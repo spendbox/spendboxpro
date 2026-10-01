@@ -44,7 +44,7 @@ export default function LandingPage() {
           <div className="mx-auto grid grid-cols-1 max-w-6xl items-center gap-12 px-5 pt-12 pb-16 sm:px-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:pt-20 lg:pb-24">
             <div className="flex flex-col gap-6">
               <span className="inline-flex w-fit items-center gap-2 rounded-full bg-brand-50 px-3 py-1.5 text-sm font-semibold text-brand-800">
-                <Sparkles className="size-4" aria-hidden /> Free for small businesses
+                <Sparkles className="size-4" aria-hidden /> Free trial for small businesses
               </span>
               <h1 className="font-display text-[2.6rem] leading-[1.02] font-extrabold tracking-tight text-ink sm:text-6xl">
                 Turn your customers into regulars.
@@ -55,7 +55,7 @@ export default function LandingPage() {
               </p>
               <div className="flex flex-col gap-3 sm:flex-row">
                 <ButtonLink href="/start" size="lg">
-                  Get your free link <ArrowRight className="size-4" aria-hidden />
+                  Start your free trial <ArrowRight className="size-4" aria-hidden />
                 </ButtonLink>
                 <ButtonLink href="#how" size="lg" variant="secondary">
                   See how it works
@@ -222,7 +222,7 @@ export default function LandingPage() {
           <div className="flex flex-col items-start justify-between gap-6 rounded-4xl bg-brand-600 p-8 text-white sm:p-12 md:flex-row md:items-center">
             <div>
               <h2 className="font-display text-3xl font-bold tracking-tight">Get your Spendbox link today</h2>
-              <p className="mt-2 text-lg text-white/90">Free to start. Your first customers can join in minutes.</p>
+              <p className="mt-2 text-lg text-white/90">Start with a free trial. Your first customers can join in minutes.</p>
             </div>
             <ButtonLink href="/start" size="lg" variant="secondary" className="ring-0">
               Get started <ArrowRight className="size-4" aria-hidden />

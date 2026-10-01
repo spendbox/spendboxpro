@@ -2,7 +2,7 @@
 
 import { ArrowLeft, LoaderCircle } from "lucide-react";
 import { useState, useTransition } from "react";
-import { PhoneOtpForm } from "@/components/auth/phone-otp-form";
+import { PhoneSignIn } from "@/components/auth/phone-sign-in";
 import { Button } from "@/components/ui/button";
 import { Field, FormMessage, Input, Select } from "@/components/ui/field";
 import { CATEGORIES } from "@/lib/constants";
@@ -22,14 +22,10 @@ export function StartFlow({ signedIn }: { signedIn: boolean }) {
       <div className="flex flex-col gap-5">
         <Steps current={2} />
         <div>
-          <h2 className="font-display text-xl font-bold">Verify your phone number</h2>
-          <p className="mt-1 text-sm text-muted">You&apos;ll use it to log in to {details.name}&apos;s dashboard.</p>
+          <h2 className="font-display text-xl font-bold">Your phone number and PIN</h2>
+          <p className="mt-1 text-sm text-muted">You&apos;ll use them to log in to {details.name}&apos;s dashboard.</p>
         </div>
-        <PhoneOtpForm
-          allowSignup
-          verifyLabel="Create my link"
-          onVerified={() => createBusiness(details)}
-        />
+        <PhoneSignIn allowSignup submitLabel="Create my link" onSignedIn={() => createBusiness(details)} />
         <button
           type="button"
           onClick={() => setStep("details")}
@@ -97,7 +93,7 @@ function Steps({ current }: { current: 1 | 2 }) {
     <div className="flex items-center gap-2 text-xs font-semibold text-muted" aria-label={`Step ${current} of 2`}>
       <span className={current === 1 ? "text-brand-700" : ""}>1 · Your business</span>
       <span aria-hidden className="h-px w-6 bg-line-strong" />
-      <span className={current === 2 ? "text-brand-700" : ""}>2 · Verify phone</span>
+      <span className={current === 2 ? "text-brand-700" : ""}>2 · Phone & PIN</span>
     </div>
   );
 }

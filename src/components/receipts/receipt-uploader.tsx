@@ -10,7 +10,8 @@ import { cn } from "@/lib/cn";
 import { formatMoney, formatWhen } from "@/lib/format";
 import type { ReceiptResult, SavedReceipt, UnmatchedReceipt } from "@/lib/receipts/save";
 
-const MAX_SIDE = 2200;
+// Receipt text stays sharp at this size, and Claude bills images by pixel area, so smaller is cheaper.
+const MAX_SIDE = 1568;
 
 /** Shrinks photos before upload so they send quickly on mobile data. */
 async function prepareFile(file: File): Promise<Blob> {
