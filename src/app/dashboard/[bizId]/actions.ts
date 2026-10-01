@@ -1,9 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { notifyPurchase, notifyRewardsReady } from "@/lib/notify";
 import { redirect } from "next/navigation";
 import { requireOwnedBusiness } from "@/lib/auth";
-import { BRAND_COLORS, CATEGORIES } from "@/lib/constants";
+import { BRAND_COLORS, cleanCategories } from "@/lib/constants";
+import { paystackConfigured, resolveAccount } from "@/lib/paystack";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { PerkKind, PurchaseStatus } from "@/lib/types";
 
@@ -26,6 +30,12 @@ export async function setPurchaseStatus(bizId: string, purchaseId: string, statu
   const supabase = await createClient();
   const { error } = await supabase.rpc("set_purchase_status", { p_purchase_id: purchaseId, p_status: status });
   if (error) return { error: error.message };
+  if (status === "verified") {
+    after(async () => {
+      await notifyPurchase(purchaseId, "confirmed");
+      await notifyRewardsReady();
+    });
+  }
   refresh(bizId);
   return { ok: true };
 }
@@ -41,15 +51,36 @@ export async function recordPurchase(bizId: string, _prev: FormState, formData: 
 
   const paidAt = /^\d{4}-\d{2}-\d{2}$/.test(date) && date !== new Date().toISOString().slice(0, 10) ? `${date}T12:00:00Z` : new Date().toISOString();
   const supabase = await createClient();
-  const { error } = await supabase.rpc("record_purchase", {
+  const { data: purchaseId, error } = await supabase.rpc("record_purchase", {
     p_membership_id: membershipId,
     p_amount: amount,
     p_description: description || null,
     p_paid_at: paidAt,
   });
   if (error) return { error: error.message };
+  after(async () => {
+    await notifyPurchase(purchaseId as string, "recorded");
+    await notifyRewardsReady();
+  });
   refresh(bizId);
   return { ok: true, message: "Purchase added." };
+}
+
+/** Customers to pick from when recording a purchase. */
+export async function memberOptions(bizId: string) {
+  await requireOwnedBusiness(bizId);
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("business_members", { p_business_id: bizId });
+  return ((data ?? []) as { membership_id: string; member_no: number; full_name: string | null; phone: string | null }[]).map(
+    (m) => ({
+      value: m.membership_id,
+      label: m.full_name?.trim() || `Member #${String(m.member_no).padStart(4, "0")}`,
+      hint: [m.full_name ? `#${String(m.member_no).padStart(4, "0")}` : "Details private", m.phone ? `+${m.phone}` : null]
+        .filter(Boolean)
+        .join(" · "),
+      keywords: `${m.member_no} ${m.phone ?? ""}`,
+    }),
+  );
 }
 
 // Rewards --------------------------------------------------------------------
@@ -71,6 +102,8 @@ export interface PerkInput {
   title: string;
   details?: string | null;
   threshold?: number | null;
+  /** Days to use it once earned; null = no limit. */
+  validDays?: number | null;
 }
 
 export async function savePerk(bizId: string, input: PerkInput): Promise<FormState> {
@@ -87,7 +120,10 @@ export async function savePerk(bizId: string, input: PerkInput): Promise<FormSta
     return { error: "Use a whole number of purchases, up to 100." };
   }
 
-  const values = { title, details: input.details?.trim().slice(0, 200) || null, threshold };
+  const validDays = input.validDays == null ? null : Math.round(Number(input.validDays));
+  if (validDays !== null && !(validDays >= 1 && validDays <= 365)) return { error: "Pick between 1 and 365 days." };
+
+  const values = { title, details: input.details?.trim().slice(0, 200) || null, threshold, valid_days: validDays };
   const supabase = await createClient();
   const { error } = input.id
     ? await supabase.from("perks").update(values).eq("id", input.id).eq("business_id", bizId)
@@ -117,15 +153,19 @@ export async function updateBusiness(bizId: string, _prev: FormState, formData: 
   await requireOwnedBusiness(bizId);
   const name = String(formData.get("name") ?? "").trim();
   if (name.length < 2 || name.length > 80) return { error: "Please enter your business name." };
-  const category = String(formData.get("category") ?? "");
+  const categories = cleanCategories(formData.getAll("categories"));
   const color = String(formData.get("brand_color") ?? "");
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  if (email && !EMAIL.test(email)) return { error: "Please check the email address." };
 
   const supabase = await createClient();
   const { error } = await supabase
     .from("businesses")
     .update({
       name,
-      category: CATEGORIES.includes(category) ? category : null,
+      categories,
+      category: categories[0] ?? null,
+      email: email || null,
       location: String(formData.get("location") ?? "").trim().slice(0, 80) || null,
       about: String(formData.get("about") ?? "").trim().slice(0, 280) || null,
       whatsapp: String(formData.get("whatsapp") ?? "").replace(/[^\d+]/g, "").slice(0, 20) || null,
@@ -138,19 +178,76 @@ export async function updateBusiness(bizId: string, _prev: FormState, formData: 
   return { ok: true, message: "Saved." };
 }
 
+const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+/** Saves a business logo (already resized in the browser) to the public logos bucket. */
+export async function uploadLogo(bizId: string, formData: FormData): Promise<FormState> {
+  await requireOwnedBusiness(bizId);
+  const file = formData.get("logo");
+  if (!(file instanceof File) || file.size === 0) return { error: "Please choose an image." };
+  if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) return { error: "Please use a PNG or JPG image." };
+  if (file.size > 900_000) return { error: "That image is too big. Please try a smaller one." };
+
+  const admin = createAdminClient();
+  const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+  const path = `${bizId}/${crypto.randomUUID()}.${ext}`;
+  const { error: uploadError } = await admin.storage
+    .from("logos")
+    .upload(path, Buffer.from(await file.arrayBuffer()), { contentType: file.type, cacheControl: "31536000" });
+  if (uploadError) return { error: "Could not upload the logo. Please try again." };
+
+  const { data: previous } = await admin.from("businesses").select("logo_url").eq("id", bizId).single();
+  const url = admin.storage.from("logos").getPublicUrl(path).data.publicUrl;
+  const supabase = await createClient();
+  const { error } = await supabase.from("businesses").update({ logo_url: url }).eq("id", bizId);
+  if (error) return { error: "Could not save the logo. Please try again." };
+
+  const oldPath = previous?.logo_url?.split("/logos/")[1];
+  if (oldPath) await admin.storage.from("logos").remove([oldPath]);
+  refresh(bizId);
+  revalidatePath("/me", "layout");
+  return { ok: true, message: "Logo updated." };
+}
+
+export async function removeLogo(bizId: string): Promise<FormState> {
+  const { business } = await requireOwnedBusiness(bizId);
+  const supabase = await createClient();
+  await supabase.from("businesses").update({ logo_url: null }).eq("id", bizId);
+  const oldPath = business.logo_url?.split("/logos/")[1];
+  if (oldPath) await createAdminClient().storage.from("logos").remove([oldPath]);
+  refresh(bizId);
+  revalidatePath("/me", "layout");
+  return { ok: true };
+}
+
+/** Looks up the name on a bank account through Paystack. */
+export async function lookupAccountName(bizId: string, bankCode: string, accountNumber: string) {
+  await requireOwnedBusiness(bizId);
+  return resolveAccount(accountNumber.replace(/\D/g, ""), bankCode);
+}
+
 export async function addBankAccount(bizId: string, _prev: FormState, formData: FormData): Promise<FormState> {
   await requireOwnedBusiness(bizId);
   const bankName = String(formData.get("bank_name") ?? "").trim();
+  const bankCode = String(formData.get("bank_code") ?? "").trim() || null;
   const accountNumber = String(formData.get("account_number") ?? "").replace(/\D/g, "");
-  const accountName = String(formData.get("account_name") ?? "").trim();
+  let accountName = String(formData.get("account_name") ?? "").trim();
   if (bankName.length < 2) return { error: "Which bank is it?" };
   if (accountNumber.length < 6 || accountNumber.length > 20) return { error: "Please enter the full account number." };
+
+  // With Paystack, the name always comes from the bank, never from what was typed.
+  if (paystackConfigured() && bankCode) {
+    const resolved = await resolveAccount(accountNumber, bankCode);
+    if (!resolved.ok) return { error: resolved.error };
+    accountName = resolved.accountName;
+  }
   if (accountName.length < 2) return { error: "Please enter the account name, as it shows on receipts." };
 
   const supabase = await createClient();
   const { error } = await supabase.from("bank_accounts").insert({
     business_id: bizId,
     bank_name: bankName.slice(0, 60),
+    bank_code: bankCode,
     account_number: accountNumber,
     account_name: accountName.slice(0, 100),
   });

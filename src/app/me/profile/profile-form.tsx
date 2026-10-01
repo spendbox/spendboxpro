@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState } from "react";
-import { Field, FormMessage, Input, Select } from "@/components/ui/field";
+import { Combobox } from "@/components/ui/combobox";
+import { Field, FormMessage, Input } from "@/components/ui/field";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { cn } from "@/lib/cn";
 import { MONTHS } from "@/lib/format";
@@ -24,6 +25,24 @@ export function ProfileForm({ profile }: { profile: Profile | null }) {
       <Field label="Name" htmlFor="full_name" optional>
         <Input id="full_name" name="full_name" maxLength={80} autoComplete="name" defaultValue={profile?.full_name ?? ""} placeholder="e.g. Tunde Adebayo" />
       </Field>
+
+      <Field
+        label="Email"
+        htmlFor="email"
+        optional
+        hint="Only used to tell you when a perk is ready or a business records your purchase. Businesses never see it."
+      >
+        <Input id="email" name="email" type="email" autoComplete="email" maxLength={200} defaultValue={profile?.email ?? ""} placeholder="you@example.com" />
+      </Field>
+      <label className="-mt-2 flex items-center gap-3 text-sm">
+        <input
+          type="checkbox"
+          name="email_notifications"
+          defaultChecked={profile?.email_notifications ?? true}
+          className="size-5 shrink-0 accent-brand-600"
+        />
+        <span className="text-ink-2">Email me about my perks and purchases</span>
+      </label>
 
       <fieldset className="flex flex-col gap-1.5">
         <legend className="mb-1.5 text-sm font-semibold text-ink">
@@ -57,30 +76,30 @@ export function ProfileForm({ profile }: { profile: Profile | null }) {
           Birthday <span className="font-normal text-muted">· year optional</span>
         </legend>
         <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,1.3fr)] gap-2">
-          <Select name="birth_day" aria-label="Birth day" defaultValue={profile?.birth_day ?? ""}>
-            <option value="">Day</option>
-            {Array.from({ length: 31 }, (_, i) => (
-              <option key={i + 1} value={i + 1}>
-                {i + 1}
-              </option>
-            ))}
-          </Select>
-          <Select name="birth_month" aria-label="Birth month" defaultValue={profile?.birth_month ?? ""}>
-            <option value="">Month</option>
-            {MONTHS.map((m, i) => (
-              <option key={m} value={i + 1}>
-                {m}
-              </option>
-            ))}
-          </Select>
-          <Select name="birth_year" aria-label="Birth year (optional)" defaultValue={profile?.birth_year ?? ""}>
-            <option value="">Year</option>
-            {Array.from({ length: 90 }, (_, i) => thisYear - 10 - i).map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </Select>
+          <Combobox
+            name="birth_day"
+            aria-label="Birth day"
+            defaultValue={profile?.birth_day ? String(profile.birth_day) : null}
+            placeholder="Day"
+            options={Array.from({ length: 31 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))}
+            searchable={false}
+          />
+          <Combobox
+            name="birth_month"
+            aria-label="Birth month"
+            defaultValue={profile?.birth_month ? String(profile.birth_month) : null}
+            placeholder="Month"
+            options={MONTHS.map((m, i) => ({ value: String(i + 1), label: m }))}
+            searchable={false}
+          />
+          <Combobox
+            name="birth_year"
+            aria-label="Birth year (optional)"
+            defaultValue={profile?.birth_year ? String(profile.birth_year) : null}
+            placeholder="Year"
+            options={Array.from({ length: 90 }, (_, i) => String(thisYear - 10 - i)).map((y) => ({ value: y, label: y }))}
+            searchable={false}
+          />
         </div>
         <p className="text-sm text-muted">Used for birthday treats, even if you keep it private.</p>
       </fieldset>

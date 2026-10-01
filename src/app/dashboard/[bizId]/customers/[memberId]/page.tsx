@@ -37,7 +37,7 @@ export default async function CustomerPage({ params }: PageProps<"/dashboard/[bi
         back={{ href: `/dashboard/${bizId}/customers`, label: "Customers" }}
         title={label}
         description={`${memberNo(m.member_no)} · joined ${formatDate(m.joined_at, { withYear: true })}${m.referred ? " · invited by a friend" : ""}`}
-        actions={<RecordPurchase bizId={bizId} currency={business.currency} members={[]} fixedMember={{ id: m.membership_id, label }} />}
+        actions={<RecordPurchase bizId={bizId} currency={business.currency} fixedMember={{ id: m.membership_id, label }} />}
       />
 
       <section className="grid grid-cols-3 gap-3">
@@ -115,7 +115,7 @@ export default async function CustomerPage({ params }: PageProps<"/dashboard/[bi
                         <PerkIcon kind={r.kind} className="size-4" />
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate font-semibold">{r.title}</p>
+                        <p className="font-semibold break-words">{r.title}</p>
                         <p className="text-xs text-muted">
                           {r.status === "redeemed" && r.redeemed_at
                             ? `Given ${formatDate(r.redeemed_at)}`

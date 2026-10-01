@@ -7,6 +7,7 @@ import type { Perk, PerkKind } from "@/lib/types";
 
 export interface SavedReceipt {
   kind: "saved";
+  purchaseId: string;
   status: "verified" | "pending";
   /** Why the business needs to confirm it (when pending). */
   reason: string | null;
@@ -86,7 +87,7 @@ export async function saveReceiptPurchase(
   const currency = x.currency && /^[A-Z]{3}$/.test(x.currency) ? x.currency : business.currency;
   const paidAt = scan.paidAt ?? new Date().toISOString();
 
-  const { error } = await admin.from("purchases").insert({
+  const { data: inserted, error } = await admin.from("purchases").insert({
     business_id: business.id,
     membership_id: membership.id,
     customer_id: scan.uid,
@@ -102,7 +103,7 @@ export async function saveReceiptPurchase(
     receipt_path: scan.path,
     receipt_hash: scan.hash,
     extracted: x,
-  });
+  }).select("id").single();
 
   if (error) {
     if (error.code === "23505") {
@@ -127,6 +128,7 @@ export async function saveReceiptPurchase(
 
   return {
     kind: "saved",
+    purchaseId: inserted.id,
     status,
     reason,
     business: { name: business.name, slug: business.slug, color: business.brand_color },

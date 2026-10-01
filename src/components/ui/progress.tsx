@@ -4,7 +4,7 @@ import { cn } from "@/lib/cn";
 export function Progress({
   current,
   target,
-  color = "#0B6E4F",
+  color = "#2A772C",
   label,
   className,
 }: {

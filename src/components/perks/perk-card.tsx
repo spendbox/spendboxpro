@@ -1,11 +1,11 @@
-import { Cake, Coins, Repeat, Sparkles, UserPlus, type LucideProps } from "lucide-react";
+import { Cake, Coins, HandHeart, Repeat, UserPlus, type LucideProps } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
-import { PERK_KINDS, perkTrigger } from "@/lib/perks";
+import { durationSentence, PERK_KINDS, perkTrigger } from "@/lib/perks";
 import type { PerkKind } from "@/lib/types";
 
 const ICONS: Record<PerkKind, (props: LucideProps) => ReactNode> = {
-  welcome: Sparkles,
+  welcome: HandHeart,
   visits: Repeat,
   referral: UserPlus,
   spend: Coins,
@@ -23,6 +23,7 @@ export function PerkCard({
   title,
   threshold,
   details,
+  validDays,
   currency,
   paused,
   footer,
@@ -34,6 +35,8 @@ export function PerkCard({
   title: string;
   threshold?: number | null;
   details?: string | null;
+  /** Show "Use within N days" (pass null for no limit; leave out to hide). */
+  validDays?: number | null;
   currency?: string;
   paused?: boolean;
   footer?: ReactNode;
@@ -67,6 +70,7 @@ export function PerkCard({
         <p className={cn("font-display leading-tight font-bold", size === "lg" ? "text-2xl" : "text-lg")}>{title}</p>
         <p className="mt-1.5 text-sm text-white/90">{perkTrigger(kind, threshold ?? null, currency, audience)}</p>
         {details && <p className="mt-1 text-xs text-white/90">{details}</p>}
+        {validDays !== undefined && <p className="mt-1 text-xs font-semibold text-white/90">{durationSentence(validDays)}</p>}
       </div>
       {footer && <div className="mt-4">{footer}</div>}
     </div>

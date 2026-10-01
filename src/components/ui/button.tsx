@@ -1,3 +1,4 @@
+import { LoaderCircle } from "lucide-react";
 import Link from "next/link";
 import type { ButtonHTMLAttributes, ComponentProps } from "react";
 import { cn } from "@/lib/cn";
@@ -40,9 +41,23 @@ export function Button({
   block,
   className,
   type = "button",
+  loading,
+  disabled,
+  children,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & StyleProps) {
-  return <button type={type} className={buttonClass({ variant, size, block }, className)} {...props} />;
+}: ButtonHTMLAttributes<HTMLButtonElement> & StyleProps & { loading?: boolean }) {
+  return (
+    <button
+      type={type}
+      className={buttonClass({ variant, size, block }, className)}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      {...props}
+    >
+      {loading && <LoaderCircle className="size-4 shrink-0 animate-spin" aria-hidden />}
+      {children}
+    </button>
+  );
 }
 
 export function ButtonLink({ variant, size, block, className, ...props }: ComponentProps<typeof Link> & StyleProps) {

@@ -22,7 +22,7 @@ export function LeaveButton({ businessName, action }: { businessName: string; ac
           <Button variant="secondary" onClick={() => setOpen(false)}>
             Stay
           </Button>
-          <Button variant="danger" disabled={pending} onClick={() => startTransition(() => action())}>
+          <Button variant="danger" loading={pending} onClick={() => startTransition(() => action())}>
             Leave
           </Button>
         </div>

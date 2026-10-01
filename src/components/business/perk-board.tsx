@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, LoaderCircle, Minus, Pencil, Plus, Trash } from "lucide-react";
+import { ArrowLeft, Minus, Pencil, Plus, Trash } from "lucide-react";
 import { useState, useTransition } from "react";
 import { deletePerk, savePerk, setPerkActive } from "@/app/dashboard/[bizId]/actions";
 import { PerkCard, PerkIcon } from "@/components/perks/perk-card";
@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Field, FormMessage, Input } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
 import { ActionSwitch } from "@/components/ui/switch";
-import { PERK_KIND_ORDER, PERK_KINDS, SUGGESTED_PERKS } from "@/lib/perks";
+import { cn } from "@/lib/cn";
+import { DEFAULT_VALID_DAYS, DURATION_CHOICES, durationLabel, PERK_KIND_ORDER, PERK_KINDS, SUGGESTED_PERKS, wordingTip } from "@/lib/perks";
 import type { Perk, PerkKind } from "@/lib/types";
 
 interface Draft {
@@ -17,13 +18,26 @@ interface Draft {
   title: string;
   details: string;
   threshold: string;
+  validDays: number | null;
+  customDays: boolean;
 }
 
 const DEFAULT_THRESHOLD: Partial<Record<PerkKind, string>> = { visits: "5", spend: "50000" };
 
-export function PerkBoard({ bizId, perks, currency }: { bizId: string; perks: Perk[]; currency: string }) {
+export function PerkBoard({
+  bizId,
+  perks,
+  currency,
+  startPicking = false,
+}: {
+  bizId: string;
+  perks: Perk[];
+  currency: string;
+  /** Open the "what kind of perk?" picker straight away. */
+  startPicking?: boolean;
+}) {
   const [draft, setDraft] = useState<Draft | null>(null);
-  const [picking, setPicking] = useState(false);
+  const [picking, setPicking] = useState(startPicking);
   const [deleting, setDeleting] = useState<Perk | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -35,7 +49,7 @@ export function PerkBoard({ bizId, perks, currency }: { bizId: string; perks: Pe
       return;
     }
     setPicking(false);
-    setDraft({ kind, title: "", details: "", threshold: DEFAULT_THRESHOLD[kind] ?? "" });
+    setDraft({ kind, title: "", details: "", threshold: DEFAULT_THRESHOLD[kind] ?? "", validDays: DEFAULT_VALID_DAYS, customDays: false });
   }
 
   function edit(perk: Perk) {
@@ -46,6 +60,8 @@ export function PerkBoard({ bizId, perks, currency }: { bizId: string; perks: Pe
       title: perk.title,
       details: perk.details ?? "",
       threshold: perk.threshold ? String(perk.threshold) : "",
+      validDays: perk.valid_days,
+      customDays: perk.valid_days !== null && !DURATION_CHOICES.includes(perk.valid_days),
     });
   }
 
@@ -58,6 +74,7 @@ export function PerkBoard({ bizId, perks, currency }: { bizId: string; perks: Pe
         title: draft.title,
         details: draft.details,
         threshold: draft.threshold ? Number(draft.threshold.replace(/[^\d.]/g, "")) : null,
+        validDays: draft.validDays,
       });
       if (result.error) setError(result.error);
       else setDraft(null);
@@ -66,7 +83,7 @@ export function PerkBoard({ bizId, perks, currency }: { bizId: string; perks: Pe
 
   function addSuggestion(s: (typeof SUGGESTED_PERKS)[number]) {
     startTransition(async () => {
-      const result = await savePerk(bizId, { kind: s.kind, title: s.title, threshold: s.threshold });
+      const result = await savePerk(bizId, { kind: s.kind, title: s.title, threshold: s.threshold, validDays: s.validDays });
       if (result.error) setError(result.error);
     });
   }
@@ -85,6 +102,7 @@ export function PerkBoard({ bizId, perks, currency }: { bizId: string; perks: Pe
               title={perk.title}
               threshold={perk.threshold}
               details={perk.details}
+              validDays={perk.valid_days}
               currency={currency}
               paused={!perk.is_active}
             />
@@ -196,11 +214,16 @@ export function PerkBoard({ bizId, perks, currency }: { bizId: string; perks: Pe
               title={draft.title || info.example}
               threshold={info.needsThreshold ? thresholdNumber || null : null}
               details={draft.details || null}
+              validDays={draft.validDays}
               currency={currency}
               size="sm"
             />
 
-            <Field label="What do they get?" htmlFor="perk-title">
+            <Field
+              label="What do they get?"
+              htmlFor="perk-title"
+              hint="Write it the way you'd say it to the customer, using “you” and “your”."
+            >
               <Input
                 id="perk-title"
                 autoFocus
@@ -210,6 +233,25 @@ export function PerkBoard({ bizId, perks, currency }: { bizId: string; perks: Pe
                 onChange={(e) => setDraft({ ...draft, title: e.target.value })}
               />
             </Field>
+            {wordingTip(draft.title) && (
+              <p role="status" className="-mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                {wordingTip(draft.title)}
+              </p>
+            )}
+            {!draft.title && (
+              <div className="-mt-2 flex flex-wrap gap-2">
+                {[info.example, ...info.ideas].map((idea) => (
+                  <button
+                    key={idea}
+                    type="button"
+                    onClick={() => setDraft({ ...draft, title: idea })}
+                    className="rounded-full bg-canvas px-3 py-1.5 text-sm font-medium text-ink-2 ring-1 ring-line hover:bg-brand-50 hover:ring-brand-200"
+                  >
+                    {idea}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {draft.kind === "visits" && (
               <Field label="After how many purchases?" htmlFor="perk-threshold" hint="It repeats: every time they reach this number, they earn it again.">
@@ -253,6 +295,56 @@ export function PerkBoard({ bizId, perks, currency }: { bizId: string; perks: Pe
               </Field>
             )}
 
+            <fieldset className="flex flex-col gap-2">
+              <legend className="mb-1 text-sm font-semibold text-ink">How long can they use it?</legend>
+              <p className="-mt-1 text-sm text-muted">Counted from the day a customer earns it. You can change this later.</p>
+              <div className="flex flex-wrap gap-2">
+                {DURATION_CHOICES.map((days) => {
+                  const selected = !draft.customDays && draft.validDays === days;
+                  return (
+                    <button
+                      key={String(days)}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => setDraft({ ...draft, validDays: days, customDays: false })}
+                      className={cn(
+                        "h-10 rounded-full px-4 text-sm font-semibold ring-1 transition",
+                        selected ? "bg-brand-600 text-white ring-brand-600" : "bg-white text-ink-2 ring-line-strong hover:bg-canvas",
+                      )}
+                    >
+                      {durationLabel(days)}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  aria-pressed={draft.customDays}
+                  onClick={() => setDraft({ ...draft, customDays: true, validDays: draft.validDays ?? DEFAULT_VALID_DAYS })}
+                  className={cn(
+                    "h-10 rounded-full px-4 text-sm font-semibold ring-1 transition",
+                    draft.customDays ? "bg-brand-600 text-white ring-brand-600" : "bg-white text-ink-2 ring-line-strong hover:bg-canvas",
+                  )}
+                >
+                  Other
+                </button>
+              </div>
+              {draft.customDays && (
+                <div className="flex items-center gap-2">
+                  <Input
+                    aria-label="Number of days"
+                    inputMode="numeric"
+                    className="w-24 text-center"
+                    value={draft.validDays ?? ""}
+                    onChange={(e) => {
+                      const n = Number(e.target.value.replace(/\D/g, "").slice(0, 3));
+                      setDraft({ ...draft, validDays: n || null });
+                    }}
+                  />
+                  <span className="text-sm text-muted">days (up to 365)</span>
+                </div>
+              )}
+            </fieldset>
+
             <Field label="Conditions" htmlFor="perk-details" optional hint="e.g. “Dine-in only” or “Not with other offers”.">
               <Input
                 id="perk-details"
@@ -277,8 +369,7 @@ export function PerkBoard({ bizId, perks, currency }: { bizId: string; perks: Pe
               ) : (
                 <span />
               )}
-              <Button type="submit" size="lg" disabled={pending}>
-                {pending && <LoaderCircle className="size-4 animate-spin" aria-hidden />}
+              <Button type="submit" size="lg" loading={pending}>
                 {draft.id ? "Save changes" : "Add perk"}
               </Button>
             </div>
@@ -298,7 +389,7 @@ export function PerkBoard({ bizId, perks, currency }: { bizId: string; perks: Pe
           </Button>
           <Button
             variant="danger"
-            disabled={pending}
+            loading={pending}
             onClick={() =>
               startTransition(async () => {
                 if (deleting) await deletePerk(bizId, deleting.id);

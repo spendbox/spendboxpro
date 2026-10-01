@@ -1,4 +1,4 @@
-import { Sparkles } from "lucide-react";
+import { CalendarClock } from "lucide-react";
 import { formatDate } from "@/lib/format";
 import { getTrial } from "@/lib/trial";
 
@@ -8,7 +8,7 @@ export function TrialBanner({ createdAt }: { createdAt: string }) {
 
   return (
     <div className="mb-6 flex items-start gap-3 rounded-2xl bg-accent-50 px-4 py-3 text-sm ring-1 ring-accent-100 sm:items-center lg:mb-8">
-      <Sparkles className="mt-0.5 size-5 shrink-0 text-accent-700 sm:mt-0" aria-hidden />
+      <CalendarClock className="mt-0.5 size-5 shrink-0 text-accent-700 sm:mt-0" aria-hidden />
       <p className="text-ink-2">
         {ended ? (
           <>

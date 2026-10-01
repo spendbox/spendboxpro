@@ -51,7 +51,7 @@ export default async function ProfilePage() {
           ) : (
             memberships.map((m) => (
               <div key={m.id} className="flex items-center gap-3 py-4">
-                <BusinessAvatar name={m.business.name} color={m.business.brand_color} size="sm" />
+                <BusinessAvatar name={m.business.name} color={m.business.brand_color} logoUrl={m.business.logo_url} size="sm" />
                 <p className="min-w-0 flex-1 truncate font-semibold">{m.business.name}</p>
                 <ActionSwitch
                   initial={m.share_details}
@@ -67,6 +67,17 @@ export default async function ProfilePage() {
       <section className="flex flex-col gap-3">
         <SectionTitle title="Account" />
         <Card className="flex flex-col gap-5 p-5 sm:p-7">
+          <p className="text-sm text-muted">
+            Read our{" "}
+            <a href="/privacy" className="font-semibold text-brand-700 underline underline-offset-2">
+              privacy policy
+            </a>{" "}
+            and{" "}
+            <a href="/terms" className="font-semibold text-brand-700 underline underline-offset-2">
+              terms
+            </a>
+            .
+          </p>
           <form action={signOut}>
             <Button type="submit" variant="secondary">
               <LogOut className="size-4" aria-hidden /> Log out

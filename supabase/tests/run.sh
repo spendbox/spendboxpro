@@ -7,5 +7,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 P="psql $TEST_DATABASE_URL -v ON_ERROR_STOP=1 -q"
 $P -f supabase/tests/supabase-stub.sql
-$P -f supabase/migrations/20261001000000_spendbox.sql
-$P -o /dev/null -f supabase/tests/spendbox.test.sql 2>&1 | sed 's/^psql:[^ ]* NOTICE:  //'
+for migration in supabase/migrations/*.sql; do $P -f "$migration"; done
+for test in supabase/tests/spendbox.test.sql supabase/tests/update2.test.sql; do
+  $P -o /dev/null -f "$test" 2>&1 | sed 's/^psql:[^ ]* NOTICE:  //'
+done

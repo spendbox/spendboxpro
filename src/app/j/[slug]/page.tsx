@@ -8,6 +8,7 @@ import { PerkCard } from "@/components/perks/perk-card";
 import { BusinessAvatar } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
 import { getUser } from "@/lib/auth";
+import { businessTagline } from "@/lib/format";
 import { PERK_KIND_ORDER } from "@/lib/perks";
 import { createClient } from "@/lib/supabase/server";
 import type { Business, Perk } from "@/lib/types";
@@ -80,17 +81,13 @@ export default async function JoinPage({ params, searchParams }: PageProps<"/j/[
           >
             <div aria-hidden className="absolute -top-16 -right-16 -z-10 size-56 rounded-full bg-white/10" />
             <div className="flex items-center gap-4">
-              <BusinessAvatar name={business.name} color="rgba(255,255,255,0.18)" size="lg" />
+              <BusinessAvatar name={business.name} color="rgba(255,255,255,0.18)" logoUrl={business.logo_url} size="lg" />
               <div className="min-w-0">
                 <p className="text-sm text-white/90">You&apos;re invited to join</p>
                 <h1 className="font-display text-3xl leading-tight font-bold tracking-tight sm:text-4xl">
                   {business.name}
                 </h1>
-                {(business.category || business.location) && (
-                  <p className="mt-1 text-sm text-white/90">
-                    {[business.category, business.location].filter(Boolean).join(" · ")}
-                  </p>
-                )}
+                {businessTagline(business) && <p className="mt-1 text-sm text-white/90">{businessTagline(business)}</p>}
               </div>
             </div>
             {business.about && <p className="mt-5 max-w-prose text-[15px] text-white/90">{business.about}</p>}
@@ -109,6 +106,7 @@ export default async function JoinPage({ params, searchParams }: PageProps<"/j/[
                     title={perk.title}
                     threshold={perk.threshold}
                     details={perk.details}
+                    validDays={perk.valid_days ?? undefined}
                     currency={business.currency}
                   />
                 ))}

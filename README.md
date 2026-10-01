@@ -11,13 +11,14 @@ Built with Next.js (hosted on Vercel), Supabase (database, login, file storage) 
 
 ## Set it up (about 20 minutes, no coding)
 
-You need free accounts on **Supabase**, **Vercel** and **Anthropic** (for Claude).
+You need accounts on **Supabase**, **Vercel** and **Anthropic** (for Claude). Optional: **Paystack** (fills in bank account names) and **Resend** (sends notification emails).
 
 ### 1. Create the database (Supabase)
 
 1. Go to [supabase.com](https://supabase.com) → **New project**. Pick a region close to your customers.
 2. When it's ready, open **SQL Editor** → **New query**.
 3. Open the file [`supabase/migrations/20261001000000_spendbox.sql`](supabase/migrations/20261001000000_spendbox.sql) in this repository, copy **everything**, paste it into the editor and press **Run**. You should see "Success".
+4. Do the same with [`supabase/migrations/20261002000000_logos_emails_durations.sql`](supabase/migrations/20261002000000_logos_emails_durations.sql) (logos, emails, perk durations). Always run the files in order, each once.
 
 ### 2. Login: nothing to set up
 
@@ -29,7 +30,12 @@ People log in with their **phone number and a 6-digit PIN** they choose the firs
 
 Go to [console.anthropic.com](https://console.anthropic.com) → **API keys** → **Create key**. Add some credit under **Billing**. Reading receipts costs roughly **$20–30 per 1,000 receipts** with the default model (Claude Opus 5.5), or about half that with `RECEIPT_MODEL=claude-sonnet-5-5`. Your exact spend shows in the Anthropic console.
 
-### 4. Put the app online (Vercel)
+### 4. Optional: Paystack and Resend
+
+- **Paystack** (looks up the account name when a business adds a bank account, so it's always exactly as the bank has it): in [Paystack](https://dashboard.paystack.com) go to **Settings → API Keys & Webhooks** and copy the **Secret Key**. Use the live key; account lookups are free. Without it, businesses type the account name themselves.
+- **Resend** (emails customers when a perk is ready or a business records their purchase, and emails businesses about new members and receipts to check): create an account at [resend.com](https://resend.com), add and verify your domain under **Domains**, then create an **API key**. Until a domain is verified, Resend only delivers to your own Resend login email.
+
+### 5. Put the app online (Vercel)
 
 1. Go to [vercel.com](https://vercel.com) → **Add New… → Project** → import this GitHub repository.
 2. Before pressing Deploy, open **Environment Variables** and add:
@@ -42,14 +48,18 @@ Go to [console.anthropic.com](https://console.anthropic.com) → **API keys** �
 | `ANTHROPIC_API_KEY` | The key from step 3 |
 | `NEXT_PUBLIC_SITE_URL` | Your app's address, e.g. `https://spendbox.vercel.app` (or your own domain) |
 | `CRON_SECRET` | Any long random text. Lets Vercel run the daily birthday-treat job. |
+| `PAYSTACK_SECRET_KEY` | Optional — Paystack secret key (step 4) |
+| `RESEND_API_KEY` | Optional — Resend API key (step 4) |
+| `EMAIL_FROM` | Optional — who emails come from, e.g. `Spendbox <hello@yourdomain.com>` (must be on your verified Resend domain) |
 
 Optional: `NEXT_PUBLIC_TRIAL_DAYS` (free-trial length, default `90`), `NEXT_PUBLIC_DEFAULT_COUNTRY_CODE` (default `234`), `NEXT_PUBLIC_TIME_ZONE` (default `Africa/Lagos`). See [`.env.example`](.env.example).
 
 3. Press **Deploy**. If you change a variable later, redeploy (**Deployments → ⋯ → Redeploy**) so it takes effect.
+4. **For speed:** in Vercel → **Settings → Functions → Function Region**, pick the region closest to your Supabase project's region (shown in Supabase → Project Settings → General). When the two are far apart, every page waits for the data to travel between continents.
 
 > Tip: Vercel's Supabase integration (**Vercel → Storage → Supabase**) can fill in the Supabase variables for you. The app accepts the names it creates.
 
-### 5. Try it
+### 6. Try it
 
 1. Open your site → **Get started**. Create a business with your phone number and a PIN.
 2. Add perks (Perks page), and your bank accounts (Settings).
@@ -73,7 +83,9 @@ Optional: `NEXT_PUBLIC_TRIAL_DAYS` (free-trial length, default `90`), `NEXT_PUBL
 
 Businesses can tap **Not received** on any payment; perks it earned are taken back if they haven't been used yet. Receipt images are stored privately: only the customer and that business can open them.
 
-**Perks.** Five card types: welcome (on joining), loyalty (every N purchases), invite reward (when an invited friend makes a first purchase), big spender (every ₦X spent), birthday treat (during the birthday month, even when the birthday is kept private). Perks are earned automatically by the database, shown on the customer's live pass, and marked as given by the business.
+**Perks.** Five card types: welcome (on joining), loyalty (every N purchases), invite reward (when an invited friend makes a first purchase), big spender (every ₦X spent), birthday treat (during the birthday month, even when the birthday is kept private). Perks are earned automatically by the database, shown on the customer's live pass, and marked as given by the business. Each perk has a time limit the business chooses (1 week to 3 months, or none); customers see a bar showing how long they have left.
+
+**Emails (optional).** Customers can add an email in Profile & privacy to hear when a perk is ready or a business records or confirms their payment. Businesses add an email in Settings to hear about new members and receipts that need checking. Businesses never see customers' emails.
 
 ---
 
@@ -89,7 +101,7 @@ npm run dev                  # http://localhost:3000
 | --- | --- |
 | `npm run lint` / `npm run typecheck` | Code checks |
 | `npm test` | Receipt-matching tests |
-| `TEST_DATABASE_URL=postgres://… npm run test:db` | Database scenario tests (56 checks: joining, referrals, perks, privacy, permissions). Needs an **empty, throwaway** Postgres database, never your real one. |
+| `TEST_DATABASE_URL=postgres://… npm run test:db` | Database scenario tests (joining, referrals, perks, privacy, permissions, perk durations). Needs an **empty, throwaway** Postgres database, never your real one. |
 
 Project layout:
 

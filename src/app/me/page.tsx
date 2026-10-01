@@ -9,15 +9,18 @@ import { Card, EmptyState, SectionTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { WhatsAppIcon } from "@/components/ui/share-actions";
 import { requireUser } from "@/lib/auth";
-import { getMyMemberships, getMyProfile, getMyPurchases, getMyRewards, syncMyRewards } from "@/lib/customer";
-import { firstName, memberNo, plural, whatsappLink } from "@/lib/format";
-import { PERK_KINDS, perkProgress } from "@/lib/perks";
+import { getMyMemberships, getMyProfile, getMyPurchases, getMyRewards } from "@/lib/customer";
+import { businessTagline, firstName, memberNo, plural, whatsappLink } from "@/lib/format";
+import { PERK_KINDS, perkProgress, sortBySoonest } from "@/lib/perks";
+import { TimeLeft } from "@/components/perks/time-left";
 
 export const metadata: Metadata = { title: "My Spendbox" };
 
+/** How many ready perks to show here; the rest are on /me/perks. */
+const SHOWN = 3;
+
 export default async function MySpendboxPage() {
   const user = await requireUser("/me");
-  await syncMyRewards();
   const [profile, memberships, rewards, purchases] = await Promise.all([
     getMyProfile(user.id),
     getMyMemberships(user.id),
@@ -26,6 +29,7 @@ export default async function MySpendboxPage() {
   ]);
 
   const name = firstName(profile?.full_name);
+  const soonest = sortBySoonest(rewards).slice(0, SHOWN);
   const missingDetails = !profile?.full_name || !profile?.birth_month;
 
   return (
@@ -63,9 +67,19 @@ export default async function MySpendboxPage() {
 
       {rewards.length > 0 && (
         <section className="flex flex-col gap-3">
-          <SectionTitle title="Ready to use" description="Show your pass at the counter on your next order." />
+          <SectionTitle
+            title="Ready to use"
+            description="Show your pass at the counter on your next order."
+            action={
+              rewards.length > SHOWN ? (
+                <Link href="/me/perks" className="text-sm font-semibold text-brand-700 hover:underline">
+                  See all {rewards.length}
+                </Link>
+              ) : undefined
+            }
+          />
           <div className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 xl:grid-cols-3">
-            {rewards.map((reward) => {
+            {soonest.map((reward) => {
               const membership = memberships.find((m) => m.id === reward.membership_id);
               if (!membership) return null;
               const info = PERK_KINDS[reward.kind];
@@ -73,22 +87,32 @@ export default async function MySpendboxPage() {
                 <Link
                   key={reward.id}
                   href={`/me/b/${membership.business.slug}/pass`}
-                  className="flex w-[78%] shrink-0 snap-start flex-col justify-between gap-6 rounded-3xl p-5 text-white shadow-card transition hover:brightness-110 sm:w-auto"
+                  className="flex w-[80%] shrink-0 snap-start flex-col justify-between gap-5 rounded-3xl p-5 text-white shadow-card transition hover:brightness-110 sm:w-auto"
                   style={{ background: info.color }}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-sm font-semibold text-white/90">{membership.business.name}</span>
                     <PerkIcon kind={reward.kind} className="size-5 shrink-0" />
                   </div>
-                  <div>
-                    <p className="font-display text-xl leading-tight font-bold">{reward.title}</p>
-                    <p className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold">
+                  <p className="font-display text-xl leading-tight font-bold">{reward.title}</p>
+                  <div className="flex flex-col gap-3">
+                    <TimeLeft issuedAt={reward.issued_at} expiresAt={reward.expires_at} />
+                    <span className="inline-flex items-center gap-1.5 text-sm font-semibold">
                       <Ticket className="size-4" aria-hidden /> Show pass
-                    </p>
+                    </span>
                   </div>
                 </Link>
               );
             })}
+            {rewards.length > SHOWN && (
+              <Link
+                href="/me/perks"
+                className="flex w-[60%] shrink-0 snap-start flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-line-strong bg-white p-5 text-center hover:border-brand-300 sm:w-auto"
+              >
+                <span className="font-display text-3xl font-bold text-ink">+{rewards.length - SHOWN}</span>
+                <span className="text-sm font-semibold text-brand-700">See all your perks</span>
+              </Link>
+            )}
           </div>
         </section>
       )}
@@ -111,11 +135,11 @@ export default async function MySpendboxPage() {
               return (
                 <Card key={m.id} className="flex flex-col gap-4 p-4 sm:p-5">
                   <Link href={`/me/b/${b.slug}`} className="flex items-center gap-3">
-                    <BusinessAvatar name={b.name} color={b.brand_color} />
+                    <BusinessAvatar name={b.name} color={b.brand_color} logoUrl={b.logo_url} />
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-bold text-ink">{b.name}</p>
                       <p className="truncate text-sm text-muted">
-                        {[b.category, b.location].filter(Boolean).join(" · ") || `Member ${memberNo(m.member_no)}`}
+                        {businessTagline(b) || `Member ${memberNo(m.member_no)}`}
                       </p>
                     </div>
                     {ready > 0 ? (

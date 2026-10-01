@@ -39,7 +39,7 @@ export default async function BusinessHome({ params, searchParams }: PageProps<"
   return (
     <div className="flex flex-col gap-8">
       <header>
-        <p className="text-sm font-semibold text-muted">{business.category ?? "Your business"}</p>
+        <p className="text-sm font-semibold text-muted">{business.categories?.length ? business.categories.join(", ") : (business.category ?? "Your business")}</p>
         <h1 className="font-display text-[30px] leading-tight font-bold tracking-tight sm:text-4xl">{business.name}</h1>
       </header>
 
