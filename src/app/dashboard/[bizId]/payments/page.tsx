@@ -6,9 +6,8 @@ import { RecordPurchase } from "@/components/business/record-purchase";
 import { Card, EmptyState } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireOwnedBusiness } from "@/lib/auth";
-import { getMembers, getPurchases, getStats } from "@/lib/business";
+import { getPurchases, getStats } from "@/lib/business";
 import { cn } from "@/lib/cn";
-import { memberLabel } from "@/lib/format";
 import type { PurchaseStatus } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Payments" };
@@ -24,11 +23,7 @@ export default async function PaymentsPage({ params, searchParams }: PageProps<"
   const [{ bizId }, { status }] = await Promise.all([params, searchParams]);
   const { business } = await requireOwnedBusiness(bizId);
   const filter = FILTERS.find((f) => f.key === status) ?? FILTERS[0];
-  const [payments, members, stats] = await Promise.all([
-    getPurchases(bizId, { status: filter.status }),
-    getMembers(bizId),
-    getStats(bizId),
-  ]);
+  const [payments, stats] = await Promise.all([getPurchases(bizId, { status: filter.status }), getStats(bizId)]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -39,7 +34,6 @@ export default async function PaymentsPage({ params, searchParams }: PageProps<"
           <RecordPurchase
             bizId={bizId}
             currency={business.currency}
-            members={members.map((m) => ({ id: m.membership_id, label: memberLabel(m.member_no, m.full_name) }))}
           />
         }
       />

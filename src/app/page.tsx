@@ -7,7 +7,7 @@ import {
   ReceiptText,
   ScanLine,
   ShieldCheck,
-  Sparkles,
+  Store,
   Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -44,7 +44,7 @@ export default function LandingPage() {
           <div className="mx-auto grid grid-cols-1 max-w-6xl items-center gap-12 px-5 pt-12 pb-16 sm:px-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:pt-20 lg:pb-24">
             <div className="flex flex-col gap-6">
               <span className="inline-flex w-fit items-center gap-2 rounded-full bg-brand-50 px-3 py-1.5 text-sm font-semibold text-brand-800">
-                <Sparkles className="size-4" aria-hidden /> Free trial for small businesses
+                <Store className="size-4" aria-hidden /> Free trial for small businesses
               </span>
               <h1 className="font-display text-[2.6rem] leading-[1.02] font-extrabold tracking-tight text-ink sm:text-6xl">
                 Turn your customers into regulars.
@@ -240,6 +240,12 @@ export default function LandingPage() {
             </Link>
             <Link href="/start" className="hover:text-ink">
               For businesses
+            </Link>
+            <Link href="/privacy" className="hover:text-ink">
+              Privacy
+            </Link>
+            <Link href="/terms" className="hover:text-ink">
+              Terms
             </Link>
           </div>
         </div>

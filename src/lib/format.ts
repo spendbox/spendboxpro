@@ -118,3 +118,9 @@ export function whatsappLink(phone: string | null | undefined, text?: string) {
   const base = normalized ? `https://wa.me/${normalized}` : "https://wa.me/";
   return text ? `${base}?text=${encodeURIComponent(text)}` : base;
 }
+
+/** "Restaurant, Small chops · Yaba, Lagos" */
+export function businessTagline(b: { categories?: string[] | null; category?: string | null; location?: string | null }) {
+  const kinds = b.categories?.length ? b.categories.join(", ") : b.category;
+  return [kinds, b.location].filter(Boolean).join(" · ");
+}

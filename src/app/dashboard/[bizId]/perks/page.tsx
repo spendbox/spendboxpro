@@ -9,8 +9,8 @@ import { plural } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Perks" };
 
-export default async function PerksPage({ params }: PageProps<"/dashboard/[bizId]/perks">) {
-  const { bizId } = await params;
+export default async function PerksPage({ params, searchParams }: PageProps<"/dashboard/[bizId]/perks">) {
+  const [{ bizId }, { new: startNew }] = await Promise.all([params, searchParams]);
   const { business } = await requireOwnedBusiness(bizId);
   const [perks, stats] = await Promise.all([getPerks(bizId), getStats(bizId)]);
 
@@ -37,7 +37,7 @@ export default async function PerksPage({ params }: PageProps<"/dashboard/[bizId
         <ChevronRight className="size-5 text-muted" aria-hidden />
       </Link>
 
-      <PerkBoard bizId={bizId} perks={perks} currency={business.currency} />
+      <PerkBoard key={String(startNew)} bizId={bizId} perks={perks} currency={business.currency} startPicking={startNew === "1"} />
     </div>
   );
 }

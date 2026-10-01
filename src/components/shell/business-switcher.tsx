@@ -22,7 +22,7 @@ export function BusinessSwitcher({
           compact ? "h-10 max-w-[60vw] px-2" : "p-2 ring-1 ring-line",
         )}
       >
-        <BusinessAvatar name={current.name} color={current.brand_color} size="sm" className={compact ? "size-7 rounded-lg text-[10px]" : ""} />
+        <BusinessAvatar name={current.name} color={current.brand_color} logoUrl={current.logo_url} size="sm" className={compact ? "size-7 rounded-lg text-[10px]" : ""} />
         <span className="min-w-0 flex-1">
           <span className={cn("block truncate font-bold text-ink", compact ? "text-sm" : "text-[15px]")}>{current.name}</span>
           {!compact && <span className="block truncate text-xs text-muted">Business account</span>}
@@ -41,7 +41,7 @@ export function BusinessSwitcher({
             href={`/dashboard/${b.id}`}
             className="flex items-center gap-3 rounded-xl p-2 text-sm font-semibold hover:bg-canvas"
           >
-            <BusinessAvatar name={b.name} color={b.brand_color} size="sm" className="size-7 rounded-lg text-[10px]" />
+            <BusinessAvatar name={b.name} color={b.brand_color} logoUrl={b.logo_url} size="sm" className="size-7 rounded-lg text-[10px]" />
             <span className="min-w-0 flex-1 truncate">{b.name}</span>
             {b.id === current.id && <Check className="size-4 text-brand-600" aria-label="Current" />}
           </Link>

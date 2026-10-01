@@ -4,13 +4,14 @@ import { ArrowLeft, LoaderCircle } from "lucide-react";
 import { useState, useTransition } from "react";
 import { PhoneSignIn } from "@/components/auth/phone-sign-in";
 import { Button } from "@/components/ui/button";
-import { Field, FormMessage, Input, Select } from "@/components/ui/field";
+import { MultiCombobox } from "@/components/ui/combobox";
+import { Field, FormMessage, Input } from "@/components/ui/field";
 import { CATEGORIES } from "@/lib/constants";
 import { createBusiness, type NewBusiness } from "./actions";
 
 export function StartFlow({ signedIn }: { signedIn: boolean }) {
   const [step, setStep] = useState<"details" | "verify">("details");
-  const [details, setDetails] = useState<NewBusiness>({ name: "", category: CATEGORIES[0], location: "", whatsapp: "" });
+  const [details, setDetails] = useState<NewBusiness>({ name: "", categories: [], location: "", whatsapp: "" });
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -61,12 +62,15 @@ export function StartFlow({ signedIn }: { signedIn: boolean }) {
       <Field label="Business name" htmlFor="name">
         <Input id="name" required maxLength={80} placeholder="e.g. Mama Tee's Kitchen" value={details.name} onChange={update("name")} />
       </Field>
-      <Field label="What do you sell?" htmlFor="category">
-        <Select id="category" value={details.category} onChange={update("category")}>
-          {CATEGORIES.map((c) => (
-            <option key={c}>{c}</option>
-          ))}
-        </Select>
+      <Field label="What do you sell?" htmlFor="categories">
+        <MultiCombobox
+          id="categories"
+          options={CATEGORIES}
+          value={details.categories}
+          onChange={(categories) => setDetails((d) => ({ ...d, categories }))}
+          placeholder="e.g. Restaurant, Barber"
+          max={3}
+        />
       </Field>
       <Field label="Area" htmlFor="location" optional>
         <Input id="location" maxLength={80} placeholder="e.g. Yaba, Lagos" value={details.location} onChange={update("location")} />

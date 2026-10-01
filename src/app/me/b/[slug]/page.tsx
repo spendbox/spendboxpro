@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PerkCard, PerkIcon } from "@/components/perks/perk-card";
+import { TimeLeft } from "@/components/perks/time-left";
 import { PurchaseList } from "@/components/purchases/purchase-list";
 import { BusinessAvatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +16,7 @@ import { requireUser } from "@/lib/auth";
 import { getMyMemberships, getMyProfile, getMyPurchases, getMyRewards } from "@/lib/customer";
 import { siteUrl } from "@/lib/env";
 import { formatDate, formatMonthYear, memberNo, whatsappLink } from "@/lib/format";
-import { PERK_KINDS, perkProgress, perkTrigger } from "@/lib/perks";
+import { durationSentence, PERK_KINDS, perkProgress, perkTrigger, sortBySoonest } from "@/lib/perks";
 import { createClient } from "@/lib/supabase/server";
 import type { ReferralRow } from "@/lib/types";
 import { leaveBusiness, setSharing } from "../../actions";
@@ -89,7 +90,7 @@ export default async function MemberBusinessPage({ params, searchParams }: PageP
       >
         <div aria-hidden className="absolute -top-20 -right-16 -z-10 size-64 rounded-full bg-white/10" />
         <div className="flex items-center gap-4">
-          <BusinessAvatar name={b.name} color="rgba(255,255,255,0.18)" size="lg" />
+          <BusinessAvatar name={b.name} color="rgba(255,255,255,0.18)" logoUrl={b.logo_url} size="lg" />
           <div className="min-w-0">
             <h1 className="font-display text-2xl leading-tight font-bold tracking-tight sm:text-3xl">{b.name}</h1>
             <p className="mt-0.5 text-sm text-white/90">
@@ -124,7 +125,7 @@ export default async function MemberBusinessPage({ params, searchParams }: PageP
             <section className="flex flex-col gap-3">
               <SectionTitle title="Ready to use" description="Show your pass at the counter to use these." />
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {myRewards.map((r) => (
+                {sortBySoonest(myRewards).map((r) => (
                   <PerkCard
                     key={r.id}
                     size="sm"
@@ -133,11 +134,7 @@ export default async function MemberBusinessPage({ params, searchParams }: PageP
                     title={r.title}
                     threshold={b.perks.find((p) => p.id === r.perk_id)?.threshold}
                     currency={b.currency}
-                    footer={
-                      r.expires_at ? (
-                        <span className="text-xs font-semibold text-white/90">Use by {formatDate(r.expires_at)}</span>
-                      ) : undefined
-                    }
+                    footer={<TimeLeft issuedAt={r.issued_at} expiresAt={r.expires_at} />}
                   />
                 ))}
               </div>
@@ -181,6 +178,7 @@ export default async function MemberBusinessPage({ params, searchParams }: PageP
                       <p className="text-sm text-muted">
                         {perkTrigger(perk.kind, perk.threshold, b.currency, "customer")}
                         {perk.details ? ` · ${perk.details}` : ""}
+                        {perk.valid_days ? ` · ${durationSentence(perk.valid_days, "customer").toLowerCase()}` : ""}
                       </p>
                     </div>
                   </div>

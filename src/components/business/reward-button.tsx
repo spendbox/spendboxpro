@@ -9,12 +9,12 @@ export function RewardButton({ bizId, rewardId, given }: { bizId: string; reward
   const [pending, startTransition] = useTransition();
   const toggle = () => startTransition(async () => void (await redeemReward(bizId, rewardId, !given)));
   return given ? (
-    <Button size="sm" variant="ghost" disabled={pending} onClick={toggle}>
-      <Undo2 className="size-4" aria-hidden /> Undo
+    <Button size="sm" variant="ghost" loading={pending} onClick={toggle}>
+      {!pending && <Undo2 className="size-4" aria-hidden />} Undo
     </Button>
   ) : (
-    <Button size="sm" disabled={pending} onClick={toggle}>
-      <Check className="size-4" aria-hidden /> Mark as given
+    <Button size="sm" loading={pending} onClick={toggle}>
+      {!pending && <Check className="size-4" aria-hidden />} Mark as given
     </Button>
   );
 }

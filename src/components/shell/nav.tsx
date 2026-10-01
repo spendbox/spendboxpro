@@ -4,6 +4,7 @@ import {
   Gift,
   House,
   LayoutGrid,
+  LoaderCircle,
   ReceiptText,
   ScanLine,
   Settings,
@@ -11,7 +12,7 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
 
@@ -38,6 +39,12 @@ export interface NavItem {
   primary?: boolean;
 }
 
+/** Spinner on the menu item that was just tapped, until its page shows. */
+function Pending({ className }: { className?: string }) {
+  const { pending } = useLinkStatus();
+  return pending ? <LoaderCircle className={cn("size-4 animate-spin text-brand-600", className)} aria-hidden /> : null;
+}
+
 function isActive(pathname: string, item: NavItem) {
   if (item.exact) return pathname === item.href || (item.also ?? []).some((p) => pathname.startsWith(p));
   return [item.href, ...(item.also ?? [])].some((p) => pathname === p || pathname.startsWith(`${p}/`));
@@ -62,6 +69,7 @@ export function SideNav({ items }: { items: NavItem[] }) {
           >
             <Icon className="size-5" aria-hidden />
             <span className="flex-1">{item.label}</span>
+            <Pending />
             {item.badge ? (
               <span className="rounded-full bg-accent-600 px-2 py-0.5 text-xs font-bold text-white">{item.badge}</span>
             ) : null}
@@ -101,6 +109,7 @@ export function BottomNav({ items }: { items: NavItem[] }) {
                   <Icon className="size-6" aria-hidden strokeWidth={active ? 2.25 : 1.75} />
                 )}
                 <span>{item.label}</span>
+                <Pending className="absolute top-1.5 right-3 size-3.5" />
                 {item.badge ? (
                   <span className="absolute top-2 left-1/2 ml-2 min-w-5 rounded-full bg-accent-600 px-1.5 text-center text-[10px] leading-5 font-bold text-white">
                     {item.badge}

@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { getUser } from "@/lib/auth";
+import { notifyReceiptToReview, notifyRewardsReady } from "@/lib/notify";
 import { saveReceiptPurchase, type ReceiptResult, type ScannedReceipt } from "@/lib/receipts/save";
 import { readToken } from "@/lib/receipts/token";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -38,5 +39,12 @@ export async function POST(request: Request) {
     status: "pending",
     reason: `${name} will check the payment reached them, then it counts.`,
   });
+  if (result.kind === "saved") {
+    const { purchaseId, status: saved } = result;
+    after(async () => {
+      await notifyRewardsReady();
+      if (saved === "pending") await notifyReceiptToReview(purchaseId);
+    });
+  }
   return reply(result, result.kind === "error" ? 409 : 200);
 }

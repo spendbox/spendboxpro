@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { getUser } from "@/lib/auth";
+import { notifyReceiptToReview, notifyRewardsReady } from "@/lib/notify";
 import { appTimeZone } from "@/lib/env";
 import { extractReceipt, ReceiptReadError } from "@/lib/receipts/extract";
 import { matchReceipt, type Candidate, type Match } from "@/lib/receipts/match";
@@ -149,5 +150,12 @@ export async function POST(request: Request) {
     status,
     reason,
   });
+  if (result.kind === "saved") {
+    const { purchaseId, status: saved } = result;
+    after(async () => {
+      await notifyRewardsReady();
+      if (saved === "pending") await notifyReceiptToReview(purchaseId);
+    });
+  }
   return reply(result, result.kind === "error" ? 409 : 200);
 }

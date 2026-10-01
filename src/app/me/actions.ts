@@ -27,6 +27,10 @@ export async function updateProfile(_prev: FormState, formData: FormData): Promi
   const birthYear = intOrNull(formData.get("birth_year"), 1900, new Date().getFullYear());
 
   if (fullName.length > 80) return { error: "Please use a shorter name." };
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  if (email && (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 200)) {
+    return { error: "Please check your email address." };
+  }
   if ((birthDay === null) !== (birthMonth === null)) return { error: "Please pick both the day and the month of your birthday." };
 
   const supabase = await createClient();
@@ -38,6 +42,8 @@ export async function updateProfile(_prev: FormState, formData: FormData): Promi
       birth_day: birthDay,
       birth_month: birthMonth,
       birth_year: birthMonth ? birthYear : null,
+      email: email || null,
+      email_notifications: formData.get("email_notifications") === "on",
     })
     .eq("id", user.id);
   if (error) return { error: "Could not save. Please try again." };

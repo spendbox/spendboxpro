@@ -49,9 +49,3 @@ export const getMyPurchases = cache(async (userId: string): Promise<Purchase[]> 
     .limit(500);
   return (data ?? []) as Purchase[];
 });
-
-/** Issues any birthday treats that are due. Cheap and safe to call on page load. */
-export async function syncMyRewards() {
-  const supabase = await createClient();
-  await supabase.rpc("sync_my_rewards");
-}

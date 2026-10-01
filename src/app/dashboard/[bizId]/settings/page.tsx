@@ -8,17 +8,19 @@ import { CopyButton } from "@/components/ui/share-actions";
 import { signOut } from "@/lib/actions/auth";
 import { requireOwnedBusiness } from "@/lib/auth";
 import { getBankAccounts } from "@/lib/business";
+import { listBanks } from "@/lib/paystack";
 import { siteUrl } from "@/lib/env";
 import { BankAccounts } from "./bank-accounts";
 import { BusinessForm } from "./business-form";
 import { DeleteBusiness } from "./delete-business";
+import { LogoUpload } from "./logo-upload";
 
 export const metadata: Metadata = { title: "Settings" };
 
 export default async function SettingsPage({ params }: PageProps<"/dashboard/[bizId]/settings">) {
   const { bizId } = await params;
   const { business } = await requireOwnedBusiness(bizId);
-  const accounts = await getBankAccounts(bizId);
+  const [accounts, banks] = await Promise.all([getBankAccounts(bizId), listBanks()]);
   const joinUrl = `${siteUrl()}/j/${business.slug}`;
 
   return (
@@ -27,8 +29,11 @@ export default async function SettingsPage({ params }: PageProps<"/dashboard/[bi
 
       <section className="flex flex-col gap-3">
         <SectionTitle title="Business details" />
-        <Card className="p-5 sm:p-7">
-          <BusinessForm business={business} />
+        <Card className="flex flex-col gap-6 p-5 sm:p-7">
+          <LogoUpload bizId={bizId} name={business.name} color={business.brand_color} logoUrl={business.logo_url} />
+          <div className="border-t border-line pt-6">
+            <BusinessForm business={business} />
+          </div>
         </Card>
       </section>
 
@@ -38,7 +43,7 @@ export default async function SettingsPage({ params }: PageProps<"/dashboard/[bi
           description="Add every account customers pay into. When a customer uploads a receipt, we check it was paid into one of these. We never touch your money."
         />
         <Card className="p-5 sm:p-7">
-          <BankAccounts bizId={bizId} accounts={accounts} />
+          <BankAccounts bizId={bizId} accounts={accounts} banks={banks} />
         </Card>
       </section>
 

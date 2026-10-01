@@ -50,7 +50,6 @@ export default async function CustomersPage({ params }: PageProps<"/dashboard/[b
             bizId={bizId}
             currency={business.currency}
             variant="secondary"
-            members={members.map((m) => ({ id: m.membership_id, label: memberLabel(m.member_no, m.full_name) }))}
           />
         }
       />

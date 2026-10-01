@@ -11,6 +11,8 @@ export interface Profile {
   birth_day: number | null;
   birth_month: number | null;
   birth_year: number | null;
+  email: string | null;
+  email_notifications: boolean;
 }
 
 export interface Business {
@@ -19,6 +21,9 @@ export interface Business {
   slug: string;
   name: string;
   category: string | null;
+  categories: string[];
+  logo_url: string | null;
+  email: string | null;
   location: string | null;
   about: string | null;
   whatsapp: string | null;
@@ -31,6 +36,7 @@ export interface BankAccount {
   id: string;
   business_id: string;
   bank_name: string;
+  bank_code: string | null;
   account_number: string;
   account_name: string;
   created_at: string;
@@ -43,6 +49,7 @@ export interface Perk {
   title: string;
   details: string | null;
   threshold: number | null;
+  valid_days: number | null;
   is_active: boolean;
   created_at: string;
 }

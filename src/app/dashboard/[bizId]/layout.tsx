@@ -1,11 +1,13 @@
 import { ExternalLink, LogOut, Wallet } from "lucide-react";
 import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
+import { BusinessFab } from "@/components/business/business-fab";
 import { TrialBanner } from "@/components/business/trial-banner";
 import { BusinessSwitcher } from "@/components/shell/business-switcher";
 import type { NavItem } from "@/components/shell/nav";
 import { signOut } from "@/lib/actions/auth";
 import { requireOwnedBusiness } from "@/lib/auth";
+import { siteUrl } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function BusinessLayout({ children, params }: LayoutProps<"/dashboard/[bizId]">) {
@@ -59,6 +61,13 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
     >
       <TrialBanner createdAt={business.created_at} />
       {children}
+      <BusinessFab
+        bizId={bizId}
+        currency={business.currency}
+        businessName={business.name}
+        joinUrl={`${siteUrl()}/j/${business.slug}`}
+        joinMessage={`Join ${business.name} on Spendbox for member perks:`}
+      />
     </AppShell>
   );
 }
