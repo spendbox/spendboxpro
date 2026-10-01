@@ -1,0 +1,174 @@
+import { Cake, ChevronRight, Gift, ScanLine, Share2, Ticket } from "lucide-react";
+import type { Metadata } from "next";
+import Link from "next/link";
+import { PerkIcon } from "@/components/perks/perk-card";
+import { BusinessAvatar } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { ButtonLink, buttonClass } from "@/components/ui/button";
+import { Card, EmptyState, SectionTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { WhatsAppIcon } from "@/components/ui/share-actions";
+import { requireUser } from "@/lib/auth";
+import { getMyMemberships, getMyProfile, getMyPurchases, getMyRewards, syncMyRewards } from "@/lib/customer";
+import { firstName, memberNo, plural, whatsappLink } from "@/lib/format";
+import { PERK_KINDS, perkProgress } from "@/lib/perks";
+
+export const metadata: Metadata = { title: "My Spendbox" };
+
+export default async function MySpendboxPage() {
+  const user = await requireUser("/me");
+  await syncMyRewards();
+  const [profile, memberships, rewards, purchases] = await Promise.all([
+    getMyProfile(user.id),
+    getMyMemberships(user.id),
+    getMyRewards(user.id),
+    getMyPurchases(user.id),
+  ]);
+
+  const name = firstName(profile?.full_name);
+  const missingDetails = !profile?.full_name || !profile?.birth_month;
+
+  return (
+    <div className="flex flex-col gap-8">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="font-display text-[30px] leading-tight font-bold tracking-tight sm:text-4xl">
+            {name ? `Hi ${name}` : "Your Spendbox"}
+          </h1>
+          <p className="mt-1 text-muted">
+            {plural(memberships.length, "business", "businesses")}
+            {rewards.length > 0 && ` · ${plural(rewards.length, "perk")} ready`}
+          </p>
+        </div>
+        <ButtonLink href="/me/receipts" className="hidden lg:inline-flex">
+          <ScanLine className="size-4" aria-hidden /> Add a receipt
+        </ButtonLink>
+      </header>
+
+      {missingDetails && memberships.length > 0 && (
+        <Link
+          href="/me/profile"
+          className="flex items-center gap-4 rounded-3xl bg-accent-50 p-4 ring-1 ring-accent-100 transition hover:bg-accent-100/60 sm:p-5"
+        >
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-white text-accent-700">
+            <Cake className="size-5" aria-hidden />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-ink">Add your name and birthday</p>
+            <p className="text-sm text-ink-2">Unlock birthday treats. You decide which businesses can see them.</p>
+          </div>
+          <ChevronRight className="size-5 shrink-0 text-muted" aria-hidden />
+        </Link>
+      )}
+
+      {rewards.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <SectionTitle title="Ready to use" description="Show your pass at the counter on your next order." />
+          <div className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 xl:grid-cols-3">
+            {rewards.map((reward) => {
+              const membership = memberships.find((m) => m.id === reward.membership_id);
+              if (!membership) return null;
+              const info = PERK_KINDS[reward.kind];
+              return (
+                <Link
+                  key={reward.id}
+                  href={`/me/b/${membership.business.slug}/pass`}
+                  className="flex w-[78%] shrink-0 snap-start flex-col justify-between gap-6 rounded-3xl p-5 text-white shadow-card transition hover:brightness-110 sm:w-auto"
+                  style={{ background: info.color }}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-sm font-semibold text-white/90">{membership.business.name}</span>
+                    <PerkIcon kind={reward.kind} className="size-5 shrink-0" />
+                  </div>
+                  <div>
+                    <p className="font-display text-xl leading-tight font-bold">{reward.title}</p>
+                    <p className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold">
+                      <Ticket className="size-4" aria-hidden /> Show pass
+                    </p>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      <section className="flex flex-col gap-3">
+        <SectionTitle title="Your businesses" />
+        {memberships.length === 0 ? (
+          <EmptyState
+            icon={<Gift className="size-5" />}
+            title="Your Spendbox is empty"
+            description="Spendbox is invite-only. Ask a business you buy from for their Spendbox link to join."
+          />
+        ) : (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {memberships.map((m) => {
+              const b = m.business;
+              const ready = rewards.filter((r) => r.membership_id === m.id).length;
+              const verified = purchases.filter((p) => p.membership_id === m.id && p.status === "verified");
+              const progress = perkProgress(b.perks, verified, b.currency)[0];
+              return (
+                <Card key={m.id} className="flex flex-col gap-4 p-4 sm:p-5">
+                  <Link href={`/me/b/${b.slug}`} className="flex items-center gap-3">
+                    <BusinessAvatar name={b.name} color={b.brand_color} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-bold text-ink">{b.name}</p>
+                      <p className="truncate text-sm text-muted">
+                        {[b.category, b.location].filter(Boolean).join(" · ") || `Member ${memberNo(m.member_no)}`}
+                      </p>
+                    </div>
+                    {ready > 0 ? (
+                      <Badge tone="solid">{ready === 1 ? "Perk ready" : `${ready} perks`}</Badge>
+                    ) : (
+                      <ChevronRight className="size-5 text-muted" aria-hidden />
+                    )}
+                  </Link>
+
+                  {progress ? (
+                    <div className="flex flex-col gap-2">
+                      <Progress
+                        current={progress.current}
+                        target={progress.target}
+                        color={b.brand_color}
+                        label={`${progress.label} toward ${progress.perk.title}`}
+                      />
+                      <p className="text-sm text-muted">
+                        <span className="font-semibold text-ink-2">{progress.label}</span> · {progress.perk.title}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted">Member {memberNo(m.member_no)}</p>
+                  )}
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <Link href={`/me/b/${b.slug}/pass`} className={buttonClass({ variant: "soft", size: "sm" }, "h-10")}>
+                      <Ticket className="size-4" aria-hidden /> Pass
+                    </Link>
+                    <Link href={`/me/b/${b.slug}#invite`} className={buttonClass({ variant: "secondary", size: "sm" }, "h-10")}>
+                      <Share2 className="size-4" aria-hidden /> Share
+                    </Link>
+                    {b.whatsapp ? (
+                      <a
+                        href={whatsappLink(b.whatsapp, `Hi ${b.name}, I'd like to order. (Spendbox member ${memberNo(m.member_no)})`)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={buttonClass({ variant: "secondary", size: "sm" }, "h-10")}
+                      >
+                        <WhatsAppIcon className="size-4 text-[#107A42]" /> Order
+                      </a>
+                    ) : (
+                      <Link href={`/me/b/${b.slug}`} className={buttonClass({ variant: "secondary", size: "sm" }, "h-10")}>
+                        Details
+                      </Link>
+                    )}
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}

@@ -1,0 +1,114 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-display-face), var(--font-body), ui-sans-serif, sans-serif;
+
+  /* Brand green */
+  --color-brand-50: #eef6f2;
+  --color-brand-100: #dcede4;
+  --color-brand-200: #b7d3c6;
+  --color-brand-300: #8fbba7;
+  --color-brand-500: #1f8a5b;
+  --color-brand-600: #0b6e4f;
+  --color-brand-700: #075a40;
+  --color-brand-800: #064632;
+  --color-brand-900: #0a3326;
+
+  /* Warm accent */
+  --color-accent-50: #fff1e8;
+  --color-accent-100: #ffe2d1;
+  --color-accent-500: #d9480f;
+  --color-accent-600: #c2410c;
+  --color-accent-700: #b03a0a;
+
+  /* Neutrals */
+  --color-ink: #14201a;
+  --color-ink-2: #33403a;
+  --color-muted: #56615b;
+  --color-subtle: #7a857f;
+  --color-line: #e4e8e3;
+  --color-line-strong: #c9d1cb;
+  --color-canvas: #f6f7f4;
+  --color-surface: #ffffff;
+
+  --radius-4xl: 2rem;
+
+  --shadow-card: 0 1px 2px rgb(20 32 26 / 0.04), 0 1px 1px rgb(20 32 26 / 0.03);
+  --shadow-lift: 0 12px 32px -12px rgb(20 32 26 / 0.18), 0 2px 6px rgb(20 32 26 / 0.06);
+
+  --animate-fade-up: fade-up 0.35s ease-out both;
+  --animate-pulse-soft: pulse-soft 1.4s ease-in-out infinite;
+  --animate-scan: scan 1.6s ease-in-out infinite;
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes scan {
+    0%,
+    100% {
+      top: 0;
+    }
+    50% {
+      top: calc(100% - 4px);
+    }
+  }
+  @keyframes pulse-soft {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+}
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+/* Visible focus for keyboard users everywhere */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-brand-600);
+  outline-offset: 2px;
+}
+
+dialog::backdrop {
+  background: rgb(10 20 15 / 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.pb-safe {
+  padding-bottom: max(env(safe-area-inset-bottom), 0px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
