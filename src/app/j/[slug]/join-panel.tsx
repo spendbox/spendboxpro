@@ -2,7 +2,7 @@
 
 import { LoaderCircle } from "lucide-react";
 import { useState, useTransition } from "react";
-import { PhoneOtpForm } from "@/components/auth/phone-otp-form";
+import { PhoneSignIn } from "@/components/auth/phone-sign-in";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { FormMessage } from "@/components/ui/field";
 import { joinBusiness } from "./actions";
@@ -100,14 +100,13 @@ export function JoinPanel({
     <div className="flex flex-col gap-4">
       <div>
         <h2 className="font-display text-xl font-bold">Join with your phone number</h2>
-        <p className="mt-1 text-sm text-muted">We&apos;ll send you a code to confirm it&apos;s you.</p>
+        <p className="mt-1 text-sm text-muted">Already on Spendbox? Use your usual PIN.</p>
       </div>
-      <PhoneOtpForm
+      <PhoneSignIn
         allowSignup
-        sendLabel="Send me a code"
-        verifyLabel={`Join ${businessName}`}
+        submitLabel={`Join ${businessName}`}
         note={shareChoice}
-        onVerified={() => joinBusiness(slug, refCode, share)}
+        onSignedIn={() => joinBusiness(slug, refCode, share)}
       />
     </div>
   );

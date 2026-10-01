@@ -1,15 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { PhoneOtpForm } from "@/components/auth/phone-otp-form";
+import { PhoneSignIn } from "@/components/auth/phone-sign-in";
 
 export function LoginForm({ next }: { next: string | null }) {
   const router = useRouter();
   return (
-    <PhoneOtpForm
+    <PhoneSignIn
       allowSignup={false}
-      verifyLabel="Log in"
-      onVerified={async () => {
+      submitLabel="Log in"
+      onSignedIn={async () => {
         router.replace(next ?? "/go");
         router.refresh();
       }}

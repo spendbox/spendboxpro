@@ -18,7 +18,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
       <div className="flex flex-col gap-6">
         <div>
           <h1 className="font-display text-3xl font-bold tracking-tight">Welcome back</h1>
-          <p className="mt-2 text-muted">Log in with the phone number you joined with.</p>
+          <p className="mt-2 text-muted">Log in with your phone number and PIN.</p>
         </div>
         <LoginForm next={nextPath} />
         <div className="rounded-2xl bg-white p-4 text-sm text-muted ring-1 ring-line">
@@ -26,7 +26,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
             <span className="font-semibold text-ink">New here?</span> Customers join from a business&apos;s Spendbox
             link. Running a business?{" "}
             <Link href="/start" className="font-semibold text-brand-700 underline underline-offset-2">
-              Get your free link
+              Start a free trial
             </Link>
             .
           </p>

@@ -1,6 +1,7 @@
 import { ExternalLink, LogOut, Wallet } from "lucide-react";
 import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
+import { TrialBanner } from "@/components/business/trial-banner";
 import { BusinessSwitcher } from "@/components/shell/business-switcher";
 import type { NavItem } from "@/components/shell/nav";
 import { signOut } from "@/lib/actions/auth";
@@ -56,6 +57,7 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
         </>
       }
     >
+      <TrialBanner createdAt={business.created_at} />
       {children}
     </AppShell>
   );

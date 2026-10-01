@@ -45,6 +45,8 @@ export function appTimeZone() {
 /** Country calling code pre-selected on phone number fields. */
 export const DEFAULT_COUNTRY_CODE = process.env.NEXT_PUBLIC_DEFAULT_COUNTRY_CODE ?? "234";
 
-/** "sms" or "whatsapp" — must match the provider set up in Supabase. */
-export const OTP_CHANNEL: "sms" | "whatsapp" =
-  process.env.NEXT_PUBLIC_OTP_CHANNEL === "whatsapp" ? "whatsapp" : "sms";
+/** Length of the free trial for new businesses, in days (default 90). */
+export function trialDays() {
+  const days = Number(process.env.NEXT_PUBLIC_TRIAL_DAYS ?? 90);
+  return Number.isFinite(days) && days > 0 ? Math.round(days) : 90;
+}
