@@ -42,6 +42,8 @@ export async function POST(request: Request) {
   if (event === "mono.events.reauthorisation_required") {
     await admin.from("bank_connections").update({ status: "reauth" }).eq("id", conn.id);
   } else if (event === "mono.events.account_updated" || event === "mono.events.account_reauthorized") {
+    const status = (body?.data?.meta as Raw | undefined)?.data_status;
+    if (typeof status === "string") await admin.from("bank_connections").update({ data_status: status.slice(0, 30) }).eq("id", conn.id);
     // Answer Mono straight away; fetch the new payments in the background.
     after(() => syncConnection(conn.id).catch((e) => console.error("Mono sync failed", e)));
   }

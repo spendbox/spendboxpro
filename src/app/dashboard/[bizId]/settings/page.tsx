@@ -30,7 +30,7 @@ export default async function SettingsPage({ params }: PageProps<"/dashboard/[bi
     receipts ? listBanks() : [],
     supabase
       .from("bank_connections")
-      .select("id, institution, account_name, account_number, status, last_error, last_synced_at")
+      .select("id, institution, account_name, account_number, status, last_error, last_synced_at, last_fetch_count, data_status")
       .eq("business_id", bizId)
       .order("created_at"),
   ]);
