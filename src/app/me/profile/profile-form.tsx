@@ -22,7 +22,7 @@ export function ProfileForm({ profile }: { profile: Profile | null }) {
 
   return (
     <form action={action} className="flex flex-col gap-5">
-      <Field label="Name" htmlFor="full_name" optional>
+      <Field label="Name" htmlFor="full_name" optional hint="Using the name on your bank account helps your transfers count by themselves.">
         <Input id="full_name" name="full_name" maxLength={80} autoComplete="name" defaultValue={profile?.full_name ?? ""} placeholder="e.g. Tunde Adebayo" />
       </Field>
 

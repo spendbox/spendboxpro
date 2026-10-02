@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { requireUser } from "@/lib/auth";
+import { matchOpenPayments } from "@/lib/bank/sync";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -48,6 +50,13 @@ export async function updateProfile(_prev: FormState, formData: FormData): Promi
     .eq("id", user.id);
   if (error) return { error: "Could not save. Please try again." };
 
+  if (fullName) {
+    // A name can match transfers that were waiting for "who paid this?".
+    after(async () => {
+      const { data } = await createAdminClient().from("memberships").select("business_id").eq("customer_id", user.id);
+      for (const m of data ?? []) await matchOpenPayments(m.business_id).catch((e) => console.error("matchOpenPayments failed", e));
+    });
+  }
   revalidatePath("/", "layout");
   return { ok: true, message: "Saved. Your details are up to date everywhere." };
 }
@@ -58,6 +67,30 @@ export async function setSharing(membershipId: string, share: boolean) {
   const supabase = await createClient();
   await supabase.from("memberships").update({ share_details: share }).eq("id", membershipId).eq("customer_id", user.id);
   revalidatePath("/", "layout");
+}
+
+/** Stop recognising a bank sender as me. */
+export async function forgetPayer(payerId: string) {
+  const user = await requireUser("/me/profile");
+  const supabase = await createClient();
+  const { data: removed, error } = await supabase
+    .from("payers")
+    .delete()
+    .eq("id", payerId)
+    .select("sender_key, sender_account")
+    .maybeSingle();
+  if (error) return { error: error.message };
+  // Don't match this sender to me again, at any business I've joined.
+  const senders = [removed?.sender_key, removed?.sender_account].filter((x): x is string => Boolean(x));
+  if (senders.length) {
+    const { data: memberships } = await supabase.from("memberships").select("id").eq("customer_id", user.id);
+    const rows = (memberships ?? []).flatMap((m) => senders.map((sender) => ({ membership_id: m.id, sender })));
+    if (rows.length) {
+      await createAdminClient().from("bank_sender_rejections").upsert(rows, { onConflict: "membership_id,sender", ignoreDuplicates: true });
+    }
+  }
+  revalidatePath("/me/profile");
+  return { ok: true };
 }
 
 export async function leaveBusiness(membershipId: string) {

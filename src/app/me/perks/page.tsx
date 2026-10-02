@@ -36,7 +36,7 @@ export default async function MyPerksPage() {
       />
 
       {groups.length === 0 ? (
-        <EmptyState icon={<Gift className="size-5" />} title="No perks ready yet" description="Keep uploading your receipts — perks unlock automatically." />
+        <EmptyState icon={<Gift className="size-5" />} title="No perks ready yet" description="Keep buying from the businesses you've joined — perks unlock automatically." />
       ) : (
         groups.map(({ membership, rewards: list }) => (
           <section key={membership.id} className="flex flex-col gap-3">

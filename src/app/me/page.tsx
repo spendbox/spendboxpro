@@ -9,6 +9,7 @@ import { Card, EmptyState, SectionTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { WhatsAppIcon } from "@/components/ui/share-actions";
 import { requireUser } from "@/lib/auth";
+import { receiptsEnabled } from "@/lib/env";
 import { getMyMemberships, getMyProfile, getMyPurchases, getMyRewards } from "@/lib/customer";
 import { businessTagline, firstName, memberNo, plural, whatsappLink } from "@/lib/format";
 import { PERK_KINDS, perkProgress, sortBySoonest } from "@/lib/perks";
@@ -44,9 +45,11 @@ export default async function MySpendboxPage() {
             {rewards.length > 0 && ` · ${plural(rewards.length, "perk")} ready`}
           </p>
         </div>
-        <ButtonLink href="/me/receipts" className="hidden lg:inline-flex">
-          <ScanLine className="size-4" aria-hidden /> Add a receipt
-        </ButtonLink>
+        {receiptsEnabled() && (
+          <ButtonLink href="/me/receipts" className="hidden lg:inline-flex">
+            <ScanLine className="size-4" aria-hidden /> Add a receipt
+          </ButtonLink>
+        )}
       </header>
 
       {missingDetails && memberships.length > 0 && (

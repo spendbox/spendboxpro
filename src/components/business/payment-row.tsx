@@ -5,7 +5,18 @@ import { formatMoney, formatWhen, memberLabel, memberNo } from "@/lib/format";
 import type { BusinessPurchaseRow } from "@/lib/types";
 import { PaymentActions } from "./payment-actions";
 
+function senderText(name: string | null) {
+  return name ? name.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()) : "the sender";
+}
+
 function howMatched(p: BusinessPurchaseRow) {
+  if (p.source === "bank") {
+    const from = `From ${senderText(p.sender_name)}`;
+    if (p.match_method === "payer") return { icon: Landmark, text: `${from} · recognised` };
+    if (p.match_method === "name") return { icon: UserCheck, text: `${from} · matched by name` };
+    return { icon: Landmark, text: `${from} · picked by you` };
+  }
+  if (p.source === "business" && p.from_bank) return { icon: PenLine, text: `Added by you · from ${senderText(p.sender_name)}` };
   if (p.source === "business") return { icon: PenLine, text: "Added by you" };
   if (p.match_method === "account") return { icon: Landmark, text: `Paid into ${p.bank_label ?? "your account"}` };
   if (p.match_method === "name") return { icon: UserCheck, text: "Matched by name — please check" };
@@ -58,7 +69,7 @@ export function PaymentRow({ bizId, payment, showMember = true }: { bizId: strin
           )}
           <span className="text-lg font-semibold text-ink">{formatMoney(payment.amount, payment.currency)}</span>
         </div>
-        <PaymentActions bizId={bizId} purchaseId={payment.id} status={payment.status} />
+        <PaymentActions bizId={bizId} purchaseId={payment.id} status={payment.status} fromBank={payment.from_bank} />
       </div>
     </li>
   );

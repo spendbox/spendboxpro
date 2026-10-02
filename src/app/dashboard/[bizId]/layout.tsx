@@ -7,6 +7,7 @@ import { BusinessSwitcher } from "@/components/shell/business-switcher";
 import type { NavItem } from "@/components/shell/nav";
 import { signOut } from "@/lib/actions/auth";
 import { requireOwnedBusiness } from "@/lib/auth";
+import { getStats } from "@/lib/business";
 import { siteUrl } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 
@@ -15,15 +16,15 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
   const { user, business, businesses } = await requireOwnedBusiness(bizId);
 
   const supabase = await createClient();
-  const [{ count: pending }, { count: memberships }] = await Promise.all([
-    supabase.from("purchases").select("id", { count: "exact", head: true }).eq("business_id", bizId).eq("status", "pending"),
+  const [stats, { count: memberships }] = await Promise.all([
+    getStats(bizId),
     supabase.from("memberships").select("id", { count: "exact", head: true }).eq("customer_id", user.id),
   ]);
 
   const base = `/dashboard/${bizId}`;
   const nav: NavItem[] = [
     { href: base, label: "Home", icon: "overview", exact: true },
-    { href: `${base}/payments`, label: "Payments", icon: "payments", badge: pending ?? 0 },
+    { href: `${base}/payments`, label: "Payments", icon: "payments", badge: stats.pending + stats.unmatched },
     { href: `${base}/customers`, label: "Customers", icon: "customers" },
     { href: `${base}/perks`, label: "Perks", icon: "perks", also: [`${base}/rewards`] },
     { href: `${base}/settings`, label: "Settings", icon: "settings" },

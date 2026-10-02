@@ -50,7 +50,7 @@ export function RecordPurchaseModal({
       open={open}
       onClose={onClose}
       title="Record a purchase"
-      description="For customers who paid cash or by card. It counts toward their perks straight away."
+      description="For cash and card payments. It counts toward their perks straight away. If they paid by transfer, it's linked when it shows up in your bank, so it isn't counted twice."
     >
       <form action={action} className="flex flex-col gap-4">
         <input type="hidden" name="membership_id" value={member ?? ""} />

@@ -1,5 +1,6 @@
 import { Download, LogOut } from "lucide-react";
 import type { Metadata } from "next";
+import { BankConnect, type BankConnectionView } from "@/components/business/bank-connect";
 import { QrCode } from "@/components/qr-code";
 import { Button, buttonClass } from "@/components/ui/button";
 import { Card, SectionTitle } from "@/components/ui/card";
@@ -9,7 +10,9 @@ import { signOut } from "@/lib/actions/auth";
 import { requireOwnedBusiness } from "@/lib/auth";
 import { getBankAccounts } from "@/lib/business";
 import { listBanks } from "@/lib/paystack";
-import { siteUrl } from "@/lib/env";
+import { receiptsEnabled, siteUrl } from "@/lib/env";
+import { monoPublicKey } from "@/lib/mono";
+import { createClient } from "@/lib/supabase/server";
 import { BankAccounts } from "./bank-accounts";
 import { BusinessForm } from "./business-form";
 import { DeleteBusiness } from "./delete-business";
@@ -20,7 +23,17 @@ export const metadata: Metadata = { title: "Settings" };
 export default async function SettingsPage({ params }: PageProps<"/dashboard/[bizId]/settings">) {
   const { bizId } = await params;
   const { business } = await requireOwnedBusiness(bizId);
-  const [accounts, banks] = await Promise.all([getBankAccounts(bizId), listBanks()]);
+  const receipts = receiptsEnabled();
+  const supabase = await createClient();
+  const [accounts, banks, { data: connections }] = await Promise.all([
+    receipts ? getBankAccounts(bizId) : [],
+    receipts ? listBanks() : [],
+    supabase
+      .from("bank_connections")
+      .select("id, institution, account_name, account_number, status, last_error, last_synced_at")
+      .eq("business_id", bizId)
+      .order("created_at"),
+  ]);
   const joinUrl = `${siteUrl()}/j/${business.slug}`;
 
   return (
@@ -39,13 +52,31 @@ export default async function SettingsPage({ params }: PageProps<"/dashboard/[bi
 
       <section id="bank" className="flex scroll-mt-24 flex-col gap-3">
         <SectionTitle
-          title="Accounts you get paid into"
-          description="Add every account customers pay into. When a customer uploads a receipt, we check it was paid into one of these. We never touch your money."
+          title="Your bank"
+          description="Connect every account customers pay into. When a customer pays by transfer, Spendbox sees it and counts it for them — no receipts needed."
         />
         <Card className="p-5 sm:p-7">
-          <BankAccounts bizId={bizId} accounts={accounts} banks={banks} />
+          <BankConnect
+            bizId={bizId}
+            publicKey={monoPublicKey()}
+            businessName={business.name}
+            businessEmail={business.email}
+            connections={(connections ?? []) as BankConnectionView[]}
+          />
         </Card>
       </section>
+
+      {receipts && (
+        <section id="receipt-accounts" className="flex scroll-mt-24 flex-col gap-3">
+          <SectionTitle
+            title="Accounts for receipts"
+            description="When a customer uploads a receipt, we check it was paid into one of these. We never touch your money."
+          />
+          <Card className="p-5 sm:p-7">
+            <BankAccounts bizId={bizId} accounts={accounts} banks={banks} />
+          </Card>
+        </section>
+      )}
 
       <section className="flex flex-col gap-3">
         <SectionTitle title="Join link" />

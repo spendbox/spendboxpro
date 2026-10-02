@@ -2,6 +2,10 @@ export type PerkKind = "welcome" | "referral" | "visits" | "spend" | "birthday";
 export type PurchaseStatus = "verified" | "pending" | "rejected";
 export type RewardStatus = "available" | "redeemed" | "void";
 export type Gender = "female" | "male" | "other";
+/** receipt: uploaded by the customer · business: typed in by the business · bank: seen in the business's bank. */
+export type PurchaseSource = "receipt" | "business" | "bank";
+/** account/name: receipt matching · payer: a sender we recognised · recorded: linked to a typed-in purchase. */
+export type MatchMethod = "account" | "name" | "manual" | "payer" | "recorded";
 
 export interface Profile {
   id: string;
@@ -74,8 +78,8 @@ export interface Purchase {
   paid_at: string;
   description: string | null;
   reference: string | null;
-  source: "receipt" | "business";
-  match_method: "account" | "name" | "manual" | null;
+  source: PurchaseSource;
+  match_method: MatchMethod | null;
   status: PurchaseStatus;
   receipt_path: string | null;
   created_at: string;
@@ -109,6 +113,8 @@ export interface BusinessStats {
   pending: number;
   rewards_ready: number;
   referred_members: number;
+  /** Bank payments waiting for "who paid this?". */
+  unmatched: number;
 }
 
 export interface BusinessMemberRow {
@@ -138,12 +144,15 @@ export interface BusinessPurchaseRow {
   paid_at: string;
   description: string | null;
   reference: string | null;
-  source: "receipt" | "business";
-  match_method: "account" | "name" | "manual" | null;
+  source: PurchaseSource;
+  match_method: MatchMethod | null;
   status: PurchaseStatus;
   has_receipt: boolean;
   bank_label: string | null;
   created_at: string;
+  /** Who the bank says sent the money (payments from the bank feed). */
+  sender_name: string | null;
+  from_bank: boolean;
 }
 
 export interface BusinessRewardRow {

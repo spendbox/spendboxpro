@@ -19,7 +19,7 @@ export function DeleteAccount({ ownsBusiness }: { ownsBusiness: boolean }) {
         open={open}
         onClose={() => setOpen(false)}
         title="Delete your Spendbox?"
-        description="This permanently removes your phone number, details, receipts, perks and every membership. It can't be undone."
+        description="This permanently removes your phone number, details, purchases, perks, recognised bank accounts and every membership. It can't be undone."
       >
         <form action={action} className="flex flex-col gap-4">
           {ownsBusiness && (

@@ -1,5 +1,6 @@
 import { after, NextResponse } from "next/server";
 import { getUser } from "@/lib/auth";
+import { receiptsEnabled } from "@/lib/env";
 import { notifyReceiptToReview, notifyRewardsReady } from "@/lib/notify";
 import { saveReceiptPurchase, type ReceiptResult, type ScannedReceipt } from "@/lib/receipts/save";
 import { readToken } from "@/lib/receipts/token";
@@ -12,6 +13,7 @@ function reply(result: ReceiptResult, status = 200) {
 // The customer tells us which business an unmatched receipt was for.
 // It is saved as "needs review" until that business confirms it.
 export async function POST(request: Request) {
+  if (!receiptsEnabled()) return NextResponse.json({ error: "Receipt uploads are switched off." }, { status: 404 });
   const user = await getUser();
   if (!user) return reply({ kind: "error", message: "Please log in again." }, 401);
 

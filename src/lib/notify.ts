@@ -65,8 +65,8 @@ export async function notifyRewardsReady() {
   }
 }
 
-/** Tells a customer a business recorded or confirmed one of their payments. */
-export async function notifyPurchase(purchaseId: string, kind: "recorded" | "confirmed") {
+/** Tells a customer a business recorded, confirmed or received (by bank transfer) one of their payments. */
+export async function notifyPurchase(purchaseId: string, kind: "recorded" | "confirmed" | "bank") {
   if (!emailConfigured()) return;
   try {
     const { data: p } = await createAdminClient()
@@ -80,7 +80,12 @@ export async function notifyPurchase(purchaseId: string, kind: "recorded" | "con
     const business = p.business as unknown as { name: string; slug: string };
     const amount = formatMoney(p.amount, p.currency);
     const { html, text } = emailBody({
-      heading: kind === "recorded" ? `${business.name} recorded your purchase` : `${business.name} confirmed your payment`,
+      heading:
+        kind === "recorded"
+          ? `${business.name} recorded your purchase`
+          : kind === "bank"
+            ? `${business.name} received your payment`
+            : `${business.name} confirmed your payment`,
       lines: [
         hello(contact.name),
         `${amount} on ${formatWhen(p.paid_at)}${p.description ? ` (${p.description})` : ""} now counts toward your perks.`,
