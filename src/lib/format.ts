@@ -124,3 +124,8 @@ export function businessTagline(b: { categories?: string[] | null; category?: st
   const kinds = b.categories?.length ? b.categories.join(", ") : b.category;
   return [kinds, b.location].filter(Boolean).join(" · ");
 }
+
+/** "2026-09" → "September 2026" */
+export function monthName(month: string) {
+  return new Date(`${month}-01T12:00:00Z`).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
+}

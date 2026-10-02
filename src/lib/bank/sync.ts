@@ -1,6 +1,6 @@
 import "server-only";
 import { decideMatch, parseNarration, senderKey, type MemberCandidate, type RecordedPurchase } from "@/lib/bank/match";
-import { listCredits, MonoError } from "@/lib/mono";
+import { accountDetails, listCredits, MonoError } from "@/lib/mono";
 import { notifyPurchase, notifyRewardsReady } from "@/lib/notify";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -9,8 +9,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 // are saved once, and each one is counted once.
 
 const DAY = 86_400_000;
-/** First sync looks back this far. */
+/** Payments up to this long before connecting can still be matched to members; older ones are sales history only. */
 const FIRST_SYNC_DAYS = 7;
+/** The first fetch reads the account's whole history (for sales), up to this many pages. */
+const HISTORY_PAGES = 50;
 /** Later syncs re-read a few days, in case the bank posts payments late. */
 const OVERLAP_DAYS = 3;
 /** Payments older than this stay in "who paid this?" but aren't re-matched. */
@@ -29,19 +31,25 @@ export async function syncConnection(connectionId: string) {
   const admin = createAdminClient();
   const { data: conn } = await admin
     .from("bank_connections")
-    .select("id, business_id, mono_account_id, account_name, account_number, currency, last_synced_at, business:businesses(ignored_senders)")
+    .select(
+      "id, business_id, mono_account_id, account_name, account_number, currency, last_synced_at, history_synced_at, created_at, business:businesses(ignored_senders)",
+    )
     .eq("id", connectionId)
     .maybeSingle();
   if (!conn) return { added: 0, matched: 0 };
 
   const now = new Date();
-  const from = conn.last_synced_at
-    ? new Date(new Date(conn.last_synced_at).getTime() - OVERLAP_DAYS * DAY)
-    : new Date(now.getTime() - FIRST_SYNC_DAYS * DAY);
+  // Until Mono has shared some history, keep asking for all of it (Mono can
+  // take a while to prepare an account after it's connected).
+  const fullHistory = !conn.history_synced_at || !conn.last_synced_at;
 
   let credits;
+  let details: Awaited<ReturnType<typeof accountDetails>> | null = null;
   try {
-    credits = await listCredits(conn.mono_account_id, from, now);
+    details = await accountDetails(conn.mono_account_id).catch(() => null);
+    credits = fullHistory
+      ? await listCredits(conn.mono_account_id, null, null, HISTORY_PAGES)
+      : await listCredits(conn.mono_account_id, new Date(new Date(conn.last_synced_at).getTime() - OVERLAP_DAYS * DAY), now);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Couldn't reach the bank";
     const reauth = error instanceof MonoError && (/re-?auth/i.test(message) || error.status === 401 || error.status === 403);
@@ -54,10 +62,12 @@ export async function syncConnection(connectionId: string) {
 
   const ignored = new Set(((conn.business as unknown as { ignored_senders: string[] } | null)?.ignored_senders ?? []) as string[]);
   const ownKey = senderKey(conn.account_name);
+  const historyBefore = new Date(conn.created_at).getTime() - FIRST_SYNC_DAYS * DAY;
   const rows = credits.map((c) => {
     const sender = parseNarration(c.narration, conn.account_number);
     const key = senderKey(sender.name);
     const skip = key !== null && (key === ownKey || ignored.has(key));
+    const old = new Date(c.date).getTime() < historyBefore;
     return {
       business_id: conn.business_id,
       connection_id: conn.id,
@@ -69,7 +79,7 @@ export async function syncConnection(connectionId: string) {
       sender_name: sender.name,
       sender_key: key,
       sender_account: sender.account,
-      status: skip ? "ignored" : "unmatched",
+      status: skip ? "ignored" : old ? "history" : "unmatched",
     };
   });
 
@@ -85,7 +95,15 @@ export async function syncConnection(connectionId: string) {
 
   await admin
     .from("bank_connections")
-    .update({ status: "active", last_error: null, last_synced_at: now.toISOString() })
+    .update({
+      status: "active",
+      last_error: null,
+      last_synced_at: now.toISOString(),
+      last_fetch_count: credits.length,
+      ...(fullHistory && credits.length > 0 ? { history_synced_at: now.toISOString() } : {}),
+      ...(details?.balance !== null && details?.balance !== undefined ? { balance: details.balance, balance_at: now.toISOString() } : {}),
+      ...(details?.dataStatus ? { data_status: details.dataStatus } : {}),
+    })
     .eq("id", conn.id);
 
   const matched = await matchOpenPayments(conn.business_id, admin);

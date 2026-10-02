@@ -8,7 +8,9 @@ import { buttonClass } from "@/components/ui/button";
 import { Card, EmptyState, SectionTitle } from "@/components/ui/card";
 import { ShareLink } from "@/components/ui/share-actions";
 import { requireOwnedBusiness } from "@/lib/auth";
+import { SalesSection } from "@/components/business/sales-section";
 import { syncBusinessIfStale } from "@/lib/bank/sync";
+import { getSalesView, parseMonth } from "@/lib/sales";
 import { compactNumber, getPerks, getPurchases, getStats, hasBankConnection } from "@/lib/business";
 import { after } from "next/server";
 import { cn } from "@/lib/cn";
@@ -18,13 +20,18 @@ import { formatMoney, plural } from "@/lib/format";
 export const metadata: Metadata = { title: "Home" };
 
 export default async function BusinessHome({ params, searchParams }: PageProps<"/dashboard/[bizId]">) {
-  const [{ bizId }, { welcome }] = await Promise.all([params, searchParams]);
+  const [{ bizId }, { welcome, month, day, sort }] = await Promise.all([params, searchParams]);
   const { business } = await requireOwnedBusiness(bizId);
-  const [stats, perks, connected, recent] = await Promise.all([
+  const [stats, perks, connected, recent, sales] = await Promise.all([
     getStats(bizId),
     getPerks(bizId),
     hasBankConnection(bizId),
     getPurchases(bizId, { limit: 5 }),
+    getSalesView(bizId, {
+      month: parseMonth(month),
+      day: typeof day === "string" ? day : null,
+      sort: typeof sort === "string" ? sort : null,
+    }),
   ]);
   if (connected) after(() => syncBusinessIfStale(bizId).catch((e) => console.error("Bank sync failed", e)));
 
@@ -96,16 +103,18 @@ export default async function BusinessHome({ params, searchParams }: PageProps<"
         </Card>
       )}
 
+      <SalesSection bizId={bizId} currency={business.currency} view={sales} />
+
       {/* Headline numbers */}
-      <section aria-label="This week" className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,2fr)]">
-        <Card className="flex flex-col justify-between gap-6 bg-brand-700 p-6 text-white ring-0">
-          <p className="text-sm font-semibold text-white/90">Sales from members this week</p>
-          <div>
-            <p className="text-5xl font-semibold tracking-tight">{formatMoney(stats.sales_week, business.currency)}</p>
-            <p className="mt-2 text-sm text-white/90">from {plural(stats.purchases_week, "counted purchase")} in the last 7 days</p>
-          </div>
-        </Card>
-        <div className="grid grid-cols-2 gap-3">
+      <section aria-labelledby="week-title" className="flex flex-col gap-3">
+        <SectionTitle title={<span id="week-title">Your customers this week</span>} />
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <StatTile
+            label="From members this week"
+            value={formatMoney(stats.sales_week, business.currency)}
+            note={`${plural(stats.purchases_week, "counted purchase")} in 7 days`}
+            href={`${base}/payments?status=verified`}
+          />
           <StatTile label="Members" value={compactNumber(stats.members)} note={stats.members_new ? `+${stats.members_new} this week` : "No new members this week"} href={`${base}/customers`} />
           <StatTile
             label="Who paid this?"
@@ -120,7 +129,6 @@ export default async function BusinessHome({ params, searchParams }: PageProps<"
             note="Earned, not yet used"
             href={`${base}/rewards`}
           />
-          <StatTile label="Joined through friends" value={compactNumber(stats.referred_members)} note="From customer invites" href={`${base}/customers`} />
         </div>
       </section>
 

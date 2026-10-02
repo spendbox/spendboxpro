@@ -56,6 +56,10 @@ export interface MonoAccount {
   accountNumber: string | null;
   institution: string | null;
   currency: string;
+  /** In naira (Mono sends kobo). Null if Mono didn't say. */
+  balance: number | null;
+  /** AVAILABLE when Mono has the account's history ready. */
+  dataStatus: string | null;
 }
 
 type Raw = Record<string, unknown>;
@@ -65,12 +69,16 @@ export async function accountDetails(accountId: string): Promise<MonoAccount> {
   const body = await call<{ data?: Raw }>(`/v2/accounts/${encodeURIComponent(accountId)}`);
   const data = (body.data ?? {}) as Raw;
   const account = ((data.account as Raw | undefined) ?? data) as Raw;
+  const meta = (data.meta ?? {}) as Raw;
   const institution = account.institution as Raw | string | undefined;
+  const kobo = account.balance === null || account.balance === undefined ? NaN : Number(account.balance);
   return {
     name: str(account.name),
     accountNumber: str(account.account_number ?? account.accountNumber),
     institution: typeof institution === "string" ? institution : str(institution?.name),
     currency: str(account.currency) ?? "NGN",
+    balance: Number.isFinite(kobo) ? Math.round(kobo) / 100 : null,
+    dataStatus: str(meta.data_status),
   };
 }
 
@@ -87,9 +95,14 @@ function ddmmyyyy(d: Date) {
   return `${String(d.getUTCDate()).padStart(2, "0")}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${d.getUTCFullYear()}`;
 }
 
-/** Money that came into the account between two dates (inclusive), newest first. */
-export async function listCredits(accountId: string, from: Date, to: Date, maxPages = 10): Promise<MonoCredit[]> {
-  const params = new URLSearchParams({ type: "credit", start: ddmmyyyy(from), end: ddmmyyyy(to), paginate: "true" });
+/**
+ * Money that came into the account, newest first. With dates, only between
+ * them (inclusive); without, everything Mono has (up to maxPages pages).
+ */
+export async function listCredits(accountId: string, from: Date | null, to: Date | null, maxPages = 10): Promise<MonoCredit[]> {
+  const params = new URLSearchParams({ type: "credit", paginate: "true" });
+  if (from) params.set("start", ddmmyyyy(from));
+  if (to) params.set("end", ddmmyyyy(to));
   let next: string | null = `/v2/accounts/${encodeURIComponent(accountId)}/transactions?${params}`;
   const out: MonoCredit[] = [];
   for (let page = 0; next && page < maxPages; page++) {

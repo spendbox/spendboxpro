@@ -16,6 +16,9 @@ export interface BankConnectionView {
   status: "active" | "reauth" | "error";
   last_error: string | null;
   last_synced_at: string | null;
+  /** How many payments Mono sent at the last check. */
+  last_fetch_count: number | null;
+  data_status: string | null;
 }
 
 const STATUS = {
@@ -123,6 +126,12 @@ export function BankConnect({
                       {c.last_synced_at ? ` · Checked ${formatWhen(c.last_synced_at)}` : " · Fetching your payments…"}
                     </p>
                     {c.status !== "active" && c.last_error && <p className="text-sm text-red-700">{c.last_error}</p>}
+                    {c.status === "active" && c.last_synced_at && c.last_fetch_count === 0 && (
+                      <p className="text-sm text-amber-900">
+                        Mono hasn&apos;t shared any payments for this account yet
+                        {c.data_status && c.data_status !== "AVAILABLE" ? " — it's still preparing your history" : ""}.
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="flex gap-2">
