@@ -161,3 +161,46 @@ export async function notifyNewMember(membershipId: string) {
     console.error("notifyNewMember failed", error);
   }
 }
+
+/** Tells a business about cross-promotion: a request to approve, a new partner, or an accepted request. */
+export async function notifyPartnership(fromBusinessId: string, toBusinessId: string, kind: "request" | "joined" | "accepted") {
+  if (!emailConfigured()) return;
+  try {
+    const { data } = await createAdminClient().from("businesses").select("id, name, email").in("id", [fromBusinessId, toBusinessId]);
+    const from = data?.find((b) => b.id === fromBusinessId);
+    const to = data?.find((b) => b.id === toBusinessId);
+    if (!from || !to?.email) return;
+    const copy = {
+      request: {
+        subject: `${from.name} wants to partner with you`,
+        lines: [
+          `${from.name} would like to cross-promote with ${to.name} on Spendbox.`,
+          "If you accept, your perks show to their customers as “from our partners”, and theirs to yours.",
+        ],
+        button: "Review the request",
+      },
+      joined: {
+        subject: `${from.name} is now your partner`,
+        lines: [
+          `${from.name} partnered with ${to.name}. You approve requests automatically, so it's already live.`,
+          "Your perks now show to their customers, and theirs to yours. You can end it any time.",
+        ],
+        button: "See your partners",
+      },
+      accepted: {
+        subject: `${from.name} accepted your partnership`,
+        lines: [`${from.name} said yes. Your perks now show to their customers as “from our partners”, and theirs to yours.`],
+        button: "See your partners",
+      },
+    }[kind];
+    const { html, text } = emailBody({
+      heading: copy.subject,
+      lines: copy.lines,
+      button: { label: copy.button, url: `${siteUrl()}/dashboard/${to.id}/partners` },
+      footer: BUSINESS_FOOTER,
+    });
+    await sendEmail({ to: to.email, subject: copy.subject, html, text });
+  } catch (error) {
+    console.error("notifyPartnership failed", error);
+  }
+}

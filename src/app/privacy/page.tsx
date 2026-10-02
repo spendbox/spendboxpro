@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Privacy policy" };
 
 export default function PrivacyPage() {
   return (
-    <LegalPage title="Privacy policy" updated="2 October 2026">
+    <LegalPage title="Privacy policy" updated="3 October 2026">
       <p>
         Spendbox (&ldquo;we&rdquo;, &ldquo;us&rdquo;) helps small businesses keep a list of their customers, count
         purchases and reward customers with perks. This policy explains what personal data we collect, why, who we share
@@ -94,6 +94,14 @@ export default function PrivacyPage() {
         you uploaded for it) and the perks you earned there. It sees your name, phone number, gender and birthday{" "}
         <strong>only if you switch sharing on</strong> for that business. Businesses never see your email address, your
         PIN, the list of bank accounts recognised as you, or anything about other businesses you belong to.
+      </p>
+
+      <h2>Partner businesses</h2>
+      <p>
+        Businesses can team up on Spendbox (&ldquo;cross-promotion&rdquo;). When they do, you may see a partner&apos;s
+        perks marked &ldquo;from our partners&rdquo;. No personal data passes between partner businesses: a partner
+        doesn&apos;t learn that you exist unless you join it yourself. Businesses that switch on cross-promotion see each
+        other&apos;s name, categories, area and how many customers they have (a number only).
       </p>
 
       <h2>Who else processes your data</h2>

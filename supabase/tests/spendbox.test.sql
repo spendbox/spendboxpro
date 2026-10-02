@@ -202,9 +202,8 @@ update public.profiles set full_name = 'Ada Okafor', birth_month = extract(month
 where id = auth.uid();
 select test.ok((select count(*) from public.rewards where kind = 'birthday' and status = 'available') = 1,
   'birthday treat arrives when the birthday month is added');
-select test.ok((select expires_at from public.rewards where kind = 'birthday') =
-  (date_trunc('month', (now() at time zone 'utc')) + interval '1 month') at time zone 'utc',
-  'birthday treat lasts until the end of the birthday month');
+select test.ok((select expires_at from public.rewards where kind = 'birthday') is null,
+  'birthday treat has no use-by date unless the business sets one');
 select test.ok((select count(*) from public.my_referrals(:'ada')) = 1, 'Ada sees one friend joined from her link');
 select test.ok((select has_purchase from public.my_referrals(:'ada')), 'Ada sees that her friend has bought');
 select test.ok((select count(*) from public.business_members(:'biz')) = 0, 'customers cannot list a business''s members');

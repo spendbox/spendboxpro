@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { PERK_KIND_ORDER } from "@/lib/perks";
 import { createClient } from "@/lib/supabase/server";
-import type { MembershipWithBusiness, Profile, Purchase, Reward } from "@/lib/types";
+import type { MembershipWithBusiness, PartnerPerkRow, Profile, Purchase, Reward } from "@/lib/types";
 
 export const getMyProfile = cache(async (userId: string): Promise<Profile | null> => {
   const supabase = await createClient();
@@ -49,3 +49,11 @@ export const getMyPurchases = cache(async (userId: string): Promise<Purchase[]> 
     .limit(500);
   return (data ?? []) as Purchase[];
 });
+
+/** Perks from partners of the given businesses (cross-promotion). */
+export async function getPartnerPerks(businessIds: string[]): Promise<PartnerPerkRow[]> {
+  if (businessIds.length === 0) return [];
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("partner_perks", { p_business_ids: businessIds });
+  return (data ?? []) as PartnerPerkRow[];
+}

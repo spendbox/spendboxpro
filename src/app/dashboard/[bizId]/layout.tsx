@@ -16,17 +16,21 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
   const { user, business, businesses } = await requireOwnedBusiness(bizId);
 
   const supabase = await createClient();
-  const [stats, { count: memberships }] = await Promise.all([
+  const [stats, { count: memberships }, { data: partnerRequests }] = await Promise.all([
     getStats(bizId),
     supabase.from("memberships").select("id", { count: "exact", head: true }).eq("customer_id", user.id),
+    supabase.rpc("partner_requests_waiting", { p_business_id: bizId }),
   ]);
+  const requests = Number(partnerRequests ?? 0);
 
   const base = `/dashboard/${bizId}`;
   const nav: NavItem[] = [
     { href: base, label: "Home", icon: "overview", exact: true },
     { href: `${base}/payments`, label: "Payments", icon: "payments", badge: stats.pending + stats.unmatched },
     { href: `${base}/customers`, label: "Customers", icon: "customers" },
-    { href: `${base}/perks`, label: "Perks", icon: "perks", also: [`${base}/rewards`] },
+    // On phones, Partners lives inside Perks, so Perks carries its badge there.
+    { href: `${base}/perks`, label: "Perks", icon: "perks", also: [`${base}/rewards`, `${base}/partners`], mobileBadge: requests },
+    { href: `${base}/partners`, label: "Partners", icon: "partners", badge: requests, desktopOnly: true },
     { href: `${base}/settings`, label: "Settings", icon: "settings" },
   ];
 

@@ -13,7 +13,8 @@ import { Progress } from "@/components/ui/progress";
 import { ShareLink, WhatsAppIcon } from "@/components/ui/share-actions";
 import { ActionSwitch } from "@/components/ui/switch";
 import { requireUser } from "@/lib/auth";
-import { getMyMemberships, getMyProfile, getMyPurchases, getMyRewards } from "@/lib/customer";
+import { getMyMemberships, getMyProfile, getMyPurchases, getMyRewards, getPartnerPerks } from "@/lib/customer";
+import { PartnerOffers } from "@/components/perks/partner-offers";
 import { receiptsEnabled, siteUrl } from "@/lib/env";
 import { formatDate, formatMonthYear, memberNo, whatsappLink } from "@/lib/format";
 import { durationSentence, PERK_KINDS, perkProgress, perkTrigger, sortBySoonest } from "@/lib/perks";
@@ -48,7 +49,10 @@ export default async function MemberBusinessPage({ params, searchParams }: PageP
   const welcomePerk = b.perks.find((p) => p.kind === "welcome");
 
   const supabase = await createClient();
-  const { data: referralData } = await supabase.rpc("my_referrals", { p_membership_id: membership.id });
+  const [{ data: referralData }, partnerPerks] = await Promise.all([
+    supabase.rpc("my_referrals", { p_membership_id: membership.id }),
+    getPartnerPerks([b.id]),
+  ]);
   const referrals = (referralData ?? []) as ReferralRow[];
 
   const inviteUrl = `${siteUrl()}/j/${b.slug}?ref=${membership.ref_code}`;
@@ -188,6 +192,12 @@ export default async function MemberBusinessPage({ params, searchParams }: PageP
               </Card>
             )}
           </section>
+
+          <PartnerOffers
+            rows={partnerPerks}
+            memberSlugs={new Set(memberships.map((m) => m.business.slug))}
+            description={`${b.name} teamed up with these businesses. Join them to earn their perks too.`}
+          />
 
           <section className="flex flex-col gap-3">
             <SectionTitle

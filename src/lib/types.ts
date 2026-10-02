@@ -34,6 +34,10 @@ export interface Business {
   brand_color: string;
   currency: string;
   created_at: string;
+  /** Cross-promotion switched on (shows in other businesses' partner search). */
+  partners_enabled: boolean;
+  /** Partner requests become partnerships without asking. */
+  partners_auto_approve: boolean;
 }
 
 export interface BankAccount {
@@ -173,4 +177,40 @@ export interface ReferralRow {
   phone_hint: string;
   has_purchase: boolean;
   reward_status: RewardStatus | null;
+}
+
+/** A business in the cross-promotion directory, as another business sees it. */
+export interface PartnerListing {
+  id: string;
+  name: string;
+  slug: string;
+  categories: string[];
+  location: string | null;
+  logo_url: string | null;
+  brand_color: string;
+  members: number;
+  auto_approve: boolean;
+  /** Already has the maximum number of partners. */
+  is_full: boolean;
+  /** none · sent (you asked) · received (they asked you) · active */
+  relation: "none" | "sent" | "received" | "active";
+  partnership_id: string | null;
+}
+
+/** A perk from a partner of a business the customer belongs to. */
+export interface PartnerPerkRow {
+  via_business_id: string;
+  partner_id: string;
+  partner_name: string;
+  partner_slug: string;
+  partner_categories: string[];
+  partner_location: string | null;
+  partner_logo_url: string | null;
+  partner_color: string;
+  perk_id: string;
+  kind: PerkKind;
+  title: string;
+  details: string | null;
+  threshold: number | null;
+  valid_days: number | null;
 }

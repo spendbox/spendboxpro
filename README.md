@@ -20,7 +20,8 @@ You need accounts on **Supabase**, **Vercel** and **Mono**. Optional: **Resend**
 3. Open the file [`supabase/migrations/20261001000000_spendbox.sql`](supabase/migrations/20261001000000_spendbox.sql) in this repository, copy **everything**, paste it into the editor and press **Run**. You should see "Success".
 4. Do the same with [`supabase/migrations/20261002000000_logos_emails_durations.sql`](supabase/migrations/20261002000000_logos_emails_durations.sql) (logos, emails, perk durations).
 5. Then [`supabase/migrations/20261003000000_bank_feeds.sql`](supabase/migrations/20261003000000_bank_feeds.sql) (payments from the bank).
-6. Then [`supabase/migrations/20261004000000_sales.sql`](supabase/migrations/20261004000000_sales.sql) (sales and balance on the home screen). Always run the files in order, each once.
+6. Then [`supabase/migrations/20261004000000_sales.sql`](supabase/migrations/20261004000000_sales.sql) (sales and balance on the home screen).
+7. Then [`supabase/migrations/20261005000000_partners.sql`](supabase/migrations/20261005000000_partners.sql) (partner businesses, and a fix for perk time limits). Always run the files in order, each once.
 
 ### 2. Login: nothing to set up
 
@@ -93,6 +94,8 @@ Moving from Mono's sandbox to real banks: replace the two Mono keys with your `l
 Payments from before someone joined don't count for them automatically. **Wrong customer?** on any payment undoes a match and stops that sender being matched to that member again. Customers see **Bank accounts recognised as you** in Profile & privacy and can tap **Not me**; businesses never see that list. Payments arrive through Mono's webhook, when the business opens Payments or taps **Check for new payments**, and in a daily check.
 
 **Sales on the home screen.** Once a bank is connected, the business's home shows its balance, money in for the month (compared with the month before), a column chart of sales per day, and every payment that came in. Tap a day to see just that day; use the arrows or the month list to go back in time; sort payments by newest, oldest or largest. The first check reads the account's whole history from Mono. Payments from before connecting show in sales but are never matched to members or put in "Who paid this?". Money marked **Not a customer** is left out of sales. If the screen stays empty, Settings shows whether Mono has shared any payments yet.
+
+**Partners (cross-promotion).** Under **Perks → Partners** (or **Partners** in the side menu on a computer), a business switches on cross-promotion, then finds other businesses by name, category or area. Each shows how many customers it has and whether it approves requests instantly or one by one. Switching one on sends a request (or partners straight away if they approve instantly). A business can have up to 2 partners, counting requests it has sent. Once partnered, each one's perks show to the other's customers under **From our partners** (on the business's page and on the customer's home), with a button to join. Requests waiting for approval show as a badge, and the business gets an email if it has added one. Either side can end a partnership at any time; switching cross-promotion off hides partner perks until it's switched back on. Partners never see each other's customers.
 
 **Receipts (switched off).** Customer receipt uploads, read by Claude, are still in the code but hidden. To bring them back, set `NEXT_PUBLIC_RECEIPT_UPLOADS=on` and `ANTHROPIC_API_KEY` (from [console.anthropic.com](https://console.anthropic.com), roughly $20–30 per 1,000 receipts), and redeploy. Optionally set `PAYSTACK_SECRET_KEY` so account names fill themselves in when businesses add the accounts receipts are checked against.
 
