@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: "Terms of use" };
 
 export default function TermsPage() {
   return (
-    <LegalPage title="Terms of use" updated="1 October 2026">
+    <LegalPage title="Terms of use" updated="2 October 2026">
       <p>
         These terms are an agreement between you and Spendbox (&ldquo;we&rdquo;, &ldquo;us&rdquo;) for using the
         Spendbox website and app. By creating an account or using Spendbox you agree to them. If you don&apos;t agree,
@@ -39,6 +39,20 @@ export default function TermsPage() {
         <li>Perks have no cash value, can&apos;t be sold or transferred, and are used at the business that offered them.</li>
         <li>A perk ends when it is used, when its time limit passes, or if the purchases that earned it are reversed.</li>
         <li>Businesses can change, pause or end their perks; perks you have already earned stay valid until they expire.</li>
+      </ul>
+
+      <h2>Payments from your bank</h2>
+      <ul>
+        <li>
+          Businesses can connect their bank accounts through Mono. Access is read-only: Spendbox sees payments coming
+          in and can never move money. A business can disconnect at any time in Settings.
+        </li>
+        <li>
+          Payments are matched to members by the sender&apos;s name and the accounts recognised as them. Matching can
+          sometimes be wrong; a business can mark a payment as the wrong customer, and a customer can tap &ldquo;Not
+          me&rdquo;.
+        </li>
+        <li>Only the business&apos;s own accounts may be connected, by someone allowed to do so.</li>
       </ul>
 
       <h2>Receipts</h2>

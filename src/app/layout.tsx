@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     template: "%s · Spendbox",
   },
   description:
-    "Spendbox helps small businesses keep their customer list, track purchases from receipts and reward customers with perks.",
+    "Spendbox helps small businesses keep their customer list, track purchases and reward customers with perks.",
 };
 
 export const viewport: Viewport = {

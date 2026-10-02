@@ -30,12 +30,12 @@ export function PurchaseList({
         <li key={p.id} className="flex items-center gap-3 py-3.5 first:pt-0 last:pb-0">
           <div className="min-w-0 flex-1">
             <p className="truncate font-semibold text-ink">
-              {businessNames ? businessNames[p.business_id] : p.description || (p.source === "business" ? "Purchase" : "Receipt")}
+              {businessNames ? businessNames[p.business_id] : p.description || (p.source === "bank" ? "Bank transfer" : p.source === "business" ? "Purchase" : "Receipt")}
             </p>
             <p className="truncate text-sm text-muted">
               {formatWhen(p.paid_at)}
               {businessNames && p.description ? ` · ${p.description}` : ""}
-              {p.source === "business" ? " · added by the business" : ""}
+              {p.source === "business" ? " · added by the business" : p.source === "bank" ? " · transfer" : ""}
             </p>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1">

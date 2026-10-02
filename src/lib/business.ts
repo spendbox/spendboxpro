@@ -1,5 +1,6 @@
 import "server-only";
 import { cache } from "react";
+import type { UnmatchedPayment } from "@/components/business/unmatched-payments";
 import { PERK_KIND_ORDER } from "@/lib/perks";
 import { createClient } from "@/lib/supabase/server";
 import type {
@@ -28,8 +29,23 @@ export const getStats = cache(async (bizId: string): Promise<BusinessStats> => {
       pending: 0,
       rewards_ready: 0,
       referred_members: 0,
+      unmatched: 0,
     }
   );
+});
+
+/** Bank payments Spendbox couldn't match to a member yet. */
+export async function getUnmatchedPayments(bizId: string): Promise<UnmatchedPayment[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("business_unmatched_payments", { p_business_id: bizId });
+  return (data ?? []) as UnmatchedPayment[];
+}
+
+/** Whether the business has connected a bank through Mono. */
+export const hasBankConnection = cache(async (bizId: string) => {
+  const supabase = await createClient();
+  const { count } = await supabase.from("bank_connections").select("id", { count: "exact", head: true }).eq("business_id", bizId);
+  return (count ?? 0) > 0;
 });
 
 export const getMembers = cache(async (bizId: string): Promise<BusinessMemberRow[]> => {

@@ -2,7 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { after } from "next/server";
+import { matchOpenPayments } from "@/lib/bank/sync";
 import { notifyNewMember, notifyRewardsReady } from "@/lib/notify";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
@@ -19,6 +21,9 @@ export async function joinBusiness(slug: string, refCode: string | null, share: 
   after(async () => {
     await notifyNewMember(membershipId as string);
     await notifyRewardsReady();
+    // Customers often pay at the counter and then join: count that payment now.
+    const { data } = await createAdminClient().from("memberships").select("business_id").eq("id", membershipId).maybeSingle();
+    if (data) await matchOpenPayments(data.business_id).catch((e) => console.error("matchOpenPayments failed", e));
   });
   redirect(`/me/b/${slug}?welcome=1`);
 }

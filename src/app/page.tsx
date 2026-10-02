@@ -5,7 +5,6 @@ import {
   LockKeyhole,
   QrCode,
   ReceiptText,
-  ScanLine,
   ShieldCheck,
   Store,
   Users,
@@ -50,8 +49,8 @@ export default function LandingPage() {
                 Turn your customers into regulars.
               </h1>
               <p className="max-w-xl text-lg leading-relaxed text-muted">
-                Share one link. Customers join with their phone number, upload their payment receipts, and earn the
-                perks you choose. You keep your customer list — Spendbox keeps count.
+                Share one link. Customers join with their phone number and pay you as usual. Every transfer counts
+                toward the perks you choose. You keep your customer list — Spendbox keeps count.
               </p>
               <div className="flex flex-col gap-3 sm:flex-row">
                 <ButtonLink href="/start" size="lg">
@@ -62,7 +61,7 @@ export default function LandingPage() {
                 </ButtonLink>
               </div>
               <ul className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-ink-2">
-                {["Ready in a minute", "We never touch your money", "Customers control their data"].map((t) => (
+                {["No receipts to upload", "We never touch your money", "Customers control their data"].map((t) => (
                   <li key={t} className="flex items-center gap-2">
                     <Check className="size-4 text-brand-600" aria-hidden />
                     {t}
@@ -97,9 +96,9 @@ export default function LandingPage() {
                   body: "No app to download. They get your welcome perk and keep you in their Spendbox.",
                 },
                 {
-                  icon: ScanLine,
-                  title: "Receipts count themselves",
-                  body: "Customers upload their transfer receipt. Spendbox reads it, checks it against your bank accounts and counts the visit.",
+                  icon: Landmark,
+                  title: "Payments count themselves",
+                  body: "Connect your bank once (read-only). When a member pays by transfer, Spendbox knows who it was and counts the visit.",
                 },
               ].map((step, i) => (
                 <li key={step.title} className="flex flex-col gap-4 rounded-3xl bg-white p-6 shadow-card ring-1 ring-line">
@@ -163,18 +162,18 @@ export default function LandingPage() {
                 },
                 {
                   icon: ReceiptText,
-                  title: "Every receipt in one list",
-                  body: "No more scrolling WhatsApp for “I’ve paid” screenshots. Tap “Not received” if one didn’t land.",
+                  title: "Every payment in one list",
+                  body: "No more scrolling WhatsApp for “I’ve paid” screenshots. Transfers show up with who paid, and cash sales take a tap."
                 },
                 {
                   icon: Landmark,
-                  title: "Checked against your accounts",
-                  body: "Add every bank account you get paid into. Receipts are matched to the right one automatically.",
+                  title: "Straight from your bank",
+                  body: "Spendbox sees money coming in, never moves it. Pick who paid once, and their next transfers count by themselves.",
                 },
                 {
                   icon: ShieldCheck,
                   title: "Hard to cheat",
-                  body: "Each receipt counts once, and perks are taken back if a payment never arrives.",
+                  body: "Only money that really reached your account counts, and each payment counts once.",
                 },
               ].map((f) => (
                 <div key={f.title} className="flex flex-col gap-3">
@@ -297,9 +296,9 @@ function HeroVisual() {
             </div>
           </div>
           <div className="flex items-center gap-3 rounded-3xl bg-brand-600 p-4 text-white">
-            <ScanLine className="size-5" />
+            <Landmark className="size-5" />
             <div>
-              <p className="text-sm font-bold">Receipt matched</p>
+              <p className="text-sm font-bold">Payment counted</p>
               <p className="text-xs text-white/90">₦5,000 · Moniepoint •••4821</p>
             </div>
           </div>

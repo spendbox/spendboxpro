@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { getUser } from "@/lib/auth";
 import { notifyReceiptToReview, notifyRewardsReady } from "@/lib/notify";
-import { appTimeZone } from "@/lib/env";
+import { appTimeZone, receiptsEnabled } from "@/lib/env";
 import { extractReceipt, ReceiptReadError } from "@/lib/receipts/extract";
 import { matchReceipt, type Candidate, type Match } from "@/lib/receipts/match";
 import { saveReceiptPurchase, type ReceiptResult, type ScannedReceipt } from "@/lib/receipts/save";
@@ -50,6 +50,7 @@ function decide(match: Match, paidAt: Date | null, currency: string | null, busi
 // Upload a receipt: Claude reads it, we match it to one of the customer's
 // businesses using their bank accounts, and save it as a purchase.
 export async function POST(request: Request) {
+  if (!receiptsEnabled()) return NextResponse.json({ error: "Receipt uploads are switched off." }, { status: 404 });
   const user = await getUser();
   if (!user) return reply({ kind: "error", message: "Please log in again." }, 401);
   if (!process.env.ANTHROPIC_API_KEY) {

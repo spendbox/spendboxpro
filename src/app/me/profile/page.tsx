@@ -12,15 +12,19 @@ import { formatPhone } from "@/lib/format";
 import { setSharing } from "../actions";
 import { DeleteAccount } from "./delete-account";
 import { ProfileForm } from "./profile-form";
+import { RecognisedPayers, type RecognisedPayer } from "./recognised-payers";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Profile & privacy" };
 
 export default async function ProfilePage() {
   const user = await requireUser("/me/profile");
-  const [profile, memberships, owned] = await Promise.all([
+  const supabase = await createClient();
+  const [profile, memberships, owned, { data: payers }] = await Promise.all([
     getMyProfile(user.id),
     getMyMemberships(user.id),
     getOwnedBusinesses(),
+    supabase.from("payers").select("id, sender_name, sender_account, last_seen_at").order("last_seen_at", { ascending: false }),
   ]);
 
   return (
@@ -61,6 +65,16 @@ export default async function ProfilePage() {
               </div>
             ))
           )}
+        </Card>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <SectionTitle
+          title="Bank accounts recognised as you"
+          description="When you pay by transfer from one of these, your purchase counts by itself at every business you've joined. Businesses never see this list."
+        />
+        <Card className="px-5">
+          <RecognisedPayers payers={(payers ?? []) as RecognisedPayer[]} />
         </Card>
       </section>
 

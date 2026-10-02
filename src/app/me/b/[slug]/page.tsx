@@ -14,7 +14,7 @@ import { ShareLink, WhatsAppIcon } from "@/components/ui/share-actions";
 import { ActionSwitch } from "@/components/ui/switch";
 import { requireUser } from "@/lib/auth";
 import { getMyMemberships, getMyProfile, getMyPurchases, getMyRewards } from "@/lib/customer";
-import { siteUrl } from "@/lib/env";
+import { receiptsEnabled, siteUrl } from "@/lib/env";
 import { formatDate, formatMonthYear, memberNo, whatsappLink } from "@/lib/format";
 import { durationSentence, PERK_KINDS, perkProgress, perkTrigger, sortBySoonest } from "@/lib/perks";
 import { createClient } from "@/lib/supabase/server";
@@ -68,7 +68,9 @@ export default async function MemberBusinessPage({ params, searchParams }: PageP
             <p className="mt-0.5 text-sm text-brand-900/90">
               {myRewards.some((r) => r.kind === "welcome")
                 ? "Your welcome perk is ready — show your pass on your first order."
-                : "Upload your receipts after you pay, and perks unlock automatically."}
+                : receiptsEnabled()
+                  ? "Upload your receipts after you pay, and perks unlock automatically."
+                  : "Every purchase here counts toward your perks, and they unlock automatically."}
               {!profile?.full_name && (
                 <>
                   {" "}
@@ -188,14 +190,23 @@ export default async function MemberBusinessPage({ params, searchParams }: PageP
           </section>
 
           <section className="flex flex-col gap-3">
-            <SectionTitle title="Your purchases" description="Upload a receipt after you pay and it counts here." />
+            <SectionTitle
+              title="Your purchases"
+              description={
+                receiptsEnabled()
+                  ? "Upload a receipt after you pay and it counts here."
+                  : `Pay ${b.name} by transfer, or let them record your purchase, and it counts here.`
+              }
+            />
             <Card className="p-5">
               {myPurchases.length === 0 ? (
                 <div className="flex flex-col items-start gap-3">
                   <p className="text-muted">No purchases yet.</p>
-                  <Link href="/me/receipts" className={buttonClass({ variant: "soft", size: "sm" })}>
-                    Add a receipt
-                  </Link>
+                  {receiptsEnabled() && (
+                    <Link href="/me/receipts" className={buttonClass({ variant: "soft", size: "sm" })}>
+                      Add a receipt
+                    </Link>
+                  )}
                 </div>
               ) : (
                 <PurchaseList purchases={myPurchases} />

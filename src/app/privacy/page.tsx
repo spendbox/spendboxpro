@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Privacy policy" };
 
 export default function PrivacyPage() {
   return (
-    <LegalPage title="Privacy policy" updated="1 October 2026">
+    <LegalPage title="Privacy policy" updated="2 October 2026">
       <p>
         Spendbox (&ldquo;we&rdquo;, &ldquo;us&rdquo;) helps small businesses keep a list of their customers, count
         purchases and reward customers with perks. This policy explains what personal data we collect, why, who we share
@@ -37,9 +37,15 @@ export default function PrivacyPage() {
           <strong>Memberships:</strong> which businesses you joined, when, your member number, and who invited you.
         </li>
         <li>
-          <strong>Receipts and purchases:</strong> receipt images you upload and what we read from them — amount, date
-          and time, the account and bank paid into, the sender name, the reference and what the payment was for — plus
-          purchases a business records for you.
+          <strong>Payments and purchases:</strong> when a business connects its bank account, the payments that come
+          into it (amount, date and time, and the bank&apos;s note, which usually includes the sender&apos;s name and
+          sometimes their account number); purchases a business records for you; and, if receipt uploads are on, receipt
+          images you upload and what we read from them.
+        </li>
+        <li>
+          <strong>Bank accounts recognised as you:</strong> the sender name (and account number, when the bank shows
+          it) of transfers that were counted for you, so your next transfers count by themselves. You can see and remove
+          these in Profile &amp; privacy.
         </li>
         <li>
           <strong>Perks:</strong> the perks you earn and use.
@@ -58,8 +64,9 @@ export default function PrivacyPage() {
       <ul>
         <li>To run your account and the memberships you ask for — this is needed to provide the service (contract).</li>
         <li>
-          To read receipts, check them against a business&apos;s bank accounts and count purchases toward perks —
-          needed to provide the service.
+          To see who paid a business, count purchases toward perks and remember the accounts you pay from — needed to
+          provide the service, and in the legitimate interest of you and the business in having purchases counted without
+          paperwork.
         </li>
         <li>
           To send emails about perks and purchases, if you add an email and leave notifications on — your consent. You
@@ -71,12 +78,22 @@ export default function PrivacyPage() {
       </ul>
       <p>We do not sell your personal data, and we do not use it for advertising.</p>
 
+      <h2>How payments are matched to you</h2>
+      <p>
+        A business connects its bank account through Mono with read-only access: we can see money coming in, never move
+        it. When a payment arrives, we compare the sender&apos;s name with the names of that business&apos;s members, and
+        with bank accounts already recognised as members. If it is clearly you, the purchase counts for you; if it is
+        unclear, the business picks who paid. The business sees the sender exactly as its own bank shows it. We then
+        remember that sender as you, so future transfers from it count for you at any business you have joined. If a
+        payment was counted for you by mistake, tap &ldquo;Not me&rdquo; in Profile &amp; privacy.
+      </p>
+
       <h2>What businesses can see</h2>
       <p>
         A business you join always sees your member number, when you joined, your purchases with it (including receipts
         you uploaded for it) and the perks you earned there. It sees your name, phone number, gender and birthday{" "}
         <strong>only if you switch sharing on</strong> for that business. Businesses never see your email address, your
-        PIN, or anything about other businesses you belong to.
+        PIN, the list of bank accounts recognised as you, or anything about other businesses you belong to.
       </p>
 
       <h2>Who else processes your data</h2>
@@ -84,7 +101,8 @@ export default function PrivacyPage() {
       <ul>
         <li>Supabase — database, login and file storage.</li>
         <li>Vercel — hosting of the website.</li>
-        <li>Anthropic (Claude) — reads the receipt images you upload. Images are sent only to extract payment details.</li>
+        <li>Mono — connects a business&apos;s bank account (read-only) and sends us the payments that come into it.</li>
+        <li>Anthropic (Claude) — reads receipt images, when receipt uploads are on. Images are sent only to extract payment details.</li>
         <li>Paystack — confirms the account name on a business&apos;s bank account when the business adds it.</li>
         <li>Resend — sends notification emails.</li>
       </ul>
@@ -96,8 +114,8 @@ export default function PrivacyPage() {
       <h2>How long we keep it</h2>
       <p>
         We keep your data while your account is open. If you leave a business, your membership, purchases and unused
-        perks with it are deleted. If you delete your account, we delete your profile, memberships, purchases, perks and
-        receipt images straight away; copies in backups are removed as the backups expire.
+        perks with it are deleted. If you delete your account, we delete your profile, memberships, purchases, perks, bank
+        accounts recognised as you and receipt images straight away; copies in backups are removed as the backups expire.
       </p>
 
       <h2>Your rights</h2>

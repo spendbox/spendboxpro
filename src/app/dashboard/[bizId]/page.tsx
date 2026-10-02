@@ -8,7 +8,9 @@ import { buttonClass } from "@/components/ui/button";
 import { Card, EmptyState, SectionTitle } from "@/components/ui/card";
 import { ShareLink } from "@/components/ui/share-actions";
 import { requireOwnedBusiness } from "@/lib/auth";
-import { compactNumber, getBankAccounts, getPerks, getPurchases, getStats } from "@/lib/business";
+import { syncBusinessIfStale } from "@/lib/bank/sync";
+import { compactNumber, getPerks, getPurchases, getStats, hasBankConnection } from "@/lib/business";
+import { after } from "next/server";
 import { cn } from "@/lib/cn";
 import { siteUrl } from "@/lib/env";
 import { formatMoney, plural } from "@/lib/format";
@@ -18,18 +20,19 @@ export const metadata: Metadata = { title: "Home" };
 export default async function BusinessHome({ params, searchParams }: PageProps<"/dashboard/[bizId]">) {
   const [{ bizId }, { welcome }] = await Promise.all([params, searchParams]);
   const { business } = await requireOwnedBusiness(bizId);
-  const [stats, perks, accounts, recent] = await Promise.all([
+  const [stats, perks, connected, recent] = await Promise.all([
     getStats(bizId),
     getPerks(bizId),
-    getBankAccounts(bizId),
+    hasBankConnection(bizId),
     getPurchases(bizId, { limit: 5 }),
   ]);
+  if (connected) after(() => syncBusinessIfStale(bizId).catch((e) => console.error("Bank sync failed", e)));
 
   const joinUrl = `${siteUrl()}/j/${business.slug}`;
   const welcomePerk = perks.find((p) => p.kind === "welcome" && p.is_active);
   const steps = [
     { done: true, label: "Create your business", href: null },
-    { done: accounts.length > 0, label: "Add the bank accounts you get paid into", href: `/dashboard/${bizId}/settings#bank` },
+    { done: connected, label: "Connect the bank account customers pay into", href: `/dashboard/${bizId}/settings#bank` },
     { done: perks.length > 0, label: "Add your first perk", href: `/dashboard/${bizId}/perks` },
     { done: stats.members > 0, label: "Share your link with customers", href: "#share" },
   ];
@@ -105,11 +108,11 @@ export default async function BusinessHome({ params, searchParams }: PageProps<"
         <div className="grid grid-cols-2 gap-3">
           <StatTile label="Members" value={compactNumber(stats.members)} note={stats.members_new ? `+${stats.members_new} this week` : "No new members this week"} href={`${base}/customers`} />
           <StatTile
-            label="Receipts to review"
-            value={compactNumber(stats.pending)}
-            note={stats.pending ? "Waiting for you" : "All caught up"}
-            href={`${base}/payments?status=pending`}
-            attention={stats.pending > 0}
+            label="Who paid this?"
+            value={compactNumber(stats.unmatched + stats.pending)}
+            note={stats.unmatched + stats.pending ? "Payments waiting for you" : "All caught up"}
+            href={`${base}/payments`}
+            attention={stats.unmatched + stats.pending > 0}
           />
           <StatTile
             label="Perks to give"
@@ -159,7 +162,7 @@ export default async function BusinessHome({ params, searchParams }: PageProps<"
             }
           />
           {recent.length === 0 ? (
-            <EmptyState title="No payments yet" description="When members upload receipts, or you record a purchase, they show up here." />
+            <EmptyState title="No payments yet" description="When customers pay into your connected bank, or you record a purchase, they show up here." />
           ) : (
             <Card className="px-5">
               <ul className="divide-y divide-line">

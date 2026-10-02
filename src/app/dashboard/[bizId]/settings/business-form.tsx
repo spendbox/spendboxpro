@@ -35,7 +35,7 @@ export function BusinessForm({ business }: { business: Business }) {
           <Input id="whatsapp" name="whatsapp" type="tel" inputMode="tel" defaultValue={business.whatsapp ?? ""} placeholder="0803 000 0000" />
         </Field>
       </div>
-      <Field label="Email" htmlFor="email" optional hint="We'll email you when a receipt needs checking and when new customers join.">
+      <Field label="Email" htmlFor="email" optional hint="We'll email you when new customers join or a payment needs you.">
         <Input id="email" name="email" type="email" autoComplete="email" maxLength={200} defaultValue={business.email ?? ""} placeholder="you@example.com" />
       </Field>
       <Field label="About" htmlFor="about" optional hint="Shown on your join page.">

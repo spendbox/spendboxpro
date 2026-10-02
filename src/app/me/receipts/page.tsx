@@ -3,12 +3,16 @@ import { PurchaseList } from "@/components/purchases/purchase-list";
 import { ReceiptUploader } from "@/components/receipts/receipt-uploader";
 import { Card, SectionTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
+import { receiptsEnabled } from "@/lib/env";
 import { getMyMemberships, getMyPurchases } from "@/lib/customer";
 
 export const metadata: Metadata = { title: "Add a receipt" };
 
 export default async function ReceiptsPage() {
+  // Switched off while payments come from the bank: old links go home.
+  if (!receiptsEnabled()) redirect("/me");
   const user = await requireUser("/me/receipts");
   const [memberships, purchases] = await Promise.all([getMyMemberships(user.id), getMyPurchases(user.id)]);
   const names = Object.fromEntries(memberships.map((m) => [m.business_id, m.business.name]));
