@@ -15,7 +15,7 @@ export function AuthLayout({ children, aside }: { children: ReactNode; aside?: R
           </div>
         )}
         <p className="max-w-sm text-lg text-white/90">
-          Keep every customer, see every payment, and give people a reason to come back.
+          Every visit counts. Turn the people who walk in once into the ones who keep coming back.
         </p>
       </aside>
       <main className="flex flex-col px-5 py-6 sm:px-10 lg:justify-center lg:py-12">

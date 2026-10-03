@@ -4,7 +4,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PerkIcon } from "@/components/perks/perk-card";
 import { requireUser } from "@/lib/auth";
-import { getMyMemberships, getMyProfile, getMyRewards } from "@/lib/customer";
+import { getMyMemberships, getMyProfile, getMyRewards, getPayAccounts } from "@/lib/customer";
+import { PayAccounts } from "@/components/perks/pay-accounts";
 import { appTimeZone } from "@/lib/env";
 import { formatDate, formatMonthYear, memberNo } from "@/lib/format";
 import { PERK_KINDS } from "@/lib/perks";
@@ -93,6 +94,8 @@ export default async function PassPage({ params }: PageProps<"/me/b/[slug]/pass"
 
         <LiveClock timeZone={appTimeZone()} />
       </div>
+
+      <PayAccounts accounts={await getPayAccounts(b.id)} businessName={b.name} />
 
       <p className="text-center text-sm text-muted">
         The clock is live, so {b.name} can tell it&apos;s really you and not a screenshot. Your purchases count toward

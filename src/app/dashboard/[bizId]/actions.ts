@@ -5,7 +5,8 @@ import { after } from "next/server";
 import { notifyPurchase, notifyRewardsReady } from "@/lib/notify";
 import { redirect } from "next/navigation";
 import { requireOwnedBusiness } from "@/lib/auth";
-import { appTimeZone } from "@/lib/env";
+import { appTimeZone, DEFAULT_COUNTRY_CODE } from "@/lib/env";
+import { normalizeWhatsapp } from "@/lib/phone";
 import { BRAND_COLORS, cleanCategories } from "@/lib/constants";
 import { paystackConfigured, resolveAccount } from "@/lib/paystack";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -183,9 +184,12 @@ export async function updateBusinessField(bizId: string, field: BusinessField, v
     case "location":
       update = { location: text.slice(0, 80) || null };
       break;
-    case "whatsapp":
-      update = { whatsapp: text.replace(/[^\d+]/g, "").slice(0, 20) || null };
+    case "whatsapp": {
+      const number = normalizeWhatsapp(text, DEFAULT_COUNTRY_CODE);
+      if (text && !number) return { error: "That doesn't look like a phone number." };
+      update = { whatsapp: number };
       break;
+    }
     case "email":
       if (text && !EMAIL.test(text.toLowerCase())) return { error: "Please check the email address." };
       update = { email: text.toLowerCase() || null };
@@ -208,34 +212,6 @@ export async function updateBusinessField(bizId: string, field: BusinessField, v
   return { ok: true };
 }
 
-export async function updateBusiness(bizId: string, _prev: FormState, formData: FormData): Promise<FormState> {
-  await requireOwnedBusiness(bizId);
-  const name = String(formData.get("name") ?? "").trim();
-  if (name.length < 2 || name.length > 80) return { error: "Please enter your business name." };
-  const categories = cleanCategories(formData.getAll("categories"));
-  const color = String(formData.get("brand_color") ?? "");
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
-  if (email && !EMAIL.test(email)) return { error: "Please check the email address." };
-
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("businesses")
-    .update({
-      name,
-      categories,
-      category: categories[0] ?? null,
-      email: email || null,
-      location: String(formData.get("location") ?? "").trim().slice(0, 80) || null,
-      about: String(formData.get("about") ?? "").trim().slice(0, 280) || null,
-      whatsapp: String(formData.get("whatsapp") ?? "").replace(/[^\d+]/g, "").slice(0, 20) || null,
-      brand_color: BRAND_COLORS.includes(color) ? color : BRAND_COLORS[0],
-    })
-    .eq("id", bizId);
-  if (error) return { error: "Could not save. Please try again." };
-  refresh(bizId);
-  revalidatePath("/me", "layout");
-  return { ok: true, message: "Saved." };
-}
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 

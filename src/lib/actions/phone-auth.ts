@@ -22,7 +22,7 @@ export async function registerPhone(phoneDigits: string, pin: string, allowSignu
     return {
       ok: false,
       error:
-        "We couldn't find a Spendbox account for this number. Customers join from a business's link, and businesses can sign up from the home page.",
+        "There's no Spendbox for this number yet. You'll need an invite: ask a business you buy from for their Spendbox link. Own a business? Start free from the For businesses page.",
     };
   }
 

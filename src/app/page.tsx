@@ -1,476 +1,86 @@
-import {
-  ArrowRight,
-  BadgeCheck,
-  Check,
-  Eye,
-  Gift,
-  Handshake,
-  History,
-  Landmark,
-  LockKeyhole,
-  QrCode,
-  ShieldCheck,
-  Smartphone,
-  Store,
-  Users,
-  Zap,
-} from "lucide-react";
+import { ArrowRight, Cake, Gift, Heart, Repeat2, Store, UserPlus, Wallet } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import { Logo } from "@/components/brand/logo";
-import { RevealOnScroll } from "@/components/landing/reveal";
-import { PerkCard } from "@/components/perks/perk-card";
-import { ButtonLink } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button";
 
-const MADE_FOR = [
-  "Restaurants",
-  "Barbers",
-  "Hair salons",
-  "Cafés",
-  "Bakeries",
-  "Spas",
-  "Boutiques",
-  "Pharmacies",
-  "Gyms",
-  "Laundries",
-  "Car washes",
-  "Bukkas",
-  "Lounges",
-  "Supermarkets",
-  "Phone shops",
-  "Nail studios",
+export const metadata: Metadata = { title: { absolute: "Spendbox — every visit counts" } };
+
+// Perks circling the member card: icon, colour, angle on the circle.
+const ORBIT = [
+  { icon: Gift, color: "#2A772C", angle: 0 },
+  { icon: Repeat2, color: "#1C2B24", angle: 60 },
+  { icon: UserPlus, color: "#4338A0", angle: 120 },
+  { icon: Wallet, color: "#A33A0B", angle: 180 },
+  { icon: Cake, color: "#A3214E", angle: 240 },
+  { icon: Heart, color: "#0F5E8C", angle: 300 },
 ];
 
-const delay = (ms: number) => ({ "--delay": `${ms}ms` }) as CSSProperties;
-
-export default function LandingPage() {
+/** The front door: one screen, two ways in. */
+export default function Home() {
   return (
-    <div className="overflow-x-clip bg-white">
-      <RevealOnScroll />
+    <div className="relative isolate flex min-h-dvh flex-col overflow-hidden bg-white">
+      <div aria-hidden className="animate-glow absolute top-[18%] left-1/2 -z-10 size-[34rem] -translate-x-1/2 rounded-full bg-brand-100 blur-3xl" />
+      <div aria-hidden className="absolute inset-x-0 bottom-0 -z-10 h-1/2 bg-gradient-to-t from-brand-50 to-transparent" />
 
-      <header className="sticky top-0 z-30 border-b border-line/70 bg-white/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-5 sm:px-8">
-          <Logo />
-          <nav className="flex items-center gap-1 sm:gap-2" aria-label="Main">
-            <a href="#how" className="hidden rounded-lg px-3 py-2 text-sm font-semibold text-ink-2 hover:bg-black/5 md:block">
-              How it works
-            </a>
-            <a href="#partners" className="hidden rounded-lg px-3 py-2 text-sm font-semibold text-ink-2 hover:bg-black/5 md:block">
-              Partners
-            </a>
-            <a href="#customers" className="hidden rounded-lg px-3 py-2 text-sm font-semibold text-ink-2 hover:bg-black/5 md:block">
-              For customers
-            </a>
-            <Link href="/login" className="rounded-lg px-3 py-2 text-sm font-semibold text-ink-2 hover:bg-black/5">
-              Log in
-            </Link>
-            <ButtonLink href="/start" size="sm" className="h-10 px-4">
-              Get started
-            </ButtonLink>
-          </nav>
-        </div>
+      <header className="flex items-center justify-between px-5 pt-5 sm:px-8 sm:pt-7">
+        <Logo />
+        <Link href="/login" className="rounded-lg px-3 py-2 text-sm font-semibold text-ink-2 hover:bg-black/5">
+          Log in
+        </Link>
       </header>
 
-      <main>
-        {/* ------------------------------------------------------------ Hero */}
-        <section className="relative isolate">
-          <div aria-hidden className="absolute -top-40 left-1/2 -z-10 size-[720px] -translate-x-1/2 rounded-full bg-brand-50 blur-3xl" />
-          <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-14 px-5 pt-12 pb-20 sm:px-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:pt-20 lg:pb-28">
-            <div className="flex flex-col gap-6">
-              <span data-reveal style={delay(0)} className="inline-flex w-fit items-center gap-2 rounded-full bg-white px-3 py-1.5 text-sm font-semibold text-brand-800 shadow-card ring-1 ring-brand-100">
-                <Store className="size-4 text-brand-600" aria-hidden /> Free trial for small businesses
-              </span>
-              <h1 data-reveal style={delay(80)} className="font-display text-[2.7rem] leading-[1] font-extrabold tracking-tight text-ink sm:text-[4.2rem]">
-                Turn your customers into <span className="text-shimmer">regulars.</span>
-              </h1>
-              <p data-reveal style={delay(160)} className="max-w-xl text-lg leading-relaxed text-muted sm:text-xl">
-                Share one link. Customers join with their phone number and pay you as usual. Every transfer counts toward
-                the perks you choose — no receipts, no stamps, no app to download.
-              </p>
-              <div data-reveal style={delay(240)} className="flex flex-col gap-3 sm:flex-row">
-                <ButtonLink href="/start" size="lg" className="shadow-lift">
-                  Start your free trial <ArrowRight className="size-4" aria-hidden />
-                </ButtonLink>
-                <ButtonLink href="#how" size="lg" variant="secondary">
-                  See how it works
-                </ButtonLink>
-              </div>
-              <ul data-reveal style={delay(320)} className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-ink-2">
-                {["Ready in a minute", "We never touch your money", "Customers control their data"].map((t) => (
-                  <li key={t} className="flex items-center gap-2">
-                    <Check className="size-4 text-brand-600" aria-hidden />
-                    {t}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <HeroVisual />
-          </div>
-        </section>
-
-        {/* ------------------------------------------------------------ Made for */}
-        <section aria-label="Made for" className="border-y border-line bg-canvas py-5">
-          <div className="marquee-mask overflow-hidden">
-            <div className="animate-marquee flex w-max gap-3">
-              {[...MADE_FOR, ...MADE_FOR].map((c, i) => (
-                <span
-                  key={i}
-                  aria-hidden={i >= MADE_FOR.length}
-                  className="flex h-10 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold whitespace-nowrap text-ink-2 ring-1 ring-line"
-                >
-                  <Store className="size-4 text-brand-600" aria-hidden /> {c}
-                </span>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ------------------------------------------------------------ How it works */}
-        <section id="how" className="scroll-mt-20">
-          <div className="mx-auto max-w-6xl px-5 py-20 sm:px-8 lg:py-28">
-            <div data-reveal className="max-w-2xl">
-              <p className="text-sm font-semibold text-brand-700">How it works</p>
-              <h2 className="mt-2 font-display text-3xl font-bold tracking-tight sm:text-5xl">Three steps. No new habits.</h2>
-            </div>
-            <div className="relative mt-12">
-              {/* The line that draws itself between the steps (desktop) */}
-              <svg data-reveal aria-hidden className="absolute top-9 left-[16%] hidden h-4 w-[68%] md:block" viewBox="0 0 600 16" preserveAspectRatio="none">
-                <path className="draw" style={{ "--len": 620 } as CSSProperties} d="M0 8 C 150 -6, 450 22, 600 8" fill="none" stroke="var(--color-brand-300)" strokeWidth="2.5" strokeDasharray="620" strokeLinecap="round" />
-              </svg>
-              <ol className="grid grid-cols-1 gap-5 md:grid-cols-3">
-                {[
-                  { icon: QrCode, title: "Share your link", body: "Post it on your WhatsApp status, send it after a sale, or print the QR code for your counter." },
-                  { icon: Smartphone, title: "Customers join with their phone", body: "They add the account they pay from, once. No app to download — it works in any browser." },
-                  { icon: Gift, title: "Every payment counts", body: "Connect your bank (read-only). Transfers are matched to the right customer, and perks unlock by themselves." },
-                ].map((step, i) => (
-                  <li key={step.title} data-reveal style={delay(i * 140)} className="relative flex flex-col gap-4 rounded-3xl bg-white p-6 shadow-card ring-1 ring-line transition hover:-translate-y-1 hover:shadow-lift">
-                    <div className="flex items-center justify-between">
-                      <div className="flex size-14 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-lift">
-                        <step.icon className="size-6" aria-hidden />
-                      </div>
-                      <span className="font-display text-5xl font-extrabold text-brand-100">{i + 1}</span>
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-bold">{step.title}</h3>
-                      <p className="mt-1.5 leading-relaxed text-muted">{step.body}</p>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          </div>
-        </section>
-
-        {/* ------------------------------------------------------------ Payments count themselves */}
-        <section className="bg-ink text-white">
-          <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-12 px-5 py-20 sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:py-28">
-            <div data-reveal="left" className="flex flex-col gap-5">
-              <p className="text-sm font-semibold text-brand-300">Straight from your bank</p>
-              <h2 className="font-display text-3xl font-bold tracking-tight sm:text-5xl">Payments count themselves.</h2>
-              <p className="text-lg leading-relaxed text-white/80">
-                Spendbox sees money coming into your account — never moves it. It knows who paid from the account they
-                added, so the visit counts and the perk unlocks while you serve the next customer.
-              </p>
-              <ul className="flex flex-col gap-3 text-white/90">
-                {["Read-only bank connection through Mono", "Matched by the customer's own bank details", "Not sure who paid? You pick once, and it's remembered"].map((t) => (
-                  <li key={t} className="flex items-start gap-3">
-                    <BadgeCheck className="mt-0.5 size-5 shrink-0 text-brand-400" aria-hidden />
-                    {t}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <PaymentFlow />
-          </div>
-        </section>
-
-        {/* ------------------------------------------------------------ Perks */}
-        <section className="mx-auto max-w-6xl px-5 py-20 sm:px-8 lg:py-28">
-          <div data-reveal className="max-w-2xl">
-            <p className="text-sm font-semibold text-brand-700">Perks</p>
-            <h2 className="mt-2 font-display text-3xl font-bold tracking-tight sm:text-5xl">Rewards that run themselves</h2>
-            <p className="mt-4 text-lg text-muted">
-              Pick a card, name the reward, done. Spendbox tracks who earned what and tells you when to hand it over.
-            </p>
-          </div>
-          <div className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {[
-              { kind: "welcome" as const, title: "Free drink on your first order", rot: "-4deg" },
-              { kind: "visits" as const, title: "Your 5th meal is on us", threshold: 5, rot: "3deg" },
-              { kind: "referral" as const, title: "Free small chops for every friend", rot: "-2deg" },
-              { kind: "spend" as const, title: "10% off your next order", threshold: 50000, rot: "4deg" },
-              { kind: "birthday" as const, title: "Birthday cake slice on us", rot: "-3deg" },
-            ].map((p, i) => (
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-7 px-5 pb-8 text-center sm:gap-9">
+        {/* Perks orbiting a member card */}
+        <div aria-hidden className="relative size-[15.5rem] shrink-0 sm:size-[19rem]">
+          <div className="orbit absolute inset-0">
+            {ORBIT.map(({ icon: Icon, color, angle }) => (
               <div
-                key={p.title}
-                data-reveal="fan"
-                style={{ ...delay(i * 90), "--rot": p.rot } as CSSProperties}
-                className="transition duration-300 hover:-translate-y-1.5 hover:rotate-[-1deg]"
+                key={angle}
+                className="absolute top-1/2 left-1/2 size-0"
+                style={{ transform: `rotate(${angle}deg) translateX(calc(var(--r) * 1))`, "--r": "min(7.5rem, 38vw)" } as CSSProperties}
               >
-                <PerkCard kind={p.kind} title={p.title} threshold={p.threshold} className="h-full" />
-              </div>
-            ))}
-            <div data-reveal="fan" style={{ ...delay(450), "--rot": "2deg" } as CSSProperties} className="flex min-h-48 flex-col justify-center gap-2 rounded-3xl border-2 border-dashed border-line-strong p-6">
-              <p className="font-display text-xl font-bold">Your own ideas</p>
-              <p className="text-muted">Extra meat, a free trim, delivery on us — whatever brings your people back.</p>
-            </div>
-          </div>
-        </section>
-
-        {/* ------------------------------------------------------------ Partners */}
-        <section id="partners" className="scroll-mt-20 bg-canvas">
-          <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-12 px-5 py-20 sm:px-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:py-28">
-            <PartnersVisual />
-            <div data-reveal="right" className="flex flex-col gap-5">
-              <p className="text-sm font-semibold text-brand-700">Partners</p>
-              <h2 className="font-display text-3xl font-bold tracking-tight sm:text-5xl">Grow together with businesses nearby.</h2>
-              <p className="text-lg leading-relaxed text-muted">
-                Team up with up to two businesses that complement yours — a barber and a spa, a gym and a juice bar.
-                Your perks show to their customers as “from our partners”, and theirs to yours.
-              </p>
-              <ul className="flex flex-col gap-3 text-ink-2">
-                {["Search by name or category", "See how many customers they have", "Approve requests yourself, or automatically"].map((t) => (
-                  <li key={t} className="flex items-start gap-3">
-                    <Handshake className="mt-0.5 size-5 shrink-0 text-brand-600" aria-hidden />
-                    {t}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </section>
-
-        {/* ------------------------------------------------------------ Trust */}
-        <section className="mx-auto max-w-6xl px-5 py-20 sm:px-8 lg:py-28">
-          <div data-reveal className="max-w-2xl">
-            <p className="text-sm font-semibold text-brand-700">Built on trust</p>
-            <h2 className="mt-2 font-display text-3xl font-bold tracking-tight sm:text-5xl">Fair for you. Fair for them.</h2>
-          </div>
-          <div className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              { icon: Users, title: "Your list stays yours", body: "Lose your phone or a staff member, and your customers stay with you." },
-              { icon: History, title: "An audit log for everyone", body: "Every purchase and perk is logged automatically. Customers see their part." },
-              { icon: Landmark, title: "Only real money counts", body: "Payments come from your bank, so each one is real and counts once." },
-              { icon: LockKeyhole, title: "Private by default", body: "Customers choose, business by business, whether to share their details." },
-            ].map((f, i) => (
-              <div key={f.title} data-reveal style={delay(i * 110)} className="group flex flex-col gap-3 rounded-3xl bg-white p-6 shadow-card ring-1 ring-line transition hover:-translate-y-1 hover:shadow-lift">
-                <div className="flex size-12 items-center justify-center rounded-2xl bg-brand-50 text-brand-700 transition group-hover:scale-110 group-hover:bg-brand-600 group-hover:text-white">
-                  <f.icon className="size-5" aria-hidden />
+                <div style={{ transform: `rotate(${-angle}deg)` }}>
+                  <span
+                    className="orbit-upright -mt-6 -ml-6 flex size-12 items-center justify-center rounded-2xl text-white shadow-lift ring-4 ring-white sm:-mt-7 sm:-ml-7 sm:size-14"
+                    style={{ background: color }}
+                  >
+                    <Icon className="size-5 sm:size-6" />
+                  </span>
                 </div>
-                <h3 className="text-lg font-bold">{f.title}</h3>
-                <p className="leading-relaxed text-muted">{f.body}</p>
               </div>
             ))}
           </div>
-        </section>
-
-        {/* ------------------------------------------------------------ Customers */}
-        <section id="customers" className="mx-auto max-w-6xl scroll-mt-20 px-5 pb-20 sm:px-8 lg:pb-28">
-          <div data-reveal="scale" className="relative isolate grid grid-cols-1 gap-10 overflow-hidden rounded-4xl bg-brand-800 p-8 text-white sm:p-12 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:items-center">
-            <div aria-hidden className="animate-blob absolute -top-32 -right-24 -z-10 size-96 rounded-[40%] bg-brand-600/60 blur-2xl" />
-            <div>
-              <p className="text-sm font-semibold text-brand-200">Shopping, not selling?</p>
-              <h2 className="mt-2 font-display text-3xl font-bold tracking-tight sm:text-5xl">All your plugs in one place</h2>
-              <p className="mt-4 max-w-xl text-lg text-white/90">
-                Spendbox is invite-only for customers. Ask a business you buy from for their link, join with your phone
-                number, and every perk you earn is waiting for you.
-              </p>
-            </div>
-            <ul className="flex flex-col gap-3">
-              {[
-                { icon: ShieldCheck, text: "Your details stay private unless you choose to share them." },
-                { icon: Zap, text: "Pay as usual — your purchases count by themselves." },
-                { icon: Eye, text: "See everything businesses did with your perks in your audits." },
-              ].map((item, i) => (
-                <li key={item.text} data-reveal="right" style={delay(150 + i * 120)} className="flex items-start gap-3 rounded-2xl bg-white/10 p-4 backdrop-blur">
-                  <item.icon className="mt-0.5 size-5 shrink-0 text-brand-200" aria-hidden />
-                  <span className="text-white/95">{item.text}</span>
-                </li>
-              ))}
-            </ul>
+          <div className="absolute top-1/2 left-1/2 flex w-40 -translate-x-1/2 -translate-y-1/2 flex-col gap-2.5 rounded-3xl bg-brand-700 p-4 text-left text-white shadow-[0_30px_60px_-24px_rgb(20_57_22/0.6)] sm:w-48 sm:p-5">
+            <span className="text-[11px] font-semibold text-white/80">My Spendbox</span>
+            <span className="font-display text-lg leading-tight font-bold sm:text-xl">3 perks ready</span>
+            <span className="h-1.5 overflow-hidden rounded-full bg-white/20">
+              <span className="animate-fill block h-full rounded-full bg-brand-400" />
+            </span>
           </div>
-        </section>
+          <span className="animate-pop absolute -right-2 bottom-3 rounded-2xl bg-white px-3 py-2 text-xs font-bold text-ink shadow-lift ring-1 ring-line sm:-right-6">
+            Free drink unlocked 🎉
+          </span>
+        </div>
 
-        {/* ------------------------------------------------------------ CTA */}
-        <section className="mx-auto max-w-6xl px-5 pb-24 sm:px-8">
-          <div data-reveal className="relative isolate overflow-hidden rounded-4xl bg-brand-600 p-8 text-white sm:p-14">
-            <div aria-hidden className="animate-blob absolute -bottom-40 -left-24 -z-10 size-[28rem] rounded-[42%] bg-brand-400/40 blur-2xl" />
-            <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
-              <div>
-                <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">Get your Spendbox link today</h2>
-                <p className="mt-2 text-lg text-white/90">Start with a free trial. Your first customers can join in minutes.</p>
-              </div>
-              <ButtonLink href="/start" size="lg" variant="secondary" className="ring-0 shadow-lift">
-                Get started <ArrowRight className="size-4" aria-hidden />
-              </ButtonLink>
-            </div>
-          </div>
-        </section>
+        <div className="flex flex-col gap-3">
+          <h1 className="font-display text-[2.6rem] leading-[1.02] font-extrabold tracking-tight sm:text-6xl">
+            Every visit <span className="text-shimmer">counts.</span>
+          </h1>
+          <p className="text-lg text-muted">The places you love, and everything they have for you, in one place.</p>
+        </div>
+
+        <div className="flex w-full flex-col gap-3">
+          <Link href="/login" className={buttonClass({ size: "lg", block: true }, "h-14 text-base shadow-lift")}>
+            My Spendbox <ArrowRight className="size-4" aria-hidden />
+          </Link>
+          <Link href="/plug" className={buttonClass({ variant: "secondary", size: "lg", block: true }, "h-14 text-base")}>
+            <Store className="size-4" aria-hidden /> For businesses
+          </Link>
+          <p className="text-sm text-muted">Customers join by invite from a business they buy from.</p>
+        </div>
       </main>
-
-      <footer className="border-t border-line">
-        <div className="mx-auto flex max-w-6xl flex-col justify-between gap-4 px-5 py-8 text-sm text-muted sm:flex-row sm:px-8">
-          <p>© {new Date().getFullYear()} Spendbox</p>
-          <div className="flex flex-wrap gap-5">
-            <Link href="/login" className="hover:text-ink">
-              Log in
-            </Link>
-            <Link href="/start" className="hover:text-ink">
-              For businesses
-            </Link>
-            <Link href="/privacy" className="hover:text-ink">
-              Privacy
-            </Link>
-            <Link href="/terms" className="hover:text-ink">
-              Terms
-            </Link>
-          </div>
-        </div>
-      </footer>
-    </div>
-  );
-}
-
-/** A phone showing the customer app, with perk cards and a "payment counted" toast floating around it. */
-function HeroVisual() {
-  return (
-    <div data-reveal="scale" style={delay(200)} className="relative mx-auto w-full max-w-md lg:max-w-none" aria-hidden>
-      <div className="absolute inset-x-6 top-10 bottom-0 -z-10 rounded-[48px] bg-gradient-to-b from-brand-100 to-brand-50" />
-      <div className="mx-auto w-[290px] rounded-[44px] bg-ink p-3 shadow-[0_40px_80px_-30px_rgb(20_32_26/0.5)] sm:w-[320px]">
-        <div className="flex flex-col gap-3 overflow-hidden rounded-[34px] bg-canvas p-4">
-          <div className="flex items-center justify-between px-1 pt-1">
-            <span className="font-display text-lg font-extrabold text-ink">My Spendbox</span>
-            <span className="rounded-full bg-accent-600 px-2 py-0.5 text-[11px] font-bold text-white">2 perks</span>
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              ["2", "Ready"],
-              ["7", "Used"],
-              ["3", "Plugs"],
-            ].map(([n, l]) => (
-              <div key={l} className="rounded-2xl bg-white p-2.5 ring-1 ring-line">
-                <p className="text-lg font-bold">{n}</p>
-                <p className="text-[10px] font-semibold text-muted">{l}</p>
-              </div>
-            ))}
-          </div>
-          <div className="rounded-3xl bg-white p-4 shadow-card ring-1 ring-line">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-brand-600 font-display text-sm font-bold text-white">MT</div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold">Mama Tee&apos;s Kitchen</p>
-                <p className="text-xs text-muted">4 of 5 · free drink</p>
-              </div>
-            </div>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-line">
-              <div className="animate-fill h-full rounded-full bg-brand-600" />
-            </div>
-          </div>
-          <div className="rounded-3xl bg-white p-4 shadow-card ring-1 ring-line">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-[#4338A0] font-display text-sm font-bold text-white">KB</div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold">Kingz Barbers</p>
-                <p className="text-xs text-muted">Free beard trim · ready</p>
-              </div>
-            </div>
-          </div>
-          <div className="animate-toast flex items-center gap-3 rounded-3xl bg-brand-600 p-4 text-white">
-            <Landmark className="size-5 shrink-0" />
-            <div>
-              <p className="text-sm font-bold">Payment counted</p>
-              <p className="text-xs text-white/90">₦5,000 · Mama Tee&apos;s Kitchen</p>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="animate-float absolute top-16 -left-3 hidden w-44 sm:block lg:-left-12" style={{ "--r": "-6deg" } as CSSProperties}>
-        <PerkCard kind="welcome" title="Free extra meat" size="sm" className="shadow-lift" />
-      </div>
-      <div className="animate-float absolute -right-3 bottom-16 hidden w-44 sm:block lg:-right-12" style={{ "--r": "6deg", "--delay": "-3s" } as CSSProperties}>
-        <PerkCard kind="birthday" title="Birthday treat" size="sm" className="shadow-lift" />
-      </div>
-    </div>
-  );
-}
-
-/** Customer transfer → your bank → Spendbox → perk unlocked, with money travelling between them. */
-function PaymentFlow() {
-  const nodes = [
-    { icon: Smartphone, label: "Customer pays by transfer" },
-    { icon: Landmark, label: "Money lands in your bank" },
-    { icon: BadgeCheck, label: "Spendbox knows who paid" },
-    { icon: Gift, label: "Perk unlocked" },
-  ];
-  return (
-    <div data-reveal="right" className="rounded-4xl bg-white/5 p-6 ring-1 ring-white/10 sm:p-8" aria-hidden>
-      <div className="relative flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-        {/* track */}
-        <div className="absolute top-7 right-[12%] left-[12%] hidden h-0.5 rounded-full bg-white/15 sm:block">
-          {[0, 1300, 2600].map((d) => (
-            <span key={d} className="animate-travel absolute -top-[5px] size-3 -translate-x-1/2 rounded-full bg-brand-400 shadow-[0_0_14px_var(--color-brand-400)]" style={delay(d)} />
-          ))}
-        </div>
-        {nodes.map((n, i) => (
-          <div key={n.label} className="relative z-10 flex items-center gap-4 sm:w-1/4 sm:flex-col sm:text-center">
-            <span className="animate-node flex size-14 shrink-0 items-center justify-center rounded-2xl bg-brand-600 text-white" style={delay(i * 1000)}>
-              <n.icon className="size-6" />
-            </span>
-            <span className="text-sm font-semibold text-white/90">{n.label}</span>
-          </div>
-        ))}
-      </div>
-      <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="animate-toast rounded-2xl bg-white p-4 text-ink" style={delay(500)}>
-          <p className="text-xs font-semibold text-muted">Your bank</p>
-          <p className="font-semibold">₦7,500 from ADEBAYO TOLULOPE</p>
-        </div>
-        <div className="animate-toast rounded-2xl bg-brand-500 p-4 text-white" style={delay(1500)}>
-          <p className="text-xs font-semibold text-white/80">Spendbox</p>
-          <p className="font-semibold">Counted for Tolu · 5th visit 🎉</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** Two businesses, linked, swapping perks. */
-function PartnersVisual() {
-  return (
-    <div data-reveal="left" className="relative mx-auto w-full max-w-lg" aria-hidden>
-      <div className="relative flex items-center justify-between rounded-4xl bg-white p-6 shadow-card ring-1 ring-line sm:p-8">
-        <svg className="absolute inset-x-[22%] top-1/2 h-10 w-[56%] -translate-y-1/2" viewBox="0 0 300 40" preserveAspectRatio="none">
-          <path className="draw" style={{ "--len": 340 } as CSSProperties} d="M0 20 Q 150 -14 300 20" fill="none" stroke="var(--color-brand-400)" strokeWidth="3" strokeDasharray="8 8" strokeLinecap="round" />
-        </svg>
-        {[
-          { initials: "FL", name: "Fade Lab", sub: "Barber", color: "#1C2B24" },
-          { initials: "GS", name: "Glow Spa", sub: "Spa", color: "#A3214E" },
-        ].map((b, i) => (
-          <div key={b.name} className="relative z-10 flex flex-col items-center gap-2 text-center">
-            <span className="animate-node flex size-16 items-center justify-center rounded-3xl font-display text-lg font-bold text-white shadow-lift sm:size-20" style={{ background: b.color, ...delay(i * 2000) }}>
-              {b.initials}
-            </span>
-            <span className="text-sm font-bold">{b.name}</span>
-            <span className="text-xs text-muted">{b.sub}</span>
-          </div>
-        ))}
-        <span className="absolute top-1/2 left-1/2 z-10 flex size-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-brand-600 text-white shadow-lift">
-          <Handshake className="size-5" />
-        </span>
-      </div>
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <div className="animate-float rounded-2xl bg-white p-4 shadow-card ring-1 ring-line" style={delay(0)}>
-          <p className="text-[11px] font-semibold text-brand-700">From our partners</p>
-          <p className="mt-1 text-sm font-bold">Free facial on your first visit</p>
-          <p className="text-xs text-muted">Glow Spa → Fade Lab customers</p>
-        </div>
-        <div className="animate-float rounded-2xl bg-white p-4 shadow-card ring-1 ring-line" style={delay(-3000)}>
-          <p className="text-[11px] font-semibold text-brand-700">From our partners</p>
-          <p className="mt-1 text-sm font-bold">Free beard trim</p>
-          <p className="text-xs text-muted">Fade Lab → Glow Spa customers</p>
-        </div>
-      </div>
     </div>
   );
 }

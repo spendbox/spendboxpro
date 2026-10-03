@@ -6,7 +6,9 @@ import { PhoneSignIn } from "@/components/auth/phone-sign-in";
 import { Button } from "@/components/ui/button";
 import { MultiCombobox } from "@/components/ui/combobox";
 import { FormMessage, Input } from "@/components/ui/field";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { CATEGORIES } from "@/lib/constants";
+import { DEFAULT_COUNTRY_CODE } from "@/lib/env";
 import { createBusiness, type NewBusiness } from "./actions";
 
 type StepKey = "name" | "categories" | "location" | "whatsapp" | "account";
@@ -26,6 +28,9 @@ export function StartFlow({ signedIn }: { signedIn: boolean }) {
   const [index, setIndex] = useState(0);
   const [details, setDetails] = useState<NewBusiness>({ name: "", categories: [], location: "", whatsapp: "" });
   const [error, setError] = useState<string | null>(null);
+  const [waCountry, setWaCountry] = useState(DEFAULT_COUNTRY_CODE);
+  // What gets saved: the WhatsApp number with its country code (the server tidies "0803…" / "803…").
+  const payload = () => ({ ...details, whatsapp: details.whatsapp.trim() ? `+${waCountry}${details.whatsapp.replace(/\D/g, "").replace(/^0+/, "")}` : "" });
   const [pending, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -45,7 +50,7 @@ export function StartFlow({ signedIn }: { signedIn: boolean }) {
 
   const finish = () =>
     startTransition(async () => {
-      const message = await createBusiness(details);
+      const message = await createBusiness(payload());
       if (message) setError(message);
     });
 
@@ -119,17 +124,14 @@ export function StartFlow({ signedIn }: { signedIn: boolean }) {
       title: "Which WhatsApp number takes orders?",
       hint: "Customers get an “Order on WhatsApp” button.",
       body: (
-        <Input
-          ref={inputRef}
+        <PhoneInput
           id="whatsapp"
-          aria-label="WhatsApp number"
-          type="tel"
-          inputMode="tel"
-          autoComplete="tel"
-          placeholder="0803 000 0000"
+          label="WhatsApp number"
+          large
+          country={waCountry}
+          onCountry={setWaCountry}
           value={details.whatsapp}
-          onChange={set("whatsapp")}
-          className="h-14 text-lg"
+          onChange={(v) => set("whatsapp")({ target: { value: v } })}
         />
       ),
     },
@@ -170,7 +172,7 @@ export function StartFlow({ signedIn }: { signedIn: boolean }) {
         </div>
 
         {step.key === "account" ? (
-          <PhoneSignIn allowSignup submitLabel="Create my link" onSignedIn={() => createBusiness(details)} />
+          <PhoneSignIn allowSignup submitLabel="Create my link" onSignedIn={() => createBusiness(payload())} />
         ) : (
           <form
             className="flex flex-col gap-4"

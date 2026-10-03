@@ -19,24 +19,27 @@ export function BirthdayFields({ value, onChange }: { value: BirthdayValue; onCh
         value={value.day}
         onChange={(day) => onChange({ ...value, day })}
         placeholder="Day"
+        searchPlaceholder="Type a day"
         options={Array.from({ length: 31 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))}
-        searchable={false}
+        searchable
       />
       <Combobox
         aria-label="Month"
         value={value.month}
         onChange={(month) => onChange({ ...value, month })}
         placeholder="Month"
+        searchPlaceholder="Type a month"
         options={MONTHS.map((m, i) => ({ value: String(i + 1), label: m }))}
-        searchable={false}
+        searchable
       />
       <Combobox
         aria-label="Year (optional)"
         value={value.year}
         onChange={(year) => onChange({ ...value, year })}
         placeholder="Year"
+        searchPlaceholder="Type a year, e.g. 1995"
         options={Array.from({ length: 90 }, (_, i) => String(thisYear - 10 - i)).map((y) => ({ value: y, label: y }))}
-        searchable={false}
+        searchable
       />
     </div>
   );

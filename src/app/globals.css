@@ -225,3 +225,28 @@ html:not(.js) .draw { stroke-dashoffset: 0; }
   .animate-toast { opacity: 1; }
   .draw { stroke-dashoffset: 0; }
 }
+
+/* Front page: perks orbiting the member card. */
+@keyframes orbit-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes orbit-spin-reverse {
+  to { transform: rotate(-360deg); }
+}
+.orbit { animation: orbit-spin 36s linear infinite; }
+.orbit-upright { animation: orbit-spin-reverse 36s linear infinite; }
+@keyframes glow-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 0.9; transform: scale(1.08); }
+}
+.animate-glow { animation: glow-pulse 5s ease-in-out infinite; }
+@keyframes pop-in-out {
+  0%, 12% { opacity: 0; transform: translateY(10px) scale(0.9); }
+  18%, 62% { opacity: 1; transform: none; }
+  70%, 100% { opacity: 0; transform: translateY(-8px) scale(0.95); }
+}
+.animate-pop { animation: pop-in-out 7s ease-in-out infinite; animation-delay: var(--delay, 0s); }
+@media (prefers-reduced-motion: reduce) {
+  .orbit, .orbit-upright, .animate-glow { animation: none !important; }
+  .animate-pop { animation: none !important; opacity: 1; }
+}

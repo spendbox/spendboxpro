@@ -1,5 +1,7 @@
 "use server";
 
+import { DEFAULT_COUNTRY_CODE } from "@/lib/env";
+import { normalizeWhatsapp } from "@/lib/phone";
 import { redirect } from "next/navigation";
 import { getUser } from "@/lib/auth";
 import { cleanCategories } from "@/lib/constants";
@@ -24,7 +26,7 @@ export async function createBusiness(input: NewBusiness): Promise<string | void>
     p_name: name,
     p_category: categories[0] ?? null,
     p_location: input.location?.trim().slice(0, 80) || null,
-    p_whatsapp: input.whatsapp?.replace(/[^\d+]/g, "").slice(0, 20) || null,
+    p_whatsapp: normalizeWhatsapp(input.whatsapp, DEFAULT_COUNTRY_CODE),
   });
   if (error || !data) return error?.message ?? "Could not create your business. Please try again.";
   if (categories.length) await supabase.from("businesses").update({ categories }).eq("id", data);

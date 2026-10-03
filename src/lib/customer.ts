@@ -77,3 +77,10 @@ export async function hasMyBankAccount(): Promise<boolean> {
   const { count } = await supabase.from("payers").select("id", { count: "exact", head: true }).is("learned_at_business", null);
   return (count ?? 0) > 0;
 }
+
+/** Where a member can transfer money to a business. */
+export async function getPayAccounts(businessId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("business_pay_accounts", { p_business_id: businessId });
+  return (data ?? []) as { institution: string | null; account_name: string | null; account_number: string }[];
+}

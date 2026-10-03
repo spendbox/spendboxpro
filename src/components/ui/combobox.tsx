@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, ChevronDown, Plus, Search, X } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 export interface ComboOption {
@@ -35,6 +35,13 @@ function useOutsideClose(open: boolean, onClose: () => void) {
 
 const panel =
   "absolute inset-x-0 top-full z-50 mt-2 flex max-h-80 flex-col overflow-hidden rounded-2xl bg-white shadow-lift ring-1 ring-line animate-fade-up";
+/** Inside a pop-up the list opens in place (pushing content down) so the pop-up's scrolling can't cut it off. */
+const inlinePanel = "relative mt-2 flex max-h-64 flex-col overflow-hidden rounded-2xl bg-white shadow-card ring-1 ring-line animate-fade-up";
+
+/** True when the element sits inside an open pop-up. */
+function inDialog(el: HTMLElement | null) {
+  return Boolean(el?.closest("dialog"));
+}
 
 function OptionRow({
   option,
@@ -116,6 +123,7 @@ export function Combobox({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
+  const [inline, setInline] = useState(false);
   const listId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const withSearch = searchable ?? options.length > 8;
@@ -132,6 +140,7 @@ export function Combobox({
     if (disabled) return;
     const index = Math.max(0, options.findIndex((o) => o.value === value));
     setActive(index);
+    setInline(inDialog(triggerRef.current));
     setOpen(true);
   }
 
@@ -199,7 +208,7 @@ export function Combobox({
       </button>
 
       {open && (
-        <div className={panel}>
+        <div className={inline ? inlinePanel : panel}>
           {withSearch && (
             <div className="flex items-center gap-2 border-b border-line px-3">
               <Search className="size-4 shrink-0 text-muted" aria-hidden />
@@ -279,6 +288,11 @@ export function MultiCombobox({
   const inputId = useId();
   const focusInput = () => document.getElementById(id ?? inputId)?.focus();
   const ref = useOutsideClose(open, () => setOpen(false));
+  const [inline, setInline] = useState(false);
+  // Find out once, after mounting, whether this sits inside a pop-up.
+  const detect = useCallback((el: HTMLElement | null) => {
+    if (el) setInline(inDialog(el));
+  }, []);
 
   const full = value.length >= max;
   const q = query.trim();
@@ -375,10 +389,10 @@ export function MultiCombobox({
           />
         )}
       </div>
-      <p className="mt-1.5 text-sm text-muted">{full ? `That's the maximum of ${max}.` : `Pick up to ${max}.`}</p>
+      <p ref={detect} className="mt-1.5 text-sm text-muted">{full ? `That's the maximum of ${max}.` : `Pick up to ${max}.`}</p>
 
       {open && !full && (
-        <div className={cn(panel, "top-14 mt-0")}>
+        <div className={inline ? inlinePanel : cn(panel, "top-14 mt-0")}>
           <ul id={listId} role="listbox" aria-multiselectable className="overflow-y-auto overscroll-contain p-1.5">
             {rows.length === 0 ? (
               <li className="px-3 py-3 text-sm text-muted">No matches. Keep typing to add your own.</li>
