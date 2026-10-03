@@ -10,6 +10,8 @@ import {
   ReceiptText,
   ScanLine,
   Settings,
+  ShieldCheck,
+  Store,
   UserRound,
   Users,
   type LucideIcon,
@@ -29,6 +31,8 @@ const ICONS = {
   partners: Handshake,
   audits: History,
   settings: Settings,
+  businesses: Store,
+  team: ShieldCheck,
 } satisfies Record<string, LucideIcon>;
 
 export interface NavItem {

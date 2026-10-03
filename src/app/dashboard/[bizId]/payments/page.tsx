@@ -13,7 +13,7 @@ import { syncBusinessIfStale } from "@/lib/bank/sync";
 import { getPurchases, getStats, getUnmatchedPayments, hasBankConnection } from "@/lib/business";
 import { after } from "next/server";
 import { cn } from "@/lib/cn";
-import { testPaymentsEnabled } from "@/lib/env";
+import { testPaymentsEnabled } from "@/lib/settings";
 import type { PurchaseStatus } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Payments" };
@@ -86,7 +86,7 @@ export default async function PaymentsPage({ params, searchParams }: PageProps<"
         </Card>
       )}
 
-      {testPaymentsEnabled() && <TestPayment bizId={bizId} />}
+      {(await testPaymentsEnabled()) && <TestPayment bizId={bizId} />}
 
       <UnmatchedPayments bizId={bizId} payments={unmatched} />
 

@@ -146,3 +146,13 @@ export function formatMoneyShort(amount: number | string | null | undefined, cur
 export function isWithinMinutes(iso: string, minutes: number) {
   return Date.now() - new Date(iso).getTime() < minutes * 60_000;
 }
+
+/** True if the time has already passed. */
+export function isPast(iso: string | Date) {
+  return new Date(iso).getTime() <= Date.now();
+}
+
+/** The moment `days` days ago, as an ISO string (for "last 30 days" queries). */
+export function daysAgoIso(days: number) {
+  return new Date(Date.now() - days * 86_400_000).toISOString();
+}

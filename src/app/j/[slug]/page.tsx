@@ -1,4 +1,4 @@
-import { ShieldCheck, UserPlus } from "lucide-react";
+import { PauseCircle, ShieldCheck, UserPlus } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { getUser } from "@/lib/auth";
 import { businessTagline } from "@/lib/format";
 import { PERK_KIND_ORDER } from "@/lib/perks";
+import { getSettings } from "@/lib/settings";
 import { createClient } from "@/lib/supabase/server";
 import type { Business, Perk } from "@/lib/types";
 import { JoinPanel } from "./join-panel";
@@ -61,6 +62,8 @@ export default async function JoinPage({ params, searchParams }: PageProps<"/j/[
       .maybeSingle();
     if (data) state = "member";
   }
+  // Joining paused (for everyone, or for this business) from the admin area.
+  const closed = (state === "signed-out" || state === "signed-in") && (Boolean(business.suspended_at) || !(await getSettings()).joinsOpen);
 
   return (
     <div className="min-h-dvh">
@@ -125,7 +128,17 @@ export default async function JoinPage({ params, searchParams }: PageProps<"/j/[
                 <p>A friend shared this with you. They get a perk when you make your first purchase.</p>
               </div>
             )}
-            <JoinPanel state={state} slug={business.slug} refCode={refCode} businessName={business.name} businessId={business.id} />
+            {closed ? (
+              <div className="flex items-start gap-3">
+                <PauseCircle className="mt-0.5 size-6 shrink-0 text-muted" aria-hidden />
+                <div>
+                  <p className="font-display text-xl font-bold">Not taking new members right now</p>
+                  <p className="mt-1 text-muted">Please check back soon. If you&apos;re already a member, log in to see your perks.</p>
+                </div>
+              </div>
+            ) : (
+              <JoinPanel state={state} slug={business.slug} refCode={refCode} businessName={business.name} businessId={business.id} />
+            )}
             <div className="flex items-start gap-3 border-t border-line pt-5 text-sm text-muted">
               <ShieldCheck className="mt-0.5 size-5 shrink-0 text-brand-600" aria-hidden />
               <p>

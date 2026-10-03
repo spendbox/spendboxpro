@@ -2,12 +2,15 @@ import { CalendarClock } from "lucide-react";
 import { cookies } from "next/headers";
 import { DismissTrial } from "@/components/business/dismiss-trial";
 import { formatDate } from "@/lib/format";
+import { getSettings } from "@/lib/settings";
 import { getTrial, TRIAL_HIDDEN_COOKIE } from "@/lib/trial";
 
 /** Tells businesses they're on a free trial and that paid plans come later. Closable until the next login. */
-export async function TrialBanner({ createdAt }: { createdAt: string }) {
+export async function TrialBanner({ business }: { business: { created_at: string; trial_ends_at?: string | null } }) {
   if ((await cookies()).get(TRIAL_HIDDEN_COOKIE)) return null;
-  const { endsAt, daysLeft, ended } = getTrial(createdAt);
+  const trial = getTrial(business, await getSettings());
+  if (!trial) return null;
+  const { endsAt, daysLeft, ended } = trial;
 
   return (
     <DismissTrial>

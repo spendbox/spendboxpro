@@ -5,7 +5,7 @@ import { after } from "next/server";
 import { requireOwnedBusiness } from "@/lib/auth";
 import { senderKey } from "@/lib/bank/match";
 import { matchOpenPayments, syncBusiness, syncConnection } from "@/lib/bank/sync";
-import { testPaymentsEnabled } from "@/lib/env";
+import { testPaymentsEnabled } from "@/lib/settings";
 import { accountDetails, exchangeToken, monoConfigured, unlinkAccount } from "@/lib/mono";
 import { notifyPurchase, notifyRewardsReady } from "@/lib/notify";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -168,7 +168,7 @@ export async function unmatchPayment(bizId: string, purchaseId: string): Promise
  */
 export async function sendTestPayment(bizId: string, input: { name: string; account: string; amount: string }): Promise<BankResult> {
   const { business } = await requireOwnedBusiness(bizId);
-  if (!testPaymentsEnabled()) return { error: "Test payments are switched off." };
+  if (!(await testPaymentsEnabled())) return { error: "Test payments are switched off." };
   const name = input.name.replace(/\s+/g, " ").trim().toUpperCase().slice(0, 100);
   const account = input.account.replace(/\D/g, "");
   const amount = Number(input.amount.replace(/[^0-9.]/g, ""));
