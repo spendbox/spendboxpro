@@ -1,4 +1,4 @@
-import { Gift, Ticket } from "lucide-react";
+import { ChevronRight, Gift, Ticket } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PerkIcon } from "@/components/perks/perk-card";
@@ -52,9 +52,14 @@ export default async function MyPerksPage() {
                 <Ticket className="size-4" aria-hidden /> Show pass
               </Link>
             </div>
-            <Card className="divide-y divide-line px-5">
+            <Card className="divide-y divide-line overflow-hidden">
               {list.map((r) => (
-                <div key={r.id} className="flex items-start gap-3 py-4">
+                <Link
+                  key={r.id}
+                  href={`/me/b/${membership.business.slug}/pass?perk=${r.id}`}
+                  aria-label={`${r.title}: show your pass at ${membership.business.name} to use it`}
+                  className="flex items-start gap-3 px-5 py-4 transition hover:bg-canvas"
+                >
                   <span
                     className="flex size-10 shrink-0 items-center justify-center rounded-xl text-white"
                     style={{ background: PERK_KINDS[r.kind].color }}
@@ -65,7 +70,8 @@ export default async function MyPerksPage() {
                     <p className="font-semibold break-words text-ink">{r.title}</p>
                     <TimeLeft issuedAt={r.issued_at} expiresAt={r.expires_at} tone="dark" />
                   </div>
-                </div>
+                  <ChevronRight className="mt-2.5 size-5 shrink-0 text-muted" aria-hidden />
+                </Link>
               ))}
             </Card>
           </section>

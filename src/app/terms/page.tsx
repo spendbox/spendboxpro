@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: "Terms of use" };
 
 export default function TermsPage() {
   return (
-    <LegalPage title="Terms of use" updated="2 October 2026">
+    <LegalPage title="Terms of use" updated="3 October 2026">
       <p>
         These terms are an agreement between you and Spendbox (&ldquo;we&rdquo;, &ldquo;us&rdquo;) for using the
         Spendbox website and app. By creating an account or using Spendbox you agree to them. If you don&apos;t agree,
@@ -71,7 +71,11 @@ export default function TermsPage() {
       <h2>For businesses</h2>
       <ul>
         <li>You must be authorised to act for the business and to add its bank accounts.</li>
-        <li>Honour the perks you offer, and describe them honestly.</li>
+        <li>Honour the perks you offer, and describe them honestly, including to customers who join you through a partner.</li>
+        <li>
+          If you switch on cross-promotion, other businesses on Spendbox can see your name, categories, area and number
+          of customers, and your perks show to your partners&apos; customers. You can end a partnership at any time.
+        </li>
         <li>
           Use customers&apos; shared details only to serve them and in line with data protection law. Don&apos;t send
           spam or share customer data with others.

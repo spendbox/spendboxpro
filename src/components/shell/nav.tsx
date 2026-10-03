@@ -2,6 +2,7 @@
 
 import {
   Gift,
+  Handshake,
   House,
   LayoutGrid,
   LoaderCircle,
@@ -24,6 +25,7 @@ const ICONS = {
   payments: ReceiptText,
   customers: Users,
   perks: Gift,
+  partners: Handshake,
   settings: Settings,
 } satisfies Record<string, LucideIcon>;
 
@@ -37,12 +39,20 @@ export interface NavItem {
   badge?: number;
   /** Shown as a raised round button in the phone tab bar. */
   primary?: boolean;
+  /** Only in the desktop side menu (the phone tab bar has room for five). */
+  desktopOnly?: boolean;
+  /** Badge shown only in the phone tab bar (e.g. for a desktop-only item it stands in for). */
+  mobileBadge?: number;
 }
 
 /** Spinner on the menu item that was just tapped, until its page shows. */
 function Pending({ className }: { className?: string }) {
   const { pending } = useLinkStatus();
   return pending ? <LoaderCircle className={cn("size-4 animate-spin text-brand-600", className)} aria-hidden /> : null;
+}
+
+function ownMatch(pathname: string, item: NavItem) {
+  return item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
 
 function isActive(pathname: string, item: NavItem) {
@@ -56,7 +66,8 @@ export function SideNav({ items }: { items: NavItem[] }) {
     <nav aria-label="Main" className="flex flex-col gap-1">
       {items.map((item) => {
         const Icon = ICONS[item.icon];
-        const active = isActive(pathname, item);
+        // A page with its own menu item highlights only that item.
+        const active = ownMatch(pathname, item) || (isActive(pathname, item) && !items.some((o) => o !== item && ownMatch(pathname, o)));
         return (
           <Link
             key={item.href}
@@ -88,7 +99,7 @@ export function BottomNav({ items }: { items: NavItem[] }) {
       className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white/95 backdrop-blur lg:hidden"
     >
       <ul className="mx-auto flex max-w-lg items-stretch justify-around px-2">
-        {items.map((item) => {
+        {items.filter((item) => !item.desktopOnly).map((item) => {
           const Icon = ICONS[item.icon];
           const active = isActive(pathname, item);
           return (
@@ -110,9 +121,9 @@ export function BottomNav({ items }: { items: NavItem[] }) {
                 )}
                 <span>{item.label}</span>
                 <Pending className="absolute top-1.5 right-3 size-3.5" />
-                {item.badge ? (
+                {(item.mobileBadge ?? item.badge) ? (
                   <span className="absolute top-2 left-1/2 ml-2 min-w-5 rounded-full bg-accent-600 px-1.5 text-center text-[10px] leading-5 font-bold text-white">
-                    {item.badge}
+                    {item.mobileBadge ?? item.badge}
                   </span>
                 ) : null}
               </Link>

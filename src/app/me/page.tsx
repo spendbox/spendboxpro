@@ -10,7 +10,8 @@ import { Progress } from "@/components/ui/progress";
 import { WhatsAppIcon } from "@/components/ui/share-actions";
 import { requireUser } from "@/lib/auth";
 import { receiptsEnabled } from "@/lib/env";
-import { getMyMemberships, getMyProfile, getMyPurchases, getMyRewards } from "@/lib/customer";
+import { getMyMemberships, getMyProfile, getMyPurchases, getMyRewards, getPartnerPerks } from "@/lib/customer";
+import { PartnerOffers } from "@/components/perks/partner-offers";
 import { businessTagline, firstName, memberNo, plural, whatsappLink } from "@/lib/format";
 import { PERK_KINDS, perkProgress, sortBySoonest } from "@/lib/perks";
 import { TimeLeft } from "@/components/perks/time-left";
@@ -28,6 +29,9 @@ export default async function MySpendboxPage() {
     getMyRewards(user.id),
     getMyPurchases(user.id),
   ]);
+  // Partners of my businesses that I haven't joined yet.
+  const memberSlugs = new Set(memberships.map((m) => m.business.slug));
+  const partnerPerks = (await getPartnerPerks(memberships.map((m) => m.business_id))).filter((r) => !memberSlugs.has(r.partner_slug));
 
   const name = firstName(profile?.full_name);
   const soonest = sortBySoonest(rewards).slice(0, SHOWN);
@@ -196,6 +200,15 @@ export default async function MySpendboxPage() {
           </div>
         )}
       </section>
+
+      <PartnerOffers
+        rows={partnerPerks}
+        memberSlugs={memberSlugs}
+        title="Offers from partners"
+        description="Businesses that team up with ones you've joined."
+        viaNames={Object.fromEntries(memberships.map((m) => [m.business_id, m.business.name]))}
+        limit={4}
+      />
     </div>
   );
 }
