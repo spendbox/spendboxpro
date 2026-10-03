@@ -1,4 +1,4 @@
-import { ExternalLink, LogOut, Wallet } from "lucide-react";
+import { ExternalLink, LogOut, PauseCircle, Wallet } from "lucide-react";
 import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
 import { BusinessFab } from "@/components/business/business-fab";
@@ -8,6 +8,7 @@ import type { NavItem } from "@/components/shell/nav";
 import { signOut } from "@/lib/actions/auth";
 import { requireOwnedBusiness } from "@/lib/auth";
 import { getStats } from "@/lib/business";
+import { SUPPORT_EMAIL } from "@/lib/email";
 import { siteUrl } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 
@@ -63,15 +64,29 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
         </>
       }
     >
-      <TrialBanner createdAt={business.created_at} />
-      {children}
-      <BusinessFab
-        bizId={bizId}
-        currency={business.currency}
-        businessName={business.name}
-        joinUrl={`${siteUrl()}/j/${business.slug}`}
-        joinMessage={`Join ${business.name} on Spendbox for member perks:`}
-      />
+      <TrialBanner business={business} />
+      {business.suspended_at ? (
+        <div className="mx-auto flex max-w-md flex-col items-center gap-3 py-16 text-center">
+          <PauseCircle className="size-12 text-muted" aria-hidden />
+          <h1 className="font-display text-2xl font-bold">{business.name} is paused</h1>
+          <p className="text-muted">
+            Spendbox has paused this business for now, so new customers can&apos;t join. Your customers can still see their perks.
+            Please email <a className="font-semibold text-brand-700 underline" href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> and
+            we&apos;ll sort it out.
+          </p>
+        </div>
+      ) : (
+        children
+      )}
+      {!business.suspended_at && (
+        <BusinessFab
+          bizId={bizId}
+          currency={business.currency}
+          businessName={business.name}
+          joinUrl={`${siteUrl()}/j/${business.slug}`}
+          joinMessage={`Join ${business.name} on Spendbox for member perks:`}
+        />
+      )}
     </AppShell>
   );
 }

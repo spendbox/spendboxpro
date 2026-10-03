@@ -23,7 +23,8 @@ You need accounts on **Supabase**, **Vercel**, **Mono** and **Paystack** (Paysta
 6. Then [`supabase/migrations/20261004000000_sales.sql`](supabase/migrations/20261004000000_sales.sql) (sales and balance on the home screen).
 7. Then [`supabase/migrations/20261005000000_partners.sql`](supabase/migrations/20261005000000_partners.sql) (partner businesses, and a fix for perk time limits).
 8. Then [`supabase/migrations/20261006000000_activity_and_accounts.sql`](supabase/migrations/20261006000000_activity_and_accounts.sql) (audit logs, deleting a typed-in purchase, customers' bank accounts).
-9. Then [`supabase/migrations/20261007000000_pay_accounts.sql`](supabase/migrations/20261007000000_pay_accounts.sql) (members can see which account to pay the business into). Always run the files in order, each once.
+9. Then [`supabase/migrations/20261007000000_pay_accounts.sql`](supabase/migrations/20261007000000_pay_accounts.sql) (members can see which account to pay the business into).
+10. Then [`supabase/migrations/20261008000000_admin.sql`](supabase/migrations/20261008000000_admin.sql) (the admin area). Always run the files in order, each once.
 
 ### 2. Login: nothing to set up
 
@@ -65,8 +66,10 @@ People log in with their **phone number and a 6-digit PIN** they choose the firs
 | `CRON_SECRET` | Any long random text. Lets Vercel run the daily job (birthday treats, and a bank check in case a webhook was missed). |
 | `RESEND_API_KEY` | Optional — Resend API key (step 4) |
 | `EMAIL_FROM` | Optional — who emails come from, e.g. `Spendbox <hello@yourdomain.com>` (must be on your verified Resend domain) |
+| `ADMIN_EMAIL` | The email you'll use to log in to the admin area at `/admin` |
+| `ADMIN_PASSWORD` | Your admin password. At least 10 characters (longer is better) and don't reuse one. Change it here any time and redeploy; that signs everyone out of the admin area. |
 
-Moving from Mono's sandbox to real banks: replace the two Mono keys with your `live_` keys and redeploy. Optional: `NEXT_PUBLIC_TRIAL_DAYS` (free-trial length, default `90`), `NEXT_PUBLIC_DEFAULT_COUNTRY_CODE` (default `234`), `NEXT_PUBLIC_TIME_ZONE` (default `Africa/Lagos`). See [`.env.example`](.env.example).
+Moving from Mono's sandbox to real banks: replace the two Mono keys with your `live_` keys and redeploy. Optional: `NEXT_PUBLIC_TRIAL_DAYS` (starting free-trial length, default `90`; change it later in `/admin`), `NEXT_PUBLIC_DEFAULT_COUNTRY_CODE` (default `234`), `NEXT_PUBLIC_TIME_ZONE` (default `Africa/Lagos`). See [`.env.example`](.env.example).
 
 3. Press **Deploy**. If you change a variable later, redeploy (**Deployments → ⋯ → Redeploy**) so it takes effect.
 4. **For speed:** in Vercel → **Settings → Functions → Function Region**, pick the region closest to your Supabase project's region (shown in Supabase → Project Settings → General). When the two are far apart, every page waits for the data to travel between continents.
@@ -80,7 +83,18 @@ Moving from Mono's sandbox to real banks: replace the two Mono keys with your `l
 3. Open your join link in a private browser window and join as a customer with a different phone number. Add a bank account when asked; the name comes from the bank.
 4. Go back to **Payments**. Sandbox payments are made up by Mono, so most will be in **Who paid this?**: pick a customer for one. Every later payment from that sender counts for that customer by itself.
 
-**Testing without Mono or real money.** In Vercel → Settings → Environment Variables, add `TEST_PAYMENTS` = `on` and redeploy. The Payments page then shows **Send a test payment**: type the customer's name exactly as it appears on their Profile and an amount, and Spendbox treats it like a real transfer that just arrived (it counts for the customer, unlocks perks and sends emails). A name it doesn't know lands in **Who paid this?**. Test payments are marked "TEST TRANSFER" and only work with Mono test keys. **Remove `TEST_PAYMENTS` before real businesses sign up**, and delete your test businesses in Settings.
+**Testing without Mono or real money.** In `/admin` → Settings, switch on **Test payments** (or set `TEST_PAYMENTS=on` in Vercel). The Payments page then shows **Send a test payment**: type the customer's name exactly as it appears on their Profile and an amount, and Spendbox treats it like a real transfer that just arrived (it counts for the customer, unlocks perks and sends emails). A name it doesn't know lands in **Who paid this?**. Test payments are marked "TEST TRANSFER" and only work with Mono test keys. **Switch them off before real businesses sign up**, and delete your test businesses in Settings.
+
+### 7. The admin area (`/admin`)
+
+Open `your-site/admin` and log in with `ADMIN_EMAIL` and `ADMIN_PASSWORD`. It works on your phone too.
+
+- **Dashboard:** businesses, customers, sales counted, perks used, free trials, and charts of new members and businesses over the last 30 days.
+- **Businesses:** search, then open one to **pause** it (new customers can't join, and the owner sees a paused notice), change its **free trial** (+30 days, +90 days, pick a date, end it now, or back to the usual length) or **delete** it.
+- **People:** everyone with a login. **Pause** someone (they can't log in) or **delete** their account.
+- **Settings:** switch the **free trial** on or off and set its length, pause **new business sign-ups**, pause **customers joining**, switch **emails** off, and switch **test payments** on or off.
+- **Team** (main admin only): give someone access with their Spendbox phone number. They then log in to Spendbox as usual and open `/admin`. *Viewer* can only look, *Support* can also pause and change trials, *Manager* can also delete and change settings.
+- **Activity:** every admin action, plus failed logins. After 8 wrong passwords from the same place, logins are blocked for 15 minutes.
 
 ---
 
@@ -135,7 +149,7 @@ npm run dev                  # http://localhost:3000
 Project layout:
 
 - `supabase/migrations/` — the whole database: tables, Row Level Security, the perk engine (`sync_member_rewards`) and the functions the app calls.
-- `src/app/` — pages. `/` front page (one screen: My Spendbox or For businesses), `/plug` the page for businesses, `/start` business sign-up, `/login` (`/login?for=business` for owners), `/j/[slug]` join page, `/me/…` customer app, `/dashboard/[bizId]/…` business dashboard, `/api/mono/webhook` Mono's webhook, `/api/receipts` receipt upload (switched off).
+- `src/app/` — pages. `/` front page (one screen: My Spendbox or For businesses), `/plug` the page for businesses, `/start` business sign-up, `/admin` admin area, `/login` (`/login?for=business` for owners), `/j/[slug]` join page, `/me/…` customer app, `/dashboard/[bizId]/…` business dashboard, `/api/mono/webhook` Mono's webhook, `/api/receipts` receipt upload (switched off).
 - `src/lib/mono.ts` and `src/lib/bank/` — talking to Mono, reading senders from bank narrations and matching them to members (`match.ts`), and fetching and counting payments (`sync.ts`).
 - `src/lib/receipts/` — reading receipts with Claude (`extract.ts`) and matching them to businesses (`match.ts`).
 - `src/components/` — shared UI. Fonts (DM Sans, Bricolage Grotesque, SIL Open Font License) are bundled in `src/app/fonts/`.

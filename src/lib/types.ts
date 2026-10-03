@@ -38,6 +38,10 @@ export interface Business {
   partners_enabled: boolean;
   /** Partner requests become partnerships without asking. */
   partners_auto_approve: boolean;
+  /** Paused from the admin area. */
+  suspended_at?: string | null;
+  /** Free-trial end set from the admin area (null = the usual length). */
+  trial_ends_at?: string | null;
 }
 
 export interface BankAccount {

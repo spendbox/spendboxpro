@@ -1,4 +1,5 @@
 import "server-only";
+import { getSettings } from "@/lib/settings";
 
 // Sends email through Resend (https://resend.com). Needs RESEND_API_KEY.
 // Without a verified domain, Resend only delivers to your own Resend account
@@ -16,7 +17,7 @@ function escape(text: string) {
 }
 
 export async function sendEmail({ to, subject, html, text }: { to: string; subject: string; html: string; text: string }) {
-  if (!emailConfigured()) return;
+  if (!emailConfigured() || !(await getSettings()).emailsEnabled) return;
   try {
     const res = await fetch(`${API}/emails`, {
       method: "POST",
