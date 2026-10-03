@@ -6,14 +6,13 @@ import { PerkIcon } from "@/components/perks/perk-card";
 import { requireUser } from "@/lib/auth";
 import { getMyMemberships, getMyProfile, getMyRewards } from "@/lib/customer";
 import { appTimeZone } from "@/lib/env";
-import { cn } from "@/lib/cn";
 import { formatDate, formatMonthYear, memberNo } from "@/lib/format";
-import { LiveClock } from "./live-clock";
+import { LiveClock } from "@/components/perks/live-clock";
 
 export const metadata: Metadata = { title: "Member pass" };
 
-export default async function PassPage({ params, searchParams }: PageProps<"/me/b/[slug]/pass">) {
-  const [{ slug }, { perk: picked }] = await Promise.all([params, searchParams]);
+export default async function PassPage({ params }: PageProps<"/me/b/[slug]/pass">) {
+  const { slug } = await params;
   const user = await requireUser(`/me/b/${slug}/pass`);
   const [memberships, rewards, profile] = await Promise.all([
     getMyMemberships(user.id),
@@ -64,16 +63,12 @@ export default async function PassPage({ params, searchParams }: PageProps<"/me/
 
         <div className="flex flex-col gap-2 rounded-3xl bg-white p-4 text-ink">
           <p className="text-sm font-semibold text-muted">
-            {ready.some((r) => r.id === picked) ? "Ask for the highlighted perk" : ready.length ? "Perks to give today" : "No perks ready yet"}
+            {ready.length ? "Perks to give today" : "No perks ready yet"}
           </p>
           {ready.length ? (
             <ul className="flex flex-col gap-2">
               {ready.map((r) => (
-                <li
-                  key={r.id}
-                  aria-current={r.id === picked ? "true" : undefined}
-                  className={cn("flex items-center gap-3", r.id === picked && "-mx-2 rounded-2xl bg-brand-50 px-2 py-2 ring-2 ring-brand-600")}
-                >
+                <li key={r.id} className="flex items-center gap-3">
                   <PerkIcon kind={r.kind} className="size-5 shrink-0 text-brand-600" />
                   <span className="flex-1 text-lg leading-tight font-bold">{r.title}</span>
                   {r.expires_at && <span className="text-xs text-muted">until {formatDate(r.expires_at)}</span>}

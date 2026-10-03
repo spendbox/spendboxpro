@@ -27,22 +27,48 @@ const STATUS = {
   error: { tone: "red", label: "Couldn't check" },
 } as const;
 
-/** Opens Mono's secure window where the business logs in to its bank (read-only). */
-async function openMono(publicKey: string, customer: { name: string; email: string }) {
+type MonoOutcome = { code: string } | { closed: true; error?: string };
+
+/**
+ * Opens Mono's secure window where the business logs in to its bank
+ * (read-only). Resolves with the one-time code, or when the window closes.
+ */
+async function openMono(publicKey: string, customer: { name: string; email: string }, onOpen: () => void): Promise<MonoOutcome> {
   const { default: Connect } = await import("@mono.co/connect.js");
-  return new Promise<string | null>((resolve) => {
-    let done = false;
+  return new Promise<MonoOutcome>((resolve) => {
+    let settled = false;
+    let lastError: string | undefined;
+    const finish = (outcome: MonoOutcome) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(outcome);
+    };
+    // If Mono's window never loads (blocked or offline), don't leave the button spinning.
+    const timer = setTimeout(() => {
+      widget.close();
+      finish({ closed: true, error: "Mono's window didn't open. Check your internet connection and try again." });
+    }, 25_000);
     const widget = new Connect({
       key: publicKey,
       scope: "auth",
       data: { customer },
-      onSuccess: ({ code }: { code: string }) => {
-        done = true;
-        resolve(code);
+      onLoad: () => {
+        clearTimeout(timer);
+        onOpen();
       },
-      onClose: () => {
-        if (!done) resolve(null);
+      onEvent: (event, data) => {
+        if (event === "OPENED") {
+          clearTimeout(timer);
+          onOpen();
+        }
+        if (event === "ERROR") {
+          const message = (data as { errorMessage?: string; message?: string } | undefined)?.errorMessage ?? (data as { message?: string })?.message;
+          if (message) lastError = message;
+        }
       },
+      onSuccess: ({ code }: { code: string }) => finish({ code }),
+      onClose: () => finish({ closed: true, error: lastError }),
     });
     widget.setup();
     widget.open();
@@ -63,7 +89,10 @@ export function BankConnect({
   businessEmail: string | null;
   connections: BankConnectionView[];
 }) {
-  const [email, setEmail] = useState(businessEmail ?? "");
+  const [email, setEmail] = useState("");
+  // The saved business email wins (it may have just been added above on this page).
+  const contactEmail = (businessEmail || email).trim();
+  const [waiting, setWaiting] = useState(false);
   const [result, setResult] = useState<BankResult | null>(null);
   const [busy, setBusy] = useState<"connect" | "sync" | string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -79,15 +108,17 @@ export function BankConnect({
 
   const connect = () => {
     if (!publicKey) return;
-    const cleanEmail = email.trim();
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cleanEmail)) {
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(contactEmail)) {
       setResult({ error: "Please enter your business email first. Mono asks for it." });
       return;
     }
     run("connect", async () => {
-      const code = await openMono(publicKey, { name: businessName, email: cleanEmail });
-      if (!code) return { message: "No bank was connected." };
-      return connectBank(bizId, code, cleanEmail);
+      const outcome = await openMono(publicKey, { name: businessName, email: contactEmail }, () => setWaiting(true));
+      setWaiting(false);
+      if ("closed" in outcome) {
+        return outcome.error ? { error: `Mono: ${outcome.error}` } : { message: "No bank was connected." };
+      }
+      return connectBank(bizId, outcome.code, contactEmail);
     });
   };
 
@@ -170,7 +201,7 @@ export function BankConnect({
       <div className="flex flex-wrap gap-2">
         <Button onClick={connect} disabled={pending} loading={busy === "connect"} variant={connections.length ? "secondary" : "primary"}>
           {busy !== "connect" && <Plus className="size-4" aria-hidden />}
-          {connections.length ? "Connect another account" : "Connect your bank"}
+          {busy === "connect" ? (waiting ? "Finish in Mono's window…" : "Connecting…") : connections.length ? "Connect another account" : "Connect your bank"}
         </Button>
         {connections.length > 0 && (
           <Button variant="secondary" disabled={pending} loading={busy === "sync"} onClick={() => run("sync", () => syncNow(bizId))}>

@@ -55,7 +55,7 @@ export async function notifyRewardsReady() {
             ? `Show your Spendbox pass at ${business.name} to use it by ${formatDate(r.expires_at, { withYear: true })}.`
             : `Show your Spendbox pass at ${business.name} on your next visit to use it.`,
         ],
-        button: { label: "Show my pass", url: `${siteUrl()}/me/b/${business.slug}/pass` },
+        button: { label: "Show my perk", url: `${siteUrl()}/me/perks/${r.id}` },
         footer: CUSTOMER_FOOTER,
       });
       await sendEmail({ to: contact.email, subject: `${r.title} — ready at ${business.name}`, html, text });

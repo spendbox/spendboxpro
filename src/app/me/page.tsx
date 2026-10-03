@@ -1,7 +1,6 @@
 import { Cake, ChevronRight, Gift, ScanLine, Share2, Ticket } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { PerkIcon } from "@/components/perks/perk-card";
 import { BusinessAvatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink, buttonClass } from "@/components/ui/button";
@@ -13,8 +12,8 @@ import { receiptsEnabled } from "@/lib/env";
 import { getMyMemberships, getMyProfile, getMyPurchases, getMyRewards, getPartnerPerks } from "@/lib/customer";
 import { PartnerOffers } from "@/components/perks/partner-offers";
 import { businessTagline, firstName, memberNo, plural, whatsappLink } from "@/lib/format";
-import { PERK_KINDS, perkProgress, sortBySoonest } from "@/lib/perks";
-import { TimeLeft } from "@/components/perks/time-left";
+import { perkProgress, sortBySoonest } from "@/lib/perks";
+import { ReadyPerks } from "@/components/perks/ready-perks";
 
 export const metadata: Metadata = { title: "My Spendbox" };
 
@@ -34,7 +33,9 @@ export default async function MySpendboxPage() {
   const partnerPerks = (await getPartnerPerks(memberships.map((m) => m.business_id))).filter((r) => !memberSlugs.has(r.partner_slug));
 
   const name = firstName(profile?.full_name);
-  const soonest = sortBySoonest(rewards).slice(0, SHOWN);
+  const soonest = sortBySoonest(rewards);
+  const businessName = (membershipId: string) => memberships.find((m) => m.id === membershipId)?.business.name ?? "";
+  const toReady = (r: (typeof rewards)[number]) => ({ ...r, businessName: businessName(r.membership_id) });
   const missingDetails = !profile?.full_name || !profile?.birth_month;
 
   return (
@@ -75,52 +76,15 @@ export default async function MySpendboxPage() {
       {rewards.length > 0 && (
         <section className="flex flex-col gap-3">
           <SectionTitle
-            title="Ready to use"
-            description="Show your pass at the counter on your next order."
-            action={
-              rewards.length > SHOWN ? (
-                <Link href="/me/perks" className="text-sm font-semibold text-brand-700 hover:underline">
-                  See all {rewards.length}
-                </Link>
-              ) : undefined
-            }
+            title={`Ready to use · ${rewards.length}`}
+            description="Tap a perk to show it at the counter."
           />
-          <div className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 xl:grid-cols-3">
-            {soonest.map((reward) => {
-              const membership = memberships.find((m) => m.id === reward.membership_id);
-              if (!membership) return null;
-              const info = PERK_KINDS[reward.kind];
-              return (
-                <Link
-                  key={reward.id}
-                  href={`/me/b/${membership.business.slug}/pass`}
-                  className="flex w-[80%] shrink-0 snap-start flex-col justify-between gap-5 rounded-3xl p-5 text-white shadow-card transition hover:brightness-110 sm:w-auto"
-                  style={{ background: info.color }}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm font-semibold text-white/90">{membership.business.name}</span>
-                    <PerkIcon kind={reward.kind} className="size-5 shrink-0" />
-                  </div>
-                  <p className="font-display text-xl leading-tight font-bold">{reward.title}</p>
-                  <div className="flex flex-col gap-3">
-                    <TimeLeft issuedAt={reward.issued_at} expiresAt={reward.expires_at} />
-                    <span className="inline-flex items-center gap-1.5 text-sm font-semibold">
-                      <Ticket className="size-4" aria-hidden /> Show pass
-                    </span>
-                  </div>
-                </Link>
-              );
-            })}
-            {rewards.length > SHOWN && (
-              <Link
-                href="/me/perks"
-                className="flex w-[60%] shrink-0 snap-start flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-line-strong bg-white p-5 text-center hover:border-brand-300 sm:w-auto"
-              >
-                <span className="font-display text-3xl font-bold text-ink">+{rewards.length - SHOWN}</span>
-                <span className="text-sm font-semibold text-brand-700">See all your perks</span>
-              </Link>
-            )}
-          </div>
+          <ReadyPerks
+            showBusiness
+            limit={SHOWN}
+            moreHref="/me/perks"
+            perks={soonest.map(toReady)}
+          />
         </section>
       )}
 

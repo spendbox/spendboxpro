@@ -1,10 +1,10 @@
-import type { InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from "react";
+import type { ComponentProps, ReactNode, TextareaHTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
 
 const control =
   "w-full rounded-xl border border-line-strong bg-white px-3.5 text-[15px] text-ink outline-none transition placeholder:text-subtle focus:border-brand-600 focus:ring-4 focus:ring-brand-600/10 disabled:bg-canvas disabled:text-muted aria-invalid:border-red-500";
 
-export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
+export function Input({ className, ...props }: ComponentProps<"input">) {
   return <input className={cn(control, "h-12", className)} {...props} />;
 }
 
