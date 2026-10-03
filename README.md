@@ -75,10 +75,12 @@ Moving from Mono's sandbox to real banks: replace the two Mono keys with your `l
 
 ### 6. Try it
 
-1. Open your site → **Get started**. Create a business with your phone number and a PIN.
+1. Open your site → **For businesses** → **Start free**. Create a business with your phone number and a PIN.
 2. Add perks (Perks page). In **Settings → Your bank**, tap **Connect your bank** and pick a bank in Mono's window. With sandbox keys, use one of Mono's test banks and the test login Mono shows you.
-3. Open your join link in a private browser window and join as a customer with a different phone number. In **Profile**, enter a name.
+3. Open your join link in a private browser window and join as a customer with a different phone number. Add a bank account when asked; the name comes from the bank.
 4. Go back to **Payments**. Sandbox payments are made up by Mono, so most will be in **Who paid this?**: pick a customer for one. Every later payment from that sender counts for that customer by itself.
+
+**Testing without Mono or real money.** In Vercel → Settings → Environment Variables, add `TEST_PAYMENTS` = `on` and redeploy. The Payments page then shows **Send a test payment**: type the customer's name exactly as it appears on their Profile and an amount, and Spendbox treats it like a real transfer that just arrived (it counts for the customer, unlocks perks and sends emails). A name it doesn't know lands in **Who paid this?**. Test payments are marked "TEST TRANSFER" and only work with Mono test keys. **Remove `TEST_PAYMENTS` before real businesses sign up**, and delete your test businesses in Settings.
 
 ---
 
