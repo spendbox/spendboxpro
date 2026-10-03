@@ -2,8 +2,8 @@ import { PartyPopper, ShieldCheck, Ticket, UserPlus } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { PerkCard, PerkIcon } from "@/components/perks/perk-card";
-import { TimeLeft } from "@/components/perks/time-left";
+import { PerkIcon } from "@/components/perks/perk-card";
+import { ReadyPerks } from "@/components/perks/ready-perks";
 import { PurchaseList } from "@/components/purchases/purchase-list";
 import { BusinessAvatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -129,21 +129,8 @@ export default async function MemberBusinessPage({ params, searchParams }: PageP
         <div className="flex flex-col gap-8">
           {myRewards.length > 0 && (
             <section className="flex flex-col gap-3">
-              <SectionTitle title="Ready to use" description="Show your pass at the counter to use these." />
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {sortBySoonest(myRewards).map((r) => (
-                  <PerkCard
-                    key={r.id}
-                    size="sm"
-                    audience="customer"
-                    kind={r.kind}
-                    title={r.title}
-                    threshold={b.perks.find((p) => p.id === r.perk_id)?.threshold}
-                    currency={b.currency}
-                    footer={<TimeLeft issuedAt={r.issued_at} expiresAt={r.expires_at} />}
-                  />
-                ))}
-              </div>
+              <SectionTitle title={`Ready to use · ${myRewards.length}`} description="Tap a perk to show it at the counter." />
+              <ReadyPerks perks={sortBySoonest(myRewards).map((r) => ({ ...r, businessName: b.name }))} limit={4} moreHref="/me/perks" />
             </section>
           )}
 

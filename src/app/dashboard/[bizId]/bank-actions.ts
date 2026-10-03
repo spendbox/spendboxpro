@@ -29,13 +29,18 @@ export async function connectBank(bizId: string, code: string, email?: string): 
   if (!code || code.length > 200) return { error: "Mono didn't send a code. Please try again." };
 
   let accountId: string;
-  let details: Awaited<ReturnType<typeof accountDetails>>;
   try {
     accountId = await exchangeToken(code);
-    details = await accountDetails(accountId);
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "Couldn't connect the bank. Please try again." };
+    console.error("Mono exchangeToken failed", error);
+    return { error: `Mono couldn't finish connecting: ${error instanceof Error ? error.message : "please try again."}` };
   }
+  // Mono can take a moment to prepare a new account; if its details aren't ready
+  // yet, save the connection anyway and fill them in on the next check.
+  const details: Awaited<ReturnType<typeof accountDetails>> = await accountDetails(accountId).catch((error) => {
+    console.error("Mono accountDetails failed", error);
+    return { name: null, accountNumber: null, institution: null, currency: "NGN", balance: null, dataStatus: null };
+  });
 
   const admin = createAdminClient();
   const cleanEmail = email?.trim().slice(0, 200);

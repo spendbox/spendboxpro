@@ -103,6 +103,10 @@ export async function syncConnection(connectionId: string) {
       ...(fullHistory && credits.length > 0 ? { history_synced_at: now.toISOString() } : {}),
       ...(details?.balance !== null && details?.balance !== undefined ? { balance: details.balance, balance_at: now.toISOString() } : {}),
       ...(details?.dataStatus ? { data_status: details.dataStatus } : {}),
+      // Fill in account details Mono didn't have ready when the bank was connected.
+      ...(details?.institution ? { institution: details.institution.slice(0, 80) } : {}),
+      ...(details?.name ? { account_name: details.name.slice(0, 120) } : {}),
+      ...(details?.accountNumber ? { account_number: details.accountNumber.slice(0, 20) } : {}),
     })
     .eq("id", conn.id);
 
