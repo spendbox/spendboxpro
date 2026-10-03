@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PaymentRow } from "@/components/business/payment-row";
 import { RecordPurchase } from "@/components/business/record-purchase";
+import { TestPayment } from "@/components/business/test-payment";
 import { UnmatchedPayments } from "@/components/business/unmatched-payments";
 import { buttonClass } from "@/components/ui/button";
 import { Card, EmptyState } from "@/components/ui/card";
@@ -12,6 +13,7 @@ import { syncBusinessIfStale } from "@/lib/bank/sync";
 import { getPurchases, getStats, getUnmatchedPayments, hasBankConnection } from "@/lib/business";
 import { after } from "next/server";
 import { cn } from "@/lib/cn";
+import { testPaymentsEnabled } from "@/lib/env";
 import type { PurchaseStatus } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Payments" };
@@ -83,6 +85,8 @@ export default async function PaymentsPage({ params, searchParams }: PageProps<"
           </Link>
         </Card>
       )}
+
+      {testPaymentsEnabled() && <TestPayment bizId={bizId} />}
 
       <UnmatchedPayments bizId={bizId} payments={unmatched} />
 

@@ -58,3 +58,12 @@ export function trialDays() {
 export function receiptsEnabled() {
   return process.env.NEXT_PUBLIC_RECEIPT_UPLOADS === "on";
 }
+
+/**
+ * "Send a test payment" on the Payments page, for trying the whole flow
+ * before Mono is live. Server only. Set TEST_PAYMENTS=on to show it, and
+ * switch it off before real businesses sign up.
+ */
+export function testPaymentsEnabled() {
+  return process.env.TEST_PAYMENTS === "on" && !process.env.MONO_SECRET_KEY?.startsWith("live_");
+}

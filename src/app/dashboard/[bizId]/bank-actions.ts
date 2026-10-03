@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { requireOwnedBusiness } from "@/lib/auth";
+import { senderKey } from "@/lib/bank/match";
 import { matchOpenPayments, syncBusiness, syncConnection } from "@/lib/bank/sync";
+import { testPaymentsEnabled } from "@/lib/env";
 import { accountDetails, exchangeToken, monoConfigured, unlinkAccount } from "@/lib/mono";
 import { notifyPurchase, notifyRewardsReady } from "@/lib/notify";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -158,4 +160,44 @@ export async function unmatchPayment(bizId: string, purchaseId: string): Promise
   if (error) return { error: error.message };
   refresh(bizId);
   return { ok: true };
+}
+
+/**
+ * Pretends a transfer just arrived in the business's bank, then runs the same
+ * matching a real Mono payment goes through. Only when TEST_PAYMENTS=on.
+ */
+export async function sendTestPayment(bizId: string, input: { name: string; account: string; amount: string }): Promise<BankResult> {
+  const { business } = await requireOwnedBusiness(bizId);
+  if (!testPaymentsEnabled()) return { error: "Test payments are switched off." };
+  const name = input.name.replace(/\s+/g, " ").trim().toUpperCase().slice(0, 100);
+  const account = input.account.replace(/\D/g, "");
+  const amount = Number(input.amount.replace(/[^0-9.]/g, ""));
+  if (!senderKey(name)) return { error: "Type at least two names, the way the bank shows them." };
+  if (account && account.length !== 10) return { error: "Account numbers have 10 digits. Or leave it empty." };
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 100_000_000) return { error: "Type how much they sent." };
+
+  const admin = createAdminClient();
+  const { data: tx, error } = await admin
+    .from("bank_transactions")
+    .insert({
+      business_id: bizId,
+      external_id: `test-${crypto.randomUUID()}`,
+      amount: Math.round(amount * 100) / 100,
+      currency: business.currency,
+      paid_at: new Date().toISOString(),
+      narration: `TEST TRANSFER FROM ${name}${account ? ` ${account}` : ""}`,
+      sender_name: name,
+      sender_key: senderKey(name),
+      sender_account: account || null,
+      status: "unmatched",
+    })
+    .select("id")
+    .single();
+  if (error) return { error: error.message };
+  await matchOpenPayments(bizId, admin);
+  const { data: after_ } = await admin.from("bank_transactions").select("status").eq("id", tx.id).single();
+  refresh(bizId);
+  return after_?.status === "matched"
+    ? { ok: true, message: "It worked: Spendbox found the customer and counted it for them." }
+    : { ok: true, message: "It arrived, but Spendbox couldn't tell who sent it. You'll find it under “Who paid this?” below." };
 }
