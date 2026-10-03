@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, BadgeCheck } from "lucide-react";
+import { ArrowLeft, ArrowRight, BadgeCheck, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { saveBirthday, saveEmail } from "@/app/me/account-actions";
@@ -16,7 +16,9 @@ export function SetupFlow({ next, hasBank }: { next: string; hasBank: boolean })
   // Fixed when the page opens: adding the account refreshes the page, which mustn't shift the steps.
   const [steps] = useState<Step[]>(() => (hasBank ? ["birthday", "email"] : ["bank", "birthday", "email"]));
   const [index, setIndex] = useState(0);
-  const [name, setName] = useState<string | null>(null);
+  // Accounts added during this setup, and whether the form is showing.
+  const [added, setAdded] = useState<string[]>([]);
+  const [adding, setAdding] = useState(true);
   const [birthday, setBirthday] = useState<BirthdayValue>({ day: null, month: null, year: null });
   const [email, setEmail] = useState("");
   const [notify, setNotify] = useState(true);
@@ -69,23 +71,43 @@ export function SetupFlow({ next, hasBank }: { next: string; hasBank: boolean })
       </div>
 
       <div key={step} className="flex animate-fade-up flex-col gap-5">
-        {name && step === "birthday" && (
-          <p className="flex items-center gap-2 rounded-2xl bg-brand-50 px-4 py-3 text-sm font-semibold text-brand-900 ring-1 ring-brand-100">
-            <BadgeCheck className="size-5 shrink-0 text-brand-700" aria-hidden /> Account added for {name}
-          </p>
-        )}
+
         <div>
           <h1 className="font-display text-2xl leading-tight font-bold">{copy[step].title}</h1>
           <p className="mt-1.5 text-muted">{copy[step].hint}</p>
         </div>
 
         {step === "bank" && (
-          <BankAccountForm
-            onAdded={(n) => {
-              setName(n);
-              advance();
-            }}
-          />
+          <div className="flex flex-col gap-4">
+            {added.length > 0 && (
+              <ul className="flex flex-col gap-2">
+                {added.map((n, i) => (
+                  <li key={i} className="flex items-center gap-2 rounded-2xl bg-brand-50 px-4 py-3 text-sm font-semibold text-brand-900 ring-1 ring-brand-100">
+                    <BadgeCheck className="size-5 shrink-0 text-brand-700" aria-hidden /> Account added for {n}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {adding ? (
+              <BankAccountForm
+                submitLabel={added.length ? "Add this account" : "Yes, this is me"}
+                onAdded={(n) => {
+                  setAdded((list) => [...list, n]);
+                  setAdding(false);
+                }}
+              />
+            ) : (
+              <>
+                <Button size="lg" block onClick={advance}>
+                  Continue <ArrowRight className="size-4" aria-hidden />
+                </Button>
+                <Button size="lg" block variant="secondary" onClick={() => setAdding(true)}>
+                  <Plus className="size-4" aria-hidden /> Add another account
+                </Button>
+                <p className="text-center text-sm text-muted">Pay from more than one account? Add them all so every transfer counts.</p>
+              </>
+            )}
+          </div>
         )}
 
         {step === "birthday" && (

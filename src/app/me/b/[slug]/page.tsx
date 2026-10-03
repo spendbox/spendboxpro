@@ -15,7 +15,8 @@ import { Progress } from "@/components/ui/progress";
 import { ShareLink, WhatsAppIcon } from "@/components/ui/share-actions";
 import { ActionSwitch } from "@/components/ui/switch";
 import { requireUser } from "@/lib/auth";
-import { getMyMemberships, getMyProfile, getMyPurchases, getMyRewards, getPartnerPerks } from "@/lib/customer";
+import { getMyMemberships, getMyProfile, getMyPurchases, getMyRewards, getPartnerPerks, getPayAccounts } from "@/lib/customer";
+import { PayAccounts } from "@/components/perks/pay-accounts";
 import { PartnerOffers } from "@/components/perks/partner-offers";
 import { receiptsEnabled, siteUrl } from "@/lib/env";
 import { formatDate, formatMonthYear, memberNo, whatsappLink } from "@/lib/format";
@@ -51,9 +52,10 @@ export default async function MemberBusinessPage({ params, searchParams }: PageP
   const welcomePerk = b.perks.find((p) => p.kind === "welcome");
 
   const supabase = await createClient();
-  const [{ data: referralData }, partnerPerks] = await Promise.all([
+  const [{ data: referralData }, partnerPerks, payAccounts] = await Promise.all([
     supabase.rpc("my_referrals", { p_membership_id: membership.id }),
     getPartnerPerks([b.id]),
+    getPayAccounts(b.id),
   ]);
   const referrals = (referralData ?? []) as ReferralRow[];
 
@@ -173,6 +175,7 @@ export default async function MemberBusinessPage({ params, searchParams }: PageP
 
       {tab === "home" && (
         <div className="flex flex-col gap-8">
+          <PayAccounts accounts={payAccounts} businessName={b.name} />
           {myRewards.length > 0 && (
             <section className="flex flex-col gap-3">
               <SectionTitle title={`Ready to use · ${myRewards.length}`} description="Tap a perk to show it at the counter." />
@@ -202,7 +205,7 @@ export default async function MemberBusinessPage({ params, searchParams }: PageP
               description={
                 receiptsEnabled()
                   ? "Upload a receipt after you pay and it counts here."
-                  : `Pay ${b.name} by transfer, or let them record your purchase, and it counts here.`
+                  : "Every transfer and every purchase they record shows up here."
               }
             />
             <Card className="p-5">

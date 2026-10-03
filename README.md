@@ -22,7 +22,8 @@ You need accounts on **Supabase**, **Vercel**, **Mono** and **Paystack** (Paysta
 5. Then [`supabase/migrations/20261003000000_bank_feeds.sql`](supabase/migrations/20261003000000_bank_feeds.sql) (payments from the bank).
 6. Then [`supabase/migrations/20261004000000_sales.sql`](supabase/migrations/20261004000000_sales.sql) (sales and balance on the home screen).
 7. Then [`supabase/migrations/20261005000000_partners.sql`](supabase/migrations/20261005000000_partners.sql) (partner businesses, and a fix for perk time limits).
-8. Then [`supabase/migrations/20261006000000_activity_and_accounts.sql`](supabase/migrations/20261006000000_activity_and_accounts.sql) (audit logs, deleting a typed-in purchase, customers' bank accounts). Always run the files in order, each once.
+8. Then [`supabase/migrations/20261006000000_activity_and_accounts.sql`](supabase/migrations/20261006000000_activity_and_accounts.sql) (audit logs, deleting a typed-in purchase, customers' bank accounts).
+9. Then [`supabase/migrations/20261007000000_pay_accounts.sql`](supabase/migrations/20261007000000_pay_accounts.sql) (members can see which account to pay the business into). Always run the files in order, each once.
 
 ### 2. Login: nothing to set up
 
@@ -87,7 +88,7 @@ Moving from Mono's sandbox to real banks: replace the two Mono keys with your `l
 
 **Free trial.** Every business dashboard shows a free-trial banner with the days left (90 days from sign-up by default) and says paid plans come after. Nothing is charged or switched off automatically. A friend's share link adds `?ref=…`, so the friend who shared it gets the invite reward when the new customer's first purchase counts.
 
-**Privacy.** Customers need only a phone number. Name, gender and birthday are optional, and each business sees them only if that customer switches sharing on for that business. Otherwise the business sees a member number and purchases. Details live in one place, so an edit shows up everywhere straight away. Customers can delete their account and everything in it.
+**Privacy.** Customers need only a phone number. Name, gender and birthday are optional, and each business sees them only if that customer switches sharing on for that business. Otherwise the business sees a member number and purchases. Details live in one place, so an edit shows up everywhere straight away. Customers can delete their account and everything in it. Members of a business can see the account numbers it gets paid into, so they know where to send transfers; nobody else can.
 
 **Payments from the bank.** A business connects its bank account through Mono's secure window (read-only: Spendbox can see money coming in, never move it). When money arrives:
 - if the sender is already **recognised** as a member (same name or account number as an earlier payment, at any business on Spendbox), it counts for them straight away;
@@ -132,7 +133,7 @@ npm run dev                  # http://localhost:3000
 Project layout:
 
 - `supabase/migrations/` — the whole database: tables, Row Level Security, the perk engine (`sync_member_rewards`) and the functions the app calls.
-- `src/app/` — pages. `/` landing, `/start` business sign-up, `/login`, `/j/[slug]` join page, `/me/…` customer app, `/dashboard/[bizId]/…` business dashboard, `/api/mono/webhook` Mono's webhook, `/api/receipts` receipt upload (switched off).
+- `src/app/` — pages. `/` front page (one screen: My Spendbox or For businesses), `/plug` the page for businesses, `/start` business sign-up, `/login` (`/login?for=business` for owners), `/j/[slug]` join page, `/me/…` customer app, `/dashboard/[bizId]/…` business dashboard, `/api/mono/webhook` Mono's webhook, `/api/receipts` receipt upload (switched off).
 - `src/lib/mono.ts` and `src/lib/bank/` — talking to Mono, reading senders from bank narrations and matching them to members (`match.ts`), and fetching and counting payments (`sync.ts`).
 - `src/lib/receipts/` — reading receipts with Claude (`extract.ts`) and matching them to businesses (`match.ts`).
 - `src/components/` — shared UI. Fonts (DM Sans, Bricolage Grotesque, SIL Open Font License) are bundled in `src/app/fonts/`.

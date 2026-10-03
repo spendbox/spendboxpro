@@ -8,21 +8,9 @@ import { Combobox } from "@/components/ui/combobox";
 import { Field, FormMessage, Input } from "@/components/ui/field";
 import { registerPhone } from "@/lib/actions/phone-auth";
 import { DEFAULT_COUNTRY_CODE } from "@/lib/env";
-import { isValidPin, normalizePhone, phoneLoginEmail, PIN_LENGTH } from "@/lib/phone";
+import { COUNTRIES, isValidPin, normalizePhone, phoneLoginEmail, PIN_LENGTH } from "@/lib/phone";
 import { createClient } from "@/lib/supabase/client";
 
-const COUNTRIES = [
-  { code: "234", name: "Nigeria", label: "NG +234" },
-  { code: "233", name: "Ghana", label: "GH +233" },
-  { code: "254", name: "Kenya", label: "KE +254" },
-  { code: "27", name: "South Africa", label: "ZA +27" },
-  { code: "256", name: "Uganda", label: "UG +256" },
-  { code: "250", name: "Rwanda", label: "RW +250" },
-  { code: "237", name: "Cameroon", label: "CM +237" },
-  { code: "225", name: "Côte d'Ivoire", label: "CI +225" },
-  { code: "44", name: "United Kingdom", label: "UK +44" },
-  { code: "1", name: "United States Canada", label: "US +1" },
-];
 
 function friendlyError(message: string, status?: number) {
   if (/failed to fetch|networkerror|load failed/i.test(message)) {

@@ -26,8 +26,7 @@ export const metadata: Metadata = {
     default: "Spendbox — turn customers into regulars",
     template: "%s · Spendbox",
   },
-  description:
-    "Spendbox helps small businesses keep their customer list, track purchases and reward customers with perks.",
+  description: "Every visit counts. Rewards from the places you love, and more regulars for the businesses behind them.",
 };
 
 export const viewport: Viewport = {
@@ -35,6 +34,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  // Android: the page shrinks when the keyboard opens, so pop-ups stay above it.
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

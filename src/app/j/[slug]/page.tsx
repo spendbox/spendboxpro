@@ -113,7 +113,7 @@ export default async function JoinPage({ params, searchParams }: PageProps<"/j/[
               </div>
             </div>
           ) : (
-            <p className="text-muted">Join to keep {business.name} in your Spendbox and get their member perks.</p>
+            <p className="text-muted">Join {business.name} and every visit brings you closer to something good.</p>
           )}
         </section>
 
@@ -129,9 +129,8 @@ export default async function JoinPage({ params, searchParams }: PageProps<"/j/[
             <div className="flex items-start gap-3 border-t border-line pt-5 text-sm text-muted">
               <ShieldCheck className="mt-0.5 size-5 shrink-0 text-brand-600" aria-hidden />
               <p>
-                You&apos;ll add the bank account you usually pay from, so your purchases count by themselves. Your
-                name comes from your bank. {business.name} only sees your details if you choose to share them, and you
-                can delete your account any time.
+                Add the account you usually pay from, once, and every visit counts by itself. {business.name} only
+                sees your details if you say so.
               </p>
             </div>
           </Card>

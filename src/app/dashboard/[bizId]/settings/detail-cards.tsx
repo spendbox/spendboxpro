@@ -7,7 +7,11 @@ import { MultiCombobox } from "@/components/ui/combobox";
 import { EditCard } from "@/components/ui/edit-card";
 import { FormMessage, Input, Textarea } from "@/components/ui/field";
 import { WhatsAppIcon } from "@/components/ui/share-actions";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { BRAND_COLORS, CATEGORIES } from "@/lib/constants";
+import { DEFAULT_COUNTRY_CODE } from "@/lib/env";
+import { formatPhone } from "@/lib/format";
+import { COUNTRIES } from "@/lib/phone";
 import type { Business } from "@/lib/types";
 import { updateBusinessField, type BusinessField } from "../actions";
 
@@ -18,12 +22,15 @@ function FieldForm({
   initial,
   close,
   render,
+  transform,
 }: {
   bizId: string;
   field: BusinessField;
   initial: string | string[];
   close: () => void;
   render: (value: string | string[], set: (v: string | string[]) => void) => ReactNode;
+  /** Turns what was typed into what gets saved. */
+  transform?: (value: string | string[]) => string | string[];
 }) {
   const [value, setValue] = useState(initial);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +41,7 @@ function FieldForm({
       onSubmit={(e) => {
         e.preventDefault();
         start(async () => {
-          const r = await updateBusinessField(bizId, field, value);
+          const r = await updateBusinessField(bizId, field, transform ? transform(value) : value);
           if (r.error) setError(r.error);
           else close();
         });
@@ -51,6 +58,27 @@ function FieldForm({
         </Button>
       </div>
     </form>
+  );
+}
+
+/** WhatsApp number with its country code. */
+function WhatsAppEditor({ bizId, current, close }: { bizId: string; current: string | null; close: () => void }) {
+  const match = COUNTRIES.map((c) => c.code).sort((a, b) => b.length - a.length).find((c) => current?.startsWith(c));
+  const [country, setCountry] = useState(match ?? DEFAULT_COUNTRY_CODE);
+  return (
+    <FieldForm
+      bizId={bizId}
+      field="whatsapp"
+      initial={current && match ? current.slice(match.length) : (current ?? "")}
+      close={close}
+      transform={(v) => {
+        const local = String(v).replace(/\D/g, "").replace(/^0+/, "");
+        return local ? `+${country}${local}` : "";
+      }}
+      render={(v, set) => (
+        <PhoneInput label="WhatsApp number" country={country} onCountry={setCountry} value={v as string} onChange={set} placeholder="803 000 0000" />
+      )}
+    />
   );
 }
 
@@ -95,10 +123,10 @@ export function BusinessDetailCards({ business }: { business: Business }) {
       <EditCard
         icon={<WhatsAppIcon className="size-5" />}
         label="WhatsApp for orders"
-        value={business.whatsapp || "Not added"}
+        value={business.whatsapp ? formatPhone(business.whatsapp) : "Not added"}
         note="Members get an “Order on WhatsApp” button"
       >
-        {text("whatsapp", business.whatsapp ?? "", "0803 000 0000", { type: "tel", inputMode: "tel", "aria-label": "WhatsApp number" })}
+        {(close) => <WhatsAppEditor bizId={id} current={business.whatsapp} close={close} />}
       </EditCard>
       <EditCard
         icon={<AtSign className="size-5" aria-hidden />}
