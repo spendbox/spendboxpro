@@ -57,3 +57,23 @@ export async function getPartnerPerks(businessIds: string[]): Promise<PartnerPer
   const { data } = await supabase.rpc("partner_perks", { p_business_ids: businessIds });
   return (data ?? []) as PartnerPerkRow[];
 }
+
+/** Perks the customer has already been given, newest first. */
+export async function getMyUsedRewards(userId: string): Promise<Reward[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("rewards")
+    .select("*")
+    .eq("customer_id", userId)
+    .eq("status", "redeemed")
+    .order("redeemed_at", { ascending: false })
+    .limit(200);
+  return (data ?? []) as Reward[];
+}
+
+/** Whether the customer has added a bank account they pay from. */
+export async function hasMyBankAccount(): Promise<boolean> {
+  const supabase = await createClient();
+  const { count } = await supabase.from("payers").select("id", { count: "exact", head: true }).is("learned_at_business", null);
+  return (count ?? 0) > 0;
+}

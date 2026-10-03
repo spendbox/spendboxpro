@@ -25,6 +25,7 @@ export default async function PerksPage({ params, searchParams }: PageProps<"/da
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
+        back={{ href: `/dashboard/${bizId}/settings`, label: "Settings" }}
         title="Perks"
         description="Each card is a reward customers earn automatically. Switch one off to pause it."
       />

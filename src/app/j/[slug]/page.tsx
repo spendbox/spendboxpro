@@ -129,8 +129,9 @@ export default async function JoinPage({ params, searchParams }: PageProps<"/j/[
             <div className="flex items-start gap-3 border-t border-line pt-5 text-sm text-muted">
               <ShieldCheck className="mt-0.5 size-5 shrink-0 text-brand-600" aria-hidden />
               <p>
-                Spendbox only needs your phone number. Your name and birthday stay private unless you choose to
-                share them, and you can delete your account at any time.
+                You&apos;ll add the bank account you usually pay from, so your purchases count by themselves. Your
+                name comes from your bank. {business.name} only sees your details if you choose to share them, and you
+                can delete your account any time.
               </p>
             </div>
           </Card>

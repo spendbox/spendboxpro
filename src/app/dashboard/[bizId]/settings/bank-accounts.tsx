@@ -6,16 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Field, FormMessage, Input } from "@/components/ui/field";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { FALLBACK_BANKS } from "@/lib/constants";
 import type { BankAccount } from "@/lib/types";
 import { addBankAccount, lookupAccountName, removeBankAccount, type FormState } from "../actions";
 
-/** Used when Paystack isn't connected: pick a bank and type the name yourself. */
-const FALLBACK_BANKS = [
-  "Access Bank", "Carbon", "Ecobank", "FairMoney", "FCMB", "Fidelity Bank", "First Bank", "Globus Bank",
-  "GTBank", "Heritage Bank", "Jaiz Bank", "Keystone Bank", "Kuda", "Moniepoint", "OPay", "PalmPay",
-  "Polaris Bank", "Providus Bank", "Stanbic IBTC", "Standard Chartered", "Sterling Bank", "Titan Trust Bank",
-  "UBA", "Union Bank", "Unity Bank", "VFD Microfinance Bank", "Wema Bank", "Zenith Bank",
-];
+
 
 type Lookup =
   | { state: "idle" }

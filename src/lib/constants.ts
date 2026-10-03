@@ -69,3 +69,11 @@ export function cleanCategories(values: unknown[]) {
   }
   return result.slice(0, 6);
 }
+
+/** Used when Paystack isn't connected: pick a bank and type the name yourself. */
+export const FALLBACK_BANKS = [
+  "Access Bank", "Carbon", "Ecobank", "FairMoney", "FCMB", "Fidelity Bank", "First Bank", "Globus Bank",
+  "GTBank", "Heritage Bank", "Jaiz Bank", "Keystone Bank", "Kuda", "Moniepoint", "OPay", "PalmPay",
+  "Polaris Bank", "Providus Bank", "Stanbic IBTC", "Standard Chartered", "Sterling Bank", "Titan Trust Bank",
+  "UBA", "Union Bank", "Unity Bank", "VFD Microfinance Bank", "Wema Bank", "Zenith Bank",
+];

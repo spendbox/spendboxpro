@@ -1,5 +1,6 @@
 "use client";
 
+import { TRIAL_HIDDEN_COOKIE } from "@/lib/trial";
 import { Eye, EyeOff, LoaderCircle } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
@@ -77,6 +78,8 @@ export function PhoneSignIn({
       setBusy(false);
       return setError(friendlyError(signInError.message, signInError.status));
     }
+    // A fresh login brings back reminders that were closed last time (like the free-trial note).
+    document.cookie = `${TRIAL_HIDDEN_COOKIE}=; Max-Age=0; path=/`;
 
     try {
       const result = await onSignedIn();

@@ -1,9 +1,6 @@
-import { Gift, Ticket } from "lucide-react";
+import { Gift } from "lucide-react";
 import type { Metadata } from "next";
-import Link from "next/link";
-import { ReadyPerks } from "@/components/perks/ready-perks";
-import { BusinessAvatar } from "@/components/ui/avatar";
-import { buttonClass } from "@/components/ui/button";
+import { PerksSearch } from "@/components/perks/perks-search";
 import { EmptyState } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireUser } from "@/lib/auth";
@@ -31,29 +28,23 @@ export default async function MyPerksPage() {
       <PageHeader
         back={{ href: "/me", label: "My Spendbox" }}
         title="Your perks"
-        description={`${plural(rewards.length, "perk")} ready at ${plural(groups.length, "business", "businesses")}. Ones running out soonest are first.`}
+        description={`${plural(rewards.length, "perk")} ready at ${plural(groups.length, "business", "businesses")}. Tap a perk to use it.`}
       />
 
       {groups.length === 0 ? (
         <EmptyState icon={<Gift className="size-5" />} title="No perks ready yet" description="Keep buying from the businesses you've joined — perks unlock automatically." />
       ) : (
-        groups.map(({ membership, rewards: list }) => (
-          <section key={membership.id} className="flex flex-col gap-3">
-            <div className="flex items-center gap-3">
-              <BusinessAvatar
-                name={membership.business.name}
-                color={membership.business.brand_color}
-                logoUrl={membership.business.logo_url}
-                size="sm"
-              />
-              <h2 className="min-w-0 flex-1 truncate font-display text-lg font-bold">{membership.business.name}</h2>
-              <Link href={`/me/b/${membership.business.slug}/pass`} className={buttonClass({ variant: "soft", size: "sm" })}>
-                <Ticket className="size-4" aria-hidden /> Show pass
-              </Link>
-            </div>
-            <ReadyPerks perks={list.map((r) => ({ ...r, businessName: membership.business.name }))} />
-          </section>
-        ))
+        <PerksSearch
+          groups={groups.map(({ membership, rewards: list }) => ({
+            id: membership.id,
+            name: membership.business.name,
+            slug: membership.business.slug,
+            logoUrl: membership.business.logo_url,
+            color: membership.business.brand_color,
+            categories: membership.business.categories ?? [],
+            perks: list.map((r) => ({ ...r, businessName: membership.business.name })),
+          }))}
+        />
       )}
     </div>
   );

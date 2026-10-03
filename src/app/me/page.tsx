@@ -1,4 +1,4 @@
-import { Cake, ChevronRight, Gift, ScanLine, Share2, Ticket } from "lucide-react";
+import { Cake, ChevronRight, Gift, Landmark, ScanLine, Ticket } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BusinessAvatar } from "@/components/ui/avatar";
@@ -9,9 +9,12 @@ import { Progress } from "@/components/ui/progress";
 import { WhatsAppIcon } from "@/components/ui/share-actions";
 import { requireUser } from "@/lib/auth";
 import { receiptsEnabled } from "@/lib/env";
-import { getMyMemberships, getMyProfile, getMyPurchases, getMyRewards, getPartnerPerks } from "@/lib/customer";
+import { getMyMemberships, getMyProfile, getMyPurchases, getMyRewards, getMyUsedRewards, getPartnerPerks, hasMyBankAccount } from "@/lib/customer";
+import { PerkStats } from "@/components/perks/perk-stats";
+import { ShareButton } from "@/components/ui/share-button";
+import { siteUrl } from "@/lib/env";
 import { PartnerOffers } from "@/components/perks/partner-offers";
-import { businessTagline, firstName, memberNo, plural, whatsappLink } from "@/lib/format";
+import { businessTagline, memberNo, whatsappLink } from "@/lib/format";
 import { perkProgress, sortBySoonest } from "@/lib/perks";
 import { ReadyPerks } from "@/components/perks/ready-perks";
 
@@ -22,21 +25,33 @@ const SHOWN = 3;
 
 export default async function MySpendboxPage() {
   const user = await requireUser("/me");
-  const [profile, memberships, rewards, purchases] = await Promise.all([
+  const [profile, memberships, rewards, purchases, used, hasBank] = await Promise.all([
     getMyProfile(user.id),
     getMyMemberships(user.id),
     getMyRewards(user.id),
     getMyPurchases(user.id),
+    getMyUsedRewards(user.id),
+    hasMyBankAccount(),
   ]);
   // Partners of my businesses that I haven't joined yet.
   const memberSlugs = new Set(memberships.map((m) => m.business.slug));
   const partnerPerks = (await getPartnerPerks(memberships.map((m) => m.business_id))).filter((r) => !memberSlugs.has(r.partner_slug));
 
-  const name = firstName(profile?.full_name);
+  // Bank names often start with the surname, so greet with the first two words ("Okonkwo Chidinma").
+  const name = profile?.full_name?.trim().split(/\s+/).slice(0, 2).join(" ") || null;
   const soonest = sortBySoonest(rewards);
   const businessName = (membershipId: string) => memberships.find((m) => m.id === membershipId)?.business.name ?? "";
   const toReady = (r: (typeof rewards)[number]) => ({ ...r, businessName: businessName(r.membership_id) });
-  const missingDetails = !profile?.full_name || !profile?.birth_month;
+  const nudge = !hasBank
+    ? {
+        href: "/me/setup?next=/me",
+        icon: Landmark,
+        title: "Add the bank account you pay from",
+        body: "Then your transfers count by themselves, and your name is filled in from your bank.",
+      }
+    : !profile?.birth_month
+      ? { href: "/me/profile", icon: Cake, title: "Add your birthday", body: "Unlock birthday treats. You decide which businesses can see it." }
+      : null;
 
   return (
     <div className="flex flex-col gap-8">
@@ -45,10 +60,7 @@ export default async function MySpendboxPage() {
           <h1 className="font-display text-[30px] leading-tight font-bold tracking-tight sm:text-4xl">
             {name ? `Hi ${name}` : "Your Spendbox"}
           </h1>
-          <p className="mt-1 text-muted">
-            {plural(memberships.length, "business", "businesses")}
-            {rewards.length > 0 && ` · ${plural(rewards.length, "perk")} ready`}
-          </p>
+          <p className="mt-1 text-muted">Here&apos;s what your plugs have for you.</p>
         </div>
         {receiptsEnabled() && (
           <ButtonLink href="/me/receipts" className="hidden lg:inline-flex">
@@ -57,17 +69,19 @@ export default async function MySpendboxPage() {
         )}
       </header>
 
-      {missingDetails && memberships.length > 0 && (
+      {memberships.length > 0 && <PerkStats ready={rewards.length} plugs={memberships.length} used={used.map((u) => ({ ...u, businessName: businessName(u.membership_id) }))} />}
+
+      {nudge && memberships.length > 0 && (
         <Link
-          href="/me/profile"
+          href={nudge.href}
           className="flex items-center gap-4 rounded-3xl bg-accent-50 p-4 ring-1 ring-accent-100 transition hover:bg-accent-100/60 sm:p-5"
         >
           <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-white text-accent-700">
-            <Cake className="size-5" aria-hidden />
+            <nudge.icon className="size-5" aria-hidden />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="font-semibold text-ink">Add your name and birthday</p>
-            <p className="text-sm text-ink-2">Unlock birthday treats. You decide which businesses can see them.</p>
+            <p className="font-semibold text-ink">{nudge.title}</p>
+            <p className="text-sm text-ink-2">{nudge.body}</p>
           </div>
           <ChevronRight className="size-5 shrink-0 text-muted" aria-hidden />
         </Link>
@@ -88,8 +102,8 @@ export default async function MySpendboxPage() {
         </section>
       )}
 
-      <section className="flex flex-col gap-3">
-        <SectionTitle title="Your businesses" />
+      <section id="plugs" className="flex scroll-mt-24 flex-col gap-3">
+        <SectionTitle title="My Plugs" description="The businesses you buy from." />
         {memberships.length === 0 ? (
           <EmptyState
             icon={<Gift className="size-5" />}
@@ -138,11 +152,16 @@ export default async function MySpendboxPage() {
 
                   <div className="grid grid-cols-3 gap-2">
                     <Link href={`/me/b/${b.slug}/pass`} className={buttonClass({ variant: "soft", size: "sm" }, "h-10")}>
-                      <Ticket className="size-4" aria-hidden /> Pass
+                      <Ticket className="size-4" aria-hidden /> Card
                     </Link>
-                    <Link href={`/me/b/${b.slug}#invite`} className={buttonClass({ variant: "secondary", size: "sm" }, "h-10")}>
-                      <Share2 className="size-4" aria-hidden /> Share
-                    </Link>
+                    <ShareButton
+                      size="sm"
+                      className="h-10"
+                      url={`${siteUrl()}/j/${b.slug}?ref=${m.ref_code}`}
+                      message={`I'm a member of ${b.name} on Spendbox. Join with my link for member perks:`}
+                      title={`Share ${b.name}`}
+                      description="Friends who join with your link are counted as your invites."
+                    />
                     {b.whatsapp ? (
                       <a
                         href={whatsappLink(b.whatsapp, `Hi ${b.name}, I'd like to order. (Spendbox member ${memberNo(m.member_no)})`)}

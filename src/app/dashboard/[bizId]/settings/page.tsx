@@ -1,6 +1,6 @@
-import { Download, LogOut } from "lucide-react";
+import { ChevronRight, Download, Gift, Handshake, History, Landmark, LogOut, TriangleAlert, type LucideIcon } from "lucide-react";
 import type { Metadata } from "next";
-import { BankConnect, type BankConnectionView } from "@/components/business/bank-connect";
+import Link from "next/link";
 import { QrCode } from "@/components/qr-code";
 import { Button, buttonClass } from "@/components/ui/button";
 import { Card, SectionTitle } from "@/components/ui/card";
@@ -8,75 +8,80 @@ import { PageHeader } from "@/components/ui/page-header";
 import { CopyButton } from "@/components/ui/share-actions";
 import { signOut } from "@/lib/actions/auth";
 import { requireOwnedBusiness } from "@/lib/auth";
-import { getBankAccounts } from "@/lib/business";
-import { listBanks } from "@/lib/paystack";
-import { receiptsEnabled, siteUrl } from "@/lib/env";
-import { monoPublicKey } from "@/lib/mono";
+import { getPerks } from "@/lib/business";
+import { siteUrl } from "@/lib/env";
+import { formatWhen, plural } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
-import { BankAccounts } from "./bank-accounts";
-import { BusinessForm } from "./business-form";
 import { DeleteBusiness } from "./delete-business";
+import { BusinessDetailCards } from "./detail-cards";
 import { LogoUpload } from "./logo-upload";
 
 export const metadata: Metadata = { title: "Settings" };
 
+function LinkCard({ href, icon: Icon, title, note, badge }: { href: string; icon: LucideIcon; title: string; note: string; badge?: number }) {
+  return (
+    <Link href={href} className="flex items-center gap-3.5 rounded-3xl bg-surface p-4 shadow-card ring-1 ring-line transition hover:ring-brand-300 sm:p-5">
+      <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-brand-50 text-brand-700">
+        <Icon className="size-5" aria-hidden />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-2 font-semibold text-ink">
+          {title}
+          {badge ? <span className="rounded-full bg-accent-600 px-2 text-xs leading-5 font-bold text-white">{badge}</span> : null}
+        </span>
+        <span className="block text-sm text-muted">{note}</span>
+      </span>
+      <ChevronRight className="size-5 shrink-0 text-muted" aria-hidden />
+    </Link>
+  );
+}
+
 export default async function SettingsPage({ params }: PageProps<"/dashboard/[bizId]/settings">) {
   const { bizId } = await params;
   const { business } = await requireOwnedBusiness(bizId);
-  const receipts = receiptsEnabled();
   const supabase = await createClient();
-  const [accounts, banks, { data: connections }] = await Promise.all([
-    receipts ? getBankAccounts(bizId) : [],
-    receipts ? listBanks() : [],
-    supabase
-      .from("bank_connections")
-      .select("id, institution, account_name, account_number, status, last_error, last_synced_at, last_fetch_count, data_status")
-      .eq("business_id", bizId)
-      .order("created_at"),
+  const [perks, { data: connections }, { data: requests }] = await Promise.all([
+    getPerks(bizId),
+    supabase.from("bank_connections").select("institution, status, last_synced_at").eq("business_id", bizId),
+    supabase.rpc("partner_requests_waiting", { p_business_id: bizId }),
   ]);
   const joinUrl = `${siteUrl()}/j/${business.slug}`;
+  const base = `/dashboard/${bizId}`;
+  const banks = connections ?? [];
+  const bankNote = banks.length
+    ? banks.some((c) => c.status !== "active")
+      ? "Needs your attention"
+      : `${banks.map((c) => c.institution ?? "Bank").join(", ")} · checked ${formatWhen(banks[0].last_synced_at ?? new Date().toISOString())}`
+    : "Not connected — connect it so transfers count by themselves";
+  const activePerks = perks.filter((p) => p.is_active).length;
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-8">
-      <PageHeader title="Settings" />
+      <PageHeader title="Settings" description="Tap a card to change it." />
 
       <section className="flex flex-col gap-3">
-        <SectionTitle title="Business details" />
-        <Card className="flex flex-col gap-6 p-5 sm:p-7">
+        <SectionTitle title="Your business" />
+        <Card className="p-5">
           <LogoUpload bizId={bizId} name={business.name} color={business.brand_color} logoUrl={business.logo_url} />
-          <div className="border-t border-line pt-6">
-            <BusinessForm business={business} />
-          </div>
         </Card>
+        <BusinessDetailCards business={business} />
       </section>
 
-      <section id="bank" className="flex scroll-mt-24 flex-col gap-3">
-        <SectionTitle
-          title="Your bank"
-          description="Connect every account customers pay into. When a customer pays by transfer, Spendbox sees it and counts it for them — no receipts needed."
-        />
-        <Card className="p-5 sm:p-7">
-          <BankConnect
-            bizId={bizId}
-            publicKey={monoPublicKey()}
-            businessName={business.name}
-            businessEmail={business.email}
-            connections={(connections ?? []) as BankConnectionView[]}
+      <section className="flex flex-col gap-3">
+        <SectionTitle title="Manage" />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <LinkCard href={`${base}/settings/bank`} icon={Landmark} title="Your bank" note={bankNote} />
+          <LinkCard href={`${base}/perks`} icon={Gift} title="Perks" note={perks.length ? `${plural(activePerks, "perk")} on` : "Add your first perk"} />
+          <LinkCard
+            href={`${base}/partners`}
+            icon={Handshake}
+            title="Partners"
+            note={business.partners_enabled ? "Cross-promotion is on" : "Show your perks to other businesses' customers"}
+            badge={Number(requests ?? 0)}
           />
-        </Card>
+          <LinkCard href={`${base}/audit`} icon={History} title="Audit log" note="Everything recorded, changed or given. Customers can see their part." />
+        </div>
       </section>
-
-      {receipts && (
-        <section id="receipt-accounts" className="flex scroll-mt-24 flex-col gap-3">
-          <SectionTitle
-            title="Accounts for receipts"
-            description="When a customer uploads a receipt, we check it was paid into one of these. We never touch your money."
-          />
-          <Card className="p-5 sm:p-7">
-            <BankAccounts bizId={bizId} accounts={accounts} banks={banks} />
-          </Card>
-        </section>
-      )}
 
       <section className="flex flex-col gap-3">
         <SectionTitle title="Join link" />
@@ -86,7 +91,7 @@ export default async function SettingsPage({ params }: PageProps<"/dashboard/[bi
             <p className="font-semibold break-all">{joinUrl.replace(/^https?:\/\//, "")}</p>
             <div className="flex flex-wrap gap-2">
               <CopyButton value={joinUrl} />
-              <a href={`/dashboard/${bizId}/qr`} className={buttonClass({ variant: "secondary" })}>
+              <a href={`${base}/qr`} className={buttonClass({ variant: "secondary" })}>
                 <Download className="size-4" aria-hidden /> Download QR
               </a>
             </div>
@@ -96,20 +101,26 @@ export default async function SettingsPage({ params }: PageProps<"/dashboard/[bi
 
       <section className="flex flex-col gap-3">
         <SectionTitle title="Account" />
-        <Card className="flex flex-col gap-5 p-5 sm:p-7">
+        <Card className="p-5">
           <form action={signOut}>
             <Button type="submit" variant="secondary">
               <LogOut className="size-4" aria-hidden /> Log out
             </Button>
           </form>
-          <div className="flex flex-col gap-3 border-t border-line pt-5">
-            <div>
-              <p className="font-semibold">Delete this business</p>
-              <p className="text-sm text-muted">Removes the business, its perks, customers and payments permanently.</p>
-            </div>
-            <DeleteBusiness bizId={bizId} name={business.name} />
-          </div>
         </Card>
+      </section>
+
+      <section className="flex flex-col gap-3" aria-labelledby="danger-zone">
+        <h2 id="danger-zone" className="flex items-center gap-2 font-display text-lg font-bold text-red-800">
+          <TriangleAlert className="size-5" aria-hidden /> Danger zone
+        </h2>
+        <div className="flex flex-col gap-3 rounded-3xl border-2 border-red-200 bg-red-50/50 p-5">
+          <div>
+            <p className="font-semibold text-ink">Delete this business</p>
+            <p className="text-sm text-muted">Removes the business, its perks, customers and payments, for good.</p>
+          </div>
+          <DeleteBusiness bizId={bizId} name={business.name} />
+        </div>
       </section>
     </div>
   );

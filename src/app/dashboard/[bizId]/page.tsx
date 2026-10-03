@@ -15,7 +15,7 @@ import { compactNumber, getPerks, getPurchases, getStats, hasBankConnection } fr
 import { after } from "next/server";
 import { cn } from "@/lib/cn";
 import { siteUrl } from "@/lib/env";
-import { formatMoney, plural } from "@/lib/format";
+import { formatMoney, formatMoneyShort, plural } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Home" };
 
@@ -39,7 +39,7 @@ export default async function BusinessHome({ params, searchParams }: PageProps<"
   const welcomePerk = perks.find((p) => p.kind === "welcome" && p.is_active);
   const steps = [
     { done: true, label: "Create your business", href: null },
-    { done: connected, label: "Connect the bank account customers pay into", href: `/dashboard/${bizId}/settings#bank` },
+    { done: connected, label: "Connect the bank account customers pay into", href: `/dashboard/${bizId}/settings/bank` },
     { done: perks.length > 0, label: "Add your first perk", href: `/dashboard/${bizId}/perks` },
     { done: stats.members > 0, label: "Share your link with customers", href: "#share" },
   ];
@@ -111,13 +111,14 @@ export default async function BusinessHome({ params, searchParams }: PageProps<"
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatTile
             label="From members this week"
-            value={formatMoney(stats.sales_week, business.currency)}
+            value={formatMoneyShort(stats.sales_week, business.currency)}
+            fullValue={formatMoney(stats.sales_week, business.currency)}
             note={`${plural(stats.purchases_week, "counted purchase")} in 7 days`}
             href={`${base}/payments?status=verified`}
           />
           <StatTile label="Members" value={compactNumber(stats.members)} note={stats.members_new ? `+${stats.members_new} this week` : "No new members this week"} href={`${base}/customers`} />
           <StatTile
-            label="Who paid this?"
+            label="Needs review"
             value={compactNumber(stats.unmatched + stats.pending)}
             note={stats.unmatched + stats.pending ? "Payments waiting for you" : "All caught up"}
             href={`${base}/payments`}
@@ -192,9 +193,12 @@ function StatTile({
   note,
   href,
   attention,
+  fullValue,
 }: {
   label: string;
   value: ReactNode;
+  /** Shown on hover when the value is shortened (₦1.2M). */
+  fullValue?: string;
   note: string;
   href: string;
   attention?: boolean;
@@ -209,7 +213,9 @@ function StatTile({
     >
       <p className="text-sm font-semibold text-muted">{label}</p>
       <div>
-        <p className="text-3xl font-semibold tracking-tight text-ink">{value}</p>
+        <p className="truncate text-2xl font-semibold tracking-tight text-ink sm:text-3xl" title={fullValue}>
+          {value}
+        </p>
         <p className={cn("mt-1 text-xs font-semibold", attention ? "text-accent-700" : "text-muted")}>{note}</p>
       </div>
     </Link>

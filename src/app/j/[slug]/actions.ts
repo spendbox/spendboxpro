@@ -25,5 +25,13 @@ export async function joinBusiness(slug: string, refCode: string | null, share: 
     const { data } = await createAdminClient().from("memberships").select("business_id").eq("id", membershipId).maybeSingle();
     if (data) await matchOpenPayments(data.business_id).catch((e) => console.error("matchOpenPayments failed", e));
   });
-  redirect(`/me/b/${slug}?welcome=1`);
+  // New customers add the bank account they pay from (and a couple of optional details) first.
+  const user = await getUser();
+  const { count } = await supabase
+    .from("payers")
+    .select("id", { count: "exact", head: true })
+    .eq("customer_id", user!.id)
+    .is("learned_at_business", null);
+  const destination = `/me/b/${slug}?welcome=1`;
+  redirect(count ? destination : `/me/setup?next=${encodeURIComponent(destination)}`);
 }

@@ -1,24 +1,26 @@
 import { Gift, Search } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { RewardButton } from "@/components/business/reward-button";
-import { PerkIcon } from "@/components/perks/perk-card";
+import { RewardsList } from "@/components/business/rewards-list";
 import { Button } from "@/components/ui/button";
-import { Card, EmptyState } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireOwnedBusiness } from "@/lib/auth";
 import { getRewards } from "@/lib/business";
 import { cn } from "@/lib/cn";
-import { formatDate, memberLabel, memberNo } from "@/lib/format";
-import { PERK_KINDS } from "@/lib/perks";
 
 export const metadata: Metadata = { title: "Perks to give" };
 
 export default async function RewardsPage({ params, searchParams }: PageProps<"/dashboard/[bizId]/rewards">) {
-  const [{ bizId }, { q, show }] = await Promise.all([params, searchParams]);
+  const [{ bizId }, { q, show, perk }] = await Promise.all([params, searchParams]);
   await requireOwnedBusiness(bizId);
   const showGiven = show === "given";
   const all = await getRewards(bizId, { status: showGiven ? "redeemed" : "available" });
+  // A customer's shared perk link opens that perk straight away.
+  const linked =
+    typeof perk === "string"
+      ? (all.find((r) => r.id === perk) ?? (await getRewards(bizId, { status: null })).find((r) => r.id === perk) ?? null)
+      : null;
 
   const query = typeof q === "string" ? q.trim().replace(/^#/, "").toLowerCase() : "";
   const rewards = query
@@ -35,7 +37,7 @@ export default async function RewardsPage({ params, searchParams }: PageProps<"/
       <PageHeader
         back={{ href: `/dashboard/${bizId}/perks`, label: "Perks" }}
         title="Perks to give"
-        description="When a customer shows their pass, find them by member number and mark the perk as given."
+        description="Tap a perk to see it in full and mark it as given. Customers see this in their Audits."
       />
 
       <form action={base} className="flex gap-2" role="search">
@@ -75,6 +77,7 @@ export default async function RewardsPage({ params, searchParams }: PageProps<"/
         ))}
       </nav>
 
+      {linked && !rewards.some((r) => r.id === linked.id) && <RewardsList bizId={bizId} rewards={[]} initialOpen={linked} />}
       {rewards.length === 0 ? (
         <EmptyState
           icon={<Gift className="size-5" />}
@@ -82,32 +85,7 @@ export default async function RewardsPage({ params, searchParams }: PageProps<"/
           description={query ? "Check the member number on the customer's pass." : "When customers earn perks, they'll show here."}
         />
       ) : (
-        <Card className="px-5">
-          <ul className="divide-y divide-line">
-            {rewards.map((r) => (
-              <li key={r.id} className="flex flex-wrap items-center gap-3 py-4">
-                <span
-                  className="flex size-10 shrink-0 items-center justify-center rounded-xl text-white"
-                  style={{ background: PERK_KINDS[r.kind].color }}
-                >
-                  <PerkIcon kind={r.kind} className="size-5" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-ink">{r.title}</p>
-                  <p className="truncate text-sm text-muted">
-                    <Link href={`/dashboard/${bizId}/customers/${r.membership_id}`} className="font-semibold text-ink-2 hover:underline">
-                      {memberLabel(r.member_no, r.member_name)}
-                    </Link>
-                    {r.member_name ? ` · ${memberNo(r.member_no)}` : ""} ·{" "}
-                    {showGiven && r.redeemed_at ? `given ${formatDate(r.redeemed_at)}` : `earned ${formatDate(r.issued_at)}`}
-                    {!showGiven && r.expires_at ? ` · until ${formatDate(r.expires_at)}` : ""}
-                  </p>
-                </div>
-                <RewardButton bizId={bizId} rewardId={r.id} given={showGiven} />
-              </li>
-            ))}
-          </ul>
-        </Card>
+        <RewardsList bizId={bizId} rewards={rewards} initialOpen={linked && rewards.some((r) => r.id === linked.id) ? linked : null} />
       )}
     </div>
   );

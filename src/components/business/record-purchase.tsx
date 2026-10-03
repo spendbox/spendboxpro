@@ -8,6 +8,7 @@ import { Combobox, type ComboOption } from "@/components/ui/combobox";
 import { Field, FormMessage, Input } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { cn } from "@/lib/cn";
 
 /** The form itself, in a pop-up. Used by the button below and the floating action button. */
 export function RecordPurchaseModal({
@@ -44,7 +45,8 @@ export function RecordPurchaseModal({
     };
   }, [open, fixedMember, bizId]);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDay(0);
+  const yesterday = localDay(-1);
   return (
     <Modal
       open={open}
@@ -83,15 +85,54 @@ export function RecordPurchaseModal({
         <Field label="What did they buy?" htmlFor="description" optional>
           <Input id="description" name="description" maxLength={200} placeholder="e.g. Jollof rice and chicken" />
         </Field>
-        <Field label="Date" htmlFor="paid_on">
-          <Input id="paid_on" name="paid_on" type="date" defaultValue={today} max={today} />
-        </Field>
+        <DateChoice today={today} yesterday={yesterday} />
         <FormMessage>{state.error}</FormMessage>
         <SubmitButton size="lg" block pendingText="Saving…" disabled={!member}>
           Add purchase
         </SubmitButton>
       </form>
     </Modal>
+  );
+}
+
+/** YYYY-MM-DD for today (0), yesterday (-1)… on this device. */
+function localDay(offset: number) {
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Today / Yesterday / Pick a date. */
+function DateChoice({ today, yesterday }: { today: string; yesterday: string }) {
+  const [choice, setChoice] = useState<"today" | "yesterday" | "pick">("today");
+  const [picked, setPicked] = useState(yesterday);
+  const value = choice === "today" ? today : choice === "yesterday" ? yesterday : picked;
+  const chip = (key: typeof choice, label: string) => (
+    <button
+      type="button"
+      aria-pressed={choice === key}
+      onClick={() => setChoice(key)}
+      className={cn(
+        "h-11 flex-1 rounded-xl text-sm font-semibold ring-1 transition",
+        choice === key ? "bg-ink text-white ring-ink" : "bg-white text-ink-2 ring-line-strong hover:bg-canvas",
+      )}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <fieldset className="flex flex-col gap-2">
+      <legend className="mb-1.5 text-sm font-semibold text-ink">When?</legend>
+      <input type="hidden" name="paid_on" value={value} />
+      <div className="flex gap-2">
+        {chip("today", "Today")}
+        {chip("yesterday", "Yesterday")}
+        {chip("pick", "Pick a date")}
+      </div>
+      {choice === "pick" && (
+        <Input aria-label="Date of the purchase" type="date" value={picked} max={today} onChange={(e) => setPicked(e.target.value)} />
+      )}
+    </fieldset>
   );
 }
 

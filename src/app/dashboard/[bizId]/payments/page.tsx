@@ -78,7 +78,7 @@ export default async function PaymentsPage({ params, searchParams }: PageProps<"
             <p className="font-semibold">Count transfers without receipts</p>
             <p className="text-sm text-muted">Connect your bank (read-only) and every transfer from a customer counts by itself.</p>
           </div>
-          <Link href={`/dashboard/${bizId}/settings#bank`} className={buttonClass({ variant: "primary", size: "sm" })}>
+          <Link href={`/dashboard/${bizId}/settings/bank`} className={buttonClass({ variant: "primary", size: "sm" })}>
             Connect your bank
           </Link>
         </Card>

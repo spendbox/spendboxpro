@@ -6,3 +6,6 @@ export function getTrial(createdAt: string) {
   const daysLeft = Math.ceil((endsAt.getTime() - Date.now()) / 86_400_000);
   return { endsAt, daysLeft, ended: daysLeft <= 0 };
 }
+
+/** Set (for the browser session) when the owner closes the free-trial note; cleared at the next login. */
+export const TRIAL_HIDDEN_COOKIE = "sb_trial_hidden";

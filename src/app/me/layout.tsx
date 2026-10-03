@@ -15,6 +15,7 @@ const NAV: NavItem[] = receiptsEnabled()
   : [
       { href: "/me", label: "My Spendbox", icon: "home", exact: true, also: ["/me/b"] },
       { href: "/me/perks", label: "Perks", icon: "perks" },
+      { href: "/me/audits", label: "Audits", icon: "audits" },
       { href: "/me/profile", label: "Profile", icon: "profile" },
     ];
 

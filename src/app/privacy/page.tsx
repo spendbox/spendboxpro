@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Privacy policy" };
 
 export default function PrivacyPage() {
   return (
-    <LegalPage title="Privacy policy" updated="3 October 2026">
+    <LegalPage title="Privacy policy" updated="4 October 2026">
       <p>
         Spendbox (&ldquo;we&rdquo;, &ldquo;us&rdquo;) helps small businesses keep a list of their customers, count
         purchases and reward customers with perks. This policy explains what personal data we collect, why, who we share
@@ -31,7 +31,12 @@ export default function PrivacyPage() {
           plain text).
         </li>
         <li>
-          <strong>Profile (optional):</strong> your name, gender, birthday and email address.
+          <strong>Bank accounts you pay from:</strong> the bank, account number and the account name your bank gives us
+          (through Paystack). Your Spendbox name comes from your first account. We use them only to recognise your
+          payments; businesses never see them.
+        </li>
+        <li>
+          <strong>Profile (optional):</strong> your birthday, gender and email address.
         </li>
         <li>
           <strong>Memberships:</strong> which businesses you joined, when, your member number, and who invited you.
@@ -88,6 +93,13 @@ export default function PrivacyPage() {
         payment was counted for you by mistake, tap &ldquo;Not me&rdquo; in Profile &amp; privacy.
       </p>
 
+      <h2>Audits</h2>
+      <p>
+        We keep an automatic record of what businesses do with your purchases and perks (recorded, confirmed, deleted,
+        given and so on). You can see it under Audits, and the business sees the same events for its customers. Nobody
+        can edit it. It is deleted with your account.
+      </p>
+
       <h2>What businesses can see</h2>
       <p>
         A business you join always sees your member number, when you joined, your purchases with it (including receipts
@@ -111,7 +123,7 @@ export default function PrivacyPage() {
         <li>Vercel — hosting of the website.</li>
         <li>Mono — connects a business&apos;s bank account (read-only) and sends us the payments that come into it.</li>
         <li>Anthropic (Claude) — reads receipt images, when receipt uploads are on. Images are sent only to extract payment details.</li>
-        <li>Paystack — confirms the account name on a business&apos;s bank account when the business adds it.</li>
+        <li>Paystack — confirms the name on bank accounts you add (and on a business&apos;s accounts for receipts).</li>
         <li>Resend — sends notification emails.</li>
       </ul>
       <p>

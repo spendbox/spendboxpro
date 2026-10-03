@@ -13,6 +13,8 @@ export interface CustomerListRow {
   sub: string;
   visits: number;
   spent: string;
+  /** Full amount for the tooltip when "spent" is shortened. */
+  spentFull?: string;
   lastVisit: string | null;
   shared: boolean;
   invited: boolean;
@@ -75,7 +77,9 @@ export function CustomerList({ bizId, rows }: { bizId: string; rows: CustomerLis
                     </div>
                   </div>
                   <span className="hidden text-right font-semibold text-ink md:block">{r.visits}</span>
-                  <span className="hidden text-right font-semibold text-ink md:block">{r.spent}</span>
+                  <span className="hidden truncate text-right font-semibold text-ink tabular md:block" title={r.spentFull ?? r.spent}>
+                    {r.spent}
+                  </span>
                   <span className="hidden text-right text-sm text-muted md:block">{r.lastVisit ?? "—"}</span>
                   <ChevronRight className="size-5 text-muted" aria-hidden />
                 </Link>

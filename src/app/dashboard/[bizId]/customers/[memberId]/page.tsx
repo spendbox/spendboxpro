@@ -11,7 +11,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { WhatsAppIcon } from "@/components/ui/share-actions";
 import { requireOwnedBusiness } from "@/lib/auth";
 import { getMembers, getPurchases, getRewards } from "@/lib/business";
-import { formatDate, formatMoney, formatPhone, MONTHS, memberLabel, memberNo, whatsappLink } from "@/lib/format";
+import { formatDate, formatMoney, formatMoneyShort, formatPhone, memberLabel, memberNo, MONTHS, whatsappLink } from "@/lib/format";
 import { PERK_KINDS } from "@/lib/perks";
 
 export const metadata: Metadata = { title: "Customer" };
@@ -43,12 +43,14 @@ export default async function CustomerPage({ params }: PageProps<"/dashboard/[bi
       <section className="grid grid-cols-3 gap-3">
         {[
           { label: "Purchases", value: String(m.visits) },
-          { label: "Spent", value: formatMoney(m.total_spent, business.currency) },
+          { label: "Spent", value: formatMoneyShort(m.total_spent, business.currency), full: formatMoney(m.total_spent, business.currency) },
           { label: "Last visit", value: m.last_visit_at ? formatDate(m.last_visit_at) : "—" },
         ].map((s) => (
           <Card key={s.label} className="p-4 sm:p-5">
             <p className="text-sm font-semibold text-muted">{s.label}</p>
-            <p className="mt-2 text-xl font-semibold tracking-tight sm:text-2xl">{s.value}</p>
+            <p className="mt-2 truncate text-xl font-semibold tracking-tight sm:text-2xl" title={"full" in s ? s.full : s.value}>
+              {s.value}
+            </p>
           </Card>
         ))}
       </section>

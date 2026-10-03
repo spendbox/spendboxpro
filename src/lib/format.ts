@@ -129,3 +129,20 @@ export function businessTagline(b: { categories?: string[] | null; category?: st
 export function monthName(month: string) {
   return new Date(`${month}-01T12:00:00Z`).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
 }
+
+/** Short money for tight spaces: ₦85,000 · ₦125K · ₦1.2M · ₦3.4B (use the full amount in a tooltip). */
+export function formatMoneyShort(amount: number | string | null | undefined, currency = "NGN") {
+  const n = Number(amount ?? 0) || 0;
+  const symbol = currency === "NGN" ? "₦" : `${currency} `;
+  const abs = Math.abs(n);
+  const trim = (x: number) => String(Math.round(x * 10) / 10);
+  if (abs >= 1e9) return `${symbol}${trim(n / 1e9)}B`;
+  if (abs >= 1e6) return `${symbol}${trim(n / 1e6)}M`;
+  if (abs >= 1e5) return `${symbol}${trim(n / 1e3)}K`;
+  return formatMoney(n, currency);
+}
+
+/** True if the time is within the last `minutes` minutes. */
+export function isWithinMinutes(iso: string, minutes: number) {
+  return Date.now() - new Date(iso).getTime() < minutes * 60_000;
+}

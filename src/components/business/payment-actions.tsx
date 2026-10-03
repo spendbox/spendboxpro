@@ -1,8 +1,8 @@
 "use client";
 
-import { Check, X } from "lucide-react";
+import { Check, Trash, X } from "lucide-react";
 import { useState, useTransition } from "react";
-import { setPurchaseStatus } from "@/app/dashboard/[bizId]/actions";
+import { deleteRecordedPurchase, setPurchaseStatus } from "@/app/dashboard/[bizId]/actions";
 import { unmatchPayment } from "@/app/dashboard/[bizId]/bank-actions";
 import { Button } from "@/components/ui/button";
 import type { PurchaseStatus } from "@/lib/types";
@@ -12,12 +12,15 @@ export function PaymentActions({
   purchaseId,
   status,
   fromBank = false,
+  canDelete = false,
 }: {
   bizId: string;
   purchaseId: string;
   status: PurchaseStatus;
   /** Seen in the business's bank: the money arrived, but the customer could be wrong. */
   fromBank?: boolean;
+  /** Typed in by the business less than an hour ago: can still be deleted. */
+  canDelete?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [target, setTarget] = useState<PurchaseStatus | null>(null);
@@ -26,6 +29,24 @@ export function PaymentActions({
     startTransition(async () => void (await setPurchaseStatus(bizId, purchaseId, next)));
   };
   const busy = (s: PurchaseStatus) => pending && target === s;
+
+  if (canDelete) {
+    return (
+      <Button
+        size="sm"
+        variant="ghost"
+        loading={pending}
+        className="text-red-700"
+        onClick={() => {
+          if (confirm("Delete this purchase? Use this if it was added by mistake. The customer will see it was deleted in their Audits.")) {
+            startTransition(async () => void (await deleteRecordedPurchase(bizId, purchaseId)));
+          }
+        }}
+      >
+        {!pending && <Trash className="size-4" aria-hidden />} Delete
+      </Button>
+    );
+  }
 
   if (fromBank) {
     return (
