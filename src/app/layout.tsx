@@ -39,7 +39,11 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${body.variable} ${display.variable} h-full antialiased`}>
+    <html lang="en" className={`${body.variable} ${display.variable} h-full antialiased`} suppressHydrationWarning>
+      <head>
+        {/* Lets scroll animations start hidden only when JavaScript can reveal them. */}
+        <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.add('js')" }} />
+      </head>
       <body className="min-h-full">
         <Suspense fallback={null}>
           <NavProgress />

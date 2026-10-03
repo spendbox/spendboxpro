@@ -113,3 +113,115 @@ dialog::backdrop {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* -------------------------------------------------------------------------
+   Landing page motion. Sections fade/slide in as they scroll into view
+   (only when JavaScript is on: <html class="js">), plus a few gentle loops.
+   Everything is switched off for people who prefer reduced motion.
+   ------------------------------------------------------------------------- */
+
+.js [data-reveal] {
+  opacity: 0;
+  transform: translate3d(0, 28px, 0);
+  transition:
+    opacity 0.8s cubic-bezier(0.2, 0.7, 0.2, 1),
+    transform 0.8s cubic-bezier(0.2, 0.7, 0.2, 1);
+  transition-delay: var(--delay, 0ms);
+  /* Never leave content hidden if the script doesn't run. */
+  animation: reveal-fallback 0s 4s forwards;
+}
+.js [data-reveal="left"] { transform: translate3d(-36px, 0, 0); }
+.js [data-reveal="right"] { transform: translate3d(36px, 0, 0); }
+.js [data-reveal="scale"] { transform: scale(0.92); }
+.js [data-reveal="fan"] { transform: translate3d(0, 40px, 0) rotate(var(--rot, 0deg)) scale(0.9); }
+.js [data-reveal].is-visible {
+  opacity: 1;
+  transform: none;
+  animation: none;
+}
+.js [data-reveal="fan"].is-visible { transform: rotate(var(--rot-end, 0deg)); }
+
+@keyframes reveal-fallback {
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes float-y {
+  0%, 100% { transform: translateY(0) rotate(var(--r, 0deg)); }
+  50% { transform: translateY(-12px) rotate(var(--r, 0deg)); }
+}
+.animate-float { animation: float-y 6s ease-in-out infinite; animation-delay: var(--delay, 0s); }
+
+@keyframes toast-cycle {
+  0%, 8% { opacity: 0; transform: translateY(16px) scale(0.96); }
+  14%, 70% { opacity: 1; transform: none; }
+  78%, 100% { opacity: 0; transform: translateY(-10px) scale(0.98); }
+}
+.animate-toast { animation: toast-cycle 6s ease-in-out infinite; animation-delay: var(--delay, 0s); }
+
+@keyframes fill-cycle {
+  0%, 10% { width: 20%; }
+  45%, 80% { width: 100%; }
+  100% { width: 20%; }
+}
+.animate-fill { animation: fill-cycle 6s ease-in-out infinite; }
+
+@keyframes shimmer-text {
+  to { background-position: 200% center; }
+}
+.text-shimmer {
+  background: linear-gradient(90deg, var(--color-brand-600), var(--color-brand-400), var(--color-brand-700), var(--color-brand-600));
+  background-size: 200% auto;
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: shimmer-text 5s linear infinite;
+}
+
+@keyframes marquee {
+  to { transform: translateX(-50%); }
+}
+.animate-marquee { animation: marquee 40s linear infinite; }
+.marquee-mask { mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent); }
+
+@keyframes travel {
+  0% { left: 0%; opacity: 0; }
+  8% { opacity: 1; }
+  92% { opacity: 1; }
+  100% { left: 100%; opacity: 0; }
+}
+.animate-travel { animation: travel 4s cubic-bezier(0.45, 0, 0.25, 1) infinite; animation-delay: var(--delay, 0s); }
+
+@keyframes node-pop {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgb(42 119 44 / 0); }
+  50% { transform: scale(1.06); box-shadow: 0 0 0 10px rgb(42 119 44 / 0.12); }
+}
+.animate-node { animation: node-pop 4s ease-in-out infinite; animation-delay: var(--delay, 0s); }
+
+@keyframes draw-line {
+  from { stroke-dashoffset: var(--len, 600); }
+  to { stroke-dashoffset: 0; }
+}
+.js [data-reveal].is-visible .draw { animation: draw-line 1.6s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+.draw { stroke-dasharray: var(--len, 600); stroke-dashoffset: var(--len, 600); }
+html:not(.js) .draw { stroke-dashoffset: 0; }
+
+@keyframes blob-spin {
+  to { transform: rotate(360deg); }
+}
+.animate-blob { animation: blob-spin 24s linear infinite; }
+
+@keyframes swap-chip {
+  0%, 40% { transform: translateX(0); }
+  50%, 90% { transform: translateX(var(--swap, 120px)); }
+  100% { transform: translateX(0); }
+}
+.animate-swap { animation: swap-chip 7s ease-in-out infinite; animation-delay: var(--delay, 0s); }
+
+@media (prefers-reduced-motion: reduce) {
+  .js [data-reveal] { opacity: 1; transform: none; }
+  .animate-float, .animate-toast, .animate-fill, .text-shimmer, .animate-marquee, .animate-travel, .animate-node, .animate-blob, .animate-swap {
+    animation: none !important;
+  }
+  .animate-toast { opacity: 1; }
+  .draw { stroke-dashoffset: 0; }
+}

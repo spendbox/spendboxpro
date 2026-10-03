@@ -11,7 +11,7 @@ Built with Next.js (hosted on Vercel), Supabase (database, login, file storage) 
 
 ## Set it up (about 20 minutes, no coding)
 
-You need accounts on **Supabase**, **Vercel** and **Mono**. Optional: **Resend** (sends notification emails).
+You need accounts on **Supabase**, **Vercel**, **Mono** and **Paystack** (Paystack confirms the name on customers' bank accounts). Optional: **Resend** (sends notification emails).
 
 ### 1. Create the database (Supabase)
 
@@ -21,7 +21,8 @@ You need accounts on **Supabase**, **Vercel** and **Mono**. Optional: **Resend**
 4. Do the same with [`supabase/migrations/20261002000000_logos_emails_durations.sql`](supabase/migrations/20261002000000_logos_emails_durations.sql) (logos, emails, perk durations).
 5. Then [`supabase/migrations/20261003000000_bank_feeds.sql`](supabase/migrations/20261003000000_bank_feeds.sql) (payments from the bank).
 6. Then [`supabase/migrations/20261004000000_sales.sql`](supabase/migrations/20261004000000_sales.sql) (sales and balance on the home screen).
-7. Then [`supabase/migrations/20261005000000_partners.sql`](supabase/migrations/20261005000000_partners.sql) (partner businesses, and a fix for perk time limits). Always run the files in order, each once.
+7. Then [`supabase/migrations/20261005000000_partners.sql`](supabase/migrations/20261005000000_partners.sql) (partner businesses, and a fix for perk time limits).
+8. Then [`supabase/migrations/20261006000000_activity_and_accounts.sql`](supabase/migrations/20261006000000_activity_and_accounts.sql) (audit logs, deleting a typed-in purchase, customers' bank accounts). Always run the files in order, each once.
 
 ### 2. Login: nothing to set up
 
@@ -39,7 +40,9 @@ People log in with their **phone number and a 6-digit PIN** they choose the firs
 
    Mono then tells Spendbox the moment a business has new payments. Without it, payments still arrive: whenever the business opens Payments or taps **Check for new payments**, and once a day.
 
-### 4. Optional: Resend (emails)
+### 4. Paystack (confirms customers' names) and Resend (emails, optional)
+
+- **Paystack**: when customers sign up they add the bank account they usually pay from, and Paystack tells us the name on it — that becomes their Spendbox name, and it's how their transfers are matched. In [Paystack](https://dashboard.paystack.com) go to **Settings → API Keys & Webhooks** and copy the **Secret Key** (use the live key; name lookups are free). Add it as `PAYSTACK_SECRET_KEY`. Without it, customers type the name on their account themselves.
 
 - **Resend** (emails customers when a perk is ready or a transfer is counted, and emails businesses about new members): create an account at [resend.com](https://resend.com), add and verify your domain under **Domains**, then create an **API key**. Until a domain is verified, Resend only delivers to your own Resend login email.
 
@@ -57,6 +60,7 @@ People log in with their **phone number and a 6-digit PIN** they choose the firs
 | `MONO_SECRET_KEY` | Mono secret key (step 3). Keep it private. |
 | `MONO_WEBHOOK_SECRET` | The random text you put in Mono's webhook settings (step 3) |
 | `NEXT_PUBLIC_SITE_URL` | Your app's address, e.g. `https://spendbox.vercel.app` (or your own domain) |
+| `PAYSTACK_SECRET_KEY` | Paystack secret key (step 4) — confirms customers' names from their bank |
 | `CRON_SECRET` | Any long random text. Lets Vercel run the daily job (birthday treats, and a bank check in case a webhook was missed). |
 | `RESEND_API_KEY` | Optional — Resend API key (step 4) |
 | `EMAIL_FROM` | Optional — who emails come from, e.g. `Spendbox <hello@yourdomain.com>` (must be on your verified Resend domain) |
@@ -95,7 +99,13 @@ Payments from before someone joined don't count for them automatically. **Wrong 
 
 **Sales on the home screen.** Once a bank is connected, the business's home shows its balance, money in for the month (compared with the month before), a column chart of sales per day, and every payment that came in. Tap a day to see just that day; use the arrows or the month list to go back in time; sort payments by newest, oldest or largest. The first check reads the account's whole history from Mono. Payments from before connecting show in sales but are never matched to members or put in "Who paid this?". Money marked **Not a customer** is left out of sales. If the screen stays empty, Settings shows whether Mono has shared any payments yet.
 
-**Partners (cross-promotion).** Under **Perks → Partners** (or **Partners** in the side menu on a computer), a business switches on cross-promotion, then finds other businesses by name, category or area. Each shows how many customers it has and whether it approves requests instantly or one by one. Switching one on sends a request (or partners straight away if they approve instantly). A business can have up to 2 partners, counting requests it has sent. Once partnered, each one's perks show to the other's customers under **From our partners** (on the business's page and on the customer's home), with a button to join. Requests waiting for approval show as a badge, and the business gets an email if it has added one. Either side can end a partnership at any time; switching cross-promotion off hides partner perks until it's switched back on. Partners never see each other's customers.
+**Customer sign-up.** After their phone number and PIN, new customers answer one question per screen: the bank account they usually pay from (Paystack shows the bank's name for it, "Is this you?"), their birthday (optional) and an email (optional). Their name comes from the bank and can't be edited. They can add more accounts in Profile; each one helps match their transfers.
+
+**Audits.** Every purchase recorded, confirmed, marked not received or deleted, and every perk earned, given or taken back, is written to an audit log automatically. Customers see their part under **Audits**; businesses see the whole log under **Settings → Audit log**. Nobody can edit it. A purchase a business typed in can be deleted within an hour of adding it (in case of a mistake); the deletion shows in the log.
+
+**Perks for customers.** Tapping a perk opens it full screen in the perk's colour, with a live clock (so a screenshot won't pass) and a **Share with [business]** button that sends the business a link to that perk — it opens straight into the perk in their dashboard, ready to mark as given.
+
+**Partners (cross-promotion).** Under **Partners** in the menu, a business switches on cross-promotion, then finds other businesses by name, category or area. Each shows how many customers it has and whether it approves requests instantly or one by one. Switching one on sends a request (or partners straight away if they approve instantly). A business can have up to 2 partners, counting requests it has sent. Once partnered, each one's perks show to the other's customers under **From our partners** (on the business's page and on the customer's home), with a button to join. Requests waiting for approval show as a badge, and the business gets an email if it has added one. Either side can end a partnership at any time; switching cross-promotion off hides partner perks until it's switched back on. Partners never see each other's customers.
 
 **Receipts (switched off).** Customer receipt uploads, read by Claude, are still in the code but hidden. To bring them back, set `NEXT_PUBLIC_RECEIPT_UPLOADS=on` and `ANTHROPIC_API_KEY` (from [console.anthropic.com](https://console.anthropic.com), roughly $20–30 per 1,000 receipts), and redeploy. Optionally set `PAYSTACK_SECRET_KEY` so account names fill themselves in when businesses add the accounts receipts are checked against.
 

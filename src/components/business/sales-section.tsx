@@ -50,7 +50,7 @@ export function SalesSection({ bizId, currency, view }: { bizId: string; currenc
               Connect your bank (read-only) to see your balance, sales per day and every payment, month by month.
             </p>
           </div>
-          <Link href={`${base}/settings#bank`} className={buttonClass({ variant: "primary" })}>
+          <Link href={`${base}/settings/bank`} className={buttonClass({ variant: "primary" })}>
             Connect your bank
           </Link>
         </Card>
@@ -91,7 +91,9 @@ export function SalesSection({ bizId, currency, view }: { bizId: string; currenc
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <Card className="flex flex-col gap-1 p-5 sm:p-6">
           <p className="text-sm font-semibold text-muted">Money in · {monthName(view.month)}</p>
-          <p className="text-5xl font-semibold tracking-tight text-ink">{formatMoney(view.total, currency)}</p>
+          <p className="text-[clamp(2rem,9vw,3rem)] leading-tight font-semibold tracking-tight [overflow-wrap:anywhere] text-ink">
+            {formatMoney(view.total, currency)}
+          </p>
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
             {change !== null && (
               <span className={cn("flex items-center gap-1 font-semibold", change >= 0 ? "text-brand-700" : "text-red-700")}>
@@ -113,7 +115,9 @@ export function SalesSection({ bizId, currency, view }: { bizId: string; currenc
           <p className="text-sm font-semibold text-muted">Balance</p>
           {knownBalances.length ? (
             <div>
-              <p className="text-3xl font-semibold tracking-tight text-ink">{formatMoney(totalBalance, currency)}</p>
+              <p className="text-[clamp(1.5rem,7vw,1.875rem)] leading-tight font-semibold tracking-tight [overflow-wrap:anywhere] text-ink">
+                {formatMoney(totalBalance, currency)}
+              </p>
               <p className="mt-1 text-xs text-muted">
                 {view.balances.length > 1 ? `${view.balances.length} accounts` : view.balances[0].label}
                 {newestBalanceAt ? ` · updated ${formatWhen(newestBalanceAt)}` : ""}
@@ -142,7 +146,7 @@ export function SalesSection({ bizId, currency, view }: { bizId: string; currenc
               Mono hasn&apos;t shared any payments for this account yet
               {view.dataStatus && view.dataStatus !== "AVAILABLE" ? " (it's still preparing your history)" : ""}. It can take a few
               minutes after connecting. Tap <strong>Check for new payments</strong> in{" "}
-              <Link href={`${base}/settings#bank`} className="font-semibold text-brand-700 underline">
+              <Link href={`${base}/settings/bank`} className="font-semibold text-brand-700 underline">
                 Settings
               </Link>{" "}
               to try again.

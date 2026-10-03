@@ -28,10 +28,9 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
     { href: base, label: "Home", icon: "overview", exact: true },
     { href: `${base}/payments`, label: "Payments", icon: "payments", badge: stats.pending + stats.unmatched },
     { href: `${base}/customers`, label: "Customers", icon: "customers" },
-    // On phones, Partners lives inside Perks, so Perks carries its badge there.
-    { href: `${base}/perks`, label: "Perks", icon: "perks", also: [`${base}/rewards`, `${base}/partners`], mobileBadge: requests },
-    { href: `${base}/partners`, label: "Partners", icon: "partners", badge: requests, desktopOnly: true },
-    { href: `${base}/settings`, label: "Settings", icon: "settings" },
+    { href: `${base}/partners`, label: "Partners", icon: "partners", badge: requests },
+    // Perks, perks to give and the audit log live under Settings.
+    { href: `${base}/settings`, label: "Settings", icon: "settings", also: [`${base}/perks`, `${base}/rewards`, `${base}/audit`] },
   ];
 
   return (

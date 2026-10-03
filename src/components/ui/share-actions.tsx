@@ -4,6 +4,7 @@ import { Check, Copy, Share2 } from "lucide-react";
 import { useState, useSyncExternalStore } from "react";
 import { buttonClass } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
+import { whatsappLink } from "@/lib/format";
 
 function WhatsAppIcon({ className }: { className?: string }) {
   return (
@@ -52,8 +53,22 @@ export function CopyButton({ value, label = "Copy link", className, compact }: {
 const noopSubscribe = () => () => {};
 
 /** The link in a box, plus Copy, WhatsApp and (on phones) the native share sheet. */
-export function ShareLink({ url, message, title }: { url: string; message: string; title: string }) {
+export function ShareLink({
+  url,
+  message,
+  title,
+  whatsappTo,
+  whatsappLabel = "Share on WhatsApp",
+}: {
+  url: string;
+  message: string;
+  title: string;
+  /** Send straight to this WhatsApp number (e.g. the business) instead of picking a chat. */
+  whatsappTo?: string | null;
+  whatsappLabel?: string;
+}) {
   const text = `${message} ${url}`;
+  const waHref = whatsappTo ? whatsappLink(whatsappTo, text) : `https://wa.me/?text=${encodeURIComponent(text)}`;
   const canShare = useSyncExternalStore(
     noopSubscribe,
     () => typeof navigator.share === "function",
@@ -67,13 +82,13 @@ export function ShareLink({ url, message, title }: { url: string; message: strin
       </div>
       <div className="flex flex-wrap gap-2">
         <a
-          href={`https://wa.me/?text=${encodeURIComponent(text)}`}
+          href={waHref}
           target="_blank"
           rel="noreferrer"
           className={buttonClass({ variant: "primary" }, "flex-1 bg-[#107A42] hover:bg-[#0c6536]")}
         >
           <WhatsAppIcon className="size-5" />
-          Share on WhatsApp
+          {whatsappLabel}
         </a>
         {canShare ? (
           <button

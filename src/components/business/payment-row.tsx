@@ -1,7 +1,7 @@
 import { FileImage, Landmark, PenLine, UserCheck, UserRound } from "lucide-react";
 import Link from "next/link";
 import { PurchaseStatusBadge } from "@/components/purchases/purchase-list";
-import { formatMoney, formatWhen, memberLabel, memberNo } from "@/lib/format";
+import { formatMoney, formatWhen, isWithinMinutes, memberLabel, memberNo } from "@/lib/format";
 import type { BusinessPurchaseRow } from "@/lib/types";
 import { PaymentActions } from "./payment-actions";
 
@@ -69,7 +69,13 @@ export function PaymentRow({ bizId, payment, showMember = true }: { bizId: strin
           )}
           <span className="text-lg font-semibold text-ink">{formatMoney(payment.amount, payment.currency)}</span>
         </div>
-        <PaymentActions bizId={bizId} purchaseId={payment.id} status={payment.status} fromBank={payment.from_bank} />
+        <PaymentActions
+          bizId={bizId}
+          purchaseId={payment.id}
+          status={payment.status}
+          fromBank={payment.from_bank}
+          canDelete={payment.source === "business" && isWithinMinutes(payment.created_at, 60)}
+        />
       </div>
     </li>
   );

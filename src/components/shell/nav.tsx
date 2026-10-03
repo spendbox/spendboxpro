@@ -3,6 +3,7 @@
 import {
   Gift,
   Handshake,
+  History,
   House,
   LayoutGrid,
   LoaderCircle,
@@ -26,6 +27,7 @@ const ICONS = {
   customers: Users,
   perks: Gift,
   partners: Handshake,
+  audits: History,
   settings: Settings,
 } satisfies Record<string, LucideIcon>;
 

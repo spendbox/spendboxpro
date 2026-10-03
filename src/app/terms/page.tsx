@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: "Terms of use" };
 
 export default function TermsPage() {
   return (
-    <LegalPage title="Terms of use" updated="3 October 2026">
+    <LegalPage title="Terms of use" updated="4 October 2026">
       <p>
         These terms are an agreement between you and Spendbox (&ldquo;we&rdquo;, &ldquo;us&rdquo;) for using the
         Spendbox website and app. By creating an account or using Spendbox you agree to them. If you don&apos;t agree,
@@ -53,6 +53,11 @@ export default function TermsPage() {
           me&rdquo;.
         </li>
         <li>Only the business&apos;s own accounts may be connected, by someone allowed to do so.</li>
+        <li>Customers may only add bank accounts that belong to them.</li>
+        <li>
+          Purchases and perks are recorded in an audit log that customers can see. A purchase a business types in can
+          only be deleted within an hour of adding it.
+        </li>
       </ul>
 
       <h2>Receipts</h2>

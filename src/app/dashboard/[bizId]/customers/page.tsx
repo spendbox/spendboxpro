@@ -1,14 +1,14 @@
-import { Cake, Users } from "lucide-react";
+import { Cake, UserPlus, Users } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { CustomerList, type CustomerListRow } from "@/components/business/customer-list";
-import { RecordPurchase } from "@/components/business/record-purchase";
+import { ShareButton } from "@/components/ui/share-button";
 import { Card, EmptyState, SectionTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireOwnedBusiness } from "@/lib/auth";
 import { getMembers } from "@/lib/business";
-import { appTimeZone } from "@/lib/env";
-import { formatDate, formatMoney, MONTHS, memberLabel, memberNo, plural } from "@/lib/format";
+import { appTimeZone, siteUrl } from "@/lib/env";
+import { formatDate, formatMoney, formatMoneyShort, MONTHS, memberLabel, memberNo, plural } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Customers" };
 
@@ -31,7 +31,8 @@ export default async function CustomersPage({ params }: PageProps<"/dashboard/[b
       initialsFrom: m.full_name,
       sub: `${m.full_name ? `${memberNo(m.member_no)} · ` : ""}joined ${formatDate(m.joined_at)}${m.shares_details ? "" : " · private"}`,
       visits: m.visits,
-      spent: formatMoney(m.total_spent, business.currency),
+      spent: formatMoneyShort(m.total_spent, business.currency),
+      spentFull: formatMoney(m.total_spent, business.currency),
       lastVisit: m.last_visit_at ? formatDate(m.last_visit_at) : null,
       shared: m.shares_details,
       invited: m.referred,
@@ -46,10 +47,14 @@ export default async function CustomersPage({ params }: PageProps<"/dashboard/[b
         title="Customers"
         description={`${plural(members.length, "member")} · ${sharing} share their details with you`}
         actions={
-          <RecordPurchase
-            bizId={bizId}
-            currency={business.currency}
-            variant="secondary"
+          <ShareButton
+            variant="primary"
+            label="Add customers"
+            icon={<UserPlus className="size-4" aria-hidden />}
+            url={`${siteUrl()}/j/${business.slug}`}
+            message={`Join ${business.name} on Spendbox for member perks:`}
+            title="Add customers"
+            description={`Customers join ${business.name} from your link. Share it on WhatsApp, or print your QR code for the counter.`}
           />
         }
       />

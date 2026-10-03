@@ -107,8 +107,15 @@ do $$ begin
   raise exception 'FAILED: customer changed verified phone';
 exception when insufficient_privilege then raise notice 'ok - the verified phone number cannot be edited';
 end $$;
-update public.profiles set full_name = 'Ada Obi', gender = 'female' where id = auth.uid();
+do $$ begin
+  update public.profiles set full_name = 'Someone Else' where id = auth.uid();
+  raise exception 'FAILED: customer typed their own name';
+exception when insufficient_privilege then raise notice 'ok - names come from the bank and cannot be typed in';
+end $$;
+update public.profiles set gender = 'female' where id = auth.uid();
 reset role;
+-- The server sets the name from the customer's bank account.
+update public.profiles set full_name = 'Ada Obi' where id = '00000000-0000-0000-0000-00000000000a';
 
 -- Bayo joins from Ada's share link -----------------------------------------------
 select test.act_as('00000000-0000-0000-0000-00000000000b');
@@ -198,7 +205,11 @@ reset role;
 select test.act_as('00000000-0000-0000-0000-00000000000a');
 set role authenticated;
 update public.memberships set share_details = true where id = :'ada';
-update public.profiles set full_name = 'Ada Okafor', birth_month = extract(month from now())::smallint, birth_day = 3
+reset role;
+update public.profiles set full_name = 'Ada Okafor' where id = '00000000-0000-0000-0000-00000000000a';
+select test.act_as('00000000-0000-0000-0000-00000000000a');
+set role authenticated;
+update public.profiles set birth_month = extract(month from now())::smallint, birth_day = 3
 where id = auth.uid();
 select test.ok((select count(*) from public.rewards where kind = 'birthday' and status = 'available') = 1,
   'birthday treat arrives when the birthday month is added');

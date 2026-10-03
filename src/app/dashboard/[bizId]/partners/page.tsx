@@ -28,7 +28,6 @@ export default async function PartnersPage({ params }: PageProps<"/dashboard/[bi
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
       <PageHeader
-        back={{ href: `/dashboard/${bizId}/perks`, label: "Perks" }}
         title="Partners"
         description="Team up with businesses that complement yours, and reach each other's customers."
       />

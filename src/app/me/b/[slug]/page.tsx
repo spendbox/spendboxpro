@@ -4,6 +4,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PerkIcon } from "@/components/perks/perk-card";
 import { ReadyPerks } from "@/components/perks/ready-perks";
+import { ShareButton } from "@/components/ui/share-button";
+import { cn } from "@/lib/cn";
 import { PurchaseList } from "@/components/purchases/purchase-list";
 import { BusinessAvatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +28,7 @@ import { LeaveButton } from "./leave-button";
 export const metadata: Metadata = { title: "Business" };
 
 export default async function MemberBusinessPage({ params, searchParams }: PageProps<"/me/b/[slug]">) {
-  const [{ slug }, { welcome }] = await Promise.all([params, searchParams]);
+  const [{ slug }, { welcome, tab: tabParam }] = await Promise.all([params, searchParams]);
   const user = await requireUser(`/me/b/${slug}`);
   const [memberships, rewards, purchases, profile] = await Promise.all([
     getMyMemberships(user.id),
@@ -55,6 +57,14 @@ export default async function MemberBusinessPage({ params, searchParams }: PageP
   ]);
   const referrals = (referralData ?? []) as ReferralRow[];
 
+  const tabs = [
+    { key: "home", label: "Home" },
+    { key: "perks", label: "Perks" },
+    ...(partnerPerks.length ? [{ key: "partners", label: "Partners" }] : []),
+    { key: "settings", label: "Settings" },
+  ];
+  const tab = tabs.some((t) => t.key === tabParam) ? (tabParam as string) : "home";
+
   const inviteUrl = `${siteUrl()}/j/${b.slug}?ref=${membership.ref_code}`;
   const inviteMessage = welcomePerk
     ? `Join ${b.name} on Spendbox and get ${welcomePerk.title.toLowerCase()}:`
@@ -71,7 +81,7 @@ export default async function MemberBusinessPage({ params, searchParams }: PageP
             <p className="font-display text-lg font-bold text-brand-900">You&apos;re in! Welcome to {b.name}.</p>
             <p className="mt-0.5 text-sm text-brand-900/90">
               {myRewards.some((r) => r.kind === "welcome")
-                ? "Your welcome perk is ready — show your pass on your first order."
+                ? "Your welcome perk is ready. Tap it below on your first order."
                 : receiptsEnabled()
                   ? "Upload your receipts after you pay, and perks unlock automatically."
                   : "Every purchase here counts toward your perks, and they unlock automatically."}
@@ -110,8 +120,27 @@ export default async function MemberBusinessPage({ params, searchParams }: PageP
             href={`/me/b/${b.slug}/pass`}
             className={buttonClass({ variant: "secondary" }, "text-ink ring-0")}
           >
-            <Ticket className="size-4" aria-hidden /> Show my pass
+            <Ticket className="size-4" aria-hidden /> Member card
           </Link>
+          <ShareButton
+            variant="light"
+            label="Share"
+            url={inviteUrl}
+            message={inviteMessage}
+            title={`Share ${b.name}`}
+            description={referralPerk ? `You earn your perk when a friend who is new to ${b.name} makes their first purchase.` : undefined}
+          >
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-2xl bg-canvas p-3.5">
+                <p className="text-xs font-semibold text-muted uppercase">Your friend gets</p>
+                <p className="mt-1 font-semibold text-ink">{welcomePerk?.title ?? `${b.name} member perks`}</p>
+              </div>
+              <div className="rounded-2xl bg-violet-50 p-3.5">
+                <p className="text-xs font-semibold text-violet-900 uppercase">You get</p>
+                <p className="mt-1 font-semibold text-violet-950">{referralPerk ? referralPerk.title : "Their thanks"}</p>
+              </div>
+            </div>
+          </ShareButton>
           {b.whatsapp && (
             <a
               href={whatsappLink(b.whatsapp, `Hi ${b.name}, I'd like to order. (Spendbox member ${memberNo(membership.member_no)})`)}
@@ -125,7 +154,24 @@ export default async function MemberBusinessPage({ params, searchParams }: PageP
         </div>
       </section>
 
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:items-start">
+      <nav aria-label={`${b.name} sections`} className="-mx-4 -mt-3 flex gap-1 overflow-x-auto border-b border-line px-4 sm:mx-0 sm:px-0">
+        {tabs.map((t) => (
+          <Link
+            key={t.key}
+            href={t.key === "home" ? `/me/b/${b.slug}` : `/me/b/${b.slug}?tab=${t.key}`}
+            scroll={false}
+            aria-current={tab === t.key ? "page" : undefined}
+            className={cn(
+              "relative flex h-12 shrink-0 items-center px-4 text-[15px] font-semibold transition-colors",
+              tab === t.key ? "text-ink after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-ink" : "text-muted hover:text-ink",
+            )}
+          >
+            {t.label}
+          </Link>
+        ))}
+      </nav>
+
+      {tab === "home" && (
         <div className="flex flex-col gap-8">
           {myRewards.length > 0 && (
             <section className="flex flex-col gap-3">
@@ -133,7 +179,6 @@ export default async function MemberBusinessPage({ params, searchParams }: PageP
               <ReadyPerks perks={sortBySoonest(myRewards).map((r) => ({ ...r, businessName: b.name }))} limit={4} moreHref="/me/perks" />
             </section>
           )}
-
           {progress.length > 0 && (
             <section className="flex flex-col gap-3">
               <SectionTitle title="Your progress" />
@@ -151,7 +196,35 @@ export default async function MemberBusinessPage({ params, searchParams }: PageP
               </Card>
             </section>
           )}
+          <section className="flex flex-col gap-3">
+            <SectionTitle
+              title="Your purchases"
+              description={
+                receiptsEnabled()
+                  ? "Upload a receipt after you pay and it counts here."
+                  : `Pay ${b.name} by transfer, or let them record your purchase, and it counts here.`
+              }
+            />
+            <Card className="p-5">
+              {myPurchases.length === 0 ? (
+                <div className="flex flex-col items-start gap-3">
+                  <p className="text-muted">No purchases yet.</p>
+                  {receiptsEnabled() && (
+                    <Link href="/me/receipts" className={buttonClass({ variant: "soft", size: "sm" })}>
+                      Add a receipt
+                    </Link>
+                  )}
+                </div>
+              ) : (
+                <PurchaseList purchases={myPurchases} />
+              )}
+            </Card>
+          </section>
+        </div>
+      )}
 
+      {tab === "perks" && (
+        <div className="flex flex-col gap-8">
           <section className="flex flex-col gap-3">
             <SectionTitle title="Member perks" />
             {b.perks.length === 0 ? (
@@ -179,61 +252,13 @@ export default async function MemberBusinessPage({ params, searchParams }: PageP
               </Card>
             )}
           </section>
-
-          <PartnerOffers
-            rows={partnerPerks}
-            memberSlugs={new Set(memberships.map((m) => m.business.slug))}
-            description={`${b.name} teamed up with these businesses. Join them to earn their perks too.`}
-          />
-
           <section className="flex flex-col gap-3">
             <SectionTitle
-              title="Your purchases"
-              description={
-                receiptsEnabled()
-                  ? "Upload a receipt after you pay and it counts here."
-                  : `Pay ${b.name} by transfer, or let them record your purchase, and it counts here.`
-              }
+              title="Invite friends"
+              description={referralPerk ? `Earn “${referralPerk.title}” when a friend you invite makes their first purchase.` : `Share ${b.name} with friends who'd love it.`}
             />
-            <Card className="p-5">
-              {myPurchases.length === 0 ? (
-                <div className="flex flex-col items-start gap-3">
-                  <p className="text-muted">No purchases yet.</p>
-                  {receiptsEnabled() && (
-                    <Link href="/me/receipts" className={buttonClass({ variant: "soft", size: "sm" })}>
-                      Add a receipt
-                    </Link>
-                  )}
-                </div>
-              ) : (
-                <PurchaseList purchases={myPurchases} />
-              )}
-            </Card>
-          </section>
-        </div>
-
-        <div className="flex flex-col gap-8">
-          <section id="invite" className="flex scroll-mt-24 flex-col gap-3">
-            <SectionTitle title={`Share ${b.name}`} />
-            <Card className="flex flex-col gap-5 p-5">
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-                <div className="rounded-2xl bg-canvas p-3.5">
-                  <p className="text-xs font-semibold text-muted uppercase">Your friend gets</p>
-                  <p className="mt-1 font-semibold text-ink">{welcomePerk?.title ?? `${b.name} member perks`}</p>
-                </div>
-                <div className="rounded-2xl bg-violet-50 p-3.5">
-                  <p className="text-xs font-semibold text-violet-900 uppercase">You get</p>
-                  <p className="mt-1 font-semibold text-violet-950">
-                    {referralPerk ? referralPerk.title : "Their thanks"}
-                  </p>
-                </div>
-              </div>
+            <Card className="flex flex-col gap-4 p-5">
               <ShareLink url={inviteUrl} message={inviteMessage} title={`Join ${b.name}`} />
-              {referralPerk && (
-                <p className="text-sm text-muted">
-                  You earn your perk when a friend who is new to {b.name} makes their first purchase.
-                </p>
-              )}
               {referrals.length > 0 && (
                 <div className="flex flex-col gap-2 border-t border-line pt-4">
                   <p className="text-sm font-semibold text-ink">Friends who joined</p>
@@ -263,9 +288,23 @@ export default async function MemberBusinessPage({ params, searchParams }: PageP
               )}
             </Card>
           </section>
+        </div>
+      )}
 
+      {tab === "partners" && (
+        <div className="flex flex-col gap-8">
+          <PartnerOffers
+            rows={partnerPerks}
+            memberSlugs={new Set(memberships.map((m) => m.business.slug))}
+            description={`${b.name} teamed up with these businesses. Join them to earn their perks too.`}
+          />
+        </div>
+      )}
+
+      {tab === "settings" && (
+        <div className="flex flex-col gap-8">
           <section className="flex flex-col gap-3">
-            <SectionTitle title="Your privacy" />
+            <SectionTitle title="Privacy and membership" />
             <Card className="flex flex-col gap-4 p-5">
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -293,7 +332,7 @@ export default async function MemberBusinessPage({ params, searchParams }: PageP
             </Card>
           </section>
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { after } from "next/server";
 import { notifyPurchase, notifyRewardsReady } from "@/lib/notify";
 import { redirect } from "next/navigation";
 import { requireOwnedBusiness } from "@/lib/auth";
+import { appTimeZone } from "@/lib/env";
 import { BRAND_COLORS, cleanCategories } from "@/lib/constants";
 import { paystackConfigured, resolveAccount } from "@/lib/paystack";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -40,6 +41,16 @@ export async function setPurchaseStatus(bizId: string, purchaseId: string, statu
   return { ok: true };
 }
 
+/** Undo a purchase typed in by mistake (only within an hour). */
+export async function deleteRecordedPurchase(bizId: string, purchaseId: string) {
+  await requireOwnedBusiness(bizId);
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("delete_recorded_purchase", { p_purchase_id: purchaseId });
+  if (error) return { error: error.message };
+  refresh(bizId);
+  return { ok: true };
+}
+
 export async function recordPurchase(bizId: string, _prev: FormState, formData: FormData): Promise<FormState> {
   await requireOwnedBusiness(bizId);
   const membershipId = String(formData.get("membership_id") ?? "");
@@ -49,7 +60,9 @@ export async function recordPurchase(bizId: string, _prev: FormState, formData: 
   if (!membershipId) return { error: "Please choose a customer." };
   if (!amount || amount <= 0) return { error: "Please enter the amount paid." };
 
-  const paidAt = /^\d{4}-\d{2}-\d{2}$/.test(date) && date !== new Date().toISOString().slice(0, 10) ? `${date}T12:00:00Z` : new Date().toISOString();
+  // "Today" is now; another day is recorded at midday that day.
+  const todayHere = new Intl.DateTimeFormat("en-CA", { timeZone: appTimeZone() }).format(new Date());
+  const paidAt = /^\d{4}-\d{2}-\d{2}$/.test(date) && date < todayHere ? `${date}T12:00:00Z` : new Date().toISOString();
   const supabase = await createClient();
   const { data: purchaseId, error } = await supabase.rpc("record_purchase", {
     p_membership_id: membershipId,
@@ -148,6 +161,52 @@ export async function deletePerk(bizId: string, perkId: string) {
 }
 
 // Business settings ------------------------------------------------------------
+
+export type BusinessField = "name" | "categories" | "location" | "whatsapp" | "email" | "about" | "brand_color";
+
+/** Saves one business detail (from a settings card). */
+export async function updateBusinessField(bizId: string, field: BusinessField, value: string | string[]): Promise<FormState> {
+  await requireOwnedBusiness(bizId);
+  const text = typeof value === "string" ? value.trim() : "";
+  let update: Record<string, unknown>;
+  switch (field) {
+    case "name":
+      if (text.length < 2 || text.length > 80) return { error: "Please enter your business name." };
+      update = { name: text };
+      break;
+    case "categories": {
+      const categories = cleanCategories(Array.isArray(value) ? value : [value]);
+      if (categories.length === 0) return { error: "Pick at least one." };
+      update = { categories, category: categories[0] };
+      break;
+    }
+    case "location":
+      update = { location: text.slice(0, 80) || null };
+      break;
+    case "whatsapp":
+      update = { whatsapp: text.replace(/[^\d+]/g, "").slice(0, 20) || null };
+      break;
+    case "email":
+      if (text && !EMAIL.test(text.toLowerCase())) return { error: "Please check the email address." };
+      update = { email: text.toLowerCase() || null };
+      break;
+    case "about":
+      update = { about: text.slice(0, 280) || null };
+      break;
+    case "brand_color":
+      if (!BRAND_COLORS.includes(text)) return { error: "Pick one of the colours." };
+      update = { brand_color: text };
+      break;
+    default:
+      return { error: "Unknown setting." };
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.from("businesses").update(update).eq("id", bizId);
+  if (error) return { error: "Could not save. Please try again." };
+  refresh(bizId);
+  revalidatePath("/me", "layout");
+  return { ok: true };
+}
 
 export async function updateBusiness(bizId: string, _prev: FormState, formData: FormData): Promise<FormState> {
   await requireOwnedBusiness(bizId);
