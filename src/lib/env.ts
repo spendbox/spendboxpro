@@ -45,10 +45,10 @@ export function appTimeZone() {
 /** Country calling code pre-selected on phone number fields. */
 export const DEFAULT_COUNTRY_CODE = process.env.NEXT_PUBLIC_DEFAULT_COUNTRY_CODE ?? "234";
 
-/** Length of the free trial for new businesses, in days (default 90). */
+/** Starting length of the free trial for new businesses, in days (default 14). Changed later in /admin. */
 export function trialDays() {
-  const days = Number(process.env.NEXT_PUBLIC_TRIAL_DAYS ?? 90);
-  return Number.isFinite(days) && days > 0 ? Math.round(days) : 90;
+  const days = Number(process.env.NEXT_PUBLIC_TRIAL_DAYS ?? 14);
+  return Number.isFinite(days) && days > 0 ? Math.round(days) : 14;
 }
 
 /**

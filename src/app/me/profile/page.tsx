@@ -55,7 +55,7 @@ export default async function ProfilePage() {
       <section className="flex flex-col gap-3">
         <SectionTitle
           title="Who can see my details"
-          description="Businesses only see your name, phone, gender and birthday when you switch them on. Otherwise they see your member number and purchases."
+          description="Businesses only see your name, phone, email, gender and birthday when you switch them on. Otherwise they see your member number and purchases."
         />
         <Card className="divide-y divide-line px-5">
           {memberships.length === 0 ? (

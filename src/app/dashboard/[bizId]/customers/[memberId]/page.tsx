@@ -1,4 +1,4 @@
-import { Lock } from "lucide-react";
+import { Lock, Mail, Phone } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { PaymentRow } from "@/components/business/payment-row";
@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, SectionTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { WhatsAppIcon } from "@/components/ui/share-actions";
+import { buttonClass } from "@/components/ui/button";
 import { requireOwnedBusiness } from "@/lib/auth";
 import { getMembers, getPurchases, getRewards } from "@/lib/business";
 import { formatDate, formatMoney, formatMoneyShort, formatPhone, memberLabel, memberNo, MONTHS, whatsappLink } from "@/lib/format";
@@ -39,6 +40,26 @@ export default async function CustomerPage({ params }: PageProps<"/dashboard/[bi
         description={`${memberNo(m.member_no)} · joined ${formatDate(m.joined_at, { withYear: true })}${m.referred ? " · invited by a friend" : ""}`}
         actions={<RecordPurchase bizId={bizId} currency={business.currency} fixedMember={{ id: m.membership_id, label }} />}
       />
+
+      {m.shares_details && (m.phone || m.email) && (
+        <section aria-label="Contact" className="flex flex-wrap gap-2">
+          {m.phone && (
+            <a href={`tel:+${m.phone}`} className={buttonClass({ variant: "secondary" })}>
+              <Phone className="size-4" aria-hidden /> Call
+            </a>
+          )}
+          {m.phone && (
+            <a href={whatsappLink(m.phone)} target="_blank" rel="noreferrer" className={buttonClass({ variant: "secondary" })}>
+              <WhatsAppIcon className="size-4" /> WhatsApp
+            </a>
+          )}
+          {m.email && (
+            <a href={`mailto:${m.email}`} className={buttonClass({ variant: "secondary" })}>
+              <Mail className="size-4" aria-hidden /> Email
+            </a>
+          )}
+        </section>
+      )}
 
       <section className="grid grid-cols-3 gap-3">
         {[
@@ -79,6 +100,18 @@ export default async function CustomerPage({ params }: PageProps<"/dashboard/[bi
                     </dd>
                   </div>
                   <div className="flex justify-between gap-4 py-2.5">
+                    <dt className="text-muted">Email</dt>
+                    <dd className="min-w-0 text-right font-semibold break-all">
+                      {m.email ? (
+                        <a href={`mailto:${m.email}`} className="text-brand-700 hover:underline">
+                          {m.email}
+                        </a>
+                      ) : (
+                        "—"
+                      )}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-4 py-2.5">
                     <dt className="text-muted">Gender</dt>
                     <dd className="text-right font-semibold capitalize">{m.gender ?? "Not added"}</dd>
                   </div>
@@ -93,8 +126,8 @@ export default async function CustomerPage({ params }: PageProps<"/dashboard/[bi
                 <div className="flex items-start gap-3 text-sm text-muted">
                   <Lock className="mt-0.5 size-4 shrink-0" aria-hidden />
                   <p>
-                    This customer keeps their details private. You can see their purchases and give their perks using
-                    member number <span className="font-semibold text-ink">{memberNo(m.member_no)}</span>.
+                    This customer keeps their details private, so you can&apos;t call or email them. You can still see their
+                    purchases and give their perks using member number <span className="font-semibold text-ink">{memberNo(m.member_no)}</span>.
                   </p>
                 </div>
               )}

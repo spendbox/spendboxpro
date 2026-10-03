@@ -17,6 +17,8 @@ interface Overview {
   businesses_paused: number;
   on_trial: number;
   trial_ended: number;
+  paying: number;
+  revenue_30d: number;
   accounts: number;
   customers: number;
   customers_7d: number;
@@ -70,14 +72,9 @@ export default async function AdminHome({ searchParams }: PageProps<"/admin">) {
         <StatTile label="Customers" value={n(o.customers)} note={`+${n(o.customers_7d)} this week · ${plural(o.memberships, "membership")}`} href="/admin/customers?filter=customers" />
         <StatTile label="Sales counted" value={formatMoneyShort(o.sales_30d)} note={`${n(o.purchases_30d)} purchases · last 30 days`} />
         <StatTile label="Perks used" value={n(o.perks_given_30d)} note="Last 30 days" />
-        <StatTile
-          label="Free trial"
-          value={settings.trialEnabled ? n(o.on_trial) : "Off"}
-          note={settings.trialEnabled ? `on trial · ${n(o.trial_ended)} ended` : "Turned off in Settings"}
-          href={settings.trialEnabled ? "/admin/businesses?filter=trial" : "/admin/settings"}
-        />
+        <StatTile label="Paying businesses" value={n(o.paying)} note={`${formatMoneyShort(o.revenue_30d)} paid in the last 30 days`} href="/admin/businesses?filter=paying" />
+        <StatTile label="On free time" value={n(o.on_trial)} note={`${n(o.trial_ended)} need to pay`} href="/admin/businesses?filter=due" />
         <StatTile label="Banks connected" value={n(o.banks_connected)} note={`of ${plural(o.businesses, "business", "businesses")}`} />
-        <StatTile label="Accounts" value={n(o.accounts)} note="Everyone with a login" href="/admin/customers" />
         <StatTile label="Paused" value={n(o.businesses_paused + o.customers_paused)} note={`${n(o.businesses_paused)} businesses · ${n(o.customers_paused)} people`} />
       </div>
 

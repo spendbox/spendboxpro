@@ -17,6 +17,8 @@ export interface Profile {
   birth_year: number | null;
   email: string | null;
   email_notifications: boolean;
+  email_verified_at?: string | null;
+  suspended_at?: string | null;
 }
 
 export interface Business {
@@ -40,8 +42,13 @@ export interface Business {
   partners_auto_approve: boolean;
   /** Paused from the admin area. */
   suspended_at?: string | null;
-  /** Free-trial end set from the admin area (null = the usual length). */
+  /** When the free trial ends. */
   trial_ends_at?: string | null;
+  plan?: "starter" | "plus";
+  /** Paid up to here (null if never paid). */
+  paid_until?: string | null;
+  /** Why it's paused: "admin" or "billing" (unpaid). */
+  suspended_reason?: "admin" | "billing" | null;
 }
 
 export interface BankAccount {
@@ -132,6 +139,7 @@ export interface BusinessMemberRow {
   shares_details: boolean;
   full_name: string | null;
   phone: string | null;
+  email: string | null;
   gender: Gender | null;
   birth_day: number | null;
   birth_month: number | null;

@@ -37,7 +37,7 @@ export default async function CustomersPage({ params }: PageProps<"/dashboard/[b
       shared: m.shares_details,
       invited: m.referred,
       perksReady: m.rewards_ready,
-      search: [label, String(m.member_no), String(m.member_no).padStart(4, "0"), m.phone ?? ""].join(" ").toLowerCase(),
+      search: [label, String(m.member_no), String(m.member_no).padStart(4, "0"), m.phone ?? "", m.email ?? ""].join(" ").toLowerCase(),
     };
   });
 

@@ -5,6 +5,7 @@ import { after } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { senderKey } from "@/lib/bank/match";
 import { matchOpenPayments } from "@/lib/bank/sync";
+import { sendVerifyEmail } from "@/lib/email-links";
 import { FALLBACK_BANKS } from "@/lib/constants";
 import { listBanks, paystackConfigured, resolveAccount } from "@/lib/paystack";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -150,12 +151,21 @@ export async function saveBirthday(day: string, month: string, year: string): Pr
 export async function saveEmail(email: string, notifications: boolean): Promise<AccountResult> {
   const user = await requireUser();
   const clean = email.trim().toLowerCase();
-  if (clean && (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(clean) || clean.length > 200)) return { error: "Please check your email address." };
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(clean) || clean.length > 200) return { error: "Please check your email address." };
+  const admin = createAdminClient();
+  const { data: current } = await admin.from("profiles").select("email").eq("id", user.id).maybeSingle();
+
+  if (current?.email !== clean) {
+    const { data: taken } = await admin.from("profiles").select("id").eq("email", clean).neq("id", user.id).maybeSingle();
+    if (taken) return { error: "That email is already on another Spendbox account." };
+    // It's also the login email, so change it there too, then ask them to confirm it.
+    const { error } = await admin.auth.admin.updateUserById(user.id, { email: clean, email_confirm: true });
+    if (error) return { error: /already/i.test(error.message) ? "That email is already on another Spendbox account." : "Could not save. Please try again." };
+    await admin.from("profiles").update({ email: clean, email_verified_at: null }).eq("id", user.id);
+    after(() => sendVerifyEmail(user.id, clean).then(() => undefined).catch((e) => console.error("Verify email failed", e)));
+  }
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("profiles")
-    .update({ email: clean || null, email_notifications: notifications })
-    .eq("id", user.id);
+  const { error } = await supabase.from("profiles").update({ email_notifications: notifications }).eq("id", user.id);
   if (error) return { error: "Could not save. Please try again." };
   revalidatePath("/", "layout");
   return { ok: true };

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { requireOwnedBusiness } from "@/lib/auth";
 import { senderKey } from "@/lib/bank/match";
+import { billingState, PLANS } from "@/lib/billing";
 import { matchOpenPayments, syncBusiness, syncConnection } from "@/lib/bank/sync";
 import { testPaymentsEnabled } from "@/lib/settings";
 import { accountDetails, exchangeToken, monoConfigured, unlinkAccount } from "@/lib/mono";
@@ -70,6 +71,20 @@ export async function connectBank(bizId: string, code: string, email?: string): 
       .eq("account_number", details.accountNumber)
       .maybeSingle();
     existing = data;
+  }
+  // Each plan covers a number of connected accounts (Mono charges us per account).
+  if (!existing) {
+    const { count } = await admin.from("bank_connections").select("id", { count: "exact", head: true }).eq("business_id", bizId);
+    const { bankLimit, status } = billingState(business);
+    if ((count ?? 0) >= bankLimit) {
+      await unlinkAccount(accountId).catch((e) => console.error("Mono unlink failed", e));
+      return {
+        error:
+          status === "active" && business.plan !== "plus"
+            ? `Your Starter plan covers ${PLANS.starter.banks} bank account. Switch to Plus in Settings → Plan & billing to connect up to ${PLANS.plus.banks}.`
+            : `You can connect up to ${bankLimit} bank accounts.`,
+      };
+    }
   }
   let connectionId: string;
   if (existing) {

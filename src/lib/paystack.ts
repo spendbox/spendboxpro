@@ -1,7 +1,8 @@
 import "server-only";
 
-// Paystack is only used to look up bank names and account names. Spendbox
-// never moves money. Needs PAYSTACK_SECRET_KEY (Paystack → Settings → API Keys).
+// Paystack looks up bank and account names, and takes businesses' monthly
+// Spendbox payments. Spendbox never touches money between customers and
+// businesses. Needs PAYSTACK_SECRET_KEY (Paystack → Settings → API Keys).
 
 const BASE = process.env.PAYSTACK_BASE_URL ?? "https://api.paystack.co";
 
@@ -54,4 +55,33 @@ export async function resolveAccount(accountNumber: string, bankCode: string): P
   } catch {
     return { ok: false, error: "We couldn't reach Paystack. Please try again." };
   }
+}
+
+/** Starts a card/transfer payment on Paystack's page. Returns the page to send the payer to. */
+export async function initTransaction(input: { email: string; amountKobo: number; reference: string; callbackUrl: string; metadata: Record<string, unknown> }) {
+  const res = await fetch(`${BASE}/transaction/initialize`, {
+    method: "POST",
+    headers: { ...headers(), "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email: input.email,
+      amount: input.amountKobo,
+      currency: "NGN",
+      reference: input.reference,
+      callback_url: input.callbackUrl,
+      metadata: input.metadata,
+    }),
+    cache: "no-store",
+  });
+  const body = (await res.json().catch(() => null)) as { status?: boolean; message?: string; data?: { authorization_url?: string } } | null;
+  if (!res.ok || !body?.data?.authorization_url) throw new Error(body?.message ?? `Paystack returned ${res.status}`);
+  return body.data.authorization_url;
+}
+
+/** Asks Paystack whether a payment went through. Amount is in naira. */
+export async function verifyTransaction(reference: string) {
+  const res = await fetch(`${BASE}/transaction/verify/${encodeURIComponent(reference)}`, { headers: headers(), cache: "no-store" });
+  const body = (await res.json().catch(() => null)) as { data?: { status?: string; amount?: number; currency?: string; reference?: string } } | null;
+  const d = body?.data;
+  if (!res.ok || !d) return null;
+  return { paid: d.status === "success", amount: Number(d.amount ?? 0) / 100, currency: d.currency ?? "NGN", reference: d.reference ?? reference };
 }

@@ -12,9 +12,10 @@ import { FormMessage, Input } from "@/components/ui/field";
 type Step = "bank" | "birthday" | "email";
 
 /** New customer setup, one question per screen. */
-export function SetupFlow({ next, hasBank }: { next: string; hasBank: boolean }) {
+export function SetupFlow({ next, hasBank, hasEmail }: { next: string; hasBank: boolean; hasEmail: boolean }) {
   // Fixed when the page opens: adding the account refreshes the page, which mustn't shift the steps.
-  const [steps] = useState<Step[]>(() => (hasBank ? ["birthday", "email"] : ["bank", "birthday", "email"]));
+  // People who signed up with their email skip the email step (older phone accounts still get it).
+  const [steps] = useState<Step[]>(() => [...(hasBank ? [] : ["bank" as const]), "birthday" as const, ...(hasEmail ? [] : ["email" as const])]);
   const [index, setIndex] = useState(0);
   // Accounts added during this setup, and whether the form is showing.
   const [added, setAdded] = useState<string[]>([]);
@@ -51,8 +52,8 @@ export function SetupFlow({ next, hasBank }: { next: string; hasBank: boolean })
       hint: "For birthday treats. Businesses only see it if you choose to share your details.",
     },
     email: {
-      title: "Want emails when a perk is ready?",
-      hint: "Optional. We'll only email you about your perks and purchases. Businesses never see your email.",
+      title: "Add your email",
+      hint: "Optional. You can then log in with it, get perk alerts and reset your password if you forget it.",
     },
   };
 

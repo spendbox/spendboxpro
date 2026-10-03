@@ -1,4 +1,4 @@
-import { ChevronRight, Download, Gift, Handshake, History, Landmark, LogOut, TriangleAlert, type LucideIcon } from "lucide-react";
+import { ChevronRight, CreditCard, Download, Gift, Handshake, History, Landmark, LogOut, TriangleAlert, type LucideIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { QrCode } from "@/components/qr-code";
@@ -9,8 +9,9 @@ import { CopyButton } from "@/components/ui/share-actions";
 import { signOut } from "@/lib/actions/auth";
 import { requireOwnedBusiness } from "@/lib/auth";
 import { getPerks } from "@/lib/business";
+import { billingState, PLANS } from "@/lib/billing";
 import { siteUrl } from "@/lib/env";
-import { formatWhen, plural } from "@/lib/format";
+import { formatDate, formatWhen, plural } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 import { DeleteBusiness } from "./delete-business";
 import { BusinessDetailCards } from "./detail-cards";
@@ -54,6 +55,13 @@ export default async function SettingsPage({ params }: PageProps<"/dashboard/[bi
       : `${banks.map((c) => c.institution ?? "Bank").join(", ")} · checked ${formatWhen(banks[0].last_synced_at ?? new Date().toISOString())}`
     : "Not connected — connect it so transfers count by themselves";
   const activePerks = perks.filter((p) => p.is_active).length;
+  const billing = billingState(business);
+  const billingNote = {
+    trial: `Free trial until ${formatDate(billing.accessUntil)}`,
+    active: `${PLANS[billing.plan].name} · paid until ${formatDate(billing.accessUntil)}`,
+    due: "Payment due — pay to keep things running",
+    suspended: "Paused — pay to switch back on",
+  }[billing.status];
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-8">
@@ -70,6 +78,7 @@ export default async function SettingsPage({ params }: PageProps<"/dashboard/[bi
       <section className="flex flex-col gap-3">
         <SectionTitle title="Manage" />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <LinkCard href={`${base}/settings/billing`} icon={CreditCard} title="Plan & billing" note={billingNote} />
           <LinkCard href={`${base}/settings/bank`} icon={Landmark} title="Your bank" note={bankNote} />
           <LinkCard href={`${base}/perks`} icon={Gift} title="Perks" note={perks.length ? `${plural(activePerks, "perk")} on` : "Add your first perk"} />
           <LinkCard

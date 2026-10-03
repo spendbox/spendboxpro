@@ -84,6 +84,15 @@ test("two members who look the same are left for the business", () => {
   assert.deepEqual(decideMatch(pay("OKAFOR JOHN"), members, []), { kind: "none", reason: "ambiguous" });
 });
 
+test("a name learned for one member isn't used when another member has the same name", () => {
+  const learned = { senderKey: "JOHN OKAFOR", senderAccount: null, senderName: "OKAFOR JOHN" };
+  const members = [member("a", "John Okafor", [learned]), member("b", "John Okafor")];
+  assert.deepEqual(decideMatch(pay("OKAFOR JOHN"), members, []), { kind: "none", reason: "ambiguous" });
+  // An account number still tells them apart.
+  const withAccount = [member("a", "John Okafor", [{ ...learned, senderAccount: "1111111111" }]), member("b", "John Okafor", [{ senderKey: null, senderAccount: "2222222222", senderName: "OKAFOR JOHN" }])];
+  assert.deepEqual(decideMatch(pay("OKAFOR JOHN", { senderAccount: "2222222222" }), withAccount, []), { kind: "member", membershipId: "b", method: "payer" });
+});
+
 test("strangers are left for the business", () => {
   assert.deepEqual(decideMatch(pay("SOMEONE ELSE"), [member("a", "Ada Obi")], []), { kind: "none", reason: "unknown" });
 });

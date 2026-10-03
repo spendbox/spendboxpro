@@ -148,8 +148,16 @@ export function DetailCards({ profile, hasBank }: { profile: Profile | null; has
         icon={<Mail className="size-5" aria-hidden />}
         label="Email"
         value={profile?.email ?? "Not added"}
-        note={profile?.email ? (profile.email_notifications ? "Emails about perks are on" : "Emails are off") : "Optional — for perk alerts"}
-        description="Only used to tell you about your perks and purchases. Businesses never see it."
+        note={
+          profile?.email
+            ? !profile.email_verified_at
+              ? "Not confirmed yet: tap the link we emailed you"
+              : profile.email_notifications
+                ? "Confirmed · perk emails on"
+                : "Confirmed · perk emails off"
+            : "Add one to log in with it and get perk alerts"
+        }
+        description="You log in with this email. Businesses only see it if you share your details with them."
       >
         {(close) => <EmailEditor profile={profile} close={close} />}
       </EditCard>
@@ -180,6 +188,8 @@ export function BankAccountsCard({ accounts }: { accounts: MyAccountRow[] }) {
   const [, start] = useTransition();
   const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<MyAccountRow | null>(null);
+  const confirmName = confirming?.sender_name ? titleCase(confirming.sender_name) : "this account";
 
   return (
     <Card className="flex flex-col gap-1 p-4 sm:p-5">
@@ -208,13 +218,7 @@ export function BankAccountsCard({ accounts }: { accounts: MyAccountRow[] }) {
               variant="ghost"
               className="text-muted"
               aria-label={a.mine ? `Remove ${a.sender_name ?? "this account"}` : `This isn't me: stop counting payments from ${a.sender_name ?? "this account"}`}
-              onClick={() => {
-                if (a.mine && !confirm("Remove this account? Transfers from it won't count by themselves any more.")) return;
-                start(async () => {
-                  remove(a.id);
-                  await (a.mine ? removeMyBankAccount(a.id) : forgetPayer(a.id));
-                });
-              }}
+              onClick={() => setConfirming(a)}
             >
               {a.mine ? <Trash className="size-4" aria-hidden /> : <X className="size-4" aria-hidden />}
               {a.mine ? "Remove" : "Not me"}
@@ -226,6 +230,36 @@ export function BankAccountsCard({ accounts }: { accounts: MyAccountRow[] }) {
       <Button variant="soft" className="mt-2 self-start" onClick={() => setAdding(true)}>
         <Plus className="size-4" aria-hidden /> Add {shown.some((a) => a.mine) ? "another" : "an"} account
       </Button>
+      <Modal
+        open={confirming !== null}
+        onClose={() => setConfirming(null)}
+        title={confirming?.mine ? "Remove this account?" : "Not your account?"}
+        description={
+          confirming?.mine
+            ? `Transfers from ${confirmName} won't count for you by themselves any more. You can add it again later.`
+            : `We'll stop counting payments from ${confirmName} for you, and remove it from your list.`
+        }
+      >
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button variant="secondary" onClick={() => setConfirming(null)}>
+            Keep it
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              const a = confirming;
+              setConfirming(null);
+              if (!a) return;
+              start(async () => {
+                remove(a.id);
+                await (a.mine ? removeMyBankAccount(a.id) : forgetPayer(a.id));
+              });
+            }}
+          >
+            {confirming?.mine ? "Remove account" : "Yes, remove it"}
+          </Button>
+        </div>
+      </Modal>
       <Modal
         open={adding}
         onClose={() => setAdding(false)}

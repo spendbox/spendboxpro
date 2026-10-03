@@ -4,7 +4,6 @@ import { AddTeamMember, TeamRow } from "@/components/admin/controls";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { allowed, requireAdmin, ROLE_LABELS, type AdminRole } from "@/lib/admin/session";
-import { DEFAULT_COUNTRY_CODE } from "@/lib/env";
 import { formatDate, formatPhone } from "@/lib/format";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -16,7 +15,7 @@ export default async function AdminTeam() {
   const supabase = createAdminClient();
   const { data: members } = await supabase.from("admin_members").select("user_id, role, created_at, added_by").order("created_at");
   const ids = (members ?? []).map((m) => m.user_id);
-  const { data: people } = ids.length ? await supabase.from("profiles").select("id, phone, full_name").in("id", ids) : { data: [] };
+  const { data: people } = ids.length ? await supabase.from("profiles").select("id, phone, email, full_name").in("id", ids) : { data: [] };
   const byId = new Map((people ?? []).map((p) => [p.id, p]));
 
   return (
@@ -45,10 +44,10 @@ export default async function AdminTeam() {
               <li key={m.user_id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <Link href={`/admin/customers/${m.user_id}`} className="font-semibold underline-offset-2 hover:underline">
-                    {p?.full_name ?? formatPhone(p?.phone)}
+                    {p?.full_name ?? p?.email ?? formatPhone(p?.phone)}
                   </Link>
                   <p className="text-sm text-muted">
-                    {p?.full_name ? `${formatPhone(p.phone)} · ` : ""}added {formatDate(m.created_at)}
+                    {p?.full_name ? `${p.email ?? formatPhone(p.phone)} · ` : ""}added {formatDate(m.created_at)}
                   </p>
                 </div>
                 {owner ? <TeamRow userId={m.user_id} role={m.role} /> : <p className="text-sm font-semibold">{ROLE_LABELS[m.role as AdminRole].label}</p>}
@@ -61,8 +60,8 @@ export default async function AdminTeam() {
       {owner ? (
         <Card className="p-5">
           <h2 className="mb-1 font-display text-lg font-bold">Add someone</h2>
-          <p className="mb-4 text-sm text-muted">They need a Spendbox account first. After you add them, they log in to Spendbox as usual and open /admin.</p>
-          <AddTeamMember defaultCountry={DEFAULT_COUNTRY_CODE} />
+          <p className="mb-4 text-sm text-muted">They need a Spendbox account first. Use the email they log in with. After you add them, they log in to Spendbox as usual and open /admin.</p>
+          <AddTeamMember />
         </Card>
       ) : (
         <p className="text-sm text-muted">Only the main admin can change the team.</p>

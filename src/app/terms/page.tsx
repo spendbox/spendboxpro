@@ -24,7 +24,7 @@ export default function TermsPage() {
 
       <h2>Your account</h2>
       <ul>
-        <li>You sign in with your phone number and a PIN. Keep your PIN private; you are responsible for what happens in your account.</li>
+        <li>You sign in with your email and a password. Keep your password private; you are responsible for what happens in your account.</li>
         <li>Use your own phone number and give accurate information.</li>
         <li>You must be at least 13 years old, or have a parent&apos;s or guardian&apos;s permission where the law requires it.</li>
         <li>Tell us at <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> if you think someone else is using your account.</li>
@@ -88,11 +88,18 @@ export default function TermsPage() {
         <li>You keep ownership of your name, logo and content, and let us show them in Spendbox so the service works.</li>
       </ul>
 
-      <h2>Free trial and fees</h2>
+      <h2>Free trial, plans and fair use</h2>
       <p>
-        Businesses start on a free trial. We plan to introduce paid plans after the trial. We will tell you the price
-        and give you notice before any fee applies, and you will never be charged without agreeing first. Spendbox is
-        free for customers.
+        Businesses start on a free trial. After it, Spendbox is a monthly plan: Starter (one connected bank account) or
+        Plus (up to five). Current prices are shown in your dashboard under Settings → Plan &amp; billing, and you only pay
+        when you choose to, through Paystack. Price changes apply to your next payment, never to months you&apos;ve
+        already paid for. Spendbox is free for customers.
+      </p>
+      <p>
+        <strong>Fair use.</strong> We pay our bank-data partner for every connected bank account. If a plan isn&apos;t paid
+        within 14 days after the trial or the last paid month ends, we pause the business (new customers can&apos;t join)
+        and disconnect its bank accounts from Spendbox. Your money and your bank account are never affected, and your
+        customers keep their perks. Paying switches the business back on; you&apos;ll just need to reconnect your bank.
       </p>
 
       <h2>Acceptable use</h2>

@@ -27,8 +27,8 @@ export default function PrivacyPage() {
       <h2>What we collect</h2>
       <ul>
         <li>
-          <strong>Account:</strong> your phone number and a PIN you choose (we store the PIN in scrambled form, never in
-          plain text).
+          <strong>Account:</strong> your email, a password you choose (stored in scrambled form, never in plain text) and,
+          if you add it, your phone number. We email you a link to confirm your email address.
         </li>
         <li>
           <strong>Bank accounts you pay from:</strong> the bank, account number and the account name your bank gives us
@@ -77,7 +77,7 @@ export default function PrivacyPage() {
           To send emails about perks and purchases, if you add an email and leave notifications on — your consent. You
           can switch this off at any time in Profile &amp; privacy.
         </li>
-        <li>To share your name, phone, gender and birthday with a business — only if you switch sharing on for it (your consent).</li>
+        <li>To share your name, phone, email, gender and birthday with a business — only if you switch sharing on for it (your consent).</li>
         <li>To prevent fraud, such as using the same receipt twice — our legitimate interest in keeping perks fair.</li>
         <li>To meet legal obligations where we must.</li>
       </ul>
@@ -103,9 +103,9 @@ export default function PrivacyPage() {
       <h2>What businesses can see</h2>
       <p>
         A business you join always sees your member number, when you joined, your purchases with it (including receipts
-        you uploaded for it) and the perks you earned there. It sees your name, phone number, gender and birthday{" "}
-        <strong>only if you switch sharing on</strong> for that business. Businesses never see your email address, your
-        PIN, the list of bank accounts recognised as you, or anything about other businesses you belong to.
+        you uploaded for it) and the perks you earned there. It sees your name, phone number, email, gender and birthday{" "}
+        <strong>only if you switch sharing on</strong> for that business. Businesses never see your
+        password, the list of bank accounts recognised as you, or anything about other businesses you belong to.
       </p>
 
       <h2>Partner businesses</h2>

@@ -16,8 +16,12 @@ function escape(text: string) {
   return text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 
-export async function sendEmail({ to, subject, html, text }: { to: string; subject: string; html: string; text: string }) {
-  if (!emailConfigured() || !(await getSettings()).emailsEnabled) return;
+/**
+ * Sends one email. "essential" emails (confirming an email address, resetting a
+ * password, billing) still go out when emails are switched off in the admin area.
+ */
+export async function sendEmail({ to, subject, html, text, essential }: { to: string; subject: string; html: string; text: string; essential?: boolean }) {
+  if (!emailConfigured() || (!essential && !(await getSettings()).emailsEnabled)) return;
   try {
     const res = await fetch(`${API}/emails`, {
       method: "POST",

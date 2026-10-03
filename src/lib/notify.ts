@@ -13,10 +13,11 @@ const BUSINESS_FOOTER = "You get these emails because this email is on your Spen
 async function customerContact(customerId: string) {
   const { data } = await createAdminClient()
     .from("profiles")
-    .select("email, email_notifications, full_name")
+    .select("email, email_notifications, email_verified_at, full_name")
     .eq("id", customerId)
     .maybeSingle();
-  return data?.email && data.email_notifications ? { email: data.email as string, name: data.full_name as string | null } : null;
+  // Only confirmed addresses, so a typo never sends someone else your perks.
+  return data?.email && data.email_notifications && data.email_verified_at ? { email: data.email as string, name: data.full_name as string | null } : null;
 }
 
 function hello(name: string | null) {

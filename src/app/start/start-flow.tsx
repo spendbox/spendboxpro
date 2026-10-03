@@ -2,7 +2,7 @@
 
 import { ArrowLeft, ArrowRight, LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
-import { PhoneSignIn } from "@/components/auth/phone-sign-in";
+import { EmailSignIn } from "@/components/auth/email-sign-in";
 import { Button } from "@/components/ui/button";
 import { MultiCombobox } from "@/components/ui/combobox";
 import { FormMessage, Input } from "@/components/ui/field";
@@ -23,7 +23,7 @@ const STEPS: { key: StepKey; optional?: boolean }[] = [
 
 /** Business sign-up, one question per screen. */
 export function StartFlow({ signedIn }: { signedIn: boolean }) {
-  // Someone already logged in doesn't need the phone & PIN step.
+  // Someone already logged in doesn't need the account step.
   const steps = signedIn ? STEPS.filter((s) => s.key !== "account") : STEPS;
   const [index, setIndex] = useState(0);
   const [details, setDetails] = useState<NewBusiness>({ name: "", categories: [], location: "", whatsapp: "" });
@@ -136,8 +136,8 @@ export function StartFlow({ signedIn }: { signedIn: boolean }) {
       ),
     },
     account: {
-      title: "Last step: your phone number and a PIN",
-      hint: `You'll use them to log in to ${name || "your business"}'s dashboard.`,
+      title: "Last step: your email and a password",
+      hint: `You'll use them to log in to ${name || "your business"}'s dashboard. We'll send a link to confirm your email.`,
       body: null,
     },
   };
@@ -172,7 +172,7 @@ export function StartFlow({ signedIn }: { signedIn: boolean }) {
         </div>
 
         {step.key === "account" ? (
-          <PhoneSignIn allowSignup submitLabel="Create my link" onSignedIn={() => createBusiness(payload())} />
+          <EmailSignIn allowSignup submitLabel="Create my link" onSignedIn={() => createBusiness(payload())} />
         ) : (
           <form
             className="flex flex-col gap-4"

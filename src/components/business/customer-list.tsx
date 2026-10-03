@@ -39,7 +39,7 @@ export function CustomerList({ bizId, rows }: { bizId: string; rows: CustomerLis
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by name, phone or member number"
+          placeholder="Search by name, phone, email or member number"
           className="h-12 w-full rounded-2xl border border-line-strong bg-white pr-4 pl-11 text-[15px] outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/10"
         />
       </label>

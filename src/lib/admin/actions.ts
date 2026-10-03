@@ -1,11 +1,13 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { adminFor, logAdmin, type AdminRole } from "@/lib/admin/session";
+import { billingState, PLANS, priceFor, type PlanKey } from "@/lib/billing";
 import { DEFAULT_COUNTRY_CODE } from "@/lib/env";
 import { normalizePhone } from "@/lib/phone";
-import { saveSetting, type AppSettings } from "@/lib/settings";
+import { getSettings, saveSetting, type NumberName, type SwitchName } from "@/lib/settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Everything the admin area changes. Each action checks the admin's role
@@ -24,7 +26,7 @@ function refresh() {
 
 // ------------------------------------------------------------------ Settings
 
-const SWITCH_LABELS: Record<Exclude<keyof AppSettings, "trialDays">, string> = {
+const SWITCH_LABELS: Record<SwitchName, string> = {
   trialEnabled: "Free trial",
   signupsOpen: "New business sign-ups",
   joinsOpen: "Customers joining",
@@ -32,7 +34,7 @@ const SWITCH_LABELS: Record<Exclude<keyof AppSettings, "trialDays">, string> = {
   testPayments: "Test payments",
 };
 
-export async function setSwitch(name: Exclude<keyof AppSettings, "trialDays">, on: boolean): Promise<AdminResult> {
+export async function setSwitch(name: SwitchName, on: boolean): Promise<AdminResult> {
   const admin = await adminFor("manager");
   if (typeof admin === "string") return { error: admin };
   if (!(name in SWITCH_LABELS)) return { error: "Unknown setting." };
@@ -42,13 +44,21 @@ export async function setSwitch(name: Exclude<keyof AppSettings, "trialDays">, o
   return { ok: true };
 }
 
-export async function setTrialDays(days: number): Promise<AdminResult> {
+const NUMBER_RULES: Record<NumberName, { min: number; max: number; label: (n: number) => string; error: string }> = {
+  trialDays: { min: 1, max: 3650, label: (n) => `Free trial length set to ${n} days`, error: "Choose between 1 and 3650 days." },
+  priceStarter: { min: 0, max: 10_000_000, label: (n) => `Starter price set to ₦${n.toLocaleString("en-NG")} a month`, error: "Type a price in naira." },
+  pricePlus: { min: 0, max: 10_000_000, label: (n) => `Plus price set to ₦${n.toLocaleString("en-NG")} a month`, error: "Type a price in naira." },
+};
+
+export async function setNumberSetting(name: NumberName, value: number): Promise<AdminResult> {
   const admin = await adminFor("manager");
   if (typeof admin === "string") return { error: admin };
-  const n = Math.round(Number(days));
-  if (!Number.isFinite(n) || n < 1 || n > 3650) return { error: "Choose between 1 and 3650 days." };
-  await saveSetting("trialDays", n, admin.name);
-  await logAdmin(admin.name, "setting", { type: "setting", id: "trialDays" }, `Free trial length set to ${n} days`);
+  const rule = NUMBER_RULES[name];
+  if (!rule) return { error: "Unknown setting." };
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n) || n < rule.min || n > rule.max) return { error: rule.error };
+  await saveSetting(name, n, admin.name);
+  await logAdmin(admin.name, "setting", { type: "setting", id: name }, rule.label(n));
   refresh();
   return { ok: true };
 }
@@ -67,7 +77,7 @@ export async function setBusinessPaused(id: string, paused: boolean): Promise<Ad
   if (!name) return { error: "That business no longer exists." };
   const { error: dbError } = await createAdminClient()
     .from("businesses")
-    .update({ suspended_at: paused ? new Date().toISOString() : null })
+    .update({ suspended_at: paused ? new Date().toISOString() : null, suspended_reason: paused ? "admin" : null })
     .eq("id", id);
   if (dbError) return { error: dbError.message };
   await logAdmin(admin.name, paused ? "business_paused" : "business_unpaused", { type: "business", id }, `${paused ? "Paused" : "Unpaused"} ${name}`);
@@ -76,42 +86,74 @@ export async function setBusinessPaused(id: string, paused: boolean): Promise<Ad
 }
 
 /**
- * Changes one business's free trial: "extend" adds days to the current end,
- * "date" sets an end date (YYYY-MM-DD), "end" ends it now, "default" goes back
- * to the usual length.
+ * Free time for one business: "give" adds days on top of whatever time it has
+ * left (and switches it back on if it was paused for not paying), "date" sets
+ * when its free time ends, and "end" ends it now.
  */
 export async function setBusinessTrial(
   id: string,
-  change: { kind: "extend"; days: number; currentEnd: string } | { kind: "date"; date: string } | { kind: "end" } | { kind: "default" },
+  change: { kind: "give"; days: number; label: string } | { kind: "date"; date: string } | { kind: "end" },
 ): Promise<AdminResult> {
   const admin = await adminFor("support");
   if (typeof admin === "string") return { error: admin };
-  const name = await businessName(id);
-  if (!name) return { error: "That business no longer exists." };
+  const supabase = createAdminClient();
+  const { data: b } = await supabase.from("businesses").select("*").eq("id", id).maybeSingle();
+  if (!b) return { error: "That business no longer exists." };
 
-  let endsAt: string | null;
+  let endsAt: string;
   let summary: string;
-  if (change.kind === "extend") {
+  if (change.kind === "give") {
     const days = Math.round(Number(change.days));
     if (!Number.isFinite(days) || days < 1 || days > 3650) return { error: "Choose between 1 and 3650 days." };
-    const from = Math.max(new Date(change.currentEnd).getTime() || 0, Date.now());
+    const from = Math.max(billingState(b).accessUntil.getTime(), Date.now());
     endsAt = new Date(from + days * DAY).toISOString();
-    summary = `Extended ${name}'s trial by ${days} days`;
+    summary = `Gave ${b.name} ${change.label.slice(0, 30)} free`;
   } else if (change.kind === "date") {
     const date = new Date(`${change.date}T23:59:00`);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(change.date) || Number.isNaN(date.getTime())) return { error: "Pick a date." };
     endsAt = date.toISOString();
-    summary = `Set ${name}'s trial to end on ${change.date}`;
-  } else if (change.kind === "end") {
-    endsAt = new Date().toISOString();
-    summary = `Ended ${name}'s trial`;
+    summary = `Set ${b.name}'s free time to end on ${change.date}`;
   } else {
-    endsAt = null;
-    summary = `Put ${name}'s trial back to the usual length`;
+    endsAt = new Date().toISOString();
+    summary = `Ended ${b.name}'s free time`;
   }
-  const { error: dbError } = await createAdminClient().from("businesses").update({ trial_ends_at: endsAt }).eq("id", id);
+  const unpause = b.suspended_reason === "billing" && new Date(endsAt).getTime() > Date.now();
+  const { error: dbError } = await supabase
+    .from("businesses")
+    .update({ trial_ends_at: endsAt, billing_notice: null, ...(unpause ? { suspended_at: null, suspended_reason: null } : {}) })
+    .eq("id", id);
   if (dbError) return { error: dbError.message };
   await logAdmin(admin.name, "business_trial", { type: "business", id }, summary);
+  refresh();
+  return { ok: true };
+}
+
+/** A payment made outside Paystack (e.g. a bank transfer to Spendbox). */
+export async function recordManualPayment(id: string, plan: PlanKey, months: number, note: string): Promise<AdminResult> {
+  const admin = await adminFor("manager");
+  if (typeof admin === "string") return { error: admin };
+  if (!(plan in PLANS)) return { error: "Pick a plan." };
+  const n = Math.round(Number(months));
+  if (!Number.isFinite(n) || n < 1 || n > 24) return { error: "Choose between 1 and 24 months." };
+  const supabase = createAdminClient();
+  const name = await businessName(id);
+  if (!name) return { error: "That business no longer exists." };
+  const amount = priceFor(plan, await getSettings()) * n;
+  const reference = `manual_${randomUUID().replace(/-/g, "")}`;
+  const { error: insertError } = await supabase.from("business_payments").insert({
+    business_id: id,
+    reference,
+    plan,
+    months: n,
+    amount,
+    method: "manual",
+    note: note.trim().slice(0, 200) || null,
+    recorded_by: admin.name,
+  });
+  if (insertError) return { error: insertError.message };
+  const { error: applyError } = await supabase.rpc("apply_business_payment", { p_reference: reference, p_amount: amount });
+  if (applyError) return { error: applyError.message };
+  await logAdmin(admin.name, "business_payment", { type: "business", id }, `Recorded ${n} month${n === 1 ? "" : "s"} of ${PLANS[plan].name} for ${name}`);
   refresh();
   return { ok: true };
 }
@@ -172,18 +214,24 @@ export async function deleteCustomerAsAdmin(id: string, confirm: string): Promis
 
 // ---------------------------------------------------------------------- Team
 
-export async function addTeamMember(country: string, phone: string, role: Exclude<AdminRole, "owner">): Promise<AdminResult> {
+export async function addTeamMember(contact: string, role: Exclude<AdminRole, "owner">): Promise<AdminResult> {
   const admin = await adminFor("owner");
   if (typeof admin === "string") return { error: admin };
   if (!["viewer", "support", "manager"].includes(role)) return { error: "Pick a role." };
-  const digits = normalizePhone(country || DEFAULT_COUNTRY_CODE, phone);
-  if (!digits) return { error: "That phone number doesn't look right." };
+  const value = contact.trim().toLowerCase();
   const supabase = createAdminClient();
-  const { data: profile } = await supabase.from("profiles").select("id, full_name").eq("phone", digits).maybeSingle();
-  if (!profile) return { error: "No Spendbox account uses that number yet. Ask them to sign up first, then add them." };
+  let query = supabase.from("profiles").select("id");
+  if (value.includes("@")) query = query.eq("email", value);
+  else {
+    const digits = normalizePhone(DEFAULT_COUNTRY_CODE, value);
+    if (!digits) return { error: "Type their email, or a phone number." };
+    query = query.eq("phone", digits);
+  }
+  const { data: profile } = await query.maybeSingle();
+  if (!profile) return { error: "No Spendbox account uses that yet. Ask them to sign up first, then add them." };
   const { error: dbError } = await supabase.from("admin_members").upsert({ user_id: profile.id, role, added_by: admin.name });
   if (dbError) return { error: dbError.message };
-  await logAdmin(admin.name, "team_added", { type: "customer", id: profile.id }, `Gave +${digits} ${role} access`);
+  await logAdmin(admin.name, "team_added", { type: "customer", id: profile.id }, `Gave ${value} ${role} access`);
   revalidatePath("/admin/team");
   return { ok: true };
 }

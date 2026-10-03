@@ -1,5 +1,6 @@
 import { LogOut, Store } from "lucide-react";
 import Link from "next/link";
+import { ConfirmEmailBanner } from "@/components/auth/confirm-email-banner";
 import { AppShell } from "@/components/shell/app-shell";
 import type { NavItem } from "@/components/shell/nav";
 import { getOwnedBusinesses, requireUser } from "@/lib/auth";
@@ -19,7 +20,7 @@ const NAV: NavItem[] = receiptsEnabled()
     ];
 
 export default async function CustomerLayout({ children }: LayoutProps<"/me">) {
-  await requireUser("/me");
+  const user = await requireUser("/me");
   const owned = await getOwnedBusinesses();
 
   return (
@@ -57,6 +58,7 @@ export default async function CustomerLayout({ children }: LayoutProps<"/me">) {
         ) : null
       }
     >
+      <ConfirmEmailBanner userId={user.id} />
       {children}
     </AppShell>
   );

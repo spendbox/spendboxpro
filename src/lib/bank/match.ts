@@ -225,6 +225,9 @@ export function decideMatch(
   if (payment.senderKey) {
     const byKey = eligible.filter((m) => m.payers.some((p) => p.senderKey === payment.senderKey));
     if (byKey.length > 1) return { kind: "none", reason: "ambiguous" };
+    // A name learned for one member proves nothing if another member has the same name.
+    const twin = byKey.length === 1 && eligible.some((m) => m !== byKey[0] && namesMatch(m.fullName, payment.senderName));
+    if (twin) return { kind: "none", reason: "ambiguous" };
     if (byKey.length === 1) return settle(byKey[0].membershipId, "payer");
   }
 

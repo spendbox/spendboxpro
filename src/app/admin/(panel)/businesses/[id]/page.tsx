@@ -2,20 +2,19 @@ import { ExternalLink } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { DeleteWithConfirm, PauseBusinessButton, TrialEditor } from "@/components/admin/controls";
+import { DeleteWithConfirm, FreeTimeEditor, ManualPayment, PauseBusinessButton } from "@/components/admin/controls";
 import { Fact } from "@/components/admin/ui";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { allowed, requireAdmin } from "@/lib/admin/session";
-import { daysAgoIso, formatDate, formatMoney, formatPhone, isPast, plural } from "@/lib/format";
+import { billingState, PLANS, type PlanKey } from "@/lib/billing";
+import { daysAgoIso, formatDate, formatMoney, formatPhone, plural } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Business } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Business" };
-
-const DAY = 86_400_000;
 
 export default async function AdminBusiness({ params }: PageProps<"/admin/businesses/[id]">) {
   const [{ id }, admin, settings] = await Promise.all([params, requireAdmin(), getSettings()]);
@@ -26,16 +25,18 @@ export default async function AdminBusiness({ params }: PageProps<"/admin/busine
   const b = data as Business;
 
   const since30 = daysAgoIso(30);
-  const [owner, members, perks, banks, sales, sales30] = await Promise.all([
-    supabase.from("profiles").select("id, phone, full_name").eq("id", b.owner_id).maybeSingle(),
+  const [owner, members, perks, banks, sales, sales30, payments] = await Promise.all([
+    supabase.from("profiles").select("id, phone, email, full_name").eq("id", b.owner_id).maybeSingle(),
     supabase.from("memberships").select("id", { count: "exact", head: true }).eq("business_id", id),
     supabase.from("perks").select("id", { count: "exact", head: true }).eq("business_id", id).eq("is_active", true),
     supabase.from("bank_connections").select("institution, account_number, status").eq("business_id", id),
     supabase.from("purchases").select("amount").eq("business_id", id).eq("status", "verified"),
     supabase.from("purchases").select("amount").eq("business_id", id).eq("status", "verified").gte("paid_at", since30),
+    supabase.from("business_payments").select("id, plan, months, amount, method, note, recorded_by, paid_at").eq("business_id", id).eq("status", "paid").order("paid_at", { ascending: false }).limit(12),
   ]);
   const sum = (rows: { amount: number | string }[] | null) => (rows ?? []).reduce((s, r) => s + Number(r.amount), 0);
-  const trialEnd = b.trial_ends_at ?? new Date(new Date(b.created_at).getTime() + settings.trialDays * DAY).toISOString();
+  const billing = billingState(b);
+  const trialEnd = b.trial_ends_at ?? b.created_at;
   const canSupport = allowed(admin, "support");
   const canManage = allowed(admin, "manager");
 
@@ -62,13 +63,14 @@ export default async function AdminBusiness({ params }: PageProps<"/admin/busine
             <Fact label="Owner">
               {owner.data ? (
                 <Link href={`/admin/customers/${b.owner_id}`} className="text-brand-700 underline underline-offset-2">
-                  {owner.data.full_name ?? formatPhone(owner.data.phone)}
+                  {owner.data.full_name ?? owner.data.email ?? formatPhone(owner.data.phone)}
                 </Link>
               ) : (
                 "Unknown"
               )}
             </Fact>
-            <Fact label="Owner's phone">{formatPhone(owner.data?.phone)}</Fact>
+            <Fact label="Owner's email">{owner.data?.email ?? "Not added"}</Fact>
+            <Fact label="Owner's phone">{owner.data?.phone ? formatPhone(owner.data.phone) : "Not added"}</Fact>
             <Fact label="Signed up">{formatDate(b.created_at, { withYear: true })}</Fact>
             <Fact label="What they sell">{(b.categories?.length ? b.categories : [b.category]).filter(Boolean).join(", ") || "Not set"}</Fact>
             <Fact label="Area">{b.location || "Not set"}</Fact>
@@ -93,25 +95,45 @@ export default async function AdminBusiness({ params }: PageProps<"/admin/busine
       </div>
 
       <Card className="flex flex-col gap-4 p-5">
-        <div>
-          <h2 className="font-display text-lg font-bold">Free trial</h2>
-          <p className="text-sm text-muted">
-            {!settings.trialEnabled
-              ? "Free trials are switched off in Settings, so this business doesn't see a trial note."
-              : isPast(trialEnd)
-                ? `Ended on ${formatDate(trialEnd, { withYear: true })}.`
-                : `Ends on ${formatDate(trialEnd, { withYear: true })}.`}{" "}
-            {b.trial_ends_at ? "This date was set by an admin." : `That's the usual ${plural(settings.trialDays, "day")} from sign-up.`}
-          </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="font-display text-lg font-bold">Plan &amp; billing</h2>
+          <Badge tone={billing.status === "active" ? "green" : billing.status === "trial" ? "amber" : "red"}>
+            {billing.status === "active" ? `${PLANS[billing.plan].name} · paid` : billing.status === "trial" ? "Free time" : billing.status === "due" ? "Payment due" : "Paused for non-payment"}
+          </Badge>
         </div>
-        <TrialEditor id={b.id} currentEnd={trialEnd} custom={Boolean(b.trial_ends_at)} disabled={!canSupport} />
+        <dl className="divide-y divide-line">
+          <Fact label="Free time ends">{formatDate(trialEnd, { withYear: true })}</Fact>
+          <Fact label="Paid until">{b.paid_until ? `${formatDate(b.paid_until, { withYear: true })} (${PLANS[billing.plan].name})` : "Never paid"}</Fact>
+          {billing.status === "due" && <Fact label="Will be paused on">{formatDate(billing.suspendOn, { withYear: true })}</Fact>}
+        </dl>
+        <FreeTimeEditor id={b.id} currentEnd={trialEnd} disabled={!canSupport} />
+        <div className="flex flex-col gap-3 border-t border-line pt-4">
+          <p className="text-sm font-semibold">Record a payment made outside Paystack</p>
+          <ManualPayment id={b.id} prices={{ starter: settings.priceStarter, plus: settings.pricePlus }} disabled={!canManage} />
+        </div>
+        {(payments.data ?? []).length > 0 && (
+          <div className="flex flex-col gap-1 border-t border-line pt-4">
+            <p className="text-sm font-semibold">Payments</p>
+            <ul className="divide-y divide-line">
+              {(payments.data ?? []).map((p) => (
+                <li key={p.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                  <span>
+                    {PLANS[p.plan as PlanKey].name} · {plural(p.months, "month")} · {formatDate(p.paid_at, { withYear: true })}
+                    <span className="block text-muted">{p.method === "manual" ? `Recorded by ${p.recorded_by ?? "an admin"}${p.note ? ` · ${p.note}` : ""}` : "Paystack"}</span>
+                  </span>
+                  <span className="font-semibold tabular">{formatMoney(p.amount)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </Card>
 
       <Card className="flex flex-col gap-4 p-5">
         <div>
           <h2 className="font-display text-lg font-bold">Pause or delete</h2>
           <p className="text-sm text-muted">
-            Pausing stops new customers joining and shows the owner a paused notice. Members keep their perks. Deleting removes the
+            Pausing stops new customers joining and shows the owner a paused notice (for problems, not unpaid plans: those pause themselves). Members keep their perks. Deleting removes the
             business, its members, perks and payments for good.
           </p>
         </div>

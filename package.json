@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "node --test src/lib/receipts/match.test.ts src/lib/bank/match.test.ts src/lib/phone.test.ts",
+    "test": "node --test src/lib/receipts/match.test.ts src/lib/bank/match.test.ts src/lib/phone.test.ts src/lib/billing.test.ts",
     "test:db": "bash supabase/tests/run.sh"
   },
   "dependencies": {

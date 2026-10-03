@@ -19,7 +19,15 @@ export interface AppSettings {
   emailsEnabled: boolean;
   /** "Send a test payment" on the Payments page (never with live Mono keys). */
   testPayments: boolean;
+  /** Monthly price of the Starter plan (1 bank account), in naira. */
+  priceStarter: number;
+  /** Monthly price of the Plus plan (up to 5 bank accounts), in naira. */
+  pricePlus: number;
 }
+
+/** The on/off switches (the rest are numbers). */
+export type SwitchName = "trialEnabled" | "signupsOpen" | "joinsOpen" | "emailsEnabled" | "testPayments";
+export type NumberName = Exclude<keyof AppSettings, SwitchName>;
 
 const KEYS: Record<keyof AppSettings, string> = {
   trialEnabled: "trial_enabled",
@@ -28,6 +36,14 @@ const KEYS: Record<keyof AppSettings, string> = {
   joinsOpen: "joins_open",
   emailsEnabled: "emails_enabled",
   testPayments: "test_payments",
+  priceStarter: "price_starter",
+  pricePlus: "price_plus",
+};
+
+const NUMBERS: Partial<Record<keyof AppSettings, [number, number]>> = {
+  trialDays: [1, 3650],
+  priceStarter: [0, 10_000_000],
+  pricePlus: [0, 10_000_000],
 };
 
 function defaults(): AppSettings {
@@ -38,6 +54,8 @@ function defaults(): AppSettings {
     joinsOpen: true,
     emailsEnabled: true,
     testPayments: process.env.TEST_PAYMENTS === "on",
+    priceStarter: 2500,
+    pricePlus: 5000,
   };
 }
 
@@ -51,11 +69,12 @@ export const getSettings = cache(async (): Promise<AppSettings> => {
     for (const [name, key] of Object.entries(KEYS) as [keyof AppSettings, string][]) {
       const value = byKey.get(key);
       if (value === undefined || value === null) continue;
-      if (name === "trialDays") {
-        const days = Number(value);
-        if (Number.isFinite(days) && days >= 1 && days <= 3650) settings.trialDays = Math.round(days);
+      const range = NUMBERS[name];
+      if (range) {
+        const n = Number(value);
+        if (Number.isFinite(n) && n >= range[0] && n <= range[1]) (settings[name] as number) = Math.round(n);
       } else if (typeof value === "boolean") {
-        settings[name] = value;
+        (settings[name] as boolean) = value;
       }
     }
   } catch {

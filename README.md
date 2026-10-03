@@ -2,8 +2,8 @@
 
 Spendbox lets small businesses keep their customer list, track purchases and reward customers with perks.
 
-- **Businesses** sign up with their phone number and a PIN, start a free trial, and get a join link and QR code. They add perks as cards (welcome, loyalty, invite rewards, big spender, birthday), connect the bank account customers pay into (read-only, through Mono), and hand over perks.
-- **Customers** join only from a business's link (invite-only), using their phone number and a 6-digit PIN. They pay as usual: transfers are seen in the business's bank and counted for them automatically, with nothing to upload. They share businesses with friends, and choose, business by business, whether to share their details.
+- **Businesses** sign up with their email and a password, start a two-week free trial, then pay monthly (Starter or Plus), and get a join link and QR code. They add perks as cards (welcome, loyalty, invite rewards, big spender, birthday), connect the bank account customers pay into (read-only, through Mono), and hand over perks.
+- **Customers** join only from a business's link (invite-only), using their email and a password (their phone number is optional). They pay as usual: transfers are seen in the business's bank and counted for them automatically, with nothing to upload. They share businesses with friends, and choose, business by business, whether to share their details.
 
 Built with Next.js (hosted on Vercel), Supabase (database, login, file storage) and Mono (reads payments coming into a business's bank account).
 
@@ -11,7 +11,7 @@ Built with Next.js (hosted on Vercel), Supabase (database, login, file storage) 
 
 ## Set it up (about 20 minutes, no coding)
 
-You need accounts on **Supabase**, **Vercel**, **Mono** and **Paystack** (Paystack confirms the name on customers' bank accounts). Optional: **Resend** (sends notification emails).
+You need accounts on **Supabase**, **Vercel**, **Mono** and **Paystack** (Paystack confirms the name on customers' bank accounts). You'll also want **Resend**: it sends the email-confirmation and password-reset links, receipts and perk alerts.
 
 ### 1. Create the database (Supabase)
 
@@ -24,13 +24,14 @@ You need accounts on **Supabase**, **Vercel**, **Mono** and **Paystack** (Paysta
 7. Then [`supabase/migrations/20261005000000_partners.sql`](supabase/migrations/20261005000000_partners.sql) (partner businesses, and a fix for perk time limits).
 8. Then [`supabase/migrations/20261006000000_activity_and_accounts.sql`](supabase/migrations/20261006000000_activity_and_accounts.sql) (audit logs, deleting a typed-in purchase, customers' bank accounts).
 9. Then [`supabase/migrations/20261007000000_pay_accounts.sql`](supabase/migrations/20261007000000_pay_accounts.sql) (members can see which account to pay the business into).
-10. Then [`supabase/migrations/20261008000000_admin.sql`](supabase/migrations/20261008000000_admin.sql) (the admin area). Always run the files in order, each once.
+10. Then [`supabase/migrations/20261008000000_admin.sql`](supabase/migrations/20261008000000_admin.sql) (the admin area).
+11. Then [`supabase/migrations/20261009000000_email_and_billing.sql`](supabase/migrations/20261009000000_email_and_billing.sql) (email sign-up, contacting customers, paid plans). Always run the files in order, each once.
 
-### 2. Login: nothing to set up
+### 2. Login: email and password
 
-People log in with their **phone number and a 6-digit PIN** they choose the first time. No text messages are sent, so you don't need an SMS provider. Behind the scenes this uses Supabase's built-in email-and-password login (on by default under **Authentication → Sign In / Providers → Email** — leave it on). No emails are ever sent.
+People sign up with their **email and a password** (at least 8 characters); a phone number is optional. Spendbox emails them a link (through Resend) to confirm their email, and a **Forgot password?** link lets them choose a new password. This uses Supabase's built-in email-and-password login (on by default under **Authentication → Sign In / Providers → Email** — leave it on). You don't need to turn on Supabase's own confirmation emails: Spendbox sends its own.
 
-> Phone numbers are not verified yet, and there is no "forgot PIN" yet. To reset someone's PIN, open Supabase → **Authentication → Users**, find them by phone number and delete or update the user. Adding text-message or WhatsApp codes later is a small change.
+> Accounts made earlier with a phone number and PIN still work: on the login page, they type their phone number instead of an email, and their PIN as the password. They can add an email in Profile.
 
 ### 3. Mono (counts payments from the bank)
 
@@ -45,6 +46,8 @@ People log in with their **phone number and a 6-digit PIN** they choose the firs
 ### 4. Paystack (confirms customers' names) and Resend (emails, optional)
 
 - **Paystack**: when customers sign up they add the bank account they usually pay from, and Paystack tells us the name on it — that becomes their Spendbox name, and it's how their transfers are matched. In [Paystack](https://dashboard.paystack.com) go to **Settings → API Keys & Webhooks** and copy the **Secret Key** (use the live key; name lookups are free). Add it as `PAYSTACK_SECRET_KEY`. Without it, customers type the name on their account themselves.
+
+  Paystack also takes businesses' monthly payments. Under **Settings → API Keys & Webhooks**, set the **Live Webhook URL** to `https://<your site>/api/paystack/webhook`, so payments count even if someone closes the page before coming back. (Paystack signs webhooks with your secret key; nothing else to set.)
 
 - **Resend** (emails customers when a perk is ready or a transfer is counted, and emails businesses about new members): create an account at [resend.com](https://resend.com), add and verify your domain under **Domains**, then create an **API key**. Until a domain is verified, Resend only delivers to your own Resend login email.
 
@@ -78,7 +81,7 @@ Moving from Mono's sandbox to real banks: replace the two Mono keys with your `l
 
 ### 6. Try it
 
-1. Open your site → **For businesses** → **Start free**. Create a business with your phone number and a PIN.
+1. Open your site → **For businesses** → **Start free**. Create a business with your email and a password, then tap the link in the confirmation email.
 2. Add perks (Perks page). In **Settings → Your bank**, tap **Connect your bank** and pick a bank in Mono's window. With sandbox keys, use one of Mono's test banks and the test login Mono shows you.
 3. Open your join link in a private browser window and join as a customer with a different phone number. Add a bank account when asked; the name comes from the bank.
 4. Go back to **Payments**. Sandbox payments are made up by Mono, so most will be in **Who paid this?**: pick a customer for one. Every later payment from that sender counts for that customer by itself.
@@ -90,10 +93,10 @@ Moving from Mono's sandbox to real banks: replace the two Mono keys with your `l
 Open `your-site/admin` and log in with `ADMIN_EMAIL` and `ADMIN_PASSWORD`. It works on your phone too.
 
 - **Dashboard:** businesses, customers, sales counted, perks used, free trials, and charts of new members and businesses over the last 30 days.
-- **Businesses:** search, then open one to **pause** it (new customers can't join, and the owner sees a paused notice), change its **free trial** (+30 days, +90 days, pick a date, end it now, or back to the usual length) or **delete** it.
+- **Businesses:** search, then open one to **pause** it (new customers can't join, and the owner sees a paused notice), give it **free time** with one tap (7 days to 1 year), **record a payment** made outside Paystack, or **delete** it.
 - **People:** everyone with a login. **Pause** someone (they can't log in) or **delete** their account.
-- **Settings:** switch the **free trial** on or off and set its length, pause **new business sign-ups**, pause **customers joining**, switch **emails** off, and switch **test payments** on or off.
-- **Team** (main admin only): give someone access with their Spendbox phone number. They then log in to Spendbox as usual and open `/admin`. *Viewer* can only look, *Support* can also pause and change trials, *Manager* can also delete and change settings.
+- **Settings:** set the **prices** of Starter and Plus, switch the **free trial** for new businesses on or off and set its length, pause **new business sign-ups**, pause **customers joining**, switch **emails** off, and switch **test payments** on or off.
+- **Team** (main admin only): give someone access with the email they use on Spendbox. They then log in to Spendbox as usual and open `/admin`. *Viewer* can only look, *Support* can also pause and change trials, *Manager* can also delete and change settings.
 - **Activity:** every admin action, plus failed logins. After 8 wrong passwords from the same place, logins are blocked for 15 minutes.
 
 ---
@@ -104,7 +107,7 @@ Open `your-site/admin` and log in with `ADMIN_EMAIL` and `ADMIN_PASSWORD`. It wo
 
 **Free trial.** Every business dashboard shows a free-trial banner with the days left (90 days from sign-up by default) and says paid plans come after. Nothing is charged or switched off automatically. A friend's share link adds `?ref=…`, so the friend who shared it gets the invite reward when the new customer's first purchase counts.
 
-**Privacy.** Customers need only a phone number. Name, gender and birthday are optional, and each business sees them only if that customer switches sharing on for that business. Otherwise the business sees a member number and purchases. Details live in one place, so an edit shows up everywhere straight away. Customers can delete their account and everything in it. Members of a business can see the account numbers it gets paid into, so they know where to send transfers; nobody else can.
+**Privacy.** Customers sign up with an email. Name, phone, email, gender and birthday are seen by a business only if that customer switches sharing on for it. Otherwise the business sees a member number and purchases. Details live in one place, so an edit shows up everywhere straight away. Customers can delete their account and everything in it. Members of a business can see the account numbers it gets paid into, so they know where to send transfers; nobody else can.
 
 **Payments from the bank.** A business connects its bank account through Mono's secure window (read-only: Spendbox can see money coming in, never move it). When money arrives:
 - if the sender is already **recognised** as a member (same name or account number as an earlier payment, at any business on Spendbox), it counts for them straight away;
@@ -116,7 +119,13 @@ Payments from before someone joined don't count for them automatically. **Wrong 
 
 **Sales on the home screen.** Once a bank is connected, the business's home shows its balance, money in for the month (compared with the month before), a column chart of sales per day, and every payment that came in. Tap a day to see just that day; use the arrows or the month list to go back in time; sort payments by newest, oldest or largest. The first check reads the account's whole history from Mono. Payments from before connecting show in sales but are never matched to members or put in "Who paid this?". Money marked **Not a customer** is left out of sales. If the screen stays empty, Settings shows whether Mono has shared any payments yet.
 
-**Customer sign-up.** After their phone number and PIN, new customers answer one question per screen: the bank account they usually pay from (Paystack shows the bank's name for it, "Is this you?"), their birthday (optional) and an email (optional). Their name comes from the bank and can't be edited. They can add more accounts in Profile; each one helps match their transfers.
+**Plans and fair use.** New businesses get a free trial (two weeks by default). After it, they pay monthly through Paystack: **Starter** (₦2,500, one connected bank account) or **Plus** (₦5,000, up to five). Prices, the trial length and whether there's a trial at all are set in `/admin` → Settings. Owners pay from **Settings → Plan & billing** for 1, 3, 6 or 12 months; paid time starts when their current free or paid time ends, and they get an emailed receipt. The daily job reminds them before their trial or plan ends and when payment is due. If a business still hasn't paid **14 days after** its plan ends, it's paused (new customers can't join) and its bank accounts are disconnected from Mono, so you aren't charged for them. Paying switches it straight back on; they reconnect their bank. In `/admin`, open a business to give it free time with one tap (7 days, 2 weeks, 1 month, 3 months, 6 months, 1 year), set an exact end date, or record a payment made outside Paystack.
+
+**Contacting customers.** When a customer shares their details with a business, the business sees **Call**, **WhatsApp** and **Email** buttons on that customer's page (only for what the customer has added).
+
+**Customers with the same name.** Transfers are matched by account number first, then by name. If two members of a business have the same name and the bank shows only a name, Spendbox doesn't guess: the payment waits in **Who paid this?** for the business to pick.
+
+**Customer sign-up.** After their email and password (and an optional phone number), new customers answer one question per screen: the bank account they usually pay from (Paystack shows the bank's name for it, "Is this you?"; they can add more than one) and their birthday (optional). Their name comes from the bank and can't be edited. They can add more accounts in Profile; each one helps match their transfers.
 
 **Audits.** Every purchase recorded, confirmed, marked not received or deleted, and every perk earned, given or taken back, is written to an audit log automatically. Customers see their part under **Audits**; businesses see the whole log under **Settings → Audit log**. Nobody can edit it. A purchase a business typed in can be deleted within an hour of adding it (in case of a mistake); the deletion shows in the log.
 

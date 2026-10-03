@@ -24,7 +24,7 @@ export default async function AdminCustomer({ params }: PageProps<"/admin/custom
     supabase.from("admin_members").select("role").eq("user_id", id).maybeSingle(),
   ]);
   if (!p) notFound();
-  const name = (p.full_name as string | null) ?? formatPhone(p.phone);
+  const name = (p.full_name as string | null) ?? (p.email as string | null) ?? formatPhone(p.phone);
   const canSupport = allowed(admin, "support");
   const canManage = allowed(admin, "manager");
   const self = admin.userId === id;
@@ -46,9 +46,17 @@ export default async function AdminCustomer({ params }: PageProps<"/admin/custom
         <Card className="p-5">
           <h2 className="mb-1 font-display text-lg font-bold">Details</h2>
           <dl className="divide-y divide-line">
-            <Fact label="Phone">{formatPhone(p.phone)}</Fact>
+            <Fact label="Phone">{p.phone ? formatPhone(p.phone) : "Not added"}</Fact>
             <Fact label="Name (from their bank)">{p.full_name ?? "Not confirmed yet"}</Fact>
-            <Fact label="Email">{p.email ?? "Not added"}</Fact>
+            <Fact label="Email">
+              {p.email ? (
+                <span className="inline-flex flex-wrap items-center justify-end gap-2">
+                  {p.email} {p.email_verified_at ? <Badge tone="green">Confirmed</Badge> : <Badge tone="amber">Not confirmed</Badge>}
+                </span>
+              ) : (
+                "Not added"
+              )}
+            </Fact>
             <Fact label="Birthday">{birthday}</Fact>
             <Fact label="Bank accounts">{accounts ?? 0}</Fact>
             <Fact label="Joined Spendbox">{formatDate(p.created_at, { withYear: true })}</Fact>

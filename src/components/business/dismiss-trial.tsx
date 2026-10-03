@@ -13,7 +13,7 @@ export function DismissTrial({ children }: { children: ReactNode }) {
       {children}
       <button
         type="button"
-        aria-label="Close the free-trial note"
+        aria-label="Close the plan note"
         onClick={() => {
           document.cookie = `${TRIAL_HIDDEN_COOKIE}=1; path=/; SameSite=Lax`;
           setHidden(true);

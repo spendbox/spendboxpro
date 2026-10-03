@@ -23,7 +23,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
         <div>
           <h1 className="font-display text-3xl font-bold tracking-tight">{business ? "Welcome back" : "Your Spendbox"}</h1>
           <p className="mt-2 text-muted">
-            {business ? "Log in to your business with your phone number and PIN." : "Log in with your phone number and PIN."}
+            {business ? "Log in to your business with your email and password." : "Log in with your email and password."}
           </p>
         </div>
         <LoginForm next={nextPath} />
