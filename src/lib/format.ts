@@ -156,3 +156,8 @@ export function isPast(iso: string | Date) {
 export function daysAgoIso(days: number) {
   return new Date(Date.now() - days * 86_400_000).toISOString();
 }
+
+/** A count that stays short however big it gets: 950, 1.25K, 48.3K, 3.1M. */
+export function shortCount(n: number) {
+  return n < 1000 ? String(Math.max(0, Math.round(n))) : new Intl.NumberFormat("en", { notation: "compact", maximumSignificantDigits: 3 }).format(n);
+}

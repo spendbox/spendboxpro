@@ -4,6 +4,7 @@
 
 export type FloorStyle = "wood" | "tiles" | "terrazzo";
 export type LightStyle = "warm" | "cool";
+export type TableStyle = "booth" | "marble" | "bistro" | "linen" | "garden";
 
 export interface StoreTheme {
   theme: "boutique";
@@ -15,13 +16,15 @@ export interface StoreTheme {
   lounge: boolean;
   plants: boolean;
   lights: LightStyle;
+  /** The table set in the lounge corner. */
+  table: TableStyle;
 }
 
 export const THEMES = [
   {
     id: "boutique" as const,
     name: "Boutique",
-    description: "A bright shop with a counter, shelves of your products and a cosy lounge.",
+    description: "A bright shop with a marble counter, shelves of your products and a cosy lounge.",
   },
 ];
 
@@ -33,9 +36,17 @@ export const FLOORS: { id: FloorStyle; label: string }[] = [
   { id: "terrazzo", label: "Terrazzo" },
 ];
 
+export const TABLES: { id: TableStyle; label: string; description: string; swatch: [string, string] }[] = [
+  { id: "booth", label: "Sage booth", description: "A curved, tufted leather booth round a marble table.", swatch: ["#9fb08a", "#f1eee8"] },
+  { id: "marble", label: "Marble & cane", description: "A dark marble table with cane-back chairs.", swatch: ["#24221f", "#c9a46a"] },
+  { id: "bistro", label: "Bistro", description: "A round walnut table with bentwood chairs.", swatch: ["#7a4f30", "#d9b97f"] },
+  { id: "linen", label: "Linen dinner", description: "A white tablecloth set between two rattan sofas.", swatch: ["#f4f1ea", "#9fb08a"] },
+  { id: "garden", label: "Garden ring", description: "Round seating wrapped around a big planter.", swatch: ["#4f9a4c", "#9fb08a"] },
+];
+
 const HEX = /^#[0-9a-f]{6}$/i;
 
-export const DEFAULT_THEME: StoreTheme = { theme: "boutique", wall: WALL_COLORS[0], floor: "wood", accent: null, lounge: true, plants: true, lights: "warm" };
+export const DEFAULT_THEME: StoreTheme = { theme: "boutique", wall: WALL_COLORS[0], floor: "wood", accent: null, lounge: true, plants: true, lights: "warm", table: "booth" };
 
 /** A safe, complete theme from whatever is stored (or sent by the designer). */
 export function readTheme(raw: unknown): StoreTheme {
@@ -48,6 +59,7 @@ export function readTheme(raw: unknown): StoreTheme {
     lounge: typeof t.lounge === "boolean" ? t.lounge : DEFAULT_THEME.lounge,
     plants: typeof t.plants === "boolean" ? t.plants : DEFAULT_THEME.plants,
     lights: t.lights === "cool" ? "cool" : "warm",
+    table: TABLES.some((x) => x.id === t.table) ? (t.table as TableStyle) : DEFAULT_THEME.table,
   };
 }
 

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { FormMessage } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/cn";
-import { ACCENT_COLORS, FLOORS, THEMES, WALL_COLORS, readTheme, type StoreTheme } from "@/lib/store-theme";
+import { ACCENT_COLORS, FLOORS, TABLES, THEMES, WALL_COLORS, readTheme, type StoreTheme } from "@/lib/store-theme";
 import type { StoreProduct } from "@/lib/types";
 import type { StoreViewBusiness } from "./store-view";
 
@@ -33,7 +33,7 @@ export function StoreDesigner({ bizId, business, products, saved }: { bizId: str
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] lg:items-start">
       <div className="aspect-[4/5] w-full overflow-hidden rounded-3xl shadow-lift sm:aspect-[4/3] lg:sticky lg:top-6">
-        <StoreView business={business} theme={previewTheme} products={products} mode="embedded" />
+        <StoreView business={business} theme={previewTheme} products={products} mode="embedded" onTableChange={(table) => set({ table, lounge: true })} />
       </div>
 
       <div className="flex flex-col gap-6">
@@ -95,6 +95,29 @@ export function StoreDesigner({ bizId, business, products, saved }: { bizId: str
                 className={cn("h-10 rounded-full px-4 text-sm font-semibold ring-2", theme.floor === f.id ? "bg-brand-50 ring-brand-600" : "bg-white ring-line")}
               >
                 {f.label}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="flex flex-col gap-2">
+          <h2 className="font-semibold">Lounge table</h2>
+          <p className="-mt-1 text-xs text-muted">You can also tap the table in the preview. Shoppers can try other styles too, just for themselves.</p>
+          <div role="radiogroup" aria-label="Lounge table" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {TABLES.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                role="radio"
+                aria-checked={theme.table === t.id}
+                onClick={() => set({ table: t.id, lounge: true })}
+                className={cn("flex items-center gap-3 rounded-2xl p-3 text-left ring-2 transition", theme.table === t.id ? "bg-brand-50 ring-brand-600" : "bg-white ring-line")}
+              >
+                <span aria-hidden className="size-9 shrink-0 rounded-full" style={{ background: `linear-gradient(135deg, ${t.swatch[0]} 50%, ${t.swatch[1]} 50%)` }} />
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold">{t.label}</span>
+                  <span className="block text-xs text-muted">{t.description}</span>
+                </span>
               </button>
             ))}
           </div>

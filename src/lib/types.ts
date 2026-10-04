@@ -363,6 +363,8 @@ export interface ExploreBusiness {
   products: number;
   new_products: number;
   latest_product_at: string | null;
+  /** How many customers the business has. */
+  customers: number;
 }
 
 /** What the 3D store needs to show a product on its shelves. */

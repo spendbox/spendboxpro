@@ -1,8 +1,10 @@
 "use client";
 
-import { Maximize2, Minimize2, Minus, Plus } from "lucide-react";
+import { Maximize2, Minimize2, Minus, Plus, Users } from "lucide-react";
 import { useCallback, useRef, type ReactNode } from "react";
 import { BusinessAvatar } from "@/components/ui/avatar";
+import { cn } from "@/lib/cn";
+import { shortCount } from "@/lib/format";
 import type { ExploreBusiness } from "@/lib/types";
 import CityCanvas from "./three/city/city-canvas";
 import type { LabelPlacement } from "./three/city/label-tracker";
@@ -48,12 +50,18 @@ export default function CityMap({
             }}
             type="button"
             onClick={() => onOpen(b)}
-            aria-label={`Visit ${b.name}${b.new_products ? `, ${b.new_products} new` : ""}`}
+            aria-label={`Visit ${b.name}, ${b.customers === 1 ? "1 customer" : `${shortCount(b.customers)} customers`}${b.new_products ? `, ${b.new_products} new` : ""}`}
             style={{ visibility: "hidden" }}
-            className="pointer-events-auto absolute top-0 left-0 flex items-center gap-1.5 rounded-full bg-white/95 py-1 pr-2.5 pl-1 text-xs font-bold whitespace-nowrap text-ink shadow-lift ring-1 ring-black/5 backdrop-blur will-change-transform select-none hover:ring-brand-400"
+            className="pointer-events-auto absolute top-0 left-0 flex items-center gap-1.5 rounded-full bg-white/95 py-1 pr-3 pl-1 text-left whitespace-nowrap text-ink shadow-lift ring-1 ring-black/5 backdrop-blur will-change-transform select-none hover:ring-brand-400"
           >
-            <BusinessAvatar name={b.name} color={b.brand_color} logoUrl={b.logo_url} size="xs" />
-            <span className="max-w-28 truncate">{b.name}</span>
+            <BusinessAvatar name={b.name} color={b.brand_color} logoUrl={b.logo_url} size="sm" className="size-8 rounded-full" />
+            <span className="flex min-w-0 flex-col leading-tight">
+              <span className="max-w-32 truncate text-xs font-bold">{b.name}</span>
+              <span className="flex items-center gap-1 text-[11px] font-semibold text-muted tabular-nums">
+                <Users className="size-3" aria-hidden />
+                {shortCount(b.customers)} {b.customers === 1 ? "customer" : "customers"}
+              </span>
+            </span>
             {b.new_products > 0 && (
               <span className="animate-bounce-soft -mr-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] text-white shadow">
                 {b.new_products}
@@ -62,7 +70,8 @@ export default function CityMap({
           </button>
         ))}
       </nav>
-      <div className="absolute right-3 bottom-3 flex flex-col gap-2">
+      {/* Top corner, so the app's menu bar never covers them. */}
+      <div className={cn("absolute right-3 flex flex-col gap-2", expanded ? "top-[max(0.75rem,env(safe-area-inset-top))]" : "top-3")}>
         <MapButton label={expanded ? "Exit full screen" : "Full screen"} onClick={onToggleExpanded}>
           {expanded ? <Minimize2 className="size-4" aria-hidden /> : <Maximize2 className="size-4" aria-hidden />}
         </MapButton>
