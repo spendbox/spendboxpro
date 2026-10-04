@@ -14,9 +14,22 @@ import type { FeedProduct } from "@/lib/types";
 /**
  * Full-screen, swipe up and down through products (like TikTok or Reels).
  * Videos play when they're on screen. Each product counts as viewed once it's
- * mostly on screen.
+ * mostly on screen. In `guest` mode (a shared shop, before joining), nothing
+ * is counted, and liking or tapping the business asks them to join.
  */
-export function ProductViewer({ products, startId, backHref }: { products: FeedProduct[]; startId: string; backHref: string }) {
+export function ProductViewer({
+  products,
+  startId,
+  backHref = "/me",
+  onClose,
+  guest,
+}: {
+  products: FeedProduct[];
+  startId: string;
+  backHref?: string;
+  onClose?: () => void;
+  guest?: { onJoin: () => void };
+}) {
   const router = useRouter();
   const scroller = useRef<HTMLDivElement>(null);
   const counted = useRef(new Set<string>());
@@ -24,7 +37,7 @@ export function ProductViewer({ products, startId, backHref }: { products: FeedP
   const [muted, setMuted] = useState(true);
   const [liked, setLiked] = useState<Record<string, boolean>>(() => Object.fromEntries(products.map((p) => [p.id, p.liked])));
 
-  const close = useCallback(() => router.push(backHref), [router, backHref]);
+  const close = useCallback(() => (onClose ? onClose() : router.push(backHref)), [router, backHref, onClose]);
 
   // Start at the product that was tapped, and keep the page behind from scrolling.
   useEffect(() => {
@@ -52,7 +65,7 @@ export function ProductViewer({ products, startId, backHref }: { products: FeedP
 
   // Count the view, and play only the video on screen.
   useEffect(() => {
-    if (!counted.current.has(active)) {
+    if (!guest && !counted.current.has(active)) {
       counted.current.add(active);
       void viewProduct(active);
     }
@@ -60,7 +73,7 @@ export function ProductViewer({ products, startId, backHref }: { products: FeedP
       if (v.dataset.id === active) void v.play().catch(() => {});
       else v.pause();
     });
-  }, [active]);
+  }, [active, guest]);
 
   // Arrow keys and Escape on computers.
   useEffect(() => {
@@ -76,6 +89,7 @@ export function ProductViewer({ products, startId, backHref }: { products: FeedP
   }, [close]);
 
   const toggleLike = (p: FeedProduct) => {
+    if (guest) return guest.onJoin();
     const next = !liked[p.id];
     setLiked((l) => ({ ...l, [p.id]: next }));
     void likeProduct(p.id, next).then((r) => {
@@ -132,11 +146,19 @@ export function ProductViewer({ products, startId, backHref }: { products: FeedP
 
             {/* Bottom: who and what */}
             <div className="absolute bottom-0 left-0 flex max-w-[calc(100%-5.5rem)] flex-col gap-2 p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-              <Link href={p.is_member ? `/me/b/${p.business_slug}` : `/j/${p.business_slug}`} className="flex w-fit items-center gap-2">
-                <BusinessAvatar name={p.business_name} color={p.business_color} logoUrl={p.business_logo_url} size="sm" />
-                <span className="font-semibold drop-shadow">{p.business_name}</span>
-                {!p.is_member && <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-semibold">Join</span>}
-              </Link>
+              {guest ? (
+                <button type="button" onClick={guest.onJoin} className="flex w-fit items-center gap-2">
+                  <BusinessAvatar name={p.business_name} color={p.business_color} logoUrl={p.business_logo_url} size="sm" />
+                  <span className="font-semibold drop-shadow">{p.business_name}</span>
+                  <span className="rounded-full bg-white px-2.5 py-0.5 text-xs font-bold text-ink">Join</span>
+                </button>
+              ) : (
+                <Link href={p.is_member ? `/me/b/${p.business_slug}` : `/j/${p.business_slug}`} className="flex w-fit items-center gap-2">
+                  <BusinessAvatar name={p.business_name} color={p.business_color} logoUrl={p.business_logo_url} size="sm" />
+                  <span className="font-semibold drop-shadow">{p.business_name}</span>
+                  {!p.is_member && <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-semibold">Join</span>}
+                </Link>
+              )}
               <h2 className="font-display text-xl leading-tight font-bold drop-shadow">{p.title}</h2>
               {p.price !== null && <p className="w-fit rounded-full bg-white px-3 py-1 text-sm font-bold text-ink">{formatMoney(p.price, p.currency)}</p>}
               {p.description && <Description text={p.description} />}
@@ -148,17 +170,17 @@ export function ProductViewer({ products, startId, backHref }: { products: FeedP
                 <Heart className={cn("size-6", liked[p.id] && "fill-red-500 text-red-500")} aria-hidden />
               </RailButton>
               {p.business_whatsapp && (
-                <RailButton label="Chat" href={whatsappLink(p.business_whatsapp, message)} onClick={() => void contactProduct(p.id, "whatsapp")} className="bg-[#25D366]">
+                <RailButton label="Chat" href={whatsappLink(p.business_whatsapp, message)} onClick={() => !guest && void contactProduct(p.id, "whatsapp")} className="bg-[#25D366]">
                   <WhatsAppIcon className="size-6" />
                 </RailButton>
               )}
               {p.business_whatsapp && (
-                <RailButton label="Call" href={`tel:+${p.business_whatsapp.replace(/\D/g, "")}`} onClick={() => void contactProduct(p.id, "call")}>
+                <RailButton label="Call" href={`tel:+${p.business_whatsapp.replace(/\D/g, "")}`} onClick={() => !guest && void contactProduct(p.id, "call")}>
                   <Phone className="size-5" aria-hidden />
                 </RailButton>
               )}
               {p.business_email && (
-                <RailButton label="Email" href={`mailto:${p.business_email}?subject=${encodeURIComponent(p.title)}&body=${encodeURIComponent(message)}`} onClick={() => void contactProduct(p.id, "email")}>
+                <RailButton label="Email" href={`mailto:${p.business_email}?subject=${encodeURIComponent(p.title)}&body=${encodeURIComponent(message)}`} onClick={() => !guest && void contactProduct(p.id, "email")}>
                   <Mail className="size-5" aria-hidden />
                 </RailButton>
               )}

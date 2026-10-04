@@ -2,7 +2,8 @@
 
 import dynamic from "next/dynamic";
 import { useSyncExternalStore } from "react";
-import type { SharedProduct } from "@/components/marketplace/store-view";
+import type { JoinInfo, SharedProduct } from "@/components/marketplace/store-view";
+import type { ShopPerk } from "@/lib/actions/shop";
 import { BusinessAvatar } from "@/components/ui/avatar";
 import type { StoreTheme } from "@/lib/store-theme";
 
@@ -26,7 +27,9 @@ export interface SharedStoreData {
   brand_color: string;
   whatsapp: string | null;
   store_theme: unknown;
+  currency: string;
   products: SharedProduct[];
+  perks: ShopPerk[];
 }
 
 const noop = () => () => {};
@@ -39,7 +42,7 @@ function webgl() {
   }
 }
 
-export function SharedStore({ store, shareUrl }: { store: SharedStoreData & { store_theme: StoreTheme }; shareUrl: string }) {
+export function SharedStore({ store, shareUrl, join }: { store: SharedStoreData & { store_theme: StoreTheme }; shareUrl: string; join: JoinInfo }) {
   const canShow = useSyncExternalStore(noop, webgl, () => true);
   if (!canShow) {
     return (
@@ -55,11 +58,14 @@ export function SharedStore({ store, shareUrl }: { store: SharedStoreData & { st
   }
   return (
     <StoreView
-      business={{ ...store, email: null }}
+      business={{ ...store, email: null, is_member: join.state === "member" }}
       theme={store.store_theme}
       products={store.products.map((p) => ({ ...p, price: p.price === null ? null : Number(p.price) }))}
       mode="public"
       shareUrl={shareUrl}
+      perks={store.perks ?? []}
+      currency={store.currency}
+      join={join}
     />
   );
 }

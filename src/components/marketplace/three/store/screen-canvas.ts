@@ -13,11 +13,14 @@ const HEADER = 190;
 const PAD = 56;
 const GAP = 28;
 
-/** Bigger tiles when there are only a few products: 1–3 in one row, up to 6 in 3 × 2, then 4 × 2. */
-function gridFor(count: number) {
-  if (count <= 3) return { cols: 3, rows: 1 };
-  if (count <= 6) return { cols: 3, rows: 2 };
-  return { cols: 4, rows: 2 };
+/** Most tiles the screen shows; with more products, the last tile is "+N See all". */
+export const MAX_TILES = 8;
+
+/** How many tiles go in each row: up to 4 in one row, then two rows (5 = 3 + 2, 6 = 3 + 3, 7 = 4 + 3, 8 = 4 + 4). */
+export function rowsFor(count: number) {
+  const n = Math.min(count, MAX_TILES);
+  if (n <= 4) return [n];
+  return [Math.ceil(n / 2), Math.floor(n / 2)];
 }
 
 export type ScreenHit = { kind: "product"; id: string } | { kind: "more" } | null;
@@ -30,17 +33,15 @@ interface Tile {
   hit: ScreenHit;
 }
 
+/** The tiles, row by row; each row's tiles stretch to fill the screen's width. */
 function tileRects(count: number) {
-  const { cols, rows } = gridFor(count);
-  const w = (SCREEN_W - PAD * 2 - GAP * (cols - 1)) / cols;
-  const h = (SCREEN_H - HEADER - PAD - GAP * (rows - 1)) / rows;
+  const rows = rowsFor(count);
+  const h = (SCREEN_H - HEADER - PAD - GAP * (rows.length - 1)) / rows.length;
   const out: { x: number; y: number; w: number; h: number }[] = [];
-  for (let r = 0; r < rows; r++) {
-    // A row that isn't full is centred.
-    const inRow = Math.min(cols, Math.max(0, count - r * cols));
-    const offset = count <= cols * rows ? ((cols - inRow) * (w + GAP)) / 2 : 0;
-    for (let c = 0; c < cols; c++) out.push({ x: PAD + offset + c * (w + GAP), y: HEADER + r * (h + GAP), w, h });
-  }
+  rows.forEach((inRow, r) => {
+    const w = (SCREEN_W - PAD * 2 - GAP * (inRow - 1)) / inRow;
+    for (let c = 0; c < inRow; c++) out.push({ x: PAD + c * (w + GAP), y: HEADER + r * (h + GAP), w, h });
+  });
   return out;
 }
 
@@ -151,6 +152,31 @@ export class ScreenCanvas {
       ctx.textAlign = "center";
       ctx.fillText("New products coming soon", SCREEN_W / 2, HEADER + (SCREEN_H - HEADER) / 2);
       ctx.textAlign = "left";
+    }
+    // One product: its picture on the left, its details on the right (the whole screen opens it).
+    if (products.length === 1) {
+      const p = products[0]!;
+      const full = { x: PAD, y: HEADER, w: SCREEN_W - PAD * 2, h: SCREEN_H - HEADER - PAD };
+      rects[0] = { ...full, w: full.w * 0.48 };
+      const tx = PAD + full.w * 0.48 + 64;
+      const tw = full.w * 0.52 - 64;
+      ctx.fillStyle = "#16201b";
+      ctx.font = `700 ${fitText(ctx, p.title, tw, 76, 700, display)}px ${display}`;
+      ctx.fillText(p.title, tx, full.y + 120);
+      let y = full.y + 120;
+      if (p.price !== null) {
+        y += 90;
+        ctx.font = `700 52px ${body}`;
+        ctx.fillStyle = accent;
+        ctx.fillText(formatMoney(p.price, p.currency), tx, y);
+      }
+      roundRect(ctx, tx, full.y + full.h - 120, 360, 92, 46);
+      ctx.fillStyle = "#16201b";
+      ctx.fill();
+      ctx.fillStyle = "#ffffff";
+      ctx.font = `600 36px ${body}`;
+      ctx.fillText("Tap to see it", tx + 56, full.y + full.h - 60);
+      this.tiles.push({ ...full, hit: { kind: "product", id: p.id } });
     }
     const overflow = products.length > rects.length;
     const shown = overflow ? products.slice(0, rects.length - 1) : products;

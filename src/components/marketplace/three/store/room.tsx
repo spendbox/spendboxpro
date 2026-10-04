@@ -1,16 +1,16 @@
 "use client";
 
 import { useMemo } from "react";
-import type { StoreTheme } from "@/lib/store-theme";
+import type { BackdropStyle, StoreTheme } from "@/lib/store-theme";
 import { mix } from "../geometry";
 import { useDispose } from "../hooks";
 import { shade } from "../textures";
 import { Built, Kit } from "./kit";
 import { BACK, COUNTER_Z, D, H, W } from "./layout";
-import { floorSurface, softShadow } from "./surfaces";
+import { brick, floorSurface, softShadow } from "./surfaces";
 import { Tappable } from "./tap";
 
-// The shop itself: panelled walls, an oak slat wall behind the product screen,
+// The shop itself: panelled walls, a feature wall behind the product screen,
 // a marble counter with a fluted front, sideboards, and the glass door and
 // window. In the editor, tapping the floor or walls opens their settings.
 
@@ -70,9 +70,6 @@ export function Room({ theme, accent, onFloor, onWalls }: { theme: StoreTheme; a
     k.box("matte", [W, H, 0.2], [0, H / 2, BACK - 0.1], wall);
     k.box("matte", [0.2, H, D + 4], [-W / 2 - 0.1, H / 2, 2], side);
     k.box("matte", [0.2, H, D + 4], [W / 2 + 0.1, H / 2, 2], side);
-    // Oak slat wall behind the product screen, with a slim brass cap.
-    for (let x = -3.15; x <= 3.151; x += 0.1) k.rbox("wood", [0.065, 3.9, 0.05], 0.012, [x, 1.95, BACK + 0.03], (Math.round(x * 10) % 3 === 0 ? shade(OAK, -0.03) : OAK));
-    k.box("brass", [6.4, 0.03, 0.07], [0, 3.92, BACK + 0.04], "#ffffff");
     const panel = shade(wall, dark ? 0.04 : -0.04);
     wainscot(k, "x", -W / 2, -3.25, BACK + 0.015, panel);
     wainscot(k, "x", 3.25, W / 2, BACK + 0.015, panel);
@@ -186,5 +183,78 @@ export function Furniture() {
       <FloorShadow size={[1.3, 4.2]} position={[-W / 2 + 0.35, -2.4]} opacity={0.45} />
       <FloorShadow size={[1.3, 4.2]} position={[W / 2 - 0.35, -2.4]} opacity={0.45} />
     </>
+  );
+}
+
+/** The feature wall behind the product screen, in the business's chosen style. */
+export function Backdrop({ style, accent, wall, onTap }: { style: BackdropStyle; accent: string; wall: string; onTap?: () => void }) {
+  const parts = useMemo(() => {
+    const k = new Kit();
+    const z = BACK + 0.03;
+    if (style === "oak" || style === "walnut") {
+      const wood = style === "oak" ? OAK : "#6e4a2e";
+      k.box("matte", [6.4, 3.9, 0.02], [0, 1.95, BACK + 0.01], shade(wood, -0.35));
+      for (let x = -3.15; x <= 3.151; x += 0.1) k.rbox("wood", [0.065, 3.9, 0.05], 0.012, [x, 1.95, z], Math.round(x * 10) % 3 === 0 ? shade(wood, -0.03) : wood);
+      k.box("brass", [6.4, 0.03, 0.07], [0, 3.92, z + 0.01], "#ffffff");
+    } else if (style === "fluted") {
+      k.box("satin", [6.4, 3.9, 0.03], [0, 1.95, BACK + 0.015], "#ece8df");
+      for (let x = -3.15; x <= 3.151; x += 0.1) k.cyl("satin", 0.05, 0.05, 3.9, [x, 1.95, z], "#f4f1ea", 14);
+      k.box("brass", [6.4, 0.03, 0.08], [0, 3.92, z + 0.01], "#ffffff");
+    } else if (style === "marble") {
+      k.rbox("marble", [6.4, 3.9, 0.06], 0.01, [0, 1.95, z]);
+      k.box("brass", [6.44, 0.03, 0.08], [0, 3.92, z + 0.01], "#ffffff");
+    } else if (style === "painted") {
+      k.rbox("satin", [6.4, 3.9, 0.04], 0.01, [0, 1.95, z], shade(mix(accent, wall, 0.12), -0.05));
+      for (const [w, h, x, y] of [
+        [6.44, 0.04, 0, 3.92],
+        [6.44, 0.04, 0, 0.02],
+        [0.04, 3.9, -3.2, 1.95],
+        [0.04, 3.9, 3.2, 1.95],
+      ] as const)
+        k.box("brass", [w, h, 0.06], [x, y, z + 0.01], "#ffffff");
+    } else if (style === "greenery") {
+      // A living wall: a dark backing thick with leaves.
+      k.box("matte", [6.4, 3.9, 0.04], [0, 1.95, z], "#1f3a26");
+      let r = 41;
+      const rand = () => ((r = (r * 9301 + 49297) % 233280) / 233280);
+      const greens = ["#ffffff", "#d7ecc6", "#bfe0a8", "#e6f2da"];
+      // Layers of overlapping leaves, mostly facing out, so no backing shows through.
+      for (let i = 0; i < 1100; i++) {
+        const cell = (i % 4 === 0 ? 2 : 1) as 1 | 2;
+        const size = cell === 1 ? 0.3 + rand() * 0.16 : 0.24;
+        k.leaf(
+          [-3.05 + rand() * 6.1, -0.1 + rand() * 3.85, z + 0.02 + rand() * 0.1],
+          (rand() - 0.5) * 0.8,
+          -0.35 + rand() * 0.5,
+          size,
+          greens[i % greens.length],
+          cell,
+          cell === 2 ? 0.34 : 0.85,
+          0.1,
+          (rand() - 0.5) * 2.4,
+        );
+      }
+    } else if (style === "brick") {
+      return null;
+    }
+    return style === "none" ? null : k.build();
+  }, [style, accent, wall]);
+  return (
+    <Tappable onTap={onTap}>
+      {parts && <Built parts={parts} shadows={false} />}
+      {style === "brick" && (
+        <mesh position={[0, 1.95, BACK + 0.02]}>
+          <planeGeometry args={[6.4, 3.9]} />
+          <meshStandardMaterial map={brick()} roughness={0.9} />
+        </mesh>
+      )}
+      {/* Tapping the plain wall there opens the backdrop choices too. */}
+      {style === "none" && onTap && (
+        <mesh position={[0, 1.95, BACK + 0.02]}>
+          <planeGeometry args={[6.4, 3.9]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+      )}
+    </Tappable>
   );
 }

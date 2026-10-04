@@ -12,7 +12,8 @@ import { createClient } from "@/lib/supabase/server";
 // actual sign-in (so Supabase's per-device limits apply); these actions check
 // details and create accounts.
 
-export type AuthResult = { ok: true; message?: string } | { ok: false; error: string };
+/** `reason` lets step-by-step forms go back to the right question. */
+export type AuthResult = { ok: true; message?: string } | { ok: false; error: string; reason?: "wrong-password" | "need-name" };
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -41,7 +42,7 @@ export async function registerEmail(input: {
   const email = cleanEmail(input.email);
   if (!EMAIL.test(email) || email.length > 200) return { ok: false, error: "Please check your email address." };
   if (await profileByEmail(email)) {
-    return { ok: false, error: "That password isn't right for this email. Try again, or tap “Forgot password?”." };
+    return { ok: false, reason: "wrong-password", error: "That password isn't right for this email. Try again, or tap “Forgot password?”." };
   }
   if (!input.allowSignup) {
     return {
@@ -51,7 +52,7 @@ export async function registerEmail(input: {
   }
   if (input.password.length < MIN_PASSWORD) return { ok: false, error: `Choose a password with at least ${MIN_PASSWORD} characters.` };
   const fullName = (input.fullName ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
-  if (fullName.length < 2) return { ok: false, error: "Please add your name, so businesses know who they're talking to." };
+  if (fullName.length < 2) return { ok: false, reason: "need-name", error: "Please add your name, so businesses know who they're talking to." };
 
   let phone: string | null = null;
   if (input.phone?.trim()) {

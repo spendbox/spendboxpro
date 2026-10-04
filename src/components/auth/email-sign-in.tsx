@@ -11,7 +11,7 @@ import { DEFAULT_COUNTRY_CODE } from "@/lib/env";
 import { MIN_PASSWORD } from "@/lib/password";
 import { TRIAL_HIDDEN_COOKIE } from "@/lib/trial";
 
-function friendlyError(message: string, status?: number) {
+export function friendlyError(message: string, status?: number) {
   if (/failed to fetch|networkerror|load failed/i.test(message)) {
     return "We couldn't connect. Check your internet connection and try again.";
   }
@@ -23,7 +23,7 @@ function friendlyError(message: string, status?: number) {
 
 // The sign-in library is big, so it loads only once someone starts filling in the form.
 let supabaseModule: Promise<typeof import("@/lib/supabase/client")> | null = null;
-function loadSupabase() {
+export function loadSupabase() {
   supabaseModule ??= import("@/lib/supabase/client");
   return supabaseModule;
 }

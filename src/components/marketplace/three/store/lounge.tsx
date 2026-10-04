@@ -2,13 +2,14 @@
 
 import { useMemo } from "react";
 import * as THREE from "three";
-import type { TableStyle } from "@/lib/store-theme";
+import type { StoreTheme, TableStyle } from "@/lib/store-theme";
 import { mix } from "../geometry";
-import { shade } from "../textures";
+import { useDispose } from "../hooks";
 import { Built, Kit, leatherOf } from "./kit";
 import { LOUNGE } from "./layout";
 import { strelitzia } from "./plants";
 import { FloorShadow } from "./room";
+import { rugSurface } from "./surfaces";
 import { Tappable } from "./tap";
 
 // The lounge corner's table sets. Each is built facing +z (the open side,
@@ -198,20 +199,49 @@ const BUILDERS: Record<Exclude<TableStyle, "none">, (k: Kit, leather: string) =>
   garden,
 };
 
-/** The lounge corner: a rug and the chosen table set. In the editor, tap it to pick another style. */
-export function Lounge({ style, accent, onTap }: { style: TableStyle; accent: string; onTap?: () => void }) {
+/** The rug under the table, in the chosen pattern and colour. */
+function Rug({ style, color, onTap }: { style: StoreTheme["rug"]["style"]; color: string; onTap?: () => void }) {
+  const texture = useMemo(() => (style === "none" ? null : rugSurface(style, color)), [style, color]);
+  useDispose(texture);
+  if (!texture) {
+    // No rug, but the business can still tap the spot to add one.
+    return onTap ? (
+      <Tappable onTap={onTap}>
+        <mesh rotation-x={-Math.PI / 2} position-y={0.01}>
+          <circleGeometry args={[1.95, 48]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+      </Tappable>
+    ) : null;
+  }
+  return (
+    <Tappable onTap={onTap}>
+      <mesh rotation-x={-Math.PI / 2} position-y={0.008} receiveShadow>
+        <circleGeometry args={[1.95, 64]} />
+        <meshStandardMaterial map={texture} transparent alphaTest={0.5} roughness={1} />
+      </mesh>
+    </Tappable>
+  );
+}
+
+/** The lounge corner: a rug and the chosen table set. In the editor, tap the table or the rug to change them. */
+export function Lounge({ style, rug, accent, onTap, onRug }: { style: TableStyle; rug: StoreTheme["rug"]; accent: string; onTap?: () => void; onRug?: () => void }) {
   const leather = leatherOf(accent);
   const parts = useMemo(() => {
+    if (style === "none") return null;
     const k = new Kit();
-    k.add("fabric", new THREE.CircleGeometry(1.95, 64), mix(accent, "#efe9de", 0.82), [0, 0.008, 0], [-Math.PI / 2, 0, 0]);
-    k.add("fabric", new THREE.RingGeometry(1.86, 1.92, 64), shade(mix(accent, "#efe9de", 0.6), -0.05), [0, 0.01, 0], [-Math.PI / 2, 0, 0]);
-    if (style !== "none") BUILDERS[style](k, leather);
+    BUILDERS[style](k, leather);
     return k.build();
-  }, [style, accent, leather]);
+  }, [style, leather]);
   return (
-    <Tappable onTap={onTap} position={[LOUNGE.x, 0, LOUNGE.z]} rotationY={LOUNGE.rotY}>
-      <Built parts={parts} />
-      {style !== "none" && <FloorShadow size={[3.4, 3.4]} position={[0, 0]} opacity={0.42} />}
-    </Tappable>
+    <group position={[LOUNGE.x, 0, LOUNGE.z]} rotation-y={LOUNGE.rotY}>
+      <Rug style={rug.style} color={rug.color} onTap={onRug} />
+      {parts && (
+        <Tappable onTap={onTap}>
+          <Built parts={parts} />
+          <FloorShadow size={[3.4, 3.4]} position={[0, 0]} opacity={0.42} />
+        </Tappable>
+      )}
+    </group>
   );
 }

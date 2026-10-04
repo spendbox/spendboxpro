@@ -3,10 +3,12 @@
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { LIGHT_TONES, type Art, type PlantSpot, type StoreTheme } from "@/lib/store-theme";
 import type { StoreProduct } from "@/lib/types";
+import { mix } from "../geometry";
 import { useDispose } from "../hooks";
-import { neonTexture, shopSignTexture } from "../textures";
+import { neonTexture, shade, shopSignTexture } from "../textures";
 import { useMaterials } from "./kit";
 import { BACK, COUNTER_Z, H, LOUNGE, W } from "./layout";
 import { ScreenCanvas } from "./screen-canvas";
@@ -42,7 +44,11 @@ export type StoreTarget =
   | { kind: "lights" }
   | { kind: "art"; index: 0 | 1 }
   | { kind: "floor" }
-  | { kind: "walls" };
+  | { kind: "walls" }
+  | { kind: "backdrop" }
+  | { kind: "rug" }
+  | { kind: "counter" }
+  | { kind: "gift" };
 
 export function businessTagline(business: StoreBusiness) {
   return [business.categories.slice(0, 2).join(" · "), business.location].filter(Boolean).join("  ·  ");
@@ -65,41 +71,83 @@ const BOARD_W = 3.6;
 const BOARD_H = 0.85;
 const BOARD_Y = 4.38;
 
+/** A soft glow on the wall behind a lit sign. */
+const halo = (() => {
+  let t: THREE.CanvasTexture | null = null;
+  return () => {
+    if (t) return t;
+    const c = document.createElement("canvas");
+    c.width = 256;
+    c.height = 64;
+    const ctx = c.getContext("2d")!;
+    const g = ctx.createRadialGradient(128, 32, 4, 128, 32, 128);
+    g.addColorStop(0, "rgba(255,255,255,0.9)");
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.setTransform(1, 0, 0, 0.25, 0, 24);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, -96, 256, 256);
+    t = new THREE.CanvasTexture(c);
+    return t;
+  };
+})();
+
 /** The welcome board at the top of the back wall, in the business's chosen style and words. */
 export function Board({ theme, business, accent, onTap }: { theme: StoreTheme; business: StoreBusiness; accent: string; onTap: () => void }) {
   const { style, title } = theme.board;
   const subtitle = theme.board.subtitle || businessTagline(business);
   const face = useMemo(() => boardTexture(style, title, subtitle, accent), [style, title, subtitle, accent]);
   useDispose(face);
+  const body = useMemo(() => {
+    if (style === "pill") {
+      // A true pill: a stadium shape, extruded with soft edges.
+      const w = BOARD_W + 0.3 - BOARD_H;
+      const r = BOARD_H / 2 - 0.02;
+      const shape = new THREE.Shape();
+      shape.moveTo(-w / 2, -r);
+      shape.lineTo(w / 2, -r);
+      shape.absarc(w / 2, 0, r, -Math.PI / 2, Math.PI / 2, false);
+      shape.lineTo(-w / 2, r);
+      shape.absarc(-w / 2, 0, r, Math.PI / 2, (3 * Math.PI) / 2, false);
+      return new THREE.ExtrudeGeometry(shape, { depth: 0.06, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 4, curveSegments: 32 }).translate(0, 0, -0.05);
+    }
+    if (style === "lightbox") return new RoundedBoxGeometry(BOARD_W, BOARD_H, 0.14, 4, 0.05);
+    if (style === "neon") return new RoundedBoxGeometry(BOARD_W + 0.16, BOARD_H + 0.12, 0.03, 4, 0.012);
+    if (style === "letter") return new RoundedBoxGeometry(BOARD_W + 0.16, BOARD_H + 0.16, 0.07, 4, 0.02);
+    return null;
+  }, [style]);
+  useDispose(body);
   const m = useMaterials();
-  const z = BACK + 0.02;
+  const hsl = new THREE.Color(accent).getHSL({ h: 0, s: 0, l: 0 });
+  const glow = `#${new THREE.Color().setHSL(hsl.h, 1, 0.62).getHexString()}`;
   return (
-    <Tappable onTap={onTap} position={[0, BOARD_Y, z]}>
-      {style === "letter" && (
+    <Tappable onTap={onTap} position={[0, BOARD_Y, BACK + 0.02]}>
+      {style === "lightbox" && (
         <>
-          <mesh position-z={0.03} castShadow material={m.wood}>
-            <boxGeometry args={[BOARD_W + 0.14, BOARD_H + 0.14, 0.06]} />
+          {/* A backlit box: its face glows softly, and lights the wall around it. */}
+          <mesh geometry={body!} position-z={0.07} castShadow>
+            <meshStandardMaterial color="#f6f5f1" roughness={0.5} />
           </mesh>
-          <mesh position-z={0.061}>
-            <planeGeometry args={[BOARD_W, BOARD_H]} />
-            <meshStandardMaterial map={face} roughness={0.95} />
+          <mesh position-z={0.141}>
+            <planeGeometry args={[BOARD_W - 0.06, BOARD_H - 0.06]} />
+            <meshBasicMaterial map={face} toneMapped={false} />
+          </mesh>
+          <mesh position-z={0.005}>
+            <planeGeometry args={[BOARD_W + 1.2, BOARD_H + 0.7]} />
+            <meshBasicMaterial map={halo()} transparent opacity={0.55} depthWrite={false} toneMapped={false} />
           </mesh>
         </>
       )}
-      {style === "acrylic" && (
+      {style === "pill" && (
         <>
-          <mesh position-z={0.07}>
-            <boxGeometry args={[BOARD_W + 0.1, BOARD_H + 0.1, 0.02]} />
-            <meshPhysicalMaterial color="#ffffff" roughness={0.35} transmission={0} transparent opacity={0.72} clearcoat={1} />
+          <mesh geometry={body!} position-z={0.06} castShadow>
+            {/* Signs keep their exact colour (like a lit sign), whatever the shop's lighting. */}
+            <meshBasicMaterial color={accent} toneMapped={false} />
           </mesh>
-          {[-1, 1].flatMap((sx) =>
-            [-1, 1].map((sy) => (
-              <mesh key={`${sx}${sy}`} position={[(sx * BOARD_W) / 2.1, (sy * BOARD_H) / 2.4, 0.04]} rotation-x={Math.PI / 2} material={m.brass}>
-                <cylinderGeometry args={[0.025, 0.025, 0.08, 16]} />
-              </mesh>
-            )),
-          )}
-          <mesh position-z={0.082}>
+          {/* A slightly darker rim, so the pill reads as a solid shape. */}
+          <mesh geometry={body!} position-z={0.045} scale={[1.025, 1.08, 1]}>
+            <meshBasicMaterial color={shade(accent, -0.18)} toneMapped={false} />
+          </mesh>
+          <mesh position-z={0.111}>
             <planeGeometry args={[BOARD_W, BOARD_H]} />
             <meshBasicMaterial map={face} transparent toneMapped={false} />
           </mesh>
@@ -107,36 +155,45 @@ export function Board({ theme, business, accent, onTap }: { theme: StoreTheme; b
       )}
       {style === "neon" && (
         <>
-          <mesh position-z={0.025} castShadow>
-            <boxGeometry args={[BOARD_W + 0.1, BOARD_H + 0.1, 0.05]} />
-            <meshStandardMaterial color="#121212" roughness={0.6} />
+          {/* Smoked glass on brass stand-offs, with glowing tubes in front. */}
+          <mesh geometry={body!} position-z={0.07}>
+            <meshBasicMaterial color="#111213" toneMapped={false} />
           </mesh>
-          <mesh position-z={0.051}>
+          {[-1, 1].flatMap((sx) =>
+            [-1, 1].map((sy) => (
+              <mesh key={`${sx}${sy}`} position={[(sx * BOARD_W) / 2.05, (sy * BOARD_H) / 2.15, 0.045]} rotation-x={Math.PI / 2} material={m.brass}>
+                <cylinderGeometry args={[0.022, 0.022, 0.09, 16]} />
+              </mesh>
+            )),
+          )}
+          <mesh position-z={0.09}>
             <planeGeometry args={[BOARD_W, BOARD_H]} />
-            <meshBasicMaterial map={face} toneMapped={false} />
+            <meshBasicMaterial map={face} transparent toneMapped={false} />
+          </mesh>
+          <mesh position-z={0.004}>
+            <planeGeometry args={[BOARD_W + 1.6, BOARD_H + 1.0]} />
+            <meshBasicMaterial map={halo()} color={glow} transparent opacity={0.45} depthWrite={false} toneMapped={false} />
           </mesh>
         </>
       )}
       {style === "brass" && (
-        <mesh position-z={0.03}>
+        <mesh position-z={0.02}>
           <planeGeometry args={[BOARD_W, BOARD_H]} />
           <meshBasicMaterial map={face} transparent toneMapped={false} />
         </mesh>
       )}
-      {style === "oak" && (
+      {style === "letter" && (
         <>
-          <mesh position-z={0.03} castShadow material={m.wood}>
-            <boxGeometry args={[BOARD_W + 0.1, BOARD_H + 0.1, 0.05]} />
-          </mesh>
-          <mesh position-z={0.056}>
+          <mesh geometry={body!} position-z={0.035} castShadow material={m.wood} />
+          <mesh position-z={0.071}>
             <planeGeometry args={[BOARD_W, BOARD_H]} />
-            <meshBasicMaterial map={face} transparent toneMapped={false} />
+            <meshStandardMaterial map={face} roughness={0.95} />
           </mesh>
         </>
       )}
       {/* An invisible pad, so the whole board is easy to tap. */}
-      <mesh position-z={0.1}>
-        <planeGeometry args={[BOARD_W + 0.2, BOARD_H + 0.2]} />
+      <mesh position-z={0.16}>
+        <planeGeometry args={[BOARD_W + 0.3, BOARD_H + 0.2]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
     </Tappable>
@@ -370,14 +427,14 @@ export function WallArt({ theme, accent, onTap }: { theme: StoreTheme; accent: s
 
 // ---------------------------------------------------------------- Small things
 
-/** The counter's name plaque, the clock and the OPEN sign by the door. */
-export function Decor({ business, accent }: { business: StoreBusiness; accent: string }) {
+/** The counter's name plaque (if the business shows it), the clock and the OPEN sign by the door. */
+export function Decor({ business, accent, counterName }: { business: StoreBusiness; accent: string; counterName: boolean }) {
   const plaque = useMemo(() => shopSignTexture(business.name, accent, business.logo_url), [business.name, accent, business.logo_url]);
   const neon = useMemo(() => neonTexture("OPEN", "#ff5c8a"), []);
   const clock = useMemo(() => clockTexture(), []);
   return (
     <>
-      <Picture texture={plaque} size={[2.2, 0.55]} position={[0, 0.6, COUNTER_Z + 0.5]} />
+      {counterName && <Picture texture={plaque} size={[2.2, 0.55]} position={[0, 0.6, COUNTER_Z + 0.5]} />}
       <Picture texture={clock} size={[0.7, 0.7]} position={[4.6, 3.3, BACK + 0.1]} />
       <Picture texture={neon} size={[1.5, 0.47]} position={[-W / 2 + 0.12, 3.05, 1.6]} rotation={[0, Math.PI / 2, 0]} />
     </>
@@ -418,6 +475,49 @@ export function Bell({ onRing }: { onRing?: () => void }) {
       <mesh position-y={0.21} material={m.brass}>
         <sphereGeometry args={[0.04, 8, 6]} />
       </mesh>
+    </group>
+  );
+}
+
+/** A wrapped gift on the counter, when the business has perks: tap it to see them. */
+export function GiftBox({ accent, onOpen }: { accent: string; onOpen?: () => void }) {
+  const group = useRef<THREE.Group>(null);
+  const hover = useHoverCursor(Boolean(onOpen));
+  const m = useMaterials();
+  const wrap = mix(accent, "#ffffff", 0.08);
+  return (
+    <group
+      ref={group}
+      position={[0.95, 1.06, COUNTER_Z + 0.12]}
+      rotation-y={-0.35}
+      scale={hover.hovered ? 1.12 : 1}
+      onClick={(e) => {
+        if (!onOpen || e.delta > 8) return;
+        e.stopPropagation();
+        onOpen();
+      }}
+      {...hover.handlers}
+    >
+      <mesh position-y={0.13} castShadow>
+        <boxGeometry args={[0.3, 0.26, 0.3]} />
+        <meshPhysicalMaterial color={wrap} roughness={0.35} clearcoat={0.6} />
+      </mesh>
+      <mesh position-y={0.275}>
+        <boxGeometry args={[0.32, 0.05, 0.32]} />
+        <meshPhysicalMaterial color={wrap} roughness={0.35} clearcoat={0.6} />
+      </mesh>
+      {/* Ribbon round both ways, and a bow. */}
+      <mesh position-y={0.15} material={m.brass}>
+        <boxGeometry args={[0.05, 0.31, 0.325]} />
+      </mesh>
+      <mesh position-y={0.15} material={m.brass}>
+        <boxGeometry args={[0.325, 0.31, 0.05]} />
+      </mesh>
+      {[-1, 1].map((side) => (
+        <mesh key={side} position={[side * 0.055, 0.33, 0]} rotation={[0, 0, side * 0.6]} scale={[1.3, 1, 0.5]} material={m.brass}>
+          <torusGeometry args={[0.045, 0.014, 8, 20]} />
+        </mesh>
+      ))}
     </group>
   );
 }

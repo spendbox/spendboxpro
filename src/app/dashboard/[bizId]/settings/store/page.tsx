@@ -3,13 +3,15 @@ import { StoreDesigner } from "@/components/marketplace/store-designer";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireOwnedBusiness } from "@/lib/auth";
 import { siteUrl } from "@/lib/env";
+import { getPerks } from "@/lib/business";
+import { SIMPLE_PERK_KINDS } from "@/lib/perks";
 import { getBusinessProducts } from "@/lib/products";
 
 export const metadata: Metadata = { title: "Your 3D shop" };
 
 export default async function StoreDesignPage({ params }: PageProps<"/dashboard/[bizId]/settings/store">) {
   const { bizId } = await params;
-  const [{ business }, products] = await Promise.all([requireOwnedBusiness(bizId), getBusinessProducts(bizId)]);
+  const [{ business }, products, perks] = await Promise.all([requireOwnedBusiness(bizId), getBusinessProducts(bizId), getPerks(bizId)]);
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
       <PageHeader
@@ -21,6 +23,7 @@ export default async function StoreDesignPage({ params }: PageProps<"/dashboard/
         bizId={bizId}
         saved={business.store_theme}
         shareUrl={`${siteUrl()}/s/${business.slug}`}
+        hasPerks={perks.some((p) => p.is_active && SIMPLE_PERK_KINDS.includes(p.kind))}
         business={{
           id: business.id,
           slug: business.slug,

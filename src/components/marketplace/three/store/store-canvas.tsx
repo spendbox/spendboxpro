@@ -10,9 +10,9 @@ import { shade } from "../textures";
 import { MaterialsProvider } from "./kit";
 import { LookControls, type StoreApi } from "./look-controls";
 import { Lounge } from "./lounge";
-import { Bell, Board, Decor, Lights, ProductScreen, WallArt, type StoreBusiness, type StoreTarget } from "./pieces";
+import { Bell, Board, Decor, GiftBox, Lights, ProductScreen, WallArt, type StoreBusiness, type StoreTarget } from "./pieces";
 import { Plants } from "./plants";
-import { Counter, Furniture, Room } from "./room";
+import { Backdrop, Counter, Furniture, Room } from "./room";
 
 /**
  * Soft studio light from every direction, made in code (no download). It's
@@ -50,6 +50,7 @@ export default function StoreCanvas({
   onSelect,
   apiRef,
   editing = false,
+  hasGift = false,
 }: {
   business: StoreBusiness;
   theme: StoreTheme;
@@ -57,6 +58,8 @@ export default function StoreCanvas({
   onSelect: (target: StoreTarget) => void;
   apiRef?: RefObject<StoreApi | null>;
   editing?: boolean;
+  /** Put a gift on the counter (the business has perks). */
+  hasGift?: boolean;
 }) {
   const accent = accentOf(theme, business.brand_color);
   const dark = theme.wall === "#2F3A34";
@@ -96,15 +99,17 @@ export default function StoreCanvas({
       <LookControls lounge={theme.table !== "none"} apiRef={apiRef} />
       <MaterialsProvider>
         <Room theme={theme} accent={accent} onFloor={pick({ kind: "floor" })} onWalls={pick({ kind: "walls" })} />
-        <Counter accent={accent} onTap={pick({ kind: "walls" })} />
+        <Counter accent={accent} onTap={pick({ kind: "counter" })} />
+        <Backdrop style={theme.backdrop} accent={accent} wall={theme.wall} onTap={pick({ kind: "backdrop" })} />
         <Furniture />
         <Plants plants={theme.plants} onTap={editing ? (spot) => onSelect({ kind: "plant", spot }) : undefined} />
-        <Lounge style={theme.table} accent={accent} onTap={pick({ kind: "table" })} />
+        <Lounge style={theme.table} rug={theme.rug} accent={accent} onTap={pick({ kind: "table" })} onRug={pick({ kind: "rug" })} />
         <Lights theme={theme} accent={accent} onTap={pick({ kind: "lights" })} />
         <Board theme={theme} business={business} accent={accent} onTap={() => onSelect({ kind: "board" })} />
         <ProductScreen business={business} products={products} accent={accent} onSelect={onSelect} editing={editing} />
         <WallArt theme={theme} accent={accent} onTap={editing ? (index) => onSelect({ kind: "art", index }) : undefined} />
-        <Decor business={business} accent={accent} />
+        <Decor business={business} accent={accent} counterName={theme.counterName} />
+        {hasGift && <GiftBox accent={accent} onOpen={() => onSelect({ kind: "gift" })} />}
         <Bell onRing={editing ? undefined : () => onSelect({ kind: "bell" })} />
       </MaterialsProvider>
     </Canvas>

@@ -1,7 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 /** Gap kept between the pop-up and the keyboard / top of the screen on phones. */
@@ -62,6 +62,7 @@ export function Modal({
   const ref = useRef<HTMLDialogElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const fit = usePhoneFit(open);
+  const titleId = useId();
 
   useEffect(() => {
     const dialog = ref.current;
@@ -86,6 +87,7 @@ export function Modal({
   return (
     <dialog
       ref={ref}
+      aria-labelledby={titleId}
       onClose={onClose}
       onClick={(e) => {
         if (e.target === ref.current) onClose();
@@ -105,7 +107,9 @@ export function Modal({
         <>
           <div className="flex shrink-0 items-start justify-between gap-4 px-5 pt-5 pb-3 sm:px-7 sm:pt-7">
             <div className="min-w-0">
-              <h2 className="font-display text-xl font-bold">{title}</h2>
+              <h2 id={titleId} className="font-display text-xl font-bold">
+                {title}
+              </h2>
               {description && <p className="mt-1 text-sm text-muted">{description}</p>}
             </div>
             <button

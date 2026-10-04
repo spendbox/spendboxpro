@@ -144,7 +144,7 @@ export class Kit {
   }
 
   /** A flat, bent leaf on a stem, pointing along `angle` and leaning out by `lean`. */
-  leaf(at: Vec, angle: number, lean: number, length: number, color = "#ffffff", cell: LeafCell = 0, width = 0.42, bend = 0.35) {
+  leaf(at: Vec, angle: number, lean: number, length: number, color = "#ffffff", cell: LeafCell = 0, width = 0.42, bend = 0.35, roll = 0) {
     const g = new THREE.PlaneGeometry(length * width, length, 1, 6);
     const pos = g.attributes.position!;
     const uv = g.attributes.uv!;
@@ -156,7 +156,7 @@ export class Kit {
     }
     g.translate(0, length / 2, 0);
     g.computeVertexNormals();
-    return this.add("leaf", g, color, at, [lean, angle, 0]);
+    return this.add("leaf", g, color, at, [lean, angle, roll]);
   }
 
   build(): BuiltParts {

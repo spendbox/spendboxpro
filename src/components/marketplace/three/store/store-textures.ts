@@ -107,100 +107,154 @@ export function artTexture(accent: string, preset: ArtPreset) {
   return t;
 }
 
-/** The welcome board's face, in the chosen style (wide: 3.6 × 0.85 on the wall). */
+type Ctx = CanvasRenderingContext2D & { letterSpacing?: string };
+
+/** Draws text with even letter spacing (where the browser supports it). */
+function spaced(ctx: Ctx, text: string, x: number, y: number, spacing: number, mode: "fill" | "stroke" = "fill") {
+  ctx.letterSpacing = `${spacing}px`;
+  // Letter spacing adds space after the last letter too; nudge to stay centred.
+  const nudge = ctx.textAlign === "center" ? spacing / 2 : 0;
+  if (mode === "fill") ctx.fillText(text, x + nudge, y);
+  else ctx.strokeText(text, x + nudge, y);
+  ctx.letterSpacing = "0px";
+}
+
+/**
+ * The lettering on the welcome board (3.6 × 0.85 on the wall). The board's
+ * body (light box, pill, glass, frame) is a real shape in the scene; this is
+ * what's printed or lit on it.
+ */
 export function boardTexture(style: BoardStyle, title: string, subtitle: string, accent: string) {
   const W = 2048;
   const H = 484;
   const c = document.createElement("canvas");
   c.width = W;
   c.height = H;
-  const ctx = c.getContext("2d")!;
+  const ctx = c.getContext("2d")! as Ctx;
   const display = fontFamily("display");
   const body = fontFamily("body");
   const t = title || "Welcome";
+  const sub = subtitle.toUpperCase();
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  const titleY = subtitle ? H * 0.42 : H * 0.52;
-  const subY = H * 0.76;
-  if (style === "letter") {
-    ctx.fillStyle = "#1c1c1c";
+  const titleY = sub ? H * 0.42 : H * 0.5;
+  const subY = H * 0.77;
+
+  if (style === "lightbox") {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, "#ffffff");
+    g.addColorStop(1, "#f3f1ec");
+    ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = "rgba(255,255,255,0.05)";
-    for (let y = 8; y < H; y += 16) ctx.fillRect(0, y, W, 3);
-    ctx.fillStyle = "#f7f5f0";
-    const size = fitText(ctx, t.toUpperCase(), W - 220, 200, 600, body);
-    ctx.font = `600 ${size}px ${body}`;
-    if ("letterSpacing" in ctx) (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = "18px";
-    ctx.fillText(t.toUpperCase(), W / 2, titleY);
-    if (subtitle) {
-      ctx.font = `500 64px ${body}`;
-      (ctx as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = "10px";
-      ctx.fillText(subtitle.toUpperCase(), W / 2, subY);
-    }
-  } else if (style === "acrylic") {
-    ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = "#1c2420";
-    const size = fitText(ctx, t, W - 240, 210, 700, display);
+    ctx.fillStyle = "#1b231f";
+    const size = fitText(ctx, t, W - 300, 190, 700, display);
     ctx.font = `700 ${size}px ${display}`;
-    ctx.fillText(t, W / 2, titleY);
-    if (subtitle) {
-      ctx.fillStyle = "#4b5550";
-      ctx.font = `500 70px ${body}`;
-      ctx.fillText(subtitle, W / 2, subY);
+    spaced(ctx, t, W / 2, titleY, -2);
+    if (sub) {
+      ctx.fillStyle = accent;
+      ctx.fillRect(W / 2 - 60, H * 0.62, 120, 6);
+      ctx.fillStyle = "#5f6863";
+      ctx.font = `600 50px ${body}`;
+      spaced(ctx, sub, W / 2, subY + 14, 14);
+    }
+  } else if (style === "pill") {
+    ctx.fillStyle = "#ffffff";
+    const size = fitText(ctx, t, W - 420, 180, 700, display);
+    ctx.font = `700 ${size}px ${display}`;
+    spaced(ctx, t, W / 2, titleY, -1);
+    if (sub) {
+      ctx.fillStyle = "rgba(255,255,255,0.82)";
+      ctx.font = `600 50px ${body}`;
+      spaced(ctx, sub, W / 2, subY, 14);
     }
   } else if (style === "neon") {
-    ctx.fillStyle = "#121212";
-    ctx.fillRect(0, 0, W, H);
-    const glow = shade(accent, 0.45);
-    const size = fitText(ctx, t, W - 260, 220, 700, display);
-    ctx.font = `italic 700 ${size}px ${display}`;
+    // Glowing glass tubes in a vivid version of the accent colour.
+    const hsl = new THREE.Color(accent).getHSL({ h: 0, s: 0, l: 0 });
+    const glow = `#${new THREE.Color().setHSL(hsl.h, 1, 0.62).getHexString()}`;
+    const tube = `#${new THREE.Color().setHSL(hsl.h, 1, 0.88).getHexString()}`;
+    const size = fitText(ctx, t, W - 360, 200, 600, display);
+    ctx.font = `italic 600 ${size}px ${display}`;
     ctx.shadowColor = glow;
-    for (const blur of [60, 30, 12]) {
+    ctx.fillStyle = glow;
+    for (const blur of [80, 44, 20]) {
       ctx.shadowBlur = blur;
-      ctx.fillStyle = glow;
-      ctx.fillText(t, W / 2, titleY);
+      spaced(ctx, t, W / 2, titleY, 4);
     }
     ctx.shadowBlur = 6;
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText(t, W / 2, titleY);
-    if (subtitle) {
-      ctx.font = `600 66px ${body}`;
-      ctx.shadowBlur = 20;
-      ctx.fillStyle = "#fff4f8";
-      ctx.fillText(subtitle, W / 2, subY);
+    ctx.fillStyle = tube;
+    spaced(ctx, t, W / 2, titleY, 4);
+    if (sub) {
+      ctx.font = `600 52px ${body}`;
+      ctx.shadowBlur = 22;
+      ctx.fillStyle = tube;
+      spaced(ctx, sub, W / 2, subY + 10, 16);
     }
     ctx.shadowBlur = 0;
   } else if (style === "brass") {
-    ctx.clearRect(0, 0, W, H);
-    const size = fitText(ctx, t, W - 200, 230, 700, display);
+    // Brushed brass letters standing off the wall, with their shadow.
+    const size = fitText(ctx, t.toUpperCase(), W - 260, 190, 700, display);
     ctx.font = `700 ${size}px ${display}`;
-    ctx.fillStyle = "rgba(0,0,0,0.22)";
-    ctx.fillText(t, W / 2 + 8, titleY + 12);
-    const g = ctx.createLinearGradient(0, titleY - size / 2, 0, titleY + size / 2);
-    g.addColorStop(0, "#f3d58c");
-    g.addColorStop(0.5, "#c9a25a");
-    g.addColorStop(1, "#8f6b2c");
-    ctx.fillStyle = g;
-    ctx.fillText(t, W / 2, titleY);
-    if (subtitle) {
-      ctx.font = `600 66px ${body}`;
-      ctx.fillStyle = "rgba(0,0,0,0.2)";
-      ctx.fillText(subtitle, W / 2 + 4, subY + 6);
-      ctx.fillStyle = "#b08a45";
-      ctx.fillText(subtitle, W / 2, subY);
+    const brass = ctx.createLinearGradient(0, titleY - size / 2, 0, titleY + size / 2);
+    brass.addColorStop(0, "#f6dc9a");
+    brass.addColorStop(0.45, "#d4ad5c");
+    brass.addColorStop(0.55, "#b88d3e");
+    brass.addColorStop(1, "#e8c77c");
+    ctx.save();
+    ctx.shadowColor = "rgba(40,28,10,0.38)";
+    ctx.shadowBlur = 18;
+    ctx.shadowOffsetX = 10;
+    ctx.shadowOffsetY = 16;
+    ctx.fillStyle = brass;
+    spaced(ctx, t.toUpperCase(), W / 2, titleY, 12);
+    ctx.restore();
+    ctx.strokeStyle = "rgba(255,246,220,0.55)";
+    ctx.lineWidth = 2;
+    spaced(ctx, t.toUpperCase(), W / 2, titleY, 12, "stroke");
+    if (sub) {
+      ctx.font = `600 50px ${body}`;
+      ctx.save();
+      ctx.shadowColor = "rgba(40,28,10,0.3)";
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetX = 4;
+      ctx.shadowOffsetY = 6;
+      ctx.fillStyle = "#c39a4f";
+      spaced(ctx, sub, W / 2, subY + 10, 18);
+      ctx.restore();
     }
   } else {
-    ctx.clearRect(0, 0, W, H);
-    const size = fitText(ctx, t, W - 240, 200, 700, display);
-    ctx.font = `700 ${size}px ${display}`;
-    ctx.fillStyle = "rgba(255,240,215,0.35)";
-    ctx.fillText(t, W / 2 + 3, titleY + 4);
-    ctx.fillStyle = "#4a2f1c";
-    ctx.fillText(t, W / 2, titleY);
-    if (subtitle) {
-      ctx.font = `600 64px ${body}`;
-      ctx.fillStyle = "#5e3e28";
-      ctx.fillText(subtitle, W / 2, subY);
+    // Felt letter board: fine grooves, white peg letters set slightly by hand.
+    ctx.fillStyle = "#232323";
+    ctx.fillRect(0, 0, W, H);
+    for (let y = 6; y < H; y += 14) {
+      ctx.fillStyle = "rgba(0,0,0,0.45)";
+      ctx.fillRect(0, y, W, 3);
+      ctx.fillStyle = "rgba(255,255,255,0.035)";
+      ctx.fillRect(0, y + 3, W, 2);
+    }
+    const word = t.toUpperCase();
+    const size = fitText(ctx, word, W - 300, 150, 600, body);
+    ctx.font = `600 ${size}px ${body}`;
+    const letters = [...word];
+    const widths = letters.map((l) => ctx.measureText(l).width + size * 0.12);
+    let x = W / 2 - widths.reduce((a, b) => a + b, 0) / 2;
+    letters.forEach((l, i) => {
+      const w = widths[i]!;
+      ctx.save();
+      ctx.translate(x + w / 2, titleY + ((i * 37) % 7) - 3);
+      ctx.rotate((((i * 53) % 9) - 4) * 0.006);
+      ctx.fillStyle = "rgba(0,0,0,0.5)";
+      ctx.fillText(l, 3, 5);
+      ctx.fillStyle = "#f2efe8";
+      ctx.fillText(l, 0, 0);
+      ctx.restore();
+      x += w;
+    });
+    if (sub) {
+      ctx.font = `600 54px ${body}`;
+      ctx.fillStyle = "rgba(0,0,0,0.5)";
+      spaced(ctx, sub, W / 2 + 2, subY + 4, 12);
+      ctx.fillStyle = "#e9e5dc";
+      spaced(ctx, sub, W / 2, subY, 12);
     }
   }
   const tex = new THREE.CanvasTexture(c);

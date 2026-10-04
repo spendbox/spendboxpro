@@ -1,13 +1,15 @@
 "use client";
 
-import { Armchair, Check, ChevronLeft, Image as ImageIcon, ImagePlus, Lamp, LayoutGrid, LoaderCircle, MonitorPlay, Palette, Sprout, Type, X } from "lucide-react";
+import { Armchair, Check, ChevronLeft, Circle, Gift, Image as ImageIcon, ImagePlus, Lamp, LayoutGrid, LoaderCircle, MonitorPlay, Palette, PanelsTopLeft, Sprout, Store, Type, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { saveStoreTheme, uploadStoreArt } from "@/app/dashboard/[bizId]/store-actions";
 import { cn } from "@/lib/cn";
+import { Switch } from "@/components/ui/switch";
 import {
   ACCENT_COLORS,
   ART_PRESETS,
+  BACKDROPS,
   BOARDS,
   FLOORS,
   LIGHT_STYLES,
@@ -15,6 +17,8 @@ import {
   PLANT_SPOTS,
   PLANTS,
   POTS,
+  RUG_COLORS,
+  RUGS,
   TABLES,
   WALL_COLORS,
   type Art,
@@ -26,25 +30,33 @@ import type { StoreApi } from "./three/store/look-controls";
 import { businessTagline, type StoreBusiness, type StoreTarget } from "./three/store/pieces";
 import StoreCanvas from "./three/store/store-canvas";
 
-type Panel = "board" | "screen" | "table" | "plants" | "lights" | "art" | "floor" | "colours";
+type Panel = "board" | "backdrop" | "screen" | "table" | "rug" | "plants" | "lights" | "art" | "floor" | "counter" | "colours" | "gift";
 
 const TOOLS: { id: Panel; label: string; icon: ReactNode }[] = [
   { id: "board", label: "Welcome board", icon: <Type className="size-4" aria-hidden /> },
+  { id: "backdrop", label: "Backdrop", icon: <PanelsTopLeft className="size-4" aria-hidden /> },
   { id: "table", label: "Table", icon: <Armchair className="size-4" aria-hidden /> },
+  { id: "rug", label: "Rug", icon: <Circle className="size-4" aria-hidden /> },
   { id: "plants", label: "Plants", icon: <Sprout className="size-4" aria-hidden /> },
   { id: "lights", label: "Lights", icon: <Lamp className="size-4" aria-hidden /> },
   { id: "art", label: "Wall art", icon: <ImageIcon className="size-4" aria-hidden /> },
   { id: "floor", label: "Floor", icon: <LayoutGrid className="size-4" aria-hidden /> },
+  { id: "counter", label: "Counter", icon: <Store className="size-4" aria-hidden /> },
   { id: "colours", label: "Colours", icon: <Palette className="size-4" aria-hidden /> },
   { id: "screen", label: "Screen", icon: <MonitorPlay className="size-4" aria-hidden /> },
 ];
+const GIFT_TOOL = { id: "gift" as const, label: "Gift", icon: <Gift className="size-4" aria-hidden /> };
 
 /** Where the camera turns for each thing (yaw: left -, right +; pitch: down -, up +). */
 const SPOT_VIEW: Record<PlantSpot, [number, number]> = { backLeft: [-0.42, -0.08], backRight: [0.42, -0.08], front: [-0.95, -0.12], counter: [-0.2, -0.16] };
 const PANEL_VIEW: Record<Exclude<Panel, "plants">, [number, number]> = {
   board: [0, 0.12],
+  backdrop: [0, 0.04],
   screen: [0, 0.02],
   table: [0.62, -0.14],
+  rug: [0.62, -0.28],
+  counter: [0, -0.16],
+  gift: [0.1, -0.16],
   lights: [0, 0.12],
   art: [0.95, 0.02],
   floor: [0, -0.28],
@@ -77,8 +89,11 @@ export function StoreEditor({
   initial,
   onClose,
   onSaved,
+  hasPerks = false,
 }: {
   bizId: string;
+  /** The business has perks, so a gift sits on the counter. */
+  hasPerks?: boolean;
   business: StoreBusiness;
   products: StoreProduct[];
   initial: StoreTheme;
@@ -116,7 +131,8 @@ export function StoreEditor({
       return open("art");
     }
     if (target.kind === "walls") return open("colours");
-    if (target.kind === "board" || target.kind === "screen" || target.kind === "table" || target.kind === "lights" || target.kind === "floor") open(target.kind);
+    if (target.kind === "product" || target.kind === "more" || target.kind === "bell") return;
+    open(target.kind);
   };
 
   const close = () => {
@@ -150,13 +166,13 @@ export function StoreEditor({
     };
   }, [panel, dirty, onClose]);
 
-  const tool = TOOLS.find((t) => t.id === panel);
+  const tool = [...TOOLS, GIFT_TOOL].find((t) => t.id === panel);
 
   return (
     <div role="dialog" aria-modal aria-label="Edit your shop" className="fixed inset-0 z-[80] h-dvh overflow-hidden bg-ink text-white">
       {/* With a panel open, the shop shrinks to the space above it (beside it on big screens), so what you're changing stays in view. */}
       <div className={cn("absolute inset-x-0 top-0", panel ? "bottom-[46dvh] lg:right-[396px] lg:bottom-0" : "bottom-0")}>
-        <StoreCanvas business={business} theme={theme} products={products} onSelect={select} apiRef={api} editing />
+        <StoreCanvas business={business} theme={theme} products={products} onSelect={select} apiRef={api} editing hasGift={hasPerks} />
       </div>
 
       {/* Top bar */}
@@ -244,6 +260,54 @@ export function StoreEditor({
                   />
                 </Field>
               </>
+            )}
+
+            {panel === "backdrop" && (
+              <Field label="Behind the screen">
+                <Choices label="Backdrop" value={theme.backdrop} options={BACKDROPS.map((b) => ({ id: b.id, label: b.label, swatch: b.swatch }))} onChange={(backdrop) => set({ backdrop })} />
+              </Field>
+            )}
+
+            {panel === "rug" && (
+              <>
+                <Field label="Pattern">
+                  <Choices label="Rug pattern" value={theme.rug.style} options={RUGS.map((r) => ({ id: r.id, label: r.label }))} onChange={(style) => set({ rug: { ...theme.rug, style } })} />
+                </Field>
+                {theme.rug.style !== "none" && (
+                  <Field label="Colour">
+                    <Dots label="Rug colour" value={theme.rug.color} options={RUG_COLORS.map((c) => ({ id: c, label: c, color: c }))} onChange={(color) => set({ rug: { ...theme.rug, color } })} />
+                  </Field>
+                )}
+              </>
+            )}
+
+            {panel === "counter" && (
+              <>
+                <div className="flex items-center gap-3 rounded-2xl bg-canvas p-3">
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold">Your name on the counter</span>
+                    <span className="block text-xs text-muted">Your logo and name on the front of the counter.</span>
+                  </span>
+                  <Switch checked={theme.counterName} label="Your name on the counter" onChange={(counterName) => set({ counterName })} />
+                </div>
+                <Field label="Counter colour" hint="The counter uses your accent colour.">
+                  <Dots
+                    label="Counter colour"
+                    value={theme.accent ?? "brand"}
+                    options={[{ id: "brand", label: "Brand colour", color: business.brand_color }, ...ACCENT_COLORS.map((c) => ({ id: c, label: `Accent ${c}`, color: c }))]}
+                    onChange={(c) => set({ accent: c === "brand" ? null : c })}
+                  />
+                </Field>
+              </>
+            )}
+
+            {panel === "gift" && (
+              <div className="flex flex-col gap-3 text-sm text-ink-2">
+                <p>Shoppers tap the gift on your counter to open it and see your perks, like your welcome gift.</p>
+                <Link href={`/dashboard/${bizId}/perks`} className="flex h-11 items-center justify-center rounded-xl bg-brand-600 font-semibold text-white">
+                  Change your perks
+                </Link>
+              </div>
             )}
 
             {panel === "screen" && (

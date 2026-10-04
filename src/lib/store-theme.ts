@@ -7,7 +7,9 @@ export type FloorStyle = "oak" | "herringbone" | "checker" | "terrazzo" | "concr
 export type LightStyle = "dome" | "globe" | "cone" | "rattan" | "linear";
 export type LightTone = "warm" | "neutral" | "cool";
 export type TableStyle = "booth" | "marble" | "bistro" | "linen" | "garden" | "none";
-export type BoardStyle = "letter" | "acrylic" | "neon" | "brass" | "oak";
+export type BoardStyle = "lightbox" | "pill" | "neon" | "brass" | "letter";
+export type BackdropStyle = "oak" | "walnut" | "fluted" | "marble" | "painted" | "brick" | "greenery" | "none";
+export type RugStyle = "plain" | "border" | "stripes" | "geometric" | "jute" | "none";
 export type PlantKind = "strelitzia" | "monstera" | "olive" | "snake" | "flowers" | "pampas" | "none";
 export type PotColor = "white" | "terracotta" | "black" | "stone";
 export type PlantSpot = "backLeft" | "backRight" | "front" | "counter";
@@ -29,6 +31,12 @@ export interface StoreTheme {
   plants: Record<PlantSpot, { kind: PlantKind; pot: PotColor }>;
   /** The two pictures on the lounge wall. */
   art: [Art, Art];
+  /** The feature wall behind the product screen. */
+  backdrop: BackdropStyle;
+  /** The rug under the lounge table. */
+  rug: { style: RugStyle; color: string };
+  /** Show the business's name on the front of the counter. */
+  counterName: boolean;
 }
 
 export const THEMES = [
@@ -74,12 +82,33 @@ export const TABLES: { id: TableStyle; label: string; description: string; swatc
 ];
 
 export const BOARDS: { id: BoardStyle; label: string; swatch: [string, string] }[] = [
-  { id: "letter", label: "Letter board", swatch: ["#1f1f1f", "#ffffff"] },
-  { id: "acrylic", label: "Frosted acrylic", swatch: ["#eef1f0", "#1c2b24"] },
-  { id: "neon", label: "Neon", swatch: ["#151515", "#ff5c8a"] },
-  { id: "brass", label: "Brass letters", swatch: ["#c9a25a", "#f6efe6"] },
-  { id: "oak", label: "Engraved oak", swatch: ["#c9a27a", "#5e3e28"] },
+  { id: "lightbox", label: "Light box", swatch: ["#ffffff", "#1c2420"] },
+  { id: "pill", label: "Colour pill", swatch: ["#2A772C", "#ffffff"] },
+  { id: "neon", label: "Neon", swatch: ["#17191a", "#ff7aa8"] },
+  { id: "brass", label: "Brass letters", swatch: ["#d8b26a", "#f6efe6"] },
+  { id: "letter", label: "Letter board", swatch: ["#232323", "#f2efe8"] },
 ];
+
+export const BACKDROPS: { id: BackdropStyle; label: string; swatch: [string, string] }[] = [
+  { id: "oak", label: "Oak slats", swatch: ["#caa47c", "#b98f66"] },
+  { id: "walnut", label: "Walnut slats", swatch: ["#6e4a2e", "#4f3420"] },
+  { id: "fluted", label: "White fluted", swatch: ["#f4f1ea", "#e2ddd3"] },
+  { id: "marble", label: "Marble slab", swatch: ["#f4f2ee", "#b9b4aa"] },
+  { id: "painted", label: "Accent panel", swatch: ["#2A772C", "#c9a25a"] },
+  { id: "brick", label: "Brick", swatch: ["#b4654a", "#e9ddd0"] },
+  { id: "greenery", label: "Living wall", swatch: ["#3f8a45", "#76b85e"] },
+  { id: "none", label: "Plain wall", swatch: ["#efebe4", "#efebe4"] },
+];
+
+export const RUGS: { id: RugStyle; label: string }[] = [
+  { id: "plain", label: "Plain" },
+  { id: "border", label: "Border" },
+  { id: "stripes", label: "Stripes" },
+  { id: "geometric", label: "Geometric" },
+  { id: "jute", label: "Woven jute" },
+  { id: "none", label: "No rug" },
+];
+export const RUG_COLORS = ["#EFE9DE", "#D9CBB4", "#9FB08A", "#C98F75", "#8FA6B8", "#2F3A34", "#E7C9A9", "#B7A4C9"];
 
 export const PLANTS: { id: PlantKind; label: string }[] = [
   { id: "strelitzia", label: "Bird of paradise" },
@@ -120,7 +149,7 @@ export const DEFAULT_THEME: StoreTheme = {
   floor: { style: "oak", color: FLOORS[0].colors[0] },
   lights: { style: "dome", tone: "warm" },
   table: "booth",
-  board: { style: "acrylic", title: "Welcome", subtitle: "" },
+  board: { style: "lightbox", title: "Welcome", subtitle: "" },
   plants: {
     backLeft: { kind: "strelitzia", pot: "white" },
     backRight: { kind: "olive", pot: "white" },
@@ -131,6 +160,9 @@ export const DEFAULT_THEME: StoreTheme = {
     { kind: "preset", id: "shapes" },
     { kind: "preset", id: "stripes" },
   ],
+  backdrop: "oak",
+  rug: { style: "border", color: RUG_COLORS[0] },
+  counterName: true,
 };
 
 function oneOf<T extends string>(value: unknown, list: readonly { id: T }[], fallback: T): T {
@@ -155,6 +187,7 @@ function readArt(raw: unknown, fallback: Art): Art {
 }
 
 const OLD_FLOORS: Record<string, FloorStyle> = { wood: "oak", tiles: "checker", terrazzo: "terrazzo" };
+const OLD_BOARDS: Record<string, BoardStyle> = { acrylic: "lightbox", oak: "pill" };
 
 /** A safe, complete theme from whatever is stored (or sent by the editor). */
 export function readTheme(raw: unknown): StoreTheme {
@@ -175,6 +208,7 @@ export function readTheme(raw: unknown): StoreTheme {
       : { style: oneOf(l.style, LIGHT_STYLES, d.lights.style), tone: oneOf(l.tone, LIGHT_TONES, d.lights.tone) };
 
   const b = (t.board && typeof t.board === "object" ? t.board : {}) as Record<string, unknown>;
+  const r = (t.rug && typeof t.rug === "object" ? t.rug : {}) as Record<string, unknown>;
 
   // Plants per spot; an older "plants: false" means none anywhere.
   const p = (t.plants && typeof t.plants === "object" ? t.plants : {}) as Record<string, unknown>;
@@ -198,9 +232,12 @@ export function readTheme(raw: unknown): StoreTheme {
     floor: { style: floorStyle, color: floorColor },
     lights,
     table,
-    board: { style: oneOf(b.style, BOARDS, d.board.style), title: text(b.title, d.board.title, 28), subtitle: text(b.subtitle, d.board.subtitle, 48) },
+    board: { style: oneOf(OLD_BOARDS[b.style as string] ?? b.style, BOARDS, d.board.style), title: text(b.title, d.board.title, 28), subtitle: text(b.subtitle, d.board.subtitle, 48) },
     plants,
     art: [readArt(art[0], d.art[0]), readArt(art[1], d.art[1])],
+    backdrop: oneOf(t.backdrop, BACKDROPS, d.backdrop),
+    rug: { style: oneOf(r.style, RUGS, d.rug.style), color: typeof r.color === "string" && RUG_COLORS.includes(r.color) ? r.color : d.rug.color },
+    counterName: typeof t.counterName === "boolean" ? t.counterName : d.counterName,
   };
 }
 

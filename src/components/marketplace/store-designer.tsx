@@ -19,7 +19,21 @@ const StoreEditor = dynamic(() => import("./store-editor").then((m) => m.StoreEd
 });
 
 /** The business's 3D shop: a preview, a button to edit it full screen, and a link to share it. */
-export function StoreDesigner({ bizId, business, products, saved, shareUrl }: { bizId: string; business: StoreViewBusiness; products: StoreProduct[]; saved: unknown; shareUrl: string }) {
+export function StoreDesigner({
+  bizId,
+  business,
+  products,
+  saved,
+  shareUrl,
+  hasPerks,
+}: {
+  bizId: string;
+  business: StoreViewBusiness;
+  products: StoreProduct[];
+  saved: unknown;
+  shareUrl: string;
+  hasPerks: boolean;
+}) {
   const [theme, setTheme] = useState<StoreTheme>(() => readTheme(saved));
   const [editing, setEditing] = useState(false);
 
@@ -47,7 +61,7 @@ export function StoreDesigner({ bizId, business, products, saved, shareUrl }: { 
             <div>
               <h2 className="font-semibold">Make it yours</h2>
               <p className="text-sm text-muted">
-                Open the editor and tap anything: the welcome board, plants, table, lights, wall art, floor and colours. Your newest products show on the screen by themselves.
+                Open the editor and tap anything: the welcome board, the backdrop, plants, table, rug, lights, wall art, floor, counter and colours. Your newest products show on the screen by themselves.
               </p>
             </div>
           </div>
@@ -69,6 +83,7 @@ export function StoreDesigner({ bizId, business, products, saved, shareUrl }: { 
           initial={theme}
           onClose={() => setEditing(false)}
           onSaved={setTheme}
+          hasPerks={hasPerks}
         />
       )}
     </div>

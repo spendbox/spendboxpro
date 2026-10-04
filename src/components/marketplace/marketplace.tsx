@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { ProductCircles } from "@/components/products/product-circles";
+import { getShopPerks, type ShopPerk } from "@/lib/actions/shop";
 import { cn } from "@/lib/cn";
 import { readTheme } from "@/lib/store-theme";
 import type { ExploreBusiness, FeedProduct, StoreProduct } from "@/lib/types";
@@ -96,6 +97,18 @@ export function Marketplace({ businesses, products }: { businesses: ExploreBusin
     [products, store],
   );
 
+  // The shop's perks, for the gift on its counter (fetched when the shop opens).
+  const [gift, setGift] = useState<{ slug: string; perks: ShopPerk[]; currency: string } | null>(null);
+  useEffect(() => {
+    if (!storeSlug) return;
+    let alive = true;
+    void getShopPerks(storeSlug).then((r) => alive && setGift({ slug: storeSlug, ...r }));
+    return () => {
+      alive = false;
+    };
+  }, [storeSlug]);
+  const shopGift = gift && gift.slug === storeSlug ? gift : null;
+
   const openStore = useCallback((b: ExploreBusiness) => router.push(`${pathname}?store=${encodeURIComponent(b.slug)}`, { scroll: false }), [router, pathname]);
   const closeStore = useCallback(() => router.replace(pathname, { scroll: false }), [router, pathname]);
   const openProduct = useCallback((id: string) => store && router.push(`/me/p/${id}?b=${store.id}`), [router, store]);
@@ -165,6 +178,8 @@ export function Marketplace({ businesses, products }: { businesses: ExploreBusin
           onClose={closeStore}
           onOpenProduct={openProduct}
           shareUrl={typeof window === "undefined" ? undefined : `${window.location.origin}/s/${storeBusiness.slug}`}
+          perks={shopGift?.perks}
+          currency={shopGift?.currency}
         />
       )}
     </div>

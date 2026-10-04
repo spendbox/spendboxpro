@@ -1,11 +1,8 @@
 "use client";
 
-import { LoaderCircle } from "lucide-react";
-import { useState, useTransition } from "react";
-import { EmailSignIn } from "@/components/auth/email-sign-in";
+import { useState } from "react";
+import { JoinWizard } from "@/components/join/join-wizard";
 import { Button, ButtonLink } from "@/components/ui/button";
-import { FormMessage } from "@/components/ui/field";
-import { joinBusiness } from "./actions";
 
 export function JoinPanel({
   state,
@@ -13,16 +10,18 @@ export function JoinPanel({
   refCode,
   businessName,
   businessId,
+  brandColor,
+  logoUrl,
 }: {
   state: "signed-out" | "signed-in" | "member" | "owner";
   slug: string;
   refCode: string | null;
   businessName: string;
   businessId: string;
+  brandColor: string;
+  logoUrl: string | null;
 }) {
-  const [share, setShare] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [open, setOpen] = useState(false);
 
   if (state === "member") {
     return (
@@ -54,59 +53,22 @@ export function JoinPanel({
     );
   }
 
-  const shareChoice = (
-    <label className="flex cursor-pointer items-start gap-3 rounded-2xl bg-canvas p-3.5 text-sm">
-      <input
-        type="checkbox"
-        checked={share}
-        onChange={(e) => setShare(e.target.checked)}
-        className="mt-0.5 size-5 shrink-0 accent-brand-600"
-      />
-      <span>
-        <span className="font-semibold text-ink">Share my details with {businessName}</span>
-        <span className="block text-muted">Your name, phone, email and birthday, so they can reach you. You can change this any time.</span>
-      </span>
-    </label>
-  );
-
-  if (state === "signed-in") {
-    return (
-      <div className="flex flex-col gap-4">
-        <div>
-          <h2 className="font-display text-xl font-bold">Join {businessName}</h2>
-          <p className="mt-1 text-sm text-muted">One tap — it&apos;s added to your Spendbox.</p>
-        </div>
-        {shareChoice}
-        <FormMessage>{error}</FormMessage>
-        <Button
-          size="lg"
-          block
-          disabled={pending}
-          onClick={() =>
-            startTransition(async () => {
-              const message = await joinBusiness(slug, refCode, share);
-              if (message) setError(message);
-            })
-          }
-        >
-          {pending && <LoaderCircle className="size-4 animate-spin" aria-hidden />}
-          Join {businessName}
-        </Button>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h2 className="font-display text-xl font-bold">Join with your email</h2>
-        <p className="mt-1 text-sm text-muted">Already on Spendbox? Use your usual email and password.</p>
+        <h2 className="font-display text-xl font-bold">Join {businessName}</h2>
+        <p className="mt-1 text-sm text-muted">{state === "signed-in" ? "One question, and it's added to your Spendbox." : "A few quick questions, one at a time."}</p>
       </div>
-      <EmailSignIn
-        allowSignup
-        submitLabel={`Join ${businessName}`}
-        note={shareChoice}
-        onSignedIn={() => joinBusiness(slug, refCode, share)}
+      <Button size="lg" block onClick={() => setOpen(true)}>
+        Join {businessName}
+      </Button>
+      <JoinWizard
+        open={open}
+        onClose={() => setOpen(false)}
+        signedIn={state === "signed-in"}
+        slug={slug}
+        refCode={refCode}
+        business={{ name: businessName, brand_color: brandColor, logo_url: logoUrl }}
       />
     </div>
   );
