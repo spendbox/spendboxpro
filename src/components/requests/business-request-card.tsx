@@ -63,7 +63,7 @@ export function BusinessRequestCard({
           {r.images.map((u) => (
             <a key={u} href={u} target="_blank" rel="noreferrer" className="shrink-0">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={u} alt="Photo from the customer" className="size-24 rounded-2xl object-cover ring-1 ring-line" />
+              <img src={u} alt="Photo from the customer" loading="lazy" decoding="async" className="size-24 rounded-2xl object-cover ring-1 ring-line" />
             </a>
           ))}
         </div>

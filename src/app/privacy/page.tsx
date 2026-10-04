@@ -64,6 +64,12 @@ export default function PrivacyPage() {
           can switch this off at any time in Profile &amp; privacy.
         </li>
         <li>To share your name, phone, email, gender and birthday with a business — only if you switch sharing on for it (your consent).</li>
+        <li>
+          To understand what you need: from your requests we keep a summary of what you ask for (categories, key words,
+          usual budget, areas and how you like to be reached), even after a request ends or is deleted. We use it to
+          improve Spendbox and what it suggests to you — our legitimate interest in making Spendbox useful. Businesses
+          never see this summary.
+        </li>
         <li>To prevent abuse, such as spam requests — our legitimate interest in keeping Spendbox safe.</li>
         <li>To meet legal obligations where we must.</li>
       </ul>
@@ -103,8 +109,8 @@ export default function PrivacyPage() {
       <h2>How long we keep it</h2>
       <p>
         We keep your data while your account is open. Requests stop showing after 24 hours; you can delete
-        them, with their photos, at any time. If you leave a business, your membership and unused perks with it are
-        deleted. If you delete your account, we delete your profile, memberships, requests, photos and perks straight
+        them, with their photos, at any time (the summary of what you ask for stays until you delete your account). If you leave a business, your membership and unused perks with it are
+        deleted. If you delete your account, we delete your profile, memberships, requests, photos, perks and that summary straight
         away; copies in backups are removed as the backups expire.
       </p>
 

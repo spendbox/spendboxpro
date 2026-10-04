@@ -72,9 +72,20 @@ export const getMyRequests = cache(async (userId: string): Promise<CustomerReque
   return (data ?? []) as CustomerRequest[];
 });
 
-/** Businesses that reached out about each request. */
-export async function getRequestContacts(requestIds: string[]): Promise<Record<string, RequestContact[]>> {
+/** Businesses that reached out, for each of the customer's recent requests (one call). */
+export async function getMyRequestContacts(): Promise<Record<string, RequestContact[]>> {
   const supabase = await createClient();
-  const results = await Promise.all(requestIds.map((id) => supabase.rpc("my_request_contacts", { p_request_id: id })));
-  return Object.fromEntries(requestIds.map((id, i) => [id, (results[i].data ?? []) as RequestContact[]]));
+  const { data } = await supabase.rpc("my_requests_contacts");
+  const byRequest: Record<string, RequestContact[]> = {};
+  for (const { request_id, ...contact } of (data ?? []) as (RequestContact & { request_id: string })[]) {
+    (byRequest[request_id] ??= []).push(contact as RequestContact);
+  }
+  return byRequest;
+}
+
+/** Perks from partners of every business the customer joined (one call). */
+export async function getMyPartnerPerks(): Promise<PartnerPerkRow[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("my_partner_perks");
+  return (data ?? []) as PartnerPerkRow[];
 }

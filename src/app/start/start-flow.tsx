@@ -22,7 +22,7 @@ const STEPS: { key: StepKey; optional?: boolean }[] = [
 ];
 
 /** Business sign-up, one question per screen. */
-export function StartFlow({ signedIn }: { signedIn: boolean }) {
+export function StartFlow({ signedIn, partnerInvite }: { signedIn: boolean; partnerInvite?: string | null }) {
   // Someone already logged in doesn't need the account step.
   const steps = signedIn ? STEPS.filter((s) => s.key !== "account") : STEPS;
   const [index, setIndex] = useState(0);
@@ -50,7 +50,7 @@ export function StartFlow({ signedIn }: { signedIn: boolean }) {
 
   const finish = () =>
     startTransition(async () => {
-      const message = await createBusiness(payload());
+      const message = await createBusiness(payload(), partnerInvite);
       if (message) setError(message);
     });
 
@@ -172,7 +172,7 @@ export function StartFlow({ signedIn }: { signedIn: boolean }) {
         </div>
 
         {step.key === "account" ? (
-          <EmailSignIn allowSignup submitLabel="Create my link" onSignedIn={() => createBusiness(payload())} />
+          <EmailSignIn allowSignup submitLabel="Create my link" onSignedIn={() => createBusiness(payload(), partnerInvite)} />
         ) : (
           <form
             className="flex flex-col gap-4"

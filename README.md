@@ -18,19 +18,10 @@ You need accounts on **Supabase**, **Vercel** and **Paystack**. You'll also want
 
 1. Go to [supabase.com](https://supabase.com) and create a new project. Choose a region close to your customers and save the database password somewhere safe.
 2. When it's ready, open **SQL Editor** in the left menu and click **New query**.
-3. Run each of these files **in order, each once**: open the file in this repository, copy **everything**, paste it into the editor and press **Run**. You should see "Success" each time.
-   1. [`20261001000000_spendbox.sql`](supabase/migrations/20261001000000_spendbox.sql)
-   2. [`20261002000000_logos_emails_durations.sql`](supabase/migrations/20261002000000_logos_emails_durations.sql)
-   3. [`20261003000000_bank_feeds.sql`](supabase/migrations/20261003000000_bank_feeds.sql)
-   4. [`20261004000000_sales.sql`](supabase/migrations/20261004000000_sales.sql)
-   5. [`20261005000000_partners.sql`](supabase/migrations/20261005000000_partners.sql)
-   6. [`20261006000000_activity_and_accounts.sql`](supabase/migrations/20261006000000_activity_and_accounts.sql)
-   7. [`20261007000000_pay_accounts.sql`](supabase/migrations/20261007000000_pay_accounts.sql)
-   8. [`20261008000000_admin.sql`](supabase/migrations/20261008000000_admin.sql)
-   9. [`20261009000000_email_and_billing.sql`](supabase/migrations/20261009000000_email_and_billing.sql)
-   10. [`20261010000000_requests.sql`](supabase/migrations/20261010000000_requests.sql) — **requests, photos and simple perks (the new product)**
+3. Open [`supabase/catch_up.sql`](supabase/catch_up.sql), copy **everything**, paste it into the editor and press **Run**. If Supabase warns about destructive operations, confirm: it only replaces Spendbox's own functions.
+4. At the end you'll see a table of every update. Every row should say **yes**.
 
-   Some early files create tables for payment tracking, which Spendbox no longer uses. They're harmless; the later files build on them, so keep running all of them in order.
+   This one file works whatever state your database is in. It checks which updates are already there and runs only the missing ones, in order, so you can run it again after every new version of Spendbox. (The same updates are also in `supabase/migrations/`, one file each, if you prefer running them one by one.)
 
 ### 2. Login: email and password
 
@@ -65,7 +56,8 @@ People sign up with their **email and a password** (at least 8 characters); a ph
 Optional: `NEXT_PUBLIC_TRIAL_DAYS` (starting free-trial length, default `14`; change it later in `/admin`), `NEXT_PUBLIC_DEFAULT_COUNTRY_CODE` (default `234`), `NEXT_PUBLIC_TIME_ZONE` (default `Africa/Lagos`). See [`.env.example`](.env.example).
 
 3. Press **Deploy**. If you change a variable later, redeploy (**Deployments → ⋯ → Redeploy**) so it takes effect.
-4. **For speed:** in Vercel → **Settings → Functions → Function Region**, pick the region closest to your Supabase project's region (shown in Supabase → Project Settings → General). When the two are far apart, every page waits for the data to travel between continents.
+4. **For speed (important):** in Vercel → **Settings → Functions → Function Region**, pick the region closest to your Supabase project's region (shown in Supabase → Project Settings → General). When the two are far apart, every page waits for the data to travel between continents.
+5. **For speed, too:** in Supabase → **Project Settings → JWT Keys**, if it offers to migrate from the legacy JWT secret to the new signing keys, do it (follow Supabase's steps). Then Spendbox checks logins without an extra trip to Supabase on every page.
 
 > Tip: Vercel's Supabase integration (**Vercel → Storage → Supabase**) can fill in the Supabase variables for you. The app accepts the names it creates.
 
@@ -98,6 +90,10 @@ Open `your-site/admin` and log in with `ADMIN_EMAIL` and `ADMIN_PASSWORD`. It wo
 
 **Who sees a request.** The businesses the customer joined — and, if one of those businesses is on **Plus** (or still in its free trial), its partners see it too, marked "Glow Spa's customer". Businesses get the customer's first name and only the contact details picked for that request (phone for WhatsApp or calls, email for email). When a business taps a contact button it's recorded once, so the customer sees "2 plugs are reaching out" with each business's name and a button to chat back.
 
+**Customer interests.** Every request also feeds a private profile of that customer (`customer_interests`, built from `request_signals`): what they ask for most (categories and key words), their usual budget, areas, how they like to be reached, how often they post and find a plug. Deleted requests still count. Only Spendbox sees it, in `/admin` → People → a person; businesses never do.
+
+**Partner invites.** On **Partners**, a business can share an invite link (`/start?partner=their-link`). A business that signs up from it becomes their partner straight away, if the inviter still has a free place.
+
 **Perks.** Three simple kinds a business can see happen: **welcome** (on joining), **invite a friend** (for every friend who joins with the customer's link) and **birthday** (during their birthday month, even if the birthday is private). Perks are earned automatically; the business taps **Mark as given** on the customer's page. **Customers → Only customers with perks to give** lists everyone with a perk waiting. Each perk can have a time limit (1 week to 3 months, or none).
 
 **Perks for customers.** Tapping a perk opens it full screen in the perk's colour, with a live clock (so a screenshot won't pass) and a **Share with [business]** button that sends the business a link to that perk — it opens straight into the perk in their dashboard, ready to mark as given.
@@ -126,6 +122,7 @@ npm run dev                  # http://localhost:3000
 | --- | --- |
 | `npm run lint` / `npm run typecheck` | Code checks |
 | `npm test` | Unit tests (phone numbers, plans) |
+| `bash supabase/build-catch-up.sh` | Rebuilds `supabase/catch_up.sql` after you add or change a migration (add the new file's check to the list in the script first) |
 | `TEST_DATABASE_URL=postgres://… npm run test:db` | Database scenario tests (joining, referrals, perks, privacy, permissions, partners, billing, requests). Needs an **empty, throwaway** Postgres database, never your real one. |
 
 Project layout:

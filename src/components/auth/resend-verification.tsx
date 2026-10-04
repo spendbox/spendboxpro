@@ -7,7 +7,7 @@ import { resendVerification } from "@/lib/actions/email-auth";
 export function ResendVerification() {
   const [message, setMessage] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  if (message) return <p className="text-sm font-semibold sm:max-w-56">{message}</p>;
+  if (message) return <p className="max-w-40 text-xs font-semibold sm:max-w-56">{message}</p>;
   return (
     <Button
       size="sm"
@@ -20,7 +20,7 @@ export function ResendVerification() {
         })
       }
     >
-      Send it again
+      Resend
     </Button>
   );
 }

@@ -11,7 +11,7 @@ import { Card, SectionTitle } from "@/components/ui/card";
 import { ShareLink, WhatsAppIcon } from "@/components/ui/share-actions";
 import { ActionSwitch } from "@/components/ui/switch";
 import { requireUser } from "@/lib/auth";
-import { getMyMemberships, getMyRewards, getPartnerPerks } from "@/lib/customer";
+import { getMyMemberships, getMyPartnerPerks, getMyRewards } from "@/lib/customer";
 import { siteUrl } from "@/lib/env";
 import { businessTagline, formatMonthYear, memberNo, whatsappLink } from "@/lib/format";
 import { durationSentence, PERK_KINDS, perkTrigger, SIMPLE_PERK_KINDS, sortBySoonest } from "@/lib/perks";
@@ -25,7 +25,7 @@ export const metadata: Metadata = { title: "Plug" };
 export default async function PlugPage({ params, searchParams }: PageProps<"/me/b/[slug]">) {
   const [{ slug }, { welcome }] = await Promise.all([params, searchParams]);
   const user = await requireUser(`/me/b/${slug}`);
-  const [memberships, rewards] = await Promise.all([getMyMemberships(user.id), getMyRewards(user.id)]);
+  const [memberships, rewards, allPartnerPerks] = await Promise.all([getMyMemberships(user.id), getMyRewards(user.id), getMyPartnerPerks()]);
   const membership = memberships.find((m) => m.business.slug === slug);
   if (!membership) notFound();
   const b = membership.business;
@@ -41,10 +41,8 @@ export default async function PlugPage({ params, searchParams }: PageProps<"/me/
   const welcomePerk = perks.find((p) => p.kind === "welcome");
 
   const supabase = await createClient();
-  const [{ data: referralData }, partnerPerks] = await Promise.all([
-    supabase.rpc("my_referrals", { p_membership_id: membership.id }),
-    getPartnerPerks([b.id]),
-  ]);
+  const { data: referralData } = await supabase.rpc("my_referrals", { p_membership_id: membership.id });
+  const partnerPerks = allPartnerPerks.filter((r) => r.via_business_id === b.id);
   const friends = ((referralData ?? []) as ReferralRow[]).length;
   const memberSlugs = new Set(memberships.map((m) => m.business.slug));
   const inviteUrl = `${siteUrl()}/j/${b.slug}?ref=${membership.ref_code}`;

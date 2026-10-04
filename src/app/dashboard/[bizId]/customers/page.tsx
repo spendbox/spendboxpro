@@ -14,8 +14,7 @@ export const metadata: Metadata = { title: "Customers" };
 
 export default async function CustomersPage({ params, searchParams }: PageProps<"/dashboard/[bizId]/customers">) {
   const [{ bizId }, { perks }] = await Promise.all([params, searchParams]);
-  const { business } = await requireOwnedBusiness(bizId);
-  const members = await getMembers(bizId);
+  const [{ business }, members] = await Promise.all([requireOwnedBusiness(bizId), getMembers(bizId)]);
 
   const sharing = members.filter((m) => m.shares_details).length;
   const month = Number(new Intl.DateTimeFormat("en-GB", { timeZone: appTimeZone(), month: "numeric" }).format(new Date()));

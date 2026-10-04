@@ -96,7 +96,7 @@ export async function notifyNewMember(membershipId: string) {
 }
 
 /** Tells a business about cross-promotion: a request to approve, a new partner, or an accepted request. */
-export async function notifyPartnership(fromBusinessId: string, toBusinessId: string, kind: "request" | "joined" | "accepted") {
+export async function notifyPartnership(fromBusinessId: string, toBusinessId: string, kind: "request" | "joined" | "accepted" | "invited") {
   if (!emailConfigured()) return;
   try {
     const { data } = await createAdminClient().from("businesses").select("id, name, email").in("id", [fromBusinessId, toBusinessId]);
@@ -117,6 +117,14 @@ export async function notifyPartnership(fromBusinessId: string, toBusinessId: st
         lines: [
           `${from.name} partnered with ${to.name}. You approve requests automatically, so it's already live.`,
           "You're now recommended to each other's customers, and on Plus you see each other's customers' requests. You can end it any time.",
+        ],
+        button: "See your partners",
+      },
+      invited: {
+        subject: `${from.name} joined from your invite`,
+        lines: [
+          `${from.name} signed up to Spendbox with your partner link, so you're now partners.`,
+          "You're recommended to each other's customers, and on Plus you see each other's customers' requests. You can end it any time.",
         ],
         button: "See your partners",
       },

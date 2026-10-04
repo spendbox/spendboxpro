@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, Copy, Share2 } from "lucide-react";
-import { useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { buttonClass } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { whatsappLink } from "@/lib/format";
@@ -108,3 +108,25 @@ export function ShareLink({
 }
 
 export { WhatsAppIcon };
+
+/** The link on one line with Copy and WhatsApp buttons, for tight spaces. */
+export function ShareLinkBar({ url, message, extra }: { url: string; message: string; extra?: ReactNode }) {
+  const waHref = `https://wa.me/?text=${encodeURIComponent(`${message} ${url}`)}`;
+  return (
+    <div className="flex items-center gap-1.5 rounded-2xl bg-white py-1.5 pr-1.5 pl-4 shadow-card ring-1 ring-line">
+      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink-2">{url.replace(/^https?:\/\//, "")}</span>
+      <CopyButton value={url} compact label="Copy link" />
+      {extra}
+      <a
+        href={waHref}
+        target="_blank"
+        rel="noreferrer"
+        aria-label="Share on WhatsApp"
+        className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-[#107A42] px-3 text-sm font-semibold text-white hover:bg-[#0c6536]"
+      >
+        <WhatsAppIcon className="size-5" />
+        <span className="hidden sm:inline">Share</span>
+      </a>
+    </div>
+  );
+}

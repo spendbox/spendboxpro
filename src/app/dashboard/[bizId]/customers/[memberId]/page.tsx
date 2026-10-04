@@ -17,8 +17,11 @@ export const metadata: Metadata = { title: "Customer" };
 
 export default async function CustomerPage({ params }: PageProps<"/dashboard/[bizId]/customers/[memberId]">) {
   const { bizId, memberId } = await params;
-  await requireOwnedBusiness(bizId);
-  const [members, rewards] = await Promise.all([getMembers(bizId), getRewards(bizId, { status: null, membershipId: memberId })]);
+  const [, members, rewards] = await Promise.all([
+    requireOwnedBusiness(bizId),
+    getMembers(bizId),
+    getRewards(bizId, { status: null, membershipId: memberId }),
+  ]);
   const m = members.find((x) => x.membership_id === memberId);
   if (!m) notFound();
 
