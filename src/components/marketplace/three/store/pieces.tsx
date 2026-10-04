@@ -6,18 +6,15 @@ import * as THREE from "three";
 import { formatMoney } from "@/lib/format";
 import type { StoreTheme } from "@/lib/store-theme";
 import type { StoreProduct } from "@/lib/types";
-import { blob, box, cylinder, disc, merge, mix } from "../geometry";
 import { useDispose } from "../hooks";
-import { chalkboardTexture, floorTexture, neonTexture, priceTagTexture, shade, shopSignTexture, storeSignTexture } from "../textures";
+import { chalkboardTexture, neonTexture, priceTagTexture, shopSignTexture, storeSignTexture } from "../textures";
+import { COUNTER_Z, H, LOUNGE, W, BACK } from "./layout";
 import { artTexture, clockTexture, labelTexture, newBadgeTexture, placeholderTexture } from "./store-textures";
 
-// The pieces of the "Boutique" store, each a React component.
+// The pieces of the "Boutique" store with pictures on them (signs, products,
+// the bell) and its lights. The room and furniture are in room.tsx and lounge.tsx.
 
-export const W = 12; // room width (x)
-export const D = 9; // room depth (z)
-export const H = 5; // wall height
-export const BACK = -D / 2;
-export const COUNTER_Z = -1.5;
+export { BACK, COUNTER_Z, D, H, W } from "./layout";
 
 export interface StoreBusiness {
   id: string;
@@ -30,7 +27,7 @@ export interface StoreBusiness {
   whatsapp: string | null;
 }
 
-export type StoreTarget = { kind: "product"; id: string } | { kind: "more" } | { kind: "bell" } | { kind: "about" };
+export type StoreTarget = { kind: "product"; id: string } | { kind: "more" } | { kind: "bell" } | { kind: "about" } | { kind: "table" };
 
 /** Runs a handler for a tap, but not at the end of a drag (which looks around). */
 function tap(handler: () => void) {
@@ -87,117 +84,54 @@ export function Picture({
   );
 }
 
-/** Walls, floor, ceiling, counter, shelves, entrance, lounge furniture and plants. */
-export function Room({ theme, accent }: { theme: StoreTheme; accent: string }) {
-  const dark = theme.wall === "#2F3A34";
-  const solid = useMemo(() => {
-    const wall = theme.wall;
-    const cz = COUNTER_Z;
-    const parts = [
-      box(W, H, 0.2, 0, H / 2, BACK - 0.1, wall),
-      box(0.2, H, D + 4, -W / 2 - 0.1, H / 2, 2, shade(wall, -0.03)),
-      box(0.2, H, D + 4, W / 2 + 0.1, H / 2, 2, shade(wall, -0.03)),
-      box(W, 0.22, 0.06, 0, 0.11, BACK + 0.03, shade(accent, -0.1)),
-      box(0.06, 0.22, D + 4, -W / 2 + 0.03, 0.11, 2, shade(accent, -0.1)),
-      box(0.06, 0.22, D + 4, W / 2 - 0.03, 0.11, 2, shade(accent, -0.1)),
-      box(W, 0.12, 0.08, 0, H - 0.4, BACK + 0.04, shade(accent, -0.05)),
-      // Counter, with a till and a little plant.
-      box(3.8, 1.0, 1.0, 0, 0.5, cz, accent),
-      box(4.0, 0.1, 1.15, 0, 1.05, cz, "#c39a6b"),
-      box(3.5, 0.06, 0.04, 0, 0.75, cz + 0.52, shade(accent, 0.15)),
-      box(0.5, 0.24, 0.4, 1.55, 1.22, cz + 0.1, "#2f3532"),
-      box(0.42, 0.12, 0.04, 1.55, 1.36, cz - 0.08, "#9fd3b8"),
-      cylinder(0.12, 0.1, 0.2, -1.6, 1.2, cz + 0.15, "#b86f4b", 10),
-      blob(0.16, -1.6, 1.38, cz + 0.15, "#4f9b4a"),
-      // Shelves and side cabinets.
-      box(5.6, 0.07, 0.42, 0, 2.02 - 0.5, BACK + 0.22, "#a87b52"),
-      box(5.6, 0.07, 0.42, 0, 3.0 - 0.5, BACK + 0.22, "#a87b52"),
-      box(0.5, 0.9, 3.4, -W / 2 + 0.3, 0.45, -2.4, "#a87b52"),
-      box(0.5, 0.9, 3.4, W / 2 - 0.3, 0.45, -2.4, "#a87b52"),
-      // Entrance: door, window, mat.
-      box(0.12, 2.5, 1.5, -W / 2 + 0.06, 1.25, 1.6, "#5b3d29"),
-      box(0.14, 2.3, 1.3, -W / 2 + 0.07, 1.2, 1.6, "#cfe8f3"),
-      box(0.14, 1.3, 2.0, -W / 2 + 0.07, 1.9, -0.6, "#cfe8f3"),
-      box(0.16, 0.1, 2.2, -W / 2 + 0.08, 1.2, -0.6, "#ffffff"),
-      box(1.4, 0.03, 0.9, -W / 2 + 0.9, 0.015, 1.6, shade(accent, -0.15)),
-      // Chalkboard easel legs.
-      box(0.06, 1.6, 0.06, -4.4, 0.8, 0.0, "#7a5534", 0.5),
-      box(0.06, 1.6, 0.06, -3.6, 0.8, -0.35, "#7a5534", 0.5),
-      // Pendant cords.
-      ...[-2.2, 0, 2.2].map((x) => cylinder(0.012, 0.012, 0.7, x, H - 0.35, -0.3, "#2f3532", 4)),
-    ];
-    if (theme.lounge) {
-      const sofa = shade(accent, 0.18);
-      parts.push(
-        box(1.0, 0.45, 2.6, 4.9, 0.32, 1.3, sofa),
-        box(0.3, 0.9, 2.6, 5.35, 0.65, 1.3, shade(sofa, -0.05)),
-        box(1.0, 0.65, 0.3, 4.9, 0.4, 0.1, shade(sofa, -0.08)),
-        box(1.0, 0.65, 0.3, 4.9, 0.4, 2.5, shade(sofa, -0.08)),
-        cylinder(0.65, 0.65, 0.06, 3.4, 0.5, 1.3, "#c39a6b", 20),
-        cylinder(0.08, 0.12, 0.48, 3.4, 0.25, 1.3, "#5b3d29", 8),
-        cylinder(0.03, 0.03, 1.9, 5.3, 0.95, 3.2, "#2f3532", 6),
-        disc(1.7, 3.9, 0.012, 1.3, mix(accent, "#f4ece0", 0.62)),
-      );
-    }
-    if (theme.plants) {
-      for (const [x, z, s] of [
-        [-5.3, -3.8, 1],
-        [5.3, -3.8, 1.1],
-        [-5.2, 3.6, 0.9],
-      ] as const) {
-        parts.push(
-          cylinder(0.32 * s, 0.25 * s, 0.6 * s, x, 0.3 * s, z, "#b86f4b", 12),
-          blob(0.55 * s, x, 0.95 * s, z, "#4f9b4a"),
-          blob(0.42 * s, x + 0.2, 1.35 * s, z - 0.1, "#5fae55"),
-          blob(0.35 * s, x - 0.2, 1.25 * s, z + 0.15, "#3f8a3f"),
-        );
-      }
-    }
-    return merge(parts);
-  }, [theme.wall, theme.lounge, theme.plants, accent]);
-  useDispose(solid);
-  const floor = useMemo(() => floorTexture(theme.floor), [theme.floor]);
-  useDispose(floor);
-
-  return (
-    <>
-      <mesh rotation-x={-Math.PI / 2} position-z={2}>
-        <planeGeometry args={[W, D + 4]} />
-        <meshLambertMaterial map={floor} />
-      </mesh>
-      <mesh geometry={solid}>
-        <meshLambertMaterial vertexColors />
-      </mesh>
-      <mesh rotation-x={Math.PI / 2} position={[0, H, 2]}>
-        <planeGeometry args={[W, D + 4]} />
-        <meshBasicMaterial color={dark ? "#2a332e" : shade(theme.wall, 0.02)} />
-      </mesh>
-    </>
-  );
-}
-
-/** Lamps over the counter, and the floor lamp in the lounge. */
+/** Brass pendants over the counter, an opal globe over the lounge table, and ceiling downlights. */
 export function Lights({ theme, accent }: { theme: StoreTheme; accent: string }) {
-  const glow = theme.lights === "warm" ? "#ffe2a8" : "#e8f3ff";
+  const warm = theme.lights === "warm";
+  const glow = warm ? "#ffd9a0" : "#eaf3ff";
+  const shade = useMemo(
+    () => new THREE.LatheGeometry([[0.02, 0.2], [0.08, 0.19], [0.2, 0.08], [0.26, 0], [0.255, -0.005]].map(([r, y]) => new THREE.Vector2(r, y)), 32),
+    [],
+  );
+  useDispose(shade);
   return (
     <>
-      {[-2.2, 0, 2.2].map((x) => (
-        <group key={x} position={[x, 0, -0.3]}>
-          <mesh position-y={H - 0.85}>
-            <sphereGeometry args={[0.12, 12, 8]} />
-            <meshBasicMaterial color={glow} />
+      {/* Hung over the shop floor in front of the counter, so they never cover the sign. */}
+      {[-2.4, 0, 2.4].map((x) => (
+        <group key={x} position={[x, H - 1.4, 0.3]}>
+          <mesh position-y={0.7}>
+            <cylinderGeometry args={[0.006, 0.006, 1.2, 4]} />
+            <meshStandardMaterial color="#1f1f1f" />
           </mesh>
-          <mesh position-y={H - 0.72}>
-            <coneGeometry args={[0.24, 0.24, 16, 1, true]} />
-            <meshLambertMaterial color={accent} side={THREE.DoubleSide} />
+          <mesh geometry={shade} castShadow>
+            <meshStandardMaterial color={accent} metalness={0.35} roughness={0.35} side={THREE.DoubleSide} />
           </mesh>
+          <mesh position-y={0.03}>
+            <sphereGeometry args={[0.07, 16, 10]} />
+            <meshBasicMaterial color={glow} toneMapped={false} />
+          </mesh>
+          <pointLight position-y={-0.05} color={glow} intensity={warm ? 2.6 : 2.2} distance={6} decay={1.6} />
         </group>
       ))}
       {theme.lounge && (
-        <mesh position={[5.3, 2.05, 3.2]}>
-          <coneGeometry args={[0.38, 0.45, 16, 1, true]} />
-          <meshBasicMaterial color={glow} side={THREE.DoubleSide} />
-        </mesh>
+        <group position={[LOUNGE.x, 2.75, LOUNGE.z]}>
+          <mesh position-y={1.13}>
+            <cylinderGeometry args={[0.006, 0.006, 1.9, 4]} />
+            <meshStandardMaterial color="#1f1f1f" />
+          </mesh>
+          <mesh>
+            <sphereGeometry args={[0.24, 32, 20]} />
+            <meshStandardMaterial color="#fff6e8" emissive={glow} emissiveIntensity={1.4} roughness={0.4} />
+          </mesh>
+          <pointLight position-y={-0.3} color={glow} intensity={2.4} distance={5} decay={1.6} />
+        </group>
+      )}
+      {[-3.6, 0, 3.6].flatMap((x) =>
+        [-2.6, 1.2, 4.4].map((z) => (
+          <mesh key={`${x}${z}`} position={[x, H - 0.005, z]} rotation-x={Math.PI / 2}>
+            <circleGeometry args={[0.09, 20]} />
+            <meshBasicMaterial color={glow} toneMapped={false} />
+          </mesh>
+        )),
       )}
     </>
   );
@@ -220,23 +154,43 @@ export function Signs({ business, theme, accent, onAbout }: { business: StoreBus
     [business.categories, business.location, business.whatsapp],
   );
   const card = useMemo(() => chalkboardTexture("Hello", [business.about?.slice(0, 40) ?? "Thanks for stopping by", "Tap to learn more"]), [business.about]);
-  const art1 = useMemo(() => artTexture(accent, 1), [accent]);
-  const art2 = useMemo(() => artTexture(accent, 2), [accent]);
   return (
     <>
       <Picture texture={sign} size={[5.2, 1.3]} position={[0, H - 0.78, BACK + 0.1]} />
-      <Picture texture={plaque} size={[2.6, 0.65]} position={[0, 0.55, COUNTER_Z + 0.51]} />
+      <Picture texture={plaque} size={[2.2, 0.55]} position={[0, 0.6, COUNTER_Z + 0.5]} />
       <Picture texture={clock} size={[0.8, 0.8]} position={[4.6, H - 0.95, BACK + 0.1]} />
       <Picture texture={neon} size={[1.5, 0.47]} position={[-W / 2 + 0.12, 3.05, 1.6]} rotation={[0, Math.PI / 2, 0]} />
-      <Picture texture={board} size={[1.3, 0.98]} position={[-4.0, 1.25, -0.1]} rotation={[-0.18, 0.5, 0]} onTap={onAbout} />
+      <Picture texture={board} size={[1.3, 0.98]} position={[-4.0, 1.3, -0.1]} rotation={[-0.18, 0.5, 0]} onTap={onAbout} />
+      <Picture texture={card} size={[0.36, 0.27]} position={[-1.05, 1.2, COUNTER_Z + 0.42]} rotation={[-0.35, 0.15, 0]} onTap={onAbout} />
       {theme.lounge && (
         <>
-          <Picture texture={card} size={[0.55, 0.41]} position={[3.4, 0.54, 1.3]} rotation={[-Math.PI / 2 + 0.25, 0, 0]} onTap={onAbout} />
-          <Picture texture={art1} size={[1.3, 1.0]} position={[W / 2 - 0.02, 2.55, 0.7]} rotation={[0, -Math.PI / 2, 0]} transparent={false} />
-          <Picture texture={art2} size={[0.9, 1.2]} position={[W / 2 - 0.02, 2.6, 2.1]} rotation={[0, -Math.PI / 2, 0]} transparent={false} />
+          <ArtFrame accent={accent} variant={1} size={[1.3, 1.0]} position={[W / 2 - 0.04, 2.55, 0.9]} />
+          <ArtFrame accent={accent} variant={2} size={[0.9, 1.2]} position={[W / 2 - 0.04, 2.6, 2.4]} />
         </>
       )}
     </>
+  );
+}
+
+/** A picture in a thin oak frame, hung on the right-hand wall. */
+function ArtFrame({ accent, variant, size, position }: { accent: string; variant: number; size: [number, number]; position: [number, number, number] }) {
+  const texture = useMemo(() => artTexture(accent, variant), [accent, variant]);
+  useDispose(texture);
+  return (
+    <group position={position} rotation-y={-Math.PI / 2}>
+      <mesh castShadow>
+        <boxGeometry args={[size[0] + 0.12, size[1] + 0.12, 0.04]} />
+        <meshStandardMaterial color="#c9a37b" roughness={0.6} />
+      </mesh>
+      <mesh position-z={0.021}>
+        <planeGeometry args={[size[0] + 0.02, size[1] + 0.02]} />
+        <meshStandardMaterial color="#f7f4ee" roughness={0.9} />
+      </mesh>
+      <mesh position-z={0.023}>
+        <planeGeometry args={[size[0] - 0.14, size[1] - 0.14]} />
+        <meshStandardMaterial map={texture} roughness={0.8} />
+      </mesh>
+    </group>
   );
 }
 
@@ -266,15 +220,15 @@ export function Bell({ onRing }: { onRing: () => void }) {
     >
       <mesh>
         <cylinderGeometry args={[0.2, 0.22, 0.05, 20]} />
-        <meshLambertMaterial color="#e0b341" emissive="#3a2a00" />
+        <meshStandardMaterial color="#d4ad5c" metalness={1} roughness={0.22} />
       </mesh>
       <mesh position-y={0.03}>
         <sphereGeometry args={[0.16, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2]} />
-        <meshLambertMaterial color="#e0b341" emissive="#3a2a00" />
+        <meshStandardMaterial color="#d4ad5c" metalness={1} roughness={0.22} />
       </mesh>
       <mesh position-y={0.21}>
         <sphereGeometry args={[0.04, 8, 6]} />
-        <meshLambertMaterial color="#e0b341" emissive="#3a2a00" />
+        <meshStandardMaterial color="#d4ad5c" metalness={1} roughness={0.22} />
       </mesh>
     </group>
   );
@@ -323,12 +277,17 @@ function ProductFrame({ product, accent, position, rotationY, onSelect }: { prod
   const hover = useHoverCursor();
   return (
     <group position={position} rotation-y={rotationY} scale={hover.hovered ? 1.06 : 1} onClick={tap(() => onSelect({ kind: "product", id: product.id }))} {...hover.handlers}>
-      <mesh>
-        <boxGeometry args={[1.08, 1.08, 0.07]} />
-        <meshLambertMaterial color="#ffffff" />
+      {/* Gallery frame: thin black edge, white mat, the picture. */}
+      <mesh castShadow>
+        <boxGeometry args={[1.08, 1.08, 0.06]} />
+        <meshStandardMaterial color="#1f1f1e" roughness={0.45} metalness={0.2} />
       </mesh>
-      <mesh position-z={0.04}>
-        <planeGeometry args={[0.94, 0.94]} />
+      <mesh position-z={0.031}>
+        <planeGeometry args={[1.02, 1.02]} />
+        <meshStandardMaterial color="#fbfaf7" roughness={0.85} />
+      </mesh>
+      <mesh position-z={0.036}>
+        <planeGeometry args={[0.9, 0.9]} />
         <meshBasicMaterial map={picture} toneMapped={false} />
       </mesh>
       {tag && (
@@ -349,8 +308,8 @@ function ProductFrame({ product, accent, position, rotationY, onSelect }: { prod
 
 const SLOTS: { position: [number, number, number]; rotationY: number }[] = [
   ...[2.02, 3.0].flatMap((y) => [-2.1, -0.7, 0.7, 2.1].map((x) => ({ position: [x, y, BACK + 0.32] as [number, number, number], rotationY: 0 }))),
-  ...[-3.5, -2.3, -1.1].map((z) => ({ position: [-W / 2 + 0.3, 1.55, z] as [number, number, number], rotationY: Math.PI / 2 })),
-  ...[-3.5, -2.3, -1.1].map((z) => ({ position: [W / 2 - 0.3, 1.55, z] as [number, number, number], rotationY: -Math.PI / 2 })),
+  ...[-3.5, -2.3, -1.1].map((z) => ({ position: [-W / 2 + 0.3, 1.47, z] as [number, number, number], rotationY: Math.PI / 2 })),
+  ...[-3.5, -2.3, -1.1].map((z) => ({ position: [W / 2 - 0.3, 1.47, z] as [number, number, number], rotationY: -Math.PI / 2 })),
 ];
 
 /** Products framed on the shelves (and side cabinets), with a "+N more" card if they don't all fit. */

@@ -13,6 +13,7 @@ select test.ok((select count(*) from public.explore_businesses()) = 2, 'the map 
 select test.ok((select is_member from public.explore_businesses() where id = :'a'), 'her own business is marked as joined');
 select test.ok((select not is_member from public.explore_businesses() where id = :'b'), 'the partner is not');
 select test.ok((select products = 1 and new_products = 0 from public.explore_businesses() where id = :'a'), 'with product counts, and none new once seen');
+select test.ok((select customers from public.explore_businesses() where id = :'a') = (select count(*) from public.memberships where business_id = :'a'), 'and how many customers each shop has');
 reset role;
 
 -- A new product shows as new on A's shop

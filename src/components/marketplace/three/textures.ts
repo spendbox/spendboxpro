@@ -11,14 +11,14 @@ function fontFamily(kind: "display" | "body") {
   return name ? `${name}, system-ui, sans-serif` : "system-ui, sans-serif";
 }
 
-function canvas(width: number, height: number) {
+export function canvas(width: number, height: number) {
   const c = document.createElement("canvas");
   c.width = width;
   c.height = height;
   return { c, ctx: c.getContext("2d")! };
 }
 
-function toTexture(c: HTMLCanvasElement, repeat?: [number, number]) {
+export function toTexture(c: HTMLCanvasElement, repeat?: [number, number]) {
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 4;

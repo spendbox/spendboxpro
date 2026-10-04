@@ -1,4 +1,4 @@
-import { ChevronRight, Store } from "lucide-react";
+import { ChevronRight, Store, UserPlus } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PartnerOffers } from "@/components/perks/partner-offers";
@@ -7,8 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { buttonClass } from "@/components/ui/button";
 import { Card, EmptyState, SectionTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
-import { WhatsAppIcon } from "@/components/ui/share-actions";
+import { ShareLink, WhatsAppIcon } from "@/components/ui/share-actions";
 import { requireUser } from "@/lib/auth";
+import { siteUrl } from "@/lib/env";
 import { getMyMemberships, getMyPartnerPerks, getMyRewards } from "@/lib/customer";
 import { businessTagline, whatsappLink } from "@/lib/format";
 
@@ -62,6 +63,27 @@ export default async function PlugsPage() {
             })}
           </Card>
         )}
+      </section>
+
+      <section aria-labelledby="invite-plugs">
+        <Card className="flex flex-col gap-4 p-5">
+          <div className="flex items-start gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-brand-50 text-brand-700">
+              <UserPlus className="size-5" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <h2 id="invite-plugs" className="font-semibold">
+                Invite more plugs
+              </h2>
+              <p className="text-sm text-muted">Love a business that isn&apos;t here yet? Send them this link to get their shop on Spendbox.</p>
+            </div>
+          </div>
+          <ShareLink
+            url={`${siteUrl()}/plug`}
+            message="I'd love to follow your business on Spendbox, so I see your new products and perks. It's quick to set up:"
+            title="Get your business on Spendbox"
+          />
+        </Card>
       </section>
 
       {partnerPerks.length > 0 && (

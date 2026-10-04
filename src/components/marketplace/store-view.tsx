@@ -1,13 +1,13 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Info, LayoutGrid, Mail, MapPin, Phone, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Info, LayoutGrid, Mail, MapPin, Phone, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BusinessAvatar } from "@/components/ui/avatar";
 import { WhatsAppIcon } from "@/components/ui/share-actions";
 import { cn } from "@/lib/cn";
 import { whatsappLink } from "@/lib/format";
-import type { StoreTheme } from "@/lib/store-theme";
+import { TABLES, type StoreTheme, type TableStyle } from "@/lib/store-theme";
 import type { StoreProduct } from "@/lib/types";
 import type { StoreApi } from "./three/store/look-controls";
 import type { StoreBusiness, StoreTarget } from "./three/store/pieces";
@@ -30,6 +30,7 @@ export default function StoreView({
   mode,
   onClose,
   onOpenProduct,
+  onTableChange,
 }: {
   business: StoreViewBusiness;
   theme: StoreTheme;
@@ -37,9 +38,31 @@ export default function StoreView({
   mode: "fullscreen" | "embedded";
   onClose?: () => void;
   onOpenProduct?: (productId: string) => void;
+  /** The designer saves the table style; shoppers just try styles out (remembered on their phone). */
+  onTableChange?: (table: TableStyle) => void;
 }) {
   const api = useRef<StoreApi | null>(null);
-  const [sheet, setSheet] = useState<"contact" | "about" | null>(null);
+  const [sheet, setSheet] = useState<"contact" | "about" | "table" | null>(null);
+  const tableKey = `spendbox-table-${business.id}`;
+  const [tried, setTried] = useState<TableStyle | null>(() => {
+    if (onTableChange) return null;
+    try {
+      const saved = localStorage.getItem(tableKey);
+      return TABLES.some((t) => t.id === saved) ? (saved as TableStyle) : null;
+    } catch {
+      return null;
+    }
+  });
+  const shown = useMemo(() => (tried ? { ...theme, table: tried } : theme), [theme, tried]);
+  const chooseTable = (table: TableStyle) => {
+    if (onTableChange) return onTableChange(table);
+    setTried(table);
+    try {
+      localStorage.setItem(tableKey, table);
+    } catch {
+      // Private mode: the choice lasts for this visit only.
+    }
+  };
   const [hint, setHint] = useState(true);
   const select = (target: StoreTarget) => {
     setHint(false);
@@ -47,6 +70,7 @@ export default function StoreView({
     else if (target.kind === "more") {
       if (products[0]) onOpenProduct?.(products[0].id);
     } else if (target.kind === "bell") setSheet("contact");
+    else if (target.kind === "table") setSheet("table");
     else setSheet("about");
   };
 
@@ -85,7 +109,7 @@ export default function StoreView({
       className={cn("overflow-hidden bg-ink text-white", mode === "fullscreen" ? "fixed inset-0 z-[75] h-dvh" : "relative size-full rounded-3xl")}
     >
       <div className="absolute inset-0">
-        <StoreCanvas business={business} theme={theme} products={products} onSelect={select} apiRef={api} />
+        <StoreCanvas business={business} theme={shown} products={products} onSelect={select} apiRef={api} />
       </div>
 
       {/* Top bar */}
@@ -112,7 +136,7 @@ export default function StoreView({
           hint ? "opacity-100" : "opacity-0",
         )}
       >
-        Drag to look around · tap a product
+        {theme.lounge ? "Drag to look around · tap a product or the table" : "Drag to look around · tap a product"}
       </div>
 
       {products.length === 0 && (
@@ -159,7 +183,7 @@ export default function StoreView({
         <div className="absolute inset-0 z-10 flex items-end justify-center bg-black/40 sm:items-center" onClick={() => setSheet(null)}>
           <div
             role="dialog"
-            aria-label={sheet === "contact" ? `Contact ${business.name}` : `About ${business.name}`}
+            aria-label={sheet === "contact" ? `Contact ${business.name}` : sheet === "table" ? "Table style" : `About ${business.name}`}
             onClick={(e) => e.stopPropagation()}
             className="w-full max-w-md animate-fade-up rounded-t-3xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-ink sm:rounded-3xl"
           >
@@ -173,7 +197,33 @@ export default function StoreView({
                 <X className="size-4" aria-hidden />
               </button>
             </div>
-            {sheet === "contact" ? (
+            {sheet === "table" ? (
+              <div className="flex flex-col gap-3">
+                <p className="text-sm text-muted">{onTableChange ? "Pick the table set for your lounge corner." : "Try a different table set. Only you see the change."}</p>
+                <div role="radiogroup" aria-label="Table style" className="flex max-h-[60dvh] flex-col gap-2 overflow-y-auto">
+                  {TABLES.map((t) => {
+                    const on = shown.table === t.id;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={on}
+                        onClick={() => chooseTable(t.id)}
+                        className={cn("flex items-center gap-3 rounded-2xl p-3 text-left ring-2 transition", on ? "bg-brand-50 ring-brand-600" : "bg-white ring-line hover:ring-line-strong")}
+                      >
+                        <span aria-hidden className="relative size-11 shrink-0 overflow-hidden rounded-full shadow-inner" style={{ background: `linear-gradient(135deg, ${t.swatch[0]} 50%, ${t.swatch[1]} 50%)` }} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-semibold">{t.label}</span>
+                          <span className="block text-xs text-muted">{t.description}</span>
+                        </span>
+                        {on && <Check className="size-4 shrink-0 text-brand-700" aria-hidden />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : sheet === "contact" ? (
               <div className="flex flex-col gap-2">
                 {business.whatsapp && (
                   <a href={whatsappLink(business.whatsapp, message)} target="_blank" rel="noreferrer" className="flex h-12 items-center justify-center gap-2 rounded-xl bg-[#107A42] font-semibold text-white">

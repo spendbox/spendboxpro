@@ -2,7 +2,7 @@ import { SubTabs } from "@/components/shell/sub-tabs";
 import { requireUser } from "@/lib/auth";
 import { getMyProfile } from "@/lib/customer";
 
-/** My Spendbox: a hello, then Explore · My box · Ask. */
+/** My Spendbox: a hello, then Explore · My box · Ask. (The page title is for screen readers only.) */
 export default async function MySpendboxLayout({ children }: LayoutProps<"/me">) {
   const user = await requireUser("/me");
   const profile = await getMyProfile(user.id);
@@ -10,8 +10,8 @@ export default async function MySpendboxLayout({ children }: LayoutProps<"/me">)
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-5">
       <header>
-        <p className="text-sm font-semibold text-muted">{firstName ? `Hi ${firstName}` : "Hi there"}</p>
-        <h1 className="font-display text-[28px] leading-tight font-bold tracking-tight sm:text-[32px]">My Spendbox</h1>
+        <h1 className="sr-only">My Spendbox</h1>
+        <p className="font-display text-lg font-bold tracking-tight text-ink-2">{firstName ? `Hi ${firstName}` : "Hi there"}</p>
       </header>
       <SubTabs
         label="My Spendbox"

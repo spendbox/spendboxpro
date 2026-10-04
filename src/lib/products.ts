@@ -45,5 +45,5 @@ export const getMyBox = cache(async (): Promise<FeedProduct[]> => {
 export const getExploreBusinesses = cache(async (): Promise<ExploreBusiness[]> => {
   const supabase = await createClient();
   const { data } = await supabase.rpc("explore_businesses");
-  return ((data ?? []) as ExploreBusiness[]).map((b) => ({ ...b, products: num(b.products), new_products: num(b.new_products) }));
+  return ((data ?? []) as ExploreBusiness[]).map((b) => ({ ...b, products: num(b.products), new_products: num(b.new_products), customers: num(b.customers) }));
 });
