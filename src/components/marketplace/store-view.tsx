@@ -9,7 +9,9 @@ import { cn } from "@/lib/cn";
 import { whatsappLink } from "@/lib/format";
 import type { StoreTheme } from "@/lib/store-theme";
 import type { StoreProduct } from "@/lib/types";
-import { StoreScene, type StoreBusiness, type StoreTarget } from "./three/store-scene";
+import type { StoreApi } from "./three/store/look-controls";
+import type { StoreBusiness, StoreTarget } from "./three/store/pieces";
+import StoreCanvas from "./three/store/store-canvas";
 
 export interface StoreViewBusiness extends StoreBusiness {
   slug: string;
@@ -36,38 +38,17 @@ export default function StoreView({
   onClose?: () => void;
   onOpenProduct?: (productId: string) => void;
 }) {
-  const holder = useRef<HTMLDivElement>(null);
-  const sceneRef = useRef<StoreScene | null>(null);
+  const api = useRef<StoreApi | null>(null);
   const [sheet, setSheet] = useState<"contact" | "about" | null>(null);
   const [hint, setHint] = useState(true);
-  const handlers = useRef({ onOpenProduct, products });
-  useEffect(() => {
-    handlers.current = { onOpenProduct, products };
-  }, [onOpenProduct, products]);
-
-  useEffect(() => {
-    if (!holder.current) return;
-    const scene = new StoreScene(holder.current, {
-      business,
-      theme,
-      products,
-      onSelect: (target: StoreTarget) => {
-        setHint(false);
-        if (target.kind === "product") handlers.current.onOpenProduct?.(target.id);
-        else if (target.kind === "more") {
-          const first = handlers.current.products[0];
-          if (first) handlers.current.onOpenProduct?.(first.id);
-        } else if (target.kind === "bell") setSheet("contact");
-        else setSheet("about");
-      },
-    });
-    sceneRef.current = scene;
-    return () => {
-      scene.dispose();
-      sceneRef.current = null;
-    };
-    // Rebuild when the store's look or stock changes.
-  }, [business, theme, products]);
+  const select = (target: StoreTarget) => {
+    setHint(false);
+    if (target.kind === "product") onOpenProduct?.(target.id);
+    else if (target.kind === "more") {
+      if (products[0]) onOpenProduct?.(products[0].id);
+    } else if (target.kind === "bell") setSheet("contact");
+    else setSheet("about");
+  };
 
   useEffect(() => {
     const t = setTimeout(() => setHint(false), 4500);
@@ -82,8 +63,8 @@ export default function StoreView({
         if (sheet) setSheet(null);
         else onClose?.();
       }
-      if (e.key === "ArrowLeft") sceneRef.current?.look(-1);
-      if (e.key === "ArrowRight") sceneRef.current?.look(1);
+      if (e.key === "ArrowLeft") api.current?.look(-1);
+      if (e.key === "ArrowRight") api.current?.look(1);
     };
     window.addEventListener("keydown", onKey);
     const previous = document.body.style.overflow;
@@ -103,7 +84,9 @@ export default function StoreView({
       aria-label={`${business.name} store`}
       className={cn("overflow-hidden bg-ink text-white", mode === "fullscreen" ? "fixed inset-0 z-[75] h-dvh" : "relative size-full rounded-3xl")}
     >
-      <div ref={holder} className="absolute inset-0" />
+      <div className="absolute inset-0">
+        <StoreCanvas business={business} theme={theme} products={products} onSelect={select} apiRef={api} />
+      </div>
 
       {/* Top bar */}
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center gap-3 bg-gradient-to-b from-black/45 to-transparent p-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:p-4">
@@ -139,10 +122,10 @@ export default function StoreView({
       )}
 
       {/* Look buttons (desktop) */}
-      <button type="button" aria-label="Look left" onClick={() => sceneRef.current?.look(-1)} className="absolute top-1/2 left-3 hidden size-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/35 backdrop-blur hover:bg-black/50 sm:flex">
+      <button type="button" aria-label="Look left" onClick={() => api.current?.look(-1)} className="absolute top-1/2 left-3 hidden size-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/35 backdrop-blur hover:bg-black/50 sm:flex">
         <ChevronLeft className="size-5" aria-hidden />
       </button>
-      <button type="button" aria-label="Look right" onClick={() => sceneRef.current?.look(1)} className="absolute top-1/2 right-3 hidden size-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/35 backdrop-blur hover:bg-black/50 sm:flex">
+      <button type="button" aria-label="Look right" onClick={() => api.current?.look(1)} className="absolute top-1/2 right-3 hidden size-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/35 backdrop-blur hover:bg-black/50 sm:flex">
         <ChevronRight className="size-5" aria-hidden />
       </button>
 

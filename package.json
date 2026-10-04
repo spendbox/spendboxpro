@@ -12,6 +12,7 @@
     "test:db": "bash supabase/tests/run.sh"
   },
   "dependencies": {
+    "@react-three/fiber": "^9.8.1",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.117.2",
     "@types/three": "^0.186.0",
