@@ -17,6 +17,7 @@ MARKERS=(
   "20261008000000_admin.sql|to_regclass('public.app_settings') is not null"
   "20261009000000_email_and_billing.sql|to_regclass('public.business_payments') is not null"
   "20261010000000_requests.sql|to_regclass('public.requests') is not null"
+  "20261011000000_interests_and_speed.sql|to_regclass('public.customer_interests') is not null"
 )
 
 listed=$(printf '%s\n' "${MARKERS[@]}" | cut -d'|' -f1 | sort)

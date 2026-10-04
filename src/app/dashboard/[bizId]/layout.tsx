@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { ExternalLink, LogOut, PauseCircle, Wallet } from "lucide-react";
 import Link from "next/link";
 import { ConfirmEmailBanner } from "@/components/auth/confirm-email-banner";
@@ -10,23 +11,26 @@ import { TrialBanner } from "@/components/business/trial-banner";
 import { BusinessSwitcher } from "@/components/shell/business-switcher";
 import type { NavItem } from "@/components/shell/nav";
 import { signOut } from "@/lib/actions/auth";
-import { requireOwnedBusiness } from "@/lib/auth";
+import { requireOwnedBusiness, requireUser } from "@/lib/auth";
 import { getStats } from "@/lib/business";
+import { getMyProfile } from "@/lib/customer";
 import { SUPPORT_EMAIL } from "@/lib/email";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function BusinessLayout({ children, params }: LayoutProps<"/dashboard/[bizId]">) {
   const { bizId } = await params;
-  const { user, business, businesses } = await requireOwnedBusiness(bizId);
-
+  const user = await requireUser(`/dashboard/${bizId}`);
+  void getMyProfile(user.id); // starts the email banner's lookup now, alongside the rest
   const supabase = await createClient();
-  const [stats, { count: memberships }, { data: partnerRequests }] = await Promise.all([
+  // Everything at once: the ownership check, and data the database only shows to the owner anyway.
+  const [{ business, businesses }, stats, { count: memberships }, { data: partnerRequests }, settings] = await Promise.all([
+    requireOwnedBusiness(bizId),
     getStats(bizId),
     supabase.from("memberships").select("id", { count: "exact", head: true }).eq("customer_id", user.id),
     supabase.rpc("partner_requests_waiting", { p_business_id: bizId }),
+    getSettings(),
   ]);
   const requests = Number(partnerRequests ?? 0);
-  const settings = await getSettings();
 
   const base = `/dashboard/${bizId}`;
   const nav: NavItem[] = [
@@ -67,7 +71,9 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
         </>
       }
     >
-      <ConfirmEmailBanner userId={user.id} />
+      <Suspense fallback={null}>
+        <ConfirmEmailBanner userId={user.id} />
+      </Suspense>
       <TrialBanner business={business} />
       {business.suspended_at && business.suspended_reason === "billing" ? (
         <div className="mx-auto flex max-w-2xl flex-col gap-5 py-6">

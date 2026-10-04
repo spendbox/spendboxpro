@@ -1,4 +1,5 @@
 import "server-only";
+import { unstable_cache, updateTag } from "next/cache";
 import { cache } from "react";
 import { trialDays } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -55,13 +56,23 @@ function defaults(): AppSettings {
   };
 }
 
-/** The current switches. One quick read per request; falls back to defaults if the database isn't updated yet. */
+// Settings change rarely, so they're kept for a minute across requests (saving one clears it).
+const SETTINGS_TAG = "app-settings";
+const readSettingRows = unstable_cache(
+  async () => {
+    const { data, error } = await createAdminClient().from("app_settings").select("key, value");
+    if (error) throw new Error(error.message);
+    return (data ?? []) as { key: string; value: unknown }[];
+  },
+  ["app-settings"],
+  { tags: [SETTINGS_TAG], revalidate: 60 },
+);
+
+/** The current switches. Falls back to defaults if the database isn't updated yet. */
 export const getSettings = cache(async (): Promise<AppSettings> => {
   const settings = defaults();
   try {
-    const { data, error } = await createAdminClient().from("app_settings").select("key, value");
-    if (error) return settings;
-    const byKey = new Map((data ?? []).map((row) => [row.key as string, row.value as unknown]));
+    const byKey = new Map((await readSettingRows()).map((row) => [row.key, row.value]));
     for (const [name, key] of Object.entries(KEYS) as [keyof AppSettings, string][]) {
       const value = byKey.get(key);
       if (value === undefined || value === null) continue;
@@ -84,4 +95,5 @@ export async function saveSetting<K extends keyof AppSettings>(name: K, value: A
     .from("app_settings")
     .upsert({ key: KEYS[name], value, updated_at: new Date().toISOString(), updated_by: actor });
   if (error) throw new Error(error.message);
+  updateTag(SETTINGS_TAG);
 }

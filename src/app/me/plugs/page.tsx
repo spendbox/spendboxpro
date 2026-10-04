@@ -10,7 +10,7 @@ import { Card, EmptyState, SectionTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { WhatsAppIcon } from "@/components/ui/share-actions";
 import { requireUser } from "@/lib/auth";
-import { getMyMemberships, getMyRewards, getPartnerPerks } from "@/lib/customer";
+import { getMyMemberships, getMyPartnerPerks, getMyRewards } from "@/lib/customer";
 import { businessTagline, whatsappLink } from "@/lib/format";
 import { sortBySoonest } from "@/lib/perks";
 
@@ -18,9 +18,9 @@ export const metadata: Metadata = { title: "Plugs" };
 
 export default async function PlugsPage() {
   const user = await requireUser("/me/plugs");
-  const [memberships, rewards] = await Promise.all([getMyMemberships(user.id), getMyRewards(user.id)]);
+  const [memberships, rewards, allPartnerPerks] = await Promise.all([getMyMemberships(user.id), getMyRewards(user.id), getMyPartnerPerks()]);
   const memberSlugs = new Set(memberships.map((m) => m.business.slug));
-  const partnerPerks = (await getPartnerPerks(memberships.map((m) => m.business_id))).filter((r) => !memberSlugs.has(r.partner_slug));
+  const partnerPerks = allPartnerPerks.filter((r) => !memberSlugs.has(r.partner_slug));
   const nameById = Object.fromEntries(memberships.map((m) => [m.id, m.business.name]));
   const ready = sortBySoonest(rewards).map((r) => ({ id: r.id, kind: r.kind, title: r.title, expires_at: r.expires_at, businessName: nameById[r.membership_id] ?? "" }));
 

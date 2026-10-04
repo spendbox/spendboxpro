@@ -1,12 +1,10 @@
-import { ArrowRight, Check, Download, ExternalLink, Inbox, PartyPopper, Sparkles } from "lucide-react";
+import { ArrowRight, Check, Inbox, PartyPopper, QrCode as QrCodeIcon, Sparkles } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { QrCode } from "@/components/qr-code";
 import { BusinessRequestCard } from "@/components/requests/business-request-card";
-import { buttonClass } from "@/components/ui/button";
 import { Card, EmptyState, SectionTitle } from "@/components/ui/card";
-import { ShareLink } from "@/components/ui/share-actions";
+import { ShareLinkBar } from "@/components/ui/share-actions";
 import { requireOwnedBusiness } from "@/lib/auth";
 import { billingState } from "@/lib/billing";
 import { compactNumber, getPerks, getRequests, getStats } from "@/lib/business";
@@ -25,8 +23,8 @@ const FILTERS = [
 
 export default async function BusinessHome({ params, searchParams }: PageProps<"/dashboard/[bizId]">) {
   const [{ bizId }, { welcome, show }] = await Promise.all([params, searchParams]);
-  const { business } = await requireOwnedBusiness(bizId);
-  const [stats, perks, requests, { data: partnerSlots }] = await Promise.all([
+  const [{ business }, stats, perks, requests, { data: partnerSlots }] = await Promise.all([
+    requireOwnedBusiness(bizId),
     getStats(bizId),
     getPerks(bizId),
     getRequests(bizId),
@@ -50,7 +48,7 @@ export default async function BusinessHome({ params, searchParams }: PageProps<"
   const setupDone = steps.every((s) => s.done);
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6">
       <header>
         <p className="text-sm font-semibold text-muted">{business.categories?.length ? business.categories.join(", ") : (business.category ?? "Your business")}</p>
         <h1 className="font-display text-[30px] leading-tight font-bold tracking-tight sm:text-4xl">{business.name}</h1>
@@ -100,6 +98,27 @@ export default async function BusinessHome({ params, searchParams }: PageProps<"
           </ol>
         </Card>
       )}
+
+      {/* Numbers and join link, kept small so requests stay the focus */}
+      <section aria-label="At a glance" className="flex flex-col gap-2.5">
+        <div className="grid grid-cols-4 gap-2 sm:gap-3">
+          <StatTile label="Customers" value={compactNumber(stats.members)} note={stats.members_new ? `+${stats.members_new} this week` : undefined} href={`${base}/customers`} />
+          <StatTile label="Perks to give" value={compactNumber(stats.rewards_ready)} href={`${base}/customers?perks=ready`} attention={stats.rewards_ready > 0} />
+          <StatTile label="Live requests" value={compactNumber(requests.length)} href="#requests-title" />
+          <StatTile label="From invites" value={compactNumber(stats.referred_members)} href={`${base}/customers`} />
+        </div>
+        <div id="share" className="scroll-mt-24">
+          <ShareLinkBar
+            url={joinUrl}
+            message={welcomePerk ? `Join ${business.name} on Spendbox and get ${welcomePerk.title.toLowerCase()}:` : `Join ${business.name} on Spendbox. Tell us what you need, anytime:`}
+            extra={
+              <a href={`${base}/qr`} aria-label="Download QR code" title="Download QR code" className="flex size-10 shrink-0 items-center justify-center rounded-xl text-ink-2 hover:bg-black/5">
+                <QrCodeIcon className="size-4" aria-hidden />
+              </a>
+            }
+          />
+        </div>
+      </section>
 
       {/* Requests */}
       <section className="flex flex-col gap-4" aria-labelledby="requests-title">
@@ -171,59 +190,22 @@ export default async function BusinessHome({ params, searchParams }: PageProps<"
         )}
       </section>
 
-      {/* Numbers + link */}
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:items-start">
-        <section className="flex flex-col gap-3">
-          <SectionTitle title="At a glance" />
-          <div className="grid grid-cols-2 gap-3">
-            <StatTile label="Customers" value={compactNumber(stats.members)} note={stats.members_new ? `+${stats.members_new} this week` : "No new ones this week"} href={`${base}/customers`} />
-            <StatTile label="Perks to give" value={compactNumber(stats.rewards_ready)} note="Earned, not yet given" href={`${base}/customers?perks=ready`} attention={stats.rewards_ready > 0} />
-            <StatTile label="Live requests" value={compactNumber(requests.length)} note="Up for 24 hours" href={base} />
-            <StatTile label="Joined from invites" value={compactNumber(stats.referred_members)} note="Brought by a friend" href={`${base}/customers`} />
-          </div>
-        </section>
-
-        <section id="share" className="flex scroll-mt-24 flex-col gap-3">
-          <SectionTitle title="Your join link" description="Customers join from this link or by scanning the QR code." />
-          <Card className="flex flex-col gap-5 p-5">
-            <div className="flex items-center gap-5">
-              <QrCode value={joinUrl} label={`QR code for ${joinUrl}`} className="w-32 shrink-0 sm:w-36" />
-              <div className="flex min-w-0 flex-col gap-2">
-                <p className="text-sm text-muted">Print it for your counter, or share it on your WhatsApp status.</p>
-                <a href={`${base}/qr`} className={buttonClass({ variant: "secondary", size: "sm" }, "w-fit")}>
-                  <Download className="size-4" aria-hidden /> Download QR
-                </a>
-                <Link href={`/j/${business.slug}`} className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-700 hover:underline">
-                  <ExternalLink className="size-4" aria-hidden /> Preview join page
-                </Link>
-              </div>
-            </div>
-            <ShareLink
-              url={joinUrl}
-              title={`Join ${business.name}`}
-              message={welcomePerk ? `Join ${business.name} on Spendbox and get ${welcomePerk.title.toLowerCase()}:` : `Join ${business.name} on Spendbox. Tell us what you need, anytime:`}
-            />
-          </Card>
-        </section>
-      </div>
     </div>
   );
 }
 
-function StatTile({ label, value, note, href, attention }: { label: string; value: ReactNode; note: string; href: string; attention?: boolean }) {
+function StatTile({ label, value, note, href, attention }: { label: string; value: ReactNode; note?: string; href: string; attention?: boolean }) {
   return (
     <Link
       href={href}
+      title={note}
       className={cn(
-        "flex flex-col justify-between gap-3 rounded-3xl bg-surface p-4 shadow-card ring-1 transition hover:ring-brand-300 sm:p-5",
+        "flex min-w-0 flex-col gap-0.5 rounded-2xl bg-surface px-3 py-2.5 shadow-card ring-1 transition hover:ring-brand-300 sm:px-4 sm:py-3",
         attention ? "bg-accent-50 ring-accent-100" : "ring-line",
       )}
     >
-      <p className="text-sm font-semibold text-muted">{label}</p>
-      <div>
-        <p className="truncate text-2xl font-semibold tracking-tight text-ink sm:text-3xl">{value}</p>
-        <p className={cn("mt-1 text-xs font-semibold", attention ? "text-accent-700" : "text-muted")}>{note}</p>
-      </div>
+      <p className="truncate text-xl leading-tight font-semibold tracking-tight text-ink sm:text-2xl">{value}</p>
+      <p className={cn("text-[11px] leading-tight font-semibold sm:text-xs", attention ? "text-accent-700" : "text-muted")}>{label}</p>
     </Link>
   );
 }

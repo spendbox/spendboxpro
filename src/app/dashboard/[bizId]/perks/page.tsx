@@ -13,9 +13,9 @@ export const metadata: Metadata = { title: "Perks" };
 
 export default async function PerksPage({ params, searchParams }: PageProps<"/dashboard/[bizId]/perks">) {
   const [{ bizId }, { new: startNew }] = await Promise.all([params, searchParams]);
-  const { business } = await requireOwnedBusiness(bizId);
   const supabase = await createClient();
-  const [perks, stats, { data: waiting }] = await Promise.all([
+  const [{ business }, perks, stats, { data: waiting }] = await Promise.all([
+    requireOwnedBusiness(bizId),
     getPerks(bizId),
     getStats(bizId),
     supabase.rpc("partner_requests_waiting", { p_business_id: bizId }),

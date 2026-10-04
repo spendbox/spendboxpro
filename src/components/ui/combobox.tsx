@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, ChevronDown, Plus, Search, X } from "lucide-react";
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { cn } from "@/lib/cn";
 
 export interface ComboOption {
@@ -33,8 +33,42 @@ function useOutsideClose(open: boolean, onClose: () => void) {
   return ref;
 }
 
+/**
+ * On phones the keyboard covers the bottom half of the screen. When a list opens,
+ * scroll it up to just under the header so the list shows above the keyboard.
+ */
+function useKeepAboveKeyboard(open: boolean, inline: boolean, ref: RefObject<HTMLDivElement | null>) {
+  // How tall the list may be so it ends above the keyboard; null = the normal size.
+  const [room, setRoom] = useState<number | null>(null);
+  useEffect(() => {
+    const touch = window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
+    if (!open || inline || !ref.current || !touch) return;
+    const el = ref.current;
+    // Instant, not smooth: focusing the search box scrolls too, and would cancel a smooth scroll.
+    const bring = () => {
+      el.scrollIntoView({ block: "start" });
+      const screen = window.visualViewport?.height ?? window.innerHeight;
+      setRoom(Math.max(140, Math.floor(screen - el.getBoundingClientRect().top - el.offsetHeight - 24)));
+    };
+    const first = setTimeout(bring, 60);
+    const settle = setTimeout(bring, 350);
+    // Again once the keyboard has finished opening (the screen gets shorter).
+    const viewport = window.visualViewport;
+    viewport?.addEventListener("resize", bring);
+    const stop = setTimeout(() => viewport?.removeEventListener("resize", bring), 1500);
+    return () => {
+      clearTimeout(first);
+      clearTimeout(settle);
+      clearTimeout(stop);
+      viewport?.removeEventListener("resize", bring);
+      setRoom(null);
+    };
+  }, [open, inline, ref]);
+  return room === null ? undefined : { maxHeight: `min(20rem, ${room}px)` };
+}
+
 const panel =
-  "absolute inset-x-0 top-full z-50 mt-2 flex max-h-80 flex-col overflow-hidden rounded-2xl bg-white shadow-lift ring-1 ring-line animate-fade-up";
+  "absolute inset-x-0 top-full z-50 mt-2 flex max-h-[min(20rem,50dvh)] flex-col overflow-hidden rounded-2xl bg-white shadow-lift ring-1 ring-line animate-fade-up";
 /** Inside a pop-up the list opens in place (pushing content down) so the pop-up's scrolling can't cut it off. */
 const inlinePanel = "relative mt-2 flex max-h-64 flex-col overflow-hidden rounded-2xl bg-white shadow-card ring-1 ring-line animate-fade-up";
 
@@ -133,6 +167,7 @@ export function Combobox({
     setQuery("");
   };
   const ref = useOutsideClose(open, close);
+  const panelStyle = useKeepAboveKeyboard(open, inline, ref);
   const filtered = useMemo(() => options.filter((o) => matches(o, query)), [options, query]);
   const selected = options.find((o) => o.value === value) ?? null;
 
@@ -182,7 +217,7 @@ export function Combobox({
   }, [active, open, listId]);
 
   return (
-    <div ref={ref} className={cn("relative", className)} onKeyDown={onKey}>
+    <div ref={ref} className={cn("relative scroll-mt-20", className)} onKeyDown={onKey}>
       {name && <input type="hidden" name={name} value={value ?? ""} />}
       <button
         ref={triggerRef}
@@ -208,7 +243,7 @@ export function Combobox({
       </button>
 
       {open && (
-        <div className={inline ? inlinePanel : panel}>
+        <div className={inline ? inlinePanel : panel} style={inline ? undefined : panelStyle}>
           {withSearch && (
             <div className="flex items-center gap-2 border-b border-line px-3">
               <Search className="size-4 shrink-0 text-muted" aria-hidden />
@@ -225,7 +260,7 @@ export function Combobox({
                   setActive(0);
                 }}
                 placeholder={searchPlaceholder}
-                className="h-12 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-subtle"
+                className="h-12 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-subtle focus-visible:outline-none"
               />
             </div>
           )}
@@ -294,6 +329,7 @@ export function MultiCombobox({
     if (el) setInline(inDialog(el));
   }, []);
 
+  const panelStyle = useKeepAboveKeyboard(open, inline, ref);
   const full = value.length >= max;
   const q = query.trim();
   const available = options.filter((o) => !value.includes(o) && o.toLowerCase().includes(q.toLowerCase()));
@@ -341,7 +377,7 @@ export function MultiCombobox({
   }
 
   return (
-    <div ref={ref} className={cn("relative", className)}>
+    <div ref={ref} className={cn("relative scroll-mt-20", className)}>
       {name && value.map((v) => <input key={v} type="hidden" name={name} value={v} />)}
       <div
         onClick={() => {
@@ -392,7 +428,7 @@ export function MultiCombobox({
       <p ref={detect} className="mt-1.5 text-sm text-muted">{full ? `That's the maximum of ${max}.` : `Pick up to ${max}.`}</p>
 
       {open && !full && (
-        <div className={inline ? inlinePanel : cn(panel, "top-14 mt-0")}>
+        <div className={inline ? inlinePanel : cn(panel, "top-14 mt-0")} style={inline ? undefined : panelStyle}>
           <ul id={listId} role="listbox" aria-multiselectable className="overflow-y-auto overscroll-contain p-1.5">
             {rows.length === 0 ? (
               <li className="px-3 py-3 text-sm text-muted">No matches. Keep typing to add your own.</li>

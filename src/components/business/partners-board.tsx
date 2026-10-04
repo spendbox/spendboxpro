@@ -1,6 +1,7 @@
 "use client";
 
-import { Check, Handshake, LoaderCircle, Search, Users, X, Zap } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, Handshake, LoaderCircle, Search, Settings2, UserPlus, Users, X, Zap } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
   endPartner,
@@ -16,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, EmptyState, SectionTitle } from "@/components/ui/card";
 import { FormMessage } from "@/components/ui/field";
+import { ShareLinkBar } from "@/components/ui/share-actions";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/cn";
 import { businessTagline, plural } from "@/lib/format";
@@ -111,20 +113,32 @@ function PartnerRow({
   );
 }
 
+const STEPS = [
+  { title: "Switch it on", body: "So other businesses can find you." },
+  { title: "Pick up to 2 partners", body: "Businesses whose customers would love yours." },
+  { title: "Share customers", body: "You're recommended to each other's customers. On Plus, you see their requests too." },
+];
+
 export function PartnersBoard({
   bizId,
+  view,
   enabled: initialEnabled,
   autoApprove: initialAuto,
   initial,
   categories,
+  invite,
 }: {
   bizId: string;
+  /** "mine": your partners, settings and the way in to finding more. "find": search for partners. */
+  view: "mine" | "find";
   enabled: boolean;
   autoApprove: boolean;
   /** The directory as first loaded (partners and requests first). */
   initial: PartnerListing[];
   /** Categories that businesses taking partners have, most common first. */
   categories: string[];
+  /** Link that signs a new business up as your partner. */
+  invite: { url: string; message: string };
 }) {
   const [enabled, setEnabled] = useState(initialEnabled);
   const [auto, setAuto] = useState(initialAuto);
@@ -234,74 +248,52 @@ export function PartnersBoard({
   };
 
   const rowProps = { canAdd, enabled, onToggle: toggle, onRespond: respond };
+  const base = `/dashboard/${bizId}/partners`;
+  const available = list.filter((b) => b.relation === "none").length;
 
-  return (
-    <div className="flex flex-col gap-8">
-      {/* 1. Switch it on */}
-      <Card className="flex flex-col gap-5 p-5 sm:p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="font-semibold text-ink">Cross-promotion</p>
-            <p className="text-sm text-muted">
-              Let other businesses on Spendbox find you, so you can share customers.
-            </p>
-          </div>
-          <Switch checked={enabled} label="Cross-promotion" onChange={(v) => saveSetting("enabled", v)} />
+  const onSwitch = (
+    <Card className="flex items-start justify-between gap-4 p-5">
+      <div>
+        <p className="font-semibold text-ink">Cross-promotion</p>
+        <p className="text-sm text-muted">Let other businesses on Spendbox find you, so you can share customers.</p>
+      </div>
+      <Switch checked={enabled} label="Cross-promotion" onChange={(v) => saveSetting("enabled", v)} />
+    </Card>
+  );
+
+  const inviteCard = (
+    <Card className="flex flex-col gap-3 p-4 sm:p-5">
+      <div className="flex items-start gap-3">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-accent-50 text-accent-700">
+          <UserPlus className="size-5" aria-hidden />
+        </span>
+        <div className="min-w-0">
+          <p className="font-semibold text-ink">Invite a business</p>
+          <p className="text-sm text-muted">Know a business your customers love? When they sign up from your link, you&apos;re partners straight away.</p>
         </div>
-        {enabled && (
-          <div className="flex items-start justify-between gap-4 border-t border-line pt-5">
-            <div>
-              <p className="font-semibold text-ink">Approve requests automatically</p>
-              <p className="text-sm text-muted">
-                {auto
-                  ? "Businesses that ask become partners straight away (while you have a free place)."
-                  : "You'll approve each request yourself. Requests wait for you here."}
-              </p>
-            </div>
-            <Switch checked={auto} label="Approve partner requests automatically" onChange={(v) => saveSetting("auto", v)} />
-          </div>
+      </div>
+      <ShareLinkBar url={invite.url} message={invite.message} />
+    </Card>
+  );
+
+  if (view === "find") {
+    return (
+      <div className="flex flex-col gap-4">
+        {!enabled && (
+          <p className="rounded-2xl bg-amber-50 p-4 text-sm text-amber-950 ring-1 ring-amber-200">
+            Cross-promotion is off, so you can look but not partner yet.{" "}
+            <Link href={base} className="font-semibold underline underline-offset-2">
+              Switch it on
+            </Link>
+          </p>
         )}
-      </Card>
-
-      {message && <FormMessage tone={message.tone}>{message.text}</FormMessage>}
-
-      {/* 2. Your partners and requests */}
-      <section className="flex flex-col gap-3" aria-labelledby="my-partners">
-        <SectionTitle
-          title={<span id="my-partners">Your partners</span>}
-          description={`${used} of ${LIMIT} places used${mine.some((b) => b.relation === "received") ? " · requests waiting for you are below" : ""}`}
-        />
-        {mine.length === 0 ? (
-          <EmptyState
-            icon={<Handshake className="size-5" />}
-            title="No partners yet"
-            description={
-              enabled
-                ? "Pick businesses below whose customers would love your perks, like a barber and a spa, or a gym and a juice bar."
-                : "Switch on cross-promotion above to find partners."
-            }
-          />
-        ) : (
-          <Card className="px-5">
-            <ul className="divide-y divide-line">
-              {mine.map((b) => (
-                <PartnerRow key={b.id} biz={b} busy={busyId === b.id} {...rowProps} />
-              ))}
-            </ul>
-          </Card>
-        )}
-      </section>
-
-      {/* 3. Find partners */}
-      <section className="flex flex-col gap-3" aria-labelledby="find-partners">
-        <SectionTitle
-          title={<span id="find-partners">Find partners</span>}
-          description="Businesses on Spendbox that are taking partners. Switch one on to partner with them."
-        />
+        {enabled && !canAdd && <p className="text-sm text-muted">You&apos;re using both places. End a partnership or cancel a request to add someone else.</p>}
+        {message && <FormMessage tone={message.tone}>{message.text}</FormMessage>}
         <div className="relative">
           <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-subtle" aria-hidden />
           <input
             type="search"
+            autoFocus
             value={query}
             onChange={(e) => startSearch(e.target.value, category)}
             placeholder="Search by name, category or area"
@@ -331,30 +323,122 @@ export function PartnersBoard({
             })}
           </div>
         )}
+        <section aria-labelledby="find-partners">
+          <h2 id="find-partners" className="sr-only">
+            Businesses taking partners
+          </h2>
+          {shown.length === 0 ? (
+            <EmptyState
+              icon={<Search className="size-5" />}
+              title={query || category ? "No businesses match" : "No other businesses are taking partners yet"}
+              description={query || category ? "Try another name or category, or invite them." : "Invite a business you know, and you'll be partners as soon as they sign up."}
+            />
+          ) : (
+            <Card className="px-5">
+              <ul className="divide-y divide-line">
+                {shown.map((b) => (
+                  <PartnerRow key={b.id} biz={b} busy={busyId === b.id} {...rowProps} />
+                ))}
+              </ul>
+            </Card>
+          )}
+        </section>
+        {inviteCard}
+      </div>
+    );
+  }
 
-        {!enabled && (
-          <p className="text-sm text-muted">Switch on cross-promotion above to partner with these businesses.</p>
-        )}
-        {enabled && !canAdd && (
-          <p className="text-sm text-muted">You&apos;re using both places. End a partnership or cancel a request to add someone else.</p>
-        )}
+  if (!enabled) {
+    return (
+      <div className="flex flex-col gap-4">
+        <ol className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {STEPS.map((step, i) => (
+            <li key={step.title} className="flex gap-3 rounded-2xl bg-white p-3.5 ring-1 ring-line">
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-brand-50 text-sm font-bold text-brand-700">{i + 1}</span>
+              <div>
+                <p className="text-sm font-semibold text-ink">{step.title}</p>
+                <p className="text-sm text-muted">{step.body}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+        {onSwitch}
+        {message && <FormMessage tone={message.tone}>{message.text}</FormMessage>}
+      </div>
+    );
+  }
 
-        {shown.length === 0 ? (
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Link
+          href={`${base}/find`}
+          className="group flex items-center gap-4 rounded-3xl bg-brand-700 p-5 text-white shadow-lift transition hover:bg-brand-800"
+        >
+          <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-white/15">
+            <Search className="size-5" aria-hidden />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-display text-lg font-bold">Find partners</span>
+            <span className="block text-sm text-white/85">
+              {available ? `${plural(available, "business", "businesses")} taking partners` : "Search by name, category or area"}
+            </span>
+          </span>
+          <ArrowRight className="size-5 transition group-hover:translate-x-0.5" aria-hidden />
+        </Link>
+        {inviteCard}
+      </div>
+
+      {message && <FormMessage tone={message.tone}>{message.text}</FormMessage>}
+
+      <section className="flex flex-col gap-3" aria-labelledby="my-partners">
+        <SectionTitle
+          title={<span id="my-partners">Your partners</span>}
+          description={`${used} of ${LIMIT} places used${mine.some((b) => b.relation === "received") ? " · requests waiting for you are below" : ""}`}
+        />
+        {mine.length === 0 ? (
           <EmptyState
-            icon={<Search className="size-5" />}
-            title={query || category ? "No businesses match" : "No other businesses are taking partners yet"}
-            description={query || category ? "Try another name or category." : "As more businesses switch on cross-promotion, they'll show up here."}
+            icon={<Handshake className="size-5" />}
+            title="No partners yet"
+            description="Find businesses whose customers would love yours, like a barber and a spa, or a baker and a decorator."
           />
         ) : (
           <Card className="px-5">
             <ul className="divide-y divide-line">
-              {shown.map((b) => (
+              {mine.map((b) => (
                 <PartnerRow key={b.id} biz={b} busy={busyId === b.id} {...rowProps} />
               ))}
             </ul>
           </Card>
         )}
       </section>
+
+      <details className="group rounded-2xl bg-white ring-1 ring-line">
+        <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3.5 text-sm font-semibold text-ink-2 [&::-webkit-details-marker]:hidden">
+          <Settings2 className="size-4 text-muted" aria-hidden />
+          <span className="flex-1">Partner settings</span>
+          <span className="font-normal text-muted">{auto ? "Approve automatically" : "Approve each request"}</span>
+          <ChevronDown className="size-4 text-muted transition group-open:rotate-180" aria-hidden />
+        </summary>
+        <div className="flex flex-col divide-y divide-line border-t border-line px-4">
+          <div className="flex items-start justify-between gap-4 py-4">
+            <div>
+              <p className="font-semibold text-ink">Approve requests automatically</p>
+              <p className="text-sm text-muted">
+                {auto ? "Businesses that ask become partners straight away (while you have a free place)." : "You approve each request yourself."}
+              </p>
+            </div>
+            <Switch checked={auto} label="Approve partner requests automatically" onChange={(v) => saveSetting("auto", v)} />
+          </div>
+          <div className="flex items-start justify-between gap-4 py-4">
+            <div>
+              <p className="font-semibold text-ink">Cross-promotion</p>
+              <p className="text-sm text-muted">Switching it off hides you from other businesses and pauses partner perks.</p>
+            </div>
+            <Switch checked={enabled} label="Cross-promotion" onChange={(v) => saveSetting("enabled", v)} />
+          </div>
+        </div>
+      </details>
     </div>
   );
 }

@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { allowed, requireAdmin, ROLE_LABELS, type AdminRole } from "@/lib/admin/session";
-import { formatDate, formatPhone, memberNo, MONTHS, plural } from "@/lib/format";
+import { formatDate, formatMoney, formatPhone, memberNo, MONTHS, plural } from "@/lib/format";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const metadata: Metadata = { title: "Person" };
@@ -16,12 +16,13 @@ export default async function AdminCustomer({ params }: PageProps<"/admin/custom
   const [{ id }, admin] = await Promise.all([params, requireAdmin()]);
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const supabase = createAdminClient();
-  const [{ data: p }, { data: memberships }, { data: owned }, { count: requestCount }, { data: team }] = await Promise.all([
+  const [{ data: p }, { data: memberships }, { data: owned }, { count: requestCount }, { data: team }, { data: interests }] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", id).maybeSingle(),
     supabase.from("memberships").select("id, member_no, joined_at, business:businesses(id, name)").eq("customer_id", id).order("joined_at", { ascending: false }),
     supabase.from("businesses").select("id, name, suspended_at").eq("owner_id", id),
     supabase.from("requests").select("id", { count: "exact", head: true }).eq("customer_id", id),
     supabase.from("admin_members").select("role").eq("user_id", id).maybeSingle(),
+    supabase.from("customer_interests").select("*").eq("customer_id", id).maybeSingle(),
   ]);
   if (!p) notFound();
   const name = (p.full_name as string | null) ?? (p.email as string | null) ?? formatPhone(p.phone);
@@ -107,6 +108,8 @@ export default async function AdminCustomer({ params }: PageProps<"/admin/custom
         </Card>
       </div>
 
+      {interests && <InterestsCard interests={interests as CustomerInterests} />}
+
       <Card className="flex flex-col gap-4 p-5">
         <div>
           <h2 className="font-display text-lg font-bold">Pause or delete</h2>
@@ -129,5 +132,73 @@ export default async function AdminCustomer({ params }: PageProps<"/admin/custom
         {self && <p className="text-sm text-muted">This is you, so these are switched off.</p>}
       </Card>
     </div>
+  );
+}
+
+interface CustomerInterests {
+  requests_count: number;
+  reposts_count: number;
+  found_count: number;
+  reach_outs_count: number;
+  categories: Record<string, number>;
+  keywords: Record<string, number>;
+  areas: Record<string, number>;
+  budget_avg: number | null;
+  budget_low: number | null;
+  budget_high: number | null;
+  prefers_whatsapp: number;
+  prefers_call: number;
+  prefers_email: number;
+  first_request_at: string | null;
+  last_request_at: string | null;
+}
+
+/** The most common keys of a {"key": count} object, most first. */
+function top(counts: Record<string, number>, n: number) {
+  return Object.entries(counts ?? {})
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, n);
+}
+
+/** What this person asks for, built up from every request they've posted (even deleted ones). */
+function InterestsCard({ interests: i }: { interests: CustomerInterests }) {
+  const chips = (rows: [string, number][]) =>
+    rows.length ? (
+      <span className="flex flex-wrap justify-end gap-1.5">
+        {rows.map(([k, n]) => (
+          <Badge key={k}>
+            {k} · {n}
+          </Badge>
+        ))}
+      </span>
+    ) : (
+      "None yet"
+    );
+  const contact = [
+    i.prefers_whatsapp && `WhatsApp ${i.prefers_whatsapp}`,
+    i.prefers_call && `Call ${i.prefers_call}`,
+    i.prefers_email && `Email ${i.prefers_email}`,
+  ].filter(Boolean);
+  return (
+    <Card className="p-5">
+      <h2 className="font-display text-lg font-bold">Interests</h2>
+      <p className="text-sm text-muted">Built from every request they&apos;ve posted. Only Spendbox sees this; businesses never do.</p>
+      <dl className="mt-2 divide-y divide-line">
+        <Fact label="Requests">
+          {plural(i.requests_count, "request")} · {i.reposts_count} reposted · {i.found_count} found a plug
+        </Fact>
+        <Fact label="Reach-outs received">{i.reach_outs_count}</Fact>
+        <Fact label="Asks for">{chips(top(i.categories, 6))}</Fact>
+        <Fact label="Words they use">{chips(top(i.keywords, 10))}</Fact>
+        <Fact label="Areas">{chips(top(i.areas, 4))}</Fact>
+        <Fact label="Budget">
+          {i.budget_avg ? `About ${formatMoney(i.budget_avg)} (from ${formatMoney(i.budget_low ?? 0)} to ${formatMoney(i.budget_high ?? 0)})` : "None yet"}
+        </Fact>
+        <Fact label="Likes to be reached by">{contact.length ? contact.join(" · ") : "None yet"}</Fact>
+        <Fact label="Posting since">
+          {i.first_request_at ? `${formatDate(i.first_request_at, { withYear: true })} · last ${formatDate(i.last_request_at ?? i.first_request_at)}` : "None yet"}
+        </Fact>
+      </dl>
+    </Card>
   );
 }

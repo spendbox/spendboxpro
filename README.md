@@ -19,7 +19,7 @@ You need accounts on **Supabase**, **Vercel** and **Paystack**. You'll also want
 1. Go to [supabase.com](https://supabase.com) and create a new project. Choose a region close to your customers and save the database password somewhere safe.
 2. When it's ready, open **SQL Editor** in the left menu and click **New query**.
 3. Open [`supabase/catch_up.sql`](supabase/catch_up.sql), copy **everything**, paste it into the editor and press **Run**. If Supabase warns about destructive operations, confirm: it only replaces Spendbox's own functions.
-4. At the end you'll see a table of 10 updates. Every row should say **yes**.
+4. At the end you'll see a table of every update. Every row should say **yes**.
 
    This one file works whatever state your database is in. It checks which updates are already there and runs only the missing ones, in order, so you can run it again after every new version of Spendbox. (The same updates are also in `supabase/migrations/`, one file each, if you prefer running them one by one.)
 
@@ -56,7 +56,8 @@ People sign up with their **email and a password** (at least 8 characters); a ph
 Optional: `NEXT_PUBLIC_TRIAL_DAYS` (starting free-trial length, default `14`; change it later in `/admin`), `NEXT_PUBLIC_DEFAULT_COUNTRY_CODE` (default `234`), `NEXT_PUBLIC_TIME_ZONE` (default `Africa/Lagos`). See [`.env.example`](.env.example).
 
 3. Press **Deploy**. If you change a variable later, redeploy (**Deployments → ⋯ → Redeploy**) so it takes effect.
-4. **For speed:** in Vercel → **Settings → Functions → Function Region**, pick the region closest to your Supabase project's region (shown in Supabase → Project Settings → General). When the two are far apart, every page waits for the data to travel between continents.
+4. **For speed (important):** in Vercel → **Settings → Functions → Function Region**, pick the region closest to your Supabase project's region (shown in Supabase → Project Settings → General). When the two are far apart, every page waits for the data to travel between continents.
+5. **For speed, too:** in Supabase → **Project Settings → JWT Keys**, if it offers to migrate from the legacy JWT secret to the new signing keys, do it (follow Supabase's steps). Then Spendbox checks logins without an extra trip to Supabase on every page.
 
 > Tip: Vercel's Supabase integration (**Vercel → Storage → Supabase**) can fill in the Supabase variables for you. The app accepts the names it creates.
 
@@ -88,6 +89,10 @@ Open `your-site/admin` and log in with `ADMIN_EMAIL` and `ADMIN_PASSWORD`. It wo
 **Requests.** A customer can have up to 3 live requests at once, and post up to 10 a day. Each needs a description, a budget (an "up to" amount or a range) and at least one contact method. Photos are shrunk on the phone before uploading (max 4). A request is live for 24 hours; after that it moves to **Earlier**, where **Post again** fills in a new one. The customer can close it early, mark **Found my plug**, or delete it (the photos are deleted too).
 
 **Who sees a request.** The businesses the customer joined — and, if one of those businesses is on **Plus** (or still in its free trial), its partners see it too, marked "Glow Spa's customer". Businesses get the customer's first name and only the contact details picked for that request (phone for WhatsApp or calls, email for email). When a business taps a contact button it's recorded once, so the customer sees "2 plugs are reaching out" with each business's name and a button to chat back.
+
+**Customer interests.** Every request also feeds a private profile of that customer (`customer_interests`, built from `request_signals`): what they ask for most (categories and key words), their usual budget, areas, how they like to be reached, how often they post and find a plug. Deleted requests still count. Only Spendbox sees it, in `/admin` → People → a person; businesses never do.
+
+**Partner invites.** On **Partners**, a business can share an invite link (`/start?partner=their-link`). A business that signs up from it becomes their partner straight away, if the inviter still has a free place.
 
 **Perks.** Three simple kinds a business can see happen: **welcome** (on joining), **invite a friend** (for every friend who joins with the customer's link) and **birthday** (during their birthday month, even if the birthday is private). Perks are earned automatically; the business taps **Mark as given** on the customer's page. **Customers → Only customers with perks to give** lists everyone with a perk waiting. Each perk can have a time limit (1 week to 3 months, or none).
 

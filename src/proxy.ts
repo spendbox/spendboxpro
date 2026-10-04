@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { SESSION_HEADER, signSession } from "@/lib/session-header";
 
 const PROTECTED = ["/me", "/dashboard"];
 
@@ -27,7 +28,8 @@ export async function proxy(request: NextRequest) {
 
   // Do not put code between createServerClient and getClaims: it refreshes the session.
   const { data } = await supabase.auth.getClaims();
-  const signedIn = Boolean(data?.claims?.sub);
+  const claims = data?.claims;
+  const signedIn = Boolean(claims?.sub);
 
   const { pathname, search } = request.nextUrl;
   if (!signedIn && PROTECTED.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
@@ -39,11 +41,29 @@ export async function proxy(request: NextRequest) {
     return redirect;
   }
 
-  return response;
+  // Hand the checked identity to the page in a signed header (never trust one sent by the visitor).
+  const headers = new Headers(request.headers);
+  headers.delete(SESSION_HEADER);
+  if (claims?.sub) {
+    const email = (claims.email as string | undefined) || null;
+    const signed = await signSession({
+      id: claims.sub,
+      phone: (claims.phone as string | undefined) || null,
+      email: email && !email.endsWith("@phone.spendbox.app") ? email : null,
+    });
+    if (signed) headers.set(SESSION_HEADER, signed);
+  }
+  const forwarded = NextResponse.next({ request: { headers } });
+  for (const cookie of response.cookies.getAll()) forwarded.cookies.set(cookie);
+  response.headers.forEach((value, name) => {
+    if (name !== "set-cookie" && !name.startsWith("x-middleware-")) forwarded.headers.set(name, value);
+  });
+  return forwarded;
 }
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|icon.svg|api/cron|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt)$).*)",
+    // Everything except files, the daily job and pages that are the same for everyone.
+    "/((?!_next/static|_next/image|favicon.ico|icon.svg|api/cron|(?:plug|terms|privacy|auth/forgot)?$|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt)$).*)",
   ],
 };

@@ -1,6 +1,8 @@
 import "server-only";
 import { cache } from "react";
+import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { readSession, SESSION_HEADER } from "@/lib/session-header";
 import { createClient } from "@/lib/supabase/server";
 import type { Business } from "@/lib/types";
 
@@ -13,6 +15,9 @@ export interface SessionUser {
 
 /** The signed-in person, or null. Cached for the duration of one request. */
 export const getUser = cache(async (): Promise<SessionUser | null> => {
+  // Usually the proxy has already checked, and says so in a signed header.
+  const checked = await readSession((await headers()).get(SESSION_HEADER));
+  if (checked) return checked;
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
   const claims = data?.claims;

@@ -39,9 +39,12 @@ function LinkCard({ href, icon: Icon, title, note, badge }: { href: string; icon
 
 export default async function SettingsPage({ params }: PageProps<"/dashboard/[bizId]/settings">) {
   const { bizId } = await params;
-  const { business } = await requireOwnedBusiness(bizId);
   const supabase = await createClient();
-  const [perks, { data: requests }] = await Promise.all([getPerks(bizId), supabase.rpc("partner_requests_waiting", { p_business_id: bizId })]);
+  const [{ business }, perks, { data: requests }] = await Promise.all([
+    requireOwnedBusiness(bizId),
+    getPerks(bizId),
+    supabase.rpc("partner_requests_waiting", { p_business_id: bizId }),
+  ]);
   const joinUrl = `${siteUrl()}/j/${business.slug}`;
   const base = `/dashboard/${bizId}`;
   const activePerks = perks.filter((p) => p.is_active).length;

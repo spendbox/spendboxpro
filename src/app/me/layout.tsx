@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { LogOut, Store } from "lucide-react";
 import Link from "next/link";
 import { ConfirmEmailBanner } from "@/components/auth/confirm-email-banner";
@@ -5,6 +6,7 @@ import { AppShell } from "@/components/shell/app-shell";
 import type { NavItem } from "@/components/shell/nav";
 import { getOwnedBusinesses, requireUser } from "@/lib/auth";
 import { signOut } from "@/lib/actions/auth";
+import { getMyProfile } from "@/lib/customer";
 const NAV: NavItem[] = [
   { href: "/me", label: "My Spendbox", icon: "home", exact: true, also: ["/me/new"] },
   { href: "/me/plugs", label: "Plugs", icon: "businesses", also: ["/me/b", "/me/perks"] },
@@ -13,6 +15,7 @@ const NAV: NavItem[] = [
 
 export default async function CustomerLayout({ children }: LayoutProps<"/me">) {
   const user = await requireUser("/me");
+  void getMyProfile(user.id); // starts the email banner's lookup now, alongside the page's
   const owned = await getOwnedBusinesses();
 
   return (
@@ -50,7 +53,9 @@ export default async function CustomerLayout({ children }: LayoutProps<"/me">) {
         ) : null
       }
     >
-      <ConfirmEmailBanner userId={user.id} />
+      <Suspense fallback={null}>
+        <ConfirmEmailBanner userId={user.id} />
+      </Suspense>
       {children}
     </AppShell>
   );

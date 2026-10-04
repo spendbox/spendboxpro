@@ -15,9 +15,9 @@ export const metadata: Metadata = { title: "Plan & billing" };
 
 export default async function BillingPage({ params, searchParams }: PageProps<"/dashboard/[bizId]/settings/billing">) {
   const [{ bizId }, sp] = await Promise.all([params, searchParams]);
-  const { business } = await requireOwnedBusiness(bizId);
   const supabase = await createClient();
-  const [settings, { data: payments }] = await Promise.all([
+  const [{ business }, settings, { data: payments }] = await Promise.all([
+    requireOwnedBusiness(bizId),
     getSettings(),
     supabase.from("business_payments").select("id, plan, months, amount, status, method, paid_at, created_at").eq("business_id", bizId).eq("status", "paid").order("paid_at", { ascending: false }).limit(24),
   ]);

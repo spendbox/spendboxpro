@@ -9,7 +9,6 @@ import { PhoneInput } from "@/components/ui/phone-input";
 import { loginWithPhone, registerEmail } from "@/lib/actions/email-auth";
 import { DEFAULT_COUNTRY_CODE } from "@/lib/env";
 import { MIN_PASSWORD } from "@/lib/password";
-import { createClient } from "@/lib/supabase/client";
 import { TRIAL_HIDDEN_COOKIE } from "@/lib/trial";
 
 function friendlyError(message: string, status?: number) {
@@ -20,6 +19,13 @@ function friendlyError(message: string, status?: number) {
     return "Too many tries. Please wait a few minutes, then try again.";
   }
   return message || "Something went wrong. Please try again.";
+}
+
+// The sign-in library is big, so it loads only once someone starts filling in the form.
+let supabaseModule: Promise<typeof import("@/lib/supabase/client")> | null = null;
+function loadSupabase() {
+  supabaseModule ??= import("@/lib/supabase/client");
+  return supabaseModule;
 }
 
 /**
@@ -81,7 +87,7 @@ export function EmailSignIn({
       return finish();
     }
 
-    const supabase = createClient();
+    const supabase = (await loadSupabase()).createClient();
     const credentials = { email: id.toLowerCase(), password };
     let { error: signInError } = await supabase.auth.signInWithPassword(credentials);
     if (signInError && /invalid login credentials/i.test(signInError.message)) {
@@ -102,6 +108,7 @@ export function EmailSignIn({
   return (
     <form
       className="flex flex-col gap-4"
+      onFocus={() => void loadSupabase()}
       onSubmit={(e) => {
         e.preventDefault();
         void submit();

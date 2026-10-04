@@ -5,22 +5,22 @@ import { MyRequestCard } from "@/components/requests/my-request-card";
 import { Card, SectionTitle } from "@/components/ui/card";
 import { FormMessage } from "@/components/ui/field";
 import { requireUser } from "@/lib/auth";
-import { getMyMemberships, getMyProfile, getMyRequests, getMyRewards, getRequestContacts } from "@/lib/customer";
+import { getMyMemberships, getMyProfile, getMyRequestContacts, getMyRequests, getMyRewards } from "@/lib/customer";
 import { budgetLabel, isLive, lifeLeft, REQUEST_IDEAS, timeAgo, timeLeftLabel } from "@/lib/requests";
 
 export const metadata: Metadata = { title: "My Spendbox" };
 
 export default async function MySpendboxPage({ searchParams }: PageProps<"/me">) {
   const [user, { posted }] = await Promise.all([requireUser("/me"), searchParams]);
-  const [profile, memberships, rewards, requests] = await Promise.all([
+  const [profile, memberships, rewards, requests, contacts] = await Promise.all([
     getMyProfile(user.id),
     getMyMemberships(user.id),
     getMyRewards(user.id),
     getMyRequests(user.id),
+    getMyRequestContacts(),
   ]);
   const live = requests.filter((r) => isLive(r));
   const earlier = requests.filter((r) => !isLive(r)).slice(0, 10);
-  const contacts = await getRequestContacts([...live, ...earlier.slice(0, 5)].map((r) => r.id));
   const firstName = profile?.full_name?.split(/\s+/)[0];
 
   const card = (r: (typeof requests)[number]) => (
