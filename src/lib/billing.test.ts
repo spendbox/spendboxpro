@@ -6,11 +6,11 @@ const DAY = 86_400_000;
 const now = Date.parse("2026-10-10T12:00:00Z");
 const iso = (days: number) => new Date(now + days * DAY).toISOString();
 
-test("a new business is on its free trial with Plus limits", () => {
+test("a new business is on its free trial with everything Plus has", () => {
   const s = billingState({ created_at: iso(-1), trial_ends_at: iso(13) }, now);
   assert.equal(s.status, "trial");
   assert.equal(s.daysLeft, 13);
-  assert.equal(s.bankLimit, 5);
+  assert.equal(s.partnerRequests, true);
 });
 
 test("after the trial, payment is due, and it's paused 14 days later", () => {
@@ -19,11 +19,12 @@ test("after the trial, payment is due, and it's paused 14 days later", () => {
   assert.equal(s.suspendOn.toISOString(), iso(-6 + GRACE_DAYS));
 });
 
-test("a paid plan sets the bank limit", () => {
-  assert.equal(billingState({ created_at: iso(-40), trial_ends_at: iso(-26), paid_until: iso(4), plan: "starter" }, now).bankLimit, 1);
+test("only Plus sees requests from partners' customers", () => {
+  assert.equal(billingState({ created_at: iso(-40), trial_ends_at: iso(-26), paid_until: iso(4), plan: "starter" }, now).partnerRequests, false);
   const plus = billingState({ created_at: iso(-40), trial_ends_at: iso(-26), paid_until: iso(4), plan: "plus" }, now);
   assert.equal(plus.status, "active");
-  assert.equal(plus.bankLimit, 5);
+  assert.equal(plus.partnerRequests, true);
+  assert.equal(billingState({ created_at: iso(-20), trial_ends_at: iso(-6), plan: "plus" }, now).partnerRequests, false);
 });
 
 test("paused for not paying, or by an admin", () => {

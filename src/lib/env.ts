@@ -50,11 +50,3 @@ export function trialDays() {
   const days = Number(process.env.NEXT_PUBLIC_TRIAL_DAYS ?? 14);
   return Number.isFinite(days) && days > 0 ? Math.round(days) : 14;
 }
-
-/**
- * Receipt uploads are switched off while payments come straight from the
- * business's bank (Mono). Set NEXT_PUBLIC_RECEIPT_UPLOADS=on to bring them back.
- */
-export function receiptsEnabled() {
-  return process.env.NEXT_PUBLIC_RECEIPT_UPLOADS === "on";
-}

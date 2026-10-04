@@ -16,7 +16,7 @@ export function LeaveButton({ businessName, action }: { businessName: string; ac
         open={open}
         onClose={() => setOpen(false)}
         title={`Leave ${businessName}?`}
-        description="Your membership, purchases and unused perks with this business will be removed. You can join again later from their link."
+        description="They will stop seeing your requests, and your unused perks there will be removed. You can join again later from their link."
       >
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button variant="secondary" onClick={() => setOpen(false)}>

@@ -1,19 +1,15 @@
 "use client";
 
-import { Cake, Landmark, Mail, Plus, Trash, UserRound, X } from "lucide-react";
-import { useOptimistic, useState, useTransition } from "react";
-import { removeMyBankAccount, saveBirthday, saveEmail, saveGender } from "@/app/me/account-actions";
-import { forgetPayer } from "@/app/me/actions";
-import { BankAccountForm } from "@/components/account/bank-account-form";
+import { Cake, Mail, Phone, UserRound } from "lucide-react";
+import { useState, useTransition } from "react";
+import { saveBirthday, saveEmail, saveGender, saveName, savePhone } from "@/app/me/account-actions";
 import { BirthdayFields, type BirthdayValue } from "@/components/account/birthday-fields";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { EditCard } from "@/components/ui/edit-card";
 import { FormMessage, Input } from "@/components/ui/field";
-import { Modal } from "@/components/ui/modal";
 import { cn } from "@/lib/cn";
-import { MONTHS } from "@/lib/format";
+import { formatPhone, MONTHS } from "@/lib/format";
+import { PhoneInput } from "@/components/ui/phone-input";
 import type { Profile } from "@/lib/types";
 
 function SaveRow({ pending, onCancel }: { pending: boolean; onCancel: () => void }) {
@@ -76,7 +72,7 @@ function EmailEditor({ profile, close }: { profile: Profile | null; close: () =>
       <Input aria-label="Email" type="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
       <label className="flex items-center gap-3 text-sm">
         <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} className="size-5 accent-brand-600" />
-        <span className="text-ink-2">Email me about my perks and purchases</span>
+        <span className="text-ink-2">Email me about my requests and perks</span>
       </label>
       <FormMessage>{error}</FormMessage>
       <SaveRow pending={pending} onCancel={close} />
@@ -127,20 +123,68 @@ function GenderEditor({ profile, close }: { profile: Profile | null; close: () =
   );
 }
 
-/** Name, birthday, email and gender as tap-to-edit cards. */
-export function DetailCards({ profile, hasBank }: { profile: Profile | null; hasBank: boolean }) {
+function NameEditor({ profile, close }: { profile: Profile | null; close: () => void }) {
+  const [name, setName] = useState(profile?.full_name ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  return (
+    <form
+      className="flex flex-col gap-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        start(async () => {
+          const r = await saveName(name);
+          if (r.error) setError(r.error);
+          else close();
+        });
+      }}
+    >
+      <Input aria-label="Your name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder="e.g. Ada Obi" />
+      <FormMessage>{error}</FormMessage>
+      <SaveRow pending={pending} onCancel={close} />
+    </form>
+  );
+}
+
+function PhoneEditor({ profile, close }: { profile: Profile | null; close: () => void }) {
+  const known = profile?.phone ?? "";
+  const [country, setCountry] = useState(known.startsWith("234") || !known ? "234" : known.slice(0, 3));
+  const [phone, setPhone] = useState(known.startsWith("234") ? known.slice(3) : known);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  return (
+    <form
+      className="flex flex-col gap-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        start(async () => {
+          const r = await savePhone(country, phone);
+          if (r.error) setError(r.error);
+          else close();
+        });
+      }}
+    >
+      <PhoneInput id="profile-phone" label="Phone number" country={country} onCountry={setCountry} value={phone} onChange={setPhone} />
+      <p className="text-sm text-muted">Leave it empty to remove it. Businesses only get it when you choose WhatsApp or call on a request, or share your details.</p>
+      <FormMessage>{error}</FormMessage>
+      <SaveRow pending={pending} onCancel={close} />
+    </form>
+  );
+}
+
+/** Name, phone, birthday, email and gender as tap-to-edit cards. */
+export function DetailCards({ profile }: { profile: Profile | null }) {
   const birthday = profile?.birth_month
     ? `${profile.birth_day ? `${profile.birth_day} ` : ""}${MONTHS[profile.birth_month - 1]}${profile.birth_year ? ` ${profile.birth_year}` : ""}`
     : "Not added";
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      <EditCard
-        readOnly
-        icon={<UserRound className="size-5" aria-hidden />}
-        label="Name"
-        value={profile?.full_name ?? "Comes from your bank"}
-        note={profile?.full_name ? "Confirmed by your bank, so it can't be edited" : hasBank ? "We'll fill this in soon" : "Add a bank account below and we'll fill this in"}
-      />
+      <EditCard icon={<UserRound className="size-5" aria-hidden />} label="Name" value={profile?.full_name ?? "Not added"} note="Businesses see your first name on requests">
+        {(close) => <NameEditor profile={profile} close={close} />}
+      </EditCard>
+      <EditCard icon={<Phone className="size-5" aria-hidden />} label="Phone" value={profile?.phone ? formatPhone(profile.phone) : "Not added"} note="For WhatsApp and calls about your requests">
+        {(close) => <PhoneEditor profile={profile} close={close} />}
+      </EditCard>
       <EditCard icon={<Cake className="size-5" aria-hidden />} label="Birthday" value={birthday} note="For birthday treats" description="Businesses only see it if you share your details with them.">
         {(close) => <BirthdayEditor profile={profile} close={close} />}
       </EditCard>
@@ -165,117 +209,5 @@ export function DetailCards({ profile, hasBank }: { profile: Profile | null; has
         {(close) => <GenderEditor profile={profile} close={close} />}
       </EditCard>
     </div>
-  );
-}
-
-export interface MyAccountRow {
-  id: string;
-  sender_name: string | null;
-  sender_account: string | null;
-  institution: string | null;
-  verified: boolean;
-  /** Added by the customer (vs recognised from a payment). */
-  mine: boolean;
-}
-
-function titleCase(name: string) {
-  return name.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-/** The bank accounts the customer pays from, plus ones recognised from payments. */
-export function BankAccountsCard({ accounts }: { accounts: MyAccountRow[] }) {
-  const [shown, remove] = useOptimistic(accounts, (list, id: string) => list.filter((a) => a.id !== id));
-  const [, start] = useTransition();
-  const [adding, setAdding] = useState(false);
-  const [added, setAdded] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState<MyAccountRow | null>(null);
-  const confirmName = confirming?.sender_name ? titleCase(confirming.sender_name) : "this account";
-
-  return (
-    <Card className="flex flex-col gap-1 p-4 sm:p-5">
-      {shown.length === 0 && (
-        <p className="py-2 text-sm text-muted">No accounts yet. Add the one you usually pay from, and your transfers count by themselves.</p>
-      )}
-      <ul className="divide-y divide-line">
-        {shown.map((a) => (
-          <li key={a.id} className="flex items-center gap-3 py-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-brand-50 text-brand-700">
-              <Landmark className="size-5" aria-hidden />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold break-words">{a.sender_name ? titleCase(a.sender_name) : "Bank account"}</p>
-              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
-                {[a.institution, a.sender_account ? `•••${a.sender_account.slice(-4)}` : null].filter(Boolean).join(" ")}
-                {a.mine ? (
-                  a.verified && <Badge tone="green">Confirmed by bank</Badge>
-                ) : (
-                  <Badge>Recognised from a payment</Badge>
-                )}
-              </p>
-            </div>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-muted"
-              aria-label={a.mine ? `Remove ${a.sender_name ?? "this account"}` : `This isn't me: stop counting payments from ${a.sender_name ?? "this account"}`}
-              onClick={() => setConfirming(a)}
-            >
-              {a.mine ? <Trash className="size-4" aria-hidden /> : <X className="size-4" aria-hidden />}
-              {a.mine ? "Remove" : "Not me"}
-            </Button>
-          </li>
-        ))}
-      </ul>
-      {added && <FormMessage tone="success">Added. Transfers from {added}&apos;s account now count by themselves.</FormMessage>}
-      <Button variant="soft" className="mt-2 self-start" onClick={() => setAdding(true)}>
-        <Plus className="size-4" aria-hidden /> Add {shown.some((a) => a.mine) ? "another" : "an"} account
-      </Button>
-      <Modal
-        open={confirming !== null}
-        onClose={() => setConfirming(null)}
-        title={confirming?.mine ? "Remove this account?" : "Not your account?"}
-        description={
-          confirming?.mine
-            ? `Transfers from ${confirmName} won't count for you by themselves any more. You can add it again later.`
-            : `We'll stop counting payments from ${confirmName} for you, and remove it from your list.`
-        }
-      >
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button variant="secondary" onClick={() => setConfirming(null)}>
-            Keep it
-          </Button>
-          <Button
-            variant="danger"
-            onClick={() => {
-              const a = confirming;
-              setConfirming(null);
-              if (!a) return;
-              start(async () => {
-                remove(a.id);
-                await (a.mine ? removeMyBankAccount(a.id) : forgetPayer(a.id));
-              });
-            }}
-          >
-            {confirming?.mine ? "Remove account" : "Yes, remove it"}
-          </Button>
-        </div>
-      </Modal>
-      <Modal
-        open={adding}
-        onClose={() => setAdding(false)}
-        title="Add an account you pay from"
-        description="We check the name with your bank. Transfers from it count for you at every business you've joined."
-      >
-        {adding && (
-          <BankAccountForm
-            submitLabel="Add this account"
-            onAdded={(name) => {
-              setAdded(name);
-              setAdding(false);
-            }}
-          />
-        )}
-      </Modal>
-    </Card>
   );
 }

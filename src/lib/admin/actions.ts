@@ -31,7 +31,6 @@ const SWITCH_LABELS: Record<SwitchName, string> = {
   signupsOpen: "New business sign-ups",
   joinsOpen: "Customers joining",
   emailsEnabled: "Emails",
-  testPayments: "Test payments",
 };
 
 export async function setSwitch(name: SwitchName, on: boolean): Promise<AdminResult> {

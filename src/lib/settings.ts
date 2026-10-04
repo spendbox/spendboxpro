@@ -17,16 +17,14 @@ export interface AppSettings {
   joinsOpen: boolean;
   /** Spendbox sends emails (perks, purchases, new members…). */
   emailsEnabled: boolean;
-  /** "Send a test payment" on the Payments page (never with live Mono keys). */
-  testPayments: boolean;
-  /** Monthly price of the Starter plan (1 bank account), in naira. */
+  /** Monthly price of the Starter plan, in naira. */
   priceStarter: number;
-  /** Monthly price of the Plus plan (up to 5 bank accounts), in naira. */
+  /** Monthly price of the Plus plan, in naira. */
   pricePlus: number;
 }
 
 /** The on/off switches (the rest are numbers). */
-export type SwitchName = "trialEnabled" | "signupsOpen" | "joinsOpen" | "emailsEnabled" | "testPayments";
+export type SwitchName = "trialEnabled" | "signupsOpen" | "joinsOpen" | "emailsEnabled";
 export type NumberName = Exclude<keyof AppSettings, SwitchName>;
 
 const KEYS: Record<keyof AppSettings, string> = {
@@ -35,7 +33,6 @@ const KEYS: Record<keyof AppSettings, string> = {
   signupsOpen: "signups_open",
   joinsOpen: "joins_open",
   emailsEnabled: "emails_enabled",
-  testPayments: "test_payments",
   priceStarter: "price_starter",
   pricePlus: "price_plus",
 };
@@ -53,7 +50,6 @@ function defaults(): AppSettings {
     signupsOpen: true,
     joinsOpen: true,
     emailsEnabled: true,
-    testPayments: process.env.TEST_PAYMENTS === "on",
     priceStarter: 2500,
     pricePlus: 5000,
   };
@@ -88,14 +84,4 @@ export async function saveSetting<K extends keyof AppSettings>(name: K, value: A
     .from("app_settings")
     .upsert({ key: KEYS[name], value, updated_at: new Date().toISOString(), updated_by: actor });
   if (error) throw new Error(error.message);
-}
-
-/** True when live (real-money) Mono keys are in use. */
-export function monoLive() {
-  return Boolean(process.env.MONO_SECRET_KEY?.startsWith("live_"));
-}
-
-/** Test payments: switched on, and never with live Mono keys. */
-export async function testPaymentsEnabled() {
-  return !monoLive() && (await getSettings()).testPayments;
 }

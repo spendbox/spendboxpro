@@ -24,7 +24,7 @@ export async function TrialBanner({ business }: { business: Business }) {
         <CreditCard className="size-5 shrink-0 text-red-700" aria-hidden />
         <p className="min-w-0 flex-1">
           <span className="font-semibold">{business.paid_until ? "Your plan has ended." : "Your free trial has ended."}</span> Pay by{" "}
-          {formatDate(s.suspendOn, { withYear: true })} to keep {business.name} running. After that it&apos;s paused and your bank is disconnected.
+          {formatDate(s.suspendOn, { withYear: true })} to keep {business.name} running. After that it&apos;s paused until you pay.
         </p>
         <Link href={href} className="shrink-0 rounded-xl bg-red-700 px-4 py-2.5 text-center font-semibold text-white hover:bg-red-800">
           Pay now

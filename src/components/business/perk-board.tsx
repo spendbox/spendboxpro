@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Minus, Pencil, Plus, Trash } from "lucide-react";
+import { ArrowLeft, Pencil, Plus, Trash } from "lucide-react";
 import { useState, useTransition } from "react";
 import { deletePerk, savePerk, setPerkActive } from "@/app/dashboard/[bizId]/actions";
 import { PerkCard, PerkIcon } from "@/components/perks/perk-card";
@@ -9,7 +9,7 @@ import { Field, FormMessage, Input } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
 import { ActionSwitch } from "@/components/ui/switch";
 import { cn } from "@/lib/cn";
-import { DEFAULT_VALID_DAYS, DURATION_CHOICES, durationLabel, PERK_KIND_ORDER, PERK_KINDS, SUGGESTED_PERKS, wordingTip } from "@/lib/perks";
+import { DEFAULT_VALID_DAYS, DURATION_CHOICES, durationLabel, PERK_KINDS, SIMPLE_PERK_KINDS, SUGGESTED_PERKS, wordingTip } from "@/lib/perks";
 import type { Perk, PerkKind } from "@/lib/types";
 
 interface Draft {
@@ -136,7 +136,7 @@ export function PerkBoard({
             <Plus className="size-6" aria-hidden />
           </span>
           <span className="font-display text-lg font-bold">Add a perk</span>
-          <span className="text-sm text-muted">Welcome, loyalty, invites, big spenders or birthdays</span>
+          <span className="text-sm text-muted">A welcome treat, an invite reward or a birthday treat</span>
         </button>
       </div>
 
@@ -176,7 +176,7 @@ export function PerkBoard({
       {/* Step 1: choose the kind of perk */}
       <Modal open={picking} onClose={() => setPicking(false)} title="What kind of perk?" description="Pick a card. You'll name the reward next.">
         <div className="grid gap-2">
-          {PERK_KIND_ORDER.map((kind) => (
+          {SIMPLE_PERK_KINDS.map((kind) => (
             <button
               key={kind}
               type="button"
@@ -251,48 +251,6 @@ export function PerkBoard({
                   </button>
                 ))}
               </div>
-            )}
-
-            {draft.kind === "visits" && (
-              <Field label="After how many purchases?" htmlFor="perk-threshold" hint="It repeats: every time they reach this number, they earn it again.">
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="secondary"
-                    aria-label="Fewer"
-                    className="w-12 px-0"
-                    onClick={() => setDraft({ ...draft, threshold: String(Math.max(1, thresholdNumber - 1)) })}
-                  >
-                    <Minus className="size-4" aria-hidden />
-                  </Button>
-                  <Input
-                    id="perk-threshold"
-                    inputMode="numeric"
-                    className="w-20 text-center text-lg font-bold"
-                    value={draft.threshold}
-                    onChange={(e) => setDraft({ ...draft, threshold: e.target.value.replace(/\D/g, "").slice(0, 3) })}
-                  />
-                  <Button
-                    variant="secondary"
-                    aria-label="More"
-                    className="w-12 px-0"
-                    onClick={() => setDraft({ ...draft, threshold: String(Math.min(100, thresholdNumber + 1)) })}
-                  >
-                    <Plus className="size-4" aria-hidden />
-                  </Button>
-                  <span className="text-sm text-muted">purchases</span>
-                </div>
-              </Field>
-            )}
-
-            {draft.kind === "spend" && (
-              <Field label={`After spending how much? (${currency})`} htmlFor="perk-threshold" hint="It repeats every time they spend this much again.">
-                <Input
-                  id="perk-threshold"
-                  inputMode="numeric"
-                  value={draft.threshold}
-                  onChange={(e) => setDraft({ ...draft, threshold: e.target.value.replace(/[^\d]/g, "").slice(0, 10) })}
-                />
-              </Field>
             )}
 
             <fieldset className="flex flex-col gap-2">

@@ -11,7 +11,7 @@ insert into auth.users (id, phone) values
 select test.act_as('00000000-0000-0000-0000-0000000000a8');
 set role authenticated;
 select public.create_business('Jollof Hub', 'Food') as biz \gset
-insert into public.perks (business_id, kind, title, threshold) values (:'biz', 'visits', 'Free plate', 1);
+insert into public.perks (business_id, kind, title) values (:'biz', 'welcome', 'Free plate');
 reset role;
 
 select test.act_as('00000000-0000-0000-0000-0000000000b8');
@@ -23,7 +23,7 @@ reset role;
 select test.act_as('00000000-0000-0000-0000-0000000000a8');
 set role authenticated;
 select public.record_purchase(:'m', 4500, 'Jollof and chicken') as p1 \gset
-select public.redeem_reward((select id from public.rewards where membership_id = :'m' and kind = 'visits'));
+select public.redeem_reward((select id from public.rewards where membership_id = :'m' and kind = 'welcome'));
 select test.ok((select count(*) from public.audit_events where business_id = :'biz') >= 3, 'the business sees its activity log');
 reset role;
 

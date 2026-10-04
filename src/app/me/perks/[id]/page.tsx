@@ -30,15 +30,15 @@ export default async function PerkPage({ params }: PageProps<"/me/perks/[id]">) 
   const name = profile?.full_name?.trim();
   const shortName = name ? name.split(/\s+/).map((w, i) => (i === 0 ? w : `${w[0]}.`)).join(" ") : null;
   // The business opens this link in its dashboard to see the perk and mark it as given.
-  const perkLink = `${siteUrl()}/dashboard/${b.id}/rewards?perk=${reward.id}`;
+  const perkLink = `${siteUrl()}/dashboard/${b.id}/customers/${membership.id}`;
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-5">
       <Link
-        href="/me/perks"
+        href={`/me/b/${b.slug}`}
         className="-ml-1 inline-flex w-fit items-center gap-1.5 rounded-lg px-1 py-1 text-sm font-semibold text-muted hover:text-ink"
       >
-        <ArrowLeft className="size-4" aria-hidden /> Your perks
+        <ArrowLeft className="size-4" aria-hidden /> {b.name}
       </Link>
 
       <article

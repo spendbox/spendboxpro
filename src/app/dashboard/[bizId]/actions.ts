@@ -1,17 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { after } from "next/server";
-import { notifyPurchase, notifyRewardsReady } from "@/lib/notify";
 import { redirect } from "next/navigation";
 import { requireOwnedBusiness } from "@/lib/auth";
-import { appTimeZone, DEFAULT_COUNTRY_CODE } from "@/lib/env";
+import { DEFAULT_COUNTRY_CODE } from "@/lib/env";
 import { normalizeWhatsapp } from "@/lib/phone";
 import { BRAND_COLORS, cleanCategories } from "@/lib/constants";
-import { paystackConfigured, resolveAccount } from "@/lib/paystack";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import type { PerkKind, PurchaseStatus } from "@/lib/types";
+import type { PerkKind } from "@/lib/types";
 
 // Every action re-checks ownership; the database rules check it again.
 
@@ -25,79 +22,18 @@ function refresh(bizId: string) {
   revalidatePath(`/dashboard/${bizId}`, "layout");
 }
 
-// Payments -------------------------------------------------------------------
+// Requests ------------------------------------------------------------------------
 
-export async function setPurchaseStatus(bizId: string, purchaseId: string, status: PurchaseStatus) {
+/** Records that the business is reaching out about a request (so the customer knows who to expect). */
+export async function reachOut(bizId: string, requestId: string, method: "whatsapp" | "call" | "email"): Promise<FormState> {
   await requireOwnedBusiness(bizId);
   const supabase = await createClient();
-  const { error } = await supabase.rpc("set_purchase_status", { p_purchase_id: purchaseId, p_status: status });
-  if (error) return { error: error.message };
-  if (status === "verified") {
-    after(async () => {
-      await notifyPurchase(purchaseId, "confirmed");
-      await notifyRewardsReady();
-    });
-  }
-  refresh(bizId);
+  const { error } = await supabase.rpc("contact_request", { p_business_id: bizId, p_request_id: requestId, p_method: method });
+  if (error) return { error: /ended/i.test(error.message) ? "This request has ended." : "Couldn't record that. Please try again." };
   return { ok: true };
 }
 
-/** Undo a purchase typed in by mistake (only within an hour). */
-export async function deleteRecordedPurchase(bizId: string, purchaseId: string) {
-  await requireOwnedBusiness(bizId);
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("delete_recorded_purchase", { p_purchase_id: purchaseId });
-  if (error) return { error: error.message };
-  refresh(bizId);
-  return { ok: true };
-}
-
-export async function recordPurchase(bizId: string, _prev: FormState, formData: FormData): Promise<FormState> {
-  await requireOwnedBusiness(bizId);
-  const membershipId = String(formData.get("membership_id") ?? "");
-  const amount = Number(String(formData.get("amount") ?? "").replace(/[^\d.]/g, ""));
-  const description = String(formData.get("description") ?? "").trim().slice(0, 200);
-  const date = String(formData.get("paid_on") ?? "");
-  if (!membershipId) return { error: "Please choose a customer." };
-  if (!amount || amount <= 0) return { error: "Please enter the amount paid." };
-
-  // "Today" is now; another day is recorded at midday that day.
-  const todayHere = new Intl.DateTimeFormat("en-CA", { timeZone: appTimeZone() }).format(new Date());
-  const paidAt = /^\d{4}-\d{2}-\d{2}$/.test(date) && date < todayHere ? `${date}T12:00:00Z` : new Date().toISOString();
-  const supabase = await createClient();
-  const { data: purchaseId, error } = await supabase.rpc("record_purchase", {
-    p_membership_id: membershipId,
-    p_amount: amount,
-    p_description: description || null,
-    p_paid_at: paidAt,
-  });
-  if (error) return { error: error.message };
-  after(async () => {
-    await notifyPurchase(purchaseId as string, "recorded");
-    await notifyRewardsReady();
-  });
-  refresh(bizId);
-  return { ok: true, message: "Purchase added." };
-}
-
-/** Customers to pick from when recording a purchase. */
-export async function memberOptions(bizId: string) {
-  await requireOwnedBusiness(bizId);
-  const supabase = await createClient();
-  const { data } = await supabase.rpc("business_members", { p_business_id: bizId });
-  return ((data ?? []) as { membership_id: string; member_no: number; full_name: string | null; phone: string | null }[]).map(
-    (m) => ({
-      value: m.membership_id,
-      label: m.full_name?.trim() || `Member #${String(m.member_no).padStart(4, "0")}`,
-      hint: [m.full_name ? `#${String(m.member_no).padStart(4, "0")}` : "Details private", m.phone ? `+${m.phone}` : null]
-        .filter(Boolean)
-        .join(" · "),
-      keywords: `${m.member_no} ${m.phone ?? ""}`,
-    }),
-  );
-}
-
-// Rewards --------------------------------------------------------------------
+// Perks to give ---------------------------------------------------------------
 
 export async function redeemReward(bizId: string, rewardId: string, redeemed: boolean) {
   await requireOwnedBusiness(bizId);
@@ -109,6 +45,9 @@ export async function redeemReward(bizId: string, rewardId: string, redeemed: bo
 }
 
 // Perks ----------------------------------------------------------------------
+
+/** Perks a business can see happen: joining, a friend joining, a birthday. */
+const SIMPLE_PERKS: PerkKind[] = ["welcome", "referral", "birthday"];
 
 export interface PerkInput {
   id?: string;
@@ -125,14 +64,8 @@ export async function savePerk(bizId: string, input: PerkInput): Promise<FormSta
   const title = input.title?.trim() ?? "";
   if (title.length < 2) return { error: "Please describe the reward." };
   if (title.length > 80) return { error: "Please keep the reward under 80 characters." };
-  const needsThreshold = input.kind === "visits" || input.kind === "spend";
-  const threshold = needsThreshold ? Number(input.threshold) : null;
-  if (needsThreshold && (!threshold || threshold <= 0)) {
-    return { error: input.kind === "visits" ? "How many purchases earn this perk?" : "How much should they spend?" };
-  }
-  if (input.kind === "visits" && threshold && (!Number.isInteger(threshold) || threshold > 100)) {
-    return { error: "Use a whole number of purchases, up to 100." };
-  }
+  if (!SIMPLE_PERKS.includes(input.kind)) return { error: "Pick a welcome, invite or birthday perk." };
+  const threshold = null;
 
   const validDays = input.validDays == null ? null : Math.round(Number(input.validDays));
   if (validDays !== null && !(validDays >= 1 && validDays <= 365)) return { error: "Pick between 1 and 365 days." };
@@ -256,50 +189,6 @@ export async function removeLogo(bizId: string): Promise<FormState> {
 }
 
 /** Looks up the name on a bank account through Paystack. */
-export async function lookupAccountName(bizId: string, bankCode: string, accountNumber: string) {
-  await requireOwnedBusiness(bizId);
-  return resolveAccount(accountNumber.replace(/\D/g, ""), bankCode);
-}
-
-export async function addBankAccount(bizId: string, _prev: FormState, formData: FormData): Promise<FormState> {
-  await requireOwnedBusiness(bizId);
-  const bankName = String(formData.get("bank_name") ?? "").trim();
-  const bankCode = String(formData.get("bank_code") ?? "").trim() || null;
-  const accountNumber = String(formData.get("account_number") ?? "").replace(/\D/g, "");
-  let accountName = String(formData.get("account_name") ?? "").trim();
-  if (bankName.length < 2) return { error: "Which bank is it?" };
-  if (accountNumber.length < 6 || accountNumber.length > 20) return { error: "Please enter the full account number." };
-
-  // With Paystack, the name always comes from the bank, never from what was typed.
-  if (paystackConfigured() && bankCode) {
-    const resolved = await resolveAccount(accountNumber, bankCode);
-    if (!resolved.ok) return { error: resolved.error };
-    accountName = resolved.accountName;
-  }
-  if (accountName.length < 2) return { error: "Please enter the account name, as it shows on receipts." };
-
-  const supabase = await createClient();
-  const { error } = await supabase.from("bank_accounts").insert({
-    business_id: bizId,
-    bank_name: bankName.slice(0, 60),
-    bank_code: bankCode,
-    account_number: accountNumber,
-    account_name: accountName.slice(0, 100),
-  });
-  if (error) {
-    return { error: error.code === "23505" ? "You've already added this account." : "Could not add the account. Please try again." };
-  }
-  refresh(bizId);
-  return { ok: true, message: "Account added. Receipts paid into it will be matched automatically." };
-}
-
-export async function removeBankAccount(bizId: string, accountId: string) {
-  await requireOwnedBusiness(bizId);
-  const supabase = await createClient();
-  await supabase.from("bank_accounts").delete().eq("id", accountId).eq("business_id", bizId);
-  refresh(bizId);
-}
-
 export async function deleteBusiness(bizId: string, _prev: FormState, formData: FormData): Promise<FormState> {
   const { business } = await requireOwnedBusiness(bizId);
   if (String(formData.get("confirm") ?? "").trim().toLowerCase() !== business.name.trim().toLowerCase()) {

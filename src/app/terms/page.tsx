@@ -17,8 +17,8 @@ export default function TermsPage() {
 
       <h2>What Spendbox is</h2>
       <p>
-        Spendbox lets businesses keep a customer list, count purchases and offer perks, and lets customers keep the
-        businesses they buy from in one place. <strong>Spendbox does not process payments</strong> and never holds or
+        Spendbox lets businesses keep a customer list, offer simple perks and team up with other businesses, and lets
+        customers post requests for what they need so the businesses they trust can reach out. <strong>Spendbox does not process payments</strong> and never holds or
         moves money. Payments happen directly between customers and businesses.
       </p>
 
@@ -37,49 +37,39 @@ export default function TermsPage() {
           how long it lasts, and is responsible for honouring it.
         </li>
         <li>Perks have no cash value, can&apos;t be sold or transferred, and are used at the business that offered them.</li>
-        <li>A perk ends when it is used, when its time limit passes, or if the purchases that earned it are reversed.</li>
+        <li>A perk ends when it is used or when its time limit passes.</li>
         <li>Businesses can change, pause or end their perks; perks you have already earned stay valid until they expire.</li>
       </ul>
 
-      <h2>Payments from your bank</h2>
+      <h2>Requests</h2>
       <ul>
         <li>
-          Businesses can connect their bank accounts through Mono. Access is read-only: Spendbox sees payments coming
-          in and can never move money. A business can disconnect at any time in Settings.
+          Customers can post requests describing what they need, with a budget and optional photos. A request is shown
+          for 24 hours to the businesses the customer joined and, depending on their plan, to those businesses&apos;
+          partners. It can be posted again after it ends.
         </li>
         <li>
-          Payments are matched to members by the sender&apos;s name and the accounts recognised as them. Matching can
-          sometimes be wrong; a business can mark a payment as the wrong customer, and a customer can tap &ldquo;Not
-          me&rdquo;.
-        </li>
-        <li>Only the business&apos;s own accounts may be connected, by someone allowed to do so.</li>
-        <li>Customers may only add bank accounts that belong to them.</li>
-        <li>
-          Purchases and perks are recorded in an audit log that customers can see. A purchase a business types in can
-          only be deleted within an hour of adding it.
-        </li>
-      </ul>
-
-      <h2>Receipts</h2>
-      <ul>
-        <li>Only upload genuine receipts for payments you made yourself.</li>
-        <li>
-          Receipts are read automatically and may sometimes be read wrongly. A business can mark a payment as not
-          received, which removes it and any unused perks it earned.
+          Only post genuine requests, with photos you have the right to share. No illegal, offensive or misleading
+          content, and no other people&apos;s personal details.
         </li>
         <li>
-          Uploading fake, edited or someone else&apos;s receipts, or reusing a receipt, is not allowed and can lead to
-          your account being closed.
+          Businesses who can see a request can contact the customer using the methods the customer picked for it. Keep
+          it relevant and respectful; no spam.
+        </li>
+        <li>
+          Any deal is between the customer and the business. Spendbox is not part of it and doesn&apos;t guarantee
+          prices, quality or delivery.
         </li>
       </ul>
 
       <h2>For businesses</h2>
       <ul>
-        <li>You must be authorised to act for the business and to add its bank accounts.</li>
+        <li>You must be authorised to act for the business.</li>
         <li>Honour the perks you offer, and describe them honestly, including to customers who join you through a partner.</li>
         <li>
           If you switch on cross-promotion, other businesses on Spendbox can see your name, categories, area and number
-          of customers, and your perks show to your partners&apos; customers. You can end a partnership at any time.
+          of customers, and your perks show to your partners&apos; customers. On Plus, partners see each other&apos;s
+          customers&apos; requests. You can end a partnership at any time.
         </li>
         <li>
           Use customers&apos; shared details only to serve them and in line with data protection law. Don&apos;t send
@@ -90,16 +80,15 @@ export default function TermsPage() {
 
       <h2>Free trial, plans and fair use</h2>
       <p>
-        Businesses start on a free trial. After it, Spendbox is a monthly plan: Starter (one connected bank account) or
-        Plus (up to five). Current prices are shown in your dashboard under Settings → Plan &amp; billing, and you only pay
+        Businesses start on a free trial. After it, Spendbox is a monthly plan: Starter (requests from your own
+        customers) or Plus (also requests from your partners&apos; customers). Current prices are shown in your dashboard under Settings → Plan &amp; billing, and you only pay
         when you choose to, through Paystack. Price changes apply to your next payment, never to months you&apos;ve
         already paid for. Spendbox is free for customers.
       </p>
       <p>
-        <strong>Fair use.</strong> We pay our bank-data partner for every connected bank account. If a plan isn&apos;t paid
-        within 14 days after the trial or the last paid month ends, we pause the business (new customers can&apos;t join)
-        and disconnect its bank accounts from Spendbox. Your money and your bank account are never affected, and your
-        customers keep their perks. Paying switches the business back on; you&apos;ll just need to reconnect your bank.
+        <strong>Fair use.</strong> If a plan isn&apos;t paid within 14 days after the trial or the last paid month ends,
+        we pause the business: new customers can&apos;t join and requests stop showing. Your customers keep their perks,
+        and paying switches the business back on straight away.
       </p>
 
       <h2>Acceptable use</h2>
@@ -118,7 +107,7 @@ export default function TermsPage() {
       <p>
         We work hard to keep Spendbox running well, but it is provided &ldquo;as is&rdquo; and may sometimes be
         unavailable or make mistakes. We are not responsible for disputes between businesses and customers, including
-        over payments, products or perks. To the extent the law allows, we are not liable for indirect or consequential
+        over requests, prices, products or perks. To the extent the law allows, we are not liable for indirect or consequential
         losses, and our total liability to you is limited to the amount you paid us in the 12 months before the claim
         (or ₦50,000 if you paid nothing). Nothing in these terms limits rights you have under consumer protection law
         that cannot be excluded.

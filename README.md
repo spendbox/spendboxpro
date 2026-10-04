@@ -1,31 +1,36 @@
 # Spendbox
 
-Spendbox lets small businesses keep their customer list, track purchases and reward customers with perks.
+Spendbox is a reverse marketplace for the businesses people already trust. Customers say what they need, with their budget, and the businesses they know reach out.
 
-- **Businesses** sign up with their email and a password, start a two-week free trial, then pay monthly (Starter or Plus), and get a join link and QR code. They add perks as cards (welcome, loyalty, invite rewards, big spender, birthday), connect the bank account customers pay into (read-only, through Mono), and hand over perks.
-- **Customers** join only from a business's link (invite-only), using their email and a password (their phone number is optional). They pay as usual: transfers are seen in the business's bank and counted for them automatically, with nothing to upload. They share businesses with friends, and choose, business by business, whether to share their details.
+- **Customers** join a business from its link, using their name, email and a password (phone optional). In **My Spendbox** they post a request — "Red velvet cake for Saturday, up to ₦30,000" — with up to 4 photos, and pick how they'd like to be reached (WhatsApp, call and/or email). A request is live for **24 hours**, then it ends; they can post it again in one tap. They see which businesses are reaching out, mark "Found my plug", and collect simple perks under **Plugs**.
+- **Businesses** sign up with their email, share their join link or QR code, and see live requests on their **Home**. One tap opens WhatsApp (with a greeting ready), a call or an email, and the customer is told who's reaching out. They also offer simple perks (welcome, invite a friend, birthday), team up with partner businesses, and manage their customer list. Menu: Home, Customers, Partners, Settings.
+- **Partners** recommend each other's perks to their customers. On the **Plus** plan (and during the free trial), a business also sees requests from its partners' customers; **Starter** sees requests from its own customers.
 
-Built with Next.js (hosted on Vercel), Supabase (database, login, file storage) and Mono (reads payments coming into a business's bank account).
+Built with Next.js (hosted on Vercel), Supabase (database, login, photo storage), Paystack (businesses' monthly plan) and Resend (emails).
 
 ---
 
-## Set it up (about 20 minutes, no coding)
+## Set it up (about 15 minutes, no coding)
 
-You need accounts on **Supabase**, **Vercel**, **Mono** and **Paystack** (Paystack confirms the name on customers' bank accounts). You'll also want **Resend**: it sends the email-confirmation and password-reset links, receipts and perk alerts.
+You need accounts on **Supabase**, **Vercel** and **Paystack**. You'll also want **Resend**: it sends the email-confirmation and password-reset links and perk alerts.
 
 ### 1. Create the database (Supabase)
 
-1. Go to [supabase.com](https://supabase.com) → **New project**. Pick a region close to your customers.
-2. When it's ready, open **SQL Editor** → **New query**.
-3. Open the file [`supabase/migrations/20261001000000_spendbox.sql`](supabase/migrations/20261001000000_spendbox.sql) in this repository, copy **everything**, paste it into the editor and press **Run**. You should see "Success".
-4. Do the same with [`supabase/migrations/20261002000000_logos_emails_durations.sql`](supabase/migrations/20261002000000_logos_emails_durations.sql) (logos, emails, perk durations).
-5. Then [`supabase/migrations/20261003000000_bank_feeds.sql`](supabase/migrations/20261003000000_bank_feeds.sql) (payments from the bank).
-6. Then [`supabase/migrations/20261004000000_sales.sql`](supabase/migrations/20261004000000_sales.sql) (sales and balance on the home screen).
-7. Then [`supabase/migrations/20261005000000_partners.sql`](supabase/migrations/20261005000000_partners.sql) (partner businesses, and a fix for perk time limits).
-8. Then [`supabase/migrations/20261006000000_activity_and_accounts.sql`](supabase/migrations/20261006000000_activity_and_accounts.sql) (audit logs, deleting a typed-in purchase, customers' bank accounts).
-9. Then [`supabase/migrations/20261007000000_pay_accounts.sql`](supabase/migrations/20261007000000_pay_accounts.sql) (members can see which account to pay the business into).
-10. Then [`supabase/migrations/20261008000000_admin.sql`](supabase/migrations/20261008000000_admin.sql) (the admin area).
-11. Then [`supabase/migrations/20261009000000_email_and_billing.sql`](supabase/migrations/20261009000000_email_and_billing.sql) (email sign-up, contacting customers, paid plans). Always run the files in order, each once.
+1. Go to [supabase.com](https://supabase.com) and create a new project. Choose a region close to your customers and save the database password somewhere safe.
+2. When it's ready, open **SQL Editor** in the left menu and click **New query**.
+3. Run each of these files **in order, each once**: open the file in this repository, copy **everything**, paste it into the editor and press **Run**. You should see "Success" each time.
+   1. [`20261001000000_spendbox.sql`](supabase/migrations/20261001000000_spendbox.sql)
+   2. [`20261002000000_logos_emails_durations.sql`](supabase/migrations/20261002000000_logos_emails_durations.sql)
+   3. [`20261003000000_bank_feeds.sql`](supabase/migrations/20261003000000_bank_feeds.sql)
+   4. [`20261004000000_sales.sql`](supabase/migrations/20261004000000_sales.sql)
+   5. [`20261005000000_partners.sql`](supabase/migrations/20261005000000_partners.sql)
+   6. [`20261006000000_activity_and_accounts.sql`](supabase/migrations/20261006000000_activity_and_accounts.sql)
+   7. [`20261007000000_pay_accounts.sql`](supabase/migrations/20261007000000_pay_accounts.sql)
+   8. [`20261008000000_admin.sql`](supabase/migrations/20261008000000_admin.sql)
+   9. [`20261009000000_email_and_billing.sql`](supabase/migrations/20261009000000_email_and_billing.sql)
+   10. [`20261010000000_requests.sql`](supabase/migrations/20261010000000_requests.sql) — **requests, photos and simple perks (the new product)**
+
+   Some early files create tables for payment tracking, which Spendbox no longer uses. They're harmless; the later files build on them, so keep running all of them in order.
 
 ### 2. Login: email and password
 
@@ -33,25 +38,13 @@ People sign up with their **email and a password** (at least 8 characters); a ph
 
 > Accounts made earlier with a phone number and PIN still work: on the login page, they type their phone number instead of an email, and their PIN as the password. They can add an email in Profile.
 
-### 3. Mono (counts payments from the bank)
+### 3. Paystack (plans) and Resend (emails, optional)
 
-1. Sign up at [mono.co](https://mono.co) and open the dashboard. Create an app for **Connect / Financial data**.
-2. Under the app's **Keys**, copy the **public key** and the **secret key**. Keys starting with `test_` use Mono's **sandbox** (practice banks and made-up payments, nothing real). Keys starting with `live_` use real banks; Mono gives you these once they've approved your business.
-3. Make up a long random password for webhooks (any text, e.g. from a password generator). After your site is online (step 5), go to the app's **Webhooks** settings in Mono and add:
-   - URL: `https://<your site>/api/mono/webhook`
-   - Secret: the random text you made up.
+- **Paystack** takes businesses' monthly payments. In [Paystack](https://dashboard.paystack.com) go to **Settings → API Keys & Webhooks**, copy the **Secret Key** and add it as `PAYSTACK_SECRET_KEY`. On the same page, set the **Live Webhook URL** to `https://<your site>/api/paystack/webhook`, so payments count even if someone closes the page before coming back.
 
-   Mono then tells Spendbox the moment a business has new payments. Without it, payments still arrive: whenever the business opens Payments or taps **Check for new payments**, and once a day.
+- **Resend** (sends confirmation and password-reset links, perk alerts, and tells businesses about new members and partners): create an account at [resend.com](https://resend.com), add and verify your domain under **Domains**, then create an **API key**. Until a domain is verified, Resend only delivers to your own Resend login email.
 
-### 4. Paystack (confirms customers' names) and Resend (emails, optional)
-
-- **Paystack**: when customers sign up they add the bank account they usually pay from, and Paystack tells us the name on it — that becomes their Spendbox name, and it's how their transfers are matched. In [Paystack](https://dashboard.paystack.com) go to **Settings → API Keys & Webhooks** and copy the **Secret Key** (use the live key; name lookups are free). Add it as `PAYSTACK_SECRET_KEY`. Without it, customers type the name on their account themselves.
-
-  Paystack also takes businesses' monthly payments. Under **Settings → API Keys & Webhooks**, set the **Live Webhook URL** to `https://<your site>/api/paystack/webhook`, so payments count even if someone closes the page before coming back. (Paystack signs webhooks with your secret key; nothing else to set.)
-
-- **Resend** (emails customers when a perk is ready or a transfer is counted, and emails businesses about new members): create an account at [resend.com](https://resend.com), add and verify your domain under **Domains**, then create an **API key**. Until a domain is verified, Resend only delivers to your own Resend login email.
-
-### 5. Put the app online (Vercel)
+### 4. Put the app online (Vercel)
 
 1. Go to [vercel.com](https://vercel.com) → **Add New… → Project** → import this GitHub repository.
 2. Before pressing Deploy, open **Environment Variables** and add:
@@ -61,41 +54,37 @@ People sign up with their **email and a password** (at least 8 characters); a ph
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase → **Project Settings → API** (or the **Connect** button): Project URL |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase → **Project Settings → API Keys**: Publishable key (older projects: the `anon` key also works, as `NEXT_PUBLIC_SUPABASE_ANON_KEY`) |
 | `SUPABASE_SECRET_KEY` | Supabase → **Project Settings → API Keys**: Secret key (older projects: `service_role` key, as `SUPABASE_SERVICE_ROLE_KEY`). Keep it private. |
-| `NEXT_PUBLIC_MONO_PUBLIC_KEY` | Mono public key (step 3) |
-| `MONO_SECRET_KEY` | Mono secret key (step 3). Keep it private. |
-| `MONO_WEBHOOK_SECRET` | The random text you put in Mono's webhook settings (step 3) |
 | `NEXT_PUBLIC_SITE_URL` | Your app's address, e.g. `https://spendbox.vercel.app` (or your own domain) |
-| `PAYSTACK_SECRET_KEY` | Paystack secret key (step 4) — confirms customers' names from their bank |
-| `CRON_SECRET` | Any long random text. Lets Vercel run the daily job (birthday treats, and a bank check in case a webhook was missed). |
-| `RESEND_API_KEY` | Optional — Resend API key (step 4) |
+| `PAYSTACK_SECRET_KEY` | Paystack secret key (step 3) — takes businesses' monthly payments |
+| `CRON_SECRET` | Any long random text. Lets Vercel run the daily job (birthday treats and plan reminders). |
+| `RESEND_API_KEY` | Optional — Resend API key (step 3) |
 | `EMAIL_FROM` | Optional — who emails come from, e.g. `Spendbox <hello@yourdomain.com>` (must be on your verified Resend domain) |
 | `ADMIN_EMAIL` | The email you'll use to log in to the admin area at `/admin` |
 | `ADMIN_PASSWORD` | Your admin password. At least 10 characters (longer is better) and don't reuse one. Change it here any time and redeploy; that signs everyone out of the admin area. |
 
-Moving from Mono's sandbox to real banks: replace the two Mono keys with your `live_` keys and redeploy. Optional: `NEXT_PUBLIC_TRIAL_DAYS` (starting free-trial length, default `90`; change it later in `/admin`), `NEXT_PUBLIC_DEFAULT_COUNTRY_CODE` (default `234`), `NEXT_PUBLIC_TIME_ZONE` (default `Africa/Lagos`). See [`.env.example`](.env.example).
+Optional: `NEXT_PUBLIC_TRIAL_DAYS` (starting free-trial length, default `14`; change it later in `/admin`), `NEXT_PUBLIC_DEFAULT_COUNTRY_CODE` (default `234`), `NEXT_PUBLIC_TIME_ZONE` (default `Africa/Lagos`). See [`.env.example`](.env.example).
 
 3. Press **Deploy**. If you change a variable later, redeploy (**Deployments → ⋯ → Redeploy**) so it takes effect.
 4. **For speed:** in Vercel → **Settings → Functions → Function Region**, pick the region closest to your Supabase project's region (shown in Supabase → Project Settings → General). When the two are far apart, every page waits for the data to travel between continents.
 
 > Tip: Vercel's Supabase integration (**Vercel → Storage → Supabase**) can fill in the Supabase variables for you. The app accepts the names it creates.
 
-### 6. Try it
+### 5. Try it
 
 1. Open your site → **For businesses** → **Start free**. Create a business with your email and a password, then tap the link in the confirmation email.
-2. Add perks (Perks page). In **Settings → Your bank**, tap **Connect your bank** and pick a bank in Mono's window. With sandbox keys, use one of Mono's test banks and the test login Mono shows you.
-3. Open your join link in a private browser window and join as a customer with a different phone number. Add a bank account when asked; the name comes from the bank.
-4. Go back to **Payments**. Sandbox payments are made up by Mono, so most will be in **Who paid this?**: pick a customer for one. Every later payment from that sender counts for that customer by itself.
+2. On **Home**, add a welcome perk and copy your join link.
+3. Open the join link in a private browser window and join as a customer with a different email. Type your name when asked.
+4. As the customer, tap **What do you need today?**, write a request, set a budget, add a photo, pick WhatsApp and post it.
+5. Back as the business, the request shows on **Home**. Tap **WhatsApp**: the chat opens, and the customer now sees that your business is reaching out.
 
-**Testing without Mono or real money.** In `/admin` → Settings, switch on **Test payments** (or set `TEST_PAYMENTS=on` in Vercel). The Payments page then shows **Send a test payment**: type the customer's name exactly as it appears on their Profile and an amount, and Spendbox treats it like a real transfer that just arrived (it counts for the customer, unlocks perks and sends emails). A name it doesn't know lands in **Who paid this?**. Test payments are marked "TEST TRANSFER" and only work with Mono test keys. **Switch them off before real businesses sign up**, and delete your test businesses in Settings.
-
-### 7. The admin area (`/admin`)
+### 6. The admin area (`/admin`)
 
 Open `your-site/admin` and log in with `ADMIN_EMAIL` and `ADMIN_PASSWORD`. It works on your phone too.
 
-- **Dashboard:** businesses, customers, sales counted, perks used, free trials, and charts of new members and businesses over the last 30 days.
+- **Dashboard:** businesses, customers, live requests, reach-outs, perks used, free trials, and charts of requests, new members and businesses over the last 30 days.
 - **Businesses:** search, then open one to **pause** it (new customers can't join, and the owner sees a paused notice), give it **free time** with one tap (7 days to 1 year), **record a payment** made outside Paystack, or **delete** it.
 - **People:** everyone with a login. **Pause** someone (they can't log in) or **delete** their account.
-- **Settings:** set the **prices** of Starter and Plus, switch the **free trial** for new businesses on or off and set its length, pause **new business sign-ups**, pause **customers joining**, switch **emails** off, and switch **test payments** on or off.
+- **Settings:** set the **prices** of Starter and Plus, switch the **free trial** for new businesses on or off and set its length, pause **new business sign-ups**, pause **customers joining**, and switch **emails** off.
 - **Team** (main admin only): give someone access with the email they use on Spendbox. They then log in to Spendbox as usual and open `/admin`. *Viewer* can only look, *Support* can also pause and change trials, *Manager* can also delete and change settings.
 - **Activity:** every admin action, plus failed logins. After 8 wrong passwords from the same place, logins are blocked for 15 minutes.
 
@@ -103,41 +92,25 @@ Open `your-site/admin` and log in with `ADMIN_EMAIL` and `ADMIN_PASSWORD`. It wo
 
 ## How it works
 
-**Invite-only customers.** A customer account can only be created from a business's join link (`/j/business-name`). The login page only lets in numbers that already have an account.
+**Invite-only customers.** A customer account is created from a business's join link (`/j/business-name`). A friend's share link adds `?ref=…`, so the friend who shared it gets the invite perk when the new customer joins.
 
-**Free trial.** Every business dashboard shows a free-trial banner with the days left (90 days from sign-up by default) and says paid plans come after. Nothing is charged or switched off automatically. A friend's share link adds `?ref=…`, so the friend who shared it gets the invite reward when the new customer's first purchase counts.
+**Requests.** A customer can have up to 3 live requests at once, and post up to 10 a day. Each needs a description, a budget (an "up to" amount or a range) and at least one contact method. Photos are shrunk on the phone before uploading (max 4). A request is live for 24 hours; after that it moves to **Earlier**, where **Post again** fills in a new one. The customer can close it early, mark **Found my plug**, or delete it (the photos are deleted too).
 
-**Privacy.** Customers sign up with an email. Name, phone, email, gender and birthday are seen by a business only if that customer switches sharing on for it. Otherwise the business sees a member number and purchases. Details live in one place, so an edit shows up everywhere straight away. Customers can delete their account and everything in it. Members of a business can see the account numbers it gets paid into, so they know where to send transfers; nobody else can.
+**Who sees a request.** The businesses the customer joined — and, if one of those businesses is on **Plus** (or still in its free trial), its partners see it too, marked "Glow Spa's customer". Businesses get the customer's first name and only the contact details picked for that request (phone for WhatsApp or calls, email for email). When a business taps a contact button it's recorded once, so the customer sees "2 plugs are reaching out" with each business's name and a button to chat back.
 
-**Payments from the bank.** A business connects its bank account through Mono's secure window (read-only: Spendbox can see money coming in, never move it). When money arrives:
-- if the sender is already **recognised** as a member (same name or account number as an earlier payment, at any business on Spendbox), it counts for them straight away;
-- otherwise, if exactly one member's **profile name** matches the sender's name (order, middle names and short forms like Tolu/Tolulope don't matter), it counts for them;
-- otherwise, if the business **recorded a purchase** for the same amount at about the same time, the two are linked (it's never counted twice);
-- otherwise it waits in **Who paid this?**: the business picks the customer once, and that sender is recognised from then on. **Not a customer** skips it (optionally for good, e.g. money the owner moves themselves).
-
-Payments from before someone joined don't count for them automatically. **Wrong customer?** on any payment undoes a match and stops that sender being matched to that member again. Customers see **Bank accounts recognised as you** in Profile & privacy and can tap **Not me**; businesses never see that list. Payments arrive through Mono's webhook, when the business opens Payments or taps **Check for new payments**, and in a daily check.
-
-**Sales on the home screen.** Once a bank is connected, the business's home shows its balance, money in for the month (compared with the month before), a column chart of sales per day, and every payment that came in. Tap a day to see just that day; use the arrows or the month list to go back in time; sort payments by newest, oldest or largest. The first check reads the account's whole history from Mono. Payments from before connecting show in sales but are never matched to members or put in "Who paid this?". Money marked **Not a customer** is left out of sales. If the screen stays empty, Settings shows whether Mono has shared any payments yet.
-
-**Plans and fair use.** New businesses get a free trial (two weeks by default). After it, they pay monthly through Paystack: **Starter** (₦2,500, one connected bank account) or **Plus** (₦5,000, up to five). Prices, the trial length and whether there's a trial at all are set in `/admin` → Settings. Owners pay from **Settings → Plan & billing** for 1, 3, 6 or 12 months; paid time starts when their current free or paid time ends, and they get an emailed receipt. The daily job reminds them before their trial or plan ends and when payment is due. If a business still hasn't paid **14 days after** its plan ends, it's paused (new customers can't join) and its bank accounts are disconnected from Mono, so you aren't charged for them. Paying switches it straight back on; they reconnect their bank. In `/admin`, open a business to give it free time with one tap (7 days, 2 weeks, 1 month, 3 months, 6 months, 1 year), set an exact end date, or record a payment made outside Paystack.
-
-**Contacting customers.** When a customer shares their details with a business, the business sees **Call**, **WhatsApp** and **Email** buttons on that customer's page (only for what the customer has added).
-
-**Customers with the same name.** Transfers are matched by account number first, then by name. If two members of a business have the same name and the bank shows only a name, Spendbox doesn't guess: the payment waits in **Who paid this?** for the business to pick.
-
-**Customer sign-up.** After their email and password (and an optional phone number), new customers answer one question per screen: the bank account they usually pay from (Paystack shows the bank's name for it, "Is this you?"; they can add more than one) and their birthday (optional). Their name comes from the bank and can't be edited. They can add more accounts in Profile; each one helps match their transfers.
-
-**Audits.** Every purchase recorded, confirmed, marked not received or deleted, and every perk earned, given or taken back, is written to an audit log automatically. Customers see their part under **Audits**; businesses see the whole log under **Settings → Audit log**. Nobody can edit it. A purchase a business typed in can be deleted within an hour of adding it (in case of a mistake); the deletion shows in the log.
+**Perks.** Three simple kinds a business can see happen: **welcome** (on joining), **invite a friend** (for every friend who joins with the customer's link) and **birthday** (during their birthday month, even if the birthday is private). Perks are earned automatically; the business taps **Given** on the customer's page. **Customers → Only customers with perks to give** lists everyone with a perk waiting. Each perk can have a time limit (1 week to 3 months, or none).
 
 **Perks for customers.** Tapping a perk opens it full screen in the perk's colour, with a live clock (so a screenshot won't pass) and a **Share with [business]** button that sends the business a link to that perk — it opens straight into the perk in their dashboard, ready to mark as given.
 
-**Partners (cross-promotion).** Under **Partners** in the menu, a business switches on cross-promotion, then finds other businesses by name, category or area. Each shows how many customers it has and whether it approves requests instantly or one by one. Switching one on sends a request (or partners straight away if they approve instantly). A business can have up to 2 partners, counting requests it has sent. Once partnered, each one's perks show to the other's customers under **From our partners** (on the business's page and on the customer's home), with a button to join. Requests waiting for approval show as a badge, and the business gets an email if it has added one. Either side can end a partnership at any time; switching cross-promotion off hides partner perks until it's switched back on. Partners never see each other's customers.
+**Partners (cross-promotion).** Under **Partners**, a business switches on cross-promotion and finds other businesses by name, category or area. Switching one on sends a request (or partners straight away if they approve instantly). A business can have up to 2 partners. Once partnered, each one's perks show to the other's customers under **Plugs your plugs recommend**, and on Plus each sees the other's customers' requests. Either side can end a partnership at any time. Partners never see each other's customer lists.
 
-**Receipts (switched off).** Customer receipt uploads, read by Claude, are still in the code but hidden. To bring them back, set `NEXT_PUBLIC_RECEIPT_UPLOADS=on` and `ANTHROPIC_API_KEY` (from [console.anthropic.com](https://console.anthropic.com), roughly $20–30 per 1,000 receipts), and redeploy. Optionally set `PAYSTACK_SECRET_KEY` so account names fill themselves in when businesses add the accounts receipts are checked against.
+**Plans and fair use.** New businesses get a free trial (two weeks by default). After it, they pay monthly through Paystack: **Starter** (₦2,500, requests from your own customers, perks and partners) or **Plus** (₦5,000, also requests from your partners' customers). Prices, the trial length and whether there's a trial at all are set in `/admin` → Settings. Owners pay from **Settings → Plan & billing** for 1, 3, 6 or 12 months; paid time starts when their current time ends. The daily job reminds them before their plan ends. If a business still hasn't paid **14 days after** its plan ends, it's paused (new customers can't join and requests stop showing). Paying switches it straight back on. In `/admin`, open a business to give it free time with one tap, set an exact end date, or record a payment made outside Paystack.
 
-**Perks.** Five card types: welcome (on joining), loyalty (every N purchases), invite reward (when an invited friend makes a first purchase), big spender (every ₦X spent), birthday treat (during the birthday month, even when the birthday is kept private). Perks are earned automatically by the database, shown on the customer's live pass, and marked as given by the business. Each perk has a time limit the business chooses (1 week to 3 months, or none); customers see a bar showing how long they have left.
+**Contacting customers.** When a customer shares their details with a business, the business sees **Call**, **WhatsApp** and **Email** buttons on that customer's page (only for what the customer has added).
 
-**Emails (optional).** Customers can add an email in Profile & privacy to hear when a perk is ready or a payment is counted. Businesses add an email in Settings to hear about new members. Businesses never see customers' emails.
+**Privacy.** Name, phone, email, gender and birthday are seen by a business only if that customer switches sharing on for it; otherwise the business sees a member number. Requests are the exception, and only for the contact methods the customer picked on that request. Customers can delete their account and everything in it.
+
+**Emails (optional).** Customers can add an email to hear when a perk is ready. Businesses add an email in Settings to hear about new members and partner requests.
 
 ---
 
@@ -152,13 +125,12 @@ npm run dev                  # http://localhost:3000
 | Command | What it does |
 | --- | --- |
 | `npm run lint` / `npm run typecheck` | Code checks |
-| `npm test` | Matching tests (bank narrations, names, receipts) |
-| `TEST_DATABASE_URL=postgres://… npm run test:db` | Database scenario tests (joining, referrals, perks, privacy, permissions, perk durations, bank payments). Needs an **empty, throwaway** Postgres database, never your real one. |
+| `npm test` | Unit tests (phone numbers, plans) |
+| `TEST_DATABASE_URL=postgres://… npm run test:db` | Database scenario tests (joining, referrals, perks, privacy, permissions, partners, billing, requests). Needs an **empty, throwaway** Postgres database, never your real one. |
 
 Project layout:
 
-- `supabase/migrations/` — the whole database: tables, Row Level Security, the perk engine (`sync_member_rewards`) and the functions the app calls.
-- `src/app/` — pages. `/` front page (one screen: My Spendbox or For businesses), `/plug` the page for businesses, `/start` business sign-up, `/admin` admin area, `/login` (`/login?for=business` for owners), `/j/[slug]` join page, `/me/…` customer app, `/dashboard/[bizId]/…` business dashboard, `/api/mono/webhook` Mono's webhook, `/api/receipts` receipt upload (switched off).
-- `src/lib/mono.ts` and `src/lib/bank/` — talking to Mono, reading senders from bank narrations and matching them to members (`match.ts`), and fetching and counting payments (`sync.ts`).
-- `src/lib/receipts/` — reading receipts with Claude (`extract.ts`) and matching them to businesses (`match.ts`).
-- `src/components/` — shared UI. Fonts (DM Sans, Bricolage Grotesque, SIL Open Font License) are bundled in `src/app/fonts/`.
+- `supabase/migrations/` — the whole database: tables, Row Level Security, the perk engine (`sync_member_rewards`), requests (`post_request`, `business_requests`, `contact_request`) and the functions the app calls.
+- `src/app/` — pages. `/` front page, `/plug` the page for businesses, `/start` business sign-up, `/admin` admin area, `/login`, `/j/[slug]` join page, `/me/…` customer app (`/me` My Spendbox, `/me/new` post a request, `/me/plugs`, `/me/profile`), `/dashboard/[bizId]/…` business dashboard.
+- `src/lib/requests.ts` — request rules shared by the screens (24 hours, photo limits, budget labels).
+- `src/components/requests/` — the request cards for customers and businesses, and photo shrinking.

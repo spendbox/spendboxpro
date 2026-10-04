@@ -24,11 +24,12 @@ interface Overview {
   customers_7d: number;
   customers_paused: number;
   memberships: number;
-  purchases_30d: number;
-  sales_30d: number;
-  banks_connected: number;
+  requests_live: number;
+  requests_30d: number;
+  reach_outs_30d: number;
+  requests_answered_30d: number;
   perks_given_30d: number;
-  daily: { day: string; businesses: number; members: number }[];
+  daily: { day: string; businesses: number; members: number; requests: number }[];
 }
 
 const n = (x: number) => Number(x).toLocaleString("en-US");
@@ -45,7 +46,7 @@ export default async function AdminHome({ searchParams }: PageProps<"/admin">) {
       <div className="flex flex-col gap-4">
         <PageHeader title="Dashboard" />
         <FormMessage>
-          Couldn&apos;t load the numbers. If you just added the admin area, run supabase/migrations/20261008000000_admin.sql in Supabase.
+          Couldn&apos;t load the numbers. Make sure every file in supabase/migrations has been run in Supabase, up to 20261010000000_requests.sql.
         </FormMessage>
       </div>
     );
@@ -70,15 +71,22 @@ export default async function AdminHome({ searchParams }: PageProps<"/admin">) {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile label="Businesses" value={n(o.businesses)} note={`+${n(o.businesses_7d)} this week`} href="/admin/businesses" />
         <StatTile label="Customers" value={n(o.customers)} note={`+${n(o.customers_7d)} this week · ${plural(o.memberships, "membership")}`} href="/admin/customers?filter=customers" />
-        <StatTile label="Sales counted" value={formatMoneyShort(o.sales_30d)} note={`${n(o.purchases_30d)} purchases · last 30 days`} />
+        <StatTile label="Live requests" value={n(o.requests_live)} note={`${n(o.requests_30d)} posted · last 30 days`} />
         <StatTile label="Perks used" value={n(o.perks_given_30d)} note="Last 30 days" />
         <StatTile label="Paying businesses" value={n(o.paying)} note={`${formatMoneyShort(o.revenue_30d)} paid in the last 30 days`} href="/admin/businesses?filter=paying" />
         <StatTile label="On free time" value={n(o.on_trial)} note={`${n(o.trial_ended)} need to pay`} href="/admin/businesses?filter=due" />
-        <StatTile label="Banks connected" value={n(o.banks_connected)} note={`of ${plural(o.businesses, "business", "businesses")}`} />
+        <StatTile
+          label="Reach-outs"
+          value={n(o.reach_outs_30d)}
+          note={`${o.requests_30d ? Math.round((o.requests_answered_30d / o.requests_30d) * 100) : 0}% of requests answered · 30 days`}
+        />
         <StatTile label="Paused" value={n(o.businesses_paused + o.customers_paused)} note={`${n(o.businesses_paused)} businesses · ${n(o.customers_paused)} people`} />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <Card className="p-5">
+          <MiniBars title="Requests posted" unit={["request", "requests"]} days={o.daily.map((d) => ({ day: d.day, value: d.requests ?? 0 }))} />
+        </Card>
         <Card className="p-5">
           <MiniBars title="New members" unit={["member", "members"]} days={o.daily.map((d) => ({ day: d.day, value: d.members }))} />
         </Card>

@@ -1,16 +1,14 @@
 import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { unlinkAccount } from "@/lib/mono";
 import { emailBody, sendEmail } from "@/lib/email";
 import { siteUrl } from "@/lib/env";
 import { formatDate, formatMoney } from "@/lib/format";
 import { paystackConfigured, verifyTransaction } from "@/lib/paystack";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { billingState, GRACE_DAYS, PLANS, type PlanKey } from "@/lib/billing";
+import { billingState, PLANS, type PlanKey } from "@/lib/billing";
 
 // Paying for Spendbox: confirming Paystack payments, and the daily fair-use
-// check (reminders, then pausing unpaid businesses and disconnecting their
-// banks from Mono, which charges us per connected account).
+// check (reminders, then pausing businesses that haven't paid).
 
 const BUSINESS_FOOTER = "You get these emails because you own a business on Spendbox.";
 
@@ -65,17 +63,6 @@ async function sendPaymentReceipt(businessId: string, plan: PlanKey, months: num
   await sendEmail({ to: contact.email, subject: "Your Spendbox payment receipt", html, text, essential: true });
 }
 
-/** Stops Mono sharing (and charging for) a business's bank accounts. */
-export async function disconnectAllBanks(businessId: string) {
-  const admin = createAdminClient();
-  const { data: connections } = await admin.from("bank_connections").select("id, mono_account_id").eq("business_id", businessId);
-  for (const c of connections ?? []) {
-    await unlinkAccount(c.mono_account_id).catch((e) => console.error("Mono unlink failed", e));
-    await admin.from("bank_connections").delete().eq("id", c.id);
-  }
-  return connections?.length ?? 0;
-}
-
 /**
  * The daily fair-use check. Sends each reminder once (tracked in
  * billing_notice), and pauses businesses still unpaid GRACE_DAYS after their
@@ -99,7 +86,6 @@ export async function runBillingCheck() {
 
     if (s.status === "due" && Date.now() >= s.suspendOn.getTime()) {
       await admin.from("businesses").update({ suspended_at: new Date().toISOString(), suspended_reason: "billing", billing_notice: `paused:${end}` }).eq("id", b.id);
-      const banks = await disconnectAllBanks(b.id);
       paused += 1;
       const contact = await ownerEmail(b.id);
       if (contact?.email) {
@@ -107,8 +93,8 @@ export async function runBillingCheck() {
           heading: `${b.name} is paused`,
           lines: [
             `Your Spendbox plan ended on ${formatDate(s.accessUntil, { withYear: true })} and wasn't renewed, so we've paused ${b.name}.`,
-            banks ? "We've also disconnected your bank from Spendbox. Your money and bank account aren't affected." : "Your customers can still see their perks.",
-            "Pay any time to switch everything back on. You'll just need to reconnect your bank.",
+            "While it's paused, you won't see customer requests and new customers can't join. Your customers keep their perks.",
+            "Pay any time to switch everything back on.",
           ],
           button: { label: "Pay and switch back on", url: billingUrl },
           footer: BUSINESS_FOOTER,
@@ -140,7 +126,7 @@ export async function runBillingCheck() {
         heading: daysToPause <= 3 ? `${b.name} will be paused in ${daysToPause <= 1 ? "1 day" : `${daysToPause} days`}` : "Your payment is due",
         lines: [
           `Your free time or plan ended on ${formatDate(s.accessUntil, { withYear: true })}.`,
-          `Pay by ${formatDate(s.suspendOn, { withYear: true })} to keep ${b.name} running. After that it's paused and your bank is disconnected (fair use: we pay for each connected bank). ${GRACE_DAYS} days after a plan ends is the limit.`,
+          `Pay by ${formatDate(s.suspendOn, { withYear: true })} to keep ${b.name} running. After that it's paused until you pay.`,
         ],
       };
     }

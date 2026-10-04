@@ -29,7 +29,7 @@ export default async function VerifyEmailPage({ searchParams }: PageProps<"/auth
         <h1 className="font-display text-3xl font-bold tracking-tight">{ok ? "Email confirmed" : "This link doesn't work"}</h1>
         <p className="text-muted">
           {ok
-            ? "Thanks! We'll use it for your perks, receipts and to help you get back in if you forget your password."
+            ? "Thanks! We'll use it for your requests and perks, and to help you get back in if you forget your password."
             : "It may have expired or already been used. Log in and tap “Send it again” on the confirm-your-email note."}
         </p>
         <ButtonLink href="/go" size="lg">

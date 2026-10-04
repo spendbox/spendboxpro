@@ -1,4 +1,4 @@
-import { Landmark, UserRound } from "lucide-react";
+import { UserRound } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { FilterChips, listHref, Pager, SearchBox } from "@/components/admin/ui";
@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireAdmin } from "@/lib/admin/session";
 import { billingState, PLANS } from "@/lib/billing";
-import { formatDate, formatMoneyShort, formatPhone } from "@/lib/format";
+import { formatDate, formatPhone } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -38,8 +38,6 @@ export interface AdminBusinessRow {
   owner_phone: string | null;
   owner_email: string | null;
   members: number;
-  sales_30d: number;
-  bank_connected: boolean;
   total: number;
 }
 
@@ -87,8 +85,6 @@ export default async function AdminBusinesses({ searchParams }: PageProps<"/admi
                 <span className="flex items-center gap-1" title="Members">
                   <UserRound className="size-4" aria-hidden /> {b.members}
                 </span>
-                <span title="Sales, last 30 days">{formatMoneyShort(b.sales_30d)}</span>
-                {b.bank_connected && <Landmark className="size-4 text-brand-700" aria-label="Bank connected" />}
               </div>
             </Link>
           );

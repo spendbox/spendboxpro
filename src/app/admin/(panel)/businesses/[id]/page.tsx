@@ -25,16 +25,14 @@ export default async function AdminBusiness({ params }: PageProps<"/admin/busine
   const b = data as Business;
 
   const since30 = daysAgoIso(30);
-  const [owner, members, perks, banks, sales, sales30, payments] = await Promise.all([
+  const [owner, members, perks, reachOuts, reachOuts30, payments] = await Promise.all([
     supabase.from("profiles").select("id, phone, email, full_name").eq("id", b.owner_id).maybeSingle(),
     supabase.from("memberships").select("id", { count: "exact", head: true }).eq("business_id", id),
     supabase.from("perks").select("id", { count: "exact", head: true }).eq("business_id", id).eq("is_active", true),
-    supabase.from("bank_connections").select("institution, account_number, status").eq("business_id", id),
-    supabase.from("purchases").select("amount").eq("business_id", id).eq("status", "verified"),
-    supabase.from("purchases").select("amount").eq("business_id", id).eq("status", "verified").gte("paid_at", since30),
+    supabase.from("request_contacts").select("id", { count: "exact", head: true }).eq("business_id", id),
+    supabase.from("request_contacts").select("id", { count: "exact", head: true }).eq("business_id", id).gte("created_at", since30),
     supabase.from("business_payments").select("id, plan, months, amount, method, note, recorded_by, paid_at").eq("business_id", id).eq("status", "paid").order("paid_at", { ascending: false }).limit(12),
   ]);
-  const sum = (rows: { amount: number | string }[] | null) => (rows ?? []).reduce((s, r) => s + Number(r.amount), 0);
   const billing = billingState(b);
   const trialEnd = b.trial_ends_at ?? b.created_at;
   const canSupport = allowed(admin, "support");
@@ -83,13 +81,8 @@ export default async function AdminBusiness({ params }: PageProps<"/admin/busine
           <dl className="divide-y divide-line">
             <Fact label="Members">{members.count ?? 0}</Fact>
             <Fact label="Active perks">{perks.count ?? 0}</Fact>
-            <Fact label="Sales, last 30 days">{formatMoney(sum(sales30.data), b.currency)}</Fact>
-            <Fact label="Sales, all time">{formatMoney(sum(sales.data), b.currency)}</Fact>
-            <Fact label="Bank">
-              {(banks.data ?? []).length
-                ? (banks.data ?? []).map((c) => `${c.institution ?? "Bank"} •••${(c.account_number ?? "").slice(-4)}${c.status !== "active" ? ` (${c.status})` : ""}`).join(", ")
-                : "Not connected"}
-            </Fact>
+            <Fact label="Reached out, last 30 days">{plural(reachOuts30.count ?? 0, "request")}</Fact>
+            <Fact label="Reached out, all time">{plural(reachOuts.count ?? 0, "request")}</Fact>
           </dl>
         </Card>
       </div>

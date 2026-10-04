@@ -40,6 +40,7 @@ export function EmailSignIn({
   submitLabel?: string;
   note?: ReactNode;
 }) {
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
@@ -84,7 +85,7 @@ export function EmailSignIn({
     const credentials = { email: id.toLowerCase(), password };
     let { error: signInError } = await supabase.auth.signInWithPassword(credentials);
     if (signInError && /invalid login credentials/i.test(signInError.message)) {
-      const registered = await registerEmail({ email: id, password, phone, country, allowSignup });
+      const registered = await registerEmail({ email: id, password, phone, country, allowSignup, fullName });
       if (!registered.ok) {
         setBusy(false);
         return setError(registered.error);
@@ -106,6 +107,12 @@ export function EmailSignIn({
         void submit();
       }}
     >
+      {allowSignup && (
+        <Field label="Your name" htmlFor="full-name" hint="Already on Spendbox? You can skip this.">
+          <Input id="full-name" autoComplete="name" placeholder="e.g. Ada Obi" value={fullName} onChange={(e) => setFullName(e.target.value)} maxLength={80} />
+        </Field>
+      )}
+
       <Field label="Email" htmlFor="email" hint={allowSignup ? undefined : "Signed up with your phone number before? Type the number here instead."}>
         <Input
           id="email"

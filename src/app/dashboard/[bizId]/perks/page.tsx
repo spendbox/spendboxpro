@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { requireOwnedBusiness } from "@/lib/auth";
 import { getPerks, getStats } from "@/lib/business";
 import { plural } from "@/lib/format";
+import { SIMPLE_PERK_KINDS } from "@/lib/perks";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Perks" };
@@ -27,11 +28,11 @@ export default async function PerksPage({ params, searchParams }: PageProps<"/da
       <PageHeader
         back={{ href: `/dashboard/${bizId}/settings`, label: "Settings" }}
         title="Perks"
-        description="Each card is a reward customers earn automatically. Switch one off to pause it."
+        description="Simple treats customers earn when they join, bring a friend, or have a birthday. You hand them over and tap “Given”."
       />
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <Link href={`/dashboard/${bizId}/rewards`} className={card}>
+        <Link href={`/dashboard/${bizId}/customers?perks=ready`} className={card}>
           <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-accent-50 text-accent-700">
             <Gift className="size-5" aria-hidden />
           </span>
@@ -59,14 +60,14 @@ export default async function PerksPage({ params, searchParams }: PageProps<"/da
                 ? `${plural(requests, "partner request")} waiting for you`
                 : business.partners_enabled
                   ? "Your perks show to your partners' customers"
-                  : "Show your perks to other businesses' customers"}
+                  : "Team up with businesses near you"}
             </span>
           </span>
           <ChevronRight className="size-5 text-muted" aria-hidden />
         </Link>
       </div>
 
-      <PerkBoard key={String(startNew)} bizId={bizId} perks={perks} currency={business.currency} startPicking={startNew === "1"} />
+      <PerkBoard key={String(startNew)} bizId={bizId} perks={perks.filter((p) => SIMPLE_PERK_KINDS.includes(p.kind))} currency={business.currency} startPicking={startNew === "1"} />
     </div>
   );
 }

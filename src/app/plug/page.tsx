@@ -3,11 +3,11 @@ import {
   BadgeCheck,
   Check,
   Eye,
-  Gift,
   Handshake,
   History,
-  Landmark,
   LockKeyhole,
+  MessageCircle,
+  Phone,
   QrCode,
   ShieldCheck,
   Smartphone,
@@ -85,10 +85,10 @@ export default function PlugPage() {
                 <Store className="size-4 text-brand-600" aria-hidden /> Free to start
               </span>
               <h1 data-reveal style={delay(80)} className="font-display text-[2.7rem] leading-[1] font-extrabold tracking-tight text-ink sm:text-[4.2rem]">
-                Turn first-timers into <span className="text-shimmer">regulars.</span>
+                Your customers say what they need. <span className="text-shimmer">You reach out.</span>
               </h1>
               <p data-reveal style={delay(160)} className="max-w-xl text-lg leading-relaxed text-muted sm:text-xl">
-                Reward the people who keep coming back, team up with businesses around you, and watch your sales grow.
+                Customers post what they want, with their budget and photos. You see it first, because they already know you. Tap WhatsApp and close the sale.
               </p>
               <div data-reveal style={delay(240)} className="flex flex-col gap-3 sm:flex-row">
                 <ButtonLink href="/start" size="lg" className="shadow-lift">
@@ -99,7 +99,7 @@ export default function PlugPage() {
                 </ButtonLink>
               </div>
               <ul data-reveal style={delay(320)} className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-ink-2">
-                {["Set up in minutes", "Your money never moves", "Loved by customers"].map((t) => (
+                {["Set up in minutes", "Real budgets, real buyers", "No commission"].map((t) => (
                   <li key={t} className="flex items-center gap-2">
                     <Check className="size-4 text-brand-600" aria-hidden />
                     {t}
@@ -134,7 +134,7 @@ export default function PlugPage() {
           <div className="mx-auto max-w-6xl px-5 py-20 sm:px-8 lg:py-28">
             <div data-reveal className="max-w-2xl">
               <p className="text-sm font-semibold text-brand-700">How it works</p>
-              <h2 className="mt-2 font-display text-3xl font-bold tracking-tight sm:text-5xl">Three steps to more regulars.</h2>
+              <h2 className="mt-2 font-display text-3xl font-bold tracking-tight sm:text-5xl">Three steps to more sales.</h2>
             </div>
             <div className="relative mt-12">
               {/* The line that draws itself between the steps (desktop) */}
@@ -145,7 +145,7 @@ export default function PlugPage() {
                 {[
                   { icon: QrCode, title: "Share your link", body: "On your WhatsApp status, after a sale, or on the counter." },
                   { icon: Smartphone, title: "Customers join in seconds", body: "One tap from your link. Nothing to download." },
-                  { icon: Gift, title: "They keep coming back", body: "Every visit brings them closer to a reward, so there's always a reason to return." },
+                  { icon: MessageCircle, title: "They tell you what they need", body: "Their requests land on your home page. Reach out on WhatsApp, a call or email." },
                 ].map((step, i) => (
                   <li key={step.title} data-reveal style={delay(i * 140)} className="relative flex flex-col gap-4 rounded-3xl bg-white p-6 shadow-card ring-1 ring-line transition hover:-translate-y-1 hover:shadow-lift">
                     <div className="flex items-center justify-between">
@@ -165,18 +165,18 @@ export default function PlugPage() {
           </div>
         </section>
 
-        {/* ------------------------------------------------------------ Payments count themselves */}
+        {/* ------------------------------------------------------------ Requests */}
         <section className="bg-ink text-white">
           <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-12 px-5 py-20 sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:py-28">
             <div data-reveal="left" className="flex flex-col gap-5">
-              <p className="text-sm font-semibold text-brand-300">Effortless</p>
-              <h2 className="font-display text-3xl font-bold tracking-tight sm:text-5xl">You sell. We keep count.</h2>
+              <p className="text-sm font-semibold text-brand-300">Requests</p>
+              <h2 className="font-display text-3xl font-bold tracking-tight sm:text-5xl">Buyers come to you.</h2>
               <p className="text-lg leading-relaxed text-white/80">
-                Customers pay you the way they always do. Spendbox quietly counts every visit and lets them know when a
-                reward is waiting, while you get on with business.
+                &ldquo;Red velvet cake for Saturday, up to ₦30,000.&rdquo; When your customers need something, they post
+                it. You see the budget, the photos and how they like to be reached. Each request lasts 24 hours.
               </p>
               <ul className="flex flex-col gap-3 text-white/90">
-                {["No cards to stamp", "No receipts to check", "Nothing changes at your counter"].map((t) => (
+                {["See the budget before you reply", "Reach out in one tap", "Customers see who's reaching out"].map((t) => (
                   <li key={t} className="flex items-start gap-3">
                     <BadgeCheck className="mt-0.5 size-5 shrink-0 text-brand-400" aria-hidden />
                     {t}
@@ -184,7 +184,7 @@ export default function PlugPage() {
                 ))}
               </ul>
             </div>
-            <PaymentFlow />
+            <RequestFlow />
           </div>
         </section>
 
@@ -192,17 +192,15 @@ export default function PlugPage() {
         <section className="mx-auto max-w-6xl px-5 py-20 sm:px-8 lg:py-28">
           <div data-reveal className="max-w-2xl">
             <p className="text-sm font-semibold text-brand-700">Perks</p>
-            <h2 className="mt-2 font-display text-3xl font-bold tracking-tight sm:text-5xl">Rewards people come back for</h2>
+            <h2 className="mt-2 font-display text-3xl font-bold tracking-tight sm:text-5xl">Simple perks people love</h2>
             <p className="mt-4 text-lg text-muted">
-              A free drink, a birthday treat, a thank-you for bringing a friend. You choose. We handle the rest.
+              A welcome treat, a thank-you for bringing a friend, a birthday surprise. Spendbox reminds you, you tap &ldquo;Given&rdquo;.
             </p>
           </div>
-          <div className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {[
               { kind: "welcome" as const, title: "Free drink on your first order", rot: "-4deg" },
-              { kind: "visits" as const, title: "Your 5th meal is on us", threshold: 5, rot: "3deg" },
               { kind: "referral" as const, title: "Free small chops for every friend", rot: "-2deg" },
-              { kind: "spend" as const, title: "10% off your next order", threshold: 50000, rot: "4deg" },
               { kind: "birthday" as const, title: "Birthday cake slice on us", rot: "-3deg" },
             ].map((p, i) => (
               <div
@@ -211,10 +209,10 @@ export default function PlugPage() {
                 style={{ ...delay(i * 90), "--rot": p.rot } as CSSProperties}
                 className="transition duration-300 hover:-translate-y-1.5 hover:rotate-[-1deg]"
               >
-                <PerkCard kind={p.kind} title={p.title} threshold={p.threshold} className="h-full" />
+                <PerkCard kind={p.kind} title={p.title} className="h-full" />
               </div>
             ))}
-            <div data-reveal="fan" style={{ ...delay(450), "--rot": "2deg" } as CSSProperties} className="flex min-h-48 flex-col justify-center gap-2 rounded-3xl border-2 border-dashed border-line-strong p-6">
+            <div data-reveal="fan" style={{ ...delay(270), "--rot": "2deg" } as CSSProperties} className="flex min-h-48 flex-col justify-center gap-2 rounded-3xl border-2 border-dashed border-line-strong p-6">
               <p className="font-display text-xl font-bold">Your own ideas</p>
               <p className="text-muted">Extra meat, a free trim, delivery on us — whatever brings your people back.</p>
             </div>
@@ -229,11 +227,11 @@ export default function PlugPage() {
               <p className="text-sm font-semibold text-brand-700">Partners</p>
               <h2 className="font-display text-3xl font-bold tracking-tight sm:text-5xl">Grow with the businesses around you.</h2>
               <p className="text-lg leading-relaxed text-muted">
-                Partner with a business your customers already love — a barber and a spa, a gym and a juice bar. Share
-                each other&apos;s rewards, and you both win new regulars.
+                Partner with a business your customers already love — a barber and a spa, a baker and a decorator. You
+                recommend each other, and on Plus you also see your partners&apos; customers&apos; requests.
               </p>
               <ul className="flex flex-col gap-3 text-ink-2">
-                {["Meet customers you'd never reach alone", "Choose partners that fit your brand", "You decide who you work with"].map((t) => (
+                {["See requests you'd never reach alone", "Choose partners that fit your brand", "You decide who you work with"].map((t) => (
                   <li key={t} className="flex items-start gap-3">
                     <Handshake className="mt-0.5 size-5 shrink-0 text-brand-600" aria-hidden />
                     {t}
@@ -254,7 +252,7 @@ export default function PlugPage() {
             {[
               { icon: Users, title: "Your customers, always", body: "They stay with you, even when your phone or staff change." },
               { icon: History, title: "Nothing hidden", body: "Customers can see every reward you give them. Trust grows." },
-              { icon: Landmark, title: "Only real sales count", body: "Every reward is earned by a real payment, once." },
+              { icon: BadgeCheck, title: "Real people, real budgets", body: "Requests come from customers who joined you or your partners." },
               { icon: LockKeyhole, title: "Privacy people trust", body: "Customers choose what they share with you." },
             ].map((f, i) => (
               <div key={f.title} data-reveal style={delay(i * 110)} className="group flex flex-col gap-3 rounded-3xl bg-white p-6 shadow-card ring-1 ring-line transition hover:-translate-y-1 hover:shadow-lift">
@@ -276,14 +274,14 @@ export default function PlugPage() {
               <p className="text-sm font-semibold text-brand-200">Shopping, not selling?</p>
               <h2 className="mt-2 font-display text-3xl font-bold tracking-tight sm:text-5xl">All your plugs in one place</h2>
               <p className="mt-4 max-w-xl text-lg text-white/90">
-                Join the places you love from their link, and every reward you earn waits for you here.
+                Post what you need with your budget. The businesses you trust reach out, and your perks wait for you here.
               </p>
             </div>
             <ul className="flex flex-col gap-3">
               {[
                 { icon: ShieldCheck, text: "Your details stay yours unless you share them." },
-                { icon: Zap, text: "Pay as usual. Your visits count by themselves." },
-                { icon: Eye, text: "See every reward, and when you got it." },
+                { icon: Zap, text: "Post a request. Plugs reach out within the day." },
+                { icon: Eye, text: "See who's reaching out, and pick who you like." },
               ].map((item, i) => (
                 <li key={item.text} data-reveal="right" style={delay(150 + i * 120)} className="flex items-start gap-3 rounded-2xl bg-white/10 p-4 backdrop-blur">
                   <item.icon className="mt-0.5 size-5 shrink-0 text-brand-200" aria-hidden />
@@ -300,8 +298,8 @@ export default function PlugPage() {
             <div aria-hidden className="animate-blob absolute -bottom-40 -left-24 -z-10 size-[28rem] rounded-[42%] bg-brand-400/40 blur-2xl" />
             <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
               <div>
-                <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">Ready for more regulars?</h2>
-                <p className="mt-2 text-lg text-white/90">Start free today. Your first customers can join in minutes.</p>
+                <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">Ready for buyers who come to you?</h2>
+                <p className="mt-2 text-lg text-white/90">Start free today. Your first customers can join, and post, in minutes.</p>
               </div>
               <ButtonLink href="/start" size="lg" variant="secondary" className="ring-0 shadow-lift">
                 Start free <ArrowRight className="size-4" aria-hidden />
@@ -334,7 +332,7 @@ export default function PlugPage() {
   );
 }
 
-/** A phone showing the customer app, with perk cards and a "payment counted" toast floating around it. */
+/** A phone showing the business home page, with requests coming in and perks floating around it. */
 function HeroVisual() {
   return (
     <div data-reveal="scale" style={delay(200)} className="relative mx-auto w-full max-w-md lg:max-w-none" aria-hidden>
@@ -342,48 +340,43 @@ function HeroVisual() {
       <div className="mx-auto w-[290px] rounded-[44px] bg-ink p-3 shadow-[0_40px_80px_-30px_rgb(20_32_26/0.5)] sm:w-[320px]">
         <div className="flex flex-col gap-3 overflow-hidden rounded-[34px] bg-canvas p-4">
           <div className="flex items-center justify-between px-1 pt-1">
-            <span className="font-display text-lg font-extrabold text-ink">My Spendbox</span>
-            <span className="rounded-full bg-accent-600 px-2 py-0.5 text-[11px] font-bold text-white">2 perks</span>
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              ["2", "Ready"],
-              ["7", "Used"],
-              ["3", "Plugs"],
-            ].map(([n, l]) => (
-              <div key={l} className="rounded-2xl bg-white p-2.5 ring-1 ring-line">
-                <p className="text-lg font-bold">{n}</p>
-                <p className="text-[10px] font-semibold text-muted">{l}</p>
-              </div>
-            ))}
-          </div>
-          <div className="rounded-3xl bg-white p-4 shadow-card ring-1 ring-line">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-brand-600 font-display text-sm font-bold text-white">MT</div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold">Mama Tee&apos;s Kitchen</p>
-                <p className="text-xs text-muted">4 of 5 · free drink</p>
-              </div>
-            </div>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-line">
-              <div className="animate-fill h-full rounded-full bg-brand-600" />
-            </div>
-          </div>
-          <div className="rounded-3xl bg-white p-4 shadow-card ring-1 ring-line">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-[#4338A0] font-display text-sm font-bold text-white">KB</div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold">Kingz Barbers</p>
-                <p className="text-xs text-muted">Free beard trim · ready</p>
-              </div>
-            </div>
+            <span className="font-display text-lg font-extrabold text-ink">Requests</span>
+            <span className="rounded-full bg-accent-600 px-2 py-0.5 text-[11px] font-bold text-white">3 live</span>
           </div>
           <div className="animate-toast flex items-center gap-3 rounded-3xl bg-brand-600 p-4 text-white">
-            <Landmark className="size-5 shrink-0" />
+            <MessageCircle className="size-5 shrink-0" />
             <div>
-              <p className="text-sm font-bold">Payment counted</p>
-              <p className="text-xs text-white/90">₦5,000 · Mama Tee&apos;s Kitchen</p>
+              <p className="text-sm font-bold">New request</p>
+              <p className="text-xs text-white/90">Ada · Up to ₦30,000</p>
             </div>
+          </div>
+          <div className="rounded-3xl bg-white p-4 shadow-card ring-1 ring-line">
+            <div className="flex items-center gap-2">
+              <div className="flex size-8 items-center justify-center rounded-full bg-brand-100 text-xs font-bold text-brand-800">A</div>
+              <p className="min-w-0 flex-1 truncate text-xs font-semibold text-muted">Ada · Your customer</p>
+              <span className="rounded-full bg-canvas px-2 py-0.5 text-[10px] font-semibold ring-1 ring-line">23h left</span>
+            </div>
+            <p className="mt-2 text-sm font-bold leading-snug">Red velvet cake for Saturday, 2 tiers</p>
+            <div className="mt-2 flex items-center gap-2">
+              <span className="rounded-full bg-brand-600 px-2.5 py-0.5 text-[11px] font-bold text-white">Up to ₦30,000</span>
+              <span className="text-[11px] text-muted">Bakery · Lekki</span>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <span className="flex h-8 items-center justify-center gap-1.5 rounded-xl bg-[#25D366] text-[11px] font-bold text-white">
+                <MessageCircle className="size-3.5" /> WhatsApp
+              </span>
+              <span className="flex h-8 items-center justify-center gap-1.5 rounded-xl bg-white text-[11px] font-bold ring-1 ring-line">
+                <Phone className="size-3.5" /> Call
+              </span>
+            </div>
+          </div>
+          <div className="rounded-3xl bg-white p-4 shadow-card ring-1 ring-line">
+            <div className="flex items-center gap-2">
+              <div className="flex size-8 items-center justify-center rounded-full bg-[#ece9ff] text-xs font-bold text-[#4338A0]">T</div>
+              <p className="min-w-0 flex-1 truncate text-xs font-semibold text-muted">Tolu · Glow Spa&apos;s customer</p>
+            </div>
+            <p className="mt-2 text-sm font-bold leading-snug">Small chops for 40 guests</p>
+            <span className="mt-2 inline-block rounded-full bg-brand-600 px-2.5 py-0.5 text-[11px] font-bold text-white">₦60,000 – ₦80,000</span>
           </div>
         </div>
       </div>
@@ -397,13 +390,13 @@ function HeroVisual() {
   );
 }
 
-/** Customer transfer → your bank → Spendbox → perk unlocked, with money travelling between them. */
-function PaymentFlow() {
+/** Customer posts → you see it → you reach out → sold, with a signal travelling between them. */
+function RequestFlow() {
   const nodes = [
-    { icon: Smartphone, label: "Your customer pays" },
-    { icon: Landmark, label: "The money lands with you" },
-    { icon: BadgeCheck, label: "We know it was them" },
-    { icon: Gift, label: "Their reward gets closer" },
+    { icon: Smartphone, label: "Your customer posts a request" },
+    { icon: Eye, label: "You see their budget and photos" },
+    { icon: MessageCircle, label: "You reach out in one tap" },
+    { icon: Handshake, label: "They buy from you" },
   ];
   return (
     <div data-reveal="right" className="rounded-4xl bg-white/5 p-6 ring-1 ring-white/10 sm:p-8" aria-hidden>
@@ -425,19 +418,19 @@ function PaymentFlow() {
       </div>
       <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="animate-toast rounded-2xl bg-white p-4 text-ink" style={delay(500)}>
-          <p className="text-xs font-semibold text-muted">Just now</p>
-          <p className="font-semibold">₦7,500 from Tolu</p>
+          <p className="text-xs font-semibold text-muted">Tolu needs · just now</p>
+          <p className="font-semibold">Knotless braids, Friday · up to ₦35,000</p>
         </div>
         <div className="animate-toast rounded-2xl bg-brand-500 p-4 text-white" style={delay(1500)}>
           <p className="text-xs font-semibold text-white/80">Spendbox</p>
-          <p className="font-semibold">Tolu&apos;s 5th visit · free meal unlocked 🎉</p>
+          <p className="font-semibold">Tolu sees you&apos;re reaching out 👋</p>
         </div>
       </div>
     </div>
   );
 }
 
-/** Two partner businesses, joined by a bridge that carries their perks back and forth. */
+/** Two partner businesses, joined by a bridge that carries requests and perks back and forth. */
 function PartnersVisual() {
   const partners = [
     { initials: "SL", name: "Sleek Lab", sub: "Barber", color: "#1C2B24" },
@@ -467,14 +460,14 @@ function PartnersVisual() {
       </div>
       <div className="mt-4 grid grid-cols-2 gap-3">
         <div className="animate-float rounded-2xl bg-white p-4 shadow-card ring-1 ring-line" style={delay(0)}>
-          <p className="text-[11px] font-semibold text-brand-700">From our partners</p>
-          <p className="mt-1 text-sm font-bold">Free facial on your first visit</p>
-          <p className="text-xs text-muted">Glow Spa → Sleek Lab customers</p>
+          <p className="text-[11px] font-semibold text-brand-700">Partner&apos;s customer</p>
+          <p className="mt-1 text-sm font-bold">Need a facial this weekend</p>
+          <p className="text-xs text-muted">Sleek Lab customer → Glow Spa sees it</p>
         </div>
         <div className="animate-float rounded-2xl bg-white p-4 shadow-card ring-1 ring-line" style={delay(-3000)}>
           <p className="text-[11px] font-semibold text-brand-700">From our partners</p>
           <p className="mt-1 text-sm font-bold">Free beard trim</p>
-          <p className="text-xs text-muted">Sleek Lab → Glow Spa customers</p>
+          <p className="text-xs text-muted">Sleek Lab&apos;s welcome perk</p>
         </div>
       </div>
     </div>

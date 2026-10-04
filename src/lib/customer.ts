@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { PERK_KIND_ORDER } from "@/lib/perks";
 import { createClient } from "@/lib/supabase/server";
-import type { MembershipWithBusiness, PartnerPerkRow, Profile, Purchase, Reward } from "@/lib/types";
+import type { CustomerRequest, MembershipWithBusiness, PartnerPerkRow, Profile, RequestContact, Reward } from "@/lib/types";
 
 export const getMyProfile = cache(async (userId: string): Promise<Profile | null> => {
   const supabase = await createClient();
@@ -39,17 +39,6 @@ export const getMyRewards = cache(async (userId: string): Promise<Reward[]> => {
   return ((data ?? []) as Reward[]).filter((r) => !r.expires_at || new Date(r.expires_at).getTime() > now);
 });
 
-export const getMyPurchases = cache(async (userId: string): Promise<Purchase[]> => {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("purchases")
-    .select("id, business_id, membership_id, amount, currency, paid_at, description, reference, source, match_method, status, receipt_path, created_at")
-    .eq("customer_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(500);
-  return (data ?? []) as Purchase[];
-});
-
 /** Perks from partners of the given businesses (cross-promotion). */
 export async function getPartnerPerks(businessIds: string[]): Promise<PartnerPerkRow[]> {
   if (businessIds.length === 0) return [];
@@ -71,16 +60,21 @@ export async function getMyUsedRewards(userId: string): Promise<Reward[]> {
   return (data ?? []) as Reward[];
 }
 
-/** Whether the customer has added a bank account they pay from. */
-export async function hasMyBankAccount(): Promise<boolean> {
+/** The customer's requests, newest first. */
+export const getMyRequests = cache(async (userId: string): Promise<CustomerRequest[]> => {
   const supabase = await createClient();
-  const { count } = await supabase.from("payers").select("id", { count: "exact", head: true }).is("learned_at_business", null);
-  return (count ?? 0) > 0;
-}
+  const { data } = await supabase
+    .from("requests")
+    .select("id, body, category, area, budget_min, budget_max, currency, images, contact_whatsapp, contact_call, contact_email, status, created_at, expires_at")
+    .eq("customer_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(30);
+  return (data ?? []) as CustomerRequest[];
+});
 
-/** Where a member can transfer money to a business. */
-export async function getPayAccounts(businessId: string) {
+/** Businesses that reached out about each request. */
+export async function getRequestContacts(requestIds: string[]): Promise<Record<string, RequestContact[]>> {
   const supabase = await createClient();
-  const { data } = await supabase.rpc("business_pay_accounts", { p_business_id: businessId });
-  return (data ?? []) as { institution: string | null; account_name: string | null; account_number: string }[];
+  const results = await Promise.all(requestIds.map((id) => supabase.rpc("my_request_contacts", { p_request_id: id })));
+  return Object.fromEntries(requestIds.map((id, i) => [id, (results[i].data ?? []) as RequestContact[]]));
 }

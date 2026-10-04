@@ -17,10 +17,9 @@ export default async function BillingPage({ params, searchParams }: PageProps<"/
   const [{ bizId }, sp] = await Promise.all([params, searchParams]);
   const { business } = await requireOwnedBusiness(bizId);
   const supabase = await createClient();
-  const [settings, { data: payments }, { count: banks }] = await Promise.all([
+  const [settings, { data: payments }] = await Promise.all([
     getSettings(),
     supabase.from("business_payments").select("id, plan, months, amount, status, method, paid_at, created_at").eq("business_id", bizId).eq("status", "paid").order("paid_at", { ascending: false }).limit(24),
-    supabase.from("bank_connections").select("id", { count: "exact", head: true }).eq("business_id", bizId),
   ]);
   const s = billingState(business);
   const until = formatDate(s.accessUntil, { withYear: true });
@@ -28,9 +27,8 @@ export default async function BillingPage({ params, searchParams }: PageProps<"/
     trial: { title: `Free trial · ${plural(Math.max(s.daysLeft, 0), "day")} left`, text: `Your free trial ends on ${until}. Pick a plan any time; your paid months start when the trial ends.`, tone: "amber" as const },
     active: { title: `${PLANS[s.plan].name} plan`, text: `Paid until ${until}.`, tone: "green" as const },
     due: { title: "Payment due", text: `Your ${business.paid_until ? "plan" : "free trial"} ended on ${until}. Pay by ${formatDate(s.suspendOn, { withYear: true })} to keep ${business.name} running.`, tone: "red" as const },
-    suspended: { title: "Paused for non-payment", text: "Pay to switch everything back on. You'll need to reconnect your bank afterwards.", tone: "red" as const },
+    suspended: { title: "Paused for non-payment", text: "Pay to switch everything back on.", tone: "red" as const },
   }[s.status];
-  const overLimit = (banks ?? 0) > PLANS.starter.banks;
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
@@ -49,21 +47,15 @@ export default async function BillingPage({ params, searchParams }: PageProps<"/
       <section className="flex flex-col gap-3">
         <SectionTitle title={s.status === "active" ? "Renew or change plan" : "Choose a plan"} />
         <Card className="p-5">
-          <PlanPicker bizId={bizId} prices={{ starter: settings.priceStarter, plus: settings.pricePlus }} current={(overLimit ? "plus" : s.plan) as PlanKey} />
-          {overLimit && (
-            <p className="mt-3 text-sm text-muted">
-              You have {plural(banks ?? 0, "bank account")} connected, so you&apos;ll need Plus (Starter covers {PLANS.starter.banks}).
-            </p>
-          )}
+          <PlanPicker bizId={bizId} prices={{ starter: settings.priceStarter, plus: settings.pricePlus }} current={s.plan as PlanKey} />
         </Card>
       </section>
 
       <Card className="flex items-start gap-3 p-5 text-sm text-muted">
         <ShieldCheck className="mt-0.5 size-5 shrink-0 text-brand-700" aria-hidden />
         <p>
-          <span className="font-semibold text-ink">Fair use.</span> We pay our bank partner for every connected account. If a plan isn&apos;t
-          paid within {GRACE_DAYS} days after it ends, we pause the business and disconnect its bank accounts. Your money and bank
-          aren&apos;t affected, and your customers keep their perks. Pay any time to switch back on.
+          <span className="font-semibold text-ink">Fair use.</span> If a plan isn&apos;t paid within {GRACE_DAYS} days after it ends, we pause
+          the business: no new requests or new customers until it&apos;s paid. Your customers keep their perks. Pay any time to switch back on.
         </p>
       </Card>
 

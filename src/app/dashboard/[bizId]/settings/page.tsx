@@ -1,4 +1,4 @@
-import { ChevronRight, CreditCard, Download, Gift, Handshake, History, Landmark, LogOut, TriangleAlert, type LucideIcon } from "lucide-react";
+import { ChevronRight, CreditCard, Download, Gift, Handshake, LogOut, TriangleAlert, type LucideIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { QrCode } from "@/components/qr-code";
@@ -11,7 +11,7 @@ import { requireOwnedBusiness } from "@/lib/auth";
 import { getPerks } from "@/lib/business";
 import { billingState, PLANS } from "@/lib/billing";
 import { siteUrl } from "@/lib/env";
-import { formatDate, formatWhen, plural } from "@/lib/format";
+import { formatDate, plural } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 import { DeleteBusiness } from "./delete-business";
 import { BusinessDetailCards } from "./detail-cards";
@@ -41,19 +41,9 @@ export default async function SettingsPage({ params }: PageProps<"/dashboard/[bi
   const { bizId } = await params;
   const { business } = await requireOwnedBusiness(bizId);
   const supabase = await createClient();
-  const [perks, { data: connections }, { data: requests }] = await Promise.all([
-    getPerks(bizId),
-    supabase.from("bank_connections").select("institution, status, last_synced_at").eq("business_id", bizId),
-    supabase.rpc("partner_requests_waiting", { p_business_id: bizId }),
-  ]);
+  const [perks, { data: requests }] = await Promise.all([getPerks(bizId), supabase.rpc("partner_requests_waiting", { p_business_id: bizId })]);
   const joinUrl = `${siteUrl()}/j/${business.slug}`;
   const base = `/dashboard/${bizId}`;
-  const banks = connections ?? [];
-  const bankNote = banks.length
-    ? banks.some((c) => c.status !== "active")
-      ? "Needs your attention"
-      : `${banks.map((c) => c.institution ?? "Bank").join(", ")} · checked ${formatWhen(banks[0].last_synced_at ?? new Date().toISOString())}`
-    : "Not connected — connect it so transfers count by themselves";
   const activePerks = perks.filter((p) => p.is_active).length;
   const billing = billingState(business);
   const billingNote = {
@@ -79,16 +69,14 @@ export default async function SettingsPage({ params }: PageProps<"/dashboard/[bi
         <SectionTitle title="Manage" />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <LinkCard href={`${base}/settings/billing`} icon={CreditCard} title="Plan & billing" note={billingNote} />
-          <LinkCard href={`${base}/settings/bank`} icon={Landmark} title="Your bank" note={bankNote} />
           <LinkCard href={`${base}/perks`} icon={Gift} title="Perks" note={perks.length ? `${plural(activePerks, "perk")} on` : "Add your first perk"} />
           <LinkCard
             href={`${base}/partners`}
             icon={Handshake}
             title="Partners"
-            note={business.partners_enabled ? "Cross-promotion is on" : "Show your perks to other businesses' customers"}
+            note={business.partners_enabled ? "Partners are on" : "Team up with businesses near you"}
             badge={Number(requests ?? 0)}
           />
-          <LinkCard href={`${base}/audit`} icon={History} title="Audit log" note="Everything recorded, changed or given. Customers can see their part." />
         </div>
       </section>
 

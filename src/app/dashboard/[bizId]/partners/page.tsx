@@ -8,9 +8,9 @@ import type { PartnerListing } from "@/lib/types";
 export const metadata: Metadata = { title: "Partners" };
 
 const STEPS = [
-  { title: "Switch it on", body: "Turn on cross-promotion so other businesses can find you." },
+  { title: "Switch it on", body: "Turn on partners so other businesses can find you." },
   { title: "Pick up to 2 partners", body: "Search by name or category, and switch on the ones that suit your customers." },
-  { title: "Share perks", body: "Once they agree, your perks show to their customers as “from our partners”, and theirs to yours." },
+  { title: "Share customers", body: "Once they agree, you're recommended to each other's customers. On Plus, you also see their customers' requests." },
 ];
 
 export default async function PartnersPage({ params }: PageProps<"/dashboard/[bizId]/partners">) {

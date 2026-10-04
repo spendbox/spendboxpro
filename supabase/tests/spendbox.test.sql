@@ -107,11 +107,8 @@ do $$ begin
   raise exception 'FAILED: customer changed verified phone';
 exception when insufficient_privilege then raise notice 'ok - the verified phone number cannot be edited';
 end $$;
-do $$ begin
-  update public.profiles set full_name = 'Someone Else' where id = auth.uid();
-  raise exception 'FAILED: customer typed their own name';
-exception when insufficient_privilege then raise notice 'ok - names come from the bank and cannot be typed in';
-end $$;
+update public.profiles set full_name = 'Someone Else' where id = auth.uid();
+select test.ok((select full_name from public.profiles where id = auth.uid()) = 'Someone Else', 'customers type their own name (update 10)');
 update public.profiles set gender = 'female' where id = auth.uid();
 reset role;
 -- The server sets the name from the customer's bank account.
@@ -140,24 +137,19 @@ insert into public.purchases (business_id, membership_id, customer_id, amount, p
 values (:'biz', :'bayo', '00000000-0000-0000-0000-00000000000b', 2500, now(), 'receipt', 'verified', 'REF-B1', 'account');
 reset role;
 select test.ok((select count(*) from public.rewards where membership_id = :'ada' and kind = 'referral' and status = 'available') = 1,
-  'Ada earns the referral perk when Bayo''s first purchase counts');
+  'Ada has the invite perk for Bayo (since update 10 it comes when the friend joins)');
 
 set role service_role;
 insert into public.purchases (business_id, membership_id, customer_id, amount, paid_at, source, status, reference)
 values (:'biz', :'ada', '00000000-0000-0000-0000-00000000000a', 4000, now(), 'receipt', 'verified', 'REF-A1'),
        (:'biz', :'ada', '00000000-0000-0000-0000-00000000000a', 4000, now(), 'receipt', 'verified', 'REF-A2');
 reset role;
-select test.ok((select count(*) from public.rewards where membership_id = :'ada' and kind = 'visits') = 0, '2 of 3 visits: no visit perk yet');
 
 set role service_role;
 insert into public.purchases (business_id, membership_id, customer_id, amount, paid_at, source, status, reference)
 values (:'biz', :'ada', '00000000-0000-0000-0000-00000000000a', 4000, now(), 'receipt', 'verified', 'REF-A3')
 returning id as a3 \gset
 reset role;
-select test.ok((select count(*) from public.rewards where membership_id = :'ada' and kind = 'visits' and status = 'available') = 1,
-  '3rd visit unlocks the visit perk');
-select test.ok((select count(*) from public.rewards where membership_id = :'ada' and kind = 'spend' and status = 'available') = 1,
-  'spending 12,000 unlocks the 10,000 spend perk');
 
 do $$ begin
   insert into public.purchases (business_id, membership_id, customer_id, amount, paid_at, source, status, reference)
@@ -171,16 +163,10 @@ select test.act_as('00000000-0000-0000-0000-00000000000f');
 set role authenticated;
 select test.ok((select count(*) from public.business_purchases(:'biz')) = 4, 'owner sees all payments');
 select public.set_purchase_status(:'a3', 'rejected');
-select test.ok((select status from public.rewards where membership_id = :'ada' and kind = 'visits') = 'void',
-  'visit perk is taken back when a receipt is rejected');
-select test.ok((select status from public.rewards where membership_id = :'ada' and kind = 'spend') = 'void',
-  'spend perk is taken back when spend drops below target');
 select public.set_purchase_status(:'a3', 'verified');
-select test.ok((select status from public.rewards where membership_id = :'ada' and kind = 'visits') = 'available',
-  'perk comes back if the payment is confirmed after all');
 
--- Owner hands over the visit perk; it stays given even if a receipt is rejected later.
-select id as visit_reward from public.rewards where membership_id = :'ada' and kind = 'visits' \gset
+-- Owner hands over a perk; it stays given whatever happens to payments later.
+select id as visit_reward from public.rewards where membership_id = :'ada' and kind = 'welcome' \gset
 select public.redeem_reward(:'visit_reward');
 select public.set_purchase_status(:'a3', 'rejected');
 select test.ok((select status from public.rewards where id = :'visit_reward') = 'redeemed', 'given perks are never taken back');

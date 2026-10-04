@@ -6,14 +6,13 @@ import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { adminLoginConfigured, allowed, requireAdmin } from "@/lib/admin/session";
 import { emailConfigured } from "@/lib/email";
-import { getSettings, monoLive } from "@/lib/settings";
+import { getSettings } from "@/lib/settings";
 
 export const metadata: Metadata = { title: "Settings" };
 
 export default async function AdminSettings() {
   const [admin, s] = await Promise.all([requireAdmin(), getSettings()]);
   const canEdit = allowed(admin, "manager");
-  const live = monoLive();
 
   return (
     <div className="flex flex-col gap-5">
@@ -22,8 +21,8 @@ export default async function AdminSettings() {
       <Card className="flex flex-col gap-4 p-5">
         <h2 className="font-display text-lg font-bold">Prices</h2>
         <p className="-mt-2 text-sm text-muted">What businesses pay each month after their free trial.</p>
-        <NumberSettingForm name="priceStarter" initial={s.priceStarter} prefix="₦" label="Starter (1 bank account)" disabled={!canEdit} />
-        <NumberSettingForm name="pricePlus" initial={s.pricePlus} prefix="₦" label="Plus (up to 5 bank accounts)" disabled={!canEdit} help="New prices apply to the next payment. Months already paid for don't change." />
+        <NumberSettingForm name="priceStarter" initial={s.priceStarter} prefix="₦" label="Starter (requests from own customers)" disabled={!canEdit} />
+        <NumberSettingForm name="pricePlus" initial={s.pricePlus} prefix="₦" label="Plus (also partners' customers' requests)" disabled={!canEdit} help="New prices apply to the next payment. Months already paid for don't change." />
       </Card>
 
       <Card className="flex flex-col gap-4 p-5">
@@ -61,15 +60,8 @@ export default async function AdminSettings() {
             name="emailsEnabled"
             initial={s.emailsEnabled}
             label="Send emails"
-            help={emailConfigured() ? "Perk alerts, purchase receipts and new-member emails." : "Emails also need RESEND_API_KEY in Vercel, which isn't set yet."}
+            help={emailConfigured() ? "Perk alerts, new-member and partner emails, and plan reminders." : "Emails also need RESEND_API_KEY in Vercel, which isn't set yet."}
             disabled={!canEdit}
-          />
-          <SettingSwitch
-            name="testPayments"
-            initial={s.testPayments && !live}
-            label="Test payments"
-            help={live ? "Not available with live Mono keys, so nobody can fake a payment." : "Shows “Send a test payment” on every business's Payments page. Turn off before real businesses sign up."}
-            disabled={!canEdit || live}
           />
         </div>
       </Card>

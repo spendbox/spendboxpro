@@ -3,9 +3,9 @@
 
 export type PlanKey = "starter" | "plus";
 
-export const PLANS: Record<PlanKey, { name: string; banks: number; blurb: string }> = {
-  starter: { name: "Starter", banks: 1, blurb: "Everything, with 1 bank account connected" },
-  plus: { name: "Plus", banks: 5, blurb: "Everything, with up to 5 bank accounts connected" },
+export const PLANS: Record<PlanKey, { name: string; blurb: string }> = {
+  starter: { name: "Starter", blurb: "Requests from your own customers, perks and partners" },
+  plus: { name: "Plus", blurb: "Everything in Starter, plus requests from your partners' customers" },
 };
 
 /** Ways to pay ahead. */
@@ -13,9 +13,6 @@ export const MONTH_CHOICES = [1, 3, 6, 12] as const;
 
 /** Days after a plan ends before an unpaid business is paused (fair use). */
 export const GRACE_DAYS = 14;
-
-/** Bank accounts a business on a free trial can connect (they get to try everything). */
-export const TRIAL_BANKS = PLANS.plus.banks;
 
 const DAY = 86_400_000;
 
@@ -39,8 +36,8 @@ export interface BillingState {
   suspendOn: Date;
   /** Whole days until accessUntil (negative once it's passed). */
   daysLeft: number;
-  /** How many bank accounts can be connected right now. */
-  bankLimit: number;
+  /** Sees requests from partners' customers too (Plus, or a free trial). */
+  partnerRequests: boolean;
   /** Paused by an admin (not for billing). */
   adminPaused: boolean;
 }
@@ -58,7 +55,7 @@ export function billingState(b: BillingFields, now = Date.now()): BillingState {
     accessUntil: new Date(accessUntil),
     suspendOn: new Date(accessUntil + GRACE_DAYS * DAY),
     daysLeft: Math.ceil((accessUntil - now) / DAY),
-    bankLimit: status === "active" ? PLANS[plan].banks : status === "trial" ? TRIAL_BANKS : PLANS[plan].banks,
+    partnerRequests: status === "trial" || (status === "active" && plan === "plus"),
     adminPaused: Boolean(b.suspended_at && b.suspended_reason !== "billing"),
   };
 }

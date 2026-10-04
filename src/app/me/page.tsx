@@ -1,197 +1,153 @@
-import { Cake, ChevronRight, Gift, Landmark, ScanLine, Ticket } from "lucide-react";
+import { ArrowRight, Cake, Gift, MessageCircleHeart, PenLine, Store, Users } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { BusinessAvatar } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { ButtonLink, buttonClass } from "@/components/ui/button";
-import { Card, EmptyState, SectionTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import { WhatsAppIcon } from "@/components/ui/share-actions";
+import { MyRequestCard } from "@/components/requests/my-request-card";
+import { Card, SectionTitle } from "@/components/ui/card";
+import { FormMessage } from "@/components/ui/field";
 import { requireUser } from "@/lib/auth";
-import { receiptsEnabled } from "@/lib/env";
-import { getMyMemberships, getMyProfile, getMyPurchases, getMyRewards, getMyUsedRewards, getPartnerPerks, hasMyBankAccount } from "@/lib/customer";
-import { PerkStats } from "@/components/perks/perk-stats";
-import { ShareButton } from "@/components/ui/share-button";
-import { siteUrl } from "@/lib/env";
-import { PartnerOffers } from "@/components/perks/partner-offers";
-import { businessTagline, memberNo, whatsappLink } from "@/lib/format";
-import { perkProgress, sortBySoonest } from "@/lib/perks";
-import { ReadyPerks } from "@/components/perks/ready-perks";
+import { getMyMemberships, getMyProfile, getMyRequests, getMyRewards, getRequestContacts } from "@/lib/customer";
+import { budgetLabel, isLive, lifeLeft, REQUEST_IDEAS, timeAgo, timeLeftLabel } from "@/lib/requests";
 
 export const metadata: Metadata = { title: "My Spendbox" };
 
-/** How many ready perks to show here; the rest are on /me/perks. */
-const SHOWN = 3;
-
-export default async function MySpendboxPage() {
-  const user = await requireUser("/me");
-  const [profile, memberships, rewards, purchases, used, hasBank] = await Promise.all([
+export default async function MySpendboxPage({ searchParams }: PageProps<"/me">) {
+  const [user, { posted }] = await Promise.all([requireUser("/me"), searchParams]);
+  const [profile, memberships, rewards, requests] = await Promise.all([
     getMyProfile(user.id),
     getMyMemberships(user.id),
     getMyRewards(user.id),
-    getMyPurchases(user.id),
-    getMyUsedRewards(user.id),
-    hasMyBankAccount(),
+    getMyRequests(user.id),
   ]);
-  // Partners of my businesses that I haven't joined yet.
-  const memberSlugs = new Set(memberships.map((m) => m.business.slug));
-  const partnerPerks = (await getPartnerPerks(memberships.map((m) => m.business_id))).filter((r) => !memberSlugs.has(r.partner_slug));
+  const live = requests.filter((r) => isLive(r));
+  const earlier = requests.filter((r) => !isLive(r)).slice(0, 10);
+  const contacts = await getRequestContacts([...live, ...earlier.slice(0, 5)].map((r) => r.id));
+  const firstName = profile?.full_name?.split(/\s+/)[0];
 
-  // Bank names often start with the surname, so greet with the first two words ("Okonkwo Chidinma").
-  const name = profile?.full_name?.trim().split(/\s+/).slice(0, 2).join(" ") || null;
-  const soonest = sortBySoonest(rewards);
-  const businessName = (membershipId: string) => memberships.find((m) => m.id === membershipId)?.business.name ?? "";
-  const toReady = (r: (typeof rewards)[number]) => ({ ...r, businessName: businessName(r.membership_id) });
-  const nudge = !hasBank
-    ? {
-        href: "/me/setup?next=/me",
-        icon: Landmark,
-        title: "Add the bank account you pay from",
-        body: "Then your transfers count by themselves, and your name is filled in from your bank.",
-      }
-    : !profile?.birth_month
-      ? { href: "/me/profile", icon: Cake, title: "Add your birthday", body: "Unlock birthday treats. You decide which businesses can see it." }
-      : null;
+  const card = (r: (typeof requests)[number]) => (
+    <MyRequestCard
+      key={r.id}
+      request={r}
+      contacts={contacts[r.id] ?? []}
+      live={isLive(r)}
+      timeLeft={timeLeftLabel(r.expires_at)}
+      life={lifeLeft(r.expires_at)}
+      budget={budgetLabel(r.budget_min, r.budget_max, r.currency)}
+      ago={timeAgo(r.created_at)}
+    />
+  );
 
   return (
-    <div className="flex flex-col gap-8">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="font-display text-[30px] leading-tight font-bold tracking-tight sm:text-4xl">
-            {name ? `Hi ${name}` : "Your Spendbox"}
-          </h1>
-          <p className="mt-1 text-muted">Here&apos;s what your plugs have for you.</p>
-        </div>
-        {receiptsEnabled() && (
-          <ButtonLink href="/me/receipts" className="hidden lg:inline-flex">
-            <ScanLine className="size-4" aria-hidden /> Add a receipt
-          </ButtonLink>
-        )}
+    <div className="mx-auto flex max-w-2xl flex-col gap-7">
+      <header>
+        <p className="text-sm font-semibold text-muted">{firstName ? `Hi ${firstName}` : "Hi there"}</p>
+        <h1 className="font-display text-[28px] leading-tight font-bold tracking-tight sm:text-[32px]">My Spendbox</h1>
       </header>
 
-      {memberships.length > 0 && <PerkStats ready={rewards.length} plugs={memberships.length} used={used.map((u) => ({ ...u, businessName: businessName(u.membership_id) }))} />}
+      {posted && <FormMessage tone="success">Posted! Your plugs can see it for the next 24 hours.</FormMessage>}
 
-      {nudge && memberships.length > 0 && (
+      {/* Ask */}
+      <section className="relative isolate overflow-hidden rounded-4xl bg-brand-700 p-5 text-white shadow-lift sm:p-6">
+        <div aria-hidden className="absolute -top-16 -right-12 -z-10 size-52 rounded-full bg-white/10" />
+        <div aria-hidden className="absolute -bottom-20 -left-10 -z-10 size-48 rounded-full bg-brand-500/40" />
+        <p className="font-display text-2xl leading-tight font-bold">What do you need today?</p>
+        <p className="mt-1 text-white/85">Post it with your budget. Plugs you trust reach out.</p>
         <Link
-          href={nudge.href}
-          className="flex items-center gap-4 rounded-3xl bg-accent-50 p-4 ring-1 ring-accent-100 transition hover:bg-accent-100/60 sm:p-5"
+          href="/me/new"
+          className="mt-4 flex items-center gap-3 rounded-2xl bg-white px-4 py-3.5 text-muted shadow-card transition hover:shadow-lift"
         >
-          <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-white text-accent-700">
-            <nudge.icon className="size-5" aria-hidden />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="font-semibold text-ink">{nudge.title}</p>
-            <p className="text-sm text-ink-2">{nudge.body}</p>
-          </div>
-          <ChevronRight className="size-5 shrink-0 text-muted" aria-hidden />
+          <PenLine className="size-5 text-brand-700" aria-hidden />
+          <span className="flex-1">e.g. A cake for Saturday, about ₦25,000</span>
+          <ArrowRight className="size-5 text-brand-700" aria-hidden />
         </Link>
-      )}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {REQUEST_IDEAS.slice(0, 4).map((i) => (
+            <Link key={i.label} href="/me/new" className="rounded-full bg-white/15 px-3 py-1.5 text-sm font-semibold text-white ring-1 ring-white/20 hover:bg-white/25">
+              {i.label}
+            </Link>
+          ))}
+        </div>
+      </section>
 
-      {rewards.length > 0 && (
+      {/* Live */}
+      {live.length > 0 && (
         <section className="flex flex-col gap-3">
-          <SectionTitle
-            title={`Ready to use · ${rewards.length}`}
-            description="Tap a perk to show it at the counter."
-          />
-          <ReadyPerks
-            showBusiness
-            limit={SHOWN}
-            moreHref="/me/perks"
-            perks={soonest.map(toReady)}
-          />
+          <SectionTitle title="Live requests" description="Up for 24 hours. Tap “Found my plug” once you're sorted." />
+          {live.map(card)}
         </section>
       )}
 
-      <section id="plugs" className="flex scroll-mt-24 flex-col gap-3">
-        <SectionTitle title="My Plugs" description="The businesses you buy from." />
-        {memberships.length === 0 ? (
-          <EmptyState
-            icon={<Gift className="size-5" />}
-            title="Your Spendbox is empty"
-            description="Spendbox is invite-only. Ask a business you buy from for their Spendbox link to join."
-          />
-        ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {memberships.map((m) => {
-              const b = m.business;
-              const ready = rewards.filter((r) => r.membership_id === m.id).length;
-              const verified = purchases.filter((p) => p.membership_id === m.id && p.status === "verified");
-              const progress = perkProgress(b.perks, verified, b.currency)[0];
-              return (
-                <Card key={m.id} className="flex flex-col gap-4 p-4 sm:p-5">
-                  <Link href={`/me/b/${b.slug}`} className="flex items-center gap-3">
-                    <BusinessAvatar name={b.name} color={b.brand_color} logoUrl={b.logo_url} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-bold text-ink">{b.name}</p>
-                      <p className="truncate text-sm text-muted">
-                        {businessTagline(b) || `Member ${memberNo(m.member_no)}`}
-                      </p>
-                    </div>
-                    {ready > 0 ? (
-                      <Badge tone="solid">{ready === 1 ? "Perk ready" : `${ready} perks`}</Badge>
-                    ) : (
-                      <ChevronRight className="size-5 text-muted" aria-hidden />
-                    )}
-                  </Link>
+      {/* Nudges */}
+      {(rewards.length > 0 || !profile?.birth_month) && (
+        <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {rewards.length > 0 && (
+            <Link href="/me/plugs" className="block rounded-3xl">
+              <Card className="flex items-center gap-3 p-4 transition hover:ring-brand-300">
+                <span className="flex size-11 items-center justify-center rounded-2xl bg-accent-50 text-accent-700">
+                  <Gift className="size-5" aria-hidden />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold">{rewards.length === 1 ? "1 perk ready" : `${rewards.length} perks ready`}</span>
+                  <span className="block text-sm text-muted">Show it when you visit</span>
+                </span>
+                <ArrowRight className="size-5 text-muted" aria-hidden />
+              </Card>
+            </Link>
+          )}
+          {!profile?.birth_month && (
+            <Link href="/me/profile" className="block rounded-3xl">
+              <Card className="flex items-center gap-3 p-4 transition hover:ring-brand-300">
+                <span className="flex size-11 items-center justify-center rounded-2xl bg-[#FBE7EE] text-[#A3214E]">
+                  <Cake className="size-5" aria-hidden />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold">Add your birthday</span>
+                  <span className="block text-sm text-muted">Some plugs give birthday treats</span>
+                </span>
+                <ArrowRight className="size-5 text-muted" aria-hidden />
+              </Card>
+            </Link>
+          )}
+        </section>
+      )}
 
-                  {progress ? (
-                    <div className="flex flex-col gap-2">
-                      <Progress
-                        current={progress.current}
-                        target={progress.target}
-                        color={b.brand_color}
-                        label={`${progress.label} toward ${progress.perk.title}`}
-                      />
-                      <p className="text-sm text-muted">
-                        <span className="font-semibold text-ink-2">{progress.label}</span> · {progress.perk.title}
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted">Member {memberNo(m.member_no)}</p>
-                  )}
+      {/* How it works (until they've posted) */}
+      {requests.length === 0 && (
+        <section className="flex flex-col gap-3">
+          <SectionTitle title="How it works" />
+          <Card className="divide-y divide-line">
+            {[
+              { icon: PenLine, title: "Say what you need", text: "Add your budget and a photo if it helps." },
+              { icon: Store, title: "Your plugs see it", text: memberships.length ? `${memberships.map((m) => m.business.name).slice(0, 2).join(" and ")}${memberships.length > 2 ? " and more" : ""}, plus businesses they partner with.` : "The businesses you've joined, plus businesses they partner with." },
+              { icon: MessageCircleHeart, title: "They reach out", text: "On WhatsApp, by phone or email, however you choose. Up for 24 hours." },
+            ].map((s, i) => (
+              <div key={s.title} className="flex items-start gap-3 p-4">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-brand-50 font-display font-bold text-brand-700">{i + 1}</span>
+                <div>
+                  <p className="font-semibold">{s.title}</p>
+                  <p className="text-sm text-muted">{s.text}</p>
+                </div>
+              </div>
+            ))}
+          </Card>
+        </section>
+      )}
 
-                  <div className="grid grid-cols-3 gap-2">
-                    <Link href={`/me/b/${b.slug}/pass`} className={buttonClass({ variant: "soft", size: "sm" }, "h-10")}>
-                      <Ticket className="size-4" aria-hidden /> Card
-                    </Link>
-                    <ShareButton
-                      size="sm"
-                      className="h-10"
-                      url={`${siteUrl()}/j/${b.slug}?ref=${m.ref_code}`}
-                      message={`I'm a member of ${b.name} on Spendbox. Join with my link for member perks:`}
-                      title={`Share ${b.name}`}
-                      description="Friends who join with your link are counted as your invites."
-                    />
-                    {b.whatsapp ? (
-                      <a
-                        href={whatsappLink(b.whatsapp, `Hi ${b.name}, I'd like to order. (Spendbox member ${memberNo(m.member_no)})`)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className={buttonClass({ variant: "secondary", size: "sm" }, "h-10")}
-                      >
-                        <WhatsAppIcon className="size-4 text-[#107A42]" /> Order
-                      </a>
-                    ) : (
-                      <Link href={`/me/b/${b.slug}`} className={buttonClass({ variant: "secondary", size: "sm" }, "h-10")}>
-                        Details
-                      </Link>
-                    )}
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-      </section>
+      {/* Earlier */}
+      {earlier.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <SectionTitle title="Earlier" description="Ended after 24 hours, or closed. Post any of them again." />
+          {earlier.map(card)}
+        </section>
+      )}
 
-      <PartnerOffers
-        rows={partnerPerks}
-        memberSlugs={memberSlugs}
-        title="Offers from partners"
-        description="Businesses that team up with ones you've joined."
-        viaNames={Object.fromEntries(memberships.map((m) => [m.business_id, m.business.name]))}
-        limit={4}
-      />
+      {memberships.length === 0 && (
+        <Card className="flex items-start gap-3 p-5">
+          <Users className="mt-0.5 size-5 shrink-0 text-brand-700" aria-hidden />
+          <p className="text-sm text-muted">
+            You haven&apos;t joined any businesses yet. Ask a business you buy from for their Spendbox link. Your requests go to the businesses you join.
+          </p>
+        </Card>
+      )}
     </div>
   );
 }

@@ -226,3 +226,60 @@ export interface PartnerPerkRow {
   threshold: number | null;
   valid_days: number | null;
 }
+
+/** A live request as a business sees it (contact details only as the customer allowed). */
+export interface BusinessRequestRow {
+  id: string;
+  body: string;
+  category: string | null;
+  area: string | null;
+  budget_min: number | null;
+  budget_max: number;
+  currency: string;
+  images: string[];
+  created_at: string;
+  expires_at: string;
+  customer_name: string;
+  phone: string | null;
+  email: string | null;
+  contact_whatsapp: boolean;
+  contact_call: boolean;
+  contact_email: boolean;
+  /** The customer joined this business (vs. a partner's customer). */
+  is_member: boolean;
+  /** For partners' customers: which partner they belong to. */
+  via_partner: string | null;
+  /** How this business already reached out, if it did. */
+  reached_out: "whatsapp" | "call" | "email" | null;
+  reach_outs: number;
+}
+
+/** A request as its customer sees it. */
+export interface CustomerRequest {
+  id: string;
+  body: string;
+  category: string | null;
+  area: string | null;
+  budget_min: number | null;
+  budget_max: number;
+  currency: string;
+  images: string[];
+  contact_whatsapp: boolean;
+  contact_call: boolean;
+  contact_email: boolean;
+  status: "open" | "found" | "closed";
+  created_at: string;
+  expires_at: string;
+}
+
+export interface RequestContact {
+  business_id: string;
+  name: string;
+  slug: string;
+  logo_url: string | null;
+  brand_color: string;
+  whatsapp: string | null;
+  email: string | null;
+  method: "whatsapp" | "call" | "email";
+  created_at: string;
+}

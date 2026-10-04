@@ -36,6 +36,7 @@ export async function registerEmail(input: {
   phone?: string;
   country?: string;
   allowSignup: boolean;
+  fullName?: string;
 }): Promise<AuthResult> {
   const email = cleanEmail(input.email);
   if (!EMAIL.test(email) || email.length > 200) return { ok: false, error: "Please check your email address." };
@@ -49,6 +50,8 @@ export async function registerEmail(input: {
     };
   }
   if (input.password.length < MIN_PASSWORD) return { ok: false, error: `Choose a password with at least ${MIN_PASSWORD} characters.` };
+  const fullName = (input.fullName ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
+  if (fullName.length < 2) return { ok: false, error: "Please add your name, so businesses know who they're talking to." };
 
   let phone: string | null = null;
   if (input.phone?.trim()) {
@@ -73,6 +76,7 @@ export async function registerEmail(input: {
     if (/password/i.test(error?.message ?? "")) return { ok: false, error: "Please choose a stronger password." };
     return { ok: false, error: "We couldn't create your account. Please try again." };
   }
+  await admin.from("profiles").update({ full_name: fullName }).eq("id", data.user.id);
   await sendVerifyEmail(data.user.id, email).catch((e) => console.error("Verify email failed", e));
   return { ok: true };
 }

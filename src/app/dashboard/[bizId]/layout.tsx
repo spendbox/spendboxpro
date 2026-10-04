@@ -2,7 +2,6 @@ import { ExternalLink, LogOut, PauseCircle, Wallet } from "lucide-react";
 import Link from "next/link";
 import { ConfirmEmailBanner } from "@/components/auth/confirm-email-banner";
 import { AppShell } from "@/components/shell/app-shell";
-import { BusinessFab } from "@/components/business/business-fab";
 import { PlanPicker } from "@/components/business/plan-picker";
 import { Card } from "@/components/ui/card";
 import { GRACE_DAYS } from "@/lib/billing";
@@ -14,7 +13,6 @@ import { signOut } from "@/lib/actions/auth";
 import { requireOwnedBusiness } from "@/lib/auth";
 import { getStats } from "@/lib/business";
 import { SUPPORT_EMAIL } from "@/lib/email";
-import { siteUrl } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function BusinessLayout({ children, params }: LayoutProps<"/dashboard/[bizId]">) {
@@ -33,11 +31,10 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
   const base = `/dashboard/${bizId}`;
   const nav: NavItem[] = [
     { href: base, label: "Home", icon: "overview", exact: true },
-    { href: `${base}/payments`, label: "Payments", icon: "payments", badge: stats.pending + stats.unmatched },
-    { href: `${base}/customers`, label: "Customers", icon: "customers" },
+    { href: `${base}/customers`, label: "Customers", icon: "customers", badge: stats.rewards_ready },
     { href: `${base}/partners`, label: "Partners", icon: "partners", badge: requests },
-    // Perks, perks to give and the audit log live under Settings.
-    { href: `${base}/settings`, label: "Settings", icon: "settings", also: [`${base}/perks`, `${base}/rewards`, `${base}/audit`] },
+    // Perks and plan & billing live under Settings.
+    { href: `${base}/settings`, label: "Settings", icon: "settings", also: [`${base}/perks`] },
   ];
 
   return (
@@ -78,8 +75,8 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
             <PauseCircle className="size-12 text-muted" aria-hidden />
             <h1 className="font-display text-2xl font-bold">{business.name} is paused</h1>
             <p className="text-muted">
-              Your plan wasn&apos;t paid within {GRACE_DAYS} days of ending, so we paused your business and disconnected your bank (fair use).
-              Your customers still have their perks. Pay below to switch everything back on, then reconnect your bank in Settings.
+              Your plan wasn&apos;t paid within {GRACE_DAYS} days of ending, so we paused your business (fair use).
+              You won&apos;t see requests and new customers can&apos;t join. Pay below to switch everything back on.
             </p>
           </div>
           <Card className="p-5">
@@ -98,15 +95,6 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
         </div>
       ) : (
         children
-      )}
-      {!business.suspended_at && (
-        <BusinessFab
-          bizId={bizId}
-          currency={business.currency}
-          businessName={business.name}
-          joinUrl={`${siteUrl()}/j/${business.slug}`}
-          joinMessage={`Join ${business.name} on Spendbox for member perks:`}
-        />
       )}
     </AppShell>
   );

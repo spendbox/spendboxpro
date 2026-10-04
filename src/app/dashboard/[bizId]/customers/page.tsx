@@ -8,12 +8,12 @@ import { PageHeader } from "@/components/ui/page-header";
 import { requireOwnedBusiness } from "@/lib/auth";
 import { getMembers } from "@/lib/business";
 import { appTimeZone, siteUrl } from "@/lib/env";
-import { formatDate, formatMoney, formatMoneyShort, MONTHS, memberLabel, memberNo, plural } from "@/lib/format";
+import { formatDate, MONTHS, memberLabel, memberNo, plural } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Customers" };
 
-export default async function CustomersPage({ params }: PageProps<"/dashboard/[bizId]/customers">) {
-  const { bizId } = await params;
+export default async function CustomersPage({ params, searchParams }: PageProps<"/dashboard/[bizId]/customers">) {
+  const [{ bizId }, { perks }] = await Promise.all([params, searchParams]);
   const { business } = await requireOwnedBusiness(bizId);
   const members = await getMembers(bizId);
 
@@ -29,11 +29,8 @@ export default async function CustomersPage({ params }: PageProps<"/dashboard/[b
       id: m.membership_id,
       label,
       initialsFrom: m.full_name,
-      sub: `${m.full_name ? `${memberNo(m.member_no)} · ` : ""}joined ${formatDate(m.joined_at)}${m.shares_details ? "" : " · private"}`,
-      visits: m.visits,
-      spent: formatMoneyShort(m.total_spent, business.currency),
-      spentFull: formatMoney(m.total_spent, business.currency),
-      lastVisit: m.last_visit_at ? formatDate(m.last_visit_at) : null,
+      sub: `${m.full_name ? `${memberNo(m.member_no)} · ` : ""}${m.shares_details ? [m.phone ? "phone" : null, m.email ? "email" : null].filter(Boolean).join(" & ") || "shares details" : "private"}`,
+      joined: formatDate(m.joined_at),
       shared: m.shares_details,
       invited: m.referred,
       perksReady: m.rewards_ready,
@@ -52,7 +49,7 @@ export default async function CustomersPage({ params }: PageProps<"/dashboard/[b
             label="Add customers"
             icon={<UserPlus className="size-4" aria-hidden />}
             url={`${siteUrl()}/j/${business.slug}`}
-            message={`Join ${business.name} on Spendbox for member perks:`}
+            message={`Join ${business.name} on Spendbox. Tell us what you need, anytime:`}
             title="Add customers"
             description={`Customers join ${business.name} from your link. Share it on WhatsApp, or print your QR code for the counter.`}
           />
@@ -72,7 +69,7 @@ export default async function CustomersPage({ params }: PageProps<"/dashboard/[b
         />
       ) : (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_300px] xl:items-start">
-          <CustomerList bizId={bizId} rows={rows} />
+          <CustomerList bizId={bizId} rows={rows} perksOnly={perks === "ready"} />
           <aside className="flex flex-col gap-3">
             <SectionTitle title={`Birthdays in ${MONTHS[month - 1]}`} />
             <Card className="p-5">

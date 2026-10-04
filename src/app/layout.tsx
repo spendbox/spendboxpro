@@ -23,10 +23,10 @@ const display = localFont({
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
   title: {
-    default: "Spendbox — turn customers into regulars",
+    default: "Spendbox — your plugs, on call",
     template: "%s · Spendbox",
   },
-  description: "Every visit counts. Rewards from the places you love, and more regulars for the businesses behind them.",
+  description: "Tell the businesses you trust what you need, with your budget. They reach out.",
 };
 
 export const viewport: Viewport = {

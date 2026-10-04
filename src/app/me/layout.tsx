@@ -5,19 +5,11 @@ import { AppShell } from "@/components/shell/app-shell";
 import type { NavItem } from "@/components/shell/nav";
 import { getOwnedBusinesses, requireUser } from "@/lib/auth";
 import { signOut } from "@/lib/actions/auth";
-import { receiptsEnabled } from "@/lib/env";
-
-const NAV: NavItem[] = receiptsEnabled()
-  ? [
-      { href: "/me", label: "My Spendbox", icon: "home", exact: true, also: ["/me/b"] },
-      { href: "/me/receipts", label: "Add receipt", icon: "scan", primary: true },
-      { href: "/me/profile", label: "Profile", icon: "profile" },
-    ]
-  : [
-      { href: "/me", label: "My Spendbox", icon: "home", exact: true, also: ["/me/b"] },
-      { href: "/me/perks", label: "Perks", icon: "perks" },
-      { href: "/me/profile", label: "Profile", icon: "profile" },
-    ];
+const NAV: NavItem[] = [
+  { href: "/me", label: "My Spendbox", icon: "home", exact: true, also: ["/me/new"] },
+  { href: "/me/plugs", label: "Plugs", icon: "businesses", also: ["/me/b", "/me/perks"] },
+  { href: "/me/profile", label: "Profile", icon: "profile" },
+];
 
 export default async function CustomerLayout({ children }: LayoutProps<"/me">) {
   const user = await requireUser("/me");

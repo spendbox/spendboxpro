@@ -1,20 +1,20 @@
-import { ArrowRight, Cake, Gift, Heart, Repeat2, Store, UserPlus, Wallet } from "lucide-react";
+import { ArrowRight, Store } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import { Logo } from "@/components/brand/logo";
 import { buttonClass } from "@/components/ui/button";
 
-export const metadata: Metadata = { title: { absolute: "Spendbox — every visit counts" } };
+export const metadata: Metadata = { title: { absolute: "Spendbox — your plugs, on call" } };
 
-// Perks circling the member card: icon, colour, angle on the circle.
+// Plugs circling the request: initials, colour, angle on the circle.
 const ORBIT = [
-  { icon: Gift, color: "#2A772C", angle: 0 },
-  { icon: Repeat2, color: "#1C2B24", angle: 60 },
-  { icon: UserPlus, color: "#4338A0", angle: 120 },
-  { icon: Wallet, color: "#A33A0B", angle: 180 },
-  { icon: Cake, color: "#A3214E", angle: 240 },
-  { icon: Heart, color: "#0F5E8C", angle: 300 },
+  { name: "KC", color: "#A3214E", angle: 0 },
+  { name: "GS", color: "#4338A0", angle: 60 },
+  { name: "TB", color: "#2A772C", angle: 120 },
+  { name: "SL", color: "#1C2B24", angle: 180 },
+  { name: "MP", color: "#A33A0B", angle: 240 },
+  { name: "FH", color: "#0F5E8C", angle: 300 },
 ];
 
 /** The front door: one screen, two ways in. */
@@ -32,10 +32,10 @@ export default function Home() {
       </header>
 
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-7 px-5 pb-8 text-center sm:gap-9">
-        {/* Perks orbiting a member card */}
+        {/* Plugs orbiting a request */}
         <div aria-hidden className="relative size-[15.5rem] shrink-0 sm:size-[19rem]">
           <div className="orbit absolute inset-0">
-            {ORBIT.map(({ icon: Icon, color, angle }) => (
+            {ORBIT.map(({ name, color, angle }) => (
               <div
                 key={angle}
                 className="absolute top-1/2 left-1/2 size-0"
@@ -43,32 +43,33 @@ export default function Home() {
               >
                 <div style={{ transform: `rotate(${-angle}deg)` }}>
                   <span
-                    className="orbit-upright -mt-6 -ml-6 flex size-12 items-center justify-center rounded-2xl text-white shadow-lift ring-4 ring-white sm:-mt-7 sm:-ml-7 sm:size-14"
+                    className="orbit-upright -mt-6 -ml-6 flex size-12 items-center justify-center rounded-2xl font-display text-sm font-bold text-white shadow-lift ring-4 ring-white sm:-mt-7 sm:-ml-7 sm:size-14"
                     style={{ background: color }}
                   >
-                    <Icon className="size-5 sm:size-6" />
+                    {name}
                   </span>
                 </div>
               </div>
             ))}
           </div>
-          <div className="absolute top-1/2 left-1/2 flex w-40 -translate-x-1/2 -translate-y-1/2 flex-col gap-2.5 rounded-3xl bg-brand-700 p-4 text-left text-white shadow-[0_30px_60px_-24px_rgb(20_57_22/0.6)] sm:w-48 sm:p-5">
-            <span className="text-[11px] font-semibold text-white/80">My Spendbox</span>
-            <span className="font-display text-lg leading-tight font-bold sm:text-xl">3 perks ready</span>
-            <span className="h-1.5 overflow-hidden rounded-full bg-white/20">
-              <span className="animate-fill block h-full rounded-full bg-brand-400" />
+          <div className="absolute top-1/2 left-1/2 flex w-44 -translate-x-1/2 -translate-y-1/2 flex-col gap-2 rounded-3xl bg-white p-4 text-left shadow-[0_30px_60px_-24px_rgb(20_57_22/0.45)] ring-1 ring-line sm:w-52 sm:p-5">
+            <span className="text-[11px] font-semibold text-muted">Ada needs</span>
+            <span className="font-display text-[15px] leading-tight font-bold text-ink sm:text-base">Red velvet cake for Saturday</span>
+            <span className="w-fit rounded-full bg-ink px-2.5 py-0.5 text-[11px] font-semibold text-white">Up to ₦30,000</span>
+            <span className="h-1.5 overflow-hidden rounded-full bg-line">
+              <span className="animate-fill block h-full rounded-full bg-brand-500" />
             </span>
           </div>
           <span className="animate-pop absolute -right-2 bottom-3 rounded-2xl bg-white px-3 py-2 text-xs font-bold text-ink shadow-lift ring-1 ring-line sm:-right-6">
-            Free drink unlocked 🎉
+            Kemi Cakes is reaching out
           </span>
         </div>
 
         <div className="flex flex-col gap-3">
           <h1 className="font-display text-[2.6rem] leading-[1.02] font-extrabold tracking-tight sm:text-6xl">
-            Every visit <span className="text-shimmer">counts.</span>
+            Need it? <span className="text-shimmer">Post it.</span>
           </h1>
-          <p className="text-lg text-muted">The places you love, and everything they have for you, in one place.</p>
+          <p className="text-lg text-muted">Tell the businesses you trust what you need and your budget. They reach out.</p>
         </div>
 
         <div className="flex w-full flex-col gap-3">
