@@ -37,7 +37,7 @@ export default async function NewRequestPage({ searchParams }: PageProps<"/me/ne
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
       <PageHeader
-        back={{ href: "/me", label: "My Spendbox" }}
+        back={{ href: "/me/ask", label: "Ask" }}
         title={source ? "Post it again" : "New request"}
         description="Say what you need and your budget. Plugs who can help will reach out."
       />

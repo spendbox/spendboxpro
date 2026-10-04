@@ -1,6 +1,6 @@
 import "server-only";
 import { emailBody, emailConfigured, sendEmail } from "@/lib/email";
-import { siteUrl } from "@/lib/env";
+import { appTimeZone, siteUrl } from "@/lib/env";
 import { formatDate } from "@/lib/format";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -63,6 +63,70 @@ export async function notifyRewardsReady() {
     }
   } catch (error) {
     console.error("notifyRewardsReady failed", error);
+  }
+}
+
+/**
+ * On a customer's birthday, each business where their birthday treat is still
+ * waiting sends them a note (in the business's name). Once per treat. Customers
+ * who only gave a birthday month already heard when the treat arrived.
+ */
+export async function notifyBirthdays() {
+  if (!emailConfigured()) return 0;
+  try {
+    const admin = createAdminClient();
+    const parts = new Intl.DateTimeFormat("en-GB", { timeZone: appTimeZone(), day: "numeric", month: "numeric" }).formatToParts(new Date());
+    const day = Number(parts.find((p) => p.type === "day")?.value);
+    const month = Number(parts.find((p) => p.type === "month")?.value);
+    const { data: people } = await admin.from("profiles").select("id").eq("birth_day", day).eq("birth_month", month).limit(1000);
+    if (!people?.length) return 0;
+
+    const { data: rewards } = await admin
+      .from("rewards")
+      .select("id, customer_id, title, expires_at, business:businesses(name, slug, email, brand_color)")
+      .eq("kind", "birthday")
+      .eq("status", "available")
+      .is("birthday_reminded_at", null)
+      .in("customer_id", people.map((p) => p.id))
+      .limit(1000);
+    if (!rewards?.length) return 0;
+
+    // Mark first, so two runs at once don't both send.
+    await admin.from("rewards").update({ birthday_reminded_at: new Date().toISOString() }).in("id", rewards.map((r) => r.id)).is("birthday_reminded_at", null);
+
+    let sent = 0;
+    for (const r of rewards) {
+      const contact = await customerContact(r.customer_id);
+      if (!contact) continue;
+      const business = r.business as unknown as { name: string; slug: string; email: string | null; brand_color: string | null };
+      const first = contact.name?.split(/\s+/)[0];
+      const { html, text } = emailBody({
+        brand: { name: business.name, color: business.brand_color },
+        heading: `Happy birthday${first ? `, ${first}` : ""}! 🎂`,
+        lines: [
+          `From all of us at ${business.name}: have a wonderful day.`,
+          `Your birthday treat is waiting for you: ${r.title}.`,
+          r.expires_at
+            ? `Come by and show your Spendbox pass to enjoy it by ${formatDate(r.expires_at, { withYear: true })}.`
+            : "Come by and show your Spendbox pass to enjoy it.",
+        ],
+        button: { label: "See my birthday treat", url: `${siteUrl()}/me/perks/${r.id}` },
+        footer: CUSTOMER_FOOTER,
+      });
+      await sendEmail({
+        to: contact.email,
+        subject: `Happy birthday from ${business.name} 🎂`,
+        html,
+        text,
+        fromName: business.name,
+        replyTo: business.email,
+      });
+      sent++;
+    }
+    return sent;
+  } catch (error) {
+    console.error("notifyBirthdays failed", error);
+    return 0;
   }
 }
 

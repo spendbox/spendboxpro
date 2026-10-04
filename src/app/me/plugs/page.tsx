@@ -2,7 +2,6 @@ import { ChevronRight, Store } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PartnerOffers } from "@/components/perks/partner-offers";
-import { ReadyPerks } from "@/components/perks/ready-perks";
 import { BusinessAvatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { buttonClass } from "@/components/ui/button";
@@ -12,7 +11,6 @@ import { WhatsAppIcon } from "@/components/ui/share-actions";
 import { requireUser } from "@/lib/auth";
 import { getMyMemberships, getMyPartnerPerks, getMyRewards } from "@/lib/customer";
 import { businessTagline, whatsappLink } from "@/lib/format";
-import { sortBySoonest } from "@/lib/perks";
 
 export const metadata: Metadata = { title: "Plugs" };
 
@@ -21,19 +19,10 @@ export default async function PlugsPage() {
   const [memberships, rewards, allPartnerPerks] = await Promise.all([getMyMemberships(user.id), getMyRewards(user.id), getMyPartnerPerks()]);
   const memberSlugs = new Set(memberships.map((m) => m.business.slug));
   const partnerPerks = allPartnerPerks.filter((r) => !memberSlugs.has(r.partner_slug));
-  const nameById = Object.fromEntries(memberships.map((m) => [m.id, m.business.name]));
-  const ready = sortBySoonest(rewards).map((r) => ({ id: r.id, kind: r.kind, title: r.title, expires_at: r.expires_at, businessName: nameById[r.membership_id] ?? "" }));
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-7">
-      <PageHeader title="Plugs" description="The businesses you've joined. They see your requests and treat you right." />
-
-      {ready.length > 0 && (
-        <section className="flex flex-col gap-3">
-          <SectionTitle title="Perks ready for you" description="Tap one and show it when you visit." />
-          <ReadyPerks perks={ready} showBusiness />
-        </section>
-      )}
+      <PageHeader title="Plugs" description="The businesses you've joined. Open one to see its perks." />
 
       <section className="flex flex-col gap-3">
         <SectionTitle title={memberships.length ? `Your plugs (${memberships.length})` : "Your plugs"} />

@@ -72,6 +72,16 @@ export async function savePerk(bizId: string, input: PerkInput): Promise<FormSta
 
   const values = { title, details: input.details?.trim().slice(0, 200) || null, threshold, valid_days: validDays };
   const supabase = await createClient();
+  // The friend gets the welcome perk, so an invite reward needs one first.
+  if (input.kind === "referral") {
+    const { count } = await supabase
+      .from("perks")
+      .select("id", { count: "exact", head: true })
+      .eq("business_id", bizId)
+      .eq("kind", "welcome")
+      .eq("is_active", true);
+    if (!count) return { error: "Add a welcome perk first. That's what the friend gets when they join." };
+  }
   const { error } = input.id
     ? await supabase.from("perks").update(values).eq("id", input.id).eq("business_id", bizId)
     : await supabase.from("perks").insert({ ...values, kind: input.kind, business_id: bizId });
@@ -80,10 +90,28 @@ export async function savePerk(bizId: string, input: PerkInput): Promise<FormSta
   return { ok: true };
 }
 
+/** Without a welcome perk, an invited friend gets nothing, so the invite reward pauses too. */
+async function pauseInviteIfNoWelcome(bizId: string) {
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("perks")
+    .select("id", { count: "exact", head: true })
+    .eq("business_id", bizId)
+    .eq("kind", "welcome")
+    .eq("is_active", true);
+  if (!count) await supabase.from("perks").update({ is_active: false }).eq("business_id", bizId).eq("kind", "referral");
+}
+
 export async function setPerkActive(bizId: string, perkId: string, active: boolean) {
   await requireOwnedBusiness(bizId);
   const supabase = await createClient();
+  const { data: perk } = await supabase.from("perks").select("kind").eq("id", perkId).eq("business_id", bizId).maybeSingle();
+  if (active && perk?.kind === "referral") {
+    const { count } = await supabase.from("perks").select("id", { count: "exact", head: true }).eq("business_id", bizId).eq("kind", "welcome").eq("is_active", true);
+    if (!count) return;
+  }
   await supabase.from("perks").update({ is_active: active }).eq("id", perkId).eq("business_id", bizId);
+  if (perk?.kind === "welcome" && !active) await pauseInviteIfNoWelcome(bizId);
   refresh(bizId);
 }
 
@@ -91,6 +119,7 @@ export async function deletePerk(bizId: string, perkId: string) {
   await requireOwnedBusiness(bizId);
   const supabase = await createClient();
   await supabase.from("perks").delete().eq("id", perkId).eq("business_id", bizId);
+  await pauseInviteIfNoWelcome(bizId);
   refresh(bizId);
 }
 

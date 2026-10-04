@@ -90,6 +90,14 @@ Open `your-site/admin` and log in with `ADMIN_EMAIL` and `ADMIN_PASSWORD`. It wo
 
 **Who sees a request.** The businesses the customer joined — and, if one of those businesses is on **Plus** (or still in its free trial), its partners see it too, marked "Glow Spa's customer". Businesses get the customer's first name and only the contact details picked for that request (phone for WhatsApp or calls, email for email). When a business taps a contact button it's recorded once, so the customer sees "2 plugs are reaching out" with each business's name and a button to chat back.
 
+**Products & services.** On **Home → Products & services**, a business adds a photo or a short video (up to 60 seconds) with a name, description and optional price. Photos are shrunk on the phone; videos go straight from the phone to storage with a one-time upload link, and the phone grabs a still frame for the thumbnail. After posting, **Share to WhatsApp status** opens the phone's share sheet with the photo or video. Products show in **My Spendbox → Explore** for the business's customers and its partners' customers (with cross-promotion on): small round pictures, newest first, with a bright ring until seen, and a search box. Tapping one opens a full-screen, swipe-up viewer where customers can like it (it goes to **My box**) or chat, call or email the business. **Home → Stats** and each product's page show views, people, partner views, likes and who got in touch.
+
+**Business home tabs.** Products & services, Requests and Stats, each with the join link at the top. My Spendbox has Explore, My box and Ask (requests).
+
+**Birthday emails.** On a customer's birthday, each business where their birthday treat is still waiting emails them in its own name ("Kemi Cakes via Spendbox"), once.
+
+**Invite reward.** The friend gets the welcome perk; the customer who shared gets the invite reward. So a business needs a welcome perk before it can add an invite reward, and pausing or deleting the welcome perk pauses the invite reward too.
+
 **Customer interests.** Every request also feeds a private profile of that customer (`customer_interests`, built from `request_signals`): what they ask for most (categories and key words), their usual budget, areas, how they like to be reached, how often they post and find a plug. Deleted requests still count. Only Spendbox sees it, in `/admin` → People → a person; businesses never do.
 
 **Partner invites.** On **Partners**, a business can share an invite link (`/start?partner=their-link`). A business that signs up from it becomes their partner straight away, if the inviter still has a free place.

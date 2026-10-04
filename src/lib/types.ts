@@ -283,3 +283,62 @@ export interface RequestContact {
   method: "whatsapp" | "call" | "email";
   created_at: string;
 }
+
+export type ProductKind = "product" | "service";
+export type ProductMediaType = "image" | "video";
+
+/** A product or service as its business sees it, with its numbers. */
+export interface BusinessProduct {
+  id: string;
+  kind: ProductKind;
+  title: string;
+  description: string | null;
+  price: number | null;
+  currency: string;
+  media_type: ProductMediaType;
+  media_url: string;
+  poster_url: string | null;
+  is_active: boolean;
+  created_at: string;
+  views: number;
+  viewers: number;
+  partner_viewers: number;
+  likes: number;
+  contacts: number;
+}
+
+/** A product in a customer's Explore feed or My box. */
+export interface FeedProduct {
+  id: string;
+  business_id: string;
+  business_name: string;
+  business_slug: string;
+  business_logo_url: string | null;
+  business_color: string;
+  business_whatsapp: string | null;
+  business_email: string | null;
+  kind: ProductKind;
+  title: string;
+  description: string | null;
+  price: number | null;
+  currency: string;
+  media_type: ProductMediaType;
+  media_url: string;
+  poster_url: string | null;
+  created_at: string;
+  viewed: boolean;
+  liked: boolean;
+  is_member: boolean;
+}
+
+/** One person who looked at, liked or asked about a product. */
+export interface ProductAudienceRow {
+  customer_name: string | null;
+  member_no: number | null;
+  via_partner: string | null;
+  view_count: number;
+  last_viewed_at: string | null;
+  liked: boolean;
+  contacted: string | null;
+  last_activity: string | null;
+}

@@ -41,6 +41,10 @@ export default function PrivacyPage() {
           contact methods you pick for each request, and which businesses tapped to reach out to you.
         </li>
         <li>
+          <strong>Products you look at:</strong> which products and services you view, like (My box) or contact a
+          business about, and when.
+        </li>
+        <li>
           <strong>Perks:</strong> the perks you earn and use.
         </li>
         <li>
@@ -79,7 +83,8 @@ export default function PrivacyPage() {
       <p>
         A business you join always sees your member number, when you joined and the perks you earned there. It sees
         your name, phone number, email, gender and birthday <strong>only if you switch sharing on</strong> for that
-        business. When you post a request, the businesses that can see it get your first name, the request, its photos
+        business. When you view, like or ask about a business&apos;s product, that business sees your first name and what you did
+        (partners&apos; customers show as &ldquo;their customer&rdquo;). When you post a request, the businesses that can see it get your first name, the request, its photos
         and only the contact details you picked for it (phone for WhatsApp or calls, email for email). Businesses never
         see your password or anything about other businesses you belong to.
       </p>

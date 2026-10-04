@@ -8,10 +8,10 @@ import { requireUser } from "@/lib/auth";
 import { getMyMemberships, getMyProfile, getMyRequestContacts, getMyRequests, getMyRewards } from "@/lib/customer";
 import { budgetLabel, isLive, lifeLeft, REQUEST_IDEAS, timeAgo, timeLeftLabel } from "@/lib/requests";
 
-export const metadata: Metadata = { title: "My Spendbox" };
+export const metadata: Metadata = { title: "Ask" };
 
-export default async function MySpendboxPage({ searchParams }: PageProps<"/me">) {
-  const [user, { posted }] = await Promise.all([requireUser("/me"), searchParams]);
+export default async function AskPage({ searchParams }: PageProps<"/me/ask">) {
+  const [user, { posted }] = await Promise.all([requireUser("/me/ask"), searchParams]);
   const [profile, memberships, rewards, requests, contacts] = await Promise.all([
     getMyProfile(user.id),
     getMyMemberships(user.id),
@@ -21,7 +21,6 @@ export default async function MySpendboxPage({ searchParams }: PageProps<"/me">)
   ]);
   const live = requests.filter((r) => isLive(r));
   const earlier = requests.filter((r) => !isLive(r)).slice(0, 10);
-  const firstName = profile?.full_name?.split(/\s+/)[0];
 
   const card = (r: (typeof requests)[number]) => (
     <MyRequestCard
@@ -37,12 +36,7 @@ export default async function MySpendboxPage({ searchParams }: PageProps<"/me">)
   );
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-7">
-      <header>
-        <p className="text-sm font-semibold text-muted">{firstName ? `Hi ${firstName}` : "Hi there"}</p>
-        <h1 className="font-display text-[28px] leading-tight font-bold tracking-tight sm:text-[32px]">My Spendbox</h1>
-      </header>
-
+    <div className="flex flex-col gap-7">
       {posted && <FormMessage tone="success">Posted! Your plugs can see it for the next 24 hours.</FormMessage>}
 
       {/* Ask */}
