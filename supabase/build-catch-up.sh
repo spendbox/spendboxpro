@@ -23,6 +23,7 @@ MARKERS=(
   "20261014000000_map_customers.sql|coalesce(pg_get_function_result(to_regprocedure('public.explore_businesses()')), '') like '%customers integer%'"
   "20261015000000_shared_store.sql|to_regprocedure('public.public_store(text)') is not null"
   "20261016000000_shop_gift.sql|coalesce(pg_get_functiondef(to_regprocedure('public.public_store(text)')), '') like '%''perks''%'"
+  "20261017000000_plug_partners.sql|to_regprocedure('public.plug_partners(uuid)') is not null"
 )
 
 listed=$(printf '%s\n' "${MARKERS[@]}" | cut -d'|' -f1 | sort)

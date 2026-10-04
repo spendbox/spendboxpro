@@ -18,6 +18,18 @@ export default async function ProductViewPage({ params, searchParams }: PageProp
   const products = businessId ? all.filter((p) => p.business_id === businessId) : all;
   const current = products.find((p) => p.id === id);
   if (!current) notFound();
-  const backHref = fromBox ? "/me/box" : businessId ? `/me?store=${encodeURIComponent(current.business_slug)}` : query ? `/me?q=${encodeURIComponent(query)}` : "/me";
+  // Opened from a plug's page: back to its Products tab, or its 3D shop.
+  const plug = `/me/b/${encodeURIComponent(current.business_slug)}`;
+  const backHref = fromBox
+    ? "/me/box"
+    : businessId && from === "plug"
+      ? plug
+      : businessId && from === "plug3d"
+        ? `${plug}?view=3d`
+        : businessId
+          ? `/me?store=${encodeURIComponent(current.business_slug)}`
+          : query
+            ? `/me?q=${encodeURIComponent(query)}`
+            : "/me";
   return <ProductViewer products={products} startId={id} backHref={backHref} />;
 }

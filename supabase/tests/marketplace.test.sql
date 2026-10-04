@@ -37,6 +37,17 @@ set role authenticated;
 select test.ok((select count(*) from public.explore_businesses()) = 0, 'no businesses, empty map');
 reset role;
 
+-- A plug's partners, for its members only
+select test.act_as('00000000-0000-0000-0000-0000000000d4');
+set role authenticated;
+select test.ok((select count(*) from public.plug_partners(:'a') where id = :'b') = 1, 'a member sees the plug''s partners');
+select test.ok((select not is_member from public.plug_partners(:'a') where id = :'b'), 'marked as not joined yet');
+reset role;
+select test.act_as('00000000-0000-0000-0000-0000000000d3');
+set role authenticated;
+select test.ok((select count(*) from public.plug_partners(:'a')) = 0, 'people who did not join see none');
+reset role;
+
 -- Shared shops: anyone with the link can walk in, but not into a paused business
 reset role;
 select set_config('request.jwt.claims', '', false);

@@ -110,6 +110,8 @@ The 3D scenes are React components (three.js through React Three Fiber, about 25
 
 **Joining, one question at a time.** The Join button (on a business's join page, or in its shared 3D shop) opens a pop-up that asks one thing per step: email, then password. Someone new to Spendbox is then asked their name and (optionally) phone number; people who already have an account skip those. The last step asks whether to share their details with the business, then they're in.
 
+**A plug's page.** Opening a plug (from **Plugs**) shows any perk waiting, then tabs for its **Products** (tap one for the swipe viewer, and back), **Perks** (with the Bring a friend link) and **Partners** (the businesses it partners with, each with a way into their 3D shop and a Join or Open button). A **Regular / 3D shop** switch at the top shows the plug's 3D shop right on the page, with a full-screen button. If the plug has partners, a **door** at the back of the shop (and a Partners button) swings open onto them, with Walk in links to their shops.
+
 **Inviting businesses.** At the top of customers' **Plugs** page, a compact **Invite more plugs** bar has a link (to `/plug`, the business sign-up page) to send to a business they love that isn't on Spendbox yet.
 
 **Partner invites.** On **Partners**, a business can share an invite link (`/start?partner=their-link`). A business that signs up from it becomes their partner straight away, if the inviter still has a free place.

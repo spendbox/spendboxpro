@@ -131,7 +131,7 @@ export function StoreEditor({
       return open("art");
     }
     if (target.kind === "walls") return open("colours");
-    if (target.kind === "product" || target.kind === "more" || target.kind === "bell") return;
+    if (target.kind === "product" || target.kind === "more" || target.kind === "bell" || target.kind === "partners") return;
     open(target.kind);
   };
 
