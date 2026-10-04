@@ -39,7 +39,7 @@ export function EmailSignIn({
   submitLabel = "Continue",
   note,
 }: {
-  /** Create an account if this email is new (join links and business sign-up only). */
+  /** Create an account if this email is new (sign-up page, join links and business sign-up). */
   allowSignup: boolean;
   /** Runs once the person is signed in. Return a string to show it as an error. */
   onSignedIn: () => Promise<string | void>;
@@ -120,7 +120,7 @@ export function EmailSignIn({
         </Field>
       )}
 
-      <Field label="Email" htmlFor="email" hint={allowSignup ? undefined : "Signed up with your phone number before? Type the number here instead."}>
+      <Field label="Email" htmlFor="email">
         <Input
           id="email"
           type={allowSignup ? "email" : "text"}

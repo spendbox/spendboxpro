@@ -36,19 +36,19 @@ export default async function StatsTab({ params }: PageProps<"/dashboard/[bizId]
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Tile label="Views" value={compactNumber(sum("views"))} note={`${compactNumber(sum("viewers"))} people`} />
           <Tile label="From partners" value={compactNumber(sum("partner_viewers"))} note="People who found you through a partner" />
-          <Tile label="Likes" value={compactNumber(sum("likes"))} note="Saved to their box" />
+          <Tile label="Saves" value={compactNumber(sum("likes"))} note="Saved to their box" />
           <Tile label="Got in touch" value={compactNumber(sum("contacts"))} note="WhatsApp, call or email" />
         </div>
 
         {ranked.length === 0 ? (
-          <EmptyState title="No products yet" description="Post a product or service to see who views and likes it." />
+          <EmptyState title="No products yet" description="Post a product or service to see who views and saves it." />
         ) : (
           <Card className="divide-y divide-line">
             <div className="hidden grid-cols-[minmax(0,1fr)_repeat(4,4.5rem)_1.25rem] gap-2 px-4 py-2.5 text-xs font-semibold text-muted sm:grid">
               <span>Product</span>
               <span className="text-right">Views</span>
               <span className="text-right">People</span>
-              <span className="text-right">Likes</span>
+              <span className="text-right">Saves</span>
               <span className="text-right">In touch</span>
               <span />
             </div>
@@ -62,7 +62,7 @@ export default async function StatsTab({ params }: PageProps<"/dashboard/[bizId]
                 <span className="min-w-0">
                   <span className="block truncate font-semibold">{p.title}</span>
                   <span className="block text-xs text-muted sm:hidden">
-                    {p.views} views · {p.viewers} people · {p.likes} likes · {p.contacts} in touch
+                    {p.views} views · {p.viewers} people · {p.likes} saves · {p.contacts} in touch
                   </span>
                 </span>
                 {[p.views, p.viewers, p.likes, p.contacts].map((n, i) => (

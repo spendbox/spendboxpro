@@ -29,7 +29,7 @@ async function profileByEmail(email: string) {
 /**
  * Called after an email sign-in fails. Tells apart "wrong password" from "new
  * email", and creates the account for new emails where signing up is allowed
- * (join links and business sign-up), then emails a confirmation link.
+ * (the sign-up page, join links and business sign-up), then emails a confirmation link.
  */
 export async function registerEmail(input: {
   email: string;
@@ -47,7 +47,7 @@ export async function registerEmail(input: {
   if (!input.allowSignup) {
     return {
       ok: false,
-      error: "There's no Spendbox with this email yet. You'll need an invite: ask a business you buy from for their Spendbox link. Own a business? Start from the For businesses page.",
+      error: "There's no Spendbox with this email yet. Tap “Create your Spendbox” below to make one.",
     };
   }
   if (input.password.length < MIN_PASSWORD) return { ok: false, error: `Choose a password with at least ${MIN_PASSWORD} characters.` };

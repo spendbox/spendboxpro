@@ -3,9 +3,28 @@
 
 export type PlanKey = "starter" | "plus";
 
-export const PLANS: Record<PlanKey, { name: string; blurb: string }> = {
-  starter: { name: "Starter", blurb: "Requests from your own customers, perks and partners" },
-  plus: { name: "Plus", blurb: "Everything in Starter, plus requests from your partners' customers" },
+export const PLANS: Record<PlanKey, { name: string; blurb: string; features: string[] }> = {
+  starter: {
+    name: "Starter",
+    blurb: "Keep your customers coming back",
+    features: [
+      "Your customers tell you what they want to buy, with their budget, and you reply on WhatsApp in one tap",
+      "Your own 3D shop and products, shared with one link",
+      "Welcome, invite and birthday perks sent for you, so customers return and bring friends",
+      "Every customer in one list: birthdays, interests and how to reach them",
+      "See who views, saves and asks about each product",
+      "Team up with partner businesses that recommend you",
+    ],
+  },
+  plus: {
+    name: "Plus",
+    blurb: "Get new buyers from your partners",
+    features: [
+      "Everything in Starter",
+      "Requests from your partners' customers too: people ready to buy who don't know you yet",
+      "More people asking means more sales, without paying for ads",
+    ],
+  },
 };
 
 /** Ways to pay ahead. */

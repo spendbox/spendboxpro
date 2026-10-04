@@ -74,7 +74,7 @@ export function ProductManager({ bizId, product, businessName, joinUrl }: { bizI
       <Button variant="ghost" className="w-fit text-red-700" onClick={() => setConfirmDelete(true)}>
         <Trash className="size-4" aria-hidden /> Delete
       </Button>
-      <Modal open={confirmDelete} onClose={() => setConfirmDelete(false)} title="Delete this?" description="It disappears for your customers, and its views and likes are deleted too.">
+      <Modal open={confirmDelete} onClose={() => setConfirmDelete(false)} title="Delete this?" description="It disappears for your customers, and its views and saves are deleted too.">
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setConfirmDelete(false)}>
             Keep it

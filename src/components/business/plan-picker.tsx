@@ -40,7 +40,15 @@ export function PlanPicker({ bizId, prices, current }: { bizId: string; prices: 
               {formatMoney(prices[key])}
               <span className="text-sm font-semibold text-muted"> / month</span>
             </span>
-            <span className="text-sm text-muted">{PLANS[key].blurb}</span>
+            <span className="text-sm font-semibold text-ink">{PLANS[key].blurb}</span>
+            <ul className="mt-1 flex flex-col gap-1.5">
+              {PLANS[key].features.map((f) => (
+                <li key={f} className="flex gap-2 text-sm text-ink-2">
+                  <Check className="mt-0.5 size-4 shrink-0 text-brand-700" aria-hidden />
+                  {f}
+                </li>
+              ))}
+            </ul>
           </button>
         ))}
       </div>

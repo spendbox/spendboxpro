@@ -1,6 +1,6 @@
 "use client";
 
-import { Heart, Mail, Phone, Volume2, VolumeX, X } from "lucide-react";
+import { Bookmark, Mail, Phone, Volume2, VolumeX, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
@@ -166,8 +166,8 @@ export function ProductViewer({
 
             {/* Right: like and get in touch */}
             <div className="absolute right-3 bottom-0 flex flex-col items-center gap-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-              <RailButton label={liked[p.id] ? "Liked" : "Like"} onClick={() => toggleLike(p)} pressed={liked[p.id]}>
-                <Heart className={cn("size-6", liked[p.id] && "fill-red-500 text-red-500")} aria-hidden />
+              <RailButton label={liked[p.id] ? "Saved" : "Save"} onClick={() => toggleLike(p)} pressed={liked[p.id]}>
+                <Bookmark className={cn("size-6", liked[p.id] && "fill-current")} aria-hidden />
               </RailButton>
               {p.business_whatsapp && (
                 <RailButton label="Chat" href={whatsappLink(p.business_whatsapp, message)} onClick={() => !guest && void contactProduct(p.id, "whatsapp")} className="bg-[#25D366]">

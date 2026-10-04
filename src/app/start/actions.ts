@@ -2,9 +2,11 @@
 
 import { DEFAULT_COUNTRY_CODE } from "@/lib/env";
 import { normalizeWhatsapp } from "@/lib/phone";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getUser } from "@/lib/auth";
 import { cleanCategories } from "@/lib/constants";
+import { cleanInviteCode, INVITED_BY_COOKIE } from "@/lib/invite";
 import { notifyPartnership } from "@/lib/notify";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -61,5 +63,13 @@ export async function createBusiness(input: NewBusiness, partnerInvite?: string 
   const extra = { ...(categories.length ? { categories } : {}), ...(owner?.email ? { email: owner.email } : {}) };
   if (Object.keys(extra).length) await supabase.from("businesses").update(extra).eq("id", data);
   if (partnerInvite) await linkInvitedPartner(data, partnerInvite).catch((e) => console.error("partner invite failed", e));
+  // The customer whose invite link brought this business becomes its first customer.
+  const jar = await cookies();
+  const inviteCode = cleanInviteCode(jar.get(INVITED_BY_COOKIE)?.value);
+  if (inviteCode) {
+    const { error: claimError } = await supabase.rpc("claim_inviter", { p_business_id: data, p_code: inviteCode });
+    if (claimError) console.error("customer invite failed", claimError.message);
+    jar.delete(INVITED_BY_COOKIE);
+  }
   redirect(`/dashboard/${data}?welcome=1`);
 }

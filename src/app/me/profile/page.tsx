@@ -1,8 +1,8 @@
 import { LogOut, TriangleAlert } from "lucide-react";
 import type { Metadata } from "next";
 import { BusinessAvatar } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
 import { Card, SectionTitle } from "@/components/ui/card";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { ActionSwitch } from "@/components/ui/switch";
 import { signOut } from "@/lib/actions/auth";
@@ -62,9 +62,9 @@ export default async function ProfilePage() {
             .
           </p>
           <form action={signOut}>
-            <Button type="submit" variant="secondary">
+            <SubmitButton variant="secondary">
               <LogOut className="size-4" aria-hidden /> Log out
-            </Button>
+            </SubmitButton>
           </form>
         </Card>
       </section>
