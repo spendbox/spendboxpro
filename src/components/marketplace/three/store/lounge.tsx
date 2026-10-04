@@ -1,14 +1,15 @@
 "use client";
 
-import { type ThreeEvent } from "@react-three/fiber";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import * as THREE from "three";
 import type { TableStyle } from "@/lib/store-theme";
 import { mix } from "../geometry";
 import { shade } from "../textures";
 import { Built, Kit, leatherOf } from "./kit";
 import { LOUNGE } from "./layout";
-import { FloorShadow, plant } from "./room";
+import { strelitzia } from "./plants";
+import { FloorShadow } from "./room";
+import { Tappable } from "./tap";
 
 // The lounge corner's table sets. Each is built facing +z (the open side,
 // towards the shopper), then turned to face the door. Tap any of them to
@@ -172,7 +173,7 @@ function linenSet(k: Kit, leather: string) {
 function garden(k: Kit, leather: string) {
   k.cyl("satin", 0.6, 0.56, 0.62, [0, 0.31, 0], "#f1ede6", 40);
   k.cyl("matte", 0.57, 0.57, 0.02, [0, 0.61, 0], "#3b2c22", 32);
-  k.place([0, 0.6, 0], 0, () => plant(k, 0, 0, 1.15, "#f1ede6", 0.4, 11));
+  k.place([0, 0, 0], 0, () => strelitzia(k, 0.6, 0.4), 1.1);
   const parts = 4;
   for (let i = 0; i < parts; i++) {
     const a0 = -Math.PI + ((2 * Math.PI) / parts) * i;
@@ -189,7 +190,7 @@ function garden(k: Kit, leather: string) {
 // Long tables are turned side-on, so their chairs and sofas don't hide the table from the shopper.
 const sideOn = (build: (k: Kit, leather: string) => void) => (k: Kit, leather: string) => k.place([0, 0, 0], Math.PI / 2, () => build(k, leather));
 
-const BUILDERS: Record<TableStyle, (k: Kit, leather: string) => void> = {
+const BUILDERS: Record<Exclude<TableStyle, "none">, (k: Kit, leather: string) => void> = {
   booth,
   marble: sideOn(marbleSet),
   bistro: (k) => bistro(k),
@@ -197,42 +198,20 @@ const BUILDERS: Record<TableStyle, (k: Kit, leather: string) => void> = {
   garden,
 };
 
-/** The lounge corner: a rug and the chosen table set. Tap it to pick another style. */
+/** The lounge corner: a rug and the chosen table set. In the editor, tap it to pick another style. */
 export function Lounge({ style, accent, onTap }: { style: TableStyle; accent: string; onTap?: () => void }) {
   const leather = leatherOf(accent);
   const parts = useMemo(() => {
     const k = new Kit();
     k.add("fabric", new THREE.CircleGeometry(1.95, 64), mix(accent, "#efe9de", 0.82), [0, 0.008, 0], [-Math.PI / 2, 0, 0]);
     k.add("fabric", new THREE.RingGeometry(1.86, 1.92, 64), shade(mix(accent, "#efe9de", 0.6), -0.05), [0, 0.01, 0], [-Math.PI / 2, 0, 0]);
-    BUILDERS[style](k, leather);
+    if (style !== "none") BUILDERS[style](k, leather);
     return k.build();
   }, [style, accent, leather]);
-  const [hovered, setHovered] = useState(false);
-  useEffect(() => {
-    if (!onTap) return;
-    document.body.style.cursor = hovered ? "pointer" : "";
-    return () => {
-      document.body.style.cursor = "";
-    };
-  }, [hovered, onTap]);
   return (
-    <group
-      position={[LOUNGE.x, 0, LOUNGE.z]}
-      rotation-y={LOUNGE.rotY}
-      onClick={
-        onTap
-          ? (e: ThreeEvent<MouseEvent>) => {
-              if (e.delta > 8) return;
-              e.stopPropagation();
-              onTap();
-            }
-          : undefined
-      }
-      onPointerOver={onTap ? (e: ThreeEvent<PointerEvent>) => (e.stopPropagation(), setHovered(true)) : undefined}
-      onPointerOut={onTap ? () => setHovered(false) : undefined}
-    >
+    <Tappable onTap={onTap} position={[LOUNGE.x, 0, LOUNGE.z]} rotationY={LOUNGE.rotY}>
       <Built parts={parts} />
-      <FloorShadow size={[3.4, 3.4]} position={[0, 0]} opacity={0.42} />
-    </group>
+      {style !== "none" && <FloorShadow size={[3.4, 3.4]} position={[0, 0]} opacity={0.42} />}
+    </Tappable>
   );
 }

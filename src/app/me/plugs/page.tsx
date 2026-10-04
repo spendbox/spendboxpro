@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { buttonClass } from "@/components/ui/button";
 import { Card, EmptyState, SectionTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
-import { ShareLink, WhatsAppIcon } from "@/components/ui/share-actions";
+import { ShareLinkBar, WhatsAppIcon } from "@/components/ui/share-actions";
 import { requireUser } from "@/lib/auth";
 import { siteUrl } from "@/lib/env";
 import { getMyMemberships, getMyPartnerPerks, getMyRewards } from "@/lib/customer";
@@ -24,6 +24,13 @@ export default async function PlugsPage() {
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-7">
       <PageHeader title="Plugs" description="The businesses you've joined. Open one to see its perks." />
+
+      <section aria-labelledby="invite-plugs" className="flex flex-col gap-2">
+        <h2 id="invite-plugs" className="flex items-center gap-1.5 text-sm font-semibold text-ink-2">
+          <UserPlus className="size-4 text-brand-700" aria-hidden /> Invite more plugs
+        </h2>
+        <ShareLinkBar url={`${siteUrl()}/plug`} message="I'd love to follow your business on Spendbox, so I see your new products and perks. It's quick to set up:" />
+      </section>
 
       <section className="flex flex-col gap-3">
         <SectionTitle title={memberships.length ? `Your plugs (${memberships.length})` : "Your plugs"} />
@@ -63,27 +70,6 @@ export default async function PlugsPage() {
             })}
           </Card>
         )}
-      </section>
-
-      <section aria-labelledby="invite-plugs">
-        <Card className="flex flex-col gap-4 p-5">
-          <div className="flex items-start gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-brand-50 text-brand-700">
-              <UserPlus className="size-5" aria-hidden />
-            </span>
-            <div className="min-w-0">
-              <h2 id="invite-plugs" className="font-semibold">
-                Invite more plugs
-              </h2>
-              <p className="text-sm text-muted">Love a business that isn&apos;t here yet? Send them this link to get their shop on Spendbox.</p>
-            </div>
-          </div>
-          <ShareLink
-            url={`${siteUrl()}/plug`}
-            message="I'd love to follow your business on Spendbox, so I see your new products and perks. It's quick to set up:"
-            title="Get your business on Spendbox"
-          />
-        </Card>
       </section>
 
       {partnerPerks.length > 0 && (

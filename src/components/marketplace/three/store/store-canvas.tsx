@@ -10,8 +10,9 @@ import { shade } from "../textures";
 import { MaterialsProvider } from "./kit";
 import { LookControls, type StoreApi } from "./look-controls";
 import { Lounge } from "./lounge";
-import { Bell, Lights, Shelves, Signs, type StoreBusiness, type StoreTarget } from "./pieces";
-import { Counter, Furniture, Plants, Room } from "./room";
+import { Bell, Board, Decor, Lights, ProductScreen, WallArt, type StoreBusiness, type StoreTarget } from "./pieces";
+import { Plants } from "./plants";
+import { Counter, Furniture, Room } from "./room";
 
 /**
  * Soft studio light from every direction, made in code (no download). It's
@@ -37,23 +38,30 @@ function StudioLight({ intensity }: { intensity: number }) {
   return null;
 }
 
-/** A business's 3D store ("Boutique" theme), as React components. */
+/**
+ * A business's 3D store ("Boutique" theme), as React components. Shoppers can
+ * tap products, the bell and the welcome board; with `editing` on (the
+ * business's own editor), tapping anything picks it to change.
+ */
 export default function StoreCanvas({
   business,
   theme,
   products,
   onSelect,
   apiRef,
+  editing = false,
 }: {
   business: StoreBusiness;
   theme: StoreTheme;
   products: StoreProduct[];
   onSelect: (target: StoreTarget) => void;
   apiRef?: RefObject<StoreApi | null>;
+  editing?: boolean;
 }) {
   const accent = accentOf(theme, business.brand_color);
   const dark = theme.wall === "#2F3A34";
-  const warm = theme.lights === "warm";
+  const warm = theme.lights.tone === "warm";
+  const pick = (target: StoreTarget) => (editing ? () => onSelect(target) : undefined);
   const mobile = useMemo(() => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches, []);
   return (
     <Canvas
@@ -62,7 +70,7 @@ export default function StoreCanvas({
       shadows={{ type: THREE.PCFSoftShadowMap }}
       dpr={[1, mobile ? 1.75 : 2]}
       gl={{ antialias: true, powerPreference: "high-performance", toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: dark ? 1.1 : 1.0 }}
-      camera={{ fov: 58, near: 0.1, far: 100, position: [0, 1.7, 8] }}
+      camera={{ fov: 58, near: 0.3, far: 60, position: [0, 1.7, 8] }}
       aria-label={`Inside ${business.name}`}
     >
       <color attach="background" args={[dark ? "#1d2420" : shade(theme.wall, -0.06)]} />
@@ -85,18 +93,20 @@ export default function StoreCanvas({
         shadow-camera-near={1}
         shadow-camera-far={30}
       />
-      <LookControls lounge={theme.lounge} apiRef={apiRef} />
+      <LookControls lounge={theme.table !== "none"} apiRef={apiRef} />
       <MaterialsProvider>
-        <Room theme={theme} accent={accent} />
-        <Counter accent={accent} />
+        <Room theme={theme} accent={accent} onFloor={pick({ kind: "floor" })} onWalls={pick({ kind: "walls" })} />
+        <Counter accent={accent} onTap={pick({ kind: "walls" })} />
         <Furniture />
-        {theme.plants && <Plants />}
-        {theme.lounge && <Lounge style={theme.table} accent={accent} onTap={() => onSelect({ kind: "table" })} />}
+        <Plants plants={theme.plants} onTap={editing ? (spot) => onSelect({ kind: "plant", spot }) : undefined} />
+        <Lounge style={theme.table} accent={accent} onTap={pick({ kind: "table" })} />
+        <Lights theme={theme} accent={accent} onTap={pick({ kind: "lights" })} />
+        <Board theme={theme} business={business} accent={accent} onTap={() => onSelect({ kind: "board" })} />
+        <ProductScreen business={business} products={products} accent={accent} onSelect={onSelect} editing={editing} />
+        <WallArt theme={theme} accent={accent} onTap={editing ? (index) => onSelect({ kind: "art", index }) : undefined} />
+        <Decor business={business} accent={accent} />
+        <Bell onRing={editing ? undefined : () => onSelect({ kind: "bell" })} />
       </MaterialsProvider>
-      <Lights theme={theme} accent={accent} />
-      <Signs business={business} theme={theme} accent={accent} onAbout={() => onSelect({ kind: "about" })} />
-      <Bell onRing={() => onSelect({ kind: "bell" })} />
-      <Shelves products={products} accent={accent} onSelect={onSelect} />
     </Canvas>
   );
 }

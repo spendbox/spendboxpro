@@ -37,4 +37,18 @@ set role authenticated;
 select test.ok((select count(*) from public.explore_businesses()) = 0, 'no businesses, empty map');
 reset role;
 
+-- Shared shops: anyone with the link can walk in, but not into a paused business
+reset role;
+select set_config('request.jwt.claims', '', false);
+set role anon;
+select test.ok((public.public_store('PROD-SHOP-A') ->> 'name') is not null, 'anyone can open a shared shop');
+select test.ok(jsonb_array_length(public.public_store('prod-shop-a') -> 'products') >= 1, 'with its products');
+select test.ok(public.public_store('no-such-shop') is null, 'an unknown link finds nothing');
+reset role;
+update public.businesses set suspended_at = now() where id = :'b';
+set role anon;
+select test.ok(public.public_store('prod-shop-b') is null, 'a paused business is not shown');
+reset role;
+update public.businesses set suspended_at = null where id = :'b';
+
 \echo 'All marketplace tests passed'
