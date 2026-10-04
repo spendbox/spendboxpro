@@ -13,7 +13,7 @@ import { Tappable } from "./tap";
 /** Where each spot is, how big its plant is, and whether it stands on the floor. */
 export const SPOTS: Record<PlantSpot, { at: [number, number, number]; scale: number; floor: boolean; seed: number }> = {
   backLeft: { at: [-4.45, 0, -3.95], scale: 1.0, floor: true, seed: 0.3 },
-  backRight: { at: [4.45, 0, -3.95], scale: 1.1, floor: true, seed: 1.1 },
+  backRight: { at: [3.8, 0, -3.95], scale: 1.1, floor: true, seed: 1.1 },
   front: { at: [-5.3, 0, 3.7], scale: 0.95, floor: true, seed: 2.2 },
   counter: { at: [-1.5, 1.06, COUNTER_Z + 0.05], scale: 0.3, floor: false, seed: 0.7 },
 };

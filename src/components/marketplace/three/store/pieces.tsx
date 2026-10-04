@@ -8,7 +8,7 @@ import { LIGHT_TONES, type Art, type PlantSpot, type StoreTheme } from "@/lib/st
 import type { StoreProduct } from "@/lib/types";
 import { mix } from "../geometry";
 import { useDispose } from "../hooks";
-import { neonTexture, shade, shopSignTexture } from "../textures";
+import { fontFamily, neonTexture, shade, shopSignTexture } from "../textures";
 import { useMaterials } from "./kit";
 import { BACK, COUNTER_Z, H, LOUNGE, W } from "./layout";
 import { ScreenCanvas } from "./screen-canvas";
@@ -48,7 +48,8 @@ export type StoreTarget =
   | { kind: "backdrop" }
   | { kind: "rug" }
   | { kind: "counter" }
-  | { kind: "gift" };
+  | { kind: "gift" }
+  | { kind: "partners" };
 
 export function businessTagline(business: StoreBusiness) {
   return [business.categories.slice(0, 2).join(" · "), business.location].filter(Boolean).join("  ·  ");
@@ -435,7 +436,7 @@ export function Decor({ business, accent, counterName }: { business: StoreBusine
   return (
     <>
       {counterName && <Picture texture={plaque} size={[2.2, 0.55]} position={[0, 0.6, COUNTER_Z + 0.5]} />}
-      <Picture texture={clock} size={[0.7, 0.7]} position={[4.6, 3.3, BACK + 0.1]} />
+      <Picture texture={clock} size={[0.6, 0.6]} position={[4.75, 3.45, BACK + 0.1]} />
       <Picture texture={neon} size={[1.5, 0.47]} position={[-W / 2 + 0.12, 3.05, 1.6]} rotation={[0, Math.PI / 2, 0]} />
     </>
   );
@@ -518,6 +519,130 @@ export function GiftBox({ accent, onOpen }: { accent: string; onOpen?: () => voi
           <torusGeometry args={[0.045, 0.014, 8, 20]} />
         </mesh>
       ))}
+    </group>
+  );
+}
+
+/** The little lit sign over the partners door. */
+function doorSignTexture(count: number, accent: string) {
+  const c = document.createElement("canvas");
+  c.width = 512;
+  c.height = 148;
+  const ctx = c.getContext("2d")!;
+  ctx.fillStyle = "#16201b";
+  ctx.beginPath();
+  ctx.roundRect(4, 4, 504, 140, 28);
+  ctx.fill();
+  ctx.fillStyle = accent;
+  ctx.beginPath();
+  ctx.roundRect(28, 38, 72, 72, 20);
+  ctx.fill();
+  ctx.fillStyle = "#ffffff";
+  ctx.font = `700 46px ${fontFamily("display")}`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(String(count), 64, 76);
+  ctx.textAlign = "left";
+  ctx.font = `700 50px ${fontFamily("display")}`;
+  ctx.fillText("Partners", 124, 64);
+  ctx.font = `500 26px ${fontFamily("body")}`;
+  ctx.fillStyle = "rgba(255,255,255,0.75)";
+  ctx.fillText("Step through to visit", 126, 108);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+const DOOR_X = 4.75;
+const DOOR_W = 1.03;
+const DOOR_H = 2.38;
+
+/**
+ * A door at the back of the shop to the business's partners. Tap it: it
+ * swings open onto warm light, and the partners appear.
+ */
+export function PartnersDoor({ count, accent, onOpen }: { count: number; accent: string; onOpen: () => void }) {
+  const leaf = useRef<THREE.Group>(null);
+  const state = useRef({ target: 0, fired: false });
+  const invalidate = useThree((st) => st.invalidate);
+  const hover = useHoverCursor();
+  const m = useMaterials();
+  const sign = useMemo(() => doorSignTexture(count, accent), [count, accent]);
+  useDispose(sign);
+  useFrame(({ invalidate }, dt) => {
+    const g = leaf.current;
+    if (!g) return;
+    const s = state.current;
+    const goal = -1.25 * s.target;
+    if (Math.abs(g.rotation.y - goal) < 0.002) return;
+    g.rotation.y += (goal - g.rotation.y) * Math.min(1, dt * 5);
+    if (s.target === 1 && !s.fired && g.rotation.y < -0.9) {
+      s.fired = true;
+      onOpen();
+    }
+    invalidate();
+  });
+  const open = (e: ThreeEvent<MouseEvent>) => {
+    if (e.delta > 8) return;
+    e.stopPropagation();
+    const s = state.current;
+    if (s.target === 1 && s.fired) return onOpen();
+    s.target = 1;
+    s.fired = false;
+    invalidate();
+  };
+  const steel = "#1d1f1e";
+  return (
+    <group position={[DOOR_X, 0, BACK + 0.02]} onClick={open} {...hover.handlers}>
+      {/* Frame */}
+      {[-1, 1].map((side) => (
+        <mesh key={side} position={[(side * (DOOR_W + 0.07)) / 2, DOOR_H / 2 + 0.035, 0.04]} castShadow>
+          <boxGeometry args={[0.07, DOOR_H + 0.07, 0.1]} />
+          <meshStandardMaterial color={steel} roughness={0.4} metalness={0.5} />
+        </mesh>
+      ))}
+      <mesh position={[0, DOOR_H + 0.035, 0.04]} castShadow>
+        <boxGeometry args={[DOOR_W + 0.14, 0.07, 0.1]} />
+        <meshStandardMaterial color={steel} roughness={0.4} metalness={0.5} />
+      </mesh>
+      {/* What's beyond: warm light from the next shop. */}
+      <mesh position={[0, DOOR_H / 2, 0.005]}>
+        <planeGeometry args={[DOOR_W, DOOR_H]} />
+        <meshBasicMaterial color="#ffe7bf" toneMapped={false} />
+      </mesh>
+      {/* The door itself, hinged on the left. */}
+      <group ref={leaf} position={[-DOOR_W / 2, 0, 0.04]}>
+        <mesh position={[DOOR_W / 2, DOOR_H / 2, 0]} castShadow>
+          <boxGeometry args={[DOOR_W - 0.01, DOOR_H - 0.01, 0.05]} />
+          <meshStandardMaterial color={shade(accent, -0.22)} roughness={0.45} />
+        </mesh>
+        {/* Raised panels and a round window glowing with the light beyond. */}
+        <mesh position={[DOOR_W / 2, 0.62, 0.027]}>
+          <boxGeometry args={[DOOR_W - 0.26, 0.78, 0.012]} />
+          <meshStandardMaterial color={shade(accent, -0.15)} roughness={0.5} />
+        </mesh>
+        <mesh position={[DOOR_W / 2, 1.68, 0.028]}>
+          <circleGeometry args={[0.24, 40]} />
+          <meshBasicMaterial color="#ffe7bf" toneMapped={false} />
+        </mesh>
+        <mesh position={[DOOR_W / 2, 1.68, 0.029]} material={m.brass}>
+          <torusGeometry args={[0.24, 0.022, 10, 48]} />
+        </mesh>
+        <mesh position={[DOOR_W - 0.12, 1.05, 0.07]} material={m.brass}>
+          <cylinderGeometry args={[0.018, 0.018, 0.34, 12]} />
+        </mesh>
+      </group>
+      {/* Sign */}
+      <mesh position={[0, DOOR_H + 0.33, 0.06]}>
+        <planeGeometry args={[0.95, 0.275]} />
+        <meshBasicMaterial map={sign} transparent toneMapped={false} />
+      </mesh>
+      {/* A soft pool of light on the floor in front. */}
+      <mesh rotation-x={-Math.PI / 2} position={[0, 0.007, 0.7]}>
+        <planeGeometry args={[1.4, 1.4]} />
+        <meshBasicMaterial map={halo()} color="#ffe7bf" transparent opacity={0.35} depthWrite={false} toneMapped={false} />
+      </mesh>
     </group>
   );
 }

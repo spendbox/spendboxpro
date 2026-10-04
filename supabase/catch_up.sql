@@ -3564,6 +3564,48 @@ $spendbox_update_16$;
   end if;
 end $outer$;
 
+-- Update 17: 20261017000000_plug_partners.sql
+do $outer$ begin
+  if not (to_regprocedure('public.plug_partners(uuid)') is not null) then
+    execute $spendbox_update_17$
+-- =============================================================================
+-- Spendbox update 17: a plug's partners, for its customers.
+--
+-- On a plug's page (and through the door in its 3D shop), customers can see
+-- the businesses it partners with. plug_partners() lists them for members of
+-- that plug: partnerships that are active, with partners turned on for both
+-- businesses, and businesses that aren't paused.
+--
+-- Safe to run more than once. Run this after 20261016000000_shop_gift.sql.
+-- =============================================================================
+
+create or replace function public.plug_partners(p_business_id uuid)
+returns table (
+  id uuid, name text, slug text, categories text[], location text, about text, logo_url text, brand_color text,
+  is_member boolean, products integer, welcome text
+)
+language sql stable security definer set search_path = '' as $$
+  with me as (select (select auth.uid()) as uid)
+  select o.id, o.name, o.slug, coalesce(o.categories, '{}'), o.location, o.about, o.logo_url, o.brand_color,
+    exists (select 1 from public.memberships m2, me where m2.business_id = o.id and m2.customer_id = me.uid),
+    (select count(*)::int from public.products pr where pr.business_id = o.id and pr.is_active),
+    (select pk.title from public.perks pk where pk.business_id = o.id and pk.kind = 'welcome' and pk.is_active limit 1)
+  from me
+  join public.memberships m on m.business_id = p_business_id and m.customer_id = me.uid
+  join public.businesses b on b.id = p_business_id and b.partners_enabled
+  join public.partnerships p on p.status = 'active' and p_business_id in (p.requester_id, p.partner_id)
+  join public.businesses o on o.id = case when p.requester_id = p_business_id then p.partner_id else p.requester_id end
+  where o.partners_enabled and o.suspended_at is null
+  order by p.created_at, o.name;
+$$;
+
+revoke execute on function public.plug_partners(uuid) from public, anon;
+grant execute on function public.plug_partners(uuid) to authenticated;
+
+$spendbox_update_17$;
+  end if;
+end $outer$;
+
 -- Which updates are in place (all should say yes).
 select * from (values
   (1, '20261001000000_spendbox', case when to_regclass('public.businesses') is not null then 'yes' else 'NO' end),
@@ -3581,5 +3623,6 @@ select * from (values
   (13, '20261013000000_marketplace', case when to_regprocedure('public.explore_businesses()') is not null then 'yes' else 'NO' end),
   (14, '20261014000000_map_customers', case when coalesce(pg_get_function_result(to_regprocedure('public.explore_businesses()')), '') like '%customers integer%' then 'yes' else 'NO' end),
   (15, '20261015000000_shared_store', case when to_regprocedure('public.public_store(text)') is not null then 'yes' else 'NO' end),
-  (16, '20261016000000_shop_gift', case when coalesce(pg_get_functiondef(to_regprocedure('public.public_store(text)')), '') like '%''perks''%' then 'yes' else 'NO' end)
+  (16, '20261016000000_shop_gift', case when coalesce(pg_get_functiondef(to_regprocedure('public.public_store(text)')), '') like '%''perks''%' then 'yes' else 'NO' end),
+  (17, '20261017000000_plug_partners', case when to_regprocedure('public.plug_partners(uuid)') is not null then 'yes' else 'NO' end)
 ) as updates (step, name, in_place);

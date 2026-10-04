@@ -89,3 +89,24 @@ export async function getMyPartnerPerks(): Promise<PartnerPerkRow[]> {
   const { data } = await supabase.rpc("my_partner_perks");
   return (data ?? []) as PartnerPerkRow[];
 }
+
+/** The businesses a plug partners with, for its customers (only members of the plug get any). */
+export interface PlugPartner {
+  id: string;
+  name: string;
+  slug: string;
+  categories: string[];
+  location: string | null;
+  about: string | null;
+  logo_url: string | null;
+  brand_color: string;
+  is_member: boolean;
+  products: number;
+  welcome: string | null;
+}
+
+export const getPlugPartners = cache(async (bizId: string): Promise<PlugPartner[]> => {
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("plug_partners", { p_business_id: bizId });
+  return ((data ?? []) as PlugPartner[]).map((p) => ({ ...p, products: Number(p.products ?? 0) }));
+});

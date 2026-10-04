@@ -10,7 +10,7 @@ import { shade } from "../textures";
 import { MaterialsProvider } from "./kit";
 import { LookControls, type StoreApi } from "./look-controls";
 import { Lounge } from "./lounge";
-import { Bell, Board, Decor, GiftBox, Lights, ProductScreen, WallArt, type StoreBusiness, type StoreTarget } from "./pieces";
+import { Bell, Board, Decor, GiftBox, Lights, PartnersDoor, ProductScreen, WallArt, type StoreBusiness, type StoreTarget } from "./pieces";
 import { Plants } from "./plants";
 import { Backdrop, Counter, Furniture, Room } from "./room";
 
@@ -51,6 +51,7 @@ export default function StoreCanvas({
   apiRef,
   editing = false,
   hasGift = false,
+  partners = 0,
 }: {
   business: StoreBusiness;
   theme: StoreTheme;
@@ -60,6 +61,8 @@ export default function StoreCanvas({
   editing?: boolean;
   /** Put a gift on the counter (the business has perks). */
   hasGift?: boolean;
+  /** How many partners the business has: a door to them appears at the back. */
+  partners?: number;
 }) {
   const accent = accentOf(theme, business.brand_color);
   const dark = theme.wall === "#2F3A34";
@@ -110,6 +113,7 @@ export default function StoreCanvas({
         <WallArt theme={theme} accent={accent} onTap={editing ? (index) => onSelect({ kind: "art", index }) : undefined} />
         <Decor business={business} accent={accent} counterName={theme.counterName} />
         {hasGift && <GiftBox accent={accent} onOpen={() => onSelect({ kind: "gift" })} />}
+        {partners > 0 && !editing && <PartnersDoor count={partners} accent={accent} onOpen={() => onSelect({ kind: "partners" })} />}
         <Bell onRing={editing ? undefined : () => onSelect({ kind: "bell" })} />
       </MaterialsProvider>
     </Canvas>

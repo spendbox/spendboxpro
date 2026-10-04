@@ -11,6 +11,8 @@ export interface SubTab {
   count?: number;
   /** Also active on these paths (prefix match). */
   also?: string[];
+  /** Set when the tabs are chosen by a query (?tab=…) rather than the path. */
+  active?: boolean;
 }
 
 /** Tabs inside a page (e.g. Explore · My box · Ask), as links so each has its own address. */
@@ -20,7 +22,7 @@ export function SubTabs({ tabs, label }: { tabs: SubTab[]; label: string }) {
     <nav aria-label={label} className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
       <div className="flex w-max gap-1 rounded-2xl bg-black/[0.04] p-1 sm:w-full">
         {tabs.map((tab) => {
-          const active = pathname === tab.href || (tab.also ?? []).some((p) => pathname.startsWith(p));
+          const active = tab.active ?? (pathname === tab.href || (tab.also ?? []).some((p) => pathname.startsWith(p)));
           return (
             <Link
               key={tab.href}

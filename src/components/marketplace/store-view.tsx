@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Gift, Info, LayoutGrid, Mail, MapPin, Phone, Share2, UserPlus, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, DoorOpen, Gift, Info, LayoutGrid, Mail, MapPin, Maximize2, Phone, Share2, UserPlus, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { JoinWizard } from "@/components/join/join-wizard";
@@ -24,6 +24,18 @@ export interface StoreViewBusiness extends StoreBusiness {
 }
 
 export type SharedProduct = StoreProduct & { description?: string | null; created_at?: string };
+
+/** A partner business, behind the door at the back of the shop. */
+export interface StorePartner {
+  id: string;
+  name: string;
+  slug: string;
+  categories: string[];
+  logo_url: string | null;
+  brand_color: string;
+  is_member: boolean;
+  welcome: string | null;
+}
 
 /** Where the person stands with this business, for the Join button on a shared shop. */
 export interface JoinInfo {
@@ -51,6 +63,9 @@ export default function StoreView({
   perks = [],
   currency = "NGN",
   join,
+  partners = [],
+  inline = false,
+  onExpand,
 }: {
   business: StoreViewBusiness;
   theme: StoreTheme;
@@ -62,9 +77,14 @@ export default function StoreView({
   perks?: ShopPerk[];
   currency?: string;
   join?: JoinInfo;
+  /** Partners: a door at the back opens onto them. */
+  partners?: StorePartner[];
+  /** Sit inside the page (with a full-screen button) instead of covering it. */
+  inline?: boolean;
+  onExpand?: () => void;
 }) {
   const api = useRef<StoreApi | null>(null);
-  const [sheet, setSheet] = useState<"contact" | "about" | "gift" | null>(null);
+  const [sheet, setSheet] = useState<"contact" | "about" | "gift" | "partners" | null>(null);
   const [viewing, setViewing] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
   const [hint, setHint] = useState(true);
@@ -88,6 +108,7 @@ export default function StoreView({
     } else if (target.kind === "bell") setSheet("contact");
     else if (target.kind === "board") setSheet("about");
     else if (target.kind === "gift") setSheet("gift");
+    else if (target.kind === "partners") setSheet("partners");
   };
 
   useEffect(() => {
@@ -98,7 +119,7 @@ export default function StoreView({
   // Escape closes; arrow keys look around.
   const full = mode !== "preview";
   useEffect(() => {
-    if (!full || viewing || joining) return;
+    if (!full || inline || viewing || joining) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         if (sheet) setSheet(null);
@@ -114,7 +135,7 @@ export default function StoreView({
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = previous;
     };
-  }, [full, sheet, viewing, joining, onClose]);
+  }, [full, inline, sheet, viewing, joining, onClose]);
 
   const share = async () => {
     if (!shareUrl) return;
@@ -171,10 +192,10 @@ export default function StoreView({
       role={full ? "dialog" : undefined}
       aria-modal={full ? true : undefined}
       aria-label={`${business.name} store`}
-      className={cn("overflow-hidden bg-ink text-white", full ? "fixed inset-0 z-[75] h-dvh" : "relative size-full rounded-3xl")}
+      className={cn("overflow-hidden bg-ink text-white", full && !inline ? "fixed inset-0 z-[75] h-dvh" : "relative size-full rounded-3xl")}
     >
       <div className="absolute inset-0">
-        <StoreCanvas business={business} theme={theme} products={products} onSelect={select} apiRef={api} hasGift={perks.length > 0} />
+        <StoreCanvas business={business} theme={theme} products={products} onSelect={select} apiRef={api} hasGift={perks.length > 0} partners={partners.length} />
       </div>
 
       {full && (
@@ -193,11 +214,18 @@ export default function StoreView({
                 <span className="block truncate text-[11px] text-white/80">{business.categories.slice(0, 2).join(" · ") || "Open now"}</span>
               </span>
             </div>
-            {shareUrl && (
-              <button type="button" onClick={share} aria-label="Share this shop" className="pointer-events-auto ml-auto flex size-11 items-center justify-center rounded-full bg-black/40 backdrop-blur">
-                <Share2 className="size-5" aria-hidden />
-              </button>
-            )}
+            <div className="ml-auto flex gap-2">
+              {shareUrl && (
+                <button type="button" onClick={share} aria-label="Share this shop" className="pointer-events-auto flex size-11 items-center justify-center rounded-full bg-black/40 backdrop-blur">
+                  <Share2 className="size-5" aria-hidden />
+                </button>
+              )}
+              {inline && onExpand && (
+                <button type="button" onClick={onExpand} aria-label="Full screen" className="pointer-events-auto flex size-11 items-center justify-center rounded-full bg-black/40 backdrop-blur">
+                  <Maximize2 className="size-5" aria-hidden />
+                </button>
+              )}
+            </div>
           </div>
 
           <div
@@ -223,6 +251,11 @@ export default function StoreView({
             {mode !== "public" && products.length > 0 && (
               <ActionButton onClick={() => openProduct(products[0]!.id)}>
                 <LayoutGrid className="size-4" aria-hidden /> All products
+              </ActionButton>
+            )}
+            {partners.length > 0 && (
+              <ActionButton onClick={() => setSheet("partners")}>
+                <DoorOpen className="size-4" aria-hidden /> Partners
               </ActionButton>
             )}
             {perks.length > 0 && (
@@ -281,6 +314,34 @@ export default function StoreView({
               )
             }
           />
+        </Sheet>
+      )}
+
+      {sheet === "partners" && (
+        <Sheet label={`${business.name}'s partners`} onClose={() => setSheet(null)}>
+          <div className="mb-4 flex items-center gap-3 pr-8">
+            <span className="flex size-11 items-center justify-center rounded-2xl bg-brand-50 text-brand-700">
+              <DoorOpen className="size-5" aria-hidden />
+            </span>
+            <div>
+              <p className="font-display text-lg font-bold">Through the door</p>
+              <p className="text-sm text-muted">Businesses {business.name} partners with</p>
+            </div>
+          </div>
+          <ul className="flex flex-col gap-2">
+            {partners.map((p) => (
+              <li key={p.id} className="flex items-center gap-3 rounded-2xl p-3 ring-1 ring-line">
+                <BusinessAvatar name={p.name} color={p.brand_color} logoUrl={p.logo_url} size="md" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold">{p.name}</p>
+                  <p className="truncate text-sm text-muted">{p.welcome ? `Join and get ${p.welcome.toLowerCase()}` : p.categories.slice(0, 2).join(" · ") || "On Spendbox"}</p>
+                </div>
+                <Link href={`/s/${p.slug}`} className="flex h-10 shrink-0 items-center rounded-full bg-brand-600 px-4 text-sm font-semibold text-white">
+                  Walk in
+                </Link>
+              </li>
+            ))}
+          </ul>
         </Sheet>
       )}
 
