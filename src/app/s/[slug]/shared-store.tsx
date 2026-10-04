@@ -33,14 +33,8 @@ export interface SharedStoreData {
 }
 
 const noop = () => () => {};
-function webgl() {
-  try {
-    const c = document.createElement("canvas");
-    return Boolean(c.getContext("webgl2") || c.getContext("webgl"));
-  } catch {
-    return false;
-  }
-}
+// A quick check (a test 3D context would slow the page down).
+const webgl = () => "WebGLRenderingContext" in window;
 
 export function SharedStore({ store, shareUrl, join }: { store: SharedStoreData & { store_theme: StoreTheme }; shareUrl: string; join: JoinInfo }) {
   const canShow = useSyncExternalStore(noop, webgl, () => true);

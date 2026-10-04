@@ -1,7 +1,7 @@
 "use client";
 
 import { Canvas, useThree } from "@react-three/fiber";
-import { useEffect, useMemo, type RefObject } from "react";
+import { useEffect, type RefObject } from "react";
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { accentOf, type StoreTheme } from "@/lib/store-theme";
@@ -68,13 +68,12 @@ export default function StoreCanvas({
   const dark = theme.wall === "#2F3A34";
   const warm = theme.lights.tone === "warm";
   const pick = (target: StoreTarget) => (editing ? () => onSelect(target) : undefined);
-  const mobile = useMemo(() => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches, []);
   return (
     <Canvas
       // Draw only when something changes (looking around, a picture loading, the bell).
       frameloop="demand"
       shadows={{ type: THREE.PCFSoftShadowMap }}
-      dpr={[1, mobile ? 1.75 : 2]}
+      dpr={[1, 1.5]}
       gl={{ antialias: true, powerPreference: "high-performance", toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: dark ? 1.1 : 1.0 }}
       camera={{ fov: 58, near: 0.3, far: 60, position: [0, 1.7, 8] }}
       aria-label={`Inside ${business.name}`}
@@ -88,7 +87,7 @@ export default function StoreCanvas({
         intensity={warm ? 1.9 : 2.1}
         color={warm ? "#fff0d9" : "#f4f8ff"}
         castShadow
-        shadow-mapSize={mobile ? [1024, 1024] : [2048, 2048]}
+        shadow-mapSize={[1024, 1024]}
         shadow-bias={-0.0004}
         shadow-normalBias={0.03}
         shadow-radius={4}

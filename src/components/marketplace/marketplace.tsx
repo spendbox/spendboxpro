@@ -3,7 +3,7 @@
 import { LayoutGrid, Map as MapIcon } from "lucide-react";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { Component, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { ProductCircles } from "@/components/products/product-circles";
 import { getShopPerks, type ShopPerk } from "@/lib/actions/shop";
 import { cn } from "@/lib/cn";
@@ -17,22 +17,58 @@ const StoreView = dynamic(() => import("./store-view"), { ssr: false, loading: (
 type View = "map" | "grid";
 const VIEW_KEY = "spendbox-explore-view";
 
-// Checked once per visit: creating a test 3D context isn't free.
-let webglCache: boolean | null = null;
-function webglAvailable() {
-  if (webglCache !== null) return webglCache;
-  try {
-    const c = document.createElement("canvas");
-    const gl = c.getContext("webgl2") || c.getContext("webgl");
-    webglCache = Boolean(gl);
-    (gl as WebGLRenderingContext | null)?.getExtension("WEBGL_lose_context")?.loseContext();
-  } catch {
-    webglCache = false;
-  }
-  return webglCache;
-}
+// A quick check only (making a test 3D context would slow the page down); if 3D
+// then fails to start, the map falls back to the grid (see MapBoundary).
+const webglAvailable = () => typeof window !== "undefined" && "WebGLRenderingContext" in window;
 
 const noop = () => () => {};
+
+/** Shows the grid instead if the 3D map can't start on this device. */
+class MapBoundary extends Component<{ onFail: () => void; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch() {
+    this.props.onFail();
+  }
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
+
+/**
+ * Starts the 3D map only once the page has painted, the browser is free and
+ * the map is on screen; then pauses it whenever it's scrolled away or the tab
+ * is hidden. The page stays quick to open, and the computer stays cool.
+ */
+function useMapLifecycle(box: React.RefObject<HTMLDivElement | null>, enabled: boolean) {
+  const [started, setStarted] = useState(false);
+  const [onScreen, setOnScreen] = useState(true);
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    if (!enabled) return;
+    const el = box.current;
+    if (!el) return;
+    let idle: number | undefined;
+    const ric = window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 300));
+    const cancel = window.cancelIdleCallback ?? window.clearTimeout;
+    const observer = new IntersectionObserver(([entry]) => {
+      const seen = Boolean(entry?.isIntersecting);
+      setOnScreen(seen);
+      if (seen && idle === undefined) idle = ric(() => setStarted(true), { timeout: 1200 });
+    });
+    observer.observe(el);
+    const onVis = () => setVisible(document.visibilityState === "visible");
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      observer.disconnect();
+      document.removeEventListener("visibilitychange", onVis);
+      if (idle !== undefined) cancel(idle);
+    };
+  }, [box, enabled]);
+  return { started, paused: !onScreen || !visible };
+}
 
 /**
  * Explore: a 3D map of the customer's shops (tap one to walk in), or the same
@@ -56,8 +92,11 @@ export function Marketplace({ businesses, products }: { businesses: ExploreBusin
     () => "map" as View,
   );
   const [chosen, setChosen] = useState<View | null>(null);
-  const view: View = !canMap ? "grid" : (chosen ?? saved);
+  const [mapFailed, setMapFailed] = useState(false);
+  const view: View = !canMap || mapFailed ? "grid" : (chosen ?? saved);
   const [expanded, setExpanded] = useState(false);
+  const mapBox = useRef<HTMLDivElement>(null);
+  const map = useMapLifecycle(mapBox, view === "map");
 
   const choose = (v: View) => {
     setChosen(v);
@@ -158,12 +197,19 @@ export function Marketplace({ businesses, products }: { businesses: ExploreBusin
 
       {view === "map" ? (
         <div
+          ref={mapBox}
           className={cn(
             "overflow-hidden bg-[#dcefe4]",
             expanded ? "fixed inset-0 z-[70] h-dvh" : "relative -mx-4 h-[calc(100dvh-19rem)] min-h-[26rem] sm:mx-0 sm:h-[34rem] sm:rounded-3xl sm:ring-1 sm:ring-line",
           )}
         >
-          <CityMap businesses={businesses} onOpen={openStore} paused={Boolean(store)} expanded={expanded} onToggleExpanded={() => setExpanded((e) => !e)} />
+          {map.started ? (
+            <MapBoundary onFail={() => setMapFailed(true)}>
+              <CityMap businesses={businesses} onOpen={openStore} paused={Boolean(store) || (map.paused && !expanded)} expanded={expanded} onToggleExpanded={() => setExpanded((e) => !e)} />
+            </MapBoundary>
+          ) : (
+            <MapLoading />
+          )}
         </div>
       ) : (
         <ProductCircles products={products} hrefFor={(p) => `/me/p/${p.id}`} />
