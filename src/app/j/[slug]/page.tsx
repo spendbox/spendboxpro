@@ -49,6 +49,7 @@ export default async function JoinPage({ params, searchParams }: PageProps<"/j/[
   if (!business) notFound();
 
   const refCode = typeof ref === "string" ? ref.slice(0, 20) : null;
+  const welcomePerk = business.perks.find((p) => p.kind === "welcome");
   const user = await getUser();
   let state: "signed-out" | "signed-in" | "member" | "owner" = user ? "signed-in" : "signed-out";
   if (user && business.owner_id === user.id) state = "owner";
@@ -125,7 +126,14 @@ export default async function JoinPage({ params, searchParams }: PageProps<"/j/[
             {refCode && state !== "member" && state !== "owner" && (
               <div className="flex items-start gap-3 rounded-2xl bg-violet-50 p-3.5 text-sm text-violet-950">
                 <UserPlus className="mt-0.5 size-5 shrink-0" aria-hidden />
-                <p>A friend shared this with you. They may get a thank-you perk when you join.</p>
+                <p>
+                  A friend shared this with you.
+                  {welcomePerk ? (
+                    <>
+                      {" "}Join and you get <b>{welcomePerk.title}</b>.
+                    </>
+                  ) : null}
+                </p>
               </div>
             )}
             {closed ? (

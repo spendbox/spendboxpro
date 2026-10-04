@@ -8,7 +8,7 @@ import { getOwnedBusinesses, requireUser } from "@/lib/auth";
 import { signOut } from "@/lib/actions/auth";
 import { getMyProfile } from "@/lib/customer";
 const NAV: NavItem[] = [
-  { href: "/me", label: "My Spendbox", icon: "home", exact: true, also: ["/me/new"] },
+  { href: "/me", label: "My Spendbox", icon: "home", exact: true, also: ["/me/new", "/me/box", "/me/ask", "/me/p/"] },
   { href: "/me/plugs", label: "Plugs", icon: "businesses", also: ["/me/b", "/me/perks"] },
   { href: "/me/profile", label: "Profile", icon: "profile" },
 ];

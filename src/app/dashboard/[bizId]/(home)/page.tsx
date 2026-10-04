@@ -1,0 +1,135 @@
+import { ArrowRight, Check, Eye, Heart, MessageCircle, PartyPopper, Plus, ShoppingBag } from "lucide-react";
+import type { Metadata } from "next";
+import Link from "next/link";
+import { ProductThumb } from "@/components/products/product-thumb";
+import { Badge } from "@/components/ui/badge";
+import { Card, EmptyState, SectionTitle } from "@/components/ui/card";
+import { requireOwnedBusiness } from "@/lib/auth";
+import { compactNumber, getPerks, getStats } from "@/lib/business";
+import { cn } from "@/lib/cn";
+import { formatMoney } from "@/lib/format";
+import { getBusinessProducts } from "@/lib/products";
+import { createAdminClient } from "@/lib/supabase/admin";
+
+export const metadata: Metadata = { title: "Products & services" };
+
+export default async function ProductsTab({ params, searchParams }: PageProps<"/dashboard/[bizId]">) {
+  const [{ bizId }, { welcome }] = await Promise.all([params, searchParams]);
+  const [, stats, perks, products, { data: partnerSlots }] = await Promise.all([
+    requireOwnedBusiness(bizId),
+    getStats(bizId),
+    getPerks(bizId),
+    getBusinessProducts(bizId),
+    // Ownership is checked alongside; partnerships are only readable server-side.
+    createAdminClient().rpc("partner_slots_used", { p_business_id: bizId }),
+  ]);
+  const base = `/dashboard/${bizId}`;
+  const steps = [
+    { done: products.length > 0, label: "Post your first product or service", href: `${base}/products/new` },
+    { done: perks.some((p) => p.is_active), label: "Add a welcome perk", href: `${base}/perks` },
+    { done: stats.members > 0, label: "Share your link so customers join", href: null },
+    { done: Number(partnerSlots ?? 0) > 0, label: "Partner with a business near you", href: `${base}/partners` },
+  ];
+  const setupDone = steps.every((s) => s.done);
+
+  return (
+    <div className="flex flex-col gap-5">
+      {welcome && (
+        <div className="flex animate-fade-up items-start gap-4 rounded-3xl bg-brand-50 p-5 ring-1 ring-brand-100">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-white text-brand-700">
+            <PartyPopper className="size-5" aria-hidden />
+          </div>
+          <div>
+            <p className="font-display text-lg font-bold text-brand-900">You&apos;re on Spendbox</p>
+            <p className="mt-0.5 text-sm text-brand-900/90">
+              Post what you sell, and share your link. Your customers see your products, and tell you what they need.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {!setupDone && (
+        <Card className="p-4 sm:p-5">
+          <SectionTitle title="Get set up" description={`${steps.filter((s) => s.done).length} of ${steps.length} done`} />
+          <ol className="mt-2 grid grid-cols-1 gap-x-4 sm:grid-cols-2">
+            {steps.map((step) => {
+              const content = (
+                <>
+                  <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-full", step.done ? "bg-brand-600 text-white" : "ring-2 ring-line-strong")}>
+                    {step.done && <Check className="size-3.5" aria-hidden />}
+                  </span>
+                  <span className={cn("flex-1 text-sm font-semibold", step.done ? "text-muted line-through" : "text-ink")}>
+                    {step.label}
+                    <span className="sr-only">{step.done ? " (done)" : ""}</span>
+                  </span>
+                  {!step.done && step.href && <ArrowRight className="size-4 text-muted" aria-hidden />}
+                </>
+              );
+              return (
+                <li key={step.label}>
+                  {!step.done && step.href ? (
+                    <Link href={step.href} className="flex items-center gap-3 rounded-xl p-2 hover:bg-canvas">
+                      {content}
+                    </Link>
+                  ) : (
+                    <div className="flex items-center gap-3 p-2">{content}</div>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        </Card>
+      )}
+
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <h2 className="font-display text-2xl font-bold">Products &amp; services</h2>
+          <p className="text-sm text-muted">Your customers and your partners&apos; customers see these, newest first.</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        <Link
+          href={`${base}/products/new`}
+          className="flex aspect-[4/5] flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-line-strong bg-white/60 p-4 text-center transition hover:border-brand-600 hover:bg-brand-50"
+        >
+          <span className="flex size-12 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-lift">
+            <Plus className="size-6" aria-hidden />
+          </span>
+          <span className="font-display font-bold">Add a product or service</span>
+          <span className="text-xs text-muted">Photo or short video</span>
+        </Link>
+        {products.map((p) => (
+          <Link key={p.id} href={`${base}/products/${p.id}`} className="group flex flex-col overflow-hidden rounded-3xl bg-white shadow-card ring-1 ring-line transition hover:ring-brand-300">
+            <ProductThumb mediaType={p.media_type} mediaUrl={p.media_url} posterUrl={p.poster_url} className={cn("aspect-square", !p.is_active && "opacity-50")} />
+            <span className="flex flex-1 flex-col gap-1 p-3">
+              <span className="flex items-center gap-1.5">
+                <span className="min-w-0 flex-1 truncate text-sm font-semibold">{p.title}</span>
+                {!p.is_active && <Badge>Hidden</Badge>}
+              </span>
+              <span className="text-xs text-muted">{p.price !== null ? formatMoney(p.price, p.currency) : p.kind === "service" ? "Service" : "Ask for price"}</span>
+              <span className="mt-auto flex items-center gap-3 pt-1 text-xs font-semibold text-ink-2 tabular">
+                <span className="flex items-center gap-1" title="Views">
+                  <Eye className="size-3.5" aria-hidden /> {compactNumber(p.views)}
+                </span>
+                <span className="flex items-center gap-1" title="Likes">
+                  <Heart className="size-3.5" aria-hidden /> {compactNumber(p.likes)}
+                </span>
+                <span className="flex items-center gap-1" title="People who got in touch">
+                  <MessageCircle className="size-3.5" aria-hidden /> {compactNumber(p.contacts)}
+                </span>
+              </span>
+            </span>
+          </Link>
+        ))}
+      </div>
+      {products.length === 0 && (
+        <EmptyState
+          icon={<ShoppingBag className="size-6" aria-hidden />}
+          title="Show what you sell"
+          description="A photo or a short video of each product or service. It shows up in your customers' Explore, and you can share it on your WhatsApp status."
+        />
+      )}
+    </div>
+  );
+}

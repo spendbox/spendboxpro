@@ -135,7 +135,13 @@ export default async function PlugPage({ params, searchParams }: PageProps<"/me/
       <section className="flex flex-col gap-3">
         <SectionTitle
           title="Bring a friend"
-          description={referralPerk ? `${referralPerk.title}. You get it for every friend who joins with your link.` : `Share ${b.name} with friends who'd love them.`}
+          description={
+            referralPerk && welcomePerk
+              ? `Your friend gets “${welcomePerk.title}” when they join with your link, and you get “${referralPerk.title}” for every friend who does.`
+              : welcomePerk
+                ? `Your friend gets “${welcomePerk.title}” when they join with your link.`
+                : `Share ${b.name} with friends who'd love them.`
+          }
         />
         <Card className="flex flex-col gap-4 p-5">
           <div className="flex items-center gap-3">

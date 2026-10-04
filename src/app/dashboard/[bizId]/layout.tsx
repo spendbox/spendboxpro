@@ -34,7 +34,7 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
 
   const base = `/dashboard/${bizId}`;
   const nav: NavItem[] = [
-    { href: base, label: "Home", icon: "overview", exact: true },
+    { href: base, label: "Home", icon: "overview", exact: true, also: [`${base}/requests`, `${base}/stats`, `${base}/products`] },
     { href: `${base}/customers`, label: "Customers", icon: "customers", badge: stats.rewards_ready },
     { href: `${base}/partners`, label: "Partners", icon: "partners", badge: requests },
     // Perks and plan & billing live under Settings.

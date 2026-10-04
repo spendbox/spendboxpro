@@ -97,7 +97,7 @@ export async function postRequest(_prev: RequestResult, formData: FormData): Pro
     return { error: error.message.replace(/^.*?: /, "") || "Couldn't post your request. Please try again." };
   }
   revalidatePath("/me", "layout");
-  redirect("/me?posted=1");
+  redirect("/me/ask?posted=1");
 }
 
 export async function closeRequest(id: string, found: boolean): Promise<RequestResult> {

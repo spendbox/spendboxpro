@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Pencil, Plus, Trash } from "lucide-react";
+import { ArrowLeft, Pencil, Plus, Trash, UserPlus } from "lucide-react";
 import { useState, useTransition } from "react";
 import { deletePerk, savePerk, setPerkActive } from "@/app/dashboard/[bizId]/actions";
 import { PerkCard, PerkIcon } from "@/components/perks/perk-card";
@@ -41,6 +41,8 @@ export function PerkBoard({
   const [deleting, setDeleting] = useState<Perk | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // An invited friend gets the welcome perk, so the invite reward needs one first.
+  const welcomePerk = perks.find((p) => p.kind === "welcome" && p.is_active) ?? null;
 
   function startNew(kind?: PerkKind) {
     setError(null);
@@ -88,7 +90,7 @@ export function PerkBoard({
     });
   }
 
-  const suggestions = SUGGESTED_PERKS.filter((s) => !perks.some((p) => p.kind === s.kind));
+  const suggestions = SUGGESTED_PERKS.filter((s) => !perks.some((p) => p.kind === s.kind) && (s.kind !== "referral" || welcomePerk));
   const info = draft ? PERK_KINDS[draft.kind] : null;
   const thresholdNumber = Number(draft?.threshold.replace(/[^\d.]/g, "") || 0);
 
@@ -176,22 +178,32 @@ export function PerkBoard({
       {/* Step 1: choose the kind of perk */}
       <Modal open={picking} onClose={() => setPicking(false)} title="What kind of perk?" description="Pick a card. You'll name the reward next.">
         <div className="grid gap-2">
-          {SIMPLE_PERK_KINDS.map((kind) => (
-            <button
-              key={kind}
-              type="button"
-              onClick={() => startNew(kind)}
-              className="flex items-center gap-4 rounded-2xl p-3 text-left ring-1 ring-line transition hover:bg-canvas hover:ring-line-strong"
-            >
-              <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl text-white" style={{ background: PERK_KINDS[kind].color }}>
-                <PerkIcon kind={kind} className="size-6" />
-              </span>
-              <span>
-                <span className="block font-bold">{PERK_KINDS[kind].label}</span>
-                <span className="block text-sm text-muted">{PERK_KINDS[kind].pickerHint}</span>
-              </span>
-            </button>
-          ))}
+          {SIMPLE_PERK_KINDS.map((kind) => {
+            const locked = kind === "referral" && !welcomePerk;
+            return (
+              <button
+                key={kind}
+                type="button"
+                disabled={locked}
+                onClick={() => startNew(kind)}
+                className="flex items-center gap-4 rounded-2xl p-3 text-left ring-1 ring-line transition enabled:hover:bg-canvas enabled:hover:ring-line-strong disabled:opacity-60"
+              >
+                <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl text-white" style={{ background: PERK_KINDS[kind].color }}>
+                  <PerkIcon kind={kind} className="size-6" />
+                </span>
+                <span>
+                  <span className="block font-bold">{PERK_KINDS[kind].label}</span>
+                  <span className="block text-sm text-muted">
+                    {locked
+                      ? "Add a welcome perk first. The friend gets your welcome perk; your customer gets this."
+                      : kind === "referral" && welcomePerk
+                        ? `Your customer gets this when a friend joins. The friend gets “${welcomePerk.title}”.`
+                        : PERK_KINDS[kind].pickerHint}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
         </div>
       </Modal>
 
@@ -233,6 +245,15 @@ export function PerkBoard({
                 onChange={(e) => setDraft({ ...draft, title: e.target.value })}
               />
             </Field>
+            {draft.kind === "referral" && (
+              <p className="-mt-2 flex items-start gap-2 rounded-xl bg-violet-50 px-3 py-2.5 text-sm text-violet-950">
+                <UserPlus className="mt-0.5 size-4 shrink-0" aria-hidden />
+                <span>
+                  This is for your customer who shares your link. Their friend gets your welcome perk
+                  {welcomePerk ? <>: <b>{welcomePerk.title}</b></> : null}.
+                </span>
+              </p>
+            )}
             {wordingTip(draft.title) && (
               <p role="status" className="-mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">
                 {wordingTip(draft.title)}
