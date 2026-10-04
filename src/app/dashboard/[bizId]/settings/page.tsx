@@ -1,4 +1,4 @@
-import { ChevronRight, CreditCard, Download, Gift, Handshake, LogOut, TriangleAlert, type LucideIcon } from "lucide-react";
+import { ChevronRight, CreditCard, Download, Gift, Handshake, LogOut, Store, TriangleAlert, type LucideIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { QrCode } from "@/components/qr-code";
@@ -71,6 +71,7 @@ export default async function SettingsPage({ params }: PageProps<"/dashboard/[bi
       <section className="flex flex-col gap-3">
         <SectionTitle title="Manage" />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <LinkCard href={`${base}/settings/store`} icon={Store} title="Your 3D store" note="How your shop looks on your customers' map" />
           <LinkCard href={`${base}/settings/billing`} icon={CreditCard} title="Plan & billing" note={billingNote} />
           <LinkCard href={`${base}/perks`} icon={Gift} title="Perks" note={perks.length ? `${plural(activePerks, "perk")} on` : "Add your first perk"} />
           <LinkCard

@@ -34,6 +34,8 @@ export interface Business {
   about: string | null;
   whatsapp: string | null;
   brand_color: string;
+  /** How the 3D store looks (see lib/store-theme). */
+  store_theme?: unknown;
   currency: string;
   created_at: string;
   /** Cross-promotion switched on (shows in other businesses' partner search). */
@@ -341,4 +343,36 @@ export interface ProductAudienceRow {
   liked: boolean;
   contacted: string | null;
   last_activity: string | null;
+}
+
+/** A shop on a customer's marketplace map. */
+export interface ExploreBusiness {
+  id: string;
+  name: string;
+  slug: string;
+  categories: string[];
+  location: string | null;
+  about: string | null;
+  logo_url: string | null;
+  brand_color: string;
+  whatsapp: string | null;
+  email: string | null;
+  store_theme: unknown;
+  is_member: boolean;
+  joined_at: string;
+  products: number;
+  new_products: number;
+  latest_product_at: string | null;
+}
+
+/** What the 3D store needs to show a product on its shelves. */
+export interface StoreProduct {
+  id: string;
+  title: string;
+  price: number | null;
+  currency: string;
+  media_type: ProductMediaType;
+  media_url: string;
+  poster_url: string | null;
+  viewed?: boolean;
 }

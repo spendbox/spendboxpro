@@ -8,6 +8,6 @@ cd "$(dirname "$0")/../.."
 P="psql $TEST_DATABASE_URL -v ON_ERROR_STOP=1 -q"
 $P -f supabase/tests/supabase-stub.sql
 for migration in supabase/migrations/*.sql; do PGOPTIONS="-c client_min_messages=warning" $P -f "$migration" >/dev/null; done
-for test in supabase/tests/spendbox.test.sql supabase/tests/update2.test.sql supabase/tests/partners.test.sql supabase/tests/activity.test.sql supabase/tests/admin.test.sql supabase/tests/billing.test.sql supabase/tests/requests.test.sql supabase/tests/interests.test.sql supabase/tests/products.test.sql; do
+for test in supabase/tests/spendbox.test.sql supabase/tests/update2.test.sql supabase/tests/partners.test.sql supabase/tests/activity.test.sql supabase/tests/admin.test.sql supabase/tests/billing.test.sql supabase/tests/requests.test.sql supabase/tests/interests.test.sql supabase/tests/products.test.sql supabase/tests/marketplace.test.sql; do
   $P -o /dev/null -f "$test" 2>&1 | sed 's/^psql:[^ ]* NOTICE:  //'
 done
