@@ -18,7 +18,7 @@ grant update (full_name) on public.profiles to authenticated;
 
 -- Requests ----------------------------------------------------------------------
 
-create table public.requests (
+create table if not exists public.requests (
   id uuid primary key default gen_random_uuid(),
   customer_id uuid not null references auth.users (id) on delete cascade,
   body text not null check (char_length(body) between 5 and 500),
@@ -40,12 +40,14 @@ create table public.requests (
   check (contact_whatsapp or contact_call or contact_email)
 );
 
-create index requests_customer_idx on public.requests (customer_id, created_at desc);
-create index requests_live_idx on public.requests (expires_at desc) where status = 'open';
+create index if not exists requests_customer_idx on public.requests (customer_id, created_at desc);
+create index if not exists requests_live_idx on public.requests (expires_at desc) where status = 'open';
 
 alter table public.requests enable row level security;
+drop policy if exists "Customers see their requests" on public.requests;
 create policy "Customers see their requests" on public.requests
   for select to authenticated using (customer_id = (select auth.uid()));
+drop policy if exists "Customers delete their requests" on public.requests;
 create policy "Customers delete their requests" on public.requests
   for delete to authenticated using (customer_id = (select auth.uid()));
 revoke all on public.requests from public, anon, authenticated;
@@ -54,7 +56,7 @@ grant all on public.requests to service_role;
 
 -- Which businesses reached out, and how --------------------------------------
 
-create table public.request_contacts (
+create table if not exists public.request_contacts (
   id uuid primary key default gen_random_uuid(),
   request_id uuid not null references public.requests (id) on delete cascade,
   business_id uuid not null references public.businesses (id) on delete cascade,
@@ -62,7 +64,7 @@ create table public.request_contacts (
   created_at timestamptz not null default now(),
   unique (request_id, business_id)
 );
-create index request_contacts_business_idx on public.request_contacts (business_id, created_at desc);
+create index if not exists request_contacts_business_idx on public.request_contacts (business_id, created_at desc);
 
 alter table public.request_contacts enable row level security;
 revoke all on public.request_contacts from public, anon, authenticated;
@@ -78,8 +80,8 @@ on conflict (id) do nothing;
 -- Plus (or a free trial): also sees requests from partners' customers.
 create or replace function public.business_has_plus(b public.businesses) returns boolean
 language sql stable set search_path = '' as $$
-  select (b.plan = 'plus' and b.paid_until > now())
-      or (coalesce(b.paid_until, '-infinity') <= now() and b.trial_ends_at > now());
+  select ((b).plan = 'plus' and (b).paid_until > now())
+      or (coalesce((b).paid_until, '-infinity') <= now() and (b).trial_ends_at > now());
 $$;
 
 -- A business can see a request if the customer is its member or (on Plus) a
@@ -91,13 +93,13 @@ language sql stable security definer set search_path = '' as $$
     select 1 from public.businesses b
     where b.id = p_business_id and b.suspended_at is null
       and (
-        exists (select 1 from public.memberships m where m.business_id = b.id and m.customer_id = p_request.customer_id)
+        exists (select 1 from public.memberships m where m.business_id = b.id and m.customer_id = (p_request).customer_id)
         or (public.business_has_plus(b) and exists (
           select 1 from public.partnerships p
           join public.memberships m
             on m.business_id = case when p.requester_id = b.id then p.partner_id else p.requester_id end
           where p.status = 'active' and (p.requester_id = b.id or p.partner_id = b.id)
-            and m.customer_id = p_request.customer_id
+            and m.customer_id = (p_request).customer_id
         ))
       )
   );
