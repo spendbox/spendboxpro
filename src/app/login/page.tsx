@@ -1,4 +1,4 @@
-import { Ticket } from "lucide-react";
+import { UserPlus } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -37,10 +37,13 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
           </div>
         ) : (
           <div className="flex gap-3 rounded-2xl bg-white p-4 text-sm text-muted ring-1 ring-line">
-            <Ticket className="mt-0.5 size-5 shrink-0 text-brand-600" aria-hidden />
+            <UserPlus className="mt-0.5 size-5 shrink-0 text-brand-600" aria-hidden />
             <p>
-              <span className="font-semibold text-ink">First time here?</span> You&apos;ll need an invite. Ask a
-              business you buy from for their Spendbox link, open it, and you&apos;re in.{" "}
+              <span className="font-semibold text-ink">First time here?</span>{" "}
+              <Link href={nextPath ? `/signup?next=${encodeURIComponent(nextPath)}` : "/signup"} className="font-semibold text-brand-700 underline underline-offset-2">
+                Create your Spendbox
+              </Link>
+              . It&apos;s free.{" "}
               <Link href="/plug" className="font-semibold text-brand-700 underline underline-offset-2">
                 Own a business?
               </Link>

@@ -7,6 +7,7 @@ import type { NavItem } from "@/components/shell/nav";
 import { getOwnedBusinesses, requireUser } from "@/lib/auth";
 import { signOut } from "@/lib/actions/auth";
 import { getMyProfile } from "@/lib/customer";
+import { SubmitRow } from "@/components/ui/submit-button";
 const NAV: NavItem[] = [
   { href: "/me", label: "My Spendbox", icon: "home", exact: true, also: ["/me/new", "/me/box", "/me/ask", "/me/p/"] },
   { href: "/me/plugs", label: "Plugs", icon: "businesses", also: ["/me/b", "/me/perks"] },
@@ -34,10 +35,10 @@ export default async function CustomerLayout({ children }: LayoutProps<"/me">) {
             </Link>
           )}
           <form action={signOut}>
-            <button className="flex h-11 w-full items-center gap-3 rounded-xl px-3 text-sm font-semibold text-ink-2 hover:bg-black/5">
+            <SubmitRow className="flex h-11 w-full items-center gap-3 rounded-xl px-3 text-sm font-semibold text-ink-2 hover:bg-black/5">
               <LogOut className="size-5" aria-hidden />
               Log out
-            </button>
+            </SubmitRow>
           </form>
         </>
       }

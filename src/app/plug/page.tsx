@@ -18,6 +18,7 @@ import {
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { CSSProperties } from "react";
+import { RememberInviter } from "@/components/auth/remember-inviter";
 import { Logo } from "@/components/brand/logo";
 import { RevealOnScroll } from "@/components/landing/reveal";
 import { PerkCard } from "@/components/perks/perk-card";
@@ -51,6 +52,7 @@ export default function PlugPage() {
   return (
     <div className="overflow-x-clip bg-white">
       <RevealOnScroll />
+      <RememberInviter />
 
       <header className="sticky top-0 z-30 border-b border-line/70 bg-white/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-5 sm:px-8">

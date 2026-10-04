@@ -63,4 +63,34 @@ select test.ok(public.public_store('prod-shop-b') is null, 'a paused business is
 reset role;
 update public.businesses set suspended_at = null where id = :'b';
 
+-- Customer invites: a business that signs up from Chioma's link gets her as a customer
+select test.act_as('00000000-0000-0000-0000-0000000000d4');
+set role authenticated;
+select public.my_invite_code() as code \gset
+select test.ok(public.my_invite_code() = :'code', 'a customer keeps the same invite code');
+select test.ok(public.claim_inviter(:'a', :'code') = false, 'only the business''s owner can claim');
+reset role;
+select test.act_as('00000000-0000-0000-0000-0000000000d3');
+set role authenticated;
+select public.create_business('Invited Shop') as inv \gset
+select test.ok(public.claim_inviter(:'inv', 'nosuchcode') = false, 'an unknown code adds nobody');
+select test.ok(public.claim_inviter(:'inv', :'code'), 'the new business claims who invited it');
+reset role;
+select test.ok((select count(*) from public.memberships where business_id = :'inv' and customer_id = '00000000-0000-0000-0000-0000000000d4') = 1, 'and she is now its customer');
+select test.act_as('00000000-0000-0000-0000-0000000000d3');
+set role authenticated;
+select test.ok(public.claim_inviter(:'inv', :'code') = false, 'only once');
+select test.ok(not has_table_privilege('public.business_inviters', 'select'), 'who invited whom stays private');
+reset role;
+select test.act_as('00000000-0000-0000-0000-0000000000d3');
+set role authenticated;
+select public.create_business('Self Shop') as self \gset
+select test.ok(public.claim_inviter(:'self', public.my_invite_code()) = false, 'nobody becomes a customer of their own business');
+reset role;
+update public.businesses set created_at = now() - interval '2 days' where id = :'self';
+select test.act_as('00000000-0000-0000-0000-0000000000d3');
+set role authenticated;
+select test.ok(public.claim_inviter(:'self', :'code') = false, 'and only in the business''s first day');
+reset role;
+
 \echo 'All marketplace tests passed'

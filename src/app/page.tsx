@@ -79,7 +79,12 @@ export default function Home() {
           <Link href="/plug" className={buttonClass({ variant: "secondary", size: "lg", block: true }, "h-14 text-base")}>
             <Store className="size-4" aria-hidden /> For businesses
           </Link>
-          <p className="text-sm text-muted">Customers join by invite from a business they buy from.</p>
+          <p className="text-sm text-muted">
+            New here?{" "}
+            <Link href="/signup" className="font-semibold text-brand-700 underline underline-offset-2">
+              Create your free Spendbox
+            </Link>
+          </p>
         </div>
       </main>
     </div>

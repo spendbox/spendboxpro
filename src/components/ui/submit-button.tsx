@@ -24,3 +24,13 @@ export function SubmitButton({
     </Button>
   );
 }
+
+/** A plain menu-row submit button (like "Log out" in the side menus) that fades while sending. */
+export function SubmitRow({ className, children }: { className?: string; children: ReactNode }) {
+  const { pending } = useFormStatus();
+  return (
+    <button type="submit" disabled={pending} aria-busy={pending || undefined} data-pending={pending ? "" : undefined} className={className}>
+      {children}
+    </button>
+  );
+}

@@ -21,7 +21,7 @@ export default async function AdminSettings() {
       <Card className="flex flex-col gap-4 p-5">
         <h2 className="font-display text-lg font-bold">Prices</h2>
         <p className="-mt-2 text-sm text-muted">What businesses pay each month after their free trial.</p>
-        <NumberSettingForm name="priceStarter" initial={s.priceStarter} prefix="₦" label="Starter (requests from own customers)" disabled={!canEdit} />
+        <NumberSettingForm name="priceStarter" initial={s.priceStarter} prefix="₦" label="Starter (own customers' requests, shop, perks)" disabled={!canEdit} />
         <NumberSettingForm name="pricePlus" initial={s.pricePlus} prefix="₦" label="Plus (also partners' customers' requests)" disabled={!canEdit} help="New prices apply to the next payment. Months already paid for don't change." />
       </Card>
 

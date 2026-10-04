@@ -12,12 +12,21 @@ import { requireUser } from "@/lib/auth";
 import { siteUrl } from "@/lib/env";
 import { getMyMemberships, getMyPartnerPerks, getMyRewards } from "@/lib/customer";
 import { businessTagline, whatsappLink } from "@/lib/format";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Plugs" };
 
 export default async function PlugsPage() {
   const user = await requireUser("/me/plugs");
-  const [memberships, rewards, allPartnerPerks] = await Promise.all([getMyMemberships(user.id), getMyRewards(user.id), getMyPartnerPerks()]);
+  const [memberships, rewards, allPartnerPerks, inviteCode] = await Promise.all([
+    getMyMemberships(user.id),
+    getMyRewards(user.id),
+    getMyPartnerPerks(),
+    // Your own code on the invite link: a business that signs up from it adds you as a customer.
+    createClient()
+      .then((s) => s.rpc("my_invite_code"))
+      .then((r) => (typeof r.data === "string" ? r.data : null)),
+  ]);
   const memberSlugs = new Set(memberships.map((m) => m.business.slug));
   const partnerPerks = allPartnerPerks.filter((r) => !memberSlugs.has(r.partner_slug));
 
@@ -29,7 +38,7 @@ export default async function PlugsPage() {
         <h2 id="invite-plugs" className="flex items-center gap-1.5 text-sm font-semibold text-ink-2">
           <UserPlus className="size-4 text-brand-700" aria-hidden /> Invite more plugs
         </h2>
-        <ShareLinkBar url={`${siteUrl()}/plug`} message="I'd love to follow your business on Spendbox, so I see your new products and perks. It's quick to set up:" />
+        <ShareLinkBar url={`${siteUrl()}/plug${inviteCode ? `?by=${inviteCode}` : ""}`} message="I'd love to follow your business on Spendbox, so I see your new products and perks. Sign up from this link and I'm added as your first customer:" />
       </section>
 
       <section className="flex flex-col gap-3">
@@ -38,7 +47,7 @@ export default async function PlugsPage() {
           <EmptyState
             icon={<Store className="size-6" aria-hidden />}
             title="No plugs yet"
-            description="Ask a business you buy from for their Spendbox link. Once you join, they'll see your requests."
+            description="Send your favourite businesses the invite link above. When they join Spendbox, they become your plug straight away, and you see their products and perks."
           />
         ) : (
           <Card className="divide-y divide-line">

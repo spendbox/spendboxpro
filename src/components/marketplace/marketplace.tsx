@@ -71,8 +71,8 @@ function useMapLifecycle(box: React.RefObject<HTMLDivElement | null>, enabled: b
 }
 
 /**
- * Explore: a 3D map of the customer's shops (tap one to walk in), or the same
- * products as a grid of circles. The choice is remembered on this device.
+ * Explore: the customer's products as a grid of circles (the default), or a 3D
+ * map of their shops (tap one to walk in). The choice is remembered on this device.
  */
 export function Marketplace({ businesses, products }: { businesses: ExploreBusiness[]; products: FeedProduct[] }) {
   const router = useRouter();
@@ -84,12 +84,12 @@ export function Marketplace({ businesses, products }: { businesses: ExploreBusin
     noop,
     () => {
       try {
-        return (localStorage.getItem(VIEW_KEY) as View | null) ?? "map";
+        return (localStorage.getItem(VIEW_KEY) as View | null) ?? "grid";
       } catch {
-        return "map";
+        return "grid";
       }
     },
-    () => "map" as View,
+    () => "grid" as View,
   );
   const [chosen, setChosen] = useState<View | null>(null);
   const [mapFailed, setMapFailed] = useState(false);
@@ -176,8 +176,8 @@ export function Marketplace({ businesses, products }: { businesses: ExploreBusin
           <div role="radiogroup" aria-label="View" className="flex rounded-full bg-black/[0.05] p-1">
             {(
               [
-                ["map", "Map", MapIcon],
                 ["grid", "Grid", LayoutGrid],
+                ["map", "Map", MapIcon],
               ] as const
             ).map(([v, label, Icon]) => (
               <button

@@ -1,4 +1,4 @@
-import { ArrowRight, Check, Eye, Heart, MessageCircle, PartyPopper, Plus, ShoppingBag } from "lucide-react";
+import { ArrowRight, Check, Bookmark, Eye, MessageCircle, PartyPopper, Plus, ShoppingBag } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ProductThumb } from "@/components/products/product-thumb";
@@ -112,8 +112,8 @@ export default async function ProductsTab({ params, searchParams }: PageProps<"/
                 <span className="flex items-center gap-1" title="Views">
                   <Eye className="size-3.5" aria-hidden /> {compactNumber(p.views)}
                 </span>
-                <span className="flex items-center gap-1" title="Likes">
-                  <Heart className="size-3.5" aria-hidden /> {compactNumber(p.likes)}
+                <span className="flex items-center gap-1" title="Saves">
+                  <Bookmark className="size-3.5" aria-hidden /> {compactNumber(p.likes)}
                 </span>
                 <span className="flex items-center gap-1" title="People who got in touch">
                   <MessageCircle className="size-3.5" aria-hidden /> {compactNumber(p.contacts)}

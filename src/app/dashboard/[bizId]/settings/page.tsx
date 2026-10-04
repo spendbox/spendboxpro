@@ -2,8 +2,9 @@ import { ChevronRight, CreditCard, Download, Gift, Handshake, LogOut, Store, Tri
 import type { Metadata } from "next";
 import Link from "next/link";
 import { QrCode } from "@/components/qr-code";
-import { Button, buttonClass } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button";
 import { Card, SectionTitle } from "@/components/ui/card";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { CopyButton } from "@/components/ui/share-actions";
 import { signOut } from "@/lib/actions/auth";
@@ -104,9 +105,9 @@ export default async function SettingsPage({ params }: PageProps<"/dashboard/[bi
         <SectionTitle title="Account" />
         <Card className="p-5">
           <form action={signOut}>
-            <Button type="submit" variant="secondary">
+            <SubmitButton variant="secondary">
               <LogOut className="size-4" aria-hidden /> Log out
-            </Button>
+            </SubmitButton>
           </form>
         </Card>
       </section>

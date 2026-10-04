@@ -16,6 +16,7 @@ import { getStats } from "@/lib/business";
 import { getMyProfile } from "@/lib/customer";
 import { SUPPORT_EMAIL } from "@/lib/email";
 import { createClient } from "@/lib/supabase/server";
+import { SubmitRow } from "@/components/ui/submit-button";
 
 export default async function BusinessLayout({ children, params }: LayoutProps<"/dashboard/[bizId]">) {
   const { bizId } = await params;
@@ -63,10 +64,10 @@ export default async function BusinessLayout({ children, params }: LayoutProps<"
             </Link>
           )}
           <form action={signOut}>
-            <button className="flex h-11 w-full items-center gap-3 rounded-xl px-3 text-sm font-semibold text-ink-2 hover:bg-black/5">
+            <SubmitRow className="flex h-11 w-full items-center gap-3 rounded-xl px-3 text-sm font-semibold text-ink-2 hover:bg-black/5">
               <LogOut className="size-5" aria-hidden />
               Log out
-            </button>
+            </SubmitRow>
           </form>
         </>
       }

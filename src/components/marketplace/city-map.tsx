@@ -26,13 +26,33 @@ export default function CityMap({
 }) {
   const api = useRef<MapApi | null>(null);
   const labels = useRef(new Map<string, HTMLButtonElement>());
+  const widths = useRef(new Map<string, number>());
   // Moves the label buttons straight in the page (every frame), without re-rendering React.
+  // When labels would cover each other (lots of shops, or zoomed out), only the
+  // front ones show their name; the rest shrink to their round logo.
   const place = useCallback((placements: LabelPlacement[]) => {
+    const shown: { el: HTMLButtonElement; p: LabelPlacement; hot: boolean }[] = [];
     for (const p of placements) {
       const el = labels.current.get(p.id);
       if (!el) continue;
       el.style.transform = `translate3d(${p.x}px, ${p.y}px, 0) translate(-50%, -100%)`;
       el.style.visibility = p.visible ? "visible" : "hidden";
+      if (p.visible) shown.push({ el, p, hot: el.dataset.new !== "0" });
+    }
+    // Shops with new products first, then the ones nearest the viewer (lower on screen).
+    shown.sort((a, b) => Number(b.hot) - Number(a.hot) || b.p.y - a.p.y);
+    const taken: { l: number; r: number; t: number; b: number }[] = [];
+    for (const { el, p } of shown) {
+      let width = widths.current.get(p.id);
+      if (width === undefined && el.dataset.compact === undefined) {
+        width = el.offsetWidth;
+        widths.current.set(p.id, width);
+      }
+      const box = { l: p.x - (width ?? 160) / 2 - 4, r: p.x + (width ?? 160) / 2 + 4, t: p.y - 44, b: p.y };
+      const clear = !taken.some((o) => box.l < o.r && box.r > o.l && box.t < o.b && box.b > o.t);
+      if (clear) taken.push(box);
+      if (clear && el.dataset.compact !== undefined) delete el.dataset.compact;
+      else if (!clear && el.dataset.compact === undefined) el.dataset.compact = "";
     }
   }, []);
   return (
@@ -51,11 +71,12 @@ export default function CityMap({
             type="button"
             onClick={() => onOpen(b)}
             aria-label={`Visit ${b.name}, ${b.customers === 1 ? "1 customer" : `${shortCount(b.customers)} customers`}${b.new_products ? `, ${b.new_products} new` : ""}`}
+            data-new={b.new_products}
             style={{ visibility: "hidden" }}
-            className="pointer-events-auto absolute top-0 left-0 flex items-center gap-1.5 rounded-full bg-white/95 py-1 pr-3 pl-1 text-left whitespace-nowrap text-ink shadow-lift ring-1 ring-black/5 backdrop-blur will-change-transform select-none hover:ring-brand-400"
+            className="group pointer-events-auto absolute top-0 left-0 flex items-center gap-1.5 rounded-full bg-white/95 py-1 pr-3 pl-1 text-left whitespace-nowrap text-ink shadow-lift ring-1 ring-black/5 backdrop-blur will-change-transform select-none hover:ring-brand-400 data-compact:z-0 data-compact:gap-0 data-compact:p-0.5 data-compact:opacity-90 not-data-compact:z-10"
           >
-            <BusinessAvatar name={b.name} color={b.brand_color} logoUrl={b.logo_url} size="sm" className="size-8 rounded-full" />
-            <span className="flex min-w-0 flex-col leading-tight">
+            <BusinessAvatar name={b.name} color={b.brand_color} logoUrl={b.logo_url} size="sm" className="size-8 rounded-full group-data-compact:size-7" />
+            <span className="flex min-w-0 flex-col leading-tight group-data-compact:hidden">
               <span className="max-w-32 truncate text-xs font-bold">{b.name}</span>
               <span className="flex items-center gap-1 text-[11px] font-semibold text-muted tabular-nums">
                 <Users className="size-3" aria-hidden />
@@ -63,7 +84,7 @@ export default function CityMap({
               </span>
             </span>
             {b.new_products > 0 && (
-              <span className="animate-bounce-soft -mr-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] text-white shadow">
+              <span className="animate-bounce-soft -mr-1 flex h-5 group-data-compact:absolute group-data-compact:-top-1.5 group-data-compact:-right-1 group-data-compact:mr-0 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] text-white shadow">
                 {b.new_products}
               </span>
             )}

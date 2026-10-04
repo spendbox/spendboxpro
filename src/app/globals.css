@@ -118,6 +118,44 @@ body {
   font-family: var(--font-sans);
 }
 
+/*
+ * Every tap shows: buttons and links press in slightly while held, and a link
+ * that's loading its page fades until the page arrives. In the base layer, so
+ * a component's own styles still win.
+ */
+@layer base {
+  :where(button, a[href], [role="button"], [role="radio"], [role="tab"], [role="switch"], summary):not(:disabled):active {
+    scale: 0.97;
+    filter: brightness(0.94);
+  }
+  [data-pending] {
+    opacity: 0.6;
+    cursor: progress;
+    animation: tap-pending 1s ease-in-out infinite;
+  }
+  @keyframes tap-pending {
+    50% {
+      opacity: 0.4;
+    }
+  }
+}
+
+/* The page-loading bar: a quick start, then a slow crawl until the page arrives. */
+.nav-progress-crawl {
+  animation: nav-crawl 10s cubic-bezier(0.1, 0.7, 0.2, 1) forwards;
+}
+@keyframes nav-crawl {
+  0% {
+    width: 0;
+  }
+  4% {
+    width: 30%;
+  }
+  100% {
+    width: 92%;
+  }
+}
+
 /* Visible focus for keyboard users everywhere */
 :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
   outline: 2px solid var(--color-brand-600);

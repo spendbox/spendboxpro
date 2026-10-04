@@ -250,10 +250,10 @@ export function JoinWizard({
   );
 }
 
-const inputClass =
+export const inputClass =
   "h-13 w-full rounded-2xl border border-line-strong bg-white px-4 text-[16px] outline-none transition placeholder:text-subtle focus:border-brand-600 focus:ring-4 focus:ring-brand-600/10";
 
-function Question({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+export function Question({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (
     <div className="flex animate-fade-up flex-col gap-3">
       <div>

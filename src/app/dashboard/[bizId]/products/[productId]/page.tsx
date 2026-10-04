@@ -1,4 +1,4 @@
-import { Heart, MessageCircle } from "lucide-react";
+import { Bookmark, MessageCircle } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ProductManager } from "@/components/products/product-manager";
@@ -25,7 +25,7 @@ export default async function ProductPage({ params }: PageProps<"/dashboard/[biz
     { label: "Views", value: product.views },
     { label: "People", value: product.viewers },
     { label: "From partners", value: product.partner_viewers },
-    { label: "Likes", value: product.likes },
+    { label: "Saves", value: product.likes },
     { label: "Got in touch", value: product.contacts },
   ];
 
@@ -55,7 +55,7 @@ export default async function ProductPage({ params }: PageProps<"/dashboard/[biz
       </div>
 
       <section className="flex flex-col gap-3">
-        <SectionTitle title="Who's interested" description="Everyone who viewed, liked or got in touch about this. First names only; full details follow each customer's sharing choice." />
+        <SectionTitle title="Who's interested" description="Everyone who viewed, saved or got in touch about this. First names only; full details follow each customer's sharing choice." />
         {audience.length === 0 ? (
           <EmptyState title="Nobody yet" description="Share it on your WhatsApp status to get eyes on it." />
         ) : (
@@ -75,7 +75,7 @@ export default async function ProductPage({ params }: PageProps<"/dashboard/[biz
                 </span>
                 {a.liked && (
                   <Badge tone="red">
-                    <Heart className="size-3 fill-current" aria-hidden /> Liked
+                    <Bookmark className="size-3 fill-current" aria-hidden /> Saved
                   </Badge>
                 )}
                 {a.contacted && (
