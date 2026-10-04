@@ -3471,6 +3471,50 @@ $spendbox_update_14$;
   end if;
 end $outer$;
 
+-- Update 15: 20261015000000_shared_store.sql
+do $outer$ begin
+  if not (to_regprocedure('public.public_store(text)') is not null) then
+    execute $spendbox_update_15$
+-- =============================================================================
+-- Spendbox update 15: shareable 3D shops.
+--
+-- A business can share a link to its 3D shop (/s/their-link). Anyone with the
+-- link can walk in, even before joining: public_store() returns what the shop
+-- needs (name, logo, store design, contact) and its newest products. Paused
+-- businesses aren't shown.
+--
+-- Safe to run more than once. Run this after 20261014000000_map_customers.sql.
+-- =============================================================================
+
+create or replace function public.public_store(p_slug text)
+returns jsonb
+language sql stable security definer set search_path = '' as $$
+  select jsonb_build_object(
+    'id', b.id, 'name', b.name, 'slug', b.slug, 'categories', coalesce(b.categories, '{}'),
+    'location', b.location, 'about', b.about, 'logo_url', b.logo_url, 'brand_color', b.brand_color,
+    'whatsapp', b.whatsapp, 'store_theme', b.store_theme,
+    'products', coalesce((
+      select jsonb_agg(p order by p.created_at desc)
+      from (
+        select pr.id, pr.title, pr.price, pr.currency, pr.media_type, pr.media_url, pr.poster_url, pr.description, pr.created_at
+        from public.products pr
+        where pr.business_id = b.id and pr.is_active
+        order by pr.created_at desc
+        limit 24
+      ) p
+    ), '[]'::jsonb)
+  )
+  from public.businesses b
+  where b.slug = lower(p_slug) and b.suspended_at is null;
+$$;
+
+revoke execute on function public.public_store(text) from public;
+grant execute on function public.public_store(text) to anon, authenticated;
+
+$spendbox_update_15$;
+  end if;
+end $outer$;
+
 -- Which updates are in place (all should say yes).
 select * from (values
   (1, '20261001000000_spendbox', case when to_regclass('public.businesses') is not null then 'yes' else 'NO' end),
@@ -3486,5 +3530,6 @@ select * from (values
   (11, '20261011000000_interests_and_speed', case when to_regclass('public.customer_interests') is not null then 'yes' else 'NO' end),
   (12, '20261012000000_products', case when to_regclass('public.products') is not null then 'yes' else 'NO' end),
   (13, '20261013000000_marketplace', case when to_regprocedure('public.explore_businesses()') is not null then 'yes' else 'NO' end),
-  (14, '20261014000000_map_customers', case when coalesce(pg_get_function_result(to_regprocedure('public.explore_businesses()')), '') like '%customers integer%' then 'yes' else 'NO' end)
+  (14, '20261014000000_map_customers', case when coalesce(pg_get_function_result(to_regprocedure('public.explore_businesses()')), '') like '%customers integer%' then 'yes' else 'NO' end),
+  (15, '20261015000000_shared_store', case when to_regprocedure('public.public_store(text)') is not null then 'yes' else 'NO' end)
 ) as updates (step, name, in_place);

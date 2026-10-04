@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { merge, mix, paint } from "../geometry";
 import { useDispose } from "../hooks";
-import { caneWeave, darkMarble, leaf, linen, whiteMarble, woodGrain } from "./surfaces";
+import { caneWeave, darkMarble, LEAF_CELLS, leaf, linen, whiteMarble, woodGrain, type LeafCell } from "./surfaces";
 
 // The store's materials (marble, leather, wood, brass...) and a small kit for
 // building furniture from simple shapes. Every piece with the same material
@@ -71,10 +71,10 @@ export class Kit {
   private parts = new Map<Mat, THREE.BufferGeometry[]>();
   private frame: THREE.Matrix4 | null = null;
 
-  /** Builds the shapes made inside `draw` standing at `position`, turned by `rotY` (like a group). */
-  place(position: Vec, rotY: number, draw: () => void) {
+  /** Builds the shapes made inside `draw` standing at `position`, turned by `rotY` and scaled (like a group). */
+  place(position: Vec, rotY: number, draw: () => void, scale = 1) {
     const previous = this.frame;
-    const local = new THREE.Matrix4().makeRotationY(rotY).setPosition(...position);
+    const local = new THREE.Matrix4().compose(new THREE.Vector3(...position), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotY), new THREE.Vector3(scale, scale, scale));
     this.frame = previous ? previous.clone().multiply(local) : local;
     draw();
     this.frame = previous;
@@ -144,13 +144,15 @@ export class Kit {
   }
 
   /** A flat, bent leaf on a stem, pointing along `angle` and leaning out by `lean`. */
-  leaf(at: Vec, angle: number, lean: number, length: number, color = "#ffffff") {
-    const g = new THREE.PlaneGeometry(length * 0.42, length, 1, 6);
+  leaf(at: Vec, angle: number, lean: number, length: number, color = "#ffffff", cell: LeafCell = 0, width = 0.42, bend = 0.35) {
+    const g = new THREE.PlaneGeometry(length * width, length, 1, 6);
     const pos = g.attributes.position!;
+    const uv = g.attributes.uv!;
     for (let i = 0; i < pos.count; i++) {
       const t = (pos.getY(i) + length / 2) / length;
-      pos.setZ(i, -t * t * length * 0.35);
-      pos.setX(i, pos.getX(i) * (1 - Math.abs(pos.getX(i)) * 0.4));
+      pos.setZ(i, -t * t * length * bend);
+      // Pick this leaf's picture from the row of leaves in the texture.
+      uv.setX(i, (cell + uv.getX(i)) / LEAF_CELLS);
     }
     g.translate(0, length / 2, 0);
     g.computeVertexNormals();

@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 import { StoreDesigner } from "@/components/marketplace/store-designer";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireOwnedBusiness } from "@/lib/auth";
+import { siteUrl } from "@/lib/env";
 import { getBusinessProducts } from "@/lib/products";
 
-export const metadata: Metadata = { title: "Your 3D store" };
+export const metadata: Metadata = { title: "Your 3D shop" };
 
 export default async function StoreDesignPage({ params }: PageProps<"/dashboard/[bizId]/settings/store">) {
   const { bizId } = await params;
@@ -13,12 +14,13 @@ export default async function StoreDesignPage({ params }: PageProps<"/dashboard/
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
       <PageHeader
         back={{ href: `/dashboard/${bizId}/settings`, label: "Settings" }}
-        title="Your 3D store"
-        description="Customers see your shop on their map and can walk in. Drag the preview to look around."
+        title="Your 3D shop"
+        description="Customers see your shop on their map and can walk in. Only you can change how it looks."
       />
       <StoreDesigner
         bizId={bizId}
         saved={business.store_theme}
+        shareUrl={`${siteUrl()}/s/${business.slug}`}
         business={{
           id: business.id,
           slug: business.slug,

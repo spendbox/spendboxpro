@@ -157,7 +157,15 @@ export function Marketplace({ businesses, products }: { businesses: ExploreBusin
       )}
 
       {storeBusiness && storeTheme && (
-        <StoreView business={storeBusiness} theme={storeTheme} products={storeProducts} mode="fullscreen" onClose={closeStore} onOpenProduct={openProduct} />
+        <StoreView
+          business={storeBusiness}
+          theme={storeTheme}
+          products={storeProducts}
+          mode="visit"
+          onClose={closeStore}
+          onOpenProduct={openProduct}
+          shareUrl={typeof window === "undefined" ? undefined : `${window.location.origin}/s/${storeBusiness.slug}`}
+        />
       )}
     </div>
   );

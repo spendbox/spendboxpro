@@ -7,6 +7,8 @@ import * as THREE from "three";
 export interface StoreApi {
   /** Turns the view a little left (-1) or right (1). */
   look: (direction: number) => void;
+  /** Turns smoothly to face a direction (yaw: left -, right +; pitch: down -, up +). */
+  focus: (yaw: number, pitch: number) => void;
 }
 
 interface LookState {
@@ -15,6 +17,7 @@ interface LookState {
   velocity: number;
   intro: number;
   dragging: boolean;
+  goal: { yaw: number; pitch: number } | null;
 }
 
 /** Stands the camera in the shop, turned by yaw/pitch, walking in during the intro. */
@@ -34,7 +37,7 @@ export function LookControls({ lounge, apiRef }: { lounge: boolean; apiRef?: Ref
   const get = useThree((s) => s.get);
   const size = useThree((s) => s.size);
   const reduced = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const state = useRef<LookState>({ yaw: 0, pitch: -0.06, velocity: 0, intro: reduced ? 1 : 0, dragging: false });
+  const state = useRef<LookState>({ yaw: 0, pitch: -0.06, velocity: 0, intro: reduced ? 1 : 0, dragging: false, goal: null });
 
   // Phones (tall screens) get a wider view so the counter and shelves fit.
   useEffect(() => {
@@ -51,11 +54,16 @@ export function LookControls({ lounge, apiRef }: { lounge: boolean; apiRef?: Ref
     const el = three.gl.domElement;
     const s = state.current;
     let last: { x: number; y: number } | null = null;
-    if (apiRef) apiRef.current = { look: (d) => ((s.velocity = d * 0.12), get().invalidate()) };
+    if (apiRef)
+      apiRef.current = {
+        look: (d) => ((s.goal = null), (s.velocity = d * 0.12), get().invalidate()),
+        focus: (yaw, pitch) => ((s.goal = { yaw: Math.max(-0.95, Math.min(0.95, yaw)), pitch: Math.max(-0.28, Math.min(0.12, pitch)) }), get().invalidate()),
+      };
     const down = (e: PointerEvent) => {
       el.setPointerCapture(e.pointerId);
       last = { x: e.clientX, y: e.clientY };
       s.dragging = true;
+      s.goal = null;
       s.velocity = 0;
     };
     const move = (e: PointerEvent) => {
@@ -94,6 +102,12 @@ export function LookControls({ lounge, apiRef }: { lounge: boolean; apiRef?: Ref
     let moving = false;
     if (s.intro < 1) {
       s.intro = Math.min(1, s.intro + dt / 1.4);
+      moving = true;
+    }
+    if (s.goal && !s.dragging) {
+      s.yaw += (s.goal.yaw - s.yaw) * Math.min(1, dt * 6);
+      s.pitch += (s.goal.pitch - s.pitch) * Math.min(1, dt * 6);
+      if (Math.abs(s.goal.yaw - s.yaw) < 0.002 && Math.abs(s.goal.pitch - s.pitch) < 0.002) s.goal = null;
       moving = true;
     }
     if (!s.dragging && Math.abs(s.velocity) > 0.0002) {
