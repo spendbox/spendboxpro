@@ -1,14 +1,18 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Info, LayoutGrid, Mail, MapPin, Phone, Share2, UserPlus, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Gift, Info, LayoutGrid, Mail, MapPin, Phone, Share2, UserPlus, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { JoinWizard } from "@/components/join/join-wizard";
+import { PerkCard } from "@/components/perks/perk-card";
+import { ProductViewer } from "@/components/products/product-viewer";
 import { BusinessAvatar } from "@/components/ui/avatar";
 import { WhatsAppIcon } from "@/components/ui/share-actions";
+import type { ShopPerk } from "@/lib/actions/shop";
 import { cn } from "@/lib/cn";
-import { formatMoney, whatsappLink } from "@/lib/format";
+import { whatsappLink } from "@/lib/format";
 import type { StoreTheme } from "@/lib/store-theme";
-import type { StoreProduct } from "@/lib/types";
+import type { FeedProduct, StoreProduct } from "@/lib/types";
 import type { StoreApi } from "./three/store/look-controls";
 import type { StoreBusiness, StoreTarget } from "./three/store/pieces";
 import StoreCanvas from "./three/store/store-canvas";
@@ -19,13 +23,21 @@ export interface StoreViewBusiness extends StoreBusiness {
   is_member?: boolean;
 }
 
-export type SharedProduct = StoreProduct & { description?: string | null };
+export type SharedProduct = StoreProduct & { description?: string | null; created_at?: string };
+
+/** Where the person stands with this business, for the Join button on a shared shop. */
+export interface JoinInfo {
+  state: "signed-out" | "signed-in" | "member" | "owner";
+  /** Joining is paused (for everyone, or this business). */
+  closed: boolean;
+}
 
 /**
  * A business's 3D store, to look around (only the business can change it,
  * in its editor).
  * - "visit": full screen for customers; products open the swipe viewer.
- * - "public": the shared link, for anyone; with a Join button.
+ * - "public": the shared link, for anyone; products open the swipe viewer
+ *   too, and Join asks one question at a time.
  * - "preview": a small, look-only preview for the business's settings page.
  */
 export default function StoreView({
@@ -36,6 +48,9 @@ export default function StoreView({
   onClose,
   onOpenProduct,
   shareUrl,
+  perks = [],
+  currency = "NGN",
+  join,
 }: {
   business: StoreViewBusiness;
   theme: StoreTheme;
@@ -44,16 +59,25 @@ export default function StoreView({
   onClose?: () => void;
   onOpenProduct?: (productId: string) => void;
   shareUrl?: string;
+  perks?: ShopPerk[];
+  currency?: string;
+  join?: JoinInfo;
 }) {
   const api = useRef<StoreApi | null>(null);
-  const [sheet, setSheet] = useState<"contact" | "about" | null>(null);
-  const [product, setProduct] = useState<SharedProduct | null>(null);
+  const [sheet, setSheet] = useState<"contact" | "about" | "gift" | null>(null);
+  const [viewing, setViewing] = useState<string | null>(null);
+  const [joining, setJoining] = useState(false);
   const [hint, setHint] = useState(true);
-  const joinHref = `/j/${business.slug}`;
+  const member = business.is_member || join?.state === "member";
 
   const openProduct = (id: string) => {
-    if (mode === "public") setProduct(products.find((p) => p.id === id) ?? null);
+    if (mode === "public") setViewing(id);
     else onOpenProduct?.(id);
+  };
+  const startJoin = () => {
+    setViewing(null);
+    setSheet(null);
+    setJoining(true);
   };
   const select = (target: StoreTarget) => {
     if (mode === "preview") return;
@@ -63,6 +87,7 @@ export default function StoreView({
       if (products[0]) openProduct(products[0].id);
     } else if (target.kind === "bell") setSheet("contact");
     else if (target.kind === "board") setSheet("about");
+    else if (target.kind === "gift") setSheet("gift");
   };
 
   useEffect(() => {
@@ -73,11 +98,10 @@ export default function StoreView({
   // Escape closes; arrow keys look around.
   const full = mode !== "preview";
   useEffect(() => {
-    if (!full) return;
+    if (!full || viewing || joining) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (product) setProduct(null);
-        else if (sheet) setSheet(null);
+        if (sheet) setSheet(null);
         else onClose?.();
       }
       if (e.key === "ArrowLeft") api.current?.look(-1);
@@ -90,24 +114,57 @@ export default function StoreView({
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = previous;
     };
-  }, [full, sheet, product, onClose]);
+  }, [full, sheet, viewing, joining, onClose]);
 
   const share = async () => {
     if (!shareUrl) return;
     const text = `Walk into ${business.name} on Spendbox:`;
     if (typeof navigator.share === "function") {
-      try {
-        await navigator.share({ title: business.name, text, url: shareUrl });
-        return;
-      } catch {
-        // Cancelled: fall back to WhatsApp below only if sharing isn't possible.
-        return;
-      }
+      await navigator.share({ title: business.name, text, url: shareUrl }).catch(() => {});
+      return;
     }
     window.open(`https://wa.me/?text=${encodeURIComponent(`${text} ${shareUrl}`)}`, "_blank", "noreferrer");
   };
 
   const message = `Hi ${business.name}, I'm in your Spendbox shop.`;
+  const canJoin = mode === "public" && join && (join.state === "signed-out" || join.state === "signed-in") && !join.closed;
+
+  // The shared shop's products, in the shape the swipe viewer uses.
+  const feed: FeedProduct[] = products.map((p) => ({
+    id: p.id,
+    business_id: business.id,
+    business_name: business.name,
+    business_slug: business.slug,
+    business_logo_url: business.logo_url,
+    business_color: business.brand_color,
+    business_whatsapp: business.whatsapp,
+    business_email: business.email,
+    kind: "product",
+    title: p.title,
+    description: p.description ?? null,
+    price: p.price,
+    currency: p.currency,
+    media_type: p.media_type,
+    media_url: p.media_url,
+    poster_url: p.poster_url,
+    created_at: p.created_at ?? "",
+    viewed: true,
+    liked: false,
+    is_member: Boolean(member),
+  }));
+
+  const joinButton =
+    mode !== "public" || !join ? null : member ? (
+      <Link href={`/me/b/${business.slug}`} className="flex h-11 items-center gap-2 rounded-full bg-brand-600 px-5 text-sm font-semibold text-white shadow-lift active:scale-95">
+        Open {business.name}
+      </Link>
+    ) : canJoin ? (
+      <button type="button" onClick={startJoin} className="flex h-11 items-center gap-2 rounded-full bg-brand-600 px-5 text-sm font-semibold text-white shadow-lift active:scale-95">
+        <UserPlus className="size-4" aria-hidden /> Join {business.name}
+      </button>
+    ) : join.closed && join.state !== "owner" ? (
+      <span className="flex h-11 items-center rounded-full bg-white/90 px-4 text-sm font-semibold text-ink">Not taking new members right now</span>
+    ) : null;
 
   return (
     <div
@@ -117,7 +174,7 @@ export default function StoreView({
       className={cn("overflow-hidden bg-ink text-white", full ? "fixed inset-0 z-[75] h-dvh" : "relative size-full rounded-3xl")}
     >
       <div className="absolute inset-0">
-        <StoreCanvas business={business} theme={theme} products={products} onSelect={select} apiRef={api} />
+        <StoreCanvas business={business} theme={theme} products={products} onSelect={select} apiRef={api} hasGift={perks.length > 0} />
       </div>
 
       {full && (
@@ -150,7 +207,7 @@ export default function StoreView({
               hint ? "opacity-100" : "opacity-0",
             )}
           >
-            Drag to look around · tap a product on the screen
+            {perks.length ? "Tap a product on the screen, or the gift" : "Drag to look around · tap a product on the screen"}
           </div>
 
           <button type="button" aria-label="Look left" onClick={() => api.current?.look(-1)} className="absolute top-1/2 left-3 hidden size-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/35 backdrop-blur hover:bg-black/50 sm:flex">
@@ -161,17 +218,17 @@ export default function StoreView({
           </button>
 
           {/* Bottom actions */}
-          <div className="absolute inset-x-0 bottom-0 flex justify-center gap-2 bg-gradient-to-t from-black/50 to-transparent p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-            {mode === "public" ? (
-              <Link href={joinHref} className="flex h-11 items-center gap-2 rounded-full bg-brand-600 px-5 text-sm font-semibold text-white shadow-lift active:scale-95">
-                <UserPlus className="size-4" aria-hidden /> Join {business.name}
-              </Link>
-            ) : (
-              products.length > 0 && (
-                <ActionButton onClick={() => openProduct(products[0]!.id)}>
-                  <LayoutGrid className="size-4" aria-hidden /> All products
-                </ActionButton>
-              )
+          <div className="absolute inset-x-0 bottom-0 flex flex-wrap justify-center gap-2 bg-gradient-to-t from-black/50 to-transparent p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            {joinButton}
+            {mode !== "public" && products.length > 0 && (
+              <ActionButton onClick={() => openProduct(products[0]!.id)}>
+                <LayoutGrid className="size-4" aria-hidden /> All products
+              </ActionButton>
+            )}
+            {perks.length > 0 && (
+              <ActionButton onClick={() => setSheet("gift")}>
+                <Gift className="size-4" aria-hidden /> Gift
+              </ActionButton>
             )}
             <ActionButton onClick={() => setSheet("contact")}>
               <WhatsAppIcon className="size-4" /> Chat
@@ -196,30 +253,40 @@ export default function StoreView({
         </>
       )}
 
-      {product && (
-        <Sheet label={product.title} onClose={() => setProduct(null)}>
-          <div className="-mx-5 -mt-5 mb-4 aspect-square overflow-hidden bg-canvas sm:rounded-t-3xl">
-            {product.media_type === "video" ? (
-              <video src={product.media_url} poster={product.poster_url ?? undefined} controls playsInline className="size-full object-cover" />
-            ) : (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={product.media_url} alt={product.title} className="size-full object-cover" />
-            )}
-          </div>
-          <div className="flex items-start justify-between gap-3">
-            <h2 className="font-display text-lg font-bold">{product.title}</h2>
-            {product.price !== null && <p className="shrink-0 font-semibold">{formatMoney(product.price, product.currency)}</p>}
-          </div>
-          {product.description && <p className="mt-1 text-sm text-ink-2">{product.description}</p>}
-          <Link href={joinHref} className="mt-4 flex h-12 items-center justify-center gap-2 rounded-xl bg-brand-600 font-semibold text-white">
-            <UserPlus className="size-4" aria-hidden /> Join {business.name} to see more
-          </Link>
+      {viewing && <ProductViewer products={feed} startId={viewing} onClose={() => setViewing(null)} guest={member ? undefined : { onJoin: canJoin ? startJoin : () => setViewing(null) }} />}
+
+      {join && canJoin && (
+        <JoinWizard open={joining} onClose={() => setJoining(false)} signedIn={join.state === "signed-in"} slug={business.slug} business={business} />
+      )}
+
+      {sheet === "gift" && (
+        <Sheet label={`A gift from ${business.name}`} onClose={() => setSheet(null)}>
+          <GiftReveal
+            business={business}
+            perks={perks}
+            currency={currency}
+            action={
+              member ? (
+                <Link href={`/me/b/${business.slug}`} className="flex h-12 items-center justify-center rounded-xl bg-brand-600 font-semibold text-white">
+                  See your perks
+                </Link>
+              ) : canJoin ? (
+                <button type="button" onClick={startJoin} className="flex h-12 items-center justify-center gap-2 rounded-xl bg-brand-600 font-semibold text-white">
+                  <UserPlus className="size-4" aria-hidden /> Join to get these
+                </button>
+              ) : (
+                <Link href={`/j/${business.slug}`} className="flex h-12 items-center justify-center gap-2 rounded-xl bg-brand-600 font-semibold text-white">
+                  <UserPlus className="size-4" aria-hidden /> Join to get these
+                </Link>
+              )
+            }
+          />
         </Sheet>
       )}
 
-      {sheet && (
+      {(sheet === "contact" || sheet === "about") && (
         <Sheet label={sheet === "contact" ? `Contact ${business.name}` : `About ${business.name}`} onClose={() => setSheet(null)}>
-          <div className="mb-4 flex items-center gap-3">
+          <div className="mb-4 flex items-center gap-3 pr-8">
             <BusinessAvatar name={business.name} color={business.brand_color} logoUrl={business.logo_url} size="md" />
             <div className="min-w-0 flex-1">
               <p className="truncate font-display text-lg font-bold">{business.name}</p>
@@ -253,13 +320,77 @@ export default function StoreView({
                   <MapPin className="size-4 text-brand-700" aria-hidden /> {business.location}
                 </p>
               )}
-              <Link href={business.is_member ? `/me/b/${business.slug}` : joinHref} className="mt-1 flex h-12 items-center justify-center rounded-xl bg-brand-600 font-semibold text-white">
-                {business.is_member ? "Perks and more" : `Join ${business.name}`}
-              </Link>
+              {member ? (
+                <Link href={`/me/b/${business.slug}`} className="mt-1 flex h-12 items-center justify-center rounded-xl bg-brand-600 font-semibold text-white">
+                  Perks and more
+                </Link>
+              ) : canJoin ? (
+                <button type="button" onClick={startJoin} className="mt-1 flex h-12 items-center justify-center rounded-xl bg-brand-600 font-semibold text-white">
+                  Join {business.name}
+                </button>
+              ) : (
+                <Link href={`/j/${business.slug}`} className="mt-1 flex h-12 items-center justify-center rounded-xl bg-brand-600 font-semibold text-white">
+                  Join {business.name}
+                </Link>
+              )}
             </div>
           )}
         </Sheet>
       )}
+    </div>
+  );
+}
+
+/** A wrapped gift: tap it, it shakes open, and the business's perks come out. */
+function GiftReveal({ business, perks, currency, action }: { business: StoreBusiness; perks: ShopPerk[]; currency: string; action: React.ReactNode }) {
+  const [stage, setStage] = useState<"closed" | "opening" | "open">("closed");
+  useEffect(() => {
+    if (stage !== "opening") return;
+    const t = setTimeout(() => setStage("open"), 650);
+    return () => clearTimeout(t);
+  }, [stage]);
+
+  if (stage !== "open") {
+    return (
+      <div className="flex flex-col items-center gap-4 py-4 text-center">
+        <button
+          type="button"
+          onClick={() => setStage("opening")}
+          aria-label="Open the gift"
+          className={cn("relative flex size-36 items-center justify-center rounded-[2rem] text-white shadow-lift transition", stage === "closed" ? "animate-bounce-soft" : "animate-gift-open")}
+          style={{ background: `linear-gradient(145deg, ${business.brand_color}, color-mix(in oklab, ${business.brand_color} 70%, black))` }}
+        >
+          <Gift className="size-16" strokeWidth={1.6} aria-hidden />
+          <span aria-hidden className="absolute -top-2 -right-2 flex size-8 items-center justify-center rounded-full bg-red-500 text-sm font-bold">
+            {perks.length}
+          </span>
+        </button>
+        <div>
+          <p className="font-display text-xl font-bold">A gift from {business.name}</p>
+          <p className="text-sm text-muted">Tap it to open</p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-3 pr-8">
+        <span className="flex size-11 items-center justify-center rounded-2xl text-white" style={{ background: business.brand_color }}>
+          <Gift className="size-5" aria-hidden />
+        </span>
+        <div>
+          <p className="font-display text-lg font-bold">What members get</p>
+          <p className="text-sm text-muted">From {business.name}</p>
+        </div>
+      </div>
+      <div className="flex flex-col gap-2">
+        {perks.map((p, i) => (
+          <div key={p.id} className="animate-fade-up" style={{ animationDelay: `${i * 90}ms`, animationFillMode: "backwards" }}>
+            <PerkCard size="sm" audience="customer" kind={p.kind} title={p.title} threshold={p.threshold} details={p.details} validDays={p.valid_days ?? undefined} currency={currency} />
+          </div>
+        ))}
+      </div>
+      {action}
     </div>
   );
 }

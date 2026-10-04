@@ -44,6 +44,7 @@ set role anon;
 select test.ok((public.public_store('PROD-SHOP-A') ->> 'name') is not null, 'anyone can open a shared shop');
 select test.ok(jsonb_array_length(public.public_store('prod-shop-a') -> 'products') >= 1, 'with its products');
 select test.ok(public.public_store('no-such-shop') is null, 'an unknown link finds nothing');
+select test.ok(jsonb_typeof(public.public_store('prod-shop-a') -> 'perks') = 'array', 'with its perks for the gift');
 reset role;
 update public.businesses set suspended_at = now() where id = :'b';
 set role anon;

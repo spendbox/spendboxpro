@@ -145,7 +145,7 @@ export default async function JoinPage({ params, searchParams }: PageProps<"/j/[
                 </div>
               </div>
             ) : (
-              <JoinPanel state={state} slug={business.slug} refCode={refCode} businessName={business.name} businessId={business.id} />
+              <JoinPanel state={state} slug={business.slug} refCode={refCode} businessName={business.name} businessId={business.id} brandColor={business.brand_color} logoUrl={business.logo_url} />
             )}
             <div className="flex items-start gap-3 border-t border-line pt-5 text-sm text-muted">
               <ShieldCheck className="mt-0.5 size-5 shrink-0 text-brand-600" aria-hidden />

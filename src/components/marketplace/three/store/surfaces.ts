@@ -471,3 +471,118 @@ export function floorSurface(style: FloorStyle, color: string) {
   }
   return toTexture(c, [2.4, 2.4]);
 }
+
+/** Painted brick for the feature wall. */
+export const brick = once(() => {
+  const { c, ctx } = canvas(1024, 1024);
+  const rand = seeded(23);
+  ctx.fillStyle = "#e6ddd2";
+  ctx.fillRect(0, 0, 1024, 1024);
+  const bw = 128;
+  const bh = 48;
+  const tones = ["#b4654a", "#a95c43", "#bf7257", "#9f553e", "#c27a5e"];
+  for (let row = 0; row < 1024 / bh + 1; row++) {
+    const offset = row % 2 ? bw / 2 : 0;
+    for (let x = -bw; x < 1024 + bw; x += bw) {
+      ctx.fillStyle = tones[Math.floor(rand() * tones.length)]!;
+      ctx.fillRect(x + offset + 4, row * bh + 4, bw - 8, bh - 8);
+      ctx.fillStyle = `rgba(255,255,255,${0.04 + rand() * 0.08})`;
+      ctx.fillRect(x + offset + 4, row * bh + 4, bw - 8, 6);
+    }
+  }
+  speckle(ctx, 1024, 1024, 9000, ["#000000", "#ffffff"], rand, 1.2);
+  return toTexture(c, [2.4, 2]);
+});
+
+/** A round rug in a pattern and colour (see-through outside the circle). */
+export function rugSurface(style: string, color: string) {
+  const { c, ctx } = canvas(1024, 1024);
+  const rand = seeded(style.length * 7 + color.length);
+  const base = new THREE.Color(color);
+  const tone = (amount: number) => `#${base.clone().offsetHSL(0, 0, amount).getHexString()}`;
+  const dark = base.getHSL({ h: 0, s: 0, l: 0 }).l < 0.4;
+  const R = 508;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(512, 512, R, 0, Math.PI * 2);
+  ctx.clip();
+  if (style === "jute") {
+    ctx.fillStyle = "#c8ab7c";
+    ctx.fillRect(0, 0, 1024, 1024);
+    for (let r = 8; r < R; r += 14) {
+      ctx.strokeStyle = r % 28 ? "rgba(120,85,40,0.35)" : "rgba(255,240,210,0.25)";
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.arc(512, 512, r, 0, Math.PI * 2);
+      ctx.stroke();
+      for (let a = 0; a < Math.PI * 2; a += 0.12 + 18 / r) {
+        ctx.strokeStyle = "rgba(90,60,25,0.18)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(512 + Math.cos(a) * (r - 6), 512 + Math.sin(a) * (r - 6));
+        ctx.lineTo(512 + Math.cos(a + 0.05) * (r + 6), 512 + Math.sin(a + 0.05) * (r + 6));
+        ctx.stroke();
+      }
+    }
+    // A band of the chosen colour near the edge.
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 26;
+    ctx.beginPath();
+    ctx.arc(512, 512, R - 60, 0, Math.PI * 2);
+    ctx.stroke();
+  } else {
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, 1024, 1024);
+    if (style === "border") {
+      for (const [r, w, a] of [
+        [R - 34, 22, -0.14],
+        [R - 76, 8, 0.12],
+      ] as const) {
+        ctx.strokeStyle = tone(dark ? -a : a);
+        ctx.lineWidth = w;
+        ctx.beginPath();
+        ctx.arc(512, 512, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    } else if (style === "stripes") {
+      for (let x = -R; x < 1024 + R; x += 96) {
+        ctx.fillStyle = tone(dark ? 0.12 : -0.1);
+        ctx.fillRect(x, 0, 34, 1024);
+        ctx.fillStyle = tone(dark ? 0.2 : 0.06);
+        ctx.fillRect(x + 50, 0, 8, 1024);
+      }
+    } else if (style === "geometric") {
+      ctx.strokeStyle = tone(dark ? 0.16 : -0.14);
+      ctx.lineWidth = 10;
+      const s = 110;
+      for (let y = -s; y < 1024 + s; y += s)
+        for (let x = -s; x < 1024 + s; x += s) {
+          ctx.beginPath();
+          ctx.moveTo(x, y + s / 2);
+          ctx.lineTo(x + s / 2, y);
+          ctx.lineTo(x + s, y + s / 2);
+          ctx.lineTo(x + s / 2, y + s);
+          ctx.closePath();
+          ctx.stroke();
+        }
+      ctx.strokeStyle = tone(dark ? 0.1 : -0.08);
+      ctx.lineWidth = 30;
+      ctx.beginPath();
+      ctx.arc(512, 512, R - 26, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    // Soft pile: fine fibres.
+    speckle(ctx, 1024, 1024, 22000, [dark ? "#ffffff" : "#000000", "#ffffff"], rand, 1.4);
+  }
+  // A darker rim where the edge is bound.
+  ctx.strokeStyle = "rgba(0,0,0,0.18)";
+  ctx.lineWidth = 10;
+  ctx.beginPath();
+  ctx.arc(512, 512, R - 4, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
