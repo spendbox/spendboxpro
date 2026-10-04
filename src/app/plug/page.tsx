@@ -194,7 +194,7 @@ export default function PlugPage() {
             <p className="text-sm font-semibold text-brand-700">Perks</p>
             <h2 className="mt-2 font-display text-3xl font-bold tracking-tight sm:text-5xl">Simple perks people love</h2>
             <p className="mt-4 text-lg text-muted">
-              A welcome treat, a thank-you for bringing a friend, a birthday surprise. Spendbox reminds you, you tap &ldquo;Given&rdquo;.
+              A welcome treat, a thank-you for bringing a friend, a birthday surprise. Spendbox reminds you, you tap &ldquo;Mark as given&rdquo;.
             </p>
           </div>
           <div className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

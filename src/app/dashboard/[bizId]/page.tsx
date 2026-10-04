@@ -13,7 +13,7 @@ import { compactNumber, getPerks, getRequests, getStats } from "@/lib/business";
 import { cn } from "@/lib/cn";
 import { siteUrl } from "@/lib/env";
 import { budgetLabel, timeAgo, timeLeftLabel } from "@/lib/requests";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const metadata: Metadata = { title: "Home" };
 
@@ -26,12 +26,12 @@ const FILTERS = [
 export default async function BusinessHome({ params, searchParams }: PageProps<"/dashboard/[bizId]">) {
   const [{ bizId }, { welcome, show }] = await Promise.all([params, searchParams]);
   const { business } = await requireOwnedBusiness(bizId);
-  const supabase = await createClient();
   const [stats, perks, requests, { data: partnerSlots }] = await Promise.all([
     getStats(bizId),
     getPerks(bizId),
     getRequests(bizId),
-    supabase.rpc("partner_slots_used", { p_business_id: bizId }),
+    // Ownership is checked above; partnerships are only readable server-side.
+    createAdminClient().rpc("partner_slots_used", { p_business_id: bizId }),
   ]);
   const filter = FILTERS.some((f) => f.key === show) ? String(show) : "all";
   const shown = requests.filter((r) => (filter === "mine" ? r.is_member : filter === "partners" ? !r.is_member : true));

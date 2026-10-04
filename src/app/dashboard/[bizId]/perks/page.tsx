@@ -28,7 +28,7 @@ export default async function PerksPage({ params, searchParams }: PageProps<"/da
       <PageHeader
         back={{ href: `/dashboard/${bizId}/settings`, label: "Settings" }}
         title="Perks"
-        description="Simple treats customers earn when they join, bring a friend, or have a birthday. You hand them over and tap “Given”."
+        description="Simple treats customers earn when they join, bring a friend, or have a birthday. You hand them over and tap “Mark as given”."
       />
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
