@@ -18,19 +18,10 @@ You need accounts on **Supabase**, **Vercel** and **Paystack**. You'll also want
 
 1. Go to [supabase.com](https://supabase.com) and create a new project. Choose a region close to your customers and save the database password somewhere safe.
 2. When it's ready, open **SQL Editor** in the left menu and click **New query**.
-3. Run each of these files **in order, each once**: open the file in this repository, copy **everything**, paste it into the editor and press **Run**. You should see "Success" each time.
-   1. [`20261001000000_spendbox.sql`](supabase/migrations/20261001000000_spendbox.sql)
-   2. [`20261002000000_logos_emails_durations.sql`](supabase/migrations/20261002000000_logos_emails_durations.sql)
-   3. [`20261003000000_bank_feeds.sql`](supabase/migrations/20261003000000_bank_feeds.sql)
-   4. [`20261004000000_sales.sql`](supabase/migrations/20261004000000_sales.sql)
-   5. [`20261005000000_partners.sql`](supabase/migrations/20261005000000_partners.sql)
-   6. [`20261006000000_activity_and_accounts.sql`](supabase/migrations/20261006000000_activity_and_accounts.sql)
-   7. [`20261007000000_pay_accounts.sql`](supabase/migrations/20261007000000_pay_accounts.sql)
-   8. [`20261008000000_admin.sql`](supabase/migrations/20261008000000_admin.sql)
-   9. [`20261009000000_email_and_billing.sql`](supabase/migrations/20261009000000_email_and_billing.sql)
-   10. [`20261010000000_requests.sql`](supabase/migrations/20261010000000_requests.sql) — **requests, photos and simple perks (the new product)**
+3. Open [`supabase/catch_up.sql`](supabase/catch_up.sql), copy **everything**, paste it into the editor and press **Run**. If Supabase warns about destructive operations, confirm: it only replaces Spendbox's own functions.
+4. At the end you'll see a table of 10 updates. Every row should say **yes**.
 
-   Some early files create tables for payment tracking, which Spendbox no longer uses. They're harmless; the later files build on them, so keep running all of them in order.
+   This one file works whatever state your database is in. It checks which updates are already there and runs only the missing ones, in order, so you can run it again after every new version of Spendbox. (The same updates are also in `supabase/migrations/`, one file each, if you prefer running them one by one.)
 
 ### 2. Login: email and password
 
@@ -126,6 +117,7 @@ npm run dev                  # http://localhost:3000
 | --- | --- |
 | `npm run lint` / `npm run typecheck` | Code checks |
 | `npm test` | Unit tests (phone numbers, plans) |
+| `bash supabase/build-catch-up.sh` | Rebuilds `supabase/catch_up.sql` after you add or change a migration (add the new file's check to the list in the script first) |
 | `TEST_DATABASE_URL=postgres://… npm run test:db` | Database scenario tests (joining, referrals, perks, privacy, permissions, partners, billing, requests). Needs an **empty, throwaway** Postgres database, never your real one. |
 
 Project layout:
