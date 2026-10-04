@@ -36,7 +36,7 @@ export default async function PlugPage({ params, searchParams }: PageProps<"/me/
   const membership = memberships.find((m) => m.business.slug === slug);
   if (!membership) notFound();
   const b = membership.business;
-  const partners = await getPlugPartners(b.id);
+
   const products = feed.filter((p) => p.business_id === b.id);
   const in3d = view === "3d";
   const tab: Tab = tabParam === "perks" || tabParam === "partners" ? tabParam : "products";
@@ -52,8 +52,9 @@ export default async function PlugPage({ params, searchParams }: PageProps<"/me/
   const referralPerk = perks.find((p) => p.kind === "referral");
   const welcomePerk = perks.find((p) => p.kind === "welcome");
 
+  // Partners and referrals together, in one round trip's time.
   const supabase = await createClient();
-  const { data: referralData } = await supabase.rpc("my_referrals", { p_membership_id: membership.id });
+  const [partners, { data: referralData }] = await Promise.all([getPlugPartners(b.id), supabase.rpc("my_referrals", { p_membership_id: membership.id })]);
   const friends = ((referralData ?? []) as ReferralRow[]).length;
   const inviteUrl = `${siteUrl()}/j/${b.slug}?ref=${membership.ref_code}`;
   const inviteMessage = welcomePerk ? `Join ${b.name} on Spendbox and get ${welcomePerk.title.toLowerCase()}:` : `${b.name} is my plug. Join them on Spendbox:`;
