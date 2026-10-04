@@ -41,6 +41,17 @@
   --animate-fade-up: fade-up 0.35s ease-out both;
   --animate-pulse-soft: pulse-soft 1.4s ease-in-out infinite;
   --animate-scan: scan 1.6s ease-in-out infinite;
+  --animate-bounce-soft: bounce-soft 1.6s ease-in-out infinite;
+
+  @keyframes bounce-soft {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-3px);
+    }
+  }
 
   @keyframes fade-up {
     from {

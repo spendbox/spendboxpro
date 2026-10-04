@@ -1,18 +1,19 @@
 import { PenLine, Search, Sparkles } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
+import { Marketplace } from "@/components/marketplace/marketplace";
 import { ProductCircles } from "@/components/products/product-circles";
 import { EmptyState } from "@/components/ui/card";
 import { requireUser } from "@/lib/auth";
-import { getExplore } from "@/lib/products";
+import { getExplore, getExploreBusinesses } from "@/lib/products";
 
 export const metadata: Metadata = { title: "My Spendbox" };
 
 export default async function ExplorePage({ searchParams }: PageProps<"/me">) {
   const [, { q }] = await Promise.all([requireUser("/me"), searchParams]);
   const query = typeof q === "string" ? q.trim().slice(0, 60) : "";
-  const products = await getExplore(query || null);
-  const unseen = products.filter((p) => !p.viewed).length;
+  const [products, businesses] = await Promise.all([getExplore(query || null), query ? Promise.resolve([]) : getExploreBusinesses()]);
 
   return (
     <div className="flex flex-col gap-5">
@@ -29,7 +30,11 @@ export default async function ExplorePage({ searchParams }: PageProps<"/me">) {
         />
       </form>
 
-      {products.length === 0 ? (
+      {!query && businesses.length > 0 ? (
+        <Suspense>
+          <Marketplace businesses={businesses} products={products} />
+        </Suspense>
+      ) : products.length === 0 ? (
         query ? (
           <EmptyState
             icon={<Search className="size-6" aria-hidden />}
@@ -50,9 +55,7 @@ export default async function ExplorePage({ searchParams }: PageProps<"/me">) {
         )
       ) : (
         <>
-          <p className="-mb-1 text-sm text-muted">
-            {query ? `${products.length} for “${query}”` : unseen ? `${unseen} new to see` : "You've seen everything. Check back soon."}
-          </p>
+          <p className="-mb-1 text-sm text-muted">{`${products.length} for “${query}”`}</p>
           <ProductCircles products={products} hrefFor={(p) => `/me/p/${p.id}${query ? `?q=${encodeURIComponent(query)}` : ""}`} />
         </>
       )}

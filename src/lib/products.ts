@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
-import type { BusinessProduct, FeedProduct, ProductAudienceRow } from "@/lib/types";
+import type { BusinessProduct, ExploreBusiness, FeedProduct, ProductAudienceRow } from "@/lib/types";
 
 const num = (v: unknown) => Number(v ?? 0);
 
@@ -39,4 +39,11 @@ export const getMyBox = cache(async (): Promise<FeedProduct[]> => {
   const supabase = await createClient();
   const { data } = await supabase.rpc("my_box");
   return ((data ?? []) as FeedProduct[]).map((p) => ({ ...p, price: p.price === null ? null : num(p.price) }));
+});
+
+/** The shops on the signed-in customer's marketplace map. */
+export const getExploreBusinesses = cache(async (): Promise<ExploreBusiness[]> => {
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("explore_businesses");
+  return ((data ?? []) as ExploreBusiness[]).map((b) => ({ ...b, products: num(b.products), new_products: num(b.new_products) }));
 });
