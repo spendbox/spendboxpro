@@ -2,7 +2,7 @@
 
 import { LoaderCircle } from "lucide-react";
 import { useState, useTransition } from "react";
-import { PhoneSignIn } from "@/components/auth/phone-sign-in";
+import { EmailSignIn } from "@/components/auth/email-sign-in";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { FormMessage } from "@/components/ui/field";
 import { joinBusiness } from "./actions";
@@ -64,7 +64,7 @@ export function JoinPanel({
       />
       <span>
         <span className="font-semibold text-ink">Share my details with {businessName}</span>
-        <span className="block text-muted">Your name, phone and birthday. You can change this any time.</span>
+        <span className="block text-muted">Your name, phone, email and birthday, so they can reach you. You can change this any time.</span>
       </span>
     </label>
   );
@@ -99,10 +99,10 @@ export function JoinPanel({
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h2 className="font-display text-xl font-bold">Join with your phone number</h2>
-        <p className="mt-1 text-sm text-muted">Already on Spendbox? Use your usual PIN.</p>
+        <h2 className="font-display text-xl font-bold">Join with your email</h2>
+        <p className="mt-1 text-sm text-muted">Already on Spendbox? Use your usual email and password.</p>
       </div>
-      <PhoneSignIn
+      <EmailSignIn
         allowSignup
         submitLabel={`Join ${businessName}`}
         note={shareChoice}

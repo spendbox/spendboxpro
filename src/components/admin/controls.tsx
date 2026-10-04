@@ -7,19 +7,21 @@ import {
   deleteCustomerAsAdmin,
   removeTeamMember,
   setBusinessPaused,
+  recordManualPayment,
   setBusinessTrial,
   setCustomerPaused,
   setSwitch,
   setTeamRole,
-  setTrialDays,
+  setNumberSetting,
   type AdminResult,
 } from "@/lib/admin/actions";
 import { Button } from "@/components/ui/button";
 import { FormMessage, Input } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
-import { PhoneInput } from "@/components/ui/phone-input";
 import { Switch } from "@/components/ui/switch";
-import type { AppSettings } from "@/lib/settings";
+import { PLANS, type PlanKey } from "@/lib/billing";
+import { formatMoney } from "@/lib/format";
+import type { NumberName, SwitchName } from "@/lib/settings";
 
 type Variant = Parameters<typeof Button>[0]["variant"];
 
@@ -95,44 +97,108 @@ export function PauseCustomerButton({ id, paused, disabled }: { id: string; paus
   );
 }
 
-/** Change one business's free-trial end. */
-export function TrialEditor({ id, currentEnd, custom, disabled }: { id: string; currentEnd: string; custom: boolean; disabled?: boolean }) {
+const FREE_TIME = [
+  { days: 7, label: "7 days" },
+  { days: 14, label: "2 weeks" },
+  { days: 30, label: "1 month" },
+  { days: 90, label: "3 months" },
+  { days: 180, label: "6 months" },
+  { days: 365, label: "1 year" },
+];
+
+/** Give one business free time with a tap, or set exactly when it ends. */
+export function FreeTimeEditor({ id, currentEnd, disabled }: { id: string; currentEnd: string; disabled?: boolean }) {
   const { pending, error, run } = useAction();
   const [date, setDate] = useState(currentEnd.slice(0, 10));
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Button variant="soft" disabled={disabled || pending} onClick={() => run(() => setBusinessTrial(id, { kind: "extend", days: 30, currentEnd }))}>
-          +30 days
-        </Button>
-        <Button variant="soft" disabled={disabled || pending} onClick={() => run(() => setBusinessTrial(id, { kind: "extend", days: 90, currentEnd }))}>
-          +90 days
-        </Button>
-        <Button
-          variant="secondary"
-          disabled={disabled || pending}
-          onClick={() => confirm("End this business's free trial now?") && run(() => setBusinessTrial(id, { kind: "end" }))}
-        >
-          End now
-        </Button>
-        <Button variant="secondary" disabled={disabled || pending || !custom} onClick={() => run(() => setBusinessTrial(id, { kind: "default" }))}>
-          Usual length
-        </Button>
+      <p className="text-sm font-semibold">Give free time</p>
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+        {FREE_TIME.map((f) => (
+          <button
+            key={f.days}
+            type="button"
+            disabled={disabled || pending}
+            onClick={() => run(() => setBusinessTrial(id, { kind: "give", days: f.days, label: f.label }))}
+            className="flex h-16 flex-col items-center justify-center rounded-2xl bg-brand-50 text-brand-800 ring-1 ring-brand-100 transition hover:bg-brand-100 disabled:opacity-50"
+          >
+            <span className="text-base font-bold">+{f.label}</span>
+          </button>
+        ))}
       </div>
+      <p className="text-xs text-muted">Added on top of any time they have left. A business paused for not paying is switched back on.</p>
       <form
-        className="flex gap-2"
+        className="flex flex-wrap gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           run(() => setBusinessTrial(id, { kind: "date", date }));
         }}
       >
-        <Input type="date" aria-label="Trial end date" value={date} onChange={(e) => setDate(e.target.value)} disabled={disabled} className="h-11 flex-1" />
-        <Button type="submit" disabled={disabled} loading={pending}>
-          Set date
+        <Input type="date" aria-label="Free time ends on" value={date} onChange={(e) => setDate(e.target.value)} disabled={disabled} className="h-11 min-w-0 flex-1" />
+        <Button type="submit" variant="secondary" disabled={disabled} loading={pending}>
+          Set end date
+        </Button>
+        <Button
+          variant="ghost"
+          disabled={disabled || pending}
+          onClick={() => confirm("End this business's free time now? If it hasn't paid, payment becomes due.") && run(() => setBusinessTrial(id, { kind: "end" }))}
+        >
+          End free time
         </Button>
       </form>
       <FormMessage>{error}</FormMessage>
     </div>
+  );
+}
+
+/** Record a payment made outside Paystack. */
+export function ManualPayment({ id, prices, disabled }: { id: string; prices: Record<PlanKey, number>; disabled?: boolean }) {
+  const [plan, setPlan] = useState<PlanKey>("starter");
+  const [months, setMonths] = useState("1");
+  const [note, setNote] = useState("");
+  const [done, setDone] = useState(false);
+  const { pending, error, run } = useAction();
+  const n = Math.max(1, Math.min(24, Number(months) || 1));
+  return (
+    <form
+      className="flex flex-col gap-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        setDone(false);
+        run(() => recordManualPayment(id, plan, n, note), () => {
+          setDone(true);
+          setNote("");
+        });
+      }}
+    >
+      <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Plan paid for">
+        {(Object.keys(PLANS) as PlanKey[]).map((key) => (
+          <button
+            key={key}
+            type="button"
+            role="radio"
+            aria-checked={plan === key}
+            onClick={() => setPlan(key)}
+            className="h-11 rounded-xl text-sm font-semibold ring-1 ring-line-strong aria-checked:bg-brand-600 aria-checked:text-white aria-checked:ring-brand-600"
+          >
+            {PLANS[key].name}
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <label htmlFor="manual-months" className="text-sm font-semibold">
+          Months
+        </label>
+        <Input id="manual-months" inputMode="numeric" value={months} onChange={(e) => setMonths(e.target.value.replace(/\D/g, ""))} className="h-11 w-20" disabled={disabled} />
+        <span className="text-sm text-muted">= {formatMoney(prices[plan] * n)}</span>
+      </div>
+      <Input aria-label="Note" placeholder="Note, e.g. bank transfer on 3 Oct" value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} disabled={disabled} />
+      {done && <FormMessage tone="success">Recorded. Their plan has been extended.</FormMessage>}
+      <FormMessage>{error}</FormMessage>
+      <Button type="submit" variant="secondary" loading={pending} disabled={disabled} className="self-start">
+        Record payment
+      </Button>
+    </form>
   );
 }
 
@@ -189,7 +255,6 @@ export function DeleteWithConfirm({
   );
 }
 
-type SwitchName = Exclude<keyof AppSettings, "trialDays">;
 
 /** One app-wide switch with its label and explanation. */
 export function SettingSwitch({ name, initial, label, help, disabled }: { name: SwitchName; initial: boolean; label: string; help: ReactNode; disabled?: boolean }) {
@@ -223,29 +288,46 @@ export function SettingSwitch({ name, initial, label, help, disabled }: { name: 
   );
 }
 
-export function TrialDaysForm({ initial, disabled }: { initial: number; disabled?: boolean }) {
-  const [days, setDays] = useState(String(initial));
+/** One number setting (trial length, a price) with a Save button. */
+export function NumberSettingForm({
+  name,
+  initial,
+  label,
+  help,
+  prefix,
+  disabled,
+}: {
+  name: NumberName;
+  initial: number;
+  label: string;
+  help?: ReactNode;
+  prefix?: string;
+  disabled?: boolean;
+}) {
+  const [value, setValue] = useState(String(initial));
   const [saved, setSaved] = useState(false);
   const { pending, error, run } = useAction();
+  const id = `setting-${name}`;
   return (
     <form
       className="flex flex-col gap-2"
       onSubmit={(e) => {
         e.preventDefault();
         setSaved(false);
-        run(() => setTrialDays(Number(days)), () => setSaved(true));
+        run(() => setNumberSetting(name, Number(value)), () => setSaved(true));
       }}
     >
-      <label htmlFor="trial-days" className="text-sm font-semibold">
-        Trial length (days)
+      <label htmlFor={id} className="text-sm font-semibold">
+        {label}
       </label>
-      <div className="flex gap-2">
-        <Input id="trial-days" inputMode="numeric" value={days} onChange={(e) => setDays(e.target.value.replace(/\D/g, ""))} disabled={disabled} className="h-11 w-28" />
+      <div className="flex items-center gap-2">
+        {prefix && <span className="font-semibold text-muted">{prefix}</span>}
+        <Input id={id} inputMode="numeric" value={value} onChange={(e) => setValue(e.target.value.replace(/\D/g, ""))} disabled={disabled} className="h-11 w-32" />
         <Button type="submit" disabled={disabled} loading={pending}>
           Save
         </Button>
       </div>
-      <p className="text-xs text-muted">Applies to every business without its own trial date, including ones already signed up.</p>
+      {help && <p className="text-xs text-muted">{help}</p>}
       {saved && <FormMessage tone="success">Saved.</FormMessage>}
       <FormMessage>{error}</FormMessage>
     </form>
@@ -258,9 +340,8 @@ const ROLE_OPTIONS = [
   { value: "manager", label: "Manager" },
 ] as const;
 
-export function AddTeamMember({ defaultCountry }: { defaultCountry: string }) {
-  const [country, setCountry] = useState(defaultCountry);
-  const [phone, setPhone] = useState("");
+export function AddTeamMember() {
+  const [contact, setContact] = useState("");
   const [role, setRole] = useState<(typeof ROLE_OPTIONS)[number]["value"]>("viewer");
   const [added, setAdded] = useState(false);
   const { pending, error, run } = useAction();
@@ -270,13 +351,16 @@ export function AddTeamMember({ defaultCountry }: { defaultCountry: string }) {
       onSubmit={(e) => {
         e.preventDefault();
         setAdded(false);
-        run(() => addTeamMember(country, phone, role), () => {
-          setPhone("");
+        run(() => addTeamMember(contact, role), () => {
+          setContact("");
           setAdded(true);
         });
       }}
     >
-      <PhoneInput id="team-phone" label="Their Spendbox phone number" country={country} onCountry={setCountry} value={phone} onChange={setPhone} placeholder="803 000 0000" />
+      <label className="flex flex-col gap-2 text-sm font-semibold">
+        Their Spendbox email (or phone number)
+        <Input id="team-contact" value={contact} onChange={(e) => setContact(e.target.value)} autoComplete="off" placeholder="name@example.com" />
+      </label>
       <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Access level">
         {ROLE_OPTIONS.map((r) => (
           <button
@@ -293,7 +377,7 @@ export function AddTeamMember({ defaultCountry }: { defaultCountry: string }) {
       </div>
       {added && <FormMessage tone="success">Added. They can open /admin after logging in to Spendbox.</FormMessage>}
       <FormMessage>{error}</FormMessage>
-      <Button type="submit" loading={pending} className="self-start">
+      <Button type="submit" loading={pending} className="self-start" disabled={!contact.trim()}>
         Add to team
       </Button>
     </form>

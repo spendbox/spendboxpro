@@ -17,9 +17,15 @@ export interface AppSettings {
   joinsOpen: boolean;
   /** Spendbox sends emails (perks, purchases, new members…). */
   emailsEnabled: boolean;
-  /** "Send a test payment" on the Payments page (never with live Mono keys). */
-  testPayments: boolean;
+  /** Monthly price of the Starter plan, in naira. */
+  priceStarter: number;
+  /** Monthly price of the Plus plan, in naira. */
+  pricePlus: number;
 }
+
+/** The on/off switches (the rest are numbers). */
+export type SwitchName = "trialEnabled" | "signupsOpen" | "joinsOpen" | "emailsEnabled";
+export type NumberName = Exclude<keyof AppSettings, SwitchName>;
 
 const KEYS: Record<keyof AppSettings, string> = {
   trialEnabled: "trial_enabled",
@@ -27,7 +33,14 @@ const KEYS: Record<keyof AppSettings, string> = {
   signupsOpen: "signups_open",
   joinsOpen: "joins_open",
   emailsEnabled: "emails_enabled",
-  testPayments: "test_payments",
+  priceStarter: "price_starter",
+  pricePlus: "price_plus",
+};
+
+const NUMBERS: Partial<Record<keyof AppSettings, [number, number]>> = {
+  trialDays: [1, 3650],
+  priceStarter: [0, 10_000_000],
+  pricePlus: [0, 10_000_000],
 };
 
 function defaults(): AppSettings {
@@ -37,7 +50,8 @@ function defaults(): AppSettings {
     signupsOpen: true,
     joinsOpen: true,
     emailsEnabled: true,
-    testPayments: process.env.TEST_PAYMENTS === "on",
+    priceStarter: 2500,
+    pricePlus: 5000,
   };
 }
 
@@ -51,11 +65,12 @@ export const getSettings = cache(async (): Promise<AppSettings> => {
     for (const [name, key] of Object.entries(KEYS) as [keyof AppSettings, string][]) {
       const value = byKey.get(key);
       if (value === undefined || value === null) continue;
-      if (name === "trialDays") {
-        const days = Number(value);
-        if (Number.isFinite(days) && days >= 1 && days <= 3650) settings.trialDays = Math.round(days);
+      const range = NUMBERS[name];
+      if (range) {
+        const n = Number(value);
+        if (Number.isFinite(n) && n >= range[0] && n <= range[1]) (settings[name] as number) = Math.round(n);
       } else if (typeof value === "boolean") {
-        settings[name] = value;
+        (settings[name] as boolean) = value;
       }
     }
   } catch {
@@ -69,14 +84,4 @@ export async function saveSetting<K extends keyof AppSettings>(name: K, value: A
     .from("app_settings")
     .upsert({ key: KEYS[name], value, updated_at: new Date().toISOString(), updated_by: actor });
   if (error) throw new Error(error.message);
-}
-
-/** True when live (real-money) Mono keys are in use. */
-export function monoLive() {
-  return Boolean(process.env.MONO_SECRET_KEY?.startsWith("live_"));
-}
-
-/** Test payments: switched on, and never with live Mono keys. */
-export async function testPaymentsEnabled() {
-  return !monoLive() && (await getSettings()).testPayments;
 }

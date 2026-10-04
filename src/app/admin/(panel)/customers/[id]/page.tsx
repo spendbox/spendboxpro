@@ -16,15 +16,15 @@ export default async function AdminCustomer({ params }: PageProps<"/admin/custom
   const [{ id }, admin] = await Promise.all([params, requireAdmin()]);
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const supabase = createAdminClient();
-  const [{ data: p }, { data: memberships }, { data: owned }, { count: accounts }, { data: team }] = await Promise.all([
+  const [{ data: p }, { data: memberships }, { data: owned }, { count: requestCount }, { data: team }] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", id).maybeSingle(),
     supabase.from("memberships").select("id, member_no, joined_at, business:businesses(id, name)").eq("customer_id", id).order("joined_at", { ascending: false }),
     supabase.from("businesses").select("id, name, suspended_at").eq("owner_id", id),
-    supabase.from("payers").select("id", { count: "exact", head: true }).eq("customer_id", id),
+    supabase.from("requests").select("id", { count: "exact", head: true }).eq("customer_id", id),
     supabase.from("admin_members").select("role").eq("user_id", id).maybeSingle(),
   ]);
   if (!p) notFound();
-  const name = (p.full_name as string | null) ?? formatPhone(p.phone);
+  const name = (p.full_name as string | null) ?? (p.email as string | null) ?? formatPhone(p.phone);
   const canSupport = allowed(admin, "support");
   const canManage = allowed(admin, "manager");
   const self = admin.userId === id;
@@ -46,11 +46,19 @@ export default async function AdminCustomer({ params }: PageProps<"/admin/custom
         <Card className="p-5">
           <h2 className="mb-1 font-display text-lg font-bold">Details</h2>
           <dl className="divide-y divide-line">
-            <Fact label="Phone">{formatPhone(p.phone)}</Fact>
-            <Fact label="Name (from their bank)">{p.full_name ?? "Not confirmed yet"}</Fact>
-            <Fact label="Email">{p.email ?? "Not added"}</Fact>
+            <Fact label="Phone">{p.phone ? formatPhone(p.phone) : "Not added"}</Fact>
+            <Fact label="Name">{p.full_name ?? "Not added"}</Fact>
+            <Fact label="Email">
+              {p.email ? (
+                <span className="inline-flex flex-wrap items-center justify-end gap-2">
+                  {p.email} {p.email_verified_at ? <Badge tone="green">Confirmed</Badge> : <Badge tone="amber">Not confirmed</Badge>}
+                </span>
+              ) : (
+                "Not added"
+              )}
+            </Fact>
             <Fact label="Birthday">{birthday}</Fact>
-            <Fact label="Bank accounts">{accounts ?? 0}</Fact>
+            <Fact label="Requests posted">{requestCount ?? 0}</Fact>
             <Fact label="Joined Spendbox">{formatDate(p.created_at, { withYear: true })}</Fact>
           </dl>
         </Card>

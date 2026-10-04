@@ -1,12 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { PhoneSignIn } from "@/components/auth/phone-sign-in";
+import { EmailSignIn } from "@/components/auth/email-sign-in";
 
 export function LoginForm({ next }: { next: string | null }) {
   const router = useRouter();
   return (
-    <PhoneSignIn
+    <EmailSignIn
       allowSignup={false}
       submitLabel="Log in"
       onSignedIn={async () => {

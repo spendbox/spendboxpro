@@ -21,30 +21,7 @@ export async function setSharing(membershipId: string, share: boolean) {
   revalidatePath("/", "layout");
 }
 
-/** Stop recognising a bank sender as me. */
-export async function forgetPayer(payerId: string) {
-  const user = await requireUser("/me/profile");
-  const supabase = await createClient();
-  const { data: removed, error } = await supabase
-    .from("payers")
-    .delete()
-    .eq("id", payerId)
-    .select("sender_key, sender_account")
-    .maybeSingle();
-  if (error) return { error: error.message };
-  // Don't match this sender to me again, at any business I've joined.
-  const senders = [removed?.sender_key, removed?.sender_account].filter((x): x is string => Boolean(x));
-  if (senders.length) {
-    const { data: memberships } = await supabase.from("memberships").select("id").eq("customer_id", user.id);
-    const rows = (memberships ?? []).flatMap((m) => senders.map((sender) => ({ membership_id: m.id, sender })));
-    if (rows.length) {
-      await createAdminClient().from("bank_sender_rejections").upsert(rows, { onConflict: "membership_id,sender", ignoreDuplicates: true });
-    }
-  }
-  revalidatePath("/me/profile");
-  return { ok: true };
-}
-
+/** Leave a business (they no longer see me or my requests). */
 export async function leaveBusiness(membershipId: string) {
   const user = await requireUser();
   const supabase = await createClient();
@@ -53,7 +30,7 @@ export async function leaveBusiness(membershipId: string) {
   redirect("/me");
 }
 
-/** Permanently deletes the account, receipts and every membership. */
+/** Permanently deletes the account, requests and every membership. */
 export async function deleteAccount(_prev: FormState, formData: FormData): Promise<FormState> {
   const user = await requireUser("/me/profile");
   if (String(formData.get("confirm") ?? "").trim().toUpperCase() !== "DELETE") {
@@ -61,10 +38,10 @@ export async function deleteAccount(_prev: FormState, formData: FormData): Promi
   }
 
   const admin = createAdminClient();
-  // Remove stored receipt images first (they live in a folder named after the user).
-  const { data: files } = await admin.storage.from("receipts").list(user.id, { limit: 1000 });
-  if (files?.length) {
-    await admin.storage.from("receipts").remove(files.map((f) => `${user.id}/${f.name}`));
+  // Remove stored images first (they live in folders named after the user).
+  for (const bucket of ["request-images", "receipts"]) {
+    const { data: files } = await admin.storage.from(bucket).list(user.id, { limit: 1000 });
+    if (files?.length) await admin.storage.from(bucket).remove(files.map((f) => `${user.id}/${f.name}`));
   }
   const { error } = await admin.auth.admin.deleteUser(user.id);
   if (error) return { error: "Could not delete your account. Please try again." };

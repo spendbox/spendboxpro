@@ -7,6 +7,8 @@ import type { Business } from "@/lib/types";
 export interface SessionUser {
   id: string;
   phone: string | null;
+  /** Null for older accounts that log in with a phone number. */
+  email: string | null;
 }
 
 /** The signed-in person, or null. Cached for the duration of one request. */
@@ -15,7 +17,8 @@ export const getUser = cache(async (): Promise<SessionUser | null> => {
   const { data } = await supabase.auth.getClaims();
   const claims = data?.claims;
   if (!claims?.sub) return null;
-  return { id: claims.sub, phone: (claims.phone as string | undefined) ?? null };
+  const email = (claims.email as string | undefined) ?? null;
+  return { id: claims.sub, phone: (claims.phone as string | undefined) || null, email: email && !email.endsWith("@phone.spendbox.app") ? email : null };
 });
 
 export async function requireUser(next = "/me") {

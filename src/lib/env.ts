@@ -45,16 +45,8 @@ export function appTimeZone() {
 /** Country calling code pre-selected on phone number fields. */
 export const DEFAULT_COUNTRY_CODE = process.env.NEXT_PUBLIC_DEFAULT_COUNTRY_CODE ?? "234";
 
-/** Length of the free trial for new businesses, in days (default 90). */
+/** Starting length of the free trial for new businesses, in days (default 14). Changed later in /admin. */
 export function trialDays() {
-  const days = Number(process.env.NEXT_PUBLIC_TRIAL_DAYS ?? 90);
-  return Number.isFinite(days) && days > 0 ? Math.round(days) : 90;
-}
-
-/**
- * Receipt uploads are switched off while payments come straight from the
- * business's bank (Mono). Set NEXT_PUBLIC_RECEIPT_UPLOADS=on to bring them back.
- */
-export function receiptsEnabled() {
-  return process.env.NEXT_PUBLIC_RECEIPT_UPLOADS === "on";
+  const days = Number(process.env.NEXT_PUBLIC_TRIAL_DAYS ?? 14);
+  return Number.isFinite(days) && days > 0 ? Math.round(days) : 14;
 }

@@ -1,7 +1,7 @@
 import "server-only";
 import { emailBody, emailConfigured, sendEmail } from "@/lib/email";
 import { siteUrl } from "@/lib/env";
-import { formatDate, formatMoney, formatWhen, memberLabel } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Email notifications. Each function is safe to call after any change: it
@@ -13,10 +13,11 @@ const BUSINESS_FOOTER = "You get these emails because this email is on your Spen
 async function customerContact(customerId: string) {
   const { data } = await createAdminClient()
     .from("profiles")
-    .select("email, email_notifications, full_name")
+    .select("email, email_notifications, email_verified_at, full_name")
     .eq("id", customerId)
     .maybeSingle();
-  return data?.email && data.email_notifications ? { email: data.email as string, name: data.full_name as string | null } : null;
+  // Only confirmed addresses, so a typo never sends someone else your perks.
+  return data?.email && data.email_notifications && data.email_verified_at ? { email: data.email as string, name: data.full_name as string | null } : null;
 }
 
 function hello(name: string | null) {
@@ -62,74 +63,6 @@ export async function notifyRewardsReady() {
     }
   } catch (error) {
     console.error("notifyRewardsReady failed", error);
-  }
-}
-
-/** Tells a customer a business recorded, confirmed or received (by bank transfer) one of their payments. */
-export async function notifyPurchase(purchaseId: string, kind: "recorded" | "confirmed" | "bank") {
-  if (!emailConfigured()) return;
-  try {
-    const { data: p } = await createAdminClient()
-      .from("purchases")
-      .select("customer_id, amount, currency, paid_at, description, business:businesses(name, slug)")
-      .eq("id", purchaseId)
-      .maybeSingle();
-    if (!p) return;
-    const contact = await customerContact(p.customer_id);
-    if (!contact) return;
-    const business = p.business as unknown as { name: string; slug: string };
-    const amount = formatMoney(p.amount, p.currency);
-    const { html, text } = emailBody({
-      heading:
-        kind === "recorded"
-          ? `${business.name} recorded your purchase`
-          : kind === "bank"
-            ? `${business.name} received your payment`
-            : `${business.name} confirmed your payment`,
-      lines: [
-        hello(contact.name),
-        `${amount} on ${formatWhen(p.paid_at)}${p.description ? ` (${p.description})` : ""} now counts toward your perks.`,
-      ],
-      button: { label: "See your progress", url: `${siteUrl()}/me/b/${business.slug}` },
-      footer: CUSTOMER_FOOTER,
-    });
-    await sendEmail({ to: contact.email, subject: `${amount} counted at ${business.name}`, html, text });
-  } catch (error) {
-    console.error("notifyPurchase failed", error);
-  }
-}
-
-/** Tells a business a receipt is waiting for them to check. */
-export async function notifyReceiptToReview(purchaseId: string) {
-  if (!emailConfigured()) return;
-  try {
-    const admin = createAdminClient();
-    const { data: p } = await admin
-      .from("purchases")
-      .select("amount, currency, paid_at, business:businesses(id, name, email), membership:memberships(member_no, share_details, customer_id)")
-      .eq("id", purchaseId)
-      .maybeSingle();
-    const business = p?.business as unknown as { id: string; name: string; email: string | null } | undefined;
-    if (!p || !business?.email) return;
-    const member = p.membership as unknown as { member_no: number; share_details: boolean; customer_id: string };
-    let name: string | null = null;
-    if (member.share_details) {
-      const { data } = await admin.from("profiles").select("full_name").eq("id", member.customer_id).maybeSingle();
-      name = data?.full_name ?? null;
-    }
-    const amount = formatMoney(p.amount, p.currency);
-    const { html, text } = emailBody({
-      heading: "A receipt needs a quick check",
-      lines: [
-        `${memberLabel(member.member_no, name)} uploaded a receipt for ${amount} (${formatWhen(p.paid_at)}).`,
-        "We couldn't match it to one of your bank accounts automatically. Tap Received if the money reached you.",
-      ],
-      button: { label: "Review payments", url: `${siteUrl()}/dashboard/${business.id}/payments?status=pending` },
-      footer: BUSINESS_FOOTER,
-    });
-    await sendEmail({ to: business.email, subject: `Receipt to check: ${amount}`, html, text });
-  } catch (error) {
-    console.error("notifyReceiptToReview failed", error);
   }
 }
 
@@ -183,13 +116,13 @@ export async function notifyPartnership(fromBusinessId: string, toBusinessId: st
         subject: `${from.name} is now your partner`,
         lines: [
           `${from.name} partnered with ${to.name}. You approve requests automatically, so it's already live.`,
-          "Your perks now show to their customers, and theirs to yours. You can end it any time.",
+          "You're now recommended to each other's customers, and on Plus you see each other's customers' requests. You can end it any time.",
         ],
         button: "See your partners",
       },
       accepted: {
         subject: `${from.name} accepted your partnership`,
-        lines: [`${from.name} said yes. Your perks now show to their customers as “from our partners”, and theirs to yours.`],
+        lines: [`${from.name} said yes. You're now recommended to each other's customers, and on Plus you see each other's customers' requests.`],
         button: "See your partners",
       },
     }[kind];

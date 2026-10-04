@@ -9,7 +9,7 @@ import { BusinessAvatar } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
 import { getUser } from "@/lib/auth";
 import { businessTagline } from "@/lib/format";
-import { PERK_KIND_ORDER } from "@/lib/perks";
+import { PERK_KIND_ORDER, SIMPLE_PERK_KINDS } from "@/lib/perks";
 import { getSettings } from "@/lib/settings";
 import { createClient } from "@/lib/supabase/server";
 import type { Business, Perk } from "@/lib/types";
@@ -25,7 +25,7 @@ const loadBusiness = cache(async (slug: string) => {
   if (!data) return null;
   const business = data as Business & { perks: Perk[] };
   business.perks = business.perks
-    .filter((p) => p.is_active)
+    .filter((p) => p.is_active && SIMPLE_PERK_KINDS.includes(p.kind))
     .sort((a, b) => PERK_KIND_ORDER.indexOf(a.kind) - PERK_KIND_ORDER.indexOf(b.kind));
   return business;
 });
@@ -116,7 +116,7 @@ export default async function JoinPage({ params, searchParams }: PageProps<"/j/[
               </div>
             </div>
           ) : (
-            <p className="text-muted">Join {business.name} and every visit brings you closer to something good.</p>
+            <p className="text-muted">Join {business.name} and post what you need. They&apos;ll reach out.</p>
           )}
         </section>
 
@@ -125,7 +125,7 @@ export default async function JoinPage({ params, searchParams }: PageProps<"/j/[
             {refCode && state !== "member" && state !== "owner" && (
               <div className="flex items-start gap-3 rounded-2xl bg-violet-50 p-3.5 text-sm text-violet-950">
                 <UserPlus className="mt-0.5 size-5 shrink-0" aria-hidden />
-                <p>A friend shared this with you. They get a perk when you make your first purchase.</p>
+                <p>A friend shared this with you. They may get a thank-you perk when you join.</p>
               </div>
             )}
             {closed ? (
@@ -142,8 +142,8 @@ export default async function JoinPage({ params, searchParams }: PageProps<"/j/[
             <div className="flex items-start gap-3 border-t border-line pt-5 text-sm text-muted">
               <ShieldCheck className="mt-0.5 size-5 shrink-0 text-brand-600" aria-hidden />
               <p>
-                Add the account you usually pay from, once, and every visit counts by itself. {business.name} only
-                sees your details if you say so.
+                Post what you need, with your budget, and {business.name} can reach out. They only see your details if you
+                say so, or when you post a request.
               </p>
             </div>
           </Card>

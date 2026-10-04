@@ -49,7 +49,7 @@ export default async function AdminCustomers({ searchParams }: PageProps<"/admin
   return (
     <div className="flex flex-col gap-5">
       <PageHeader title="People" description="Everyone with a Spendbox login: customers and business owners." />
-      <SearchBox action="/admin/customers" q={q} placeholder="Search by phone, name or email" hidden={filter !== "all" ? { filter } : undefined} />
+      <SearchBox action="/admin/customers" q={q} placeholder="Search by email, name or phone" hidden={filter !== "all" ? { filter } : undefined} />
       <FilterChips current={filter} items={FILTERS.map((f) => ({ ...f, href: href({ filter: f.key, page: 1 }) }))} />
       <Card className="divide-y divide-line">
         {rows.length === 0 && <p className="p-5 text-muted">{q ? `Nobody matches “${q}”.` : "Nobody here yet."}</p>}
@@ -60,11 +60,11 @@ export default async function AdminCustomers({ searchParams }: PageProps<"/admin
             </span>
             <div className="min-w-0 flex-1">
               <p className="flex flex-wrap items-center gap-2 font-semibold">
-                <span className="truncate">{c.full_name ?? formatPhone(c.phone)}</span>
+                <span className="truncate">{c.full_name ?? c.email ?? formatPhone(c.phone)}</span>
                 {c.suspended_at && <Badge tone="red">Paused</Badge>}
               </p>
               <p className="truncate text-sm text-muted">
-                {c.full_name ? `${formatPhone(c.phone)} · ` : ""}since {formatDate(c.created_at, { withYear: true })}
+                {c.full_name ? `${c.email ?? formatPhone(c.phone)} · ` : c.email && c.phone ? `${formatPhone(c.phone)} · ` : ""}since {formatDate(c.created_at, { withYear: true })}
               </p>
             </div>
             <p className="shrink-0 text-right text-sm text-muted tabular">

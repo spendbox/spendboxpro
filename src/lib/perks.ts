@@ -1,5 +1,5 @@
 import { formatMoney } from "@/lib/format";
-import type { Perk, PerkKind, Purchase } from "@/lib/types";
+import type { PerkKind } from "@/lib/types";
 
 export interface PerkKindInfo {
   label: string;
@@ -39,8 +39,8 @@ export const PERK_KINDS: Record<PerkKind, PerkKindInfo> = {
     label: "Invite reward",
     color: "#4338A0",
     tint: "#ECEAFB",
-    pickerHint: "When a customer brings a friend",
-    example: "Free small chops when your friend orders",
+    pickerHint: "When a friend they invite joins",
+    example: "Free small chops for every friend you bring",
     ideas: ["₦1,000 off your next order for every friend", "A free drink for each friend you bring"],
     needsThreshold: false,
   },
@@ -64,7 +64,10 @@ export const PERK_KINDS: Record<PerkKind, PerkKindInfo> = {
   },
 };
 
-export const PERK_KIND_ORDER: PerkKind[] = ["welcome", "visits", "referral", "spend", "birthday"];
+export const PERK_KIND_ORDER: PerkKind[] = ["welcome", "referral", "birthday", "visits", "spend"];
+
+/** The perks businesses can set up now: ones they can see happen (no payment tracking). */
+export const SIMPLE_PERK_KINDS: PerkKind[] = ["welcome", "referral", "birthday"];
 
 /** "Every 5 purchases", "When a friend they invite makes a first purchase"… */
 export function perkTrigger(kind: PerkKind, threshold: number | null, currency = "NGN", audience: "business" | "customer" = "business") {
@@ -77,61 +80,16 @@ export function perkTrigger(kind: PerkKind, threshold: number | null, currency =
     case "spend":
       return `Every ${formatMoney(t, currency)} spent`;
     case "referral":
-      return audience === "business"
-        ? "When a friend they invite makes a first purchase"
-        : "When a friend you invite makes a first purchase";
+      return audience === "business" ? "For every friend they bring who joins" : "For every friend you bring who joins";
     case "birthday":
       return audience === "business" ? "In their birthday month" : "In your birthday month";
   }
 }
 
-export interface PerkProgress {
-  perk: Perk;
-  current: number;
-  target: number;
-  /** Text like "3 of 5 purchases" or "₦32,000 of ₦50,000". */
-  label: string;
-  remainingLabel: string;
-}
-
-/** How far a member is toward each repeating perk (mirrors the database rules). */
-export function perkProgress(perks: Perk[], verifiedPurchases: Pick<Purchase, "amount" | "created_at">[], currency = "NGN") {
-  const result: PerkProgress[] = [];
-  for (const perk of perks) {
-    if (!perk.is_active || !perk.threshold) continue;
-    const since = new Date(perk.created_at).getTime();
-    const counted = verifiedPurchases.filter((p) => new Date(p.created_at).getTime() >= since);
-    const target = Number(perk.threshold);
-    if (perk.kind === "visits") {
-      const current = counted.length % target;
-      const left = target - current;
-      result.push({
-        perk,
-        current,
-        target,
-        label: `${current} of ${target} purchases`,
-        remainingLabel: left === 1 ? "1 more purchase" : `${left} more purchases`,
-      });
-    } else if (perk.kind === "spend") {
-      const total = counted.reduce((sum, p) => sum + Number(p.amount), 0);
-      const current = total % target;
-      result.push({
-        perk,
-        current,
-        target,
-        label: `${formatMoney(current, currency)} of ${formatMoney(target, currency)}`,
-        remainingLabel: `${formatMoney(target - current, currency)} more`,
-      });
-    }
-  }
-  return result;
-}
-
 /** Ready-made perks a new business can add in one tap. */
 export const SUGGESTED_PERKS: { kind: PerkKind; title: string; threshold: number | null; validDays: number | null }[] = [
   { kind: "welcome", title: "Free drink on your first order", threshold: null, validDays: 30 },
-  { kind: "visits", title: "Your next order is on us", threshold: 5, validDays: 30 },
-  { kind: "referral", title: "Free small chops when your friend orders", threshold: null, validDays: 30 },
+  { kind: "referral", title: "Free small chops for every friend you bring", threshold: null, validDays: 30 },
   { kind: "birthday", title: "A birthday treat on us", threshold: null, validDays: 30 },
 ];
 

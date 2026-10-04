@@ -1,35 +1,42 @@
 import { ChevronRight, History, KeyRound, ShieldCheck } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { SettingSwitch, TrialDaysForm } from "@/components/admin/controls";
+import { NumberSettingForm, SettingSwitch } from "@/components/admin/controls";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { adminLoginConfigured, allowed, requireAdmin } from "@/lib/admin/session";
 import { emailConfigured } from "@/lib/email";
-import { getSettings, monoLive } from "@/lib/settings";
+import { getSettings } from "@/lib/settings";
 
 export const metadata: Metadata = { title: "Settings" };
 
 export default async function AdminSettings() {
   const [admin, s] = await Promise.all([requireAdmin(), getSettings()]);
   const canEdit = allowed(admin, "manager");
-  const live = monoLive();
 
   return (
     <div className="flex flex-col gap-5">
       <PageHeader title="Settings" description={canEdit ? "Changes apply straight away, everywhere." : "You can see these, but only managers can change them."} />
 
       <Card className="flex flex-col gap-4 p-5">
+        <h2 className="font-display text-lg font-bold">Prices</h2>
+        <p className="-mt-2 text-sm text-muted">What businesses pay each month after their free trial.</p>
+        <NumberSettingForm name="priceStarter" initial={s.priceStarter} prefix="₦" label="Starter (requests from own customers)" disabled={!canEdit} />
+        <NumberSettingForm name="pricePlus" initial={s.pricePlus} prefix="₦" label="Plus (also partners' customers' requests)" disabled={!canEdit} help="New prices apply to the next payment. Months already paid for don't change." />
+      </Card>
+
+      <Card className="flex flex-col gap-4 p-5">
         <h2 className="font-display text-lg font-bold">Free trial</h2>
         <SettingSwitch
           name="trialEnabled"
           initial={s.trialEnabled}
-          label="Give businesses a free trial"
-          help="When off, businesses don't see a trial note and sign-up doesn't mention a trial."
+          label="Give new businesses a free trial"
+          help="When off, new businesses pay from the start. Businesses already on a trial keep it."
           disabled={!canEdit}
         />
-        {s.trialEnabled && <TrialDaysForm initial={s.trialDays} disabled={!canEdit} />}
-        <p className="text-xs text-muted">To change one business&apos;s trial, open it from Businesses.</p>
+        {s.trialEnabled && (
+          <NumberSettingForm name="trialDays" initial={s.trialDays} label="Trial length (days)" help="For businesses that sign up from now on. To give one business more time, open it from Businesses." disabled={!canEdit} />
+        )}
       </Card>
 
       <Card className="flex flex-col p-5">
@@ -53,15 +60,8 @@ export default async function AdminSettings() {
             name="emailsEnabled"
             initial={s.emailsEnabled}
             label="Send emails"
-            help={emailConfigured() ? "Perk alerts, purchase receipts and new-member emails." : "Emails also need RESEND_API_KEY in Vercel, which isn't set yet."}
+            help={emailConfigured() ? "Perk alerts, new-member and partner emails, and plan reminders." : "Emails also need RESEND_API_KEY in Vercel, which isn't set yet."}
             disabled={!canEdit}
-          />
-          <SettingSwitch
-            name="testPayments"
-            initial={s.testPayments && !live}
-            label="Test payments"
-            help={live ? "Not available with live Mono keys, so nobody can fake a payment." : "Shows “Send a test payment” on every business's Payments page. Turn off before real businesses sign up."}
-            disabled={!canEdit || live}
           />
         </div>
       </Card>

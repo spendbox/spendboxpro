@@ -102,7 +102,7 @@ export const getAdmin = cache(async (): Promise<Admin | null> => {
   if (!user) return null;
   const { data } = await createAdminClient().from("admin_members").select("role").eq("user_id", user.id).maybeSingle();
   if (!data) return null;
-  return { role: data.role as AdminRole, name: user.phone ? `+${user.phone}` : user.id.slice(0, 8), userId: user.id };
+  return { role: data.role as AdminRole, name: user.email ?? (user.phone ? `+${user.phone}` : user.id.slice(0, 8)), userId: user.id };
 });
 
 export function allowed(admin: Admin | null, min: AdminRole) {

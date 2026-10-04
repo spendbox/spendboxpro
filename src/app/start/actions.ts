@@ -29,6 +29,9 @@ export async function createBusiness(input: NewBusiness): Promise<string | void>
     p_whatsapp: normalizeWhatsapp(input.whatsapp, DEFAULT_COUNTRY_CODE),
   });
   if (error || !data) return error?.message ?? "Could not create your business. Please try again.";
-  if (categories.length) await supabase.from("businesses").update({ categories }).eq("id", data);
+  // The owner's email is the business's contact email until they change it in Settings.
+  const { data: owner } = await supabase.from("profiles").select("email").eq("id", (await getUser())!.id).maybeSingle();
+  const extra = { ...(categories.length ? { categories } : {}), ...(owner?.email ? { email: owner.email } : {}) };
+  if (Object.keys(extra).length) await supabase.from("businesses").update(extra).eq("id", data);
   redirect(`/dashboard/${data}?welcome=1`);
 }

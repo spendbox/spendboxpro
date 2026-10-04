@@ -67,7 +67,7 @@ select test.ok((public.admin_overview(90) ->> 'businesses')::int >= 1, 'the dash
 select test.ok(jsonb_array_length(public.admin_overview(90) -> 'daily') = 30, 'with 30 days of sign-ups');
 select test.ok((select count(*) from public.admin_businesses('open', 'all', 10, 0, 90) where id = :'biz') = 1, 'businesses can be searched by name');
 select test.ok((select count(*) from public.admin_businesses('', 'trial', 10, 0, 90) where id = :'biz') = 1, 'a new business is on trial');
-select test.ok((select count(*) from public.admin_businesses('', 'trial', 10, 0, 0) where id = :'biz') = 0, 'a zero-day trial has ended');
+select test.ok((select trial_ends_at::date from public.businesses where id = :'biz') = (now() + interval '14 days')::date, 'new businesses get a two-week trial');
 select test.ok((select count(*) from public.admin_customers('8700000002', 'all', 10, 0)) = 1, 'customers can be found by phone');
 select test.ok((select count(*) from public.admin_customers('08700000002', 'customers', 10, 0)) = 1, 'even typed with a leading 0');
 reset role;

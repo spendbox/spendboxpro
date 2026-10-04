@@ -15,6 +15,7 @@ grant usage on schema auth to anon, authenticated, service_role;
 create table auth.users (
   id uuid primary key default gen_random_uuid(),
   phone text unique,
+  email text unique,
   created_at timestamptz default now()
 );
 create function auth.uid() returns uuid language sql stable as $$

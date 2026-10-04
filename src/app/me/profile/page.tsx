@@ -1,38 +1,22 @@
-import { ChevronRight, History, LogOut, Phone, TriangleAlert } from "lucide-react";
+import { LogOut, TriangleAlert } from "lucide-react";
 import type { Metadata } from "next";
-import Link from "next/link";
 import { BusinessAvatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, SectionTitle } from "@/components/ui/card";
-import { EditCard } from "@/components/ui/edit-card";
 import { PageHeader } from "@/components/ui/page-header";
 import { ActionSwitch } from "@/components/ui/switch";
 import { signOut } from "@/lib/actions/auth";
 import { getOwnedBusinesses, requireUser } from "@/lib/auth";
 import { getMyMemberships, getMyProfile } from "@/lib/customer";
-import { formatPhone } from "@/lib/format";
-import { createClient } from "@/lib/supabase/server";
 import { setSharing } from "../actions";
 import { DeleteAccount } from "./delete-account";
-import { BankAccountsCard, DetailCards, type MyAccountRow } from "./profile-cards";
+import { DetailCards } from "./profile-cards";
 
 export const metadata: Metadata = { title: "Profile & privacy" };
 
 export default async function ProfilePage() {
   const user = await requireUser("/me/profile");
-  const supabase = await createClient();
-  const [profile, memberships, owned, { data: payers }] = await Promise.all([
-    getMyProfile(user.id),
-    getMyMemberships(user.id),
-    getOwnedBusinesses(),
-    supabase
-      .from("payers")
-      .select("id, sender_name, sender_account, institution, verified, learned_at_business")
-      .order("created_at"),
-  ]);
-  const accounts: MyAccountRow[] = (payers ?? [])
-    .map((p) => ({ ...p, mine: p.learned_at_business === null }))
-    .sort((a, b) => Number(b.mine) - Number(a.mine));
+  const [profile, memberships, owned] = await Promise.all([getMyProfile(user.id), getMyMemberships(user.id), getOwnedBusinesses()]);
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-8">
@@ -40,22 +24,13 @@ export default async function ProfilePage() {
 
       <section className="flex flex-col gap-3">
         <SectionTitle title="Your details" />
-        <EditCard readOnly icon={<Phone className="size-5" aria-hidden />} label="Phone" value={formatPhone(profile?.phone ?? user.phone)} note="You log in with this number" />
-        <DetailCards profile={profile} hasBank={accounts.some((a) => a.mine)} />
-      </section>
-
-      <section className="flex flex-col gap-3">
-        <SectionTitle
-          title="Bank accounts you pay from"
-          description="Transfers from these count for you by themselves, at every business you've joined. Businesses never see this list."
-        />
-        <BankAccountsCard accounts={accounts} />
+        <DetailCards profile={profile} />
       </section>
 
       <section className="flex flex-col gap-3">
         <SectionTitle
           title="Who can see my details"
-          description="Businesses only see your name, phone, gender and birthday when you switch them on. Otherwise they see your member number and purchases."
+          description="Switch on to show your name, phone, email, gender and birthday on a business's customer list. Otherwise they only see your member number. Your requests always show the contact you pick for them."
         />
         <Card className="divide-y divide-line px-5">
           {memberships.length === 0 ? (
@@ -74,16 +49,6 @@ export default async function ProfilePage() {
 
       <section className="flex flex-col gap-3">
         <SectionTitle title="More" />
-        <Link href="/me/audits" className="flex items-center gap-3.5 rounded-3xl bg-surface p-4 shadow-card ring-1 ring-line transition hover:ring-brand-300 sm:p-5">
-          <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-brand-50 text-brand-700">
-            <History className="size-5" aria-hidden />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block font-semibold">Audits</span>
-            <span className="block text-sm text-muted">Everything businesses did with your purchases and perks</span>
-          </span>
-          <ChevronRight className="size-5 text-muted" aria-hidden />
-        </Link>
         <Card className="flex flex-col gap-4 p-5">
           <p className="text-sm text-muted">
             Read our{" "}
@@ -112,7 +77,7 @@ export default async function ProfilePage() {
           <div>
             <p className="font-semibold text-ink">Delete my Spendbox</p>
             <p className="text-sm text-muted">
-              Removes your number, details, bank accounts, purchases, perks and memberships from every business, for good.
+              Removes your details, requests, perks and memberships from every business, for good.
             </p>
           </div>
           <div>

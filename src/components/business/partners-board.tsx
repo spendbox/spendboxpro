@@ -199,13 +199,13 @@ export function PartnersBoard({
     if (on) {
       run(biz.id, () => requestPartner(bizId, biz.id), (r) =>
         r.status === "active"
-          ? `You're now partners with ${biz.name}. Your perks show to each other's customers.`
-          : `Request sent. Once ${biz.name} approves, your perks show to each other's customers.`,
+          ? `You're now partners with ${biz.name}. You're now recommended to each other's customers.`
+          : `Request sent. Once ${biz.name} approves, you'll be recommended to each other's customers.`,
       );
       return;
     }
     if (!biz.partnership_id) return;
-    if (biz.relation === "active" && !confirm(`End your partnership with ${biz.name}? Your perks stop showing to each other's customers.`)) {
+    if (biz.relation === "active" && !confirm(`End your partnership with ${biz.name}? You stop being recommended to each other's customers.`)) {
       return;
     }
     run(biz.id, () => endPartner(bizId, biz.partnership_id!), () =>
@@ -243,7 +243,7 @@ export function PartnersBoard({
           <div>
             <p className="font-semibold text-ink">Cross-promotion</p>
             <p className="text-sm text-muted">
-              Let other businesses on Spendbox find you, and show your perks to their customers.
+              Let other businesses on Spendbox find you, so you can share customers.
             </p>
           </div>
           <Switch checked={enabled} label="Cross-promotion" onChange={(v) => saveSetting("enabled", v)} />

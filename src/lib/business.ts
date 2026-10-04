@@ -1,18 +1,8 @@
 import "server-only";
 import { cache } from "react";
-import type { UnmatchedPayment } from "@/components/business/unmatched-payments";
 import { PERK_KIND_ORDER } from "@/lib/perks";
 import { createClient } from "@/lib/supabase/server";
-import type {
-  BankAccount,
-  BusinessMemberRow,
-  BusinessPurchaseRow,
-  BusinessRewardRow,
-  BusinessStats,
-  Perk,
-  PurchaseStatus,
-  RewardStatus,
-} from "@/lib/types";
+import type { BusinessMemberRow, BusinessRequestRow, BusinessRewardRow, BusinessStats, Perk, RewardStatus } from "@/lib/types";
 
 // Data for the business dashboard. Each function goes through database
 // functions that only answer the business's owner.
@@ -34,39 +24,11 @@ export const getStats = cache(async (bizId: string): Promise<BusinessStats> => {
   );
 });
 
-/** Bank payments Spendbox couldn't match to a member yet. */
-export async function getUnmatchedPayments(bizId: string): Promise<UnmatchedPayment[]> {
-  const supabase = await createClient();
-  const { data } = await supabase.rpc("business_unmatched_payments", { p_business_id: bizId });
-  return (data ?? []) as UnmatchedPayment[];
-}
-
-/** Whether the business has connected a bank through Mono. */
-export const hasBankConnection = cache(async (bizId: string) => {
-  const supabase = await createClient();
-  const { count } = await supabase.from("bank_connections").select("id", { count: "exact", head: true }).eq("business_id", bizId);
-  return (count ?? 0) > 0;
-});
-
 export const getMembers = cache(async (bizId: string): Promise<BusinessMemberRow[]> => {
   const supabase = await createClient();
   const { data } = await supabase.rpc("business_members", { p_business_id: bizId });
   return (data ?? []) as BusinessMemberRow[];
 });
-
-export async function getPurchases(
-  bizId: string,
-  { status, membershipId, limit }: { status?: PurchaseStatus | null; membershipId?: string; limit?: number } = {},
-): Promise<BusinessPurchaseRow[]> {
-  const supabase = await createClient();
-  const { data } = await supabase.rpc("business_purchases", {
-    p_business_id: bizId,
-    p_status: status ?? null,
-    p_membership_id: membershipId ?? null,
-    p_limit: limit ?? 200,
-  });
-  return (data ?? []) as BusinessPurchaseRow[];
-}
 
 export async function getRewards(
   bizId: string,
@@ -87,10 +49,11 @@ export const getPerks = cache(async (bizId: string): Promise<Perk[]> => {
   return ((data ?? []) as Perk[]).sort((a, b) => PERK_KIND_ORDER.indexOf(a.kind) - PERK_KIND_ORDER.indexOf(b.kind));
 });
 
-export const getBankAccounts = cache(async (bizId: string): Promise<BankAccount[]> => {
+/** Live customer requests this business can see (its customers, and partners' customers on Plus). */
+export const getRequests = cache(async (bizId: string): Promise<BusinessRequestRow[]> => {
   const supabase = await createClient();
-  const { data } = await supabase.from("bank_accounts").select("*").eq("business_id", bizId).order("created_at");
-  return (data ?? []) as BankAccount[];
+  const { data } = await supabase.rpc("business_requests", { p_business_id: bizId });
+  return (data ?? []) as BusinessRequestRow[];
 });
 
 /** "1,284", "12.9K", "4.2M" */
