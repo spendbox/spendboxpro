@@ -2,9 +2,10 @@ import { cn } from "@/lib/cn";
 import type { Placement } from "@/lib/product-categories";
 
 // A little picture of how a category looks in the 3D shop: framed on the
-// wall under picture lights, leaning on walnut-and-oak shelves, or standing
-// on a marble table. It uses the category's own product photos when it has
-// some, and soft colour tiles when it doesn't.
+// wall under picture lights, leaning on walnut-and-oak shelves, standing
+// on a marble table, or (for cars) a 3D car on a showroom platform. It uses
+// the category's own product photos when it has some, and soft colour tiles
+// when it doesn't.
 
 const TILES = ["linear-gradient(135deg,#f3d9c4,#d9a27b)", "linear-gradient(135deg,#d7e6d2,#8fb487)", "linear-gradient(135deg,#dde3f1,#97a6cf)", "linear-gradient(135deg,#f2e2b8,#cfa64e)"];
 
@@ -66,6 +67,37 @@ export function PlacementPreview({ placement, images = [], accent, className }: 
             </span>
           ))}
         </span>
+      )}
+
+      {placement === "showroom" && (
+        <>
+          {/* The car's photo on the wall behind it */}
+          <span className="absolute top-[9%] left-1/2 flex w-[26%] -translate-x-1/2 flex-col items-center">
+            <span className="mb-[6%] h-[3px] w-[60%] rounded-full bg-gradient-to-r from-[#b8893f] via-[#e4c27a] to-[#b8893f]" />
+            <Frame src={img(0)} i={0} className="aspect-[4/3] w-full" />
+          </span>
+          {/* A round platform with a brass edge, and a glossy coupe on it */}
+          <span className="absolute bottom-[5%] left-1/2 h-[16%] w-[78%] -translate-x-1/2 rounded-[50%] border-t-2 border-[#d2ab5c] shadow-[0_3px_8px_rgba(0,0,0,0.25)]" style={{ background: plinth }} />
+          <svg viewBox="0 0 120 44" className="absolute bottom-[12%] left-1/2 w-[62%] -translate-x-1/2 drop-shadow-[0_3px_3px_rgba(0,0,0,0.3)]" aria-hidden>
+            <defs>
+              <linearGradient id="pp-paint" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stopColor="#d23a43" />
+                <stop offset="1" stopColor="#7c0b12" />
+              </linearGradient>
+            </defs>
+            <path d="M6 30 Q7 23 16 21 L36 18 Q48 8 66 8 Q82 8 92 17 L108 21 Q115 23 115 30 L115 34 L6 34 Z" fill="url(#pp-paint)" />
+            <path d="M42 18 Q51 11 64 11 L64 18 Z M68 11 Q80 11 88 18 L68 18 Z" fill="#1d2630" />
+            <path d="M14 23 L30 21" stroke="#fff" strokeOpacity="0.5" strokeWidth="1.2" />
+            <rect x="108" y="23" width="6" height="2.5" rx="1" fill="#fff8dc" />
+            {[28, 92].map((x) => (
+              <g key={x}>
+                <circle cx={x} cy={34} r={8} fill="#141414" />
+                <circle cx={x} cy={34} r={4.6} fill="#c4c8ce" />
+                <circle cx={x} cy={34} r={1.4} fill="#6b6f75" />
+              </g>
+            ))}
+          </svg>
+        </>
       )}
 
       {placement === "table" && (

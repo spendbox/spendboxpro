@@ -8,7 +8,7 @@ import { LIGHT_TONES, type Art, type PlantSpot, type StoreTheme } from "@/lib/st
 import type { StoreProduct } from "@/lib/types";
 import { mix } from "../geometry";
 import { useDispose } from "../hooks";
-import { fontFamily, neonTexture, shade, shopSignTexture } from "../textures";
+import { counterPlaqueTexture, fontFamily, neonTexture, shade } from "../textures";
 import { useMaterials } from "./kit";
 import { BACK, COUNTER_Z, H, LOUNGE, W } from "./layout";
 import { ScreenCanvas } from "./screen-canvas";
@@ -437,15 +437,34 @@ export function WallArt({ theme, accent, onTap }: { theme: StoreTheme; accent: s
 
 /** The counter's name plaque (if the business shows it), the clock and the OPEN sign by the door. */
 export function Decor({ business, accent, counterName }: { business: StoreBusiness; accent: string; counterName: boolean }) {
-  const plaque = useMemo(() => shopSignTexture(business.name, accent, business.logo_url), [business.name, accent, business.logo_url]);
+  const plaque = useMemo(() => counterPlaqueTexture(business.name, accent, business.logo_url), [business.name, accent, business.logo_url]);
+  useDispose(plaque);
   const neon = useMemo(() => neonTexture("OPEN", "#ff5c8a"), []);
   const clock = useMemo(() => clockTexture(), []);
   return (
     <>
-      {counterName && <Picture texture={plaque} size={[2.2, 0.55]} position={[0, 0.6, COUNTER_Z + 0.5]} />}
+      {counterName && <CounterPlaque texture={plaque} />}
       <Picture texture={clock} size={[0.6, 0.6]} position={[4.75, 3.45, BACK + 0.1]} />
       <Picture texture={neon} size={[1.5, 0.47]} position={[-W / 2 + 0.12, 3.05, 1.6]} rotation={[0, Math.PI / 2, 0]} />
     </>
+  );
+}
+
+/** The nameplate on the counter front, in a raised brass frame. */
+function CounterPlaque({ texture }: { texture: THREE.Texture }) {
+  const [w, h] = [2.5, 0.583];
+  const z = COUNTER_Z + 0.49;
+  return (
+    <group position={[0, 0.6, z]}>
+      <mesh>
+        <boxGeometry args={[w + 0.07, h + 0.07, 0.03]} />
+        <meshStandardMaterial color="#d2ab5c" metalness={0.85} roughness={0.28} />
+      </mesh>
+      <mesh position-z={0.0155}>
+        <planeGeometry args={[w, h]} />
+        <meshStandardMaterial map={texture} roughness={0.35} metalness={0.05} />
+      </mesh>
+    </group>
   );
 }
 

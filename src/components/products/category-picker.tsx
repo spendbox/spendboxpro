@@ -57,6 +57,7 @@ import {
   categoriesForBusiness,
   categoryInfo,
   PLACEMENTS,
+  placementsFor,
   suggestCategories,
   type CategoryGroup,
   type CustomCategory,
@@ -316,8 +317,11 @@ export function PlacementChoice({
   images,
   accent,
   label = "Where it shows in your 3D shop",
+  options = placementsFor(null),
 }: {
   value: Placement;
+  /** The choices (a 3D showroom only for vehicles). */
+  options?: typeof PLACEMENTS;
   onChange: (p: Placement) => void;
   images?: string[];
   /** The shop's colour, for the shelves and tables in the pictures. */
@@ -325,8 +329,8 @@ export function PlacementChoice({
   label?: string;
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className="grid grid-cols-3 gap-2">
-      {PLACEMENTS.map((p) => {
+    <div role="radiogroup" aria-label={label} className={cn("grid gap-2", options.length > 3 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3")}>
+      {options.map((p) => {
         const on = p.id === value;
         return (
           <button
@@ -365,7 +369,7 @@ function AddCategory({ bizId, initialName, onAdded, onCancel }: { bizId: string;
         aria-label="New category name"
         className="h-12 rounded-xl border border-line-strong bg-white px-3 text-[16px] outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/10"
       />
-      <PlacementChoice value={placement} onChange={setPlacement} />
+      <PlacementChoice value={placement} onChange={setPlacement} options={placementsFor(null, [], name)} />
       {error && <p className="text-sm font-semibold text-red-700">{error}</p>}
       <div className="flex gap-2">
         <button type="button" onClick={onCancel} className="h-11 flex-1 rounded-xl font-semibold ring-1 ring-line-strong">
