@@ -10,7 +10,7 @@ import { useDispose } from "../hooks";
 import { canvas, fitText, fontFamily, roundRect, shade, toTexture } from "../textures";
 import type { Hall, HallItem } from "./hall";
 import { FRONT } from "./hall";
-import { CutoutFigure, MannequinFigure, MannequinHead } from "./cutout-figure";
+import { CutoutFigure, WornFigure } from "./cutout-figure";
 import { Built, Kit } from "./kit";
 import { H, W } from "./layout";
 import { FloorShadow } from "./room";
@@ -243,53 +243,18 @@ function signTexture(label: string, count: number, accent: string) {
 
 // ---------------------------------------------------------------- Furniture (merged)
 
-/** The dress form's outline: [radius, height]. */
-const FORM: [number, number][] = [
-  [0, 0.84],
-  [0.15, 0.845],
-  [0.175, 0.9],
-  [0.185, 0.98],
-  [0.165, 1.08],
-  [0.15, 1.14],
-  [0.165, 1.22],
-  [0.185, 1.3],
-  [0.18, 1.38],
-  [0.155, 1.45],
-  [0.1, 1.5],
-  [0.05, 1.53],
-  [0.045, 1.6],
-  [0, 1.6],
-];
-const FORM_SCALE: Vec = [1.18, 1, 0.74];
-
-function formRadius(y: number) {
-  for (let i = 1; i < FORM.length; i++) {
-    const [r1, y1] = FORM[i]!;
-    const [r0, y0] = FORM[i - 1]!;
-    if (y <= y1) return r0 + ((r1 - r0) * (y - y0)) / Math.max(1e-6, y1 - y0);
+/** A slim black poster stand, for clothes without a cutout (their photo goes in it). */
+function posterStand(k: Kit) {
+  k.box("satin", [0.84, 1.1, 0.03], [0, 1.25, 0], "#151515");
+  for (const s of [-1, 1]) {
+    k.cyl("metal", 0.012, 0.012, 1.25, [s * 0.32, 0.6, -0.12], "#151515", 8, [0.18, 0, 0]);
+    k.cyl("metal", 0.012, 0.012, 1.0, [s * 0.32, 0.5, 0.12], "#151515", 8, [-0.1, 0, 0]);
   }
-  return 0;
 }
 
-/** The garment's outline: evenly spaced up the form (so the photo isn't stretched), flaring into a skirt below the hips. */
-const GARMENT_BOTTOM = 0.62;
-const GARMENT_TOP = 1.51;
-const GARMENT: THREE.Vector2[] = Array.from({ length: 16 }, (_, i) => {
-  const y = GARMENT_BOTTOM + ((GARMENT_TOP - GARMENT_BOTTOM) * i) / 15;
-  const r = y < 0.9 ? 0.177 + (0.9 - y) * 0.3 : formRadius(y) + 0.012;
-  return new THREE.Vector2(r, y);
-});
-
-/** A glossy black boutique dress form on a slim base (its head is added separately). */
-function dressForm(k: Kit) {
-  k.cyl("leather", 0.24, 0.26, 0.024, [0, 0.012, 0], "#141414", 40);
-  k.cyl("leather", 0.016, 0.016, 0.84, [0, 0.44, 0], "#141414", 12);
-  k.add("leather", new THREE.LatheGeometry(FORM.map(([r, y]) => new THREE.Vector2(r, y)), 32).scale(...FORM_SCALE), "#141414");
-}
-
-/** A black dress form, unless the product's own 3D cutout stands there (it brings its own mannequin parts). */
+/** Clothes stand as their own cutout (it brings its own stand); without one, their photo on a poster stand. */
 function mannequin(k: Kit, cutout: boolean) {
-  if (!cutout) dressForm(k);
+  if (!cutout) posterStand(k);
 }
 
 /** Two oak-topped white steps: the shoe (or bag) on the top one. */
@@ -469,21 +434,23 @@ const HIT: Record<DisplayKind, { at: Vec; size: Vec }> = {
 const cutoutOf = (item: HallItem) => (item.product.media_type === "image" ? (item.product.cutout_url ?? null) : null);
 
 /**
- * Clothes: the 3D cutout of the photo (the model wearing it, full height, or
- * the garment itself at dress-form height) on the platform; without a cutout,
- * the photo wrapped round a dress form.
+ * Clothes: the cutout photo standing in the shop like a mockup (a model full
+ * height, clothes on their own at the height they're worn); without a cutout,
+ * the photo on a poster stand.
  */
 function Wear({ item }: { item: HallItem }) {
   const url = cutoutOf(item);
+  const poster = <PhotoPlane item={item} size={[0.78, 1.04]} position={[0, 1.25, 0.017]} />;
   return (
     <>
-      {url ? <MannequinFigure url={url} at={[item.x, item.z]} fallback={<Garment item={item} withForm />} /> : <Garment item={item} />}
+      {url ? <WornFigure url={url} at={[item.x, item.z]} fallback={poster} /> : poster}
+      {!url && <FloorShadow size={[1.0, 0.6]} position={[0, 0]} opacity={0.4} />}
       <NameAbove item={item} />
     </>
   );
 }
 
-/** The product's name floating above its mannequin, like the signs in a boutique window. */
+/** The product's name floating above it, like the signs in a boutique window. */
 function NameAbove({ item }: { item: HallItem }) {
   const invalidate = useThree((s) => s.invalidate);
   const [near, setNear] = useState(false);
@@ -530,44 +497,6 @@ function OnRiser({ item, accent }: { item: HallItem; accent: string }) {
       {url ? <CutoutFigure url={url} at={[item.x, item.z]} base={0.81} maxW={0.44} maxH={0.4} z={-0.08} fallback={photo} /> : photo}
       <Tag item={item} accent={accent} position={[0, 0.25, 0.302]} rotation={[0, 0, 0]} />
       <FloorShadow size={[1.0, 0.85]} position={[0, 0]} opacity={0.5} />
-    </>
-  );
-}
-
-/** A dress form on its own (when a cutout fails to load on a platform built without one). */
-function LoneDressForm() {
-  const parts = useMemo(() => {
-    const k = new Kit();
-    dressForm(k);
-    return k.build();
-  }, []);
-  return <Built parts={parts} />;
-}
-
-/** The photo wrapped round the dress form, front and back. */
-function Garment({ item, withForm = false }: { item: HallItem; withForm?: boolean }) {
-  const [front, back] = useMemo(
-    () => [
-      new THREE.LatheGeometry(GARMENT, 28, -Math.PI / 2, Math.PI).scale(...FORM_SCALE),
-      new THREE.LatheGeometry(GARMENT, 28, Math.PI / 2, Math.PI).scale(...FORM_SCALE),
-    ],
-    [],
-  );
-  useDispose(front);
-  useDispose(back);
-  const texture = useNearTexture(pictureUrl(item), 0.78, [item.x, item.z]);
-  const material = texture ? <meshStandardMaterial key={texture.uuid} map={texture} roughness={0.85} /> : <meshStandardMaterial key="blank" color="#d8d0c4" roughness={0.9} />;
-  return (
-    <>
-      {withForm && <LoneDressForm />}
-      <MannequinHead y={1.54} />
-      <mesh geometry={front} castShadow>
-        {material}
-      </mesh>
-      <mesh geometry={back} castShadow>
-        {material}
-      </mesh>
-      <FloorShadow size={[0.9, 0.9]} position={[0, 0]} opacity={0.45} />
     </>
   );
 }

@@ -1,32 +1,31 @@
 "use client";
 
 import { useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import * as THREE from "three";
 import { useDispose } from "../hooks";
+import { softShadow } from "./surfaces";
 
-// A product photo with its background removed, made into a rounded 3D figure:
-// the cut-out shape is "inflated" (thickest in the middle, thin at the edges),
-// front and back, so a model wearing an outfit, a shoe or a bottle stands in
-// the shop with real depth as you walk round it.
+// A product photo with its background removed, standing in the shop the way
+// mockup and AR "placeholder" apps show them: the photo itself, crisp and
+// true to colour, upright, always turned to face the visitor, with a soft
+// shadow of its own outline on the floor and a darker touch where it meets it.
 
-const GRID = 120;
 const NEAR = 18;
 
 interface Figure {
   texture: THREE.Texture;
-  front: THREE.BufferGeometry;
-  back: THREE.BufferGeometry;
-  /** Built 1 unit tall; this is its width. */
-  width: number;
-  height: number;
+  /** The outline as a soft shadow, laid on the floor behind it. */
+  shadow: THREE.Texture;
+  /** Width ÷ height. */
+  aspect: number;
   /** The picture already has a head on top (a model, or a mannequin with one). */
   hasHead: boolean;
 }
 
 /**
- * Whether the shape starts with a head: a narrow part at the top that widens
- * into shoulders below it. Flat-lay clothes start wide (collar and shoulders).
+ * Whether the shape starts with a head: one narrow piece in the middle at the
+ * top that widens into shoulders below. Flat-lay clothes start wide.
  */
 function looksLikeHead(mask: Uint8Array, w: number, h: number) {
   const widths: number[] = [];
@@ -61,30 +60,10 @@ function looksLikeHead(mask: Uint8Array, w: number, h: number) {
 }
 
 /** How far each grid cell is from the edge of the shape (0 outside). */
-function distanceFromEdge(mask: Uint8Array, w: number, h: number) {
-  const d = new Float32Array(w * h);
-  const BIG = 1e6;
-  for (let i = 0; i < w * h; i++) d[i] = mask[i] ? BIG : 0;
-  const at = (x: number, y: number) => (x < 0 || y < 0 || x >= w || y >= h ? 0 : d[y * w + x]!);
-  for (let y = 0; y < h; y++)
-    for (let x = 0; x < w; x++) {
-      const i = y * w + x;
-      if (!d[i]) continue;
-      d[i] = Math.min(d[i]!, at(x - 1, y) + 1, at(x, y - 1) + 1, at(x - 1, y - 1) + 1.414, at(x + 1, y - 1) + 1.414);
-    }
-  for (let y = h - 1; y >= 0; y--)
-    for (let x = w - 1; x >= 0; x--) {
-      const i = y * w + x;
-      if (!d[i]) continue;
-      d[i] = Math.min(d[i]!, at(x + 1, y) + 1, at(x, y + 1) + 1, at(x + 1, y + 1) + 1.414, at(x - 1, y + 1) + 1.414);
-    }
-  return d;
-}
-
 /**
- * The picture with clean edges: the soft rim (which still carries a little of
- * the old background) is trimmed by two pixels, and the see-through pixels take
- * the colour of the product next to them, so no pale outline shows.
+ * The picture ready to draw: see-through pixels take the colour of the
+ * product next to them, so its soft edge never shows a pale or dark outline
+ * when the picture is drawn small.
  */
 function cleanEdges(img: HTMLImageElement) {
   const scale = Math.min(1, 1024 / Math.max(img.width, img.height));
@@ -97,17 +76,8 @@ function cleanEdges(img: HTMLImageElement) {
   ctx.drawImage(img, 0, 0, w, h);
   const data = ctx.getImageData(0, 0, w, h);
   const px = data.data;
-  let solid = new Uint8Array(w * h);
-  for (let i = 0; i < w * h; i++) solid[i] = px[i * 4 + 3]! > 200 ? 1 : 0;
-  for (let pass = 0; pass < 2; pass++) {
-    const next = new Uint8Array(solid);
-    for (let y = 0; y < h; y++)
-      for (let x = 0; x < w; x++) {
-        const i = y * w + x;
-        if (solid[i] && (x === 0 || y === 0 || x === w - 1 || y === h - 1 || !solid[i - 1] || !solid[i + 1] || !solid[i - w] || !solid[i + w])) next[i] = 0;
-      }
-    solid = next;
-  }
+  const solid = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) solid[i] = px[i * 4 + 3]! > 160 ? 1 : 0;
   // Spread the product's colours outwards into the see-through area.
   let filled = new Uint8Array(solid);
   for (let pass = 0; pass < 6; pass++) {
@@ -135,18 +105,45 @@ function cleanEdges(img: HTMLImageElement) {
       }
     filled = next;
   }
-  for (let i = 0; i < w * h; i++) px[i * 4 + 3] = solid[i] ? 255 : 0;
   ctx.putImageData(data, 0, 0);
   return c;
 }
 
-/** Builds the inflated front and back from the picture's see-through parts, 1 unit tall. */
+/** The outline, squashed and blurred, as a shadow texture. */
+function shadowOf(picture: HTMLCanvasElement) {
+  const w = 128;
+  const h = 96;
+  const shape = document.createElement("canvas");
+  shape.width = w;
+  shape.height = h;
+  const sctx = shape.getContext("2d")!;
+  // Flipped, so the feet meet the shadow's near edge.
+  sctx.translate(0, h);
+  sctx.scale(1, -1);
+  sctx.drawImage(picture, 8, 8, w - 16, h - 16);
+  sctx.setTransform(1, 0, 0, 1, 0, 0);
+  sctx.globalCompositeOperation = "source-in";
+  // Darkest near the feet, fading away from them.
+  const fade = sctx.createLinearGradient(0, 0, 0, h);
+  fade.addColorStop(0, "rgba(20,16,12,0.15)");
+  fade.addColorStop(1, "rgba(20,16,12,0.85)");
+  sctx.fillStyle = fade;
+  sctx.fillRect(0, 0, w, h);
+  const out = document.createElement("canvas");
+  out.width = w;
+  out.height = h;
+  const octx = out.getContext("2d")!;
+  octx.filter = "blur(4px)";
+  octx.drawImage(shape, 0, 0);
+  const t = new THREE.CanvasTexture(out);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 function buildFigure(img: HTMLImageElement): Figure {
-  const aspect = img.width / img.height;
-  const height = 1;
-  const width = aspect;
-  const gw = Math.max(8, Math.round(aspect >= 1 ? GRID : GRID * aspect));
-  const gh = Math.max(8, Math.round(aspect >= 1 ? GRID / aspect : GRID));
+  const picture = cleanEdges(img);
+  const gw = 96;
+  const gh = Math.max(8, Math.round((96 * img.height) / img.width));
   const c = document.createElement("canvas");
   c.width = gw;
   c.height = gh;
@@ -155,38 +152,10 @@ function buildFigure(img: HTMLImageElement): Figure {
   const px = ctx.getImageData(0, 0, gw, gh).data;
   const mask = new Uint8Array(gw * gh);
   for (let i = 0; i < gw * gh; i++) mask[i] = px[i * 4 + 3]! > 100 ? 1 : 0;
-  const hasHead = looksLikeHead(mask, gw, gh);
-  const dist = distanceFromEdge(mask, gw, gh);
-  let max = 1;
-  for (const v of dist) if (v > max) max = v;
-  const depth = Math.min(width, height) * 0.3;
-
-  const front = new THREE.PlaneGeometry(width, height, gw - 1, gh - 1);
-  const pos = front.attributes.position!;
-  for (let iy = 0; iy < gh; iy++)
-    for (let ix = 0; ix < gw; ix++) {
-      const t = Math.min(1, dist[iy * gw + ix]! / max);
-      // A rounded profile: steep at the edge, flat on top.
-      pos.setZ(iy * gw + ix, depth * Math.sqrt(1 - (1 - t) * (1 - t)));
-    }
-  front.computeVertexNormals();
-
-  const back = front.clone();
-  const bpos = back.attributes.position!;
-  for (let i = 0; i < bpos.count; i++) bpos.setZ(i, -bpos.getZ(i));
-  const index = back.index!;
-  for (let i = 0; i < index.count; i += 3) {
-    const a = index.getX(i + 1);
-    index.setX(i + 1, index.getX(i + 2));
-    index.setX(i + 2, a);
-  }
-  back.computeVertexNormals();
-
-  const texture = new THREE.CanvasTexture(cleanEdges(img));
+  const texture = new THREE.CanvasTexture(picture);
   texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 4;
-  texture.needsUpdate = true;
-  return { texture, front, back, width, height, hasHead };
+  texture.anisotropy = 8;
+  return { texture, shadow: shadowOf(picture), aspect: img.width / img.height, hasHead: looksLikeHead(mask, gw, gh) };
 }
 
 /** The figure, made once the camera is near `at`; "failed" if the cutout can't be loaded. */
@@ -227,26 +196,57 @@ function useFigure(url: string, at: [number, number]) {
   const figure = useNearFigure(url, at);
   const ready = figure && figure !== "failed" ? figure : null;
   useDispose(ready?.texture);
-  useDispose(ready?.front);
-  useDispose(ready?.back);
+  useDispose(ready?.shadow);
   return { failed: figure === "failed", ready };
 }
 
-/** The inflated picture itself, `scale` metres tall, its middle at `y`. */
-function Body({ figure, scale, y, z = 0 }: { figure: Figure; scale: number; y: number; z?: number }) {
+const camLocal = new THREE.Vector3();
+
+/** Keeps a group turned to face the camera (round the upright axis). */
+function useFaceCamera() {
+  const ref = useRef<THREE.Group>(null);
+  useFrame(({ camera }) => {
+    const g = ref.current;
+    if (!g?.parent) return;
+    camLocal.copy(camera.position);
+    g.parent.worldToLocal(camLocal);
+    g.rotation.y = Math.atan2(camLocal.x - g.position.x, camLocal.z - g.position.z);
+  });
+  return ref;
+}
+
+/**
+ * The photo standing upright, `height` metres tall with its bottom at `base`,
+ * facing the visitor, with its shadow (when `shadow` gives the floor height).
+ */
+function Standee({ figure, height, base, z = 0, floor }: { figure: Figure; height: number; base: number; z?: number; floor?: number }) {
+  const ref = useFaceCamera();
+  const width = height * figure.aspect;
   return (
-    <group position={[0, y, z]} scale={scale}>
-      <mesh geometry={figure.front}>
-        <meshStandardMaterial map={figure.texture} alphaTest={0.6} roughness={0.6} />
+    <group ref={ref} position={[0, 0, z]}>
+      <mesh position-y={base + height / 2}>
+        <planeGeometry args={[width, height]} />
+        <meshBasicMaterial map={figure.texture} alphaTest={0.5} alphaToCoverage toneMapped={false} side={THREE.DoubleSide} />
       </mesh>
-      <mesh geometry={figure.back}>
-        <meshStandardMaterial map={figure.texture} alphaTest={0.6} roughness={0.7} color="#c9c4bc" />
-      </mesh>
+      {floor !== undefined && (
+        <>
+          {/* Its outline on the floor behind it, as if lit from the front and above. */}
+          <mesh rotation-x={-Math.PI / 2} position={[0, floor + 0.004, -height * 0.2]} renderOrder={2}>
+            <planeGeometry args={[width * 1.05, height * 0.42]} />
+            <meshBasicMaterial map={figure.shadow} transparent opacity={0.55} depthWrite={false} toneMapped={false} />
+          </mesh>
+          {/* A darker touch where it stands. */}
+          <mesh rotation-x={-Math.PI / 2} position={[0, floor + 0.005, 0]} renderOrder={3}>
+            <planeGeometry args={[Math.max(0.3, width * 0.9), Math.max(0.16, width * 0.35)]} />
+            <meshBasicMaterial map={softShadow()} transparent opacity={0.7} depthWrite={false} toneMapped={false} />
+          </mesh>
+        </>
+      )}
     </group>
   );
 }
 
-/** A cutout standing with its feet (or base) at `base`, fitting maxW × maxH. Shows `fallback` if it can't load. */
+/** A cutout standing with its bottom at `base`, fitting maxW × maxH. Shows `fallback` if it can't load. */
 export function CutoutFigure({
   url,
   at,
@@ -262,87 +262,43 @@ export function CutoutFigure({
   maxW: number;
   maxH: number;
   z?: number;
-  fallback?: React.ReactNode;
+  fallback?: ReactNode;
 }) {
   const { failed, ready } = useFigure(url, at);
   if (failed) return <>{fallback}</>;
   if (!ready) return null;
-  const scale = Math.min(maxW / ready.width, maxH);
-  return <Body figure={ready} scale={scale} y={base + scale / 2} z={z} />;
+  return <Standee figure={ready} height={Math.min(maxH, maxW / ready.aspect)} base={base} z={z} floor={base} />;
 }
-
-// ---------------------------------------------------------------- Boutique mannequins
-
-/** Glossy black, like lacquered display mannequins. */
-function Gloss() {
-  return <meshPhysicalMaterial color="#0d0d0e" roughness={0.18} metalness={0.1} clearcoat={1} clearcoatRoughness={0.08} />;
-}
-
-/** A faceless egg-shaped head on a neck, its chin at `y`. */
-export function MannequinHead({ y }: { y: number }) {
-  return (
-    <group position-y={y}>
-      <mesh position-y={0.05}>
-        <cylinderGeometry args={[0.042, 0.05, 0.12, 20]} />
-        <Gloss />
-      </mesh>
-      <mesh position={[0, 0.2, 0.01]} scale={[0.1, 0.13, 0.115]} rotation-x={-0.12}>
-        <sphereGeometry args={[1, 32, 24]} />
-        <Gloss />
-      </mesh>
-    </group>
-  );
-}
-
-/** A slim black base, with a pole up to `top` (when the clothes don't reach the floor). */
-function MannequinStand({ top }: { top: number }) {
-  return (
-    <>
-      <mesh position-y={0.012}>
-        <cylinderGeometry args={[0.24, 0.26, 0.024, 40]} />
-        <Gloss />
-      </mesh>
-      {top > 0.05 && (
-        <mesh position-y={top / 2}>
-          <cylinderGeometry args={[0.016, 0.016, top, 12]} />
-          <Gloss />
-        </mesh>
-      )}
-    </>
-  );
-}
-
-const SHOULDERS = 1.52;
 
 /**
- * Clothes worn on a glossy black boutique mannequin, from the product's 3D
- * cutout. A photo of a model (it has a head) stands full height as it is; an
- * outfit on its own gets the mannequin's head above its shoulders, and a top
- * on its own sits on a stand at chest height.
+ * Clothes from the product's 3D cutout. A photo of a model (it has a head)
+ * stands full height on the floor; clothes on their own float at the height
+ * they're worn, like "ghost mannequin" shop photos, over a clear stand.
  */
-export function MannequinFigure({ url, at, fallback = null }: { url: string; at: [number, number]; fallback?: React.ReactNode }) {
+export function WornFigure({ url, at, fallback = null }: { url: string; at: [number, number]; fallback?: ReactNode }) {
   const { failed, ready } = useFigure(url, at);
   if (failed) return <>{fallback}</>;
   if (!ready) return null;
-  if (ready.hasHead) {
-    const scale = Math.min(0.95 / ready.width, 1.78);
-    return (
-      <>
-        <MannequinStand top={0} />
-        <Body figure={ready} scale={scale} y={0.024 + scale / 2} />
-      </>
-    );
-  }
-  // A full outfit (tall) reaches the floor; a top or dress shorter than that sits on a pole.
-  const tall = 1 / ready.width >= 1.25;
-  // Wide robes (agbada, kaftans) may spread wider, so their feet still reach the floor.
-  const scale = tall ? Math.min(1.15 / ready.width, SHOULDERS - 0.06) : Math.min(0.68 / ready.width, 0.8);
-  const bottom = SHOULDERS - scale;
+  if (ready.hasHead) return <Standee figure={ready} height={Math.min(1.78, 1.0 / ready.aspect)} base={0} floor={0} />;
+  // A full outfit reaches down to the shoes; a top or dress sits higher.
+  const tall = ready.aspect <= 0.8;
+  const height = tall ? Math.min(1.42, 1.1 / ready.aspect) : Math.min(0.8, 0.7 / ready.aspect);
+  const bottom = 1.5 - height;
   return (
     <>
-      <MannequinStand top={bottom + 0.02} />
-      <Body figure={ready} scale={scale} y={SHOULDERS - scale / 2} />
-      <MannequinHead y={SHOULDERS - 0.03} />
+      {bottom > 0.08 && (
+        <>
+          <mesh position-y={bottom / 2}>
+            <cylinderGeometry args={[0.012, 0.012, bottom, 12]} />
+            <meshPhysicalMaterial color="#ffffff" roughness={0.05} transmission={0.9} thickness={0.02} transparent opacity={0.35} />
+          </mesh>
+          <mesh position-y={0.008}>
+            <cylinderGeometry args={[0.2, 0.21, 0.016, 40]} />
+            <meshPhysicalMaterial color="#ffffff" roughness={0.05} transparent opacity={0.3} />
+          </mesh>
+        </>
+      )}
+      <Standee figure={ready} height={height} base={bottom} floor={0} />
     </>
   );
 }
