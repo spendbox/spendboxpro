@@ -11,6 +11,7 @@ import { getMyMemberships, getMyProfile } from "@/lib/customer";
 import { setSharing } from "../actions";
 import { DeleteAccount } from "./delete-account";
 import { DetailCards } from "./profile-cards";
+import { SecurityCards } from "@/components/account/security-cards";
 
 export const metadata: Metadata = { title: "Profile & privacy" };
 
@@ -25,6 +26,11 @@ export default async function ProfilePage() {
       <section className="flex flex-col gap-3">
         <SectionTitle title="Your details" />
         <DetailCards profile={profile} />
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <SectionTitle title="Login & security" />
+        <SecurityCards profile={profile} showEmail={false} />
       </section>
 
       <section className="flex flex-col gap-3">

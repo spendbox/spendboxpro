@@ -52,7 +52,7 @@ function BirthdayEditor({ profile, close }: { profile: Profile | null; close: ()
   );
 }
 
-function EmailEditor({ profile, close }: { profile: Profile | null; close: () => void }) {
+export function EmailEditor({ profile, close, notifyLabel = "Email me about my requests and perks" }: { profile: Profile | null; close: () => void; notifyLabel?: string }) {
   const [email, setEmail] = useState(profile?.email ?? "");
   const [notify, setNotify] = useState(profile?.email_notifications ?? true);
   const [error, setError] = useState<string | null>(null);
@@ -72,7 +72,7 @@ function EmailEditor({ profile, close }: { profile: Profile | null; close: () =>
       <Input aria-label="Email" type="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
       <label className="flex items-center gap-3 text-sm">
         <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} className="size-5 accent-brand-600" />
-        <span className="text-ink-2">Email me about my requests and perks</span>
+        <span className="text-ink-2">{notifyLabel}</span>
       </label>
       <FormMessage>{error}</FormMessage>
       <SaveRow pending={pending} onCancel={close} />

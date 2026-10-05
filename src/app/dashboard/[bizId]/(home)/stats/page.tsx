@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { ProductThumb } from "@/components/products/product-thumb";
 import { Card, EmptyState, SectionTitle } from "@/components/ui/card";
 import { requireOwnedBusiness } from "@/lib/auth";
-import { compactNumber, getRequests, getStats } from "@/lib/business";
+import { compactNumber, getReach, getRequests, getStats } from "@/lib/business";
 import { cn } from "@/lib/cn";
 import { getBusinessProducts } from "@/lib/products";
 
@@ -13,7 +13,13 @@ export const metadata: Metadata = { title: "Stats" };
 
 export default async function StatsTab({ params }: PageProps<"/dashboard/[bizId]/stats">) {
   const { bizId } = await params;
-  const [, stats, requests, products] = await Promise.all([requireOwnedBusiness(bizId), getStats(bizId), getRequests(bizId), getBusinessProducts(bizId)]);
+  const [{ business }, stats, requests, products, reach] = await Promise.all([
+    requireOwnedBusiness(bizId),
+    getStats(bizId),
+    getRequests(bizId),
+    getBusinessProducts(bizId),
+    getReach(bizId),
+  ]);
   const base = `/dashboard/${bizId}`;
   const sum = (key: "views" | "viewers" | "likes" | "contacts" | "partner_viewers") => products.reduce((s, p) => s + p[key], 0);
   const reachedOut = requests.filter((r) => r.reached_out).length;
@@ -22,9 +28,22 @@ export default async function StatsTab({ params }: PageProps<"/dashboard/[bizId]
   return (
     <div className="flex flex-col gap-6">
       <section className="flex flex-col gap-3" aria-label="Customers">
-        <SectionTitle title="Customers" />
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <SectionTitle title="Customers" description="Total reach is everyone who sees your posts and perks: your customers, plus your partners' customers who haven't joined you yet." />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <Tile label="Customers" value={compactNumber(stats.members)} note={stats.members_new ? `+${stats.members_new} this week` : "No new ones this week"} href={`${base}/customers`} />
+          <Tile
+            label="Total reach"
+            value={compactNumber(Math.max(reach.total, stats.members))}
+            note={
+              !business.partners_enabled
+                ? "Turn on partners to reach more"
+                : reach.partners === 0
+                  ? "Add a partner to reach more"
+                  : `+${compactNumber(reach.partner_customers)} through ${reach.partners === 1 ? "your partner" : `${reach.partners} partners`}`
+            }
+            href={`${base}/partners`}
+            highlight
+          />
           <Tile label="Joined from invites" value={compactNumber(stats.referred_members)} note="Brought by a friend" href={`${base}/customers`} />
           <Tile label="Perks to give" value={compactNumber(stats.rewards_ready)} note="Earned, not yet given" href={`${base}/customers?perks=ready`} attention={stats.rewards_ready > 0} />
           <Tile label="Live requests" value={compactNumber(requests.length)} note={`You reached out to ${reachedOut}`} href={`${base}/requests`} />
@@ -80,7 +99,7 @@ export default async function StatsTab({ params }: PageProps<"/dashboard/[bizId]
   );
 }
 
-function Tile({ label, value, note, href, attention }: { label: string; value: ReactNode; note: string; href?: string; attention?: boolean }) {
+function Tile({ label, value, note, href, attention, highlight }: { label: string; value: ReactNode; note: string; href?: string; attention?: boolean; highlight?: boolean }) {
   const body = (
     <>
       <p className="text-xs font-semibold text-muted sm:text-sm">{label}</p>
@@ -88,7 +107,7 @@ function Tile({ label, value, note, href, attention }: { label: string; value: R
       <p className={cn("text-xs font-semibold", attention ? "text-accent-700" : "text-muted")}>{note}</p>
     </>
   );
-  const className = cn("flex flex-col gap-1 rounded-2xl bg-surface p-4 shadow-card ring-1", attention ? "bg-accent-50 ring-accent-100" : "ring-line");
+  const className = cn("flex flex-col gap-1 rounded-2xl bg-surface p-4 shadow-card ring-1", attention ? "bg-accent-50 ring-accent-100" : highlight ? "bg-brand-50 ring-brand-100" : "ring-line");
   return href ? (
     <Link href={href} className={cn(className, "transition hover:ring-brand-300")}>
       {body}

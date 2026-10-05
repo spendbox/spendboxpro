@@ -15,6 +15,8 @@ import { siteUrl } from "@/lib/env";
 import { formatDate, plural } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 import { DeleteBusiness } from "./delete-business";
+import { SecurityCards } from "@/components/account/security-cards";
+import { getMyProfile } from "@/lib/customer";
 import { BusinessDetailCards } from "./detail-cards";
 import { LogoUpload } from "./logo-upload";
 
@@ -41,11 +43,12 @@ function LinkCard({ href, icon: Icon, title, note, badge }: { href: string; icon
 export default async function SettingsPage({ params }: PageProps<"/dashboard/[bizId]/settings">) {
   const { bizId } = await params;
   const supabase = await createClient();
-  const [{ business }, perks, { data: requests }] = await Promise.all([
+  const [{ business, user }, perks, { data: requests }] = await Promise.all([
     requireOwnedBusiness(bizId),
     getPerks(bizId),
     supabase.rpc("partner_requests_waiting", { p_business_id: bizId }),
   ]);
+  const profile = await getMyProfile(user.id);
   const joinUrl = `${siteUrl()}/j/${business.slug}`;
   const base = `/dashboard/${bizId}`;
   const activePerks = perks.filter((p) => p.is_active).length;
@@ -102,7 +105,8 @@ export default async function SettingsPage({ params }: PageProps<"/dashboard/[bi
       </section>
 
       <section className="flex flex-col gap-3">
-        <SectionTitle title="Account" />
+        <SectionTitle title="Login & security" description="How you log in to Spendbox. Your customers never see these." />
+        <SecurityCards profile={profile} notifyLabel="Send me Spendbox emails (perks and updates)" />
         <Card className="p-5">
           <form action={signOut}>
             <SubmitButton variant="secondary">

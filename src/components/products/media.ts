@@ -3,6 +3,8 @@
 import { MAX_VIDEO_BYTES, MAX_VIDEO_SECONDS, VIDEO_TYPES } from "@/lib/product-rules";
 import { shrinkImage } from "@/components/requests/shrink-image";
 
+const MB = 1024 * 1024;
+
 export interface PreparedMedia {
   type: "image" | "video";
   file: File;
@@ -30,9 +32,9 @@ async function imageAspect(file: Blob) {
 
 /** Shrinks a photo, or checks a video and grabs a still frame from it. Throws a friendly message. */
 export async function prepareMedia(file: File): Promise<PreparedMedia> {
-  if (file.type.startsWith("image/")) {
-    const small = await shrinkImage(file, 1600, 0.85).catch(() => {
-      throw new Error("We couldn't read that photo. Please try another.");
+  if (file.type.startsWith("image/") || (!file.type && !/\.(mp4|mov|webm)$/i.test(file.name))) {
+    const small = await shrinkImage(file, 1600, 0.85).catch((e: Error) => {
+      throw new Error(`We couldn't read that photo. ${e.message}`);
     });
     return { type: "image", file: small, poster: null, previewUrl: URL.createObjectURL(small), aspect: await imageAspect(small) };
   }
@@ -94,22 +96,59 @@ function readVideo(url: string): Promise<{ duration: number; poster: File | null
   });
 }
 
-/** Uploads a file to a one-time storage link, reporting progress (0–1). */
-export function uploadToSignedUrl(signedUrl: string, file: File, onProgress?: (fraction: number) => void): Promise<void> {
+/** Why an upload failed, from what the storage server said (or didn't). */
+function uploadProblem(status: number, body: string, file: File) {
+  if (status === 413 || /too large|exceeded the maximum/i.test(body)) return `It's too big to upload (${Math.round(file.size / MB)} MB). Videos need to be under 50 MB.`;
+  if (/mime type|not supported/i.test(body)) return "That kind of file can't be uploaded. Please use a JPG, PNG or WebP photo, or an MP4 or MOV video.";
+  if (status === 400 && /signature|expired|token/i.test(body)) return "The upload link ran out. Press Post again.";
+  if (status === 409 || /already exists/i.test(body)) return "It's already uploaded. Press Post again.";
+  if (status >= 500) return "Our storage is busy right now. Please try again in a minute.";
+  return `The upload didn't go through (error ${status}). Please try again.`;
+}
+
+/** One try at the upload. Rejects with `retry` set when trying again may help (the connection dropped or stalled). */
+function putOnce(signedUrl: string, file: File, onProgress?: (fraction: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const form = new FormData();
     form.append("cacheControl", "31536000");
     form.append("", file);
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", signedUrl);
-    xhr.setRequestHeader("x-upsert", "false");
+    // Long enough for a 50 MB video on slow data, short enough not to hang forever.
+    xhr.timeout = Math.max(60_000, (file.size / MB) * 20_000);
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress?.(e.loaded / e.total);
     };
-    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error("The upload didn't go through. Please try again.")));
-    xhr.onerror = () => reject(new Error("The upload didn't go through. Check your connection and try again."));
+    const fail = (message: string, retry: boolean) => reject(Object.assign(new Error(message), { retry }));
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : fail(uploadProblem(xhr.status, xhr.responseText ?? "", file), xhr.status >= 500));
+    xhr.onerror = () =>
+      fail(navigator.onLine === false ? "You're offline. Check your connection, then press Post again." : "The connection dropped while uploading. Check your connection and press Post again.", true);
+    xhr.ontimeout = () => fail("The upload took too long (the connection may be slow). Press Post again, or try on Wi-Fi.", true);
     xhr.send(form);
   });
+}
+
+/**
+ * Uploads a file to a one-time storage link, reporting progress (0–1).
+ * First checks the file can still be read on this device (a draft whose photo
+ * was removed from the phone can't be), then tries up to three times when the
+ * connection drops, and says what went wrong when it can't.
+ */
+export async function uploadToSignedUrl(signedUrl: string, file: File, onProgress?: (fraction: number) => void): Promise<void> {
+  try {
+    await file.slice(0, 1).arrayBuffer();
+  } catch {
+    throw new Error("This photo or video is no longer on this device. Remove it and add it again.");
+  }
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await putOnce(signedUrl, file, onProgress);
+    } catch (e) {
+      const err = e as Error & { retry?: boolean };
+      if (!err.retry || attempt >= 3 || navigator.onLine === false) throw err;
+      await new Promise((r) => setTimeout(r, attempt * 1500));
+    }
+  }
 }
 
 /**
