@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  PawPrint,
+  Stethoscope,
   Baby,
   BookOpen,
   Briefcase,
@@ -83,6 +85,7 @@ const ICONS: Record<string, LucideIcon> = {
   kids: Baby,
   books: BookOpen,
   health: Pill,
+  pets: PawPrint,
   sports: Dumbbell,
   cars: Car,
   property: Building2,
@@ -98,6 +101,7 @@ const ICONS: Record<string, LucideIcon> = {
   cleaning: WashingMachine,
   repairs: Wrench,
   lessons: GraduationCap,
+  "health-care": Stethoscope,
   fitness: HeartPulse,
   design: PenTool,
   delivery: Truck,

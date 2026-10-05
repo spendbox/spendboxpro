@@ -64,6 +64,6 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     // Everything except files, the daily job and pages that are the same for everyone.
-    "/((?!_next/static|_next/image|favicon.ico|icon.svg|api/cron|(?:plug|terms|privacy|auth/forgot)?$|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|icon.svg|api/cron|(?:plug|terms|privacy|auth/forgot)?$|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|mp4|webm)$).*)",
   ],
 };

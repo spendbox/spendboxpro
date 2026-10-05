@@ -68,14 +68,21 @@ export function BulkComposer({ bizId, businessName, joinUrl, categories }: { biz
   // Bring back drafts kept on this device.
   useEffect(() => {
     let alive = true;
-    void loadDrafts(bizId).then((saved) => {
+    void loadDrafts(bizId).then(async (saved) => {
+      // Copy each photo out of the browser's storage into memory. Safari drops
+      // its hold on a stored photo as soon as the drafts are saved again, and
+      // uploading it then fails as if the connection had dropped.
+      const copy = (b: Blob) => b.arrayBuffer().then((buf) => buf, () => null);
+      const loaded = await Promise.all(saved.map(async (x) => ({ x, file: await copy(x.file), poster: x.poster ? await copy(x.poster) : null })));
       if (!alive) return;
-      const back: Draft[] = saved.map((x) => {
-        const file = new File([x.file], x.fileName, { type: x.fileType });
-        const media: PreparedMedia = { type: x.type, file, poster: x.poster ? new File([x.poster], "poster.jpg", { type: "image/jpeg" }) : null, previewUrl: URL.createObjectURL(file), aspect: x.aspect ?? null };
-        urls.current.push(media.previewUrl);
-        return { key: x.key, media, kind: x.kind, title: x.title, description: x.description, price: x.price, category: x.category, selected: x.selected, status: "draft" };
-      });
+      const back: Draft[] = loaded
+        .filter((l): l is typeof l & { file: ArrayBuffer } => l.file !== null && l.file.byteLength > 0)
+        .map(({ x, file: bytes, poster }) => {
+          const file = new File([bytes], x.fileName, { type: x.fileType });
+          const media: PreparedMedia = { type: x.type, file, poster: poster ? new File([poster], "poster.jpg", { type: "image/jpeg" }) : null, previewUrl: URL.createObjectURL(file), aspect: x.aspect ?? null };
+          urls.current.push(media.previewUrl);
+          return { key: x.key, media, kind: x.kind, title: x.title, description: x.description, price: x.price, category: x.category, selected: x.selected, status: "draft" as const };
+        });
       setDrafts((d) => [...back, ...d.filter((x) => !back.some((b) => b.key === x.key))]);
       setRestored(back.length);
     });
@@ -86,7 +93,8 @@ export function BulkComposer({ bizId, businessName, joinUrl, categories }: { biz
 
   // Keep the drafts on this device as they change (once the old ones are back).
   useEffect(() => {
-    if (restored === null) return;
+    // Not while posting: saving every photo again on each step slows the uploads down.
+    if (restored === null || posting) return;
     const t = setTimeout(() => {
       const keep: StoredDraft[] = drafts
         .filter((d) => d.status !== "done")
@@ -108,7 +116,7 @@ export function BulkComposer({ bizId, businessName, joinUrl, categories }: { biz
       void saveDrafts(bizId, keep).then((ok) => setKept(ok && keep.length > 0));
     }, 400);
     return () => clearTimeout(t);
-  }, [drafts, restored, bizId]);
+  }, [drafts, restored, bizId, posting]);
 
   const update = (key: string, patch: Partial<Draft>) => setDrafts((list) => list.map((d) => (d.key === key ? { ...d, ...patch } : d)));
   const selected = drafts.filter((d) => d.selected && d.status !== "done");

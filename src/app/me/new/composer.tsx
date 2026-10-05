@@ -78,15 +78,16 @@ export function Composer({ defaults, phone, email, audience }: { defaults: Compo
     setLocalError(null);
     setShrinking(true);
     const next: { file: File; url: string }[] = [];
+    const problems: string[] = [];
     for (const f of Array.from(files).slice(0, room)) {
-      if (!f.type.startsWith("image/")) continue;
       try {
         const small = await shrinkImage(f);
         next.push({ file: small, url: URL.createObjectURL(small) });
-      } catch {
-        setLocalError("We couldn't read one of those photos. Try a different one.");
+      } catch (e) {
+        problems.push(`We couldn't read ${f.name || "that photo"}. ${(e as Error).message}`);
       }
     }
+    if (problems.length) setLocalError(problems.join(" "));
     setPhotos((p) => [...p, ...next].slice(0, MAX_REQUEST_IMAGES - kept.length));
     setShrinking(false);
     if (fileInput.current) fileInput.current.value = "";

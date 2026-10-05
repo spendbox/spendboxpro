@@ -38,8 +38,8 @@ export async function prepareProductUpload(
   if (!ext) return { ok: false, error: mediaType === "video" ? "Please use an MP4 or MOV video." : "Please use a JPG, PNG or WebP photo." };
   const storage = createAdminClient().storage.from(BUCKET);
   const id = crypto.randomUUID();
-  const media = await storage.createSignedUploadUrl(`${bizId}/${id}.${ext}`);
-  const poster = mediaType === "video" ? await storage.createSignedUploadUrl(`${bizId}/${id}-poster.jpg`) : null;
+  const media = await storage.createSignedUploadUrl(`${bizId}/${id}.${ext}`, { upsert: true });
+  const poster = mediaType === "video" ? await storage.createSignedUploadUrl(`${bizId}/${id}-poster.jpg`, { upsert: true }) : null;
   if (media.error || !media.data || poster?.error) return { ok: false, error: "Couldn't get ready to upload. Please try again." };
   return {
     ok: true,

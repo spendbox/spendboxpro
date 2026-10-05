@@ -7,6 +7,23 @@ import type { BusinessMemberRow, BusinessRequestRow, BusinessRewardRow, Business
 // Data for the business dashboard. Each function goes through database
 // functions that only answer the business's owner.
 
+export interface BusinessReach {
+  customers: number;
+  /** Partners' customers who haven't joined (they see this business's posts and perks). */
+  partner_customers: number;
+  total: number;
+  partners: number;
+}
+
+/** Who the business's posts can reach: its customers plus its partners' customers. */
+export const getReach = cache(async (bizId: string): Promise<BusinessReach> => {
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("business_reach", { p_business_id: bizId }).maybeSingle();
+  const r = data as Partial<Record<keyof BusinessReach, number | string>> | null;
+  const n = (v: number | string | undefined) => Number(v ?? 0);
+  return { customers: n(r?.customers), partner_customers: n(r?.partner_customers), total: n(r?.total), partners: n(r?.partners) };
+});
+
 export const getStats = cache(async (bizId: string): Promise<BusinessStats> => {
   const supabase = await createClient();
   const { data } = await supabase.rpc("business_stats", { p_business_id: bizId }).maybeSingle();

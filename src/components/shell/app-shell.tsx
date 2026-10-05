@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Logo } from "@/components/brand/logo";
 import { BottomNav, SideNav, type NavItem } from "@/components/shell/nav";
+import { FreshOnBack } from "@/components/auth/fresh-on-back";
 
 /**
  * Page frame for signed-in areas: a sidebar on large screens, a top bar and a
@@ -23,6 +24,7 @@ export function AppShell({
 }) {
   return (
     <div className="min-h-dvh lg:pl-72">
+      <FreshOnBack />
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 flex-col gap-6 border-r border-line bg-white px-4 py-6 lg:flex">
         <div className="px-2">
           <Logo href={homeHref} />

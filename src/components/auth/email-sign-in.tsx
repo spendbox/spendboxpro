@@ -102,6 +102,9 @@ export function EmailSignIn({
       setBusy(false);
       return setError(friendlyError(signInError.message, signInError.status));
     }
+    // From here the server keeps the session fresh. A copy refreshing itself
+    // in this tab could put it back after logging out, so stop it.
+    await supabase.auth.stopAutoRefresh();
     return finish();
   }
 

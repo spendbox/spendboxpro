@@ -134,4 +134,31 @@ exception when no_data_found then raise notice 'ok - businesses can only end the
 end $$;
 reset role;
 
+-- Total reach: A's own customers, plus its partner C's customers who haven't joined A.
+insert into auth.users (id, phone) values ('00000000-0000-0000-0000-0000000000f7', '2348400000006');
+select test.act_as('00000000-0000-0000-0000-0000000000f7');
+set role authenticated;
+select public.join_business('bean-there') as f_c \gset
+reset role;
+select test.act_as('00000000-0000-0000-0000-0000000000e7');
+set role authenticated;
+select public.join_business('bean-there') as e_c \gset
+reset role;
+select test.act_as('00000000-0000-0000-0000-0000000000a7');
+set role authenticated;
+select test.ok((select customers from public.business_reach(:'a')) = 1, 'reach counts the business''s own customers');
+select test.ok((select partner_customers from public.business_reach(:'a')) = 1, 'and its partners'' customers who haven''t joined it (once each)');
+select test.ok((select total from public.business_reach(:'a')) = 2, 'adding up to its total reach');
+reset role;
+update public.businesses set partners_enabled = false where id = :'c';
+select test.act_as('00000000-0000-0000-0000-0000000000a7');
+set role authenticated;
+select test.ok((select partner_customers from public.business_reach(:'a')) = 0, 'a partner with partners switched off adds no reach');
+reset role;
+update public.businesses set partners_enabled = true where id = :'c';
+select test.act_as('00000000-0000-0000-0000-0000000000d7');
+set role authenticated;
+select test.ok(not exists (select 1 from public.business_reach(:'a')), 'only the owner sees a business''s reach');
+reset role;
+
 \echo 'All partner tests passed'

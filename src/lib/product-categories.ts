@@ -29,7 +29,25 @@ export interface CustomCategory {
   placement: Placement;
 }
 
-const w = (words: string) => new RegExp(`\\b(${words})\\b`, "i");
+/** Splits "a|b(c|d)|e" into its top-level choices. */
+function choices(words: string) {
+  const out: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < words.length; i++) {
+    const ch = words[i];
+    if (ch === "\\") i++;
+    else if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+    else if (ch === "|" && depth === 0) {
+      out.push(words.slice(start, i));
+      start = i + 1;
+    }
+  }
+  return [...out, words.slice(start)];
+}
+/** A word list as a pattern, longest choices first, so "pet food" is matched whole before "pet". */
+const w = (words: string) => new RegExp(`\\b(${choices(words).sort((a, b) => b.length - a.length).join("|")})\\b`, "i");
 
 export const CATEGORIES: Category[] = [
   // ------------------------------------------------------------ Products
@@ -184,7 +202,7 @@ export const CATEGORIES: Category[] = [
     name: "Drinks",
     group: "product",
     placement: "table",
-    strong: w("drinks?|juices?|smoothies?|zobo|kunu|chapman|cocktails?|mocktails?|wines?|beers?|whisk(e)?y|vodka|gin|champagne|tequila|liquor|yog(h)?urt|coffee|latte|tea|milkshakes?|soda|tigernut|fura|palm ?wine|water|bottled ?water|energy ?drink"),
+    strong: w("drinks?|juices?|smoothies?|zobo|kunu|chapman|cocktails?|mocktails?|wines?|beers?|whisk(e)?y|vodka|gin|champagne|tequila|liquor|yog(h)?urt|coffee|latte|tea|milkshakes?|soda|tigernut|tiger ?nuts?|fura|palm ?wine|water|bottled ?water|energy ?drink"),
     business: /drink|bar|lounge|juice|smoothie|wine|beverage|coffee/i,
   },
   {
@@ -219,8 +237,19 @@ export const CATEGORIES: Category[] = [
     name: "Health & pharmacy",
     group: "product",
     placement: "shelf",
-    strong: w("supplements?|vitamins?|drugs?|medicines?|herbal|capsules|tablets ?of|syrup|sanitary ?pads?|pads|tampons|test ?kits?|first ?aid|blood ?pressure|glucometer|thermometer|face ?masks?|sanitizer|condoms?|detox|slimming|weight ?loss ?tea"),
-    business: /pharm|health|medic|chemist|herbal|wellness/i,
+    strong: w(
+      "supplements?|vitamins?|multivitamins?|vitamin ?[a-e]\\d*|omega ?3|fish ?oil|cod ?liver ?oil|probiotics?|drugs?|medicines?|medications?|pills?|capsules?|syrups?|cough|paracetamol|panadol|ibuprofen|aspirin|antibiotics?|amoxicillin|antimalarials?|malaria|coartem|blood ?tonic|tonic|antiseptic|dettol|savlon|iodine|plasters?|bandages?|gauze|cotton ?wool|syringes?|insulin|glucometers?|test ?strips?|test ?kits?|pregnancy ?tests?|ovulation|fertility|first ?aid|blood ?pressure|bp ?monitor|thermometers?|nebuli[sz]ers?|inhalers?|oximeters?|wheel ?chairs?|crutches|walking ?sticks?|eye ?drops|ear ?drops|reading ?glasses|contact ?lens(es)?|spectacles|face ?masks?|nose ?masks?|sanitizers?|hand ?sanitizers?|condoms?|sanitary ?pads?|pads|tampons|menstrual ?cups?|diabetic ?socks|diabetic|diabetes|herbal|herbs|bitters|detox|slimming|weight ?loss ?tea|immune ?boosters?|immunity|pain ?relief|ointments?|health ?check|\\d+ ?mg",
+    ),
+    weak: w("tablets|health|healthy|wellness|nafdac|pharmacy|relief|remedy|natural ?cure|treatment"),
+    business: /pharm|health|medic|chemist|herbal|wellness|drug|clinic/i,
+  },
+  {
+    id: "pets",
+    name: "Pets & pet supplies",
+    group: "product",
+    placement: "shelf",
+    strong: w("pets?|puppy|puppies|kittens?|dogs|cats|dog ?food|cat ?food|pet ?food|dog ?treats|cat ?litter|aquarium|fish ?tank|leash|dog ?collar|pet ?shampoo|bird ?cage|pet ?bed|kennel"),
+    business: /\bpets?\b|vet|kennel|aquarium/i,
   },
   {
     id: "sports",
@@ -321,7 +350,7 @@ export const CATEGORIES: Category[] = [
     name: "Catering & chefs",
     group: "service",
     placement: "table",
-    strong: w("catering|caterer|chefs?|private ?chef|personal ?chef|event ?food|food ?for ?events|cooking ?class|meal ?prep|outdoor ?catering|buffet"),
+    strong: w("catering|caterer|chefs?|private ?chef|personal ?chef|event ?food|food ?for ?events|for ?parties|party ?packs?|cooking ?class|meal ?prep|outdoor ?catering|buffet"),
     business: /catering|caterer|chef/i,
   },
   {
@@ -352,12 +381,24 @@ export const CATEGORIES: Category[] = [
     business: /school|tutor|academy|training|education|coach|lesson/i,
   },
   {
+    id: "health-care",
+    name: "Health & medical care",
+    group: "service",
+    placement: "wall",
+    wide: true,
+    strong: w(
+      "doctors?|consultations?|clinic|hospital|nurse|nurses|nursing|home ?care|caregivers?|physio(therapy|therapist)?|dental|dentist|teeth ?whitening|scaling ?and ?polishing|lab ?tests?|laboratory|blood ?tests?|scans?|ultrasound|x-?rays?|check-?ups?|medical|telemedicine|optician|eye ?tests?|antenatal|vaccinations?|immuni[sz]ations?|dental ?cleaning|health ?screening",
+    ),
+    weak: w("health|appointment|session|treatment"),
+    business: /clinic|hospital|health|medic|dental|nurs|lab|diagnostic|pharm/i,
+  },
+  {
     id: "fitness",
     name: "Fitness & wellness",
     group: "service",
     placement: "wall",
     wide: true,
-    strong: w("gym|personal ?trainer|workouts?|fitness|yoga|pilates|massage|therapy|therapist|wellness|physio(therapy)?|spa ?day|meditation|counsel(l)?ing|nutritionist|diet ?plan|weight ?loss ?program"),
+    strong: w("gym|personal ?trainer|workouts?|fitness|yoga|pilates|massage|therapy|therapist|wellness|spa ?day|meditation|counsel(l)?ing|nutritionist|diet ?plan|weight ?loss ?program"),
     business: /gym|fitness|wellness|spa|massage|therap|yoga/i,
   },
   {
@@ -437,9 +478,12 @@ function nameWords(name: string) {
 }
 
 const EDIBLE = new Set(["food", "cakes", "drinks", "plants", "groceries"]);
+const HEALTH_EDIBLES = /\b(fish ?oil|cod ?liver ?oil|fish|tea|teas|syrup|tonic|bitters|honey|milk|drinks?|powder)\b/g;
 const COLOUR_WORDS = /\b(coffee|wine|champagne|honey|chocolate|cream|caramel|mint|peach|olive|cherry|lemon|orange|rose|milk|tea|butter|pepper|plum|berry|lime|cinnamon|mocha|vanilla|salmon|wine)\b/g;
 
-const count = (re: RegExp | undefined, text: string) => (re ? (text.match(new RegExp(re.source, "gi"))?.length ?? 0) : 0);
+/** How many times a category's words appear; a phrase ("reading glasses") counts for more than a single word ("glasses"). */
+const count = (re: RegExp | undefined, text: string) =>
+  re ? (text.match(new RegExp(re.source, "gi")) ?? []).reduce((sum, m) => sum + 1 + 0.25 * (m.trim().split(/[\s-]+/).length - 1), 0) : 0;
 
 /**
  * The categories that fit a product best, best first: words in its name count
@@ -463,7 +507,9 @@ export function suggestCategories(
   }
   // "Coffee brown gown", "Honey blonde wig": a food word used as a colour doesn't make it food.
   const named = CATEGORIES.some((c) => !EDIBLE.has(c.id) && c.strong?.test(title));
-  const edibleTitle = named ? title.replace(COLOUR_WORDS, " ") : title;
+  // "Fertility tea", "Omega 3 fish oil", "Cough syrup": health products, not drinks or food.
+  const health = BY_ID.get("health")!.strong!.test(title);
+  const edibleTitle = (named ? title.replace(COLOUR_WORDS, " ") : title).replace(health ? HEALTH_EDIBLES : /$^/, " ");
   for (const c of CATEGORIES) {
     const t = EDIBLE.has(c.id) ? edibleTitle : title;
     add(c.id, count(c.strong, t) * 4 + count(c.weak, t) * 1 + count(c.strong, description) * 1.5 + count(c.weak, description) * 0.4);
