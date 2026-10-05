@@ -57,7 +57,7 @@ const SPACING: Record<DisplayKind, number> = { wear: 1.5, shoes: 1.3, item: 1.3,
 // The point looked at sits a little below the display's middle, so the
 // product shows above the details card at the bottom of the screen.
 const VIEW: Record<DisplayKind, { distance: number; height: number; eye: number }> = {
-  wear: { distance: 2.5, height: 0.85, eye: 1.6 },
+  wear: { distance: 2.9, height: 1.0, eye: 1.6 },
   shoes: { distance: 1.7, height: 0.5, eye: 1.45 },
   item: { distance: 1.8, height: 0.85, eye: 1.55 },
   video: { distance: 2.8, height: 0.85, eye: 1.6 },
