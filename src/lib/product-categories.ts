@@ -4,7 +4,8 @@
 // another or add its own. In the 3D shop each category is a section, shown
 // framed on the wall, on shelves or on tables (the business can change where).
 
-export type Placement = "wall" | "shelf" | "table";
+/** How a category shows in the 3D shop. "showroom" (a 3D car for each) is only for vehicles. */
+export type Placement = "wall" | "shelf" | "table" | "showroom";
 export type CategoryGroup = "product" | "service";
 
 export interface Category {
@@ -430,10 +431,25 @@ export const PLACEMENTS: { id: Placement; name: string; hint: string }[] = [
   { id: "wall", name: "Framed on the wall", hint: "Big frames in a row, each with a picture light" },
   { id: "shelf", name: "On shelves", hint: "Small frames, four to a shelf" },
   { id: "table", name: "On tables", hint: "Small frames standing on marble tables" },
+  { id: "showroom", name: "3D showroom", hint: "A full-size 3D car for each one, on its own platform, in the colour of its photo" },
 ];
 
 export function isPlacement(v: unknown): v is Placement {
-  return v === "wall" || v === "shelf" || v === "table";
+  return v === "wall" || v === "shelf" || v === "table" || v === "showroom";
+}
+
+/** Cars and other vehicles: the categories that can be a 3D showroom (ours, or a business's own named like one). */
+const VEHICLE_WORDS = /\b(cars?|vehicles?|autos?|suvs?|fleet|jeeps?|trucks?|vans?|buses|coupes?|sedans?|saloons?|rides?|motors?)\b/i;
+export function canShowroom(id: string, custom: CustomCategory[] = []) {
+  if (id === "cars") return true;
+  const own = custom.find((c) => c.id === id);
+  return Boolean(own && VEHICLE_WORDS.test(own.name));
+}
+
+/** The ways a category can show: a 3D showroom only for vehicles. */
+export function placementsFor(id: string | null, custom: CustomCategory[] = [], name?: string) {
+  const vehicle = id ? canShowroom(id, custom) : Boolean(name && VEHICLE_WORDS.test(name));
+  return PLACEMENTS.filter((p) => p.id !== "showroom" || vehicle);
 }
 
 /** A business's own category's id, from its name ("Bridal sets" → "c-bridal-sets"). */

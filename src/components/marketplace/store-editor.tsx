@@ -7,7 +7,7 @@ import { setProductCategory } from "@/app/dashboard/[bizId]/product-actions";
 import { saveStoreTheme, uploadStoreArt } from "@/app/dashboard/[bizId]/store-actions";
 import { CategoryIcon, CategorySheet, PlacementChoice } from "@/components/products/category-picker";
 import { cn } from "@/lib/cn";
-import { categoryInfo, customCategoryId, MAX_CUSTOM_CATEGORIES, PLACEMENTS, type CustomCategory, type Placement } from "@/lib/product-categories";
+import { categoryInfo, customCategoryId, MAX_CUSTOM_CATEGORIES, PLACEMENTS, placementsFor, type CustomCategory, type Placement } from "@/lib/product-categories";
 import { Switch } from "@/components/ui/switch";
 import {
   ACCENT_COLORS,
@@ -873,7 +873,14 @@ function CategoriesPanel({
           </div>
         </div>
         <Field label="Where it shows" hint="Pick how this category looks in your shop. Nothing ever blocks anything else.">
-          <PlacementChoice label="Where it shows" value={info.placement} onChange={(placement) => onLook(selected, { placement })} images={images} accent={accent} />
+          <PlacementChoice
+            label="Where it shows"
+            value={info.placement}
+            onChange={(placement) => onLook(selected, { placement })}
+            images={images}
+            accent={accent}
+            options={placementsFor(selected, cats.custom)}
+          />
         </Field>
         <Field label="Which side" hint="As you walk in. Automatic fills whichever aisle has more room, so both sides fill before your shop gets longer.">
           <Choices
@@ -1001,7 +1008,7 @@ function NewCategory({ existing, onAdd, onCancel }: { existing: CustomCategory[]
         />
       </Field>
       <Field label="Where it shows">
-        <PlacementChoice label="Where it shows" value={placement} onChange={setPlacement} />
+        <PlacementChoice label="Where it shows" value={placement} onChange={setPlacement} options={placementsFor(null, [], name)} />
       </Field>
       {taken && <p className="text-sm font-semibold text-red-700">You already have a category called that.</p>}
       <div className="flex gap-2">

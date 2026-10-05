@@ -118,6 +118,108 @@ export function shopSignTexture(name: string, color: string, logoUrl: string | n
   return texture;
 }
 
+/**
+ * The nameplate on the front of the counter: a deep lacquered panel in the
+ * shop's colour, a fine gold border inset from the edge, the logo (or
+ * initials) in a gold ring, and the name in gold with room to breathe.
+ */
+export function counterPlaqueTexture(name: string, color: string, logoUrl: string | null) {
+  const W = 1200;
+  const H = 280;
+  const { c, ctx } = canvas(W, H);
+  const display = fontFamily("display");
+  // Lacquer: the shop's colour, deepened, with a soft sheen across the top.
+  const deep = shade(color, -0.55);
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, shade(color, -0.38));
+  bg.addColorStop(0.55, deep);
+  bg.addColorStop(1, shade(color, -0.65));
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+  const sheen = ctx.createLinearGradient(0, 0, 0, H * 0.5);
+  sheen.addColorStop(0, "rgba(255,255,255,0.10)");
+  sheen.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = sheen;
+  ctx.fillRect(0, 0, W, H * 0.5);
+  // Gold, as a gradient so it catches the light.
+  const gold = ctx.createLinearGradient(0, 0, W, H);
+  gold.addColorStop(0, "#f3d58a");
+  gold.addColorStop(0.45, "#c9a24e");
+  gold.addColorStop(0.7, "#f6e1a6");
+  gold.addColorStop(1, "#b88c3a");
+  // A fine double border, well inside the edge.
+  ctx.strokeStyle = gold;
+  ctx.lineWidth = 4;
+  roundRect(ctx, 26, 26, W - 52, H - 52, 18);
+  ctx.stroke();
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, 38, 38, W - 76, H - 76, 12);
+  ctx.stroke();
+  // The badge: a gold ring with the initials (the logo replaces them when it loads).
+  const bx = 150;
+  const by = H / 2;
+  const br = 74;
+  ctx.beginPath();
+  ctx.arc(bx, by, br + 7, 0, Math.PI * 2);
+  ctx.fillStyle = gold;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(bx, by, br, 0, Math.PI * 2);
+  ctx.fillStyle = shade(color, -0.25);
+  ctx.fill();
+  ctx.fillStyle = "#f6e1a6";
+  ctx.font = `800 64px ${display}`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(initials(name), bx, by + 3);
+  // A thin gold rule between the badge and the name.
+  ctx.fillStyle = gold;
+  ctx.fillRect(bx + br + 42, by - 46, 3, 92);
+  // The name, letter-spaced, in the room that's left.
+  const left = bx + br + 80;
+  const room = W - left - 90;
+  const text = name.toUpperCase();
+  ctx.textAlign = "left";
+  let size = 96;
+  const spacing = (s: number) => s * 0.08;
+  const widthAt = (s: number) => {
+    ctx.font = `800 ${s}px ${display}`;
+    return ctx.measureText(text).width + spacing(s) * Math.max(0, text.length - 1);
+  };
+  while (size > 30 && widthAt(size) > room) size -= 2;
+  ctx.font = `800 ${size}px ${display}`;
+  const sp = spacing(size);
+  // Gently shadowed so the gold reads as raised lettering.
+  ctx.shadowColor = "rgba(0,0,0,0.45)";
+  ctx.shadowOffsetY = 3;
+  ctx.shadowBlur = 6;
+  ctx.fillStyle = gold;
+  let x = left + Math.max(0, (room - widthAt(size)) / 2);
+  for (const ch of text) {
+    ctx.fillText(ch, x, by + 4);
+    x += ctx.measureText(ch).width + sp;
+  }
+  ctx.shadowColor = "transparent";
+  const texture = toTexture(c);
+  texture.anisotropy = 8;
+  drawLogoWhenReady(
+    logoUrl,
+    (img) => {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(bx, by, br - 4, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(bx - br, by - br, br * 2, br * 2);
+      const s = Math.max((br * 2) / img.width, (br * 2) / img.height);
+      ctx.drawImage(img, bx - (img.width * s) / 2, by - (img.height * s) / 2, img.width * s, img.height * s);
+      ctx.restore();
+    },
+    texture,
+  );
+  return texture;
+}
+
 /** Striped awning, with a scalloped edge. */
 export function awningTexture(color: string) {
   const { c, ctx } = canvas(256, 96);

@@ -13,6 +13,7 @@ import { Built, Kit, type Mat } from "./kit";
 import { H } from "./layout";
 import { FloorShadow } from "./room";
 import { tap, useHoverCursor } from "./tap";
+import { Showroom } from "./car/showroom";
 
 // The product hall's displays. Every product is a framed picture with its
 // name and price printed under the photo, in the frame style the business
@@ -535,6 +536,7 @@ export function HallDisplays({
       {hall.sections.map((s) => (
         <SectionSign key={s.key} label={s.label} count={s.count} accent={accent} signs={signs} position={[s.sign.x, s.sign.y, s.sign.z]} rotationY={s.sign.rotY} />
       ))}
+      {hall.cars.length > 0 && <Showroom cars={hall.cars} items={hall.items} accent={accent} onPick={onPick} />}
       {hall.items.length > 0 && <HallLights end={hall.end} glow={glow} />}
     </>
   );

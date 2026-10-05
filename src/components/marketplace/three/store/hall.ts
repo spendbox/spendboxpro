@@ -15,6 +15,10 @@ import { D, W } from "./layout";
 // before the hall gets longer. Several sections can follow one another down
 // the same aisle. Frames fit each photo's shape (tall, square, wide, long)
 // unless the business picks one shape for the category.
+//
+// Vehicles can be a 3D showroom instead: a full-size 3D car for each product,
+// on its own round platform, turned towards the walkway and the way in, with
+// the product's photo framed on the wall behind it.
 
 /** Where the old shop front was; the hall starts here. */
 export const FRONT = D / 2 + 2;
@@ -114,6 +118,18 @@ const SHELF_ORDER = [1, 2, 0];
 /** A display table against the wall, its frames in one row facing the walkway. */
 export const TABLE = { depth: 0.7, back: 0.15, height: 0.76, set: 0.32, tilt: 0.16, gap: 0.8 };
 
+/** A car's round platform (metres): how big, how high, how far its middle stands from the wall, and the room each car takes along it. */
+export const SHOWROOM = { radius: 2.55, height: 0.12, out: 2.05, bay: 5.7, angle: 0.62 };
+
+/** A car on its platform in a showroom section: the middle of the platform, and which way the car's nose points. */
+export interface CarSpot {
+  x: number;
+  z: number;
+  rotY: number;
+  /** The product it shows (its photo hangs on the wall behind). */
+  productId: string;
+}
+
 export interface Fixture {
   kind: "shelf" | "table";
   /** The middle of its back, at the wall. */
@@ -167,6 +183,8 @@ export interface Hall {
   items: HallItem[];
   sections: HallSection[];
   fixtures: Fixture[];
+  /** Cars in showroom sections. */
+  cars: CarSpot[];
   /** The back wall shows products (so its decorations step aside). */
   backInUse: boolean;
 }
@@ -210,7 +228,7 @@ export interface HallOptions {
   backCategory?: string | null;
 }
 
-const ORDER: Placement[] = ["wall", "shelf", "table"];
+const ORDER: Placement[] = ["showroom", "wall", "shelf", "table"];
 const CATALOG = new Map(CATEGORIES.map((c, i) => [c.id, i]));
 
 /** The category a product shows under: its own, or the best guess for older products without one. */
@@ -233,11 +251,25 @@ interface Block {
   /** Per item: position along the wall, distance out from it, and how to view it (distance, eye, look-at height). */
   spots: { u: number; v: number; dist: number; eye: number; lookY: number }[];
   fixtures: { u: number; length: number; kind: "shelf" | "table"; style: ShelfStyle | DisplayTableStyle }[];
+  cars: { u: number; productId: string }[];
 }
 
 function buildBlock(list: HallProduct[], category: string, look: ReturnType<typeof lookOf>): Block {
-  const block: Block = { length: 0, items: [], spots: [], fixtures: [] };
+  const block: Block = { length: 0, items: [], spots: [], fixtures: [], cars: [] };
   const { placement, size } = look;
+  if (placement === "showroom") {
+    // A bay per car: the platform, with the photo framed on the wall behind, above the roof.
+    list.forEach((product, i) => {
+      const u = i * SHOWROOM.bay + SHOWROOM.bay / 2;
+      const frame = wallFrame(product, { ...look, size: "m" }, true);
+      block.items.push({ product, category, frame, y: 1.75, tilt: 0, onWall: true });
+      // Seen from the walkway, far enough back to take in the whole car and its photo above it.
+      block.spots.push({ u, v: 0.01, dist: SHOWROOM.out + SHOWROOM.radius + 4.4, eye: 2.1, lookY: 1.2 });
+      block.cars.push({ u, productId: product.id });
+    });
+    block.length = list.length * SHOWROOM.bay;
+    return block;
+  }
   if (placement === "wall") {
     const gap = size === "s" ? 0.3 : size === "m" ? 0.4 : 0.5;
     let u = 0;
@@ -255,12 +287,13 @@ function buildBlock(list: HallProduct[], category: string, look: ReturnType<type
   const cols = COLS[size];
   const span = spanOf(size);
   const per = placement === "shelf" ? SHELF.shelves.length * cols : cols;
+  const kind = placement === "shelf" ? "shelf" : "table";
   const fixtureGap = placement === "shelf" ? SHELF.gap : TABLE.gap;
   let u = 0;
   for (let n = 0; n * per < list.length; n++) {
     const unit = list.slice(n * per, (n + 1) * per);
     const center = u + span / 2;
-    block.fixtures.push({ u: center, length: span, kind: placement, style: placement === "shelf" ? look.shelf : look.table });
+    block.fixtures.push({ u: center, length: span, kind, style: placement === "shelf" ? look.shelf : look.table });
     const rows = placement === "shelf" ? SHELF_ORDER.map((shelf, r) => ({ y: SHELF.shelves[shelf]! + 0.002, row: unit.slice(r * cols, (r + 1) * cols) })) : [{ y: TABLE.height + 0.002, row: unit }];
     // Shelves: walked top shelf first, front to back.
     const ordered = [...rows].sort((a, b) => b.y - a.y);
@@ -300,6 +333,13 @@ function lay(hall: Hall, lane: Lane, start: number, block: Block) {
     const [x, z] = place(lane, start + f.u, 0);
     hall.fixtures.push({ kind: f.kind, x, z, rotY, length: f.length, style: f.style });
   }
+  for (const c of block.cars) {
+    const [x, z] = place(lane, start + c.u, SHOWROOM.out);
+    // Nose towards the walkway and back the way visitors come in.
+    const dx = -lane.ax * Math.cos(SHOWROOM.angle) + lane.nx * Math.sin(SHOWROOM.angle);
+    const dz = -lane.az * Math.cos(SHOWROOM.angle) + lane.nz * Math.sin(SHOWROOM.angle);
+    hall.cars.push({ x, z, rotY: Math.atan2(dx, dz), productId: c.productId });
+  }
 }
 
 /** Lays out the products, one section per category (empty ones are left out). */
@@ -309,7 +349,7 @@ export function layoutHall(products: HallProduct[], cats: HallCategories, busine
     const id = categoryOf(p, cats, businessCategories);
     groups.set(id, [...(groups.get(id) ?? []), p]);
   }
-  const hall: Hall = { end: 0, items: [], sections: [], fixtures: [], backInUse: false };
+  const hall: Hall = { end: 0, items: [], sections: [], fixtures: [], cars: [], backInUse: false };
   const cursor: Record<"left" | "right", number> = { left: 0, right: 0 };
   // Walls first, then shelves, then tables; within each, the usual order of categories (a business's own last).
   const order = [...groups.keys()]
@@ -400,6 +440,18 @@ export function clearOfFixtures(hall: Hall, x: number, z: number): [number, numb
       const push = depth + margin - out;
       x += nx * push;
       z += nz * push;
+    }
+  }
+  // Not onto a car's platform: just off its edge.
+  for (const c of hall.cars) {
+    const dx = x - c.x;
+    const dz = z - c.z;
+    const d = Math.hypot(dx, dz);
+    const keep = SHOWROOM.radius + 0.7;
+    if (d < keep) {
+      const k = d > 1e-3 ? keep / d : 1;
+      x = c.x + (d > 1e-3 ? dx : 1) * k;
+      z = c.z + (d > 1e-3 ? dz : 0) * k;
     }
   }
   return [x, z];
