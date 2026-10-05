@@ -26,6 +26,7 @@ MARKERS=(
   "20261017000000_plug_partners.sql|to_regprocedure('public.plug_partners(uuid)') is not null"
   "20261018000000_customer_invites.sql|to_regprocedure('public.claim_inviter(uuid,text)') is not null"
   "20261019000000_shop_hall.sql|coalesce(pg_get_functiondef(to_regprocedure('public.public_store(text)')), '') like '%limit 400%'"
+  "20261020000000_cutouts.sql|exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'products' and column_name = 'cutout_url')"
 )
 
 listed=$(printf '%s\n' "${MARKERS[@]}" | cut -d'|' -f1 | sort)

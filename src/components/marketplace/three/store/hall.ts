@@ -52,18 +52,19 @@ export interface Hall {
   sections: HallSection[];
 }
 
-const SPACING: Record<DisplayKind, number> = { wear: 1.5, item: 1.3, video: 1.4, food: 2.5, home: 2.7 };
+const SPACING: Record<DisplayKind, number> = { wear: 1.5, shoes: 1.3, item: 1.3, video: 1.4, food: 2.5, home: 2.7 };
 /** How far back to stand from each display, and the height to look at. */
 // The point looked at sits a little below the display's middle, so the
 // product shows above the details card at the bottom of the screen.
 const VIEW: Record<DisplayKind, { distance: number; height: number; eye: number }> = {
   wear: { distance: 2.5, height: 0.85, eye: 1.6 },
+  shoes: { distance: 1.7, height: 0.5, eye: 1.45 },
   item: { distance: 1.8, height: 0.85, eye: 1.55 },
   video: { distance: 2.8, height: 0.85, eye: 1.6 },
   food: { distance: 1.7, height: 0.5, eye: 1.6 },
   home: { distance: 2.4, height: 0.9, eye: 1.65 },
 };
-const WALL_KINDS: DisplayKind[] = ["wear", "item", "video"];
+const WALL_KINDS: DisplayKind[] = ["wear", "shoes", "item", "video"];
 const ISLAND_KINDS: DisplayKind[] = ["food", "home"];
 
 /** The camera's yaw and pitch for looking from (x, y, z) at a point. */

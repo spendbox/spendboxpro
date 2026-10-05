@@ -25,12 +25,13 @@ function refresh(bizId: string) {
   revalidatePath("/me", "layout");
 }
 
-/** One-time upload links for a product's photo or video (and a video's still frame). */
+/** One-time upload links for a product's photo or video (and a video's still frame, or a photo's 3D cutout). */
 export async function prepareProductUpload(
   bizId: string,
   mediaType: ProductMediaType,
   contentType: string,
-): Promise<ActionResult<{ media: UploadTicket; poster: UploadTicket | null }>> {
+  withCutout = false,
+): Promise<ActionResult<{ media: UploadTicket; poster: UploadTicket | null; cutout: UploadTicket | null }>> {
   await requireOwnedBusiness(bizId);
   const ext = (mediaType === "video" ? VIDEO_TYPES : IMAGE_TYPES)[contentType];
   if (!ext) return { ok: false, error: mediaType === "video" ? "Please use an MP4 or MOV video." : "Please use a JPG, PNG or WebP photo." };
@@ -38,13 +39,29 @@ export async function prepareProductUpload(
   const id = crypto.randomUUID();
   const media = await storage.createSignedUploadUrl(`${bizId}/${id}.${ext}`);
   const poster = mediaType === "video" ? await storage.createSignedUploadUrl(`${bizId}/${id}-poster.jpg`) : null;
-  if (media.error || !media.data || poster?.error) return { ok: false, error: "Couldn't get ready to upload. Please try again." };
+  const cutout = mediaType === "image" && withCutout ? await storage.createSignedUploadUrl(`${bizId}/${id}-cutout.png`) : null;
+  if (media.error || !media.data || poster?.error || cutout?.error) return { ok: false, error: "Couldn't get ready to upload. Please try again." };
   return {
     ok: true,
     media: { path: media.data.path, signedUrl: media.data.signedUrl },
     poster: poster?.data ? { path: poster.data.path, signedUrl: poster.data.signedUrl } : null,
+    cutout: cutout?.data ? { path: cutout.data.path, signedUrl: cutout.data.signedUrl } : null,
   };
 }
+
+/** Only files this business was given upload links for. */
+const ownPath = (bizId: string, p?: string | null) => !p || (p.startsWith(`${bizId}/`) && !p.includes(".."));
+
+async function uploaded(bizId: string, path: string) {
+  const name = path.slice(bizId.length + 1);
+  const { data: files } = await createAdminClient().storage.from(BUCKET).list(bizId, { search: name, limit: 5 });
+  return Boolean(files?.some((f) => f.name === name));
+}
+
+const pathOf = (bizId: string, url: string | null | undefined) => {
+  const p = url?.split(`/${BUCKET}/`)[1];
+  return p && p.startsWith(`${bizId}/`) ? p : null;
+};
 
 export interface ProductInput {
   kind: ProductKind;
@@ -68,34 +85,35 @@ function clean(input: ProductInput): ActionResult<{ values: { kind: ProductKind;
 /** Saves a new product once its photo or video is uploaded. */
 export async function createProduct(
   bizId: string,
-  input: ProductInput & { mediaType: ProductMediaType; mediaPath: string; posterPath?: string | null },
+  input: ProductInput & { mediaType: ProductMediaType; mediaPath: string; posterPath?: string | null; cutoutPath?: string | null },
 ): Promise<ActionResult<{ id: string; mediaUrl: string }>> {
   const { business } = await requireOwnedBusiness(bizId);
   const checked = clean(input);
   if (!checked.ok) return checked;
-  // Only files this business was given upload links for.
-  const own = (p?: string | null) => !p || (p.startsWith(`${bizId}/`) && !p.includes(".."));
-  if (!input.mediaPath || !own(input.mediaPath) || !own(input.posterPath)) return { ok: false, error: "Please add a photo or video again." };
+  if (!input.mediaPath || !ownPath(bizId, input.mediaPath) || !ownPath(bizId, input.posterPath) || !ownPath(bizId, input.cutoutPath)) return { ok: false, error: "Please add a photo or video again." };
   const storage = createAdminClient().storage.from(BUCKET);
-  const name = input.mediaPath.slice(bizId.length + 1);
-  const { data: files } = await storage.list(bizId, { search: name, limit: 5 });
-  if (!files?.some((f) => f.name === name)) return { ok: false, error: "The upload didn't finish. Please try again." };
+  if (!(await uploaded(bizId, input.mediaPath))) return { ok: false, error: "The upload didn't finish. Please try again." };
 
   const mediaUrl = storage.getPublicUrl(input.mediaPath).data.publicUrl;
   const posterUrl = input.posterPath ? storage.getPublicUrl(input.posterPath).data.publicUrl : null;
+  // A cutout that didn't upload is simply left off.
+  const cutoutUrl = input.cutoutPath && (await uploaded(bizId, input.cutoutPath)) ? storage.getPublicUrl(input.cutoutPath).data.publicUrl : null;
   const supabase = await createClient();
-  const { data, error } = await supabase
+  const row: Record<string, unknown> = {
+    business_id: bizId,
+    ...checked.values,
+    currency: business.currency ?? "NGN",
+    media_type: input.mediaType === "video" ? "video" : "image",
+    media_url: mediaUrl,
+    poster_url: posterUrl,
+  };
+  let { data, error } = await supabase
     .from("products")
-    .insert({
-      business_id: bizId,
-      ...checked.values,
-      currency: business.currency ?? "NGN",
-      media_type: input.mediaType === "video" ? "video" : "image",
-      media_url: mediaUrl,
-      poster_url: posterUrl,
-    })
+    .insert(cutoutUrl ? { ...row, cutout_url: cutoutUrl } : row)
     .select("id")
     .single();
+  // A database without update 20 yet has nowhere to keep the cutout: save the product without it.
+  if (error && cutoutUrl && /cutout_url/.test(error.message)) ({ data, error } = await supabase.from("products").insert(row).select("id").single());
   if (error || !data) return { ok: false, error: /200/.test(error?.message ?? "") ? error!.message : "Couldn't save it. Please try again." };
   refresh(bizId);
   return { ok: true, id: data.id as string, mediaUrl };
@@ -127,13 +145,83 @@ export async function setProductActive(bizId: string, productId: string, active:
 export async function deleteProduct(bizId: string, productId: string): Promise<ActionResult> {
   await requireOwnedBusiness(bizId);
   const supabase = await createClient();
-  const { data: product } = await supabase.from("products").select("media_url, poster_url").eq("id", productId).eq("business_id", bizId).maybeSingle();
+  const { data: product } = await supabase.from("products").select("*").eq("id", productId).eq("business_id", bizId).maybeSingle();
   if (!product) return { ok: false, error: "Not found." };
   const { error } = await supabase.from("products").delete().eq("id", productId).eq("business_id", bizId);
   if (error) return { ok: false, error: "Couldn't delete. Please try again." };
-  const paths = [product.media_url, product.poster_url]
-    .map((u) => (u as string | null)?.split(`/${BUCKET}/`)[1])
-    .filter((p): p is string => Boolean(p) && p!.startsWith(`${bizId}/`));
+  const paths = [product.media_url, product.poster_url, product.cutout_url].map((u) => pathOf(bizId, u as string | null)).filter((p): p is string => Boolean(p));
+  if (paths.length) await createAdminClient().storage.from(BUCKET).remove(paths);
+  refresh(bizId);
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------- 3D cutouts
+
+/** An upload link for a new cutout of an existing product's photo. */
+export async function prepareCutoutUpload(bizId: string, productId: string): Promise<ActionResult<{ ticket: UploadTicket }>> {
+  await requireOwnedBusiness(bizId);
+  const { data } = await createAdminClient().storage.from(BUCKET).createSignedUploadUrl(`${bizId}/${productId}-${crypto.randomUUID().slice(0, 8)}-cutout.png`);
+  if (!data) return { ok: false, error: "Couldn't get ready to upload. Please try again." };
+  return { ok: true, ticket: { path: data.path, signedUrl: data.signedUrl } };
+}
+
+/** Saves (or, with null, removes) a product's 3D cutout, deleting the old one. */
+export async function saveProductCutout(bizId: string, productId: string, path: string | null): Promise<ActionResult> {
+  await requireOwnedBusiness(bizId);
+  if (path && (!ownPath(bizId, path) || !(await uploaded(bizId, path)))) return { ok: false, error: "The upload didn't finish. Please try again." };
+  const supabase = await createClient();
+  const { data: product } = await supabase.from("products").select("*").eq("id", productId).eq("business_id", bizId).maybeSingle();
+  if (!product) return { ok: false, error: "Not found." };
+  const storage = createAdminClient().storage.from(BUCKET);
+  const url = path ? storage.getPublicUrl(path).data.publicUrl : null;
+  const { error } = await supabase.from("products").update({ cutout_url: url, updated_at: new Date().toISOString() }).eq("id", productId).eq("business_id", bizId);
+  if (error) return { ok: false, error: "Couldn't save. Please try again." };
+  const old = pathOf(bizId, product.cutout_url as string | null);
+  if (old && old !== path) await storage.remove([old]);
+  refresh(bizId);
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------- Many at once
+
+/** Saves changes to several products together. Returns the first problem, naming the product. */
+export async function updateProducts(bizId: string, items: (ProductInput & { id: string })[]): Promise<ActionResult<{ saved: number }>> {
+  await requireOwnedBusiness(bizId);
+  if (!Array.isArray(items) || items.length === 0) return { ok: false, error: "Nothing to save." };
+  if (items.length > 100) return { ok: false, error: "Please save up to 100 at a time." };
+  const checked = [];
+  for (const [n, item] of items.entries()) {
+    const c = clean(item);
+    if (!c.ok) return { ok: false, error: `${item.title?.trim() || `Product ${n + 1}`}: ${c.error}` };
+    checked.push({ id: String(item.id), values: c.values });
+  }
+  const supabase = await createClient();
+  const now = new Date().toISOString();
+  const results = await Promise.all(checked.map((c) => supabase.from("products").update({ ...c.values, updated_at: now }).eq("id", c.id).eq("business_id", bizId)));
+  if (results.some((r) => r.error)) return { ok: false, error: "Some changes didn't save. Please try again." };
+  refresh(bizId);
+  return { ok: true, saved: checked.length };
+}
+
+/** Shows or hides several products. */
+export async function setProductsActive(bizId: string, ids: string[], active: boolean): Promise<ActionResult> {
+  await requireOwnedBusiness(bizId);
+  const supabase = await createClient();
+  const { error } = await supabase.from("products").update({ is_active: active, updated_at: new Date().toISOString() }).in("id", ids.slice(0, 200)).eq("business_id", bizId);
+  if (error) return { ok: false, error: "Couldn't save. Please try again." };
+  refresh(bizId);
+  return { ok: true };
+}
+
+/** Deletes several products and their files. */
+export async function deleteProducts(bizId: string, ids: string[]): Promise<ActionResult> {
+  await requireOwnedBusiness(bizId);
+  const supabase = await createClient();
+  const { data: products } = await supabase.from("products").select("*").in("id", ids.slice(0, 200)).eq("business_id", bizId);
+  if (!products?.length) return { ok: false, error: "Not found." };
+  const { error } = await supabase.from("products").delete().in("id", products.map((p) => p.id)).eq("business_id", bizId);
+  if (error) return { ok: false, error: "Couldn't delete. Please try again." };
+  const paths = products.flatMap((p) => [p.media_url, p.poster_url, p.cutout_url].map((u) => pathOf(bizId, u as string | null))).filter((p): p is string => Boolean(p));
   if (paths.length) await createAdminClient().storage.from(BUCKET).remove(paths);
   refresh(bizId);
   return { ok: true };

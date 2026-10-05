@@ -161,3 +161,8 @@ export function daysAgoIso(days: number) {
 export function shortCount(n: number) {
   return n < 1000 ? String(Math.max(0, Math.round(n))) : new Intl.NumberFormat("en", { notation: "compact", maximumSignificantDigits: 3 }).format(n);
 }
+
+/** "1,284", "12.9K", "4.2M" */
+export function compactNumber(n: number) {
+  return new Intl.NumberFormat("en-NG", { notation: n >= 10_000 ? "compact" : "standard", maximumFractionDigits: 1 }).format(n);
+}

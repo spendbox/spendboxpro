@@ -56,7 +56,4 @@ export const getRequests = cache(async (bizId: string): Promise<BusinessRequestR
   return (data ?? []) as BusinessRequestRow[];
 });
 
-/** "1,284", "12.9K", "4.2M" */
-export function compactNumber(n: number) {
-  return new Intl.NumberFormat("en-NG", { notation: n >= 10_000 ? "compact" : "standard", maximumFractionDigits: 1 }).format(n);
-}
+export { compactNumber } from "@/lib/format";

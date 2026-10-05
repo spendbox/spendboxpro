@@ -1,17 +1,15 @@
-import { ArrowRight, Box, Check, Bookmark, Eye, LayoutGrid, MessageCircle, PartyPopper, Plus, ShoppingBag } from "lucide-react";
+import { ArrowRight, Box, Check, LayoutGrid, PartyPopper, ShoppingBag } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ProductThumb } from "@/components/products/product-thumb";
-import { Badge } from "@/components/ui/badge";
 import { Card, EmptyState, SectionTitle } from "@/components/ui/card";
 import { requireOwnedBusiness } from "@/lib/auth";
 import { siteUrl } from "@/lib/env";
-import { compactNumber, getPerks, getStats } from "@/lib/business";
+import { getPerks, getStats } from "@/lib/business";
 import { cn } from "@/lib/cn";
-import { formatMoney } from "@/lib/format";
 import { getBusinessProducts } from "@/lib/products";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { HomeShop } from "./home-shop";
+import { ProductGrid } from "./product-grid";
 
 export const metadata: Metadata = { title: "Products & services" };
 
@@ -134,46 +132,12 @@ export default async function ProductsTab({ params, searchParams }: PageProps<"/
           }}
           products={products
             .filter((p) => p.is_active)
-            .map((p) => ({ id: p.id, title: p.title, price: p.price, currency: p.currency, media_type: p.media_type, media_url: p.media_url, poster_url: p.poster_url, description: p.description }))}
+            .map((p) => ({ id: p.id, title: p.title, price: p.price, currency: p.currency, media_type: p.media_type, media_url: p.media_url, poster_url: p.poster_url, description: p.description, cutout_url: p.cutout_url }))}
         />
       ) : (
         <>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            <Link
-              href={`${base}/products/new`}
-              className="flex aspect-[4/5] flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-line-strong bg-white/60 p-4 text-center transition hover:border-brand-600 hover:bg-brand-50"
-            >
-              <span className="flex size-12 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-lift">
-                <Plus className="size-6" aria-hidden />
-              </span>
-              <span className="font-display font-bold">Add a product or service</span>
-              <span className="text-xs text-muted">Photo or short video</span>
-            </Link>
-            {products.map((p) => (
-              <Link key={p.id} href={`${base}/products/${p.id}`} className="group flex flex-col overflow-hidden rounded-3xl bg-white shadow-card ring-1 ring-line transition hover:ring-brand-300">
-                <ProductThumb mediaType={p.media_type} mediaUrl={p.media_url} posterUrl={p.poster_url} className={cn("aspect-square", !p.is_active && "opacity-50")} />
-                <span className="flex flex-1 flex-col gap-1 p-3">
-                  <span className="flex items-center gap-1.5">
-                    <span className="min-w-0 flex-1 truncate text-sm font-semibold">{p.title}</span>
-                    {!p.is_active && <Badge>Hidden</Badge>}
-                  </span>
-                  <span className="text-xs text-muted">{p.price !== null ? formatMoney(p.price, p.currency) : p.kind === "service" ? "Service" : "Ask for price"}</span>
-                  <span className="mt-auto flex items-center gap-3 pt-1 text-xs font-semibold text-ink-2 tabular">
-                    <span className="flex items-center gap-1" title="Views">
-                      <Eye className="size-3.5" aria-hidden /> {compactNumber(p.views)}
-                    </span>
-                    <span className="flex items-center gap-1" title="Saves">
-                      <Bookmark className="size-3.5" aria-hidden /> {compactNumber(p.likes)}
-                    </span>
-                    <span className="flex items-center gap-1" title="People who got in touch">
-                      <MessageCircle className="size-3.5" aria-hidden /> {compactNumber(p.contacts)}
-                    </span>
-                  </span>
-                </span>
-              </Link>
-            ))}
-          </div>
+          <ProductGrid bizId={bizId} products={products} businessName={business.name} joinUrl={`${siteUrl()}/j/${business.slug}`} />
           {products.length === 0 && (
             <EmptyState
               icon={<ShoppingBag className="size-6" aria-hidden />}
