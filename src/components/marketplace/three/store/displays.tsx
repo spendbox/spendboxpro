@@ -1,7 +1,7 @@
 "use client";
 
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import * as THREE from "three";
 import { DISPLAY_KINDS, type DisplayKind } from "@/lib/product-display";
 import { formatMoney } from "@/lib/format";
@@ -10,7 +10,7 @@ import { useDispose } from "../hooks";
 import { canvas, fitText, fontFamily, roundRect, shade, toTexture } from "../textures";
 import type { Hall, HallItem } from "./hall";
 import { FRONT } from "./hall";
-import { CutoutFigure } from "./cutout-figure";
+import { CutoutFigure, MannequinFigure, MannequinHead } from "./cutout-figure";
 import { Built, Kit } from "./kit";
 import { H, W } from "./layout";
 import { FloorShadow } from "./room";
@@ -280,21 +280,15 @@ const GARMENT: THREE.Vector2[] = Array.from({ length: 16 }, (_, i) => {
   return new THREE.Vector2(r, y);
 });
 
-function platform(k: Kit) {
-  k.cyl("satin", 0.42, 0.44, 0.08, [0, 0.04, 0], "#f4f1ea", 40);
-  k.torus("brass", 0.425, 0.01, [0, 0.08, 0], "#ffffff", [Math.PI / 2, 0, 0]);
-}
-
+/** A glossy black boutique dress form on a slim base (its head is added separately). */
 function dressForm(k: Kit) {
-  k.cyl("brass", 0.12, 0.14, 0.025, [0, 0.092, 0], "#ffffff", 28);
-  k.cyl("brass", 0.016, 0.016, 0.76, [0, 0.47, 0], "#ffffff", 10);
-  k.add("fabric", new THREE.LatheGeometry(FORM.map(([r, y]) => new THREE.Vector2(r, y)), 32).scale(...FORM_SCALE), "#efe7da");
-  k.sphere("wood", 0.034, [0, 1.635, 0], "#8a6448");
+  k.cyl("leather", 0.24, 0.26, 0.024, [0, 0.012, 0], "#141414", 40);
+  k.cyl("leather", 0.016, 0.016, 0.84, [0, 0.44, 0], "#141414", 12);
+  k.add("leather", new THREE.LatheGeometry(FORM.map(([r, y]) => new THREE.Vector2(r, y)), 32).scale(...FORM_SCALE), "#141414");
 }
 
-/** A platform, and a dress form unless the product's own 3D cutout (the model wearing it) stands there. */
+/** A black dress form, unless the product's own 3D cutout stands there (it brings its own mannequin parts). */
 function mannequin(k: Kit, cutout: boolean) {
-  platform(k);
   if (!cutout) dressForm(k);
 }
 
@@ -448,7 +442,7 @@ function ProductDisplay({ item, accent, focused, onPick }: { item: HallItem; acc
   });
   return (
     <group position={[item.x, 0, item.z]} rotation-y={item.rotY} onClick={onClick} {...hover.handlers}>
-      {item.kind === "wear" && <Wear item={item} accent={accent} />}
+      {item.kind === "wear" && <Wear item={item} />}
       {item.kind === "shoes" && <OnRiser item={item} accent={accent} />}
       {item.kind === "food" && <Plate item={item} accent={accent} />}
       {item.kind === "home" && <Listing item={item} accent={accent} />}
@@ -463,7 +457,7 @@ function ProductDisplay({ item, accent, focused, onPick }: { item: HallItem; acc
 }
 
 const HIT: Record<DisplayKind, { at: Vec; size: Vec }> = {
-  wear: { at: [0, 0.85, 0], size: [0.9, 1.7, 0.9] },
+  wear: { at: [0, 1.0, 0], size: [0.9, 2.0, 0.9] },
   shoes: { at: [0, 0.5, 0], size: [0.8, 1.0, 0.7] },
   food: { at: [0, 0.6, 0], size: [1.3, 1.2, 1.3] },
   home: { at: [0, 1.0, -0.2], size: [1.2, 2.1, 1.5] },
@@ -479,15 +473,51 @@ const cutoutOf = (item: HallItem) => (item.product.media_type === "image" ? (ite
  * the garment itself at dress-form height) on the platform; without a cutout,
  * the photo wrapped round a dress form.
  */
-function Wear({ item, accent }: { item: HallItem; accent: string }) {
+function Wear({ item }: { item: HallItem }) {
   const url = cutoutOf(item);
-  if (!url) return <Garment item={item} accent={accent} />;
   return (
     <>
-      <CutoutFigure url={url} at={[item.x, item.z]} base={0.08} maxW={0.95} maxH={1.74} fallback={<Garment item={item} accent={accent} withForm />} />
-      <Tag item={item} accent={accent} position={[0, 0.2, 0.47]} rotation={[-0.5, 0, 0]} />
-      <FloorShadow size={[1.2, 1.2]} position={[0, 0]} opacity={0.45} />
+      {url ? <MannequinFigure url={url} at={[item.x, item.z]} fallback={<Garment item={item} withForm />} /> : <Garment item={item} />}
+      <NameAbove item={item} />
     </>
+  );
+}
+
+/** The product's name floating above its mannequin, like the signs in a boutique window. */
+function NameAbove({ item }: { item: HallItem }) {
+  const invalidate = useThree((s) => s.invalidate);
+  const [near, setNear] = useState(false);
+  useFrame(({ camera }) => {
+    if (near) return;
+    const dx = camera.position.x - item.x;
+    const dz = camera.position.z - item.z;
+    if (dx * dx + dz * dz < NEAR * NEAR) setNear(true);
+  });
+  const texture = useMemo(() => {
+    if (!near) return null;
+    const { c, ctx } = canvas(512, 160);
+    const display = fontFamily("display");
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#1c211e";
+    let name = item.product.title;
+    fitText(ctx, name, 480, 56, 800, display);
+    while (ctx.measureText(name).width > 480 && name.length > 4) name = `${name.slice(0, -2).trimEnd()}…`;
+    ctx.fillText(name, 256, 56);
+    const price = priceOf(item);
+    ctx.font = `600 38px ${display}`;
+    ctx.fillStyle = "#4b524e";
+    ctx.fillText(price ?? "Ask for price", 256, 120);
+    return toTexture(c);
+  }, [near, item]);
+  useDispose(texture);
+  useEffect(() => invalidate(), [texture, invalidate]);
+  if (!texture) return null;
+  return (
+    <mesh position={[0, 2.12, 0]}>
+      <planeGeometry args={[0.85, 0.265]} />
+      <meshBasicMaterial map={texture} transparent toneMapped={false} />
+    </mesh>
   );
 }
 
@@ -515,7 +545,7 @@ function LoneDressForm() {
 }
 
 /** The photo wrapped round the dress form, front and back. */
-function Garment({ item, accent, withForm = false }: { item: HallItem; accent: string; withForm?: boolean }) {
+function Garment({ item, withForm = false }: { item: HallItem; withForm?: boolean }) {
   const [front, back] = useMemo(
     () => [
       new THREE.LatheGeometry(GARMENT, 28, -Math.PI / 2, Math.PI).scale(...FORM_SCALE),
@@ -530,14 +560,14 @@ function Garment({ item, accent, withForm = false }: { item: HallItem; accent: s
   return (
     <>
       {withForm && <LoneDressForm />}
+      <MannequinHead y={1.54} />
       <mesh geometry={front} castShadow>
         {material}
       </mesh>
       <mesh geometry={back} castShadow>
         {material}
       </mesh>
-      <Tag item={item} accent={accent} position={[0, 0.2, 0.47]} rotation={[-0.5, 0, 0]} />
-      <FloorShadow size={[1.2, 1.2]} position={[0, 0]} opacity={0.45} />
+      <FloorShadow size={[0.9, 0.9]} position={[0, 0]} opacity={0.45} />
     </>
   );
 }
