@@ -2,19 +2,31 @@
 
 import { Field, Input, Textarea } from "@/components/ui/field";
 import { cn } from "@/lib/cn";
+import type { CustomCategory } from "@/lib/product-categories";
 import type { ProductKind } from "@/lib/types";
+import { CategoryField, type CategoryOptions } from "./category-picker";
 
 export interface ProductFieldValues {
   kind: ProductKind;
   title: string;
   description: string;
   price: string;
+  /** The picked category, or null to follow the suggestion from the name. */
+  category: string | null;
 }
 
 const withCommas = (digits: string) => (digits ? Number(digits).toLocaleString("en-US") : "");
 
-/** Name, description, price and product/service: shared by "add" and "edit". */
-export function ProductFields({ values, onChange }: { values: ProductFieldValues; onChange: (next: ProductFieldValues) => void }) {
+/** Name, category, description, price and product/service: shared by "add" and "edit". */
+export function ProductFields({
+  values,
+  onChange,
+  categories,
+}: {
+  values: ProductFieldValues;
+  onChange: (next: ProductFieldValues) => void;
+  categories: { options: CategoryOptions; added: (c: CustomCategory) => void };
+}) {
   const set = (patch: Partial<ProductFieldValues>) => onChange({ ...values, ...patch });
   return (
     <div className="flex flex-col gap-5">
@@ -41,6 +53,13 @@ export function ProductFields({ values, onChange }: { values: ProductFieldValues
           onChange={(e) => set({ title: e.target.value })}
         />
       </Field>
+      <CategoryField
+        category={values.category}
+        product={{ title: values.title, description: values.description, kind: values.kind }}
+        options={categories.options}
+        onChange={(category) => set({ category })}
+        onAdded={categories.added}
+      />
       <Field label="Description" htmlFor="product-description" hint="Optional. Sizes, colours, how long it takes, what's included…">
         <Textarea
           id="product-description"

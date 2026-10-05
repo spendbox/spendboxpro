@@ -8,13 +8,15 @@ import { Button, buttonClass } from "@/components/ui/button";
 import { FormMessage } from "@/components/ui/field";
 import { WhatsAppIcon } from "@/components/ui/share-actions";
 import { formatMoney } from "@/lib/format";
+import { chosenCategory, useCategoryOptions, type CategoryOptions } from "./category-picker";
 import { prepareMedia, shareText, shareToStatus, uploadToSignedUrl, type PreparedMedia } from "./media";
 import { ProductFields, type ProductFieldValues } from "./product-fields";
 
-const EMPTY: ProductFieldValues = { kind: "product", title: "", description: "", price: "" };
+const EMPTY: ProductFieldValues = { kind: "product", title: "", description: "", price: "", category: null };
 
 /** Add a product or service: photo or video, a few words, then share it to a WhatsApp status. */
-export function ProductComposer({ bizId, businessName, joinUrl }: { bizId: string; businessName: string; joinUrl: string }) {
+export function ProductComposer({ bizId, businessName, joinUrl, categories }: { bizId: string; businessName: string; joinUrl: string; categories: CategoryOptions }) {
+  const cats = useCategoryOptions(categories);
   const [media, setMedia] = useState<PreparedMedia | null>(null);
   const [values, setValues] = useState(EMPTY);
   const [reading, setReading] = useState(false);
@@ -55,6 +57,7 @@ export function ProductComposer({ bizId, businessName, joinUrl }: { bizId: strin
       if (ticket.poster && media.poster) await uploadToSignedUrl(ticket.poster.signedUrl, media.poster, (f) => setProgress(0.85 + f * 0.1));
       const result = await createProduct(bizId, {
         ...values,
+        category: chosenCategory(values.category, values, cats.options),
         mediaType: media.type,
         mediaPath: ticket.media.path,
         posterPath: ticket.poster && media.poster ? ticket.poster.path : null,
@@ -155,7 +158,7 @@ export function ProductComposer({ bizId, businessName, joinUrl }: { bizId: strin
         </button>
       )}
 
-      <ProductFields values={values} onChange={setValues} />
+      <ProductFields values={values} onChange={setValues} categories={cats} />
 
       <Link href={`/dashboard/${bizId}/products/bulk`} className="-mt-2 text-sm font-semibold text-brand-700 underline-offset-2 hover:underline">
         Got lots to add? Add many at once

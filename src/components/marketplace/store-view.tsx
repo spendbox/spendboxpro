@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, DoorOpen, Expand, Gift, Home, Info, LayoutGrid, Mail, MapPin, Maximize2, Phone, Play, Share2, UserPlus, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, DoorOpen, Expand, Gift, Home, LayoutGrid, Mail, MapPin, Maximize2, Phone, Play, Share2, UserPlus, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { JoinWizard } from "@/components/join/join-wizard";
@@ -90,7 +90,7 @@ export default function StoreView({
   const [joining, setJoining] = useState(false);
   const [hint, setHint] = useState(true);
   const [focused, setFocused] = useState<string | null>(null);
-  const hall = useMemo(() => layoutHall(products, theme.displays, business.categories), [products, theme.displays, business.categories]);
+  const hall = useMemo(() => layoutHall(products, theme.categories, business.categories), [products, theme.categories, business.categories]);
   const focusIndex = hall.items.findIndex((i) => i.product.id === focused);
   const focusItem = focusIndex >= 0 ? hall.items[focusIndex]! : null;
   const member = business.is_member || join?.state === "member";
@@ -200,15 +200,15 @@ export default function StoreView({
 
   const joinButton =
     mode !== "public" || !join ? null : member ? (
-      <Link href={`/me/b/${business.slug}`} className="flex h-11 items-center gap-2 rounded-full bg-brand-600 px-5 text-sm font-semibold text-white shadow-lift active:scale-95">
+      <Link href={`/me/b/${business.slug}`} className="flex h-12 min-w-0 items-center gap-2 truncate rounded-full bg-white px-5 text-sm font-semibold text-ink shadow-lift active:scale-95">
         Open {business.name}
       </Link>
     ) : canJoin ? (
-      <button type="button" onClick={startJoin} className="flex h-11 items-center gap-2 rounded-full bg-brand-600 px-5 text-sm font-semibold text-white shadow-lift active:scale-95">
-        <UserPlus className="size-4" aria-hidden /> Join {business.name}
+      <button type="button" onClick={startJoin} className="flex h-12 min-w-0 items-center gap-2 rounded-full bg-white px-5 text-sm font-semibold text-ink shadow-lift active:scale-95">
+        <UserPlus className="size-4 shrink-0" aria-hidden /> <span className="truncate">Join {business.name}</span>
       </button>
     ) : join.closed && join.state !== "owner" ? (
-      <span className="flex h-11 items-center rounded-full bg-white/90 px-4 text-sm font-semibold text-ink">Not taking new members right now</span>
+      <span className="flex h-12 items-center rounded-full bg-white/90 px-4 text-center text-xs font-semibold text-ink">Not taking new members right now</span>
     ) : null;
 
   return (
@@ -231,13 +231,20 @@ export default function StoreView({
                 <X className="size-5" aria-hidden />
               </button>
             )}
-            <div className="flex min-w-0 items-center gap-2 rounded-full bg-black/35 py-1 pr-3 pl-1 backdrop-blur">
+            {/* The business's name opens its details. */}
+            <button
+              type="button"
+              onClick={() => setSheet("about")}
+              aria-label={`About ${business.name}`}
+              className="pointer-events-auto flex min-w-0 items-center gap-2 rounded-full bg-black/35 py-1 pr-2.5 pl-1 text-left backdrop-blur active:scale-[0.98]"
+            >
               <BusinessAvatar name={business.name} color={business.brand_color} logoUrl={business.logo_url} size="sm" className="rounded-full" />
               <span className="min-w-0">
                 <span className="block truncate text-sm font-bold">{business.name}</span>
                 <span className="block truncate text-[11px] text-white/80">{business.categories.slice(0, 2).join(" · ") || "Open now"}</span>
               </span>
-            </div>
+              <ChevronDown className="size-4 shrink-0 text-white/80" aria-hidden />
+            </button>
             <div className="ml-auto flex gap-2">
               {shareUrl && (
                 <button type="button" onClick={share} aria-label="Share this shop" className="pointer-events-auto flex size-11 items-center justify-center rounded-full bg-black/40 backdrop-blur">
@@ -302,48 +309,52 @@ export default function StoreView({
             </div>
           )}
 
-          {/* Sections of the hall, to walk straight to */}
-          {!focusItem && hall.sections.length > 0 && (
-            <nav aria-label="Walk to" className="absolute inset-x-0 bottom-[max(4.75rem,calc(env(safe-area-inset-bottom)+4rem))] flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:justify-center">
-              <button type="button" onClick={() => api.current?.home()} className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-black/45 px-3 text-xs font-semibold backdrop-blur">
-                <Home className="size-3.5" aria-hidden /> Counter
-              </button>
-              {hall.sections.map((sec) => (
-                <button key={sec.kind} type="button" onClick={() => api.current?.flyTo(sec.view)} className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-black/45 px-3 text-xs font-semibold backdrop-blur">
-                  {sec.label}
-                  <span className="rounded-full bg-white/20 px-1.5 tabular-nums">{sec.count}</span>
+          {/* Bottom: shop buttons and sections in one scrolling row, then the main actions. Stacked, so nothing overlaps. */}
+          {!focusItem && (
+            <div className="absolute inset-x-0 bottom-0 flex flex-col gap-2.5 bg-gradient-to-t from-black/60 via-black/25 to-transparent pt-10 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              <div className="flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:justify-center">
+                {perks.length > 0 && (
+                  <Chip onClick={() => setSheet("gift")} className="bg-amber-400 text-ink">
+                    <Gift className="size-3.5" aria-hidden /> Gift
+                  </Chip>
+                )}
+                {mode !== "public" && products.length > 0 && (
+                  <Chip onClick={() => openProduct(products[0]!.id)}>
+                    <LayoutGrid className="size-3.5" aria-hidden /> All products
+                  </Chip>
+                )}
+                {partners.length > 0 && (
+                  <Chip onClick={() => setSheet("partners")}>
+                    <DoorOpen className="size-3.5" aria-hidden /> Partners
+                  </Chip>
+                )}
+                {hall.sections.length > 0 && (
+                  <nav aria-label="Walk to" className="flex shrink-0 gap-2">
+                    <Chip onClick={() => api.current?.home()}>
+                      <Home className="size-3.5" aria-hidden /> Counter
+                    </Chip>
+                    {hall.sections.map((sec) => (
+                      <Chip key={sec.key} onClick={() => api.current?.flyTo(sec.view)}>
+                        {sec.label}
+                        <span className="rounded-full bg-white/20 px-1.5 tabular-nums">{sec.count}</span>
+                      </Chip>
+                    ))}
+                  </nav>
+                )}
+              </div>
+              <div className="flex justify-center gap-2 px-4">
+                {joinButton}
+                {/* Chat: the main way to reach the business. */}
+                <button
+                  type="button"
+                  onClick={() => setSheet("contact")}
+                  className="flex h-12 min-w-0 shrink-0 items-center justify-center gap-2 rounded-full bg-[#1FAF55] px-6 text-[15px] font-bold text-white shadow-lift ring-4 ring-[#1FAF55]/25 active:scale-95"
+                >
+                  <WhatsAppIcon className="size-5" /> Chat
                 </button>
-              ))}
-            </nav>
+              </div>
+            </div>
           )}
-
-          {/* Bottom actions */}
-          <div className={cn("absolute inset-x-0 bottom-0 flex flex-wrap justify-center gap-2 bg-gradient-to-t from-black/50 to-transparent p-4 pb-[max(1rem,env(safe-area-inset-bottom))]", focusItem && "hidden")}>
-            {joinButton}
-            {mode !== "public" && products.length > 0 && (
-              <ActionButton onClick={() => openProduct(products[0]!.id)}>
-                <LayoutGrid className="size-4" aria-hidden /> All products
-              </ActionButton>
-            )}
-            {partners.length > 0 && (
-              <ActionButton onClick={() => setSheet("partners")}>
-                <DoorOpen className="size-4" aria-hidden /> Partners
-              </ActionButton>
-            )}
-            {perks.length > 0 && (
-              <ActionButton onClick={() => setSheet("gift")}>
-                <Gift className="size-4" aria-hidden /> Gift
-              </ActionButton>
-            )}
-            <ActionButton onClick={() => setSheet("contact")}>
-              <WhatsAppIcon className="size-4" /> Chat
-            </ActionButton>
-            {mode !== "public" && (
-              <ActionButton onClick={() => setSheet("about")}>
-                <Info className="size-4" aria-hidden /> About
-              </ActionButton>
-            )}
-          </div>
 
           {/* Products, for screen readers and keyboards: walks up to each, like a tap */}
           <ul className="sr-only" aria-label={`${business.name} products`}>
@@ -546,9 +557,9 @@ function Sheet({ label, onClose, children }: { label: string; onClose: () => voi
   );
 }
 
-function ActionButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+function Chip({ onClick, children, className }: { onClick: () => void; children: React.ReactNode; className?: string }) {
   return (
-    <button type="button" onClick={onClick} className="flex h-11 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-ink shadow-lift active:scale-95">
+    <button type="button" onClick={onClick} className={cn("flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-black/45 px-3 text-xs font-semibold backdrop-blur active:scale-95", className)}>
       {children}
     </button>
   );
