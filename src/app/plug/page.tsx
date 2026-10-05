@@ -22,7 +22,7 @@ import { RememberInviter } from "@/components/auth/remember-inviter";
 import { Logo } from "@/components/brand/logo";
 import { RevealOnScroll } from "@/components/landing/reveal";
 import { PerkCard } from "@/components/perks/perk-card";
-import { ShopScene } from "@/components/landing/shop-scene";
+import { ShopIllustration } from "@/components/landing/shop-illustration";
 import { ButtonLink } from "@/components/ui/button";
 
 const MADE_FOR = [
@@ -160,7 +160,7 @@ export default function PlugPage() {
               </p>
             </div>
             <div className="order-1 lg:order-2">
-              <ShopScene className="sm:scale-125 lg:scale-[1.35]" />
+              <ShopIllustration className="mx-auto w-full max-w-md" />
             </div>
           </div>
         </section>

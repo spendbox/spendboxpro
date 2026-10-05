@@ -2,7 +2,7 @@ import { ArrowRight, Store } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
-import { ShopScene } from "@/components/landing/shop-scene";
+import { ShopIllustration } from "@/components/landing/shop-illustration";
 import { buttonClass } from "@/components/ui/button";
 
 export const metadata: Metadata = { title: { absolute: "Spendbox — shop comfortably, shop different" } };
@@ -22,8 +22,8 @@ export default function Home() {
       </header>
 
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-7 px-5 pb-8 text-center sm:gap-8">
-        {/* A little 3D shop, walked into */}
-        <ShopScene className="shrink-0 sm:scale-110" />
+        {/* Walking into a shop in 3D, on a phone */}
+        <ShopIllustration className="w-full max-w-[22rem] shrink-0 sm:max-w-md" />
 
         <div className="flex flex-col gap-3">
           <h1 className="font-display text-[2.5rem] leading-[1.02] font-extrabold tracking-tight sm:text-6xl">
