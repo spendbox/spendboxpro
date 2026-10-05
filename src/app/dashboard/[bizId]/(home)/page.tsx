@@ -1,7 +1,8 @@
-import { ArrowRight, Box, Check, LayoutGrid, PartyPopper, ShoppingBag } from "lucide-react";
+import { Box, LayoutGrid, PartyPopper, ShoppingBag } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Card, EmptyState, SectionTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/card";
+import { Checklist } from "@/components/ui/checklist";
 import { requireOwnedBusiness } from "@/lib/auth";
 import { siteUrl } from "@/lib/env";
 import { getPerks, getStats } from "@/lib/business";
@@ -37,7 +38,6 @@ export default async function ProductsTab({ params, searchParams }: PageProps<"/
       href: `${base}/settings/store?edit=1`,
     },
   ];
-  const setupDone = steps.every((s) => s.done);
 
   return (
     <div className="flex flex-col gap-5">
@@ -55,38 +55,7 @@ export default async function ProductsTab({ params, searchParams }: PageProps<"/
         </div>
       )}
 
-      {!setupDone && (
-        <Card className="p-4 sm:p-5">
-          <SectionTitle title="Get set up" description={`${steps.filter((s) => s.done).length} of ${steps.length} done`} />
-          <ol className="mt-2 grid grid-cols-1 gap-x-4 sm:grid-cols-2">
-            {steps.map((step) => {
-              const content = (
-                <>
-                  <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-full", step.done ? "bg-brand-600 text-white" : "ring-2 ring-line-strong")}>
-                    {step.done && <Check className="size-3.5" aria-hidden />}
-                  </span>
-                  <span className={cn("flex-1 text-sm font-semibold", step.done ? "text-muted line-through" : "text-ink")}>
-                    {step.label}
-                    <span className="sr-only">{step.done ? " (done)" : ""}</span>
-                  </span>
-                  {!step.done && step.href && <ArrowRight className="size-4 text-muted" aria-hidden />}
-                </>
-              );
-              return (
-                <li key={step.label}>
-                  {!step.done && step.href ? (
-                    <Link href={step.href} className="flex items-center gap-3 rounded-xl p-2 hover:bg-canvas">
-                      {content}
-                    </Link>
-                  ) : (
-                    <div className="flex items-center gap-3 p-2">{content}</div>
-                  )}
-                </li>
-              );
-            })}
-          </ol>
-        </Card>
-      )}
+      <Checklist title="Get set up" steps={steps} />
 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
