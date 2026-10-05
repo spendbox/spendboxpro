@@ -116,6 +116,12 @@ function pampas(k: Kit, soil: number, seed: number) {
 
 const BUILD: Record<Exclude<PlantKind, "none">, (k: Kit, soil: number, seed: number) => void> = { strelitzia, monstera, olive, snake, flowers, pampas };
 
+/** A plant in its pot, standing at the kit's current place (for other spots, like the end of the hall). */
+export function plantKit(k: Kit, kind: Exclude<PlantKind, "none">, potColor: PotColor, seed: number) {
+  const soil = pot(k, kind, POTS.find((p) => p.id === potColor)!.color);
+  BUILD[kind](k, soil, seed);
+}
+
 function PlantAt({ spot, kind, potColor, onTap }: { spot: PlantSpot; kind: PlantKind; potColor: PotColor; onTap?: () => void }) {
   const place = SPOTS[spot];
   const color = POTS.find((p) => p.id === potColor)!.color;

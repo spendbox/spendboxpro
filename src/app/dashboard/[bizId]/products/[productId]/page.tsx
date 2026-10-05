@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { requireOwnedBusiness } from "@/lib/auth";
 import { compactNumber } from "@/lib/business";
 import { siteUrl } from "@/lib/env";
+import { categoryOptionsOf } from "@/lib/store-theme";
 import { memberNo } from "@/lib/format";
 import { getBusinessProducts, getProductAudience } from "@/lib/products";
 import { timeAgo } from "@/lib/requests";
@@ -51,7 +52,7 @@ export default async function ProductPage({ params }: PageProps<"/dashboard/[biz
             ))}
           </div>
         </div>
-        <ProductManager bizId={bizId} product={product} businessName={business.name} joinUrl={`${siteUrl()}/j/${business.slug}`} />
+        <ProductManager bizId={bizId} product={product} businessName={business.name} joinUrl={`${siteUrl()}/j/${business.slug}`} categories={categoryOptionsOf(business)} />
       </div>
 
       <section className="flex flex-col gap-3">

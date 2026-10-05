@@ -3,7 +3,6 @@
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useState } from "react";
 import * as THREE from "three";
-import { DISPLAY_KINDS } from "@/lib/product-display";
 import { formatMoney } from "@/lib/format";
 import { mix } from "../geometry";
 import { useDispose } from "../hooks";
@@ -397,50 +396,38 @@ function HallLights({ end, glow }: { end: number; glow: string }) {
 
 // ---------------------------------------------------------------- The hall
 
-/** The business's name on the hall's far wall. */
-function EndSign({ name, accent, z }: { name: string; accent: string; z: number }) {
-  const texture = useMemo(() => {
-    const { c, ctx } = canvas(1024, 256);
-    const display = fontFamily("display");
-    ctx.fillStyle = accent;
-    roundRect(ctx, 462, 214, 100, 12, 6);
-    ctx.fill();
-    ctx.fillStyle = "#1d2320";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    fitText(ctx, name, 960, 130, 800, display);
-    ctx.fillText(name, 512, 110);
-    return toTexture(c);
-  }, [name, accent]);
-  useDispose(texture);
-  return (
-    <mesh position={[0, 2.9, z - 0.02]} rotation-y={Math.PI}>
-      <planeGeometry args={[4.4, 1.1]} />
-      <meshBasicMaterial map={texture} transparent toneMapped={false} />
-    </mesh>
-  );
-}
-
 export function HallDisplays({
   hall,
-  name,
   accent,
   glow,
   focusedId,
   onPick,
 }: {
   hall: Hall;
-  name: string;
   accent: string;
   glow: string;
   focusedId: string | null;
   onPick: (item: HallItem, far: boolean) => void;
 }) {
   const furniture = useHallFurniture(hall, accent);
-  const kinds = useMemo(() => new Map(DISPLAY_KINDS.map((k) => [k.id, k])), []);
   return (
     <>
-      <Built parts={furniture} />
+      {/* Tapping a table, shelf or frame edge picks the nearest product on it (rather than walking into it). */}
+      <group onClick={tap((e: ThreeEvent<MouseEvent>) => {
+        let best: HallItem | null = null;
+        let bestD = Infinity;
+        for (const item of hall.items) {
+          const d = (item.x - e.point.x) ** 2 + (item.z - e.point.z) ** 2 + (item.y + 0.25 - e.point.y) ** 2 * 0.5;
+          if (d < bestD) [best, bestD] = [item, d];
+        }
+        if (best && bestD < 2.5 * 2.5) {
+          const dx = e.camera.position.x - best.x;
+          const dz = e.camera.position.z - best.z;
+          onPick(best, dx * dx + dz * dz > 5 * 5);
+        }
+      })}>
+        <Built parts={furniture} />
+      </group>
       {hall.fixtures.map((fx) =>
         fx.kind === "shelf" ? (
           <FloorShadow key={`${fx.x},${fx.z}`} size={[SHELF.depth + 0.45, SHELF.width + 0.3]} position={[fx.x - Math.sign(fx.x) * (SHELF.depth / 2), fx.z]} opacity={0.4} />
@@ -454,16 +441,15 @@ export function HallDisplays({
       {hall.sections.map((s) =>
         s.placement === "table" ? (
           // Over the tables, facing people walking down the hall.
-          [-TABLE.x, TABLE.x].map((x) => <SectionSign key={`${s.kind}${x}`} label={kinds.get(s.kind)!.section} count={s.count} accent={accent} position={[x, 3.4, s.z - 0.1]} rotationY={Math.PI} />)
+          [-TABLE.x, TABLE.x].map((x) => <SectionSign key={`${s.key}${x}`} label={s.label} count={s.count} accent={accent} position={[x, 3.4, s.z - 0.1]} rotationY={Math.PI} />)
         ) : (
           // High on both walls.
           [-1, 1].map((side) => (
-            <SectionSign key={`${s.kind}${side}`} label={kinds.get(s.kind)!.section} count={s.count} accent={accent} position={[side * (W / 2 - 0.03), 3.3, s.z + 0.9]} rotationY={-side * (Math.PI / 2)} />
+            <SectionSign key={`${s.key}${side}`} label={s.label} count={s.count} accent={accent} position={[side * (W / 2 - 0.03), 3.3, s.z + 0.9]} rotationY={-side * (Math.PI / 2)} />
           ))
         ),
       )}
       {hall.items.length > 0 && <HallLights end={hall.end} glow={glow} />}
-      <EndSign name={name} accent={accent} z={hall.end} />
     </>
   );
 }

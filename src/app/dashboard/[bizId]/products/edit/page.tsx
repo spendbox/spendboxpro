@@ -3,12 +3,13 @@ import { BulkEditor } from "@/components/products/bulk-editor";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireOwnedBusiness } from "@/lib/auth";
 import { getBusinessProducts } from "@/lib/products";
+import { categoryOptionsOf } from "@/lib/store-theme";
 
 export const metadata: Metadata = { title: "Edit products" };
 
 export default async function BulkEditPage({ params, searchParams }: PageProps<"/dashboard/[bizId]/products/edit">) {
   const [{ bizId }, { ids }] = await Promise.all([params, searchParams]);
-  const [, all] = await Promise.all([requireOwnedBusiness(bizId), getBusinessProducts(bizId)]);
+  const [{ business }, all] = await Promise.all([requireOwnedBusiness(bizId), getBusinessProducts(bizId)]);
   const wanted = new Set(String(ids ?? "").split(",").filter(Boolean));
   const products = wanted.size ? all.filter((p) => wanted.has(p.id)) : all;
   return (
@@ -20,6 +21,7 @@ export default async function BulkEditPage({ params, searchParams }: PageProps<"
       />
       <BulkEditor
         bizId={bizId}
+        categories={categoryOptionsOf(business)}
         products={products.map((p) => ({
           id: p.id,
           kind: p.kind,
@@ -29,6 +31,7 @@ export default async function BulkEditPage({ params, searchParams }: PageProps<"
           media_type: p.media_type,
           media_url: p.media_url,
           poster_url: p.poster_url,
+          category: p.category ?? null,
         }))}
       />
     </div>

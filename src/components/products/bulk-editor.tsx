@@ -1,13 +1,15 @@
 "use client";
 
-import { Check } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { updateProducts } from "@/app/dashboard/[bizId]/product-actions";
 import { Button } from "@/components/ui/button";
 import { FormMessage } from "@/components/ui/field";
 import { cn } from "@/lib/cn";
+import { categoryInfo } from "@/lib/product-categories";
 import type { ProductKind } from "@/lib/types";
+import { CategoryField, CategoryIcon, CategorySheet, chosenCategory, useCategoryOptions, type CategoryOptions } from "./category-picker";
 import { ProductThumb } from "./product-thumb";
 
 export interface EditableProduct {
@@ -19,16 +21,20 @@ export interface EditableProduct {
   media_type: "image" | "video";
   media_url: string;
   poster_url: string | null;
+  /** Its category, or null to follow the suggestion from the name. */
+  category: string | null;
 }
 
 const withCommas = (digits: string) => (digits ? Number(digits).toLocaleString("en-US") : "");
 const digitsOf = (v: string) => v.replace(/\D/g, "").slice(0, 10);
 
 /** Edit several products together: each one's fields, and "same for selected" values. */
-export function BulkEditor({ bizId, products }: { bizId: string; products: EditableProduct[] }) {
+export function BulkEditor({ bizId, products, categories }: { bizId: string; products: EditableProduct[]; categories: CategoryOptions }) {
+  const cats = useCategoryOptions(categories);
+  const [pickingBulkCategory, setPickingBulkCategory] = useState(false);
   const router = useRouter();
   const [rows, setRows] = useState(products.map((p) => ({ ...p, selected: true })));
-  const [bulk, setBulk] = useState({ price: "", description: "", kind: "" as "" | ProductKind });
+  const [bulk, setBulk] = useState({ price: "", description: "", kind: "" as "" | ProductKind, category: "" });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const set = (id: string, patch: Partial<EditableProduct & { selected: boolean }>) => setRows((list) => list.map((r) => (r.id === id ? { ...r, ...patch } : r)));
@@ -37,7 +43,15 @@ export function BulkEditor({ bizId, products }: { bizId: string; products: Edita
   const apply = () =>
     setRows((list) =>
       list.map((r) =>
-        r.selected ? { ...r, ...(bulk.price ? { price: bulk.price } : {}), ...(bulk.description.trim() ? { description: bulk.description } : {}), ...(bulk.kind ? { kind: bulk.kind } : {}) } : r,
+        r.selected
+          ? {
+              ...r,
+              ...(bulk.price ? { price: bulk.price } : {}),
+              ...(bulk.description.trim() ? { description: bulk.description } : {}),
+              ...(bulk.kind ? { kind: bulk.kind } : {}),
+              ...(bulk.category ? { category: bulk.category } : {}),
+            }
+          : r,
       ),
     );
 
@@ -46,7 +60,7 @@ export function BulkEditor({ bizId, products }: { bizId: string; products: Edita
     setMessage(null);
     const r = await updateProducts(
       bizId,
-      rows.map((p) => ({ id: p.id, kind: p.kind, title: p.title, description: p.description, price: p.price })),
+      rows.map((p) => ({ id: p.id, kind: p.kind, title: p.title, description: p.description, price: p.price, category: chosenCategory(p.category, p, cats.options) })),
     );
     setSaving(false);
     setMessage(r.ok ? { ok: true, text: `Saved ${r.saved === 1 ? "it" : `all ${r.saved}`}.` } : { ok: false, text: r.error });
@@ -63,6 +77,11 @@ export function BulkEditor({ bizId, products }: { bizId: string; products: Edita
           </label>
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-[9rem_1fr_auto_auto]">
+          <button type="button" onClick={() => setPickingBulkCategory(true)} aria-label="Category for selected" className="flex h-11 items-center gap-2 rounded-xl border border-line-strong bg-white px-3 text-left text-[15px] sm:col-span-4">
+            {bulk.category ? <CategoryIcon id={bulk.category} className="size-4 text-brand-700" /> : null}
+            <span className={cn("min-w-0 flex-1 truncate", !bulk.category && "text-muted")}>{bulk.category ? categoryInfo(bulk.category, cats.options.custom).name : "Category"}</span>
+            <ChevronDown className="size-4 text-muted" aria-hidden />
+          </button>
           <div className="relative">
             <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm font-semibold text-muted">₦</span>
             <input
@@ -87,10 +106,25 @@ export function BulkEditor({ bizId, products }: { bizId: string; products: Edita
             <option value="product">Products</option>
             <option value="service">Services</option>
           </select>
-          <Button type="button" variant="dark" onClick={apply} disabled={!selected.length || (!bulk.price && !bulk.description.trim() && !bulk.kind)}>
+          <Button type="button" variant="dark" onClick={apply} disabled={!selected.length || (!bulk.price && !bulk.description.trim() && !bulk.kind && !bulk.category)}>
             Apply to {selected.length}
           </Button>
         </div>
+        <CategorySheet
+          open={pickingBulkCategory}
+          onClose={() => setPickingBulkCategory(false)}
+          value={bulk.category || null}
+          options={cats.options}
+          onPick={(category) => {
+            setBulk((b) => ({ ...b, category }));
+            setPickingBulkCategory(false);
+          }}
+          onAdded={(c) => {
+            cats.added(c);
+            setBulk((b) => ({ ...b, category: c.id }));
+            setPickingBulkCategory(false);
+          }}
+        />
       </section>
 
       <ul className="flex flex-col gap-3" aria-label="Products">
@@ -131,6 +165,15 @@ export function BulkEditor({ bizId, products }: { bizId: string; products: Edita
                   ))}
                 </div>
               </div>
+              <CategoryField
+                compact
+                label={`Category of product ${i + 1}`}
+                category={p.category}
+                product={{ title: p.title, description: p.description, kind: p.kind }}
+                options={cats.options}
+                onChange={(category) => set(p.id, { category })}
+                onAdded={cats.added}
+              />
               <textarea
                 aria-label={`Description of product ${i + 1}`}
                 rows={2}

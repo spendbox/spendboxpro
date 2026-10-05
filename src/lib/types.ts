@@ -299,6 +299,8 @@ export interface BusinessProduct {
   currency: string;
   media_type: ProductMediaType;
   media_url: string;
+  /** Its category's id (see lib/product-categories); older products may have none. */
+  category?: string | null;
   poster_url: string | null;
   is_active: boolean;
   created_at: string;
@@ -326,6 +328,8 @@ export interface FeedProduct {
   currency: string;
   media_type: ProductMediaType;
   media_url: string;
+  /** Its category's id (see lib/product-categories); older products may have none. */
+  category?: string | null;
   poster_url: string | null;
   created_at: string;
   viewed: boolean;
@@ -370,11 +374,14 @@ export interface ExploreBusiness {
 /** What the 3D store needs to show a product on its shelves. */
 export interface StoreProduct {
   id: string;
+  kind?: ProductKind;
   title: string;
   price: number | null;
   currency: string;
   media_type: ProductMediaType;
   media_url: string;
+  /** Its category's id (see lib/product-categories); older products may have none. */
+  category?: string | null;
   poster_url: string | null;
   viewed?: boolean;
   /** Shown on the card when the visitor walks up to it in the hall. */

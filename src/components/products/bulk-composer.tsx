@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, CircleAlert, ImagePlus, LoaderCircle, Plus, Trash2 } from "lucide-react";
+import { Check, ChevronDown, CircleAlert, HardDriveDownload, ImagePlus, LoaderCircle, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { createProduct, prepareProductUpload } from "@/app/dashboard/[bizId]/product-actions";
@@ -9,7 +9,10 @@ import { FormMessage } from "@/components/ui/field";
 import { WhatsAppIcon } from "@/components/ui/share-actions";
 import { cn } from "@/lib/cn";
 import { formatMoney } from "@/lib/format";
+import { categoryInfo } from "@/lib/product-categories";
 import type { ProductKind } from "@/lib/types";
+import { CategoryField, CategoryIcon, CategorySheet, chosenCategory, useCategoryOptions, type CategoryOptions } from "./category-picker";
+import { clearDrafts, loadDrafts, saveDrafts, type StoredDraft } from "./draft-store";
 import { prepareMedia, uploadToSignedUrl, type PreparedMedia } from "./media";
 
 const MAX_AT_ONCE = 30;
@@ -21,6 +24,8 @@ interface Draft {
   title: string;
   description: string;
   price: string;
+  /** The picked category, or null to follow the suggestion from the name. */
+  category: string | null;
   selected: boolean;
   status: "draft" | "posting" | "done" | "error";
   error?: string;
@@ -42,18 +47,67 @@ const digitsOf = (v: string) => v.replace(/\D/g, "").slice(0, 10);
  * (and a price and words, or set them for several together), then post them
  * all and share them to WhatsApp together.
  */
-export function BulkComposer({ bizId, businessName, joinUrl }: { bizId: string; businessName: string; joinUrl: string }) {
+export function BulkComposer({ bizId, businessName, joinUrl, categories }: { bizId: string; businessName: string; joinUrl: string; categories: CategoryOptions }) {
+  const cats = useCategoryOptions(categories);
+  const [pickingBulkCategory, setPickingBulkCategory] = useState(false);
+  // Drafts kept on this device from last time (null until checked).
+  const [restored, setRestored] = useState<number | null>(null);
+  const [kept, setKept] = useState(false);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [reading, setReading] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
   const [finished, setFinished] = useState(false);
   const [shareNote, setShareNote] = useState<string | null>(null);
-  const [bulk, setBulk] = useState({ price: "", description: "", kind: "" as "" | ProductKind });
+  const [bulk, setBulk] = useState({ price: "", description: "", kind: "" as "" | ProductKind, category: "" });
   const fileInput = useRef<HTMLInputElement>(null);
   const urls = useRef<string[]>([]);
 
   useEffect(() => () => urls.current.forEach((u) => URL.revokeObjectURL(u)), []);
+
+  // Bring back drafts kept on this device.
+  useEffect(() => {
+    let alive = true;
+    void loadDrafts(bizId).then((saved) => {
+      if (!alive) return;
+      const back: Draft[] = saved.map((x) => {
+        const file = new File([x.file], x.fileName, { type: x.fileType });
+        const media: PreparedMedia = { type: x.type, file, poster: x.poster ? new File([x.poster], "poster.jpg", { type: "image/jpeg" }) : null, previewUrl: URL.createObjectURL(file) };
+        urls.current.push(media.previewUrl);
+        return { key: x.key, media, kind: x.kind, title: x.title, description: x.description, price: x.price, category: x.category, selected: x.selected, status: "draft" };
+      });
+      setDrafts((d) => [...back, ...d.filter((x) => !back.some((b) => b.key === x.key))]);
+      setRestored(back.length);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [bizId]);
+
+  // Keep the drafts on this device as they change (once the old ones are back).
+  useEffect(() => {
+    if (restored === null) return;
+    const t = setTimeout(() => {
+      const keep: StoredDraft[] = drafts
+        .filter((d) => d.status !== "done")
+        .map((d) => ({
+          key: d.key,
+          type: d.media.type,
+          file: d.media.file,
+          fileName: d.media.file.name,
+          fileType: d.media.file.type,
+          poster: d.media.poster,
+          kind: d.kind,
+          title: d.title,
+          description: d.description,
+          price: d.price,
+          category: d.category,
+          selected: d.selected,
+        }));
+      void saveDrafts(bizId, keep).then((ok) => setKept(ok && keep.length > 0));
+    }, 400);
+    return () => clearTimeout(t);
+  }, [drafts, restored, bizId]);
 
   const update = (key: string, patch: Partial<Draft>) => setDrafts((list) => list.map((d) => (d.key === key ? { ...d, ...patch } : d)));
   const selected = drafts.filter((d) => d.selected && d.status !== "done");
@@ -73,7 +127,7 @@ export function BulkComposer({ bizId, businessName, joinUrl }: { bizId: string; 
         const key = crypto.randomUUID();
         setDrafts((d) => [
           ...d,
-          { key, media, kind: "product", title: nameFromFile(file.name), description: "", price: "", selected: true, status: "draft" },
+          { key, media, kind: "product", title: nameFromFile(file.name), description: "", price: "", category: null, selected: true, status: "draft" },
         ]);
       } catch (e) {
         problems.push(`${file.name}: ${(e as Error).message}`);
@@ -90,7 +144,13 @@ export function BulkComposer({ bizId, businessName, joinUrl }: { bizId: string; 
     setDrafts((list) =>
       list.map((d) =>
         d.selected && d.status !== "done"
-          ? { ...d, ...(bulk.price ? { price: bulk.price } : {}), ...(bulk.description.trim() ? { description: bulk.description } : {}), ...(bulk.kind ? { kind: bulk.kind } : {}) }
+          ? {
+              ...d,
+              ...(bulk.price ? { price: bulk.price } : {}),
+              ...(bulk.description.trim() ? { description: bulk.description } : {}),
+              ...(bulk.kind ? { kind: bulk.kind } : {}),
+              ...(bulk.category ? { category: bulk.category } : {}),
+            }
           : d,
       ),
     );
@@ -118,6 +178,7 @@ export function BulkComposer({ bizId, businessName, joinUrl }: { bizId: string; 
           title: d.title,
           description: d.description,
           price: d.price,
+          category: chosenCategory(d.category, d, cats.options),
           mediaType: d.media.type,
           mediaPath: ticket.media.path,
           posterPath: ticket.poster && d.media.poster ? ticket.poster.path : null,
@@ -130,8 +191,11 @@ export function BulkComposer({ bizId, businessName, joinUrl }: { bizId: string; 
       }
     }
     setPosting(false);
-    if (failed) setError(failed === 1 ? "One didn't post. Check it and press Post again." : `${failed} didn't post. Check them and press Post again.`);
-    else setFinished(true);
+    if (failed) setError(failed === 1 ? "One didn't post. It's kept here: check it and press Post again." : `${failed} didn't post. They're kept here: check them and press Post again.`);
+    else {
+      void clearDrafts(bizId);
+      setFinished(true);
+    }
   }
 
   const posted = drafts.filter((d) => d.status === "done");
@@ -244,6 +308,16 @@ export function BulkComposer({ bizId, businessName, joinUrl }: { bizId: string; 
             <span className="text-xs text-muted">Set these for the selected ones, then fine-tune each below.</span>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-[9rem_1fr_auto_auto]">
+            <button
+              type="button"
+              onClick={() => setPickingBulkCategory(true)}
+              aria-label="Category for selected"
+              className="flex h-11 items-center gap-2 rounded-xl border border-line-strong bg-white px-3 text-left text-[15px] sm:col-span-4"
+            >
+              {bulk.category ? <CategoryIcon id={bulk.category} className="size-4 text-brand-700" /> : null}
+              <span className={cn("min-w-0 flex-1 truncate", !bulk.category && "text-muted")}>{bulk.category ? categoryInfo(bulk.category, cats.options.custom).name : "Category"}</span>
+              <ChevronDown className="size-4 text-muted" aria-hidden />
+            </button>
             <div className="relative">
               <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm font-semibold text-muted">₦</span>
               <input
@@ -273,11 +347,33 @@ export function BulkComposer({ bizId, businessName, joinUrl }: { bizId: string; 
               <option value="product">Products</option>
               <option value="service">Services</option>
             </select>
-            <Button type="button" variant="dark" onClick={applyToSelected} disabled={!selected.length || (!bulk.price && !bulk.description.trim() && !bulk.kind)}>
+            <Button type="button" variant="dark" onClick={applyToSelected} disabled={!selected.length || (!bulk.price && !bulk.description.trim() && !bulk.kind && !bulk.category)}>
               Apply to {selected.length}
             </Button>
           </div>
+          <CategorySheet
+            open={pickingBulkCategory}
+            onClose={() => setPickingBulkCategory(false)}
+            value={bulk.category || null}
+            options={cats.options}
+            onPick={(category) => {
+              setBulk((b) => ({ ...b, category }));
+              setPickingBulkCategory(false);
+            }}
+            onAdded={(c) => {
+              cats.added(c);
+              setBulk((b) => ({ ...b, category: c.id }));
+              setPickingBulkCategory(false);
+            }}
+          />
         </section>
+      )}
+
+      {(kept || Boolean(restored)) && waiting.length > 0 && (
+        <p role="status" className="-mt-2 flex items-center gap-2 text-sm text-muted">
+          <HardDriveDownload className="size-4 shrink-0 text-brand-700" aria-hidden />
+          {restored ? `We kept ${restored === 1 ? "1 draft" : `${restored} drafts`} from last time. ` : ""}Drafts are saved on this device until you post them.
+        </p>
       )}
 
       <ul className="flex flex-col gap-3" aria-label="To post">
@@ -287,6 +383,7 @@ export function BulkComposer({ bizId, businessName, joinUrl }: { bizId: string; 
             draft={d}
             index={i}
             disabled={posting}
+            categories={cats}
             onChange={(patch) => update(d.key, { ...patch, ...(d.status === "error" ? { status: "draft", error: undefined } : {}) })}
             onRemove={() => setDrafts((list) => list.filter((x) => x.key !== d.key))}
           />
@@ -311,12 +408,14 @@ function DraftCard({
   draft: d,
   index,
   disabled,
+  categories,
   onChange,
   onRemove,
 }: {
   draft: Draft;
   index: number;
   disabled: boolean;
+  categories: ReturnType<typeof useCategoryOptions>;
   onChange: (patch: Partial<Draft>) => void;
   onRemove: () => void;
 }) {
@@ -398,6 +497,17 @@ function DraftCard({
             ))}
           </div>
         </div>
+        {!locked && (
+          <CategoryField
+            compact
+            label={`Category of item ${index + 1}`}
+            category={d.category}
+            product={{ title: d.title, description: d.description, kind: d.kind }}
+            options={categories.options}
+            onChange={(category) => onChange({ category })}
+            onAdded={categories.added}
+          />
+        )}
         <textarea
           aria-label={`Description of item ${index + 1}`}
           placeholder="Description (optional)"

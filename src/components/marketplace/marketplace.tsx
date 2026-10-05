@@ -131,7 +131,7 @@ export function Marketplace({ businesses, products }: { businesses: ExploreBusin
       store
         ? products
             .filter((p) => p.business_id === store.id)
-            .map((p) => ({ id: p.id, title: p.title, price: p.price, currency: p.currency, media_type: p.media_type, media_url: p.media_url, poster_url: p.poster_url, description: p.description, viewed: p.viewed }))
+            .map((p) => ({ id: p.id, title: p.title, price: p.price, currency: p.currency, media_type: p.media_type, media_url: p.media_url, poster_url: p.poster_url, description: p.description, category: p.category, kind: p.kind, viewed: p.viewed }))
         : [],
     [products, store],
   );
@@ -176,7 +176,7 @@ export function Marketplace({ businesses, products }: { businesses: ExploreBusin
             ? `${businesses.length} ${businesses.length === 1 ? "shop" : "shops"} · ${unseen ? `${unseen} new` : "all seen"}`
             : unseen
               ? `${unseen} new to see`
-              : "You've seen everything. Check back soon."}
+              : ""}
         </p>
         {canMap && (
           <div role="radiogroup" aria-label="View" className="flex rounded-full bg-black/[0.05] p-1">

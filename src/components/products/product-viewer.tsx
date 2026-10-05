@@ -3,7 +3,7 @@
 import { Bookmark, ChevronDown, ChevronUp, Mail, Phone, Volume2, VolumeX, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { contactProduct, likeProduct, viewProduct } from "@/app/me/product-actions";
 import { BusinessAvatar } from "@/components/ui/avatar";
 import { WhatsAppIcon } from "@/components/ui/share-actions";
@@ -17,6 +17,8 @@ import type { FeedProduct } from "@/lib/types";
  * mostly on screen. In `guest` mode (a shared shop, before joining), nothing
  * is counted, and liking or tapping the business asks them to join.
  */
+const noop = () => () => {};
+
 export function ProductViewer({
   products,
   startId,
@@ -30,6 +32,7 @@ export function ProductViewer({
   onClose?: () => void;
   guest?: { onJoin: () => void };
 }) {
+  const origin = useSyncExternalStore(noop, () => window.location.origin, () => "");
   const router = useRouter();
   const scroller = useRef<HTMLDivElement>(null);
   const counted = useRef(new Set<string>());
@@ -118,7 +121,9 @@ export function ProductViewer({
       className="fixed inset-0 z-[80] h-dvh snap-y snap-mandatory overflow-y-scroll overscroll-contain bg-black text-white [scrollbar-width:none]"
     >
       {products.map((p) => {
-        const message = `Hi ${p.business_name}, I saw “${p.title}” on Spendbox. Is it available?`;
+        // The link shows as a preview with the product's picture in WhatsApp (chat links can't carry the photo itself).
+        const link = origin && `${origin}/s/${p.business_slug}/p/${p.id}`;
+        const message = `Hi ${p.business_name}, I saw “${p.title}” on Spendbox. Is it available?${link ? `\n\n${link}` : ""}`;
         return (
           <section key={p.id} id={`slide-${p.id}`} data-slide data-id={p.id} aria-label={p.title} className="relative h-dvh w-full snap-start snap-always overflow-hidden">
             {p.media_type === "video" ? (

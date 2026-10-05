@@ -85,8 +85,18 @@ select test.ok((select customer_name from public.product_audience(:'a', :'shoe')
 select test.ok((select via_partner from public.product_audience(:'a', :'shoe') where member_no is null) = 'Prod Shop B', 'and through which partner');
 select public.view_product(:'shoe');
 select test.ok((select views from public.business_products(:'a') where id = :'shoe') = 2, 'owners viewing their own products are not counted');
+update public.products set category = 'shoes' where id = :'shoe';
+select test.ok((select category from public.business_products(:'a') where id = :'shoe') = 'shoes', 'owners set a product''s category');
+select test.ok((select count(*) from public.explore_products() where category = 'shoes') = 0, 'owners don''t see their own products in Explore');
+do $$ begin
+  update public.products set category = 'Not A Slug!' where business_id = (select id from public.businesses where name = 'Prod Shop A');
+  raise exception 'a badly written category was accepted';
+exception when check_violation then null;
+end $$;
 update public.products set is_active = false where id = :'hair';
 reset role;
+select test.ok((public.public_store((select slug from public.businesses where id = :'a')) -> 'products' -> 0 ->> 'category') is not null
+  or jsonb_array_length(public.public_store((select slug from public.businesses where id = :'a')) -> 'products') = 0, 'the public shop returns categories');
 select test.act_as('00000000-0000-0000-0000-0000000000d2');
 set role authenticated;
 select test.ok((select count(*) from public.business_products(:'a')) = 0, 'businesses only read their own stats');

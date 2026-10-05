@@ -31,7 +31,8 @@ export default async function ProductsTab({ params, searchParams }: PageProps<"/
     { done: stats.members > 0, label: "Share your link so customers join", href: null },
     { done: Number(partnerSlots ?? 0) > 0, label: "Partner with a business near you", href: `${base}/partners` },
     {
-      done: Boolean(business.store_theme && typeof business.store_theme === "object" && Object.keys(business.store_theme).length),
+      // Adding a category of their own keeps it in the shop design too, but isn't designing the shop.
+      done: Boolean(business.store_theme && typeof business.store_theme === "object" && Object.keys(business.store_theme).some((k) => k !== "categories")),
       label: "Design your 3D shop",
       href: `${base}/settings/store?edit=1`,
     },
@@ -132,7 +133,7 @@ export default async function ProductsTab({ params, searchParams }: PageProps<"/
           }}
           products={products
             .filter((p) => p.is_active)
-            .map((p) => ({ id: p.id, title: p.title, price: p.price, currency: p.currency, media_type: p.media_type, media_url: p.media_url, poster_url: p.poster_url, description: p.description }))}
+            .map((p) => ({ id: p.id, title: p.title, price: p.price, currency: p.currency, media_type: p.media_type, media_url: p.media_url, poster_url: p.poster_url, description: p.description, category: p.category, kind: p.kind }))}
         />
       ) : (
         <>

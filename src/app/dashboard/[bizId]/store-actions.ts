@@ -14,6 +14,7 @@ export async function saveStoreTheme(bizId: string, theme: unknown): Promise<{ o
   const clean = readTheme(theme);
   // Only pictures this business uploaded can hang in its store.
   clean.art = clean.art.map((a, i) => (a.kind === "image" && !a.url.includes(`/logos/${ART_FOLDER(bizId)}`) ? readTheme({}).art[i]! : a)) as typeof clean.art;
+  if (clean.backWall.art.kind === "image" && !clean.backWall.art.url.includes(`/logos/${ART_FOLDER(bizId)}`)) clean.backWall.art = readTheme({}).backWall.art;
   const supabase = await createClient();
   const { error } = await supabase.from("businesses").update({ store_theme: clean }).eq("id", bizId);
   if (error) return { ok: false, error: "Couldn't save. Please try again." };

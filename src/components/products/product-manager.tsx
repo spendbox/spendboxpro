@@ -13,16 +13,19 @@ import { ActionSwitch } from "@/components/ui/switch";
 import { formatMoney } from "@/lib/format";
 import type { BusinessProduct } from "@/lib/types";
 import { shareText, shareToStatus } from "./media";
+import { chosenCategory, useCategoryOptions, type CategoryOptions } from "./category-picker";
 import { ProductFields, type ProductFieldValues } from "./product-fields";
 
 /** Share, edit, hide or delete one product. */
-export function ProductManager({ bizId, product, businessName, joinUrl }: { bizId: string; product: BusinessProduct; businessName: string; joinUrl: string }) {
+export function ProductManager({ bizId, product, businessName, joinUrl, categories }: { bizId: string; product: BusinessProduct; businessName: string; joinUrl: string; categories: CategoryOptions }) {
+  const cats = useCategoryOptions(categories);
   const router = useRouter();
   const [values, setValues] = useState<ProductFieldValues>({
     kind: product.kind,
     title: product.title,
     description: product.description ?? "",
     price: product.price === null ? "" : String(Math.round(product.price)),
+    category: product.category ?? null,
   });
   const [message, setMessage] = useState<{ tone: "error" | "success"; text: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -58,12 +61,12 @@ export function ProductManager({ bizId, product, businessName, joinUrl }: { bizI
             e.preventDefault();
             setMessage(null);
             startTransition(async () => {
-              const r = await updateProduct(bizId, product.id, values);
+              const r = await updateProduct(bizId, product.id, { ...values, category: chosenCategory(values.category, values, cats.options) });
               setMessage(r.ok ? { tone: "success", text: "Saved." } : { tone: "error", text: r.error });
             });
           }}
         >
-          <ProductFields values={values} onChange={setValues} />
+          <ProductFields values={values} onChange={setValues} categories={cats} />
           <Button type="submit" loading={pending}>
             Save changes
           </Button>

@@ -3,7 +3,7 @@
 // changes it. Anything unknown or missing falls back to the defaults, and
 // designs saved by older versions are read into the new shape.
 
-import { isDisplayKind, type DisplayKind } from "./product-display";
+import { customCategoryId, isKnownCategory, isPlacement, MAX_CUSTOM_CATEGORIES, type CustomCategory, type Placement } from "./product-categories";
 
 export type FloorStyle = "oak" | "herringbone" | "checker" | "terrazzo" | "concrete" | "marble";
 export type LightStyle = "dome" | "globe" | "cone" | "rattan" | "linear";
@@ -17,6 +17,23 @@ export type PotColor = "white" | "terracotta" | "black" | "stone";
 export type PlantSpot = "backLeft" | "backRight" | "front" | "counter";
 export type ArtPreset = "shapes" | "stripes" | "arch" | "sun" | "leaf";
 export type Art = { kind: "preset"; id: ArtPreset } | { kind: "image"; url: string };
+export type BackFeature = "name" | "art" | "mirror" | "leaves" | "shelves" | "none";
+export type BackLights = "sconces" | "globes" | "picture" | "none";
+export type BackConsole = "flowers" | "books" | "none";
+
+/** The far wall at the end of the product hall. */
+export interface BackWall {
+  /** The centrepiece: the business's name, a big framed picture, an arched mirror, a living wall or floating shelves. */
+  feature: BackFeature;
+  art: Art;
+  /** Wall lights either side (or a picture light over the centrepiece). */
+  lights: BackLights;
+  /** A floor plant in each corner. */
+  plants: PlantKind;
+  pot: PotColor;
+  /** A console table under the centrepiece, with flowers or books on it. */
+  console: BackConsole;
+}
 
 export interface StoreTheme {
   theme: "boutique";
@@ -39,9 +56,30 @@ export interface StoreTheme {
   rug: { style: RugStyle; color: string };
   /** Show the business's name on the front of the counter. */
   counterName: boolean;
-  /** How chosen products stand in the shop, by displayKey(product id); others are guessed. */
-  displays: Record<string, DisplayKind>;
+  /** The business's own product categories, and where each category shows in the hall (framed on the wall, shelves or tables) when it isn't the usual place. */
+  categories: { custom: CustomCategory[]; placements: Record<string, Placement> };
+  backWall: BackWall;
 }
+
+export const BACK_FEATURES: { id: BackFeature; label: string; description: string }[] = [
+  { id: "name", label: "Your name", description: "Your shop's name, big and centred" },
+  { id: "art", label: "Big picture", description: "A large framed print, or a photo of your own" },
+  { id: "mirror", label: "Arched mirror", description: "A tall brass-framed mirror" },
+  { id: "leaves", label: "Living wall", description: "A framed panel of leaves" },
+  { id: "shelves", label: "Floating shelves", description: "Oak shelves with vases, books and plants" },
+  { id: "none", label: "Plain", description: "Just the wall" },
+];
+export const BACK_LIGHTS: { id: BackLights; label: string }[] = [
+  { id: "sconces", label: "Brass sconces" },
+  { id: "globes", label: "Opal globes" },
+  { id: "picture", label: "Picture light" },
+  { id: "none", label: "None" },
+];
+export const BACK_CONSOLES: { id: BackConsole; label: string }[] = [
+  { id: "flowers", label: "Console with flowers" },
+  { id: "books", label: "Console with books" },
+  { id: "none", label: "None" },
+];
 
 export const THEMES = [
   {
@@ -167,7 +205,8 @@ export const DEFAULT_THEME: StoreTheme = {
   backdrop: "oak",
   rug: { style: "border", color: RUG_COLORS[0] },
   counterName: true,
-  displays: {},
+  categories: { custom: [], placements: {} },
+  backWall: { feature: "name", art: { kind: "preset", id: "arch" }, lights: "sconces", plants: "olive", pot: "white", console: "flowers" },
 };
 
 function oneOf<T extends string>(value: unknown, list: readonly { id: T }[], fallback: T): T {
@@ -198,6 +237,7 @@ const OLD_BOARDS: Record<string, BoardStyle> = { acrylic: "lightbox", oak: "pill
 export function readTheme(raw: unknown): StoreTheme {
   const t = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const d = DEFAULT_THEME;
+  const bw = (t.backWall && typeof t.backWall === "object" ? t.backWall : {}) as Record<string, unknown>;
 
   // Floor: { style, color }, or an older plain name.
   const f = (t.floor && typeof t.floor === "object" ? t.floor : {}) as Record<string, unknown>;
@@ -243,16 +283,34 @@ export function readTheme(raw: unknown): StoreTheme {
     backdrop: oneOf(t.backdrop, BACKDROPS, d.backdrop),
     rug: { style: oneOf(r.style, RUGS, d.rug.style), color: typeof r.color === "string" && RUG_COLORS.includes(r.color) ? r.color : d.rug.color },
     counterName: typeof t.counterName === "boolean" ? t.counterName : d.counterName,
-    displays: readDisplays(t.displays),
+    categories: readCategories(t.categories),
+    backWall: {
+      feature: oneOf(bw.feature, BACK_FEATURES, d.backWall.feature),
+      art: readArt(bw.art, d.backWall.art),
+      lights: oneOf(bw.lights, BACK_LIGHTS, d.backWall.lights),
+      plants: oneOf(bw.plants, PLANTS, d.backWall.plants),
+      pot: oneOf(bw.pot, POTS, d.backWall.pot),
+      console: oneOf(bw.console, BACK_CONSOLES, d.backWall.console),
+    },
   };
 }
 
-/** At most 120 chosen displays (the design is kept small). */
-function readDisplays(raw: unknown): Record<string, DisplayKind> {
-  const out: Record<string, DisplayKind> = {};
-  if (!raw || typeof raw !== "object") return out;
-  for (const [key, value] of Object.entries(raw).slice(0, 120)) if (/^[0-9a-f]{10}$/.test(key) && isDisplayKind(value)) out[key] = value;
-  return out;
+/** A business's own categories (named, with where they show) and its choices of where categories show. */
+function readCategories(raw: unknown): StoreTheme["categories"] {
+  const r = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const custom: CustomCategory[] = [];
+  for (const c of Array.isArray(r.custom) ? r.custom : []) {
+    if (!c || typeof c !== "object" || custom.length >= MAX_CUSTOM_CATEGORIES) continue;
+    const { name, placement } = c as Record<string, unknown>;
+    const clean = typeof name === "string" ? name.replace(/\s+/g, " ").trim().slice(0, 32) : "";
+    if (clean.length < 2) continue;
+    const id = customCategoryId(clean);
+    if (!custom.some((x) => x.id === id)) custom.push({ id, name: clean, placement: isPlacement(placement) ? placement : "shelf" });
+  }
+  const placements: Record<string, Placement> = {};
+  const p = r.placements && typeof r.placements === "object" ? (r.placements as Record<string, unknown>) : {};
+  for (const [id, value] of Object.entries(p).slice(0, 80)) if (isPlacement(value) && isKnownCategory(id, custom)) placements[id] = value;
+  return { custom, placements };
 }
 
 /** The colour used for trim: the theme's accent, or the brand colour. */
@@ -262,5 +320,10 @@ export function accentOf(theme: StoreTheme, brandColor: string) {
 
 /** The pictures a theme uses from storage (so replaced ones can be deleted). */
 export function themeImages(theme: StoreTheme) {
-  return theme.art.flatMap((a) => (a.kind === "image" ? [a.url] : []));
+  return [...theme.art, theme.backWall.art].flatMap((a) => (a.kind === "image" ? [a.url] : []));
+}
+
+/** What the category picker needs to know about a business. */
+export function categoryOptionsOf(business: { id: string; categories?: string[] | null; store_theme?: unknown }) {
+  return { bizId: business.id, businessCategories: business.categories ?? [], custom: readTheme(business.store_theme).categories.custom };
 }

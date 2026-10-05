@@ -52,7 +52,9 @@ export type StoreTarget =
   | { kind: "rug" }
   | { kind: "counter" }
   | { kind: "gift" }
-  | { kind: "partners" };
+  | { kind: "partners" }
+  /** Editing: the far wall at the end of the hall. */
+  | { kind: "backWall" };
 
 export function businessTagline(business: StoreBusiness) {
   return [business.categories.slice(0, 2).join(" · "), business.location].filter(Boolean).join("  ·  ");
@@ -364,7 +366,7 @@ export function Lights({ theme, accent, onTap }: { theme: StoreTheme; accent: st
 // ---------------------------------------------------------------- Wall art
 
 /** Loads a picture as a texture, cropped to fill `aspect` (width / height). */
-function useImageTexture(url: string | null, aspect: number) {
+export function useImageTexture(url: string | null, aspect: number) {
   const [texture, setTexture] = useState<THREE.Texture | null>(null);
   useEffect(() => {
     if (!url) return;

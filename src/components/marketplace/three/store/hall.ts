@@ -1,14 +1,15 @@
-import { DISPLAY_KINDS, displayKey, guessDisplay, placementOf, type DisplayKind, type Placement } from "@/lib/product-display";
+import { CATEGORIES, categoryInfo, guessCategory, type CategoryGroup, type CustomCategory, type Placement } from "@/lib/product-categories";
 import type { StoreProduct } from "@/lib/types";
 import { D, W } from "./layout";
 
 // The product hall: behind the visitor as they stand in the shop, it grows
 // longer as the business adds products. Every product is a framed picture,
-// and each section has its own stretch of the hall: large frames (clothes,
-// hair & beauty, homes, videos) hang in one tidy row on both walls; small
-// frames (shoes, bags, everything else) stand on shelving units against the
-// walls, four to a shelf; food stands on two rows of tables, with walkways
-// either side. Nothing ever stands in the middle of a wall section, and each
+// and each category is a section with its own stretch of the hall, shown the
+// way the business chose: large frames hung in one tidy row on both walls
+// (landscape for homes, cars, events...; a slim screen for videos), small
+// frames on shelving units against the walls, four to a shelf, or small
+// frames on two rows of tables, with walkways either side. Wall sections come
+// first, then shelves, then tables. Nothing ever stands in the middle of a wall section, and each
 // frame has its own spot to view it from with nothing in between, so no
 // picture ever hides another.
 
@@ -29,7 +30,7 @@ export interface View {
   pitch: number;
 }
 
-export type HallProduct = StoreProduct & { description?: string | null };
+export type HallProduct = StoreProduct & { description?: string | null; kind?: CategoryGroup | null };
 
 export type FrameKind = "large" | "wide" | "screen" | "small";
 
@@ -47,7 +48,11 @@ export function frameSize(frame: FrameKind): [number, number] {
   return [f.photo[0] + 2 * (f.mat + f.moulding), f.photo[1] + f.mat + f.caption + 2 * f.moulding];
 }
 
-const FRAME_OF: Record<DisplayKind, FrameKind> = { wear: "large", hair: "large", home: "wide", video: "screen", shoes: "small", item: "small", food: "small" };
+/** The frame a product gets where its category shows. */
+function frameFor(placement: Placement, wide: boolean, video: boolean): FrameKind {
+  if (placement !== "wall") return "small";
+  return video ? "screen" : wide ? "wide" : "large";
+}
 
 /** Wall frames: the height of their middle, the space each takes along the wall, and where to view them from. */
 const HANG = { middle: 1.8, gap: 0.4, distance: 2.4, eye: 1.65 };
@@ -62,7 +67,8 @@ export const TABLE = { length: 2.3, width: 0.8, height: 0.76, cols: 4, pitch: 0.
 
 export interface HallItem {
   product: HallProduct;
-  kind: DisplayKind;
+  /** Its category's id. */
+  category: string;
   frame: FrameKind;
   /** The foot of the frame's back, on the floor plan, and how high it stands. */
   x: number;
@@ -84,7 +90,8 @@ export interface Fixture {
 }
 
 export interface HallSection {
-  kind: DisplayKind;
+  /** The category's id. */
+  key: string;
   placement: Placement;
   label: string;
   count: number;
@@ -133,24 +140,42 @@ function sectionView(placement: Placement, start: number): View {
 /** Facing into the hall from the left (-1) or right (1) wall, or out to that side. */
 const facingIn = (side: number) => (side < 0 ? Math.PI / 2 : -Math.PI / 2);
 
-/** Lays out the products down the hall, grouped by display. */
-export function layoutHall(products: HallProduct[], displays: Record<string, DisplayKind>, categories: string[]): Hall {
-  const groups = new Map<DisplayKind, HallProduct[]>();
+/** Where categories show, and a business's own: from the shop design. */
+export interface HallCategories {
+  custom: CustomCategory[];
+  placements: Record<string, Placement>;
+}
+
+const ORDER: Placement[] = ["wall", "shelf", "table"];
+const CATALOG = new Map(CATEGORIES.map((c, i) => [c.id, i]));
+
+/** The category a product shows under: its own, or the best guess for older products without one. */
+export function categoryOf(p: HallProduct, cats: HallCategories, businessCategories: string[]) {
+  const known = p.category && (CATALOG.has(p.category) || cats.custom.some((c) => c.id === p.category));
+  return known ? p.category! : guessCategory({ title: p.title, description: p.description, kind: p.kind }, { businessCategories, custom: cats.custom });
+}
+
+/** Lays out the products down the hall, one section per category (empty ones are left out). */
+export function layoutHall(products: HallProduct[], cats: HallCategories, businessCategories: string[]): Hall {
+  const groups = new Map<string, HallProduct[]>();
   for (const p of products.slice(0, MAX_HALL_PRODUCTS)) {
-    const kind = displays[displayKey(p.id)] ?? guessDisplay(p, categories);
-    groups.set(kind, [...(groups.get(kind) ?? []), p]);
+    const id = categoryOf(p, cats, businessCategories);
+    groups.set(id, [...(groups.get(id) ?? []), p]);
   }
-  const blocks: { section: HallSection; items: HallItem[]; order: number }[] = [];
+  const blocks: { section: HallSection; items: HallItem[] }[] = [];
   const fixtures: Fixture[] = [];
   // Running positions down the left and right sides of the hall.
   const cursor = [FIRST, FIRST];
+  // Walls first, then shelves, then tables; within each, the usual order of categories (a business's own last).
+  const sections = [...groups.keys()]
+    .map((id) => categoryInfo(id, cats.custom, cats.placements))
+    .sort((a, b) => ORDER.indexOf(a.placement) - ORDER.indexOf(b.placement) || (CATALOG.get(a.id) ?? 999) - (CATALOG.get(b.id) ?? 999) || a.name.localeCompare(b.name));
 
-  for (const [order, { id: kind, section: label }] of DISPLAY_KINDS.entries()) {
-    const list = groups.get(kind);
-    if (!list?.length) continue;
-    const placement = placementOf(kind);
-    const frame = FRAME_OF[kind];
-    const [fw, fh] = frameSize(frame);
+  for (const info of sections) {
+    const list = groups.get(info.id)!;
+    const { placement } = info;
+    const category = info.id;
+    const label = info.name;
     // A section starts level on both sides, so it faces itself across the walkway.
     const start = Math.max(cursor[0]!, cursor[1]!);
     cursor[0] = cursor[1] = start;
@@ -158,8 +183,10 @@ export function layoutHall(products: HallProduct[], displays: Record<string, Dis
 
     if (placement === "wall") {
       // One row, alternating left and right.
-      const step = fw + HANG.gap;
       list.forEach((product, i) => {
+        const frame = frameFor("wall", info.wide, product.media_type === "video");
+        const [fw, fh] = frameSize(frame);
+        const step = fw + HANG.gap;
         const s = i % 2;
         const side = s === 0 ? -1 : 1;
         const x = side * (WALL - 0.01);
@@ -167,9 +194,11 @@ export function layoutHall(products: HallProduct[], displays: Record<string, Dis
         cursor[s]! += step;
         const rotY = facingIn(side);
         const y = HANG.middle - fh / 2;
-        items.push({ product, kind, frame, x, z, y, rotY, tilt: 0, view: viewOf(x, z, rotY, HANG.distance, HANG.eye, HANG.middle - 0.18) });
+        items.push({ product, category, frame, x, z, y, rotY, tilt: 0, view: viewOf(x, z, rotY, HANG.distance, HANG.eye, HANG.middle - 0.18) });
       });
     } else {
+      const frame: FrameKind = "small";
+      const fh = frameSize(frame)[1];
       // Shelving units (twelve frames each) or tables (eight each), alternating left and right.
       const per = placement === "shelf" ? SHELF.shelves.length * SHELF.cols : 2 * TABLE.cols;
       const [span, gap] = placement === "shelf" ? [SHELF.width, SHELF.gap] : [TABLE.length, TABLE.gap];
@@ -192,7 +221,7 @@ export function layoutHall(products: HallProduct[], displays: Record<string, Dis
             row.forEach((product, c) => {
               // A part-filled shelf is centred.
               const z = center + (c - (row.length - 1) / 2) * SHELF.pitch;
-              placed.push({ product, kind, frame, x, z, y, rotY, tilt: SHELF.tilt, view: viewOf(x, z, rotY, 1.85, eye, middleY - 0.08) });
+              placed.push({ product, category, frame, x, z, y, rotY, tilt: SHELF.tilt, view: viewOf(x, z, rotY, 1.85, eye, middleY - 0.08) });
             });
           });
           // Walk them top shelf first, front to back.
@@ -208,7 +237,7 @@ export function layoutHall(products: HallProduct[], displays: Record<string, Dis
             const y = TABLE.height + 0.002;
             row.forEach((product, c) => {
               const z = center + (c - (row.length - 1) / 2) * TABLE.pitch;
-              items.push({ product, kind, frame, x, z, y, rotY, tilt: TABLE.tilt, view: viewOf(x, z, rotY, 1.3, 1.4, y + fh / 2 - 0.08) });
+              items.push({ product, category, frame, x, z, y, rotY, tilt: TABLE.tilt, view: viewOf(x, z, rotY, 1.3, 1.4, y + fh / 2 - 0.08) });
             });
           });
         }
@@ -216,10 +245,9 @@ export function layoutHall(products: HallProduct[], displays: Record<string, Dis
     }
 
     blocks.push({
-      order,
       items,
       section: {
-        kind,
+        key: category,
         placement,
         label,
         count: list.length,
@@ -231,12 +259,28 @@ export function layoutHall(products: HallProduct[], displays: Record<string, Dis
     cursor[1]! += SECTION_GAP;
   }
 
-  // Sections in walking order, down the hall; products follow their section.
-  blocks.sort((a, b) => a.section.z - b.section.z || a.order - b.order);
+  // Sections are laid out in walking order; products follow their section.
   return {
     end: Math.max(FRONT + 2.2, cursor[0]! + 0.6, cursor[1]! + 0.6),
     items: blocks.flatMap((b) => b.items),
     sections: blocks.map((b) => b.section),
     fixtures,
   };
+}
+
+/**
+ * A spot to walk to near (x, z) that isn't inside or right up against a
+ * shelving unit or table (tapping the floor there would walk into it).
+ */
+export function clearOfFixtures(hall: Hall, x: number, z: number): [number, number] {
+  const margin = 1.1;
+  for (const f of hall.fixtures) {
+    if (f.kind === "shelf") {
+      const front = Math.abs(f.x) - SHELF.depth;
+      if (Math.abs(z - f.z) < SHELF.width / 2 + 0.3 && Math.abs(x) > front - margin && Math.sign(x) === Math.sign(f.x)) x = Math.sign(f.x) * (front - margin);
+    } else if (Math.abs(z - f.z) < TABLE.length / 2 + 0.3 && Math.abs(x - f.x) < TABLE.width / 2 + margin) {
+      x = f.x + Math.sign(x - f.x || 1) * (TABLE.width / 2 + margin);
+    }
+  }
+  return [x, z];
 }

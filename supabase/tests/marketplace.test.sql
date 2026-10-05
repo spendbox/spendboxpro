@@ -93,12 +93,13 @@ set role authenticated;
 select test.ok(public.claim_inviter(:'self', :'code') = false, 'and only in the business''s first day');
 reset role;
 
--- 3D cutouts come with the shop and the feed
-update public.products set cutout_url = 'https://x/c-cutout.png' where business_id = :'a';
-select test.ok((public.public_store('prod-shop-a') -> 'products' -> 0 ->> 'cutout_url') = 'https://x/c-cutout.png', 'the shared shop has each product''s 3D cutout');
+-- Categories come with the shop and the feed (they group the 3D shop)
+update public.products set category = 'cakes' where business_id = :'a';
+select test.ok((public.public_store('prod-shop-a') -> 'products' -> 0 ->> 'category') = 'cakes', 'the shared shop has each product''s category');
+select test.ok((public.public_store('prod-shop-a') -> 'products' -> 0 ->> 'kind') is not null, 'and whether it''s a product or a service');
 select test.act_as('00000000-0000-0000-0000-0000000000d4');
 set role authenticated;
-select test.ok((select bool_and(cutout_url = 'https://x/c-cutout.png') from public.explore_products(null, 50) where business_id = :'a'), 'and so does the feed');
+select test.ok((select bool_and(category = 'cakes') from public.explore_products(null, 50) where business_id = :'a'), 'and so does the feed');
 reset role;
 
 \echo 'All marketplace tests passed'

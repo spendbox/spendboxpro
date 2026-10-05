@@ -3,6 +3,7 @@ import { ProductComposer } from "@/components/products/product-composer";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireOwnedBusiness } from "@/lib/auth";
 import { siteUrl } from "@/lib/env";
+import { categoryOptionsOf } from "@/lib/store-theme";
 
 export const metadata: Metadata = { title: "Add a product or service" };
 
@@ -16,7 +17,7 @@ export default async function NewProductPage({ params }: PageProps<"/dashboard/[
         title="Add a product or service"
         description="It shows in your customers' Explore, and your partners' customers' too."
       />
-      <ProductComposer bizId={bizId} businessName={business.name} joinUrl={`${siteUrl()}/j/${business.slug}`} />
+      <ProductComposer bizId={bizId} businessName={business.name} joinUrl={`${siteUrl()}/j/${business.slug}`} categories={categoryOptionsOf(business)} />
     </div>
   );
 }
