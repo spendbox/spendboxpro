@@ -64,7 +64,7 @@ export function StoreDesigner({
             <div>
               <h2 className="font-semibold">Make it yours</h2>
               <p className="text-sm text-muted">
-                Open the editor and tap anything: the welcome board, the backdrop, plants, table, rug, lights, wall art, floor, counter and colours. Every product gets its own display in the hall behind the counter (clothes on mannequins, food on tables, homes as model houses, videos on banners); tap one to change how it stands.
+                Open the editor and tap anything: the welcome board, the backdrop, plants, table, rug, lights, wall art, floor, counter and colours. Every product gets its own display in the hall behind the counter as a framed picture (on the walls, on shelves or on tables); tap one to change where it goes.
               </p>
             </div>
           </div>

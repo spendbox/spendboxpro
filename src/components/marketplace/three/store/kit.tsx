@@ -71,10 +71,11 @@ export class Kit {
   private parts = new Map<Mat, THREE.BufferGeometry[]>();
   private frame: THREE.Matrix4 | null = null;
 
-  /** Builds the shapes made inside `draw` standing at `position`, turned by `rotY` and scaled (like a group). */
-  place(position: Vec, rotY: number, draw: () => void, scale = 1) {
+  /** Builds the shapes made inside `draw` standing at `position`, turned by `rotY`, leaned back by `tilt` and scaled (like a group). */
+  place(position: Vec, rotY: number, draw: () => void, scale = 1, tilt = 0) {
     const previous = this.frame;
-    const local = new THREE.Matrix4().compose(new THREE.Vector3(...position), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotY), new THREE.Vector3(scale, scale, scale));
+    const turn = new THREE.Quaternion().setFromEuler(new THREE.Euler(-tilt, rotY, 0, "YXZ"));
+    const local = new THREE.Matrix4().compose(new THREE.Vector3(...position), turn, new THREE.Vector3(scale, scale, scale));
     this.frame = previous ? previous.clone().multiply(local) : local;
     draw();
     this.frame = previous;

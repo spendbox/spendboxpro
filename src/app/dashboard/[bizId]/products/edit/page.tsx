@@ -29,7 +29,6 @@ export default async function BulkEditPage({ params, searchParams }: PageProps<"
           media_type: p.media_type,
           media_url: p.media_url,
           poster_url: p.poster_url,
-          cutout_url: p.cutout_url ?? null,
         }))}
       />
     </div>
