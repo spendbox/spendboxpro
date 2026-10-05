@@ -24,3 +24,9 @@ test("otherwise the business's categories decide", () => {
 test("display keys are short and stable", () => {
   assert.equal(displayKey("718b2620-2077-48ea-871b-d65d83fe6f92"), "718b262020");
 });
+
+test("shoes and bags stand on a riser", () => {
+  assert.equal(guessDisplay(image("Red sneakers")), "shoes");
+  assert.equal(guessDisplay(image("Leather tote bag")), "shoes");
+  assert.equal(guessDisplay(image("New in"), ["Shoes & bags"]), "shoes");
+});

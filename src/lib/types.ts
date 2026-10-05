@@ -302,6 +302,8 @@ export interface BusinessProduct {
   poster_url: string | null;
   is_active: boolean;
   created_at: string;
+  /** The photo with its background removed (for the 3D shop), if made. */
+  cutout_url?: string | null;
   views: number;
   viewers: number;
   partner_viewers: number;
@@ -331,6 +333,7 @@ export interface FeedProduct {
   viewed: boolean;
   liked: boolean;
   is_member: boolean;
+  cutout_url?: string | null;
 }
 
 /** One person who looked at, liked or asked about a product. */
@@ -379,4 +382,6 @@ export interface StoreProduct {
   viewed?: boolean;
   /** Shown on the card when the visitor walks up to it in the hall. */
   description?: string | null;
+  /** The photo cut out of its background: stands in the hall as a 3D figure. */
+  cutout_url?: string | null;
 }

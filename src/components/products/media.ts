@@ -126,3 +126,37 @@ export async function shareToStatus({ file, mediaUrl, text }: { file?: File | nu
 export function shareText(title: string, price: string | null, businessName: string, joinUrl: string) {
   return `${title}${price ? ` · ${price}` : ""}\nSee more from ${businessName} on Spendbox: ${joinUrl}`;
 }
+
+/**
+ * Shares several products at once: their photos and videos to the share sheet
+ * (WhatsApp status or a chat) where the phone allows, or WhatsApp with their
+ * names, prices and the link.
+ */
+export async function shareManyToWhatsApp(items: { mediaUrl?: string; file?: File; title: string; price: string | null }[], businessName: string, joinUrl: string): Promise<"shared" | "whatsapp" | "cancelled"> {
+  const text = [`New at ${businessName}:`, ...items.map((i) => `• ${i.title}${i.price ? ` · ${i.price}` : ""}`), `See them all on Spendbox: ${joinUrl}`].join("\n");
+  if (typeof navigator.canShare === "function") {
+    const files = (
+      await Promise.all(
+        items.map(async (item, n) => {
+          if (item.file) return item.file;
+          try {
+            const blob = await (await fetch(item.mediaUrl!)).blob();
+            return new File([blob], `spendbox-${n + 1}.${blob.type.includes("video") ? "mp4" : "jpg"}`, { type: blob.type });
+          } catch {
+            return null;
+          }
+        }),
+      )
+    ).filter((f): f is File => Boolean(f));
+    if (files.length && navigator.canShare({ files })) {
+      try {
+        await navigator.share({ files, text });
+        return "shared";
+      } catch (error) {
+        if ((error as Error).name === "AbortError") return "cancelled";
+      }
+    }
+  }
+  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener");
+  return "whatsapp";
+}

@@ -10,6 +10,7 @@ import { useDispose } from "../hooks";
 import { canvas, fitText, fontFamily, roundRect, shade, toTexture } from "../textures";
 import type { Hall, HallItem } from "./hall";
 import { FRONT } from "./hall";
+import { CutoutFigure } from "./cutout-figure";
 import { Built, Kit } from "./kit";
 import { H, W } from "./layout";
 import { FloorShadow } from "./room";
@@ -279,13 +280,32 @@ const GARMENT: THREE.Vector2[] = Array.from({ length: 16 }, (_, i) => {
   return new THREE.Vector2(r, y);
 });
 
-function mannequin(k: Kit) {
+function platform(k: Kit) {
   k.cyl("satin", 0.42, 0.44, 0.08, [0, 0.04, 0], "#f4f1ea", 40);
   k.torus("brass", 0.425, 0.01, [0, 0.08, 0], "#ffffff", [Math.PI / 2, 0, 0]);
+}
+
+function dressForm(k: Kit) {
   k.cyl("brass", 0.12, 0.14, 0.025, [0, 0.092, 0], "#ffffff", 28);
   k.cyl("brass", 0.016, 0.016, 0.76, [0, 0.47, 0], "#ffffff", 10);
   k.add("fabric", new THREE.LatheGeometry(FORM.map(([r, y]) => new THREE.Vector2(r, y)), 32).scale(...FORM_SCALE), "#efe7da");
   k.sphere("wood", 0.034, [0, 1.635, 0], "#8a6448");
+}
+
+/** A platform, and a dress form unless the product's own 3D cutout (the model wearing it) stands there. */
+function mannequin(k: Kit, cutout: boolean) {
+  platform(k);
+  if (!cutout) dressForm(k);
+}
+
+/** Two oak-topped white steps: the shoe (or bag) on the top one. */
+function riser(k: Kit, cutout: boolean) {
+  k.rbox("satin", [0.72, 0.42, 0.56], 0.015, [0, 0.21, 0.02], "#f5f2ec");
+  k.box("wood", [0.73, 0.025, 0.57], [0, 0.432, 0.02], "#c79f74");
+  k.rbox("satin", [0.48, 0.34, 0.36], 0.015, [0, 0.615, -0.08], "#f5f2ec");
+  k.box("wood", [0.49, 0.025, 0.37], [0, 0.797, -0.08], "#c79f74");
+  // Without a cutout, the photo leans on a little acrylic stand on the lower step.
+  if (!cutout) k.rbox("glass", [0.3, 0.03, 0.1], 0.008, [0, 0.46, 0.17]);
 }
 
 function table(k: Kit, accent: string) {
@@ -383,7 +403,7 @@ function banner(k: Kit) {
   k.cyl("metal", 0.016, 0.016, 0.9, [0, 2.19, 0], "#cfd3d6", 10, [0, 0, Math.PI / 2]);
 }
 
-function pedestal(k: Kit) {
+function pedestal(k: Kit, cutout: boolean) {
   k.box("satin", [0.6, 0.05, 0.6], [0, 0.025, 0], "#d9d3c8");
   k.rbox("satin", [0.56, 0.9, 0.56], 0.015, [0, 0.5, 0], "#f5f2ec");
   k.box("satin", [0.585, 0.02, 0.585], [0, 0.96, 0], "#faf8f3");
@@ -391,6 +411,8 @@ function pedestal(k: Kit) {
     k.box("brass", [0.59, 0.012, 0.012], [0, 0.944, s * 0.293], "#ffffff");
     k.box("brass", [0.012, 0.012, 0.59], [s * 0.293, 0.944, 0], "#ffffff");
   }
+  // The photo's mount (a cutout stands on the pedestal itself).
+  if (cutout) return;
   k.rbox("glass", [0.4, 0.05, 0.16], 0.01, [0, 0.995, 0]);
   k.box("satin", [0.54, 0.54, 0.02], [0, 1.26, -0.02], "#ffffff", [-0.08, 0, 0]);
 }
@@ -400,12 +422,14 @@ function useHallFurniture(hall: Hall, accent: string) {
   return useMemo(() => {
     const k = new Kit();
     hall.items.forEach((item, i) => {
+      const cutout = Boolean(item.product.cutout_url) && item.product.media_type === "image";
       k.place([item.x, 0, item.z], item.rotY, () => {
-        if (item.kind === "wear") mannequin(k);
+        if (item.kind === "wear") mannequin(k, cutout);
+        else if (item.kind === "shoes") riser(k, cutout);
         else if (item.kind === "food") table(k, accent);
         else if (item.kind === "home") house(k, i);
         else if (item.kind === "video") banner(k);
-        else pedestal(k);
+        else pedestal(k, cutout);
       });
     });
     return k.build();
@@ -424,7 +448,8 @@ function ProductDisplay({ item, accent, focused, onPick }: { item: HallItem; acc
   });
   return (
     <group position={[item.x, 0, item.z]} rotation-y={item.rotY} onClick={onClick} {...hover.handlers}>
-      {item.kind === "wear" && <Garment item={item} accent={accent} />}
+      {item.kind === "wear" && <Wear item={item} accent={accent} />}
+      {item.kind === "shoes" && <OnRiser item={item} accent={accent} />}
       {item.kind === "food" && <Plate item={item} accent={accent} />}
       {item.kind === "home" && <Listing item={item} accent={accent} />}
       {item.kind === "video" && <Banner item={item} accent={accent} focused={focused} />}
@@ -439,14 +464,58 @@ function ProductDisplay({ item, accent, focused, onPick }: { item: HallItem; acc
 
 const HIT: Record<DisplayKind, { at: Vec; size: Vec }> = {
   wear: { at: [0, 0.85, 0], size: [0.9, 1.7, 0.9] },
+  shoes: { at: [0, 0.5, 0], size: [0.8, 1.0, 0.7] },
   food: { at: [0, 0.6, 0], size: [1.3, 1.2, 1.3] },
   home: { at: [0, 1.0, -0.2], size: [1.2, 2.1, 1.5] },
   video: { at: [0, 1.1, 0], size: [0.95, 2.2, 0.3] },
   item: { at: [0, 0.8, 0], size: [0.7, 1.6, 0.7] },
 };
 
+/** The product's 3D cutout, when it has one (and it's a photo). */
+const cutoutOf = (item: HallItem) => (item.product.media_type === "image" ? (item.product.cutout_url ?? null) : null);
+
+/**
+ * Clothes: the 3D cutout of the photo (the model wearing it, full height, or
+ * the garment itself at dress-form height) on the platform; without a cutout,
+ * the photo wrapped round a dress form.
+ */
+function Wear({ item, accent }: { item: HallItem; accent: string }) {
+  const url = cutoutOf(item);
+  if (!url) return <Garment item={item} accent={accent} />;
+  return (
+    <>
+      <CutoutFigure url={url} at={[item.x, item.z]} base={0.08} maxW={0.95} maxH={1.74} fallback={<Garment item={item} accent={accent} withForm />} />
+      <Tag item={item} accent={accent} position={[0, 0.2, 0.47]} rotation={[-0.5, 0, 0]} />
+      <FloorShadow size={[1.2, 1.2]} position={[0, 0]} opacity={0.45} />
+    </>
+  );
+}
+
+/** Shoes and bags: the 3D cutout on the top step, or the photo leaning on the lower one. */
+function OnRiser({ item, accent }: { item: HallItem; accent: string }) {
+  const url = cutoutOf(item);
+  const photo = <PhotoPlane item={item} size={[0.3, 0.3]} position={[0, 0.62, 0.15]} rotation={[-0.25, 0, 0]} aspect={1} />;
+  return (
+    <>
+      {url ? <CutoutFigure url={url} at={[item.x, item.z]} base={0.81} maxW={0.44} maxH={0.4} z={-0.08} fallback={photo} /> : photo}
+      <Tag item={item} accent={accent} position={[0, 0.25, 0.302]} rotation={[0, 0, 0]} />
+      <FloorShadow size={[1.0, 0.85]} position={[0, 0]} opacity={0.5} />
+    </>
+  );
+}
+
+/** A dress form on its own (when a cutout fails to load on a platform built without one). */
+function LoneDressForm() {
+  const parts = useMemo(() => {
+    const k = new Kit();
+    dressForm(k);
+    return k.build();
+  }, []);
+  return <Built parts={parts} />;
+}
+
 /** The photo wrapped round the dress form, front and back. */
-function Garment({ item, accent }: { item: HallItem; accent: string }) {
+function Garment({ item, accent, withForm = false }: { item: HallItem; accent: string; withForm?: boolean }) {
   const [front, back] = useMemo(
     () => [
       new THREE.LatheGeometry(GARMENT, 28, -Math.PI / 2, Math.PI).scale(...FORM_SCALE),
@@ -460,6 +529,7 @@ function Garment({ item, accent }: { item: HallItem; accent: string }) {
   const material = texture ? <meshStandardMaterial key={texture.uuid} map={texture} roughness={0.85} /> : <meshStandardMaterial key="blank" color="#d8d0c4" roughness={0.9} />;
   return (
     <>
+      {withForm && <LoneDressForm />}
       <mesh geometry={front} castShadow>
         {material}
       </mesh>
@@ -522,9 +592,12 @@ function Banner({ item, accent, focused }: { item: HallItem; accent: string; foc
 }
 
 function OnPedestal({ item, accent }: { item: HallItem; accent: string }) {
+  const url = cutoutOf(item);
+  const photo = <PhotoPlane item={item} size={[0.48, 0.48]} position={[0, 1.26, -0.008]} rotation={[-0.08, 0, 0]} />;
   return (
     <>
-      <PhotoPlane item={item} size={[0.48, 0.48]} position={[0, 1.26, -0.008]} rotation={[-0.08, 0, 0]} />
+      {/* The product itself standing on the pedestal, when it has a 3D cutout. */}
+      {url ? <CutoutFigure url={url} at={[item.x, item.z]} base={0.97} maxW={0.46} maxH={0.55} fallback={photo} /> : photo}
       <Tag item={item} accent={accent} position={[0, 0.72, 0.282]} rotation={[0, 0, 0]} />
       <FloorShadow size={[0.95, 0.95]} position={[0, 0]} opacity={0.5} />
     </>

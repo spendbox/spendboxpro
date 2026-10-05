@@ -8,6 +8,7 @@ import { Button, buttonClass } from "@/components/ui/button";
 import { FormMessage } from "@/components/ui/field";
 import { WhatsAppIcon } from "@/components/ui/share-actions";
 import { formatMoney } from "@/lib/format";
+import { CutoutChoice, useCutout } from "./cutout-preview";
 import { prepareMedia, shareText, shareToStatus, uploadToSignedUrl, type PreparedMedia } from "./media";
 import { ProductFields, type ProductFieldValues } from "./product-fields";
 
@@ -23,6 +24,9 @@ export function ProductComposer({ bizId, businessName, joinUrl }: { bizId: strin
   const [saved, setSaved] = useState<{ id: string } | null>(null);
   const [shareNote, setShareNote] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const cutout = useCutout(media?.type === "image" ? media.file : null);
+  const [useCut, setUseCut] = useState(true);
+  const cutFile = useCut && cutout?.status === "ready" ? cutout.file : null;
 
   useEffect(() => () => {
     if (media) URL.revokeObjectURL(media.previewUrl);
@@ -48,16 +52,19 @@ export function ProductComposer({ bizId, businessName, joinUrl }: { bizId: strin
     setError(null);
     setProgress(0);
     try {
-      const ticket = await prepareProductUpload(bizId, media.type, media.file.type);
+      const ticket = await prepareProductUpload(bizId, media.type, media.file.type, Boolean(cutFile));
       if (!ticket.ok) throw new Error(ticket.error);
       const posterShare = ticket.poster && media.poster ? 0.1 : 0;
       await uploadToSignedUrl(ticket.media.signedUrl, media.file, (f) => setProgress(f * (1 - posterShare) * 0.95));
       if (ticket.poster && media.poster) await uploadToSignedUrl(ticket.poster.signedUrl, media.poster, (f) => setProgress(0.85 + f * 0.1));
+      // The cutout is a nice extra: if it doesn't upload, the product still goes up.
+      const cutoutOk = ticket.cutout && cutFile ? await uploadToSignedUrl(ticket.cutout.signedUrl, cutFile).then(() => true, () => false) : false;
       const result = await createProduct(bizId, {
         ...values,
         mediaType: media.type,
         mediaPath: ticket.media.path,
         posterPath: ticket.poster && media.poster ? ticket.poster.path : null,
+        cutoutPath: cutoutOk && ticket.cutout ? ticket.cutout.path : null,
       });
       if (!result.ok) throw new Error(result.error);
       setProgress(1);
@@ -155,7 +162,13 @@ export function ProductComposer({ bizId, businessName, joinUrl }: { bizId: strin
         </button>
       )}
 
+      <CutoutChoice state={cutout} on={useCut} onChange={setUseCut} />
+
       <ProductFields values={values} onChange={setValues} />
+
+      <Link href={`/dashboard/${bizId}/products/bulk`} className="-mt-2 text-sm font-semibold text-brand-700 underline-offset-2 hover:underline">
+        Got lots to add? Add many at once
+      </Link>
 
       {error && <FormMessage>{error}</FormMessage>}
 

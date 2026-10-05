@@ -131,7 +131,7 @@ export function Marketplace({ businesses, products }: { businesses: ExploreBusin
       store
         ? products
             .filter((p) => p.business_id === store.id)
-            .map((p) => ({ id: p.id, title: p.title, price: p.price, currency: p.currency, media_type: p.media_type, media_url: p.media_url, poster_url: p.poster_url, description: p.description, viewed: p.viewed }))
+            .map((p) => ({ id: p.id, title: p.title, price: p.price, currency: p.currency, media_type: p.media_type, media_url: p.media_url, poster_url: p.poster_url, description: p.description, cutout_url: p.cutout_url, viewed: p.viewed }))
         : [],
     [products, store],
   );
