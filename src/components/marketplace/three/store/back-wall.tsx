@@ -192,8 +192,34 @@ function Mirror() {
   );
 }
 
-export function BackWall({ theme, name, accent, glow, end, onTap }: { theme: StoreTheme; name: string; accent: string; glow: string; end: number; onTap?: () => void }) {
-  const wall = theme.backWall;
+export function BackWall({
+  theme,
+  name,
+  accent,
+  glow,
+  end,
+  products = false,
+  onTap,
+}: {
+  theme: StoreTheme;
+  name: string;
+  accent: string;
+  glow: string;
+  end: number;
+  /** The wall shows products: only the name stays, small at the top, so nothing overlaps them. */
+  products?: boolean;
+  onTap?: () => void;
+}) {
+  const chosen = theme.backWall;
+  const wall = useMemo(
+    () =>
+      products
+        ? { ...chosen, feature: "none" as const, lights: "none" as const, console: "none" as const, plants: "none" as const }
+        : chosen.feature === "products"
+          ? { ...chosen, feature: "name" as const }
+          : chosen,
+    [chosen, products],
+  );
   const parts = useWallParts(wall, accent);
   const sign = useMemo(() => nameTexture(name, accent), [name, accent]);
   useDispose(sign);

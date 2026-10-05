@@ -17,7 +17,28 @@ export type PotColor = "white" | "terracotta" | "black" | "stone";
 export type PlantSpot = "backLeft" | "backRight" | "front" | "counter";
 export type ArtPreset = "shapes" | "stripes" | "arch" | "sun" | "leaf";
 export type Art = { kind: "preset"; id: ArtPreset } | { kind: "image"; url: string };
-export type BackFeature = "name" | "art" | "mirror" | "leaves" | "shelves" | "none";
+export type BackFeature = "name" | "art" | "mirror" | "leaves" | "shelves" | "products" | "none";
+/** Which side of the hall a category stands on, as you walk in ("auto" picks the side with more room). */
+export type Side = "auto" | "left" | "right" | "back";
+export type ShelfStyle = "brand" | "walnut" | "oak" | "white" | "black";
+export type DisplayTableStyle = "brand" | "marble" | "oak" | "glass" | "black";
+export type FrameStyle = "classic" | "gallery" | "gold" | "white" | "canvas";
+export type FrameShape = "auto" | "portrait" | "square" | "landscape" | "tall" | "long";
+export type DisplaySize = "s" | "m" | "l";
+export type SignStyle = "dark" | "light" | "brand" | "brass";
+export type DoorStyle = "steel" | "oak" | "arched" | "french" | "brand";
+export type WindowStyle = "grid" | "arched" | "plain" | "shutters";
+
+/** How one category looks in the hall; anything unset uses the usual. */
+export interface CategoryLook {
+  placement?: Placement;
+  side?: Exclude<Side, "back">;
+  shelf?: ShelfStyle;
+  table?: DisplayTableStyle;
+  frame?: FrameStyle;
+  shape?: FrameShape;
+  size?: DisplaySize;
+}
 export type BackLights = "sconces" | "globes" | "picture" | "none";
 export type BackConsole = "flowers" | "books" | "none";
 
@@ -33,6 +54,8 @@ export interface BackWall {
   pot: PotColor;
   /** A console table under the centrepiece, with flowers or books on it. */
   console: BackConsole;
+  /** With feature "products": the category shown on the back wall. */
+  category: string | null;
 }
 
 export interface StoreTheme {
@@ -56,10 +79,75 @@ export interface StoreTheme {
   rug: { style: RugStyle; color: string };
   /** Show the business's name on the front of the counter. */
   counterName: boolean;
-  /** The business's own product categories, and where each category shows in the hall (framed on the wall, shelves or tables) when it isn't the usual place. */
-  categories: { custom: CustomCategory[]; placements: Record<string, Placement> };
+  /** The business's own product categories, and how each category looks in the hall (where, which side, which design and size). */
+  categories: { custom: CustomCategory[]; looks: Record<string, CategoryLook> };
   backWall: BackWall;
+  /** The hanging signs over each section. Null colour = the style's own. */
+  signs: { style: SignStyle; color: string | null };
+  /** The shop's door and window, and the colour of their frames. */
+  entrance: { door: DoorStyle; window: WindowStyle; color: string };
 }
+
+export const SIDES: { id: Side; label: string }[] = [
+  { id: "auto", label: "Automatic" },
+  { id: "left", label: "Left aisle" },
+  { id: "right", label: "Right aisle" },
+  { id: "back", label: "Back wall" },
+];
+export const SHELF_STYLES: { id: ShelfStyle; label: string }[] = [
+  { id: "brand", label: "Your colour" },
+  { id: "walnut", label: "Walnut" },
+  { id: "oak", label: "Light oak" },
+  { id: "white", label: "White lacquer" },
+  { id: "black", label: "Black & brass" },
+];
+export const DISPLAY_TABLES: { id: DisplayTableStyle; label: string }[] = [
+  { id: "brand", label: "Marble on your colour" },
+  { id: "marble", label: "White marble" },
+  { id: "oak", label: "Oak" },
+  { id: "glass", label: "Glass & brass" },
+  { id: "black", label: "Black marble" },
+];
+export const FRAME_STYLES: { id: FrameStyle; label: string }[] = [
+  { id: "classic", label: "Walnut & mat" },
+  { id: "gallery", label: "Thin black" },
+  { id: "gold", label: "Gold" },
+  { id: "white", label: "White" },
+  { id: "canvas", label: "Canvas, no frame" },
+];
+export const FRAME_SHAPES: { id: FrameShape; label: string }[] = [
+  { id: "auto", label: "Fit each photo" },
+  { id: "portrait", label: "Portrait" },
+  { id: "square", label: "Square" },
+  { id: "landscape", label: "Landscape" },
+  { id: "tall", label: "Tall" },
+  { id: "long", label: "Long" },
+];
+export const DISPLAY_SIZES: { id: DisplaySize; label: string }[] = [
+  { id: "s", label: "Small" },
+  { id: "m", label: "Medium" },
+  { id: "l", label: "Large" },
+];
+export const SIGN_STYLES: { id: SignStyle; label: string; swatch: [string, string] }[] = [
+  { id: "dark", label: "Dark", swatch: ["#1d2320", "#ffffff"] },
+  { id: "light", label: "Light", swatch: ["#fbf8f2", "#1d2320"] },
+  { id: "brand", label: "Your colour", swatch: ["#2A772C", "#ffffff"] },
+  { id: "brass", label: "Brass", swatch: ["#c9a25a", "#2b2420"] },
+];
+export const DOOR_STYLES: { id: DoorStyle; label: string }[] = [
+  { id: "steel", label: "Steel & glass" },
+  { id: "oak", label: "Oak" },
+  { id: "arched", label: "Arched glass" },
+  { id: "french", label: "French doors" },
+  { id: "brand", label: "Your colour" },
+];
+export const WINDOW_STYLES: { id: WindowStyle; label: string }[] = [
+  { id: "grid", label: "Steel grid" },
+  { id: "arched", label: "Arched" },
+  { id: "plain", label: "Plain glass" },
+  { id: "shutters", label: "With shutters" },
+];
+export const FRAME_COLORS = ["#232625", "#FFFFFF", "#6E4A2E", "#C9A25A", "#2F3A34", "#8C3B2E"];
 
 export const BACK_FEATURES: { id: BackFeature; label: string; description: string }[] = [
   { id: "name", label: "Your name", description: "Your shop's name, big and centred" },
@@ -67,6 +155,7 @@ export const BACK_FEATURES: { id: BackFeature; label: string; description: strin
   { id: "mirror", label: "Arched mirror", description: "A tall brass-framed mirror" },
   { id: "leaves", label: "Living wall", description: "A framed panel of leaves" },
   { id: "shelves", label: "Floating shelves", description: "Oak shelves with vases, books and plants" },
+  { id: "products", label: "Your products", description: "Use the wall to show one of your categories" },
   { id: "none", label: "Plain", description: "Just the wall" },
 ];
 export const BACK_LIGHTS: { id: BackLights; label: string }[] = [
@@ -205,8 +294,10 @@ export const DEFAULT_THEME: StoreTheme = {
   backdrop: "oak",
   rug: { style: "border", color: RUG_COLORS[0] },
   counterName: true,
-  categories: { custom: [], placements: {} },
-  backWall: { feature: "name", art: { kind: "preset", id: "arch" }, lights: "sconces", plants: "olive", pot: "white", console: "flowers" },
+  categories: { custom: [], looks: {} },
+  backWall: { feature: "name", art: { kind: "preset", id: "arch" }, lights: "sconces", plants: "olive", pot: "white", console: "flowers", category: null },
+  signs: { style: "dark", color: null },
+  entrance: { door: "steel", window: "grid", color: "#232625" },
 };
 
 function oneOf<T extends string>(value: unknown, list: readonly { id: T }[], fallback: T): T {
@@ -238,12 +329,15 @@ export function readTheme(raw: unknown): StoreTheme {
   const t = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const d = DEFAULT_THEME;
   const bw = (t.backWall && typeof t.backWall === "object" ? t.backWall : {}) as Record<string, unknown>;
+  const sg = (t.signs && typeof t.signs === "object" ? t.signs : {}) as Record<string, unknown>;
+  const en = (t.entrance && typeof t.entrance === "object" ? t.entrance : {}) as Record<string, unknown>;
 
   // Floor: { style, color }, or an older plain name.
   const f = (t.floor && typeof t.floor === "object" ? t.floor : {}) as Record<string, unknown>;
   const floorStyle = typeof t.floor === "string" ? (OLD_FLOORS[t.floor] ?? d.floor.style) : oneOf(f.style, FLOORS, d.floor.style);
   const floorColors = FLOORS.find((x) => x.id === floorStyle)!.colors;
-  const floorColor = typeof f.color === "string" && floorColors.includes(f.color) ? f.color : floorColors[0]!;
+  // Any colour from the picker, or the style's first.
+  const floorColor = typeof f.color === "string" && HEX.test(f.color) ? f.color : floorColors[0]!;
 
   // Lights: { style, tone }, or an older "warm"/"cool".
   const l = (t.lights && typeof t.lights === "object" ? t.lights : {}) as Record<string, unknown>;
@@ -281,7 +375,7 @@ export function readTheme(raw: unknown): StoreTheme {
     plants,
     art: [readArt(art[0], d.art[0]), readArt(art[1], d.art[1])],
     backdrop: oneOf(t.backdrop, BACKDROPS, d.backdrop),
-    rug: { style: oneOf(r.style, RUGS, d.rug.style), color: typeof r.color === "string" && RUG_COLORS.includes(r.color) ? r.color : d.rug.color },
+    rug: { style: oneOf(r.style, RUGS, d.rug.style), color: typeof r.color === "string" && HEX.test(r.color) ? r.color : d.rug.color },
     counterName: typeof t.counterName === "boolean" ? t.counterName : d.counterName,
     categories: readCategories(t.categories),
     backWall: {
@@ -291,7 +385,10 @@ export function readTheme(raw: unknown): StoreTheme {
       plants: oneOf(bw.plants, PLANTS, d.backWall.plants),
       pot: oneOf(bw.pot, POTS, d.backWall.pot),
       console: oneOf(bw.console, BACK_CONSOLES, d.backWall.console),
+      category: typeof bw.category === "string" && /^[a-z0-9-]{1,40}$/.test(bw.category) ? bw.category : null,
     },
+    signs: { style: oneOf(sg.style, SIGN_STYLES, d.signs.style), color: typeof sg.color === "string" && HEX.test(sg.color) ? sg.color : null },
+    entrance: { door: oneOf(en.door, DOOR_STYLES, d.entrance.door), window: oneOf(en.window, WINDOW_STYLES, d.entrance.window), color: typeof en.color === "string" && HEX.test(en.color) ? en.color : d.entrance.color },
   };
 }
 
@@ -307,10 +404,25 @@ function readCategories(raw: unknown): StoreTheme["categories"] {
     const id = customCategoryId(clean);
     if (!custom.some((x) => x.id === id)) custom.push({ id, name: clean, placement: isPlacement(placement) ? placement : "shelf" });
   }
-  const placements: Record<string, Placement> = {};
-  const p = r.placements && typeof r.placements === "object" ? (r.placements as Record<string, unknown>) : {};
-  for (const [id, value] of Object.entries(p).slice(0, 80)) if (isPlacement(value) && isKnownCategory(id, custom)) placements[id] = value;
-  return { custom, placements };
+  // How each category looks; designs saved before held only "placements".
+  const looks: Record<string, CategoryLook> = {};
+  const saved = r.looks && typeof r.looks === "object" ? (r.looks as Record<string, unknown>) : {};
+  const old = r.placements && typeof r.placements === "object" ? (r.placements as Record<string, unknown>) : {};
+  for (const id of [...new Set([...Object.keys(saved), ...Object.keys(old)])].slice(0, 80)) {
+    if (!isKnownCategory(id, custom)) continue;
+    const l = (saved[id] && typeof saved[id] === "object" ? saved[id] : {}) as Record<string, unknown>;
+    const look: CategoryLook = {};
+    const placement = l.placement ?? old[id];
+    if (isPlacement(placement)) look.placement = placement;
+    if (l.side === "left" || l.side === "right") look.side = l.side;
+    if (SHELF_STYLES.some((x) => x.id === l.shelf)) look.shelf = l.shelf as ShelfStyle;
+    if (DISPLAY_TABLES.some((x) => x.id === l.table)) look.table = l.table as DisplayTableStyle;
+    if (FRAME_STYLES.some((x) => x.id === l.frame)) look.frame = l.frame as FrameStyle;
+    if (FRAME_SHAPES.some((x) => x.id === l.shape)) look.shape = l.shape as FrameShape;
+    if (DISPLAY_SIZES.some((x) => x.id === l.size)) look.size = l.size as DisplaySize;
+    if (Object.keys(look).length) looks[id] = look;
+  }
+  return { custom, looks };
 }
 
 /** The colour used for trim: the theme's accent, or the brand colour. */

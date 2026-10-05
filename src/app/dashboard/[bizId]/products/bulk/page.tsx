@@ -17,7 +17,7 @@ export default async function BulkProductsPage({ params }: PageProps<"/dashboard
         title="Add many at once"
         description="Pick your photos and videos, name them (and set prices for several together), then post them all. Nothing shows until you press Post."
       />
-      <BulkComposer bizId={bizId} businessName={business.name} joinUrl={`${siteUrl()}/j/${business.slug}`} categories={categoryOptionsOf(business)} />
+      <BulkComposer bizId={bizId} businessName={business.name} joinUrl={`${siteUrl()}/s/${business.slug}`} categories={categoryOptionsOf(business)} />
     </div>
   );
 }

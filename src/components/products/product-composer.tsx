@@ -59,6 +59,7 @@ export function ProductComposer({ bizId, businessName, joinUrl, categories }: { 
         ...values,
         category: chosenCategory(values.category, values, cats.options),
         mediaType: media.type,
+        aspect: media.aspect ?? null,
         mediaPath: ticket.media.path,
         posterPath: ticket.poster && media.poster ? ticket.poster.path : null,
       });

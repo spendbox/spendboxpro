@@ -10,7 +10,8 @@ export default async function BusinessHomeLayout({ children, params }: LayoutPro
   const { bizId } = await params;
   const [{ business }, perks, requests] = await Promise.all([requireOwnedBusiness(bizId), getPerks(bizId), getRequests(bizId)]);
   const base = `/dashboard/${bizId}`;
-  const joinUrl = `${siteUrl()}/j/${business.slug}`;
+  // The 3D shop link: people walk in, look around and join from there.
+  const joinUrl = `${siteUrl()}/s/${business.slug}`;
   const welcomePerk = perks.find((p) => p.kind === "welcome" && p.is_active);
 
   return (
@@ -29,7 +30,7 @@ export default async function BusinessHomeLayout({ children, params }: LayoutPro
       />
       <ShareLinkBar
         url={joinUrl}
-        message={welcomePerk ? `Join ${business.name} on Spendbox and get ${welcomePerk.title.toLowerCase()}:` : `Join ${business.name} on Spendbox. See what's new and tell us what you need:`}
+        message={welcomePerk ? `Walk into ${business.name}'s 3D shop on Spendbox, and join to get ${welcomePerk.title.toLowerCase()}:` : `Walk into ${business.name}'s 3D shop on Spendbox. See what's new and tell us what you need:`}
         extra={
           <a href={`${base}/qr`} aria-label="Download QR code" title="Download QR code" className="flex size-10 shrink-0 items-center justify-center rounded-xl text-ink-2 hover:bg-black/5">
             <QrCodeIcon className="size-4" aria-hidden />

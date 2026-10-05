@@ -99,7 +99,7 @@ function clean(input: ProductInput, ctx: CategoryCtx): ActionResult<{ values: { 
 /** Saves a new product once its photo or video is uploaded. */
 export async function createProduct(
   bizId: string,
-  input: ProductInput & { mediaType: ProductMediaType; mediaPath: string; posterPath?: string | null },
+  input: ProductInput & { mediaType: ProductMediaType; mediaPath: string; posterPath?: string | null; aspect?: number | null },
 ): Promise<ActionResult<{ id: string; mediaUrl: string }>> {
   const { business } = await requireOwnedBusiness(bizId);
   const checked = clean(input, ctxOf(business));
@@ -120,6 +120,7 @@ export async function createProduct(
       media_type: input.mediaType === "video" ? "video" : "image",
       media_url: mediaUrl,
       poster_url: posterUrl,
+      media_aspect: typeof input.aspect === "number" && input.aspect >= 0.2 && input.aspect <= 5 ? input.aspect : null,
     })
     .select("id")
     .single();

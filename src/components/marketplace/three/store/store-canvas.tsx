@@ -1,14 +1,15 @@
 "use client";
 
 import { Canvas, useThree } from "@react-three/fiber";
-import { useEffect, useMemo, useRef, type RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { accentOf, LIGHT_TONES, type StoreTheme } from "@/lib/store-theme";
 import { shade } from "../textures";
 import { HallDisplays } from "./displays";
 import { BackWall } from "./back-wall";
-import { clearOfFixtures, layoutHall, type Hall, type HallProduct } from "./hall";
+import { useHall } from "./aspects";
+import { clearOfFixtures, type Hall, type HallProduct } from "./hall";
 import { MaterialsProvider } from "./kit";
 import { LookControls, type StoreApi } from "./look-controls";
 import { Lounge } from "./lounge";
@@ -84,7 +85,7 @@ export default function StoreCanvas({
   const warm = theme.lights.tone === "warm";
   const ownApi = useRef<StoreApi | null>(null);
   const api = apiRef ?? ownApi;
-  const hall = useMemo(() => layoutHall(products, theme.categories, business.categories), [products, theme.categories, business.categories]);
+  const hall = useHall(products, theme, business.categories);
   const glow = LIGHT_TONES.find((t) => t.id === theme.lights.tone)!.color;
   const background = dark ? "#1d2420" : shade(theme.wall, -0.06);
   const pick = (target: StoreTarget) => (editing ? () => onSelect(target) : undefined);
@@ -123,10 +124,11 @@ export default function StoreCanvas({
       <LookControls lounge={theme.table !== "none"} apiRef={api} end={hall.end} />
       <FocusCamera hall={hall} focusedId={focusedId} apiRef={api} />
       <MaterialsProvider>
-        <Room theme={theme} accent={accent} end={hall.end} onFloor={pick({ kind: "floor" })} onWalls={pick({ kind: "walls" })} onWalk={editing ? undefined : (x, z) => api.current?.walkTo(...clearOfFixtures(hall, x, z))} />
-        <BackWall theme={theme} name={business.name} accent={accent} glow={glow} end={hall.end} onTap={pick({ kind: "backWall" })} />
+        <Room theme={theme} accent={accent} end={hall.end} onFloor={pick({ kind: "floor" })} onWalls={pick({ kind: "walls" })} onEntrance={pick({ kind: "entrance" })} onWalk={editing ? undefined : (x, z) => api.current?.walkTo(...clearOfFixtures(hall, x, z))} />
+        <BackWall theme={theme} name={business.name} accent={accent} glow={glow} end={hall.end} products={hall.backInUse} onTap={pick({ kind: "backWall" })} />
         <HallDisplays
           hall={hall}
+          signs={theme.signs}
           accent={accent}
           glow={glow}
           focusedId={focusedId}

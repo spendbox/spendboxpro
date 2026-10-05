@@ -44,7 +44,7 @@ export function SharedStore({ store, shareUrl, join }: { store: SharedStoreData 
         <BusinessAvatar name={store.name} color={store.brand_color} logoUrl={store.logo_url} size="lg" />
         <h1 className="font-display text-2xl font-bold">{store.name}</h1>
         <p className="text-muted">This phone can&apos;t show 3D shops, but you can still join.</p>
-        <a href={`/j/${store.slug}`} className="flex h-12 items-center rounded-xl bg-brand-600 px-6 font-semibold text-white">
+        <a href={`/j/${store.slug}${join.refCode ? `?ref=${encodeURIComponent(join.refCode)}` : ""}`} className="flex h-12 items-center rounded-xl bg-brand-600 px-6 font-semibold text-white">
           Join {store.name}
         </a>
       </main>

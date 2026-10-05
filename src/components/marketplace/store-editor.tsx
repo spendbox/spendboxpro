@@ -1,6 +1,6 @@
 "use client";
 
-import { Armchair, ArrowRightLeft, Check, ChevronLeft, ChevronRight, Circle, Frame, Gift, Image as ImageIcon, ImagePlus, Lamp, LayoutGrid, LoaderCircle, MonitorPlay, Palette, PanelsTopLeft, Plus, Shirt, Sprout, Store, Trash2, Type, X } from "lucide-react";
+import { Armchair, ArrowRightLeft, Check, ChevronLeft, ChevronRight, Circle, DoorOpen, Frame, Gift, Image as ImageIcon, ImagePlus, Lamp, LayoutGrid, LoaderCircle, MonitorPlay, Palette, PanelsTopLeft, Plus, Shirt, Signpost, Sprout, Store, Trash2, Type, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { setProductCategory } from "@/app/dashboard/[bizId]/product-actions";
@@ -27,16 +27,30 @@ import {
   RUGS,
   TABLES,
   WALL_COLORS,
+  accentOf,
+  DISPLAY_SIZES,
+  DISPLAY_TABLES,
+  DOOR_STYLES,
+  FRAME_COLORS,
+  FRAME_SHAPES,
+  FRAME_STYLES,
+  SHELF_STYLES,
+  SIDES,
+  SIGN_STYLES,
+  WINDOW_STYLES,
+  type CategoryLook,
   type Art,
   type PlantSpot,
   type StoreTheme,
 } from "@/lib/store-theme";
-import { categoryOf, layoutHall, lookFrom, type Hall, type HallProduct } from "./three/store/hall";
+import { useHall } from "./three/store/aspects";
+import { categoryOf, lookFrom, lookOf, type Hall, type HallProduct } from "./three/store/hall";
+import { mix } from "./three/geometry";
 import type { StoreApi } from "./three/store/look-controls";
 import { businessTagline, type StoreBusiness, type StoreTarget } from "./three/store/pieces";
 import StoreCanvas from "./three/store/store-canvas";
 
-type Panel = "categories" | "backWall" | "board" | "backdrop" | "screen" | "table" | "rug" | "plants" | "lights" | "art" | "floor" | "counter" | "colours" | "gift";
+type Panel = "categories" | "backWall" | "entrance" | "signs" | "board" | "backdrop" | "screen" | "table" | "rug" | "plants" | "lights" | "art" | "floor" | "counter" | "colours" | "gift";
 
 const TOOLS: { id: Panel; label: string; icon: ReactNode }[] = [
   { id: "categories", label: "Categories", icon: <Shirt className="size-4" aria-hidden /> },
@@ -51,13 +65,15 @@ const TOOLS: { id: Panel; label: string; icon: ReactNode }[] = [
   { id: "floor", label: "Floor", icon: <LayoutGrid className="size-4" aria-hidden /> },
   { id: "counter", label: "Counter", icon: <Store className="size-4" aria-hidden /> },
   { id: "colours", label: "Colours", icon: <Palette className="size-4" aria-hidden /> },
+  { id: "signs", label: "Signs", icon: <Signpost className="size-4" aria-hidden /> },
+  { id: "entrance", label: "Door & window", icon: <DoorOpen className="size-4" aria-hidden /> },
   { id: "screen", label: "Screen", icon: <MonitorPlay className="size-4" aria-hidden /> },
 ];
 const GIFT_TOOL = { id: "gift" as const, label: "Gift", icon: <Gift className="size-4" aria-hidden /> };
 
 /** Where the camera turns for each thing (yaw: left -, right +; pitch: down -, up +). */
 const SPOT_VIEW: Record<PlantSpot, [number, number]> = { backLeft: [-0.42, -0.08], backRight: [0.42, -0.08], front: [-0.95, -0.12], counter: [-0.2, -0.16] };
-const PANEL_VIEW: Record<Exclude<Panel, "plants" | "categories" | "backWall">, [number, number]> = {
+const PANEL_VIEW: Record<Exclude<Panel, "plants" | "categories" | "backWall" | "signs">, [number, number]> = {
   board: [0, 0.12],
   backdrop: [0, 0.04],
   screen: [0, 0.02],
@@ -69,6 +85,7 @@ const PANEL_VIEW: Record<Exclude<Panel, "plants" | "categories" | "backWall">, [
   art: [0.95, 0.02],
   floor: [0, -0.28],
   colours: [0, -0.04],
+  entrance: [-1.05, 0.02],
 };
 
 /** Shrinks a picture to at most 1400px on its longest side, as a JPEG. */
@@ -118,7 +135,8 @@ export function StoreEditor({
   // Products moved to another category here (saved straight away), shown at once.
   const [moved, setMoved] = useState<Record<string, string>>({});
   const shown = useMemo(() => products.map((p) => (moved[p.id] ? { ...p, category: moved[p.id] } : p)), [products, moved]);
-  const hall = useMemo(() => layoutHall(shown, theme.categories, business.categories), [shown, theme.categories, business.categories]);
+  const hall = useHall(shown, theme, business.categories);
+  const accent = accentOf(theme, business.brand_color);
   // After a change that moves sections, walk to this category once the hall is laid out again.
   const flyAfter = useRef<string | null>(null);
   useEffect(() => {
@@ -148,6 +166,11 @@ export function StoreEditor({
       api.current?.flyTo({ x: 0, z, y: 1.7, ...lookFrom(0, 1.7, z, [0, 2.1, hall.end]) });
       return;
     }
+    if (next === "signs") {
+      const v = hall.sections[0]?.view;
+      if (v) api.current?.flyTo(v);
+      return;
+    }
     if (next === "categories") {
       // Walk over to the product (or the start of the hall).
       const item = hall.items.find((i) => i.product.id === productId);
@@ -168,18 +191,18 @@ export function StoreEditor({
     if (item) api.current?.flyTo(item.view);
   };
 
-  /** Where a category shows (the usual place clears the choice). */
-  const setPlacement = (id: string, placement: Placement) => {
-    const usual = categoryInfo(id, theme.categories.custom).placement;
-    const own = theme.categories.custom.find((c) => c.id === id);
-    const placements = { ...theme.categories.placements };
-    if (own || placement === categoryInfo(id).placement) delete placements[id];
-    else placements[id] = placement;
-    const custom = own ? theme.categories.custom.map((c) => (c.id === id ? { ...c, placement } : c)) : theme.categories.custom;
-    if (usual !== placement || own) {
-      flyAfter.current = id;
-      set({ categories: { custom, placements } });
-    } else walkTo(id);
+  /** Changes how a category looks in the hall (where, which side, design, size). */
+  const setLook = (id: string, patch: Partial<CategoryLook> & { back?: boolean }) => {
+    const { back, ...change } = patch;
+    const looks = { ...theme.categories.looks, [id]: { ...theme.categories.looks[id], ...change } };
+    for (const key of Object.keys(looks[id]!) as (keyof CategoryLook)[]) if (looks[id]![key] === undefined) delete looks[id]![key];
+    // A business's own category keeps its place with it too.
+    const custom = change.placement ? theme.categories.custom.map((c) => (c.id === id ? { ...c, placement: change.placement! } : c)) : theme.categories.custom;
+    let backWall = theme.backWall;
+    if (back) backWall = { ...backWall, feature: "products", category: id };
+    else if (back === false && backWall.feature === "products" && backWall.category === id) backWall = { ...backWall, feature: "name", category: null };
+    flyAfter.current = id;
+    set({ categories: { custom, looks }, backWall });
   };
 
   const select = (target: StoreTarget) => {
@@ -192,6 +215,7 @@ export function StoreEditor({
       return open("art");
     }
     if (target.kind === "walls") return open("colours");
+    if (target.kind === "entrance") return open("entrance");
     if (target.kind === "display") return pickProduct(target.id);
     if (target.kind === "product" || target.kind === "more" || target.kind === "bell" || target.kind === "partners") return;
     open(target.kind);
@@ -272,7 +296,7 @@ export function StoreEditor({
       {/* Tools, when no panel is open */}
       {!panel && (
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 to-transparent pt-10 pb-[max(1rem,env(safe-area-inset-bottom))]">
-          <div role="toolbar" aria-label="Change" className="flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:justify-center">
+          <div role="toolbar" aria-label="Change" className="flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] [justify-content:safe_center]">
             {TOOLS.map((t) => (
               <button key={t.id} type="button" onClick={() => open(t.id)} className="flex h-11 shrink-0 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-ink shadow-lift active:scale-95">
                 {t.icon} {t.label}
@@ -338,15 +362,17 @@ export function StoreEditor({
                   setProductId(null);
                   if (id) walkTo(id);
                 }}
-                onPlacement={setPlacement}
+                onLook={setLook}
+                accent={accent}
+                backWall={theme.backWall}
                 onAdd={(c) => {
                   set({ categories: { ...theme.categories, custom: [...theme.categories.custom, c] } });
                   setCategoryId(c.id);
                 }}
                 onRemove={(id) => {
-                  const placements = { ...theme.categories.placements };
-                  delete placements[id];
-                  set({ categories: { custom: theme.categories.custom.filter((c) => c.id !== id), placements } });
+                  const looks = { ...theme.categories.looks };
+                  delete looks[id];
+                  set({ categories: { custom: theme.categories.custom.filter((c) => c.id !== id), looks } });
                   setCategoryId(null);
                 }}
                 onMoved={(id, category) => {
@@ -363,6 +389,20 @@ export function StoreEditor({
                   <Choices label="Centrepiece" value={theme.backWall.feature} options={BACK_FEATURES.map((f) => ({ id: f.id, label: f.label, description: f.description }))} onChange={(feature) => set({ backWall: { ...theme.backWall, feature } })} cards />
                 </Field>
                 {theme.backWall.feature === "art" && <ArtPanel bizId={bizId} art={theme.backWall.art} onChange={(art) => set({ backWall: { ...theme.backWall, art } })} />}
+                {theme.backWall.feature === "products" && (
+                  <Field label="Which category" hint="Great when you sell a few things: they get the whole back wall. Anything that doesn't fit carries on in an aisle.">
+                    {hall.sections.length ? (
+                      <Choices
+                        label="Back wall category"
+                        value={theme.backWall.category ?? ""}
+                        options={[...new Set(hall.sections.map((x) => x.category))].map((id) => ({ id, label: categoryInfo(id, theme.categories.custom).name }))}
+                        onChange={(category) => set({ backWall: { ...theme.backWall, category } })}
+                      />
+                    ) : (
+                      <p className="text-sm text-muted">Add products first.</p>
+                    )}
+                  </Field>
+                )}
                 <Field label="Wall lights">
                   <Choices label="Wall lights" value={theme.backWall.lights} options={BACK_LIGHTS.map((l) => ({ id: l.id, label: l.label }))} onChange={(lights) => set({ backWall: { ...theme.backWall, lights } })} />
                 </Field>
@@ -380,6 +420,42 @@ export function StoreEditor({
               </>
             )}
 
+            {panel === "entrance" && (
+              <>
+                <Field label="Door">
+                  <Choices label="Door" value={theme.entrance.door} options={DOOR_STYLES.map((d) => ({ id: d.id, label: d.label }))} onChange={(door) => set({ entrance: { ...theme.entrance, door } })} />
+                </Field>
+                <Field label="Window">
+                  <Choices label="Window" value={theme.entrance.window} options={WINDOW_STYLES.map((w) => ({ id: w.id, label: w.label }))} onChange={(window) => set({ entrance: { ...theme.entrance, window } })} />
+                </Field>
+                <Field label="Frame colour">
+                  <Dots label="Door and window colour" value={theme.entrance.color} options={FRAME_COLORS.map((c) => ({ id: c, label: c, color: c }))} onChange={(color) => set({ entrance: { ...theme.entrance, color } })} picker />
+                </Field>
+              </>
+            )}
+
+            {panel === "signs" && (
+              <>
+                <Field label="Style" hint="The signs hanging over each section of your hall.">
+                  <Choices
+                    label="Sign style"
+                    value={theme.signs.style}
+                    options={SIGN_STYLES.map((x) => ({ id: x.id, label: x.label, swatch: x.id === "brand" ? ([accent, "#ffffff"] as [string, string]) : x.swatch }))}
+                    onChange={(style) => set({ signs: { style, color: null } })}
+                  />
+                </Field>
+                <Field label="Colour">
+                  <Dots
+                    label="Sign colour"
+                    value={theme.signs.color ?? "style"}
+                    options={[{ id: "style", label: "The style's own", color: SIGN_STYLES.find((x) => x.id === theme.signs.style)!.id === "brand" ? accent : SIGN_STYLES.find((x) => x.id === theme.signs.style)!.swatch[0] }]}
+                    onChange={(c) => set({ signs: { ...theme.signs, color: c === "style" ? null : c } })}
+                    picker
+                  />
+                </Field>
+              </>
+            )}
+
             {panel === "backdrop" && (
               <Field label="Behind the screen">
                 <Choices label="Backdrop" value={theme.backdrop} options={BACKDROPS.map((b) => ({ id: b.id, label: b.label, swatch: b.swatch }))} onChange={(backdrop) => set({ backdrop })} />
@@ -393,7 +469,7 @@ export function StoreEditor({
                 </Field>
                 {theme.rug.style !== "none" && (
                   <Field label="Colour">
-                    <Dots label="Rug colour" value={theme.rug.color} options={RUG_COLORS.map((c) => ({ id: c, label: c, color: c }))} onChange={(color) => set({ rug: { ...theme.rug, color } })} />
+                    <Dots label="Rug colour" value={theme.rug.color} options={RUG_COLORS.map((c) => ({ id: c, label: c, color: c }))} onChange={(color) => set({ rug: { ...theme.rug, color } })} picker />
                   </Field>
                 )}
               </>
@@ -414,6 +490,7 @@ export function StoreEditor({
                     value={theme.accent ?? "brand"}
                     options={[{ id: "brand", label: "Brand colour", color: business.brand_color }, ...ACCENT_COLORS.map((c) => ({ id: c, label: `Accent ${c}`, color: c }))]}
                     onChange={(c) => set({ accent: c === "brand" ? null : c })}
+                    picker
                   />
                 </Field>
               </>
@@ -508,6 +585,7 @@ export function StoreEditor({
                     value={theme.floor.color}
                     options={FLOORS.find((f) => f.id === theme.floor.style)!.colors.map((c) => ({ id: c, label: c, color: c }))}
                     onChange={(color) => set({ floor: { ...theme.floor, color } })}
+                    picker
                   />
                 </Field>
               </>
@@ -516,7 +594,7 @@ export function StoreEditor({
             {panel === "colours" && (
               <>
                 <Field label="Walls">
-                  <Dots label="Wall colour" value={theme.wall} options={WALL_COLORS.map((c) => ({ id: c, label: `Walls ${c}`, color: c }))} onChange={(wall) => set({ wall })} />
+                  <Dots label="Wall colour" value={theme.wall} options={WALL_COLORS.map((c) => ({ id: c, label: `Walls ${c}`, color: c }))} onChange={(wall) => set({ wall })} picker />
                 </Field>
                 <Field label="Accent" hint="The counter, lamps, leather and trim.">
                   <Dots
@@ -524,6 +602,7 @@ export function StoreEditor({
                     value={theme.accent ?? "brand"}
                     options={[{ id: "brand", label: "Brand colour", color: business.brand_color }, ...ACCENT_COLORS.map((c) => ({ id: c, label: `Accent ${c}`, color: c }))]}
                     onChange={(c) => set({ accent: c === "brand" ? null : c })}
+                    picker
                   />
                 </Field>
               </>
@@ -644,7 +723,21 @@ function Choices<T extends string>({
 }
 
 /** Colour dots, one picked. */
-function Dots<T extends string>({ label, value, options, onChange }: { label: string; value: string; options: { id: T; label: string; color: string }[]; onChange: (id: T) => void }) {
+function Dots<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+  picker = false,
+}: {
+  label: string;
+  value: string;
+  options: { id: T; label: string; color: string }[];
+  onChange: (id: T) => void;
+  /** Also offer any colour, from the device's colour picker. */
+  picker?: boolean;
+}) {
+  const own = picker && /^#[0-9a-f]{6}$/i.test(value) && !options.some((o) => o.id.toLowerCase() === value.toLowerCase());
   return (
     <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-2.5">
       {options.map((o) => {
@@ -665,8 +758,33 @@ function Dots<T extends string>({ label, value, options, onChange }: { label: st
           </button>
         );
       })}
+      {picker && (
+        // Any colour at all: a rainbow swatch that opens the colour picker (showing the chosen colour once picked).
+        <label
+          title="Pick any colour"
+          className={cn("relative flex size-10 cursor-pointer items-center justify-center rounded-full ring-2 ring-offset-2 transition", own ? "ring-brand-600" : "ring-transparent hover:ring-line-strong")}
+          style={{ background: own ? value : "conic-gradient(#f43f5e, #f59e0b, #84cc16, #06b6d4, #6366f1, #d946ef, #f43f5e)", boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.12)" }}
+        >
+          {own ? <Check className="size-4 text-white mix-blend-difference" aria-hidden /> : <Plus className="size-4 text-white drop-shadow" aria-hidden />}
+          <input
+            type="color"
+            aria-label={`${label}: pick any colour`}
+            value={/^#[0-9a-f]{6}$/i.test(value) ? value : "#2a772c"}
+            onChange={(e) => onChange(e.target.value.toUpperCase() as T)}
+            className="absolute inset-0 size-full cursor-pointer opacity-0"
+          />
+        </label>
+      )}
     </div>
   );
+}
+
+/** Two colours showing each shelf and table design in the business's colour. */
+function shelfSwatch(id: string, accent: string): [string, string] {
+  return id === "brand" ? [mix(accent, "#141414", 0.35), "#c6a279"] : id === "walnut" ? ["#56392a", "#c6a279"] : id === "oak" ? ["#cfae84", "#dcc39d"] : id === "white" ? ["#f2efe9", "#c6a279"] : ["#1a1d1c", "#c9a25a"];
+}
+function tableSwatch(id: string, accent: string): [string, string] {
+  return id === "brand" ? [mix(accent, "#23211f", 0.55), "#f4f2ee"] : id === "marble" ? ["#efebe4", "#f8f6f2"] : id === "oak" ? ["#c6a279", "#a98a63"] : id === "glass" ? ["#dbe9ee", "#c9a25a"] : ["#1d1c1a", "#3a3836"];
 }
 
 /** A product's picture for thumbnails (a video's still frame). */
@@ -686,7 +804,9 @@ function CategoriesPanel({
   selected,
   productId,
   onSelect,
-  onPlacement,
+  onLook,
+  accent,
+  backWall,
   onAdd,
   onRemove,
   onMoved,
@@ -699,7 +819,9 @@ function CategoriesPanel({
   selected: string | null;
   productId: string | null;
   onSelect: (id: string | null) => void;
-  onPlacement: (id: string, placement: Placement) => void;
+  onLook: (id: string, patch: Partial<CategoryLook> & { back?: boolean }) => void;
+  accent: string;
+  backWall: StoreTheme["backWall"];
   onAdd: (c: CustomCategory) => void;
   onRemove: (id: string) => void;
   onMoved: (productId: string, category: string) => void;
@@ -716,8 +838,11 @@ function CategoriesPanel({
   if (adding) return <NewCategory existing={cats.custom} onCancel={() => setAdding(false)} onAdd={(c) => (onAdd(c), setAdding(false))} />;
 
   if (selected) {
-    const info = categoryInfo(selected, cats.custom, cats.placements);
     const items = inCategory(selected);
+    const look = lookOf(cats, selected);
+    const info = look.info;
+    const side = backWall.feature === "products" && backWall.category === selected ? "back" : (cats.looks[selected]?.side ?? "auto");
+    const images = items.map(thumbOf).filter((x): x is string => Boolean(x)).slice(0, 8);
     const own = cats.custom.some((c) => c.id === selected);
     return (
       <div className="flex flex-col gap-4">
@@ -748,7 +873,39 @@ function CategoriesPanel({
           </div>
         </div>
         <Field label="Where it shows" hint="Pick how this category looks in your shop. Nothing ever blocks anything else.">
-          <PlacementChoice label="Where it shows" value={info.placement} onChange={(placement) => onPlacement(selected, placement)} images={items.map(thumbOf).filter((x): x is string => Boolean(x)).slice(0, 8)} />
+          <PlacementChoice label="Where it shows" value={info.placement} onChange={(placement) => onLook(selected, { placement })} images={images} accent={accent} />
+        </Field>
+        <Field label="Which side" hint="As you walk in. Automatic fills whichever aisle has more room, so both sides fill before your shop gets longer.">
+          <Choices
+            label="Which side"
+            value={side}
+            options={SIDES.map((x) => ({ id: x.id, label: x.label }))}
+            onChange={(next) => (next === "back" ? onLook(selected, { side: undefined, back: true }) : onLook(selected, { side: next === "auto" ? undefined : next, back: false }))}
+          />
+        </Field>
+        {info.placement === "shelf" && (
+          <Field label="Shelf design">
+            <Choices label="Shelf design" value={look.shelf} options={SHELF_STYLES.map((x) => ({ id: x.id, label: x.label, swatch: shelfSwatch(x.id, accent) }))} onChange={(shelf) => onLook(selected, { shelf })} />
+          </Field>
+        )}
+        {info.placement === "table" && (
+          <Field label="Table design">
+            <Choices label="Table design" value={look.table} options={DISPLAY_TABLES.map((x) => ({ id: x.id, label: x.label, swatch: tableSwatch(x.id, accent) }))} onChange={(table) => onLook(selected, { table })} />
+          </Field>
+        )}
+        <Field label={info.placement === "wall" ? "Frame size" : info.placement === "shelf" ? "Shelf size" : "Table size"}>
+          <Choices
+            label="Size"
+            value={look.size}
+            options={DISPLAY_SIZES.map((x) => ({ id: x.id, label: info.placement === "wall" ? x.label : `${x.label} (${{ s: 3, m: 4, l: 6 }[x.id]} across)` }))}
+            onChange={(size) => onLook(selected, { size })}
+          />
+        </Field>
+        <Field label="Frames">
+          <Choices label="Frame style" value={look.frame} options={FRAME_STYLES.map((x) => ({ id: x.id, label: x.label }))} onChange={(frame) => onLook(selected, { frame })} />
+        </Field>
+        <Field label="Frame shape" hint="Fit each photo makes every frame the shape of its own picture.">
+          <Choices label="Frame shape" value={look.shape} options={FRAME_SHAPES.map((x) => ({ id: x.id, label: x.label }))} onChange={(shape) => onLook(selected, { shape })} />
         </Field>
         {own && items.length === 0 && (
           <button type="button" onClick={() => onRemove(selected)} className="flex h-11 items-center justify-center gap-2 rounded-xl font-semibold text-red-700 ring-1 ring-line-strong">
@@ -793,7 +950,7 @@ function CategoriesPanel({
       {rows.length > 0 && (
         <ul className="flex flex-col divide-y divide-line">
           {rows.map((id) => {
-            const info = categoryInfo(id, cats.custom, cats.placements);
+            const info = categoryInfo(id, cats.custom, cats.looks);
             const count = hall.sections.find((x) => x.key === id)?.count ?? 0;
             return (
               <li key={id}>

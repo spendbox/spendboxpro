@@ -133,12 +133,12 @@ export default async function ProductsTab({ params, searchParams }: PageProps<"/
           }}
           products={products
             .filter((p) => p.is_active)
-            .map((p) => ({ id: p.id, title: p.title, price: p.price, currency: p.currency, media_type: p.media_type, media_url: p.media_url, poster_url: p.poster_url, description: p.description, category: p.category, kind: p.kind }))}
+            .map((p) => ({ id: p.id, title: p.title, price: p.price, currency: p.currency, media_type: p.media_type, media_url: p.media_url, poster_url: p.poster_url, description: p.description, category: p.category, kind: p.kind, media_aspect: p.media_aspect }))}
         />
       ) : (
         <>
 
-          <ProductGrid bizId={bizId} products={products} businessName={business.name} joinUrl={`${siteUrl()}/j/${business.slug}`} />
+          <ProductGrid bizId={bizId} products={products} businessName={business.name} joinUrl={`${siteUrl()}/s/${business.slug}`} />
           {products.length === 0 && (
             <EmptyState
               icon={<ShoppingBag className="size-6" aria-hidden />}

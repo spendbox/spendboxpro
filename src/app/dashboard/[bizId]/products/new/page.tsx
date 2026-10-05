@@ -17,7 +17,7 @@ export default async function NewProductPage({ params }: PageProps<"/dashboard/[
         title="Add a product or service"
         description="It shows in your customers' Explore, and your partners' customers' too."
       />
-      <ProductComposer bizId={bizId} businessName={business.name} joinUrl={`${siteUrl()}/j/${business.slug}`} categories={categoryOptionsOf(business)} />
+      <ProductComposer bizId={bizId} businessName={business.name} joinUrl={`${siteUrl()}/s/${business.slug}`} categories={categoryOptionsOf(business)} />
     </div>
   );
 }

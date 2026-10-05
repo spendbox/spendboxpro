@@ -27,8 +27,10 @@ export async function generateMetadata({ params }: PageProps<"/s/[slug]">): Prom
   };
 }
 
-export default async function SharedStorePage({ params }: PageProps<"/s/[slug]">) {
-  const { slug } = await params;
+export default async function SharedStorePage({ params, searchParams }: PageProps<"/s/[slug]">) {
+  const [{ slug }, { ref }] = await Promise.all([params, searchParams]);
+  // A customer's invite code, so the friend who joins here counts for their invite perk.
+  const refCode = typeof ref === "string" ? ref.slice(0, 20) : null;
   const store = await loadStore(slug);
   if (!store) notFound();
 
@@ -46,5 +48,5 @@ export default async function SharedStorePage({ params }: PageProps<"/s/[slug]">
   }
   const closed = !(await getSettings()).joinsOpen;
 
-  return <SharedStore store={{ ...store, store_theme: readTheme(store.store_theme) }} shareUrl={`${siteUrl()}/s/${store.slug}`} join={{ state, closed }} />;
+  return <SharedStore store={{ ...store, store_theme: readTheme(store.store_theme) }} shareUrl={`${siteUrl()}/s/${store.slug}`} join={{ state, closed, refCode }} />;
 }

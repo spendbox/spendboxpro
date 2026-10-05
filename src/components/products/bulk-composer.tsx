@@ -72,7 +72,7 @@ export function BulkComposer({ bizId, businessName, joinUrl, categories }: { biz
       if (!alive) return;
       const back: Draft[] = saved.map((x) => {
         const file = new File([x.file], x.fileName, { type: x.fileType });
-        const media: PreparedMedia = { type: x.type, file, poster: x.poster ? new File([x.poster], "poster.jpg", { type: "image/jpeg" }) : null, previewUrl: URL.createObjectURL(file) };
+        const media: PreparedMedia = { type: x.type, file, poster: x.poster ? new File([x.poster], "poster.jpg", { type: "image/jpeg" }) : null, previewUrl: URL.createObjectURL(file), aspect: x.aspect ?? null };
         urls.current.push(media.previewUrl);
         return { key: x.key, media, kind: x.kind, title: x.title, description: x.description, price: x.price, category: x.category, selected: x.selected, status: "draft" };
       });
@@ -97,6 +97,7 @@ export function BulkComposer({ bizId, businessName, joinUrl, categories }: { biz
           fileName: d.media.file.name,
           fileType: d.media.file.type,
           poster: d.media.poster,
+          aspect: d.media.aspect ?? null,
           kind: d.kind,
           title: d.title,
           description: d.description,
@@ -180,6 +181,7 @@ export function BulkComposer({ bizId, businessName, joinUrl, categories }: { biz
           price: d.price,
           category: chosenCategory(d.category, d, cats.options),
           mediaType: d.media.type,
+          aspect: d.media.aspect ?? null,
           mediaPath: ticket.media.path,
           posterPath: ticket.poster && d.media.poster ? ticket.poster.path : null,
         });

@@ -1,8 +1,8 @@
 "use client";
 
-import { ChevronDown, ChevronLeft, ChevronRight, DoorOpen, Expand, Gift, Home, LayoutGrid, Mail, MapPin, Maximize2, Phone, Play, Share2, UserPlus, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, DoorOpen, Ellipsis, Expand, Gift, Home, LayoutGrid, Menu as MenuIcon, Store, Mail, MapPin, Maximize2, Phone, Play, Share2, UserPlus, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { JoinWizard } from "@/components/join/join-wizard";
 import { PerkCard } from "@/components/perks/perk-card";
 import { ProductViewer } from "@/components/products/product-viewer";
@@ -13,7 +13,7 @@ import { cn } from "@/lib/cn";
 import { formatMoney, whatsappLink } from "@/lib/format";
 import type { StoreTheme } from "@/lib/store-theme";
 import type { FeedProduct, StoreProduct } from "@/lib/types";
-import { layoutHall } from "./three/store/hall";
+import { useHall } from "./three/store/aspects";
 import type { StoreApi } from "./three/store/look-controls";
 import type { StoreBusiness, StoreTarget } from "./three/store/pieces";
 import StoreCanvas from "./three/store/store-canvas";
@@ -43,6 +43,8 @@ export interface JoinInfo {
   state: "signed-out" | "signed-in" | "member" | "owner";
   /** Joining is paused (for everyone, or this business). */
   closed: boolean;
+  /** A customer's invite code from the shared link. */
+  refCode?: string | null;
 }
 
 /**
@@ -85,12 +87,13 @@ export default function StoreView({
   onExpand?: () => void;
 }) {
   const api = useRef<StoreApi | null>(null);
+  const [menu, setMenu] = useState<"more" | "sections" | null>(null);
   const [sheet, setSheet] = useState<"contact" | "about" | "gift" | "partners" | null>(null);
   const [viewing, setViewing] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
   const [hint, setHint] = useState(true);
   const [focused, setFocused] = useState<string | null>(null);
-  const hall = useMemo(() => layoutHall(products, theme.categories, business.categories), [products, theme.categories, business.categories]);
+  const hall = useHall(products, theme, business.categories);
   const focusIndex = hall.items.findIndex((i) => i.product.id === focused);
   const focusItem = focusIndex >= 0 ? hall.items[focusIndex]! : null;
   const member = business.is_member || join?.state === "member";
@@ -173,6 +176,8 @@ export default function StoreView({
 
   const message = `Hi ${business.name}, I'm in your Spendbox shop.`;
   const canJoin = mode === "public" && join && (join.state === "signed-out" || join.state === "signed-in") && !join.closed;
+  // From a shared link, before joining: Join is the one big button, the rest is tucked into menus.
+  const prejoin = Boolean(canJoin);
 
   // The shared shop's products, in the shape the swipe viewer uses.
   const feed: FeedProduct[] = products.map((p) => ({
@@ -246,10 +251,19 @@ export default function StoreView({
               <ChevronDown className="size-4 shrink-0 text-white/80" aria-hidden />
             </button>
             <div className="ml-auto flex gap-2">
-              {shareUrl && (
-                <button type="button" onClick={share} aria-label="Share this shop" className="pointer-events-auto flex size-11 items-center justify-center rounded-full bg-black/40 backdrop-blur">
-                  <Share2 className="size-5" aria-hidden />
-                </button>
+              {prejoin ? (
+                // Before joining, the sections live in a menu (sharing is in the "More" menu).
+                hall.sections.length > 0 && (
+                  <button type="button" onClick={() => setMenu("sections")} aria-label="Sections" aria-expanded={menu === "sections"} className="pointer-events-auto flex size-11 items-center justify-center rounded-full bg-black/40 backdrop-blur">
+                    <MenuIcon className="size-5" aria-hidden />
+                  </button>
+                )
+              ) : (
+                shareUrl && (
+                  <button type="button" onClick={share} aria-label="Share this shop" className="pointer-events-auto flex size-11 items-center justify-center rounded-full bg-black/40 backdrop-blur">
+                    <Share2 className="size-5" aria-hidden />
+                  </button>
+                )
               )}
               {inline && onExpand && (
                 <button type="button" onClick={onExpand} aria-label="Full screen" className="pointer-events-auto flex size-11 items-center justify-center rounded-full bg-black/40 backdrop-blur">
@@ -309,10 +323,79 @@ export default function StoreView({
             </div>
           )}
 
+          {/* Not joined yet, from a shared link: one big Join, the gift if there is one, everything else tucked away. */}
+          {!focusItem && prejoin && (
+            <div className="absolute inset-x-0 bottom-0 flex items-center gap-2 bg-gradient-to-t from-black/60 via-black/25 to-transparent px-4 pt-12 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              {perks.length > 0 && (
+                <button type="button" onClick={() => setSheet("gift")} className="flex h-14 shrink-0 items-center gap-2 rounded-full bg-amber-400 px-4 text-sm font-bold text-ink shadow-lift active:scale-95">
+                  <Gift className="size-5" aria-hidden /> Gift
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={startJoin}
+                className="flex h-14 min-w-0 flex-1 animate-pulse-ring items-center justify-center gap-2 rounded-full bg-brand-600 px-5 text-base font-bold text-white shadow-lift ring-4 ring-white/30 active:scale-[0.98]"
+              >
+                <UserPlus className="size-5 shrink-0" aria-hidden /> <span className="truncate">Join {business.name}</span>
+              </button>
+              <button type="button" onClick={() => setMenu("more")} aria-label="More" aria-expanded={menu === "more"} className="flex size-14 shrink-0 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur active:scale-95">
+                <Ellipsis className="size-6" aria-hidden />
+              </button>
+            </div>
+          )}
+
+          {/* The tucked-away menus (before joining): more actions at the bottom, sections from the top. */}
+          {prejoin && menu && (
+            <div className="absolute inset-0 z-20" onClick={() => setMenu(null)}>
+              <div
+                role="menu"
+                aria-label={menu === "more" ? "More" : "Sections"}
+                onClick={(e) => e.stopPropagation()}
+                className={cn(
+                  "absolute flex w-64 animate-fade-up flex-col gap-0.5 rounded-2xl bg-white p-2 text-ink shadow-lift",
+                  menu === "more" ? "right-4 bottom-[calc(max(1rem,env(safe-area-inset-bottom))+4rem)]" : "top-[calc(max(0.75rem,env(safe-area-inset-top))+3.5rem)] right-3",
+                )}
+              >
+                {menu === "more" ? (
+                  <>
+                    <MenuItem onClick={() => (setMenu(null), setSheet("contact"))}>
+                      <WhatsAppIcon className="size-4 text-[#1FAF55]" /> Chat on WhatsApp
+                    </MenuItem>
+                    {partners.length > 0 && (
+                      <MenuItem onClick={() => (setMenu(null), setSheet("partners"))}>
+                        <DoorOpen className="size-4" aria-hidden /> Partners
+                      </MenuItem>
+                    )}
+                    <MenuItem onClick={() => (setMenu(null), setSheet("about"))}>
+                      <Store className="size-4" aria-hidden /> About {business.name}
+                    </MenuItem>
+                    {shareUrl && (
+                      <MenuItem onClick={() => (setMenu(null), void share())}>
+                        <Share2 className="size-4" aria-hidden /> Share this shop
+                      </MenuItem>
+                    )}
+                  </>
+                ) : (
+                  <nav aria-label="Walk to" className="flex flex-col gap-0.5">
+                    <MenuItem onClick={() => (setMenu(null), api.current?.home())}>
+                      <Home className="size-4" aria-hidden /> Counter
+                    </MenuItem>
+                    {hall.sections.map((sec) => (
+                      <MenuItem key={sec.key} onClick={() => (setMenu(null), api.current?.flyTo(sec.view))}>
+                        <span className="min-w-0 flex-1 truncate">{sec.label}</span>
+                        <span className="rounded-full bg-canvas px-2 text-xs tabular-nums text-muted">{sec.count}</span>
+                      </MenuItem>
+                    ))}
+                  </nav>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Bottom: shop buttons and sections in one scrolling row, then the main actions. Stacked, so nothing overlaps. */}
-          {!focusItem && (
+          {!focusItem && !prejoin && (
             <div className="absolute inset-x-0 bottom-0 flex flex-col gap-2.5 bg-gradient-to-t from-black/60 via-black/25 to-transparent pt-10 pb-[max(1rem,env(safe-area-inset-bottom))]">
-              <div className="flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:justify-center">
+              <div className="flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] [justify-content:safe_center]">
                 {perks.length > 0 && (
                   <Chip onClick={() => setSheet("gift")} className="bg-amber-400 text-ink">
                     <Gift className="size-3.5" aria-hidden /> Gift
@@ -372,7 +455,7 @@ export default function StoreView({
       {viewing && <ProductViewer products={feed} startId={viewing} onClose={() => setViewing(null)} guest={member ? undefined : { onJoin: canJoin ? startJoin : () => setViewing(null) }} />}
 
       {join && canJoin && (
-        <JoinWizard open={joining} onClose={() => setJoining(false)} signedIn={join.state === "signed-in"} slug={business.slug} business={business} />
+        <JoinWizard open={joining} onClose={() => setJoining(false)} signedIn={join.state === "signed-in"} slug={business.slug} business={business} refCode={join.refCode ?? null} />
       )}
 
       {sheet === "gift" && (
@@ -391,7 +474,7 @@ export default function StoreView({
                   <UserPlus className="size-4" aria-hidden /> Join to get these
                 </button>
               ) : (
-                <Link href={`/j/${business.slug}`} className="flex h-12 items-center justify-center gap-2 rounded-xl bg-brand-600 font-semibold text-white">
+                <Link href={`/j/${business.slug}${join?.refCode ? `?ref=${encodeURIComponent(join.refCode)}` : ""}`} className="flex h-12 items-center justify-center gap-2 rounded-xl bg-brand-600 font-semibold text-white">
                   <UserPlus className="size-4" aria-hidden /> Join to get these
                 </Link>
               )
@@ -473,7 +556,7 @@ export default function StoreView({
                   Join {business.name}
                 </button>
               ) : (
-                <Link href={`/j/${business.slug}`} className="mt-1 flex h-12 items-center justify-center rounded-xl bg-brand-600 font-semibold text-white">
+                <Link href={`/j/${business.slug}${join?.refCode ? `?ref=${encodeURIComponent(join.refCode)}` : ""}`} className="mt-1 flex h-12 items-center justify-center rounded-xl bg-brand-600 font-semibold text-white">
                   Join {business.name}
                 </Link>
               )}
@@ -554,6 +637,14 @@ function Sheet({ label, onClose, children }: { label: string; onClose: () => voi
         {children}
       </div>
     </div>
+  );
+}
+
+function MenuItem({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button type="button" role="menuitem" onClick={onClick} className="flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold hover:bg-canvas">
+      {children}
+    </button>
   );
 }
 

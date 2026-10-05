@@ -52,7 +52,7 @@ export default async function ProductPage({ params }: PageProps<"/dashboard/[biz
             ))}
           </div>
         </div>
-        <ProductManager bizId={bizId} product={product} businessName={business.name} joinUrl={`${siteUrl()}/j/${business.slug}`} categories={categoryOptionsOf(business)} />
+        <ProductManager bizId={bizId} product={product} businessName={business.name} joinUrl={`${siteUrl()}/s/${business.slug}`} categories={categoryOptionsOf(business)} />
       </div>
 
       <section className="flex flex-col gap-3">
