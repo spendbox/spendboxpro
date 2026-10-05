@@ -606,11 +606,11 @@ function ProductsPanel({
 }) {
   const product = products.find((p) => p.id === selected);
   if (!products.length)
-    return <p className="text-sm text-ink-2">Add products and they appear in your shop: clothes on mannequins, food on tables, homes as model houses and videos on standing banners.</p>;
+    return <p className="text-sm text-ink-2">Add products and they appear in your shop as framed pictures: clothes, hair & beauty, homes and videos on the walls, shoes, bags and other products on shelves, and food on tables.</p>;
   if (!product)
     return (
       <div className="flex flex-col gap-2">
-        <p className="text-sm text-ink-2">Tap a product in your shop, or pick one here, to choose how it stands.</p>
+        <p className="text-sm text-ink-2">Tap a product in your shop, or pick one here, to choose where its frame goes.</p>
         <ul className="flex flex-col divide-y divide-line">
           {products.map((p) => {
             const kind = displays[displayKey(p.id)] ?? guessDisplay(p, categories);
@@ -629,7 +629,7 @@ function ProductsPanel({
   const chosen = displays[displayKey(product.id)];
   const guess = guessDisplay(product, categories);
   return (
-    <Field label={product.title} hint="How it stands in your shop.">
+    <Field label={product.title} hint="Where its frame goes in your shop.">
       <Choices
         label="Display"
         value={chosen ?? "auto"}

@@ -1,24 +1,26 @@
-// How each product stands in a business's 3D shop: clothes and hair & beauty
-// on large photo boards, shoes, bags and everything else on small ones, food
-// on a laid table, homes as a model house, videos on a standing banner.
-// Guessed from the product's words and the business's categories; the
-// business can change it in its shop editor.
+// How each product shows in a business's 3D shop. Every product is a framed
+// picture: clothes, hair & beauty, homes and videos hang on the walls, shoes,
+// bags and everything else stand on shelves, and food stands on tables down
+// the middle. Guessed from the product's words and the business's
+// categories; the business can change it in its shop editor.
 
 export type DisplayKind = "wear" | "hair" | "shoes" | "food" | "home" | "video" | "item";
 
 export const DISPLAY_KINDS: { id: DisplayKind; name: string; section: string; hint: string }[] = [
-  { id: "wear", name: "Clothes (large photo board)", section: "Clothes", hint: "Clothes, fabric and outfits" },
-  { id: "hair", name: "Hair & beauty (large photo board)", section: "Hair & beauty", hint: "Hair, wigs, braids, nails, make-up and skincare" },
-  { id: "shoes", name: "Shoes & bags (small photo board)", section: "Shoes & bags", hint: "Shoes, sneakers, heels, sandals and bags" },
-  { id: "item", name: "Other products (small photo board)", section: "Products", hint: "Everything else" },
-  { id: "food", name: "On a table", section: "Food & drinks", hint: "Meals, cakes, snacks and drinks" },
-  { id: "home", name: "As a model house", section: "Homes & spaces", hint: "Houses, flats, land and shortlets" },
-  { id: "video", name: "On a standing banner", section: "Videos", hint: "Videos and adverts" },
+  { id: "wear", name: "Clothes (large frame on the wall)", section: "Clothes", hint: "Clothes, fabric and outfits" },
+  { id: "hair", name: "Hair & beauty (large frame on the wall)", section: "Hair & beauty", hint: "Hair, wigs, braids, nails, make-up and skincare" },
+  { id: "home", name: "Homes & spaces (wide frame on the wall)", section: "Homes & spaces", hint: "Houses, flats, land and shortlets" },
+  { id: "video", name: "Videos (screen frame on the wall)", section: "Videos", hint: "Videos and adverts" },
+  { id: "shoes", name: "Shoes & bags (frame on a shelf)", section: "Shoes & bags", hint: "Shoes, sneakers, heels, sandals and bags" },
+  { id: "item", name: "Other products (frame on a shelf)", section: "Products", hint: "Everything else" },
+  { id: "food", name: "Food & drinks (frame on a table)", section: "Food & drinks", hint: "Meals, cakes, snacks and drinks" },
 ];
 
-/** Which displays are photo boards, and how big. */
-export function boardSize(kind: DisplayKind): "large" | "small" | null {
-  return kind === "wear" || kind === "hair" ? "large" : kind === "shoes" || kind === "item" ? "small" : null;
+export type Placement = "wall" | "shelf" | "table";
+
+/** Where a display's frame is kept. */
+export function placementOf(kind: DisplayKind): Placement {
+  return kind === "shoes" || kind === "item" ? "shelf" : kind === "food" ? "table" : "wall";
 }
 
 const WORDS: [DisplayKind, RegExp][] = [

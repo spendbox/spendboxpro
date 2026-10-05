@@ -4,7 +4,7 @@ import { displayKey, guessDisplay } from "./product-display.ts";
 
 const image = (title: string, description: string | null = null) => ({ title, description, media_type: "image" });
 
-test("videos stand on banners", () => {
+test("videos get a screen frame", () => {
   assert.equal(guessDisplay({ title: "Ankara dress", media_type: "video" }), "video");
 });
 
