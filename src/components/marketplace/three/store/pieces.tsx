@@ -34,7 +34,10 @@ export interface StoreBusiness {
 
 /** What was tapped. Shoppers tap products, the bell and the board; the business (editing) taps anything. */
 export type StoreTarget =
-  | { kind: "product"; id: string }
+  /** From the hall (`far` when tapped from a distance) or the screen on the back wall. */
+  | { kind: "product"; id: string; far?: boolean; from?: "hall" | "screen" }
+  /** Editing: a product in the hall, to choose how it stands. */
+  | { kind: "display"; id: string }
   | { kind: "more" }
   | { kind: "bell" }
   | { kind: "board" }

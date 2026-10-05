@@ -131,13 +131,13 @@ export function Marketplace({ businesses, products }: { businesses: ExploreBusin
       store
         ? products
             .filter((p) => p.business_id === store.id)
-            .map((p) => ({ id: p.id, title: p.title, price: p.price, currency: p.currency, media_type: p.media_type, media_url: p.media_url, poster_url: p.poster_url, viewed: p.viewed }))
+            .map((p) => ({ id: p.id, title: p.title, price: p.price, currency: p.currency, media_type: p.media_type, media_url: p.media_url, poster_url: p.poster_url, description: p.description, viewed: p.viewed }))
         : [],
     [products, store],
   );
 
   // The shop's perks, for the gift on its counter (fetched when the shop opens).
-  const [gift, setGift] = useState<{ slug: string; perks: ShopPerk[]; currency: string } | null>(null);
+  const [gift, setGift] = useState<{ slug: string; perks: ShopPerk[]; currency: string; products: StoreProduct[] } | null>(null);
   useEffect(() => {
     if (!storeSlug) return;
     let alive = true;
@@ -147,6 +147,12 @@ export function Marketplace({ businesses, products }: { businesses: ExploreBusin
     };
   }, [storeSlug]);
   const shopGift = gift && gift.slug === storeSlug ? gift : null;
+  // Once the whole shop has loaded, its hall shows every product (keeping which ones they've seen).
+  const hallProducts = useMemo(() => {
+    if (!shopGift || shopGift.products.length <= storeProducts.length) return storeProducts;
+    const seen = new Map(storeProducts.map((p) => [p.id, p.viewed]));
+    return shopGift.products.map((p) => ({ ...p, viewed: seen.get(p.id) ?? false }));
+  }, [shopGift, storeProducts]);
 
   const openStore = useCallback((b: ExploreBusiness) => router.push(`${pathname}?store=${encodeURIComponent(b.slug)}`, { scroll: false }), [router, pathname]);
   const closeStore = useCallback(() => router.replace(pathname, { scroll: false }), [router, pathname]);
@@ -219,7 +225,7 @@ export function Marketplace({ businesses, products }: { businesses: ExploreBusin
         <StoreView
           business={storeBusiness}
           theme={storeTheme}
-          products={storeProducts}
+          products={hallProducts}
           mode="visit"
           onClose={closeStore}
           onOpenProduct={openProduct}

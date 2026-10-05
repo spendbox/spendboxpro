@@ -377,4 +377,6 @@ export interface StoreProduct {
   media_url: string;
   poster_url: string | null;
   viewed?: boolean;
+  /** Shown on the card when the visitor walks up to it in the hall. */
+  description?: string | null;
 }

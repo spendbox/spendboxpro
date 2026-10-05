@@ -1,10 +1,11 @@
 "use client";
 
-import { Armchair, Check, ChevronLeft, Circle, Gift, Image as ImageIcon, ImagePlus, Lamp, LayoutGrid, LoaderCircle, MonitorPlay, Palette, PanelsTopLeft, Sprout, Store, Type, X } from "lucide-react";
+import { Armchair, Check, ChevronLeft, Circle, Gift, Image as ImageIcon, ImagePlus, Lamp, LayoutGrid, LoaderCircle, MonitorPlay, Palette, PanelsTopLeft, Shirt, Sprout, Store, Type, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { saveStoreTheme, uploadStoreArt } from "@/app/dashboard/[bizId]/store-actions";
 import { cn } from "@/lib/cn";
+import { DISPLAY_KINDS, displayKey, guessDisplay, type DisplayKind } from "@/lib/product-display";
 import { Switch } from "@/components/ui/switch";
 import {
   ACCENT_COLORS,
@@ -25,14 +26,15 @@ import {
   type PlantSpot,
   type StoreTheme,
 } from "@/lib/store-theme";
-import type { StoreProduct } from "@/lib/types";
+import { layoutHall, type HallProduct } from "./three/store/hall";
 import type { StoreApi } from "./three/store/look-controls";
 import { businessTagline, type StoreBusiness, type StoreTarget } from "./three/store/pieces";
 import StoreCanvas from "./three/store/store-canvas";
 
-type Panel = "board" | "backdrop" | "screen" | "table" | "rug" | "plants" | "lights" | "art" | "floor" | "counter" | "colours" | "gift";
+type Panel = "products" | "board" | "backdrop" | "screen" | "table" | "rug" | "plants" | "lights" | "art" | "floor" | "counter" | "colours" | "gift";
 
 const TOOLS: { id: Panel; label: string; icon: ReactNode }[] = [
+  { id: "products", label: "Products", icon: <Shirt className="size-4" aria-hidden /> },
   { id: "board", label: "Welcome board", icon: <Type className="size-4" aria-hidden /> },
   { id: "backdrop", label: "Backdrop", icon: <PanelsTopLeft className="size-4" aria-hidden /> },
   { id: "table", label: "Table", icon: <Armchair className="size-4" aria-hidden /> },
@@ -49,7 +51,7 @@ const GIFT_TOOL = { id: "gift" as const, label: "Gift", icon: <Gift className="s
 
 /** Where the camera turns for each thing (yaw: left -, right +; pitch: down -, up +). */
 const SPOT_VIEW: Record<PlantSpot, [number, number]> = { backLeft: [-0.42, -0.08], backRight: [0.42, -0.08], front: [-0.95, -0.12], counter: [-0.2, -0.16] };
-const PANEL_VIEW: Record<Exclude<Panel, "plants">, [number, number]> = {
+const PANEL_VIEW: Record<Exclude<Panel, "plants" | "products">, [number, number]> = {
   board: [0, 0.12],
   backdrop: [0, 0.04],
   screen: [0, 0.02],
@@ -95,7 +97,7 @@ export function StoreEditor({
   /** The business has perks, so a gift sits on the counter. */
   hasPerks?: boolean;
   business: StoreBusiness;
-  products: StoreProduct[];
+  products: HallProduct[];
   initial: StoreTheme;
   onClose: () => void;
   onSaved: (theme: StoreTheme) => void;
@@ -105,6 +107,8 @@ export function StoreEditor({
   const [panel, setPanel] = useState<Panel | null>(null);
   const [spot, setSpot] = useState<PlantSpot>("backLeft");
   const [artIndex, setArtIndex] = useState<0 | 1>(0);
+  const [productId, setProductId] = useState<string | null>(null);
+  const hall = useMemo(() => layoutHall(products, theme.displays, business.categories), [products, theme.displays, business.categories]);
   const [dirty, setDirty] = useState(false);
   const [status, setStatus] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [saving, startSaving] = useTransition();
@@ -117,8 +121,31 @@ export function StoreEditor({
 
   const open = (next: Panel, view?: [number, number]) => {
     setPanel(next);
+    if (next === "products") {
+      // Walk over to the product (or the start of the hall).
+      const item = hall.items.find((i) => i.product.id === productId);
+      const v = item?.view ?? hall.sections[0]?.view;
+      if (v) api.current?.flyTo(v);
+      return;
+    }
     const [yaw, pitch] = view ?? (next === "plants" ? SPOT_VIEW[spot] : PANEL_VIEW[next]);
+    api.current?.home();
     api.current?.focus(yaw, pitch);
+  };
+
+  const pickProduct = (id: string) => {
+    setProductId(id);
+    setPanel("products");
+    const item = hall.items.find((i) => i.product.id === id);
+    if (item) api.current?.flyTo(item.view);
+  };
+
+  /** Sets how a product stands ("auto" goes back to the guess). */
+  const setDisplay = (id: string, kind: DisplayKind | "auto") => {
+    const displays = { ...theme.displays };
+    if (kind === "auto") delete displays[displayKey(id)];
+    else displays[displayKey(id)] = kind;
+    set({ displays });
   };
 
   const select = (target: StoreTarget) => {
@@ -131,6 +158,7 @@ export function StoreEditor({
       return open("art");
     }
     if (target.kind === "walls") return open("colours");
+    if (target.kind === "display") return pickProduct(target.id);
     if (target.kind === "product" || target.kind === "more" || target.kind === "bell" || target.kind === "partners") return;
     open(target.kind);
   };
@@ -260,6 +288,17 @@ export function StoreEditor({
                   />
                 </Field>
               </>
+            )}
+
+            {panel === "products" && (
+              <ProductsPanel
+                products={products}
+                selected={productId}
+                displays={theme.displays}
+                categories={business.categories}
+                onSelect={pickProduct}
+                onChange={setDisplay}
+              />
             )}
 
             {panel === "backdrop" && (
@@ -546,5 +585,61 @@ function Dots<T extends string>({ label, value, options, onChange }: { label: st
         );
       })}
     </div>
+  );
+}
+
+/** How each product stands in the hall: pick one, then a display for it. */
+function ProductsPanel({
+  products,
+  selected,
+  displays,
+  categories,
+  onSelect,
+  onChange,
+}: {
+  products: HallProduct[];
+  selected: string | null;
+  displays: Record<string, DisplayKind>;
+  categories: string[];
+  onSelect: (id: string) => void;
+  onChange: (id: string, kind: DisplayKind | "auto") => void;
+}) {
+  const product = products.find((p) => p.id === selected);
+  if (!products.length)
+    return <p className="text-sm text-ink-2">Add products and they appear in your shop: clothes on mannequins, food on tables, homes as model houses and videos on standing banners.</p>;
+  if (!product)
+    return (
+      <div className="flex flex-col gap-2">
+        <p className="text-sm text-ink-2">Tap a product in your shop, or pick one here, to choose how it stands.</p>
+        <ul className="flex flex-col divide-y divide-line">
+          {products.map((p) => {
+            const kind = displays[displayKey(p.id)] ?? guessDisplay(p, categories);
+            return (
+              <li key={p.id}>
+                <button type="button" onClick={() => onSelect(p.id)} className="flex w-full items-center gap-3 py-2.5 text-left">
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold">{p.title}</span>
+                  <span className="text-xs text-muted">{DISPLAY_KINDS.find((k) => k.id === kind)!.name}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
+  const chosen = displays[displayKey(product.id)];
+  const guess = guessDisplay(product, categories);
+  return (
+    <Field label={product.title} hint="How it stands in your shop.">
+      <Choices
+        label="Display"
+        value={chosen ?? "auto"}
+        options={[
+          { id: "auto" as const, label: "Automatic", description: `We picked: ${DISPLAY_KINDS.find((k) => k.id === guess)!.name.toLowerCase()}` },
+          ...DISPLAY_KINDS.map((k) => ({ id: k.id, label: k.name, description: k.hint })),
+        ]}
+        onChange={(kind) => onChange(product.id, kind)}
+        cards
+      />
+    </Field>
   );
 }

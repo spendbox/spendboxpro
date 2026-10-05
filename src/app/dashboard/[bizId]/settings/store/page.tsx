@@ -9,8 +9,8 @@ import { getBusinessProducts } from "@/lib/products";
 
 export const metadata: Metadata = { title: "Your 3D shop" };
 
-export default async function StoreDesignPage({ params }: PageProps<"/dashboard/[bizId]/settings/store">) {
-  const { bizId } = await params;
+export default async function StoreDesignPage({ params, searchParams }: PageProps<"/dashboard/[bizId]/settings/store">) {
+  const [{ bizId }, { edit }] = await Promise.all([params, searchParams]);
   const [{ business }, products, perks] = await Promise.all([requireOwnedBusiness(bizId), getBusinessProducts(bizId), getPerks(bizId)]);
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -21,6 +21,7 @@ export default async function StoreDesignPage({ params }: PageProps<"/dashboard/
       />
       <StoreDesigner
         bizId={bizId}
+        startEditing={edit === "1"}
         saved={business.store_theme}
         shareUrl={`${siteUrl()}/s/${business.slug}`}
         hasPerks={perks.some((p) => p.is_active && SIMPLE_PERK_KINDS.includes(p.kind))}
@@ -39,7 +40,7 @@ export default async function StoreDesignPage({ params }: PageProps<"/dashboard/
         }}
         products={products
           .filter((p) => p.is_active)
-          .map((p) => ({ id: p.id, title: p.title, price: p.price, currency: p.currency, media_type: p.media_type, media_url: p.media_url, poster_url: p.poster_url }))}
+          .map((p) => ({ id: p.id, title: p.title, price: p.price, currency: p.currency, media_type: p.media_type, media_url: p.media_url, poster_url: p.poster_url, description: p.description }))}
       />
     </div>
   );

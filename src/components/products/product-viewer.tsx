@@ -1,6 +1,6 @@
 "use client";
 
-import { Bookmark, Mail, Phone, Volume2, VolumeX, X } from "lucide-react";
+import { Bookmark, ChevronDown, ChevronUp, Mail, Phone, Volume2, VolumeX, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
@@ -35,6 +35,16 @@ export function ProductViewer({
   const counted = useRef(new Set<string>());
   const [active, setActive] = useState(startId);
   const [muted, setMuted] = useState(true);
+  // "Swipe for more" shows until they move to another product, or for a few seconds.
+  const [hintGone, setHintGone] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setHintGone(true), 6000);
+    return () => clearTimeout(t);
+  }, []);
+  const index = Math.max(0, products.findIndex((p) => p.id === active));
+  const startIndex = products.findIndex((p) => p.id === startId);
+  const showHint = products.length > 1 && !hintGone && active === startId;
+  const hintUp = startIndex < products.length - 1;
   const [liked, setLiked] = useState<Record<string, boolean>>(() => Object.fromEntries(products.map((p) => [p.id, p.liked])));
 
   const close = useCallback(() => (onClose ? onClose() : router.push(backHref)), [router, backHref, onClose]);
@@ -75,13 +85,15 @@ export function ProductViewer({
     });
   }, [active, guest]);
 
+  const page = (d: number) => scroller.current?.scrollBy({ top: d * window.innerHeight, behavior: "smooth" });
+
   // Arrow keys and Escape on computers.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") close();
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
-        scroller.current?.scrollBy({ top: (e.key === "ArrowDown" ? 1 : -1) * window.innerHeight, behavior: "smooth" });
+        page(e.key === "ArrowDown" ? 1 : -1);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -188,6 +200,37 @@ export function ProductViewer({
           </section>
         );
       })}
+
+      {products.length > 1 && (
+        <>
+          {/* Where they are in the list, so it's clear there's more. */}
+          <p className="pointer-events-none fixed top-[max(1.6rem,calc(env(safe-area-inset-top)+0.6rem))] left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/40 px-3 py-1 text-xs font-semibold tabular-nums backdrop-blur">
+            {index + 1} of {products.length}
+          </p>
+          {/* Up and down buttons on computers. */}
+          <div className="fixed top-1/2 right-3 z-10 hidden -translate-y-1/2 flex-col gap-2 pointer-fine:flex">
+            <button type="button" onClick={() => page(-1)} disabled={index === 0} aria-label="Previous product" className="flex size-11 items-center justify-center rounded-full bg-black/40 backdrop-blur disabled:opacity-30">
+              <ChevronUp className="size-5" aria-hidden />
+            </button>
+            <button type="button" onClick={() => page(1)} disabled={index === products.length - 1} aria-label="Next product" className="flex size-11 items-center justify-center rounded-full bg-black/40 backdrop-blur disabled:opacity-30">
+              <ChevronDown className="size-5" aria-hidden />
+            </button>
+          </div>
+        </>
+      )}
+      <div
+        aria-hidden
+        className={cn(
+          "pointer-events-none fixed inset-x-0 top-[38%] z-10 flex flex-col items-center gap-1 transition-opacity duration-500",
+          showHint ? "opacity-100" : "opacity-0",
+        )}
+      >
+        {hintUp ? <ChevronUp className="size-8 animate-bounce drop-shadow" /> : <ChevronDown className="size-8 animate-bounce drop-shadow" />}
+        <span className="rounded-full bg-black/55 px-4 py-2 text-sm font-semibold backdrop-blur">
+          <span className="hidden pointer-coarse:inline">{hintUp ? "Swipe up for more" : "Swipe down for more"}</span>
+          <span className="pointer-coarse:hidden">{hintUp ? "Scroll down or press ↓ for more" : "Scroll up or press ↑ for more"}</span>
+        </span>
+      </div>
     </div>
   );
 }
