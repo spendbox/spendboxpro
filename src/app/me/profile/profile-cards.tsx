@@ -25,7 +25,7 @@ function SaveRow({ pending, onCancel }: { pending: boolean; onCancel: () => void
   );
 }
 
-function BirthdayEditor({ profile, close }: { profile: Profile | null; close: () => void }) {
+export function BirthdayEditor({ profile, close }: { profile: Profile | null; close: () => void }) {
   const [value, setValue] = useState<BirthdayValue>({
     day: profile?.birth_day ? String(profile.birth_day) : null,
     month: profile?.birth_month ? String(profile.birth_month) : null,

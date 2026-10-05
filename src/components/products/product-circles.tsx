@@ -9,7 +9,7 @@ import { ProductThumb } from "./product-thumb";
  */
 export function ProductCircles({ products, hrefFor }: { products: FeedProduct[]; hrefFor: (p: FeedProduct) => string }) {
   return (
-    <ul className="grid grid-cols-4 gap-x-3 gap-y-4 sm:grid-cols-5 sm:gap-x-4">
+    <ul aria-label="Products" className="grid grid-cols-4 gap-x-3 gap-y-4 sm:grid-cols-5 sm:gap-x-4">
       {products.map((p) => (
         <li key={p.id}>
           <Link
