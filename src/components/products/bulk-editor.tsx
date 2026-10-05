@@ -1,16 +1,13 @@
 "use client";
 
-import { Box, Check, LoaderCircle } from "lucide-react";
+import { Check } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { prepareCutoutUpload, saveProductCutout, updateProducts } from "@/app/dashboard/[bizId]/product-actions";
+import { updateProducts } from "@/app/dashboard/[bizId]/product-actions";
 import { Button } from "@/components/ui/button";
 import { FormMessage } from "@/components/ui/field";
 import { cn } from "@/lib/cn";
 import type { ProductKind } from "@/lib/types";
-import { makeCutout } from "./cutout";
-import { CHECKER } from "./cutout-preview";
-import { uploadToSignedUrl } from "./media";
 import { ProductThumb } from "./product-thumb";
 
 export interface EditableProduct {
@@ -22,21 +19,18 @@ export interface EditableProduct {
   media_type: "image" | "video";
   media_url: string;
   poster_url: string | null;
-  cutout_url: string | null;
 }
 
 const withCommas = (digits: string) => (digits ? Number(digits).toLocaleString("en-US") : "");
 const digitsOf = (v: string) => v.replace(/\D/g, "").slice(0, 10);
-type CutStatus = "working" | "done" | "failed";
 
-/** Edit several products together: each one's fields, "same for selected" values, and 3D cutouts. */
+/** Edit several products together: each one's fields, and "same for selected" values. */
 export function BulkEditor({ bizId, products }: { bizId: string; products: EditableProduct[] }) {
   const router = useRouter();
   const [rows, setRows] = useState(products.map((p) => ({ ...p, selected: true })));
   const [bulk, setBulk] = useState({ price: "", description: "", kind: "" as "" | ProductKind });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
-  const [cuts, setCuts] = useState<Record<string, CutStatus>>({});
   const set = (id: string, patch: Partial<EditableProduct & { selected: boolean }>) => setRows((list) => list.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   const selected = rows.filter((r) => r.selected);
 
@@ -59,28 +53,6 @@ export function BulkEditor({ bizId, products }: { bizId: string; products: Edita
     if (r.ok) router.refresh();
   };
 
-  /** Cuts the selected photos without one out of their backgrounds, for the 3D shop. */
-  const makeCutouts = async () => {
-    for (const p of selected.filter((r) => r.media_type === "image" && !r.cutout_url)) {
-      setCuts((c) => ({ ...c, [p.id]: "working" }));
-      try {
-        const cut = await makeCutout(p.media_url);
-        if (!cut) throw new Error("busy");
-        const t = await prepareCutoutUpload(bizId, p.id);
-        if (!t.ok) throw new Error(t.error);
-        await uploadToSignedUrl(t.ticket.signedUrl, new File([cut.blob], "cutout.png", { type: "image/png" }));
-        const saved = await saveProductCutout(bizId, p.id, t.ticket.path);
-        if (!saved.ok) throw new Error(saved.error);
-        set(p.id, { cutout_url: URL.createObjectURL(cut.blob) });
-        setCuts((c) => ({ ...c, [p.id]: "done" }));
-      } catch {
-        setCuts((c) => ({ ...c, [p.id]: "failed" }));
-      }
-    }
-    router.refresh();
-  };
-  const needCutouts = selected.filter((r) => r.media_type === "image" && !r.cutout_url).length;
-
   return (
     <div className="flex flex-col gap-5">
       <section aria-label="Same for selected" className="flex flex-col gap-3 rounded-3xl bg-white p-4 ring-1 ring-line">
@@ -89,11 +61,6 @@ export function BulkEditor({ bizId, products }: { bizId: string; products: Edita
             <input type="checkbox" className="size-4 accent-brand-600" checked={selected.length === rows.length} onChange={(e) => setRows((l) => l.map((r) => ({ ...r, selected: e.target.checked })))} />
             {selected.length === rows.length ? `All ${rows.length} selected` : `${selected.length} of ${rows.length} selected`}
           </label>
-          {needCutouts > 0 && (
-            <Button type="button" variant="secondary" size="sm" onClick={() => void makeCutouts()} disabled={Object.values(cuts).includes("working")}>
-              <Box className="size-4" aria-hidden /> Make 3D cutouts ({needCutouts})
-            </Button>
-          )}
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-[9rem_1fr_auto_auto]">
           <div className="relative">
@@ -163,21 +130,6 @@ export function BulkEditor({ bizId, products }: { bizId: string; products: Edita
                     </button>
                   ))}
                 </div>
-                {p.media_type === "image" && (
-                  <span className="flex items-center gap-1.5 text-xs text-muted">
-                    <span className={cn("flex size-8 items-center justify-center overflow-hidden rounded-lg ring-1 ring-line", CHECKER)}>
-                      {cuts[p.id] === "working" ? (
-                        <LoaderCircle className="size-4 animate-spin" aria-hidden />
-                      ) : p.cutout_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element -- the cutout
-                        <img src={p.cutout_url} alt="" className="size-full object-contain" />
-                      ) : (
-                        <Box className="size-4" aria-hidden />
-                      )}
-                    </span>
-                    {cuts[p.id] === "failed" ? "Background too busy" : p.cutout_url ? "3D cutout" : "No 3D cutout yet"}
-                  </span>
-                )}
               </div>
               <textarea
                 aria-label={`Description of product ${i + 1}`}

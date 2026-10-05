@@ -1,7 +1,6 @@
 import { Bookmark, MessageCircle } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { CutoutCard } from "@/components/products/cutout-card";
 import { ProductManager } from "@/components/products/product-manager";
 import { Badge } from "@/components/ui/badge";
 import { Card, EmptyState, SectionTitle } from "@/components/ui/card";
@@ -52,10 +51,7 @@ export default async function ProductPage({ params }: PageProps<"/dashboard/[biz
             ))}
           </div>
         </div>
-        <div className="flex flex-col gap-5">
-          {product.media_type === "image" && <CutoutCard bizId={bizId} productId={product.id} mediaUrl={product.media_url} cutoutUrl={product.cutout_url ?? null} />}
-          <ProductManager bizId={bizId} product={product} businessName={business.name} joinUrl={`${siteUrl()}/j/${business.slug}`} />
-        </div>
+        <ProductManager bizId={bizId} product={product} businessName={business.name} joinUrl={`${siteUrl()}/j/${business.slug}`} />
       </div>
 
       <section className="flex flex-col gap-3">

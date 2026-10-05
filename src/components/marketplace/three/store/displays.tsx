@@ -3,14 +3,12 @@
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useState } from "react";
 import * as THREE from "three";
-import { DISPLAY_KINDS, type DisplayKind } from "@/lib/product-display";
+import { boardSize, DISPLAY_KINDS, type DisplayKind } from "@/lib/product-display";
 import { formatMoney } from "@/lib/format";
 import { mix } from "../geometry";
 import { useDispose } from "../hooks";
 import { canvas, fitText, fontFamily, roundRect, shade, toTexture } from "../textures";
-import type { Hall, HallItem } from "./hall";
-import { FRONT } from "./hall";
-import { CutoutFigure, WornFigure } from "./cutout-figure";
+import { FRONT, type Hall, type HallItem } from "./hall";
 import { Built, Kit } from "./kit";
 import { H, W } from "./layout";
 import { FloorShadow } from "./room";
@@ -198,6 +196,55 @@ function bannerTexture(title: string, price: string | null, accent: string) {
   return toTexture(c);
 }
 
+/** The two board sizes, in metres: width, height, the bands above and below the photo, and the margin beside it. */
+const BOARDS = {
+  large: { w: 0.85, h: 2.05, head: 0.2, foot: 0.4, side: 0.05, base: 0.12 },
+  small: { w: 0.6, h: 1.25, head: 0.14, foot: 0.28, side: 0.04, base: 0.12 },
+} as const;
+type BoardSize = keyof typeof BOARDS;
+
+/**
+ * A photo board's print: ivory, a thin band of the brand colour, "New in" at
+ * the top, a hairline frame where the photo goes, and the name and price below.
+ */
+function photoBoardTexture(size: BoardSize, title: string, price: string | null, accent: string) {
+  const b = BOARDS[size];
+  const ppm = 400;
+  const W = Math.round(b.w * ppm);
+  const H = Math.round(b.h * ppm);
+  const { c, ctx } = canvas(W, H);
+  ctx.fillStyle = "#f8f5ef";
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = accent;
+  ctx.fillRect(0, 0, W, 10);
+  const display = fontFamily("display");
+  const spaced = ctx as CanvasRenderingContext2D & { letterSpacing?: string };
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = shade(accent, -0.15);
+  ctx.font = `700 ${size === "large" ? 20 : 16}px ${display}`;
+  spaced.letterSpacing = "6px";
+  ctx.fillText("NEW IN", W / 2 + 3, (b.head * ppm) / 2 + 5);
+  spaced.letterSpacing = "0px";
+  const side = b.side * ppm;
+  const top = b.head * ppm;
+  const bottom = H - b.foot * ppm;
+  ctx.strokeStyle = "rgba(28,33,30,0.18)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(side - 3, top - 3, W - 2 * side + 6, bottom - top + 6);
+  const nameSize = size === "large" ? 32 : 24;
+  ctx.fillStyle = "#1c211e";
+  let name = title;
+  fitText(ctx, name, W - 2 * side, nameSize, 800, display);
+  while (ctx.measureText(name).width > W - 2 * side && name.length > 4) name = `${name.slice(0, -2).trimEnd()}…`;
+  const footMid = bottom + (H - bottom) / 2;
+  ctx.fillText(name, W / 2, footMid - nameSize * 0.6);
+  ctx.font = `700 ${Math.round(nameSize * 0.8)}px ${display}`;
+  ctx.fillStyle = shade(accent, -0.1);
+  ctx.fillText(price ?? "Ask for price", W / 2, footMid + nameSize * 0.75);
+  return toTexture(c);
+}
+
 /** A white play button. */
 const playTexture = (() => {
   let t: THREE.Texture | null = null;
@@ -242,30 +289,6 @@ function signTexture(label: string, count: number, accent: string) {
 }
 
 // ---------------------------------------------------------------- Furniture (merged)
-
-/** A slim black poster stand, for clothes without a cutout (their photo goes in it). */
-function posterStand(k: Kit) {
-  k.box("satin", [0.84, 1.1, 0.03], [0, 1.25, 0], "#151515");
-  for (const s of [-1, 1]) {
-    k.cyl("metal", 0.012, 0.012, 1.25, [s * 0.32, 0.6, -0.12], "#151515", 8, [0.18, 0, 0]);
-    k.cyl("metal", 0.012, 0.012, 1.0, [s * 0.32, 0.5, 0.12], "#151515", 8, [-0.1, 0, 0]);
-  }
-}
-
-/** Clothes stand as their own cutout (it brings its own stand); without one, their photo on a poster stand. */
-function mannequin(k: Kit, cutout: boolean) {
-  if (!cutout) posterStand(k);
-}
-
-/** Two oak-topped white steps: the shoe (or bag) on the top one. */
-function riser(k: Kit, cutout: boolean) {
-  k.rbox("satin", [0.72, 0.42, 0.56], 0.015, [0, 0.21, 0.02], "#f5f2ec");
-  k.box("wood", [0.73, 0.025, 0.57], [0, 0.432, 0.02], "#c79f74");
-  k.rbox("satin", [0.48, 0.34, 0.36], 0.015, [0, 0.615, -0.08], "#f5f2ec");
-  k.box("wood", [0.49, 0.025, 0.37], [0, 0.797, -0.08], "#c79f74");
-  // Without a cutout, the photo leans on a little acrylic stand on the lower step.
-  if (!cutout) k.rbox("glass", [0.3, 0.03, 0.1], 0.008, [0, 0.46, 0.17]);
-}
 
 function table(k: Kit, accent: string) {
   k.cyl("brass", 0.22, 0.24, 0.025, [0, 0.0125, 0], "#ffffff", 32);
@@ -355,25 +378,12 @@ function house(k: Kit, index: number) {
   k.box("wood", [0.78, 0.58, 0.03], [0, 1.78, -0.71], "#2b2420");
 }
 
-function banner(k: Kit) {
-  k.rbox("metal", [0.92, 0.09, 0.2], 0.03, [0, 0.07, 0], "#cfd3d6");
-  for (const s of [-1, 1]) k.box("metal", [0.04, 0.02, 0.42], [s * 0.38, 0.01, -0.02], "#9aa0a3", [0, s * 0.25, 0]);
-  k.cyl("metal", 0.012, 0.012, 2.08, [0, 1.14, -0.04], "#9aa0a3", 8);
-  k.cyl("metal", 0.016, 0.016, 0.9, [0, 2.19, 0], "#cfd3d6", 10, [0, 0, Math.PI / 2]);
-}
-
-function pedestal(k: Kit, cutout: boolean) {
-  k.box("satin", [0.6, 0.05, 0.6], [0, 0.025, 0], "#d9d3c8");
-  k.rbox("satin", [0.56, 0.9, 0.56], 0.015, [0, 0.5, 0], "#f5f2ec");
-  k.box("satin", [0.585, 0.02, 0.585], [0, 0.96, 0], "#faf8f3");
-  for (const s of [-1, 1]) {
-    k.box("brass", [0.59, 0.012, 0.012], [0, 0.944, s * 0.293], "#ffffff");
-    k.box("brass", [0.012, 0.012, 0.59], [s * 0.293, 0.944, 0], "#ffffff");
-  }
-  // The photo's mount (a cutout stands on the pedestal itself).
-  if (cutout) return;
-  k.rbox("glass", [0.4, 0.05, 0.16], 0.01, [0, 0.995, 0]);
-  k.box("satin", [0.54, 0.54, 0.02], [0, 1.26, -0.02], "#ffffff", [-0.08, 0, 0]);
+/** A roll-up banner's stand: the cassette at the foot, the pole behind and the rail along the top. */
+function banner(k: Kit, w = 0.85, h = 2.05) {
+  k.rbox("metal", [w + 0.07, 0.09, 0.2], 0.03, [0, 0.07, 0], "#cfd3d6");
+  for (const s of [-1, 1]) k.box("metal", [0.04, 0.02, 0.42], [s * (w / 2 - 0.05), 0.01, -0.02], "#9aa0a3", [0, s * 0.25, 0]);
+  k.cyl("metal", 0.012, 0.012, h + 0.03, [0, 0.12 + h / 2, -0.04], "#9aa0a3", 8);
+  k.cyl("metal", 0.016, 0.016, w + 0.05, [0, 0.14 + h, 0], "#cfd3d6", 10, [0, 0, Math.PI / 2]);
 }
 
 /** Every display's furniture in one go, plus the hall's ceiling lights. */
@@ -381,14 +391,12 @@ function useHallFurniture(hall: Hall, accent: string) {
   return useMemo(() => {
     const k = new Kit();
     hall.items.forEach((item, i) => {
-      const cutout = Boolean(item.product.cutout_url) && item.product.media_type === "image";
+      const board = boardSize(item.kind);
       k.place([item.x, 0, item.z], item.rotY, () => {
-        if (item.kind === "wear") mannequin(k, cutout);
-        else if (item.kind === "shoes") riser(k, cutout);
+        if (board) banner(k, BOARDS[board].w, BOARDS[board].h);
         else if (item.kind === "food") table(k, accent);
         else if (item.kind === "home") house(k, i);
-        else if (item.kind === "video") banner(k);
-        else pedestal(k, cutout);
+        else banner(k);
       });
     });
     return k.build();
@@ -405,14 +413,13 @@ function ProductDisplay({ item, accent, focused, onPick }: { item: HallItem; acc
     const dz = e.camera.position.z - item.z;
     onPick(item, dx * dx + dz * dz > 5 * 5);
   });
+  const board = boardSize(item.kind);
   return (
     <group position={[item.x, 0, item.z]} rotation-y={item.rotY} onClick={onClick} {...hover.handlers}>
-      {item.kind === "wear" && <Wear item={item} />}
-      {item.kind === "shoes" && <OnRiser item={item} accent={accent} />}
+      {board && <PhotoBoard item={item} accent={accent} size={board} />}
       {item.kind === "food" && <Plate item={item} accent={accent} />}
       {item.kind === "home" && <Listing item={item} accent={accent} />}
       {item.kind === "video" && <Banner item={item} accent={accent} focused={focused} />}
-      {item.kind === "item" && <OnPedestal item={item} accent={accent} />}
       {/* The area that takes the tap. */}
       <mesh position={HIT[item.kind].at} visible={false}>
         <boxGeometry args={HIT[item.kind].size} />
@@ -422,84 +429,14 @@ function ProductDisplay({ item, accent, focused, onPick }: { item: HallItem; acc
 }
 
 const HIT: Record<DisplayKind, { at: Vec; size: Vec }> = {
-  wear: { at: [0, 1.0, 0], size: [0.9, 2.0, 0.9] },
-  shoes: { at: [0, 0.5, 0], size: [0.8, 1.0, 0.7] },
+  wear: { at: [0, 1.1, 0], size: [0.95, 2.2, 0.3] },
+  hair: { at: [0, 1.1, 0], size: [0.95, 2.2, 0.3] },
+  shoes: { at: [0, 0.72, 0], size: [0.7, 1.45, 0.3] },
+  item: { at: [0, 0.72, 0], size: [0.7, 1.45, 0.3] },
   food: { at: [0, 0.6, 0], size: [1.3, 1.2, 1.3] },
   home: { at: [0, 1.0, -0.2], size: [1.2, 2.1, 1.5] },
   video: { at: [0, 1.1, 0], size: [0.95, 2.2, 0.3] },
-  item: { at: [0, 0.8, 0], size: [0.7, 1.6, 0.7] },
 };
-
-/** The product's 3D cutout, when it has one (and it's a photo). */
-const cutoutOf = (item: HallItem) => (item.product.media_type === "image" ? (item.product.cutout_url ?? null) : null);
-
-/**
- * Clothes: the cutout photo standing in the shop like a mockup (a model full
- * height, clothes on their own at the height they're worn); without a cutout,
- * the photo on a poster stand.
- */
-function Wear({ item }: { item: HallItem }) {
-  const url = cutoutOf(item);
-  const poster = <PhotoPlane item={item} size={[0.78, 1.04]} position={[0, 1.25, 0.017]} />;
-  return (
-    <>
-      {url ? <WornFigure url={url} at={[item.x, item.z]} fallback={poster} /> : poster}
-      {!url && <FloorShadow size={[1.0, 0.6]} position={[0, 0]} opacity={0.4} />}
-      <NameAbove item={item} />
-    </>
-  );
-}
-
-/** The product's name floating above it, like the signs in a boutique window. */
-function NameAbove({ item }: { item: HallItem }) {
-  const invalidate = useThree((s) => s.invalidate);
-  const [near, setNear] = useState(false);
-  useFrame(({ camera }) => {
-    if (near) return;
-    const dx = camera.position.x - item.x;
-    const dz = camera.position.z - item.z;
-    if (dx * dx + dz * dz < NEAR * NEAR) setNear(true);
-  });
-  const texture = useMemo(() => {
-    if (!near) return null;
-    const { c, ctx } = canvas(512, 160);
-    const display = fontFamily("display");
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = "#1c211e";
-    let name = item.product.title;
-    fitText(ctx, name, 480, 56, 800, display);
-    while (ctx.measureText(name).width > 480 && name.length > 4) name = `${name.slice(0, -2).trimEnd()}…`;
-    ctx.fillText(name, 256, 56);
-    const price = priceOf(item);
-    ctx.font = `600 38px ${display}`;
-    ctx.fillStyle = "#4b524e";
-    ctx.fillText(price ?? "Ask for price", 256, 120);
-    return toTexture(c);
-  }, [near, item]);
-  useDispose(texture);
-  useEffect(() => invalidate(), [texture, invalidate]);
-  if (!texture) return null;
-  return (
-    <mesh position={[0, 2.12, 0]}>
-      <planeGeometry args={[0.85, 0.265]} />
-      <meshBasicMaterial map={texture} transparent toneMapped={false} />
-    </mesh>
-  );
-}
-
-/** Shoes and bags: the 3D cutout on the top step, or the photo leaning on the lower one. */
-function OnRiser({ item, accent }: { item: HallItem; accent: string }) {
-  const url = cutoutOf(item);
-  const photo = <PhotoPlane item={item} size={[0.3, 0.3]} position={[0, 0.62, 0.15]} rotation={[-0.25, 0, 0]} aspect={1} />;
-  return (
-    <>
-      {url ? <CutoutFigure url={url} at={[item.x, item.z]} base={0.81} maxW={0.44} maxH={0.4} z={-0.08} fallback={photo} /> : photo}
-      <Tag item={item} accent={accent} position={[0, 0.25, 0.302]} rotation={[0, 0, 0]} />
-      <FloorShadow size={[1.0, 0.85]} position={[0, 0]} opacity={0.5} />
-    </>
-  );
-}
 
 function Plate({ item, accent }: { item: HallItem; accent: string }) {
   return (
@@ -550,15 +487,20 @@ function Banner({ item, accent, focused }: { item: HallItem; accent: string; foc
   );
 }
 
-function OnPedestal({ item, accent }: { item: HallItem; accent: string }) {
-  const url = cutoutOf(item);
-  const photo = <PhotoPlane item={item} size={[0.48, 0.48]} position={[0, 1.26, -0.008]} rotation={[-0.08, 0, 0]} />;
+/** A product's photo on a clean roll-up board, large (clothes, hair) or small (shoes, bags, everything else). */
+function PhotoBoard({ item, accent, size }: { item: HallItem; accent: string; size: BoardSize }) {
+  const print = useMemo(() => photoBoardTexture(size, item.product.title, priceOf(item), accent), [size, item, accent]);
+  useDispose(print);
+  const b = BOARDS[size];
+  const photoH = b.h - b.head - b.foot;
   return (
     <>
-      {/* The product itself standing on the pedestal, when it has a 3D cutout. */}
-      {url ? <CutoutFigure url={url} at={[item.x, item.z]} base={0.97} maxW={0.46} maxH={0.55} fallback={photo} /> : photo}
-      <Tag item={item} accent={accent} position={[0, 0.72, 0.282]} rotation={[0, 0, 0]} />
-      <FloorShadow size={[0.95, 0.95]} position={[0, 0]} opacity={0.5} />
+      <mesh position={[0, b.base + b.h / 2, 0]} castShadow>
+        <planeGeometry args={[b.w, b.h]} />
+        <meshBasicMaterial map={print} toneMapped={false} side={THREE.DoubleSide} />
+      </mesh>
+      <PhotoPlane item={item} size={[b.w - 2 * b.side, photoH]} position={[0, b.base + b.h - b.head - photoH / 2, 0.004]} />
+      <FloorShadow size={[b.w + 0.35, 0.6]} position={[0, 0]} opacity={0.45} />
     </>
   );
 }

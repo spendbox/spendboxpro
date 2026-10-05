@@ -30,3 +30,15 @@ test("shoes and bags stand on a riser", () => {
   assert.equal(guessDisplay(image("Leather tote bag")), "shoes");
   assert.equal(guessDisplay(image("New in"), ["Shoes & bags"]), "shoes");
 });
+
+test("hair and beauty get their own large boards", () => {
+  assert.equal(guessDisplay(image("Bone straight wig, 24 inches")), "hair");
+  assert.equal(guessDisplay(image("Knotless braids")), "hair");
+  assert.equal(guessDisplay(image("New look"), ["Hair salon"]), "hair");
+});
+
+test("clothes, shoes and hair are never put on a food table, even at a bakery", () => {
+  assert.equal(guessDisplay(image("Coffee brown gown")), "wear");
+  assert.equal(guessDisplay(image("Chocolate leather loafers")), "shoes");
+  assert.equal(guessDisplay(image("Honey blonde wig"), ["Bakery & cakes"]), "hair");
+});

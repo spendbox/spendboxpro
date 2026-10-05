@@ -132,7 +132,7 @@ export default async function ProductsTab({ params, searchParams }: PageProps<"/
           }}
           products={products
             .filter((p) => p.is_active)
-            .map((p) => ({ id: p.id, title: p.title, price: p.price, currency: p.currency, media_type: p.media_type, media_url: p.media_url, poster_url: p.poster_url, description: p.description, cutout_url: p.cutout_url }))}
+            .map((p) => ({ id: p.id, title: p.title, price: p.price, currency: p.currency, media_type: p.media_type, media_url: p.media_url, poster_url: p.poster_url, description: p.description }))}
         />
       ) : (
         <>

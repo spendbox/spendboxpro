@@ -1,23 +1,18 @@
 "use client";
 
-import { Check, CircleAlert, ImagePlus, LoaderCircle, Plus, Trash2, X } from "lucide-react";
+import { Check, CircleAlert, ImagePlus, LoaderCircle, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { createProduct, prepareProductUpload } from "@/app/dashboard/[bizId]/product-actions";
 import { Button, buttonClass } from "@/components/ui/button";
 import { FormMessage } from "@/components/ui/field";
 import { WhatsAppIcon } from "@/components/ui/share-actions";
-import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/cn";
 import { formatMoney } from "@/lib/format";
 import type { ProductKind } from "@/lib/types";
-import { makeCutout } from "./cutout";
-import { CHECKER } from "./cutout-preview";
 import { prepareMedia, uploadToSignedUrl, type PreparedMedia } from "./media";
 
 const MAX_AT_ONCE = 30;
-
-type Cut = { status: "working" } | { status: "ready"; file: File; url: string } | { status: "failed" };
 
 interface Draft {
   key: string;
@@ -27,7 +22,6 @@ interface Draft {
   description: string;
   price: string;
   selected: boolean;
-  useCut: boolean;
   status: "draft" | "posting" | "done" | "error";
   error?: string;
 }
@@ -50,7 +44,6 @@ const digitsOf = (v: string) => v.replace(/\D/g, "").slice(0, 10);
  */
 export function BulkComposer({ bizId, businessName, joinUrl }: { bizId: string; businessName: string; joinUrl: string }) {
   const [drafts, setDrafts] = useState<Draft[]>([]);
-  const [cuts, setCuts] = useState<Record<string, Cut>>({});
   const [reading, setReading] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
@@ -80,21 +73,8 @@ export function BulkComposer({ bizId, businessName, joinUrl }: { bizId: string; 
         const key = crypto.randomUUID();
         setDrafts((d) => [
           ...d,
-          { key, media, kind: "product", title: nameFromFile(file.name), description: "", price: "", selected: true, useCut: true, status: "draft" },
+          { key, media, kind: "product", title: nameFromFile(file.name), description: "", price: "", selected: true, status: "draft" },
         ]);
-        // Cut photos out of their backgrounds for the 3D shop, while they type.
-        if (media.type === "image") {
-          setCuts((c) => ({ ...c, [key]: { status: "working" } }));
-          void makeCutout(media.file)
-            .then((cut) => {
-              if (!cut) return setCuts((c) => ({ ...c, [key]: { status: "failed" } }));
-              const f = new File([cut.blob], "cutout.png", { type: "image/png" });
-              const url = URL.createObjectURL(f);
-              urls.current.push(url);
-              setCuts((c) => ({ ...c, [key]: { status: "ready", file: f, url } }));
-            })
-            .catch(() => setCuts((c) => ({ ...c, [key]: { status: "failed" } })));
-        }
       } catch (e) {
         problems.push(`${file.name}: ${(e as Error).message}`);
       }
@@ -129,13 +109,10 @@ export function BulkComposer({ bizId, businessName, joinUrl }: { bizId: string; 
     for (const d of todo) {
       update(d.key, { status: "posting", error: undefined });
       try {
-        const cut = cuts[d.key];
-        const cutFile = d.useCut && cut?.status === "ready" ? cut.file : null;
-        const ticket = await prepareProductUpload(bizId, d.media.type, d.media.file.type, Boolean(cutFile));
+        const ticket = await prepareProductUpload(bizId, d.media.type, d.media.file.type);
         if (!ticket.ok) throw new Error(ticket.error);
         await uploadToSignedUrl(ticket.media.signedUrl, d.media.file);
         if (ticket.poster && d.media.poster) await uploadToSignedUrl(ticket.poster.signedUrl, d.media.poster);
-        const cutOk = ticket.cutout && cutFile ? await uploadToSignedUrl(ticket.cutout.signedUrl, cutFile).then(() => true, () => false) : false;
         const r = await createProduct(bizId, {
           kind: d.kind,
           title: d.title,
@@ -144,7 +121,6 @@ export function BulkComposer({ bizId, businessName, joinUrl }: { bizId: string; 
           mediaType: d.media.type,
           mediaPath: ticket.media.path,
           posterPath: ticket.poster && d.media.poster ? ticket.poster.path : null,
-          cutoutPath: cutOk && ticket.cutout ? ticket.cutout.path : null,
         });
         if (!r.ok) throw new Error(r.error);
         update(d.key, { status: "done" });
@@ -207,7 +183,6 @@ export function BulkComposer({ bizId, businessName, joinUrl }: { bizId: string; 
             className={buttonClass({ variant: "secondary" })}
             onClick={() => {
               setDrafts([]);
-              setCuts({});
               setFinished(false);
               setShareNote(null);
             }}
@@ -311,7 +286,6 @@ export function BulkComposer({ bizId, businessName, joinUrl }: { bizId: string; 
             key={d.key}
             draft={d}
             index={i}
-            cut={cuts[d.key]}
             disabled={posting}
             onChange={(patch) => update(d.key, { ...patch, ...(d.status === "error" ? { status: "draft", error: undefined } : {}) })}
             onRemove={() => setDrafts((list) => list.filter((x) => x.key !== d.key))}
@@ -336,14 +310,12 @@ export function BulkComposer({ bizId, businessName, joinUrl }: { bizId: string; 
 function DraftCard({
   draft: d,
   index,
-  cut,
   disabled,
   onChange,
   onRemove,
 }: {
   draft: Draft;
   index: number;
-  cut: Cut | undefined;
   disabled: boolean;
   onChange: (patch: Partial<Draft>) => void;
   onRemove: () => void;
@@ -436,22 +408,6 @@ function DraftCard({
           onChange={(e) => onChange({ description: e.target.value })}
           className="rounded-xl border border-line-strong px-3 py-2 text-[15px] outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/10"
         />
-        {cut && (
-          <div className="flex items-center gap-2 text-xs text-muted">
-            <span className={cn("flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg ring-1 ring-line", CHECKER)}>
-              {cut.status === "working" && <LoaderCircle className="size-4 animate-spin" aria-hidden />}
-              {cut.status === "ready" && (
-                // eslint-disable-next-line @next/next/no-img-element -- a local preview
-                <img src={cut.url} alt="" className="size-full object-contain" />
-              )}
-              {cut.status === "failed" && <X className="size-4" aria-hidden />}
-            </span>
-            <span className="flex-1">
-              {cut.status === "working" ? "Making the 3D cutout…" : cut.status === "ready" ? "3D cutout for your shop" : "Background too busy for a 3D cutout; it shows as a photo"}
-            </span>
-            {cut.status === "ready" && <Switch checked={d.useCut} disabled={locked} label={`Use the 3D cutout for item ${index + 1}`} onChange={(useCut) => onChange({ useCut })} />}
-          </div>
-        )}
         {d.error && (
           <p className="flex items-center gap-1.5 text-sm font-semibold text-red-700">
             <CircleAlert className="size-4" aria-hidden /> {d.error}
