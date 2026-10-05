@@ -1,8 +1,8 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, DoorOpen, Gift, Info, LayoutGrid, Mail, MapPin, Maximize2, Phone, Share2, UserPlus, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, DoorOpen, Expand, Gift, Home, Info, LayoutGrid, Mail, MapPin, Maximize2, Phone, Play, Share2, UserPlus, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { JoinWizard } from "@/components/join/join-wizard";
 import { PerkCard } from "@/components/perks/perk-card";
 import { ProductViewer } from "@/components/products/product-viewer";
@@ -10,9 +10,10 @@ import { BusinessAvatar } from "@/components/ui/avatar";
 import { WhatsAppIcon } from "@/components/ui/share-actions";
 import type { ShopPerk } from "@/lib/actions/shop";
 import { cn } from "@/lib/cn";
-import { whatsappLink } from "@/lib/format";
+import { formatMoney, whatsappLink } from "@/lib/format";
 import type { StoreTheme } from "@/lib/store-theme";
 import type { FeedProduct, StoreProduct } from "@/lib/types";
+import { layoutHall } from "./three/store/hall";
 import type { StoreApi } from "./three/store/look-controls";
 import type { StoreBusiness, StoreTarget } from "./three/store/pieces";
 import StoreCanvas from "./three/store/store-canvas";
@@ -88,6 +89,10 @@ export default function StoreView({
   const [viewing, setViewing] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
   const [hint, setHint] = useState(true);
+  const [focused, setFocused] = useState<string | null>(null);
+  const hall = useMemo(() => layoutHall(products, theme.displays, business.categories), [products, theme.displays, business.categories]);
+  const focusIndex = hall.items.findIndex((i) => i.product.id === focused);
+  const focusItem = focusIndex >= 0 ? hall.items[focusIndex]! : null;
   const member = business.is_member || join?.state === "member";
 
   const openProduct = (id: string) => {
@@ -102,8 +107,14 @@ export default function StoreView({
   const select = (target: StoreTarget) => {
     if (mode === "preview") return;
     setHint(false);
-    if (target.kind === "product") openProduct(target.id);
-    else if (target.kind === "more") {
+    if (target.kind === "product") {
+      // From the hall: the first tap walks up to it, the second opens it full
+      // screen. A video tapped from far away opens straight away.
+      if (target.from !== "hall") return openProduct(target.id);
+      const item = hall.items.find((i) => i.product.id === target.id);
+      if (focused === target.id || (item?.product.media_type === "video" && target.far)) return openProduct(target.id);
+      setFocused(target.id);
+    } else if (target.kind === "more") {
       if (products[0]) openProduct(products[0].id);
     } else if (target.kind === "bell") setSheet("contact");
     else if (target.kind === "board") setSheet("about");
@@ -123,10 +134,13 @@ export default function StoreView({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         if (sheet) setSheet(null);
+        else if (focused) setFocused(null);
         else onClose?.();
       }
       if (e.key === "ArrowLeft") api.current?.look(-1);
       if (e.key === "ArrowRight") api.current?.look(1);
+      if (e.key === "ArrowUp") api.current?.walk(1);
+      if (e.key === "ArrowDown") api.current?.walk(-1);
     };
     window.addEventListener("keydown", onKey);
     const previous = document.body.style.overflow;
@@ -135,7 +149,17 @@ export default function StoreView({
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = previous;
     };
-  }, [full, inline, sheet, viewing, joining, onClose]);
+  }, [full, inline, sheet, viewing, joining, onClose, focused]);
+
+  /** Walks to the next (1) or previous (-1) product down the hall. */
+  const step = (d: number) => {
+    const next = hall.items[(focusIndex + d + hall.items.length) % hall.items.length];
+    if (next) setFocused(next.product.id);
+  };
+  const stepBack = () => {
+    setFocused(null);
+    api.current?.walk(-1);
+  };
 
   const share = async () => {
     if (!shareUrl) return;
@@ -195,7 +219,7 @@ export default function StoreView({
       className={cn("overflow-hidden bg-ink text-white", full && !inline ? "fixed inset-0 z-[75] h-dvh" : "relative size-full rounded-3xl")}
     >
       <div className="absolute inset-0">
-        <StoreCanvas business={business} theme={theme} products={products} onSelect={select} apiRef={api} hasGift={perks.length > 0} partners={partners.length} />
+        <StoreCanvas business={business} theme={theme} products={products} onSelect={select} apiRef={api} hasGift={perks.length > 0} partners={partners.length} focusedId={full ? focused : null} />
       </div>
 
       {full && (
@@ -231,11 +255,11 @@ export default function StoreView({
           <div
             aria-hidden
             className={cn(
-              "pointer-events-none absolute bottom-24 left-1/2 -translate-x-1/2 rounded-full bg-black/55 px-4 py-2 text-sm font-semibold whitespace-nowrap backdrop-blur transition-opacity duration-500",
+              "pointer-events-none absolute bottom-36 left-1/2 -translate-x-1/2 rounded-full bg-black/55 px-4 py-2 text-sm font-semibold whitespace-nowrap backdrop-blur transition-opacity duration-500",
               hint ? "opacity-100" : "opacity-0",
             )}
           >
-            {perks.length ? "Tap a product on the screen, or the gift" : "Drag to look around · tap a product on the screen"}
+            {hall.items.length ? `Turn around: ${hall.items.length} products behind you` : perks.length ? "Tap a product on the screen, or the gift" : "Drag to look around · tap a product on the screen"}
           </div>
 
           <button type="button" aria-label="Look left" onClick={() => api.current?.look(-1)} className="absolute top-1/2 left-3 hidden size-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/35 backdrop-blur hover:bg-black/50 sm:flex">
@@ -245,8 +269,56 @@ export default function StoreView({
             <ChevronRight className="size-5" aria-hidden />
           </button>
 
+          {/* The product being looked at, up close */}
+          {focusItem && (
+            <div className="absolute inset-x-0 bottom-0 flex justify-center bg-gradient-to-t from-black/55 to-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+              <section aria-label={focusItem.product.title} className="flex w-full max-w-md animate-fade-up flex-col gap-3 rounded-3xl bg-white p-4 text-ink shadow-lift">
+                <div className="flex items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <h2 className="font-display text-lg leading-tight font-bold">{focusItem.product.title}</h2>
+                    <p className="mt-0.5 font-semibold text-brand-700">{focusItem.product.price != null ? formatMoney(focusItem.product.price, focusItem.product.currency) : "Ask for price"}</p>
+                    {focusItem.product.description && <p className="mt-1 line-clamp-2 text-sm text-ink-2">{focusItem.product.description}</p>}
+                  </div>
+                  <button type="button" onClick={stepBack} aria-label="Step back" className="flex size-9 shrink-0 items-center justify-center rounded-full bg-canvas">
+                    <X className="size-4" aria-hidden />
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => step(-1)} aria-label="Previous product" className="flex size-11 shrink-0 items-center justify-center rounded-full bg-canvas">
+                    <ChevronLeft className="size-5" aria-hidden />
+                  </button>
+                  <button type="button" onClick={() => openProduct(focusItem.product.id)} className="flex h-11 flex-1 items-center justify-center gap-2 rounded-full bg-brand-600 text-sm font-semibold text-white">
+                    {focusItem.product.media_type === "video" ? <Play className="size-4" aria-hidden /> : <Expand className="size-4" aria-hidden />}
+                    {focusItem.product.media_type === "video" ? "Watch full screen" : "See full screen"}
+                  </button>
+                  <button type="button" onClick={() => step(1)} aria-label="Next product" className="flex size-11 shrink-0 items-center justify-center rounded-full bg-canvas">
+                    <ChevronRight className="size-5" aria-hidden />
+                  </button>
+                </div>
+                <p className="-mt-1 text-center text-xs text-muted">
+                  {focusIndex + 1} of {hall.items.length} · tap it again to see it full screen
+                </p>
+              </section>
+            </div>
+          )}
+
+          {/* Sections of the hall, to walk straight to */}
+          {!focusItem && hall.sections.length > 0 && (
+            <nav aria-label="Walk to" className="absolute inset-x-0 bottom-[max(4.75rem,calc(env(safe-area-inset-bottom)+4rem))] flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:justify-center">
+              <button type="button" onClick={() => api.current?.home()} className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-black/45 px-3 text-xs font-semibold backdrop-blur">
+                <Home className="size-3.5" aria-hidden /> Counter
+              </button>
+              {hall.sections.map((sec) => (
+                <button key={sec.kind} type="button" onClick={() => api.current?.flyTo(sec.view)} className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-black/45 px-3 text-xs font-semibold backdrop-blur">
+                  {sec.label}
+                  <span className="rounded-full bg-white/20 px-1.5 tabular-nums">{sec.count}</span>
+                </button>
+              ))}
+            </nav>
+          )}
+
           {/* Bottom actions */}
-          <div className="absolute inset-x-0 bottom-0 flex flex-wrap justify-center gap-2 bg-gradient-to-t from-black/50 to-transparent p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <div className={cn("absolute inset-x-0 bottom-0 flex flex-wrap justify-center gap-2 bg-gradient-to-t from-black/50 to-transparent p-4 pb-[max(1rem,env(safe-area-inset-bottom))]", focusItem && "hidden")}>
             {joinButton}
             {mode !== "public" && products.length > 0 && (
               <ActionButton onClick={() => openProduct(products[0]!.id)}>
@@ -273,11 +345,11 @@ export default function StoreView({
             )}
           </div>
 
-          {/* Products, for screen readers and keyboards */}
+          {/* Products, for screen readers and keyboards: walks up to each, like a tap */}
           <ul className="sr-only" aria-label={`${business.name} products`}>
             {products.map((p) => (
               <li key={p.id}>
-                <button type="button" onClick={() => openProduct(p.id)}>
+                <button type="button" onClick={() => (hall.items.some((i) => i.product.id === p.id) ? setFocused(p.id) : openProduct(p.id))}>
                   {p.title}
                 </button>
               </li>

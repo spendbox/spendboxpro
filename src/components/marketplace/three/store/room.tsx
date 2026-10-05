@@ -1,14 +1,17 @@
 "use client";
 
+import type { ThreeEvent } from "@react-three/fiber";
 import { useMemo } from "react";
+import * as THREE from "three";
 import type { BackdropStyle, StoreTheme } from "@/lib/store-theme";
 import { mix } from "../geometry";
 import { useDispose } from "../hooks";
 import { shade } from "../textures";
+import { FRONT } from "./hall";
 import { Built, Kit } from "./kit";
 import { BACK, COUNTER_Z, D, H, W } from "./layout";
 import { brick, floorSurface, softShadow } from "./surfaces";
-import { Tappable } from "./tap";
+import { Tappable, tap } from "./tap";
 
 // The shop itself: panelled walls, a feature wall behind the product screen,
 // a marble counter with a fluted front, sideboards, and the glass door and
@@ -61,25 +64,48 @@ export function FloorShadow({ size, position, opacity = 0.6, rotation = 0 }: { s
   );
 }
 
-export function Room({ theme, accent, onFloor, onWalls }: { theme: StoreTheme; accent: string; onFloor?: () => void; onWalls?: () => void }) {
+/** A plane lying on the floor (or ceiling) from the back wall to `end`, its pattern repeating at the shop's usual scale. */
+function useLengthPlane(end: number) {
+  const plane = useMemo(() => {
+    const len = end - BACK;
+    const g = new THREE.PlaneGeometry(W, len);
+    const uv = g.attributes.uv!;
+    for (let i = 0; i < uv.count; i++) uv.setY(i, uv.getY(i) * (len / (D + 4)));
+    return g;
+  }, [end]);
+  useDispose(plane);
+  return plane;
+}
+
+/**
+ * The shop's walls, floor and ceiling. They run from the back wall to `end`:
+ * the far wall of the product hall, which grows as products are added.
+ */
+export function Room({ theme, accent, end = FRONT + 2.2, onFloor, onWalls, onWalk }: { theme: StoreTheme; accent: string; end?: number; onFloor?: () => void; onWalls?: () => void; onWalk?: (x: number, z: number) => void }) {
   const dark = theme.wall === "#2F3A34";
   const wall = theme.wall;
+  const len = end - BACK;
+  const mid = (BACK + end) / 2;
   const shell = useMemo(() => {
     const k = new Kit();
     const side = shade(wall, -0.025);
     k.box("matte", [W, H, 0.2], [0, H / 2, BACK - 0.1], wall);
-    k.box("matte", [0.2, H, D + 4], [-W / 2 - 0.1, H / 2, 2], side);
-    k.box("matte", [0.2, H, D + 4], [W / 2 + 0.1, H / 2, 2], side);
+    k.box("matte", [0.2, H, len], [-W / 2 - 0.1, H / 2, mid], side);
+    k.box("matte", [0.2, H, len], [W / 2 + 0.1, H / 2, mid], side);
+    // The far wall of the hall.
+    k.box("matte", [W + 0.4, H, 0.2], [0, H / 2, end + 0.1], wall);
     const panel = shade(wall, dark ? 0.04 : -0.04);
     wainscot(k, "x", -W / 2, -3.25, BACK + 0.015, panel);
     wainscot(k, "x", 3.25, W / 2, BACK + 0.015, panel);
+    wainscot(k, "x", -W / 2, W / 2, end - 0.015, panel);
     wainscot(k, "z", BACK, 0.75, -W / 2 + 0.015, panel);
-    wainscot(k, "z", 2.45, D / 2 + 2, -W / 2 + 0.015, panel);
-    wainscot(k, "z", BACK, D / 2 + 2, W / 2 - 0.015, panel);
+    wainscot(k, "z", 2.45, end, -W / 2 + 0.015, panel);
+    wainscot(k, "z", BACK, end, W / 2 - 0.015, panel);
     // Crown moulding.
     k.rbox("satin", [W, 0.14, 0.12], 0.03, [0, H - 0.07, BACK + 0.06], shade(wall, 0.03));
-    k.rbox("satin", [0.12, 0.14, D + 4], 0.03, [-W / 2 + 0.06, H - 0.07, 2], shade(wall, 0.03));
-    k.rbox("satin", [0.12, 0.14, D + 4], 0.03, [W / 2 - 0.06, H - 0.07, 2], shade(wall, 0.03));
+    k.rbox("satin", [W, 0.14, 0.12], 0.03, [0, H - 0.07, end - 0.06], shade(wall, 0.03));
+    k.rbox("satin", [0.12, 0.14, len], 0.03, [-W / 2 + 0.06, H - 0.07, mid], shade(wall, 0.03));
+    k.rbox("satin", [0.12, 0.14, len], 0.03, [W / 2 - 0.06, H - 0.07, mid], shade(wall, 0.03));
     // The entrance: black steel door and window frames, and a mat.
     const steel = "#232625";
     for (const [z, w, y0, y1] of [
@@ -97,7 +123,8 @@ export function Room({ theme, accent, onFloor, onWalls }: { theme: StoreTheme; a
     k.cyl("brass", 0.018, 0.018, 0.5, [-W / 2 + 0.12, 1.1, 1.0], "#ffffff", 10);
     k.rbox("fabric", [1.0, 0.025, 1.4], 0.01, [-W / 2 + 0.75, 0.012, 1.6], shade(accent, -0.25));
     return k.build();
-  }, [wall, dark, accent]);
+  }, [wall, dark, accent, end, len, mid]);
+  const plane = useLengthPlane(end);
 
   const floor = useMemo(() => floorSurface(theme.floor.style, theme.floor.color), [theme.floor.style, theme.floor.color]);
   useDispose(floor);
@@ -106,16 +133,21 @@ export function Room({ theme, accent, onFloor, onWalls }: { theme: StoreTheme; a
   return (
     <>
       <Tappable onTap={onFloor}>
-        <mesh rotation-x={-Math.PI / 2} position-z={2} receiveShadow>
-          <planeGeometry args={[W, D + 4]} />
+        <mesh
+          rotation-x={-Math.PI / 2}
+          position-z={mid}
+          geometry={plane}
+          receiveShadow
+          // Visitors tap the floor to walk there.
+          onClick={onWalk && !onFloor ? tap((e: ThreeEvent<MouseEvent>) => onWalk(e.point.x, e.point.z)) : undefined}
+        >
           <meshStandardMaterial map={floor} roughness={wood ? 0.5 : theme.floor.style === "concrete" ? 0.6 : 0.2} />
         </mesh>
       </Tappable>
       <Tappable onTap={onWalls}>
         <Built parts={shell} shadows={false} />
       </Tappable>
-      <mesh rotation-x={Math.PI / 2} position={[0, H, 2]}>
-        <planeGeometry args={[W, D + 4]} />
+      <mesh rotation-x={Math.PI / 2} position={[0, H, mid]} geometry={plane}>
         <meshStandardMaterial color={dark ? "#2a332e" : "#fbfaf7"} roughness={1} />
       </mesh>
       {/* Daylight outside the door and window. */}

@@ -25,6 +25,7 @@ MARKERS=(
   "20261016000000_shop_gift.sql|coalesce(pg_get_functiondef(to_regprocedure('public.public_store(text)')), '') like '%''perks''%'"
   "20261017000000_plug_partners.sql|to_regprocedure('public.plug_partners(uuid)') is not null"
   "20261018000000_customer_invites.sql|to_regprocedure('public.claim_inviter(uuid,text)') is not null"
+  "20261019000000_shop_hall.sql|coalesce(pg_get_functiondef(to_regprocedure('public.public_store(text)')), '') like '%limit 400%'"
 )
 
 listed=$(printf '%s\n' "${MARKERS[@]}" | cut -d'|' -f1 | sort)

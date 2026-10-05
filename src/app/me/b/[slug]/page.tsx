@@ -17,6 +17,7 @@ import { getMyMemberships, getMyRewards, getPlugPartners } from "@/lib/customer"
 import { siteUrl } from "@/lib/env";
 import { businessTagline, formatMonthYear, memberNo, whatsappLink } from "@/lib/format";
 import { durationSentence, PERK_KINDS, perkTrigger, SIMPLE_PERK_KINDS, sortBySoonest } from "@/lib/perks";
+import { getShopPerks } from "@/lib/actions/shop";
 import { getExplore } from "@/lib/products";
 import { readTheme } from "@/lib/store-theme";
 import { createClient } from "@/lib/supabase/server";
@@ -54,7 +55,14 @@ export default async function PlugPage({ params, searchParams }: PageProps<"/me/
 
   // Partners and referrals together, in one round trip's time.
   const supabase = await createClient();
-  const [partners, { data: referralData }] = await Promise.all([getPlugPartners(b.id), supabase.rpc("my_referrals", { p_membership_id: membership.id })]);
+  const [partners, { data: referralData }, shop] = await Promise.all([
+    getPlugPartners(b.id),
+    supabase.rpc("my_referrals", { p_membership_id: membership.id }),
+    // The 3D shop's hall shows every product, not only the newest in the feed.
+    in3d ? getShopPerks(b.slug) : null,
+  ]);
+  const feedForShop = products.map((p) => ({ id: p.id, title: p.title, price: p.price, currency: p.currency, media_type: p.media_type, media_url: p.media_url, poster_url: p.poster_url, description: p.description, viewed: p.viewed }));
+  const shopProducts = shop && shop.products.length > feedForShop.length ? shop.products : feedForShop;
   const friends = ((referralData ?? []) as ReferralRow[]).length;
   const inviteUrl = `${siteUrl()}/j/${b.slug}?ref=${membership.ref_code}`;
   const inviteMessage = welcomePerk ? `Join ${b.name} on Spendbox and get ${welcomePerk.title.toLowerCase()}:` : `${b.name} is my plug. Join them on Spendbox:`;
@@ -150,7 +158,7 @@ export default async function PlugPage({ params, searchParams }: PageProps<"/me/
             is_member: true,
           }}
           theme={readTheme(b.store_theme)}
-          products={products.map((p) => ({ id: p.id, title: p.title, price: p.price, currency: p.currency, media_type: p.media_type, media_url: p.media_url, poster_url: p.poster_url, viewed: p.viewed }))}
+          products={shopProducts}
           perks={perks.map((p) => ({ id: p.id, kind: p.kind, title: p.title, details: p.details, threshold: p.threshold, valid_days: p.valid_days ?? null }))}
           currency={b.currency}
           partners={partners}

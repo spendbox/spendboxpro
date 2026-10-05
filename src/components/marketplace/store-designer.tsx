@@ -26,8 +26,11 @@ export function StoreDesigner({
   saved,
   shareUrl,
   hasPerks,
+  startEditing = false,
 }: {
   bizId: string;
+  /** Open straight into the editor (from the "Design your 3D shop" step). */
+  startEditing?: boolean;
   business: StoreViewBusiness;
   products: StoreProduct[];
   saved: unknown;
@@ -35,7 +38,7 @@ export function StoreDesigner({
   hasPerks: boolean;
 }) {
   const [theme, setTheme] = useState<StoreTheme>(() => readTheme(saved));
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(startEditing);
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:items-start">
@@ -61,7 +64,7 @@ export function StoreDesigner({
             <div>
               <h2 className="font-semibold">Make it yours</h2>
               <p className="text-sm text-muted">
-                Open the editor and tap anything: the welcome board, the backdrop, plants, table, rug, lights, wall art, floor, counter and colours. Your newest products show on the screen by themselves.
+                Open the editor and tap anything: the welcome board, the backdrop, plants, table, rug, lights, wall art, floor, counter and colours. Every product gets its own display in the hall behind the counter (clothes on mannequins, food on tables, homes as model houses, videos on banners); tap one to change how it stands.
               </p>
             </div>
           </div>

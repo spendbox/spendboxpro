@@ -3,6 +3,8 @@
 // changes it. Anything unknown or missing falls back to the defaults, and
 // designs saved by older versions are read into the new shape.
 
+import { isDisplayKind, type DisplayKind } from "./product-display";
+
 export type FloorStyle = "oak" | "herringbone" | "checker" | "terrazzo" | "concrete" | "marble";
 export type LightStyle = "dome" | "globe" | "cone" | "rattan" | "linear";
 export type LightTone = "warm" | "neutral" | "cool";
@@ -37,6 +39,8 @@ export interface StoreTheme {
   rug: { style: RugStyle; color: string };
   /** Show the business's name on the front of the counter. */
   counterName: boolean;
+  /** How chosen products stand in the shop, by displayKey(product id); others are guessed. */
+  displays: Record<string, DisplayKind>;
 }
 
 export const THEMES = [
@@ -163,6 +167,7 @@ export const DEFAULT_THEME: StoreTheme = {
   backdrop: "oak",
   rug: { style: "border", color: RUG_COLORS[0] },
   counterName: true,
+  displays: {},
 };
 
 function oneOf<T extends string>(value: unknown, list: readonly { id: T }[], fallback: T): T {
@@ -238,7 +243,16 @@ export function readTheme(raw: unknown): StoreTheme {
     backdrop: oneOf(t.backdrop, BACKDROPS, d.backdrop),
     rug: { style: oneOf(r.style, RUGS, d.rug.style), color: typeof r.color === "string" && RUG_COLORS.includes(r.color) ? r.color : d.rug.color },
     counterName: typeof t.counterName === "boolean" ? t.counterName : d.counterName,
+    displays: readDisplays(t.displays),
   };
+}
+
+/** At most 120 chosen displays (the design is kept small). */
+function readDisplays(raw: unknown): Record<string, DisplayKind> {
+  const out: Record<string, DisplayKind> = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const [key, value] of Object.entries(raw).slice(0, 120)) if (/^[0-9a-f]{10}$/.test(key) && isDisplayKind(value)) out[key] = value;
+  return out;
 }
 
 /** The colour used for trim: the theme's accent, or the brand colour. */

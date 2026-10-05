@@ -1,12 +1,13 @@
 "use client";
 
 import { Canvas, useThree } from "@react-three/fiber";
-import { useEffect, type RefObject } from "react";
+import { useEffect, useMemo, useRef, type RefObject } from "react";
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-import { accentOf, type StoreTheme } from "@/lib/store-theme";
-import type { StoreProduct } from "@/lib/types";
+import { accentOf, LIGHT_TONES, type StoreTheme } from "@/lib/store-theme";
 import { shade } from "../textures";
+import { HallDisplays } from "./displays";
+import { layoutHall, type Hall, type HallProduct } from "./hall";
 import { MaterialsProvider } from "./kit";
 import { LookControls, type StoreApi } from "./look-controls";
 import { Lounge } from "./lounge";
@@ -38,6 +39,16 @@ function StudioLight({ intensity }: { intensity: number }) {
   return null;
 }
 
+/** Glides the camera up to the product being looked at. */
+function FocusCamera({ hall, focusedId, apiRef }: { hall: Hall; focusedId: string | null; apiRef: RefObject<StoreApi | null> }) {
+  useEffect(() => {
+    if (!focusedId) return;
+    const item = hall.items.find((i) => i.product.id === focusedId);
+    if (item) apiRef.current?.flyTo(item.view);
+  }, [hall, focusedId, apiRef]);
+  return null;
+}
+
 /**
  * A business's 3D store ("Boutique" theme), as React components. Shoppers can
  * tap products, the bell and the welcome board; with `editing` on (the
@@ -52,10 +63,11 @@ export default function StoreCanvas({
   editing = false,
   hasGift = false,
   partners = 0,
+  focusedId = null,
 }: {
   business: StoreBusiness;
   theme: StoreTheme;
-  products: StoreProduct[];
+  products: HallProduct[];
   onSelect: (target: StoreTarget) => void;
   apiRef?: RefObject<StoreApi | null>;
   editing?: boolean;
@@ -63,10 +75,17 @@ export default function StoreCanvas({
   hasGift?: boolean;
   /** How many partners the business has: a door to them appears at the back. */
   partners?: number;
+  /** The product the camera has glided up to. */
+  focusedId?: string | null;
 }) {
   const accent = accentOf(theme, business.brand_color);
   const dark = theme.wall === "#2F3A34";
   const warm = theme.lights.tone === "warm";
+  const ownApi = useRef<StoreApi | null>(null);
+  const api = apiRef ?? ownApi;
+  const hall = useMemo(() => layoutHall(products, theme.displays, business.categories), [products, theme.displays, business.categories]);
+  const glow = LIGHT_TONES.find((t) => t.id === theme.lights.tone)!.color;
+  const background = dark ? "#1d2420" : shade(theme.wall, -0.06);
   const pick = (target: StoreTarget) => (editing ? () => onSelect(target) : undefined);
   return (
     <Canvas
@@ -75,10 +94,12 @@ export default function StoreCanvas({
       shadows={{ type: THREE.PCFSoftShadowMap }}
       dpr={[1, 1.5]}
       gl={{ antialias: true, powerPreference: "high-performance", toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: dark ? 1.1 : 1.0 }}
-      camera={{ fov: 58, near: 0.3, far: 60, position: [0, 1.7, 8] }}
+      camera={{ fov: 58, near: 0.25, far: 90, position: [0, 1.7, 8] }}
       aria-label={`Inside ${business.name}`}
     >
-      <color attach="background" args={[dark ? "#1d2420" : shade(theme.wall, -0.06)]} />
+      <color attach="background" args={[background]} />
+      {/* A long hall fades softly into the distance. */}
+      {hall.end > 30 && <fog attach="fog" args={[background, 22, 60]} />}
       <StudioLight intensity={dark ? 0.45 : 0.6} />
       <hemisphereLight args={[warm ? "#fff1dc" : "#eef5ff", warm ? "#8a6a4a" : "#6c7a88", 0.45]} />
       {/* Daylight through the door and window, casting soft shadows. */}
@@ -98,9 +119,18 @@ export default function StoreCanvas({
         shadow-camera-near={1}
         shadow-camera-far={30}
       />
-      <LookControls lounge={theme.table !== "none"} apiRef={apiRef} />
+      <LookControls lounge={theme.table !== "none"} apiRef={api} end={hall.end} />
+      <FocusCamera hall={hall} focusedId={focusedId} apiRef={api} />
       <MaterialsProvider>
-        <Room theme={theme} accent={accent} onFloor={pick({ kind: "floor" })} onWalls={pick({ kind: "walls" })} />
+        <Room theme={theme} accent={accent} end={hall.end} onFloor={pick({ kind: "floor" })} onWalls={pick({ kind: "walls" })} onWalk={editing ? undefined : (x, z) => api.current?.walkTo(x, z)} />
+        <HallDisplays
+          hall={hall}
+          name={business.name}
+          accent={accent}
+          glow={glow}
+          focusedId={focusedId}
+          onPick={(item, far) => onSelect(editing ? { kind: "display", id: item.product.id } : { kind: "product", id: item.product.id, far, from: "hall" })}
+        />
         <Counter accent={accent} onTap={pick({ kind: "counter" })} />
         <Backdrop style={theme.backdrop} accent={accent} wall={theme.wall} onTap={pick({ kind: "backdrop" })} />
         <Furniture />
