@@ -416,11 +416,11 @@ export interface CategoryInfo {
 }
 
 /** A category's name and where it shows (the business's choice, or its usual place). */
-export function categoryInfo(id: string | null | undefined, custom: CustomCategory[] = [], placements: Record<string, Placement> = {}): CategoryInfo {
+export function categoryInfo(id: string | null | undefined, custom: CustomCategory[] = [], looks: Record<string, { placement?: Placement }> = {}): CategoryInfo {
   const own = id ? custom.find((c) => c.id === id) : undefined;
-  if (own) return { id: own.id, name: own.name, group: "product", placement: placements[own.id] ?? own.placement, wide: false, custom: true };
+  if (own) return { id: own.id, name: own.name, group: "product", placement: looks[own.id]?.placement ?? own.placement, wide: false, custom: true };
   const c = (id && BY_ID.get(id)) || BY_ID.get(OTHER.product)!;
-  return { id: c.id, name: c.name, group: c.group, placement: placements[c.id] ?? c.placement, wide: Boolean(c.wide), custom: false };
+  return { id: c.id, name: c.name, group: c.group, placement: looks[c.id]?.placement ?? c.placement, wide: Boolean(c.wide), custom: false };
 }
 
 export function isKnownCategory(id: string, custom: CustomCategory[] = []) {

@@ -61,10 +61,11 @@ export default async function PlugPage({ params, searchParams }: PageProps<"/me/
     // The 3D shop's hall shows every product, not only the newest in the feed.
     in3d ? getShopPerks(b.slug) : null,
   ]);
-  const feedForShop = products.map((p) => ({ id: p.id, title: p.title, price: p.price, currency: p.currency, media_type: p.media_type, media_url: p.media_url, poster_url: p.poster_url, description: p.description, category: p.category, kind: p.kind, viewed: p.viewed }));
+  const feedForShop = products.map((p) => ({ id: p.id, title: p.title, price: p.price, currency: p.currency, media_type: p.media_type, media_url: p.media_url, poster_url: p.poster_url, description: p.description, category: p.category, kind: p.kind, media_aspect: p.media_aspect, viewed: p.viewed }));
   const shopProducts = shop && shop.products.length > feedForShop.length ? shop.products : feedForShop;
   const friends = ((referralData ?? []) as ReferralRow[]).length;
-  const inviteUrl = `${siteUrl()}/j/${b.slug}?ref=${membership.ref_code}`;
+  // Friends get the 3D shop (with the invite code, so the invite perk still counts).
+  const inviteUrl = `${siteUrl()}/s/${b.slug}?ref=${membership.ref_code}`;
   const inviteMessage = welcomePerk ? `Join ${b.name} on Spendbox and get ${welcomePerk.title.toLowerCase()}:` : `${b.name} is my plug. Join them on Spendbox:`;
 
   return (

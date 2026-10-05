@@ -13,6 +13,7 @@ export interface StoredDraft {
   fileName: string;
   fileType: string;
   poster: Blob | null;
+  aspect?: number | null;
   kind: "product" | "service";
   title: string;
   description: string;

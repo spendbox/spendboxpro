@@ -54,7 +54,9 @@ export type StoreTarget =
   | { kind: "gift" }
   | { kind: "partners" }
   /** Editing: the far wall at the end of the hall. */
-  | { kind: "backWall" };
+  | { kind: "backWall" }
+  /** Editing: the door and window. */
+  | { kind: "entrance" };
 
 export function businessTagline(business: StoreBusiness) {
   return [business.categories.slice(0, 2).join(" · "), business.location].filter(Boolean).join("  ·  ");

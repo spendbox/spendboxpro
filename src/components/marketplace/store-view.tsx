@@ -2,7 +2,7 @@
 
 import { ChevronDown, ChevronLeft, ChevronRight, DoorOpen, Expand, Gift, Home, LayoutGrid, Mail, MapPin, Maximize2, Phone, Play, Share2, UserPlus, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { JoinWizard } from "@/components/join/join-wizard";
 import { PerkCard } from "@/components/perks/perk-card";
 import { ProductViewer } from "@/components/products/product-viewer";
@@ -13,7 +13,7 @@ import { cn } from "@/lib/cn";
 import { formatMoney, whatsappLink } from "@/lib/format";
 import type { StoreTheme } from "@/lib/store-theme";
 import type { FeedProduct, StoreProduct } from "@/lib/types";
-import { layoutHall } from "./three/store/hall";
+import { useHall } from "./three/store/aspects";
 import type { StoreApi } from "./three/store/look-controls";
 import type { StoreBusiness, StoreTarget } from "./three/store/pieces";
 import StoreCanvas from "./three/store/store-canvas";
@@ -43,6 +43,8 @@ export interface JoinInfo {
   state: "signed-out" | "signed-in" | "member" | "owner";
   /** Joining is paused (for everyone, or this business). */
   closed: boolean;
+  /** A customer's invite code from the shared link. */
+  refCode?: string | null;
 }
 
 /**
@@ -90,7 +92,7 @@ export default function StoreView({
   const [joining, setJoining] = useState(false);
   const [hint, setHint] = useState(true);
   const [focused, setFocused] = useState<string | null>(null);
-  const hall = useMemo(() => layoutHall(products, theme.categories, business.categories), [products, theme.categories, business.categories]);
+  const hall = useHall(products, theme, business.categories);
   const focusIndex = hall.items.findIndex((i) => i.product.id === focused);
   const focusItem = focusIndex >= 0 ? hall.items[focusIndex]! : null;
   const member = business.is_member || join?.state === "member";
@@ -312,7 +314,7 @@ export default function StoreView({
           {/* Bottom: shop buttons and sections in one scrolling row, then the main actions. Stacked, so nothing overlaps. */}
           {!focusItem && (
             <div className="absolute inset-x-0 bottom-0 flex flex-col gap-2.5 bg-gradient-to-t from-black/60 via-black/25 to-transparent pt-10 pb-[max(1rem,env(safe-area-inset-bottom))]">
-              <div className="flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:justify-center">
+              <div className="flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] [justify-content:safe_center]">
                 {perks.length > 0 && (
                   <Chip onClick={() => setSheet("gift")} className="bg-amber-400 text-ink">
                     <Gift className="size-3.5" aria-hidden /> Gift
@@ -372,7 +374,7 @@ export default function StoreView({
       {viewing && <ProductViewer products={feed} startId={viewing} onClose={() => setViewing(null)} guest={member ? undefined : { onJoin: canJoin ? startJoin : () => setViewing(null) }} />}
 
       {join && canJoin && (
-        <JoinWizard open={joining} onClose={() => setJoining(false)} signedIn={join.state === "signed-in"} slug={business.slug} business={business} />
+        <JoinWizard open={joining} onClose={() => setJoining(false)} signedIn={join.state === "signed-in"} slug={business.slug} business={business} refCode={join.refCode ?? null} />
       )}
 
       {sheet === "gift" && (
@@ -391,7 +393,7 @@ export default function StoreView({
                   <UserPlus className="size-4" aria-hidden /> Join to get these
                 </button>
               ) : (
-                <Link href={`/j/${business.slug}`} className="flex h-12 items-center justify-center gap-2 rounded-xl bg-brand-600 font-semibold text-white">
+                <Link href={`/j/${business.slug}${join?.refCode ? `?ref=${encodeURIComponent(join.refCode)}` : ""}`} className="flex h-12 items-center justify-center gap-2 rounded-xl bg-brand-600 font-semibold text-white">
                   <UserPlus className="size-4" aria-hidden /> Join to get these
                 </Link>
               )
@@ -473,7 +475,7 @@ export default function StoreView({
                   Join {business.name}
                 </button>
               ) : (
-                <Link href={`/j/${business.slug}`} className="mt-1 flex h-12 items-center justify-center rounded-xl bg-brand-600 font-semibold text-white">
+                <Link href={`/j/${business.slug}${join?.refCode ? `?ref=${encodeURIComponent(join.refCode)}` : ""}`} className="mt-1 flex h-12 items-center justify-center rounded-xl bg-brand-600 font-semibold text-white">
                   Join {business.name}
                 </Link>
               )}

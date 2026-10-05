@@ -30,7 +30,10 @@ function Frame({ src, i, className }: { src?: string; i: number; className?: str
   );
 }
 
-export function PlacementPreview({ placement, images = [], className }: { placement: Placement; images?: string[]; className?: string }) {
+export function PlacementPreview({ placement, images = [], accent, className }: { placement: Placement; images?: string[]; accent?: string; className?: string }) {
+  // Shelves and tables in the shop's colour (a deep shade of it), or walnut and green.
+  const carcass = accent ? `color-mix(in oklab, ${accent} 65%, #141414)` : "#56392a";
+  const plinth = accent ? `color-mix(in oklab, ${accent} 45%, #23211f)` : "#2f4a3c";
   const img = (i: number) => images[i % Math.max(1, images.length)];
   return (
     <span aria-hidden className={cn("relative block aspect-[16/10] w-full overflow-hidden rounded-xl bg-gradient-to-b from-[#efe9e0] to-[#e4ddd2]", className)}>
@@ -51,7 +54,7 @@ export function PlacementPreview({ placement, images = [], className }: { placem
       )}
 
       {placement === "shelf" && (
-        <span className="absolute top-[6%] bottom-[18%] left-1/2 flex w-[62%] -translate-x-1/2 flex-col justify-end rounded-t-[3px] border-x-[5px] border-t-[5px] border-[#56392a] bg-[#f1ebe1] px-[4%]">
+        <span className="absolute top-[6%] bottom-[18%] left-1/2 flex w-[62%] -translate-x-1/2 flex-col justify-end rounded-t-[3px] border-x-[5px] border-t-[5px] bg-[#f1ebe1] px-[4%]" style={{ borderColor: carcass }}>
           {[0, 1].map((row) => (
             <span key={row} className="flex flex-col">
               <span className="flex justify-center gap-[6%] px-[2%]">
@@ -74,7 +77,7 @@ export function PlacementPreview({ placement, images = [], className }: { placem
           </span>
           {/* Marble top with a brass edge, on a deep plinth */}
           <span className="absolute bottom-[25%] left-1/2 h-[6%] w-[78%] -translate-x-1/2 rounded-[2px] border-b-2 border-[#c9a25a] bg-gradient-to-b from-white to-[#e9e6e1]" />
-          <span className="absolute bottom-[6%] left-1/2 h-[19%] w-[70%] -translate-x-1/2 bg-gradient-to-b from-[#2f4a3c] to-[#22352b]" />
+          <span className="absolute bottom-[6%] left-1/2 h-[19%] w-[70%] -translate-x-1/2" style={{ background: plinth }} />
         </>
       )}
     </span>

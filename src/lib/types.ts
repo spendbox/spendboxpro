@@ -301,6 +301,8 @@ export interface BusinessProduct {
   media_url: string;
   /** Its category's id (see lib/product-categories); older products may have none. */
   category?: string | null;
+  /** The photo's (or video's) width / height, when known. */
+  media_aspect?: number | null;
   poster_url: string | null;
   is_active: boolean;
   created_at: string;
@@ -330,6 +332,8 @@ export interface FeedProduct {
   media_url: string;
   /** Its category's id (see lib/product-categories); older products may have none. */
   category?: string | null;
+  /** The photo's (or video's) width / height, when known. */
+  media_aspect?: number | null;
   poster_url: string | null;
   created_at: string;
   viewed: boolean;
@@ -382,6 +386,8 @@ export interface StoreProduct {
   media_url: string;
   /** Its category's id (see lib/product-categories); older products may have none. */
   category?: string | null;
+  /** The photo's (or video's) width / height, when known. */
+  media_aspect?: number | null;
   poster_url: string | null;
   viewed?: boolean;
   /** Shown on the card when the visitor walks up to it in the hall. */

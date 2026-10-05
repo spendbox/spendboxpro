@@ -22,6 +22,7 @@ import { RememberInviter } from "@/components/auth/remember-inviter";
 import { Logo } from "@/components/brand/logo";
 import { RevealOnScroll } from "@/components/landing/reveal";
 import { PerkCard } from "@/components/perks/perk-card";
+import { ShopScene } from "@/components/landing/shop-scene";
 import { ButtonLink } from "@/components/ui/button";
 
 const MADE_FOR = [
@@ -101,7 +102,7 @@ export default function PlugPage() {
                 </ButtonLink>
               </div>
               <ul data-reveal style={delay(320)} className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-ink-2">
-                {["Set up in minutes", "Real budgets, real buyers", "No commission"].map((t) => (
+                {["Your own 3D shop", "Real budgets, real buyers", "No commission"].map((t) => (
                   <li key={t} className="flex items-center gap-2">
                     <Check className="size-4 text-brand-600" aria-hidden />
                     {t}
@@ -132,6 +133,38 @@ export default function PlugPage() {
         </section>
 
         {/* ------------------------------------------------------------ How it works */}
+        {/* ------------------------------------------------------------ 3D shop */}
+        <section id="shop" className="scroll-mt-20 overflow-hidden">
+          <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-12 px-5 py-20 sm:px-8 lg:grid-cols-2 lg:py-28">
+            <div className="order-2 flex flex-col gap-5 lg:order-1">
+              <p className="text-sm font-semibold tracking-wide text-brand-700 uppercase">Your 3D shop</p>
+              <h2 className="font-display text-3xl font-bold tracking-tight sm:text-5xl">A shop people can walk into, from their phone.</h2>
+              <p className="text-lg leading-relaxed text-muted">
+                Every product you post goes up in your own 3D shop: framed on the wall, on shelves or on tables, grouped into neat sections. Customers look around, tap what they like and chat with you on WhatsApp. Share one link and anyone can walk in.
+              </p>
+              <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {[
+                  "Your colours, floors, walls and lights",
+                  "Shelves, tables and frames in many designs",
+                  "Left aisle, right aisle or the back wall",
+                  "Door, window, plants, art and signs",
+                ].map((t) => (
+                  <li key={t} className="flex items-start gap-2.5 text-ink-2">
+                    <Check className="mt-0.5 size-4 shrink-0 text-brand-600" aria-hidden />
+                    {t}
+                  </li>
+                ))}
+              </ul>
+              <p className="rounded-2xl bg-brand-50 px-4 py-3 font-semibold text-brand-900 ring-1 ring-brand-100">
+                Over a million ways to make it yours, and any colour you like. No two shops need look the same.
+              </p>
+            </div>
+            <div className="order-1 lg:order-2">
+              <ShopScene className="sm:scale-125 lg:scale-[1.35]" />
+            </div>
+          </div>
+        </section>
+
         <section id="how" className="scroll-mt-20">
           <div className="mx-auto max-w-6xl px-5 py-20 sm:px-8 lg:py-28">
             <div data-reveal className="max-w-2xl">

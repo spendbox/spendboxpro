@@ -320,3 +320,13 @@ html:not(.js) .draw { stroke-dashoffset: 0; }
   .orbit, .orbit-upright, .animate-glow { animation: none !important; }
   .animate-pop { animation: none !important; opacity: 1; }
 }
+
+/* The front page's little 3D shop: a slow walk in and out. */
+@keyframes shop-walk {
+  0% { transform: translateZ(0) rotateY(-3deg); }
+  100% { transform: translateZ(230px) rotateY(3deg); }
+}
+.shop-walk { animation: shop-walk 9s ease-in-out infinite alternate; }
+@media (prefers-reduced-motion: reduce) {
+  .shop-walk { animation: none !important; transform: translateZ(120px); }
+}

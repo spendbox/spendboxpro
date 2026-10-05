@@ -10,6 +10,22 @@ export interface PreparedMedia {
   poster: File | null;
   /** Local preview address. */
   previewUrl: string;
+  /** Width / height, when the browser could tell (frames in the 3D shop fit it). */
+  aspect?: number | null;
+}
+
+/** A width / height ratio kept to the range the database accepts. */
+const ratio = (w: number, h: number) => (w > 0 && h > 0 ? Math.round(Math.min(5, Math.max(0.2, w / h)) * 1000) / 1000 : null);
+
+async function imageAspect(file: Blob) {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const r = ratio(bitmap.width, bitmap.height);
+    bitmap.close();
+    return r;
+  } catch {
+    return null;
+  }
 }
 
 /** Shrinks a photo, or checks a video and grabs a still frame from it. Throws a friendly message. */
@@ -18,7 +34,7 @@ export async function prepareMedia(file: File): Promise<PreparedMedia> {
     const small = await shrinkImage(file, 1600, 0.85).catch(() => {
       throw new Error("We couldn't read that photo. Please try another.");
     });
-    return { type: "image", file: small, poster: null, previewUrl: URL.createObjectURL(small) };
+    return { type: "image", file: small, poster: null, previewUrl: URL.createObjectURL(small), aspect: await imageAspect(small) };
   }
   if (!file.type.startsWith("video/")) throw new Error("Please pick a photo or a video.");
   // Phones sometimes leave the type off .mov files.
@@ -27,16 +43,16 @@ export async function prepareMedia(file: File): Promise<PreparedMedia> {
   if (file.size > MAX_VIDEO_BYTES) throw new Error("That video is too big. Please keep it under 50 MB (about a minute).");
   const video = file.type === type ? file : new File([file], file.name, { type });
   const previewUrl = URL.createObjectURL(video);
-  const { duration, poster } = await readVideo(previewUrl);
+  const { duration, poster, aspect } = await readVideo(previewUrl);
   if (duration > MAX_VIDEO_SECONDS + 1) {
     URL.revokeObjectURL(previewUrl);
     throw new Error(`Please keep videos to ${MAX_VIDEO_SECONDS} seconds or less.`);
   }
-  return { type: "video", file: video, poster, previewUrl };
+  return { type: "video", file: video, poster, previewUrl, aspect };
 }
 
 /** A video's length and a still frame (or null if the browser can't decode it). */
-function readVideo(url: string): Promise<{ duration: number; poster: File | null }> {
+function readVideo(url: string): Promise<{ duration: number; poster: File | null; aspect: number | null }> {
   return new Promise((resolve) => {
     const video = document.createElement("video");
     video.muted = true;
@@ -44,14 +60,16 @@ function readVideo(url: string): Promise<{ duration: number; poster: File | null
     video.preload = "auto";
     video.src = url;
     let duration = 0;
+    let aspect: number | null = null;
     const done = (poster: File | null) => {
       video.removeAttribute("src");
       video.load();
-      resolve({ duration, poster });
+      resolve({ duration, poster, aspect });
     };
     const timer = setTimeout(() => done(null), 8000);
     video.onloadedmetadata = () => {
       duration = Number.isFinite(video.duration) ? video.duration : 0;
+      aspect = ratio(video.videoWidth, video.videoHeight);
       video.currentTime = Math.min(0.5, duration / 2 || 0);
     };
     video.onseeked = () => {

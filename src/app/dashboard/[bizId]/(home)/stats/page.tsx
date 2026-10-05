@@ -62,7 +62,7 @@ export default async function StatsTab({ params }: PageProps<"/dashboard/[bizId]
                 <span className="min-w-0">
                   <span className="block truncate font-semibold">{p.title}</span>
                   <span className="block text-xs text-muted sm:hidden">
-                    {p.views} views · {p.viewers} people · {p.likes} saves · {p.contacts} in touch
+                    {plural(p.views, "view")} · {p.viewers === 1 ? "1 person" : `${p.viewers} people`} · {plural(p.likes, "save")} · {p.contacts} in touch
                   </span>
                 </span>
                 {[p.views, p.viewers, p.likes, p.contacts].map((n, i) => (
@@ -96,4 +96,9 @@ function Tile({ label, value, note, href, attention }: { label: string; value: R
   ) : (
     <div className={className}>{body}</div>
   );
+}
+
+/** "1 save", "2 saves". */
+function plural(n: number, word: string) {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
 }

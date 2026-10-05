@@ -53,7 +53,7 @@ test("a business's own categories are suggested by their names", () => {
 
 test("category info: names, places and the business's choices", () => {
   assert.deepEqual(categoryInfo("shoes"), { id: "shoes", name: "Shoes", group: "product", placement: "shelf", wide: false, custom: false });
-  assert.equal(categoryInfo("shoes", [], { shoes: "wall" }).placement, "wall");
+  assert.equal(categoryInfo("shoes", [], { shoes: { placement: "wall" } }).placement, "wall");
   assert.equal(categoryInfo("property").wide, true);
   assert.equal(categoryInfo("nope").id, "other-products");
   assert.equal(categoryInfo("c-x", [{ id: "c-x", name: "X", placement: "table" }]).placement, "table");

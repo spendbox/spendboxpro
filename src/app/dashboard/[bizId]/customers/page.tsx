@@ -47,8 +47,8 @@ export default async function CustomersPage({ params, searchParams }: PageProps<
             variant="primary"
             label="Add customers"
             icon={<UserPlus className="size-4" aria-hidden />}
-            url={`${siteUrl()}/j/${business.slug}`}
-            message={`Join ${business.name} on Spendbox. Tell us what you need, anytime:`}
+            url={`${siteUrl()}/s/${business.slug}`}
+            message={`Walk into ${business.name}'s 3D shop on Spendbox and join. Tell us what you need, anytime:`}
             title="Add customers"
             description={`Customers join ${business.name} from your link. Share it on WhatsApp, or print your QR code for the counter.`}
           />

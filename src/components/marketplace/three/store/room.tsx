@@ -19,6 +19,106 @@ import { Tappable, tap } from "./tap";
 
 const OAK = "#caa47c";
 
+// ---------------------------------------------------------------- Door and window
+
+/** The door and the window, on the left wall by the entrance, facing into the shop. */
+const DOOR = { z: 1.6, w: 1.5, h: 2.55 };
+const WINDOW = { z: -0.6, w: 2.1, y0: 1.15, y1: 2.6 };
+const WX = -W / 2 + 0.04;
+
+/** An arch outline (round top) `w` wide, `h` tall, from y = 0; with an inner arch cut out if `inset`. */
+function archShape(w: number, h: number, inset = 0) {
+  const outline = (ww: number, hh: number, y0: number) => {
+    const r = ww / 2;
+    const p = new THREE.Path();
+    p.moveTo(-r, y0);
+    p.lineTo(r, y0);
+    p.lineTo(r, y0 + hh - r);
+    p.absarc(0, y0 + hh - r, r, 0, Math.PI, false);
+    p.lineTo(-r, y0);
+    return p;
+  };
+  const s = new THREE.Shape(outline(w, h, 0).getPoints(24));
+  if (inset) s.holes.push(new THREE.Path(outline(w - inset * 2, h - inset * 2, inset).getPoints(24)));
+  return s;
+}
+/** A flat shape on the wall, facing into the shop (its x runs along the wall). */
+function onWall(k: Kit, mat: "metal" | "glass" | "satin" | "wood", shape: THREE.Shape, depth: number, at: [number, number, number], color?: string) {
+  const g = depth ? new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: 24 }) : new THREE.ShapeGeometry(shape, 24);
+  k.add(mat, g, color ?? "#ffffff", at, [0, Math.PI / 2, 0]);
+}
+
+/** A rectangular frame on the wall: posts, head and sill, with optional glazing bars. */
+function rectFrame(k: Kit, z: number, w: number, y0: number, y1: number, color: string, bars: { across?: number; down?: number } = {}) {
+  const h = y1 - y0;
+  k.box("metal", [0.08, h, 0.07], [WX, y0 + h / 2, z - w / 2], color);
+  k.box("metal", [0.08, h, 0.07], [WX, y0 + h / 2, z + w / 2], color);
+  k.box("metal", [0.08, 0.07, w], [WX, y1, z], color);
+  k.box("metal", [0.08, 0.07, w], [WX, y0 + 0.035, z], color);
+  for (let i = 1; i <= (bars.across ?? 0); i++) k.box("metal", [0.06, 0.035, w], [WX, y0 + (h * i) / ((bars.across ?? 0) + 1), z], color);
+  for (let i = 1; i <= (bars.down ?? 0); i++) k.box("metal", [0.06, h, 0.035], [WX, y0 + h / 2, z - w / 2 + (w * i) / ((bars.down ?? 0) + 1)], color);
+}
+
+function buildEntrance(k: Kit, e: StoreTheme["entrance"], accent: string) {
+  const c = e.color;
+  const { z, w, h } = DOOR;
+  // The door.
+  if (e.door === "arched") {
+    // Kept below the OPEN sign above the door.
+    onWall(k, "metal", archShape(w + 0.14, h + 0.2, 0.07), 0.07, [WX - 0.035, 0, z], c);
+    onWall(k, "glass", archShape(w, h + 0.13), 0, [WX + 0.01, 0.035, z]);
+    k.box("metal", [0.06, 0.04, w], [WX, 1.1, z], c);
+  } else if (e.door === "french") {
+    rectFrame(k, z, w, 0, h, c);
+    k.box("metal", [0.07, h, 0.05], [WX, h / 2, z], c);
+    // Two glazed leaves, each with a grid of panes.
+    for (const s of [-1, 1]) {
+      const lz = z + (s * w) / 4;
+      for (let i = 1; i <= 3; i++) k.box("metal", [0.05, 0.025, w / 2 - 0.05], [WX, (h * i) / 4, lz], c);
+      k.box("metal", [0.05, h - 0.1, 0.025], [WX, h / 2, lz], c);
+      k.box("glass", [0.02, h, w / 2], [WX + 0.01, h / 2, lz]);
+    }
+  } else if (e.door === "oak" || e.door === "brand") {
+    rectFrame(k, z, w, 0, h, c);
+    // A solid leaf (oak, or the brand colour) with a tall glass panel.
+    const leaf = e.door === "oak" ? OAK : accent;
+    k.rbox(e.door === "oak" ? "wood" : "satin", [0.05, h - 0.08, w - 0.08], 0.01, [WX + 0.01, (h - 0.08) / 2 + 0.04, z], leaf);
+    k.box("glass", [0.06, h * 0.55, 0.32], [WX + 0.02, h * 0.58, z + 0.18]);
+    k.box("metal", [0.065, h * 0.55 + 0.06, 0.38], [WX + 0.012, h * 0.58, z + 0.18], c);
+  } else {
+    rectFrame(k, z, w, 0, h, c, { across: 1 });
+    k.box("glass", [0.02, h, w], [WX + 0.01, h / 2, z]);
+  }
+  // The handle.
+  k.cyl("brass", 0.018, 0.018, 0.5, [-W / 2 + 0.12, 1.1, 1.0], "#ffffff", 10);
+
+  // The window.
+  const { z: wz, w: ww, y0, y1 } = WINDOW;
+  if (e.window === "arched") {
+    onWall(k, "metal", archShape(ww * 0.62 + 0.14, y1 - y0 + 0.5, 0.07), 0.07, [WX - 0.035, y0, wz], c);
+    onWall(k, "glass", archShape(ww * 0.62, y1 - y0 + 0.43), 0, [WX + 0.01, y0 + 0.035, wz]);
+    k.box("metal", [0.05, 0.03, ww * 0.62], [WX, y0 + (y1 - y0) * 0.55, wz], c);
+  } else {
+    rectFrame(k, wz, ww, y0, y1, c, e.window === "grid" ? { across: 1, down: 2 } : {});
+    k.box("glass", [0.02, y1 - y0, ww], [WX + 0.01, (y0 + y1) / 2, wz]);
+    if (e.window === "shutters")
+      // Slim louvred shutters folded open either side (clear of the door).
+      for (const s of [-1, 1]) {
+        const sz = wz + s * (ww / 2 + 0.18);
+        k.box("satin", [0.03, y1 - y0 + 0.1, 0.28], [WX + 0.02, (y0 + y1) / 2, sz], c);
+        for (let i = 0; i < 12; i++) k.box("satin", [0.05, 0.02, 0.22], [WX + 0.04, y0 + 0.04 + i * ((y1 - y0) / 12), sz], shade(c, 0.12));
+      }
+  }
+}
+
+function useEntrance(e: StoreTheme["entrance"], accent: string) {
+  return useMemo(() => {
+    const k = new Kit();
+    buildEntrance(k, e, accent);
+    return k.build();
+  }, [e, accent]);
+}
+
 /** Panel mouldings on the lower part of a wall, from a to b along it. */
 function wainscot(k: Kit, along: "x" | "z", from: number, to: number, at: number, color: string) {
   const len = to - from;
@@ -81,7 +181,24 @@ function useLengthPlane(end: number) {
  * The shop's walls, floor and ceiling. They run from the back wall to `end`:
  * the far wall of the product hall, which grows as products are added.
  */
-export function Room({ theme, accent, end = FRONT + 2.2, onFloor, onWalls, onWalk }: { theme: StoreTheme; accent: string; end?: number; onFloor?: () => void; onWalls?: () => void; onWalk?: (x: number, z: number) => void }) {
+export function Room({
+  theme,
+  accent,
+  end = FRONT + 2.2,
+  onFloor,
+  onWalls,
+  onEntrance,
+  onWalk,
+}: {
+  theme: StoreTheme;
+  accent: string;
+  end?: number;
+  onFloor?: () => void;
+  onWalls?: () => void;
+  onEntrance?: () => void;
+  onWalk?: (x: number, z: number) => void;
+}) {
+  const entrance = useEntrance(theme.entrance, accent);
   const dark = theme.wall === "#2F3A34";
   const wall = theme.wall;
   const len = end - BACK;
@@ -106,21 +223,7 @@ export function Room({ theme, accent, end = FRONT + 2.2, onFloor, onWalls, onWal
     k.rbox("satin", [W, 0.14, 0.12], 0.03, [0, H - 0.07, end - 0.06], shade(wall, 0.03));
     k.rbox("satin", [0.12, 0.14, len], 0.03, [-W / 2 + 0.06, H - 0.07, mid], shade(wall, 0.03));
     k.rbox("satin", [0.12, 0.14, len], 0.03, [W / 2 - 0.06, H - 0.07, mid], shade(wall, 0.03));
-    // The entrance: black steel door and window frames, and a mat.
-    const steel = "#232625";
-    for (const [z, w, y0, y1] of [
-      [1.6, 1.5, 0, 2.55],
-      [-0.6, 2.1, 1.15, 2.6],
-    ] as const) {
-      const h = y1 - y0;
-      k.box("metal", [0.08, h, 0.07], [-W / 2 + 0.04, y0 + h / 2, z - w / 2], steel);
-      k.box("metal", [0.08, h, 0.07], [-W / 2 + 0.04, y0 + h / 2, z + w / 2], steel);
-      k.box("metal", [0.08, 0.07, w], [-W / 2 + 0.04, y1, z], steel);
-      k.box("metal", [0.08, 0.07, w], [-W / 2 + 0.04, y0 + 0.035, z], steel);
-      k.box("metal", [0.06, 0.04, w], [-W / 2 + 0.04, y0 + h * 0.62, z], steel);
-      k.box("glass", [0.02, h, w], [-W / 2 + 0.05, y0 + h / 2, z]);
-    }
-    k.cyl("brass", 0.018, 0.018, 0.5, [-W / 2 + 0.12, 1.1, 1.0], "#ffffff", 10);
+    // The doormat (the door and window themselves are built separately, in their chosen designs).
     k.rbox("fabric", [1.0, 0.025, 1.4], 0.01, [-W / 2 + 0.75, 0.012, 1.6], shade(accent, -0.25));
     return k.build();
   }, [wall, dark, accent, end, len, mid]);
@@ -143,6 +246,9 @@ export function Room({ theme, accent, end = FRONT + 2.2, onFloor, onWalls, onWal
         >
           <meshStandardMaterial map={floor} roughness={wood ? 0.5 : theme.floor.style === "concrete" ? 0.6 : 0.2} />
         </mesh>
+      </Tappable>
+      <Tappable onTap={onEntrance}>
+        <Built parts={entrance} shadows={false} />
       </Tappable>
       <Tappable onTap={onWalls}>
         <Built parts={shell} shadows={false} />

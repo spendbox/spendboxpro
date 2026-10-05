@@ -306,7 +306,20 @@ export function CategorySheet({
 }
 
 /** Where a category shows in the 3D shop: three pictures to choose from. */
-export function PlacementChoice({ value, onChange, images, label = "Where it shows in your 3D shop" }: { value: Placement; onChange: (p: Placement) => void; images?: string[]; label?: string }) {
+export function PlacementChoice({
+  value,
+  onChange,
+  images,
+  accent,
+  label = "Where it shows in your 3D shop",
+}: {
+  value: Placement;
+  onChange: (p: Placement) => void;
+  images?: string[];
+  /** The shop's colour, for the shelves and tables in the pictures. */
+  accent?: string;
+  label?: string;
+}) {
   return (
     <div role="radiogroup" aria-label={label} className="grid grid-cols-3 gap-2">
       {PLACEMENTS.map((p) => {
@@ -321,7 +334,7 @@ export function PlacementChoice({ value, onChange, images, label = "Where it sho
             onClick={() => onChange(p.id)}
             className={cn("flex flex-col gap-1.5 rounded-2xl p-1.5 text-left ring-2 transition", on ? "bg-brand-50 ring-brand-600" : "ring-line hover:ring-line-strong")}
           >
-            <PlacementPreview placement={p.id} images={images} />
+            <PlacementPreview placement={p.id} images={images} accent={accent} />
             <span className="flex items-center gap-1 px-0.5 text-xs leading-tight font-semibold">
               {on && <Check className="size-3.5 shrink-0 text-brand-700" aria-hidden />}
               {p.name}
