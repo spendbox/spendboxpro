@@ -65,6 +65,8 @@ const SIDEWALK = 0xf3f1ec;
 const GRASS = 0xa8d79a;
 const WATER = 0x7cc4e8;
 const BRIDGE_TOP = 0.24;
+/** Traffic-light bulbs carry this plus (direction × 3 + bulb) as their colour until lit. */
+const SIGNAL_TAG = 1000;
 
 // ---------------------------------------------------------------- shapes
 function geometries() {
@@ -192,6 +194,15 @@ function partsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "ti
     } else {
       // Junctions: a zebra crossing on each side that has a road.
       add("ground", { x, y: 0, z, sx: 0.5, sy: 0.062, sz: 0.5, ry: 0, color: 0x6a7380 });
+      // Traffic lights on two opposite corners, one for each direction of traffic. The bulbs
+      // are coloured live (see updateSignals); their colour here only says which is which.
+      for (const [cx, cz, axis] of [[0.43, -0.43, 0], [-0.43, 0.43, 1]] as const) {
+        add("trunk", { x: x + cx, y: 0.06, z: z + cz, sx: 0.28, sy: 0.5, sz: 0.28, ry: 0, color: 0x343a40 });
+        add("building", { x: x + cx, y: 0.42, z: z + cz, sx: 0.07, sy: 0.19, sz: 0.07, ry: 0, color: 0x212529 });
+        for (let k = 0; k < 3; k++) {
+          add("signal", { x: x + cx, y: 0.585 - k * 0.058, z: z + cz, sx: 0.05, sy: 0.05, sz: 0.05, ry: 0, color: SIGNAL_TAG + axis * 3 + k });
+        }
+      }
       for (const [bit, dx, dz] of [[1, 0, -0.38], [2, 0.38, 0], [4, 0, 0.38], [8, -0.38, 0]] as const) {
         if (!(m & bit)) continue;
         for (let k = -2; k <= 2; k++) {
@@ -729,7 +740,8 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
   useEffect(() => {
     const el = host.current!;
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // Phones have very dense screens; 1.5× looks just as sharp and draws much faster.
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, window.innerWidth < 700 ? 1.5 : 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -787,6 +799,8 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       curveLine: { geometry: geo.curveLine, material: mat(), shadow: false },
       // Street-lamp heads: plain colour that we brighten as night falls.
       lamp: { geometry: geo.lamp, material: lampMat, shadow: false },
+      // Traffic-light bulbs (red, amber, green), lit in turn.
+      signal: { geometry: geo.lamp, material: new THREE.MeshBasicMaterial({ color: 0xffffff }), shadow: false },
       water: { geometry: geo.box, material: new THREE.MeshPhongMaterial({ color: 0xffffff, shininess: 90, specular: 0xffffff }), shadow: false },
     };
 
@@ -808,6 +822,9 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
     let currentSeed = -1;
     let born = new Map<number, number>(); // tile → time it started rising
     let growing: number[] = [];
+    // Traffic lights: which direction and bulb each lit instance is, and the last phase shown.
+    let signalTags: number[] = [];
+    let signalPhase = -1;
     let tileParts = new Map<number, [string, number][]>();
     let radius = 10;
     let framed = false;
@@ -1305,6 +1322,8 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
         city.add(mesh);
       }
       for (const t of tiles) if (now < born.get(t.i)! + 700) growing.push(t.i);
+      signalTags = (parts.signal ?? []).map((p) => p.color - SIGNAL_TAG);
+      signalPhase = -1;
 
       radius = tiles.reduce((m, t) => Math.max(m, Math.abs(t.x), Math.abs(t.z)), 4) + 1.5;
       base.scale.setScalar(radius * 8 + 120);
@@ -1581,25 +1600,25 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       const walker = makeWalker(kind);
       const corners = [[-0.45, -0.45], [0.45, -0.45], [0.45, 0.45], [-0.45, 0.45]];
       const start = Math.floor(Math.random() * 4);
-      addFx(walker, 4200, (t) => {
-        // Walk two sides of the tile, pause and look around, then leave.
-        const walk = Math.min(1, t / 0.6) * 2;
+      addFx(walker, 1100, (t) => {
+        // A quick dash along two sides of the tile, a glance around, then gone (about a second).
+        const walk = Math.min(1, t / 0.7) * 2;
         const a = corners[(start + Math.floor(walk)) % 4];
         const b = corners[(start + Math.floor(walk) + 1) % 4];
         const f = walk % 1;
         const px = a[0] + (b[0] - a[0]) * (walk >= 2 ? 1 : f);
         const pz = a[1] + (b[1] - a[1]) * (walk >= 2 ? 1 : f);
-        walker.position.set(tile.x + px, 0.08 + (t < 0.6 ? Math.abs(Math.sin(t * 60)) * 0.02 : 0), tile.z + pz);
-        walker.rotation.y = t < 0.6 ? Math.atan2(-(b[1] - a[1]), b[0] - a[0]) : Math.sin(t * 20) * 1.2;
+        walker.position.set(tile.x + px, 0.08 + (t < 0.7 ? Math.abs(Math.sin(t * 40)) * 0.02 : 0), tile.z + pz);
+        walker.rotation.y = t < 0.7 ? Math.atan2(-(b[1] - a[1]), b[0] - a[0]) : Math.sin(t * 12) * 1.2;
         const fade = t > 0.85 ? 1 - (t - 0.85) / 0.15 : 1;
         walker.scale.setScalar(1.5 * Math.min(1, t * 8) * fade + 0.0001);
       });
       if (!found) {
-        puff(tile, 0x8b95a1, 2600);
+        puff(tile, 0x8b95a1, 700);
         const q = new THREE.Sprite(new THREE.SpriteMaterial({ map: unknownTex, transparent: true, depthTest: false }));
         q.renderOrder = 6;
-        addFx(q, 4200, (t) => {
-          const k = Math.max(0, (t - 0.6) / 0.4);
+        addFx(q, 1800, (t) => {
+          const k = Math.max(0, (t - 0.4) / 0.6);
           q.visible = k > 0;
           q.position.set(tile.x, tile.top + 0.4 + k * 0.6, tile.z);
           q.scale.setScalar(0.45);
@@ -1722,6 +1741,12 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
         } else if (e.kind === "sweep") sweepScene(tile, e.detail?.radius ?? 1);
         else if (e.kind === "caught") arrestScene(tile, e.detail?.hiders ?? []);
         else if (e.kind === "moved") puff(tile, 0xffb400);
+        else if (e.kind === "shielded") {
+          // A shield flash: the hider blinked away to somewhere nearby.
+          puff(tile, 0x9775fa);
+          puff(tile, 0x9775fa, 250);
+          puff(tile, 0xd0bfff, 500);
+        }
       }
     }
 
@@ -2020,6 +2045,26 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
     ro.observe(el);
     resize();
 
+    // Traffic lights cycle every 10 s: one direction green, then amber, then the other's turn.
+    const SIGNAL_ON = [new THREE.Color(0xff3b30), new THREE.Color(0xffb020), new THREE.Color(0x2fd158)];
+    const SIGNAL_OFF = new THREE.Color(0x2b2f33);
+    function updateSignals(time: number) {
+      const mesh = meshes.signal;
+      if (!mesh || !signalTags.length) return;
+      const c = time % 10;
+      const phase = c < 4 ? 0 : c < 5 ? 1 : c < 9 ? 2 : 3;
+      if (phase === signalPhase) return;
+      signalPhase = phase;
+      // Which bulb is lit for each direction in this phase (0 red, 1 amber, 2 green).
+      const lit = [[2, 0], [1, 0], [0, 2], [0, 1]][phase];
+      signalTags.forEach((tag, k) => {
+        const axis = Math.floor(tag / 3);
+        const bulb = tag % 3;
+        mesh.setColorAt(k, bulb === lit[axis] ? SIGNAL_ON[bulb] : SIGNAL_OFF);
+      });
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    }
+
     const clock = new THREE.Clock();
     let frame = 0;
     const loop = () => {
@@ -2038,6 +2083,7 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       }
       updateGrowth(performance.now());
       updateCars(dt);
+      updateSignals(time);
       updateSky(time, dt);
       updateLandmarks(dt, performance.now());
       updateBoats(time, dt);
@@ -2060,10 +2106,35 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
     };
     loop();
 
+    // Coming back to the game: stop drawing while the page is hidden (saves battery and keeps
+    // the phone from throttling us), and pick straight up again when it's visible. If the phone
+    // dropped the 3D canvas while we were away, three.js restores it; we just restart drawing.
+    const onVisibility = () => {
+      cancelAnimationFrame(frame);
+      if (document.visibilityState === "visible") {
+        clock.getDelta();
+        loop();
+      }
+    };
+    const onLost = (e: Event) => {
+      e.preventDefault();
+      cancelAnimationFrame(frame);
+    };
+    const onRestored = () => {
+      clock.getDelta();
+      loop();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    renderer.domElement.addEventListener("webglcontextlost", onLost);
+    renderer.domElement.addEventListener("webglcontextrestored", onRestored);
+
     api.current = { build, setMarkers, playEvents, setBalloon };
 
     return () => {
       cancelAnimationFrame(frame);
+      document.removeEventListener("visibilitychange", onVisibility);
+      renderer.domElement.removeEventListener("webglcontextlost", onLost);
+      renderer.domElement.removeEventListener("webglcontextrestored", onRestored);
       ro.disconnect();
       controls.dispose();
       renderer.domElement.removeEventListener("pointerdown", onDown);

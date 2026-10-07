@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AvatarFace } from "@/components/avatar";
 import type { Avatar } from "@/lib/avatar";
 import { defaultAvatar } from "@/lib/avatar";
@@ -25,24 +26,41 @@ const ROLE_STYLE: Record<ChatMessage["sender_role"] | "bot", { label: string; pi
 const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
 /** On phones, keep the chat above the on-screen keyboard (which shrinks the visual viewport). */
-function useKeyboardSafeArea() {
+function useKeyboardSafeArea(active: boolean) {
   const [box, setBox] = useState<{ top: number; height: number } | null>(null);
   useEffect(() => {
     const vv = window.visualViewport;
-    if (!vv) return;
+    if (!vv || !active) return;
     const update = () => {
       // Only matters on small screens.
       if (window.innerWidth >= 640) return setBox(null);
       setBox({ top: vv.offsetTop, height: vv.height });
     };
+    // Phones open the keyboard in steps (and iOS reports it late), so check again shortly
+    // after a text box gets focus.
+    const timers: number[] = [];
+    const onFocus = () => {
+      update();
+      for (const ms of [100, 300, 600]) timers.push(window.setTimeout(update, ms));
+    };
+    // Stop the page behind from scrolling while the chat is open.
+    const html = document.documentElement;
+    const before = html.style.overflow;
+    html.style.overflow = "hidden";
     update();
     vv.addEventListener("resize", update);
     vv.addEventListener("scroll", update);
+    window.addEventListener("focusin", onFocus);
+    window.addEventListener("focusout", onFocus);
     return () => {
+      timers.forEach(clearTimeout);
+      html.style.overflow = before;
       vv.removeEventListener("resize", update);
       vv.removeEventListener("scroll", update);
+      window.removeEventListener("focusin", onFocus);
+      window.removeEventListener("focusout", onFocus);
     };
-  }, []);
+  }, [active]);
   return box;
 }
 
@@ -76,7 +94,7 @@ export function Chat({
   const [seen, setSeen] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
   const [findText, setFindText] = useState("");
-  const box = useKeyboardSafeArea();
+  const box = useKeyboardSafeArea(open);
 
   const byId = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
   const faceOf = useCallback(
@@ -204,7 +222,9 @@ export function Chat({
     .filter((p) => p.id !== meId && p.name.toLowerCase().includes(findText.trim().toLowerCase()))
     .sort((a, b) => a.role.localeCompare(b.role) || a.name.localeCompare(b.name));
 
-  return (
+  // Drawn straight onto the page (not inside the game's layers) so nothing can stop it from
+  // sitting right above the keyboard.
+  return createPortal(
     <section
       className="pointer-events-auto fixed inset-x-0 z-50 flex flex-col bg-panel shadow-[0_-8px_40px_-12px_rgb(24_32_43/0.35)] sm:inset-x-auto sm:bottom-4 sm:right-4 sm:h-[min(640px,calc(100dvh-7rem))] sm:w-96 sm:rounded-3xl"
       style={box ? { top: box.top, height: box.height } : { bottom: 0, height: "100dvh" }}
@@ -305,7 +325,8 @@ export function Chat({
         <Composer onSend={send} onAudio={sendAudio} placeholder={thread ? `Message ${thread.name}` : "Message the city"} />
       )}
       {error && <p className="px-4 pb-2 text-xs text-hit">{error}</p>}
-    </section>
+    </section>,
+    document.body,
   );
 }
 

@@ -87,3 +87,22 @@ end $$;
 select count_visit(), count_visit();
 select (select sum(created) - sum(burned) from coin_supply_daily) as created_minus_burned,
        (select sum(coins+bonus_coins) from profiles) + (select value from game_state where key='carry') + (select coalesce(sum(pool),0) from rounds where status <> 'done') as held;
+-- Badge collection (part 8): new badges are handed out, career ones only once, never to the bot.
+select coalesce(pr.username, pr.email_key) who, b.round_id, b.badge, b.detail
+  from badges b join profiles pr on pr.id = b.user_id order by b.round_id, who, b.badge;
+do $$ declare bo uuid := (select id from profiles where email_key='bo@x.com'); begin
+  if not exists (select 1 from badges where user_id = bo and round_id = 1 and badge = 'the_closer') then
+    raise exception 'bo should be The Closer in round 1 (found the bot, the last hider)'; end if;
+  if not exists (select 1 from badges where user_id = bo and round_id = 1 and badge = 'quick_draw') then
+    raise exception 'bo should have Quick Draw in round 1'; end if;
+  if not exists (select 1 from badges where user_id = bo and round_id = 2 and badge = 'close_shave') then
+    raise exception 'bo should have Close Shave in round 2 (swept, still got away)'; end if;
+  if (select count(*) from badges where user_id = bo and badge = 'welcome') <> 1 then
+    raise exception 'Welcome to the City should be won exactly once'; end if;
+  if (select count(*) from badges where badge = 'welcome') <> 2 then
+    raise exception 'bo and cy (the two players so far) should each have Welcome'; end if;
+  if exists (select 1 from badges where user_id = '00000000-0000-0000-0000-00000000b07a') then
+    raise exception 'the bot must never get badges'; end if;
+  if award_badges(1) <> 0 then raise exception 'awarding a round twice should add nothing'; end if;
+  raise notice 'ok badges: % kinds handed out', (select count(distinct badge) from badges);
+end $$;

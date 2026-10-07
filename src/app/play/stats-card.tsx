@@ -3,6 +3,9 @@
 import { cn } from "@/lib/cn";
 import { short } from "@/lib/format";
 
+/** Long numbers get a smaller font so they always fit their box. */
+const fit = (v: string) => (v.length <= 5 ? "text-sm" : v.length <= 7 ? "text-xs" : "text-[10px]");
+
 /** The round clock and numbers. Folds down to a slim pill. */
 export function StatsCard({
   city,
@@ -75,19 +78,20 @@ export function StatsCard({
         )}
         <dl className="mt-3 grid grid-cols-3 gap-1 text-center">
           {[
-            ["Hidden", `${short(hidden)}/${short(hidersTotal)}`],
-            ["Pool", short(pool)],
-            ["Spots", short(tiles)],
-          ].map(([k, v]) => (
-            <div key={k} className="rounded-xl bg-white/60 px-1 py-1.5">
-              <dd className="font-display text-sm font-bold tabular-nums">{v}</dd>
-              <dt className="text-[9px] font-semibold uppercase tracking-wide text-muted">{k}</dt>
+            ["Hidden", short(hidden), `${hidden.toLocaleString("en")} of ${hidersTotal.toLocaleString("en")} still hidden`, `of ${short(hidersTotal)}`],
+            ["Pool", short(pool), `${pool.toLocaleString("en")} coins in the pool`, "coins"],
+            ["Spots", short(tiles), `${tiles.toLocaleString("en")} spots in the city`, "in city"],
+          ].map(([k, v, full, sub]) => (
+            <div key={k} className="min-w-0 rounded-xl bg-white/60 px-1 py-1.5" title={full}>
+              <dd className={cn("truncate font-display font-bold leading-tight tabular-nums", fit(v))}>{v}</dd>
+              <dt className="truncate text-[9px] font-semibold uppercase leading-tight tracking-wide text-muted">{k}</dt>
+              <div className="truncate text-[9px] leading-tight text-muted/80">{sub}</div>
             </div>
           ))}
         </dl>
       </div>
       <div className="grid grid-cols-3 bg-ink/[0.04] px-2 py-2 text-center">
-        <div title="Players in the city right now">
+        <div className="min-w-0" title="Players in the city right now">
           <div className="flex items-center justify-center gap-1.5 font-display text-sm font-bold tabular-nums">
             <span className="relative flex size-2">
               <span className="absolute inline-flex size-full animate-ping rounded-full bg-me opacity-60" />
@@ -97,23 +101,30 @@ export function StatsCard({
           </div>
           <div className="text-[9px] font-semibold uppercase tracking-wide text-muted">Online</div>
         </div>
-        <div title="Visits since launch">
-          <div className="font-display text-sm font-bold tabular-nums">{short(visits)}</div>
+        <div className="min-w-0" title={`${visits.toLocaleString("en")} visits since launch`}>
+          <div className={cn("truncate font-display font-bold tabular-nums", fit(short(visits)))}>{short(visits)}</div>
           <div className="text-[9px] font-semibold uppercase tracking-wide text-muted">Visits</div>
         </div>
-        <div title="Players who've signed up">
-          <div className="font-display text-sm font-bold tabular-nums">{short(players)}</div>
+        <div className="min-w-0" title={`${players.toLocaleString("en")} players have signed up`}>
+          <div className={cn("truncate font-display font-bold tabular-nums", fit(short(players)))}>{short(players)}</div>
           <div className="text-[9px] font-semibold uppercase tracking-wide text-muted">Players</div>
         </div>
       </div>
-      <div className="flex border-t border-line text-xs font-semibold">
-        <button onClick={onMarks} className="flex-1 py-2 hover:bg-white/50" aria-pressed={marks} title="Show or hide the marks on the map">
-          {marks ? "👁 Marks on" : "🙈 Marks off"}
+      <div className="grid grid-cols-[1fr_1fr_2.5rem] border-t border-line text-xs font-semibold">
+        <button
+          onClick={onMarks}
+          className="flex items-center justify-center gap-1 py-2 hover:bg-white/50"
+          aria-pressed={marks}
+          title="Show or hide the marks on the map"
+        >
+          <span aria-hidden>{marks ? "👁" : "🙈"}</span>
+          {marks ? "Marks" : "Hidden"}
         </button>
-        <button onClick={onSound} className="flex-1 border-l border-line py-2 hover:bg-white/50" aria-pressed={sound}>
-          {sound ? "🔊 Sound" : "🔈 Muted"}
+        <button onClick={onSound} className="flex items-center justify-center gap-1 border-l border-line py-2 hover:bg-white/50" aria-pressed={sound}>
+          <span aria-hidden>{sound ? "🔊" : "🔈"}</span>
+          {sound ? "Sound" : "Muted"}
         </button>
-        <button onClick={onToggle} className="w-10 border-l border-line py-2 hover:bg-white/50" aria-label="Fold away">
+        <button onClick={onToggle} className="grid place-items-center border-l border-line py-2 hover:bg-white/50" aria-label="Fold away">
           ▴
         </button>
       </div>

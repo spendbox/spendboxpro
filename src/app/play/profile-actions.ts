@@ -66,7 +66,7 @@ export async function loadMyStats(): Promise<
     db.from("entries").select("round_id", { count: "exact", head: true }).eq("user_id", userId),
     db.from("entries").select("user_id", { count: "exact", head: true }).eq("caught_by", userId),
     db.from("badges").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("badge", "survivor"),
-    db.from("badges").select("id, badge, detail, round_id, earned_at").eq("user_id", userId).order("earned_at", { ascending: false }).limit(60),
+    db.from("badges").select("id, badge, detail, round_id, earned_at").eq("user_id", userId).order("earned_at", { ascending: false }).limit(2000),
     db.from("ledger").select("user_id, amount").in("kind", WIN_KINDS).gt("created_at", weekAgo).not("user_id", "is", null).limit(20000),
   ]);
   const totals = new Map<string, number>();

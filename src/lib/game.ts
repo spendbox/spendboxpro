@@ -8,7 +8,7 @@ export type Phase = "join" | "seek" | "done";
 
 export type GameEvent = {
   id: number;
-  kind: "moved" | "caught" | "searched" | "sweep";
+  kind: "moved" | "caught" | "searched" | "sweep" | "shielded";
   tile: number;
   at: string;
   detail: {
@@ -27,7 +27,20 @@ export type GameEvent = {
 
 export type GameState = {
   serverNow: string;
-  me: { id: string; name: string | null; pinSet: boolean; coins: number; bonusCoins: number; canHide: boolean; freeSearch: boolean; avatar: Avatar };
+  me: {
+    id: string;
+    /** Watching without signing in. */
+    guest: boolean;
+    name: string | null;
+    pinSet: boolean;
+    coins: number;
+    bonusCoins: number;
+    canHide: boolean;
+    freeSearch: boolean;
+    avatar: Avatar;
+    /** Coins that just trickled in from passive income (under 100 coins). */
+    passiveGained: number;
+  };
   /** Everyone in this round (not the bot), for finding people to chat with. */
   players: { id: string; name: string; role: "hider" | "seeker"; caught: boolean; avatar: Avatar }[];
   /** A coin balloon drifting by just for you, if one's due (slot = which one). */
@@ -58,6 +71,9 @@ export type GameState = {
     lastSweptAt: string | null;
     /** A sweep pinned this hider: no moving until then. */
     frozenUntil: string | null;
+    /** Bought a shield this round, and whether it has already saved them. */
+    shieldBought: boolean;
+    shieldSaved: boolean;
   } | null;
   mySearches: { tile: number; caught: number }[];
   /** The latest searches by anyone (no results), so everyone sees tiles light up. */
@@ -78,7 +94,7 @@ export type GameState = {
   events: GameEvent[];
   lastResult: { roundId: number; role: string; payout: number; caught: boolean } | null;
   results: RoundResults | null;
-  prices: { stake: number; moveFee: number; moveCooldown: number; sweepCooldown: number };
+  prices: { stake: number; moveFee: number; moveCooldown: number; sweepCooldown: number; freezeSeconds: number; shield: number; passiveTarget: number; passivePerDay: number; winShare: number; otherShare: number };
 };
 
 export type RoundResults = {
@@ -117,15 +133,28 @@ export async function hasLoginCookie() {
 const num = (v: unknown) => Number(v ?? 0);
 const money = (n: number) => Math.round(n * 100) / 100;
 
-export async function loadGame(userId: string): Promise<GameState> {
+/** Someone watching the city without an account (the home page). */
+const GUEST = "00000000-0000-0000-0000-000000000000";
+
+export async function loadGame(userIdOrGuest: string | null): Promise<GameState> {
   const db = createAdminClient();
+  const guest = !userIdOrGuest;
+  const userId = userIdOrGuest ?? GUEST;
   // Moves the round clock along (and lets the Seed Bot think). A scheduled job does this
   // too; calling it here keeps the game moving even if that job is not set up.
-  const ticked = await db.rpc("tick_with_extras");
+  // Passive income for players running low runs alongside (best effort: older databases
+  // don't have it yet).
+  const [ticked, passive] = await Promise.all([
+    db.rpc("tick_with_extras"),
+    guest ? Promise.resolve({ data: 0 }) : db.rpc("accrue_passive", { p_user: userId }),
+  ]);
   if (ticked.error) await db.rpc("tick");
+  const passiveGained = Number(passive.data ?? 0);
 
   const [{ data: profile, error: profileError }, { data: round }, { data: settings }] = await Promise.all([
-    db.from("profiles").select("username, pin_set, coins, bonus_coins, seeker_rounds, free_search_day, avatar").eq("id", userId).single(),
+    guest
+      ? Promise.resolve({ data: { username: null, pin_set: true, coins: 0, bonus_coins: 0, seeker_rounds: 0, free_search_day: null, avatar: null }, error: null })
+      : db.from("profiles").select("username, pin_set, coins, bonus_coins, seeker_rounds, free_search_day, avatar").eq("id", userId).single(),
     db.from("rounds").select("*").order("id", { ascending: false }).limit(1).maybeSingle(),
     db.from("game_settings").select("key, value"),
   ]);
@@ -146,17 +175,28 @@ export async function loadGame(userId: string): Promise<GameState> {
   const mySweeps: GameState["mySweeps"] = [];
   let activeTraps = 0;
   let notifications: GameState["notifications"] = [];
-  if (round) {
-    const [{ data: e }, { data: searches }, { data: allEvents }, { data: allSearches }] = await Promise.all([
+  // Everything below only needs the round, so it's fetched all at once (fewer round trips =
+  // a faster first paint when you come back to the game).
+  const roundPart = async () => {
+    if (!round) return;
+    const trapsPer = s.traps_per_seeker ?? 5;
+    const [{ data: e }, { data: searches }, { data: allEvents }, { data: allSearches }, { data: sweepRows }, { data: notes }, { data: alive }] = await Promise.all([
       db
         .from("entries")
-        .select("role, tile, moves, caught, stake, stake_weight, visited, last_move_at, last_sweep_at, last_swept_at, frozen_until")
+        .select("*")
         .eq("round_id", round.id)
         .eq("user_id", userId)
         .maybeSingle(),
       db.from("searches").select("tile, caught").eq("round_id", round.id).eq("seeker_id", userId),
       db.from("events").select("id, kind, tile, detail, created_at").eq("round_id", round.id).order("id", { ascending: true }),
       db.from("searches").select("tile, created_at").eq("round_id", round.id).order("created_at", { ascending: true }),
+      db.from("sweeps").select("id, seeker_id, tile, radius, found, created_at").eq("round_id", round.id).order("id", { ascending: false }).limit(2000),
+      guest
+        ? Promise.resolve({ data: [] as { id: number; kind: string; body: string; tile: number | null; created_at: string }[] })
+        : db.from("notifications").select("id, kind, body, tile, created_at").eq("user_id", userId).eq("round_id", round.id).order("id", { ascending: false }).limit(40),
+      guest
+        ? Promise.resolve({ data: [] as { stake_weight: number }[] })
+        : db.from("entries").select("stake_weight").eq("round_id", round.id).eq("role", "hider").eq("caught", false).gt("stake_weight", 0),
     ]);
     if (e) {
       entry = {
@@ -169,6 +209,8 @@ export async function loadGame(userId: string): Promise<GameState> {
         lastSweepAt: e.last_sweep_at,
         lastSweptAt: e.last_swept_at,
         frozenUntil: e.frozen_until,
+        shieldBought: Boolean(e.shield_bought),
+        shieldSaved: Boolean(e.shield_saved),
       };
     }
     mySearches = searches ?? [];
@@ -185,11 +227,6 @@ export async function loadGame(userId: string): Promise<GameState> {
     caughtTiles = (allEvents ?? []).filter((x) => x.kind === "caught").map((x) => x.tile);
     events = (allEvents ?? []).slice(-40).map((x) => ({ id: x.id, kind: x.kind, tile: x.tile, at: x.created_at, detail: x.detail }));
 
-    const trapsPer = s.traps_per_seeker ?? 5;
-    const [{ data: sweepRows }, { data: notes }] = await Promise.all([
-      db.from("sweeps").select("id, seeker_id, tile, radius, found, created_at").eq("round_id", round.id).order("id", { ascending: false }).limit(2000),
-      db.from("notifications").select("id, kind, body, tile, created_at").eq("user_id", userId).eq("round_id", round.id).order("id", { ascending: false }).limit(40),
-    ]);
     const perSeeker = new Map<string, number>();
     for (const sw of sweepRows ?? []) {
       const n = (perSeeker.get(sw.seeker_id) ?? 0) + 1;
@@ -206,33 +243,30 @@ export async function loadGame(userId: string): Promise<GameState> {
     ];
 
     if (e?.role === "hider" && !e.caught) {
-      const { data: alive } = await db
-        .from("entries")
-        .select("stake_weight")
-        .eq("round_id", round.id)
-        .eq("role", "hider")
-        .eq("caught", false)
-        .gt("stake_weight", 0);
       const total = (alive ?? []).reduce((t, r) => t + num(r.stake_weight), 0);
-      const share = total > 0 ? (num(round.pool) * s.pool_hiders * num(e.stake_weight)) / total : 0;
+      const share = total > 0 ? (num(round.pool) * (s.pool_win_share ?? s.pool_hiders) * num(e.stake_weight)) / total : 0;
       outlook = { stakeBack: num(e.stake), share: Math.floor(share * 100) / 100 };
     }
-  }
+  };
 
-  const { data: last } = await db
-    .from("entries")
-    .select("round_id, role, payout, caught, rounds!inner(status)")
-    .eq("user_id", userId)
-    .eq("rounds.status", "done")
-    .order("round_id", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const results = await loadResults(db, userId);
+  const lastPart = async () =>
+    guest
+      ? null
+      : (
+          await db
+            .from("entries")
+            .select("round_id, role, payout, caught, rounds!inner(status)")
+            .eq("user_id", userId)
+            .eq("rounds.status", "done")
+            .order("round_id", { ascending: false })
+            .limit(1)
+            .maybeSingle()
+        ).data;
 
   // Everyone in the round, so you can find people to message.
   let players: GameState["players"] = [];
-  if (round) {
+  const playersPart = async () => {
+    if (!round) return;
     const { data: rows } = await db
       .from("entries")
       .select("user_id, role, caught, profiles!entries_user_id_fkey(username, avatar, is_bot)")
@@ -245,13 +279,14 @@ export async function loadGame(userId: string): Promise<GameState> {
         return { id: r.user_id, name: p.username, role: r.role, caught: r.caught, avatar: cleanAvatar(p.avatar, p.username) };
       })
       .filter((x): x is GameState["players"][number] => x !== null);
-  }
+  };
 
   // Coin balloons: one can drift by every few minutes, for you alone, up to a daily limit.
   let balloon: GameState["balloon"] = null;
   const slotMs = (s.balloon_minutes ?? 4) * 60_000;
   const slot = Math.floor(Date.now() / slotMs);
-  if (round?.status === "seek") {
+  const balloonPart = async () => {
+    if (round?.status !== "seek" || guest) return;
     const { data: claims } = await db.from("balloon_claims").select("slot").eq("user_id", userId).eq("day", today);
     const claimed = new Set((claims ?? []).map((c) => c.slot));
     // Not every window has one: about two in three do, picked per player.
@@ -259,9 +294,14 @@ export async function loadGame(userId: string): Promise<GameState> {
     if ((claims?.length ?? 0) < (s.balloons_per_day ?? 10) && !claimed.has(slot) && lucky) {
       balloon = { slot, coins: s.balloon_coins ?? 5 };
     }
-  }
+  };
 
-  const [{ data: visits }, { count: playerCount }] = await Promise.all([
+  const [, last, results, , , { data: visits }, { count: playerCount }] = await Promise.all([
+    roundPart(),
+    lastPart(),
+    loadResults(db, userId),
+    playersPart(),
+    balloonPart(),
     db.from("site_counters").select("value").eq("key", "visits").maybeSingle(),
     db.from("profiles").select("id", { count: "exact", head: true }).eq("is_bot", false),
   ]);
@@ -279,6 +319,8 @@ export async function loadGame(userId: string): Promise<GameState> {
     site,
     me: {
       id: userId,
+      guest,
+      passiveGained,
       name: profile?.username ?? null,
       avatar: cleanAvatar(profile?.avatar, profile?.username ?? userId),
       pinSet: Boolean(profile?.pin_set),
@@ -320,6 +362,12 @@ export async function loadGame(userId: string): Promise<GameState> {
       moveFee: s.second_move_fee,
       moveCooldown: s.move_cooldown_seconds ?? 60,
       sweepCooldown: s.sweep_cooldown_seconds ?? 10,
+      freezeSeconds: s.sweep_freeze_seconds ?? 60,
+      shield: s.shield_price ?? 100,
+      passiveTarget: s.passive_target ?? 100,
+      passivePerDay: s.passive_per_day ?? 100,
+      winShare: s.pool_win_share ?? 0.8,
+      otherShare: s.pool_other_share ?? 0.1,
     },
   };
 }

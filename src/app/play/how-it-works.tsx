@@ -19,14 +19,15 @@ const SECTIONS: { icon: string; title: string; body: string[] }[] = [
       "Put down 100 coins and we'll drop you on a random spot when the window closes. Every hider makes the city grow a little.",
       "You can move as often as you like: 100 coins a move, once a minute. You can't go back to a spot you've left, or onto one that's been searched (those show in orange).",
       "When you move, everyone sees that you slipped away, and from where.",
-      "Make it to the end and you get your 100 back plus a share of the survivor pool.",
+      "Make it to the end and you get your 100 back, and the survivors share 80% of the pool.",
+      "Once the hunt starts you can raise a shield (100 coins, once per game). The next time someone finds you, it teleports you to a spot nearby and you stay in the game, though the seeker still takes your stake. While the shield is up you can't move.",
     ],
   },
   {
     icon: "🔍",
-    title: "Seeking",
+    title: "Hunting",
     body: [
-      "Tap any spot to search it. Your first search each day is free; after that the price creeps up as more of the city gets searched.",
+      "Tap Hunt to join, then tap any spot to search it. Your first search each day is free; after that the price creeps up as more of the city gets searched.",
       "Find a hider and you keep most of their stake. Find the bot and you get 200 coins.",
       "You can search a spot again if you think someone's snuck in. We'll remind you it was searched before.",
       "You only see the most recent searches on the map; older ones fade.",
@@ -37,7 +38,7 @@ const SECTIONS: { icon: string; title: string; body: string[] }[] = [
     icon: "📡",
     title: "Drones and traps",
     body: [
-      "A sweep sends a drone over an area. It tells you yes or no: is anyone hiding there? Anyone inside is pinned in place for 15 seconds.",
+      "A sweep sends a drone over an area. It tells you yes or no: is anyone hiding there? Anyone inside is pinned in place for 1 minute (they see a countdown).",
       "Your last 5 sweeps keep watching as traps. If a hider moves into one, you'll get a ping. Nobody else can see your traps.",
       "Sweeps get pricier the more people use them, and your drone needs 10 seconds to recharge.",
     ],
@@ -47,15 +48,17 @@ const SECTIONS: { icon: string; title: string; body: string[] }[] = [
     title: "Coins",
     body: [
       "Coins are just for playing: they can't be bought or cashed out.",
-      "Searches, sweeps and moves all feed the survivor pool. At the end, survivors share 60% of it, seekers share 20% (by how much they spent), and 20% disappears.",
+      "Every round's pool starts at 0. Searches, sweeps, moves and shields all go into it.",
+      "If anyone survives: survivors share 80%, hunters share 10% (by how much they spent), and 10% disappears.",
+      "If every hider is found: hunters share 80% (by how much they spent), the hiders who played share 10%, and 10% disappears.",
       "Keep an eye out for golden coin balloons drifting over the city. Tap one to pop it for a few coins (up to 10 a day).",
-      "Running low? Everyone gets topped back up to 100 every day.",
+      "Running low? While you have under 100 coins you earn passive income, a little every hour, up to 100 in 24 hours.",
     ],
   },
   {
     icon: "🏅",
     title: "Badges",
-    body: ["Pull off something special (survive without moving, catch three in a round, find the bot...) and you earn a badge you can share."],
+    body: ["There are 50 badges to collect. Pull off something special (survive without moving, catch three in a round, find the bot, play a week in a row...) and you earn one you can share."],
   },
 ];
 
