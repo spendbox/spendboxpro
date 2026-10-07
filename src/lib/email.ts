@@ -6,12 +6,20 @@ import "server-only";
 
 const API = "https://api.resend.com";
 
-export async function sendEmail({ to, subject, html, text }: { to: string; subject: string; html: string; text: string }) {
+/** Sends one email. Returns Resend's own error text when it refuses, so problems are visible. */
+export async function sendEmail({
+  to,
+  subject,
+  html,
+  text,
+}: {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
   const key = process.env.RESEND_API_KEY;
-  if (!key) {
-    console.error("RESEND_API_KEY is not set, so no email was sent.");
-    return false;
-  }
+  if (!key) return { ok: false, error: "Email is not set up (RESEND_API_KEY is missing)." };
   try {
     const res = await fetch(`${API}/emails`, {
       method: "POST",
@@ -24,11 +32,17 @@ export async function sendEmail({ to, subject, html, text }: { to: string; subje
         text,
       }),
     });
-    if (!res.ok) console.error("Email failed", res.status, await res.text().catch(() => ""));
-    return res.ok;
+    if (res.ok) return { ok: true };
+    const body = await res.text().catch(() => "");
+    console.error("Email failed", res.status, body);
+    let message = "";
+    try {
+      message = JSON.parse(body).message ?? "";
+    } catch {}
+    return { ok: false, error: message || `Resend said no (status ${res.status}).` };
   } catch (error) {
     console.error("Email failed", error);
-    return false;
+    return { ok: false, error: "Couldn't reach the email service." };
   }
 }
 

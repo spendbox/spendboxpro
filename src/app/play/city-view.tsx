@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { KIND_LABEL, makePlan, tileAt, type CityPlan, type Tile } from "@/lib/city/layout";
+import { KIND_LABEL, makePlan, riverCentre, tileAt, type CityPlan, type Tile } from "@/lib/city/layout";
 
 // The game board, drawn as a small living 3D city with three.js.
 // Every tile is a lot: a road, a building, a park... New tiles rise out of the ground
@@ -18,6 +18,10 @@ export type CityMarkers = {
   me: number | null;
   sweeps: { tile: number; radius: number; count: number }[];
   pending: number | null;
+  /** Latest searches by anyone, and how long ago (ms). They light up. */
+  recent: { tile: number; ageMs: number }[];
+  /** Every searched tile (hiders only): shown as locked. */
+  locked: number[];
 };
 
 type Props = {
@@ -65,6 +69,26 @@ function partsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "ti
     add("crown", { x: x + dx, y: 0.08 + 0.25 * size, z: z + dz, sx: 0.6 * size, sy: 0.75 * size, sz: 0.6 * size, ry: v * 6, color: pick(pal.leaves, v) });
   };
 
+  if (t.kind === "river" || t.kind === "lake") {
+    add("water", { x, y: 0, z, sx: 1, sy: 0.03, sz: 1, ry: 0, color: t.kind === "river" ? 0x6fb7e0 : WATER });
+    return;
+  }
+
+  if (t.kind === "bridge") {
+    const along = t.road === "x";
+    add("water", { x, y: 0, z, sx: 1, sy: 0.03, sz: 1, ry: 0, color: 0x6fb7e0 });
+    add("building", { x, y: 0, z, sx: along ? 0.16 : 0.5, sy: 0.24, sz: along ? 0.5 : 0.16, ry: 0, color: 0xc9ced6 });
+    add("building", { x, y: 0.24, z, sx: along ? 1 : 0.72, sy: 0.06, sz: along ? 0.72 : 1, ry: 0, color: 0xb9c0c9 });
+    add("ground", { x, y: 0.3, z, sx: along ? 1 : 0.6, sy: 0.02, sz: along ? 0.6 : 1, ry: 0, color: ASPHALT });
+    for (const o of [-0.34, 0.34]) {
+      add("building", { x: x + (along ? 0 : o), y: 0.3, z: z + (along ? o : 0), sx: along ? 1 : 0.04, sy: 0.08, sz: along ? 0.04 : 1, ry: 0, color: 0xe85d4a });
+    }
+    for (const o of [-0.25, 0.25]) {
+      add("paint", { x: x + (along ? o : 0), y: 0.321, z: z + (along ? 0 : o), sx: along ? 0.22 : 0.04, sy: 0.005, sz: along ? 0.04 : 0.22, ry: 0, color: 0xffffff });
+    }
+    return;
+  }
+
   if (t.kind === "road") {
     add("ground", { x, y: 0, z, sx: 1, sy: 0.06, sz: 1, ry: 0, color: ASPHALT });
     if (t.road !== "cross") {
@@ -78,7 +102,7 @@ function partsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "ti
     return;
   }
 
-  const lot = t.kind === "park" || t.kind === "trees" || t.kind === "pond" ? GRASS : SIDEWALK;
+  const lot = ["park", "trees", "pond", "ferris", "turbine"].includes(t.kind) ? GRASS : SIDEWALK;
   add("ground", { x, y: 0, z, sx: 0.98, sy: 0.08, sz: 0.98, ry: 0, color: lot });
 
   switch (t.kind) {
@@ -134,6 +158,24 @@ function partsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "ti
     case "pond":
       add("water", { x, y: 0.08, z, sx: 0.82, sy: 0.02, sz: 0.72, ry: r[1], color: WATER });
       tree(0.36, -0.36, 0.6, r[2]);
+      break;
+    case "ferris":
+      // The legs; the turning wheel is added separately (see landmarks).
+      for (const o of [-0.2, 0.2]) {
+        add("building", { x: x + o, y: 0.08, z, sx: 0.05, sy: 1.25, sz: 0.05, ry: 0, color: 0xdee2e6 });
+      }
+      add("building", { x, y: 0.08, z: z + 0.32, sx: 0.5, sy: 0.12, sz: 0.2, ry: 0, color: 0xf08c6b });
+      break;
+    case "turbine":
+      add("trunk", { x, y: 0.08, z, sx: 1.1, sy: 2.6, sz: 1.1, ry: 0, color: 0xf1f3f5 });
+      add("building", { x, y: 2.6, z: z + 0.02, sx: 0.1, sy: 0.1, sz: 0.2, ry: 0, color: 0xf1f3f5 });
+      tree(0.32, 0.3, 0.5, r[1]);
+      break;
+    case "stadium":
+      add("disc", { x, y: 0.08, z, sx: 0.96, sy: 0.4, sz: 0.82, ry: 0, color: 0xdfe3e8 });
+      add("disc", { x, y: 0.08, z, sx: 0.78, sy: 0.43, sz: 0.62, ry: 0, color: 0xd9734e });
+      add("disc", { x, y: 0.08, z, sx: 0.62, sy: 0.44, sz: 0.46, ry: 0, color: 0x69c06a });
+      add("paint", { x, y: 0.52, z, sx: 0.02, sy: 0.005, sz: 0.4, ry: 0, color: 0xffffff });
       break;
     case "plaza":
       add("ground", { x, y: 0.08, z, sx: 0.8, sy: 0.02, sz: 0.8, ry: 0, color: 0xe7e1d5 });
@@ -230,6 +272,7 @@ export function CityView({ seed, tileCount, markers, interactive, onTile, onHove
     let meshes: Record<string, THREE.InstancedMesh> = {};
     let parts: Record<string, Part[]> = {};
     let tiles: Tile[] = [];
+    let kindAt = new Map<string, Tile["kind"]>();
     let currentSeed = -1;
     let born = new Map<number, number>(); // tile → time it started rising
     let growing: number[] = [];
@@ -265,7 +308,7 @@ export function CityView({ seed, tileCount, markers, interactive, onTile, onHove
       if (carBody) moving.remove(carBody, carTop!);
       const lines = new Map<string, { axis: "x" | "z"; at: number; min: number; max: number }>();
       for (const t of tiles) {
-        if (t.kind !== "road") continue;
+        if (t.kind !== "road" && t.kind !== "bridge") continue;
         if (t.road === "x" || t.road === "cross") {
           const k = `x${t.z}`;
           const l = lines.get(k) ?? { axis: "x" as const, at: t.z, min: t.x, max: t.x };
@@ -309,10 +352,14 @@ export function CityView({ seed, tileCount, markers, interactive, onTile, onHove
         const alongX = c.line.axis === "x";
         const x = alongX ? c.pos : c.line.at + c.lane;
         const z = alongX ? c.line.at - c.lane : c.pos;
+        // Ride up onto bridges; hide where the road line is interrupted (water, park...).
+        const under = kindAt.get(`${Math.round(x)},${Math.round(z)}`);
+        const y = under === "bridge" ? 0.32 : 0.06;
+        const shown = under === "road" || under === "bridge" ? 1 : 0.0001;
         q.setFromAxisAngle(up, alongX ? 0 : Math.PI / 2);
-        m4.compose(v.set(x, 0.06, z), q, s.set(0.3, 0.09, 0.15));
+        m4.compose(v.set(x, y, z), q, s.set(0.3 * shown, 0.09 * shown, 0.15 * shown));
         carBody!.setMatrixAt(k, m4);
-        m4.compose(v.set(x - (alongX ? 0.02 * Math.sign(c.speed) : 0), 0.15, z - (alongX ? 0 : 0.02 * Math.sign(c.speed))), q, s.set(0.16, 0.06, 0.13));
+        m4.compose(v.set(x - (alongX ? 0.02 * Math.sign(c.speed) : 0), y + 0.09, z - (alongX ? 0 : 0.02 * Math.sign(c.speed))), q, s.set(0.16 * shown, 0.06 * shown, 0.13 * shown));
         carTop!.setMatrixAt(k, m4);
       });
       carBody.instanceMatrix.needsUpdate = true;
@@ -368,6 +415,164 @@ export function CityView({ seed, tileCount, markers, interactive, onTile, onHove
       }
     }
 
+    // ---- landmarks that move: Ferris wheels turn, wind turbines spin
+    let landmarks: { obj: THREE.Object3D; spin: THREE.Object3D; tile: number; speed: number }[] = [];
+    const lmMat = {
+      white: new THREE.MeshLambertMaterial({ color: 0xf1f3f5 }),
+      frame: new THREE.MeshLambertMaterial({ color: 0xe9ecef }),
+      cabins: [0xff6b6b, 0xffd43b, 0x4dabf7, 0x69db7c, 0xda77f2, 0xff922b].map((c) => new THREE.MeshLambertMaterial({ color: c })),
+    };
+    const lmGeo = {
+      rim: new THREE.TorusGeometry(0.62, 0.025, 6, 32),
+      spoke: new THREE.BoxGeometry(0.02, 1.24, 0.02),
+      cabin: new THREE.BoxGeometry(0.12, 0.12, 0.12),
+      blade: new THREE.BoxGeometry(0.06, 0.9, 0.02).translate(0, 0.45, 0),
+    };
+    function buildLandmarks() {
+      for (const l of landmarks) moving.remove(l.obj);
+      landmarks = [];
+      for (const t of tiles) {
+        if (t.kind === "ferris") {
+          const obj = new THREE.Group();
+          const wheel = new THREE.Group();
+          wheel.add(new THREE.Mesh(lmGeo.rim, lmMat.frame));
+          for (let k = 0; k < 4; k++) {
+            const sp = new THREE.Mesh(lmGeo.spoke, lmMat.frame);
+            sp.rotation.z = (k * Math.PI) / 4;
+            wheel.add(sp);
+          }
+          for (let k = 0; k < 8; k++) {
+            const c = new THREE.Mesh(lmGeo.cabin, lmMat.cabins[k % lmMat.cabins.length]);
+            const a = (k / 8) * Math.PI * 2;
+            c.position.set(Math.cos(a) * 0.62, Math.sin(a) * 0.62, 0);
+            c.castShadow = true;
+            wheel.add(c);
+          }
+          wheel.position.y = 1.35;
+          obj.add(wheel);
+          obj.position.set(t.x, 0, t.z);
+          obj.rotation.y = t.r[1] < 0.5 ? 0 : Math.PI / 2;
+          landmarks.push({ obj, spin: wheel, tile: t.i, speed: 0.35 });
+          moving.add(obj);
+        }
+        if (t.kind === "turbine") {
+          const obj = new THREE.Group();
+          const rotor = new THREE.Group();
+          for (let k = 0; k < 3; k++) {
+            const b = new THREE.Mesh(lmGeo.blade, lmMat.white);
+            b.rotation.z = (k * Math.PI * 2) / 3;
+            rotor.add(b);
+          }
+          rotor.position.set(0, 2.68, 0.14);
+          obj.add(rotor);
+          obj.position.set(t.x, 0, t.z);
+          obj.rotation.y = t.r[2] * 0.6;
+          landmarks.push({ obj, spin: rotor, tile: t.i, speed: 1.6 + t.r[3] });
+          moving.add(obj);
+        }
+      }
+    }
+    function updateLandmarks(dt: number, now: number) {
+      for (const l of landmarks) {
+        l.spin.rotation.z += l.speed * dt;
+        const t = Math.min(1, Math.max(0, (now - (born.get(l.tile) ?? 0)) / 700));
+        l.obj.scale.setScalar(Math.max(0.0001, t));
+      }
+    }
+
+    // ---- boats drift along the river
+    const boatMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    const boatGeo = new THREE.BoxGeometry(0.34, 0.08, 0.14).translate(0, 0.04, 0);
+    const cabinGeo = new THREE.BoxGeometry(0.12, 0.07, 0.1).translate(0, 0.115, 0);
+    let boats: { obj: THREE.Group; pos: number; speed: number; side: number }[] = [];
+    let boatPlan: CityPlan | null = null;
+    function buildBoats(plan: CityPlan) {
+      for (const b of boats) moving.remove(b.obj);
+      boats = [];
+      boatPlan = plan;
+      if (!plan.river) return;
+      const hasRiver = tiles.some((t) => t.kind === "river");
+      if (!hasRiver) return;
+      const n = Math.min(6, 2 + Math.floor(radius / 6));
+      for (let k = 0; k < n; k++) {
+        const obj = new THREE.Group();
+        const hull = new THREE.Mesh(boatGeo, boatMat);
+        const cabin = new THREE.Mesh(cabinGeo, lmMat.cabins[k % lmMat.cabins.length]);
+        obj.add(hull, cabin);
+        boats.push({ obj, pos: (Math.random() - 0.5) * radius * 2, speed: (k % 2 ? 1 : -1) * (0.25 + Math.random() * 0.25), side: (k % 2 ? 1 : -1) * 0.2 });
+        moving.add(obj);
+      }
+    }
+    function updateBoats(time: number, dt: number) {
+      if (!boatPlan?.river) return;
+      const along = boatPlan.river.along;
+      for (const b of boats) {
+        b.pos += b.speed * dt;
+        if (b.pos > radius) b.pos = -radius;
+        if (b.pos < -radius) b.pos = radius;
+        const c = riverCentre(boatPlan, b.pos) + b.side;
+        const c2 = riverCentre(boatPlan, b.pos + 0.1 * Math.sign(b.speed)) + b.side;
+        const x = along === "x" ? b.pos : c;
+        const z = along === "x" ? c : b.pos;
+        const onWater = kindAt.get(`${Math.round(x)},${Math.round(z)}`);
+        b.obj.visible = onWater === "river" || onWater === "bridge";
+        b.obj.position.set(x, 0.03 + Math.sin(time * 2 + b.pos) * 0.01, z);
+        const dx = along === "x" ? 0.1 * Math.sign(b.speed) : c2 - c;
+        const dz = along === "x" ? c2 - c : 0.1 * Math.sign(b.speed);
+        b.obj.rotation.y = Math.atan2(-dz, dx);
+      }
+    }
+
+    // ---- hot-air balloons and planes
+    const balloonColors = [0xff6b6b, 0xffd43b, 0x4dabf7, 0xda77f2, 0x38d9a9];
+    const balloons = balloonColors.map((c, k) => {
+      const g = new THREE.Group();
+      const envelope = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 10), new THREE.MeshLambertMaterial({ color: c, flatShading: true }));
+      envelope.scale.y = 1.15;
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(0.43, 0.38, 0.12, 12), new THREE.MeshLambertMaterial({ color: 0xffffff }));
+      band.position.y = -0.12;
+      const basket = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, 0.14), new THREE.MeshLambertMaterial({ color: 0x8a6a4f }));
+      basket.position.y = -0.68;
+      g.add(envelope, band, basket);
+      g.userData = { a: (k / balloonColors.length) * Math.PI * 2, r: 0.5 + (k % 3) * 0.25, h: 4.5 + (k % 3) * 1.4, speed: 0.025 + k * 0.006 };
+      moving.add(g);
+      return g;
+    });
+    const planes = [0, 1].map((k) => {
+      const g = new THREE.Group();
+      const white = new THREE.MeshLambertMaterial({ color: 0xffffff });
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.05, 0.9, 8).rotateZ(Math.PI / 2), white);
+      const wing = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.02, 0.9), white);
+      const tail = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.2, 0.02), new THREE.MeshLambertMaterial({ color: k ? 0xe5484d : 0x228be6 }));
+      tail.position.set(-0.4, 0.1, 0);
+      const light = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 6), new THREE.MeshBasicMaterial({ color: 0xff4d4f }));
+      light.position.set(0, 0, 0.46);
+      g.add(body, wing, tail, light);
+      g.userData = { t: k * 0.5, angle: 0.4 + k * 2.2, light };
+      moving.add(g);
+      return g;
+    });
+    function updateAir(time: number, dt: number) {
+      for (const b of balloons) {
+        const u = b.userData;
+        u.a += u.speed * dt;
+        b.position.set(Math.cos(u.a) * radius * u.r, u.h + Math.sin(time * 0.6 + u.a * 5) * 0.25, Math.sin(u.a) * radius * u.r);
+      }
+      for (const p of planes) {
+        const u = p.userData;
+        u.t += dt / 26;
+        if (u.t > 1) {
+          u.t = 0;
+          u.angle += 1.9;
+        }
+        const span = radius * 3 + 30;
+        const dir = new THREE.Vector3(Math.cos(u.angle), 0, Math.sin(u.angle));
+        p.position.copy(dir).multiplyScalar((u.t - 0.5) * span).add(new THREE.Vector3(-dir.z * 4, 15 + radius * 0.3, dir.x * 4));
+        p.rotation.y = -u.angle;
+        (u.light as THREE.Mesh).visible = Math.sin(time * 6) > 0.6;
+      }
+    }
+
     // ---- build / grow the city
     function build(newSeed: number, count: number) {
       const sameCity = newSeed === currentSeed;
@@ -378,6 +583,7 @@ export function CityView({ seed, tileCount, markers, interactive, onTile, onHove
       currentSeed = newSeed;
       const plan = makePlan(newSeed);
       tiles = Array.from({ length: count }, (_, i) => tileAt(plan, i));
+      kindAt = new Map(tiles.map((t) => [`${t.x},${t.z}`, t.kind]));
 
       const now = performance.now();
       for (const t of tiles) {
@@ -443,6 +649,8 @@ export function CityView({ seed, tileCount, markers, interactive, onTile, onHove
         controls.update();
       }
       buildCars(plan);
+      buildLandmarks();
+      buildBoats(plan);
       setMarkers(lastMarkers);
     }
 
@@ -466,8 +674,9 @@ export function CityView({ seed, tileCount, markers, interactive, onTile, onHove
     }
 
     // ---- markers
-    let lastMarkers: CityMarkers = { searchedEmpty: [], searchedHit: [], caught: [], left: [], me: null, sweeps: [], pending: null };
-    const pulsers: { obj: THREE.Object3D; kind: "pulse" | "bob" | "spin"; base: number }[] = [];
+    let lastMarkers: CityMarkers = { searchedEmpty: [], searchedHit: [], caught: [], left: [], me: null, sweeps: [], pending: null, recent: [], locked: [] };
+    const pulsers: { obj: THREE.Object3D; kind: "pulse" | "bob" | "spin" | "flash"; base: number }[] = [];
+    const glassBox = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
     const markerGeo = {
       pinHead: new THREE.SphereGeometry(0.14, 16, 12),
       pinStick: new THREE.ConeGeometry(0.06, 0.32, 10).rotateX(Math.PI),
@@ -503,19 +712,49 @@ export function CityView({ seed, tileCount, markers, interactive, onTile, onHove
       if (!tiles.length) return;
       const ok = (t: number) => t >= 0 && t < tiles.length;
 
-      for (const t of m.searchedEmpty.filter(ok)) {
-        const g = new THREE.Group();
-        const mat = new THREE.MeshBasicMaterial({ color: 0x8b95a1, transparent: true, opacity: 0.9 });
-        const a = new THREE.Mesh(markerGeo.cross, mat);
-        const b = new THREE.Mesh(markerGeo.cross, mat);
-        a.rotation.y = Math.PI / 4;
-        b.rotation.y = -Math.PI / 4;
-        g.add(a, b);
-        g.position.set(posOf(t).x, topOf(t) + 0.04, posOf(t).z);
-        markerGroup.add(g);
+      // Searched tiles: a coloured glass block over the whole tile, with a solid cap on top.
+      // Blue = you searched, empty. Red = you found someone. Orange = searched (hiders' view).
+      const mineSet = new Set([...m.searchedEmpty, ...m.searchedHit]);
+      const blocks: { tile: number; color: number }[] = [
+        ...m.locked.filter((t) => ok(t) && !mineSet.has(t)).map((tile) => ({ tile, color: 0xff922b })),
+        ...m.searchedEmpty.filter(ok).map((tile) => ({ tile, color: 0x5c7cfa })),
+        ...m.searchedHit.filter(ok).map((tile) => ({ tile, color: 0xe5484d })),
+      ];
+      if (blocks.length) {
+        const glass = new THREE.InstancedMesh(glassBox, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.28, depthWrite: false }), blocks.length);
+        const caps = new THREE.InstancedMesh(glassBox, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.85 }), blocks.length);
+        blocks.forEach((b, k) => {
+          const p = posOf(b.tile);
+          const h = topOf(b.tile) + 0.12;
+          m4.compose(v.set(p.x, 0, p.z), q.identity(), s.set(1.02, h, 1.02));
+          glass.setMatrixAt(k, m4);
+          m4.compose(v.set(p.x, h, p.z), q.identity(), s.set(1.02, 0.04, 1.02));
+          caps.setMatrixAt(k, m4);
+          glass.setColorAt(k, color.setHex(b.color));
+          caps.setColorAt(k, color.setHex(b.color));
+        });
+        glass.renderOrder = 2;
+        markerGroup.add(glass, caps);
       }
       for (const t of m.caught.filter(ok)) markerGroup.add(pin(t, 0xe5484d));
-      for (const t of m.searchedHit.filter(ok)) markerGroup.add(pin(t, 0xe5484d));
+
+      // Everyone's latest searches light up: a bright beam that fades, then a ring that stays.
+      for (const r of m.recent.filter((x) => ok(x.tile))) {
+        const p = posOf(r.tile);
+        const beam = new THREE.Mesh(
+          markerGeo.beam,
+          new THREE.MeshBasicMaterial({ color: 0xfff3bf, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }),
+        );
+        beam.scale.set(2.2, topOf(r.tile) + 7, 2.2);
+        beam.position.set(p.x, 0, p.z);
+        beam.renderOrder = 4;
+        markerGroup.add(beam);
+        pulsers.push({ obj: beam, kind: "flash", base: Date.now() - r.ageMs });
+        const ring = new THREE.Mesh(markerGeo.ring, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 }));
+        ring.scale.setScalar(1.25);
+        ring.position.set(p.x, topOf(r.tile) + 0.2, p.z);
+        markerGroup.add(ring);
+      }
       for (const t of m.left.filter(ok)) {
         const ring = new THREE.Mesh(markerGeo.ring, new THREE.MeshBasicMaterial({ color: 0xffb400 }));
         ring.position.set(posOf(t).x, topOf(t) + 0.15, posOf(t).z);
@@ -581,6 +820,12 @@ export function CityView({ seed, tileCount, markers, interactive, onTile, onHove
           p.obj.rotation.y = time * 1.5;
         }
         if (p.kind === "spin") ((p.obj as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = 0.2 + Math.abs(Math.sin(time * 5)) * 0.3;
+        if (p.kind === "flash") {
+          const age = (Date.now() - p.base) / 1000;
+          const mat = (p.obj as THREE.Mesh).material as THREE.MeshBasicMaterial;
+          mat.opacity = age < 0 || age > 12 ? 0 : (1 - age / 12) * (0.45 + Math.abs(Math.sin(time * 6)) * 0.25);
+          p.obj.visible = mat.opacity > 0.01;
+        }
       }
     }
 
@@ -672,6 +917,9 @@ export function CityView({ seed, tileCount, markers, interactive, onTile, onHove
       updateGrowth(performance.now());
       updateCars(dt);
       updateSky(time, dt);
+      updateLandmarks(dt, performance.now());
+      updateBoats(time, dt);
+      updateAir(time, dt);
       updateMarkers(time);
       if (focus) {
         controls.target.lerp(focus, 0.06);

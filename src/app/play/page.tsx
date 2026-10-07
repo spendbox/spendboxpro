@@ -9,5 +9,6 @@ export default async function PlayPage() {
   const userId = await currentUserId();
   if (!userId) redirect("/login");
   const state = await loadGame(userId);
+  if (!state.me.pinSet) redirect("/welcome");
   return <Game state={state} />;
 }
