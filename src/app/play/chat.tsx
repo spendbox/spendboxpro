@@ -18,7 +18,7 @@ export type ChatPlayer = { id: string; name: string; role: "hider" | "seeker"; c
 
 const ROLE_STYLE: Record<ChatMessage["sender_role"] | "bot", { label: string; pill: string }> = {
   hider: { label: "Hider", pill: "bg-me/15 text-me" },
-  seeker: { label: "Seeker", pill: "bg-gold/25 text-gold-dark" },
+  seeker: { label: "Hunter", pill: "bg-gold/25 text-gold-dark" },
   watcher: { label: "Watching", pill: "bg-panel-2 text-muted" },
   bot: { label: "Bot", pill: "bg-[#7048e8]/15 text-[#5f3dc4]" },
 };
@@ -209,7 +209,11 @@ export function Chat({
           <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z" />
         </svg>
         Chat
-        {unread > 0 && (
+        {unreadDm > 0 ? (
+          <span className="absolute -right-2 -top-2 flex items-center gap-0.5 rounded-full bg-[#7048e8] px-1.5 py-0.5 text-[11px] text-white shadow" title="New private message">
+            🔒 {unreadDm > 9 ? "9+" : unreadDm}
+          </span>
+        ) : unread > 0 && (
           <span className="absolute -right-1 -top-1 grid min-w-5 place-items-center rounded-full bg-hit px-1 text-[11px] text-white">
             {unread > 99 ? "99+" : unread}
           </span>
@@ -377,9 +381,15 @@ function Messages({
                   <span className={cn("rounded-full px-1.5 py-px text-[10px] font-semibold", role.pill)}>{role.label}</span>
                 </button>
               )}
+              {m.recipient_id && (
+                <span className={cn("mb-0.5 flex items-center gap-1 px-1 text-[10px] font-semibold text-[#5f3dc4]", mine && "justify-end")}>
+                  🔒 Private{mine && m.recipient_name ? ` to ${m.recipient_name}` : ""}
+                </span>
+              )}
               <div
                 className={cn(
                   "rounded-2xl px-3 py-2 text-sm",
+                  m.recipient_id && "ring-2 ring-[#7048e8]/40",
                   mine ? "rounded-br-md bg-ink text-white" : bot ? "rounded-bl-md bg-[#f3f0ff]" : "rounded-bl-md bg-panel-2",
                   !mine && !bot && m.sender_role === "hider" && "border-l-4 border-me",
                   !mine && !bot && m.sender_role === "seeker" && "border-l-4 border-gold",

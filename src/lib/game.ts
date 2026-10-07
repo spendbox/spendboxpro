@@ -8,7 +8,8 @@ export type Phase = "join" | "seek" | "done";
 
 export type GameEvent = {
   id: number;
-  kind: "moved" | "caught" | "searched" | "sweep" | "shielded";
+  kind: "moved" | "caught" | "searched" | "sweep" | "shielded" | "decoy" | "decoy_found" | "respawn" | "area_search";
+  /** Where it happened (-1 when it's secret, like a decoy going down or a respawn). */
   tile: number;
   at: string;
   detail: {
@@ -22,6 +23,9 @@ export type GameEvent = {
     user?: string | null;
     /** Who was found (for "caught"). */
     hiders?: { name: string | null; avatar: unknown; bot: boolean }[];
+    /** A decoy that was searched: did it go bang, or was it a toy? */
+    outcome?: "explode" | "toy";
+    avatar?: unknown;
   } | null;
 };
 
@@ -40,6 +44,9 @@ export type GameState = {
     avatar: Avatar;
     /** Coins that just trickled in from passive income (under 100 coins). */
     passiveGained: number;
+    level: number;
+    /** When your next search is allowed (it waits longer if you search too fast). */
+    searchReadyAt: string | null;
   };
   /** Everyone in this round (not the bot), for finding people to chat with. */
   players: { id: string; name: string; role: "hider" | "seeker"; caught: boolean; avatar: Avatar }[];
@@ -59,6 +66,8 @@ export type GameState = {
     /** Price of a sweep by size (1 = 3×3, 2 = 5×5, 3 = 7×7) right now. */
     sweepPrices: Record<1 | 2 | 3, number>;
     botName: string;
+    /** A brand that put coins into this round's prize pool. */
+    sponsor: { name: string; logo: string | null; coins: number } | null;
   } | null;
   entry: {
     role: "hider" | "seeker";
@@ -74,6 +83,12 @@ export type GameState = {
     /** Bought a shield this round, and whether it has already saved them. */
     shieldBought: boolean;
     shieldSaved: boolean;
+    /** Your decoy this round (only you know where it is). */
+    decoyUsed: boolean;
+    decoyTile: number | null;
+    respawned: boolean;
+    /** Caught early enough (and high enough level) to pay to come back in. */
+    canRespawn: boolean;
   } | null;
   mySearches: { tile: number; caught: number }[];
   /** The latest searches by anyone (no results), so everyone sees tiles light up. */
@@ -94,7 +109,23 @@ export type GameState = {
   events: GameEvent[];
   lastResult: { roundId: number; role: string; payout: number; caught: boolean } | null;
   results: RoundResults | null;
-  prices: { stake: number; moveFee: number; moveCooldown: number; sweepCooldown: number; freezeSeconds: number; shield: number; passiveTarget: number; passivePerDay: number; winShare: number; otherShare: number };
+  prices: {
+    stake: number;
+    moveFee: number;
+    moveCooldown: number;
+    sweepCooldown: number;
+    freezeSeconds: number;
+    shield: number;
+    decoy: number;
+    respawn: number;
+    bigSearch: number;
+    passiveTarget: number;
+    passivePerDay: number;
+    winShare: number;
+    otherShare: number;
+  };
+  /** Levels at which power-ups unlock. */
+  unlocks: { decoy: number; shield: number; bigSearch: number; respawn: number };
 };
 
 export type RoundResults = {
@@ -153,8 +184,11 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
 
   const [{ data: profile, error: profileError }, { data: round }, { data: settings }] = await Promise.all([
     guest
-      ? Promise.resolve({ data: { username: null, pin_set: true, coins: 0, bonus_coins: 0, seeker_rounds: 0, free_search_day: null, avatar: null }, error: null })
-      : db.from("profiles").select("username, pin_set, coins, bonus_coins, seeker_rounds, free_search_day, avatar").eq("id", userId).single(),
+      ? Promise.resolve({
+          data: { username: null, pin_set: true, coins: 0, bonus_coins: 0, seeker_rounds: 0, free_search_day: null, avatar: null, level: 1, shield_uses: 0, decoy_uses: 0, search_heat: 0, last_search_at: null },
+          error: null,
+        })
+      : db.from("profiles").select("*").eq("id", userId).single(),
     db.from("rounds").select("*").order("id", { ascending: false }).limit(1).maybeSingle(),
     db.from("game_settings").select("key, value"),
   ]);
@@ -180,7 +214,7 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
   const roundPart = async () => {
     if (!round) return;
     const trapsPer = s.traps_per_seeker ?? 5;
-    const [{ data: e }, { data: searches }, { data: allEvents }, { data: allSearches }, { data: sweepRows }, { data: notes }, { data: alive }] = await Promise.all([
+    const [{ data: e }, { data: searches }, { data: allEvents }, { data: allSearches }, { data: sweepRows }, { data: notes }, { data: alive }, { data: myDecoy }] = await Promise.all([
       db
         .from("entries")
         .select("*")
@@ -197,6 +231,9 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
       guest
         ? Promise.resolve({ data: [] as { stake_weight: number }[] })
         : db.from("entries").select("stake_weight").eq("round_id", round.id).eq("role", "hider").eq("caught", false).gt("stake_weight", 0),
+      guest
+        ? Promise.resolve({ data: null })
+        : db.from("decoys").select("tile").eq("round_id", round.id).eq("user_id", userId).is("found_at", null).maybeSingle(),
     ]);
     if (e) {
       entry = {
@@ -211,6 +248,17 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
         frozenUntil: e.frozen_until,
         shieldBought: Boolean(e.shield_bought),
         shieldSaved: Boolean(e.shield_saved),
+        decoyUsed: Boolean(e.decoy_used),
+        decoyTile: myDecoy?.tile ?? null,
+        respawned: Boolean(e.respawned),
+        canRespawn:
+          e.role === "hider" &&
+          e.caught &&
+          !e.respawned &&
+          round.status === "seek" &&
+          num(profile.level ?? 1) >= (s.respawn_level ?? 20) &&
+          !!e.caught_at &&
+          Date.parse(e.caught_at) <= Date.parse(round.join_ends_at) + (s.respawn_window_minutes ?? 30) * 60_000,
       };
     }
     mySearches = searches ?? [];
@@ -223,9 +271,9 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
     const unique = [...firstSeen.keys()];
     const keep = e?.role === "hider" ? unique.length : Math.ceil(unique.length * (s.searched_visible_fraction ?? 0.7));
     knownSearched = unique.slice(unique.length - keep);
-    leftTiles = (allEvents ?? []).filter((x) => x.kind === "moved").map((x) => x.tile);
-    caughtTiles = (allEvents ?? []).filter((x) => x.kind === "caught").map((x) => x.tile);
-    events = (allEvents ?? []).slice(-40).map((x) => ({ id: x.id, kind: x.kind, tile: x.tile, at: x.created_at, detail: x.detail }));
+    leftTiles = (allEvents ?? []).filter((x) => x.kind === "moved" && x.tile !== null).map((x) => x.tile);
+    caughtTiles = (allEvents ?? []).filter((x) => x.kind === "caught" && x.tile !== null).map((x) => x.tile);
+    events = (allEvents ?? []).slice(-40).map((x) => ({ id: x.id, kind: x.kind, tile: x.tile ?? -1, at: x.created_at, detail: x.detail }));
 
     const perSeeker = new Map<string, number>();
     for (const sw of sweepRows ?? []) {
@@ -321,6 +369,13 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
       id: userId,
       guest,
       passiveGained,
+      level: num(profile.level ?? 1),
+      searchReadyAt: profile.last_search_at
+        ? new Date(
+            Date.parse(profile.last_search_at) +
+              Math.min(s.search_cooldown_max ?? 30, (s.search_cooldown_seconds ?? 2) * 2 ** num(profile.search_heat)) * 1000,
+          ).toISOString()
+        : null,
       name: profile?.username ?? null,
       avatar: cleanAvatar(profile?.avatar, profile?.username ?? userId),
       pinSet: Boolean(profile?.pin_set),
@@ -342,6 +397,9 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
           searchPrice,
           sweepPrices: { 1: sweepPrice(1), 2: sweepPrice(2), 3: sweepPrice(3) },
           botName: botNameFor(round.id, round.bot_name),
+          sponsor: round.sponsor_name
+            ? { name: round.sponsor_name, logo: round.sponsor_logo ?? null, coins: num(round.sponsor_coins) }
+            : null,
         }
       : null,
     entry,
@@ -357,13 +415,17 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
     events,
     results,
     lastResult: last ? { roundId: last.round_id, role: last.role, payout: num(last.payout), caught: last.caught } : null,
+    unlocks: { decoy: s.decoy_level ?? 3, shield: s.shield_level ?? 5, bigSearch: s.big_search_level ?? 10, respawn: s.respawn_level ?? 20 },
     prices: {
       stake: s.hider_stake,
-      moveFee: s.second_move_fee,
+      moveFee: money((s.move_fee_start ?? s.second_move_fee) * (1 + (s.move_fee_growth ?? 0) * num(round?.move_count))),
       moveCooldown: s.move_cooldown_seconds ?? 60,
       sweepCooldown: s.sweep_cooldown_seconds ?? 10,
       freezeSeconds: s.sweep_freeze_seconds ?? 60,
-      shield: s.shield_price ?? 100,
+      shield: money((s.shield_price ?? 100) * (1 + 0.5 * num(profile.shield_uses))),
+      decoy: money((s.decoy_price ?? 20) * (1 + 0.5 * num(profile.decoy_uses))),
+      respawn: s.respawn_price ?? 300,
+      bigSearch: money(searchPrice * (s.big_search_multiplier ?? 7)),
       passiveTarget: s.passive_target ?? 100,
       passivePerDay: s.passive_per_day ?? 100,
       winShare: s.pool_win_share ?? 0.8,

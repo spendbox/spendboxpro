@@ -1,6 +1,7 @@
 "use server";
 
-import { createHash, createHmac, randomInt, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomInt } from "node:crypto";
+import { saveBirthDate, toIsoDate } from "@/lib/age";
 import { codeEmail, sendEmail } from "@/lib/email";
 import { supabaseSecretKey } from "@/lib/env";
 import { currentUserId } from "@/lib/game";
@@ -9,21 +10,30 @@ import { createClient } from "@/lib/supabase/server";
 
 // Signing in starts with an email address:
 // - Returning players (who have a PIN) type their PIN.
-// - New players (and "forgot PIN") get a 6-digit code that we email through Resend ourselves
-//   (Supabase sends nothing, so its email limits don't apply), then pick a name and PIN.
+// - New players (and "forgot PIN") get a 4-digit code that we email through Resend ourselves
+//   (Supabase sends nothing, so its email limits don't apply), then pick a name and PIN,
+//   and give their date of birth (the game is for adults 18+).
+// Guessing a 4-digit code is kept very unlikely: 5 wrong tries per code, codes last 10 minutes,
+// at most 5 codes an hour, and at most 15 wrong tries a day per email (checked in the database,
+// in one locked step, so a flood of guesses at once can't get round it).
 // After either check passes, the server signs the player in with Supabase, which sets the
 // login cookies.
 
-export type LoginResult = { ok: true; needsSetup?: boolean } | { ok: false; error: string };
+export type LoginResult = { ok: true; needsSetup?: boolean } | { ok: false; error: string; underage?: boolean };
+/** Day, month (1-12) and year from the date-of-birth boxes. */
+export type BirthInput = { day: number; month: number; year: number };
 export type StartResult = { ok: true; next: "pin" | "code" } | { ok: false; error: string };
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const NAME = /^[A-Za-z0-9_]{3,16}$/;
 const PIN = /^\d{6}$/;
+const CODE = /^\d{4}$/;
 const CODE_MINUTES = 10;
-const MAX_ATTEMPTS = 5;
 const MAX_SENDS_PER_HOUR = 5;
 const RESEND_SECONDS = 30;
+const DAILY_WRONG = 15; // same number as in check_email_code (game-db/012)
+const LOCKED = "Too many wrong codes today. Please try again tomorrow.";
+const UNDERAGE = "Sorry, Hide & Seek is only for adults 18 and over, so you can't play.";
 const PIN_TRIES = 5;
 const PIN_LOCK_MINUTES = 15;
 
@@ -63,9 +73,12 @@ export async function sendCode(rawEmail: string): Promise<LoginResult> {
       sentCount = row.sent_count + 1;
       windowStart = row.window_started_at;
     }
+    if (row.wrong_total >= DAILY_WRONG && now - Date.parse(row.wrong_window_started_at) < 86400_000) {
+      return { ok: false, error: LOCKED };
+    }
   }
 
-  const code = randomInt(0, 1_000_000).toString().padStart(6, "0");
+  const code = randomInt(0, 10_000).toString().padStart(4, "0");
   const { error } = await db.from("email_codes").upsert({
     email,
     code_hash: hash(email, code),
@@ -104,22 +117,23 @@ async function signInAs(userId: string, email: string) {
 export async function verifyCode(rawEmail: string, rawCode: string): Promise<LoginResult> {
   const email = clean(rawEmail);
   const code = rawCode.replace(/\D/g, "");
-  if (code.length !== 6) return { ok: false, error: "Enter the 6-digit code." };
+  if (!EMAIL.test(email) || !CODE.test(code)) return { ok: false, error: "Enter the 4-digit code." };
 
   const db = createAdminClient();
-  const { data: row } = await db.from("email_codes").select("*").eq("email", email).maybeSingle();
-  if (!row || Date.parse(row.expires_at) < Date.now()) {
-    return { ok: false, error: "This code has expired. Ask for a new one." };
+  // The database checks the code and counts wrong tries in one locked step (see game-db/012).
+  const { data: verdict, error: checkError } = await db.rpc("check_email_code", { p_email: email, p_hash: hash(email, code) });
+  if (checkError) {
+    console.error("Checking sign-in code failed", checkError.message);
+    return { ok: false, error: "Something went wrong. Please try again." };
   }
-  if (row.attempts >= MAX_ATTEMPTS) return { ok: false, error: "Too many wrong tries. Ask for a new code." };
-
-  const a = Buffer.from(hash(email, code));
-  const b = Buffer.from(row.code_hash);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) {
-    await db.from("email_codes").update({ attempts: row.attempts + 1 }).eq("email", email);
-    return { ok: false, error: "That code isn't right. Check it and try again." };
+  if (verdict !== "ok") {
+    const errors: Record<string, string> = {
+      expired: "This code has expired. Ask for a new one.",
+      too_many: "Too many wrong tries. Ask for a new code.",
+      locked: LOCKED,
+    };
+    return { ok: false, error: errors[verdict as string] ?? "That code isn't right. Check it and try again." };
   }
-  await db.from("email_codes").delete().eq("email", email);
 
   // New players get an account (and their signup coins) here.
   const created = await db.auth.admin.createUser({ email, email_confirm: true });
@@ -177,8 +191,47 @@ export async function loginWithPin(rawEmail: string, rawPin: string): Promise<Lo
   return { ok: true };
 }
 
-/** First sign-in (or "forgot PIN"): choose a name and a 6-digit PIN. */
-export async function saveNameAndPin(rawName: string, rawPin: string): Promise<LoginResult> {
+/** Checks and saves the date of birth (only if it isn't saved yet). Under-18s are stopped for good. */
+async function checkBirthDate(userId: string, birth: BirthInput | null | undefined): Promise<LoginResult> {
+  if (!birth) {
+    // Nothing sent (e.g. "Change PIN"): fine only if we already have it. Unlike the page
+    // redirect, this check never lets anyone through when the lookup fails.
+    const { data, error } = await createAdminClient()
+      .from("profiles")
+      .select("birth_date, age_blocked_at")
+      .eq("id", userId)
+      .maybeSingle();
+    if (error || !data) return { ok: false, error: "Something went wrong. Please try again." };
+    if (data.age_blocked_at) return { ok: false, error: UNDERAGE, underage: true };
+    return data.birth_date ? { ok: true } : { ok: false, error: "Please choose your date of birth." };
+  }
+  const iso = toIsoDate(Number(birth.day), Number(birth.month), Number(birth.year));
+  if (!iso) return { ok: false, error: "Please choose your full date of birth." };
+  const result = await saveBirthDate(userId, iso);
+  if (result === "ok" || result === "already_set") return { ok: true };
+  if (result === "under_18" || result === "blocked") return { ok: false, error: UNDERAGE, underage: true };
+  if (result === "invalid") return { ok: false, error: "That date of birth doesn't look right. Please check it." };
+  return { ok: false, error: "We couldn't save your date of birth. Please try again." };
+}
+
+/** Players who signed up before the 18+ rule: just add the date of birth. */
+export async function saveBirthDateOnly(birth: BirthInput): Promise<LoginResult> {
+  const userId = await currentUserId();
+  if (!userId) return { ok: false, error: "Please sign in again." };
+  return checkBirthDate(userId, birth);
+}
+
+/** Leaves the account (used on the "adults only" screen). */
+export async function signOutNow(): Promise<void> {
+  await (await createClient()).auth.signOut();
+}
+
+/**
+ * First sign-in (or "forgot PIN"): choose a name and a 6-digit PIN, plus the date of birth
+ * if we don't have it yet. Under-18s are stopped before the name and PIN are saved, so their
+ * account never becomes playable.
+ */
+export async function saveNameAndPin(rawName: string, rawPin: string, birth?: BirthInput | null): Promise<LoginResult> {
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Please sign in again." };
   const name = rawName.trim();
@@ -197,6 +250,9 @@ export async function saveNameAndPin(rawName: string, rawPin: string): Promise<L
     .neq("id", userId)
     .maybeSingle();
   if (taken || /^seed.?bot$/i.test(name)) return { ok: false, error: "That name is taken. Try another." };
+
+  const age = await checkBirthDate(userId, birth);
+  if (!age.ok) return age;
 
   const { error: pwError } = await db.auth.admin.updateUserById(userId, { password: pinPassword(userId, pin) });
   if (pwError) {

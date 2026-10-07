@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { needsBirthDate } from "@/lib/age";
 import { currentUserId, hasLoginCookie, loadGame } from "@/lib/game";
 import { Reconnecting } from "./reconnecting";
 import { Game } from "./game";
@@ -22,5 +23,7 @@ export default async function PlayPage() {
     return <Reconnecting />;
   }
   if (!state.me.pinSet) redirect("/welcome");
+  // 18+: players without a date of birth add it once (skipped if the check hiccups).
+  if (await needsBirthDate(userId)) redirect("/welcome");
   return <Game state={state} />;
 }

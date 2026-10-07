@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import type { RoundResults } from "@/lib/game";
 import { BadgeTile } from "@/components/badges";
 import { cn } from "@/lib/cn";
@@ -11,6 +11,8 @@ export function Results({ results: r, onClose, me, city }: { results: RoundResul
   const survived = r.hidersTotal - r.caught;
   const mine = r.mine;
   const downOnBackdrop = useRef(false);
+  // When these badges were won: the round just ended, so "now" is close enough.
+  const [endedAt] = useState(() => new Date().toISOString());
   return (
     <div
       className="fixed inset-0 z-40 grid place-items-center bg-ink/30 p-4 backdrop-blur-sm"
@@ -56,10 +58,10 @@ export function Results({ results: r, onClose, me, city }: { results: RoundResul
 
         {mine && mine.badges.length > 0 && (
           <div className="mt-3 rounded-2xl bg-gradient-to-br from-[#18202b] to-[#3b2f6b] p-3 text-white">
-            <p className="px-1 text-sm font-semibold">🏅 New badge{mine.badges.length > 1 ? "s" : ""}! Tap to share and show off.</p>
+            <p className="px-1 text-sm font-semibold">🏅 New badge{mine.badges.length > 1 ? "s" : ""}! Tap one to see it and share it.</p>
             <div className="mt-1 grid grid-cols-3 gap-1 [&_.text-muted]:text-white/70 [&_button:hover]:bg-white/10">
               {mine.badges.map((b) => (
-                <BadgeTile key={b.badge} badge={b.badge} player={me} city={city} detail={b.detail} />
+                <BadgeTile key={b.badge} badge={b.badge} player={me} city={city} detail={b.detail} at={endedAt} hint="Tap to open" />
               ))}
             </div>
           </div>
@@ -100,7 +102,7 @@ export function Results({ results: r, onClose, me, city }: { results: RoundResul
                         w.role === "hider" ? "bg-me/15 text-me" : "bg-gold/25 text-gold-dark",
                       )}
                     >
-                      {w.role === "hider" ? "Hider" : "Seeker"}
+                      {w.role === "hider" ? "Hider" : "Hunter"}
                     </span>
                   </span>
                   <span className="block truncate text-xs text-muted">{w.detail}</span>

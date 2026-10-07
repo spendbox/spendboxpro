@@ -4,10 +4,12 @@ import { useEffect, useRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar, type Avatar } from "@/lib/avatar";
-import { addressOf, KIND_LABEL, makePlan, riverCentre, spiralXY, STRUCTURE_LABEL, tileAt, type CityPlan, type Tile } from "@/lib/city/layout";
+import { addressOf, hash, KIND_LABEL, makePlan, riverCentre, smoothNoise, spiralXY, STRUCTURE_LABEL, tileAt, type CityPlan, type Tile } from "@/lib/city/layout";
 import { daylight, weatherAt } from "@/lib/city/sky";
+import { playSfx } from "./sound";
 
 // The game board, drawn as a small living 3D city with three.js.
 // Every tile is a lot: a road, a building, a park... New tiles rise out of the ground
@@ -26,16 +28,27 @@ export type CityMarkers = {
   recent: { tile: number; ageMs: number }[];
   /** Every searched tile (hiders only): shown as locked. */
   locked: number[];
+  /** Your own decoy's tile (only you see it): a little inflatable dummy stands there. */
+  decoy: number | null;
 };
 
 /** Something that just happened, for a short animation (see GameEvent). */
 export type CityEvent = {
   id: number;
   kind: string;
-  tile: number;
+  /** Where it happened (null for things with no place, like "respawn"). */
+  tile: number | null;
   ageMs: number;
-  detail?: { radius?: number; hiders?: { name: string | null; avatar: unknown; bot: boolean }[] } | null;
+  detail?: {
+    radius?: number;
+    /** decoy_found: "explode" or "toy". */
+    outcome?: string;
+    hiders?: { name: string | null; avatar: unknown; bot: boolean }[];
+  } | null;
 };
+
+/** An advert shown on the city's billboards (image: a public URL, ideally about 2:1). */
+export type CityAd = { id: string; image: string; headline: string; brand: string; link: string | null };
 
 type Props = {
   seed: number;
@@ -44,7 +57,8 @@ type Props = {
   events: CityEvent[];
   interactive: boolean;
   onTile: (tile: number) => void;
-  onBillboard: (info: { id: string; tile: number }) => void;
+  /** A billboard was tapped: which board, and the ad it was showing (null = "advertise here"). */
+  onBillboard: (info: { id: string; tile: number; adId: string | null }) => void;
   onHover?: (info: { tile: number; label: string } | null) => void;
   /** Your face, floating over your hiding spot. */
   meAvatar: Avatar;
@@ -54,6 +68,10 @@ type Props = {
   /** How far through the hunt we are (0..1), for day and night, and which way it runs. */
   progress: number;
   nightFirst: boolean;
+  /** Adverts to rotate through on the billboards (empty = the house "advertise here" boards). */
+  ads: CityAd[];
+  /** Ad views seen on screen since the last call ({ adId: views }), sent at most every 15 s. */
+  onAdViews: (counts: Record<string, number>) => void;
 };
 
 type Part = { tile: number; x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number; color: number; tilt?: number };
@@ -67,6 +85,9 @@ const WATER = 0x7cc4e8;
 const BRIDGE_TOP = 0.24;
 /** Traffic-light bulbs carry this plus (direction × 3 + bulb) as their colour until lit. */
 const SIGNAL_TAG = 1000;
+/** Blinking lights carry this plus their kind as their colour (see FLASH below). */
+const FLASH_TAG = 2000;
+const FLASH = { hazard: 0, policeRed: 1, policeBlue: 2, works: 3 } as const;
 
 // ---------------------------------------------------------------- shapes
 function geometries() {
@@ -191,6 +212,8 @@ function partsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "ti
       }
       // Dead end: a turning circle.
       if (m === 1 || m === 4 || m === 2 || m === 8) add("disc", { x, y: 0.0, z, sx: 1.05, sy: 0.061, sz: 1.05, ry: 0, color: ASPHALT });
+      if (t.works) roadWorksParts(t, along, add);
+      else if (t.incident) incidentParts(t, along, plan, add);
     } else {
       // Junctions: a zebra crossing on each side that has a road.
       add("ground", { x, y: 0, z, sx: 0.5, sy: 0.062, sz: 0.5, ry: 0, color: 0x6a7380 });
@@ -436,6 +459,104 @@ function partsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "ti
   }
 }
 
+type AddFn = (mesh: string, p: Omit<Part, "tile">) => void;
+
+/** A crossing with traffic lights (not a bend, a straight stretch or a roundabout). */
+function signalJunction(t: Tile) {
+  if (t.kind !== "road" || t.roundabout) return false;
+  const m = t.mask ?? 0;
+  return ![3, 6, 12, 9, 5, 10, 1, 4, 2, 8].includes(m);
+}
+
+/** A soft round glow (white in the middle, fading to nothing), for pools of light. */
+function glowTexture() {
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 64;
+  const c = canvas.getContext("2d")!;
+  const g = c.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, "rgba(255,255,255,1)");
+  g.addColorStop(0.35, "rgba(255,255,255,0.55)");
+  g.addColorStop(1, "rgba(255,255,255,0)");
+  c.fillStyle = g;
+  c.fillRect(0, 0, 64, 64);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/** Road works on a straight road: a dug-up patch, barriers, cones, blinking lamps and a digger or roller. */
+function roadWorksParts(t: Tile, along: boolean, add: AddFn) {
+  // a = along the road, c = across it.
+  const at = (a: number, c: number) => (along ? { x: t.x + a, z: t.z + c } : { x: t.x + c, z: t.z + a });
+  const ry = along ? 0 : -Math.PI / 2;
+  const P = (mesh: string, a: number, y: number, c: number, sa: number, sy: number, sc: number, color: number, tilt = 0, turn = 0) =>
+    add(mesh, { ...at(a, c), y, sx: sa, sy, sz: sc, ry: ry + turn, color, tilt });
+  // The hole and a heap of earth.
+  P("ground", 0, 0.055, -0.04, 0.46, 0.012, 0.36, 0x7a5a3c);
+  P("ground", 0, 0.062, -0.04, 0.34, 0.006, 0.24, 0x5e4430);
+  add("crown", { ...at(0.12, 0.27), y: 0.04, sx: 0.22, sy: 0.14, sz: 0.18, ry: t.r[1] * 6, color: 0x8b6a48 });
+  // Red-and-white barriers right across the road at both ends, with a blinking lamp on each.
+  for (const a of [-0.4, 0.4]) {
+    P("building", a, 0.15, 0, 0.035, 0.06, 0.74, 0xffffff);
+    for (const c of [-0.27, 0, 0.27]) P("paint", a, 0.15, c, 0.04, 0.062, 0.1, 0xe03131);
+    for (const c of [-0.34, 0.34]) {
+      P("trunk", a, 0.06, c, 0.2, 0.1, 0.2, 0x495057);
+      add("flash", { ...at(a, c), y: 0.235, sx: 0.045, sy: 0.045, sz: 0.045, ry: 0, color: FLASH_TAG + FLASH.works });
+    }
+  }
+  // Cones round the hole.
+  for (const [a, c] of [[-0.24, -0.3], [0, -0.3], [0.24, -0.3], [-0.26, 0.18], [0.26, 0.18]]) {
+    P("cone", a, 0.06, c, 0.07, 0.12, 0.07, 0xff7a1a);
+    P("paint", a, 0.06, c, 0.09, 0.012, 0.09, 0x343a40);
+  }
+  if (t.r[2] < 0.6) {
+    // A little digger: tracks, a yellow body, a cab and an arm reaching into the hole.
+    const c0 = 0.22;
+    P("building", -0.14, 0.06, c0, 0.24, 0.045, 0.15, 0x343a40);
+    P("building", -0.14, 0.105, c0, 0.2, 0.07, 0.13, 0xf2b705);
+    P("glass", -0.18, 0.175, c0, 0.09, 0.09, 0.11, 0x74c0fc);
+    P("building", -0.18, 0.265, c0, 0.1, 0.015, 0.12, 0xf2b705);
+    P("building", -0.02, 0.17, c0 - 0.06, 0.2, 0.03, 0.03, 0xf2b705, 0.55);
+    P("building", 0.07, 0.1, c0 - 0.12, 0.03, 0.14, 0.03, 0xf2b705, -0.35);
+    P("building", 0.1, 0.07, c0 - 0.16, 0.07, 0.05, 0.07, 0x495057);
+  } else {
+    // A road roller: a drum at the front, a body and a canopy.
+    const c0 = 0.24;
+    // (the drum is a lying cylinder drawn from one end, so shift it to centre it)
+    add("cyl", { ...at(0.0, along ? c0 - 0.075 : c0 + 0.075), y: 0.105, sx: 0.09, sy: 0.15, sz: 0.09, ry: ry + Math.PI / 2, color: 0x868e96, tilt: Math.PI / 2 });
+    P("building", -0.15, 0.07, c0, 0.18, 0.08, 0.13, 0xf2b705);
+    P("trunk", -0.18, 0.15, c0, 0.15, 0.12, 0.15, 0x343a40);
+    P("building", -0.17, 0.27, c0, 0.14, 0.015, 0.14, 0xf2b705);
+  }
+}
+
+/** A broken-down car with its hazards on and its bonnet up, or a police car with lights flashing. */
+function incidentParts(t: Tile, along: boolean, plan: CityPlan, add: AddFn) {
+  const at = (a: number, c: number) => (along ? { x: t.x + a, z: t.z + c } : { x: t.x + c, z: t.z + a });
+  const ry = along ? 0 : -Math.PI / 2;
+  const side = t.r[1] < 0.5 ? 0.33 : -0.33;
+  const P = (mesh: string, a: number, y: number, c: number, sa: number, sy: number, sc: number, color: number, tilt = 0) =>
+    add(mesh, { ...at(a, c), y, sx: sa, sy, sz: sc, ry, color, tilt });
+  const flash = (a: number, y: number, c: number, kind: number, size = 0.035) =>
+    add("flash", { ...at(a, c), y, sx: size, sy: size, sz: size, ry: 0, color: FLASH_TAG + kind });
+  if (t.incident === "breakdown") {
+    const body = plan.palette.car[Math.floor(t.r[2] * plan.palette.car.length) % plan.palette.car.length];
+    P("building", 0, 0.06, side, 0.3, 0.09, 0.15, body);
+    P("building", -0.03, 0.15, side, 0.15, 0.06, 0.13, 0xe9f2fb);
+    // Bonnet up.
+    P("building", 0.1, 0.19, side, 0.1, 0.008, 0.13, body, -1.0);
+    for (const a of [-0.15, 0.15]) for (const c of [-0.06, 0.06]) flash(a, 0.12, side + c, FLASH.hazard, 0.03);
+    // A warning triangle behind it.
+    add("roof", { ...at(-0.36, side), y: 0.06, sx: 0.035, sy: 0.07, sz: 0.035, ry: ry + Math.PI / 4, color: 0xe03131 });
+  } else {
+    P("building", 0, 0.06, side, 0.32, 0.09, 0.16, 0xffffff);
+    P("paint", 0, 0.09, side, 0.325, 0.03, 0.165, 0x1c3faa);
+    P("building", -0.02, 0.15, side, 0.16, 0.06, 0.14, 0x343a40);
+    flash(-0.02, 0.225, side - 0.04, FLASH.policeRed);
+    flash(-0.02, 0.225, side + 0.04, FLASH.policeBlue);
+  }
+}
+
 type BoxFn = (dx: number, y: number, dz: number, sx: number, sy: number, sz: number, color: number, ry?: number, mesh?: string, tilt?: number) => void;
 type TreeFn = (dx: number, dz: number, size: number, v: number) => void;
 
@@ -671,6 +792,38 @@ function billboardTexture(design: number) {
   return tex;
 }
 
+/**
+ * An ad's picture, letterboxed onto a 2:1 canvas (the billboard's shape): the whole picture
+ * shows, and any space round it is filled with a soft blur of the picture itself.
+ */
+function adTexture(img: CanvasImageSource & { width: number; height: number }) {
+  const W = 1024;
+  const H = 512;
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const c = canvas.getContext("2d")!;
+  const iw = img.width || W;
+  const ih = img.height || H;
+  // The blur: shrink the picture to a few pixels, then stretch it back up.
+  const tiny = document.createElement("canvas");
+  tiny.width = 16;
+  tiny.height = 8;
+  tiny.getContext("2d")!.drawImage(img, 0, 0, 16, 8);
+  c.imageSmoothingEnabled = true;
+  c.drawImage(tiny, 0, 0, W, H);
+  c.fillStyle = "rgba(0,0,0,0.3)";
+  c.fillRect(0, 0, W, H);
+  const k = Math.min(W / iw, H / ih);
+  const dw = iw * k;
+  const dh = ih * k;
+  c.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
 /** A player's face as a round sprite texture (drawn from the same SVG as the rest of the app). */
 const faceCache = new Map<string, THREE.CanvasTexture>();
 function faceTexture(avatar: Avatar, ring: string) {
@@ -710,6 +863,40 @@ function labelTexture(text: string, bg: string) {
   return tex;
 }
 
+/** A cartoon "BOOM!" in a spiky yellow burst. */
+function boomTexture() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 128;
+  const c = canvas.getContext("2d")!;
+  c.beginPath();
+  for (let k = 0; k < 24; k++) {
+    const a = (k / 24) * Math.PI * 2;
+    const r = k % 2 ? 0.62 : 1;
+    const x = 128 + Math.cos(a) * 124 * r;
+    const y = 64 + Math.sin(a) * 62 * r;
+    if (k) c.lineTo(x, y);
+    else c.moveTo(x, y);
+  }
+  c.closePath();
+  c.fillStyle = "#ffd43b";
+  c.fill();
+  c.lineWidth = 6;
+  c.strokeStyle = "#e8590c";
+  c.stroke();
+  c.font = "900 52px system-ui, sans-serif";
+  c.textAlign = "center";
+  c.textBaseline = "middle";
+  c.lineWidth = 8;
+  c.strokeStyle = "#ffffff";
+  c.strokeText("BOOM!", 128, 68);
+  c.fillStyle = "#e03131";
+  c.fillText("BOOM!", 128, 68);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 const hashish = (v: number, k: number) => {
   const s = Math.sin(v * 9301 + k * 49297) * 233280;
   return s - Math.floor(s);
@@ -721,18 +908,19 @@ const easeOutBack = (t: number) => {
 };
 
 // ---------------------------------------------------------------- component
-export function CityView({ seed, tileCount, markers, events, interactive, onTile, onBillboard, onHover, meAvatar, coinBalloon, onBalloon, progress, nightFirst }: Props) {
+export function CityView({ seed, tileCount, markers, events, interactive, onTile, onBillboard, onHover, meAvatar, coinBalloon, onBalloon, progress, nightFirst, ads, onAdViews }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const api = useRef<{
     build: (seed: number, count: number) => void;
     setMarkers: (m: CityMarkers) => void;
     playEvents: (e: CityEvent[]) => void;
     setBalloon: (slot: number | null) => void;
+    setAds: (ads: CityAd[]) => void;
   } | null>(null);
-  const cb = useRef({ onTile, onHover, onBillboard, onBalloon, interactive });
+  const cb = useRef({ onTile, onHover, onBillboard, onBalloon, onAdViews, interactive });
   const atmos = useRef({ progress, nightFirst, meAvatar });
   useEffect(() => {
-    cb.current = { onTile, onHover, onBillboard, onBalloon, interactive };
+    cb.current = { onTile, onHover, onBillboard, onBalloon, onAdViews, interactive };
     atmos.current = { progress, nightFirst, meAvatar };
   });
 
@@ -774,7 +962,8 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
     sun.shadow.normalBias = 0.02;
     scene.add(sun, sun.target);
 
-    const base = new THREE.Mesh(new THREE.CircleGeometry(1, 48).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: GROUND }));
+    // The flat ground the city stands on (a circle; the countryside starts round its edge).
+    const base = new THREE.Mesh(new THREE.CircleGeometry(1, 64).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: GROUND }));
     base.receiveShadow = true;
     base.position.y = -0.01;
     scene.add(base);
@@ -801,6 +990,8 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       lamp: { geometry: geo.lamp, material: lampMat, shadow: false },
       // Traffic-light bulbs (red, amber, green), lit in turn.
       signal: { geometry: geo.lamp, material: new THREE.MeshBasicMaterial({ color: 0xffffff }), shadow: false },
+      // Blinking lamps: hazard lights, police lights, road-works lamps (see updateFlashers).
+      flash: { geometry: geo.lamp, material: new THREE.MeshBasicMaterial({ color: 0xffffff }), shadow: false },
       water: { geometry: geo.box, material: new THREE.MeshPhongMaterial({ color: 0xffffff, shininess: 90, specular: 0xffffff }), shadow: false },
     };
 
@@ -850,74 +1041,268 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       mesh.setMatrixAt(idx, m4);
     }
 
-    // ---- cars: each one drives the street network, turning at junctions and bends
-    type Car = { from: [number, number]; to: [number, number]; t: number; speed: number };
+    // ---- cars: each one drives the street network, turning at junctions and bends. Road works
+    // close a street (cars turn back before them), and now and then a street jams up: cars
+    // queue bumper to bumper with their brake lights glowing, then the queue clears.
+    type Car = {
+      from: [number, number];
+      to: [number, number];
+      t: number;
+      speed: number;
+      /** Bridges under the start and end of this stretch (for the hump). */
+      bridgeFrom: boolean;
+      bridgeTo: boolean;
+      /** The jam this car is queuing in (-1 none), its place, and where along the street it stops. */
+      jam: number;
+      slot: number;
+      target: number;
+      /** Seconds to wait before moving off (a queue clears one car at a time). */
+      hold: number;
+      /** Brake lights drawn on (1) or off (0), or -1 (not drawn yet). */
+      lit: number;
+    };
     let cars: Car[] = [];
     let carBody: THREE.InstancedMesh | null = null;
     let carTop: THREE.InstancedMesh | null = null;
+    let carLights: THREE.InstancedMesh | null = null;
+    const carLightMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    let carNight = 0;
+    let carNightDrawn = -1;
+    let blocked = new Set<string>();
     const roadAt = (x: number, z: number) => {
-      const k = kindAt.get(`${x},${z}`);
-      return k === "road" || k === "bridge";
+      const key = `${x},${z}`;
+      const k = kindAt.get(key);
+      return (k === "road" || k === "bridge") && !blocked.has(key);
     };
+    const tileXY = (x: number, z: number) => {
+      const i = tileIndex.get(`${x},${z}`);
+      return i === undefined ? undefined : tiles[i];
+    };
+
+    type Jam = { stop: number; tail: number; count: number; active: boolean; period: number; on: number; offset: number };
+    let jams: Jam[] = [];
+    /** Directed street stretches that belong to a jam: which jam, and how far along it (−1 = the way in). */
+    const jamSeg = new Map<number, { jam: number; i: number }>();
+    const segKey = (x: number, z: number, dx: number, dz: number) => ((x + 1024) * 2048 + (z + 1024)) * 4 + (dx === 1 ? 0 : dx === -1 ? 1 : dz === 1 ? 2 : 3);
+    const QUEUE_GAP = 0.36;
+    const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
+    const jamFull = (jam: Jam) => jam.tail - QUEUE_GAP < -0.85;
+
     function nextStop(c: Car): [number, number] {
       const [x, z] = c.to;
       const dx = Math.sign(c.to[0] - c.from[0]);
       const dz = Math.sign(c.to[1] - c.from[1]);
-      const options = ([[1, 0], [-1, 0], [0, 1], [0, -1]] as const)
-        .filter(([ox, oz]) => !(ox === -dx && oz === -dz) && roadAt(x + ox, z + oz))
-        .map(([ox, oz]) => [x + ox, z + oz] as [number, number]);
-      if (!options.length) return c.from; // dead end: turn round
+      const options = DIRS.filter(([ox, oz]) => {
+        if ((ox === -dx && oz === -dz) || !roadAt(x + ox, z + oz)) return false;
+        // Don't join a jam that's already backed right up.
+        const info = jamSeg.get(segKey(x, z, ox, oz));
+        return !(info && info.i === -1 && jams[info.jam].active && jamFull(jams[info.jam]));
+      }).map(([ox, oz]) => [x + ox, z + oz] as [number, number]);
+      if (!options.length) return c.from; // dead end (or road works): turn round
       const ahead = options.find(([nx, nz]) => nx - x === dx && nz - z === dz);
       if (ahead && Math.random() < 0.6) return ahead;
       return options[Math.floor(Math.random() * options.length)];
     }
+    const isBridge = (x: number, z: number) => kindAt.get(`${x},${z}`) === "bridge";
 
     function buildCars(plan: CityPlan) {
-      if (carBody) moving.remove(carBody, carTop!);
-      const roads = tiles.filter((t) => t.kind === "road" || t.kind === "bridge");
+      if (carBody) moving.remove(carBody, carTop!, carLights!);
+      carBody?.dispose();
+      carTop?.dispose();
+      carLights?.dispose();
+      const roads = tiles.filter((t) => (t.kind === "road" || t.kind === "bridge") && !t.works);
       cars = [];
       const n = Math.min(160, Math.floor(roads.length / 4));
       for (let k = 0; k < n; k++) {
         const t = roads[Math.floor(Math.random() * roads.length)];
-        const options = ([[1, 0], [-1, 0], [0, 1], [0, -1]] as const).filter(([ox, oz]) => roadAt(t.x + ox, t.z + oz));
+        const options = DIRS.filter(([ox, oz]) => roadAt(t.x + ox, t.z + oz));
         if (!options.length) continue;
         const [ox, oz] = options[Math.floor(Math.random() * options.length)];
-        cars.push({ from: [t.x, t.z], to: [t.x + ox, t.z + oz], t: Math.random(), speed: 0.8 + Math.random() * 0.9 });
+        cars.push({
+          from: [t.x, t.z],
+          to: [t.x + ox, t.z + oz],
+          t: Math.random(),
+          speed: 0.8 + Math.random() * 0.9,
+          bridgeFrom: t.kind === "bridge",
+          bridgeTo: isBridge(t.x + ox, t.z + oz),
+          jam: -1,
+          slot: -1,
+          target: 0,
+          hold: 0,
+          lit: -1,
+        });
       }
       carBody = new THREE.InstancedMesh(geo.box, mat(), Math.max(1, cars.length));
       carTop = new THREE.InstancedMesh(geo.box, mat({ color: 0xe9f2fb }), Math.max(1, cars.length));
+      // Two little lamps per car: headlights in front (on at night), brake lights behind.
+      carLights = new THREE.InstancedMesh(geo.box, carLightMat, Math.max(1, cars.length * 2));
       carBody.castShadow = true;
       cars.forEach((_, k) => carBody!.setColorAt(k, color.setHex(plan.palette.car[k % plan.palette.car.length])));
       carBody.count = carTop.count = cars.length;
-      moving.add(carBody, carTop);
+      carLights.count = cars.length * 2;
+      for (let k = 0; k < cars.length * 2; k++) carLights.setColorAt(k, color.setHex(0x6b1d1d));
+      for (const m of [carBody, carTop, carLights]) m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      carNightDrawn = -1;
+      moving.add(carBody, carTop, carLights);
     }
 
-    function updateCars(dt: number) {
-      if (!carBody || !carTop) return;
-      cars.forEach((c, k) => {
-        c.t += c.speed * dt;
+    /** Pick a few streets that jam up now and then: the last few stretches before a junction. */
+    function buildJams(seedV: number) {
+      jams = [];
+      jamSeg.clear();
+      const roadCount = tiles.reduce((n, t) => n + (t.kind === "road" ? 1 : 0), 0);
+      const want = Math.min(3, Math.floor(roadCount / 80));
+      if (!want) return;
+      const cands: { h: Tile; dx: number; dz: number; score: number }[] = [];
+      for (const t of tiles) {
+        const m = t.mask ?? 0;
+        const arms = (m & 1) + ((m >> 1) & 1) + ((m >> 2) & 1) + ((m >> 3) & 1);
+        if (t.kind !== "road" || arms < 3) continue;
+        DIRS.forEach(([dx, dz], d) => cands.push({ h: t, dx, dz, score: hash(t.x * 4 + d, t.z, seedV + 1401) }));
+      }
+      cands.sort((a, b) => a.score - b.score);
+      for (const c of cands) {
+        if (jams.length >= want) break;
+        // Walk back from the junction along a straight street (2 to 4 stretches).
+        let K = 0;
+        for (let k = 1; k <= 4; k++) {
+          const t = tileXY(c.h.x - c.dx * k, c.h.z - c.dz * k);
+          if (!t || t.kind !== "road" || t.works || t.mask !== (c.dx !== 0 ? 10 : 5)) break;
+          K = k;
+        }
+        if (K < 2) continue;
+        const keys: number[] = [];
+        for (let i = -1; i < K; i++) keys.push(segKey(c.h.x - c.dx * (K - i), c.h.z - c.dz * (K - i), c.dx, c.dz));
+        if (keys.some((k) => jamSeg.has(k))) continue;
+        const j = jams.length;
+        keys.forEach((k, n) => jamSeg.set(k, { jam: j, i: n - 1 }));
+        const r = (n: number) => hash(c.h.x, c.h.z, seedV + 1410 + n);
+        const period = 45 + r(1) * 40;
+        jams.push({ stop: K - 0.68, tail: 0, count: 0, active: false, period, on: 12 + r(2) * 10, offset: r(3) * period });
+      }
+    }
+
+    // A car's place in the queue: one car-length behind the last. (A car already past that
+    // point simply stops where it is.)
+    function joinQueue(c: Car, j: number) {
+      const jam = jams[j];
+      const target = jam.tail - QUEUE_GAP;
+      c.jam = j;
+      c.slot = jam.count++;
+      c.target = target;
+      jam.tail = target;
+    }
+
+    const carP = (c: Car, i: number) => i + c.t;
+    function updateJams(time: number) {
+      for (let j = 0; j < jams.length; j++) {
+        const jam = jams[j];
+        const on = (time + jam.offset) % jam.period < jam.on;
+        if (on === jam.active) continue;
+        jam.active = on;
+        jam.tail = jam.stop + QUEUE_GAP;
+        jam.count = 0;
+        if (on) {
+          // Cars already on the street queue up in the order they're in.
+          const queued: { c: Car; p: number }[] = [];
+          for (const c of cars) {
+            const info = jamSeg.get(segKey(c.from[0], c.from[1], c.to[0] - c.from[0], c.to[1] - c.from[1]));
+            if (info && info.jam === j && carP(c, info.i) <= jam.stop) queued.push({ c, p: carP(c, info.i) });
+          }
+          queued.sort((a, b) => b.p - a.p);
+          for (const { c } of queued) if (!jamFull(jam)) joinQueue(c, j);
+        } else {
+          // The jam clears: the front car moves off first, the others one after another.
+          for (const c of cars) {
+            if (c.jam !== j) continue;
+            c.hold = 0.3 + c.slot * 0.3;
+            c.jam = -1;
+            c.slot = -1;
+          }
+        }
+      }
+    }
+
+    const BRAKE_ON = new THREE.Color(0xff2a2a);
+    const BRAKE_OFF = new THREE.Color(0x5a1a1a);
+    const BRAKE_NIGHT = new THREE.Color(0xb8222b);
+    const HEAD_DAY = new THREE.Color(0x9aa3ad);
+    const HEAD_NIGHT = new THREE.Color(0xfff2c4);
+    function updateCars(dt: number, time: number) {
+      if (!carBody || !carTop || !carLights) return;
+      updateJams(time);
+      let colorsDirty = false;
+      const nightChanged = Math.abs(carNight - carNightDrawn) > 0.03;
+      if (nightChanged) {
+        carNightDrawn = carNight;
+        color.copy(HEAD_DAY).lerp(HEAD_NIGHT, carNight);
+        for (let k = 0; k < cars.length; k++) {
+          carLights.setColorAt(k * 2, color);
+          cars[k].lit = -1;
+        }
+        colorsDirty = true;
+      }
+      for (let k = 0; k < cars.length; k++) {
+        const c = cars[k];
+        let dx = c.to[0] - c.from[0];
+        let dz = c.to[1] - c.from[1];
+        let move = c.speed * dt;
+        let braking = false;
+        if (c.hold > 0) {
+          c.hold -= dt;
+          move = 0;
+          braking = true;
+        } else if (jams.length) {
+          const info = jamSeg.get(segKey(c.from[0], c.from[1], dx, dz));
+          const jam = info ? jams[info.jam] : null;
+          if (info && jam?.active) {
+            const p = carP(c, info.i);
+            if (c.jam !== info.jam && p <= jam.stop && !jamFull(jam)) joinQueue(c, info.jam);
+            if (c.jam === info.jam) {
+              const room = c.target - p;
+              move = Math.max(0, Math.min(move * Math.min(1, Math.max(0.12, room / 0.5)), room));
+              braking = room < 0.5;
+            }
+          }
+        }
+        c.t += move;
         while (c.t >= 1) {
           c.t -= 1;
           const next = nextStop(c);
           c.from = c.to;
           c.to = next;
+          c.bridgeFrom = c.bridgeTo;
+          c.bridgeTo = isBridge(next[0], next[1]);
+          dx = c.to[0] - c.from[0];
+          dz = c.to[1] - c.from[1];
         }
-        const dx = c.to[0] - c.from[0];
-        const dz = c.to[1] - c.from[1];
         // Keep to the right-hand lane.
         const x = c.from[0] + dx * c.t - dz * 0.14;
         const z = c.from[1] + dz * c.t + dx * 0.14;
-        const under = kindAt.get(`${Math.round(x)},${Math.round(z)}`);
-        const off = Math.abs(dx !== 0 ? x - Math.round(x) : z - Math.round(z));
-        const y = under === "bridge" ? 0.06 + (BRIDGE_TOP - 0.06) * Math.min(1, Math.max(0, (0.5 - off) / 0.3)) : 0.06;
+        const onBridge = c.t < 0.5 ? c.bridgeFrom : c.bridgeTo;
+        const off = Math.abs(c.t < 0.5 ? c.t : 1 - c.t);
+        const y = onBridge ? 0.06 + (BRIDGE_TOP - 0.06) * Math.min(1, Math.max(0, (0.5 - off) / 0.3)) : 0.06;
         q.setFromAxisAngle(up, Math.atan2(-dz, dx));
         m4.compose(v.set(x, y, z), q, s.set(0.3, 0.09, 0.15));
-        carBody!.setMatrixAt(k, m4);
+        carBody.setMatrixAt(k, m4);
         m4.compose(v.set(x - dx * 0.02, y + 0.09, z - dz * 0.02), q, s.set(0.16, 0.06, 0.13));
-        carTop!.setMatrixAt(k, m4);
-      });
+        carTop.setMatrixAt(k, m4);
+        s.set(0.012, 0.026, 0.11);
+        m4.compose(v.set(x + dx * 0.151, y + 0.05, z + dz * 0.151), q, s);
+        carLights.setMatrixAt(k * 2, m4);
+        m4.compose(v.set(x - dx * 0.151, y + 0.05, z - dz * 0.151), q, s);
+        carLights.setMatrixAt(k * 2 + 1, m4);
+        const lit = braking ? 1 : 0;
+        if (lit !== c.lit) {
+          c.lit = lit;
+          carLights.setColorAt(k * 2 + 1, lit ? BRAKE_ON : color.copy(BRAKE_OFF).lerp(BRAKE_NIGHT, carNight));
+          colorsDirty = true;
+        }
+      }
       carBody.instanceMatrix.needsUpdate = true;
       carTop.instanceMatrix.needsUpdate = true;
+      carLights.instanceMatrix.needsUpdate = true;
+      if (colorsDirty && carLights.instanceColor) carLights.instanceColor.needsUpdate = true;
     }
 
     // ---- birds and clouds
@@ -982,60 +1367,252 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       cabin: new THREE.BoxGeometry(0.12, 0.12, 0.12),
       blade: new THREE.BoxGeometry(0.06, 0.9, 0.02).translate(0, 0.45, 0),
     };
-    // ---- billboards: the city's ad space. Tap one to advertise on it.
+    // ---- billboards: the city's ad space. Big panels on legs with a lit frame and two little
+    // spotlights, glowing at night. Each one turns to a different ad every few seconds (or shows
+    // "advertise here" when there are none). Tap one to see the ad, or to advertise.
     const boardTextures = [0, 1, 2, 3].map((d) => billboardTexture(d));
-    const boardMats = boardTextures.map((tex, d) =>
-      d === 2
-        ? new THREE.MeshBasicMaterial({ map: tex })
-        : new THREE.MeshLambertMaterial({ map: tex, emissive: 0xffffff, emissiveIntensity: 0.12, emissiveMap: tex }),
-    );
     const poleMat = new THREE.MeshLambertMaterial({ color: 0x495057 });
-    const frameMat = new THREE.MeshLambertMaterial({ color: 0x343a40 });
-    let boards: { obj: THREE.Group; tile: number }[] = [];
+    const boardGlowMat = new THREE.MeshBasicMaterial({ color: 0x5c636a });
+    const boardBeamMat = new THREE.MeshBasicMaterial({
+      color: 0xfff1c4,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    // Per design: panel width and height (about 2:1), panel centre height, where the legs go.
+    const BOARD_SPEC = [
+      { w: 1.5, h: 0.75, y: 1.75, poles: [-0.45, 0.45] },
+      { w: 1.4, h: 0.7, y: 2.3, poles: [0] },
+      { w: 1.7, h: 0.85, y: 1.5, poles: [-0.6, 0, 0.6] },
+      { w: 1.24, h: 0.62, y: 1.4, poles: [-0.36, 0.36] },
+    ];
+    const AD_SECONDS = 12;
+    const AD_FLIP = 0.32;
+    type Board = {
+      obj: THREE.Group;
+      tile: number;
+      id: string;
+      design: number;
+      panel: THREE.Mesh;
+      mat: THREE.MeshLambertMaterial;
+      beams: THREE.Mesh;
+      /** Middle of the panel (world), and its width: for "is it on screen?". */
+      centre: THREE.Vector3;
+      w: number;
+      /** Which turn of the rotation we're on, the ad it wants, and the ad actually showing. */
+      slot: number;
+      want: CityAd | null;
+      shown: string | null;
+      /** Seconds on screen during this turn, and whether this turn's view is counted. */
+      seen: number;
+      counted: boolean;
+      flip: number;
+      swapped: boolean;
+    };
+    let boards: Board[] = [];
     let boardHits: THREE.Mesh[] = [];
-    function buildBillboard(t: Tile) {
+    function buildBillboard(t: Tile, index: number): Board {
       const b = t.billboard!;
+      const spec = BOARD_SPEC[b.design] ?? BOARD_SPEC[0];
+      const { w, h } = spec;
+      const cy = spec.y + 0.08;
       const g = new THREE.Group();
-      // Sizes per design: [panel width, panel height, panel centre height, poles]
-      const spec = [
-        { w: 0.95, h: 0.46, y: 0.95, poles: [-0.3, 0.3] },
-        { w: 0.9, h: 0.44, y: 1.5, poles: [0] },
-        { w: 0.78, h: 0.5, y: 0.75, poles: [-0.28, 0.28] },
-        { w: 0.5, h: 0.34, y: 0.6, poles: [0] },
-      ][b.design];
-      for (const px of spec.poles) {
-        const pole = new THREE.Mesh(new THREE.CylinderGeometry(px === 0 ? 0.05 : 0.025, px === 0 ? 0.06 : 0.03, spec.y, 8), poleMat);
-        pole.position.set(px, spec.y / 2 + 0.08, 0);
-        pole.castShadow = true;
-        g.add(pole);
-      }
-      const frame = new THREE.Mesh(new THREE.BoxGeometry(spec.w + 0.05, spec.h + 0.05, 0.04), frameMat);
-      frame.position.y = spec.y + 0.08;
-      frame.castShadow = true;
-      g.add(frame);
-      for (const side of [1, -1]) {
-        const face = new THREE.Mesh(new THREE.PlaneGeometry(spec.w, spec.h), boardMats[b.design]);
-        face.position.set(0, spec.y + 0.08, side * 0.021);
-        if (side < 0) face.rotation.y = Math.PI;
-        face.userData = { billboard: b.id, tile: t.i };
-        g.add(face);
-        boardHits.push(face);
-      }
-      if (b.design === 1) {
-        const walk = new THREE.Mesh(new THREE.BoxGeometry(spec.w, 0.02, 0.12), poleMat);
-        walk.position.set(0, spec.y + 0.08 - spec.h / 2 - 0.04, 0.06);
-        g.add(walk);
-      }
-      if (b.design === 3) {
-        const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffe8a3 }));
-        lamp.position.set(0, spec.y + 0.08 + spec.h / 2 + 0.06, 0.05);
-        g.add(lamp);
-      }
+      const lampY = cy + h / 2 + 0.08;
+      const armZ = 0.3;
+      const lampXs = [-w * 0.28, w * 0.28];
+      // Legs, the backing board, a walkway on the tall one, and the lamp arms: one mesh.
+      const solid: THREE.BufferGeometry[] = spec.poles.map((px) =>
+        new THREE.CylinderGeometry(px === 0 ? 0.06 : 0.035, px === 0 ? 0.075 : 0.045, cy, 8).translate(px, cy / 2, 0),
+      );
+      solid.push(new THREE.BoxGeometry(w + 0.06, h + 0.06, 0.045).translate(0, cy, 0));
+      if (b.design === 1) solid.push(new THREE.BoxGeometry(w, 0.025, 0.16).translate(0, cy - h / 2 - 0.06, 0.09));
+      for (const lx of lampXs) solid.push(new THREE.BoxGeometry(0.022, 0.022, armZ).translate(lx, lampY, armZ / 2 + 0.02));
+      const structure = new THREE.Mesh(mergeGeometries(solid), poleMat);
+      structure.castShadow = true;
+      // The lit frame and the lamp heads: one glowing mesh.
+      const lit: THREE.BufferGeometry[] = [
+        new THREE.BoxGeometry(w + 0.12, 0.04, 0.075).translate(0, cy + h / 2 + 0.04, 0),
+        new THREE.BoxGeometry(w + 0.12, 0.04, 0.075).translate(0, cy - h / 2 - 0.04, 0),
+        new THREE.BoxGeometry(0.04, h + 0.12, 0.075).translate(-w / 2 - 0.04, cy, 0),
+        new THREE.BoxGeometry(0.04, h + 0.12, 0.075).translate(w / 2 + 0.04, cy, 0),
+        ...lampXs.map((lx) => new THREE.BoxGeometry(0.09, 0.045, 0.07).translate(lx, lampY, armZ + 0.02)),
+      ];
+      const glow = new THREE.Mesh(mergeGeometries(lit), boardGlowMat);
+      // Soft beams of light from the lamps down onto the panel (seen at night).
+      const dy = lampY - cy;
+      const dz = armZ - 0.01;
+      const len = Math.hypot(dy, dz) + h * 0.35;
+      const beamGeo = lampXs.map((lx) =>
+        new THREE.ConeGeometry(w * 0.3, len, 14, 1, true)
+          .translate(0, -len / 2, 0)
+          .rotateX(Math.atan2(dz, dy))
+          .translate(lx, lampY, armZ + 0.02),
+      );
+      const beams = new THREE.Mesh(mergeGeometries(beamGeo), boardBeamMat);
+      beams.renderOrder = 5;
+      beams.visible = false;
+      for (const x of [...solid, ...lit, ...beamGeo]) x.dispose();
+      // The picture, on both sides.
+      const front = new THREE.PlaneGeometry(w, h).translate(0, 0, 0.027);
+      const back = new THREE.PlaneGeometry(w, h).rotateY(Math.PI).translate(0, 0, -0.027);
+      const house = boardTextures[b.design] ?? boardTextures[0];
+      const mat = new THREE.MeshLambertMaterial({ map: house, emissive: 0xffffff, emissiveMap: house, emissiveIntensity: 0.28 });
+      const panel = new THREE.Mesh(mergeGeometries([front, back]), mat);
+      front.dispose();
+      back.dispose();
+      panel.position.y = cy;
+      panel.userData = { billboard: b.id, tile: t.i, board: index };
+      g.add(structure, glow, beams, panel);
       // Stand at the road edge of the tile, facing the road.
       const dir = [[1, 0], [-1, 0], [0, 1], [0, -1]][b.face];
       g.position.set(t.x + dir[0] * 0.28, 0, t.z + dir[1] * 0.28);
       g.rotation.y = [Math.PI / 2, -Math.PI / 2, 0, Math.PI][b.face];
-      return g;
+      return {
+        obj: g,
+        tile: t.i,
+        id: b.id,
+        design: b.design,
+        panel,
+        mat,
+        beams,
+        centre: new THREE.Vector3(g.position.x, cy, g.position.z),
+        w,
+        slot: -1,
+        want: null,
+        shown: null,
+        seen: 0,
+        counted: false,
+        flip: 0,
+        swapped: true,
+      };
+    }
+
+    // The ads: loaded once each (by id), drawn letterboxed onto a 2:1 canvas.
+    let adsList: CityAd[] = [];
+    const adCache = new Map<string, { url: string; tex: THREE.CanvasTexture | null; failed: boolean }>();
+    const adLoader = new THREE.TextureLoader();
+    adLoader.setCrossOrigin("anonymous");
+    let alive = true;
+    function setAds(list: CityAd[]) {
+      adsList = (list ?? []).filter((a) => a && a.id && a.image);
+      const wanted = new Map(adsList.map((a) => [a.id, a.image]));
+      for (const [id, entry] of adCache) {
+        if (wanted.get(id) === entry.url) continue;
+        entry.tex?.dispose();
+        adCache.delete(id);
+      }
+      for (const ad of adsList) {
+        if (adCache.has(ad.id)) continue;
+        const entry: { url: string; tex: THREE.CanvasTexture | null; failed: boolean } = { url: ad.image, tex: null, failed: false };
+        adCache.set(ad.id, entry);
+        adLoader.load(
+          ad.image,
+          (loaded) => {
+            if (alive && adCache.get(ad.id) === entry) {
+              try {
+                entry.tex = adTexture(loaded.image as CanvasImageSource & { width: number; height: number });
+              } catch {
+                entry.failed = true;
+              }
+            }
+            loaded.dispose();
+          },
+          undefined,
+          () => {
+            entry.failed = true;
+          },
+        );
+      }
+      // Every board picks its ad again from the new list.
+      for (const b of boards) b.slot = -1;
+    }
+    const adReady = (id: string) => !!adCache.get(id)?.tex;
+    function pickAd(slot: number, k: number): CityAd | null {
+      const n = adsList.length;
+      for (let j = 0; j < n; j++) {
+        const ad = adsList[(slot + k + j) % n];
+        if (!adCache.get(ad.id)?.failed) return ad;
+      }
+      return null;
+    }
+
+    // Counting views: an ad counts once per turn on a board, if the board was on screen (and
+    // not tiny) for 1.5 s while showing it. Sent up at most every 15 s.
+    const MIN_AD_PX = 40;
+    const frustum = new THREE.Frustum();
+    const projScreen = new THREE.Matrix4();
+    const boardSphere = new THREE.Sphere();
+    let viewCounts: Record<string, number> = {};
+    let viewsPending = false;
+    let lastFlush = performance.now();
+    let viewAcc = 0;
+    function flushViews(now: number) {
+      lastFlush = now;
+      if (!viewsPending) return;
+      const out = viewCounts;
+      viewCounts = {};
+      viewsPending = false;
+      cb.current.onAdViews?.(out);
+    }
+
+    function updateBoards(dt: number, time: number, now: number) {
+      for (let k = 0; k < boards.length; k++) {
+        const b = boards[k];
+        const grow = Math.min(1, Math.max(0, (now - (born.get(b.tile) ?? 0)) / 700));
+        b.obj.scale.setScalar(Math.max(0.0001, grow));
+        const slot = Math.floor((time + k * 4.7) / AD_SECONDS);
+        if (slot !== b.slot) {
+          b.slot = slot;
+          b.want = pickAd(slot, k);
+          b.seen = 0;
+          b.counted = false;
+        }
+        const target = b.want && adReady(b.want.id) ? b.want.id : null;
+        if (target !== b.shown) {
+          // A quick flip to the next ad (the picture changes half way).
+          b.shown = target;
+          b.flip = AD_FLIP;
+          b.swapped = false;
+          b.seen = 0;
+          b.counted = false;
+        }
+        if (b.flip > 0) {
+          b.flip = Math.max(0, b.flip - dt);
+          const f = 1 - b.flip / AD_FLIP;
+          if (!b.swapped && f >= 0.5) {
+            b.swapped = true;
+            const tex = (b.shown && adCache.get(b.shown)?.tex) || boardTextures[b.design] || boardTextures[0];
+            b.mat.map = tex;
+            b.mat.emissiveMap = tex;
+          }
+          b.panel.scale.y = Math.max(0.04, Math.abs(Math.cos(f * Math.PI)));
+        }
+      }
+      viewAcc += dt;
+      if (viewAcc >= 0.2) {
+        const step = viewAcc;
+        viewAcc = 0;
+        projScreen.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+        frustum.setFromProjectionMatrix(projScreen);
+        const focal = (el.clientHeight || 1) / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
+        for (const b of boards) {
+          if (!b.shown || b.counted) continue;
+          boardSphere.center.copy(b.centre);
+          boardSphere.radius = b.w / 2;
+          const px = (b.w * focal) / Math.max(0.001, camera.position.distanceTo(b.centre));
+          if (b.obj.scale.x >= 1 && b.flip === 0 && px >= MIN_AD_PX && frustum.intersectsSphere(boardSphere)) {
+            b.seen += step;
+            if (b.seen >= 1.5) {
+              b.counted = true;
+              viewCounts[b.shown] = (viewCounts[b.shown] ?? 0) + 1;
+              viewsPending = true;
+            }
+          } else b.seen = 0;
+        }
+      }
+      if (now - lastFlush >= 15000) flushViews(now);
     }
 
     function addFerris(px: number, pz: number, rotY: number, tile: number, scale: number) {
@@ -1072,16 +1649,32 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
     }
 
     function buildLandmarks() {
+      // Boards keep showing what they showed (no flicker when the city grows).
+      const wasShowing = new Map(boards.map((b) => [b.id, b.shown]));
       for (const l of landmarks) moving.remove(l.obj);
       landmarks = [];
-      for (const b of boards) moving.remove(b.obj);
+      for (const b of boards) {
+        moving.remove(b.obj);
+        b.obj.traverse((o) => {
+          if (o instanceof THREE.Mesh) o.geometry.dispose();
+        });
+        b.mat.dispose();
+      }
       boards = [];
       boardHits = [];
       for (const t of tiles) {
         if (t.kind === "billboard") {
-          const obj = buildBillboard(t);
-          boards.push({ obj, tile: t.i });
-          moving.add(obj);
+          const board = buildBillboard(t, boards.length);
+          const shown = wasShowing.get(board.id);
+          const tex = shown ? adCache.get(shown)?.tex : null;
+          if (shown && tex) {
+            board.shown = shown;
+            board.mat.map = tex;
+            board.mat.emissiveMap = tex;
+          }
+          boards.push(board);
+          boardHits.push(board.panel);
+          moving.add(board.obj);
         }
         if (t.kind === "ferris") addFerris(t.x, t.z, t.r[1] < 0.5 ? 0 : Math.PI / 2, t.i, 1);
         if (t.kind === "crane") {
@@ -1149,10 +1742,6 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
     }
     function updateLandmarks(dt: number, now: number) {
       boardTextures[2].offset.x = (boardTextures[2].offset.x + dt * 0.12) % 1;
-      for (const b of boards) {
-        const t = Math.min(1, Math.max(0, (now - (born.get(b.tile) ?? 0)) / 700));
-        b.obj.scale.setScalar(Math.max(0.0001, t));
-      }
       for (const l of landmarks) {
         if (l.axis === "y") l.spin.rotation.y += l.speed * dt;
         else l.spin.rotation.z += l.speed * dt;
@@ -1247,11 +1836,225 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
           u.angle += 1.9;
         }
         const span = radius * 3 + 30;
-        const dir = new THREE.Vector3(Math.cos(u.angle), 0, Math.sin(u.angle));
-        p.position.copy(dir).multiplyScalar((u.t - 0.5) * span).add(new THREE.Vector3(-dir.z * 4, 15 + radius * 0.3, dir.x * 4));
+        const ca = Math.cos(u.angle);
+        const sa = Math.sin(u.angle);
+        const d = (u.t - 0.5) * span;
+        p.position.set(ca * d - sa * 4, 15 + radius * 0.3, sa * d + ca * 4);
         p.rotation.y = -u.angle;
         (u.light as THREE.Mesh).visible = Math.sin(time * 6) > 0.6;
       }
+    }
+
+    // ---- the countryside round the city: gentle hills and little valleys near the edge, rising
+    // to mountains in the distance (different every round), fading into the haze. Two meshes
+    // (the land and its trees), rebuilt only when the city changes size. Never tappable.
+    const terrainMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+    const terrain = new THREE.Mesh(new THREE.BufferGeometry(), terrainMat);
+    terrain.receiveShadow = true;
+    terrain.frustumCulled = false;
+    scene.add(terrain);
+    const HILL_TREES = 340;
+    const hillTrees = new THREE.InstancedMesh(
+      new THREE.ConeGeometry(0.5, 1, 6).translate(0, 0.5, 0),
+      new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }),
+      HILL_TREES,
+    );
+    hillTrees.count = 0;
+    hillTrees.frustumCulled = false;
+    scene.add(hillTrees);
+    let terrainKey = "";
+    // This round's land: its seed, the half-size of the flat ground the city stands on, how hilly
+    // it is, how high the mountains get, and how far out they start and reach full height.
+    const land = { seed: 0, half: 10, hills: 1, peaks: 14, start: 20, full: 60 };
+    const LAND_COLORS = [
+      { meadow: 0xb9d99b, hill: 0x8cc178, forest: 0x5f9e5a, rock: 0x9b958a, low: 0x9fcb8a },
+      { meadow: 0xd3d8a2, hill: 0xbcc283, forest: 0x7b9b58, rock: 0xa89a86, low: 0xb7c98d },
+      { meadow: 0xcfd9a6, hill: 0xcdb47c, forest: 0xa8743f, rock: 0x948b85, low: 0xb5c894 },
+    ];
+    const SNOW = new THREE.Color(0xf3f6f9);
+    const smooth = (a: number, b: number, x: number) => {
+      const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+      return t * t * (3 - 2 * t);
+    };
+    /** How far outside the city's flat ground the last landHeight() point was. */
+    let landE = 0;
+    function landHeight(x: number, z: number) {
+      // Distance outside a square with rounded corners round the city.
+      const c = 2.5;
+      const qx = Math.abs(x) - land.half + c;
+      const qz = Math.abs(z) - land.half + c;
+      const e = Math.hypot(Math.max(qx, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qz), 0) - c;
+      landE = Math.max(0, e);
+      if (e <= 0) return -0.02;
+      const n = smoothNoise(x / 4.5, z / 4.5, land.seed) * 0.65 + smoothNoise(x / 1.9 + 50, z / 1.9, land.seed + 1) * 0.35 - 0.5;
+      const hills = n * (0.55 * smooth(0, 5, e) + 3.4 * land.hills * smooth(5, 30, e));
+      const r1 = 1 - Math.abs(2 * smoothNoise(x / 20, z / 20, land.seed + 2) - 1);
+      const r2 = 1 - Math.abs(2 * smoothNoise(x / 8 + 9, z / 8 - 4, land.seed + 3) - 1);
+      const ridges = r1 * r1 * 0.75 + r2 * r2 * 0.3;
+      const range = 0.35 + 0.9 * smoothNoise(x / 55, z / 55, land.seed + 4);
+      return -0.02 + hills + ridges * range * land.peaks * smooth(land.start, land.full, e);
+    }
+    function buildTerrain(seedV: number, R: number) {
+      const key = `${seedV}:${R}`;
+      if (key === terrainKey) return;
+      terrainKey = key;
+      const rr = (k: number) => hash(seedV, k, 5151);
+      land.seed = (seedV * 31 + 7) | 0;
+      land.half = R + 1.2;
+      land.hills = 0.45 + rr(1) * 0.9;
+      land.peaks = (9 + R * 0.5) * (0.6 + rr(2) * 0.8);
+      land.start = 10 + R * 0.5;
+      land.full = 40 + R * 1.6;
+      const pal = LAND_COLORS[Math.floor(rr(3) * LAND_COLORS.length) % LAND_COLORS.length];
+      const cGround = new THREE.Color(GROUND);
+      const cMeadow = new THREE.Color(pal.meadow);
+      const cHill = new THREE.Color(pal.hill);
+      const cForest = new THREE.Color(pal.forest);
+      const cRock = new THREE.Color(pal.rock);
+      const cLow = new THREE.Color(pal.low);
+      const snowy = land.peaks > 11;
+      // A polar grid: rings close together near the city, wide apart far out.
+      const N = 60;
+      const M = 144;
+      const r0 = land.half - 0.8;
+      const rOut = R * 14 + 80;
+      const pos = new Float32Array((N + 1) * M * 3);
+      const col = new Float32Array((N + 1) * M * 3);
+      const cc = new THREE.Color();
+      for (let i = 0; i <= N; i++) {
+        const r = r0 + (rOut - r0) * Math.pow(i / N, 1.9);
+        for (let j = 0; j < M; j++) {
+          const a = (j / M) * Math.PI * 2 + (i % 2) * (Math.PI / M);
+          const x = Math.cos(a) * r;
+          const z = Math.sin(a) * r;
+          const y = landHeight(x, z);
+          const e = landE;
+          const o = (i * M + j) * 3;
+          pos[o] = x;
+          pos[o + 1] = y;
+          pos[o + 2] = z;
+          cc.copy(cGround).lerp(cMeadow, smooth(0, 4, e));
+          if (y < -0.12) cc.lerp(cLow, smooth(-0.12, -0.8, y));
+          cc.lerp(cHill, smooth(0.3, 2, y));
+          cc.lerp(cForest, smooth(1.5, 4, y) * (0.4 + 0.6 * smoothNoise(x / 9, z / 9, land.seed + 5)));
+          cc.lerp(cRock, smooth(land.peaks * 0.22, land.peaks * 0.45, y));
+          if (snowy) cc.lerp(SNOW, smooth(land.peaks * 0.55, land.peaks * 0.7, y));
+          col[o] = cc.r;
+          col[o + 1] = cc.g;
+          col[o + 2] = cc.b;
+        }
+      }
+      const index = new Uint32Array(N * M * 6);
+      let n = 0;
+      for (let i = 0; i < N; i++) {
+        for (let j = 0; j < M; j++) {
+          const a = i * M + j;
+          const b = i * M + ((j + 1) % M);
+          const c = (i + 1) * M + j;
+          const d = (i + 1) * M + ((j + 1) % M);
+          index.set([a, b, c, c, b, d], n);
+          n += 6;
+        }
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+      g.setAttribute("color", new THREE.BufferAttribute(col, 3));
+      g.setIndex(new THREE.BufferAttribute(index, 1));
+      g.computeVertexNormals();
+      terrain.geometry.dispose();
+      terrain.geometry = g;
+      // Little woods on the hills.
+      let count = 0;
+      for (let k = 0; k < 4000 && count < HILL_TREES; k++) {
+        const a = hash(k, 1, seedV + 5252) * Math.PI * 2;
+        const d = land.half + 1 + Math.sqrt(hash(k, 2, seedV + 5252)) * (32 + R * 0.6);
+        const x = Math.cos(a) * d;
+        const z = Math.sin(a) * d;
+        const y = landHeight(x, z);
+        if (landE < 1.2 || y > land.peaks * 0.2 || smoothNoise(x / 7, z / 7, land.seed + 6) < 0.5) continue;
+        const h = (0.55 + hash(k, 3, seedV + 5252) * 0.6) * (1 + landE / 45);
+        m4.compose(v.set(x, y - 0.05, z), q.identity(), s.set(h * 0.42, h, h * 0.42));
+        hillTrees.setMatrixAt(count, m4);
+        hillTrees.setColorAt(count, cc.copy(cForest).multiplyScalar(0.75 + hash(k, 4, seedV + 5252) * 0.35));
+        count++;
+      }
+      hillTrees.count = count;
+      hillTrees.instanceMatrix.needsUpdate = true;
+      if (hillTrees.instanceColor) hillTrees.instanceColor.needsUpdate = true;
+      // The flat ground under the city, and how far we can see.
+      base.scale.setScalar(land.half);
+      camera.far = Math.max(400, rOut * 1.3);
+      camera.updateProjectionMatrix();
+    }
+
+    // ---- traffic lights light up the road at night: soft coloured pools on the asphalt
+    // under each light, following its colour.
+    const poolMat = new THREE.MeshBasicMaterial({
+      map: glowTexture(),
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const poolGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+    let pools: THREE.InstancedMesh | null = null;
+    let poolAxis: number[] = [];
+    function buildPools() {
+      if (pools) {
+        scene.remove(pools);
+        pools.dispose();
+      }
+      const spots: { x: number; z: number; axis: number }[] = [];
+      for (const t of tiles) {
+        if (!signalJunction(t)) continue;
+        spots.push({ x: t.x + 0.24, z: t.z - 0.24, axis: 0 }, { x: t.x - 0.24, z: t.z + 0.24, axis: 1 });
+      }
+      poolAxis = spots.map((p) => p.axis);
+      pools = new THREE.InstancedMesh(poolGeo, poolMat, Math.max(1, spots.length));
+      pools.count = spots.length;
+      spots.forEach((p, k) => {
+        m4.compose(v.set(p.x, 0.072, p.z), q.identity(), s.set(1.15, 1, 1.15));
+        pools!.setMatrixAt(k, m4);
+        pools!.setColorAt(k, color.setHex(0x000000));
+      });
+      pools.renderOrder = 3;
+      pools.visible = false;
+      pools.computeBoundingSphere();
+      scene.add(pools);
+    }
+
+    // ---- blinking lamps: hazard lights, police lights, road-works lamps
+    let flashTags: number[] = [];
+    let flashState = -1;
+    const FLASH_COL = {
+      amber: new THREE.Color(0xffa41b),
+      amberOff: new THREE.Color(0x4a3a20),
+      red: new THREE.Color(0xff2d2d),
+      blue: new THREE.Color(0x2d6bff),
+      off: new THREE.Color(0x1d2330),
+    };
+    function updateFlashers(time: number) {
+      const mesh = meshes.flash;
+      if (!mesh || !flashTags.length) return;
+      const hazard = Math.sin(time * 5.5) > 0 ? 1 : 0;
+      const police = Math.floor(time * 6) % 2;
+      const works = Math.sin(time * 3.2) > 0.2 ? 1 : 0;
+      const state = hazard | (police << 1) | (works << 2);
+      if (state === flashState) return;
+      flashState = state;
+      for (let k = 0; k < flashTags.length; k++) {
+        const tag = flashTags[k];
+        const c =
+          tag === FLASH.hazard
+            ? hazard ? FLASH_COL.amber : FLASH_COL.amberOff
+            : tag === FLASH.policeRed
+              ? police ? FLASH_COL.red : FLASH_COL.off
+              : tag === FLASH.policeBlue
+                ? police ? FLASH_COL.off : FLASH_COL.blue
+                : works ? FLASH_COL.amber : FLASH_COL.amberOff;
+        mesh.setColorAt(k, c);
+      }
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     }
 
     // ---- build / grow the city
@@ -1275,6 +2078,7 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       });
       kindAt = new Map(tiles.map((t) => [`${t.x},${t.z}`, t.kind]));
       tileIndex = new Map(tiles.map((t) => [`${t.x},${t.z}`, t.i]));
+      blocked = new Set(tiles.filter((t) => t.works).map((t) => `${t.x},${t.z}`));
       currentPlan = plan;
 
       const now = performance.now();
@@ -1324,9 +2128,11 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       for (const t of tiles) if (now < born.get(t.i)! + 700) growing.push(t.i);
       signalTags = (parts.signal ?? []).map((p) => p.color - SIGNAL_TAG);
       signalPhase = -1;
+      flashTags = (parts.flash ?? []).map((p) => p.color - FLASH_TAG);
+      flashState = -1;
 
       radius = tiles.reduce((m, t) => Math.max(m, Math.abs(t.x), Math.abs(t.z)), 4) + 1.5;
-      base.scale.setScalar(radius * 8 + 120);
+      buildTerrain(newSeed, radius);
       const sc = sun.shadow.camera;
       sc.left = sc.bottom = -radius * 1.3;
       sc.right = sc.top = radius * 1.3;
@@ -1343,6 +2149,8 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
         controls.update();
       }
       buildCars(plan);
+      buildJams(newSeed);
+      buildPools();
       buildLandmarks();
       buildBoats(plan);
       buildGhosts(count);
@@ -1369,8 +2177,8 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
     }
 
     // ---- markers
-    let lastMarkers: CityMarkers = { searchedEmpty: [], searchedHit: [], caught: [], left: [], me: null, sweeps: [], pending: null, recent: [], locked: [] };
-    const pulsers: { obj: THREE.Object3D; kind: "pulse" | "bob" | "spin" | "flash"; base: number }[] = [];
+    let lastMarkers: CityMarkers = { searchedEmpty: [], searchedHit: [], caught: [], left: [], me: null, sweeps: [], pending: null, recent: [], locked: [], decoy: null };
+    const pulsers: { obj: THREE.Object3D; kind: "pulse" | "bob" | "spin" | "flash" | "sway"; base: number }[] = [];
     const glassBox = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
     const markerGeo = {
       pinHead: new THREE.SphereGeometry(0.14, 16, 12),
@@ -1380,7 +2188,15 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       gem: new THREE.OctahedronGeometry(0.22),
       square: new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
       cross: new THREE.BoxGeometry(0.42, 0.04, 0.08),
+      // Your decoy: an inflatable tube man.
+      tube: new THREE.CylinderGeometry(0.06, 0.075, 0.5, 10).translate(0, 0.25, 0),
+      arm: new THREE.CylinderGeometry(0.025, 0.03, 0.26, 8).translate(0, 0.13, 0),
+      ball: new THREE.SphereGeometry(0.5, 12, 8),
+      dash: new THREE.RingGeometry(0.34, 0.4, 32).rotateX(-Math.PI / 2),
+      stand: new THREE.CylinderGeometry(0.5, 0.5, 1, 16).translate(0, 0.5, 0),
     };
+    // Shared with the little scenes (which free what they made, but not these).
+    markerGeo.square.userData.keep = true;
     const topOf = (tile: number) => tiles[tile]?.top ?? 0.2;
     const posOf = (tile: number) => tiles[tile] ?? { x: 0, z: 0 };
 
@@ -1500,6 +2316,46 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
         markerGroup.add(g);
         pulsers.push({ obj: gem, kind: "bob", base: gem.position.y });
       }
+      if (m.decoy !== null && m.decoy !== undefined && ok(m.decoy)) {
+        // Your decoy: a purple inflatable tube man waving about (only you see it).
+        const g = new THREE.Group();
+        const purple = new THREE.MeshLambertMaterial({ color: 0x9775fa, emissive: 0x5f3dc4, emissiveIntensity: 0.25 });
+        const man = new THREE.Group();
+        const tube = new THREE.Mesh(markerGeo.tube, purple);
+        tube.castShadow = true;
+        const head = new THREE.Mesh(markerGeo.ball, purple);
+        head.scale.setScalar(0.16);
+        head.position.y = 0.56;
+        const face = new THREE.MeshBasicMaterial({ color: 0x1b1b1b });
+        for (const side of [-1, 1]) {
+          const eye = new THREE.Mesh(markerGeo.ball, face);
+          eye.scale.setScalar(0.03);
+          eye.position.set(side * 0.035, 0.58, 0.07);
+          man.add(eye);
+        }
+        const mouth = new THREE.Mesh(markerGeo.ball, face);
+        mouth.scale.set(0.06, 0.02, 0.02);
+        mouth.position.set(0, 0.525, 0.075);
+        const arms: THREE.Mesh[] = [];
+        for (const side of [-1, 1]) {
+          const arm = new THREE.Mesh(markerGeo.arm, purple);
+          arm.position.set(side * 0.05, 0.4, 0);
+          arm.rotation.z = -side * 1.1;
+          arms.push(arm);
+          man.add(arm);
+        }
+        man.add(tube, head, mouth);
+        man.userData.arms = arms;
+        man.scale.setScalar(1.5);
+        const base = new THREE.Mesh(markerGeo.stand, new THREE.MeshLambertMaterial({ color: 0x5f3dc4 }));
+        base.scale.set(0.3, 0.04, 0.3);
+        const ring = new THREE.Mesh(markerGeo.dash, new THREE.MeshBasicMaterial({ color: 0x9775fa, transparent: true, opacity: 0.85, depthWrite: false }));
+        ring.position.y = 0.02;
+        g.add(man, base, ring);
+        g.position.set(posOf(m.decoy).x, topOf(m.decoy) + 0.02, posOf(m.decoy).z);
+        markerGroup.add(g);
+        pulsers.push({ obj: man, kind: "sway", base: Math.random() * 6 });
+      }
       if (m.pending !== null && ok(m.pending)) {
         const beam = new THREE.Mesh(
           markerGeo.beam,
@@ -1519,6 +2375,15 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
           p.obj.position.y = p.base + Math.sin(time * 2.5) * 0.15;
         }
         if (p.kind === "spin") ((p.obj as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = 0.2 + Math.abs(Math.sin(time * 5)) * 0.3;
+        if (p.kind === "sway") {
+          // The tube man wobbles and flaps its arms.
+          const t = time + p.base;
+          p.obj.rotation.z = Math.sin(t * 2.6) * 0.18 + Math.sin(t * 6.1) * 0.05;
+          p.obj.rotation.x = Math.sin(t * 1.9) * 0.08;
+          const arms = p.obj.userData.arms as THREE.Object3D[];
+          arms[0].rotation.z = 1.1 + Math.sin(t * 7) * 0.6;
+          arms[1].rotation.z = -1.1 + Math.sin(t * 6.3 + 1) * 0.6;
+        }
         if (p.kind === "flash") {
           const age = (Date.now() - p.base) / 1000;
           const mat = (p.obj as THREE.Mesh).material as THREE.MeshBasicMaterial;
@@ -1540,36 +2405,60 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
     const cuffTex = labelTexture("!", "#e5484d");
     const ringGeo = new THREE.RingGeometry(0.42, 0.5, 32).rotateX(-Math.PI / 2);
 
+    // Searchers share their shapes and paints (marked "keep" so finished scenes don't free them).
+    const keep = <T extends THREE.BufferGeometry | THREE.Material>(x: T) => {
+      x.userData.keep = true;
+      return x;
+    };
+    const walkerGeo = {
+      body: keep(new THREE.CylinderGeometry(0.045, 0.055, 0.18, 8)),
+      legs: keep(new THREE.CylinderGeometry(0.04, 0.035, 0.09, 8)),
+      head: keep(new THREE.SphereGeometry(0.045, 10, 8)),
+      helmet: keep(new THREE.SphereGeometry(0.052, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2)),
+      dogBody: keep(new THREE.BoxGeometry(0.2, 0.08, 0.08)),
+      dogHead: keep(new THREE.BoxGeometry(0.08, 0.08, 0.07)),
+      dogTail: keep(new THREE.BoxGeometry(0.06, 0.02, 0.02)),
+      dogLeg: keep(new THREE.BoxGeometry(0.025, 0.08, 0.025)),
+    };
+    const paints = new Map<number, THREE.MeshLambertMaterial>();
+    const paint = (hex: number) => {
+      let m = paints.get(hex);
+      if (!m) {
+        m = keep(new THREE.MeshLambertMaterial({ color: hex }));
+        paints.set(hex, m);
+      }
+      return m;
+    };
     function makeWalker(kind: number) {
       const g = new THREE.Group();
       if (kind === 2) {
         // Dog
-        const fur = fxMat(0xa0703c);
-        const body = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.08, 0.08), fur);
+        const fur = paint(0xa0703c);
+        const body = new THREE.Mesh(walkerGeo.dogBody, fur);
         body.position.y = 0.11;
-        const head = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.07), fur);
+        const head = new THREE.Mesh(walkerGeo.dogHead, fur);
         head.position.set(0.12, 0.16, 0);
-        const tail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 0.02), fur);
+        const tail = new THREE.Mesh(walkerGeo.dogTail, fur);
         tail.position.set(-0.12, 0.15, 0);
         tail.rotation.z = 0.6;
         g.add(body, head, tail);
         for (const [lx, lz] of [[0.07, 0.03], [0.07, -0.03], [-0.07, 0.03], [-0.07, -0.03]]) {
-          const leg = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.08, 0.025), fur);
+          const leg = new THREE.Mesh(walkerGeo.dogLeg, fur);
           leg.position.set(lx, 0.04, lz);
           g.add(leg);
         }
       } else {
         // Person (kind 0) or soldier (kind 1)
         const shirt = kind === 1 ? 0x5c7a3a : [0x4dabf7, 0xff6b6b, 0xffd43b, 0x845ef7][Math.floor(Math.random() * 4)];
-        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 0.18, 8), fxMat(shirt));
+        const body = new THREE.Mesh(walkerGeo.body, paint(shirt));
         body.position.y = 0.17;
-        const legs = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.035, 0.09, 8), fxMat(kind === 1 ? 0x4a5d2f : 0x343a40));
+        const legs = new THREE.Mesh(walkerGeo.legs, paint(kind === 1 ? 0x4a5d2f : 0x343a40));
         legs.position.y = 0.045;
-        const head = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), fxMat(0xf1c27d));
+        const head = new THREE.Mesh(walkerGeo.head, paint(0xf1c27d));
         head.position.y = 0.3;
         g.add(body, legs, head);
         if (kind === 1) {
-          const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.052, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), fxMat(0x4a5d2f));
+          const helmet = new THREE.Mesh(walkerGeo.helmet, paint(0x4a5d2f));
           helmet.position.y = 0.305;
           g.add(helmet);
         }
@@ -1600,8 +2489,8 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       const walker = makeWalker(kind);
       const corners = [[-0.45, -0.45], [0.45, -0.45], [0.45, 0.45], [-0.45, 0.45]];
       const start = Math.floor(Math.random() * 4);
-      addFx(walker, 1100, (t) => {
-        // A quick dash along two sides of the tile, a glance around, then gone (about a second).
+      addFx(walker, 2000, (t) => {
+        // A dash along two sides of the tile, a good look around, then gone (two seconds).
         const walk = Math.min(1, t / 0.7) * 2;
         const a = corners[(start + Math.floor(walk)) % 4];
         const b = corners[(start + Math.floor(walk) + 1) % 4];
@@ -1609,16 +2498,16 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
         const px = a[0] + (b[0] - a[0]) * (walk >= 2 ? 1 : f);
         const pz = a[1] + (b[1] - a[1]) * (walk >= 2 ? 1 : f);
         walker.position.set(tile.x + px, 0.08 + (t < 0.7 ? Math.abs(Math.sin(t * 40)) * 0.02 : 0), tile.z + pz);
-        walker.rotation.y = t < 0.7 ? Math.atan2(-(b[1] - a[1]), b[0] - a[0]) : Math.sin(t * 12) * 1.2;
-        const fade = t > 0.85 ? 1 - (t - 0.85) / 0.15 : 1;
-        walker.scale.setScalar(1.5 * Math.min(1, t * 8) * fade + 0.0001);
+        walker.rotation.y = t < 0.7 ? Math.atan2(-(b[1] - a[1]), b[0] - a[0]) : Math.sin(t * 9) * 1.2;
+        const fade = t > 0.88 ? 1 - (t - 0.88) / 0.12 : 1;
+        walker.scale.setScalar(1.5 * Math.min(1, t * 10) * fade + 0.0001);
       });
       if (!found) {
-        puff(tile, 0x8b95a1, 700);
+        puff(tile, 0x8b95a1, 1350);
         const q = new THREE.Sprite(new THREE.SpriteMaterial({ map: unknownTex, transparent: true, depthTest: false }));
         q.renderOrder = 6;
-        addFx(q, 1800, (t) => {
-          const k = Math.max(0, (t - 0.4) / 0.6);
+        addFx(q, 2800, (t) => {
+          const k = Math.max(0, (t - 0.5) / 0.5);
           q.visible = k > 0;
           q.position.set(tile.x, tile.top + 0.4 + k * 0.6, tile.z);
           q.scale.setScalar(0.45);
@@ -1728,16 +2617,278 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       puff(tile, 0xe5484d, 600);
     }
 
+    // A big search: a squad fans out over the 3×3 block round the tile while a searchlight sweeps it.
+    const searchlightGeo = keep(new THREE.ConeGeometry(0.9, 1, 20, 1, true).translate(0, -0.5, 0));
+    function areaSearchScene(tile: Tile, r: number) {
+      const size = r * 2 + 1;
+      const ORDER = [[-1, -1], [0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [0, 0]];
+      ORDER.forEach(([ox, oz], k) => {
+        const kind = k === 8 ? 2 : k % 3 === 2 ? 2 : k % 2;
+        const walker = makeWalker(kind);
+        const tx = tile.x + ox * r;
+        const tz = tile.z + oz * r;
+        const spin = Math.random() * Math.PI * 2;
+        const delay = k * 0.025;
+        addFx(walker, 2500, (t) => {
+          const u = Math.max(0, t - delay);
+          let px: number;
+          let pz: number;
+          let face: number;
+          if (u < 0.32) {
+            // Fan out from the middle.
+            const f = u / 0.32;
+            px = tile.x + (tx - tile.x) * f;
+            pz = tile.z + (tz - tile.z) * f;
+            face = Math.atan2(-(tz - tile.z), tx - tile.x || 0.001);
+          } else {
+            // Search round the tile, looking about.
+            const a = spin + (u - 0.32) * 9;
+            px = tx + Math.cos(a) * 0.28;
+            pz = tz + Math.sin(a) * 0.28;
+            face = -a - Math.PI / 2 + Math.sin(u * 30) * 0.5;
+          }
+          walker.position.set(px, 0.08 + (u < 0.85 ? Math.abs(Math.sin(u * 45)) * 0.025 : 0), pz);
+          walker.rotation.y = face;
+          const fade = t > 0.88 ? 1 - (t - 0.88) / 0.12 : 1;
+          walker.scale.setScalar(1.5 * Math.min(1, u * 12) * fade + 0.0001);
+        });
+      });
+      // The area lights up...
+      const zone = new THREE.Mesh(
+        markerGeo.square,
+        new THREE.MeshBasicMaterial({ color: 0xffd43b, transparent: true, opacity: 0, depthWrite: false }),
+      );
+      zone.scale.set(size, 1, size);
+      zone.position.set(tile.x, 0.13, tile.z);
+      zone.renderOrder = 3;
+      addFx(zone, 2500, (t) => {
+        const env = Math.min(1, t * 6) * (t > 0.8 ? (1 - t) / 0.2 : 1);
+        (zone.material as THREE.MeshBasicMaterial).opacity = env * (0.12 + Math.abs(Math.sin(t * 14)) * 0.1);
+      });
+      // ...and a searchlight sweeps round it.
+      const beam = new THREE.Mesh(
+        searchlightGeo,
+        new THREE.MeshBasicMaterial({ color: 0xfff3bf, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
+      );
+      beam.renderOrder = 5;
+      const spot = new THREE.Mesh(
+        markerGeo.square,
+        new THREE.MeshBasicMaterial({ map: poolMat.map, color: 0xfff3bf, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }),
+      );
+      spot.renderOrder = 4;
+      const H = 4.5;
+      addFx(beam, 2500, (t) => {
+        const env = Math.min(1, t * 5) * (t > 0.85 ? (1 - t) / 0.15 : 1);
+        const a = t * Math.PI * 2 * 1.3;
+        const gx = tile.x + Math.cos(a) * r * 0.9;
+        const gz = tile.z + Math.sin(a) * r * 0.9;
+        // Hang the beam from above the middle and point it at (gx, gz).
+        const dx = gx - tile.x;
+        const dz = gz - tile.z;
+        const len = Math.hypot(dx, dz, H);
+        beam.position.set(tile.x, H, tile.z);
+        beam.scale.set(1, len, 1);
+        beam.quaternion.setFromUnitVectors(up, v.set(-dx / len, H / len, -dz / len));
+        (beam.material as THREE.MeshBasicMaterial).opacity = env * 0.28;
+        spot.position.set(gx, 0.15, gz);
+        spot.scale.set(2.2, 1, 2.2);
+        (spot.material as THREE.MeshBasicMaterial).opacity = env * 0.8;
+      });
+      addFx(spot, 2500, () => {});
+      const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0xffd43b, transparent: true, depthWrite: false }));
+      ring.position.set(tile.x, 0.14, tile.z);
+      addFx(ring, 2500, (t) => {
+        const k = Math.min(1, t / 0.4);
+        ring.scale.setScalar(0.5 + k * size * 1.1);
+        (ring.material as THREE.MeshBasicMaterial).opacity = 0.8 * (1 - k);
+      });
+    }
+
+    // A decoy goes off: a cartoon explosion, or a toy pops out and wobbles.
+    const sparkGeo = keep(new THREE.BoxGeometry(0.05, 0.05, 0.05));
+    const blobGeo = keep(new THREE.IcosahedronGeometry(0.5, 1));
+    const smokeRingGeo = keep(new THREE.TorusGeometry(0.5, 0.13, 6, 24).rotateX(Math.PI / 2));
+    const ballGeo = keep(new THREE.SphereGeometry(0.5, 14, 10));
+    const boomTex = boomTexture();
+    function explodeScene(tile: Tile) {
+      const y0 = tile.top + 0.1;
+      const fire = new THREE.Group();
+      const outer = new THREE.Mesh(blobGeo, new THREE.MeshBasicMaterial({ color: 0xff8c1a, transparent: true }));
+      const inner = new THREE.Mesh(blobGeo, new THREE.MeshBasicMaterial({ color: 0xffe066, transparent: true }));
+      inner.scale.setScalar(0.65);
+      fire.add(outer, inner);
+      fire.position.set(tile.x, y0, tile.z);
+      addFx(fire, 3000, (t) => {
+        const k = t / 0.16;
+        const size = t < 0.16 ? easeOutBack(Math.min(1, k)) * 1.5 : 1.5 * Math.max(0, 1 - (t - 0.16) / 0.2);
+        fire.scale.setScalar(size + 0.0001);
+        fire.rotation.y = t * 4;
+        fire.visible = size > 0.01;
+      });
+      const ring = new THREE.Mesh(smokeRingGeo, new THREE.MeshLambertMaterial({ color: 0xb8bec6, transparent: true, depthWrite: false }));
+      ring.position.set(tile.x, y0, tile.z);
+      addFx(ring, 3000, (t) => {
+        const k = Math.min(1, t / 0.6);
+        ring.scale.setScalar(0.4 + k * 2.4);
+        ring.position.y = y0 + k * 0.3;
+        (ring.material as THREE.MeshLambertMaterial).opacity = 0.85 * (1 - Math.min(1, t / 0.7));
+      });
+      // Puffs of smoke drifting up.
+      const smokeMat = new THREE.MeshLambertMaterial({ color: 0x9aa1aa, transparent: true, depthWrite: false, flatShading: true });
+      const smoke = new THREE.Group();
+      for (let k = 0; k < 6; k++) {
+        const b = new THREE.Mesh(blobGeo, smokeMat);
+        const a = (k / 6) * Math.PI * 2;
+        b.userData = { dx: Math.cos(a) * 0.3, dz: Math.sin(a) * 0.3, s: 0.5 + (k % 3) * 0.2 };
+        smoke.add(b);
+      }
+      smoke.position.set(tile.x, y0, tile.z);
+      addFx(smoke, 3000, (t) => {
+        const k = Math.max(0, (t - 0.08) / 0.92);
+        smoke.visible = k > 0;
+        for (const b of smoke.children) {
+          const u = b.userData as { dx: number; dz: number; s: number };
+          b.position.set(u.dx * (1 + k * 2), 0.2 + k * 1.6, u.dz * (1 + k * 2));
+          b.scale.setScalar(u.s * (0.4 + k * 1.2));
+        }
+        smokeMat.opacity = 0.75 * (1 - k);
+      });
+      // Sparks flying out.
+      const sparkMat = new THREE.MeshBasicMaterial({ color: 0xffd43b });
+      const sparks = new THREE.Group();
+      for (let k = 0; k < 12; k++) {
+        const b = new THREE.Mesh(sparkGeo, sparkMat);
+        const a = Math.random() * Math.PI * 2;
+        const sp = 1.6 + Math.random() * 1.8;
+        b.userData = { vx: Math.cos(a) * sp, vz: Math.sin(a) * sp, vy: 2 + Math.random() * 2.5 };
+        sparks.add(b);
+      }
+      sparks.position.set(tile.x, y0, tile.z);
+      addFx(sparks, 3000, (t) => {
+        const tt = t * 3;
+        sparks.visible = tt < 0.9;
+        for (const b of sparks.children) {
+          const u = b.userData as { vx: number; vy: number; vz: number };
+          b.position.set(u.vx * tt, u.vy * tt - 4.9 * tt * tt, u.vz * tt);
+          b.rotation.set(tt * 9, tt * 7, 0);
+        }
+      });
+      // "BOOM!"
+      const word = new THREE.Sprite(new THREE.SpriteMaterial({ map: boomTex, transparent: true, depthTest: false }));
+      word.renderOrder = 8;
+      addFx(word, 3000, (t) => {
+        const k = Math.min(1, t / 0.12);
+        word.scale.set(1.6 * easeOutBack(k), 0.8 * easeOutBack(k), 1);
+        word.position.set(tile.x, y0 + 1.1 + t * 0.4, tile.z);
+        word.material.opacity = t > 0.7 ? (1 - t) / 0.3 : 1;
+      });
+    }
+
+    function toyScene(tile: Tile, id: number) {
+      const y0 = tile.top + 0.05;
+      const toy = new THREE.Group();
+      const duck = id % 2 === 0;
+      if (duck) {
+        // A rubber duck
+        const yellow = new THREE.MeshLambertMaterial({ color: 0xffd43b });
+        const body = new THREE.Mesh(ballGeo, yellow);
+        body.scale.set(0.62, 0.44, 0.48);
+        body.position.y = 0.22;
+        const head = new THREE.Mesh(ballGeo, yellow);
+        head.scale.setScalar(0.3);
+        head.position.set(0.18, 0.52, 0);
+        const beak = new THREE.Mesh(ballGeo, new THREE.MeshLambertMaterial({ color: 0xff8a1f }));
+        beak.scale.set(0.16, 0.06, 0.14);
+        beak.position.set(0.34, 0.5, 0);
+        const tail = new THREE.Mesh(ballGeo, yellow);
+        tail.scale.set(0.16, 0.18, 0.16);
+        tail.position.set(-0.3, 0.36, 0);
+        toy.add(body, head, beak, tail);
+        for (const side of [-1, 1]) {
+          const eye = new THREE.Mesh(ballGeo, new THREE.MeshBasicMaterial({ color: 0x1b1b1b }));
+          eye.scale.setScalar(0.05);
+          eye.position.set(0.27, 0.58, side * 0.08);
+          toy.add(eye);
+        }
+      } else {
+        // A teddy bear
+        const fur = new THREE.MeshLambertMaterial({ color: 0xb07d48 });
+        const light = new THREE.MeshLambertMaterial({ color: 0xe8c9a0 });
+        const add = (m: THREE.Material, x: number, y: number, z: number, sx: number, sy = sx, sz = sx) => {
+          const b = new THREE.Mesh(ballGeo, m);
+          b.scale.set(sx, sy, sz);
+          b.position.set(x, y, z);
+          toy.add(b);
+        };
+        add(fur, 0, 0.22, 0, 0.42, 0.46, 0.38);
+        add(light, 0.12, 0.22, 0, 0.12, 0.26, 0.24);
+        add(fur, 0, 0.58, 0, 0.32);
+        add(light, 0.13, 0.55, 0, 0.12, 0.1, 0.13);
+        for (const side of [-1, 1]) {
+          add(fur, -0.02, 0.73, side * 0.12, 0.12);
+          add(fur, 0.02, 0.3, side * 0.2, 0.13, 0.22, 0.13);
+          add(fur, 0.08, 0.05, side * 0.11, 0.15, 0.12, 0.15);
+          const eye = new THREE.Mesh(ballGeo, new THREE.MeshBasicMaterial({ color: 0x1b1b1b }));
+          eye.scale.setScalar(0.045);
+          eye.position.set(0.14, 0.63, side * 0.06);
+          toy.add(eye);
+        }
+      }
+      toy.traverse((o) => (o.castShadow = true));
+      toy.position.set(tile.x, y0, tile.z);
+      const turn = Math.random() * Math.PI * 2;
+      addFx(toy, 3000, (t) => {
+        const pop = t < 0.12 ? easeOutBack(t / 0.12) : t > 0.88 ? 1 - (t - 0.88) / 0.12 : 1;
+        const sc = 1.3 * pop + 0.0001;
+        // Squash and stretch as it bounces, wobbling side to side.
+        const bounce = Math.abs(Math.sin(t * 16)) * Math.max(0, 0.6 - t) * 0.5;
+        toy.scale.set(sc * (1 - bounce * 0.3), sc * (1 + bounce * 0.4), sc * (1 - bounce * 0.3));
+        toy.position.y = y0 + bounce * 0.4;
+        toy.rotation.set(Math.sin(t * 22) * 0.3 * (1 - t), turn + t * 1.5, Math.sin(t * 18) * 0.35 * (1 - t));
+      });
+      // A burst of confetti.
+      const conf = new THREE.Group();
+      const hues = [0xff6b6b, 0xffd43b, 0x4dabf7, 0x69db7c, 0xda77f2];
+      for (let k = 0; k < 14; k++) {
+        const b = new THREE.Mesh(sparkGeo, paint(hues[k % hues.length]));
+        const a = Math.random() * Math.PI * 2;
+        const sp = 0.8 + Math.random() * 1.2;
+        b.scale.set(1, 0.3, 0.7);
+        b.userData = { vx: Math.cos(a) * sp, vz: Math.sin(a) * sp, vy: 2.2 + Math.random() * 1.5 };
+        conf.add(b);
+      }
+      conf.position.set(tile.x, y0 + 0.2, tile.z);
+      addFx(conf, 3000, (t) => {
+        const tt = t * 3;
+        conf.visible = tt < 1.4;
+        for (const b of conf.children) {
+          const u = b.userData as { vx: number; vy: number; vz: number };
+          b.position.set(u.vx * tt, Math.max(-0.2, u.vy * tt - 3 * tt * tt), u.vz * tt);
+          b.rotation.set(tt * 8, tt * 5, tt * 3);
+        }
+      });
+      puff(tile, 0xf783ac);
+    }
+
     function playEvents(list: CityEvent[]) {
       for (const e of list) {
         if (seenEvents.has(e.id)) continue;
+        // Things with no place on the map (respawns, new decoys...) have nothing to show.
+        if (typeof e.tile !== "number" || !Number.isInteger(e.tile) || e.tile < 0) {
+          seenEvents.add(e.id);
+          continue;
+        }
         const tile = tiles[e.tile];
-        if (!tile) continue;
+        if (!tile) continue; // not built yet: try again once the city has grown
         seenEvents.add(e.id);
         if (e.ageMs > 15000) continue;
         if (e.kind === "searched") {
           const found = list.some((x) => x.kind === "caught" && x.tile === e.tile && Math.abs(x.id - e.id) <= 2);
           searchScene(tile, found);
+        } else if (e.kind === "area_search") areaSearchScene(tile, Math.max(1, Math.min(3, e.detail?.radius ?? 1)));
+        else if (e.kind === "decoy_found") {
+          if (e.detail?.outcome === "toy") toyScene(tile, e.id);
+          else explodeScene(tile);
         } else if (e.kind === "sweep") sweepScene(tile, e.detail?.radius ?? 1);
         else if (e.kind === "caught") arrestScene(tile, e.detail?.hiders ?? []);
         else if (e.kind === "moved") puff(tile, 0xffb400);
@@ -1757,8 +2908,9 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
           fxGroup.remove(f.obj);
           f.obj.traverse((o) => {
             if (o instanceof THREE.Mesh || o instanceof THREE.Sprite) {
-              if (o instanceof THREE.Mesh && o.geometry !== ringGeo) o.geometry.dispose();
-              (o.material as THREE.Material).dispose();
+              if (o instanceof THREE.Mesh && o.geometry !== ringGeo && !o.geometry.userData.keep) o.geometry.dispose();
+              const m = o.material as THREE.Material;
+              if (!m.userData.keep) m.dispose();
             }
           });
           return false;
@@ -1780,6 +2932,13 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       lampOn: new THREE.Color(0xfff1b8),
       windowDay: new THREE.Color(0x0b1a2a),
       windowNight: new THREE.Color(0xffc970),
+      frameDay: new THREE.Color(0x5c636a),
+      frameNight: new THREE.Color(0xfff4d6),
+      flash: new THREE.Color(0xe4e9ff),
+      plotDay: new THREE.Color(0xdfe5ec),
+      plotNight: new THREE.Color(0x3a4352),
+      ghostDay: new THREE.Color(0x7c8da3),
+      ghostNight: new THREE.Color(0x5a6a80),
     };
     const skyCol = new THREE.Color();
     let fogFactor = 0;
@@ -1821,7 +2980,7 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       const { progress, nightFirst } = atmos.current;
       const dl = daylight(progress, nightFirst);
       const w = weatherAt(currentSeed, progress);
-      const cloud = w.kind === "clear" ? 0 : w.kind === "cloudy" ? 0.45 * w.strength : w.kind === "rain" ? 0.75 * w.strength : 0.5 * w.strength;
+      const cloud = w.kind === "clear" ? 0 : w.kind === "cloudy" ? 0.45 * w.strength : w.kind === "rain" ? 0.45 + 0.3 * w.strength : 0.5 * w.strength;
       if (dl > 0.5) skyCol.copy(C.dusk).lerp(C.day, (dl - 0.5) / 0.5);
       else skyCol.copy(C.night).lerp(C.dusk, dl / 0.5);
       skyCol.lerp(dl > 0.3 ? C.grey : C.night, cloud * 0.6);
@@ -1838,7 +2997,96 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       cloudMat.color.setRGB(1 - cloud * 0.4, 1 - cloud * 0.38, 1 - cloud * 0.33);
       rain.visible = w.kind === "rain";
       rainMat.opacity = 0.45 * w.strength;
+      storm = w.kind === "rain" ? w.strength : 0;
       fogFactor = w.kind === "fog" ? 0.6 * w.strength : w.kind === "rain" ? 0.25 * w.strength : 0;
+      baseHemi = hemi.intensity;
+      // Night lights: traffic-light pools, glowing billboards, car headlights.
+      const night = Math.min(1, Math.max(0, (0.75 - dl) / 0.6));
+      poolMat.opacity = 0.6 * night;
+      if (pools) pools.visible = night > 0.02;
+      boardGlowMat.color.copy(C.frameDay).lerp(C.frameNight, night);
+      boardBeamMat.opacity = 0.2 * night;
+      for (const b of boards) {
+        b.mat.emissiveIntensity = 0.28 + 0.62 * night;
+        b.beams.visible = night > 0.02;
+      }
+      carNight = night;
+      // The see-through plots round the edge dim with the light (instead of glowing at night).
+      plotMat.color.copy(C.plotDay).lerp(C.plotNight, night);
+      ghostMat.color.copy(C.ghostDay).lerp(C.ghostNight, night);
+    }
+
+    // ---- thunder and lightning, now and then while it pours
+    let storm = 0;
+    let baseHemi = hemi.intensity;
+    let nextStrike = 4 + Math.random() * 8;
+    let strikeT = -1;
+    const flashSky = new THREE.Color();
+    const BOLT_PTS = 14;
+    const boltPos = new Float32Array(BOLT_PTS * 2 * 3);
+    const boltGeo = new THREE.BufferGeometry();
+    boltGeo.setAttribute("position", new THREE.BufferAttribute(boltPos, 3));
+    const boltIdx: number[] = [];
+    for (let k = 0; k < BOLT_PTS - 1; k++) boltIdx.push(k * 2, k * 2 + 1, k * 2 + 2, k * 2 + 2, k * 2 + 1, k * 2 + 3);
+    boltGeo.setIndex(boltIdx);
+    const boltMat = new THREE.MeshBasicMaterial({ color: 0xf4f1ff, transparent: true, opacity: 0, fog: false, depthWrite: false, side: THREE.DoubleSide });
+    const bolt = new THREE.Mesh(boltGeo, boltMat);
+    bolt.frustumCulled = false;
+    bolt.visible = false;
+    bolt.renderOrder = 1;
+    scene.add(bolt);
+    function strike() {
+      // A jagged bolt far off over the hills, roughly on the side we're looking at.
+      const look = Math.atan2(controls.target.z - camera.position.z, controls.target.x - camera.position.x);
+      const a = look + (Math.random() - 0.5) * 1.6;
+      const d = radius * 1.8 + 22 + Math.random() * 25;
+      let x = controls.target.x + Math.cos(a) * d;
+      let z = controls.target.z + Math.sin(a) * d;
+      const ground = landHeight(x, z);
+      const top = ground + 34 + Math.random() * 10;
+      // Ribbon across the view.
+      const px = -Math.sin(look);
+      const pz = Math.cos(look);
+      for (let k = 0; k < BOLT_PTS; k++) {
+        const f = k / (BOLT_PTS - 1);
+        const y = top + (ground - top) * f;
+        if (k > 0) {
+          x += (Math.random() - 0.5) * 2.4 * px;
+          z += (Math.random() - 0.5) * 2.4 * pz;
+        }
+        const wd = 0.45 * (1 - f * 0.6);
+        boltPos.set([x - px * wd, y, z - pz * wd, x + px * wd, y, z + pz * wd], k * 6);
+      }
+      boltGeo.attributes.position.needsUpdate = true;
+      strikeT = 0;
+      playSfx("thunder", { delay: 0.35 + d / 140 });
+    }
+    function updateLightning(dt: number) {
+      if (storm > 0.45) {
+        nextStrike -= dt;
+        if (nextStrike <= 0 && strikeT < 0) {
+          strike();
+          nextStrike = 7 + Math.random() * 16;
+        }
+      }
+      if (strikeT < 0) return;
+      strikeT += dt;
+      // Two or three quick flickers, then gone.
+      const t = strikeT;
+      const f = t < 0.07 ? 1 : t < 0.13 ? 0.15 : t < 0.2 ? 0.75 : t < 0.27 ? 0.1 : t < 0.36 ? 0.55 * (1 - (t - 0.27) / 0.09) : 0;
+      hemi.intensity = baseHemi + f * 2.4;
+      flashSky.copy(skyCol).lerp(C.flash, f * 0.55);
+      (scene.background as THREE.Color).copy(flashSky);
+      (scene.fog as THREE.Fog).color.copy(flashSky);
+      boltMat.opacity = Math.min(1, f * 1.4);
+      bolt.visible = f > 0.02;
+      if (t > 0.4) {
+        strikeT = -1;
+        bolt.visible = false;
+        hemi.intensity = baseHemi;
+        (scene.background as THREE.Color).copy(skyCol);
+        (scene.fog as THREE.Fog).color.copy(skyCol);
+      }
     }
 
     function updateRain(dt: number) {
@@ -1968,7 +3216,8 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       if (!boardHit) return null;
       const tileHit = ray.intersectObjects(Object.values(meshes), false)[0];
       if (tileHit && tileHit.distance < boardHit.distance) return null;
-      return { id: boardHit.object.userData.billboard as string, tile: boardHit.object.userData.tile as number };
+      const board = boards[boardHit.object.userData.board as number];
+      return { id: boardHit.object.userData.billboard as string, tile: boardHit.object.userData.tile as number, adId: board?.shown ?? null };
     }
 
     function showHover(tile: number | null) {
@@ -1981,7 +3230,7 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       hoverBox.visible = true;
       hoverBox.position.set(t.x, 0, t.z);
       hoverBox.scale.set(1.02, t.top + 0.1, 1.02);
-      const what = t.kind === "structure" && t.structure ? STRUCTURE_LABEL[t.structure.type] : KIND_LABEL[t.kind];
+      const what = t.kind === "structure" && t.structure ? STRUCTURE_LABEL[t.structure.type] : t.works ? "Road works" : KIND_LABEL[t.kind];
       cb.current.onHover?.({ tile, label: currentPlan ? `${addressOf(currentPlan, t)} · ${what}` : what });
     }
 
@@ -2063,6 +3312,10 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
         mesh.setColorAt(k, bulb === lit[axis] ? SIGNAL_ON[bulb] : SIGNAL_OFF);
       });
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      if (pools) {
+        for (let k = 0; k < poolAxis.length; k++) pools.setColorAt(k, SIGNAL_ON[lit[poolAxis[k]]]);
+        if (pools.instanceColor) pools.instanceColor.needsUpdate = true;
+      }
     }
 
     const clock = new THREE.Clock();
@@ -2076,20 +3329,25 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
         renderer.domElement.style.cursor = board ? "pointer" : "";
         if (board) {
           const t = tiles[board.tile];
-          cb.current.onHover?.({ tile: board.tile, label: `Billboard at ${t && currentPlan ? addressOf(currentPlan, t) : "this spot"} · tap to advertise` });
+          const ad = board.adId ? adsList.find((a) => a.id === board.adId) : null;
+          const where = t && currentPlan ? addressOf(currentPlan, t) : "this spot";
+          cb.current.onHover?.({ tile: board.tile, label: ad ? `${ad.brand}: ${ad.headline} · tap to see more` : `Billboard at ${where} · tap to advertise` });
         }
         else showHover(tileUnder(hoverQueued.clientX, hoverQueued.clientY));
         hoverQueued = null;
       }
       updateGrowth(performance.now());
-      updateCars(dt);
+      updateCars(dt, time);
       updateSignals(time);
       updateSky(time, dt);
       updateLandmarks(dt, performance.now());
+      updateBoards(dt, time, performance.now());
+      updateFlashers(time);
       updateBoats(time, dt);
       updateAir(time, dt);
       updateFx(performance.now());
       updateAtmosphere(dt);
+      updateLightning(dt);
       updateRain(dt);
       updateCoin(time);
       updateMarkers(time);
@@ -2128,10 +3386,15 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
     renderer.domElement.addEventListener("webglcontextlost", onLost);
     renderer.domElement.addEventListener("webglcontextrestored", onRestored);
 
-    api.current = { build, setMarkers, playEvents, setBalloon };
+    api.current = { build, setMarkers, playEvents, setBalloon, setAds };
 
     return () => {
+      alive = false;
       cancelAnimationFrame(frame);
+      // Send off any ad views not reported yet.
+      flushViews(performance.now());
+      for (const entry of adCache.values()) entry.tex?.dispose();
+      adCache.clear();
       document.removeEventListener("visibilitychange", onVisibility);
       renderer.domElement.removeEventListener("webglcontextlost", onLost);
       renderer.domElement.removeEventListener("webglcontextrestored", onRestored);
@@ -2169,6 +3432,10 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
   useEffect(() => {
     api.current?.setBalloon(coinBalloon);
   }, [coinBalloon]);
+
+  useEffect(() => {
+    api.current?.setAds(ads ?? []);
+  }, [ads]);
 
   return <div ref={host} className="absolute inset-0" />;
 }

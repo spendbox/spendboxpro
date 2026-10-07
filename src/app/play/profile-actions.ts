@@ -97,3 +97,41 @@ export async function loadMyStats(): Promise<
     myRank: rank >= 0 ? rank + 1 : null,
   };
 }
+
+export type LevelInfo = {
+  level: number;
+  roundsPlayed: number;
+  /** What the next level costs (coins) and how many rounds you need to have played first. */
+  nextCost: number;
+  nextRounds: number;
+  canUpgrade: boolean;
+  coins: number;
+};
+
+/** Your level and what it takes to reach the next one (rules live in the database). */
+export async function loadLevel(): Promise<Result<{ info: LevelInfo }>> {
+  const userId = await currentUserId();
+  if (!userId) return { ok: false, error: "Please sign in again." };
+  const { data, error } = await createAdminClient().rpc("level_info", { p_user: userId });
+  if (error || !data) return { ok: false, error: "Couldn't load your level." };
+  return {
+    ok: true,
+    info: {
+      level: Number(data.level),
+      roundsPlayed: Number(data.rounds_played),
+      nextCost: Number(data.next_cost),
+      nextRounds: Number(data.next_rounds),
+      canUpgrade: Boolean(data.can_upgrade),
+      coins: Number(data.coins),
+    },
+  };
+}
+
+/** Spend coins to go up a level (once you've played enough rounds). */
+export async function upgradeLevel(): Promise<Result<{ level: number; cost: number }>> {
+  const userId = await currentUserId();
+  if (!userId) return { ok: false, error: "Please sign in again." };
+  const { data, error } = await createAdminClient().rpc("upgrade_level", { p_user: userId });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, level: Number(data.level), cost: Number(data.cost) };
+}

@@ -46,17 +46,17 @@ export async function sendEmail({
   }
 }
 
+/** The sign-in email. `code` is the 4-digit code. */
 export function codeEmail(code: string) {
-  const spaced = `${code.slice(0, 3)} ${code.slice(3)}`;
   return {
-    subject: `${spaced} is your Hide & Seek code`,
-    text: `Your Hide & Seek sign-in code is ${spaced}.\n\nIt works for 10 minutes. If you didn't ask for it, you can ignore this email.`,
+    subject: `${code} is your Hide & Seek code`,
+    text: `Your Hide & Seek sign-in code is ${code}.\n\nIt works for 10 minutes. If you didn't ask for it, you can ignore this email.`,
     html: `<!doctype html><html><body style="margin:0;background:#eef2f6;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#18202b">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px">
 <table role="presentation" width="100%" style="max-width:420px;background:#ffffff;border-radius:16px" cellpadding="0" cellspacing="0"><tr><td style="padding:32px">
 <div style="font-size:20px;font-weight:800">Hide &amp; Seek</div>
 <p style="font-size:15px;color:#64707d;margin:16px 0 8px">Your sign-in code:</p>
-<div style="font-size:36px;font-weight:800;letter-spacing:8px;background:#f1f4f8;border-radius:12px;padding:16px;text-align:center">${spaced}</div>
+<div style="font-size:36px;font-weight:800;letter-spacing:12px;text-indent:12px;background:#f1f4f8;border-radius:12px;padding:16px;text-align:center">${code}</div>
 <p style="font-size:13px;color:#64707d;margin:16px 0 0">It works for 10 minutes. If you didn't ask for it, you can ignore this email.</p>
 </td></tr></table></td></tr></table></body></html>`,
   };

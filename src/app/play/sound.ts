@@ -411,7 +411,24 @@ export function useCitySound(on: boolean, roundId: number, progress: number) {
 // Game sound effects
 // ---------------------------------------------------------------------------------------
 
-export type Sfx = "search" | "found" | "miss" | "move" | "sweep" | "pop" | "tick" | "start" | "shield" | "caught";
+export type Sfx =
+  | "search"
+  | "found"
+  | "miss"
+  | "move"
+  | "sweep"
+  | "pop"
+  | "tick"
+  | "start"
+  | "shield"
+  | "caught"
+  | "explode"
+  | "toy"
+  | "respawn"
+  | "levelup"
+  | "thunder"
+  | "decoy"
+  | "denied";
 
 let sfxOn = true;
 let sfx: { ctx: AudioContext; out: GainNode } | null = null;
@@ -482,7 +499,8 @@ type NoiseOpts = {
 function hiss(ctx: AudioContext, out: AudioNode, now: number, o: NoiseOpts) {
   const t = now + (o.at ?? 0);
   const n = noise(ctx);
-  const src = noiseSource(ctx, o.brown ? n.brown : n.white);
+  // Looping, so long sounds (thunder) never run off the end of the noise buffer.
+  const src = noiseSource(ctx, o.brown ? n.brown : n.white, true);
   const f = filter(ctx, o.type, o.freq, o.q ?? 1);
   if (o.to) f.frequency.exponentialRampToValueAtTime(o.to, t + o.dur);
   const g = ctx.createGain();
@@ -494,14 +512,17 @@ function hiss(ctx: AudioContext, out: AudioNode, now: number, o: NoiseOpts) {
   src.stop(t + o.dur + 0.02);
 }
 
-/** Play a short game sound. Safe to call any time (does nothing on the server or when off). */
-export function playSfx(name: Sfx) {
+/**
+ * Play a short game sound. Safe to call any time (does nothing on the server or when off).
+ * `delay` (seconds) starts it a little later, e.g. thunder rolling in after the flash.
+ */
+export function playSfx(name: Sfx, opts: { delay?: number } = {}) {
   if (!sfxOn) return;
   const eng = sfxEngine();
   if (!eng) return;
   const { ctx, out } = eng;
   if (ctx.state === "suspended") void ctx.resume();
-  const now = ctx.currentTime + 0.01;
+  const now = ctx.currentTime + 0.01 + Math.max(0, opts.delay ?? 0);
 
   switch (name) {
     case "search":
@@ -579,6 +600,58 @@ export function playSfx(name: Sfx) {
       tone(ctx, out, now, { dur: 0.2, freq: 523, to: 494, type: "square", gain: 0.18, lowpass: 1500 });
       tone(ctx, out, now, { at: 0.22, dur: 0.22, freq: 392, to: 370, type: "square", gain: 0.18, lowpass: 1500 });
       tone(ctx, out, now, { at: 0.46, dur: 0.45, freq: 294, to: 220, type: "square", gain: 0.16, lowpass: 1200 });
+      break;
+    case "explode":
+      // A cartoon "ka-boom": a punchy low thump, a crackle, then a rumble that dies away
+      tone(ctx, out, now, { dur: 0.5, freq: 140, to: 38, gain: 0.9, attack: 0.004 });
+      hiss(ctx, out, now, { dur: 0.18, type: "highpass", freq: 1500, gain: 0.45, attack: 0.002 });
+      hiss(ctx, out, now, { dur: 1.3, type: "lowpass", freq: 1400, to: 90, gain: 0.85, attack: 0.01, brown: true });
+      for (let k = 0; k < 5; k++) hiss(ctx, out, now, { at: 0.12 + k * rand(0.05, 0.11), dur: 0.04, type: "bandpass", freq: rand(1800, 4200), q: 2, gain: 0.18 });
+      break;
+    case "toy":
+      // A springy "boing" and two rubber-duck squeaks
+      tone(ctx, out, now, { dur: 0.35, freq: 220, to: 660, type: "triangle", gain: 0.35, attack: 0.01 });
+      for (const at of [0.32, 0.52]) {
+        const osc = tone(ctx, out, now, { at, dur: 0.14, freq: 1150, to: 1550, type: "square", gain: 0.12, attack: 0.01, lowpass: 2600 });
+        const lfo = ctx.createOscillator();
+        lfo.frequency.value = 35;
+        const d = ctx.createGain();
+        d.gain.value = 60;
+        lfo.connect(d).connect(osc.frequency);
+        lfo.start(now + at);
+        lfo.stop(now + at + 0.16);
+      }
+      break;
+    case "respawn":
+      // Back in the game: a rising whoosh into a bright two-note chime
+      hiss(ctx, out, now, { dur: 0.45, type: "bandpass", freq: 300, to: 3200, q: 1.4, gain: 0.25, attack: 0.3 });
+      tone(ctx, out, now, { at: 0.38, dur: 0.3, freq: 784, type: "triangle", gain: 0.35 });
+      tone(ctx, out, now, { at: 0.48, dur: 0.55, freq: 1175, type: "triangle", gain: 0.35 });
+      tone(ctx, out, now, { at: 0.48, dur: 0.6, freq: 2349, gain: 0.06 });
+      break;
+    case "levelup":
+      // A happy climbing arpeggio that lands on a chord
+      [523, 659, 784, 1047, 1319].forEach((f, i) => tone(ctx, out, now, { at: i * 0.075, dur: 0.18, freq: f, type: "triangle", gain: 0.35 }));
+      for (const f of [1047, 1319, 1568]) tone(ctx, out, now, { at: 0.4, dur: 0.8, freq: f, type: "triangle", gain: 0.22 });
+      tone(ctx, out, now, { at: 0.4, dur: 0.8, freq: 523, type: "square", gain: 0.05, lowpass: 1600 });
+      break;
+    case "thunder":
+      // A sharp crack, then a deep rumble that rolls on and fades
+      hiss(ctx, out, now, { dur: 0.3, type: "highpass", freq: 1600, gain: 0.22, attack: 0.004 });
+      hiss(ctx, out, now, { dur: 3.4, type: "lowpass", freq: 900, to: 110, gain: 0.95, attack: 0.04, brown: true });
+      hiss(ctx, out, now, { at: 0.45, dur: 2.8, type: "lowpass", freq: 320, to: 70, gain: 0.8, attack: 0.35, brown: true });
+      hiss(ctx, out, now, { at: 1.3, dur: 2.6, type: "lowpass", freq: 220, to: 60, gain: 0.6, attack: 0.5, brown: true });
+      break;
+    case "decoy":
+      // Deploying a decoy: a quick airy whoosh and a soft "pomf" as it inflates
+      hiss(ctx, out, now, { dur: 0.4, type: "bandpass", freq: 2400, to: 400, q: 1.3, gain: 0.3, attack: 0.05 });
+      tone(ctx, out, now, { at: 0.3, dur: 0.28, freq: 180, to: 420, gain: 0.4, attack: 0.03 });
+      hiss(ctx, out, now, { at: 0.3, dur: 0.12, type: "lowpass", freq: 700, gain: 0.3 });
+      break;
+    case "denied":
+      // A soft "nuh-uh": two low buzzes, gently filtered
+      tone(ctx, out, now, { dur: 0.12, freq: 196, type: "square", gain: 0.14, attack: 0.01, lowpass: 900 });
+      tone(ctx, out, now, { at: 0.16, dur: 0.18, freq: 165, type: "square", gain: 0.14, attack: 0.01, lowpass: 800 });
       break;
   }
 }

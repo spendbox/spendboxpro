@@ -59,6 +59,10 @@ export type Tile = {
   fallback?: Tile;
   /** Stable random numbers for this tile (0..1). */
   r: [number, number, number, number];
+  /** A straight stretch of road dug up for road works (cars can't get through). */
+  works?: boolean;
+  /** Something stopped at the side of a straight road: a broken-down car or a police car. */
+  incident?: "breakdown" | "police";
 };
 
 export const KIND_LABEL: Record<TileKind, string> = {
@@ -111,9 +115,9 @@ export const CITY_ASSETS = {
     "Houses (pitched bungalow, flat modern with pool, duplex with garage)",
     "Hospitals", "Police stations", "Clock towers", "Construction sites with cranes", "Water towers", "Radio masts", "Fuel stations",
     "Parks", "Woods", "Plazas with fountains", "Ponds", "Ferris wheels", "Wind turbines", "Billboards",
-    "Roads", "Bridges", "A river (sometimes)", "Small lakes",
+    "Roads", "Bridges", "A river (sometimes)", "Small lakes", "Road works", "Hills and mountains around the city",
   ],
-  moving: ["Cars", "Boats", "Birds", "Clouds", "Hot-air balloons", "Planes", "Ferris wheels, carousels, cranes and turbines"],
+  moving: ["Cars (and the odd traffic jam)", "Boats", "Birds", "Clouds", "Hot-air balloons", "Planes", "Ferris wheels, carousels, cranes and turbines"],
 };
 
 /** Square spiral: tile n → grid (x, z). Must match spiral_xy in the database. */
@@ -141,7 +145,7 @@ export function hash(x: number, z: number, s: number) {
 }
 
 /** Smooth random field (value noise), 0..1. */
-function noise(x: number, z: number, s: number) {
+export function smoothNoise(x: number, z: number, s: number) {
   const x0 = Math.floor(x);
   const z0 = Math.floor(z);
   const fx = x - x0;
@@ -380,7 +384,7 @@ function densityAt(plan: CityPlan, x: number, z: number) {
     const d = Math.hypot(x - c.x, z - c.z);
     density = Math.max(density, c.weight * Math.exp(-d / (c.radius * 1.5)));
   }
-  return density + (noise(x / 3, z / 3, plan.seed + 7) - 0.5) * 0.3;
+  return density + (smoothNoise(x / 3, z / 3, plan.seed + 7) - 0.5) * 0.3;
 }
 
 const STRUCTURES_BY_ZONE: { min: number; chance: number; types: StructureType[] }[] = [
@@ -465,7 +469,7 @@ export function tileAt(plan: CityPlan, i: number): Tile {
     return {
       ...t,
       kind: "billboard",
-      top: 1.5,
+      top: 2.8,
       billboard: { id: `${Math.floor(x / 10)}.${Math.floor(z / 10)}`, design: Math.floor(t.r[2] * 4), face: b.face },
     };
   }
@@ -550,18 +554,23 @@ function baseTile(plan: CityPlan, x: number, z: number): Tile {
     const ns = (mask & 1) || (mask & 4);
     const dir: Tile["road"] = ew && ns ? "cross" : ew ? "x" : "z";
     const roundabout = mask === 15 && plan.xAt.has(x) && plan.zAt.has(z) && hash(x, z, s + 808) < plan.style.roundabouts;
-    return { i, x, z, kind: "road", top: roundabout ? 0.3 : 0.05, road: dir, mask, roundabout, r };
+    // Now and then a straight stretch is dug up for road works, or has a car stopped at the side.
+    const straight = mask === 5 || mask === 10;
+    const works = straight && Math.hypot(x, z) > 2.5 && hash(x, z, s + 1201) < 0.02;
+    const roll = hash(x, z, s + 1301);
+    const incident = straight && !works ? (roll < 0.007 ? "breakdown" : roll < 0.011 ? "police" : undefined) : undefined;
+    return { i, x, z, kind: "road", top: works ? 0.45 : roundabout ? 0.3 : 0.05, road: dir, mask, roundabout, r, works: works || undefined, incident };
   }
 
   // Where a stretch of street was left out: a strip of park or a little square.
   if (onLine) return { i, x, z, kind: r[0] < 0.75 ? "park" : "plaza", top: r[0] < 0.75 ? 0.9 : 0.6, r };
 
   // The odd small lake, inside a block, away from the busiest areas.
-  if (Math.hypot(x, z) > 9 && noise(x / 4 - 9, z / 4 + 4, s + 23) > 0.88) return { i, x, z, kind: "lake", top: 0.1, r };
+  if (Math.hypot(x, z) > 9 && smoothNoise(x / 4 - 9, z / 4 + 4, s + 23) > 0.88) return { i, x, z, kind: "lake", top: 0.1, r };
 
   const density = densityAt(plan, x, z);
 
-  const green = noise(x / 6 + 31, z / 6 - 17, s + 11) - plan.style.green;
+  const green = smoothNoise(x / 6 + 31, z / 6 - 17, s + 11) - plan.style.green;
   if (green > 0.7 && density < 0.6) {
     if (green > 0.82 && r[0] < 0.3) return { i, x, z, kind: "pond", top: 0.5, r };
     if (r[3] < 0.035) return { i, x, z, kind: "ferris", top: 2.6, r };

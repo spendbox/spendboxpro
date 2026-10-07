@@ -1,4 +1,7 @@
 \set ON_ERROR_STOP on
+-- Faster clocks for the test (the real game waits longer between searches and moves).
+update game_settings set value = 0 where key = 'search_cooldown_seconds';
+update game_settings set value = 60 where key = 'move_cooldown_seconds';
 insert into auth.users (email) values ('Ada@gmail.com'),('bo@x.com'),('cy@x.com'),('a.da+2@gmail.com');
 select email_key, coins, is_bot from profiles order by email_key nulls first;   -- alias gets 0 coins
 -- Round 1: only the bot hides; a new player seeks and finds it.

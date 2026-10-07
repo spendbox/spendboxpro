@@ -24,6 +24,7 @@ export function StatsCard({
   onMarks,
   sound,
   onSound,
+  sponsor,
 }: {
   city: string;
   phase: "join" | "seek" | "done";
@@ -41,12 +42,13 @@ export function StatsCard({
   onMarks: () => void;
   sound: boolean;
   onSound: () => void;
+  sponsor?: { name: string; logo: string | null; coins: number } | null;
 }) {
   const label = phase === "join" ? "Hiding" : phase === "seek" ? "Hunting" : "Over";
   if (minimised) {
     return (
       <button onClick={onToggle} className="glass pointer-events-auto flex items-center gap-2 rounded-full px-3 py-1.5 text-sm" aria-label="Show round details">
-        <span className="font-display font-bold">{city}</span>
+        <span className="max-w-[8rem] truncate font-display font-bold" title={city}>{city}</span>
         <span className="font-display font-bold tabular-nums text-gold-dark">{phase === "done" ? label : countdown}</span>
         <span className="flex items-center gap-1 text-xs text-muted">
           <span className="size-1.5 animate-pulse rounded-full bg-me" />
@@ -59,8 +61,13 @@ export function StatsCard({
   return (
     <div className="glass pointer-events-auto w-52 overflow-hidden rounded-3xl">
       <div className="px-4 pb-2 pt-3">
-        <div className="flex items-center justify-between gap-2">
-          <h1 className="truncate font-display text-base font-extrabold">{city}</h1>
+        <div className="flex items-start justify-between gap-2">
+          <h1
+            className={cn("min-w-0 break-words font-display font-extrabold leading-tight", city.length > 14 ? "text-sm" : "text-base")}
+            title={city}
+          >
+            {city}
+          </h1>
           <span
             className={cn(
               "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
@@ -89,6 +96,13 @@ export function StatsCard({
             </div>
           ))}
         </dl>
+        {sponsor && (
+          <div className="mt-2 flex items-center gap-1.5 rounded-xl bg-gold/20 px-2 py-1 text-[11px] font-semibold text-gold-dark" title={`${sponsor.name} added ${sponsor.coins.toLocaleString("en")} coins to this pool`}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {sponsor.logo && <img src={sponsor.logo} alt="" className="size-4 rounded object-contain" />}
+            <span className="truncate">🏆 Prize pool by {sponsor.name}</span>
+          </div>
+        )}
       </div>
       <div className="grid grid-cols-3 bg-ink/[0.04] px-2 py-2 text-center">
         <div className="min-w-0" title="Players in the city right now">
@@ -117,8 +131,8 @@ export function StatsCard({
           aria-pressed={marks}
           title="Show or hide the marks on the map"
         >
-          <span aria-hidden>{marks ? "👁" : "🙈"}</span>
-          {marks ? "Marks" : "Hidden"}
+          <EyeIcon off={!marks} />
+          Marks
         </button>
         <button onClick={onSound} className="flex items-center justify-center gap-1 border-l border-line py-2 hover:bg-white/50" aria-pressed={sound}>
           <span aria-hidden>{sound ? "🔊" : "🔈"}</span>
@@ -129,5 +143,16 @@ export function StatsCard({
         </button>
       </div>
     </div>
+  );
+}
+
+/** An eye, crossed out when the map marks are hidden. */
+function EyeIcon({ off }: { off: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+      <circle cx="12" cy="12" r="3" />
+      {off && <path d="M3 3l18 18" />}
+    </svg>
   );
 }
