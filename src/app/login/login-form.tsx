@@ -80,26 +80,29 @@ export function LoginForm() {
           e.preventDefault();
           run(() => verifyCode(email, code), () => {
             setBusy(true);
-            router.push("/welcome");
+            router.push("/welcome?pin=1");
             router.refresh();
           });
         }}
         className="flex flex-col gap-3"
       >
         <p className="text-sm text-muted">
-          We sent a 6-digit code to <b className="text-ink">{email}</b>. If you can&apos;t see it, check your spam folder.
+          We sent a 4-digit code to <b className="text-ink">{email}</b>. If you can&apos;t see it, check your spam folder.
         </p>
         <input
-          className={`${input} text-center text-2xl tracking-[0.4em]`}
+          className={`${input} text-center text-2xl tracking-[0.6em]`}
           inputMode="numeric"
           autoComplete="one-time-code"
-          placeholder="000000"
+          placeholder="0000"
+          maxLength={4}
+          pattern="[0-9]*"
+          aria-label="4-digit code"
           value={code}
-          onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
           autoFocus
           required
         />
-        <button className={button} disabled={busy || code.length !== 6}>
+        <button className={button} disabled={busy || code.length !== 4}>
           {busy ? "Checking…" : "Continue"}
         </button>
         <div className="flex justify-between">
@@ -135,7 +138,7 @@ export function LoginForm() {
       <button className={button} disabled={busy}>
         {busy ? "One moment…" : "Continue"}
       </button>
-      <p className="text-xs text-muted">First time? We&apos;ll email you a code, then you pick a name and PIN. New players start with 500 coins.</p>
+      <p className="text-xs text-muted">First time? We&apos;ll email you a code, then you pick a name and PIN. New players start with 500 coins. You must be 18 or older to play.</p>
       {error && <p className="text-sm text-hit">{error}</p>}
     </form>
   );

@@ -63,3 +63,20 @@ export async function requestAd(input: { billboard: string; name: string; contac
 export async function buyShield() {
   return run("buy_shield", {});
 }
+
+/** A hider's one-time decoy, placed on any spot they point at (level 3+). */
+export async function placeDecoy(tile: number) {
+  if (!isTile(tile)) return { ok: false, error: "Pick a spot." } as ActionResult;
+  return run("place_decoy", { p_tile: tile });
+}
+
+/** Caught early? Level 20+ hiders can pay to drop back in (once per game). */
+export async function respawnMe() {
+  return run("respawn", {});
+}
+
+/** Level 10+ hunters: search a whole 3×3 area at once. */
+export async function bigSearch(tile: number) {
+  if (!isTile(tile)) return { ok: false, error: "Pick a spot." } as ActionResult;
+  return run("search_area", { p_tile: tile });
+}

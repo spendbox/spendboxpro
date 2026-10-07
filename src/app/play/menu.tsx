@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { AvatarFace } from "@/components/avatar";
-import { BADGE_GROUPS, BADGE_INFO, BadgeMedal, BadgeTile } from "@/components/badges";
+import { BADGE_GROUPS, BADGE_INFO, BadgeTile, type EarnedBadge } from "@/components/badges";
 import type { Avatar } from "@/lib/avatar";
 import { cn } from "@/lib/cn";
 import { short } from "@/lib/format";
-import { loadMyStats, type Badge, type Leader } from "./profile-actions";
+import { loadLevel, loadMyStats, upgradeLevel, type Badge, type Leader, type LevelInfo } from "./profile-actions";
 
 type Stats = { won: number; rounds: number; catches: number; survived: number; badges: Badge[]; leaders: Leader[]; myRank: number | null };
 
@@ -34,15 +34,17 @@ export function Menu({
 }) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [tab, setTab] = useState<"badges" | "leaders">("badges");
-  const [peek, setPeek] = useState<string | null>(null);
   useEffect(() => {
-    loadMyStats().then((res) => res.ok && setStats(res));
+    loadMyStats()
+      .then((res) => res.ok && setStats(res))
+      .catch(() => {});
   }, []);
 
-  const earned = new Map<string, { count: number; detail: string | null }>();
+  // Newest first, so the first one we see of each badge is the latest win.
+  const earned = new Map<string, EarnedBadge>();
   for (const b of stats?.badges ?? []) {
     const prev = earned.get(b.badge);
-    earned.set(b.badge, { count: (prev?.count ?? 0) + 1, detail: prev?.detail ?? b.detail });
+    earned.set(b.badge, { count: (prev?.count ?? 0) + 1, detail: prev?.detail ?? b.detail, at: prev?.at ?? b.at, firstAt: b.at });
   }
   const allBadges = Object.keys(BADGE_INFO);
   const collected = allBadges.filter((k) => earned.has(k)).length;
@@ -82,6 +84,8 @@ export function Menu({
           ))}
         </div>
 
+        <LevelCard />
+
         <div className="mt-3 grid grid-cols-2 gap-2">
           <button onClick={onHowItWorks} className="rounded-xl bg-ink px-3 py-2.5 font-semibold text-white">
             How it works
@@ -112,7 +116,7 @@ export function Menu({
                 <span className="font-semibold">
                   {stats ? `${collected} of ${allBadges.length} collected` : "Loading your badges…"}
                 </span>
-                {stats && earned.size === 0 && <span className="text-muted">Tap one to see how</span>}
+                {stats && <span className="text-muted">Tap any badge to see how</span>}
               </div>
               <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-panel-2">
                 <div
@@ -126,11 +130,15 @@ export function Menu({
               const keys = allBadges.filter((k) => BADGE_INFO[k].group === group);
               const mine = keys.filter((k) => earned.has(k));
               const locked = keys.filter((k) => !earned.has(k));
-              const peeked = peek && locked.includes(peek) ? BADGE_INFO[peek] : null;
               return (
                 <section key={group} className="mt-3">
-                  <h3 className="flex items-baseline justify-between px-1 text-[11px] font-bold uppercase tracking-wide text-muted">
-                    <span>{group}</span>
+                  <h3
+                    className={cn(
+                      "flex items-baseline justify-between px-1 text-[11px] font-bold uppercase tracking-wide text-muted",
+                      group === "Legendary" && "text-[#9b3fd6]",
+                    )}
+                  >
+                    <span>{group === "Legendary" ? "★ Legendary" : group}</span>
                     <span className="tabular-nums">
                       {mine.length}/{keys.length}
                     </span>
@@ -140,9 +148,18 @@ export function Menu({
                       const info = earned.get(badge)!;
                       return (
                         <div key={badge} className="relative flex min-w-0 justify-center">
-                          <BadgeTile badge={badge} player={me.name ?? "Me"} city={city} detail={info.detail} size={52} />
+                          <BadgeTile
+                            badge={badge}
+                            player={me.name ?? "Me"}
+                            city={city}
+                            detail={info.detail}
+                            count={info.count}
+                            at={info.at}
+                            firstAt={info.firstAt}
+                            size={52}
+                          />
                           {info.count > 1 && (
-                            <span className="absolute right-0 top-0.5 rounded-full bg-ink px-1.5 text-[10px] font-bold text-white">
+                            <span className="pointer-events-none absolute right-0 top-0.5 rounded-full bg-ink px-1.5 text-[10px] font-bold text-white">
                               ×{info.count}
                             </span>
                           )}
@@ -150,26 +167,11 @@ export function Menu({
                       );
                     })}
                     {locked.map((badge) => (
-                      <button
-                        key={badge}
-                        onClick={() => setPeek(peek === badge ? null : badge)}
-                        className={cn(
-                          "flex min-w-0 flex-col items-center gap-1 rounded-2xl p-2 text-center transition",
-                          peek === badge && "bg-panel-2",
-                        )}
-                        aria-label={`${BADGE_INFO[badge].title}: ${BADGE_INFO[badge].blurb}`}
-                      >
-                        <BadgeMedal badge={badge} size={44} dim />
-                        <span className="text-[10px] leading-tight text-muted">{BADGE_INFO[badge].title}</span>
-                      </button>
+                      <div key={badge} className="flex min-w-0 justify-center">
+                        <BadgeTile badge={badge} player={me.name ?? "Me"} city={city} size={44} locked />
+                      </div>
                     ))}
                   </div>
-                  {peeked && (
-                    <p className="mx-1 mt-1 rounded-lg bg-panel-2 px-2 py-1.5 text-xs">
-                      <span className="mr-1">🔒</span>
-                      <span className="font-semibold">{peeked.title}:</span> {peeked.blurb}
-                    </p>
-                  )}
                 </section>
               );
             })}
@@ -198,6 +200,8 @@ export function Menu({
           </div>
         )}
 
+        <Marketplace />
+
         <div className="mt-4 grid grid-cols-2 gap-2 border-t border-line pt-3">
           <button onClick={onChangePin} className="rounded-xl bg-panel-2 px-3 py-2 font-medium">
             Change PIN
@@ -206,6 +210,170 @@ export function Menu({
             Sign out
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** The power-ups each level unlocks. */
+const PERKS = [
+  { level: 3, icon: "🎭", name: "Decoy", what: "Hiders drop a fake hider to fool the hunters." },
+  { level: 5, icon: "🛡️", name: "Shield", what: "Hiders get a shield that blocks one find." },
+  { level: 10, icon: "🔎", name: "Big search", what: "Hunters search a 3×3 area at once, for the price of 7 searches." },
+  { level: 20, icon: "🔁", name: "Respawn", what: "Caught in the first 30 minutes? Pay 300 coins to jump back in." },
+];
+
+/** Your level, what the next one takes, and the power-ups it unlocks. Hidden if it can't load. */
+function LevelCard() {
+  const [info, setInfo] = useState<LevelInfo | null>(null);
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const refresh = () =>
+    loadLevel()
+      .then((res) => setInfo(res.ok ? res.info : null))
+      .catch(() => setInfo(null));
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  if (!info) return null;
+  const next = info.level + 1;
+  const roundsLeft = Math.max(0, info.nextRounds - info.roundsPlayed);
+  const enoughCoins = info.coins >= info.nextCost;
+
+  const upgrade = async () => {
+    setBusy(true);
+    setNote(null);
+    try {
+      const res = await upgradeLevel();
+      if (res.ok) {
+        setNote({ ok: true, text: `🎉 You're level ${res.level}! (${short(res.cost)} coins spent)` });
+        await refresh();
+      } else {
+        setNote({ ok: false, text: res.error || "Couldn't level up. Try again." });
+      }
+    } catch {
+      setNote({ ok: false, text: "Couldn't level up. Try again." });
+    }
+    setConfirm(false);
+    setBusy(false);
+  };
+
+  return (
+    <div className="mt-3 rounded-2xl bg-gradient-to-br from-[#18202b] to-[#3b2f6b] p-3 text-white">
+      <div className="flex items-center gap-3">
+        <div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-gold font-display text-xl font-extrabold text-ink shadow">
+          {info.level}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-display text-base font-bold">Level {info.level}</p>
+          <p className="text-xs text-white/70">
+            {short(info.roundsPlayed)} round{info.roundsPlayed === 1 ? "" : "s"} played
+          </p>
+        </div>
+      </div>
+
+      {/* What the next level needs */}
+      <div className="mt-2.5">
+        {roundsLeft > 0 ? (
+          <>
+            <div className="flex items-baseline justify-between text-xs">
+              <span>
+                Play <b>{roundsLeft}</b> more round{roundsLeft === 1 ? "" : "s"} to unlock level {next}
+              </span>
+              <span className="tabular-nums text-white/60">
+                {info.roundsPlayed}/{info.nextRounds}
+              </span>
+            </div>
+            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/15">
+              <div className="h-full rounded-full bg-gold" style={{ width: `${Math.min(100, (info.roundsPlayed / Math.max(1, info.nextRounds)) * 100)}%` }} />
+            </div>
+          </>
+        ) : confirm ? (
+          <div className="rounded-xl bg-white/10 p-2 text-xs">
+            <p>
+              Spend <b>{short(info.nextCost)} coins</b> to reach level {next}? The coins are used up.
+            </p>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button onClick={() => setConfirm(false)} disabled={busy} className="rounded-lg bg-white/15 py-2 font-semibold">
+                Not now
+              </button>
+              <button onClick={upgrade} disabled={busy} className="rounded-lg bg-gold py-2 font-semibold text-ink disabled:opacity-60">
+                {busy ? "Levelling up…" : "Yes, level up"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <button
+              onClick={() => {
+                setNote(null);
+                setConfirm(true);
+              }}
+              disabled={!enoughCoins}
+              className="w-full rounded-xl bg-gold py-2 text-sm font-semibold text-ink disabled:opacity-50"
+            >
+              Upgrade to level {next} for {short(info.nextCost)} coins
+            </button>
+            {!enoughCoins && (
+              <p className="mt-1 text-center text-[11px] text-white/70">
+                You need {short(info.nextCost - info.coins)} more coins (you have {short(info.coins)}).
+              </p>
+            )}
+          </>
+        )}
+        {note && <p className={cn("mt-1.5 text-center text-xs font-semibold", note.ok ? "text-gold" : "text-[#ffb4b6]")}>{note.text}</p>}
+      </div>
+
+      {/* Power-ups */}
+      <ul className="mt-3 grid grid-cols-2 gap-1.5">
+        {PERKS.map((p) => {
+          const open = info.level >= p.level;
+          return (
+            <li key={p.level} className={cn("rounded-xl px-2 py-1.5", open ? "bg-white/15" : "bg-white/5")} title={p.what}>
+              <p className="flex items-center gap-1 text-xs font-semibold">
+                <span className={open ? undefined : "opacity-50 grayscale"}>{p.icon}</span>
+                <span className="truncate">{p.name}</span>
+                <span className="ml-auto shrink-0 text-[10px] font-bold">{open ? "✓" : `🔒 L${p.level}`}</span>
+              </p>
+              <p className={cn("mt-0.5 text-[10px] leading-snug", open ? "text-white/80" : "text-white/50")}>{p.what}</p>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-2 text-[11px] leading-snug text-white/75">
+        ⭐ Every 5 levels, whoever catches you earns a bigger bonus. It never stops growing, so high levels are prized targets!
+      </p>
+    </div>
+  );
+}
+
+/** A peek at the coin shop that's on its way. */
+function Marketplace() {
+  return (
+    <div className="mt-4 overflow-hidden rounded-2xl bg-gradient-to-br from-[#ffe27a] via-[#ffb86b] to-[#ff7ab6] p-3 text-ink">
+      <div className="flex items-center justify-between">
+        <p className="font-display text-base font-extrabold">🛍️ Marketplace</p>
+        <span className="rounded-full bg-ink px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">Coming soon</span>
+      </div>
+      <p className="mt-1 text-xs leading-snug">
+        Soon you&apos;ll swap your coins for real rewards from brands: custom tees, event tickets, vouchers, gadgets and more. Keep
+        stacking those coins!
+      </p>
+      <div className="mt-2 grid grid-cols-4 gap-1.5 text-center">
+        {[
+          ["👕", "Tees"],
+          ["🎟️", "Tickets"],
+          ["🎁", "Vouchers"],
+          ["🎧", "Gadgets"],
+        ].map(([icon, label]) => (
+          <div key={label} className="rounded-xl bg-white/45 py-1.5">
+            <div className="text-xl leading-none">{icon}</div>
+            <div className="mt-0.5 text-[10px] font-semibold">{label}</div>
+          </div>
+        ))}
       </div>
     </div>
   );

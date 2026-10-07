@@ -9,6 +9,7 @@ create function pg_temp.set_coins(u uuid, n numeric) returns void language sql a
   update profiles set coins = n where id = u;
 $$;
 select pg_temp.set_coins(id, 1000) from profiles where email_key in ('bo@x.com', 'cy@x.com', 'ada@gmail.com');
+update profiles set level = 5 where email_key = 'bo@x.com';  -- shields unlock at level 5 (part 9)
 do $$ begin
   perform join_round((select id from profiles where email_key='bo@x.com'),'hider');
   perform join_round((select id from profiles where email_key='cy@x.com'),'hider');

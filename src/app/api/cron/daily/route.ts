@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { sendAdReports } from "@/lib/ad-emails";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Vercel runs this once a day (see vercel.json): tops broke players up to the floor,
@@ -32,5 +33,12 @@ export async function GET(request: Request) {
     const { count } = await db.from("chat_messages").delete({ count: "exact" }).in("round_id", batch);
     removed += count ?? 0;
   }
-  return NextResponse.json({ ok: true, tick: tick.data, upkeep: upkeep.data, chatRemoved: removed });
+  // Advertisers' and sponsors' daily report emails (never allowed to break this job).
+  let ads: unknown = null;
+  try {
+    ads = await sendAdReports();
+  } catch (e) {
+    console.error("Ad reports failed", e);
+  }
+  return NextResponse.json({ ok: true, tick: tick.data, upkeep: upkeep.data, chatRemoved: removed, ads });
 }

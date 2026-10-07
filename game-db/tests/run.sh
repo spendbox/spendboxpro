@@ -15,9 +15,16 @@ for f in game-db/001_hide_and_seek.sql \
          game-db/005_traps_freezes_notifications.sql \
          game-db/006_avatars_badges_balloons.sql \
          game-db/007_shields_payouts_passive.sql \
-         game-db/008_badge_collection.sql; do
+         game-db/008_badge_collection.sql \
+         game-db/009_levels_powerups.sql \
+         game-db/010_ads_sponsors.sql \
+         game-db/011_badges_hard.sql \
+         game-db/012_age_codes.sql; do
   [ -f "$f" ] || continue
   $P -f "$f"
 done
 $P -f game-db/tests/game.test.sql 2>&1 | sed 's/^psql:[^ ]* NOTICE:  //'
-$P -f game-db/tests/round4.test.sql 2>&1 | sed 's/^psql:[^ ]* NOTICE:  //'
+for t in round4 round5 ads badges2 age; do
+  [ -f "game-db/tests/$t.test.sql" ] || continue
+  $P -f "game-db/tests/$t.test.sql" 2>&1 | sed 's/^psql:[^ ]* NOTICE:  //'
+done
