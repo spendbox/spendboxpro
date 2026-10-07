@@ -1,15 +1,12 @@
-import { Logo } from "@/components/brand/logo";
-import { ButtonLink } from "@/components/ui/button";
+import Link from "next/link";
 
 export default function NotFound() {
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center gap-6 px-6 text-center">
-      <Logo />
-      <div>
-        <h1 className="font-display text-3xl font-bold">We couldn&apos;t find that page</h1>
-        <p className="mt-2 text-muted">The link may be mistyped, or the business may have removed it.</p>
-      </div>
-      <ButtonLink href="/">Go to the home page</ButtonLink>
-    </div>
+    <main className="mx-auto flex min-h-screen max-w-sm flex-col items-center justify-center gap-4 px-4 text-center">
+      <h1 className="font-display text-3xl font-bold">Nothing hiding here</h1>
+      <Link href="/" className="text-gold underline">
+        Back home
+      </Link>
+    </main>
   );
 }

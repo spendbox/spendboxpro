@@ -1,56 +1,19 @@
-import { UserPlus } from "lucide-react";
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AuthLayout } from "@/components/auth/auth-layout";
-import { getUser } from "@/lib/auth";
-import { safeNext } from "@/lib/safe-next";
-import { getSettings } from "@/lib/settings";
+import { currentUserId } from "@/lib/game";
 import { LoginForm } from "./login-form";
 
-export const metadata: Metadata = { title: "Log in" };
+export const metadata: Metadata = { title: "Sign in" };
 
-export default async function LoginPage({ searchParams }: PageProps<"/login">) {
-  const { next, for: audience } = await searchParams;
-  const nextPath = safeNext(next);
-  if (await getUser()) redirect(nextPath ?? "/go");
-  const business = audience === "business";
-  const { trialEnabled } = business ? await getSettings() : { trialEnabled: false };
-
+export default async function LoginPage() {
+  if (await currentUserId()) redirect("/play");
   return (
-    <AuthLayout>
-      <div className="flex flex-col gap-6">
-        <div>
-          <h1 className="font-display text-3xl font-bold tracking-tight">{business ? "Welcome back" : "Your Spendbox"}</h1>
-          <p className="mt-2 text-muted">
-            {business ? "Log in to your business with your email and password." : "Log in with your email and password."}
-          </p>
-        </div>
-        <LoginForm next={nextPath} />
-        {business ? (
-          <div className="rounded-2xl bg-white p-4 text-sm text-muted ring-1 ring-line">
-            <span className="font-semibold text-ink">New to Spendbox?</span>{" "}
-            <Link href="/start" className="font-semibold text-brand-700 underline underline-offset-2">
-              {trialEnabled ? "Start your free trial" : "Get started"}
-            </Link>
-            .
-          </div>
-        ) : (
-          <div className="flex gap-3 rounded-2xl bg-white p-4 text-sm text-muted ring-1 ring-line">
-            <UserPlus className="mt-0.5 size-5 shrink-0 text-brand-600" aria-hidden />
-            <p>
-              <span className="font-semibold text-ink">First time here?</span>{" "}
-              <Link href={nextPath ? `/signup?next=${encodeURIComponent(nextPath)}` : "/signup"} className="font-semibold text-brand-700 underline underline-offset-2">
-                Create your Spendbox
-              </Link>
-              . It&apos;s free.{" "}
-              <Link href="/plug" className="font-semibold text-brand-700 underline underline-offset-2">
-                Own a business?
-              </Link>
-            </p>
-          </div>
-        )}
+    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-4">
+      <div>
+        <h1 className="font-display text-3xl font-bold">Sign in</h1>
+        <p className="mt-1 text-muted">We&apos;ll email you a code. New here? You&apos;ll get 500 coins.</p>
       </div>
-    </AuthLayout>
+      <LoginForm />
+    </main>
   );
 }
