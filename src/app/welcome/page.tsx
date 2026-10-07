@@ -13,9 +13,11 @@ export default async function WelcomePage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-4">
       <div>
-        <h1 className="font-display text-3xl font-bold">{data?.pin_set ? "Change your PIN" : "Welcome to the city"}</h1>
+        <h1 className="font-display text-3xl font-bold">{data?.pin_set ? "Set a new PIN" : "Welcome to the city"}</h1>
         <p className="mt-1 text-muted">
-          Pick the name other players will see, and a 6-digit PIN to sign in with next time.
+          {data?.pin_set
+            ? "Choose a new 6-digit PIN. You can change your name here too."
+            : "Pick the name other players will see, and a 6-digit PIN for next time."}
         </p>
       </div>
       <WelcomeForm initialName={data?.username ?? ""} />

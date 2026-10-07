@@ -25,14 +25,26 @@ do $$ begin
 end $$;
 select id, tile_count, hiders_total from rounds where status <> 'done';           -- 420, 2
 update rounds set join_ends_at = now() - interval '1s' where status='join'; select tick();
-do $$ declare b uuid := (select id from profiles where email_key='bo@x.com'); t int; res jsonb;
+do $$ declare b uuid := (select id from profiles where email_key='bo@x.com'); c uuid := (select id from profiles where email_key='cy@x.com'); t int; x int; res jsonb;
 begin
   select tile into t from entries where user_id=b and round_id=2;
-  res := move_hider(b, (t+5) % 420); raise notice 'move1: %', res;
+  res := move_hider(b, (t+5) % 420); raise notice 'move1 (costs 100): %', res;
+  begin perform move_hider(b, (t+6) % 420); raise exception 'should fail'; exception when others then raise notice 'ok cooldown: %', sqlerrm; end;
+  update entries set last_move_at = now() - interval '2 minutes' where user_id = b and round_id = 2;
+  begin perform move_hider(b, t); raise exception 'should fail'; exception when others then raise notice 'ok no going back: %', sqlerrm; end;
   res := move_hider(b, (t+6) % 420); raise notice 'move2: %', res;
-  begin perform move_hider(b, (t+7) % 420); raise exception 'should fail'; exception when others then raise notice 'ok: %', sqlerrm; end;
-  begin perform move_hider('00000000-0000-0000-0000-00000000b07a', 0); raise exception 'should fail'; exception when others then raise notice 'ok bot: %', sqlerrm; end;
-  res := sweep((select id from profiles where email_key='cy@x.com'), (t+6) % 420, 1); raise notice 'sweep: %', res;
+  res := sweep(c, (t+6) % 420, 1); raise notice 'sweep: %', res;
+  raise notice 'hider warned of sweep: %', (select last_swept_at is not null from entries where user_id = b and round_id = 2);
+  begin perform sweep(c, 0, 1); raise exception 'should fail'; exception when others then raise notice 'ok sweep cooldown: %', sqlerrm; end;
+  -- The bot runs when swept.
+  update entries set last_swept_at = now() where user_id = '00000000-0000-0000-0000-00000000b07a' and round_id = 2;
+  raise notice 'bot: %', tick();
+  -- Walking into a searched tile gets you caught by whoever searched it.
+  x := (t + 50) % 420;
+  if exists (select 1 from entries where round_id = 2 and tile = x) then x := (t + 51) % 420; end if;
+  res := search_tile(c, x); raise notice 'cy searches %: %', x, res->>'result';
+  update entries set last_move_at = now() - interval '2 minutes' where user_id = b and round_id = 2;
+  res := move_hider(b, x); raise notice 'bo walks in: %', res;
 end $$;
 select events.kind, count(*) from events group by 1;
 update rounds set seek_ends_at = now() - interval '1s' where status='seek'; select tick();

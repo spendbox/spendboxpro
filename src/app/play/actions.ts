@@ -35,3 +35,26 @@ export async function sweepAround(tile: number, radius: number) {
   if (!isTile(tile) || ![1, 2, 3].includes(radius)) return { ok: false, error: "Pick a tile." } as ActionResult;
   return run("sweep", { p_tile: tile, p_radius: radius });
 }
+
+/** "Advertise here": someone tapped a billboard and left their details. */
+export async function requestAd(input: { billboard: string; name: string; contact: string; message: string }) {
+  const userId = await currentUserId();
+  if (!userId) return { ok: false, error: "Please sign in again." } as ActionResult;
+  const name = input.name.trim().slice(0, 80);
+  const contact = input.contact.trim().slice(0, 120);
+  const message = input.message.trim().slice(0, 1000);
+  if (name.length < 2 || contact.length < 5) return { ok: false, error: "Add your name and an email or phone number." } as ActionResult;
+  const db = createAdminClient();
+  const { count } = await db
+    .from("ad_requests")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .gt("created_at", new Date(Date.now() - 3600_000).toISOString());
+  if ((count ?? 0) >= 5) return { ok: false, error: "Thanks! We already have your requests." } as ActionResult;
+  const { data: round } = await db.from("rounds").select("id").order("id", { ascending: false }).limit(1).maybeSingle();
+  const { error } = await db
+    .from("ad_requests")
+    .insert({ round_id: round?.id ?? null, billboard: input.billboard.slice(0, 40), user_id: userId, name, contact, message: message || null });
+  if (error) return { ok: false, error: "Couldn't send that. Try again." } as ActionResult;
+  return { ok: true, data: {} } as ActionResult;
+}

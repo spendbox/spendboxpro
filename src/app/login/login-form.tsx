@@ -2,140 +2,135 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { cn } from "@/lib/cn";
-import { loginWithPin, sendCode, verifyCode } from "./actions";
+import { loginWithPin, sendCode, startSignIn, verifyCode } from "./actions";
 
 const input = "w-full rounded-xl border border-line bg-panel px-4 py-3 text-ink outline-none focus:border-gold";
 const button = "w-full rounded-xl bg-gold px-4 py-3 font-semibold text-ink disabled:opacity-50";
 
+type Step = "email" | "pin" | "code";
+
+/** Email first. Returning players type their PIN; new players (and forgot PIN) get a code. */
 export function LoginForm() {
-  const [tab, setTab] = useState<"pin" | "email">("email");
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 rounded-xl bg-panel-2 p-1 text-sm font-semibold">
-        {(["email", "pin"] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={cn("rounded-lg py-2", tab === t ? "bg-panel shadow-sm" : "text-muted")}
-          >
-            {t === "pin" ? "Name & PIN" : "Email code"}
-          </button>
-        ))}
-      </div>
-      {tab === "pin" ? <PinForm onForgot={() => setTab("email")} /> : <EmailForm />}
-    </div>
-  );
-}
-
-function PinForm({ onForgot }: { onForgot: () => void }) {
   const router = useRouter();
-  const [name, setName] = useState("");
-  const [pin, setPin] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    const res = await loginWithPin(name, pin);
-    if (!res.ok) {
-      setBusy(false);
-      return setError(res.error);
-    }
-    router.push("/play");
-    router.refresh();
-  }
-
-  return (
-    <form onSubmit={submit} className="flex flex-col gap-3">
-      <input className={input} placeholder="Your name" autoComplete="username" value={name} onChange={(e) => setName(e.target.value)} required />
-      <input
-        className={`${input} tracking-[0.3em]`}
-        placeholder="6-digit PIN"
-        inputMode="numeric"
-        type="password"
-        autoComplete="current-password"
-        value={pin}
-        onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
-        required
-      />
-      <button className={button} disabled={busy || pin.length !== 6 || name.length < 3}>
-        {busy ? "Signing in…" : "Sign in"}
-      </button>
-      <button type="button" onClick={onForgot} className="text-sm text-muted underline">
-        Forgot your PIN? Sign in with an email code
-      </button>
-      {error && <p className="text-sm text-hit">{error}</p>}
-    </form>
-  );
-}
-
-function EmailForm() {
-  const router = useRouter();
+  const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
+  const [pin, setPin] = useState("");
   const [code, setCode] = useState("");
-  const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  async function send(e?: React.FormEvent) {
-    e?.preventDefault();
+  async function run<T extends { ok: boolean }>(fn: () => Promise<T>, then: (res: T) => void) {
     setBusy(true);
     setError(null);
-    const res = await sendCode(email);
+    setNotice(null);
+    const res = await fn();
     setBusy(false);
-    if (!res.ok) return setError(res.error);
-    setNotice(sent ? "New code sent." : null);
-    setSent(true);
+    if (!res.ok) setError((res as unknown as { error: string }).error);
+    else then(res);
   }
 
-  async function verify(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    const res = await verifyCode(email, code);
-    if (!res.ok) {
-      setBusy(false);
-      return setError(res.error);
-    }
-    router.push(res.needsSetup ? "/welcome" : "/play");
-    router.refresh();
+  const back = (
+    <button type="button" className="text-sm text-muted underline" onClick={() => { setStep("email"); setPin(""); setCode(""); setError(null); }}>
+      Use a different email
+    </button>
+  );
+
+  if (step === "pin") {
+    return (
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          run(() => loginWithPin(email, pin), () => {
+            setBusy(true);
+            router.push("/play");
+            router.refresh();
+          });
+        }}
+        className="flex flex-col gap-3"
+      >
+        <p className="text-sm text-muted">
+          Welcome back, <b className="text-ink">{email}</b>. Enter your PIN.
+        </p>
+        <input
+          className={`${input} text-center text-2xl tracking-[0.4em]`}
+          type="password"
+          inputMode="numeric"
+          autoComplete="current-password"
+          placeholder="••••••"
+          value={pin}
+          onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          autoFocus
+          required
+        />
+        <button className={button} disabled={busy || pin.length !== 6}>
+          {busy ? "Opening the city…" : "Enter"}
+        </button>
+        <div className="flex justify-between">
+          {back}
+          <button
+            type="button"
+            className="text-sm text-muted underline"
+            disabled={busy}
+            onClick={() => run(() => sendCode(email), () => { setStep("code"); setNotice("We emailed you a code to reset your PIN."); })}
+          >
+            Forgot PIN?
+          </button>
+        </div>
+        {error && <p className="text-sm text-hit">{error}</p>}
+      </form>
+    );
   }
 
-  return sent ? (
-    <form onSubmit={verify} className="flex flex-col gap-3">
-      <p className="text-sm text-muted">
-        We sent a 6-digit code to <b className="text-ink">{email}</b>. Check your inbox (and spam).
-      </p>
-      <input
-        className={`${input} text-center text-2xl tracking-[0.4em]`}
-        inputMode="numeric"
-        autoComplete="one-time-code"
-        placeholder="000000"
-        value={code}
-        onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-        autoFocus
-        required
-      />
-      <button className={button} disabled={busy || code.length !== 6}>
-        {busy ? "Checking…" : "Continue"}
-      </button>
-      <div className="flex justify-between text-sm text-muted">
-        <button type="button" className="underline" onClick={() => { setSent(false); setCode(""); setError(null); }}>
-          Change email
+  if (step === "code") {
+    return (
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          run(() => verifyCode(email, code), () => {
+            setBusy(true);
+            router.push("/welcome");
+            router.refresh();
+          });
+        }}
+        className="flex flex-col gap-3"
+      >
+        <p className="text-sm text-muted">
+          We sent a 6-digit code to <b className="text-ink">{email}</b>. If you can&apos;t see it, check your spam folder.
+        </p>
+        <input
+          className={`${input} text-center text-2xl tracking-[0.4em]`}
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          placeholder="000000"
+          value={code}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          autoFocus
+          required
+        />
+        <button className={button} disabled={busy || code.length !== 6}>
+          {busy ? "Checking…" : "Continue"}
         </button>
-        <button type="button" className="underline" disabled={busy} onClick={() => send()}>
-          Send a new code
-        </button>
-      </div>
-      {notice && !error && <p className="text-sm text-me">{notice}</p>}
-      {error && <p className="text-sm text-hit">{error}</p>}
-    </form>
-  ) : (
-    <form onSubmit={send} className="flex flex-col gap-3">
+        <div className="flex justify-between">
+          {back}
+          <button type="button" className="text-sm text-muted underline" disabled={busy} onClick={() => run(() => sendCode(email), () => setNotice("New code sent."))}>
+            Send a new code
+          </button>
+        </div>
+        {notice && !error && <p className="text-sm text-me">{notice}</p>}
+        {error && <p className="text-sm text-hit">{error}</p>}
+      </form>
+    );
+  }
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        run(() => startSignIn(email), (res) => res.ok && setStep(res.next));
+      }}
+      className="flex flex-col gap-3"
+    >
       <input
         className={input}
         type="email"
@@ -143,12 +138,13 @@ function EmailForm() {
         placeholder="you@example.com"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
+        autoFocus
         required
       />
       <button className={button} disabled={busy}>
-        {busy ? "Sending…" : "Email me a code"}
+        {busy ? "One moment…" : "Continue"}
       </button>
-      <p className="text-xs text-muted">New here? Use your email. You&apos;ll pick a name and PIN next, and get 500 coins.</p>
+      <p className="text-xs text-muted">First time? We&apos;ll email you a code, then you pick a name and PIN. New players start with 500 coins.</p>
       {error && <p className="text-sm text-hit">{error}</p>}
     </form>
   );
