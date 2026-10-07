@@ -12,9 +12,11 @@ The full rule book is the "Hide & Seek Grid Game: Rules Spec" doc.
    search each day is free, then the price rises as more of the city is searched) or send a
    drone to sweep an area (yes/no only, 10-second cooldown, dearer every time anyone sweeps,
    and the hiders inside are warned). Hiders can move any number of times: 100 coins a move,
-   one a minute, never back to a tile they've left; everyone sees the tile they left. Moving
-   onto a tile that was already searched (and hasn't unlocked) gets you caught. Players only
-   see the most recent 70% of searched tiles.
+   one a minute, never back to a tile they've left; everyone sees the tile they left. Hiders
+   see every searched tile and can't move onto one; seekers see the most recent 70%. A spot
+   can be searched again (it costs a search). A sweep freezes the hiders inside for 15
+   seconds, and each seeker's last 5 sweeps stay active as secret traps: a hider who moves
+   into one is detected and both sides get a notification.
 3. **Payout.** Finding a hider pays the finder 80% of the stake (20% for new hiders). Finding
    the bot (a new name every round; it moves and flees sweeps) pays 200. Search, sweep and move
    fees (real coins) go into the survivor pool. Survivors get their stake back plus 60% of the
@@ -24,7 +26,8 @@ The full rule book is the "Hide & Seek Grid Game: Rules Spec" doc.
 
 1. **Database.** In Supabase → SQL Editor, run `game-db/001_hide_and_seek.sql`,
    `game-db/002_email_codes_and_city.sql`, `game-db/003_names_pins_chat.sql` and
-   `game-db/004_moves_sweeps_bot_ads.sql`, in order, once each, on an empty database. In Supabase → Database → Extensions, switch on **pg_cron** first if you
+   `game-db/004_moves_sweeps_bot_ads.sql` and `game-db/005_traps_freezes_notifications.sql`,
+   in order, once each, on an empty database. In Supabase → Database → Extensions, switch on **pg_cron** first if you
    can: the file then schedules the round clock to run every minute. (Without it, the clock
    still moves whenever someone has the game open.)
 2. **Email codes.** The app sends its own 6-digit sign-in codes through Resend, so nothing

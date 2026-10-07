@@ -1,6 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { botNameFor } from "@/lib/bot-names";
 
 export type Phase = "join" | "seek" | "done";
 
@@ -38,12 +39,20 @@ export type GameState = {
     lastMoveAt: string | null;
     lastSweepAt: string | null;
     lastSweptAt: string | null;
+    /** A sweep pinned this hider: no moving until then. */
+    frozenUntil: string | null;
   } | null;
   mySearches: { tile: number; caught: number }[];
   /** The latest searches by anyone (no results), so everyone sees tiles light up. */
   recentSearches: { tile: number; at: string }[];
   /** Searched tiles everyone can see: only the most recent share (the oldest are forgotten). */
   knownSearched: number[];
+  /** Seekers: their own sweeps that are still active as traps. */
+  mySweeps: { id: number; tile: number; radius: number; found: boolean; at: string }[];
+  /** How many drone traps are active in the city right now (not where they are). */
+  activeTraps: number;
+  /** Private notices for this player this round (trap alerts, sweeps, being caught). */
+  notifications: { id: number; kind: string; body: string; tile: number | null; at: string }[];
   /** For a hider still hidden: what surviving would pay right now. */
   outlook: { stakeBack: number; share: number } | null;
   leftTiles: number[];
@@ -116,11 +125,14 @@ export async function loadGame(userId: string): Promise<GameState> {
   let knownSearched: number[] = [];
   let outlook: GameState["outlook"] = null;
   let events: GameEvent[] = [];
+  const mySweeps: GameState["mySweeps"] = [];
+  let activeTraps = 0;
+  let notifications: GameState["notifications"] = [];
   if (round) {
     const [{ data: e }, { data: searches }, { data: allEvents }, { data: allSearches }] = await Promise.all([
       db
         .from("entries")
-        .select("role, tile, moves, caught, stake, stake_weight, visited, last_move_at, last_sweep_at, last_swept_at")
+        .select("role, tile, moves, caught, stake, stake_weight, visited, last_move_at, last_sweep_at, last_swept_at, frozen_until")
         .eq("round_id", round.id)
         .eq("user_id", userId)
         .maybeSingle(),
@@ -138,17 +150,42 @@ export async function loadGame(userId: string): Promise<GameState> {
         lastMoveAt: e.last_move_at,
         lastSweepAt: e.last_sweep_at,
         lastSweptAt: e.last_swept_at,
+        frozenUntil: e.frozen_until,
       };
     }
     mySearches = searches ?? [];
     const list = allSearches ?? [];
     recentSearches = list.slice(-12).reverse().map((r) => ({ tile: r.tile, at: r.created_at }));
-    // Everyone sees the most recent 70% of searched tiles; the oldest are forgotten.
-    const keep = Math.ceil(list.length * (s.searched_visible_fraction ?? 0.7));
-    knownSearched = list.slice(list.length - keep).map((r) => r.tile);
+    // Searched spots, oldest first, each once. Hiders see them all (they can't move onto
+    // them); seekers only see the most recent 70%.
+    const firstSeen = new Map<number, number>();
+    list.forEach((r, k) => firstSeen.has(r.tile) || firstSeen.set(r.tile, k));
+    const unique = [...firstSeen.keys()];
+    const keep = e?.role === "hider" ? unique.length : Math.ceil(unique.length * (s.searched_visible_fraction ?? 0.7));
+    knownSearched = unique.slice(unique.length - keep);
     leftTiles = (allEvents ?? []).filter((x) => x.kind === "moved").map((x) => x.tile);
     caughtTiles = (allEvents ?? []).filter((x) => x.kind === "caught").map((x) => x.tile);
     events = (allEvents ?? []).slice(-40).map((x) => ({ id: x.id, kind: x.kind, tile: x.tile, at: x.created_at, detail: x.detail }));
+
+    const trapsPer = s.traps_per_seeker ?? 5;
+    const [{ data: sweepRows }, { data: notes }] = await Promise.all([
+      db.from("sweeps").select("id, seeker_id, tile, radius, found, created_at").eq("round_id", round.id).order("id", { ascending: false }).limit(2000),
+      db.from("notifications").select("id, kind, body, tile, created_at").eq("user_id", userId).eq("round_id", round.id).order("id", { ascending: false }).limit(40),
+    ]);
+    const perSeeker = new Map<string, number>();
+    for (const sw of sweepRows ?? []) {
+      const n = (perSeeker.get(sw.seeker_id) ?? 0) + 1;
+      perSeeker.set(sw.seeker_id, n);
+      if (n > trapsPer) continue;
+      activeTraps++;
+      if (sw.seeker_id === userId) mySweeps.push({ id: sw.id, tile: sw.tile, radius: sw.radius, found: sw.found, at: sw.created_at });
+    }
+    notifications = (notes ?? []).map((n) => ({ id: n.id, kind: n.kind, body: n.body, tile: n.tile, at: n.created_at }));
+    // Your own sweeps play the drone animation for you (nobody else sees them).
+    events = [
+      ...events.filter((x) => x.kind !== "sweep"),
+      ...mySweeps.map((sw) => ({ id: -sw.id, kind: "sweep" as const, tile: sw.tile, at: sw.at, detail: { radius: sw.radius } })),
+    ];
 
     if (e?.role === "hider" && !e.caught) {
       const { data: alive } = await db
@@ -203,13 +240,16 @@ export async function loadGame(userId: string): Promise<GameState> {
           pool: num(round.pool),
           searchPrice,
           sweepPrices: { 1: sweepPrice(1), 2: sweepPrice(2), 3: sweepPrice(3) },
-          botName: round.bot_name ?? "Seed Bot",
+          botName: botNameFor(round.id, round.bot_name),
         }
       : null,
     entry,
     mySearches,
     recentSearches,
     knownSearched,
+    mySweeps,
+    activeTraps,
+    notifications,
     outlook,
     leftTiles,
     caughtTiles,
@@ -280,7 +320,7 @@ async function loadResults(db: ReturnType<typeof createAdminClient>, userId: str
     caught: round.hiders_total - round.hiders_remaining,
     searches: round.searched_count,
     pool: num(round.pool),
-    botName: round.bot_name ?? "Seed Bot",
+    botName: botNameFor(round.id, round.bot_name),
     botFoundBy: bot?.caught_by ? (nameOf.get(bot.caught_by) ?? "A player") : null,
     winners,
     players: entries?.length ? entries.length - (bot ? 1 : 0) : 0,

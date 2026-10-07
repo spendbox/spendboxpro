@@ -43,8 +43,17 @@ begin
   x := (t + 50) % 420;
   if exists (select 1 from entries where round_id = 2 and tile = x) then x := (t + 51) % 420; end if;
   res := search_tile(c, x); raise notice 'cy searches %: %', x, res->>'result';
+  raise notice 'search again (allowed): %', search_tile(c, x)->>'searched_before';
   update entries set last_move_at = now() - interval '2 minutes' where user_id = b and round_id = 2;
-  res := move_hider(b, x); raise notice 'bo walks in: %', res;
+  begin perform move_hider(b, x); raise exception 'should fail'; exception when others then raise notice 'ok frozen or blocked: %', sqlerrm; end;
+  update entries set frozen_until = null where user_id = b and round_id = 2;
+  begin perform move_hider(b, x); raise exception 'should fail'; exception when others then raise notice 'ok searched spot blocked: %', sqlerrm; end;
+  -- Drone trap: cy's sweep around a spot keeps watching; bo moves into it.
+  update entries set last_sweep_at = null where user_id = c and round_id = 2;
+  perform sweep(c, (t + 120) % 420, 1);
+  update entries set last_move_at = now() - interval '2 minutes', frozen_until = null where user_id = b and round_id = 2;
+  res := move_hider(b, (t + 120) % 420); raise notice 'bo moves into the trap: %', res;
+  raise notice 'notifications: %', (select string_agg(kind, ',' order by id) from notifications);
 end $$;
 select events.kind, count(*) from events group by 1;
 update rounds set seek_ends_at = now() - interval '1s' where status='seek'; select tick();

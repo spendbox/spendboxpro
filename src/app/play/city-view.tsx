@@ -67,7 +67,10 @@ function geometries() {
   const cyl = new THREE.CylinderGeometry(0.5, 0.5, 1, 20).translate(0, 0.5, 0);
   const cone = new THREE.ConeGeometry(0.5, 1, 16).translate(0, 0.5, 0);
   const dome = new THREE.SphereGeometry(0.5, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2);
-  return { box, roof, crown, trunk, disc, bird, arch, cyl, cone, dome };
+  // A quarter ring lying flat, centred on a tile corner: a bend in the road.
+  const curve = new THREE.RingGeometry(0.2, 0.8, 14, 1, 0, Math.PI / 2).rotateX(-Math.PI / 2);
+  const curveLine = new THREE.RingGeometry(0.485, 0.515, 14, 1, 0, Math.PI / 2).rotateX(-Math.PI / 2);
+  return { box, roof, crown, trunk, disc, bird, arch, cyl, cone, dome, curve, curveLine };
 }
 
 // ---------------------------------------------------------------- what stands on a tile
@@ -119,14 +122,56 @@ function partsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "ti
   }
 
   if (t.kind === "road") {
+    const m = t.mask ?? 0;
+    // Bends: pavement with a curved stretch of road sweeping round the corner.
+    const bend: Record<number, [number, number, number]> = { 3: [0.5, -0.5, Math.PI], 6: [0.5, 0.5, Math.PI / 2], 12: [-0.5, 0.5, 0], 9: [-0.5, -0.5, -Math.PI / 2] };
+    if (bend[m]) {
+      const [cx, cz, ry] = bend[m];
+      add("ground", { x, y: 0, z, sx: 1, sy: 0.06, sz: 1, ry: 0, color: SIDEWALK });
+      add("curve", { x: x + cx, y: 0.062, z: z + cz, sx: 1, sy: 1, sz: 1, ry, color: ASPHALT });
+      add("curveLine", { x: x + cx, y: 0.064, z: z + cz, sx: 1, sy: 1, sz: 1, ry, color: 0xffffff });
+      // A tree tucked into the outside of the bend.
+      add("trunk", { x: x - cx * 0.7, y: 0.06, z: z - cz * 0.7, sx: 0.45, sy: 0.16, sz: 0.45, ry: 0, color: 0x8a6a4f });
+      add("crown", { x: x - cx * 0.7, y: 0.17, z: z - cz * 0.7, sx: 0.27, sy: 0.34, sz: 0.27, ry: t.r[0] * 6, color: plan.palette.leaves[0] });
+      return;
+    }
     add("ground", { x, y: 0, z, sx: 1, sy: 0.06, sz: 1, ry: 0, color: ASPHALT });
-    if (t.road !== "cross") {
-      const along = t.road === "x";
+    if (t.roundabout) {
+      // Roundabout: a grassy island with a fountain or a tree, and a painted ring.
+      add("curveLine", { x: x + 0.5, y: 0.064, z: z - 0.5, sx: 0.8, sy: 1, sz: 0.8, ry: Math.PI, color: 0xffffff });
+      add("curveLine", { x: x + 0.5, y: 0.064, z: z + 0.5, sx: 0.8, sy: 1, sz: 0.8, ry: Math.PI / 2, color: 0xffffff });
+      add("curveLine", { x: x - 0.5, y: 0.064, z: z + 0.5, sx: 0.8, sy: 1, sz: 0.8, ry: 0, color: 0xffffff });
+      add("curveLine", { x: x - 0.5, y: 0.064, z: z - 0.5, sx: 0.8, sy: 1, sz: 0.8, ry: -Math.PI / 2, color: 0xffffff });
+      add("disc", { x, y: 0.06, z, sx: 0.46, sy: 0.08, sz: 0.46, ry: 0, color: 0xdee2e6 });
+      add("disc", { x, y: 0.06, z, sx: 0.4, sy: 0.1, sz: 0.4, ry: 0, color: GRASS });
+      if (t.r[1] < 0.5) {
+        add("disc", { x, y: 0.16, z, sx: 0.2, sy: 0.06, sz: 0.2, ry: 0, color: 0xcfd6dd });
+        add("water", { x, y: 0.2, z, sx: 0.15, sy: 0.02, sz: 0.15, ry: 0, color: WATER });
+        add("cyl", { x, y: 0.16, z, sx: 0.04, sy: 0.18, sz: 0.04, ry: 0, color: 0xcfd6dd });
+      } else {
+        add("trunk", { x, y: 0.16, z, sx: 0.6, sy: 0.2, sz: 0.6, ry: 0, color: 0x8a6a4f });
+        add("crown", { x, y: 0.3, z, sx: 0.32, sy: 0.4, sz: 0.32, ry: t.r[2] * 6, color: plan.palette.leaves[1] });
+      }
+      return;
+    }
+    const straight = m === 5 || m === 10 || m === 1 || m === 4 || m === 2 || m === 8;
+    if (straight) {
+      const along = m === 10 || m === 2 || m === 8;
       for (const o of [-0.25, 0.25]) {
         add("paint", { x: x + (along ? o : 0), y: 0.061, z: z + (along ? 0 : o), sx: along ? 0.22 : 0.04, sy: 0.005, sz: along ? 0.04 : 0.22, ry: 0, color: 0xffffff });
       }
+      // Dead end: a turning circle.
+      if (m === 1 || m === 4 || m === 2 || m === 8) add("disc", { x, y: 0.0, z, sx: 1.05, sy: 0.061, sz: 1.05, ry: 0, color: ASPHALT });
     } else {
+      // Junctions: a zebra crossing on each side that has a road.
       add("ground", { x, y: 0, z, sx: 0.5, sy: 0.062, sz: 0.5, ry: 0, color: 0x6a7380 });
+      for (const [bit, dx, dz] of [[1, 0, -0.38], [2, 0.38, 0], [4, 0, 0.38], [8, -0.38, 0]] as const) {
+        if (!(m & bit)) continue;
+        for (let k = -2; k <= 2; k++) {
+          const ns = bit === 1 || bit === 4;
+          add("paint", { x: x + dx + (ns ? k * 0.09 : 0), y: 0.061, z: z + dz + (ns ? 0 : k * 0.09), sx: ns ? 0.05 : 0.16, sy: 0.005, sz: ns ? 0.16 : 0.05, ry: 0, color: 0xffffff });
+        }
+      }
     }
     return;
   }
@@ -616,6 +661,8 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       cyl: { geometry: geo.cyl, material: mat(), shadow: true },
       cone: { geometry: geo.cone, material: mat({ flatShading: true }), shadow: true },
       dome: { geometry: geo.dome, material: mat(), shadow: true },
+      curve: { geometry: geo.curve, material: mat(), shadow: false },
+      curveLine: { geometry: geo.curveLine, material: mat(), shadow: false },
       water: { geometry: geo.box, material: new THREE.MeshPhongMaterial({ color: 0xffffff, shininess: 90, specular: 0xffffff }), shadow: false },
     };
 
@@ -662,43 +709,40 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       mesh.setMatrixAt(idx, m4);
     }
 
-    // ---- cars: each drives back and forth along one road line
-    type Car = { line: { axis: "x" | "z"; at: number; min: number; max: number }; pos: number; speed: number; lane: number };
+    // ---- cars: each one drives the street network, turning at junctions and bends
+    type Car = { from: [number, number]; to: [number, number]; t: number; speed: number };
     let cars: Car[] = [];
     let carBody: THREE.InstancedMesh | null = null;
     let carTop: THREE.InstancedMesh | null = null;
+    const roadAt = (x: number, z: number) => {
+      const k = kindAt.get(`${x},${z}`);
+      return k === "road" || k === "bridge";
+    };
+    function nextStop(c: Car): [number, number] {
+      const [x, z] = c.to;
+      const dx = Math.sign(c.to[0] - c.from[0]);
+      const dz = Math.sign(c.to[1] - c.from[1]);
+      const options = ([[1, 0], [-1, 0], [0, 1], [0, -1]] as const)
+        .filter(([ox, oz]) => !(ox === -dx && oz === -dz) && roadAt(x + ox, z + oz))
+        .map(([ox, oz]) => [x + ox, z + oz] as [number, number]);
+      if (!options.length) return c.from; // dead end: turn round
+      const ahead = options.find(([nx, nz]) => nx - x === dx && nz - z === dz);
+      if (ahead && Math.random() < 0.6) return ahead;
+      return options[Math.floor(Math.random() * options.length)];
+    }
 
     function buildCars(plan: CityPlan) {
       if (carBody) moving.remove(carBody, carTop!);
-      const lines = new Map<string, { axis: "x" | "z"; at: number; min: number; max: number }>();
-      for (const t of tiles) {
-        if (t.kind !== "road" && t.kind !== "bridge") continue;
-        if (t.road === "x" || t.road === "cross") {
-          const k = `x${t.z}`;
-          const l = lines.get(k) ?? { axis: "x" as const, at: t.z, min: t.x, max: t.x };
-          l.min = Math.min(l.min, t.x);
-          l.max = Math.max(l.max, t.x);
-          lines.set(k, l);
-        }
-        if (t.road === "z" || t.road === "cross") {
-          const k = `z${t.x}`;
-          const l = lines.get(k) ?? { axis: "z" as const, at: t.x, min: t.z, max: t.z };
-          l.min = Math.min(l.min, t.z);
-          l.max = Math.max(l.max, t.z);
-          lines.set(k, l);
-        }
-      }
+      const roads = tiles.filter((t) => t.kind === "road" || t.kind === "bridge");
       cars = [];
-      for (const l of lines.values()) {
-        const len = l.max - l.min;
-        if (len < 3) continue;
-        const n = Math.min(4, Math.max(1, Math.round(len / 6)));
-        for (let k = 0; k < n; k++) {
-          const dir = (k + l.at) % 2 === 0 ? 1 : -1;
-          cars.push({ line: l, pos: l.min + Math.random() * len, speed: dir * (0.8 + Math.random() * 0.9), lane: dir * 0.14 });
-        }
+      const n = Math.min(160, Math.floor(roads.length / 4));
+      for (let k = 0; k < n; k++) {
+        const t = roads[Math.floor(Math.random() * roads.length)];
+        const options = ([[1, 0], [-1, 0], [0, 1], [0, -1]] as const).filter(([ox, oz]) => roadAt(t.x + ox, t.z + oz));
+        if (!options.length) continue;
+        const [ox, oz] = options[Math.floor(Math.random() * options.length)];
+        cars.push({ from: [t.x, t.z], to: [t.x + ox, t.z + oz], t: Math.random(), speed: 0.8 + Math.random() * 0.9 });
       }
-      cars = cars.slice(0, 140);
       carBody = new THREE.InstancedMesh(geo.box, mat(), Math.max(1, cars.length));
       carTop = new THREE.InstancedMesh(geo.box, mat({ color: 0xe9f2fb }), Math.max(1, cars.length));
       carBody.castShadow = true;
@@ -710,22 +754,25 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
     function updateCars(dt: number) {
       if (!carBody || !carTop) return;
       cars.forEach((c, k) => {
-        c.pos += c.speed * dt;
-        if (c.pos > c.line.max + 0.4) c.pos = c.line.min - 0.4;
-        if (c.pos < c.line.min - 0.4) c.pos = c.line.max + 0.4;
-        const alongX = c.line.axis === "x";
-        const x = alongX ? c.pos : c.line.at + c.lane;
-        const z = alongX ? c.line.at - c.lane : c.pos;
-        // Ride up onto bridges; hide where the road line is interrupted (water, park...).
+        c.t += c.speed * dt;
+        while (c.t >= 1) {
+          c.t -= 1;
+          const next = nextStop(c);
+          c.from = c.to;
+          c.to = next;
+        }
+        const dx = c.to[0] - c.from[0];
+        const dz = c.to[1] - c.from[1];
+        // Keep to the right-hand lane.
+        const x = c.from[0] + dx * c.t - dz * 0.14;
+        const z = c.from[1] + dz * c.t + dx * 0.14;
         const under = kindAt.get(`${Math.round(x)},${Math.round(z)}`);
-        // Over a bridge, follow its hump.
-        const off = Math.abs((alongX ? x : z) - Math.round(alongX ? x : z));
+        const off = Math.abs(dx !== 0 ? x - Math.round(x) : z - Math.round(z));
         const y = under === "bridge" ? 0.06 + (BRIDGE_TOP - 0.06) * Math.min(1, Math.max(0, (0.5 - off) / 0.3)) : 0.06;
-        const shown = under === "road" || under === "bridge" ? 1 : 0.0001;
-        q.setFromAxisAngle(up, alongX ? 0 : Math.PI / 2);
-        m4.compose(v.set(x, y, z), q, s.set(0.3 * shown, 0.09 * shown, 0.15 * shown));
+        q.setFromAxisAngle(up, Math.atan2(-dz, dx));
+        m4.compose(v.set(x, y, z), q, s.set(0.3, 0.09, 0.15));
         carBody!.setMatrixAt(k, m4);
-        m4.compose(v.set(x - (alongX ? 0.02 * Math.sign(c.speed) : 0), y + 0.09, z - (alongX ? 0 : 0.02 * Math.sign(c.speed))), q, s.set(0.16 * shown, 0.06 * shown, 0.13 * shown));
+        m4.compose(v.set(x - dx * 0.02, y + 0.09, z - dz * 0.02), q, s.set(0.16, 0.06, 0.13));
         carTop!.setMatrixAt(k, m4);
       });
       carBody.instanceMatrix.needsUpdate = true;
