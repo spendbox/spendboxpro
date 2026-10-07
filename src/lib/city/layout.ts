@@ -30,10 +30,11 @@ export type TileKind =
   | "watertower"
   | "mast"
   | "fuel"
+  | "police"
   | "structure";
 
 /** Big buildings that span a 2×2 block of tiles. */
-export type StructureType = "mall" | "twin" | "museum" | "funfair" | "market" | "arena" | "campus" | "hotel" | "solar";
+export type StructureType = "mall" | "twin" | "museum" | "funfair" | "market" | "arena" | "campus" | "hotel" | "solar" | "airport" | "port" | "military";
 
 export type Tile = {
   i: number;
@@ -82,6 +83,7 @@ export const KIND_LABEL: Record<TileKind, string> = {
   watertower: "Water tower",
   mast: "Radio mast",
   fuel: "Fuel station",
+  police: "Police station",
   structure: "Landmark",
 };
 
@@ -95,16 +97,19 @@ export const STRUCTURE_LABEL: Record<StructureType, string> = {
   campus: "University",
   hotel: "Hotel",
   solar: "Solar farm",
+  airport: "Airport",
+  port: "Sea port",
+  military: "Military camp",
 };
 
 /** Everything the city can be made of, for the help screen. */
 export const CITY_ASSETS = {
-  big: ["Shopping malls", "Twin towers with a sky bridge", "Domed museums", "Funfairs", "Open-air markets", "Arenas", "University campuses", "Hotels with rooftop pools", "Solar farms"],
+  big: ["Airports", "Sea ports", "Military camps", "Shopping malls", "Twin towers with a sky bridge", "Domed museums", "Funfairs", "Open-air markets", "Arenas", "University campuses", "Hotels with rooftop pools", "Solar farms"],
   tiles: [
     "Skyscrapers (stepped, round glass, twisted, needle spire, helipad)",
     "Office blocks (plain, L-shaped, rooftop garden)",
     "Houses (pitched bungalow, flat modern with pool, duplex with garage)",
-    "Hospitals", "Clock towers", "Construction sites with cranes", "Water towers", "Radio masts", "Fuel stations",
+    "Hospitals", "Police stations", "Clock towers", "Construction sites with cranes", "Water towers", "Radio masts", "Fuel stations",
     "Parks", "Woods", "Plazas with fountains", "Ponds", "Ferris wheels", "Wind turbines", "Billboards",
     "Roads", "Bridges", "A river (sometimes)", "Small lakes",
   ],
@@ -381,7 +386,7 @@ function densityAt(plan: CityPlan, x: number, z: number) {
 const STRUCTURES_BY_ZONE: { min: number; chance: number; types: StructureType[] }[] = [
   { min: 0.56, chance: 0.12, types: ["twin", "hotel", "mall", "museum"] },
   { min: 0.24, chance: 0.14, types: ["mall", "market", "museum", "campus", "arena", "funfair", "hotel"] },
-  { min: -9, chance: 0.08, types: ["funfair", "solar", "arena", "campus", "market"] },
+  { min: -9, chance: 0.1, types: ["funfair", "solar", "arena", "campus", "market", "airport", "port", "military", "airport"] },
 ];
 
 /**
@@ -436,6 +441,12 @@ function structureName(plan: CityPlan, type: StructureType, ax: number, az: numb
       return pick([`Grand ${city} Hotel`, `The ${street}`, `${city} Continental`], 8);
     case "solar":
       return `${street} Solar Farm`;
+    case "airport":
+      return pick([`${city} Airport`, `${street} Airfield`, `${city} International`], 9);
+    case "port":
+      return pick([`${city} Harbour`, `${street} Docks`, `Port of ${city}`], 10);
+    case "military":
+      return pick([`${street} Barracks`, `${city} Army Camp`, `Fort ${street}`], 11);
   }
 }
 
@@ -446,7 +457,7 @@ export function tileAt(plan: CityPlan, i: number): Tile {
   if (!LOTS.includes(t.kind)) return t;
   const st = structureAt(plan, x, z);
   if (st) {
-    const heights: Record<StructureType, number> = { mall: 1.2, twin: 7, museum: 1.8, funfair: 2.8, market: 0.7, arena: 1.1, campus: 1.6, hotel: 4.4, solar: 0.5 };
+    const heights: Record<StructureType, number> = { mall: 1.2, twin: 7, museum: 1.8, funfair: 2.8, market: 0.7, arena: 1.1, campus: 1.6, hotel: 4.4, solar: 0.5, airport: 1.6, port: 1.8, military: 1.2 };
     return { ...t, kind: "structure", top: heights[st.type], structure: st, fallback: t };
   }
   const b = blockBillboard(plan, x, z);
@@ -567,6 +578,7 @@ function baseTile(plan: CityPlan, x: number, z: number): Tile {
     if (r[0] < 0.075) return { i, x, z, kind: "hospital", top: 1.7, r };
     if (r[0] < 0.09) return { i, x, z, kind: "clock", top: 2.6, r };
     if (r[0] < 0.11) return { i, x, z, kind: "crane", top: 3.2, r };
+    if (r[0] < 0.122 && nextToRoad) return { i, x, z, kind: "police", top: 1.1, r };
     if (r[0] > 0.988 && nextToRoad) return { i, x, z, kind: "fuel", top: 0.5, r };
     return { i, x, z, kind: "office", top: 0.9 + r[1] * 1.8 + density * 1.2, r, v: Math.floor(r[2] * 3) };
   }

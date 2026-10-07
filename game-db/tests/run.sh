@@ -12,4 +12,5 @@ $P -f game-db/002_email_codes_and_city.sql
 $P -f game-db/003_names_pins_chat.sql
 $P -f game-db/004_moves_sweeps_bot_ads.sql
 $P -f game-db/005_traps_freezes_notifications.sql
+$P -f game-db/006_avatars_badges_balloons.sql
 $P -f game-db/tests/game.test.sql 2>&1 | sed 's/^psql:[^ ]* NOTICE:  //'

@@ -2,6 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { botNameFor } from "@/lib/bot-names";
+import { cleanAvatar, type Avatar } from "@/lib/avatar";
 
 export type Phase = "join" | "seek" | "done";
 
@@ -10,12 +11,28 @@ export type GameEvent = {
   kind: "moved" | "caught" | "searched" | "sweep";
   tile: number;
   at: string;
-  detail: { how?: string; finder?: string | null; count?: number; bot?: boolean; radius?: number } | null;
+  detail: {
+    how?: string;
+    finder?: string | null;
+    count?: number;
+    bot?: boolean;
+    radius?: number;
+    /** Who moved (for "moved"). */
+    name?: string | null;
+    user?: string | null;
+    /** Who was found (for "caught"). */
+    hiders?: { name: string | null; avatar: unknown; bot: boolean }[];
+  } | null;
 };
 
 export type GameState = {
   serverNow: string;
-  me: { id: string; name: string | null; pinSet: boolean; coins: number; bonusCoins: number; canHide: boolean; freeSearch: boolean };
+  me: { id: string; name: string | null; pinSet: boolean; coins: number; bonusCoins: number; canHide: boolean; freeSearch: boolean; avatar: Avatar };
+  /** Everyone in this round (not the bot), for finding people to chat with. */
+  players: { id: string; name: string; role: "hider" | "seeker"; caught: boolean; avatar: Avatar }[];
+  /** A coin balloon drifting by just for you, if one's due (slot = which one). */
+  balloon: { slot: number; coins: number } | null;
+  site: { visits: number; players: number };
   round: {
     id: number;
     status: Phase;
@@ -77,7 +94,7 @@ export type RoundResults = {
   winners: { name: string; role: string; won: number; detail: string }[];
   players: number;
   /** What the signed-in player got out of that round, if they played. */
-  mine: { role: string; won: number; detail: string; caught: boolean } | null;
+  mine: { role: string; won: number; detail: string; caught: boolean; badges: { badge: string; detail: string | null }[] } | null;
 };
 
 /** The signed-in player's id, or null. */
@@ -104,10 +121,11 @@ export async function loadGame(userId: string): Promise<GameState> {
   const db = createAdminClient();
   // Moves the round clock along (and lets the Seed Bot think). A scheduled job does this
   // too; calling it here keeps the game moving even if that job is not set up.
-  await db.rpc("tick");
+  const ticked = await db.rpc("tick_with_extras");
+  if (ticked.error) await db.rpc("tick");
 
   const [{ data: profile, error: profileError }, { data: round }, { data: settings }] = await Promise.all([
-    db.from("profiles").select("username, pin_set, coins, bonus_coins, seeker_rounds, free_search_day").eq("id", userId).single(),
+    db.from("profiles").select("username, pin_set, coins, bonus_coins, seeker_rounds, free_search_day, avatar").eq("id", userId).single(),
     db.from("rounds").select("*").order("id", { ascending: false }).limit(1).maybeSingle(),
     db.from("game_settings").select("key, value"),
   ]);
@@ -211,6 +229,43 @@ export async function loadGame(userId: string): Promise<GameState> {
     .maybeSingle();
 
   const results = await loadResults(db, userId);
+
+  // Everyone in the round, so you can find people to message.
+  let players: GameState["players"] = [];
+  if (round) {
+    const { data: rows } = await db
+      .from("entries")
+      .select("user_id, role, caught, profiles!entries_user_id_fkey(username, avatar, is_bot)")
+      .eq("round_id", round.id)
+      .limit(500);
+    players = (rows ?? [])
+      .map((r) => {
+        const p = r.profiles as unknown as { username: string | null; avatar: unknown; is_bot: boolean } | null;
+        if (!p || p.is_bot || !p.username) return null;
+        return { id: r.user_id, name: p.username, role: r.role, caught: r.caught, avatar: cleanAvatar(p.avatar, p.username) };
+      })
+      .filter((x): x is GameState["players"][number] => x !== null);
+  }
+
+  // Coin balloons: one can drift by every few minutes, for you alone, up to a daily limit.
+  let balloon: GameState["balloon"] = null;
+  const slotMs = (s.balloon_minutes ?? 4) * 60_000;
+  const slot = Math.floor(Date.now() / slotMs);
+  if (round?.status === "seek") {
+    const { data: claims } = await db.from("balloon_claims").select("slot").eq("user_id", userId).eq("day", today);
+    const claimed = new Set((claims ?? []).map((c) => c.slot));
+    // Not every window has one: about two in three do, picked per player.
+    const lucky = parseInt(userId.replace(/-/g, "").slice(0, 6), 16) % 3 !== slot % 3;
+    if ((claims?.length ?? 0) < (s.balloons_per_day ?? 10) && !claimed.has(slot) && lucky) {
+      balloon = { slot, coins: s.balloon_coins ?? 5 };
+    }
+  }
+
+  const [{ data: visits }, { count: playerCount }] = await Promise.all([
+    db.from("site_counters").select("value").eq("key", "visits").maybeSingle(),
+    db.from("profiles").select("id", { count: "exact", head: true }).eq("is_bot", false),
+  ]);
+  const site = { visits: Number(visits?.value ?? 0), players: playerCount ?? 0 };
   const tileCount = round?.tile_count ?? 0;
   const frac = tileCount ? Math.min(1, (round?.searched_count ?? 0) / tileCount) : 0;
   const searchPrice = money(s.search_price_start + (s.search_price_max - s.search_price_start) * frac);
@@ -219,9 +274,13 @@ export async function loadGame(userId: string): Promise<GameState> {
 
   return {
     serverNow: new Date().toISOString(),
+    players,
+    balloon,
+    site,
     me: {
       id: userId,
       name: profile?.username ?? null,
+      avatar: cleanAvatar(profile?.avatar, profile?.username ?? userId),
       pinSet: Boolean(profile?.pin_set),
       coins: num(profile?.coins),
       bonusCoins: num(profile?.bonus_coins),
@@ -311,6 +370,9 @@ async function loadResults(db: ReturnType<typeof createAdminClient>, userId: str
     .slice(0, 10);
   const bot = (entries ?? []).find((e) => (e.profiles as unknown as { is_bot: boolean } | null)?.is_bot);
   const myEntry = (entries ?? []).find((e) => e.user_id === userId);
+  const { data: myBadges } = myEntry
+    ? await db.from("badges").select("badge, detail").eq("user_id", userId).eq("round_id", round.id)
+    : { data: [] as { badge: string; detail: string | null }[] };
   const myTotal = totals.get(userId);
   return {
     roundId: round.id,
@@ -325,7 +387,7 @@ async function loadResults(db: ReturnType<typeof createAdminClient>, userId: str
     winners,
     players: entries?.length ? entries.length - (bot ? 1 : 0) : 0,
     mine: myEntry
-      ? { role: myEntry.role, won: money(myTotal?.won ?? 0), detail: myTotal ? describe(myTotal) : "", caught: myEntry.caught }
+      ? { role: myEntry.role, won: money(myTotal?.won ?? 0), detail: myTotal ? describe(myTotal) : "", caught: myEntry.caught, badges: myBadges ?? [] }
       : null,
   };
 }
