@@ -3,15 +3,24 @@
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { addressOf, CITY_ASSETS, makePlan, tileAt } from "@/lib/city/layout";
+import { addressOf, makePlan, tileAt } from "@/lib/city/layout";
+import { cleanAvatar } from "@/lib/avatar";
 import type { GameEvent, GameState } from "@/lib/game";
 import { cn } from "@/lib/cn";
 import { short } from "@/lib/format";
 import { createClient } from "@/lib/supabase/client";
 import { joinRound, moveTo, requestAd, searchTile, sweepAround, type ActionResult } from "./actions";
+import { AvatarEditor } from "./avatar-editor";
 import { Chat } from "./chat";
 import type { CityEvent, CityMarkers } from "./city-view";
+import { HowItWorks } from "./how-it-works";
+import { Menu } from "./menu";
+import { FeedRow, NotificationsPanel, type FeedItem } from "./notifications";
+import { claimBalloon, recordVisit } from "./profile-actions";
 import { Results } from "./results";
+import { Sheet } from "./sheet";
+import { useCitySound } from "./sound";
+import { StatsCard } from "./stats-card";
 
 // The 3D city only runs in the browser.
 const CityView = dynamic(() => import("./city-view").then((m) => m.CityView), {
@@ -20,8 +29,7 @@ const CityView = dynamic(() => import("./city-view").then((m) => m.CityView), {
 });
 
 type Mode = "search" | "sweep";
-type Notice = { id: number; text: string; tone: "alarm" | "move" | "info" | "mine" };
-type FeedItem = { key: string; at: string; text: string; tone: Notice["tone"] };
+type Notice = { id: number; text: string; tone: "alarm" | "move" | "info" | "mine"; avatar?: ReturnType<typeof cleanAvatar> | null };
 
 /** The server's clock, ticking every second on this device. */
 function useNow(serverNow: string) {
@@ -61,12 +69,22 @@ function describe(e: GameEvent, botName: string, myTile: number | null, where: (
   if (e.kind === "caught") {
     const who = e.detail?.finder ?? "Someone";
     if (e.detail?.how === "walked_in") return { id: e.id, tone: "alarm", text: `A hider wandered onto a searched spot and got caught! ${who} gets the credit.` };
-    if (e.detail?.bot) return { id: e.id, tone: "alarm", text: `${who} found ${botName}!` };
-    return { id: e.id, tone: "alarm", text: `${who} caught ${e.detail?.count && e.detail.count > 1 ? `${e.detail.count} hiders` : "a hider"} at ${where(e.tile)}!` };
+    const hiders = (e.detail?.hiders ?? []).filter((h) => !h.bot);
+    const first = hiders[0];
+    if (e.detail?.bot && !hiders.length) return { id: e.id, tone: "alarm", text: `${who} found ${botName}, the bot!` };
+    const names = hiders.map((h) => h.name ?? "a hider");
+    const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : (names[0] ?? (e.detail?.count && e.detail.count > 1 ? `${e.detail.count} hiders` : "a hider"));
+    return {
+      id: e.id,
+      tone: "alarm",
+      text: `${who} caught ${list} at ${where(e.tile)}!`,
+      avatar: first ? cleanAvatar(first.avatar, first.name ?? "hider") : null,
+    };
   }
   if (e.kind === "moved") {
     if (myTile !== null && e.tile === myTile) return null;
-    return { id: e.id, tone: "move", text: `Someone just slipped away from ${where(e.tile)}.` };
+    const name = e.detail?.name;
+    return { id: e.id, tone: "move", text: `${name ? (e.detail?.bot ? `${name} (the bot)` : name) : "Someone"} just slipped away from ${where(e.tile)}.` };
   }
   return null;
 }
@@ -88,6 +106,12 @@ export function Game({ state }: { state: GameState }) {
   const [feedOpen, setFeedOpen] = useState(false);
   const [feedSeenAt, setFeedSeenAt] = useState<string>(state.serverNow);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
+  const [confirmHide, setConfirmHide] = useState(false);
+  const [howOpen, setHowOpen] = useState(false);
+  const [editAvatar, setEditAvatar] = useState(false);
+  const [statsMin, setStatsMin] = useState(false);
+  const [marks, setMarks] = useState(true);
+  const [sound, setSound] = useState(false);
   const online = useOnline(state.me.id);
 
   const { round, entry, me } = state;
@@ -111,6 +135,60 @@ export function Game({ state }: { state: GameState }) {
   const plan = useMemo(() => makePlan(roundSeed), [roundSeed]);
   const where = useCallback((tile: number) => addressOf(plan, tileAt(plan, tile)), [plan]);
   const knownSet = useMemo(() => new Set(state.knownSearched), [state.knownSearched]);
+  // Where we are in the hunt (0 at the start, 1 at the end): drives day/night and weather.
+  const huntProgress = round && phase === "seek"
+    ? Math.min(1, Math.max(0, (now - Date.parse(round.joinEndsAt)) / (Date.parse(round.seekEndsAt) - Date.parse(round.joinEndsAt))))
+    : phase === "done" ? 1 : 0;
+  useCitySound(sound, roundSeed, huntProgress);
+
+  // Remember your view settings on this device.
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("hs-view") ?? "{}");
+      const id = setTimeout(() => {
+        if (typeof saved.statsMin === "boolean") setStatsMin(saved.statsMin);
+        if (typeof saved.marks === "boolean") setMarks(saved.marks);
+        if (typeof saved.sound === "boolean") setSound(saved.sound);
+      }, 0);
+      return () => clearTimeout(id);
+    } catch {}
+  }, []);
+  const saveView = (patch: Record<string, boolean>) => {
+    try {
+      localStorage.setItem("hs-view", JSON.stringify({ statsMin, marks, sound, ...patch }));
+    } catch {}
+  };
+
+  // Let people know when the city grows (each new hider adds spots at the edge).
+  const lastTiles = useRef<number | null>(null);
+  const tilesNow = round?.tileCount ?? 0;
+  const roundNow = round?.id ?? 0;
+  const lastRound = useRef(roundNow);
+  useEffect(() => {
+    if (lastRound.current !== roundNow) {
+      lastRound.current = roundNow;
+      lastTiles.current = tilesNow;
+      return;
+    }
+    const before = lastTiles.current;
+    lastTiles.current = tilesNow;
+    if (before === null || tilesNow <= before) return;
+    const grew = tilesNow - before;
+    const id = setTimeout(
+      () => setMessage({ text: `🏗️ The city just grew by ${grew} spots: ${grew >= 40 ? "new hiders are" : "a new hider is"} joining. Look at the edges!`, tone: "info" }),
+      0,
+    );
+    return () => clearTimeout(id);
+  }, [tilesNow, roundNow]);
+
+  // Count this visit (once per browser session).
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem("hs-visit")) return;
+      sessionStorage.setItem("hs-visit", "1");
+    } catch {}
+    recordVisit();
+  }, []);
 
   // Keep the board live: fetch fresh state every few seconds.
   useEffect(() => {
@@ -125,17 +203,18 @@ export function Game({ state }: { state: GameState }) {
     const pub = state.events
       .map((e) => {
         const n = describe(e, botName, myLastSpot, where);
-        return n ? { key: `e${e.id}`, at: e.at, text: n.text, tone: n.tone } : null;
+        return n ? ({ key: `e${e.id}`, at: e.at, text: n.text, tone: n.tone, avatar: n.avatar ?? null } as FeedItem) : null;
       })
       .filter((x): x is FeedItem => x !== null);
     const mine = state.notifications.map((n) => ({
       key: `n${n.id}`,
       at: n.at,
       text: n.tile !== null && n.kind === "trap" ? `${n.body} (near ${where(n.tile)})` : n.body,
-      tone: "mine" as const,
+      tone: n.kind === "caught" ? ("alarm" as const) : ("mine" as const),
+      avatar: n.kind === "caught" ? me.avatar : null,
     }));
     return [...pub, ...mine].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 60);
-  }, [state.events, state.notifications, botName, myLastSpot, where]);
+  }, [state.events, state.notifications, botName, myLastSpot, where, me.avatar]);
   const unread = feed.filter((f) => Date.parse(f.at) > Date.parse(feedSeenAt)).length;
 
   // New items pop up briefly under the bell (only what arrives while you're here).
@@ -185,7 +264,9 @@ export function Game({ state }: { state: GameState }) {
 
   const serverNowMs = Date.parse(state.serverNow);
   const markers: CityMarkers = useMemo(
-    () => ({
+    () => !marks
+      ? { searchedEmpty: [], searchedHit: [], caught: [], left: [], me: isHider && entry && !entry.caught ? entry.tile : null, sweeps: [], pending: pending ? busyTile : null, recent: [], locked: [] }
+      : ({
       searchedEmpty: state.mySearches.filter((s) => s.caught === 0).map((s) => s.tile),
       searchedHit: state.mySearches.filter((s) => s.caught > 0).map((s) => s.tile),
       caught: state.caughtTiles,
@@ -196,7 +277,7 @@ export function Game({ state }: { state: GameState }) {
       recent: state.recentSearches.map((r) => ({ tile: r.tile, ageMs: Math.max(0, serverNowMs - Date.parse(r.at)) })),
       locked: state.knownSearched,
     }),
-    [state.mySearches, state.caughtTiles, state.leftTiles, state.recentSearches, state.knownSearched, state.mySweeps, serverNowMs, isHider, entry, pending, busyTile],
+    [marks, state.mySearches, state.caughtTiles, state.leftTiles, state.recentSearches, state.knownSearched, state.mySweeps, serverNowMs, isHider, entry, pending, busyTile],
   );
   const cityEvents: CityEvent[] = useMemo(
     () => state.events.map((e) => ({ id: e.id, kind: e.kind, tile: e.tile, detail: e.detail, ageMs: Math.max(0, serverNowMs - Date.parse(e.at)) })),
@@ -205,7 +286,13 @@ export function Game({ state }: { state: GameState }) {
 
   function act(fn: () => Promise<ActionResult>, onOk: (data: Record<string, unknown>) => void) {
     startTransition(async () => {
-      const res = await fn();
+      // A dropped connection must never take the whole page down: say so and carry on.
+      let res: ActionResult;
+      try {
+        res = await fn();
+      } catch {
+        res = { ok: false, error: "The connection blinked. Give it another tap." };
+      }
       if (res.ok) onOk(res.data);
       else setMessage({ text: res.error, tone: "bad" });
       router.refresh();
@@ -256,6 +343,18 @@ export function Game({ state }: { state: GameState }) {
     }
   }
 
+  function popBalloon(slot: number) {
+    startTransition(async () => {
+      const res = await claimBalloon(slot).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
+      setMessage(
+        res.ok
+          ? { text: `🎈 Pop! +${res.coins} coins.${res.leftToday > 0 ? ` ${res.leftToday} more balloon${res.leftToday === 1 ? "" : "s"} today.` : " That's all for today."}`, tone: "good" }
+          : { text: res.error, tone: "info" },
+      );
+      router.refresh();
+    });
+  }
+
   function doMove(tile: number) {
     setConfirmMove(null);
     setBusyTile(tile);
@@ -289,42 +388,38 @@ export function Game({ state }: { state: GameState }) {
           onTile={onTile}
           onBillboard={setBillboard}
           onHover={setHover}
+          meAvatar={me.avatar}
+          coinBalloon={state.balloon?.slot ?? null}
+          onBalloon={popBalloon}
+          progress={huntProgress}
+          nightFirst={round.id % 2 === 1}
         />
       )}
 
       {/* Top: round clock and numbers (stacked, so big numbers fit) */}
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-3 sm:p-4">
-        <div className="glass pointer-events-auto w-44 rounded-2xl px-3.5 py-2.5 sm:w-52">
-          <div className="flex items-baseline justify-between gap-2">
-            <h1 className="truncate font-display text-sm font-extrabold sm:text-base" title={`Hide & Seek in ${plan.city.name}`}>
-              {round ? plan.city.name : "Hide & Seek"}
-            </h1>
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">
-              {phase === "join" ? "Hiding" : phase === "seek" ? "Searching" : "Over"}
-            </span>
-          </div>
-          {round && phase !== "done" && (
-            <div className="mt-0.5">
-              <div className="font-display text-3xl font-extrabold leading-none tabular-nums">{countdown}</div>
-              <div className="mt-0.5 text-[11px] text-muted">{phase === "join" ? "until hiders drop in" : "left to search"}</div>
-            </div>
-          )}
-          {round && (
-            <dl className="mt-2 space-y-1 border-t border-line pt-2 text-xs">
-              <Stat label="Still hidden" value={`${short(round.hidersRemaining)} / ${short(round.hidersTotal)}`} />
-              <Stat label="Survivor pool" value={short(round.pool)} />
-              <Stat label="City tiles" value={short(round.tileCount)} />
-              <Stat
-                label={
-                  <span className="flex items-center gap-1">
-                    <span className="size-1.5 animate-pulse rounded-full bg-me" /> Watching
-                  </span>
-                }
-                value={online === null ? "…" : short(online)}
-              />
-            </dl>
-          )}
-        </div>
+        {round ? (
+          <StatsCard
+            city={plan.city.name}
+            phase={phase}
+            countdown={countdown}
+            hidden={round.hidersRemaining}
+            hidersTotal={round.hidersTotal}
+            pool={round.pool}
+            tiles={round.tileCount}
+            online={online}
+            visits={state.site.visits}
+            players={state.site.players}
+            minimised={statsMin}
+            onToggle={() => { setStatsMin(!statsMin); saveView({ statsMin: !statsMin }); }}
+            marks={marks}
+            onMarks={() => { setMarks(!marks); saveView({ marks: !marks }); }}
+            sound={sound}
+            onSound={() => { setSound(!sound); saveView({ sound: !sound }); }}
+          />
+        ) : (
+          <span />
+        )}
         <div className="flex flex-col items-end gap-2">
           <div className="pointer-events-auto flex items-center gap-2">
             <span className="glass whitespace-nowrap rounded-full px-3 py-1.5 text-sm" title={`${me.coins} coins`}>
@@ -363,91 +458,75 @@ export function Game({ state }: { state: GameState }) {
       </div>
 
       {/* Latest notices pop up under the bell; the bell opens the full list. */}
-      <div className="pointer-events-none absolute right-3 top-[13.5rem] z-10 flex w-[min(18rem,calc(100vw-1.5rem))] flex-col items-end gap-1.5 sm:right-4 sm:top-16">
+      <div className={cn("pointer-events-none absolute right-3 z-10 flex w-[min(19rem,calc(100vw-1.5rem))] flex-col items-end gap-1.5 sm:right-4 sm:top-16", statsMin ? "top-16" : "top-[16.5rem]")}>
         {!feedOpen &&
+          !menu &&
           toasts.map((n) => (
             <button
               key={n.key}
               onClick={() => { setFeedOpen(true); setFeedSeenAt(new Date(now).toISOString()); setToasts([]); }}
-              className="glass pointer-events-auto flex items-start gap-2 rounded-xl px-3 py-2 text-left text-xs shadow-lg"
+              className="glass pointer-events-auto w-full rounded-2xl px-3 py-2 text-left shadow-lg"
             >
-              <FeedIcon tone={n.tone} />
-              <span>{n.text}</span>
+              <FeedRow item={n} now={now} compact />
             </button>
           ))}
       </div>
-      {feedOpen && (
-        <div className="glass absolute right-3 top-16 z-30 flex max-h-[min(28rem,calc(100dvh-14rem))] w-[min(20rem,calc(100vw-1.5rem))] flex-col rounded-2xl text-sm sm:right-4">
-          <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
-            <h2 className="font-semibold">Notifications</h2>
-            <button onClick={() => setFeedOpen(false)} className="rounded-full px-2 text-lg text-muted" aria-label="Close notifications">
-              ×
-            </button>
-          </div>
-          <ul className="flex-1 space-y-1 overflow-y-auto p-2">
-            {feed.length === 0 ? (
-              <li className="p-4 text-center text-muted">Nothing yet this round.</li>
-            ) : (
-              feed.map((f) => (
-                <li key={f.key} className={cn("flex gap-2 rounded-xl px-2.5 py-2", f.tone === "mine" && "bg-gold/15")}>
-                  <FeedIcon tone={f.tone} />
-                  <span className="flex-1">
-                    {f.text}
-                    <span className="block text-[11px] text-muted">{new Date(f.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
-                  </span>
-                </li>
-              ))
-            )}
-          </ul>
-        </div>
-      )}
+      {feedOpen && <NotificationsPanel feed={feed} now={now} onClose={() => setFeedOpen(false)} />}
 
       {menu && (
-        <div className="glass absolute right-3 top-16 z-30 max-h-[calc(100dvh-6rem)] w-[min(20rem,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl p-4 text-sm sm:right-4">
-          <p className="mb-3 font-semibold">Hey {me.name} 👋</p>
-          <h2 className="mb-1.5 font-semibold">How it works</h2>
-          <ul className="space-y-1.5 text-muted">
-            <li>Drag to look around, pinch or scroll to zoom, and use two fingers (or right-drag) to turn the city.</li>
-            <li>Seekers tap a spot to search it. Your first search each day is free. Every coin you spend goes into the survivor pool.</li>
-            <li>Sweeps send a drone over an area and tell you if anyone&apos;s hiding there. They get pricier the more people use them, and hiders find out they were swept.</li>
-            <li>Hiders can move as much as they like: {state.prices.moveFee} coins a move, one move a minute, never back to an old spot. Everyone sees when someone moves. And stepping onto a spot that&apos;s already been searched gets you caught.</li>
-            <li>You only see the most recent searches; older ones fade from the map. So look carefully before you move.</li>
-            <li>{botName} (our bot) hides every round, and runs when it&apos;s swept. Find it for 200 coins.</li>
-            <li>See a billboard? Tap it to put your brand on it.</li>
+        <Menu
+          me={me}
+          city={plan.city.name}
+          hasResults={Boolean(state.results)}
+          onClose={() => setMenu(false)}
+          onHowItWorks={() => { setMenu(false); setHowOpen(true); }}
+          onEditAvatar={() => { setMenu(false); setEditAvatar(true); }}
+          onResults={() => { setMenu(false); if (state.results) setShowResults(state.results.roundId); }}
+          onChangePin={() => router.push("/welcome")}
+          onSignOut={() => { setMenu(false); setConfirmSignOut(true); }}
+        />
+      )}
+      {howOpen && <HowItWorks onClose={() => setHowOpen(false)} />}
+      {editAvatar && (
+        <AvatarEditor
+          initial={me.avatar}
+          onClose={() => setEditAvatar(false)}
+          onSaved={() => { setEditAvatar(false); setMessage({ text: "Looking good! Your new look is saved.", tone: "good" }); router.refresh(); }}
+        />
+      )}
+      {confirmHide && round && (
+        <Sheet onClose={() => setConfirmHide(false)}>
+          <h2 className="font-display text-xl font-bold">Hide this round?</h2>
+          <div className="mt-3 rounded-2xl bg-panel-2 p-4 text-center">
+            <p className="text-sm text-muted">You&apos;re putting down</p>
+            <p className="font-display text-4xl font-extrabold">{short(state.prices.stake)} coins</p>
+            <p className="text-xs text-muted">You have {short(me.coins)}. After this: {short(Math.max(0, me.coins - state.prices.stake))}.</p>
+          </div>
+          <ul className="mt-3 space-y-1.5 text-sm text-ink/80">
+            <li>✅ Stay hidden till the end: you get your {short(state.prices.stake)} back plus a share of the survivor pool (it&apos;s {short(round.pool)} right now and grows during the hunt).</li>
+            <li>❌ Get caught: the seeker who finds you keeps most of your stake.</li>
+            <li>🚶 Moving costs {short(state.prices.moveFee)} coins each time.</li>
           </ul>
-          <h3 className="mb-1 mt-3 font-semibold">On the map</h3>
-          <ul className="space-y-1 text-muted">
-            <Key className="bg-[#5c7cfa]">You searched it: nobody there</Key>
-            <Key className="bg-hit">Someone was caught here</Key>
-            <Key className="bg-[#ff922b]">Searched recently</Key>
-            <Key className="border-2 border-white bg-[#fff3bf]">Being searched right now</Key>
-            <Key className="border-2 border-gold bg-transparent">Someone just left this spot</Key>
-            <Key className="bg-me">You, if you&apos;re hiding</Key>
-          </ul>
-          <h3 className="mb-1 mt-3 font-semibold">Around the city</h3>
-          <p className="text-muted">
-            Every round is a new city, named after a real place, with its own street names. Big landmarks: {CITY_ASSETS.big.join(" · ")}.
-          </p>
-          <p className="mt-1 text-muted">{CITY_ASSETS.tiles.join(" · ")}</p>
-          <p className="mt-1 text-muted">On the move: {CITY_ASSETS.moving.join(" · ")}</p>
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            {state.results && (
-              <button onClick={() => { setShowResults(state.results!.roundId); setMenu(false); }} className="rounded-xl bg-panel-2 px-3 py-2 font-medium">
-                Last results
-              </button>
-            )}
-            <button onClick={() => router.push("/welcome")} className="rounded-xl bg-panel-2 px-3 py-2 font-medium">
-              Change PIN
+          <div className="mt-4 flex gap-2">
+            <button onClick={() => setConfirmHide(false)} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold">
+              Not now
             </button>
-            <button onClick={() => { setMenu(false); setConfirmSignOut(true); }} className="col-span-2 rounded-xl bg-panel-2 px-3 py-2 font-medium text-muted">
-              Sign out
+            <button
+              disabled={pending}
+              onClick={() => {
+                setConfirmHide(false);
+                act(() => joinRound("hider"), () => setMessage({ text: "You're in! When the clock hits zero, we'll drop you somewhere in the city.", tone: "info" }));
+              }}
+              className="flex-1 rounded-xl bg-ink py-2.5 font-semibold text-white disabled:opacity-50"
+            >
+              Stake {short(state.prices.stake)} & hide
             </button>
           </div>
-        </div>
+        </Sheet>
       )}
 
       {showResults && state.results?.roundId === showResults && (
-        <Results results={state.results} onClose={() => setShowResults(null)} />
+        <Results results={state.results} onClose={() => setShowResults(null)} me={me.name ?? "Me"} city={plan.city.name} />
       )}
 
       {confirmMove !== null && entry && (
@@ -517,7 +596,16 @@ export function Game({ state }: { state: GameState }) {
         )}
 
         <div className="flex w-full max-w-xl justify-end">
-          {round && <Chat meId={me.id} roundId={round.id} open={chatOpen} onOpenChange={setChatOpen} />}
+          {round && (
+            <Chat
+              meId={me.id}
+              meRole={entry?.role ?? null}
+              roundId={round.id}
+              players={state.players}
+              open={chatOpen}
+              onOpenChange={setChatOpen}
+            />
+          )}
         </div>
 
         <div className="glass pointer-events-auto w-full max-w-xl rounded-2xl p-3">
@@ -541,9 +629,7 @@ export function Game({ state }: { state: GameState }) {
                 {phase === "join" && (
                   <button
                     disabled={pending || !me.canHide}
-                    onClick={() =>
-                      act(() => joinRound("hider"), () => setMessage({ text: "You're in! When the clock hits zero, we'll drop you somewhere in the city.", tone: "info" }))
-                    }
+                    onClick={() => setConfirmHide(true)}
                     className="flex-1 rounded-xl bg-ink px-4 py-2.5 font-semibold text-white disabled:opacity-40 sm:flex-none"
                   >
                     Hide · {state.prices.stake}
@@ -618,47 +704,12 @@ export function Game({ state }: { state: GameState }) {
                   </span>
                 </p>
               )}
-              <p className="text-xs text-muted">You&apos;re under the green light. Tap another spot if you want to move.</p>
+              <p className="text-xs text-muted">That&apos;s you under the green light. Tap another spot if you want to move.</p>
             </div>
           )}
         </div>
       </div>
     </main>
-  );
-}
-
-function FeedIcon({ tone }: { tone: Notice["tone"] }) {
-  if (tone === "alarm") return <Siren />;
-  if (tone === "mine") return <span className="mt-0.5 shrink-0 text-sm leading-none">📡</span>;
-  return <span className="mt-1 size-2.5 shrink-0 rounded-full bg-gold" />;
-}
-
-function Siren() {
-  return (
-    <span className="relative mt-0.5 grid size-4 shrink-0 place-items-center" aria-hidden>
-      <span className="absolute inset-0 animate-ping rounded-full bg-hit/60" />
-      <span className="relative size-3 rounded-full bg-hit [animation:siren_0.5s_steps(1)_infinite]" />
-    </span>
-  );
-}
-
-function Sheet({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
-  // The sheet opens as a finger lifts off the city; the browser then sends a "click" to
-  // whatever is now under it (this backdrop). Only close for taps that START on the backdrop.
-  const downOnBackdrop = useRef(false);
-  return (
-    <div
-      className="fixed inset-0 z-40 grid place-items-end bg-ink/25 p-3 backdrop-blur-[2px] sm:place-items-center"
-      onPointerDown={(e) => (downOnBackdrop.current = e.target === e.currentTarget)}
-      onClick={(e) => {
-        if (downOnBackdrop.current && e.target === e.currentTarget) onClose();
-        downOnBackdrop.current = false;
-      }}
-    >
-      <section className="w-full max-w-sm rounded-3xl bg-panel p-5 shadow-2xl">
-        {children}
-      </section>
-    </div>
   );
 }
 
@@ -716,24 +767,6 @@ function BillboardSheet({ board, address, onClose }: { board: { id: string; tile
         </form>
       )}
     </Sheet>
-  );
-}
-
-function Stat({ label, value }: { label: React.ReactNode; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <dt className="text-muted">{label}</dt>
-      <dd className="font-semibold tabular-nums">{value}</dd>
-    </div>
-  );
-}
-
-function Key({ className, children }: { className: string; children: React.ReactNode }) {
-  return (
-    <li className="flex items-center gap-2">
-      <span className={cn("inline-block size-3 shrink-0 rounded-[3px]", className)} />
-      {children}
-    </li>
   );
 }
 

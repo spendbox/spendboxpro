@@ -10,7 +10,8 @@ export async function GET(request: Request) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
   const db = createAdminClient();
-  const tick = await db.rpc("tick");
+  let tick = await db.rpc("tick_with_extras");
+  if (tick.error) tick = await db.rpc("tick");
   const upkeep = await db.rpc("daily_upkeep");
   const error = tick.error ?? upkeep.error;
   if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });

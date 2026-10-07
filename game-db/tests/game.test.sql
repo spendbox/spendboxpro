@@ -72,3 +72,18 @@ insert into chat_messages (round_id, sender_id, sender_name, sender_role, recipi
   select max(id), (select id from profiles where email_key='bo@x.com'), 'bo', 'hider', (select id from profiles where email_key='cy@x.com'), 'cy', 'psst' from rounds;
 select sender_role, recipient_name, body from chat_messages order by id;
 select value as tiles_per_hider from game_settings where key = 'tiles_per_hider';  -- 20
+-- Round 3: the bot teases in chat (time-travel the round), names on moves, badges, balloons.
+select tick() as r3;
+update rounds set join_ends_at = now() - interval '1s' where status = 'join'; select tick();
+update rounds set join_ends_at = now() - interval '50 minutes' where status = 'seek';
+select bot_tease(max(id)) as tease1, bot_tease(max(id)) as tease2, bot_tease(max(id)) as tease3 from rounds;
+select sender_name, body from chat_messages where sender_id = '00000000-0000-0000-0000-00000000b07a';
+select detail->>'name' as mover from events where kind = 'moved' order by id desc limit 2;
+select badge, detail from badges order by id;
+do $$ declare u uuid := (select id from profiles where email_key='ada@gmail.com'); begin
+  raise notice 'balloon: %', claim_balloon(u, 1);
+  begin perform claim_balloon(u, 1); raise exception 'should fail'; exception when others then raise notice 'ok same balloon: %', sqlerrm; end;
+end $$;
+select count_visit(), count_visit();
+select (select sum(created) - sum(burned) from coin_supply_daily) as created_minus_burned,
+       (select sum(coins+bonus_coins) from profiles) + (select value from game_state where key='carry') + (select coalesce(sum(pool),0) from rounds where status <> 'done') as held;

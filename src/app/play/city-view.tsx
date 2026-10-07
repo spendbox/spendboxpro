@@ -1,9 +1,13 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { addressOf, KIND_LABEL, makePlan, riverCentre, STRUCTURE_LABEL, tileAt, type CityPlan, type Tile } from "@/lib/city/layout";
+import { AvatarFace } from "@/components/avatar";
+import { cleanAvatar, type Avatar } from "@/lib/avatar";
+import { addressOf, KIND_LABEL, makePlan, riverCentre, spiralXY, STRUCTURE_LABEL, tileAt, type CityPlan, type Tile } from "@/lib/city/layout";
+import { daylight, weatherAt } from "@/lib/city/sky";
 
 // The game board, drawn as a small living 3D city with three.js.
 // Every tile is a lot: a road, a building, a park... New tiles rise out of the ground
@@ -25,7 +29,13 @@ export type CityMarkers = {
 };
 
 /** Something that just happened, for a short animation (see GameEvent). */
-export type CityEvent = { id: number; kind: string; tile: number; ageMs: number; detail?: { radius?: number } | null };
+export type CityEvent = {
+  id: number;
+  kind: string;
+  tile: number;
+  ageMs: number;
+  detail?: { radius?: number; hiders?: { name: string | null; avatar: unknown; bot: boolean }[] } | null;
+};
 
 type Props = {
   seed: number;
@@ -36,6 +46,14 @@ type Props = {
   onTile: (tile: number) => void;
   onBillboard: (info: { id: string; tile: number }) => void;
   onHover?: (info: { tile: number; label: string } | null) => void;
+  /** Your face, floating over your hiding spot. */
+  meAvatar: Avatar;
+  /** A coin balloon drifting by just for you (its slot number), or none. */
+  coinBalloon: number | null;
+  onBalloon: (slot: number) => void;
+  /** How far through the hunt we are (0..1), for day and night, and which way it runs. */
+  progress: number;
+  nightFirst: boolean;
 };
 
 type Part = { tile: number; x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number; color: number; tilt?: number };
@@ -70,7 +88,8 @@ function geometries() {
   // A quarter ring lying flat, centred on a tile corner: a bend in the road.
   const curve = new THREE.RingGeometry(0.2, 0.8, 14, 1, 0, Math.PI / 2).rotateX(-Math.PI / 2);
   const curveLine = new THREE.RingGeometry(0.485, 0.515, 14, 1, 0, Math.PI / 2).rotateX(-Math.PI / 2);
-  return { box, roof, crown, trunk, disc, bird, arch, cyl, cone, dome, curve, curveLine };
+  const lamp = new THREE.SphereGeometry(0.5, 8, 6);
+  return { box, roof, crown, trunk, disc, bird, arch, cyl, cone, dome, curve, curveLine, lamp };
 }
 
 // ---------------------------------------------------------------- what stands on a tile
@@ -157,6 +176,14 @@ function partsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "ti
     const straight = m === 5 || m === 10 || m === 1 || m === 4 || m === 2 || m === 8;
     if (straight) {
       const along = m === 10 || m === 2 || m === 8;
+      // A street light on every other stretch, alternating sides.
+      if ((x + z) % 2 === 0) {
+        const side = (x * 3 + z) % 4 < 2 ? 0.47 : -0.47;
+        const lx = along ? x : x + side;
+        const lz = along ? z + side : z;
+        add("trunk", { x: lx, y: 0.06, z: lz, sx: 0.3, sy: 0.5, sz: 0.3, ry: 0, color: 0x495057 });
+        add("lamp", { x: lx - (along ? 0 : side * 0.12), y: 0.56, z: lz - (along ? side * 0.12 : 0), sx: 0.11, sy: 0.07, sz: 0.11, ry: 0, color: 0xffffff });
+      }
       for (const o of [-0.25, 0.25]) {
         add("paint", { x: x + (along ? o : 0), y: 0.061, z: z + (along ? 0 : o), sx: along ? 0.22 : 0.04, sy: 0.005, sz: along ? 0.04 : 0.22, ry: 0, color: 0xffffff });
       }
@@ -327,6 +354,18 @@ function partsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "ti
       B(0, 0.28, 0, 0.28, 3.6, 0.28, 0xf03e3e, 0, "cone");
       for (const y of [1.0, 1.9, 2.8]) B(0, 0.28 + y, 0, 0.28 * (1 - y / 3.6) + 0.02, 0.18, 0.28 * (1 - y / 3.6) + 0.02, 0xffffff, 0, "cyl");
       break;
+    case "police": {
+      // Blue-and-white police station with a light on the roof and a patrol car outside.
+      B(-0.05, 0.08, -0.08, 0.72, 0.62, 0.55, 0xf8f9fa);
+      B(-0.05, 0.42, -0.08, 0.73, 0.1, 0.56, 0x1c3faa);
+      B(-0.05, 0.7, -0.08, 0.5, 0.04, 0.4, 0xdee2e6);
+      B(-0.05, 0.74, -0.08, 0.08, 0.08, 0.08, 0x4dabf7, 0, "lamp");
+      B(-0.05, 0.08, 0.22, 0.24, 0.24, 0.04, 0x1c3faa);
+      B(0.28, 0.08, 0.34, 0.3, 0.09, 0.15, 0xffffff);
+      B(0.28, 0.12, 0.34, 0.305, 0.03, 0.155, 0x1c3faa);
+      B(0.28, 0.17, 0.34, 0.15, 0.06, 0.13, 0x343a40);
+      break;
+    }
     case "fuel": {
       const brand = [0xe03131, 0x1971c2, 0x2f9e44, 0xf08c00][Math.floor(r[2] * 4)];
       for (const [px, pz] of [[-0.32, -0.2], [0.32, -0.2], [-0.32, 0.25], [0.32, 0.25]]) {
@@ -396,7 +435,8 @@ function structureParts(t: Tile, plan: CityPlan, B: BoxFn, tree: TreeFn) {
   const r = t.r;
   const pick = (list: number[], v: number) => list[Math.floor(v * list.length) % list.length];
   const c = 0.5; // centre offset
-  const floor = st.type === "funfair" || st.type === "solar" || st.type === "campus" ? GRASS : 0xe7e1d5;
+  const floor =
+    st.type === "funfair" || st.type === "solar" || st.type === "campus" ? GRASS : st.type === "military" ? 0xa3ad7f : st.type === "airport" ? 0xb7c4a5 : 0xe7e1d5;
   B(c, 0.02, c, 1.98, 0.07, 1.98, floor, 0, "ground");
   switch (st.type) {
     case "mall": {
@@ -491,6 +531,62 @@ function structureParts(t: Tile, plan: CityPlan, B: BoxFn, tree: TreeFn) {
       tree(c + 0.75, c + 0.75, 0.6, r[2]);
       break;
     }
+    case "airport": {
+      // Runway with markings, a terminal, a control tower, a hangar and a parked plane.
+      B(c, 0.09, c + 0.35, 1.94, 0.012, 0.5, 0x4b5563, 0, "ground");
+      for (let k = -3; k <= 3; k++) B(c + k * 0.25, 0.103, c + 0.35, 0.12, 0.004, 0.03, 0xffffff, 0, "paint");
+      B(c - 0.9, 0.103, c + 0.35, 0.04, 0.004, 0.3, 0xffffff, 0, "paint");
+      B(c + 0.9, 0.103, c + 0.35, 0.04, 0.004, 0.3, 0xffffff, 0, "paint");
+      B(c - 0.15, 0.09, c - 0.5, 1.0, 0.32, 0.42, 0xe9ecef);
+      B(c - 0.15, 0.19, c - 0.5, 1.01, 0.1, 0.43, 0x74c0fc, 0, "glass");
+      B(c + 0.7, 0.09, c - 0.55, 0.12, 1.25, 0.12, 0xdee2e6, 0, "cyl");
+      B(c + 0.7, 1.34, c - 0.55, 0.3, 0.16, 0.3, 0x4dabf7, 0, "cyl");
+      B(c + 0.7, 1.5, c - 0.55, 0.32, 0.04, 0.32, 0x495057, 0, "cyl");
+      B(c - 0.75, 0.09, c - 0.05, 0.42, 0.28, 0.3, 0xadb5bd, 0, "dome");
+      // Parked plane
+      B(c + 0.3, 0.13, c - 0.05, 0.5, 0.09, 0.09, 0xffffff);
+      B(c + 0.3, 0.15, c - 0.05, 0.13, 0.02, 0.5, 0xffffff);
+      B(c + 0.08, 0.19, c - 0.05, 0.08, 0.13, 0.02, 0xe5484d);
+      break;
+    }
+    case "port": {
+      // A harbour basin with a ship, container stacks and a big gantry crane.
+      B(c, 0.0, c + 0.45, 1.98, 0.08, 1.05, 0x5b9bd5, 0, "water");
+      B(c, 0.09, c - 0.55, 1.98, 0.04, 0.85, 0xced4da, 0, "ground");
+      const boxes = [0xe5484d, 0x228be6, 0xfab005, 0x2f9e44, 0xf76707, 0x7048e8];
+      for (let i = 0; i < 4; i++)
+        for (let j = 0; j < 2; j++)
+          for (let h = 0; h <= (i + j) % 3; h++) B(c - 0.75 + i * 0.25, 0.13 + h * 0.11, c - 0.75 + j * 0.16, 0.22, 0.1, 0.13, boxes[(i * 2 + j + h) % boxes.length]);
+      B(c + 0.45, 0.13, c - 0.3, 0.06, 1.3, 0.06, 0xe03131);
+      B(c + 0.75, 0.13, c - 0.3, 0.06, 1.3, 0.06, 0xe03131);
+      B(c + 0.6, 1.43, c + 0.05, 0.4, 0.08, 1.0, 0xe03131);
+      // The ship
+      B(c - 0.1, 0.0, c + 0.5, 1.2, 0.22, 0.36, 0x343a40);
+      B(c - 0.1, 0.22, c + 0.5, 1.15, 0.04, 0.34, 0xc92a2a);
+      B(c - 0.55, 0.26, c + 0.5, 0.22, 0.3, 0.28, 0xffffff);
+      for (let k = 0; k < 3; k++) B(c - 0.2 + k * 0.25, 0.26, c + 0.5, 0.2, 0.12, 0.26, boxes[k + 2]);
+      break;
+    }
+    case "military": {
+      // A fenced camp: barracks, tents, a watchtower, a flag, and a tank.
+      for (const [fx, fz, w, d] of [[c, c - 0.95, 1.9, 0.03], [c, c + 0.95, 1.9, 0.03], [c - 0.95, c, 0.03, 1.9], [c + 0.95, c, 0.03, 1.9]]) {
+        B(fx, 0.09, fz, w, 0.12, d, 0x868e96);
+      }
+      B(c - 0.45, 0.09, c - 0.5, 0.7, 0.3, 0.32, 0x6b7a4b);
+      B(c - 0.45, 0.39, c - 0.5, 0.72 / Math.SQRT2, 0.14, 0.34 / Math.SQRT2, 0x55603b, 0, "roof");
+      for (const [tx, tz] of [[c + 0.25, c - 0.55], [c + 0.6, c - 0.55], [c + 0.6, c - 0.15]]) {
+        B(tx, 0.09, tz, 0.3 / Math.SQRT2, 0.26, 0.3 / Math.SQRT2, 0x5c6b3a, 0, "roof");
+      }
+      for (const [lx, lz] of [[-0.08, -0.08], [0.08, -0.08], [-0.08, 0.08], [0.08, 0.08]]) B(c - 0.75 + lx, 0.09, c + 0.7 + lz, 0.025, 0.85, 0.025, 0x495057);
+      B(c - 0.75, 0.94, c + 0.7, 0.26, 0.16, 0.26, 0x6b7a4b);
+      B(c, 0.09, c + 0.1, 0.02, 1.0, 0.02, 0xdee2e6);
+      B(c + 0.13, 0.95, c + 0.1, 0.24, 0.13, 0.01, 0x2f9e44, 0, "paint");
+      // Tank
+      B(c + 0.4, 0.09, c + 0.55, 0.42, 0.12, 0.26, 0x55603b);
+      B(c + 0.4, 0.21, c + 0.55, 0.22, 0.09, 0.18, 0x6b7a4b);
+      B(c + 0.15, 0.25, c + 0.55, 0.3, 0.03, 0.03, 0x343a40);
+      break;
+    }
     case "solar": {
       for (let i = 0; i < 4; i++) {
         for (let j = 0; j < 3; j++) {
@@ -564,6 +660,27 @@ function billboardTexture(design: number) {
   return tex;
 }
 
+/** A player's face as a round sprite texture (drawn from the same SVG as the rest of the app). */
+const faceCache = new Map<string, THREE.CanvasTexture>();
+function faceTexture(avatar: Avatar, ring: string) {
+  const key = JSON.stringify(avatar) + ring;
+  const cached = faceCache.get(key);
+  if (cached) return cached;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 128;
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const svg = renderToStaticMarkup(<AvatarFace avatar={avatar} size={128} ring={ring} />);
+  const img = new Image();
+  img.onload = () => {
+    canvas.getContext("2d")!.drawImage(img, 0, 0, 128, 128);
+    tex.needsUpdate = true;
+  };
+  img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  faceCache.set(key, tex);
+  return tex;
+}
+
 function labelTexture(text: string, bg: string) {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = 128;
@@ -593,16 +710,19 @@ const easeOutBack = (t: number) => {
 };
 
 // ---------------------------------------------------------------- component
-export function CityView({ seed, tileCount, markers, events, interactive, onTile, onBillboard, onHover }: Props) {
+export function CityView({ seed, tileCount, markers, events, interactive, onTile, onBillboard, onHover, meAvatar, coinBalloon, onBalloon, progress, nightFirst }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const api = useRef<{
     build: (seed: number, count: number) => void;
     setMarkers: (m: CityMarkers) => void;
     playEvents: (e: CityEvent[]) => void;
+    setBalloon: (slot: number | null) => void;
   } | null>(null);
-  const cb = useRef({ onTile, onHover, onBillboard, interactive });
+  const cb = useRef({ onTile, onHover, onBillboard, onBalloon, interactive });
+  const atmos = useRef({ progress, nightFirst, meAvatar });
   useEffect(() => {
-    cb.current = { onTile, onHover, onBillboard, interactive };
+    cb.current = { onTile, onHover, onBillboard, onBalloon, interactive };
+    atmos.current = { progress, nightFirst, meAvatar };
   });
 
   // Set up the scene once.
@@ -633,7 +753,8 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
     controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
     controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
 
-    scene.add(new THREE.HemisphereLight(0xeef7ff, 0xc9d3c0, 1.5));
+    const hemi = new THREE.HemisphereLight(0xeef7ff, 0xc9d3c0, 1.5);
+    scene.add(hemi);
     const sun = new THREE.DirectionalLight(0xfff1dc, 2.4);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
@@ -648,6 +769,7 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
 
     const geo = geometries();
     const mat = (opts: THREE.MeshLambertMaterialParameters = {}) => new THREE.MeshLambertMaterial({ color: 0xffffff, ...opts });
+    const lampMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const meshDefs: Record<string, { geometry: THREE.BufferGeometry; material: THREE.Material; shadow: boolean }> = {
       ground: { geometry: geo.box, material: mat(), shadow: false },
       paint: { geometry: geo.box, material: mat(), shadow: false },
@@ -663,6 +785,8 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       dome: { geometry: geo.dome, material: mat(), shadow: true },
       curve: { geometry: geo.curve, material: mat(), shadow: false },
       curveLine: { geometry: geo.curveLine, material: mat(), shadow: false },
+      // Street-lamp heads: plain colour that we brighten as night falls.
+      lamp: { geometry: geo.lamp, material: lampMat, shadow: false },
       water: { geometry: geo.box, material: new THREE.MeshPhongMaterial({ color: 0xffffff, shininess: 90, specular: 0xffffff }), shadow: false },
     };
 
@@ -1202,6 +1326,7 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       buildCars(plan);
       buildLandmarks();
       buildBoats(plan);
+      buildGhosts(count);
       setMarkers(lastMarkers);
     }
 
@@ -1343,10 +1468,15 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
         );
         beam.scale.set(1.6, topOf(m.me) + 6, 1.6);
         beam.renderOrder = 3;
-        const gem = new THREE.Mesh(markerGeo.gem, new THREE.MeshLambertMaterial({ color: 0x12b886, emissive: 0x12b886, emissiveIntensity: 0.4 }));
-        gem.scale.setScalar(1.6);
-        gem.position.y = topOf(m.me) + 1.2;
-        g.add(beam, gem);
+        // Your own face floats above your hiding spot.
+        const gem = new THREE.Sprite(new THREE.SpriteMaterial({ map: faceTexture(atmos.current.meAvatar, "#12b886"), depthTest: false }));
+        gem.renderOrder = 7;
+        gem.scale.setScalar(1.1);
+        gem.position.y = topOf(m.me) + 1.3;
+        const pinTip = new THREE.Mesh(markerGeo.pinStick, new THREE.MeshBasicMaterial({ color: 0x12b886 }));
+        pinTip.scale.set(1.4, 1.4, 1.4);
+        pinTip.position.y = topOf(m.me) + 0.55;
+        g.add(beam, gem, pinTip);
         g.position.set(posOf(m.me).x, 0, posOf(m.me).z);
         markerGroup.add(g);
         pulsers.push({ obj: gem, kind: "bob", base: gem.position.y });
@@ -1368,7 +1498,6 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
         if (p.kind === "pulse") p.obj.scale.setScalar(1 + Math.sin(time * 4) * 0.12);
         if (p.kind === "bob") {
           p.obj.position.y = p.base + Math.sin(time * 2.5) * 0.15;
-          p.obj.rotation.y = time * 1.5;
         }
         if (p.kind === "spin") ((p.obj as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = 0.2 + Math.abs(Math.sin(time * 5)) * 0.3;
         if (p.kind === "flash") {
@@ -1533,7 +1662,19 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       });
     }
 
-    function arrestScene(tile: Tile) {
+    function arrestScene(tile: Tile, hiders: { name: string | null; avatar: unknown; bot: boolean }[] = []) {
+      // The faces of whoever got caught pop up over the spot.
+      hiders.slice(0, 3).forEach((h, k) => {
+        const tex = h.bot ? labelTexture("🤖", "#7048e8") : faceTexture(cleanAvatar(h.avatar, h.name ?? "hider"), "#e5484d");
+        const face = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+        face.renderOrder = 8;
+        addFx(face, 6000, (t) => {
+          const pop = Math.min(1, t * 6);
+          face.scale.setScalar(0.9 * pop);
+          face.position.set(tile.x + (k - (Math.min(hiders.length, 3) - 1) / 2) * 0.95, tile.top + 1.5 + Math.sin(t * 10) * 0.05, tile.z);
+          face.material.opacity = t > 0.85 ? (1 - t) / 0.15 : 1;
+        });
+      });
       const g = new THREE.Group();
       const red = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff2d2d }));
       const blue = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), new THREE.MeshBasicMaterial({ color: 0x2d6bff }));
@@ -1579,7 +1720,7 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
           const found = list.some((x) => x.kind === "caught" && x.tile === e.tile && Math.abs(x.id - e.id) <= 2);
           searchScene(tile, found);
         } else if (e.kind === "sweep") sweepScene(tile, e.detail?.radius ?? 1);
-        else if (e.kind === "caught") arrestScene(tile);
+        else if (e.kind === "caught") arrestScene(tile, e.detail?.hiders ?? []);
         else if (e.kind === "moved") puff(tile, 0xffb400);
       }
     }
@@ -1600,6 +1741,171 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
         f.step(t);
         return true;
       });
+    }
+
+    // ---- sky: day and night, weather, stars and rain
+    const glassMat = meshDefs.glass.material as THREE.MeshLambertMaterial;
+    const C = {
+      day: new THREE.Color(SKY),
+      dusk: new THREE.Color(0xf2b48a),
+      night: new THREE.Color(0x0d1630),
+      grey: new THREE.Color(0x9aa5b1),
+      fog: new THREE.Color(0xcfd6dc),
+      lampOff: new THREE.Color(0x868e96),
+      lampOn: new THREE.Color(0xfff1b8),
+      windowDay: new THREE.Color(0x0b1a2a),
+      windowNight: new THREE.Color(0xffc970),
+    };
+    const skyCol = new THREE.Color();
+    let fogFactor = 0;
+    let atmosT = 1;
+
+    const starGeo = new THREE.BufferGeometry();
+    const starPos = new Float32Array(700 * 3);
+    for (let k = 0; k < 700; k++) {
+      const a = Math.random() * Math.PI * 2;
+      const e = Math.random() * 0.45 + 0.08;
+      starPos.set([Math.cos(a) * Math.cos(e) * 160, Math.sin(e) * 160, Math.sin(a) * Math.cos(e) * 160], k * 3);
+    }
+    starGeo.setAttribute("position", new THREE.BufferAttribute(starPos, 3));
+    const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.6, sizeAttenuation: false, transparent: true, opacity: 0, fog: false, depthWrite: false });
+    const stars = new THREE.Points(starGeo, starMat);
+    scene.add(stars);
+
+    const RAIN = 900;
+    const rainPos = new Float32Array(RAIN * 6);
+    const rainGeo = new THREE.BufferGeometry();
+    rainGeo.setAttribute("position", new THREE.BufferAttribute(rainPos, 3));
+    const rainMat = new THREE.LineBasicMaterial({ color: 0xb8cce6, transparent: true, opacity: 0, depthWrite: false });
+    const rain = new THREE.LineSegments(rainGeo, rainMat);
+    rain.frustumCulled = false;
+    rain.visible = false;
+    scene.add(rain);
+    const rainSpan = () => radius * 1.4 + 8;
+    for (let k = 0; k < RAIN; k++) {
+      const x = (Math.random() - 0.5) * 2;
+      const y = Math.random() * 14;
+      const z = (Math.random() - 0.5) * 2;
+      rainPos.set([x, y, z, x, y - 0.35, z], k * 6);
+    }
+
+    function updateAtmosphere(dt: number) {
+      atmosT += dt;
+      if (atmosT < 0.25) return;
+      atmosT = 0;
+      const { progress, nightFirst } = atmos.current;
+      const dl = daylight(progress, nightFirst);
+      const w = weatherAt(currentSeed, progress);
+      const cloud = w.kind === "clear" ? 0 : w.kind === "cloudy" ? 0.45 * w.strength : w.kind === "rain" ? 0.75 * w.strength : 0.5 * w.strength;
+      if (dl > 0.5) skyCol.copy(C.dusk).lerp(C.day, (dl - 0.5) / 0.5);
+      else skyCol.copy(C.night).lerp(C.dusk, dl / 0.5);
+      skyCol.lerp(dl > 0.3 ? C.grey : C.night, cloud * 0.6);
+      if (w.kind === "fog") skyCol.lerp(C.fog, 0.35 * w.strength * Math.max(dl, 0.25));
+      (scene.background as THREE.Color).copy(skyCol);
+      (scene.fog as THREE.Fog).color.copy(skyCol);
+      hemi.intensity = 0.3 + 1.2 * dl * (1 - cloud * 0.35);
+      sun.intensity = Math.max(0.3, 2.4 * dl * (1 - cloud * 0.7));
+      sun.color.set(dl <= 0.12 ? 0x9fb4ff : dl < 0.75 ? 0xffb37a : 0xfff1dc);
+      glassMat.emissive.copy(C.windowDay).lerp(C.windowNight, 1 - dl);
+      glassMat.emissiveIntensity = 0.2 + (1 - dl) * 0.8;
+      lampMat.color.copy(C.lampOff).lerp(C.lampOn, Math.min(1, (1 - dl) * 1.6));
+      starMat.opacity = Math.max(0, (0.35 - dl) / 0.35) * (1 - cloud);
+      cloudMat.color.setRGB(1 - cloud * 0.4, 1 - cloud * 0.38, 1 - cloud * 0.33);
+      rain.visible = w.kind === "rain";
+      rainMat.opacity = 0.45 * w.strength;
+      fogFactor = w.kind === "fog" ? 0.6 * w.strength : w.kind === "rain" ? 0.25 * w.strength : 0;
+    }
+
+    function updateRain(dt: number) {
+      if (!rain.visible) return;
+      const span = rainSpan();
+      rain.position.set(controls.target.x, 0, controls.target.z);
+      rain.scale.set(span, 1, span);
+      for (let k = 0; k < RAIN; k++) {
+        const i = k * 6;
+        let y = rainPos[i + 1] - dt * 13;
+        if (y < 0) y += 14;
+        rainPos[i + 1] = y;
+        rainPos[i + 4] = y - 0.35;
+      }
+      rainGeo.attributes.position.needsUpdate = true;
+    }
+
+    // ---- the edge of the city: see-through outlines of what's about to be built
+    let ghosts: THREE.Object3D[] = [];
+    const ghostMat = new THREE.MeshBasicMaterial({ color: 0x7c8da3, wireframe: true, transparent: true, opacity: 0.35 });
+    const plotMat = new THREE.MeshBasicMaterial({ color: 0xdfe5ec, transparent: true, opacity: 0.45, depthWrite: false });
+    const craneMat = new THREE.MeshBasicMaterial({ color: 0xfab005, transparent: true, opacity: 0.5 });
+    function buildGhosts(count: number) {
+      for (const g of ghosts) scene.remove(g);
+      ghosts = [];
+      const n = Math.min(200, Math.round(8 * Math.sqrt(count) + 8));
+      const frame = new THREE.InstancedMesh(geo.box, ghostMat, n);
+      const plot = new THREE.InstancedMesh(geo.box, plotMat, n);
+      for (let k = 0; k < n; k++) {
+        const [gx, gz] = spiralXY(count + k);
+        const h = 0.3 + hashish(gx * 0.13, gz) * 1.2;
+        m4.compose(v.set(gx, 0.02, gz), q.identity(), s.set(0.7, h, 0.7));
+        frame.setMatrixAt(k, m4);
+        m4.compose(v.set(gx, 0, gz), q.identity(), s.set(0.94, 0.02, 0.94));
+        plot.setMatrixAt(k, m4);
+        if (k % 23 === 7) {
+          const crane = new THREE.Group();
+          const mast = new THREE.Mesh(geo.box, craneMat);
+          mast.scale.set(0.07, 2.4, 0.07);
+          const jib = new THREE.Mesh(geo.box, craneMat);
+          jib.scale.set(1.3, 0.05, 0.05);
+          jib.position.set(0.4, 2.4, 0);
+          crane.add(mast, jib);
+          crane.position.set(gx, 0, gz);
+          crane.rotation.y = hashish(gx, gz) * 6;
+          ghosts.push(crane);
+          scene.add(crane);
+        }
+      }
+      ghosts.push(frame, plot);
+      scene.add(frame, plot);
+    }
+
+    // ---- a coin balloon, just for you: tap it to pop it
+    let coin: { slot: number; obj: THREE.Group; hits: THREE.Object3D[]; born: number } | null = null;
+    const coinTex = labelTexture("+", "#f5a524");
+    function setBalloon(slot: number | null) {
+      if (coin && coin.slot === slot) return;
+      if (coin) {
+        scene.remove(coin.obj);
+        coin = null;
+      }
+      if (slot === null) return;
+      const obj = new THREE.Group();
+      const gold = new THREE.MeshLambertMaterial({ color: 0xffc53d, emissive: 0xb37400, emissiveIntensity: 0.35, flatShading: true });
+      const envelope = new THREE.Mesh(new THREE.SphereGeometry(0.5, 14, 10), gold);
+      envelope.scale.y = 1.15;
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(0.51, 0.45, 0.14, 14), new THREE.MeshLambertMaterial({ color: 0xffffff }));
+      band.position.y = -0.14;
+      const basket = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.14, 0.16), new THREE.MeshLambertMaterial({ color: 0x8a6a4f }));
+      basket.position.y = -0.8;
+      const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: coinTex, depthTest: false }));
+      tag.renderOrder = 9;
+      tag.scale.setScalar(0.45);
+      tag.position.y = 0.95;
+      obj.add(envelope, band, basket, tag);
+      scene.add(obj);
+      coin = { slot, obj, hits: [envelope, band, basket], born: performance.now() };
+    }
+    function updateCoin(time: number) {
+      if (!coin) return;
+      const a = time * 0.12 + coin.slot;
+      const r = Math.min(radius * 0.5, 5);
+      coin.obj.position.set(controls.target.x + Math.cos(a) * r, 3.2 + Math.sin(time * 1.3) * 0.25, controls.target.z + Math.sin(a) * r);
+      coin.obj.scale.setScalar(Math.min(1, (performance.now() - coin.born) / 800));
+    }
+    function coinUnder(clientX: number, clientY: number) {
+      if (!coin) return false;
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+      ray.setFromCamera(pointer, camera);
+      return ray.intersectObjects(coin.hits, false).length > 0;
     }
 
     // ---- hover highlight and taps
@@ -1664,6 +1970,22 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       const quick = performance.now() - down.t < 600;
       down = null;
       if (moved > 8 || !quick) return;
+      if (coin && coinUnder(e.clientX, e.clientY)) {
+        // Pop! A burst of gold where the balloon was.
+        const at = coin.obj.position.clone();
+        const burst = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0xffc53d, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+        burst.position.copy(at);
+        addFx(burst, 700, (t) => {
+          burst.scale.setScalar(0.5 + t * 3);
+          burst.lookAt(camera.position);
+          (burst.material as THREE.MeshBasicMaterial).opacity = 1 - t;
+        });
+        const slot = coin.slot;
+        scene.remove(coin.obj);
+        coin = null;
+        cb.current.onBalloon(slot);
+        return;
+      }
       const board = boardUnder(e.clientX, e.clientY);
       if (board) {
         cb.current.onBillboard(board);
@@ -1721,6 +2043,9 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       updateBoats(time, dt);
       updateAir(time, dt);
       updateFx(performance.now());
+      updateAtmosphere(dt);
+      updateRain(dt);
+      updateCoin(time);
       updateMarkers(time);
       if (focus) {
         controls.target.lerp(focus, 0.06);
@@ -1729,13 +2054,13 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       controls.update();
       const dist = camera.position.distanceTo(controls.target);
       const fog = scene.fog as THREE.Fog;
-      fog.near = dist + radius * 0.8;
-      fog.far = dist + radius * 4 + 30;
+      fog.near = (dist + radius * 0.8) * (1 - fogFactor * 0.45);
+      fog.far = (dist + radius * 4 + 30) * (1 - fogFactor * 0.3);
       renderer.render(scene, camera);
     };
     loop();
 
-    api.current = { build, setMarkers, playEvents };
+    api.current = { build, setMarkers, playEvents, setBalloon };
 
     return () => {
       cancelAnimationFrame(frame);
@@ -1769,6 +2094,10 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
   useEffect(() => {
     api.current?.playEvents(events);
   }, [events, tileCount]);
+
+  useEffect(() => {
+    api.current?.setBalloon(coinBalloon);
+  }, [coinBalloon]);
 
   return <div ref={host} className="absolute inset-0" />;
 }

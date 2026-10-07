@@ -2,11 +2,12 @@
 
 import { useRef } from "react";
 import type { RoundResults } from "@/lib/game";
+import { BadgeTile } from "@/components/badges";
 import { cn } from "@/lib/cn";
 import { short } from "@/lib/format";
 
 /** Shown when a round ends: how you did, then what happened and who won what. */
-export function Results({ results: r, onClose }: { results: RoundResults; onClose: () => void }) {
+export function Results({ results: r, onClose, me, city }: { results: RoundResults; onClose: () => void; me: string; city: string }) {
   const survived = r.hidersTotal - r.caught;
   const mine = r.mine;
   const downOnBackdrop = useRef(false);
@@ -50,6 +51,17 @@ export function Results({ results: r, onClose }: { results: RoundResults; onClos
                   : "No winnings for you this round. The next city's already going up."}
               </p>
             )}
+          </div>
+        )}
+
+        {mine && mine.badges.length > 0 && (
+          <div className="mt-3 rounded-2xl bg-gradient-to-br from-[#18202b] to-[#3b2f6b] p-3 text-white">
+            <p className="px-1 text-sm font-semibold">🏅 New badge{mine.badges.length > 1 ? "s" : ""}! Tap to share and show off.</p>
+            <div className="mt-1 grid grid-cols-3 gap-1 [&_.text-muted]:text-white/70 [&_button:hover]:bg-white/10">
+              {mine.badges.map((b) => (
+                <BadgeTile key={b.badge} badge={b.badge} player={me} city={city} detail={b.detail} />
+              ))}
+            </div>
           </div>
         )}
 
