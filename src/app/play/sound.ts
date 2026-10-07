@@ -3,20 +3,36 @@
 import { useEffect, useRef } from "react";
 import { daylight, weatherAt } from "@/lib/city/sky";
 
-// City sounds made on the fly with the Web Audio API (no audio files to download):
-// a soft traffic hum, the odd car horn, birds by day, crickets by night, and rain.
-// Very light on the device, and only runs while sound is switched on.
+// All sound here is made on the fly with the Web Audio API (no audio files to download).
+//
+// 1. City ambience (useCitySound): a soft distant traffic bed, the odd car driving past,
+//    a rare far-off horn, muffled people chatting, quiet birds by day, faint crickets by
+//    night, a distant dog now and then, a very rare cat, and rain when it rains.
+//    Everything is mixed low so it sits in the background.
+// 2. Game sound effects (playSfx): short, soft "game" sounds for searching, finding,
+//    moving, countdown ticks and so on.
+//
+// Nothing touches the browser until sound is actually used, so this is safe to import
+// anywhere (including server rendering).
 
-type Engine = {
-  ctx: AudioContext;
-  master: GainNode;
-  traffic: GainNode;
-  rain: GainNode;
-  timers: number[];
-};
+type Ctor = typeof AudioContext;
 
-function noiseBuffer(ctx: AudioContext, seconds: number, brown: boolean) {
-  const buf = ctx.createBuffer(1, ctx.sampleRate * seconds, ctx.sampleRate);
+function audioCtor(): Ctor | null {
+  if (typeof window === "undefined") return null;
+  return window.AudioContext ?? (window as unknown as { webkitAudioContext?: Ctor }).webkitAudioContext ?? null;
+}
+
+const rand = (min: number, max: number) => min + Math.random() * (max - min);
+
+// ---------------------------------------------------------------------------------------
+// Noise buffers: made once per audio context and reused by every sound.
+// ---------------------------------------------------------------------------------------
+
+type Noise = { white: AudioBuffer; brown: AudioBuffer };
+const noiseCache = new WeakMap<BaseAudioContext, Noise>();
+
+function makeNoise(ctx: BaseAudioContext, seconds: number, brown: boolean) {
+  const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * seconds), ctx.sampleRate);
   const data = buf.getChannelData(0);
   let last = 0;
   for (let i = 0; i < data.length; i++) {
@@ -29,122 +45,540 @@ function noiseBuffer(ctx: AudioContext, seconds: number, brown: boolean) {
   return buf;
 }
 
-function loop(ctx: AudioContext, buffer: AudioBuffer, to: AudioNode, filter: BiquadFilterType, freq: number) {
+function noise(ctx: BaseAudioContext): Noise {
+  let n = noiseCache.get(ctx);
+  if (!n) {
+    n = { white: makeNoise(ctx, 3, false), brown: makeNoise(ctx, 4, true) };
+    noiseCache.set(ctx, n);
+  }
+  return n;
+}
+
+// A noise player (callers start it at a random offset, so repeats never line up).
+function noiseSource(ctx: BaseAudioContext, buffer: AudioBuffer, loop = false) {
   const src = ctx.createBufferSource();
   src.buffer = buffer;
-  src.loop = true;
+  src.loop = loop;
+  return src;
+}
+
+function filter(ctx: BaseAudioContext, type: BiquadFilterType, freq: number, q = 0.7) {
   const f = ctx.createBiquadFilter();
-  f.type = filter;
+  f.type = type;
   f.frequency.value = freq;
-  src.connect(f).connect(to);
-  src.start();
+  f.Q.value = q;
+  return f;
 }
 
-function chirp(e: Engine, night: boolean) {
-  const { ctx } = e;
-  const t = ctx.currentTime;
-  const g = ctx.createGain();
-  g.gain.value = 0;
-  g.connect(e.master);
-  const o = ctx.createOscillator();
-  o.type = "sine";
-  if (night) {
-    // A cricket: quick high pulses
-    o.frequency.value = 4200 + Math.random() * 400;
-    for (let k = 0; k < 3; k++) {
-      g.gain.setValueAtTime(0.025, t + k * 0.09);
-      g.gain.setValueAtTime(0, t + k * 0.09 + 0.05);
-    }
-  } else {
-    // A little bird: a quick rising whistle
-    const base = 2200 + Math.random() * 1500;
-    o.frequency.setValueAtTime(base, t);
-    o.frequency.exponentialRampToValueAtTime(base * 1.6, t + 0.12);
-    o.frequency.exponentialRampToValueAtTime(base * 1.1, t + 0.22);
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.03, t + 0.03);
-    g.gain.linearRampToValueAtTime(0, t + 0.24);
+// A stereo panner where supported (falls back to plain pass-through).
+function panner(ctx: BaseAudioContext, pan: number): AudioNode & { pan?: AudioParam } {
+  if (typeof ctx.createStereoPanner === "function") {
+    const p = ctx.createStereoPanner();
+    p.pan.value = pan;
+    return p;
   }
-  o.connect(g);
-  o.start(t);
-  o.stop(t + 0.4);
+  return ctx.createGain();
 }
 
+// ---------------------------------------------------------------------------------------
+// City ambience
+// ---------------------------------------------------------------------------------------
+
+type Mood = { night: boolean; rain: number };
+
+type Engine = {
+  ctx: AudioContext;
+  master: GainNode; // everything goes through here (used for the fade in/out)
+  traffic: GainNode;
+  crowd: GainNode;
+  rain: GainNode;
+  events: GainNode; // one-off sounds (cars, birds, dogs...)
+  timers: Set<number>;
+  mood: { current: Mood };
+};
+
+const MASTER = 0.85;
+
+// A car driving past: rumbling noise that rises then drops in pitch (a little doppler)
+// while it travels from one side to the other.
+function carPass(e: Engine) {
+  const { ctx } = e;
+  const t = ctx.currentTime + 0.05;
+  const dur = rand(2, 4);
+  const mid = t + dur * rand(0.4, 0.6);
+  const src = noiseSource(ctx, noise(ctx).brown, true);
+  const bp = filter(ctx, "bandpass", 260, 1.2);
+  bp.frequency.setValueAtTime(rand(260, 340), t);
+  bp.frequency.linearRampToValueAtTime(rand(650, 850), mid);
+  bp.frequency.exponentialRampToValueAtTime(rand(220, 280), t + dur);
+  const g = ctx.createGain();
+  const peak = (e.mood.current.night ? 0.05 : 0.08) * rand(0.6, 1);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(peak, mid);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  const dir = Math.random() < 0.5 ? 1 : -1;
+  const p = panner(ctx, -0.85 * dir);
+  p.pan?.linearRampToValueAtTime(0.85 * dir, t + dur);
+  src.connect(bp).connect(g).connect(p).connect(e.events);
+  src.start(t, rand(0, 3));
+  src.stop(t + dur + 0.05);
+}
+
+// A short, soft, far-away horn: two slightly out-of-tune notes, heavily muffled.
 function horn(e: Engine) {
   const { ctx } = e;
-  const t = ctx.currentTime;
+  const t = ctx.currentTime + 0.05;
+  const len = rand(0.15, 0.32);
   const g = ctx.createGain();
-  g.gain.setValueAtTime(0, t);
-  g.gain.linearRampToValueAtTime(0.018, t + 0.02);
-  g.gain.setValueAtTime(0.018, t + 0.18);
-  g.gain.linearRampToValueAtTime(0, t + 0.22);
-  const f = ctx.createBiquadFilter();
-  f.type = "lowpass";
-  f.frequency.value = 1400;
-  g.connect(f).connect(e.master);
-  for (const hz of [392, 494]) {
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.012, t + 0.04);
+  g.gain.setValueAtTime(0.012, t + len);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + len + 0.12);
+  const lp = filter(ctx, "lowpass", 650);
+  const p = panner(ctx, rand(-0.8, 0.8));
+  g.connect(lp).connect(p).connect(e.events);
+  const base = rand(300, 380);
+  for (const ratio of [1, 1.26]) {
     const o = ctx.createOscillator();
     o.type = "sawtooth";
-    o.frequency.value = hz * (0.9 + Math.random() * 0.2);
+    o.frequency.value = base * ratio;
+    o.detune.value = rand(-15, 15);
     o.connect(g);
     o.start(t);
-    o.stop(t + 0.25);
+    o.stop(t + len + 0.15);
   }
+}
+
+// A little bird: a few quick warbling notes (a whistle wobbled very fast), kept quiet.
+function bird(e: Engine) {
+  const { ctx } = e;
+  let t = ctx.currentTime + 0.05;
+  const notes = Math.floor(rand(2, 5));
+  const p = panner(ctx, rand(-0.9, 0.9));
+  const out = ctx.createGain();
+  out.gain.value = rand(0.004, 0.007);
+  out.connect(p).connect(e.events);
+  const base = rand(2400, 3600);
+  for (let k = 0; k < notes; k++) {
+    const len = rand(0.06, 0.14);
+    const o = ctx.createOscillator();
+    o.type = "sine";
+    const f0 = base * rand(0.85, 1.2);
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.linearRampToValueAtTime(f0 * rand(0.8, 1.3), t + len);
+    // The warble: a fast wobble on the pitch
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = rand(18, 40);
+    const depth = ctx.createGain();
+    depth.gain.value = rand(150, 450);
+    lfo.connect(depth).connect(o.frequency);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(1, t + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    o.connect(g).connect(out);
+    o.start(t);
+    lfo.start(t);
+    o.stop(t + len + 0.02);
+    lfo.stop(t + len + 0.02);
+    t += len + rand(0.03, 0.12);
+  }
+}
+
+// Crickets: a faint, fast trill of filtered noise (not a tone, so it never "beeps").
+function crickets(e: Engine) {
+  const { ctx } = e;
+  const t = ctx.currentTime + 0.05;
+  const src = noiseSource(ctx, noise(ctx).white, true);
+  const bp = filter(ctx, "bandpass", rand(4300, 5200), 18);
+  const g = ctx.createGain();
+  g.gain.value = 0;
+  const pulses = Math.floor(rand(8, 16));
+  const level = rand(0.02, 0.035);
+  for (let k = 0; k < pulses; k++) {
+    const s = t + k * 0.035;
+    g.gain.setValueAtTime(level, s);
+    g.gain.setValueAtTime(0, s + 0.018);
+  }
+  const p = panner(ctx, rand(-0.9, 0.9));
+  src.connect(bp).connect(g).connect(p).connect(e.events);
+  src.start(t, rand(0, 2));
+  src.stop(t + pulses * 0.035 + 0.05);
+}
+
+// A distant dog: one to three short, rough "woof"s, muffled by distance.
+function dog(e: Engine) {
+  const { ctx } = e;
+  const t0 = ctx.currentTime + 0.05;
+  const barks = Math.floor(rand(1, 4));
+  const p = panner(ctx, rand(-0.9, 0.9));
+  const lp = filter(ctx, "lowpass", 1300);
+  const formant = filter(ctx, "bandpass", rand(550, 800), 2.5);
+  const out = ctx.createGain();
+  out.gain.value = rand(0.025, 0.04);
+  formant.connect(lp).connect(out).connect(p).connect(e.events);
+  const pitch = rand(220, 340);
+  for (let k = 0; k < barks; k++) {
+    const t = t0 + k * rand(0.28, 0.42);
+    const len = rand(0.1, 0.16);
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.exponentialRampToValueAtTime(1, t + 0.012);
+    env.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    env.connect(formant);
+    // The voice: a buzzy note that drops in pitch, plus a puff of breath
+    const o = ctx.createOscillator();
+    o.type = "sawtooth";
+    o.frequency.setValueAtTime(pitch * 1.3, t);
+    o.frequency.exponentialRampToValueAtTime(pitch * 0.8, t + len);
+    o.connect(env);
+    o.start(t);
+    o.stop(t + len + 0.02);
+    const breath = noiseSource(ctx, noise(ctx).white);
+    const bg = ctx.createGain();
+    bg.gain.value = 0.6;
+    breath.connect(bg).connect(env);
+    breath.start(t, rand(0, 2));
+    breath.stop(t + len + 0.02);
+  }
+}
+
+// A cat, very rarely: a gliding "mee-ow" (the mouth shape moves from "ee" to "ow").
+function cat(e: Engine) {
+  const { ctx } = e;
+  const t = ctx.currentTime + 0.05;
+  const len = rand(0.55, 0.85);
+  const o = ctx.createOscillator();
+  o.type = "sawtooth";
+  const f = rand(480, 620);
+  o.frequency.setValueAtTime(f * 0.9, t);
+  o.frequency.linearRampToValueAtTime(f * 1.35, t + len * 0.35);
+  o.frequency.linearRampToValueAtTime(f * 0.8, t + len);
+  const vib = ctx.createOscillator();
+  vib.frequency.value = 6;
+  const vd = ctx.createGain();
+  vd.gain.value = 8;
+  vib.connect(vd).connect(o.frequency);
+  const formant = filter(ctx, "bandpass", 2200, 4);
+  formant.frequency.setValueAtTime(2300, t);
+  formant.frequency.exponentialRampToValueAtTime(850, t + len);
+  const lp = filter(ctx, "lowpass", 2400);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.03, t + 0.08);
+  g.gain.setValueAtTime(0.03, t + len * 0.6);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+  const p = panner(ctx, rand(-0.8, 0.8));
+  o.connect(formant).connect(lp).connect(g).connect(p).connect(e.events);
+  o.start(t);
+  vib.start(t);
+  o.stop(t + len + 0.05);
+  vib.stop(t + len + 0.05);
+}
+
+// Muffled chatter: a few "voices" of filtered noise whose loudness and pitch wander
+// like syllables, so it reads as people talking a way off rather than static.
+function startCrowd(e: Engine, voices: number) {
+  const { ctx } = e;
+  const buf = noise(ctx).white;
+  for (let v = 0; v < voices; v++) {
+    const src = noiseSource(ctx, buf, true);
+    const centre = rand(350, 1000);
+    const bp = filter(ctx, "bandpass", centre, 5);
+    const lp = filter(ctx, "lowpass", 1400);
+    const g = ctx.createGain();
+    g.gain.value = 0;
+    const p = panner(ctx, rand(-0.7, 0.7));
+    src.connect(bp).connect(lp).connect(g).connect(p).connect(e.crowd);
+    src.start(ctx.currentTime, rand(0, 3));
+    let talking = Math.random() < 0.5;
+    let left = Math.floor(rand(4, 14));
+    const step = () => {
+      const t = ctx.currentTime;
+      // Each voice talks in bursts of syllables, then pauses.
+      if (--left <= 0) {
+        talking = !talking;
+        left = Math.floor(talking ? rand(5, 18) : rand(3, 12));
+      }
+      const level = talking ? rand(0.2, 1) : 0;
+      g.gain.setTargetAtTime(level, t, 0.05);
+      bp.frequency.setTargetAtTime(Math.min(1200, Math.max(300, centre * rand(0.8, 1.25))), t, 0.08);
+      later(e, step, rand(140, 320));
+    };
+    later(e, step, rand(0, 400));
+  }
+}
+
+function later(e: Engine, fn: () => void, ms: number) {
+  const id = window.setTimeout(() => {
+    e.timers.delete(id);
+    fn();
+  }, ms);
+  e.timers.add(id);
+}
+
+// Run fn again and again at random gaps between min and max milliseconds.
+function every(e: Engine, fn: () => void, min: number, max: number) {
+  const tick = () => {
+    fn();
+    later(e, tick, rand(min, max));
+  };
+  later(e, tick, rand(min, max));
+}
+
+function setMix(e: Engine, mood: Mood, smooth: number) {
+  const t = e.ctx.currentTime;
+  e.traffic.gain.setTargetAtTime(mood.night ? 0.045 : 0.09, t, smooth);
+  e.crowd.gain.setTargetAtTime((mood.night ? 0.012 : 0.03) * (1 - mood.rain * 0.6), t, smooth);
+  e.rain.gain.setTargetAtTime(mood.rain * 0.2, t, smooth);
 }
 
 export function useCitySound(on: boolean, roundId: number, progress: number) {
   const engine = useRef<Engine | null>(null);
-  const mood = useRef({ night: false, rain: 0 });
+  const mood = useRef<Mood>({ night: false, rain: 0 });
 
-  // Day/night and rain set the mix.
+  // Day/night and rain set the mix (odd rounds start at night, like the game does).
   const night = daylight(progress, roundId % 2 === 1) < 0.35;
   const w = weatherAt(roundId, progress);
   const rain = w.kind === "rain" ? w.strength : 0;
   useEffect(() => {
     mood.current = { night, rain };
-    const e = engine.current;
-    if (!e) return;
-    const t = e.ctx.currentTime;
-    e.rain.gain.setTargetAtTime(rain * 0.22, t, 1.5);
-    e.traffic.gain.setTargetAtTime(night ? 0.05 : 0.11, t, 2);
+    if (engine.current) setMix(engine.current, mood.current, 1.5);
   }, [night, rain]);
 
   useEffect(() => {
     if (!on) return;
-    const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const Ctx = audioCtor();
     if (!Ctx) return;
     const ctx = new Ctx();
     const master = ctx.createGain();
-    master.gain.value = 0.9;
+    master.gain.value = 0;
     master.connect(ctx.destination);
-    const traffic = ctx.createGain();
-    traffic.gain.value = 0.1;
-    traffic.connect(master);
-    const rainGain = ctx.createGain();
-    rainGain.gain.value = mood.current.rain * 0.22;
-    rainGain.connect(master);
-    loop(ctx, noiseBuffer(ctx, 4, true), traffic, "lowpass", 380);
-    loop(ctx, noiseBuffer(ctx, 3, false), rainGain, "highpass", 1600);
-    const e: Engine = { ctx, master, traffic, rain: rainGain, timers: [] };
-    engine.current = e;
-    const schedule = (fn: () => void, min: number, max: number) => {
-      const tickOnce = () => {
-        fn();
-        e.timers.push(window.setTimeout(tickOnce, min + Math.random() * (max - min)));
-      };
-      e.timers.push(window.setTimeout(tickOnce, min + Math.random() * (max - min)));
+    const bus = () => {
+      const g = ctx.createGain();
+      g.gain.value = 0;
+      g.connect(master);
+      return g;
     };
-    schedule(() => mood.current.rain < 0.5 && chirp(e, mood.current.night), 1500, 5000);
-    schedule(() => horn(e), 9000, 26000);
+    const events = ctx.createGain();
+    events.gain.value = 1;
+    events.connect(master);
+    const e: Engine = { ctx, master, traffic: bus(), crowd: bus(), rain: bus(), events, timers: new Set(), mood };
+    engine.current = e;
+
+    // The steady beds: distant traffic rumble and (when it rains) rain hiss.
+    const n = noise(ctx);
+    const trafficSrc = noiseSource(ctx, n.brown, true);
+    trafficSrc.connect(filter(ctx, "lowpass", 340)).connect(e.traffic);
+    trafficSrc.start();
+    const rainSrc = noiseSource(ctx, n.white, true);
+    rainSrc.connect(filter(ctx, "highpass", 1500)).connect(filter(ctx, "lowpass", 7000)).connect(e.rain);
+    rainSrc.start();
+    startCrowd(e, 3);
+    setMix(e, mood.current, 0.3);
+
+    // The occasional sounds. Busier by day, calmer at night; most animals hide in the rain.
+    const m = () => mood.current;
+    every(e, () => (!m().night || Math.random() < 0.4) && carPass(e), 4000, 11000);
+    every(e, () => Math.random() < 0.5 && horn(e), 30000, 70000);
+    every(e, () => !m().night && m().rain < 0.4 && bird(e), 6000, 15000);
+    every(e, () => m().night && m().rain < 0.4 && crickets(e), 2500, 7000);
+    every(e, () => m().rain < 0.6 && dog(e), 25000, 60000);
+    every(e, () => m().rain < 0.4 && Math.random() < 0.5 && cat(e), 60000, 140000);
+
+    // Fade in gently.
+    master.gain.setTargetAtTime(MASTER, ctx.currentTime, 0.8);
+
     // Browsers only start audio after a tap; resume on the next one if needed.
-    const resume = () => ctx.state === "suspended" && ctx.resume();
+    const resume = () => {
+      if (ctx.state === "suspended") void ctx.resume();
+    };
     window.addEventListener("pointerdown", resume);
     resume();
     return () => {
       window.removeEventListener("pointerdown", resume);
       e.timers.forEach((id) => clearTimeout(id));
-      ctx.close();
+      e.timers.clear();
       engine.current = null;
+      // Fade out, then shut the whole thing down (this frees every node at once).
+      master.gain.setTargetAtTime(0, ctx.currentTime, 0.15);
+      window.setTimeout(() => void ctx.close(), 700);
     };
   }, [on]);
+}
+
+// ---------------------------------------------------------------------------------------
+// Game sound effects
+// ---------------------------------------------------------------------------------------
+
+export type Sfx = "search" | "found" | "miss" | "move" | "sweep" | "pop" | "tick" | "start" | "shield" | "caught";
+
+let sfxOn = true;
+let sfx: { ctx: AudioContext; out: GainNode } | null = null;
+
+/** Switch game sound effects on or off (off = playSfx does nothing). */
+export function setSfxEnabled(on: boolean) {
+  sfxOn = on;
+}
+
+function sfxEngine() {
+  if (sfx) return sfx;
+  const Ctx = audioCtor();
+  if (!Ctx) return null;
+  const ctx = new Ctx();
+  // A gentle limiter so stacked sounds never get harsh.
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -14;
+  comp.ratio.value = 6;
+  const out = ctx.createGain();
+  out.gain.value = 0.3;
+  out.connect(comp).connect(ctx.destination);
+  sfx = { ctx, out };
+  return sfx;
+}
+
+type ToneOpts = {
+  at?: number; // seconds from now
+  dur: number;
+  freq: number;
+  to?: number; // glide to this pitch
+  type?: OscillatorType;
+  gain?: number;
+  attack?: number;
+  lowpass?: number;
+};
+
+function tone(ctx: AudioContext, out: AudioNode, now: number, o: ToneOpts) {
+  const t = now + (o.at ?? 0);
+  const osc = ctx.createOscillator();
+  osc.type = o.type ?? "sine";
+  osc.frequency.setValueAtTime(o.freq, t);
+  if (o.to) osc.frequency.exponentialRampToValueAtTime(o.to, t + o.dur);
+  const g = ctx.createGain();
+  const peak = o.gain ?? 0.5;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(peak, t + (o.attack ?? 0.01));
+  g.gain.exponentialRampToValueAtTime(0.0001, t + o.dur);
+  let node: AudioNode = osc;
+  if (o.lowpass) node = node.connect(filter(ctx, "lowpass", o.lowpass));
+  node.connect(g).connect(out);
+  osc.start(t);
+  osc.stop(t + o.dur + 0.02);
+  return osc;
+}
+
+type NoiseOpts = {
+  at?: number;
+  dur: number;
+  type: BiquadFilterType;
+  freq: number;
+  to?: number;
+  q?: number;
+  gain?: number;
+  attack?: number;
+  brown?: boolean;
+};
+
+function hiss(ctx: AudioContext, out: AudioNode, now: number, o: NoiseOpts) {
+  const t = now + (o.at ?? 0);
+  const n = noise(ctx);
+  const src = noiseSource(ctx, o.brown ? n.brown : n.white);
+  const f = filter(ctx, o.type, o.freq, o.q ?? 1);
+  if (o.to) f.frequency.exponentialRampToValueAtTime(o.to, t + o.dur);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(o.gain ?? 0.5, t + (o.attack ?? 0.005));
+  g.gain.exponentialRampToValueAtTime(0.0001, t + o.dur);
+  src.connect(f).connect(g).connect(out);
+  src.start(t, rand(0, 2));
+  src.stop(t + o.dur + 0.02);
+}
+
+/** Play a short game sound. Safe to call any time (does nothing on the server or when off). */
+export function playSfx(name: Sfx) {
+  if (!sfxOn) return;
+  const eng = sfxEngine();
+  if (!eng) return;
+  const { ctx, out } = eng;
+  if (ctx.state === "suspended") void ctx.resume();
+  const now = ctx.currentTime + 0.01;
+
+  switch (name) {
+    case "search":
+      // A soft whoosh, then a little tap
+      hiss(ctx, out, now, { dur: 0.28, type: "bandpass", freq: 500, to: 2800, q: 1.5, gain: 0.35, attack: 0.12 });
+      tone(ctx, out, now, { at: 0.26, dur: 0.12, freq: 900, to: 520, gain: 0.45 });
+      hiss(ctx, out, now, { at: 0.26, dur: 0.04, type: "highpass", freq: 2500, gain: 0.15 });
+      break;
+    case "found":
+      // A bright rising chime
+      [1047, 1319, 1568, 2093].forEach((f, i) =>
+        tone(ctx, out, now, { at: i * 0.07, dur: 0.35 + i * 0.05, freq: f, type: "triangle", gain: 0.4 }),
+      );
+      tone(ctx, out, now, { at: 0.28, dur: 0.5, freq: 3136, gain: 0.1 });
+      break;
+    case "miss":
+      // A soft low "boop"
+      tone(ctx, out, now, { dur: 0.25, freq: 240, to: 140, gain: 0.55, attack: 0.015 });
+      hiss(ctx, out, now, { dur: 0.1, type: "lowpass", freq: 300, gain: 0.3, brown: true });
+      break;
+    case "move":
+      // Two quick footsteps with a little swoosh
+      hiss(ctx, out, now, { dur: 0.06, type: "lowpass", freq: 600, gain: 0.5 });
+      hiss(ctx, out, now, { at: 0.13, dur: 0.06, type: "lowpass", freq: 480, gain: 0.45 });
+      hiss(ctx, out, now, { dur: 0.22, type: "bandpass", freq: 1200, to: 2400, q: 1.2, gain: 0.08, attack: 0.08 });
+      break;
+    case "sweep": {
+      // A drone whirr sweeping upward
+      const osc = tone(ctx, out, now, { dur: 0.9, freq: 110, to: 440, type: "sawtooth", gain: 0.25, attack: 0.15, lowpass: 1100 });
+      const lfo = ctx.createOscillator();
+      lfo.frequency.value = 28;
+      const d = ctx.createGain();
+      d.gain.value = 12;
+      lfo.connect(d).connect(osc.frequency);
+      lfo.start(now);
+      lfo.stop(now + 0.95);
+      hiss(ctx, out, now, { dur: 0.9, type: "bandpass", freq: 400, to: 3000, q: 2, gain: 0.12, attack: 0.3 });
+      break;
+    }
+    case "pop":
+      // Balloon pop, then a coin jingle
+      hiss(ctx, out, now, { dur: 0.07, type: "highpass", freq: 900, gain: 0.7, attack: 0.002 });
+      tone(ctx, out, now, { dur: 0.06, freq: 180, to: 60, gain: 0.4, attack: 0.002 });
+      tone(ctx, out, now, { at: 0.08, dur: 0.1, freq: 988, type: "square", gain: 0.12, lowpass: 4000 });
+      tone(ctx, out, now, { at: 0.16, dur: 0.35, freq: 1319, type: "square", gain: 0.12, lowpass: 4000 });
+      break;
+    case "tick":
+      // A very gentle countdown beep
+      tone(ctx, out, now, { dur: 0.08, freq: 880, gain: 0.12, attack: 0.008 });
+      break;
+    case "start":
+      // A little fanfare
+      [392, 523, 659].forEach((f, i) =>
+        tone(ctx, out, now, { at: i * 0.11, dur: 0.16, freq: f, type: "triangle", gain: 0.4 }),
+      );
+      tone(ctx, out, now, { at: 0.33, dur: 0.6, freq: 784, type: "triangle", gain: 0.45 });
+      tone(ctx, out, now, { at: 0.33, dur: 0.6, freq: 392, type: "square", gain: 0.06, lowpass: 1800 });
+      break;
+    case "shield":
+      // A shimmering magic sweep
+      for (let k = 0; k < 4; k++) {
+        const osc = tone(ctx, out, now, { at: k * 0.05, dur: 0.6, freq: 600 + k * 150, to: 2400 + k * 300, gain: 0.12, attack: 0.08 });
+        const lfo = ctx.createOscillator();
+        lfo.frequency.value = 9 + k * 2;
+        const d = ctx.createGain();
+        d.gain.value = 40;
+        lfo.connect(d).connect(osc.frequency);
+        lfo.start(now);
+        lfo.stop(now + 0.75);
+      }
+      hiss(ctx, out, now, { dur: 0.7, type: "highpass", freq: 5000, gain: 0.06, attack: 0.2 });
+      break;
+    case "caught":
+      // A descending "uh-oh"
+      tone(ctx, out, now, { dur: 0.2, freq: 523, to: 494, type: "square", gain: 0.18, lowpass: 1500 });
+      tone(ctx, out, now, { at: 0.22, dur: 0.22, freq: 392, to: 370, type: "square", gain: 0.18, lowpass: 1500 });
+      tone(ctx, out, now, { at: 0.46, dur: 0.45, freq: 294, to: 220, type: "square", gain: 0.16, lowpass: 1200 });
+      break;
+  }
 }

@@ -7,10 +7,17 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 P="psql $TEST_DATABASE_URL -v ON_ERROR_STOP=1 -q"
 $P -f game-db/tests/supabase-stub.sql
-$P -f game-db/001_hide_and_seek.sql
-$P -f game-db/002_email_codes_and_city.sql
-$P -f game-db/003_names_pins_chat.sql
-$P -f game-db/004_moves_sweeps_bot_ads.sql
-$P -f game-db/005_traps_freezes_notifications.sql
-$P -f game-db/006_avatars_badges_balloons.sql
+# Each part in order (a part that isn't there yet is skipped).
+for f in game-db/001_hide_and_seek.sql \
+         game-db/002_email_codes_and_city.sql \
+         game-db/003_names_pins_chat.sql \
+         game-db/004_moves_sweeps_bot_ads.sql \
+         game-db/005_traps_freezes_notifications.sql \
+         game-db/006_avatars_badges_balloons.sql \
+         game-db/007_shields_payouts_passive.sql \
+         game-db/008_badge_collection.sql; do
+  [ -f "$f" ] || continue
+  $P -f "$f"
+done
 $P -f game-db/tests/game.test.sql 2>&1 | sed 's/^psql:[^ ]* NOTICE:  //'
+$P -f game-db/tests/round4.test.sql 2>&1 | sed 's/^psql:[^ ]* NOTICE:  //'

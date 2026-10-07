@@ -42,6 +42,8 @@ export function AvatarEditor({ initial, onClose, onSaved }: { initial: Avatar; o
   const [error, setError] = useState<string | null>(null);
   const current = TABS.find((t) => t.key === tab)!;
   const options = current.colors ?? NAMES[tab] ?? [];
+  // Long lists (like outfits) get a tighter grid of small previews that scrolls on its own.
+  const dense = !current.colors && options.length > 12;
 
   function randomise() {
     const r = (n: number) => Math.floor(Math.random() * n);
@@ -93,7 +95,16 @@ export function AvatarEditor({ initial, onClose, onSaved }: { initial: Avatar; o
           </button>
         ))}
       </div>
-      <div className={cn("mt-3 grid gap-2", current.colors ? "grid-cols-8" : "grid-cols-3")}>
+      <div
+        className={cn(
+          "mt-3 grid gap-2",
+          current.colors
+            ? "grid-cols-8"
+            : dense
+              ? "-mx-1 max-h-[min(19rem,42vh)] grid-cols-4 gap-1.5 overflow-y-auto overscroll-contain px-1 py-0.5 sm:grid-cols-5"
+              : "grid-cols-3",
+        )}
+      >
         {options.map((opt, i) =>
           current.colors ? (
             <button
@@ -107,10 +118,15 @@ export function AvatarEditor({ initial, onClose, onSaved }: { initial: Avatar; o
             <button
               key={opt}
               onClick={() => setA({ ...a, [tab]: i })}
-              className={cn("flex flex-col items-center gap-1 rounded-xl border p-1.5 text-[11px]", a[tab] === i ? "border-ink bg-panel-2" : "border-line")}
+              aria-pressed={a[tab] === i}
+              className={cn(
+                "flex flex-col items-center gap-1 rounded-xl border p-1.5",
+                dense ? "text-[10px] leading-tight" : "text-[11px]",
+                a[tab] === i ? "border-ink bg-panel-2" : "border-line",
+              )}
             >
-              <AvatarFace avatar={{ ...a, [tab]: i }} size={48} />
-              {opt}
+              <AvatarFace avatar={{ ...a, [tab]: i }} size={dense ? 44 : 48} />
+              <span className="line-clamp-2 w-full text-center">{opt}</span>
             </button>
           ),
         )}

@@ -49,3 +49,11 @@ button:disabled {
     background: #2d6bff;
   }
 }
+
+/* "The hunt has started" card: pops in with a little bounce. */
+@keyframes start-pop {
+  0% { transform: scale(0.6) rotate(-4deg); opacity: 0; }
+  60% { transform: scale(1.06) rotate(1deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); }
+}
+.start-pop { animation: start-pop 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.3) both; }

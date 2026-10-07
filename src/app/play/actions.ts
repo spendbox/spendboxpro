@@ -58,3 +58,8 @@ export async function requestAd(input: { billboard: string; name: string; contac
   if (error) return { ok: false, error: "Couldn't send that. Try again." } as ActionResult;
   return { ok: true, data: {} } as ActionResult;
 }
+
+/** A hider's one-time shield: blocks one find (by teleporting them nearby), but no moving while it's up. */
+export async function buyShield() {
+  return run("buy_shield", {});
+}

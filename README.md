@@ -1,6 +1,7 @@
 # Hide & Seek
 
-One shared world, played in rounds: hiders stake coins and are dropped on a random tile
+The home page is the live city: anyone can watch a round without signing in, and sign in to
+play. One shared world, played in rounds: hiders stake coins and are dropped on a random tile
 of a hidden grid; seekers pay coins to search tiles. A seed bot hides in every round.
 The full rule book is the "Hide & Seek Grid Game: Rules Spec" doc.
 
@@ -11,23 +12,31 @@ The full rule book is the "Hide & Seek Grid Game: Rules Spec" doc.
 2. **The hunt (60 min).** Hiders are dropped on random tiles. Seekers search tiles (first
    search each day is free, then the price rises as more of the city is searched) or send a
    drone to sweep an area (yes/no only, 10-second cooldown, dearer every time anyone sweeps,
-   and the hiders inside are warned). Hiders can move any number of times: 100 coins a move,
+   and the hiders inside are warned and pinned for 1 minute). Hiders can move any number of times: 100 coins a move,
    one a minute, never back to a tile they've left; everyone sees the tile they left. Hiders
    see every searched tile and can't move onto one; seekers see the most recent 70%. A spot
-   can be searched again (it costs a search). A sweep freezes the hiders inside for 15
-   seconds, and each seeker's last 5 sweeps stay active as secret traps: a hider who moves
+   can be searched again (it costs a search). A sweep freezes the hiders inside for 1
+   minute (they see a countdown), and each seeker's last 5 sweeps stay active as secret traps: a hider who moves
    into one is detected and both sides get a notification.
-3. **Payout.** Finding a hider pays the finder 80% of the stake (20% for new hiders). Finding
-   the bot (a new name every round; it moves at most 3 times, only when a sweep catches it) pays 200. Search, sweep and move
-   fees (real coins) go into the survivor pool. Survivors get their stake back plus 60% of the
-   pool; seekers share 20% by real coins spent; 20% burns.
+3. **Shields.** A hider can buy one shield per round (100 coins). While it's up they can't
+   move; when they're found, the seeker is paid and the stake is lost, but the hider is
+   teleported to a free spot nearby and plays on.
+4. **Payout.** Finding a hider pays the finder 80% of the stake (20% for new hiders). Finding
+   the bot (a new name every round; it moves at most 3 times, only when a sweep catches it, and
+   for free) pays 200. Every pool starts at 0 (nothing carries over). Search, sweep, move and
+   shield fees (real coins) go into it. If anyone survives: survivors get their stake back plus
+   80% of the pool, seekers share 10% by real coins spent, 10% burns. If everyone is found:
+   seekers share 80%, the hiders who played share 10%, 10% burns.
+5. **Passive income.** Players under 100 coins earn coins back over time, up to 100 in 24
+   hours (replaces the old daily top-up).
 
 ## Setup
 
 1. **Database.** In Supabase → SQL Editor, run `game-db/001_hide_and_seek.sql`,
    `game-db/002_email_codes_and_city.sql`, `game-db/003_names_pins_chat.sql` and
-   `game-db/004_moves_sweeps_bot_ads.sql`, `game-db/005_traps_freezes_notifications.sql` and
-   `game-db/006_avatars_badges_balloons.sql`,
+   `game-db/004_moves_sweeps_bot_ads.sql`, `game-db/005_traps_freezes_notifications.sql`,
+   `game-db/006_avatars_badges_balloons.sql`, `game-db/007_shields_payouts_passive.sql` and
+   `game-db/008_badge_collection.sql`,
    in order, once each, on an empty database. In Supabase → Database → Extensions, switch on **pg_cron** first if you
    can: the file then schedules the round clock to run every minute. (Without it, the clock
    still moves whenever someone has the game open.)
@@ -36,7 +45,7 @@ The full rule book is the "Hide & Seek Grid Game: Rules Spec" doc.
    your Resend-verified domain) are set in Vercel.
 3. **Vercel environment variables** (see `.env.example`): `NEXT_PUBLIC_SUPABASE_URL`,
    `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `NEXT_PUBLIC_SITE_URL`,
-   `CRON_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`. The daily job (`vercel.json`) tops broke players up to 100 coins.
+   `CRON_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`. The daily job (`vercel.json`) pays passive income to players who haven't been online.
 
 ## The city
 
@@ -71,7 +80,8 @@ mark the next spots the city will grow into.
 
 Every player has a face they can edit from the menu (`src/lib/avatar.ts`); it marks them on
 the map and shows up when they're caught. Badges (Survivor, Ghost, Hat-trick, Bot Hunter…)
-are awarded when a round ends and can be shared as a picture. During the hunt, a hot-air
+(50 of them, from Survivor and Hat-trick to Week Warrior and Night Owl; rules in
+`game-db/008_badge_collection.sql`) are awarded when a round ends and can be shared as a picture. During the hunt, a hot-air
 balloon carrying coins sometimes floats by for a player: tapping it gives 5 coins, at most
 10 a day (logged as `balloon` in `coin_supply_daily`).
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AvatarFace } from "@/components/avatar";
-import { BADGE_INFO, BadgeMedal, BadgeTile } from "@/components/badges";
+import { BADGE_GROUPS, BADGE_INFO, BadgeMedal, BadgeTile } from "@/components/badges";
 import type { Avatar } from "@/lib/avatar";
 import { cn } from "@/lib/cn";
 import { short } from "@/lib/format";
@@ -34,6 +34,7 @@ export function Menu({
 }) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [tab, setTab] = useState<"badges" | "leaders">("badges");
+  const [peek, setPeek] = useState<string | null>(null);
   useEffect(() => {
     loadMyStats().then((res) => res.ok && setStats(res));
   }, []);
@@ -43,6 +44,8 @@ export function Menu({
     const prev = earned.get(b.badge);
     earned.set(b.badge, { count: (prev?.count ?? 0) + 1, detail: prev?.detail ?? b.detail });
   }
+  const allBadges = Object.keys(BADGE_INFO);
+  const collected = allBadges.filter((k) => earned.has(k)).length;
 
   return (
     <div className="glass absolute right-3 top-16 z-30 flex max-h-[calc(100dvh-5rem)] w-[min(22rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-3xl text-sm sm:right-4">
@@ -72,9 +75,9 @@ export function Menu({
             ["Catches", stats ? short(stats.catches) : "…"],
             ["Survived", stats ? short(stats.survived) : "…"],
           ].map(([label, value]) => (
-            <div key={label} className="rounded-xl bg-panel-2 px-1 py-2">
-              <div className="font-display text-base font-bold tabular-nums">{value}</div>
-              <div className="text-[10px] uppercase tracking-wide text-muted">{label}</div>
+            <div key={label} className="min-w-0 rounded-xl bg-panel-2 px-1 py-2">
+              <div className="min-w-0 truncate font-display text-base font-bold tabular-nums">{value}</div>
+              <div className="truncate text-[10px] uppercase tracking-wide text-muted">{label}</div>
             </div>
           ))}
         </div>
@@ -96,32 +99,80 @@ export function Menu({
         <div className="mt-4 grid grid-cols-2 rounded-xl bg-panel-2 p-1 text-xs font-semibold">
           {(["badges", "leaders"] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)} className={cn("rounded-lg py-1.5", tab === t ? "bg-panel shadow-sm" : "text-muted")}>
-              {t === "badges" ? `My badges${stats ? ` (${stats.badges.length})` : ""}` : "Leaderboard"}
+              {t === "badges" ? `My badges${stats ? ` (${collected})` : ""}` : "Leaderboard"}
             </button>
           ))}
         </div>
 
         {tab === "badges" ? (
           <div className="mt-2">
-            {earned.size === 0 && <p className="px-2 py-2 text-xs text-muted">No badges yet. Here&apos;s what you can win:</p>}
-            <div className="grid grid-cols-3 gap-1">
-              {[...earned.entries()].map(([badge, info]) => (
-                <div key={badge} className="relative">
-                  <BadgeTile badge={badge} player={me.name ?? "Me"} city={city} detail={info.detail} />
-                  {info.count > 1 && (
-                    <span className="absolute right-2 top-1 rounded-full bg-ink px-1.5 text-[10px] font-bold text-white">×{info.count}</span>
-                  )}
-                </div>
-              ))}
-              {Object.keys(BADGE_INFO)
-                .filter((b) => !earned.has(b))
-                .map((b) => (
-                  <div key={b} className="flex flex-col items-center gap-1 p-2 text-center" title={BADGE_INFO[b].blurb}>
-                    <BadgeMedal badge={b} size={52} dim />
-                    <span className="text-[10px] leading-tight text-muted">{BADGE_INFO[b].title}</span>
-                  </div>
-                ))}
+            {/* Progress */}
+            <div className="px-1">
+              <div className="flex items-baseline justify-between text-xs">
+                <span className="font-semibold">
+                  {stats ? `${collected} of ${allBadges.length} collected` : "Loading your badges…"}
+                </span>
+                {stats && earned.size === 0 && <span className="text-muted">Tap one to see how</span>}
+              </div>
+              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-panel-2">
+                <div
+                  className="h-full rounded-full bg-gold transition-all"
+                  style={{ width: `${(collected / allBadges.length) * 100}%` }}
+                />
+              </div>
             </div>
+
+            {BADGE_GROUPS.map((group) => {
+              const keys = allBadges.filter((k) => BADGE_INFO[k].group === group);
+              const mine = keys.filter((k) => earned.has(k));
+              const locked = keys.filter((k) => !earned.has(k));
+              const peeked = peek && locked.includes(peek) ? BADGE_INFO[peek] : null;
+              return (
+                <section key={group} className="mt-3">
+                  <h3 className="flex items-baseline justify-between px-1 text-[11px] font-bold uppercase tracking-wide text-muted">
+                    <span>{group}</span>
+                    <span className="tabular-nums">
+                      {mine.length}/{keys.length}
+                    </span>
+                  </h3>
+                  <div className="mt-1 grid grid-cols-4 gap-1">
+                    {mine.map((badge) => {
+                      const info = earned.get(badge)!;
+                      return (
+                        <div key={badge} className="relative flex min-w-0 justify-center">
+                          <BadgeTile badge={badge} player={me.name ?? "Me"} city={city} detail={info.detail} size={52} />
+                          {info.count > 1 && (
+                            <span className="absolute right-0 top-0.5 rounded-full bg-ink px-1.5 text-[10px] font-bold text-white">
+                              ×{info.count}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {locked.map((badge) => (
+                      <button
+                        key={badge}
+                        onClick={() => setPeek(peek === badge ? null : badge)}
+                        className={cn(
+                          "flex min-w-0 flex-col items-center gap-1 rounded-2xl p-2 text-center transition",
+                          peek === badge && "bg-panel-2",
+                        )}
+                        aria-label={`${BADGE_INFO[badge].title}: ${BADGE_INFO[badge].blurb}`}
+                      >
+                        <BadgeMedal badge={badge} size={44} dim />
+                        <span className="text-[10px] leading-tight text-muted">{BADGE_INFO[badge].title}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {peeked && (
+                    <p className="mx-1 mt-1 rounded-lg bg-panel-2 px-2 py-1.5 text-xs">
+                      <span className="mr-1">🔒</span>
+                      <span className="font-semibold">{peeked.title}:</span> {peeked.blurb}
+                    </p>
+                  )}
+                </section>
+              );
+            })}
           </div>
         ) : (
           <div className="mt-2">
