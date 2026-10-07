@@ -34,7 +34,22 @@ export type TileKind =
   | "structure";
 
 /** Big buildings that span a 2×2 block of tiles. */
-export type StructureType = "mall" | "twin" | "museum" | "funfair" | "market" | "arena" | "campus" | "hotel" | "solar" | "airport" | "port" | "military";
+export type StructureType =
+  | "mall"
+  | "twin"
+  | "museum"
+  | "funfair"
+  | "market"
+  | "arena"
+  | "campus"
+  | "hotel"
+  | "solar"
+  | "airport"
+  | "port"
+  | "military"
+  | "power"
+  | "dam"
+  | "oilrig";
 
 export type Tile = {
   i: number;
@@ -63,6 +78,9 @@ export type Tile = {
   works?: boolean;
   /** Something stopped at the side of a straight road: a broken-down car or a police car. */
   incident?: "breakdown" | "police";
+  /** The railway viaduct passes over this tile (and the station stands here). */
+  rail?: boolean;
+  station?: boolean;
 };
 
 export const KIND_LABEL: Record<TileKind, string> = {
@@ -104,20 +122,30 @@ export const STRUCTURE_LABEL: Record<StructureType, string> = {
   airport: "Airport",
   port: "Sea port",
   military: "Military camp",
+  power: "Power station",
+  dam: "Dam",
+  oilrig: "Oil rig",
 };
 
 /** Everything the city can be made of, for the help screen. */
 export const CITY_ASSETS = {
-  big: ["Airports", "Sea ports", "Military camps", "Shopping malls", "Twin towers with a sky bridge", "Domed museums", "Funfairs", "Open-air markets", "Arenas", "University campuses", "Hotels with rooftop pools", "Solar farms"],
+  big: [
+    "Airports", "Sea ports", "Military camps", "Shopping malls", "Twin towers with a sky bridge", "Domed museums", "Funfairs", "Open-air markets", "Arenas",
+    "University campuses", "Hotels with rooftop pools", "Solar farms", "Power stations with steaming cooling towers", "Dams with spillways", "Oil rigs with gas flares",
+  ],
   tiles: [
     "Skyscrapers (stepped, round glass, twisted, needle spire, helipad)",
     "Office blocks (plain, L-shaped, rooftop garden)",
     "Houses (pitched bungalow, flat modern with pool, duplex with garage)",
     "Hospitals", "Police stations", "Clock towers", "Construction sites with cranes", "Water towers", "Radio masts", "Fuel stations",
     "Parks", "Woods", "Plazas with fountains", "Ponds", "Ferris wheels", "Wind turbines", "Billboards",
-    "Roads", "Bridges", "A river (sometimes)", "Small lakes", "Road works", "Hills and mountains around the city",
+    "Roads", "Bridges", "A river (sometimes)", "Small lakes", "Road works", "Hills and mountains around the city", "A railway on a viaduct, with a station",
   ],
-  moving: ["Cars (and the odd traffic jam)", "Boats", "Birds", "Clouds", "Hot-air balloons", "Planes", "Ferris wheels, carousels, cranes and turbines"],
+  moving: [
+    "Cars, taxis, vans, buses, trucks and articulated lorries (and the odd traffic jam)", "Trains", "People out walking (with umbrellas when it rains)", "Boats",
+    "Pigeons, gulls, swallows, geese flying in a V and the odd eagle", "Clouds", "Hot-air balloons", "Planes", "Buildings going up during the hunt",
+    "Ferris wheels, carousels, cranes and turbines",
+  ],
 };
 
 /** Square spiral: tile n → grid (x, z). Must match spiral_xy in the database. */
@@ -179,8 +207,19 @@ export type CityPlan = {
   structures: Map<string, { type: StructureType; name: string } | null>;
   /** A river winding across the city (along x or z), or none. */
   river: { along: "x" | "z"; at: number; amp: number; wave: number; phase: number; width: number } | null;
+  /**
+   * A railway on a viaduct above one long street: it runs along x (fixed z = at) or along z
+   * (fixed x = at). The station is a 3-tile platform centred at `station` along the line.
+   */
+  rail: { along: "x" | "z"; at: number; station: number | null } | null;
   palette: Palette;
 };
+
+/** Is (x, z) under the railway viaduct? */
+export function onRail(plan: CityPlan, x: number, z: number) {
+  const r = plan.rail;
+  return !!r && (r.along === "z" ? x === r.at : z === r.at);
+}
 
 /** Where the river's centre line is, for a position along it. */
 export function riverCentre(plan: CityPlan, along: number) {
@@ -285,6 +324,27 @@ export function makePlan(seed: number): CityPlan {
     }
   }
 
+  // About two cities in three have a railway, on a viaduct above a street near the middle.
+  let rail: CityPlan["rail"] = null;
+  if (r(80) < 0.7) {
+    const along: "x" | "z" = r(81) < 0.5 ? "x" : "z";
+    const lines = along === "z" ? xs : zs; // the street it runs above
+    const cross = along === "z" ? zs : xs; // the streets it crosses
+    const zero = along === "z" ? x0 : z0;
+    const czero = along === "z" ? z0 : x0;
+    const at = lines[zero + Math.floor(r(82) * 5) - 2];
+    // The station sits on a straight stretch between two cross streets at least 4 apart.
+    let station: number | null = null;
+    for (const d of [0, -1, 1, -2, 2]) {
+      const k = czero + d;
+      if (cross[k + 1] - cross[k] >= 4) {
+        station = cross[k] + 2;
+        break;
+      }
+    }
+    if (at !== undefined) rail = { along, at, station };
+  }
+
   // The city's name and street names.
   let pickW = r(60) * FLAVORS.reduce((t, f) => t + f.weight, 0);
   const flavor = FLAVORS.find((f) => (pickW -= f.weight) < 0) ?? FLAVORS[0];
@@ -306,6 +366,7 @@ export function makePlan(seed: number): CityPlan {
     style,
     centres,
     river,
+    rail,
     cache: new Map(),
     structures: new Map(),
     palette: PALETTES[Math.floor(r(7) * PALETTES.length)],
@@ -364,7 +425,7 @@ function blockBillboard(plan: CityPlan, x: number, z: number) {
     for (let dz = 1; dz < 9; dz++) {
       const tx = bx * 10 + dx;
       const tz = bz * 10 + dz;
-      if (!LOTS.includes(baseTile(plan, tx, tz).kind) || structureAt(plan, tx, tz)) continue;
+      if (!LOTS.includes(baseTile(plan, tx, tz).kind) || onRail(plan, tx, tz) || structureAt(plan, tx, tz)) continue;
       const faces = [isRoad(plan, tx + 1, tz), isRoad(plan, tx - 1, tz), isRoad(plan, tx, tz + 1), isRoad(plan, tx, tz - 1)];
       const face = faces.findIndex(Boolean);
       if (face < 0) continue;
@@ -390,7 +451,7 @@ function densityAt(plan: CityPlan, x: number, z: number) {
 const STRUCTURES_BY_ZONE: { min: number; chance: number; types: StructureType[] }[] = [
   { min: 0.56, chance: 0.12, types: ["twin", "hotel", "mall", "museum"] },
   { min: 0.24, chance: 0.14, types: ["mall", "market", "museum", "campus", "arena", "funfair", "hotel"] },
-  { min: -9, chance: 0.1, types: ["funfair", "solar", "arena", "campus", "market", "airport", "port", "military", "airport"] },
+  { min: -9, chance: 0.1, types: ["funfair", "solar", "arena", "campus", "market", "airport", "port", "military", "airport", "power", "oilrig", "dam", "dam"] },
 ];
 
 /**
@@ -413,13 +474,27 @@ function structureAt(plan: CityPlan, x: number, z: number) {
     const roll = hash(ax, az, plan.seed + 501);
     const members = [[ax, az], [ax + 1, az], [ax, az + 1], [ax + 1, az + 1]];
     if (roll < zone.chance && members.every(([mx, mz]) => LOTS.includes(baseTile(plan, mx, mz).kind))) {
-      const type = zone.types[Math.floor(hash(ax, az, plan.seed + 502) * zone.types.length)];
+      let type = zone.types[Math.floor(hash(ax, az, plan.seed + 502) * zone.types.length)];
+      // A dam needs water next to it (the river or a lake); otherwise it's a power station.
+      if (type === "dam" && !nearWater(plan, ax, az)) type = "power";
       found = { type, name: structureName(plan, type, ax, az) };
     }
     plan.structures.set(key, found);
   }
   const st = plan.structures.get(key);
   return st ? { ...st, ax, az, anchor: x === ax && z === az } : null;
+}
+
+/** Is there river or lake right round the 2×2 cell at (ax, az)? */
+function nearWater(plan: CityPlan, ax: number, az: number) {
+  for (let dx = -1; dx <= 2; dx++) {
+    for (let dz = -1; dz <= 2; dz++) {
+      if (dx >= 0 && dx <= 1 && dz >= 0 && dz <= 1) continue;
+      const k = baseTile(plan, ax + dx, az + dz).kind;
+      if (k === "river" || k === "lake" || k === "bridge") return true;
+    }
+  }
+  return false;
 }
 
 function structureName(plan: CityPlan, type: StructureType, ax: number, az: number) {
@@ -451,6 +526,12 @@ function structureName(plan: CityPlan, type: StructureType, ax: number, az: numb
       return pick([`${city} Harbour`, `${street} Docks`, `Port of ${city}`], 10);
     case "military":
       return pick([`${street} Barracks`, `${city} Army Camp`, `Fort ${street}`], 11);
+    case "power":
+      return pick([`${city} Power Station`, `${street} Power Plant`, `${city} Energy Centre`], 12);
+    case "dam":
+      return pick([`${city} Dam`, `${street} Dam`, `${city} Reservoir Dam`], 13);
+    case "oilrig":
+      return pick([`${city} Oil Platform`, `${street} Oil Rig`, `${city} Offshore Rig`], 14);
   }
 }
 
@@ -458,10 +539,19 @@ export function tileAt(plan: CityPlan, i: number): Tile {
   const [x, z] = spiralXY(i);
   const t = baseTile(plan, x, z);
   t.i = i;
+  if (onRail(plan, x, z)) {
+    t.rail = true;
+    const along = plan.rail!.along === "z" ? z : x;
+    if (plan.rail!.station !== null && Math.abs(along - plan.rail!.station) <= 1) t.station = true;
+    t.top = Math.max(t.top, t.station ? 1.75 : 1.2);
+  }
   if (!LOTS.includes(t.kind)) return t;
-  const st = structureAt(plan, x, z);
+  const st = t.rail ? null : structureAt(plan, x, z);
   if (st) {
-    const heights: Record<StructureType, number> = { mall: 1.2, twin: 7, museum: 1.8, funfair: 2.8, market: 0.7, arena: 1.1, campus: 1.6, hotel: 4.4, solar: 0.5, airport: 1.6, port: 1.8, military: 1.2 };
+    const heights: Record<StructureType, number> = {
+      mall: 1.2, twin: 7, museum: 1.8, funfair: 2.8, market: 0.7, arena: 1.1, campus: 1.6, hotel: 4.4, solar: 0.5, airport: 1.6, port: 1.8, military: 1.2,
+      power: 3.4, dam: 0.9, oilrig: 2.8,
+    };
     return { ...t, kind: "structure", top: heights[st.type], structure: st, fallback: t };
   }
   const b = blockBillboard(plan, x, z);

@@ -2,28 +2,35 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import { AvatarFace } from "@/components/avatar";
 import type { Avatar } from "@/lib/avatar";
-import { defaultAvatar } from "@/lib/avatar";
+import { cleanAvatar, defaultAvatar } from "@/lib/avatar";
 import { cn } from "@/lib/cn";
 import { createClient } from "@/lib/supabase/client";
-import { loadChat, sendMessage, sendVoice, voiceUrl, type ChatMessage } from "./chat-actions";
+import { BotCard } from "./bot-card";
+import { loadDms, loadRoom, sendMessage, sendVoice, voiceUrl, type ChatMessage, type ChatTarget } from "./chat-actions";
+import { formatCountdown, useCountdown, type RoomInfo, type RoomMember } from "./rooms";
 
-// In-game chat: a public "City" room per round, private messages, and a People list to find
+// In-game chat, in places: everyone inside the same building (or hot-air balloon) chats
+// together ("Here"), plus private messages between two players and a People list to find
 // anyone in the round. Text and voice notes. Everything resets when a new map starts.
 
 const BOT_ID = "00000000-0000-0000-0000-00000000b07a";
+const BOT_BOUNTY = 200;
 
 export type ChatPlayer = { id: string; name: string; role: "hider" | "seeker"; caught: boolean; avatar: Avatar };
 
+// Hiders are "Ghosts" and seekers "Hunters" everywhere players can read it.
 const ROLE_STYLE: Record<ChatMessage["sender_role"] | "bot", { label: string; pill: string }> = {
-  hider: { label: "Hider", pill: "bg-me/15 text-me" },
+  hider: { label: "Ghost", pill: "bg-me/15 text-me" },
   seeker: { label: "Hunter", pill: "bg-gold/25 text-gold-dark" },
   watcher: { label: "Watching", pill: "bg-panel-2 text-muted" },
   bot: { label: "Bot", pill: "bg-[#7048e8]/15 text-[#5f3dc4]" },
 };
 
 const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+const botNameOf = (m: ChatMessage) => m.sender_name.replace(/\s*\(bot\)$/i, "") || "The bot";
 
 /** On phones, keep the chat above the on-screen keyboard (which shrinks the visual viewport). */
 function useKeyboardSafeArea(active: boolean) {
@@ -72,6 +79,11 @@ function BotFace({ size }: { size: number }) {
   );
 }
 
+type Thread = { id: string; name: string };
+type List = { key: string; round: number; list: ChatMessage[] };
+
+const append = (list: ChatMessage[], m: ChatMessage, max: number) => (list.some((x) => x.id === m.id) ? list : [...list, m].slice(-max));
+
 export function Chat({
   meId,
   meRole,
@@ -79,97 +91,171 @@ export function Chat({
   players,
   open,
   onOpenChange,
+  room,
+  roomMembers,
+  roomCount,
+  onLeaveRoom,
+  guest,
+  rideEndsAt = null,
+  onBotInfo,
+  botName: botNameProp,
+  botBounty = BOT_BOUNTY,
+  dmRequest = null,
 }: {
   meId: string;
   meRole: "hider" | "seeker" | null;
   roundId: number;
+  /** Everyone in this round (not the bot). */
   players: ChatPlayer[];
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  /** The place you're in (building or balloon), or null. */
+  room: RoomInfo | null;
+  /** Everyone in that place right now (from useRooms().members). */
+  roomMembers: RoomMember[];
+  /** How many are in that place (useRooms().counts[room.id]). */
+  roomCount: number;
+  onLeaveRoom: () => void;
+  /** Watching without signing in: shows a "Sign in to chat" panel instead. */
+  guest: boolean;
+  /** Balloon rides: when the ride ends (ms timestamp). */
+  rideEndsAt?: number | null;
+  /** Tapping the bot's name or face. Without this, the chat shows its own bot card. */
+  onBotInfo?: () => void;
+  /** The bot's name for the built-in bot card (otherwise taken from its messages). */
+  botName?: string;
+  /** Coins for finding the bot, for the built-in bot card. */
+  botBounty?: number;
+  /** Open a private chat with this person (e.g. tapping a caught ghost on the map). */
+  dmRequest?: { id: string; name: string; at: number } | null;
 }) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [loadedRound, setLoadedRound] = useState<number | null>(null);
-  const [thread, setThread] = useState<{ id: string; name: string } | null>(null);
-  const [tab, setTab] = useState<"city" | "private" | "people">("city");
+  const roomId = room?.id ?? null;
+  const [roomMsgs, setRoomMsgs] = useState<List | null>(null);
+  const [dms, setDms] = useState<List | null>(null);
+  const [thread, setThread] = useState<Thread | null>(null);
+  const [tab, setTab] = useState<"here" | "private" | "people">("here");
   const [seen, setSeen] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
   const [findText, setFindText] = useState("");
+  const [botCard, setBotCard] = useState<string | null>(null);
   const box = useKeyboardSafeArea(open);
+  const rideLeft = useCountdown(room?.kind === "balloon" ? rideEndsAt : null);
 
   const byId = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
+  const memberById = useMemo(() => new Map(roomMembers.map((p) => [p.id, p])), [roomMembers]);
+  const avatarOf = useCallback(
+    (id: string, name: string) => byId.get(id)?.avatar ?? (memberById.has(id) ? cleanAvatar(memberById.get(id)!.avatar, name) : defaultAvatar(name)),
+    [byId, memberById],
+  );
+  const showBot = useCallback(
+    (name: string) => {
+      if (onBotInfo) onBotInfo();
+      else setBotCard(name);
+    },
+    [onBotInfo],
+  );
   const faceOf = useCallback(
     (id: string, name: string, size: number) =>
-      id === BOT_ID ? <BotFace size={size} /> : <AvatarFace avatar={byId.get(id)?.avatar ?? defaultAvatar(name)} size={size} className="shrink-0 rounded-full" />,
-    [byId],
+      id === BOT_ID ? (
+        <button onClick={() => showBot(botNameProp ?? name.replace(/\s*\(bot\)$/i, ""))} aria-label="About the bot" className="shrink-0 rounded-full">
+          <BotFace size={size} />
+        </button>
+      ) : (
+        <AvatarFace avatar={avatarOf(id, name)} size={size} className="shrink-0 rounded-full" />
+      ),
+    [avatarOf, showBot, botNameProp],
   );
 
-  const add = useCallback((m: ChatMessage) => {
-    setMessages((list) => (list.some((x) => x.id === m.id) ? list : [...list, m].slice(-400)));
-  }, []);
-
-  // Load this round's messages and listen for new ones. A new round starts a fresh chat.
+  // Load my private messages for this round.
   useEffect(() => {
+    if (guest) return;
     let cancelled = false;
-    loadChat()
+    loadDms()
       .then((res) => {
-        if (cancelled || !res.ok) return;
-        setMessages(res.messages);
-        setLoadedRound(res.roundId);
+        if (!cancelled && res.ok) setDms({ key: "dm", round: res.roundId, list: res.messages });
       })
       .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [roundId, guest]);
+
+  // Load the place you're in (each time you enter a new one).
+  useEffect(() => {
+    if (guest || !roomId) return;
+    let cancelled = false;
+    loadRoom(roomId)
+      .then((res) => {
+        if (!cancelled && res.ok) setRoomMsgs({ key: res.room, round: res.roundId, list: res.messages });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [roomId, roundId, guest]);
+
+  // Live: one listener for the whole round; keep what belongs to your place or your private chats.
+  const addMessage = useCallback((m: ChatMessage) => {
+    if (m.recipient_id) {
+      setDms((d) => (d && d.round === m.round_id ? { ...d, list: append(d.list, m, 400) } : d));
+    } else {
+      setRoomMsgs((r) => (r && r.round === m.round_id && (m.room === r.key || m.room === "*") ? { ...r, list: append(r.list, m, 200) } : r));
+    }
+  }, []);
+  useEffect(() => {
+    if (guest) return;
     const supabase = createClient();
     const channel = supabase
       .channel(`chat:${roundId}`)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "chat_messages", filter: `round_id=eq.${roundId}` },
-        (payload) => add(payload.new as ChatMessage),
+        (payload) => addMessage(payload.new as ChatMessage),
       )
       .subscribe();
     return () => {
-      cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [roundId, add]);
+  }, [roundId, guest, addMessage]);
 
-  const current = useMemo(
-    () => (loadedRound === roundId ? messages.filter((m) => m.round_id === roundId) : []),
-    [messages, loadedRound, roundId],
+  const hereMsgs = useMemo(
+    () => (roomId && roomMsgs && roomMsgs.key === roomId && roomMsgs.round === roundId ? roomMsgs.list : []),
+    [roomMsgs, roomId, roundId],
   );
-  const publicMsgs = current.filter((m) => !m.recipient_id);
+  const dmMsgs = useMemo(() => (dms && dms.round === roundId ? dms.list : []), [dms, roundId]);
   const conversations = useMemo(() => {
     const map = new Map<string, { id: string; name: string; last: ChatMessage }>();
-    for (const m of current) {
-      if (!m.recipient_id) continue;
-      const otherId = m.sender_id === meId ? m.recipient_id : m.sender_id;
+    for (const m of dmMsgs) {
+      const otherId = m.sender_id === meId ? m.recipient_id! : m.sender_id;
       const name = (m.sender_id === meId ? m.recipient_name : m.sender_name) || map.get(otherId)?.name || "Player";
       map.set(otherId, { id: otherId, name, last: m });
     }
     return [...map.values()].sort((a, b) => b.last.id - a.last.id);
-  }, [current, meId]);
+  }, [dmMsgs, meId]);
 
-  const threadMsgs = thread ? current.filter((m) => m.recipient_id && (m.sender_id === thread.id || m.recipient_id === thread.id)) : [];
-  const shown = thread ? threadMsgs : publicMsgs;
+  const threadMsgs = thread ? dmMsgs.filter((m) => m.sender_id === thread.id || m.recipient_id === thread.id) : [];
+  const shown = thread ? threadMsgs : hereMsgs;
 
-  // Unread counts (what arrived since you last looked at each room).
-  const lastId = (list: ChatMessage[]) => list.at(-1)?.id ?? 0;
-  const key = thread ? `dm:${thread.id}` : "city";
-  const visibleKey = open && (tab === "city" || thread) ? key : null;
-  const newest = lastId(shown);
+  // Unread counts (what arrived since you last looked at each place or private chat).
+  const key = thread ? `dm:${thread.id}` : `room:${roomId}`;
+  const visibleKey = open && (thread || (tab === "here" && roomId)) ? key : null;
+  const newest = shown.at(-1)?.id ?? 0;
   useEffect(() => {
     if (!visibleKey) return;
     const id = requestAnimationFrame(() => setSeen((s) => ({ ...s, [visibleKey]: newest })));
     return () => cancelAnimationFrame(id);
   }, [visibleKey, newest]);
-  const unreadCity = publicMsgs.filter((m) => m.id > (seen.city ?? 0) && m.sender_id !== meId).length;
-  const unreadDm = current.filter((m) => m.recipient_id === meId && m.id > (seen[`dm:${m.sender_id}`] ?? 0)).length;
-  const unread = unreadCity + unreadDm;
+  const unreadHere = hereMsgs.filter((m) => m.id > (seen[`room:${roomId}`] ?? 0) && m.sender_id !== meId).length;
+  const unreadDm = dmMsgs.filter((m) => m.recipient_id === meId && m.id > (seen[`dm:${m.sender_id}`] ?? 0)).length;
+  const unread = unreadHere + unreadDm;
 
   async function send(text: string) {
     setError(null);
+    const target: ChatTarget | null = thread ? { to: thread.id } : roomId ? { room: roomId } : null;
+    if (!target) return false;
     try {
-      const res = await sendMessage(text, thread?.id ?? null);
-      if (res.ok) add(res.message);
+      const res = await sendMessage(text, target);
+      if (res.ok) addMessage(res.message);
       else setError(res.error);
       return res.ok;
     } catch {
@@ -184,9 +270,11 @@ export function Chat({
     form.set("audio", blob);
     form.set("seconds", String(seconds));
     if (thread) form.set("to", thread.id);
+    else if (roomId) form.set("room", roomId);
+    else return;
     try {
       const res = await sendVoice(form);
-      if (res.ok) add(res.message);
+      if (res.ok) addMessage(res.message);
       else setError(res.error);
     } catch {
       setError("The connection blinked. Try again.");
@@ -194,37 +282,79 @@ export function Chat({
   }
 
   function openThread(id: string, name: string) {
-    if (id === meId || id === BOT_ID) return;
+    if (id === BOT_ID) return showBot(botNameProp ?? name.replace(/\s*\(bot\)$/i, ""));
+    if (id === meId) return;
     setThread({ id, name });
     setTab("private");
   }
 
+  // Someone asked to message a particular player (from the map).
+  const lastDm = useRef(0);
+  useEffect(() => {
+    if (!dmRequest || dmRequest.at === lastDm.current || dmRequest.id === meId) return;
+    lastDm.current = dmRequest.at;
+    const id = setTimeout(() => {
+      setThread({ id: dmRequest.id, name: dmRequest.name });
+      setTab("private");
+    }, 0);
+    return () => clearTimeout(id);
+  }, [dmRequest, meId]);
+
+  const card = botCard !== null && <BotCard botName={botCard || "The bot"} bounty={botBounty} onClose={() => setBotCard(null)} />;
+
   if (!open) {
     return (
-      <button
-        onClick={() => onOpenChange(true)}
-        className="glass pointer-events-auto relative flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold"
-      >
-        <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z" />
-        </svg>
-        Chat
-        {unreadDm > 0 ? (
-          <span className="absolute -right-2 -top-2 flex items-center gap-0.5 rounded-full bg-[#7048e8] px-1.5 py-0.5 text-[11px] text-white shadow" title="New private message">
-            🔒 {unreadDm > 9 ? "9+" : unreadDm}
-          </span>
-        ) : unread > 0 && (
-          <span className="absolute -right-1 -top-1 grid min-w-5 place-items-center rounded-full bg-hit px-1 text-[11px] text-white">
-            {unread > 99 ? "99+" : unread}
-          </span>
-        )}
-      </button>
+      <>
+        <button
+          onClick={() => onOpenChange(true)}
+          className="glass pointer-events-auto relative flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold"
+        >
+          <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z" />
+          </svg>
+          Chat
+          {!guest && unreadDm > 0 ? (
+            <span className="absolute -right-2 -top-2 flex items-center gap-0.5 rounded-full bg-[#7048e8] px-1.5 py-0.5 text-[11px] text-white shadow" title="New private message">
+              🔒 {unreadDm > 9 ? "9+" : unreadDm}
+            </span>
+          ) : (
+            !guest &&
+            unread > 0 && (
+              <span className="absolute -right-1 -top-1 grid min-w-5 place-items-center rounded-full bg-hit px-1 text-[11px] text-white">
+                {unread > 99 ? "99+" : unread}
+              </span>
+            )
+          )}
+        </button>
+        {card}
+      </>
     );
   }
 
+  const q = findText.trim().toLowerCase();
   const people = players
-    .filter((p) => p.id !== meId && p.name.toLowerCase().includes(findText.trim().toLowerCase()))
+    .filter((p) => p.id !== meId && p.name.toLowerCase().includes(q))
     .sort((a, b) => a.role.localeCompare(b.role) || a.name.localeCompare(b.name));
+  const herePeople = roomMembers.filter((p) => p.id !== meId && p.name.toLowerCase().includes(q));
+
+  const placeLine = room && (
+    <div className="flex items-center gap-2 border-b border-line bg-panel-2/60 px-3 py-2">
+      <span className="text-xl" aria-hidden>
+        {room.kind === "balloon" ? "🎈" : "🏢"}
+      </span>
+      <p className="min-w-0 flex-1 text-sm">
+        <b className="block truncate">{room.name}</b>
+        <span className="text-xs text-muted">
+          {roomCount.toLocaleString()}/{room.capacity.toLocaleString()}
+          {room.kind === "building" ? " inside" : " riding"}
+          {room.kind === "balloon" && rideLeft !== null && ` · ride ends in ${formatCountdown(rideLeft)}`}
+        </span>
+      </p>
+      <button onClick={onLeaveRoom} className="rounded-full bg-panel px-3 py-1.5 text-xs font-semibold shadow-sm">
+        Leave
+      </button>
+    </div>
+  );
 
   // Drawn straight onto the page (not inside the game's layers) so nothing can stop it from
   // sitting right above the keyboard.
@@ -242,18 +372,24 @@ export function Chat({
             {faceOf(thread.id, thread.name, 32)}
             <div className="min-w-0 flex-1">
               <h2 className="truncate font-semibold">{thread.name}</h2>
-              <p className="text-[11px] text-muted">
-                Private · {byId.get(thread.id) ? ROLE_STYLE[byId.get(thread.id)!.role].label : "Player"}
-                {byId.get(thread.id)?.caught ? " (caught)" : ""}
+              <p className="text-[11px] font-semibold text-[#5f3dc4]">
+                🔒 Private
+                <span className="font-normal text-muted">
+                  {" · "}
+                  {byId.get(thread.id) ? ROLE_STYLE[byId.get(thread.id)!.role].label : "Player"}
+                  {byId.get(thread.id)?.caught ? " (caught)" : ""}
+                </span>
               </p>
             </div>
           </>
+        ) : guest ? (
+          <h2 className="flex-1 px-1 font-semibold">Chat</h2>
         ) : (
           <div className="flex flex-1 gap-1 rounded-xl bg-panel-2 p-1 text-sm font-semibold">
-            {(["city", "private", "people"] as const).map((t) => (
+            {(["here", "private", "people"] as const).map((t) => (
               <button key={t} onClick={() => setTab(t)} className={cn("flex-1 rounded-lg py-1.5", tab === t ? "bg-panel shadow-sm" : "text-muted")}>
-                {t === "city" ? "City" : t === "private" ? "Private" : "People"}
-                {t === "city" && unreadCity > 0 && <span className="ml-1 text-hit">•</span>}
+                {t === "here" ? "Here" : t === "private" ? "🔒 Private" : "People"}
+                {t === "here" && unreadHere > 0 && <span className="ml-1 text-hit">•</span>}
                 {t === "private" && unreadDm > 0 && <span className="ml-1 text-hit">•</span>}
               </button>
             ))}
@@ -264,71 +400,127 @@ export function Chat({
         </button>
       </header>
 
-      {meRole && (
-        <p className="border-b border-line bg-panel-2/60 px-4 py-1.5 text-[11px] text-muted">
-          Others see you as a <b className={meRole === "hider" ? "text-me" : "text-gold-dark"}>{meRole}</b> in chat.
-        </p>
-      )}
-
-      {!thread && tab === "people" ? (
-        <div className="flex min-h-0 flex-1 flex-col">
-          <div className="p-2">
-            <input
-              value={findText}
-              onChange={(e) => setFindText(e.target.value)}
-              placeholder="Find a player"
-              className="w-full rounded-full border border-line bg-panel px-4 py-2 text-base outline-none focus:border-gold sm:text-sm"
-            />
-          </div>
-          <ul className="flex-1 overflow-y-auto px-2 pb-2">
-            {people.length === 0 && <li className="p-6 text-center text-sm text-muted">Nobody else here yet.</li>}
-            {people.map((p) => (
-              <li key={p.id}>
-                <button onClick={() => openThread(p.id, p.name)} className="flex w-full items-center gap-3 rounded-2xl px-2 py-2 text-left hover:bg-panel-2">
-                  <AvatarFace avatar={p.avatar} size={40} className={cn("shrink-0 rounded-full", p.caught && "opacity-50 grayscale")} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-semibold">{p.name}</span>
-                    <span className="text-xs text-muted">{p.caught ? "Caught this round" : "Tap to message"}</span>
-                  </span>
-                  <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", ROLE_STYLE[p.role].pill)}>{ROLE_STYLE[p.role].label}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : !thread && tab === "private" ? (
-        <div className="flex-1 overflow-y-auto p-2">
-          {conversations.length === 0 ? (
-            <div className="p-6 text-center text-sm text-muted">
-              <p>No private chats yet.</p>
-              <button onClick={() => setTab("people")} className="mt-3 rounded-full bg-panel-2 px-4 py-2 font-semibold text-ink">
-                Find someone to message
-              </button>
-            </div>
-          ) : (
-            conversations.map((c) => (
-              <button key={c.id} onClick={() => setThread({ id: c.id, name: c.name })} className="flex w-full items-center gap-3 rounded-2xl px-2 py-2.5 text-left hover:bg-panel-2">
-                {faceOf(c.id, c.name, 40)}
-                <span className="min-w-0 flex-1">
-                  <span className="block font-semibold">{c.name}</span>
-                  <span className="block truncate text-sm text-muted">
-                    {c.last.sender_id === meId ? "You: " : ""}
-                    {c.last.body ?? "🎤 Voice note"}
-                  </span>
-                </span>
-                <span className="text-xs text-muted">{time(c.last.created_at)}</span>
-              </button>
-            ))
-          )}
+      {guest ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+          <span className="text-4xl" aria-hidden>
+            💬
+          </span>
+          <p className="font-semibold">Sign in to chat</p>
+          <p className="text-sm text-muted">
+            Once you&apos;re signed in, you can step into buildings and hot-air balloons to chat with the people there, and message
+            players privately.
+          </p>
+          <Link href="/login" className="rounded-full bg-gold px-5 py-2.5 text-sm font-semibold text-ink shadow">
+            Sign in
+          </Link>
         </div>
       ) : (
-        <Messages list={shown} meId={meId} onName={openThread} isPrivate={Boolean(thread)} faceOf={faceOf} />
-      )}
+        <>
+          {!thread && tab === "here" && placeLine}
+          {meRole && !thread && tab === "here" && (
+            <p className="border-b border-line px-4 py-1.5 text-[11px] text-muted">
+              Others see you as a <b className={meRole === "hider" ? "text-me" : "text-gold-dark"}>{ROLE_STYLE[meRole].label}</b> in chat.
+            </p>
+          )}
 
-      {(thread || tab === "city") && (
-        <Composer onSend={send} onAudio={sendAudio} placeholder={thread ? `Message ${thread.name}` : "Message the city"} />
+          {!thread && tab === "people" ? (
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="p-2">
+                <input
+                  value={findText}
+                  onChange={(e) => setFindText(e.target.value)}
+                  placeholder="Find a player"
+                  className="w-full rounded-full border border-line bg-panel px-4 py-2 text-base outline-none focus:border-gold sm:text-sm"
+                />
+              </div>
+              <ul className="flex-1 overflow-y-auto px-2 pb-2">
+                {room && (
+                  <>
+                    <li className="px-2 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted">
+                      In this place ({roomCount.toLocaleString()})
+                    </li>
+                    {herePeople.length === 0 && <li className="px-2 py-2 text-sm text-muted">Just you here so far.</li>}
+                    {herePeople.slice(0, 200).map((p) => {
+                      const player = byId.get(p.id);
+                      return (
+                        <li key={`here-${p.id}`}>
+                          <button onClick={() => openThread(p.id, p.name)} className="flex w-full items-center gap-3 rounded-2xl px-2 py-2 text-left hover:bg-panel-2">
+                            <AvatarFace avatar={avatarOf(p.id, p.name)} size={36} className="shrink-0 rounded-full" />
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate font-semibold">{p.name}</span>
+                              <span className="text-xs text-muted">Tap to message privately</span>
+                            </span>
+                            <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", ROLE_STYLE[player?.role ?? "watcher"].pill)}>
+                              {ROLE_STYLE[player?.role ?? "watcher"].label}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                    <li className="px-2 pb-1 pt-4 text-xs font-semibold uppercase tracking-wide text-muted">Everyone in this game</li>
+                  </>
+                )}
+                {people.length === 0 && <li className="p-6 text-center text-sm text-muted">Nobody else here yet.</li>}
+                {people.map((p) => (
+                  <li key={p.id}>
+                    <button onClick={() => openThread(p.id, p.name)} className="flex w-full items-center gap-3 rounded-2xl px-2 py-2 text-left hover:bg-panel-2">
+                      <AvatarFace avatar={p.avatar} size={40} className={cn("shrink-0 rounded-full", p.caught && "opacity-50 grayscale")} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-semibold">{p.name}</span>
+                        <span className="text-xs text-muted">{p.caught ? "Caught this round" : "Tap to message privately"}</span>
+                      </span>
+                      <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", ROLE_STYLE[p.role].pill)}>{ROLE_STYLE[p.role].label}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : !thread && tab === "private" ? (
+            <div className="flex-1 overflow-y-auto p-2">
+              <p className="px-2 pb-2 text-[11px] text-muted">🔒 Private messages: only you and the other player can see them.</p>
+              {conversations.length === 0 ? (
+                <div className="p-6 text-center text-sm text-muted">
+                  <p>No private chats yet.</p>
+                  <button onClick={() => setTab("people")} className="mt-3 rounded-full bg-panel-2 px-4 py-2 font-semibold text-ink">
+                    Find someone to message
+                  </button>
+                </div>
+              ) : (
+                conversations.map((c) => (
+                  <button key={c.id} onClick={() => setThread({ id: c.id, name: c.name })} className="flex w-full items-center gap-3 rounded-2xl px-2 py-2.5 text-left hover:bg-panel-2">
+                    {faceOf(c.id, c.name, 40)}
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-semibold">
+                        {c.name} <span className="text-[10px] font-semibold text-[#5f3dc4]">🔒 Private</span>
+                      </span>
+                      <span className="block truncate text-sm text-muted">
+                        {c.last.sender_id === meId ? "You: " : ""}
+                        {c.last.body ?? "🎤 Voice note"}
+                      </span>
+                    </span>
+                    <span className="text-xs text-muted">{time(c.last.created_at)}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          ) : !thread && !room ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
+              <span className="text-4xl" aria-hidden>
+                🏢🎈
+              </span>
+              <p className="text-sm text-muted">Switch to Chat mode and tap a building or balloon to join the people there.</p>
+            </div>
+          ) : (
+            <Messages list={shown} meId={meId} onName={openThread} isPrivate={Boolean(thread)} faceOf={faceOf} />
+          )}
+
+          {(thread || (tab === "here" && room)) && (
+            <Composer onSend={send} onAudio={sendAudio} placeholder={thread ? `Private message to ${thread.name}` : `Message ${room?.name ?? "everyone here"}`} />
+          )}
+          {error && <p className="px-4 pb-2 text-xs text-hit">{error}</p>}
+        </>
       )}
-      {error && <p className="px-4 pb-2 text-xs text-hit">{error}</p>}
+      {card}
     </section>,
     document.body,
   );
@@ -355,7 +547,7 @@ function Messages({
   if (!list.length) {
     return (
       <p className="flex-1 p-6 text-center text-sm text-muted">
-        {isPrivate ? "Say hello. Only the two of you can see this." : "No messages yet this round. Say something!"}
+        {isPrivate ? "🔒 Say hello. Only the two of you can see this." : "Nobody has said anything here yet. Say hi!"}
       </p>
     );
   }
@@ -364,7 +556,25 @@ function Messages({
       {list.map((m, i) => {
         const mine = m.sender_id === meId;
         const bot = m.sender_id === BOT_ID;
-        const sameAsPrev = list[i - 1]?.sender_id === m.sender_id;
+        // The bot's teases go to every place at once: shown as their own special line.
+        if (bot && m.room === "*") {
+          return (
+            <div key={m.id} className="mx-auto flex max-w-[92%] items-start gap-2 rounded-2xl bg-[#f3f0ff] px-3 py-2 text-sm ring-1 ring-[#7048e8]/25">
+              {faceOf(m.sender_id, m.sender_name, 28)}
+              <div className="min-w-0">
+                <button onClick={() => onName(m.sender_id, m.sender_name)} className="flex items-center gap-1.5 text-xs">
+                  <span className="font-semibold">{botNameOf(m)}</span>
+                  <span className={cn("rounded-full px-1.5 py-px text-[10px] font-semibold", ROLE_STYLE.bot.pill)}>{ROLE_STYLE.bot.label}</span>
+                  <span className="text-[10px] text-muted">· to everyone</span>
+                </button>
+                <p className="break-words">{m.body}</p>
+              </div>
+              <span className="ml-auto shrink-0 self-end text-[10px] text-muted">{time(m.created_at)}</span>
+            </div>
+          );
+        }
+        const prev = list[i - 1];
+        const sameAsPrev = prev?.sender_id === m.sender_id && prev.room !== "*";
         const role = ROLE_STYLE[bot ? "bot" : m.sender_role];
         return (
           <div key={m.id} className={cn("flex items-end gap-2", mine && "flex-row-reverse")}>
@@ -373,11 +583,10 @@ function Messages({
               {!mine && !sameAsPrev && (
                 <button
                   onClick={() => onName(m.sender_id, m.sender_name)}
-                  disabled={bot}
                   className="mb-0.5 flex items-center gap-1.5 px-1 text-xs"
-                  title={bot ? undefined : "Message privately"}
+                  title={bot ? "About the bot" : "Message privately"}
                 >
-                  <span className="font-semibold">{m.sender_name}</span>
+                  <span className="font-semibold">{bot ? botNameOf(m) : m.sender_name}</span>
                   <span className={cn("rounded-full px-1.5 py-px text-[10px] font-semibold", role.pill)}>{role.label}</span>
                 </button>
               )}

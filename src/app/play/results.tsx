@@ -27,7 +27,7 @@ export function Results({ results: r, onClose, me, city }: { results: RoundResul
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-muted">Round {r.roundId} is over</p>
             <h2 className="font-display text-2xl font-extrabold">
-              {survived <= 0 ? "Everyone got found!" : `${short(survived)} hider${survived === 1 ? "" : "s"} made it`}
+              {survived <= 0 ? "Everyone got found!" : `${short(survived)} ghost${survived === 1 ? "" : "s"} made it`}
             </h2>
           </div>
           <button onClick={onClose} className="rounded-full px-2 text-2xl text-muted" aria-label="Close">

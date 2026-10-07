@@ -1,32 +1,11 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
+import { AD_POLICY } from "@/lib/ads";
 
-// Before an ad goes live, Claude looks at the picture and the words and checks them against
-// the advertising policy. Needs ANTHROPIC_API_KEY (console.anthropic.com → API Keys). Without
-// it, or if the check fails for any reason, the ad is "held" for the owner to check by hand.
-
-/** The advertising policy, in plain words. Shown on /advertise/policy and given to the reviewer. */
-export const AD_POLICY = {
-  notAllowed: [
-    "Adult or sexual content, nudity, or sexually suggestive pictures",
-    "Gambling, betting, sports betting, lotteries or casinos",
-    "Weapons, guns, ammunition or explosives",
-    "Drugs, including recreational drugs and unlicensed medicines",
-    "Tobacco, cigarettes, vaping or e-cigarettes",
-    "Hate, harassment, or attacks on anyone for their tribe, religion, race, gender, disability or who they love",
-    "Violence, gore, or anything shocking or frightening",
-    "Scams, get-rich-quick schemes, fake giveaways, or claims that aren't true (including miracle cures and guaranteed returns)",
-    "Other people's brands, logos or trademarks you don't have permission to use",
-    "Political ads: parties, candidates, elections or campaigns",
-    "Anything illegal in Nigeria",
-  ],
-  rules: [
-    "The picture must be yours, or one you have the right to use.",
-    "The headline and picture must clearly show who is advertising (your brand).",
-    "Links must go to a safe, working website that matches the ad.",
-    "Hide & Seek is for adults (18+), but ads must still be suitable for a general audience.",
-  ],
-};
+// NOT USED RIGHT NOW: ads go live as soon as they're paid (see src/lib/ads.ts). This is kept
+// so an automatic picture check can be switched back on later: Claude looks at the picture
+// and the words and checks them against the advertising policy. It would need
+// ANTHROPIC_API_KEY (console.anthropic.com → API Keys).
 
 export type ReviewResult =
   | { verdict: "approved"; reason: string }

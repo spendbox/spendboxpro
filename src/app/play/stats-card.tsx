@@ -80,7 +80,7 @@ export function StatsCard({
         {phase !== "done" && (
           <>
             <div className="mt-1 font-display text-[2.1rem] font-extrabold leading-none tabular-nums">{countdown}</div>
-            <div className="text-[11px] text-muted">{phase === "join" ? "until hiders drop in" : "left in the hunt"}</div>
+            <div className="text-[11px] text-muted">{phase === "join" ? "until ghosts drop in" : "left in the hunt"}</div>
           </>
         )}
         <dl className="mt-3 grid grid-cols-3 gap-1 text-center">

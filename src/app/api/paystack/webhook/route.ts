@@ -2,8 +2,8 @@ import { after, NextResponse } from "next/server";
 import { confirmPayment } from "@/lib/ads";
 import { webhookIsGenuine } from "@/lib/paystack";
 
-// Gives the ad review time to finish after we've answered Paystack.
-export const maxDuration = 60;
+// Gives the follow-up (emails) time to finish after we've answered Paystack.
+export const maxDuration = 30;
 
 /**
  * POST /api/paystack/webhook: Paystack tells us a payment went through. Set this address in
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     return new NextResponse("Bad body", { status: 400 });
   }
   const reference = event.data?.reference;
-  if (event.event === "charge.success" && typeof reference === "string" && /^(ad|sp)-/.test(reference)) {
+  if (event.event === "charge.success" && typeof reference === "string" && /^(ad|sp|at)-/.test(reference)) {
     after(async () => {
       try {
         await confirmPayment(reference);

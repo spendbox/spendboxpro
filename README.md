@@ -7,8 +7,11 @@ The full rule book is the "Hide & Seek Grid Game: Rules Spec" doc.
 
 ## How a round works
 
-The game is 18+ (players give their date of birth when they sign up). The UI calls seekers
-"hunters"; the database still says `seeker`.
+The game is 18+ (players give their date of birth when they sign up). The UI calls hiders "ghosts" and seekers
+"hunters"; the database still says `hider` and `seeker`. Ghosts get 1 move per game (2 from level 10,
+3 from level 20); the hunt always runs the full hour, even when every ghost is caught. Chat
+happens in places: players switch to Chat mode and enter buildings or ride hot-air balloons
+(10-minute rides, up to 1,000 people), plus private messages.
 
 1. **Hiding window (10 min).** Anyone joins as a hunter; players who have finished one round
    as a hunter can hide (stake 100 coins). Each hider adds 20 tiles to a 20×20 starting city.
@@ -45,7 +48,8 @@ The game is 18+ (players give their date of birth when they sign up). The UI cal
    `game-db/004_moves_sweeps_bot_ads.sql`, `game-db/005_traps_freezes_notifications.sql`,
    `game-db/006_avatars_badges_balloons.sql`, `game-db/007_shields_payouts_passive.sql`,
    `game-db/008_badge_collection.sql`, `game-db/009_levels_powerups.sql`,
-   `game-db/010_ads_sponsors.sql`, `game-db/011_badges_hard.sql` and `game-db/012_age_codes.sql`,
+   `game-db/010_ads_sponsors.sql`, `game-db/011_badges_hard.sql`, `game-db/012_age_codes.sql`,
+   `game-db/013_ads_v2.sql`, `game-db/014_chat_rooms.sql` and `game-db/015_ghost_rules.sql`,
    in order, once each, on an empty database. In Supabase → Database → Extensions, switch on **pg_cron** first if you
    can: the file then schedules the round clock to run every minute. (Without it, the clock
    still moves whenever someone has the game open.)
@@ -103,31 +107,43 @@ messages, with text and voice notes, a People list showing who's hiding or seeki
 few teasing messages from the bot; it belongs to one round, so a new map starts a new
 chat (old chats and voice notes are deleted by the daily job).
 
-## Ads and sponsored prize pools
+## Ads
 
-Brands book at **/advertise** (no account needed) and pay with Paystack. Two products:
+Brands book at **/advertise** (no game account needed) and pay with Paystack. The ad goes
+live on billboards in every city **as soon as the payment is confirmed** (there's no
+automatic picture check).
 
-- **Billboard ad:** 1 slot = 1,000 views of the billboard across every city within 7 days
-  (₦5,000 a slot, 1–50 slots). Every billboard rotates through the live ads; ads that are behind
-  schedule are shown more, and an ad keeps showing until it has every view it paid for. Players
-  who tap a billboard earn 2 coins (10 times a day at most, logged as `ad_reward`). Each ad
-  gets a report email every morning.
-- **Sponsor a prize pool:** from ₦5,000 (₦5 = 1 coin). The coins go into the current round if it's
-  still in its hiding window and has no sponsor, otherwise into the next free round (one sponsor
-  per round, shown as "Prize pool by …").
+- **Budget = a coin pool.** The advertiser picks a weekly budget (from ₦5,000) and 1–8 weeks.
+  What they pay loads the ad with coins: 1 coin per ₦5.
+- **Paid views are taps.** A signed-in player who taps a billboard to look at the ad gets 5
+  coins from that ad's pool (logged as `ad_reward`). Each player can earn this from 5 ads a
+  day, once per ad per day.
+- **Free views.** Taps by people who get no coins (watchers without an account, players over
+  their daily limit, a second look the same day) are counted but cost nothing. Link clicks are
+  counted too. Billboards just being on screen are counted as "seen on billboards" and never
+  charged.
+- **The end.** An ad stops when its pool can't pay another reward, or its weeks are over.
+  Unused coins expire. Coins are only created when a player is paid, so the coin books
+  (`coin_supply_daily`) stay correct.
+- **Advertiser accounts.** The first booking makes an advertiser account from the email
+  (separate from players). Every email (receipt, "your ad is live", daily report) has a
+  private **Manage your ad** link (works 30 days). At **/advertiser** they can also sign in
+  with a 4-digit email code. There they see live numbers (coins left, paid views, free views,
+  clicks, days left), change the picture, headline or link (live straight away), pause or
+  resume, and top up (Paystack again).
+- **Prize pool sponsorships** are no longer sold on the site. Ones already paid still work:
+  they queue, one per round, in order.
 
-Setup: run `game-db/010_ads_sponsors.sql` once (it also makes the public `ads` storage bucket),
-then add `PAYSTACK_SECRET_KEY`, `ANTHROPIC_API_KEY` and `ADMIN_EMAIL` in Vercel (see
-`.env.example`). In Paystack → Settings → API Keys & Webhooks, set the **Webhook URL** to
-`https://<your site>/api/paystack/webhook`.
+Setup: run `game-db/010_ads_sponsors.sql` and then `game-db/013_ads_v2.sql` once (010 also
+makes the public `ads` storage bucket). Add `PAYSTACK_SECRET_KEY`, `ADMIN_EMAIL` and
+(optionally) `ADVERTISER_SECRET` in Vercel (see `.env.example`). In Paystack → Settings → API
+Keys & Webhooks, set the **Webhook URL** to `https://<your site>/api/paystack/webhook`.
 
-After payment, Claude checks each ad against the policy (`/advertise/policy`). Approved ads go
-live at once. Rejected ads: the advertiser is told why and that they'll be refunded; you get an
-email, so refund it in Paystack (Transactions → the reference → Refund). If the check can't run,
-the ad is **held** and you get an email: to approve it, open Supabase → Table Editor → `ads`,
-find it and change `status` to `live` (its 7 days start then); to turn it down, set `rejected`
-and refund. Prices and limits are rows in `game_settings` (`ad_slot_price_ngn`,
-`ad_views_per_slot`, `ad_open_coins`, `sponsor_coins_per_ngn`, …).
+You get an email for every new ad (with its picture). To take one down: Supabase → Table
+Editor → `ads` → find it → change `status` to `held` (it stops at once and the advertiser
+can't switch it back on); refund in Paystack if you want (Transactions → the reference →
+Refund). Every number is a row in `game_settings`: `ad_coins_per_ngn`, `ad_view_reward`,
+`ad_rewards_per_day`, `ad_min_weekly_ngn`, `ad_max_weeks`, `ad_max_ngn`, `ad_link_days`, …
 
 ## Tuning
 

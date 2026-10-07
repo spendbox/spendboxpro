@@ -8,7 +8,15 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar, type Avatar } from "@/lib/avatar";
 import { addressOf, hash, KIND_LABEL, makePlan, riverCentre, smoothNoise, spiralXY, STRUCTURE_LABEL, tileAt, type CityPlan, type Tile } from "@/lib/city/layout";
+import { ABBREV } from "@/lib/city/places";
 import { daylight, weatherAt } from "@/lib/city/sky";
+import { createBirds } from "./city/birds";
+import { createBuildingSite, createSites } from "./city/construction";
+import { coolingTowerGeometry, createPlumes, industryParts } from "./city/industry";
+import { createPeople } from "./city/people";
+import { balloonBannerTexture, billboardTexture, disposePills, pillTexture } from "./city/textures";
+import { createTrains, railParts } from "./city/trains";
+import { BRIDGE_TOP, makeWorld, signalJunction } from "./city/world";
 import { playSfx } from "./sound";
 
 // The game board, drawn as a small living 3D city with three.js.
@@ -50,6 +58,15 @@ export type CityEvent = {
 /** An advert shown on the city's billboards (image: a public URL, ideally about 2:1). */
 export type CityAd = { id: string; image: string; headline: string; brand: string; link: string | null };
 
+/**
+ * A chat room: a building (id "b:<tile index>", the corner tile for big 2×2 buildings) or a
+ * hot-air balloon (id "balloon:<k>").
+ */
+export type CityRoom = { id: string; name: string; capacity: number; kind: "building" | "balloon" };
+
+/** A ghost caught this round: their face stays floating over the spot. */
+export type CaughtFace = { tile: number; name: string | null; avatar: unknown };
+
 type Props = {
   seed: number;
   tileCount: number;
@@ -72,17 +89,34 @@ type Props = {
   ads: CityAd[];
   /** Ad views seen on screen since the last call ({ adId: views }), sent at most every 15 s. */
   onAdViews: (counts: Record<string, number>) => void;
+  /**
+   * False during the join window: the real city stays secret and the whole map is a building
+   * site. When it turns true (the hunt starts) the city rises. Default true.
+   */
+  revealed?: boolean;
+  /** "chat": tap buildings and balloons to enter their chat rooms (onRoom) instead of onTile. Default "game". */
+  mode?: "game" | "chat";
+  /** How many people are in each chat room right now ({ roomId: count }). */
+  roomCounts?: Record<string, number>;
+  /** Chat mode: a building or balloon was tapped. */
+  onRoom?: (room: CityRoom) => void;
+  /** Ride hot-air balloon k (the camera flies into its basket), or null for the normal view. */
+  ride?: number | null;
+  /** How many hot-air balloons there are (called after the city is built). */
+  onBalloons?: (count: number) => void;
+  /** Ghosts caught this round (preferred over working it out from events, which get trimmed). */
+  caughtFaces?: CaughtFace[];
 };
 
 type Part = { tile: number; x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number; color: number; tilt?: number };
 
 const SKY = 0xd7ebf7;
+const BALLOON_NAMES = ["Red", "Yellow", "Blue", "Purple", "Mint"];
 const GROUND = 0xd3e4c8;
 const ASPHALT = 0x5b6470;
 const SIDEWALK = 0xf3f1ec;
 const GRASS = 0xa8d79a;
 const WATER = 0x7cc4e8;
-const BRIDGE_TOP = 0.24;
 /** Traffic-light bulbs carry this plus (direction × 3 + bulb) as their colour until lit. */
 const SIGNAL_TAG = 1000;
 /** Blinking lights carry this plus their kind as their colour (see FLASH below). */
@@ -96,13 +130,6 @@ function geometries() {
   const crown = new THREE.IcosahedronGeometry(0.5, 0).translate(0, 0.5, 0);
   const trunk = new THREE.CylinderGeometry(0.05, 0.07, 1, 5).translate(0, 0.5, 0);
   const disc = new THREE.CylinderGeometry(0.5, 0.5, 1, 20).translate(0, 0.5, 0);
-  // A bird: two wings in a V. Scaling it up and down on y makes it flap.
-  const bird = new THREE.BufferGeometry();
-  bird.setAttribute(
-    "position",
-    new THREE.Float32BufferAttribute([0, 0, 0.12, -0.32, 0.12, -0.05, 0, 0, -0.08, 0, 0, 0.12, 0, 0, -0.08, 0.32, 0.12, -0.05], 3),
-  );
-  bird.computeVertexNormals();
   // Half a ring, standing up: the arch under a bridge.
   const arch = new THREE.TorusGeometry(0.29, 0.035, 6, 18, Math.PI);
   const cyl = new THREE.CylinderGeometry(0.5, 0.5, 1, 20).translate(0, 0.5, 0);
@@ -112,11 +139,18 @@ function geometries() {
   const curve = new THREE.RingGeometry(0.2, 0.8, 14, 1, 0, Math.PI / 2).rotateX(-Math.PI / 2);
   const curveLine = new THREE.RingGeometry(0.485, 0.515, 14, 1, 0, Math.PI / 2).rotateX(-Math.PI / 2);
   const lamp = new THREE.SphereGeometry(0.5, 8, 6);
-  return { box, roof, crown, trunk, disc, bird, arch, cyl, cone, dome, curve, curveLine, lamp };
+  const cooling = coolingTowerGeometry();
+  return { box, roof, crown, trunk, disc, arch, cyl, cone, dome, curve, curveLine, lamp, cooling };
 }
 
 // ---------------------------------------------------------------- what stands on a tile
 function partsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "tile">) => void) {
+  basePartsFor(t, plan, add);
+  // The railway viaduct passes over some tiles (whatever is underneath).
+  if (t.rail) railParts(t, plan, add);
+}
+
+function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "tile">) => void) {
   const { x, z, r } = t;
   const pal = plan.palette;
   const pick = (list: number[], v: number) => list[Math.floor(v * list.length) % list.length];
@@ -238,7 +272,7 @@ function partsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "ti
   }
 
   const GREEN_LOTS = ["park", "trees", "pond", "ferris", "turbine", "watertower", "mast"];
-  const greenStructure = t.kind === "structure" && ["funfair", "solar", "campus"].includes(t.structure!.type);
+  const greenStructure = t.kind === "structure" && ["funfair", "solar", "campus", "dam"].includes(t.structure!.type);
   const lot = GREEN_LOTS.includes(t.kind) || greenStructure ? GRASS : SIDEWALK;
   add("ground", { x, y: 0, z, sx: 0.98, sy: 0.08, sz: 0.98, ry: 0, color: lot });
 
@@ -371,10 +405,14 @@ function partsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "ti
       tree(0.32, 0.32, 0.45, r[0]);
       break;
     case "crane":
-      // A building going up; the crane's arm is added separately so it can turn.
-      B(-0.06, 0.08, 0.05, 0.62, 1.1, 0.6, 0xced4da);
-      B(-0.06, 1.18, 0.05, 0.62, 0.3, 0.6, 0xffd43b, 0, "glass");
+      // A building site: the building itself goes up during the hunt (see createSites), the
+      // crane's arm is added separately so it can turn. Here: the earth, a fence, the mast.
+      B(-0.06, 0.08, 0.05, 0.74, 0.004, 0.72, 0x9c8466, 0, "ground");
+      for (const [fx, fz, fw, fd] of [[0, -0.45, 0.9, 0.02], [0, 0.45, 0.9, 0.02], [-0.45, 0, 0.02, 0.9]] as const) {
+        B(fx, 0.08, fz, fw, 0.1, fd, 0xff922b);
+      }
       B(0.32, 0.08, -0.32, 0.08, 3.0, 0.08, 0xfab005);
+      B(0.3, 0.08, 0.3, 0.2, 0.12, 0.14, 0xf2b705);
       break;
     case "watertower":
       for (const [lx, lz] of [[-0.15, -0.15], [0.15, -0.15], [-0.15, 0.15], [0.15, 0.15]]) {
@@ -461,12 +499,6 @@ function partsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "ti
 
 type AddFn = (mesh: string, p: Omit<Part, "tile">) => void;
 
-/** A crossing with traffic lights (not a bend, a straight stretch or a roundabout). */
-function signalJunction(t: Tile) {
-  if (t.kind !== "road" || t.roundabout) return false;
-  const m = t.mask ?? 0;
-  return ![3, 6, 12, 9, 5, 10, 1, 4, 2, 8].includes(m);
-}
 
 /** A soft round glow (white in the middle, fading to nothing), for pools of light. */
 function glowTexture() {
@@ -568,7 +600,17 @@ function structureParts(t: Tile, plan: CityPlan, B: BoxFn, tree: TreeFn) {
   const pick = (list: number[], v: number) => list[Math.floor(v * list.length) % list.length];
   const c = 0.5; // centre offset
   const floor =
-    st.type === "funfair" || st.type === "solar" || st.type === "campus" ? GRASS : st.type === "military" ? 0xa3ad7f : st.type === "airport" ? 0xb7c4a5 : 0xe7e1d5;
+    st.type === "funfair" || st.type === "solar" || st.type === "campus" || st.type === "dam"
+      ? GRASS
+      : st.type === "military"
+        ? 0xa3ad7f
+        : st.type === "airport"
+          ? 0xb7c4a5
+          : st.type === "power"
+            ? 0xc9cdd2
+            : st.type === "oilrig"
+              ? 0x2f74b5
+              : 0xe7e1d5;
   B(c, 0.02, c, 1.98, 0.07, 1.98, floor, 0, "ground");
   switch (st.type) {
     case "mall": {
@@ -719,6 +761,11 @@ function structureParts(t: Tile, plan: CityPlan, B: BoxFn, tree: TreeFn) {
       B(c + 0.15, 0.25, c + 0.55, 0.3, 0.03, 0.03, 0x343a40);
       break;
     }
+    case "power":
+    case "dam":
+    case "oilrig":
+      industryParts(st.type, B);
+      break;
     case "solar": {
       for (let i = 0; i < 4; i++) {
         for (let j = 0; j < 3; j++) {
@@ -730,66 +777,6 @@ function structureParts(t: Tile, plan: CityPlan, B: BoxFn, tree: TreeFn) {
       break;
     }
   }
-}
-
-/** Artwork for the four billboard designs ("your ad here"), drawn on a canvas. */
-function billboardTexture(design: number) {
-  const canvas = document.createElement("canvas");
-  canvas.width = design === 2 ? 1024 : 512;
-  canvas.height = 256;
-  const c = canvas.getContext("2d")!;
-  const font = (size: number, weight = 800) => `${weight} ${size}px system-ui, -apple-system, Segoe UI, sans-serif`;
-  c.textAlign = "center";
-  c.textBaseline = "middle";
-  if (design === 0) {
-    c.fillStyle = "#ffd43b";
-    c.fillRect(0, 0, 512, 256);
-    c.fillStyle = "#18202b";
-    c.font = font(64);
-    c.fillText("YOUR AD HERE", 256, 105);
-    c.font = font(30, 600);
-    c.fillText("Tap to advertise", 256, 175);
-  } else if (design === 1) {
-    c.fillStyle = "#1c2541";
-    c.fillRect(0, 0, 512, 256);
-    c.fillStyle = "#ffc53d";
-    c.font = font(58);
-    c.fillText("ADVERTISE", 256, 92);
-    c.fillText("HERE", 256, 152);
-    c.fillStyle = "#ffffff";
-    c.font = font(24, 600);
-    c.fillText("Tap this billboard", 256, 210);
-  } else if (design === 2) {
-    const grad = c.createLinearGradient(0, 0, 1024, 256);
-    grad.addColorStop(0, "#7048e8");
-    grad.addColorStop(0.5, "#e64980");
-    grad.addColorStop(1, "#7048e8");
-    c.fillStyle = grad;
-    c.fillRect(0, 0, 1024, 256);
-    c.fillStyle = "#ffffff";
-    c.font = font(72);
-    c.fillText("YOUR BRAND HERE  ✦  TAP TO ADVERTISE  ✦", 512, 128);
-  } else {
-    c.fillStyle = "#ffffff";
-    c.fillRect(0, 0, 512, 256);
-    c.strokeStyle = "#e5484d";
-    c.lineWidth = 18;
-    c.strokeRect(9, 9, 494, 238);
-    c.fillStyle = "#e5484d";
-    c.font = font(70);
-    c.fillText("AD SPACE", 256, 110);
-    c.fillStyle = "#18202b";
-    c.font = font(30, 600);
-    c.fillText("Tap to book", 256, 180);
-  }
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
-  if (design === 2) {
-    tex.wrapS = THREE.RepeatWrapping;
-    tex.repeat.x = 0.5;
-  }
-  return tex;
 }
 
 /**
@@ -908,7 +895,30 @@ const easeOutBack = (t: number) => {
 };
 
 // ---------------------------------------------------------------- component
-export function CityView({ seed, tileCount, markers, events, interactive, onTile, onBillboard, onHover, meAvatar, coinBalloon, onBalloon, progress, nightFirst, ads, onAdViews }: Props) {
+export function CityView({
+  seed,
+  tileCount,
+  markers,
+  events,
+  interactive,
+  onTile,
+  onBillboard,
+  onHover,
+  meAvatar,
+  coinBalloon,
+  onBalloon,
+  progress,
+  nightFirst,
+  ads,
+  onAdViews,
+  revealed = true,
+  mode = "game",
+  roomCounts,
+  onRoom,
+  ride = null,
+  onBalloons,
+  caughtFaces,
+}: Props) {
   const host = useRef<HTMLDivElement>(null);
   const api = useRef<{
     build: (seed: number, count: number) => void;
@@ -916,11 +926,16 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
     playEvents: (e: CityEvent[]) => void;
     setBalloon: (slot: number | null) => void;
     setAds: (ads: CityAd[]) => void;
+    setRevealed: (on: boolean) => void;
+    setMode: (m: "game" | "chat") => void;
+    setRoomCounts: (counts: Record<string, number>) => void;
+    setRide: (k: number | null) => void;
+    setCaughtFaces: (list: CaughtFace[] | undefined) => void;
   } | null>(null);
-  const cb = useRef({ onTile, onHover, onBillboard, onBalloon, onAdViews, interactive });
+  const cb = useRef({ onTile, onHover, onBillboard, onBalloon, onAdViews, interactive, onRoom, onBalloons, mode });
   const atmos = useRef({ progress, nightFirst, meAvatar });
   useEffect(() => {
-    cb.current = { onTile, onHover, onBillboard, onBalloon, onAdViews, interactive };
+    cb.current = { onTile, onHover, onBillboard, onBalloon, onAdViews, interactive, onRoom, onBalloons, mode };
     atmos.current = { progress, nightFirst, meAvatar };
   });
 
@@ -993,6 +1008,7 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       // Blinking lamps: hazard lights, police lights, road-works lamps (see updateFlashers).
       flash: { geometry: geo.lamp, material: new THREE.MeshBasicMaterial({ color: 0xffffff }), shadow: false },
       water: { geometry: geo.box, material: new THREE.MeshPhongMaterial({ color: 0xffffff, shininess: 90, specular: 0xffffff }), shadow: false },
+      cooling: { geometry: geo.cooling, material: mat({ side: THREE.DoubleSide }), shadow: true },
     };
 
     const city = new THREE.Group();
@@ -1003,6 +1019,11 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
     scene.add(markerGroup);
     const fxGroup = new THREE.Group();
     scene.add(fxGroup);
+    // Street life (traffic, people, trains, billboards, moving landmarks): hidden while the map
+    // is still a secret building site.
+    const life = new THREE.Group();
+    scene.add(life);
+    const world = makeWorld();
 
     let meshes: Record<string, THREE.InstancedMesh> = {};
     let parts: Record<string, Part[]> = {};
@@ -1018,6 +1039,8 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
     let signalPhase = -1;
     let tileParts = new Map<number, [string, number][]>();
     let radius = 10;
+    /** The tallest thing in the city (balloon rides float above it). */
+    let tallest = 0;
     let framed = false;
     let focus: THREE.Vector3 | null = null;
     let lastMe: number | null = null;
@@ -1030,6 +1053,7 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
     const color = new THREE.Color();
 
     const tiltQ = new THREE.Quaternion();
+    const tq = new THREE.Quaternion();
     const zAxis = new THREE.Vector3(0, 0, 1);
     function writePart(mesh: THREE.InstancedMesh, idx: number, p: Part, g: number) {
       const gx = Math.min(1, g * 1.15);
@@ -1044,9 +1068,15 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
     // ---- cars: each one drives the street network, turning at junctions and bends. Road works
     // close a street (cars turn back before them), and now and then a street jams up: cars
     // queue bumper to bumper with their brake lights glowing, then the queue clears.
+    // Vehicle kinds: 0 car, 1 taxi, 2 delivery van, 3 bus, 4 truck, 5 articulated lorry.
     type Car = {
+      kind: number;
+      /** Length, for queuing in jams. */
+      len: number;
       from: [number, number];
       to: [number, number];
+      /** Where the stretch before this one started (an articulated trailer follows that way). */
+      prev: [number, number];
       t: number;
       speed: number;
       /** Bridges under the start and end of this stretch (for the hump). */
@@ -1056,16 +1086,25 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       jam: number;
       slot: number;
       target: number;
-      /** Seconds to wait before moving off (a queue clears one car at a time). */
+      /** Seconds to wait before moving off (a queue clears one car at a time; buses at stops). */
       hold: number;
+      /** A bus has already pulled in at a stop on this stretch. */
+      stopped: boolean;
       /** Brake lights drawn on (1) or off (0), or -1 (not drawn yet). */
       lit: number;
     };
+    const VEH_LEN = [0.3, 0.3, 0.34, 0.62, 0.52, 0.9];
+    const VEH_SPEED = [1, 1.05, 0.9, 0.7, 0.75, 0.65];
     let cars: Car[] = [];
     let carBody: THREE.InstancedMesh | null = null;
     let carTop: THREE.InstancedMesh | null = null;
     let carLights: THREE.InstancedMesh | null = null;
+    /** Truck boxes, lorry trailers, bus roofs. */
+    let carExtra: THREE.InstancedMesh | null = null;
+    /** Bus windows and taxi signs: they light up at night. */
+    let carGlow: THREE.InstancedMesh | null = null;
     const carLightMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const carGlowMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     let carNight = 0;
     let carNightDrawn = -1;
     let blocked = new Set<string>();
@@ -1105,11 +1144,40 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
     }
     const isBridge = (x: number, z: number) => kindAt.get(`${x},${z}`) === "bridge";
 
+    /** What sort of area a road is in: near docks and industry, downtown, or the suburbs. */
+    const INDUSTRY = ["port", "airport", "military", "power", "oilrig", "dam", "market", "solar"];
+    function zoneOf(t: Tile) {
+      let industry = 0;
+      let town = 0;
+      for (let dx = -2; dx <= 2; dx++) {
+        for (let dz = -2; dz <= 2; dz++) {
+          const n = tileXY(t.x + dx, t.z + dz);
+          if (!n) continue;
+          if (n.kind === "tower" || n.kind === "office") town++;
+          if (n.kind === "crane" || n.kind === "fuel" || (n.structure && INDUSTRY.includes(n.structure.type))) industry++;
+        }
+      }
+      return industry >= 2 ? 2 : town >= 5 ? 1 : 0;
+    }
+    // Chances of each kind (car, taxi, van, bus, truck, lorry) in the suburbs, downtown, near industry.
+    const MIX = [
+      [0.7, 0.06, 0.12, 0.05, 0.05, 0.02],
+      [0.5, 0.24, 0.1, 0.13, 0.02, 0.01],
+      [0.28, 0.02, 0.2, 0.02, 0.28, 0.2],
+    ];
+    function pickKind(t: Tile) {
+      const mix = MIX[zoneOf(t)];
+      let r = Math.random();
+      for (let k = 0; k < mix.length; k++) if ((r -= mix[k]) < 0) return k;
+      return 0;
+    }
+
     function buildCars(plan: CityPlan) {
-      if (carBody) moving.remove(carBody, carTop!, carLights!);
-      carBody?.dispose();
-      carTop?.dispose();
-      carLights?.dispose();
+      for (const m of [carBody, carTop, carLights, carExtra, carGlow]) {
+        if (!m) continue;
+        life.remove(m);
+        m.dispose();
+      }
       const roads = tiles.filter((t) => (t.kind === "road" || t.kind === "bridge") && !t.works);
       cars = [];
       const n = Math.min(160, Math.floor(roads.length / 4));
@@ -1118,32 +1186,53 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
         const options = DIRS.filter(([ox, oz]) => roadAt(t.x + ox, t.z + oz));
         if (!options.length) continue;
         const [ox, oz] = options[Math.floor(Math.random() * options.length)];
+        const kind = pickKind(t);
         cars.push({
+          kind,
+          len: VEH_LEN[kind],
           from: [t.x, t.z],
           to: [t.x + ox, t.z + oz],
+          prev: [t.x - ox, t.z - oz],
           t: Math.random(),
-          speed: 0.8 + Math.random() * 0.9,
+          speed: (0.8 + Math.random() * 0.9) * VEH_SPEED[kind],
           bridgeFrom: t.kind === "bridge",
           bridgeTo: isBridge(t.x + ox, t.z + oz),
           jam: -1,
           slot: -1,
           target: 0,
           hold: 0,
+          stopped: false,
           lit: -1,
         });
       }
-      carBody = new THREE.InstancedMesh(geo.box, mat(), Math.max(1, cars.length));
-      carTop = new THREE.InstancedMesh(geo.box, mat({ color: 0xe9f2fb }), Math.max(1, cars.length));
+      const N = Math.max(1, cars.length);
+      carBody = new THREE.InstancedMesh(geo.box, mat(), N);
+      carTop = new THREE.InstancedMesh(geo.box, mat({ color: 0xffffff }), N);
+      carExtra = new THREE.InstancedMesh(geo.box, mat(), N);
+      carGlow = new THREE.InstancedMesh(geo.box, carGlowMat, N);
       // Two little lamps per car: headlights in front (on at night), brake lights behind.
-      carLights = new THREE.InstancedMesh(geo.box, carLightMat, Math.max(1, cars.length * 2));
+      carLights = new THREE.InstancedMesh(geo.box, carLightMat, N * 2);
       carBody.castShadow = true;
-      cars.forEach((_, k) => carBody!.setColorAt(k, color.setHex(plan.palette.car[k % plan.palette.car.length])));
-      carBody.count = carTop.count = cars.length;
+      carExtra.castShadow = true;
+      const pal = plan.palette.car;
+      const pickC = (list: number[], k: number) => list[k % list.length];
+      cars.forEach((c, k) => {
+        const body =
+          c.kind === 0 ? pickC(pal, k) : c.kind === 1 ? 0xffd43b : c.kind === 2 ? pickC([0xffffff, 0xdee2e6, 0x1971c2, 0xe03131, 0xf08c00], k) : c.kind === 3 ? pickC([0xe03131, 0x1971c2, 0x2f9e44], plan.seed) : c.kind === 4 ? pickC([0xe03131, 0x1971c2, 0xf08c00, 0xffffff], k) : pickC([0x343a40, 0x1971c2, 0xe03131, 0xf1f3f5], k);
+        carBody!.setColorAt(k, color.setHex(body));
+        carTop!.setColorAt(k, color.setHex(c.kind <= 1 ? 0xe9f2fb : 0xbcd4e6));
+        carExtra!.setColorAt(k, color.setHex(c.kind === 3 ? 0xf1f3f5 : c.kind === 4 ? pickC([0xf1f3f5, 0xffd43b, 0xdee2e6, 0x69db7c], k) : pickC([0xe5484d, 0x228be6, 0xfab005, 0x2f9e44, 0xf1f3f5], k)));
+        carGlow!.setColorAt(k, color.setHex(0x2b3a4f));
+      });
+      carBody.count = carTop.count = carExtra.count = carGlow.count = cars.length;
       carLights.count = cars.length * 2;
       for (let k = 0; k < cars.length * 2; k++) carLights.setColorAt(k, color.setHex(0x6b1d1d));
-      for (const m of [carBody, carTop, carLights]) m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      for (const m of [carBody, carTop, carLights, carExtra, carGlow]) {
+        m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        m.frustumCulled = false;
+      }
       carNightDrawn = -1;
-      moving.add(carBody, carTop, carLights);
+      life.add(carBody, carTop, carLights, carExtra, carGlow);
     }
 
     /** Pick a few streets that jam up now and then: the last few stretches before a junction. */
@@ -1186,7 +1275,7 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
     // point simply stops where it is.)
     function joinQueue(c: Car, j: number) {
       const jam = jams[j];
-      const target = jam.tail - QUEUE_GAP;
+      const target = jam.tail - QUEUE_GAP - Math.max(0, c.len - 0.3);
       c.jam = j;
       c.slot = jam.count++;
       c.target = target;
@@ -1228,8 +1317,39 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
     const BRAKE_NIGHT = new THREE.Color(0xb8222b);
     const HEAD_DAY = new THREE.Color(0x9aa3ad);
     const HEAD_NIGHT = new THREE.Color(0xfff2c4);
+    const BUS_DAY = new THREE.Color(0x2b3a4f);
+    const BUS_NIGHT = new THREE.Color(0xffd98a);
+    const TAXI_DAY = new THREE.Color(0xc9b458);
+    const TAXI_NIGHT = new THREE.Color(0xfff3bf);
+    const HIDDEN = new THREE.Vector3(0.0001, 0.0001, 0.0001);
+    // A point some way back along a vehicle's path (for lorry trailers), in its lane.
+    const trail = { x: 0, z: 0 };
+    function pathPoint(c: Car, back: number) {
+      let t = c.t - back;
+      let a = c.from;
+      let b = c.to;
+      if (t < 0) {
+        t = Math.max(0, t + 1);
+        a = c.prev;
+        b = c.from;
+      }
+      const dx = b[0] - a[0];
+      const dz = b[1] - a[1];
+      trail.x = a[0] + dx * t - dz * 0.14;
+      trail.z = a[1] + dz * t + dx * 0.14;
+    }
+    // One box of a vehicle: `a` along it from its centre, `lift` up, of the given size.
+    const fwd = { x: 0, z: 0 };
+    function box(mesh: THREE.InstancedMesh, k: number, x: number, y: number, z: number, a: number, lift: number, len: number, h: number, w: number) {
+      m4.compose(v.set(x + fwd.x * a, y + lift, z + fwd.z * a), q, s.set(len, h, w));
+      mesh.setMatrixAt(k, m4);
+    }
+    function hide(mesh: THREE.InstancedMesh, k: number) {
+      m4.compose(v.set(0, -5, 0), q, HIDDEN);
+      mesh.setMatrixAt(k, m4);
+    }
     function updateCars(dt: number, time: number) {
-      if (!carBody || !carTop || !carLights) return;
+      if (!carBody || !carTop || !carLights || !carExtra || !carGlow) return;
       updateJams(time);
       let colorsDirty = false;
       const nightChanged = Math.abs(carNight - carNightDrawn) > 0.03;
@@ -1240,6 +1360,12 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
           carLights.setColorAt(k * 2, color);
           cars[k].lit = -1;
         }
+        for (let k = 0; k < cars.length; k++) {
+          const kind = cars[k].kind;
+          if (kind === 3) carGlow.setColorAt(k, color.copy(BUS_DAY).lerp(BUS_NIGHT, carNight));
+          else if (kind === 1) carGlow.setColorAt(k, color.copy(TAXI_DAY).lerp(TAXI_NIGHT, carNight));
+        }
+        if (carGlow.instanceColor) carGlow.instanceColor.needsUpdate = true;
         colorsDirty = true;
       }
       for (let k = 0; k < cars.length; k++) {
@@ -1265,12 +1391,23 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
             }
           }
         }
+        // Buses pull in at a stop now and then, half way along a straight stretch.
+        if (c.kind === 3 && !c.stopped && c.t < 0.5 && c.t + move >= 0.5 && c.jam < 0) {
+          c.stopped = true;
+          const here = tileXY(c.from[0], c.from[1]);
+          if (here && (here.mask === 5 || here.mask === 10) && Math.random() < 0.4) {
+            move = 0.5 - c.t;
+            c.hold = 2 + Math.random() * 2;
+          }
+        }
         c.t += move;
         while (c.t >= 1) {
           c.t -= 1;
           const next = nextStop(c);
+          c.prev = c.from;
           c.from = c.to;
           c.to = next;
+          c.stopped = false;
           c.bridgeFrom = c.bridgeTo;
           c.bridgeTo = isBridge(next[0], next[1]);
           dx = c.to[0] - c.from[0];
@@ -1283,15 +1420,77 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
         const off = Math.abs(c.t < 0.5 ? c.t : 1 - c.t);
         const y = onBridge ? 0.06 + (BRIDGE_TOP - 0.06) * Math.min(1, Math.max(0, (0.5 - off) / 0.3)) : 0.06;
         q.setFromAxisAngle(up, Math.atan2(-dz, dx));
-        m4.compose(v.set(x, y, z), q, s.set(0.3, 0.09, 0.15));
-        carBody.setMatrixAt(k, m4);
-        m4.compose(v.set(x - dx * 0.02, y + 0.09, z - dz * 0.02), q, s.set(0.16, 0.06, 0.13));
-        carTop.setMatrixAt(k, m4);
-        s.set(0.012, 0.026, 0.11);
-        m4.compose(v.set(x + dx * 0.151, y + 0.05, z + dz * 0.151), q, s);
+        fwd.x = dx;
+        fwd.z = dz;
+        let front = 0.151;
+        let rear = -0.151;
+        let lampW = 0.11;
+        switch (c.kind) {
+          case 0:
+          case 1:
+            box(carBody, k, x, y, z, 0, 0, 0.3, 0.09, 0.15);
+            box(carTop, k, x, y, z, -0.02, 0.09, 0.16, 0.06, 0.13);
+            hide(carExtra, k);
+            if (c.kind === 1) box(carGlow, k, x, y, z, -0.02, 0.15, 0.05, 0.025, 0.09);
+            else hide(carGlow, k);
+            break;
+          case 2:
+            box(carBody, k, x, y, z, -0.02, 0, 0.3, 0.15, 0.155);
+            box(carTop, k, x, y, z, 0.125, 0.07, 0.05, 0.06, 0.15);
+            hide(carExtra, k);
+            hide(carGlow, k);
+            front = 0.131;
+            rear = -0.171;
+            lampW = 0.12;
+            break;
+          case 3:
+            box(carBody, k, x, y, z, 0, 0, 0.62, 0.15, 0.17);
+            hide(carTop, k);
+            box(carGlow, k, x, y, z, 0, 0.075, 0.6, 0.05, 0.176);
+            box(carExtra, k, x, y, z, 0, 0.15, 0.58, 0.015, 0.15);
+            front = 0.311;
+            rear = -0.311;
+            lampW = 0.13;
+            break;
+          case 4:
+            box(carBody, k, x, y, z, 0.17, 0, 0.16, 0.15, 0.16);
+            box(carTop, k, x, y, z, 0.24, 0.07, 0.03, 0.06, 0.15);
+            box(carExtra, k, x, y, z, -0.09, 0.03, 0.34, 0.19, 0.17);
+            hide(carGlow, k);
+            front = 0.251;
+            rear = -0.261;
+            lampW = 0.13;
+            break;
+          default: {
+            // Articulated lorry: the tractor here, its trailer following round corners.
+            box(carBody, k, x, y, z, 0, 0, 0.18, 0.15, 0.16);
+            box(carTop, k, x, y, z, 0.08, 0.07, 0.03, 0.06, 0.15);
+            hide(carGlow, k);
+            pathPoint(c, 0.1);
+            const hx = trail.x;
+            const hz = trail.z;
+            pathPoint(c, 0.66);
+            const tx = trail.x;
+            const tz = trail.z;
+            const yaw = Math.atan2(-(hz - tz), hx - tx || 0.0001);
+            tq.setFromAxisAngle(up, yaw);
+            m4.compose(v.set((hx + tx) / 2, y + 0.03, (hz + tz) / 2), tq, s.set(0.56, 0.19, 0.17));
+            carExtra.setMatrixAt(k, m4);
+            front = 0.091;
+            lampW = 0.13;
+            s.set(0.012, 0.03, lampW);
+            m4.compose(v.set(tx - Math.cos(yaw) * 0.005, y + 0.06, tz + Math.sin(yaw) * 0.005), tq, s);
+            carLights.setMatrixAt(k * 2 + 1, m4);
+            rear = NaN;
+          }
+        }
+        s.set(0.012, 0.026, lampW);
+        m4.compose(v.set(x + dx * front, y + 0.05, z + dz * front), q, s);
         carLights.setMatrixAt(k * 2, m4);
-        m4.compose(v.set(x - dx * 0.151, y + 0.05, z - dz * 0.151), q, s);
-        carLights.setMatrixAt(k * 2 + 1, m4);
+        if (!Number.isNaN(rear)) {
+          m4.compose(v.set(x + dx * rear, y + 0.05, z + dz * rear), q, s);
+          carLights.setMatrixAt(k * 2 + 1, m4);
+        }
         const lit = braking ? 1 : 0;
         if (lit !== c.lit) {
           c.lit = lit;
@@ -1299,22 +1498,12 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
           colorsDirty = true;
         }
       }
-      carBody.instanceMatrix.needsUpdate = true;
-      carTop.instanceMatrix.needsUpdate = true;
-      carLights.instanceMatrix.needsUpdate = true;
+      for (const m of [carBody, carTop, carLights, carExtra, carGlow]) m.instanceMatrix.needsUpdate = true;
       if (colorsDirty && carLights.instanceColor) carLights.instanceColor.needsUpdate = true;
     }
 
     // ---- birds and clouds
-    const BIRDS = 18;
-    const birds = new THREE.InstancedMesh(geo.bird, new THREE.MeshLambertMaterial({ color: 0x3d4752, side: THREE.DoubleSide }), BIRDS);
-    const birdData = Array.from({ length: BIRDS }, (_, k) => ({
-      flock: k % 3,
-      offset: (k % 6) * 0.5,
-      phase: Math.random() * 10,
-      spread: 0.6 + Math.random() * 1.2,
-    }));
-    moving.add(birds);
+    const birds = createBirds(world, moving);
 
     const clouds: THREE.Group[] = [];
     const cloudMat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, flatShading: true });
@@ -1333,18 +1522,7 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
     }
 
     function updateSky(time: number, dt: number) {
-      birdData.forEach((b, k) => {
-        const a = time * 0.12 + b.flock * 2.1 - b.offset * 0.08;
-        const R = radius * 0.6 + b.flock * 3;
-        const x = Math.cos(a) * R + Math.cos(b.phase) * b.spread;
-        const z = Math.sin(a) * R + Math.sin(b.phase) * b.spread;
-        const y = 6 + b.flock * 1.6 + Math.sin(time * 0.8 + b.phase) * 0.4;
-        q.setFromAxisAngle(up, -a);
-        const flap = 0.4 + Math.abs(Math.sin(time * 9 + b.phase)) * 1.4;
-        m4.compose(v.set(x, y, z), q, s.set(1, flap, 1));
-        birds.setMatrixAt(k, m4);
-      });
-      birds.instanceMatrix.needsUpdate = true;
+      birds.update(time, dt, camera, performance.now());
       // Clouds drift across, high above the city.
       const span = radius * 3 + 20;
       for (const c of clouds) {
@@ -1645,16 +1823,16 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       obj.rotation.y = rotY;
       obj.userData.scale = scale;
       landmarks.push({ obj, spin: wheel, tile, speed: 0.35 });
-      moving.add(obj);
+      life.add(obj);
     }
 
     function buildLandmarks() {
       // Boards keep showing what they showed (no flicker when the city grows).
       const wasShowing = new Map(boards.map((b) => [b.id, b.shown]));
-      for (const l of landmarks) moving.remove(l.obj);
+      for (const l of landmarks) life.remove(l.obj);
       landmarks = [];
       for (const b of boards) {
-        moving.remove(b.obj);
+        life.remove(b.obj);
         b.obj.traverse((o) => {
           if (o instanceof THREE.Mesh) o.geometry.dispose();
         });
@@ -1674,7 +1852,7 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
           }
           boards.push(board);
           boardHits.push(board.panel);
-          moving.add(board.obj);
+          life.add(board.obj);
         }
         if (t.kind === "ferris") addFerris(t.x, t.z, t.r[1] < 0.5 ? 0 : Math.PI / 2, t.i, 1);
         if (t.kind === "crane") {
@@ -1696,8 +1874,10 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
           jib.position.y = 3.08;
           obj.add(jib);
           obj.position.set(t.x + 0.32, 0, t.z - 0.32);
+          // The hook winds up and down, and the trolley runs along the arm.
+          obj.userData.lift = { cable, load, phase: t.r[0] * 6 };
           landmarks.push({ obj, spin: jib, tile: t.i, speed: 0.15, axis: "y" });
-          moving.add(obj);
+          life.add(obj);
         }
         if (t.structure?.anchor && t.structure.type === "funfair") {
           addFerris(t.x + 0.05, t.z, Math.PI / 4, t.i, 1.15);
@@ -1721,7 +1901,7 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
           obj.add(spin);
           obj.position.set(t.x + 0.95, 0, t.z + 0.15);
           landmarks.push({ obj, spin, tile: t.i, speed: 0.8, axis: "y" });
-          moving.add(obj);
+          life.add(obj);
         }
         if (t.kind === "turbine") {
           const obj = new THREE.Group();
@@ -1736,15 +1916,23 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
           obj.position.set(t.x, 0, t.z);
           obj.rotation.y = t.r[2] * 0.6;
           landmarks.push({ obj, spin: rotor, tile: t.i, speed: 1.6 + t.r[3] });
-          moving.add(obj);
+          life.add(obj);
         }
       }
     }
     function updateLandmarks(dt: number, now: number) {
-      boardTextures[2].offset.x = (boardTextures[2].offset.x + dt * 0.12) % 1;
+      const secs = now / 1000;
       for (const l of landmarks) {
         if (l.axis === "y") l.spin.rotation.y += l.speed * dt;
         else l.spin.rotation.z += l.speed * dt;
+        const lift = l.obj.userData.lift as { cable: THREE.Object3D; load: THREE.Object3D; phase: number } | undefined;
+        if (lift) {
+          const drop = 0.35 + 0.9 * (0.5 + 0.5 * Math.sin(secs * 0.45 + lift.phase));
+          const reach = 0.75 + 0.3 * Math.sin(secs * 0.23 + lift.phase);
+          lift.cable.scale.y = drop / 0.6;
+          lift.cable.position.set(reach, -drop / 2, 0);
+          lift.load.position.set(reach, -drop - 0.04, 0);
+        }
         const t = Math.min(1, Math.max(0, (now - (born.get(l.tile) ?? 0)) / 700));
         l.obj.scale.setScalar(Math.max(0.0001, t) * (l.obj.userData.scale ?? 1));
       }
@@ -1757,7 +1945,7 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
     let boats: { obj: THREE.Group; pos: number; speed: number; side: number }[] = [];
     let boatPlan: CityPlan | null = null;
     function buildBoats(plan: CityPlan) {
-      for (const b of boats) moving.remove(b.obj);
+      for (const b of boats) life.remove(b.obj);
       boats = [];
       boatPlan = plan;
       if (!plan.river) return;
@@ -1770,7 +1958,7 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
         const cabin = new THREE.Mesh(cabinGeo, lmMat.cabins[k % lmMat.cabins.length]);
         obj.add(hull, cabin);
         boats.push({ obj, pos: (Math.random() - 0.5) * radius * 2, speed: (k % 2 ? 1 : -1) * (0.25 + Math.random() * 0.25), side: (k % 2 ? 1 : -1) * 0.2 });
-        moving.add(obj);
+        life.add(obj);
       }
     }
     function updateBoats(time: number, dt: number) {
@@ -1795,19 +1983,79 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
 
     // ---- hot-air balloons and planes
     const balloonColors = [0xff6b6b, 0xffd43b, 0x4dabf7, 0xda77f2, 0x38d9a9];
-    const balloons = balloonColors.map((c, k) => {
+    // Each balloon carries an advert on a banner round its middle (the same ads as the
+    // billboards, changing every 20 s; "Your ad here" when there are none), and slowly turns so
+    // both sides show. In chat mode each one is a chat room you can ride in.
+    const bannerTex = balloonBannerTexture();
+    const bannerGeo = mergeGeometries([
+      new THREE.CylinderGeometry(0.41, 0.445, 0.22, 12, 1, true, -0.62, 1.24),
+      new THREE.CylinderGeometry(0.41, 0.445, 0.22, 12, 1, true, Math.PI - 0.62, 1.24),
+    ]);
+    const ropeGeo = mergeGeometries(
+      [[-0.07, -0.07], [0.07, -0.07], [-0.07, 0.07], [0.07, 0.07]].map(([rx, rz]) => new THREE.BoxGeometry(0.008, 0.2, 0.008).translate(rx, -0.52, rz)),
+    );
+    const BALLOON_SCALE = 1.25;
+    type Balloon = {
+      obj: THREE.Group;
+      body: THREE.Group;
+      basket: THREE.Object3D;
+      /** Extra height while you ride it (to clear the tallest towers). */
+      lift: number;
+      mat: THREE.MeshLambertMaterial;
+      shown: string | null;
+      hits: THREE.Object3D[];
+      a: number;
+      r: number;
+      h: number;
+      speed: number;
+      cx: number;
+      cz: number;
+      k: number;
+    };
+    const balloons: Balloon[] = balloonColors.map((c, k) => {
       const g = new THREE.Group();
+      const body = new THREE.Group();
       const envelope = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 10), new THREE.MeshLambertMaterial({ color: c, flatShading: true }));
       envelope.scale.y = 1.15;
       const band = new THREE.Mesh(new THREE.CylinderGeometry(0.43, 0.38, 0.12, 12), new THREE.MeshLambertMaterial({ color: 0xffffff }));
       band.position.y = -0.12;
       const basket = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, 0.14), new THREE.MeshLambertMaterial({ color: 0x8a6a4f }));
       basket.position.y = -0.68;
-      g.add(envelope, band, basket);
-      g.userData = { a: (k / balloonColors.length) * Math.PI * 2, r: 0.5 + (k % 3) * 0.25, h: 4.5 + (k % 3) * 1.4, speed: 0.025 + k * 0.006 };
+      const mat = new THREE.MeshLambertMaterial({ map: bannerTex, emissive: 0xffffff, emissiveMap: bannerTex, emissiveIntensity: 0.3 });
+      const banner = new THREE.Mesh(bannerGeo, mat);
+      banner.position.y = 0.08;
+      body.add(envelope, band, banner);
+      // The basket and its ropes (hidden while you ride in it).
+      const rig = new THREE.Group();
+      rig.add(new THREE.Mesh(ropeGeo, lmMat.frame), basket);
+      g.add(body, rig);
+      g.scale.setScalar(BALLOON_SCALE);
       moving.add(g);
-      return g;
+      return {
+        obj: g,
+        body,
+        basket: rig,
+        lift: 0,
+        mat,
+        shown: null,
+        hits: [envelope, band, banner, basket],
+        a: (k / balloonColors.length) * Math.PI * 2,
+        r: 0.45 + (k % 3) * 0.22,
+        h: 5.6 + (k % 3) * 1.3,
+        speed: 0.022 + k * 0.005,
+        cx: (k - 2) * 0.7,
+        cz: ((k * 3) % 5 - 2) * 0.6,
+        k,
+      };
     });
+    const balloonHits = balloons.flatMap((b) => b.hits);
+    /** Where balloon b is (into out), and which way it's heading (into dir). A gentle loop over the city. */
+    function balloonPose(b: Balloon, time: number, out: THREE.Vector3, dir?: THREE.Vector3) {
+      const R = Math.max(3, radius * b.r);
+      const a = b.a;
+      out.set(b.cx + Math.cos(a) * R, b.h + b.lift + Math.sin(time * 0.5 + b.k) * 0.25, b.cz + Math.sin(a) * R * 0.78 + Math.sin(2 * a + b.k) * R * 0.18);
+      dir?.set(-Math.sin(a) * R, 0, Math.cos(a) * R * 0.78 + Math.cos(2 * a + b.k) * R * 0.36).normalize();
+    }
     const planes = [0, 1].map((k) => {
       const g = new THREE.Group();
       const white = new THREE.MeshLambertMaterial({ color: 0xffffff });
@@ -1824,9 +2072,20 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
     });
     function updateAir(time: number, dt: number) {
       for (const b of balloons) {
-        const u = b.userData;
-        u.a += u.speed * dt;
-        b.position.set(Math.cos(u.a) * radius * u.r, u.h + Math.sin(time * 0.6 + u.a * 5) * 0.25, Math.sin(u.a) * radius * u.r);
+        b.a += b.speed * dt;
+        const lift = rideActive && rideK === b.k ? Math.max(0, tallest + 1.8 - b.h) : 0;
+        b.lift += (lift - b.lift) * Math.min(1, dt * 0.6);
+        balloonPose(b, time, b.obj.position);
+        b.body.rotation.y += dt * 0.12;
+        // Turn to the next ad every 20 s.
+        const want = pickAd(Math.floor((time + b.k * 9) / 20), b.k + 2);
+        const id = want && adReady(want.id) ? want.id : null;
+        if (id !== b.shown) {
+          b.shown = id;
+          const tex = (id && adCache.get(id)?.tex) || bannerTex;
+          b.mat.map = tex;
+          b.mat.emissiveMap = tex;
+        }
       }
       for (const p of planes) {
         const u = p.userData;
@@ -2057,12 +2316,24 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     }
 
+    // ---- the city's moving parts and things being built (see ./city/*)
+    const people = createPeople(world, life);
+    const trains = createTrains(world, life);
+    const plumes = createPlumes(world, life);
+    const sites = createSites(world, life);
+    const buildingSite = createBuildingSite(scene);
+    /** False while the map is still a secret building site (the join window). */
+    let isRevealed = true;
+    /** Street life comes back a moment after the city starts rising. */
+    let lifeAt = 0;
+
     // ---- build / grow the city
     function build(newSeed: number, count: number) {
       const sameCity = newSeed === currentSeed;
       if (!sameCity) {
         born = new Map();
         framed = false;
+        caughtFromEvents.clear();
       }
       currentSeed = newSeed;
       const plan = makePlan(newSeed);
@@ -2132,6 +2403,7 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       flashState = -1;
 
       radius = tiles.reduce((m, t) => Math.max(m, Math.abs(t.x), Math.abs(t.z)), 4) + 1.5;
+      tallest = tiles.reduce((m, t) => Math.max(m, t.top), 0);
       buildTerrain(newSeed, radius);
       const sc = sun.shadow.camera;
       sc.left = sc.bottom = -radius * 1.3;
@@ -2154,7 +2426,26 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       buildLandmarks();
       buildBoats(plan);
       buildGhosts(count);
+      for (const g of ghosts) g.visible = isRevealed;
+      // Everyone else who needs to know about the new city.
+      world.tiles = tiles;
+      world.plan = plan;
+      world.radius = radius;
+      world.kindAt = kindAt;
+      world.tileIndex = tileIndex;
+      world.blocked = blocked;
+      world.born = born;
+      birds.build(newSeed);
+      people.build();
+      trains.build();
+      plumes.build();
+      sites.build();
+      if (!isRevealed) buildingSite.build(newSeed, count);
+      cb.current.onBalloons?.(balloons.length);
       setMarkers(lastMarkers);
+      rebuildPills();
+      caughtKey = "";
+      drawCaught();
     }
 
     function updateGrowth(now: number) {
@@ -2573,7 +2864,7 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
     function arrestScene(tile: Tile, hiders: { name: string | null; avatar: unknown; bot: boolean }[] = []) {
       // The faces of whoever got caught pop up over the spot.
       hiders.slice(0, 3).forEach((h, k) => {
-        const tex = h.bot ? labelTexture("🤖", "#7048e8") : faceTexture(cleanAvatar(h.avatar, h.name ?? "hider"), "#e5484d");
+        const tex = h.bot ? labelTexture("🤖", "#7048e8") : faceTexture(cleanAvatar(h.avatar, h.name ?? "ghost"), "#e5484d");
         const face = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
         face.renderOrder = 8;
         addFx(face, 6000, (t) => {
@@ -2881,6 +3172,10 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
         const tile = tiles[e.tile];
         if (!tile) continue; // not built yet: try again once the city has grown
         seenEvents.add(e.id);
+        // Whoever got caught keeps floating over the spot for the rest of the round.
+        if (e.kind === "caught") {
+          (e.detail?.hiders ?? []).forEach((h, k) => caughtFromEvents.set(`${e.id}:${k}`, { tile: e.tile!, name: h.name, avatar: h.avatar, bot: h.bot }));
+        }
         if (e.ageMs > 15000) continue;
         if (e.kind === "searched") {
           const found = list.some((x) => x.kind === "caught" && x.tile === e.tile && Math.abs(x.id - e.id) <= 2);
@@ -2899,6 +3194,7 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
           puff(tile, 0xd0bfff, 500);
         }
       }
+      drawCaught();
     }
 
     function updateFx(now: number) {
@@ -3003,7 +3299,8 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       // Night lights: traffic-light pools, glowing billboards, car headlights.
       const night = Math.min(1, Math.max(0, (0.75 - dl) / 0.6));
       poolMat.opacity = 0.6 * night;
-      if (pools) pools.visible = night > 0.02;
+      if (pools) pools.visible = night > 0.02 && isRevealed;
+      sites.setNight(night, C.windowDay, C.windowNight);
       boardGlowMat.color.copy(C.frameDay).lerp(C.frameNight, night);
       boardBeamMat.opacity = 0.2 * night;
       for (const b of boards) {
@@ -3195,6 +3492,15 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       const rect = renderer.domElement.getBoundingClientRect();
       pointer.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
       ray.setFromCamera(pointer, camera);
+      if (!isRevealed) {
+        // The city is hidden: use the ground.
+        if (Math.abs(ray.ray.direction.y) < 1e-4) return null;
+        const d = -ray.ray.origin.y / ray.ray.direction.y;
+        if (d < 0) return null;
+        const gx = Math.round(ray.ray.origin.x + ray.ray.direction.x * d);
+        const gz = Math.round(ray.ray.origin.z + ray.ray.direction.z * d);
+        return tileIndex.get(`${gx},${gz}`) ?? null;
+      }
       const hits = ray.intersectObjects(Object.values(meshes), false);
       for (const h of hits) {
         // The square under the exact point touched (big buildings cover several squares).
@@ -3221,17 +3527,471 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
     }
 
     function showHover(tile: number | null) {
-      if (tile === null || !cb.current.interactive) {
+      if (tile === null || (!cb.current.interactive && !chatMode)) {
         hoverBox.visible = false;
         cb.current.onHover?.(null);
         return;
       }
       const t = tiles[tile];
+      if (!t) return;
+      if (!isRevealed) {
+        // The city is still a secret: no addresses, no shapes.
+        hoverBox.visible = true;
+        hoverBox.position.set(t.x, 0, t.z);
+        hoverBox.scale.set(1.02, 0.3, 1.02);
+        cb.current.onHover?.({ tile, label: "Building site · the city appears when the hunt starts" });
+        return;
+      }
+      if (chatMode) {
+        // Highlight the whole building, and say who's inside.
+        const r = roomFor(tile);
+        if (!r) {
+          hoverBox.visible = false;
+          cb.current.onHover?.(null);
+          return;
+        }
+        const a = r.anchor;
+        hoverBox.visible = true;
+        hoverBox.position.set(a.x + (r.big ? 0.5 : 0), 0, a.z + (r.big ? 0.5 : 0));
+        hoverBox.scale.set(r.big ? 2.04 : 1.04, a.top + 0.12, r.big ? 2.04 : 1.04);
+        const n = roomCountsNow[r.room.id] ?? 0;
+        cb.current.onHover?.({ tile: a.i, label: `${r.room.name} · ${n ? `${n} inside` : "nobody inside yet"} · tap to go in` });
+        return;
+      }
       hoverBox.visible = true;
       hoverBox.position.set(t.x, 0, t.z);
       hoverBox.scale.set(1.02, t.top + 0.1, 1.02);
-      const what = t.kind === "structure" && t.structure ? STRUCTURE_LABEL[t.structure.type] : t.works ? "Road works" : KIND_LABEL[t.kind];
+      const what = t.station
+        ? "Railway station"
+        : t.kind === "structure" && t.structure
+          ? STRUCTURE_LABEL[t.structure.type]
+          : t.works
+            ? "Road works"
+            : `${KIND_LABEL[t.kind]}${t.rail ? " · under the railway" : ""}`;
       cb.current.onHover?.({ tile, label: currentPlan ? `${addressOf(currentPlan, t)} · ${what}` : what });
+    }
+
+    // ---- chat mode: buildings and balloons are chat rooms
+    let chatMode = false;
+    let roomCountsNow: Record<string, number> = {};
+    const ROOM_LABEL: Partial<Record<Tile["kind"], string>> = {
+      house: "House",
+      office: "Office",
+      tower: "Skyscraper",
+      hospital: "Hospital",
+      police: "Police station",
+      fuel: "Fuel station",
+      clock: "Clock tower",
+      ferris: "Ferris wheel",
+      stadium: "Stadium",
+      park: "Park",
+      plaza: "Plaza",
+      trees: "Woods",
+      pond: "Pond",
+    };
+    const OUTDOOR = new Set<Tile["kind"]>(["park", "plaza", "trees", "pond"]);
+    const shortAddress = (a: string) => {
+      for (const [full, short] of Object.entries(ABBREV)) {
+        if (a.endsWith(` ${full}`)) return `${a.slice(0, -full.length)}${short}`;
+      }
+      return a;
+    };
+    /** The chat room a tile belongs to (big buildings: their corner tile), or null. */
+    function roomFor(i: number): { room: CityRoom; anchor: Tile; big: boolean } | null {
+      const t = tiles[i];
+      if (!t || !currentPlan) return null;
+      const rail = currentPlan.rail;
+      if (t.station && rail && rail.station !== null) {
+        const at = rail.along === "z" ? tileIndex.get(`${rail.at},${rail.station}`) : tileIndex.get(`${rail.station},${rail.at}`);
+        const anchor = at !== undefined ? tiles[at] : t;
+        return { room: { id: `b:${anchor.i}`, name: `${currentPlan.city.name} Central Station`, capacity: 500, kind: "building" }, anchor, big: false };
+      }
+      if (t.kind === "structure" && t.structure) {
+        const at = tileIndex.get(`${t.structure.ax},${t.structure.az}`);
+        const anchor = at !== undefined ? tiles[at] : t;
+        return { room: { id: `b:${anchor.i}`, name: t.structure.name, capacity: 500, kind: "building" }, anchor, big: true };
+      }
+      const label = ROOM_LABEL[t.kind];
+      if (!label) return null;
+      let capacity = 50;
+      if (t.kind === "house") capacity = 10;
+      else if (t.kind === "office") capacity = t.top < 1.9 ? 30 : 100;
+      else if (t.kind === "tower") capacity = Math.max(100, Math.min(300, 100 + Math.round(((t.top - 2) / 6) * 20) * 10));
+      else if (t.kind === "hospital") capacity = 100;
+      else if (t.kind === "police" || t.kind === "fuel") capacity = 30;
+      else if (t.kind === "clock" || t.kind === "ferris" || t.kind === "stadium") capacity = 500;
+      else if (OUTDOOR.has(t.kind)) capacity = 50;
+      return { room: { id: `b:${t.i}`, name: `${shortAddress(addressOf(currentPlan, t))} · ${label}`, capacity, kind: "building" }, anchor: t, big: false };
+    }
+    const balloonRoom = (k: number): CityRoom => ({ id: `balloon:${k}`, name: `${BALLOON_NAMES[k] ?? `Balloon ${k + 1}`} hot-air balloon`, capacity: 1000, kind: "balloon" });
+
+    function balloonUnder(clientX: number, clientY: number) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+      ray.setFromCamera(pointer, camera);
+      const hit = ray.intersectObjects(balloonHits, false)[0];
+      if (!hit) return null;
+      const k = balloons.findIndex((b) => b.hits.includes(hit.object));
+      return k >= 0 ? k : null;
+    }
+
+    // Count pills ("👥 12") over the busiest rooms (at most 40, for speed).
+    type Pill = { sprite: THREE.Sprite; balloon: number };
+    let pills: Pill[] = [];
+    const pillGroup = new THREE.Group();
+    scene.add(pillGroup);
+    let pillKey = "";
+    function rebuildPills() {
+      const entries = chatMode
+        ? Object.entries(roomCountsNow)
+            .filter(([, n]) => typeof n === "number" && n > 0)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 40)
+        : [];
+      // The counts often arrive as a new object with the same numbers: nothing to redo then.
+      const key = `${currentSeed}|${tiles.length}|${entries.join(";")}`;
+      if (key === pillKey) return;
+      pillKey = key;
+      for (const p of pills) {
+        pillGroup.remove(p.sprite);
+        p.sprite.material.dispose();
+      }
+      pills = [];
+      for (const [id, n] of entries) {
+        let balloon = -1;
+        const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: pillTexture(n), depthTest: false, transparent: true, toneMapped: false }));
+        sprite.center.set(0.5, 0);
+        sprite.renderOrder = 9;
+        if (id.startsWith("balloon:")) {
+          balloon = Number(id.slice(8));
+          if (!balloons[balloon]) continue;
+        } else if (id.startsWith("b:")) {
+          const t = tiles[Number(id.slice(2))];
+          if (!t) continue;
+          const big = t.kind === "structure";
+          sprite.position.set(t.x + (big ? 0.5 : 0), t.top + 0.35, t.z + (big ? 0.5 : 0));
+        } else continue;
+        pills.push({ sprite, balloon });
+        pillGroup.add(sprite);
+      }
+    }
+    function updatePills() {
+      pillGroup.visible = chatMode && isRevealed;
+      if (!pillGroup.visible) return;
+      for (const p of pills) {
+        if (p.balloon >= 0) {
+          const b = balloons[p.balloon];
+          p.sprite.position.copy(b.obj.position);
+          p.sprite.position.y += 0.75 * BALLOON_SCALE;
+          // No label on the balloon you're riding in.
+          p.sprite.visible = !(rideActive && rideK === p.balloon);
+        }
+        // Keep them readable at any zoom.
+        const k = Math.min(2.4, Math.max(0.35, camera.position.distanceTo(p.sprite.position) * 0.045));
+        p.sprite.scale.set(k * 0.95, k * 0.386, 1);
+      }
+    }
+    function setMode(m: "game" | "chat") {
+      chatMode = m === "chat";
+      (hoverBox.material as THREE.LineBasicMaterial).color.set(chatMode ? 0x63e6be : 0xffb400);
+      hoverBox.visible = false;
+      rebuildPills();
+    }
+    function setRoomCounts(counts: Record<string, number>) {
+      roomCountsNow = counts ?? {};
+      rebuildPills();
+    }
+
+    // ---- riding a balloon: the camera flies into the basket and drifts round with it
+    let rideK: number | null = null;
+    let rideActive = false;
+    let rideBlend = 0;
+    const rideFrom = { pos: new THREE.Vector3(), quat: new THREE.Quaternion() };
+    const saved = { pos: new THREE.Vector3(), target: new THREE.Vector3(), quat: new THREE.Quaternion() };
+    const look = { yaw: 0, pitch: 0 };
+    const ridePos = new THREE.Vector3();
+    const rideDir = new THREE.Vector3();
+    const rideQuat = new THREE.Quaternion();
+    const rideM = new THREE.Matrix4();
+    const lookAtV = new THREE.Vector3();
+    function setRide(k: number | null) {
+      if (k !== null && !balloons[k]) k = null;
+      if (k === rideK) return;
+      if (k !== null && !rideActive) {
+        // Remember the normal view, to fly back to it later.
+        saved.pos.copy(camera.position);
+        saved.target.copy(controls.target);
+        saved.quat.copy(camera.quaternion);
+        controls.enabled = false;
+        rideActive = true;
+        focus = null;
+      }
+      if (rideActive) {
+        rideFrom.pos.copy(camera.position);
+        rideFrom.quat.copy(camera.quaternion);
+        rideBlend = 0;
+      }
+      rideK = k;
+      look.yaw = 0;
+      look.pitch = 0;
+    }
+    /** Moves the camera while riding (or flying in or out). False when the normal controls are in charge. */
+    function updateRide(dt: number, time: number) {
+      if (!rideActive) return false;
+      rideBlend = Math.min(1, rideBlend + dt / 2.8);
+      const e = rideBlend * rideBlend * (3 - 2 * rideBlend);
+      for (const b of balloons) b.basket.visible = !(rideK === b.k && rideBlend > 0.7);
+      if (rideK !== null) {
+        const b = balloons[rideK];
+        balloonPose(b, time, ridePos, rideDir);
+        ridePos.copy(b.obj.position);
+        ridePos.y -= 0.5 * BALLOON_SCALE;
+        // Look ahead and down over the city (towards a point ahead of us near the middle);
+        // drag to look round a bit.
+        const ax = rideDir.x * radius * 0.45 - ridePos.x;
+        const az = rideDir.z * radius * 0.45 - ridePos.z;
+        const yaw = Math.atan2(ax, az) + look.yaw;
+        const pitch = Math.max(-0.8, Math.min(-0.22, Math.atan2(-ridePos.y, Math.hypot(ax, az)))) + look.pitch;
+        lookAtV.set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)).add(ridePos);
+        rideQuat.setFromRotationMatrix(rideM.lookAt(ridePos, lookAtV, up));
+        camera.position.lerpVectors(rideFrom.pos, ridePos, e);
+        camera.position.y += Math.sin(e * Math.PI) * 1.5;
+        camera.quaternion.slerpQuaternions(rideFrom.quat, rideQuat, e);
+      } else {
+        camera.position.lerpVectors(rideFrom.pos, saved.pos, e);
+        camera.quaternion.slerpQuaternions(rideFrom.quat, saved.quat, e);
+        if (rideBlend >= 1) {
+          rideActive = false;
+          controls.enabled = true;
+          controls.target.copy(saved.target);
+          camera.position.copy(saved.pos);
+          for (const b of balloons) b.basket.visible = true;
+          return false;
+        }
+      }
+      return true;
+    }
+
+    // ---- caught ghosts: their faces float over where they were caught, all round long
+    type Caught = CaughtFace & { bot?: boolean };
+    const caughtFromEvents = new Map<string, Caught>();
+    let caughtProp: CaughtFace[] | undefined;
+    let caughtKey = "";
+    const caughtGroup = new THREE.Group();
+    scene.add(caughtGroup);
+    function drawCaught() {
+      const list: Caught[] = caughtProp ?? [...caughtFromEvents.values()];
+      const key = `${tiles.length}|${list.map((f) => `${f.tile}:${f.name ?? ""}`).join(",")}`;
+      if (key === caughtKey) return;
+      caughtKey = key;
+      for (const c of [...caughtGroup.children]) {
+        caughtGroup.remove(c);
+        ((c as THREE.Sprite).material as THREE.Material).dispose();
+      }
+      const perTile = new Map<number, number>();
+      for (const f of list.slice(-40)) {
+        const t = tiles[f.tile];
+        if (!t) continue;
+        const n = perTile.get(f.tile) ?? 0;
+        perTile.set(f.tile, n + 1);
+        const tex = f.bot ? labelTexture("🤖", "#7048e8") : faceTexture(cleanAvatar(f.avatar, f.name ?? "ghost"), "#e5484d");
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+        sp.renderOrder = 6;
+        sp.scale.setScalar(0.55);
+        const col = n % 3;
+        sp.userData = {
+          x: t.x + (col === 0 ? 0 : col === 1 ? -0.42 : 0.42),
+          y: t.top + 0.95 + Math.floor(n / 3) * 0.5,
+          z: t.z,
+          phase: (f.tile * 1.7 + n) % 6.28,
+        };
+        caughtGroup.add(sp);
+      }
+    }
+    function setCaughtFaces(list: CaughtFace[] | undefined) {
+      caughtProp = list;
+      drawCaught();
+    }
+    function updateCaught(time: number) {
+      caughtGroup.visible = isRevealed;
+      for (const c of caughtGroup.children) {
+        const u = c.userData as { x: number; y: number; z: number; phase: number };
+        c.position.set(u.x, u.y + Math.sin(time * 1.6 + u.phase) * 0.08, u.z);
+      }
+    }
+
+    // ---- little extras when you tap things: trees shake, parked cars honk, fountains splash
+    const shakes = new Map<number, number>();
+    const wobble = new THREE.Quaternion();
+    const wobbleE = new THREE.Euler();
+    function tapExtras(i: number) {
+      const t = tiles[i];
+      if (!t || !isRevealed) return;
+      const fountain = t.kind === "plaza" || (t.kind === "road" && t.roundabout && t.r[1] < 0.5);
+      if (fountain) {
+        splashScene(t);
+        playSfx("splash");
+        return;
+      }
+      if ((t.kind === "road" && t.incident) || t.kind === "police") {
+        honkScene(t);
+        playSfx("honk");
+        return;
+      }
+      if ((tileParts.get(i) ?? []).some(([n]) => n === "crown")) {
+        if (!shakes.has(i)) leavesScene(t, i);
+        shakes.set(i, performance.now());
+        playSfx("rustle");
+      }
+    }
+    function updateShakes(now: number) {
+      if (!shakes.size) return;
+      const mesh = meshes.crown;
+      if (!mesh) return;
+      for (const [tile, start] of shakes) {
+        const k = (now - start) / 1000;
+        const done = k >= 1.1;
+        for (const [name, idx] of tileParts.get(tile) ?? []) {
+          if (name !== "crown") continue;
+          const p = parts.crown[idx];
+          if (done || growing.includes(tile)) {
+            writePart(mesh, idx, p, 1);
+            continue;
+          }
+          const amp = 0.25 * (1 - k / 1.1);
+          wobble.setFromEuler(wobbleE.set(Math.sin(k * 31 + idx) * amp, 0, Math.sin(k * 26 + idx * 2) * amp));
+          q.setFromAxisAngle(up, p.ry);
+          wobble.multiply(q);
+          m4.compose(v.set(p.x, p.y, p.z), wobble, s.set(p.sx, p.sy, p.sz));
+          mesh.setMatrixAt(idx, m4);
+        }
+        if (done) shakes.delete(tile);
+      }
+      mesh.instanceMatrix.needsUpdate = true;
+    }
+    function leavesScene(t: Tile, i: number) {
+      const crowns = (tileParts.get(i) ?? []).filter(([n]) => n === "crown").slice(0, 3);
+      crowns.forEach(([, idx], j) => {
+        const p = parts.crown[idx];
+        for (let k = 0; k < 2; k++) {
+          const leaf = new THREE.Mesh(sparkGeo, paint(p.color));
+          const sx = (Math.random() - 0.5) * p.sx * 0.8;
+          const sz = (Math.random() - 0.5) * p.sz * 0.8;
+          const top = p.y + p.sy * 0.6;
+          const delay = 0.1 + Math.random() * 0.2 + j * 0.05;
+          const spin = Math.random() * 6;
+          addFx(leaf, 2400, (u) => {
+            const f = Math.max(0, u - delay / 2.4) / (1 - delay / 2.4);
+            leaf.visible = u > delay / 2.4;
+            const y = top - (top - 0.09) * Math.min(1, f * 1.15);
+            leaf.position.set(p.x + sx + Math.sin(f * 9 + spin) * 0.12, y, p.z + sz + Math.cos(f * 7 + spin) * 0.08);
+            leaf.rotation.set(f * 8 + spin, f * 5, Math.sin(f * 10) * 0.8);
+            leaf.scale.set(1, 0.25, 0.8);
+            leaf.scale.multiplyScalar(f > 0.85 ? Math.max(0.0001, (1 - f) / 0.15) : 1);
+          });
+        }
+      });
+    }
+    function splashScene(t: Tile) {
+      const y0 = t.kind === "plaza" ? 0.24 : 0.22;
+      const drops = new THREE.Group();
+      for (let k = 0; k < 16; k++) {
+        const d = new THREE.Mesh(sparkGeo, paint(k % 2 ? 0xa5d8ff : 0xe7f5ff));
+        const a = Math.random() * Math.PI * 2;
+        const sp = 0.25 + Math.random() * 0.45;
+        d.userData = { vx: Math.cos(a) * sp, vz: Math.sin(a) * sp, vy: 1.6 + Math.random() * 1.2 };
+        drops.add(d);
+      }
+      drops.position.set(t.x, y0, t.z);
+      addFx(drops, 1300, (u) => {
+        const tt = u * 1.3;
+        for (const d of drops.children) {
+          const w = d.userData as { vx: number; vy: number; vz: number };
+          d.position.set(w.vx * tt, Math.max(-0.05, w.vy * tt - 4 * tt * tt), w.vz * tt);
+          d.scale.setScalar(0.8 * (1 - u * 0.5));
+        }
+      });
+      const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0x74c0fc, transparent: true, depthWrite: false }));
+      ring.position.set(t.x, y0 + 0.01, t.z);
+      addFx(ring, 900, (u) => {
+        ring.scale.setScalar(0.2 + u * 0.7);
+        (ring.material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - u);
+      });
+    }
+    function honkScene(t: Tile) {
+      // Where the parked car is.
+      let cx = t.x + 0.28;
+      let cz = t.z + 0.34;
+      if (t.kind === "road") {
+        const side = t.r[1] < 0.5 ? 0.33 : -0.33;
+        const alongX = t.mask === 10;
+        cx = alongX ? t.x : t.x + side;
+        cz = alongX ? t.z + side : t.z;
+      }
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: poolMat.map, color: 0xffd43b, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+      glow.position.set(cx, 0.16, cz);
+      glow.renderOrder = 6;
+      addFx(glow, 1300, (u) => {
+        const on = Math.sin(u * Math.PI * 8) > 0;
+        glow.scale.setScalar(on ? 0.75 : 0.0001);
+      });
+      const hop = new THREE.Sprite(new THREE.SpriteMaterial({ map: honkTex, transparent: true, depthTest: false }));
+      hop.renderOrder = 7;
+      addFx(hop, 1300, (u) => {
+        hop.position.set(cx, 0.55 + u * 0.4, cz);
+        hop.scale.set(0.7, 0.35, 1);
+        hop.material.opacity = u > 0.7 ? (1 - u) / 0.3 : 1;
+      });
+    }
+    const honkTex = (() => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 256;
+      canvas.height = 128;
+      const c = canvas.getContext("2d")!;
+      c.font = "900 64px system-ui, sans-serif";
+      c.textAlign = "center";
+      c.textBaseline = "middle";
+      c.lineWidth = 10;
+      c.strokeStyle = "#ffffff";
+      c.strokeText("BEEP!", 128, 66);
+      c.fillStyle = "#1c7ed6";
+      c.fillText("BEEP!", 128, 66);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    })();
+
+    // ---- the secret city: a building site until the hunt starts, then the big reveal
+    function setRevealed(on: boolean) {
+      if (on === isRevealed) return;
+      isRevealed = on;
+      world.revealed = on;
+      if (!on) {
+        city.visible = false;
+        life.visible = false;
+        for (const g of ghosts) g.visible = false;
+        hoverBox.visible = false;
+        buildingSite.build(currentSeed, tiles.length);
+        buildingSite.show(true);
+        return;
+      }
+      // Everything rises out of the ground, from the middle outwards, in about three seconds.
+      const now = performance.now();
+      const far = tiles.reduce((m, t) => Math.max(m, Math.hypot(t.x, t.z)), 1);
+      born = new Map();
+      for (const t of tiles) born.set(t.i, now + 350 + (Math.hypot(t.x, t.z) / far) * 2200 + Math.random() * 200);
+      world.born = born;
+      growing = tiles.map((t) => t.i);
+      for (const [name, list] of Object.entries(parts)) {
+        const mesh = meshes[name];
+        if (!mesh) continue;
+        list.forEach((p, k) => writePart(mesh, k, p, 0));
+        mesh.instanceMatrix.needsUpdate = true;
+      }
+      city.visible = true;
+      for (const g of ghosts) g.visible = true;
+      buildingSite.show(false);
+      lifeAt = now + 1600;
     }
 
     let down: { x: number; y: number; t: number } | null = null;
@@ -3260,21 +4020,47 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
         cb.current.onBalloon(slot);
         return;
       }
-      const board = boardUnder(e.clientX, e.clientY);
+      const board = isRevealed ? boardUnder(e.clientX, e.clientY) : null;
       if (board) {
         cb.current.onBillboard(board);
         return;
       }
-      if (!cb.current.interactive) return;
-      const tile = tileUnder(e.clientX, e.clientY);
-      if (tile !== null) {
-        showHover(tile);
-        cb.current.onTile(tile);
+      if (chatMode) {
+        // Chat mode: buildings and balloons are rooms.
+        const k = balloonUnder(e.clientX, e.clientY);
+        if (k !== null) {
+          cb.current.onRoom?.(balloonRoom(k));
+          return;
+        }
+        const tile = tileUnder(e.clientX, e.clientY);
+        if (tile === null) return;
+        tapExtras(tile);
+        const r = isRevealed ? roomFor(tile) : null;
+        if (r) {
+          showHover(tile);
+          cb.current.onRoom?.(r.room);
+        }
+        return;
       }
+      const tile = tileUnder(e.clientX, e.clientY);
+      if (tile === null) return;
+      tapExtras(tile);
+      if (!cb.current.interactive) return;
+      showHover(tile);
+      cb.current.onTile(tile);
     };
     let hoverQueued: PointerEvent | null = null;
+    let lastDrag: { x: number; y: number } | null = null;
     const onMove = (e: PointerEvent) => {
       if (e.pointerType === "mouse" && !down) hoverQueued = e;
+      // Riding a balloon: drag to look round.
+      if (down && rideActive && rideK !== null) {
+        if (lastDrag) {
+          look.yaw = Math.max(-2.6, Math.min(2.6, look.yaw - (e.clientX - lastDrag.x) * 0.006));
+          look.pitch = Math.max(-0.7, Math.min(0.5, look.pitch + (e.clientY - lastDrag.y) * 0.004));
+        }
+        lastDrag = { x: e.clientX, y: e.clientY };
+      } else lastDrag = null;
     };
     const onLeave = () => showHover(null);
     renderer.domElement.addEventListener("pointerdown", onDown);
@@ -3324,39 +4110,65 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       frame = requestAnimationFrame(loop);
       const dt = Math.min(clock.getDelta(), 0.1);
       const time = clock.elapsedTime;
+      const now = performance.now();
       if (hoverQueued) {
-        const board = boardUnder(hoverQueued.clientX, hoverQueued.clientY);
-        renderer.domElement.style.cursor = board ? "pointer" : "";
-        if (board) {
+        const balloonK = chatMode ? balloonUnder(hoverQueued.clientX, hoverQueued.clientY) : null;
+        const board = balloonK === null && isRevealed ? boardUnder(hoverQueued.clientX, hoverQueued.clientY) : null;
+        renderer.domElement.style.cursor = board || balloonK !== null ? "pointer" : "";
+        if (balloonK !== null) {
+          const room = balloonRoom(balloonK);
+          const n = roomCountsNow[room.id] ?? 0;
+          hoverBox.visible = false;
+          cb.current.onHover?.({ tile: -1, label: `${room.name} · ${n ? `${n} aboard` : "nobody aboard yet"} · tap to climb in` });
+        } else if (board) {
           const t = tiles[board.tile];
           const ad = board.adId ? adsList.find((a) => a.id === board.adId) : null;
           const where = t && currentPlan ? addressOf(currentPlan, t) : "this spot";
-          cb.current.onHover?.({ tile: board.tile, label: ad ? `${ad.brand}: ${ad.headline} · tap to see more` : `Billboard at ${where} · tap to advertise` });
-        }
-        else showHover(tileUnder(hoverQueued.clientX, hoverQueued.clientY));
+          cb.current.onHover?.({ tile: board.tile, label: ad ? `${ad.brand}: ${ad.headline} · tap to see more` : `Billboard at ${where} · your ad here, tap to find out more` });
+        } else showHover(tileUnder(hoverQueued.clientX, hoverQueued.clientY));
         hoverQueued = null;
       }
-      updateGrowth(performance.now());
-      updateCars(dt, time);
+      world.night = carNight;
+      world.rain = storm;
+      world.progress = atmos.current.progress;
+      life.visible = isRevealed && now >= lifeAt;
+      updateGrowth(now);
+      updateShakes(now);
+      if (life.visible) {
+        updateCars(dt, time);
+        updateLandmarks(dt, now);
+        updateBoards(dt, time, now);
+        updateBoats(time, dt);
+        people.update(dt, now);
+        trains.update(dt, now);
+        plumes.update(time, now);
+        sites.update(now);
+      }
       updateSignals(time);
       updateSky(time, dt);
-      updateLandmarks(dt, performance.now());
-      updateBoards(dt, time, performance.now());
       updateFlashers(time);
-      updateBoats(time, dt);
       updateAir(time, dt);
-      updateFx(performance.now());
+      buildingSite.update(dt, now);
+      updateFx(now);
       updateAtmosphere(dt);
       updateLightning(dt);
       updateRain(dt);
       updateCoin(time);
       updateMarkers(time);
-      if (focus) {
-        controls.target.lerp(focus, 0.06);
-        if (controls.target.distanceTo(focus) < 0.05) focus = null;
+      updateCaught(time);
+      // Chat mode: the city dims a little so the rooms' counts stand out.
+      const exposure = chatMode ? 0.8 : 1.05;
+      renderer.toneMappingExposure += (exposure - renderer.toneMappingExposure) * Math.min(1, dt * 3);
+      const riding = updateRide(dt, time);
+      if (!riding) {
+        if (focus) {
+          controls.target.lerp(focus, 0.06);
+          if (controls.target.distanceTo(focus) < 0.05) focus = null;
+        }
+        controls.update();
       }
-      controls.update();
-      const dist = camera.position.distanceTo(controls.target);
+      updatePills();
+      const dist = riding ? 10 : camera.position.distanceTo(controls.target);
       const fog = scene.fog as THREE.Fog;
       fog.near = (dist + radius * 0.8) * (1 - fogFactor * 0.45);
       fog.far = (dist + radius * 4 + 30) * (1 - fogFactor * 0.3);
@@ -3386,7 +4198,7 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
     renderer.domElement.addEventListener("webglcontextlost", onLost);
     renderer.domElement.addEventListener("webglcontextrestored", onRestored);
 
-    api.current = { build, setMarkers, playEvents, setBalloon, setAds };
+    api.current = { build, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setCaughtFaces, setMode };
 
     return () => {
       alive = false;
@@ -3395,6 +4207,17 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       flushViews(performance.now());
       for (const entry of adCache.values()) entry.tex?.dispose();
       adCache.clear();
+      birds.dispose();
+      people.dispose();
+      trains.dispose();
+      plumes.dispose();
+      sites.dispose();
+      buildingSite.dispose();
+      for (const p of pills) p.sprite.material.dispose();
+      disposePills();
+      bannerTex.dispose();
+      honkTex.dispose();
+      for (const t of boardTextures) t.dispose();
       document.removeEventListener("visibilitychange", onVisibility);
       renderer.domElement.removeEventListener("webglcontextlost", onLost);
       renderer.domElement.removeEventListener("webglcontextrestored", onRestored);
@@ -3436,6 +4259,26 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
   useEffect(() => {
     api.current?.setAds(ads ?? []);
   }, [ads]);
+
+  useEffect(() => {
+    api.current?.setRevealed(revealed);
+  }, [revealed]);
+
+  useEffect(() => {
+    api.current?.setMode(mode);
+  }, [mode]);
+
+  useEffect(() => {
+    api.current?.setRoomCounts(roomCounts ?? {});
+  }, [roomCounts]);
+
+  useEffect(() => {
+    api.current?.setRide(ride);
+  }, [ride]);
+
+  useEffect(() => {
+    api.current?.setCaughtFaces(caughtFaces);
+  }, [caughtFaces, tileCount]);
 
   return <div ref={host} className="absolute inset-0" />;
 }
