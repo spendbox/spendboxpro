@@ -17,8 +17,9 @@ The full rule book is the "Hide & Seek Grid Game: Rules Spec" doc.
 
 ## Setup
 
-1. **Database.** In Supabase → SQL Editor, run `game-db/001_hide_and_seek.sql` and then
-   `game-db/002_email_codes_and_city.sql`, once each, on an empty database. In Supabase → Database → Extensions, switch on **pg_cron** first if you
+1. **Database.** In Supabase → SQL Editor, run `game-db/001_hide_and_seek.sql`,
+   `game-db/002_email_codes_and_city.sql` and `game-db/003_names_pins_chat.sql`, in order,
+   once each, on an empty database. In Supabase → Database → Extensions, switch on **pg_cron** first if you
    can: the file then schedules the round clock to run every minute. (Without it, the clock
    still moves whenever someone has the game open.)
 2. **Email codes.** The app sends its own 6-digit sign-in codes through Resend, so nothing
@@ -31,9 +32,21 @@ The full rule book is the "Hide & Seek Grid Game: Rules Spec" doc.
 ## The city
 
 The board is a small 3D city (three.js, `src/app/play/city-view.tsx`). Tiles spiral out from
-the centre, so new tiles (10 per hider) appear on the edge and rise out of the ground. What
+the centre, so new tiles (20 per hider) appear on the edge and rise out of the ground. What
 stands on each tile is decided in `src/lib/city/layout.ts` from the round number, so each
-round has its own street grid, downtowns, parks and colours.
+round has its own street grid, downtowns, river, lakes, parks and colours.
+
+Tiles: roads, bridges, a winding river, lakes, ponds, skyscrapers, office blocks, houses,
+parks, woods, plazas with fountains, Ferris wheels, stadiums, wind turbines.
+Moving: cars, boats, birds, clouds, hot-air balloons, planes, turning wheels and turbines.
+
+## Sign-in and chat
+
+First sign-in is by a 6-digit email code (sent by the app through Resend). New players then
+pick a name and a 6-digit PIN, and use those to sign in later (5 wrong PINs locks it for
+15 minutes; "forgot PIN" uses an email code). Chat has a public City room and private
+messages, with text and voice notes; it belongs to one round, so a new map starts a new
+chat (old chats and voice notes are deleted by the daily job).
 
 ## Tuning
 

@@ -6,7 +6,21 @@
 // Each round gets its own seed, so the street grid, downtowns and parks differ every round,
 // but a given tile always looks the same for everyone during that round.
 
-export type TileKind = "road" | "tower" | "office" | "house" | "park" | "trees" | "plaza" | "pond";
+export type TileKind =
+  | "road"
+  | "bridge"
+  | "river"
+  | "lake"
+  | "tower"
+  | "office"
+  | "house"
+  | "park"
+  | "trees"
+  | "plaza"
+  | "pond"
+  | "ferris"
+  | "stadium"
+  | "turbine";
 
 export type Tile = {
   i: number;
@@ -30,6 +44,18 @@ export const KIND_LABEL: Record<TileKind, string> = {
   trees: "Woods",
   plaza: "Plaza",
   pond: "Pond",
+  bridge: "Bridge",
+  river: "River",
+  lake: "Lake",
+  ferris: "Ferris wheel",
+  stadium: "Stadium",
+  turbine: "Wind turbine",
+};
+
+/** Everything the city can be made of, for the help screen. */
+export const CITY_ASSETS = {
+  tiles: ["Roads and crossings", "Bridges", "A winding river", "Lakes", "Ponds", "Skyscrapers", "Office blocks", "Houses with gardens", "Parks", "Woods", "Plazas with fountains", "Ferris wheels", "Stadiums", "Wind turbines"],
+  moving: ["Cars", "Boats", "Birds", "Clouds", "Hot-air balloons", "Planes", "Turning Ferris wheels and turbines"],
 };
 
 /** Square spiral: tile n → grid (x, z). Must match spiral_xy in the database. */
@@ -78,8 +104,16 @@ export type CityPlan = {
   offX: number;
   offZ: number;
   centres: { x: number; z: number; radius: number; weight: number }[];
+  /** A river winding across the city (along x or z), or none. */
+  river: { along: "x" | "z"; at: number; amp: number; wave: number; phase: number; width: number } | null;
   palette: Palette;
 };
+
+/** Where the river's centre line is, for a position along it. */
+export function riverCentre(plan: CityPlan, along: number) {
+  const r = plan.river!;
+  return r.at + r.amp * Math.sin(along / r.wave + r.phase);
+}
 
 export type Palette = {
   name: string;
@@ -142,6 +176,17 @@ export function makePlan(seed: number): CityPlan {
     offX: Math.floor(r(5) * 6),
     offZ: Math.floor(r(6) * 6),
     centres,
+    river:
+      r(50) < 0.75
+        ? {
+            along: r(51) < 0.5 ? "x" : "z",
+            at: Math.round((r(52) - 0.5) * 14) || 5,
+            amp: 1.5 + r(53) * 3,
+            wave: 3 + r(54) * 4,
+            phase: r(55) * 6.28,
+            width: 0.9 + r(56) * 0.8,
+          }
+        : null,
     palette: PALETTES[Math.floor(r(7) * PALETTES.length)],
   };
 }
@@ -155,9 +200,25 @@ export function tileAt(plan: CityPlan, i: number): Tile {
 
   const roadX = mod(z - plan.offZ, plan.periodZ) === 0; // runs along x
   const roadZ = mod(x - plan.offX, plan.periodX) === 0; // runs along z
-  if (roadX || roadZ) {
-    return { i, x, z, kind: "road", top: 0.05, road: roadX && roadZ ? "cross" : roadX ? "x" : "z", r };
+  const road: Tile["road"] = roadX && roadZ ? "cross" : roadX ? "x" : "z";
+
+  // Water: the river, and lakes away from downtown. Roads cross water on bridges.
+  let water: "river" | "lake" | null = null;
+  if (plan.river) {
+    const along = plan.river.along === "x" ? x : z;
+    const across = plan.river.along === "x" ? z : x;
+    if (Math.abs(across - riverCentre(plan, along)) <= plan.river.width) water = "river";
   }
+  if (!water && Math.hypot(x, z) > 5 && noise(x / 5 - 9, z / 5 + 4, s + 23) > 0.79) water = "lake";
+  if (water) {
+    const crossing = road === "cross" || (plan.river?.along === "x" ? road === "z" : road === "x");
+    if ((roadX || roadZ) && (water === "lake" || crossing)) {
+      return { i, x, z, kind: "bridge", top: 0.35, road: road === "cross" ? (plan.river?.along === "x" ? "z" : "x") : road, r };
+    }
+    return { i, x, z, kind: water, top: 0.1, r };
+  }
+
+  if (roadX || roadZ) return { i, x, z, kind: "road", top: 0.05, road, r };
 
   let density = 0;
   for (const c of plan.centres) {
@@ -169,6 +230,7 @@ export function tileAt(plan: CityPlan, i: number): Tile {
   const green = noise(x / 6 + 31, z / 6 - 17, s + 11);
   if (green > 0.7 && density < 0.6) {
     if (green > 0.8 && r[0] < 0.45) return { i, x, z, kind: "pond", top: 0.5, r };
+    if (r[3] < 0.07) return { i, x, z, kind: "ferris", top: 2.6, r };
     return { i, x, z, kind: "park", top: 0.9, r };
   }
   if (density > 0.56) {
@@ -177,8 +239,11 @@ export function tileAt(plan: CityPlan, i: number): Tile {
   }
   if (density > 0.24) {
     if (r[0] < 0.06) return { i, x, z, kind: "plaza", top: 0.6, r };
+    if (r[0] > 0.985) return { i, x, z, kind: "stadium", top: 0.6, r };
     return { i, x, z, kind: "office", top: 0.9 + r[1] * 1.6 + density * 1.5, r };
   }
+  if (Math.hypot(x, z) > 13 && r[2] < 0.035) return { i, x, z, kind: "turbine", top: 3.2, r };
+  if (r[3] > 0.992) return { i, x, z, kind: "ferris", top: 2.6, r };
   if (r[0] < 0.16) return { i, x, z, kind: "trees", top: 1, r };
   return { i, x, z, kind: "house", top: 0.95, r };
 }

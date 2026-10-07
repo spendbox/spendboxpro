@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PROTECTED = ["/play"];
+const PROTECTED = ["/play", "/welcome"];
 
 // Runs before every page: keeps the login session fresh and sends signed-out
 // visitors of the game to the login screen.
