@@ -40,3 +40,7 @@ select id, status, pool from rounds order by id;
 select (select sum(created) - sum(burned) from coin_supply_daily) as created_minus_burned,
        (select sum(coins+bonus_coins) from profiles) + (select value from game_state where key='carry') as held;
 select coalesce(username, email_key) who, coins, bonus_coins, hider_rounds, seeker_rounds from profiles order by 1;
+-- City layout: the database spiral must match the app's (src/lib/city/layout.ts).
+select spiral_xy(0) as t0, spiral_xy(1) as t1, spiral_xy(24) as t24, spiral_xy(399) as t399, spiral_xy(1234) as t1234;
+-- expect {0,0} {1,0} {2,-2} {-9,10} {18,-8}
+select count(*) as distinct_positions from (select distinct spiral_xy(g) from generate_series(0, 4999) g) x;  -- 5000

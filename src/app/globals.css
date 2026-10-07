@@ -4,25 +4,25 @@
   --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-display-face), var(--font-body), ui-sans-serif, sans-serif;
 
-  --color-night: #120f24;
-  --color-panel: #1b1730;
-  --color-panel-2: #251f40;
-  --color-line: #342c57;
-  --color-ink: #f3f0ff;
-  --color-muted: #a59cc9;
-  --color-gold: #ffcf4a;
-  --color-gold-dark: #e0a800;
-  --color-hit: #ff5d73;
-  --color-miss: #4b4372;
-  --color-me: #47d6a8;
+  --color-bg: #eef2f6;
+  --color-panel: #ffffff;
+  --color-panel-2: #eef1f5;
+  --color-line: #dde3ea;
+  --color-ink: #18202b;
+  --color-muted: #64707d;
+  --color-gold: #ffc53d;
+  --color-gold-dark: #c98a00;
+  --color-hit: #e5484d;
+  --color-miss: #8b95a1;
+  --color-me: #12a37a;
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
-  background: var(--color-night);
+  background: var(--color-bg);
   color: var(--color-ink);
 }
 
@@ -31,4 +31,12 @@ button {
 }
 button:disabled {
   cursor: not-allowed;
+}
+
+/* Frosted panel floating over the city. */
+@utility glass {
+  background: rgb(255 255 255 / 0.82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 6px 24px -10px rgb(24 32 43 / 0.25), 0 1px 2px rgb(24 32 43 / 0.06);
 }
