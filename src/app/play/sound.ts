@@ -428,7 +428,10 @@ export type Sfx =
   | "levelup"
   | "thunder"
   | "decoy"
-  | "denied";
+  | "denied"
+  | "honk"
+  | "splash"
+  | "rustle";
 
 let sfxOn = true;
 let sfx: { ctx: AudioContext; out: GainNode } | null = null;
@@ -652,6 +655,22 @@ export function playSfx(name: Sfx, opts: { delay?: number } = {}) {
       // A soft "nuh-uh": two low buzzes, gently filtered
       tone(ctx, out, now, { dur: 0.12, freq: 196, type: "square", gain: 0.14, attack: 0.01, lowpass: 900 });
       tone(ctx, out, now, { at: 0.16, dur: 0.18, freq: 165, type: "square", gain: 0.14, attack: 0.01, lowpass: 800 });
+      break;
+    case "honk":
+      // A friendly double "beep-beep" from a parked car
+      for (const at of [0, 0.2]) {
+        tone(ctx, out, now, { at, dur: 0.14, freq: 392, type: "sawtooth", gain: 0.13, attack: 0.008, lowpass: 1500 });
+        tone(ctx, out, now, { at, dur: 0.14, freq: 494, type: "sawtooth", gain: 0.1, attack: 0.008, lowpass: 1500 });
+      }
+      break;
+    case "splash":
+      // A fountain splash: a watery burst and a few droplets
+      hiss(ctx, out, now, { dur: 0.45, type: "bandpass", freq: 1800, to: 700, q: 0.9, gain: 0.35, attack: 0.01 });
+      for (let k = 0; k < 4; k++) tone(ctx, out, now, { at: 0.08 + k * rand(0.05, 0.09), dur: 0.06, freq: rand(900, 1700), to: rand(1800, 2600), gain: 0.08 });
+      break;
+    case "rustle":
+      // Leaves shaking
+      for (let k = 0; k < 3; k++) hiss(ctx, out, now, { at: k * 0.12, dur: 0.22, type: "bandpass", freq: rand(2500, 4500), q: 0.8, gain: 0.12, attack: 0.04 });
       break;
   }
 }

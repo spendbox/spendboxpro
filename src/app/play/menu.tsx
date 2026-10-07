@@ -217,8 +217,8 @@ export function Menu({
 
 /** The power-ups each level unlocks. */
 const PERKS = [
-  { level: 3, icon: "🎭", name: "Decoy", what: "Hiders drop a fake hider to fool the hunters." },
-  { level: 5, icon: "🛡️", name: "Shield", what: "Hiders get a shield that blocks one find." },
+  { level: 3, icon: "🎭", name: "Decoy", what: "As a ghost, drop a fake you anywhere to fool the hunters." },
+  { level: 5, icon: "🛡️", name: "Shield", what: "As a ghost, raise a shield that saves you from one find." },
   { level: 10, icon: "🔎", name: "Big search", what: "Hunters search a 3×3 area at once, for the price of 7 searches." },
   { level: 20, icon: "🔁", name: "Respawn", what: "Caught in the first 30 minutes? Pay 300 coins to jump back in." },
 ];

@@ -2,6 +2,7 @@
 -- Faster clocks for the test (the real game waits longer between searches and moves).
 update game_settings set value = 0 where key = 'search_cooldown_seconds';
 update game_settings set value = 60 where key = 'move_cooldown_seconds';
+update game_settings set value = 99 where key = 'ghost_moves_level_1';  -- the scenario moves a lot
 insert into auth.users (email) values ('Ada@gmail.com'),('bo@x.com'),('cy@x.com'),('a.da+2@gmail.com');
 select email_key, coins, is_bot from profiles order by email_key nulls first;   -- alias gets 0 coins
 -- Round 1: only the bot hides; a new player seeks and finds it.
@@ -19,7 +20,9 @@ begin
   res := search_tile(u, (t + 1) % 400); raise notice 'again: %', res;  -- already searched
   res := search_tile(u, t);             raise notice 'bot: %', res;    -- bounty
 end $$;
-select id, status from rounds;                                                    -- done (all hiders caught)
+-- Catching everyone no longer ends the round early (part 15): let the clock run out.
+update rounds set seek_ends_at = now() - interval '1s' where status = 'seek'; select tick() as r1_done;
+select id, status from rounds;                                                    -- done
 -- Round 2: bo (now a seeker veteran) hides, cy seeks.
 select tick() as r2;
 do $$ begin
@@ -69,8 +72,8 @@ select spiral_xy(0) as t0, spiral_xy(1) as t1, spiral_xy(24) as t24, spiral_xy(3
 -- expect {0,0} {1,0} {2,-2} {-9,10} {18,-8}
 select count(*) as distinct_positions from (select distinct spiral_xy(g) from generate_series(0, 4999) g) x;  -- 5000
 -- Chat: a public message and a private one, both tied to the current round.
-insert into chat_messages (round_id, sender_id, sender_name, sender_role, body)
-  select max(id), (select id from profiles where email_key='bo@x.com'), 'bo', 'hider', 'hello city' from rounds;
+insert into chat_messages (round_id, sender_id, sender_name, sender_role, room, body)
+  select max(id), (select id from profiles where email_key='bo@x.com'), 'bo', 'hider', 'b:0', 'hello city' from rounds;
 insert into chat_messages (round_id, sender_id, sender_name, sender_role, recipient_id, recipient_name, body)
   select max(id), (select id from profiles where email_key='bo@x.com'), 'bo', 'hider', (select id from profiles where email_key='cy@x.com'), 'cy', 'psst' from rounds;
 select sender_role, recipient_name, body from chat_messages order by id;

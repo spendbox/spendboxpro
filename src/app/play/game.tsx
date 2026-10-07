@@ -19,7 +19,9 @@ import { Menu } from "./menu";
 import { FeedRow, NotificationsPanel, type FeedItem } from "./notifications";
 import { claimBalloon, recordVisit } from "./profile-actions";
 import { Results } from "./results";
+import { balloonRoom, useRooms, type RoomInfo } from "./rooms";
 import { Sheet } from "./sheet";
+import { AdvertiseExplainer } from "@/components/advertise-explainer";
 import { playSfx, setSfxEnabled, useCitySound } from "./sound";
 import { StatsCard } from "./stats-card";
 
@@ -72,17 +74,21 @@ function useOnline(userId: string, guest: boolean) {
 function describe(e: GameEvent, botName: string, myTile: number | null, where: (tile: number) => string): Notice | null {
   if (e.kind === "caught") {
     const who = e.detail?.finder ?? "Someone";
-    if (e.detail?.how === "walked_in") return { id: e.id, tone: "alarm", text: `A hider wandered onto a searched spot and got caught! ${who} gets the credit.` };
-    const hiders = (e.detail?.hiders ?? []).filter((h) => !h.bot);
-    const first = hiders[0];
-    if (e.detail?.bot && !hiders.length) return { id: e.id, tone: "alarm", text: `${who} found ${botName}, the bot!` };
-    const names = hiders.map((h) => h.name ?? "a hider");
-    const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : (names[0] ?? (e.detail?.count && e.detail.count > 1 ? `${e.detail.count} hiders` : "a hider"));
+    if (e.detail?.how === "walked_in") return { id: e.id, tone: "alarm", text: `A ghost wandered onto a searched spot and got caught! ${who} gets the credit.` };
+    const ghosts = (e.detail?.hiders ?? []).filter((h) => !h.bot);
+    const first = ghosts[0];
+    if (e.detail?.bot && !ghosts.length) return { id: e.id, tone: "alarm", text: `${who} found ${botName}, the bot!` };
+    const names = ghosts.map((h) => h.name ?? "a ghost");
+    const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : (names[0] ?? (e.detail?.count && e.detail.count > 1 ? `${e.detail.count} ghosts` : "a ghost"));
+    // Catching a seasoned player is big news.
+    const top = ghosts.reduce((m, h) => Math.max(m, h.level ?? 0), 0);
+    const fish = top >= 20 ? "🦈 Whale of a catch! " : top >= 10 ? "🐟 Big fish caught! " : top >= 5 ? "🎣 Nice catch! " : "";
+    const lvl = top >= 5 ? ` (level ${top})` : "";
     return {
       id: e.id,
       tone: "alarm",
-      text: `${who} caught ${list} at ${where(e.tile)}!`,
-      avatar: first ? cleanAvatar(first.avatar, first.name ?? "hider") : null,
+      text: `${fish}${who} caught ${list}${ghosts.length === 1 ? lvl : ""} at ${where(e.tile)}!`,
+      avatar: first ? cleanAvatar(first.avatar, first.name ?? "ghost") : null,
     };
   }
   if (e.kind === "decoy") return { id: e.id, tone: "info", text: "🎭 Someone just set down a decoy somewhere in the city. Careful what you search!" };
@@ -97,7 +103,7 @@ function describe(e: GameEvent, botName: string, myTile: number | null, where: (
     };
   }
   if (e.kind === "respawn") {
-    const name = e.detail?.name ?? "A hider";
+    const name = e.detail?.name ?? "A ghost";
     return {
       id: e.id,
       tone: "alarm",
@@ -107,12 +113,12 @@ function describe(e: GameEvent, botName: string, myTile: number | null, where: (
   }
   if (e.kind === "shielded") {
     const saved = e.detail?.hiders ?? [];
-    const names = saved.map((h) => h.name ?? "a hider").join(" and ") || "A hider";
+    const names = saved.map((h) => h.name ?? "a ghost").join(" and ") || "A ghost";
     return {
       id: e.id,
       tone: "alarm",
       text: `🛡️ ${names}'s shield blocked ${e.detail?.finder ?? "a hunter"} at ${where(e.tile)}! They teleported somewhere nearby.`,
-      avatar: saved[0] ? cleanAvatar(saved[0].avatar, saved[0].name ?? "hider") : null,
+      avatar: saved[0] ? cleanAvatar(saved[0].avatar, saved[0].name ?? "ghost") : null,
     };
   }
   if (e.kind === "moved") {
@@ -145,7 +151,7 @@ const CHEERS = {
     ["Stay sneaky 🐾", "Nobody knows where you are. Keep it that way."],
   ],
   watcher: [
-    ["The hunt has begun!", "Hiders are in place. Grab a seat and watch the city light up."],
+    ["The hunt has begun!", "Ghosts are in place. Grab a seat and watch the city light up."],
     ["Showtime 🍿", "Hunters are on the move. Who'll be found first?"],
     ["Let the games begin!", "Join in any time as a hunter."],
     ["Here we go!", "Watch the searches land in real time."],
@@ -164,7 +170,7 @@ function startCheer(role: "hider" | "seeker" | null, hiders: number) {
     localStorage.setItem("hs-cheer", String(k));
   } catch {}
   const [title, line] = list[k];
-  return { title, line: `${line} ${hiders > 1 ? `${hiders} hiders are in the city` : "The bot is hiding somewhere"}.` };
+  return { title, line: `${line} ${hiders > 1 ? `${hiders} ghosts are in the city` : "The bot is hiding somewhere"}.` };
 }
 
 export function Game({ state }: { state: GameState }) {
@@ -192,6 +198,12 @@ export function Game({ state }: { state: GameState }) {
   const [busy, setBusy] = useState(false);
   const [confirmShield, setConfirmShield] = useState(false);
   const [confirmDecoy, setConfirmDecoy] = useState(false);
+  const [confirmHunt, setConfirmHunt] = useState(false);
+  // Game mode (search, move…) or Chat mode (go into buildings and balloons to talk).
+  const [viewMode, setViewMode] = useState<"game" | "chat">("game");
+  const [ride, setRide] = useState<number | null>(null);
+  const [balloonCount, setBalloonCount] = useState(0);
+  const [dmRequest, setDmRequest] = useState<{ id: string; name: string; at: number } | null>(null);
   const [placingDecoy, setPlacingDecoy] = useState(false);
   const [confirmRespawn, setConfirmRespawn] = useState(false);
   const [searchReadyAt, setSearchReadyAt] = useState<number>(0);
@@ -199,8 +211,12 @@ export function Game({ state }: { state: GameState }) {
   const [openAd, setOpenAd] = useState<{ ad: Ad; tile: number; reward: string | null } | null>(null);
   const [advertise, setAdvertise] = useState<{ tile: number } | null>(null);
   const [ctrlHint, setCtrlHint] = useState(false);
+  const [adExplainer, setAdExplainer] = useState(false);
   const [startCard, setStartCard] = useState<{ title: string; line: string } | null>(null);
   const online = useOnline(state.me.id, state.me.guest);
+  const rooms = useRooms(state.round?.id ?? null, state.me.guest ? null : { id: state.me.id, name: state.me.name ?? "Player", avatar: state.me.avatar }, {
+    onRideEnd: () => setRide(null),
+  });
 
   const { round, entry, me } = state;
   const now = useNow(state.serverNow);
@@ -209,7 +225,7 @@ export function Game({ state }: { state: GameState }) {
   const isHider = entry?.role === "hider";
   const isSeeker = entry?.role === "seeker";
   const moveWait = entry?.lastMoveAt ? Date.parse(entry.lastMoveAt) + state.prices.moveCooldown * 1000 - now : 0;
-  const sweepWait = entry?.lastSweepAt ? Date.parse(entry.lastSweepAt) + state.prices.sweepCooldown * 1000 - now : 0;
+  const sweepWait = entry?.sweepReadyAt ? Date.parse(entry.sweepReadyAt) - now : 0;
   const frozenWait = entry?.frozenUntil ? Date.parse(entry.frozenUntil) - now : 0;
   const recentlySwept =
     isHider &&
@@ -313,11 +329,19 @@ export function Game({ state }: { state: GameState }) {
     setOpenAd({ ad, tile: info.tile, reward: null });
     try {
       const res = await fetch("/api/ads/open", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ adId: ad.id }) });
-      const d = (await res.json()) as { coins?: number; leftToday?: number };
+      const d = (await res.json()) as { coins?: number; leftToday?: number; reason?: string };
       if (d.coins && d.coins > 0) {
         playSfx("pop");
-        setOpenAd({ ad, tile: info.tile, reward: `+${d.coins} coins for checking it out!${d.leftToday ? ` (${d.leftToday} more today)` : ""}` });
+        setOpenAd({ ad, tile: info.tile, reward: `+${d.coins} coins from ${ad.brand} for checking it out!${d.leftToday ? ` (${d.leftToday} more ad rewards today)` : " That's all your ad rewards for today."}` });
         startTransition(() => router.refresh());
+      } else if (d.reason) {
+        const why: Record<string, string> = {
+          signed_out: "Sign in to earn 5 coins every time you check out an ad (up to 5 a day).",
+          daily_limit: "You've had all 5 ad rewards for today. More tomorrow!",
+          already_today: "You've already been rewarded for this ad today.",
+          pool_empty: "This ad's coins have run out.",
+        };
+        setOpenAd({ ad, tile: info.tile, reward: why[d.reason] ?? null });
       }
     } catch {}
   }
@@ -371,7 +395,7 @@ export function Game({ state }: { state: GameState }) {
     if (before === null || tilesNow <= before) return;
     const grew = tilesNow - before;
     const id = setTimeout(
-      () => setMessage({ text: `🏗️ The city just grew by ${grew} spots: ${grew >= 40 ? "new hiders are" : "a new hider is"} joining. Look at the edges!`, tone: "info" }),
+      () => setMessage({ text: `🏗️ The city just grew by ${grew} spots: ${grew >= 40 ? "new ghosts are" : "a new ghost is"} joining. Look at the edges!`, tone: "info" }),
       0,
     );
     return () => clearTimeout(id);
@@ -506,7 +530,38 @@ export function Game({ state }: { state: GameState }) {
     startTransition(() => router.refresh());
   }
 
+  // Chat mode: tapping a building or balloon takes you inside to chat with the people there.
+  function onRoom(room: RoomInfo) {
+    const k = room.kind === "balloon" ? Number(room.id.split(":")[1]) : null;
+    if (guest) {
+      // Watchers get the view from the balloon, but need to sign in to chat.
+      if (k !== null) {
+        setRide(k);
+        setTimeout(() => setRide((r) => (r === k ? null : r)), 45_000);
+      }
+      return setMessage({ text: "Sign in to go inside and chat with the people here. (You can still enjoy the view!)", tone: "info" });
+    }
+    const res = rooms.enter(room);
+    if (!res.ok) return setMessage({ text: res.reason === "full" ? `${room.name} is full right now. Try somewhere bigger!` : "Sign in to chat.", tone: "info" });
+    if (k !== null) setRide(k);
+    setChatOpen(true);
+  }
+  function leaveRoom() {
+    rooms.leave();
+    setRide(null);
+  }
+  function rideBalloon(k: number) {
+    onRoom({ id: balloonRoom(k), name: `Balloon ${k + 1}`, capacity: 1000, kind: "balloon" });
+  }
+
   function onTile(tile: number) {
+    // Tapping where someone was caught: say hi to them.
+    const face = state.caughtFaces.find((f) => f.tile === tile && f.user && f.user !== me.id);
+    if (face?.user && !guest && !(isHider && placingDecoy)) {
+      setDmRequest({ id: face.user, name: face.name ?? "Player", at: Date.now() });
+      setChatOpen(true);
+      return setMessage({ text: `${face.name ?? "They"} got caught here. Send them a message!`, tone: "info" });
+    }
     if (busy || !canTap || !entry) return;
     if (isHider && placingDecoy) {
       if (tile === entry.tile) return setMessage({ text: "Put your decoy somewhere other than your own spot.", tone: "info" });
@@ -524,6 +579,8 @@ export function Game({ state }: { state: GameState }) {
       if (entry.visited.includes(tile)) return setMessage({ text: "You've been there already. No going back.", tone: "bad" });
       if (knownSet.has(tile)) return setMessage({ text: "That spot's been searched (it's orange). Pick somewhere else.", tone: "bad" });
       if (frozenWait > 0) return setMessage({ text: `A drone has you pinned. You can move in ${clock(frozenWait)}.`, tone: "bad" });
+      if (entry.moves >= entry.movesAllowed)
+        return setMessage({ text: `You've used your ${entry.movesAllowed === 1 ? "move" : `${entry.movesAllowed} moves`} for this game. Level up to get more moves per game.`, tone: "info" });
       if (moveWait > 0) return setMessage({ text: `Catch your breath: you can move again in ${clock(moveWait)}.`, tone: "info" });
       return setConfirmMove(tile);
     }
@@ -535,12 +592,17 @@ export function Game({ state }: { state: GameState }) {
         () => sweepAround(tile, radius),
         (d) => {
           const found = Boolean(d.found);
-          setMessage({
-            text: found
-              ? `The drone picked something up! Anyone in that area is pinned for ${state.prices.freezeSeconds >= 60 ? `${Math.round(state.prices.freezeSeconds / 60)} minute${state.prices.freezeSeconds >= 120 ? "s" : ""}` : `${state.prices.freezeSeconds} seconds`}. Your drone keeps watching it as a trap.`
-              : "The drone saw nothing there, for now. It'll keep watching the area as a trap.",
-            tone: found ? "good" : "info",
-          });
+          // Don't spoil it: the answer comes when the drone has finished its scan.
+          setMessage({ text: "📡 Drone on its way… scanning the area.", tone: "info" });
+          setTimeout(() => {
+            playSfx(found ? "found" : "miss");
+            setMessage({
+              text: found
+                ? `The drone picked something up! Anyone in that area is pinned for ${state.prices.freezeSeconds >= 60 ? `${Math.round(state.prices.freezeSeconds / 60)} minute${state.prices.freezeSeconds >= 120 ? "s" : ""}` : `${state.prices.freezeSeconds} seconds`}. Your drone needs ${d.cooldown ?? 90}s to recharge, and keeps watching the area as a trap.`
+                : "The drone saw nothing there, for now. It'll keep watching the area as a trap.",
+              tone: found ? "good" : "info",
+            });
+          }, 5200);
         },
       );
     } else {
@@ -625,11 +687,18 @@ export function Game({ state }: { state: GameState }) {
           tileCount={round.tileCount}
           markers={markers}
           events={cityEvents}
-          interactive={canTap}
+          interactive={canTap || viewMode === "chat"}
           onTile={onTile}
           onBillboard={onBillboardTap}
           ads={ads}
           onAdViews={onAdViews}
+          mode={viewMode}
+          roomCounts={rooms.counts}
+          onRoom={onRoom}
+          ride={ride}
+          onBalloons={setBalloonCount}
+          revealed={phase !== "join"}
+          caughtFaces={state.caughtFaces}
           onHover={setHover}
           meAvatar={me.avatar}
           coinBalloon={state.balloon?.slot ?? null}
@@ -768,17 +837,18 @@ export function Game({ state }: { state: GameState }) {
 
       {confirmShield && entry && (
         <Sheet onClose={() => setConfirmShield(false)}>
-          <h2 className="font-display text-xl font-bold">🛡️ Raise a shield?</h2>
+          <h2 className="font-display text-xl font-bold">🛡️ Raise your shield?</h2>
+          <p className="mt-1 text-sm text-muted">As a ghost, you can wrap yourself in a shield that saves you once.</p>
           <div className="mt-3 rounded-2xl bg-[#7048e8]/10 p-4 text-center">
             <p className="text-sm text-muted">It costs</p>
             <p className="font-display text-4xl font-extrabold">{short(state.prices.shield)} coins</p>
             <p className="text-xs text-muted">You have {short(me.coins)}. One shield per game.</p>
           </div>
           <ul className="mt-3 space-y-1.5 text-sm text-ink/80">
-            <li>✨ The next time a hunter finds you, the shield teleports you to a free spot nearby and you stay in the game.</li>
-            <li>💸 You still lose your stake to that hunter, but you can keep playing for the pool.</li>
-            <li>🧱 While the shield is up you <b>can&apos;t move</b>. Once it has saved you, you can move again.</li>
-            <li>🎲 The teleport is random: it could land you on a spot that was already searched.</li>
+            <li>✨ The next time a hunter finds you, your shield whisks you away to a free spot nearby and you stay in the game.</li>
+            <li>💸 You still lose your stake to that hunter, but you keep playing for the pool.</li>
+            <li>🧱 While your shield is up you <b>can&apos;t move</b>. Once it has saved you, you can move again.</li>
+            <li>🎲 Where you land is random: it could be a spot that was already searched.</li>
           </ul>
           <div className="mt-4 flex gap-2">
             <button onClick={() => setConfirmShield(false)} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold">
@@ -803,7 +873,7 @@ export function Game({ state }: { state: GameState }) {
 
       {confirmHide && round && (
         <Sheet onClose={() => setConfirmHide(false)}>
-          <h2 className="font-display text-xl font-bold">Hide this round?</h2>
+          <h2 className="font-display text-xl font-bold">👻 Be a ghost this round?</h2>
           <div className="mt-3 rounded-2xl bg-panel-2 p-4 text-center">
             <p className="text-sm text-muted">You&apos;re putting down</p>
             <p className="font-display text-4xl font-extrabold">{short(state.prices.stake)} coins</p>
@@ -811,7 +881,7 @@ export function Game({ state }: { state: GameState }) {
           </div>
           <ul className="mt-3 space-y-1.5 text-sm text-ink/80">
             <li>✅ Stay hidden till the end: you get your {short(state.prices.stake)} back, and the survivors share {Math.round(state.prices.winShare * 100)}% of the pool (it starts at 0 and grows with every search, sweep and move).</li>
-            <li>❌ Get caught: the hunter who finds you keeps most of your stake. If every hider is found, hunters take {Math.round(state.prices.winShare * 100)}% of the pool and the hiders share {Math.round(state.prices.otherShare * 100)}%.</li>
+            <li>❌ Get caught: the hunter who finds you keeps most of your stake. If every ghost is found, hunters take {Math.round(state.prices.winShare * 100)}% of the pool and the ghosts share {Math.round(state.prices.otherShare * 100)}%.</li>
             <li>🛡️ Once the hunt starts you can buy a one-time shield ({short(state.prices.shield)} coins).</li>
             <li>🚶 Moving costs {short(state.prices.moveFee)} coins each time.</li>
           </ul>
@@ -827,7 +897,7 @@ export function Game({ state }: { state: GameState }) {
               }}
               className="flex-1 rounded-xl bg-ink py-2.5 font-semibold text-white disabled:opacity-50"
             >
-              Stake {short(state.prices.stake)} & hide
+              Stake {short(state.prices.stake)} & become a ghost
             </button>
           </div>
         </Sheet>
@@ -881,6 +951,11 @@ export function Game({ state }: { state: GameState }) {
         </Sheet>
       )}
 
+      {adExplainer && (
+        <Sheet onClose={() => setAdExplainer(false)}>
+          <AdvertiseExplainer onClose={() => setAdExplainer(false)} />
+        </Sheet>
+      )}
       {advertise && (
         <Sheet onClose={() => setAdvertise(null)}>
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">Billboard · {where(advertise.tile)}</p>
@@ -928,9 +1003,38 @@ export function Game({ state }: { state: GameState }) {
           </p>
         </Sheet>
       )}
+      {confirmHunt && round && (
+        <Sheet onClose={() => setConfirmHunt(false)}>
+          <h2 className="font-display text-xl font-bold">🔦 Join the hunt?</h2>
+          <ul className="mt-3 space-y-1.5 text-sm text-ink/80">
+            <li>🆓 Joining is free. {me.freeSearch ? "Your first search today is on us." : `Searches cost about ${short(round.searchPrice)} coins each right now.`}</li>
+            <li>👻 As a hunter, you tap spots to search for ghosts, or send drones to sweep an area.</li>
+            <li>💰 Find a ghost and you keep most of their stake. Find {botName}, the bot, for {short(200)} coins.</li>
+            <li>🏆 Catch every ghost and hunters share 80% of the pool.</li>
+            <li>⏳ You stay a hunter for the whole round.</li>
+          </ul>
+          <div className="mt-4 flex gap-2">
+            <button onClick={() => setConfirmHunt(false)} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold">
+              Not now
+            </button>
+            <button
+              disabled={busy}
+              onClick={() => {
+                setConfirmHunt(false);
+                act(() => joinRound("seeker"), () => setMessage({ text: "You're hunting this round. Happy hunting! 🔦", tone: "info" }));
+              }}
+              className="flex-1 rounded-xl bg-gold py-2.5 font-semibold text-ink disabled:opacity-50"
+            >
+              Start hunting
+            </button>
+          </div>
+        </Sheet>
+      )}
+
       {confirmDecoy && entry && (
         <Sheet onClose={() => setConfirmDecoy(false)}>
-          <h2 className="font-display text-xl font-bold">🎭 Set down a decoy?</h2>
+          <h2 className="font-display text-xl font-bold">🎭 Drop a decoy?</h2>
+          <p className="mt-1 text-sm text-muted">As a ghost, you can drop a fake you anywhere in the city to fool the hunters.</p>
           <div className="mt-3 rounded-2xl bg-[#f08c00]/10 p-4 text-center">
             <p className="text-sm text-muted">It costs</p>
             <p className="font-display text-4xl font-extrabold">{short(state.prices.decoy)} coins</p>
@@ -938,9 +1042,9 @@ export function Game({ state }: { state: GameState }) {
           </div>
           <ul className="mt-3 space-y-1.5 text-sm text-ink/80">
             <li>📍 You choose where it goes: after this, tap any spot in the city.</li>
-            <li>📢 Everyone hears that a decoy went out, but not where (unless a drone trap is watching that spot).</li>
-            <li>📡 Drones think it&apos;s a real hider. A hunter who searches it gets nothing: it goes bang, or a squeaky toy pops up.</li>
-            <li>🧱 Decoys don&apos;t move.</li>
+            <li>📢 Everyone hears that a decoy went out, but not where (unless one of their drone traps is watching that spot).</li>
+            <li>📡 Drones think it&apos;s really you. A hunter who searches it gets nothing: it goes bang, or a squeaky toy pops up.</li>
+            <li>🧱 Your decoy stays where you drop it.</li>
           </ul>
           <div className="mt-4 flex gap-2">
             <button onClick={() => setConfirmDecoy(false)} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold">
@@ -960,7 +1064,8 @@ export function Game({ state }: { state: GameState }) {
       )}
       {confirmRespawn && entry && (
         <Sheet onClose={() => setConfirmRespawn(false)}>
-          <h2 className="font-display text-xl font-bold">🔁 Respawn?</h2>
+          <h2 className="font-display text-xl font-bold">🔁 Come back as a ghost?</h2>
+          <p className="mt-1 text-sm text-muted">You were caught early, so you can rise again, once.</p>
           <div className="mt-3 rounded-2xl bg-[#e8590c]/10 p-4 text-center">
             <p className="text-sm text-muted">It costs</p>
             <p className="font-display text-4xl font-extrabold">{short(state.prices.respawn)} coins</p>
@@ -1018,8 +1123,28 @@ export function Game({ state }: { state: GameState }) {
           </button>
         )}
 
-        <div className="flex w-full max-w-xl justify-end">
-          {round && !guest && (
+        <div className="flex w-full max-w-xl items-end justify-between gap-2">
+          {round ? (
+            <div className="glass pointer-events-auto flex rounded-full p-1 text-sm font-semibold" role="tablist" aria-label="Mode">
+              {(["game", "chat"] as const).map((m) => (
+                <button
+                  key={m}
+                  role="tab"
+                  aria-selected={viewMode === m}
+                  onClick={() => {
+                    setViewMode(m);
+                    if (m === "game") setRide(null);
+                  }}
+                  className={cn("rounded-full px-3 py-1.5", viewMode === m ? "bg-ink text-white" : "text-muted")}
+                >
+                  {m === "game" ? "🎮 Game" : "💬 Chat mode"}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <span />
+          )}
+          {round && (
             <Chat
               meId={me.id}
               meRole={entry?.role ?? null}
@@ -1027,12 +1152,61 @@ export function Game({ state }: { state: GameState }) {
               players={state.players}
               open={chatOpen}
               onOpenChange={setChatOpen}
+              room={rooms.myRoomInfo}
+              roomMembers={rooms.members}
+              roomCount={rooms.myRoom ? (rooms.counts[rooms.myRoom] ?? 0) : 0}
+              onLeaveRoom={leaveRoom}
+              guest={guest}
+              rideEndsAt={rooms.rideEndsAt}
+              botName={botName}
+              botBounty={200}
+              dmRequest={dmRequest}
             />
           )}
         </div>
 
         <div className="glass pointer-events-auto w-full max-w-xl rounded-2xl p-3">
-          {!round || phase === "done" ? (
+          {round && viewMode === "chat" ? (
+            <div className="space-y-2 text-sm">
+              <p>
+                <b>💬 Chat mode.</b>{" "}
+                <span className="text-muted">
+                  {rooms.myRoomInfo
+                    ? `You're in ${rooms.myRoomInfo.name} with ${Math.max(0, (rooms.counts[rooms.myRoomInfo.id] ?? 1) - 1)} other${(rooms.counts[rooms.myRoomInfo.id] ?? 1) - 1 === 1 ? "" : "s"}.`
+                    : "Tap a building to go in and chat with the people there. Bigger buildings hold more people. The 👥 numbers show who's inside."}
+                </span>
+              </p>
+              {balloonCount > 0 && (
+                <div className="flex gap-1.5 overflow-x-auto pb-1">
+                  {Array.from({ length: balloonCount }, (_, k) => {
+                    const n = rooms.counts[balloonRoom(k)] ?? 0;
+                    return (
+                      <button
+                        key={k}
+                        onClick={() => rideBalloon(k)}
+                        className={cn(
+                          "shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold",
+                          ride === k ? "bg-[#e64980] text-white" : "bg-panel-2",
+                        )}
+                      >
+                        🎈 Balloon {k + 1} · {n}/1000
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              <p className="text-xs text-muted">
+                {guest
+                  ? "Hop on a balloon to enjoy the view. Sign in to chat with the people on board."
+                  : "Balloon rides last 10 minutes and float over the city. Switch back to 🎮 Game to search or move."}
+              </p>
+              {rooms.myRoomInfo && (
+                <button onClick={leaveRoom} className="rounded-xl bg-panel-2 px-3 py-1.5 text-xs font-semibold">
+                  Leave {rooms.myRoomInfo.kind === "balloon" ? "the balloon" : rooms.myRoomInfo.name}
+                </button>
+              )}
+            </div>
+          ) : !round || phase === "done" ? (
             <p className="text-sm text-muted">Building the next city…</p>
           ) : guest ? (
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -1040,14 +1214,17 @@ export function Game({ state }: { state: GameState }) {
                 <span className="mr-1.5 inline-block size-2 animate-pulse rounded-full bg-hit align-middle" />
                 <b className="text-ink">Watching live.</b> <span className="rounded bg-ink px-1 text-[10px] font-bold text-white">18+</span>{" "}
                 {phase === "join"
-                  ? `Hiders are getting ready. The hunt starts in ${countdown}.`
+                  ? `Ghosts are getting ready. The hunt starts in ${countdown}.`
                   : `The hunt is on: ${short(round.hidersRemaining)} still hidden, ${short(round.pool)} coins in the pool.`}
               </p>
-              <div className="flex gap-2">
-                <button onClick={() => setHowOpen(true)} className="flex-1 rounded-xl bg-panel-2 px-4 py-2.5 font-semibold sm:flex-none">
-                  How it works
+              <div className="grid grid-cols-3 gap-2 text-sm sm:flex">
+                <button onClick={() => setHowOpen(true)} className="whitespace-nowrap rounded-xl bg-panel-2 px-3 py-2.5 font-semibold">
+                  ❓ Rules
                 </button>
-                <Link href="/login" className="flex-1 rounded-xl bg-gold px-4 py-2.5 text-center font-semibold text-ink sm:flex-none">
+                <button onClick={() => setAdExplainer(true)} className="whitespace-nowrap rounded-xl bg-panel-2 px-3 py-2.5 font-semibold">
+                  📣 Advertise
+                </button>
+                <Link href="/login" className="whitespace-nowrap rounded-xl bg-gold px-3 py-2.5 text-center font-semibold text-ink">
                   Play now
                 </Link>
               </div>
@@ -1056,13 +1233,13 @@ export function Game({ state }: { state: GameState }) {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <p className="flex-1 text-sm text-muted">
                 {phase === "join"
-                  ? "Hiders are getting ready and the city's growing. Want to hide, or hunt?"
+                  ? "Ghosts are getting ready and the city's growing. Want to hide, or hunt?"
                   : "The hunt is on. Jump in as a hunter and start searching."}
               </p>
               <div className="flex gap-2">
                 <button
                   disabled={busy}
-                  onClick={() => act(() => joinRound("seeker"), () => setMessage({ text: "You're hunting this round. Good luck!", tone: "info" }))}
+                  onClick={() => setConfirmHunt(true)}
                   className="flex-1 rounded-xl bg-gold px-4 py-2.5 font-semibold text-ink disabled:opacity-50 sm:flex-none"
                 >
                   Hunt
@@ -1073,7 +1250,7 @@ export function Game({ state }: { state: GameState }) {
                     onClick={() => setConfirmHide(true)}
                     className="flex-1 rounded-xl bg-ink px-4 py-2.5 font-semibold text-white disabled:opacity-40 sm:flex-none"
                   >
-                    Hide · {state.prices.stake}
+                    👻 Ghost · {state.prices.stake}
                   </button>
                 )}
               </div>
@@ -1213,7 +1390,12 @@ export function Game({ state }: { state: GameState }) {
                   </span>
                 </p>
               )}
-              <p className="text-xs text-muted">That&apos;s your face over your hiding spot. Tap another spot if you want to move.</p>
+              <p className="text-xs text-muted">
+                That&apos;s your face over your hiding spot.{" "}
+                {entry.moves < entry.movesAllowed
+                  ? `You have ${entry.movesAllowed - entry.moves} move${entry.movesAllowed - entry.moves === 1 ? "" : "s"} left this game: tap another spot to use it.`
+                  : "You've used your moves for this game. Stay hidden!"}
+              </p>
             </div>
           )}
         </div>

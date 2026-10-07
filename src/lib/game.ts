@@ -22,7 +22,7 @@ export type GameEvent = {
     name?: string | null;
     user?: string | null;
     /** Who was found (for "caught"). */
-    hiders?: { name: string | null; avatar: unknown; bot: boolean }[];
+    hiders?: { name: string | null; avatar: unknown; bot: boolean; user?: string | null; level?: number | null }[];
     /** A decoy that was searched: did it go bang, or was it a toy? */
     outcome?: "explode" | "toy";
     avatar?: unknown;
@@ -87,6 +87,10 @@ export type GameState = {
     decoyUsed: boolean;
     decoyTile: number | null;
     respawned: boolean;
+    /** Moves this ghost may make this game (by level). */
+    movesAllowed: number;
+    /** When this hunter's drone is ready again (longer after it spotted someone). */
+    sweepReadyAt: string | null;
     /** Caught early enough (and high enough level) to pay to come back in. */
     canRespawn: boolean;
   } | null;
@@ -105,6 +109,8 @@ export type GameState = {
   outlook: { stakeBack: number; share: number } | null;
   leftTiles: number[];
   caughtTiles: number[];
+  /** Everyone caught this round: where, and who (so you can see their face and message them). */
+  caughtFaces: { tile: number; name: string | null; avatar: unknown; user: string | null; level: number | null }[];
   /** Latest public happenings (moves, catches, searches, sweeps) for notices and animations. */
   events: GameEvent[];
   lastResult: { roundId: number; role: string; payout: number; caught: boolean } | null;
@@ -202,6 +208,7 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
   let mySearches: GameState["mySearches"] = [];
   let leftTiles: number[] = [];
   let caughtTiles: number[] = [];
+  let caughtFaces: GameState["caughtFaces"] = [];
   let recentSearches: GameState["recentSearches"] = [];
   let knownSearched: number[] = [];
   let outlook: GameState["outlook"] = null;
@@ -251,6 +258,13 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
         decoyUsed: Boolean(e.decoy_used),
         decoyTile: myDecoy?.tile ?? null,
         respawned: Boolean(e.respawned),
+        movesAllowed:
+          num(profile.level ?? 1) >= 20 ? (s.ghost_moves_level_20 ?? 3) : num(profile.level ?? 1) >= 10 ? (s.ghost_moves_level_10 ?? 2) : (s.ghost_moves_level_1 ?? 1),
+        sweepReadyAt: e.last_sweep_at
+          ? new Date(
+              Date.parse(e.last_sweep_at) + (e.last_sweep_found ? (s.sweep_found_cooldown_seconds ?? 90) : (s.sweep_cooldown_seconds ?? 10)) * 1000,
+            ).toISOString()
+          : null,
         canRespawn:
           e.role === "hider" &&
           e.caught &&
@@ -273,6 +287,13 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
     knownSearched = unique.slice(unique.length - keep);
     leftTiles = (allEvents ?? []).filter((x) => x.kind === "moved" && x.tile !== null).map((x) => x.tile);
     caughtTiles = (allEvents ?? []).filter((x) => x.kind === "caught" && x.tile !== null).map((x) => x.tile);
+    caughtFaces = (allEvents ?? [])
+      .filter((x) => x.kind === "caught" && x.tile !== null)
+      .flatMap((x) =>
+        ((x.detail?.hiders ?? []) as { name: string | null; avatar: unknown; bot: boolean; user?: string | null; level?: number | null }[])
+          .filter((h) => !h.bot)
+          .map((h) => ({ tile: x.tile as number, name: h.name, avatar: h.avatar, user: h.user ?? null, level: h.level ?? null })),
+      );
     events = (allEvents ?? []).slice(-40).map((x) => ({ id: x.id, kind: x.kind, tile: x.tile ?? -1, at: x.created_at, detail: x.detail }));
 
     const perSeeker = new Map<string, number>();
@@ -412,6 +433,7 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
     outlook,
     leftTiles,
     caughtTiles,
+    caughtFaces,
     events,
     results,
     lastResult: last ? { roundId: last.round_id, role: last.role, payout: num(last.payout), caught: last.caught } : null,

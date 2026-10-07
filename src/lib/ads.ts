@@ -1,57 +1,74 @@
 import "server-only";
 import { createHash, randomUUID } from "node:crypto";
-import { reviewAd, type ReviewMediaType } from "@/lib/ad-review";
-import {
-  adHeldEmail,
-  adLiveEmail,
-  adRejectedEmail,
-  adminAdEmail,
-  emailAdmin,
-  esc,
-  naira,
-  sponsorPaidEmail,
-  type AdForEmail,
-} from "@/lib/ad-emails";
+import { adLiveEmail, adminNewAdEmail, emailAdmin, esc, naira, sponsorPaidEmail, topUpEmail, type AdForEmail } from "@/lib/ad-emails";
 import { sendEmail } from "@/lib/email";
 import { siteUrl } from "@/lib/env";
 import { checkPayment, paystackEnabled, startPayment } from "@/lib/paystack";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-// Billboard ads and sponsored prize pools: prices, checkout, payment confirmation and the
-// review that puts an ad live. The rules (pacing, view caps, coin rewards) live in the
-// database (game-db/010_ads_sponsors.sql).
+// Billboard ads: prices, checkout, payment confirmation, and what advertisers can change.
+// The rules (coin pools, rewards, daily limits, pacing) live in the database
+// (game-db/013_ads_v2.sql, on top of 010_ads_sponsors.sql).
+//
+// How an ad works: the advertiser pays a weekly budget for 1–8 weeks. That loads the ad with a
+// pool of coins (1 coin per ₦5). Each signed-in player who taps the billboard to look at the ad
+// gets 5 coins from the pool (up to 5 ads a day, once per ad). Taps by anyone else are free.
+// The ad stops when the pool runs out or its weeks are over. It goes live as soon as it's paid.
 
 export const AD_BUCKET = "ads";
 export const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 
+/** The advertising policy, in plain words. Shown on /advertise/policy. */
+export const AD_POLICY = {
+  notAllowed: [
+    "Adult or sexual content, nudity, or sexually suggestive pictures",
+    "Gambling, betting, sports betting, lotteries or casinos",
+    "Weapons, guns, ammunition or explosives",
+    "Drugs, including recreational drugs and unlicensed medicines",
+    "Tobacco, cigarettes, vaping or e-cigarettes",
+    "Hate, harassment, or attacks on anyone for their tribe, religion, race, gender, disability or who they love",
+    "Violence, gore, or anything shocking or frightening",
+    "Scams, get-rich-quick schemes, fake giveaways, or claims that aren't true (including miracle cures and guaranteed returns)",
+    "Other people's brands, logos or trademarks you don't have permission to use",
+    "Political ads: parties, candidates, elections or campaigns",
+    "Anything illegal in Nigeria",
+  ],
+  rules: [
+    "The picture must be yours, or one you have the right to use.",
+    "The headline and picture must clearly show who is advertising (your brand).",
+    "Links must go to a safe, working website that matches the ad.",
+    "Hide & Seek is for adults (18+), but ads must still be suitable for a general audience.",
+  ],
+};
+
 export type AdPricing = {
-  viewsPerSlot: number;
-  slotPriceNgn: number;
-  days: number;
-  maxSlots: number;
-  sponsorCoinsPerNgn: number;
-  sponsorMinNgn: number;
-  openCoins: number;
+  /** Coins loaded into the pool per naira (0.2 = 1 coin per ₦5). */
+  coinsPerNgn: number;
+  /** Coins a player gets for tapping an ad (taken from the pool). */
+  viewReward: number;
+  /** Paid taps per player per day. */
+  rewardsPerDay: number;
+  minWeeklyNgn: number;
+  maxWeeks: number;
+  maxNgn: number;
 };
 
 const DEFAULTS: AdPricing = {
-  viewsPerSlot: 1000,
-  slotPriceNgn: 5000,
-  days: 7,
-  maxSlots: 50,
-  sponsorCoinsPerNgn: 0.2,
-  sponsorMinNgn: 5000,
-  openCoins: 2,
+  coinsPerNgn: 0.2,
+  viewReward: 5,
+  rewardsPerDay: 5,
+  minWeeklyNgn: 5000,
+  maxWeeks: 8,
+  maxNgn: 10_000_000,
 };
 
 const KEYS: Record<keyof AdPricing, string> = {
-  viewsPerSlot: "ad_views_per_slot",
-  slotPriceNgn: "ad_slot_price_ngn",
-  days: "ad_days",
-  maxSlots: "ad_max_slots",
-  sponsorCoinsPerNgn: "sponsor_coins_per_ngn",
-  sponsorMinNgn: "sponsor_min_ngn",
-  openCoins: "ad_open_coins",
+  coinsPerNgn: "ad_coins_per_ngn",
+  viewReward: "ad_view_reward",
+  rewardsPerDay: "ad_rewards_per_day",
+  minWeeklyNgn: "ad_min_weekly_ngn",
+  maxWeeks: "ad_max_weeks",
+  maxNgn: "ad_max_ngn",
 };
 
 /** Prices and limits, from the game_settings table (so the owner can change them). */
@@ -65,8 +82,14 @@ export async function adPricing(): Promise<AdPricing> {
       if (row && Number.isFinite(v) && v > 0) out[name] = v;
     }
   } catch {}
-  out.maxSlots = Math.min(Math.floor(out.maxSlots), 50);
+  out.maxWeeks = Math.max(1, Math.min(Math.floor(out.maxWeeks), 52));
   return out;
+}
+
+/** Coins a payment loads into the pool, and how many paid taps that is. */
+export function poolFor(ngn: number, p: Pick<AdPricing, "coinsPerNgn" | "viewReward">) {
+  const coins = Math.max(0, Math.floor(ngn * p.coinsPerNgn));
+  return { coins, taps: Math.floor(coins / p.viewReward) };
 }
 
 /** Public web address of a picture in the `ads` storage bucket. */
@@ -96,9 +119,11 @@ function clean(v: FormDataEntryValue | null, max: number) {
   return typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "";
 }
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
-function cleanLink(raw: string): { ok: true; url: string | null } | { ok: false; error: string } {
+const money = (v: FormDataEntryValue | null) => Math.floor(Number(String(v ?? "").replace(/[,\s₦]/g, "")));
+
+export function cleanLink(raw: string): { ok: true; url: string | null } | { ok: false; error: string } {
   if (!raw) return { ok: true, url: null };
   let text = raw.trim();
   if (!/^[a-z]+:\/\//i.test(text)) text = `https://${text}`;
@@ -114,26 +139,22 @@ function cleanLink(raw: string): { ok: true; url: string | null } | { ok: false;
   }
 }
 
+type Picture = { bytes: Uint8Array; type: string; ext: string };
+
 /** Checks an uploaded picture by its actual bytes (not just its name). */
-async function readImage(
-  v: FormDataEntryValue | null,
-): Promise<{ ok: true; bytes: Uint8Array; type: ReviewMediaType; ext: string } | { ok: false; error: string } | null> {
+export async function readImage(v: FormDataEntryValue | null): Promise<({ ok: true } & Picture) | { ok: false; error: string } | null> {
   if (!v || typeof v === "string" || v.size === 0) return null;
   if (v.size > MAX_IMAGE_BYTES) return { ok: false, error: "That picture is over 2 MB. Please use a smaller one." };
-  const bytes = new Uint8Array(await v.arrayBuffer());
-  const b = bytes;
-  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return { ok: true, bytes, type: "image/jpeg", ext: "jpg" };
-  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return { ok: true, bytes, type: "image/png", ext: "png" };
-  if (
-    String.fromCharCode(b[0], b[1], b[2], b[3]) === "RIFF" &&
-    String.fromCharCode(b[8], b[9], b[10], b[11]) === "WEBP"
-  ) {
-    return { ok: true, bytes, type: "image/webp", ext: "webp" };
+  const b = new Uint8Array(await v.arrayBuffer());
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return { ok: true, bytes: b, type: "image/jpeg", ext: "jpg" };
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return { ok: true, bytes: b, type: "image/png", ext: "png" };
+  if (String.fromCharCode(b[0], b[1], b[2], b[3]) === "RIFF" && String.fromCharCode(b[8], b[9], b[10], b[11]) === "WEBP") {
+    return { ok: true, bytes: b, type: "image/webp", ext: "webp" };
   }
   return { ok: false, error: "Please upload a JPG, PNG or WebP picture." };
 }
 
-async function upload(img: { bytes: Uint8Array; type: string; ext: string }, folder: string) {
+export async function uploadImage(img: Picture, folder: string) {
   const path = `${folder}/${randomUUID()}.${img.ext}`;
   const { error } = await createAdminClient().storage.from(AD_BUCKET).upload(path, img.bytes, {
     contentType: img.type,
@@ -160,12 +181,12 @@ function readContact(form: FormData): { ok: true; contact: Contact } | { ok: fal
 }
 
 /** Stops one person filling the database with unpaid checkouts. */
-async function tooManyCheckouts(table: "ads" | "pool_sponsors", email: string) {
+async function tooManyCheckouts(email: string) {
   const db = createAdminClient();
   const since = new Date(Date.now() - 3600_000).toISOString();
   const [mine, all] = await Promise.all([
-    db.from(table).select("id", { count: "exact", head: true }).eq("contact_email", email).eq("status", "pending_payment").gt("created_at", since),
-    db.from(table).select("id", { count: "exact", head: true }).eq("status", "pending_payment").gt("created_at", since),
+    db.from("ads").select("id", { count: "exact", head: true }).eq("contact_email", email).eq("status", "pending_payment").gt("created_at", since),
+    db.from("ads").select("id", { count: "exact", head: true }).eq("status", "pending_payment").gt("created_at", since),
   ]);
   return (mine.count ?? 0) >= 6 || (all.count ?? 0) >= 2000;
 }
@@ -173,6 +194,7 @@ async function tooManyCheckouts(table: "ads" | "pool_sponsors", email: string) {
 export type CheckoutResult = { ok: true; url: string } | { ok: false; error: string };
 
 const NOT_ON = "Payments aren't switched on yet. Please check back soon.";
+const fmt = (n: number) => n.toLocaleString("en-NG");
 
 // ============================================================ checkout
 
@@ -181,12 +203,18 @@ export async function startAdCheckout(form: FormData): Promise<CheckoutResult> {
   const pricing = await adPricing();
   const brand = clean(form.get("brand"), 61);
   const headline = clean(form.get("headline"), 61);
-  const slots = Math.floor(Number(form.get("slots")));
+  const weekly = money(form.get("weekly"));
+  const weeks = Math.floor(Number(form.get("weeks")));
   if (brand.length < 2 || brand.length > 60) return { ok: false, error: "Please add your brand name (up to 60 characters)." };
   if (headline.length < 2 || headline.length > 60) return { ok: false, error: "Please add a headline (up to 60 characters)." };
-  if (!Number.isFinite(slots) || slots < 1 || slots > pricing.maxSlots) {
-    return { ok: false, error: `Pick between 1 and ${pricing.maxSlots} slots.` };
+  if (!Number.isFinite(weekly) || weekly < pricing.minWeeklyNgn) {
+    return { ok: false, error: `The smallest weekly budget is ₦${fmt(pricing.minWeeklyNgn)}.` };
   }
+  if (!Number.isFinite(weeks) || weeks < 1 || weeks > pricing.maxWeeks) {
+    return { ok: false, error: `Pick between 1 and ${pricing.maxWeeks} weeks.` };
+  }
+  const total = weekly * weeks;
+  if (total > pricing.maxNgn) return { ok: false, error: `For budgets over ₦${fmt(pricing.maxNgn)}, please contact us.` };
   const link = cleanLink(clean(form.get("link"), 600));
   if (!link.ok) return link;
   if (form.get("policy") !== "yes") return { ok: false, error: "Please confirm you've read the advertising policy." };
@@ -195,17 +223,22 @@ export async function startAdCheckout(form: FormData): Promise<CheckoutResult> {
   const img = await readImage(form.get("image"));
   if (!img) return { ok: false, error: "Please add a picture for your billboard." };
   if (!img.ok) return img;
-  if (await tooManyCheckouts("ads", c.contact.email)) {
+  if (await tooManyCheckouts(c.contact.email)) {
     return { ok: false, error: "You've started a lot of checkouts. Please finish one, or try again in an hour." };
   }
 
-  const path = await upload(img, "billboards");
+  const db = createAdminClient();
+  const adv = await db.rpc("advertiser_for_email", { p_email: c.contact.email, p_name: c.contact.name, p_phone: c.contact.phone });
+  if (adv.error || !adv.data) {
+    console.error("Advertiser account failed", adv.error);
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  const path = await uploadImage(img, "billboards");
   if (!path) return { ok: false, error: "We couldn't save your picture. Please try again." };
 
   const id = randomUUID();
   const reference = `ad-${id}`;
-  const amountKobo = Math.round(slots * pricing.slotPriceNgn * 100);
-  const db = createAdminClient();
+  const { coins } = poolFor(total, pricing);
   const { error } = await db.from("ads").insert({
     id,
     brand,
@@ -215,9 +248,10 @@ export async function startAdCheckout(form: FormData): Promise<CheckoutResult> {
     contact_name: c.contact.name,
     contact_email: c.contact.email,
     contact_phone: c.contact.phone,
-    slots,
-    views_bought: Math.round(slots * pricing.viewsPerSlot),
-    amount_kobo: amountKobo,
+    advertiser_id: adv.data as string,
+    weeks,
+    coins_total: coins,
+    amount_kobo: total * 100,
     paystack_reference: reference,
     policy_accepted_at: new Date().toISOString(),
   });
@@ -228,67 +262,61 @@ export async function startAdCheckout(form: FormData): Promise<CheckoutResult> {
   }
   return startPayment({
     email: c.contact.email,
-    amountKobo,
+    amountKobo: total * 100,
     reference,
     callbackUrl: `${siteUrl()}/advertise/done`,
-    metadata: { kind: "ad", id, brand, slots },
+    metadata: { kind: "ad", id, brand, weeks, coins },
   });
 }
 
-export async function startSponsorCheckout(form: FormData): Promise<CheckoutResult> {
+/** More budget (and optionally more weeks) for one of the advertiser's own ads. */
+export async function startTopUpCheckout(advertiserId: string, form: FormData): Promise<CheckoutResult> {
   if (!paystackEnabled()) return { ok: false, error: NOT_ON };
   const pricing = await adPricing();
-  const brand = clean(form.get("brand"), 61);
-  const amountNgn = Math.floor(Number(String(form.get("amount") ?? "").replace(/[,\s₦]/g, "")));
-  if (brand.length < 2 || brand.length > 60) return { ok: false, error: "Please add your brand name (up to 60 characters)." };
-  if (!Number.isFinite(amountNgn) || amountNgn < pricing.sponsorMinNgn) {
-    return { ok: false, error: `The smallest sponsorship is ₦${pricing.sponsorMinNgn.toLocaleString("en-NG")}.` };
+  const adId = clean(form.get("ad_id"), 40);
+  const amount = money(form.get("amount"));
+  const weeks = Math.floor(Number(form.get("weeks") ?? 0));
+  if (!UUID_RE.test(adId)) return { ok: false, error: "That ad wasn't found." };
+  if (!Number.isFinite(amount) || amount < pricing.minWeeklyNgn) {
+    return { ok: false, error: `The smallest top-up is ₦${fmt(pricing.minWeeklyNgn)}.` };
   }
-  if (amountNgn > 10_000_000) return { ok: false, error: "For sponsorships over ₦10,000,000, please contact us." };
-  if (form.get("policy") !== "yes") return { ok: false, error: "Please confirm you've read the advertising policy." };
-  const c = readContact(form);
-  if (!c.ok) return c;
-  const img = await readImage(form.get("logo"));
-  if (img && !img.ok) return img;
-  if (await tooManyCheckouts("pool_sponsors", c.contact.email)) {
-    return { ok: false, error: "You've started a lot of checkouts. Please finish one, or try again in an hour." };
-  }
-
-  let logoPath: string | null = null;
-  if (img) {
-    logoPath = await upload(img, "logos");
-    if (!logoPath) return { ok: false, error: "We couldn't save your logo. Please try again." };
-  }
-
-  const id = randomUUID();
-  const reference = `sp-${id}`;
-  const amountKobo = amountNgn * 100;
-  const coins = Math.floor(amountNgn * pricing.sponsorCoinsPerNgn);
-  if (coins < 1) return { ok: false, error: "That amount is too small." };
+  if (amount > pricing.maxNgn) return { ok: false, error: `For top-ups over ₦${fmt(pricing.maxNgn)}, please contact us.` };
   const db = createAdminClient();
-  const { error } = await db.from("pool_sponsors").insert({
-    id,
-    brand,
-    logo_path: logoPath,
-    logo_url: logoPath ? adImageUrl(logoPath) : null,
-    coins,
-    amount_kobo: amountKobo,
-    paystack_reference: reference,
-    contact_name: c.contact.name,
-    contact_email: c.contact.email,
-    contact_phone: c.contact.phone,
-  });
+  const { data: ad } = await db
+    .from("ads")
+    .select("id, brand, status, ends_at, contact_email")
+    .eq("id", adId)
+    .eq("advertiser_id", advertiserId)
+    .maybeSingle();
+  if (!ad || !["live", "finished"].includes(ad.status as string)) return { ok: false, error: "That ad can't be topped up." };
+  const msLeft = ad.ends_at ? Math.max(Date.parse(ad.ends_at as string) - Date.now(), 0) : 0;
+  const weeksLeft = Math.ceil(msLeft / (7 * 86_400_000));
+  const maxExtra = Math.max(pricing.maxWeeks - weeksLeft, 0);
+  if (!Number.isFinite(weeks) || weeks < 0 || weeks > maxExtra) {
+    return { ok: false, error: maxExtra > 0 ? `You can add 0 to ${maxExtra} weeks.` : "Your ad already runs for as long as it can." };
+  }
+  const { count } = await db
+    .from("ad_topups")
+    .select("id", { count: "exact", head: true })
+    .eq("ad_id", adId)
+    .eq("status", "pending_payment")
+    .gt("created_at", new Date(Date.now() - 3600_000).toISOString());
+  if ((count ?? 0) >= 6) return { ok: false, error: "You've started a lot of top-ups. Please finish one, or try again in an hour." };
+
+  const { coins } = poolFor(amount, pricing);
+  const id = randomUUID();
+  const reference = `at-${id}`;
+  const { error } = await db.from("ad_topups").insert({ id, ad_id: adId, coins, weeks, amount_kobo: amount * 100, paystack_reference: reference });
   if (error) {
-    console.error("Saving sponsor failed", error);
-    if (logoPath) await db.storage.from(AD_BUCKET).remove([logoPath]);
+    console.error("Saving top-up failed", error);
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   return startPayment({
-    email: c.contact.email,
-    amountKobo,
+    email: ad.contact_email as string,
+    amountKobo: amount * 100,
     reference,
     callbackUrl: `${siteUrl()}/advertise/done`,
-    metadata: { kind: "sponsor", id, brand, coins },
+    metadata: { kind: "topup", id, ad: adId, brand: ad.brand as string, coins, weeks },
   });
 }
 
@@ -299,15 +327,16 @@ export type PaymentOutcome =
   | { kind: "unknown" }
   | {
       kind: "ad";
-      state: "not_paid" | "reviewing" | "live" | "rejected" | "held" | "finished";
+      state: "not_paid" | "live" | "finished" | "other";
       brand: string;
       headline: string;
       image: string;
-      reason: string | null;
-      views: number;
+      coins: number;
+      taps: number;
       endsAt: string | null;
       email: string;
     }
+  | { kind: "topup"; state: "not_paid" | "paid"; brand: string; coins: number; taps: number; email: string }
   | {
       kind: "sponsor";
       state: "not_paid" | "queued" | "applied";
@@ -318,12 +347,25 @@ export type PaymentOutcome =
       email: string;
     };
 
-const REF_RE = /^(ad|sp)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+export const REF_RE = /^(ad|sp|at)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+export const AD_EMAIL_FIELDS =
+  "id, advertiser_id, brand, headline, contact_name, contact_email, weeks, coins_total, coins_left, rewarded_views, free_views, opens, clicks, sightings, amount_kobo, paystack_reference, starts_at, ends_at, status, paused";
+
+function toAdForEmail(row: Record<string, unknown>): AdForEmail {
+  return {
+    ...(row as unknown as AdForEmail),
+    coins_total: Number(row.coins_total ?? 0),
+    coins_left: Number(row.coins_left ?? 0),
+    amount_kobo: Number(row.amount_kobo ?? 0),
+  };
+}
 
 /**
- * Checks a payment with Paystack and acts on it: an ad is reviewed and goes live (or not); a
- * sponsor's coins go into a pool (or wait for the next round). Used by both the page people
- * come back to after paying and the Paystack webhook, and safe to run any number of times.
+ * Checks a payment with Paystack and acts on it: a new ad goes live, a top-up adds coins, a
+ * (previously sold) prize pool sponsorship is queued. Used by both the page people come back
+ * to after paying and the Paystack webhook, and safe to run any number of times: emails are
+ * sent only by the call that marks the payment as paid.
  */
 export async function confirmPayment(reference: string): Promise<PaymentOutcome> {
   if (!paystackEnabled()) return { kind: "off" };
@@ -331,36 +373,62 @@ export async function confirmPayment(reference: string): Promise<PaymentOutcome>
   const db = createAdminClient();
   const payment = await checkPayment(reference);
   const paid = payment?.paid === true;
+  const pricing = await adPricing();
 
   if (reference.startsWith("ad-")) {
     if (paid) {
       const res = await db.rpc("ad_paid", { p_reference: reference, p_amount_kobo: payment.amountKobo });
-      const r = res.data as { found?: boolean; id?: string; claimed?: boolean } | null;
       if (res.error) console.error("ad_paid failed", res.error);
-      if (r?.found && r.claimed && r.id) await runReview(r.id);
+      const r = res.data as { found?: boolean; id?: string; newly_paid?: boolean } | null;
+      if (r?.found && r.newly_paid && r.id) await adWentLive(r.id);
     }
     const { data: ad } = await db
       .from("ads")
-      .select("brand, headline, image_path, status, review_notes, views_bought, ends_at, contact_email")
+      .select("brand, headline, image_path, status, coins_total, ends_at, contact_email")
       .eq("paystack_reference", reference)
       .maybeSingle();
     if (!ad) return { kind: "unknown" };
     const status = ad.status as string;
-    const state =
-      status === "pending_payment" ? "not_paid" : status === "paid" ? "reviewing" : (status as "reviewing" | "live" | "rejected" | "held" | "finished");
+    const coins = Number(ad.coins_total ?? 0);
     return {
       kind: "ad",
-      state,
+      state: status === "pending_payment" ? "not_paid" : status === "live" ? "live" : status === "finished" ? "finished" : "other",
       brand: ad.brand as string,
       headline: ad.headline as string,
       image: adImageUrl(ad.image_path as string),
-      reason: status === "rejected" ? ((ad.review_notes as string | null) ?? null) : null,
-      views: Number(ad.views_bought),
+      coins,
+      taps: Math.floor(coins / pricing.viewReward),
       endsAt: (ad.ends_at as string | null) ?? null,
       email: ad.contact_email as string,
     };
   }
 
+  if (reference.startsWith("at-")) {
+    if (paid) {
+      const res = await db.rpc("ad_topup_paid", { p_reference: reference, p_amount_kobo: payment.amountKobo });
+      if (res.error) console.error("ad_topup_paid failed", res.error);
+      const r = res.data as { found?: boolean; ad_id?: string; newly_paid?: boolean; coins?: number } | null;
+      if (r?.found && r.newly_paid && r.ad_id) await toppedUp(r.ad_id, Number(r.coins ?? 0), reference);
+    }
+    const { data: t } = await db
+      .from("ad_topups")
+      .select("status, coins, ads(brand, contact_email)")
+      .eq("paystack_reference", reference)
+      .maybeSingle();
+    if (!t) return { kind: "unknown" };
+    const ad = (Array.isArray(t.ads) ? t.ads[0] : t.ads) as { brand: string; contact_email: string } | null;
+    const coins = Number(t.coins);
+    return {
+      kind: "topup",
+      state: t.status === "paid" ? "paid" : "not_paid",
+      brand: ad?.brand ?? "your ad",
+      coins,
+      taps: Math.floor(coins / pricing.viewReward),
+      email: ad?.contact_email ?? "",
+    };
+  }
+
+  // Prize pool sponsors: no longer sold on the website, but payments already started still count.
   let queuedAhead = 0;
   if (paid) {
     const res = await db.rpc("sponsor_paid", { p_reference: reference, p_amount_kobo: payment.amountKobo });
@@ -375,7 +443,11 @@ export async function confirmPayment(reference: string): Promise<PaymentOutcome>
         .maybeSingle();
       if (s) {
         const email = sponsorPaidEmail(
-          { ...(s as { brand: string; contact_name: string; contact_email: string; paystack_reference: string }), coins: Number(s.coins), amount_kobo: Number(s.amount_kobo) },
+          {
+            ...(s as { brand: string; contact_name: string; contact_email: string; paystack_reference: string }),
+            coins: Number(s.coins),
+            amount_kobo: Number(s.amount_kobo),
+          },
           r.status === "applied",
         );
         await sendEmail({ to: s.contact_email as string, ...email }).catch(() => {});
@@ -404,50 +476,140 @@ export async function confirmPayment(reference: string): Promise<PaymentOutcome>
   };
 }
 
-const AD_EMAIL_FIELDS =
-  "id, brand, headline, link_url, image_path, contact_name, contact_email, slots, views_bought, views_delivered, opens, clicks, amount_kobo, paystack_reference, starts_at, ends_at, status";
-
-/** Runs the review for a paid ad (the caller has claimed it), saves the verdict and sends the emails. */
-async function runReview(adId: string) {
+/** A new ad was just paid for (and is live): receipt to the advertiser, a note to the owner. */
+async function adWentLive(adId: string) {
   const db = createAdminClient();
-  const { data: ad } = await db.from("ads").select(AD_EMAIL_FIELDS).eq("id", adId).maybeSingle();
-  if (!ad) return;
+  const { data } = await db.from("ads").select(`${AD_EMAIL_FIELDS}, image_path`).eq("id", adId).maybeSingle();
+  if (!data) return;
+  const ad = toAdForEmail(data);
+  const pricing = await adPricing();
+  await sendEmail({ to: ad.contact_email, ...(await adLiveEmail(ad, pricing.viewReward)) }).catch(() => {});
+  await emailAdmin(adminNewAdEmail(ad, adImageUrl(data.image_path as string)));
+}
 
-  let result: Awaited<ReturnType<typeof reviewAd>>;
-  const file = await db.storage.from(AD_BUCKET).download(ad.image_path as string);
-  if (file.error || !file.data) {
-    result = { verdict: "unavailable", reason: "We couldn't open the picture to check it." };
-  } else {
-    const path = ad.image_path as string;
-    const mediaType: ReviewMediaType = path.endsWith(".png") ? "image/png" : path.endsWith(".webp") ? "image/webp" : "image/jpeg";
-    const base64 = Buffer.from(await file.data.arrayBuffer()).toString("base64");
-    result = await reviewAd({
-      brand: ad.brand as string,
-      headline: ad.headline as string,
-      link: (ad.link_url as string | null) ?? null,
-      imageBase64: base64,
-      mediaType,
-    });
-  }
+async function toppedUp(adId: string, coins: number, reference: string) {
+  const db = createAdminClient();
+  const { data } = await db.from("ads").select(AD_EMAIL_FIELDS).eq("id", adId).maybeSingle();
+  if (!data) return;
+  const ad = toAdForEmail(data);
+  const pricing = await adPricing();
+  await sendEmail({ to: ad.contact_email, ...(await topUpEmail(ad, coins, reference, pricing.viewReward)) }).catch(() => {});
+}
 
-  const status = result.verdict === "approved" ? "live" : result.verdict === "rejected" ? "rejected" : "held";
-  const notes = result.verdict === "unavailable" ? `Held for a manual check: ${result.reason}` : result.reason;
-  const { error } = await db.rpc("ad_set_review", { p_ad: adId, p_status: status, p_notes: notes });
-  if (error) {
-    console.error("Saving the ad review failed", error);
-    return;
+// ============================================================ the advertiser's portal
+
+export type PortalAd = {
+  id: string;
+  brand: string;
+  headline: string;
+  link: string | null;
+  image: string;
+  status: "live" | "paused" | "finished" | "ended" | "stopped";
+  coinsTotal: number;
+  coinsLeft: number;
+  rewardedViews: number;
+  freeViews: number;
+  clicks: number;
+  sightings: number;
+  startsAt: string | null;
+  endsAt: string | null;
+  daysLeft: number;
+  /** Whole weeks still to run (rounded up), and whether a top-up must add at least a week. */
+  weeksLeft: number;
+  needsWeek: boolean;
+  week: { day: string; views: number; freeViews: number; clicks: number }[];
+};
+
+/** Everything an advertiser sees about their own ads (newest first). */
+export async function advertiserAds(advertiserId: string): Promise<{ email: string; name: string | null; ads: PortalAd[] } | null> {
+  const db = createAdminClient();
+  const { data: who } = await db.from("advertisers").select("email, name").eq("id", advertiserId).maybeSingle();
+  if (!who) return null;
+  const { data: rows } = await db
+    .from("ads")
+    .select("id, brand, headline, link_url, image_path, status, paused, coins_total, coins_left, rewarded_views, free_views, clicks, sightings, starts_at, ends_at")
+    .eq("advertiser_id", advertiserId)
+    .neq("status", "pending_payment")
+    .order("created_at", { ascending: false })
+    .limit(50);
+  const ids = (rows ?? []).map((r) => r.id as string);
+  const since = new Date(Date.now() - 6 * 86_400_000).toISOString().slice(0, 10);
+  const { data: daily } = ids.length
+    ? await db.from("ad_daily").select("ad_id, day, views, free_views, clicks").in("ad_id", ids).gte("day", since).order("day")
+    : { data: [] };
+  const now = Date.now();
+  const ads = (rows ?? []).map((r): PortalAd => {
+    const ends = r.ends_at ? Date.parse(r.ends_at as string) : null;
+    const st = r.status as string;
+    const status: PortalAd["status"] =
+      st === "live" ? (ends !== null && ends < now ? "ended" : r.paused ? "paused" : "live") : st === "finished" ? (ends !== null && ends < now ? "ended" : "finished") : "stopped";
+    return {
+      id: r.id as string,
+      brand: r.brand as string,
+      headline: r.headline as string,
+      link: (r.link_url as string | null) ?? null,
+      image: adImageUrl(r.image_path as string),
+      status,
+      coinsTotal: Number(r.coins_total ?? 0),
+      coinsLeft: Number(r.coins_left ?? 0),
+      rewardedViews: Number(r.rewarded_views ?? 0),
+      freeViews: Number(r.free_views ?? 0),
+      clicks: Number(r.clicks ?? 0),
+      sightings: Number(r.sightings ?? 0),
+      startsAt: (r.starts_at as string | null) ?? null,
+      endsAt: (r.ends_at as string | null) ?? null,
+      daysLeft: ends === null ? 0 : Math.max(0, Math.ceil((ends - now) / 86_400_000)),
+      weeksLeft: ends === null ? 0 : Math.ceil(Math.max(ends - now, 0) / (7 * 86_400_000)),
+      needsWeek: ends === null || ends <= now + 86_400_000,
+      week: (daily ?? [])
+        .filter((d) => d.ad_id === r.id)
+        .map((d) => ({ day: d.day as string, views: Number(d.views), freeViews: Number(d.free_views), clicks: Number(d.clicks) })),
+    };
+  });
+  return { email: who.email as string, name: (who.name as string | null) ?? null, ads };
+}
+
+export type EditResult = { ok: true } | { ok: false; error: string };
+
+/** Changes the headline, link and/or picture of one of the advertiser's own ads. Live at once. */
+export async function editAdFor(advertiserId: string, form: FormData): Promise<EditResult> {
+  const adId = clean(form.get("ad_id"), 40);
+  if (!UUID_RE.test(adId)) return { ok: false, error: "That ad wasn't found." };
+  const headline = clean(form.get("headline"), 61);
+  if (headline.length < 2 || headline.length > 60) return { ok: false, error: "Please add a headline (up to 60 characters)." };
+  const rawLink = clean(form.get("link"), 600);
+  const link = cleanLink(rawLink);
+  if (!link.ok) return link;
+  const img = await readImage(form.get("image"));
+  if (img && !img.ok) return img;
+
+  const db = createAdminClient();
+  const { data: mine } = await db.from("ads").select("id").eq("id", adId).eq("advertiser_id", advertiserId).maybeSingle();
+  if (!mine) return { ok: false, error: "That ad wasn't found." };
+  let path: string | null = null;
+  if (img) {
+    path = await uploadImage(img, "billboards");
+    if (!path) return { ok: false, error: "We couldn't save your picture. Please try again." };
   }
-  const { data: fresh } = await db.from("ads").select(AD_EMAIL_FIELDS).eq("id", adId).maybeSingle();
-  const a = { ...(fresh ?? ad) } as unknown as AdForEmail;
-  a.amount_kobo = Number(a.amount_kobo);
-  const to = a.contact_email;
-  if (status === "live") {
-    await sendEmail({ to, ...adLiveEmail(a) }).catch(() => {});
-  } else if (status === "rejected") {
-    await sendEmail({ to, ...adRejectedEmail(a, result.reason) }).catch(() => {});
-    await emailAdmin(adminAdEmail(a, "rejected", result.reason));
-  } else {
-    await sendEmail({ to, ...adHeldEmail(a) }).catch(() => {});
-    await emailAdmin(adminAdEmail(a, "held", result.reason));
+  const { data, error } = await db.rpc("ad_edit", {
+    p_ad: adId,
+    p_advertiser: advertiserId,
+    p_headline: headline,
+    p_link: link.url,
+    p_clear_link: link.url === null,
+    p_image_path: path,
+  });
+  if (error || data !== true) {
+    if (error) console.error("Editing ad failed", error);
+    if (path) await db.storage.from(AD_BUCKET).remove([path]);
+    return { ok: false, error: "We couldn't save your changes. Please try again." };
   }
+  return { ok: true };
+}
+
+export async function setPausedFor(advertiserId: string, adId: string, paused: boolean): Promise<EditResult> {
+  if (!UUID_RE.test(adId)) return { ok: false, error: "That ad wasn't found." };
+  const { data, error } = await createAdminClient().rpc("ad_set_paused", { p_ad: adId, p_advertiser: advertiserId, p_paused: paused });
+  if (error || data !== true) return { ok: false, error: "That didn't work. Please try again." };
+  return { ok: true };
 }

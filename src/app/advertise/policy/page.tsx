@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AD_POLICY } from "@/lib/ad-review";
+import { AD_POLICY } from "@/lib/ads";
 
 export const metadata: Metadata = {
   title: "Advertising policy",
@@ -15,10 +15,7 @@ export default function PolicyPage() {
           ← Back to advertising
         </Link>
         <h1 className="mt-3 font-display text-3xl font-bold">Advertising policy</h1>
-        <p className="mt-2 text-muted">
-          We want ads that players are happy to see, and advertisers who are happy they booked. These rules apply to billboard
-          ads and prize pool sponsors (names and logos). Every ad is checked before it goes live.
-        </p>
+        <p className="mt-2 text-muted">We want ads players are happy to see. These rules apply to every ad: the picture, the words and the link.</p>
       </div>
 
       <Section title="Not allowed">
@@ -37,38 +34,26 @@ export default function PolicyPage() {
         </ul>
       </Section>
 
-      <Section title="How checking works">
+      <Section title="If an ad breaks the rules">
         <p>
-          After you pay, your picture, headline and link are checked against this policy, usually in under a minute. Sometimes
-          a person on our team takes a look too, which can take up to a day. Your 7 days of
-          showing only start once your ad is live.
-        </p>
-      </Section>
-
-      <Section title="If we can't approve your ad">
-        <p>
-          We&apos;ll tell you why by email and refund your payment in full (refunds usually arrive within 5–10 working days).
-          You&apos;re welcome to make a new ad that follows the rules.
-        </p>
-        <p>
-          We may also take down an ad that is already live if we find it breaks these rules or we receive a valid complaint
-          (for example, from a trademark owner). If that happens, we&apos;ll refund the views you haven&apos;t had yet.
+          Ads go live as soon as they&apos;re paid, and the same rules apply to any changes you make later. We may take down an ad
+          that breaks these rules, or after a valid complaint (for example, from a trademark owner). If we do, we&apos;ll tell you why
+          and refund the part of your budget that hasn&apos;t been used yet.
         </p>
       </Section>
 
       <Section title="Who sees your ad">
         <p>
-          Hide &amp; Seek is a game for adults (18 and over), played mostly in Nigeria. Views are counted when your billboard is
-          on a player&apos;s screen. We limit how many views one person can add in an hour, so your numbers are real people,
-          not one person refreshing.
+          Hide &amp; Seek is for adults (18 and over), mostly in Nigeria. You pay only when a signed-in player taps your billboard to
+          look at your ad. Each player can do that once a day per ad, so your numbers are real people, not one person tapping again
+          and again.
         </p>
       </Section>
 
       <Section title="Your responsibilities">
         <p>
-          You confirm that you have the right to use everything in your ad (pictures, logos, names and claims), that your ad is
-          honest, and that what you&apos;re advertising is legal in Nigeria. You&apos;re responsible for the website your
-          link goes to.
+          You confirm that you have the right to use everything in your ad (pictures, logos, names and claims), that it&apos;s honest,
+          and that what you&apos;re advertising is legal in Nigeria. You&apos;re responsible for the website your link goes to.
         </p>
       </Section>
 

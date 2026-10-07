@@ -8,7 +8,8 @@ type Served = { id: string; image_path: string; headline: string; brand: string;
 
 /**
  * GET /api/ads/serve?n=24 → { ads: [{ id, image, headline, brand, link }] }
- * A fresh, weighted pick of live ads for the billboards (ads behind schedule come up more).
+ * A fresh, weighted pick of live ads for the billboards: only ads that are running, not paused,
+ * and can still pay a reward. Ads with more coins to spend per hour left come up more.
  */
 export async function GET(request: Request) {
   const raw = Number(new URL(request.url).searchParams.get("n") ?? 24);
