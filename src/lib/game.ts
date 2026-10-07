@@ -13,7 +13,6 @@ export type GameState = {
     joinEndsAt: string;
     seekEndsAt: string;
     tileCount: number;
-    width: number;
     hidersTotal: number;
     hidersRemaining: number;
     pool: number;
@@ -96,7 +95,6 @@ export async function loadGame(userId: string): Promise<GameState> {
           joinEndsAt: round.join_ends_at,
           seekEndsAt: round.seek_ends_at,
           tileCount,
-          width: Math.max(1, Math.ceil(Math.sqrt(Math.max(tileCount, 1)))),
           hidersTotal: round.hiders_total,
           hidersRemaining: round.hiders_remaining,
           pool: num(round.pool),

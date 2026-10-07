@@ -1,0 +1,49 @@
+import "server-only";
+
+// Sends email through Resend (https://resend.com). Needs RESEND_API_KEY.
+// Without a verified domain, Resend only delivers to your own Resend account
+// email, so add a domain in Resend and set EMAIL_FROM to an address on it.
+
+const API = "https://api.resend.com";
+
+export async function sendEmail({ to, subject, html, text }: { to: string; subject: string; html: string; text: string }) {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) {
+    console.error("RESEND_API_KEY is not set, so no email was sent.");
+    return false;
+  }
+  try {
+    const res = await fetch(`${API}/emails`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from: process.env.EMAIL_FROM ?? "Hide & Seek <onboarding@resend.dev>",
+        to: [to],
+        subject,
+        html,
+        text,
+      }),
+    });
+    if (!res.ok) console.error("Email failed", res.status, await res.text().catch(() => ""));
+    return res.ok;
+  } catch (error) {
+    console.error("Email failed", error);
+    return false;
+  }
+}
+
+export function codeEmail(code: string) {
+  const spaced = `${code.slice(0, 3)} ${code.slice(3)}`;
+  return {
+    subject: `${spaced} is your Hide & Seek code`,
+    text: `Your Hide & Seek sign-in code is ${spaced}.\n\nIt works for 10 minutes. If you didn't ask for it, you can ignore this email.`,
+    html: `<!doctype html><html><body style="margin:0;background:#eef2f6;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#18202b">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px">
+<table role="presentation" width="100%" style="max-width:420px;background:#ffffff;border-radius:16px" cellpadding="0" cellspacing="0"><tr><td style="padding:32px">
+<div style="font-size:20px;font-weight:800">Hide &amp; Seek</div>
+<p style="font-size:15px;color:#64707d;margin:16px 0 8px">Your sign-in code:</p>
+<div style="font-size:36px;font-weight:800;letter-spacing:8px;background:#f1f4f8;border-radius:12px;padding:16px;text-align:center">${spaced}</div>
+<p style="font-size:13px;color:#64707d;margin:16px 0 0">It works for 10 minutes. If you didn't ask for it, you can ignore this email.</p>
+</td></tr></table></td></tr></table></body></html>`,
+  };
+}

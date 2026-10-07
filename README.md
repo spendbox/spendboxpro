@@ -17,17 +17,23 @@ The full rule book is the "Hide & Seek Grid Game: Rules Spec" doc.
 
 ## Setup
 
-1. **Database.** In Supabase → SQL Editor, run `game-db/001_hide_and_seek.sql` once on an
-   empty database. In Supabase → Database → Extensions, switch on **pg_cron** first if you
+1. **Database.** In Supabase → SQL Editor, run `game-db/001_hide_and_seek.sql` and then
+   `game-db/002_email_codes_and_city.sql`, once each, on an empty database. In Supabase → Database → Extensions, switch on **pg_cron** first if you
    can: the file then schedules the round clock to run every minute. (Without it, the clock
    still moves whenever someone has the game open.)
-2. **Email codes through Resend.** Supabase → Authentication → SMTP Settings: host
-   `smtp.resend.com`, port `465`, username `resend`, password = your Resend API key,
-   sender = an address on your Resend-verified domain. Then Authentication → Email Templates
-   → Magic Link: put the code in the email with `{{ .Token }}`.
+2. **Email codes.** The app sends its own 6-digit sign-in codes through Resend, so nothing
+   needs setting up in Supabase. Just make sure `RESEND_API_KEY` and `EMAIL_FROM` (an address on
+   your Resend-verified domain) are set in Vercel.
 3. **Vercel environment variables** (see `.env.example`): `NEXT_PUBLIC_SUPABASE_URL`,
    `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `NEXT_PUBLIC_SITE_URL`,
-   `CRON_SECRET`. The daily job (`vercel.json`) tops broke players up to 100 coins.
+   `CRON_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`. The daily job (`vercel.json`) tops broke players up to 100 coins.
+
+## The city
+
+The board is a small 3D city (three.js, `src/app/play/city-view.tsx`). Tiles spiral out from
+the centre, so new tiles (10 per hider) appear on the edge and rise out of the ground. What
+stands on each tile is decided in `src/lib/city/layout.ts` from the round number, so each
+round has its own street grid, downtowns, parks and colours.
 
 ## Tuning
 
