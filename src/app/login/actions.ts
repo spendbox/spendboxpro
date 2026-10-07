@@ -7,14 +7,15 @@ import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
-// Two ways in:
-// 1. Email code: a 6-digit code we make and email through Resend ourselves (Supabase sends
-//    nothing, so its email limits don't apply). First-timers then pick a name and a PIN.
-// 2. Name + PIN, for coming back later.
+// Signing in starts with an email address:
+// - Returning players (who have a PIN) type their PIN.
+// - New players (and "forgot PIN") get a 6-digit code that we email through Resend ourselves
+//   (Supabase sends nothing, so its email limits don't apply), then pick a name and PIN.
 // After either check passes, the server signs the player in with Supabase, which sets the
 // login cookies.
 
 export type LoginResult = { ok: true; needsSetup?: boolean } | { ok: false; error: string };
+export type StartResult = { ok: true; next: "pin" | "code" } | { ok: false; error: string };
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const NAME = /^[A-Za-z0-9_]{3,16}$/;
@@ -32,6 +33,16 @@ const hash = (email: string, code: string) =>
 /** The account password is made from the PIN plus a server secret, so it is long and strong. */
 const pinPassword = (userId: string, pin: string) =>
   createHmac("sha256", supabaseSecretKey()).update(`pin:${userId}:${pin}`).digest("base64url");
+
+/** Step 1: "Enter world" with an email. Returning players go to their PIN; others get a code. */
+export async function startSignIn(rawEmail: string): Promise<StartResult> {
+  const email = clean(rawEmail);
+  if (!EMAIL.test(email) || email.length > 200) return { ok: false, error: "Please check your email address." };
+  const { data } = await createAdminClient().from("profiles").select("pin_set").eq("email", email).maybeSingle();
+  if (data?.pin_set) return { ok: true, next: "pin" };
+  const sent = await sendCode(email);
+  return sent.ok ? { ok: true, next: "code" } : sent;
+}
 
 export async function sendCode(rawEmail: string): Promise<LoginResult> {
   const email = clean(rawEmail);
@@ -120,31 +131,32 @@ export async function verifyCode(rawEmail: string, rawCode: string): Promise<Log
     return { ok: false, error: "We couldn't sign you in. Please try again." };
   }
   const userId = await currentUserId();
-  const { data: profile } = await db.from("profiles").select("pin_set").eq("id", userId ?? "").maybeSingle();
-  return { ok: true, needsSetup: !profile?.pin_set };
+  if (userId) await db.from("profiles").update({ email }).eq("id", userId).is("email", null);
+  // After an email code they always (re)set their PIN: new players, and "forgot PIN".
+  return { ok: true, needsSetup: true };
 }
 
-export async function loginWithPin(rawName: string, rawPin: string): Promise<LoginResult> {
-  const name = rawName.trim();
+export async function loginWithPin(rawEmail: string, rawPin: string): Promise<LoginResult> {
+  const email = clean(rawEmail);
   const pin = rawPin.replace(/\D/g, "");
-  if (!NAME.test(name) || !PIN.test(pin)) return { ok: false, error: "That name and PIN don't match." };
+  if (!EMAIL.test(email) || !PIN.test(pin)) return { ok: false, error: "That PIN isn't right." };
 
   const db = createAdminClient();
   const { data: profile } = await db
     .from("profiles")
     .select("id, pin_set, pin_failures, pin_locked_until")
-    .ilike("username", name.replace(/_/g, "\\_"))
+    .eq("email", email)
     .maybeSingle();
-  if (!profile?.pin_set) return { ok: false, error: "That name and PIN don't match." };
+  if (!profile?.pin_set) return { ok: false, error: "That PIN isn't right." };
   if (profile.pin_locked_until && Date.parse(profile.pin_locked_until) > Date.now()) {
-    return { ok: false, error: "Too many wrong PINs. Wait a few minutes, or sign in with an email code." };
+    return { ok: false, error: "Too many wrong PINs. Wait a few minutes, or use Forgot PIN." };
   }
 
   const { data: user } = await db.auth.admin.getUserById(profile.id);
-  const email = user.user?.email;
+  const authEmail = user.user?.email;
   const supabase = await createClient();
-  const { error } = email
-    ? await supabase.auth.signInWithPassword({ email, password: pinPassword(profile.id, pin) })
+  const { error } = authEmail
+    ? await supabase.auth.signInWithPassword({ email: authEmail, password: pinPassword(profile.id, pin) })
     : { error: new Error("no email") };
   if (error) {
     const failures = profile.pin_failures + 1;
@@ -158,7 +170,7 @@ export async function loginWithPin(rawName: string, rawPin: string): Promise<Log
       .eq("id", profile.id);
     return {
       ok: false,
-      error: failures >= PIN_TRIES ? "Too many wrong PINs. Wait 15 minutes, or sign in with an email code." : "That name and PIN don't match.",
+      error: failures >= PIN_TRIES ? "Too many wrong PINs. Wait 15 minutes, or use Forgot PIN." : "That PIN isn't right.",
     };
   }
   await db.from("profiles").update({ pin_failures: 0, pin_locked_until: null }).eq("id", profile.id);

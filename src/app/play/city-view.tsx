@@ -24,16 +24,21 @@ export type CityMarkers = {
   locked: number[];
 };
 
+/** Something that just happened, for a short animation (see GameEvent). */
+export type CityEvent = { id: number; kind: string; tile: number; ageMs: number; detail?: { radius?: number } | null };
+
 type Props = {
   seed: number;
   tileCount: number;
   markers: CityMarkers;
+  events: CityEvent[];
   interactive: boolean;
   onTile: (tile: number) => void;
+  onBillboard: (info: { id: string; tile: number }) => void;
   onHover?: (info: { tile: number; label: string } | null) => void;
 };
 
-type Part = { tile: number; x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number; color: number };
+type Part = { tile: number; x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number; color: number; tilt?: number };
 
 const SKY = 0xd7ebf7;
 const GROUND = 0xd3e4c8;
@@ -41,6 +46,7 @@ const ASPHALT = 0x5b6470;
 const SIDEWALK = 0xf3f1ec;
 const GRASS = 0xa8d79a;
 const WATER = 0x7cc4e8;
+const BRIDGE_TOP = 0.24;
 
 // ---------------------------------------------------------------- shapes
 function geometries() {
@@ -56,7 +62,9 @@ function geometries() {
     new THREE.Float32BufferAttribute([0, 0, 0.12, -0.32, 0.12, -0.05, 0, 0, -0.08, 0, 0, 0.12, 0, 0, -0.08, 0.32, 0.12, -0.05], 3),
   );
   bird.computeVertexNormals();
-  return { box, roof, crown, trunk, disc, bird };
+  // Half a ring, standing up: the arch under a bridge.
+  const arch = new THREE.TorusGeometry(0.29, 0.035, 6, 18, Math.PI);
+  return { box, roof, crown, trunk, disc, bird, arch };
 }
 
 // ---------------------------------------------------------------- what stands on a tile
@@ -70,21 +78,39 @@ function partsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "ti
   };
 
   if (t.kind === "river" || t.kind === "lake") {
-    add("water", { x, y: 0, z, sx: 1, sy: 0.03, sz: 1, ry: 0, color: t.kind === "river" ? 0x6fb7e0 : WATER });
+    add("water", { x, y: -0.03, z, sx: 1, sy: 0.03, sz: 1, ry: 0, color: t.kind === "river" ? 0x6fb7e0 : WATER });
     return;
   }
 
   if (t.kind === "bridge") {
-    const along = t.road === "x";
-    add("water", { x, y: 0, z, sx: 1, sy: 0.03, sz: 1, ry: 0, color: 0x6fb7e0 });
-    add("building", { x, y: 0, z, sx: along ? 0.16 : 0.5, sy: 0.24, sz: along ? 0.5 : 0.16, ry: 0, color: 0xc9ced6 });
-    add("building", { x, y: 0.24, z, sx: along ? 1 : 0.72, sy: 0.06, sz: along ? 0.72 : 1, ry: 0, color: 0xb9c0c9 });
-    add("ground", { x, y: 0.3, z, sx: along ? 1 : 0.6, sy: 0.02, sz: along ? 0.6 : 1, ry: 0, color: ASPHALT });
-    for (const o of [-0.34, 0.34]) {
-      add("building", { x: x + (along ? 0 : o), y: 0.3, z: z + (along ? o : 0), sx: along ? 1 : 0.04, sy: 0.08, sz: along ? 0.04 : 1, ry: 0, color: 0xe85d4a });
+    // A humped bridge: ramps up from the road on both banks, a flat span with an arch
+    // under it, railings and street lamps. Drawn along x, turned for streets along z.
+    const alongX = t.road === "x";
+    const ry = alongX ? 0 : Math.PI / 2;
+    const at = (dx: number, dz: number) => (alongX ? { x: x + dx, z: z + dz } : { x: x + dz, z: z - dx });
+    add("water", { x, y: -0.03, z, sx: 1, sy: 0.03, sz: 1, ry: 0, color: 0x6fb7e0 });
+    const rise = BRIDGE_TOP - 0.06;
+    const ramp = Math.atan2(rise, 0.3);
+    const rampLen = Math.hypot(0.3, rise) + 0.02;
+    const segs = [
+      { dx: -0.35, y: 0.06 + rise / 2, len: rampLen, tilt: ramp },
+      { dx: 0, y: BRIDGE_TOP, len: 0.42, tilt: 0 },
+      { dx: 0.35, y: 0.06 + rise / 2, len: rampLen, tilt: -ramp },
+    ];
+    for (const sg of segs) {
+      const c = at(sg.dx, 0);
+      add("building", { ...c, y: sg.y - 0.06, sx: sg.len, sy: 0.05, sz: 0.66, ry, tilt: sg.tilt, color: 0xd5d9df });
+      add("ground", { ...c, y: sg.y - 0.012, sx: sg.len, sy: 0.014, sz: 0.5, ry, tilt: sg.tilt, color: ASPHALT });
+      for (const side of [-0.31, 0.31]) {
+        const r2 = at(sg.dx, side);
+        add("building", { ...r2, y: sg.y, sx: sg.len, sy: 0.06, sz: 0.03, ry, tilt: sg.tilt, color: 0xc0504a });
+      }
     }
-    for (const o of [-0.25, 0.25]) {
-      add("paint", { x: x + (along ? o : 0), y: 0.321, z: z + (along ? 0 : o), sx: along ? 0.22 : 0.04, sy: 0.005, sz: along ? 0.04 : 0.22, ry: 0, color: 0xffffff });
+    for (const side of [-0.3, 0.3]) {
+      add("arch", { ...at(0, side), y: -0.06, sx: 1, sy: 1, sz: 1, ry, color: 0xb9c0c9 });
+      const lamp = at(0, side + (side > 0 ? 0.02 : -0.02));
+      add("trunk", { ...lamp, y: BRIDGE_TOP, sx: 0.35, sy: 0.32, sz: 0.35, ry: 0, color: 0x495057 });
+      add("disc", { ...lamp, y: BRIDGE_TOP + 0.32, sx: 0.07, sy: 0.04, sz: 0.07, ry: 0, color: 0xffe8a3 });
     }
     return;
   }
@@ -177,12 +203,94 @@ function partsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "ti
       add("disc", { x, y: 0.08, z, sx: 0.62, sy: 0.44, sz: 0.46, ry: 0, color: 0x69c06a });
       add("paint", { x, y: 0.52, z, sx: 0.02, sy: 0.005, sz: 0.4, ry: 0, color: 0xffffff });
       break;
+    case "billboard":
+      // The board itself is added separately (see billboards); a little greenery here.
+      add("ground", { x, y: 0.08, z, sx: 0.5, sy: 0.01, sz: 0.5, ry: 0, color: GRASS });
+      break;
     case "plaza":
       add("ground", { x, y: 0.08, z, sx: 0.8, sy: 0.02, sz: 0.8, ry: 0, color: 0xe7e1d5 });
       add("disc", { x, y: 0.1, z, sx: 0.3, sy: 0.12, sz: 0.3, ry: 0, color: 0xcfd6dd });
       add("water", { x, y: 0.22, z, sx: 0.22, sy: 0.02, sz: 0.22, ry: 0, color: WATER });
       break;
   }
+}
+
+/** Artwork for the four billboard designs ("your ad here"), drawn on a canvas. */
+function billboardTexture(design: number) {
+  const canvas = document.createElement("canvas");
+  canvas.width = design === 2 ? 1024 : 512;
+  canvas.height = 256;
+  const c = canvas.getContext("2d")!;
+  const font = (size: number, weight = 800) => `${weight} ${size}px system-ui, -apple-system, Segoe UI, sans-serif`;
+  c.textAlign = "center";
+  c.textBaseline = "middle";
+  if (design === 0) {
+    c.fillStyle = "#ffd43b";
+    c.fillRect(0, 0, 512, 256);
+    c.fillStyle = "#18202b";
+    c.font = font(64);
+    c.fillText("YOUR AD HERE", 256, 105);
+    c.font = font(30, 600);
+    c.fillText("Tap to advertise", 256, 175);
+  } else if (design === 1) {
+    c.fillStyle = "#1c2541";
+    c.fillRect(0, 0, 512, 256);
+    c.fillStyle = "#ffc53d";
+    c.font = font(58);
+    c.fillText("ADVERTISE", 256, 92);
+    c.fillText("HERE", 256, 152);
+    c.fillStyle = "#ffffff";
+    c.font = font(24, 600);
+    c.fillText("Tap this billboard", 256, 210);
+  } else if (design === 2) {
+    const grad = c.createLinearGradient(0, 0, 1024, 256);
+    grad.addColorStop(0, "#7048e8");
+    grad.addColorStop(0.5, "#e64980");
+    grad.addColorStop(1, "#7048e8");
+    c.fillStyle = grad;
+    c.fillRect(0, 0, 1024, 256);
+    c.fillStyle = "#ffffff";
+    c.font = font(72);
+    c.fillText("YOUR BRAND HERE  ✦  TAP TO ADVERTISE  ✦", 512, 128);
+  } else {
+    c.fillStyle = "#ffffff";
+    c.fillRect(0, 0, 512, 256);
+    c.strokeStyle = "#e5484d";
+    c.lineWidth = 18;
+    c.strokeRect(9, 9, 494, 238);
+    c.fillStyle = "#e5484d";
+    c.font = font(70);
+    c.fillText("AD SPACE", 256, 110);
+    c.fillStyle = "#18202b";
+    c.font = font(30, 600);
+    c.fillText("Tap to book", 256, 180);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  if (design === 2) {
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.repeat.x = 0.5;
+  }
+  return tex;
+}
+
+function labelTexture(text: string, bg: string) {
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 128;
+  const c = canvas.getContext("2d")!;
+  c.fillStyle = bg;
+  c.beginPath();
+  c.arc(64, 64, 56, 0, Math.PI * 2);
+  c.fill();
+  c.fillStyle = "#ffffff";
+  c.font = "800 72px system-ui, sans-serif";
+  c.textAlign = "center";
+  c.textBaseline = "middle";
+  c.fillText(text, 64, 68);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
 
 const hashish = (v: number, k: number) => {
@@ -196,15 +304,16 @@ const easeOutBack = (t: number) => {
 };
 
 // ---------------------------------------------------------------- component
-export function CityView({ seed, tileCount, markers, interactive, onTile, onHover }: Props) {
+export function CityView({ seed, tileCount, markers, events, interactive, onTile, onBillboard, onHover }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const api = useRef<{
     build: (seed: number, count: number) => void;
     setMarkers: (m: CityMarkers) => void;
+    playEvents: (e: CityEvent[]) => void;
   } | null>(null);
-  const cb = useRef({ onTile, onHover, interactive });
+  const cb = useRef({ onTile, onHover, onBillboard, interactive });
   useEffect(() => {
-    cb.current = { onTile, onHover, interactive };
+    cb.current = { onTile, onHover, onBillboard, interactive };
   });
 
   // Set up the scene once.
@@ -259,6 +368,7 @@ export function CityView({ seed, tileCount, markers, interactive, onTile, onHove
       crown: { geometry: geo.crown, material: mat({ flatShading: true }), shadow: true },
       trunk: { geometry: geo.trunk, material: mat(), shadow: true },
       disc: { geometry: geo.disc, material: mat(), shadow: false },
+      arch: { geometry: geo.arch, material: mat(), shadow: true },
       water: { geometry: geo.box, material: new THREE.MeshPhongMaterial({ color: 0xffffff, shininess: 90, specular: 0xffffff }), shadow: false },
     };
 
@@ -268,6 +378,8 @@ export function CityView({ seed, tileCount, markers, interactive, onTile, onHove
     scene.add(moving);
     const markerGroup = new THREE.Group();
     scene.add(markerGroup);
+    const fxGroup = new THREE.Group();
+    scene.add(fxGroup);
 
     let meshes: Record<string, THREE.InstancedMesh> = {};
     let parts: Record<string, Part[]> = {};
@@ -289,11 +401,14 @@ export function CityView({ seed, tileCount, markers, interactive, onTile, onHove
     const s = new THREE.Vector3();
     const color = new THREE.Color();
 
+    const tiltQ = new THREE.Quaternion();
+    const zAxis = new THREE.Vector3(0, 0, 1);
     function writePart(mesh: THREE.InstancedMesh, idx: number, p: Part, g: number) {
       const gx = Math.min(1, g * 1.15);
       v.set(p.x, p.y * g, p.z);
       s.set(p.sx * gx, Math.max(0.0001, p.sy * g), p.sz * gx);
       q.setFromAxisAngle(up, p.ry);
+      if (p.tilt) q.multiply(tiltQ.setFromAxisAngle(zAxis, p.tilt));
       m4.compose(v, q, s);
       mesh.setMatrixAt(idx, m4);
     }
@@ -354,7 +469,9 @@ export function CityView({ seed, tileCount, markers, interactive, onTile, onHove
         const z = alongX ? c.line.at - c.lane : c.pos;
         // Ride up onto bridges; hide where the road line is interrupted (water, park...).
         const under = kindAt.get(`${Math.round(x)},${Math.round(z)}`);
-        const y = under === "bridge" ? 0.32 : 0.06;
+        // Over a bridge, follow its hump.
+        const off = Math.abs((alongX ? x : z) - Math.round(alongX ? x : z));
+        const y = under === "bridge" ? 0.06 + (BRIDGE_TOP - 0.06) * Math.min(1, Math.max(0, (0.5 - off) / 0.3)) : 0.06;
         const shown = under === "road" || under === "bridge" ? 1 : 0.0001;
         q.setFromAxisAngle(up, alongX ? 0 : Math.PI / 2);
         m4.compose(v.set(x, y, z), q, s.set(0.3 * shown, 0.09 * shown, 0.15 * shown));
@@ -428,10 +545,74 @@ export function CityView({ seed, tileCount, markers, interactive, onTile, onHove
       cabin: new THREE.BoxGeometry(0.12, 0.12, 0.12),
       blade: new THREE.BoxGeometry(0.06, 0.9, 0.02).translate(0, 0.45, 0),
     };
+    // ---- billboards: the city's ad space. Tap one to advertise on it.
+    const boardTextures = [0, 1, 2, 3].map((d) => billboardTexture(d));
+    const boardMats = boardTextures.map((tex, d) =>
+      d === 2
+        ? new THREE.MeshBasicMaterial({ map: tex })
+        : new THREE.MeshLambertMaterial({ map: tex, emissive: 0xffffff, emissiveIntensity: 0.12, emissiveMap: tex }),
+    );
+    const poleMat = new THREE.MeshLambertMaterial({ color: 0x495057 });
+    const frameMat = new THREE.MeshLambertMaterial({ color: 0x343a40 });
+    let boards: { obj: THREE.Group; tile: number }[] = [];
+    let boardHits: THREE.Mesh[] = [];
+    function buildBillboard(t: Tile) {
+      const b = t.billboard!;
+      const g = new THREE.Group();
+      // Sizes per design: [panel width, panel height, panel centre height, poles]
+      const spec = [
+        { w: 0.95, h: 0.46, y: 0.95, poles: [-0.3, 0.3] },
+        { w: 0.9, h: 0.44, y: 1.5, poles: [0] },
+        { w: 0.78, h: 0.5, y: 0.75, poles: [-0.28, 0.28] },
+        { w: 0.5, h: 0.34, y: 0.6, poles: [0] },
+      ][b.design];
+      for (const px of spec.poles) {
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(px === 0 ? 0.05 : 0.025, px === 0 ? 0.06 : 0.03, spec.y, 8), poleMat);
+        pole.position.set(px, spec.y / 2 + 0.08, 0);
+        pole.castShadow = true;
+        g.add(pole);
+      }
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(spec.w + 0.05, spec.h + 0.05, 0.04), frameMat);
+      frame.position.y = spec.y + 0.08;
+      frame.castShadow = true;
+      g.add(frame);
+      for (const side of [1, -1]) {
+        const face = new THREE.Mesh(new THREE.PlaneGeometry(spec.w, spec.h), boardMats[b.design]);
+        face.position.set(0, spec.y + 0.08, side * 0.021);
+        if (side < 0) face.rotation.y = Math.PI;
+        face.userData = { billboard: b.id, tile: t.i };
+        g.add(face);
+        boardHits.push(face);
+      }
+      if (b.design === 1) {
+        const walk = new THREE.Mesh(new THREE.BoxGeometry(spec.w, 0.02, 0.12), poleMat);
+        walk.position.set(0, spec.y + 0.08 - spec.h / 2 - 0.04, 0.06);
+        g.add(walk);
+      }
+      if (b.design === 3) {
+        const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffe8a3 }));
+        lamp.position.set(0, spec.y + 0.08 + spec.h / 2 + 0.06, 0.05);
+        g.add(lamp);
+      }
+      // Stand at the road edge of the tile, facing the road.
+      const dir = [[1, 0], [-1, 0], [0, 1], [0, -1]][b.face];
+      g.position.set(t.x + dir[0] * 0.28, 0, t.z + dir[1] * 0.28);
+      g.rotation.y = [Math.PI / 2, -Math.PI / 2, 0, Math.PI][b.face];
+      return g;
+    }
+
     function buildLandmarks() {
       for (const l of landmarks) moving.remove(l.obj);
       landmarks = [];
+      for (const b of boards) moving.remove(b.obj);
+      boards = [];
+      boardHits = [];
       for (const t of tiles) {
+        if (t.kind === "billboard") {
+          const obj = buildBillboard(t);
+          boards.push({ obj, tile: t.i });
+          moving.add(obj);
+        }
         if (t.kind === "ferris") {
           const obj = new THREE.Group();
           const wheel = new THREE.Group();
@@ -473,6 +654,11 @@ export function CityView({ seed, tileCount, markers, interactive, onTile, onHove
       }
     }
     function updateLandmarks(dt: number, now: number) {
+      boardTextures[2].offset.x = (boardTextures[2].offset.x + dt * 0.12) % 1;
+      for (const b of boards) {
+        const t = Math.min(1, Math.max(0, (now - (born.get(b.tile) ?? 0)) / 700));
+        b.obj.scale.setScalar(Math.max(0.0001, t));
+      }
       for (const l of landmarks) {
         l.spin.rotation.z += l.speed * dt;
         const t = Math.min(1, Math.max(0, (now - (born.get(l.tile) ?? 0)) / 700));
@@ -829,6 +1015,228 @@ export function CityView({ seed, tileCount, markers, interactive, onTile, onHove
       }
     }
 
+    // ---- little scenes for things that just happened
+    // Search: a person, soldier or dog walks round the tile and looks about; if nobody turns
+    // up, a puff and a "?" . Sweep: a drone flies over and scans the area. Catch: police
+    // lights and a siren ring. Move: a puff where the hider was.
+    type Fx = { obj: THREE.Object3D; start: number; dur: number; step: (t: number) => void };
+    let fx: Fx[] = [];
+    const seenEvents = new Set<number>();
+    const fxMat = (color: number) => new THREE.MeshLambertMaterial({ color });
+    const unknownTex = labelTexture("?", "#8b95a1");
+    const cuffTex = labelTexture("!", "#e5484d");
+    const ringGeo = new THREE.RingGeometry(0.42, 0.5, 32).rotateX(-Math.PI / 2);
+
+    function makeWalker(kind: number) {
+      const g = new THREE.Group();
+      if (kind === 2) {
+        // Dog
+        const fur = fxMat(0xa0703c);
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.08, 0.08), fur);
+        body.position.y = 0.11;
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.07), fur);
+        head.position.set(0.12, 0.16, 0);
+        const tail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 0.02), fur);
+        tail.position.set(-0.12, 0.15, 0);
+        tail.rotation.z = 0.6;
+        g.add(body, head, tail);
+        for (const [lx, lz] of [[0.07, 0.03], [0.07, -0.03], [-0.07, 0.03], [-0.07, -0.03]]) {
+          const leg = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.08, 0.025), fur);
+          leg.position.set(lx, 0.04, lz);
+          g.add(leg);
+        }
+      } else {
+        // Person (kind 0) or soldier (kind 1)
+        const shirt = kind === 1 ? 0x5c7a3a : [0x4dabf7, 0xff6b6b, 0xffd43b, 0x845ef7][Math.floor(Math.random() * 4)];
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 0.18, 8), fxMat(shirt));
+        body.position.y = 0.17;
+        const legs = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.035, 0.09, 8), fxMat(kind === 1 ? 0x4a5d2f : 0x343a40));
+        legs.position.y = 0.045;
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), fxMat(0xf1c27d));
+        head.position.y = 0.3;
+        g.add(body, legs, head);
+        if (kind === 1) {
+          const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.052, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), fxMat(0x4a5d2f));
+          helmet.position.y = 0.305;
+          g.add(helmet);
+        }
+      }
+      g.traverse((o) => (o.castShadow = true));
+      g.scale.setScalar(1.5);
+      return g;
+    }
+
+    function addFx(obj: THREE.Object3D, dur: number, step: (t: number) => void) {
+      fxGroup.add(obj);
+      fx.push({ obj, start: performance.now(), dur, step });
+    }
+
+    function puff(tile: Tile, color: number, delay = 0) {
+      const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false }));
+      ring.position.set(tile.x, 0.12, tile.z);
+      addFx(ring, 1400 + delay, (t) => {
+        const k = Math.max(0, (t * (1400 + delay) - delay) / 1400);
+        ring.visible = k > 0;
+        ring.scale.setScalar(0.4 + k * 1.6);
+        (ring.material as THREE.MeshBasicMaterial).opacity = 0.8 * (1 - k);
+      });
+    }
+
+    function searchScene(tile: Tile, found: boolean) {
+      const kind = Math.floor(hashish(tile.r[0], tile.i) * 3);
+      const walker = makeWalker(kind);
+      const corners = [[-0.45, -0.45], [0.45, -0.45], [0.45, 0.45], [-0.45, 0.45]];
+      const start = Math.floor(Math.random() * 4);
+      addFx(walker, 4200, (t) => {
+        // Walk two sides of the tile, pause and look around, then leave.
+        const walk = Math.min(1, t / 0.6) * 2;
+        const a = corners[(start + Math.floor(walk)) % 4];
+        const b = corners[(start + Math.floor(walk) + 1) % 4];
+        const f = walk % 1;
+        const px = a[0] + (b[0] - a[0]) * (walk >= 2 ? 1 : f);
+        const pz = a[1] + (b[1] - a[1]) * (walk >= 2 ? 1 : f);
+        walker.position.set(tile.x + px, 0.08 + (t < 0.6 ? Math.abs(Math.sin(t * 60)) * 0.02 : 0), tile.z + pz);
+        walker.rotation.y = t < 0.6 ? Math.atan2(-(b[1] - a[1]), b[0] - a[0]) : Math.sin(t * 20) * 1.2;
+        const fade = t > 0.85 ? 1 - (t - 0.85) / 0.15 : 1;
+        walker.scale.setScalar(1.5 * Math.min(1, t * 8) * fade + 0.0001);
+      });
+      if (!found) {
+        puff(tile, 0x8b95a1, 2600);
+        const q = new THREE.Sprite(new THREE.SpriteMaterial({ map: unknownTex, transparent: true, depthTest: false }));
+        q.renderOrder = 6;
+        addFx(q, 4200, (t) => {
+          const k = Math.max(0, (t - 0.6) / 0.4);
+          q.visible = k > 0;
+          q.position.set(tile.x, tile.top + 0.4 + k * 0.6, tile.z);
+          q.scale.setScalar(0.45);
+          q.material.opacity = k < 0.7 ? 1 : 1 - (k - 0.7) / 0.3;
+        });
+      }
+    }
+
+    function sweepScene(tile: Tile, radius: number) {
+      const drone = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.06, 0.22), fxMat(0x343a40));
+      drone.add(body);
+      const rotors: THREE.Mesh[] = [];
+      for (const [rx, rz] of [[0.15, 0.15], [-0.15, 0.15], [0.15, -0.15], [-0.15, -0.15]]) {
+        const rotor = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.01, 0.02), fxMat(0xdee2e6));
+        rotor.position.set(rx, 0.05, rz);
+        drone.add(rotor);
+        rotors.push(rotor);
+      }
+      const light = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 6), new THREE.MeshBasicMaterial({ color: 0x4dabf7 }));
+      light.position.y = -0.04;
+      drone.add(light);
+      drone.scale.setScalar(1.6);
+      const size = radius * 2 + 1;
+      const scan = new THREE.Mesh(
+        new THREE.PlaneGeometry(size, size).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ color: 0x4dabf7, transparent: true, opacity: 0, depthWrite: false }),
+      );
+      scan.position.set(tile.x, 0.14, tile.z);
+      scan.renderOrder = 3;
+      const line = new THREE.Mesh(
+        new THREE.BoxGeometry(size, 0.02, 0.05),
+        new THREE.MeshBasicMaterial({ color: 0xa5d8ff, transparent: true, depthWrite: false }),
+      );
+      line.renderOrder = 4;
+      const fromX = tile.x + 8;
+      const fromZ = tile.z + 6;
+      addFx(drone, 6500, (t) => {
+        for (const r of rotors) r.rotation.y += 0.9;
+        const h = 2.6 + radius * 0.4;
+        if (t < 0.2) {
+          const k = t / 0.2;
+          drone.position.set(fromX + (tile.x - fromX) * k, h + 2 * (1 - k), fromZ + (tile.z - fromZ) * k);
+        } else if (t < 0.8) {
+          const a = ((t - 0.2) / 0.6) * Math.PI * 2;
+          drone.position.set(tile.x + Math.cos(a) * radius * 0.6, h, tile.z + Math.sin(a) * radius * 0.6);
+        } else {
+          const k = (t - 0.8) / 0.2;
+          drone.position.set(tile.x - k * 6, h + k * 4, tile.z - k * 5);
+        }
+      });
+      addFx(scan, 6500, (t) => {
+        const on = t > 0.2 && t < 0.8;
+        (scan.material as THREE.MeshBasicMaterial).opacity = on ? 0.18 + Math.abs(Math.sin(t * 30)) * 0.12 : 0;
+      });
+      addFx(line, 6500, (t) => {
+        const on = t > 0.2 && t < 0.8;
+        line.visible = on;
+        line.position.set(tile.x, 0.16, tile.z - size / 2 + (((t - 0.2) / 0.3) % 1) * size);
+      });
+    }
+
+    function arrestScene(tile: Tile) {
+      const g = new THREE.Group();
+      const red = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff2d2d }));
+      const blue = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), new THREE.MeshBasicMaterial({ color: 0x2d6bff }));
+      red.position.x = -0.1;
+      blue.position.x = 0.1;
+      g.add(red, blue);
+      const car = new THREE.Group();
+      const shell = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.1, 0.17), fxMat(0xffffff));
+      shell.position.y = 0.08;
+      const band = new THREE.Mesh(new THREE.BoxGeometry(0.345, 0.03, 0.175), fxMat(0x1c3faa));
+      band.position.y = 0.09;
+      const cab = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.07, 0.15), fxMat(0x343a40));
+      cab.position.y = 0.16;
+      car.add(shell, band, cab);
+      car.position.set(tile.x + 0.42, 0.06, tile.z);
+      car.rotation.y = Math.PI / 2;
+      const sign = new THREE.Sprite(new THREE.SpriteMaterial({ map: cuffTex, transparent: true, depthTest: false }));
+      sign.renderOrder = 6;
+      addFx(car, 5500, (t) => car.scale.setScalar(Math.min(1, t * 10) * (t > 0.9 ? (1 - t) * 10 : 1) + 0.0001));
+      addFx(g, 5500, (t) => {
+        g.position.set(tile.x + 0.42, 0.33, tile.z);
+        const flip = Math.sin(t * 70) > 0;
+        red.visible = flip;
+        blue.visible = !flip;
+      });
+      addFx(sign, 5500, (t) => {
+        sign.position.set(tile.x, tile.top + 0.6 + Math.sin(t * 12) * 0.05, tile.z);
+        sign.scale.setScalar(0.5);
+        sign.material.opacity = t > 0.85 ? (1 - t) / 0.15 : 1;
+      });
+      puff(tile, 0xe5484d);
+      puff(tile, 0xe5484d, 600);
+    }
+
+    function playEvents(list: CityEvent[]) {
+      for (const e of list) {
+        if (seenEvents.has(e.id)) continue;
+        const tile = tiles[e.tile];
+        if (!tile) continue;
+        seenEvents.add(e.id);
+        if (e.ageMs > 15000) continue;
+        if (e.kind === "searched") {
+          const found = list.some((x) => x.kind === "caught" && x.tile === e.tile && Math.abs(x.id - e.id) <= 2);
+          searchScene(tile, found);
+        } else if (e.kind === "sweep") sweepScene(tile, e.detail?.radius ?? 1);
+        else if (e.kind === "caught") arrestScene(tile);
+        else if (e.kind === "moved") puff(tile, 0xffb400);
+      }
+    }
+
+    function updateFx(now: number) {
+      fx = fx.filter((f) => {
+        const t = (now - f.start) / f.dur;
+        if (t >= 1) {
+          fxGroup.remove(f.obj);
+          f.obj.traverse((o) => {
+            if (o instanceof THREE.Mesh || o instanceof THREE.Sprite) {
+              if (o instanceof THREE.Mesh && o.geometry !== ringGeo) o.geometry.dispose();
+              (o.material as THREE.Material).dispose();
+            }
+          });
+          return false;
+        }
+        f.step(t);
+        return true;
+      });
+    }
+
     // ---- hover highlight and taps
     const hoverBox = new THREE.LineSegments(
       new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0)),
@@ -853,6 +1261,17 @@ export function CityView({ seed, tileCount, markers, interactive, onTile, onHove
       return null;
     }
 
+    function boardUnder(clientX: number, clientY: number) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+      ray.setFromCamera(pointer, camera);
+      const boardHit = ray.intersectObjects(boardHits, false)[0];
+      if (!boardHit) return null;
+      const tileHit = ray.intersectObjects(Object.values(meshes), false)[0];
+      if (tileHit && tileHit.distance < boardHit.distance) return null;
+      return { id: boardHit.object.userData.billboard as string, tile: boardHit.object.userData.tile as number };
+    }
+
     function showHover(tile: number | null) {
       if (tile === null || !cb.current.interactive) {
         hoverBox.visible = false;
@@ -875,7 +1294,13 @@ export function CityView({ seed, tileCount, markers, interactive, onTile, onHove
       const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
       const quick = performance.now() - down.t < 600;
       down = null;
-      if (moved > 8 || !quick || !cb.current.interactive) return;
+      if (moved > 8 || !quick) return;
+      const board = boardUnder(e.clientX, e.clientY);
+      if (board) {
+        cb.current.onBillboard(board);
+        return;
+      }
+      if (!cb.current.interactive) return;
       const tile = tileUnder(e.clientX, e.clientY);
       if (tile !== null) {
         showHover(tile);
@@ -911,7 +1336,10 @@ export function CityView({ seed, tileCount, markers, interactive, onTile, onHove
       const dt = Math.min(clock.getDelta(), 0.1);
       const time = clock.elapsedTime;
       if (hoverQueued) {
-        showHover(tileUnder(hoverQueued.clientX, hoverQueued.clientY));
+        const board = boardUnder(hoverQueued.clientX, hoverQueued.clientY);
+        renderer.domElement.style.cursor = board ? "pointer" : "";
+        if (board) cb.current.onHover?.({ tile: board.tile, label: "Billboard · tap to advertise here" });
+        else showHover(tileUnder(hoverQueued.clientX, hoverQueued.clientY));
         hoverQueued = null;
       }
       updateGrowth(performance.now());
@@ -920,6 +1348,7 @@ export function CityView({ seed, tileCount, markers, interactive, onTile, onHove
       updateLandmarks(dt, performance.now());
       updateBoats(time, dt);
       updateAir(time, dt);
+      updateFx(performance.now());
       updateMarkers(time);
       if (focus) {
         controls.target.lerp(focus, 0.06);
@@ -934,7 +1363,7 @@ export function CityView({ seed, tileCount, markers, interactive, onTile, onHove
     };
     loop();
 
-    api.current = { build, setMarkers };
+    api.current = { build, setMarkers, playEvents };
 
     return () => {
       cancelAnimationFrame(frame);
@@ -964,6 +1393,10 @@ export function CityView({ seed, tileCount, markers, interactive, onTile, onHove
   useEffect(() => {
     api.current?.setMarkers(markers);
   }, [markers]);
+
+  useEffect(() => {
+    api.current?.playEvents(events);
+  }, [events, tileCount]);
 
   return <div ref={host} className="absolute inset-0" />;
 }

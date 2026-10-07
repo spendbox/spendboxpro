@@ -2,10 +2,10 @@ import Link from "next/link";
 import { currentUserId } from "@/lib/game";
 
 const RULES = [
-  ["Seek", "Join any time. Tap tiles to search. Your first search each day is free; prices rise as the map fills up. Find a hider and take 80% of their stake."],
-  ["Hide", "Stake 100 coins in the 10-minute window. You're dropped on a random tile, then have an hour to survive. One free move, one paid move."],
-  ["Survive", "Hiders still hidden when the hour ends get their stake back plus a share of the survivor pool."],
-  ["Seed Bot", "A bot hides somewhere in the city every round. Find it for 200 coins."],
+  ["Seek", "Jump in whenever you like and start poking around the city. Your first search of the day is on us; after that, searches get pricier as more of the city gets combed. Catch a hider and you pocket most of their stake."],
+  ["Hide", "Put 100 coins down in the 10-minute window and we'll drop you somewhere random. Then survive the hour. You can move whenever you like (100 coins a go, once a minute), but never back to where you've been, and don't wander onto a spot someone already searched."],
+  ["Survive", "Still hidden when time runs out? You get your stake back plus a cut of the survivor pool, which fills up with every search, sweep and move."],
+  ["The bot", "There's a bot hiding in every round, with a new name each time. It moves around, and it runs when it gets swept. Find it for 200 coins."],
 ];
 
 export default async function Home() {
@@ -23,7 +23,7 @@ export default async function Home() {
           href={signedIn ? "/play" : "/login"}
           className="mt-6 inline-block rounded-xl bg-gold px-6 py-3 font-semibold text-ink"
         >
-          {signedIn ? "Play now" : "Sign in to play"}
+          {signedIn ? "Back to the city" : "Enter world"}
         </Link>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">

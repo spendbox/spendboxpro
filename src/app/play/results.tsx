@@ -2,13 +2,12 @@
 
 import type { RoundResults } from "@/lib/game";
 import { cn } from "@/lib/cn";
+import { short } from "@/lib/format";
 
-const coins = (n: number) =>
-  Number.isInteger(n) ? n.toLocaleString() : n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-/** The scoreboard shown when a round ends: what happened and who won what. */
-export function Results({ results: r, meName, onClose }: { results: RoundResults; meName: string | null; onClose: () => void }) {
+/** Shown when a round ends: how you did, then what happened and who won what. */
+export function Results({ results: r, onClose }: { results: RoundResults; onClose: () => void }) {
   const survived = r.hidersTotal - r.caught;
+  const mine = r.mine;
   return (
     <div className="fixed inset-0 z-40 grid place-items-center bg-ink/30 p-4 backdrop-blur-sm" onClick={onClose}>
       <section
@@ -17,9 +16,9 @@ export function Results({ results: r, meName, onClose }: { results: RoundResults
       >
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted">Round {r.roundId} results</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">Round {r.roundId} is over</p>
             <h2 className="font-display text-2xl font-extrabold">
-              {survived === 0 ? "Everyone was found!" : `${survived} hider${survived === 1 ? "" : "s"} survived`}
+              {survived <= 0 ? "Everyone got found!" : `${short(survived)} hider${survived === 1 ? "" : "s"} made it`}
             </h2>
           </div>
           <button onClick={onClose} className="rounded-full px-2 text-2xl text-muted" aria-label="Close">
@@ -27,34 +26,52 @@ export function Results({ results: r, meName, onClose }: { results: RoundResults
           </button>
         </div>
 
+        {mine && (
+          <div className={cn("mt-4 rounded-2xl px-4 py-3", mine.won > 0 ? "bg-gold/30" : "bg-panel-2")}>
+            {mine.won > 0 ? (
+              <>
+                <p className="text-sm text-muted">You won</p>
+                <p className="font-display text-3xl font-extrabold">+{short(mine.won)} coins</p>
+                <p className="text-sm">
+                  {mine.role === "hider" && !mine.caught ? "You stayed hidden the whole way. " : ""}
+                  {mine.detail && <span className="text-muted">({mine.detail})</span>}
+                </p>
+              </>
+            ) : (
+              <p className="text-sm">
+                {mine.role === "hider" && mine.caught
+                  ? "You got caught this time, so no winnings. Shake it off and go again."
+                  : "No winnings for you this round. The next city's already going up."}
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-          <Big label="Players" value={r.players.toLocaleString()} />
-          <Big label="Hiders found" value={`${r.caught.toLocaleString()} / ${r.hidersTotal.toLocaleString()}`} />
-          <Big label="Tiles searched" value={`${r.searches.toLocaleString()} / ${r.tileCount.toLocaleString()}`} />
-          <Big label="Survivor pool" value={coins(r.pool)} />
+          <Big label="Players" value={short(r.players)} />
+          <Big label="Hiders caught" value={`${short(r.caught)} / ${short(r.hidersTotal)}`} />
+          <Big label="Spots searched" value={`${short(r.searches)} / ${short(r.tileCount)}`} />
+          <Big label="Survivor pool" value={short(r.pool)} />
         </div>
 
         <p className="mt-3 rounded-xl bg-panel-2 px-3 py-2 text-sm">
-          🤖 Seed Bot:{" "}
+          🤖 {r.botName}:{" "}
           {r.botFoundBy ? (
             <>
               found by <b>{r.botFoundBy}</b> (+200)
             </>
           ) : (
-            "nobody found it"
+            "got away with it this time"
           )}
         </p>
 
-        <h3 className="mb-2 mt-4 font-semibold">Winners</h3>
+        <h3 className="mb-2 mt-4 font-semibold">Top winners</h3>
         {r.winners.length === 0 ? (
           <p className="text-sm text-muted">Nobody won coins this round.</p>
         ) : (
           <ol className="space-y-1.5">
             {r.winners.map((w, i) => (
-              <li
-                key={`${w.name}-${i}`}
-                className={cn("flex items-center gap-3 rounded-xl px-3 py-2", w.name === meName ? "bg-gold/25" : "bg-panel-2")}
-              >
+              <li key={`${w.name}-${i}`} className="flex items-center gap-3 rounded-xl bg-panel-2 px-3 py-2">
                 <span className="w-5 text-center font-display font-bold text-muted">{i + 1}</span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-1.5 font-semibold">
@@ -70,13 +87,13 @@ export function Results({ results: r, meName, onClose }: { results: RoundResults
                   </span>
                   <span className="block truncate text-xs text-muted">{w.detail}</span>
                 </span>
-                <span className="font-display font-bold tabular-nums">+{coins(w.won)}</span>
+                <span className="font-display font-bold tabular-nums">+{short(w.won)}</span>
               </li>
             ))}
           </ol>
         )}
         <button onClick={onClose} className="mt-5 w-full rounded-xl bg-gold py-3 font-semibold text-ink">
-          Into the next city
+          On to the next city
         </button>
       </section>
     </div>
