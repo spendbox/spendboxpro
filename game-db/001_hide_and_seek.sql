@@ -14,11 +14,12 @@ create table public.game_settings (
 insert into public.game_settings (key, value, note) values
   ('hider_stake',        100,  'Coins a hider stakes'),
   ('tiles_per_hider',    10,   'Tiles added to the map per hider'),
-  ('join_minutes',       10,   'Join window before hiding starts'),
-  ('hide_minutes',       60,   'Hide phase length'),
-  ('seek_minutes',       60,   'Seek phase length'),
-  ('second_move_fee',    100,  'Fee for a hider move during the seek phase'),
-  ('signup_coins',       500,  'Coins at signup (once per verified phone)'),
+  ('join_minutes',       10,   'Hiding window: hiders join, then are placed at random'),
+  ('base_tiles',         400,  'Map size before any player hides (20 x 20)'),
+  ('bot_bounty',         200,  'Coins for finding the seed bot'),
+  ('seek_minutes',       60,   'Seek phase length (hiders can move during it)'),
+  ('second_move_fee',    100,  'Fee for a hider''s second move (the first is free)'),
+  ('signup_coins',       500,  'Coins at signup (once per verified email)'),
   ('seeker_bonus',       50,   'Bonus coins when joining as a seeker (once per day)'),
   ('topup_floor',        100,  'Daily top-up: broke players refilled to this, never more'),
   ('search_price_start', 0.5,  'Tile search price when little of the map is searched'),
@@ -39,9 +40,10 @@ language sql stable as $$ select value from public.game_settings where key = p_k
 
 -- ============================================================ players
 create table public.profiles (
-  id uuid primary key references auth.users (id) on delete cascade,
+  id uuid primary key,  -- the auth.users id (the seed bot has no login)
   username text unique,
-  phone text unique,
+  email_key text unique,  -- normalised email, so a+1@gmail.com and a@gmail.com count once
+  is_bot boolean not null default false,
   device_hash text,
   coins numeric(14,2) not null default 0 check (coins >= 0),
   bonus_coins numeric(14,2) not null default 0 check (bonus_coins >= 0),
@@ -70,9 +72,8 @@ create index ledger_day_idx on public.ledger (created_at);
 -- ============================================================ rounds
 create table public.rounds (
   id bigserial primary key,
-  status text not null default 'join' check (status in ('join', 'hide', 'seek', 'done')),
+  status text not null default 'join' check (status in ('join', 'seek', 'done')),
   join_ends_at timestamptz not null,
-  hide_ends_at timestamptz not null,
   seek_ends_at timestamptz not null,
   tile_count int not null default 0,
   hiders_total int not null default 0,
@@ -144,7 +145,7 @@ insert into public.game_state (key, value) values ('carry', 0);
 -- Daily coin supply: coins created vs destroyed. Tune burn so supply stays flat or grows slowly.
 create view public.coin_supply_daily as
 select created_at::date as day,
-       coalesce(sum(amount) filter (where kind in ('signup', 'seeker_bonus', 'topup', 'sponsor')), 0) as created,
+       coalesce(sum(amount) filter (where kind in ('signup', 'seeker_bonus', 'topup', 'sponsor', 'bot_bounty')), 0) as created,
        coalesce(sum(amount) filter (where kind = 'burn'), 0) as burned
 from public.ledger
 group by 1
@@ -177,19 +178,34 @@ language sql stable as $$
       * least(1, p_searched::numeric / greatest(p_tiles, 1)), 2)
 $$;
 
--- ============================================================ signup
+-- ============================================================ seed bot
+-- The seed bot hides in every round, never moves, and pays a bounty to whoever finds it.
+insert into public.profiles (id, username, is_bot)
+values ('00000000-0000-0000-0000-00000000b07a', 'Seed Bot', true);
+
+-- ============================================================ signup (email code)
+create or replace function public.email_key(p_email text) returns text
+language sql immutable as $$
+  select case
+    when split_part(e, '@', 2) in ('gmail.com', 'googlemail.com')
+      then replace(split_part(split_part(e, '@', 1), '+', 1), '.', '') || '@gmail.com'
+    else split_part(split_part(e, '@', 1), '+', 1) || '@' || split_part(e, '@', 2)
+  end
+  from (select lower(trim(p_email)) e) x
+$$;
+
 create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = public as $$
-declare v_coins numeric := 0; v_phone text := nullif(new.phone, '');
+declare v_coins numeric := 0; v_key text := public.email_key(nullif(new.email, ''));
 begin
-  -- Signup coins: only for a phone number nobody has used before. A repeat number still gets
-  -- an account, but with no coins and no phone on the profile.
-  if v_phone is not null and not exists (select 1 from public.profiles where phone = v_phone) then
+  -- Signup coins: only for an email nobody has used before. A repeat (e.g. a +alias) still
+  -- gets an account, but with no coins.
+  if v_key is not null and not exists (select 1 from public.profiles where email_key = v_key) then
     v_coins := public.setting('signup_coins');
   else
-    v_phone := null;
+    v_key := null;
   end if;
-  insert into public.profiles (id, phone, coins) values (new.id, v_phone, v_coins) on conflict do nothing;
+  insert into public.profiles (id, email_key, coins) values (new.id, v_key, v_coins) on conflict do nothing;
   if v_coins > 0 then
     perform public.log_coins(new.id, null, 'signup', v_coins);
   end if;
@@ -198,6 +214,16 @@ end $$;
 
 create trigger on_auth_user_created after insert on auth.users
   for each row execute function public.handle_new_user();
+
+create or replace function public.handle_deleted_user() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  delete from public.profiles where id = old.id;
+  return old;
+end $$;
+
+create trigger on_auth_user_deleted after delete on auth.users
+  for each row execute function public.handle_deleted_user();
 
 -- ============================================================ joining
 create or replace function public.join_round(p_user uuid, p_role text) returns jsonb
@@ -211,7 +237,7 @@ begin
   select * into r from public.rounds where status <> 'done' for update;
   if not found then raise exception 'No round is open right now'; end if;
   select * into p from public.profiles where id = p_user for update;
-  if not found then raise exception 'Unknown player'; end if;
+  if not found or p.is_bot then raise exception 'Unknown player'; end if;
   if p.frozen then raise exception 'This account is frozen'; end if;
   if exists (select 1 from public.entries where round_id = r.id and user_id = p_user) then
     raise exception 'You are already in this round';
@@ -242,14 +268,14 @@ begin
 end $$;
 
 -- ============================================================ round clock
--- Run every minute. Starts rounds, places hiders, opens seeking, ends rounds.
+-- Run every minute. Starts rounds (with the seed bot hiding), places hiders, ends rounds.
 create or replace function public.tick() returns text
 language plpgsql security definer set search_path = public as $$
 declare
   r public.rounds;
   v_carry numeric;
+  v_id bigint;
   v_join int := public.setting('join_minutes')::int;
-  v_hide int := public.setting('hide_minutes')::int;
   v_seek int := public.setting('seek_minutes')::int;
   v_out text := 'idle';
 begin
@@ -257,26 +283,19 @@ begin
 
   if not found then
     select value into v_carry from public.game_state where key = 'carry';
-    insert into public.rounds (join_ends_at, hide_ends_at, seek_ends_at, pool)
+    insert into public.rounds (join_ends_at, seek_ends_at, pool, tile_count, hiders_total, hiders_remaining)
     values (now() + make_interval(mins => v_join),
-            now() + make_interval(mins => v_join + v_hide),
-            now() + make_interval(mins => v_join + v_hide + v_seek),
-            coalesce(v_carry, 0));
+            now() + make_interval(mins => v_join + v_seek),
+            coalesce(v_carry, 0), public.setting('base_tiles')::int, 1, 1)
+    returning id into v_id;
+    insert into public.entries (round_id, user_id, role)
+      select v_id, id, 'hider' from public.profiles where is_bot;
     update public.game_state set value = 0 where key = 'carry';
     return 'round created';
   end if;
 
   if r.status = 'join' and now() >= r.join_ends_at then
-    if r.hiders_total = 0 then
-      -- Nobody is hiding: keep the window open and push the whole round back.
-      update public.rounds set
-        join_ends_at = now() + make_interval(mins => v_join),
-        hide_ends_at = now() + make_interval(mins => v_join + v_hide),
-        seek_ends_at = now() + make_interval(mins => v_join + v_hide + v_seek)
-        where id = r.id;
-      return 'join extended (no hiders)';
-    end if;
-    -- Random placement on distinct tiles.
+    -- Random placement on distinct tiles, the seed bot included.
     with t as (
       select g, row_number() over (order by random()) rn from generate_series(0, r.tile_count - 1) g
     ), h as (
@@ -286,12 +305,6 @@ begin
     update public.entries e set tile = t.g
     from h join t on t.rn = h.rn
     where e.round_id = r.id and e.user_id = h.user_id;
-    update public.rounds set status = 'hide' where id = r.id;
-    v_out := 'hiding started';
-    r.status := 'hide';
-  end if;
-
-  if r.status = 'hide' and now() >= r.hide_ends_at then
     update public.rounds set status = 'seek' where id = r.id;
     v_out := 'seeking started';
     r.status := 'seek';
@@ -315,20 +328,18 @@ declare
   v_cap int;
   v_old int;
 begin
-  select * into r from public.rounds where status in ('hide', 'seek') for update;
+  select * into r from public.rounds where status = 'seek' for update;
   if not found then raise exception 'You cannot move right now'; end if;
   select * into e from public.entries where round_id = r.id and user_id = p_user and role = 'hider' for update;
-  if not found then raise exception 'You are not hiding in this round'; end if;
+  if not found or p_user = '00000000-0000-0000-0000-00000000b07a' then
+    raise exception 'You are not hiding in this round';
+  end if;
   if e.caught then raise exception 'You have been caught'; end if;
   if e.moves >= 2 then raise exception 'No moves left'; end if;
   if p_tile < 0 or p_tile >= r.tile_count then raise exception 'That tile is not on the map'; end if;
   if p_tile = e.tile then raise exception 'You are already on that tile'; end if;
 
-  if r.status = 'hide' then
-    if e.moves >= 1 then raise exception 'Your free move is used. You can move once more in the seek hour'; end if;
-  else
-    v_fee := public.setting('second_move_fee');
-  end if;
+  if e.moves = 1 then v_fee := public.setting('second_move_fee'); end if;
 
   v_frac := r.searched_count::numeric / greatest(r.tile_count, 1);
   if v_frac < public.setting('unlock_fraction')
@@ -418,14 +429,22 @@ begin
   end if;
 
   for h in
-    select e.user_id, e.stake, pr.hider_rounds from public.entries e
+    select e.user_id, e.stake, pr.hider_rounds, pr.is_bot from public.entries e
     join public.profiles pr on pr.id = e.user_id
     where e.round_id = r.id and e.role = 'hider' and not e.caught and e.tile = p_tile
-    order by e.created_at, e.user_id
+    order by pr.is_bot desc, e.created_at, e.user_id
   loop
-    v_n := v_n + 1;
+    if not h.is_bot then v_n := v_n + 1; end if;
     v_caught := v_caught + 1;
-    if v_n > 3 then
+    if h.is_bot then
+      -- New coins: the bounty for finding the seed bot.
+      v_share := public.setting('bot_bounty');
+      update public.entries set caught = true, caught_by = p_user where round_id = r.id and user_id = h.user_id;
+      update public.profiles set coins = coins + v_share where id = p_user;
+      perform public.log_coins(p_user, r.id, 'bot_bounty', v_share);
+      v_reward := v_reward + v_share;
+      continue;
+    elsif v_n > 3 then
       perform public.burn(r.id, h.stake, 'stacked stake beyond 3');
       v_share := 0;
     elsif public.linked_accounts(p_user, h.user_id) then
@@ -485,7 +504,7 @@ begin
     select * into p from public.profiles where id = p_user;
   end if;
 
-  v_cost := round(public.setting('sweep_base_price') * power(2 * p_radius + 1, 2) / 9, 2);
+  v_cost := round(public.setting('sweep_base_price') * (2 * p_radius + 1) * (2 * p_radius + 1) / 9, 2);
   v_bonus_used := least(p.bonus_coins, v_cost);
   v_real := v_cost - v_bonus_used;
   if p.coins < v_real then raise exception 'Not enough coins (a sweep costs %)', v_cost; end if;
@@ -531,14 +550,17 @@ begin
   v_seekers := round(r.pool * public.setting('pool_seekers'), 2);
 
   select coalesce(sum(stake_weight), 0) into v_hider_w
-    from public.entries where round_id = p_round and role = 'hider' and not caught;
+    from public.entries where round_id = p_round and role = 'hider' and not caught and stake_weight > 0;
   select coalesce(sum(least(real_spent, v_cap)), 0) into v_seeker_w
     from public.entries where round_id = p_round and role = 'seeker';
 
-  -- Surviving hiders, in proportion to stake. Nobody left: the share rolls into the next round.
+  -- Surviving hiders get their stake back, plus a share in proportion to stake.
+  -- Nobody left: the share rolls into the next round.
   if v_hider_w > 0 then
-    for x in select user_id, stake_weight from public.entries
-             where round_id = p_round and role = 'hider' and not caught loop
+    for x in select user_id, stake, stake_weight from public.entries
+             where round_id = p_round and role = 'hider' and not caught and stake_weight > 0 loop
+      update public.profiles set coins = coins + x.stake where id = x.user_id;
+      perform public.log_coins(x.user_id, p_round, 'stake_return', x.stake);
       v_share := round(v_hiders * x.stake_weight / v_hider_w, 2);
       update public.profiles set coins = coins + v_share where id = x.user_id;
       update public.entries set payout = payout + v_share where round_id = p_round and user_id = x.user_id;
@@ -569,7 +591,7 @@ begin
   perform public.burn(p_round, r.pool - v_paid, 'bank');
 
   update public.profiles set hider_rounds = hider_rounds + 1
-    where id in (select user_id from public.entries where round_id = p_round and role = 'hider');
+    where not is_bot and id in (select user_id from public.entries where round_id = p_round and role = 'hider');
   update public.profiles set seeker_rounds = seeker_rounds + 1
     where id in (select user_id from public.entries where round_id = p_round and role = 'seeker');
 end $$;
@@ -579,7 +601,7 @@ create or replace function public.daily_upkeep() returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare v_floor numeric := public.setting('topup_floor'); v_n int := 0; x record;
 begin
-  for x in select id, coins from public.profiles where coins < v_floor and not frozen loop
+  for x in select id, coins from public.profiles where coins < v_floor and not frozen and not is_bot loop
     update public.profiles set coins = v_floor where id = x.id;
     perform public.log_coins(x.id, null, 'topup', v_floor - x.coins);
     v_n := v_n + 1;
@@ -629,7 +651,7 @@ begin
   for f in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
            where n.nspname = 'public' and p.proname in
            ('join_round', 'tick', 'move_hider', 'search_tile', 'sweep', 'finalize_round',
-            'daily_upkeep', 'sponsor_deposit', 'log_coins', 'burn', 'handle_new_user')
+            'daily_upkeep', 'sponsor_deposit', 'log_coins', 'burn', 'handle_new_user', 'handle_deleted_user')
   loop
     execute format('revoke all on function %s from public, anon, authenticated', f.sig);
     execute format('grant execute on function %s to service_role', f.sig);
