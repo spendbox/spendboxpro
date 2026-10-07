@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { PinInput } from "@/components/pin-input";
 import { loginWithPin, sendCode, startSignIn, verifyCode } from "./actions";
 
 const input = "w-full rounded-xl border border-line bg-panel px-4 py-3 text-ink outline-none focus:border-gold";
@@ -50,19 +51,9 @@ export function LoginForm() {
         className="flex flex-col gap-3"
       >
         <p className="text-sm text-muted">
-          Welcome back, <b className="text-ink">{email}</b>. Enter your PIN.
+          Welcome back, <b className="text-ink">{email}</b>. Enter your 6-digit PIN.
         </p>
-        <input
-          className={`${input} text-center text-2xl tracking-[0.4em]`}
-          type="password"
-          inputMode="numeric"
-          autoComplete="current-password"
-          placeholder="••••••"
-          value={pin}
-          onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
-          autoFocus
-          required
-        />
+        <PinInput label="Your PIN" value={pin} onChange={setPin} autoFocus />
         <button className={button} disabled={busy || pin.length !== 6}>
           {busy ? "Opening the city…" : "Enter"}
         </button>

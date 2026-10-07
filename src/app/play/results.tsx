@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import type { RoundResults } from "@/lib/game";
 import { cn } from "@/lib/cn";
 import { short } from "@/lib/format";
@@ -8,12 +9,17 @@ import { short } from "@/lib/format";
 export function Results({ results: r, onClose }: { results: RoundResults; onClose: () => void }) {
   const survived = r.hidersTotal - r.caught;
   const mine = r.mine;
+  const downOnBackdrop = useRef(false);
   return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-ink/30 p-4 backdrop-blur-sm" onClick={onClose}>
-      <section
-        className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-3xl bg-panel p-5 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div
+      className="fixed inset-0 z-40 grid place-items-center bg-ink/30 p-4 backdrop-blur-sm"
+      onPointerDown={(e) => (downOnBackdrop.current = e.target === e.currentTarget)}
+      onClick={(e) => {
+        if (downOnBackdrop.current && e.target === e.currentTarget) onClose();
+        downOnBackdrop.current = false;
+      }}
+    >
+      <section className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-3xl bg-panel p-5 shadow-2xl">
         <div className="flex items-start justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-muted">Round {r.roundId} is over</p>

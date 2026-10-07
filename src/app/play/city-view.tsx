@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { KIND_LABEL, makePlan, riverCentre, tileAt, type CityPlan, type Tile } from "@/lib/city/layout";
+import { addressOf, KIND_LABEL, makePlan, riverCentre, STRUCTURE_LABEL, tileAt, type CityPlan, type Tile } from "@/lib/city/layout";
 
 // The game board, drawn as a small living 3D city with three.js.
 // Every tile is a lot: a road, a building, a park... New tiles rise out of the ground
@@ -64,7 +64,10 @@ function geometries() {
   bird.computeVertexNormals();
   // Half a ring, standing up: the arch under a bridge.
   const arch = new THREE.TorusGeometry(0.29, 0.035, 6, 18, Math.PI);
-  return { box, roof, crown, trunk, disc, bird, arch };
+  const cyl = new THREE.CylinderGeometry(0.5, 0.5, 1, 20).translate(0, 0.5, 0);
+  const cone = new THREE.ConeGeometry(0.5, 1, 16).translate(0, 0.5, 0);
+  const dome = new THREE.SphereGeometry(0.5, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2);
+  return { box, roof, crown, trunk, disc, bird, arch, cyl, cone, dome };
 }
 
 // ---------------------------------------------------------------- what stands on a tile
@@ -128,43 +131,166 @@ function partsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "ti
     return;
   }
 
-  const lot = ["park", "trees", "pond", "ferris", "turbine"].includes(t.kind) ? GRASS : SIDEWALK;
+  const GREEN_LOTS = ["park", "trees", "pond", "ferris", "turbine", "watertower", "mast"];
+  const greenStructure = t.kind === "structure" && ["funfair", "solar", "campus"].includes(t.structure!.type);
+  const lot = GREEN_LOTS.includes(t.kind) || greenStructure ? GRASS : SIDEWALK;
   add("ground", { x, y: 0, z, sx: 0.98, sy: 0.08, sz: 0.98, ry: 0, color: lot });
+
+  // Little helpers: a box / cylinder / cone standing on the ground at (dx, dz) from the tile centre.
+  const B = (dx: number, y: number, dz: number, sx: number, sy: number, sz: number, color: number, ry = 0, mesh = "building", tilt = 0) =>
+    add(mesh, { x: x + dx, y, z: z + dz, sx, sy, sz, ry, color, tilt });
+  const bands = (dx: number, dz: number, w: number, d: number, from: number, to: number, step: number, color = 0x5d7fa3, ry = 0) => {
+    for (let y = from + step; y < to - 0.05; y += step) B(dx, y, dz, w + 0.012, 0.07, d + 0.012, color, ry, "glass");
+  };
+
+  if (t.kind === "structure") {
+    if (t.structure!.anchor) structureParts(t, plan, B, tree);
+    return;
+  }
 
   switch (t.kind) {
     case "tower": {
-      const h = t.top - 0.4;
-      const w = 0.62 + r[2] * 0.18;
       const color = pick(pal.towers, r[3]);
-      add("building", { x, y: 0.08, z, sx: w, sy: h * 0.72, sz: w, ry: 0, color });
-      add("building", { x, y: 0.08 + h * 0.72, z, sx: w * 0.78, sy: h * 0.28, sz: w * 0.78, ry: 0, color });
-      add("building", { x: x + 0.08, y: 0.08 + h, z: z - 0.06, sx: 0.18, sy: 0.18, sz: 0.14, ry: 0, color: 0xdee2e6 });
-      if (r[0] > 0.55) add("trunk", { x: x - 0.1, y: 0.08 + h, z: z + 0.08, sx: 0.25, sy: 0.6, sz: 0.25, ry: 0, color: 0xadb5bd });
-      // Window bands
-      for (let k = 1; k < Math.min(10, Math.floor(h * 0.72 / 0.55)); k++) {
-        add("glass", { x, y: 0.08 + k * 0.55, z, sx: w + 0.012, sy: 0.07, sz: w + 0.012, ry: 0, color: 0x5d7fa3 });
+      const w = 0.62 + r[2] * 0.18;
+      if (t.v === 1) {
+        // Round glass tower
+        const h = t.top - 0.4;
+        B(0, 0.08, 0, w, h, w, color, 0, "cyl");
+        for (let y = 0.5; y < h; y += 0.42) B(0, 0.08 + y, 0, w + 0.03, 0.06, w + 0.03, 0x4c6e91, 0, "cyl");
+        B(0, 0.08 + h, 0, w * 0.6, 0.25, w * 0.6, color, 0, "cyl");
+        B(0, 0.33 + h, 0, 0.12, 0.35, 0.12, 0xdee2e6, 0, "cone");
+      } else if (t.v === 2) {
+        // Twisting tower: floors turn a little as they rise
+        const h = t.top - 0.4;
+        const floors = Math.max(4, Math.floor(h / 0.32));
+        for (let k = 0; k < floors; k++) {
+          B(0, 0.08 + k * (h / floors), 0, w * 0.9, h / floors - 0.03, w * 0.9, k % 2 ? color : 0x6c8eae, k * 0.11);
+        }
+      } else if (t.v === 3) {
+        // Needle spire
+        const h = t.top - 1.6;
+        B(0, 0.08, 0, w, h * 0.8, w, color);
+        bands(0, 0, w, w, 0.08, 0.08 + h * 0.8, 0.5);
+        B(0, 0.08 + h * 0.8, 0, w * 0.7, h * 0.2, w * 0.7, color);
+        B(0, 0.08 + h, 0, 0.16, 1.5, 0.16, 0xe9ecef, 0, "cone");
+      } else if (t.v === 4) {
+        // Helipad on the roof
+        const h = t.top - 0.4;
+        B(0, 0.08, 0, w + 0.06, h, w + 0.06, color);
+        bands(0, 0, w + 0.06, w + 0.06, 0.08, 0.08 + h, 0.45);
+        B(0, 0.08 + h, 0, w * 0.85, 0.03, w * 0.85, 0x495057, 0, "cyl");
+        B(-0.08, 0.115 + h, 0, 0.04, 0.005, 0.26, 0xffffff, 0, "paint");
+        B(0.08, 0.115 + h, 0, 0.04, 0.005, 0.26, 0xffffff, 0, "paint");
+        B(0, 0.115 + h, 0, 0.16, 0.005, 0.04, 0xffffff, 0, "paint");
+      } else {
+        // Stepped tower
+        const h = t.top - 0.4;
+        B(0, 0.08, 0, w, h * 0.72, w, color);
+        B(0, 0.08 + h * 0.72, 0, w * 0.78, h * 0.28, w * 0.78, color);
+        B(0.08, 0.08 + h, -0.06, 0.18, 0.18, 0.14, 0xdee2e6);
+        if (r[0] > 0.55) add("trunk", { x: x - 0.1, y: 0.08 + h, z: z + 0.08, sx: 0.25, sy: 0.6, sz: 0.25, ry: 0, color: 0xadb5bd });
+        bands(0, 0, w, w, 0.08, 0.08 + h * 0.72, 0.55);
       }
       break;
     }
     case "office": {
       const h = t.top - 0.08;
-      const w = 0.7 + r[2] * 0.15;
-      const d = 0.6 + r[3] * 0.25;
       const color = pick(pal.offices, r[1]);
-      add("building", { x, y: 0.08, z, sx: w, sy: h, sz: d, ry: 0, color });
-      for (let k = 1; k <= Math.floor(h / 0.38); k++) {
-        add("glass", { x, y: 0.08 + k * 0.38 - 0.16, z, sx: w + 0.01, sy: 0.08, sz: d + 0.01, ry: 0, color: 0x6c8eae });
+      if (t.v === 1) {
+        // L-shaped block
+        B(0, 0.08, -0.2, 0.84, h, 0.38, color);
+        B(-0.23, 0.08, 0.12, 0.38, h * 0.7, 0.42, color);
+        bands(0, -0.2, 0.84, 0.38, 0.08, 0.08 + h, 0.38, 0x6c8eae);
+        tree(0.25, 0.25, 0.5, r[0]);
+      } else if (t.v === 2) {
+        // Rooftop garden and stepped terraces
+        const w = 0.74;
+        B(0, 0.08, 0, w, h, w * 0.85, color);
+        bands(0, 0, w, w * 0.85, 0.08, 0.08 + h, 0.36, 0x6c8eae);
+        B(0, 0.08 + h, 0, w * 0.9, 0.03, w * 0.75, GRASS, 0, "ground");
+        add("crown", { x: x - 0.15, y: 0.11 + h, z, sx: 0.25, sy: 0.3, sz: 0.25, ry: r[2], color: pick(pal.leaves, r[3]) });
+        add("crown", { x: x + 0.15, y: 0.11 + h, z: z + 0.1, sx: 0.2, sy: 0.25, sz: 0.2, ry: r[1], color: pick(pal.leaves, r[0]) });
+      } else {
+        const w = 0.7 + r[2] * 0.15;
+        const d = 0.6 + r[3] * 0.25;
+        B(0, 0.08, 0, w, h, d, color);
+        for (let k = 1; k <= Math.floor(h / 0.38); k++) B(0, 0.08 + k * 0.38 - 0.16, 0, w + 0.01, 0.08, d + 0.01, 0x6c8eae, 0, "glass");
+        B(-w * 0.2, 0.08 + h, 0, 0.16, 0.1, 0.16, 0xced4da);
       }
-      add("building", { x: x - w * 0.2, y: 0.08 + h, z, sx: 0.16, sy: 0.1, sz: 0.16, ry: 0, color: 0xced4da });
       break;
     }
     case "house": {
-      const w = 0.5 + r[2] * 0.12;
-      const d = 0.45 + r[3] * 0.12;
-      const dx = (r[1] - 0.5) * 0.12;
-      add("building", { x: x + dx, y: 0.08, z, sx: w, sy: 0.38, sz: d, ry: 0, color: pick(pal.walls, r[1]) });
-      add("roof", { x: x + dx, y: 0.46, z, sx: (w + 0.08) / Math.SQRT2, sy: 0.3, sz: (d + 0.08) / Math.SQRT2, ry: 0, color: pick(pal.roofs, r[3]) });
-      tree(0.34 * (dx > 0 ? -1 : 1), 0.32, 0.55, r[0]);
+      const dx = (r[1] - 0.5) * 0.1;
+      if (t.v === 1) {
+        // Flat-roofed modern house with a pool
+        B(dx - 0.08, 0.08, -0.05, 0.56, 0.3, 0.45, 0xf8f9fa);
+        B(dx - 0.08, 0.2, -0.05, 0.57, 0.08, 0.46, 0x495057, 0, "glass");
+        B(dx - 0.05, 0.38, -0.05, 0.68, 0.04, 0.55, 0xdee2e6);
+        B(dx + 0.3, 0.08, 0.22, 0.22, 0.02, 0.3, 0x74c0fc, 0, "water");
+        tree(-0.36, 0.33, 0.45, r[0]);
+      } else if (t.v === 2) {
+        // Two-storey duplex with a garage
+        const wall = pick(pal.walls, r[2]);
+        B(dx - 0.06, 0.08, -0.04, 0.5, 0.6, 0.44, wall);
+        add("roof", { x: x + dx - 0.06, y: 0.68, z: z - 0.04, sx: 0.58 / Math.SQRT2, sy: 0.26, sz: 0.52 / Math.SQRT2, ry: 0, color: pick(pal.roofs, r[3]) });
+        B(dx + 0.3, 0.08, 0.05, 0.24, 0.22, 0.32, wall);
+        B(dx - 0.06, 0.36, 0.2, 0.4, 0.03, 0.1, 0xced4da);
+        tree(-0.38, 0.35, 0.45, r[0]);
+      } else {
+        const w = 0.5 + r[2] * 0.12;
+        const d = 0.45 + r[3] * 0.12;
+        B(dx, 0.08, 0, w, 0.38, d, pick(pal.walls, r[1]));
+        add("roof", { x: x + dx, y: 0.46, z, sx: (w + 0.08) / Math.SQRT2, sy: 0.3, sz: (d + 0.08) / Math.SQRT2, ry: 0, color: pick(pal.roofs, r[3]) });
+        tree(0.34 * (dx > 0 ? -1 : 1), 0.32, 0.55, r[0]);
+      }
+      break;
+    }
+    case "hospital":
+      B(0, 0.08, -0.05, 0.82, 1.25, 0.62, 0xf8f9fa);
+      B(0.2, 0.08, 0.2, 0.42, 0.7, 0.5, 0xf1f3f5);
+      bands(0, -0.05, 0.82, 0.62, 0.08, 1.33, 0.32, 0x74c0fc);
+      B(-0.15, 0.62, 0.265, 0.08, 0.3, 0.02, 0xe03131, 0, "paint");
+      B(-0.15, 0.73, 0.265, 0.3, 0.08, 0.02, 0xe03131, 0, "paint");
+      B(0, 1.33, -0.05, 0.5, 0.02, 0.5, 0x495057, 0, "cyl");
+      B(0, 1.355, -0.05, 0.05, 0.005, 0.2, 0xe03131, 0, "paint");
+      B(0, 1.355, -0.05, 0.2, 0.005, 0.05, 0xe03131, 0, "paint");
+      break;
+    case "clock":
+      B(0, 0.08, 0, 0.6, 0.1, 0.6, 0xe7e1d5);
+      B(0, 0.18, 0, 0.32, 1.9, 0.32, 0xd9c7a7);
+      for (const [fx, fz, ry] of [[0, 0.165, Math.PI / 2], [0, -0.165, Math.PI / 2], [0.165, 0, 0], [-0.165, 0, 0]] as const) {
+        B(fx, 1.78, fz, 0.24, 0.02, 0.24, 0xffffff, ry, "disc", Math.PI / 2);
+      }
+      add("roof", { x, y: 2.08, z, sx: 0.4 / Math.SQRT2, sy: 0.5, sz: 0.4 / Math.SQRT2, ry: 0, color: 0x2f9e44 });
+      tree(0.32, 0.32, 0.45, r[0]);
+      break;
+    case "crane":
+      // A building going up; the crane's arm is added separately so it can turn.
+      B(-0.06, 0.08, 0.05, 0.62, 1.1, 0.6, 0xced4da);
+      B(-0.06, 1.18, 0.05, 0.62, 0.3, 0.6, 0xffd43b, 0, "glass");
+      B(0.32, 0.08, -0.32, 0.08, 3.0, 0.08, 0xfab005);
+      break;
+    case "watertower":
+      for (const [lx, lz] of [[-0.15, -0.15], [0.15, -0.15], [-0.15, 0.15], [0.15, 0.15]]) {
+        add("trunk", { x: x + lx, y: 0.08, z: z + lz, sx: 0.6, sy: 1.3, sz: 0.6, ry: 0, color: 0x868e96 });
+      }
+      B(0, 1.35, 0, 0.55, 0.5, 0.55, 0x74c0fc, 0, "cyl");
+      B(0, 1.85, 0, 0.6, 0.3, 0.6, 0x495057, 0, "cone");
+      break;
+    case "mast":
+      B(0, 0.08, 0, 0.3, 0.2, 0.3, 0xadb5bd);
+      B(0, 0.28, 0, 0.28, 3.6, 0.28, 0xf03e3e, 0, "cone");
+      for (const y of [1.0, 1.9, 2.8]) B(0, 0.28 + y, 0, 0.28 * (1 - y / 3.6) + 0.02, 0.18, 0.28 * (1 - y / 3.6) + 0.02, 0xffffff, 0, "cyl");
+      break;
+    case "fuel": {
+      const brand = [0xe03131, 0x1971c2, 0x2f9e44, 0xf08c00][Math.floor(r[2] * 4)];
+      for (const [px, pz] of [[-0.32, -0.2], [0.32, -0.2], [-0.32, 0.25], [0.32, 0.25]]) {
+        add("trunk", { x: x + px, y: 0.08, z: z + pz, sx: 0.5, sy: 0.42, sz: 0.5, ry: 0, color: 0xdee2e6 });
+      }
+      B(0, 0.48, 0.02, 0.84, 0.06, 0.6, brand);
+      B(0, 0.08, -0.05, 0.08, 0.16, 0.12, brand);
+      B(0, 0.08, 0.15, 0.08, 0.16, 0.12, brand);
+      B(-0.22, 0.08, -0.36, 0.45, 0.28, 0.22, 0xf8f9fa);
       break;
     }
     case "park": {
@@ -212,6 +338,124 @@ function partsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "ti
       add("disc", { x, y: 0.1, z, sx: 0.3, sy: 0.12, sz: 0.3, ry: 0, color: 0xcfd6dd });
       add("water", { x, y: 0.22, z, sx: 0.22, sy: 0.02, sz: 0.22, ry: 0, color: WATER });
       break;
+  }
+}
+
+type BoxFn = (dx: number, y: number, dz: number, sx: number, sy: number, sz: number, color: number, ry?: number, mesh?: string, tilt?: number) => void;
+type TreeFn = (dx: number, dz: number, size: number, v: number) => void;
+
+/** The big 2×2 buildings, drawn from their corner tile (the block's centre is at +0.5, +0.5). */
+function structureParts(t: Tile, plan: CityPlan, B: BoxFn, tree: TreeFn) {
+  const st = t.structure!;
+  const pal = plan.palette;
+  const r = t.r;
+  const pick = (list: number[], v: number) => list[Math.floor(v * list.length) % list.length];
+  const c = 0.5; // centre offset
+  const floor = st.type === "funfair" || st.type === "solar" || st.type === "campus" ? GRASS : 0xe7e1d5;
+  B(c, 0.02, c, 1.98, 0.07, 1.98, floor, 0, "ground");
+  switch (st.type) {
+    case "mall": {
+      const color = pick(pal.offices, r[1]);
+      B(c, 0.09, c - 0.3, 1.7, 0.6, 1.05, color);
+      B(c, 0.09, c - 0.3, 1.71, 0.12, 1.06, 0x6c8eae, 0, "glass");
+      B(c, 0.69, c - 0.3, 0.8, 0.32, 0.6, 0xa5d8ff, 0, "glass");
+      B(c, 0.4, c + 0.25, 0.6, 0.05, 0.12, 0xfa5252);
+      B(c, 0.09, c + 0.6, 1.7, 0.012, 0.66, ASPHALT, 0, "ground");
+      for (let k = -3; k <= 3; k++) B(c + k * 0.22, 0.103, c + 0.6, 0.02, 0.004, 0.3, 0xffffff, 0, "paint");
+      break;
+    }
+    case "twin": {
+      const color = pick(pal.towers, r[2]);
+      const H = 6 + r[1] * 1.5;
+      for (const side of [-0.42, 0.42]) {
+        B(c + side, 0.09, c, 0.6, H, 0.6, color);
+        for (let y = 0.6; y < H - 0.2; y += 0.55) B(c + side, 0.09 + y, c, 0.612, 0.07, 0.612, 0x5d7fa3, 0, "glass");
+        B(c + side, 0.09 + H, c, 0.12, 0.9, 0.12, 0xe9ecef, 0, "cone");
+      }
+      B(c, 0.09 + H * 0.55, c, 0.3, 0.22, 0.28, 0xadb5bd);
+      break;
+    }
+    case "museum": {
+      B(c, 0.09, c, 1.8, 0.15, 1.6, 0xf1ece2);
+      B(c, 0.24, c - 0.1, 1.3, 0.65, 1.0, 0xf8f4ec);
+      B(c, 0.89, c - 0.1, 0.9, 0.6, 0.9, 0x96c7c1, 0, "dome");
+      for (let k = 0; k < 6; k++) B(c - 0.55 + k * 0.22, 0.24, c + 0.5, 0.08, 0.6, 0.08, 0xffffff, 0, "cyl");
+      B(c, 0.84, c + 0.5, 1.3, 0.08, 0.2, 0xf8f4ec);
+      B(c, 0.09, c + 0.78, 1.2, 0.08, 0.2, 0xe9ecef);
+      break;
+    }
+    case "funfair": {
+      // Ferris wheel and carousel turn (see landmarks); tents and a little roller coaster here.
+      const tents = [0xff6b6b, 0xffd43b, 0x4dabf7, 0xda77f2];
+      [[c - 0.55, c + 0.55], [c - 0.2, c + 0.7], [c + 0.65, c - 0.6]].forEach(([tx, tz], k) => {
+        B(tx, 0.09, tz, 0.3, 0.2, 0.3, 0xffffff, 0, "cyl");
+        B(tx, 0.29, tz, 0.36, 0.3, 0.36, tents[k % tents.length], 0, "cone");
+      });
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI;
+        B(c + 0.55 + Math.cos(a) * 0.35, 0.09, c + 0.55, 0.05, 0.3 + Math.sin(a) * 0.6, 0.05, 0xe03131);
+      }
+      B(c + 0.55, 0.39, c + 0.55, 1, 1, 1, 0xe03131, 0, "arch");
+      break;
+    }
+    case "market": {
+      const roofs = [0xff6b6b, 0xffd43b, 0x4dabf7, 0x69db7c, 0xf783ac, 0xff922b];
+      for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 3; j++) {
+          const sx = c - 0.6 + i * 0.6;
+          const sz = c - 0.6 + j * 0.6;
+          B(sx, 0.09, sz, 0.36, 0.22, 0.36, 0xf1e3c8);
+          B(sx, 0.31, sz, 0.48 / Math.SQRT2, 0.2, 0.48 / Math.SQRT2, roofs[(i * 3 + j + Math.floor(r[0] * 6)) % roofs.length], 0, "roof");
+        }
+      }
+      break;
+    }
+    case "arena": {
+      B(c, 0.09, c, 1.92, 0.62, 1.62, 0xdfe3e8, 0, "disc");
+      B(c, 0.09, c, 1.6, 0.66, 1.3, 0xadb5bd, 0, "disc");
+      B(c, 0.09, c, 1.35, 0.67, 1.05, 0xd9734e, 0, "disc");
+      B(c, 0.09, c, 1.05, 0.68, 0.75, 0x69c06a, 0, "disc");
+      B(c, 0.775, c, 0.02, 0.005, 0.6, 0xffffff, 0, "paint");
+      for (const [lx, lz] of [[-0.85, -0.7], [0.85, -0.7], [-0.85, 0.7], [0.85, 0.7]]) {
+        B(c + lx, 0.09, c + lz, 0.04, 1.3, 0.04, 0x868e96);
+        B(c + lx, 1.39, c + lz, 0.2, 0.1, 0.06, 0xfff3bf);
+      }
+      break;
+    }
+    case "campus": {
+      const brick = 0xb5523b;
+      B(c, 0.09, c - 0.6, 1.4, 0.75, 0.4, brick);
+      B(c, 0.09, c - 0.6, 1.41, 0.08, 0.41, 0xf1e3c8, 0, "glass");
+      B(c - 0.68, 0.09, c + 0.1, 0.36, 0.55, 0.9, brick);
+      B(c + 0.68, 0.09, c + 0.1, 0.36, 0.55, 0.9, brick);
+      B(c, 0.09, c - 0.3, 0.2, 1.5, 0.2, 0xd9c7a7);
+      B(c, 1.59, c - 0.3, 0.2 / Math.SQRT2 + 0.05, 0.25, 0.2 / Math.SQRT2 + 0.05, 0x2f9e44, 0, "roof");
+      B(c, 0.09, c + 0.3, 0.12, 0.01, 0.9, 0xe9dcc3, 0, "ground");
+      tree(c - 0.3, c + 0.45, 0.6, r[0]);
+      tree(c + 0.3, c + 0.6, 0.55, r[1]);
+      break;
+    }
+    case "hotel": {
+      const color = pick(pal.towers, r[3]);
+      B(c, 0.09, c - 0.1, 1.6, 0.4, 1.1, 0xf1f3f5);
+      B(c - 0.2, 0.49, c - 0.25, 0.95, 3.7, 0.55, color);
+      for (let y = 0.4; y < 3.6; y += 0.4) B(c - 0.2, 0.49 + y, c - 0.25, 0.962, 0.06, 0.562, 0x4c6e91, 0, "glass");
+      B(c - 0.2, 4.19, c - 0.25, 0.7, 0.2, 0.4, 0xffd43b);
+      B(c + 0.5, 0.49, c + 0.2, 0.45, 0.02, 0.5, 0x4dabf7, 0, "water");
+      for (let k = 0; k < 3; k++) B(c + 0.25, 0.49, c + 0.05 + k * 0.15, 0.08, 0.02, 0.05, 0xffffff);
+      tree(c + 0.75, c + 0.75, 0.6, r[2]);
+      break;
+    }
+    case "solar": {
+      for (let i = 0; i < 4; i++) {
+        for (let j = 0; j < 3; j++) {
+          B(c - 0.66 + i * 0.44, 0.16, c - 0.55 + j * 0.5, 0.38, 0.02, 0.3, 0x1c3f6e, 0, "glass", 0);
+          B(c - 0.66 + i * 0.44, 0.09, c - 0.55 + j * 0.5, 0.03, 0.08, 0.03, 0x868e96);
+        }
+      }
+      B(c + 0.7, 0.09, c + 0.75, 0.3, 0.25, 0.25, 0xf1f3f5);
+      break;
+    }
   }
 }
 
@@ -369,6 +613,9 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       trunk: { geometry: geo.trunk, material: mat(), shadow: true },
       disc: { geometry: geo.disc, material: mat(), shadow: false },
       arch: { geometry: geo.arch, material: mat(), shadow: true },
+      cyl: { geometry: geo.cyl, material: mat(), shadow: true },
+      cone: { geometry: geo.cone, material: mat({ flatShading: true }), shadow: true },
+      dome: { geometry: geo.dome, material: mat(), shadow: true },
       water: { geometry: geo.box, material: new THREE.MeshPhongMaterial({ color: 0xffffff, shininess: 90, specular: 0xffffff }), shadow: false },
     };
 
@@ -385,6 +632,8 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
     let parts: Record<string, Part[]> = {};
     let tiles: Tile[] = [];
     let kindAt = new Map<string, Tile["kind"]>();
+    let tileIndex = new Map<string, number>();
+    let currentPlan: CityPlan | null = null;
     let currentSeed = -1;
     let born = new Map<number, number>(); // tile → time it started rising
     let growing: number[] = [];
@@ -533,7 +782,7 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
     }
 
     // ---- landmarks that move: Ferris wheels turn, wind turbines spin
-    let landmarks: { obj: THREE.Object3D; spin: THREE.Object3D; tile: number; speed: number }[] = [];
+    let landmarks: { obj: THREE.Object3D; spin: THREE.Object3D; tile: number; speed: number; axis?: "y" | "z" }[] = [];
     const lmMat = {
       white: new THREE.MeshLambertMaterial({ color: 0xf1f3f5 }),
       frame: new THREE.MeshLambertMaterial({ color: 0xe9ecef }),
@@ -601,6 +850,39 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       return g;
     }
 
+    function addFerris(px: number, pz: number, rotY: number, tile: number, scale: number) {
+      const obj = new THREE.Group();
+      const wheel = new THREE.Group();
+      wheel.add(new THREE.Mesh(lmGeo.rim, lmMat.frame));
+      for (let k = 0; k < 4; k++) {
+        const sp = new THREE.Mesh(lmGeo.spoke, lmMat.frame);
+        sp.rotation.z = (k * Math.PI) / 4;
+        wheel.add(sp);
+      }
+      for (let k = 0; k < 8; k++) {
+        const c = new THREE.Mesh(lmGeo.cabin, lmMat.cabins[k % lmMat.cabins.length]);
+        const a = (k / 8) * Math.PI * 2;
+        c.position.set(Math.cos(a) * 0.62, Math.sin(a) * 0.62, 0);
+        c.castShadow = true;
+        wheel.add(c);
+      }
+      wheel.position.y = 1.35;
+      obj.add(wheel);
+      if (scale !== 1) {
+        // Legs for the bigger funfair wheel (the single-tile one has legs drawn with the tile).
+        for (const o of [-0.2, 0.2]) {
+          const leg = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.3, 0.05), lmMat.frame);
+          leg.position.set(o, 0.7, 0);
+          obj.add(leg);
+        }
+      }
+      obj.position.set(px, 0, pz);
+      obj.rotation.y = rotY;
+      obj.userData.scale = scale;
+      landmarks.push({ obj, spin: wheel, tile, speed: 0.35 });
+      moving.add(obj);
+    }
+
     function buildLandmarks() {
       for (const l of landmarks) moving.remove(l.obj);
       landmarks = [];
@@ -613,27 +895,51 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
           boards.push({ obj, tile: t.i });
           moving.add(obj);
         }
-        if (t.kind === "ferris") {
+        if (t.kind === "ferris") addFerris(t.x, t.z, t.r[1] < 0.5 ? 0 : Math.PI / 2, t.i, 1);
+        if (t.kind === "crane") {
+          // The crane's arm swings slowly round, with a load hanging off it.
           const obj = new THREE.Group();
-          const wheel = new THREE.Group();
-          wheel.add(new THREE.Mesh(lmGeo.rim, lmMat.frame));
-          for (let k = 0; k < 4; k++) {
-            const sp = new THREE.Mesh(lmGeo.spoke, lmMat.frame);
-            sp.rotation.z = (k * Math.PI) / 4;
-            wheel.add(sp);
+          const jib = new THREE.Group();
+          const yellow = new THREE.MeshLambertMaterial({ color: 0xfab005 });
+          const arm = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.07, 0.07), yellow);
+          arm.position.x = 0.45;
+          const back = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.12, 0.12), lmMat.frame);
+          back.position.x = -0.35;
+          const cab = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), yellow);
+          cab.position.set(0.05, -0.08, 0.06);
+          const cable = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.6, 0.01), lmMat.frame);
+          cable.position.set(0.9, -0.3, 0);
+          const load = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, 0.12), new THREE.MeshLambertMaterial({ color: 0x8a6a4f }));
+          load.position.set(0.9, -0.64, 0);
+          jib.add(arm, back, cab, cable, load);
+          jib.position.y = 3.08;
+          obj.add(jib);
+          obj.position.set(t.x + 0.32, 0, t.z - 0.32);
+          landmarks.push({ obj, spin: jib, tile: t.i, speed: 0.15, axis: "y" });
+          moving.add(obj);
+        }
+        if (t.structure?.anchor && t.structure.type === "funfair") {
+          addFerris(t.x + 0.05, t.z, Math.PI / 4, t.i, 1.15);
+          // A carousel that turns
+          const obj = new THREE.Group();
+          const spin = new THREE.Group();
+          const base = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.05, 20), lmMat.frame);
+          base.position.y = 0.12;
+          const top = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.22, 20), lmMat.cabins[0]);
+          top.position.y = 0.48;
+          spin.add(base, top);
+          for (let k = 0; k < 6; k++) {
+            const a = (k / 6) * Math.PI * 2;
+            const pole = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.33, 0.015), lmMat.frame);
+            pole.position.set(Math.cos(a) * 0.22, 0.3, Math.sin(a) * 0.22);
+            const horse = new THREE.Mesh(lmGeo.cabin, lmMat.cabins[(k + 1) % lmMat.cabins.length]);
+            horse.position.set(Math.cos(a) * 0.22, 0.24, Math.sin(a) * 0.22);
+            horse.scale.set(0.8, 0.6, 0.5);
+            spin.add(pole, horse);
           }
-          for (let k = 0; k < 8; k++) {
-            const c = new THREE.Mesh(lmGeo.cabin, lmMat.cabins[k % lmMat.cabins.length]);
-            const a = (k / 8) * Math.PI * 2;
-            c.position.set(Math.cos(a) * 0.62, Math.sin(a) * 0.62, 0);
-            c.castShadow = true;
-            wheel.add(c);
-          }
-          wheel.position.y = 1.35;
-          obj.add(wheel);
-          obj.position.set(t.x, 0, t.z);
-          obj.rotation.y = t.r[1] < 0.5 ? 0 : Math.PI / 2;
-          landmarks.push({ obj, spin: wheel, tile: t.i, speed: 0.35 });
+          obj.add(spin);
+          obj.position.set(t.x + 0.95, 0, t.z + 0.15);
+          landmarks.push({ obj, spin, tile: t.i, speed: 0.8, axis: "y" });
           moving.add(obj);
         }
         if (t.kind === "turbine") {
@@ -660,9 +966,10 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
         b.obj.scale.setScalar(Math.max(0.0001, t));
       }
       for (const l of landmarks) {
-        l.spin.rotation.z += l.speed * dt;
+        if (l.axis === "y") l.spin.rotation.y += l.speed * dt;
+        else l.spin.rotation.z += l.speed * dt;
         const t = Math.min(1, Math.max(0, (now - (born.get(l.tile) ?? 0)) / 700));
-        l.obj.scale.setScalar(Math.max(0.0001, t));
+        l.obj.scale.setScalar(Math.max(0.0001, t) * (l.obj.userData.scale ?? 1));
       }
     }
 
@@ -769,7 +1076,18 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       currentSeed = newSeed;
       const plan = makePlan(newSeed);
       tiles = Array.from({ length: count }, (_, i) => tileAt(plan, i));
+      // A big building only appears once all four of its tiles exist; until then each
+      // of its tiles shows what it would otherwise be.
+      const present = new Set(tiles.map((t) => `${t.x},${t.z}`));
+      tiles = tiles.map((t) => {
+        if (t.kind !== "structure" || !t.structure || !t.fallback) return t;
+        const { ax, az } = t.structure;
+        const whole = [`${ax},${az}`, `${ax + 1},${az}`, `${ax},${az + 1}`, `${ax + 1},${az + 1}`].every((k) => present.has(k));
+        return whole ? t : { ...t.fallback, i: t.i };
+      });
       kindAt = new Map(tiles.map((t) => [`${t.x},${t.z}`, t.kind]));
+      tileIndex = new Map(tiles.map((t) => [`${t.x},${t.z}`, t.i]));
+      currentPlan = plan;
 
       const now = performance.now();
       for (const t of tiles) {
@@ -1253,6 +1571,9 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       ray.setFromCamera(pointer, camera);
       const hits = ray.intersectObjects(Object.values(meshes), false);
       for (const h of hits) {
+        // The square under the exact point touched (big buildings cover several squares).
+        const byPoint = tileIndex.get(`${Math.round(h.point.x)},${Math.round(h.point.z)}`);
+        if (byPoint !== undefined) return byPoint;
         const name = (h.object as THREE.InstancedMesh).userData.name as string;
         if (h.instanceId === undefined) continue;
         const p = parts[name]?.[h.instanceId];
@@ -1282,7 +1603,8 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       hoverBox.visible = true;
       hoverBox.position.set(t.x, 0, t.z);
       hoverBox.scale.set(1.02, t.top + 0.1, 1.02);
-      cb.current.onHover?.({ tile, label: KIND_LABEL[t.kind] });
+      const what = t.kind === "structure" && t.structure ? STRUCTURE_LABEL[t.structure.type] : KIND_LABEL[t.kind];
+      cb.current.onHover?.({ tile, label: currentPlan ? `${addressOf(currentPlan, t)} · ${what}` : what });
     }
 
     let down: { x: number; y: number; t: number } | null = null;
@@ -1338,7 +1660,10 @@ export function CityView({ seed, tileCount, markers, events, interactive, onTile
       if (hoverQueued) {
         const board = boardUnder(hoverQueued.clientX, hoverQueued.clientY);
         renderer.domElement.style.cursor = board ? "pointer" : "";
-        if (board) cb.current.onHover?.({ tile: board.tile, label: "Billboard · tap to advertise here" });
+        if (board) {
+          const t = tiles[board.tile];
+          cb.current.onHover?.({ tile: board.tile, label: `Billboard at ${t && currentPlan ? addressOf(currentPlan, t) : "this spot"} · tap to advertise` });
+        }
         else showHover(tileUnder(hoverQueued.clientX, hoverQueued.clientY));
         hoverQueued = null;
       }

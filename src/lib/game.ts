@@ -74,8 +74,18 @@ export type RoundResults = {
 /** The signed-in player's id, or null. */
 export async function currentUserId() {
   const supabase = await createClient();
-  const { data } = await supabase.auth.getClaims();
-  return (data?.claims?.sub as string | undefined) ?? null;
+  const { data, error } = await supabase.auth.getClaims();
+  if (data?.claims?.sub) return data.claims.sub as string;
+  if (!error) return null;
+  // One more try (a brief network hiccup shouldn't sign anyone out).
+  const retry = await supabase.auth.getUser();
+  return retry.data.user?.id ?? null;
+}
+
+/** True when the browser still carries a login cookie (even if checking it just failed). */
+export async function hasLoginCookie() {
+  const { cookies } = await import("next/headers");
+  return (await cookies()).getAll().some((c) => c.name.startsWith("sb-") && c.name.includes("-auth-token"));
 }
 
 const num = (v: unknown) => Number(v ?? 0);
@@ -87,11 +97,14 @@ export async function loadGame(userId: string): Promise<GameState> {
   // too; calling it here keeps the game moving even if that job is not set up.
   await db.rpc("tick");
 
-  const [{ data: profile }, { data: round }, { data: settings }] = await Promise.all([
+  const [{ data: profile, error: profileError }, { data: round }, { data: settings }] = await Promise.all([
     db.from("profiles").select("username, pin_set, coins, bonus_coins, seeker_rounds, free_search_day").eq("id", userId).single(),
     db.from("rounds").select("*").order("id", { ascending: false }).limit(1).maybeSingle(),
     db.from("game_settings").select("key, value"),
   ]);
+  // Couldn't read the profile (network blip): fail loudly so the page retries, rather than
+  // treating the player as brand new.
+  if (profileError || !profile) throw new Error(`Profile not loaded: ${profileError?.message ?? "missing"}`);
   const s = Object.fromEntries((settings ?? []).map((r) => [r.key, num(r.value)]));
   const today = new Date().toISOString().slice(0, 10);
 

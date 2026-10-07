@@ -39,7 +39,15 @@ The full rule book is the "Hide & Seek Grid Game: Rules Spec" doc.
 The board is a small 3D city (three.js, `src/app/play/city-view.tsx`). Tiles spiral out from
 the centre, so new tiles (20 per hider) appear on the edge and rise out of the ground. What
 stands on each tile is decided in `src/lib/city/layout.ts` from the round number, so each
-round has its own street grid, downtowns, river, lakes, parks and colours.
+round has its own street grid, downtowns, river, lakes, parks and colours. Each round's city is
+named after a real place (Ikeja, Lekki, Abuja, Chicago, London, Accra, Nairobi, Johannesburg…;
+see `src/lib/city/places.ts`) with matching street names, and every spot has an address like
+"14 Adekunle Street" or "Allen Ave & Obafemi Cl".
+
+Big 2×2 landmarks: shopping malls, twin towers, domed museums, funfairs, markets, arenas,
+university campuses, hotels with rooftop pools, solar farms. One-of-a-kind buildings:
+skyscrapers in five shapes, three kinds of office block and house, hospitals, clock towers,
+construction sites with turning cranes, water towers, radio masts, fuel stations.
 
 Tiles: roads, humped bridges, a river (about one city in three), the odd lake, ponds,
 skyscrapers, office blocks, houses, parks, woods, plazas with fountains, Ferris wheels,
