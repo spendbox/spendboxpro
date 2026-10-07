@@ -26,8 +26,11 @@ export async function proxy(request: NextRequest) {
   });
 
   // Do not put code between createServerClient and getClaims: it refreshes the session.
-  const { data } = await supabase.auth.getClaims();
-  const signedIn = Boolean(data?.claims?.sub);
+  const { data, error } = await supabase.auth.getClaims();
+  // A hiccup reaching Supabase is not the same as being signed out: if the browser still
+  // has a login cookie, let the page load rather than throwing the player out.
+  const hasLoginCookie = request.cookies.getAll().some((c) => c.name.startsWith("sb-") && c.name.includes("-auth-token"));
+  const signedIn = Boolean(data?.claims?.sub) || (Boolean(error) && hasLoginCookie);
 
   const { pathname } = request.nextUrl;
   if (!signedIn && PROTECTED.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {

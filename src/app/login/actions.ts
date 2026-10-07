@@ -208,5 +208,11 @@ export async function saveNameAndPin(rawName: string, rawPin: string): Promise<L
     .update({ username: name, pin_set: true, pin_failures: 0, pin_locked_until: null })
     .eq("id", userId);
   if (error) return { ok: false, error: /duplicate|unique/i.test(error.message) ? "That name is taken. Try another." : "We couldn't save your name." };
+  // Changing the password can end the current login on Supabase's side, so sign straight
+  // back in with the new PIN. Otherwise players get thrown out right after setting it.
+  const { data: user } = await db.auth.admin.getUserById(userId);
+  if (user.user?.email) {
+    await (await createClient()).auth.signInWithPassword({ email: user.user.email, password: pinPassword(userId, pin) });
+  }
   return { ok: true };
 }

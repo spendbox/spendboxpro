@@ -2,8 +2,8 @@
 
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { CITY_ASSETS } from "@/lib/city/layout";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { addressOf, CITY_ASSETS, makePlan, tileAt } from "@/lib/city/layout";
 import type { GameEvent, GameState } from "@/lib/game";
 import { cn } from "@/lib/cn";
 import { short } from "@/lib/format";
@@ -20,7 +20,8 @@ const CityView = dynamic(() => import("./city-view").then((m) => m.CityView), {
 });
 
 type Mode = "search" | "sweep";
-type Notice = { id: number; text: string; tone: "alarm" | "move" | "info" };
+type Notice = { id: number; text: string; tone: "alarm" | "move" | "info" | "mine" };
+type FeedItem = { key: string; at: string; text: string; tone: Notice["tone"] };
 
 /** The server's clock, ticking every second on this device. */
 function useNow(serverNow: string) {
@@ -56,16 +57,16 @@ function useOnline(userId: string) {
   return count;
 }
 
-function describe(e: GameEvent, botName: string, myTile: number | null): Notice | null {
+function describe(e: GameEvent, botName: string, myTile: number | null, where: (tile: number) => string): Notice | null {
   if (e.kind === "caught") {
     const who = e.detail?.finder ?? "Someone";
     if (e.detail?.how === "walked_in") return { id: e.id, tone: "alarm", text: `A hider wandered onto a searched spot and got caught! ${who} gets the credit.` };
     if (e.detail?.bot) return { id: e.id, tone: "alarm", text: `${who} found ${botName}!` };
-    return { id: e.id, tone: "alarm", text: `${who} caught ${e.detail?.count && e.detail.count > 1 ? `${e.detail.count} hiders` : "a hider"} on tile ${e.tile + 1}!` };
+    return { id: e.id, tone: "alarm", text: `${who} caught ${e.detail?.count && e.detail.count > 1 ? `${e.detail.count} hiders` : "a hider"} at ${where(e.tile)}!` };
   }
   if (e.kind === "moved") {
     if (myTile !== null && e.tile === myTile) return null;
-    return { id: e.id, tone: "move", text: `Someone just slipped away from tile ${e.tile + 1}.` };
+    return { id: e.id, tone: "move", text: `Someone just slipped away from ${where(e.tile)}.` };
   }
   return null;
 }
@@ -76,7 +77,6 @@ export function Game({ state }: { state: GameState }) {
   const [mode, setMode] = useState<Mode>("search");
   const [radius, setRadius] = useState<1 | 2 | 3>(1);
   const [message, setMessage] = useState<{ text: string; tone: "good" | "bad" | "info" } | null>(null);
-  const [sweeps, setSweeps] = useState<{ tile: number; radius: number; count: number }[]>([]);
   const [busyTile, setBusyTile] = useState<number | null>(null);
   const [hover, setHover] = useState<{ tile: number; label: string } | null>(null);
   const [menu, setMenu] = useState(false);
@@ -84,7 +84,10 @@ export function Game({ state }: { state: GameState }) {
   const [showResults, setShowResults] = useState<number | null>(null);
   const [confirmMove, setConfirmMove] = useState<number | null>(null);
   const [billboard, setBillboard] = useState<{ id: string; tile: number } | null>(null);
-  const [notices, setNotices] = useState<Notice[]>([]);
+  const [toasts, setToasts] = useState<FeedItem[]>([]);
+  const [feedOpen, setFeedOpen] = useState(false);
+  const [feedSeenAt, setFeedSeenAt] = useState<string>(state.serverNow);
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
   const online = useOnline(state.me.id);
 
   const { round, entry, me } = state;
@@ -95,6 +98,7 @@ export function Game({ state }: { state: GameState }) {
   const isSeeker = entry?.role === "seeker";
   const moveWait = entry?.lastMoveAt ? Date.parse(entry.lastMoveAt) + state.prices.moveCooldown * 1000 - now : 0;
   const sweepWait = entry?.lastSweepAt ? Date.parse(entry.lastSweepAt) + state.prices.sweepCooldown * 1000 - now : 0;
+  const frozenWait = entry?.frozenUntil ? Date.parse(entry.frozenUntil) - now : 0;
   const recentlySwept =
     isHider &&
     !!entry?.lastSweptAt &&
@@ -102,6 +106,11 @@ export function Game({ state }: { state: GameState }) {
     (!entry.lastMoveAt || Date.parse(entry.lastSweptAt) > Date.parse(entry.lastMoveAt));
   const canTap = phase === "seek" && !!entry && !(isHider && entry.caught);
   const botName = round?.botName ?? "the bot";
+  // This round's city: its name and street addresses (same maths as the 3D view).
+  const roundSeed = round?.id ?? 0;
+  const plan = useMemo(() => makePlan(roundSeed), [roundSeed]);
+  const where = useCallback((tile: number) => addressOf(plan, tileAt(plan, tile)), [plan]);
+  const knownSet = useMemo(() => new Set(state.knownSearched), [state.knownSearched]);
 
   // Keep the board live: fetch fresh state every few seconds.
   useEffect(() => {
@@ -109,36 +118,44 @@ export function Game({ state }: { state: GameState }) {
     return () => clearInterval(id);
   }, [router]);
 
-  // A new round clears the sweeps from the last one.
-  const roundId = round?.id;
-  const [sweepRound, setSweepRound] = useState(roundId);
-  if (sweepRound !== roundId) {
-    setSweepRound(roundId);
-    setSweeps([]);
-  }
+  // Everything worth knowing, newest first: public happenings (moves, catches) and private
+  // notices for you (your trap went off, a drone swept you, you were found).
+  const myLastSpot = isHider ? (entry?.visited.at(-1) ?? null) : null;
+  const feed: FeedItem[] = useMemo(() => {
+    const pub = state.events
+      .map((e) => {
+        const n = describe(e, botName, myLastSpot, where);
+        return n ? { key: `e${e.id}`, at: e.at, text: n.text, tone: n.tone } : null;
+      })
+      .filter((x): x is FeedItem => x !== null);
+    const mine = state.notifications.map((n) => ({
+      key: `n${n.id}`,
+      at: n.at,
+      text: n.tile !== null && n.kind === "trap" ? `${n.body} (near ${where(n.tile)})` : n.body,
+      tone: "mine" as const,
+    }));
+    return [...pub, ...mine].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 60);
+  }, [state.events, state.notifications, botName, myLastSpot, where]);
+  const unread = feed.filter((f) => Date.parse(f.at) > Date.parse(feedSeenAt)).length;
 
-  // Public happenings become little notices (only new ones, not what happened before you came).
-  const seen = useRef<number | null>(null);
+  // New items pop up briefly under the bell (only what arrives while you're here).
+  const seenKeys = useRef<Set<string> | null>(null);
   useEffect(() => {
-    const latest = state.events.at(-1)?.id ?? 0;
-    if (seen.current === null) {
-      seen.current = latest;
+    if (seenKeys.current === null) {
+      seenKeys.current = new Set(feed.map((f) => f.key));
       return;
     }
-    const fresh = state.events
-      .filter((e) => e.id > seen.current!)
-      .map((e) => describe(e, botName, isHider ? (entry?.visited.at(-1) ?? null) : null))
-      .filter((n): n is Notice => n !== null);
-    seen.current = latest;
-    if (!fresh.length) return;
-    const id = setTimeout(() => setNotices((list) => [...list, ...fresh].slice(-3)), 0);
+    const fresh = feed.filter((f) => !seenKeys.current!.has(f.key));
+    fresh.forEach((f) => seenKeys.current!.add(f.key));
+    if (!fresh.length || feedOpen) return;
+    const id = setTimeout(() => setToasts((list) => [...fresh.slice(0, 2).reverse(), ...list].slice(0, 2)), 0);
     return () => clearTimeout(id);
-  }, [state.events, botName, isHider, entry]);
+  }, [feed, feedOpen]);
   useEffect(() => {
-    if (!notices.length) return;
-    const id = setTimeout(() => setNotices((list) => list.slice(1)), 6000);
+    if (!toasts.length) return;
+    const id = setTimeout(() => setToasts((list) => list.slice(0, -1)), 5500);
     return () => clearTimeout(id);
-  }, [notices]);
+  }, [toasts]);
 
   // When a round finishes, show its results once (remembered on this device).
   const resultsId = state.results?.roundId ?? null;
@@ -174,12 +191,12 @@ export function Game({ state }: { state: GameState }) {
       caught: state.caughtTiles,
       left: state.leftTiles,
       me: isHider && entry && !entry.caught ? entry.tile : null,
-      sweeps,
+      sweeps: state.mySweeps.map((sw) => ({ tile: sw.tile, radius: sw.radius, count: sw.found ? 1 : 0 })),
       pending: pending ? busyTile : null,
       recent: state.recentSearches.map((r) => ({ tile: r.tile, ageMs: Math.max(0, serverNowMs - Date.parse(r.at)) })),
       locked: state.knownSearched,
     }),
-    [state.mySearches, state.caughtTiles, state.leftTiles, state.recentSearches, state.knownSearched, serverNowMs, isHider, entry, sweeps, pending, busyTile],
+    [state.mySearches, state.caughtTiles, state.leftTiles, state.recentSearches, state.knownSearched, state.mySweeps, serverNowMs, isHider, entry, pending, busyTile],
   );
   const cityEvents: CityEvent[] = useMemo(
     () => state.events.map((e) => ({ id: e.id, kind: e.kind, tile: e.tile, detail: e.detail, ageMs: Math.max(0, serverNowMs - Date.parse(e.at)) })),
@@ -200,6 +217,8 @@ export function Game({ state }: { state: GameState }) {
     if (isHider) {
       if (tile === entry.tile) return setMessage({ text: "You're already hiding there.", tone: "info" });
       if (entry.visited.includes(tile)) return setMessage({ text: "You've been there already. No going back.", tone: "bad" });
+      if (knownSet.has(tile)) return setMessage({ text: "That spot's been searched (it's orange). Pick somewhere else.", tone: "bad" });
+      if (frozenWait > 0) return setMessage({ text: `A drone has you pinned. You can move in ${Math.ceil(frozenWait / 1000)}s.`, tone: "bad" });
       if (moveWait > 0) return setMessage({ text: `Catch your breath: you can move again in ${clock(moveWait)}.`, tone: "info" });
       return setConfirmMove(tile);
     }
@@ -210,9 +229,10 @@ export function Game({ state }: { state: GameState }) {
         () => sweepAround(tile, radius),
         (d) => {
           const found = Boolean(d.found);
-          setSweeps((s) => [{ tile, radius, count: found ? 1 : 0 }, ...s].slice(0, 6));
           setMessage({
-            text: found ? "The drone picked something up in that area! Someone's hiding nearby." : "The drone saw nothing in that area. For now.",
+            text: found
+              ? "The drone picked something up! Anyone in that area is pinned for 15 seconds. Your drone keeps watching it as a trap."
+              : "The drone saw nothing there, for now. It'll keep watching the area as a trap.",
             tone: found ? "good" : "info",
           });
         },
@@ -221,13 +241,16 @@ export function Game({ state }: { state: GameState }) {
       act(
         () => searchTile(tile),
         (d) => {
-          if (d.result === "already_searched") setMessage({ text: "Someone's already checked there. No charge.", tone: "info" });
-          else if (d.result === "caught")
+          if (d.result === "caught")
             setMessage({
               text: d.bot ? `You found ${botName}! +${short(Number(d.reward))} coins.` : `Gotcha! You found ${d.caught}. +${short(Number(d.reward))} coins.`,
               tone: "good",
             });
-          else setMessage({ text: `Nobody on tile ${tile + 1}.`, tone: "info" });
+          else
+            setMessage({
+              text: d.searched_before ? `Nobody at ${where(tile)}. (Heads up: that spot had been searched before.)` : `Nobody at ${where(tile)}.`,
+              tone: "info",
+            });
         },
       );
     }
@@ -242,7 +265,7 @@ export function Game({ state }: { state: GameState }) {
         setMessage(
           d.caught
             ? { text: "Oh no. Someone had already searched that spot and was waiting. You've been caught.", tone: "bad" }
-            : { text: `You slipped over to tile ${tile + 1}. Everyone saw someone leave your old spot.`, tone: "info" },
+            : { text: `You slipped over to ${where(tile)}. Everyone saw someone leave your old spot.`, tone: "info" },
         ),
     );
   }
@@ -253,7 +276,6 @@ export function Game({ state }: { state: GameState }) {
     router.refresh();
   }
 
-  const knownSet = useMemo(() => new Set(state.knownSearched), [state.knownSearched]);
 
   return (
     <main className="fixed inset-0 overflow-hidden bg-bg">
@@ -274,7 +296,9 @@ export function Game({ state }: { state: GameState }) {
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-3 sm:p-4">
         <div className="glass pointer-events-auto w-44 rounded-2xl px-3.5 py-2.5 sm:w-52">
           <div className="flex items-baseline justify-between gap-2">
-            <h1 className="whitespace-nowrap font-display text-sm font-extrabold sm:text-base">Hide &amp; Seek</h1>
+            <h1 className="truncate font-display text-sm font-extrabold sm:text-base" title={`Hide & Seek in ${plan.city.name}`}>
+              {round ? plan.city.name : "Hide & Seek"}
+            </h1>
             <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">
               {phase === "join" ? "Hiding" : phase === "seek" ? "Searching" : "Over"}
             </span>
@@ -309,7 +333,26 @@ export function Game({ state }: { state: GameState }) {
               {me.bonusCoins > 0 && <span className="text-muted"> +{short(me.bonusCoins)}</span>}
             </span>
             <button
-              onClick={() => setMenu((v) => !v)}
+              onClick={() => {
+                setFeedOpen((v) => !v);
+                setMenu(false);
+                setToasts([]);
+                setFeedSeenAt(new Date(now).toISOString());
+              }}
+              className="glass relative grid h-9 w-9 shrink-0 place-items-center rounded-full"
+              aria-label="Notifications"
+            >
+              <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0" />
+              </svg>
+              {unread > 0 && (
+                <span className="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-hit px-1 text-[10px] font-semibold text-white">
+                  {unread > 9 ? "9+" : unread}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => { setMenu((v) => !v); setFeedOpen(false); }}
               className="glass grid h-9 w-9 shrink-0 place-items-center rounded-full text-base font-semibold"
               aria-label="Menu"
             >
@@ -319,15 +362,45 @@ export function Game({ state }: { state: GameState }) {
         </div>
       </div>
 
-      {/* Live notices: catches and moves */}
+      {/* Latest notices pop up under the bell; the bell opens the full list. */}
       <div className="pointer-events-none absolute right-3 top-[13.5rem] z-10 flex w-[min(18rem,calc(100vw-1.5rem))] flex-col items-end gap-1.5 sm:right-4 sm:top-16">
-        {notices.map((n) => (
-          <div key={n.id} className="glass pointer-events-auto flex items-start gap-2 rounded-xl px-3 py-2 text-xs shadow-lg">
-            {n.tone === "alarm" ? <Siren /> : <span className="mt-0.5 size-2.5 shrink-0 rounded-full bg-gold" />}
-            <span>{n.text}</span>
-          </div>
-        ))}
+        {!feedOpen &&
+          toasts.map((n) => (
+            <button
+              key={n.key}
+              onClick={() => { setFeedOpen(true); setFeedSeenAt(new Date(now).toISOString()); setToasts([]); }}
+              className="glass pointer-events-auto flex items-start gap-2 rounded-xl px-3 py-2 text-left text-xs shadow-lg"
+            >
+              <FeedIcon tone={n.tone} />
+              <span>{n.text}</span>
+            </button>
+          ))}
       </div>
+      {feedOpen && (
+        <div className="glass absolute right-3 top-16 z-30 flex max-h-[min(28rem,calc(100dvh-14rem))] w-[min(20rem,calc(100vw-1.5rem))] flex-col rounded-2xl text-sm sm:right-4">
+          <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+            <h2 className="font-semibold">Notifications</h2>
+            <button onClick={() => setFeedOpen(false)} className="rounded-full px-2 text-lg text-muted" aria-label="Close notifications">
+              ×
+            </button>
+          </div>
+          <ul className="flex-1 space-y-1 overflow-y-auto p-2">
+            {feed.length === 0 ? (
+              <li className="p-4 text-center text-muted">Nothing yet this round.</li>
+            ) : (
+              feed.map((f) => (
+                <li key={f.key} className={cn("flex gap-2 rounded-xl px-2.5 py-2", f.tone === "mine" && "bg-gold/15")}>
+                  <FeedIcon tone={f.tone} />
+                  <span className="flex-1">
+                    {f.text}
+                    <span className="block text-[11px] text-muted">{new Date(f.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
+                  </span>
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      )}
 
       {menu && (
         <div className="glass absolute right-3 top-16 z-30 max-h-[calc(100dvh-6rem)] w-[min(20rem,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl p-4 text-sm sm:right-4">
@@ -352,7 +425,10 @@ export function Game({ state }: { state: GameState }) {
             <Key className="bg-me">You, if you&apos;re hiding</Key>
           </ul>
           <h3 className="mb-1 mt-3 font-semibold">Around the city</h3>
-          <p className="text-muted">{CITY_ASSETS.tiles.join(" · ")}</p>
+          <p className="text-muted">
+            Every round is a new city, named after a real place, with its own street names. Big landmarks: {CITY_ASSETS.big.join(" · ")}.
+          </p>
+          <p className="mt-1 text-muted">{CITY_ASSETS.tiles.join(" · ")}</p>
           <p className="mt-1 text-muted">On the move: {CITY_ASSETS.moving.join(" · ")}</p>
           <div className="mt-4 grid grid-cols-2 gap-2">
             {state.results && (
@@ -363,7 +439,7 @@ export function Game({ state }: { state: GameState }) {
             <button onClick={() => router.push("/welcome")} className="rounded-xl bg-panel-2 px-3 py-2 font-medium">
               Change PIN
             </button>
-            <button onClick={signOut} className="col-span-2 rounded-xl bg-panel-2 px-3 py-2 font-medium text-muted">
+            <button onClick={() => { setMenu(false); setConfirmSignOut(true); }} className="col-span-2 rounded-xl bg-panel-2 px-3 py-2 font-medium text-muted">
               Sign out
             </button>
           </div>
@@ -376,15 +452,16 @@ export function Game({ state }: { state: GameState }) {
 
       {confirmMove !== null && entry && (
         <Sheet onClose={() => setConfirmMove(null)}>
-          <h2 className="font-display text-xl font-bold">Move to tile {confirmMove + 1}?</h2>
+          <h2 className="font-display text-xl font-bold">Move to {where(confirmMove)}?</h2>
           <ul className="mt-2 space-y-1 text-sm text-muted">
             <li>It costs {state.prices.moveFee} coins (you have {short(me.coins)}). The coins go into the survivor pool.</li>
-            <li>Everyone will see that someone left tile {(entry.tile ?? 0) + 1}, and you can&apos;t come back to it.</li>
+            <li>Everyone will see that someone left {where(entry.tile ?? 0)}, and you can&apos;t come back to it.</li>
             <li>Your next move will be possible in {state.prices.moveCooldown} seconds.</li>
           </ul>
-          {knownSet.has(confirmMove) && (
-            <p className="mt-3 rounded-xl bg-hit/10 px-3 py-2 text-sm font-medium text-hit">
-              Careful: that spot has already been searched. Moving there will get you caught.
+          {state.activeTraps > 0 && (
+            <p className="mt-3 rounded-xl bg-[#4dabf7]/15 px-3 py-2 text-sm text-[#1864ab]">
+              📡 There {state.activeTraps === 1 ? "is 1 drone trap" : `are ${state.activeTraps} drone traps`} watching parts of the city
+              right now, and you can&apos;t see where. If you move into one, the seeker who set it will know someone&apos;s there.
             </p>
           )}
           <div className="mt-4 flex gap-2">
@@ -398,7 +475,26 @@ export function Game({ state }: { state: GameState }) {
         </Sheet>
       )}
 
-      {billboard && <BillboardSheet board={billboard} onClose={() => setBillboard(null)} />}
+      {confirmSignOut && (
+        <Sheet onClose={() => setConfirmSignOut(false)}>
+          <h2 className="font-display text-xl font-bold">Sign out?</h2>
+          <p className="mt-1 text-sm text-muted">
+            {isHider && entry && !entry.caught
+              ? "You'll stay hidden in the city while you're away, and you can sign back in with your email and PIN."
+              : "You can sign back in any time with your email and PIN."}
+          </p>
+          <div className="mt-4 flex gap-2">
+            <button onClick={() => setConfirmSignOut(false)} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold">
+              Stay
+            </button>
+            <button onClick={signOut} className="flex-1 rounded-xl bg-ink py-2.5 font-semibold text-white">
+              Sign out
+            </button>
+          </div>
+        </Sheet>
+      )}
+
+      {billboard && <BillboardSheet board={billboard} address={where(billboard.tile)} onClose={() => setBillboard(null)} />}
 
       {/* Bottom: messages, controls and chat */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-2 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
@@ -416,7 +512,7 @@ export function Game({ state }: { state: GameState }) {
         )}
         {hover && (
           <p className="glass hidden rounded-full px-3 py-1 text-xs text-muted sm:block">
-            {hover.label.startsWith("Billboard") ? hover.label : `Tile ${hover.tile + 1} · ${hover.label}`}
+            {hover.label}
           </p>
         )}
 
@@ -496,14 +592,19 @@ export function Game({ state }: { state: GameState }) {
             <p className="text-sm text-hit">You&apos;ve been found. Hang around and watch the rest of the hunt, or try again next round.</p>
           ) : (
             <div className="space-y-2 text-sm">
-              {recentlySwept && (
+              {frozenWait > 0 && (
+                <p className="rounded-xl bg-hit/10 px-3 py-2 font-medium text-hit">
+                  📡 A drone has you pinned. You can&apos;t move for {Math.ceil(frozenWait / 1000)}s.
+                </p>
+              )}
+              {frozenWait <= 0 && recentlySwept && (
                 <p className="rounded-xl bg-[#4dabf7]/15 px-3 py-2 font-medium text-[#1864ab]">
                   📡 A drone just swept your area. Seekers know someone&apos;s close. Maybe time to move?
                 </p>
               )}
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-full bg-me/15 px-2.5 py-1 text-xs font-semibold text-me">
-                  {moveWait > 0 ? `Next move in ${clock(moveWait)}` : "You can move now"}
+                  {frozenWait > 0 ? `Pinned for ${Math.ceil(frozenWait / 1000)}s` : moveWait > 0 ? `Next move in ${clock(moveWait)}` : "You can move now"}
                 </span>
                 <span className="text-xs text-muted">
                   {state.prices.moveFee} coins a move · {entry.moves} move{entry.moves === 1 ? "" : "s"} so far
@@ -526,6 +627,12 @@ export function Game({ state }: { state: GameState }) {
   );
 }
 
+function FeedIcon({ tone }: { tone: Notice["tone"] }) {
+  if (tone === "alarm") return <Siren />;
+  if (tone === "mine") return <span className="mt-0.5 shrink-0 text-sm leading-none">📡</span>;
+  return <span className="mt-1 size-2.5 shrink-0 rounded-full bg-gold" />;
+}
+
 function Siren() {
   return (
     <span className="relative mt-0.5 grid size-4 shrink-0 place-items-center" aria-hidden>
@@ -536,16 +643,26 @@ function Siren() {
 }
 
 function Sheet({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
+  // The sheet opens as a finger lifts off the city; the browser then sends a "click" to
+  // whatever is now under it (this backdrop). Only close for taps that START on the backdrop.
+  const downOnBackdrop = useRef(false);
   return (
-    <div className="fixed inset-0 z-40 grid place-items-end bg-ink/25 p-3 backdrop-blur-[2px] sm:place-items-center" onClick={onClose}>
-      <section className="w-full max-w-sm rounded-3xl bg-panel p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 z-40 grid place-items-end bg-ink/25 p-3 backdrop-blur-[2px] sm:place-items-center"
+      onPointerDown={(e) => (downOnBackdrop.current = e.target === e.currentTarget)}
+      onClick={(e) => {
+        if (downOnBackdrop.current && e.target === e.currentTarget) onClose();
+        downOnBackdrop.current = false;
+      }}
+    >
+      <section className="w-full max-w-sm rounded-3xl bg-panel p-5 shadow-2xl">
         {children}
       </section>
     </div>
   );
 }
 
-function BillboardSheet({ board, onClose }: { board: { id: string; tile: number }; onClose: () => void }) {
+function BillboardSheet({ board, address, onClose }: { board: { id: string; tile: number }; address: string; onClose: () => void }) {
   const [name, setName] = useState("");
   const [contact, setContact] = useState("");
   const [note, setNote] = useState("");
@@ -557,7 +674,7 @@ function BillboardSheet({ board, onClose }: { board: { id: string; tile: number 
     e.preventDefault();
     setState("sending");
     setError(null);
-    const res = await requestAd({ billboard: board.id, name, contact, message: note });
+    const res = await requestAd({ billboard: `${board.id} (${address})`, name, contact, message: note });
     if (res.ok) setState("sent");
     else {
       setState("idle");
@@ -570,7 +687,7 @@ function BillboardSheet({ board, onClose }: { board: { id: string; tile: number 
       {state === "sent" ? (
         <div className="text-center">
           <h2 className="font-display text-xl font-bold">Thanks!</h2>
-          <p className="mt-2 text-sm text-muted">We&apos;ll be in touch about putting your brand on billboard {board.id}.</p>
+          <p className="mt-2 text-sm text-muted">We&apos;ll be in touch about putting your brand on the billboard at {address}.</p>
           <button onClick={onClose} className="mt-4 w-full rounded-xl bg-gold py-2.5 font-semibold">
             Back to the city
           </button>
@@ -578,7 +695,7 @@ function BillboardSheet({ board, onClose }: { board: { id: string; tile: number 
       ) : (
         <form onSubmit={submit} className="space-y-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted">Billboard {board.id}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">Billboard · {address}</p>
             <h2 className="font-display text-xl font-bold">Put your brand here</h2>
             <p className="mt-1 text-sm text-muted">
               Everyone playing in this part of the city sees this board. Leave your details and we&apos;ll get back to you with prices and dates.
