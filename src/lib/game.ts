@@ -178,19 +178,37 @@ const money = (n: number) => Math.round(n * 100) / 100;
 /** Someone watching the city without an account (the home page). */
 const GUEST = "00000000-0000-0000-0000-000000000000";
 
+/** When this server last moved the round clock (see loadGame). */
+let lastTickAt = 0;
+
+/** Moves the round clock along, but gives up after a few seconds rather than hold the page. */
+async function tickSoon(db: ReturnType<typeof createAdminClient>) {
+  const ticked = await db.rpc("tick_with_extras").abortSignal(AbortSignal.timeout(5000));
+  if (ticked.error && !/abort/i.test(ticked.error.message)) await db.rpc("tick").abortSignal(AbortSignal.timeout(5000));
+}
+
 export async function loadGame(userIdOrGuest: string | null): Promise<GameState> {
   const db = createAdminClient();
   const guest = !userIdOrGuest;
   const userId = userIdOrGuest ?? GUEST;
-  // Moves the round clock along (and lets the Seed Bot think). A scheduled job does this
-  // too; calling it here keeps the game moving even if that job is not set up.
-  // Passive income for players running low runs alongside (best effort: older databases
-  // don't have it yet).
-  const [ticked, passive] = await Promise.all([
-    db.rpc("tick_with_extras"),
-    guest ? Promise.resolve({ data: 0 }) : db.rpc("accrue_passive", { p_user: userId }),
+  // The round clock (and the Seed Bot's thinking): a scheduled job moves it every minute.
+  // Page loads only nudge it when it's due (a deadline has passed) or when this server hasn't
+  // for a while: every screen refreshes every few seconds, and nudging it on every refresh made
+  // everyone queue behind each other (pages timing out).
+  // Passive income for players running low runs alongside (best effort).
+  const { data: head } = await db.from("rounds").select("status, join_ends_at, seek_ends_at").order("id", { ascending: false }).limit(1).maybeSingle();
+  const nowMs = Date.now();
+  const due =
+    !head ||
+    head.status === "done" ||
+    (head.status === "join" && Date.parse(head.join_ends_at) <= nowMs) ||
+    (head.status === "seek" && Date.parse(head.seek_ends_at) <= nowMs);
+  const nudge = due || nowMs - lastTickAt > 20_000;
+  if (nudge) lastTickAt = nowMs;
+  const [, passive] = await Promise.all([
+    nudge ? tickSoon(db).catch((e) => console.error("tick failed", e)) : null,
+    guest ? Promise.resolve({ data: 0 }) : db.rpc("accrue_passive", { p_user: userId }).abortSignal(AbortSignal.timeout(5000)),
   ]);
-  if (ticked.error) await db.rpc("tick");
   const passiveGained = Number(passive.data ?? 0);
 
   const [{ data: profile, error: profileError }, { data: round }, { data: settings }] = await Promise.all([
@@ -409,7 +427,7 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
     playersPart(),
     balloonPart(),
     db.from("site_counters").select("value").eq("key", "visits").maybeSingle(),
-    db.from("profiles").select("id", { count: "exact", head: true }).eq("is_bot", false),
+    db.from("profiles").select("id", { count: "estimated", head: true }).eq("is_bot", false),
   ]);
   const site = { visits: Number(visits?.value ?? 0), players: playerCount ?? 0 };
   const tileCount = round?.tile_count ?? 0;

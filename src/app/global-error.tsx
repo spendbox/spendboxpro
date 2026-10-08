@@ -10,8 +10,8 @@ export default function GlobalError({ error }: { error: Error & { digest?: strin
     <html lang="en">
       <body style={{ fontFamily: "system-ui, sans-serif", display: "grid", placeItems: "center", minHeight: "100vh", margin: 0, background: "#eef2f6" }}>
         <div style={{ textAlign: "center", padding: 16 }}>
-          <p style={{ fontWeight: 700, fontSize: 20 }}>One moment…</p>
-          <p style={{ color: "#64707d" }}>Something hiccuped.</p>
+          <p style={{ fontWeight: 700, fontSize: 20 }}>Reconnecting to the city…</p>
+          <p style={{ color: "#64707d" }}>The connection blinked. Tap reload to jump back in.</p>
           <button onClick={() => window.location.reload()} style={{ marginTop: 12, padding: "10px 18px", borderRadius: 12, border: 0, background: "#ffc53d", fontWeight: 600 }}>
             Reload
           </button>

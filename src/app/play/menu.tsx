@@ -3,8 +3,12 @@
 import { useEffect, useState } from "react";
 import { AvatarFace } from "@/components/avatar";
 import { BADGE_GROUPS, BADGE_INFO, BadgeTile, type EarnedBadge } from "@/components/badges";
+import { Armchair, Paintbrush } from "lucide-react";
 import {
   Check,
+  Crown,
+  House,
+  Store,
   Drama,
   Flashlight,
   Gift,
@@ -224,6 +228,7 @@ export function Menu({
           </div>
         )}
 
+        <HouseSoon />
         <Marketplace />
 
         <div className="mt-4 grid grid-cols-2 gap-2 border-t border-line pt-3">
@@ -393,6 +398,40 @@ function LevelCard() {
 }
 
 /** A peek at the coin shop that's on its way. */
+/** Your own house in the city: not open yet. */
+function HouseSoon() {
+  return (
+    <div className="mt-4 overflow-hidden rounded-2xl bg-gradient-to-br from-[#a5d8ff] via-[#b197fc] to-[#63e6be] p-3 text-ink">
+      <div className="flex items-center justify-between">
+        <p className="flex items-center gap-1.5 font-display text-base font-extrabold">
+          <House className="size-5" strokeWidth={2.25} />
+          My house
+        </p>
+        <span className="rounded-full bg-ink px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">Coming soon</span>
+      </div>
+      <p className="mt-1 text-xs leading-snug">
+        Soon you&apos;ll get your own place in the city. Design it, fill it with furniture, invite people round, and turn it into a
+        studio for your business. Start small and grow it into a mansion as you level up.
+      </p>
+      <div className="mt-2 grid grid-cols-4 gap-1.5 text-center">
+        {(
+          [
+            [Paintbrush, "Design"],
+            [Armchair, "Furnish"],
+            [Store, "Studio"],
+            [Crown, "Mansion"],
+          ] as const
+        ).map(([Icon, label]) => (
+          <div key={label} className="flex flex-col items-center rounded-xl bg-white/45 py-1.5">
+            <Icon className="size-5" />
+            <div className="mt-0.5 text-[10px] font-semibold">{label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function Marketplace() {
   return (
     <div className="mt-4 overflow-hidden rounded-2xl bg-gradient-to-br from-[#ffe27a] via-[#ffb86b] to-[#ff7ab6] p-3 text-ink">

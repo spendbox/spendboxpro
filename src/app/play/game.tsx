@@ -10,9 +10,6 @@ import type { GameEvent, GameState } from "@/lib/game";
 import { cn } from "@/lib/cn";
 import {
   Anchor,
-  ArrowLeft,
-  ArrowRight,
-  ArrowUp,
   Armchair,
   Building2,
   Check,
@@ -38,6 +35,7 @@ import {
   Ghost,
   Hammer,
   HotAirBalloon,
+  House,
   Lightbulb,
   Lock,
   MapPin,
@@ -61,14 +59,16 @@ import { AvatarEditor } from "./avatar-editor";
 import { ActivitySheet, GiveCoinsSheet, QuestBanner, QuestSheet, RoomActivityLayer, useQuestTracker, type ActivityItem } from "./activities";
 import { Chat } from "./chat";
 import { setEventSoundsEnabled } from "./city/event-sounds";
-import type { CityEvent, CityInteract, CityMarkers, CityRide, RideTarget, TurnDir } from "./city-view";
+import type { CityEvent, CityInteract, CityMarkers, CityRide, RideTarget } from "./city-view";
 import { HowItWorks } from "./how-it-works";
 import { Menu } from "./menu";
 import { FeedRow, NotificationsPanel, type FeedIcon, type FeedItem } from "./notifications";
+import { signOutNow } from "../login/actions";
 import { claimBalloon, recordVisit } from "./profile-actions";
 import { Results } from "./results";
 import { rideRoom, useRooms, type RoomInfo } from "./rooms";
 import { RIDE_ICONS, RIDE_INFO, RideIcon, type RideKindName } from "./ride-icon";
+import { Safe } from "./safe";
 import { Sheet } from "./sheet";
 import { AdvertiseExplainer } from "@/components/advertise-explainer";
 import { playSfx, setSfxEnabled, useCitySound } from "./sound";
@@ -96,7 +96,7 @@ const RIDE_HELLO: Record<RideKindName, string> = {
   balloon: "Up we go! Drag to look around; tap Chat to talk to everyone on board.",
   train: "All aboard! Grab a window and drag to look around; tap Chat to talk to the carriage.",
   bus: "Top deck, front seat. Drag to look around; tap Chat to talk to the passengers.",
-  car: "You're driving! When a junction comes up, pick left, right or straight.",
+  car: "Sit back: the car drives itself round the city. Drag to look around; tap Chat to talk to your passengers.",
   boat: "Cast off! Enjoy the cruise; drag to look around and tap Chat to talk to the deck.",
   ferris: "Your cabin is climbing. Drag to look around; tap Chat to talk to your cabin.",
   slide: "Hold on tight…",
@@ -264,6 +264,10 @@ export function Game({ state }: { state: GameState }) {
   const [feedOpen, setFeedOpen] = useState(false);
   const [feedSeenAt, setFeedSeenAt] = useState<string>(state.serverNow);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  // Watchers who try to do something that needs an account: why, for the sign-in prompt.
+  const [signInWhy, setSignInWhy] = useState<string | null>(null);
+  const [houseSoon, setHouseSoon] = useState(false);
   const [confirmHide, setConfirmHide] = useState(false);
   const [howOpen, setHowOpen] = useState(false);
   const [editAvatar, setEditAvatar] = useState(false);
@@ -277,10 +281,8 @@ export function Game({ state }: { state: GameState }) {
   // Game mode (search, move…) or Chat mode (go into buildings and balloons to talk).
   const [viewMode, setViewMode] = useState<"game" | "chat">("game");
   const [ride, setRide] = useState<RideTarget | null>(null);
-  // Everything there is to ride this round (from the 3D city), and car steering.
+  // Everything there is to ride this round (from the 3D city).
   const [rides, setRides] = useState<CityRide[]>([]);
-  const [junction, setJunction] = useState<TurnDir[] | null>(null);
-  const [steer, setSteer] = useState<{ dir: TurnDir; at: number } | null>(null);
   // Inside places: a mini game / seat / menu that was tapped, and giving coins to someone.
   const [activity, setActivity] = useState<ActivityItem | null>(null);
   const [giveTo, setGiveTo] = useState<{ id: string; name: string; avatar: unknown } | null>(null);
@@ -306,7 +308,6 @@ export function Game({ state }: { state: GameState }) {
   const rooms = useRooms(state.round?.id ?? null, state.me.guest ? null : { id: state.me.id, name: state.me.name ?? "Player", avatar: state.me.avatar }, {
     onRideEnd: () => {
       setRide(null);
-      setJunction(null);
     },
   });
   const meP = useMemo(() => (state.me.guest ? null : { id: state.me.id, name: state.me.name ?? "Player", avatar: state.me.avatar as unknown }), [state.me.guest, state.me.id, state.me.name, state.me.avatar]);
@@ -355,18 +356,20 @@ export function Game({ state }: { state: GameState }) {
   const eventOn = (key: string) => liveEvents.some((w) => w.key === key);
   const quietNow = eventOn("quiet_hour");
   const [focusEvent, setFocusEvent] = useState<{ id: number; at: number } | null>(null);
+  // Fly the camera to an event (stepping out of any building or ride first).
   function flyToEvent(id: number) {
     setToasts([]);
-    setViewMode("game");
+    if (place || ride !== null) leaveRoom();
     setFocusEvent({ id, at: Date.now() });
-    const w = state.worldEvents.find((x) => x.id === id);
-    const kind = w ? WORLD_EVENT_BY_KEY[w.key] : null;
-    if (kind?.reward && w && !w.claimed && (w.slotsLeft ?? 0) > 0) {
-      setMessage({ icon: Coins, text: `${kind.title}: tap it in the city to grab ${kind.reward.coins} coins!`, tone: "good" });
-    }
+  }
+  // What's happening, where, for how long, and any coins to grab.
+  const [eventInfo, setEventInfo] = useState<number | null>(null);
+  function openEvent(id: number) {
+    flyToEvent(id);
+    setEventInfo(id);
   }
   async function onEventTap(id: number) {
-    if (guest) return setMessage({ text: "Sign in to grab event rewards.", tone: "info" });
+    if (guest) return setSignInWhy("Sign in to grab event rewards before anyone else does.");
     const res = await claimWorldEvent(id).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
     if (res.ok) {
       playSfx("pop");
@@ -570,12 +573,23 @@ export function Game({ state }: { state: GameState }) {
     recordVisit();
   }, []);
 
-  // Keep the board live: fetch fresh state every few seconds.
+  // Keep the board live: fetch fresh state every few seconds (never two at once: on a slow
+  // connection they'd pile up and time out).
+  const [refreshing, startRefresh] = useTransition();
+  // When the refresh in flight started (0 = none); one stuck for 20 s no longer blocks the next.
+  const refreshingSince = useRef(0);
   useEffect(() => {
-    const id = setInterval(() => {
-      if (document.visibilityState === "visible") router.refresh();
-    }, 4000);
-    const onVisible = () => document.visibilityState === "visible" && router.refresh();
+    if (!refreshing) refreshingSince.current = 0;
+  }, [refreshing]);
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      if (refreshingSince.current && Date.now() - refreshingSince.current < 20_000) return;
+      refreshingSince.current = Date.now();
+      startRefresh(() => router.refresh());
+    };
+    const id = setInterval(refresh, 4000);
+    const onVisible = () => refresh();
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       clearInterval(id);
@@ -724,7 +738,6 @@ export function Game({ state }: { state: GameState }) {
       if (!res.ok) return setMessage({ text: res.reason === "full" ? `${info.name} is full right now. Try another floor!` : "Sign in to chat here.", tone: "info" });
     }
     setRide(null);
-    setJunction(null);
     setPlaceRoom(room);
     setPlace({ building: room.id, level: level.id });
     setMessage({
@@ -739,7 +752,6 @@ export function Game({ state }: { state: GameState }) {
   function boardRide(r: { kind: RideKindName; index: number; name: string; capacity: number }) {
     setPickRide(false);
     setPlace(null);
-    setJunction(null);
     setActivity(null);
     const info = RIDE_INFO[r.kind];
     if (!guest) {
@@ -763,7 +775,6 @@ export function Game({ state }: { state: GameState }) {
     rooms.leave();
     setRide(null);
     setPlace(null);
-    setJunction(null);
     setActivity(null);
   }
   // A ride that ends by itself (the water slide's splash).
@@ -775,13 +786,9 @@ export function Game({ state }: { state: GameState }) {
       setMessage({ icon: RIDE_ICONS.slide, text: "SPLASH! What a ride. Go again?", tone: "good" });
     }
   }
-  function steerCar(dir: TurnDir) {
-    setSteer({ dir, at: Date.now() });
-    setJunction(null);
-  }
   // Inside a place: something glowing was tapped (a seat, the bar, darts, the DJ deck...).
   function onInteract(item: CityInteract) {
-    if (guest) return setMessage({ text: "Sign in to sit down, play games and order food here.", tone: "info" });
+    if (guest) return setSignInWhy(item.kind === "seat" ? "Sign in to sit down here." : `Sign in to use the ${item.label.toLowerCase() || "games"} here: play games, order food, sit down and chat with people.`);
     if (item.kind === "seat") {
       if (rooms.mySeat === item.id) return setActivity(item);
       const res = rooms.sit(item.id);
@@ -925,58 +932,68 @@ export function Game({ state }: { state: GameState }) {
   }
 
   async function signOut() {
-    await createClient().auth.signOut();
-    router.push("/");
-    router.refresh();
+    if (signingOut) return;
+    setSigningOut(true);
+    // Sign out on the server (clears the login cookies) and in this browser at the same time,
+    // but never wait more than a few seconds; then load the city fresh.
+    const wait = new Promise((r) => setTimeout(r, 4000));
+    await Promise.race([Promise.allSettled([signOutNow(), createClient().auth.signOut({ scope: "local" })]), wait]);
+    // A full page load (not a quick in-app hop) so nothing from the old account lingers.
+    window.location.replace(new URL("/", window.location.origin).href);
   }
 
 
   return (
     <main className="fixed inset-0 overflow-hidden bg-bg">
       {round && (
-        <CityView
-          seed={round.id}
-          tileCount={round.tileCount}
-          markers={markers}
-          events={cityEvents}
-          interactive={canTap || viewMode === "chat"}
-          onTile={onTile}
-          onBillboard={onBillboardTap}
-          ads={ads}
-          onAdViews={onAdViews}
-          mode={viewMode}
-          roomCounts={rooms.buildingCounts}
-          onRoom={onRoom}
-          ride={ride}
-          onRides={setRides}
-          onRideEnd={onRideEnd}
-          steer={steer}
-          onJunction={setJunction}
-          onInteract={onInteract}
-          seats={rooms.seats}
-          mySeat={rooms.mySeat}
-          place={place}
-          onNpc={(id: string) => {
-            setNpcTap({ id, at: Date.now() });
-          }}
-          onBalloons={setBalloonCount}
-          revealed={phase !== "join"}
-          caughtFaces={state.caughtFaces}
-          worldEvents={state.worldEvents}
-          focusEvent={focusEvent}
-          onEventTap={onEventTap}
-          clockOffsetMs={clockOffset}
-          onHover={setHover}
-          meAvatar={me.avatar}
-          coinBalloon={state.balloon?.slot ?? null}
-          onBalloon={popBalloon}
-          progress={huntProgress}
-          nightFirst={round.id % 2 === 1}
-        />
+        <Safe name="City view" fallback={<div className="absolute inset-0 grid place-items-center text-muted">Rebuilding the city…</div>}>
+          <CityView
+            seed={round.id}
+            tileCount={round.tileCount}
+            markers={markers}
+            events={cityEvents}
+            interactive={canTap || viewMode === "chat"}
+            onTile={onTile}
+            onBillboard={onBillboardTap}
+            ads={ads}
+            onAdViews={onAdViews}
+            mode={viewMode}
+            roomCounts={rooms.buildingCounts}
+            onRoom={onRoom}
+            ride={ride}
+            onRides={setRides}
+            onRideEnd={onRideEnd}
+            onInteract={onInteract}
+            seats={rooms.seats}
+            mySeat={rooms.mySeat}
+            place={place}
+            onNpc={(id: string) => {
+              if (guest) return setSignInWhy("Sign in to chat with the people here.");
+              setNpcTap({ id, at: Date.now() });
+            }}
+            onBalloons={setBalloonCount}
+            revealed={phase !== "join"}
+            caughtFaces={state.caughtFaces}
+            worldEvents={state.worldEvents}
+            focusEvent={focusEvent}
+            onEventTap={onEventTap}
+            clockOffsetMs={clockOffset}
+            onHover={setHover}
+            meAvatar={me.avatar}
+            coinBalloon={state.balloon?.slot ?? null}
+            onBalloon={popBalloon}
+            progress={huntProgress}
+            nightFirst={round.id % 2 === 1}
+          />
+        </Safe>
       )}
 
       {/* Inside a place: money spraying, the jukebox, duel invites and room news. */}
-      {meP && rooms.myRoom && <RoomActivityLayer roundId={round?.id ?? null} roomId={rooms.myRoom} me={meP} />}
+      {meP && rooms.myRoom && (
+        <Safe name="Room activity">
+          <RoomActivityLayer roundId={round?.id ?? null} roomId={rooms.myRoom} me={meP} />
+        </Safe>
+      )}
 
       {/* The world's last minutes: a red glow around the edges. */}
       {(urgent || eventOn("final_countdown")) && (
@@ -1078,7 +1095,7 @@ export function Game({ state }: { state: GameState }) {
             <button
               key={n.key}
               onClick={() => {
-                if (n.eventId) return flyToEvent(n.eventId);
+                if (n.eventId) return openEvent(n.eventId);
                 setFeedOpen(true);
                 setFeedSeenAt(new Date(now).toISOString());
                 setToasts([]);
@@ -1096,7 +1113,7 @@ export function Game({ state }: { state: GameState }) {
           onClose={() => setFeedOpen(false)}
           onPick={(f) => {
             setFeedOpen(false);
-            if (f.eventId) flyToEvent(f.eventId);
+            if (f.eventId) openEvent(f.eventId);
           }}
         />
       )}
@@ -1177,6 +1194,10 @@ export function Game({ state }: { state: GameState }) {
       {confirmHide && round && (
         <Sheet onClose={() => setConfirmHide(false)}>
           <h2 className="flex items-center gap-2 font-display text-xl font-bold"><Ghost className="size-5 text-me" />Be a ghost this round?</h2>
+          <p className="mt-1 flex items-center gap-1.5 text-sm font-semibold">
+            <Timer className="size-4 text-gold-dark" />
+            The hunt starts in <span className="tabular-nums">{countdown}</span>
+          </p>
           <div className="mt-3 rounded-2xl bg-panel-2 p-4 text-center">
             <p className="text-sm text-muted">You&apos;re putting down</p>
             <p className="font-display text-4xl font-extrabold">{short(state.prices.stake)} coins</p>
@@ -1193,7 +1214,7 @@ export function Game({ state }: { state: GameState }) {
               disabled={busy}
               onClick={() => {
                 setConfirmHide(false);
-                act(() => joinRound("hider"), () => setMessage({ icon: Ghost, text: "You're in! When the clock hits zero, we'll drop you somewhere in the city.", tone: "info" }));
+                act(() => joinRound("hider"), () => setMessage({ icon: Ghost, text: `You're in! The hunt starts in ${countdown}: then we'll drop you somewhere secret in the city.`, tone: "info" }));
               }}
               className="flex w-full items-center justify-center gap-2 rounded-2xl bg-ink px-4 py-3.5 text-white disabled:opacity-50"
             >
@@ -1241,7 +1262,7 @@ export function Game({ state }: { state: GameState }) {
       )}
 
       {confirmSignOut && (
-        <Sheet onClose={() => setConfirmSignOut(false)}>
+        <Sheet onClose={() => !signingOut && setConfirmSignOut(false)}>
           <h2 className="font-display text-xl font-bold">Sign out?</h2>
           <p className="mt-1 text-sm text-muted">
             {isHider && entry && !entry.caught
@@ -1249,16 +1270,76 @@ export function Game({ state }: { state: GameState }) {
               : "You can sign back in any time with your email and PIN."}
           </p>
           <div className="mt-4 flex gap-2">
-            <button onClick={() => setConfirmSignOut(false)} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold">
+            <button onClick={() => setConfirmSignOut(false)} disabled={signingOut} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold disabled:opacity-50">
               Stay
             </button>
-            <button onClick={signOut} className="flex-1 rounded-xl bg-ink py-2.5 font-semibold text-white">
-              Sign out
+            <button
+              onClick={signOut}
+              disabled={signingOut}
+              aria-busy={signingOut}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-ink py-2.5 font-semibold text-white disabled:opacity-80"
+            >
+              {signingOut && <span className="size-4 animate-spin rounded-full border-2 border-white/30 border-t-white" aria-hidden />}
+              {signingOut ? "Signing out…" : "Sign out"}
             </button>
           </div>
         </Sheet>
       )}
 
+      {eventInfo !== null && (
+        <EventInfoSheet
+          event={state.worldEvents.find((w) => w.id === eventInfo) ?? null}
+          now={now}
+          where={where}
+          onClose={() => setEventInfo(null)}
+          onShow={() => {
+            flyToEvent(eventInfo);
+            setEventInfo(null);
+          }}
+          onGrab={() => {
+            const id = eventInfo;
+            setEventInfo(null);
+            void onEventTap(id);
+          }}
+        />
+      )}
+      {signInWhy && (
+        <Sheet onClose={() => setSignInWhy(null)}>
+          <h2 className="flex items-center gap-2 font-display text-xl font-bold">
+            <Lock className="size-5 text-gold-dark" />
+            Sign in to join in
+          </h2>
+          <p className="mt-1 text-sm text-muted">{signInWhy}</p>
+          <p className="mt-2 text-sm text-muted">It&apos;s free: just your email and a PIN. 18+ only.</p>
+          <div className="mt-4 flex gap-2">
+            <button onClick={() => setSignInWhy(null)} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold">
+              Keep watching
+            </button>
+            <Link href="/login" className="flex-1 rounded-xl bg-gold py-2.5 text-center font-semibold text-ink">
+              Sign in
+            </Link>
+          </div>
+        </Sheet>
+      )}
+      {houseSoon && (
+        <Sheet onClose={() => setHouseSoon(false)}>
+          <p className="text-xs font-bold uppercase tracking-wide text-[#7048e8]">Coming soon</p>
+          <h2 className="flex items-center gap-2 font-display text-xl font-bold">
+            <House className="size-5 text-[#7048e8]" />
+            Your own house in the city
+          </h2>
+          <ul className="mt-3 space-y-1.5 text-sm text-ink/80">
+            <Li icon={House}>Get your own place that shows up in the busiest parts of every city.</Li>
+            <Li icon={Sparkles}>Design it your way and fill it with furniture.</Li>
+            <Li icon={Users}>Invite people round: they can walk in, sit down and chat.</Li>
+            <Li icon={Building2}>Turn it into a studio for your business, with your contacts on the wall.</Li>
+            <Li icon={Trophy}>Start small and grow it into a mansion as you level up.</Li>
+          </ul>
+          <button onClick={() => setHouseSoon(false)} className="mt-4 w-full rounded-xl bg-ink py-2.5 font-semibold text-white">
+            Can&apos;t wait
+          </button>
+        </Sheet>
+      )}
       {pickPlace && (
         <Sheet onClose={() => setPickPlace(null)}>
           <h2 className="flex items-center gap-2 font-display text-xl font-bold">
@@ -1347,34 +1428,42 @@ export function Game({ state }: { state: GameState }) {
         </Sheet>
       )}
       {activity && rooms.myRoom && (
-        <ActivitySheet
-          item={activity}
-          roomId={activity.place}
-          me={meP}
-          members={rooms.members}
-          roundId={round?.id ?? null}
-          onClose={() => setActivity(null)}
-          seating={rooms}
-          onUseStairs={
-            placeRoom && (placeRoom.levels?.length ?? 0) > 1
-              ? () => {
-                  setActivity(null);
-                  setPickPlace(placeRoom);
-                }
-              : undefined
-          }
-        />
+        <Safe name="Activity">
+          <ActivitySheet
+            item={activity}
+            roomId={activity.place}
+            me={meP}
+            members={rooms.members}
+            roundId={round?.id ?? null}
+            onClose={() => setActivity(null)}
+            seating={rooms}
+            onUseStairs={
+              placeRoom && (placeRoom.levels?.length ?? 0) > 1
+                ? () => {
+                    setActivity(null);
+                    setPickPlace(placeRoom);
+                  }
+                : undefined
+            }
+          />
+        </Safe>
       )}
       {giveTo && (
-        <GiveCoinsSheet
-          to={giveTo}
-          onClose={() => {
-            setGiveTo(null);
-            startTransition(() => router.refresh());
-          }}
-        />
+        <Safe name="Give coins">
+          <GiveCoinsSheet
+            to={giveTo}
+            onClose={() => {
+              setGiveTo(null);
+              startTransition(() => router.refresh());
+            }}
+          />
+        </Safe>
       )}
-      {questOpen && <QuestSheet quest={quests.quest} onClose={() => setQuestOpen(false)} players={rooms.members.filter((m) => m.id !== me.id)} />}
+      {questOpen && (
+        <Safe name="Quest card">
+          <QuestSheet quest={quests.quest} onClose={() => setQuestOpen(false)} players={rooms.members.filter((m) => m.id !== me.id)} />
+        </Safe>
+      )}
       {adExplainer && (
         <Sheet onClose={() => setAdExplainer(false)}>
           <AdvertiseExplainer onClose={() => setAdExplainer(false)} />
@@ -1524,7 +1613,17 @@ export function Game({ state }: { state: GameState }) {
 
       {/* Bottom: messages, controls and chat */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-2 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
-        {!guest && <QuestBanner quest={quests.quest} onOpen={() => setQuestOpen(true)} />}
+        {!guest && (
+          <Safe name="Quest banner">
+            <QuestBanner quest={quests.quest} onOpen={() => setQuestOpen(true)} />
+          </Safe>
+        )}
+        {busy && !message && (
+          <p className="glass flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold" role="status">
+            <span className="size-3.5 animate-spin rounded-full border-2 border-line border-t-gold" aria-hidden />
+            Working on it…
+          </p>
+        )}
         {message && (
           <p
             className={cn(
@@ -1574,26 +1673,28 @@ export function Game({ state }: { state: GameState }) {
             <span />
           )}
           {round && (
-            <Chat
-              meId={me.id}
-              meRole={entry?.role ?? null}
-              roundId={round.id}
-              players={state.players}
-              open={chatOpen}
-              onOpenChange={setChatOpen}
-              room={rooms.myRoomInfo}
-              roomMembers={rooms.members}
-              roomCount={rooms.myRoom ? (rooms.counts[rooms.myRoom] ?? 0) : 0}
-              onLeaveRoom={leaveRoom}
-              guest={guest}
-              rideEndsAt={rooms.rideEndsAt}
-              botName={botName}
-              botBounty={200}
-              dmRequest={dmRequest}
-              externalNpc={npcTap}
-              enteredAt={rooms.enteredAt}
-              onGiveCoins={guest ? undefined : setGiveTo}
-            />
+            <Safe name="Chat">
+              <Chat
+                meId={me.id}
+                meRole={entry?.role ?? null}
+                roundId={round.id}
+                players={state.players}
+                open={chatOpen}
+                onOpenChange={setChatOpen}
+                room={rooms.myRoomInfo}
+                roomMembers={rooms.members}
+                roomCount={rooms.myRoom ? (rooms.counts[rooms.myRoom] ?? 0) : 0}
+                onLeaveRoom={leaveRoom}
+                guest={guest}
+                rideEndsAt={rooms.rideEndsAt}
+                botName={botName}
+                botBounty={200}
+                dmRequest={dmRequest}
+                externalNpc={npcTap}
+                enteredAt={rooms.enteredAt}
+                onGiveCoins={guest ? undefined : setGiveTo}
+              />
+            </Safe>
           )}
         </div>
 
@@ -1614,34 +1715,19 @@ export function Game({ state }: { state: GameState }) {
                       </b>
                       <span className="text-xs text-muted">
                         {guest
-                          ? "Watching. Sign in to chat here."
+                          ? "Watching. Sign in to chat, sit down and play here."
                           : `${Math.max(0, (rooms.myRoom ? rooms.counts[rooms.myRoom] : 1) ?? 1)} here · ${place ? (rooms.mySeat ? "you're sitting down" : "tap the floor to walk, glowing things to use them") : "drag to look around"}`}
                       </span>
                     </span>
                   </p>
-                  {ride?.kind === "car" && junction && junction.length > 0 && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-muted">Junction ahead:</span>
-                      {(["left", "straight", "right"] as const)
-                        .filter((d) => junction.includes(d))
-                        .map((d) => {
-                          const Icon = d === "left" ? ArrowLeft : d === "right" ? ArrowRight : ArrowUp;
-                          return (
-                            <button key={d} onClick={() => steerCar(d)} className="flex items-center gap-1 rounded-xl bg-[#12a37a] px-3 py-1.5 text-sm font-semibold capitalize text-white">
-                              <Icon className="size-4" />
-                              {d}
-                            </button>
-                          );
-                        })}
-                    </div>
-                  )}
                   <div className="flex flex-wrap gap-2">
-                    {!guest && (
-                      <button onClick={() => setChatOpen(true)} className="flex items-center gap-1.5 rounded-xl bg-ink px-3 py-2 font-semibold text-white">
-                        <MessageCircle className="size-4" />
-                        Chat
-                      </button>
-                    )}
+                    <button
+                      onClick={() => (guest ? setSignInWhy("Sign in to chat with the people here, sit down, play games and order food.") : setChatOpen(true))}
+                      className="flex items-center gap-1.5 rounded-xl bg-ink px-3 py-2 font-semibold text-white"
+                    >
+                      <MessageCircle className="size-4" />
+                      Chat
+                    </button>
                     {rooms.mySeat && (
                       <button onClick={() => rooms.stand()} className="flex items-center gap-1.5 rounded-xl bg-panel-2 px-3 py-2 font-semibold">
                         <Armchair className="size-4" />
@@ -1656,7 +1742,7 @@ export function Game({ state }: { state: GameState }) {
                     )}
                     <button onClick={leaveRoom} className="flex items-center gap-1.5 rounded-xl bg-panel-2 px-3 py-2 font-semibold">
                       <LogOut className="size-4" />
-                      {ride?.kind === "car" ? "Park & get out" : ride !== null ? "Get off" : "Leave"}
+                      {ride !== null ? "Get off" : "Leave"}
                     </button>
                   </div>
                 </>
@@ -1672,10 +1758,17 @@ export function Game({ state }: { state: GameState }) {
                       wheel or water slide. The numbers show who&apos;s there.
                     </span>
                   </p>
-                  <button onClick={() => setPickRide(true)} className="flex items-center gap-1.5 rounded-xl bg-[#e64980] px-3 py-2 font-semibold text-white">
-                    <HotAirBalloon className="size-4" />
-                    Hop on a ride
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={() => setPickRide(true)} className="flex items-center gap-1.5 rounded-xl bg-[#e64980] px-3 py-2 font-semibold text-white">
+                      <HotAirBalloon className="size-4" />
+                      Hop on a ride
+                    </button>
+                    <button onClick={() => setHouseSoon(true)} className="flex items-center gap-1.5 rounded-xl bg-panel-2 px-3 py-2 font-semibold">
+                      <House className="size-4 text-[#7048e8]" />
+                      My house
+                      <span className="rounded-full bg-[#7048e8] px-1.5 py-0.5 text-[9px] font-bold uppercase text-white">Soon</span>
+                    </button>
+                  </div>
                 </>
               )}
             </div>
@@ -1732,12 +1825,22 @@ export function Game({ state }: { state: GameState }) {
               )}
             </div>
           ) : phase === "join" ? (
-            <p className="text-sm text-muted">
-              {isHider
-                ? "You're in. When the clock hits zero you'll be dropped somewhere random."
-                : "You're hunting. It starts when the clock hits zero."}{" "}
-              Watch the city grow as people join.
-            </p>
+            <div className="flex items-center gap-3">
+              <span className={cn("grid size-11 shrink-0 place-items-center rounded-full text-white", isHider ? "bg-ink" : "bg-gold-dark")}>
+                {isHider ? <Ghost className="size-6" /> : <Flashlight className="size-6" />}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">{isHider ? "You're a ghost this round" : "You're hunting this round"}</p>
+                <p className={cn("font-display text-2xl font-extrabold tabular-nums leading-tight", (joinLeft ?? 99) <= 10 && "animate-pulse text-hit")}>
+                  Hunt starts in {countdown}
+                </p>
+                <p className="text-xs text-muted">
+                  {isHider
+                    ? "When it hits zero you'll be dropped somewhere secret. Watch the city grow as people join."
+                    : "When it hits zero, start searching. Watch the city grow as people join."}
+                </p>
+              </div>
+            </div>
           ) : isSeeker ? (
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -1864,7 +1967,6 @@ export function Game({ state }: { state: GameState }) {
                 </p>
               )}
               <p className="text-xs text-muted">
-                That&apos;s your face over your hiding spot.{" "}
                 {entry.moves < entry.movesAllowed
                   ? `You have ${entry.movesAllowed - entry.moves} move${entry.movesAllowed - entry.moves === 1 ? "" : "s"} left this game: tap another spot to use it.`
                   : "You've used your moves for this game. Stay hidden!"}
@@ -1923,6 +2025,90 @@ function ModeButton({ on, onClick, children }: { on: boolean; onClick: () => voi
 }
 
 /** A list line with an icon in front (used in the pop-ups). */
+const EVENT_STYLE: Record<string, { label: string; colour: string }> = {
+  emergency: { label: "Emergency", colour: "#e5484d" },
+  weather: { label: "Weather", colour: "#1c7ed6" },
+  party: { label: "Party", colour: "#e64980" },
+  transport: { label: "Transport", colour: "#f08c00" },
+  city: { label: "City life", colour: "#12a37a" },
+  mystery: { label: "Mystery", colour: "#7048e8" },
+  twist: { label: "Rule twist", colour: "#c98a00" },
+};
+
+/** A world event's card: what's going on, where, time left, and its coins if it has any. */
+function EventInfoSheet({
+  event,
+  now,
+  where,
+  onClose,
+  onShow,
+  onGrab,
+}: {
+  event: GameState["worldEvents"][number] | null;
+  now: number;
+  where: (tile: number) => string;
+  onClose: () => void;
+  onShow: () => void;
+  onGrab: () => void;
+}) {
+  const kind = event ? WORLD_EVENT_BY_KEY[event.key] : null;
+  if (!event || !kind) return null;
+  const style = EVENT_STYLE[kind.category] ?? EVENT_STYLE.city;
+  const starts = Date.parse(event.startsAt);
+  const ends = Date.parse(event.endsAt);
+  const live = now >= starts && now < ends;
+  const news = kind.news.replace("{place}", where(event.tile)).replace("{name}", event.name ?? "a ghost");
+  const slots = event.slotsLeft ?? kind.reward?.slots ?? 0;
+  const canGrab = !!kind.reward && live && !event.claimed && slots > 0;
+  return (
+    <Sheet onClose={onClose}>
+      <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide" style={{ color: style.colour }}>
+        <span className="rounded-full px-2 py-0.5 text-white" style={{ background: style.colour }}>
+          {style.label}
+        </span>
+        {live ? (
+          <span className="flex items-center gap-1">
+            <span className="size-2 animate-pulse rounded-full" style={{ background: style.colour }} />
+            On now · ends in {clock(ends - now)}
+          </span>
+        ) : now < starts ? (
+          `Starts in ${clock(starts - now)}`
+        ) : (
+          "Over"
+        )}
+      </p>
+      <h2 className="mt-2 font-display text-xl font-bold">{kind.title}</h2>
+      <p className="mt-1 text-sm text-ink/80">{news}</p>
+      <p className="mt-2 flex items-center gap-1.5 text-sm text-muted">
+        <MapPin className="size-4 shrink-0" />
+        {kind.twist && !kind.radius ? "Everywhere in the city" : where(event.tile)}
+      </p>
+      {kind.reward && (
+        <p className="mt-2 rounded-xl bg-gold/25 px-3 py-2 text-sm font-semibold text-gold-dark">
+          <Coins className="mr-1 inline size-4 align-[-0.15em]" />
+          {event.claimed
+            ? "You grabbed this one."
+            : slots > 0
+              ? `${kind.reward.coins} coins for the first ${kind.reward.slots === 1 ? "person" : `${kind.reward.slots} people`} to tap it. ${slots} left.`
+              : "All grabbed. Be quicker next time!"}
+        </p>
+      )}
+      <div className="mt-4 flex gap-2">
+        <button onClick={onShow} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-panel-2 py-2.5 font-semibold">
+          <MapPin className="size-4" />
+          Show me
+        </button>
+        {canGrab && (
+          <button onClick={onGrab} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gold py-2.5 font-semibold text-ink">
+            <Coins className="size-4" />
+            Grab {kind.reward!.coins} coins
+          </button>
+        )}
+      </div>
+    </Sheet>
+  );
+}
+
 function Li({ icon: Icon, children }: { icon: LucideIcon; children: React.ReactNode }) {
   return (
     <li className="flex gap-2">
