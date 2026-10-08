@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import type { RoundResults } from "@/lib/game";
 import { BadgeTile } from "@/components/badges";
+import { Bot, Medal, X } from "@/components/icons";
 import { cn } from "@/lib/cn";
 import { short } from "@/lib/format";
 
@@ -30,8 +31,8 @@ export function Results({ results: r, onClose, me, city }: { results: RoundResul
               {survived <= 0 ? "Everyone got found!" : `${short(survived)} ghost${survived === 1 ? "" : "s"} made it`}
             </h2>
           </div>
-          <button onClick={onClose} className="rounded-full px-2 text-2xl text-muted" aria-label="Close">
-            ×
+          <button onClick={onClose} className="grid size-9 shrink-0 place-items-center rounded-full text-muted hover:bg-panel-2" aria-label="Close">
+            <X className="size-6" />
           </button>
         </div>
 
@@ -58,7 +59,10 @@ export function Results({ results: r, onClose, me, city }: { results: RoundResul
 
         {mine && mine.badges.length > 0 && (
           <div className="mt-3 rounded-2xl bg-gradient-to-br from-[#18202b] to-[#3b2f6b] p-3 text-white">
-            <p className="px-1 text-sm font-semibold">🏅 New badge{mine.badges.length > 1 ? "s" : ""}! Tap one to see it and share it.</p>
+            <p className="flex items-center gap-1.5 px-1 text-sm font-semibold">
+              <Medal className="size-4 shrink-0 text-gold" />
+              New badge{mine.badges.length > 1 ? "s" : ""}! Tap one to see it and share it.
+            </p>
             <div className="mt-1 grid grid-cols-3 gap-1 [&_.text-muted]:text-white/70 [&_button:hover]:bg-white/10">
               {mine.badges.map((b) => (
                 <BadgeTile key={b.badge} badge={b.badge} player={me} city={city} detail={b.detail} at={endedAt} hint="Tap to open" />
@@ -75,7 +79,8 @@ export function Results({ results: r, onClose, me, city }: { results: RoundResul
         </div>
 
         <p className="mt-3 rounded-xl bg-panel-2 px-3 py-2 text-sm">
-          🤖 {r.botName}:{" "}
+          <Bot className="mr-1.5 inline-block size-4 align-[-0.2em] text-muted" />
+          {r.botName}:{" "}
           {r.botFoundBy ? (
             <>
               found by <b>{r.botFoundBy}</b> (+200)

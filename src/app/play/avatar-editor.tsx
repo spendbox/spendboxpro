@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { AvatarFace } from "@/components/avatar";
+import { Dices } from "@/components/icons";
 import { AVATAR_PARTS, BG, HAIR_COLOR, SKIN, TOP_COLOR, type Avatar } from "@/lib/avatar";
 import { cn } from "@/lib/cn";
 import { saveAvatar } from "./profile-actions";
@@ -79,8 +80,9 @@ export function AvatarEditor({ initial, onClose, onSaved }: { initial: Avatar; o
         <div className="flex-1">
           <h2 className="font-display text-xl font-bold">Your look</h2>
           <p className="text-sm text-muted">Other players see this in chat, on the scoreboard and when you&apos;re caught.</p>
-          <button onClick={randomise} className="mt-2 rounded-lg bg-panel-2 px-3 py-1.5 text-sm font-medium">
-            🎲 Surprise me
+          <button onClick={randomise} className="mt-2 flex items-center gap-1.5 rounded-lg bg-panel-2 px-3 py-1.5 text-sm font-medium">
+            <Dices className="size-4" />
+            Surprise me
           </button>
         </div>
       </div>

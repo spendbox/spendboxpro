@@ -3,22 +3,57 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-// Who is inside which place (building or hot-air balloon), live, using ONE Supabase Realtime
-// presence channel per round ("rooms:<roundId>"). Each player in a place shares
-// { room, name, avatar, at }; everyone adds the counts up in their own browser.
+// Who is inside which place, live, using ONE Supabase Realtime presence channel per round
+// ("rooms:<roundId>"). A place is one level of a building (ground "b:<tile>:g", floor n
+// "b:<tile>:f<n>", rooftop "b:<tile>:r") or a hot-air balloon ("balloon:<k>"). Each player in a
+// place shares { room, name, avatar, at }; everyone adds the counts up in their own browser.
 // Watchers who aren't signed in still see the counts but can't go in.
 
 /** A balloon ride lasts this long, then you're dropped back in the city. */
 export const RIDE_MS = 10 * 60 * 1000;
 
-export type RoomInfo = { id: string; name: string; capacity: number; kind: "building" | "balloon" };
+export type RoomInfo = {
+  /** "b:<tile>:g" | "b:<tile>:f<n>" | "b:<tile>:r" | "balloon:<k>" (old "b:<tile>" still works). */
+  id: string;
+  /** e.g. "Lekki Tower · Floor 4" or "Balloon 2". */
+  name: string;
+  capacity: number;
+  kind: "building" | "balloon";
+  /** Building levels: "g" (ground), "f<n>" (floor n, 1 … 200) or "r" (rooftop). */
+  level?: string;
+  /** Building levels: the whole building's key, "b:<tile>". */
+  building?: string;
+};
 export type RoomMember = { id: string; name: string; avatar: unknown };
 type Meta = { room: string | null; name: string; avatar: unknown; at: number };
 
-/** Room id for a building tile. */
+/** Key for a whole building (what its levels add up to in buildingCounts). */
 export const buildingRoom = (tile: number) => `b:${tile}`;
+/** Room id for one level of a building: "g" (ground), "f<n>" (floor n) or "r" (rooftop). */
+export const levelRoom = (tile: number, level: string) => `b:${tile}:${level}`;
 /** Room id for balloon k (0 … 50). */
 export const balloonRoom = (k: number) => `balloon:${k}`;
+
+/** The whole building a room belongs to ("b:12:f4" → "b:12"); balloons stay as they are. */
+export function buildingOf(roomId: string) {
+  const m = /^(b:\d+):/.exec(roomId);
+  return m ? m[1] : roomId;
+}
+
+/** The level part of a building room ("b:12:f4" → "f4"), or null. */
+export function levelOf(roomId: string) {
+  const m = /^b:\d+:(g|r|f\d+)$/.exec(roomId);
+  return m ? m[1] : null;
+}
+
+/** "Ground floor", "Floor 4", "Rooftop" (or "" for no level). */
+export function levelLabel(level: string | null | undefined) {
+  if (!level) return "";
+  if (level === "g") return "Ground floor";
+  if (level === "r") return "Rooftop";
+  const n = /^f(\d+)$/.exec(level);
+  return n ? `Floor ${Number(n[1])}` : "";
+}
 
 /** "7:42" for a number of milliseconds (never below 0:00). */
 export function formatCountdown(ms: number) {
@@ -114,9 +149,24 @@ export function useRooms(
     return c;
   }, [people]);
 
+  // Every level of a building added up ("b:<tile>"), for the numbers over buildings on the map.
+  const buildingCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const [room, n] of Object.entries(counts)) {
+      const key = buildingOf(room);
+      c[key] = (c[key] ?? 0) + n;
+    }
+    return c;
+  }, [counts]);
+
   const enter = useCallback(
-    (room: RoomInfo): { ok: boolean; reason?: "full" | "signed_out" } => {
+    (place: RoomInfo): { ok: boolean; reason?: "full" | "signed_out" } => {
       if (!meRef.current) return { ok: false, reason: "signed_out" };
+      // Each level is its own room (with its own capacity); fill in its building and level from the id if missing.
+      const room: RoomInfo =
+        place.kind === "building"
+          ? { ...place, building: place.building ?? buildingOf(place.id), level: place.level ?? levelOf(place.id) ?? undefined }
+          : place;
       const c = currentRef.current;
       if (c?.room.id === room.id && c.round === roundId) return { ok: true };
       const inside = peopleRef.current.filter((p) => p.room === room.id && p.id !== meRef.current?.id).length;
@@ -178,12 +228,16 @@ export function useRooms(
   );
 
   return {
-    /** How many people are in each place right now, by room id. */
+    /** How many people are in each place right now, by room id (each building level on its own). */
     counts,
+    /** How many people are in each whole building ("b:<tile>", every level added up) and each balloon. */
+    buildingCounts,
     /** The room id you're in, or null. */
     myRoom,
-    /** Full details of where you are (name, capacity, kind), or null. */
+    /** Full details of where you are (name, capacity, kind, level, building), or null. */
     myRoomInfo: myPlace?.room ?? null,
+    /** When you went into your place (ms timestamp), or null. */
+    enteredAt: myPlace?.at ?? null,
     /** When your balloon ride ends (ms timestamp), or null. */
     rideEndsAt,
     /** False for watchers who aren't signed in. */

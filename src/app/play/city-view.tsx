@@ -10,11 +10,18 @@ import { cleanAvatar, type Avatar } from "@/lib/avatar";
 import { addressOf, hash, KIND_LABEL, makePlan, riverCentre, smoothNoise, spiralXY, STRUCTURE_LABEL, tileAt, type CityPlan, type Tile } from "@/lib/city/layout";
 import { ABBREV } from "@/lib/city/places";
 import { daylight, weatherAt } from "@/lib/city/sky";
+import { npcsFor, type Npc } from "@/lib/npcs";
 import { createBirds } from "./city/birds";
 import { createBuildingSite, createSites } from "./city/construction";
+import { createFigures, type Figures } from "./city/figures";
 import { coolingTowerGeometry, createPlumes, industryParts } from "./city/industry";
+import { createInterior, type Interior } from "./city/interiors";
+import { disposeBlobTexture, disposeKitCaches } from "./city/kit";
+import { EYE, levelsOf, METRES, ROOM_LABEL, type PlaceLevel } from "./city/levels";
+import { createLookControls } from "./city/look-controls";
 import { createPeople } from "./city/people";
-import { balloonBannerTexture, billboardTexture, disposePills, pillTexture } from "./city/textures";
+import { createBasket, createDeck, createOpenAir, type Deck } from "./city/rooftops";
+import { balloonBannerTexture, billboardTexture, botTexture, disposePills, pillTexture } from "./city/textures";
 import { createTrains, railParts } from "./city/trains";
 import { BRIDGE_TOP, makeWorld, signalJunction } from "./city/world";
 import { playSfx } from "./sound";
@@ -59,10 +66,21 @@ export type CityEvent = {
 export type CityAd = { id: string; image: string; headline: string; brand: string; link: string | null };
 
 /**
- * A chat room: a building (id "b:<tile index>", the corner tile for big 2×2 buildings) or a
- * hot-air balloon (id "balloon:<k>").
+ * One place inside a building: "g" the ground floor (lobby, living room, shop...), "f<n>" floor n
+ * (a few floors of taller buildings, e.g. "Floor 12 · Sky lounge"), "r" the roof (or a terrace /
+ * deck high up), "o" an open-air spot at street level (parks, plazas, markets...).
  */
-export type CityRoom = { id: string; name: string; capacity: number; kind: "building" | "balloon" };
+export type CityLevel = { id: string; label: string; capacity: number };
+
+/**
+ * A chat room: a building (id "b:<tile index>", the corner tile for big 2×2 buildings) or a
+ * hot-air balloon (id "balloon:<k>"). Buildings list the levels you can go to (capacity is
+ * their total); balloons have none.
+ */
+export type CityRoom = { id: string; name: string; capacity: number; kind: "building" | "balloon"; levels?: CityLevel[] };
+
+/** Where you are inside a building: its room id ("b:<tile>") and a level id from its levels. */
+export type CityPlace = { building: string; level: string };
 
 /** A ghost caught this round: their face stays floating over the spot. */
 export type CaughtFace = { tile: number; name: string | null; avatar: unknown };
@@ -106,6 +124,17 @@ type Props = {
   onBalloons?: (count: number) => void;
   /** Ghosts caught this round (preferred over working it out from events, which get trimmed). */
   caughtFaces?: CaughtFace[];
+  /**
+   * Go inside a building (or onto its roof): the camera flies there and you can look round.
+   * null (default) for the normal view. Takes priority over `ride`.
+   */
+  place?: CityPlace | null;
+  /** One of the regulars (NPCs) standing in the place was tapped: their id from npcsFor(). */
+  onNpc?: (npcId: string) => void;
+  /** Which viewpoint inside the place (0, 1, 2...; wraps round). Default 0. */
+  spot?: number;
+  /** How many viewpoints the current place has (called when you arrive somewhere). */
+  onSpots?: (count: number) => void;
 };
 
 type Part = { tile: number; x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number; color: number; tilt?: number };
@@ -918,6 +947,10 @@ export function CityView({
   ride = null,
   onBalloons,
   caughtFaces,
+  place = null,
+  onNpc,
+  spot = 0,
+  onSpots,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const api = useRef<{
@@ -930,12 +963,14 @@ export function CityView({
     setMode: (m: "game" | "chat") => void;
     setRoomCounts: (counts: Record<string, number>) => void;
     setRide: (k: number | null) => void;
+    setPlace: (p: CityPlace | null) => void;
+    setSpot: (n: number) => void;
     setCaughtFaces: (list: CaughtFace[] | undefined) => void;
   } | null>(null);
-  const cb = useRef({ onTile, onHover, onBillboard, onBalloon, onAdViews, interactive, onRoom, onBalloons, mode });
+  const cb = useRef({ onTile, onHover, onBillboard, onBalloon, onAdViews, interactive, onRoom, onBalloons, mode, onNpc, onSpots });
   const atmos = useRef({ progress, nightFirst, meAvatar });
   useEffect(() => {
-    cb.current = { onTile, onHover, onBillboard, onBalloon, onAdViews, interactive, onRoom, onBalloons, mode };
+    cb.current = { onTile, onHover, onBillboard, onBalloon, onAdViews, interactive, onRoom, onBalloons, mode, onNpc, onSpots };
     atmos.current = { progress, nightFirst, meAvatar };
   });
 
@@ -2001,6 +2036,8 @@ export function CityView({
       basket: THREE.Object3D;
       /** Extra height while you ride it (to clear the tallest towers). */
       lift: number;
+      /** How much it bobs up and down (calms right down while you ride it). */
+      bob: number;
       mat: THREE.MeshLambertMaterial;
       shown: string | null;
       hits: THREE.Object3D[];
@@ -2036,6 +2073,7 @@ export function CityView({
         body,
         basket: rig,
         lift: 0,
+        bob: 1,
         mat,
         shown: null,
         hits: [envelope, band, banner, basket],
@@ -2053,7 +2091,7 @@ export function CityView({
     function balloonPose(b: Balloon, time: number, out: THREE.Vector3, dir?: THREE.Vector3) {
       const R = Math.max(3, radius * b.r);
       const a = b.a;
-      out.set(b.cx + Math.cos(a) * R, b.h + b.lift + Math.sin(time * 0.5 + b.k) * 0.25, b.cz + Math.sin(a) * R * 0.78 + Math.sin(2 * a + b.k) * R * 0.18);
+      out.set(b.cx + Math.cos(a) * R, b.h + b.lift + Math.sin(time * 0.5 + b.k) * 0.25 * b.bob, b.cz + Math.sin(a) * R * 0.78 + Math.sin(2 * a + b.k) * R * 0.18);
       dir?.set(-Math.sin(a) * R, 0, Math.cos(a) * R * 0.78 + Math.cos(2 * a + b.k) * R * 0.36).normalize();
     }
     const planes = [0, 1].map((k) => {
@@ -2073,8 +2111,11 @@ export function CityView({
     function updateAir(time: number, dt: number) {
       for (const b of balloons) {
         b.a += b.speed * dt;
-        const lift = rideActive && rideK === b.k ? Math.max(0, tallest + 1.8 - b.h) : 0;
-        b.lift += (lift - b.lift) * Math.min(1, dt * 0.6);
+        const riding = view?.kind === "ride" && view.k === b.k;
+        const lift = riding ? Math.max(0, tallest + 1.8 - b.h) : 0;
+        // Rise smoothly (no jolts) to clear the tallest towers, and stop bobbing about.
+        b.lift += (lift - b.lift) * Math.min(1, dt * 0.35);
+        b.bob += ((riding ? 0 : 1) - b.bob) * Math.min(1, dt * 0.8);
         balloonPose(b, time, b.obj.position);
         b.body.rotation.y += dt * 0.12;
         // Turn to the next ad every 20 s.
@@ -2446,6 +2487,13 @@ export function CityView({
       rebuildPills();
       caughtKey = "";
       drawCaught();
+      // The meshes were made afresh: hide the roof bits again if we're up there; and if we were
+      // asked to go somewhere that didn't exist yet, go now.
+      if (view?.kind === "place" && view.stage.level.hide) {
+        view.stage.hidden = false;
+        hideRoof(view.stage, true);
+      }
+      syncView();
     }
 
     function updateGrowth(now: number) {
@@ -2864,7 +2912,7 @@ export function CityView({
     function arrestScene(tile: Tile, hiders: { name: string | null; avatar: unknown; bot: boolean }[] = []) {
       // The faces of whoever got caught pop up over the spot.
       hiders.slice(0, 3).forEach((h, k) => {
-        const tex = h.bot ? labelTexture("🤖", "#7048e8") : faceTexture(cleanAvatar(h.avatar, h.name ?? "ghost"), "#e5484d");
+        const tex = h.bot ? botTexture() : faceTexture(cleanAvatar(h.avatar, h.name ?? "ghost"), "#e5484d");
         const face = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
         face.renderOrder = 8;
         addFx(face, 6000, (t) => {
@@ -3389,7 +3437,8 @@ export function CityView({
     function updateRain(dt: number) {
       if (!rain.visible) return;
       const span = rainSpan();
-      rain.position.set(controls.target.x, 0, controls.target.z);
+      if (immersive()) rain.position.set(camera.position.x, 0, camera.position.z);
+      else rain.position.set(controls.target.x, 0, controls.target.z);
       rain.scale.set(span, 1, span);
       for (let k = 0; k < RAIN; k++) {
         const i = k * 6;
@@ -3574,54 +3623,54 @@ export function CityView({
     // ---- chat mode: buildings and balloons are chat rooms
     let chatMode = false;
     let roomCountsNow: Record<string, number> = {};
-    const ROOM_LABEL: Partial<Record<Tile["kind"], string>> = {
-      house: "House",
-      office: "Office",
-      tower: "Skyscraper",
-      hospital: "Hospital",
-      police: "Police station",
-      fuel: "Fuel station",
-      clock: "Clock tower",
-      ferris: "Ferris wheel",
-      stadium: "Stadium",
-      park: "Park",
-      plaza: "Plaza",
-      trees: "Woods",
-      pond: "Pond",
-    };
-    const OUTDOOR = new Set<Tile["kind"]>(["park", "plaza", "trees", "pond"]);
     const shortAddress = (a: string) => {
       for (const [full, short] of Object.entries(ABBREV)) {
         if (a.endsWith(` ${full}`)) return `${a.slice(0, -full.length)}${short}`;
       }
       return a;
     };
-    /** The chat room a tile belongs to (big buildings: their corner tile), or null. */
-    function roomFor(i: number): { room: CityRoom; anchor: Tile; big: boolean } | null {
+    /** The tile a place hangs off: big buildings use their corner tile, the station its middle tile. */
+    function anchorOf(i: number): { anchor: Tile; big: boolean } | null {
       const t = tiles[i];
       if (!t || !currentPlan) return null;
       const rail = currentPlan.rail;
       if (t.station && rail && rail.station !== null) {
         const at = rail.along === "z" ? tileIndex.get(`${rail.at},${rail.station}`) : tileIndex.get(`${rail.station},${rail.at}`);
-        const anchor = at !== undefined ? tiles[at] : t;
-        return { room: { id: `b:${anchor.i}`, name: `${currentPlan.city.name} Central Station`, capacity: 500, kind: "building" }, anchor, big: false };
+        return { anchor: at !== undefined ? tiles[at] : t, big: false };
       }
       if (t.kind === "structure" && t.structure) {
         const at = tileIndex.get(`${t.structure.ax},${t.structure.az}`);
-        const anchor = at !== undefined ? tiles[at] : t;
-        return { room: { id: `b:${anchor.i}`, name: t.structure.name, capacity: 500, kind: "building" }, anchor, big: true };
+        return { anchor: at !== undefined ? tiles[at] : t, big: true };
       }
-      const label = ROOM_LABEL[t.kind];
-      if (!label) return null;
-      let capacity = 50;
-      if (t.kind === "house") capacity = 10;
-      else if (t.kind === "office") capacity = t.top < 1.9 ? 30 : 100;
-      else if (t.kind === "tower") capacity = Math.max(100, Math.min(300, 100 + Math.round(((t.top - 2) / 6) * 20) * 10));
-      else if (t.kind === "hospital") capacity = 100;
-      else if (t.kind === "police" || t.kind === "fuel") capacity = 30;
-      else if (t.kind === "clock" || t.kind === "ferris" || t.kind === "stadium") capacity = 500;
-      else if (OUTDOOR.has(t.kind)) capacity = 50;
-      return { room: { id: `b:${t.i}`, name: `${shortAddress(addressOf(currentPlan, t))} · ${label}`, capacity, kind: "building" }, anchor: t, big: false };
+      return ROOM_LABEL[t.kind] ? { anchor: t, big: false } : null;
+    }
+    /** The chat room a tile belongs to (with its levels), or null. */
+    function roomFor(i: number): { room: CityRoom; anchor: Tile; big: boolean; levels: PlaceLevel[] } | null {
+      const a = anchorOf(i);
+      if (!a || !currentPlan) return null;
+      const { anchor, big } = a;
+      const levels = levelsOf(anchor, currentPlan);
+      if (!levels.length) return null;
+      const name = anchor.station
+        ? `${currentPlan.city.name} Central Station`
+        : anchor.kind === "structure" && anchor.structure
+          ? anchor.structure.name
+          : `${shortAddress(addressOf(currentPlan, anchor))} · ${ROOM_LABEL[anchor.kind]}`;
+      const capacity = levels.reduce((n, l) => n + l.capacity, 0);
+      const room: CityRoom = { id: `b:${anchor.i}`, name, capacity, kind: "building", levels: levels.map((l) => ({ id: l.id, label: l.label, capacity: l.capacity })) };
+      return { room, anchor, big, levels };
+    }
+    /** A name for signs inside a building (company, hotel, hospital...). */
+    function signName(anchor: Tile) {
+      if (!currentPlan) return "Welcome";
+      if (anchor.station) return `${currentPlan.city.name} Central`;
+      if (anchor.structure) return anchor.structure.name;
+      const street = addressOf(currentPlan, anchor).replace(/^\d+\s+/, "").split(" ").slice(0, -1).join(" ") || currentPlan.city.name;
+      if (anchor.kind === "hospital") return `${currentPlan.city.name} General Hospital`;
+      if (anchor.kind === "police") return `${currentPlan.city.name} Police`;
+      if (anchor.kind === "clock") return `${street} Clock Tower`;
+      const ends = ["House", "Plaza", "Tower", "Centre", "Court", "Point", "Exchange", "Place"];
+      return `${street} ${ends[Math.floor(anchor.r[1] * ends.length) % ends.length]}`;
     }
     const balloonRoom = (k: number): CityRoom => ({ id: `balloon:${k}`, name: `${BALLOON_NAMES[k] ?? `Balloon ${k + 1}`} hot-air balloon`, capacity: 1000, kind: "balloon" });
 
@@ -3635,8 +3684,8 @@ export function CityView({
       return k >= 0 ? k : null;
     }
 
-    // Count pills ("👥 12") over the busiest rooms (at most 40, for speed).
-    type Pill = { sprite: THREE.Sprite; balloon: number };
+    // Count pills (a people icon and a number) over the busiest rooms (at most 40, for speed).
+    type Pill = { sprite: THREE.Sprite; balloon: number; id: string };
     let pills: Pill[] = [];
     const pillGroup = new THREE.Group();
     scene.add(pillGroup);
@@ -3671,7 +3720,7 @@ export function CityView({
           const big = t.kind === "structure";
           sprite.position.set(t.x + (big ? 0.5 : 0), t.top + 0.35, t.z + (big ? 0.5 : 0));
         } else continue;
-        pills.push({ sprite, balloon });
+        pills.push({ sprite, balloon, id });
         pillGroup.add(sprite);
       }
     }
@@ -3684,8 +3733,8 @@ export function CityView({
           p.sprite.position.copy(b.obj.position);
           p.sprite.position.y += 0.75 * BALLOON_SCALE;
           // No label on the balloon you're riding in.
-          p.sprite.visible = !(rideActive && rideK === p.balloon);
-        }
+          p.sprite.visible = !(view?.kind === "ride" && view.k === p.balloon);
+        } else p.sprite.visible = !(view?.kind === "place" && view.stage.building === p.id);
         // Keep them readable at any zoom.
         const k = Math.min(2.4, Math.max(0.35, camera.position.distanceTo(p.sprite.position) * 0.045));
         p.sprite.scale.set(k * 0.95, k * 0.386, 1);
@@ -3702,74 +3751,451 @@ export function CityView({
       rebuildPills();
     }
 
-    // ---- riding a balloon: the camera flies into the basket and drifts round with it
-    let rideK: number | null = null;
-    let rideActive = false;
-    let rideBlend = 0;
-    const rideFrom = { pos: new THREE.Vector3(), quat: new THREE.Quaternion() };
-    const saved = { pos: new THREE.Vector3(), target: new THREE.Vector3(), quat: new THREE.Quaternion() };
-    const look = { yaw: 0, pitch: 0 };
-    const ridePos = new THREE.Vector3();
-    const rideDir = new THREE.Vector3();
-    const rideQuat = new THREE.Quaternion();
-    const rideM = new THREE.Matrix4();
-    const lookAtV = new THREE.Vector3();
-    function setRide(k: number | null) {
-      if (k !== null && !balloons[k]) k = null;
-      if (k === rideK) return;
-      if (k !== null && !rideActive) {
-        // Remember the normal view, to fly back to it later.
+    // ---- looking round from one spot: riding a balloon, or inside a building / on its roof.
+    // The camera flies there (eased, about 1.5 s) and then stays put: drag with one finger (or
+    // the mouse) to turn the view, pinch or scroll to zoom a little. No panning, no flying off.
+    // The normal map controls come back when you leave. Inside buildings the room is drawn on
+    // top of the real city (which shows through the windows, at the right height); rooftops and
+    // open-air spots stand in the city itself. Taps there only ever reach the people (NPCs).
+    type StageView = { p: THREE.Vector3; yaw: number; pitch: number };
+    type Stage = {
+      building: string;
+      tile: number;
+      level: PlaceLevel;
+      /** Interiors: the room's own scene (drawn over the city), and how city space maps onto it. */
+      scene: THREE.Scene | null;
+      origin: THREE.Vector3;
+      unit: number;
+      holder: THREE.Group;
+      interior: Interior | null;
+      deck: Deck | null;
+      figures: Figures | null;
+      views: StageView[];
+      alpha: number;
+      npcs: Npc[];
+      hidden: boolean;
+    };
+    type ViewMode = { kind: "ride"; k: number } | { kind: "place"; stage: Stage };
+    const look = createLookControls(renderer.domElement);
+    const overlayCam = new THREE.PerspectiveCamera(60, 1, 0.05, 400);
+    const basketScene = new THREE.Scene();
+    const basket = createBasket();
+    basketScene.add(basket.group);
+    let basketAlpha = 0;
+    let wantRide: number | null = null;
+    let wantPlace: CityPlace | null = null;
+    let wantSpot = 0;
+    let spotIndex = 0;
+    let view: ViewMode | null = null;
+    /** The place (or balloon) we're flying away from: it fades out, then goes. */
+    let leaving: Stage | null = null;
+    let leavingRide = false;
+    const saved = { pos: new THREE.Vector3(), target: new THREE.Vector3(), quat: new THREE.Quaternion(), fov: 38 };
+    type Flight = { from: THREE.Vector3; quat: THREE.Quaternion; fov: number; ctrl: THREE.Vector3 | null; t: number; dur: number; kind: "enter" | "exit" | "move" };
+    let flight: Flight | null = null;
+    const aim = { yaw: 0, pitch: -0.38 };
+    const pose = { pos: new THREE.Vector3(), quat: new THREE.Quaternion(), fov: 60 };
+    const eul = new THREE.Euler(0, 0, 0, "YXZ");
+    const rideEye = new THREE.Vector3();
+    const leanDir = new THREE.Vector3();
+    const tmpV = new THREE.Vector3();
+    /** How far the eye is below a balloon's middle (in the basket). */
+    const BASKET_EYE = 0.77;
+    const immersive = () => view !== null || flight !== null;
+    const smoothstep = (a: number, b: number, x: number) => {
+      const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+      return t * t * (3 - 2 * t);
+    };
+    const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+    const turnTo = (a: number, b: number) => {
+      let d = (b - a) % (Math.PI * 2);
+      if (d > Math.PI) d -= Math.PI * 2;
+      if (d < -Math.PI) d += Math.PI * 2;
+      return d;
+    };
+    const cameraYaw = () => eul.setFromQuaternion(camera.quaternion, "YXZ").y;
+    /** Vertical field of view for a wanted sideways view (wide enough on portrait phones too). */
+    const fovFor = (hfovDeg: number) => {
+      const v = (2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(hfovDeg) / 2) / Math.max(0.3, camera.aspect)) * 180) / Math.PI;
+      return Math.min(88, Math.max(48, v));
+    };
+
+    /** Hide (or bring back) the building's own bits on its roof while we're up there. */
+    function hideRoof(st: Stage, on: boolean) {
+      const h = st.level.hide;
+      if (!h || st.hidden === on) return;
+      st.hidden = on;
+      const touched = new Set<string>();
+      for (const [name, idx] of tileParts.get(st.tile) ?? []) {
+        const p = parts[name]?.[idx];
+        const mesh = meshes[name];
+        if (!p || !mesh || p.y < h.above) continue;
+        if (h.rect && (p.x < h.rect[0] || p.x > h.rect[2] || p.z < h.rect[1] || p.z > h.rect[3])) continue;
+        if (h.maxH !== undefined && p.sy > h.maxH) continue;
+        writePart(mesh, idx, p, on ? 0 : 1);
+        touched.add(name);
+      }
+      for (const name of touched) meshes[name].instanceMatrix.needsUpdate = true;
+    }
+
+    function buildStage(building: string, anchor: Tile, lvl: PlaceLevel): Stage {
+      const plan = currentPlan!;
+      const key = `${currentSeed}|${building}|${lvl.id}`;
+      const npcs = npcsFor(`${building}:${lvl.id}`, currentSeed, lvl.capacity);
+      const st: Stage = {
+        building,
+        tile: anchor.i,
+        level: lvl,
+        scene: null,
+        origin: new THREE.Vector3(lvl.x, lvl.y + EYE, lvl.z),
+        unit: 1 / METRES,
+        holder: new THREE.Group(),
+        interior: null,
+        deck: null,
+        figures: null,
+        views: [],
+        alpha: 0,
+        npcs,
+        hidden: false,
+      };
+      if (lvl.kind === "interior") {
+        const interior = createInterior({
+          theme: lvl.theme,
+          key,
+          floor: lvl.floor,
+          name: signName(anchor),
+          city: plan.city.name,
+          places: plan.city.flavor.cities.filter((c) => c !== plan.city.name),
+          variant: anchor.kind === "clock" && lvl.id === "g" ? "small" : anchor.station ? "station" : undefined,
+        });
+        const figures = createFigures(npcs, interior.spots, { key });
+        st.holder.add(interior.group, figures.group);
+        // Turn the room so its first view looks the way the camera looks now (no spinning round).
+        const rot = cameraYaw() - interior.views[0].yaw;
+        st.holder.rotation.y = rot;
+        st.scene = new THREE.Scene();
+        st.scene.add(st.holder);
+        // City units per metre inside: the room fits inside the building's footprint.
+        const half = Math.max(interior.w, interior.d) / 2;
+        st.unit = (Math.min(lvl.hw, lvl.hd) * 0.85) / half;
+        st.views = interior.views.map((v) => {
+          const e = tmpV.set(v.x, 0, v.z).applyAxisAngle(up, rot);
+          return { p: new THREE.Vector3(st.origin.x + e.x * st.unit, st.origin.y, st.origin.z + e.z * st.unit), yaw: v.yaw + rot, pitch: v.pitch };
+        });
+        st.interior = interior;
+        st.figures = figures;
+        interior.setNight(carNight);
+      } else {
+        const deck = lvl.kind === "roof" ? createDeck(lvl.theme, key, lvl.hw * 2 * METRES, lvl.hd * 2 * METRES) : createOpenAir(lvl.theme, key);
+        const figures = createFigures(npcs, deck.spots, { key, tags: true });
+        figures.group.traverse((o) => {
+          if (o instanceof THREE.Mesh && o.material instanceof THREE.MeshLambertMaterial) o.castShadow = true;
+        });
+        st.holder.add(deck.group, figures.group);
+        st.holder.position.set(lvl.x, lvl.y + 0.001, lvl.z);
+        st.holder.rotation.y = lvl.ry;
+        st.holder.scale.setScalar(1 / METRES);
+        scene.add(st.holder);
+        const deckTop = lvl.kind === "roof" ? 0.005 : 0;
+        const views = deck.views.map((v) => {
+          const e = tmpV.set(v.x, 0, v.z).applyAxisAngle(up, lvl.ry).multiplyScalar(1 / METRES);
+          return { p: new THREE.Vector3(lvl.x + e.x, lvl.y + deckTop + EYE, lvl.z + e.z), yaw: v.yaw + lvl.ry, pitch: v.pitch };
+        });
+        // Start with whichever view looks most like the way we're facing now.
+        const now = cameraYaw();
+        let best = 0;
+        views.forEach((v, i) => {
+          if (Math.abs(turnTo(now, v.yaw)) < Math.abs(turnTo(now, views[best].yaw))) best = i;
+        });
+        st.views = [...views.slice(best), ...views.slice(0, best)];
+        st.deck = deck;
+        st.figures = figures;
+        deck.setNight(carNight);
+        hideRoof(st, true);
+      }
+      return st;
+    }
+
+    function disposeStage(st: Stage) {
+      hideRoof(st, false);
+      st.holder.removeFromParent();
+      st.interior?.dispose();
+      st.deck?.dispose();
+      st.figures?.dispose();
+    }
+
+    function pickView(i: number) {
+      if (view?.kind !== "place") return;
+      const n = view.stage.views.length;
+      spotIndex = ((i % n) + n) % n;
+      const v = view.stage.views[spotIndex];
+      aim.yaw = v.yaw;
+      aim.pitch = v.pitch;
+      const inside = view.stage.level.kind === "interior";
+      const roof = view.stage.level.kind === "roof";
+      look.setLimits({ pitchMin: (inside ? -1.0 : roof ? -1.3 : -0.95) - aim.pitch, pitchMax: (inside ? 0.75 : 0.65) - aim.pitch, zoomMin: 0.55, zoomMax: 1.15 });
+    }
+
+    function startFlight(kind: Flight["kind"], dur: number, ctrl: THREE.Vector3 | null) {
+      flight = { from: camera.position.clone(), quat: camera.quaternion.clone(), fov: camera.fov, ctrl, t: 0, dur, kind };
+    }
+
+    /** Work out where we should be (from the props) and fly there if it changed. */
+    function syncView() {
+      type Next = { kind: "place"; anchor: Tile; level: PlaceLevel; building: string } | { kind: "ride"; k: number } | null;
+      let next: Next = null;
+      if (wantPlace && currentPlan) {
+        const m = /^b:(\d+)$/.exec(wantPlace.building);
+        const r = m ? roomFor(Number(m[1])) : null;
+        if (r && r.room.id === wantPlace.building) {
+          const level = r.levels.find((l) => l.id === wantPlace!.level) ?? r.levels[0];
+          next = { kind: "place", anchor: r.anchor, level, building: r.room.id };
+        }
+      }
+      if (!next && wantRide !== null && balloons[wantRide]) next = { kind: "ride", k: wantRide };
+      if (next?.kind === "place" && view?.kind === "place" && view.stage.building === next.building && view.stage.level.id === next.level.id) return;
+      if (next?.kind === "ride" && view?.kind === "ride" && view.k === next.k) return;
+      if (!next && !view) return;
+      if (!view && !flight) {
+        // Leaving the normal map view: remember it, to fly back later.
         saved.pos.copy(camera.position);
         saved.target.copy(controls.target);
         saved.quat.copy(camera.quaternion);
-        controls.enabled = false;
-        rideActive = true;
-        focus = null;
+        saved.fov = camera.fov;
       }
-      if (rideActive) {
-        rideFrom.pos.copy(camera.position);
-        rideFrom.quat.copy(camera.quaternion);
-        rideBlend = 0;
+      if (leaving) disposeStage(leaving);
+      const prev = view;
+      leaving = prev?.kind === "place" ? prev.stage : null;
+      leavingRide = prev?.kind === "ride";
+      controls.enabled = false;
+      focus = null;
+      hoverBox.visible = false;
+      cb.current.onHover?.(null);
+      const from = camera.position.clone();
+      if (!next) {
+        view = null;
+        look.setEnabled(false);
+        // Out the way we came in: back out through the side we're facing from, then up.
+        let ctrl: THREE.Vector3 | null = null;
+        if (prev?.kind === "place") {
+          const dir = tmpV.copy(saved.pos).sub(from).setY(0);
+          const dist = from.distanceTo(saved.pos);
+          ctrl = from.clone().add(dir.normalize().multiplyScalar(Math.min(3.5, Math.max(0.5, dist * 0.3)))).add(new THREE.Vector3(0, Math.min(1.5, dist * 0.12), 0));
+        }
+        startFlight("exit", 1.5, ctrl);
+        return;
       }
-      rideK = k;
-      look.yaw = 0;
-      look.pitch = 0;
+      look.setEnabled(true);
+      if (next.kind === "ride") {
+        view = { kind: "ride", k: next.k };
+        aim.yaw = cameraYaw();
+        aim.pitch = -0.55;
+        look.lookAt(0, 0, true);
+        look.resetZoom(true);
+        look.setLimits({ pitchMin: -1.25 - aim.pitch, pitchMax: 0.3 - aim.pitch, zoomMin: 0.55, zoomMax: 1.15 });
+        const b = balloons[next.k];
+        const mid = from.clone().add(b.obj.position).multiplyScalar(0.5);
+        mid.y += Math.min(2, from.distanceTo(b.obj.position) * 0.1);
+        startFlight("enter", 1.6, mid);
+        return;
+      }
+      const sameBuilding = prev?.kind === "place" && prev.stage.building === next.building;
+      const st = buildStage(next.building, next.anchor, next.level);
+      view = { kind: "place", stage: st };
+      look.lookAt(0, 0, true);
+      look.resetZoom(true);
+      pickView(wantSpot);
+      cb.current.onSpots?.(st.views.length);
+      const target = st.views[spotIndex].p;
+      let ctrl: THREE.Vector3 | null = null;
+      if (!sameBuilding) {
+        // Swoop in from the side we're looking from, arriving level (through the facade).
+        const dir = tmpV.copy(from).sub(target).setY(0);
+        const dist = from.distanceTo(target);
+        if (dir.lengthSq() < 1e-6) dir.set(0, 0, 1);
+        ctrl = target
+          .clone()
+          .add(dir.normalize().multiplyScalar(Math.min(3.5, Math.max(0.5, dist * 0.3))))
+          .add(new THREE.Vector3(0, Math.min(1.5, Math.max(0.05, dist * 0.12)), 0));
+      }
+      startFlight("enter", 1.5, ctrl);
     }
-    /** Moves the camera while riding (or flying in or out). False when the normal controls are in charge. */
-    function updateRide(dt: number, time: number) {
-      if (!rideActive) return false;
-      rideBlend = Math.min(1, rideBlend + dt / 2.8);
-      const e = rideBlend * rideBlend * (3 - 2 * rideBlend);
-      for (const b of balloons) b.basket.visible = !(rideK === b.k && rideBlend > 0.7);
-      if (rideK !== null) {
-        const b = balloons[rideK];
-        balloonPose(b, time, ridePos, rideDir);
-        ridePos.copy(b.obj.position);
-        ridePos.y -= 0.5 * BALLOON_SCALE;
-        // Look ahead and down over the city (towards a point ahead of us near the middle);
-        // drag to look round a bit.
-        const ax = rideDir.x * radius * 0.45 - ridePos.x;
-        const az = rideDir.z * radius * 0.45 - ridePos.z;
-        const yaw = Math.atan2(ax, az) + look.yaw;
-        const pitch = Math.max(-0.8, Math.min(-0.22, Math.atan2(-ridePos.y, Math.hypot(ax, az)))) + look.pitch;
-        lookAtV.set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)).add(ridePos);
-        rideQuat.setFromRotationMatrix(rideM.lookAt(ridePos, lookAtV, up));
-        camera.position.lerpVectors(rideFrom.pos, ridePos, e);
-        camera.position.y += Math.sin(e * Math.PI) * 1.5;
-        camera.quaternion.slerpQuaternions(rideFrom.quat, rideQuat, e);
+
+    function setRide(k: number | null) {
+      wantRide = k;
+      syncView();
+    }
+    function setPlace(p: CityPlace | null) {
+      wantPlace = p;
+      syncView();
+    }
+    function setSpot(n: number) {
+      wantSpot = n;
+      if (view?.kind !== "place" || !view.stage.views.length) return;
+      const nv = view.stage.views.length;
+      if (((n % nv) + nv) % nv === spotIndex) return;
+      pickView(n);
+      look.lookAt(0, 0);
+      startFlight("move", 1.0, null);
+    }
+
+    /** Where the camera wants to be right now (balloon basket or the viewpoint in a place). */
+    function targetPose(dt: number) {
+      let hfov = 74;
+      if (view?.kind === "ride") {
+        // A calmer, narrower view from the basket on tall phone screens.
+        hfov = (el.clientWidth || 1) < (el.clientHeight || 1) ? 62 : 74;
+        const b = balloons[view.k];
+        rideEye.copy(b.obj.position);
+        rideEye.y -= BASKET_EYE;
+        pose.pos.copy(rideEye);
+        // The basket turns slowly to keep the middle of the city in front of you.
+        const want = Math.atan2(rideEye.x, rideEye.z);
+        if (Math.hypot(rideEye.x, rideEye.z) > 1.5) aim.yaw += turnTo(aim.yaw, want) * (1 - Math.exp(-dt / 9));
+      } else if (view?.kind === "place") {
+        const v = view.stage.views[spotIndex];
+        pose.pos.copy(v.p);
+        hfov = view.stage.level.kind === "interior" ? 84 : 80;
+      }
+      const yaw = aim.yaw + look.state.yaw;
+      const pitch = aim.pitch + look.state.pitch;
+      pose.quat.setFromEuler(eul.set(pitch, yaw, 0, "YXZ"));
+      pose.fov = fovFor(hfov) * look.state.zoom;
+    }
+
+    /** Moves the camera when riding or in a place (or flying to / from one). False when the map controls are in charge. */
+    function updateView(dt: number) {
+      if (!view && !flight) return false;
+      look.update(dt, THREE.MathUtils.degToRad(camera.fov), el.clientHeight || 600);
+      if (view) targetPose(dt);
+      else {
+        pose.pos.copy(saved.pos);
+        pose.quat.copy(saved.quat);
+        pose.fov = saved.fov;
+      }
+      let e = 1;
+      if (flight) {
+        flight.t = Math.min(1, flight.t + dt / flight.dur);
+        e = easeInOut(flight.t);
+        const f = flight;
+        if (f.ctrl) {
+          // A gentle curve (quadratic Bézier) rather than a straight line.
+          const u = 1 - e;
+          camera.position.set(
+            u * u * f.from.x + 2 * u * e * f.ctrl.x + e * e * pose.pos.x,
+            u * u * f.from.y + 2 * u * e * f.ctrl.y + e * e * pose.pos.y,
+            u * u * f.from.z + 2 * u * e * f.ctrl.z + e * e * pose.pos.z,
+          );
+        } else camera.position.lerpVectors(f.from, pose.pos, e);
+        camera.quaternion.slerpQuaternions(f.quat, pose.quat, e);
+        camera.fov = f.fov + (pose.fov - f.fov) * e;
       } else {
-        camera.position.lerpVectors(rideFrom.pos, saved.pos, e);
-        camera.quaternion.slerpQuaternions(rideFrom.quat, saved.quat, e);
-        if (rideBlend >= 1) {
-          rideActive = false;
-          controls.enabled = true;
-          controls.target.copy(saved.target);
+        camera.position.copy(pose.pos);
+        camera.quaternion.copy(pose.quat);
+        camera.fov = pose.fov;
+      }
+      // Fading rooms and the basket in and out: a room appears round you as you pass in
+      // through its walls, and melts away as you leave.
+      const kind = flight?.kind;
+      const out = kind === "enter" || kind === "exit" ? 1 - smoothstep(0.15, 0.6, e) : 0;
+      if (view?.kind === "place") view.stage.alpha = view.stage.level.kind === "interior" ? (kind === "enter" ? Math.min(smoothstep(0.35, 0.8, e), insideRoom(view.stage)) : 1) : 1;
+      if (leaving) leaving.alpha = flight ? Math.min(out, insideRoom(leaving)) : 0;
+      basketAlpha = view?.kind === "ride" ? (kind === "enter" ? smoothstep(0.6, 0.95, e) : 1) : leavingRide && flight ? 1 - smoothstep(0, 0.3, e) : 0;
+      const outdoors = view?.kind === "place" && view.stage.level.kind !== "interior";
+      camera.near = outdoors && (!flight || e > 0.5) ? 0.05 : 0.1;
+      camera.updateProjectionMatrix();
+      if (flight && flight.t >= 1) {
+        flight = null;
+        if (leaving) {
+          disposeStage(leaving);
+          leaving = null;
+        }
+        leavingRide = false;
+        if (!view) {
+          // Back to the map: the normal controls take over again.
           camera.position.copy(saved.pos);
-          for (const b of balloons) b.basket.visible = true;
+          camera.quaternion.copy(saved.quat);
+          camera.fov = saved.fov;
+          camera.near = 0.1;
+          camera.updateProjectionMatrix();
+          controls.target.copy(saved.target);
+          controls.enabled = true;
+          basketAlpha = 0;
           return false;
         }
       }
       return true;
+    }
+
+    /** How far inside a room's walls the camera is (0 outside, 1 a metre or more in). */
+    function insideRoom(st: Stage) {
+      if (!st.interior) return 1;
+      const p = tmpV.copy(camera.position).sub(st.origin).divideScalar(st.unit).applyAxisAngle(up, -st.holder.rotation.y);
+      const y = p.y + 1.6;
+      const margin = Math.min(st.interior.w / 2 - Math.abs(p.x), st.interior.d / 2 - Math.abs(p.z), y, 4 - y);
+      return smoothstep(0, 1, margin);
+    }
+
+    /** Draw the room we're in (or the basket) over the city: the city shows through the windows. */
+    function renderOverlays(time: number) {
+      const passes: { scene: THREE.Scene; origin: THREE.Vector3; unit: number; eye: number; lean?: number }[] = [];
+      for (const st of [leaving, view?.kind === "place" ? view.stage : null]) {
+        if (!st?.scene || !st.interior) continue;
+        st.interior.setAlpha(st.alpha);
+        if (st.alpha > 0.002) passes.push({ scene: st.scene, origin: st.origin, unit: st.unit, eye: 1.6 });
+      }
+      basket.setAlpha(basketAlpha);
+      const rideK = view?.kind === "ride" ? view.k : null;
+      for (const b of balloons) b.basket.visible = !(rideK === b.k && basketAlpha > 0.5);
+      if (basketAlpha > 0.002 && rideK !== null) {
+        basket.update(time, carNight);
+        basket.group.rotation.y = aim.yaw;
+        // Eye a little above the rim, so the basket is just a frame at the bottom of the view.
+        passes.push({ scene: basketScene, origin: rideEye, unit: 1 / METRES, eye: 1.85, lean: 0.62 });
+      }
+      if (!passes.length) return;
+      overlayCam.quaternion.copy(camera.quaternion);
+      overlayCam.fov = camera.fov;
+      overlayCam.aspect = camera.aspect;
+      overlayCam.updateProjectionMatrix();
+      renderer.autoClear = false;
+      for (const p of passes) {
+        overlayCam.position.copy(camera.position).sub(p.origin).divideScalar(p.unit);
+        overlayCam.position.y += p.eye;
+        if (p.lean) {
+          // Lean over the rim in the direction you're looking, like a real passenger: the
+          // basket then only frames the bottom of the view instead of filling it.
+          leanDir.set(0, 0, -1).applyQuaternion(camera.quaternion);
+          leanDir.y = 0;
+          if (leanDir.lengthSq() > 1e-6) overlayCam.position.addScaledVector(leanDir.normalize(), p.lean);
+        }
+        overlayCam.updateMatrixWorld();
+        renderer.clearDepth();
+        renderer.render(p.scene, overlayCam);
+      }
+      renderer.autoClear = true;
+    }
+
+    function updateStages(time: number) {
+      for (const st of [leaving, view?.kind === "place" ? view.stage : null]) {
+        if (!st) continue;
+        st.interior?.setNight(carNight);
+        st.deck?.setNight(carNight);
+        st.figures?.update(time);
+      }
+    }
+
+    /** The regular (NPC) under the pointer in the place we're in, if any. */
+    function npcUnder(clientX: number, clientY: number): Npc | null {
+      if (view?.kind !== "place" || flight) return null;
+      const st = view.stage;
+      if (!st.figures) return null;
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+      ray.setFromCamera(pointer, st.scene ? overlayCam : camera);
+      const hit = ray.intersectObjects(st.figures.hits, true)[0];
+      const id = hit ? st.figures.npcOf(hit.object) : null;
+      return id ? (st.npcs.find((n) => n.id === id) ?? null) : null;
     }
 
     // ---- caught ghosts: their faces float over where they were caught, all round long
@@ -3794,7 +4220,7 @@ export function CityView({
         if (!t) continue;
         const n = perTile.get(f.tile) ?? 0;
         perTile.set(f.tile, n + 1);
-        const tex = f.bot ? labelTexture("🤖", "#7048e8") : faceTexture(cleanAvatar(f.avatar, f.name ?? "ghost"), "#e5484d");
+        const tex = f.bot ? botTexture() : faceTexture(cleanAvatar(f.avatar, f.name ?? "ghost"), "#e5484d");
         const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
         sp.renderOrder = 6;
         sp.scale.setScalar(0.55);
@@ -3997,12 +4423,22 @@ export function CityView({
     let down: { x: number; y: number; t: number } | null = null;
     const onDown = (e: PointerEvent) => {
       down = { x: e.clientX, y: e.clientY, t: performance.now() };
+      if (immersive()) renderer.domElement.style.cursor = "grabbing";
     };
     const onUp = (e: PointerEvent) => {
       if (!down) return;
       const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
       const quick = performance.now() - down.t < 600;
       down = null;
+      if (immersive()) {
+        // Riding or inside somewhere: dragging only looks round. A tap only ever reaches the
+        // people standing there (never the map, buildings or balloons behind).
+        renderer.domElement.style.cursor = "grab";
+        if (moved > 8 || !quick || look.multiTouch) return;
+        const npc = npcUnder(e.clientX, e.clientY);
+        if (npc) cb.current.onNpc?.(npc.id);
+        return;
+      }
       if (moved > 8 || !quick) return;
       if (coin && coinUnder(e.clientX, e.clientY)) {
         // Pop! A burst of gold where the balloon was.
@@ -4050,17 +4486,8 @@ export function CityView({
       cb.current.onTile(tile);
     };
     let hoverQueued: PointerEvent | null = null;
-    let lastDrag: { x: number; y: number } | null = null;
     const onMove = (e: PointerEvent) => {
       if (e.pointerType === "mouse" && !down) hoverQueued = e;
-      // Riding a balloon: drag to look round.
-      if (down && rideActive && rideK !== null) {
-        if (lastDrag) {
-          look.yaw = Math.max(-2.6, Math.min(2.6, look.yaw - (e.clientX - lastDrag.x) * 0.006));
-          look.pitch = Math.max(-0.7, Math.min(0.5, look.pitch + (e.clientY - lastDrag.y) * 0.004));
-        }
-        lastDrag = { x: e.clientX, y: e.clientY };
-      } else lastDrag = null;
     };
     const onLeave = () => showHover(null);
     renderer.domElement.addEventListener("pointerdown", onDown);
@@ -4111,6 +4538,13 @@ export function CityView({
       const dt = Math.min(clock.getDelta(), 0.1);
       const time = clock.elapsedTime;
       const now = performance.now();
+      if (hoverQueued && immersive()) {
+        // Inside somewhere: point at people to see who they are.
+        const npc = npcUnder(hoverQueued.clientX, hoverQueued.clientY);
+        renderer.domElement.style.cursor = npc ? "pointer" : "grab";
+        cb.current.onHover?.(npc ? { tile: -1, label: `${npc.name} · ${npc.role} · tap to say hi` } : null);
+        hoverQueued = null;
+      }
       if (hoverQueued) {
         const balloonK = chatMode ? balloonUnder(hoverQueued.clientX, hoverQueued.clientY) : null;
         const board = balloonK === null && isRevealed ? boardUnder(hoverQueued.clientX, hoverQueued.clientY) : null;
@@ -4156,10 +4590,12 @@ export function CityView({
       updateCoin(time);
       updateMarkers(time);
       updateCaught(time);
-      // Chat mode: the city dims a little so the rooms' counts stand out.
-      const exposure = chatMode ? 0.8 : 1.05;
+      // Chat mode: the city dims a little so the rooms' counts stand out (but not once you're
+      // inside somewhere, looking round).
+      const exposure = immersive() ? 1.0 : chatMode ? 0.8 : 1.05;
       renderer.toneMappingExposure += (exposure - renderer.toneMappingExposure) * Math.min(1, dt * 3);
-      const riding = updateRide(dt, time);
+      updateStages(time);
+      const riding = updateView(dt);
       if (!riding) {
         if (focus) {
           controls.target.lerp(focus, 0.06);
@@ -4173,6 +4609,7 @@ export function CityView({
       fog.near = (dist + radius * 0.8) * (1 - fogFactor * 0.45);
       fog.far = (dist + radius * 4 + 30) * (1 - fogFactor * 0.3);
       renderer.render(scene, camera);
+      renderOverlays(time);
     };
     loop();
 
@@ -4198,7 +4635,7 @@ export function CityView({
     renderer.domElement.addEventListener("webglcontextlost", onLost);
     renderer.domElement.addEventListener("webglcontextrestored", onRestored);
 
-    api.current = { build, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setCaughtFaces, setMode };
+    api.current = { build, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setPlace, setSpot, setCaughtFaces, setMode };
 
     return () => {
       alive = false;
@@ -4215,6 +4652,11 @@ export function CityView({
       buildingSite.dispose();
       for (const p of pills) p.sprite.material.dispose();
       disposePills();
+      for (const st of [leaving, view?.kind === "place" ? view.stage : null]) if (st) disposeStage(st);
+      basket.dispose();
+      look.dispose();
+      disposeKitCaches();
+      disposeBlobTexture();
       bannerTex.dispose();
       honkTex.dispose();
       for (const t of boardTextures) t.dispose();
@@ -4275,6 +4717,16 @@ export function CityView({
   useEffect(() => {
     api.current?.setRide(ride);
   }, [ride]);
+
+  const placeKey = place ? `${place.building}|${place.level}` : "";
+  useEffect(() => {
+    const [building, level] = placeKey ? placeKey.split("|") : [];
+    api.current?.setPlace(building ? { building, level } : null);
+  }, [placeKey]);
+
+  useEffect(() => {
+    api.current?.setSpot(spot);
+  }, [spot]);
 
   useEffect(() => {
     api.current?.setCaughtFaces(caughtFaces);

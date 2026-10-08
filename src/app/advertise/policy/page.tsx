@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ArrowLeft } from "@/components/icons";
 import { AD_POLICY } from "@/lib/ads";
 
 export const metadata: Metadata = {
@@ -11,8 +12,9 @@ export default function PolicyPage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-6 px-4 py-8">
       <div>
-        <Link href="/advertise" className="text-sm font-medium text-muted">
-          ← Back to advertising
+        <Link href="/advertise" className="inline-flex items-center gap-1 text-sm font-medium text-muted">
+          <ArrowLeft className="size-4" />
+          Back to advertising
         </Link>
         <h1 className="mt-3 font-display text-3xl font-bold">Advertising policy</h1>
         <p className="mt-2 text-muted">We want ads players are happy to see. These rules apply to every ad: the picture, the words and the link.</p>

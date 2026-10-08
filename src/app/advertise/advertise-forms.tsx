@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { Coins, Eye } from "@/components/icons";
 import type { AdPricing } from "@/lib/ads";
 import { checkoutAd } from "./actions";
 import { Billboard } from "./billboard";
@@ -131,11 +132,17 @@ export function AdForm({ pricing }: { pricing: AdPricing }) {
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2 text-center">
                 <div className="rounded-lg bg-panel-2 p-2">
-                  <div className="font-display text-xl font-bold">🪙 {fmt(coins)}</div>
+                  <div className="flex items-center justify-center gap-1.5 font-display text-xl font-bold">
+                    <Coins className="size-5 text-gold-dark" />
+                    {fmt(coins)}
+                  </div>
                   <div className="text-xs text-muted">coins in your ad&apos;s pool</div>
                 </div>
                 <div className="rounded-lg bg-panel-2 p-2">
-                  <div className="font-display text-xl font-bold">👀 {fmt(taps)}</div>
+                  <div className="flex items-center justify-center gap-1.5 font-display text-xl font-bold">
+                    <Eye className="size-5 text-gold-dark" />
+                    {fmt(taps)}
+                  </div>
                   <div className="text-xs text-muted">players will tap your ad</div>
                 </div>
               </div>

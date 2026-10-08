@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { CircleCheck, PartyPopper, Trophy, type LucideIcon } from "@/components/icons";
 import { confirmPayment, type PaymentOutcome } from "@/lib/ads";
 import { ManageButton } from "./manage-button";
 import { Refresher } from "./refresher";
@@ -38,10 +39,23 @@ export default async function DonePage({
   );
 }
 
-function Card({ title, children, tone = "plain" }: { title: string; children: React.ReactNode; tone?: "good" | "plain" }) {
+function Card({
+  title,
+  icon: Icon,
+  children,
+  tone = "plain",
+}: {
+  title: string;
+  icon?: LucideIcon;
+  children: React.ReactNode;
+  tone?: "good" | "plain";
+}) {
   return (
     <section className={`rounded-2xl border-2 ${tone === "good" ? "border-me" : "border-line"} bg-panel p-6`}>
-      <h1 className="font-display text-2xl font-bold">{title}</h1>
+      <h1 className="flex items-center gap-2 font-display text-2xl font-bold">
+        {Icon && <Icon className="size-7 shrink-0 text-me" strokeWidth={2.25} />}
+        {title}
+      </h1>
       <div className="mt-3 flex flex-col gap-3 text-ink">{children}</div>
     </section>
   );
@@ -77,7 +91,7 @@ function Outcome({ outcome, reference }: { outcome: PaymentOutcome; reference: s
 
   if (outcome.kind === "sponsor") {
     return (
-      <Card title={outcome.state === "applied" ? "Your prize pool is live! 🏆" : "Thanks! You're in the queue 🏆"} tone="good">
+      <Card title={outcome.state === "applied" ? "Your prize pool is live!" : "Thanks! You're in the queue"} icon={Trophy} tone="good">
         <p>
           <b>{fmt(outcome.coins)} coins</b> from <b>{outcome.brand}</b>{" "}
           {outcome.state === "applied"
@@ -93,7 +107,7 @@ function Outcome({ outcome, reference }: { outcome: PaymentOutcome; reference: s
 
   if (outcome.kind === "topup") {
     return (
-      <Card title="Top-up received! ✅" tone="good">
+      <Card title="Top-up received!" icon={CircleCheck} tone="good">
         <p>
           <b>{fmt(outcome.coins)} coins</b> were added to your ad for <b>{outcome.brand}</b>: about {fmt(outcome.taps)} more players tapping
           it. It&apos;s showing now.
@@ -105,7 +119,7 @@ function Outcome({ outcome, reference }: { outcome: PaymentOutcome; reference: s
   }
 
   return (
-    <Card title={outcome.state === "other" ? "Payment received" : "Your ad is live! 🎉"} tone="good">
+    <Card title={outcome.state === "other" ? "Payment received" : "Your ad is live!"} icon={outcome.state === "other" ? CircleCheck : PartyPopper} tone="good">
       {/* eslint-disable-next-line @next/next/no-img-element -- the advertiser's own picture */}
       <img src={outcome.image} alt={outcome.headline} className="aspect-[2/1] w-full rounded-xl border border-line object-cover" />
       {outcome.state === "other" ? (

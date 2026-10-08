@@ -3,6 +3,25 @@
 import { useEffect, useState } from "react";
 import { AvatarFace } from "@/components/avatar";
 import { BADGE_GROUPS, BADGE_INFO, BadgeTile, type EarnedBadge } from "@/components/badges";
+import {
+  Check,
+  Drama,
+  Flashlight,
+  Gift,
+  Headphones,
+  Lock,
+  Medal,
+  PartyPopper,
+  Pencil,
+  RotateCcw,
+  Shield,
+  Shirt,
+  ShoppingBag,
+  Star,
+  Ticket,
+  X,
+  type LucideIcon,
+} from "@/components/icons";
 import type { Avatar } from "@/lib/avatar";
 import { cn } from "@/lib/cn";
 import { short } from "@/lib/format";
@@ -56,7 +75,9 @@ export function Menu({
         <div className="flex items-center gap-3">
           <button onClick={onEditAvatar} className="relative shrink-0" aria-label="Change your look">
             <AvatarFace avatar={me.avatar} size={56} className="rounded-full shadow" />
-            <span className="absolute -bottom-0.5 -right-0.5 grid size-5 place-items-center rounded-full bg-ink text-[10px] text-white">✎</span>
+            <span className="absolute -bottom-0.5 -right-0.5 grid size-5 place-items-center rounded-full bg-ink text-white">
+              <Pencil className="size-3" strokeWidth={2.5} />
+            </span>
           </button>
           <div className="min-w-0 flex-1">
             <p className="truncate font-display text-lg font-bold">{me.name}</p>
@@ -64,8 +85,8 @@ export function Menu({
               Change your look
             </button>
           </div>
-          <button onClick={onClose} className="rounded-full px-2 text-xl text-muted" aria-label="Close menu">
-            ×
+          <button onClick={onClose} className="grid size-8 place-items-center rounded-full text-muted hover:bg-panel-2" aria-label="Close menu">
+            <X className="size-5" />
           </button>
         </div>
 
@@ -138,7 +159,10 @@ export function Menu({
                       group === "Legendary" && "text-[#9b3fd6]",
                     )}
                   >
-                    <span>{group === "Legendary" ? "★ Legendary" : group}</span>
+                    <span className="flex items-center gap-1">
+                      {group === "Legendary" && <Star className="size-3" fill="currentColor" />}
+                      {group}
+                    </span>
                     <span className="tabular-nums">
                       {mine.length}/{keys.length}
                     </span>
@@ -187,8 +211,8 @@ export function Menu({
               <ol className="space-y-1">
                 {stats.leaders.map((l, i) => (
                   <li key={l.id} className={cn("flex items-center gap-2.5 rounded-xl px-2 py-1.5", l.id === me.id ? "bg-gold/25" : "bg-panel-2")}>
-                    <span className={cn("w-5 text-center font-display font-bold", i < 3 ? "text-gold-dark" : "text-muted")}>
-                      {i < 3 ? ["🥇", "🥈", "🥉"][i] : i + 1}
+                    <span className="grid w-5 place-items-center font-display font-bold text-muted">
+                      {i < 3 ? <Medal className="size-5" style={{ color: PODIUM[i] }} role="img" aria-label={`Number ${i + 1}`} /> : i + 1}
                     </span>
                     <AvatarFace avatar={l.avatar} size={30} className="rounded-full" />
                     <span className="flex-1 truncate font-medium">{l.name}</span>
@@ -215,12 +239,15 @@ export function Menu({
   );
 }
 
+/** Gold, silver and bronze for the top three on the leaderboard. */
+const PODIUM = ["#e0a100", "#8a94a6", "#b0662f"];
+
 /** The power-ups each level unlocks. */
-const PERKS = [
-  { level: 3, icon: "🎭", name: "Decoy", what: "As a ghost, drop a fake you anywhere to fool the hunters." },
-  { level: 5, icon: "🛡️", name: "Shield", what: "As a ghost, raise a shield that saves you from one find." },
-  { level: 10, icon: "🔎", name: "Big search", what: "Hunters search a 3×3 area at once, for the price of 7 searches." },
-  { level: 20, icon: "🔁", name: "Respawn", what: "Caught in the first 30 minutes? Pay 300 coins to jump back in." },
+const PERKS: { level: number; icon: LucideIcon; name: string; what: string }[] = [
+  { level: 3, icon: Drama, name: "Decoy", what: "As a ghost, drop a fake you anywhere to fool the hunters." },
+  { level: 5, icon: Shield, name: "Shield", what: "As a ghost, raise a shield that saves you from one find." },
+  { level: 10, icon: Flashlight, name: "Big search", what: "Hunters search a 3×3 area at once, for the price of 7 searches." },
+  { level: 20, icon: RotateCcw, name: "Respawn", what: "Caught in the first 30 minutes? Pay 300 coins to jump back in." },
 ];
 
 /** Your level, what the next one takes, and the power-ups it unlocks. Hidden if it can't load. */
@@ -228,7 +255,7 @@ function LevelCard() {
   const [info, setInfo] = useState<LevelInfo | null>(null);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const [note, setNote] = useState<{ ok: boolean; text: string; party?: boolean } | null>(null);
 
   const refresh = () =>
     loadLevel()
@@ -249,7 +276,7 @@ function LevelCard() {
     try {
       const res = await upgradeLevel();
       if (res.ok) {
-        setNote({ ok: true, text: `🎉 You're level ${res.level}! (${short(res.cost)} coins spent)` });
+        setNote({ ok: true, party: true, text: `You're level ${res.level}! (${short(res.cost)} coins spent)` });
         await refresh();
       } else {
         setNote({ ok: false, text: res.error || "Couldn't level up. Try again." });
@@ -324,27 +351,42 @@ function LevelCard() {
             )}
           </>
         )}
-        {note && <p className={cn("mt-1.5 text-center text-xs font-semibold", note.ok ? "text-gold" : "text-[#ffb4b6]")}>{note.text}</p>}
+        {note && (
+          <p className={cn("mt-1.5 flex items-center justify-center gap-1.5 text-center text-xs font-semibold", note.ok ? "text-gold" : "text-[#ffb4b6]")}>
+            {note.party && <PartyPopper className="size-4 shrink-0" />}
+            {note.text}
+          </p>
+        )}
       </div>
 
       {/* Power-ups */}
       <ul className="mt-3 grid grid-cols-2 gap-1.5">
         {PERKS.map((p) => {
           const open = info.level >= p.level;
+          const Icon = p.icon;
           return (
             <li key={p.level} className={cn("rounded-xl px-2 py-1.5", open ? "bg-white/15" : "bg-white/5")} title={p.what}>
-              <p className="flex items-center gap-1 text-xs font-semibold">
-                <span className={open ? undefined : "opacity-50 grayscale"}>{p.icon}</span>
+              <p className="flex items-center gap-1.5 text-xs font-semibold">
+                <Icon className={cn("size-3.5 shrink-0", open ? "text-gold" : "text-white/45")} />
                 <span className="truncate">{p.name}</span>
-                <span className="ml-auto shrink-0 text-[10px] font-bold">{open ? "✓" : `🔒 L${p.level}`}</span>
+                <span className="ml-auto flex shrink-0 items-center gap-0.5 text-[10px] font-bold text-white/60">
+                  {open ? (
+                    <Check className="size-3.5 text-[#5be3b5]" strokeWidth={3} role="img" aria-label="Unlocked" />
+                  ) : (
+                    <>
+                      <Lock className="size-3" strokeWidth={2.5} />L{p.level}
+                    </>
+                  )}
+                </span>
               </p>
               <p className={cn("mt-0.5 text-[10px] leading-snug", open ? "text-white/80" : "text-white/50")}>{p.what}</p>
             </li>
           );
         })}
       </ul>
-      <p className="mt-2 text-[11px] leading-snug text-white/75">
-        ⭐ Every 5 levels, whoever catches you earns a bigger bonus. It never stops growing, so high levels are prized targets!
+      <p className="mt-2 flex gap-1.5 text-[11px] leading-snug text-white/75">
+        <Star className="mt-px size-3.5 shrink-0 text-gold" fill="currentColor" />
+        <span>Every 5 levels, whoever catches you earns a bigger bonus. It never stops growing, so high levels are prized targets!</span>
       </p>
     </div>
   );
@@ -355,7 +397,10 @@ function Marketplace() {
   return (
     <div className="mt-4 overflow-hidden rounded-2xl bg-gradient-to-br from-[#ffe27a] via-[#ffb86b] to-[#ff7ab6] p-3 text-ink">
       <div className="flex items-center justify-between">
-        <p className="font-display text-base font-extrabold">🛍️ Marketplace</p>
+        <p className="flex items-center gap-1.5 font-display text-base font-extrabold">
+          <ShoppingBag className="size-5" strokeWidth={2.25} />
+          Marketplace
+        </p>
         <span className="rounded-full bg-ink px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">Coming soon</span>
       </div>
       <p className="mt-1 text-xs leading-snug">
@@ -363,14 +408,16 @@ function Marketplace() {
         stacking those coins!
       </p>
       <div className="mt-2 grid grid-cols-4 gap-1.5 text-center">
-        {[
-          ["👕", "Tees"],
-          ["🎟️", "Tickets"],
-          ["🎁", "Vouchers"],
-          ["🎧", "Gadgets"],
-        ].map(([icon, label]) => (
-          <div key={label} className="rounded-xl bg-white/45 py-1.5">
-            <div className="text-xl leading-none">{icon}</div>
+        {(
+          [
+            [Shirt, "Tees"],
+            [Ticket, "Tickets"],
+            [Gift, "Vouchers"],
+            [Headphones, "Gadgets"],
+          ] as const
+        ).map(([Icon, label]) => (
+          <div key={label} className="flex flex-col items-center rounded-xl bg-white/45 py-1.5">
+            <Icon className="size-5" />
             <div className="mt-0.5 text-[10px] font-semibold">{label}</div>
           </div>
         ))}

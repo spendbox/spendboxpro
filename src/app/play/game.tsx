@@ -8,6 +8,46 @@ import { addressOf, makePlan, tileAt } from "@/lib/city/layout";
 import { cleanAvatar } from "@/lib/avatar";
 import type { GameEvent, GameState } from "@/lib/game";
 import { cn } from "@/lib/cn";
+import {
+  Anchor,
+  Building2,
+  Check,
+  CircleX,
+  DoorOpen,
+  Layers,
+  LogOut,
+  Sun,
+  Clapperboard,
+  Dices,
+  Gamepad2,
+  Repeat1,
+} from "lucide-react";
+/** Any of our line icons (Lucide or our own). */
+type LucideIcon = React.ComponentType<{ className?: string; style?: React.CSSProperties; "aria-hidden"?: boolean }>;
+import {
+  Coins,
+  CircleHelp,
+  Drama,
+  Flashlight,
+  Footprints,
+  Ghost,
+  Hammer,
+  HotAirBalloon,
+  Lightbulb,
+  Lock,
+  MapPin,
+  Megaphone,
+  Menu as MenuIcon,
+  MessageCircle,
+  Radar,
+  RotateCcw,
+  Shield,
+  Sparkles,
+  Timer,
+  Trophy,
+  Users,
+  X,
+} from "@/components/icons";
 import { short } from "@/lib/format";
 import { createClient } from "@/lib/supabase/client";
 import { bigSearch, buyShield, joinRound, moveTo, placeDecoy, respawnMe, searchTile, sweepAround, type ActionResult } from "./actions";
@@ -16,7 +56,7 @@ import { Chat } from "./chat";
 import type { CityEvent, CityMarkers } from "./city-view";
 import { HowItWorks } from "./how-it-works";
 import { Menu } from "./menu";
-import { FeedRow, NotificationsPanel, type FeedItem } from "./notifications";
+import { FeedRow, NotificationsPanel, type FeedIcon, type FeedItem } from "./notifications";
 import { claimBalloon, recordVisit } from "./profile-actions";
 import { Results } from "./results";
 import { balloonRoom, useRooms, type RoomInfo } from "./rooms";
@@ -32,8 +72,19 @@ const CityView = dynamic(() => import("./city-view").then((m) => m.CityView), {
 });
 
 type Mode = "search" | "sweep" | "big";
+/** A building or balloon you can go into (from the 3D city), with its levels. */
+type PlaceRoom = {
+  id: string;
+  name: string;
+  capacity: number;
+  kind: "building" | "balloon";
+  levels?: { id: string; label: string; capacity: number }[];
+};
+// Same order as the balloons in the 3D city.
+const BALLOON_NAMES = ["Red", "Yellow", "Blue", "Purple", "Mint"];
+const BALLOON_COLOURS = ["#e5484d", "#f5a524", "#2f6fd1", "#7048e8", "#12a37a"];
 type Ad = { id: string; image: string; headline: string; brand: string; link: string | null };
-type Notice = { id: number; text: string; tone: "alarm" | "move" | "info" | "mine"; avatar?: ReturnType<typeof cleanAvatar> | null };
+type Notice = { id: number; text: string; tone: "alarm" | "move" | "info" | "mine"; avatar?: ReturnType<typeof cleanAvatar> | null; icon?: FeedIcon };
 
 /** The server's clock, ticking every second on this device. */
 function useNow(serverNow: string) {
@@ -82,24 +133,26 @@ function describe(e: GameEvent, botName: string, myTile: number | null, where: (
     const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : (names[0] ?? (e.detail?.count && e.detail.count > 1 ? `${e.detail.count} ghosts` : "a ghost"));
     // Catching a seasoned player is big news.
     const top = ghosts.reduce((m, h) => Math.max(m, h.level ?? 0), 0);
-    const fish = top >= 20 ? "🦈 Whale of a catch! " : top >= 10 ? "🐟 Big fish caught! " : top >= 5 ? "🎣 Nice catch! " : "";
+    const fish = top >= 20 ? "Whale of a catch! " : top >= 10 ? "Big fish caught! " : top >= 5 ? "Nice catch! " : "";
     const lvl = top >= 5 ? ` (level ${top})` : "";
     return {
       id: e.id,
       tone: "alarm",
       text: `${fish}${who} caught ${list}${ghosts.length === 1 ? lvl : ""} at ${where(e.tile)}!`,
+      icon: top >= 20 ? "whale" : top >= 10 ? "fish" : "catch",
       avatar: first ? cleanAvatar(first.avatar, first.name ?? "ghost") : null,
     };
   }
-  if (e.kind === "decoy") return { id: e.id, tone: "info", text: "🎭 Someone just set down a decoy somewhere in the city. Careful what you search!" };
+  if (e.kind === "decoy") return { id: e.id, tone: "info", icon: "decoy", text: "Someone just set down a decoy somewhere in the city. Careful what you search!" };
   if (e.kind === "decoy_found") {
     const who = e.detail?.finder ?? "A hunter";
     return {
       id: e.id,
       tone: "info",
       text: e.detail?.outcome === "explode"
-        ? `💥 Boom! ${who} searched ${where(e.tile)} and hit a decoy.`
-        : `🧸 Squeak! ${who} searched ${where(e.tile)} and found a toy. It was a decoy.`,
+        ? `Boom! ${who} searched ${where(e.tile)} and hit a decoy.`
+        : `Squeak! ${who} searched ${where(e.tile)} and found a toy. It was a decoy.`,
+      icon: e.detail?.outcome === "explode" ? "boom" : "toy",
     };
   }
   if (e.kind === "respawn") {
@@ -107,7 +160,8 @@ function describe(e: GameEvent, botName: string, myTile: number | null, where: (
     return {
       id: e.id,
       tone: "alarm",
-      text: `🔁 ${name} respawned! They're back in hiding somewhere in the city.`,
+      text: `${name} respawned! They're back in hiding somewhere in the city.`,
+      icon: "respawn",
       avatar: e.detail?.avatar ? cleanAvatar(e.detail.avatar, name) : null,
     };
   }
@@ -117,14 +171,15 @@ function describe(e: GameEvent, botName: string, myTile: number | null, where: (
     return {
       id: e.id,
       tone: "alarm",
-      text: `🛡️ ${names}'s shield blocked ${e.detail?.finder ?? "a hunter"} at ${where(e.tile)}! They teleported somewhere nearby.`,
+      text: `${names}'s shield blocked ${e.detail?.finder ?? "a hunter"} at ${where(e.tile)}! They teleported somewhere nearby.`,
+      icon: "shield",
       avatar: saved[0] ? cleanAvatar(saved[0].avatar, saved[0].name ?? "ghost") : null,
     };
   }
   if (e.kind === "moved") {
     if (myTile !== null && e.tile === myTile) return null;
     const name = e.detail?.name;
-    return { id: e.id, tone: "move", text: `${name ? (e.detail?.bot ? `${name} (the bot)` : name) : "Someone"} just slipped away from ${where(e.tile)}.` };
+    return { id: e.id, tone: "move", icon: "move", text: `${name ? (e.detail?.bot ? `${name} (the bot)` : name) : "Someone"} just slipped away from ${where(e.tile)}.` };
   }
   return null;
 }
@@ -135,24 +190,24 @@ const CHEERS = {
     ["Start hunting!", "They're out there. Somewhere. Go get them."],
     ["Release the hounds!", "Every rooftop, every alley. Nobody hides forever."],
     ["Ready, set, SEEK!", "The clock is ticking and the pool is waiting."],
-    ["The hunt is on 🔍", "Trust your gut. Check the weird spots."],
+    ["The hunt is on", "Trust your gut. Check the weird spots."],
     ["Eyes open, detective", "Somebody just held their breath. Find them."],
     ["Game time!", "First catch gets the bragging rights."],
     ["Go go go!", "Search smart, sweep smarter."],
     ["Hide-and-seek champion?", "Prove it. The city is yours to search."],
   ],
   hider: [
-    ["Good luck! 🤫", "You've been dropped somewhere secret. Stay calm and stay hidden."],
+    ["Good luck!", "You've been dropped somewhere secret. Stay calm and stay hidden."],
     ["Shhh… it's started", "Hunters are coming. Don't make a sound."],
     ["Blend in!", "You're a lamppost now. Act natural."],
     ["Deep breath", "Outlast the hour and the pool is yours."],
     ["Into the shadows", "Every minute you survive is a minute closer to the prize."],
     ["They're coming…", "Watch the drones. Move only when you must."],
-    ["Stay sneaky 🐾", "Nobody knows where you are. Keep it that way."],
+    ["Stay sneaky", "Nobody knows where you are. Keep it that way."],
   ],
   watcher: [
     ["The hunt has begun!", "Ghosts are in place. Grab a seat and watch the city light up."],
-    ["Showtime 🍿", "Hunters are on the move. Who'll be found first?"],
+    ["Showtime", "Hunters are on the move. Who'll be found first?"],
     ["Let the games begin!", "Join in any time as a hunter."],
     ["Here we go!", "Watch the searches land in real time."],
   ],
@@ -178,7 +233,7 @@ export function Game({ state }: { state: GameState }) {
   const [, startTransition] = useTransition();
   const [mode, setMode] = useState<Mode>("search");
   const [radius, setRadius] = useState<1 | 2 | 3>(1);
-  const [message, setMessage] = useState<{ text: string; tone: "good" | "bad" | "info" } | null>(null);
+  const [message, setMessage] = useState<{ text: string; tone: "good" | "bad" | "info"; icon?: LucideIcon } | null>(null);
   const [busyTile, setBusyTile] = useState<number | null>(null);
   const [hover, setHover] = useState<{ tile: number; label: string } | null>(null);
   const [menu, setMenu] = useState(false);
@@ -202,6 +257,12 @@ export function Game({ state }: { state: GameState }) {
   // Game mode (search, move…) or Chat mode (go into buildings and balloons to talk).
   const [viewMode, setViewMode] = useState<"game" | "chat">("game");
   const [ride, setRide] = useState<number | null>(null);
+  // Inside a building: which one, and which level (ground "g", floor "f<n>", rooftop "r").
+  const [place, setPlace] = useState<{ building: string; level: string } | null>(null);
+  const [pickPlace, setPickPlace] = useState<PlaceRoom | null>(null);
+  const [placeRoom, setPlaceRoom] = useState<PlaceRoom | null>(null);
+  const [pickBalloon, setPickBalloon] = useState(false);
+  const [npcTap, setNpcTap] = useState<{ id: string; at: number } | null>(null);
   const [balloonCount, setBalloonCount] = useState(0);
   const [dmRequest, setDmRequest] = useState<{ id: string; name: string; at: number } | null>(null);
   const [placingDecoy, setPlacingDecoy] = useState(false);
@@ -297,7 +358,7 @@ export function Game({ state }: { state: GameState }) {
   useEffect(() => {
     if (passiveGained <= 0) return;
     const id = setTimeout(
-      () => setMessage({ text: `💤 Passive income: +${short(passiveGained)} coins. You earn up to ${short(state.prices.passivePerDay)} a day while you have under ${short(state.prices.passiveTarget)}.`, tone: "good" }),
+      () => setMessage({ icon: Coins, text: `Passive income: +${short(passiveGained)} coins. You earn up to ${short(state.prices.passivePerDay)} a day while you have under ${short(state.prices.passiveTarget)}.`, tone: "good" }),
       0,
     );
     return () => clearTimeout(id);
@@ -395,7 +456,7 @@ export function Game({ state }: { state: GameState }) {
     if (before === null || tilesNow <= before) return;
     const grew = tilesNow - before;
     const id = setTimeout(
-      () => setMessage({ text: `🏗️ The city just grew by ${grew} spots: ${grew >= 40 ? "new ghosts are" : "a new ghost is"} joining. Look at the edges!`, tone: "info" }),
+      () => setMessage({ icon: Hammer, text: `The city just grew by ${grew} spots: ${grew >= 40 ? "new ghosts are" : "a new ghost is"} joining. Look at the edges!`, tone: "info" }),
       0,
     );
     return () => clearTimeout(id);
@@ -430,7 +491,7 @@ export function Game({ state }: { state: GameState }) {
     const pub = state.events
       .map((e) => {
         const n = describe(e, botName, myLastSpot, where);
-        return n ? ({ key: `e${e.id}`, at: e.at, text: n.text, tone: n.tone, avatar: n.avatar ?? null } as FeedItem) : null;
+        return n ? ({ key: `e${e.id}`, at: e.at, text: n.text, tone: n.tone, avatar: n.avatar ?? null, icon: n.icon } as FeedItem) : null;
       })
       .filter((x): x is FeedItem => x !== null);
     const mine = state.notifications.map((n) => ({
@@ -439,6 +500,7 @@ export function Game({ state }: { state: GameState }) {
       text: n.tile !== null && n.kind === "trap" ? `${n.body} (near ${where(n.tile)})` : n.body,
       tone: n.kind === "caught" ? ("alarm" as const) : ("mine" as const),
       avatar: n.kind === "caught" || n.kind === "shield" ? me.avatar : null,
+      icon: (({ trap: "trap", trapped: "trap", swept: "drone", caught: "catch", shield: "shield", shielded: "shield", decoy: "decoy" }) as Record<string, FeedIcon>)[n.kind] ?? "info",
     }));
     return [...pub, ...mine].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 60);
   }, [state.events, state.notifications, botName, myLastSpot, where, me.avatar]);
@@ -531,27 +593,49 @@ export function Game({ state }: { state: GameState }) {
   }
 
   // Chat mode: tapping a building or balloon takes you inside to chat with the people there.
-  function onRoom(room: RoomInfo) {
-    const k = room.kind === "balloon" ? Number(room.id.split(":")[1]) : null;
-    if (guest) {
-      // Watchers get the view from the balloon, but need to sign in to chat.
-      if (k !== null) {
-        setRide(k);
-        setTimeout(() => setRide((r) => (r === k ? null : r)), 45_000);
-      }
-      return setMessage({ text: "Sign in to go inside and chat with the people here. (You can still enjoy the view!)", tone: "info" });
+  // Chat mode: tapping a building shows its levels (ground, floors, rooftop) to pick from;
+  // nothing opens the chat by itself.
+  function onRoom(room: PlaceRoom) {
+    if (place || ride !== null) return; // inside somewhere: taps just look around
+    if (room.kind === "balloon") return boardBalloon(Number(room.id.split(":")[1]));
+    setPickPlace(room);
+  }
+  function goToLevel(room: PlaceRoom, level: { id: string; label: string; capacity: number }) {
+    setPickPlace(null);
+    const info: RoomInfo = {
+      id: `${room.id}:${level.id}`,
+      name: `${room.name} · ${level.label}`,
+      capacity: level.capacity,
+      kind: "building",
+      building: room.id,
+      level: level.id,
+    } as RoomInfo;
+    if (!guest) {
+      const res = rooms.enter(info);
+      if (!res.ok) return setMessage({ text: res.reason === "full" ? `${info.name} is full right now. Try another floor!` : "Sign in to chat here.", tone: "info" });
     }
-    const res = rooms.enter(room);
-    if (!res.ok) return setMessage({ text: res.reason === "full" ? `${room.name} is full right now. Try somewhere bigger!` : "Sign in to chat.", tone: "info" });
-    if (k !== null) setRide(k);
-    setChatOpen(true);
+    setRide(null);
+    setPlaceRoom(room);
+    setPlace({ building: room.id, level: level.id });
+    setMessage({ icon: Building2, text: guest ? `Welcome to ${info.name}. Sign in to chat with the people here.` : `You're in ${info.name}. Drag to look around; tap Chat to talk to people here.`, tone: "info" });
+  }
+  function boardBalloon(k: number) {
+    setPickBalloon(false);
+    setPlace(null);
+    if (!guest) {
+      const res = rooms.enter({ id: balloonRoom(k), name: `Balloon ${k + 1}`, capacity: 1000, kind: "balloon" });
+      if (!res.ok) return setMessage({ text: res.reason === "full" ? "That balloon is full. Try another one!" : "Sign in to ride.", tone: "info" });
+    } else {
+      // Watchers get the view for a while, but need to sign in to chat on board.
+      setTimeout(() => setRide((r) => (r === k ? null : r)), 60_000);
+    }
+    setRide(k);
+    setMessage({ icon: HotAirBalloon, text: guest ? "Enjoy the view! Sign in to chat with the people on board." : "Up we go! Drag to look around; tap Chat to talk to everyone on board.", tone: "info" });
   }
   function leaveRoom() {
     rooms.leave();
     setRide(null);
-  }
-  function rideBalloon(k: number) {
-    onRoom({ id: balloonRoom(k), name: `Balloon ${k + 1}`, capacity: 1000, kind: "balloon" });
+    setPlace(null);
   }
 
   function onTile(tile: number) {
@@ -570,7 +654,7 @@ export function Game({ state }: { state: GameState }) {
       playSfx("decoy");
       return act(
         () => placeDecoy(tile),
-        () => setMessage({ text: `🎭 Decoy set down at ${where(tile)}. Everyone heard a decoy went out, but only you know where.`, tone: "good" }),
+        () => setMessage({ icon: Drama, text: `Decoy set down at ${where(tile)}. Everyone heard a decoy went out, but only you know where.`, tone: "good" }),
       );
     }
     if (isHider) {
@@ -593,7 +677,7 @@ export function Game({ state }: { state: GameState }) {
         (d) => {
           const found = Boolean(d.found);
           // Don't spoil it: the answer comes when the drone has finished its scan.
-          setMessage({ text: "📡 Drone on its way… scanning the area.", tone: "info" });
+          setMessage({ icon: Radar, text: "Drone on its way… scanning the area.", tone: "info" });
           setTimeout(() => {
             playSfx(found ? "found" : "miss");
             setMessage({
@@ -650,7 +734,7 @@ export function Game({ state }: { state: GameState }) {
       if (res.ok) playSfx("pop");
       setMessage(
         res.ok
-          ? { text: `🎈 Pop! +${res.coins} coins.${res.leftToday > 0 ? ` ${res.leftToday} more balloon${res.leftToday === 1 ? "" : "s"} today.` : " That's all for today."}`, tone: "good" }
+          ? { icon: Coins, text: `Pop! +${res.coins} coins.${res.leftToday > 0 ? ` ${res.leftToday} more balloon${res.leftToday === 1 ? "" : "s"} today.` : " That's all for today."}`, tone: "good" }
           : { text: res.error, tone: "info" },
       );
       router.refresh();
@@ -693,9 +777,13 @@ export function Game({ state }: { state: GameState }) {
           ads={ads}
           onAdViews={onAdViews}
           mode={viewMode}
-          roomCounts={rooms.counts}
+          roomCounts={rooms.buildingCounts}
           onRoom={onRoom}
           ride={ride}
+          place={place}
+          onNpc={(id: string) => {
+            setNpcTap({ id, at: Date.now() });
+          }}
           onBalloons={setBalloonCount}
           revealed={phase !== "join"}
           caughtFaces={state.caughtFaces}
@@ -777,7 +865,7 @@ export function Game({ state }: { state: GameState }) {
               className="glass grid h-9 w-9 shrink-0 place-items-center rounded-full text-base font-semibold"
               aria-label="Menu"
             >
-              {menu ? "×" : "☰"}
+              {menu ? <X className="size-4" /> : <MenuIcon className="size-4" />}
             </button>
           </div>
           )}
@@ -828,7 +916,9 @@ export function Game({ state }: { state: GameState }) {
           aria-label="Close"
         >
           <div className="start-pop glass w-full max-w-sm rounded-3xl p-6 text-center shadow-2xl">
-            <p className="text-5xl">{entry?.role === "hider" ? "🤫" : entry?.role === "seeker" ? "🔦" : "🎬"}</p>
+            <span className="mx-auto grid size-16 place-items-center rounded-full bg-ink text-white">
+              {entry?.role === "hider" ? <Ghost className="size-8" /> : entry?.role === "seeker" ? <Flashlight className="size-8" /> : <Clapperboard className="size-8" />}
+            </span>
             <h2 className="mt-2 font-display text-3xl font-extrabold">{startCard.title}</h2>
             <p className="mt-2 text-sm text-ink/80">{startCard.line}</p>
           </div>
@@ -837,7 +927,7 @@ export function Game({ state }: { state: GameState }) {
 
       {confirmShield && entry && (
         <Sheet onClose={() => setConfirmShield(false)}>
-          <h2 className="font-display text-xl font-bold">🛡️ Raise your shield?</h2>
+          <h2 className="flex items-center gap-2 font-display text-xl font-bold"><Shield className="size-5 text-[#7048e8]" />Raise your shield?</h2>
           <p className="mt-1 text-sm text-muted">As a ghost, you can wrap yourself in a shield that saves you once.</p>
           <div className="mt-3 rounded-2xl bg-[#7048e8]/10 p-4 text-center">
             <p className="text-sm text-muted">It costs</p>
@@ -845,10 +935,10 @@ export function Game({ state }: { state: GameState }) {
             <p className="text-xs text-muted">You have {short(me.coins)}. One shield per game.</p>
           </div>
           <ul className="mt-3 space-y-1.5 text-sm text-ink/80">
-            <li>✨ The next time a hunter finds you, your shield whisks you away to a free spot nearby and you stay in the game.</li>
-            <li>💸 You still lose your stake to that hunter, but you keep playing for the pool.</li>
-            <li>🧱 While your shield is up you <b>can&apos;t move</b>. Once it has saved you, you can move again.</li>
-            <li>🎲 Where you land is random: it could be a spot that was already searched.</li>
+            <Li icon={Sparkles}>The next time a hunter finds you, your shield whisks you away to a free spot nearby and you stay in the game.</Li>
+            <Li icon={Coins}>You still lose your stake to that hunter, but you keep playing for the pool.</Li>
+            <Li icon={Anchor}>While your shield is up you <b>can&apos;t move</b>. Once it has saved you, you can move again.</Li>
+            <Li icon={Dices}>Where you land is random: it could be a spot that was already searched.</Li>
           </ul>
           <div className="mt-4 flex gap-2">
             <button onClick={() => setConfirmShield(false)} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold">
@@ -860,7 +950,7 @@ export function Game({ state }: { state: GameState }) {
                 setConfirmShield(false);
                 act(buyShield, () => {
                   playSfx("shield");
-                  setMessage({ text: "🛡️ Shield up! The next find just teleports you. Sit tight until then.", tone: "good" });
+                  setMessage({ icon: Shield, text: "Shield up! The next find just teleports you. Sit tight until then.", tone: "good" });
                 });
               }}
               className="flex-1 rounded-xl bg-[#7048e8] py-2.5 font-semibold text-white disabled:opacity-50"
@@ -873,31 +963,36 @@ export function Game({ state }: { state: GameState }) {
 
       {confirmHide && round && (
         <Sheet onClose={() => setConfirmHide(false)}>
-          <h2 className="font-display text-xl font-bold">👻 Be a ghost this round?</h2>
+          <h2 className="flex items-center gap-2 font-display text-xl font-bold"><Ghost className="size-5 text-me" />Be a ghost this round?</h2>
           <div className="mt-3 rounded-2xl bg-panel-2 p-4 text-center">
             <p className="text-sm text-muted">You&apos;re putting down</p>
             <p className="font-display text-4xl font-extrabold">{short(state.prices.stake)} coins</p>
             <p className="text-xs text-muted">You have {short(me.coins)}. After this: {short(Math.max(0, me.coins - state.prices.stake))}.</p>
           </div>
           <ul className="mt-3 space-y-1.5 text-sm text-ink/80">
-            <li>✅ Stay hidden till the end: you get your {short(state.prices.stake)} back, and the survivors share {Math.round(state.prices.winShare * 100)}% of the pool (it starts at 0 and grows with every search, sweep and move).</li>
-            <li>❌ Get caught: the hunter who finds you keeps most of your stake. If every ghost is found, hunters take {Math.round(state.prices.winShare * 100)}% of the pool and the ghosts share {Math.round(state.prices.otherShare * 100)}%.</li>
-            <li>🛡️ Once the hunt starts you can buy a one-time shield ({short(state.prices.shield)} coins).</li>
-            <li>🚶 Moving costs {short(state.prices.moveFee)} coins each time.</li>
+            <Li icon={Check}>Stay hidden till the end: you get your {short(state.prices.stake)} back, and the survivors share {Math.round(state.prices.winShare * 100)}% of the pool (it starts at 0 and grows with every search, sweep and move).</Li>
+            <Li icon={CircleX}>Get caught: the hunter who finds you keeps most of your stake. If every ghost is found, hunters take {Math.round(state.prices.winShare * 100)}% of the pool and the ghosts share {Math.round(state.prices.otherShare * 100)}%.</Li>
+            <Li icon={Shield}>Once the hunt starts you can buy a one-time shield ({short(state.prices.shield)} coins).</Li>
+            <Li icon={Footprints}>Moving costs {short(state.prices.moveFee)} coins each time.</Li>
           </ul>
-          <div className="mt-4 flex gap-2">
-            <button onClick={() => setConfirmHide(false)} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold">
-              Not now
-            </button>
+          <div className="mt-4 space-y-2">
             <button
               disabled={busy}
               onClick={() => {
                 setConfirmHide(false);
-                act(() => joinRound("hider"), () => setMessage({ text: "You're in! When the clock hits zero, we'll drop you somewhere in the city.", tone: "info" }));
+                act(() => joinRound("hider"), () => setMessage({ icon: Ghost, text: "You're in! When the clock hits zero, we'll drop you somewhere in the city.", tone: "info" }));
               }}
-              className="flex-1 rounded-xl bg-ink py-2.5 font-semibold text-white disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-ink px-4 py-3.5 text-white disabled:opacity-50"
             >
-              Stake {short(state.prices.stake)} & become a ghost
+              <Ghost className="size-5 shrink-0" />
+              <span className="font-semibold">Become a ghost</span>
+              <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-sm font-semibold tabular-nums">
+                <Coins className="mr-1 inline size-3.5 align-[-0.1em]" />
+                {short(state.prices.stake)}
+              </span>
+            </button>
+            <button onClick={() => setConfirmHide(false)} className="w-full rounded-2xl py-2.5 text-sm font-semibold text-muted hover:bg-panel-2">
+              Not now
             </button>
           </div>
         </Sheet>
@@ -917,7 +1012,7 @@ export function Game({ state }: { state: GameState }) {
           </ul>
           {state.activeTraps > 0 && (
             <p className="mt-3 rounded-xl bg-[#4dabf7]/15 px-3 py-2 text-sm text-[#1864ab]">
-              📡 There {state.activeTraps === 1 ? "is 1 drone trap" : `are ${state.activeTraps} drone traps`} watching parts of the city
+              <Radar className="mr-1 inline size-4 align-[-0.15em]" />There {state.activeTraps === 1 ? "is 1 drone trap" : `are ${state.activeTraps} drone traps`} watching parts of the city
               right now, and you can&apos;t see where. If you move into one, the hunter who set it will know someone&apos;s there.
             </p>
           )}
@@ -951,6 +1046,66 @@ export function Game({ state }: { state: GameState }) {
         </Sheet>
       )}
 
+      {pickPlace && (
+        <Sheet onClose={() => setPickPlace(null)}>
+          <h2 className="flex items-center gap-2 font-display text-xl font-bold">
+            <Building2 className="size-5 text-[#7048e8]" />
+            {pickPlace.name}
+          </h2>
+          <p className="mt-1 text-sm text-muted">Where would you like to go? Each floor has its own people and its own chat.</p>
+          <div className="mt-3 space-y-2">
+            {(pickPlace.levels?.length ? pickPlace.levels : [{ id: "g", label: "Ground floor", capacity: pickPlace.capacity }]).map((lvl) => {
+              const id = `${pickPlace.id}:${lvl.id}`;
+              const here = rooms.counts[id] ?? 0;
+              const Icon = lvl.id === "r" ? Sun : lvl.id === "g" ? DoorOpen : Layers;
+              return (
+                <button
+                  key={lvl.id}
+                  onClick={() => goToLevel(pickPlace, lvl)}
+                  className="flex w-full items-center gap-3 rounded-2xl bg-panel-2 px-4 py-3 text-left hover:bg-gold/20"
+                >
+                  <Icon className="size-5 shrink-0 text-muted" />
+                  <span className="flex-1 font-semibold">{lvl.label}</span>
+                  <span className="flex items-center gap-1 text-xs text-muted">
+                    <Users className="size-3.5" />
+                    {here}/{short(lvl.capacity)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </Sheet>
+      )}
+      {pickBalloon && (
+        <Sheet onClose={() => setPickBalloon(false)}>
+          <h2 className="flex items-center gap-2 font-display text-xl font-bold">
+            <HotAirBalloon className="size-5 text-[#e64980]" />
+            Hop on a balloon
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            Rides last 10 minutes and float over the whole city. Up to 1,000 people per balloon chat together on the way.
+          </p>
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {Array.from({ length: Math.max(balloonCount, 1) }, (_, k) => {
+              const n = rooms.counts[balloonRoom(k)] ?? 0;
+              return (
+                <button
+                  key={k}
+                  onClick={() => boardBalloon(k)}
+                  className="flex items-center gap-3 rounded-2xl bg-panel-2 px-4 py-3 text-left hover:bg-[#e64980]/15"
+                >
+                  <HotAirBalloon className="size-6 shrink-0" style={{ color: BALLOON_COLOURS[k % BALLOON_COLOURS.length] }} />
+                  <span className="flex-1 font-semibold">{BALLOON_NAMES[k % BALLOON_NAMES.length]} balloon</span>
+                  <span className="flex items-center gap-1 text-xs text-muted">
+                    <Users className="size-3.5" />
+                    {n}/1,000
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </Sheet>
+      )}
       {adExplainer && (
         <Sheet onClose={() => setAdExplainer(false)}>
           <AdvertiseExplainer onClose={() => setAdExplainer(false)} />
@@ -979,7 +1134,7 @@ export function Game({ state }: { state: GameState }) {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={openAd.ad.image} alt={openAd.ad.headline} className="mt-2 aspect-[2/1] w-full rounded-2xl bg-panel-2 object-cover" />
           <h2 className="mt-3 font-display text-xl font-bold">{openAd.ad.headline}</h2>
-          {openAd.reward && <p className="mt-2 rounded-xl bg-gold/25 px-3 py-2 text-sm font-semibold text-gold-dark">🪙 {openAd.reward}</p>}
+          {openAd.reward && <p className="mt-2 rounded-xl bg-gold/25 px-3 py-2 text-sm font-semibold text-gold-dark"><Coins className="mr-1 inline size-4 align-[-0.15em]" />{openAd.reward}</p>}
           <div className="mt-4 flex gap-2">
             <button onClick={() => setOpenAd(null)} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold">
               Back to the city
@@ -1005,13 +1160,13 @@ export function Game({ state }: { state: GameState }) {
       )}
       {confirmHunt && round && (
         <Sheet onClose={() => setConfirmHunt(false)}>
-          <h2 className="font-display text-xl font-bold">🔦 Join the hunt?</h2>
+          <h2 className="flex items-center gap-2 font-display text-xl font-bold"><Flashlight className="size-5 text-gold-dark" />Join the hunt?</h2>
           <ul className="mt-3 space-y-1.5 text-sm text-ink/80">
             <li>🆓 Joining is free. {me.freeSearch ? "Your first search today is on us." : `Searches cost about ${short(round.searchPrice)} coins each right now.`}</li>
-            <li>👻 As a hunter, you tap spots to search for ghosts, or send drones to sweep an area.</li>
-            <li>💰 Find a ghost and you keep most of their stake. Find {botName}, the bot, for {short(200)} coins.</li>
-            <li>🏆 Catch every ghost and hunters share 80% of the pool.</li>
-            <li>⏳ You stay a hunter for the whole round.</li>
+            <Li icon={Ghost}>As a hunter, you tap spots to search for ghosts, or send drones to sweep an area.</Li>
+            <Li icon={Coins}>Find a ghost and you keep most of their stake. Find {botName}, the bot, for {short(200)} coins.</Li>
+            <Li icon={Trophy}>Catch every ghost and hunters share 80% of the pool.</Li>
+            <Li icon={Timer}>You stay a hunter for the whole round.</Li>
           </ul>
           <div className="mt-4 flex gap-2">
             <button onClick={() => setConfirmHunt(false)} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold">
@@ -1021,7 +1176,7 @@ export function Game({ state }: { state: GameState }) {
               disabled={busy}
               onClick={() => {
                 setConfirmHunt(false);
-                act(() => joinRound("seeker"), () => setMessage({ text: "You're hunting this round. Happy hunting! 🔦", tone: "info" }));
+                act(() => joinRound("seeker"), () => setMessage({ text: "You're hunting this round. Happy hunting!", tone: "info" }));
               }}
               className="flex-1 rounded-xl bg-gold py-2.5 font-semibold text-ink disabled:opacity-50"
             >
@@ -1033,7 +1188,7 @@ export function Game({ state }: { state: GameState }) {
 
       {confirmDecoy && entry && (
         <Sheet onClose={() => setConfirmDecoy(false)}>
-          <h2 className="font-display text-xl font-bold">🎭 Drop a decoy?</h2>
+          <h2 className="flex items-center gap-2 font-display text-xl font-bold"><Drama className="size-5 text-[#f08c00]" />Drop a decoy?</h2>
           <p className="mt-1 text-sm text-muted">As a ghost, you can drop a fake you anywhere in the city to fool the hunters.</p>
           <div className="mt-3 rounded-2xl bg-[#f08c00]/10 p-4 text-center">
             <p className="text-sm text-muted">It costs</p>
@@ -1041,10 +1196,10 @@ export function Game({ state }: { state: GameState }) {
             <p className="text-xs text-muted">You have {short(me.coins)}. One decoy per game; each one costs a little more than your last.</p>
           </div>
           <ul className="mt-3 space-y-1.5 text-sm text-ink/80">
-            <li>📍 You choose where it goes: after this, tap any spot in the city.</li>
-            <li>📢 Everyone hears that a decoy went out, but not where (unless one of their drone traps is watching that spot).</li>
-            <li>📡 Drones think it&apos;s really you. A hunter who searches it gets nothing: it goes bang, or a squeaky toy pops up.</li>
-            <li>🧱 Your decoy stays where you drop it.</li>
+            <Li icon={MapPin}>You choose where it goes: after this, tap any spot in the city.</Li>
+            <Li icon={Megaphone}>Everyone hears that a decoy went out, but not where (unless one of their drone traps is watching that spot).</Li>
+            <Li icon={Radar}>Drones think it&apos;s really you. A hunter who searches it gets nothing: it goes bang, or a squeaky toy pops up.</Li>
+            <Li icon={Anchor}>Your decoy stays where you drop it.</Li>
           </ul>
           <div className="mt-4 flex gap-2">
             <button onClick={() => setConfirmDecoy(false)} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold">
@@ -1064,7 +1219,7 @@ export function Game({ state }: { state: GameState }) {
       )}
       {confirmRespawn && entry && (
         <Sheet onClose={() => setConfirmRespawn(false)}>
-          <h2 className="font-display text-xl font-bold">🔁 Come back as a ghost?</h2>
+          <h2 className="flex items-center gap-2 font-display text-xl font-bold"><RotateCcw className="size-5 text-[#e8590c]" />Come back as a ghost?</h2>
           <p className="mt-1 text-sm text-muted">You were caught early, so you can rise again, once.</p>
           <div className="mt-3 rounded-2xl bg-[#e8590c]/10 p-4 text-center">
             <p className="text-sm text-muted">It costs</p>
@@ -1072,10 +1227,10 @@ export function Game({ state }: { state: GameState }) {
             <p className="text-xs text-muted">You have {short(me.coins)}. These coins disappear (they don&apos;t go into the pool).</p>
           </div>
           <ul className="mt-3 space-y-1.5 text-sm text-ink/80">
-            <li>🎲 You drop back in on a random spot nobody has searched yet.</li>
-            <li>📢 Everyone is told you respawned (but not where).</li>
-            <li>💸 Your stake is still gone, but you can play on for a share of the pool.</li>
-            <li>1️⃣ Once per game.</li>
+            <Li icon={Dices}>You drop back in on a random spot nobody has searched yet.</Li>
+            <Li icon={Megaphone}>Everyone is told you respawned (but not where).</Li>
+            <Li icon={Coins}>Your stake is still gone, but you can play on for a share of the pool.</Li>
+            <Li icon={Repeat1}>Once per game.</Li>
           </ul>
           <div className="mt-4 flex gap-2">
             <button onClick={() => setConfirmRespawn(false)} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold">
@@ -1087,7 +1242,7 @@ export function Game({ state }: { state: GameState }) {
                 setConfirmRespawn(false);
                 act(respawnMe, () => {
                   playSfx("respawn");
-                  setMessage({ text: "🔁 You're back! Dropped somewhere new. Stay sharp.", tone: "good" });
+                  setMessage({ icon: RotateCcw, text: "You're back! Dropped somewhere new. Stay sharp.", tone: "good" });
                 });
               }}
               className="flex-1 rounded-xl bg-[#e8590c] py-2.5 font-semibold text-white disabled:opacity-50"
@@ -1109,6 +1264,7 @@ export function Game({ state }: { state: GameState }) {
               message.tone === "info" && "glass",
             )}
           >
+            {message.icon && <message.icon className="mr-1.5 inline size-4 align-[-0.15em]" aria-hidden />}
             {message.text}
           </p>
         )}
@@ -1119,7 +1275,9 @@ export function Game({ state }: { state: GameState }) {
         )}
         {ctrlHint && (
           <button onClick={() => setCtrlHint(false)} className="glass pointer-events-auto hidden rounded-full px-3 py-1.5 text-xs font-medium sm:block">
-            💡 Tip: hold <kbd className="rounded bg-panel-2 px-1 font-sans">Ctrl</kbd> and drag to turn the city. Scroll to zoom. ✕
+            <Lightbulb className="mr-1 inline size-3.5 align-[-0.15em] text-gold-dark" />
+            Tip: hold <kbd className="rounded bg-panel-2 px-1 font-sans">Ctrl</kbd> and drag to turn the city. Scroll to zoom.
+            <X className="ml-1 inline size-3.5 align-[-0.15em]" />
           </button>
         )}
 
@@ -1133,11 +1291,12 @@ export function Game({ state }: { state: GameState }) {
                   aria-selected={viewMode === m}
                   onClick={() => {
                     setViewMode(m);
-                    if (m === "game") setRide(null);
+                    if (m === "game") leaveRoom();
                   }}
                   className={cn("rounded-full px-3 py-1.5", viewMode === m ? "bg-ink text-white" : "text-muted")}
                 >
-                  {m === "game" ? "🎮 Game" : "💬 Chat mode"}
+                  {m === "game" ? <Gamepad2 className="size-4" /> : <MessageCircle className="size-4" />}
+                  {m === "game" ? "Game" : "Chat mode"}
                 </button>
               ))}
             </div>
@@ -1161,6 +1320,8 @@ export function Game({ state }: { state: GameState }) {
               botName={botName}
               botBounty={200}
               dmRequest={dmRequest}
+              externalNpc={npcTap}
+              enteredAt={rooms.enteredAt}
             />
           )}
         </div>
@@ -1168,42 +1329,50 @@ export function Game({ state }: { state: GameState }) {
         <div className="glass pointer-events-auto w-full max-w-xl rounded-2xl p-3">
           {round && viewMode === "chat" ? (
             <div className="space-y-2 text-sm">
-              <p>
-                <b>💬 Chat mode.</b>{" "}
-                <span className="text-muted">
-                  {rooms.myRoomInfo
-                    ? `You're in ${rooms.myRoomInfo.name} with ${Math.max(0, (rooms.counts[rooms.myRoomInfo.id] ?? 1) - 1)} other${(rooms.counts[rooms.myRoomInfo.id] ?? 1) - 1 === 1 ? "" : "s"}.`
-                    : "Tap a building to go in and chat with the people there. Bigger buildings hold more people. The 👥 numbers show who's inside."}
-                </span>
-              </p>
-              {balloonCount > 0 && (
-                <div className="flex gap-1.5 overflow-x-auto pb-1">
-                  {Array.from({ length: balloonCount }, (_, k) => {
-                    const n = rooms.counts[balloonRoom(k)] ?? 0;
-                    return (
-                      <button
-                        key={k}
-                        onClick={() => rideBalloon(k)}
-                        className={cn(
-                          "shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold",
-                          ride === k ? "bg-[#e64980] text-white" : "bg-panel-2",
-                        )}
-                      >
-                        🎈 Balloon {k + 1} · {n}/1000
+              {place || ride !== null ? (
+                <>
+                  <p className="flex items-center gap-2">
+                    {ride !== null ? <HotAirBalloon className="size-5 shrink-0 text-[#e64980]" /> : <Building2 className="size-5 shrink-0 text-[#7048e8]" />}
+                    <span className="min-w-0">
+                      <b className="block truncate">{rooms.myRoomInfo?.name ?? (ride !== null ? `Balloon ${ride + 1}` : "Inside")}</b>
+                      <span className="text-xs text-muted">
+                        {guest ? "Watching. Sign in to chat here." : `${Math.max(0, (rooms.myRoom ? rooms.counts[rooms.myRoom] : 1) ?? 1)} here · drag to look around`}
+                      </span>
+                    </span>
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {!guest && (
+                      <button onClick={() => setChatOpen(true)} className="flex items-center gap-1.5 rounded-xl bg-ink px-3 py-2 font-semibold text-white">
+                        <MessageCircle className="size-4" />
+                        Chat
                       </button>
-                    );
-                  })}
-                </div>
-              )}
-              <p className="text-xs text-muted">
-                {guest
-                  ? "Hop on a balloon to enjoy the view. Sign in to chat with the people on board."
-                  : "Balloon rides last 10 minutes and float over the city. Switch back to 🎮 Game to search or move."}
-              </p>
-              {rooms.myRoomInfo && (
-                <button onClick={leaveRoom} className="rounded-xl bg-panel-2 px-3 py-1.5 text-xs font-semibold">
-                  Leave {rooms.myRoomInfo.kind === "balloon" ? "the balloon" : rooms.myRoomInfo.name}
-                </button>
+                    )}
+                    {place && placeRoom && placeRoom.id === place.building && (placeRoom.levels?.length ?? 0) > 1 && (
+                      <button onClick={() => setPickPlace(placeRoom)} className="flex items-center gap-1.5 rounded-xl bg-panel-2 px-3 py-2 font-semibold">
+                        <Layers className="size-4" />
+                        Change floor
+                      </button>
+                    )}
+                    <button onClick={leaveRoom} className="flex items-center gap-1.5 rounded-xl bg-panel-2 px-3 py-2 font-semibold">
+                      <LogOut className="size-4" />
+                      {ride !== null ? "Get off" : "Leave"}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p>
+                    <b className="inline-flex items-center gap-1">
+                      <MessageCircle className="size-4" />
+                      Chat mode.
+                    </b>{" "}
+                    <span className="text-muted">Tap a building to go inside: the lobby, upper floors or the rooftop. The numbers over buildings show who&apos;s there.</span>
+                  </p>
+                  <button onClick={() => setPickBalloon(true)} className="flex items-center gap-1.5 rounded-xl bg-[#e64980] px-3 py-2 font-semibold text-white">
+                    <HotAirBalloon className="size-4" />
+                    Hop on a balloon
+                  </button>
+                </>
               )}
             </div>
           ) : !round || phase === "done" ? (
@@ -1219,10 +1388,10 @@ export function Game({ state }: { state: GameState }) {
               </p>
               <div className="grid grid-cols-3 gap-2 text-sm sm:flex">
                 <button onClick={() => setHowOpen(true)} className="whitespace-nowrap rounded-xl bg-panel-2 px-3 py-2.5 font-semibold">
-                  ❓ Rules
+                  <CircleHelp className="mr-1 inline size-4 align-[-0.15em]" />Rules
                 </button>
                 <button onClick={() => setAdExplainer(true)} className="whitespace-nowrap rounded-xl bg-panel-2 px-3 py-2.5 font-semibold">
-                  📣 Advertise
+                  <Megaphone className="mr-1 inline size-4 align-[-0.15em]" />Advertise
                 </button>
                 <Link href="/login" className="whitespace-nowrap rounded-xl bg-gold px-3 py-2.5 text-center font-semibold text-ink">
                   Play now
@@ -1250,7 +1419,7 @@ export function Game({ state }: { state: GameState }) {
                     onClick={() => setConfirmHide(true)}
                     className="flex-1 rounded-xl bg-ink px-4 py-2.5 font-semibold text-white disabled:opacity-40 sm:flex-none"
                   >
-                    👻 Ghost · {state.prices.stake}
+                    <Ghost className="mr-1 inline size-4 align-[-0.15em]" />Ghost · {state.prices.stake}
                   </button>
                 )}
               </div>
@@ -1280,7 +1449,7 @@ export function Game({ state }: { state: GameState }) {
                   </ModeButton>
                 ) : (
                   <span className="rounded-lg bg-panel-2 px-3 py-1.5 font-semibold text-muted/70" title={`Unlocks at level ${state.unlocks.bigSearch}`}>
-                    🔒 Big search · Lv {state.unlocks.bigSearch}
+                    <Lock className="mr-1 inline size-3.5 align-[-0.1em]" />Big search · Lv {state.unlocks.bigSearch}
                   </span>
                 )}
                 {mode === "sweep" && (
@@ -1316,7 +1485,7 @@ export function Game({ state }: { state: GameState }) {
               <p className="text-hit">You&apos;ve been found. Hang around and watch the rest of the hunt, or try again next round.</p>
               {entry.canRespawn && (
                 <button onClick={() => setConfirmRespawn(true)} className="w-full rounded-xl bg-[#e8590c] py-2.5 font-semibold text-white">
-                  🔁 Respawn · {short(state.prices.respawn)} coins
+                  <RotateCcw className="mr-1 inline size-4 align-[-0.15em]" />Respawn · {short(state.prices.respawn)} coins
                 </button>
               )}
             </div>
@@ -1325,7 +1494,7 @@ export function Game({ state }: { state: GameState }) {
               {frozenWait > 0 && (
                 <div className="rounded-xl bg-hit/10 px-3 py-2 font-medium text-hit">
                   <div className="flex items-center justify-between gap-2">
-                    <span>📡 A drone has you pinned. No moving for now.</span>
+                    <span className="flex items-center gap-1.5"><Radar className="size-4" />A drone has you pinned. No moving for now.</span>
                     <span className="font-display text-lg font-bold tabular-nums">{clock(frozenWait)}</span>
                   </div>
                   <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-hit/15">
@@ -1338,12 +1507,12 @@ export function Game({ state }: { state: GameState }) {
               )}
               {frozenWait <= 0 && recentlySwept && (
                 <p className="rounded-xl bg-[#4dabf7]/15 px-3 py-2 font-medium text-[#1864ab]">
-                  📡 A drone just swept your area. Hunters know someone&apos;s close. Maybe time to move?
+                  <Radar className="mr-1 inline size-4 align-[-0.15em]" />A drone just swept your area. Hunters know someone&apos;s close. Maybe time to move?
                 </p>
               )}
               {placingDecoy && (
                 <div className="flex items-center justify-between gap-2 rounded-xl bg-[#f08c00]/15 px-3 py-2 font-medium text-[#a35200]">
-                  <span>🎭 Tap the spot where you want your decoy.</span>
+                  <span className="flex items-center gap-1.5"><Drama className="size-4" />Tap the spot where you want your decoy.</span>
                   <button onClick={() => setPlacingDecoy(false)} className="text-xs underline">
                     Cancel
                   </button>
@@ -1359,7 +1528,7 @@ export function Game({ state }: { state: GameState }) {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <PowerUp
-                  icon="🎭"
+                  icon={Drama}
                   label="Decoy"
                   price={state.prices.decoy}
                   unlockAt={state.unlocks.decoy}
@@ -1370,7 +1539,7 @@ export function Game({ state }: { state: GameState }) {
                   tone="bg-[#f08c00]"
                 />
                 <PowerUp
-                  icon="🛡️"
+                  icon={Shield}
                   label="Shield"
                   price={state.prices.shield}
                   unlockAt={state.unlocks.shield}
@@ -1406,7 +1575,7 @@ export function Game({ state }: { state: GameState }) {
 
 /** A power-up button for hiders: locked until a level, then once per game. */
 function PowerUp(props: {
-  icon: string;
+  icon: LucideIcon;
   label: string;
   price: number;
   unlockAt: number;
@@ -1419,18 +1588,21 @@ function PowerUp(props: {
   if (props.level < props.unlockAt)
     return (
       <span className="rounded-full bg-panel-2 px-3 py-1 text-xs font-semibold text-muted/70" title={`Unlocks at level ${props.unlockAt}`}>
-        🔒 {props.label} · Lv {props.unlockAt}
+        <Lock className="mr-1 inline size-3 align-[-0.1em]" />
+        {props.label} · Lv {props.unlockAt}
       </span>
     );
   if (props.used)
     return (
       <span className="rounded-full bg-panel-2 px-3 py-1 text-xs font-semibold text-muted">
-        {props.icon} {props.usedLabel}
+        <props.icon className="mr-1 inline size-3.5 align-[-0.15em]" />
+        {props.usedLabel}
       </span>
     );
   return (
     <button onClick={props.onClick} className={cn("rounded-full px-3 py-1 text-xs font-semibold text-white shadow-sm", props.tone)}>
-      {props.icon} {props.label} · {short(props.price)}
+      <props.icon className="mr-1 inline size-3.5 align-[-0.15em]" />
+      {props.label} · {short(props.price)}
     </button>
   );
 }
@@ -1443,5 +1615,15 @@ function ModeButton({ on, onClick, children }: { on: boolean; onClick: () => voi
     >
       {children}
     </button>
+  );
+}
+
+/** A list line with an icon in front (used in the pop-ups). */
+function Li({ icon: Icon, children }: { icon: LucideIcon; children: React.ReactNode }) {
+  return (
+    <li className="flex gap-2">
+      <Icon className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden />
+      <span>{children}</span>
+    </li>
   );
 }

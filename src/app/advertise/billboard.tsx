@@ -1,3 +1,5 @@
+import { ImageIcon } from "@/components/icons";
+
 /** A preview of an ad as a billboard on a city street (used on /advertise and /advertiser). */
 export function Billboard({ image, brand, headline }: { image: string | null; brand: string; headline: string }) {
   return (
@@ -10,7 +12,7 @@ export function Billboard({ image, brand, headline }: { image: string | null; br
               <img src={image} alt="Your billboard" className="h-full w-full object-cover" />
             ) : (
               <div className="flex h-full flex-col items-center justify-center gap-1 text-sm text-slate-300">
-                <span className="text-2xl">🖼️</span>
+                <ImageIcon className="size-7" strokeWidth={1.75} />
                 Your picture shows here
               </div>
             )}
