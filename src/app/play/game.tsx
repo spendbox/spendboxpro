@@ -10,6 +10,10 @@ import type { GameEvent, GameState } from "@/lib/game";
 import { cn } from "@/lib/cn";
 import {
   Anchor,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  Armchair,
   Building2,
   Check,
   CircleX,
@@ -28,6 +32,7 @@ import {
   Coins,
   CircleHelp,
   Drama,
+  Fish,
   Flashlight,
   Footprints,
   Ghost,
@@ -50,16 +55,20 @@ import {
 } from "@/components/icons";
 import { short } from "@/lib/format";
 import { createClient } from "@/lib/supabase/client";
-import { bigSearch, buyShield, joinRound, moveTo, placeDecoy, respawnMe, searchTile, sweepAround, type ActionResult } from "./actions";
+import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
+import { bigSearch, buyShield, claimWorldEvent, joinRound, moveTo, placeDecoy, respawnMe, searchTile, sweepAround, type ActionResult } from "./actions";
 import { AvatarEditor } from "./avatar-editor";
+import { ActivitySheet, GiveCoinsSheet, QuestBanner, QuestSheet, RoomActivityLayer, useQuestTracker, type ActivityItem } from "./activities";
 import { Chat } from "./chat";
-import type { CityEvent, CityMarkers } from "./city-view";
+import { setEventSoundsEnabled } from "./city/event-sounds";
+import type { CityEvent, CityInteract, CityMarkers, CityRide, RideTarget, TurnDir } from "./city-view";
 import { HowItWorks } from "./how-it-works";
 import { Menu } from "./menu";
 import { FeedRow, NotificationsPanel, type FeedIcon, type FeedItem } from "./notifications";
 import { claimBalloon, recordVisit } from "./profile-actions";
 import { Results } from "./results";
-import { balloonRoom, useRooms, type RoomInfo } from "./rooms";
+import { rideRoom, useRooms, type RoomInfo } from "./rooms";
+import { RIDE_ICONS, RIDE_INFO, RideIcon, type RideKindName } from "./ride-icon";
 import { Sheet } from "./sheet";
 import { AdvertiseExplainer } from "@/components/advertise-explainer";
 import { playSfx, setSfxEnabled, useCitySound } from "./sound";
@@ -80,9 +89,18 @@ type PlaceRoom = {
   kind: "building" | "balloon";
   levels?: { id: string; label: string; capacity: number }[];
 };
-// Same order as the balloons in the 3D city.
+// Same order as the balloons in the 3D city (used until the city lists its rides).
 const BALLOON_NAMES = ["Red", "Yellow", "Blue", "Purple", "Mint"];
-const BALLOON_COLOURS = ["#e5484d", "#f5a524", "#2f6fd1", "#7048e8", "#12a37a"];
+const RIDE_ORDER: RideKindName[] = ["balloon", "train", "bus", "car", "boat", "ferris", "slide"];
+const RIDE_HELLO: Record<RideKindName, string> = {
+  balloon: "Up we go! Drag to look around; tap Chat to talk to everyone on board.",
+  train: "All aboard! Grab a window and drag to look around; tap Chat to talk to the carriage.",
+  bus: "Top deck, front seat. Drag to look around; tap Chat to talk to the passengers.",
+  car: "You're driving! When a junction comes up, pick left, right or straight.",
+  boat: "Cast off! Enjoy the cruise; drag to look around and tap Chat to talk to the deck.",
+  ferris: "Your cabin is climbing. Drag to look around; tap Chat to talk to your cabin.",
+  slide: "Hold on tight…",
+};
 type Ad = { id: string; image: string; headline: string; brand: string; link: string | null };
 type Notice = { id: number; text: string; tone: "alarm" | "move" | "info" | "mine"; avatar?: ReturnType<typeof cleanAvatar> | null; icon?: FeedIcon };
 
@@ -133,13 +151,15 @@ function describe(e: GameEvent, botName: string, myTile: number | null, where: (
     const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : (names[0] ?? (e.detail?.count && e.detail.count > 1 ? `${e.detail.count} ghosts` : "a ghost"));
     // Catching a seasoned player is big news.
     const top = ghosts.reduce((m, h) => Math.max(m, h.level ?? 0), 0);
-    const fish = top >= 20 ? "Whale of a catch! " : top >= 10 ? "Big fish caught! " : top >= 5 ? "Nice catch! " : "";
+    // Big fish = anyone holding 10,000+ coins.
+    const rich = ghosts.some((h) => (h as { bigfish?: boolean }).bigfish);
+    const fish = rich && top >= 20 ? "Whale of a catch! " : rich ? "Big fish caught! " : top >= 10 ? "Seasoned ghost caught! " : top >= 5 ? "Nice catch! " : "";
     const lvl = top >= 5 ? ` (level ${top})` : "";
     return {
       id: e.id,
       tone: "alarm",
       text: `${fish}${who} caught ${list}${ghosts.length === 1 ? lvl : ""} at ${where(e.tile)}!`,
-      icon: top >= 20 ? "whale" : top >= 10 ? "fish" : "catch",
+      icon: rich && top >= 20 ? "whale" : rich ? "fish" : "catch",
       avatar: first ? cleanAvatar(first.avatar, first.name ?? "ghost") : null,
     };
   }
@@ -256,12 +276,20 @@ export function Game({ state }: { state: GameState }) {
   const [confirmHunt, setConfirmHunt] = useState(false);
   // Game mode (search, move…) or Chat mode (go into buildings and balloons to talk).
   const [viewMode, setViewMode] = useState<"game" | "chat">("game");
-  const [ride, setRide] = useState<number | null>(null);
+  const [ride, setRide] = useState<RideTarget | null>(null);
+  // Everything there is to ride this round (from the 3D city), and car steering.
+  const [rides, setRides] = useState<CityRide[]>([]);
+  const [junction, setJunction] = useState<TurnDir[] | null>(null);
+  const [steer, setSteer] = useState<{ dir: TurnDir; at: number } | null>(null);
+  // Inside places: a mini game / seat / menu that was tapped, and giving coins to someone.
+  const [activity, setActivity] = useState<ActivityItem | null>(null);
+  const [giveTo, setGiveTo] = useState<{ id: string; name: string; avatar: unknown } | null>(null);
+  const [questOpen, setQuestOpen] = useState(false);
   // Inside a building: which one, and which level (ground "g", floor "f<n>", rooftop "r").
   const [place, setPlace] = useState<{ building: string; level: string } | null>(null);
   const [pickPlace, setPickPlace] = useState<PlaceRoom | null>(null);
   const [placeRoom, setPlaceRoom] = useState<PlaceRoom | null>(null);
-  const [pickBalloon, setPickBalloon] = useState(false);
+  const [pickRide, setPickRide] = useState(false);
   const [npcTap, setNpcTap] = useState<{ id: string; at: number } | null>(null);
   const [balloonCount, setBalloonCount] = useState(0);
   const [dmRequest, setDmRequest] = useState<{ id: string; name: string; at: number } | null>(null);
@@ -276,8 +304,12 @@ export function Game({ state }: { state: GameState }) {
   const [startCard, setStartCard] = useState<{ title: string; line: string } | null>(null);
   const online = useOnline(state.me.id, state.me.guest);
   const rooms = useRooms(state.round?.id ?? null, state.me.guest ? null : { id: state.me.id, name: state.me.name ?? "Player", avatar: state.me.avatar }, {
-    onRideEnd: () => setRide(null),
+    onRideEnd: () => {
+      setRide(null);
+      setJunction(null);
+    },
   });
+  const meP = useMemo(() => (state.me.guest ? null : { id: state.me.id, name: state.me.name ?? "Player", avatar: state.me.avatar as unknown }), [state.me.guest, state.me.id, state.me.name, state.me.avatar]);
 
   const { round, entry, me } = state;
   const now = useNow(state.serverNow);
@@ -294,6 +326,8 @@ export function Game({ state }: { state: GameState }) {
     now - Date.parse(entry.lastSweptAt) < 90_000 &&
     (!entry.lastMoveAt || Date.parse(entry.lastSweptAt) > Date.parse(entry.lastMoveAt));
   const canTap = phase === "seek" && !!entry && !(isHider && entry.caught);
+  // Side quests: sitting down makes one more likely; visits and rides count by themselves.
+  const quests = useQuestTracker({ room: rooms.myRoom, seated: !!rooms.mySeat, hiding: isHider && !entry?.caught && phase === "seek", signedIn: !me.guest });
   // Searches have a short cooldown that grows if you search too fast (the server decides).
   const serverReady = me.searchReadyAt ? Date.parse(me.searchReadyAt) : 0;
   const searchWait = Math.max(searchReadyAt, serverReady) - now;
@@ -308,7 +342,72 @@ export function Game({ state }: { state: GameState }) {
     ? Math.min(1, Math.max(0, (now - Date.parse(round.joinEndsAt)) / (Date.parse(round.seekEndsAt) - Date.parse(round.joinEndsAt))))
     : phase === "done" ? 1 : 0;
   useCitySound(sound, roundSeed, huntProgress);
-  useEffect(() => setSfxEnabled(sound), [sound]);
+  const serverNowMs = Date.parse(state.serverNow);
+  // Server clock minus this device's clock, so world events start at the same moment for everyone.
+  const [clockOffset, setClockOffset] = useState(0);
+  useEffect(() => {
+    const id = setTimeout(() => setClockOffset(Date.parse(state.serverNow) - Date.now()), 0);
+    return () => clearTimeout(id);
+  }, [state.serverNow]);
+
+  // World events happening right now.
+  const liveEvents = state.worldEvents.filter((w) => Date.parse(w.startsAt) <= now && now < Date.parse(w.endsAt));
+  const eventOn = (key: string) => liveEvents.some((w) => w.key === key);
+  const quietNow = eventOn("quiet_hour");
+  const [focusEvent, setFocusEvent] = useState<{ id: number; at: number } | null>(null);
+  function flyToEvent(id: number) {
+    setToasts([]);
+    setViewMode("game");
+    setFocusEvent({ id, at: Date.now() });
+    const w = state.worldEvents.find((x) => x.id === id);
+    const kind = w ? WORLD_EVENT_BY_KEY[w.key] : null;
+    if (kind?.reward && w && !w.claimed && (w.slotsLeft ?? 0) > 0) {
+      setMessage({ icon: Coins, text: `${kind.title}: tap it in the city to grab ${kind.reward.coins} coins!`, tone: "good" });
+    }
+  }
+  async function onEventTap(id: number) {
+    if (guest) return setMessage({ text: "Sign in to grab event rewards.", tone: "info" });
+    const res = await claimWorldEvent(id).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
+    if (res.ok) {
+      playSfx("pop");
+      quests.track({ type: "event" });
+      setMessage({ icon: Coins, text: `You grabbed ${short(Number(res.data.coins))} coins!`, tone: "good" });
+      startTransition(() => router.refresh());
+    } else setMessage({ text: res.error, tone: "info" });
+  }
+
+  // The world's last minute: the clock turns red and beeps every second.
+  const worldLeft = round && phase === "seek" ? Date.parse(round.seekEndsAt) - now : Infinity;
+  const urgent = worldLeft <= 60_000 && worldLeft > 0;
+  const urgentSec = urgent ? Math.ceil(worldLeft / 1000) : null;
+  useEffect(() => {
+    if (urgentSec !== null) playSfx("tick");
+  }, [urgentSec]);
+  // Only a few ghosts left: this world may end any moment.
+  const fewLeft = round && phase === "seek" && round.hidersRemaining > 0 && round.hidersRemaining <= 2 ? round.hidersRemaining : null;
+  useEffect(() => {
+    if (fewLeft === null) return;
+    const id = setTimeout(
+      () => setMessage({ icon: Timer, text: `Only ${fewLeft} ${fewLeft === 1 ? "ghost is" : "ghosts are"} left. This world may end soon!`, tone: "info" }),
+      0,
+    );
+    return () => clearTimeout(id);
+  }, [fewLeft]);
+  useEffect(() => {
+    setSfxEnabled(sound);
+    setEventSoundsEnabled(sound);
+  }, [sound]);
+  // Seats: your 3 minutes are up, or someone sat down just before you.
+  const seatNotice = rooms.seatNotice;
+  const clearSeatNotice = rooms.clearSeatNotice;
+  useEffect(() => {
+    if (!seatNotice) return;
+    const id = setTimeout(() => {
+      setMessage({ icon: Armchair, text: seatNotice.text, tone: "info" });
+      clearSeatNotice();
+    }, 0);
+    return () => clearTimeout(id);
+  }, [seatNotice, clearSeatNotice]);
   const guest = me.guest;
   const shieldUp = Boolean(entry?.shieldBought && !entry.shieldSaved);
 
@@ -502,8 +601,19 @@ export function Game({ state }: { state: GameState }) {
       avatar: n.kind === "caught" || n.kind === "shield" ? me.avatar : null,
       icon: (({ trap: "trap", trapped: "trap", swept: "drone", caught: "catch", shield: "shield", shielded: "shield", decoy: "decoy" }) as Record<string, FeedIcon>)[n.kind] ?? "info",
     }));
-    return [...pub, ...mine].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 60);
-  }, [state.events, state.notifications, botName, myLastSpot, where, me.avatar]);
+    // World events that have started: news you can tap to fly there.
+    const news = state.worldEvents
+      .filter((w) => Date.parse(w.startsAt) <= serverNowMs)
+      .map((w) => {
+        const kind = WORLD_EVENT_BY_KEY[w.key];
+        if (!kind) return null;
+        const text = kind.news.replace("{place}", where(w.tile)).replace("{name}", w.name ?? "a ghost");
+        const icon: FeedIcon = kind.category === "twist" ? "build" : kind.reward ? "coin" : kind.category === "emergency" ? "drone" : "info";
+        return { key: `w${w.id}`, at: w.startsAt, text: `${kind.title}: ${text}`, tone: "info" as const, avatar: null, icon, eventId: w.id } as FeedItem;
+      })
+      .filter((x): x is FeedItem => x !== null);
+    return [...pub, ...mine, ...news].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 60);
+  }, [state.events, state.notifications, state.worldEvents, serverNowMs, botName, myLastSpot, where, me.avatar]);
   const unread = feed.filter((f) => Date.parse(f.at) > Date.parse(feedSeenAt)).length;
 
   // New items pop up briefly under the bell (only what arrives while you're here).
@@ -516,10 +626,10 @@ export function Game({ state }: { state: GameState }) {
     const fresh = feed.filter((f) => !seenKeys.current!.has(f.key));
     fresh.forEach((f) => seenKeys.current!.add(f.key));
     if (fresh.some((f) => f.key.startsWith("n") && f.tone === "alarm")) playSfx("caught");
-    if (!fresh.length || feedOpen) return;
+    if (!fresh.length || feedOpen || quietNow) return;
     const id = setTimeout(() => setToasts((list) => [...fresh.slice(0, 2).reverse(), ...list].slice(0, 2)), 0);
     return () => clearTimeout(id);
-  }, [feed, feedOpen]);
+  }, [feed, feedOpen, quietNow]);
   useEffect(() => {
     if (!toasts.length) return;
     const id = setTimeout(() => setToasts((list) => list.slice(0, -1)), 5500);
@@ -552,7 +662,6 @@ export function Game({ state }: { state: GameState }) {
     return () => clearTimeout(id);
   }, [message]);
 
-  const serverNowMs = Date.parse(state.serverNow);
   const markers: CityMarkers = useMemo(
     () => !marks
       ? { searchedEmpty: [], searchedHit: [], caught: [], left: [], me: isHider && entry && !entry.caught ? entry.tile : null, decoy: entry?.decoyTile ?? null, sweeps: [], pending: busy ? busyTile : null, recent: [], locked: [] }
@@ -597,7 +706,7 @@ export function Game({ state }: { state: GameState }) {
   // nothing opens the chat by itself.
   function onRoom(room: PlaceRoom) {
     if (place || ride !== null) return; // inside somewhere: taps just look around
-    if (room.kind === "balloon") return boardBalloon(Number(room.id.split(":")[1]));
+    if (room.kind === "balloon") return boardRide({ kind: "balloon", index: Number(room.id.split(":")[1]), name: room.name, capacity: room.capacity });
     setPickPlace(room);
   }
   function goToLevel(room: PlaceRoom, level: { id: string; label: string; capacity: number }) {
@@ -615,28 +724,85 @@ export function Game({ state }: { state: GameState }) {
       if (!res.ok) return setMessage({ text: res.reason === "full" ? `${info.name} is full right now. Try another floor!` : "Sign in to chat here.", tone: "info" });
     }
     setRide(null);
+    setJunction(null);
     setPlaceRoom(room);
     setPlace({ building: room.id, level: level.id });
-    setMessage({ icon: Building2, text: guest ? `Welcome to ${info.name}. Sign in to chat with the people here.` : `You're in ${info.name}. Drag to look around; tap Chat to talk to people here.`, tone: "info" });
+    setMessage({
+      icon: Building2,
+      text: guest
+        ? `Welcome to ${info.name}. Sign in to chat with the people here.`
+        : `You're in ${info.name}. Tap the floor to walk, tap anything glowing to use it, and tap Chat to talk.`,
+      tone: "info",
+    });
   }
-  function boardBalloon(k: number) {
-    setPickBalloon(false);
+  // Hop on a ride: a balloon, train, bus, car, boat, Ferris wheel cabin or water slide.
+  function boardRide(r: { kind: RideKindName; index: number; name: string; capacity: number }) {
+    setPickRide(false);
     setPlace(null);
+    setJunction(null);
+    setActivity(null);
+    const info = RIDE_INFO[r.kind];
     if (!guest) {
-      const res = rooms.enter({ id: balloonRoom(k), name: `Balloon ${k + 1}`, capacity: 1000, kind: "balloon" });
-      if (!res.ok) return setMessage({ text: res.reason === "full" ? "That balloon is full. Try another one!" : "Sign in to ride.", tone: "info" });
-    } else {
+      const res = rooms.enter({
+        id: rideRoom(r.kind, r.index),
+        name: r.name,
+        capacity: r.capacity,
+        kind: r.kind === "balloon" ? "balloon" : "ride",
+        ride: r.kind === "balloon" ? undefined : r.kind,
+        rideMs: r.kind !== "balloon" && info.minutes ? info.minutes * 60_000 : undefined,
+      });
+      if (!res.ok) return setMessage({ text: res.reason === "full" ? `${r.name} is full. Try another one!` : "Sign in to ride.", tone: "info" });
+    } else if (r.kind !== "slide") {
       // Watchers get the view for a while, but need to sign in to chat on board.
-      setTimeout(() => setRide((r) => (r === k ? null : r)), 60_000);
+      setTimeout(() => setRide((cur) => (cur?.kind === r.kind && cur.index === r.index ? null : cur)), 60_000);
     }
-    setRide(k);
-    setMessage({ icon: HotAirBalloon, text: guest ? "Enjoy the view! Sign in to chat with the people on board." : "Up we go! Drag to look around; tap Chat to talk to everyone on board.", tone: "info" });
+    setRide({ kind: r.kind, index: r.index });
+    setMessage({ icon: RIDE_ICONS[r.kind], text: guest && r.kind !== "slide" ? "Enjoy the ride! Sign in to chat with the people on board." : RIDE_HELLO[r.kind], tone: "info" });
   }
   function leaveRoom() {
     rooms.leave();
     setRide(null);
     setPlace(null);
+    setJunction(null);
+    setActivity(null);
   }
+  // A ride that ends by itself (the water slide's splash).
+  function onRideEnd() {
+    const was = ride?.kind;
+    leaveRoom();
+    if (was === "slide") {
+      playSfx("pop");
+      setMessage({ icon: RIDE_ICONS.slide, text: "SPLASH! What a ride. Go again?", tone: "good" });
+    }
+  }
+  function steerCar(dir: TurnDir) {
+    setSteer({ dir, at: Date.now() });
+    setJunction(null);
+  }
+  // Inside a place: something glowing was tapped (a seat, the bar, darts, the DJ deck...).
+  function onInteract(item: CityInteract) {
+    if (guest) return setMessage({ text: "Sign in to sit down, play games and order food here.", tone: "info" });
+    if (item.kind === "seat") {
+      if (rooms.mySeat === item.id) return setActivity(item);
+      const res = rooms.sit(item.id);
+      if (res.ok) {
+        playSfx("pop");
+        return setMessage({
+          icon: Armchair,
+          text: "You sat down. Seats are for 3 minutes, and people sitting down are the ones most likely to be handed a side quest.",
+          tone: "info",
+        });
+      }
+      if (res.reason === "taken") return setMessage({ icon: Armchair, text: `${rooms.seats[item.id]?.name ?? "Someone"} is sitting there. Seats free up after 3 minutes at most.`, tone: "info" });
+      return setMessage({ text: "You need to be in this room to sit there.", tone: "info" });
+    }
+    setActivity(item);
+  }
+
+  // What you can ride: the city's list, or just the balloons until it arrives.
+  const rideList: CityRide[] = rides.length
+    ? rides
+    : Array.from({ length: Math.max(balloonCount, 1) }, (_, k) => ({ kind: "balloon" as const, index: k, name: `${BALLOON_NAMES[k % BALLOON_NAMES.length]} balloon`, capacity: 1000 }));
 
   function onTile(tile: number) {
     // Tapping where someone was caught: say hi to them.
@@ -675,6 +841,7 @@ export function Game({ state }: { state: GameState }) {
       act(
         () => sweepAround(tile, radius),
         (d) => {
+          quests.track({ type: "sweep" });
           const found = Boolean(d.found);
           // Don't spoil it: the answer comes when the drone has finished its scan.
           setMessage({ icon: Radar, text: "Drone on its way… scanning the area.", tone: "info" });
@@ -700,6 +867,7 @@ export function Game({ state }: { state: GameState }) {
       act(
         () => (big ? bigSearch(tile) : searchTile(tile)),
         (d) => {
+          quests.track({ type: "search" });
           if (d.cooldown) setSearchReadyAt(Date.now() + Number(d.cooldown) * 1000);
           playSfx(d.result === "caught" ? "found" : d.result === "shielded" ? "shield" : d.result === "decoy" ? "explode" : "miss");
           if (d.result === "decoy")
@@ -780,6 +948,13 @@ export function Game({ state }: { state: GameState }) {
           roomCounts={rooms.buildingCounts}
           onRoom={onRoom}
           ride={ride}
+          onRides={setRides}
+          onRideEnd={onRideEnd}
+          steer={steer}
+          onJunction={setJunction}
+          onInteract={onInteract}
+          seats={rooms.seats}
+          mySeat={rooms.mySeat}
           place={place}
           onNpc={(id: string) => {
             setNpcTap({ id, at: Date.now() });
@@ -787,12 +962,28 @@ export function Game({ state }: { state: GameState }) {
           onBalloons={setBalloonCount}
           revealed={phase !== "join"}
           caughtFaces={state.caughtFaces}
+          worldEvents={state.worldEvents}
+          focusEvent={focusEvent}
+          onEventTap={onEventTap}
+          clockOffsetMs={clockOffset}
           onHover={setHover}
           meAvatar={me.avatar}
           coinBalloon={state.balloon?.slot ?? null}
           onBalloon={popBalloon}
           progress={huntProgress}
           nightFirst={round.id % 2 === 1}
+        />
+      )}
+
+      {/* Inside a place: money spraying, the jukebox, duel invites and room news. */}
+      {meP && rooms.myRoom && <RoomActivityLayer roundId={round?.id ?? null} roomId={rooms.myRoom} me={meP} />}
+
+      {/* The world's last minutes: a red glow around the edges. */}
+      {(urgent || eventOn("final_countdown")) && (
+        <div
+          aria-hidden
+          className={cn("pointer-events-none absolute inset-0 z-[5]", urgent ? "animate-pulse" : "")}
+          style={{ boxShadow: `inset 0 0 ${urgent ? 120 : 70}px rgba(229, 72, 77, ${urgent ? 0.55 : 0.3})` }}
         />
       )}
 
@@ -817,6 +1008,7 @@ export function Game({ state }: { state: GameState }) {
             sound={sound}
             onSound={() => { setSound(!sound); saveView({ sound: !sound }); }}
             sponsor={round.sponsor}
+            urgent={urgent}
           />
         ) : (
           <span />
@@ -836,6 +1028,12 @@ export function Game({ state }: { state: GameState }) {
             <span className="glass hidden whitespace-nowrap rounded-full px-2.5 py-1.5 text-xs font-bold sm:inline" title="Your level (level up from the menu)">
               Lv {me.level}
             </span>
+            {me.bigFish && (
+              <span className="glass flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1.5 text-xs font-bold text-[#1c7ed6]" title="You hold 10,000+ coins: everyone sees you as a big fish">
+                <Fish className="size-3.5" />
+                <span className="hidden sm:inline">Big fish</span>
+              </span>
+            )}
             <span className="glass whitespace-nowrap rounded-full px-3 py-1.5 text-sm" title={`${me.coins} coins · level ${me.level}`}>
               <b className="text-gold-dark">{short(me.coins)}</b>
               <span className="hidden sm:inline"> coins</span>
@@ -879,14 +1077,29 @@ export function Game({ state }: { state: GameState }) {
           toasts.map((n) => (
             <button
               key={n.key}
-              onClick={() => { setFeedOpen(true); setFeedSeenAt(new Date(now).toISOString()); setToasts([]); }}
+              onClick={() => {
+                if (n.eventId) return flyToEvent(n.eventId);
+                setFeedOpen(true);
+                setFeedSeenAt(new Date(now).toISOString());
+                setToasts([]);
+              }}
               className="glass pointer-events-auto w-full rounded-2xl px-3 py-2 text-left shadow-lg"
             >
               <FeedRow item={n} now={now} compact />
             </button>
           ))}
       </div>
-      {feedOpen && <NotificationsPanel feed={feed} now={now} onClose={() => setFeedOpen(false)} />}
+      {feedOpen && (
+        <NotificationsPanel
+          feed={feed}
+          now={now}
+          onClose={() => setFeedOpen(false)}
+          onPick={(f) => {
+            setFeedOpen(false);
+            if (f.eventId) flyToEvent(f.eventId);
+          }}
+        />
+      )}
 
       {menu && (
         <Menu
@@ -1058,14 +1271,27 @@ export function Game({ state }: { state: GameState }) {
               const id = `${pickPlace.id}:${lvl.id}`;
               const here = rooms.counts[id] ?? 0;
               const Icon = lvl.id === "r" ? Sun : lvl.id === "g" ? DoorOpen : Layers;
+              const hereNow = place?.building === pickPlace.id && place.level === lvl.id;
               return (
                 <button
                   key={lvl.id}
-                  onClick={() => goToLevel(pickPlace, lvl)}
-                  className="flex w-full items-center gap-3 rounded-2xl bg-panel-2 px-4 py-3 text-left hover:bg-gold/20"
+                  onClick={() => (hereNow ? setPickPlace(null) : goToLevel(pickPlace, lvl))}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left",
+                    hereNow ? "bg-[#7048e8]/12 ring-2 ring-[#7048e8]" : "bg-panel-2 hover:bg-gold/20",
+                  )}
+                  aria-current={hereNow ? "location" : undefined}
                 >
-                  <Icon className="size-5 shrink-0 text-muted" />
-                  <span className="flex-1 font-semibold">{lvl.label}</span>
+                  <Icon className={cn("size-5 shrink-0", hereNow ? "text-[#7048e8]" : "text-muted")} />
+                  <span className="flex-1 font-semibold">
+                    {lvl.label}
+                    {hereNow && (
+                      <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-[#7048e8] px-2 py-0.5 align-middle text-[10px] font-bold text-white">
+                        <MapPin className="size-3" />
+                        You&apos;re here
+                      </span>
+                    )}
+                  </span>
                   <span className="flex items-center gap-1 text-xs text-muted">
                     <Users className="size-3.5" />
                     {here}/{short(lvl.capacity)}
@@ -1076,36 +1302,79 @@ export function Game({ state }: { state: GameState }) {
           </div>
         </Sheet>
       )}
-      {pickBalloon && (
-        <Sheet onClose={() => setPickBalloon(false)}>
+      {pickRide && (
+        <Sheet onClose={() => setPickRide(false)}>
           <h2 className="flex items-center gap-2 font-display text-xl font-bold">
             <HotAirBalloon className="size-5 text-[#e64980]" />
-            Hop on a balloon
+            Hop on a ride
           </h2>
-          <p className="mt-1 text-sm text-muted">
-            Rides last 10 minutes and float over the whole city. Up to 1,000 people per balloon chat together on the way.
-          </p>
-          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {Array.from({ length: Math.max(balloonCount, 1) }, (_, k) => {
-              const n = rooms.counts[balloonRoom(k)] ?? 0;
+          <p className="mt-1 text-sm text-muted">Everyone on the same ride chats together on the way. You can also tap any building to go inside.</p>
+          <div className="mt-3 space-y-4">
+            {RIDE_ORDER.map((kind) => {
+              const list = rideList.filter((r) => r.kind === kind);
+              if (!list.length) return null;
+              const info = RIDE_INFO[kind];
               return (
-                <button
-                  key={k}
-                  onClick={() => boardBalloon(k)}
-                  className="flex items-center gap-3 rounded-2xl bg-panel-2 px-4 py-3 text-left hover:bg-[#e64980]/15"
-                >
-                  <HotAirBalloon className="size-6 shrink-0" style={{ color: BALLOON_COLOURS[k % BALLOON_COLOURS.length] }} />
-                  <span className="flex-1 font-semibold">{BALLOON_NAMES[k % BALLOON_NAMES.length]} balloon</span>
-                  <span className="flex items-center gap-1 text-xs text-muted">
-                    <Users className="size-3.5" />
-                    {n}/1,000
-                  </span>
-                </button>
+                <section key={kind}>
+                  <h3 className="flex items-center gap-2 text-sm font-bold">
+                    <RideIcon kind={kind} className="size-4 shrink-0" style={{ color: info.colour }} />
+                    {info.plural}
+                  </h3>
+                  <p className="text-xs text-muted">{info.blurb}</p>
+                  <div className="mt-1.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {list.map((r) => {
+                      const n = rooms.counts[rideRoom(r.kind, r.index)] ?? 0;
+                      return (
+                        <button
+                          key={`${r.kind}:${r.index}`}
+                          onClick={() => boardRide(r)}
+                          className="flex items-center gap-3 rounded-2xl bg-panel-2 px-4 py-2.5 text-left hover:bg-gold/20"
+                        >
+                          <RideIcon kind={r.kind} className="size-5 shrink-0" style={{ color: info.colour }} />
+                          <span className="min-w-0 flex-1 truncate font-semibold">{r.name}</span>
+                          <span className="flex shrink-0 items-center gap-1 text-xs text-muted">
+                            <Users className="size-3.5" />
+                            {short(n)}/{short(r.capacity)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
               );
             })}
           </div>
         </Sheet>
       )}
+      {activity && rooms.myRoom && (
+        <ActivitySheet
+          item={activity}
+          roomId={activity.place}
+          me={meP}
+          members={rooms.members}
+          roundId={round?.id ?? null}
+          onClose={() => setActivity(null)}
+          seating={rooms}
+          onUseStairs={
+            placeRoom && (placeRoom.levels?.length ?? 0) > 1
+              ? () => {
+                  setActivity(null);
+                  setPickPlace(placeRoom);
+                }
+              : undefined
+          }
+        />
+      )}
+      {giveTo && (
+        <GiveCoinsSheet
+          to={giveTo}
+          onClose={() => {
+            setGiveTo(null);
+            startTransition(() => router.refresh());
+          }}
+        />
+      )}
+      {questOpen && <QuestSheet quest={quests.quest} onClose={() => setQuestOpen(false)} players={rooms.members.filter((m) => m.id !== me.id)} />}
       {adExplainer && (
         <Sheet onClose={() => setAdExplainer(false)}>
           <AdvertiseExplainer onClose={() => setAdExplainer(false)} />
@@ -1162,7 +1431,7 @@ export function Game({ state }: { state: GameState }) {
         <Sheet onClose={() => setConfirmHunt(false)}>
           <h2 className="flex items-center gap-2 font-display text-xl font-bold"><Flashlight className="size-5 text-gold-dark" />Join the hunt?</h2>
           <ul className="mt-3 space-y-1.5 text-sm text-ink/80">
-            <li>🆓 Joining is free. {me.freeSearch ? "Your first search today is on us." : `Searches cost about ${short(round.searchPrice)} coins each right now.`}</li>
+            <Li icon={Sparkles}>Joining is free. {me.freeSearch ? "Your first search today is on us." : `Searches cost about ${short(round.searchPrice)} coins each right now.`}</Li>
             <Li icon={Ghost}>As a hunter, you tap spots to search for ghosts, or send drones to sweep an area.</Li>
             <Li icon={Coins}>Find a ghost and you keep most of their stake. Find {botName}, the bot, for {short(200)} coins.</Li>
             <Li icon={Trophy}>Catch every ghost and hunters share 80% of the pool.</Li>
@@ -1255,6 +1524,7 @@ export function Game({ state }: { state: GameState }) {
 
       {/* Bottom: messages, controls and chat */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-2 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
+        {!guest && <QuestBanner quest={quests.quest} onOpen={() => setQuestOpen(true)} />}
         {message && (
           <p
             className={cn(
@@ -1322,6 +1592,7 @@ export function Game({ state }: { state: GameState }) {
               dmRequest={dmRequest}
               externalNpc={npcTap}
               enteredAt={rooms.enteredAt}
+              onGiveCoins={guest ? undefined : setGiveTo}
             />
           )}
         </div>
@@ -1332,19 +1603,49 @@ export function Game({ state }: { state: GameState }) {
               {place || ride !== null ? (
                 <>
                   <p className="flex items-center gap-2">
-                    {ride !== null ? <HotAirBalloon className="size-5 shrink-0 text-[#e64980]" /> : <Building2 className="size-5 shrink-0 text-[#7048e8]" />}
+                    {ride !== null ? (
+                      <RideIcon kind={ride.kind} className="size-5 shrink-0" style={{ color: RIDE_INFO[ride.kind].colour }} />
+                    ) : (
+                      <Building2 className="size-5 shrink-0 text-[#7048e8]" />
+                    )}
                     <span className="min-w-0">
-                      <b className="block truncate">{rooms.myRoomInfo?.name ?? (ride !== null ? `Balloon ${ride + 1}` : "Inside")}</b>
+                      <b className="block truncate">
+                        {rooms.myRoomInfo?.name ?? (ride !== null ? (rideList.find((r) => r.kind === ride.kind && r.index === ride.index)?.name ?? RIDE_INFO[ride.kind].label) : "Inside")}
+                      </b>
                       <span className="text-xs text-muted">
-                        {guest ? "Watching. Sign in to chat here." : `${Math.max(0, (rooms.myRoom ? rooms.counts[rooms.myRoom] : 1) ?? 1)} here · drag to look around`}
+                        {guest
+                          ? "Watching. Sign in to chat here."
+                          : `${Math.max(0, (rooms.myRoom ? rooms.counts[rooms.myRoom] : 1) ?? 1)} here · ${place ? (rooms.mySeat ? "you're sitting down" : "tap the floor to walk, glowing things to use them") : "drag to look around"}`}
                       </span>
                     </span>
                   </p>
+                  {ride?.kind === "car" && junction && junction.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-muted">Junction ahead:</span>
+                      {(["left", "straight", "right"] as const)
+                        .filter((d) => junction.includes(d))
+                        .map((d) => {
+                          const Icon = d === "left" ? ArrowLeft : d === "right" ? ArrowRight : ArrowUp;
+                          return (
+                            <button key={d} onClick={() => steerCar(d)} className="flex items-center gap-1 rounded-xl bg-[#12a37a] px-3 py-1.5 text-sm font-semibold capitalize text-white">
+                              <Icon className="size-4" />
+                              {d}
+                            </button>
+                          );
+                        })}
+                    </div>
+                  )}
                   <div className="flex flex-wrap gap-2">
                     {!guest && (
                       <button onClick={() => setChatOpen(true)} className="flex items-center gap-1.5 rounded-xl bg-ink px-3 py-2 font-semibold text-white">
                         <MessageCircle className="size-4" />
                         Chat
+                      </button>
+                    )}
+                    {rooms.mySeat && (
+                      <button onClick={() => rooms.stand()} className="flex items-center gap-1.5 rounded-xl bg-panel-2 px-3 py-2 font-semibold">
+                        <Armchair className="size-4" />
+                        Stand up
                       </button>
                     )}
                     {place && placeRoom && placeRoom.id === place.building && (placeRoom.levels?.length ?? 0) > 1 && (
@@ -1355,7 +1656,7 @@ export function Game({ state }: { state: GameState }) {
                     )}
                     <button onClick={leaveRoom} className="flex items-center gap-1.5 rounded-xl bg-panel-2 px-3 py-2 font-semibold">
                       <LogOut className="size-4" />
-                      {ride !== null ? "Get off" : "Leave"}
+                      {ride?.kind === "car" ? "Park & get out" : ride !== null ? "Get off" : "Leave"}
                     </button>
                   </div>
                 </>
@@ -1366,11 +1667,14 @@ export function Game({ state }: { state: GameState }) {
                       <MessageCircle className="size-4" />
                       Chat mode.
                     </b>{" "}
-                    <span className="text-muted">Tap a building to go inside: the lobby, upper floors or the rooftop. The numbers over buildings show who&apos;s there.</span>
+                    <span className="text-muted">
+                      Tap any building to go inside: lobbies, floors, rooftops, clubs, restaurants and more. Or hop on a balloon, train, bus, car, boat, Ferris
+                      wheel or water slide. The numbers show who&apos;s there.
+                    </span>
                   </p>
-                  <button onClick={() => setPickBalloon(true)} className="flex items-center gap-1.5 rounded-xl bg-[#e64980] px-3 py-2 font-semibold text-white">
+                  <button onClick={() => setPickRide(true)} className="flex items-center gap-1.5 rounded-xl bg-[#e64980] px-3 py-2 font-semibold text-white">
                     <HotAirBalloon className="size-4" />
-                    Hop on a balloon
+                    Hop on a ride
                   </button>
                 </>
               )}

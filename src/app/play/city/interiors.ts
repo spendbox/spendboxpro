@@ -10,8 +10,13 @@
 import * as THREE from "three";
 import { books, board, cityMap, dashboard, departures, floorTexture, painting, products, rug, sign, tvPicture, ART_STYLES, RUG_STYLES, Sheet, type FloorStyle } from "./interior-art";
 import { blobTexture, Kit, mixHex, pickOf, rngFrom, shadeHex, shadowMesh, type Rng, type UvRect } from "./kit";
-import type { Spot } from "./figures";
+import type { Act, Spot } from "./figures";
+import type { Block, InteractKind } from "./interact";
 import type { Theme } from "./levels";
+import { fireEngineKit } from "./vehicles";
+
+/** Something to use in a room (its id is made by the city view). */
+export type RoomItem = { kind: InteractKind; label: string; x: number; y: number; z: number; r: number };
 
 export type View = { x: number; z: number; yaw: number; pitch: number };
 
@@ -26,6 +31,8 @@ export type InteriorInfo = {
   places: string[];
   /** A smaller version (the clock tower's hall) or a station concourse (departure board). */
   variant?: "small" | "station";
+  /** The city's flavour ("ng", "uk"...), for local food on menus. */
+  flavor?: string;
 };
 
 export type Interior = {
@@ -33,11 +40,19 @@ export type Interior = {
   group: THREE.Group;
   views: View[];
   spots: Spot[];
+  /** Every seat, in a fixed order (seat n is the same for everyone). */
+  seats: Spot[];
+  /** Things to use (the bar, darts, the DJ booth...). */
+  items: RoomItem[];
+  /** Where furniture stands (for walking round it). */
+  blocks: Block[];
   /** Room size (metres), for keeping things inside. */
   w: number;
   d: number;
   setNight(n: number): void;
   setAlpha(a: number): void;
+  /** Moving parts (club lights...). */
+  update(time: number): void;
   dispose(): void;
 };
 
@@ -132,7 +147,21 @@ type Ctx = {
   /** Warm lights for the evening: where they hang (max two are real lights). */
   lamps: { x: number; y: number; z: number }[];
   info: InteriorInfo;
+  /** Things to use, and what people do in the spots being made now. */
+  items: RoomItem[];
+  act?: Act;
+  /** Animated extras (not merged): added to the room after it's built. */
+  extras: THREE.Object3D[];
+  anim: ((time: number) => void)[];
+  /** Night-only light: the club stays dark and colourful whatever the time. */
+  dark?: boolean;
 };
+
+/** Something to use, at a point in the current drawing frame. */
+function item(x: Ctx, kind: InteractKind, label: string, lx: number, ly: number, lz: number, r = 0.7) {
+  const p = x.k.world(lx, ly, lz);
+  x.items.push({ kind, label, x: p.x, y: p.y, z: p.z, r });
+}
 
 /** Position and turn of a point on the inside face of a wall, u along it (from its middle). */
 function onWall(room: Room, side: number, u: number): [number, number, number] {
@@ -196,19 +225,19 @@ function shell(x: Ctx) {
     atWall(x, side, 0, () => {
       const full = L + 2 * T;
       if (kind === "solid") {
-        k.box(0, 0, -T / 2, full, room.h, T, color, { noAo: true });
+        k.box(0, 0, -T / 2, full, room.h, T, color, { noAo: true, grad: [0.84, 1.04, room.h] });
         k.box(0, 0, 0.008, L, 0.09, 0.02, pal.trim, { noAo: true });
         return;
       }
       const { open, s, hh } = windowLayout(kind, L, room.h, room.headDrop ?? 0.15);
-      if (s > 0) k.box(0, 0, -T / 2, full, s, T, color, { noAo: true });
-      k.box(0, hh, -T / 2, full, room.h - hh, T, color, { noAo: true });
+      if (s > 0) k.box(0, 0, -T / 2, full, s, T, color, { noAo: true, grad: [0.84, 1.04, room.h] });
+      k.box(0, hh, -T / 2, full, room.h - hh, T, color, { noAo: true, grad: [0.84, 1.04, room.h] });
       let prev = -full / 2;
       for (const [a, b] of open) {
-        if (a - prev > 0.001) k.box((prev + a) / 2, s, -T / 2, a - prev, hh - s, T, color, { noAo: true });
+        if (a - prev > 0.001) k.box((prev + a) / 2, s, -T / 2, a - prev, hh - s, T, color, { noAo: true, grad: [0.84, 1.04, room.h] });
         prev = b;
       }
-      if (full / 2 - prev > 0.001) k.box((prev + full / 2) / 2, s, -T / 2, full / 2 - prev, hh - s, T, color, { noAo: true });
+      if (full / 2 - prev > 0.001) k.box((prev + full / 2) / 2, s, -T / 2, full / 2 - prev, hh - s, T, color, { noAo: true, grad: [0.84, 1.04, room.h] });
       if (kind !== "glass") k.box(0, 0, 0.008, L, 0.09, 0.02, pal.trim, { noAo: true });
       for (const [a, b] of open) {
         const ow = b - a;
@@ -250,7 +279,7 @@ const solidSides = (room: Room) => [0, 1, 2, 3].filter((s) => room.walls[s] === 
 
 function spot(x: Ctx, lx: number, lz: number, ry: number, pose: Spot["pose"], seat?: number) {
   const p = x.k.world(lx, 0, lz);
-  x.spots.push({ x: p.x, z: p.z, ry: x.k.worldYaw(ry), pose, y: pose === "sit" ? seat ?? 0.46 : 0 });
+  x.spots.push({ x: p.x, z: p.z, ry: x.k.worldYaw(ry), pose, y: pose === "sit" ? seat ?? 0.46 : 0, act: x.act });
 }
 
 function sofa(x: Ctx, px: number, pz: number, ry: number, len: number, fabric: number, opts?: { legs?: number; seats?: number; low?: boolean }) {
@@ -537,7 +566,11 @@ function kitchen(x: Ctx, side: number, u: number, len: number) {
     k.cyl(0.1, 0.92, 0.2, 0.12, 0.1, 0.06, 0xffffff, 16);
     for (let f = 0; f < 3; f++) k.ball(0.1 + (f - 1) * 0.06, 0.99, 0.2, 0.04, [0xe5484d, 0xf5a524, 0x69db7c][f], { w: 6, h: 5 });
   });
-  atWall(x, side, u - len / 4, () => spot(x, 0, 0.85, Math.PI, "stand"));
+  atWall(x, side, u - len / 4, () => {
+    x.act = "cook";
+    spot(x, 0, 0.85, Math.PI, "stand");
+    x.act = undefined;
+  });
 }
 
 function bed(x: Ctx, side: number, u: number, fabric: number) {
@@ -594,6 +627,7 @@ function elevators(x: Ctx, side: number, u: number, n: number) {
   const { k, pal, sheet, info } = x;
   const uv = sheet.paint(96, 48, (c, w, h) => sign(c, w, h, String(info.floor || "G"), 0x0e1116, 0xffb020, { weight: 800 }));
   atWall(x, side, u, () => {
+    if (!x.items.some((it) => it.kind === "stairs")) item(x, "stairs", "Lifts", 0, 0, 0.9, 0.9);
     for (let e = 0; e < n; e++) {
       const ex = (e - (n - 1) / 2) * 1.6;
       k.box(ex, 0, 0.01, 1.2, 2.35, 0.06, shadeHex(pal.metal, -0.4), { noAo: true });
@@ -679,6 +713,459 @@ function atWindow(x: Ctx, side: number, u: number) {
   const ix = px + Math.sin(ry) * 0.6;
   const iz = pz + Math.cos(ry) * 0.6;
   x.spots.push({ x: ix, z: iz, ry: ry + Math.PI, pose: "stand", y: 0 });
+  if (x.room.walls[side] !== "solid" && !x.items.some((it) => it.kind === "window")) {
+    x.items.push({ kind: "window", label: "Look out", x: px + Math.sin(ry) * 0.9 + Math.cos(ry) * 1.2, y: 0, z: pz + Math.cos(ry) * 0.9 - Math.sin(ry) * 1.2, r: 0.7 });
+  }
+}
+
+// ---------------------------------------------------------------- games, music and fun
+
+function poolTable(x: Ctx, px: number, pz: number, ry: number) {
+  const { k, pal } = x;
+  k.at(px, 0, pz, ry, () => {
+    for (const sx of [-0.95, 0.95]) for (const sz of [-0.45, 0.45]) k.box(sx, 0, sz, 0.12, 0.7, 0.12, pal.wood);
+    k.box(0, 0.62, 0, 2.3, 0.14, 1.3, pal.wood);
+    k.box(0, 0.76, 0, 2.06, 0.02, 1.06, 0x1f7a4d);
+    for (const sx of [-1.07, 1.07]) k.box(sx, 0.76, 0, 0.12, 0.05, 1.3, shadeHex(pal.wood, 0.15));
+    for (const sz of [-0.59, 0.59]) k.box(0, 0.76, sz, 2.3, 0.05, 0.12, shadeHex(pal.wood, 0.15));
+    for (let b = 0; b < 7; b++) k.ball(-0.3 + (b % 3) * 0.06 + Math.floor(b / 3) * 0.05, 0.81, -0.06 + (b % 3) * 0.06, 0.028, [0xffd43b, 0x1c3faa, 0xe03131, 0x7048e8, 0xf08c00, 0x2f9e44, 0x1b1b1b][b], { w: 8, h: 6 });
+    k.ball(0.5, 0.81, 0, 0.028, 0xffffff, { w: 8, h: 6 });
+    k.cyl(0.2, 0.8, 0.3, 0.008, 0.012, 1.4, 0xd9c7a7, 6, { rz: Math.PI / 2 + 0.05, noAo: true });
+    k.shadow(0, 0, 2.6, 1.6, 0.3);
+    k.box(0, 1.6, 0, 1.4, 0.08, 0.3, 0x2b2b2b, { noAo: true });
+    k.box(0, 1.56, 0, 1.3, 0.02, 0.24, 0xfff1d6, { layer: "glow" });
+    item(x, "pool", "Pool table", 0, 0, 0.9, 1.2);
+  });
+}
+
+function dartboard(x: Ctx, px: number, pz: number) {
+  const { k } = x;
+  k.at(px, 0, pz, Math.PI, () => {
+    k.box(0, 0, 0, 0.5, 0.06, 0.4, 0x2b2b2b);
+    k.box(0, 0.06, 0, 0.08, 1.55, 0.08, 0x2b2b2b);
+    k.cyl(0, 1.73, 0.06, 0.24, 0.24, 0.04, 0x1b1b1b, 24, { rx: Math.PI / 2 });
+    k.cyl(0, 1.73, 0.1, 0.2, 0.2, 0.01, 0xe9dcc3, 20, { rx: Math.PI / 2, noAo: true });
+    k.cyl(0, 1.73, 0.11, 0.13, 0.13, 0.01, 0x2f9e44, 20, { rx: Math.PI / 2, noAo: true });
+    k.cyl(0, 1.73, 0.12, 0.07, 0.07, 0.01, 0xe9dcc3, 20, { rx: Math.PI / 2, noAo: true });
+    k.cyl(0, 1.73, 0.13, 0.025, 0.025, 0.01, 0xe03131, 12, { rx: Math.PI / 2, noAo: true });
+    k.shadow(0, 0, 0.6, 0.5, 0.25);
+    item(x, "darts", "Darts", 0, 0, 1.4, 0.9);
+  });
+}
+
+function jukebox(x: Ctx, px: number, pz: number, ry: number) {
+  const { k } = x;
+  k.at(px, 0, pz, ry, () => {
+    k.soft(0, 0, 0, 0.85, 1.35, 0.55, 0x7a2e3a, 0.08);
+    k.ball(0, 1.32, 0, 0.42, 0x7a2e3a, { part: 0.5, sz: 0.62, w: 16, h: 8 });
+    k.box(0, 0.75, 0.28, 0.6, 0.45, 0.02, 0xffd43b, { layer: "glow" });
+    for (const sx of [-0.36, 0.36]) k.box(sx, 0.1, 0.28, 0.06, 1.3, 0.02, 0xff922b, { layer: "glow" });
+    k.ring(0, 1.3, 0.25, 0.32, 0.03, 0x74c0fc, { layer: "glow", arc: Math.PI });
+    k.shadow(0, 0, 1.1, 0.8, 0.3);
+    item(x, "jukebox", "Jukebox", 0, 0, 0.75, 0.8);
+  });
+}
+
+function grandPiano(x: Ctx, px: number, pz: number, ry: number) {
+  const { k } = x;
+  k.at(px, 0, pz, ry, () => {
+    for (const [lx, lz] of [[-0.6, -0.5], [0.6, -0.5], [0.1, 0.7]]) k.cyl(lx, 0, lz, 0.05, 0.04, 0.68, 0x111111, 8);
+    k.soft(0, 0.62, 0.05, 1.45, 0.3, 1.5, 0x111111, 0.12);
+    k.box(0, 0.92, 0.25, 1.3, 0.03, 1.1, 0x161616, { rx: -0.55, noAo: true });
+    k.box(0, 0.76, -0.78, 1.25, 0.05, 0.2, 0xf8f9fa, { noAo: true });
+    for (let b = 0; b < 18; b++) k.box(-0.58 + b * 0.068, 0.81, -0.74, 0.03, 0.02, 0.11, 0x111111, { noAo: true });
+    k.box(0, 0, -1.25, 0.9, 0.48, 0.38, 0x111111);
+    k.shadow(0, 0, 1.9, 2.3, 0.3);
+    spot(x, 0, -1.25, 0, "sit", 0.5);
+    item(x, "piano", "Grand piano", 0, 0, -1.0, 1.0);
+  });
+}
+
+function arcadeCabinet(x: Ctx, px: number, pz: number, ry: number, color: number) {
+  const { k, sheet, rnd } = x;
+  const scr = sheet.paint(64, 48, (c, w, h) => {
+    c.fillStyle = "#0b0f2a";
+    c.fillRect(0, 0, w, h);
+    for (let i = 0; i < 9; i++) {
+      c.fillStyle = ["#ff6b6b", "#ffd43b", "#69db7c", "#4dabf7", "#da77f2"][i % 5];
+      c.fillRect(rnd() * w, rnd() * h, 4 + rnd() * 6, 4 + rnd() * 6);
+    }
+  });
+  k.at(px, 0, pz, ry, () => {
+    k.box(0, 0, 0, 0.7, 1.75, 0.7, color);
+    k.box(0, 0.95, -0.36, 0.6, 0.1, 0.25, 0x1b1b1b, { rx: -0.3 });
+    k.quad(0, 1.35, -0.355, 0.52, 0.4, 0xffffff, { layer: "texGlow", ry: Math.PI }, scr);
+    k.box(0, 1.7, -0.36, 0.66, 0.16, 0.02, shadeHex(color, -0.4), { layer: "glow" });
+    for (const bx of [-0.1, 0.05, 0.15]) k.ball(bx, 1.02, -0.42, 0.025, [0xe03131, 0xffd43b, 0x4dabf7][Math.floor(rnd() * 3)], { layer: "glow", w: 6, h: 4 });
+    k.shadow(0, 0, 0.9, 0.9, 0.3);
+  });
+}
+
+function slotMachine(x: Ctx, px: number, pz: number, ry: number) {
+  const { k } = x;
+  k.at(px, 0, pz, ry, () => {
+    k.soft(0, 0, 0, 0.75, 1.55, 0.6, 0xd4af37, 0.06);
+    k.box(0, 1.0, -0.31, 0.56, 0.3, 0.02, 0xffffff, { layer: "glow" });
+    for (let r = 0; r < 3; r++) k.cyl(-0.18 + r * 0.18, 1.15, -0.33, 0.05, 0.05, 0.01, [0xe03131, 0x2f9e44, 0xe03131][r], 12, { layer: "glow", rx: Math.PI / 2 });
+    k.cyl(0.42, 0.9, 0, 0.025, 0.025, 0.5, 0xadb5bd, 8);
+    k.ball(0.42, 1.42, 0, 0.06, 0xe03131, { w: 8, h: 6 });
+    k.box(0, 1.55, -0.3, 0.7, 0.18, 0.04, 0xe03131, { layer: "glow" });
+    k.shadow(0, 0, 0.9, 0.8, 0.3);
+  });
+}
+
+function photoBooth(x: Ctx, px: number, pz: number, ry: number, color: number) {
+  const { k } = x;
+  k.at(px, 0, pz, ry, () => {
+    k.box(0, 0, 0, 1.2, 2.2, 1.0, color);
+    k.box(0, 0.2, -0.505, 0.7, 1.8, 0.02, 0x1b1b1b, { noAo: true });
+    for (let f = 0; f < 5; f++) k.box(-0.3 + f * 0.15, 0.25, -0.53, 0.13, 1.7, 0.03, 0xc92a2a, { noAo: true });
+    k.box(0, 1.95, -0.51, 1.0, 0.22, 0.02, 0xfff3bf, { layer: "glow" });
+    k.shadow(0, 0, 1.4, 1.3, 0.3);
+    item(x, "photo", "Photo booth", 0, 0, -0.9, 0.8);
+  });
+}
+
+function karaokeCorner(x: Ctx, px: number, pz: number, ry: number) {
+  const { k, sheet } = x;
+  const lyr = sheet.paint(160, 90, (c, w, h) => {
+    c.fillStyle = "#14102b";
+    c.fillRect(0, 0, w, h);
+    c.font = "700 14px system-ui";
+    c.textAlign = "center";
+    c.fillStyle = "#ffd43b";
+    c.fillText("♪ Sing along! ♪", w / 2, 30);
+    c.fillStyle = "#ffffff";
+    c.fillText("la la la la...", w / 2, 58);
+  });
+  k.at(px, 0, pz, ry, () => {
+    k.box(0, 0, 0.3, 1.8, 0.25, 1.4, 0x2b2b2b);
+    k.box(0, 0.9, 0.95, 1.4, 0.85, 0.06, 0x111111, { noAo: true });
+    k.quad(0, 1.33, 0.92, 1.3, 0.75, 0xffffff, { layer: "texGlow", ry: Math.PI }, lyr);
+    k.cyl(0, 0.25, 0.1, 0.012, 0.012, 1.25, 0x868e96, 6);
+    k.ball(0, 1.52, 0.1, 0.04, 0x343a40, { w: 8, h: 6 });
+    k.shadow(0, 0.3, 2.0, 1.6, 0.3);
+    item(x, "karaoke", "Karaoke", 0, 0.25, 0.1, 0.9);
+  });
+}
+
+// ---------------------------------------------------------------- the club
+
+function club(x: Ctx) {
+  const { room, pal, rnd, sheet, info, k } = x;
+  const W = room.w;
+  const D = room.d;
+  x.dark = true;
+  const neon = pickOf(rnd, [0xff4fd8, 0x22d3ee, 0xa3e635, 0xffd43b]);
+  const neon2 = pickOf(rnd, [0x7c3aed, 0x22d3ee, 0xff4fd8, 0xff6b6b]);
+  // Glowing strips round the ceiling and along the bottom of the walls.
+  for (const [cx, cz, cw, cd] of [[0, -D / 2 + 0.05, W, 0.05], [0, D / 2 - 0.05, W, 0.05], [-W / 2 + 0.05, 0, 0.05, D], [W / 2 - 0.05, 0, 0.05, D]] as const) {
+    k.box(cx, room.h - 0.12, cz, cw, 0.04, cd, neon, { layer: "glow" });
+    k.box(cx, 0.1, cz, cw, 0.03, cd, neon2, { layer: "glow" });
+  }
+  // The dance floor: a raised edge round a floor of light tiles (they change colour).
+  const fw = 7;
+  const fd = 5.5;
+  const fz = -0.4;
+  k.box(0, 0, fz, fw + 0.3, 0.06, fd + 0.3, 0x1b1b1b, { noAo: true });
+  const tiles = new THREE.InstancedMesh(new THREE.BoxGeometry(0.46, 0.02, 0.46).translate(0, 0.07, 0), new THREE.MeshBasicMaterial({ color: 0xffffff }), Math.round(fw / 0.5) * Math.round(fd / 0.5));
+  const cols = [0xff4fd8, 0x22d3ee, 0xa3e635, 0xffd43b, 0x7c3aed, 0xff6b6b].map((c) => new THREE.Color(c));
+  const n0 = Math.round(fw / 0.5);
+  const n1 = Math.round(fd / 0.5);
+  const m4 = new THREE.Matrix4();
+  for (let i = 0; i < n0; i++) for (let j = 0; j < n1; j++) {
+    m4.makeTranslation(-fw / 2 + 0.25 + i * 0.5, 0, fz - fd / 2 + 0.25 + j * 0.5);
+    tiles.setMatrixAt(i * n1 + j, m4);
+    tiles.setColorAt(i * n1 + j, cols[(i + j) % cols.length]);
+  }
+  x.extras.push(tiles);
+  let lastBeat = -1;
+  const dim = new THREE.Color();
+  x.anim.push((t) => {
+    const beat = Math.floor(t * 2.1);
+    if (beat === lastBeat) return;
+    lastBeat = beat;
+    for (let i = 0; i < n0; i++) for (let j = 0; j < n1; j++) {
+      const wave = Math.sin(i * 0.9 + j * 0.7 + beat * 1.3);
+      tiles.setColorAt(i * n1 + j, dim.copy(cols[(i + j + beat) % cols.length]).multiplyScalar(wave > 0.2 ? 1 : 0.18));
+    }
+    if (tiles.instanceColor) tiles.instanceColor.needsUpdate = true;
+  });
+  item(x, "dance", "Dance floor", 0, 0.07, fz, 1.6);
+  x.act = "dance";
+  for (let d = 0; d < 10; d++) {
+    const a = rnd() * Math.PI * 2;
+    const r = 0.6 + rnd() * 1.8;
+    spot(x, Math.cos(a) * r * 1.2, fz + Math.sin(a) * r * 0.9, rnd() * 6, "stand");
+  }
+  x.act = undefined;
+  // The DJ booth on the back wall: a platform, the decks, speakers, and a glowing wall.
+  const name = info.name;
+  const wall = sheet.paint(512, 128, (c, w, h) => {
+    const g = c.createLinearGradient(0, 0, w, 0);
+    g.addColorStop(0, "#1a0b3b");
+    g.addColorStop(0.5, "#3b0a45");
+    g.addColorStop(1, "#0b2a3b");
+    c.fillStyle = g;
+    c.fillRect(0, 0, w, h);
+    c.font = "900 54px system-ui, sans-serif";
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    c.shadowColor = "#ff4fd8";
+    c.shadowBlur = 18;
+    c.fillStyle = "#ffffff";
+    c.fillText(name.toUpperCase().slice(0, 18), w / 2, h / 2, w - 30);
+  });
+  atWall(x, 2, 0, () => {
+    k.box(0, 0, 1.0, 4.2, 0.5, 2.0, 0x1b1b1b);
+    k.box(0, 0.5, 1.4, 2.6, 0.9, 0.7, 0x2b2b2b);
+    k.box(0, 1.4, 1.4, 2.7, 0.04, 0.8, 0x111111);
+    for (const dx of [-0.75, 0.75]) {
+      k.cyl(dx, 1.44, 1.45, 0.22, 0.22, 0.03, 0x343a40, 20);
+      k.cyl(dx, 1.47, 1.45, 0.08, 0.08, 0.01, neon, 12, { layer: "glow" });
+    }
+    k.box(0, 1.44, 1.45, 0.4, 0.05, 0.3, 0x495057);
+    k.box(0, 0.6, 1.76, 2.6, 0.7, 0.02, neon2, { layer: "glow" });
+    for (const sx of [-1.9, 1.9]) {
+      k.box(sx, 0.5, 1.2, 0.8, 2.0, 0.7, 0x1b1b1b);
+      for (const sy of [0.95, 1.85]) k.cyl(sx, 0.5 + sy, 1.56, 0.25, 0.25, 0.02, 0x343a40, 18, { rx: Math.PI / 2 });
+    }
+    k.quad(0, 2.4, 0.04, 6.0, 1.5, 0xffffff, { layer: "texGlow" }, wall);
+    x.act = "dj";
+    spot(x, 0, 1.0, Math.PI, "stand");
+    x.act = undefined;
+    item(x, "dj", "DJ booth", 0, 0.5, 2.3, 1.2);
+  });
+  // The bar along the east wall, backlit bottles, stools.
+  atWall(x, 1, 0.4, () => {
+    k.box(0, 0, 1.6, 4.6, 1.1, 0.7, 0x1b1b1b);
+    k.box(0, 1.1, 1.6, 4.7, 0.05, 0.8, 0x343a40);
+    k.box(0, 0.08, 1.96, 4.6, 0.03, 0.02, neon, { layer: "glow" });
+    k.box(0, 1.2, 0.2, 4.2, 1.2, 0.3, 0x111111);
+    for (let b = 0; b < 22; b++) k.cyl(-2.0 + (b % 11) * 0.4, 1.32 + Math.floor(b / 11) * 0.55, 0.25, 0.04, 0.04, 0.28, pickOf(rnd, [0x2f9e44, 0xe8c07d, 0xb6d7e6, 0x7a2e3a, 0xff922b]), 8, { layer: "glow" });
+    spot(x, 0, 0.9, 0, "stand");
+    x.act = "sip";
+    for (let s2 = 0; s2 < 5; s2++) chair(x, -1.6 + s2 * 0.8, 2.35, 0, neon2, 0x343a40, { stool: true });
+    x.act = undefined;
+    item(x, "bar", "Bar", 0, 0, 2.6, 1.2);
+  });
+  // Booths along the west wall.
+  x.act = "sip";
+  for (let b = 0; b < 2; b++) {
+    const bz = -D / 2 + 2.4 + b * 3.0;
+    sofa(x, -W / 2 + 0.75, bz, Math.PI / 2, 2.4, pal.fabric, { legs: 0x111111 });
+    table(x, -W / 2 + 1.85, bz, 0, 0.8, 1.4, 0x111111, 0x343a40, { h: 0.5 });
+    x.k.cyl(-W / 2 + 1.85, 0.5, bz, 0.05, 0.05, 0.1, neon, 10, { layer: "glow" });
+  }
+  x.act = undefined;
+  // Karaoke or a photo booth in the corner.
+  if (rnd() < 0.55) karaokeCorner(x, -W / 2 + 1.6, D / 2 - 1.3, 0);
+  else photoBooth(x, -W / 2 + 1.2, D / 2 - 1.2, Math.PI / 2, neon2);
+  // A disco ball, lasers and moving spotlights (all moving).
+  const ballMat = new THREE.MeshBasicMaterial({ color: 0xdfe6ff });
+  const ball = new THREE.Mesh(new THREE.IcosahedronGeometry(0.35, 1), ballMat);
+  ball.position.set(0, room.h - 0.6, fz);
+  x.extras.push(ball);
+  const beamMat = new THREE.MeshBasicMaterial({ color: neon, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
+  const lasers = new THREE.Group();
+  const beamGeo = new THREE.CylinderGeometry(0.012, 0.012, 9, 4).translate(0, 4.5, 0);
+  for (let l = 0; l < 6; l++) {
+    const b = new THREE.Mesh(beamGeo, beamMat);
+    b.rotation.z = -1.2 + (l / 5) * 2.4;
+    b.rotation.x = -1.1;
+    lasers.add(b);
+  }
+  lasers.position.set(0, 2.2, D / 2 - 1.2);
+  x.extras.push(lasers);
+  const coneMat = new THREE.MeshBasicMaterial({ color: neon2, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const coneGeo = new THREE.ConeGeometry(1.0, room.h - 0.2, 20, 1, true).translate(0, -(room.h - 0.2) / 2, 0);
+  const cones: THREE.Mesh[] = [];
+  for (let c = 0; c < 3; c++) {
+    const cone = new THREE.Mesh(coneGeo, coneMat);
+    cone.position.set((c - 1) * 2.5, room.h - 0.1, fz);
+    cones.push(cone);
+    x.extras.push(cone);
+  }
+  x.anim.push((t) => {
+    ball.rotation.y = t * 0.8;
+    lasers.rotation.y = Math.sin(t * 0.7) * 0.6;
+    lasers.visible = Math.sin(t * 0.5) > -0.3;
+    cones.forEach((c, i) => {
+      c.rotation.z = Math.sin(t * 0.9 + i * 2) * 0.45;
+      c.rotation.x = Math.cos(t * 0.7 + i) * 0.35;
+    });
+    ballMat.color.setHSL((t * 0.1) % 1, 0.4, 0.85);
+  });
+  // A neon sign on the side wall.
+  wallSign(x, 3, D / 4, 2.6, "DANCE", 0x14102b, neon, 2.0, 0.6);
+  x.lamps.push({ x: -2, y: room.h - 0.8, z: fz }, { x: 2, y: room.h - 0.8, z: fz });
+  x.views.push(
+    { x: W / 2 - 1.6, z: -D / 2 + 1.4, yaw: yawTo(W / 2 - 1.6, -D / 2 + 1.4, -1, D / 2), pitch: -0.1 },
+    { x: -W / 2 + 2.8, z: -D / 2 + 1.0, yaw: yawTo(-W / 2 + 2.8, -D / 2 + 1.0, 1.5, D / 2), pitch: -0.08 },
+    { x: 0, z: fz + 1.0, yaw: 0, pitch: -0.05 },
+  );
+}
+
+// ---------------------------------------------------------------- restaurants
+
+const DISHES: Record<string, string[]> = {
+  ng: ["Jollof rice & chicken", "Pounded yam & egusi", "Suya platter", "Goat pepper soup", "Moi moi", "Puff-puff", "Chapman"],
+  uk: ["Fish & chips", "Sunday roast", "Shepherd's pie", "Full English", "Sticky toffee pudding", "Pot of tea"],
+  us: ["Cheeseburger", "BBQ ribs", "Mac & cheese", "Buffalo wings", "Apple pie", "Milkshake"],
+  gh: ["Waakye", "Banku & tilapia", "Kelewele", "Red red", "Fufu & light soup", "Sobolo"],
+  ke: ["Nyama choma", "Ugali & sukuma", "Pilau", "Chapati", "Mandazi", "Chai"],
+  za: ["Bunny chow", "Braai platter", "Bobotie", "Pap & chakalaka", "Malva pudding", "Rooibos"],
+};
+
+function restaurant(x: Ctx) {
+  const { room, pal, rnd, sheet, info, k } = x;
+  const W = room.w;
+  const D = room.d;
+  const dishes = DISHES[info.flavor ?? "ng"] ?? DISHES.ng;
+  const fancy = rnd() < 0.5;
+  const cloth = fancy ? 0xf7f4ee : pickOf(rnd, [0xe03131, 0x2f9e44, 0x1971c2]);
+  // Tables in rows in the front of the room, by the windows.
+  x.act = "eat";
+  for (let r = 0; r < 2; r++) {
+    for (let c = 0; c < 4; c++) {
+      const tx = -W / 2 + 2.0 + c * ((W - 4.5) / 3);
+      const tz = -D / 2 + 1.7 + r * 2.4;
+      const four = (r + c) % 2 === 0;
+      table(x, tx, tz, 0, four ? 1.0 : 0.8, four ? 1.0 : 0.8, cloth, pal.metal, { round: !four, cloth: fancy ? cloth : undefined });
+      if (!fancy && four) for (let cc = 0; cc < 4; cc++) k.box(tx - 0.5 + cc * 0.25 + 0.125, 0.752, tz, 0.125, 0.002, 1.0, cc % 2 ? 0xffffff : cloth, { noAo: true });
+      const seatsAt = four ? [[0, -0.7, 0], [0, 0.7, Math.PI], [-0.7, 0, Math.PI / 2], [0.7, 0, -Math.PI / 2]] : [[0, -0.62, 0], [0, 0.62, Math.PI]];
+      seatsAt.forEach(([sx, sz, ry], i) => chair(x, tx + sx, tz + sz, ry, pal.fabric, pal.wood, { spot: i < 2 || rnd() < 0.5 }));
+      k.cyl(tx, 0.76, tz, 0.03, 0.035, 0.08, 0xfff1d6, 10, { layer: "glow" });
+      k.cyl(tx + 0.18, 0.76, tz + 0.1, 0.035, 0.03, 0.12, 0xffffff, 10);
+      k.ball(tx + 0.18, 0.92, tz + 0.1, 0.045, pickOf(rnd, [0xe64980, 0xffd43b, 0xff922b]), { w: 6, h: 5 });
+      for (const [px2, pz2] of [[0.15, -0.15], [-0.15, 0.15]]) k.cyl(tx + px2, 0.76, tz + pz2, 0.12, 0.1, 0.02, 0xffffff, 16);
+      pendant(x, tx, tz, 1.15, fancy ? "globe" : "cone", pal.metal);
+    }
+  }
+  x.act = undefined;
+  // The kitchen pass on the back wall: a counter, heat lamps, chefs at work behind it.
+  atWall(x, 2, -1.2, () => {
+    k.box(0, 0, 0.05, 4.2, room.h, 0.1, 0x2b2f33, { noAo: true });
+    k.box(0, 0, 0.6, 3.8, 1.05, 0.6, pal.wood);
+    k.box(0, 1.05, 0.6, 3.9, 0.05, 0.7, 0xdee2e6);
+    for (let l = 0; l < 4; l++) {
+      k.cyl(-1.35 + l * 0.9, 1.75, 0.6, 0.12, 0.18, 0.18, 0x343a40, 12, { open: true });
+      k.ball(-1.35 + l * 0.9, 1.78, 0.6, 0.07, 0xff922b, { layer: "glow", w: 8, h: 6 });
+      k.cyl(-1.35 + l * 0.9, 1.93, 0.6, 0.008, 0.008, room.h - 1.93, 0x2b2b2b, 4, { noAo: true });
+    }
+    for (let p2 = 0; p2 < 5; p2++) k.cyl(-1.6 + p2 * 0.8, 1.1, 0.6, 0.13, 0.11, 0.03, 0xffffff, 16);
+    k.box(0, 1.3, 0.12, 3.8, 0.04, 0.3, 0xadb5bd, { noAo: true });
+    k.box(0, 1.9, 0.12, 3.8, 0.04, 0.3, 0xadb5bd, { noAo: true });
+    for (let p2 = 0; p2 < 6; p2++) k.cyl(-1.6 + p2 * 0.64, 1.34, 0.12, 0.1, 0.1, 0.18, 0xced4da, 12);
+    x.act = "cook";
+    spot(x, -0.8, 0.22, 0, "stand");
+    spot(x, 0.9, 0.22, 0, "stand");
+    x.act = undefined;
+  });
+  // A chalkboard menu of local dishes.
+  const menu = sheet.paint(240, 300, (c, w, h) => {
+    c.fillStyle = "#1f2a24";
+    c.fillRect(0, 0, w, h);
+    c.strokeStyle = "#8a6a4f";
+    c.lineWidth = 10;
+    c.strokeRect(0, 0, w, h);
+    c.fillStyle = "#ffffff";
+    c.font = "700 26px Georgia, serif";
+    c.textAlign = "center";
+    c.fillText("Today's menu", w / 2, 44);
+    c.font = "400 17px Georgia, serif";
+    dishes.slice(0, 6).forEach((d, i) => c.fillText(d, w / 2, 90 + i * 34, w - 30));
+  });
+  atWall(x, 2, W / 2 - 2.2, () => {
+    k.quad(0, 1.75, 0.04, 1.2, 1.5, 0xffffff, { layer: "tex" }, menu);
+    item(x, "menu", "Menu", 0, 0, 1.2, 0.9);
+  });
+  // The bar along the east wall, with stools.
+  atWall(x, 1, 1.5, () => {
+    k.box(0, 0, 1.0, 3.0, 1.05, 0.6, pal.wood);
+    k.box(0, 1.05, 1.0, 3.1, 0.05, 0.7, 0x2b2b2b);
+    k.box(0, 1.25, 0.15, 2.8, 0.03, 0.25, pal.wood, { noAo: true });
+    for (let b = 0; b < 10; b++) k.cyl(-1.2 + b * 0.27, 1.28, 0.15, 0.035, 0.035, 0.26, pickOf(rnd, [0x2f9e44, 0x7a2e3a, 0xe8c07d, 0xb6d7e6]), 8);
+    x.act = "sip";
+    for (let s2 = 0; s2 < 3; s2++) chair(x, -0.9 + s2 * 0.9, 1.7, 0, pal.fabric, pal.metal, { stool: true });
+    x.act = undefined;
+    spot(x, 0, 0.45, 0, "stand");
+    item(x, "bar", "Bar", 0, 0, 1.9, 1.0);
+  });
+  // Music: a jukebox in a diner, a piano in a fancier place.
+  if (fancy) grandPiano(x, W / 2 - 1.6, -D / 2 + 1.6, -Math.PI * 0.75);
+  else jukebox(x, W / 2 - 0.6, -D / 2 + 0.8, -Math.PI / 2);
+  // A host stand by the door, plants, art.
+  k.box(-W / 2 + 1.2, 0, D / 2 - 1.4, 0.6, 1.1, 0.45, pal.wood);
+  spot(x, -W / 2 + 1.2, D / 2 - 2.0, Math.PI, "stand");
+  plant(x, -W / 2 + 0.5, D / 2 - 0.5, 1.2, "tall");
+  plant(x, W / 2 - 0.5, D / 2 - 0.5, 1.2, "palm");
+  for (const sd of solidSides(room)) if (sd !== 2) art(x, sd, -1.0, 1.7, 1.1, 0.8);
+  x.lamps.push({ x: -W / 4, y: room.h - 1.2, z: -D / 2 + 2.9 }, { x: W / 4, y: room.h - 1.2, z: -D / 2 + 2.9 });
+  x.views.push(
+    { x: -W / 2 + 1.4, z: D / 2 - 2.6, yaw: yawTo(-W / 2 + 1.4, D / 2 - 2.6, W / 4, -D / 2), pitch: -0.1 },
+    { x: W / 2 - 1.5, z: D / 2 - 2.8, yaw: yawTo(W / 2 - 1.5, D / 2 - 2.8, -W / 3, -D / 2), pitch: -0.1 },
+    { x: 0, z: -D / 2 + 0.9, yaw: Math.PI, pitch: -0.08 },
+  );
+}
+
+// ---------------------------------------------------------------- the fire station
+
+function firehall(x: Ctx) {
+  const { room, rnd, k } = x;
+  const W = room.w;
+  const D = room.d;
+  // Red doors on the front, yellow lines on the floor.
+  atWall(x, 0, 0, () => {
+    for (const dx of [-3.4, 0, 3.4]) {
+      k.box(dx, 0, 0.03, 3.0, 3.2, 0.06, 0xc92a2a, { noAo: true });
+      for (let p2 = 1; p2 < 8; p2++) k.box(dx, p2 * 0.4, 0.07, 2.9, 0.03, 0.02, 0x9c1f1f, { noAo: true });
+      k.box(dx, 2.0, 0.08, 2.4, 0.5, 0.02, 0x9fd3ff, { noAo: true });
+    }
+  });
+  for (const dx of [-3.4, 0, 3.4]) for (const sx of [-1.4, 1.4]) k.box(dx + sx, 0.002, -0.5, 0.1, 0.004, D - 3, 0xffd43b, { noAo: true });
+  // Two engines, noses to the doors.
+  for (const dx of [-3.4, 0]) {
+    k.at(dx, 0, -0.2, Math.PI / 2, () => fireEngineKit(k));
+    k.shadow(dx, -0.2, 2.8, 8.2, 0.35);
+  }
+  item(x, "photo", "Photo with the fire engine", -1.7, 0, 1.6, 1.0);
+  // Lockers with helmets and jackets along the west wall.
+  atWall(x, 3, 0, () => {
+    for (let l = 0; l < 6; l++) {
+      const lx = -2.5 + l * 1.0;
+      k.box(lx, 0, 0.3, 0.9, 2.0, 0.55, 0x495057);
+      k.box(lx, 0.1, 0.58, 0.8, 1.2, 0.02, 0x2b2f33, { noAo: true });
+      k.soft(lx, 0.5, 0.62, 0.5, 0.8, 0.1, 0x343a40, 0.04);
+      k.ball(lx, 1.5, 0.5, 0.17, l % 2 ? 0xffd43b : 0xc92a2a, { part: 0.5, w: 12, h: 6 });
+    }
+    k.shadow(0, 0.3, 6.4, 0.9, 0.3);
+    k.box(0, 0, 1.4, 3.0, 0.45, 0.45, 0x6b4f37);
+    spot(x, -0.6, 1.4, 0, "sit", 0.45);
+    spot(x, 0.6, 1.4, 0, "sit", 0.45);
+  });
+  // The brass pole down from the crew room, through a hole in the ceiling.
+  const px = W / 2 - 1.1;
+  const pz = -D / 2 + 2.6;
+  k.cyl(px, 0, pz, 0.05, 0.05, room.h, 0xd4af37, 12);
+  k.cyl(px, 0, pz, 0.5, 0.5, 0.04, 0x343a40, 20);
+  k.cyl(px, room.h - 0.02, pz, 0.6, 0.6, 0.03, 0x1b1b1b, 20, { noAo: true });
+  item(x, "stairs", "Fire pole", px, 0, pz - 0.6, 0.8);
+  // Hose reels and a notice board on the east wall.
+  atWall(x, 1, -1.5, () => {
+    for (let h = 0; h < 2; h++) k.cyl(-0.6 + h * 1.2, 1.2, 0.2, 0.4, 0.4, 0.3, 0xc92a2a, 18, { rx: Math.PI / 2 });
+    k.box(1.8, 1.1, 0.03, 1.4, 1.0, 0.04, 0xb98a5a, { noAo: true });
+    for (let n = 0; n < 5; n++) k.box(1.4 + (n % 3) * 0.35, 1.7 - Math.floor(n / 3) * 0.4, 0.06, 0.25, 0.3, 0.005, 0xf8f9fa, { noAo: true, rz: (rnd() - 0.5) * 0.2 });
+  });
+  x.act = "talk";
+  spot(x, 1.6, 1.8, -2.4, "stand");
+  spot(x, 2.3, 1.2, 2.2, "stand");
+  x.act = undefined;
+  linearLights(x, 3, "z");
+  x.views.push(
+    { x: W / 2 - 1.2, z: D / 2 - 0.9, yaw: yawTo(W / 2 - 1.2, D / 2 - 0.9, -2, -D / 2), pitch: -0.12 },
+    { x: 2.6, z: -D / 2 + 1.2, yaw: yawTo(2.6, -D / 2 + 1.2, -2, D / 2), pitch: -0.1 },
+  );
 }
 
 // ---------------------------------------------------------------- themes
@@ -703,6 +1190,9 @@ function livingRoom(x: Ctx, upstairs: boolean) {
     }
     pendant(x, dx, -1.1, 1.0, pickOf(rnd, ["globe", "cone", "drum"] as const), pal.metal);
     x.lamps.push({ x: dx, y: room.h - 1.2, z: -1.1 });
+    // A deck of cards on the table.
+    for (let c = 0; c < 4; c++) x.k.box(dx - 0.15 + c * 0.1, 0.76, -1.1 + (c % 2) * 0.06, 0.06, 0.004, 0.09, c % 2 ? 0xffffff : 0xe03131, { noAo: true, ry: c * 0.3 });
+    item(x, "cards", "Card game", dx, 0.75, -1.1, 0.6);
   }
   // Lounge.
   const lx = W / 2 - 2.2;
@@ -849,6 +1339,7 @@ function lobby(x: Ctx, kind: "corp" | "hotel" | "clinic" | "police" | "small") {
         x.k.cyl(cx, room.h - 0.3, cz, 0.36, 0.3, 0.3, pal.metal, 20, { noAo: true });
       }
     }
+    grandPiano(x, -W / 2 + 3.0, 2.0, Math.PI * 0.85);
     // A luggage trolley.
     const tx = -1.6;
     const tz = deskZ - 1.6;
@@ -892,7 +1383,9 @@ function officeFloor(x: Ctx, kind: "office" | "detectives" | "control") {
       for (const side of [-1, 1]) {
         const dz = (kind === "control" ? -1.8 : -0.6) + side * 0.36;
         const dx = cx + (r - 0.5) * 1.45;
+        x.act = "work";
         desk(x, dx, dz, side < 0 ? Math.PI : 0, top, pickOf(rnd, screens), pal.fabric, rnd() < 0.8);
+        x.act = undefined;
       }
     }
     if (kind === "office") {
@@ -1011,7 +1504,9 @@ function loungeFloor(x: Ctx, restaurant: boolean) {
   }
   x.k.box(0, room.h - 0.57, 0.6, bw - 0.4, 0.02, 0.32, 0xfff1d6, { layer: "glow" });
   spot(x, 0.6, 0.05, Math.PI, "stand");
+  x.act = restaurant ? "eat" : "sip";
   for (let s = 0; s < 5; s++) chair(x, -1.6 + s * 0.8, 1.45, Math.PI, pal.fabric, pal.metal, { stool: true });
+  item(x, "bar", "Bar", 0, 0, 1.25, 1.1);
   x.lamps.push({ x: 0, y: room.h - 1.1, z: 0.6 });
   // Tables round the windows.
   const spotsT: [number, number][] = [];
@@ -1031,6 +1526,11 @@ function loungeFloor(x: Ctx, restaurant: boolean) {
       table(x, tx, tz, 0, 0.5, 0.5, pal.metal, pal.metal, { round: true, h: 0.45 });
     }
   });
+  x.act = undefined;
+  // A games corner: a pool table and a darts board, and a jukebox.
+  poolTable(x, W / 2 - 3.6, D / 2 - 2.0, 0);
+  dartboard(x, 2.7, D / 2 - 0.35);
+  jukebox(x, -W / 2 + 2.2, D / 2 - 0.55, Math.PI);
   // A velvet sofa group at the back.
   rugAt(x, 0, D / 2 - 1.8, 3.6, 2.2, 0, pal.fabric2, pal.fabric);
   sofa(x, 0, D / 2 - 1.0, Math.PI, 2.6, pal.fabric);
@@ -1180,6 +1680,7 @@ function mall(x: Ctx, food: boolean) {
           x.k.box(0, 0, 0.75, sw - 0.6, 1.05, 0.6, shadeHex(hue, 0.25));
           x.k.box(0, 1.05, 0.75, sw - 0.5, 0.05, 0.7, 0xf1efea);
           spot(x, 0.3, 0.3, 0, "stand");
+          item(x, "menu", `${name} · menu`, 0, 0, 1.5, 0.8);
         } else {
           x.k.quad(0, 1.3, 0.16, sw - 0.5, 2.6, 0xffffff, { layer: "glass" });
           x.k.box(0, 0, 0.6, sw - 0.6, 0.05, 0.5, hue, { noAo: true });
@@ -1193,7 +1694,9 @@ function mall(x: Ctx, food: boolean) {
         const tx = -W / 2 + 3.5 + i * ((W - 7) / 2);
         const tz = -D / 2 + 3.0 + j * 2.6;
         table(x, tx, tz, 0, 1.2, 0.8, 0xf1efea, pal.metal);
+        x.act = "eat";
         for (const side of [-1, 1]) chair(x, tx + 0.3 * side, tz + side * 0.62, side < 0 ? 0 : Math.PI, pickOf(rnd, hues), pal.metal, { spot: (i + j + (side > 0 ? 1 : 0)) % 2 === 0 });
+        x.act = undefined;
         pendant(x, tx, tz, 1.2, "cone", pal.accent);
       }
     }
@@ -1206,6 +1709,12 @@ function mall(x: Ctx, food: boolean) {
       plant(x, px + 0.6, -0.5, 1.2, "bush");
       bench(x, px, 0.6, 0, 2.0, pal.wood, pal.metal);
     }
+    // An arcade corner: cabinets, a (free) slot machine, a photo booth.
+    for (let a = 0; a < 3; a++) arcadeCabinet(x, -W / 4 - 1.1 + a * 0.85, 2.9, Math.PI, pickOf(rnd, hues));
+    item(x, "arcade", "Arcade games", -W / 4 - 0.25, 0, 2.1, 1.1);
+    slotMachine(x, -W / 4 + 1.6, 2.9, Math.PI);
+    item(x, "slots-free", "Lucky slots (free)", -W / 4 + 1.6, 0, 2.2, 0.7);
+    photoBooth(x, W / 2 - 1.4, 2.6, -Math.PI / 2, pickOf(rnd, hues));
     // A kiosk cart.
     const kx = W / 4 + 1.6;
     x.k.box(kx, 0, 2.2, 1.4, 1.0, 0.8, pal.accent);
@@ -1278,6 +1787,7 @@ function gallery(x: Ctx, rotunda: boolean) {
   plinth(x, W / 4, 0.3, 0xf6f4f0, pickOf(rnd, pal.art));
   bench(x, 0, 0.4, 0, 2.2, pal.wood, pal.wood);
   bench(x, 0, -1.2, Math.PI, 2.2, pal.wood, pal.wood);
+  item(x, "photo", "Selfie with the art", -W / 4, 0, 1.1, 0.8);
   wallSign(x, 2, 0, room.h - 0.9, x.info.name, 0xfbfaf8, 0x2b2b2b, 3.2, 0.45, false);
   x.views.push(
     { x: -W / 2 + 1.2, z: -D / 2 + 1.4, yaw: yawTo(-W / 2 + 1.2, -D / 2 + 1.4, W / 4, D / 2), pitch: -0.05 },
@@ -1607,6 +2117,16 @@ function plan(theme: Theme, rnd: Rng, variant?: InteriorInfo["variant"]): { room
       return { room: { w: 12, d: 3.6, h: 3.0, walls: ["glass", "solid", "glass", "solid"], frame: 0x2b2f33 }, pal: pickOf(rnd, CORP), build: skybridge };
     case "clockroom":
       return { room: { w: 4.6, d: 4.6, h: 4.4, walls: ["solid", "solid", "solid", "solid"] }, pal: { ...LIBRARY, wall: 0x8a6a4f, floor: ["planks", 0x8a6a4f, 0x6b5440] }, build: clockroom };
+    case "club":
+      return {
+        room: { w: 16, d: 12, h: 4.4, walls: ["band", "solid", "solid", "solid"], frame: 0x111111, headDrop: 0.6 },
+        pal: { ...pickOf(rnd, LOUNGE), wall: 0x3a2d5c, accentWall: 0x4a2f6e, trim: 0x2b2140, ceiling: 0x1c1430, floor: ["marble", 0x3a3346, 0x262130], fabric: pickOf(rnd, [0x7048e8, 0xae3ec9, 0x1c7ed6]) },
+        build: club,
+      };
+    case "restaurant":
+      return { room: { w: 14, d: 10, h: 3.5, walls: ["glass", "solid", "solid", "solid"], accentSide: 3, frame: 0x2b2b2b }, pal: pickOf(rnd, [...HOME.slice(1, 6), LOUNGE[3]]), build: restaurant };
+    case "firehall":
+      return { room: { w: 14, d: 10, h: 4.6, walls: ["solid", "band", "solid", "solid"], headDrop: 0.4 }, pal: { ...POLICE, accentWall: 0xc92a2a, wall: 0xf1ede6, floor: ["concrete", 0xb9b6b0, 0xa29e97] }, build: firehall };
     default:
       return { room: { w: 8, d: 6, h: 3, walls: ["glass", "solid", "solid", "solid"] }, pal: home, build: (x) => livingRoom(x, false) };
   }
@@ -1619,11 +2139,16 @@ export function createInterior(info: InteriorInfo): Interior {
   const { room, pal, build } = plan(info.theme, rnd, info.variant);
   const sheet = new Sheet(1024);
   const k = new Kit();
-  const x: Ctx = { k, sheet, rnd, pal, room, spots: [], views: [], lamps: [], info };
+  const x: Ctx = { k, sheet, rnd, pal, room, spots: [], views: [], lamps: [], info, items: [], extras: [], anim: [] };
   // The clock tower's dials make their own walls.
   if (info.theme !== "clockroom") shell(x);
   else k.box(0, room.h, 0, room.w + 0.6, 0.12, room.d + 0.6, pal.ceiling, { noAo: true });
   build(x);
+  // Soft shadows along the bottom of the walls (and they keep walkers off the walls).
+  for (let side = 0; side < 4; side++) {
+    const L = wallLen(room, side);
+    atWall(x, side, 0, () => k.shadow(0, 0.18, L, 0.42, 0.18));
+  }
   const tex = sheet.finish();
 
   const mats = {
@@ -1647,8 +2172,10 @@ export function createInterior(info: InteriorInfo): Interior {
   const floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(room.w, room.d).rotateX(-Math.PI / 2), floorMat);
   floorMesh.name = "floor";
   group.add(floorMesh);
+  const blocks: Block[] = k.shadows.filter((b) => b.a >= 0.2).map((b) => ({ x: b.x, z: b.z, w: b.w - 0.15, d: b.d - 0.15, ry: b.ry }));
   const shadows = shadowMesh(k.shadows);
   if (shadows) group.add(shadows);
+  for (const e of x.extras) group.add(e);
 
   // Light: soft light from the sky through the windows, a little sun, and warm lamps at night.
   const hemi = new THREE.HemisphereLight(0xfff8ee, 0xd8cdbf, 1.35);
@@ -1678,13 +2205,19 @@ export function createInterior(info: InteriorInfo): Interior {
     const r = Math.min(room.w, room.d) * 0.25;
     x.spots.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, ry: rnd() * 6, pose: "stand", y: 0 });
   }
+  // Every seat, in the order they were made (the same for everyone).
+  const seats = x.spots.filter((sp) => sp.pose === "sit");
   // Nobody stands right in front of where you look from; then mix up who goes where.
-  const clear = x.spots.filter((sp) => x.views.every((v) => Math.hypot(sp.x - v.x, sp.z - v.z) > 2.2));
-  const spots = (clear.length >= 4 ? clear : x.spots).sort(() => rnd() - 0.5);
+  const clear = x.spots.filter((sp) => x.views.every((v) => Math.hypot(sp.x - v.x, sp.z - v.z) > 2.6));
+  const spots = [...(clear.length >= 4 ? clear : x.spots)].sort(() => rnd() - 0.5);
 
   const allMats: THREE.Material[] = [...Object.values(mats), floorMat];
   if (shadows) allMats.push(shadows.material as THREE.Material);
   allMats.push(poolMat);
+  for (const e of x.extras)
+    e.traverse((o) => {
+      if ((o instanceof THREE.Mesh || o instanceof THREE.InstancedMesh) && !allMats.includes(o.material as THREE.Material)) allMats.push(o.material as THREE.Material);
+    });
   const baseOpacity = new Map(allMats.map((m) => [m, m.opacity]));
   const baseTransparent = new Map(allMats.map((m) => [m, m.transparent]));
 
@@ -1699,6 +2232,16 @@ export function createInterior(info: InteriorInfo): Interior {
     sun.color.setHex(mixHex(0xfff1dc, 0x9fb4ff, n));
     for (const l of warm) l.intensity = 2.2 * n;
     mats.glow.color.setScalar(0.8 + 0.45 * n);
+    if (x.dark) {
+      // A club: dark and colourful whatever the time of day.
+      hemi.intensity = 0.95;
+      hemi.color.setHex(0x9b7bff);
+      hemi.groundColor.setHex(0x2a1840);
+      sun.intensity = 0.05;
+      for (const l of warm) l.intensity = 3.2;
+      mats.glow.color.setScalar(1.3);
+      poolMat.opacity = 0.35;
+    }
     poolMat.opacity = 0.32 * n;
     mats.glass.opacity = 0.09 + 0.05 * n;
     baseOpacity.set(mats.glass, mats.glass.opacity);
@@ -1720,6 +2263,7 @@ export function createInterior(info: InteriorInfo): Interior {
   function dispose() {
     group.traverse((o) => {
       if (o instanceof THREE.Mesh) o.geometry.dispose();
+      if (o instanceof THREE.InstancedMesh) o.dispose();
     });
     for (const m of allMats) m.dispose();
     tex.dispose();
@@ -1727,5 +2271,10 @@ export function createInterior(info: InteriorInfo): Interior {
     poolGeo.dispose();
   }
 
-  return { group, views: x.views, spots, w: room.w, d: room.d, setNight, setAlpha, dispose };
+  function update(time: number) {
+    for (const a of x.anim) a(time);
+    if (x.dark) warm.forEach((l, i) => l.color.setHSL((time * 0.07 + i * 0.4) % 1, 0.8, 0.6));
+  }
+
+  return { group, views: x.views, spots, seats, items: x.items, blocks, w: room.w, d: room.d, setNight, setAlpha, update, dispose };
 }

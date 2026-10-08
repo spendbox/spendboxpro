@@ -6,7 +6,7 @@
 // Each round gets its own seed, so the street grid, downtowns and parks differ every round,
 // but a given tile always looks the same for everyone during that round.
 
-import { ABBREV, FLAVORS, type Flavor } from "./places";
+import { ABBREV, CLUB_NAMES, eggChoices, FLAVORS, landmarkChoices, nameOf, RESTAURANT_NAMES, type EasterEgg, type Flavor, type LandmarkKey, type Named } from "./places";
 
 export type TileKind =
   | "road"
@@ -31,6 +31,9 @@ export type TileKind =
   | "mast"
   | "fuel"
   | "police"
+  | "fire"
+  | "club"
+  | "restaurant"
   | "structure";
 
 /** Big buildings that span a 2×2 block of tiles. */
@@ -49,7 +52,8 @@ export type StructureType =
   | "military"
   | "power"
   | "dam"
-  | "oilrig";
+  | "oilrig"
+  | "waterpark";
 
 export type Tile = {
   i: number;
@@ -69,7 +73,11 @@ export type Tile = {
   /** Shape variant for towers, offices and houses, so neighbours don't all look alike. */
   v?: number;
   /** Part of a 2×2 building: which one, where its corner is, and the tile it stands on otherwise. */
-  structure?: { type: StructureType; ax: number; az: number; anchor: boolean; name: string };
+  structure?: { type: StructureType; ax: number; az: number; anchor: boolean; name: string; /** Names for its levels (rooms inside), in order. */ inside?: string[] };
+  /** A single-tile landmark's own name ("Teslim Balogun Stadium", "Club Gbedu"...). */
+  name?: string;
+  /** A little named decoration on this lot (a suya spot, a danfo park...), and which side faces the road. */
+  egg?: EasterEgg & { face: number };
   /** What this tile shows until all four tiles of its big building exist. */
   fallback?: Tile;
   /** Stable random numbers for this tile (0..1). */
@@ -106,6 +114,9 @@ export const KIND_LABEL: Record<TileKind, string> = {
   mast: "Radio mast",
   fuel: "Fuel station",
   police: "Police station",
+  fire: "Fire station",
+  club: "Nightclub",
+  restaurant: "Restaurant",
   structure: "Landmark",
 };
 
@@ -125,6 +136,7 @@ export const STRUCTURE_LABEL: Record<StructureType, string> = {
   power: "Power station",
   dam: "Dam",
   oilrig: "Oil rig",
+  waterpark: "Water park",
 };
 
 /** Everything the city can be made of, for the help screen. */
@@ -132,12 +144,13 @@ export const CITY_ASSETS = {
   big: [
     "Airports", "Sea ports", "Military camps", "Shopping malls", "Twin towers with a sky bridge", "Domed museums", "Funfairs", "Open-air markets", "Arenas",
     "University campuses", "Hotels with rooftop pools", "Solar farms", "Power stations with steaming cooling towers", "Dams with spillways", "Oil rigs with gas flares",
+    "Water parks with twisting slides",
   ],
   tiles: [
     "Skyscrapers (stepped, round glass, twisted, needle spire, helipad)",
     "Office blocks (plain, L-shaped, rooftop garden)",
     "Houses (pitched bungalow, flat modern with pool, duplex with garage)",
-    "Hospitals", "Police stations", "Clock towers", "Construction sites with cranes", "Water towers", "Radio masts", "Fuel stations",
+    "Hospitals", "Police stations", "Fire stations", "Nightclubs", "Restaurants", "Clock towers", "Construction sites with cranes", "Water towers", "Radio masts", "Fuel stations",
     "Parks", "Woods", "Plazas with fountains", "Ponds", "Ferris wheels", "Wind turbines", "Billboards",
     "Roads", "Bridges", "A river (sometimes)", "Small lakes", "Road works", "Hills and mountains around the city", "A railway on a viaduct, with a station",
   ],
@@ -146,6 +159,7 @@ export const CITY_ASSETS = {
     "Pigeons, gulls, swallows, geese flying in a V and the odd eagle", "Clouds", "Hot-air balloons", "Planes", "Buildings going up during the hunt",
     "Ferris wheels, carousels, cranes and turbines",
   ],
+  fun: ["Famous local landmarks (Unilag, Third Mainland Bridge, Big Ben, Willis Tower...)", "Suya spots, danfo parks, Mama Put stands, phone boxes and other easter eggs"],
 };
 
 /** Square spiral: tile n → grid (x, z). Must match spiral_xy in the database. */
@@ -204,7 +218,9 @@ export type CityPlan = {
   centres: { x: number; z: number; radius: number; weight: number }[];
   /** Billboard choice per 10×10 block (filled in as needed). */
   cache: Map<string, { x: number; z: number; face: number } | null>;
-  structures: Map<string, { type: StructureType; name: string } | null>;
+  structures: Map<string, StructureInfo | null>;
+  /** Easter egg choice per 7×7 block (filled in as needed). */
+  eggs: Map<string, { x: number; z: number; face: number; egg: EasterEgg } | null>;
   /** A river winding across the city (along x or z), or none. */
   river: { along: "x" | "z"; at: number; amp: number; wave: number; phase: number; width: number } | null;
   /**
@@ -369,6 +385,7 @@ export function makePlan(seed: number): CityPlan {
     rail,
     cache: new Map(),
     structures: new Map(),
+    eggs: new Map(),
     palette: PALETTES[Math.floor(r(7) * PALETTES.length)],
   };
 }
@@ -450,8 +467,8 @@ function densityAt(plan: CityPlan, x: number, z: number) {
 
 const STRUCTURES_BY_ZONE: { min: number; chance: number; types: StructureType[] }[] = [
   { min: 0.56, chance: 0.12, types: ["twin", "hotel", "mall", "museum"] },
-  { min: 0.24, chance: 0.14, types: ["mall", "market", "museum", "campus", "arena", "funfair", "hotel"] },
-  { min: -9, chance: 0.1, types: ["funfair", "solar", "arena", "campus", "market", "airport", "port", "military", "airport", "power", "oilrig", "dam", "dam"] },
+  { min: 0.24, chance: 0.14, types: ["mall", "market", "museum", "campus", "arena", "funfair", "hotel", "waterpark", "waterpark"] },
+  { min: -9, chance: 0.1, types: ["funfair", "solar", "arena", "campus", "market", "airport", "port", "military", "airport", "power", "oilrig", "dam", "dam", "waterpark"] },
 ];
 
 /**
@@ -468,7 +485,7 @@ function structureAt(plan: CityPlan, x: number, z: number) {
   if (ax + 1 >= plan.xs[kx + 1] || az + 1 >= plan.zs[kz + 1]) return null;
   const key = `${ax},${az}`;
   if (!plan.structures.has(key)) {
-    let found: { type: StructureType; name: string } | null = null;
+    let found: StructureInfo | null = null;
     const d = densityAt(plan, ax + 0.5, az + 0.5);
     const zone = STRUCTURES_BY_ZONE.find((zn) => d >= zn.min)!;
     const roll = hash(ax, az, plan.seed + 501);
@@ -477,7 +494,7 @@ function structureAt(plan: CityPlan, x: number, z: number) {
       let type = zone.types[Math.floor(hash(ax, az, plan.seed + 502) * zone.types.length)];
       // A dam needs water next to it (the river or a lake); otherwise it's a power station.
       if (type === "dam" && !nearWater(plan, ax, az)) type = "power";
-      found = { type, name: structureName(plan, type, ax, az) };
+      found = structureNamed(plan, type, ax, az);
     }
     plan.structures.set(key, found);
   }
@@ -495,6 +512,34 @@ function nearWater(plan: CityPlan, ax: number, az: number) {
     }
   }
   return false;
+}
+
+type StructureInfo = { type: StructureType; name: string; inside?: string[]; around?: Partial<Record<LandmarkKey, string[]>> };
+
+/**
+ * A real local name for something, when the city has one: its own landmarks first (most of the
+ * time), then the flavour's. Null now and then (or when there are none): the caller makes one up.
+ */
+function famous(plan: CityPlan, key: LandmarkKey, x: number, z: number, salt: number, chance = 0.85): Named | null {
+  const { local, wide } = landmarkChoices(plan.city.flavor.id, plan.city.name, key);
+  const roll = hash(x, z, plan.seed + salt);
+  const k = hash(z, x, plan.seed + salt + 1);
+  if (local.length && roll < chance) return local[Math.floor(k * local.length) % local.length];
+  if (wide.length && roll < chance * 0.75 + (local.length ? 0 : 0.15)) return wide[Math.floor(k * wide.length) % wide.length];
+  return null;
+}
+
+function structureNamed(plan: CityPlan, type: StructureType, ax: number, az: number): StructureInfo {
+  const known = famous(plan, type, ax, az, 520, type === "solar" ? 0 : 0.8);
+  if (known) {
+    const info: StructureInfo = { type, name: nameOf(known) };
+    if (typeof known !== "string") {
+      info.inside = known.inside;
+      info.around = known.around;
+    }
+    return info;
+  }
+  return { type, name: structureName(plan, type, ax, az) };
 }
 
 function structureName(plan: CityPlan, type: StructureType, ax: number, az: number) {
@@ -532,7 +577,108 @@ function structureName(plan: CityPlan, type: StructureType, ax: number, az: numb
       return pick([`${city} Dam`, `${street} Dam`, `${city} Reservoir Dam`], 13);
     case "oilrig":
       return pick([`${city} Oil Platform`, `${street} Oil Rig`, `${city} Offshore Rig`], 14);
+    case "waterpark":
+      return pick([`${city} Water Park`, `${street} Splash Park`, `${city} Aqua World`], 15);
   }
+}
+
+/** The big building whose "around" names reach (x, z): a university's lagoon front, its gate... */
+function aroundName(plan: CityPlan, key: LandmarkKey, x: number, z: number) {
+  for (let dx = -3; dx <= 3; dx++) {
+    for (let dz = -3; dz <= 3; dz++) {
+      const st = structureAt(plan, x + dx, z + dz);
+      if (!st) continue;
+      const info = plan.structures.get(`${st.ax},${st.az}`);
+      const list = info?.around?.[key];
+      if (list?.length) return list[Math.floor(hash(x, z, plan.seed + 530) * list.length) % list.length];
+    }
+  }
+  return null;
+}
+
+/** A single-tile landmark's name (a stadium, a famous park, a club...), or undefined. */
+function tileName(plan: CityPlan, t: Tile): string | undefined {
+  const { x, z } = t;
+  const roll = hash(x, z, plan.seed + 540);
+  const any = (key: LandmarkKey, chance: number) => {
+    const n = famous(plan, key, x, z, 541, chance);
+    return n ? nameOf(n) : undefined;
+  };
+  switch (t.kind) {
+    case "stadium":
+      return any("stadium", 0.9) ?? any("arena", 0.9);
+    case "ferris":
+      return any("ferris", 0.95);
+    case "hospital":
+      return aroundName(plan, "hospital", x, z) ?? any("hospital", 0.9);
+    case "police":
+      return any("police", 0.9);
+    case "fire":
+      return any("fire", 0.9);
+    case "clock":
+      return roll < 0.7 ? any("clock", 1) : undefined;
+    case "tower":
+      return t.top > 4.6 && roll < 0.4 ? any("tower", 1) : undefined;
+    case "park":
+      return aroundName(plan, "park", x, z) ?? (roll < 0.14 ? any("park", 1) : undefined);
+    case "plaza":
+      return aroundName(plan, "plaza", x, z) ?? (roll < 0.3 ? any("plaza", 1) : undefined);
+    case "pond":
+      return aroundName(plan, "pond", x, z) ?? (roll < 0.4 ? any("pond", 1) : undefined);
+    case "club":
+      return aroundName(plan, "club", x, z) ?? any("club", 0.9) ?? CLUB_NAMES[Math.floor(roll * CLUB_NAMES.length) % CLUB_NAMES.length];
+    case "restaurant":
+      return aroundName(plan, "restaurant", x, z) ?? any("restaurant", 0.9) ?? RESTAURANT_NAMES[Math.floor(roll * RESTAURANT_NAMES.length) % RESTAURANT_NAMES.length];
+  }
+  return undefined;
+}
+
+/** A name for a club or restaurant floor inside a bigger building (stable for the tile). */
+export function venueName(plan: CityPlan, kind: "club" | "restaurant", x: number, z: number) {
+  const n = famous(plan, kind, x, z, 550, 0.9);
+  if (n) return nameOf(n);
+  const list = kind === "club" ? CLUB_NAMES : RESTAURANT_NAMES;
+  return list[Math.floor(hash(x, z, plan.seed + 551) * list.length) % list.length];
+}
+
+/** The railway station's name. */
+export function stationName(plan: CityPlan) {
+  const r = plan.rail;
+  const n = r ? famous(plan, "station", r.at, r.station ?? 0, 560, 0.9) : null;
+  return n ? nameOf(n) : `${plan.city.name} Central Station`;
+}
+
+/** One easter egg per 9×9 block (most blocks), on a park, square or wood next to a road. */
+function blockEgg(plan: CityPlan, x: number, z: number) {
+  const B = 9;
+  const bx = Math.floor((x + 4) / B);
+  const bz = Math.floor((z + 4) / B);
+  const key = `${bx},${bz}`;
+  if (plan.eggs.has(key)) return plan.eggs.get(key)!;
+  let best: { x: number; z: number; face: number; score: number } | null = null;
+  const eggs = eggChoices(plan.city.flavor.id, plan.city.name);
+  if (eggs.length && hash(bx, bz, plan.seed + 570) < 0.75) {
+    for (let dx = 0; dx < B; dx++) {
+      for (let dz = 0; dz < B; dz++) {
+        const tx = bx * B - 4 + dx;
+        const tz = bz * B - 4 + dz;
+        const k = baseTile(plan, tx, tz).kind;
+        if ((k !== "park" && k !== "plaza" && k !== "trees") || onRail(plan, tx, tz) || structureAt(plan, tx, tz)) continue;
+        const b = blockBillboard(plan, tx, tz);
+        if (b && b.x === tx && b.z === tz) continue;
+        const faces = [isRoad(plan, tx + 1, tz), isRoad(plan, tx - 1, tz), isRoad(plan, tx, tz + 1), isRoad(plan, tx, tz - 1)];
+        const face = faces.findIndex(Boolean);
+        if (face < 0) continue;
+        const score = hash(tx, tz, plan.seed + 571);
+        if (!best || score > best.score) best = { x: tx, z: tz, face, score };
+      }
+    }
+  }
+  // Neighbouring blocks get different ones (the city's own first, then the rest in turn).
+  const turn = mod(bx * 3 + bz * 5 + Math.floor(hash(plan.seed, 1, 572) * 97), eggs.length);
+  const pick = best ? { x: best.x, z: best.z, face: best.face, egg: eggs[turn] } : null;
+  plan.eggs.set(key, pick);
+  return pick;
 }
 
 export function tileAt(plan: CityPlan, i: number): Tile {
@@ -545,14 +691,24 @@ export function tileAt(plan: CityPlan, i: number): Tile {
     if (plan.rail!.station !== null && Math.abs(along - plan.rail!.station) <= 1) t.station = true;
     t.top = Math.max(t.top, t.station ? 1.75 : 1.2);
   }
-  if (!LOTS.includes(t.kind)) return t;
+  if (!LOTS.includes(t.kind)) {
+    const named = t.rail ? undefined : tileName(plan, t);
+    if (named) t.name = named;
+    return t;
+  }
   const st = t.rail ? null : structureAt(plan, x, z);
   if (st) {
     const heights: Record<StructureType, number> = {
       mall: 1.2, twin: 7, museum: 1.8, funfair: 2.8, market: 0.7, arena: 1.1, campus: 1.6, hotel: 4.4, solar: 0.5, airport: 1.6, port: 1.8, military: 1.2,
-      power: 3.4, dam: 0.9, oilrig: 2.8,
+      power: 3.4, dam: 0.9, oilrig: 2.8, waterpark: 1.3,
     };
-    return { ...t, kind: "structure", top: heights[st.type], structure: st, fallback: t };
+    const info = plan.structures.get(`${st.ax},${st.az}`);
+    const structure: NonNullable<Tile["structure"]> = { type: st.type, name: st.name, ax: st.ax, az: st.az, anchor: st.anchor };
+    if (info?.inside) structure.inside = info.inside;
+    const fallback = { ...t };
+    const named = tileName(plan, fallback);
+    if (named) fallback.name = named;
+    return { ...t, kind: "structure", top: heights[st.type], structure, fallback };
   }
   const b = blockBillboard(plan, x, z);
   if (b && b.x === x && b.z === z) {
@@ -563,6 +719,10 @@ export function tileAt(plan: CityPlan, i: number): Tile {
       billboard: { id: `${Math.floor(x / 10)}.${Math.floor(z / 10)}`, design: Math.floor(t.r[2] * 4), face: b.face },
     };
   }
+  const named = tileName(plan, t);
+  if (named) t.name = named;
+  const egg = blockEgg(plan, x, z);
+  if (egg && egg.x === x && egg.z === z) t.egg = { ...egg.egg, face: egg.face };
   return t;
 }
 
@@ -604,7 +764,13 @@ export function addressOf(plan: CityPlan, t: Tile): string {
       return t.roundabout ? `${name} roundabout` : name;
     }
     const name = onEW ? streetName(plan, "x", ew.k) : streetName(plan, "z", ns.k);
-    return t.kind === "bridge" ? `${name} Bridge` : name;
+    if (t.kind === "bridge") {
+      // Famous bridges: every bridge on a street shares its name.
+      const k = onEW ? ew.k * 2 : ns.k * 2 + 1;
+      const known = famous(plan, "bridge", k, 7, 580, 0.75);
+      return known ? `${nameOf(known)} (${name})` : `${name} Bridge`;
+    }
+    return name;
   }
   // Lots take the number of the nearest street.
   const onX = ew.d <= ns.d;
@@ -614,6 +780,7 @@ export function addressOf(plan: CityPlan, t: Tile): string {
   const number = Math.abs(along) * 2 + (side ? 1 : 2) + (along < 0 ? 40 : 0);
   const place = `${number} ${street}`;
   if (t.kind === "structure" && t.structure) return `${t.structure.name}, ${place}`;
+  if (t.name) return `${t.name}, ${place}`;
   if (t.kind === "river") return `The river by ${place}`;
   if (t.kind === "lake") return `The lake by ${place}`;
   return place;
@@ -678,6 +845,9 @@ function baseTile(plan: CityPlan, x: number, z: number): Tile {
     if (r[0] < 0.09) return { i, x, z, kind: "clock", top: 2.6, r };
     if (r[0] < 0.11) return { i, x, z, kind: "crane", top: 3.2, r };
     if (r[0] < 0.122 && nextToRoad) return { i, x, z, kind: "police", top: 1.1, r };
+    if (r[0] >= 0.122 && r[0] < 0.133 && nextToRoad) return { i, x, z, kind: "fire", top: 1.0, r };
+    if (r[0] >= 0.133 && r[0] < 0.158 && nextToRoad) return { i, x, z, kind: "club", top: 0.85, r, v: Math.floor(r[2] * 2) };
+    if (r[0] >= 0.158 && r[0] < 0.18 && nextToRoad) return { i, x, z, kind: "restaurant", top: 0.75, r, v: Math.floor(r[2] * 2) };
     if (r[0] > 0.988 && nextToRoad) return { i, x, z, kind: "fuel", top: 0.5, r };
     return { i, x, z, kind: "office", top: 0.9 + r[1] * 1.8 + density * 1.2, r, v: Math.floor(r[2] * 3) };
   }
@@ -687,6 +857,7 @@ function baseTile(plan: CityPlan, x: number, z: number): Tile {
   if (r[0] < 0.175) return { i, x, z, kind: "watertower", top: 2.2, r };
   if (r[0] < 0.182) return { i, x, z, kind: "mast", top: 4, r };
   if (r[0] > 0.99 && nextToRoad) return { i, x, z, kind: "fuel", top: 0.5, r };
+  if (r[0] >= 0.182 && r[0] < 0.192 && nextToRoad) return { i, x, z, kind: "restaurant", top: 0.75, r, v: Math.floor(r[2] * 2) };
   const v = Math.floor(r[1] * 3);
   return { i, x, z, kind: "house", top: v === 2 ? 1.1 : 0.95, r, v };
 }

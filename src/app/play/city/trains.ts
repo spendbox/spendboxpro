@@ -5,6 +5,7 @@
 
 import * as THREE from "three";
 import type { CityPlan, Tile } from "@/lib/city/layout";
+import type { VehiclePose } from "./traffic";
 import { grown, keyOf, type World } from "./world";
 
 /** Height of the top of the track. */
@@ -223,6 +224,25 @@ export function createTrains(world: World, parent: THREE.Object3D) {
     roofs.instanceMatrix.needsUpdate = true;
   }
 
+  /**
+   * Where carriage `car` of train i is (its floor middle); yaw faces along the line (+x or +z),
+   * whichever way the train is going. False if there's no such train.
+   */
+  function pose(i: number, out: VehiclePose, car = 1) {
+    const tr = trains[i];
+    if (!tr) return false;
+    const L = length(tr);
+    const c = Math.min(car, tr.cars - 1);
+    const a = tr.pos - L / 2 + CAR / 2 + c * (CAR + GAP);
+    const cross = tr.track * 0.1;
+    out.x = along === "z" ? at + cross : a;
+    out.z = along === "z" ? a : at + cross;
+    out.y = RAIL_Y + 0.02;
+    out.yaw = along === "z" ? Math.PI : -Math.PI / 2;
+    out.speed = tr.speed * tr.dir;
+    return true;
+  }
+
   function dispose() {
     clear();
     bodyGeo.dispose();
@@ -231,5 +251,5 @@ export function createTrains(world: World, parent: THREE.Object3D) {
     roofMat.dispose();
   }
 
-  return { build, update, dispose };
+  return { build, update, pose, dispose, get count() { return trains.length; } };
 }

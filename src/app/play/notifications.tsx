@@ -48,6 +48,8 @@ export type FeedItem = {
   tone: "alarm" | "move" | "info" | "mine";
   avatar?: Avatar | null;
   icon?: FeedIcon;
+  /** A world event this item is about (tap to fly there). */
+  eventId?: number;
 };
 
 type IconLike = { size?: number | string; strokeWidth?: number; className?: string };
@@ -122,7 +124,18 @@ export function FeedRow({ item, now, compact }: { item: FeedItem; now: number; c
 }
 
 /** The bell's panel: the latest five in view, scroll for the rest. */
-export function NotificationsPanel({ feed, now, onClose }: { feed: FeedItem[]; now: number; onClose: () => void }) {
+export function NotificationsPanel({
+  feed,
+  now,
+  onClose,
+  onPick,
+}: {
+  feed: FeedItem[];
+  now: number;
+  onClose: () => void;
+  /** Tapping a row that leads somewhere (e.g. a world event on the map). */
+  onPick?: (item: FeedItem) => void;
+}) {
   return (
     <div className="glass absolute right-3 top-16 z-30 w-[min(21rem,calc(100vw-1.5rem))] overflow-hidden rounded-3xl sm:right-4">
       <div className="flex items-center justify-between px-4 pb-2 pt-3">
@@ -140,7 +153,13 @@ export function NotificationsPanel({ feed, now, onClose }: { feed: FeedItem[]; n
         <ul className="max-h-[19.5rem] space-y-1 overflow-y-auto overscroll-contain px-2 pb-2">
           {feed.map((f) => (
             <li key={f.key}>
-              <FeedRow item={f} now={now} />
+              {f.eventId && onPick ? (
+                <button onClick={() => onPick(f)} className="block w-full rounded-2xl text-left hover:bg-panel-2" title="Show me on the map">
+                  <FeedRow item={f} now={now} />
+                </button>
+              ) : (
+                <FeedRow item={f} now={now} />
+              )}
             </li>
           ))}
         </ul>

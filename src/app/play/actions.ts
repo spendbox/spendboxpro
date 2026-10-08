@@ -80,3 +80,9 @@ export async function bigSearch(tile: number) {
   if (!isTile(tile)) return { ok: false, error: "Pick a spot." } as ActionResult;
   return run("search_area", { p_tile: tile });
 }
+
+/** Tap a world event that pays (money spill, treasure chest, golden balloon…). */
+export async function claimWorldEvent(eventId: number) {
+  if (!Number.isInteger(eventId) || eventId <= 0) return { ok: false, error: "That one's gone." } as ActionResult;
+  return run("claim_world_event", { p_event: eventId });
+}

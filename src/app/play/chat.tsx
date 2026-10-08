@@ -5,31 +5,51 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { ArrowDown, ArrowLeft, LoaderCircle, Mic, Pause } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
-import { Bot, Building2, ChevronDown, ChevronUp, HotAirBalloon, Lock, LogOut, MessageCircle, Play, Users, X } from "@/components/icons";
+import { Bot, Building2, ChevronDown, ChevronUp, Coins, Fish, HotAirBalloon, Lock, LogOut, MessageCircle, Play, Users, X } from "@/components/icons";
 import type { Avatar } from "@/lib/avatar";
 import { cleanAvatar, defaultAvatar } from "@/lib/avatar";
 import { cn } from "@/lib/cn";
-import { npcChatter, npcsFor, type Npc, type NpcMessage } from "@/lib/npcs";
+import { npcById, npcChatter, npcsFor, type Npc, type NpcMessage } from "@/lib/npcs";
 import { createClient } from "@/lib/supabase/client";
 import { BotCard } from "./bot-card";
 import { loadDms, loadRoom, sendMessage, sendVoice, voiceUrl, type ChatMessage, type ChatTarget } from "./chat-actions";
-import { NpcCard, REGULAR_PILL } from "./npc-card";
+import { NpcBadge, NpcCard, NpcFace } from "./npc-card";
+import { RideIcon } from "./ride-icon";
 import { formatCountdown, levelLabel, levelOf, useCountdown, type RoomInfo, type RoomMember } from "./rooms";
 
 // In-game chat, in places: everyone on the same floor of a building (or the same hot-air
-// balloon) chats together ("Here"), along with the place's regulars (made-up people who live
-// there). Plus private messages between two players and a People list to find anyone in the
-// round. Text and voice notes. Everything resets when a new map starts.
+// balloon) chats together ("Here"), along with the place's NPCs (made-up people who live there,
+// always marked "NPC"; tap one to chat with them). Plus private messages between two players
+// and a People list to find anyone in the round. Text and voice notes. Everything resets when a
+// new map starts.
 //
 // It only ever opens when someone taps the Chat button. On phones it's a sheet over the bottom
 // half of the screen (drag or tap the handle to make it bigger); on computers a side panel.
 
 const BOT_ID = "00000000-0000-0000-0000-00000000b07a";
 const BOT_BOUNTY = 200;
-/** The regulars' chat shown when you walk in starts this long before you arrived. */
+/** The NPCs' chat shown when you walk in starts this long before you arrived. */
 const NPC_BACKLOG_MS = 10 * 60 * 1000;
 
-export type ChatPlayer = { id: string; name: string; role: "hider" | "seeker"; caught: boolean; avatar: Avatar };
+export type ChatPlayer = {
+  id: string;
+  name: string;
+  role: "hider" | "seeker";
+  caught: boolean;
+  avatar: Avatar;
+  /** Holding 10,000+ coins: shown with a "Big fish" badge. */
+  bigFish?: boolean;
+};
+
+/** "Big fish": a player holding lots of coins. */
+function BigFishBadge() {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-[#1c7ed6]/12 px-1.5 py-px text-[10px] font-semibold text-[#1864ab]" title="Holding 10,000+ coins">
+      <Fish className="size-3" aria-hidden />
+      Big fish
+    </span>
+  );
+}
 
 // Hiders are "Ghosts" and seekers "Hunters" everywhere players can read it.
 const ROLE_STYLE: Record<ChatMessage["sender_role"] | "bot", { label: string; pill: string }> = {
@@ -43,12 +63,17 @@ const time = (at: string | number) => new Date(at).toLocaleTimeString([], { hour
 const botNameOf = (m: ChatMessage) => m.sender_name.replace(/\s*\(bot\)$/i, "") || "The bot";
 const firstName = (name: string) => name.split(" ")[0] || name;
 
-/** A regular from their id ("npc:<roomId>:<n>"), e.g. when someone taps one in the 3D view. */
-function findNpc(id: string, roundId: number): Npc | null {
-  const m = /^npc:(.+):(\d+)$/.exec(id);
-  if (!m) return null;
-  // The first regulars in a place are the same whatever its size, so ask for the most.
-  return npcsFor(m[1], roundId, 1000).find((n) => n.id === id) ?? null;
+/** An NPC from their id ("npc:<roomId>:<n>"), e.g. when someone taps one in the 3D view. */
+function findNpc(id: string, roundId: number, here: string | null, hint: string | undefined): Npc | null {
+  // The first NPCs in a place are the same whatever its size; jobs follow the place's theme.
+  return npcById(id, roundId, here && id.startsWith(`npc:${here}:`) ? hint : undefined);
+}
+
+/** A place's theme, if the room carries one ("lounge", "office"…), so NPC jobs match the 3D view. */
+function roomHint(room: RoomInfo | null): string | undefined {
+  if (!room || !("theme" in room)) return undefined;
+  const theme = (room as { theme?: unknown }).theme;
+  return typeof theme === "string" && theme ? theme : undefined;
 }
 
 /** "Floor 4 · Lekki Tower" for a building level; the place's own name otherwise. */
@@ -122,7 +147,7 @@ function BotFace({ size }: { size: number }) {
 
 type Thread = { id: string; name: string };
 type List = { key: string; round: number; list: ChatMessage[] };
-/** One line in the chat: a real message, or something a regular said (only on this device). */
+/** One line in the chat: a real message, or something an NPC said (only on this device). */
 type Item = { key: string; at: number; m: ChatMessage; npc?: undefined } | { key: string; at: number; npc: NpcMessage; m?: undefined };
 
 const append = (list: ChatMessage[], m: ChatMessage, max: number) => (list.some((x) => x.id === m.id) ? list : [...list, m].slice(-max));
@@ -147,6 +172,7 @@ export function Chat({
   dmRequest = null,
   enteredAt = null,
   externalNpc = null,
+  onGiveCoins,
 }: {
   meId: string;
   meRole: "hider" | "seeker" | null;
@@ -177,8 +203,10 @@ export function Chat({
   dmRequest?: { id: string; name: string; at: number } | null;
   /** When you went into this place (useRooms().enteredAt). Without it, the chat notes the time itself. */
   enteredAt?: number | null;
-  /** Show a regular's card (e.g. someone tapped a regular in the 3D view). id is "npc:<roomId>:<n>"; change `at` to ask again. */
+  /** Open a chat with an NPC (e.g. someone tapped one in the 3D view). id is "npc:<roomId>:<n>"; change `at` to ask again. */
   externalNpc?: { id: string; at: number } | null;
+  /** "Give coins" to a real player (shown in a private chat and on players in the people lists). */
+  onGiveCoins?: (p: { id: string; name: string; avatar: unknown }) => void;
 }) {
   const roomId = room?.id ?? null;
   const roomCap = room?.capacity ?? 30;
@@ -190,12 +218,14 @@ export function Chat({
   const [error, setError] = useState<string | null>(null);
   const [findText, setFindText] = useState("");
   const [botCard, setBotCard] = useState<string | null>(null);
-  const [npcCard, setNpcCard] = useState<Npc | null>(null);
+  const [npcCard, setNpcCard] = useState<{ npc: Npc; auto: boolean } | null>(null);
+  const openNpc = useCallback((npc: Npc, auto = false) => setNpcCard({ npc, auto }), []);
   const [expanded, setExpanded] = useState(false);
   const box = useKeyboardSafeArea(open);
-  const rideLeft = useCountdown(room?.kind === "balloon" ? rideEndsAt : null);
+  const rideLeft = useCountdown(room && room.kind !== "building" ? rideEndsAt : null);
 
   const byId = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
+  const bigFishIds = useMemo(() => new Set(players.filter((p) => p.bigFish).map((p) => p.id)), [players]);
   const memberById = useMemo(() => new Map(roomMembers.map((p) => [p.id, p])), [roomMembers]);
   const avatarOf = useCallback(
     (id: string, name: string) => byId.get(id)?.avatar ?? (memberById.has(id) ? cleanAvatar(memberById.get(id)!.avatar, name) : defaultAvatar(name)),
@@ -272,8 +302,9 @@ export function Chat({
     };
   }, [roundId, guest, addMessage]);
 
-  // ---- the place's regulars: who they are, and what they've been saying
-  const npcs = useMemo(() => (roomId && !guest ? npcsFor(roomId, roundId, roomCap) : []), [roomId, roundId, roomCap, guest]);
+  // ---- the place's NPCs: who they are, and what they've been saying
+  const hint = roomHint(room);
+  const npcs = useMemo(() => (roomId && !guest ? npcsFor(roomId, roundId, roomCap, hint) : []), [roomId, roundId, roomCap, guest, hint]);
   // When you walked in (from useRooms, or noted here when the place changes).
   const [noted, setNoted] = useState<{ room: string; at: number } | null>(null);
   useEffect(() => {
@@ -282,7 +313,7 @@ export function Chat({
     return () => clearTimeout(id);
   }, [roomId, enteredAt]);
   const since = enteredAt ?? (noted && noted.room === roomId ? noted.at : null);
-  // The regulars' clock: moves on every 15 seconds while the chat is open.
+  // The NPCs' clock: moves on every 15 seconds while the chat is open.
   const [clock, setClock] = useState(() => Date.now());
   useEffect(() => {
     if (!open || !roomId || guest) return;
@@ -297,8 +328,8 @@ export function Chat({
   const npcLines = useMemo(() => {
     if (!roomId || guest) return [];
     const to = Math.max(clock, since ?? 0);
-    return npcChatter(roomId, roundId, (since ?? to) - NPC_BACKLOG_MS, to, roomCap).slice(-80);
-  }, [roomId, roundId, roomCap, since, clock, guest]);
+    return npcChatter(roomId, roundId, (since ?? to) - NPC_BACKLOG_MS, to, roomCap, hint).slice(-80);
+  }, [roomId, roundId, roomCap, since, clock, guest, hint]);
 
   const hereMsgs = useMemo(
     () => (roomId && roomMsgs && roomMsgs.key === roomId && roomMsgs.round === roundId ? roomMsgs.list : []),
@@ -391,25 +422,40 @@ export function Chat({
     return () => clearTimeout(id);
   }, [dmRequest, meId]);
 
-  // Someone tapped a regular in the 3D view: show their card (the chat stays as it is).
+  // Someone tapped an NPC in the 3D view: open the chat with them (the chat stays as it is).
   const lastNpc = useRef(0);
   useEffect(() => {
     if (!externalNpc || externalNpc.at === lastNpc.current) return;
-    const npc = findNpc(externalNpc.id, roundId);
+    const npc = findNpc(externalNpc.id, roundId, roomId, hint);
     const id = setTimeout(() => {
       lastNpc.current = externalNpc.at;
-      if (npc) setNpcCard(npc);
+      if (npc) setNpcCard({ npc, auto: false });
     }, 0);
     return () => clearTimeout(id);
-  }, [externalNpc, roundId]);
+  }, [externalNpc, roundId, roomId, hint]);
 
   const closeNpc = useCallback(() => setNpcCard(null), []);
   const cards = (
     <>
       {botCard !== null && <BotCard botName={botCard || "The bot"} bounty={botBounty} onClose={() => setBotCard(null)} />}
-      {npcCard && <NpcCard npc={npcCard} onClose={closeNpc} />}
+      {npcCard && <NpcCard key={npcCard.npc.id} npc={npcCard.npc} autoStart={npcCard.auto} onClose={closeNpc} />}
     </>
   );
+  const giveButton = (p: { id: string; name: string; avatar: unknown }, small = false) =>
+    onGiveCoins && p.id !== meId && p.id !== BOT_ID ? (
+      <button
+        onClick={() => onGiveCoins(p)}
+        className={cn(
+          "flex shrink-0 items-center gap-1 rounded-full bg-gold/25 font-semibold text-gold-dark hover:bg-gold/40",
+          small ? "absolute -right-1 -top-1 size-5 justify-center p-0 shadow" : "px-2.5 py-1 text-xs",
+        )}
+        aria-label={`Give coins to ${p.name}`}
+        title={`Give coins to ${p.name}`}
+      >
+        <Coins className={small ? "size-3" : "size-3.5"} aria-hidden />
+        {!small && "Give"}
+      </button>
+    ) : null;
 
   function close() {
     onOpenChange(false);
@@ -469,19 +515,19 @@ export function Chat({
   const placeLine = room && (
     <div className="flex shrink-0 items-center gap-2 border-b border-line bg-panel-2/60 px-3 py-2">
       <span className="grid size-9 shrink-0 place-items-center rounded-full bg-panel text-ink shadow-sm">
-        {room.kind === "balloon" ? <HotAirBalloon className="size-5" /> : <Building2 className="size-5" aria-hidden />}
+        {room.kind === "balloon" ? <HotAirBalloon className="size-5" /> : room.kind === "ride" ? <RideIcon kind={room.ride} className="size-5" /> : <Building2 className="size-5" aria-hidden />}
       </span>
       <div className="min-w-0 flex-1 text-sm">
         <p className="truncate">
           <b>{placeTitle(room)}</b>
-          {room.kind === "balloon" && rideLeft !== null && <span className="text-muted"> · ride ends in {formatCountdown(rideLeft)}</span>}
+          {room.kind !== "building" && rideLeft !== null && <span className="text-muted"> · ride ends in {formatCountdown(rideLeft)}</span>}
         </p>
         <p className="flex items-center gap-1 truncate text-xs text-muted">
           <Users className="size-3.5 shrink-0" aria-hidden />
           <span className="truncate">
             {roomCount.toLocaleString()}/{room.capacity.toLocaleString()}
             {room.kind === "building" ? " inside" : " riding"}
-            {npcs.length > 0 && ` · ${npcs.length} regular${npcs.length === 1 ? "" : "s"}`}
+            {npcs.length > 0 && ` · ${npcs.length} NPC${npcs.length === 1 ? "" : "s"}`}
             {meRole && (
               <>
                 {" · you're a "}
@@ -498,21 +544,24 @@ export function Chat({
     </div>
   );
 
-  // Faces of everyone here: real players first (tap to message privately), then the regulars.
+  // Faces of everyone here: real players first (tap to message privately), then the NPCs.
   const MAX_FACES = 40;
   const peopleRow = room && (others.length > 0 || npcs.length > 0) && (
-    <div className="flex shrink-0 gap-2 overflow-x-auto border-b border-line px-3 py-2 [scrollbar-width:none]" aria-label="People here">
+    <div className="flex shrink-0 gap-2 overflow-x-auto border-b border-line px-3 pb-2 pt-2.5 [scrollbar-width:none]" aria-label="People here">
       {others.slice(0, MAX_FACES).map((p) => {
         const role = byId.get(p.id)?.role;
         return (
-          <button key={p.id} onClick={() => openThread(p.id, p.name)} className="flex w-14 shrink-0 flex-col items-center gap-0.5" title={`Message ${p.name} privately`}>
-            <AvatarFace
-              avatar={avatarOf(p.id, p.name)}
-              size={36}
-              className={cn("rounded-full ring-2", role === "hider" ? "ring-me" : role === "seeker" ? "ring-gold" : "ring-line")}
-            />
-            <span className="w-full truncate text-center text-[10px] font-semibold">{firstName(p.name)}</span>
-          </button>
+          <div key={p.id} className="relative w-14 shrink-0">
+            <button onClick={() => openThread(p.id, p.name)} className="flex w-full flex-col items-center gap-0.5" title={`Message ${p.name} privately`}>
+              <AvatarFace
+                avatar={avatarOf(p.id, p.name)}
+                size={36}
+                className={cn("rounded-full ring-2", role === "hider" ? "ring-me" : role === "seeker" ? "ring-gold" : "ring-line")}
+              />
+              <span className="w-full truncate text-center text-[10px] font-semibold">{firstName(p.name)}</span>
+            </button>
+            {giveButton({ id: p.id, name: p.name, avatar: p.avatar }, true)}
+          </div>
         );
       })}
       {others.length > MAX_FACES && (
@@ -522,12 +571,12 @@ export function Chat({
         </button>
       )}
       {npcs.map((n) => (
-        <button key={n.id} onClick={() => setNpcCard(n)} className="flex w-14 shrink-0 flex-col items-center gap-0.5" title={`${n.name}, ${n.role}`}>
+        <button key={n.id} onClick={() => openNpc(n)} className="flex w-14 shrink-0 flex-col items-center gap-0.5" title={`${n.name}, ${n.role} (NPC) · tap to chat`}>
           <span className="relative">
-            <AvatarFace avatar={n.avatar} size={36} className="rounded-full" />
-            <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 rounded-full bg-[#0b7285] px-1 text-[8px] font-bold uppercase leading-3 text-white">Regular</span>
+            <NpcFace npc={n} size={36} />
+            <NpcBadge className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 px-1 text-[8px] leading-3" />
           </span>
-          <span className="mt-0.5 w-full truncate text-center text-[10px] text-muted">{firstName(n.name)}</span>
+          <span className="mt-1 w-full truncate text-center text-[10px] text-muted">{n.first}</span>
         </button>
       ))}
     </div>
@@ -583,7 +632,10 @@ export function Chat({
             </button>
             {faceOf(thread.id, thread.name, 32)}
             <div className="min-w-0 flex-1">
-              <h2 className="truncate font-semibold">{thread.name}</h2>
+              <h2 className="flex min-w-0 items-center gap-1.5 font-semibold">
+                <span className="truncate">{thread.name}</span>
+                {byId.get(thread.id)?.bigFish && <BigFishBadge />}
+              </h2>
               <p className="flex items-center gap-1 truncate text-[11px] font-semibold text-[#5f3dc4]">
                 <Lock className="size-3 shrink-0" aria-hidden />
                 Private
@@ -594,6 +646,7 @@ export function Chat({
                 </span>
               </p>
             </div>
+            {giveButton({ id: thread.id, name: thread.name, avatar: byId.get(thread.id)?.avatar ?? avatarOf(thread.id, thread.name) })}
           </>
         ) : guest ? (
           <h2 className="flex-1 px-1 font-semibold">Chat</h2>
@@ -633,7 +686,7 @@ export function Chat({
           <MessageCircle className="size-10 text-muted" aria-hidden />
           <p className="font-semibold">Sign in to chat</p>
           <p className="text-sm text-muted">
-            Once you&apos;re signed in, you can step into buildings and hot-air balloons to chat with the people there, and message
+            Once you&apos;re signed in, you can step into buildings, or hop on a balloon, train, bus, car, boat or Ferris wheel, to chat with the people there, and message
             players privately.
           </p>
           <Link href="/login" className="rounded-full bg-gold px-5 py-2.5 text-sm font-semibold text-ink shadow">
@@ -665,32 +718,50 @@ export function Chat({
                     {herePeople.slice(0, 200).map((p) => {
                       const player = byId.get(p.id);
                       return (
-                        <li key={`here-${p.id}`}>
-                          <button onClick={() => openThread(p.id, p.name)} className="flex w-full items-center gap-3 rounded-2xl px-2 py-2 text-left hover:bg-panel-2">
+                        <li key={`here-${p.id}`} className="flex items-center gap-1">
+                          <button onClick={() => openThread(p.id, p.name)} className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl px-2 py-2 text-left hover:bg-panel-2">
                             <AvatarFace avatar={avatarOf(p.id, p.name)} size={36} className="shrink-0 rounded-full" />
                             <span className="min-w-0 flex-1">
-                              <span className="block truncate font-semibold">{p.name}</span>
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                <span className="truncate font-semibold">{p.name}</span>
+                                {player?.bigFish && <BigFishBadge />}
+                              </span>
                               <span className="text-xs text-muted">Tap to message privately</span>
                             </span>
                             <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", ROLE_STYLE[player?.role ?? "watcher"].pill)}>
                               {ROLE_STYLE[player?.role ?? "watcher"].label}
                             </span>
                           </button>
+                          {giveButton({ id: p.id, name: p.name, avatar: p.avatar })}
                         </li>
                       );
                     })}
                     {hereNpcs.length > 0 && (
-                      <li className="px-2 pb-1 pt-4 text-xs font-semibold uppercase tracking-wide text-muted">Regulars here ({hereNpcs.length})</li>
+                      <li className="px-2 pb-1 pt-4 text-xs font-semibold uppercase tracking-wide text-muted">
+                        NPCs here ({hereNpcs.length}) <span className="font-normal normal-case tracking-normal">· the city&apos;s own people, not players</span>
+                      </li>
                     )}
                     {hereNpcs.map((n) => (
-                      <li key={n.id}>
-                        <button onClick={() => setNpcCard(n)} className="flex w-full items-center gap-3 rounded-2xl px-2 py-2 text-left hover:bg-panel-2">
-                          <AvatarFace avatar={n.avatar} size={36} className="shrink-0 rounded-full" />
+                      <li key={n.id} className="flex items-center gap-1">
+                        <button onClick={() => openNpc(n)} className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl px-2 py-2 text-left hover:bg-panel-2">
+                          <NpcFace npc={n} size={36} />
                           <span className="min-w-0 flex-1">
-                            <span className="block truncate font-semibold">{n.name}</span>
-                            <span className="block truncate text-xs text-muted">{n.role} · tap to say hi</span>
+                            <span className="flex min-w-0 items-center gap-1.5">
+                              <span className="truncate font-semibold">{n.name}</span>
+                              <NpcBadge />
+                            </span>
+                            <span className="block truncate text-xs text-muted">
+                              {n.role} · {n.personaLabel}
+                            </span>
                           </span>
-                          <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", REGULAR_PILL)}>Regular</span>
+                        </button>
+                        <button
+                          onClick={() => openNpc(n, true)}
+                          className="flex shrink-0 items-center gap-1 rounded-full bg-[#0b7285] px-3 py-1.5 text-xs font-semibold text-white"
+                          aria-label={`Chat with ${n.name} (NPC)`}
+                        >
+                          <MessageCircle className="size-3.5" aria-hidden />
+                          Chat
                         </button>
                       </li>
                     ))}
@@ -699,15 +770,19 @@ export function Chat({
                 )}
                 {people.length === 0 && <li className="p-6 text-center text-sm text-muted">Nobody else here yet.</li>}
                 {people.map((p) => (
-                  <li key={p.id}>
-                    <button onClick={() => openThread(p.id, p.name)} className="flex w-full items-center gap-3 rounded-2xl px-2 py-2 text-left hover:bg-panel-2">
+                  <li key={p.id} className="flex items-center gap-1">
+                    <button onClick={() => openThread(p.id, p.name)} className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl px-2 py-2 text-left hover:bg-panel-2">
                       <AvatarFace avatar={p.avatar} size={40} className={cn("shrink-0 rounded-full", p.caught && "opacity-50 grayscale")} />
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate font-semibold">{p.name}</span>
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <span className="truncate font-semibold">{p.name}</span>
+                          {p.bigFish && <BigFishBadge />}
+                        </span>
                         <span className="text-xs text-muted">{p.caught ? "Caught this round" : "Tap to message privately"}</span>
                       </span>
                       <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", ROLE_STYLE[p.role].pill)}>{ROLE_STYLE[p.role].label}</span>
                     </button>
+                    {giveButton({ id: p.id, name: p.name, avatar: p.avatar })}
                   </li>
                 ))}
               </ul>
@@ -757,7 +832,7 @@ export function Chat({
                 <Building2 className="size-8" />
                 <HotAirBalloon className="size-8" />
               </span>
-              <p className="text-sm text-muted">Switch to Chat mode and tap a building or a hot-air balloon to go in and meet the people there.</p>
+              <p className="text-sm text-muted">Switch to Chat mode, then tap any building to go in, or hop on a ride (balloon, train, bus, car, boat, Ferris wheel), to meet the people there.</p>
             </div>
           ) : (
             <Messages
@@ -765,9 +840,10 @@ export function Chat({
               items={shown}
               meId={meId}
               onName={openThread}
-              onNpc={setNpcCard}
+              onNpc={openNpc}
               isPrivate={Boolean(thread)}
               faceOf={faceOf}
+              bigFish={bigFishIds}
             />
           )}
 
@@ -790,6 +866,7 @@ function Messages({
   onNpc,
   isPrivate,
   faceOf,
+  bigFish,
 }: {
   items: Item[];
   meId: string;
@@ -797,6 +874,8 @@ function Messages({
   onNpc: (npc: Npc) => void;
   isPrivate: boolean;
   faceOf: (id: string, name: string, size: number) => React.ReactNode;
+  /** Players holding lots of coins (shown with a "Big fish" badge). */
+  bigFish: Set<string>;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
@@ -867,22 +946,25 @@ function Messages({
           {items.map((it, i) => {
             const sameAsPrev = senderOf(items[i - 1]) === senderOf(it) && senderOf(it) !== "*";
 
-            // A regular: shown like a player, with a "Regular" pill. Only on this device.
+            // An NPC: always marked "NPC" (their face has a dashed teal ring). Only on this device.
             if (it.npc) {
-              const { npc, body } = it.npc;
+              const { npc, body, replyTo } = it.npc;
               return (
                 <div key={it.key} className="flex items-end gap-2">
-                  <button onClick={() => onNpc(npc)} className={cn("shrink-0 rounded-full", sameAsPrev && "invisible")} aria-label={`About ${npc.name}`}>
-                    <AvatarFace avatar={npc.avatar} size={28} className="rounded-full" />
+                  <button onClick={() => onNpc(npc)} className={cn("shrink-0 rounded-full p-0.5", sameAsPrev && "invisible")} aria-label={`Chat with ${npc.name} (NPC)`}>
+                    <NpcFace npc={npc} size={26} />
                   </button>
                   <div className="flex max-w-[80%] flex-col items-start">
                     {!sameAsPrev && (
-                      <button onClick={() => onNpc(npc)} className="mb-0.5 flex items-center gap-1.5 px-1 text-xs" title={`${npc.role} · tap to say hi`}>
+                      <button onClick={() => onNpc(npc)} className="mb-0.5 flex items-center gap-1.5 px-1 text-xs" title={`${npc.role} · ${npc.personaLabel} · tap to chat`}>
                         <span className="font-semibold">{npc.name}</span>
-                        <span className={cn("rounded-full px-1.5 py-px text-[10px] font-semibold", REGULAR_PILL)}>Regular</span>
+                        <NpcBadge />
+                        <span className="text-[10px] text-muted">{npc.role}</span>
                       </button>
                     )}
-                    <div className="rounded-2xl rounded-bl-md border-l-4 border-[#0b7285]/40 bg-panel-2 px-3 py-2 text-sm">
+                    <div className="rounded-2xl rounded-bl-md border-l-4 border-[#0b7285]/50 bg-panel-2 px-3 py-2 text-sm">
+                      <NpcBadge className="mr-1.5 px-1 text-[9px] leading-3" />
+                      {replyTo && <span className="mr-1 text-xs font-semibold text-[#0b7285]">@{replyTo}</span>}
                       <span className="break-words">{body}</span>
                       <span className="ml-2 align-bottom text-[10px] text-muted">{time(it.at)}</span>
                     </div>
@@ -924,6 +1006,7 @@ function Messages({
                     >
                       <span className="font-semibold">{bot ? botNameOf(m) : m.sender_name}</span>
                       <span className={cn("rounded-full px-1.5 py-px text-[10px] font-semibold", role.pill)}>{role.label}</span>
+                      {!bot && bigFish.has(m.sender_id) && <BigFishBadge />}
                     </button>
                   )}
                   {m.recipient_id && (

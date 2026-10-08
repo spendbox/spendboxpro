@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { botNameFor } from "@/lib/bot-names";
 import { cleanAvatar, type Avatar } from "@/lib/avatar";
+import type { WorldEvent } from "@/lib/world-events";
 
 export type Phase = "join" | "seek" | "done";
 
@@ -47,9 +48,13 @@ export type GameState = {
     level: number;
     /** When your next search is allowed (it waits longer if you search too fast). */
     searchReadyAt: string | null;
+    /** Holding 10,000+ coins. */
+    bigFish: boolean;
   };
   /** Everyone in this round (not the bot), for finding people to chat with. */
-  players: { id: string; name: string; role: "hider" | "seeker"; caught: boolean; avatar: Avatar }[];
+  players: { id: string; name: string; role: "hider" | "seeker"; caught: boolean; avatar: Avatar; bigFish: boolean }[];
+  /** This hunt's world events (rare happenings around the city), past, present and coming. */
+  worldEvents: WorldEvent[];
   /** A coin balloon drifting by just for you, if one's due (slot = which one). */
   balloon: { slot: number; coins: number } | null;
   site: { visits: number; players: number };
@@ -209,6 +214,7 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
   let leftTiles: number[] = [];
   let caughtTiles: number[] = [];
   let caughtFaces: GameState["caughtFaces"] = [];
+  let worldEvents: GameState["worldEvents"] = [];
   let recentSearches: GameState["recentSearches"] = [];
   let knownSearched: number[] = [];
   let outlook: GameState["outlook"] = null;
@@ -285,6 +291,30 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
     const unique = [...firstSeen.keys()];
     const keep = e?.role === "hider" ? unique.length : Math.ceil(unique.length * (s.searched_visible_fraction ?? 0.7));
     knownSearched = unique.slice(unique.length - keep);
+
+    // World events this hunt (and which rewards you already took).
+    const [{ data: wev }, { data: myClaims }] = await Promise.all([
+      db.from("world_events").select("id, key, tile, starts_at, ends_at, reward_slots, claimed, detail").eq("round_id", round.id).order("starts_at"),
+      guest ? Promise.resolve({ data: [] as { event_id: number }[] }) : db.from("world_event_claims").select("event_id").eq("user_id", userId),
+    ]);
+    const mine = new Set((myClaims ?? []).map((c) => c.event_id));
+    worldEvents = (wev ?? []).map((w) => ({
+      id: w.id,
+      key: w.key,
+      tile: w.tile,
+      startsAt: w.starts_at,
+      endsAt: w.ends_at,
+      name: (w.detail as { name?: string } | null)?.name ?? null,
+      slotsLeft: Math.max(0, num(w.reward_slots) - num(w.claimed)),
+      claimed: mine.has(w.id),
+    }));
+    // Fog of war: hunters lose sight of recent searches while it lasts.
+    const nowMs = Date.now();
+    const fog = worldEvents.some((w) => w.key === "fog_of_war" && Date.parse(w.startsAt) <= nowMs && nowMs < Date.parse(w.endsAt));
+    if (fog && e?.role !== "hider") {
+      recentSearches = [];
+      knownSearched = [];
+    }
     leftTiles = (allEvents ?? []).filter((x) => x.kind === "moved" && x.tile !== null).map((x) => x.tile);
     caughtTiles = (allEvents ?? []).filter((x) => x.kind === "caught" && x.tile !== null).map((x) => x.tile);
     caughtFaces = (allEvents ?? [])
@@ -338,14 +368,21 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
     if (!round) return;
     const { data: rows } = await db
       .from("entries")
-      .select("user_id, role, caught, profiles!entries_user_id_fkey(username, avatar, is_bot)")
+      .select("user_id, role, caught, profiles!entries_user_id_fkey(username, avatar, is_bot, coins)")
       .eq("round_id", round.id)
       .limit(500);
     players = (rows ?? [])
       .map((r) => {
-        const p = r.profiles as unknown as { username: string | null; avatar: unknown; is_bot: boolean } | null;
+        const p = r.profiles as unknown as { username: string | null; avatar: unknown; is_bot: boolean; coins: number } | null;
         if (!p || p.is_bot || !p.username) return null;
-        return { id: r.user_id, name: p.username, role: r.role, caught: r.caught, avatar: cleanAvatar(p.avatar, p.username) };
+        return {
+          id: r.user_id,
+          name: p.username,
+          role: r.role,
+          caught: r.caught,
+          avatar: cleanAvatar(p.avatar, p.username),
+          bigFish: num(p.coins) >= (s.big_fish_coins ?? 10000),
+        };
       })
       .filter((x): x is GameState["players"][number] => x !== null);
   };
@@ -391,6 +428,7 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
       guest,
       passiveGained,
       level: num(profile.level ?? 1),
+      bigFish: num(profile.coins) >= (s.big_fish_coins ?? 10000),
       searchReadyAt: profile.last_search_at
         ? new Date(
             Date.parse(profile.last_search_at) +
@@ -434,6 +472,7 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
     leftTiles,
     caughtTiles,
     caughtFaces,
+    worldEvents,
     events,
     results,
     lastResult: last ? { roundId: last.round_id, role: last.role, payout: num(last.payout), caught: last.caught } : null,

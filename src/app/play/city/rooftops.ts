@@ -7,19 +7,44 @@ import * as THREE from "three";
 import { sign, wicker, Sheet } from "./interior-art";
 import { Kit, pickOf, rngFrom, shadeHex, shadowMesh, type Rng } from "./kit";
 import type { Spot } from "./figures";
+import type { Block } from "./interact";
 import type { Theme } from "./levels";
-import type { View } from "./interiors";
+import type { RoomItem, View } from "./interiors";
 
 export type Deck = {
   /** In metres, centred on the spot, floor at y = 0 (scale it down to city size). */
   group: THREE.Group;
   views: View[];
   spots: Spot[];
+  /** Every seat in a fixed order, things to use, where furniture stands, and the walkable size. */
+  seats: Spot[];
+  items: RoomItem[];
+  blocks: Block[];
+  w: number;
+  d: number;
   setNight(n: number): void;
   dispose(): void;
 };
 
-type Ctx = { k: Kit; rnd: Rng; w: number; d: number; spots: Spot[]; views: View[]; sheet: Sheet };
+type Ctx = { k: Kit; rnd: Rng; w: number; d: number; spots: Spot[]; views: View[]; sheet: Sheet; items: RoomItem[] };
+
+function itemAt(x: Ctx, kind: RoomItem["kind"], label: string, px: number, pz: number, r = 0.8) {
+  const p = x.k.world(px, 0, pz);
+  x.items.push({ kind, label, x: p.x, y: p.y, z: p.z, r });
+}
+
+/** An archery target on a stand, with a bow rack. */
+function archery(x: Ctx, px: number, pz: number, ry: number) {
+  const { k } = x;
+  k.at(px, 0, pz, ry, () => {
+    for (const sx of [-0.4, 0.4]) k.box(sx, 0, 0.2, 0.06, 1.5, 0.06, 0x8f6b4a, { rx: -0.2 });
+    k.cyl(0, 1.0, 0, 0.5, 0.5, 0.12, 0xe9d8a6, 20, { rx: Math.PI / 2 });
+    for (const [r, c] of [[0.42, 0xffffff], [0.32, 0x1b1b1b], [0.22, 0x1c7ed6], [0.13, 0xe03131], [0.05, 0xffd43b]] as const) k.cyl(0, 1.0, 0.125, r, r, 0.01, c, 20, { rx: Math.PI / 2, noAo: true });
+    k.box(1.0, 0, -0.6, 0.5, 1.0, 0.1, 0x6b4f37);
+    k.shadow(0, 0, 1.2, 0.8, 0.25);
+  });
+  itemAt(x, "archery", "Archery", px + Math.sin(ry) * 2.2, pz + Math.cos(ry) * 2.2, 0.9);
+}
 
 const DECK_WOOD = [0xb08a62, 0x9c7652, 0xc29a6d, 0x8f6b4a];
 const LEAVES = [0x4f8a5b, 0x5f9e6a, 0x3f7a4f, 0x6aa86f];
@@ -172,6 +197,8 @@ function roofDeck(x: Ctx, theme: Theme) {
     }
     spotAt(x, 0.6, -id / 2 + 0.6, Math.PI);
     spotAt(x, iw / 2 - 0.6, 0.3, -Math.PI / 2);
+    itemAt(x, "photo", "Photo spot", 0, -id / 2 + 0.7);
+    if (big && rnd() < 0.6) archery(x, -iw / 2 + 0.8, 0.4, Math.PI / 2);
     // From a back corner looking across the deck and out over the city.
     x.views.push(
       { x: iw / 2 - 0.8, z: id / 2 - 0.8, yaw: Math.atan2(iw / 2 - 0.8 + iw / 2, id / 2 - 0.8 + id / 2), pitch: -0.2 },
@@ -205,6 +232,7 @@ function roofDeck(x: Ctx, theme: Theme) {
     stringLights(x, [[-iw / 2 + 0.2, -id / 2 + 0.2], [iw / 2 - 0.2, -id / 2 + 0.2]]);
     spotAt(x, 0, -id / 2 + 0.6, Math.PI);
     spotAt(x, 0.2, id / 2 - 0.6, 0);
+    itemAt(x, "photo", "Photo spot", 0.4, -id / 2 + 0.8);
     x.views.push(
       { x: 0, z: id / 2 - 0.6, yaw: 0, pitch: -0.2 },
       { x: iw / 2 - 0.7, z: id / 2 - 0.7, yaw: Math.PI * 0.25, pitch: -0.22 },
@@ -234,6 +262,7 @@ function roofDeck(x: Ctx, theme: Theme) {
     k.box(-W / 2 + 1.0, 0, D / 2 - 1.51, 0.8, 2.0, 0.02, 0x495057, { noAo: true });
     spotAt(x, -W / 2 + 1.0, D / 2 - 2.1, Math.PI);
     spotAt(x, W / 2 - 1.0, -D / 2 + 1.0, Math.PI * 0.75);
+    itemAt(x, "photo", "Photo on the helipad", 0, 0, 1.2);
     x.views.push({ x: -W / 2 + 1.0, z: D / 2 - 2.0, yaw: Math.PI * 0.15, pitch: -0.28 }, { x: W / 2 - 0.9, z: -D / 2 + 0.9, yaw: Math.PI * 0.75 + Math.PI, pitch: -0.3 }, { x: 0, z: 0, yaw: Math.PI, pitch: -0.4 });
     return;
   }
@@ -255,6 +284,7 @@ function roofDeck(x: Ctx, theme: Theme) {
     stringLights(x, [[-W / 2 + 0.3, -D / 2 + 0.3], [W / 2 - 0.3, -D / 2 + 0.3]], 2.6);
     spotAt(x, 1.9, -D / 2 + 1.3, Math.PI);
     spotAt(x, -0.7, D / 2 - 0.8, 0.3);
+    itemAt(x, "photo", "Poolside photo", 1.6, D / 2 - 1.0);
     // Along the pool and out over the city (the hotel tower stands to the west).
     x.views.push(
       { x: 0.3, z: D / 2 - 0.7, yaw: -0.25, pitch: -0.22 },
@@ -306,7 +336,7 @@ export function createDeck(theme: Theme, key: string, w: number, d: number): Dec
   const rnd = rngFrom(key);
   const k = new Kit();
   const sheet = new Sheet(256);
-  const x: Ctx = { k, rnd, w, d, spots: [], views: [], sheet };
+  const x: Ctx = { k, rnd, w, d, spots: [], views: [], sheet, items: [] };
   roofDeck(x, theme);
   const tex = sheet.finish();
   const mats = {
@@ -337,12 +367,19 @@ export function createDeck(theme: Theme, key: string, w: number, d: number): Dec
     const a = rnd() * Math.PI * 2;
     x.spots.push({ x: Math.cos(a) * w * 0.25, z: Math.sin(a) * d * 0.25, ry: a + Math.PI, pose: "stand", y: 0 });
   }
+  const seats = x.spots.filter((sp) => sp.pose === "sit");
+  const blocks: Block[] = k.shadows.map((b) => ({ x: b.x, z: b.z, w: b.w - 0.15, d: b.d - 0.15, ry: b.ry }));
   const clear = x.spots.filter((sp) => x.views.every((v) => Math.hypot(sp.x - v.x, sp.z - v.z) > 2.0));
   return {
     group,
     pool,
     views: x.views,
-    spots: (clear.length >= 3 ? clear : x.spots).sort(() => rnd() - 0.5),
+    seats,
+    items: x.items,
+    blocks,
+    w: Math.max(1, w - 0.8),
+    d: Math.max(1, d - 0.8),
+    spots: [...(clear.length >= 3 ? clear : x.spots)].sort(() => rnd() - 0.5),
     setNight(n: number) {
       mats.glow.color.setScalar(0.75 + 0.6 * n);
       poolMat.emissiveIntensity = 0.15 + 0.6 * n;
@@ -363,7 +400,7 @@ export function createDeck(theme: Theme, key: string, w: number, d: number): Dec
 export function createOpenAir(theme: Theme, key: string): Deck {
   const rnd = rngFrom(key);
   const k = new Kit();
-  const x: Ctx = { k, rnd, w: 4, d: 4, spots: [], views: [], sheet: new Sheet(64) };
+  const x: Ctx = { k, rnd, w: 4, d: 4, spots: [], views: [], sheet: new Sheet(64), items: [] };
   if (theme === "park" || theme === "pond" || theme === "plaza") {
     k.at(1.6, 0, -1.2, -0.6, () => {
       k.box(0, 0, 0, 1.5, 0.45, 0.45, 0x8f6b4a);
@@ -373,6 +410,19 @@ export function createOpenAir(theme: Theme, key: string): Deck {
       spotAt(x, 0.35, 0.02, 0, "sit", 0.45);
     });
   }
+  if (theme === "park" || theme === "plaza" || theme === "pond" || theme === "waterpark") itemAt(x, "photo", theme === "waterpark" ? "Splash photo" : "Photo spot", -1.4, -1.0);
+  if (theme === "funfair") archery(x, -1.8, 1.4, 0.4);
+  if (theme === "waterpark") {
+    // Loungers by the pool.
+    for (let l = 0; l < 3; l++) {
+      k.at(1.2, 0, -1.0 + l * 1.0, -Math.PI / 2, () => {
+        k.box(0, 0.22, 0.1, 0.7, 0.06, 1.5, 0xf1efea);
+        k.box(0, 0.3, -0.75, 0.7, 0.06, 0.65, 0xf1efea, { rx: 0.7 });
+        k.soft(0, 0.28, 0.25, 0.6, 0.04, 1.1, [0x4dabf7, 0xffd43b, 0xff6b6b][l], 0.02);
+        spotAt(x, 0, 0.1, Math.PI, "sit", 0.3);
+      });
+    }
+  }
   if (theme === "market") {
     for (let c = 0; c < 3; c++) k.box(-1.5 + c * 0.7, 0, 1.4, 0.55, 0.4, 0.4, pickOf(rnd, [0x8f6b4a, 0x6b5440]));
     for (let f = 0; f < 10; f++) k.ball(-1.5 + (f % 3) * 0.7 + (rnd() - 0.5) * 0.3, 0.45, 1.4 + (rnd() - 0.5) * 0.2, 0.07, pickOf(rnd, [0xe5484d, 0xf5a524, 0x69db7c, 0xffd43b]), { w: 6, h: 5 });
@@ -381,7 +431,7 @@ export function createOpenAir(theme: Theme, key: string): Deck {
   const groups = 2 + Math.floor(rnd() * 2);
   for (let g = 0; g < groups; g++) {
     const a = rnd() * Math.PI * 2;
-    const r = 1.6 + rnd() * 1.6;
+    const r = 2.6 + rnd() * 1.6;
     const cx = Math.cos(a) * r;
     const cz = Math.sin(a) * r;
     const n = 2 + Math.floor(rnd() * 2);
@@ -399,10 +449,17 @@ export function createOpenAir(theme: Theme, key: string): Deck {
   });
   const yaw0 = rnd() * Math.PI * 2;
   x.views.push({ x: 0, z: 0, yaw: yaw0, pitch: -0.08 }, { x: 0.8, z: 0.8, yaw: yaw0 + 2.1, pitch: -0.08 }, { x: -0.8, z: 0.4, yaw: yaw0 + 4.2, pitch: -0.12 });
+  // Nobody stands right in front of where you look from.
+  const clear = x.spots.filter((sp) => x.views.every((v) => Math.hypot(sp.x - v.x, sp.z - v.z) > 1.8));
   return {
     group,
     views: x.views,
-    spots: x.spots,
+    spots: clear.length >= 3 ? clear : x.spots,
+    seats: x.spots.filter((sp) => sp.pose === "sit"),
+    items: x.items,
+    blocks: k.shadows.map((b) => ({ x: b.x, z: b.z, w: b.w - 0.15, d: b.d - 0.15, ry: b.ry })),
+    w: 7,
+    d: 7,
     setNight() {},
     dispose() {
       group.traverse((o) => {

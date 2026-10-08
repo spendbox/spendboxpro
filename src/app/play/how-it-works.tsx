@@ -14,6 +14,7 @@ import {
   RotateCcw,
   Search,
   Shield,
+  Sparkles,
   Star,
   Users,
   X,
@@ -53,7 +54,7 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
     body: [
       "Tap Hunt to join, then tap any spot to search it. Your first search each day is free; after that the price creeps up as more of the city gets searched.",
       "Each search takes a couple of seconds. Search too fast and you'll have to wait a little longer before the next one.",
-      "Catching every ghost doesn't end the round: the hunt runs until the clock hits zero.",
+      "Catch every ghost (and the bot) and this world ends straight away. Otherwise it ends when the clock hits zero; the clock turns red and beeps in the last minute.",
       "Find a ghost and you keep most of their stake, plus a bonus if they're level 5 or higher (it grows every 5 levels). Find the bot and you get 200 coins.",
       "You can search a spot again if you think someone's snuck in. You only see the most recent searches on the map; older ones fade.",
       "There's a bot hiding every round, with a new name each time. It only moves when a drone sweeps it (three times at most), and it likes to tease the chat.",
@@ -121,8 +122,30 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
       "If anyone survives: survivors share 80%, hunters share 10% (by how much they spent), and 10% disappears.",
       "If every ghost is found: hunters share 80% (by how much they spent), the ghosts who played share 10%, and 10% disappears.",
       "Tap a billboard to see the ad on it and earn 5 coins, paid by the brand (up to 5 ads a day). Keep an eye out for golden coin balloons too.",
-      "Running low? While you have under 100 coins you earn passive income, a little every hour, up to 100 in 24 hours.",
+      "Running low? While you're under your refill line you earn passive income every hour: up to 100 coins a day at level 1, and 25 more for every level after that.",
+      "Anyone holding 10,000 coins or more is a big fish, and everyone can see it.",
+      "You can give coins to other players, and spray coins on the dance floor in clubs.",
       "Coming soon: a marketplace to swap coins for rewards from brands, like custom tees and event tickets.",
+    ],
+  },
+  {
+    icon: Sparkles,
+    title: "World events",
+    body: [
+      "Every hour something rare happens somewhere in the city: fires, parades, UFOs, a treasure chest, a money truck spill, and dozens more.",
+      "Tap the news to fly straight there. Some events pay coins to the first few people who tap them.",
+      "Some events change the rules for a few minutes: double coins, free searches on a lucky street, a safe house where nobody can be found, a blackout where nobody can search…",
+    ],
+  },
+  {
+    icon: Gamepad2,
+    title: "Things to do",
+    body: [
+      "In Chat mode, tap any building to go inside: lobbies, floors, restaurants, clubs and rooftops. Tap the floor to walk around and tap glowing things to use them.",
+      "Sit down, play mini games with the people around you (archery, darts, arcade, duels, trivia and more), order food, dance and spray coins in clubs.",
+      "Hop on a ride: hot-air balloons, trains, buses, taxis, boats, the Ferris wheel and water slides.",
+      "Sometimes you'll get a side quest (sitting down makes it more likely). Finish it for coins and special moves.",
+      "Chat with the city's regulars (NPCs). Some joke, some are rude, some are generous, and a few spill real secrets about where ghosts are.",
     ],
   },
   {

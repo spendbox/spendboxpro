@@ -52,6 +52,8 @@ type Opts = {
   layer?: Layer;
   /** No darkening near the floor (for things that don't stand on it). */
   noAo?: boolean;
+  /** A soft vertical gradient (walls): brightness f0 at the floor, f1 at height h. */
+  grad?: [number, number, number];
 };
 
 /** Every shape is merged without an index (so different shapes can be merged together). */
@@ -133,8 +135,11 @@ const col = new THREE.Color();
 export class Kit {
   private lists: Record<Layer, THREE.BufferGeometry[]> = { solid: [], glow: [], tex: [], texGlow: [], glass: [], foliage: [] };
   private stack: THREE.Matrix4[] = [new THREE.Matrix4()];
-  /** Soft round shadows on the floor under things: x, z, width, depth, strength. */
-  shadows: { x: number; z: number; w: number; d: number; a: number; y: number }[] = [];
+  /**
+   * Soft round shadows on the floor under things: x, z, width, depth, strength, and how they're
+   * turned. They also mark where furniture stands (people walking round a room avoid them).
+   */
+  shadows: { x: number; z: number; w: number; d: number; a: number; y: number; ry: number }[] = [];
   /** Height above which the floor darkening fades out (metres). */
   aoHeight = 0.35;
   /** The floor height things stand on (for the darkening). */
@@ -174,12 +179,14 @@ export class Kit {
     const colors = new Float32Array(n * 3);
     col.setHex(color);
     const ao = !o.noAo && (layer === "solid" || layer === "tex" || layer === "foliage");
+    const grad = o.grad;
     for (let k = 0; k < n; k++) {
       let f = 1;
       if (ao) {
         const h = pos.getY(k) - this.floorY;
         if (h < this.aoHeight) f = 0.66 + 0.34 * Math.max(0, h / this.aoHeight);
       }
+      if (grad) f *= grad[0] + (grad[1] - grad[0]) * Math.min(1, Math.max(0, (pos.getY(k) - this.floorY) / grad[2]));
       colors[k * 3] = col.r * f;
       colors[k * 3 + 1] = col.g * f;
       colors[k * 3 + 2] = col.b * f;
@@ -231,7 +238,7 @@ export class Kit {
   /** A soft shadow on the floor under something (room space, at the current transform). */
   shadow(x: number, z: number, w: number, d: number, a = 0.35) {
     const p = this.world(x, this.floorY, z);
-    this.shadows.push({ x: p.x, z: p.z, w, d, a, y: p.y });
+    this.shadows.push({ x: p.x, z: p.z, w, d, a, y: p.y, ry: this.worldYaw() });
   }
 
   /** Merge everything into meshes, one per layer, using the given materials. */
@@ -286,7 +293,7 @@ export function shadowMesh(list: Kit["shadows"]) {
   if (!list.length) return null;
   const geos = list.map((s) => {
     const g = unitPlane.clone();
-    g.applyMatrix4(new THREE.Matrix4().compose(pv.set(s.x, s.y + 0.004, s.z), qq.setFromEuler(ee.set(-Math.PI / 2, 0, 0)), sv.set(s.w, s.d, 1)));
+    g.applyMatrix4(new THREE.Matrix4().compose(pv.set(s.x, s.y + 0.004, s.z), qq.setFromEuler(ee.set(-Math.PI / 2, s.ry ?? 0, 0, "YXZ")), sv.set(s.w, s.d, 1)));
     const n = g.getAttribute("position").count;
     const a = new Float32Array(n * 3).fill(s.a);
     g.setAttribute("color", new THREE.BufferAttribute(a, 3));
