@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { ArrowLeft } from "@/components/icons";
 import { adPricing, advertiserAds } from "@/lib/ads";
 import { paystackEnabled } from "@/lib/paystack";
 import { AdCard, SignOutButton } from "./portal";
@@ -32,8 +33,9 @@ export default async function AdvertiserPage({
     return (
       <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 px-4 py-8">
         <div>
-          <Link href="/advertise" className="text-sm font-medium text-muted">
-            ← Advertising
+          <Link href="/advertise" className="inline-flex items-center gap-1 text-sm font-medium text-muted">
+            <ArrowLeft className="size-4" />
+            Advertising
           </Link>
           <h1 className="mt-3 font-display text-3xl font-bold">Manage your ads</h1>
           <p className="mt-2 text-muted">Sign in with the email you paid with. We&apos;ll send you a 4-digit code.</p>
@@ -62,8 +64,9 @@ export default async function AdvertiserPage({
     <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-6 px-4 py-8">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <Link href="/" className="text-sm font-medium text-muted">
-            ← Go to the city
+          <Link href="/" className="inline-flex items-center gap-1 text-sm font-medium text-muted">
+            <ArrowLeft className="size-4" />
+            Go to the city
           </Link>
           <h1 className="mt-3 font-display text-3xl font-bold">Your ads</h1>
           <p className="mt-1 text-sm text-muted">Signed in as {data.email}</p>

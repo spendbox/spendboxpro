@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { Pause, Pencil, Play, Plus } from "@/components/icons";
 import type { AdPricing, PortalAd } from "@/lib/ads";
 import { Billboard } from "../advertise/billboard";
 import { fileInputClass, usePicture } from "../advertise/use-picture";
@@ -124,9 +125,10 @@ export function AdCard({ ad, pricing, payments }: { ad: PortalAd; pricing: AdPri
           <button
             type="button"
             onClick={() => setPanel(panel === "edit" ? null : "edit")}
-            className={`flex-1 rounded-xl px-3 py-2.5 font-semibold ${panel === "edit" ? "bg-ink text-white" : "bg-panel-2"}`}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 font-semibold ${panel === "edit" ? "bg-ink text-white" : "bg-panel-2"}`}
           >
-            ✏️ Edit
+            <Pencil className="size-4" />
+            Edit
           </button>
           {canPause && (
             <button
@@ -140,18 +142,29 @@ export function AdCard({ ad, pricing, payments }: { ad: PortalAd; pricing: AdPri
                   router.refresh();
                 })
               }
-              className="flex-1 rounded-xl bg-panel-2 px-3 py-2.5 font-semibold disabled:opacity-50"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-panel-2 px-3 py-2.5 font-semibold disabled:opacity-50"
             >
-              {ad.status === "paused" ? "▶️ Resume" : "⏸️ Pause"}
+              {ad.status === "paused" ? (
+                <>
+                  <Play className="size-4" />
+                  Resume
+                </>
+              ) : (
+                <>
+                  <Pause className="size-4" />
+                  Pause
+                </>
+              )}
             </button>
           )}
           {canTopUp && (
             <button
               type="button"
               onClick={() => setPanel(panel === "topup" ? null : "topup")}
-              className={`flex-1 rounded-xl px-3 py-2.5 font-semibold ${panel === "topup" ? "bg-ink text-white" : "bg-gold text-ink"}`}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 font-semibold ${panel === "topup" ? "bg-ink text-white" : "bg-gold text-ink"}`}
             >
-              ➕ Top up
+              <Plus className="size-4" strokeWidth={2.5} />
+              Top up
             </button>
           )}
         </div>

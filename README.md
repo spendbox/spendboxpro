@@ -49,7 +49,8 @@ happens in places: players switch to Chat mode and enter buildings or ride hot-a
    `game-db/006_avatars_badges_balloons.sql`, `game-db/007_shields_payouts_passive.sql`,
    `game-db/008_badge_collection.sql`, `game-db/009_levels_powerups.sql`,
    `game-db/010_ads_sponsors.sql`, `game-db/011_badges_hard.sql`, `game-db/012_age_codes.sql`,
-   `game-db/013_ads_v2.sql`, `game-db/014_chat_rooms.sql` and `game-db/015_ghost_rules.sql`,
+   `game-db/013_ads_v2.sql`, `game-db/014_chat_rooms.sql`, `game-db/015_ghost_rules.sql` and
+   `game-db/016_place_rooms.sql`,
    in order, once each, on an empty database. In Supabase → Database → Extensions, switch on **pg_cron** first if you
    can: the file then schedules the round clock to run every minute. (Without it, the clock
    still moves whenever someone has the game open.)

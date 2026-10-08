@@ -1,11 +1,35 @@
 "use client";
 
+import {
+  Building2,
+  Coins,
+  Compass,
+  Drama,
+  Flashlight,
+  Gamepad2,
+  Ghost,
+  Medal,
+  MessageCircle,
+  Radar,
+  RotateCcw,
+  Search,
+  Shield,
+  Star,
+  Users,
+  X,
+  type LucideIcon,
+} from "@/components/icons";
 import { CITY_ASSETS } from "@/lib/city/layout";
 import { Sheet } from "./sheet";
 
-const SECTIONS: { icon: string; title: string; body: string[] }[] = [
+/** A small icon that sits in a line of text, the same size as the words. */
+function Ico({ icon: Icon }: { icon: LucideIcon }) {
+  return <Icon className="mx-0.5 inline-block size-[1.05em] align-[-0.17em]" />;
+}
+
+const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] = [
   {
-    icon: "🏙️",
+    icon: Building2,
     title: "One city, one hour",
     body: [
       "Every round is a brand-new city, named after a real place, with its own streets and landmarks.",
@@ -14,7 +38,7 @@ const SECTIONS: { icon: string; title: string; body: string[] }[] = [
     ],
   },
   {
-    icon: "🙈",
+    icon: Ghost,
     title: "Hiding",
     body: [
       "Put down 100 coins and we'll drop you on a random spot when the window closes. Every ghost makes the city grow a little.",
@@ -24,7 +48,7 @@ const SECTIONS: { icon: string; title: string; body: string[] }[] = [
     ],
   },
   {
-    icon: "🔍",
+    icon: Search,
     title: "Hunting",
     body: [
       "Tap Hunt to join, then tap any spot to search it. Your first search each day is free; after that the price creeps up as more of the city gets searched.",
@@ -36,7 +60,7 @@ const SECTIONS: { icon: string; title: string; body: string[] }[] = [
     ],
   },
   {
-    icon: "📡",
+    icon: Radar,
     title: "Drones and traps",
     body: [
       "A sweep sends a drone over an area. It tells you yes or no: is anyone hiding there? Any ghost inside is pinned in place for 60 seconds (they see a countdown). A drone that spots someone needs 90 seconds to recharge.",
@@ -45,28 +69,51 @@ const SECTIONS: { icon: string; title: string; body: string[] }[] = [
     ],
   },
   {
-    icon: "💬",
+    icon: MessageCircle,
     title: "Chatting",
     body: [
-      "Switch to 💬 Chat mode and tap any building to go inside and chat with the people there. The 👥 numbers show how many are inside; bigger buildings hold more people.",
+      <>
+        Switch to <Ico icon={MessageCircle} />
+        <b>Chat</b> mode and tap any building to go inside and chat with the people there. The <Ico icon={Users} /> numbers show how
+        many are inside; bigger buildings hold more people.
+      </>,
       "Or hop on a hot-air balloon: up to 1,000 people float over the city together for 10 minutes and chat on the way.",
       "You can still message anyone privately from the People list. Tap where a ghost was caught to say hi to them.",
-      "Switch back to 🎮 Game to search or move.",
+      <>
+        Switch back to <Ico icon={Gamepad2} />
+        <b>Game</b> to search or move.
+      </>,
     ],
   },
   {
-    icon: "⭐",
+    icon: Star,
     title: "Levels and power-ups",
     body: [
       "Play rounds, then spend coins to level up from the menu. Each level needs a few more rounds and a few more coins than the last.",
-      "Level 3, Decoy 🎭 (ghosts): put a fake ghost on any spot you choose. Everyone hears a decoy went out, but not where. Drones think it's real, and a hunter who searches it gets nothing (bang, or a squeaky toy). One per game; each one costs a bit more than your last.",
-      "Level 5, Shield 🛡️ (ghosts): the next time you're found, you're teleported to a spot nearby and stay in the game (the hunter still takes your stake). You can't move while it's up. One per game, from 100 coins and a bit more each time.",
-      "Level 10, Big search 🔦 (hunters): search a whole 3×3 area at once, for 7 times the price of a search.",
-      "Level 20, Respawn 🔁 (ghosts): caught in the first 30 minutes? Pay 300 coins to drop back in somewhere new. Everyone is told. Once per game.",
+      <>
+        Level 3, <Ico icon={Drama} />
+        <b>Decoy</b> (ghosts): put a fake ghost on any spot you choose. Everyone hears a decoy went out, but not where. Drones think
+        it&apos;s real, and a hunter who searches it gets nothing (bang, or a squeaky toy). One per game; each one costs a bit more
+        than your last.
+      </>,
+      <>
+        Level 5, <Ico icon={Shield} />
+        <b>Shield</b> (ghosts): the next time you&apos;re found, you&apos;re teleported to a spot nearby and stay in the game (the
+        hunter still takes your stake). You can&apos;t move while it&apos;s up. One per game, from 100 coins and a bit more each time.
+      </>,
+      <>
+        Level 10, <Ico icon={Flashlight} />
+        <b>Big search</b> (hunters): search a whole 3×3 area at once, for 7 times the price of a search.
+      </>,
+      <>
+        Level 20, <Ico icon={RotateCcw} />
+        <b>Respawn</b> (ghosts): caught in the first 30 minutes? Pay 300 coins to drop back in somewhere new. Everyone is told.
+        Once per game.
+      </>,
     ],
   },
   {
-    icon: "🪙",
+    icon: Coins,
     title: "Coins",
     body: [
       "Coins are just for playing: they can't be bought or cashed out.",
@@ -79,7 +126,7 @@ const SECTIONS: { icon: string; title: string; body: string[] }[] = [
     ],
   },
   {
-    icon: "🏅",
+    icon: Medal,
     title: "Badges",
     body: ["There are 100 badges to collect, from easy ones to legendary. Tap any badge in the menu to see what it means and how to earn it."],
   },
@@ -93,27 +140,28 @@ export function HowItWorks({ onClose }: { onClose: () => void }) {
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">Hide &amp; Seek</p>
           <h2 className="font-display text-2xl font-extrabold">How it works</h2>
         </div>
-        <button onClick={onClose} className="rounded-full px-2 text-2xl text-muted" aria-label="Close">
-          ×
+        <button onClick={onClose} className="grid size-9 place-items-center rounded-full text-muted hover:bg-panel-2" aria-label="Close">
+          <X className="size-6" />
         </button>
       </div>
       <div className="space-y-4">
         {SECTIONS.map((s) => (
           <section key={s.title} className="rounded-2xl bg-panel-2 p-4">
             <h3 className="mb-1.5 flex items-center gap-2 font-display text-lg font-bold">
-              <span>{s.icon}</span>
+              <SectionIcon icon={s.icon} />
               {s.title}
             </h3>
             <ul className="space-y-1.5 text-sm text-ink/80">
-              {s.body.map((line) => (
-                <li key={line}>{line}</li>
+              {s.body.map((line, i) => (
+                <li key={i}>{line}</li>
               ))}
             </ul>
           </section>
         ))}
         <section className="rounded-2xl bg-panel-2 p-4 text-sm text-ink/80">
           <h3 className="mb-1.5 flex items-center gap-2 font-display text-lg font-bold text-ink">
-            <span>🗺️</span>Getting around
+            <SectionIcon icon={Compass} />
+            Getting around
           </h3>
           <p>On a phone: drag to look around, pinch to zoom, and use two fingers to turn the city. On a computer: drag to look around, scroll to zoom, and hold Ctrl (or right-click) and drag to turn. Tap a billboard to see its ad.</p>
           <p className="mt-2 text-muted">You might spot: {CITY_ASSETS.big.join(", ")}, and plenty more.</p>
@@ -123,5 +171,14 @@ export function HowItWorks({ onClose }: { onClose: () => void }) {
         Got it
       </button>
     </Sheet>
+  );
+}
+
+/** The round gold badge next to each section title. */
+function SectionIcon({ icon: Icon }: { icon: LucideIcon }) {
+  return (
+    <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-gold/25 text-gold-dark" aria-hidden>
+      <Icon className="size-[18px]" strokeWidth={2.25} />
+    </span>
   );
 }

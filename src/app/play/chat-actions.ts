@@ -3,10 +3,12 @@
 import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-// Chat for the current round, in places: each building ("b:<tile>") and hot-air balloon
-// ("balloon:<k>") is its own room, plus private messages between two players. Messages are
-// written by the database function chat_send (it checks names, rooms, length and pace);
-// players receive them live. The bot's teases use room "*" (shown in every room).
+// Chat for the current round, in places: each level of a building (ground "b:<tile>:g",
+// floor n "b:<tile>:f<n>", rooftop "b:<tile>:r") and each hot-air balloon ("balloon:<k>") is
+// its own room, plus private messages between two players. The old whole-building rooms
+// ("b:<tile>") still work. Messages are written by the database function chat_send (it checks
+// names, rooms, length and pace); players receive them live. The bot's teases use room "*"
+// (shown in every room).
 
 export type ChatMessage = {
   id: number;
@@ -16,7 +18,7 @@ export type ChatMessage = {
   sender_role: "hider" | "seeker" | "watcher";
   recipient_id: string | null;
   recipient_name: string | null;
-  /** "b:<tile>", "balloon:<k>", "*" (bot, every room) or null (private message). */
+  /** "b:<tile>:g" / "b:<tile>:f<n>" / "b:<tile>:r" (or old "b:<tile>"), "balloon:<k>", "*" (bot, every room) or null (private message). */
   room: string | null;
   body: string | null;
   audio_path: string | null;
@@ -30,7 +32,9 @@ type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
 const MAX_VOICE_BYTES = 1_500_000;
 const VOICE_TYPES = ["audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "audio/aac", "audio/wav"];
-const ROOM_RE = /^(b:\d{1,7}|balloon:([0-9]|[1-4][0-9]|50))$/;
+// Same list as chat_room_ok in game-db/016_place_rooms.sql: a building level (g, f1…f200, r),
+// a whole building (old), or balloon 0…50.
+const ROOM_RE = /^(b:[0-9]{1,7}(:(g|r|f([1-9]|[1-9][0-9]|1[0-9][0-9]|200)))?|balloon:([0-9]|[1-4][0-9]|50))$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const FRIENDLY: Record<string, string> = {

@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronDown, ChevronUp, Eye, EyeOff, Trophy, Volume2, VolumeX } from "@/components/icons";
 import { cn } from "@/lib/cn";
 import { short } from "@/lib/format";
 
@@ -54,7 +55,7 @@ export function StatsCard({
           <span className="size-1.5 animate-pulse rounded-full bg-me" />
           {online === null ? "…" : short(online)}
         </span>
-        <span className="text-muted">▾</span>
+        <ChevronDown className="size-4 text-muted" />
       </button>
     );
   }
@@ -100,7 +101,8 @@ export function StatsCard({
           <div className="mt-2 flex items-center gap-1.5 rounded-xl bg-gold/20 px-2 py-1 text-[11px] font-semibold text-gold-dark" title={`${sponsor.name} added ${sponsor.coins.toLocaleString("en")} coins to this pool`}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             {sponsor.logo && <img src={sponsor.logo} alt="" className="size-4 rounded object-contain" />}
-            <span className="truncate">🏆 Prize pool by {sponsor.name}</span>
+            <Trophy className="size-3.5 shrink-0" />
+            <span className="truncate">Prize pool by {sponsor.name}</span>
           </div>
         )}
       </div>
@@ -131,28 +133,17 @@ export function StatsCard({
           aria-pressed={marks}
           title="Show or hide the marks on the map"
         >
-          <EyeIcon off={!marks} />
+          {marks ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
           Marks
         </button>
         <button onClick={onSound} className="flex items-center justify-center gap-1 border-l border-line py-2 hover:bg-white/50" aria-pressed={sound}>
-          <span aria-hidden>{sound ? "🔊" : "🔈"}</span>
+          {sound ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
           {sound ? "Sound" : "Muted"}
         </button>
         <button onClick={onToggle} className="grid place-items-center border-l border-line py-2 hover:bg-white/50" aria-label="Fold away">
-          ▴
+          <ChevronUp className="size-4" />
         </button>
       </div>
     </div>
-  );
-}
-
-/** An eye, crossed out when the map marks are hidden. */
-function EyeIcon({ off }: { off: boolean }) {
-  return (
-    <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
-      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
-      <circle cx="12" cy="12" r="3" />
-      {off && <path d="M3 3l18 18" />}
-    </svg>
   );
 }

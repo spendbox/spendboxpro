@@ -1,8 +1,111 @@
 "use client";
 
-import { useState } from "react";
+import { createElement, useState } from "react";
 import { createPortal } from "react-dom";
+import {
+  Anchor,
+  Award,
+  Axe,
+  Balloon,
+  Banknote,
+  BicepsFlexed,
+  Bike,
+  Binoculars,
+  Bird,
+  Blend,
+  Bot,
+  BotOff,
+  BowArrow,
+  BrushCleaning,
+  Building,
+  Building2,
+  Calendar,
+  CalendarCheck,
+  CalendarDays,
+  Castle,
+  ChevronsUp,
+  CircleDashed,
+  CloudFog,
+  Clover,
+  Cog,
+  Coins,
+  Cpu,
+  Crosshair,
+  Crown,
+  Diamond,
+  Dices,
+  Dog,
+  DoorClosed,
+  Drama,
+  Drone,
+  Droplets,
+  Eye,
+  EyeOff,
+  FastForward,
+  Flame,
+  Footprints,
+  Galaxy,
+  Gamepad2,
+  Gem,
+  Ghost,
+  Gift,
+  Glasses,
+  Grid3x3,
+  HandCoins,
+  HatGlasses,
+  InfinityIcon,
+  KeyRound,
+  Landmark,
+  Medal,
+  MessageCircle,
+  MessageSquareLock,
+  Mic,
+  Moon,
+  MoonStar,
+  MountainSnow,
+  Network,
+  Orbit,
+  Palette,
+  PartyPopper,
+  PawPrint,
+  PersonStanding,
+  PiggyBank,
+  Rabbit,
+  Radar,
+  RadioTower,
+  Rocket,
+  Satellite,
+  Scissors,
+  SearchCheck,
+  Shield,
+  ShieldCheck,
+  Siren,
+  Sparkles,
+  Squirrel,
+  Star,
+  Sunrise,
+  Sword,
+  Swords,
+  Target,
+  Tent,
+  Ticket,
+  Tickets,
+  Timer,
+  Tornado,
+  Trophy,
+  Turtle,
+  UserStar,
+  Users,
+  Vault,
+  Wallet,
+  WandSparkles,
+  Wheat,
+  WifiOff,
+  Zap,
+  type LucideIcon,
+} from "lucide-react";
 import { Sheet } from "@/app/play/sheet";
+import { Lock, Whale, X } from "@/components/icons";
 
 // Badges players earn in a round, drawn as shiny medals, a pop-up that explains each one,
 // and a share card they can post.
@@ -10,12 +113,13 @@ import { Sheet } from "@/app/play/sheet";
 export type BadgeGroup = "Hiding" | "Hunting" | "Drones" | "Powers" | "Levels" | "Milestones" | "Social" | "Rare" | "Legendary";
 /** How hard a badge is, from bronze (easiest) to legendary (the hardest in the game). */
 export type BadgeRim = "bronze" | "silver" | "gold" | "diamond" | "legendary";
-export type BadgeInfo = { title: string; blurb: string; icon: string; from: string; to: string; rim: BadgeRim; group: BadgeGroup };
+/** Each badge's picture is a line icon, drawn in white on the medal. */
+export type BadgeInfo = { title: string; blurb: string; icon: LucideIcon; from: string; to: string; rim: BadgeRim; group: BadgeGroup };
 
 /** The order the groups are shown in. */
 export const BADGE_GROUPS: BadgeGroup[] = ["Hiding", "Hunting", "Drones", "Powers", "Levels", "Milestones", "Social", "Rare", "Legendary"];
 
-const def = (group: BadgeGroup, rim: BadgeRim, icon: string, title: string, blurb: string, from: string, to: string): BadgeInfo => ({
+const def = (group: BadgeGroup, rim: BadgeRim, icon: LucideIcon, title: string, blurb: string, from: string, to: string): BadgeInfo => ({
   title,
   blurb,
   icon,
@@ -29,114 +133,114 @@ const def = (group: BadgeGroup, rim: BadgeRim, icon: string, title: string, blur
 // game-db/011_badges_hard.sql). Bronze is the easiest, then silver, gold, diamond, and legendary.
 export const BADGE_INFO: Record<string, BadgeInfo> = {
   // Hiding
-  survivor: def("Hiding", "silver", "🛡️", "Survivor", "Stay hidden till the very end.", "#34d399", "#047857"),
-  ghost: def("Hiding", "gold", "👻", "Ghost", "Survive without moving once. Nerves of steel.", "#a5b4fc", "#4338ca"),
-  escape_artist: def("Hiding", "silver", "🏃", "Escape Artist", "Move 3+ times and still get away.", "#fda4af", "#be123c"),
-  last_standing: def("Hiding", "gold", "👑", "Last One Standing", "Be the only ghost nobody could find.", "#fde68a", "#b45309"),
-  crowd_dodger: def("Hiding", "silver", "🫥", "Crowd Dodger", "Survive a round with 5+ hunters on the prowl.", "#99f6e4", "#0e7490"),
-  against_odds: def("Hiding", "gold", "🍀", "Against the Odds", "Survive when 3 out of 4 ghosts got found.", "#bef264", "#3f6212"),
-  shield_saved: def("Hiding", "bronze", "🔰", "Saved by the Shield", "Have your shield block a find.", "#bae6fd", "#0369a1"),
-  hot_streak: def("Hiding", "gold", "🔥", "Hot Streak", "Stay hidden 3 hiding rounds in a row.", "#fdba74", "#c2410c"),
-  last_second: def("Hiding", "silver", "⏱️", "Last-Second Dash", "Move in the final minute and get away.", "#fcd34d", "#9a3412"),
-  untouchable: def("Hiding", "diamond", "🌀", "Untouchable", "Stay hidden 5 hiding rounds in a row (and again every 5 after that).", "#c4b5fd", "#5b21b6"),
-  radar_proof: def("Hiding", "gold", "📵", "Radar Proof", "Get swept by drones 3+ times in one round and still get away.", "#a7f3d0", "#047857"),
-  slippery: def("Hiding", "gold", "🐍", "Slippery Customer", "Walk into a drone trap AND get swept in the same round, and still get away.", "#d9f99d", "#4d7c0f"),
-  needle_haystack: def("Hiding", "diamond", "🪡", "Needle in a Haystack", "Survive a round with 50+ hunters on the prowl.", "#fef3c7", "#92400e"),
-  plain_sight: def("Hiding", "gold", "🕶️", "Hidden in Plain Sight", "Survive a round where 3 out of every 4 spots in the city got searched.", "#e2e8f0", "#1e293b"),
-  statue: def("Hiding", "diamond", "🗿", "Statue", "Survive a round with 20+ hunters without moving once and without a shield.", "#e7e5e4", "#44403c"),
-  last_legend: def("Hiding", "diamond", "👤", "Last Legend", "Be the only one of 10+ ghosts left standing at the end.", "#fde68a", "#9a3412"),
+  survivor: def("Hiding", "silver", Shield, "Survivor", "Stay hidden till the very end.", "#34d399", "#047857"),
+  ghost: def("Hiding", "gold", Ghost, "Ghost", "Survive without moving once. Nerves of steel.", "#a5b4fc", "#4338ca"),
+  escape_artist: def("Hiding", "silver", Footprints, "Escape Artist", "Move 3+ times and still get away.", "#fda4af", "#be123c"),
+  last_standing: def("Hiding", "gold", PersonStanding, "Last One Standing", "Be the only ghost nobody could find.", "#fde68a", "#b45309"),
+  crowd_dodger: def("Hiding", "silver", Users, "Crowd Dodger", "Survive a round with 5+ hunters on the prowl.", "#99f6e4", "#0e7490"),
+  against_odds: def("Hiding", "gold", Clover, "Against the Odds", "Survive when 3 out of 4 ghosts got found.", "#bef264", "#3f6212"),
+  shield_saved: def("Hiding", "bronze", ShieldCheck, "Saved by the Shield", "Have your shield block a find.", "#bae6fd", "#0369a1"),
+  hot_streak: def("Hiding", "gold", Flame, "Hot Streak", "Stay hidden 3 hiding rounds in a row.", "#fdba74", "#c2410c"),
+  last_second: def("Hiding", "silver", Timer, "Last-Second Dash", "Move in the final minute and get away.", "#fcd34d", "#9a3412"),
+  untouchable: def("Hiding", "diamond", Orbit, "Untouchable", "Stay hidden 5 hiding rounds in a row (and again every 5 after that).", "#c4b5fd", "#5b21b6"),
+  radar_proof: def("Hiding", "gold", WifiOff, "Radar Proof", "Get swept by drones 3+ times in one round and still get away.", "#a7f3d0", "#047857"),
+  slippery: def("Hiding", "gold", Droplets, "Slippery Customer", "Walk into a drone trap AND get swept in the same round, and still get away.", "#d9f99d", "#4d7c0f"),
+  needle_haystack: def("Hiding", "diamond", Wheat, "Needle in a Haystack", "Survive a round with 50+ hunters on the prowl.", "#fef3c7", "#92400e"),
+  plain_sight: def("Hiding", "gold", Glasses, "Hidden in Plain Sight", "Survive a round where 3 out of every 4 spots in the city got searched.", "#e2e8f0", "#1e293b"),
+  statue: def("Hiding", "diamond", Anchor, "Statue", "Survive a round with 20+ hunters without moving once and without a shield.", "#e7e5e4", "#44403c"),
+  last_legend: def("Hiding", "diamond", UserStar, "Last Legend", "Be the only one of 10+ ghosts left standing at the end.", "#fde68a", "#9a3412"),
   // Hunting
-  bot_hunter: def("Hunting", "silver", "🤖", "Bot Hunter", "Track down the bot.", "#93c5fd", "#1d4ed8"),
-  hat_trick: def("Hunting", "gold", "🎯", "Hat-trick", "Catch 3 or more ghosts in one round.", "#fca5a5", "#b91c1c"),
-  first_blood: def("Hunting", "bronze", "⚡", "First Catch", "Make the first catch of the round.", "#fcd34d", "#c2410c"),
-  sharpshooter: def("Hunting", "gold", "🔍", "Sharpshooter", "Find someone with your very first search.", "#5eead4", "#0f766e"),
-  double_trouble: def("Hunting", "gold", "✌️", "Double Trouble", "Find 2 ghosts with one search.", "#f0abfc", "#a21caf"),
-  freebie_find: def("Hunting", "bronze", "🎁", "Freebie Find", "Find someone with your free search.", "#fecdd3", "#e11d48"),
-  the_closer: def("Hunting", "silver", "🚪", "The Closer", "Find the last ghost and end the round.", "#cbd5e1", "#334155"),
-  comeback_kid: def("Hunting", "silver", "💪", "Comeback Kid", "Miss 5 searches, then find someone.", "#fdba74", "#9a3412"),
-  quick_draw: def("Hunting", "silver", "🤠", "Quick Draw", "Find someone in the first minute of the hunt.", "#fde68a", "#a16207"),
-  clean_sweep: def("Hunting", "gold", "🧹", "Clean Sweep", "Find every ghost in a round yourself.", "#c7d2fe", "#3730a3"),
-  hunting_party: def("Hunting", "diamond", "🏹", "Hunting Party", "Catch 5 or more ghosts in one round.", "#fecaca", "#991b1b"),
-  bot_nemesis: def("Hunting", "diamond", "👾", "Bot Nemesis", "Be the one who finds the bot 3 rounds in a row.", "#a5b4fc", "#312e81"),
-  buzzer_beater: def("Hunting", "gold", "🚨", "Buzzer Beater", "Catch someone in the last 60 seconds of the round.", "#fed7aa", "#c2410c"),
-  giant_slayer: def("Hunting", "gold", "🗡️", "Giant Slayer", "Catch a player who is level 10 or higher.", "#cbd5e1", "#475569"),
-  titan_slayer: def("Hunting", "diamond", "⚔️", "Titan Slayer", "Catch a player who is level 25 or higher.", "#fca5a5", "#7f1d1d"),
-  perfect_aim: def("Hunting", "diamond", "💯", "Perfect Aim", "Make 3+ searches in a round and find someone with every single one.", "#fecdd3", "#9f1239"),
-  bounty_hunter: def("Hunting", "gold", "🤑", "Bounty Hunter", "Earn 1,000 coins in level bonuses by catching high-level players.", "#fde047", "#713f12"),
+  bot_hunter: def("Hunting", "silver", Bot, "Bot Hunter", "Track down the bot.", "#93c5fd", "#1d4ed8"),
+  hat_trick: def("Hunting", "gold", Target, "Hat-trick", "Catch 3 or more ghosts in one round.", "#fca5a5", "#b91c1c"),
+  first_blood: def("Hunting", "bronze", Zap, "First Catch", "Make the first catch of the round.", "#fcd34d", "#c2410c"),
+  sharpshooter: def("Hunting", "gold", SearchCheck, "Sharpshooter", "Find someone with your very first search.", "#5eead4", "#0f766e"),
+  double_trouble: def("Hunting", "gold", Binoculars, "Double Trouble", "Find 2 ghosts with one search.", "#f0abfc", "#a21caf"),
+  freebie_find: def("Hunting", "bronze", Gift, "Freebie Find", "Find someone with your free search.", "#fecdd3", "#e11d48"),
+  the_closer: def("Hunting", "silver", DoorClosed, "The Closer", "Find the last ghost and end the round.", "#cbd5e1", "#334155"),
+  comeback_kid: def("Hunting", "silver", BicepsFlexed, "Comeback Kid", "Miss 5 searches, then find someone.", "#fdba74", "#9a3412"),
+  quick_draw: def("Hunting", "silver", Rabbit, "Quick Draw", "Find someone in the first minute of the hunt.", "#fde68a", "#a16207"),
+  clean_sweep: def("Hunting", "gold", BrushCleaning, "Clean Sweep", "Find every ghost in a round yourself.", "#c7d2fe", "#3730a3"),
+  hunting_party: def("Hunting", "diamond", BowArrow, "Hunting Party", "Catch 5 or more ghosts in one round.", "#fecaca", "#991b1b"),
+  bot_nemesis: def("Hunting", "diamond", BotOff, "Bot Nemesis", "Be the one who finds the bot 3 rounds in a row.", "#a5b4fc", "#312e81"),
+  buzzer_beater: def("Hunting", "gold", Siren, "Buzzer Beater", "Catch someone in the last 60 seconds of the round.", "#fed7aa", "#c2410c"),
+  giant_slayer: def("Hunting", "gold", Sword, "Giant Slayer", "Catch a player who is level 10 or higher.", "#cbd5e1", "#475569"),
+  titan_slayer: def("Hunting", "diamond", Swords, "Titan Slayer", "Catch a player who is level 25 or higher.", "#fca5a5", "#7f1d1d"),
+  perfect_aim: def("Hunting", "diamond", Crosshair, "Perfect Aim", "Make 3+ searches in a round and find someone with every single one.", "#fecdd3", "#9f1239"),
+  bounty_hunter: def("Hunting", "gold", HandCoins, "Bounty Hunter", "Earn 1,000 coins in level bonuses by catching high-level players.", "#fde047", "#713f12"),
   // Drones
-  trapper: def("Drones", "bronze", "📡", "Trapper", "Catch someone sneaking into your drone trap.", "#c4b5fd", "#6d28d9"),
-  trap_master: def("Drones", "gold", "🕸️", "Trap Master", "Have your traps go off 3 times in one round.", "#ddd6fe", "#5b21b6"),
-  drone_pilot: def("Drones", "bronze", "🚁", "Drone Pilot", "Fly 5 drone sweeps in one round.", "#a5f3fc", "#0e7490"),
-  drone_ace: def("Drones", "gold", "🛸", "Drone Ace", "Spot someone with 3 sweeps in one round.", "#86efac", "#15803d"),
-  drone_combo: def("Drones", "silver", "🎮", "Combo!", "Spot someone with a drone, then find them.", "#f9a8d4", "#be185d"),
-  close_shave: def("Drones", "silver", "😅", "Close Shave", "Get swept by a drone and still get away.", "#fef08a", "#ca8a04"),
-  drone_dodger: def("Drones", "gold", "🦊", "Drone Dodger", "Walk into a drone trap and still get away.", "#fed7aa", "#c2410c"),
-  eye_in_sky: def("Drones", "gold", "👁️", "Eye in the Sky", "Spot someone with 5 sweeps in one round.", "#bae6fd", "#0c4a6e"),
-  spider_web: def("Drones", "diamond", "🕷️", "Spider's Web", "Have your drone traps go off 5 times in one round.", "#e9d5ff", "#3b0764"),
+  trapper: def("Drones", "bronze", Radar, "Trapper", "Catch someone sneaking into your drone trap.", "#c4b5fd", "#6d28d9"),
+  trap_master: def("Drones", "gold", RadioTower, "Trap Master", "Have your traps go off 3 times in one round.", "#ddd6fe", "#5b21b6"),
+  drone_pilot: def("Drones", "bronze", Drone, "Drone Pilot", "Fly 5 drone sweeps in one round.", "#a5f3fc", "#0e7490"),
+  drone_ace: def("Drones", "gold", Satellite, "Drone Ace", "Spot someone with 3 sweeps in one round.", "#86efac", "#15803d"),
+  drone_combo: def("Drones", "silver", Gamepad2, "Combo!", "Spot someone with a drone, then find them.", "#f9a8d4", "#be185d"),
+  close_shave: def("Drones", "silver", Scissors, "Close Shave", "Get swept by a drone and still get away.", "#fef08a", "#ca8a04"),
+  drone_dodger: def("Drones", "gold", Squirrel, "Drone Dodger", "Walk into a drone trap and still get away.", "#fed7aa", "#c2410c"),
+  eye_in_sky: def("Drones", "gold", Eye, "Eye in the Sky", "Spot someone with 5 sweeps in one round.", "#bae6fd", "#0c4a6e"),
+  spider_web: def("Drones", "diamond", Network, "Spider's Web", "Have your drone traps go off 5 times in one round.", "#e9d5ff", "#3b0764"),
   // Powers (decoys, shields, respawns, big searches)
-  gotcha: def("Powers", "silver", "🎭", "Gotcha!", "Place a decoy that fools a hunter.", "#fbcfe8", "#9d174d"),
-  master_disguise: def("Powers", "gold", "🥸", "Master of Disguise", "Your decoy fools 2+ different hunters in one round (searched or swept).", "#f5d0fe", "#701a75"),
-  smoke_mirrors: def("Powers", "gold", "🪞", "Smoke & Mirrors", "Your decoy fools a hunter AND you survive the round.", "#ddd6fe", "#4c1d95"),
-  turtle: def("Powers", "gold", "🐢", "Turtle", "Your shield saves you, you never move, and you survive.", "#bbf7d0", "#166534"),
-  phoenix: def("Powers", "diamond", "🦅", "Phoenix", "Get caught, pay to respawn, then survive the round.", "#fdba74", "#9a3412"),
-  wide_net: def("Powers", "gold", "🥅", "Wide Net", "Catch 2+ ghosts with one big search.", "#99f6e4", "#134e4a"),
-  illusionist: def("Powers", "diamond", "🎩", "Illusionist", "Fool hunters with your decoys 10 times in total.", "#c7d2fe", "#1e1b4b"),
+  gotcha: def("Powers", "silver", Drama, "Gotcha!", "Place a decoy that fools a hunter.", "#fbcfe8", "#9d174d"),
+  master_disguise: def("Powers", "gold", HatGlasses, "Master of Disguise", "Your decoy fools 2+ different hunters in one round (searched or swept).", "#f5d0fe", "#701a75"),
+  smoke_mirrors: def("Powers", "gold", Blend, "Smoke & Mirrors", "Your decoy fools a hunter AND you survive the round.", "#ddd6fe", "#4c1d95"),
+  turtle: def("Powers", "gold", Turtle, "Turtle", "Your shield saves you, you never move, and you survive.", "#bbf7d0", "#166534"),
+  phoenix: def("Powers", "diamond", Bird, "Phoenix", "Get caught, pay to respawn, then survive the round.", "#fdba74", "#9a3412"),
+  wide_net: def("Powers", "gold", Grid3x3, "Wide Net", "Catch 2+ ghosts with one big search.", "#99f6e4", "#134e4a"),
+  illusionist: def("Powers", "diamond", WandSparkles, "Illusionist", "Fool hunters with your decoys 10 times in total.", "#c7d2fe", "#1e1b4b"),
   // Levels (won once)
-  level_5: def("Levels", "silver", "⭐", "Level 5", "Reach level 5. Shields unlocked!", "#fef08a", "#a16207"),
-  level_10: def("Levels", "gold", "🌟", "Level 10", "Reach level 10. Big searches unlocked!", "#fde68a", "#b45309"),
-  level_20: def("Levels", "diamond", "💫", "Level 20", "Reach level 20. Respawns unlocked!", "#bfdbfe", "#1e3a8a"),
-  level_30: def("Levels", "diamond", "🚀", "Level 30", "Reach level 30.", "#fbcfe8", "#831843"),
+  level_5: def("Levels", "silver", Star, "Level 5", "Reach level 5. Shields unlocked!", "#fef08a", "#a16207"),
+  level_10: def("Levels", "gold", Sparkles, "Level 10", "Reach level 10. Big searches unlocked!", "#fde68a", "#b45309"),
+  level_20: def("Levels", "diamond", ChevronsUp, "Level 20", "Reach level 20. Respawns unlocked!", "#bfdbfe", "#1e3a8a"),
+  level_30: def("Levels", "diamond", Rocket, "Level 30", "Reach level 30.", "#fbcfe8", "#831843"),
   // Milestones (won once)
-  rounds_5: def("Milestones", "bronze", "🎟️", "Regular", "Play 5 rounds.", "#e9d5ff", "#7e22ce"),
-  rounds_25: def("Milestones", "silver", "🏙️", "City Veteran", "Play 25 rounds.", "#c4b5fd", "#4c1d95"),
-  rounds_50: def("Milestones", "silver", "🎫", "Half Century", "Play 50 rounds.", "#fde68a", "#854d0e"),
-  rounds_100: def("Milestones", "gold", "🏆", "Legend", "Play 100 rounds.", "#fde047", "#854d0e"),
-  rounds_250: def("Milestones", "diamond", "🌆", "City Icon", "Play 250 rounds.", "#fbcfe8", "#701a75"),
-  catches_10: def("Milestones", "bronze", "🐾", "Tracker", "Find 10 ghosts in total.", "#fecaca", "#991b1b"),
-  catches_50: def("Milestones", "gold", "🐕", "Bloodhound", "Find 50 ghosts in total.", "#fca5a5", "#7f1d1d"),
-  catches_100: def("Milestones", "diamond", "🐺", "Apex Hunter", "Find 100 ghosts in total.", "#cbd5e1", "#1e293b"),
-  survive_5: def("Milestones", "bronze", "🙈", "Hard to Find", "Survive 5 rounds in total.", "#a7f3d0", "#065f46"),
-  survive_25: def("Milestones", "gold", "🫧", "Invisible", "Survive 25 rounds in total.", "#e0f2fe", "#0c4a6e"),
-  survive_50: def("Milestones", "gold", "🦎", "Chameleon", "Survive 50 rounds in total.", "#bbf7d0", "#14532d"),
-  survive_100: def("Milestones", "diamond", "🌫️", "Vanishing Act", "Survive 100 rounds in total.", "#e2e8f0", "#334155"),
-  coins_1k: def("Milestones", "silver", "🪙", "Coin Collector", "Win 1,000 coins in total.", "#fef3c7", "#b45309"),
-  coins_5k: def("Milestones", "silver", "💵", "Money Maker", "Win 5,000 coins in total.", "#bbf7d0", "#166534"),
-  coins_10k: def("Milestones", "gold", "💎", "Tycoon", "Win 10,000 coins in total.", "#a5f3fc", "#155e75"),
-  coins_25k: def("Milestones", "diamond", "🏦", "Mogul", "Win 25,000 coins in total.", "#fde68a", "#78350f"),
-  streak_3: def("Milestones", "bronze", "📅", "Three in a Row", "Play on 3 days in a row.", "#bfdbfe", "#1e40af"),
-  streak_7: def("Milestones", "gold", "🗓️", "Week Warrior", "Play every day for a week.", "#93c5fd", "#1e3a8a"),
-  streak_14: def("Milestones", "diamond", "📆", "Fortnight Fanatic", "Play every day for 14 days in a row.", "#c7d2fe", "#312e81"),
-  bot_buster: def("Milestones", "silver", "🦾", "Bot Buster", "Find the bot 5 times.", "#bfdbfe", "#1e3a8a"),
-  bot_terminator: def("Milestones", "diamond", "⚙️", "Bot Terminator", "Find the bot 25 times.", "#cbd5e1", "#0f172a"),
-  shield_master: def("Milestones", "gold", "🏰", "Shield Master", "Get saved by your shield 3 times.", "#7dd3fc", "#075985"),
+  rounds_5: def("Milestones", "bronze", Ticket, "Regular", "Play 5 rounds.", "#e9d5ff", "#7e22ce"),
+  rounds_25: def("Milestones", "silver", Building2, "City Veteran", "Play 25 rounds.", "#c4b5fd", "#4c1d95"),
+  rounds_50: def("Milestones", "silver", Tickets, "Half Century", "Play 50 rounds.", "#fde68a", "#854d0e"),
+  rounds_100: def("Milestones", "gold", Trophy, "Legend", "Play 100 rounds.", "#fde047", "#854d0e"),
+  rounds_250: def("Milestones", "diamond", Building, "City Icon", "Play 250 rounds.", "#fbcfe8", "#701a75"),
+  catches_10: def("Milestones", "bronze", PawPrint, "Tracker", "Find 10 ghosts in total.", "#fecaca", "#991b1b"),
+  catches_50: def("Milestones", "gold", Dog, "Bloodhound", "Find 50 ghosts in total.", "#fca5a5", "#7f1d1d"),
+  catches_100: def("Milestones", "diamond", Axe, "Apex Hunter", "Find 100 ghosts in total.", "#cbd5e1", "#1e293b"),
+  survive_5: def("Milestones", "bronze", EyeOff, "Hard to Find", "Survive 5 rounds in total.", "#a7f3d0", "#065f46"),
+  survive_25: def("Milestones", "gold", CircleDashed, "Invisible", "Survive 25 rounds in total.", "#e0f2fe", "#0c4a6e"),
+  survive_50: def("Milestones", "gold", Palette, "Chameleon", "Survive 50 rounds in total.", "#bbf7d0", "#14532d"),
+  survive_100: def("Milestones", "diamond", CloudFog, "Vanishing Act", "Survive 100 rounds in total.", "#e2e8f0", "#334155"),
+  coins_1k: def("Milestones", "silver", Coins, "Coin Collector", "Win 1,000 coins in total.", "#fef3c7", "#b45309"),
+  coins_5k: def("Milestones", "silver", Banknote, "Money Maker", "Win 5,000 coins in total.", "#bbf7d0", "#166534"),
+  coins_10k: def("Milestones", "gold", Gem, "Tycoon", "Win 10,000 coins in total.", "#a5f3fc", "#155e75"),
+  coins_25k: def("Milestones", "diamond", Vault, "Mogul", "Win 25,000 coins in total.", "#fde68a", "#78350f"),
+  streak_3: def("Milestones", "bronze", Calendar, "Three in a Row", "Play on 3 days in a row.", "#bfdbfe", "#1e40af"),
+  streak_7: def("Milestones", "gold", CalendarCheck, "Week Warrior", "Play every day for a week.", "#93c5fd", "#1e3a8a"),
+  streak_14: def("Milestones", "diamond", CalendarDays, "Fortnight Fanatic", "Play every day for 14 days in a row.", "#c7d2fe", "#312e81"),
+  bot_buster: def("Milestones", "silver", Cpu, "Bot Buster", "Find the bot 5 times.", "#bfdbfe", "#1e3a8a"),
+  bot_terminator: def("Milestones", "diamond", Cog, "Bot Terminator", "Find the bot 25 times.", "#cbd5e1", "#0f172a"),
+  shield_master: def("Milestones", "gold", Castle, "Shield Master", "Get saved by your shield 3 times.", "#7dd3fc", "#075985"),
   // Social
-  chatterbox: def("Social", "bronze", "💬", "Chatterbox", "Send 10 chat messages in one round.", "#fbcfe8", "#be185d"),
-  on_air: def("Social", "bronze", "🎙️", "On Air", "Send a voice note.", "#fda4af", "#9f1239"),
-  whisper: def("Social", "bronze", "🤫", "Secret Whisper", "Send someone a private message.", "#e9d5ff", "#6b21a8"),
-  party_time: def("Social", "silver", "🎉", "Party Time", "Play in a round with 20+ players.", "#f5d0fe", "#86198f"),
-  festival: def("Social", "gold", "🎪", "Festival", "Play in a round with 100+ players.", "#fecaca", "#9f1239"),
+  chatterbox: def("Social", "bronze", MessageCircle, "Chatterbox", "Send 10 chat messages in one round.", "#fbcfe8", "#be185d"),
+  on_air: def("Social", "bronze", Mic, "On Air", "Send a voice note.", "#fda4af", "#9f1239"),
+  whisper: def("Social", "bronze", MessageSquareLock, "Secret Whisper", "Send someone a private message.", "#e9d5ff", "#6b21a8"),
+  party_time: def("Social", "silver", PartyPopper, "Party Time", "Play in a round with 20+ players.", "#f5d0fe", "#86198f"),
+  festival: def("Social", "gold", Tent, "Festival", "Play in a round with 100+ players.", "#fecaca", "#9f1239"),
   // Rare
-  welcome: def("Rare", "bronze", "🗝️", "Welcome to the City", "Play your very first round.", "#fde68a", "#92400e"),
-  big_win: def("Rare", "gold", "💰", "Big Win", "Win 300+ coins in one round.", "#fde047", "#a16207"),
-  jackpot: def("Rare", "diamond", "💸", "Jackpot", "Win 1,000+ coins in one round.", "#bbf7d0", "#14532d"),
-  high_roller: def("Rare", "gold", "🎰", "High Roller", "Play a round with a 1,000+ coin pool.", "#fcd34d", "#7c2d12"),
-  whale: def("Rare", "diamond", "🐋", "Whale", "Play a round with a 10,000+ coin pool.", "#bae6fd", "#1e3a8a"),
-  weekly_champ: def("Rare", "diamond", "🥇", "Champion of the Week", "Be top of the weekly leaderboard (with 5+ winners that week) when a round ends.", "#fde68a", "#a16207"),
-  night_owl: def("Rare", "silver", "🦉", "Night Owl", "Play a round that ends between midnight and 5am (UTC).", "#818cf8", "#1e1b4b"),
-  early_bird: def("Rare", "bronze", "🐦", "Early Bird", "Play a round that ends between 5 and 8am (UTC).", "#fef9c3", "#d97706"),
-  weekend_warrior: def("Rare", "bronze", "🛹", "Weekend Warrior", "Play a round on a Saturday or Sunday.", "#99f6e4", "#115e59"),
-  balloon_popper: def("Rare", "silver", "🎈", "Balloon Popper", "Pop 10 coin balloons.", "#fecaca", "#dc2626"),
+  welcome: def("Rare", "bronze", KeyRound, "Welcome to the City", "Play your very first round.", "#fde68a", "#92400e"),
+  big_win: def("Rare", "gold", Wallet, "Big Win", "Win 300+ coins in one round.", "#fde047", "#a16207"),
+  jackpot: def("Rare", "diamond", PiggyBank, "Jackpot", "Win 1,000+ coins in one round.", "#bbf7d0", "#14532d"),
+  high_roller: def("Rare", "gold", Dices, "High Roller", "Play a round with a 1,000+ coin pool.", "#fcd34d", "#7c2d12"),
+  whale: def("Rare", "diamond", Whale, "Whale", "Play a round with a 10,000+ coin pool.", "#bae6fd", "#1e3a8a"),
+  weekly_champ: def("Rare", "diamond", Medal, "Champion of the Week", "Be top of the weekly leaderboard (with 5+ winners that week) when a round ends.", "#fde68a", "#a16207"),
+  night_owl: def("Rare", "silver", Moon, "Night Owl", "Play a round that ends between midnight and 5am (UTC).", "#818cf8", "#1e1b4b"),
+  early_bird: def("Rare", "bronze", Sunrise, "Early Bird", "Play a round that ends between 5 and 8am (UTC).", "#fef9c3", "#d97706"),
+  weekend_warrior: def("Rare", "bronze", Bike, "Weekend Warrior", "Play a round on a Saturday or Sunday.", "#99f6e4", "#115e59"),
+  balloon_popper: def("Rare", "silver", Balloon, "Balloon Popper", "Pop 10 coin balloons.", "#fecaca", "#dc2626"),
   // Legendary: the hardest badges in the game
-  phantom: def("Legendary", "legendary", "🌌", "Phantom", "Stay hidden 10 hiding rounds in a row.", "#a78bfa", "#1e1b4b"),
-  unstoppable: def("Legendary", "legendary", "☄️", "Unstoppable", "Catch 10 or more ghosts in one round.", "#fb923c", "#7f1d1d"),
-  exterminator: def("Legendary", "legendary", "🌪️", "Exterminator", "Find every single ghost yourself in a round with 5+ ghosts.", "#5eead4", "#134e4a"),
-  immortal: def("Legendary", "legendary", "♾️", "Immortal", "Respawn and then survive, 5 times in total.", "#f9a8d4", "#500724"),
-  level_50: def("Legendary", "legendary", "🔱", "Level 50", "Reach level 50. Catching you is worth a fortune.", "#fde047", "#713f12"),
-  coins_100k: def("Legendary", "legendary", "💠", "Coin Royalty", "Win 100,000 coins in total.", "#67e8f9", "#164e63"),
-  rounds_500: def("Legendary", "legendary", "🏛️", "Living Legend", "Play 500 rounds.", "#fcd34d", "#451a03"),
-  streak_30: def("Legendary", "legendary", "🌙", "Month of Madness", "Play every day for 30 days in a row.", "#818cf8", "#0f172a"),
-  catches_500: def("Legendary", "legendary", "🦁", "King of the Hunt", "Find 500 ghosts in total.", "#fdba74", "#7c2d12"),
-  collector_80: def("Legendary", "legendary", "🧿", "Hall of Fame", "Collect 80 different badges.", "#93c5fd", "#172554"),
+  phantom: def("Legendary", "legendary", Galaxy, "Phantom", "Stay hidden 10 hiding rounds in a row.", "#a78bfa", "#1e1b4b"),
+  unstoppable: def("Legendary", "legendary", FastForward, "Unstoppable", "Catch 10 or more ghosts in one round.", "#fb923c", "#7f1d1d"),
+  exterminator: def("Legendary", "legendary", Tornado, "Exterminator", "Find every single ghost yourself in a round with 5+ ghosts.", "#5eead4", "#134e4a"),
+  immortal: def("Legendary", "legendary", InfinityIcon, "Immortal", "Respawn and then survive, 5 times in total.", "#f9a8d4", "#500724"),
+  level_50: def("Legendary", "legendary", MountainSnow, "Level 50", "Reach level 50. Catching you is worth a fortune.", "#fde047", "#713f12"),
+  coins_100k: def("Legendary", "legendary", Diamond, "Coin Royalty", "Win 100,000 coins in total.", "#67e8f9", "#164e63"),
+  rounds_500: def("Legendary", "legendary", Landmark, "Living Legend", "Play 500 rounds.", "#fcd34d", "#451a03"),
+  streak_30: def("Legendary", "legendary", MoonStar, "Month of Madness", "Play every day for 30 days in a row.", "#818cf8", "#0f172a"),
+  catches_500: def("Legendary", "legendary", Crown, "King of the Hunt", "Find 500 ghosts in total.", "#fdba74", "#7c2d12"),
+  collector_80: def("Legendary", "legendary", Award, "Hall of Fame", "Collect 80 different badges.", "#93c5fd", "#172554"),
 };
 
 /** Badges you can only win once (the rest can be won again in any round). */
@@ -181,8 +285,12 @@ const SHINE_CSS = `
 @media (prefers-reduced-motion: reduce) { .bdg-sweep, .bdg-twinkle { animation: none } .bdg-sweep { opacity: 0 } }
 `;
 
+/** Where the icon sits on the medal (in the medal's 120 x 120 drawing). */
+const MEDAL_ICON = { x: 37, y: 35, size: 46 };
+
 export function BadgeMedal({ badge, size = 72, dim }: { badge: string; size?: number; dim?: boolean }) {
   const b = BADGE_INFO[badge] ?? BADGE_INFO.survivor;
+  const Icon = b.icon;
   const rim = RIMS[b.rim];
   const id = `bdg-${badge}`;
   const special = shiny(b.rim) && !dim;
@@ -205,6 +313,10 @@ export function BadgeMedal({ badge, size = 72, dim }: { badge: string; size?: nu
           <stop offset="0" stopColor="#ffffff" stopOpacity="0.55" />
           <stop offset="0.5" stopColor="#ffffff" stopOpacity="0" />
         </linearGradient>
+        {/* A soft shadow under the icon so it pops on light and dark medals alike */}
+        <filter id={`${id}-pop`} x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="1.6" stdDeviation="1.4" floodColor="#000000" floodOpacity="0.45" />
+        </filter>
         {special && (
           <>
             <radialGradient id={`${id}-glow`}>
@@ -230,9 +342,9 @@ export function BadgeMedal({ badge, size = 72, dim }: { badge: string; size?: nu
         {shiny(b.rim) && <path d={hexInner} fill="none" stroke="#ffffff" strokeOpacity="0.8" strokeWidth="2.5" transform="translate(-4.5 -4.6) scale(1.075)" />}
         <path d={hexInner} fill={`url(#${id}-in)`} />
         <path d="M60 15 L98 37 L98 58 Q60 46 22 58 L22 37 Z" fill={`url(#${id}-shine)`} />
-        <text x="60" y="72" textAnchor="middle" fontSize="40">
-          {b.icon}
-        </text>
+        <g filter={`url(#${id}-pop)`}>
+          <Icon x={MEDAL_ICON.x} y={MEDAL_ICON.y} size={MEDAL_ICON.size} color="#ffffff" strokeWidth={2.25} aria-hidden="true" />
+        </g>
         {[0, 1, 2].map((k) => (
           <circle key={k} cx={44 + k * 16} cy="94" r="2.2" fill="#ffffff" opacity="0.8" />
         ))}
@@ -252,6 +364,26 @@ export function BadgeMedal({ badge, size = 72, dim }: { badge: string; size?: nu
       )}
     </svg>
   );
+}
+
+/**
+ * A line icon as a picture the share card can draw: rendered to SVG markup, then loaded as an
+ * image. Resolves to null if it can't load (the card is then made without it).
+ */
+async function iconImage(icon: LucideIcon, size: number): Promise<HTMLImageElement | null> {
+  try {
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const svg = renderToStaticMarkup(createElement(icon, { size, color: "#ffffff", strokeWidth: 2 }));
+    const img = new Image(size, size);
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error("icon didn't load"));
+      img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    });
+    return img;
+  } catch {
+    return null;
+  }
 }
 
 /** Draws a square share card for a badge (badge, player, city) and shares or saves it. */
@@ -355,10 +487,18 @@ export async function shareBadge(badge: string, player: string, city?: string) {
     c.fill();
     c.restore();
   }
-  c.font = "180px system-ui, Apple Color Emoji, Segoe UI Emoji, sans-serif";
+  // The badge's icon, drawn from the same line icon as the medal, in white with a soft shadow
+  const icon = await iconImage(b.icon, 220);
+  if (icon) {
+    c.save();
+    c.shadowColor = "rgba(0,0,0,0.45)";
+    c.shadowBlur = 22;
+    c.shadowOffsetY = 8;
+    c.drawImage(icon, cx - 110, cy - 115, 220, 220);
+    c.restore();
+  }
   c.textAlign = "center";
   c.textBaseline = "middle";
-  c.fillText(b.icon, cx, cy + 10);
   // Sparkles for gold and up
   if (b.rim === "gold" || shiny(b.rim)) {
     c.fillStyle = b.rim === "gold" ? "#fff8d6" : "#ffffff";
@@ -382,7 +522,14 @@ export async function shareBadge(badge: string, player: string, city?: string) {
   } else {
     c.fillStyle = b.rim === "diamond" ? "#bfeaff" : rim[1];
   }
-  c.fillText(`${b.rim === "legendary" ? "★ LEGENDARY ★" : `${b.rim.toUpperCase()} BADGE`} · ${b.group.toUpperCase()}`, 540, 92);
+  const kicker = `${b.rim.toUpperCase()} BADGE${b.group.toUpperCase() === b.rim.toUpperCase() ? "" : ` · ${b.group.toUpperCase()}`}`;
+  c.fillText(kicker, 540, 92);
+  if (b.rim === "legendary") {
+    // Little sparkles either side, instead of star characters
+    const half = c.measureText(kicker).width / 2;
+    c.fill(new Path2D(star(540 - half - 30, 92, 15)));
+    c.fill(new Path2D(star(540 + half + 30, 92, 15)));
+  }
   // Words
   c.fillStyle = "#ffffff";
   let size = 84;
@@ -408,7 +555,7 @@ export async function shareBadge(badge: string, player: string, city?: string) {
 
   const blob: Blob = await new Promise((resolve) => canvas.toBlob((bl) => resolve(bl!), "image/png"));
   const file = new File([blob], `hide-and-seek-${badge}.png`, { type: "image/png" });
-  const text = `I just earned the ${b.title} badge in Hide & Seek! Come find me 👀 ${location.origin}`;
+  const text = `I just earned the ${b.title} badge in Hide & Seek! Come find me: ${location.origin}`;
   try {
     if (navigator.canShare?.({ files: [file] })) {
       await navigator.share({ files: [file], text, title: `${b.title} badge` });
@@ -466,8 +613,12 @@ export function BadgeSheet({
   const sheet = (
     <Sheet onClose={onClose}>
       <div className="relative">
-        <button onClick={onClose} className="absolute -right-2 -top-2 rounded-full px-2 text-2xl text-muted" aria-label="Close">
-          ×
+        <button
+          onClick={onClose}
+          className="absolute -right-2 -top-2 z-10 grid size-9 place-items-center rounded-full text-muted hover:bg-panel-2"
+          aria-label="Close"
+        >
+          <X className="size-6" />
         </button>
         <div
           className="-mx-5 -mt-5 flex justify-center rounded-t-3xl pb-2 pt-6"
@@ -477,15 +628,23 @@ export function BadgeSheet({
         </div>
         <div className="text-center">
           <span
-            className="inline-block rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white"
+            className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 align-middle text-[11px] font-bold uppercase tracking-wide text-white"
             style={{
               background:
                 b.rim === "legendary" ? `linear-gradient(90deg, ${RIMS.legendary.join(", ")})` : rarity.color,
             }}
           >
-            {b.rim === "legendary" ? "★ Legendary ★" : `${rarity.label} badge`}
+            {b.rim === "legendary" ? (
+              <>
+                <Star className="size-3" fill="currentColor" />
+                Legendary
+                <Star className="size-3" fill="currentColor" />
+              </>
+            ) : (
+              `${rarity.label} badge`
+            )}
           </span>
-          <span className="ml-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">{b.group}</span>
+          {b.group !== rarity.label && <span className="ml-1.5 align-middle text-[11px] font-semibold uppercase tracking-wide text-muted">{b.group}</span>}
           <h2 className="mt-1.5 font-display text-2xl font-extrabold">{b.title}</h2>
         </div>
 
@@ -515,7 +674,10 @@ export function BadgeSheet({
               </p>
             </div>
           ) : (
-            <p className="rounded-xl border border-dashed border-line px-3 py-2 text-center font-semibold text-muted">🔒 Not earned yet</p>
+            <p className="flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-line px-3 py-2 font-semibold text-muted">
+              <Lock className="size-4" />
+              Not earned yet
+            </p>
           )}
         </div>
 

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { connection } from "next/server";
+import { ArrowLeft, Plus } from "@/components/icons";
 import { adPricing } from "@/lib/ads";
 import { paystackEnabled } from "@/lib/paystack";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -60,15 +61,15 @@ export default async function AdvertisePage() {
     ],
     ["Can I change my ad?", "Yes. Change the picture, headline or link, pause or resume, and top up from your ad page. Changes go live in minutes."],
     ["Who will see it?", "Adults (18+) playing and watching Hide & Seek, mostly in Nigeria, in every city on the map."],
-    ["What if several prize pools are sponsored?", "They queue: one per round, in order. (We aren't taking new prize pool sponsors right now.)"],
   ];
 
   return (
     <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-10 px-4 py-8">
       <div>
         <div className="flex items-center justify-between">
-          <Link href="/" className="text-sm font-medium text-muted">
-            ← Back to the city
+          <Link href="/" className="flex items-center gap-1 text-sm font-medium text-muted">
+            <ArrowLeft className="size-4" />
+            Back to the city
           </Link>
           <Link href="/advertiser" className="text-sm font-medium text-muted underline">
             Manage your ads
@@ -128,7 +129,7 @@ export default async function AdvertisePage() {
             <details key={q} className="group rounded-xl border border-line bg-panel px-4 py-3">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-semibold">
                 {q}
-                <span className="text-muted transition group-open:rotate-45">+</span>
+                <Plus className="size-5 shrink-0 text-muted transition group-open:rotate-45" />
               </summary>
               <p className="mt-2 text-sm text-ink">{a}</p>
             </details>

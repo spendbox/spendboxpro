@@ -1,10 +1,62 @@
 // Pictures drawn on canvases: the "your ad here" billboard designs, the banner on the hot-air
-// balloons, and the little "👥 12" count pills shown over chat rooms.
+// balloons, the little "people · 12" count pills shown over chat rooms, and the bot's face.
+// Icons are the game's own line icons (Lucide), drawn as vector paths: no emoji anywhere.
 
+import { Bot, Users, type LucideIcon } from "lucide-react";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import * as THREE from "three";
 
 const FONT = "system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
-const EMOJI = "'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji'";
+
+type IconShape = { kind: "path"; d: string } | { kind: "circle"; cx: number; cy: number; r: number } | { kind: "rect"; x: number; y: number; w: number; h: number; rx: number };
+const iconCache = new Map<LucideIcon, IconShape[]>();
+
+/** The shapes of a Lucide icon (on its 24 × 24 grid). */
+function iconShapes(icon: LucideIcon): IconShape[] {
+  const cached = iconCache.get(icon);
+  if (cached) return cached;
+  const svg = renderToStaticMarkup(createElement(icon, { size: 24 }));
+  const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
+  const out: IconShape[] = [];
+  const num = (el: Element, a: string) => Number(el.getAttribute(a) ?? 0);
+  doc.querySelectorAll("path, circle, rect, line, polyline, ellipse").forEach((el) => {
+    const tag = el.tagName.toLowerCase();
+    if (tag === "path") out.push({ kind: "path", d: el.getAttribute("d") ?? "" });
+    else if (tag === "circle") out.push({ kind: "circle", cx: num(el, "cx"), cy: num(el, "cy"), r: num(el, "r") });
+    else if (tag === "ellipse") out.push({ kind: "circle", cx: num(el, "cx"), cy: num(el, "cy"), r: (num(el, "rx") + num(el, "ry")) / 2 });
+    else if (tag === "rect") out.push({ kind: "rect", x: num(el, "x"), y: num(el, "y"), w: num(el, "width"), h: num(el, "height"), rx: num(el, "rx") });
+    else if (tag === "line") out.push({ kind: "path", d: `M${num(el, "x1")} ${num(el, "y1")}L${num(el, "x2")} ${num(el, "y2")}` });
+    else if (tag === "polyline") out.push({ kind: "path", d: `M${(el.getAttribute("points") ?? "").trim().replace(/\s+/g, " L")}` });
+  });
+  iconCache.set(icon, out);
+  return out;
+}
+
+/** Draw a Lucide icon (line style) at (x, y), size px square, in the current colour. */
+export function drawIcon(c: CanvasRenderingContext2D, icon: LucideIcon, x: number, y: number, size: number, color: string, stroke = 2) {
+  const shapes = iconShapes(icon);
+  c.save();
+  c.translate(x, y);
+  c.scale(size / 24, size / 24);
+  c.strokeStyle = color;
+  c.lineWidth = stroke;
+  c.lineCap = "round";
+  c.lineJoin = "round";
+  for (const s of shapes) {
+    if (s.kind === "path") c.stroke(new Path2D(s.d));
+    else if (s.kind === "circle") {
+      c.beginPath();
+      c.arc(s.cx, s.cy, s.r, 0, Math.PI * 2);
+      c.stroke();
+    } else {
+      c.beginPath();
+      c.roundRect(s.x, s.y, s.w, s.h, s.rx);
+      c.stroke();
+    }
+  }
+  c.restore();
+}
 
 /** Write text centred at (x, y), shrinking the font until it fits in maxWidth. */
 function fitText(c: CanvasRenderingContext2D, text: string, x: number, y: number, size: number, weight: number, maxWidth: number) {
@@ -91,7 +143,7 @@ export function balloonBannerTexture() {
 
 const pillCache = new Map<string, THREE.CanvasTexture>();
 
-/** "👥 12": how many people are in a chat room. Cached per text. */
+/** "(people icon) 12": how many people are in a chat room. Cached per text. */
 export function pillTexture(count: number) {
   const text = count > 999 ? `${Math.floor(count / 100) / 10}k` : String(count);
   const cached = pillCache.get(text);
@@ -115,8 +167,7 @@ export function pillTexture(count: number) {
   c.stroke();
   c.textBaseline = "middle";
   c.textAlign = "left";
-  c.font = `44px ${EMOJI}, ${FONT}`;
-  c.fillText("👥", x0 + 18, H / 2 + 2);
+  drawIcon(c, Users, x0 + 20, H / 2 - 22, 44, "#ffffff", 2.4);
   c.fillStyle = "#ffffff";
   c.font = `800 52px ${FONT}`;
   c.fillText(text, x0 + 76, H / 2 + 3);
@@ -125,8 +176,30 @@ export function pillTexture(count: number) {
   return tex;
 }
 
-/** Free the cached count pills (when the city view goes away). */
+let botTex: THREE.CanvasTexture | null = null;
+
+/** The bot's face over the spot where it was caught: a robot icon on a purple disc. */
+export function botTexture() {
+  if (botTex) return botTex;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 128;
+  const c = canvas.getContext("2d")!;
+  c.fillStyle = "#7048e8";
+  c.beginPath();
+  c.arc(64, 64, 56, 0, Math.PI * 2);
+  c.fill();
+  c.strokeStyle = "#e5484d";
+  c.lineWidth = 6;
+  c.stroke();
+  drawIcon(c, Bot, 28, 26, 72, "#ffffff", 2.2);
+  botTex = finish(canvas);
+  return botTex;
+}
+
+/** Free the cached count pills and the bot face (when the city view goes away). */
 export function disposePills() {
   for (const t of pillCache.values()) t.dispose();
   pillCache.clear();
+  botTex?.dispose();
+  botTex = null;
 }

@@ -109,7 +109,7 @@ export async function adLiveEmail(ad: AdForEmail, reward: number): Promise<Email
     subject: `Your ad for ${ad.brand} is live on Hide & Seek`,
     text: `Hi ${ad.contact_name},\n\nThanks for your payment. Your billboard ad is live in every Hide & Seek city.\n\n${textTable(rows)}\n\nEach signed-in player who taps your billboard gets ${reward} coins from your pool. Taps from everyone else are free for you. Unused coins at the end of your run expire.\n\nManage your ad (see live numbers, change the picture, headline or link, pause, or add budget):\n${link}\n\nWe'll email you a short report every morning while it runs.`,
     html: layout(
-      "Your ad is live! 🎉",
+      "Your ad is live!",
       p(`Hi ${esc(ad.contact_name)}, thanks for your payment. Your billboard ad is now showing in every Hide &amp; Seek city.`) +
         statsTable(rows) +
         p(`Each signed-in player who taps your billboard gets ${reward} coins from your pool. Taps from everyone else are free for you. Unused coins at the end of your run expire.`) +
@@ -134,7 +134,7 @@ export async function topUpEmail(ad: AdForEmail, coins: number, reference: strin
     subject: `Top-up received for your ${ad.brand} ad`,
     text: `Hi ${ad.contact_name},\n\nThanks! Your top-up went through and your ad is showing.\n\n${textTable(rows)}\n\nManage your ad: ${link}`,
     html: layout(
-      "Top-up received ✅",
+      "Top-up received",
       p(`Hi ${esc(ad.contact_name)}, thanks! Your top-up went through and your ad for <b>${esc(ad.brand)}</b> is showing.`) +
         statsTable(rows) +
         button(link, "Manage your ad") +
@@ -270,7 +270,7 @@ export function adReportEmail(ad: AdForEmail, y: Yesterday, link: string, reward
     subject: finished ? `Your ad for ${ad.brand} has finished` : `Your Hide & Seek ad: ${n(y.views)} paid views yesterday`,
     text: `Hi ${ad.contact_name},\n\n${intro.replace(/<[^>]+>/g, "")}\n\n${textTable(rows)}\n\nManage your ad${finished ? " or top it up to run again" : ""}: ${link}`,
     html: layout(
-      finished ? "Your ad has finished ✅" : "Your daily ad report",
+      finished ? "Your ad has finished" : "Your daily ad report",
       p(`Hi ${esc(ad.contact_name)}, ${intro}`) +
         statsTable(rows) +
         button(link, finished ? "Top up to run again" : "Manage your ad") +
@@ -386,7 +386,7 @@ export async function sendAdReports() {
         subject: `Your Hide & Seek prize pool round has finished`,
         text: `Hi ${s.contact_name},\n\nThe round sponsored by ${s.brand} has finished and the prize pool has been paid out to the players.\n\n${textTable(rows)}\n\nThank you for sponsoring! Want your brand on every billboard next? ${siteUrl()}/advertise`,
         html: layout(
-          "Your sponsored round is done 🏆",
+          "Your sponsored round is done",
           p(`Hi ${esc(s.contact_name as string)}, the round sponsored by <b>${esc(s.brand as string)}</b> has finished and the prize pool has been paid out to the players.`) +
             statsTable(rows) +
             p(`Thank you for sponsoring! Want your brand on every billboard next? <a href="${siteUrl()}/advertise" style="color:#c98a00">Advertise here</a>.`),
