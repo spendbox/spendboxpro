@@ -431,7 +431,9 @@ export type Sfx =
   | "denied"
   | "honk"
   | "splash"
-  | "rustle";
+  | "rustle"
+  | "whoosh"
+  | "chime";
 
 let sfxOn = true;
 let sfx: { ctx: AudioContext; out: GainNode } | null = null;
@@ -671,6 +673,16 @@ export function playSfx(name: Sfx, opts: { delay?: number } = {}) {
     case "rustle":
       // Leaves shaking
       for (let k = 0; k < 3; k++) hiss(ctx, out, now, { at: k * 0.12, dur: 0.22, type: "bandpass", freq: rand(2500, 4500), q: 0.8, gain: 0.12, attack: 0.04 });
+      break;
+    case "whoosh":
+      // Off down the water slide: a long rushing whoosh and a happy "wheee"
+      hiss(ctx, out, now, { dur: 1.6, type: "bandpass", freq: 400, to: 2600, q: 0.7, gain: 0.3, attack: 0.3 });
+      tone(ctx, out, now, { at: 0.1, dur: 0.6, freq: 520, to: 1040, type: "triangle", gain: 0.08, attack: 0.05 });
+      break;
+    case "chime":
+      // A little two-note chime (sitting down, a lift arriving)
+      tone(ctx, out, now, { dur: 0.25, freq: 784, gain: 0.18 });
+      tone(ctx, out, now, { at: 0.12, dur: 0.35, freq: 1047, gain: 0.16 });
       break;
   }
 }

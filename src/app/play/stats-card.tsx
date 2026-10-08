@@ -26,6 +26,7 @@ export function StatsCard({
   sound,
   onSound,
   sponsor,
+  urgent = false,
 }: {
   city: string;
   phase: "join" | "seek" | "done";
@@ -44,13 +45,15 @@ export function StatsCard({
   sound: boolean;
   onSound: () => void;
   sponsor?: { name: string; logo: string | null; coins: number } | null;
+  /** The last minute before the world changes: the clock turns red and pulses. */
+  urgent?: boolean;
 }) {
   const label = phase === "join" ? "Hiding" : phase === "seek" ? "Hunting" : "Over";
   if (minimised) {
     return (
       <button onClick={onToggle} className="glass pointer-events-auto flex items-center gap-2 rounded-full px-3 py-1.5 text-sm" aria-label="Show round details">
         <span className="max-w-[8rem] truncate font-display font-bold" title={city}>{city}</span>
-        <span className="font-display font-bold tabular-nums text-gold-dark">{phase === "done" ? label : countdown}</span>
+        <span className={cn("font-display font-bold tabular-nums", urgent ? "animate-pulse text-hit" : "text-gold-dark")}>{phase === "done" ? label : countdown}</span>
         <span className="flex items-center gap-1 text-xs text-muted">
           <span className="size-1.5 animate-pulse rounded-full bg-me" />
           {online === null ? "…" : short(online)}
@@ -80,8 +83,17 @@ export function StatsCard({
         </div>
         {phase !== "done" && (
           <>
-            <div className="mt-1 font-display text-[2.1rem] font-extrabold leading-none tabular-nums">{countdown}</div>
-            <div className="text-[11px] text-muted">{phase === "join" ? "until ghosts drop in" : "left in the hunt"}</div>
+            <div
+              className={cn(
+                "mt-1 font-display text-[2.1rem] font-extrabold leading-none tabular-nums",
+                urgent && "animate-pulse text-hit",
+              )}
+            >
+              {countdown}
+            </div>
+            <div className={cn("text-[11px]", urgent ? "font-semibold text-hit" : "text-muted")}>
+              {phase === "join" ? "until ghosts drop in" : urgent ? "until this world changes!" : "left on this world"}
+            </div>
           </>
         )}
         <dl className="mt-3 grid grid-cols-3 gap-1 text-center">

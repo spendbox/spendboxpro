@@ -7,7 +7,7 @@
 // roughly one every quarter of a city unit), "r" the roof (or a terrace / deck high up),
 // "o" an open-air spot at street level (parks, plazas, markets, docks...).
 
-import type { CityPlan, StructureType, Tile } from "@/lib/city/layout";
+import { venueName, type CityPlan, type StructureType, type Tile } from "@/lib/city/layout";
 import { RAIL_Y } from "./trains";
 
 export type LevelKind = "interior" | "roof" | "outdoor";
@@ -38,6 +38,9 @@ export type Theme =
   | "concourse"
   | "skybridge"
   | "clockroom"
+  | "club"
+  | "restaurant"
+  | "firehall"
   // roofs and decks high up
   | "roofGarden"
   | "roofTerrace"
@@ -56,7 +59,8 @@ export type Theme =
   | "funfair"
   | "quay"
   | "parade"
-  | "solar";
+  | "solar"
+  | "waterpark";
 
 export type PlaceLevel = {
   id: string;
@@ -99,8 +103,18 @@ export const ROOM_LABEL: Partial<Record<Tile["kind"], string>> = {
   plaza: "Plaza",
   trees: "Woods",
   pond: "Pond",
+  fire: "Fire station",
+  club: "Nightclub",
+  restaurant: "Restaurant",
 };
 const OUTDOOR = new Set<Tile["kind"]>(["park", "plaza", "trees", "pond", "ferris"]);
+
+/** What a level is for, as the UI sees it (a club and a restaurant get their own icon). */
+export function levelUse(l: PlaceLevel): "room" | "club" | "restaurant" | "roof" | "outdoor" {
+  if (l.theme === "club") return "club";
+  if (l.theme === "restaurant" || l.theme === "foodcourt") return "restaurant";
+  return l.kind === "interior" ? "room" : l.kind;
+}
 
 /** How many people fit in the whole place. */
 export function capacityOf(t: Tile) {
@@ -110,7 +124,9 @@ export function capacityOf(t: Tile) {
   if (t.kind === "office") return t.top < 1.9 ? 30 : 100;
   if (t.kind === "tower") return Math.max(100, Math.min(300, 100 + Math.round(((t.top - 2) / 6) * 20) * 10));
   if (t.kind === "hospital") return 100;
-  if (t.kind === "police" || t.kind === "fuel") return 30;
+  if (t.kind === "police" || t.kind === "fuel" || t.kind === "fire") return 30;
+  if (t.kind === "club") return 150;
+  if (t.kind === "restaurant") return 60;
   if (t.kind === "clock" || t.kind === "stadium") return 500;
   if (OUTDOOR.has(t.kind)) return 50;
   return 50;
@@ -157,7 +173,14 @@ export function levelsOf(t: Tile, plan: CityPlan): PlaceLevel[] {
     return share(total, out);
   }
 
-  if (t.kind === "structure" && t.structure) return share(total, structureLevels(t, t.structure.type));
+  if (t.kind === "structure" && t.structure) {
+    const drafts = structureLevels(t, t.structure.type, plan);
+    // Famous places name their rooms ("Unilag Main Library", "Senate Building"...).
+    t.structure.inside?.forEach((name, k) => {
+      if (drafts[k] && name) drafts[k].label = name;
+    });
+    return share(total, drafts);
+  }
 
   switch (t.kind) {
     case "house": {
@@ -191,9 +214,14 @@ export function levelsOf(t: Tile, plan: CityPlan): PlaceLevel[] {
       R("g", "Lobby", "interior", "lobby", cx, 0.08, cz, hw - 0.03, hd - 0.03);
       const n = Math.floor((h - 0.2) / STOREY);
       const mids = h > 2.2 ? [Math.round(n * 0.4), n] : h > 1.4 ? [Math.max(1, Math.round(n * 0.6))] : [];
-      for (const f of [...new Set(mids)].filter((f) => f >= 1 && 0.08 + f * STOREY + 0.2 < top)) {
-        R(`f${f}`, floorLabel(f), "interior", "office", cx, 0.08 + f * STOREY, cz, hw - 0.03, hd - 0.03);
-      }
+      const fl = [...new Set(mids)].filter((f) => f >= 1 && 0.08 + f * STOREY + 0.2 < top);
+      fl.forEach((f, k) => {
+        // Now and then the top one of these is a restaurant or a club.
+        const last = k === fl.length - 1;
+        const use = last && r[3] < 0.18 ? "restaurant" : last && r[3] < 0.3 ? "club" : null;
+        if (use) R(`f${f}`, floorLabel(f, venueName(plan, use, x, z)), "interior", use, cx, 0.08 + f * STOREY, cz, hw - 0.03, hd - 0.03);
+        else R(`f${f}`, floorLabel(f), "interior", "office", cx, 0.08 + f * STOREY, cz, hw - 0.03, hd - 0.03);
+      });
       R("r", t.v === 2 ? "Roof garden" : "Rooftop", "roof", "roofGarden", cx, top, cz, hw, hd, { hide: { above: top - 0.005 } });
       break;
     }
@@ -212,10 +240,18 @@ export function levelsOf(t: Tile, plan: CityPlan): PlaceLevel[] {
       const uniq = [...new Set(floors)].filter((f) => f >= 1);
       uniq.forEach((f, k) => {
         const top = k === uniq.length - 1 && count >= 2;
-        const label = top ? floorLabel(f, r[0] < 0.5 ? "Sky lounge" : "Restaurant") : floorLabel(f);
+        // A club part way up some towers (the middle floor of tall ones, the first of others).
+        const club = !top && ((count === 3 && k === 1 && r[1] < 0.6) || (count === 2 && k === 0 && r[1] < 0.3));
+        const sky = r[0] < 0.5 ? "lounge" : "restaurant";
+        const theme: Theme = top ? sky : club ? "club" : "office";
+        const label = top
+          ? floorLabel(f, sky === "lounge" ? "Sky lounge" : `Sky restaurant · ${venueName(plan, "restaurant", x, z)}`)
+          : club
+            ? floorLabel(f, venueName(plan, "club", x, z))
+            : floorLabel(f);
         // Twisting towers turn a little every floor.
         const ry = v === 2 ? Math.floor((0.08 + f * STOREY - 0.08) / (h / Math.max(4, Math.floor(h / 0.32)))) * 0.11 : 0;
-        R(`f${f}`, label, "interior", top ? "lounge" : "office", x, 0.08 + f * STOREY, z, hw * 0.7, hw * 0.7, { ry });
+        R(`f${f}`, label, "interior", theme, x, 0.08 + f * STOREY, z, hw * 0.7, hw * 0.7, { ry, weight: club ? 1.4 : 1 });
       });
       if (v === 0 || v === 2 || v === 4) {
         const floors2 = Math.max(4, Math.floor(h / 0.32));
@@ -239,6 +275,18 @@ export function levelsOf(t: Tile, plan: CityPlan): PlaceLevel[] {
       break;
     case "fuel":
       R("g", "Shop", "interior", "shop", x - 0.22, 0.08, z - 0.36, 0.2, 0.09);
+      break;
+    case "fire":
+      R("g", "Engine bay", "interior", "firehall", x - 0.04, 0.08, z - 0.08, 0.3, 0.24);
+      R("f1", floorLabel(1, "Crew room"), "interior", "living", x - 0.04, 0.08 + STOREY + 0.06, z - 0.08, 0.3, 0.24, { weight: 0.6 });
+      break;
+    case "club":
+      R("g", t.name ?? "Dance floor", "interior", "club", x, 0.08, z, 0.36, 0.3, { weight: 1.6 });
+      if (t.v === 1) R("f1", floorLabel(1, "VIP lounge"), "interior", "lounge", x, 0.08 + STOREY + 0.05, z, 0.36, 0.3);
+      break;
+    case "restaurant":
+      R("g", t.name ?? "Dining room", "interior", "restaurant", x, 0.08, z - 0.04, 0.33, 0.27);
+      if (t.v === 1) R("r", "Roof terrace", "roof", "roofTerrace", x, 0.08 + 0.42, z - 0.04, 0.36, 0.3, { hide: { above: 0.495 }, weight: 0.7 });
       break;
     case "clock":
       R("g", "Entrance hall", "interior", "lobby", x, 0.18, z, 0.13, 0.13);
@@ -267,7 +315,7 @@ export function levelsOf(t: Tile, plan: CityPlan): PlaceLevel[] {
   return share(total, out);
 }
 
-function structureLevels(t: Tile, type: StructureType): Draft[] {
+function structureLevels(t: Tile, type: StructureType, plan: CityPlan): Draft[] {
   const out: Draft[] = [];
   const c = 0.5;
   const X = t.x + c;
@@ -308,10 +356,12 @@ function structureLevels(t: Tile, type: StructureType): Draft[] {
       break;
     case "hotel": {
       R("g", "Lobby", "interior", "hotelLobby", X + 0.2, 0.09, Z + 0.05, 0.5, 0.35);
+      R("f1", `Floor 1 · ${venueName(plan, "restaurant", t.x, t.z)}`, "interior", "restaurant", X - 0.2, 0.09 + STOREY, Z - 0.25, 0.42, 0.22);
       const n = Math.floor(3.5 / STOREY);
       const mid = Math.round(n * 0.5);
       R(`f${mid + 2}`, `Floor ${mid + 2} · Suite`, "interior", "suite", X - 0.2, 0.49 + mid * STOREY, Z - 0.25, 0.42, 0.22);
-      R(`f${n + 2}`, `Floor ${n + 2} · Sky bar`, "interior", "lounge", X - 0.2, 0.49 + n * STOREY, Z - 0.25, 0.42, 0.22);
+      const club = t.r[2] < 0.5;
+      R(`f${n + 2}`, club ? `Floor ${n + 2} · Sky club` : `Floor ${n + 2} · Sky bar`, "interior", club ? "club" : "lounge", X - 0.2, 0.49 + n * STOREY, Z - 0.25, 0.42, 0.22);
       R("r", "Pool deck", "roof", "poolDeck", X + 0.5, 0.49, Z - 0.05, 0.27, 0.5, {
         hide: { above: 0.488, rect: [X + 0.2, Z - 0.62, X + 0.82, Z + 0.52], maxH: 0.1 },
       });
@@ -338,6 +388,9 @@ function structureLevels(t: Tile, type: StructureType): Draft[] {
       break;
     case "solar":
       R("o", "Solar farm", "outdoor", "solar", X, 0.09, Z - 0.3, 0.3, 0.03);
+      break;
+    case "waterpark":
+      R("o", "Poolside", "outdoor", "waterpark", X - 0.45, 0.09, Z + 0.62, 0.1, 0.1);
       break;
   }
   return out;

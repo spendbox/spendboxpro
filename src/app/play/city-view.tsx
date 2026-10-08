@@ -7,24 +7,33 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar, type Avatar } from "@/lib/avatar";
-import { addressOf, hash, KIND_LABEL, makePlan, riverCentre, smoothNoise, spiralXY, STRUCTURE_LABEL, tileAt, type CityPlan, type Tile } from "@/lib/city/layout";
+import { addressOf, hash, KIND_LABEL, makePlan, smoothNoise, stationName, spiralXY, STRUCTURE_LABEL, tileAt, type CityPlan, type Tile } from "@/lib/city/layout";
 import { ABBREV } from "@/lib/city/places";
 import { daylight, weatherAt } from "@/lib/city/sky";
 import { npcsFor, type Npc } from "@/lib/npcs";
 import { createBirds } from "./city/birds";
 import { createBuildingSite, createSites } from "./city/construction";
-import { createFigures, type Figures } from "./city/figures";
+import { createFigures, type Figures, type Person, type Spot } from "./city/figures";
+import { createInteractables, createWalker, type Interactables, type Item } from "./city/interact";
 import { coolingTowerGeometry, createPlumes, industryParts } from "./city/industry";
-import { createInterior, type Interior } from "./city/interiors";
+import { createInterior, type Interior, type RoomItem } from "./city/interiors";
 import { disposeBlobTexture, disposeKitCaches } from "./city/kit";
-import { EYE, levelsOf, METRES, ROOM_LABEL, type PlaceLevel } from "./city/levels";
+import { EYE, levelsOf, levelUse, METRES, ROOM_LABEL, type PlaceLevel } from "./city/levels";
 import { createLookControls } from "./city/look-controls";
 import { createPeople } from "./city/people";
 import { createBasket, createDeck, createOpenAir, type Deck } from "./city/rooftops";
 import { balloonBannerTexture, billboardTexture, botTexture, disposePills, pillTexture } from "./city/textures";
 import { createTrains, railParts } from "./city/trains";
+import { createTraffic, type VehiclePose } from "./city/traffic";
+import { clubParts, eggParts, fireStationParts, restaurantParts } from "./city/street-bits";
+import { createCabin, type Cabin } from "./city/rides";
+import { disposeVehicleCaches } from "./city/vehicles";
+import { createBoats } from "./city/boats";
+import { createSlideRide, createWaterpark, waterparkParts, type Slide, type SlideRide, type Waterpark } from "./city/waterpark";
 import { BRIDGE_TOP, makeWorld, signalJunction } from "./city/world";
 import { playSfx } from "./sound";
+import type { WorldEvent } from "@/lib/world-events";
+import { createWorldEvents } from "./city/world-events";
 
 // The game board, drawn as a small living 3D city with three.js.
 // Every tile is a lot: a road, a building, a park... New tiles rise out of the ground
@@ -70,7 +79,13 @@ export type CityAd = { id: string; image: string; headline: string; brand: strin
  * (a few floors of taller buildings, e.g. "Floor 12 · Sky lounge"), "r" the roof (or a terrace /
  * deck high up), "o" an open-air spot at street level (parks, plazas, markets...).
  */
-export type CityLevel = { id: string; label: string; capacity: number };
+export type CityLevel = {
+  id: string;
+  label: string;
+  capacity: number;
+  /** What it is: a room, a nightclub, a restaurant (or food court), a rooftop, or open air. */
+  kind?: "room" | "club" | "restaurant" | "roof" | "outdoor";
+};
 
 /**
  * A chat room: a building (id "b:<tile index>", the corner tile for big 2×2 buildings) or a
@@ -81,6 +96,28 @@ export type CityRoom = { id: string; name: string; capacity: number; kind: "buil
 
 /** Where you are inside a building: its room id ("b:<tile>") and a level id from its levels. */
 export type CityPlace = { building: string; level: string };
+
+/** Something you can ride. (For the `ride` prop a plain number still means hot-air balloon k.) */
+export type RideKind = "balloon" | "train" | "bus" | "car" | "boat" | "ferris" | "slide";
+export type RideTarget = { kind: RideKind; index: number };
+/**
+ * A ride that exists this round (see onRides). Its chat room id is `v:<kind>:<index>`, except
+ * balloons, which keep `balloon:<k>`.
+ */
+export type CityRide = { kind: RideKind; index: number; name: string; capacity: number };
+/** Which way to go at a junction when you're driving a car. */
+export type TurnDir = "left" | "right" | "straight";
+
+/** Things you can do inside places (shown with a soft glow and a label; tap to use). */
+export type InteractKind =
+  | "seat" | "darts" | "archery" | "arcade" | "pool" | "cards" | "dance" | "dj" | "bar" | "jukebox" | "menu" | "stairs" | "window" | "piano" | "karaoke" | "slots-free" | "photo";
+/**
+ * Something tapped inside a place. id is stable for everyone: "<room>:seat:<n>" for seats,
+ * "<room>:<kind>:<n>" for the rest; place is the room id ("b:12:f4").
+ */
+export type CityInteract = { id: string; kind: InteractKind; label: string; place: string };
+/** Someone sitting in a seat (a player): their name and avatar. */
+export type SeatTaker = { name: string; avatar: unknown };
 
 /** A ghost caught this round: their face stays floating over the spot. */
 export type CaughtFace = { tile: number; name: string | null; avatar: unknown };
@@ -118,8 +155,26 @@ type Props = {
   roomCounts?: Record<string, number>;
   /** Chat mode: a building or balloon was tapped. */
   onRoom?: (room: CityRoom) => void;
-  /** Ride hot-air balloon k (the camera flies into its basket), or null for the normal view. */
-  ride?: number | null;
+  /**
+   * Ride something: a hot-air balloon (a plain number k, or { kind: "balloon", index: k }), a
+   * train, bus, car, boat, Ferris wheel cabin or water slide ({ kind, index } from onRides). The
+   * camera flies in and you can look round. null for the normal view.
+   */
+  ride?: number | RideTarget | null;
+  /** Everything there is to ride this round (called after the city is built, when it changes). */
+  onRides?: (rides: CityRide[]) => void;
+  /** A ride that ends by itself (a water slide, after the splash) has finished. */
+  onRideEnd?: () => void;
+  /** Driving a car: take this turn at the next junction (a new `at` each time). Otherwise it picks. */
+  steer?: { dir: TurnDir; at: number } | null;
+  /** Driving a car: a junction is coming up, and these are the ways you can go. */
+  onJunction?: (options: TurnDir[]) => void;
+  /** Inside a place: something you can use (a seat, the bar, darts...) was tapped. */
+  onInteract?: (item: CityInteract) => void;
+  /** Seats taken by players ({ seatId: who }): they're drawn sitting there with their name. */
+  seats?: Record<string, SeatTaker>;
+  /** Your own seat (a seat id in the place you're in): the camera sits down there. */
+  mySeat?: string | null;
   /** How many hot-air balloons there are (called after the city is built). */
   onBalloons?: (count: number) => void;
   /** Ghosts caught this round (preferred over working it out from events, which get trimmed). */
@@ -135,6 +190,14 @@ type Props = {
   spot?: number;
   /** How many viewpoints the current place has (called when you arrive somewhere). */
   onSpots?: (count: number) => void;
+  /** World events (src/lib/world-events.ts) to show in the city while they're on (see ./city/world-events). */
+  worldEvents?: WorldEvent[];
+  /** Fly the map camera to look at an event (a new `at` each time). Ignored while riding or inside. */
+  focusEvent?: { id: number; at: number } | null;
+  /** An event's reward (cash, a treasure chest, a lost dog...) was tapped. */
+  onEventTap?: (id: number) => void;
+  /** Server clock minus this device's clock (ms), so events start on time everywhere. Default 0. */
+  clockOffsetMs?: number;
 };
 
 type Part = { tile: number; x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number; color: number; tilt?: number };
@@ -523,7 +586,18 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
       add("disc", { x, y: 0.1, z, sx: 0.3, sy: 0.12, sz: 0.3, ry: 0, color: 0xcfd6dd });
       add("water", { x, y: 0.22, z, sx: 0.22, sy: 0.02, sz: 0.22, ry: 0, color: WATER });
       break;
+    case "fire":
+      fireStationParts(t, B);
+      break;
+    case "club":
+      clubParts(t, B);
+      break;
+    case "restaurant":
+      restaurantParts(t, B);
+      break;
   }
+  // A little named thing on some parks and squares (a suya spot, a danfo park, a mural...).
+  if (t.egg) eggParts(t, B);
 }
 
 type AddFn = (mesh: string, p: Omit<Part, "tile">) => void;
@@ -639,7 +713,9 @@ function structureParts(t: Tile, plan: CityPlan, B: BoxFn, tree: TreeFn) {
             ? 0xc9cdd2
             : st.type === "oilrig"
               ? 0x2f74b5
-              : 0xe7e1d5;
+              : st.type === "waterpark"
+                ? 0xd9eeea
+                : 0xe7e1d5;
   B(c, 0.02, c, 1.98, 0.07, 1.98, floor, 0, "ground");
   switch (st.type) {
     case "mall": {
@@ -795,6 +871,9 @@ function structureParts(t: Tile, plan: CityPlan, B: BoxFn, tree: TreeFn) {
     case "oilrig":
       industryParts(st.type, B);
       break;
+    case "waterpark":
+      waterparkParts(t, B, tree);
+      break;
     case "solar": {
       for (let i = 0; i < 4; i++) {
         for (let j = 0; j < 3; j++) {
@@ -945,12 +1024,23 @@ export function CityView({
   roomCounts,
   onRoom,
   ride = null,
+  onInteract,
+  seats,
+  mySeat = null,
+  onRides,
+  onRideEnd,
+  steer = null,
+  onJunction,
   onBalloons,
   caughtFaces,
   place = null,
   onNpc,
   spot = 0,
   onSpots,
+  worldEvents,
+  focusEvent = null,
+  onEventTap,
+  clockOffsetMs = 0,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const api = useRef<{
@@ -962,15 +1052,19 @@ export function CityView({
     setRevealed: (on: boolean) => void;
     setMode: (m: "game" | "chat") => void;
     setRoomCounts: (counts: Record<string, number>) => void;
-    setRide: (k: number | null) => void;
+    setRide: (r: RideTarget | null) => void;
+    setSteer: (dir: TurnDir) => void;
+    setSeats: (list: Record<string, SeatTaker> | undefined, mine: string | null) => void;
     setPlace: (p: CityPlace | null) => void;
     setSpot: (n: number) => void;
     setCaughtFaces: (list: CaughtFace[] | undefined) => void;
+    setWorldEvents: (list: WorldEvent[] | undefined) => void;
+    focusEvent: (id: number) => void;
   } | null>(null);
-  const cb = useRef({ onTile, onHover, onBillboard, onBalloon, onAdViews, interactive, onRoom, onBalloons, mode, onNpc, onSpots });
+  const cb = useRef({ onTile, onHover, onBillboard, onBalloon, onAdViews, interactive, onRoom, onBalloons, mode, onNpc, onSpots, onEventTap, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract });
   const atmos = useRef({ progress, nightFirst, meAvatar });
   useEffect(() => {
-    cb.current = { onTile, onHover, onBillboard, onBalloon, onAdViews, interactive, onRoom, onBalloons, mode, onNpc, onSpots };
+    cb.current = { onTile, onHover, onBillboard, onBalloon, onAdViews, interactive, onRoom, onBalloons, mode, onNpc, onSpots, onEventTap, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract };
     atmos.current = { progress, nightFirst, meAvatar };
   });
 
@@ -1088,7 +1182,6 @@ export function CityView({
     const color = new THREE.Color();
 
     const tiltQ = new THREE.Quaternion();
-    const tq = new THREE.Quaternion();
     const zAxis = new THREE.Vector3(0, 0, 1);
     function writePart(mesh: THREE.InstancedMesh, idx: number, p: Part, g: number) {
       const gx = Math.min(1, g * 1.15);
@@ -1100,442 +1193,9 @@ export function CityView({
       mesh.setMatrixAt(idx, m4);
     }
 
-    // ---- cars: each one drives the street network, turning at junctions and bends. Road works
-    // close a street (cars turn back before them), and now and then a street jams up: cars
-    // queue bumper to bumper with their brake lights glowing, then the queue clears.
-    // Vehicle kinds: 0 car, 1 taxi, 2 delivery van, 3 bus, 4 truck, 5 articulated lorry.
-    type Car = {
-      kind: number;
-      /** Length, for queuing in jams. */
-      len: number;
-      from: [number, number];
-      to: [number, number];
-      /** Where the stretch before this one started (an articulated trailer follows that way). */
-      prev: [number, number];
-      t: number;
-      speed: number;
-      /** Bridges under the start and end of this stretch (for the hump). */
-      bridgeFrom: boolean;
-      bridgeTo: boolean;
-      /** The jam this car is queuing in (-1 none), its place, and where along the street it stops. */
-      jam: number;
-      slot: number;
-      target: number;
-      /** Seconds to wait before moving off (a queue clears one car at a time; buses at stops). */
-      hold: number;
-      /** A bus has already pulled in at a stop on this stretch. */
-      stopped: boolean;
-      /** Brake lights drawn on (1) or off (0), or -1 (not drawn yet). */
-      lit: number;
-    };
-    const VEH_LEN = [0.3, 0.3, 0.34, 0.62, 0.52, 0.9];
-    const VEH_SPEED = [1, 1.05, 0.9, 0.7, 0.75, 0.65];
-    let cars: Car[] = [];
-    let carBody: THREE.InstancedMesh | null = null;
-    let carTop: THREE.InstancedMesh | null = null;
-    let carLights: THREE.InstancedMesh | null = null;
-    /** Truck boxes, lorry trailers, bus roofs. */
-    let carExtra: THREE.InstancedMesh | null = null;
-    /** Bus windows and taxi signs: they light up at night. */
-    let carGlow: THREE.InstancedMesh | null = null;
-    const carLightMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    const carGlowMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    // ---- traffic (cars, taxis, buses, lorries...) and boats: see ./city/traffic and ./city/boats.
     let carNight = 0;
-    let carNightDrawn = -1;
     let blocked = new Set<string>();
-    const roadAt = (x: number, z: number) => {
-      const key = `${x},${z}`;
-      const k = kindAt.get(key);
-      return (k === "road" || k === "bridge") && !blocked.has(key);
-    };
-    const tileXY = (x: number, z: number) => {
-      const i = tileIndex.get(`${x},${z}`);
-      return i === undefined ? undefined : tiles[i];
-    };
-
-    type Jam = { stop: number; tail: number; count: number; active: boolean; period: number; on: number; offset: number };
-    let jams: Jam[] = [];
-    /** Directed street stretches that belong to a jam: which jam, and how far along it (−1 = the way in). */
-    const jamSeg = new Map<number, { jam: number; i: number }>();
-    const segKey = (x: number, z: number, dx: number, dz: number) => ((x + 1024) * 2048 + (z + 1024)) * 4 + (dx === 1 ? 0 : dx === -1 ? 1 : dz === 1 ? 2 : 3);
-    const QUEUE_GAP = 0.36;
-    const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
-    const jamFull = (jam: Jam) => jam.tail - QUEUE_GAP < -0.85;
-
-    function nextStop(c: Car): [number, number] {
-      const [x, z] = c.to;
-      const dx = Math.sign(c.to[0] - c.from[0]);
-      const dz = Math.sign(c.to[1] - c.from[1]);
-      const options = DIRS.filter(([ox, oz]) => {
-        if ((ox === -dx && oz === -dz) || !roadAt(x + ox, z + oz)) return false;
-        // Don't join a jam that's already backed right up.
-        const info = jamSeg.get(segKey(x, z, ox, oz));
-        return !(info && info.i === -1 && jams[info.jam].active && jamFull(jams[info.jam]));
-      }).map(([ox, oz]) => [x + ox, z + oz] as [number, number]);
-      if (!options.length) return c.from; // dead end (or road works): turn round
-      const ahead = options.find(([nx, nz]) => nx - x === dx && nz - z === dz);
-      if (ahead && Math.random() < 0.6) return ahead;
-      return options[Math.floor(Math.random() * options.length)];
-    }
-    const isBridge = (x: number, z: number) => kindAt.get(`${x},${z}`) === "bridge";
-
-    /** What sort of area a road is in: near docks and industry, downtown, or the suburbs. */
-    const INDUSTRY = ["port", "airport", "military", "power", "oilrig", "dam", "market", "solar"];
-    function zoneOf(t: Tile) {
-      let industry = 0;
-      let town = 0;
-      for (let dx = -2; dx <= 2; dx++) {
-        for (let dz = -2; dz <= 2; dz++) {
-          const n = tileXY(t.x + dx, t.z + dz);
-          if (!n) continue;
-          if (n.kind === "tower" || n.kind === "office") town++;
-          if (n.kind === "crane" || n.kind === "fuel" || (n.structure && INDUSTRY.includes(n.structure.type))) industry++;
-        }
-      }
-      return industry >= 2 ? 2 : town >= 5 ? 1 : 0;
-    }
-    // Chances of each kind (car, taxi, van, bus, truck, lorry) in the suburbs, downtown, near industry.
-    const MIX = [
-      [0.7, 0.06, 0.12, 0.05, 0.05, 0.02],
-      [0.5, 0.24, 0.1, 0.13, 0.02, 0.01],
-      [0.28, 0.02, 0.2, 0.02, 0.28, 0.2],
-    ];
-    function pickKind(t: Tile) {
-      const mix = MIX[zoneOf(t)];
-      let r = Math.random();
-      for (let k = 0; k < mix.length; k++) if ((r -= mix[k]) < 0) return k;
-      return 0;
-    }
-
-    function buildCars(plan: CityPlan) {
-      for (const m of [carBody, carTop, carLights, carExtra, carGlow]) {
-        if (!m) continue;
-        life.remove(m);
-        m.dispose();
-      }
-      const roads = tiles.filter((t) => (t.kind === "road" || t.kind === "bridge") && !t.works);
-      cars = [];
-      const n = Math.min(160, Math.floor(roads.length / 4));
-      for (let k = 0; k < n; k++) {
-        const t = roads[Math.floor(Math.random() * roads.length)];
-        const options = DIRS.filter(([ox, oz]) => roadAt(t.x + ox, t.z + oz));
-        if (!options.length) continue;
-        const [ox, oz] = options[Math.floor(Math.random() * options.length)];
-        const kind = pickKind(t);
-        cars.push({
-          kind,
-          len: VEH_LEN[kind],
-          from: [t.x, t.z],
-          to: [t.x + ox, t.z + oz],
-          prev: [t.x - ox, t.z - oz],
-          t: Math.random(),
-          speed: (0.8 + Math.random() * 0.9) * VEH_SPEED[kind],
-          bridgeFrom: t.kind === "bridge",
-          bridgeTo: isBridge(t.x + ox, t.z + oz),
-          jam: -1,
-          slot: -1,
-          target: 0,
-          hold: 0,
-          stopped: false,
-          lit: -1,
-        });
-      }
-      const N = Math.max(1, cars.length);
-      carBody = new THREE.InstancedMesh(geo.box, mat(), N);
-      carTop = new THREE.InstancedMesh(geo.box, mat({ color: 0xffffff }), N);
-      carExtra = new THREE.InstancedMesh(geo.box, mat(), N);
-      carGlow = new THREE.InstancedMesh(geo.box, carGlowMat, N);
-      // Two little lamps per car: headlights in front (on at night), brake lights behind.
-      carLights = new THREE.InstancedMesh(geo.box, carLightMat, N * 2);
-      carBody.castShadow = true;
-      carExtra.castShadow = true;
-      const pal = plan.palette.car;
-      const pickC = (list: number[], k: number) => list[k % list.length];
-      cars.forEach((c, k) => {
-        const body =
-          c.kind === 0 ? pickC(pal, k) : c.kind === 1 ? 0xffd43b : c.kind === 2 ? pickC([0xffffff, 0xdee2e6, 0x1971c2, 0xe03131, 0xf08c00], k) : c.kind === 3 ? pickC([0xe03131, 0x1971c2, 0x2f9e44], plan.seed) : c.kind === 4 ? pickC([0xe03131, 0x1971c2, 0xf08c00, 0xffffff], k) : pickC([0x343a40, 0x1971c2, 0xe03131, 0xf1f3f5], k);
-        carBody!.setColorAt(k, color.setHex(body));
-        carTop!.setColorAt(k, color.setHex(c.kind <= 1 ? 0xe9f2fb : 0xbcd4e6));
-        carExtra!.setColorAt(k, color.setHex(c.kind === 3 ? 0xf1f3f5 : c.kind === 4 ? pickC([0xf1f3f5, 0xffd43b, 0xdee2e6, 0x69db7c], k) : pickC([0xe5484d, 0x228be6, 0xfab005, 0x2f9e44, 0xf1f3f5], k)));
-        carGlow!.setColorAt(k, color.setHex(0x2b3a4f));
-      });
-      carBody.count = carTop.count = carExtra.count = carGlow.count = cars.length;
-      carLights.count = cars.length * 2;
-      for (let k = 0; k < cars.length * 2; k++) carLights.setColorAt(k, color.setHex(0x6b1d1d));
-      for (const m of [carBody, carTop, carLights, carExtra, carGlow]) {
-        m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-        m.frustumCulled = false;
-      }
-      carNightDrawn = -1;
-      life.add(carBody, carTop, carLights, carExtra, carGlow);
-    }
-
-    /** Pick a few streets that jam up now and then: the last few stretches before a junction. */
-    function buildJams(seedV: number) {
-      jams = [];
-      jamSeg.clear();
-      const roadCount = tiles.reduce((n, t) => n + (t.kind === "road" ? 1 : 0), 0);
-      const want = Math.min(3, Math.floor(roadCount / 80));
-      if (!want) return;
-      const cands: { h: Tile; dx: number; dz: number; score: number }[] = [];
-      for (const t of tiles) {
-        const m = t.mask ?? 0;
-        const arms = (m & 1) + ((m >> 1) & 1) + ((m >> 2) & 1) + ((m >> 3) & 1);
-        if (t.kind !== "road" || arms < 3) continue;
-        DIRS.forEach(([dx, dz], d) => cands.push({ h: t, dx, dz, score: hash(t.x * 4 + d, t.z, seedV + 1401) }));
-      }
-      cands.sort((a, b) => a.score - b.score);
-      for (const c of cands) {
-        if (jams.length >= want) break;
-        // Walk back from the junction along a straight street (2 to 4 stretches).
-        let K = 0;
-        for (let k = 1; k <= 4; k++) {
-          const t = tileXY(c.h.x - c.dx * k, c.h.z - c.dz * k);
-          if (!t || t.kind !== "road" || t.works || t.mask !== (c.dx !== 0 ? 10 : 5)) break;
-          K = k;
-        }
-        if (K < 2) continue;
-        const keys: number[] = [];
-        for (let i = -1; i < K; i++) keys.push(segKey(c.h.x - c.dx * (K - i), c.h.z - c.dz * (K - i), c.dx, c.dz));
-        if (keys.some((k) => jamSeg.has(k))) continue;
-        const j = jams.length;
-        keys.forEach((k, n) => jamSeg.set(k, { jam: j, i: n - 1 }));
-        const r = (n: number) => hash(c.h.x, c.h.z, seedV + 1410 + n);
-        const period = 45 + r(1) * 40;
-        jams.push({ stop: K - 0.68, tail: 0, count: 0, active: false, period, on: 12 + r(2) * 10, offset: r(3) * period });
-      }
-    }
-
-    // A car's place in the queue: one car-length behind the last. (A car already past that
-    // point simply stops where it is.)
-    function joinQueue(c: Car, j: number) {
-      const jam = jams[j];
-      const target = jam.tail - QUEUE_GAP - Math.max(0, c.len - 0.3);
-      c.jam = j;
-      c.slot = jam.count++;
-      c.target = target;
-      jam.tail = target;
-    }
-
-    const carP = (c: Car, i: number) => i + c.t;
-    function updateJams(time: number) {
-      for (let j = 0; j < jams.length; j++) {
-        const jam = jams[j];
-        const on = (time + jam.offset) % jam.period < jam.on;
-        if (on === jam.active) continue;
-        jam.active = on;
-        jam.tail = jam.stop + QUEUE_GAP;
-        jam.count = 0;
-        if (on) {
-          // Cars already on the street queue up in the order they're in.
-          const queued: { c: Car; p: number }[] = [];
-          for (const c of cars) {
-            const info = jamSeg.get(segKey(c.from[0], c.from[1], c.to[0] - c.from[0], c.to[1] - c.from[1]));
-            if (info && info.jam === j && carP(c, info.i) <= jam.stop) queued.push({ c, p: carP(c, info.i) });
-          }
-          queued.sort((a, b) => b.p - a.p);
-          for (const { c } of queued) if (!jamFull(jam)) joinQueue(c, j);
-        } else {
-          // The jam clears: the front car moves off first, the others one after another.
-          for (const c of cars) {
-            if (c.jam !== j) continue;
-            c.hold = 0.3 + c.slot * 0.3;
-            c.jam = -1;
-            c.slot = -1;
-          }
-        }
-      }
-    }
-
-    const BRAKE_ON = new THREE.Color(0xff2a2a);
-    const BRAKE_OFF = new THREE.Color(0x5a1a1a);
-    const BRAKE_NIGHT = new THREE.Color(0xb8222b);
-    const HEAD_DAY = new THREE.Color(0x9aa3ad);
-    const HEAD_NIGHT = new THREE.Color(0xfff2c4);
-    const BUS_DAY = new THREE.Color(0x2b3a4f);
-    const BUS_NIGHT = new THREE.Color(0xffd98a);
-    const TAXI_DAY = new THREE.Color(0xc9b458);
-    const TAXI_NIGHT = new THREE.Color(0xfff3bf);
-    const HIDDEN = new THREE.Vector3(0.0001, 0.0001, 0.0001);
-    // A point some way back along a vehicle's path (for lorry trailers), in its lane.
-    const trail = { x: 0, z: 0 };
-    function pathPoint(c: Car, back: number) {
-      let t = c.t - back;
-      let a = c.from;
-      let b = c.to;
-      if (t < 0) {
-        t = Math.max(0, t + 1);
-        a = c.prev;
-        b = c.from;
-      }
-      const dx = b[0] - a[0];
-      const dz = b[1] - a[1];
-      trail.x = a[0] + dx * t - dz * 0.14;
-      trail.z = a[1] + dz * t + dx * 0.14;
-    }
-    // One box of a vehicle: `a` along it from its centre, `lift` up, of the given size.
-    const fwd = { x: 0, z: 0 };
-    function box(mesh: THREE.InstancedMesh, k: number, x: number, y: number, z: number, a: number, lift: number, len: number, h: number, w: number) {
-      m4.compose(v.set(x + fwd.x * a, y + lift, z + fwd.z * a), q, s.set(len, h, w));
-      mesh.setMatrixAt(k, m4);
-    }
-    function hide(mesh: THREE.InstancedMesh, k: number) {
-      m4.compose(v.set(0, -5, 0), q, HIDDEN);
-      mesh.setMatrixAt(k, m4);
-    }
-    function updateCars(dt: number, time: number) {
-      if (!carBody || !carTop || !carLights || !carExtra || !carGlow) return;
-      updateJams(time);
-      let colorsDirty = false;
-      const nightChanged = Math.abs(carNight - carNightDrawn) > 0.03;
-      if (nightChanged) {
-        carNightDrawn = carNight;
-        color.copy(HEAD_DAY).lerp(HEAD_NIGHT, carNight);
-        for (let k = 0; k < cars.length; k++) {
-          carLights.setColorAt(k * 2, color);
-          cars[k].lit = -1;
-        }
-        for (let k = 0; k < cars.length; k++) {
-          const kind = cars[k].kind;
-          if (kind === 3) carGlow.setColorAt(k, color.copy(BUS_DAY).lerp(BUS_NIGHT, carNight));
-          else if (kind === 1) carGlow.setColorAt(k, color.copy(TAXI_DAY).lerp(TAXI_NIGHT, carNight));
-        }
-        if (carGlow.instanceColor) carGlow.instanceColor.needsUpdate = true;
-        colorsDirty = true;
-      }
-      for (let k = 0; k < cars.length; k++) {
-        const c = cars[k];
-        let dx = c.to[0] - c.from[0];
-        let dz = c.to[1] - c.from[1];
-        let move = c.speed * dt;
-        let braking = false;
-        if (c.hold > 0) {
-          c.hold -= dt;
-          move = 0;
-          braking = true;
-        } else if (jams.length) {
-          const info = jamSeg.get(segKey(c.from[0], c.from[1], dx, dz));
-          const jam = info ? jams[info.jam] : null;
-          if (info && jam?.active) {
-            const p = carP(c, info.i);
-            if (c.jam !== info.jam && p <= jam.stop && !jamFull(jam)) joinQueue(c, info.jam);
-            if (c.jam === info.jam) {
-              const room = c.target - p;
-              move = Math.max(0, Math.min(move * Math.min(1, Math.max(0.12, room / 0.5)), room));
-              braking = room < 0.5;
-            }
-          }
-        }
-        // Buses pull in at a stop now and then, half way along a straight stretch.
-        if (c.kind === 3 && !c.stopped && c.t < 0.5 && c.t + move >= 0.5 && c.jam < 0) {
-          c.stopped = true;
-          const here = tileXY(c.from[0], c.from[1]);
-          if (here && (here.mask === 5 || here.mask === 10) && Math.random() < 0.4) {
-            move = 0.5 - c.t;
-            c.hold = 2 + Math.random() * 2;
-          }
-        }
-        c.t += move;
-        while (c.t >= 1) {
-          c.t -= 1;
-          const next = nextStop(c);
-          c.prev = c.from;
-          c.from = c.to;
-          c.to = next;
-          c.stopped = false;
-          c.bridgeFrom = c.bridgeTo;
-          c.bridgeTo = isBridge(next[0], next[1]);
-          dx = c.to[0] - c.from[0];
-          dz = c.to[1] - c.from[1];
-        }
-        // Keep to the right-hand lane.
-        const x = c.from[0] + dx * c.t - dz * 0.14;
-        const z = c.from[1] + dz * c.t + dx * 0.14;
-        const onBridge = c.t < 0.5 ? c.bridgeFrom : c.bridgeTo;
-        const off = Math.abs(c.t < 0.5 ? c.t : 1 - c.t);
-        const y = onBridge ? 0.06 + (BRIDGE_TOP - 0.06) * Math.min(1, Math.max(0, (0.5 - off) / 0.3)) : 0.06;
-        q.setFromAxisAngle(up, Math.atan2(-dz, dx));
-        fwd.x = dx;
-        fwd.z = dz;
-        let front = 0.151;
-        let rear = -0.151;
-        let lampW = 0.11;
-        switch (c.kind) {
-          case 0:
-          case 1:
-            box(carBody, k, x, y, z, 0, 0, 0.3, 0.09, 0.15);
-            box(carTop, k, x, y, z, -0.02, 0.09, 0.16, 0.06, 0.13);
-            hide(carExtra, k);
-            if (c.kind === 1) box(carGlow, k, x, y, z, -0.02, 0.15, 0.05, 0.025, 0.09);
-            else hide(carGlow, k);
-            break;
-          case 2:
-            box(carBody, k, x, y, z, -0.02, 0, 0.3, 0.15, 0.155);
-            box(carTop, k, x, y, z, 0.125, 0.07, 0.05, 0.06, 0.15);
-            hide(carExtra, k);
-            hide(carGlow, k);
-            front = 0.131;
-            rear = -0.171;
-            lampW = 0.12;
-            break;
-          case 3:
-            box(carBody, k, x, y, z, 0, 0, 0.62, 0.15, 0.17);
-            hide(carTop, k);
-            box(carGlow, k, x, y, z, 0, 0.075, 0.6, 0.05, 0.176);
-            box(carExtra, k, x, y, z, 0, 0.15, 0.58, 0.015, 0.15);
-            front = 0.311;
-            rear = -0.311;
-            lampW = 0.13;
-            break;
-          case 4:
-            box(carBody, k, x, y, z, 0.17, 0, 0.16, 0.15, 0.16);
-            box(carTop, k, x, y, z, 0.24, 0.07, 0.03, 0.06, 0.15);
-            box(carExtra, k, x, y, z, -0.09, 0.03, 0.34, 0.19, 0.17);
-            hide(carGlow, k);
-            front = 0.251;
-            rear = -0.261;
-            lampW = 0.13;
-            break;
-          default: {
-            // Articulated lorry: the tractor here, its trailer following round corners.
-            box(carBody, k, x, y, z, 0, 0, 0.18, 0.15, 0.16);
-            box(carTop, k, x, y, z, 0.08, 0.07, 0.03, 0.06, 0.15);
-            hide(carGlow, k);
-            pathPoint(c, 0.1);
-            const hx = trail.x;
-            const hz = trail.z;
-            pathPoint(c, 0.66);
-            const tx = trail.x;
-            const tz = trail.z;
-            const yaw = Math.atan2(-(hz - tz), hx - tx || 0.0001);
-            tq.setFromAxisAngle(up, yaw);
-            m4.compose(v.set((hx + tx) / 2, y + 0.03, (hz + tz) / 2), tq, s.set(0.56, 0.19, 0.17));
-            carExtra.setMatrixAt(k, m4);
-            front = 0.091;
-            lampW = 0.13;
-            s.set(0.012, 0.03, lampW);
-            m4.compose(v.set(tx - Math.cos(yaw) * 0.005, y + 0.06, tz + Math.sin(yaw) * 0.005), tq, s);
-            carLights.setMatrixAt(k * 2 + 1, m4);
-            rear = NaN;
-          }
-        }
-        s.set(0.012, 0.026, lampW);
-        m4.compose(v.set(x + dx * front, y + 0.05, z + dz * front), q, s);
-        carLights.setMatrixAt(k * 2, m4);
-        if (!Number.isNaN(rear)) {
-          m4.compose(v.set(x + dx * rear, y + 0.05, z + dz * rear), q, s);
-          carLights.setMatrixAt(k * 2 + 1, m4);
-        }
-        const lit = braking ? 1 : 0;
-        if (lit !== c.lit) {
-          c.lit = lit;
-          carLights.setColorAt(k * 2 + 1, lit ? BRAKE_ON : color.copy(BRAKE_OFF).lerp(BRAKE_NIGHT, carNight));
-          colorsDirty = true;
-        }
-      }
-      for (const m of [carBody, carTop, carLights, carExtra, carGlow]) m.instanceMatrix.needsUpdate = true;
-      if (colorsDirty && carLights.instanceColor) carLights.instanceColor.needsUpdate = true;
-    }
 
     // ---- birds and clouds
     const birds = createBirds(world, moving);
@@ -1837,12 +1497,14 @@ export function CityView({
         sp.rotation.z = (k * Math.PI) / 4;
         wheel.add(sp);
       }
+      const cabins: THREE.Mesh[] = [];
       for (let k = 0; k < 8; k++) {
         const c = new THREE.Mesh(lmGeo.cabin, lmMat.cabins[k % lmMat.cabins.length]);
         const a = (k / 8) * Math.PI * 2;
         c.position.set(Math.cos(a) * 0.62, Math.sin(a) * 0.62, 0);
         c.castShadow = true;
         wheel.add(c);
+        cabins.push(c);
       }
       wheel.position.y = 1.35;
       obj.add(wheel);
@@ -1857,15 +1519,24 @@ export function CityView({
       obj.position.set(px, 0, pz);
       obj.rotation.y = rotY;
       obj.userData.scale = scale;
-      landmarks.push({ obj, spin: wheel, tile, speed: 0.35 });
+      // A slow wheel (about 75 s a turn), its cabins hanging upright as it goes round.
+      obj.userData.cabins = cabins;
+      landmarks.push({ obj, spin: wheel, tile, speed: (Math.PI * 2) / 75 });
+      wheels.push({ obj, wheel, tile, scale });
       life.add(obj);
     }
+    /** The Ferris wheels (for rides), and the water parks (their slides and swimmers). */
+    let wheels: { obj: THREE.Group; wheel: THREE.Group; tile: number; scale: number }[] = [];
+    let parks: Waterpark[] = [];
 
     function buildLandmarks() {
       // Boards keep showing what they showed (no flicker when the city grows).
       const wasShowing = new Map(boards.map((b) => [b.id, b.shown]));
       for (const l of landmarks) life.remove(l.obj);
       landmarks = [];
+      wheels = [];
+      for (const p of parks) p.dispose();
+      parks = [];
       for (const b of boards) {
         life.remove(b.obj);
         b.obj.traverse((o) => {
@@ -1914,6 +1585,11 @@ export function CityView({
           landmarks.push({ obj, spin: jib, tile: t.i, speed: 0.15, axis: "y" });
           life.add(obj);
         }
+        if (t.structure?.anchor && t.structure.type === "waterpark") {
+          const park = createWaterpark(t, t.structure.name);
+          parks.push(park);
+          life.add(park.group);
+        }
         if (t.structure?.anchor && t.structure.type === "funfair") {
           addFerris(t.x + 0.05, t.z, Math.PI / 4, t.i, 1.15);
           // A carousel that turns
@@ -1960,6 +1636,8 @@ export function CityView({
       for (const l of landmarks) {
         if (l.axis === "y") l.spin.rotation.y += l.speed * dt;
         else l.spin.rotation.z += l.speed * dt;
+        const cabins = l.obj.userData.cabins as THREE.Object3D[] | undefined;
+        if (cabins) for (const c of cabins) c.rotation.z = -l.spin.rotation.z;
         const lift = l.obj.userData.lift as { cable: THREE.Object3D; load: THREE.Object3D; phase: number } | undefined;
         if (lift) {
           const drop = 0.35 + 0.9 * (0.5 + 0.5 * Math.sin(secs * 0.45 + lift.phase));
@@ -1970,49 +1648,6 @@ export function CityView({
         }
         const t = Math.min(1, Math.max(0, (now - (born.get(l.tile) ?? 0)) / 700));
         l.obj.scale.setScalar(Math.max(0.0001, t) * (l.obj.userData.scale ?? 1));
-      }
-    }
-
-    // ---- boats drift along the river
-    const boatMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-    const boatGeo = new THREE.BoxGeometry(0.34, 0.08, 0.14).translate(0, 0.04, 0);
-    const cabinGeo = new THREE.BoxGeometry(0.12, 0.07, 0.1).translate(0, 0.115, 0);
-    let boats: { obj: THREE.Group; pos: number; speed: number; side: number }[] = [];
-    let boatPlan: CityPlan | null = null;
-    function buildBoats(plan: CityPlan) {
-      for (const b of boats) life.remove(b.obj);
-      boats = [];
-      boatPlan = plan;
-      if (!plan.river) return;
-      const hasRiver = tiles.some((t) => t.kind === "river");
-      if (!hasRiver) return;
-      const n = Math.min(6, 2 + Math.floor(radius / 6));
-      for (let k = 0; k < n; k++) {
-        const obj = new THREE.Group();
-        const hull = new THREE.Mesh(boatGeo, boatMat);
-        const cabin = new THREE.Mesh(cabinGeo, lmMat.cabins[k % lmMat.cabins.length]);
-        obj.add(hull, cabin);
-        boats.push({ obj, pos: (Math.random() - 0.5) * radius * 2, speed: (k % 2 ? 1 : -1) * (0.25 + Math.random() * 0.25), side: (k % 2 ? 1 : -1) * 0.2 });
-        life.add(obj);
-      }
-    }
-    function updateBoats(time: number, dt: number) {
-      if (!boatPlan?.river) return;
-      const along = boatPlan.river.along;
-      for (const b of boats) {
-        b.pos += b.speed * dt;
-        if (b.pos > radius) b.pos = -radius;
-        if (b.pos < -radius) b.pos = radius;
-        const c = riverCentre(boatPlan, b.pos) + b.side;
-        const c2 = riverCentre(boatPlan, b.pos + 0.1 * Math.sign(b.speed)) + b.side;
-        const x = along === "x" ? b.pos : c;
-        const z = along === "x" ? c : b.pos;
-        const onWater = kindAt.get(`${Math.round(x)},${Math.round(z)}`);
-        b.obj.visible = onWater === "river" || onWater === "bridge";
-        b.obj.position.set(x, 0.03 + Math.sin(time * 2 + b.pos) * 0.01, z);
-        const dx = along === "x" ? 0.1 * Math.sign(b.speed) : c2 - c;
-        const dz = along === "x" ? c2 - c : 0.1 * Math.sign(b.speed);
-        b.obj.rotation.y = Math.atan2(-dz, dx);
       }
     }
 
@@ -2360,9 +1995,16 @@ export function CityView({
     // ---- the city's moving parts and things being built (see ./city/*)
     const people = createPeople(world, life);
     const trains = createTrains(world, life);
+    const traffic = createTraffic(world, life);
+    const boats = createBoats(world, life);
     const plumes = createPlumes(world, life);
     const sites = createSites(world, life);
     const buildingSite = createBuildingSite(scene);
+    // World events (fires, parades, a UFO...): drawn over the city while they're on.
+    const worldEventsLayer = createWorldEvents({ scene, parent: life, camera, renderer, hemi, sun, tiles: () => tiles, plan: () => currentPlan, ground: (x, z) => landHeight(x, z), night: () => carNight });
+    /** Flying the map camera over to an event (target and camera glide together). */
+    let eventFly: THREE.Vector3 | null = null;
+    const flyStep = new THREE.Vector3();
     /** False while the map is still a secret building site (the join window). */
     let isRevealed = true;
     /** Street life comes back a moment after the city starts rising. */
@@ -2461,11 +2103,7 @@ export function CityView({
         controls.target.set(0, 0, 0);
         controls.update();
       }
-      buildCars(plan);
-      buildJams(newSeed);
       buildPools();
-      buildLandmarks();
-      buildBoats(plan);
       buildGhosts(count);
       for (const g of ghosts) g.visible = isRevealed;
       // Everyone else who needs to know about the new city.
@@ -2479,10 +2117,14 @@ export function CityView({
       birds.build(newSeed);
       people.build();
       trains.build();
+      traffic.build(plan);
+      boats.build();
+      buildLandmarks();
       plumes.build();
       sites.build();
       if (!isRevealed) buildingSite.build(newSeed, count);
       cb.current.onBalloons?.(balloons.length);
+      listRides();
       setMarkers(lastMarkers);
       rebuildPills();
       caughtKey = "";
@@ -3604,13 +3246,15 @@ export function CityView({
         hoverBox.position.set(a.x + (r.big ? 0.5 : 0), 0, a.z + (r.big ? 0.5 : 0));
         hoverBox.scale.set(r.big ? 2.04 : 1.04, a.top + 0.12, r.big ? 2.04 : 1.04);
         const n = roomCountsNow[r.room.id] ?? 0;
-        cb.current.onHover?.({ tile: a.i, label: `${r.room.name} · ${n ? `${n} inside` : "nobody inside yet"} · tap to go in` });
+        cb.current.onHover?.({ tile: a.i, label: `${r.room.name}${t.egg ? ` · ${t.egg.name}` : ""} · ${n ? `${n} inside` : "nobody inside yet"} · tap to go in` });
         return;
       }
       hoverBox.visible = true;
       hoverBox.position.set(t.x, 0, t.z);
       hoverBox.scale.set(1.02, t.top + 0.1, 1.02);
-      const what = t.station
+      const what = t.egg
+        ? `${t.egg.name} · ${KIND_LABEL[t.kind]}`
+        : t.station
         ? "Railway station"
         : t.kind === "structure" && t.structure
           ? STRUCTURE_LABEL[t.structure.type]
@@ -3652,19 +3296,22 @@ export function CityView({
       const levels = levelsOf(anchor, currentPlan);
       if (!levels.length) return null;
       const name = anchor.station
-        ? `${currentPlan.city.name} Central Station`
+        ? stationName(currentPlan)
         : anchor.kind === "structure" && anchor.structure
           ? anchor.structure.name
-          : `${shortAddress(addressOf(currentPlan, anchor))} · ${ROOM_LABEL[anchor.kind]}`;
+          : anchor.name
+            ? anchor.name
+            : `${shortAddress(addressOf(currentPlan, anchor))} · ${ROOM_LABEL[anchor.kind]}`;
       const capacity = levels.reduce((n, l) => n + l.capacity, 0);
-      const room: CityRoom = { id: `b:${anchor.i}`, name, capacity, kind: "building", levels: levels.map((l) => ({ id: l.id, label: l.label, capacity: l.capacity })) };
+      const room: CityRoom = { id: `b:${anchor.i}`, name, capacity, kind: "building", levels: levels.map((l) => ({ id: l.id, label: l.label, capacity: l.capacity, kind: levelUse(l) })) };
       return { room, anchor, big, levels };
     }
     /** A name for signs inside a building (company, hotel, hospital...). */
     function signName(anchor: Tile) {
       if (!currentPlan) return "Welcome";
-      if (anchor.station) return `${currentPlan.city.name} Central`;
+      if (anchor.station) return stationName(currentPlan);
       if (anchor.structure) return anchor.structure.name;
+      if (anchor.name) return anchor.name;
       const street = addressOf(currentPlan, anchor).replace(/^\d+\s+/, "").split(" ").slice(0, -1).join(" ") || currentPlan.city.name;
       if (anchor.kind === "hospital") return `${currentPlan.city.name} General Hospital`;
       if (anchor.kind === "police") return `${currentPlan.city.name} Police`;
@@ -3757,7 +3404,7 @@ export function CityView({
     // The normal map controls come back when you leave. Inside buildings the room is drawn on
     // top of the real city (which shows through the windows, at the right height); rooftops and
     // open-air spots stand in the city itself. Taps there only ever reach the people (NPCs).
-    type StageView = { p: THREE.Vector3; yaw: number; pitch: number };
+    type StageView = { p: THREE.Vector3; yaw: number; pitch: number; lx: number; lz: number };
     type Stage = {
       building: string;
       tile: number;
@@ -3774,15 +3421,51 @@ export function CityView({
       alpha: number;
       npcs: Npc[];
       hidden: boolean;
+      /** The room id ("b:12:f4"), every seat (fixed order), things to use, and their markers. */
+      place: string;
+      seats: Spot[];
+      npcSeats: Set<Spot>;
+      interact: Interactables | null;
+      hover: string | null;
+      walker: ReturnType<typeof createWalker> | null;
+      /** Where you are in the room (metres), your eye height, and the walk you're on. */
+      local: { x: number; z: number };
+      eye: number;
+      eyeTo: number;
+      walk: { pts: { x: number; z: number }[]; i: number } | null;
+      /** Players sitting in seats here (and which seats they're in). */
+      players: Figures | null;
+      playersKey: string;
+      /** Moving parts of the room (club lights...). */
+      update: ((time: number) => void) | null;
     };
-    type ViewMode = { kind: "ride"; k: number } | { kind: "place"; stage: Stage };
+    /** On a ride (not a balloon): the cabin drawn round you, the people in it, where it is. */
+    type VehicleView = {
+      kind: "vehicle";
+      ride: RideTarget;
+      scene: THREE.Scene;
+      cabin: Cabin | null;
+      figures: Figures | null;
+      npcs: Npc[];
+      /** Where the vehicle is now (its floor, or a slide's start), and its smoothed heading. */
+      pose: VehiclePose;
+      yaw: number;
+      origin: THREE.Vector3;
+      alpha: number;
+      /** Ferris wheels: which cabin, and whether you face the far side. */
+      cabinK: number;
+      flip: boolean;
+      slide: { ride: SlideRide; data: Slide; length: number; phase: "top" | "slide" | "splash"; t: number; d: number; v: number; roll: number; pitch: number; ended: boolean } | null;
+    };
+    type ViewMode = { kind: "ride"; k: number } | { kind: "place"; stage: Stage } | VehicleView;
     const look = createLookControls(renderer.domElement);
     const overlayCam = new THREE.PerspectiveCamera(60, 1, 0.05, 400);
     const basketScene = new THREE.Scene();
     const basket = createBasket();
     basketScene.add(basket.group);
     let basketAlpha = 0;
-    let wantRide: number | null = null;
+    let wantRide: RideTarget | null = null;
+    let leavingVehicle: VehicleView | null = null;
     let wantPlace: CityPlace | null = null;
     let wantSpot = 0;
     let spotIndex = 0;
@@ -3841,7 +3524,7 @@ export function CityView({
     function buildStage(building: string, anchor: Tile, lvl: PlaceLevel): Stage {
       const plan = currentPlan!;
       const key = `${currentSeed}|${building}|${lvl.id}`;
-      const npcs = npcsFor(`${building}:${lvl.id}`, currentSeed, lvl.capacity);
+      const npcs = npcsFor(`${building}:${lvl.id}`, currentSeed, lvl.capacity, lvl.theme);
       const st: Stage = {
         building,
         tile: anchor.i,
@@ -3857,6 +3540,19 @@ export function CityView({
         alpha: 0,
         npcs,
         hidden: false,
+        place: `${building}:${lvl.id}`,
+        seats: [],
+        npcSeats: new Set(),
+        interact: null,
+        hover: null,
+        walker: null,
+        local: { x: 0, z: 0 },
+        eye: 1.6,
+        eyeTo: 1.6,
+        walk: null,
+        players: null,
+        playersKey: "",
+        update: null,
       };
       if (lvl.kind === "interior") {
         const interior = createInterior({
@@ -3867,8 +3563,9 @@ export function CityView({
           city: plan.city.name,
           places: plan.city.flavor.cities.filter((c) => c !== plan.city.name),
           variant: anchor.kind === "clock" && lvl.id === "g" ? "small" : anchor.station ? "station" : undefined,
+          flavor: plan.city.flavor.id,
         });
-        const figures = createFigures(npcs, interior.spots, { key });
+        const figures = createFigures(npcs, interior.spots, { key, act: lvl.theme === "club" ? "dance" : undefined });
         st.holder.add(interior.group, figures.group);
         // Turn the room so its first view looks the way the camera looks now (no spinning round).
         const rot = cameraYaw() - interior.views[0].yaw;
@@ -3880,11 +3577,14 @@ export function CityView({
         st.unit = (Math.min(lvl.hw, lvl.hd) * 0.85) / half;
         st.views = interior.views.map((v) => {
           const e = tmpV.set(v.x, 0, v.z).applyAxisAngle(up, rot);
-          return { p: new THREE.Vector3(st.origin.x + e.x * st.unit, st.origin.y, st.origin.z + e.z * st.unit), yaw: v.yaw + rot, pitch: v.pitch };
+          return { p: new THREE.Vector3(st.origin.x + e.x * st.unit, st.origin.y, st.origin.z + e.z * st.unit), yaw: v.yaw + rot, pitch: v.pitch, lx: v.x, lz: v.z };
         });
         st.interior = interior;
         st.figures = figures;
         interior.setNight(carNight);
+        st.update = interior.update;
+        setupUse(st, interior.seats, interior.items, interior.spots, npcs.length);
+        st.walker = createWalker(interior.w, interior.d, interior.blocks);
       } else {
         const deck = lvl.kind === "roof" ? createDeck(lvl.theme, key, lvl.hw * 2 * METRES, lvl.hd * 2 * METRES) : createOpenAir(lvl.theme, key);
         const figures = createFigures(npcs, deck.spots, { key, tags: true });
@@ -3899,7 +3599,7 @@ export function CityView({
         const deckTop = lvl.kind === "roof" ? 0.005 : 0;
         const views = deck.views.map((v) => {
           const e = tmpV.set(v.x, 0, v.z).applyAxisAngle(up, lvl.ry).multiplyScalar(1 / METRES);
-          return { p: new THREE.Vector3(lvl.x + e.x, lvl.y + deckTop + EYE, lvl.z + e.z), yaw: v.yaw + lvl.ry, pitch: v.pitch };
+          return { p: new THREE.Vector3(lvl.x + e.x, lvl.y + deckTop + EYE, lvl.z + e.z), yaw: v.yaw + lvl.ry, pitch: v.pitch, lx: v.x, lz: v.z };
         });
         // Start with whichever view looks most like the way we're facing now.
         const now = cameraYaw();
@@ -3912,6 +3612,8 @@ export function CityView({
         st.figures = figures;
         deck.setNight(carNight);
         hideRoof(st, true);
+        setupUse(st, deck.seats, deck.items, deck.spots, npcs.length);
+        st.walker = createWalker(deck.w, deck.d, deck.blocks, 0.3);
       }
       return st;
     }
@@ -3922,6 +3624,149 @@ export function CityView({
       st.interior?.dispose();
       st.deck?.dispose();
       st.figures?.dispose();
+      st.interact?.dispose();
+      st.players?.dispose();
+    }
+
+    // ---- things to use inside places, sitting down, and walking round
+    let seatsNow: Record<string, SeatTaker> = {};
+    let mySeatNow: string | null = null;
+    /** The things to use in a place (seats the regulars aren't in, the bar, darts...). */
+    function setupUse(st: Stage, seats: Spot[], raw: RoomItem[], npcSpots: Spot[], npcCount: number) {
+      st.seats = seats;
+      st.npcSeats = new Set(npcSpots.slice(0, npcCount));
+      const counts: Record<string, number> = {};
+      const things: Item[] = raw.map((it) => {
+        const n = (counts[it.kind] = (counts[it.kind] ?? -1) + 1);
+        return { id: `${st.place}:${it.kind}:${n}`, kind: it.kind, label: it.label, x: it.x, y: it.y, z: it.z, r: it.r };
+      });
+      st.interact = createInteractables([...seatItems(st), ...things]);
+      st.holder.add(st.interact.group);
+      syncPlayers(st);
+    }
+    function seatItems(st: Stage): Item[] {
+      const out: Item[] = [];
+      st.seats.forEach((sp, n) => {
+        const id = `${st.place}:seat:${n}`;
+        if (st.npcSeats.has(sp) || id === mySeatNow) return;
+        out.push({ id, kind: "seat", label: "Sit here", x: sp.x, y: (sp.y ?? 0.46) - 0.02, z: sp.z, r: 0.45, taken: seatsNow[id]?.name ?? null });
+      });
+      return out;
+    }
+    /** Players sitting here: draw them in their seats; keep the seat markers up to date. */
+    function syncPlayers(st: Stage) {
+      const mine = st.seats.map((_, n) => `${st.place}:seat:${n}`);
+      const key = mine.filter((id) => seatsNow[id] && id !== mySeatNow).map((id) => `${id}=${seatsNow[id].name}`).join("|") + `|me:${mySeatNow}`;
+      if (key === st.playersKey) return;
+      st.playersKey = key;
+      st.players?.dispose();
+      st.players = null;
+      const people: Person[] = [];
+      const spots: Spot[] = [];
+      st.seats.forEach((sp, n) => {
+        const id = `${st.place}:seat:${n}`;
+        const who = seatsNow[id];
+        if (!who || id === mySeatNow || st.npcSeats.has(sp)) return;
+        people.push({ id: `seat:${id}`, name: who.name, avatar: cleanAvatar(who.avatar, who.name), npc: false, seat: id });
+        spots.push({ ...sp, act: "idle" });
+      });
+      if (people.length) {
+        st.players = createFigures(people, spots, { key: st.place });
+        st.holder.add(st.players.group);
+      }
+      if (st.interact) {
+        const things = st.interact.items.filter((it) => it.kind !== "seat");
+        st.interact.setItems([...seatItems(st), ...things]);
+      }
+      // Sitting down in my seat (or standing up again).
+      const n = mySeatNow?.startsWith(`${st.place}:seat:`) ? Number(mySeatNow.slice(st.place.length + 6)) : -1;
+      const sp = n >= 0 ? st.seats[n] : undefined;
+      if (sp) {
+        walkTo(st, sp.x, sp.z, true);
+        st.eyeTo = (sp.y ?? 0.46) + 0.72;
+        // Face the way the seat faces.
+        const fx = Math.sin(sp.ry);
+        const fz = Math.cos(sp.ry);
+        aim.yaw = Math.atan2(-fx, -fz) + stageTurn(st);
+        aim.pitch = -0.12;
+        look.lookAt(0, 0);
+      } else st.eyeTo = 1.6;
+    }
+    const stageTurn = (st: Stage) => (st.interior ? st.holder.rotation.y : st.level.ry);
+    /** Walk to (x, z) in the room (round the furniture; `exact`: right to that spot, e.g. a seat). */
+    function walkTo(st: Stage, x: number, z: number, exact = false) {
+      const pts = st.walker?.path(st.local.x, st.local.z, x, z) ?? null;
+      if (!pts && !exact) return false;
+      const list = pts ?? [];
+      if (exact) list.push({ x, z });
+      st.walk = list.length ? { pts: list, i: 0 } : null;
+      return true;
+    }
+    function stepWalk(st: Stage, dt: number) {
+      st.eye += (st.eyeTo - st.eye) * (1 - Math.exp(-dt * 3.5));
+      const w = st.walk;
+      if (!w) return;
+      let step = dt * 1.5;
+      while (step > 0 && w.i < w.pts.length) {
+        const t = w.pts[w.i];
+        const dx = t.x - st.local.x;
+        const dz = t.z - st.local.z;
+        const d = Math.hypot(dx, dz);
+        if (d <= step) {
+          st.local.x = t.x;
+          st.local.z = t.z;
+          step -= d;
+          w.i++;
+        } else {
+          st.local.x += (dx / d) * step;
+          st.local.z += (dz / d) * step;
+          step = 0;
+        }
+      }
+      if (w.i >= w.pts.length) st.walk = null;
+    }
+    /** Room metres → city (the camera), at eye height `eye` metres. */
+    function stageToCity(st: Stage, x: number, z: number, eye: number, out: THREE.Vector3) {
+      if (st.interior) {
+        const e = tmpV.set(x, 0, z).applyAxisAngle(up, st.holder.rotation.y);
+        return out.set(st.origin.x + e.x * st.unit, st.origin.y - (1.6 - eye) * st.unit, st.origin.z + e.z * st.unit);
+      }
+      const e = tmpV.set(x, 0, z).applyAxisAngle(up, st.level.ry).multiplyScalar(1 / METRES);
+      return out.set(st.level.x + e.x, st.level.y + (st.level.kind === "roof" ? 0.005 : 0) + eye / METRES, st.level.z + e.z);
+    }
+    const camLocal = new THREE.Vector3();
+    /** What's under the pointer in a place: a seated player's seat, or a thing to use. */
+    function itemUnder(clientX: number, clientY: number): Item | null {
+      if (view?.kind !== "place" || flight) return null;
+      const st = view.stage;
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+      ray.setFromCamera(pointer, st.scene ? overlayCam : camera);
+      if (st.players) {
+        const hit = ray.intersectObjects(st.players.hits, true)[0];
+        const id = hit ? st.players.seatOf(hit.object) : null;
+        if (id) return { id, kind: "seat", label: `${seatsNow[id]?.name ?? "Someone"}'s seat`, x: 0, y: 0, z: 0, r: 0, taken: seatsNow[id]?.name ?? null };
+      }
+      return st.interact?.pick(ray.ray) ?? null;
+    }
+    const floorHit = new THREE.Vector3();
+    const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    /** Tap on the floor of a place: walk there. */
+    function walkTap(clientX: number, clientY: number) {
+      if (view?.kind !== "place" || flight) return false;
+      const st = view.stage;
+      if (mySeatNow?.startsWith(`${st.place}:seat:`)) return false;
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+      ray.setFromCamera(pointer, st.scene ? overlayCam : camera);
+      st.holder.updateWorldMatrix(true, false);
+      floorPlane.constant = -st.holder.getWorldPosition(tmpV).y;
+      if (!ray.ray.intersectPlane(floorPlane, floorHit)) return false;
+      st.holder.worldToLocal(floorHit);
+      const W = st.interior ? st.interior.w : 7;
+      const D = st.interior ? st.interior.d : 7;
+      if (Math.abs(floorHit.x) > W / 2 + 0.5 || Math.abs(floorHit.z) > D / 2 + 0.5) return false;
+      return walkTo(st, floorHit.x, floorHit.z);
     }
 
     function pickView(i: number) {
@@ -3929,6 +3774,9 @@ export function CityView({
       const n = view.stage.views.length;
       spotIndex = ((i % n) + n) % n;
       const v = view.stage.views[spotIndex];
+      view.stage.local.x = v.lx;
+      view.stage.local.z = v.lz;
+      view.stage.walk = null;
       aim.yaw = v.yaw;
       aim.pitch = v.pitch;
       const inside = view.stage.level.kind === "interior";
@@ -3942,7 +3790,7 @@ export function CityView({
 
     /** Work out where we should be (from the props) and fly there if it changed. */
     function syncView() {
-      type Next = { kind: "place"; anchor: Tile; level: PlaceLevel; building: string } | { kind: "ride"; k: number } | null;
+      type Next = { kind: "place"; anchor: Tile; level: PlaceLevel; building: string } | { kind: "ride"; k: number } | { kind: "vehicle"; ride: RideTarget } | null;
       let next: Next = null;
       if (wantPlace && currentPlan) {
         const m = /^b:(\d+)$/.exec(wantPlace.building);
@@ -3952,9 +3800,11 @@ export function CityView({
           next = { kind: "place", anchor: r.anchor, level, building: r.room.id };
         }
       }
-      if (!next && wantRide !== null && balloons[wantRide]) next = { kind: "ride", k: wantRide };
+      if (!next && wantRide?.kind === "balloon" && balloons[wantRide.index]) next = { kind: "ride", k: wantRide.index };
+      if (!next && wantRide && wantRide.kind !== "balloon" && rideExists(wantRide)) next = { kind: "vehicle", ride: wantRide };
       if (next?.kind === "place" && view?.kind === "place" && view.stage.building === next.building && view.stage.level.id === next.level.id) return;
       if (next?.kind === "ride" && view?.kind === "ride" && view.k === next.k) return;
+      if (next?.kind === "vehicle" && view?.kind === "vehicle" && view.ride.kind === next.ride.kind && view.ride.index === next.ride.index) return;
       if (!next && !view) return;
       if (!view && !flight) {
         // Leaving the normal map view: remember it, to fly back later.
@@ -3964,9 +3814,12 @@ export function CityView({
         saved.fov = camera.fov;
       }
       if (leaving) disposeStage(leaving);
+      if (leavingVehicle) disposeVehicle(leavingVehicle);
       const prev = view;
       leaving = prev?.kind === "place" ? prev.stage : null;
       leavingRide = prev?.kind === "ride";
+      leavingVehicle = prev?.kind === "vehicle" ? prev : null;
+      if (leavingVehicle) endVehicle(leavingVehicle);
       controls.enabled = false;
       focus = null;
       hoverBox.visible = false;
@@ -3986,6 +3839,21 @@ export function CityView({
         return;
       }
       look.setEnabled(true);
+      if (next.kind === "vehicle") {
+        const vv = startVehicle(next.ride);
+        view = vv;
+        look.lookAt(0, 0, true);
+        look.resetZoom(true);
+        const am = vv.cabin?.aim ?? { yaw: 0, pitch: -0.12, pitchMin: -0.9, pitchMax: 0.5 };
+        aim.yaw = am.yaw;
+        aim.pitch = am.pitch;
+        look.setLimits({ pitchMin: am.pitchMin - aim.pitch, pitchMax: am.pitchMax - aim.pitch, zoomMin: 0.55, zoomMax: 1.15 });
+        vehicleEye(vv, 0, rideEye);
+        const mid = from.clone().add(rideEye).multiplyScalar(0.5);
+        mid.y += Math.min(2.5, from.distanceTo(rideEye) * 0.15);
+        startFlight("enter", 1.7, mid);
+        return;
+      }
       if (next.kind === "ride") {
         view = { kind: "ride", k: next.k };
         aim.yaw = cameraYaw();
@@ -4005,6 +3873,9 @@ export function CityView({
       look.lookAt(0, 0, true);
       look.resetZoom(true);
       pickView(wantSpot);
+      // Already have a seat here? Sit straight down.
+      st.playersKey = "";
+      syncPlayers(st);
       cb.current.onSpots?.(st.views.length);
       const target = st.views[spotIndex].p;
       let ctrl: THREE.Vector3 | null = null;
@@ -4021,9 +3892,240 @@ export function CityView({
       startFlight("enter", 1.5, ctrl);
     }
 
-    function setRide(k: number | null) {
-      wantRide = k;
+    function setRide(r: RideTarget | null) {
+      wantRide = r;
       syncView();
+    }
+    function setSteer(dir: TurnDir) {
+      traffic.steer(dir);
+    }
+
+    // ---- rides other than balloons: trains, buses, cars, boats, Ferris wheels, water slides
+    const RIDE_CAP: Record<RideKind, number> = { balloon: 1000, train: 300, bus: 40, car: 4, boat: 30, ferris: 8, slide: 1 };
+    let rideIdx: { buses: number[]; cars: number[] } = { buses: [], cars: [] };
+    let slidesFlat: Slide[] = [];
+    let ridesKey = "";
+    function rideExists(r: RideTarget) {
+      switch (r.kind) {
+        case "train":
+          return r.index >= 0 && r.index < trains.count;
+        case "bus":
+          return rideIdx.buses[r.index] !== undefined;
+        case "car":
+          return rideIdx.cars[r.index] !== undefined;
+        case "boat":
+          return r.index >= 0 && r.index < boats.count;
+        case "ferris":
+          return !!wheels[r.index];
+        case "slide":
+          return !!slidesFlat[r.index];
+        default:
+          return !!balloons[r.index];
+      }
+    }
+    /** Work out what can be ridden this round, and tell the UI (when it changed). */
+    function listRides() {
+      rideIdx = traffic.rideables();
+      slidesFlat = parks.flatMap((p) => p.slides);
+      const plan = currentPlan;
+      if (!plan) return;
+      const out: CityRide[] = balloons.map((_, k) => ({ kind: "balloon" as const, index: k, name: `${BALLOON_NAMES[k] ?? `Balloon ${k + 1}`} hot-air balloon`, capacity: RIDE_CAP.balloon }));
+      const city = plan.city.name;
+      for (let i = 0; i < trains.count; i++) out.push({ kind: "train", index: i, name: `${city} train ${i + 1}`, capacity: RIDE_CAP.train });
+      const busLabel = ({ ng: "BRT bus", uk: "Double-decker bus", us: "City bus", gh: "Metro bus", ke: "City Hoppa bus", za: "Rea Vaya bus" } as Record<string, string>)[plan.city.flavor.id] ?? "City bus";
+      rideIdx.buses.forEach((_, j) => out.push({ kind: "bus", index: j, name: `${busLabel} · route ${[12, 7, 25][j] ?? j + 1}`, capacity: RIDE_CAP.bus }));
+      let cars = 0;
+      rideIdx.cars.forEach((k, j) => out.push({ kind: "car", index: j, name: traffic.isTaxi(k) ? `${city} taxi` : `Car ${++cars}`, capacity: RIDE_CAP.car }));
+      const boatNames = [`${city} River Bus`, "Lady of the River", "Sunset Cruiser", "Island Hopper", "Blue Heron"];
+      for (let i = 0; i < boats.count; i++) out.push({ kind: "boat", index: i, name: boatNames[i] ?? `River boat ${i + 1}`, capacity: RIDE_CAP.boat });
+      wheels.forEach((w, i) => {
+        const t = tiles[w.tile];
+        const name = t?.name ?? (t?.structure ? `${t.structure.name} wheel` : t ? `Ferris wheel, ${shortAddress(addressOf(plan, t))}` : "Ferris wheel");
+        out.push({ kind: "ferris", index: i, name, capacity: RIDE_CAP.ferris });
+      });
+      slidesFlat.forEach((sl, i) => out.push({ kind: "slide", index: i, name: sl.name, capacity: RIDE_CAP.slide }));
+      const key = out.map((r) => `${r.kind}${r.index}:${r.name}`).join("|");
+      if (key !== ridesKey) {
+        ridesKey = key;
+        cb.current.onRides?.(out);
+      }
+    }
+
+    function startVehicle(r: RideTarget): VehicleView {
+      const scene = new THREE.Scene();
+      const key = `${currentSeed}|v:${r.kind}:${r.index}`;
+      const vv: VehicleView = { kind: "vehicle", ride: r, scene, cabin: null, figures: null, npcs: [], pose: { x: 0, y: 0, z: 0, yaw: 0, speed: 0 }, yaw: 0, origin: new THREE.Vector3(), alpha: 0, cabinK: 0, flip: false, slide: null };
+      if (r.kind === "slide") {
+        const data = slidesFlat[r.index];
+        const sr = createSlideRide(data);
+        scene.add(sr.group);
+        vv.slide = { ride: sr, data, length: data.curve.getLength(), phase: "top", t: 0, d: 0, v: 0, roll: 0, pitch: 0, ended: false };
+        vehiclePose(vv, 0);
+        vv.yaw = vv.pose.yaw;
+        return vv;
+      }
+      const plan = currentPlan!;
+      let color = 0xe03131;
+      if (r.kind === "train") color = [0xe03131, 0x1971c2, 0x2f9e44, 0xf08c00][Math.abs(currentSeed) % 4];
+      else if (r.kind === "bus") color = [0xe03131, 0x1971c2, 0x2f9e44][Math.abs(plan.seed) % 3];
+      else if (r.kind === "car") {
+        const k = rideIdx.cars[r.index];
+        color = traffic.isTaxi(k) ? 0xffd43b : plan.palette.car[k % plan.palette.car.length];
+        traffic.setRide(k, (opts) => cb.current.onJunction?.(opts));
+      } else if (r.kind === "boat") {
+        color = [0xff6b6b, 0xffd43b, 0x4dabf7, 0x69db7c, 0xda77f2, 0xff922b][r.index % 6];
+        boats.setRide(r.index);
+      } else if (r.kind === "ferris") {
+        // Board the cabin nearest the bottom, facing out over the city.
+        const w = wheels[r.index];
+        let best = 0;
+        let bestD = 9;
+        for (let k = 0; k < 8; k++) {
+          const a = (k / 8) * Math.PI * 2 + w.wheel.rotation.z;
+          const d = Math.abs(turnTo(a, -Math.PI / 2));
+          if (d < bestD) {
+            bestD = d;
+            best = k;
+          }
+        }
+        vv.cabinK = best;
+        const ry = w.obj.rotation.y;
+        vv.flip = -Math.sin(ry) * -w.obj.position.x + -Math.cos(ry) * -w.obj.position.z < 0;
+        color = (lmMat.cabins[best % lmMat.cabins.length].color as THREE.Color).getHex();
+      }
+      if (r.kind === "bus") traffic.setRide(rideIdx.buses[r.index], null);
+      const cabin = createCabin(r.kind === "train" ? "train" : r.kind === "bus" ? "bus" : r.kind === "car" ? "car" : r.kind === "boat" ? "boat" : "ferris", key, color);
+      scene.add(cabin.group);
+      vv.cabin = cabin;
+      // Fellow passengers (never in your own seat).
+      const spots = cabin.spots.filter((sp) => Math.hypot(sp.x - cabin.eye.x, sp.z - cabin.eye.z) > 0.55);
+      const npcs = npcsFor(`v:${r.kind}:${r.index}`, currentSeed, RIDE_CAP[r.kind]).slice(0, spots.length);
+      if (npcs.length) {
+        vv.npcs = npcs;
+        vv.figures = createFigures(npcs, spots, { key });
+        cabin.group.add(vv.figures.group);
+      }
+      vehiclePose(vv, 0);
+      vv.yaw = vv.pose.yaw;
+      return vv;
+    }
+    /** Stop steering / hiding the vehicle you were in (its cabin fades out separately). */
+    function endVehicle(vv: VehicleView) {
+      if (vv.ride.kind === "car" || vv.ride.kind === "bus") traffic.setRide(-1, null);
+      if (vv.ride.kind === "boat") boats.setRide(-1);
+    }
+    function disposeVehicle(vv: VehicleView) {
+      vv.cabin?.dispose();
+      vv.figures?.dispose();
+      vv.slide?.ride.dispose();
+    }
+    /** Where the vehicle is now (into vv.pose). False if it's gone. */
+    function vehiclePose(vv: VehicleView, time: number) {
+      const r = vv.ride;
+      const out = vv.pose;
+      switch (r.kind) {
+        case "train":
+          return trains.pose(r.index, out);
+        case "bus":
+          return traffic.pose(rideIdx.buses[r.index] ?? -1, out);
+        case "car":
+          return traffic.pose(rideIdx.cars[r.index] ?? -1, out);
+        case "boat":
+          return boats.pose(r.index, time, out);
+        case "ferris": {
+          const w = wheels[r.index];
+          if (!w) return false;
+          const sc = w.obj.scale.x;
+          const a = (vv.cabinK / 8) * Math.PI * 2 + w.wheel.rotation.z;
+          const lx = Math.cos(a) * 0.62 * sc;
+          const ry = w.obj.rotation.y;
+          out.x = w.obj.position.x + Math.cos(ry) * lx;
+          out.z = w.obj.position.z - Math.sin(ry) * lx;
+          out.y = (1.35 + Math.sin(a) * 0.62) * sc;
+          out.yaw = ry + (vv.flip ? Math.PI : 0);
+          out.speed = 0;
+          return true;
+        }
+        case "slide": {
+          const sl = vv.slide!;
+          const u = Math.min(1, sl.d / sl.length);
+          sl.data.curve.getPointAt(u, tmpV);
+          out.x = tmpV.x;
+          out.y = tmpV.y;
+          out.z = tmpV.z;
+          // Look a little way ahead round the bends (not straight into the wall).
+          sl.data.curve.getPointAt(Math.min(1, u + 0.16 / sl.length), leanDir).sub(tmpV);
+          if (leanDir.lengthSq() < 1e-8) sl.data.curve.getTangentAt(u, leanDir);
+          leanDir.normalize();
+          out.yaw = Math.atan2(-leanDir.x, -leanDir.z);
+          out.speed = sl.v;
+          sl.pitch = Math.asin(Math.max(-1, Math.min(1, leanDir.y)));
+          return true;
+        }
+      }
+      return false;
+    }
+    /** Your eyes on the vehicle (city space), into out. */
+    function vehicleEye(vv: VehicleView, time: number, out: THREE.Vector3) {
+      vehiclePose(vv, time);
+      if (vv.slide) {
+        const sl = vv.slide;
+        if (sl.phase === "splash") {
+          // Into the pool: a dip under the surface, then bobbing about.
+          const s2 = sl.t;
+          const end = sl.data.points[sl.data.points.length - 1];
+          const f = Math.min(1, s2 / 0.7);
+          out.set(end.x - Math.sin(vv.yaw) * Math.min(0.12, s2 * 0.3), sl.data.pool.y + 0.035 - Math.sin(f * Math.PI) * 0.06 + (s2 > 0.7 ? Math.sin(s2 * 2.4) * 0.004 : 0), end.z - Math.cos(vv.yaw) * Math.min(0.12, s2 * 0.3));
+        } else out.set(vv.pose.x, vv.pose.y + 0.075, vv.pose.z);
+        vv.origin.copy(sl.ride.origin);
+        return out;
+      }
+      const e = vv.cabin!.eye;
+      const c = Math.cos(vv.yaw);
+      const sn = Math.sin(vv.yaw);
+      // Turn the cabin's eye point by the heading (yaw about +y), metres → city units.
+      out.set(vv.pose.x + (e.x * c + e.z * sn) / METRES, vv.pose.y + e.y / METRES, vv.pose.z + (-e.x * sn + e.z * c) / METRES);
+      vv.origin.set(vv.pose.x, vv.pose.y, vv.pose.z);
+      return out;
+    }
+    /** Move a ride along a step (slides go down by themselves). */
+    function stepVehicle(vv: VehicleView, dt: number, time: number) {
+      const sl = vv.slide;
+      if (sl && !flight) {
+        sl.t += dt;
+        if (sl.phase === "top" && sl.t > 2.0) {
+          sl.phase = "slide";
+          sl.v = 0.32;
+          playSfx("whoosh");
+        } else if (sl.phase === "slide") {
+          sl.v = Math.min(1.3, sl.v + dt * 0.85);
+          sl.d += sl.v * dt;
+          if (sl.d >= sl.length) {
+            sl.d = sl.length;
+            sl.phase = "splash";
+            sl.t = 0;
+            playSfx("splash");
+          }
+        } else if (sl.phase === "splash" && sl.t > 1.4 && !sl.ended) {
+          sl.ended = true;
+          cb.current.onRideEnd?.();
+        }
+        sl.ride.splash(sl.phase === "splash" ? sl.t : -1);
+      }
+      const prevYaw = vv.yaw;
+      vehiclePose(vv, time);
+      // A steady view: the heading follows the vehicle smoothly (no jolts on phones).
+      vv.yaw += turnTo(vv.yaw, vv.pose.yaw) * (1 - Math.exp(-dt * (sl ? 16 : 5)));
+      if (sl && dt > 0) {
+        const rate = turnTo(prevYaw, vv.yaw) / dt;
+        sl.roll += (Math.max(-0.55, Math.min(0.55, rate * 0.16)) - sl.roll) * Math.min(1, dt * 5);
+      }
+      if (vv.cabin) {
+        vv.cabin.group.rotation.y = vv.yaw;
+        const steerAmt = vv.ride.kind === "car" ? Math.max(-1, Math.min(1, turnTo(prevYaw, vv.yaw) / Math.max(0.001, dt) * 0.6)) : 0;
+        vv.cabin.update(time, carNight, steerAmt);
+      } else sl?.ride.setNight(carNight);
+      vv.figures?.update(time);
     }
     function setPlace(p: CityPlace | null) {
       wantPlace = p;
@@ -4053,9 +4155,21 @@ export function CityView({
         const want = Math.atan2(rideEye.x, rideEye.z);
         if (Math.hypot(rideEye.x, rideEye.z) > 1.5) aim.yaw += turnTo(aim.yaw, want) * (1 - Math.exp(-dt / 9));
       } else if (view?.kind === "place") {
-        const v = view.stage.views[spotIndex];
-        pose.pos.copy(v.p);
-        hfov = view.stage.level.kind === "interior" ? 84 : 80;
+        const st = view.stage;
+        stepWalk(st, dt);
+        stageToCity(st, st.local.x, st.local.z, st.eye, pose.pos);
+        hfov = st.level.kind === "interior" ? 84 : 80;
+      } else if (view?.kind === "vehicle") {
+        const tall = (el.clientWidth || 1) < (el.clientHeight || 1);
+        stepVehicle(view, dt, clock.elapsedTime);
+        vehicleEye(view, clock.elapsedTime, pose.pos);
+        hfov = view.slide ? 96 : tall ? 70 : 80;
+        const sl = view.slide;
+        const yaw = view.yaw + aim.yaw + look.state.yaw;
+        const pitch = (sl && sl.phase === "slide" ? sl.pitch * 0.8 : 0) + aim.pitch + look.state.pitch;
+        pose.quat.setFromEuler(eul.set(pitch, yaw, sl && sl.phase === "slide" ? sl.roll : 0, "YXZ"));
+        pose.fov = fovFor(hfov) * look.state.zoom;
+        return;
       }
       const yaw = aim.yaw + look.state.yaw;
       const pitch = aim.pitch + look.state.pitch;
@@ -4101,14 +4215,20 @@ export function CityView({
       if (view?.kind === "place") view.stage.alpha = view.stage.level.kind === "interior" ? (kind === "enter" ? Math.min(smoothstep(0.35, 0.8, e), insideRoom(view.stage)) : 1) : 1;
       if (leaving) leaving.alpha = flight ? Math.min(out, insideRoom(leaving)) : 0;
       basketAlpha = view?.kind === "ride" ? (kind === "enter" ? smoothstep(0.6, 0.95, e) : 1) : leavingRide && flight ? 1 - smoothstep(0, 0.3, e) : 0;
-      const outdoors = view?.kind === "place" && view.stage.level.kind !== "interior";
-      camera.near = outdoors && (!flight || e > 0.5) ? 0.05 : 0.1;
+      if (view?.kind === "vehicle") view.alpha = kind === "enter" ? smoothstep(0.55, 0.95, e) : 1;
+      if (leavingVehicle) leavingVehicle.alpha = flight ? 1 - smoothstep(0, 0.3, e) : 0;
+      const outdoors = (view?.kind === "place" && view.stage.level.kind !== "interior") || view?.kind === "vehicle";
+      camera.near = outdoors && (!flight || e > 0.5) ? (view?.kind === "vehicle" ? 0.03 : 0.05) : 0.1;
       camera.updateProjectionMatrix();
       if (flight && flight.t >= 1) {
         flight = null;
         if (leaving) {
           disposeStage(leaving);
           leaving = null;
+        }
+        if (leavingVehicle) {
+          disposeVehicle(leavingVehicle);
+          leavingVehicle = null;
         }
         leavingRide = false;
         if (!view) {
@@ -4143,6 +4263,12 @@ export function CityView({
         if (!st?.scene || !st.interior) continue;
         st.interior.setAlpha(st.alpha);
         if (st.alpha > 0.002) passes.push({ scene: st.scene, origin: st.origin, unit: st.unit, eye: 1.6 });
+      }
+      for (const vv of [leavingVehicle, view?.kind === "vehicle" ? view : null]) {
+        if (!vv) continue;
+        vv.cabin?.setAlpha(vv.alpha);
+        vv.slide?.ride.setAlpha(vv.alpha);
+        if (vv.alpha > 0.002) passes.push({ scene: vv.scene, origin: vv.origin, unit: 1 / METRES, eye: 0 });
       }
       basket.setAlpha(basketAlpha);
       const rideK = view?.kind === "ride" ? view.k : null;
@@ -4181,12 +4307,30 @@ export function CityView({
         if (!st) continue;
         st.interior?.setNight(carNight);
         st.deck?.setNight(carNight);
-        st.figures?.update(time);
+        camLocal.set(st.local.x, 0, st.local.z);
+        st.figures?.update(time, camLocal);
+        st.players?.update(time, camLocal);
+        st.update?.(time);
+        st.interact?.update(time, camLocal, st.hover);
       }
+    }
+    function setSeats(list: Record<string, SeatTaker> | undefined, mine: string | null) {
+      seatsNow = list ?? {};
+      mySeatNow = mine;
+      if (view?.kind === "place") syncPlayers(view.stage);
     }
 
     /** The regular (NPC) under the pointer in the place we're in, if any. */
     function npcUnder(clientX: number, clientY: number): Npc | null {
+      if (view?.kind === "vehicle" && !flight && view.figures) {
+        const rect = renderer.domElement.getBoundingClientRect();
+        pointer.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+        ray.setFromCamera(pointer, overlayCam);
+        const hit = ray.intersectObjects(view.figures.hits, true)[0];
+        const id = hit ? view.figures.npcOf(hit.object) : null;
+        const npcs = view.npcs;
+        return id ? (npcs.find((n) => n.id === id) ?? null) : null;
+      }
       if (view?.kind !== "place" || flight) return null;
       const st = view.stage;
       if (!st.figures) return null;
@@ -4423,6 +4567,7 @@ export function CityView({
     let down: { x: number; y: number; t: number } | null = null;
     const onDown = (e: PointerEvent) => {
       down = { x: e.clientX, y: e.clientY, t: performance.now() };
+      eventFly = null;
       if (immersive()) renderer.domElement.style.cursor = "grabbing";
     };
     const onUp = (e: PointerEvent) => {
@@ -4436,10 +4581,25 @@ export function CityView({
         renderer.domElement.style.cursor = "grab";
         if (moved > 8 || !quick || look.multiTouch) return;
         const npc = npcUnder(e.clientX, e.clientY);
-        if (npc) cb.current.onNpc?.(npc.id);
+        if (npc) {
+          cb.current.onNpc?.(npc.id);
+          return;
+        }
+        const it = itemUnder(e.clientX, e.clientY);
+        if (it && view?.kind === "place") {
+          playSfx("chime");
+          cb.current.onInteract?.({ id: it.id, kind: it.kind, label: it.label, place: view.stage.place });
+          return;
+        }
+        walkTap(e.clientX, e.clientY);
         return;
       }
       if (moved > 8 || !quick) return;
+      const eventTap = isRevealed ? worldEventsLayer.pickAt(e.clientX, e.clientY) : null;
+      if (eventTap !== null) {
+        cb.current.onEventTap?.(eventTap);
+        return;
+      }
       if (coin && coinUnder(e.clientX, e.clientY)) {
         // Pop! A burst of gold where the balloon was.
         const at = coin.obj.position.clone();
@@ -4541,8 +4701,16 @@ export function CityView({
       if (hoverQueued && immersive()) {
         // Inside somewhere: point at people to see who they are.
         const npc = npcUnder(hoverQueued.clientX, hoverQueued.clientY);
-        renderer.domElement.style.cursor = npc ? "pointer" : "grab";
-        cb.current.onHover?.(npc ? { tile: -1, label: `${npc.name} · ${npc.role} · tap to say hi` } : null);
+        const it = npc ? null : itemUnder(hoverQueued.clientX, hoverQueued.clientY);
+        if (view?.kind === "place") view.stage.hover = it?.id ?? null;
+        renderer.domElement.style.cursor = npc || it ? "pointer" : "grab";
+        cb.current.onHover?.(
+          npc
+            ? { tile: -1, label: `${npc.name} · ${npc.role} · NPC · tap to chat` }
+            : it
+              ? { tile: -1, label: it.kind === "seat" ? (it.taken ? `${it.taken} is sitting here` : "A free seat · tap to sit") : `${it.label} · tap to use` }
+              : null,
+        );
         hoverQueued = null;
       }
       if (hoverQueued) {
@@ -4569,10 +4737,11 @@ export function CityView({
       updateGrowth(now);
       updateShakes(now);
       if (life.visible) {
-        updateCars(dt, time);
+        traffic.update(dt, time);
         updateLandmarks(dt, now);
+        for (const p of parks) p.update(time);
         updateBoards(dt, time, now);
-        updateBoats(time, dt);
+        boats.update(time, dt);
         people.update(dt, now);
         trains.update(dt, now);
         plumes.update(time, now);
@@ -4601,6 +4770,15 @@ export function CityView({
           controls.target.lerp(focus, 0.06);
           if (controls.target.distanceTo(focus) < 0.05) focus = null;
         }
+        if (eventFly) {
+          flyStep.subVectors(eventFly, controls.target).multiplyScalar(0.06);
+          controls.target.add(flyStep);
+          camera.position.add(flyStep);
+          // Come in closer if we're zoomed right out.
+          const far = camera.position.distanceTo(controls.target) > 13;
+          if (far) camera.position.lerp(controls.target, 0.03);
+          if (flyStep.lengthSq() < 1e-6 && !far) eventFly = null;
+        }
         controls.update();
       }
       updatePills();
@@ -4608,6 +4786,7 @@ export function CityView({
       const fog = scene.fog as THREE.Fog;
       fog.near = (dist + radius * 0.8) * (1 - fogFactor * 0.45);
       fog.far = (dist + radius * 4 + 30) * (1 - fogFactor * 0.3);
+      worldEventsLayer.update(dt, time, Date.now() + cb.current.clockOffsetMs);
       renderer.render(scene, camera);
       renderOverlays(time);
     };
@@ -4635,7 +4814,16 @@ export function CityView({
     renderer.domElement.addEventListener("webglcontextlost", onLost);
     renderer.domElement.addEventListener("webglcontextrestored", onRestored);
 
-    api.current = { build, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setPlace, setSpot, setCaughtFaces, setMode };
+    const setWorldEvents = (list: WorldEvent[] | undefined) => worldEventsLayer.set(list);
+    const focusEventAt = (id: number) => {
+      if (immersive()) return;
+      const p = worldEventsLayer.locate(id);
+      if (!p) return;
+      focus = null;
+      eventFly = p;
+      worldEventsLayer.ping(id);
+    };
+    api.current = { build, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setMode, setWorldEvents, focusEvent: focusEventAt };
 
     return () => {
       alive = false;
@@ -4647,12 +4835,18 @@ export function CityView({
       birds.dispose();
       people.dispose();
       trains.dispose();
+      traffic.dispose();
+      boats.dispose();
       plumes.dispose();
       sites.dispose();
       buildingSite.dispose();
+      worldEventsLayer.dispose();
       for (const p of pills) p.sprite.material.dispose();
       disposePills();
       for (const st of [leaving, view?.kind === "place" ? view.stage : null]) if (st) disposeStage(st);
+      for (const vv of [leavingVehicle, view?.kind === "vehicle" ? view : null]) if (vv) disposeVehicle(vv);
+      for (const p of parks) p.dispose();
+      disposeVehicleCaches();
       basket.dispose();
       look.dispose();
       disposeKitCaches();
@@ -4714,9 +4908,16 @@ export function CityView({
     api.current?.setRoomCounts(roomCounts ?? {});
   }, [roomCounts]);
 
+  const rideKey = ride === null || ride === undefined ? "" : typeof ride === "number" ? `balloon:${ride}` : `${ride.kind}:${ride.index}`;
   useEffect(() => {
-    api.current?.setRide(ride);
-  }, [ride]);
+    const [kind, index] = rideKey ? rideKey.split(":") : [];
+    api.current?.setRide(kind ? { kind: kind as RideKind, index: Number(index) } : null);
+  }, [rideKey]);
+
+  const steerKey = steer ? `${steer.dir}|${steer.at}` : "";
+  useEffect(() => {
+    if (steerKey) api.current?.setSteer(steerKey.split("|")[0] as TurnDir);
+  }, [steerKey]);
 
   const placeKey = place ? `${place.building}|${place.level}` : "";
   useEffect(() => {
@@ -4729,8 +4930,20 @@ export function CityView({
   }, [spot]);
 
   useEffect(() => {
+    api.current?.setSeats(seats, mySeat ?? null);
+  }, [seats, mySeat]);
+
+  useEffect(() => {
     api.current?.setCaughtFaces(caughtFaces);
   }, [caughtFaces, tileCount]);
+
+  useEffect(() => {
+    api.current?.setWorldEvents(worldEvents);
+  }, [worldEvents]);
+
+  useEffect(() => {
+    if (focusEvent) api.current?.focusEvent(focusEvent.id);
+  }, [focusEvent]);
 
   return <div ref={host} className="absolute inset-0" />;
 }

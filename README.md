@@ -9,9 +9,11 @@ The full rule book is the "Hide & Seek Grid Game: Rules Spec" doc.
 
 The game is 18+ (players give their date of birth when they sign up). The UI calls hiders "ghosts" and seekers
 "hunters"; the database still says `hider` and `seeker`. Ghosts get 1 move per game (2 from level 10,
-3 from level 20); the hunt always runs the full hour, even when every ghost is caught. Chat
-happens in places: players switch to Chat mode and enter buildings or ride hot-air balloons
-(10-minute rides, up to 1,000 people), plus private messages.
+3 from level 20); the hunt runs for up to an hour and the world ends as soon as every ghost is
+caught (the clock turns red and beeps in the last minute). Chat happens in places: players
+switch to Chat mode and enter buildings (lobbies, floors, rooftops, clubs, restaurants) or hop
+on a ride (hot-air balloons, trains, buses, cars they steer, boats, Ferris wheels, water
+slides), plus private messages.
 
 1. **Hiding window (10 min).** Anyone joins as a hunter; players who have finished one round
    as a hunter can hide (stake 100 coins). Each hider adds 20 tiles to a 20×20 starting city.
@@ -39,7 +41,13 @@ happens in places: players switch to Chat mode and enter buildings or ride hot-a
    survivors get their stake back plus 80% of the pool, hunters share 10% by real coins spent,
    10% burns. If everyone is found: hunters share 80%, the hiders who played share 10%, 10% burns.
 5. **Passive income.** Players under 100 coins earn coins back over time, up to 100 in 24
-   hours. Opening a billboard ad pays 2 coins (10 a day).
+   hours; each level adds 25 to both numbers. Opening a billboard ad pays 5 coins (5 a day).
+   Anyone holding 10,000+ coins is a "big fish". Players can give coins to each other and
+   spray them on dancers in clubs (capped per day; transfers, never new coins).
+6. **World events.** Every hunt gets 2–4 of 100 events (`src/lib/world-events.ts`, mirrored in
+   `world_event_kinds`): emergencies, weather, parties, transport trouble and mysteries to watch,
+   some with coins to grab (first come, first served), and 13 twists that change the rules for
+   a few minutes (fog of war, double coins, ghost amnesty, blackout, safe house, bounty board…).
 
 ## Setup
 
@@ -49,8 +57,9 @@ happens in places: players switch to Chat mode and enter buildings or ride hot-a
    `game-db/006_avatars_badges_balloons.sql`, `game-db/007_shields_payouts_passive.sql`,
    `game-db/008_badge_collection.sql`, `game-db/009_levels_powerups.sql`,
    `game-db/010_ads_sponsors.sql`, `game-db/011_badges_hard.sql`, `game-db/012_age_codes.sql`,
-   `game-db/013_ads_v2.sql`, `game-db/014_chat_rooms.sql`, `game-db/015_ghost_rules.sql` and
-   `game-db/016_place_rooms.sql`,
+   `game-db/013_ads_v2.sql`, `game-db/014_chat_rooms.sql`, `game-db/015_ghost_rules.sql`,
+   `game-db/016_place_rooms.sql`, `game-db/017_world_events.sql`, `game-db/018_npcs.sql` and
+   `game-db/019_activities.sql`,
    in order, once each, on an empty database. In Supabase → Database → Extensions, switch on **pg_cron** first if you
    can: the file then schedules the round clock to run every minute. (Without it, the clock
    still moves whenever someone has the game open.)
@@ -89,6 +98,15 @@ lights, lit windows and stars after dark, random weather (rain, fog, cloud) per 
 optional synthesized city sounds (`src/lib/city/sky.ts`, `src/app/play/sound.ts`). Airports,
 sea ports, military camps and police stations appear too, and see-through construction sites
 mark the next spots the city will grow into.
+
+Inside places: tap the floor to walk, tap glowing things to use them. Seats (one person, 3
+minutes at most; sitting makes a side quest more likely), mini games (archery, darts, arcade,
+pool, cards, trivia, dice and rock-paper-scissors duels, karaoke, piano, photo booth), menus to
+order from, a DJ deck and dance floor in clubs. NPCs ("regulars", marked NPC) have their own
+personalities: some gossip about where ghosts are, some give coins or side quests. Side quests
+(52 roles such as thief, detective, courier, DJ; `src/lib/quests.ts`) reward coins and a special
+move (steal a little from a player, a hint, a free search…). Code: `src/app/play/activities/`,
+`src/lib/npc/`, `game-db/018_npcs.sql`, `game-db/019_activities.sql`.
 
 ## Avatars, badges and coin balloons
 
