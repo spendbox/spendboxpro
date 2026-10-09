@@ -10,7 +10,6 @@ import { cleanAvatar, defaultAvatar, type Avatar } from "@/lib/avatar";
 import {
   addressOf,
   hash,
-  KIND_LABEL,
   makePlan,
   railCentre,
   smoothNoise,
@@ -18,7 +17,6 @@ import {
   stationXZ,
   spiralIndex,
   spiralXY,
-  STRUCTURE_LABEL,
   structureCentre,
   structureSize,
   tileAt,
@@ -129,7 +127,7 @@ export type CityRoom = { id: string; name: string; capacity: number; kind: "buil
 
 /** Someone dancing on the dance floor of the club you're in: their move, and who they dance with (a player's or an NPC's id). */
 export type CityDancer = { id: string; name: string; avatar: Avatar; move: DanceMove; with: string | null };
-/** A friend in a place in town (chat mode shows their face over it): the room id from useRooms ("b:12:f4", "balloon:2"). */
+/** A friend in a place in town (their face shows over it): the room id from useRooms ("b:12:f4", "balloon:2"). */
 export type CityFriendPin = { id: string; name: string; avatar: Avatar; room: string };
 /** A ghost lit up on the map: free to challenge, in a duel right now, or golden (safe). */
 export type CityGhost = { id: string; name: string; avatar: Avatar; tile: number; status: "free" | "playing" | "golden"; mine?: boolean };
@@ -176,8 +174,6 @@ type Props = {
   tileCount: number;
   markers: CityMarkers;
   events: CityEvent[];
-  interactive: boolean;
-  onTile: (tile: number) => void;
   /** A billboard was tapped: which board, and the ad it was showing (null = "advertise here"). */
   onBillboard: (info: { id: string; tile: number; adId: string | null }) => void;
   onHover?: (info: { tile: number; label: string } | null) => void;
@@ -198,11 +194,9 @@ type Props = {
    * site. When it turns true (the hunt starts) the city rises. Default true.
    */
   revealed?: boolean;
-  /** "chat": tap buildings and balloons to enter their chat rooms (onRoom) instead of onTile. Default "game". */
-  mode?: "game" | "chat";
   /** How many people are in each chat room right now ({ roomId: count }). */
   roomCounts?: Record<string, number>;
-  /** Chat mode: a building or balloon was tapped. */
+  /** A building or balloon was tapped (each one is a place to go inside). */
   onRoom?: (room: CityRoom) => void;
   /**
    * Ride something: a hot-air balloon (a plain number k, or { kind: "balloon", index: k }), a
@@ -253,7 +247,7 @@ type Props = {
   onEventInfo?: (id: number) => void;
   /**
    * What's on at the sports venues right now: a short live label per sport ("Lions 2-1 Eagles"),
-   * or null / missing when nothing is. The venue's info bubble shows it (chat mode).
+   * or null / missing when nothing is. The venue's info bubble shows it.
    */
   liveVenues?: Partial<Record<CitySport, string | null>>;
   /** Server clock minus this device's clock (ms), so events start on time everywhere. Default 0. */
@@ -267,7 +261,7 @@ type Props = {
   dance?: CityDance | null;
   /** Other players dancing in the club you're in. */
   dancers?: CityDancer[];
-  /** Your friends who are in a place right now: chat mode shows each one's face and name over it. */
+  /** Your friends who are in a place right now: each one's face and name shows over it. */
   friendsAt?: CityFriendPin[];
   /** Open a building's place (as if it was tapped: onRoom is called with it), e.g. to go to a friend. A new `at` each time. */
   openRoom?: { id: string; at: number } | null;
@@ -1200,8 +1194,6 @@ export function CityView({
   tileCount,
   markers,
   events,
-  interactive,
-  onTile,
   onBillboard,
   onHover,
   meAvatar,
@@ -1212,7 +1204,6 @@ export function CityView({
   ads,
   onAdViews,
   revealed = true,
-  mode = "game",
   roomCounts,
   onRoom,
   ride = null,
@@ -1253,7 +1244,6 @@ export function CityView({
     setBalloon: (slot: number | null) => void;
     setAds: (ads: CityAd[]) => void;
     setRevealed: (on: boolean) => void;
-    setMode: (m: "game" | "chat") => void;
     setRoomCounts: (counts: Record<string, number>) => void;
     setRide: (r: RideTarget | null) => void;
     setSteer: (dir: TurnDir) => void;
@@ -1271,10 +1261,10 @@ export function CityView({
     setGhosts: (list: CityGhost[]) => void;
     flyToTile: (tile: number) => void;
   } | null>(null);
-  const cb = useRef({ onTile, onHover, onBillboard, onBalloon, onAdViews, interactive, onRoom, onBalloons, mode, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost });
+  const cb = useRef({ onHover, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost });
   const atmos = useRef({ progress, nightFirst, meAvatar });
   useEffect(() => {
-    cb.current = { onTile, onHover, onBillboard, onBalloon, onAdViews, interactive, onRoom, onBalloons, mode, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost };
+    cb.current = { onHover, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost };
     atmos.current = { progress, nightFirst, meAvatar };
   });
 
@@ -1932,8 +1922,8 @@ export function CityView({
 
     // ---- hot-air balloons and planes
     const balloonColors = [0xff6b6b, 0xffd43b, 0x4dabf7, 0xda77f2, 0x38d9a9];
-    // Balloons carry no ads (ads are on billboards only). They slowly turn as they drift. In
-    // chat mode each one is a chat room you can ride in.
+    // Balloons carry no ads (ads are on billboards only). They slowly turn as they drift. Each
+    // one is a place you can ride in and chat with the people there.
     const ropeGeo = mergeGeometries(
       [[-0.07, -0.07], [0.07, -0.07], [-0.07, 0.07], [0.07, 0.07]].map(([rx, rz]) => new THREE.BoxGeometry(0.008, 0.2, 0.008).translate(rx, -0.52, rz)),
     );
@@ -3545,7 +3535,7 @@ export function CityView({
     // ---- hover highlight and taps
     const hoverBox = new THREE.LineSegments(
       new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0)),
-      new THREE.LineBasicMaterial({ color: 0xffb400 }),
+      new THREE.LineBasicMaterial({ color: 0x63e6be }),
     );
     hoverBox.visible = false;
     scene.add(hoverBox);
@@ -3591,7 +3581,7 @@ export function CityView({
     }
 
     function showHover(tile: number | null) {
-      if (tile === null || (!cb.current.interactive && !chatMode)) {
+      if (tile === null) {
         hoverBox.visible = false;
         cb.current.onHover?.(null);
         return;
@@ -3606,42 +3596,23 @@ export function CityView({
         cb.current.onHover?.({ tile, label: "Building site · the city appears when the hunt starts" });
         return;
       }
-      if (chatMode) {
-        // Highlight the whole building, and say who's inside.
-        const r = roomFor(tile);
-        if (!r) {
-          hoverBox.visible = false;
-          cb.current.onHover?.(null);
-          return;
-        }
-        const a = r.anchor;
-        const size = a.structure ? structureSize(a.structure) : { w: 1, d: 1 };
-        hoverBox.visible = true;
-        hoverBox.position.set(a.x + (size.w - 1) / 2, 0, a.z + (size.d - 1) / 2);
-        hoverBox.scale.set(size.w + 0.04, a.top + 0.12, size.d + 0.04);
-        const n = roomCountsNow[r.room.id] ?? 0;
-        cb.current.onHover?.({ tile: a.i, label: `${r.room.name}${t.egg ? ` · ${t.egg.name}` : ""} · ${n ? `${n} inside` : "nobody inside yet"} · tap to go in` });
+      // Highlight the whole building, and say who's inside.
+      const r = roomFor(tile);
+      if (!r) {
+        hoverBox.visible = false;
+        cb.current.onHover?.(null);
         return;
       }
+      const a = r.anchor;
+      const size = a.structure ? structureSize(a.structure) : { w: 1, d: 1 };
       hoverBox.visible = true;
-      hoverBox.position.set(t.x, 0, t.z);
-      hoverBox.scale.set(1.02, t.top + 0.1, 1.02);
-      const what = t.home
-        ? homeLabel(t.home)
-        : t.egg
-        ? `${t.egg.name} · ${KIND_LABEL[t.kind]}`
-        : t.station
-        ? "Railway station"
-        : t.kind === "structure" && t.structure
-          ? STRUCTURE_LABEL[t.structure.type]
-          : t.works
-            ? "Road works"
-            : `${KIND_LABEL[t.kind]}${t.rail ? " · under the railway" : ""}`;
-      cb.current.onHover?.({ tile, label: currentPlan ? `${addressOf(currentPlan, t)} · ${what}` : what });
+      hoverBox.position.set(a.x + (size.w - 1) / 2, 0, a.z + (size.d - 1) / 2);
+      hoverBox.scale.set(size.w + 0.04, a.top + 0.12, size.d + 0.04);
+      const n = roomCountsNow[r.room.id] ?? 0;
+      cb.current.onHover?.({ tile: a.i, label: `${r.room.name}${t.egg ? ` · ${t.egg.name}` : ""} · ${n ? `${n} inside` : "nobody inside yet"} · tap to go in` });
     }
 
-    // ---- chat mode: buildings and balloons are chat rooms
-    let chatMode = false;
+    // ---- places: buildings and balloons are places to go inside, with people to chat with
     let roomCountsNow: Record<string, number> = {};
     const shortAddress = (a: string) => {
       for (const [full, short] of Object.entries(ABBREV)) {
@@ -3719,12 +3690,10 @@ export function CityView({
     scene.add(pillGroup);
     let pillKey = "";
     function rebuildPills() {
-      const entries = chatMode
-        ? Object.entries(roomCountsNow)
-            .filter(([, n]) => typeof n === "number" && n > 0)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 40)
-        : [];
+      const entries = Object.entries(roomCountsNow)
+        .filter(([, n]) => typeof n === "number" && n > 0)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 40);
       // The counts often arrive as a new object with the same numbers: nothing to redo then.
       const key = `${currentSeed}|${tiles.length}|${entries.join(";")}`;
       if (key === pillKey) return;
@@ -3755,7 +3724,7 @@ export function CityView({
       }
     }
     function updatePills() {
-      pillGroup.visible = chatMode && isRevealed;
+      pillGroup.visible = isRevealed;
       if (!pillGroup.visible) return;
       const recheck = bubbles.picks() !== pillPicks;
       pillPicks = bubbles.picks();
@@ -3782,7 +3751,7 @@ export function CityView({
         if (p.a < 0.02) p.sprite.visible = false;
       }
     }
-    // Friends in places (chat mode): their face, with their name under it, over the place
+    // Friends in places: their face, with their name under it, over the place
     // they're in (just above its info bubble), side by side when several are in one place.
     // Drawn as small page elements over the canvas (like the bubbles), so they're always on top.
     type Pin = { root: HTMLDivElement; tile: number; balloon: number; building: string; slot: number; of: number; shown: boolean };
@@ -3835,7 +3804,7 @@ export function CityView({
       }
     }
     function updatePins() {
-      const on = chatMode && isRevealed && pins.length > 0;
+      const on = isRevealed && pins.length > 0;
       pinLayer.style.display = on ? "" : "none";
       if (!on) return;
       const w = el.clientWidth || 1;
@@ -3981,12 +3950,6 @@ export function CityView({
       const r = m ? roomFor(Number(m[1])) : null;
       if (r) cb.current.onRoom?.(r.room);
     }
-    function setMode(m: "game" | "chat") {
-      chatMode = m === "chat";
-      (hoverBox.material as THREE.LineBasicMaterial).color.set(chatMode ? 0x63e6be : 0xffb400);
-      hoverBox.visible = false;
-      rebuildPills();
-    }
     function setRoomCounts(counts: Record<string, number>) {
       roomCountsNow = counts ?? {};
       countByTile.clear();
@@ -3994,8 +3957,8 @@ export function CityView({
       rebuildPills();
     }
 
-    // ---- info bubbles: over the places near the middle of the view (chat mode: name, what it
-    // is, who's inside; tap to go in) and over the world events' pins (both modes; tap for info).
+    // ---- info bubbles: over the places near the middle of the view (name, what it is, who's
+    // inside; tap to go in) and over the world events' pins (tap for info).
     const countByTile = new Map<number, number>();
     let spotTiles: Tile[] | null = null;
     let spotList: BubbleSpot[] = [];
@@ -4096,7 +4059,7 @@ export function CityView({
         return false;
       },
       onBuilding: (i) => {
-        if (!chatMode || !isRevealed || immersive()) return;
+        if (!isRevealed || immersive()) return;
         const r = roomFor(i);
         if (!r) return;
         showHover(i);
@@ -5593,29 +5556,20 @@ export function CityView({
         cb.current.onBillboard(board);
         return;
       }
-      if (chatMode) {
-        // Chat mode: buildings and balloons are rooms.
-        const k = balloonUnder(e.clientX, e.clientY);
-        if (k !== null) {
-          cb.current.onRoom?.(balloonRoom(k));
-          return;
-        }
-        const tile = tileUnder(e.clientX, e.clientY);
-        if (tile === null) return;
-        tapExtras(tile);
-        const r = isRevealed ? roomFor(tile) : null;
-        if (r) {
-          showHover(tile);
-          cb.current.onRoom?.(r.room);
-        }
+      // Buildings and balloons are places: tap one to go inside.
+      const k = balloonUnder(e.clientX, e.clientY);
+      if (k !== null) {
+        cb.current.onRoom?.(balloonRoom(k));
         return;
       }
       const tile = tileUnder(e.clientX, e.clientY);
       if (tile === null) return;
       tapExtras(tile);
-      if (!cb.current.interactive) return;
-      showHover(tile);
-      cb.current.onTile(tile);
+      const r = isRevealed ? roomFor(tile) : null;
+      if (r) {
+        showHover(tile);
+        cb.current.onRoom?.(r.room);
+      }
     };
     let hoverQueued: PointerEvent | null = null;
     const onMove = (e: PointerEvent) => {
@@ -5696,7 +5650,7 @@ export function CityView({
         }
       }
       if (hoverQueued) {
-        const balloonK = chatMode ? balloonUnder(hoverQueued.clientX, hoverQueued.clientY) : null;
+        const balloonK = balloonUnder(hoverQueued.clientX, hoverQueued.clientY);
         const board = balloonK === null && isRevealed ? boardUnder(hoverQueued.clientX, hoverQueued.clientY) : null;
         renderer.domElement.style.cursor = board || balloonK !== null ? "pointer" : "";
         if (balloonK !== null) {
@@ -5743,9 +5697,9 @@ export function CityView({
       updateCoin(time);
       updateMarkers(time);
       updateCaught(time);
-      // Chat mode: the city dims a little so the rooms' counts stand out (but not once you're
-      // inside somewhere, looking round).
-      const exposure = immersive() ? 1.0 : chatMode ? 0.8 : 1.05;
+      // The city dims a little so the places' counts stand out (but not once you're inside
+      // somewhere, looking round).
+      const exposure = immersive() ? 1.0 : 0.8;
       renderer.toneMappingExposure += (exposure - renderer.toneMappingExposure) * Math.min(1, dt * 3);
       updateStages(time);
       const riding = updateView(dt);
@@ -5778,7 +5732,7 @@ export function CityView({
       renderOverlays(time);
       // After drawing: the camera's matrices are this frame's now.
       const map = isRevealed && !immersive();
-      bubbles.update(dt, now, map && chatMode, map && !!cb.current.onEventInfo);
+      bubbles.update(dt, now, map, map && !!cb.current.onEventInfo);
     };
     loop();
 
@@ -5822,7 +5776,7 @@ export function CityView({
       if (currentSeed >= 0 && builtCount > 0) build(currentSeed, builtCount);
     }
 
-    api.current = { build, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setMode, setWorldEvents, setHouses, setDance, setFriendPins, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile };
+    api.current = { build, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile };
 
     return () => {
       alive = false;
@@ -5912,10 +5866,6 @@ export function CityView({
   useEffect(() => {
     api.current?.setRevealed(revealed);
   }, [revealed]);
-
-  useEffect(() => {
-    api.current?.setMode(mode);
-  }, [mode]);
 
   useEffect(() => {
     api.current?.setRoomCounts(roomCounts ?? {});

@@ -25,6 +25,8 @@ import {
 /** Any of our line icons (Lucide or our own). */
 type LucideIcon = React.ComponentType<{ className?: string; style?: React.CSSProperties; "aria-hidden"?: boolean }>;
 import {
+  ChevronDown,
+  ChevronUp,
   Coins,
   CircleHelp,
   Fish,
@@ -296,7 +298,11 @@ export function Game({ state }: { state: GameState }) {
   const [confirmHide, setConfirmHide] = useState(false);
   const [howOpen, setHowOpen] = useState(false);
   const [editAvatar, setEditAvatar] = useState(false);
-  const [statsMin, setStatsMin] = useState(false);
+  // The round card (top left) and the bottom bar (Explore, Chat, Ghosts, My house) start folded
+  // away on every visit, so the town gets the screen; tap either to open it.
+  const [statsMin, setStatsMin] = useState(true);
+  const [dockOpen, setDockOpen] = useState(false);
+  const [chatUnread, setChatUnread] = useState(0);
   const [sound, setSound] = useState(true);
   const [busy, setBusy] = useState(false);
   // Ghost duels: a ghost's card (tapped on the map), the list of ghosts, the duel on screen,
@@ -720,9 +726,6 @@ export function Game({ state }: { state: GameState }) {
     try {
       const saved = JSON.parse(localStorage.getItem("hs-view") ?? "{}");
       const id = setTimeout(() => {
-        // Phones start with the round card folded into a slim pill, unless you opened it before.
-        if (typeof saved.statsMin === "boolean") setStatsMin(saved.statsMin);
-        else if (window.innerWidth < 640) setStatsMin(true);
         if (typeof saved.sound === "boolean") setSound(saved.sound);
       }, 0);
       return () => clearTimeout(id);
@@ -730,7 +733,7 @@ export function Game({ state }: { state: GameState }) {
   }, []);
   const saveView = (patch: Record<string, boolean>) => {
     try {
-      localStorage.setItem("hs-view", JSON.stringify({ statsMin, sound, ...patch }));
+      localStorage.setItem("hs-view", JSON.stringify({ sound, ...patch }));
     } catch {}
   };
 
@@ -907,9 +910,8 @@ export function Game({ state }: { state: GameState }) {
     startTransition(() => router.refresh());
   }
 
-  // Chat mode: tapping a building or balloon takes you inside to chat with the people there.
-  // Chat mode: tapping a building shows its levels (ground, floors, rooftop) to pick from;
-  // nothing opens the chat by itself.
+  // Tapping a building or balloon takes you inside to meet the people there. A building with
+  // several levels (ground, floors, rooftop) asks which one; nothing opens the chat by itself.
   function onRoom(room: PlaceRoom) {
     // Going to a friend: straight onto their floor.
     if (goTo && room.id === goTo.building) {
@@ -981,7 +983,7 @@ export function Game({ state }: { state: GameState }) {
     setPlace(null);
     setActivity(null);
   }
-  // "Visit my house": straight into its ground floor (chat mode).
+  // "Visit my house": straight into its ground floor.
   async function visitMyHouse() {
     setHouseOpen(false);
     if (myHouseTile === null) return setMessage({ text: "Your house isn't in this game. Switch it on and it'll be in the next one.", tone: "info" });
@@ -1075,7 +1077,6 @@ export function Game({ state }: { state: GameState }) {
   }
 
   // ---- ghost duels
-  const noTile = useCallback(() => {}, []);
   const ghostList = board?.ghosts;
   const openGhost = useCallback(
     (id: string) => {
@@ -1095,6 +1096,30 @@ export function Game({ state }: { state: GameState }) {
     const id = setTimeout(() => setDuelOn(reopenDuel), 0);
     return () => clearTimeout(id);
   }, [reopenDuel]);
+  // What the folded bottom bar says: where you are, or how the game's going for you.
+  const dockHint = ((): { icon: LucideIcon; text: string; colour?: string; hot?: boolean } => {
+    if (!round || phase === "done") return { icon: Hammer, text: "Building the next town…" };
+    if (guest) return { icon: Users, text: "Watching live" };
+    if (isDancing) return { icon: Music, text: "Dancing", colour: "#e64980" };
+    if (ride !== null) {
+      const name = rooms.myRoomInfo?.name ?? rideList.find((r) => r.kind === ride.kind && r.index === ride.index)?.name ?? RIDE_INFO[ride.kind].label;
+      return { icon: RIDE_ICONS[ride.kind], text: name, colour: RIDE_INFO[ride.kind].colour };
+    }
+    if (place) return { icon: Building2, text: rooms.myRoomInfo?.name ?? "Inside", colour: "#7048e8" };
+    if (board?.phase === "join") {
+      return board.me.role === "ghost"
+        ? { icon: Ghost, text: `You're a ghost · the hunt starts in ${countdown}` }
+        : { icon: Ghost, text: `Be a ghost? Joining closes in ${countdown}`, hot: true };
+    }
+    if (board?.phase === "seek" && board.me.role === "ghost") {
+      const m = board.me;
+      if (m.out) return { icon: Ghost, text: "You're out of this game" };
+      if (m.golden) return { icon: Crown, text: "You're golden!", colour: "#e8a800" };
+      return { icon: Ghost, text: `You're a ghost · ${m.wins} won · ${m.losses} lost` };
+    }
+    if (board?.phase === "seek") return { icon: Swords, text: `Explore · Chat · Ghosts ${board.ghosts.length}` };
+    return { icon: Compass, text: "Explore · Chat", colour: "#e64980" };
+  })();
   const duelStrip = board ? (
     <DuelStatus board={board} countdown={countdown} busy={busy} onBeGhost={() => setConfirmHide(true)} onGhosts={() => setGhostsOpen(true)} />
   ) : null;
@@ -1120,12 +1145,9 @@ export function Game({ state }: { state: GameState }) {
             tileCount={round.tileCount}
             markers={markers}
             events={cityEvents}
-            interactive
-            onTile={noTile}
             onBillboard={onBillboardTap}
             ads={ads}
             onAdViews={onAdViews}
-            mode="chat"
             ghosts={ghostLights}
             onGhost={openGhost}
             flyTo={flyTo}
@@ -1198,7 +1220,7 @@ export function Game({ state }: { state: GameState }) {
             visits={state.site.visits}
             players={state.site.players}
             minimised={statsMin}
-            onToggle={() => { setStatsMin(!statsMin); saveView({ statsMin: !statsMin }); }}
+            onToggle={() => setStatsMin(!statsMin)}
             sound={sound}
             onSound={() => { setSound(!sound); saveView({ sound: !sound }); }}
             sponsor={round.sponsor}
@@ -1759,20 +1781,58 @@ export function Game({ state }: { state: GameState }) {
           </button>
         )}
 
-        <div className="flex w-full max-w-xl items-end justify-between gap-2">
-          {round ? (
+        <div className={cn("flex w-full max-w-xl items-end gap-2", dockOpen ? "justify-between" : "justify-center")}>
+          {dockOpen ? (
+            round ? (
+              <button
+                onClick={() => {
+                  setExploreTab("rides");
+                  setPickRide(true);
+                }}
+                className="glass pointer-events-auto flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold sm:px-4 sm:py-2 sm:text-sm"
+              >
+                <Compass className="size-4 text-[#e64980]" />
+                Explore
+              </button>
+            ) : (
+              <span />
+            )
+          ) : null}
+          {!dockOpen && (
             <button
-              onClick={() => {
-                setExploreTab("rides");
-                setPickRide(true);
-              }}
-              className="glass pointer-events-auto flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold sm:px-4 sm:py-2 sm:text-sm"
+              onClick={() => setDockOpen(true)}
+              className={cn(
+                "pointer-events-auto relative flex min-w-0 max-w-full items-center gap-1.5 rounded-full py-1.5 pl-3 pr-2.5 text-xs font-semibold shadow sm:text-sm",
+                dockHint.hot ? "bg-gold text-ink" : "glass",
+              )}
+              aria-expanded={false}
+              aria-label={`${dockHint.text}. Show the bottom bar`}
             >
-              <Compass className="size-4 text-[#e64980]" />
-              Explore
+              <dockHint.icon className="size-4 shrink-0" style={dockHint.colour ? { color: dockHint.colour } : undefined} aria-hidden />
+              <span className="min-w-0 truncate">{dockHint.text}</span>
+              <ChevronUp className="size-4 shrink-0 opacity-60" aria-hidden />
+              {chatUnread > 0 && (
+                <span className="absolute -right-1.5 -top-1.5 grid min-w-5 place-items-center rounded-full bg-hit px-1 text-[11px] text-white" title="Unread chat messages">
+                  {chatUnread > 99 ? "99+" : chatUnread}
+                </span>
+              )}
             </button>
-          ) : (
-            <span />
+          )}
+          {!dockOpen && !guest && !isDancing && (place || ride !== null) && (
+            <button onClick={leaveRoom} className="glass pointer-events-auto flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold shadow sm:text-sm">
+              <LogOut className="size-4" />
+              {ride !== null ? "Get off" : "Leave"}
+            </button>
+          )}
+          {dockOpen && (
+            <button
+              onClick={() => setDockOpen(false)}
+              className="glass pointer-events-auto grid size-8 shrink-0 place-items-center rounded-full sm:size-9"
+              aria-expanded
+              aria-label="Fold the bottom bar away"
+            >
+              <ChevronDown className="size-4" />
+            </button>
           )}
           {round && (
             <Safe name="Chat">
@@ -1798,11 +1858,14 @@ export function Game({ state }: { state: GameState }) {
                 greet={guest ? undefined : greet}
                 friendStatusOf={friendStatusOf}
                 onAddFriend={guest ? undefined : befriend}
+                hideButton={!dockOpen}
+                onUnread={setChatUnread}
               />
             </Safe>
           )}
         </div>
 
+        {dockOpen && (
         <div className="glass pointer-events-auto w-full max-w-xl rounded-2xl p-2.5 sm:p-3">
           {!round || phase === "done" ? (
             <p className="text-sm text-muted">Building the next town…</p>
@@ -1916,6 +1979,7 @@ export function Game({ state }: { state: GameState }) {
             </div>
           )}
         </div>
+        )}
       </div>
     </main>
   );

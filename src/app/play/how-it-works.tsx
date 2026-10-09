@@ -132,7 +132,7 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
     icon: House,
     title: "Your house",
     body: [
-      "Build your own house from the menu or Chat mode: pick a style (cottage, bungalow, modern, duplex or villa), paint the walls and roof, choose the room inside and give it a name.",
+      "Build your own house from the menu: pick a style (cottage, bungalow, modern, duplex or villa), paint the walls and roof, choose the room inside and give it a name.",
       "Switch on \u201cShow my house in the game\u201d and it stands in the busy middle of every new town, with your name on the sign. People can walk in, sit down and chat. Each house adds 5 more hiding spots to the town.",
       "Switch it off any time: it stays until the end of the game it's in, and won't be in the next one. Free for now.",
     ],

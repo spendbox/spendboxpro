@@ -1,6 +1,6 @@
 // Little info bubbles over the map: a white pill with a tail, floating over the places near
-// the middle of the view (chat mode: the place's name, an icon for what it is, and how many
-// people are inside) and over the world events' pins (both modes: the event's title).
+// the middle of the view (the place's name, an icon for what it is, and how many people are
+// inside) and over the world events' pins (the event's title).
 // Tapping one opens the place (or the event's info).
 //
 // Drawn as a handful of plain DOM elements over the canvas (crisp text, easy taps), moved
@@ -640,7 +640,7 @@ export function createBubbles(host: BubblesHost) {
       lastPick = now;
       pick(places, events);
     } else if (!want && active) {
-      // Hidden (inside somewhere, riding, chat mode off...): everything pops out.
+      // Hidden (inside somewhere, riding...): everything pops out.
       for (const s of slots) if (s.kind !== 0 && s.on) hideSlot(s);
       lastPick = -Infinity;
     }
