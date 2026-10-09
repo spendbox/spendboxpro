@@ -10,8 +10,12 @@ const button = "w-full rounded-xl bg-gold px-4 py-3 font-semibold text-ink disab
 
 type Step = "email" | "pin" | "code";
 
-/** Email first. Returning players type their PIN; new players (and forgot PIN) get a code. */
-export function LoginForm() {
+/**
+ * Email first. Returning players type their PIN; new players (and forgot PIN) get a code.
+ * onDone (the sign-in pop-up over the town): called instead of going to another page, with
+ * "play" once signed in, or "welcome" when a name and PIN come next.
+ */
+export function LoginForm({ onDone }: { onDone?: (next: "play" | "welcome") => void } = {}) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
@@ -44,6 +48,7 @@ export function LoginForm() {
           e.preventDefault();
           run(() => loginWithPin(email, pin), () => {
             setBusy(true);
+            if (onDone) return onDone("play");
             router.push("/play");
             router.refresh();
           });
@@ -80,6 +85,7 @@ export function LoginForm() {
           e.preventDefault();
           run(() => verifyCode(email, code), () => {
             setBusy(true);
+            if (onDone) return onDone("welcome");
             router.push("/welcome?pin=1");
             router.refresh();
           });

@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { addressOf, makePlan, tileAt } from "@/lib/city/layout";
 import { houseTileOf } from "@/lib/city/houses";
 import { homeLabel } from "@/lib/houses";
+import type { WelcomeNeeds } from "@/lib/welcome";
 import { useDiary } from "./style/diary";
 import { cleanAvatar } from "@/lib/avatar";
 import type { GameEvent, GameState } from "@/lib/game";
@@ -101,6 +102,7 @@ const GiveCoinsSheet = dynamic(() => import("./activities/gift-sheet").then((m) 
 const RoomActivityLayer = dynamic(() => import("./activities/room-layer").then((m) => m.RoomActivityLayer));
 const AdvertiseExplainer = dynamic(() => import("@/components/advertise-explainer").then((m) => m.AdvertiseExplainer));
 const HouseSheet = dynamic(() => import("./houses/house-sheet").then((m) => m.HouseSheet));
+const SignInOverlay = dynamic(() => import("./sign-in-overlay").then((m) => m.SignInOverlay));
 const StyleSheet = dynamic(() => import("./style/style-ui").then((m) => m.StyleSheet));
 const DanceBar = dynamic(() => import("./dance-bar").then((m) => m.DanceBar));
 const FriendsSheet = dynamic(() => import("./friends-sheet").then((m) => m.FriendsSheet));
@@ -276,7 +278,17 @@ function startCheer(role: "hider" | "seeker" | null, hiders: number) {
   return { title, line: `${line} ${hiders > 1 ? `${hiders - 1} ghost${hiders - 1 === 1 ? " is" : "s are"} in this game.` : ""}`.trim() };
 }
 
-export function Game({ state }: { state: GameState }) {
+export function Game({
+  state,
+  welcome = null,
+  openSignIn = false,
+}: {
+  state: GameState;
+  /** Signed in, but still to finish signing up (name and PIN, date of birth): the pop-up asks. */
+  welcome?: WelcomeNeeds | null;
+  /** Open the sign-in pop-up straight away (a link to sign in). */
+  openSignIn?: boolean;
+}) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [message, setMessage] = useState<{ text: string; tone: "good" | "bad" | "info"; icon?: LucideIcon } | null>(null);
@@ -289,8 +301,16 @@ export function Game({ state }: { state: GameState }) {
   const [feedSeenAt, setFeedSeenAt] = useState<string>(state.serverNow);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
-  // Watchers who try to do something that needs an account: why, for the sign-in prompt.
-  const [signInWhy, setSignInWhy] = useState<string | null>(null);
+  // The sign-in pop-up over the town (and why we're asking, when they tried something that
+  // needs an account). Signing up halfway (signed in, no name and PIN yet) always shows it.
+  const [signIn, setSignIn] = useState<{ why: string | null } | null>(() => (openSignIn && state.me.guest ? { why: null } : null));
+  const [welcomeDone, setWelcomeDone] = useState(false);
+  const setSignInWhy = (why: string) => setSignIn({ why });
+  const signInShown = signIn !== null || (welcome !== null && !welcomeDone);
+  const closeSignIn = useCallback(() => {
+    setSignIn(null);
+    setWelcomeDone(true);
+  }, []);
   const [houseOpen, setHouseOpen] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
   // Sports: the matches sheet (which sport to open on), or null.
@@ -569,12 +589,13 @@ export function Game({ state }: { state: GameState }) {
   useEffect(() => {
     if (urgentSec !== null) playSfx("tick");
   }, [urgentSec]);
-  // Only a few ghosts left (the hunt still runs to the top of the hour).
-  const fewLeft = round && phase === "seek" && round.hidersRemaining > 0 && round.hidersRemaining <= 2 ? round.hidersRemaining : null;
+  // Only a few ghosts still to beat (not golden yet), late enough in the hunt to say so.
+  const toBeat = board?.phase === "seek" ? board.ghosts.filter((g) => g.status !== "golden").length : 0;
+  const fewLeft = round && phase === "seek" && toBeat > 0 && toBeat <= 2 ? toBeat : null;
   useEffect(() => {
     if (fewLeft === null) return;
     const id = setTimeout(
-      () => setMessage({ icon: Timer, text: `Only ${fewLeft} ${fewLeft === 1 ? "ghost is" : "ghosts are"} left in this game. Challenge ${fewLeft === 1 ? "them" : "them"} before the hour is up!`, tone: "info" }),
+      () => setMessage({ icon: Timer, text: `Only ${fewLeft} ${fewLeft === 1 ? "ghost is" : "ghosts are"} still to beat in this game. Challenge them before the hour is up!`, tone: "info" }),
       0,
     );
     return () => clearTimeout(id);
@@ -596,12 +617,11 @@ export function Game({ state }: { state: GameState }) {
   }, [seatNotice, clearSeatNotice]);
   const guest = me.guest;
 
-  // The last minute before the hunt: soft beeps (every other second, then every second for
-  // the final ten).
+  // The last 30 seconds before the hunt: a soft beep every second.
   const joinLeft = round && phase === "join" ? Math.ceil((Date.parse(round.joinEndsAt) - now) / 1000) : null;
   useEffect(() => {
-    if (joinLeft === null || joinLeft <= 0 || joinLeft > 60) return;
-    if (joinLeft <= 10 || joinLeft % 2 === 0) playSfx("tick");
+    if (joinLeft === null || joinLeft <= 0 || joinLeft > 30) return;
+    playSfx("tick");
   }, [joinLeft]);
 
   // The hunt starts: a pop-up with a different cheer each time, and a fanfare.
@@ -919,7 +939,10 @@ export function Game({ state }: { state: GameState }) {
       setGoTo(null);
       if (level) return goToLevel(room, level);
     }
-    if (place || ride !== null) return; // inside somewhere: taps just look around
+    // Inside somewhere, or on a ride: taps just look around. From a hot-air balloon you can
+    // still tap a building (or its bubble) to go and visit it.
+    if (place) return;
+    if (ride !== null && (ride.kind !== "balloon" || room.kind === "balloon")) return;
     if (room.kind === "balloon") return boardRide({ kind: "balloon", index: Number(room.id.split(":")[1]), name: room.name, capacity: room.capacity });
     setPickPlace(room);
   }
@@ -982,6 +1005,20 @@ export function Game({ state }: { state: GameState }) {
     setRide(null);
     setPlace(null);
     setActivity(null);
+  }
+  // The house button: fly over to your house (or build one, if it isn't in this town).
+  function showMyHouse() {
+    if (myHouseTile === null) return setHouseOpen(true);
+    if (phase === "join") return setMessage({ icon: House, text: `Your house goes up with the rest of the town, in ${countdown}.`, tone: "info" });
+    const tile = myHouseTile;
+    const fly = () => setFlyTo((f) => ({ tile, at: (f?.at ?? 0) + 1 }));
+    // Inside somewhere or on a ride: step out first, then fly over once the camera's back.
+    if (place || ride !== null) {
+      leaveRoom();
+      setTimeout(fly, 1700);
+    } else fly();
+    const home = tileAt(plan, tile).home;
+    setMessage({ icon: House, text: `There's your house${home?.name ? `, ${home.name}` : ""}. Tap it to go inside. Change it from My house in the menu.`, tone: "info" });
   }
   // "Visit my house": straight into its ground floor.
   async function visitMyHouse() {
@@ -1099,13 +1136,13 @@ export function Game({ state }: { state: GameState }) {
   // What the folded bottom bar says: where you are, or how the game's going for you.
   const dockHint = ((): { icon: LucideIcon; text: string; colour?: string; hot?: boolean } => {
     if (!round || phase === "done") return { icon: Hammer, text: "Building the next town…" };
-    if (guest) return { icon: Users, text: "Watching live" };
     if (isDancing) return { icon: Music, text: "Dancing", colour: "#e64980" };
     if (ride !== null) {
       const name = rooms.myRoomInfo?.name ?? rideList.find((r) => r.kind === ride.kind && r.index === ride.index)?.name ?? RIDE_INFO[ride.kind].label;
       return { icon: RIDE_ICONS[ride.kind], text: name, colour: RIDE_INFO[ride.kind].colour };
     }
-    if (place) return { icon: Building2, text: rooms.myRoomInfo?.name ?? "Inside", colour: "#7048e8" };
+    if (place) return { icon: Building2, text: rooms.myRoomInfo?.name ?? placeRoom?.name ?? "Inside", colour: "#7048e8" };
+    if (guest) return { icon: Users, text: "Watching live" };
     if (board?.phase === "join") {
       return board.me.role === "ghost"
         ? { icon: Ghost, text: `You're a ghost · the hunt starts in ${countdown}` }
@@ -1149,6 +1186,7 @@ export function Game({ state }: { state: GameState }) {
             ads={ads}
             onAdViews={onAdViews}
             ghosts={ghostLights}
+            paused={signInShown}
             onGhost={openGhost}
             flyTo={flyTo}
             roomCounts={rooms.buildingCounts}
@@ -1213,7 +1251,7 @@ export function Game({ state }: { state: GameState }) {
             phase={phase}
             countdown={countdown}
             hidden={board ? board.ghosts.length : round.hidersRemaining}
-            hidersTotal={board ? Math.max(board.ghosts.length, round.hidersTotal - 1) : round.hidersTotal}
+            hidersTotal={board ? Math.max(board.ghosts.length, round.hidersTotal) : round.hidersTotal}
             golden={board ? board.ghosts.filter((g) => g.status === "golden").length : 0}
             pool={round.pool}
             online={online}
@@ -1238,9 +1276,9 @@ export function Game({ state }: { state: GameState }) {
               <button onClick={() => setHowOpen(true)} className="glass grid h-9 w-9 shrink-0 place-items-center rounded-full font-display font-bold" aria-label="How it works">
                 ?
               </button>
-              <Link href="/login" className="whitespace-nowrap rounded-full bg-gold px-4 py-2 text-sm font-semibold text-ink shadow">
+              <button onClick={() => setSignIn({ why: null })} className="whitespace-nowrap rounded-full bg-gold px-4 py-2 text-sm font-semibold text-ink shadow">
                 Sign in to play
-              </Link>
+              </button>
             </div>
           ) : (
           <div className="pointer-events-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
@@ -1555,23 +1593,15 @@ export function Game({ state }: { state: GameState }) {
           }}
         />
       )}
-      {signInWhy && (
-        <Sheet onClose={() => setSignInWhy(null)}>
-          <h2 className="flex items-center gap-2 font-display text-xl font-bold">
-            <Lock className="size-5 text-gold-dark" />
-            Sign in to join in
-          </h2>
-          <p className="mt-1 text-sm text-muted">{signInWhy}</p>
-          <p className="mt-2 text-sm text-muted">It&apos;s free: just your email and a PIN. 18+ only.</p>
-          <div className="mt-4 flex gap-2">
-            <button onClick={() => setSignInWhy(null)} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold">
-              Keep watching
-            </button>
-            <Link href="/login" className="flex-1 rounded-xl bg-gold py-2.5 text-center font-semibold text-ink">
-              Sign in
-            </Link>
-          </div>
-        </Sheet>
+      {signInShown && (
+        <SignInOverlay
+          why={signIn?.why ?? null}
+          signedIn={!guest}
+          welcome={welcomeDone ? null : welcome}
+          meName={me.name}
+          onClose={closeSignIn}
+          onSignOut={() => void signOut()}
+        />
       )}
       {houseOpen && (
         <HouseSheet onClose={() => setHouseOpen(false)} onVisit={() => void visitMyHouse()} standingNow={myHouseTile !== null} />
@@ -1786,54 +1816,79 @@ export function Game({ state }: { state: GameState }) {
             round ? (
               <button
                 onClick={() => {
+                  // While the town is still a building site, there's nothing to explore yet.
+                  if (phase === "join")
+                    return setMessage({ icon: Hammer, text: `The town is still being built. Explore opens when the hunt starts, in ${countdown}.`, tone: "info" });
                   setExploreTab("rides");
                   setPickRide(true);
                 }}
-                className="glass pointer-events-auto flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold sm:px-4 sm:py-2 sm:text-sm"
+                aria-disabled={phase === "join"}
+                className={cn(
+                  "glass pointer-events-auto flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold sm:px-4 sm:py-2 sm:text-sm",
+                  phase === "join" && "opacity-60",
+                )}
               >
-                <Compass className="size-4 text-[#e64980]" />
+                {phase === "join" ? <Lock className="size-4 text-muted" /> : <Compass className="size-4 text-[#e64980]" />}
                 Explore
               </button>
             ) : (
               <span />
             )
           ) : null}
-          {!dockOpen && (
-            <button
-              onClick={() => setDockOpen(true)}
-              className={cn(
-                "pointer-events-auto relative flex min-w-0 max-w-full items-center gap-1.5 rounded-full py-1.5 pl-3 pr-2.5 text-xs font-semibold shadow sm:text-sm",
-                dockHint.hot ? "bg-gold text-ink" : "glass",
-              )}
-              aria-expanded={false}
-              aria-label={`${dockHint.text}. Show the bottom bar`}
-            >
-              <dockHint.icon className="size-4 shrink-0" style={dockHint.colour ? { color: dockHint.colour } : undefined} aria-hidden />
-              <span className="min-w-0 truncate">{dockHint.text}</span>
-              <ChevronUp className="size-4 shrink-0 opacity-60" aria-hidden />
-              {chatUnread > 0 && (
-                <span className="absolute -right-1.5 -top-1.5 grid min-w-5 place-items-center rounded-full bg-hit px-1 text-[11px] text-white" title="Unread chat messages">
-                  {chatUnread > 99 ? "99+" : chatUnread}
-                </span>
-              )}
-            </button>
-          )}
-          {!dockOpen && !guest && !isDancing && (place || ride !== null) && (
-            <button onClick={leaveRoom} className="glass pointer-events-auto flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold shadow sm:text-sm">
-              <LogOut className="size-4" />
-              {ride !== null ? "Get off" : "Leave"}
-            </button>
-          )}
-          {dockOpen && (
-            <button
-              onClick={() => setDockOpen(false)}
-              className="glass pointer-events-auto grid size-8 shrink-0 place-items-center rounded-full sm:size-9"
-              aria-expanded
-              aria-label="Fold the bottom bar away"
-            >
-              <ChevronDown className="size-4" />
-            </button>
-          )}
+          <div className="flex min-w-0 items-center gap-2">
+            {!dockOpen && (
+              <button
+                onClick={() => setDockOpen(true)}
+                className={cn(
+                  "pointer-events-auto relative flex min-w-0 max-w-full items-center gap-1.5 rounded-full py-1.5 pl-3 pr-2.5 text-xs font-semibold shadow sm:text-sm",
+                  dockHint.hot ? "bg-gold text-ink" : "glass",
+                )}
+                aria-expanded={false}
+                aria-label={`${dockHint.text}. Show the bottom bar`}
+              >
+                <dockHint.icon className="size-4 shrink-0" style={dockHint.colour ? { color: dockHint.colour } : undefined} aria-hidden />
+                <span className="min-w-0 truncate">{dockHint.text}</span>
+                <ChevronUp className="size-4 shrink-0 opacity-60" aria-hidden />
+                {chatUnread > 0 && (
+                  <span className="absolute -right-1.5 -top-1.5 grid min-w-5 place-items-center rounded-full bg-hit px-1 text-[11px] text-white" title="Unread chat messages">
+                    {chatUnread > 99 ? "99+" : chatUnread}
+                  </span>
+                )}
+              </button>
+            )}
+            {!dockOpen && !isDancing && (place || ride !== null) && (
+              <button onClick={leaveRoom} className="glass pointer-events-auto flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold shadow sm:text-sm">
+                <LogOut className="size-4" />
+                {ride !== null ? "Get off" : "Leave"}
+              </button>
+            )}
+            {!dockOpen && guest && round && !place && ride === null && (
+              <button onClick={() => setAdExplainer(true)} className="glass pointer-events-auto flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold shadow sm:text-sm">
+                <Megaphone className="size-4 text-gold-dark" />
+                Advertise
+              </button>
+            )}
+            {dockOpen && (
+              <button
+                onClick={() => setDockOpen(false)}
+                className="glass pointer-events-auto grid size-8 shrink-0 place-items-center rounded-full sm:size-9"
+                aria-expanded
+                aria-label="Fold the bottom bar away"
+              >
+                <ChevronDown className="size-4" />
+              </button>
+            )}
+            {!guest && round && (
+              <button
+                onClick={showMyHouse}
+                className="glass pointer-events-auto grid size-8 shrink-0 place-items-center rounded-full shadow sm:size-9"
+                aria-label={myHouseTile !== null ? "Show my house" : "Build my house"}
+                title={myHouseTile !== null ? "Show my house" : "Build my house"}
+              >
+                <House className="size-4 text-[#7048e8]" />
+              </button>
+            )}
+          </div>
           {round && (
             <Safe name="Chat">
               <Chat
@@ -1850,7 +1905,6 @@ export function Game({ state }: { state: GameState }) {
                 guest={guest}
                 rideEndsAt={rooms.rideEndsAt}
                 botName={botName}
-                botBounty={200}
                 dmRequest={dmRequest}
                 externalNpc={npcTap}
                 enteredAt={rooms.enteredAt}
@@ -1860,6 +1914,7 @@ export function Game({ state }: { state: GameState }) {
                 onAddFriend={guest ? undefined : befriend}
                 hideButton={!dockOpen}
                 onUnread={setChatUnread}
+                onSignIn={() => setSignIn({ why: null })}
               />
             </Safe>
           )}
@@ -1869,7 +1924,7 @@ export function Game({ state }: { state: GameState }) {
         <div className="glass pointer-events-auto w-full max-w-xl rounded-2xl p-2.5 sm:p-3">
           {!round || phase === "done" ? (
             <p className="text-sm text-muted">Building the next town…</p>
-          ) : guest ? (
+          ) : guest && !place && ride === null ? (
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <p className="flex-1 text-sm text-muted">
                 <LogoMark size={20} className="mr-1.5 inline align-[-0.3em] sm:hidden" />
@@ -1887,9 +1942,9 @@ export function Game({ state }: { state: GameState }) {
                 <button onClick={() => setAdExplainer(true)} className="whitespace-nowrap rounded-xl bg-panel-2 px-3 py-2.5 font-semibold">
                   <Megaphone className="mr-1 inline size-4 align-[-0.15em]" />Advertise
                 </button>
-                <Link href="/login" className="whitespace-nowrap rounded-xl bg-gold px-3 py-2.5 text-center font-semibold text-ink">
+                <button onClick={() => setSignIn({ why: null })} className="whitespace-nowrap rounded-xl bg-gold px-3 py-2.5 text-center font-semibold text-ink">
                   Play now
-                </Link>
+                </button>
               </div>
             </div>
           ) : (
@@ -1917,7 +1972,7 @@ export function Game({ state }: { state: GameState }) {
                     )}
                     <span className="min-w-0">
                       <b className="block truncate">
-                        {rooms.myRoomInfo?.name ?? (ride !== null ? (rideList.find((r) => r.kind === ride.kind && r.index === ride.index)?.name ?? RIDE_INFO[ride.kind].label) : "Inside")}
+                        {rooms.myRoomInfo?.name ?? (ride !== null ? (rideList.find((r) => r.kind === ride.kind && r.index === ride.index)?.name ?? RIDE_INFO[ride.kind].label) : (placeRoom?.name ?? "Inside"))}
                       </b>
                       <span className="text-xs text-muted">
                         {guest
@@ -1961,19 +2016,10 @@ export function Game({ state }: { state: GameState }) {
               ) : (
                 <>
                   {duelStrip}
-                  {/* On phones the tip and My house (also in the menu) make way for the town. */}
-                  <div className="hidden items-center gap-2 border-t border-line pt-2 sm:flex">
-                    <p className="min-w-0 flex-1 text-xs text-muted">
-                      Tap any building to go inside (the numbers show who&apos;s there), or Explore rides and sports.
-                    </p>
-                    <button
-                      onClick={() => (guest ? setSignInWhy("Sign in to build your own house in the town.") : setHouseOpen(true))}
-                      className="flex shrink-0 items-center gap-1.5 rounded-xl bg-panel-2 px-3 py-2 font-semibold"
-                    >
-                      <House className="size-4 text-[#7048e8]" />
-                      My house
-                    </button>
-                  </div>
+                  {/* On phones the tip makes way for the town. */}
+                  <p className="hidden border-t border-line pt-2 text-xs text-muted sm:block">
+                    Tap any building to go inside (the numbers show who&apos;s there), or Explore rides and sports. The house button flies you to your house.
+                  </p>
                 </>
               )}
             </div>

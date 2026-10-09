@@ -272,6 +272,8 @@ type Props = {
   onGhost?: (id: string) => void;
   /** Fly the camera over a spot (a new `at` each time), e.g. a ghost picked from a list. */
   flyTo?: { tile: number; at: number } | null;
+  /** Freeze the town (it stops moving and drawing), e.g. behind the sign-in pop-up. */
+  paused?: boolean;
 };
 
 type Part = { tile: number; x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number; color: number; tilt?: number };
@@ -1235,6 +1237,7 @@ export function CityView({
   ghosts,
   onGhost,
   flyTo = null,
+  paused = false,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const api = useRef<{
@@ -1261,10 +1264,10 @@ export function CityView({
     setGhosts: (list: CityGhost[]) => void;
     flyToTile: (tile: number) => void;
   } | null>(null);
-  const cb = useRef({ onHover, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost });
+  const cb = useRef({ onHover, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused });
   const atmos = useRef({ progress, nightFirst, meAvatar });
   useEffect(() => {
-    cb.current = { onHover, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost };
+    cb.current = { onHover, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused };
     atmos.current = { progress, nightFirst, meAvatar };
   });
 
@@ -3942,6 +3945,8 @@ export function CityView({
       const p = posOf(tile);
       focus = null;
       eventFly = new THREE.Vector3(p.x, 0, p.z);
+      // Outline the building there, so it's easy to spot.
+      showHover(tile);
     };
 
     /** Open a building's place as if it had been tapped (onRoom), e.g. to go to a friend. */
@@ -4004,11 +4009,16 @@ export function CityView({
       }
       return spotList;
     }
+    // What the bubbles gather round: the map's middle, or (from a balloon) what you're looking at.
+    const bubbleTarget = new THREE.Vector3();
+    const lookDir = new THREE.Vector3();
+    let bubbleZoom: number | null = null;
     const bubbles = createBubbles({
       el,
       canvas: renderer.domElement,
       camera,
-      target: controls.target,
+      target: bubbleTarget,
+      zoom: () => bubbleZoom,
       events: worldEventsLayer,
       spots: bubbleSpots,
       label: (i) => {
@@ -4059,7 +4069,7 @@ export function CityView({
         return false;
       },
       onBuilding: (i) => {
-        if (!isRevealed || immersive()) return;
+        if (!isRevealed || (immersive() && !aloft())) return;
         const r = roomFor(i);
         if (!r) return;
         showHover(i);
@@ -4176,6 +4186,9 @@ export function CityView({
     /** How far the eye is below a balloon's middle (in the basket). */
     const BASKET_EYE = 0.77;
     const immersive = () => view !== null || flight !== null;
+    // Up in a hot-air balloon (not flying there or back): the town's bubbles still show, and
+    // tapping a building (or its bubble) takes you there.
+    const aloft = () => view?.kind === "ride" && flight === null;
     const smoothstep = (a: number, b: number, x: number) => {
       const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
       return t * t * (3 - 2 * t);
@@ -5513,6 +5526,12 @@ export function CityView({
           cb.current.onNpc?.(npc.id);
           return;
         }
+        if (aloft()) {
+          const tile = isRevealed ? tileUnder(e.clientX, e.clientY) : null;
+          const r = tile !== null ? roomFor(tile) : null;
+          if (r) cb.current.onRoom?.(r.room);
+          return;
+        }
         const it = itemUnder(e.clientX, e.clientY);
         if (it && view?.kind === "place") {
           playSfx("chime");
@@ -5557,7 +5576,8 @@ export function CityView({
         return;
       }
       // Buildings and balloons are places: tap one to go inside.
-      const k = balloonUnder(e.clientX, e.clientY);
+      // (No rides while the town is still a building site.)
+      const k = isRevealed ? balloonUnder(e.clientX, e.clientY) : null;
       if (k !== null) {
         cb.current.onRoom?.(balloonRoom(k));
         return;
@@ -5622,6 +5642,12 @@ export function CityView({
     let frame = 0;
     const loop = () => {
       frame = requestAnimationFrame(loop);
+      // Frozen (behind the sign-in pop-up): the last picture stays, nothing moves. (Not in the
+      // first few seconds, so there's a town to see behind it when the page opens with it up.)
+      if (cb.current.paused && clock.elapsedTime > 3) {
+        clock.getDelta();
+        return;
+      }
       const dt = Math.min(clock.getDelta(), 0.1);
       const time = clock.elapsedTime;
       const now = performance.now();
@@ -5650,7 +5676,7 @@ export function CityView({
         }
       }
       if (hoverQueued) {
-        const balloonK = balloonUnder(hoverQueued.clientX, hoverQueued.clientY);
+        const balloonK = isRevealed ? balloonUnder(hoverQueued.clientX, hoverQueued.clientY) : null;
         const board = balloonK === null && isRevealed ? boardUnder(hoverQueued.clientX, hoverQueued.clientY) : null;
         renderer.domElement.style.cursor = board || balloonK !== null ? "pointer" : "";
         if (balloonK !== null) {
@@ -5732,7 +5758,18 @@ export function CityView({
       renderOverlays(time);
       // After drawing: the camera's matrices are this frame's now.
       const map = isRevealed && !immersive();
-      bubbles.update(dt, now, map, map && !!cb.current.onEventInfo);
+      if (aloft()) {
+        // From a balloon: bubbles over the spot on the ground you're looking at, as many as on
+        // a map zoomed in fairly close.
+        camera.getWorldDirection(lookDir);
+        bubbleTarget.copy(camera.position).addScaledVector(lookDir, lookDir.y < -0.05 ? Math.min(70, camera.position.y / -lookDir.y) : 40);
+        bubbleTarget.y = 0;
+        bubbleZoom = 22;
+      } else {
+        bubbleTarget.copy(controls.target);
+        bubbleZoom = null;
+      }
+      bubbles.update(dt, now, map || (isRevealed && aloft()), map && !!cb.current.onEventInfo);
     };
     loop();
 

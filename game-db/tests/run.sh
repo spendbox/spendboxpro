@@ -46,3 +46,8 @@ for t in streaks hugs duels; do
   [ -f "game-db/tests/$t.test.sql" ] || continue
   $P -f "game-db/tests/$t.test.sql" 2>&1 | sed 's/^psql:[^ ]* NOTICE:  //'
 done
+# Part 30 takes the bot out of the ghosts, which the scenarios above still count on.
+for t in nobot; do
+  [ -f "game-db/tests/$t.test.sql" ] || continue
+  $P -f "game-db/tests/$t.test.sql" 2>&1 | sed 's/^psql:[^ ]* NOTICE:  //'
+done

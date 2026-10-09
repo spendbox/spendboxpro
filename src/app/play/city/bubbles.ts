@@ -64,6 +64,11 @@ export type BubblesHost = {
   camera: THREE.PerspectiveCamera;
   /** What the map camera looks at (for how far out we're zoomed). */
   target: THREE.Vector3;
+  /**
+   * How zoomed in to count as, for how many bubbles to show, when that isn't simply the
+   * camera's distance to the target (from a hot-air balloon, looking across the town). null: the distance.
+   */
+  zoom?: () => number | null;
   events: WorldEventsLayer;
   /** The places that can have a bubble (a new array when the city changes). */
   spots: () => readonly BubbleSpot[];
@@ -472,7 +477,8 @@ export function createBubbles(host: BubblesHost) {
     picks++;
     rectN = 0;
     pickedN = 0;
-    const zoom = host.camera.position.distanceTo(host.target);
+    const dist = host.camera.position.distanceTo(host.target);
+    const zoom = host.zoom?.() ?? dist;
     // Fewer bubbles as you zoom out (changes only once clearly past a step, so it doesn't flicker).
     const up = wantFor(zoom * 1.08);
     const down = wantFor(zoom * 0.92);
@@ -496,7 +502,7 @@ export function createBubbles(host: BubblesHost) {
     pinRects = rectN;
 
     // Events first (rarer, and they don't last).
-    if (events && zoom < 80) {
+    if (events && dist < 80) {
       candN = 0;
       for (let k = 0; k < pinN; k++) {
         const p = host.events.pin(k);
@@ -506,7 +512,7 @@ export function createBubbles(host: BubblesHost) {
         const dx = (pt.x - cx) / (rx * grow);
         const dy = (pt.y - cy) / (ry * grow);
         const d = dx * dx + dy * dy;
-        if (d > 1 || pt.depth > zoom * 1.7 + 8) continue;
+        if (d > 1 || pt.depth > dist * 1.7 + 8) continue;
         const s = slotFor(2, p.id);
         const w = s && s.content ? s.w : 6 + 10 + 6 + Math.min(NAME_MAX, textW(p.title, 600, 12.5)) + 6 + (p.claimable && p.coins ? textW(`+${p.coins} mint`, 700, 11.5) : 12) + 12;
         addCand(p.id, Math.sqrt(d) - (was ? 0.2 : 0), pt.x, pt.y, w, was);
@@ -527,7 +533,7 @@ export function createBubbles(host: BubblesHost) {
     if (maxPlaces > 0) {
       candN = 0;
       const spots = host.spots();
-      const reach = zoom * 0.95 + 6;
+      const reach = dist * 0.95 + 6;
       const tx = host.target.x;
       const tz = host.target.z;
       for (let k = 0; k < spots.length; k++) {
@@ -539,7 +545,7 @@ export function createBubbles(host: BubblesHost) {
         const dx = (pt.x - cx) / (rx * grow);
         const dy = (pt.y - cy) / (ry * grow);
         const d = dx * dx + dy * dy;
-        if (d > 1 || pt.depth > zoom * (was ? 1.6 : 1.45) + 3) continue;
+        if (d > 1 || pt.depth > dist * (was ? 1.6 : 1.45) + 3) continue;
         // Nearest the middle wins; busy places, named ones and ones already showing get a
         // nudge, plain bits of park a small step back.
         const info = host.label(sp.i);

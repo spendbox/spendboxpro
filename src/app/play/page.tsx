@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { needsBirthDate } from "@/lib/age";
 import { currentUserId, hasLoginCookie, loadGame } from "@/lib/game";
+import { welcomeNeeds } from "@/lib/welcome";
 import { Reconnecting } from "./reconnecting";
 import { Game } from "./game";
 
@@ -11,9 +11,9 @@ export default async function PlayPage() {
   const userId = await currentUserId();
   if (!userId) {
     // Still has a login cookie: the check failed for some other reason, so try again shortly
-    // instead of sending them to the sign-in page.
+    // instead of asking them to sign in.
     if (await hasLoginCookie()) return <Reconnecting />;
-    redirect("/login");
+    redirect("/?signin=1");
   }
   let state;
   try {
@@ -22,8 +22,6 @@ export default async function PlayPage() {
     console.error("Loading the game failed", e);
     return <Reconnecting />;
   }
-  if (!state.me.pinSet) redirect("/welcome");
-  // 18+: players without a date of birth add it once (skipped if the check hiccups).
-  if (await needsBirthDate(userId)) redirect("/welcome");
-  return <Game state={state} />;
+  // A name and PIN still to pick, or a date of birth to give (18+): the pop-up over the town asks.
+  return <Game state={state} welcome={await welcomeNeeds(userId, state.me.pinSet)} />;
 }

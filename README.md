@@ -13,12 +13,15 @@ hunters (everyone else) challenge them to quick duels (`game-db/029_ghost_duels.
 The game is 18+ (players give their date of birth when they sign up). The UI says "ghosts" and
 "hunters"; the database still says `hider` and `seeker`. Games run on the hour (UTC): every game
 starts at the top of an hour and ends on the next hour mark (the clock turns red and beeps in the
-last 30 seconds). Tapping a building goes inside, and Explore holds the rides (hot-air balloons, trains, buses, cars, boats, Ferris wheels, water slides) and
-sport, plus private messages.
+last 30 seconds, and beeps in the last 30 seconds before the hunt starts). Tapping a building
+goes inside (from a hot-air balloon too), and Explore holds the rides (hot-air balloons, trains, buses, cars, boats, Ferris wheels, water slides) and
+sport, plus private messages. Explore stays locked while the town is still a building site
+(the join window). The house button at the bottom flies the camera to your house.
 
-1. **Join window (the first 3 minutes of the hour).** Anyone signed in can join as a ghost (stake
-   `hider_stake`, 100 mint). Everyone else is a hunter; there's nothing to join. Each ghost adds 20
-   tiles to a 20×20 starting city.
+1. **Join window (the first 2 minutes of the hour, `join_minutes`).** Anyone signed in can join as
+   a ghost (stake `hider_stake`, 100 mint). Everyone else is a hunter; there's nothing to join.
+   Each ghost adds 20 tiles to a 20×20 starting city. The bot doesn't play (part 30): every ghost
+   is a real person, and a game can have none.
 2. **The hunt (until the next hour mark).** Each ghost is put on a random spot and lights up on the
    map for everyone (blue: free, orange: in a duel, gold: golden). Tapping a light opens the
    ghost's card (stats this game and their record, chat, challenge). Nobody searches, sweeps,
@@ -237,11 +240,13 @@ Two side quests (Town hugger, Diplomat) count hugs and handshakes.
 
 ## Sign-in and chat
 
-"Enter world" asks for an email. Returning players type their 6-digit PIN; new players get
+Signing in and signing up happen in a pop-up over the town (the town freezes and blurs behind
+it; only the X closes it). `/login` and signed-out visits to `/play` open it at `/?signin=1`.
+The pop-up asks for an email. Returning players type their 6-digit PIN; new players get
 a 4-digit email code (sent by the app through Resend), then pick a name and PIN. "Forgot
 PIN" emails a code and lets you set a new one. 5 wrong PINs locks it for 15 minutes. Chat has a public City room and private
-messages, with text and voice notes, a People list showing who's hiding or seeking, and a
-few teasing messages from the bot; it belongs to one round, so a new map starts a new
+messages, with text and voice notes, a People list showing who's a ghost or a hunter, and town
+news signed by the bot; it belongs to one round, so a new map starts a new
 chat (old chats and voice notes are deleted by the daily job).
 
 ## Ads
