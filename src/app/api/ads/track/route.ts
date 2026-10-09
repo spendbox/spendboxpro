@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 /**
  * POST /api/ads/track  body { views: { "<ad id>": count } } → { ok: true }
  * Counts "seen on billboards" (an ad on someone's screen). Never charged to the advertiser:
- * paid views are taps (see /api/ads/open). Each viewer can add only a limited number per ad
+ * paid views are taps on the ad's button (see /api/ads/cta). Each viewer can add only a limited number per ad
  * per hour (the database enforces it); silly numbers are ignored.
  */
 export async function POST(request: Request) {

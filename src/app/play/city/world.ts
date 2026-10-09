@@ -10,6 +10,8 @@ export type World = {
   radius: number;
   kindAt: Map<string, TileKind>;
   tileIndex: Map<string, number>;
+  /** The drawn tiles by tile number (a big town only draws the part around the camera). */
+  byIndex: Map<number, Tile>;
   /** Road tiles closed for road works. */
   blocked: Set<string>;
   /** When each tile started rising (performance.now() ms). */
@@ -31,6 +33,7 @@ export function makeWorld(): World {
     radius: 10,
     kindAt: new Map(),
     tileIndex: new Map(),
+    byIndex: new Map(),
     blocked: new Set(),
     born: new Map(),
     night: 0,

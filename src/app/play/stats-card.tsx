@@ -92,7 +92,7 @@ export function StatsCard({
               {countdown}
             </div>
             <div className={cn("text-[11px]", urgent ? "font-semibold text-hit" : "text-muted")}>
-              {phase === "join" ? "until ghosts drop in" : urgent ? "until this world changes!" : "left on this world"}
+              {phase === "join" ? "until ghosts drop in" : urgent ? "left in this town!" : "left in this town"}
             </div>
           </>
         )}

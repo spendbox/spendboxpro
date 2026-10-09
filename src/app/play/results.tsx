@@ -6,9 +6,22 @@ import { BadgeTile } from "@/components/badges";
 import { Bot, Medal, X } from "@/components/icons";
 import { cn } from "@/lib/cn";
 import { short } from "@/lib/format";
+import { PlayStyleCard } from "./style/style-ui";
 
-/** Shown when a round ends: how you did, then what happened and who won what. */
-export function Results({ results: r, onClose, me, city }: { results: RoundResults; onClose: () => void; me: string; city: string }) {
+/** Shown when a round ends: how you played (your play style), what you won, then what happened and who won what. */
+export function Results({
+  results: r,
+  onClose,
+  me,
+  city,
+  signedIn,
+}: {
+  results: RoundResults;
+  onClose: () => void;
+  me: string;
+  city: string;
+  signedIn: boolean;
+}) {
   const survived = r.hidersTotal - r.caught;
   const mine = r.mine;
   const downOnBackdrop = useRef(false);
@@ -36,8 +49,10 @@ export function Results({ results: r, onClose, me, city }: { results: RoundResul
           </button>
         </div>
 
+        <PlayStyleCard roundId={r.roundId} signedIn={signedIn} player={me} city={city} />
+
         {mine && (
-          <div className={cn("mt-4 rounded-2xl px-4 py-3", mine.won > 0 ? "bg-gold/30" : "bg-panel-2")}>
+          <div className={cn("mt-3 rounded-2xl px-4 py-3", mine.won > 0 ? "bg-gold/30" : "bg-panel-2")}>
             {mine.won > 0 ? (
               <>
                 <p className="text-sm text-muted">You won</p>

@@ -179,7 +179,7 @@ export const WORLD_EVENTS: WorldEventKind[] = [
   E(97, "bounty_board", "Bounty board", "Bounty! Whoever catches {name} gets 100 extra mint.", "twist", "any", 6, { twist: true }),
   E(98, "safe_house", "Safe house", "{place} is a safe house: nobody can be found there for 3 minutes.", "twist", "any", 3, { twist: true, radius: 1 }),
   E(99, "blackout_district", "Blackout district", "Blackout! Nobody can search around {place} for 2 minutes.", "twist", "any", 2, { twist: true, radius: 2 }),
-  E(100, "final_countdown", "Final countdown", "Final countdown! This world ends at the top of the hour, in 5 minutes.", "twist", "any", 5, { twist: true }),
+  E(100, "final_countdown", "Final countdown", "Final countdown! 2 minutes left in this town.", "twist", "any", 2, { twist: true }),
 ];
 
 export const WORLD_EVENT_BY_KEY: Record<string, WorldEventKind> = Object.fromEntries(WORLD_EVENTS.map((e) => [e.key, e]));

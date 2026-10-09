@@ -7,7 +7,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar, type Avatar } from "@/lib/avatar";
-import { addressOf, hash, KIND_LABEL, makePlan, smoothNoise, stationName, spiralXY, STRUCTURE_LABEL, tileAt, VENUE_SPORT, type CityPlan, type Tile } from "@/lib/city/layout";
+import { addressOf, hash, KIND_LABEL, makePlan, smoothNoise, stationName, spiralIndex, spiralXY, STRUCTURE_LABEL, tileAt, VENUE_SPORT, type CityPlan, type Tile } from "@/lib/city/layout";
 import { ABBREV } from "@/lib/city/places";
 import { daylight, weatherAt } from "@/lib/city/sky";
 import { npcsFor, type Npc } from "@/lib/npcs";
@@ -23,7 +23,7 @@ import { EYE, levelsOf, levelUse, METRES, ROOM_LABEL, THEME_SPORT, type PlaceLev
 import { createLookControls } from "./city/look-controls";
 import { createPeople } from "./city/people";
 import { createBasket, createDeck, createOpenAir, type Deck } from "./city/rooftops";
-import { balloonBannerTexture, billboardTexture, botTexture, disposePills, pillTexture } from "./city/textures";
+import { billboardTexture, botTexture, disposePills, pillTexture } from "./city/textures";
 import { createTrains, railParts } from "./city/trains";
 import { createTraffic, type VehiclePose } from "./city/traffic";
 import { clubParts, eggParts, fireStationParts, restaurantParts } from "./city/street-bits";
@@ -36,6 +36,8 @@ import { BRIDGE_TOP, makeWorld, signalJunction } from "./city/world";
 import { playSfx } from "./sound";
 import type { WorldEvent } from "@/lib/world-events";
 import { createWorldEvents } from "./city/world-events";
+import { placeHouses } from "@/lib/city/houses";
+import { homeLabel, type TownHouse } from "@/lib/houses";
 
 // The game board, drawn as a small living 3D city with three.js.
 // Every tile is a lot: a road, a building, a park... New tiles rise out of the ground
@@ -220,10 +222,14 @@ type Props = {
   liveVenues?: Partial<Record<CitySport, string | null>>;
   /** Server clock minus this device's clock (ms), so events start on time everywhere. Default 0. */
   clockOffsetMs?: number;
+  /** Players' houses standing in this game (src/lib/houses.ts): drawn in their colours, each one a place. */
+  houses?: TownHouse[];
 };
 
 type Part = { tile: number; x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number; color: number; tilt?: number };
 
+/** A very big town draws only this many tiles each way round the camera (see build). */
+const WINDOW = 40;
 const SKY = 0xd7ebf7;
 const BALLOON_NAMES = ["Red", "Yellow", "Blue", "Purple", "Mint"];
 const GROUND = 0xd3e4c8;
@@ -262,6 +268,72 @@ function partsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "ti
   basePartsFor(t, plan, add);
   // The railway viaduct passes over some tiles (whatever is underneath).
   if (t.rail) railParts(t, plan, add);
+}
+
+/**
+ * A player's house: one of the city's house shapes in the owner's wall and roof colours, with a
+ * purple name board by the path (purple marks players' houses). Only ever a few dozen pieces.
+ */
+function homeParts(
+  t: Tile,
+  B: (dx: number, y: number, dz: number, sx: number, sy: number, sz: number, color: number, ry?: number, mesh?: string, tilt?: number) => void,
+  add: (mesh: string, p: Omit<Part, "tile">) => void,
+  tree: (dx: number, dz: number, size: number, v: number) => void,
+) {
+  const h = t.home!;
+  const { x, z, r } = t;
+  const wall = parseInt(h.wall.slice(1), 16) || 0xffe8cc;
+  const roof = parseInt(h.roof.slice(1), 16) || 0xc92a2a;
+  const roofOn = (cx: number, y: number, cz: number, w: number, d: number, tall: number) =>
+    add("roof", { x: x + cx, y, z: z + cz, sx: (w + 0.08) / Math.SQRT2, sy: tall, sz: (d + 0.08) / Math.SQRT2, ry: 0, color: roof });
+  // A little lawn and a path to the door.
+  B(0, 0.08, 0, 0.9, 0.004, 0.9, 0x9fd88f, 0, "ground");
+  B(0, 0.082, 0.33, 0.12, 0.004, 0.26, 0xe9ecef, 0, "ground");
+  switch (h.style) {
+    case "bungalow":
+      B(0, 0.08, -0.04, 0.74, 0.3, 0.5, wall);
+      roofOn(0, 0.38, -0.04, 0.74, 0.5, 0.24);
+      B(0, 0.08, 0.215, 0.12, 0.2, 0.02, 0x6b4430);
+      B(-0.22, 0.2, 0.215, 0.16, 0.1, 0.02, 0xfff1b8, 0, "glass");
+      B(0.22, 0.2, 0.215, 0.16, 0.1, 0.02, 0xfff1b8, 0, "glass");
+      break;
+    case "modern":
+      B(-0.08, 0.08, -0.05, 0.56, 0.3, 0.45, wall);
+      B(-0.08, 0.2, -0.05, 0.57, 0.08, 0.46, 0x495057, 0, "glass");
+      B(-0.05, 0.38, -0.05, 0.68, 0.04, 0.55, roof);
+      B(0.3, 0.08, 0.22, 0.22, 0.02, 0.3, 0x74c0fc, 0, "water");
+      tree(-0.36, 0.33, 0.45, r[0]);
+      break;
+    case "duplex":
+      B(-0.06, 0.08, -0.04, 0.5, 0.6, 0.44, wall);
+      add("roof", { x: x - 0.06, y: 0.68, z: z - 0.04, sx: 0.58 / Math.SQRT2, sy: 0.26, sz: 0.52 / Math.SQRT2, ry: 0, color: roof });
+      B(0.3, 0.08, 0.05, 0.24, 0.22, 0.32, wall);
+      B(0.3, 0.3, 0.05, 0.26, 0.03, 0.34, roof);
+      B(-0.06, 0.36, 0.2, 0.4, 0.03, 0.1, 0xced4da);
+      tree(-0.38, 0.35, 0.45, r[0]);
+      break;
+    case "villa":
+      B(-0.06, 0.08, -0.08, 0.7, 0.26, 0.5, wall);
+      B(-0.14, 0.34, -0.12, 0.46, 0.24, 0.36, wall);
+      B(-0.14, 0.44, -0.12, 0.47, 0.06, 0.37, 0x495057, 0, "glass");
+      B(-0.06, 0.34, -0.08, 0.76, 0.03, 0.56, roof);
+      B(-0.14, 0.58, -0.12, 0.54, 0.04, 0.44, roof);
+      for (const cx of [-0.3, -0.12, 0.06]) B(cx, 0.08, 0.19, 0.04, 0.26, 0.04, 0xf8f9fa, 0, "cyl");
+      B(0.3, 0.08, 0.27, 0.26, 0.02, 0.22, 0x74c0fc, 0, "water");
+      tree(0.36, -0.3, 0.5, r[0]);
+      break;
+    default: {
+      // cottage
+      B(0, 0.08, 0, 0.54, 0.38, 0.48, wall);
+      roofOn(0, 0.46, 0, 0.54, 0.48, 0.3);
+      B(0, 0.08, 0.245, 0.11, 0.22, 0.02, 0x6b4430);
+      B(0.14, 0.62, -0.1, 0.07, 0.16, 0.07, 0xb5654a);
+      tree(0.36, 0.32, 0.5, r[0]);
+    }
+  }
+  // The name board by the path, in the players' purple.
+  B(-0.13, 0.08, 0.4, 0.02, 0.14, 0.02, 0x8d5a3b);
+  B(-0.13, 0.19, 0.405, 0.2, 0.08, 0.02, 0x7048e8);
 }
 
 function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "tile">) => void) {
@@ -474,6 +546,10 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
       break;
     }
     case "house": {
+      if (t.home) {
+        homeParts(t, B, add, tree);
+        break;
+      }
       const dx = (r[1] - 0.5) * 0.1;
       if (t.v === 1) {
         // Flat-roofed modern house with a pool
@@ -1070,6 +1146,7 @@ export function CityView({
   onEventInfo,
   liveVenues,
   clockOffsetMs = 0,
+  houses,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const api = useRef<{
@@ -1088,6 +1165,7 @@ export function CityView({
     setSpot: (n: number) => void;
     setCaughtFaces: (list: CaughtFace[] | undefined) => void;
     setWorldEvents: (list: WorldEvent[] | undefined) => void;
+    setHouses: (list: TownHouse[] | undefined) => void;
     focusEvent: (id: number) => void;
   } | null>(null);
   const cb = useRef({ onTile, onHover, onBillboard, onBalloon, onAdViews, interactive, onRoom, onBalloons, mode, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract });
@@ -1190,6 +1268,19 @@ export function CityView({
     let tileIndex = new Map<string, number>();
     let currentPlan: CityPlan | null = null;
     let currentSeed = -1;
+    /** How many tiles the town has (the last build). */
+    let builtCount = 0;
+    /**
+     * A very big town only draws the square of tiles around the camera (WINDOW tiles each way),
+     * so drawing costs the same however big the town grows. null: the whole town is drawn
+     * (towns up to about 6,500 tiles, which is every town so far).
+     */
+    let win: { cx: number; cz: number } | null = null;
+    /** The drawn tiles by tile number. */
+    let tileById = new Map<number, Tile>();
+    /** Players' houses in this game, and a key to spot changes. */
+    let homesNow: TownHouse[] = [];
+    let homesKey = "";
     let born = new Map<number, number>(); // tile → time it started rising
     let growing: number[] = [];
     // Traffic lights: which direction and bulb each lit instance is, and the last phase shown.
@@ -1397,8 +1488,47 @@ export function CityView({
     const adLoader = new THREE.TextureLoader();
     adLoader.setCrossOrigin("anonymous");
     let alive = true;
+    /**
+     * The order this viewer's billboards go through the ads: shuffled per viewer (so different
+     * people see different ads on the same board), with the ads the server ranks first (those
+     * with more budget left) coming up a bit more often, and never the same ad twice in a row.
+     */
+    let adCycle: CityAd[] = [];
+    const viewerSeed = (() => {
+      try {
+        const saved = Number(localStorage.getItem("nt-ad-seed"));
+        if (Number.isInteger(saved) && saved > 0) return saved;
+        const fresh = 1 + Math.floor(Math.random() * 2_000_000_000);
+        localStorage.setItem("nt-ad-seed", String(fresh));
+        return fresh;
+      } catch {
+        return 1 + Math.floor(Math.random() * 2_000_000_000);
+      }
+    })();
+    function makeAdCycle(list: CityAd[]) {
+      const rich = Math.ceil(list.length / 3);
+      const cycle = list.flatMap((a, i) => (i < rich && list.length > 1 ? [a, a] : [a]));
+      let seedV = viewerSeed;
+      const rand = () => {
+        seedV = (seedV + 0x6d2b79f5) | 0;
+        let t = Math.imul(seedV ^ (seedV >>> 15), 1 | seedV);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+      for (let i = cycle.length - 1; i > 0; i--) {
+        const j = Math.floor(rand() * (i + 1));
+        [cycle[i], cycle[j]] = [cycle[j], cycle[i]];
+      }
+      for (let i = 1; i < cycle.length; i++) {
+        if (cycle[i].id !== cycle[i - 1].id) continue;
+        const j = cycle.findIndex((c, k) => k > i && c.id !== cycle[i].id);
+        if (j > 0) [cycle[i], cycle[j]] = [cycle[j], cycle[i]];
+      }
+      return cycle;
+    }
     function setAds(list: CityAd[]) {
       adsList = (list ?? []).filter((a) => a && a.id && a.image);
+      adCycle = makeAdCycle(adsList);
       const wanted = new Map(adsList.map((a) => [a.id, a.image]));
       for (const [id, entry] of adCache) {
         if (wanted.get(id) === entry.url) continue;
@@ -1431,10 +1561,12 @@ export function CityView({
       for (const b of boards) b.slot = -1;
     }
     const adReady = (id: string) => !!adCache.get(id)?.tex;
+    /** What board k shows in time slot `slot`: neighbouring boards show different ads. */
     function pickAd(slot: number, k: number): CityAd | null {
-      const n = adsList.length;
+      const n = adCycle.length;
+      const step = Math.max(1, boards.length);
       for (let j = 0; j < n; j++) {
-        const ad = adsList[(slot + k + j) % n];
+        const ad = adCycle[(((slot * step + k + j) % n) + n) % n];
         if (!adCache.get(ad.id)?.failed) return ad;
       }
       return null;
@@ -1693,14 +1825,8 @@ export function CityView({
 
     // ---- hot-air balloons and planes
     const balloonColors = [0xff6b6b, 0xffd43b, 0x4dabf7, 0xda77f2, 0x38d9a9];
-    // Each balloon carries an advert on a banner round its middle (the same ads as the
-    // billboards, changing every 20 s; "Your ad here" when there are none), and slowly turns so
-    // both sides show. In chat mode each one is a chat room you can ride in.
-    const bannerTex = balloonBannerTexture();
-    const bannerGeo = mergeGeometries([
-      new THREE.CylinderGeometry(0.41, 0.445, 0.22, 12, 1, true, -0.62, 1.24),
-      new THREE.CylinderGeometry(0.41, 0.445, 0.22, 12, 1, true, Math.PI - 0.62, 1.24),
-    ]);
+    // Balloons carry no ads (ads are on billboards only). They slowly turn as they drift. In
+    // chat mode each one is a chat room you can ride in.
     const ropeGeo = mergeGeometries(
       [[-0.07, -0.07], [0.07, -0.07], [-0.07, 0.07], [0.07, 0.07]].map(([rx, rz]) => new THREE.BoxGeometry(0.008, 0.2, 0.008).translate(rx, -0.52, rz)),
     );
@@ -1713,8 +1839,6 @@ export function CityView({
       lift: number;
       /** How much it bobs up and down (calms right down while you ride it). */
       bob: number;
-      mat: THREE.MeshLambertMaterial;
-      shown: string | null;
       hits: THREE.Object3D[];
       a: number;
       r: number;
@@ -1733,10 +1857,10 @@ export function CityView({
       band.position.y = -0.12;
       const basket = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, 0.14), new THREE.MeshLambertMaterial({ color: 0x8a6a4f }));
       basket.position.y = -0.68;
-      const mat = new THREE.MeshLambertMaterial({ map: bannerTex, emissive: 0xffffff, emissiveMap: bannerTex, emissiveIntensity: 0.3 });
-      const banner = new THREE.Mesh(bannerGeo, mat);
-      banner.position.y = 0.08;
-      body.add(envelope, band, banner);
+      // A second band of colour where the ad banner used to be.
+      const stripe = new THREE.Mesh(new THREE.CylinderGeometry(0.425, 0.44, 0.1, 12), new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }));
+      stripe.position.y = 0.1;
+      body.add(envelope, band, stripe);
       // The basket and its ropes (hidden while you ride in it).
       const rig = new THREE.Group();
       rig.add(new THREE.Mesh(ropeGeo, lmMat.frame), basket);
@@ -1749,9 +1873,7 @@ export function CityView({
         basket: rig,
         lift: 0,
         bob: 1,
-        mat,
-        shown: null,
-        hits: [envelope, band, banner, basket],
+        hits: [envelope, band, stripe, basket],
         a: (k / balloonColors.length) * Math.PI * 2,
         r: 0.45 + (k % 3) * 0.22,
         h: 5.6 + (k % 3) * 1.3,
@@ -1793,15 +1915,6 @@ export function CityView({
         b.bob += ((riding ? 0 : 1) - b.bob) * Math.min(1, dt * 0.8);
         balloonPose(b, time, b.obj.position);
         b.body.rotation.y += dt * 0.12;
-        // Turn to the next ad every 20 s.
-        const want = pickAd(Math.floor((time + b.k * 9) / 20), b.k + 2);
-        const id = want && adReady(want.id) ? want.id : null;
-        if (id !== b.shown) {
-          b.shown = id;
-          const tex = (id && adCache.get(id)?.tex) || bannerTex;
-          b.mat.map = tex;
-          b.mat.emissiveMap = tex;
-        }
       }
       for (const p of planes) {
         const u = p.userData;
@@ -2051,7 +2164,7 @@ export function CityView({
     let lifeAt = 0;
 
     // ---- build / grow the city
-    function build(newSeed: number, count: number) {
+    function build(newSeed: number, count: number, centre?: { cx: number; cz: number }) {
       const sameCity = newSeed === currentSeed;
       if (!sameCity) {
         born = new Map();
@@ -2059,8 +2172,28 @@ export function CityView({
         caughtFromEvents.clear();
       }
       currentSeed = newSeed;
+      builtCount = count;
       const plan = makePlan(newSeed);
-      tiles = Array.from({ length: count }, (_, i) => tileAt(plan, i));
+      placeHouses(plan, count, homesNow);
+      // The spiral ring the last tile is on: the town is (2 × ring + 1) tiles across.
+      const ring = Math.ceil((Math.sqrt(count) - 1) / 2);
+      const moved = Boolean(centre) && sameCity;
+      if (ring <= WINDOW) {
+        win = null;
+        tiles = Array.from({ length: count }, (_, i) => tileAt(plan, i));
+      } else {
+        const c = centre ?? (sameCity && win ? win : { cx: 0, cz: 0 });
+        const lim = Math.max(0, ring - WINDOW);
+        win = { cx: Math.max(-lim, Math.min(lim, c.cx)), cz: Math.max(-lim, Math.min(lim, c.cz)) };
+        tiles = [];
+        for (let x = win.cx - WINDOW; x <= win.cx + WINDOW; x++) {
+          for (let z = win.cz - WINDOW; z <= win.cz + WINDOW; z++) {
+            const i = spiralIndex(x, z);
+            if (i < count) tiles.push(tileAt(plan, i));
+          }
+        }
+        tiles.sort((a, b) => a.i - b.i);
+      }
       // A big building only appears once all four of its tiles exist; until then each
       // of its tiles shows what it would otherwise be.
       const present = new Set(tiles.map((t) => `${t.x},${t.z}`));
@@ -2070,6 +2203,7 @@ export function CityView({
         const whole = [`${ax},${az}`, `${ax + 1},${az}`, `${ax},${az + 1}`, `${ax + 1},${az + 1}`].every((k) => present.has(k));
         return whole ? t : { ...t.fallback, i: t.i };
       });
+      tileById = new Map(tiles.map((t) => [t.i, t]));
       kindAt = new Map(tiles.map((t) => [`${t.x},${t.z}`, t.kind]));
       tileIndex = new Map(tiles.map((t) => [`${t.x},${t.z}`, t.i]));
       blocked = new Set(tiles.filter((t) => t.works).map((t) => `${t.x},${t.z}`));
@@ -2078,11 +2212,14 @@ export function CityView({
       const now = performance.now();
       for (const t of tiles) {
         if (!born.has(t.i)) {
-          // First load: rise from the centre outwards. Later: new tiles pop up.
-          const delay = sameCity ? (t.i - born.size) * 25 : Math.hypot(t.x, t.z) * 45;
+          // First load: rise from the centre outwards. Later: new tiles pop up. Tiles that come
+          // into view as you move round a very big town are simply there.
+          const delay = moved ? -1000 : sameCity ? (t.i - born.size) * 25 : Math.hypot(t.x - (win?.cx ?? 0), t.z - (win?.cz ?? 0)) * 45;
           born.set(t.i, now + Math.min(delay, 2500));
         }
       }
+      // Forget tiles far out of view (a very big town), so this never grows without end.
+      if (win && born.size > tiles.length * 3) for (const i of born.keys()) if (!tileById.has(i)) born.delete(i);
 
       parts = {};
       tileParts = new Map();
@@ -2125,22 +2262,27 @@ export function CityView({
       flashTags = (parts.flash ?? []).map((p) => p.color - FLASH_TAG);
       flashState = -1;
 
-      radius = tiles.reduce((m, t) => Math.max(m, Math.abs(t.x), Math.abs(t.z)), 4) + 1.5;
+      // radius: half the width of what's drawn. The hills start beyond the whole town.
+      radius = win ? WINDOW + 1.5 : tiles.reduce((m, t) => Math.max(m, Math.abs(t.x), Math.abs(t.z)), 4) + 1.5;
       tallest = tiles.reduce((m, t) => Math.max(m, t.top), 0);
-      buildTerrain(newSeed, radius);
+      buildTerrain(newSeed, win ? ring + 1.5 : radius);
+      const ox = win?.cx ?? 0;
+      const oz = win?.cz ?? 0;
       const sc = sun.shadow.camera;
       sc.left = sc.bottom = -radius * 1.3;
       sc.right = sc.top = radius * 1.3;
       sc.near = 1;
       sc.far = radius * 6 + 40;
       sc.updateProjectionMatrix();
-      sun.position.set(-radius * 1.2, radius * 2 + 12, radius * 0.9);
-      controls.maxDistance = Math.max(30, radius * 4.5);
+      sun.position.set(ox - radius * 1.2, radius * 2 + 12, oz + radius * 0.9);
+      sun.target.position.set(ox, 0, oz);
+      sun.target.updateMatrixWorld();
+      controls.maxDistance = Math.max(30, radius * (win ? 3 : 4.5));
       if (!framed) {
         framed = true;
         const d = (radius * 2.3 + 8) * Math.max(1, 0.95 / camera.aspect);
-        camera.position.set(d * 0.62, d * 0.72, d * 0.62);
-        controls.target.set(0, 0, 0);
+        camera.position.set(ox + d * 0.62, d * 0.72, oz + d * 0.62);
+        controls.target.set(ox, 0, oz);
         controls.update();
       }
       buildPools();
@@ -2148,6 +2290,7 @@ export function CityView({
       for (const g of ghosts) g.visible = isRevealed;
       // Everyone else who needs to know about the new city.
       world.tiles = tiles;
+      world.byIndex = tileById;
       world.plan = plan;
       world.radius = radius;
       world.kindAt = kindAt;
@@ -2162,7 +2305,7 @@ export function CityView({
       buildLandmarks();
       plumes.build();
       sites.build();
-      if (!isRevealed) buildingSite.build(newSeed, count);
+      if (!isRevealed) buildingSite.build(newSeed, count, siteBox());
       cb.current.onBalloons?.(balloons.length);
       listRides();
       setMarkers(lastMarkers);
@@ -2176,6 +2319,26 @@ export function CityView({
         hideRoof(view.stage, true);
       }
       syncView();
+    }
+
+    /** The part of a very big town the building site covers (null: all of it). */
+    const siteBox = () => (win ? { x0: win.cx - WINDOW, x1: win.cx + WINDOW, z0: win.cz - WINDOW, z1: win.cz + WINDOW } : null);
+
+    /**
+     * A very big town: when the camera has wandered well away from the middle of what's drawn,
+     * draw the part around it instead (checked a few times a second, never while inside a
+     * place or riding something).
+     */
+    let windowCheckAt = 0;
+    function followWindow(now: number) {
+      if (!win || now < windowCheckAt) return;
+      windowCheckAt = now + 400;
+      if (view || eventFly) return;
+      const tx = controls.target.x;
+      const tz = controls.target.z;
+      if (Math.max(Math.abs(tx - win.cx), Math.abs(tz - win.cz)) < WINDOW * 0.45) return;
+      const step = 10;
+      build(currentSeed, builtCount, { cx: Math.round(tx / step) * step, cz: Math.round(tz / step) * step });
     }
 
     function updateGrowth(now: number) {
@@ -2218,8 +2381,14 @@ export function CityView({
     };
     // Shared with the little scenes (which free what they made, but not these).
     markerGeo.square.userData.keep = true;
-    const topOf = (tile: number) => tiles[tile]?.top ?? 0.2;
-    const posOf = (tile: number) => tiles[tile] ?? { x: 0, z: 0 };
+    const topOf = (tile: number) => tileById.get(tile)?.top ?? 0.2;
+    const posOf = (tile: number) => {
+      const t = tileById.get(tile);
+      if (t) return t;
+      // Not drawn (far out in a very big town): it's still at its place on the spiral.
+      const [x, z] = spiralXY(tile);
+      return { x, z };
+    };
 
     function pin(tile: number, hex: number) {
       const g = new THREE.Group();
@@ -2242,7 +2411,7 @@ export function CityView({
       }
       pulsers.length = 0;
       if (!tiles.length) return;
-      const ok = (t: number) => t >= 0 && t < tiles.length;
+      const ok = (t: number) => t >= 0 && t < builtCount;
 
       // Searched tiles: a coloured glass block over the whole tile, with a solid cap on top.
       // Blue = you searched, empty. Red = you found someone. Orange = searched (hiders' view).
@@ -2899,7 +3068,7 @@ export function CityView({
           seenEvents.add(e.id);
           continue;
         }
-        const tile = tiles[e.tile];
+        const tile = tileById.get(e.tile);
         if (!tile) continue; // not built yet: try again once the city has grown
         seenEvents.add(e.id);
         // Whoever got caught keeps floating over the spot for the rest of the round.
@@ -3263,7 +3432,7 @@ export function CityView({
         cb.current.onHover?.(null);
         return;
       }
-      const t = tiles[tile];
+      const t = tileById.get(tile);
       if (!t) return;
       if (!isRevealed) {
         // The city is still a secret: no addresses, no shapes.
@@ -3292,7 +3461,9 @@ export function CityView({
       hoverBox.visible = true;
       hoverBox.position.set(t.x, 0, t.z);
       hoverBox.scale.set(1.02, t.top + 0.1, 1.02);
-      const what = t.egg
+      const what = t.home
+        ? homeLabel(t.home)
+        : t.egg
         ? `${t.egg.name} · ${KIND_LABEL[t.kind]}`
         : t.station
         ? "Railway station"
@@ -3315,16 +3486,16 @@ export function CityView({
     };
     /** The tile a place hangs off: big buildings use their corner tile, the station its middle tile. */
     function anchorOf(i: number): { anchor: Tile; big: boolean } | null {
-      const t = tiles[i];
+      const t = tileById.get(i);
       if (!t || !currentPlan) return null;
       const rail = currentPlan.rail;
       if (t.station && rail && rail.station !== null) {
         const at = rail.along === "z" ? tileIndex.get(`${rail.at},${rail.station}`) : tileIndex.get(`${rail.station},${rail.at}`);
-        return { anchor: at !== undefined ? tiles[at] : t, big: false };
+        return { anchor: (at !== undefined && tileById.get(at)) || t, big: false };
       }
       if (t.kind === "structure" && t.structure) {
         const at = tileIndex.get(`${t.structure.ax},${t.structure.az}`);
-        return { anchor: at !== undefined ? tiles[at] : t, big: true };
+        return { anchor: (at !== undefined && tileById.get(at)) || t, big: true };
       }
       return ROOM_LABEL[t.kind] ? { anchor: t, big: false } : null;
     }
@@ -3335,7 +3506,9 @@ export function CityView({
       const { anchor, big } = a;
       const levels = levelsOf(anchor, currentPlan);
       if (!levels.length) return null;
-      const name = anchor.station
+      const name = anchor.home
+        ? homeLabel(anchor.home)
+        : anchor.station
         ? stationName(currentPlan)
         : anchor.kind === "structure" && anchor.structure
           ? anchor.structure.name
@@ -3406,7 +3579,7 @@ export function CityView({
           if (!balloons[balloon]) continue;
         } else if (id.startsWith("b:")) {
           tile = Number(id.slice(2));
-          const t = tiles[tile];
+          const t = tileById.get(tile);
           if (!t) continue;
           const big = t.kind === "structure";
           sprite.position.set(t.x + (big ? 0.5 : 0), t.top + 0.35, t.z + (big ? 0.5 : 0));
@@ -3522,7 +3695,7 @@ export function CityView({
       count: (i) => countByTile.get(i) ?? 0,
       note: (i) => {
         // A match on at a stadium or arena: say so (the lead's live label, e.g. "Lions 2-1 Eagles").
-        const st = tiles[i]?.structure;
+        const st = tileById.get(i)?.structure;
         const sport = st ? VENUE_SPORT[st.type] : undefined;
         const live = sport ? cb.current.liveVenues?.[sport] : null;
         if (live === null || live === undefined) return null;
@@ -4110,7 +4283,7 @@ export function CityView({
       const boatNames = [`${city} River Bus`, "Lady of the River", "Sunset Cruiser", "Island Hopper", "Blue Heron"];
       for (let i = 0; i < boats.count; i++) out.push({ kind: "boat", index: i, name: boatNames[i] ?? `River boat ${i + 1}`, capacity: RIDE_CAP.boat });
       wheels.forEach((w, i) => {
-        const t = tiles[w.tile];
+        const t = tileById.get(w.tile);
         const name = t?.name ?? (t?.structure ? `${t.structure.name} wheel` : t ? `Ferris wheel, ${shortAddress(addressOf(plan, t))}` : "Ferris wheel");
         out.push({ kind: "ferris", index: i, name, capacity: RIDE_CAP.ferris });
       });
@@ -4531,7 +4704,7 @@ export function CityView({
       }
       const perTile = new Map<number, number>();
       for (const f of list.slice(-40)) {
-        const t = tiles[f.tile];
+        const t = tileById.get(f.tile);
         if (!t) continue;
         const n = perTile.get(f.tile) ?? 0;
         perTile.set(f.tile, n + 1);
@@ -4566,7 +4739,7 @@ export function CityView({
     const wobble = new THREE.Quaternion();
     const wobbleE = new THREE.Euler();
     function tapExtras(i: number) {
-      const t = tiles[i];
+      const t = tileById.get(i);
       if (!t || !isRevealed) return;
       const fountain = t.kind === "plaza" || (t.kind === "road" && t.roundabout && t.r[1] < 0.5);
       if (fountain) {
@@ -4712,7 +4885,7 @@ export function CityView({
         life.visible = false;
         for (const g of ghosts) g.visible = false;
         hoverBox.visible = false;
-        buildingSite.build(currentSeed, tiles.length);
+        buildingSite.build(currentSeed, builtCount, siteBox());
         buildingSite.show(true);
         return;
       }
@@ -4902,7 +5075,7 @@ export function CityView({
         if (pinId !== null) {
           renderer.domElement.style.cursor = "pointer";
           hoverBox.visible = false;
-          cb.current.onHover?.({ tile: -1, label: `${worldEventsLayer.titleOf(pinId) ?? "World event"} · tap for details` });
+          cb.current.onHover?.({ tile: -1, label: `${worldEventsLayer.titleOf(pinId) ?? "Town event"} · tap for details` });
           hoverQueued = null;
         }
       }
@@ -4916,7 +5089,7 @@ export function CityView({
           hoverBox.visible = false;
           cb.current.onHover?.({ tile: -1, label: `${room.name} · ${n ? `${n} aboard` : "nobody aboard yet"} · tap to climb in` });
         } else if (board) {
-          const t = tiles[board.tile];
+          const t = tileById.get(board.tile);
           const ad = board.adId ? adsList.find((a) => a.id === board.adId) : null;
           const where = t && currentPlan ? addressOf(currentPlan, t) : "this spot";
           cb.current.onHover?.({ tile: board.tile, label: ad ? `${ad.brand}: ${ad.headline} · tap to see more` : `Billboard at ${where} · your ad here, tap to find out more` });
@@ -4927,6 +5100,7 @@ export function CityView({
       world.rain = storm;
       world.progress = atmos.current.progress;
       life.visible = isRevealed && now >= lifeAt;
+      followWindow(now);
       updateGrowth(now);
       updateShakes(now);
       if (life.visible) {
@@ -5020,7 +5194,16 @@ export function CityView({
       eventFly = p;
       worldEventsLayer.ping(id);
     };
-    api.current = { build, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setMode, setWorldEvents, focusEvent: focusEventAt };
+    function setHouses(list: TownHouse[] | undefined) {
+      const next = list ?? [];
+      const key = next.map((h) => `${h.slot}:${h.ownerId}:${h.style}:${h.wall}:${h.roof}:${h.interior}:${h.name}`).join("|");
+      if (key === homesKey) return;
+      homesKey = key;
+      homesNow = next;
+      if (currentSeed >= 0 && builtCount > 0) build(currentSeed, builtCount);
+    }
+
+    api.current = { build, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setMode, setWorldEvents, setHouses, focusEvent: focusEventAt };
 
     return () => {
       alive = false;
@@ -5050,7 +5233,7 @@ export function CityView({
       look.dispose();
       disposeKitCaches();
       disposeBlobTexture();
-      bannerTex.dispose();
+
       honkTex.dispose();
       for (const t of boardTextures) t.dispose();
       document.removeEventListener("visibilitychange", onVisibility);
@@ -5078,6 +5261,10 @@ export function CityView({
   useEffect(() => {
     api.current?.build(seed, tileCount);
   }, [seed, tileCount]);
+
+  useEffect(() => {
+    api.current?.setHouses(houses);
+  }, [houses]);
 
   useEffect(() => {
     api.current?.setMarkers(markers);

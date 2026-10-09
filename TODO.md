@@ -1,11 +1,16 @@
 # To do
 
 ## Now (owner)
-- [ ] In the Supabase SQL Editor run, in order: `game-db/017_world_events.sql` (again if you already ran it: it now stops clock ticks queueing up), `018_npcs.sql`, `019_activities.sql`, `020_sports.sql`, `021_hourly_rounds.sql`. Then merge the open pull request.
+- [ ] In the Supabase SQL Editor run, in order: `game-db/021_hourly_rounds.sql` (again), `022_pool_and_ads.sql`, `023_houses.sql`, `024_play_style.sql`, `025_big_towns.sql`. (If 017–020 were never run, run them first.) Then merge the open pull request.
 - [ ] In Vercel, set `SPORTS_SECRET` to a long random string (once; don't change it later).
 - [ ] Test on a real phone: sounds, touch gestures, the water slide, club lights.
 
 ## Done lately
+- [x] Houses, phase 1 (free): pick a style, colours, room and name; "Show my house in the game" puts it in the middle of every new town (+5 hiding spots each); switch off for the next game; "Visit my house".
+- [x] Play styles: 12 styles at the end of every game with a tease line, the numbers behind it, a share picture, and "My style" bars over time.
+- [x] Mint spent during a game (respawns, sports tickets, the sportsbook's cut) goes into the prize pool. Ads pay for a tap on the ad's button, not for looking. Final countdown is the last 2 minutes. No "world" wording.
+- [x] Billboards: different ads on different boards and for different people; no ads on balloons.
+- [x] Big towns: nothing scans the whole town any more, and huge towns only draw the part around the camera. Compact menu that opens instantly.
 - [x] Games on the hour (UTC): 3-minute join countdown from the top of every hour, hunt until the next hour mark, red final 30 seconds, no early end when every ghost is caught; games on the old timing get pulled in to end on the hour (run `game-db/021_hourly_rounds.sql`, again if you already ran it).
 - [x] Renamed to Newtown: new logo, favicon, share picture, "mint" instead of coins, newtown.world and hello@newtown.world everywhere.
 - [x] Fixes: sign-out spinner, hunt countdown for ghosts, sign-in prompts for watchers, timeouts ("Reconnecting" screen), cars drive themselves, button press feedback, "My house" coming soon.
@@ -29,10 +34,11 @@ Decide first:
 - [ ] Studios full-size as soon as they pay; levels unlock mansions and decorations for personal houses.
 - [ ] Legal check with a Nigerian lawyer: mint pools and stakes as gaming, subscription rules, showing contact details publicly.
 
-Stage 1: free private house (cheapest path: reuse what the city already draws)
-- [ ] Pick, don't build: choose one of the house styles the city already has, paint colours, a name sign, and a room style (living room, lounge, studio, club...).
+Stage 1: free house (cheapest path: reuse what the city already draws)
+- [x] Pick, don't build: one of the city's house styles, paint colours, a name sign, a room style.
+- [x] Free publishing into every new town, switch off for the next game, +5 spots per house.
 - [ ] Furniture slots instead of a free editor: tap a spot in the room, pick a chair, sofa, table, plant, lamp, TV, bar... (mint, burned). Free starter set.
-- [ ] "My house" button that always takes the owner home, even if the house is switched off in the city.
+- [ ] "My house" visit even when the house is switched off (a private copy just for the owner).
 
 Stage 2: paid publishing (N1500 a month)
 - [ ] Paystack monthly billing, grace period and reminder emails for failed cards.

@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { addressOf, makePlan, tileAt } from "@/lib/city/layout";
+import { houseTileOf } from "@/lib/city/houses";
+import { homeLabel } from "@/lib/houses";
+import { useDiary } from "./style/diary";
 import { cleanAvatar } from "@/lib/avatar";
 import type { GameEvent, GameState } from "@/lib/game";
 import { cn } from "@/lib/cn";
@@ -55,25 +58,21 @@ import { short } from "@/lib/format";
 import { createClient } from "@/lib/supabase/client";
 import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
 import { bigSearch, buyShield, claimWorldEvent, joinRound, moveTo, placeDecoy, respawnMe, searchTile, sweepAround, type ActionResult } from "./actions";
-import { AvatarEditor } from "./avatar-editor";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import type { Sport } from "@/lib/sports/types";
-import { ActivitySheet, GiveCoinsSheet, QuestBanner, QuestSheet, RoomActivityLayer, useQuestTracker, type ActivityItem } from "./activities";
+import type { ActivityItem } from "./activities/games";
+import { useQuestTracker } from "./activities/quest-tracker";
+import { QuestBanner, QuestSheet } from "./activities/quest-ui";
 import { Chat } from "./chat";
 import { setEventSoundsEnabled } from "./city/event-sounds";
 import type { CityEvent, CityInteract, CityMarkers, CityRide, RideTarget } from "./city-view";
-import { HowItWorks } from "./how-it-works";
-import { Menu } from "./menu";
 import { FeedRow, NotificationsPanel, type FeedIcon, type FeedItem } from "./notifications";
 import { signOutNow } from "../login/actions";
 import { claimBalloon, recordVisit } from "./profile-actions";
-import { Results } from "./results";
 import { rideRoom, useRooms, type RoomInfo } from "./rooms";
 import { RIDE_ICONS, RIDE_INFO, RideIcon, type RideKindName } from "./ride-icon";
 import { Safe } from "./safe";
 import { Sheet } from "./sheet";
-import { SportsSheet } from "./sports/sportsbook";
-import { AdvertiseExplainer } from "@/components/advertise-explainer";
 import { Logo, LogoMark } from "@/components/logo";
 import { playSfx, setSfxEnabled, useCitySound } from "./sound";
 import { StatsCard } from "./stats-card";
@@ -83,6 +82,19 @@ const CityView = dynamic(() => import("./city-view").then((m) => m.CityView), {
   ssr: false,
   loading: () => <div className="absolute inset-0 grid place-items-center text-muted">Building the city…</div>,
 });
+// Panels people open now and then: their code only loads when first opened, so the town
+// itself starts faster.
+const Menu = dynamic(() => import("./menu").then((m) => m.Menu));
+const HowItWorks = dynamic(() => import("./how-it-works").then((m) => m.HowItWorks));
+const Results = dynamic(() => import("./results").then((m) => m.Results));
+const AvatarEditor = dynamic(() => import("./avatar-editor").then((m) => m.AvatarEditor));
+const SportsSheet = dynamic(() => import("./sports/sportsbook").then((m) => m.SportsSheet));
+const ActivitySheet = dynamic(() => import("./activities/activity-sheet").then((m) => m.ActivitySheet));
+const GiveCoinsSheet = dynamic(() => import("./activities/gift-sheet").then((m) => m.GiveCoinsSheet));
+const RoomActivityLayer = dynamic(() => import("./activities/room-layer").then((m) => m.RoomActivityLayer));
+const AdvertiseExplainer = dynamic(() => import("@/components/advertise-explainer").then((m) => m.AdvertiseExplainer));
+const HouseSheet = dynamic(() => import("./houses/house-sheet").then((m) => m.HouseSheet));
+const StyleSheet = dynamic(() => import("./style/style-ui").then((m) => m.StyleSheet));
 
 type Mode = "search" | "sweep" | "big";
 /** A building or balloon you can go into (from the 3D city), with its levels. */
@@ -91,7 +103,7 @@ type PlaceRoom = {
   name: string;
   capacity: number;
   kind: "building" | "balloon";
-  levels?: { id: string; label: string; capacity: number }[];
+  levels?: { id: string; label: string; capacity: number; kind?: string }[];
 };
 // Same order as the balloons in the 3D city (used until the city lists its rides).
 const BALLOON_NAMES = ["Red", "Yellow", "Blue", "Purple", "Mint"];
@@ -271,7 +283,8 @@ export function Game({ state }: { state: GameState }) {
   const [signingOut, setSigningOut] = useState(false);
   // Watchers who try to do something that needs an account: why, for the sign-in prompt.
   const [signInWhy, setSignInWhy] = useState<string | null>(null);
-  const [houseSoon, setHouseSoon] = useState(false);
+  const [houseOpen, setHouseOpen] = useState(false);
+  const [styleOpen, setStyleOpen] = useState(false);
   // Sports: the matches sheet (which sport to open on), or null.
   const [sportsOpen, setSportsOpen] = useState<Sport | null>(null);
   const [confirmHide, setConfirmHide] = useState(false);
@@ -305,7 +318,8 @@ export function Game({ state }: { state: GameState }) {
   const [confirmRespawn, setConfirmRespawn] = useState(false);
   const [searchReadyAt, setSearchReadyAt] = useState<number>(0);
   const [ads, setAds] = useState<Ad[]>([]);
-  const [openAd, setOpenAd] = useState<{ ad: Ad; tile: number; reward: string | null } | null>(null);
+  // An ad someone opened: what its button would pay them (0 = nothing), a note, and whether they've tapped it.
+  const [openAd, setOpenAd] = useState<{ ad: Ad; tile: number; reward: number; note: string | null; tapped: boolean } | null>(null);
   const [advertise, setAdvertise] = useState<{ tile: number } | null>(null);
   const [ctrlHint, setCtrlHint] = useState(false);
   const [adExplainer, setAdExplainer] = useState(false);
@@ -335,6 +349,14 @@ export function Game({ state }: { state: GameState }) {
   const canTap = phase === "seek" && !!entry && !(isHider && entry.caught);
   // Side quests: sitting down makes one more likely; visits and rides count by themselves.
   const quests = useQuestTracker({ room: rooms.myRoom, seated: !!rooms.mySeat, hiding: isHider && !entry?.caught && phase === "seek", signedIn: !me.guest });
+  // This game's play diary (for the play style at the end): where you go and what you do.
+  useDiary({
+    round: round && phase !== "done" ? round.id : null,
+    room: rooms.myRoom,
+    levelKind: place && placeRoom?.id === place.building ? (placeRoom.levels?.find((l) => l.id === place.level)?.kind ?? null) : null,
+    seated: !!rooms.mySeat,
+    signedIn: !me.guest,
+  });
   // Searches have a short cooldown that grows if you search too fast (the server decides).
   const serverReady = me.searchReadyAt ? Date.parse(me.searchReadyAt) : 0;
   const searchWait = Math.max(searchReadyAt, serverReady) - now;
@@ -343,6 +365,11 @@ export function Game({ state }: { state: GameState }) {
   const roundSeed = round?.id ?? 0;
   const plan = useMemo(() => makePlan(roundSeed), [roundSeed]);
   const where = useCallback((tile: number) => addressOf(plan, tileAt(plan, tile)), [plan]);
+  // Where my house stands in this game's town (null: it isn't in this game).
+  const myHouseTile = useMemo(
+    () => (round && !me.guest ? houseTileOf(plan, round.tileCount, state.houses, me.id) : null),
+    [plan, round, me.guest, me.id, state.houses],
+  );
   const knownSet = useMemo(() => new Set(state.knownSearched), [state.knownSearched]);
   // Where we are in the hunt (0 at the start, 1 at the end): drives day/night and weather.
   const huntProgress = round && phase === "seek"
@@ -492,26 +519,41 @@ export function Game({ state }: { state: GameState }) {
     if (!Object.keys(views).length) return;
     fetch("/api/ads/track", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ views }), keepalive: true }).catch(() => {});
   }, []);
+  const AD_WHY: Record<string, string> = {
+    signed_out: "Sign in to earn 5 mint when you tap an ad's button (up to 5 ads a day).",
+    daily_limit: "You've had all 5 ad rewards for today. More tomorrow!",
+    already_today: "You've already been rewarded for this ad today.",
+    pool_empty: "This ad's mint has run out.",
+  };
   async function onBillboardTap(info: { id: string; tile: number; adId: string | null }) {
     const ad = info.adId ? ads.find((a) => a.id === info.adId) : null;
     if (!ad) return setAdvertise({ tile: info.tile });
-    setOpenAd({ ad, tile: info.tile, reward: null });
+    setOpenAd({ ad, tile: info.tile, reward: 0, note: null, tapped: false });
     try {
+      // Looking is free: this only says what the button would pay.
       const res = await fetch("/api/ads/open", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ adId: ad.id }) });
+      const d = (await res.json()) as { reward?: number; reason?: string };
+      const reward = Number(d.reward ?? 0);
+      setOpenAd((o) => (o && o.ad.id === ad.id && !o.tapped ? { ...o, reward, note: reward > 0 ? null : (d.reason && AD_WHY[d.reason]) || null } : o));
+    } catch {}
+  }
+  // The ad's button ("Visit <brand>" or "Thanks, <brand>!") is what earns the mint.
+  async function onAdButton() {
+    const o = openAd;
+    if (!o || o.tapped) return;
+    setOpenAd({ ...o, tapped: true });
+    try {
+      const res = await fetch("/api/ads/cta", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ adId: o.ad.id }), keepalive: true });
       const d = (await res.json()) as { coins?: number; leftToday?: number; reason?: string };
+      const note =
+        d.coins && d.coins > 0
+          ? `+${d.coins} mint from ${o.ad.brand}!${d.leftToday ? ` (${d.leftToday} more ad rewards today)` : " That's all your ad rewards for today."}`
+          : (d.reason && AD_WHY[d.reason]) || null;
       if (d.coins && d.coins > 0) {
         playSfx("pop");
-        setOpenAd({ ad, tile: info.tile, reward: `+${d.coins} mint from ${ad.brand} for checking it out!${d.leftToday ? ` (${d.leftToday} more ad rewards today)` : " That's all your ad rewards for today."}` });
         startTransition(() => router.refresh());
-      } else if (d.reason) {
-        const why: Record<string, string> = {
-          signed_out: "Sign in to earn 5 mint every time you check out an ad (up to 5 a day).",
-          daily_limit: "You've had all 5 ad rewards for today. More tomorrow!",
-          already_today: "You've already been rewarded for this ad today.",
-          pool_empty: "This ad's mint has run out.",
-        };
-        setOpenAd({ ad, tile: info.tile, reward: why[d.reason] ?? null });
       }
+      setOpenAd((cur) => (cur && cur.ad.id === o.ad.id ? { ...cur, reward: 0, note } : cur));
     } catch {}
   }
 
@@ -783,6 +825,20 @@ export function Game({ state }: { state: GameState }) {
     setPlace(null);
     setActivity(null);
   }
+  // "Visit my house": straight into its ground floor (chat mode).
+  async function visitMyHouse() {
+    setHouseOpen(false);
+    if (myHouseTile === null) return setMessage({ text: "Your house isn't in this game. Switch it on and it'll be in the next one.", tone: "info" });
+    const home = tileAt(plan, myHouseTile).home;
+    if (!home) return;
+    const { levelsOf } = await import("./city/levels");
+    const levels = levelsOf(tileAt(plan, myHouseTile), plan).map((l) => ({ id: l.id, label: l.label, capacity: l.capacity }));
+    if (!levels.length) return;
+    rooms.leave();
+    setActivity(null);
+    setViewMode("chat");
+    goToLevel({ id: `b:${myHouseTile}`, name: homeLabel(home), capacity: levels.reduce((n, l) => n + l.capacity, 0), kind: "building", levels }, levels[0]);
+  }
   // A ride that ends by itself (the water slide's splash).
   function onRideEnd() {
     const was = ride?.kind;
@@ -977,6 +1033,7 @@ export function Game({ state }: { state: GameState }) {
             onRoom={onRoom}
             ride={ride}
             onRides={setRides}
+            houses={state.houses}
             onRideEnd={onRideEnd}
             onInteract={onInteract}
             seats={rooms.seats}
@@ -1147,11 +1204,16 @@ export function Game({ state }: { state: GameState }) {
           onHowItWorks={() => { setMenu(false); setHowOpen(true); }}
           onEditAvatar={() => { setMenu(false); setEditAvatar(true); }}
           onResults={() => { setMenu(false); if (state.results) setShowResults(state.results.roundId); }}
+          onMyStyle={guest ? undefined : () => { setMenu(false); setStyleOpen(true); }}
+          onMyHouse={guest ? undefined : () => { setMenu(false); setHouseOpen(true); }}
+          coins={guest ? undefined : me.coins}
+          level={guest ? undefined : me.level}
           onChangePin={() => router.push("/welcome")}
           onSignOut={() => { setMenu(false); setConfirmSignOut(true); }}
         />
       )}
       {howOpen && <HowItWorks onClose={() => setHowOpen(false)} />}
+      {styleOpen && <StyleSheet onClose={() => setStyleOpen(false)} />}
       {editAvatar && (
         <AvatarEditor
           initial={me.avatar}
@@ -1253,7 +1315,7 @@ export function Game({ state }: { state: GameState }) {
       )}
 
       {showResults && state.results?.roundId === showResults && (
-        <Results results={state.results} onClose={() => setShowResults(null)} me={me.name ?? "Me"} city={plan.city.name} />
+        <Results results={state.results} onClose={() => setShowResults(null)} me={me.name ?? "Me"} city={plan.city.name} signedIn={!guest} />
       )}
 
       {confirmMove !== null && entry && (
@@ -1357,24 +1419,8 @@ export function Game({ state }: { state: GameState }) {
           </div>
         </Sheet>
       )}
-      {houseSoon && (
-        <Sheet onClose={() => setHouseSoon(false)}>
-          <p className="text-xs font-bold uppercase tracking-wide text-[#7048e8]">Coming soon</p>
-          <h2 className="flex items-center gap-2 font-display text-xl font-bold">
-            <House className="size-5 text-[#7048e8]" />
-            Your own house in the city
-          </h2>
-          <ul className="mt-3 space-y-1.5 text-sm text-ink/80">
-            <Li icon={House}>Get your own place that shows up in the busiest parts of every city.</Li>
-            <Li icon={Sparkles}>Design it your way and fill it with furniture.</Li>
-            <Li icon={Users}>Invite people round: they can walk in, sit down and chat.</Li>
-            <Li icon={Building2}>Turn it into a studio for your business, with your contacts on the wall.</Li>
-            <Li icon={Trophy}>Start small and grow it into a mansion as you level up.</Li>
-          </ul>
-          <button onClick={() => setHouseSoon(false)} className="mt-4 w-full rounded-xl bg-ink py-2.5 font-semibold text-white">
-            Can&apos;t wait
-          </button>
-        </Sheet>
+      {houseOpen && (
+        <HouseSheet onClose={() => setHouseOpen(false)} onVisit={() => void visitMyHouse()} standingNow={myHouseTile !== null} />
       )}
       {pickPlace && (
         <Sheet onClose={() => setPickPlace(null)}>
@@ -1528,23 +1574,36 @@ export function Game({ state }: { state: GameState }) {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={openAd.ad.image} alt={openAd.ad.headline} className="mt-2 aspect-[2/1] w-full rounded-2xl bg-panel-2 object-cover" />
           <h2 className="mt-3 font-display text-xl font-bold">{openAd.ad.headline}</h2>
-          {openAd.reward && <p className="mt-2 rounded-xl bg-gold/25 px-3 py-2 text-sm font-semibold text-gold-dark"><Coins className="mr-1 inline size-4 align-[-0.15em]" />{openAd.reward}</p>}
+          {openAd.note ? (
+            <p className="mt-2 rounded-xl bg-gold/25 px-3 py-2 text-sm font-semibold text-gold-dark"><Coins className="mr-1 inline size-4 align-[-0.15em]" />{openAd.note}</p>
+          ) : openAd.reward > 0 && !openAd.tapped ? (
+            <p className="mt-2 rounded-xl bg-gold/15 px-3 py-2 text-sm font-semibold text-gold-dark">
+              <Coins className="mr-1 inline size-4 align-[-0.15em]" />
+              Tap {openAd.ad.link ? `Visit ${openAd.ad.brand}` : "the button"} below to earn {openAd.reward} mint.
+            </p>
+          ) : null}
           <div className="mt-4 flex gap-2">
             <button onClick={() => setOpenAd(null)} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold">
               Back to the city
             </button>
-            {openAd.ad.link && (
+            {openAd.ad.link ? (
               <a
                 href={openAd.ad.link}
                 target="_blank"
                 rel="noopener noreferrer sponsored"
-                onClick={() =>
-                  fetch("/api/ads/click", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ adId: openAd.ad.id }), keepalive: true }).catch(() => {})
-                }
+                onClick={() => void onAdButton()}
                 className="flex-1 rounded-xl bg-gold py-2.5 text-center font-semibold text-ink"
               >
                 Visit {openAd.ad.brand}
               </a>
+            ) : (
+              <button
+                onClick={() => void onAdButton()}
+                disabled={openAd.tapped}
+                className="flex-1 rounded-xl bg-gold py-2.5 text-center font-semibold text-ink disabled:opacity-60"
+              >
+                Thanks, {openAd.ad.brand}!
+              </button>
             )}
           </div>
           <p className="mt-3 text-center text-[11px] text-muted">
@@ -1803,10 +1862,12 @@ export function Game({ state }: { state: GameState }) {
                       <Trophy className="size-4" />
                       Sports
                     </button>
-                    <button onClick={() => setHouseSoon(true)} className="flex items-center gap-1.5 rounded-xl bg-panel-2 px-3 py-2 font-semibold">
+                    <button
+                      onClick={() => (guest ? setSignInWhy("Sign in to build your own house in the town.") : setHouseOpen(true))}
+                      className="flex items-center gap-1.5 rounded-xl bg-panel-2 px-3 py-2 font-semibold"
+                    >
                       <House className="size-4 text-[#7048e8]" />
                       My house
-                      <span className="rounded-full bg-[#7048e8] px-1.5 py-0.5 text-[9px] font-bold uppercase text-white">Soon</span>
                     </button>
                   </div>
                 </>

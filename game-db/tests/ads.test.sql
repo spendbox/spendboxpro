@@ -51,11 +51,14 @@ do $$
 declare u uuid := (select id from profiles where email_key = 'ad1@x.com'); res jsonb; before numeric;
 begin
   before := (select coins from profiles where id = u);
+  -- Part 22: looking at an ad (ad_open) pays nothing; tapping its button (ad_cta) pays.
   res := ad_open('00000000-0000-0000-0000-0000000000a1', u, 'v1');
-  perform pg_temp.check((res->>'coins')::numeric = 5, 'a tap pays 5 coins from the pool: ' || res::text);
-  res := ad_open('00000000-0000-0000-0000-0000000000a1', u, 'v1');
+  perform pg_temp.check((res->>'coins')::numeric = 0 and (res->>'reward')::numeric = 5, 'looking pays nothing: ' || res::text);
+  res := ad_cta('00000000-0000-0000-0000-0000000000a1', u, 'v1');
+  perform pg_temp.check((res->>'coins')::numeric = 5, 'tapping the button pays 5 coins from the pool: ' || res::text);
+  res := ad_cta('00000000-0000-0000-0000-0000000000a1', u, 'v1');
   perform pg_temp.check((res->>'coins')::numeric = 0 and res->>'reason' = 'already_today', 'once per ad per day');
-  res := ad_open('00000000-0000-0000-0000-0000000000a1', null, 'v9');
+  res := ad_cta('00000000-0000-0000-0000-0000000000a1', null, 'v9');
   perform pg_temp.check((res->>'coins')::numeric = 0 and res->>'reason' = 'signed_out', 'visitors without an account get no coins');
   perform pg_temp.check((select coins from profiles where id = u) = before + 5, 'player got 5 coins');
   begin

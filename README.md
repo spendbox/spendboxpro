@@ -64,8 +64,9 @@ slides), plus private messages.
    `game-db/010_ads_sponsors.sql`, `game-db/011_badges_hard.sql`, `game-db/012_age_codes.sql`,
    `game-db/013_ads_v2.sql`, `game-db/014_chat_rooms.sql`, `game-db/015_ghost_rules.sql`,
    `game-db/016_place_rooms.sql`, `game-db/017_world_events.sql`, `game-db/018_npcs.sql`,
-   `game-db/019_activities.sql`, `game-db/020_sports.sql` and `game-db/021_hourly_rounds.sql`,
-   in order, once each, on an empty database. In Supabase → Database → Extensions, switch on **pg_cron** first if you
+   `game-db/019_activities.sql`, `game-db/020_sports.sql`, `game-db/021_hourly_rounds.sql`,
+   `game-db/022_pool_and_ads.sql`, `game-db/023_houses.sql`, `game-db/024_play_style.sql` and
+   `game-db/025_big_towns.sql`, in order, once each, on an empty database. In Supabase → Database → Extensions, switch on **pg_cron** first if you
    can: the file then schedules the round clock to run every minute. (Without it, the clock
    still moves whenever someone has the game open.)
 2. **Email codes.** The app sends its own 4-digit sign-in codes through Resend, so nothing
@@ -116,9 +117,48 @@ move (steal a little from a player, a hint, a free search…). Code: `src/app/pl
 Sport: football at stadiums, basketball, boxing and wrestling at arenas. Matches run on a fixed
 schedule and are simulated on the server from a secret seed (`src/lib/sports/`), so no two are
 alike and nobody can know the result early; the browser only ever gets the match up to "now"
-(`/api/sports/feed`). Tickets cost mint (burned); bets are pari-mutuel: winners share the pot,
-10% burns, everyone is refunded if nobody backed the winner (`game-db/020_sports.sql`). Optional
+(`/api/sports/feed`). Tickets cost mint; bets are pari-mutuel: winners share the pot,
+the sportsbook takes 10%, everyone is refunded if nobody backed the winner (`game-db/020_sports.sql`).
+Ticket money and the sportsbook's cut go into the prize pool of the game that's on (burned if
+none is), like respawns (`game-db/022_pool_and_ads.sql`). Optional
 env var `SPORTS_SECRET` (falls back to `SUPABASE_SECRET_KEY`).
+
+## Billboards
+
+Each billboard shows a different ad when several brands are advertising, and every viewer gets
+their own shuffled order (so two people looking at the same board usually see different ads).
+Brands with more budget left come up a little more often. Boards change every few seconds and
+the mix is fetched again every 5 minutes. Hot-air balloons carry no ads.
+
+## Players' houses (phase 1, free)
+
+From the menu or Chat mode, a player builds a house from what the city already draws: a style
+(cottage, bungalow, modern, duplex, villa), wall and roof colours, a room style inside (living
+room, lounge, studio, party room, dining room) and a name for the sign (`src/lib/houses.ts`,
+`src/app/play/houses/`). Switching on "Show my house in the game" puts it into every new game:
+when a game is created the database takes a snapshot of the houses that are on (longest-waiting
+first, at most `houses_per_round_max`, 500) and adds 5 hiding spots per house to the town
+(`tiles_per_house`; `game-db/023_houses.sql`). Switching off takes effect from the next game.
+Houses stand on ordinary lots near the middle of town, never side by side when there's room
+(`src/lib/city/houses.ts`); each one is a place you can go into, with its room style on the
+ground floor. Free for now: no mint moves.
+
+## Play styles
+
+At the end of each game every player gets one of 12 play styles (The Explorer, The Tourist, The
+Detective, The Phantom, The Escape Artist, The Socialite, The Party Animal, The Foodie, The High
+Roller, The Master Thief, The Gamer, The Sports Fan), with a teasing line, the numbers behind it
+and a share picture. The phone keeps a small diary of the game (buildings, rides, food, time in
+the club…); the server adds what it knows for sure (searches, catches, bets, gifts…), picks the
+style and adds it to the player's lifetime mix, shown as bars in "My style"
+(`src/lib/play-style.ts`, `src/app/play/style/`, `game-db/024_play_style.sql`).
+
+## Big towns
+
+Nothing in a game scans every spot of the town any more (`game-db/021_hourly_rounds.sql`,
+`game-db/025_big_towns.sql`), and a town bigger than about 6,500 spots only draws the 81×81
+square around the camera (moving with it), so a 2,000,000-spot town costs the same to draw as
+a 6,500-spot one.
 
 ## Avatars, badges and mint balloons
 
@@ -146,11 +186,12 @@ automatic picture check).
 
 - **Budget = a mint pool.** The advertiser picks a weekly budget (from ₦5,000) and 1–8 weeks.
   What they pay loads the ad with mint: 1 mint per ₦5.
-- **Paid views are taps.** A signed-in player who taps a billboard to look at the ad gets 5
-  mint from that ad's pool (logged as `ad_reward`). Each player can earn this from 5 ads a
-  day, once per ad per day.
-- **Free views.** Taps by people who get no mint (watchers without an account, players over
-  their daily limit, a second look the same day) are counted but cost nothing. Link clicks are
+- **Paid views are button taps.** Tapping a billboard opens the ad (free for everyone). A
+  signed-in player who then taps the ad's button ("Visit <brand>", or "Thanks, <brand>!" when
+  there's no link) gets 5 mint from that ad's pool (logged as `ad_reward`;
+  `game-db/022_pool_and_ads.sql`). Each player can earn this from 5 ads a day, once per ad per day.
+- **Free views.** Opening an ad, and button taps by people who get no mint (watchers without an
+  account, players over their daily limit, a second tap the same day), are counted but cost nothing. Link clicks are
   counted too. Billboards just being on screen are counted as "seen on billboards" and never
   charged.
 - **The end.** An ad stops when its pool can't pay another reward, or its weeks are over.

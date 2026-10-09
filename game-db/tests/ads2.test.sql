@@ -2,6 +2,8 @@
 \pset tuples_only on
 \pset format unaligned
 -- Coin-pool ads and advertiser accounts (part 13). Runs on a fresh database after 001…013.
+-- Since part 22, looking at an ad (ad_open) is always a free view and pays nothing; the paid
+-- view is a tap on the ad's button (ad_cta), so the reward checks below tap the button.
 insert into auth.users (email) values ('p1@ads2.com'), ('p2@ads2.com'), ('p3@ads2.com'), ('p4@ads2.com'),
                                       ('p5@ads2.com'), ('p6@ads2.com'), ('p7@ads2.com');
 
@@ -102,29 +104,35 @@ begin
     'a watcher''s tap is a free view: nothing leaves the pool');
 
   res := ad_open(ad1, p1, 'v-p1');
+  perform pg_temp.check((res->>'coins')::numeric = 0 and (res->>'reward')::numeric = 5 and res->>'reason' is null,
+    'a player''s look pays nothing (the button would pay 5): ' || res::text);
+  res := ad_cta(ad1, p1, 'v-p1');
   perform pg_temp.check((res->>'coins')::numeric = 5 and (res->>'left_today')::int = 4 and res->>'reason' is null,
-    'a player''s tap pays 5 coins: ' || res::text);
+    'a player''s tap on the button pays 5 coins: ' || res::text);
   perform pg_temp.check((select coins from profiles where id = p1) = before + 5, 'the player got the 5 coins');
   perform pg_temp.check((select coins_left = 1995 and rewarded_views = 1 from ads where id = ad1), '5 coins came out of the ad''s pool');
-  perform pg_temp.check((select views = 1 and free_views = 1 and opens = 2 from ad_daily where ad_id = ad1 and day = current_date),
-    'today''s numbers: 1 rewarded view, 1 free view');
+  perform pg_temp.check((select views = 1 and free_views = 2 and opens = 2 from ad_daily where ad_id = ad1 and day = current_date),
+    'today''s numbers: 1 rewarded view (the button), 2 free views (both looks)');
 
-  res := ad_open(ad1, p1, 'v-p1');
+  res := ad_cta(ad1, p1, 'v-p1');
   perform pg_temp.check((res->>'coins')::numeric = 0 and res->>'reason' = 'already_today' and (res->>'left_today')::int = 4,
     'the same ad pays once a day: ' || res::text);
-  perform pg_temp.check((select coins_left = 1995 and free_views = 2 from ads where id = ad1), 'a second look is free');
+  res := ad_open(ad1, p1, 'v-p1');
+  perform pg_temp.check((select coins_left = 1995 and free_views = 3 from ads where id = ad1) and res->>'reason' = 'already_today',
+    'a second look is free');
 
   -- Daily cap: 5 paid taps a day, across ads.
   for i in 2..6 loop perform pg_temp.ad(i::text, v, 1000); end loop;
   for i in 2..5 loop
-    res := ad_open(('00000000-0000-0000-0000-' || lpad(i::text, 12, '0'))::uuid, p1, 'v-p1');
+    res := ad_cta(('00000000-0000-0000-0000-' || lpad(i::text, 12, '0'))::uuid, p1, 'v-p1');
     perform pg_temp.check((res->>'coins')::numeric = 5 and (res->>'left_today')::int = 5 - i, 'paid tap ' || i || ': ' || res::text);
   end loop;
-  res := ad_open('00000000-0000-0000-0000-000000000006', p1, 'v-p1');
+  res := ad_cta('00000000-0000-0000-0000-000000000006', p1, 'v-p1');
   perform pg_temp.check((res->>'coins')::numeric = 0 and res->>'reason' = 'daily_limit' and (res->>'left_today')::int = 0,
     'the 6th paid tap of the day is refused: ' || res::text);
-  perform pg_temp.check((select coins_left = 1000 and free_views = 1 from ads where id = '00000000-0000-0000-0000-000000000006'),
-    'a player over the daily limit is a free view');
+  res := ad_open('00000000-0000-0000-0000-000000000006', p1, 'v-p1');
+  perform pg_temp.check((select coins_left = 1000 and free_views = 1 from ads where id = '00000000-0000-0000-0000-000000000006')
+                        and res->>'reason' = 'daily_limit', 'a player over the daily limit only gets a free view');
   perform pg_temp.check((select coins from profiles where id = p1) = before + 25, 'the player got 25 coins today in all');
 
   -- Free views are rate-limited per viewer (5 an hour), so one person can't pump the numbers.
@@ -134,7 +142,7 @@ begin
 
   -- Bots and frozen players never get coins.
   update profiles set frozen = true where id = pg_temp.u('p7@ads2.com');
-  res := ad_open(ad1, pg_temp.u('p7@ads2.com'), 'v-p7');
+  res := ad_cta(ad1, pg_temp.u('p7@ads2.com'), 'v-p7');
   perform pg_temp.check((res->>'coins')::numeric = 0, 'a frozen player gets no coins');
   update profiles set frozen = false where id = pg_temp.u('p7@ads2.com');
 end $$;
@@ -146,9 +154,9 @@ declare v uuid := advertiser_for_email('ann@brand.com'); small uuid; res jsonb;
 begin
   small := pg_temp.ad('7', v, 12);  -- 12 coins: pays two taps of 5, then can't pay a third
   perform pg_temp.check(exists (select 1 from ad_serve(40) where id = small), 'small ad is served');
-  res := ad_open(small, pg_temp.u('p2@ads2.com'), 'v2');
+  res := ad_cta(small, pg_temp.u('p2@ads2.com'), 'v2');
   perform pg_temp.check((res->>'coins')::numeric = 5, 'first tap paid');
-  res := ad_open(small, pg_temp.u('p3@ads2.com'), 'v3');
+  res := ad_cta(small, pg_temp.u('p3@ads2.com'), 'v3');
   perform pg_temp.check((res->>'coins')::numeric = 5, 'second tap paid');
   perform pg_temp.check((select status = 'finished' and coins_left = 2 and finished_at is not null from ads where id = small),
     'an ad that can''t pay another reward is finished');
@@ -157,6 +165,8 @@ begin
   perform pg_temp.check((res->>'coins')::numeric = 0 and res->>'reason' = 'pool_empty',
     'a finished ad can still be looked at, but pays nothing: ' || res::text);
   perform pg_temp.check((select free_views = 1 and rewarded_views = 2 from ads where id = small), 'that look is a free view');
+  res := ad_cta(small, pg_temp.u('p4@ads2.com'), 'v4');
+  perform pg_temp.check((res->>'coins')::numeric = 0 and res->>'reason' = 'pool_empty', 'and its button pays nothing: ' || res::text);
   perform pg_temp.check((select count(*) from ad_serve(1000)) <= 40, 'serve is capped at 40');
 end $$;
 select pg_temp.check(pg_temp.books(), 'books balance when a pool runs out');
@@ -168,7 +178,7 @@ begin
   old := pg_temp.ad('8', v, 500);
   update ads set ends_at = now() - interval '1 minute' where id = old;
   perform pg_temp.check(not exists (select 1 from ad_serve(40) where id = old), 'an ad whose weeks are over is not served');
-  perform pg_temp.check((ad_open(old, pg_temp.u('p5@ads2.com'), 'v5'))->>'reason' = 'pool_empty', 'and pays nothing');
+  perform pg_temp.check((ad_cta(old, pg_temp.u('p5@ads2.com'), 'v5'))->>'reason' = 'pool_empty', 'and pays nothing');
   perform ad_housekeeping();
   perform pg_temp.check((select status from ads where id = old) = 'finished', 'housekeeping finishes it (unused coins expire)');
 end $$;
@@ -196,7 +206,7 @@ begin
   perform pg_temp.check(not ad_set_paused(ad2, other, true), 'someone else can''t pause my ad');
   perform pg_temp.check(ad_set_paused(ad2, v, true), 'I can pause my ad');
   perform pg_temp.check(not exists (select 1 from ad_serve(40) where id = ad2), 'a paused ad is not served');
-  res := ad_open(ad2, pg_temp.u('p6@ads2.com'), 'v6');
+  res := ad_cta(ad2, pg_temp.u('p6@ads2.com'), 'v6');
   perform pg_temp.check((res->>'coins')::numeric = 0 and res->>'reason' = 'pool_empty', 'a paused ad pays nothing: ' || res::text);
   perform pg_temp.check(ad_set_paused(ad2, v, false), 'I can resume it');
   perform pg_temp.check(exists (select 1 from ad_serve(40) where id = ad2), 'a resumed ad is served again');

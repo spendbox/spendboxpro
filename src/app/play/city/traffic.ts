@@ -87,7 +87,7 @@ export function createTraffic(world: World, parent: THREE.Object3D) {
   };
   const tileXY = (x: number, z: number) => {
     const i = world.tileIndex.get(keyOf(x, z));
-    return i === undefined ? undefined : world.tiles[i];
+    return i === undefined ? undefined : world.byIndex.get(i);
   };
   const isBridge = (x: number, z: number) => world.kindAt.get(keyOf(x, z)) === "bridge";
 
