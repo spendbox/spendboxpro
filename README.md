@@ -4,57 +4,54 @@ Live at [newtown.world](https://newtown.world). Contact: hello@newtown.world. Th
 **mint** (the database still calls it `coins`; older database messages are reworded on the way
 to the screen by `mintify` in `src/lib/brand.ts`).
 
-The home page is the live city: anyone can watch a round without signing in, and sign in to
-play. One shared world, played in rounds: hiders stake mint and are dropped on a random tile
-of a hidden grid; seekers pay mint to search tiles. A seed bot hides in every round.
-The full rule book is the "Hide & Seek Grid Game: Rules Spec" doc (the game's working title).
+The home page is the live city: anyone can watch a game without signing in, and sign in to
+play. One shared world, played in hourly games: ghosts stake mint and light up on the map;
+hunters (everyone else) challenge them to quick duels (`game-db/029_ghost_duels.sql`).
 
-## How a round works
+## How a game works
 
-The game is 18+ (players give their date of birth when they sign up). The UI calls hiders "ghosts" and seekers
-"hunters"; the database still says `hider` and `seeker`. Ghosts get 1 move per game (2 from level 10,
-3 from level 20). Games run on the hour (UTC): every game starts at the top of an hour and
-ends on the next hour mark, even if every ghost is caught (the clock turns red and beeps in the
-last 30 seconds). Chat happens in places: players
-switch to Chat mode and enter buildings (lobbies, floors, rooftops, clubs, restaurants) or hop
-on a ride (hot-air balloons, trains, buses, cars, boats, Ferris wheels, water
-slides), plus private messages.
+The game is 18+ (players give their date of birth when they sign up). The UI says "ghosts" and
+"hunters"; the database still says `hider` and `seeker`. Games run on the hour (UTC): every game
+starts at the top of an hour and ends on the next hour mark (the clock turns red and beeps in the
+last 30 seconds). There's no Game/Chat switch: tapping a building always goes inside, and Explore
+holds the rides (hot-air balloons, trains, buses, cars, boats, Ferris wheels, water slides) and
+sport, plus private messages.
 
-1. **Hiding window (the first 3 minutes of the hour).** Anyone joins as a hunter; players who have finished one round
-   as a hunter can hide (stake 100 mint). Each hider adds 20 tiles to a 20×20 starting city.
-2. **The hunt (until the next hour mark, about 57 min).** Hiders are dropped on random tiles. Hunters search tiles (first
-   search each day is free, then the price rises as more of the city is searched; each search
-   has a short cooldown that doubles if you search too fast, up to 30 s) or send a drone to
-   sweep an area (yes/no only, 10-second cooldown, dearer every time anyone sweeps; hiders
-   inside are warned and pinned for 30 seconds). Moving costs 50 mint at the start of a round
-   and gets dearer with every move anyone makes; after a move a hider waits 5 minutes; never
-   back to a tile they've left; everyone sees the tile they left. Hiders see every searched
-   tile and can't move onto one; hunters see the most recent 70%. Each hunter's last 5 sweeps
-   stay active as secret traps.
-3. **Levels.** Players earn XP (10 for playing a game, 10 for finishing a side quest, 5 for
-   each streak day) and spend mint (burned) to level up, up to level 100. Below level 20 each
-   level takes 15 XP and 10 × level mint; from 20 on, 30 XP plus 5 more each level (425 at 99)
-   and 50 × (level − 15) mint (`game-db/027_streaks_levels.sql`). Level 3: decoy (hiders place a fake hider on a chosen spot; drones read it as
-   "yes", a hunter who searches it gets nothing; from 20 mint). Level 5: shield (when found,
-   the hunter is paid and the stake is lost, but the hider teleports nearby and plays on; no
-   moving while it's up; from 100 mint). Level 10: big search (hunters search a 3×3 area for
-   7 searches). Level 20: respawn (caught in the first 30 minutes? 300 mint, burned, to drop
-   back in; announced to everyone). Decoys and shields are one per game and each costs half
-   again more than your last. Catching a level-5+ player pays a bonus of 25 mint per 5 levels.
-4. **Payout.** Finding a hider pays the finder 80% of the stake (20% for new hiders). Finding
-   the bot (a new name every round; it moves at most 3 times, only when a sweep catches it, and
-   for free) pays 200. Every pool starts at 0 (nothing carries over, though a brand can sponsor
-   it). Search, sweep, move, shield and decoy fees (real mint) go into it. If anyone survives:
-   survivors get their stake back plus 80% of the pool, hunters share 10% by real mint spent,
-   10% burns. If everyone is found: hunters share 80%, the hiders who played share 10%, 10% burns.
+1. **Join window (the first 3 minutes of the hour).** Anyone signed in can join as a ghost (stake
+   `hider_stake`, 100 mint). Everyone else is a hunter; there's nothing to join. Each ghost adds 20
+   tiles to a 20×20 starting city.
+2. **The hunt (until the next hour mark).** Each ghost is put on a random spot and lights up on the
+   map for everyone (blue: free, orange: in a duel, gold: golden). Tapping a light opens the
+   ghost's card (stats this game and their record, chat, challenge). Nobody searches, sweeps,
+   sends drones or moves any more.
+3. **Duels.** A challenge costs `duel_fee` (10 mint, held until the duel ends). The ghost gets a
+   pop-up wherever they are and has `duel_answer_seconds` (30) to answer; no answer is a loss.
+   The duel is one quick game (Rock-Paper-Scissors for now): first to `duel_first_to` (2), at most
+   `duel_seconds` (60); level when time runs out goes to the ghost. Hunter wins: the fee back plus
+   `finder_share` (80%) of a slice of the ghost's stake (stake ÷ `ghost_out_losses`), the rest of
+   the slice to the prize pool. Ghost wins: the fee goes into the prize pool. One duel at a time
+   for each player; hunters wait `duel_cooldown_seconds` (30) between duels.
+4. **Golden and out.** `ghost_golden_wins` (3) wins: golden (safe, stake back, in the pool).
+   `ghost_out_losses` (3) losses: out (light gone, stake gone). Hunters with `hunter_pool_wins`
+   (20) wins in one game enter the pool. At the end, golden ghosts and those hunters share 90% of
+   the pool equally (10% burns; with nobody in the pool, it all burns); ghosts still in get their
+   remaining stake back; duels still going are called off (fee back).
+   Levels: players earn XP (10 for playing a game, 10 for finishing a side quest, 5 for each
+   streak day) and spend mint (burned) to level up, up to level 100. Below level 20 each level
+   takes 15 XP and 10 × level mint; from 20 on, 30 XP plus 5 more each level (425 at 99) and
+   50 × (level − 15) mint (`game-db/027_streaks_levels.sql`). The old power-ups (decoy, shield, big
+   search, respawn) belonged to hide-and-seek and are no longer offered.
 5. **Passive income.** Players under 100 mint earn mint back over time, up to 100 in 24
    hours; each level adds 25 to both numbers, up to level 40 (1,075). Opening a billboard ad pays 5 mint (5 a day).
    Anyone holding 10,000+ mint is a "big fish". Players can give mint to each other and
    spray it on dancers in clubs (capped per day; transfers, never new mint).
 6. **World events.** Every hunt gets 2–4 of 100 events (`src/lib/world-events.ts`, mirrored in
    `world_event_kinds`): emergencies, weather, parties, transport trouble and mysteries to watch,
-   some with mint to grab (first come, first served), and 13 twists that change the rules for
-   a few minutes (fog of war, double mint, ghost amnesty, blackout, safe house, bounty board…).
+   some with mint to grab (first come, first served), the golden balloon, quiet spells and the
+   final countdown. The 10 twists about hiding and hunting (fog of war, double mint on catches,
+   ghost amnesty, drone storm, lucky street, bot tantrum, spotlight, bounty board, safe house,
+   blackout) are switched off by part 29 (`world_event_kinds.enabled`), and so are the 12 side
+   quests about hiding and hunting.
 
 ## Setup
 
@@ -68,8 +65,8 @@ slides), plus private messages.
    `game-db/016_place_rooms.sql`, `game-db/017_world_events.sql`, `game-db/018_npcs.sql`,
    `game-db/019_activities.sql`, `game-db/020_sports.sql`, `game-db/021_hourly_rounds.sql`,
    `game-db/022_pool_and_ads.sql`, `game-db/023_houses.sql`, `game-db/024_play_style.sql`,
-   `game-db/025_big_towns.sql`, `game-db/026_friends.sql`, `game-db/027_streaks_levels.sql` and
-   `game-db/028_hugs_gifts.sql`, in order, once each, on an empty database. In Supabase → Database → Extensions, switch on **pg_cron** first if you
+   `game-db/025_big_towns.sql`, `game-db/026_friends.sql`, `game-db/027_streaks_levels.sql`,
+   `game-db/028_hugs_gifts.sql` and `game-db/029_ghost_duels.sql`, in order, once each, on an empty database. In Supabase → Database → Extensions, switch on **pg_cron** first if you
    can: the file then schedules the round clock to run every minute. (Without it, the clock
    still moves whenever someone has the game open.)
 2. **Email codes.** The app sends its own 4-digit sign-in codes through Resend, so nothing

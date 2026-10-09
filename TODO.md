@@ -1,11 +1,12 @@
 # To do
 
 ## Now (owner)
-- [ ] In the Supabase SQL Editor run, in order: `game-db/021_hourly_rounds.sql` (again), `022_pool_and_ads.sql`, `023_houses.sql`, `024_play_style.sql`, `025_big_towns.sql`, `026_friends.sql`, `027_streaks_levels.sql`, `028_hugs_gifts.sql`. (If 017–020 were never run, run them first.) Then merge the open pull request.
+- [ ] In the Supabase SQL Editor run, in order: `game-db/021_hourly_rounds.sql` (again), `022_pool_and_ads.sql`, `023_houses.sql`, `024_play_style.sql`, `025_big_towns.sql`, `026_friends.sql`, `027_streaks_levels.sql`, `028_hugs_gifts.sql`, `029_ghost_duels.sql`. (If 017–020 were never run, run them first.) Then merge the open pull request.
 - [ ] In Vercel, set `SPORTS_SECRET` to a long random string (once; don't change it later).
 - [ ] Test on a real phone: sounds, touch gestures, the water slide, club lights.
 
 ## Done lately
+- [x] New core game: ghost duels (run `game-db/029_ghost_duels.sql`). Ghosts join in the first 3 minutes and light up on the map (no hiding, no moving). Hunters (everyone else) tap a light to see the ghost's stats, chat, or challenge them (10 mint) to Rock-Paper-Scissors, first to 2, a minute at most. Ghosts get a 30-second pop-up anywhere. 3 wins: golden (safe, in the pool). 3 losses: out. Each loss: 80% of a third of the stake to the hunter, 20% to the pool. Hunters with 20 wins enter the pool. No more searching, sweeping, drones, Game/Chat switch. Explore holds rides and sports. "Spray mint", not money.
 - [x] Daily streaks (run `game-db/027_streaks_levels.sql`): a flame next to your mint, one thing a day keeps it going (a game, a side quest, a gift or spray, a hug or handshake, a ride), a free freeze each week, mint and badges at 3, 7, 14, 30, 60 and 100 days.
 - [x] New level curve (same file): XP from games, side quests and streak days; quick and cheap to level 20, then harder every level to 100. Everyone keeps their level. The daily refill stops growing at level 40.
 - [x] Hugs, handshakes and My gifts (run `game-db/028_hugs_gifts.sql`): free hugs and handshakes (30 a day, 3 to the same person), a My gifts screen with thank-you buttons, and blocking. Two new side quests count them.
@@ -25,10 +26,12 @@
 - [x] Sports: football, basketball, boxing, wrestling. Simulated matches in a tactical view, mint tickets, simple mint bets (run `game-db/020_sports.sql`).
 
 ## Next batch
-- [ ] **Ghost pranks on hunters** (mint-priced, one per game, level-gated):
-  - Booby-trapped spot: green slime and a longer wait for the hunter who searches it.
-  - Mirage: a fake ghost on hunters' maps for a minute.
-  - Haunting: caught ghosts flicker lights and rattle chairs while hunters are inside buildings.
+- [ ] **Replacements for what the duels switched off** (owner to decide):
+  - Town event twists: fog of war, double mint (on catches), ghost amnesty, drone storm, lucky street, bot tantrum, spotlight, bounty board, safe house, blackout district.
+  - Side quests: detective, private eye, spy, lookout, informant, apprentice hunter, bounty hunter, drone pilot, decoy master, escape artist, ghost whisperer, shadow.
+  - Level perks (decoy, shield, big search, respawn, extra moves) and badges about hiding, searching and drones.
+- [ ] **More duel games** besides Rock-Paper-Scissors (picked at random, a minute at most).
+- [ ] **Ghost pranks: on hold** (owner said hold on). The first version (booby trap, mirage, haunting) was built for searching and needs redoing for duels.
 - [ ] **Simple counters** (time spent, next-day return, players per round) and a plan for 10-20 friends playing for a few days, plus scheduled evening "peak hour" events.
 
 ## Houses and studios

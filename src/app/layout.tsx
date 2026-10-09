@@ -22,7 +22,7 @@ const display = localFont({
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
   title: { default: "Newtown", template: "%s · Newtown" },
-  description: "Newtown is a living 3D city game. Hide as a ghost, hunt for ghosts, ride, play and chat, and earn mint. Play at newtown.world.",
+  description: "Newtown is a living 3D city game. Light up as a ghost or challenge the ghosts, ride, play and chat, and earn mint. Play at newtown.world.",
   applicationName: "Newtown",
   openGraph: { siteName: "Newtown", type: "website", url: "/" },
 };

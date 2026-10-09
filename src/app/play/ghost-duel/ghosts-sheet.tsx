@@ -47,7 +47,9 @@ export function GhostsSheet({ ghosts, rules, meId, onPick, onClose }: { ghosts: 
                     </b>
                     <span className="flex items-center gap-2 text-[11px] text-muted">
                       <Dots n={g.wins} max={rules.goldenWins} tone="win" />
+                      wins
                       <Dots n={g.losses} max={rules.outLosses} tone="loss" />
+                      losses
                     </span>
                   </span>
                   <span className={cn("shrink-0 rounded-full px-2.5 py-1 text-xs font-bold", glow.chip)}>{glow.label}</span>

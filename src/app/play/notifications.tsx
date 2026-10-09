@@ -161,7 +161,7 @@ export function NotificationsPanel({
         </button>
       </div>
       {feed.length === 0 ? (
-        <p className="px-4 pb-5 pt-2 text-center text-sm text-muted">Nothing yet. Catches, moves and your drone alerts will show up here.</p>
+        <p className="px-4 pb-5 pt-2 text-center text-sm text-muted">Nothing yet. Duels, challenges and town news will show up here.</p>
       ) : (
         <ul className="max-h-[19.5rem] space-y-1 overflow-y-auto overscroll-contain px-2 pb-2">
           {feed.map((f) => (

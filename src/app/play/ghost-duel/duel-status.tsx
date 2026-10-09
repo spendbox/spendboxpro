@@ -87,8 +87,9 @@ export function DuelStatus({
               <b>You&apos;re a ghost.</b> <span className="text-muted">Everyone can see your light.</span>{" "}
               <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
                 <Dots n={me.wins} max={rules.goldenWins} tone="win" />
+                <span className="text-xs text-muted">wins</span>
                 <Dots n={me.losses} max={rules.outLosses} tone="loss" />
-                <span className="text-xs text-muted">· {short(me.stake)} mint staked</span>
+                <span className="text-xs text-muted">losses · {short(me.stake)} mint staked</span>
               </span>
             </>
           )}

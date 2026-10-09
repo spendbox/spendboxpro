@@ -31,7 +31,6 @@ import {
   Flashlight,
   Ghost,
   Hammer,
-  HotAirBalloon,
   House,
   Lightbulb,
   Lock,
@@ -41,7 +40,6 @@ import {
   MessageCircle,
   Sparkles,
   Timer,
-  Trophy,
   Users,
   X,
 } from "@/components/icons";
@@ -49,13 +47,13 @@ import { short } from "@/lib/format";
 import { createClient } from "@/lib/supabase/client";
 import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
 import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
-import { liveLabel, SPORT_INFO, SPORTS } from "@/lib/sports/schedule";
-import { SPORT_ICON } from "@/lib/sports/icons";
+import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
 import { Compass, Crown, Swords } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
 import { GhostsSheet } from "./ghost-duel/ghosts-sheet";
+import { ExploreSheet } from "./explore-sheet";
 import type { Sport } from "@/lib/sports/types";
 import type { ActivityItem } from "./activities/games";
 import { useActivityRoom } from "./activities/hub";
@@ -119,7 +117,6 @@ type PlaceRoom = {
 };
 // Same order as the balloons in the 3D city (used until the city lists its rides).
 const BALLOON_NAMES = ["Red", "Yellow", "Blue", "Purple", "Mint"];
-const RIDE_ORDER: RideKindName[] = ["balloon", "train", "bus", "car", "boat", "ferris", "slide"];
 const RIDE_HELLO: Record<RideKindName, string> = {
   balloon: "Up we go! Drag to look around; tap Chat to talk to everyone on board.",
   train: "All aboard! Grab a window and drag to look around; tap Chat to talk to the carriage.",
@@ -1603,96 +1600,19 @@ export function Game({ state }: { state: GameState }) {
         </Sheet>
       )}
       {pickRide && (
-        <Sheet onClose={() => setPickRide(false)} wide>
-          <div className="flex items-center gap-2">
-            <span className="grid size-10 place-items-center rounded-xl bg-[#ffe3ec] text-[#d6336c]">
-              <Compass className="size-5" />
-            </span>
-            <h2 className="min-w-0 flex-1 font-display text-xl font-extrabold">Explore</h2>
-            <button onClick={() => setPickRide(false)} className="grid size-9 shrink-0 place-items-center rounded-full text-muted hover:bg-panel-2" aria-label="Close">
-              <X className="size-5" />
-            </button>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-1 rounded-xl bg-panel-2 p-1 text-sm font-semibold" role="tablist">
-            {(["rides", "sports"] as const).map((t) => (
-              <button
-                key={t}
-                role="tab"
-                aria-selected={exploreTab === t}
-                onClick={() => setExploreTab(t)}
-                className={cn("flex items-center justify-center gap-1.5 rounded-lg py-2", exploreTab === t ? "bg-panel shadow-sm" : "text-muted")}
-              >
-                {t === "rides" ? <HotAirBalloon className="size-4" /> : <Trophy className="size-4" />}
-                {t === "rides" ? "Rides" : "Sports"}
-              </button>
-            ))}
-          </div>
-          {exploreTab === "sports" ? (
-            <div className="mt-3 space-y-2">
-              <p className="text-sm text-muted">Watch a match live from above. Tickets cost a few mint, and you can bet mint on who wins.</p>
-              {SPORTS.map((sp) => {
-                const Icon = SPORT_ICON[sp];
-                const live = liveVenues[sp];
-                return (
-                  <button
-                    key={sp}
-                    onClick={() => {
-                      setPickRide(false);
-                      setSportsOpen(sp);
-                    }}
-                    className="flex w-full items-center gap-3 rounded-2xl bg-panel-2 px-4 py-3 text-left hover:bg-[#d3f9d8]"
-                  >
-                    <Icon className="size-6 shrink-0 text-[#12a37a]" />
-                    <span className="min-w-0 flex-1">
-                      <b className="block">{SPORT_INFO[sp].label}</b>
-                      <span className="block truncate text-xs text-muted">{live ? `Live now: ${live}` : `At the ${SPORT_INFO[sp].place.toLowerCase()}`}</span>
-                    </span>
-                    {live && <span className="size-2.5 shrink-0 animate-pulse rounded-full bg-hit" aria-label="live" />}
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-          <>
-          <p className="mt-3 text-sm text-muted">Everyone on the same ride chats together on the way. You can also tap any building to go inside.</p>
-          <div className="mt-3 space-y-4">
-            {RIDE_ORDER.map((kind) => {
-              const list = rideList.filter((r) => r.kind === kind);
-              if (!list.length) return null;
-              const info = RIDE_INFO[kind];
-              return (
-                <section key={kind}>
-                  <h3 className="flex items-center gap-2 text-sm font-bold">
-                    <RideIcon kind={kind} className="size-4 shrink-0" style={{ color: info.colour }} />
-                    {info.plural}
-                  </h3>
-                  <p className="text-xs text-muted">{info.blurb}</p>
-                  <div className="mt-1.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    {list.map((r) => {
-                      const n = rooms.counts[rideRoom(r.kind, r.index)] ?? 0;
-                      return (
-                        <button
-                          key={`${r.kind}:${r.index}`}
-                          onClick={() => boardRide(r)}
-                          className="flex items-center gap-3 rounded-2xl bg-panel-2 px-4 py-2.5 text-left hover:bg-gold/20"
-                        >
-                          <RideIcon kind={r.kind} className="size-5 shrink-0" style={{ color: info.colour }} />
-                          <span className="min-w-0 flex-1 truncate font-semibold">{r.name}</span>
-                          <span className="flex shrink-0 items-center gap-1 text-xs text-muted">
-                            <Users className="size-3.5" />
-                            {short(n)}/{short(r.capacity)}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
-              );
-            })}
-          </div>
-          </>
-          )}
-        </Sheet>
+        <ExploreSheet
+          tab={exploreTab}
+          onTab={setExploreTab}
+          rides={rideList}
+          counts={rooms.counts}
+          liveVenues={liveVenues}
+          onRide={boardRide}
+          onSport={(sp) => {
+            setPickRide(false);
+            setSportsOpen(sp);
+          }}
+          onClose={() => setPickRide(false)}
+        />
       )}
       {activity && rooms.myRoom && (
         <Safe name="Activity">

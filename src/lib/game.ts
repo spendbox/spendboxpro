@@ -171,6 +171,9 @@ export type RoundResults = {
   pool: number;
   botName: string;
   botFoundBy: string | null;
+  /** Ghost duels: ghosts who played (not the bot), and how many turned golden. */
+  ghosts: number;
+  golden: number;
   winners: { name: string; role: string; won: number; detail: string }[];
   players: number;
   /** What the signed-in player got out of that round, if they played. */
@@ -591,7 +594,8 @@ async function loadResults(db: ReturnType<typeof createAdminClient>, userId: str
   if (!round) return null;
   const [{ data: ledger }, { data: entries }] = await Promise.all([
     db.from("ledger").select("user_id, kind, amount").eq("round_id", round.id).in("kind", Object.keys(WIN_KINDS)),
-    db.from("entries").select("user_id, role, caught, caught_by, profiles!entries_user_id_fkey(username, is_bot)").eq("round_id", round.id),
+    // (All columns, so "golden" comes along once game-db/029 is run.)
+    db.from("entries").select("*, profiles!entries_user_id_fkey(username, is_bot)").eq("round_id", round.id),
   ]);
   const ids = new Set<string>();
   for (const l of ledger ?? []) if (l.user_id) ids.add(l.user_id);
@@ -631,6 +635,8 @@ async function loadResults(db: ReturnType<typeof createAdminClient>, userId: str
     pool: num(round.pool),
     botName: botNameFor(round.id, round.bot_name),
     botFoundBy: bot?.caught_by ? (nameOf.get(bot.caught_by) ?? "A player") : null,
+    ghosts: (entries ?? []).filter((e) => e.role === "hider" && e !== bot).length,
+    golden: (entries ?? []).filter((e) => e.role === "hider" && e.golden).length,
     winners,
     players: entries?.length ? entries.length - (bot ? 1 : 0) : 0,
     mine: myEntry
