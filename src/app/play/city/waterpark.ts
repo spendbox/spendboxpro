@@ -66,12 +66,14 @@ export function waterparkParts(t: Tile, B: BoxFn, tree: (dx: number, dz: number,
   // Pools: a white rim, blue tiles, the water.
   for (const pl of [lagoon, landing]) {
     B(pl.x, 0.06, pl.z, pl.w + 0.08, 0.05, pl.d + 0.08, 0xf8f9fa);
-    B(pl.x, 0.075, pl.z, pl.w, 0.02, pl.d, 0x3fb5e8, 0, "water");
+    B(pl.x, 0.075, pl.z, pl.w, 0.02, pl.d, 0x6fd0f2, 0, "water");
+    // Deeper water down the middle.
+    B(pl.x, 0.0955, pl.z, pl.w * 0.7, 0.001, pl.d * 0.6, 0x2f9fd8, 0, "paint");
     // Lane ropes in the lagoon.
     if (pl === lagoon) for (let k = 1; k < 3; k++) B(pl.x - pl.w / 2 + (k * pl.w) / 3, 0.097, pl.z, 0.012, 0.006, pl.d, 0xff6b6b, 0, "paint");
   }
   B(kids.x, 0.06, kids.z, kids.r * 2 + 0.06, 0.05, kids.r * 2 + 0.06, 0xf8f9fa, 0, "disc");
-  B(kids.x, 0.075, kids.z, kids.r * 2, 0.02, kids.r * 2, 0x66d9e8, 0, "water");
+  B(kids.x, 0.075, kids.z, kids.r * 2, 0.02, kids.r * 2, 0x66d9e8, 0, "waterDisc");
   // A mushroom fountain in the kids' pool.
   B(kids.x, 0.09, kids.z, 0.03, 0.12, 0.03, 0xffd43b, 0, "cyl");
   B(kids.x, 0.2, kids.z, 0.14, 0.06, 0.14, 0xff6b6b, 0, "dome");

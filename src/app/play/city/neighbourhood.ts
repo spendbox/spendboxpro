@@ -12,7 +12,6 @@ type TreeFn = (dx: number, dz: number, size: number, v: number) => void;
 type AddFn = (mesh: string, p: { x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number; color: number; tilt?: number }) => void;
 
 const ASPHALT = 0x5b6470;
-const WATER = 0x7cc4e8;
 const WHITE = 0xf8f9fa;
 const WOOD = 0x9c6b47;
 
@@ -137,7 +136,7 @@ export function neighbourhoodParts(t: Tile, plan: CityPlan, B0: BoxFn, tree: Tre
 export function causewayParts(t: Tile, add: AddFn) {
   const { x, z } = t;
   const m = t.mask ?? 0;
-  add("water", { x, y: -0.03, z, sx: 1, sy: 0.03, sz: 1, ry: 0, color: WATER });
+  // (The water round it is part of the smooth water surface, see ./water.)
   const alongX = (m & 2) || (m & 8);
   const alongZ = (m & 1) || (m & 4);
   const W = 0.6;
@@ -212,4 +211,50 @@ export function supertallParts(t: Tile, color: number, B: BoxFn) {
   B(0, y, 0, w * 0.5, 0.25, w * 0.5, 0xfff3bf, 0, "lamp");
   B(0, y + 0.25, 0, 0.14, spire, 0.14, 0xe9ecef, 0, "cone");
   B(0, y + 0.25 + spire, 0, 0.04, 0.04, 0.04, 0xff6b6b, 0, "lamp");
+}
+
+/**
+ * A swimming pool: a stone deck, a white rim, clear blue water that's darker at the deep end,
+ * a ladder and (if there's room) a couple of sun loungers. (x, z) is its middle, w × d the water.
+ */
+export function pool(B: BoxFn, x: number, y: number, z: number, w: number, d: number, loungers = true) {
+  const alongX = w >= d;
+  B(x, y, z, w + 0.09, 0.012, d + 0.09, 0xe9e2d4, 0, "ground");
+  B(x, y + 0.012, z, w + 0.035, 0.01, d + 0.035, 0xffffff, 0, "ground");
+  B(x, y + 0.012, z, w, 0.012, d, 0x6fd0f2, 0, "water");
+  // The deep end, a shade darker, and a dark stripe on the floor down the middle.
+  const deepW = alongX ? w * 0.38 : w;
+  const deepD = alongX ? d : d * 0.38;
+  B(x + (alongX ? w / 2 - deepW / 2 : 0), y + 0.0245, z + (alongX ? 0 : d / 2 - deepD / 2), deepW, 0.001, deepD, 0x2f9fd8, 0, "paint");
+  B(x, y + 0.0247, z, alongX ? w * 0.8 : 0.008, 0.0005, alongX ? 0.008 : d * 0.8, 0x1c7ed6, 0, "paint");
+  // The ladder at the shallow end.
+  const lx = x - (alongX ? w / 2 - 0.02 : 0);
+  const lz = z - (alongX ? 0 : d / 2 - 0.02);
+  for (const s of [-0.018, 0.018]) B(lx + (alongX ? 0 : s), y + 0.012, lz + (alongX ? s : 0), 0.006, 0.05, 0.006, 0xced4da);
+  if (loungers) {
+    for (const s of [-1, 1]) {
+      const ox = alongX ? s * w * 0.22 : w / 2 + 0.08;
+      const oz = alongX ? d / 2 + 0.08 : s * d * 0.22;
+      B(x + ox, y + 0.012, z + oz, alongX ? 0.05 : 0.1, 0.014, alongX ? 0.1 : 0.05, 0xffffff);
+    }
+  }
+}
+
+/**
+ * A pond with soft, rounded edges: a few overlapping ovals of water on a sandy rim, lily pads,
+ * and reeds at the edge. y is the ground it sits in.
+ */
+export function pond(B: BoxFn, y: number, r: readonly number[], scale = 1) {
+  const s = scale;
+  const blobs: [number, number, number, number, number][] = [
+    [0, 0, 0.62, 0.48, r[1] * 3],
+    [0.14, 0.1, 0.42, 0.36, r[2] * 3],
+    [-0.12, -0.09, 0.4, 0.32, r[3] * 3],
+  ];
+  for (const [bx, bz, w, d, ry] of blobs) B(bx * s, y, bz * s, (w + 0.08) * s, 0.004, (d + 0.08) * s, 0xd8c99a, ry, "disc");
+  for (const [bx, bz, w, d, ry] of blobs) B(bx * s, y + 0.004, bz * s, w * s, 0.004, d * s, 0x5fb8e6, ry, "waterDisc");
+  B(0, y + 0.0045, 0, 0.3 * s, 0.004, 0.22 * s, 0x3d9fd6, r[1] * 3, "waterDisc");
+  for (const [px, pz] of [[0.12, -0.05], [-0.05, 0.12], [0.2, 0.15]]) B(px * s, y + 0.009, pz * s, 0.07 * s, 0.002, 0.07 * s, 0x5c940d, 0, "disc");
+  B(0.13 * s, y + 0.011, -0.05 * s, 0.025 * s, 0.002, 0.025 * s, 0xf783ac, 0, "disc");
+  for (const [rx, rz] of [[-0.33, 0.05], [-0.3, 0.12], [0.3, -0.18], [0.34, -0.1]]) B(rx * s, y, rz * s, 0.012, 0.09, 0.012, 0x6b8e23, 0, "building");
 }

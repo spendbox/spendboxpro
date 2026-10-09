@@ -55,7 +55,8 @@ import type { WorldEvent } from "@/lib/world-events";
 import { createWorldEvents } from "./city/world-events";
 import { placeHouses } from "@/lib/city/houses";
 import { megaParts, statue } from "./city/megas";
-import { causewayParts, jettyParts, neighbourhoodParts, supertallParts } from "./city/neighbourhood";
+import { buildWater, disposeWater } from "./city/water";
+import { causewayParts, jettyParts, neighbourhoodParts, pond, pool, supertallParts } from "./city/neighbourhood";
 import { homeLabel, type TownHouse } from "@/lib/houses";
 
 // The game board, drawn as a small living 3D city with three.js.
@@ -320,7 +321,7 @@ function homeParts(
       B(-0.08, 0.08, -0.05, 0.56, 0.3, 0.45, wall);
       B(-0.08, 0.2, -0.05, 0.57, 0.08, 0.46, 0x495057, 0, "glass");
       B(-0.05, 0.38, -0.05, 0.68, 0.04, 0.55, roof);
-      B(0.3, 0.08, 0.22, 0.22, 0.02, 0.3, 0x74c0fc, 0, "water");
+      pool(B, 0.3, 0.08, 0.22, 0.2, 0.28, false);
       tree(-0.36, 0.33, 0.45, r[0]);
       break;
     case "duplex":
@@ -338,7 +339,7 @@ function homeParts(
       B(-0.06, 0.34, -0.08, 0.76, 0.03, 0.56, roof);
       B(-0.14, 0.58, -0.12, 0.54, 0.04, 0.44, roof);
       for (const cx of [-0.3, -0.12, 0.06]) B(cx, 0.08, 0.19, 0.04, 0.26, 0.04, 0xf8f9fa, 0, "cyl");
-      B(0.3, 0.08, 0.27, 0.26, 0.02, 0.22, 0x74c0fc, 0, "water");
+      pool(B, 0.3, 0.08, 0.27, 0.26, 0.18, false);
       tree(0.36, -0.3, 0.5, r[0]);
       break;
     default: {
@@ -365,7 +366,7 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
   };
 
   if (t.kind === "river" || t.kind === "lake") {
-    add("water", { x, y: -0.03, z, sx: 1.02, sy: 0.03, sz: 1.02, ry: 0, color: t.kind === "river" ? 0x6fb7e0 : t.sea ? 0x4f9fd4 : WATER });
+    // The water itself is one smooth surface over all the water tiles (see ./city/water).
     if (t.jetty !== undefined) jettyParts(t, add);
     return;
   }
@@ -376,7 +377,6 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
     const alongX = t.road === "x";
     const ry = alongX ? 0 : Math.PI / 2;
     const at = (dx: number, dz: number) => (alongX ? { x: x + dx, z: z + dz } : { x: x + dz, z: z - dx });
-    add("water", { x, y: -0.03, z, sx: 1, sy: 0.03, sz: 1, ry: 0, color: 0x6fb7e0 });
     const rise = BRIDGE_TOP - 0.06;
     const ramp = Math.atan2(rise, 0.3);
     const rampLen = Math.hypot(0.3, rise) + 0.02;
@@ -433,7 +433,7 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
       add("disc", { x, y: 0.06, z, sx: 0.4, sy: 0.1, sz: 0.4, ry: 0, color: GRASS });
       if (t.r[1] < 0.5) {
         add("disc", { x, y: 0.16, z, sx: 0.2, sy: 0.06, sz: 0.2, ry: 0, color: 0xcfd6dd });
-        add("water", { x, y: 0.2, z, sx: 0.15, sy: 0.02, sz: 0.15, ry: 0, color: WATER });
+        add("waterDisc", { x, y: 0.2, z, sx: 0.17, sy: 0.02, sz: 0.17, ry: 0, color: WATER });
         add("cyl", { x, y: 0.16, z, sx: 0.04, sy: 0.18, sz: 0.04, ry: 0, color: 0xcfd6dd });
       } else {
         add("trunk", { x, y: 0.16, z, sx: 0.6, sy: 0.2, sz: 0.6, ry: 0, color: 0x8a6a4f });
@@ -583,7 +583,7 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
         B(dx - 0.08, 0.08, -0.05, 0.56, 0.3, 0.45, 0xf8f9fa);
         B(dx - 0.08, 0.2, -0.05, 0.57, 0.08, 0.46, 0x495057, 0, "glass");
         B(dx - 0.05, 0.38, -0.05, 0.68, 0.04, 0.55, 0xdee2e6);
-        B(dx + 0.3, 0.08, 0.22, 0.22, 0.02, 0.3, 0x74c0fc, 0, "water");
+        pool(B, dx + 0.3, 0.08, 0.22, 0.2, 0.28, false);
         tree(-0.36, 0.33, 0.45, r[0]);
       } else if (t.v === 2) {
         // Two-storey duplex with a garage
@@ -681,7 +681,7 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
       }
       break;
     case "pond":
-      add("water", { x, y: 0.08, z, sx: 0.82, sy: 0.02, sz: 0.72, ry: r[1], color: WATER });
+      pond(B, 0.08, r);
       tree(0.36, -0.36, 0.6, r[2]);
       break;
     case "ferris":
@@ -719,7 +719,8 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
         statue(B, 0, 0, 0.7);
       } else {
         add("disc", { x, y: 0.1, z, sx: 0.3, sy: 0.12, sz: 0.3, ry: 0, color: 0xcfd6dd });
-        add("water", { x, y: 0.22, z, sx: 0.22, sy: 0.02, sz: 0.22, ry: 0, color: WATER });
+        add("waterDisc", { x, y: 0.22, z, sx: 0.25, sy: 0.02, sz: 0.25, ry: 0, color: WATER });
+        add("cyl", { x, y: 0.22, z, sx: 0.04, sy: 0.12, sz: 0.04, ry: 0, color: 0xcfd6dd });
       }
       break;
     case "school":
@@ -950,8 +951,7 @@ function structureParts(t: Tile, plan: CityPlan, B: BoxFn, tree: TreeFn) {
       B(c - 0.2, 0.49, c - 0.25, 0.95, 3.7, 0.55, color);
       for (let y = 0.4; y < 3.6; y += 0.4) B(c - 0.2, 0.49 + y, c - 0.25, 0.962, 0.06, 0.562, 0x4c6e91, 0, "glass");
       B(c - 0.2, 4.19, c - 0.25, 0.7, 0.2, 0.4, 0xffd43b);
-      B(c + 0.5, 0.49, c + 0.2, 0.45, 0.02, 0.5, 0x4dabf7, 0, "water");
-      for (let k = 0; k < 3; k++) B(c + 0.25, 0.49, c + 0.05 + k * 0.15, 0.08, 0.02, 0.05, 0xffffff);
+      pool(B, c + 0.5, 0.49, c + 0.2, 0.4, 0.46, true);
       tree(c + 0.75, c + 0.75, 0.6, r[2]);
       break;
     }
@@ -1291,6 +1291,8 @@ export function CityView({
       // Blinking lamps: hazard lights, police lights, road-works lamps (see updateFlashers).
       flash: { geometry: geo.lamp, material: new THREE.MeshBasicMaterial({ color: 0xffffff }), shadow: false },
       water: { geometry: geo.box, material: new THREE.MeshPhongMaterial({ color: 0xffffff, shininess: 90, specular: 0xffffff }), shadow: false },
+      // Round water: ponds, fountains.
+      waterDisc: { geometry: geo.disc, material: new THREE.MeshPhongMaterial({ color: 0xffffff, shininess: 90, specular: 0xffffff }), shadow: false },
       cooling: { geometry: geo.cooling, material: mat({ side: THREE.DoubleSide }), shadow: true },
     };
 
@@ -1309,6 +1311,8 @@ export function CityView({
     const world = makeWorld();
 
     let meshes: Record<string, THREE.InstancedMesh> = {};
+    /** Rivers, lakes and the sea as one smooth surface (see ./city/water). */
+    let waterGroup: THREE.Group | null = null;
     let parts: Record<string, Part[]> = {};
     let tiles: Tile[] = [];
     let kindAt = new Map<string, Tile["kind"]>();
@@ -2285,6 +2289,9 @@ export function CityView({
         city.remove(m);
         m.dispose();
       }
+      disposeWater(waterGroup);
+      waterGroup = buildWater(tiles, newSeed);
+      if (waterGroup) city.add(waterGroup);
       meshes = {};
       growing = [];
       for (const [name, def] of Object.entries(meshDefs)) {
@@ -5304,6 +5311,7 @@ export function CityView({
           (Array.isArray(m) ? m : [m]).forEach((x) => x.dispose());
         }
       });
+      disposeWater(waterGroup);
       renderer.dispose();
       el.removeChild(renderer.domElement);
       api.current = null;
