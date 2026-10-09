@@ -108,12 +108,12 @@ export async function adLiveEmail(ad: AdForEmail, reward: number): Promise<Email
   ];
   return {
     subject: `Your ad for ${ad.brand} is live on Newtown`,
-    text: `Hi ${ad.contact_name},\n\nThanks for your payment. Your billboard ad is live in every Newtown city.\n\n${textTable(rows)}\n\nEach signed-in player who taps your billboard gets ${reward} mint from your pool. Taps from everyone else are free for you. Unused mint at the end of your run expires.\n\nManage your ad (see live numbers, change the picture, headline or link, pause, or add budget):\n${link}\n\nWe'll email you a short report every morning while it runs.`,
+    text: `Hi ${ad.contact_name},\n\nThanks for your payment. Your billboard ad is live in every Newtown city.\n\n${textTable(rows)}\n\nEach signed-in player who taps your ad's button gets ${reward} mint from your pool. Just looking, and taps from everyone else, are free for you. Unused mint at the end of your run expires.\n\nManage your ad (see live numbers, change the picture, headline or link, pause, or add budget):\n${link}\n\nWe'll email you a short report every morning while it runs.`,
     html: layout(
       "Your ad is live!",
       p(`Hi ${esc(ad.contact_name)}, thanks for your payment. Your billboard ad is now showing in every Newtown city.`) +
         statsTable(rows) +
-        p(`Each signed-in player who taps your billboard gets ${reward} mint from your pool. Taps from everyone else are free for you. Unused mint at the end of your run expires.`) +
+        p(`Each signed-in player who taps your ad's button gets ${reward} mint from your pool. Just looking, and taps from everyone else, are free for you. Unused mint at the end of your run expires.`) +
         button(link, "Manage your ad") +
         linkNote +
         p("We'll email you a short report every morning while it runs."),
@@ -250,7 +250,7 @@ export function adReportEmail(ad: AdForEmail, y: Yesterday, link: string, reward
   const timeUp = ad.ends_at ? Date.parse(ad.ends_at) <= Date.now() : false;
   const daysLeft = ad.ends_at ? Math.max(0, Math.ceil((Date.parse(ad.ends_at) - Date.now()) / 86_400_000)) : 0;
   const rows: [string, string][] = [
-    ["Paid views yesterday (players who tapped and earned mint)", n(y.views)],
+    ["Paid views yesterday (players who tapped your button and earned mint)", n(y.views)],
     ["Free views yesterday (watchers and players over their daily limit)", n(y.free_views)],
     ["Link clicks yesterday", n(y.clicks)],
     ["Mint used yesterday", n(y.views * reward)],

@@ -8,6 +8,7 @@ import {
   Flashlight,
   Gamepad2,
   Ghost,
+  House,
   Medal,
   MessageCircle,
   Radar,
@@ -120,10 +121,10 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
     title: "Mint",
     body: [
       "Mint is just for playing: it can't be bought or cashed out.",
-      "Every round's pool starts at 0. Searches, sweeps, moves, shields and decoys all go into it. Sometimes a brand sponsors the pool and adds extra mint.",
+      "Every game's pool starts at 0. Mint spent during a game goes into it: searches, sweeps, moves, shields, decoys, respawns, sports tickets and the sportsbook's cut of bets. Sometimes a brand sponsors the pool and adds extra mint.",
       "If anyone survives: survivors share 80%, hunters share 10% (by how much they spent), and 10% disappears.",
       "If every ghost is found: hunters share 80% (by how much they spent), the ghosts who played share 10%, and 10% disappears.",
-      "Tap a billboard to see the ad on it and earn 5 mint, paid by the brand (up to 5 ads a day). Keep an eye out for golden mint balloons too.",
+      "Tap a billboard to see the ad on it, then tap the ad's button to earn 5 mint, paid by the brand (up to 5 ads a day). Keep an eye out for golden mint balloons too.",
       "Running low? While you're under your refill line you earn passive income every hour: up to 100 mint a day at level 1, and 25 more for every level after that.",
       "Anyone holding 10,000 mint or more is a big fish, and everyone can see it.",
       "You can give mint to other players, and spray mint on the dance floor in clubs.",
@@ -132,7 +133,7 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
   },
   {
     icon: Sparkles,
-    title: "World events",
+    title: "Town events",
     body: [
       "Every hour something rare happens somewhere in the city: fires, parades, UFOs, a treasure chest, a money truck spill, and dozens more.",
       "Tap the news to fly straight there. Some events pay mint to the first few people who tap them.",
@@ -146,9 +147,26 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
       "In Chat mode, tap any building to go inside: lobbies, floors, restaurants, clubs and rooftops. Tap the floor to walk around and tap glowing things to use them.",
       "Sit down, play mini games with the people around you (archery, darts, arcade, duels, trivia and more), order food, dance and spray mint in clubs.",
       "Hop on a ride: hot-air balloons, trains, buses, cars, boats, the Ferris wheel and water slides. They drive themselves, so just sit back and look around.",
-      "Watch sport: football at the stadium, basketball, boxing and wrestling at the arenas (or tap Sports in Chat mode). Every match is a brand-new simulated game, shown live from above. A ticket costs a few mint, and you can bet mint on who wins before kick-off. Mint only, just for fun.",
+      "Watch sport: football at the stadium, basketball, boxing and wrestling at the arenas (or tap Sports in Chat mode). Every match is a brand-new simulated game, shown live from above. A ticket costs a few mint, and you can bet mint on who wins before kick-off. Tickets and the sportsbook's cut of bets go into the game's prize pool. Mint only, just for fun.",
       "Sometimes you'll get a side quest (sitting down makes it more likely). Finish it for mint and special moves.",
       "Chat with the city's regulars (NPCs). Some joke, some are rude, some are generous, and a few spill real secrets about where ghosts are.",
+    ],
+  },
+  {
+    icon: House,
+    title: "Your house",
+    body: [
+      "Build your own house from the menu or Chat mode: pick a style (cottage, bungalow, modern, duplex or villa), paint the walls and roof, choose the room inside and give it a name.",
+      "Switch on \u201cShow my house in the game\u201d and it stands in the busy middle of every new town, with your name on the sign. People can walk in, sit down and chat. Each house adds 5 more hiding spots to the town.",
+      "Switch it off any time: it stays until the end of the game it's in, and won't be in the next one. Free for now.",
+    ],
+  },
+  {
+    icon: Compass,
+    title: "Your play style",
+    body: [
+      "At the end of every game you find out how you played: The Explorer, The Detective, The Party Animal, The Foodie, The Master Thief and more (12 in all), with the numbers that earned it.",
+      "Play a few games and the bars in My style show your mix. Share your card with friends and see who's who.",
     ],
   },
   {

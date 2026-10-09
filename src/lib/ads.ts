@@ -11,8 +11,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 // (game-db/013_ads_v2.sql, on top of 010_ads_sponsors.sql).
 //
 // How an ad works: the advertiser pays a weekly budget for 1–8 weeks. That loads the ad with a
-// pool of coins (1 coin per ₦5). Each signed-in player who taps the billboard to look at the ad
-// gets 5 coins from the pool (up to 5 ads a day, once per ad). Taps by anyone else are free.
+// pool of coins (1 coin per ₦5). Opening an ad from a billboard is free. Each signed-in player
+// who then taps the ad's button gets 5 coins from the pool (up to 5 ads a day, once per ad;
+// game-db/022_pool_and_ads.sql). Taps by anyone else are free.
 // The ad stops when the pool runs out or its weeks are over. It goes live as soon as it's paid.
 
 export const AD_BUCKET = "ads";

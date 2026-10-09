@@ -25,6 +25,8 @@ declare
   v_hour timestamptz := date_trunc('hour', now() at time zone 'UTC') at time zone 'UTC';
   v_join_end timestamptz;
   v_next timestamptz;
+  v_pick int;
+  h record;
   v_out text := 'idle';
 begin
   select * into r from public.rounds where status <> 'done' for update;
@@ -60,15 +62,16 @@ begin
   end if;
 
   if r.status = 'join' and now() >= r.join_ends_at then
-    with t as (
-      select g, row_number() over (order by random()) rn from generate_series(0, r.tile_count - 1) g
-    ), h as (
-      select user_id, row_number() over (order by random()) rn
-      from public.entries where round_id = r.id and role = 'hider'
-    )
-    update public.entries e set tile = t.g
-    from h join t on t.rn = h.rn
-    where e.round_id = r.id and e.user_id = h.user_id;
+    -- Drop each ghost on a random free spot. Picks spots directly instead of shuffling the
+    -- whole town, so it stays quick however big the town gets (ghosts never fill more than
+    -- a twentieth of it, so a free spot turns up in a try or two).
+    for h in select user_id from public.entries where round_id = r.id and role = 'hider' order by random() loop
+      for k in 1..200 loop
+        v_pick := floor(random() * r.tile_count)::int;
+        exit when not exists (select 1 from public.entries x where x.round_id = r.id and x.tile = v_pick);
+      end loop;
+      update public.entries set tile = v_pick where round_id = r.id and user_id = h.user_id;
+    end loop;
     update public.rounds set status = 'seek' where id = r.id;
     v_out := 'seeking started';
     r.status := 'seek';
@@ -166,7 +169,13 @@ begin
   perform public.charge_hunter(r.id, p_user, v_cost, 'search_fee');
   insert into public.events (round_id, kind, tile, detail) values (r.id, 'area_search', p_tile, jsonb_build_object('radius', 1));
 
-  for v_tile in select g from generate_series(0, r.tile_count - 1) g where public.in_area(g, p_tile, 1) loop
+  -- The 3x3 block around the spot, worked out directly (no scan of the whole town).
+  for v_tile in
+    select t from (
+      select public.npc_xy_tile(c[1] + dx, c[2] + dy) t
+      from (select public.spiral_xy(p_tile) c) s, generate_series(-1, 1) dx, generate_series(-1, 1) dy
+    ) n where t < r.tile_count order by t
+  loop
     res := public.search_resolve(r.id, p_user, v_tile, round(v_cost / 9, 2), true);
     v_caught := v_caught + (res->>'caught')::int;
     v_shielded := v_shielded + (res->>'shielded')::int;

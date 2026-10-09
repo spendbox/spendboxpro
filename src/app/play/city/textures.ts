@@ -119,28 +119,6 @@ export function billboardTexture(design: number) {
   return finish(canvas);
 }
 
-/** The banner strapped round a hot-air balloon when it has no ad: "Your ad here". */
-export function balloonBannerTexture() {
-  const W = 512;
-  const H = 256;
-  const canvas = document.createElement("canvas");
-  canvas.width = W;
-  canvas.height = H;
-  const c = canvas.getContext("2d")!;
-  c.fillStyle = "#ffffff";
-  c.fillRect(0, 0, W, H);
-  c.strokeStyle = "#18202b";
-  c.lineWidth = 10;
-  c.strokeRect(10, 10, W - 20, H - 20);
-  c.textAlign = "center";
-  c.textBaseline = "middle";
-  c.fillStyle = "#18202b";
-  fitText(c, "Your ad here", W / 2, 118, 84, 900, W - 70);
-  c.fillStyle = "#495057";
-  fitText(c, "tap to find out more", W / 2, 192, 30, 600, W - 120);
-  return finish(canvas);
-}
-
 const pillCache = new Map<string, THREE.CanvasTexture>();
 
 /** "(people icon) 12": how many people are in a chat room. Cached per text. */

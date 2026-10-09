@@ -81,8 +81,8 @@ export function AdCard({ ad, pricing, payments }: { ad: PortalAd; pricing: AdPri
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Stat label="Paid views" value={fmt(ad.rewardedViews)} hint="Players who tapped and earned mint" />
-        <Stat label="Free views" value={fmt(ad.freeViews)} hint="Watchers & players over their limit" />
+        <Stat label="Paid views" value={fmt(ad.rewardedViews)} hint="Players who tapped your button and earned mint" />
+        <Stat label="Free views" value={fmt(ad.freeViews)} hint="Looks without a paid button tap" />
         <Stat label="Link clicks" value={fmt(ad.clicks)} />
         <Stat
           label={ad.status === "live" || ad.status === "paused" ? "Days left" : "Ended"}

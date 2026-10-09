@@ -10,7 +10,7 @@
 //    added. When the hunt starts it sinks away and the real city rises (see city-view).
 
 import * as THREE from "three";
-import { hash, spiralXY, type Tile } from "@/lib/city/layout";
+import { hash, spiralIndex, spiralXY, type Tile } from "@/lib/city/layout";
 import { grown, keyOf, type World } from "./world";
 
 /** How far along a construction site is (0 = just started, 1 = finished). */
@@ -186,8 +186,9 @@ export function createBuildingSite(scene: THREE.Object3D) {
     cranes = [];
   }
 
-  function build(seed: number, count: number) {
-    const k = `${seed}:${count}`;
+  /** box: only the part of a very big town that's being drawn (see the window in city-view). */
+  function build(seed: number, count: number, box?: { x0: number; x1: number; z0: number; z1: number } | null) {
+    const k = `${seed}:${count}:${box ? `${box.x0},${box.z0}` : ""}`;
     if (k === builtFor) return;
     builtFor = k;
     clear();
@@ -195,10 +196,20 @@ export function createBuildingSite(scene: THREE.Object3D) {
     const n = count + Math.min(160, Math.round(6 * Math.sqrt(count) + 10));
     const cells: [number, number][] = [];
     const inSite = new Set<string>();
-    for (let i = 0; i < n; i++) {
-      const c = spiralXY(i);
-      cells.push(c);
-      inSite.add(keyOf(c[0], c[1]));
+    if (box) {
+      for (let x = box.x0; x <= box.x1; x++) {
+        for (let z = box.z0; z <= box.z1; z++) {
+          if (spiralIndex(x, z) >= n) continue;
+          cells.push([x, z]);
+          inSite.add(keyOf(x, z));
+        }
+      }
+    } else {
+      for (let i = 0; i < n; i++) {
+        const c = spiralXY(i);
+        cells.push(c);
+        inSite.add(keyOf(c[0], c[1]));
+      }
     }
     const H = (x: number, z: number, k: number) => hash(x * 3 + 7, z * 5 - 3, seed * 13 + 4242 + k);
     const plots: number[] = [];

@@ -6,6 +6,7 @@
 // Each round gets its own seed, so the street grid, downtowns and parks differ every round,
 // but a given tile always looks the same for everyone during that round.
 
+import type { HouseInterior, HouseStyle, TownHouse } from "@/lib/houses";
 import { ABBREV, CLUB_NAMES, eggChoices, FLAVORS, landmarkChoices, nameOf, RESTAURANT_NAMES, type EasterEgg, type Flavor, type LandmarkKey, type Named } from "./places";
 
 export type TileKind =
@@ -98,6 +99,8 @@ export type Tile = {
   /** The railway viaduct passes over this tile (and the station stands here). */
   rail?: boolean;
   station?: boolean;
+  /** A player's house stands here (see src/lib/city/houses.ts). */
+  home?: { slot: number; name: string; owner: string; ownerId: string; style: HouseStyle; wall: string; roof: string; interior: HouseInterior };
 };
 
 export const KIND_LABEL: Record<TileKind, string> = {
@@ -190,6 +193,17 @@ export function spiralXY(n: number): [number, number] {
   return [k, k - (m - p - t)];
 }
 
+/** The tile number at (x, z): the opposite of spiralXY (same as npc_xy_tile in the database). */
+export function spiralIndex(x: number, z: number): number {
+  const k = Math.max(Math.abs(x), Math.abs(z));
+  if (k === 0) return 0;
+  const big = (2 * k + 1) * (2 * k + 1);
+  if (z === -k) return big - (k - x) - 1;
+  if (x === -k) return big - 2 * k - (z + k) - 1;
+  if (z === k) return big - 4 * k - (x + k) - 1;
+  return big - 6 * k - (k - z) - 1;
+}
+
 /** Integer hash → 0..1, stable for the same inputs. */
 export function hash(x: number, z: number, s: number) {
   let h = Math.imul(x | 0, 374761393) ^ Math.imul(z | 0, 668265263) ^ Math.imul(s | 0, 2147483647);
@@ -243,6 +257,8 @@ export type CityPlan = {
    */
   rail: { along: "x" | "z"; at: number; station: number | null } | null;
   palette: Palette;
+  /** Players' houses in this game, by tile (set by placeHouses in ./houses.ts). */
+  homes?: Map<number, TownHouse>;
 };
 
 /** Is (x, z) under the railway viaduct? */
@@ -746,7 +762,39 @@ function blockEgg(plan: CityPlan, x: number, z: number) {
   return pick;
 }
 
+/** What stands on tile i (a player's house, if one was placed there). */
 export function tileAt(plan: CityPlan, i: number): Tile {
+  const t = lotAt(plan, i);
+  const h = plan.homes?.get(i);
+  return h ? homeTile(t, h) : t;
+}
+
+/** How tall each house style stands, and which of the city's house shapes it is built from. */
+const HOME_SHAPE: Record<HouseStyle, { top: number; v: number }> = {
+  cottage: { top: 0.76, v: 0 },
+  bungalow: { top: 0.68, v: 0 },
+  modern: { top: 0.42, v: 1 },
+  duplex: { top: 0.94, v: 2 },
+  villa: { top: 0.66, v: 1 },
+};
+
+function homeTile(t: Tile, h: TownHouse): Tile {
+  const shape = HOME_SHAPE[h.style] ?? HOME_SHAPE.cottage;
+  return {
+    i: t.i,
+    x: t.x,
+    z: t.z,
+    r: t.r,
+    kind: "house",
+    top: shape.top,
+    v: shape.v,
+    name: h.name,
+    home: { slot: h.slot, name: h.name, owner: h.owner, ownerId: h.ownerId, style: h.style, wall: h.wall, roof: h.roof, interior: h.interior },
+  };
+}
+
+/** What the city plan puts on tile i, before any player's house. */
+export function lotAt(plan: CityPlan, i: number): Tile {
   const [x, z] = spiralXY(i);
   const t = baseTile(plan, x, z);
   t.i = i;

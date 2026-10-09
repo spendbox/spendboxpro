@@ -12,6 +12,15 @@ import { RAIL_Y } from "./trains";
 
 export type LevelKind = "interior" | "roof" | "outdoor";
 
+/** The room style a player picked for their house, as a room design here. */
+const HOME_ROOM: Record<string, { label: string; theme: Theme }> = {
+  living: { label: "Living room", theme: "living" },
+  lounge: { label: "Lounge", theme: "lounge" },
+  studio: { label: "Studio", theme: "office" },
+  party: { label: "Party room", theme: "club" },
+  dining: { label: "Dining room", theme: "restaurant" },
+};
+
 export type Theme =
   // insides
   | "living"
@@ -195,6 +204,27 @@ export function levelsOf(t: Tile, plan: CityPlan): PlaceLevel[] {
 
   switch (t.kind) {
     case "house": {
+      if (t.home) {
+        // A player's house: the ground floor in the room style they picked, plus a roof
+        // terrace (modern, villa) or an upstairs (duplex).
+        const room = HOME_ROOM[t.home.interior] ?? HOME_ROOM.living;
+        const style = t.home.style;
+        if (style === "modern") {
+          R("g", room.label, "interior", room.theme, x - 0.08, 0.08, z - 0.05, 0.25, 0.2);
+          R("r", "Roof terrace", "roof", "roofTerrace", x - 0.05, 0.42, z - 0.05, 0.34, 0.275, { weight: 0.8 });
+        } else if (style === "villa") {
+          R("g", room.label, "interior", room.theme, x - 0.06, 0.08, z - 0.08, 0.32, 0.22);
+          R("r", "Roof terrace", "roof", "roofTerrace", x - 0.14, 0.62, z - 0.12, 0.27, 0.22, { weight: 0.8 });
+        } else if (style === "duplex") {
+          R("g", room.label, "interior", room.theme, x - 0.06, 0.08, z - 0.04, 0.22, 0.2);
+          R("f1", "Upstairs", "interior", "upstairs", x - 0.06, 0.38, z - 0.04, 0.22, 0.2, { weight: 0.8 });
+        } else if (style === "bungalow") {
+          R("g", room.label, "interior", room.theme, x, 0.08, z - 0.04, 0.34, 0.22);
+        } else {
+          R("g", room.label, "interior", room.theme, x, 0.08, z, 0.24, 0.21);
+        }
+        break;
+      }
       const dx = (r[1] - 0.5) * 0.1;
       if (t.v === 1) {
         R("g", "Living room", "interior", "living", x + dx - 0.08, 0.08, z - 0.05, 0.25, 0.2);

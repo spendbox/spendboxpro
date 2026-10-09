@@ -39,19 +39,20 @@ export default async function AdvertisePage() {
     [
       "What exactly am I paying for?",
       <>
-        Real people looking at your ad. Your budget becomes a pool of mint (₦{fmt(ngnPerCoin)} = 1 mint). Each signed-in player who
-        taps your billboard to look at it gets {fmt(pricing.viewReward)} mint from your pool. That tap is a <b>paid view</b>.
+        Real people acting on your ad. Your budget becomes a pool of mint (₦{fmt(ngnPerCoin)} = 1 mint). Players tap your billboard to
+        open the ad, and each signed-in player who then taps its button (&ldquo;Visit&rdquo; your link) gets {fmt(pricing.viewReward)} mint
+        from your pool. That button tap is a <b>paid view</b>.
       </>,
     ],
     [
       "Do I pay when my billboard is just on screen?",
-      "No. Billboards passing by on someone's screen are never charged. You only pay when a player chooses to tap and look.",
+      "No. Billboards passing by on someone's screen are never charged, and neither is opening the ad. You only pay when a player taps your ad's button.",
     ],
     [
       "What are free views?",
-      `People watching without an account can tap your ad too, and so can players who've already earned mint from ${fmt(
+      `Everyone who opens your ad without earning from it: people watching without an account, players who've already earned mint from ${fmt(
         pricing.rewardsPerDay,
-      )} ads today. They get no mint, and those views are free for you. Link clicks are free too.`,
+      )} ads today, and anyone who looks without tapping the button. They get no mint, and those views are free for you.`,
     ],
     [
       "Can one person drain my budget?",

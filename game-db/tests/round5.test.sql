@@ -55,7 +55,7 @@ begin
   update profiles set last_search_at = now() - interval '1 minute', search_heat = 0 where id = a;
   res := search_area(a, 0); raise notice 'big search: % caught % reward % cost %', res->>'result', res->>'caught', res->>'reward', res->>'cost';
   raise notice 'level bonus paid: %', (select sum(amount) from ledger where kind = 'level_bonus' and round_id = r);
-  -- bo respawns (level 20, caught in the first 30 minutes); the 300 coins burn.
+  -- bo respawns (level 20, caught in the first 30 minutes); the 300 coins go into the prize pool (part 22).
   res := respawn(b); raise notice 'respawn: % at a secret spot', res->>'respawned';
   begin perform respawn(b); raise exception 'should fail'; exception when others then raise notice 'ok once: %', sqlerrm; end;
   raise notice 'public respawn event tile: %, hiders left: %', (select tile from events where round_id = r and kind = 'respawn'),

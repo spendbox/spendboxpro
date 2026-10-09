@@ -124,7 +124,7 @@ export function createPeople(world: World, parent: THREE.Object3D) {
     const options: [number, number][] = [];
     for (const [ox, oz] of DIRS) {
       if (ox === -dx && oz === -dz) continue;
-      if (roadAt(world, x + ox, z + oz) && world.tiles[world.tileIndex.get(keyOf(x + ox, z + oz)) ?? -1]?.roundabout !== true) options.push([x + ox, z + oz]);
+      if (roadAt(world, x + ox, z + oz) && world.byIndex.get(world.tileIndex.get(keyOf(x + ox, z + oz)) ?? -1)?.roundabout !== true) options.push([x + ox, z + oz]);
     }
     if (!options.length) return p.from;
     const ahead = options.find(([nx, nz]) => nx - x === dx && nz - z === dz);
@@ -161,7 +161,7 @@ export function createPeople(world: World, parent: THREE.Object3D) {
       while (p.t >= 1) {
         p.t -= 1;
         const next = nextStop(p);
-        const at = world.tiles[world.tileIndex.get(keyOf(p.to[0], p.to[1])) ?? -1];
+        const at = world.byIndex.get(world.tileIndex.get(keyOf(p.to[0], p.to[1])) ?? -1);
         p.from = p.to;
         p.to = next;
         p.bridgeFrom = p.bridgeTo;

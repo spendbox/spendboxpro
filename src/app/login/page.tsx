@@ -6,7 +6,7 @@ import { currentUserId } from "@/lib/game";
 import { LoginForm } from "./login-form";
 import { Logo } from "@/components/logo";
 
-export const metadata: Metadata = { title: "Enter the world" };
+export const metadata: Metadata = { title: "Enter Newtown" };
 
 export default async function LoginPage() {
   if (await currentUserId()) redirect("/play");
@@ -20,7 +20,7 @@ export default async function LoginPage() {
           <ArrowLeft className="size-4" />
           Back to watching the city
         </Link>
-        <h1 className="mt-3 font-display text-3xl font-bold">Enter the world</h1>
+        <h1 className="mt-3 font-display text-3xl font-bold">Enter Newtown</h1>
         <p className="mt-1 text-muted">Just your email to start.</p>
         <p className="mt-3 flex items-center gap-2 text-sm font-medium">
           <span className="rounded-lg border border-hit px-1.5 py-0.5 text-xs font-bold text-hit">18+</span>

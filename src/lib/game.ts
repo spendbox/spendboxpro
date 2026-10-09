@@ -7,6 +7,8 @@ import { createClient } from "@/lib/supabase/server";
 import { botNameFor } from "@/lib/bot-names";
 import { cleanAvatar, type Avatar } from "@/lib/avatar";
 import type { WorldEvent } from "@/lib/world-events";
+import type { TownHouse } from "@/lib/houses";
+import { loadRoundHouses } from "@/lib/houses.server";
 
 export type Phase = "join" | "seek" | "done";
 
@@ -56,8 +58,10 @@ export type GameState = {
   };
   /** Everyone in this round (not the bot), for finding people to chat with. */
   players: { id: string; name: string; role: "hider" | "seeker"; caught: boolean; avatar: Avatar; bigFish: boolean }[];
-  /** This hunt's world events (rare happenings around the city), past, present and coming. */
+  /** This hunt's town events (rare happenings around the city), past, present and coming. */
   worldEvents: WorldEvent[];
+  /** Players' houses standing in this game's town, in slot order. */
+  houses: TownHouse[];
   /** A coin balloon drifting by just for you, if one's due (slot = which one). */
   balloon: { slot: number; coins: number } | null;
   site: { visits: number; players: number };
@@ -430,7 +434,7 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
     }
   };
 
-  const [, last, results, , , { data: visits }, { count: playerCount }] = await Promise.all([
+  const [, last, results, , , { data: visits }, { count: playerCount }, houses] = await Promise.all([
     roundPart(),
     lastPart(),
     loadResults(db, userId),
@@ -438,6 +442,7 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
     balloonPart(),
     db.from("site_counters").select("value").eq("key", "visits").maybeSingle(),
     db.from("profiles").select("id", { count: "estimated", head: true }).eq("is_bot", false),
+    round ? loadRoundHouses(db, round.id) : Promise.resolve([] as TownHouse[]),
   ]);
   const site = { visits: Number(visits?.value ?? 0), players: playerCount ?? 0 };
   const tileCount = round?.tile_count ?? 0;
@@ -501,6 +506,7 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
     caughtTiles,
     caughtFaces,
     worldEvents,
+    houses,
     events,
     results,
     lastResult: last ? { roundId: last.round_id, role: last.role, payout: num(last.payout), caught: last.caught } : null,
