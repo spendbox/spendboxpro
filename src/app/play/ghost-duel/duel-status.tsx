@@ -36,60 +36,61 @@ export function DuelStatus({
     return () => clearInterval(id);
   }, [coolUntil]);
   const ghostsButton = (
-    <button onClick={onGhosts} className="flex shrink-0 items-center gap-1.5 rounded-xl bg-ink px-3 py-2 text-sm font-semibold text-white">
-      <Ghost className="size-4" />
+    <button onClick={onGhosts} className="flex shrink-0 items-center gap-1.5 rounded-xl bg-ink px-2.5 py-1.5 text-xs font-semibold text-white sm:px-3 sm:py-2 sm:text-sm">
+      <Ghost className="size-3.5 sm:size-4" />
       Ghosts · {board.ghosts.length}
     </button>
   );
 
   if (phase === "join") {
     return me.role === "ghost" ? (
-      <p className="flex items-center gap-2 text-sm">
-        <Ghost className="size-5 shrink-0" />
+      <p className="flex items-center gap-2 text-xs sm:text-sm">
+        <Ghost className="size-4 shrink-0 sm:size-5" />
         <span>
           <b>You&apos;re a ghost.</b> <span className="text-muted">The hunt starts in {countdown}. Then your light shows on the map and hunters can challenge you.</span>
         </span>
       </p>
     ) : (
       <div className="flex items-center gap-2">
-        <p className="min-w-0 flex-1 text-sm">
+        <p className="min-w-0 flex-1 text-xs sm:text-sm">
           <b>Be a ghost this game?</b>{" "}
           <span className="text-muted">
-            Joining closes in <b className="tabular-nums text-ink">{countdown}</b>. Everyone else is a hunter.
+            Joining closes in <b className="tabular-nums text-ink">{countdown}</b>.<span className="hidden sm:inline"> Everyone else is a hunter.</span>
           </span>
         </p>
-        <button onClick={onBeGhost} disabled={busy} className="flex shrink-0 items-center gap-1.5 rounded-xl bg-ink px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
-          <Ghost className="size-4" />
+        <button onClick={onBeGhost} disabled={busy} className="flex shrink-0 items-center gap-1.5 rounded-xl bg-ink px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-50 sm:px-3 sm:py-2 sm:text-sm">
+          <Ghost className="size-3.5 sm:size-4" />
           Ghost · {short(rules.stake)}
         </button>
       </div>
     );
   }
-  if (phase !== "seek") return <p className="text-sm text-muted">Building the next town…</p>;
+  if (phase !== "seek") return <p className="text-xs text-muted sm:text-sm">Building the next town…</p>;
 
   if (me.role === "ghost") {
     return (
       <div className="flex items-center gap-2">
-        <p className="min-w-0 flex-1 text-sm">
+        <p className="min-w-0 flex-1 text-xs sm:text-sm">
           {me.out ? (
             <>
-              <b>You&apos;re out of this game.</b> <span className="text-muted">The next one starts on the hour. Explore and chat till then.</span>
+              <b>You&apos;re out of this game.</b> <span className="text-muted">The next one starts on the hour.<span className="hidden sm:inline"> Explore and chat till then.</span></span>
             </>
           ) : me.golden ? (
             <span className="flex items-center gap-1.5">
-              <Crown className="size-5 shrink-0 text-[#e8a800]" />
+              <Crown className="size-4 shrink-0 text-[#e8a800] sm:size-5" />
               <span>
-                <b>You&apos;re golden!</b> <span className="text-muted">Safe for the rest of the game, and in the prize pool.</span>
+                <b>You&apos;re golden!</b> <span className="text-muted">Safe, and in the prize pool.</span>
               </span>
             </span>
           ) : (
             <>
-              <b>You&apos;re a ghost.</b> <span className="text-muted">Everyone can see your light.</span>{" "}
-              <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+              <b>You&apos;re a ghost.</b> <span className="text-muted">{short(me.stake)} mint staked.</span>{" "}
+              <span className="hidden text-muted sm:inline">Everyone can see your light.</span>
+              <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
                 <Dots n={me.wins} max={rules.goldenWins} tone="win" />
-                <span className="text-xs text-muted">wins</span>
+                <span className="text-[11px] text-muted sm:text-xs">wins</span>
                 <Dots n={me.losses} max={rules.outLosses} tone="loss" />
-                <span className="text-xs text-muted">losses · {short(me.stake)} mint staked</span>
+                <span className="text-[11px] text-muted sm:text-xs">losses</span>
               </span>
             </>
           )}
@@ -100,18 +101,19 @@ export function DuelStatus({
   }
   return (
     <div className="flex items-center gap-2">
-      <p className="min-w-0 flex-1 text-sm">
+      <p className="min-w-0 flex-1 text-xs sm:text-sm">
         <span className="flex items-center gap-1.5">
-          <Swords className="size-4 shrink-0" />
-          <b>Tap a ghost&apos;s light to challenge them</b>
+          <Swords className="size-3.5 shrink-0 sm:size-4" />
+          <b className="sm:hidden">Tap a ghost to duel them</b>
+          <b className="hidden sm:inline">Tap a ghost&apos;s light to challenge them</b>
         </span>
-        <span className="text-xs text-muted">
+        <span className="text-[11px] text-muted sm:text-xs">
           {short(rules.fee)} mint a duel ·{" "}
           {me.inPool ? (
             <b className="text-[#2b8a3e]">You&apos;re in the prize pool!</b>
           ) : (
             <>
-              your wins: <b className="text-ink">{me.wins}</b>/{rules.poolWins} to enter the pool
+              wins <b className="text-ink">{me.wins}</b>/{rules.poolWins} to enter the pool
             </>
           )}
         </span>

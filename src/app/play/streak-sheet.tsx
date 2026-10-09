@@ -38,11 +38,11 @@ export function StreakPill({ streak, onOpen }: { streak: Streak; onOpen: () => v
     <span className="relative">
       <button
         onClick={onOpen}
-        className={cn("glass flex items-center gap-0.5 whitespace-nowrap rounded-full py-1.5 pl-2 pr-2.5 text-sm font-bold", pop !== null && "streak-pop")}
+        className={cn("glass flex items-center gap-0.5 whitespace-nowrap rounded-full py-1.5 pl-1.5 pr-2 text-xs font-bold sm:pl-2 sm:pr-2.5 sm:text-sm", pop !== null && "streak-pop")}
         aria-label={`Daily streak: ${streak.current} day${streak.current === 1 ? "" : "s"}`}
         title={streak.today ? "Today counts. Come back tomorrow!" : "Do one thing today to keep your streak"}
       >
-        <Flame className={cn("size-4", streak.today ? "fill-[#ffa94d] text-[#f76707]" : "text-muted")} />
+        <Flame className={cn("size-3.5 sm:size-4", streak.today ? "fill-[#ffa94d] text-[#f76707]" : "text-muted")} />
         <span className={streak.today ? "text-[#d9480f]" : undefined}>{streak.current}</span>
         {atRisk && <span className="absolute -right-0.5 -top-0.5 size-2.5 animate-pulse rounded-full bg-hit ring-2 ring-white" aria-hidden />}
       </button>

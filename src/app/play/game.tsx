@@ -297,7 +297,6 @@ export function Game({ state }: { state: GameState }) {
   const [howOpen, setHowOpen] = useState(false);
   const [editAvatar, setEditAvatar] = useState(false);
   const [statsMin, setStatsMin] = useState(false);
-  const [marks, setMarks] = useState(true);
   const [sound, setSound] = useState(true);
   const [busy, setBusy] = useState(false);
   // Ghost duels: a ghost's card (tapped on the map), the list of ghosts, the duel on screen,
@@ -721,8 +720,9 @@ export function Game({ state }: { state: GameState }) {
     try {
       const saved = JSON.parse(localStorage.getItem("hs-view") ?? "{}");
       const id = setTimeout(() => {
+        // Phones start with the round card folded into a slim pill, unless you opened it before.
         if (typeof saved.statsMin === "boolean") setStatsMin(saved.statsMin);
-        if (typeof saved.marks === "boolean") setMarks(saved.marks);
+        else if (window.innerWidth < 640) setStatsMin(true);
         if (typeof saved.sound === "boolean") setSound(saved.sound);
       }, 0);
       return () => clearTimeout(id);
@@ -730,7 +730,7 @@ export function Game({ state }: { state: GameState }) {
   }, []);
   const saveView = (patch: Record<string, boolean>) => {
     try {
-      localStorage.setItem("hs-view", JSON.stringify({ statsMin, marks, sound, ...patch }));
+      localStorage.setItem("hs-view", JSON.stringify({ statsMin, sound, ...patch }));
     } catch {}
   };
 
@@ -1184,7 +1184,7 @@ export function Game({ state }: { state: GameState }) {
       )}
 
       {/* Top: round clock and numbers (stacked, so big numbers fit) */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-3 sm:p-4">
+      <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-2.5 sm:p-4">
         {round ? (
           <StatsCard
             city={plan.city.name}
@@ -1192,15 +1192,13 @@ export function Game({ state }: { state: GameState }) {
             countdown={countdown}
             hidden={board ? board.ghosts.length : round.hidersRemaining}
             hidersTotal={board ? Math.max(board.ghosts.length, round.hidersTotal - 1) : round.hidersTotal}
+            golden={board ? board.ghosts.filter((g) => g.status === "golden").length : 0}
             pool={round.pool}
-            tiles={round.tileCount}
             online={online}
             visits={state.site.visits}
             players={state.site.players}
             minimised={statsMin}
             onToggle={() => { setStatsMin(!statsMin); saveView({ statsMin: !statsMin }); }}
-            marks={marks}
-            onMarks={() => { setMarks(!marks); saveView({ marks: !marks }); }}
             sound={sound}
             onSound={() => { setSound(!sound); saveView({ sound: !sound }); }}
             sponsor={round.sponsor}
@@ -1223,18 +1221,18 @@ export function Game({ state }: { state: GameState }) {
               </Link>
             </div>
           ) : (
-          <div className="pointer-events-auto flex items-center gap-2">
+          <div className="pointer-events-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
             <span className="glass hidden whitespace-nowrap rounded-full px-2.5 py-1.5 text-xs font-bold sm:inline" title="Your level (level up from the menu)">
               Lv {me.level}
             </span>
             {me.bigFish && (
-              <span className="glass flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1.5 text-xs font-bold text-[#1c7ed6]" title="You hold 10,000+ mint: everyone sees you as a big fish">
+              <span className="glass flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-1.5 text-xs font-bold text-[#1c7ed6] sm:px-2.5" title="You hold 10,000+ mint: everyone sees you as a big fish">
                 <Fish className="size-3.5" />
                 <span className="hidden sm:inline">Big fish</span>
               </span>
             )}
             {state.streak && <StreakPill streak={state.streak} onOpen={() => { setStreakOpen(true); setMenu(false); setFeedOpen(false); }} />}
-            <span className="glass whitespace-nowrap rounded-full px-3 py-1.5 text-sm" title={`${me.coins} mint · level ${me.level}`}>
+            <span className="glass whitespace-nowrap rounded-full px-2.5 py-1.5 text-xs sm:px-3 sm:text-sm" title={`${me.coins} mint · level ${me.level}`}>
               <b className="text-gold-dark">{short(me.coins)}</b>
               <span className="hidden sm:inline"> mint</span>
               {me.bonusCoins > 0 && <span className="text-muted"> +{short(me.bonusCoins)}</span>}
@@ -1246,7 +1244,7 @@ export function Game({ state }: { state: GameState }) {
                 setToasts([]);
                 setFeedSeenAt(new Date(now).toISOString());
               }}
-              className="glass relative grid h-9 w-9 shrink-0 place-items-center rounded-full"
+              className="glass relative grid size-8 shrink-0 place-items-center rounded-full sm:size-9"
               aria-label="Notifications"
             >
               <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1260,7 +1258,7 @@ export function Game({ state }: { state: GameState }) {
             </button>
             <button
               onClick={() => { setMenu((v) => !v); setFeedOpen(false); }}
-              className="glass grid h-9 w-9 shrink-0 place-items-center rounded-full text-base font-semibold"
+              className="glass grid size-8 shrink-0 place-items-center rounded-full text-base font-semibold sm:size-9"
               aria-label="Menu"
             >
               {menu ? <X className="size-4" /> : <MenuIcon className="size-4" />}
@@ -1271,7 +1269,7 @@ export function Game({ state }: { state: GameState }) {
       </div>
 
       {/* Latest notices pop up under the bell; the bell opens the full list. */}
-      <div className={cn("pointer-events-none absolute right-3 z-10 flex w-[min(19rem,calc(100vw-1.5rem))] flex-col items-end gap-1.5 sm:right-4 sm:top-16", statsMin ? "top-16" : "top-[16.5rem]")}>
+      <div className={cn("pointer-events-none absolute right-3 z-10 flex w-[min(19rem,calc(100vw-1.5rem))] flex-col items-end gap-1.5 sm:right-4 sm:top-16", statsMin ? "top-14" : "top-[14.5rem]")}>
         {!feedOpen &&
           !menu &&
           toasts.map((n) => (
@@ -1719,7 +1717,7 @@ export function Game({ state }: { state: GameState }) {
 
 
       {/* Bottom: messages, controls and chat */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-2 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-1.5 p-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:gap-2 sm:p-4">
         {!guest && (
           <Safe name="Quest banner">
             <QuestBanner quest={quests.quest} onOpen={() => setQuestOpen(true)} />
@@ -1738,7 +1736,7 @@ export function Game({ state }: { state: GameState }) {
         {message && (
           <p
             className={cn(
-              "pointer-events-auto max-w-xl rounded-xl px-4 py-2 text-sm font-medium shadow-lg",
+              "pointer-events-auto max-w-xl rounded-xl px-3 py-1.5 text-xs font-medium shadow-lg sm:px-4 sm:py-2 sm:text-sm",
               message.tone === "good" && "bg-gold text-ink",
               message.tone === "bad" && "bg-hit text-white",
               message.tone === "info" && "glass",
@@ -1768,7 +1766,7 @@ export function Game({ state }: { state: GameState }) {
                 setExploreTab("rides");
                 setPickRide(true);
               }}
-              className="glass pointer-events-auto flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold"
+              className="glass pointer-events-auto flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold sm:px-4 sm:py-2 sm:text-sm"
             >
               <Compass className="size-4 text-[#e64980]" />
               Explore
@@ -1805,7 +1803,7 @@ export function Game({ state }: { state: GameState }) {
           )}
         </div>
 
-        <div className="glass pointer-events-auto w-full max-w-xl rounded-2xl p-3">
+        <div className="glass pointer-events-auto w-full max-w-xl rounded-2xl p-2.5 sm:p-3">
           {!round || phase === "done" ? (
             <p className="text-sm text-muted">Building the next town…</p>
           ) : guest ? (
@@ -1832,7 +1830,7 @@ export function Game({ state }: { state: GameState }) {
               </div>
             </div>
           ) : (
-            <div className="space-y-2 text-sm">
+            <div className="space-y-2 text-xs sm:text-sm">
               {isDancing && dancing ? (
                 <DanceBar
                   move={dancing.move}
@@ -1900,7 +1898,8 @@ export function Game({ state }: { state: GameState }) {
               ) : (
                 <>
                   {duelStrip}
-                  <div className="flex items-center gap-2 border-t border-line pt-2">
+                  {/* On phones the tip and My house (also in the menu) make way for the town. */}
+                  <div className="hidden items-center gap-2 border-t border-line pt-2 sm:flex">
                     <p className="min-w-0 flex-1 text-xs text-muted">
                       Tap any building to go inside (the numbers show who&apos;s there), or Explore rides and sports.
                     </p>
