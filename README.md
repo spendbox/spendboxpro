@@ -13,15 +13,16 @@ The full rule book is the "Hide & Seek Grid Game: Rules Spec" doc (the game's wo
 
 The game is 18+ (players give their date of birth when they sign up). The UI calls hiders "ghosts" and seekers
 "hunters"; the database still says `hider` and `seeker`. Ghosts get 1 move per game (2 from level 10,
-3 from level 20); the hunt runs for up to an hour and the world ends as soon as every ghost is
-caught (the clock turns red and beeps in the last minute). Chat happens in places: players
+3 from level 20). Games run on the hour (UTC): every game starts at the top of an hour and
+ends on the next hour mark, even if every ghost is caught (the clock turns red and beeps in the
+last 30 seconds). Chat happens in places: players
 switch to Chat mode and enter buildings (lobbies, floors, rooftops, clubs, restaurants) or hop
-on a ride (hot-air balloons, trains, buses, cars they steer, boats, Ferris wheels, water
+on a ride (hot-air balloons, trains, buses, cars, boats, Ferris wheels, water
 slides), plus private messages.
 
-1. **Hiding window (10 min).** Anyone joins as a hunter; players who have finished one round
+1. **Hiding window (the first 3 minutes of the hour).** Anyone joins as a hunter; players who have finished one round
    as a hunter can hide (stake 100 mint). Each hider adds 20 tiles to a 20×20 starting city.
-2. **The hunt (60 min).** Hiders are dropped on random tiles. Hunters search tiles (first
+2. **The hunt (until the next hour mark, about 57 min).** Hiders are dropped on random tiles. Hunters search tiles (first
    search each day is free, then the price rises as more of the city is searched; each search
    has a short cooldown that doubles if you search too fast, up to 30 s) or send a drone to
    sweep an area (yes/no only, 10-second cooldown, dearer every time anyone sweeps; hiders
@@ -63,7 +64,7 @@ slides), plus private messages.
    `game-db/010_ads_sponsors.sql`, `game-db/011_badges_hard.sql`, `game-db/012_age_codes.sql`,
    `game-db/013_ads_v2.sql`, `game-db/014_chat_rooms.sql`, `game-db/015_ghost_rules.sql`,
    `game-db/016_place_rooms.sql`, `game-db/017_world_events.sql`, `game-db/018_npcs.sql`,
-   `game-db/019_activities.sql` and `game-db/020_sports.sql`,
+   `game-db/019_activities.sql`, `game-db/020_sports.sql` and `game-db/021_hourly_rounds.sql`,
    in order, once each, on an empty database. In Supabase → Database → Extensions, switch on **pg_cron** first if you
    can: the file then schedules the round clock to run every minute. (Without it, the clock
    still moves whenever someone has the game open.)

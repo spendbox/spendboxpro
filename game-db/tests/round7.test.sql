@@ -1,6 +1,7 @@
 \set ON_ERROR_STOP on
 -- Run part 17 again: it must be safe to re-run (and earlier tests re-run part 16).
 \ir ../017_world_events.sql
+\ir ../021_hourly_rounds.sql
 -- Round 7 (part 17): world events and twists, event rewards, the bot's last words, the world
 -- ending when every ghost is caught, level-based passive income, ride chat rooms.
 create temp table books7 as select
@@ -57,11 +58,11 @@ begin
   insert into world_events (round_id, key, tile, starts_at, ends_at, reward_coins, reward_slots) values (r, 'treasure_chest', 5, now() - interval '1 minute', now() + interval '1 minute', 50, 1) returning id into ev;
   raise notice 'claim treasure: %', claim_world_event(a, ev);
   begin perform claim_world_event(b, ev); raise exception 'should fail'; exception when others then raise notice 'ok too late: %', sqlerrm; end;
-  -- Catch the rest: the bot speaks, and the world ends.
+  -- Catch the rest: the bot speaks, and the hunt carries on to the hour (part 21).
   perform search_tile(a, 302);
   perform search_tile(a, 410);
   raise notice 'bot last words: %', (select body from chat_messages where round_id = r and sender_id = bot and room = '*' order by id desc limit 1) is not null;
-  raise notice 'world ended when everyone was caught: %', (select status from rounds where id = r);
+  raise notice 'world keeps going after everyone is caught: %', (select status from rounds where id = r);
   -- Ride rooms are valid chat rooms.
   raise notice 'ride rooms ok: %', chat_room_ok('v:train:0') and chat_room_ok('v:car:12') and not chat_room_ok('v:plane:1');
   -- Passive income grows with level: level 5 refills to 200 and earns up to 200 a day.

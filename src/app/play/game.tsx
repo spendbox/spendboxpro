@@ -385,19 +385,19 @@ export function Game({ state }: { state: GameState }) {
     } else setMessage({ text: res.error, tone: "info" });
   }
 
-  // The world's last minute: the clock turns red and beeps every second.
+  // The world's last 30 seconds: the clock turns red and beeps every second.
   const worldLeft = round && phase === "seek" ? Date.parse(round.seekEndsAt) - now : Infinity;
-  const urgent = worldLeft <= 60_000 && worldLeft > 0;
+  const urgent = worldLeft <= 30_000 && worldLeft > 0;
   const urgentSec = urgent ? Math.ceil(worldLeft / 1000) : null;
   useEffect(() => {
     if (urgentSec !== null) playSfx("tick");
   }, [urgentSec]);
-  // Only a few ghosts left: this world may end any moment.
+  // Only a few ghosts left (the hunt still runs to the top of the hour).
   const fewLeft = round && phase === "seek" && round.hidersRemaining > 0 && round.hidersRemaining <= 2 ? round.hidersRemaining : null;
   useEffect(() => {
     if (fewLeft === null) return;
     const id = setTimeout(
-      () => setMessage({ icon: Timer, text: `Only ${fewLeft} ${fewLeft === 1 ? "ghost is" : "ghosts are"} left. This world may end soon!`, tone: "info" }),
+      () => setMessage({ icon: Timer, text: `Only ${fewLeft} ${fewLeft === 1 ? "ghost is" : "ghosts are"} left. Can anyone find ${fewLeft === 1 ? "them" : "them both"} before the hour?`, tone: "info" }),
       0,
     );
     return () => clearTimeout(id);
@@ -1813,7 +1813,7 @@ export function Game({ state }: { state: GameState }) {
               )}
             </div>
           ) : !round || phase === "done" ? (
-            <p className="text-sm text-muted">Building the next city…</p>
+            <p className="text-sm text-muted">Building the next city… A new game starts every hour, on the hour.</p>
           ) : guest ? (
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <p className="flex-1 text-sm text-muted">
@@ -1821,9 +1821,14 @@ export function Game({ state }: { state: GameState }) {
                 <b className="text-ink sm:hidden">Newtown · </b>
                 <span className="mr-1.5 inline-block size-2 animate-pulse rounded-full bg-hit align-middle" />
                 <b className="text-ink">Watching live.</b> <span className="rounded bg-ink px-1 text-[10px] font-bold text-white">18+</span>{" "}
-                {phase === "join"
-                  ? `Ghosts are getting ready. The hunt starts in ${countdown}.`
-                  : `The hunt is on: ${short(round.hidersRemaining)} still hidden, ${short(round.pool)} mint in the pool.`}
+                {phase === "join" ? (
+                  `Ghosts are getting ready. The hunt starts in ${countdown}.`
+                ) : (
+                  <>
+                    The hunt is on: {short(round.hidersRemaining)} still hidden, {short(round.pool)} mint in the pool. Next game at{" "}
+                    <LocalTime iso={round.seekEndsAt} />.
+                  </>
+                )}
               </p>
               <div className="grid grid-cols-3 gap-2 text-sm sm:flex">
                 <button onClick={() => setHowOpen(true)} className="whitespace-nowrap rounded-xl bg-panel-2 px-3 py-2.5 font-semibold">
@@ -1840,9 +1845,20 @@ export function Game({ state }: { state: GameState }) {
           ) : !entry ? (
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <p className="flex-1 text-sm text-muted">
-                {phase === "join"
-                  ? "Ghosts are getting ready and the city's growing. Want to hide, or hunt?"
-                  : "The hunt is on. Jump in as a hunter and start searching."}
+                {phase === "join" ? (
+                  <>
+                    Ghosts are getting ready and the city&apos;s growing. Want to hide, or hunt? Joining as a ghost closes in{" "}
+                    <b className="tabular-nums text-ink">{countdown}</b>.
+                  </>
+                ) : (
+                  <>
+                    The hunt is on. Jump in as a hunter and start searching. Want to be a ghost? The next game starts at{" "}
+                    <b className="text-ink">
+                      <LocalTime iso={round.seekEndsAt} />
+                    </b>
+                    : join in its first 3 minutes.
+                  </>
+                )}
               </p>
               <div className="flex gap-2">
                 <button
@@ -2067,6 +2083,11 @@ function ModeButton({ on, onClick, children }: { on: boolean; onClick: () => voi
 }
 
 /** A list line with an icon in front (used in the pop-ups). */
+/** A time on this device's own clock ("11:00"), filled in on the phone itself. */
+function LocalTime({ iso }: { iso: string }) {
+  return <span suppressHydrationWarning>{new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>;
+}
+
 const EVENT_STYLE: Record<string, { label: string; colour: string }> = {
   emergency: { label: "Emergency", colour: "#e5484d" },
   weather: { label: "Weather", colour: "#1c7ed6" },
