@@ -380,12 +380,19 @@ export function inSea(plan: CityPlan, x: number, z: number) {
   return out > coast;
 }
 
-/** Is (x, z) in the river? */
+/**
+ * Is (x, z) in the river? Every tile the river's centre line passes over between this step and
+ * the next, so where it bends it fills in the corner and flows on unbroken.
+ */
 function inRiver(plan: CityPlan, x: number, z: number) {
   if (!plan.river) return false;
   const along = plan.river.along === "x" ? x : z;
   const across = plan.river.along === "x" ? z : x;
-  return Math.abs(across - riverCentre(plan, along)) <= plan.river.width;
+  const a = riverCentre(plan, along - 0.5);
+  const b = riverCentre(plan, along);
+  const c = riverCentre(plan, along + 0.5);
+  const w = plan.river.width;
+  return across >= Math.min(a, b, c) - w && across <= Math.max(a, b, c) + w;
 }
 
 /** Any water: river, lake or sea (not the little ponds and lakes inside blocks). */
@@ -1281,13 +1288,9 @@ function baseTile(plan: CityPlan, x: number, z: number): Tile {
   const road = isRoad(plan, x, z);
 
   // The river: streets cross it on bridges, so every street stays connected.
-  if (plan.river) {
-    const along = plan.river.along === "x" ? x : z;
-    const across = plan.river.along === "x" ? z : x;
-    if (Math.abs(across - riverCentre(plan, along)) <= plan.river.width) {
-      if (road) return { i, x, z, kind: "bridge", top: 0.35, road: plan.river.along === "x" ? "z" : "x", mask: 0, r };
-      return { i, x, z, kind: "river", top: 0.1, r };
-    }
+  if (inRiver(plan, x, z)) {
+    if (road) return { i, x, z, kind: "bridge", top: 0.35, road: plan.river!.along === "x" ? "z" : "x", mask: 0, r };
+    return { i, x, z, kind: "river", top: 0.1, r };
   }
 
   // Big lakes: streets cross them on low causeways, so every street stays connected.
