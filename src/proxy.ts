@@ -4,7 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 const PROTECTED = ["/play", "/welcome"];
 
 // Runs before every page: keeps the login session fresh and sends signed-out
-// visitors of the game to the login screen.
+// visitors of the game to the town, with the sign-in pop-up open.
 export async function proxy(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -35,8 +35,8 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (!signedIn && PROTECTED.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
     const login = request.nextUrl.clone();
-    login.pathname = "/login";
-    login.search = "";
+    login.pathname = "/";
+    login.search = "?signin=1";
     const redirect = NextResponse.redirect(login);
     for (const cookie of response.cookies.getAll()) redirect.cookies.set(cookie);
     return redirect;

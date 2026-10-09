@@ -6,7 +6,7 @@ import { Bot } from "@/components/icons";
 
 // A small pop-up that explains who the bot is. Opens when someone taps the bot's name or face.
 
-export function BotCard({ botName, bounty, onClose }: { botName: string; bounty: number; onClose: () => void }) {
+export function BotCard({ botName, onClose }: { botName: string; onClose: () => void }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -30,8 +30,8 @@ export function BotCard({ botName, bounty, onClose }: { botName: string; bounty:
           <span className="ml-2 rounded-full bg-[#7048e8]/15 px-2 py-0.5 align-middle text-[11px] font-semibold text-[#5f3dc4]">Bot</span>
         </h2>
         <p className="mt-2 text-sm text-muted">
-          {botName} is our bot. It hides in every round like a ghost, moves only when a drone sweeps it (3 times at most), and teases
-          the chat. Find it for <b className="text-ink">{bounty.toLocaleString()} mint</b>!
+          {botName} is the town&apos;s bot. It posts town news in the chat, but it doesn&apos;t play: every ghost you see lit up is a real
+          person.
         </p>
         <button onClick={onClose} className="mt-4 w-full rounded-full bg-ink py-2.5 text-sm font-semibold text-white" autoFocus>
           Got it

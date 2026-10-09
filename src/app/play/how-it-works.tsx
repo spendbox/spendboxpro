@@ -34,7 +34,7 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
     body: [
       "Every round is a brand-new city, named after a real place, with its own streets and landmarks.",
       "Out past the edge of town there's farmland and a few famous places from that country, like the Third Mainland Bridge, Big Ben or the Statue of Liberty. Take the train out to see them.",
-      "A new game starts every hour, on the hour (UTC). The first 3 minutes are for joining as a ghost. Then the hunt runs until the next hour mark, from morning to night (or night to morning), and the next game's countdown starts straight away.",
+      "A new game starts every hour, on the hour (UTC). The first 2 minutes are for joining as a ghost, while the town is being built. Then the hunt runs until the next hour mark, from morning to night (or night to morning), and the next game's countdown starts straight away.",
       "Newtown is for adults 18+.",
     ],
   },
@@ -42,7 +42,7 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
     icon: Ghost,
     title: "Ghosts",
     body: [
-      "Join as a ghost in the first 3 minutes of the hour: put down 100 mint. Ghosts don't hide or move: when the hunt starts, every ghost lights up on the map for everyone to see.",
+      "Join as a ghost in the first 2 minutes of the hour: put down 100 mint. Ghosts don't hide or move: when the hunt starts, every ghost lights up on the map for everyone to see.",
       "Hunters challenge you to a quick game (Rock-Paper-Scissors for now, first to 2, a minute at most). A pop-up tells you wherever you are, even inside a building: answer within 30 seconds or you lose that duel.",
       "Win 3 duels and your light turns gold: you're safe for the rest of the game, you get your stake back, and you share the prize pool.",
       "Lose 3 and you're out: your light goes. Each loss costs a third of your stake (80% to the hunter who beat you, 20% to the prize pool).",

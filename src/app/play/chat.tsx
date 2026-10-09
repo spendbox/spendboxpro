@@ -28,7 +28,6 @@ import { formatCountdown, levelLabel, levelOf, useCountdown, type RoomInfo, type
 // half of the screen (drag or tap the handle to make it bigger); on computers a side panel.
 
 const BOT_ID = "00000000-0000-0000-0000-00000000b07a";
-const BOT_BOUNTY = 200;
 /** The NPCs' chat shown when you walk in starts this long before you arrived. */
 const NPC_BACKLOG_MS = 10 * 60 * 1000;
 
@@ -169,7 +168,6 @@ export function Chat({
   rideEndsAt = null,
   onBotInfo,
   botName: botNameProp,
-  botBounty = BOT_BOUNTY,
   dmRequest = null,
   enteredAt = null,
   externalNpc = null,
@@ -179,6 +177,7 @@ export function Chat({
   onAddFriend,
   hideButton = false,
   onUnread,
+  onSignIn,
 }: {
   meId: string;
   meRole: "hider" | "seeker" | null;
@@ -203,8 +202,6 @@ export function Chat({
   onBotInfo?: () => void;
   /** The bot's name for the built-in bot card (otherwise taken from its messages). */
   botName?: string;
-  /** Coins for finding the bot, for the built-in bot card. */
-  botBounty?: number;
   /** Open a private chat with this person (e.g. tapping a caught ghost on the map). */
   dmRequest?: { id: string; name: string; at: number } | null;
   /** When you went into this place (useRooms().enteredAt). Without it, the chat notes the time itself. */
@@ -223,6 +220,8 @@ export function Chat({
   hideButton?: boolean;
   /** How many unread messages there are (for a badge somewhere else while the button is hidden). */
   onUnread?: (n: number) => void;
+  /** Watchers: open the sign-in pop-up. */
+  onSignIn?: () => void;
 }) {
   const roomId = room?.id ?? null;
   const roomCap = room?.capacity ?? 30;
@@ -456,7 +455,7 @@ export function Chat({
   const closeNpc = useCallback(() => setNpcCard(null), []);
   const cards = (
     <>
-      {botCard !== null && <BotCard botName={botCard || "The bot"} bounty={botBounty} onClose={() => setBotCard(null)} />}
+      {botCard !== null && <BotCard botName={botCard || "The bot"} onClose={() => setBotCard(null)} />}
       {npcCard && <NpcCard key={npcCard.npc.id} npc={npcCard.npc} autoStart={npcCard.auto} onClose={closeNpc} />}
     </>
   );
@@ -733,9 +732,21 @@ export function Chat({
             Once you&apos;re signed in, you can step into buildings, or hop on a balloon, train, bus, car, boat or Ferris wheel, to chat with the people there, and message
             players privately.
           </p>
-          <Link href="/login" className="rounded-full bg-gold px-5 py-2.5 text-sm font-semibold text-ink shadow">
-            Sign in
-          </Link>
+          {onSignIn ? (
+            <button
+              onClick={() => {
+                close();
+                onSignIn();
+              }}
+              className="rounded-full bg-gold px-5 py-2.5 text-sm font-semibold text-ink shadow"
+            >
+              Sign in
+            </button>
+          ) : (
+            <Link href="/?signin=1" className="rounded-full bg-gold px-5 py-2.5 text-sm font-semibold text-ink shadow">
+              Sign in
+            </Link>
+          )}
         </div>
       ) : (
         <>

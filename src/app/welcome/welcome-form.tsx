@@ -13,7 +13,18 @@ const button = "w-full rounded-xl bg-gold px-4 py-3 font-semibold text-ink disab
  * Name + PIN (first sign-in, forgot PIN, change PIN) and/or date of birth (asked once).
  * askPin false = a player from before the 18+ rule who only needs to add their date of birth.
  */
-export function WelcomeForm({ initialName, askPin, askBirth }: { initialName: string; askPin: boolean; askBirth: boolean }) {
+export function WelcomeForm({
+  initialName,
+  askPin,
+  askBirth,
+  onDone,
+}: {
+  initialName: string;
+  askPin: boolean;
+  askBirth: boolean;
+  /** The sign-in pop-up over the town: called instead of going to the game page. */
+  onDone?: () => void;
+}) {
   const router = useRouter();
   const [name, setName] = useState(initialName);
   const [pin, setPin] = useState("");
@@ -37,6 +48,7 @@ export function WelcomeForm({ initialName, askPin, askBirth }: { initialName: st
       if (res.underage) router.refresh();
       return;
     }
+    if (onDone) return onDone();
     router.push("/play");
     router.refresh();
   }
