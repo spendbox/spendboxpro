@@ -6,6 +6,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { botNameFor } from "@/lib/bot-names";
 import { friendLists, NO_FRIENDS, type FriendLists } from "@/lib/friends";
+import { cleanStreak, type Streak } from "@/lib/streaks";
+import { cleanBoard, type DuelBoard } from "@/lib/ghost-duels";
 import { cleanAvatar, type Avatar } from "@/lib/avatar";
 import type { WorldEvent } from "@/lib/world-events";
 import type { TownHouse } from "@/lib/houses";
@@ -15,7 +17,7 @@ export type Phase = "join" | "seek" | "done";
 
 export type GameEvent = {
   id: number;
-  kind: "moved" | "caught" | "searched" | "sweep" | "shielded" | "decoy" | "decoy_found" | "respawn" | "area_search";
+  kind: "moved" | "caught" | "searched" | "sweep" | "shielded" | "decoy" | "decoy_found" | "respawn" | "area_search" | "duel";
   /** Where it happened (-1 when it's secret, like a decoy going down or a respawn). */
   tile: number;
   at: string;
@@ -33,6 +35,12 @@ export type GameEvent = {
     /** A decoy that was searched: did it go bang, or was it a toy? */
     outcome?: "explode" | "toy";
     avatar?: unknown;
+    /** Duels: the ghost, the hunter, who won, and whether the ghost went out or turned golden. */
+    ghost?: string | null;
+    hunter?: string | null;
+    winner?: "ghost" | "hunter";
+    out?: boolean;
+    golden?: boolean;
   } | null;
 };
 
@@ -65,6 +73,10 @@ export type GameState = {
   houses: TownHouse[];
   /** Your friends (they stay friends from one town to the next) and friend requests. */
   friends: FriendLists;
+  /** Your daily streak (null for watchers, or before game-db/027 is run). */
+  streak: Streak | null;
+  /** Ghost duels: the ghosts lit up on the map, your part in the game, your live duel (null before game-db/029 is run). */
+  duels: DuelBoard | null;
   /** A coin balloon drifting by just for you, if one's due (slot = which one). */
   balloon: { slot: number; coins: number } | null;
   site: { visits: number; players: number };
@@ -159,6 +171,9 @@ export type RoundResults = {
   pool: number;
   botName: string;
   botFoundBy: string | null;
+  /** Ghost duels: ghosts who played (not the bot), and how many turned golden. */
+  ghosts: number;
+  golden: number;
   winners: { name: string; role: string; won: number; detail: string }[];
   players: number;
   /** What the signed-in player got out of that round, if they played. */
@@ -444,7 +459,20 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
     return error ? NO_FRIENDS : friendLists(data);
   };
 
-  const [, last, results, , , { data: visits }, { count: playerCount }, houses, friends] = await Promise.all([
+  // Daily streak (best effort too).
+  const streakPart = async (): Promise<Streak | null> => {
+    if (guest) return null;
+    const { data, error } = await db.rpc("streak_of", { p_user: userId });
+    return error ? null : cleanStreak(data);
+  };
+
+  // Ghost duels (best effort too). Watchers see the ghosts as well.
+  const duelsPart = async (): Promise<DuelBoard | null> => {
+    const { data, error } = await db.rpc("duel_board", { p_user: guest ? null : userId });
+    return error ? null : cleanBoard(data);
+  };
+
+  const [, last, results, , , { data: visits }, { count: playerCount }, houses, friends, streak, duels] = await Promise.all([
     roundPart(),
     lastPart(),
     loadResults(db, userId),
@@ -454,6 +482,8 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
     db.from("profiles").select("id", { count: "estimated", head: true }).eq("is_bot", false),
     round ? loadRoundHouses(db, round.id) : Promise.resolve([] as TownHouse[]),
     friendsPart(),
+    streakPart(),
+    duelsPart(),
   ]);
   const site = { visits: Number(visits?.value ?? 0), players: playerCount ?? 0 };
   const tileCount = round?.tile_count ?? 0;
@@ -519,6 +549,8 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
     worldEvents,
     houses,
     friends,
+    streak,
+    duels,
     events,
     results,
     lastResult: last ? { roundId: last.round_id, role: last.role, payout: num(last.payout), caught: last.caught } : null,
@@ -544,9 +576,10 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
 const WIN_KINDS: Record<string, string> = {
   catch_reward: "found hiders",
   bot_bounty: "found the bot",
-  pool_hider: "survived",
+  duel_reward: "beat ghosts in duels",
+  pool_hider: "golden ghost's share of the pool",
   stake_return: "got their stake back",
-  pool_seeker: "seeker share",
+  pool_seeker: "hunter's share of the pool",
 };
 
 /** Results of the most recently finished round: who won what (and what you won). */
@@ -561,7 +594,8 @@ async function loadResults(db: ReturnType<typeof createAdminClient>, userId: str
   if (!round) return null;
   const [{ data: ledger }, { data: entries }] = await Promise.all([
     db.from("ledger").select("user_id, kind, amount").eq("round_id", round.id).in("kind", Object.keys(WIN_KINDS)),
-    db.from("entries").select("user_id, role, caught, caught_by, profiles!entries_user_id_fkey(username, is_bot)").eq("round_id", round.id),
+    // (All columns, so "golden" comes along once game-db/029 is run.)
+    db.from("entries").select("*, profiles!entries_user_id_fkey(username, is_bot)").eq("round_id", round.id),
   ]);
   const ids = new Set<string>();
   for (const l of ledger ?? []) if (l.user_id) ids.add(l.user_id);
@@ -601,6 +635,8 @@ async function loadResults(db: ReturnType<typeof createAdminClient>, userId: str
     pool: num(round.pool),
     botName: botNameFor(round.id, round.bot_name),
     botFoundBy: bot?.caught_by ? (nameOf.get(bot.caught_by) ?? "A player") : null,
+    ghosts: (entries ?? []).filter((e) => e.role === "hider" && e !== bot).length,
+    golden: (entries ?? []).filter((e) => e.role === "hider" && e.golden).length,
     winners,
     players: entries?.length ? entries.length - (bot ? 1 : 0) : 0,
     mine: myEntry

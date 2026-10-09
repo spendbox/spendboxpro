@@ -28,6 +28,8 @@ function say(message: string) {
       return `That's ${n ?? 40} friend requests today. Try again tomorrow.`;
     case "no_request":
       return "That request isn't there any more.";
+    case "blocked":
+      return "You can't add this player.";
     default:
       return "Couldn't do that just now. Try again.";
   }

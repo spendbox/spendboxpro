@@ -1,5 +1,6 @@
 "use client";
 
+import { Handshake, Heart, Swords } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import {
   Bomb,
@@ -7,7 +8,9 @@ import {
   Drama,
   Drone,
   Fish,
+  Flame,
   Footprints,
+  Gift,
   Hammer,
   Info,
   Megaphone,
@@ -39,6 +42,11 @@ export type FeedIcon =
   | "coin"
   | "build"
   | "ad"
+  | "flame"
+  | "gift"
+  | "hug"
+  | "handshake"
+  | "duel"
   | "info";
 
 export type FeedItem = {
@@ -71,6 +79,11 @@ const FEED_ICONS: Record<FeedIcon, { Icon: React.ComponentType<IconLike>; tint: 
   coin: { Icon: Coins, tint: "bg-gold/25 text-gold-dark" },
   build: { Icon: Hammer, tint: "bg-[#f08c00]/15 text-[#e8590c]" },
   ad: { Icon: Megaphone, tint: "bg-gold/25 text-gold-dark" },
+  flame: { Icon: Flame, tint: "bg-[#ff922b]/20 text-[#e8590c]" },
+  gift: { Icon: Gift, tint: "bg-[#f06595]/15 text-[#c2255c]" },
+  hug: { Icon: Heart, tint: "bg-[#ffe3ec] text-[#d6336c]" },
+  handshake: { Icon: Handshake, tint: "bg-[#fff3bf] text-[#e67700]" },
+  duel: { Icon: Swords, tint: "bg-ink/10 text-ink" },
   info: { Icon: Info, tint: "bg-panel-2 text-muted" },
 };
 
@@ -148,13 +161,13 @@ export function NotificationsPanel({
         </button>
       </div>
       {feed.length === 0 ? (
-        <p className="px-4 pb-5 pt-2 text-center text-sm text-muted">Nothing yet. Catches, moves and your drone alerts will show up here.</p>
+        <p className="px-4 pb-5 pt-2 text-center text-sm text-muted">Nothing yet. Duels, challenges and town news will show up here.</p>
       ) : (
         <ul className="max-h-[19.5rem] space-y-1 overflow-y-auto overscroll-contain px-2 pb-2">
           {feed.map((f) => (
             <li key={f.key}>
-              {f.eventId && onPick ? (
-                <button onClick={() => onPick(f)} className="block w-full rounded-2xl text-left hover:bg-panel-2" title="Show me on the map">
+              {onPick && (f.eventId || f.icon === "hug" || f.icon === "handshake" || f.icon === "gift") ? (
+                <button onClick={() => onPick(f)} className="block w-full rounded-2xl text-left hover:bg-panel-2" title={f.eventId ? "Show me on the map" : "Open My gifts"}>
                   <FeedRow item={f} now={now} />
                 </button>
               ) : (

@@ -70,7 +70,7 @@ export function DanceFloor(props: GameProps) {
             className={cn("flex items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-semibold", tab === t ? "bg-panel shadow-sm" : "text-muted")}
           >
             {t === "dance" ? <Music className="size-4" /> : <Banknote className="size-4" />}
-            {t === "dance" ? "Dance-off" : "Spray money"}
+            {t === "dance" ? "Dance-off" : "Spray mint"}
           </button>
         ))}
       </div>

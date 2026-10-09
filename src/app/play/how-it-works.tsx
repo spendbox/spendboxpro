@@ -4,23 +4,19 @@ import {
   Building2,
   Coins,
   Compass,
-  Drama,
-  Flashlight,
+  Flame,
   Gamepad2,
   Ghost,
   House,
   Medal,
   MessageCircle,
-  Radar,
-  RotateCcw,
-  Search,
-  Shield,
   Sparkles,
   Star,
   Users,
   X,
   type LucideIcon,
 } from "@/components/icons";
+import { Swords, Trophy } from "lucide-react";
 import { CITY_ASSETS } from "@/lib/city/layout";
 import { Sheet } from "./sheet";
 import { Logo } from "@/components/logo";
@@ -44,33 +40,33 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
   },
   {
     icon: Ghost,
-    title: "Hiding",
+    title: "Ghosts",
     body: [
-      "Join in the first 3 minutes of the hour: put down 100 mint and we'll drop you on a random spot when the countdown ends. Every ghost makes the city grow a little.",
-      "As a ghost you get one move per game (two from level 10, three from level 20). Moving costs 50 mint at the start of a round, and the price goes up every time anyone moves. You can't go back to a spot you've left, or onto one that's been searched (those show in orange).",
-      "When you move, everyone sees that you slipped away, and from where.",
-      "Make it to the end and you get your 100 back, and the survivors share 80% of the pool.",
+      "Join as a ghost in the first 3 minutes of the hour: put down 100 mint. Ghosts don't hide or move: when the hunt starts, every ghost lights up on the map for everyone to see.",
+      "Hunters challenge you to a quick game (Rock-Paper-Scissors for now, first to 2, a minute at most). A pop-up tells you wherever you are, even inside a building: answer within 30 seconds or you lose that duel.",
+      "Win 3 duels and your light turns gold: you're safe for the rest of the game, you get your stake back, and you share the prize pool.",
+      "Lose 3 and you're out: your light goes. Each loss costs a third of your stake (80% to the hunter who beat you, 20% to the prize pool).",
+      "Your light shows blue when you're free and orange while you're in a duel. In between duels, explore, chat and play like everyone else.",
     ],
   },
   {
-    icon: Search,
-    title: "Hunting",
+    icon: Swords,
+    title: "Hunters",
     body: [
-      "Tap Hunt to join, then tap any spot to search it. Your first search each day is free; after that the price creeps up as more of the city gets searched.",
-      "Each search takes a couple of seconds. Search too fast and you'll have to wait a little longer before the next one.",
-      "The hunt always runs to the top of the hour, even if every ghost has been caught. The clock turns red and beeps in the last 30 seconds.",
-      "Find a ghost and you keep most of their stake, plus a bonus if they're level 5 or higher (it grows every 5 levels). Find the bot and you get 200 mint.",
-      "You can search a spot again if you think someone's snuck in. You only see the most recent searches on the map; older ones fade.",
-      "There's a bot hiding every round, with a new name each time. It only moves when a drone sweeps it (three times at most), and it likes to tease the chat.",
+      "Everyone who isn't a ghost is a hunter: there's nothing to join.",
+      "Tap a ghost's light (or Ghosts in the bottom bar) to see their stats: wins and losses this game and their record. Chat with them, or challenge them.",
+      "A challenge costs 10 mint. Win and you get your 10 back plus a slice of the ghost's stake. Lose and your 10 goes into the prize pool. Ghosts start with the advantage: if time runs out with the score level, the ghost wins.",
+      "After each duel you catch your breath for 30 seconds. You can't challenge a ghost who's already in a duel, or a golden one.",
+      "Win 20 duels in one game and you're in the prize pool too.",
     ],
   },
   {
-    icon: Radar,
-    title: "Drones and traps",
+    icon: Trophy,
+    title: "The prize pool",
     body: [
-      "A sweep sends a drone over an area. It tells you yes or no: is anyone hiding there? Any ghost inside is pinned in place for 60 seconds (they see a countdown). A drone that spots someone needs 90 seconds to recharge.",
-      "Your last 5 sweeps keep watching as traps. If a ghost moves into one, you'll get a ping. Nobody else can see your traps.",
-      "Sweeps get pricier the more people use them, and your drone needs 10 seconds to recharge.",
+      "Every game's pool starts at 0 and grows with lost challenges, slices of ghosts' stakes, sports tickets and the sportsbook's cut.",
+      "When the game ends on the hour, golden ghosts and hunters with 20 wins share 90% of it equally; 10% disappears. If nobody made it, it all disappears.",
+      "Ghosts who are still in (not golden, not out) get what's left of their stake back.",
     ],
   },
   {
@@ -78,45 +74,23 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
     title: "Chatting",
     body: [
       <>
-        Switch to <Ico icon={MessageCircle} />
-        <b>Chat</b> mode and tap any building to go inside and chat with the people there. The <Ico icon={Users} /> numbers show how
-        many are inside; bigger buildings hold more people.
+        Tap any building to go inside and chat with the people there. The <Ico icon={Users} /> numbers show how many are inside;
+        bigger buildings hold more people.
       </>,
-      "Or hop on a hot-air balloon: up to 1,000 people float over the city together for 10 minutes and chat on the way.",
-      "You can still message anyone privately from the People list. Tap where a ghost was caught to say hi to them.",
+      "Or tap Explore to hop on a ride: up to 1,000 people float over the city together on a hot-air balloon for 10 minutes and chat on the way.",
+      "You can message anyone privately from the People list, or from a ghost's card.",
       "When other real players are in the same place as you, a card pops up saying who they are (they're people, not NPCs), so you can say hi or add them as a friend.",
       "Add friends from the menu (Friends), the People list or that card. Once they say yes, they stay your friends in every new town: you see their faces over the places they're in, get a nudge when they go somewhere, and can go straight to them. Remove a friend any time.",
-      <>
-        Switch back to <Ico icon={Gamepad2} />
-        <b>Game</b> to search or move.
-      </>,
+      "Send someone a hug or a handshake (from that card, Friends, or a private chat). It's free: up to 30 a day, and 3 a day to the same person. My gifts in the menu shows the hugs, handshakes and mint people sent you, with a Thank you button. Don't want to hear from someone? Block them there: their hugs, gifts, private messages and friend requests stop reaching you.",
     ],
   },
   {
     icon: Star,
-    title: "Levels and power-ups",
+    title: "Levels",
     body: [
-      "Play rounds, then spend mint to level up from the menu. Each level needs a few more rounds and a bit more mint than the last.",
-      <>
-        Level 3, <Ico icon={Drama} />
-        <b>Decoy</b> (ghosts): put a fake ghost on any spot you choose. Everyone hears a decoy went out, but not where. Drones think
-        it&apos;s real, and a hunter who searches it gets nothing (bang, or a squeaky toy). One per game; each one costs a bit more
-        than your last.
-      </>,
-      <>
-        Level 5, <Ico icon={Shield} />
-        <b>Shield</b> (ghosts): the next time you&apos;re found, you&apos;re teleported to a spot nearby and stay in the game (the
-        hunter still takes your stake). You can&apos;t move while it&apos;s up. One per game, from 100 mint and a bit more each time.
-      </>,
-      <>
-        Level 10, <Ico icon={Flashlight} />
-        <b>Big search</b> (hunters): search a whole 3×3 area at once, for 7 times the price of a search.
-      </>,
-      <>
-        Level 20, <Ico icon={RotateCcw} />
-        <b>Respawn</b> (ghosts): caught in the first 30 minutes? Pay 300 mint to drop back in somewhere new. Everyone is told.
-        Once per game.
-      </>,
+      "Earn XP, then spend mint to level up from the menu. Playing a game gives 10 XP, finishing a side quest 10, and every day of your streak 5.",
+      "Levels up to 20 are quick and cheap (15 XP and 10 mint per level). After that each level takes more XP and more mint, all the way to level 100.",
+      "Perks for the new duel game are on the way.",
     ],
   },
   {
@@ -124,11 +98,9 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
     title: "Mint",
     body: [
       "Mint is just for playing: it can't be bought or cashed out.",
-      "Every game's pool starts at 0. Mint spent during a game goes into it: searches, sweeps, moves, shields, decoys, respawns, sports tickets and the sportsbook's cut of bets. Sometimes a brand sponsors the pool and adds extra mint.",
-      "If anyone survives: survivors share 80%, hunters share 10% (by how much they spent), and 10% disappears.",
-      "If every ghost is found: hunters share 80% (by how much they spent), the ghosts who played share 10%, and 10% disappears.",
+      "Mint spent during a game goes into its prize pool (see above). Sometimes a brand sponsors the pool and adds extra mint.",
       "Tap a billboard to see the ad on it, then tap the ad's button to earn 5 mint, paid by the brand (up to 5 ads a day). Keep an eye out for golden mint balloons too.",
-      "Running low? While you're under your refill line you earn passive income every hour: up to 100 mint a day at level 1, and 25 more for every level after that.",
+      "Running low? While you're under your refill line you earn passive income every hour: up to 100 mint a day at level 1, and 25 more for every level after that, up to level 40 (1,075 a day).",
       "Anyone holding 10,000 mint or more is a big fish, and everyone can see it.",
       "You can give mint to other players, and spray mint on the dance floor in clubs.",
       "Coming soon: a marketplace to swap mint for rewards from brands, like custom tees and event tickets.",
@@ -147,11 +119,11 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
     icon: Gamepad2,
     title: "Things to do",
     body: [
-      "In Chat mode, tap any building to go inside: lobbies, floors, restaurants, clubs and rooftops. Tap the floor to walk around and tap glowing things to use them.",
+      "Tap any building to go inside: lobbies, floors, restaurants, clubs and rooftops. Tap the floor to walk around and tap glowing things to use them.",
       "Sit down, play mini games with the people around you (archery, darts, arcade, duels, trivia and more), order food, dance and spray mint in clubs.",
       "In a club, tap Dance (or the dance floor): the music starts and you see yourself dancing in the middle of the crowd, with a glowing ring under you. Pick a move (groove, hands up, shaku shaku, disco point, body wave, gwara gwara, legwork, spin), dance with another player or one of the regulars, and drag to look round. Everyone in the club sees you dance.",
-      "Hop on a ride: hot-air balloons, trains, buses, cars, boats, the Ferris wheel and water slides. They drive themselves, so just sit back and look around.",
-      "Watch sport: football at the stadium, basketball, boxing and wrestling at the arenas (or tap Sports in Chat mode). Every match is a brand-new simulated game, shown live from above. A ticket costs a few mint, and you can bet mint on who wins before kick-off. Tickets and the sportsbook's cut of bets go into the game's prize pool. Mint only, just for fun.",
+      "Tap Explore to hop on a ride (hot-air balloons, trains, buses, cars, boats, the Ferris wheel and water slides) or watch sport. Rides drive themselves, so just sit back and look around.",
+      "Watch sport: football at the stadium, basketball, boxing and wrestling at the arenas (or Explore, then Sports). Every match is a brand-new simulated game, shown live from above. A ticket costs a few mint, and you can bet mint on who wins before kick-off. Tickets and the sportsbook's cut of bets go into the game's prize pool. Mint only, just for fun.",
       "Sometimes you'll get a side quest (sitting down makes it more likely). Finish it for mint and special moves.",
       "Chat with the city's regulars (NPCs). Some joke, some are rude, some are generous, and a few spill real secrets about where ghosts are.",
     ],
@@ -174,9 +146,18 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
     ],
   },
   {
+    icon: Flame,
+    title: "Daily streaks",
+    body: [
+      "Do one thing a day to keep your streak going: play a game, finish a side quest, give or spray mint, hug or shake hands, or ride something. The flame next to your mint shows your days in a row.",
+      "Miss a day and your free weekly freeze saves your streak (one a week). Miss more and it starts again.",
+      "Reach 3, 7, 14, 30, 60 and 100 days for mint (10 up to 500) and a badge.",
+    ],
+  },
+  {
     icon: Medal,
     title: "Badges",
-    body: ["There are 100 badges to collect, from easy ones to legendary. Tap any badge in the menu to see what it means and how to earn it."],
+    body: ["There are over 100 badges to collect, from easy ones to legendary. Tap any badge in the menu to see what it means and how to earn it."],
   },
 ];
 

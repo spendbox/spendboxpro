@@ -25,6 +25,7 @@ export function FriendsSheet({
   onMessage,
   onChanged,
   onClose,
+  greet,
 }: {
   /** Your lists as the game last loaded them. */
   initial: FriendLists;
@@ -41,6 +42,8 @@ export function FriendsSheet({
   /** Something changed (the game reloads its copy). */
   onChanged: () => void;
   onClose: () => void;
+  /** Hug and handshake buttons for a friend (left out: none). */
+  greet?: (friend: FriendPerson) => React.ReactNode;
 }) {
   // What the last action returned, until the game's own copy catches up.
   const initialKey = JSON.stringify([initial.friends.map((f) => f.id), initial.incoming.map((f) => f.id), initial.outgoing.map((f) => f.id)]);
@@ -239,6 +242,7 @@ export function FriendsSheet({
                       <UserMinus className="size-4" />
                     </button>
                   </div>
+                  {greet && <div className="mt-1.5 flex justify-end gap-1.5">{greet(f)}</div>}
                   {confirm === f.id && (
                     <div className="mt-2 flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs">
                       <span className="flex-1">Remove {f.name} from your friends?</span>

@@ -34,6 +34,7 @@ function friendly(message: string | undefined, fallback: string) {
     new_player: "Play one game first, then you can give mint away.",
     not_enough: "You don't have that much mint.",
     no_dancers: "Nobody to spray right now. Wait for some dancers!",
+    blocked: "That player isn't taking gifts from you.",
   };
   const code = Object.keys(map).find((k) => m.startsWith(k));
   if (!code) console.error("Mint transfer failed", m);

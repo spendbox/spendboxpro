@@ -73,7 +73,9 @@ export type QuestStep =
   /** Ghosts: stay hidden (not caught) for this many minutes. */
   | { type: "survive_minutes"; minutes: number }
   /** Grab a reward from a world event or a coin balloon (checked by the server). */
-  | { type: "claim_event"; count: number };
+  | { type: "claim_event"; count: number }
+  /** Hug or shake hands with this many different players (or only hug / only shake hands; checked by the server). */
+  | { type: "greet"; count: number; kind?: "hug" | "handshake" };
 
 export type QuestStepType = QuestStep["type"];
 
@@ -127,7 +129,8 @@ export type QuestIcon =
   | "boat"
   | "seat"
   | "dance"
-  | "coins";
+  | "coins"
+  | "hug";
 
 export type QuestDef = {
   key: string;
@@ -711,12 +714,33 @@ export const QUESTS: QuestDef[] = [
     steps: [{ type: "visit_rooms", count: 3 }, { type: "talk_npcs", count: 3 }],
     reward: 30,
   },
+  // ------------------------------------------------------------------ hugs and handshakes (game-db/028_hugs_gifts.sql)
+  {
+    key: "town_hugger",
+    title: "Town hugger",
+    role: "Today you are the town hugger.",
+    brief: "Give 3 different players a hug (tap someone, then Hug).",
+    icon: "hug",
+    fits: "any",
+    steps: [{ type: "greet", kind: "hug", count: 3 }],
+    reward: 15,
+  },
+  {
+    key: "diplomat",
+    title: "Diplomat",
+    role: "Today you are a diplomat.",
+    brief: "Shake hands with 2 different players and say hi to a regular.",
+    icon: "hug",
+    fits: "any",
+    steps: [{ type: "greet", kind: "handshake", count: 2 }, { type: "talk_npcs", count: 1 }],
+    reward: 20,
+  },
 ];
 
 export const QUEST_BY_KEY: Record<string, QuestDef> = Object.fromEntries(QUESTS.map((q) => [q.key, q]));
 
 /** Steps the server checks by itself (from coins moved, searches, drone sweeps, event rewards). */
-export const SERVER_STEPS: QuestStepType[] = ["spray", "gift", "gift_people", "search_tiles", "sweep", "claim_event"];
+export const SERVER_STEPS: QuestStepType[] = ["spray", "gift", "gift_people", "search_tiles", "sweep", "claim_event", "greet"];
 /** Steps measured in seconds (sit, stay, survive). */
 export const TIMED_STEPS: QuestStepType[] = ["sit_seconds", "stay_seconds", "survive_minutes"];
 
@@ -810,6 +834,10 @@ export function stepLabel(step: QuestStep): string {
       return `Stay hidden for ${step.minutes} minute${step.minutes === 1 ? "" : "s"}`;
     case "claim_event":
       return "Grab a city event or mint balloon reward";
+    case "greet": {
+      const who = `${step.count} different player${step.count === 1 ? "" : "s"}`;
+      return step.kind === "hug" ? `Hug ${who}` : step.kind === "handshake" ? `Shake hands with ${who}` : `Hug or shake hands with ${who}`;
+    }
   }
 }
 
@@ -859,13 +887,13 @@ export const NPC_QUEST_KEYS: Record<string, string[]> = {
   Courier: ["courier", "messenger", "commuter"],
   "Café owner": ["food_critic", "street_food_tour", "regular"],
   Cleaner: ["thief", "pickpocket", "treasure_hunter"],
-  Visitor: ["tourist", "globetrotter", "socialite"],
+  Visitor: ["tourist", "globetrotter", "socialite", "diplomat"],
   "Office worker": ["private_eye", "lift_rider", "hustler"],
   Accountant: ["philanthropist", "good_samaritan", "big_spender"],
   Designer: ["photographer", "night_owl", "high_flyer"],
   Intern: ["courier", "hustler", "stair_sprinter"],
   Manager: ["heist_planner", "champion", "quiz_master"],
-  Tenant: ["socialite", "town_crier", "regular"],
+  Tenant: ["socialite", "town_crier", "regular", "town_hugger"],
   Chef: ["food_critic", "street_food_tour", "mixologist"],
   Photographer: ["photographer", "high_flyer", "night_owl"],
   Gardener: ["night_owl", "cat_burglar", "lookout"],

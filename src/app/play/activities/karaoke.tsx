@@ -21,7 +21,7 @@ const SONGS: { title: string; vibe: Vibe; lines: string[] }[] = [
   { title: "Jollof Anthem", vibe: "highlife", lines: ["Smoky pot on a Sunday", "Party rice, make it go one way", "Who get the best? We go see", "Pass the plate, one more for me!"] },
   { title: "Big Fish Boogie", vibe: "disco", lines: ["Ten thousand mint in my pocket", "Shining bright like a rocket", "Hunters looking, I dey dance", "Big fish moving, no second chance!"] },
   { title: "Rooftop Lullaby", vibe: "lofi", lines: ["Up on the roof where the pigeons sleep", "City lights in a quiet heap", "Count the drones like shooting stars", "Hide-and-seek between the cars"] },
-  { title: "Owambe Queen", vibe: "amapiano", lines: ["Gele high and the music loud", "Spraying money on the crowd", "Aso-ebi, we match today", "Owambe queen, come dance my way!"] },
+  { title: "Owambe Queen", vibe: "amapiano", lines: ["Gele high and the music loud", "Spraying mint upon the crowd", "Aso-ebi, we match today", "Owambe queen, come dance my way!"] },
   { title: "One Drop Ghost", vibe: "reggae", lines: ["Easy now, the ghost is calm", "Hiding out in the city palm", "One drop beat and a gentle sway", "Hunters searching the other way"] },
 ];
 

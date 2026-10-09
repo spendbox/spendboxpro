@@ -8,7 +8,7 @@ import { cn } from "@/lib/cn";
 
 // Real people near you. Inside a place (a floor of a building, a club, a balloon, a train...):
 // as soon as another real player is there (not an NPC), a card pops up saying who, with
-// buttons to message them or add them as a friend. It tucks away after a few seconds into a
+// buttons to hug them, shake hands, message them or add them as a friend. It tucks away after a few seconds into a
 // little "2 real people here" chip you can tap to see them again, and pops up again whenever
 // someone new walks in. Plus a nudge when a friend goes somewhere in town, to join them.
 
@@ -22,6 +22,7 @@ export function PeopleHere({
   busy,
   onChat,
   onAddFriend,
+  greet,
 }: {
   /** The place you're in (the pop-up starts again in each new place). */
   room: string;
@@ -32,6 +33,8 @@ export function PeopleHere({
   busy: string | null;
   onChat: (p: HerePerson) => void;
   onAddFriend: (p: HerePerson) => void;
+  /** Hug and handshake buttons for someone (left out: none). */
+  greet?: (p: HerePerson) => React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [fresh, setFresh] = useState<string[]>([]);
@@ -113,6 +116,7 @@ export function PeopleHere({
                 <b className="block truncate text-sm">{p.name}</b>
                 {st === "friend" && <span className="text-xs font-semibold text-[#2b8a3e]">Your friend</span>}
               </span>
+              {greet?.(p)}
               <button onClick={() => onChat(p)} className="flex items-center gap-1 rounded-full bg-panel-2 px-2.5 py-1.5 text-xs font-semibold">
                 <MessageCircle className="size-3.5" />
                 Chat

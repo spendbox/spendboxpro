@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import type { RoundResults } from "@/lib/game";
 import { BadgeTile } from "@/components/badges";
-import { Bot, Medal, X } from "@/components/icons";
+import { Medal, X } from "@/components/icons";
 import { cn } from "@/lib/cn";
 import { short } from "@/lib/format";
 import { PlayStyleCard } from "./style/style-ui";
@@ -22,7 +22,6 @@ export function Results({
   city: string;
   signedIn: boolean;
 }) {
-  const survived = r.hidersTotal - r.caught;
   const mine = r.mine;
   const downOnBackdrop = useRef(false);
   // When these badges were won: the round just ended, so "now" is close enough.
@@ -41,7 +40,7 @@ export function Results({
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-muted">Round {r.roundId} is over</p>
             <h2 className="font-display text-2xl font-extrabold">
-              {survived <= 0 ? "Everyone got found!" : `${short(survived)} ghost${survived === 1 ? "" : "s"} made it`}
+              {r.golden > 0 ? `${short(r.golden)} ghost${r.golden === 1 ? "" : "s"} turned golden` : r.ghosts > 0 ? "No golden ghosts this time" : "Game over"}
             </h2>
           </div>
           <button onClick={onClose} className="grid size-9 shrink-0 place-items-center rounded-full text-muted hover:bg-panel-2" aria-label="Close">
@@ -58,14 +57,14 @@ export function Results({
                 <p className="text-sm text-muted">You won</p>
                 <p className="font-display text-3xl font-extrabold">+{short(mine.won)} mint</p>
                 <p className="text-sm">
-                  {mine.role === "hider" && !mine.caught ? "You stayed hidden the whole way. " : ""}
+                  {mine.role === "hider" && !mine.caught ? "You made it to the end as a ghost. " : ""}
                   {mine.detail && <span className="text-muted">({mine.detail})</span>}
                 </p>
               </>
             ) : (
               <p className="text-sm">
                 {mine.role === "hider" && mine.caught
-                  ? "You got caught this time, so no winnings. Shake it off and go again."
+                  ? "You lost three duels this time, so you were out. Shake it off and go again."
                   : "No winnings for you this round. The next city's already going up."}
               </p>
             )}
@@ -88,22 +87,11 @@ export function Results({
 
         <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
           <Big label="Players" value={short(r.players)} />
-          <Big label="Hiders caught" value={`${short(r.caught)} / ${short(r.hidersTotal)}`} />
-          <Big label="Spots searched" value={`${short(r.searches)} / ${short(r.tileCount)}`} />
-          <Big label="Survivor pool" value={short(r.pool)} />
+          <Big label="Golden ghosts" value={`${short(r.golden)} / ${short(r.ghosts)}`} />
+          <Big label="Ghosts out" value={`${short(r.caught)} / ${short(r.ghosts)}`} />
+          <Big label="Prize pool" value={short(r.pool)} />
         </div>
 
-        <p className="mt-3 rounded-xl bg-panel-2 px-3 py-2 text-sm">
-          <Bot className="mr-1.5 inline-block size-4 align-[-0.2em] text-muted" />
-          {r.botName}:{" "}
-          {r.botFoundBy ? (
-            <>
-              found by <b>{r.botFoundBy}</b> (+200)
-            </>
-          ) : (
-            "got away with it this time"
-          )}
-        </p>
 
         <h3 className="mb-2 mt-4 font-semibold">Top winners</h3>
         {r.winners.length === 0 ? (
@@ -122,7 +110,7 @@ export function Results({
                         w.role === "hider" ? "bg-me/15 text-me" : "bg-gold/25 text-gold-dark",
                       )}
                     >
-                      {w.role === "hider" ? "Hider" : "Hunter"}
+                      {w.role === "hider" ? "Ghost" : "Hunter"}
                     </span>
                   </span>
                   <span className="block truncate text-xs text-muted">{w.detail}</span>

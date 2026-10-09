@@ -18,6 +18,7 @@ import {
   Gem,
   Ghost,
   Gift,
+  HeartHandshake,
   Martini,
   MessageCircle,
   Mic,
@@ -81,6 +82,7 @@ export const QUEST_ICONS: Record<QuestIcon, Icon> = {
   seat: Armchair,
   dance: Footprints,
   coins: Coins,
+  hug: HeartHandshake,
 };
 
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;

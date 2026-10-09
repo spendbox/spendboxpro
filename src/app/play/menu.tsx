@@ -9,6 +9,7 @@ import {
   CircleHelp,
   Coins,
   Gamepad2,
+  Gift,
   House,
   LogOut,
   Pencil,
@@ -29,7 +30,7 @@ import { useEscape } from "./menu/escape";
 import { MenuSheet } from "./menu/menu-sheet";
 import { BadgesSkeleton, LeadersSkeleton, LevelSkeleton } from "./menu/skeletons";
 
-// The menu itself is small and opens instantly. The heavy parts (all 100 badges, the
+// The menu itself is small and opens instantly. The heavy parts (all the badges, the
 // leaderboard, the level card) are separate downloads, fetched the first time you open one,
 // or already as your finger lands on its button. Their numbers are fetched only then too.
 const loadBadges = () => import("./menu/badges-sheet");
@@ -81,6 +82,8 @@ export function Menu({
   onMyHouse,
   onFriends,
   friendRequests = 0,
+  onMyGifts,
+  newGifts = 0,
   coins,
   level,
 }: {
@@ -101,6 +104,10 @@ export function Menu({
   onFriends?: () => void;
   /** Friend requests waiting for you (a red number on Friends). */
   friendRequests?: number;
+  /** Opens My gifts. Left out: the entry is hidden. */
+  onMyGifts?: () => void;
+  /** Hugs, handshakes and gifts since you last looked (a red number on My gifts). */
+  newGifts?: number;
   /** Your mint balance, shown under your name. */
   coins?: number;
   /** Your level, shown straight away (the progress bar fills in a moment later). */
@@ -127,10 +134,14 @@ export function Menu({
   // Levels only go up, so the higher of the two is the fresher.
   const lvl = Math.max(level ?? 0, info?.level ?? 0) || null;
   const next = info ? info.level + 1 : null;
-  const roundsLeft = info ? Math.max(0, info.nextRounds - info.roundsPlayed) : 0;
-  const ready = info !== null && roundsLeft === 0;
+  // XP towards the next level (rounds played before game-db/027 is run).
+  const xpMode = info?.xp != null && info.nextXp != null;
+  const have = info ? (xpMode ? info.xp! : info.roundsPlayed) : 0;
+  const need = info ? (xpMode ? info.nextXp! : info.nextRounds) : 1;
+  const left = info ? Math.max(0, need - have) : 0;
+  const ready = info !== null && left === 0 && !info.max;
   const canUpgrade = ready && info.coins >= info.nextCost;
-  const progress = info ? Math.min(100, (info.roundsPlayed / Math.max(1, info.nextRounds)) * 100) : 0;
+  const progress = info ? (info.max ? 100 : Math.min(100, (have / Math.max(1, need)) * 100)) : 0;
 
   const all: (Entry | undefined)[] = [
     { key: "how", label: "How it works", icon: CircleHelp, tint: "bg-[#e3edff] text-[#2d6bff]", onClick: onHowItWorks },
@@ -144,6 +155,7 @@ export function Menu({
       hint: hasResults ? undefined : "Shows up after your first round",
     },
     onFriends && { key: "friends", label: "Friends", icon: Users, tint: "bg-[#ffe3f1] text-[#c2255c]", onClick: onFriends, badge: friendRequests },
+    onMyGifts && { key: "gifts", label: "My gifts", icon: Gift, tint: "bg-[#ffe3ec] text-[#d6336c]", onClick: onMyGifts, badge: newGifts },
     onMyStyle && { key: "style", label: "My style", icon: Gamepad2, tint: "bg-[#fbe3f6] text-[#b8268f]", onClick: onMyStyle },
     onMyHouse && { key: "house", label: "My house", icon: House, tint: "bg-[#d7f6ea] text-[#0f8f6a]", onClick: onMyHouse },
     { key: "badges", label: "Badges", icon: Award, tint: SHEETS.badges.tint, onClick: () => open("badges"), warm: warm("badges") },
@@ -218,15 +230,19 @@ export function Menu({
                 {info ? (
                   <>
                     <span className="truncate font-semibold">
-                      {!ready
-                        ? `${roundsLeft} more round${roundsLeft === 1 ? "" : "s"} to level ${next}`
-                        : canUpgrade
-                          ? `Level ${next} is ready!`
-                          : `Level ${next}: ${short(info.nextCost)} mint`}
+                      {info.max
+                        ? "Top level!"
+                        : !ready
+                          ? xpMode
+                            ? `${left} more XP to level ${next}`
+                            : `${left} more round${left === 1 ? "" : "s"} to level ${next}`
+                          : canUpgrade
+                            ? `Level ${next} is ready!`
+                            : `Level ${next}: ${short(info.nextCost)} mint`}
                     </span>
-                    {!ready && (
+                    {!ready && !info.max && (
                       <span className="shrink-0 tabular-nums text-white/60">
-                        {info.roundsPlayed}/{info.nextRounds}
+                        {have}/{need}
                       </span>
                     )}
                   </>

@@ -18,6 +18,7 @@ export type QuestEvent =
   | { type: "order"; where?: "restaurant" | "bar"; room?: string }
   | { type: "spray"; amount?: number }
   | { type: "gift"; amount?: number }
+  | { type: "greet" }
   | { type: "search" }
   | { type: "sweep" }
   | { type: "event" };

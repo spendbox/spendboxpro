@@ -49,6 +49,7 @@ const FRIENDLY: Record<string, string> = {
   empty: "Type a message.",
   too_long: "That message is too long (500 letters max).",
   too_fast: "Slow down a little.",
+  blocked: "That player isn't taking messages from you.",
 };
 
 /** The signed-in player with a name, and this round's id. */
