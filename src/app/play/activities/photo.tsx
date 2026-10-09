@@ -140,7 +140,7 @@ export function PhotoSpot({ booth, ...props }: GameProps & { booth?: boolean }) 
     ctx.fillStyle = booth ? "rgba(255,255,255,.85)" : "#64707d";
     ctx.fillText(`${props.label} · ${new Date().toLocaleDateString()}`, W / 2, py + ph + 110);
     ctx.font = "18px system-ui, sans-serif";
-    ctx.fillText("Hide & Seek", W / 2, py + ph + 150);
+    ctx.fillText("Newtown · newtown.world", W / 2, py + ph + 150);
     const blob = await new Promise<Blob | null>((r) => cv.toBlob(r, "image/png"));
     if (!blob) return;
     if (shot) URL.revokeObjectURL(shot);
@@ -153,11 +153,11 @@ export function PhotoSpot({ booth, ...props }: GameProps & { booth?: boolean }) 
   async function share() {
     if (!shot) return;
     const blob = await (await fetch(shot)).blob();
-    const file = new File([blob], "hide-and-seek.png", { type: "image/png" });
+    const file = new File([blob], "newtown.png", { type: "image/png" });
     const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
     if (nav.share && nav.canShare?.({ files: [file] })) {
       try {
-        await nav.share({ files: [file], title: "Hide & Seek" });
+        await nav.share({ files: [file], title: "Newtown" });
         return;
       } catch {
         // Cancelled: fall through to saving.
@@ -165,7 +165,7 @@ export function PhotoSpot({ booth, ...props }: GameProps & { booth?: boolean }) 
     }
     const a = document.createElement("a");
     a.href = shot;
-    a.download = "hide-and-seek.png";
+    a.download = "newtown.png";
     a.click();
   }
 

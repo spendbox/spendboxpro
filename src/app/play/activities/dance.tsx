@@ -284,16 +284,16 @@ function Spray({ dancers, send, ...props }: GameProps & { dancers: ActivityPlaye
     send({ t: "spray", from: props.me, amount: res.amount, shares: res.shares });
     questEvent({ type: "spray", amount: res.amount });
     playSfx("found");
-    setMsg({ text: `You sprayed ${res.amount} coins on ${res.shares.length === 1 ? res.shares[0].name : `${res.shares.length} dancers`}!`, ok: true });
+    setMsg({ text: `You sprayed ${res.amount} mint on ${res.shares.length === 1 ? res.shares[0].name : `${res.shares.length} dancers`}!`, ok: true });
     setTarget(null);
   }
 
-  if (!props.me) return <p className="rounded-2xl bg-panel-2 p-3 text-sm text-muted">Sign in to spray coins.</p>;
+  if (!props.me) return <p className="rounded-2xl bg-panel-2 p-3 text-sm text-muted">Sign in to spray mint.</p>;
 
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted">
-        Shower coins on the dancers! They&apos;re split between {target ? "your pick" : `everyone dancing (up to 10)`}. Real coins, from your balance.
+        Shower mint on the dancers! It&apos;s split between {target ? "your pick" : `everyone dancing (up to 10)`}. Real mint, from your balance.
       </p>
       <div className="grid grid-cols-5 gap-1.5">
         {AMOUNTS.map((a) => (
@@ -314,7 +314,7 @@ function Spray({ dancers, send, ...props }: GameProps & { dancers: ActivityPlaye
         value={amount}
         onChange={(e) => setAmount(Number(e.target.value))}
         className="w-full accent-[#e64980]"
-        aria-label="How many coins to spray"
+        aria-label="How much mint to spray"
       />
       <div>
         <p className="mb-1.5 text-sm font-semibold">{dancers.length ? "On the dance floor" : "Nobody else is dancing yet. Spray someone here:"}</p>
@@ -337,7 +337,7 @@ function Spray({ dancers, send, ...props }: GameProps & { dancers: ActivityPlaye
       </div>
       <BigButton tone="gold" onClick={() => void spray()} disabled={busy || pool.length === 0}>
         <Coins className="size-5" />
-        {busy ? "Spraying…" : `Spray ${amount} coins ${target ? `on ${target.name}` : `on ${Math.min(pool.length, 10)} dancer${pool.length === 1 ? "" : "s"}`}`}
+        {busy ? "Spraying…" : `Spray ${amount} mint ${target ? `on ${target.name}` : `on ${Math.min(pool.length, 10)} dancer${pool.length === 1 ? "" : "s"}`}`}
       </BigButton>
       {msg && <p className={cn("act-pop rounded-2xl px-3 py-2 text-center text-sm font-semibold", msg.ok ? "bg-me/15 text-me" : "bg-hit/10 text-hit")}>{msg.text}</p>}
     </div>

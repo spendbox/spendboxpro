@@ -36,7 +36,7 @@ export const JOKES: readonly Joke[] = [
   { setup: "What do you call a lazy kangaroo?", punch: "A pouch potato!" },
   { setup: "Why did the bicycle fall over?", punch: "It was two-tired!" },
   { setup: "Why did the pigeon sit on the drone?", punch: "It wanted a free ride to the roof!" },
-  { setup: "What do you call a hunter with no coins?", punch: "A ghost, basically!" },
+  { setup: "What do you call a hunter with no mint?", punch: "A ghost, basically!" },
   { setup: "Why did the egusi soup go to therapy?", punch: "Too many things were stirring inside!" },
   { setup: "Why do bees have sticky hair?", punch: "Because they use honeycombs!" },
   { setup: "What did the ocean say to the beach?", punch: "Nothing, it just waved!" },

@@ -1,4 +1,5 @@
 import "server-only";
+import { CONTACT_EMAIL, SITE_DOMAIN } from "@/lib/brand";
 import { createHash, randomBytes } from "node:crypto";
 import { sendEmail } from "@/lib/email";
 import { siteUrl } from "@/lib/env";
@@ -24,10 +25,10 @@ function layout(title: string, body: string) {
   return `<!doctype html><html><body style="margin:0;background:#eef2f6;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#18202b">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px">
 <table role="presentation" width="100%" style="max-width:520px;background:#ffffff;border-radius:16px" cellpadding="0" cellspacing="0"><tr><td style="padding:28px">
-<div style="font-size:13px;font-weight:700;color:#c98a00;letter-spacing:1px;text-transform:uppercase">Hide &amp; Seek</div>
+<div style="font-size:13px;font-weight:700;color:#c98a00;letter-spacing:1px;text-transform:uppercase">Newtown</div>
 <div style="font-size:22px;font-weight:800;margin:6px 0 14px">${title}</div>
 ${body}
-<p style="font-size:12px;color:#64707d;margin:24px 0 0">Questions? Just reply to this email.</p>
+<p style="font-size:12px;color:#64707d;margin:24px 0 0">Questions? Just reply to this email, or write to ${CONTACT_EMAIL}. <a href="https://${SITE_DOMAIN}" style="color:#c98a00;text-decoration:none;font-weight:700">${SITE_DOMAIN}</a></p>
 </td></tr></table></td></tr></table></body></html>`;
 }
 
@@ -100,19 +101,19 @@ export async function adLiveEmail(ad: AdForEmail, reward: number): Promise<Email
     ["Brand", ad.brand],
     ["Headline", ad.headline],
     ["Paid", naira(ad.amount_kobo)],
-    ["Coins in your ad's pool", n(ad.coins_total)],
+    ["Mint in your ad's pool", n(ad.coins_total)],
     ["Player taps that covers", `about ${n(ad.coins_total / reward)}`],
     ["Runs until", ad.ends_at ? day(ad.ends_at) : `${ad.weeks ?? 1} week(s) from today`],
     ["Payment reference", ad.paystack_reference],
   ];
   return {
-    subject: `Your ad for ${ad.brand} is live on Hide & Seek`,
-    text: `Hi ${ad.contact_name},\n\nThanks for your payment. Your billboard ad is live in every Hide & Seek city.\n\n${textTable(rows)}\n\nEach signed-in player who taps your billboard gets ${reward} coins from your pool. Taps from everyone else are free for you. Unused coins at the end of your run expire.\n\nManage your ad (see live numbers, change the picture, headline or link, pause, or add budget):\n${link}\n\nWe'll email you a short report every morning while it runs.`,
+    subject: `Your ad for ${ad.brand} is live on Newtown`,
+    text: `Hi ${ad.contact_name},\n\nThanks for your payment. Your billboard ad is live in every Newtown city.\n\n${textTable(rows)}\n\nEach signed-in player who taps your billboard gets ${reward} mint from your pool. Taps from everyone else are free for you. Unused mint at the end of your run expires.\n\nManage your ad (see live numbers, change the picture, headline or link, pause, or add budget):\n${link}\n\nWe'll email you a short report every morning while it runs.`,
     html: layout(
       "Your ad is live!",
-      p(`Hi ${esc(ad.contact_name)}, thanks for your payment. Your billboard ad is now showing in every Hide &amp; Seek city.`) +
+      p(`Hi ${esc(ad.contact_name)}, thanks for your payment. Your billboard ad is now showing in every Newtown city.`) +
         statsTable(rows) +
-        p(`Each signed-in player who taps your billboard gets ${reward} coins from your pool. Taps from everyone else are free for you. Unused coins at the end of your run expire.`) +
+        p(`Each signed-in player who taps your billboard gets ${reward} mint from your pool. Taps from everyone else are free for you. Unused mint at the end of your run expires.`) +
         button(link, "Manage your ad") +
         linkNote +
         p("We'll email you a short report every morning while it runs."),
@@ -124,8 +125,8 @@ export async function topUpEmail(ad: AdForEmail, coins: number, reference: strin
   const link = await manageLink(ad.advertiser_id);
   const rows: [string, string][] = [
     ["Brand", ad.brand],
-    ["Coins added", n(coins)],
-    ["Coins in the pool now", n(ad.coins_left)],
+    ["Mint added", n(coins)],
+    ["Mint in the pool now", n(ad.coins_left)],
     ["Player taps that covers", `about ${n(ad.coins_left / reward)}`],
     ["Runs until", ad.ends_at ? day(ad.ends_at) : "—"],
     ["Payment reference", reference],
@@ -146,8 +147,8 @@ export async function topUpEmail(ad: AdForEmail, coins: number, reference: strin
 /** The 4-digit code for signing in to /advertiser. */
 export function advertiserCodeEmail(code: string): Email {
   return {
-    subject: `${code} is your Hide & Seek advertiser code`,
-    text: `Your code to manage your Hide & Seek ads is ${code}.\n\nIt works for 10 minutes. If you didn't ask for it, you can ignore this email.`,
+    subject: `${code} is your Newtown advertiser code`,
+    text: `Your code to manage your Newtown ads is ${code}.\n\nIt works for 10 minutes. If you didn't ask for it, you can ignore this email.`,
     html: layout(
       "Your sign-in code",
       p("Use this code to manage your ads:") +
@@ -164,7 +165,7 @@ export function adminNewAdEmail(ad: AdForEmail, imageUrl: string): Email {
     ["Headline", ad.headline],
     ["Contact", `${ad.contact_name} <${ad.contact_email}>`],
     ["Paid", naira(ad.amount_kobo)],
-    ["Coins in pool", n(ad.coins_total)],
+    ["Mint in pool", n(ad.coins_total)],
     ["Paystack reference", ad.paystack_reference],
     ["Ad id", ad.id],
   ];
@@ -194,14 +195,14 @@ export type SponsorForEmail = {
 /** Prize pool sponsors are no longer sold, but payments already started still get a receipt. */
 export function sponsorPaidEmail(s: SponsorForEmail, applied: boolean): Email {
   const when = applied
-    ? "Your coins are already in the prize pool of the round that's starting now."
-    : "Your coins will go into the prize pool of the next round that's free (one sponsor per round, in order).";
+    ? "Your mint is already in the prize pool of the round that's starting now."
+    : "Your mint will go into the prize pool of the next round that's free (one sponsor per round, in order).";
   return {
-    subject: `Thanks for sponsoring a Hide & Seek prize pool`,
-    text: `Hi ${s.contact_name},\n\nThanks! ${n(s.coins)} coins from ${s.brand} will be in a Hide & Seek prize pool, shown to players as "Prize pool by ${s.brand}".\n\n${when}\n\nWe'll email you when your round finishes.\n\nPaid: ${naira(s.amount_kobo)}\nPayment reference: ${s.paystack_reference}`,
+    subject: `Thanks for sponsoring a Newtown prize pool`,
+    text: `Hi ${s.contact_name},\n\nThanks! ${n(s.coins)} mint from ${s.brand} will be in a Newtown prize pool, shown to players as "Prize pool by ${s.brand}".\n\n${when}\n\nWe'll email you when your round finishes.\n\nPaid: ${naira(s.amount_kobo)}\nPayment reference: ${s.paystack_reference}`,
     html: layout(
       "Thanks for sponsoring!",
-      p(`Hi ${esc(s.contact_name)}, <b>${n(s.coins)} coins</b> from <b>${esc(s.brand)}</b> will be in a Hide &amp; Seek prize pool, shown to players as “Prize pool by ${esc(s.brand)}”.`) +
+      p(`Hi ${esc(s.contact_name)}, <b>${n(s.coins)} mint</b> from <b>${esc(s.brand)}</b> will be in a Newtown prize pool, shown to players as “Prize pool by ${esc(s.brand)}”.`) +
         p(esc(when)) +
         p("We'll email you when your round finishes.") +
         `<p style="font-size:12px;color:#64707d;margin:0">Paid ${naira(s.amount_kobo)} · reference ${esc(s.paystack_reference)}</p>`,
@@ -222,12 +223,12 @@ export async function emailAdmin(email: Email) {
 async function sendBatch(emails: ({ to: string } & Email)[]) {
   const key = process.env.RESEND_API_KEY;
   if (!key || emails.length === 0) return 0;
-  const from = process.env.EMAIL_FROM ?? "Hide & Seek <onboarding@resend.dev>";
+  const from = process.env.EMAIL_FROM ?? "Newtown <onboarding@resend.dev>";
   try {
     const res = await fetch("https://api.resend.com/emails/batch", {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify(emails.map((e) => ({ from, to: [e.to], subject: e.subject, html: e.html, text: e.text }))),
+      body: JSON.stringify(emails.map((e) => ({ from, reply_to: CONTACT_EMAIL, to: [e.to], subject: e.subject, html: e.html, text: e.text }))),
     });
     if (res.ok) return emails.length;
     console.error("Report emails failed", res.status, await res.text().catch(() => ""));
@@ -249,25 +250,25 @@ export function adReportEmail(ad: AdForEmail, y: Yesterday, link: string, reward
   const timeUp = ad.ends_at ? Date.parse(ad.ends_at) <= Date.now() : false;
   const daysLeft = ad.ends_at ? Math.max(0, Math.ceil((Date.parse(ad.ends_at) - Date.now()) / 86_400_000)) : 0;
   const rows: [string, string][] = [
-    ["Paid views yesterday (players who tapped and earned coins)", n(y.views)],
+    ["Paid views yesterday (players who tapped and earned mint)", n(y.views)],
     ["Free views yesterday (watchers and players over their daily limit)", n(y.free_views)],
     ["Link clicks yesterday", n(y.clicks)],
-    ["Coins used yesterday", n(y.views * reward)],
+    ["Mint used yesterday", n(y.views * reward)],
     ["Paid views so far", n(ad.rewarded_views)],
     ["Free views so far", n(ad.free_views)],
     ["Link clicks so far", n(ad.clicks)],
-    ["Coins left", `${n(ad.coins_left)} of ${n(ad.coins_total)}`],
+    ["Mint left", `${n(ad.coins_left)} of ${n(ad.coins_total)}`],
     finished ? ["Status", "Finished"] : ["Days left", ad.paused ? `${n(daysLeft)} (paused)` : n(daysLeft)],
   ];
   if (ad.sightings > 0) rows.push(["Seen on billboards so far (free)", n(ad.sightings)]);
-  const why = timeUp ? "its weeks are over" : "its coins have all been earned by players";
+  const why = timeUp ? "its weeks are over" : "its mint has all been earned by players";
   const intro = finished
-    ? `Your ad for <b>${esc(ad.brand)}</b> has finished: ${why}. ${n(ad.rewarded_views)} players tapped it and earned coins${
-        ad.coins_left > 0 ? `; the ${n(ad.coins_left)} unused coins have expired` : ""
+    ? `Your ad for <b>${esc(ad.brand)}</b> has finished: ${why}. ${n(ad.rewarded_views)} players tapped it and earned mint${
+        ad.coins_left > 0 ? `; the ${n(ad.coins_left)} unused mint has expired` : ""
       }. Thank you for advertising with us!`
     : `Here's how your ad for <b>${esc(ad.brand)}</b> (“${esc(ad.headline)}”) did yesterday.`;
   return {
-    subject: finished ? `Your ad for ${ad.brand} has finished` : `Your Hide & Seek ad: ${n(y.views)} paid views yesterday`,
+    subject: finished ? `Your ad for ${ad.brand} has finished` : `Your Newtown ad: ${n(y.views)} paid views yesterday`,
     text: `Hi ${ad.contact_name},\n\n${intro.replace(/<[^>]+>/g, "")}\n\n${textTable(rows)}\n\nManage your ad${finished ? " or top it up to run again" : ""}: ${link}`,
     html: layout(
       finished ? "Your ad has finished" : "Your daily ad report",
@@ -378,12 +379,12 @@ export async function sendAdReports() {
         ["Round", `#${r.id}`],
         ["Finished", r.finished_at ? day(r.finished_at as string) : "Yes"],
         ["Players in the round", n(Math.max((players.get(r.id as number) ?? 1) - 1, 0))],
-        ["Your coins in the pool", n(Number(s.coins))],
-        ["Final prize pool", `${n(Number(r.pool))} coins`],
+        ["Your mint in the pool", n(Number(s.coins))],
+        ["Final prize pool", `${n(Number(r.pool))} mint`],
       ];
       return {
         to: s.contact_email as string,
-        subject: `Your Hide & Seek prize pool round has finished`,
+        subject: `Your Newtown prize pool round has finished`,
         text: `Hi ${s.contact_name},\n\nThe round sponsored by ${s.brand} has finished and the prize pool has been paid out to the players.\n\n${textTable(rows)}\n\nThank you for sponsoring! Want your brand on every billboard next? ${siteUrl()}/advertise`,
         html: layout(
           "Your sponsored round is done",

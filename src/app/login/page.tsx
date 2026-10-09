@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { ArrowLeft } from "@/components/icons";
 import { currentUserId } from "@/lib/game";
 import { LoginForm } from "./login-form";
+import { Logo } from "@/components/logo";
 
 export const metadata: Metadata = { title: "Enter the world" };
 
@@ -12,6 +13,9 @@ export default async function LoginPage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-4">
       <div>
+        <div className="mb-6">
+          <Logo size={40} />
+        </div>
         <Link href="/" className="inline-flex items-center gap-1 text-sm font-medium text-muted">
           <ArrowLeft className="size-4" />
           Back to watching the city

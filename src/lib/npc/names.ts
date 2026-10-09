@@ -71,7 +71,7 @@ export const NICKNAMES: readonly string[] = [
   "Kpakpando", "Omo Ologo", "Small Pikin", "Big Tee", "Baba Nla", "Sharp Guy", "Correct Person", "Mr Fix-It", "Madam Gist",
   "Gist Master", "Lord of the Lift", "Captain Vibes", "DJ Pepper Soup", "Tiger", "Lion Heart", "Eagle Eye",
   "Mr Calculator", "Mama Put", "Professor", "The Oracle", "Chairman", "Odogwu", "Ebube", "Oga Boss", "Baby Face", "Blessed",
-  "Big Bros", "Small Madam", "Fine Boy", "Fine Girl", "Mr Money", "Coin Collector", "Night Owl", "Early Bird", "Flash",
+  "Big Bros", "Small Madam", "Fine Boy", "Fine Girl", "Mr Money", "Mint Collector", "Night Owl", "Early Bird", "Flash",
   "Speedometer", "Slowly-Slowly", "Kerosene", "Generator", "NEPA", "Danfo", "Keke", "Okada", "Agege", "Puff-Puff",
   "Chin-Chin", "Zobo", "Kunu", "Kilishi", "Garri", "Moi-Moi", "Plantain", "Dodo", "Pepper Soup", "Egusi", "Ofada",
   "Amala", "Tuwo", "Fura", "Shawarma", "Kokoro", "Boli", "Twinkle", "Sparkle", "Thunder", "Lightning",

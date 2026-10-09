@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AdultsOnly, WelcomeForm } from "./welcome-form";
+import { Logo } from "@/components/logo";
 
 export const metadata: Metadata = { title: "Welcome" };
 
@@ -36,8 +37,9 @@ export default async function WelcomePage({ searchParams }: { searchParams: Prom
     return (
       <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-4">
         <div>
+          <Logo size={36} className="mb-5" />
           <h1 className="font-display text-3xl font-bold">Adults only</h1>
-          <p className="mt-1 text-muted">Hide &amp; Seek is for adults 18+.</p>
+          <p className="mt-1 text-muted">Newtown is for adults 18+.</p>
         </div>
         <AdultsOnly />
       </main>
@@ -52,11 +54,12 @@ export default async function WelcomePage({ searchParams }: { searchParams: Prom
     ? "Pick the name other players will see, a 6-digit PIN for next time, and tell us your date of birth."
     : askPin
       ? "Choose a new 6-digit PIN. You can change your name here too."
-      : "Hide & Seek is now for adults 18+. Please add your date of birth to keep playing. We'll only ask once.";
+      : "Newtown is now for adults 18+. Please add your date of birth to keep playing. We'll only ask once.";
 
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-4">
       <div>
+        <Logo size={36} className="mb-5" />
         <h1 className="font-display text-3xl font-bold">{title}</h1>
         <p className="mt-1 text-muted">{intro}</p>
       </div>

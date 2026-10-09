@@ -353,7 +353,7 @@ export function createWorldEvents(host: WorldEventsHost) {
     if (id === null) return null;
     const inst = list.get(id);
     const kind = inst ? WORLD_EVENT_BY_KEY[inst.ev.key] : null;
-    return kind?.reward ? `${kind.title} · tap to grab ${kind.reward.coins} coins` : null;
+    return kind?.reward ? `${kind.title} · tap to grab ${kind.reward.coins} mint` : null;
   }
 
   function dispose() {

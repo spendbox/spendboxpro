@@ -55,7 +55,7 @@ export function GiveCoinsSheet({ to, onClose }: { to: { id: string; name: string
     <Sheet onClose={onClose}>
       <ActivityStyles />
       <div className="relative space-y-4">
-        <GameHeader icon={Gift} title="Give coins" sub={balance === null ? "" : `You have ${short(balance)} coins`} onClose={onClose} color="#12a37a" />
+        <GameHeader icon={Gift} title="Give mint" sub={balance === null ? "" : `You have ${short(balance)} mint`} onClose={onClose} color="#12a37a" />
         <div className="flex items-center gap-3 rounded-2xl bg-panel-2 p-3">
           <Face p={to} size={44} />
           <div className="min-w-0">
@@ -70,7 +70,7 @@ export function GiveCoinsSheet({ to, onClose }: { to: { id: string; name: string
               <Check className="size-8" />
             </span>
             <p className="font-display text-xl font-bold">
-              Sent {short(sent.amount)} coins to {to.name}!
+              Sent {short(sent.amount)} mint to {to.name}!
             </p>
             <p className="text-sm text-muted">They&apos;ll get a notification. You can give {short(sent.leftToday)} more today.</p>
             <BigButton onClick={onClose}>Done</BigButton>
@@ -89,13 +89,13 @@ export function GiveCoinsSheet({ to, onClose }: { to: { id: string; name: string
               ))}
             </div>
             <label className="block">
-              <span className="text-sm font-semibold">How many coins?</span>
+              <span className="text-sm font-semibold">How much mint?</span>
               <input
                 inputMode="numeric"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, "").slice(0, 5))}
                 className="mt-1 w-full rounded-2xl border border-line bg-panel px-4 py-3 text-lg font-bold outline-none focus:border-ink"
-                aria-label="Coins to give"
+                aria-label="Mint to give"
               />
             </label>
             <label className="block">
@@ -107,12 +107,12 @@ export function GiveCoinsSheet({ to, onClose }: { to: { id: string; name: string
                 className="mt-1 w-full rounded-2xl border border-line bg-panel px-4 py-3 outline-none focus:border-ink"
               />
             </label>
-            {balance !== null && n > balance && <p className="text-sm text-hit">You only have {short(balance)} coins.</p>}
+            {balance !== null && n > balance && <p className="text-sm text-hit">You only have {short(balance)} mint.</p>}
             {error && <p className="act-pop rounded-2xl bg-hit/10 px-3 py-2 text-sm font-semibold text-hit">{error}</p>}
             <BigButton tone="green" onClick={() => void give()} disabled={!valid || busy}>
-              <Send className="size-4" /> {busy ? "Sending…" : `Give ${valid ? short(n) : ""} coins`}
+              <Send className="size-4" /> {busy ? "Sending…" : `Give ${valid ? short(n) : ""} mint`}
             </BigButton>
-            <p className="text-center text-xs text-muted">Up to 10,000 at a time and 20,000 a day. Coins you give can&apos;t be taken back.</p>
+            <p className="text-center text-xs text-muted">Up to 10,000 at a time and 20,000 a day. Mint you give can&apos;t be taken back.</p>
           </>
         )}
       </div>

@@ -168,15 +168,15 @@ export const WORLD_EVENTS: WorldEventKind[] = [
 
   // ---------------------------------------------------------------- twists: the rules change for a while
   E(88, "fog_of_war", "Fog of war", "Fog of war! Hunters can't see recent searches for 2 minutes.", "twist", "any", 2, { twist: true }),
-  E(89, "double_coins", "Double coins", "Double coins! Every catch pays twice for the next few minutes.", "twist", "any", 5, { twist: true }),
+  E(89, "double_coins", "Double mint", "Double mint! Every catch pays twice for the next few minutes.", "twist", "any", 5, { twist: true }),
   E(90, "ghost_amnesty", "Ghost amnesty", "Ghost amnesty! Every ghost gets one free extra move.", "twist", "any", 4, { twist: true }),
   E(91, "drone_storm", "Drone storm", "Drone storm! Sweeps cost half for 3 minutes.", "twist", "any", 3, { twist: true }),
   E(92, "lucky_street", "Lucky street", "Lucky street! Searches around {place} are free for a while.", "twist", "road", 3, { twist: true, radius: 1 }),
   E(93, "bot_tantrum", "Bot tantrum", "The bot is throwing a tantrum and has moved somewhere new!", "twist", "any", 1, { twist: true }),
   E(94, "spotlight", "Spotlight", "Spotlight on {place}! Every move there lights up.", "twist", "any", 3, { twist: true, radius: 2 }),
-  E(95, "golden_balloon", "Golden balloon", "A golden balloon worth 50 coins is floating over {place}!", "twist", "sky", 3, { twist: true, reward: { coins: 50, slots: 1 } }),
+  E(95, "golden_balloon", "Golden balloon", "A golden balloon worth 50 mint is floating over {place}!", "twist", "sky", 3, { twist: true, reward: { coins: 50, slots: 1 } }),
   E(96, "quiet_hour", "Quiet spell", "Shhh… a quiet spell. No news for 5 minutes.", "twist", "any", 5, { twist: true }),
-  E(97, "bounty_board", "Bounty board", "Bounty! Whoever catches {name} gets 100 extra coins.", "twist", "any", 6, { twist: true }),
+  E(97, "bounty_board", "Bounty board", "Bounty! Whoever catches {name} gets 100 extra mint.", "twist", "any", 6, { twist: true }),
   E(98, "safe_house", "Safe house", "{place} is a safe house: nobody can be found there for 3 minutes.", "twist", "any", 3, { twist: true, radius: 1 }),
   E(99, "blackout_district", "Blackout district", "Blackout! Nobody can search around {place} for 2 minutes.", "twist", "any", 2, { twist: true, radius: 2 }),
   E(100, "final_countdown", "Final countdown", "Final countdown! The world ends in 5 minutes.", "twist", "any", 5, { twist: true }),

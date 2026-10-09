@@ -46,7 +46,7 @@ export function BirthDateInput({ value, onChange }: { value: BirthDraft; onChang
           ))}
         </select>
       </div>
-      <p className="mt-1 text-xs text-muted">Hide &amp; Seek is for adults 18+. Your date of birth is private.</p>
+      <p className="mt-1 text-xs text-muted">Newtown is for adults 18+. Your date of birth is private.</p>
     </fieldset>
   );
 }

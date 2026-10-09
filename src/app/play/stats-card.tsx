@@ -99,7 +99,7 @@ export function StatsCard({
         <dl className="mt-3 grid grid-cols-3 gap-1 text-center">
           {[
             ["Hidden", short(hidden), `${hidden.toLocaleString("en")} of ${hidersTotal.toLocaleString("en")} still hidden`, `of ${short(hidersTotal)}`],
-            ["Pool", short(pool), `${pool.toLocaleString("en")} coins in the pool`, "coins"],
+            ["Pool", short(pool), `${pool.toLocaleString("en")} mint in the pool`, "mint"],
             ["Spots", short(tiles), `${tiles.toLocaleString("en")} spots in the city`, "in city"],
           ].map(([k, v, full, sub]) => (
             <div key={k} className="min-w-0 rounded-xl bg-white/60 px-1 py-1.5" title={full}>
@@ -110,7 +110,7 @@ export function StatsCard({
           ))}
         </dl>
         {sponsor && (
-          <div className="mt-2 flex items-center gap-1.5 rounded-xl bg-gold/20 px-2 py-1 text-[11px] font-semibold text-gold-dark" title={`${sponsor.name} added ${sponsor.coins.toLocaleString("en")} coins to this pool`}>
+          <div className="mt-2 flex items-center gap-1.5 rounded-xl bg-gold/20 px-2 py-1 text-[11px] font-semibold text-gold-dark" title={`${sponsor.name} added ${sponsor.coins.toLocaleString("en")} mint to this pool`}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             {sponsor.logo && <img src={sponsor.logo} alt="" className="size-4 rounded object-contain" />}
             <Trophy className="size-3.5 shrink-0" />

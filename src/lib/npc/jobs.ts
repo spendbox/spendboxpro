@@ -56,7 +56,7 @@ export const JOBS: Record<PlaceKind, readonly Job[]> = {
   ],
   floor: [
     J("Office worker", ["Pretends to work, mostly watches the hunt.", "Has 47 browser tabs open."], [2, 14]),
-    J("Accountant", ["Counts coins for fun.", "Has a spreadsheet for their spreadsheets."], [14]),
+    J("Accountant", ["Counts mint for fun.", "Has a spreadsheet for their spreadsheets."], [14]),
     J("Designer", ["Thinks every billboard could be prettier.", "Owns nine shades of black."], [6, 12]),
     J("Intern", ["First week. Very excited about everything.", "Has made coffee for the whole floor. Twice."], [5], [18, 24]),
     J("Manager", ["In a meeting. Always in a meeting.", "Says 'let's circle back' a lot."], [14, 15]),
@@ -80,7 +80,7 @@ export const JOBS: Record<PlaceKind, readonly Job[]> = {
   ],
   office: [
     J("Office worker", ["Pretends to work, mostly watches the hunt.", "Lunch break is a lifestyle."], [2, 14]),
-    J("Accountant", ["Counts coins for fun.", "Sleeps with a calculator."], [14]),
+    J("Accountant", ["Counts mint for fun.", "Sleeps with a calculator."], [14]),
     J("CEO", ["Owns the corner office and the loudest laugh.", "Says 'synergy' without blinking."], [15, 4], [40, 70]),
     J("Personal assistant", ["Knows the boss's schedule better than the boss.", "Runs the whole place, quietly."], [14]),
     J("HR officer", ["Has a form for everything.", "Sends memos about memos."], [2]),
@@ -218,7 +218,7 @@ export const JOBS: Record<PlaceKind, readonly Job[]> = {
     J("Mall security", ["Rides a little scooter with great pride.", "Watches the cameras and the hunt."], [3, 24]),
     J("Cinema usher", ["Has seen every film fifty times.", "Shines a torch at people on their phones."], [15]),
     J("Ice cream seller", ["Has every flavour except the one you want.", "Hands out free samples (just one)."], [9]),
-    J("Cleaner", ["Mops the floor, dodges the shoppers.", "Finds coins under every bench."], [19]),
+    J("Cleaner", ["Mops the floor, dodges the shoppers.", "Finds mint under every bench."], [19]),
     J("Window shopper", ["Never buys. Always looks.", "Knows every price in the building."]),
     J("Fashion designer", ["Judging everyone's outfits, kindly.", "Makes clothes from leftover ankara."], [20, 7]),
   ],

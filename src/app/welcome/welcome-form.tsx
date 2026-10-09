@@ -81,7 +81,7 @@ export function AdultsOnly() {
   return (
     <div className="flex flex-col gap-3">
       <p className="rounded-xl border border-line bg-panel p-4 text-sm">
-        Sorry, Hide &amp; Seek is only for adults 18 and over, so this account can&apos;t play. Thanks for being honest with us.
+        Sorry, Newtown is only for adults 18 and over, so this account can&apos;t play. Thanks for being honest with us.
       </p>
       <button
         type="button"

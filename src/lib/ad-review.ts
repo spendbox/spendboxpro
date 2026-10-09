@@ -17,7 +17,7 @@ export type ReviewMediaType = "image/jpeg" | "image/png" | "image/webp";
 
 const MODEL = "claude-opus-5-5";
 
-const SYSTEM = `You review billboard adverts for "Hide & Seek", an online game played mostly in Nigeria. Players are adults (18+), but adverts must suit a general audience.
+const SYSTEM = `You review billboard adverts for "Newtown", an online game played mostly in Nigeria. Players are adults (18+), but adverts must suit a general audience.
 
 Decide whether the advert follows this policy.
 

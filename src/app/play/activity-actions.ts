@@ -18,15 +18,15 @@ export async function claimActivityReward(
   score: number,
 ): Promise<{ ok: true; coins: number; leftToday: number; reason: "low_score" | "daily_limit" | "too_soon" | null } | Fail> {
   const userId = await currentUserId();
-  if (!userId) return { ok: false, error: "Sign in to win coins." };
-  if (!GAMES.includes(game)) return { ok: false, error: "That game doesn't pay coins." };
+  if (!userId) return { ok: false, error: "Sign in to win mint." };
+  if (!GAMES.includes(game)) return { ok: false, error: "That game doesn't pay mint." };
   if (typeof score !== "number" || !Number.isFinite(score) || score < 0) return { ok: false, error: "That score doesn't count." };
   const { data, error } = await createAdminClient().rpc("claim_activity_reward", { p_user: userId, p_game: game, p_score: Math.floor(score) });
   if (error || !data) {
     if (error?.message?.startsWith("frozen")) return { ok: false, error: "Your account is paused right now." };
     if (error?.message?.startsWith("bad_score")) return { ok: false, error: "That score doesn't count." };
     console.error("claim_activity_reward failed", error?.message);
-    return { ok: false, error: "Couldn't collect your coins. Try again later." };
+    return { ok: false, error: "Couldn't collect your mint. Try again later." };
   }
   const d = data as { coins: number; left_today: number; reason: string | null };
   const reason = d.reason === "low_score" || d.reason === "daily_limit" || d.reason === "too_soon" ? d.reason : null;

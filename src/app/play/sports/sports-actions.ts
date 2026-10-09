@@ -1,5 +1,6 @@
 "use server";
 
+import { mintify } from "@/lib/brand";
 import { settleIfDue } from "@/app/api/sports/settle";
 import { currentUserId } from "@/lib/game";
 import { matchById } from "@/lib/sports/schedule";
@@ -18,7 +19,7 @@ const MATCH_RE = /^(football|basketball|boxing|wrestling):[A-Za-z0-9_-]{1,40}$/;
 
 /** Messages the database raises on purpose (plain RAISE EXCEPTION, code P0001) are already written for players. */
 function friendly(error: DbError, fallback: string) {
-  if (error?.code === "P0001" && error.message) return error.message;
+  if (error?.code === "P0001" && error.message) return mintify(error.message);
   console.error("Sports action failed", error?.message ?? error);
   return fallback;
 }
@@ -97,7 +98,7 @@ export async function placeBet(
     if (typeof option !== "string" || !match.options.some((o) => o.key === option)) {
       return { ok: false, error: "Pick who you think will win." };
     }
-    if (!Number.isInteger(amount) || amount < 1 || amount > 1_000_000) return { ok: false, error: "Pick a whole number of coins." };
+    if (!Number.isInteger(amount) || amount < 1 || amount > 1_000_000) return { ok: false, error: "Pick a whole number of mint." };
     const now = Date.now();
     if (now >= match.kickoffAt) return { ok: false, error: "Bets are closed: it's kicked off" };
     if (now < match.opensAt) {

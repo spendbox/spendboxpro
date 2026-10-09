@@ -31,7 +31,7 @@ export function BotCard({ botName, bounty, onClose }: { botName: string; bounty:
         </h2>
         <p className="mt-2 text-sm text-muted">
           {botName} is our bot. It hides in every round like a ghost, moves only when a drone sweeps it (3 times at most), and teases
-          the chat. Find it for <b className="text-ink">{bounty.toLocaleString()} coins</b>!
+          the chat. Find it for <b className="text-ink">{bounty.toLocaleString()} mint</b>!
         </p>
         <button onClick={onClose} className="mt-4 w-full rounded-full bg-ink py-2.5 text-sm font-semibold text-white" autoFocus>
           Got it

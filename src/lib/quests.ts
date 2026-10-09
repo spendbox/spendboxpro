@@ -146,7 +146,7 @@ export type QuestDef = {
   action?: SpecialAction;
 };
 
-const STEAL_BRIEF = "Then pick a player and swipe a few of their coins (1–5%, at most 100).";
+const STEAL_BRIEF = "Then pick a player and swipe a little of their mint (1–5%, at most 100).";
 
 export const QUESTS: QuestDef[] = [
   // ------------------------------------------------------------------ thieves and tricksters
@@ -362,7 +362,7 @@ export const QUESTS: QuestDef[] = [
     key: "courier",
     title: "Courier",
     role: "Today you are a courier.",
-    brief: "Deliver a parcel of 50 coins to any player (tap someone, then Give coins).",
+    brief: "Deliver a parcel of 50 mint to any player (tap someone, then Give mint).",
     icon: "courier",
     fits: "any",
     steps: [{ type: "gift", coins: 50 }],
@@ -372,7 +372,7 @@ export const QUESTS: QuestDef[] = [
     key: "philanthropist",
     title: "Philanthropist",
     role: "Today you are a philanthropist.",
-    brief: "Share the love: give 100 coins in total to at least 2 different players.",
+    brief: "Share the love: give 100 mint in total to at least 2 different players.",
     icon: "gift",
     fits: "any",
     steps: [{ type: "gift", coins: 100 }, { type: "gift_people", count: 2 }],
@@ -382,7 +382,7 @@ export const QUESTS: QuestDef[] = [
     key: "good_samaritan",
     title: "Good Samaritan",
     role: "Today you are a Good Samaritan.",
-    brief: "Give 20 coins to someone who could use them.",
+    brief: "Give 20 mint to someone who could use it.",
     icon: "gift",
     fits: "any",
     steps: [{ type: "gift", coins: 20 }],
@@ -404,7 +404,7 @@ export const QUESTS: QuestDef[] = [
     key: "party_starter",
     title: "Party starter",
     role: "Today you start the party.",
-    brief: "Hit a club dance floor, do a dance-off and spray 100 coins on the dancers.",
+    brief: "Hit a club dance floor, do a dance-off and spray 100 mint on the dancers.",
     icon: "party",
     fits: "any",
     steps: [{ type: "play_game", count: 1, game: "dance" }, { type: "spray", coins: 100 }],
@@ -414,7 +414,7 @@ export const QUESTS: QuestDef[] = [
     key: "big_spender",
     title: "Big spender",
     role: "Today you are the big spender.",
-    brief: "Make it rain: spray 300 coins on a dance floor.",
+    brief: "Make it rain: spray 300 mint on a dance floor.",
     icon: "coins",
     fits: "any",
     steps: [{ type: "spray", coins: 300 }],
@@ -673,7 +673,7 @@ export const QUESTS: QuestDef[] = [
     key: "treasure_hunter",
     title: "Treasure hunter",
     role: "Today you hunt treasure.",
-    brief: "Grab a reward from a city event or a coin balloon before anyone else.",
+    brief: "Grab a reward from a city event or a mint balloon before anyone else.",
     icon: "treasure",
     fits: "any",
     steps: [{ type: "claim_event", count: 1 }],
@@ -797,11 +797,11 @@ export function stepLabel(step: QuestStep): string {
     case "order_food":
       return `Order at ${step.count} different ${step.where === "bar" ? "bars" : step.where === "restaurant" ? "restaurants" : "places"}`;
     case "spray":
-      return `Spray ${step.coins} coins on a dance floor`;
+      return `Spray ${step.coins} mint on a dance floor`;
     case "gift":
-      return `Give ${step.coins} coins away`;
+      return `Give ${step.coins} mint away`;
     case "gift_people":
-      return `Give coins to ${step.count} different players`;
+      return `Give mint to ${step.count} different players`;
     case "search_tiles":
       return `Search ${step.count} spots`;
     case "sweep":
@@ -809,7 +809,7 @@ export function stepLabel(step: QuestStep): string {
     case "survive_minutes":
       return `Stay hidden for ${step.minutes} minute${step.minutes === 1 ? "" : "s"}`;
     case "claim_event":
-      return "Grab a city event or coin balloon reward";
+      return "Grab a city event or mint balloon reward";
   }
 }
 
@@ -819,7 +819,7 @@ export function stepProgressText(step: QuestStep, value: number) {
   const v = Math.min(Math.floor(value), target);
   if (step.type === "survive_minutes") return `${Math.floor(v / 60)}/${step.minutes} min`;
   if (step.type === "sit_seconds" || step.type === "stay_seconds") return `${v}/${target} s`;
-  if (step.type === "spray" || step.type === "gift") return `${v}/${target} coins`;
+  if (step.type === "spray" || step.type === "gift") return `${v}/${target} mint`;
   return `${v}/${target}`;
 }
 
@@ -828,7 +828,7 @@ export const ACTION_INFO: Record<SpecialAction, { label: string; button: string;
   steal: {
     label: "Steal",
     button: "Steal from…",
-    about: "Pick a player and take 1–5% of their coins (at most 100). They'll know it was you, and thieves can't touch them for 24 hours.",
+    about: "Pick a player and take 1–5% of their mint (at most 100). They'll know it was you, and thieves can't touch them for 24 hours.",
   },
   hint: {
     label: "Hint",

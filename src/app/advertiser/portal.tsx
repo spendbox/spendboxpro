@@ -37,7 +37,7 @@ export function SignOutButton() {
 const STATUS: Record<PortalAd["status"], { text: string; tone: string }> = {
   live: { text: "Live", tone: "bg-me/15 text-me" },
   paused: { text: "Paused", tone: "bg-gold/25 text-gold-dark" },
-  finished: { text: "Finished: coins used up", tone: "bg-panel-2 text-muted" },
+  finished: { text: "Finished: mint used up", tone: "bg-panel-2 text-muted" },
   ended: { text: "Finished: time's up", tone: "bg-panel-2 text-muted" },
   stopped: { text: "Stopped by us", tone: "bg-hit/10 text-hit" },
 };
@@ -71,7 +71,7 @@ export function AdCard({ ad, pricing, payments }: { ad: PortalAd; pricing: AdPri
       <div>
         <div className="flex items-baseline justify-between text-sm">
           <span className="font-semibold">
-            {fmt(ad.coinsLeft)} <span className="font-normal text-muted">of {fmt(ad.coinsTotal)} coins left</span>
+            {fmt(ad.coinsLeft)} <span className="font-normal text-muted">of {fmt(ad.coinsTotal)} mint left</span>
           </span>
           <span className="text-muted">≈ {fmt(tapsLeft)} more paid taps</span>
         </div>
@@ -81,7 +81,7 @@ export function AdCard({ ad, pricing, payments }: { ad: PortalAd; pricing: AdPri
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Stat label="Paid views" value={fmt(ad.rewardedViews)} hint="Players who tapped and earned coins" />
+        <Stat label="Paid views" value={fmt(ad.rewardedViews)} hint="Players who tapped and earned mint" />
         <Stat label="Free views" value={fmt(ad.freeViews)} hint="Watchers & players over their limit" />
         <Stat label="Link clicks" value={fmt(ad.clicks)} />
         <Stat
@@ -169,7 +169,7 @@ export function AdCard({ ad, pricing, payments }: { ad: PortalAd; pricing: AdPri
           )}
         </div>
       )}
-      {ad.status === "paused" && <p className="-mt-2 text-xs text-muted">While paused, your ad isn&apos;t shown and no coins are used. The days keep counting.</p>}
+      {ad.status === "paused" && <p className="-mt-2 text-xs text-muted">While paused, your ad isn&apos;t shown and no mint is used. The days keep counting.</p>}
       {error && <p className="text-sm text-hit">{error}</p>}
 
       {panel === "edit" && <EditPanel ad={ad} onDone={() => setPanel(null)} />}
@@ -296,7 +296,7 @@ function TopUpPanel({ ad, pricing }: { ad: PortalAd; pricing: AdPricing }) {
           <span className="text-muted">Enter at least ₦{fmt(pricing.minWeeklyNgn)}.</span>
         ) : (
           <>
-            Adds <b>{fmt(coins)} coins</b> to your pool: about <b>{fmt(taps)} more players</b> tapping your ad.
+            Adds <b>{fmt(coins)} mint</b> to your pool: about <b>{fmt(taps)} more players</b> tapping your ad.
           </>
         )}
       </div>

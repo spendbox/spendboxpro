@@ -30,6 +30,8 @@ import type { Avatar } from "@/lib/avatar";
 import { cn } from "@/lib/cn";
 import { short } from "@/lib/format";
 import { loadLevel, loadMyStats, upgradeLevel, type Badge, type Leader, type LevelInfo } from "./profile-actions";
+import { LogoMark } from "@/components/logo";
+import { CONTACT_EMAIL, SITE_DOMAIN } from "@/lib/brand";
 
 type Stats = { won: number; rounds: number; catches: number; survived: number; badges: Badge[]; leaders: Leader[]; myRank: number | null };
 
@@ -206,7 +208,7 @@ export function Menu({
           </div>
         ) : (
           <div className="mt-2">
-            <p className="px-1 pb-1 text-xs text-muted">Most coins won in the last 7 days{stats?.myRank ? ` · you're #${stats.myRank}` : ""}</p>
+            <p className="px-1 pb-1 text-xs text-muted">Most mint won in the last 7 days{stats?.myRank ? ` · you're #${stats.myRank}` : ""}</p>
             {!stats ? (
               <p className="p-3 text-center text-muted">Loading…</p>
             ) : stats.leaders.length === 0 ? (
@@ -239,6 +241,15 @@ export function Menu({
             Sign out
           </button>
         </div>
+        <p className="mt-3 text-center text-xs text-muted">
+          Questions or ideas?{" "}
+          <a href={`mailto:${CONTACT_EMAIL}`} className="font-semibold text-ink underline">
+            {CONTACT_EMAIL}
+          </a>
+          <br />
+          <LogoMark size={14} className="mr-1 inline align-[-0.15em]" />
+          Newtown · {SITE_DOMAIN}
+        </p>
       </div>
     </div>
   );
@@ -252,7 +263,7 @@ const PERKS: { level: number; icon: LucideIcon; name: string; what: string }[] =
   { level: 3, icon: Drama, name: "Decoy", what: "As a ghost, drop a fake you anywhere to fool the hunters." },
   { level: 5, icon: Shield, name: "Shield", what: "As a ghost, raise a shield that saves you from one find." },
   { level: 10, icon: Flashlight, name: "Big search", what: "Hunters search a 3×3 area at once, for the price of 7 searches." },
-  { level: 20, icon: RotateCcw, name: "Respawn", what: "Caught in the first 30 minutes? Pay 300 coins to jump back in." },
+  { level: 20, icon: RotateCcw, name: "Respawn", what: "Caught in the first 30 minutes? Pay 300 mint to jump back in." },
 ];
 
 /** Your level, what the next one takes, and the power-ups it unlocks. Hidden if it can't load. */
@@ -281,7 +292,7 @@ function LevelCard() {
     try {
       const res = await upgradeLevel();
       if (res.ok) {
-        setNote({ ok: true, party: true, text: `You're level ${res.level}! (${short(res.cost)} coins spent)` });
+        setNote({ ok: true, party: true, text: `You're level ${res.level}! (${short(res.cost)} mint spent)` });
         await refresh();
       } else {
         setNote({ ok: false, text: res.error || "Couldn't level up. Try again." });
@@ -326,7 +337,7 @@ function LevelCard() {
         ) : confirm ? (
           <div className="rounded-xl bg-white/10 p-2 text-xs">
             <p>
-              Spend <b>{short(info.nextCost)} coins</b> to reach level {next}? The coins are used up.
+              Spend <b>{short(info.nextCost)} mint</b> to reach level {next}? The mint is used up.
             </p>
             <div className="mt-2 grid grid-cols-2 gap-2">
               <button onClick={() => setConfirm(false)} disabled={busy} className="rounded-lg bg-white/15 py-2 font-semibold">
@@ -347,11 +358,11 @@ function LevelCard() {
               disabled={!enoughCoins}
               className="w-full rounded-xl bg-gold py-2 text-sm font-semibold text-ink disabled:opacity-50"
             >
-              Upgrade to level {next} for {short(info.nextCost)} coins
+              Upgrade to level {next} for {short(info.nextCost)} mint
             </button>
             {!enoughCoins && (
               <p className="mt-1 text-center text-[11px] text-white/70">
-                You need {short(info.nextCost - info.coins)} more coins (you have {short(info.coins)}).
+                You need {short(info.nextCost - info.coins)} more mint (you have {short(info.coins)}).
               </p>
             )}
           </>
@@ -443,8 +454,8 @@ function Marketplace() {
         <span className="rounded-full bg-ink px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">Coming soon</span>
       </div>
       <p className="mt-1 text-xs leading-snug">
-        Soon you&apos;ll swap your coins for real rewards from brands: custom tees, event tickets, vouchers, gadgets and more. Keep
-        stacking those coins!
+        Soon you&apos;ll swap your mint for real rewards from brands: custom tees, event tickets, vouchers, gadgets and more. Keep
+        stacking that mint!
       </p>
       <div className="mt-2 grid grid-cols-4 gap-1.5 text-center">
         {(

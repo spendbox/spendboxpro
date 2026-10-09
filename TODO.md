@@ -6,30 +6,31 @@
 - [ ] Test on a real phone: sounds, touch gestures, the water slide, club lights.
 
 ## Done lately
+- [x] Renamed to Newtown: new logo, favicon, share picture, "mint" instead of coins, newtown.world and hello@newtown.world everywhere.
 - [x] Fixes: sign-out spinner, hunt countdown for ghosts, sign-in prompts for watchers, timeouts ("Reconnecting" screen), cars drive themselves, button press feedback, "My house" coming soon.
 - [x] Info bubbles over nearby buildings and tappable world events.
-- [x] Sports: football, basketball, boxing, wrestling. Simulated matches in a tactical view, coin tickets, simple coin bets (run `game-db/020_sports.sql`).
+- [x] Sports: football, basketball, boxing, wrestling. Simulated matches in a tactical view, mint tickets, simple mint bets (run `game-db/020_sports.sql`).
 
 ## Next batch
-- [ ] **Daily streaks.** Any daily action counts (play a round, finish a side quest, send a gift or hug, ride something). Rewards grow at 3, 7, 14, 30, 60 and 100 days (small coins, badges). One free "freeze" a week. Flame icon on the home screen.
+- [ ] **Daily streaks.** Any daily action counts (play a round, finish a side quest, send a gift or hug, ride something). Rewards grow at 3, 7, 14, 30, 60 and 100 days (a little mint, badges). One free "freeze" a week. Flame icon on the home screen.
 - [ ] **Hugs, handshakes and a "My gifts" screen.** Free, with daily caps and a block button. "My gifts" in the menu shows who sent what, with a thank-you button. Counts towards quests and streaks.
-- [ ] **Ghost pranks on hunters** (coin-priced, one per game, level-gated):
+- [ ] **Ghost pranks on hunters** (mint-priced, one per game, level-gated):
   - Booby-trapped spot: green slime and a longer wait for the hunter who searches it.
   - Mirage: a fake ghost on hunters' maps for a minute.
   - Haunting: caught ghosts flicker lights and rattle chairs while hunters are inside buildings.
 - [ ] **Fix planes** so they look like airliners (fuselage, wings, tail, high and slow, trails), not drones.
-- [ ] **New level curve.** Cheap and fast to level 20, then harder every level to 100. Quests, games and streaks also earn level progress. Cap the daily coin refill (+25 per level is about 2,575 a day at level 100). Existing players keep their levels.
+- [ ] **New level curve.** Cheap and fast to level 20, then harder every level to 100. Quests, games and streaks also earn level progress. Cap the daily mint refill (+25 per level is about 2,575 a day at level 100). Existing players keep their levels.
 - [ ] **Simple counters** (time spent, next-day return, players per round) and a plan for 10-20 friends playing for a few days, plus scheduled evening "peak hour" events.
 
 ## Houses and studios
 Decide first:
 - [ ] What 4x4 to 10x10 means. Default: room size inside, small building outside.
 - [ ] Studios full-size as soon as they pay; levels unlock mansions and decorations for personal houses.
-- [ ] Legal check with a Nigerian lawyer: coin pools and stakes as gaming, subscription rules, showing contact details publicly.
+- [ ] Legal check with a Nigerian lawyer: mint pools and stakes as gaming, subscription rules, showing contact details publicly.
 
 Stage 1: free private house (cheapest path: reuse what the city already draws)
 - [ ] Pick, don't build: choose one of the house styles the city already has, paint colours, a name sign, and a room style (living room, lounge, studio, club...).
-- [ ] Furniture slots instead of a free editor: tap a spot in the room, pick a chair, sofa, table, plant, lamp, TV, bar... (coins, burned). Free starter set.
+- [ ] Furniture slots instead of a free editor: tap a spot in the room, pick a chair, sofa, table, plant, lamp, TV, bar... (mint, burned). Free starter set.
 - [ ] "My house" button that always takes the owner home, even if the house is switched off in the city.
 
 Stage 2: paid publishing (N1500 a month)
@@ -44,6 +45,6 @@ Stage 3: studios (N15,000 a month) and mansions
 - [ ] Studio grows over time; mansions for personal houses up to 10x10 at level 100.
 
 ## Rules to remember
-- Every new kind of coin that appears (streaks, passive boost, etc.) must be added to the `coin_supply_daily` view so the books balance.
-- Gifts, spraying and stealing are transfers, not new coins.
+- Every new kind of mint that appears (streaks, passive boost, etc.) must be added to the `coin_supply_daily` view so the books balance.
+- Gifts, spraying and stealing are transfers, not new mint.
 - Line icons only, no emoji.

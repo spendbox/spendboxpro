@@ -33,7 +33,7 @@ const MAX_SENDS_PER_HOUR = 5;
 const RESEND_SECONDS = 30;
 const DAILY_WRONG = 15; // same number as in check_email_code (game-db/012)
 const LOCKED = "Too many wrong codes today. Please try again tomorrow.";
-const UNDERAGE = "Sorry, Hide & Seek is only for adults 18 and over, so you can't play.";
+const UNDERAGE = "Sorry, Newtown is only for adults 18 and over, so you can't play.";
 const PIN_TRIES = 5;
 const PIN_LOCK_MINUTES = 15;
 
