@@ -12,6 +12,7 @@ import {
   hash,
   KIND_LABEL,
   makePlan,
+  railCentre,
   smoothNoise,
   stationName,
   stationXZ,
@@ -56,6 +57,8 @@ import { createWorldEvents } from "./city/world-events";
 import { placeHouses } from "@/lib/city/houses";
 import { megaParts, statue } from "./city/megas";
 import { buildWater, disposeWater } from "./city/water";
+import { createCountryside, regionOf } from "./city/countryside";
+import { buildLandmarks as buildCountryLandmarks } from "./city/landmarks";
 import { causewayParts, jettyParts, neighbourhoodParts, pond, pool, supertallParts } from "./city/neighbourhood";
 import { homeLabel, type TownHouse } from "@/lib/houses";
 
@@ -1993,18 +1996,46 @@ export function CityView({
     terrain.frustumCulled = false;
     scene.add(terrain);
     const HILL_TREES = 340;
-    const hillTrees = new THREE.InstancedMesh(
-      new THREE.ConeGeometry(0.5, 1, 6).translate(0, 0.5, 0),
-      new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }),
-      HILL_TREES,
-    );
+    // The trees on the land round the town, shaped for the country (palms, flat-topped acacias,
+    // round oaks or pines), one colour each so they stay a single cheap draw.
+    const hillTreeShapes = new Map<string, THREE.BufferGeometry>();
+    function hillTreeShape(kind: string) {
+      let g = hillTreeShapes.get(kind);
+      if (g) return g;
+      const stem = (h: number, r: number) => new THREE.CylinderGeometry(r * 0.7, r, h, 5).translate(0, h / 2, 0).toNonIndexed();
+      if (kind === "acacia") g = mergeGeometries([stem(0.62, 0.07), new THREE.CylinderGeometry(0.62, 0.5, 0.16, 7).translate(0, 0.68, 0).toNonIndexed()]);
+      else if (kind === "palm") g = mergeGeometries([stem(0.8, 0.06), new THREE.IcosahedronGeometry(0.36, 0).scale(1.1, 0.5, 1.1).translate(0, 0.84, 0)]);
+      else if (kind === "round") g = mergeGeometries([stem(0.35, 0.08), new THREE.IcosahedronGeometry(0.42, 0).translate(0, 0.62, 0)]);
+      else g = new THREE.ConeGeometry(0.5, 1, 6).translate(0, 0.5, 0);
+      hillTreeShapes.set(kind, g);
+      return g;
+    }
+    const hillTrees = new THREE.InstancedMesh(hillTreeShape("pine"), new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), HILL_TREES);
     hillTrees.count = 0;
     hillTrees.frustumCulled = false;
     scene.add(hillTrees);
     let terrainKey = "";
     // This round's land: its seed, the half-size of the flat ground the city stands on, how hilly
     // it is, how high the mountains get, and how far out they start and reach full height.
-    const land = { seed: 0, half: 10, hills: 1, peaks: 14, start: 20, full: 60 };
+    const land = { seed: 0, half: 10, hills: 1, peaks: 14, start: 20, full: 60, flat: 18 };
+    /** The railway's line, anywhere along it (in town or out in the countryside). */
+    function railOut(x: number, z: number, pad: number) {
+      const r = currentPlan?.rail;
+      if (!r || !currentPlan) return false;
+      const along = r.along === "z" ? z : x;
+      const across = r.along === "z" ? x : z;
+      return Math.abs(across - railCentre(currentPlan, along)) < pad;
+    }
+    let country: ReturnType<typeof buildCountryLandmarks> | null = null;
+    // Farmland, villages and trees made up round you while you ride (see ./city/countryside).
+    const countryside = createCountryside({
+      parent: life,
+      ground: (x, z) => landHeight(x, z),
+      plan: () => currentPlan,
+      half: () => land.half,
+      flat: () => land.flat,
+      reserved: (x, z) => railOut(x, z, 1.2) || !!country?.covers(x, z),
+    });
     const LAND_COLORS = [
       { meadow: 0xb9d99b, hill: 0x8cc178, forest: 0x5f9e5a, rock: 0x9b958a, low: 0x9fcb8a },
       { meadow: 0xd3d8a2, hill: 0xbcc283, forest: 0x7b9b58, rock: 0xa89a86, low: 0xb7c98d },
@@ -2017,7 +2048,19 @@ export function CityView({
     };
     /** How far outside the city's flat ground the last landHeight() point was. */
     let landE = 0;
+    /** Level ground under each landmark (so the land's gentle roll doesn't poke through its lake or plaza). */
+    let pads: { x: number; z: number; r: number; y: number }[] = [];
     function landHeight(x: number, z: number) {
+      const h = rawLandHeight(x, z);
+      if (!pads.length) return h;
+      let out = h;
+      for (const p of pads) {
+        const d = Math.hypot(x - p.x, z - p.z);
+        if (d < p.r + 2) out += (p.y - out) * (1 - smooth(p.r + 0.3, p.r + 2, d));
+      }
+      return out;
+    }
+    function rawLandHeight(x: number, z: number) {
       // Distance outside a square with rounded corners round the city.
       const c = 2.5;
       const qx = Math.abs(x) - land.half + c;
@@ -2026,7 +2069,9 @@ export function CityView({
       landE = Math.max(0, e);
       if (e <= 0) return -0.02;
       const n = smoothNoise(x / 4.5, z / 4.5, land.seed) * 0.65 + smoothNoise(x / 1.9 + 50, z / 1.9, land.seed + 1) * 0.35 - 0.5;
-      const hills = n * (0.55 * smooth(0, 5, e) + 3.4 * land.hills * smooth(5, 30, e));
+      // Flat farmland round the town (just a gentle roll), hills only beyond it, the mountains
+      // far off on the horizon: a ride out of town never heads into mountains.
+      const hills = n * (0.12 * smooth(0, 4, e) + 3.4 * land.hills * smooth(land.flat, land.flat + 22, e));
       const r1 = 1 - Math.abs(2 * smoothNoise(x / 20, z / 20, land.seed + 2) - 1);
       const r2 = 1 - Math.abs(2 * smoothNoise(x / 8 + 9, z / 8 - 4, land.seed + 3) - 1);
       const ridges = r1 * r1 * 0.75 + r2 * r2 * 0.3;
@@ -2042,8 +2087,16 @@ export function CityView({
       land.half = R + 1.2;
       land.hills = 0.45 + rr(1) * 0.9;
       land.peaks = (9 + R * 0.5) * (0.6 + rr(2) * 0.8);
-      land.start = 10 + R * 0.5;
-      land.full = 40 + R * 1.6;
+      land.flat = 16 + R * 0.35;
+      land.start = land.flat + 14 + R * 0.4;
+      land.full = land.start + 30 + R * 1.2;
+      // This country's famous landmarks, out in the farmland (see ./city/landmarks).
+      country?.dispose();
+      pads = [];
+      country = currentPlan ? buildCountryLandmarks(currentPlan, land.half, landHeight, (x, z, r) => railOut(x, z, r + 1)) : null;
+      pads = (country?.spots ?? []).map((p) => ({ ...p, y: landHeight(p.x, p.z) }));
+      if (country) life.add(country.group);
+      countryside.reset();
       const pal = LAND_COLORS[Math.floor(rr(3) * LAND_COLORS.length) % LAND_COLORS.length];
       const cGround = new THREE.Color(GROUND);
       const cMeadow = new THREE.Color(pal.meadow);
@@ -2103,6 +2156,11 @@ export function CityView({
       terrain.geometry.dispose();
       terrain.geometry = g;
       // Little woods on the hills.
+      const treeKind = regionOf(currentPlan).tree;
+      hillTrees.geometry = hillTreeShape(treeKind);
+      const wide = treeKind === "pine" ? 0.42 : 0.8;
+      // Leafy trees stay green whatever the hills' colour (a brown palm looks like a table).
+      const cLeaf = cForest.clone().lerp(new THREE.Color(treeKind === "acacia" ? 0x7a9a3a : 0x3f9b46), treeKind === "pine" ? 0 : 0.7);
       let count = 0;
       for (let k = 0; k < 4000 && count < HILL_TREES; k++) {
         const a = hash(k, 1, seedV + 5252) * Math.PI * 2;
@@ -2111,10 +2169,11 @@ export function CityView({
         const z = Math.sin(a) * d;
         const y = landHeight(x, z);
         if (landE < 1.2 || y > land.peaks * 0.2 || smoothNoise(x / 7, z / 7, land.seed + 6) < 0.5) continue;
+        if (railOut(x, z, 1.5) || country?.covers(x, z)) continue;
         const h = (0.55 + hash(k, 3, seedV + 5252) * 0.6) * (1 + landE / 45);
-        m4.compose(v.set(x, y - 0.05, z), q.identity(), s.set(h * 0.42, h, h * 0.42));
+        m4.compose(v.set(x, y - 0.05, z), q.identity(), s.set(h * wide, h, h * wide));
         hillTrees.setMatrixAt(count, m4);
-        hillTrees.setColorAt(count, cc.copy(cForest).multiplyScalar(0.75 + hash(k, 4, seedV + 5252) * 0.35));
+        hillTrees.setColorAt(count, cc.copy(cLeaf).multiplyScalar(0.75 + hash(k, 4, seedV + 5252) * 0.35));
         count++;
       }
       hillTrees.count = count;
@@ -2355,7 +2414,8 @@ export function CityView({
       world.born = born;
       birds.build(newSeed);
       people.build();
-      trains.build();
+      // The railway runs on out into the farmland (not in a huge town drawn only round the camera).
+      trains.build(win ? 0 : Math.max(0, Math.min(26, Math.floor(land.flat - 3))));
       traffic.build(plan);
       boats.build();
       buildLandmarks();
@@ -5192,6 +5252,7 @@ export function CityView({
       renderer.toneMappingExposure += (exposure - renderer.toneMappingExposure) * Math.min(1, dt * 3);
       updateStages(time);
       const riding = updateView(dt);
+      countryside.update(camera.position, view?.kind === "ride" || view?.kind === "vehicle", currentSeed);
       if (!riding) {
         if (focus) {
           controls.target.lerp(focus, 0.06);
@@ -5312,6 +5373,9 @@ export function CityView({
         }
       });
       disposeWater(waterGroup);
+      countryside.dispose();
+      country?.dispose();
+      for (const g of hillTreeShapes.values()) g.dispose();
       renderer.dispose();
       el.removeChild(renderer.domElement);
       api.current = null;

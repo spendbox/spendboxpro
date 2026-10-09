@@ -143,17 +143,97 @@ export function createTrains(world: World, parent: THREE.Object3D) {
   const DAY = new THREE.Color(0x0b1a2a);
   const NIGHT = new THREE.Color(0xffd27a);
 
+  /** The line's way out into the countryside (beyond the town), drawn here: deck, rails, legs, poles. */
+  let outer: THREE.InstancedMesh[] = [];
+  const outerMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  /** Where the town's own stretch of line starts and ends (the rest is countryside). */
+  let townLo = 0;
+  let townHi = 0;
+
   function clear() {
-    for (const m of [body, windows, roofs]) {
+    for (const m of [body, windows, roofs, ...outer]) {
       if (!m) continue;
       parent.remove(m);
       m.dispose();
     }
     body = windows = roofs = null;
+    outer = [];
     trains = [];
   }
 
-  function build() {
+  /**
+   * The line beyond the town, from step `from` to `to` (`out`: which way is outwards), a step at a
+   * time: deck, ballast, two rails, two legs, sometimes a pole, and a little halt at the far end.
+   */
+  function buildOuter(plan: CityPlan, from: number, to: number, out: number) {
+    const tip = out > 0 ? to : from;
+    const steps: number[] = [];
+    for (let a = from; a <= to; a++) steps.push(a);
+    if (!steps.length) return;
+    const parts: { x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number; c: number }[] = [];
+    const deck = RAIL_Y - 0.1;
+    for (const a of steps) {
+      const f = railFrame(plan, a);
+      const ry = Math.atan2(-f.dz, f.dx);
+      const seg = Math.hypot(1, f.slope) + 0.04;
+      const at = (u: number, c: number) => ({ x: f.x + u * f.dx + c * f.nx, z: f.z + u * f.dz + c * f.nz });
+      const P = (u: number, y: number, c: number, sx: number, sy: number, sz: number, col: number) => parts.push({ ...at(u, c), y, sx, sy, sz, ry, c: col });
+      P(0, deck - 0.02, 0, seg, 0.1, 0.5, 0xc9ccd1);
+      P(0, deck + 0.075, 0, seg, 0.01, 0.44, 0x8a8178);
+      for (const c of [-0.245, 0.245]) P(0, deck + 0.08, c, seg, 0.07, 0.03, 0xb4b9c0);
+      for (const c of [-0.15, -0.05, 0.05, 0.15]) P(0, deck + 0.097, c, seg, 0.014, 0.014, 0xadb5bd);
+      for (const c of [-0.18, 0.18]) P(0, 0, c, 0.09, deck, 0.09, 0xbfc4ca);
+      // Telegraph poles alongside, every few steps.
+      if (Math.abs(a) % 3 === 0 && Math.abs(a - tip) > 3) {
+        P(0, 0, 0.55, 0.04, 1.5, 0.04, 0x6b4f35);
+        P(0, 1.4, 0.55, 0.03, 0.03, 0.3, 0x6b4f35);
+      }
+      // A little country halt at the end of the line: platforms both sides, a shelter, stairs.
+      const fromTip = Math.abs(a - tip);
+      if (fromTip < 3) {
+        for (const c of [-0.33, 0.33]) {
+          P(0, deck - 0.02, c, seg, 0.13, 0.16, 0xdee2e6);
+          P(0, deck + 0.111, c > 0 ? c - 0.07 : c + 0.07, seg, 0.004, 0.02, 0xffd43b);
+          P(0, 0, c * 1.15, 0.07, deck - 0.02, 0.07, 0xbfc4ca);
+          if (fromTip === 1) {
+            for (const u of [-0.42, 0.42]) P(u, deck + 0.11, c * 1.18, 0.035, 0.46, 0.035, 0x495057);
+            P(0, deck + 0.57, c * 1.08, 1.0, 0.04, 0.26, 0x2b8a3e);
+            P(0, deck + 0.11, c * 1.2, 0.5, 0.07, 0.07, 0x8d6e4a);
+          }
+          if (fromTip === 2) {
+            // Stairs down from the platform's far end, beside the line.
+            const n = 10;
+            for (let k = 0; k < n; k++) P(-out * (0.1 + k * 0.09), 0, c * 1.55, 0.09, (deck + 0.11) * (1 - k / n), 0.18, 0xced4da);
+          }
+        }
+      }
+      if (a === tip) {
+        // Buffer stops, red and white, at the very end.
+        for (const c of [-0.1, 0.1]) {
+          P(out * 0.44, deck + 0.08, c, 0.08, 0.14, 0.16, 0xe03131);
+          P(out * 0.44, deck + 0.13, c, 0.085, 0.03, 0.165, 0xffffff);
+        }
+        P(out * 0.52, deck - 0.02, 0, 0.06, 0.24, 0.5, 0xc9ccd1);
+      }
+    }
+    const mesh = new THREE.InstancedMesh(bodyGeo, outerMat, parts.length);
+    parts.forEach((p, k) => {
+      q.setFromAxisAngle(up, p.ry);
+      m4.compose(v.set(p.x, p.y, p.z), q, s.set(p.sx, p.sy, p.sz));
+      mesh.setMatrixAt(k, m4);
+      mesh.setColorAt(k, color.setHex(p.c));
+    });
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    parent.add(mesh);
+    outer.push(mesh);
+  }
+
+  /**
+   * extend: how far the line runs on past each end of the town into the countryside (0 = it stops
+   * at the edge, e.g. in a very big town where only the part round the camera is drawn).
+   */
+  function build(extend = 0) {
     clear();
     const rail = world.plan?.rail;
     if (!rail) return;
@@ -168,8 +248,14 @@ export function createTrains(world: World, parent: THREE.Object3D) {
       max = Math.max(max, a);
     }
     if (!Number.isFinite(min) || max - min < 5) return;
-    lo = min - 0.4;
-    hi = max + 0.4;
+    townLo = min;
+    townHi = max;
+    if (extend > 0 && world.plan) {
+      buildOuter(world.plan, min - extend, min - 1, -1);
+      buildOuter(world.plan, max + 1, max + extend, 1);
+    }
+    lo = min - extend - 0.4;
+    hi = max + extend + 0.4;
     const len = hi - lo;
     const cars = len > 12 ? 4 : len > 8 ? 3 : 2;
     const tl = cars * CAR + (cars - 1) * GAP;
@@ -244,7 +330,8 @@ export function createTrains(world: World, parent: THREE.Object3D) {
       const mid = Math.round(tr.pos);
       const row = railRow(plan, mid);
       const tile = world.tileIndex.get(along === "z" ? keyOf(row, mid) : keyOf(mid, row));
-      const show = tile !== undefined && grown(world, tile, now);
+      // (Out in the countryside there's no tile: always shown.)
+      const show = mid < townLo || mid > townHi || (tile !== undefined && grown(world, tile, now));
       for (let c = 0; c < tr.cars; c++, k++) {
         const a = tr.pos - L / 2 + CAR / 2 + c * (CAR + GAP);
         // Each carriage sits on the curve, turned along it, on its own track.
@@ -298,6 +385,7 @@ export function createTrains(world: World, parent: THREE.Object3D) {
     clear();
     bodyGeo.dispose();
     bodyMat.dispose();
+    outerMat.dispose();
     windowMat.dispose();
     roofMat.dispose();
   }

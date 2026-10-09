@@ -98,6 +98,22 @@ a glass-vaulted grand station (`src/app/play/city/trains.ts`). Suburbs get windi
 every 6×6 lots, a school, a mosque or church, a five-a-side pitch, a playground or a monument
 (`src/app/play/city/neighbourhood.ts`).
 
+Round the town: flat farmland first (the hills start further out and the mountains stay on the
+horizon, so a ride out of town never heads into mountains). The railway runs on past the town
+into the countryside to a little halt at each end. While you're on a ride, fields, hedges,
+farms, villages, trees and animals are made around you as you go, in the style of the town's
+country (palms and red earth in Nigeria and Ghana, acacias, round huts and giraffes in Kenya
+and South Africa, hedges and sheep in Britain, barns and silos in America), from a few pooled
+instanced meshes (`src/app/play/city/countryside.ts`). Each town also has three famous
+places from its own city or country standing just outside it, with name labels
+(`src/app/play/city/landmarks.ts`): the Third Mainland Bridge, the Lekki-Ikoyi Link Bridge,
+the National Theatre, Zuma Rock, Cocoa House, Olumo Rock, the Kano dye pits, the Black Star
+Gate, Kakum's canopy walkway, Cape Coast Castle, KICC, Nairobi National Park, Lake Nakuru's
+flamingos, Fort Jesus, the Nelson Mandela Bridge, the Soweto Towers, Moses Mabhida Stadium,
+Bo-Kaap, the Union Buildings, Big Ben, the London Eye, Tower Bridge, Stonehenge, Edinburgh
+Castle, the Royal Liver Building, the Statue of Liberty, the Space Needle, the Hollywood Sign,
+Cloud Gate, Navy Pier and a Route 66 diner. Each is baked into a few meshes, so they're cheap.
+
 Big 2×2 landmarks: shopping malls, twin towers, domed museums, funfairs, markets, arenas,
 university campuses, hotels with rooftop pools, solar farms. One-of-a-kind buildings:
 skyscrapers in five shapes, three kinds of office block and house, hospitals, clock towers,
