@@ -129,8 +129,9 @@ const def = (group: BadgeGroup, rim: BadgeRim, icon: LucideIcon, title: string, 
   group,
 });
 
-// All 100 badges. The keys match the database (game-db/008_badge_collection.sql and
-// game-db/011_badges_hard.sql). Bronze is the easiest, then silver, gold, diamond, and legendary.
+// All 102 badges. The keys match the database (game-db/008_badge_collection.sql,
+// game-db/011_badges_hard.sql, and game-db/027_streaks_levels.sql for the streaks). Bronze is
+// the easiest, then silver, gold, diamond, and legendary.
 export const BADGE_INFO: Record<string, BadgeInfo> = {
   // Hiding
   survivor: def("Hiding", "silver", Shield, "Survivor", "Stay hidden till the very end.", "#34d399", "#047857"),
@@ -207,9 +208,9 @@ export const BADGE_INFO: Record<string, BadgeInfo> = {
   coins_5k: def("Milestones", "silver", Banknote, "Money Maker", "Win 5,000 mint in total.", "#bbf7d0", "#166534"),
   coins_10k: def("Milestones", "gold", Gem, "Tycoon", "Win 10,000 mint in total.", "#a5f3fc", "#155e75"),
   coins_25k: def("Milestones", "diamond", Vault, "Mogul", "Win 25,000 mint in total.", "#fde68a", "#78350f"),
-  streak_3: def("Milestones", "bronze", Calendar, "Three in a Row", "Play on 3 days in a row.", "#bfdbfe", "#1e40af"),
-  streak_7: def("Milestones", "gold", CalendarCheck, "Week Warrior", "Play every day for a week.", "#93c5fd", "#1e3a8a"),
-  streak_14: def("Milestones", "diamond", CalendarDays, "Fortnight Fanatic", "Play every day for 14 days in a row.", "#c7d2fe", "#312e81"),
+  streak_3: def("Milestones", "bronze", Calendar, "Three in a Row", "Keep a daily streak for 3 days.", "#bfdbfe", "#1e40af"),
+  streak_7: def("Milestones", "gold", CalendarCheck, "Week Warrior", "Keep a daily streak for a week.", "#93c5fd", "#1e3a8a"),
+  streak_14: def("Milestones", "diamond", CalendarDays, "Fortnight Fanatic", "Keep a daily streak for 14 days.", "#c7d2fe", "#312e81"),
   bot_buster: def("Milestones", "silver", Cpu, "Bot Buster", "Find the bot 5 times.", "#bfdbfe", "#1e3a8a"),
   bot_terminator: def("Milestones", "diamond", Cog, "Bot Terminator", "Find the bot 25 times.", "#cbd5e1", "#0f172a"),
   shield_master: def("Milestones", "gold", Castle, "Shield Master", "Get saved by your shield 3 times.", "#7dd3fc", "#075985"),
@@ -238,7 +239,9 @@ export const BADGE_INFO: Record<string, BadgeInfo> = {
   level_50: def("Legendary", "legendary", MountainSnow, "Level 50", "Reach level 50. Catching you is worth a fortune.", "#fde047", "#713f12"),
   coins_100k: def("Legendary", "legendary", Diamond, "Mint Royalty", "Win 100,000 mint in total.", "#67e8f9", "#164e63"),
   rounds_500: def("Legendary", "legendary", Landmark, "Living Legend", "Play 500 rounds.", "#fcd34d", "#451a03"),
-  streak_30: def("Legendary", "legendary", MoonStar, "Month of Madness", "Play every day for 30 days in a row.", "#818cf8", "#0f172a"),
+  streak_30: def("Legendary", "legendary", MoonStar, "Month of Madness", "Keep a daily streak for 30 days.", "#818cf8", "#0f172a"),
+  streak_60: def("Legendary", "legendary", Flame, "Eternal Flame", "Keep a daily streak for 60 days.", "#fdba74", "#7c2d12"),
+  streak_100: def("Legendary", "legendary", Medal, "Hundred Days", "Keep a daily streak for 100 days.", "#fde68a", "#713f12"),
   catches_500: def("Legendary", "legendary", Crown, "King of the Hunt", "Find 500 ghosts in total.", "#fdba74", "#7c2d12"),
   collector_80: def("Legendary", "legendary", Award, "Hall of Fame", "Collect 80 different badges.", "#93c5fd", "#172554"),
 };
@@ -247,7 +250,7 @@ export const BADGE_INFO: Record<string, BadgeInfo> = {
 const ONCE = new Set([
   "rounds_5", "rounds_25", "rounds_50", "rounds_100", "rounds_250", "rounds_500",
   "catches_10", "catches_50", "catches_100", "catches_500", "survive_5", "survive_25", "survive_50", "survive_100",
-  "coins_1k", "coins_5k", "coins_10k", "coins_25k", "coins_100k", "streak_3", "streak_7", "streak_14", "streak_30",
+  "coins_1k", "coins_5k", "coins_10k", "coins_25k", "coins_100k", "streak_3", "streak_7", "streak_14", "streak_30", "streak_60", "streak_100",
   "bot_buster", "bot_terminator", "shield_master", "welcome", "balloon_popper", "bounty_hunter", "illusionist", "immortal",
   "level_5", "level_10", "level_20", "level_30", "level_50", "collector_80",
 ]);

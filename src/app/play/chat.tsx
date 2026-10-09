@@ -174,6 +174,7 @@ export function Chat({
   enteredAt = null,
   externalNpc = null,
   onGiveCoins,
+  greet,
   friendStatusOf,
   onAddFriend,
 }: {
@@ -210,6 +211,8 @@ export function Chat({
   externalNpc?: { id: string; at: number } | null;
   /** "Give coins" to a real player (shown in a private chat and on players in the people lists). */
   onGiveCoins?: (p: { id: string; name: string; avatar: unknown }) => void;
+  /** Hug and handshake buttons for a real player (shown in a private chat). */
+  greet?: (p: { id: string; name: string }) => React.ReactNode;
   /** Whether someone is already your friend (or asked, or was asked). */
   friendStatusOf?: (id: string) => "friend" | "incoming" | "outgoing" | null;
   /** "Add friend" on players in the people lists. */
@@ -676,6 +679,7 @@ export function Chat({
                 </span>
               </p>
             </div>
+            {thread.id !== meId && thread.id !== BOT_ID && greet?.({ id: thread.id, name: thread.name })}
             {giveButton({ id: thread.id, name: thread.name, avatar: byId.get(thread.id)?.avatar ?? avatarOf(thread.id, thread.name) })}
           </>
         ) : guest ? (

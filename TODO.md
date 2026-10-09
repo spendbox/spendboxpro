@@ -1,11 +1,14 @@
 # To do
 
 ## Now (owner)
-- [ ] In the Supabase SQL Editor run, in order: `game-db/021_hourly_rounds.sql` (again), `022_pool_and_ads.sql`, `023_houses.sql`, `024_play_style.sql`, `025_big_towns.sql`, `026_friends.sql`. (If 017–020 were never run, run them first.) Then merge the open pull request.
+- [ ] In the Supabase SQL Editor run, in order: `game-db/021_hourly_rounds.sql` (again), `022_pool_and_ads.sql`, `023_houses.sql`, `024_play_style.sql`, `025_big_towns.sql`, `026_friends.sql`, `027_streaks_levels.sql`, `028_hugs_gifts.sql`. (If 017–020 were never run, run them first.) Then merge the open pull request.
 - [ ] In Vercel, set `SPORTS_SECRET` to a long random string (once; don't change it later).
 - [ ] Test on a real phone: sounds, touch gestures, the water slide, club lights.
 
 ## Done lately
+- [x] Daily streaks (run `game-db/027_streaks_levels.sql`): a flame next to your mint, one thing a day keeps it going (a game, a side quest, a gift or spray, a hug or handshake, a ride), a free freeze each week, mint and badges at 3, 7, 14, 30, 60 and 100 days.
+- [x] New level curve (same file): XP from games, side quests and streak days; quick and cheap to level 20, then harder every level to 100. Everyone keeps their level. The daily refill stops growing at level 40.
+- [x] Hugs, handshakes and My gifts (run `game-db/028_hugs_gifts.sql`): free hugs and handshakes (30 a day, 3 to the same person), a My gifts screen with thank-you buttons, and blocking. Two new side quests count them.
 - [x] Planes are proper airliners now: rounded body with a nose and cockpit, a row of windows, swept wings with engines, a tall tail in an airline's colours, wingtip lights and strobes, and two vapour trails. They fly higher and slower. The plane parked at the airport is an airliner too.
 - [x] Friends (run `game-db/026_friends.sql`): add, say yes, remove; friends stay friends in every new town, their faces show over the places they're in, nudges to join them, and "your friends are in this town too". A card pops up when real players (not NPCs) are in the same place as you. People look much more natural (jointed bodies, faces from avatars, outfits from avatars) and stay fast. Clubs: dance with everyone, see yourself dancing, eight moves, partners, music and lights on the beat.
 - [x] Rides out of town: the railway runs on into the countryside, flat farmland round every town (no mountains in the way), scenery made around you while you ride (fields, farms, villages, trees and animals in each country's style), and famous places from the town's own country or city outside it (Third Mainland Bridge, Big Ben, Statue of Liberty, Lake Nakuru's flamingos and more).
@@ -22,13 +25,10 @@
 - [x] Sports: football, basketball, boxing, wrestling. Simulated matches in a tactical view, mint tickets, simple mint bets (run `game-db/020_sports.sql`).
 
 ## Next batch
-- [ ] **Daily streaks.** Any daily action counts (play a round, finish a side quest, send a gift or hug, ride something). Rewards grow at 3, 7, 14, 30, 60 and 100 days (a little mint, badges). One free "freeze" a week. Flame icon on the home screen.
-- [ ] **Hugs, handshakes and a "My gifts" screen.** Free, with daily caps and a block button. "My gifts" in the menu shows who sent what, with a thank-you button. Counts towards quests and streaks.
 - [ ] **Ghost pranks on hunters** (mint-priced, one per game, level-gated):
   - Booby-trapped spot: green slime and a longer wait for the hunter who searches it.
   - Mirage: a fake ghost on hunters' maps for a minute.
   - Haunting: caught ghosts flicker lights and rattle chairs while hunters are inside buildings.
-- [ ] **New level curve.** Cheap and fast to level 20, then harder every level to 100. Quests, games and streaks also earn level progress. Cap the daily mint refill (+25 per level is about 2,575 a day at level 100). Existing players keep their levels.
 - [ ] **Simple counters** (time spent, next-day return, players per round) and a plan for 10-20 friends playing for a few days, plus scheduled evening "peak hour" events.
 
 ## Houses and studios

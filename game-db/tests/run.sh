@@ -36,3 +36,13 @@ for t in round4 round5 ads badges2 age ads2 rooms round6 rooms2 round7 npcs acti
   [ -f "game-db/tests/$t.test.sql" ] || continue
   $P -f "game-db/tests/$t.test.sql" 2>&1 | sed 's/^psql:[^ ]* NOTICE:  //'
 done
+# Parts from 27 on change rules the scenarios above were written for (part 27's level curve),
+# so they go in after them, followed by their own tests.
+for f in game-db/027_streaks_levels.sql game-db/028_hugs_gifts.sql; do
+  [ -f "$f" ] || continue
+  $P -f "$f"
+done
+for t in streaks hugs; do
+  [ -f "game-db/tests/$t.test.sql" ] || continue
+  $P -f "game-db/tests/$t.test.sql" 2>&1 | sed 's/^psql:[^ ]* NOTICE:  //'
+done

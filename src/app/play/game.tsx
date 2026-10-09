@@ -68,6 +68,10 @@ import { isDanceMove, syncBeat, type DanceMove } from "./city/dance-moves";
 import { npcsFor } from "@/lib/npcs";
 import { addFriend } from "./friend-actions";
 import { FriendNudge, PeopleHere, type HerePerson } from "./people-here";
+import { rodeSomething } from "./streak-actions";
+import { GreetButtons } from "./greet-buttons";
+import { MyGiftsSheet } from "./my-gifts-sheet";
+import { StreakPill, StreakSheet } from "./streak-sheet";
 import { useQuestTracker } from "./activities/quest-tracker";
 import { QuestBanner, QuestSheet } from "./activities/quest-ui";
 import { Chat } from "./chat";
@@ -318,6 +322,21 @@ export function Game({ state }: { state: GameState }) {
   // Inside a building: which one, and which level (ground "g", floor "f<n>", rooftop "r").
   const [place, setPlace] = useState<{ building: string; level: string } | null>(null);
   const [friendsOpen, setFriendsOpen] = useState(false);
+  const [streakOpen, setStreakOpen] = useState(false);
+  const [giftsOpen, setGiftsOpen] = useState(false);
+  // When you last opened My gifts (remembered on this device): newer hugs and gifts get a number.
+  const [giftsSeenAt, setGiftsSeenAt] = useState(() => Date.parse(state.serverNow));
+  useEffect(() => {
+    const id = setTimeout(() => {
+      try {
+        const seen = Number(localStorage.getItem("hs-gifts-seen") ?? 0);
+        if (seen > 0) setGiftsSeenAt(seen);
+      } catch {}
+    }, 0);
+    return () => clearTimeout(id);
+  }, []);
+  // Riding something counts towards your daily streak (asked once a day, at most).
+  const rodeToday = useRef(false);
   const [friendBusy, setFriendBusy] = useState<string | null>(null);
   /** Going to a friend: open their building (openRoom), then straight onto their floor (goTo). */
   const [openReq, setOpenReq] = useState<{ id: string; at: number } | null>(null);
@@ -803,7 +822,7 @@ export function Game({ state }: { state: GameState }) {
       text: n.tile !== null && n.kind === "trap" ? `${n.body} (near ${where(n.tile)})` : n.body,
       tone: n.kind === "caught" ? ("alarm" as const) : ("mine" as const),
       avatar: n.kind === "caught" || n.kind === "shield" ? me.avatar : null,
-      icon: (({ trap: "trap", trapped: "trap", swept: "drone", caught: "catch", shield: "shield", shielded: "shield", decoy: "decoy" }) as Record<string, FeedIcon>)[n.kind] ?? "info",
+      icon: (({ trap: "trap", trapped: "trap", swept: "drone", caught: "catch", shield: "shield", shielded: "shield", decoy: "decoy", streak: "flame", gift: "gift", spray: "gift", hug: "hug", handshake: "handshake", thanks: "hug" }) as Record<string, FeedIcon>)[n.kind] ?? "info",
     }));
     // World events that have started: news you can tap to fly there.
     const news = state.worldEvents
@@ -819,6 +838,21 @@ export function Game({ state }: { state: GameState }) {
     return [...pub, ...mine, ...news].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 60);
   }, [state.events, state.notifications, state.worldEvents, serverNowMs, botName, myLastSpot, where, me.avatar]);
   const unread = feed.filter((f) => Date.parse(f.at) > Date.parse(feedSeenAt)).length;
+
+  // Hugs, handshakes and mint that arrived since you last opened My gifts.
+  const newGifts = state.notifications.filter((n) => ["hug", "handshake", "gift", "spray"].includes(n.kind) && Date.parse(n.at) > giftsSeenAt).length;
+  function openGifts() {
+    setGiftsOpen(true);
+    const t = Date.parse(state.serverNow);
+    setGiftsSeenAt(t);
+    try {
+      localStorage.setItem("hs-gifts-seen", String(t));
+    } catch {}
+  }
+  // Hug and Shake hands buttons for someone (they say how it went on the message line).
+  const greet = (p: { id: string; name: string }, compact = true) => (
+    <GreetButtons person={p} compact={compact} onDone={(text, ok) => setMessage({ text, tone: ok ? "good" : "bad" })} />
+  );
 
   // New items pop up briefly under the bell (only what arrives while you're here).
   const seenKeys = useRef<Set<string> | null>(null);
@@ -960,6 +994,12 @@ export function Game({ state }: { state: GameState }) {
         rideMs: r.kind !== "balloon" && info.minutes ? info.minutes * 60_000 : undefined,
       });
       if (!res.ok) return setMessage({ text: res.reason === "full" ? `${r.name} is full. Try another one!` : "Sign in to ride.", tone: "info" });
+      if (state.streak && !state.streak.today && !rodeToday.current) {
+        rodeToday.current = true;
+        void rodeSomething().then((s) => {
+          if (s.ok && s.newDay) startTransition(() => router.refresh());
+        });
+      }
     } else if (r.kind !== "slide") {
       // Watchers get the view for a while, but need to sign in to chat on board.
       setTimeout(() => setRide((cur) => (cur?.kind === r.kind && cur.index === r.index ? null : cur)), 60_000);
@@ -1306,6 +1346,7 @@ export function Game({ state }: { state: GameState }) {
                 <span className="hidden sm:inline">Big fish</span>
               </span>
             )}
+            {state.streak && <StreakPill streak={state.streak} onOpen={() => { setStreakOpen(true); setMenu(false); setFeedOpen(false); }} />}
             <span className="glass whitespace-nowrap rounded-full px-3 py-1.5 text-sm" title={`${me.coins} mint · level ${me.level}`}>
               <b className="text-gold-dark">{short(me.coins)}</b>
               <span className="hidden sm:inline"> mint</span>
@@ -1351,6 +1392,10 @@ export function Game({ state }: { state: GameState }) {
               key={n.key}
               onClick={() => {
                 if (n.eventId) return openEvent(n.eventId);
+                if (!guest && (n.icon === "hug" || n.icon === "handshake" || n.icon === "gift")) {
+                  setToasts([]);
+                  return openGifts();
+                }
                 setFeedOpen(true);
                 setFeedSeenAt(new Date(now).toISOString());
                 setToasts([]);
@@ -1369,6 +1414,7 @@ export function Game({ state }: { state: GameState }) {
           onPick={(f) => {
             setFeedOpen(false);
             if (f.eventId) openEvent(f.eventId);
+            else if (!guest && (f.icon === "hug" || f.icon === "handshake" || f.icon === "gift")) openGifts();
           }}
         />
       )}
@@ -1386,6 +1432,8 @@ export function Game({ state }: { state: GameState }) {
           onMyHouse={guest ? undefined : () => { setMenu(false); setHouseOpen(true); }}
           onFriends={guest ? undefined : () => { setMenu(false); setFriendsOpen(true); }}
           friendRequests={state.friends.incoming.length}
+          onMyGifts={guest ? undefined : () => { setMenu(false); openGifts(); }}
+          newGifts={newGifts}
           coins={guest ? undefined : me.coins}
           level={guest ? undefined : me.level}
           onChangePin={() => router.push("/welcome")}
@@ -1393,6 +1441,8 @@ export function Game({ state }: { state: GameState }) {
         />
       )}
       {howOpen && <HowItWorks onClose={() => setHowOpen(false)} />}
+      {streakOpen && state.streak && <StreakSheet streak={state.streak} now={now} onClose={() => setStreakOpen(false)} />}
+      {giftsOpen && !guest && <MyGiftsSheet now={now} onClose={() => setGiftsOpen(false)} onChanged={() => startTransition(() => router.refresh())} />}
       {styleOpen && <StyleSheet onClose={() => setStyleOpen(false)} />}
       {friendsOpen && !guest && (
         <FriendsSheet
@@ -1408,6 +1458,7 @@ export function Game({ state }: { state: GameState }) {
           }}
           onChanged={() => startTransition(() => router.refresh())}
           onClose={() => setFriendsOpen(false)}
+          greet={(f) => greet(f, false)}
         />
       )}
       {editAvatar && (
@@ -1911,7 +1962,7 @@ export function Game({ state }: { state: GameState }) {
         )}
         {!guest && nudge && <FriendNudge friend={nudge} place={nudge.place} onJoin={() => goToFriend(nudge.room, nudge.name)} onClose={closeNudge} />}
         {!guest && rooms.myRoom && !isDancing && (
-          <PeopleHere room={rooms.myRoom} people={hereNow} statusOf={friendStatusOf} busy={friendBusy} onChat={chatWith} onAddFriend={befriend} />
+          <PeopleHere room={rooms.myRoom} people={hereNow} statusOf={friendStatusOf} busy={friendBusy} onChat={chatWith} onAddFriend={befriend} greet={greet} />
         )}
         {busy && !message && (
           <p className="glass flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold" role="status">
@@ -1988,6 +2039,7 @@ export function Game({ state }: { state: GameState }) {
                 externalNpc={npcTap}
                 enteredAt={rooms.enteredAt}
                 onGiveCoins={guest ? undefined : setGiveTo}
+                greet={guest ? undefined : greet}
                 friendStatusOf={friendStatusOf}
                 onAddFriend={guest ? undefined : befriend}
               />

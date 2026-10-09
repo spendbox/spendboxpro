@@ -179,7 +179,7 @@ export function useQuestTracker(opts: { room?: string | null; seated?: boolean; 
         if (opts.seated === undefined) ctx.current.seated = seatedManual.current;
         return;
       }
-      if (e.type === "spray" || e.type === "gift" || e.type === "search" || e.type === "sweep" || e.type === "event") {
+      if (e.type === "spray" || e.type === "gift" || e.type === "greet" || e.type === "search" || e.type === "sweep" || e.type === "event") {
         if (questRef.current?.status === "active") loadSoon();
         return;
       }

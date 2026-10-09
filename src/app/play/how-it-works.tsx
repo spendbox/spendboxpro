@@ -5,6 +5,7 @@ import {
   Coins,
   Compass,
   Drama,
+  Flame,
   Flashlight,
   Gamepad2,
   Ghost,
@@ -86,6 +87,7 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
       "You can still message anyone privately from the People list. Tap where a ghost was caught to say hi to them.",
       "When other real players are in the same place as you, a card pops up saying who they are (they're people, not NPCs), so you can say hi or add them as a friend.",
       "Add friends from the menu (Friends), the People list or that card. Once they say yes, they stay your friends in every new town: you see their faces over the places they're in, get a nudge when they go somewhere, and can go straight to them. Remove a friend any time.",
+      "Send someone a hug or a handshake (from that card, Friends, or a private chat). It's free: up to 30 a day, and 3 a day to the same person. My gifts in the menu shows the hugs, handshakes and mint people sent you, with a Thank you button. Don't want to hear from someone? Block them there: their hugs, gifts, private messages and friend requests stop reaching you.",
       <>
         Switch back to <Ico icon={Gamepad2} />
         <b>Game</b> to search or move.
@@ -96,7 +98,8 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
     icon: Star,
     title: "Levels and power-ups",
     body: [
-      "Play rounds, then spend mint to level up from the menu. Each level needs a few more rounds and a bit more mint than the last.",
+      "Earn XP, then spend mint to level up from the menu. Playing a game gives 10 XP, finishing a side quest 10, and every day of your streak 5.",
+      "Levels up to 20 are quick and cheap (15 XP and 10 mint per level). After that each level takes more XP and more mint, all the way to level 100.",
       <>
         Level 3, <Ico icon={Drama} />
         <b>Decoy</b> (ghosts): put a fake ghost on any spot you choose. Everyone hears a decoy went out, but not where. Drones think
@@ -128,7 +131,7 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
       "If anyone survives: survivors share 80%, hunters share 10% (by how much they spent), and 10% disappears.",
       "If every ghost is found: hunters share 80% (by how much they spent), the ghosts who played share 10%, and 10% disappears.",
       "Tap a billboard to see the ad on it, then tap the ad's button to earn 5 mint, paid by the brand (up to 5 ads a day). Keep an eye out for golden mint balloons too.",
-      "Running low? While you're under your refill line you earn passive income every hour: up to 100 mint a day at level 1, and 25 more for every level after that.",
+      "Running low? While you're under your refill line you earn passive income every hour: up to 100 mint a day at level 1, and 25 more for every level after that, up to level 40 (1,075 a day).",
       "Anyone holding 10,000 mint or more is a big fish, and everyone can see it.",
       "You can give mint to other players, and spray mint on the dance floor in clubs.",
       "Coming soon: a marketplace to swap mint for rewards from brands, like custom tees and event tickets.",
@@ -174,9 +177,18 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
     ],
   },
   {
+    icon: Flame,
+    title: "Daily streaks",
+    body: [
+      "Do one thing a day to keep your streak going: play a game, finish a side quest, give or spray mint, hug or shake hands, or ride something. The flame next to your mint shows your days in a row.",
+      "Miss a day and your free weekly freeze saves your streak (one a week). Miss more and it starts again.",
+      "Reach 3, 7, 14, 30, 60 and 100 days for mint (10 up to 500) and a badge.",
+    ],
+  },
+  {
     icon: Medal,
     title: "Badges",
-    body: ["There are 100 badges to collect, from easy ones to legendary. Tap any badge in the menu to see what it means and how to earn it."],
+    body: ["There are over 100 badges to collect, from easy ones to legendary. Tap any badge in the menu to see what it means and how to earn it."],
   },
 ];
 

@@ -9,7 +9,7 @@ import { recordStore, useStore } from "./data";
 import { useEscape } from "./escape";
 import { BadgesSkeleton, LoadFailed } from "./skeletons";
 
-// All 100 badges and their medals live in this file's download, which the menu only fetches
+// All the badges and their medals live in this file's download, which the menu only fetches
 // when you open "Badges".
 
 const ALL = Object.keys(BADGE_INFO);

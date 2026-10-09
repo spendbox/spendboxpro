@@ -31,8 +31,10 @@ slides), plus private messages.
    back to a tile they've left; everyone sees the tile they left. Hiders see every searched
    tile and can't move onto one; hunters see the most recent 70%. Each hunter's last 5 sweeps
    stay active as secret traps.
-3. **Levels.** After enough rounds (2 × level), players spend mint (50 × level, burned) to
-   level up. Level 3: decoy (hiders place a fake hider on a chosen spot; drones read it as
+3. **Levels.** Players earn XP (10 for playing a game, 10 for finishing a side quest, 5 for
+   each streak day) and spend mint (burned) to level up, up to level 100. Below level 20 each
+   level takes 15 XP and 10 × level mint; from 20 on, 30 XP plus 5 more each level (425 at 99)
+   and 50 × (level − 15) mint (`game-db/027_streaks_levels.sql`). Level 3: decoy (hiders place a fake hider on a chosen spot; drones read it as
    "yes", a hunter who searches it gets nothing; from 20 mint). Level 5: shield (when found,
    the hunter is paid and the stake is lost, but the hider teleports nearby and plays on; no
    moving while it's up; from 100 mint). Level 10: big search (hunters search a 3×3 area for
@@ -46,7 +48,7 @@ slides), plus private messages.
    survivors get their stake back plus 80% of the pool, hunters share 10% by real mint spent,
    10% burns. If everyone is found: hunters share 80%, the hiders who played share 10%, 10% burns.
 5. **Passive income.** Players under 100 mint earn mint back over time, up to 100 in 24
-   hours; each level adds 25 to both numbers. Opening a billboard ad pays 5 mint (5 a day).
+   hours; each level adds 25 to both numbers, up to level 40 (1,075). Opening a billboard ad pays 5 mint (5 a day).
    Anyone holding 10,000+ mint is a "big fish". Players can give mint to each other and
    spray it on dancers in clubs (capped per day; transfers, never new mint).
 6. **World events.** Every hunt gets 2–4 of 100 events (`src/lib/world-events.ts`, mirrored in
@@ -65,8 +67,9 @@ slides), plus private messages.
    `game-db/013_ads_v2.sql`, `game-db/014_chat_rooms.sql`, `game-db/015_ghost_rules.sql`,
    `game-db/016_place_rooms.sql`, `game-db/017_world_events.sql`, `game-db/018_npcs.sql`,
    `game-db/019_activities.sql`, `game-db/020_sports.sql`, `game-db/021_hourly_rounds.sql`,
-   `game-db/022_pool_and_ads.sql`, `game-db/023_houses.sql`, `game-db/024_play_style.sql` and
-   `game-db/025_big_towns.sql`, in order, once each, on an empty database. In Supabase → Database → Extensions, switch on **pg_cron** first if you
+   `game-db/022_pool_and_ads.sql`, `game-db/023_houses.sql`, `game-db/024_play_style.sql`,
+   `game-db/025_big_towns.sql`, `game-db/026_friends.sql`, `game-db/027_streaks_levels.sql` and
+   `game-db/028_hugs_gifts.sql`, in order, once each, on an empty database. In Supabase → Database → Extensions, switch on **pg_cron** first if you
    can: the file then schedules the round clock to run every minute. (Without it, the clock
    still moves whenever someone has the game open.)
 2. **Email codes.** The app sends its own 4-digit sign-in codes through Resend, so nothing
@@ -215,10 +218,26 @@ a 6,500-spot one.
 
 Every player has a face they can edit from the menu (`src/lib/avatar.ts`); it marks them on
 the map and shows up when they're caught. Badges (Survivor, Ghost, Hat-trick, Bot Hunter…)
-(100 of them, up to legendary ones like Phantom and Immortal; rules in
-`game-db/008_badge_collection.sql` and `game-db/011_badges_hard.sql`) are awarded when a round ends and can be shared as a picture. During the hunt, a hot-air
+(102 of them, up to legendary ones like Phantom and Immortal; rules in
+`game-db/008_badge_collection.sql` and `game-db/011_badges_hard.sql`, streak badges in
+`game-db/027_streaks_levels.sql`) are awarded when a round ends and can be shared as a picture. During the hunt, a hot-air
 balloon carrying mint sometimes floats by for a player: tapping it gives 5 mint, at most
 10 a day (logged as `balloon` in `coin_supply_daily`).
+
+## Daily streaks, hugs and My gifts
+
+Doing one thing a day (playing a game, finishing a side quest, giving or spraying mint, a hug
+or a handshake, riding something) keeps a player's streak going (UTC days, `streak_touch` in
+`game-db/027_streaks_levels.sql`; games, quests, gifts and hugs count through triggers, rides
+through `rodeSomething`). One missed day a week is saved by a free freeze. 3, 7, 14, 30, 60 and
+100 days (and every 100 after) pay `streak_reward_<days>` mint (`streak_reward` in
+`coin_supply_daily`) and a badge the first time. The flame next to the mint opens the streak screen.
+
+Hugs and handshakes (`game-db/028_hugs_gifts.sql`) are free, capped at `hugs_per_day` (30) and
+`hugs_pair_per_day` (3 to the same person). My gifts (menu) lists hugs, handshakes, gifts and
+spraying received in the last 30 days, with a thank-you per gift. Blocking someone stops their
+hugs, handshakes, mint gifts, private messages and friend requests, and ends a friendship.
+Two side quests (Town hugger, Diplomat) count hugs and handshakes.
 
 ## Sign-in and chat
 

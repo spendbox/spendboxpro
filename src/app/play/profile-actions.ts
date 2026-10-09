@@ -107,6 +107,13 @@ export type LevelInfo = {
   nextRounds: number;
   canUpgrade: boolean;
   coins: number;
+  /** XP towards the next level and what it needs (null before game-db/027 is run: rounds only). */
+  xp: number | null;
+  nextXp: number | null;
+  /** At the top level. */
+  max: boolean;
+  /** XP for a game, a side quest and a streak day. */
+  xpFor: { game: number; quest: number; streak: number };
 };
 
 /** Your level and what it takes to reach the next one (rules live in the database). */
@@ -124,11 +131,15 @@ export async function loadLevel(): Promise<Result<{ info: LevelInfo }>> {
       nextRounds: Number(data.next_rounds),
       canUpgrade: Boolean(data.can_upgrade),
       coins: Number(data.coins),
+      xp: data.xp == null ? null : Number(data.xp),
+      nextXp: data.next_xp == null ? null : Number(data.next_xp),
+      max: Boolean(data.max),
+      xpFor: { game: Number(data.xp_game ?? 10), quest: Number(data.xp_quest ?? 10), streak: Number(data.xp_streak ?? 5) },
     },
   };
 }
 
-/** Spend coins to go up a level (once you've played enough rounds). */
+/** Spend coins to go up a level (once you have the XP for it). */
 export async function upgradeLevel(): Promise<Result<{ level: number; cost: number }>> {
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Please sign in again." };
