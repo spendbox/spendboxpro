@@ -48,7 +48,7 @@ export function StatsCard({
   const label = phase === "join" ? "Joining" : phase === "seek" ? "Hunting" : "Over";
   if (minimised) {
     return (
-      <button onClick={onToggle} className="glass pointer-events-auto flex min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs sm:gap-2 sm:px-3 sm:py-1.5 sm:text-sm" aria-label="Show round details">
+      <button onClick={onToggle} className="glass pointer-events-auto flex h-8 min-w-0 items-center gap-1.5 rounded-full px-2.5 text-xs sm:h-9 sm:gap-2 sm:px-3 sm:text-sm" aria-label="Show round details">
         <span className="min-w-0 max-w-[5.5rem] truncate font-display font-bold sm:max-w-[8rem]" title={city}>{city}</span>
         <span className={cn("font-display font-bold tabular-nums", urgent ? "animate-pulse text-hit" : "text-gold-dark")}>{phase === "done" ? label : countdown}</span>
         <span className="flex items-center gap-1 text-xs text-muted max-[359px]:hidden">
