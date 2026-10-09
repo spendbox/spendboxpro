@@ -455,9 +455,9 @@ export function DuelInvite({
   onDecline: () => void;
 }) {
   return (
-    <div className="act-pop pointer-events-auto flex items-center gap-3 rounded-2xl bg-panel p-3 shadow-xl ring-2 ring-gold">
-      <Face p={from} size={40} />
-      <div className="min-w-0 flex-1 text-sm">
+    <div className="act-pop pointer-events-auto flex max-w-[min(24rem,100%)] items-center gap-3 rounded-2xl bg-panel p-2.5 shadow-xl ring-2 ring-gold sm:p-3">
+      <Face p={from} size={36} />
+      <div className="min-w-0 flex-1 text-xs sm:text-sm">
         <p className="font-semibold">
           {from.name} challenged you to {DUEL_NAME[game]}!
         </p>

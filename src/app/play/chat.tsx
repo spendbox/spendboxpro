@@ -506,7 +506,7 @@ export function Chat({
       <>
         <button
           onClick={() => onOpenChange(true)}
-          className="glass pointer-events-auto relative flex min-w-0 max-w-[48vw] items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold sm:max-w-xs"
+          className="glass pointer-events-auto relative flex min-w-0 max-w-[48vw] items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold sm:max-w-xs sm:px-4 sm:py-2 sm:text-sm"
         >
           <MessageCircle className="size-4 shrink-0" aria-hidden />
           <span className="shrink-0">Chat</span>

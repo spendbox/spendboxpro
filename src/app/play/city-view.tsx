@@ -3892,7 +3892,9 @@ export function CityView({
       ghostLights = [];
     }
     function setGhosts(list: CityGhost[]) {
-      const key = `${currentSeed}|${list.map((g) => `${g.id}@${g.tile}|${g.status}|${g.name}|${g.mine ? 1 : 0}|${JSON.stringify(g.avatar)}`).join(";")}`;
+      // Phones get smaller faces and just the name (the colour already says free, in a duel or golden).
+      const small = (el.clientWidth || 1) < 640;
+      const key = `${currentSeed}|${small ? "s" : "l"}|${list.map((g) => `${g.id}@${g.tile}|${g.status}|${g.name}|${g.mine ? 1 : 0}|${JSON.stringify(g.avatar)}`).join(";")}`;
       if (key === ghostKey) return;
       ghostKey = key;
       clearGhosts();
@@ -3913,13 +3915,18 @@ export function CityView({
         root.style.cssText =
           "position:absolute;left:0;top:0;display:flex;flex-direction:column;align-items:center;gap:2px;will-change:transform;visibility:hidden;pointer-events:auto;background:none;border:0;padding:0;cursor:pointer;";
         const face = document.createElement("img");
-        const svg = renderToStaticMarkup(<AvatarFace avatar={cleanAvatar(g.avatar, g.name)} size={44} />).replace(/^<svg(?![^>]*xmlns=)/, '<svg xmlns="http://www.w3.org/2000/svg"');
+        const size = small ? 32 : 44;
+        const svg = renderToStaticMarkup(<AvatarFace avatar={cleanAvatar(g.avatar, g.name)} size={size} />).replace(/^<svg(?![^>]*xmlns=)/, '<svg xmlns="http://www.w3.org/2000/svg"');
         face.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
         face.alt = "";
-        face.style.cssText = `width:44px;height:44px;border-radius:999px;border:3px solid ${glow.css};background:#fff;box-shadow:0 0 0 4px ${glow.css}55,0 0 18px 6px ${glow.css}aa;`;
+        face.style.cssText = small
+          ? `width:${size}px;height:${size}px;border-radius:999px;border:2px solid ${glow.css};background:#fff;box-shadow:0 0 0 3px ${glow.css}55,0 0 12px 4px ${glow.css}aa;`
+          : `width:${size}px;height:${size}px;border-radius:999px;border:3px solid ${glow.css};background:#fff;box-shadow:0 0 0 4px ${glow.css}55,0 0 18px 6px ${glow.css}aa;`;
         const name = document.createElement("div");
-        name.textContent = `${g.mine ? "You" : g.name} · ${glow.label}`;
-        name.style.cssText = `max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 8px;border-radius:999px;background:${glow.css};color:#fff;font:700 11px/16px system-ui,sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.2);`;
+        name.textContent = small ? (g.mine ? "You" : g.name) : `${g.mine ? "You" : g.name} · ${glow.label}`;
+        name.style.cssText = small
+          ? `max-width:84px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 6px;border-radius:999px;background:${glow.css};color:#fff;font:700 10px/14px system-ui,sans-serif;box-shadow:0 1px 3px rgba(0,0,0,.2);`
+          : `max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 8px;border-radius:999px;background:${glow.css};color:#fff;font:700 11px/16px system-ui,sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.2);`;
         root.append(face, name);
         root.addEventListener("click", (e) => {
           e.stopPropagation();

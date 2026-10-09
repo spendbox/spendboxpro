@@ -13,7 +13,8 @@ import { ActivityStyles, Face, nowMs } from "./ui";
 // Everything that happens in a place for everyone there, even with no game open: money
 // raining down when someone sprays, "Now playing" from the jukebox, duel invitations (and the
 // duel itself), and little news lines ("Kemi is having jollof rice"). Mount it while the player
-// is inside a place.
+// is inside a place. Busy places stay calm: one news line at a time (the rest wait their turn,
+// and old news is dropped when lots happens at once), and one invitation at a time.
 
 const TOAST_ICON: Record<ToastIcon, React.ComponentType<{ className?: string }>> = {
   trophy: Trophy,
@@ -64,9 +65,23 @@ export function RoomActivityLayer({
 
   function toast(text: string, icon: ToastIcon, who?: ActivityPlayer) {
     const id = nextId.current++;
-    setToasts((t) => [...t.slice(-2), { id, text: text.slice(0, 140), icon, who }]);
-    window.setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4500);
+    const line = text.slice(0, 140);
+    setToasts((q) => {
+      // The same news twice: once is enough.
+      if (q.some((x) => x.text === line)) return q;
+      const next = [...q, { id, text: line, icon, who }];
+      // Lots going on: keep the line on screen and the newest few; older news is dropped.
+      return next.length > 4 ? [next[0], ...next.slice(-3)] : next;
+    });
   }
+  // One line at a time; it moves on quicker when more news is waiting.
+  const head = toasts[0]?.id;
+  const queued = toasts.length > 1;
+  useEffect(() => {
+    if (head === undefined) return;
+    const id = window.setTimeout(() => setToasts((q) => q.filter((x) => x.id !== head)), queued ? 2800 : 4500);
+    return () => window.clearTimeout(id);
+  }, [head, queued]);
 
   function onMessage(m: ActivityMsg) {
     switch (m.t) {
@@ -153,28 +168,28 @@ export function RoomActivityLayer({
     <>
       <ActivityStyles />
       {rain && <SprayRain key={rain.id} count={rain.amount >= 200 ? 48 : 30} />}
-      <div className={cn("pointer-events-none fixed inset-x-0 top-16 z-[45] flex flex-col items-center gap-2 px-3", className)}>
+      <div className={cn("pointer-events-none fixed inset-x-0 top-14 z-[45] flex flex-col items-center gap-1.5 px-3 sm:top-16 sm:gap-2", className)}>
         {rain && (
-          <div key={rain.id} className="act-pop flex items-center gap-2 rounded-2xl bg-[#2b8a3e] px-3 py-2 text-sm font-semibold text-white shadow-lg">
-            <Face p={rain.from} size={28} />
+          <div key={rain.id} className="act-pop flex max-w-[min(24rem,100%)] items-center gap-2 rounded-2xl bg-[#2b8a3e] px-3 py-1.5 text-xs font-semibold text-white shadow-lg sm:py-2 sm:text-sm">
+            <Face p={rain.from} size={24} />
             <span>
               {rain.from.id === me?.id ? "You" : rain.from.name} sprayed {rain.amount} mint!
               {rain.mine > 0 && <b className="ml-1 text-gold">+{rain.mine} for you!</b>}
             </span>
           </div>
         )}
-        {invites.map((inv) => (
-          <DuelInvite key={inv.cid} from={inv.from} game={inv.game} onAccept={() => accept(inv)} onDecline={() => decline(inv)} />
-        ))}
-        {toasts.map((t) => {
-          const Icon = TOAST_ICON[t.icon] ?? Star;
-          return (
-            <div key={t.id} className="act-rise flex max-w-sm items-center gap-2 rounded-2xl bg-panel/95 px-3 py-2 text-sm shadow-lg">
-              {t.who ? <Face p={t.who} size={24} /> : <Icon className="size-4 shrink-0 text-[#7048e8]" />}
-              <span>{t.text}</span>
-            </div>
-          );
-        })}
+        {invites[0] && (
+          <>
+            <DuelInvite key={invites[0].cid} from={invites[0].from} game={invites[0].game} onAccept={() => accept(invites[0])} onDecline={() => decline(invites[0])} />
+            {invites.length > 1 && (
+              <span className="rounded-full bg-ink/80 px-2.5 py-0.5 text-[11px] font-semibold text-white shadow">
+                +{invites.length - 1} more {invites.length === 2 ? "challenge" : "challenges"} waiting
+              </span>
+            )}
+          </>
+        )}
+        {/* News waits while an invitation is up, so there's only ever one thing to read. */}
+        {!invites.length && toasts[0] && <NewsLine key={toasts[0].id} toast={toasts[0]} more={toasts.length - 1} />}
         {playing && (
           <button onClick={listen} className="pointer-events-auto flex items-center gap-2 rounded-full bg-ink/85 py-1.5 pl-2 pr-3 text-xs font-semibold text-white shadow-lg">
             <span className="grid size-6 place-items-center rounded-full" style={{ background: VIBE_BY_ID[playing.vibe].color }}>
@@ -187,5 +202,16 @@ export function RoomActivityLayer({
       </div>
       {duel && duel.roomId === roomId && <DuelSheet key={duel.cid} duel={duel} />}
     </>
+  );
+}
+
+function NewsLine({ toast: t, more }: { toast: Toast; more: number }) {
+  const Icon = TOAST_ICON[t.icon] ?? Star;
+  return (
+    <div className="act-rise flex max-w-[min(22rem,100%)] items-center gap-2 rounded-2xl bg-panel/95 px-3 py-1.5 text-xs shadow-lg sm:py-2 sm:text-sm">
+      {t.who ? <Face p={t.who} size={22} /> : <Icon className="size-4 shrink-0 text-[#7048e8]" />}
+      <span className="line-clamp-2 min-w-0">{t.text}</span>
+      {more > 0 && <span className="shrink-0 rounded-full bg-panel-2 px-1.5 py-px text-[10px] font-bold text-muted">+{more}</span>}
+    </div>
   );
 }
