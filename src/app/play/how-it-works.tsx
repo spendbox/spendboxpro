@@ -37,6 +37,7 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
     title: "One city, one hour",
     body: [
       "Every round is a brand-new city, named after a real place, with its own streets and landmarks.",
+      "Out past the edge of town there's farmland and a few famous places from that country, like the Third Mainland Bridge, Big Ben or the Statue of Liberty. Take the train out to see them.",
       "A new game starts every hour, on the hour (UTC). The first 3 minutes are for joining as a ghost. Then the hunt runs until the next hour mark, from morning to night (or night to morning), and the next game's countdown starts straight away.",
       "Newtown is for adults 18+.",
     ],
