@@ -49,6 +49,7 @@ import { clubParts, eggParts, fireStationParts, restaurantParts } from "./city/s
 import { createCabin, type Cabin } from "./city/rides";
 import { disposeVehicleCaches } from "./city/vehicles";
 import { createBoats } from "./city/boats";
+import { createAirliner, LIVERIES } from "./city/airliner";
 import { createSlideRide, createWaterpark, waterparkParts, type Slide, type SlideRide, type Waterpark } from "./city/waterpark";
 import { createVenueGame, venueParts, type VenueGame } from "./city/venues";
 import { BRIDGE_TOP, makeWorld, signalJunction } from "./city/world";
@@ -993,10 +994,17 @@ function structureParts(t: Tile, plan: CityPlan, B: BoxFn, tree: TreeFn) {
       B(c + 0.7, 1.34, c - 0.55, 0.3, 0.16, 0.3, 0x4dabf7, 0, "cyl");
       B(c + 0.7, 1.5, c - 0.55, 0.32, 0.04, 0.32, 0x495057, 0, "cyl");
       B(c - 0.75, 0.09, c - 0.05, 0.42, 0.28, 0.3, 0xadb5bd, 0, "dome");
-      // Parked plane
-      B(c + 0.3, 0.13, c - 0.05, 0.5, 0.09, 0.09, 0xffffff);
-      B(c + 0.3, 0.15, c - 0.05, 0.13, 0.02, 0.5, 0xffffff);
-      B(c + 0.08, 0.19, c - 0.05, 0.08, 0.13, 0.02, 0xe5484d);
+      // A parked airliner: fuselage with a nose and tail cone, swept wings, engines, tail fin.
+      B(c + 0.6, 0.16, c - 0.05, 0.085, 0.58, 0.085, 0xf8f9fa, 0, "cyl", Math.PI / 2);
+      B(c + 0.6, 0.16, c - 0.05, 0.085, 0.07, 0.085, 0xf8f9fa, 0, "cone", -Math.PI / 2);
+      B(c + 0.02, 0.165, c - 0.05, 0.08, 0.1, 0.08, 0xf8f9fa, 0, "cone", Math.PI / 2);
+      for (const s of [-1, 1]) {
+        B(c + 0.27, 0.14, c - 0.05 + s * 0.16, 0.1, 0.012, 0.28, 0xdee2e6, -s * 0.45);
+        B(c + 0.36, 0.105, c - 0.05 + s * 0.11, 0.035, 0.08, 0.035, 0xadb5bd, 0, "cyl", -Math.PI / 2);
+        B(c + 0.05, 0.17, c - 0.05 + s * 0.06, 0.05, 0.008, 0.1, 0xf8f9fa, -s * 0.5);
+      }
+      B(c + 0.33, 0.175, c - 0.05, 0.4, 0.012, 0.087, 0x2f9e44);
+      B(c + 0.08, 0.2, c - 0.05, 0.1, 0.13, 0.012, 0x2f9e44, 0, undefined, 0.55);
       break;
     }
     case "port": {
@@ -1978,19 +1986,13 @@ export function CityView({
       out.set(b.cx + Math.cos(a) * R, b.h + b.lift + Math.sin(time * 0.5 + b.k) * 0.25 * b.bob, b.cz + Math.sin(a) * R * 0.78 + Math.sin(2 * a + b.k) * R * 0.18);
       dir?.set(-Math.sin(a) * R, 0, Math.cos(a) * R * 0.78 + Math.cos(2 * a + b.k) * R * 0.36).normalize();
     }
+    // Airliners crossing high over the town, slowly, trailing vapour (see ./city/airliner).
     const planes = [0, 1].map((k) => {
-      const g = new THREE.Group();
-      const white = new THREE.MeshLambertMaterial({ color: 0xffffff });
-      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.05, 0.9, 8).rotateZ(Math.PI / 2), white);
-      const wing = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.02, 0.9), white);
-      const tail = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.2, 0.02), new THREE.MeshLambertMaterial({ color: k ? 0xe5484d : 0x228be6 }));
-      tail.position.set(-0.4, 0.1, 0);
-      const light = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 6), new THREE.MeshBasicMaterial({ color: 0xff4d4f }));
-      light.position.set(0, 0, 0.46);
-      g.add(body, wing, tail, light);
-      g.userData = { t: k * 0.5, angle: 0.4 + k * 2.2, light };
-      moving.add(g);
-      return g;
+      const jet = createAirliner(LIVERIES[(k * 3) % LIVERIES.length]);
+      jet.group.scale.setScalar(2.4);
+      jet.group.userData = { t: k * 0.5, angle: 0.4 + k * 2.2, jet };
+      moving.add(jet.group);
+      return jet.group;
     });
     function updateAir(time: number, dt: number) {
       for (const b of balloons) {
@@ -2005,18 +2007,19 @@ export function CityView({
       }
       for (const p of planes) {
         const u = p.userData;
-        u.t += dt / 26;
+        // High and slow: a minute or so to cross, then a new heading.
+        u.t += dt / 70;
         if (u.t > 1) {
           u.t = 0;
           u.angle += 1.9;
         }
-        const span = radius * 3 + 30;
+        const span = radius * 3 + 70;
         const ca = Math.cos(u.angle);
         const sa = Math.sin(u.angle);
         const d = (u.t - 0.5) * span;
-        p.position.set(ca * d - sa * 4, 15 + radius * 0.3, sa * d + ca * 4);
+        p.position.set(ca * d - sa * 6, 24 + radius * 0.35, sa * d + ca * 6);
         p.rotation.y = -u.angle;
-        (u.light as THREE.Mesh).visible = Math.sin(time * 6) > 0.6;
+        (u.jet as ReturnType<typeof createAirliner>).update(time);
       }
     }
 
@@ -5748,6 +5751,7 @@ export function CityView({
       disposeWater(waterGroup);
       countryside.dispose();
       country?.dispose();
+      for (const p of planes) (p.userData.jet as ReturnType<typeof createAirliner>).dispose();
       pinLayer.remove();
       for (const g of hillTreeShapes.values()) g.dispose();
       renderer.dispose();
