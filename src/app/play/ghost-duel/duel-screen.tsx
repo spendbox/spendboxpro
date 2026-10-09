@@ -13,12 +13,13 @@ import { localTime, MOVE_INFO } from "./parts";
 
 // The duel itself, for both players: Rock-Paper-Scissors, first to 2 points, a minute at most.
 // Each throw is sent to the server, which waits for both and gives the point (a tie is thrown
-// again). The screen checks about once a second. A hunter sees "waiting for the ghost to
-// answer" first; a ghost who opens it from the pop-up has already answered.
+// again). Once one player has thrown, the other has 20 seconds or the point goes to the one who
+// threw, so nobody can win by sitting still. The screen checks about once a second. A hunter
+// sees "waiting for the ghost to answer" first; a ghost who opens it from the pop-up has already answered.
 
 const REASON: Record<string, { me: string; them: string }> = {
-  score: { me: "You got there first.", them: "They got there first." },
-  time: { me: "Time ran out and you were ahead (or level, as the ghost).", them: "Time ran out. Level goes to the ghost." },
+  score: { me: "", them: "" },
+  time: { me: "Time ran out and you were ahead (or level, as the ghost).", them: "Time ran out, and they were ahead (or level: a draw goes to the ghost)." },
   no_answer: { me: "They didn't answer in time.", them: "You didn't answer in time." },
   gave_up: { me: "They gave up.", them: "You gave up." },
 };
@@ -27,6 +28,8 @@ export function DuelScreen({ initial, me, onClose }: { initial: DuelView; me: { 
   const [duel, setDuel] = useState(initial);
   const [ends, setEnds] = useState<number | null>(null);
   const [left, setLeft] = useState(0);
+  const [moveEnds, setMoveEnds] = useState<number | null>(null);
+  const [moveLeft, setMoveLeft] = useState(0);
   const [sending, setSending] = useState<RpsMove | "answer" | "quit" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const live = duel.status === "asked" || duel.status === "playing";
@@ -60,6 +63,24 @@ export function DuelScreen({ initial, me, onClose }: { initial: DuelView; me: { 
     const t = setInterval(tick, 250);
     return () => clearInterval(t);
   }, [ends]);
+  // The throw clock: once one of you has thrown, the other has a few seconds left to throw.
+  const moveBy = duel.status === "playing" ? duel.moveBy : null;
+  useEffect(() => {
+    const t = setTimeout(() => setMoveEnds(localTime(moveBy, serverNow, Date.now())), 0);
+    return () => clearTimeout(t);
+  }, [moveBy, serverNow]);
+  useEffect(() => {
+    if (moveEnds === null) return;
+    const tick = () => setMoveLeft(Math.max(0, Math.ceil((moveEnds - Date.now()) / 1000)));
+    tick();
+    const t = setInterval(tick, 250);
+    return () => clearInterval(t);
+  }, [moveEnds]);
+  // A beep in the last few seconds when it's you who has to throw.
+  const mustThrow = duel.status === "playing" && !duel.myMove && duel.theyMoved && moveBy !== null;
+  useEffect(() => {
+    if (mustThrow && moveLeft > 0 && moveLeft <= 5) playSfx("tick");
+  }, [mustThrow, moveLeft]);
   // Sounds: a point won or lost, and the result.
   const throwsSeen = useRef(initial.throws.length);
   const status = duel.status;
@@ -101,7 +122,7 @@ export function DuelScreen({ initial, me, onClose }: { initial: DuelView; me: { 
             <h2 className="font-display text-lg font-extrabold leading-tight">Rock-Paper-Scissors</h2>
             <p className="text-xs text-muted">
               First to {duel.firstTo} · you&apos;re the {duel.role}
-              {duel.role === "ghost" ? " (a draw when time runs out is yours)" : ""}
+              {duel.role === "ghost" ? " (a draw when time runs out is yours)" : " (a draw when time runs out goes to the ghost)"}
             </p>
           </div>
           {live ? (
@@ -137,7 +158,9 @@ export function DuelScreen({ initial, me, onClose }: { initial: DuelView; me: { 
         {last && (
           <div className="mt-3 flex items-center justify-center gap-3 rounded-2xl bg-panel-2 py-2 text-sm">
             <MoveBadge move={last.me} good={last.w === "me"} />
-            <span className="font-semibold text-muted">{last.w === "tie" ? "Tie: throw again" : last.w === "me" ? "Your point" : "Their point"}</span>
+            <span className="font-semibold text-muted">
+              {last.w === "tie" ? "Tie: throw again" : !last.them ? "They didn't throw: your point" : !last.me ? "You didn't throw: their point" : last.w === "me" ? "Your point" : "Their point"}
+            </span>
             <MoveBadge move={last.them} good={last.w === "them"} />
           </div>
         )}
@@ -167,12 +190,21 @@ export function DuelScreen({ initial, me, onClose }: { initial: DuelView; me: { 
           )
         ) : duel.status === "playing" ? (
           <>
-            <p className="mt-4 text-center text-sm font-semibold">
+            <p className={cn("mt-4 text-center text-sm font-semibold", mustThrow && "rounded-xl bg-hit/10 px-2 py-1.5 text-hit")}>
               {duel.myMove
                 ? `You threw ${MOVE_INFO[duel.myMove].label.toLowerCase()}. ${duel.theyMoved ? "Revealing…" : `Waiting for ${them.name}…`}`
                 : duel.theyMoved
-                  ? `${them.name} has thrown. Your turn!`
+                  ? `${them.name} has thrown! Throw within ${moveBy ? moveLeft : duel.throwSeconds}s or you lose this point.`
                   : "Pick your throw!"}
+            </p>
+            <p className="mt-0.5 text-center text-xs text-muted">
+              {duel.myMove && !duel.theyMoved
+                ? `If ${them.name} doesn't throw${moveBy ? ` in ${moveLeft}s` : ""}, the point is yours.`
+                : !duel.myMove && !duel.theyMoved
+                  ? duel.role === "ghost"
+                    ? `Once ${them.name} throws, you have ${duel.throwSeconds}s to throw or you lose the point.`
+                    : `Once one of you throws, the other has ${duel.throwSeconds}s. A draw when time runs out goes to the ghost.`
+                  : ""}
             </p>
             <div className="mt-2 grid grid-cols-3 gap-2">
               {RPS_MOVES.map((m) => {
@@ -209,12 +241,12 @@ export function DuelScreen({ initial, me, onClose }: { initial: DuelView; me: { 
                 ? duel.reason === "game_over"
                   ? "The game ended first. Your mint came back."
                   : `Called off. ${duel.role === "hunter" ? `Your ${duel.fee} mint came back.` : ""}`
-                : `${REASON[duel.reason ?? "score"]?.[result === "won" ? "me" : "them"] ?? ""} `}
+                : (REASON[duel.reason ?? "score"]?.[result === "won" ? "me" : "them"] ?? "").replace(/.$/, "$& ")}
               {duel.status === "done" &&
                 (duel.role === "hunter"
                   ? result === "won"
                     ? `+${short(duel.reward)} mint, and your ${duel.fee} back.`
-                    : `Your ${duel.fee} mint went into the prize pool.`
+                    : `You lost ${duel.fee} mint.`
                   : result === "won"
                     ? "One step closer to golden."
                     : `You lost ${short(duel.portion)} mint of your stake.`)}
@@ -236,7 +268,8 @@ export function DuelScreen({ initial, me, onClose }: { initial: DuelView; me: { 
   );
 }
 
-function MoveBadge({ move, good }: { move: RpsMove; good: boolean }) {
+function MoveBadge({ move, good }: { move: RpsMove | null; good: boolean }) {
+  if (!move) return <span className="rounded-full bg-panel px-2.5 py-1 font-semibold text-muted">No throw</span>;
   const { Icon, label } = MOVE_INFO[move];
   return (
     <span className={cn("flex items-center gap-1 rounded-full px-2.5 py-1 font-semibold", good ? "bg-[#d3f9d8] text-[#2b8a3e]" : "bg-panel")}>

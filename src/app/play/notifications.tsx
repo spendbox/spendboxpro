@@ -58,6 +58,8 @@ export type FeedItem = {
   icon?: FeedIcon;
   /** A world event this item is about (tap to fly there). */
   eventId?: number;
+  /** Listed, but doesn't pop up (e.g. the result of your own duel: the duel screen already says). */
+  quiet?: boolean;
 };
 
 type IconLike = { size?: number | string; strokeWidth?: number; className?: string };

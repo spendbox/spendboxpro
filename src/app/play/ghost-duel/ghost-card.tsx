@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Crown, Ghost, LoaderCircle, MessageCircle, Swords, Trophy, X } from "lucide-react";
+import { Crown, Ghost, LoaderCircle, MessageCircle, Sparkles, Swords, Trophy, X } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import { cn } from "@/lib/cn";
 import type { Avatar } from "@/lib/avatar";
@@ -26,6 +26,15 @@ const WHY: Record<string, string> = {
   cooldown: "Catching your breath after your last duel…",
   not_enough: "You don't have enough mint for a challenge.",
 };
+
+// Cheers for a golden ghost (one picked per ghost, so it doesn't change while the card is open).
+const HYPE = [
+  "Untouchable! Three duels, three wins. Nobody's catching this one.",
+  "Pure gold. Beat every hunter who dared, and now safe till the hour's up.",
+  "Legend status! In the prize pool and out of reach.",
+  "The hunters tried. The hunters failed. All hail the golden ghost!",
+  "Shining bright! Safe for the rest of the game, and sharing the prize pool.",
+];
 
 export function GhostCardSheet({
   ghost,
@@ -79,6 +88,11 @@ export function GhostCardSheet({
   }, [coolUntil]);
 
   const status = card?.status ?? ghost.status;
+  const golden = status === "golden";
+  // A fanfare when you open a golden ghost's card (or they turn golden while it's open).
+  useEffect(() => {
+    if (golden) playSfx("levelup");
+  }, [golden]);
   const glow = GLOW[status];
   const wins = card?.wins ?? ghost.wins;
   const losses = card?.losses ?? ghost.losses;
@@ -106,9 +120,9 @@ export function GhostCardSheet({
           <span className="block rounded-full p-1" style={{ boxShadow: `0 0 0 3px ${glow.ring}, 0 0 22px 6px ${glow.ring}66` }}>
             <AvatarFace avatar={card?.avatar ?? ghost.avatar} size={64} className="rounded-full" />
           </span>
-          {status === "golden" && (
-            <span className="absolute -right-1 -top-1 grid size-7 place-items-center rounded-full bg-[#fcc419] text-white ring-2 ring-white">
-              <Crown className="size-4" />
+          {golden && (
+            <span className="golden-bob absolute -right-1 -top-2 grid size-8 place-items-center rounded-full bg-[#fcc419] text-white ring-2 ring-white">
+              <Crown className="size-4.5" />
             </span>
           )}
         </span>
@@ -124,6 +138,25 @@ export function GhostCardSheet({
           <X className="size-5" />
         </button>
       </div>
+
+      {/* A golden ghost: a badge and some cheering */}
+      {golden && (
+        <div className="golden-shine mt-3 rounded-2xl p-[2px] shadow-[0_0_24px_-4px_#fcc419]">
+          <div className="flex items-center gap-3 rounded-[14px] bg-[#fffbea] px-3 py-2.5">
+            <span className="golden-shine grid size-12 shrink-0 place-items-center rounded-full text-white ring-2 ring-[#fff3bf]">
+              <Crown className="golden-bob size-6 drop-shadow" />
+            </span>
+            <div className="min-w-0">
+              <p className="flex items-center gap-1 font-display text-base font-extrabold uppercase tracking-wide text-[#a37500]">
+                <Sparkles className="size-4" />
+                Golden ghost
+                <Sparkles className="size-4" />
+              </p>
+              <p className="text-sm font-semibold text-[#7a5800]">{HYPE[(ghost.id.charCodeAt(0) + ghost.id.charCodeAt(ghost.id.length - 1)) % HYPE.length]}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* This game */}
       <div className="mt-4 grid grid-cols-2 gap-2 text-sm">

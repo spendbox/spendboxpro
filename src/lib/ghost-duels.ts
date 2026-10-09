@@ -18,11 +18,16 @@ export type DuelView = {
   me: number;
   them: number;
   firstTo: number;
-  throws: { me: RpsMove; them: RpsMove; w: "me" | "them" | "tie" }[];
+  /** Each point thrown. A move is null when that player didn't throw in time (the point went to the other). */
+  throws: { me: RpsMove | null; them: RpsMove | null; w: "me" | "them" | "tie" }[];
   myMove: RpsMove | null;
   theyMoved: boolean;
   answerBy: string;
   endsAt: string | null;
+  /** Once one player has thrown: when the other must have thrown by, or lose the point. */
+  moveBy: string | null;
+  /** How long that is (seconds). */
+  throwSeconds: number;
   /** The server's clock when this was read (for countdowns). */
   now: string;
   winner: "me" | "them" | null;
@@ -77,13 +82,18 @@ export function cleanDuel(raw: unknown): DuelView | null {
     me: num(d.me),
     them: num(d.them),
     firstTo: num(d.first_to, 2),
-    throws: (Array.isArray(d.throws) ? d.throws : []).flatMap((t: Record<string, unknown>) =>
-      isMove(t.me) && isMove(t.them) ? [{ me: t.me, them: t.them, w: t.w === "me" || t.w === "them" ? t.w : ("tie" as const) }] : [],
-    ),
+    throws: (Array.isArray(d.throws) ? d.throws : []).flatMap((t: Record<string, unknown>) => {
+      const me = isMove(t.me) ? t.me : null;
+      const them = isMove(t.them) ? t.them : null;
+      // A missed throw has one move; a point with no moves at all isn't one.
+      return me || them ? [{ me, them, w: t.w === "me" || t.w === "them" ? t.w : ("tie" as const) }] : [];
+    }),
     myMove: isMove(d.my_move) ? d.my_move : null,
     theyMoved: Boolean(d.they_moved),
     answerBy: String(d.answer_by ?? ""),
     endsAt: d.ends_at ? String(d.ends_at) : null,
+    moveBy: d.move_by ? String(d.move_by) : null,
+    throwSeconds: num(d.throw_seconds, 20),
     now: String(d.now ?? new Date().toISOString()),
     winner: d.winner === "me" || d.winner === "them" ? d.winner : null,
     reason: d.reason ? String(d.reason) : null,
