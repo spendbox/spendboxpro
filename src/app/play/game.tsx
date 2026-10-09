@@ -12,30 +12,23 @@ import { cleanAvatar } from "@/lib/avatar";
 import type { GameEvent, GameState } from "@/lib/game";
 import { cn } from "@/lib/cn";
 import {
-  Anchor,
   Armchair,
   Building2,
-  Check,
   CircleX,
   DoorOpen,
   Layers,
   LogOut,
   Sun,
   Clapperboard,
-  Dices,
-  Gamepad2,
   Music,
-  Repeat1,
 } from "lucide-react";
 /** Any of our line icons (Lucide or our own). */
 type LucideIcon = React.ComponentType<{ className?: string; style?: React.CSSProperties; "aria-hidden"?: boolean }>;
 import {
   Coins,
   CircleHelp,
-  Drama,
   Fish,
   Flashlight,
-  Footprints,
   Ghost,
   Hammer,
   HotAirBalloon,
@@ -46,9 +39,6 @@ import {
   Megaphone,
   Menu as MenuIcon,
   MessageCircle,
-  Radar,
-  RotateCcw,
-  Shield,
   Sparkles,
   Timer,
   Trophy,
@@ -58,8 +48,14 @@ import {
 import { short } from "@/lib/format";
 import { createClient } from "@/lib/supabase/client";
 import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
-import { bigSearch, buyShield, claimWorldEvent, joinRound, moveTo, placeDecoy, respawnMe, searchTile, sweepAround, type ActionResult } from "./actions";
-import { liveLabel, SPORTS } from "@/lib/sports/schedule";
+import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
+import { liveLabel, SPORT_INFO, SPORTS } from "@/lib/sports/schedule";
+import { SPORT_ICON } from "@/lib/sports/icons";
+import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
+import { Compass, Crown, Swords } from "lucide-react";
+import { ChallengePopup } from "./ghost-duel/challenge-popup";
+import { DuelStatus } from "./ghost-duel/duel-status";
+import { GhostsSheet } from "./ghost-duel/ghosts-sheet";
 import type { Sport } from "@/lib/sports/types";
 import type { ActivityItem } from "./activities/games";
 import { useActivityRoom } from "./activities/hub";
@@ -76,7 +72,7 @@ import { useQuestTracker } from "./activities/quest-tracker";
 import { QuestBanner, QuestSheet } from "./activities/quest-ui";
 import { Chat } from "./chat";
 import { setEventSoundsEnabled } from "./city/event-sounds";
-import type { CityDancer, CityEvent, CityFriendPin, CityInteract, CityMarkers, CityRide, RideTarget } from "./city-view";
+import type { CityDancer, CityEvent, CityFriendPin, CityGhost, CityInteract, CityMarkers, CityRide, RideTarget } from "./city-view";
 import { FeedRow, NotificationsPanel, type FeedIcon, type FeedItem } from "./notifications";
 import { signOutNow } from "../login/actions";
 import { claimBalloon, recordVisit } from "./profile-actions";
@@ -108,8 +104,11 @@ const HouseSheet = dynamic(() => import("./houses/house-sheet").then((m) => m.Ho
 const StyleSheet = dynamic(() => import("./style/style-ui").then((m) => m.StyleSheet));
 const DanceBar = dynamic(() => import("./dance-bar").then((m) => m.DanceBar));
 const FriendsSheet = dynamic(() => import("./friends-sheet").then((m) => m.FriendsSheet));
+const GhostCardSheet = dynamic(() => import("./ghost-duel/ghost-card").then((m) => m.GhostCardSheet));
+const DuelScreen = dynamic(() => import("./ghost-duel/duel-screen").then((m) => m.DuelScreen));
 
-type Mode = "search" | "sweep" | "big";
+/** The map shows no searched spots, sweeps or hiding spots any more: only the ghosts' lights. */
+const NO_MARKERS: CityMarkers = { searchedEmpty: [], searchedHit: [], caught: [], left: [], me: null, decoy: null, sweeps: [], pending: null, recent: [], locked: [] };
 /** A building or balloon you can go into (from the 3D city), with its levels. */
 type PlaceRoom = {
   id: string;
@@ -225,6 +224,15 @@ function describe(e: GameEvent, botName: string, myTile: number | null, where: (
       avatar: saved[0] ? cleanAvatar(saved[0].avatar, saved[0].name ?? "ghost") : null,
     };
   }
+  if (e.kind === "duel") {
+    const d = e.detail ?? {};
+    const ghost = d.ghost ?? "A ghost";
+    const hunter = d.hunter ?? "a hunter";
+    const avatar = d.avatar ? cleanAvatar(d.avatar, d.winner === "ghost" ? ghost : hunter) : null;
+    if (d.winner === "hunter")
+      return { id: e.id, tone: "alarm", icon: "catch", avatar, text: d.out ? `${hunter} beat ${ghost}. That's three losses: ${ghost} is out!` : `${hunter} beat ${ghost} in a duel.` };
+    return { id: e.id, tone: "info", icon: d.golden ? "coin" : "shield", avatar, text: d.golden ? `${ghost} beat ${hunter} and turned golden!` : `${ghost} beat ${hunter} in a duel.` };
+  }
   if (e.kind === "moved") {
     if (myTile !== null && e.tile === myTile) return null;
     const name = e.detail?.name;
@@ -236,29 +244,21 @@ function describe(e: GameEvent, botName: string, myTile: number | null, where: (
 // A different cheer every time the hunt begins (never the same one twice in a row).
 const CHEERS = {
   seeker: [
-    ["Start hunting!", "They're out there. Somewhere. Go get them."],
-    ["Release the hounds!", "Every rooftop, every alley. Nobody hides forever."],
-    ["Ready, set, SEEK!", "The clock is ticking and the pool is waiting."],
-    ["The hunt is on", "Trust your gut. Check the weird spots."],
-    ["Eyes open, detective", "Somebody just held their breath. Find them."],
-    ["Game time!", "First catch gets the bragging rights."],
-    ["Go go go!", "Search smart, sweep smarter."],
-    ["Hide-and-seek champion?", "Prove it. The city is yours to search."],
+    ["The hunt is on!", "Ghosts are lit up on the map. Tap a light and challenge them."],
+    ["Game time!", "Beat a ghost and win a slice of their stake."],
+    ["Ready, set, duel!", "Rock, paper or scissors? Choose wisely."],
+    ["Go get them", "Every ghost you beat takes you closer to the prize pool."],
   ],
   hider: [
-    ["Good luck!", "You've been dropped somewhere secret. Stay calm and stay hidden."],
-    ["Shhh… it's started", "Hunters are coming. Don't make a sound."],
-    ["Blend in!", "You're a lamppost now. Act natural."],
-    ["Deep breath", "Outlast the hour and the pool is yours."],
-    ["Into the shadows", "Every minute you survive is a minute closer to the prize."],
-    ["They're coming…", "Watch the drones. Move only when you must."],
-    ["Stay sneaky", "Nobody knows where you are. Keep it that way."],
+    ["You're lit up!", "Everyone can see your light. Hunters will come to you: be ready to answer."],
+    ["Show time", "Win three duels and you turn golden."],
+    ["Stay sharp", "When a challenge pops up, you have 30 seconds to answer."],
+    ["Here they come", "Rock, paper or scissors? Keep them guessing."],
   ],
   watcher: [
-    ["The hunt has begun!", "Ghosts are in place. Grab a seat and watch the city light up."],
-    ["Showtime", "Hunters are on the move. Who'll be found first?"],
-    ["Let the games begin!", "Join in any time as a hunter."],
-    ["Here we go!", "Watch the searches land in real time."],
+    ["The hunt has begun!", "Ghosts are lit up on the map. Tap one to see who they are."],
+    ["Showtime", "Hunters are challenging ghosts. Who'll turn golden?"],
+    ["Let the games begin!", "Sign in to challenge a ghost yourself."],
   ],
 };
 
@@ -274,21 +274,17 @@ function startCheer(role: "hider" | "seeker" | null, hiders: number) {
     localStorage.setItem("hs-cheer", String(k));
   } catch {}
   const [title, line] = list[k];
-  return { title, line: `${line} ${hiders > 1 ? `${hiders} ghosts are in the city` : "The bot is hiding somewhere"}.` };
+  return { title, line: `${line} ${hiders > 1 ? `${hiders - 1} ghost${hiders - 1 === 1 ? " is" : "s are"} in this game.` : ""}`.trim() };
 }
 
 export function Game({ state }: { state: GameState }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
-  const [mode, setMode] = useState<Mode>("search");
-  const [radius, setRadius] = useState<1 | 2 | 3>(1);
   const [message, setMessage] = useState<{ text: string; tone: "good" | "bad" | "info"; icon?: LucideIcon } | null>(null);
-  const [busyTile, setBusyTile] = useState<number | null>(null);
   const [hover, setHover] = useState<{ tile: number; label: string } | null>(null);
   const [menu, setMenu] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [showResults, setShowResults] = useState<number | null>(null);
-  const [confirmMove, setConfirmMove] = useState<number | null>(null);
   const [toasts, setToasts] = useState<FeedItem[]>([]);
   const [feedOpen, setFeedOpen] = useState(false);
   const [feedSeenAt, setFeedSeenAt] = useState<string>(state.serverNow);
@@ -307,11 +303,12 @@ export function Game({ state }: { state: GameState }) {
   const [marks, setMarks] = useState(true);
   const [sound, setSound] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [confirmShield, setConfirmShield] = useState(false);
-  const [confirmDecoy, setConfirmDecoy] = useState(false);
-  const [confirmHunt, setConfirmHunt] = useState(false);
-  // Game mode (search, move…) or Chat mode (go into buildings and balloons to talk).
-  const [viewMode, setViewMode] = useState<"game" | "chat">("game");
+  // Ghost duels: a ghost's card (tapped on the map), the list of ghosts, the duel on screen,
+  // and flying the camera over to a ghost's light.
+  const [ghostFor, setGhostFor] = useState<BoardGhost | null>(null);
+  const [ghostsOpen, setGhostsOpen] = useState(false);
+  const [duelOn, setDuelOn] = useState<DuelView | null>(null);
+  const [flyTo, setFlyTo] = useState<{ tile: number; at: number } | null>(null);
   const [ride, setRide] = useState<RideTarget | null>(null);
   // Everything there is to ride this round (from the 3D city).
   const [rides, setRides] = useState<CityRide[]>([]);
@@ -348,12 +345,10 @@ export function Game({ state }: { state: GameState }) {
   const [pickPlace, setPickPlace] = useState<PlaceRoom | null>(null);
   const [placeRoom, setPlaceRoom] = useState<PlaceRoom | null>(null);
   const [pickRide, setPickRide] = useState(false);
+  const [exploreTab, setExploreTab] = useState<"rides" | "sports">("rides");
   const [npcTap, setNpcTap] = useState<{ id: string; at: number } | null>(null);
   const [balloonCount, setBalloonCount] = useState(0);
   const [dmRequest, setDmRequest] = useState<{ id: string; name: string; at: number } | null>(null);
-  const [placingDecoy, setPlacingDecoy] = useState(false);
-  const [confirmRespawn, setConfirmRespawn] = useState(false);
-  const [searchReadyAt, setSearchReadyAt] = useState<number>(0);
   const [ads, setAds] = useState<Ad[]>([]);
   // An ad someone opened: what its button would pay them (0 = nothing), a note, and whether they've tapped it.
   const [openAd, setOpenAd] = useState<{ ad: Ad; tile: number; reward: number; note: string | null; tapped: boolean } | null>(null);
@@ -374,18 +369,14 @@ export function Game({ state }: { state: GameState }) {
   const phase = round?.status ?? "done";
   const countdown = clock(Date.parse((phase === "join" ? round?.joinEndsAt : round?.seekEndsAt) ?? "") - now);
   const isHider = entry?.role === "hider";
-  const isSeeker = entry?.role === "seeker";
-  const moveWait = entry?.lastMoveAt ? Date.parse(entry.lastMoveAt) + state.prices.moveCooldown * 1000 - now : 0;
-  const sweepWait = entry?.sweepReadyAt ? Date.parse(entry.sweepReadyAt) - now : 0;
-  const frozenWait = entry?.frozenUntil ? Date.parse(entry.frozenUntil) - now : 0;
-  const recentlySwept =
-    isHider &&
-    !!entry?.lastSweptAt &&
-    now - Date.parse(entry.lastSweptAt) < 90_000 &&
-    (!entry.lastMoveAt || Date.parse(entry.lastSweptAt) > Date.parse(entry.lastMoveAt));
-  const canTap = phase === "seek" && !!entry && !(isHider && entry.caught);
+  // Ghost duels: the ghosts lit up on the map, your part in the game, your live duel.
+  const board = state.duels;
+  const ghostLights: CityGhost[] = useMemo(
+    () => (board?.phase === "seek" ? board.ghosts.map((g) => ({ id: g.id, name: g.name, avatar: g.avatar, tile: g.tile, status: g.status, mine: g.id === state.me.id })) : []),
+    [board, state.me.id],
+  );
   // Side quests: sitting down makes one more likely; visits and rides count by themselves.
-  const quests = useQuestTracker({ room: rooms.myRoom, seated: !!rooms.mySeat, hiding: isHider && !entry?.caught && phase === "seek", signedIn: !me.guest });
+  const quests = useQuestTracker({ room: rooms.myRoom, seated: !!rooms.mySeat, hiding: false, signedIn: !me.guest });
   // This game's play diary (for the play style at the end): where you go and what you do.
   useDiary({
     round: round && phase !== "done" ? round.id : null,
@@ -394,9 +385,6 @@ export function Game({ state }: { state: GameState }) {
     seated: !!rooms.mySeat,
     signedIn: !me.guest,
   });
-  // Searches have a short cooldown that grows if you search too fast (the server decides).
-  const serverReady = me.searchReadyAt ? Date.parse(me.searchReadyAt) : 0;
-  const searchWait = Math.max(searchReadyAt, serverReady) - now;
   const botName = round?.botName ?? "the bot";
   // This round's city: its name and street addresses (same maths as the 3D view).
   const roundSeed = round?.id ?? 0;
@@ -407,7 +395,6 @@ export function Game({ state }: { state: GameState }) {
     () => (round && !me.guest ? houseTileOf(plan, round.tileCount, state.houses, me.id) : null),
     [plan, round, me.guest, me.id, state.houses],
   );
-  const knownSet = useMemo(() => new Set(state.knownSearched), [state.knownSearched]);
   // Where we are in the hunt (0 at the start, 1 at the end): drives day/night and weather.
   const huntProgress = round && phase === "seek"
     ? Math.min(1, Math.max(0, (now - Date.parse(round.joinEndsAt)) / (Date.parse(round.seekEndsAt) - Date.parse(round.joinEndsAt))))
@@ -585,7 +572,7 @@ export function Game({ state }: { state: GameState }) {
   useEffect(() => {
     if (fewLeft === null) return;
     const id = setTimeout(
-      () => setMessage({ icon: Timer, text: `Only ${fewLeft} ${fewLeft === 1 ? "ghost is" : "ghosts are"} left. Can anyone find ${fewLeft === 1 ? "them" : "them both"} before the hour?`, tone: "info" }),
+      () => setMessage({ icon: Timer, text: `Only ${fewLeft} ${fewLeft === 1 ? "ghost is" : "ghosts are"} left in this game. Challenge ${fewLeft === 1 ? "them" : "them"} before the hour is up!`, tone: "info" }),
       0,
     );
     return () => clearTimeout(id);
@@ -606,7 +593,6 @@ export function Game({ state }: { state: GameState }) {
     return () => clearTimeout(id);
   }, [seatNotice, clearSeatNotice]);
   const guest = me.guest;
-  const shieldUp = Boolean(entry?.shieldBought && !entry.shieldSaved);
 
   // The last minute before the hunt: soft beeps (every other second, then every second for
   // the final ten).
@@ -822,7 +808,7 @@ export function Game({ state }: { state: GameState }) {
       text: n.tile !== null && n.kind === "trap" ? `${n.body} (near ${where(n.tile)})` : n.body,
       tone: n.kind === "caught" ? ("alarm" as const) : ("mine" as const),
       avatar: n.kind === "caught" || n.kind === "shield" ? me.avatar : null,
-      icon: (({ trap: "trap", trapped: "trap", swept: "drone", caught: "catch", shield: "shield", shielded: "shield", decoy: "decoy", streak: "flame", gift: "gift", spray: "gift", hug: "hug", handshake: "handshake", thanks: "hug" }) as Record<string, FeedIcon>)[n.kind] ?? "info",
+      icon: (({ trap: "trap", trapped: "trap", swept: "drone", caught: "catch", shield: "shield", shielded: "shield", decoy: "decoy", streak: "flame", gift: "gift", spray: "gift", hug: "hug", handshake: "handshake", thanks: "hug", duel: "duel", duel_won: "duel", duel_lost: "duel" }) as Record<string, FeedIcon>)[n.kind] ?? "info",
     }));
     // World events that have started: news you can tap to fly there.
     const news = state.worldEvents
@@ -900,23 +886,8 @@ export function Game({ state }: { state: GameState }) {
     return () => clearTimeout(id);
   }, [message]);
 
-  const markers: CityMarkers = useMemo(
-    () => !marks
-      ? { searchedEmpty: [], searchedHit: [], caught: [], left: [], me: isHider && entry && !entry.caught ? entry.tile : null, decoy: entry?.decoyTile ?? null, sweeps: [], pending: busy ? busyTile : null, recent: [], locked: [] }
-      : ({
-      searchedEmpty: state.mySearches.filter((s) => s.caught === 0).map((s) => s.tile),
-      searchedHit: state.mySearches.filter((s) => s.caught > 0).map((s) => s.tile),
-      caught: state.caughtTiles,
-      left: state.leftTiles,
-      me: isHider && entry && !entry.caught ? entry.tile : null,
-      decoy: entry?.decoyTile ?? null,
-      sweeps: state.mySweeps.map((sw) => ({ tile: sw.tile, radius: sw.radius, count: sw.found ? 1 : 0 })),
-      pending: busy ? busyTile : null,
-      recent: state.recentSearches.map((r) => ({ tile: r.tile, ageMs: Math.max(0, serverNowMs - Date.parse(r.at)) })),
-      locked: state.knownSearched,
-    }),
-    [marks, state.mySearches, state.caughtTiles, state.leftTiles, state.recentSearches, state.knownSearched, state.mySweeps, serverNowMs, isHider, entry, busy, busyTile],
-  );
+  // Nothing is searched or swept any more: the map only shows the ghosts' lights.
+  const markers: CityMarkers = NO_MARKERS;
   const cityEvents: CityEvent[] = useMemo(
     () => state.events.map((e) => ({ id: e.id, kind: e.kind, tile: e.tile, detail: e.detail, ageMs: Math.max(0, serverNowMs - Date.parse(e.at)) })),
     [state.events, serverNowMs],
@@ -1024,7 +995,6 @@ export function Game({ state }: { state: GameState }) {
     if (!levels.length) return;
     rooms.leave();
     setActivity(null);
-    setViewMode("chat");
     goToLevel({ id: `b:${myHouseTile}`, name: homeLabel(home), capacity: levels.reduce((n, l) => n + l.capacity, 0), kind: "building", levels }, levels[0]);
   }
   // A ride that ends by itself (the water slide's splash).
@@ -1076,7 +1046,6 @@ export function Game({ state }: { state: GameState }) {
     setFriendsOpen(false);
     setNudge(null);
     if (me.guest || rooms.myRoom === room) return;
-    setViewMode("chat");
     const b = /^(b:\d+):(g|r|f\d+)$/.exec(room);
     if (b) {
       if (place || ride !== null) leaveRoom();
@@ -1095,98 +1064,6 @@ export function Game({ state }: { state: GameState }) {
     setMessage({ text: `Couldn't get to ${name} right now. Try again in a moment.`, tone: "info" });
   }
 
-  function onTile(tile: number) {
-    // Tapping where someone was caught: say hi to them.
-    const face = state.caughtFaces.find((f) => f.tile === tile && f.user && f.user !== me.id);
-    if (face?.user && !guest && !(isHider && placingDecoy)) {
-      setDmRequest({ id: face.user, name: face.name ?? "Player", at: Date.now() });
-      setChatOpen(true);
-      return setMessage({ text: `${face.name ?? "They"} got caught here. Send them a message!`, tone: "info" });
-    }
-    if (busy || !canTap || !entry) return;
-    if (isHider && placingDecoy) {
-      if (tile === entry.tile) return setMessage({ text: "Put your decoy somewhere other than your own spot.", tone: "info" });
-      setPlacingDecoy(false);
-      setBusyTile(tile);
-      playSfx("decoy");
-      return act(
-        () => placeDecoy(tile),
-        () => setMessage({ icon: Drama, text: `Decoy set down at ${where(tile)}. Everyone heard a decoy went out, but only you know where.`, tone: "good" }),
-      );
-    }
-    if (isHider) {
-      if (shieldUp) return setMessage({ text: "Your shield is up, so you're staying put until it's used.", tone: "info" });
-      if (tile === entry.tile) return setMessage({ text: "You're already hiding there.", tone: "info" });
-      if (entry.visited.includes(tile)) return setMessage({ text: "You've been there already. No going back.", tone: "bad" });
-      if (knownSet.has(tile)) return setMessage({ text: "That spot's been searched (it's orange). Pick somewhere else.", tone: "bad" });
-      if (frozenWait > 0) return setMessage({ text: `A drone has you pinned. You can move in ${clock(frozenWait)}.`, tone: "bad" });
-      if (entry.moves >= entry.movesAllowed)
-        return setMessage({ text: `You've used your ${entry.movesAllowed === 1 ? "move" : `${entry.movesAllowed} moves`} for this game. Level up to get more moves per game.`, tone: "info" });
-      if (moveWait > 0) return setMessage({ text: `Catch your breath: you can move again in ${clock(moveWait)}.`, tone: "info" });
-      return setConfirmMove(tile);
-    }
-    if (mode === "sweep") {
-      if (sweepWait > 0) return setMessage({ text: `Your drone is recharging (${Math.ceil(sweepWait / 1000)}s).`, tone: "info" });
-      setBusyTile(tile);
-      playSfx("sweep");
-      act(
-        () => sweepAround(tile, radius),
-        (d) => {
-          quests.track({ type: "sweep" });
-          const found = Boolean(d.found);
-          // Don't spoil it: the answer comes when the drone has finished its scan.
-          setMessage({ icon: Radar, text: "Drone on its way… scanning the area.", tone: "info" });
-          setTimeout(() => {
-            playSfx(found ? "found" : "miss");
-            setMessage({
-              text: found
-                ? `The drone picked something up! Anyone in that area is pinned for ${state.prices.freezeSeconds >= 60 ? `${Math.round(state.prices.freezeSeconds / 60)} minute${state.prices.freezeSeconds >= 120 ? "s" : ""}` : `${state.prices.freezeSeconds} seconds`}. Your drone needs ${d.cooldown ?? 90}s to recharge, and keeps watching the area as a trap.`
-                : "The drone saw nothing there, for now. It'll keep watching the area as a trap.",
-              tone: found ? "good" : "info",
-            });
-          }, 5200);
-        },
-      );
-    } else {
-      if (searchWait > 0) {
-        playSfx("denied");
-        return setMessage({ text: `Easy, detective: next search in ${Math.ceil(searchWait / 1000)}s. Searching too fast makes the wait longer.`, tone: "info" });
-      }
-      const big = mode === "big";
-      setBusyTile(tile);
-      playSfx("search");
-      act(
-        () => (big ? bigSearch(tile) : searchTile(tile)),
-        (d) => {
-          quests.track({ type: "search" });
-          if (d.cooldown) setSearchReadyAt(Date.now() + Number(d.cooldown) * 1000);
-          playSfx(d.result === "caught" ? "found" : d.result === "shielded" ? "shield" : d.result === "decoy" ? "explode" : "miss");
-          if (d.result === "decoy")
-            setMessage({ text: "That was a decoy! Nobody was there, and decoys pay nothing. Someone's playing tricks.", tone: "info" });
-          else if (d.result === "shielded")
-            setMessage({
-              text: `You found ${d.names || "someone"}, but their shield teleported them somewhere nearby! You still get +${short(Number(d.reward))} mint.`,
-              tone: "good",
-            });
-          else if (d.result === "caught")
-            setMessage({
-              text: d.bot ? `You found ${botName}! +${short(Number(d.reward))} mint.` : `Gotcha! You found ${d.names || d.caught}. +${short(Number(d.reward))} mint.`,
-              tone: "good",
-            });
-          else
-            setMessage({
-              text: big
-                ? `Nobody in the 9 spots around ${where(tile)}.`
-                : d.searched_before
-                  ? `Nobody at ${where(tile)}. (Heads up: that spot had been searched before.)`
-                  : `Nobody at ${where(tile)}.`,
-              tone: "info",
-            });
-        },
-      );
-    }
-  }
-
   function popBalloon(slot: number) {
     startTransition(async () => {
       const res = await claimBalloon(slot).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
@@ -1200,20 +1077,30 @@ export function Game({ state }: { state: GameState }) {
     });
   }
 
-  function doMove(tile: number) {
-    setConfirmMove(null);
-    setBusyTile(tile);
-    playSfx("move");
-    act(
-      () => moveTo(tile),
-      (d) =>
-        setMessage(
-          d.caught
-            ? { text: "Oh no. Someone had already searched that spot and was waiting. You've been caught.", tone: "bad" }
-            : { text: `You slipped over to ${where(tile)}. Everyone saw someone leave your old spot.`, tone: "info" },
-        ),
-    );
-  }
+  // ---- ghost duels
+  const noTile = useCallback(() => {}, []);
+  const ghostList = board?.ghosts;
+  const openGhost = useCallback(
+    (id: string) => {
+      const g = ghostList?.find((x) => x.id === id);
+      if (g) setGhostFor(g);
+    },
+    [ghostList],
+  );
+  const rules = board?.rules ?? DEFAULT_RULES;
+  // Your live duel: a ghost who's been challenged gets the pop-up (wherever they are); anyone
+  // whose duel is under way (or a hunter waiting for an answer) gets the duel screen back.
+  const liveDuel = board?.duel && (board.duel.status === "asked" || board.duel.status === "playing") ? board.duel : null;
+  const askedGhost = liveDuel && liveDuel.role === "ghost" && liveDuel.status === "asked" && duelOn?.id !== liveDuel.id ? liveDuel : null;
+  const reopenDuel = liveDuel && !askedGhost && duelOn?.id !== liveDuel.id ? liveDuel : null;
+  useEffect(() => {
+    if (!reopenDuel) return;
+    const id = setTimeout(() => setDuelOn(reopenDuel), 0);
+    return () => clearTimeout(id);
+  }, [reopenDuel]);
+  const duelStrip = board ? (
+    <DuelStatus board={board} countdown={countdown} busy={busy} onBeGhost={() => setConfirmHide(true)} onGhosts={() => setGhostsOpen(true)} />
+  ) : null;
 
   async function signOut() {
     if (signingOut) return;
@@ -1236,12 +1123,15 @@ export function Game({ state }: { state: GameState }) {
             tileCount={round.tileCount}
             markers={markers}
             events={cityEvents}
-            interactive={canTap || viewMode === "chat"}
-            onTile={onTile}
+            interactive
+            onTile={noTile}
             onBillboard={onBillboardTap}
             ads={ads}
             onAdViews={onAdViews}
-            mode={viewMode}
+            mode="chat"
+            ghosts={ghostLights}
+            onGhost={openGhost}
+            flyTo={flyTo}
             roomCounts={rooms.buildingCounts}
             onRoom={onRoom}
             ride={ride}
@@ -1280,7 +1170,7 @@ export function Game({ state }: { state: GameState }) {
         </Safe>
       )}
 
-      {/* Inside a place: money spraying, the jukebox, duel invites and room news. */}
+      {/* Inside a place: mint spraying, the jukebox, duel invites and room news. */}
       {meP && rooms.myRoom && (
         <Safe name="Room activity">
           <RoomActivityLayer roundId={round?.id ?? null} roomId={rooms.myRoom} me={meP} />
@@ -1303,8 +1193,8 @@ export function Game({ state }: { state: GameState }) {
             city={plan.city.name}
             phase={phase}
             countdown={countdown}
-            hidden={round.hidersRemaining}
-            hidersTotal={round.hidersTotal}
+            hidden={board ? board.ghosts.length : round.hidersRemaining}
+            hidersTotal={board ? Math.max(board.ghosts.length, round.hidersTotal - 1) : round.hidersTotal}
             pool={round.pool}
             tiles={round.tileCount}
             online={online}
@@ -1441,6 +1331,65 @@ export function Game({ state }: { state: GameState }) {
         />
       )}
       {howOpen && <HowItWorks onClose={() => setHowOpen(false)} />}
+      {ghostsOpen && board && (
+        <GhostsSheet
+          ghosts={board.ghosts}
+          rules={rules}
+          meId={me.id}
+          onPick={(g) => {
+            setGhostsOpen(false);
+            setFlyTo((f) => ({ tile: g.tile, at: (f?.at ?? 0) + 1 }));
+            setGhostFor(g);
+          }}
+          onClose={() => setGhostsOpen(false)}
+        />
+      )}
+      {ghostFor && (
+        <GhostCardSheet
+          key={ghostFor.id}
+          ghost={ghostFor}
+          rules={rules}
+          guest={guest}
+          onChat={(g) => {
+            setGhostFor(null);
+            chatWith(g);
+          }}
+          onChallenged={(d) => {
+            setGhostFor(null);
+            setDuelOn(d);
+            startTransition(() => router.refresh());
+          }}
+          onSignIn={() => {
+            setGhostFor(null);
+            setSignInWhy("Sign in to challenge ghosts: 10 mint a duel, and you win a slice of their stake if you beat them.");
+          }}
+          onClose={() => setGhostFor(null)}
+        />
+      )}
+      {duelOn && (
+        <DuelScreen
+          key={duelOn.id}
+          initial={duelOn}
+          me={{ name: me.name ?? "You", avatar: me.avatar }}
+          onClose={() => {
+            setDuelOn(null);
+            startTransition(() => router.refresh());
+          }}
+        />
+      )}
+      {askedGhost && !guest && (
+        <div className="pointer-events-none fixed inset-x-0 top-3 z-50 flex justify-center px-3">
+          <ChallengePopup
+            key={askedGhost.id}
+            duel={askedGhost}
+            onPlay={(d) => setDuelOn(d)}
+            onDone={(text) => {
+              setMessage({ text, tone: "info" });
+              startTransition(() => router.refresh());
+            }}
+          />
+        </div>
+      )}
       {streakOpen && state.streak && <StreakSheet streak={state.streak} now={now} onClose={() => setStreakOpen(false)} />}
       {giftsOpen && !guest && <MyGiftsSheet now={now} onClose={() => setGiftsOpen(false)} onChanged={() => startTransition(() => router.refresh())} />}
       {styleOpen && <StyleSheet onClose={() => setStyleOpen(false)} />}
@@ -1484,41 +1433,6 @@ export function Game({ state }: { state: GameState }) {
         </button>
       )}
 
-      {confirmShield && entry && (
-        <Sheet onClose={() => setConfirmShield(false)}>
-          <h2 className="flex items-center gap-2 font-display text-xl font-bold"><Shield className="size-5 text-[#7048e8]" />Raise your shield?</h2>
-          <p className="mt-1 text-sm text-muted">As a ghost, you can wrap yourself in a shield that saves you once.</p>
-          <div className="mt-3 rounded-2xl bg-[#7048e8]/10 p-4 text-center">
-            <p className="text-sm text-muted">It costs</p>
-            <p className="font-display text-4xl font-extrabold">{short(state.prices.shield)} mint</p>
-            <p className="text-xs text-muted">You have {short(me.coins)}. One shield per game.</p>
-          </div>
-          <ul className="mt-3 space-y-1.5 text-sm text-ink/80">
-            <Li icon={Sparkles}>The next time a hunter finds you, your shield whisks you away to a free spot nearby and you stay in the game.</Li>
-            <Li icon={Coins}>You still lose your stake to that hunter, but you keep playing for the pool.</Li>
-            <Li icon={Anchor}>While your shield is up you <b>can&apos;t move</b>. Once it has saved you, you can move again.</Li>
-            <Li icon={Dices}>Where you land is random: it could be a spot that was already searched.</Li>
-          </ul>
-          <div className="mt-4 flex gap-2">
-            <button onClick={() => setConfirmShield(false)} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold">
-              Not now
-            </button>
-            <button
-              disabled={busy}
-              onClick={() => {
-                setConfirmShield(false);
-                act(buyShield, () => {
-                  playSfx("shield");
-                  setMessage({ icon: Shield, text: "Shield up! The next find just teleports you. Sit tight until then.", tone: "good" });
-                });
-              }}
-              className="flex-1 rounded-xl bg-[#7048e8] py-2.5 font-semibold text-white disabled:opacity-50"
-            >
-              Raise shield · {short(state.prices.shield)}
-            </button>
-          </div>
-        </Sheet>
-      )}
 
       {confirmHide && round && (
         <Sheet onClose={() => setConfirmHide(false)}>
@@ -1533,17 +1447,17 @@ export function Game({ state }: { state: GameState }) {
             <p className="text-xs text-muted">You have {short(me.coins)}. After this: {short(Math.max(0, me.coins - state.prices.stake))}.</p>
           </div>
           <ul className="mt-3 space-y-1.5 text-sm text-ink/80">
-            <Li icon={Check}>Stay hidden till the end: you get your {short(state.prices.stake)} back, and the survivors share {Math.round(state.prices.winShare * 100)}% of the pool (it starts at 0 and grows with every search, sweep and move).</Li>
-            <Li icon={CircleX}>Get caught: the hunter who finds you keeps most of your stake. If every ghost is found, hunters take {Math.round(state.prices.winShare * 100)}% of the pool and the ghosts share {Math.round(state.prices.otherShare * 100)}%.</Li>
-            <Li icon={Shield}>Once the hunt starts you can buy a one-time shield ({short(state.prices.shield)} mint).</Li>
-            <Li icon={Footprints}>Moving costs {short(state.prices.moveFee)} mint each time.</Li>
+            <Li icon={Sparkles}>When the hunt starts, your light shows on the map for everyone. You don&apos;t hide or move: hunters come to you.</Li>
+            <Li icon={Swords}>Hunters challenge you to a quick game (Rock-Paper-Scissors for now, first to {rules.firstTo}). A challenge pops up wherever you are: answer within {rules.answerSeconds} seconds or you lose that duel.</Li>
+            <Li icon={Crown}>Win {rules.goldenWins} duels and you turn golden: safe for the rest of the game, your stake back, and a share of the prize pool.</Li>
+            <Li icon={CircleX}>Lose {rules.outLosses} and you&apos;re out. Each loss costs you a {rules.outLosses === 3 ? "third" : "slice"} of your stake: {Math.round(state.prices.winShare * 100)}% of it to the hunter, the rest to the pool.</Li>
           </ul>
           <div className="mt-4 space-y-2">
             <button
               disabled={busy}
               onClick={() => {
                 setConfirmHide(false);
-                act(() => joinRound("hider"), () => setMessage({ icon: Ghost, text: `You're in! The hunt starts in ${countdown}: then we'll drop you somewhere secret in the city.`, tone: "info" }));
+                act(() => joinRound("hider"), () => setMessage({ icon: Ghost, text: `You're a ghost! When the hunt starts in ${countdown}, your light goes on and hunters can challenge you.`, tone: "info" }));
               }}
               className="flex w-full items-center justify-center gap-2 rounded-2xl bg-ink px-4 py-3.5 text-white disabled:opacity-50"
             >
@@ -1565,37 +1479,13 @@ export function Game({ state }: { state: GameState }) {
         <Results results={state.results} onClose={() => setShowResults(null)} me={me.name ?? "Me"} city={plan.city.name} signedIn={!guest} />
       )}
 
-      {confirmMove !== null && entry && (
-        <Sheet onClose={() => setConfirmMove(null)}>
-          <h2 className="font-display text-xl font-bold">Move to {where(confirmMove)}?</h2>
-          <ul className="mt-2 space-y-1 text-sm text-muted">
-            <li>It costs {state.prices.moveFee} mint (you have {short(me.coins)}). The mint goes into the survivor pool.</li>
-            <li>Everyone will see that someone left {where(entry.tile ?? 0)}, and you can&apos;t come back to it.</li>
-            <li>After this you&apos;ll need to wait {state.prices.moveCooldown >= 60 ? `${Math.round(state.prices.moveCooldown / 60)} minutes` : `${state.prices.moveCooldown} seconds`} before moving again. Every move by anyone makes the next one dearer.</li>
-          </ul>
-          {state.activeTraps > 0 && (
-            <p className="mt-3 rounded-xl bg-[#4dabf7]/15 px-3 py-2 text-sm text-[#1864ab]">
-              <Radar className="mr-1 inline size-4 align-[-0.15em]" />There {state.activeTraps === 1 ? "is 1 drone trap" : `are ${state.activeTraps} drone traps`} watching parts of the city
-              right now, and you can&apos;t see where. If you move into one, the hunter who set it will know someone&apos;s there.
-            </p>
-          )}
-          <div className="mt-4 flex gap-2">
-            <button onClick={() => setConfirmMove(null)} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold">
-              Stay put
-            </button>
-            <button onClick={() => doMove(confirmMove)} className="flex-1 rounded-xl bg-ink py-2.5 font-semibold text-white">
-              Move · {short(state.prices.moveFee)}
-            </button>
-          </div>
-        </Sheet>
-      )}
 
       {confirmSignOut && (
         <Sheet onClose={() => !signingOut && setConfirmSignOut(false)}>
           <h2 className="font-display text-xl font-bold">Sign out?</h2>
           <p className="mt-1 text-sm text-muted">
             {isHider && entry && !entry.caught
-              ? "You'll stay hidden in the city while you're away, and you can sign back in with your email and PIN."
+              ? "Your light stays on the map while you're away, and challenges you don't answer count as losses. Sign back in any time with your email and PIN."
               : "You can sign back in any time with your email and PIN."}
           </p>
           <div className="mt-4 flex gap-2">
@@ -1713,12 +1603,58 @@ export function Game({ state }: { state: GameState }) {
         </Sheet>
       )}
       {pickRide && (
-        <Sheet onClose={() => setPickRide(false)}>
-          <h2 className="flex items-center gap-2 font-display text-xl font-bold">
-            <HotAirBalloon className="size-5 text-[#e64980]" />
-            Hop on a ride
-          </h2>
-          <p className="mt-1 text-sm text-muted">Everyone on the same ride chats together on the way. You can also tap any building to go inside.</p>
+        <Sheet onClose={() => setPickRide(false)} wide>
+          <div className="flex items-center gap-2">
+            <span className="grid size-10 place-items-center rounded-xl bg-[#ffe3ec] text-[#d6336c]">
+              <Compass className="size-5" />
+            </span>
+            <h2 className="min-w-0 flex-1 font-display text-xl font-extrabold">Explore</h2>
+            <button onClick={() => setPickRide(false)} className="grid size-9 shrink-0 place-items-center rounded-full text-muted hover:bg-panel-2" aria-label="Close">
+              <X className="size-5" />
+            </button>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-1 rounded-xl bg-panel-2 p-1 text-sm font-semibold" role="tablist">
+            {(["rides", "sports"] as const).map((t) => (
+              <button
+                key={t}
+                role="tab"
+                aria-selected={exploreTab === t}
+                onClick={() => setExploreTab(t)}
+                className={cn("flex items-center justify-center gap-1.5 rounded-lg py-2", exploreTab === t ? "bg-panel shadow-sm" : "text-muted")}
+              >
+                {t === "rides" ? <HotAirBalloon className="size-4" /> : <Trophy className="size-4" />}
+                {t === "rides" ? "Rides" : "Sports"}
+              </button>
+            ))}
+          </div>
+          {exploreTab === "sports" ? (
+            <div className="mt-3 space-y-2">
+              <p className="text-sm text-muted">Watch a match live from above. Tickets cost a few mint, and you can bet mint on who wins.</p>
+              {SPORTS.map((sp) => {
+                const Icon = SPORT_ICON[sp];
+                const live = liveVenues[sp];
+                return (
+                  <button
+                    key={sp}
+                    onClick={() => {
+                      setPickRide(false);
+                      setSportsOpen(sp);
+                    }}
+                    className="flex w-full items-center gap-3 rounded-2xl bg-panel-2 px-4 py-3 text-left hover:bg-[#d3f9d8]"
+                  >
+                    <Icon className="size-6 shrink-0 text-[#12a37a]" />
+                    <span className="min-w-0 flex-1">
+                      <b className="block">{SPORT_INFO[sp].label}</b>
+                      <span className="block truncate text-xs text-muted">{live ? `Live now: ${live}` : `At the ${SPORT_INFO[sp].place.toLowerCase()}`}</span>
+                    </span>
+                    {live && <span className="size-2.5 shrink-0 animate-pulse rounded-full bg-hit" aria-label="live" />}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+          <>
+          <p className="mt-3 text-sm text-muted">Everyone on the same ride chats together on the way. You can also tap any building to go inside.</p>
           <div className="mt-3 space-y-4">
             {RIDE_ORDER.map((kind) => {
               const list = rideList.filter((r) => r.kind === kind);
@@ -1754,6 +1690,8 @@ export function Game({ state }: { state: GameState }) {
               );
             })}
           </div>
+          </>
+          )}
         </Sheet>
       )}
       {activity && rooms.myRoom && (
@@ -1858,100 +1796,7 @@ export function Game({ state }: { state: GameState }) {
           </p>
         </Sheet>
       )}
-      {confirmHunt && round && (
-        <Sheet onClose={() => setConfirmHunt(false)}>
-          <h2 className="flex items-center gap-2 font-display text-xl font-bold"><Flashlight className="size-5 text-gold-dark" />Join the hunt?</h2>
-          <ul className="mt-3 space-y-1.5 text-sm text-ink/80">
-            <Li icon={Sparkles}>Joining is free. {me.freeSearch ? "Your first search today is on us." : `Searches cost about ${short(round.searchPrice)} mint each right now.`}</Li>
-            <Li icon={Ghost}>As a hunter, you tap spots to search for ghosts, or send drones to sweep an area.</Li>
-            <Li icon={Coins}>Find a ghost and you keep most of their stake. Find {botName}, the bot, for {short(200)} mint.</Li>
-            <Li icon={Trophy}>Catch every ghost and hunters share 80% of the pool.</Li>
-            <Li icon={Timer}>You stay a hunter for the whole round.</Li>
-          </ul>
-          <div className="mt-4 flex gap-2">
-            <button onClick={() => setConfirmHunt(false)} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold">
-              Not now
-            </button>
-            <button
-              disabled={busy}
-              onClick={() => {
-                setConfirmHunt(false);
-                act(() => joinRound("seeker"), () => setMessage({ text: "You're hunting this round. Happy hunting!", tone: "info" }));
-              }}
-              className="flex-1 rounded-xl bg-gold py-2.5 font-semibold text-ink disabled:opacity-50"
-            >
-              Start hunting
-            </button>
-          </div>
-        </Sheet>
-      )}
 
-      {confirmDecoy && entry && (
-        <Sheet onClose={() => setConfirmDecoy(false)}>
-          <h2 className="flex items-center gap-2 font-display text-xl font-bold"><Drama className="size-5 text-[#f08c00]" />Drop a decoy?</h2>
-          <p className="mt-1 text-sm text-muted">As a ghost, you can drop a fake you anywhere in the city to fool the hunters.</p>
-          <div className="mt-3 rounded-2xl bg-[#f08c00]/10 p-4 text-center">
-            <p className="text-sm text-muted">It costs</p>
-            <p className="font-display text-4xl font-extrabold">{short(state.prices.decoy)} mint</p>
-            <p className="text-xs text-muted">You have {short(me.coins)}. One decoy per game; each one costs a little more than your last.</p>
-          </div>
-          <ul className="mt-3 space-y-1.5 text-sm text-ink/80">
-            <Li icon={MapPin}>You choose where it goes: after this, tap any spot in the city.</Li>
-            <Li icon={Megaphone}>Everyone hears that a decoy went out, but not where (unless one of their drone traps is watching that spot).</Li>
-            <Li icon={Radar}>Drones think it&apos;s really you. A hunter who searches it gets nothing: it goes bang, or a squeaky toy pops up.</Li>
-            <Li icon={Anchor}>Your decoy stays where you drop it.</Li>
-          </ul>
-          <div className="mt-4 flex gap-2">
-            <button onClick={() => setConfirmDecoy(false)} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold">
-              Not now
-            </button>
-            <button
-              onClick={() => {
-                setConfirmDecoy(false);
-                setPlacingDecoy(true);
-              }}
-              className="flex-1 rounded-xl bg-[#f08c00] py-2.5 font-semibold text-white"
-            >
-              Choose a spot
-            </button>
-          </div>
-        </Sheet>
-      )}
-      {confirmRespawn && entry && (
-        <Sheet onClose={() => setConfirmRespawn(false)}>
-          <h2 className="flex items-center gap-2 font-display text-xl font-bold"><RotateCcw className="size-5 text-[#e8590c]" />Come back as a ghost?</h2>
-          <p className="mt-1 text-sm text-muted">You were caught early, so you can rise again, once.</p>
-          <div className="mt-3 rounded-2xl bg-[#e8590c]/10 p-4 text-center">
-            <p className="text-sm text-muted">It costs</p>
-            <p className="font-display text-4xl font-extrabold">{short(state.prices.respawn)} mint</p>
-            <p className="text-xs text-muted">You have {short(me.coins)}. This mint disappears (it doesn&apos;t go into the pool).</p>
-          </div>
-          <ul className="mt-3 space-y-1.5 text-sm text-ink/80">
-            <Li icon={Dices}>You drop back in on a random spot nobody has searched yet.</Li>
-            <Li icon={Megaphone}>Everyone is told you respawned (but not where).</Li>
-            <Li icon={Coins}>Your stake is still gone, but you can play on for a share of the pool.</Li>
-            <Li icon={Repeat1}>Once per game.</Li>
-          </ul>
-          <div className="mt-4 flex gap-2">
-            <button onClick={() => setConfirmRespawn(false)} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold">
-              Not now
-            </button>
-            <button
-              disabled={busy}
-              onClick={() => {
-                setConfirmRespawn(false);
-                act(respawnMe, () => {
-                  playSfx("respawn");
-                  setMessage({ icon: RotateCcw, text: "You're back! Dropped somewhere new. Stay sharp.", tone: "good" });
-                });
-              }}
-              className="flex-1 rounded-xl bg-[#e8590c] py-2.5 font-semibold text-white disabled:opacity-50"
-            >
-              Respawn · {short(state.prices.respawn)}
-            </button>
-          </div>
-        </Sheet>
-      )}
 
       {/* Bottom: messages, controls and chat */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-2 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
@@ -1998,23 +1843,16 @@ export function Game({ state }: { state: GameState }) {
 
         <div className="flex w-full max-w-xl items-end justify-between gap-2">
           {round ? (
-            <div className="glass pointer-events-auto flex rounded-full p-1 text-sm font-semibold" role="tablist" aria-label="Mode">
-              {(["game", "chat"] as const).map((m) => (
-                <button
-                  key={m}
-                  role="tab"
-                  aria-selected={viewMode === m}
-                  onClick={() => {
-                    setViewMode(m);
-                    if (m === "game") leaveRoom();
-                  }}
-                  className={cn("rounded-full px-3 py-1.5", viewMode === m ? "bg-ink text-white" : "text-muted")}
-                >
-                  {m === "game" ? <Gamepad2 className="size-4" /> : <MessageCircle className="size-4" />}
-                  {m === "game" ? "Game" : "Chat mode"}
-                </button>
-              ))}
-            </div>
+            <button
+              onClick={() => {
+                setExploreTab("rides");
+                setPickRide(true);
+              }}
+              className="glass pointer-events-auto flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold"
+            >
+              <Compass className="size-4 text-[#e64980]" />
+              Explore
+            </button>
           ) : (
             <span />
           )}
@@ -2048,7 +1886,32 @@ export function Game({ state }: { state: GameState }) {
         </div>
 
         <div className="glass pointer-events-auto w-full max-w-xl rounded-2xl p-3">
-          {round && viewMode === "chat" ? (
+          {!round || phase === "done" ? (
+            <p className="text-sm text-muted">Building the next town…</p>
+          ) : guest ? (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <p className="flex-1 text-sm text-muted">
+                <LogoMark size={20} className="mr-1.5 inline align-[-0.3em] sm:hidden" />
+                <b className="text-ink sm:hidden">Newtown · </b>
+                <span className="mr-1.5 inline-block size-2 animate-pulse rounded-full bg-hit align-middle" />
+                <b className="text-ink">Watching live.</b> <span className="rounded bg-ink px-1 text-[10px] font-bold text-white">18+</span>{" "}
+                {phase === "join"
+                  ? `Ghosts are getting ready. The hunt starts in ${countdown}.`
+                  : `The hunt is on: ${short(board?.ghosts.length ?? round.hidersRemaining)} ghosts lit up, ${short(round.pool)} mint in the pool. Tap a light to see a ghost.`}
+              </p>
+              <div className="grid grid-cols-3 gap-2 text-sm sm:flex">
+                <button onClick={() => setHowOpen(true)} className="whitespace-nowrap rounded-xl bg-panel-2 px-3 py-2.5 font-semibold">
+                  <CircleHelp className="mr-1 inline size-4 align-[-0.15em]" />Rules
+                </button>
+                <button onClick={() => setAdExplainer(true)} className="whitespace-nowrap rounded-xl bg-panel-2 px-3 py-2.5 font-semibold">
+                  <Megaphone className="mr-1 inline size-4 align-[-0.15em]" />Advertise
+                </button>
+                <Link href="/login" className="whitespace-nowrap rounded-xl bg-gold px-3 py-2.5 text-center font-semibold text-ink">
+                  Play now
+                </Link>
+              </div>
+            </div>
+          ) : (
             <div className="space-y-2 text-sm">
               {isDancing && dancing ? (
                 <DanceBar
@@ -2116,28 +1979,14 @@ export function Game({ state }: { state: GameState }) {
                 </>
               ) : (
                 <>
-                  <p>
-                    <b className="inline-flex items-center gap-1">
-                      <MessageCircle className="size-4" />
-                      Chat mode.
-                    </b>{" "}
-                    <span className="text-muted">
-                      Tap any building to go inside: lobbies, floors, rooftops, clubs, restaurants and more. Or hop on a balloon, train, bus, car, boat, Ferris
-                      wheel or water slide. The numbers show who&apos;s there.
-                    </span>
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <button onClick={() => setPickRide(true)} className="flex items-center gap-1.5 rounded-xl bg-[#e64980] px-3 py-2 font-semibold text-white">
-                      <HotAirBalloon className="size-4" />
-                      Hop on a ride
-                    </button>
-                    <button onClick={() => setSportsOpen("football")} className="flex items-center gap-1.5 rounded-xl bg-[#12a37a] px-3 py-2 font-semibold text-white">
-                      <Trophy className="size-4" />
-                      Sports
-                    </button>
+                  {duelStrip}
+                  <div className="flex items-center gap-2 border-t border-line pt-2">
+                    <p className="min-w-0 flex-1 text-xs text-muted">
+                      Tap any building to go inside (the numbers show who&apos;s there), or Explore rides and sports.
+                    </p>
                     <button
                       onClick={() => (guest ? setSignInWhy("Sign in to build your own house in the town.") : setHouseOpen(true))}
-                      className="flex items-center gap-1.5 rounded-xl bg-panel-2 px-3 py-2 font-semibold"
+                      className="flex shrink-0 items-center gap-1.5 rounded-xl bg-panel-2 px-3 py-2 font-semibold"
                     >
                       <House className="size-4 text-[#7048e8]" />
                       My house
@@ -2146,262 +1995,10 @@ export function Game({ state }: { state: GameState }) {
                 </>
               )}
             </div>
-          ) : !round || phase === "done" ? (
-            <p className="text-sm text-muted">Building the next city…</p>
-          ) : guest ? (
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <p className="flex-1 text-sm text-muted">
-                <LogoMark size={20} className="mr-1.5 inline align-[-0.3em] sm:hidden" />
-                <b className="text-ink sm:hidden">Newtown · </b>
-                <span className="mr-1.5 inline-block size-2 animate-pulse rounded-full bg-hit align-middle" />
-                <b className="text-ink">Watching live.</b> <span className="rounded bg-ink px-1 text-[10px] font-bold text-white">18+</span>{" "}
-                {phase === "join"
-                  ? `Ghosts are getting ready. The hunt starts in ${countdown}.`
-                  : `The hunt is on: ${short(round.hidersRemaining)} still hidden, ${short(round.pool)} mint in the pool.`}
-              </p>
-              <div className="grid grid-cols-3 gap-2 text-sm sm:flex">
-                <button onClick={() => setHowOpen(true)} className="whitespace-nowrap rounded-xl bg-panel-2 px-3 py-2.5 font-semibold">
-                  <CircleHelp className="mr-1 inline size-4 align-[-0.15em]" />Rules
-                </button>
-                <button onClick={() => setAdExplainer(true)} className="whitespace-nowrap rounded-xl bg-panel-2 px-3 py-2.5 font-semibold">
-                  <Megaphone className="mr-1 inline size-4 align-[-0.15em]" />Advertise
-                </button>
-                <Link href="/login" className="whitespace-nowrap rounded-xl bg-gold px-3 py-2.5 text-center font-semibold text-ink">
-                  Play now
-                </Link>
-              </div>
-            </div>
-          ) : !entry ? (
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <p className="flex-1 text-sm text-muted">
-                {phase === "join" ? (
-                  <>
-                    Ghosts are getting ready and the city&apos;s growing. Want to hide, or hunt? Joining as a ghost closes in{" "}
-                    <b className="tabular-nums text-ink">{countdown}</b>.
-                  </>
-                ) : (
-                  "The hunt is on. Jump in as a hunter and start searching."
-                )}
-              </p>
-              <div className="flex gap-2">
-                <button
-                  disabled={busy}
-                  onClick={() => setConfirmHunt(true)}
-                  className="flex-1 rounded-xl bg-gold px-4 py-2.5 font-semibold text-ink disabled:opacity-50 sm:flex-none"
-                >
-                  Hunt
-                </button>
-                {phase === "join" && (
-                  <button
-                    disabled={busy || !me.canHide}
-                    onClick={() => setConfirmHide(true)}
-                    className="flex-1 rounded-xl bg-ink px-4 py-2.5 font-semibold text-white disabled:opacity-40 sm:flex-none"
-                  >
-                    <Ghost className="mr-1 inline size-4 align-[-0.15em]" />Ghost · {state.prices.stake}
-                  </button>
-                )}
-              </div>
-              {phase === "join" && !me.canHide && (
-                <p className="text-xs text-muted">Play one round as a hunter first, then you can hide.</p>
-              )}
-            </div>
-          ) : phase === "join" ? (
-            <div className="flex items-center gap-3">
-              <span className={cn("grid size-11 shrink-0 place-items-center rounded-full text-white", isHider ? "bg-ink" : "bg-gold-dark")}>
-                {isHider ? <Ghost className="size-6" /> : <Flashlight className="size-6" />}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">{isHider ? "You're a ghost this round" : "You're hunting this round"}</p>
-                <p className={cn("font-display text-2xl font-extrabold tabular-nums leading-tight", (joinLeft ?? 99) <= 10 && "animate-pulse text-hit")}>
-                  Hunt starts in {countdown}
-                </p>
-                <p className="text-xs text-muted">
-                  {isHider
-                    ? "When it hits zero you'll be dropped somewhere secret. Watch the city grow as people join."
-                    : "When it hits zero, start searching. Watch the city grow as people join."}
-                </p>
-              </div>
-            </div>
-          ) : isSeeker ? (
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <ModeButton on={mode === "search"} onClick={() => setMode("search")}>
-                  Search · {me.freeSearch ? "free" : short(round.searchPrice)}
-                </ModeButton>
-                <ModeButton on={mode === "sweep"} onClick={() => setMode("sweep")}>
-                  Sweep · {sweepWait > 0 ? `${Math.ceil(sweepWait / 1000)}s` : short(round.sweepPrices[radius])}
-                </ModeButton>
-                {me.level >= state.unlocks.bigSearch ? (
-                  <ModeButton on={mode === "big"} onClick={() => setMode("big")}>
-                    Big search · {short(state.prices.bigSearch)}
-                  </ModeButton>
-                ) : (
-                  <span className="rounded-lg bg-panel-2 px-3 py-1.5 font-semibold text-muted/70" title={`Unlocks at level ${state.unlocks.bigSearch}`}>
-                    <Lock className="mr-1 inline size-3.5 align-[-0.1em]" />Big search · Lv {state.unlocks.bigSearch}
-                  </span>
-                )}
-                {mode === "sweep" && (
-                  <select
-                    value={radius}
-                    onChange={(e) => setRadius(Number(e.target.value) as 1 | 2 | 3)}
-                    className="rounded-lg border border-line bg-panel px-2 py-1.5"
-                  >
-                    <option value={1}>Small area · {short(round.sweepPrices[1])}</option>
-                    <option value={2}>Medium area · {short(round.sweepPrices[2])}</option>
-                    <option value={3}>Large area · {short(round.sweepPrices[3])}</option>
-                  </select>
-                )}
-              </div>
-              {mode !== "sweep" && searchWait > 0 && (
-                <div className="flex items-center gap-2 text-xs font-semibold text-gold-dark">
-                  <span className="tabular-nums">Next search in {Math.ceil(searchWait / 1000)}s</span>
-                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gold/20">
-                    <div className="h-full rounded-full bg-gold transition-[width] duration-1000 ease-linear" style={{ width: `${Math.min(100, (searchWait / 30_000) * 100)}%` }} />
-                  </div>
-                </div>
-              )}
-              <p className="text-xs text-muted">
-                {mode === "search"
-                  ? "Tap anywhere in the city to search that spot. Search too fast and you'll have to wait longer."
-                  : mode === "big"
-                    ? `Tap a spot to search it and the 8 spots around it in one go (${state.prices.bigSearch ? short(state.prices.bigSearch) : ""} mint).`
-                    : "Tap a spot and a drone will check the area around it. It only tells you yes or no."}
-              </p>
-            </div>
-          ) : entry.caught ? (
-            <div className="space-y-2 text-sm">
-              <p className="text-hit">You&apos;ve been found. Hang around and watch the rest of the hunt, or try again next round.</p>
-              {entry.canRespawn && (
-                <button onClick={() => setConfirmRespawn(true)} className="w-full rounded-xl bg-[#e8590c] py-2.5 font-semibold text-white">
-                  <RotateCcw className="mr-1 inline size-4 align-[-0.15em]" />Respawn · {short(state.prices.respawn)} mint
-                </button>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-2 text-sm">
-              {frozenWait > 0 && (
-                <div className="rounded-xl bg-hit/10 px-3 py-2 font-medium text-hit">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-1.5"><Radar className="size-4" />A drone has you pinned. No moving for now.</span>
-                    <span className="font-display text-lg font-bold tabular-nums">{clock(frozenWait)}</span>
-                  </div>
-                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-hit/15">
-                    <div
-                      className="h-full rounded-full bg-hit transition-[width] duration-1000 ease-linear"
-                      style={{ width: `${Math.min(100, (frozenWait / (state.prices.freezeSeconds * 1000)) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-              {frozenWait <= 0 && recentlySwept && (
-                <p className="rounded-xl bg-[#4dabf7]/15 px-3 py-2 font-medium text-[#1864ab]">
-                  <Radar className="mr-1 inline size-4 align-[-0.15em]" />A drone just swept your area. Hunters know someone&apos;s close. Maybe time to move?
-                </p>
-              )}
-              {placingDecoy && (
-                <div className="flex items-center justify-between gap-2 rounded-xl bg-[#f08c00]/15 px-3 py-2 font-medium text-[#a35200]">
-                  <span className="flex items-center gap-1.5"><Drama className="size-4" />Tap the spot where you want your decoy.</span>
-                  <button onClick={() => setPlacingDecoy(false)} className="text-xs underline">
-                    Cancel
-                  </button>
-                </div>
-              )}
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-me/15 px-2.5 py-1 text-xs font-semibold text-me">
-                  {shieldUp ? "Shield up: staying put" : frozenWait > 0 ? `Pinned for ${clock(frozenWait)}` : moveWait > 0 ? `Next move in ${clock(moveWait)}` : "You can move now"}
-                </span>
-                <span className="text-xs text-muted">
-                  Moving costs {short(state.prices.moveFee)} right now (it goes up every time anyone moves) · {entry.moves} move{entry.moves === 1 ? "" : "s"} so far
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <PowerUp
-                  icon={Drama}
-                  label="Decoy"
-                  price={state.prices.decoy}
-                  unlockAt={state.unlocks.decoy}
-                  level={me.level}
-                  used={entry.decoyUsed}
-                  usedLabel="Decoy out"
-                  onClick={() => setConfirmDecoy(true)}
-                  tone="bg-[#f08c00]"
-                />
-                <PowerUp
-                  icon={Shield}
-                  label="Shield"
-                  price={state.prices.shield}
-                  unlockAt={state.unlocks.shield}
-                  level={me.level}
-                  used={entry.shieldBought}
-                  usedLabel={entry.shieldSaved ? "Shield used" : "Shield up"}
-                  onClick={() => setConfirmShield(true)}
-                  tone="bg-[#7048e8]"
-                />
-                <span className="text-[11px] text-muted">One of each per game.</span>
-              </div>
-              {state.outlook && (
-                <p className="rounded-xl bg-me/10 px-3 py-2">
-                  Stay hidden and you walk away with about <b>{short(state.outlook.stakeBack + state.outlook.share)}</b> mint:{" "}
-                  <span className="text-muted">
-                    your {short(state.outlook.stakeBack)} back, plus {short(state.outlook.share)} from the pool so far.
-                  </span>
-                </p>
-              )}
-              <p className="text-xs text-muted">
-                {entry.moves < entry.movesAllowed
-                  ? `You have ${entry.movesAllowed - entry.moves} move${entry.movesAllowed - entry.moves === 1 ? "" : "s"} left this game: tap another spot to use it.`
-                  : "You've used your moves for this game. Stay hidden!"}
-              </p>
-            </div>
           )}
         </div>
       </div>
     </main>
-  );
-}
-
-/** A power-up button for hiders: locked until a level, then once per game. */
-function PowerUp(props: {
-  icon: LucideIcon;
-  label: string;
-  price: number;
-  unlockAt: number;
-  level: number;
-  used: boolean;
-  usedLabel: string;
-  onClick: () => void;
-  tone: string;
-}) {
-  if (props.level < props.unlockAt)
-    return (
-      <span className="rounded-full bg-panel-2 px-3 py-1 text-xs font-semibold text-muted/70" title={`Unlocks at level ${props.unlockAt}`}>
-        <Lock className="mr-1 inline size-3 align-[-0.1em]" />
-        {props.label} · Lv {props.unlockAt}
-      </span>
-    );
-  if (props.used)
-    return (
-      <span className="rounded-full bg-panel-2 px-3 py-1 text-xs font-semibold text-muted">
-        <props.icon className="mr-1 inline size-3.5 align-[-0.15em]" />
-        {props.usedLabel}
-      </span>
-    );
-  return (
-    <button onClick={props.onClick} className={cn("rounded-full px-3 py-1 text-xs font-semibold text-white shadow-sm", props.tone)}>
-      <props.icon className="mr-1 inline size-3.5 align-[-0.15em]" />
-      {props.label} · {short(props.price)}
-    </button>
-  );
-}
-
-function ModeButton({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn("rounded-lg px-3 py-1.5 font-semibold", on ? "bg-gold text-ink" : "bg-panel-2 text-ink")}
-    >
-      {children}
-    </button>
   );
 }
 

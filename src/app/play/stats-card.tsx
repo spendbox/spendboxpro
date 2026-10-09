@@ -92,13 +92,13 @@ export function StatsCard({
               {countdown}
             </div>
             <div className={cn("text-[11px]", urgent ? "font-semibold text-hit" : "text-muted")}>
-              {phase === "join" ? "until ghosts drop in" : urgent ? "left in this town!" : "left in this town"}
+              {phase === "join" ? "until ghosts light up" : urgent ? "left in this town!" : "left in this town"}
             </div>
           </>
         )}
         <dl className="mt-3 grid grid-cols-3 gap-1 text-center">
           {[
-            ["Hidden", short(hidden), `${hidden.toLocaleString("en")} of ${hidersTotal.toLocaleString("en")} still hidden`, `of ${short(hidersTotal)}`],
+            ["Ghosts", short(hidden), `${hidden.toLocaleString("en")} of ${hidersTotal.toLocaleString("en")} ghosts still lit up`, `of ${short(hidersTotal)}`],
             ["Pool", short(pool), `${pool.toLocaleString("en")} mint in the pool`, "mint"],
             ["Spots", short(tiles), `${tiles.toLocaleString("en")} spots in the city`, "in city"],
           ].map(([k, v, full, sub]) => (

@@ -82,7 +82,7 @@ export function DanceBar({
       )}
       <button onClick={onDanceOff} className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-ink px-3 py-2 font-semibold text-white">
         <PartyPopper className="size-4" />
-        Dance-off and spray money
+        Dance-off and spray mint
       </button>
     </div>
   );

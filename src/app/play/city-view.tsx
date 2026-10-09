@@ -131,6 +131,8 @@ export type CityRoom = { id: string; name: string; capacity: number; kind: "buil
 export type CityDancer = { id: string; name: string; avatar: Avatar; move: DanceMove; with: string | null };
 /** A friend in a place in town (chat mode shows their face over it): the room id from useRooms ("b:12:f4", "balloon:2"). */
 export type CityFriendPin = { id: string; name: string; avatar: Avatar; room: string };
+/** A ghost lit up on the map: free to challenge, in a duel right now, or golden (safe). */
+export type CityGhost = { id: string; name: string; avatar: Avatar; tile: number; status: "free" | "playing" | "golden"; mine?: boolean };
 /** You dancing: your id (so everyone places the dancers the same way), your move, your partner. */
 export type CityDance = { id: string; move: DanceMove; with: string | null };
 
@@ -271,6 +273,11 @@ type Props = {
   openRoom?: { id: string; at: number } | null;
   /** The other real players in the place you're in: the ones not sitting or dancing are drawn standing about. */
   roomPeople?: CityPerson[];
+  /** Ghosts lit up on the map (tap one: onGhost). */
+  ghosts?: CityGhost[];
+  onGhost?: (id: string) => void;
+  /** Fly the camera over a spot (a new `at` each time), e.g. a ghost picked from a list. */
+  flyTo?: { tile: number; at: number } | null;
 };
 
 type Part = { tile: number; x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number; color: number; tilt?: number };
@@ -1234,6 +1241,9 @@ export function CityView({
   friendsAt,
   openRoom = null,
   roomPeople,
+  ghosts,
+  onGhost,
+  flyTo = null,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const api = useRef<{
@@ -1258,11 +1268,13 @@ export function CityView({
     setRoomPeople: (list: CityPerson[]) => void;
     openRoom: (id: string) => void;
     focusEvent: (id: number) => void;
+    setGhosts: (list: CityGhost[]) => void;
+    flyToTile: (tile: number) => void;
   } | null>(null);
-  const cb = useRef({ onTile, onHover, onBillboard, onBalloon, onAdViews, interactive, onRoom, onBalloons, mode, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract });
+  const cb = useRef({ onTile, onHover, onBillboard, onBalloon, onAdViews, interactive, onRoom, onBalloons, mode, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost });
   const atmos = useRef({ progress, nightFirst, meAvatar });
   useEffect(() => {
-    cb.current = { onTile, onHover, onBillboard, onBalloon, onAdViews, interactive, onRoom, onBalloons, mode, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract };
+    cb.current = { onTile, onHover, onBillboard, onBalloon, onAdViews, interactive, onRoom, onBalloons, mode, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost };
     atmos.current = { progress, nightFirst, meAvatar };
   });
 
@@ -3853,6 +3865,109 @@ export function CityView({
         p.root.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`;
       }
     }
+    // ---- ghost lights: every ghost glows on the map (blue: free to challenge, orange: in a
+    // duel right now, gold: golden and safe). A beam of light over their spot and a ring on the
+    // ground, with their face over it (a page element, so it's easy to tap).
+    type GhostLight = { id: string; tile: number; status: CityGhost["status"]; beam: THREE.Mesh; ring: THREE.Mesh; root: HTMLButtonElement; shown: boolean };
+    const GHOST_GLOW: Record<CityGhost["status"], { hex: number; css: string; label: string }> = {
+      free: { hex: 0x4dabf7, css: "#1c7ed6", label: "Free" },
+      playing: { hex: 0xff922b, css: "#e8590c", label: "In a duel" },
+      golden: { hex: 0xffd43b, css: "#e8a800", label: "Golden" },
+    };
+    let ghostLights: GhostLight[] = [];
+    let ghostKey = "";
+    const ghostGroup = new THREE.Group();
+    scene.add(ghostGroup);
+    const ghostLayer = document.createElement("div");
+    ghostLayer.style.cssText = "position:absolute;inset:0;z-index:3;pointer-events:none;overflow:hidden;contain:strict;";
+    el.appendChild(ghostLayer);
+    const ghostAt = new THREE.Vector3();
+    function clearGhosts() {
+      for (const g of ghostLights) {
+        g.root.remove();
+        ghostGroup.remove(g.beam, g.ring);
+        (g.beam.material as THREE.Material).dispose();
+        (g.ring.material as THREE.Material).dispose();
+      }
+      ghostLights = [];
+    }
+    function setGhosts(list: CityGhost[]) {
+      const key = `${currentSeed}|${list.map((g) => `${g.id}@${g.tile}|${g.status}|${g.name}|${g.mine ? 1 : 0}|${JSON.stringify(g.avatar)}`).join(";")}`;
+      if (key === ghostKey) return;
+      ghostKey = key;
+      clearGhosts();
+      for (const g of list) {
+        if (!Number.isInteger(g.tile) || g.tile < 0) continue;
+        const glow = GHOST_GLOW[g.status];
+        const beam = new THREE.Mesh(
+          markerGeo.beam,
+          new THREE.MeshBasicMaterial({ color: glow.hex, transparent: true, opacity: 0.4, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }),
+        );
+        beam.renderOrder = 4;
+        const ring = new THREE.Mesh(markerGeo.ring, new THREE.MeshBasicMaterial({ color: glow.hex, transparent: true, opacity: 0.9 }));
+        ring.scale.setScalar(1.6);
+        ghostGroup.add(beam, ring);
+        const root = document.createElement("button");
+        root.type = "button";
+        root.setAttribute("aria-label", `${g.mine ? "You" : g.name}: ghost, ${glow.label.toLowerCase()}`);
+        root.style.cssText =
+          "position:absolute;left:0;top:0;display:flex;flex-direction:column;align-items:center;gap:2px;will-change:transform;visibility:hidden;pointer-events:auto;background:none;border:0;padding:0;cursor:pointer;";
+        const face = document.createElement("img");
+        const svg = renderToStaticMarkup(<AvatarFace avatar={cleanAvatar(g.avatar, g.name)} size={44} />).replace(/^<svg(?![^>]*xmlns=)/, '<svg xmlns="http://www.w3.org/2000/svg"');
+        face.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+        face.alt = "";
+        face.style.cssText = `width:44px;height:44px;border-radius:999px;border:3px solid ${glow.css};background:#fff;box-shadow:0 0 0 4px ${glow.css}55,0 0 18px 6px ${glow.css}aa;`;
+        const name = document.createElement("div");
+        name.textContent = `${g.mine ? "You" : g.name} · ${glow.label}`;
+        name.style.cssText = `max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 8px;border-radius:999px;background:${glow.css};color:#fff;font:700 11px/16px system-ui,sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.2);`;
+        root.append(face, name);
+        root.addEventListener("click", (e) => {
+          e.stopPropagation();
+          cb.current.onGhost?.(g.id);
+        });
+        root.addEventListener("pointerdown", (e) => e.stopPropagation());
+        ghostLayer.appendChild(root);
+        ghostLights.push({ id: g.id, tile: g.tile, status: g.status, beam, ring, root, shown: false });
+      }
+    }
+    function updateGhosts(time: number) {
+      const on = isRevealed && ghostLights.length > 0 && !immersive();
+      ghostLayer.style.display = on ? "" : "none";
+      ghostGroup.visible = isRevealed && ghostLights.length > 0;
+      if (!ghostGroup.visible) return;
+      const w = el.clientWidth || 1;
+      const h = el.clientHeight || 1;
+      for (const g of ghostLights) {
+        const p = posOf(g.tile);
+        const top = topOf(g.tile);
+        // In a duel: a quick orange throb. Free and golden: a slow breathing glow.
+        const k = g.status === "playing" ? 0.5 + 0.5 * Math.abs(Math.sin(time * 6)) : 0.75 + 0.25 * Math.sin(time * 1.8);
+        g.beam.scale.set(1.4 + 0.3 * k, top + 10, 1.4 + 0.3 * k);
+        g.beam.position.set(p.x, 0, p.z);
+        (g.beam.material as THREE.MeshBasicMaterial).opacity = 0.22 + 0.25 * k;
+        g.ring.position.set(p.x, top + 0.15, p.z);
+        g.ring.scale.setScalar(1.4 + 0.4 * k);
+        if (!on) continue;
+        ghostAt.set(p.x, top + 0.6, p.z);
+        ghostAt.project(camera);
+        const show = ghostAt.z < 1 && Math.abs(ghostAt.x) < 1.1 && Math.abs(ghostAt.y) < 1.1;
+        if (show !== g.shown) {
+          g.shown = show;
+          g.root.style.visibility = show ? "visible" : "hidden";
+        }
+        if (!show) continue;
+        const x = ((ghostAt.x + 1) / 2) * w;
+        const y = ((1 - ghostAt.y) / 2) * h - 8;
+        g.root.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`;
+      }
+    }
+    const flyToTile = (tile: number) => {
+      if (immersive()) return;
+      const p = posOf(tile);
+      focus = null;
+      eventFly = new THREE.Vector3(p.x, 0, p.z);
+    };
+
     /** Open a building's place as if it had been tapped (onRoom), e.g. to go to a friend. */
     function openRoomById(id: string) {
       const m = /^b:(\d+)/.exec(id);
@@ -5646,6 +5761,7 @@ export function CityView({
       }
       updatePills();
       updatePins();
+      updateGhosts(time);
       const dist = riding ? 10 : camera.position.distanceTo(controls.target);
       const fog = scene.fog as THREE.Fog;
       fog.near = (dist + radius * 0.8) * (1 - fogFactor * 0.45);
@@ -5699,7 +5815,7 @@ export function CityView({
       if (currentSeed >= 0 && builtCount > 0) build(currentSeed, builtCount);
     }
 
-    api.current = { build, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setMode, setWorldEvents, setHouses, setDance, setFriendPins, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt };
+    api.current = { build, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setMode, setWorldEvents, setHouses, setDance, setFriendPins, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile };
 
     return () => {
       alive = false;
@@ -5753,6 +5869,8 @@ export function CityView({
       country?.dispose();
       for (const p of planes) (p.userData.jet as ReturnType<typeof createAirliner>).dispose();
       pinLayer.remove();
+      clearGhosts();
+      ghostLayer.remove();
       for (const g of hillTreeShapes.values()) g.dispose();
       renderer.dispose();
       el.removeChild(renderer.domElement);
@@ -5832,6 +5950,18 @@ export function CityView({
   useEffect(() => {
     if (focusEvent) api.current?.focusEvent(focusEvent.id);
   }, [focusEvent]);
+
+  const ghostsKey = (ghosts ?? []).map((g) => `${g.id}@${g.tile}|${g.status}|${g.name}|${g.mine ? 1 : 0}|${JSON.stringify(g.avatar)}`).join(";");
+  const ghostsRef = useRef(ghosts);
+  useEffect(() => {
+    ghostsRef.current = ghosts;
+  });
+  useEffect(() => {
+    api.current?.setGhosts(ghostsRef.current ?? []);
+  }, [ghostsKey, tileCount, seed]);
+  useEffect(() => {
+    if (flyTo) api.current?.flyToTile(flyTo.tile);
+  }, [flyTo]);
 
   const friendsKey = (friendsAt ?? []).map((f) => `${f.id}@${f.room}|${f.name}|${JSON.stringify(f.avatar)}`).join(";");
   const friendsRef = useRef(friendsAt);

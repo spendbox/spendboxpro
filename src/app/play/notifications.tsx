@@ -1,6 +1,6 @@
 "use client";
 
-import { Handshake, Heart } from "lucide-react";
+import { Handshake, Heart, Swords } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import {
   Bomb,
@@ -46,6 +46,7 @@ export type FeedIcon =
   | "gift"
   | "hug"
   | "handshake"
+  | "duel"
   | "info";
 
 export type FeedItem = {
@@ -82,6 +83,7 @@ const FEED_ICONS: Record<FeedIcon, { Icon: React.ComponentType<IconLike>; tint: 
   gift: { Icon: Gift, tint: "bg-[#f06595]/15 text-[#c2255c]" },
   hug: { Icon: Heart, tint: "bg-[#ffe3ec] text-[#d6336c]" },
   handshake: { Icon: Handshake, tint: "bg-[#fff3bf] text-[#e67700]" },
+  duel: { Icon: Swords, tint: "bg-ink/10 text-ink" },
   info: { Icon: Info, tint: "bg-panel-2 text-muted" },
 };
 

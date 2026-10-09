@@ -2,24 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { ScrollText } from "lucide-react";
-import { Check, Drama, Flame, Flashlight, Gamepad2, Lock, PartyPopper, RotateCcw, Shield, Star, type LucideIcon } from "@/components/icons";
+import { Flame, Gamepad2, PartyPopper, Star } from "@/components/icons";
 import { cn } from "@/lib/cn";
 import { short } from "@/lib/format";
 import { upgradeLevel } from "../profile-actions";
 import { levelStore, useStore } from "./data";
 import { LevelSkeleton, LoadFailed } from "./skeletons";
 
-/** The power-ups each level unlocks. */
-const PERKS: { level: number; icon: LucideIcon; name: string; what: string }[] = [
-  { level: 3, icon: Drama, name: "Decoy", what: "As a ghost, drop a fake you anywhere to fool the hunters." },
-  { level: 5, icon: Shield, name: "Shield", what: "As a ghost, raise a shield that saves you from one find." },
-  { level: 10, icon: Flashlight, name: "Big search", what: "Hunters search a 3×3 area at once, for the price of 7 searches." },
-  { level: 20, icon: RotateCcw, name: "Respawn", what: "Caught in the first 30 minutes? Pay 300 mint to jump back in." },
-];
-
 /**
  * Your level, what the next one takes (XP from games, side quests and streak days, plus mint),
- * the power-ups it unlocks, and the button to level up.
+ * and the button to level up.
  * Its code is only downloaded when you open it from the menu.
  */
 export function LevelSheet({ me }: { me: { id: string } }) {
@@ -157,34 +149,9 @@ export function LevelSheet({ me }: { me: { id: string } }) {
         )}
       </div>
 
-      {/* Power-ups */}
-      <ul className="mt-3 grid grid-cols-2 gap-1.5">
-        {PERKS.map((p) => {
-          const open = info.level >= p.level;
-          const Icon = p.icon;
-          return (
-            <li key={p.level} className={cn("rounded-xl px-2 py-1.5", open ? "bg-white/15" : "bg-white/5")} title={p.what}>
-              <p className="flex items-center gap-1.5 text-xs font-semibold">
-                <Icon className={cn("size-3.5 shrink-0", open ? "text-gold" : "text-white/45")} />
-                <span className="truncate">{p.name}</span>
-                <span className="ml-auto flex shrink-0 items-center gap-0.5 text-[10px] font-bold text-white/60">
-                  {open ? (
-                    <Check className="size-3.5 text-[#5be3b5]" strokeWidth={3} role="img" aria-label="Unlocked" />
-                  ) : (
-                    <>
-                      <Lock className="size-3" strokeWidth={2.5} />L{p.level}
-                    </>
-                  )}
-                </span>
-              </p>
-              <p className={cn("mt-0.5 text-[10px] leading-snug", open ? "text-white/80" : "text-white/50")}>{p.what}</p>
-            </li>
-          );
-        })}
-      </ul>
-      <p className="mt-2 flex gap-1.5 text-[11px] leading-snug text-white/75">
+      <p className="mt-3 flex gap-1.5 rounded-xl bg-white/10 px-2.5 py-2 text-[11px] leading-snug text-white/80">
         <Star className="mt-px size-3.5 shrink-0 text-gold" fill="currentColor" />
-        <span>Every 5 levels, whoever catches you earns a bigger bonus. It never stops growing, so high levels are prized targets!</span>
+        <span>Your level shows how seasoned you are. New perks for ghost duels are on the way.</span>
       </p>
     </div>
   );
