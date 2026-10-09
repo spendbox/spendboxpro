@@ -143,7 +143,8 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
     body: [
       "In Chat mode, tap any building to go inside: lobbies, floors, restaurants, clubs and rooftops. Tap the floor to walk around and tap glowing things to use them.",
       "Sit down, play mini games with the people around you (archery, darts, arcade, duels, trivia and more), order food, dance and spray coins in clubs.",
-      "Hop on a ride: hot-air balloons, trains, buses, taxis, boats, the Ferris wheel and water slides.",
+      "Hop on a ride: hot-air balloons, trains, buses, cars, boats, the Ferris wheel and water slides. They drive themselves, so just sit back and look around.",
+      "Watch sport: football at the stadium, basketball, boxing and wrestling at the arenas (or tap Sports in Chat mode). Every match is a brand-new simulated game, shown live from above. A ticket costs a few coins, and you can bet coins on who wins before kick-off. Coins only, just for fun.",
       "Sometimes you'll get a side quest (sitting down makes it more likely). Finish it for coins and special moves.",
       "Chat with the city's regulars (NPCs). Some joke, some are rude, some are generous, and a few spill real secrets about where ghosts are.",
     ],

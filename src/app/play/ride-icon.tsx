@@ -9,7 +9,7 @@ export const RIDE_INFO: Record<RideKindName, { label: string; plural: string; co
   balloon: { label: "Hot-air balloon", plural: "Hot-air balloons", colour: "#e64980", minutes: 10, blurb: "Float over the whole city for 10 minutes." },
   train: { label: "Train", plural: "Trains", colour: "#2f6fd1", minutes: 8, blurb: "Sit by the window as it glides along the line." },
   bus: { label: "Bus", plural: "Buses", colour: "#f08c00", minutes: 8, blurb: "Front seat on the top deck, round the city." },
-  car: { label: "Car", plural: "Cars", colour: "#12a37a", minutes: null, blurb: "You drive: pick left, right or straight at each junction." },
+  car: { label: "Car", plural: "Cars", colour: "#12a37a", minutes: 6, blurb: "It drives itself round the city: just sit back and look around." },
   boat: { label: "Boat", plural: "Boats", colour: "#1c7ed6", minutes: 6, blurb: "A gentle cruise on the water." },
   ferris: { label: "Ferris wheel", plural: "Ferris wheels", colour: "#7048e8", minutes: 3, blurb: "A cabin for eight, slowly up over the rooftops." },
   slide: { label: "Water slide", plural: "Water slides", colour: "#15aabf", minutes: null, blurb: "Whoosh down, twist, splash. Over in seconds." },

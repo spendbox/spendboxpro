@@ -412,6 +412,18 @@ export function createOpenAir(theme: Theme, key: string): Deck {
   }
   if (theme === "park" || theme === "plaza" || theme === "pond" || theme === "waterpark") itemAt(x, "photo", theme === "waterpark" ? "Splash photo" : "Photo spot", -1.4, -1.0);
   if (theme === "funfair") archery(x, -1.8, 1.4, 0.4);
+  if (theme === "courtside") {
+    // By the outdoor basketball court (it's 6 m east and 4 m north of here): a bench facing it.
+    const ry = Math.atan2(6.2, -4.1);
+    k.at(-0.9, 0, 1.1, ry, () => {
+      k.box(0, 0, 0, 1.6, 0.45, 0.42, 0x1c7ed6);
+      k.box(0, 0.45, -0.19, 1.6, 0.42, 0.06, 0x1c7ed6, { rx: -0.12 });
+      for (const sx of [-0.7, 0.7]) k.box(sx, 0, 0, 0.06, 0.45, 0.44, 0x2b2b2b);
+      for (const sx of [-0.45, 0, 0.45]) spotAt(x, sx, 0.02, 0, "sit", 0.45);
+    });
+    const yaw = Math.atan2(-6.2, 4.1);
+    x.views.push({ x: 0, z: 0, yaw, pitch: -0.1 }, { x: 0.9, z: -0.8, yaw: yaw + 0.35, pitch: -0.08 }, { x: -1.2, z: 0.2, yaw: yaw - 0.3, pitch: -0.08 });
+  }
   if (theme === "waterpark") {
     // Loungers by the pool.
     for (let l = 0; l < 3; l++) {
@@ -448,7 +460,7 @@ export function createOpenAir(theme: Theme, key: string): Deck {
     if (o instanceof THREE.Mesh) o.castShadow = true;
   });
   const yaw0 = rnd() * Math.PI * 2;
-  x.views.push({ x: 0, z: 0, yaw: yaw0, pitch: -0.08 }, { x: 0.8, z: 0.8, yaw: yaw0 + 2.1, pitch: -0.08 }, { x: -0.8, z: 0.4, yaw: yaw0 + 4.2, pitch: -0.12 });
+  if (!x.views.length) x.views.push({ x: 0, z: 0, yaw: yaw0, pitch: -0.08 }, { x: 0.8, z: 0.8, yaw: yaw0 + 2.1, pitch: -0.08 }, { x: -0.8, z: 0.4, yaw: yaw0 + 4.2, pitch: -0.12 });
   // Nobody stands right in front of where you look from.
   const clear = x.spots.filter((sp) => x.views.every((v) => Math.hypot(sp.x - v.x, sp.z - v.z) > 1.8));
   return {

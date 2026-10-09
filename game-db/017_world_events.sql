@@ -782,10 +782,15 @@ begin
   return v_amt;
 end $$;
 
+-- Only one clock tick at a time: if another one is already running (the scheduled job, or a
+-- page load), skip straight away instead of queueing behind it.
 create or replace function public.tick_with_extras() returns text
 language plpgsql security definer set search_path = public as $$
 declare v text; r public.rounds;
 begin
+  if not pg_try_advisory_xact_lock(hashtext('hideseek-tick')) then
+    return 'busy';
+  end if;
   v := public.tick();
   begin
     v := v || ' / events: ' || public.world_event_tick();

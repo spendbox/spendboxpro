@@ -4,19 +4,21 @@
 // (only the closest few show), and picking by distance to each thing (no extra hit meshes).
 // Also the walk planner: tap the floor to walk there, round the furniture.
 
-import { Armchair, ArrowUpDown, Binoculars, Camera, Cherry, Circle, Disc3, Gamepad2, Martini, Mic, Music, Music2, Piano, Spade, Target, UtensilsCrossed, type LucideIcon } from "lucide-react";
+import { Armchair, ArrowUpDown, Binoculars, Camera, Cherry, Circle, Disc3, Gamepad2, Martini, Mic, Music, Music2, Piano, Spade, Target, Tv, UtensilsCrossed, type LucideIcon } from "lucide-react";
 import * as THREE from "three";
 import { drawIcon } from "./textures";
 
 export type InteractKind =
-  | "seat" | "darts" | "archery" | "arcade" | "pool" | "cards" | "dance" | "dj" | "bar" | "jukebox" | "menu" | "stairs" | "window" | "piano" | "karaoke" | "slots-free" | "photo";
+  | "seat" | "darts" | "archery" | "arcade" | "pool" | "cards" | "dance" | "dj" | "bar" | "jukebox" | "menu" | "stairs" | "window" | "piano" | "karaoke" | "slots-free" | "photo"
+  // At a sports venue: watch the match / the fight (by the big screen, at the pitch side).
+  | "match";
 
 /** Something to use, in the room's own space (metres). */
 export type Item = { id: string; kind: InteractKind; label: string; x: number; y: number; z: number; /** How big it is (tap radius, metres). */ r: number; /** A seat someone's in. */ taken?: string | null };
 
 const ICONS: Record<InteractKind, LucideIcon> = {
   seat: Armchair, darts: Target, archery: Target, arcade: Gamepad2, pool: Circle, cards: Spade, dance: Music, dj: Disc3, bar: Martini, jukebox: Music2,
-  menu: UtensilsCrossed, stairs: ArrowUpDown, window: Binoculars, piano: Piano, karaoke: Mic, "slots-free": Cherry, photo: Camera,
+  menu: UtensilsCrossed, stairs: ArrowUpDown, window: Binoculars, piano: Piano, karaoke: Mic, "slots-free": Cherry, photo: Camera, match: Tv,
 };
 const SEAT = new THREE.Color(0x63e6be);
 const THING = new THREE.Color(0xffd43b);

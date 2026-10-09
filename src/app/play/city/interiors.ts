@@ -10,6 +10,7 @@
 import * as THREE from "three";
 import { books, board, cityMap, dashboard, departures, floorTexture, painting, products, rug, sign, tvPicture, ART_STYLES, RUG_STYLES, Sheet, type FloorStyle } from "./interior-art";
 import { blobTexture, Kit, mixHex, pickOf, rngFrom, shadeHex, shadowMesh, type Rng, type UvRect } from "./kit";
+import { createAthletes, createCrowd, faceRig, runRig, skinOf, type AthleteLook } from "./arenas";
 import type { Act, Spot } from "./figures";
 import type { Block, InteractKind } from "./interact";
 import type { Theme } from "./levels";
@@ -134,6 +135,8 @@ type Room = {
   frame?: number;
   /** Ceiling height of window heads (from the top). */
   headDrop?: number;
+  /** No walls or ceiling (the stadium: it brings its own sky), and no floor (it has its own). */
+  noShell?: boolean;
 };
 
 type Ctx = {
@@ -155,6 +158,10 @@ type Ctx = {
   anim: ((time: number) => void)[];
   /** Night-only light: the club stays dark and colourful whatever the time. */
   dark?: boolean;
+  /** Called when day turns to night (0..1), for things with their own colours (a sky). */
+  nightHooks: ((n: number) => void)[];
+  /** Places nobody walks (besides under the furniture), e.g. over the stadium's lower tiers. */
+  blocks: Block[];
 };
 
 /** Something to use, at a point in the current drawing frame. */
@@ -2060,6 +2067,617 @@ function clockroom(x: Ctx) {
 
 // ---------------------------------------------------------------- room plans per theme
 
+// ---------------------------------------------------------------- sports venues
+//
+// The stands round a football pitch, an indoor basketball court, and the boxing and wrestling
+// rings: seats facing the action (the front rows are real seats anyone can sit in), a crowd in
+// the tiers behind, a big screen, a "Watch the match" spot by it, and the players themselves
+// playing away (see ./arenas).
+
+const SPORT_PAL: Pal = {
+  wall: 0x232b38,
+  accentWall: 0x2f3a4b,
+  trim: 0x2f3a4b,
+  ceiling: 0x141920,
+  floor: ["concrete", 0x3b4049, 0x31363e],
+  wood: 0x8a6a4f,
+  fabric: 0x1c7ed6,
+  fabric2: 0xe03131,
+  accent: 0xf5a524,
+  metal: 0x2b2f36,
+  art: [0xe03131, 0x1c7ed6, 0xf5a524, 0xf1f3f5],
+  frame: 0x2b2f36,
+  leaves: LEAVES,
+  pot: 0x2b2f36,
+};
+
+/** Big-screen picture: LIVE, the venue's name and a line about what's on. */
+function screenArt(c: CanvasRenderingContext2D, w: number, h: number, title: string, line: string, accent: string) {
+  const g = c.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, "#0d1626");
+  g.addColorStop(1, "#1b2a44");
+  c.fillStyle = g;
+  c.fillRect(0, 0, w, h);
+  c.fillStyle = accent;
+  c.fillRect(0, h - h * 0.08, w, h * 0.08);
+  // LIVE pill.
+  c.fillStyle = "#e5484d";
+  c.beginPath();
+  c.roundRect(w * 0.05, h * 0.1, w * 0.17, h * 0.17, h * 0.085);
+  c.fill();
+  c.fillStyle = "#ffffff";
+  c.textAlign = "center";
+  c.textBaseline = "middle";
+  c.font = `900 ${Math.round(h * 0.11)}px system-ui, sans-serif`;
+  c.fillText("LIVE", w * 0.135, h * 0.19);
+  c.font = `800 ${Math.round(h * 0.12)}px system-ui, sans-serif`;
+  c.fillText(title.toUpperCase().slice(0, 30), w / 2, h * 0.45, w * 0.9);
+  c.fillStyle = accent;
+  c.font = `900 ${Math.round(h * 0.17)}px system-ui, sans-serif`;
+  c.fillText(line, w / 2, h * 0.7, w * 0.9);
+}
+
+/** A seat up in the tiers (its floor at fy): a plastic stadium seat that anyone can sit in. */
+function tierSeat(x: Ctx, px: number, fy: number, pz: number, ry: number, color: number) {
+  const { k } = x;
+  k.at(px, fy, pz, ry, () => {
+    k.box(0, 0, -0.02, 0.36, 0.4, 0.34, shadeHex(color, 0.35), { noAo: true });
+    k.soft(0, 0.4, 0.02, 0.46, 0.06, 0.42, color, 0.03);
+    k.soft(0, 0.44, -0.2, 0.46, 0.42, 0.05, color, 0.025, { rx: -0.1 });
+  });
+  const p = k.world(px, fy, pz);
+  x.spots.push({ x: p.x, z: p.z, ry: k.worldYaw(ry), pose: "sit", y: fy + 0.46, floor: fy, act: "idle" });
+}
+
+/**
+ * Tiers of steps behind the front rows, with the crowd sitting on them. In the frame at
+ * (cx, cz) turned by ry: the front edge runs along x (len long) at z = 0, rising backwards (-z).
+ * `skip` leaves gaps in the crowd (u, row) for real seats.
+ */
+function tiers(x: Ctx, crowd: { x: number; y: number; z: number; ry: number }[], cx: number, cz: number, ry: number, len: number, rows: number, depth: number, rise: number, colors: [number, number], fill = 0.8, skip?: (u: number, row: number) => boolean, empty?: number) {
+  const { k, rnd } = x;
+  k.at(cx, 0, cz, ry, () => {
+    for (let r = 0; r < rows; r++) {
+      const top = (r + 1) * rise;
+      k.box(0, 0, -(r + 0.5) * depth, len, top, depth, r % 2 ? colors[1] : colors[0], { noAo: true });
+      // A thin bright edge on every step.
+      k.box(0, top - 0.02, -r * depth - 0.02, len, 0.03, 0.04, 0xdee2e6, { noAo: true });
+      for (let u = -len / 2 + 0.4; u <= len / 2 - 0.4; u += 0.72) {
+        if (rnd() > fill) continue;
+        if (skip?.(u, r)) {
+          // An empty seat.
+          if (empty !== undefined) {
+            k.box(u, top, -(r + 0.5) * depth + 0.12, 0.44, 0.08, 0.4, empty, { noAo: true });
+            k.box(u, top, -(r + 0.5) * depth - 0.1, 0.44, 0.42, 0.06, empty, { noAo: true });
+          }
+          continue;
+        }
+        const p = k.world(u, top, -(r + 0.5) * depth + 0.1);
+        crowd.push({ x: p.x, y: p.y, z: p.z, ry: k.worldYaw(0) });
+      }
+    }
+    k.shadow(0, -(rows * depth) / 2, len, rows * depth, 0.25);
+  });
+}
+
+/** The crowd and the players are added to the room, and move every frame. */
+function addCrowd(x: Ctx, crowd: { x: number; y: number; z: number; ry: number }[]) {
+  if (!crowd.length) return;
+  const c = createCrowd(crowd, x.rnd);
+  x.extras.push(c.group);
+  x.anim.push(c.update);
+}
+
+/** A big screen high on a wall (side), showing the venue and what's on. */
+function wallScreen(x: Ctx, side: number, y: number, w: number, h: number, line: string) {
+  const { k, sheet, info } = x;
+  const uv = sheet.paint(512, Math.round(512 * (h / w)), (c, cw, ch) => screenArt(c, cw, ch, info.name, line, "#f5a524"));
+  atWall(x, side, 0, () => {
+    k.box(0, y - 0.25, 0.12, w + 0.5, h + 0.5, 0.24, 0x111418, { noAo: true });
+    k.quad(0, y + h / 2, 0.25, w, h, 0xffffff, { layer: "texGlow" }, uv);
+  });
+}
+
+/** A four-sided screen hanging over the middle (the jumbotron), at height y. */
+function hangingScreen(x: Ctx, y: number, size: number, line: string) {
+  const { k, sheet, info, room } = x;
+  const uv = sheet.paint(256, 144, (c, cw, ch) => screenArt(c, cw, ch, info.name, line, "#f5a524"));
+  const h = size * 0.56;
+  k.box(0, y, 0, size, h + 0.3, size, 0x111418, { noAo: true });
+  for (let s = 0; s < 4; s++) {
+    const a = (s * Math.PI) / 2;
+    k.at(0, 0, 0, a, () => k.quad(0, y + 0.15 + h / 2, size / 2 + 0.01, size * 0.92, h, 0xffffff, { layer: "texGlow" }, uv));
+  }
+  // Hung from the roof on four cables.
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) k.box((sx * size) / 2.4, y + h + 0.3, (sz * size) / 2.4, 0.03, room.h - (y + h + 0.3), 0.03, 0x2b2f36, { noAo: true });
+}
+
+/** Soft cones of light shining down on the action, from lamps high up. */
+function spotlights(x: Ctx, pts: [number, number][], top: number, color = 0xfff3d6) {
+  const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.07, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const geo = new THREE.ConeGeometry(1.6, top, 18, 1, true).translate(0, -top / 2, 0);
+  for (const [px, pz] of pts) {
+    const cone = new THREE.Mesh(geo, mat);
+    cone.position.set(px * 0.4, top, pz * 0.4);
+    cone.lookAt(px, 0, pz);
+    cone.rotateX(-Math.PI / 2);
+    x.extras.push(cone);
+    x.k.cyl(px * 0.4, top - 0.1, pz * 0.4, 0.22, 0.3, 0.3, 0x2b2f36, 12, { noAo: true });
+    x.k.cyl(px * 0.4, top - 0.12, pz * 0.4, 0.2, 0.2, 0.02, color, 12, { layer: "glow" });
+  }
+}
+
+/** Boxing (four ropes, red and blue corners) or wrestling (three ropes, a brighter apron). */
+function ringHall(x: Ctx, wrestling: boolean) {
+  const { k, room, rnd } = x;
+  const W = room.w;
+  const S = 6.2;
+  const half = S / 2;
+  const H = 1.0;
+  const canvas = wrestling ? 0xf1f3f5 : 0x2f6fd1;
+  const apron = wrestling ? pickOf(rnd, [0x7c3aed, 0xe03131, 0x111418]) : 0x111418;
+  // The ring: a platform with a skirt, the canvas, corner posts with pads, ropes, and steps.
+  k.box(0, 0, 0, S + 1.0, H - 0.04, S + 1.0, apron, { noAo: true });
+  k.box(0, H - 0.04, 0, S + 1.0, 0.04, S + 1.0, shadeHex(apron, -0.25), { noAo: true });
+  k.box(0, H, 0, S, 0.05, S, canvas, { noAo: true });
+  k.mat(0, H + 0.052, 0, S * 0.38, S * 0.38, wrestling ? apron : 0xf5a524, { noAo: true });
+  k.mat(0, H + 0.053, 0, S * 0.3, S * 0.3, canvas, { noAo: true });
+  const corners: [number, number, number][] = [[-half, -half, wrestling ? 0xf5a524 : 0xe03131], [half, -half, 0xf1f3f5], [half, half, wrestling ? 0xf5a524 : 0x1c7ed6], [-half, half, 0xf1f3f5]];
+  for (const [cx, cz, pad] of corners) {
+    k.cyl(cx, H, cz, 0.07, 0.07, 1.5, 0xadb5bd, 10);
+    k.soft(cx - Math.sign(cx) * 0.08, H + 0.35, cz - Math.sign(cz) * 0.08, 0.22, 1.05, 0.22, pad, 0.06);
+  }
+  const ropes = wrestling ? [0.45, 0.85, 1.25] : [0.4, 0.72, 1.04, 1.36];
+  const ropeColor = wrestling ? apron : 0xf1f3f5;
+  for (const ry of ropes) {
+    k.box(0, H + ry, -half, S, 0.05, 0.05, ropeColor, { noAo: true });
+    k.box(0, H + ry, half, S, 0.05, 0.05, ropeColor, { noAo: true });
+    k.box(-half, H + ry, 0, 0.05, 0.05, S, ropeColor, { noAo: true });
+    k.box(half, H + ry, 0, 0.05, 0.05, S, ropeColor, { noAo: true });
+  }
+  for (let st = 0; st < 3; st++) k.box(half + 0.75 + st * 0.3, 0, half - 0.3, 0.32, H - st * 0.32, 0.9, 0x343a40);
+  k.shadow(0, 0, S + 1.6, S + 1.6, 0.4);
+  // Lights over the ring: a square rig, lamps and soft cones of light.
+  const rig = 7.6;
+  for (const [bx, bz, bw, bd] of [[0, -half, S + 0.4, 0.2], [0, half, S + 0.4, 0.2], [-half, 0, 0.2, S + 0.4], [half, 0, 0.2, S + 0.4]]) k.box(bx, rig, bz, bw, 0.25, bd, 0x2b2f36, { noAo: true });
+  spotlights(x, [[-half + 0.6, -half + 0.6], [half - 0.6, -half + 0.6], [-half + 0.6, half - 0.6], [half - 0.6, half - 0.6]], rig - 0.1);
+  hangingScreen(x, rig + 0.4, 2.8, wrestling ? "MAIN EVENT" : "ROUND 3");
+  wallScreen(x, 0, 4.2, 8, 4.5, wrestling ? "TITLE MATCH" : "FIGHT NIGHT");
+  // Ringside: a row of chairs facing the ring on every side (real seats).
+  const row = half + 1.5;
+  for (let side = 0; side < 4; side++) {
+    const a = (side * Math.PI) / 2;
+    for (let s = 0; s < 5; s++) {
+      const u = -2.6 + s * 1.3;
+      const px = Math.cos(a) * u - Math.sin(a) * row;
+      const pz = Math.sin(a) * u + Math.cos(a) * row;
+      // Leave the corner with the steps free.
+      if (px > half && pz > half - 1.2) continue;
+      chair(x, px, pz, faceTo(px, pz, 0, 0), wrestling ? 0xae3ec9 : 0xe03131, 0x2b2f36);
+    }
+  }
+  // Tiers all round with the crowd.
+  const crowd: { x: number; y: number; z: number; ry: number }[] = [];
+  const front = half + 3.7;
+  const rows = 5;
+  const depth = 0.85;
+  tiers(x, crowd, 0, -front, 0, W - 2 * 0.4, rows, depth, 0.45, [0x2f3a4b, 0x283241]);
+  tiers(x, crowd, 0, front, Math.PI, W - 2 * 0.4, rows, depth, 0.45, [0x2f3a4b, 0x283241]);
+  tiers(x, crowd, -front, 0, Math.PI / 2, 2 * front - 0.2, rows, depth, 0.45, [0x2f3a4b, 0x283241]);
+  tiers(x, crowd, front, 0, -Math.PI / 2, 2 * front - 0.2, rows, depth, 0.45, [0x2f3a4b, 0x283241]);
+  addCrowd(x, crowd);
+  // The fighters and the referee.
+  const skinA = skinOf(rnd);
+  const skinB = skinOf(rnd);
+  const looks = wrestling
+    ? [
+        { shirt: 0xe03131, shorts: 0xe03131, skin: skinA, shoes: 0x111418 },
+        { shirt: 0x1c7ed6, shorts: 0x1c7ed6, skin: skinB, shoes: 0xf1f3f5 },
+        { shirt: 0xf1f3f5, shorts: 0x111418, skin: skinOf(rnd) },
+      ]
+    : [
+        { shirt: skinA, shorts: 0xe03131, skin: skinA, gloves: 0xe03131 },
+        { shirt: skinB, shorts: 0x1c7ed6, skin: skinB, gloves: 0x1c7ed6 },
+        { shirt: 0xf1f3f5, shorts: 0x111418, skin: skinOf(rnd) },
+      ];
+  const team = createAthletes(looks);
+  team.group.position.y = H + 0.05;
+  x.extras.push(team.group);
+  const [a, b, ref] = team.rigs;
+  a.x = -1.2;
+  b.x = 1.2;
+  ref.z = 2.2;
+  let last = -1;
+  x.anim.push((t) => {
+    const dt = last < 0 ? 0 : Math.min(0.1, Math.max(0, t - last));
+    last = t;
+    if (wrestling) {
+      // Circle, lock up, a slam, a pose to the crowd, and up again (every 9 s).
+      const c = t % 9;
+      const ang = t * 0.5;
+      const r = c < 3.5 ? 1.5 : c < 5 ? 0.38 : 0.6;
+      runRig(a, Math.cos(ang) * r, Math.sin(ang) * r, 1.8, dt, false);
+      if (c < 5.2 || c > 7.6) runRig(b, -Math.cos(ang) * r, -Math.sin(ang) * r, 1.8, dt, false);
+      faceRig(a, b.x, b.z, 0.25);
+      if (b.down < 0.5) faceRig(b, a.x, a.z, 0.25);
+      const lock = c > 3.5 && c < 5.2 ? 1 : 0;
+      a.reachL = a.reachR = lock;
+      b.reachL = b.reachR = lock * (c < 5 ? 1 : 0);
+      a.lean = b.lean = lock * 0.35;
+      a.guard = c > 5.6 && c < 7.4 ? 1 : 0.3;
+      b.guard = 0.3;
+      b.down += ((c > 5.1 && c < 7.6 ? 1 : 0) - b.down) * Math.min(1, dt * (c < 5.6 ? 9 : 2.5));
+    } else {
+      // Circle each other, guards up, throwing jabs and the odd big right.
+      const ang = t * 0.42;
+      const r = 1.05 + Math.sin(t * 0.7) * 0.3;
+      runRig(a, Math.cos(ang) * r, Math.sin(ang) * r, 1.6, dt, false);
+      runRig(b, -Math.cos(ang) * r, -Math.sin(ang) * r, 1.6, dt, false);
+      faceRig(a, b.x, b.z, 0.3);
+      faceRig(b, a.x, a.z, 0.3);
+      const jab = (s: number) => Math.pow(Math.max(0, Math.sin(s)), 10);
+      a.guard = b.guard = 1;
+      a.reachL = jab(t * 3.1);
+      a.reachR = jab(t * 1.3 + 2);
+      b.reachL = jab(t * 2.7 + 1);
+      b.reachR = jab(t * 1.1 + 4);
+      b.lean = -a.reachR * 0.25;
+      a.lean = -b.reachR * 0.25;
+    }
+    // The referee keeps to the side, watching.
+    const ra = t * 0.3 + Math.PI / 2;
+    runRig(ref, Math.cos(ra) * 2.3, Math.sin(ra) * 2.3, 1.2, dt, false);
+    faceRig(ref, (a.x + b.x) / 2, (a.z + b.z) / 2, 0.2);
+    team.update();
+  });
+  // Where to watch from, and where to tap to watch the fight.
+  item(x, "match", "Watch the fight", 0, 0, row - 0.9, 0.9);
+  for (let s = 0; s < 4; s++) x.spots.push({ x: -4.5 + s * 1.6, z: front - 0.5, ry: Math.PI, pose: "stand", y: 0, act: "wave" });
+  x.lamps.push({ x: 0, y: rig - 0.5, z: 0 }, { x: 0, y: 6, z: front + 2 });
+  x.views.push(
+    { x: 0.65, z: row + 1.9, yaw: yawTo(0.65, row + 1.9, 0, 0), pitch: 0.0 },
+    { x: -row - 1.9, z: -0.65, yaw: yawTo(-row - 1.9, -0.65, 0, 0), pitch: 0.0 },
+    { x: row + 1.7, z: -row - 1.7, yaw: yawTo(row + 1.7, -row - 1.7, 0, 0), pitch: -0.02 },
+  );
+}
+
+/** An indoor basketball court: the court and its lines, hoops, courtside seats and tiers. */
+function courtHall(x: Ctx) {
+  const { k, room, rnd } = x;
+  const W = room.w;
+  const L = 26;
+  const B = 14;
+  const hl = L / 2;
+  const hb = B / 2;
+  const white = 0xf8f9fa;
+  const teams = pickOf(rnd, [[0xf5a524, 0x1c7ed6], [0xe03131, 0x2f9e44], [0x7048e8, 0xf1f3f5], [0x0ca678, 0xe8590c]] as [number, number][]);
+  // Lines: the edge, the halfway line, the centre circle, the keys and the three-point arcs.
+  const line = (cx: number, cz: number, w: number, d: number) => k.mat(cx, 0.008, cz, w, d, white, { noAo: true });
+  line(0, -hb, L, 0.08);
+  line(0, hb, L, 0.08);
+  line(-hl, 0, 0.08, B);
+  line(hl, 0, 0.08, B);
+  line(0, 0, 0.08, B);
+  k.cyl(0, 0.002, 0, 1.8, 1.8, 0.004, teams[0], 32, { noAo: true });
+  k.ring(0, 0.01, 0, 1.8, 0.04, white, { rx: Math.PI / 2, noAo: true });
+  for (const side of [-1, 1]) {
+    const ex = side * hl;
+    k.mat(ex - side * 2.9, 0.006, 0, 5.8, 4.9, side < 0 ? teams[0] : teams[1], { noAo: true });
+    line(ex - side * 5.8, 0, 0.08, 4.9);
+    line(ex - side * 2.9, -2.45, 5.8, 0.08);
+    line(ex - side * 2.9, 2.45, 5.8, 0.08);
+    k.ring(ex - side * 5.8, 0.01, 0, 1.8, 0.04, white, { rx: Math.PI / 2, rz: -Math.PI / 2, ry: side < 0 ? 0 : Math.PI, arc: Math.PI, noAo: true });
+    k.ring(ex - side * 1.6, 0.01, 0, 6.0, 0.04, white, { rx: Math.PI / 2, rz: -Math.PI / 2, ry: side < 0 ? 0 : Math.PI, arc: Math.PI, noAo: true });
+    line(ex - side * 0.8, -6.0, 1.6, 0.08);
+    line(ex - side * 0.8, 6.0, 1.6, 0.08);
+    // The hoop: a padded base off the court, an arm, the backboard, the rim and the net.
+    const bx = ex + side * 1.3;
+    k.box(bx, 0, 0, 1.2, 0.9, 1.4, 0x1c2430);
+    k.box(bx, 0.9, 0, 0.3, 2.6, 0.3, 0x2b2f36);
+    k.box(bx - side * 0.65, 3.3, 0, 1.4, 0.2, 0.2, 0x2b2f36);
+    k.box(ex - side * 0.0, 2.85, 0, 0.06, 1.05, 1.8, 0xf1f3f5, { noAo: true });
+    k.box(ex - side * 0.04, 3.05, 0, 0.02, 0.45, 0.59, 0xe03131, { noAo: true });
+    k.box(ex - side * 0.045, 3.1, 0, 0.02, 0.35, 0.49, 0xf1f3f5, { noAo: true });
+    k.ring(ex - side * 0.45, 3.05, 0, 0.23, 0.02, 0xf76707, { rx: Math.PI / 2, noAo: true });
+    k.cyl(ex - side * 0.45, 2.62, 0, 0.23, 0.15, 0.42, 0xf8f9fa, 10, { open: true, layer: "glow" });
+    k.shadow(bx, 0, 1.4, 1.6, 0.3);
+  }
+  // Courtside: the scorer's table across the court, and rows of chairs either side.
+  const near = hb + 1.2;
+  k.box(0, 0, -(near - 0.1), 3.6, 0.78, 0.7, 0x111418);
+  k.box(0, 0.08, -(near - 0.1) + 0.36, 3.4, 0.55, 0.02, teams[0], { layer: "glow" });
+  for (const side of [-1, 1]) {
+    for (let c = 0; c < 8; c++) {
+      const px = -9.8 + c * 2.8;
+      if (Math.abs(px) < 2.8) continue;
+      chair(x, px, side * (near + 0.6), side > 0 ? Math.PI : 0, side > 0 ? teams[0] : teams[1], 0x2b2f36);
+    }
+  }
+  item(x, "match", "Watch the match", 0, 0, near - 0.75, 0.9);
+  // Tiers on all four sides, and the crowd.
+  const crowd: { x: number; y: number; z: number; ry: number }[] = [];
+  const tz = near + 1.7;
+  tiers(x, crowd, 0, -tz, 0, L + 4, 3, 0.9, 0.5, [0x2f3a4b, 0x283241]);
+  tiers(x, crowd, 0, tz, Math.PI, L + 4, 3, 0.9, 0.5, [0x2f3a4b, 0x283241]);
+  tiers(x, crowd, -(hl + 2.5), 0, Math.PI / 2, 2 * tz - 0.4, 2, 0.9, 0.5, [0x2f3a4b, 0x283241]);
+  tiers(x, crowd, hl + 2.5, 0, -Math.PI / 2, 2 * tz - 0.4, 2, 0.9, 0.5, [0x2f3a4b, 0x283241]);
+  addCrowd(x, crowd);
+  hangingScreen(x, 7.2, 3.6, "Q3  58 - 54");
+  wallScreen(x, 0, 6.0, 9, 3.4, "GAME NIGHT");
+  linearLights(x, 3, "x");
+  spotlights(x, [[-6, 0], [6, 0]], room.h - 0.3, 0xf4f8ff);
+  // The players (two on two) and the ball.
+  const looks = [0, 1, 2, 3].map((i) => ({ shirt: teams[i % 2], shorts: teams[i % 2], skin: skinOf(rnd), shoes: 0xf1f3f5 }));
+  const team = createAthletes(looks);
+  x.extras.push(team.group);
+  const ballMat = new THREE.MeshLambertMaterial({ color: 0xe8590c });
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 8), ballMat);
+  x.extras.push(ball);
+  team.rigs.forEach((r, i) => {
+    r.x = (i - 1.5) * 2;
+    r.z = (i % 2 ? 1 : -1) * 2;
+  });
+  let last = -1;
+  x.anim.push((t) => {
+    const dt = last < 0 ? 0 : Math.min(0.1, Math.max(0, t - last));
+    last = t;
+    // Each attack lasts 9 s, towards alternate ends: dribble up, shoot, score.
+    const p = Math.floor(t / 9);
+    const u = t - p * 9;
+    const dir = p % 2 ? 1 : -1;
+    const atk = p % 2;
+    const rimX = dir * (hl - 0.45);
+    const carrier = team.rigs[atk + (p % 4 < 2 ? 0 : 2)];
+    const mate = team.rigs[atk + (p % 4 < 2 ? 2 : 0)];
+    const shootX = dir * 7.2;
+    const shootZ = Math.sin(p * 1.7) * 3;
+    const go = Math.min(1, u / 5.5);
+    const cx = -dir * 2 + (shootX + dir * 2) * go;
+    const cz = shootZ * go + Math.sin(u * 1.3) * 0.8 * (1 - go);
+    runRig(carrier, cx, cz, 5, dt);
+    if (u > 5) faceRig(carrier, rimX, 0, 0.2);
+    runRig(mate, dir * 9.5, -shootZ * 0.8 + Math.sin(t) * 1.5, 4.5, dt);
+    // Defenders mark them, between them and the basket.
+    const def = team.rigs.filter((r) => r !== carrier && r !== mate);
+    runRig(def[0], carrier.x + dir * 1.1, carrier.z * 0.85, 5, dt, false);
+    faceRig(def[0], carrier.x, carrier.z, 0.2);
+    runRig(def[1], mate.x + dir * 1.0, mate.z * 0.85, 4.5, dt, false);
+    faceRig(def[1], mate.x, mate.z, 0.2);
+    for (const r of team.rigs) r.y = 0;
+    for (const r of team.rigs) r.guard = 0;
+    if (u < 5.5) {
+      // Dribbling.
+      const f = Math.abs(Math.sin(u * 7));
+      ball.position.set(carrier.x + Math.sin(carrier.yaw) * 0.35 + Math.cos(carrier.yaw) * 0.25, 0.12 + f * 0.75, carrier.z + Math.cos(carrier.yaw) * 0.35 - Math.sin(carrier.yaw) * 0.25);
+      carrier.reachR = 0.25 + (1 - f) * 0.2;
+      def[0].guard = 0.4;
+    } else if (u < 6.6) {
+      // The shot: a jump, arms up, the ball arcs to the rim.
+      const s = (u - 5.5) / 1.1;
+      carrier.y = Math.sin(Math.min(1, s * 2.2) * Math.PI) * 0.45;
+      carrier.guard = 1;
+      def[0].guard = 1;
+      def[0].y = Math.sin(Math.min(1, s * 2.4) * Math.PI) * 0.35;
+      const sx = carrier.x;
+      const sz = carrier.z;
+      ball.position.set(sx + (rimX - sx) * s, 2.3 + (3.25 - 2.3) * s + Math.sin(s * Math.PI) * 2.2, sz + (0 - sz) * s);
+    } else if (u < 7.0) {
+      // Through the net.
+      const s = (u - 6.6) / 0.4;
+      ball.position.set(rimX, 3.2 - s * 2.9, 0);
+    } else {
+      // It bounces away to the other team.
+      const s = (u - 7) / 2;
+      ball.position.set(rimX - dir * s * 2.5, 0.12 + Math.abs(Math.sin(s * 9)) * (1 - s) * 0.9, Math.sin(s * 3) * 0.6);
+    }
+    team.update();
+  });
+  x.lamps.push({ x: -5, y: room.h - 1, z: 0 }, { x: 5, y: room.h - 1, z: 0 });
+  x.views.push(
+    { x: 0, z: near + 1.2, yaw: yawTo(0, near + 1.2, 0, 0), pitch: -0.04 },
+    { x: -hl - 1.4, z: 3.0, yaw: yawTo(-hl - 1.4, 3.0, 0, 0), pitch: 0 },
+    { x: -8, z: -(near + 0.8), yaw: yawTo(-8, -(near + 0.8), 0, 0), pitch: -0.02 },
+  );
+  void W;
+}
+
+/**
+ * The stands round a football pitch, open to the sky, with floodlights and a big screen. The
+ * pitch lies below: you stand on the walkway part way up the near stand (floor level here),
+ * with real seats in the row behind it.
+ */
+function standsBowl(x: Ctx) {
+  const { k, room, rnd } = x;
+  const W = room.w;
+  const D = room.d;
+  const L = 56;
+  const B = 36;
+  const hl = L / 2;
+  const hb = B / 2;
+  const white = 0xf8f9fa;
+  const depth = 0.85;
+  const rise = 0.55;
+  // The pitch is five rows down.
+  const P = -5 * rise;
+  // The sky (it gets dark at night), on a big dome round everything.
+  const skyGeo = new THREE.SphereGeometry(150, 24, 12);
+  const skyCols: number[] = [];
+  const pos = skyGeo.getAttribute("position");
+  const top = new THREE.Color(0x6fb2e6);
+  const low = new THREE.Color(0xd9eef9);
+  const c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    c.copy(low).lerp(top, Math.min(1, Math.max(0, pos.getY(i) / 90)));
+    skyCols.push(c.r, c.g, c.b);
+  }
+  skyGeo.setAttribute("color", new THREE.Float32BufferAttribute(skyCols, 3));
+  const skyMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, depthWrite: false, fog: false });
+  const sky = new THREE.Mesh(skyGeo, skyMat);
+  sky.renderOrder = -1;
+  x.extras.push(sky);
+  x.nightHooks.push((n) => skyMat.color.setRGB(1 - 0.85 * n, 1 - 0.83 * n, 1 - 0.72 * n));
+  const crowd: { x: number; y: number; z: number; ry: number }[] = [];
+  const sz = hb + 2.6;
+  const sx = hl + 3.6;
+  const walk0 = sz + 5 * depth;
+  const walk1 = walk0 + 3.4;
+  k.floorY = P;
+  k.at(0, P, 0, 0, () => {
+    // Under everything, then the pitch: mown stripes, a grass margin, and the lines.
+    k.mat(0, -0.02, 0, W, D, 0x2b2f36, { noAo: true });
+    k.mat(0, 0.004, 0, L + 8, B + 6, 0x3f8f45, { noAo: true });
+    for (let s = 0; s < 14; s++) k.mat(-hl + (s + 0.5) * (L / 14), 0.006, 0, L / 14, B, s % 2 ? 0x4caf50 : 0x43a047, { noAo: true });
+    const line = (cx: number, cz: number, w: number, d: number) => k.mat(cx, 0.009, cz, w, d, white, { noAo: true });
+    line(0, -hb, L, 0.12);
+    line(0, hb, L, 0.12);
+    line(-hl, 0, 0.12, B);
+    line(hl, 0, 0.12, B);
+    line(0, 0, 0.12, B);
+    k.ring(0, 0.01, 0, 5.2, 0.06, white, { rx: Math.PI / 2, noAo: true });
+    k.cyl(0, 0.008, 0, 0.18, 0.18, 0.004, white, 12, { noAo: true });
+    for (const side of [-1, 1]) {
+      const ex = side * hl;
+      // Penalty box, goal area, penalty spot.
+      line(ex - side * 9, 0, 0.12, 22);
+      line(ex - side * 4.5, -11, 9, 0.12);
+      line(ex - side * 4.5, 11, 9, 0.12);
+      line(ex - side * 3, 0, 0.12, 10);
+      line(ex - side * 1.5, -5, 3, 0.12);
+      line(ex - side * 1.5, 5, 3, 0.12);
+      k.cyl(ex - side * 6.5, 0.008, 0, 0.15, 0.15, 0.004, white, 10, { noAo: true });
+      // The goal: posts, crossbar and a net.
+      for (const gz of [-3.6, 3.6]) k.box(ex, 0, gz, 0.14, 2.44, 0.14, white);
+      k.box(ex, 2.37, 0, 0.14, 0.14, 7.34, white);
+      k.box(ex + side * 1.6, 0, 0, 0.05, 1.6, 7.3, white, { layer: "glass" });
+      k.box(ex + side * 0.8, 2.36, 0, 1.6, 0.04, 7.3, white, { layer: "glass" });
+      for (const gz of [-3.65, 3.65]) k.box(ex + side * 0.8, 0, gz, 1.6, 2.4, 0.04, white, { layer: "glass" });
+    }
+    // The dugouts by the near touchline.
+    for (const dx of [-14, 14]) {
+      k.box(dx, 0, hb + 1.4, 6, 0.1, 1.6, 0x2b2f36);
+      k.box(dx, 0, hb + 2.15, 6, 1.9, 0.1, 0x2b2f36);
+      k.box(dx, 1.9, hb + 1.4, 6.1, 0.08, 1.7, 0xdee2e6, { layer: "glass" });
+      k.box(dx, 0, hb + 1.8, 5.4, 0.45, 0.45, 0x1c7ed6);
+    }
+    // The lower stands: up to the walkway on the near side, all the way up on the others.
+    // (Nobody in the top rows right under the walkway, so they don't block the view.)
+    tiers(x, crowd, 0, sz, Math.PI, L + 6, 5, depth, rise, [0xc92a2a, 0xa61e1e], 1, (_u, row) => row >= 3, 0xe03131);
+    tiers(x, crowd, 0, -sz, 0, L + 6, 10, depth, rise, [0x1864ab, 0x145591], 0.85);
+    tiers(x, crowd, -sx, 0, Math.PI / 2, 2 * sz - 1, 8, depth, rise, [0x343a40, 0x2b2f36], 0.8);
+    tiers(x, crowd, sx, 0, -Math.PI / 2, 2 * sz - 1, 8, depth, rise, [0x343a40, 0x2b2f36], 0.8);
+    // Floodlights on the four corners.
+    for (const [fx, fz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      const px = fx * (sx + 4);
+      const pz = fz * (sz + 6);
+      k.box(px, 0, pz, 0.6, 18, 0.6, 0x868e96);
+      k.at(px, 18, pz, Math.atan2(-px, -pz), () => {
+        k.box(0, 0, 0, 3.4, 1.8, 0.4, 0x495057, { rx: 0.4 });
+        for (let i = 0; i < 4; i++) for (let j = 0; j < 2; j++) k.box(-1.2 + i * 0.8, 0.25 + j * 0.75, 0.2, 0.55, 0.5, 0.06, 0xfff8e1, { layer: "glow", rx: 0.4 });
+      });
+    }
+    // The big screen over the east end.
+    const uv = x.sheet.paint(512, 256, (cc, cw, ch) => screenArt(cc, cw, ch, x.info.name, "LIONS 1 - 0 EAGLES", "#f5a524"));
+    k.at(sx + 8 * depth + 0.4, 0, 0, -Math.PI / 2, () => {
+      k.box(0, 8 * rise + 1.0, 0, 15, 8, 0.6, 0x111418);
+      k.quad(0, 8 * rise + 5.0, 0.31, 14, 7, 0xffffff, { layer: "texGlow" }, uv);
+    });
+    // Back walls behind the end stands and the far stand, and its roof.
+    for (const xx of [sx, -sx]) k.box(xx + Math.sign(xx) * (8 * depth + 0.3), 0, 0, 0.6, 8 * rise + 1.2, 2 * sz + 4, 0x2b2f36);
+    const farBack = -sz - 10 * depth;
+    k.box(0, 0, farBack - 0.3, L + 6, 10 * rise + 4.2, 0.6, 0x2b2f36);
+    k.box(0, 10 * rise + 4.0, farBack + 4.0, L + 6, 0.25, 10 * depth + 1.2, 0xe9ecef);
+    for (let p = -3; p <= 3; p++) k.box(p * 9, 10 * rise, farBack, 0.25, 4.0, 0.25, 0xadb5bd);
+  });
+  k.floorY = 0;
+  // The walkway (where you stand), its glass rail, and the upper tier behind with real seats in
+  // its first row, under a roof.
+  k.box(0, -0.4, (walk0 + walk1) / 2, W, 0.4, walk1 - walk0, 0x8d939a, { noAo: true });
+  k.box(0, 0, walk0 + 0.05, L + 6, 1.0, 0.06, 0xd6e9f5, { layer: "glass" });
+  k.box(0, 1.0, walk0 + 0.05, L + 6, 0.06, 0.1, 0xadb5bd, { noAo: true });
+  tiers(x, crowd, 0, walk1, Math.PI, L + 6, 5, depth, rise, [0xc92a2a, 0xa61e1e], 0.85, (u, row) => row === 0 && Math.abs(u) < 9);
+  addCrowd(x, crowd);
+  for (let s = 0; s < 22; s++) tierSeat(x, -8.5 + s * 0.81, rise, walk1 + 0.5 * depth - 0.05, Math.PI, 0xf1f3f5);
+  const upBack = walk1 + 5 * depth;
+  k.box(0, 0, upBack + 0.3, L + 6, 5 * rise + 4.2, 0.6, 0x2b2f36);
+  k.box(0, 5 * rise + 4.0, (walk0 + upBack) / 2 + 0.4, L + 6, 0.25, upBack - walk0 + 1.2, 0xe9ecef);
+  for (let p = -3; p <= 3; p++) k.box(p * 9, 5 * rise, upBack, 0.25, 4.0, 0.25, 0xadb5bd);
+  // Just over the rail, in front of you (on the empty seats at the top of the lower tier).
+  item(x, "match", "Watch the match", 0.3, 0.05, walk0 - 0.5, 0.9);
+  // Keep walkers on the walkway (the pitch and the lower tiers are down below).
+  for (let k3 = 0; k3 < 3; k3++) x.blocks.push({ x: -W / 3 + (k3 * W) / 3, z: (-D / 2 + walk0) / 2, w: W / 3, d: walk0 + D / 2, ry: 0 });
+  // The players: two teams of five, their keepers, a referee, and the ball.
+  const home = pickOf(rnd, [[0xe03131, 0xf8f9fa], [0xf5a524, 0x18202b], [0x2f9e44, 0xf8f9fa]] as [number, number][]);
+  const away = pickOf(rnd, [[0x1c7ed6, 0x18202b], [0xf8f9fa, 0x1c7ed6], [0x7048e8, 0xf8f9fa]] as [number, number][]);
+  const looks: AthleteLook[] = [];
+  for (let i = 0; i < 5; i++) looks.push({ shirt: home[0], shorts: home[1], skin: skinOf(rnd), shoes: 0x111418 });
+  for (let i = 0; i < 5; i++) looks.push({ shirt: away[0], shorts: away[1], skin: skinOf(rnd), shoes: 0x111418 });
+  looks.push({ shirt: 0x2f9e44, shorts: 0x111418, skin: skinOf(rnd), gloves: 0xf1f3f5 }, { shirt: 0xffd43b, shorts: 0x111418, skin: skinOf(rnd), gloves: 0xf1f3f5 }, { shirt: 0x18202b, shorts: 0x18202b, skin: skinOf(rnd) });
+  const team = createAthletes(looks);
+  team.group.position.y = P;
+  x.extras.push(team.group);
+  const ballMat = new THREE.MeshLambertMaterial({ color: 0xf8f9fa });
+  const ball = new THREE.Mesh(new THREE.IcosahedronGeometry(0.16, 1), ballMat);
+  x.extras.push(ball);
+  // Where each outfield player keeps to (home team attacks +x), as a share of the pitch.
+  const shape = [[-0.55, -0.45], [-0.55, 0.45], [-0.15, 0], [0.25, -0.35], [0.25, 0.35]];
+  team.rigs.forEach((r, i) => {
+    const s = shape[i % 5];
+    r.x = (i < 5 ? s[0] : -s[0]) * hl;
+    r.z = s[1] * hb;
+  });
+  let last = -1;
+  x.anim.push((t) => {
+    const dt = last < 0 ? 0 : Math.min(0.1, Math.max(0, t - last));
+    last = t;
+    // The ball wanders round the pitch (a smooth path), now and then lofted.
+    const bx = Math.sin(t * 0.11) * (hl - 6) + Math.sin(t * 0.37 + 1) * 5;
+    const bz = Math.sin(t * 0.17 + 2) * (hb - 5) + Math.sin(t * 0.53) * 3;
+    const loft = Math.max(0, Math.sin(t * 0.9)) ** 6 * 2.2;
+    ball.position.set(bx, P + 0.16 + loft, bz);
+    ball.rotation.x = t * 6;
+    ball.rotation.z = t * 4;
+    // The nearest player of each side goes for it; the others keep their shape, drawn towards it.
+    for (let side = 0; side < 2; side++) {
+      let best = side * 5;
+      for (let i = side * 5; i < side * 5 + 5; i++) {
+        const r = team.rigs[i];
+        const b = team.rigs[best];
+        if (Math.hypot(r.x - bx, r.z - bz) < Math.hypot(b.x - bx, b.z - bz)) best = i;
+      }
+      for (let i = side * 5; i < side * 5 + 5; i++) {
+        const r = team.rigs[i];
+        const s = shape[i % 5];
+        const hx = (side === 0 ? s[0] : -s[0]) * hl;
+        const hz = s[1] * hb;
+        if (i === best) runRig(r, bx - (side === 0 ? 0.5 : -0.5), bz, 7, dt);
+        else {
+          runRig(r, hx + (bx - hx) * 0.45, hz + (bz - hz) * 0.35, 4.5, dt, false);
+          faceRig(r, bx, bz, Math.min(1, dt * 3));
+        }
+      }
+    }
+    // Keepers move along their goal line with the ball; the referee follows play.
+    const kh = team.rigs[10];
+    const ka = team.rigs[11];
+    runRig(kh, -hl + 1.2, Math.max(-3, Math.min(3, bz * 0.2)), 3, dt, false);
+    faceRig(kh, bx, bz, 0.1);
+    runRig(ka, hl - 1.2, Math.max(-3, Math.min(3, bz * 0.2)), 3, dt, false);
+    faceRig(ka, bx, bz, 0.1);
+    kh.guard = ka.guard = 0.35;
+    const ref = team.rigs[12];
+    runRig(ref, bx - 6, bz * 0.6 + 4, 5, dt, false);
+    faceRig(ref, bx, bz, 0.1);
+    team.update();
+  });
+  x.lamps.push({ x: -hl / 2, y: 12, z: 0 }, { x: hl / 2, y: 12, z: 0 });
+  const vz = walk0 + 1.3;
+  x.views.push(
+    { x: 0, z: vz, yaw: yawTo(0, vz, 0, 0), pitch: -0.16 },
+    { x: -18, z: vz, yaw: yawTo(-18, vz, -8, 0), pitch: -0.15 },
+    { x: 18, z: vz, yaw: yawTo(18, vz, 8, 0), pitch: -0.15 },
+  );
+}
+
 function plan(theme: Theme, rnd: Rng, variant?: InteriorInfo["variant"]): { room: Room; pal: Pal; build: (x: Ctx) => void } {
   const home = pickOf(rnd, HOME);
   if (theme === "lobby" && variant === "small") {
@@ -2127,6 +2745,13 @@ function plan(theme: Theme, rnd: Rng, variant?: InteriorInfo["variant"]): { room
       return { room: { w: 14, d: 10, h: 3.5, walls: ["glass", "solid", "solid", "solid"], accentSide: 3, frame: 0x2b2b2b }, pal: pickOf(rnd, [...HOME.slice(1, 6), LOUNGE[3]]), build: restaurant };
     case "firehall":
       return { room: { w: 14, d: 10, h: 4.6, walls: ["solid", "band", "solid", "solid"], headDrop: 0.4 }, pal: { ...POLICE, accentWall: 0xc92a2a, wall: 0xf1ede6, floor: ["concrete", 0xb9b6b0, 0xa29e97] }, build: firehall };
+    case "stands":
+      return { room: { w: 80, d: 68, h: 12, walls: ["solid", "solid", "solid", "solid"], noShell: true }, pal: { ...SPORT_PAL, floor: ["concrete", 0x9aa0a6, 0x8d939a] }, build: standsBowl };
+    case "court":
+      return { room: { w: 36, d: 26, h: 11, walls: ["solid", "solid", "solid", "solid"] }, pal: { ...SPORT_PAL, floor: ["parquet", 0xd9b382, 0xc9a06c] }, build: courtHall };
+    case "boxing":
+    case "wrestling":
+      return { room: { w: 24, d: 24, h: 11, walls: ["solid", "solid", "solid", "solid"] }, pal: SPORT_PAL, build: (x) => ringHall(x, theme === "wrestling") };
     default:
       return { room: { w: 8, d: 6, h: 3, walls: ["glass", "solid", "solid", "solid"] }, pal: home, build: (x) => livingRoom(x, false) };
   }
@@ -2139,15 +2764,19 @@ export function createInterior(info: InteriorInfo): Interior {
   const { room, pal, build } = plan(info.theme, rnd, info.variant);
   const sheet = new Sheet(1024);
   const k = new Kit();
-  const x: Ctx = { k, sheet, rnd, pal, room, spots: [], views: [], lamps: [], info, items: [], extras: [], anim: [] };
-  // The clock tower's dials make their own walls.
-  if (info.theme !== "clockroom") shell(x);
+  const x: Ctx = { k, sheet, rnd, pal, room, spots: [], views: [], lamps: [], info, items: [], extras: [], anim: [], nightHooks: [], blocks: [] };
+  // The clock tower's dials make their own walls (and the stadium is open to the sky).
+  if (room.noShell) {
+    // Nothing: no walls, no ceiling.
+  } else if (info.theme !== "clockroom") shell(x);
   else k.box(0, room.h, 0, room.w + 0.6, 0.12, room.d + 0.6, pal.ceiling, { noAo: true });
   build(x);
   // Soft shadows along the bottom of the walls (and they keep walkers off the walls).
-  for (let side = 0; side < 4; side++) {
-    const L = wallLen(room, side);
-    atWall(x, side, 0, () => k.shadow(0, 0.18, L, 0.42, 0.18));
+  if (!room.noShell) {
+    for (let side = 0; side < 4; side++) {
+      const L = wallLen(room, side);
+      atWall(x, side, 0, () => k.shadow(0, 0.18, L, 0.42, 0.18));
+    }
   }
   const tex = sheet.finish();
 
@@ -2171,8 +2800,10 @@ export function createInterior(info: InteriorInfo): Interior {
     : new THREE.MeshLambertMaterial({ map: ftex });
   const floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(room.w, room.d).rotateX(-Math.PI / 2), floorMat);
   floorMesh.name = "floor";
+  // (The stadium has its own ground.)
+  floorMesh.visible = !room.noShell;
   group.add(floorMesh);
-  const blocks: Block[] = k.shadows.filter((b) => b.a >= 0.2).map((b) => ({ x: b.x, z: b.z, w: b.w - 0.15, d: b.d - 0.15, ry: b.ry }));
+  const blocks: Block[] = [...k.shadows.filter((b) => b.a >= 0.2).map((b) => ({ x: b.x, z: b.z, w: b.w - 0.15, d: b.d - 0.15, ry: b.ry })), ...x.blocks];
   const shadows = shadowMesh(k.shadows);
   if (shadows) group.add(shadows);
   for (const e of x.extras) group.add(e);
@@ -2243,6 +2874,7 @@ export function createInterior(info: InteriorInfo): Interior {
       poolMat.opacity = 0.35;
     }
     poolMat.opacity = 0.32 * n;
+    for (const h of x.nightHooks) h(n);
     mats.glass.opacity = 0.09 + 0.05 * n;
     baseOpacity.set(mats.glass, mats.glass.opacity);
     baseOpacity.set(poolMat, poolMat.opacity);

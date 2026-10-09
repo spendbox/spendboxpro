@@ -33,6 +33,26 @@ button:disabled {
   cursor: not-allowed;
 }
 
+/* Every button, link and toggle squishes a little when pressed, so a tap always feels
+   answered (the `scale` property adds to any transform the element already has). */
+button,
+a[href],
+[role="button"],
+[role="tab"],
+select {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition-property: scale, color, background-color, border-color, opacity, box-shadow;
+  transition-duration: 90ms;
+  transition-timing-function: ease-out;
+}
+button:not(:disabled):active,
+a[href]:active,
+[role="button"]:active,
+[role="tab"]:active {
+  scale: 0.95;
+}
+
 /* Frosted panel floating over the city. */
 @utility glass {
   background: rgb(255 255 255 / 0.82);
