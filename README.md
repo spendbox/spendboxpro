@@ -106,8 +106,9 @@ into the countryside to a little halt at each end. While you're on a ride, field
 farms, villages, trees and animals are made around you as you go, in the style of the town's
 country (palms and red earth in Nigeria and Ghana, acacias, round huts and giraffes in Kenya
 and South Africa, hedges and sheep in Britain, barns and silos in America), from a few pooled
-instanced meshes (`src/app/play/city/countryside.ts`). Each town also has three famous
-places from its own city or country standing just outside it, with name labels
+instanced meshes (`src/app/play/city/countryside.ts`). Each town can also have three famous
+places from its own city or country standing just outside it, with name labels (hidden for
+now: `SHOW_COUNTRY_LANDMARKS` in `src/app/play/city-view.tsx`)
 (`src/app/play/city/landmarks.ts`): the Third Mainland Bridge, the Lekki-Ikoyi Link Bridge,
 the National Theatre, Zuma Rock, Cocoa House, Olumo Rock, the Kano dye pits, the Black Star
 Gate, Kakum's canopy walkway, Cape Coast Castle, KICC, Nairobi National Park, Lake Nakuru's

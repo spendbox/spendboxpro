@@ -1270,9 +1270,6 @@ export function Game({
         <div className="flex flex-col items-end gap-2">
           {guest ? (
             <div className="pointer-events-auto flex items-center gap-2">
-              <span className="hidden sm:inline-flex" title="Newtown">
-                <Logo size={34} />
-              </span>
               <button onClick={() => setHowOpen(true)} className="glass grid h-9 w-9 shrink-0 place-items-center rounded-full font-display font-bold" aria-label="How it works">
                 ?
               </button>
@@ -1327,6 +1324,15 @@ export function Game({
           )}
         </div>
       </div>
+
+      {/* Watchers on a computer: the Newtown logo, top centre. */}
+      {guest && (
+        <div className="pointer-events-none absolute inset-x-0 top-0 hidden justify-center p-4 sm:flex" title="Newtown">
+          <span className="glass flex items-center rounded-full py-1 pl-1.5 pr-3.5 shadow">
+            <Logo size={30} />
+          </span>
+        </div>
+      )}
 
       {/* Latest notices pop up under the bell; the bell opens the full list. */}
       <div className={cn("pointer-events-none absolute right-3 z-10 flex w-[min(19rem,calc(100vw-1.5rem))] flex-col items-end gap-1.5 sm:right-4 sm:top-16", statsMin ? "top-14" : "top-[14.5rem]")}>

@@ -62,6 +62,9 @@ import { buildLandmarks as buildCountryLandmarks } from "./city/landmarks";
 import { causewayParts, jettyParts, neighbourhoodParts, pond, pool, supertallParts } from "./city/neighbourhood";
 import { homeLabel, type TownHouse } from "@/lib/houses";
 
+/** The country's famous landmarks out in the farmland round each town (hidden for now). */
+const SHOW_COUNTRY_LANDMARKS = false;
+
 // The game board, drawn as a small living 3D city with three.js.
 // Every tile is a lot: a road, a building, a park... New tiles rise out of the ground
 // as the city grows. Cars drive the roads, birds and clouds drift overhead.
@@ -2131,10 +2134,12 @@ export function CityView({
       land.flat = 16 + R * 0.35;
       land.start = land.flat + 14 + R * 0.4;
       land.full = land.start + 30 + R * 1.2;
-      // This country's famous landmarks, out in the farmland (see ./city/landmarks).
+      // This country's famous landmarks, out in the farmland (see ./city/landmarks). Switched off
+      // for now (SHOW_COUNTRY_LANDMARKS).
       country?.dispose();
       pads = [];
-      country = currentPlan ? buildCountryLandmarks(currentPlan, land.half, landHeight, (x, z, r) => railOut(x, z, r + 1)) : null;
+      country =
+        SHOW_COUNTRY_LANDMARKS && currentPlan ? buildCountryLandmarks(currentPlan, land.half, landHeight, (x, z, r) => railOut(x, z, r + 1)) : null;
       pads = (country?.spots ?? []).map((p) => ({ ...p, y: landHeight(p.x, p.z) }));
       if (country) life.add(country.group);
       countryside.reset();
