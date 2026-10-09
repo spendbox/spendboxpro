@@ -1,0 +1,9 @@
+knight-slim.glb
+  The Knight from "KayKit: Adventurers Character Pack 1.0" by Kay Lousberg (www.kaylousberg.com).
+  License: Creative Commons Zero (CC0), free for personal, educational and commercial use.
+  https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0
+  Slimmed for the web: weapons and shields removed, 6 of 76 animations kept (Idle, Walking_A,
+  Running_A, Jump_Full_Short, Cheer, Sit_Floor_Idle), meshopt-compressed.
+
+avatar-placeholder.glb
+  A simple placeholder figure made for this project.
