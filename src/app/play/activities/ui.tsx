@@ -238,18 +238,18 @@ export function useGameReward(game: RewardGame | "piano" | "jukebox" | "slots" |
   async function finish(score: number, won?: boolean) {
     questEvent({ type: "play", game, score, won });
     if (!reward) return;
-    if (!signedIn) return setClaim({ state: "done", coins: 0, text: "Sign in to win coins." });
+    if (!signedIn) return setClaim({ state: "done", coins: 0, text: "Sign in to win mint." });
     if (score < reward.min) {
-      return setClaim({ state: "done", coins: 0, text: reward.unit === "win" ? "" : `Get ${reward.min}+ ${reward.unit} to win coins.` });
+      return setClaim({ state: "done", coins: 0, text: reward.unit === "win" ? "" : `Get ${reward.min}+ ${reward.unit} to win mint.` });
     }
-    setClaim({ state: "claiming", coins: 0, text: "Collecting your coins…" });
+    setClaim({ state: "claiming", coins: 0, text: "Collecting your mint…" });
     const res = await claimActivityReward(game as RewardGame, score);
     if (!res.ok) return setClaim({ state: "done", coins: 0, text: res.error });
     if (res.coins > 0) {
       return setClaim({
         state: "done",
         coins: res.coins,
-        text: `+${res.coins} coins!${res.leftToday === 0 ? " That's all the game coins for today." : ""}`,
+        text: `+${res.coins} mint!${res.leftToday === 0 ? " That's all the game mint for today." : ""}`,
       });
     }
     setClaim({
@@ -257,10 +257,10 @@ export function useGameReward(game: RewardGame | "piano" | "jukebox" | "slots" |
       coins: 0,
       text:
         res.reason === "daily_limit"
-          ? "You've won all the game coins for today. Playing is still fun!"
+          ? "You've won all the game mint for today. Playing is still fun!"
           : res.reason === "too_soon"
-            ? "Nice! Coins pay out once a minute per game, so this one's just for glory."
-            : `Get ${reward.min}+ ${reward.unit} to win coins.`,
+            ? "Nice! Mint pays out once a minute per game, so this one's just for glory."
+            : `Get ${reward.min}+ ${reward.unit} to win mint.`,
     });
   }
   return { claim, finish, reset: () => setClaim({ state: "idle", coins: 0, text: "" }), reward };
@@ -288,8 +288,8 @@ export function RewardHint({ game }: { game: RewardGame }) {
     <p className="flex items-center gap-1.5 text-xs text-muted">
       <Coins className="size-3.5 text-gold-dark" />
       {r.unit === "win"
-        ? `Win to earn ${r.coinsMax} coins (5 rewarded games a day).`
-        : `Score ${r.min}+ ${r.unit} to win ${r.coinsMin}–${r.coinsMax} coins (5 rewarded games a day).`}
+        ? `Win to earn ${r.coinsMax} mint (5 rewarded games a day).`
+        : `Score ${r.min}+ ${r.unit} to win ${r.coinsMin}–${r.coinsMax} mint (5 rewarded games a day).`}
     </p>
   );
 }

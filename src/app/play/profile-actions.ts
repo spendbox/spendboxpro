@@ -1,5 +1,6 @@
 "use server";
 
+import { mintify } from "@/lib/brand";
 import { cleanAvatar, type Avatar } from "@/lib/avatar";
 import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -21,7 +22,7 @@ export async function claimBalloon(slot: number): Promise<Result<{ coins: number
   const { data: round } = await db.from("rounds").select("status").order("id", { ascending: false }).limit(1).maybeSingle();
   if (round?.status !== "seek") return { ok: false, error: "That balloon has floated away." };
   const { data, error } = await db.rpc("claim_balloon", { p_user: userId, p_slot: slot });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: mintify(error.message) };
   return { ok: true, coins: Number(data.coins), leftToday: Number(data.left_today) };
 }
 
@@ -132,6 +133,6 @@ export async function upgradeLevel(): Promise<Result<{ level: number; cost: numb
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Please sign in again." };
   const { data, error } = await createAdminClient().rpc("upgrade_level", { p_user: userId });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: mintify(error.message) };
   return { ok: true, level: Number(data.level), cost: Number(data.cost) };
 }

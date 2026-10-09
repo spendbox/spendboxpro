@@ -1,4 +1,5 @@
 import "server-only";
+import { CONTACT_EMAIL, SITE_DOMAIN } from "@/lib/brand";
 
 // Sends email through Resend (https://resend.com). Needs RESEND_API_KEY.
 // Without a verified domain, Resend only delivers to your own Resend account
@@ -25,7 +26,8 @@ export async function sendEmail({
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        from: process.env.EMAIL_FROM ?? "Hide & Seek <onboarding@resend.dev>",
+        from: process.env.EMAIL_FROM ?? "Newtown <onboarding@resend.dev>",
+        reply_to: CONTACT_EMAIL,
         to: [to],
         subject,
         html,
@@ -49,15 +51,16 @@ export async function sendEmail({
 /** The sign-in email. `code` is the 4-digit code. */
 export function codeEmail(code: string) {
   return {
-    subject: `${code} is your Hide & Seek code`,
-    text: `Your Hide & Seek sign-in code is ${code}.\n\nIt works for 10 minutes. If you didn't ask for it, you can ignore this email.`,
+    subject: `${code} is your Newtown code`,
+    text: `Your Newtown sign-in code is ${code}.\n\nIt works for 10 minutes. If you didn't ask for it, you can ignore this email.\n\n${SITE_DOMAIN} · ${CONTACT_EMAIL}`,
     html: `<!doctype html><html><body style="margin:0;background:#eef2f6;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#18202b">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px">
 <table role="presentation" width="100%" style="max-width:420px;background:#ffffff;border-radius:16px" cellpadding="0" cellspacing="0"><tr><td style="padding:32px">
-<div style="font-size:20px;font-weight:800">Hide &amp; Seek</div>
+<div style="font-size:20px;font-weight:800">Newtown</div>
 <p style="font-size:15px;color:#64707d;margin:16px 0 8px">Your sign-in code:</p>
 <div style="font-size:36px;font-weight:800;letter-spacing:12px;text-indent:12px;background:#f1f4f8;border-radius:12px;padding:16px;text-align:center">${code}</div>
 <p style="font-size:13px;color:#64707d;margin:16px 0 0">It works for 10 minutes. If you didn't ask for it, you can ignore this email.</p>
+<p style="font-size:12px;color:#64707d;margin:16px 0 0"><a href="https://${SITE_DOMAIN}" style="color:#c98a00;text-decoration:none;font-weight:700">${SITE_DOMAIN}</a> · ${CONTACT_EMAIL}</p>
 </td></tr></table></td></tr></table></body></html>`,
   };
 }

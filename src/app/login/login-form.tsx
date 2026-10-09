@@ -138,7 +138,7 @@ export function LoginForm() {
       <button className={button} disabled={busy}>
         {busy ? "One moment…" : "Continue"}
       </button>
-      <p className="text-xs text-muted">First time? We&apos;ll email you a code, then you pick a name and PIN. New players start with 500 coins. You must be 18 or older to play.</p>
+      <p className="text-xs text-muted">First time? We&apos;ll email you a code, then you pick a name and PIN. New players start with 500 mint. You must be 18 or older to play.</p>
       {error && <p className="text-sm text-hit">{error}</p>}
     </form>
   );

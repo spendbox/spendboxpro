@@ -1,7 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-// Hide & Seek is for adults (18+). Players give their date of birth once, on /welcome.
+// Newtown is for adults (18+). Players give their date of birth once, on /welcome.
 // The date is private: it is only read here on the server and never sent to other players.
 
 /**

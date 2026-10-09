@@ -12,7 +12,7 @@ import { BigButton, Confetti, GameHeader, type GameProps, rand } from "./ui";
 
 const SYMBOLS = [
   { icon: Ghost, color: "#7048e8", name: "ghosts" },
-  { icon: Coins, color: "#f5a524", name: "coins" },
+  { icon: Coins, color: "#f5a524", name: "mint stacks" },
   { icon: Crown, color: "#e8590c", name: "crowns" },
   { icon: Gem, color: "#0c8599", name: "gems" },
   { icon: Star, color: "#fab005", name: "stars" },
@@ -66,7 +66,7 @@ export function Slots(props: GameProps) {
 
   return (
     <div className="space-y-3">
-      <GameHeader icon={Coins} title="Free slots" sub="Just for fun: no coins in, no coins out" onClose={props.onClose} color="#f5a524" />
+      <GameHeader icon={Coins} title="Free slots" sub="Just for fun: no mint in, no mint out" onClose={props.onClose} color="#f5a524" />
       <div className="relative rounded-3xl bg-gradient-to-b from-[#e8590c] to-[#c92a2a] p-4 shadow-inner">
         {result?.startsWith("Jackpot") && <Confetti />}
         <div className="grid grid-cols-3 gap-2 rounded-2xl bg-white p-2">

@@ -74,6 +74,7 @@ import { Safe } from "./safe";
 import { Sheet } from "./sheet";
 import { SportsSheet } from "./sports/sportsbook";
 import { AdvertiseExplainer } from "@/components/advertise-explainer";
+import { Logo, LogoMark } from "@/components/logo";
 import { playSfx, setSfxEnabled, useCitySound } from "./sound";
 import { StatsCard } from "./stats-card";
 
@@ -379,7 +380,7 @@ export function Game({ state }: { state: GameState }) {
     if (res.ok) {
       playSfx("pop");
       quests.track({ type: "event" });
-      setMessage({ icon: Coins, text: `You grabbed ${short(Number(res.data.coins))} coins!`, tone: "good" });
+      setMessage({ icon: Coins, text: `You grabbed ${short(Number(res.data.coins))} mint!`, tone: "good" });
       startTransition(() => router.refresh());
     } else setMessage({ text: res.error, tone: "info" });
   }
@@ -465,7 +466,7 @@ export function Game({ state }: { state: GameState }) {
   useEffect(() => {
     if (passiveGained <= 0) return;
     const id = setTimeout(
-      () => setMessage({ icon: Coins, text: `Passive income: +${short(passiveGained)} coins. You earn up to ${short(state.prices.passivePerDay)} a day while you have under ${short(state.prices.passiveTarget)}.`, tone: "good" }),
+      () => setMessage({ icon: Coins, text: `Passive income: +${short(passiveGained)} mint. You earn up to ${short(state.prices.passivePerDay)} a day while you have under ${short(state.prices.passiveTarget)}.`, tone: "good" }),
       0,
     );
     return () => clearTimeout(id);
@@ -500,14 +501,14 @@ export function Game({ state }: { state: GameState }) {
       const d = (await res.json()) as { coins?: number; leftToday?: number; reason?: string };
       if (d.coins && d.coins > 0) {
         playSfx("pop");
-        setOpenAd({ ad, tile: info.tile, reward: `+${d.coins} coins from ${ad.brand} for checking it out!${d.leftToday ? ` (${d.leftToday} more ad rewards today)` : " That's all your ad rewards for today."}` });
+        setOpenAd({ ad, tile: info.tile, reward: `+${d.coins} mint from ${ad.brand} for checking it out!${d.leftToday ? ` (${d.leftToday} more ad rewards today)` : " That's all your ad rewards for today."}` });
         startTransition(() => router.refresh());
       } else if (d.reason) {
         const why: Record<string, string> = {
-          signed_out: "Sign in to earn 5 coins every time you check out an ad (up to 5 a day).",
+          signed_out: "Sign in to earn 5 mint every time you check out an ad (up to 5 a day).",
           daily_limit: "You've had all 5 ad rewards for today. More tomorrow!",
           already_today: "You've already been rewarded for this ad today.",
-          pool_empty: "This ad's coins have run out.",
+          pool_empty: "This ad's mint has run out.",
         };
         setOpenAd({ ad, tile: info.tile, reward: why[d.reason] ?? null });
       }
@@ -895,12 +896,12 @@ export function Game({ state }: { state: GameState }) {
             setMessage({ text: "That was a decoy! Nobody was there, and decoys pay nothing. Someone's playing tricks.", tone: "info" });
           else if (d.result === "shielded")
             setMessage({
-              text: `You found ${d.names || "someone"}, but their shield teleported them somewhere nearby! You still get +${short(Number(d.reward))} coins.`,
+              text: `You found ${d.names || "someone"}, but their shield teleported them somewhere nearby! You still get +${short(Number(d.reward))} mint.`,
               tone: "good",
             });
           else if (d.result === "caught")
             setMessage({
-              text: d.bot ? `You found ${botName}! +${short(Number(d.reward))} coins.` : `Gotcha! You found ${d.names || d.caught}. +${short(Number(d.reward))} coins.`,
+              text: d.bot ? `You found ${botName}! +${short(Number(d.reward))} mint.` : `Gotcha! You found ${d.names || d.caught}. +${short(Number(d.reward))} mint.`,
               tone: "good",
             });
           else
@@ -923,7 +924,7 @@ export function Game({ state }: { state: GameState }) {
       if (res.ok) playSfx("pop");
       setMessage(
         res.ok
-          ? { icon: Coins, text: `Pop! +${res.coins} coins.${res.leftToday > 0 ? ` ${res.leftToday} more balloon${res.leftToday === 1 ? "" : "s"} today.` : " That's all for today."}`, tone: "good" }
+          ? { icon: Coins, text: `Pop! +${res.coins} mint.${res.leftToday > 0 ? ` ${res.leftToday} more balloon${res.leftToday === 1 ? "" : "s"} today.` : " That's all for today."}`, tone: "good" }
           : { text: res.error, tone: "info" },
       );
       router.refresh();
@@ -1049,6 +1050,9 @@ export function Game({ state }: { state: GameState }) {
         <div className="flex flex-col items-end gap-2">
           {guest ? (
             <div className="pointer-events-auto flex items-center gap-2">
+              <span className="hidden sm:inline-flex" title="Newtown">
+                <Logo size={34} />
+              </span>
               <button onClick={() => setHowOpen(true)} className="glass grid h-9 w-9 shrink-0 place-items-center rounded-full font-display font-bold" aria-label="How it works">
                 ?
               </button>
@@ -1062,14 +1066,14 @@ export function Game({ state }: { state: GameState }) {
               Lv {me.level}
             </span>
             {me.bigFish && (
-              <span className="glass flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1.5 text-xs font-bold text-[#1c7ed6]" title="You hold 10,000+ coins: everyone sees you as a big fish">
+              <span className="glass flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1.5 text-xs font-bold text-[#1c7ed6]" title="You hold 10,000+ mint: everyone sees you as a big fish">
                 <Fish className="size-3.5" />
                 <span className="hidden sm:inline">Big fish</span>
               </span>
             )}
-            <span className="glass whitespace-nowrap rounded-full px-3 py-1.5 text-sm" title={`${me.coins} coins · level ${me.level}`}>
+            <span className="glass whitespace-nowrap rounded-full px-3 py-1.5 text-sm" title={`${me.coins} mint · level ${me.level}`}>
               <b className="text-gold-dark">{short(me.coins)}</b>
-              <span className="hidden sm:inline"> coins</span>
+              <span className="hidden sm:inline"> mint</span>
               {me.bonusCoins > 0 && <span className="text-muted"> +{short(me.bonusCoins)}</span>}
             </span>
             <button
@@ -1177,7 +1181,7 @@ export function Game({ state }: { state: GameState }) {
           <p className="mt-1 text-sm text-muted">As a ghost, you can wrap yourself in a shield that saves you once.</p>
           <div className="mt-3 rounded-2xl bg-[#7048e8]/10 p-4 text-center">
             <p className="text-sm text-muted">It costs</p>
-            <p className="font-display text-4xl font-extrabold">{short(state.prices.shield)} coins</p>
+            <p className="font-display text-4xl font-extrabold">{short(state.prices.shield)} mint</p>
             <p className="text-xs text-muted">You have {short(me.coins)}. One shield per game.</p>
           </div>
           <ul className="mt-3 space-y-1.5 text-sm text-ink/80">
@@ -1216,14 +1220,14 @@ export function Game({ state }: { state: GameState }) {
           </p>
           <div className="mt-3 rounded-2xl bg-panel-2 p-4 text-center">
             <p className="text-sm text-muted">You&apos;re putting down</p>
-            <p className="font-display text-4xl font-extrabold">{short(state.prices.stake)} coins</p>
+            <p className="font-display text-4xl font-extrabold">{short(state.prices.stake)} mint</p>
             <p className="text-xs text-muted">You have {short(me.coins)}. After this: {short(Math.max(0, me.coins - state.prices.stake))}.</p>
           </div>
           <ul className="mt-3 space-y-1.5 text-sm text-ink/80">
             <Li icon={Check}>Stay hidden till the end: you get your {short(state.prices.stake)} back, and the survivors share {Math.round(state.prices.winShare * 100)}% of the pool (it starts at 0 and grows with every search, sweep and move).</Li>
             <Li icon={CircleX}>Get caught: the hunter who finds you keeps most of your stake. If every ghost is found, hunters take {Math.round(state.prices.winShare * 100)}% of the pool and the ghosts share {Math.round(state.prices.otherShare * 100)}%.</Li>
-            <Li icon={Shield}>Once the hunt starts you can buy a one-time shield ({short(state.prices.shield)} coins).</Li>
-            <Li icon={Footprints}>Moving costs {short(state.prices.moveFee)} coins each time.</Li>
+            <Li icon={Shield}>Once the hunt starts you can buy a one-time shield ({short(state.prices.shield)} mint).</Li>
+            <Li icon={Footprints}>Moving costs {short(state.prices.moveFee)} mint each time.</Li>
           </ul>
           <div className="mt-4 space-y-2">
             <button
@@ -1256,7 +1260,7 @@ export function Game({ state }: { state: GameState }) {
         <Sheet onClose={() => setConfirmMove(null)}>
           <h2 className="font-display text-xl font-bold">Move to {where(confirmMove)}?</h2>
           <ul className="mt-2 space-y-1 text-sm text-muted">
-            <li>It costs {state.prices.moveFee} coins (you have {short(me.coins)}). The coins go into the survivor pool.</li>
+            <li>It costs {state.prices.moveFee} mint (you have {short(me.coins)}). The mint goes into the survivor pool.</li>
             <li>Everyone will see that someone left {where(entry.tile ?? 0)}, and you can&apos;t come back to it.</li>
             <li>After this you&apos;ll need to wait {state.prices.moveCooldown >= 60 ? `${Math.round(state.prices.moveCooldown / 60)} minutes` : `${state.prices.moveCooldown} seconds`} before moving again. Every move by anyone makes the next one dearer.</li>
           </ul>
@@ -1313,7 +1317,7 @@ export function Game({ state }: { state: GameState }) {
             }}
             onSignIn={() => {
               setSportsOpen(null);
-              setSignInWhy("Sign in to watch matches and bet coins on who wins.");
+              setSignInWhy("Sign in to watch matches and bet mint on who wins.");
             }}
           />
         </Safe>
@@ -1552,9 +1556,9 @@ export function Game({ state }: { state: GameState }) {
         <Sheet onClose={() => setConfirmHunt(false)}>
           <h2 className="flex items-center gap-2 font-display text-xl font-bold"><Flashlight className="size-5 text-gold-dark" />Join the hunt?</h2>
           <ul className="mt-3 space-y-1.5 text-sm text-ink/80">
-            <Li icon={Sparkles}>Joining is free. {me.freeSearch ? "Your first search today is on us." : `Searches cost about ${short(round.searchPrice)} coins each right now.`}</Li>
+            <Li icon={Sparkles}>Joining is free. {me.freeSearch ? "Your first search today is on us." : `Searches cost about ${short(round.searchPrice)} mint each right now.`}</Li>
             <Li icon={Ghost}>As a hunter, you tap spots to search for ghosts, or send drones to sweep an area.</Li>
-            <Li icon={Coins}>Find a ghost and you keep most of their stake. Find {botName}, the bot, for {short(200)} coins.</Li>
+            <Li icon={Coins}>Find a ghost and you keep most of their stake. Find {botName}, the bot, for {short(200)} mint.</Li>
             <Li icon={Trophy}>Catch every ghost and hunters share 80% of the pool.</Li>
             <Li icon={Timer}>You stay a hunter for the whole round.</Li>
           </ul>
@@ -1582,7 +1586,7 @@ export function Game({ state }: { state: GameState }) {
           <p className="mt-1 text-sm text-muted">As a ghost, you can drop a fake you anywhere in the city to fool the hunters.</p>
           <div className="mt-3 rounded-2xl bg-[#f08c00]/10 p-4 text-center">
             <p className="text-sm text-muted">It costs</p>
-            <p className="font-display text-4xl font-extrabold">{short(state.prices.decoy)} coins</p>
+            <p className="font-display text-4xl font-extrabold">{short(state.prices.decoy)} mint</p>
             <p className="text-xs text-muted">You have {short(me.coins)}. One decoy per game; each one costs a little more than your last.</p>
           </div>
           <ul className="mt-3 space-y-1.5 text-sm text-ink/80">
@@ -1613,8 +1617,8 @@ export function Game({ state }: { state: GameState }) {
           <p className="mt-1 text-sm text-muted">You were caught early, so you can rise again, once.</p>
           <div className="mt-3 rounded-2xl bg-[#e8590c]/10 p-4 text-center">
             <p className="text-sm text-muted">It costs</p>
-            <p className="font-display text-4xl font-extrabold">{short(state.prices.respawn)} coins</p>
-            <p className="text-xs text-muted">You have {short(me.coins)}. These coins disappear (they don&apos;t go into the pool).</p>
+            <p className="font-display text-4xl font-extrabold">{short(state.prices.respawn)} mint</p>
+            <p className="text-xs text-muted">You have {short(me.coins)}. This mint disappears (it doesn&apos;t go into the pool).</p>
           </div>
           <ul className="mt-3 space-y-1.5 text-sm text-ink/80">
             <Li icon={Dices}>You drop back in on a random spot nobody has searched yet.</Li>
@@ -1813,11 +1817,13 @@ export function Game({ state }: { state: GameState }) {
           ) : guest ? (
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <p className="flex-1 text-sm text-muted">
+                <LogoMark size={20} className="mr-1.5 inline align-[-0.3em] sm:hidden" />
+                <b className="text-ink sm:hidden">Newtown · </b>
                 <span className="mr-1.5 inline-block size-2 animate-pulse rounded-full bg-hit align-middle" />
                 <b className="text-ink">Watching live.</b> <span className="rounded bg-ink px-1 text-[10px] font-bold text-white">18+</span>{" "}
                 {phase === "join"
                   ? `Ghosts are getting ready. The hunt starts in ${countdown}.`
-                  : `The hunt is on: ${short(round.hidersRemaining)} still hidden, ${short(round.pool)} coins in the pool.`}
+                  : `The hunt is on: ${short(round.hidersRemaining)} still hidden, ${short(round.pool)} mint in the pool.`}
               </p>
               <div className="grid grid-cols-3 gap-2 text-sm sm:flex">
                 <button onClick={() => setHowOpen(true)} className="whitespace-nowrap rounded-xl bg-panel-2 px-3 py-2.5 font-semibold">
@@ -1919,7 +1925,7 @@ export function Game({ state }: { state: GameState }) {
                 {mode === "search"
                   ? "Tap anywhere in the city to search that spot. Search too fast and you'll have to wait longer."
                   : mode === "big"
-                    ? `Tap a spot to search it and the 8 spots around it in one go (${state.prices.bigSearch ? short(state.prices.bigSearch) : ""} coins).`
+                    ? `Tap a spot to search it and the 8 spots around it in one go (${state.prices.bigSearch ? short(state.prices.bigSearch) : ""} mint).`
                     : "Tap a spot and a drone will check the area around it. It only tells you yes or no."}
               </p>
             </div>
@@ -1928,7 +1934,7 @@ export function Game({ state }: { state: GameState }) {
               <p className="text-hit">You&apos;ve been found. Hang around and watch the rest of the hunt, or try again next round.</p>
               {entry.canRespawn && (
                 <button onClick={() => setConfirmRespawn(true)} className="w-full rounded-xl bg-[#e8590c] py-2.5 font-semibold text-white">
-                  <RotateCcw className="mr-1 inline size-4 align-[-0.15em]" />Respawn · {short(state.prices.respawn)} coins
+                  <RotateCcw className="mr-1 inline size-4 align-[-0.15em]" />Respawn · {short(state.prices.respawn)} mint
                 </button>
               )}
             </div>
@@ -1996,7 +2002,7 @@ export function Game({ state }: { state: GameState }) {
               </div>
               {state.outlook && (
                 <p className="rounded-xl bg-me/10 px-3 py-2">
-                  Stay hidden and you walk away with about <b>{short(state.outlook.stakeBack + state.outlook.share)}</b> coins:{" "}
+                  Stay hidden and you walk away with about <b>{short(state.outlook.stakeBack + state.outlook.share)}</b> mint:{" "}
                   <span className="text-muted">
                     your {short(state.outlook.stakeBack)} back, plus {short(state.outlook.share)} from the pool so far.
                   </span>
@@ -2125,7 +2131,7 @@ function EventInfoSheet({
           {event.claimed
             ? "You grabbed this one."
             : slots > 0
-              ? `${kind.reward.coins} coins for the first ${kind.reward.slots === 1 ? "person" : `${kind.reward.slots} people`} to tap it. ${slots} left.`
+              ? `${kind.reward.coins} mint for the first ${kind.reward.slots === 1 ? "person" : `${kind.reward.slots} people`} to tap it. ${slots} left.`
               : "All grabbed. Be quicker next time!"}
         </p>
       )}
@@ -2137,7 +2143,7 @@ function EventInfoSheet({
         {canGrab && (
           <button onClick={onGrab} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gold py-2.5 font-semibold text-ink">
             <Coins className="size-4" />
-            Grab {kind.reward!.coins} coins
+            Grab {kind.reward!.coins} mint
           </button>
         )}
       </div>

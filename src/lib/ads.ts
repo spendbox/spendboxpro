@@ -37,7 +37,7 @@ export const AD_POLICY = {
     "The picture must be yours, or one you have the right to use.",
     "The headline and picture must clearly show who is advertising (your brand).",
     "Links must go to a safe, working website that matches the ad.",
-    "Hide & Seek is for adults (18+), but ads must still be suitable for a general audience.",
+    "Newtown is for adults (18+), but ads must still be suitable for a general audience.",
   ],
 };
 
@@ -451,7 +451,7 @@ export async function confirmPayment(reference: string): Promise<PaymentOutcome>
           r.status === "applied",
         );
         await sendEmail({ to: s.contact_email as string, ...email }).catch(() => {});
-        const line = `${s.brand} paid ${naira(Number(s.amount_kobo))} for ${Number(s.coins)} coins in a prize pool (${
+        const line = `${s.brand} paid ${naira(Number(s.amount_kobo))} for ${Number(s.coins)} mint in a prize pool (${
           r.status === "applied" ? "added to the current round" : "waiting for the next round"
         }). Contact: ${s.contact_name} <${s.contact_email}>.`;
         await emailAdmin({ subject: `New prize pool sponsor: ${s.brand}`, text: line, html: `<p>${esc(line)}</p>` });

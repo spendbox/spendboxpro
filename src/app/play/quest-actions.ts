@@ -1,5 +1,6 @@
 "use server";
 
+import { mintify } from "@/lib/brand";
 import { currentUserId } from "@/lib/game";
 import { npcsFor } from "@/lib/npcs";
 import { NPC_QUEST_KEYS, QUEST_BY_KEY, isBigFish, type QuestActionResult, type QuestState } from "@/lib/quests";
@@ -25,7 +26,7 @@ const FRIENDLY: Record<string, string> = {
   target_bot: "The bot has pockets full of nothing. Pick a real player.",
   target_frozen: "That player's account is paused. Pick someone else.",
   target_safe: "That player was robbed recently and is safe from thieves for now. Pick someone else.",
-  target_broke: "That player has hardly any coins. Pick someone richer!",
+  target_broke: "That player has hardly any mint. Pick someone richer!",
   no_steal: "You need to finish a thief quest first (or your chance has run out).",
   no_perk: "That special move isn't waiting for you any more.",
   bad_action: "That isn't a special move.",
@@ -62,9 +63,9 @@ function cleanQuest(raw: unknown): QuestState | null {
   return {
     id: Number(q.id),
     key: q.key,
-    title: String(q.title ?? QUEST_BY_KEY[q.key].title),
-    role: String(q.role ?? QUEST_BY_KEY[q.key].role),
-    brief: String(q.brief ?? QUEST_BY_KEY[q.key].brief),
+    title: mintify(String(q.title ?? QUEST_BY_KEY[q.key].title)),
+    role: mintify(String(q.role ?? QUEST_BY_KEY[q.key].role)),
+    brief: mintify(String(q.brief ?? QUEST_BY_KEY[q.key].brief)),
     status: (["active", "done", "expired", "dropped"].includes(String(q.status)) ? q.status : "expired") as QuestState["status"],
     progress: nums(q.progress),
     targets: nums(q.targets),

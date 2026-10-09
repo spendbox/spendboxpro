@@ -8,6 +8,7 @@ import { AvatarFace } from "@/components/avatar";
 import { Bot, Building2, ChevronDown, ChevronUp, Coins, Fish, HotAirBalloon, Lock, LogOut, MessageCircle, Play, Users, X } from "@/components/icons";
 import type { Avatar } from "@/lib/avatar";
 import { cleanAvatar, defaultAvatar } from "@/lib/avatar";
+import { mintify } from "@/lib/brand";
 import { cn } from "@/lib/cn";
 import { npcById, npcChatter, npcsFor, type Npc, type NpcMessage } from "@/lib/npcs";
 import { createClient } from "@/lib/supabase/client";
@@ -44,7 +45,7 @@ export type ChatPlayer = {
 /** "Big fish": a player holding lots of coins. */
 function BigFishBadge() {
   return (
-    <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-[#1c7ed6]/12 px-1.5 py-px text-[10px] font-semibold text-[#1864ab]" title="Holding 10,000+ coins">
+    <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-[#1c7ed6]/12 px-1.5 py-px text-[10px] font-semibold text-[#1864ab]" title="Holding 10,000+ mint">
       <Fish className="size-3" aria-hidden />
       Big fish
     </span>
@@ -449,8 +450,8 @@ export function Chat({
           "flex shrink-0 items-center gap-1 rounded-full bg-gold/25 font-semibold text-gold-dark hover:bg-gold/40",
           small ? "absolute -right-1 -top-1 size-5 justify-center p-0 shadow" : "px-2.5 py-1 text-xs",
         )}
-        aria-label={`Give coins to ${p.name}`}
-        title={`Give coins to ${p.name}`}
+        aria-label={`Give mint to ${p.name}`}
+        title={`Give mint to ${p.name}`}
       >
         <Coins className={small ? "size-3" : "size-3.5"} aria-hidden />
         {!small && "Give"}
@@ -987,7 +988,7 @@ function Messages({
                       <span className={cn("rounded-full px-1.5 py-px text-[10px] font-semibold", ROLE_STYLE.bot.pill)}>{ROLE_STYLE.bot.label}</span>
                       <span className="text-[10px] text-muted">· to everyone</span>
                     </button>
-                    <p className="break-words">{m.body}</p>
+                    <p className="break-words">{mintify(m.body)}</p>
                   </div>
                   <span className="ml-auto shrink-0 self-end text-[10px] text-muted">{time(m.created_at)}</span>
                 </div>
@@ -1024,7 +1025,7 @@ function Messages({
                       !mine && !bot && m.sender_role === "seeker" && "border-l-4 border-gold",
                     )}
                   >
-                    {m.audio_path ? <VoiceNote id={m.id} seconds={m.audio_seconds ?? 0} mine={mine} /> : <span className="break-words">{m.body}</span>}
+                    {m.audio_path ? <VoiceNote id={m.id} seconds={m.audio_seconds ?? 0} mine={mine} /> : <span className="break-words">{bot ? mintify(m.body) : m.body}</span>}
                     <span className={cn("ml-2 align-bottom text-[10px]", mine ? "text-white/60" : "text-muted")}>{time(m.created_at)}</span>
                   </div>
                 </div>

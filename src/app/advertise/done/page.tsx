@@ -93,7 +93,7 @@ function Outcome({ outcome, reference }: { outcome: PaymentOutcome; reference: s
     return (
       <Card title={outcome.state === "applied" ? "Your prize pool is live!" : "Thanks! You're in the queue"} icon={Trophy} tone="good">
         <p>
-          <b>{fmt(outcome.coins)} coins</b> from <b>{outcome.brand}</b>{" "}
+          <b>{fmt(outcome.coins)} mint</b> from <b>{outcome.brand}</b>{" "}
           {outcome.state === "applied"
             ? `are in the prize pool of round #${outcome.roundId}, the one starting now.`
             : `will go into the next free round (one sponsor per round, in order${
@@ -109,7 +109,7 @@ function Outcome({ outcome, reference }: { outcome: PaymentOutcome; reference: s
     return (
       <Card title="Top-up received!" icon={CircleCheck} tone="good">
         <p>
-          <b>{fmt(outcome.coins)} coins</b> were added to your ad for <b>{outcome.brand}</b>: about {fmt(outcome.taps)} more players tapping
+          <b>{fmt(outcome.coins)} mint</b> was added to your ad for <b>{outcome.brand}</b>: about {fmt(outcome.taps)} more players tapping
           it. It&apos;s showing now.
         </p>
         <ManageButton reference={reference} />
@@ -126,7 +126,7 @@ function Outcome({ outcome, reference }: { outcome: PaymentOutcome; reference: s
         <p>Thanks, your payment went through. We&apos;ll email {outcome.email} about your ad.</p>
       ) : (
         <p>
-          <b>{outcome.brand}</b> is on billboards in every city now, with <b>{fmt(outcome.coins)} coins</b> for players: about{" "}
+          <b>{outcome.brand}</b> is on billboards in every city now, with <b>{fmt(outcome.coins)} mint</b> for players: about{" "}
           {fmt(outcome.taps)} people tapping your ad{outcome.endsAt ? `, until ${date(outcome.endsAt)}` : ""}.
         </p>
       )}

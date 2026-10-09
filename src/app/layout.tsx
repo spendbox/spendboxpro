@@ -21,8 +21,10 @@ const display = localFont({
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
-  title: { default: "Hide & Seek", template: "%s · Hide & Seek" },
-  description: "One shared world. Hide on the grid, or search it for coins.",
+  title: { default: "Newtown", template: "%s · Newtown" },
+  description: "Newtown is a living 3D city game. Hide as a ghost, hunt for ghosts, ride, play and chat, and earn mint. Play at newtown.world.",
+  applicationName: "Newtown",
+  openGraph: { siteName: "Newtown", type: "website", url: "/" },
 };
 
 export const viewport: Viewport = {

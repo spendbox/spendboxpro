@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft } from "@/components/icons";
 import { AD_POLICY } from "@/lib/ads";
+import { CONTACT_EMAIL, SITE_DOMAIN } from "@/lib/brand";
 
 export const metadata: Metadata = {
   title: "Advertising policy",
-  description: "What you can and can't advertise on Hide & Seek.",
+  description: "What you can and can't advertise on Newtown.",
 };
 
 export default function PolicyPage() {
@@ -46,7 +47,7 @@ export default function PolicyPage() {
 
       <Section title="Who sees your ad">
         <p>
-          Hide &amp; Seek is for adults (18 and over), mostly in Nigeria. You pay only when a signed-in player taps your billboard to
+          Newtown is for adults (18 and over), mostly in Nigeria. You pay only when a signed-in player taps your billboard to
           look at your ad. Each player can do that once a day per ad, so your numbers are real people, not one person tapping again
           and again.
         </p>
@@ -59,7 +60,17 @@ export default function PolicyPage() {
         </p>
       </Section>
 
-      <p className="text-sm text-muted">Questions about this policy? Reply to any email we&apos;ve sent you.</p>
+      <Section title="Contact">
+        <p>
+          Questions, complaints or takedown requests: email{" "}
+          <a href={`mailto:${CONTACT_EMAIL}`} className="font-semibold underline">
+            {CONTACT_EMAIL}
+          </a>
+          . Newtown lives at {SITE_DOMAIN}.
+        </p>
+      </Section>
+
+      <p className="text-sm text-muted">Questions about this policy? Email {CONTACT_EMAIL} or reply to any email we&apos;ve sent you.</p>
     </main>
   );
 }

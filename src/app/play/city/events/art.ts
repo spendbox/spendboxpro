@@ -738,7 +738,7 @@ export function createUiSheet(): UiSheet {
       c.fillText(label, 128, 186);
       c.font = `800 26px ${FONT}`;
       c.fillStyle = "#b8590b";
-      c.fillText("+100 coins", 128, 222);
+      c.fillText("+100 mint", 128, 222);
       done();
     },
     dispose: () => texture.dispose(),

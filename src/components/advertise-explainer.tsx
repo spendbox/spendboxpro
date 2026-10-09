@@ -18,13 +18,13 @@ const POINTS: { icon: LucideIcon; text: React.ReactNode }[] = [
     icon: Coins,
     text: (
       <>
-        Your budget becomes a pool of coins (₦5 = 1 coin). Each player who taps your ad gets <b>5 coins</b> from it, so you pay only
+        Your budget becomes a pool of mint (₦5 = 1 mint). Each player who taps your ad gets <b>5 mint</b> from it, so you pay only
         for real people looking.
       </>
     ),
   },
   { icon: Eye, text: "People watching without an account can tap your ad too: free for you." },
-  { icon: Hourglass, text: "Run it for 1 to 8 weeks. Unused coins at the end of your run expire." },
+  { icon: Hourglass, text: "Run it for 1 to 8 weeks. Unused mint at the end of your run expires." },
   { icon: ChartColumn, text: "No game account needed. Track taps and clicks, change your ad, pause or top up any time." },
 ];
 
@@ -32,9 +32,9 @@ export function AdvertiseExplainer({ onClose }: { onClose: () => void }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-gold via-[#ffd76e] to-[#ffb020] p-4 text-ink">
-        <p className="text-xs font-bold uppercase tracking-wide opacity-70">Advertise on Hide &amp; Seek</p>
+        <p className="text-xs font-bold uppercase tracking-wide opacity-70">Advertise on Newtown</p>
         <h2 className="mt-1 font-display text-2xl font-bold leading-tight">Your brand on every billboard in the city</h2>
-        <p className="mt-1 text-sm opacity-80">Players get coins for tapping your ad, so they actually look.</p>
+        <p className="mt-1 text-sm opacity-80">Players get mint for tapping your ad, so they actually look.</p>
         <Megaphone aria-hidden className="pointer-events-none absolute -bottom-3 -right-2 size-20 -rotate-12 opacity-20" strokeWidth={1.75} />
       </div>
 

@@ -27,5 +27,5 @@ export function siteUrl() {
   if (explicit) return explicit.replace(/\/$/, "");
   const vercel = process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_PROJECT_PRODUCTION_URL;
   if (vercel) return `https://${vercel}`;
-  return "http://localhost:3000";
+  return process.env.NODE_ENV === "production" ? "https://newtown.world" : "http://localhost:3000";
 }

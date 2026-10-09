@@ -6,10 +6,12 @@ import { adPricing } from "@/lib/ads";
 import { paystackEnabled } from "@/lib/paystack";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AdForm } from "./advertise-forms";
+import { Logo } from "@/components/logo";
+import { CONTACT_EMAIL, SITE_DOMAIN } from "@/lib/brand";
 
 export const metadata: Metadata = {
   title: "Advertise",
-  description: "Put your brand on every billboard in the Hide & Seek city. From ₦5,000 a week, live in minutes.",
+  description: "Put your brand on every billboard in the Newtown city. From ₦5,000 a week, live in minutes.",
 };
 
 async function stats() {
@@ -37,8 +39,8 @@ export default async function AdvertisePage() {
     [
       "What exactly am I paying for?",
       <>
-        Real people looking at your ad. Your budget becomes a pool of coins (₦{fmt(ngnPerCoin)} = 1 coin). Each signed-in player who
-        taps your billboard to look at it gets {fmt(pricing.viewReward)} coins from your pool. That tap is a <b>paid view</b>.
+        Real people looking at your ad. Your budget becomes a pool of mint (₦{fmt(ngnPerCoin)} = 1 mint). Each signed-in player who
+        taps your billboard to look at it gets {fmt(pricing.viewReward)} mint from your pool. That tap is a <b>paid view</b>.
       </>,
     ],
     [
@@ -47,20 +49,21 @@ export default async function AdvertisePage() {
     ],
     [
       "What are free views?",
-      `People watching without an account can tap your ad too, and so can players who've already earned coins from ${fmt(
+      `People watching without an account can tap your ad too, and so can players who've already earned mint from ${fmt(
         pricing.rewardsPerDay,
-      )} ads today. They get no coins, and those views are free for you. Link clicks are free too.`,
+      )} ads today. They get no mint, and those views are free for you. Link clicks are free too.`,
     ],
     [
       "Can one person drain my budget?",
       `No. Each player can earn from your ad once a day, and from ${fmt(pricing.rewardsPerDay)} ads a day at most.`,
     ],
     [
-      "What happens when my coins run out, or my weeks end?",
-      "Your ad stops showing. You can top up any time to keep it going. Unused coins at the end of your run expire, so we spread your coins evenly over your weeks.",
+      "What happens when my mint runs out, or my weeks end?",
+      "Your ad stops showing. You can top up any time to keep it going. Unused mint at the end of your run expires, so we spread your mint evenly over your weeks.",
     ],
     ["Can I change my ad?", "Yes. Change the picture, headline or link, pause or resume, and top up from your ad page. Changes go live in minutes."],
-    ["Who will see it?", "Adults (18+) playing and watching Hide & Seek, mostly in Nigeria, in every city on the map."],
+    ["Who will see it?", "Adults (18+) playing and watching Newtown, mostly in Nigeria, in every city on the map."],
+    ["How do I reach you?", `Email ${CONTACT_EMAIL} and a real person will get back to you. Newtown lives at ${SITE_DOMAIN}.`],
   ];
 
   return (
@@ -75,10 +78,11 @@ export default async function AdvertisePage() {
             Manage your ads
           </Link>
         </div>
-        <p className="mt-6 text-sm font-semibold uppercase tracking-wide text-gold-dark">Advertise on Hide &amp; Seek</p>
+        <Logo size={34} className="mt-6" />
+        <p className="mt-4 text-sm font-semibold uppercase tracking-wide text-gold-dark">Advertise on Newtown</p>
         <h1 className="mt-1 font-display text-4xl font-bold leading-tight sm:text-5xl">Put your brand on every billboard in the city</h1>
         <p className="mt-3 text-lg text-muted">
-          Players get coins for tapping your ad, so they actually look. You only pay for real taps. From ₦{fmt(pricing.minWeeklyNgn)} a
+          Players get mint for tapping your ad, so they actually look. You only pay for real taps. From ₦{fmt(pricing.minWeeklyNgn)} a
           week, live in minutes.
         </p>
         <div className="mt-5 flex flex-wrap items-center gap-3">
@@ -102,8 +106,8 @@ export default async function AdvertisePage() {
       <section className="rounded-2xl border border-line bg-panel p-5">
         <h2 className="font-display text-xl font-bold">How it works</h2>
         <p className="mt-2 text-ink">
-          Your budget fills your ad with coins (₦{fmt(ngnPerCoin)} = 1 coin). Every player who taps your billboard gets{" "}
-          {fmt(pricing.viewReward)} coins from it, so <b>₦{fmt(pricing.viewReward * ngnPerCoin)} buys one person really looking</b> at
+          Your budget fills your ad with mint (₦{fmt(ngnPerCoin)} = 1 mint). Every player who taps your billboard gets{" "}
+          {fmt(pricing.viewReward)} mint from it, so <b>₦{fmt(pricing.viewReward * ngnPerCoin)} buys one person really looking</b> at
           your ad.
         </p>
         <p className="mt-2 text-sm text-muted">

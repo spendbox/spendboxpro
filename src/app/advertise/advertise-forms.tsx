@@ -136,7 +136,7 @@ export function AdForm({ pricing }: { pricing: AdPricing }) {
                     <Coins className="size-5 text-gold-dark" />
                     {fmt(coins)}
                   </div>
-                  <div className="text-xs text-muted">coins in your ad&apos;s pool</div>
+                  <div className="text-xs text-muted">mint in your ad&apos;s pool</div>
                 </div>
                 <div className="rounded-lg bg-panel-2 p-2">
                   <div className="flex items-center justify-center gap-1.5 font-display text-xl font-bold">
@@ -147,8 +147,8 @@ export function AdForm({ pricing }: { pricing: AdPricing }) {
                 </div>
               </div>
               <p className="mt-2 text-xs text-muted">
-                Each tap gives a player {fmt(pricing.viewReward)} coins (coins ÷ {fmt(pricing.viewReward)} = taps). Plus free taps from
-                watchers and link clicks. Unused coins at the end of your run expire.
+                Each tap gives a player {fmt(pricing.viewReward)} mint (mint ÷ {fmt(pricing.viewReward)} = taps). Plus free taps from
+                watchers and link clicks. Unused mint at the end of your run expires.
               </p>
               {tooBig && <p className="mt-2 text-sm text-hit">For budgets over ₦{fmt(pricing.maxNgn)}, please contact us.</p>}
             </>

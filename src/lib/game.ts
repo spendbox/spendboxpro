@@ -1,4 +1,5 @@
 import "server-only";
+import { mintify } from "@/lib/brand";
 import { after } from "next/server";
 import { settleRecent } from "@/app/api/sports/settle";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -208,8 +209,11 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
   const nudge = due || nowMs - lastTickAt > 20_000;
   if (nudge) {
     lastTickAt = nowMs;
-    // Pay out finished sports matches, after the page has gone back (never slows it down).
-    after(() => settleRecent(nowMs).catch((e) => console.error("settling matches failed", e)));
+    // Pay out finished sports matches, after the page has gone back (never slows it down;
+    // not while the app is being built).
+    if (process.env.NEXT_PHASE !== "phase-production-build") {
+      after(() => settleRecent(nowMs).catch((e) => console.error("settling matches failed", e)));
+    }
   }
   const [, passive] = await Promise.all([
     nudge ? tickSoon(db).catch((e) => console.error("tick failed", e)) : null,
@@ -358,7 +362,7 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
       activeTraps++;
       if (sw.seeker_id === userId) mySweeps.push({ id: sw.id, tile: sw.tile, radius: sw.radius, found: sw.found, at: sw.created_at });
     }
-    notifications = (notes ?? []).map((n) => ({ id: n.id, kind: n.kind, body: n.body, tile: n.tile, at: n.created_at }));
+    notifications = (notes ?? []).map((n) => ({ id: n.id, kind: n.kind, body: mintify(n.body), tile: n.tile, at: n.created_at }));
     // Your own sweeps play the drone animation for you (nobody else sees them).
     events = [
       ...events.filter((x) => x.kind !== "sweep"),

@@ -10,7 +10,7 @@ import { SignInForm } from "./sign-in-form";
 
 export const metadata: Metadata = {
   title: "Manage your ads",
-  description: "See how your Hide & Seek billboard ads are doing, change them, pause them or add budget.",
+  description: "See how your Newtown billboard ads are doing, change them, pause them or add budget.",
   robots: { index: false },
 };
 
