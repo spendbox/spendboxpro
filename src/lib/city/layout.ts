@@ -35,7 +35,13 @@ export type TileKind =
   | "fire"
   | "club"
   | "restaurant"
-  | "structure";
+  | "structure"
+  // Neighbourhood places, one every few dozen lots in the suburbs (see featureAt).
+  | "school"
+  | "worship"
+  | "pitch"
+  | "playground"
+  | "monument";
 
 /** Big buildings that span a 2×2 block of tiles. */
 export type StructureType =
@@ -59,7 +65,10 @@ export type StructureType =
   // football stadium; "court" a basketball court with an indoor hall; boxing and wrestling arenas.
   | "court"
   | "boxing"
-  | "wrestling";
+  | "wrestling"
+  // Big landmarks (3×3 and up, see MEGAS): a domed capitol with gardens, a mega mall.
+  | "capitol"
+  | "megamall";
 
 /** The sport played at a venue. */
 export type Sport = "football" | "basketball" | "boxing" | "wrestling";
@@ -82,8 +91,22 @@ export type Tile = {
   billboard?: { id: string; design: number; face: number };
   /** Shape variant for towers, offices and houses, so neighbours don't all look alike. */
   v?: number;
-  /** Part of a 2×2 building: which one, where its corner is, and the tile it stands on otherwise. */
-  structure?: { type: StructureType; ax: number; az: number; anchor: boolean; name: string; /** Names for its levels (rooms inside), in order. */ inside?: string[] };
+  /**
+   * Part of a big building (2×2 unless w / d say otherwise): which one, where its corner is, and
+   * the tile it stands on otherwise.
+   */
+  structure?: {
+    type: StructureType;
+    ax: number;
+    az: number;
+    anchor: boolean;
+    name: string;
+    /** Names for its levels (rooms inside), in order. */
+    inside?: string[];
+    /** Size in tiles along x and z (2 when missing). */
+    w?: number;
+    d?: number;
+  };
   /** A single-tile landmark's own name ("Teslim Balogun Stadium", "Club Gbedu"...). */
   name?: string;
   /** A little named decoration on this lot (a suya spot, a danfo park...), and which side faces the road. */
@@ -99,6 +122,14 @@ export type Tile = {
   /** The railway viaduct passes over this tile (and the station stands here). */
   rail?: boolean;
   station?: boolean;
+  /** A street crossing a lake on a low causeway (water either side). */
+  causeway?: boolean;
+  /** The open square either side of the station's glass hall. */
+  forecourt?: boolean;
+  /** Open sea (big towns reach the coast). */
+  sea?: boolean;
+  /** A lake or sea tile by the shore with a wooden jetty (which side faces land: 0 +x, 1 -x, 2 +z, 3 -z). */
+  jetty?: number;
   /** A player's house stands here (see src/lib/city/houses.ts). */
   home?: { slot: number; name: string; owner: string; ownerId: string; style: HouseStyle; wall: string; roof: string; interior: HouseInterior };
 };
@@ -130,6 +161,11 @@ export const KIND_LABEL: Record<TileKind, string> = {
   club: "Nightclub",
   restaurant: "Restaurant",
   structure: "Landmark",
+  school: "School",
+  worship: "Place of worship",
+  pitch: "Football pitch",
+  playground: "Playground",
+  monument: "Monument",
 };
 
 export const STRUCTURE_LABEL: Record<StructureType, string> = {
@@ -152,12 +188,15 @@ export const STRUCTURE_LABEL: Record<StructureType, string> = {
   court: "Basketball court",
   boxing: "Boxing arena",
   wrestling: "Wrestling arena",
+  capitol: "Capitol",
+  megamall: "Mega mall",
 };
 
 /** Everything the city can be made of, for the help screen. */
 export const CITY_ASSETS = {
   big: [
-    "Airports", "Sea ports", "Military camps", "Shopping malls", "Twin towers with a sky bridge", "Domed museums", "Funfairs", "Open-air markets", "Arenas",
+    "Football stadiums (a bowl of stands round the pitch, under a ring of roof)", "Domed capitols in gardens, with a statue out front", "Mega malls under glass",
+    "A grand station under a glass vault", "Airports", "Sea ports", "Military camps", "Shopping malls", "Twin towers with a sky bridge", "Domed museums", "Funfairs", "Open-air markets", "Arenas",
     "University campuses", "Hotels with rooftop pools", "Solar farms", "Power stations with steaming cooling towers", "Dams with spillways", "Oil rigs with gas flares",
     "Water parks with twisting slides",
   ],
@@ -166,8 +205,10 @@ export const CITY_ASSETS = {
     "Office blocks (plain, L-shaped, rooftop garden)",
     "Houses (pitched bungalow, flat modern with pool, duplex with garage)",
     "Hospitals", "Police stations", "Fire stations", "Nightclubs", "Restaurants", "Clock towers", "Construction sites with cranes", "Water towers", "Radio masts", "Fuel stations",
-    "Parks", "Woods", "Plazas with fountains", "Ponds", "Ferris wheels", "Wind turbines", "Billboards",
-    "Roads", "Bridges", "A river (sometimes)", "Small lakes", "Road works", "Hills and mountains around the city", "A railway on a viaduct, with a station",
+    "Supertall skyscrapers in the biggest downtowns", "Schools", "Mosques and churches", "Five-a-side pitches", "Playgrounds", "Monuments and statues",
+    "Parks", "Woods", "Plazas with fountains or statues", "Ponds", "Ferris wheels", "Wind turbines", "Billboards",
+    "Roads", "Winding lanes in the suburbs", "Bridges", "A river (sometimes)", "Big lakes with causeways and jetties", "The sea (when a town grows really big)",
+    "Road works", "Hills and mountains around the city", "A railway on a viaduct sweeping round in curves",
   ],
   moving: [
     "Cars, taxis, vans, buses, trucks and articulated lorries (and the odd traffic jam)", "Trains", "People out walking (with umbrellas when it rains)", "Boats",
@@ -252,19 +293,104 @@ export type CityPlan = {
   /** A river winding across the city (along x or z), or none. */
   river: { along: "x" | "z"; at: number; amp: number; wave: number; phase: number; width: number } | null;
   /**
-   * A railway on a viaduct above one long street: it runs along x (fixed z = at) or along z
-   * (fixed x = at). The station is a 3-tile platform centred at `station` along the line.
+   * A railway on a viaduct sweeping across the city in gentle S-bends: along x its centre line
+   * is z = at + amp·sin(x / wave + phase) (along z the same with x and z swapped; see
+   * railCentre). The station is a 5-tile glass hall on a straight stretch at `station`.
    */
-  rail: { along: "x" | "z"; at: number; station: number | null } | null;
+  rail: { along: "x" | "z"; at: number; station: number | null; amp: number; wave: number; phase: number } | null;
+  /** Big lakes (wobbly ovals). */
+  lakes: { x: number; z: number; rx: number; rz: number }[];
+  /** The coast: the sea starts about `dist` out in direction (nx, nz) (only very big towns reach it). */
+  sea: { nx: number; nz: number; dist: number };
+  /** Big landmarks of 3×3 tiles and up (the stadium, the capitol, mega malls), and what's where. */
+  megas: Mega[];
+  megaAt: Map<number, number>;
+  /** Winding lanes per 16×16 stretch of suburb (filled in as needed). */
+  lanes: Map<string, Set<number> | null>;
+  /** One neighbourhood place per 6×6 cell of suburb (filled in as needed). */
+  features: Map<string, { x: number; z: number; kind: TileKind } | null>;
   palette: Palette;
   /** Players' houses in this game, by tile (set by placeHouses in ./houses.ts). */
   homes?: Map<number, TownHouse>;
 };
 
+/** A big landmark of 3×3 tiles or more. */
+export type Mega = { type: StructureType; ax: number; az: number; w: number; d: number; name: string; inside?: string[] };
+
+/** A number for a grid spot (for quick lookups). */
+const nkey = (x: number, z: number) => (x + 32768) * 65536 + (z + 32768);
+
+/** Where the railway's centre line is across the line, at a position along it. */
+export function railCentre(plan: CityPlan, along: number) {
+  const r = plan.rail!;
+  return r.at + r.amp * Math.sin(along / r.wave + r.phase);
+}
+
+/** The railway's tile at a position along the line (one per step along). */
+export function railRow(plan: CityPlan, along: number) {
+  return Math.round(railCentre(plan, along));
+}
+
 /** Is (x, z) under the railway viaduct? */
 export function onRail(plan: CityPlan, x: number, z: number) {
   const r = plan.rail;
-  return !!r && (r.along === "z" ? x === r.at : z === r.at);
+  if (!r) return false;
+  return r.along === "z" ? x === railRow(plan, z) : z === railRow(plan, x);
+}
+
+/** The station's middle tile (where its entrance is). */
+export function stationXZ(plan: CityPlan): { x: number; z: number } | null {
+  const r = plan.rail;
+  if (!r || r.station === null) return null;
+  const c = railRow(plan, r.station);
+  return r.along === "z" ? { x: c, z: r.station } : { x: r.station, z: c };
+}
+
+/** A big building's size in tiles. */
+export function structureSize(st: { w?: number; d?: number }) {
+  return { w: st.w ?? 2, d: st.d ?? 2 };
+}
+
+/** The middle of a big building (city units). */
+export function structureCentre(st: { ax: number; az: number; w?: number; d?: number }) {
+  const { w, d } = structureSize(st);
+  return { x: st.ax + (w - 1) / 2, z: st.az + (d - 1) / 2 };
+}
+
+/** Is (x, z) in a big lake? */
+export function inLake(plan: CityPlan, x: number, z: number) {
+  for (const L of plan.lakes) {
+    const dx = (x - L.x) / L.rx;
+    const dz = (z - L.z) / L.rz;
+    if (Math.abs(dx) > 1.6 || Math.abs(dz) > 1.6) continue;
+    const wobble = (smoothNoise(x / 2.5 + L.x, z / 2.5 + L.z, plan.seed + 31) - 0.5) * 0.7;
+    if (Math.hypot(dx, dz) + wobble < 1) return true;
+  }
+  return false;
+}
+
+/** Is (x, z) out at sea? */
+export function inSea(plan: CityPlan, x: number, z: number) {
+  const { nx, nz, dist } = plan.sea;
+  const out = x * nx + z * nz;
+  if (out < dist - 6) return false;
+  const along = -x * nz + z * nx;
+  // A wavy coastline with bays and headlands.
+  const coast = dist + (smoothNoise(along / 7, 3.3, plan.seed + 37) - 0.5) * 12 + Math.sin(along / 11 + plan.seed) * 2;
+  return out > coast;
+}
+
+/** Is (x, z) in the river? */
+function inRiver(plan: CityPlan, x: number, z: number) {
+  if (!plan.river) return false;
+  const along = plan.river.along === "x" ? x : z;
+  const across = plan.river.along === "x" ? z : x;
+  return Math.abs(across - riverCentre(plan, along)) <= plan.river.width;
+}
+
+/** Any water: river, lake or sea (not the little ponds and lakes inside blocks). */
+function wet(plan: CityPlan, x: number, z: number) {
+  return inRiver(plan, x, z) || inLake(plan, x, z) || inSea(plan, x, z);
 }
 
 /** Where the river's centre line is, for a position along it. */
@@ -341,6 +467,18 @@ export function makePlan(seed: number): CityPlan {
       weight: 0.7 + r(40 + k) * 0.45,
     });
   }
+  // Further out, more downtowns that only appear as the town grows: a big town becomes a
+  // megacity with skyline after skyline (and they're taller the further out they are).
+  for (let k = 0; k < 7; k++) {
+    const angle = r(100 + k) * Math.PI * 2;
+    const dist = 30 + k * 15 + r(110 + k) * 8;
+    centres.push({
+      x: Math.round(Math.cos(angle) * dist),
+      z: Math.round(Math.sin(angle) * dist),
+      radius: 3 + r(120 + k) * 3,
+      weight: 0.95 + Math.min(0.35, k * 0.06) + r(130 + k) * 0.15,
+    });
+  }
   const style = {
     towers: 0.55 + r(70) * 0.75,
     green: (r(71) - 0.5) * 0.16,
@@ -370,26 +508,39 @@ export function makePlan(seed: number): CityPlan {
     }
   }
 
-  // About two cities in three have a railway, on a viaduct above a street near the middle.
+  // About two cities in three have a railway: a viaduct sweeping across the city in gentle
+  // S-bends, with a big glass station hall on a straight stretch near the middle.
   let rail: CityPlan["rail"] = null;
   if (r(80) < 0.7) {
     const along: "x" | "z" = r(81) < 0.5 ? "x" : "z";
-    const lines = along === "z" ? xs : zs; // the street it runs above
-    const cross = along === "z" ? zs : xs; // the streets it crosses
-    const zero = along === "z" ? x0 : z0;
-    const czero = along === "z" ? z0 : x0;
-    const at = lines[zero + Math.floor(r(82) * 5) - 2];
-    // The station sits on a straight stretch between two cross streets at least 4 apart.
-    let station: number | null = null;
-    for (const d of [0, -1, 1, -2, 2]) {
-      const k = czero + d;
-      if (cross[k + 1] - cross[k] >= 4) {
-        station = cross[k] + 2;
-        break;
-      }
+    const wave = 7 + r(83) * 6;
+    // Now and then nearly straight; mostly properly curvy (but gentle enough for trains).
+    const amp = Math.min(wave * 0.42, r(84) < 0.15 ? 0.6 : 2.5 + r(85) * 2.5);
+    const phase = r(86) * Math.PI * 2;
+    const at0 = Math.round((r(82) - 0.5) * 8);
+    // The station: on a crest of the curve nearest the middle (where the line runs straight).
+    let station = 0;
+    for (let k = -4; k <= 4; k++) {
+      const a = wave * (Math.PI / 2 - phase + k * Math.PI);
+      if (k === -4 || Math.abs(a) < Math.abs(station)) station = a;
     }
-    if (at !== undefined) rail = { along, at, station };
+    station = Math.round(station);
+    // Line the crest up with a row of tiles, so the station hall sits square on it.
+    const c = at0 + amp * Math.sin(station / wave + phase);
+    rail = { along, at: at0 + (Math.round(c) - c), station, amp, wave, phase };
   }
+
+  // Big lakes out in the districts, and (for really big towns) the coast.
+  const lakes: CityPlan["lakes"] = [];
+  const lakeCount = 1 + (r(140) < 0.65 ? 1 : 0) + (r(141) < 0.35 ? 1 : 0);
+  for (let k = 0; k < lakeCount + 3; k++) {
+    const angle = r(150 + k) * Math.PI * 2;
+    // The first ones near enough to see in a small town; the rest further out.
+    const dist = k < lakeCount ? 13 + r(160 + k) * 20 : 38 + (k - lakeCount) * 16 + r(160 + k) * 10;
+    lakes.push({ x: Math.round(Math.cos(angle) * dist), z: Math.round(Math.sin(angle) * dist), rx: 2.6 + r(170 + k) * 3.4, rz: 2.6 + r(180 + k) * 3.4 });
+  }
+  const seaAngle = r(190) * Math.PI * 2;
+  const sea = { nx: Math.cos(seaAngle), nz: Math.sin(seaAngle), dist: 48 + r(191) * 18 };
 
   // The city's name and street names.
   let pickW = r(60) * FLAVORS.reduce((t, f) => t + f.weight, 0);
@@ -413,14 +564,68 @@ export function makePlan(seed: number): CityPlan {
     centres,
     river,
     rail,
+    lakes,
+    sea,
+    megas: [],
+    megaAt: new Map(),
+    lanes: new Map(),
+    features: new Map(),
     cache: new Map(),
     structures: new Map(),
     venues: new Map(),
     eggs: new Map(),
     palette: PALETTES[Math.floor(r(7) * PALETTES.length)],
   };
+  placeMegas(plan);
   placeVenues(plan);
   return plan;
+}
+
+/**
+ * The big landmarks, from the middle outwards: the football stadium (4×4), the capitol (3×3)
+ * and a mega mall near the middle, then more as the town grows into a megacity. Each takes over
+ * whatever streets ran through its spot (they end at its plaza). Never on water, the railway or
+ * another landmark.
+ */
+const MEGAS: { type: StructureType; w: number; d: number; min: number; max: number }[] = [
+  { type: "arena", w: 4, d: 4, min: 3.5, max: 7.5 },
+  { type: "capitol", w: 3, d: 3, min: 6.5, max: 11 },
+  { type: "megamall", w: 3, d: 3, min: 11, max: 20 },
+  { type: "arena", w: 4, d: 4, min: 30, max: 44 },
+  { type: "megamall", w: 3, d: 3, min: 38, max: 54 },
+  { type: "capitol", w: 3, d: 3, min: 50, max: 68 },
+  { type: "megamall", w: 3, d: 3, min: 62, max: 84 },
+];
+
+function placeMegas(plan: CityPlan) {
+  const st = plan.rail && plan.rail.station !== null ? stationXZ(plan) : null;
+  MEGAS.forEach((m, k) => {
+    for (let tries = 0; tries < 40; tries++) {
+      const angle = hash(k, tries, plan.seed + 700) * Math.PI * 2;
+      const dist = m.min + hash(tries, k, plan.seed + 701) * (m.max - m.min);
+      const ax = Math.round(Math.cos(angle) * dist - m.w / 2);
+      const az = Math.round(Math.sin(angle) * dist - m.d / 2);
+      let ok = true;
+      for (let x = ax - 2; x < ax + m.w + 2 && ok; x++) {
+        for (let z = az - 2; z < az + m.d + 2 && ok; z++) {
+          // Two tiles clear of other landmarks and the railway, one clear of water.
+          const ring = Math.max(ax - x, x - (ax + m.w - 1), az - z, z - (az + m.d - 1), 0);
+          if (plan.megaAt.has(nkey(x, z)) || onRail(plan, x, z)) ok = false;
+          else if (st && Math.abs(x - st.x) <= 3 && Math.abs(z - st.z) <= 3) ok = false;
+          else if (ring <= 1 && wet(plan, x, z)) ok = false;
+        }
+      }
+      if (!ok) continue;
+      const known = famous(plan, m.type, ax, az, 520, 0.8);
+      const name = known ? nameOf(known) : structureName(plan, m.type, ax, az);
+      const mega: Mega = { type: m.type, ax, az, w: m.w, d: m.d, name };
+      if (known && typeof known !== "string" && known.inside) mega.inside = known.inside;
+      const id = plan.megas.length;
+      plan.megas.push(mega);
+      for (let x = ax; x < ax + m.w; x++) for (let z = az; z < az + m.d; z++) plan.megaAt.set(nkey(x, z), id);
+      return;
+    }
+  });
 }
 
 /** Index of the last line at or before v. */
@@ -442,14 +647,125 @@ const gapEW = (plan: CityPlan, j: number, k: number) => hash(j * 11 + 5, k * 17 
 
 /** Is there road at (x, z)? */
 export function isRoad(plan: CityPlan, x: number, z: number) {
+  // Big landmarks take over the streets through their spot, and roads stop at the sea.
+  if (plan.megaAt.has(nkey(x, z)) || inSea(plan, x, z)) return false;
   const k = plan.xAt.get(x);
   const j = plan.zAt.get(z);
+  // Every other street crosses a big lake on a causeway; the rest stop at the shore.
+  if ((k !== undefined || j !== undefined) && inLake(plan, x, z) && !((k ?? 1) % 2 === 0 || (j ?? 1) % 2 === 0)) return false;
+  let grid = false;
   if (k !== undefined && j !== undefined) {
-    return !gapNS(plan, k, j - 1) || !gapNS(plan, k, j) || !gapEW(plan, j, k - 1) || !gapEW(plan, j, k);
+    grid = !gapNS(plan, k, j - 1) || !gapNS(plan, k, j) || !gapEW(plan, j, k - 1) || !gapEW(plan, j, k);
+  } else if (k !== undefined) grid = !gapNS(plan, k, below(plan.zs, z));
+  else if (j !== undefined) grid = !gapEW(plan, j, below(plan.xs, x));
+  return grid || laneAt(plan, x, z);
+}
+
+// ---------------------------------------------------------------- winding lanes
+// Out in the suburbs, a 16×16 stretch now and then gets a lane that wanders between two streets,
+// kinking sideways every few lots (each kink drawn as two rounded bends), so not every road is
+// a straight line on a grid.
+const LANE = 16;
+
+function laneAt(plan: CityPlan, x: number, z: number) {
+  const bx = Math.floor(x / LANE);
+  const bz = Math.floor(z / LANE);
+  const key = `${bx},${bz}`;
+  let set = plan.lanes.get(key);
+  if (set === undefined) {
+    set = makeLane(plan, bx, bz);
+    plan.lanes.set(key, set);
   }
-  if (k !== undefined) return !gapNS(plan, k, below(plan.zs, z));
-  if (j !== undefined) return !gapEW(plan, j, below(plan.xs, x));
-  return false;
+  return !!set && set.has(nkey(x, z));
+}
+
+function makeLane(plan: CityPlan, bx: number, bz: number): Set<number> | null {
+  const cx = bx * LANE + LANE / 2;
+  const cz = bz * LANE + LANE / 2;
+  if (Math.hypot(cx, cz) < 10 || hash(bx, bz, plan.seed + 900) > 0.55 || densityAt(plan, cx, cz) > 0.3) return null;
+  const alongX = hash(bz, bx, plan.seed + 901) < 0.5;
+  // a = along the lane, c = across it.
+  const crossLines = alongX ? plan.xs : plan.zs;
+  const crossAt = alongX ? plan.xAt : plan.zAt;
+  const sideAt = alongX ? plan.zAt : plan.xAt;
+  const a0 = (alongX ? bx : bz) * LANE;
+  const c0 = (alongX ? bz : bx) * LANE;
+  // From the first street in the stretch to the last, so both ends join the grid.
+  const inside = crossLines.filter((v) => v >= a0 && v < a0 + LANE);
+  if (inside.length < 2 || inside[inside.length - 1] - inside[0] < 4) return null;
+  const near = (c: number) => sideAt.has(c - 1) || sideAt.has(c) || sideAt.has(c + 1);
+  let c = c0 + 2 + Math.floor(hash(bx, bz, plan.seed + 902) * (LANE - 4));
+  for (let t = 0; t < LANE && near(c); t++) c = c0 + 2 + ((c - c0 - 1) % (LANE - 4));
+  if (near(c)) return null;
+  const out = new Set<number>();
+  const put = (a: number, cc: number) => {
+    const x = alongX ? a : cc;
+    const z = alongX ? cc : a;
+    if (!wet(plan, x, z) && !plan.megaAt.has(nkey(x, z))) out.add(nkey(x, z));
+  };
+  let lastKink = -9;
+  for (let a = inside[0]; a <= inside[inside.length - 1]; a++) {
+    put(a, c);
+    const kink = hash(a, c, plan.seed + 903) < 0.62;
+    if (kink && a - lastKink >= 2 && a > inside[0] && a < inside[inside.length - 1] && !crossAt.has(a)) {
+      const nc = c + (hash(c, a, plan.seed + 904) < 0.5 ? -1 : 1);
+      if (nc > c0 && nc < c0 + LANE - 1 && !near(nc)) {
+        put(a, nc);
+        c = nc;
+        lastKink = a;
+      }
+    }
+  }
+  return out.size ? out : null;
+}
+
+// ---------------------------------------------------------------- neighbourhood places
+// Every 6×6 cell of suburb gets one interesting place on a lot by a road (most cells): a
+// school, a mosque or church, a little football pitch, a playground or a monument.
+const FEATURE = 6;
+const FEATURE_KINDS: TileKind[] = ["school", "worship", "pitch", "playground", "worship", "school", "pitch", "playground", "monument"];
+
+function featureAt(plan: CityPlan, x: number, z: number): TileKind | null {
+  const fx = Math.floor(x / FEATURE);
+  const fz = Math.floor(z / FEATURE);
+  const key = `${fx},${fz}`;
+  let f = plan.features.get(key);
+  if (f === undefined) {
+    f = pickFeature(plan, fx, fz);
+    plan.features.set(key, f);
+  }
+  return f && f.x === x && f.z === z ? f.kind : null;
+}
+
+function pickFeature(plan: CityPlan, fx: number, fz: number) {
+  if (hash(fx, fz, plan.seed + 950) > 0.8) return null;
+  let best: { x: number; z: number; score: number } | null = null;
+  for (let dx = 0; dx < FEATURE; dx++) {
+    for (let dz = 0; dz < FEATURE; dz++) {
+      const x = fx * FEATURE + dx;
+      const z = fz * FEATURE + dz;
+      if (Math.hypot(x, z) < 6 || plan.xAt.has(x) || plan.zAt.has(z) || isRoad(plan, x, z)) continue;
+      if (plan.megaAt.has(nkey(x, z)) || wet(plan, x, z) || onRail(plan, x, z)) continue;
+      if (smoothNoise(x / 4 - 9, z / 4 + 4, plan.seed + 23) > 0.88) continue;
+      if (densityAt(plan, x, z) > 0.24) continue;
+      if (smoothNoise(x / 6 + 31, z / 6 - 17, plan.seed + 11) - plan.style.green > 0.7) continue;
+      if (!(isRoad(plan, x + 1, z) || isRoad(plan, x - 1, z) || isRoad(plan, x, z + 1) || isRoad(plan, x, z - 1))) continue;
+      const score = hash(x, z, plan.seed + 951);
+      if (!best || score > best.score) best = { x, z, score };
+    }
+  }
+  if (!best) return null;
+  const kind = FEATURE_KINDS[Math.floor(hash(fz, fx, plan.seed + 952) * FEATURE_KINDS.length) % FEATURE_KINDS.length];
+  return { x: best.x, z: best.z, kind };
+}
+
+/** Is (x, z) one of the open squares either side of the station hall? */
+function isForecourt(plan: CityPlan, x: number, z: number) {
+  const r = plan.rail;
+  if (!r || r.station === null) return false;
+  const along = r.along === "z" ? z : x;
+  const across = r.along === "z" ? x : z;
+  return Math.abs(along - r.station) <= 2 && Math.abs(across - railRow(plan, along)) === 1;
 }
 
 /** Which neighbours are road: 1 north (z-1), 2 east (x+1), 4 south (z+1), 8 west (x-1). */
@@ -463,6 +779,10 @@ export function roadMask(plan: CityPlan, x: number, z: number) {
 }
 
 const LOTS: TileKind[] = ["house", "office", "park", "trees", "plaza"];
+/** What can stay under the railway viaduct (everything else makes way for paving). */
+const UNDER_RAIL = new Set<TileKind>(["road", "bridge", "river", "lake", "park", "plaza", "trees", "pond"]);
+/** What stays round the station (roads and water; the rest becomes its square). */
+const UNDER_RAIL_KEEP = new Set<TileKind>(["road", "bridge", "river", "lake", "structure"]);
 
 /** One billboard per 10×10 block of the city, on a lot right next to a road, facing it. */
 function blockBillboard(plan: CityPlan, x: number, z: number) {
@@ -506,10 +826,10 @@ const STRUCTURES_BY_ZONE: { min: number; chance: number; types: StructureType[] 
 ];
 
 /**
- * The sports venues: a football stadium, a basketball court, a boxing arena and a wrestling
- * arena, each on a 2×2 cell of plain lots near the middle of the city (so even small cities
- * have them), nearest first, not right next to each other. The stadium gets the nearest cell;
- * the others take turns (by round). Cities with no room left (rare) go without.
+ * The smaller sports venues: a basketball court, a boxing arena and a wrestling arena, each on
+ * a 2×2 cell of plain lots near the middle of the city (so even small cities have them), nearest
+ * first, not right next to each other, taking turns (by round). (The football stadium is one of
+ * the big landmarks, see MEGAS.) Cities with no room left (rare) go without.
  */
 function placeVenues(plan: CityPlan) {
   const cells: { ax: number; az: number; d: number }[] = [];
@@ -536,7 +856,7 @@ function placeVenues(plan: CityPlan) {
   const rest: StructureType[] = ["court", "boxing", "wrestling"];
   rest.sort((a, b) => hash(a.length, a.charCodeAt(0), plan.seed + 611) - hash(b.length, b.charCodeAt(0), plan.seed + 611));
   const taken: { ax: number; az: number }[] = [];
-  for (const type of ["arena", ...rest] as StructureType[]) {
+  for (const type of rest) {
     const c = cells.find((c) => taken.every((o) => Math.abs(o.ax - c.ax) + Math.abs(o.az - c.az) >= 4));
     if (!c) break;
     taken.push(c);
@@ -565,7 +885,10 @@ function structureAt(plan: CityPlan, x: number, z: number) {
     const members = [[ax, az], [ax + 1, az], [ax, az + 1], [ax + 1, az + 1]];
     const venue = plan.venues.get(key);
     if (venue) found = structureNamed(plan, venue, ax, az);
-    else if (roll < zone.chance && members.every(([mx, mz]) => LOTS.includes(baseTile(plan, mx, mz).kind))) {
+    else if (
+      roll < zone.chance &&
+      members.every(([mx, mz]) => LOTS.includes(baseTile(plan, mx, mz).kind) && !onRail(plan, mx, mz) && !isForecourt(plan, mx, mz))
+    ) {
       let type = zone.types[Math.floor(hash(ax, az, plan.seed + 502) * zone.types.length)];
       // A dam needs water next to it (the river or a lake); otherwise it's a power station.
       if (type === "dam" && !nearWater(plan, ax, az)) type = "power";
@@ -660,6 +983,10 @@ function structureName(plan: CityPlan, type: StructureType, ax: number, az: numb
       return pick([`${city} Oil Platform`, `${street} Oil Rig`, `${city} Offshore Rig`], 14);
     case "waterpark":
       return pick([`${city} Water Park`, `${street} Splash Park`, `${city} Aqua World`], 15);
+    case "capitol":
+      return pick([`${city} City Hall`, `${city} State House`, `The ${city} Capitol`, `${city} Parliament`], 19);
+    case "megamall":
+      return pick([`${city} Mega Mall`, `${street} Galleria`, `${city} Grand Mall`, `The ${city} Dome`], 20);
   }
 }
 
@@ -796,13 +1123,19 @@ function homeTile(t: Tile, h: TownHouse): Tile {
 /** What the city plan puts on tile i, before any player's house. */
 export function lotAt(plan: CityPlan, i: number): Tile {
   const [x, z] = spiralXY(i);
-  const t = baseTile(plan, x, z);
+  let t = baseTile(plan, x, z);
   t.i = i;
   if (onRail(plan, x, z)) {
+    // Under the viaduct: roads, water and open ground carry on; buildings make way for a strip
+    // of paving with the viaduct's legs.
+    if (!UNDER_RAIL.has(t.kind)) t = { i, x, z, kind: "plaza", top: 0.6, r: t.r };
     t.rail = true;
     const along = plan.rail!.along === "z" ? z : x;
-    if (plan.rail!.station !== null && Math.abs(along - plan.rail!.station) <= 1) t.station = true;
-    t.top = Math.max(t.top, t.station ? 1.75 : 1.2);
+    if (plan.rail!.station !== null && Math.abs(along - plan.rail!.station) <= 2) t.station = true;
+    t.top = Math.max(t.top, t.station ? 2 : 1.2);
+  } else if (isForecourt(plan, x, z) && !UNDER_RAIL_KEEP.has(t.kind)) {
+    // Either side of the station: an open square under the glass hall's roof.
+    return { i, x, z, kind: "plaza", top: 1.9, r: t.r, forecourt: true };
   }
   if (!LOTS.includes(t.kind)) {
     const named = t.rail ? undefined : tileName(plan, t);
@@ -813,7 +1146,7 @@ export function lotAt(plan: CityPlan, i: number): Tile {
   if (st) {
     const heights: Record<StructureType, number> = {
       mall: 1.2, twin: 7, museum: 1.8, funfair: 2.8, market: 0.7, arena: 1.1, campus: 1.6, hotel: 4.4, solar: 0.5, airport: 1.6, port: 1.8, military: 1.2,
-      power: 3.4, dam: 0.9, oilrig: 2.8, waterpark: 1.3, court: 0.9, boxing: 1.35, wrestling: 1.35,
+      power: 3.4, dam: 0.9, oilrig: 2.8, waterpark: 1.3, court: 0.9, boxing: 1.35, wrestling: 1.35, capitol: 2.3, megamall: 1.2,
     };
     const info = plan.structures.get(`${st.ax},${st.az}`);
     const structure: NonNullable<Tile["structure"]> = { type: st.type, name: st.name, ax: st.ax, az: st.az, anchor: st.anchor };
@@ -901,10 +1234,49 @@ export function addressOf(plan: CityPlan, t: Tile): string {
 
 const mod = (a: number, n: number) => ((a % n) + n) % n;
 
+/** How tall each big landmark stands (for markers above it). */
+const MEGA_TOP: Partial<Record<StructureType, number>> = { arena: 1.1, capitol: 2.3, megamall: 1.2 };
+
+/** A road tile: its direction, bends and junctions, roundabouts, road works. */
+function roadTile(plan: CityPlan, x: number, z: number, r: Tile["r"]): Tile {
+  const s = plan.seed;
+  const mask = roadMask(plan, x, z);
+  const ew = (mask & 2) || (mask & 8);
+  const ns = (mask & 1) || (mask & 4);
+  const dir: Tile["road"] = ew && ns ? "cross" : ew ? "x" : "z";
+  const roundabout = mask === 15 && plan.xAt.has(x) && plan.zAt.has(z) && hash(x, z, s + 808) < plan.style.roundabouts;
+  // Now and then a straight stretch is dug up for road works, or has a car stopped at the side.
+  const straight = mask === 5 || mask === 10;
+  const works = straight && Math.hypot(x, z) > 2.5 && hash(x, z, s + 1201) < 0.02;
+  const roll = hash(x, z, s + 1301);
+  const incident = straight && !works ? (roll < 0.007 ? "breakdown" : roll < 0.011 ? "police" : undefined) : undefined;
+  return { i: -1, x, z, kind: "road", top: works ? 0.45 : roundabout ? 0.3 : 0.05, road: dir, mask, roundabout, r, works: works || undefined, incident };
+}
+
+/** A wooden jetty on some lake and sea tiles right by the shore (facing the land). */
+function jettyAt(plan: CityPlan, x: number, z: number) {
+  if (hash(x, z, plan.seed + 960) > 0.14) return undefined;
+  const sides: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  const face = sides.findIndex(([dx, dz]) => !wet(plan, x + dx, z + dz) && !plan.megaAt.has(nkey(x + dx, z + dz)));
+  return face >= 0 ? face : undefined;
+}
+
 function baseTile(plan: CityPlan, x: number, z: number): Tile {
   const i = -1;
   const s = plan.seed;
   const r: Tile["r"] = [hash(x, z, s), hash(x, z, s + 1), hash(x, z, s + 2), hash(x, z, s + 3)];
+
+  // A big landmark: the stadium, the capitol, a mega mall.
+  const mi = plan.megaAt.get(nkey(x, z));
+  if (mi !== undefined) {
+    const m = plan.megas[mi];
+    const structure: NonNullable<Tile["structure"]> = { type: m.type, name: m.name, ax: m.ax, az: m.az, anchor: x === m.ax && z === m.az, w: m.w, d: m.d };
+    if (m.inside) structure.inside = m.inside;
+    return { i, x, z, kind: "structure", top: MEGA_TOP[m.type] ?? 1.5, r, structure };
+  }
+  // The sea (only very big towns get this far out).
+  if (inSea(plan, x, z)) return { i, x, z, kind: "lake", top: 0.1, r, sea: true, jetty: jettyAt(plan, x, z) };
+
   const onLine = plan.xAt.has(x) || plan.zAt.has(z);
   const road = isRoad(plan, x, z);
 
@@ -918,19 +1290,16 @@ function baseTile(plan: CityPlan, x: number, z: number): Tile {
     }
   }
 
-  if (road) {
-    const mask = roadMask(plan, x, z);
-    const ew = (mask & 2) || (mask & 8);
-    const ns = (mask & 1) || (mask & 4);
-    const dir: Tile["road"] = ew && ns ? "cross" : ew ? "x" : "z";
-    const roundabout = mask === 15 && plan.xAt.has(x) && plan.zAt.has(z) && hash(x, z, s + 808) < plan.style.roundabouts;
-    // Now and then a straight stretch is dug up for road works, or has a car stopped at the side.
-    const straight = mask === 5 || mask === 10;
-    const works = straight && Math.hypot(x, z) > 2.5 && hash(x, z, s + 1201) < 0.02;
-    const roll = hash(x, z, s + 1301);
-    const incident = straight && !works ? (roll < 0.007 ? "breakdown" : roll < 0.011 ? "police" : undefined) : undefined;
-    return { i, x, z, kind: "road", top: works ? 0.45 : roundabout ? 0.3 : 0.05, road: dir, mask, roundabout, r, works: works || undefined, incident };
+  // Big lakes: streets cross them on low causeways, so every street stays connected.
+  if (inLake(plan, x, z)) {
+    if (road) {
+      const t = roadTile(plan, x, z, r);
+      return { ...t, top: 0.05, roundabout: false, works: undefined, incident: undefined, causeway: true };
+    }
+    return { i, x, z, kind: "lake", top: 0.1, r, jetty: jettyAt(plan, x, z) };
   }
+
+  if (road) return roadTile(plan, x, z, r);
 
   // Where a stretch of street was left out: a strip of park or a little square.
   if (onLine) return { i, x, z, kind: r[0] < 0.75 ? "park" : "plaza", top: r[0] < 0.75 ? 0.9 : 0.6, r };
@@ -948,8 +1317,10 @@ function baseTile(plan: CityPlan, x: number, z: number): Tile {
   }
   const nextToRoad = isRoad(plan, x + 1, z) || isRoad(plan, x - 1, z) || isRoad(plan, x, z + 1) || isRoad(plan, x, z - 1);
   if (density > 0.56) {
-    const v = Math.floor(r[3] * 5);
     const h = (1.6 + density * 5.5 * (0.5 + r[1] * 0.9)) * plan.style.towers;
+    // The heart of a big downtown now and then gets a supertall: setbacks, a crown and a spire.
+    if (density > 0.92 && r[2] < 0.14) return { i, x, z, kind: "tower", top: Math.max(5, h * 1.5) + 1.4, r, v: 5 };
+    const v = Math.floor(r[3] * 5);
     return { i, x, z, kind: "tower", top: Math.max(1.6, h) + (v === 3 ? 1.6 : 0.4), r, v };
   }
   if (density > 0.24) {
@@ -963,6 +1334,12 @@ function baseTile(plan: CityPlan, x: number, z: number): Tile {
     if (r[0] >= 0.158 && r[0] < 0.18 && nextToRoad) return { i, x, z, kind: "restaurant", top: 0.75, r, v: Math.floor(r[2] * 2) };
     if (r[0] > 0.988 && nextToRoad) return { i, x, z, kind: "fuel", top: 0.5, r };
     return { i, x, z, kind: "office", top: 0.9 + r[1] * 1.8 + density * 1.2, r, v: Math.floor(r[2] * 3) };
+  }
+  // The neighbourhood's own place (a school, a mosque or church, a pitch, a playground…).
+  const feature = featureAt(plan, x, z);
+  if (feature) {
+    const tops: Partial<Record<TileKind, number>> = { school: 0.9, worship: 1.6, pitch: 0.3, playground: 0.5, monument: 1.4 };
+    return { i, x, z, kind: feature, top: tops[feature] ?? 0.8, r, v: Math.floor(r[2] * 2) };
   }
   if (Math.hypot(x, z) > 13 && r[2] < 0.035) return { i, x, z, kind: "turbine", top: 3.2, r };
   if (r[3] > 0.997) return { i, x, z, kind: "ferris", top: 2.6, r };

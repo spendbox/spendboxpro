@@ -86,6 +86,18 @@ named after a real place (Ikeja, Lekki, Abuja, Chicago, London, Accra, Nairobi, 
 see `src/lib/city/places.ts`) with matching street names, and every spot has an address like
 "14 Adekunle Street" or "Allen Ave & Obafemi Cl".
 
+Big landmarks of 3×3 and 4×4 tiles (`MEGAS` in `src/lib/city/layout.ts`, drawn in
+`src/app/play/city/megas.ts`): the football stadium (a bowl of tiered stands round a striped
+pitch, a white roof ring with an oval opening, floodlights), the domed capitol in its gardens
+with a reflecting pool and a statue, and mega malls under glass. They take over the streets in
+their spot (the streets end at their plaza), and more appear as the town grows: a second
+stadium, more malls and capitols further out, plus extra downtowns with supertall towers, so a
+big town turns into a megacity. Big lakes (crossed by causeways, with jetties and boats) and,
+for really big towns, the sea along one side. The railway sweeps across in gentle S-bends with
+a glass-vaulted grand station (`src/app/play/city/trains.ts`). Suburbs get winding lanes and,
+every 6×6 lots, a school, a mosque or church, a five-a-side pitch, a playground or a monument
+(`src/app/play/city/neighbourhood.ts`).
+
 Big 2×2 landmarks: shopping malls, twin towers, domed museums, funfairs, markets, arenas,
 university campuses, hotels with rooftop pools, solar farms. One-of-a-kind buildings:
 skyscrapers in five shapes, three kinds of office block and house, hospitals, clock towers,

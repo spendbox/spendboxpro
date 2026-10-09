@@ -7,7 +7,24 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar, type Avatar } from "@/lib/avatar";
-import { addressOf, hash, KIND_LABEL, makePlan, smoothNoise, stationName, spiralIndex, spiralXY, STRUCTURE_LABEL, tileAt, VENUE_SPORT, type CityPlan, type Tile } from "@/lib/city/layout";
+import {
+  addressOf,
+  hash,
+  KIND_LABEL,
+  makePlan,
+  smoothNoise,
+  stationName,
+  stationXZ,
+  spiralIndex,
+  spiralXY,
+  STRUCTURE_LABEL,
+  structureCentre,
+  structureSize,
+  tileAt,
+  VENUE_SPORT,
+  type CityPlan,
+  type Tile,
+} from "@/lib/city/layout";
 import { ABBREV } from "@/lib/city/places";
 import { daylight, weatherAt } from "@/lib/city/sky";
 import { npcsFor, type Npc } from "@/lib/npcs";
@@ -37,6 +54,8 @@ import { playSfx } from "./sound";
 import type { WorldEvent } from "@/lib/world-events";
 import { createWorldEvents } from "./city/world-events";
 import { placeHouses } from "@/lib/city/houses";
+import { megaParts, statue } from "./city/megas";
+import { causewayParts, jettyParts, neighbourhoodParts, supertallParts } from "./city/neighbourhood";
 import { homeLabel, type TownHouse } from "@/lib/houses";
 
 // The game board, drawn as a small living 3D city with three.js.
@@ -346,7 +365,8 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
   };
 
   if (t.kind === "river" || t.kind === "lake") {
-    add("water", { x, y: -0.03, z, sx: 1, sy: 0.03, sz: 1, ry: 0, color: t.kind === "river" ? 0x6fb7e0 : WATER });
+    add("water", { x, y: -0.03, z, sx: 1.02, sy: 0.03, sz: 1.02, ry: 0, color: t.kind === "river" ? 0x6fb7e0 : t.sea ? 0x4f9fd4 : WATER });
+    if (t.jetty !== undefined) jettyParts(t, add);
     return;
   }
 
@@ -380,6 +400,11 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
       add("trunk", { ...lamp, y: BRIDGE_TOP, sx: 0.35, sy: 0.32, sz: 0.35, ry: 0, color: 0x495057 });
       add("disc", { ...lamp, y: BRIDGE_TOP + 0.32, sx: 0.07, sy: 0.04, sz: 0.07, ry: 0, color: 0xffe8a3 });
     }
+    return;
+  }
+
+  if (t.kind === "road" && t.causeway) {
+    causewayParts(t, add);
     return;
   }
 
@@ -457,7 +482,7 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
     return;
   }
 
-  const GREEN_LOTS = ["park", "trees", "pond", "ferris", "turbine", "watertower", "mast"];
+  const GREEN_LOTS = ["park", "trees", "pond", "ferris", "turbine", "watertower", "mast", "pitch", "playground", "school", "worship", "monument"];
   const greenStructure = t.kind === "structure" && ["funfair", "solar", "campus", "dam"].includes(t.structure!.type);
   const lot = GREEN_LOTS.includes(t.kind) || greenStructure ? GRASS : SIDEWALK;
   add("ground", { x, y: 0, z, sx: 0.98, sy: 0.08, sz: 0.98, ry: 0, color: lot });
@@ -478,7 +503,9 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
     case "tower": {
       const color = pick(pal.towers, r[3]);
       const w = 0.62 + r[2] * 0.18;
-      if (t.v === 1) {
+      if (t.v === 5) {
+        supertallParts(t, color, B);
+      } else if (t.v === 1) {
         // Round glass tower
         const h = t.top - 0.4;
         B(0, 0.08, 0, w, h, w, color, 0, "cyl");
@@ -681,8 +708,26 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
       break;
     case "plaza":
       add("ground", { x, y: 0.08, z, sx: 0.8, sy: 0.02, sz: 0.8, ry: 0, color: 0xe7e1d5 });
-      add("disc", { x, y: 0.1, z, sx: 0.3, sy: 0.12, sz: 0.3, ry: 0, color: 0xcfd6dd });
-      add("water", { x, y: 0.22, z, sx: 0.22, sy: 0.02, sz: 0.22, ry: 0, color: WATER });
+      if (t.forecourt) {
+        // Under the station hall's roof: benches and planters.
+        for (const [px, pz] of [[-0.25, -0.25], [0.25, 0.25]]) {
+          B(px, 0.1, pz, 0.22, 0.05, 0.06, 0x8d5a3b);
+          tree(-px, pz, 0.35, r[0]);
+        }
+      } else if (r[1] < 0.22 && !t.rail) {
+        // A statue on a plinth in the middle of the square.
+        statue(B, 0, 0, 0.7);
+      } else {
+        add("disc", { x, y: 0.1, z, sx: 0.3, sy: 0.12, sz: 0.3, ry: 0, color: 0xcfd6dd });
+        add("water", { x, y: 0.22, z, sx: 0.22, sy: 0.02, sz: 0.22, ry: 0, color: WATER });
+      }
+      break;
+    case "school":
+    case "worship":
+    case "pitch":
+    case "playground":
+    case "monument":
+      neighbourhoodParts(t, plan, B, tree);
       break;
     case "fire":
       fireStationParts(t, B);
@@ -795,6 +840,8 @@ type TreeFn = (dx: number, dz: number, size: number, v: number) => void;
 
 /** The big 2×2 buildings, drawn from their corner tile (the block's centre is at +0.5, +0.5). */
 function structureParts(t: Tile, plan: CityPlan, B: BoxFn, tree: TreeFn) {
+  // The big ones (the stadium, the capitol, mega malls) have their own drawings.
+  if (megaParts(t, B, tree)) return;
   const st = t.structure!;
   const pal = plan.palette;
   const r = t.r;
@@ -2200,7 +2247,9 @@ export function CityView({
       tiles = tiles.map((t) => {
         if (t.kind !== "structure" || !t.structure || !t.fallback) return t;
         const { ax, az } = t.structure;
-        const whole = [`${ax},${az}`, `${ax + 1},${az}`, `${ax},${az + 1}`, `${ax + 1},${az + 1}`].every((k) => present.has(k));
+        const { w, d } = structureSize(t.structure);
+        let whole = true;
+        for (let dx = 0; dx < w && whole; dx++) for (let dz = 0; dz < d && whole; dz++) whole = present.has(`${ax + dx},${az + dz}`);
         return whole ? t : { ...t.fallback, i: t.i };
       });
       tileById = new Map(tiles.map((t) => [t.i, t]));
@@ -3451,9 +3500,10 @@ export function CityView({
           return;
         }
         const a = r.anchor;
+        const size = a.structure ? structureSize(a.structure) : { w: 1, d: 1 };
         hoverBox.visible = true;
-        hoverBox.position.set(a.x + (r.big ? 0.5 : 0), 0, a.z + (r.big ? 0.5 : 0));
-        hoverBox.scale.set(r.big ? 2.04 : 1.04, a.top + 0.12, r.big ? 2.04 : 1.04);
+        hoverBox.position.set(a.x + (size.w - 1) / 2, 0, a.z + (size.d - 1) / 2);
+        hoverBox.scale.set(size.w + 0.04, a.top + 0.12, size.d + 0.04);
         const n = roomCountsNow[r.room.id] ?? 0;
         cb.current.onHover?.({ tile: a.i, label: `${r.room.name}${t.egg ? ` · ${t.egg.name}` : ""} · ${n ? `${n} inside` : "nobody inside yet"} · tap to go in` });
         return;
@@ -3489,8 +3539,9 @@ export function CityView({
       const t = tileById.get(i);
       if (!t || !currentPlan) return null;
       const rail = currentPlan.rail;
-      if (t.station && rail && rail.station !== null) {
-        const at = rail.along === "z" ? tileIndex.get(`${rail.at},${rail.station}`) : tileIndex.get(`${rail.station},${rail.at}`);
+      const sxz = t.station && rail ? stationXZ(currentPlan) : null;
+      if (sxz) {
+        const at = tileIndex.get(`${sxz.x},${sxz.z}`);
         return { anchor: (at !== undefined && tileById.get(at)) || t, big: false };
       }
       if (t.kind === "structure" && t.structure) {
@@ -3581,8 +3632,8 @@ export function CityView({
           tile = Number(id.slice(2));
           const t = tileById.get(tile);
           if (!t) continue;
-          const big = t.kind === "structure";
-          sprite.position.set(t.x + (big ? 0.5 : 0), t.top + 0.35, t.z + (big ? 0.5 : 0));
+          const c = t.structure ? structureCentre(t.structure) : t;
+          sprite.position.set(c.x, t.top + 0.35, c.z);
         } else continue;
         pills.push({ sprite, balloon, id, tile, hide: false, a: 1 });
         pillGroup.add(sprite);
@@ -3670,7 +3721,8 @@ export function CityView({
           if (!a || seen.has(a.anchor.i)) continue;
           seen.add(a.anchor.i);
           const at = a.anchor;
-          spotList.push({ i: at.i, x: at.x + (a.big ? 0.5 : 0), y: at.top + 0.12, z: at.z + (a.big ? 0.5 : 0) });
+          const c = at.structure ? structureCentre(at.structure) : at;
+          spotList.push({ i: at.i, x: c.x, y: at.top + 0.12, z: c.z });
         }
       }
       return spotList;
