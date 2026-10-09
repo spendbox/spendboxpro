@@ -13,8 +13,7 @@ hunters (everyone else) challenge them to quick duels (`game-db/029_ghost_duels.
 The game is 18+ (players give their date of birth when they sign up). The UI says "ghosts" and
 "hunters"; the database still says `hider` and `seeker`. Games run on the hour (UTC): every game
 starts at the top of an hour and ends on the next hour mark (the clock turns red and beeps in the
-last 30 seconds). There's no Game/Chat switch: tapping a building always goes inside, and Explore
-holds the rides (hot-air balloons, trains, buses, cars, boats, Ferris wheels, water slides) and
+last 30 seconds). Tapping a building goes inside, and Explore holds the rides (hot-air balloons, trains, buses, cars, boats, Ferris wheels, water slides) and
 sport, plus private messages.
 
 1. **Join window (the first 3 minutes of the hour).** Anyone signed in can join as a ghost (stake
@@ -155,7 +154,7 @@ one is there a card pops up saying who (`src/app/play/people-here.tsx`).
 
 Friends (`game-db/026_friends.sql`, `src/app/play/friends-sheet.tsx`): add people by name, from
 the People list or the "real people here" card; they say yes (or ask back) and you're friends
-in every new town until one of you removes the other. Chat mode shows friends' faces over the
+in every new town until one of you removes the other. The town shows friends' faces over the
 places they're in, you get a nudge when a friend goes somewhere (Join takes you there), and
 each new town tells you which friends are in it too.
 
@@ -183,7 +182,7 @@ the mix is fetched again every 5 minutes. Hot-air balloons carry no ads.
 
 ## Players' houses (phase 1, free)
 
-From the menu or Chat mode, a player builds a house from what the city already draws: a style
+From the menu, a player builds a house from what the city already draws: a style
 (cottage, bungalow, modern, duplex, villa), wall and roof colours, a room style inside (living
 room, lounge, studio, party room, dining room) and a name for the sign (`src/lib/houses.ts`,
 `src/app/play/houses/`). Switching on "Show my house in the game" puts it into every new game:

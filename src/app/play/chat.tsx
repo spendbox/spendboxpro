@@ -177,6 +177,8 @@ export function Chat({
   greet,
   friendStatusOf,
   onAddFriend,
+  hideButton = false,
+  onUnread,
 }: {
   meId: string;
   meRole: "hider" | "seeker" | null;
@@ -217,6 +219,10 @@ export function Chat({
   friendStatusOf?: (id: string) => "friend" | "incoming" | "outgoing" | null;
   /** "Add friend" on players in the people lists. */
   onAddFriend?: (p: { id: string; name: string }) => void;
+  /** The bottom bar is folded away: no Chat button (the chat still opens when asked to). */
+  hideButton?: boolean;
+  /** How many unread messages there are (for a badge somewhere else while the button is hidden). */
+  onUnread?: (n: number) => void;
 }) {
   const roomId = room?.id ?? null;
   const roomCap = room?.capacity ?? 30;
@@ -380,6 +386,9 @@ export function Chat({
   const unreadHere = hereMsgs.filter((m) => m.id > (seen[`room:${roomId}`] ?? 0) && m.sender_id !== meId).length;
   const unreadDm = dmMsgs.filter((m) => m.recipient_id === meId && m.id > (seen[`dm:${m.sender_id}`] ?? 0)).length;
   const unread = unreadHere + unreadDm;
+  useEffect(() => {
+    onUnread?.(unread);
+  }, [unread, onUnread]);
 
   async function send(text: string) {
     setError(null);
@@ -500,6 +509,7 @@ export function Chat({
   const drag = useRef<{ y: number } | null>(null);
   const dragged = useRef(false);
 
+  if (!open && hideButton) return cards;
   if (!open) {
     const short = room ? (room.kind === "building" ? levelLabel(room.level ?? levelOf(room.id)) || room.name : room.name) : null;
     return (
@@ -868,7 +878,7 @@ export function Chat({
                 <Building2 className="size-8" />
                 <HotAirBalloon className="size-8" />
               </span>
-              <p className="text-sm text-muted">Switch to Chat mode, then tap any building to go in, or hop on a ride (balloon, train, bus, car, boat, Ferris wheel), to meet the people there.</p>
+              <p className="text-sm text-muted">Tap any building to go in, or pick a ride from Explore (balloon, train, bus, car, boat, Ferris wheel), to meet the people there.</p>
             </div>
           ) : (
             <Messages
