@@ -1,13 +1,14 @@
 # To do
 
 ## Now (owner)
-- [ ] Run `game-db/017_world_events.sql`, `018_npcs.sql`, `019_activities.sql` in the Supabase SQL Editor, in order (after 001-016), then deploy the `hide-and-seek` branch (PR #44).
+- [ ] In the Supabase SQL Editor run, in order: `game-db/017_world_events.sql` (again if you already ran it: it now stops clock ticks queueing up), `018_npcs.sql`, `019_activities.sql`, `020_sports.sql`. Then merge PR #45.
+- [ ] In Vercel, set `SPORTS_SECRET` to a long random string (once; don't change it later).
 - [ ] Test on a real phone: sounds, touch gestures, the water slide, club lights.
 
-## In progress
+## Done lately
 - [x] Fixes: sign-out spinner, hunt countdown for ghosts, sign-in prompts for watchers, timeouts ("Reconnecting" screen), cars drive themselves, button press feedback, "My house" coming soon.
-- [ ] Info bubbles over nearby buildings and tappable world events.
-- [ ] Sports: football, basketball, boxing, wrestling. Simulated matches in a tactical view, coin tickets, simple coin bets (run `game-db/020_sports.sql`).
+- [x] Info bubbles over nearby buildings and tappable world events.
+- [x] Sports: football, basketball, boxing, wrestling. Simulated matches in a tactical view, coin tickets, simple coin bets (run `game-db/020_sports.sql`).
 
 ## Next batch
 - [ ] **Daily streaks.** Any daily action counts (play a round, finish a side quest, send a gift or hug, ride something). Rewards grow at 3, 7, 14, 30, 60 and 100 days (small coins, badges). One free "freeze" a week. Flame icon on the home screen.
