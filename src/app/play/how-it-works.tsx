@@ -36,7 +36,7 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
     title: "One city, one hour",
     body: [
       "Every round is a brand-new city, named after a real place, with its own streets and landmarks.",
-      "First there's a 10-minute window to get ready. Then the hunt runs for an hour, from morning to night (or night to morning).",
+      "A new game starts every hour, on the hour (UTC). The first 3 minutes are for joining as a ghost. Then the hunt runs until the next hour mark, from morning to night (or night to morning), and the next game's countdown starts straight away.",
       "Newtown is for adults 18+.",
     ],
   },
@@ -44,7 +44,7 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
     icon: Ghost,
     title: "Hiding",
     body: [
-      "Put down 100 mint and we'll drop you on a random spot when the window closes. Every ghost makes the city grow a little.",
+      "Join in the first 3 minutes of the hour: put down 100 mint and we'll drop you on a random spot when the countdown ends. Every ghost makes the city grow a little.",
       "As a ghost you get one move per game (two from level 10, three from level 20). Moving costs 50 mint at the start of a round, and the price goes up every time anyone moves. You can't go back to a spot you've left, or onto one that's been searched (those show in orange).",
       "When you move, everyone sees that you slipped away, and from where.",
       "Make it to the end and you get your 100 back, and the survivors share 80% of the pool.",
@@ -56,7 +56,7 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
     body: [
       "Tap Hunt to join, then tap any spot to search it. Your first search each day is free; after that the price creeps up as more of the city gets searched.",
       "Each search takes a couple of seconds. Search too fast and you'll have to wait a little longer before the next one.",
-      "Catch every ghost (and the bot) and this world ends straight away. Otherwise it ends when the clock hits zero; the clock turns red and beeps in the last minute.",
+      "The hunt always runs to the top of the hour, even if every ghost has been caught. The clock turns red and beeps in the last 30 seconds.",
       "Find a ghost and you keep most of their stake, plus a bonus if they're level 5 or higher (it grows every 5 levels). Find the bot and you get 200 mint.",
       "You can search a spot again if you think someone's snuck in. You only see the most recent searches on the map; older ones fade.",
       "There's a bot hiding every round, with a new name each time. It only moves when a drone sweeps it (three times at most), and it likes to tease the chat.",

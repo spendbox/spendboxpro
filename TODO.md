@@ -1,11 +1,12 @@
 # To do
 
 ## Now (owner)
-- [ ] In the Supabase SQL Editor run, in order: `game-db/017_world_events.sql` (again if you already ran it: it now stops clock ticks queueing up), `018_npcs.sql`, `019_activities.sql`, `020_sports.sql`. Then merge PR #45.
+- [ ] In the Supabase SQL Editor run, in order: `game-db/017_world_events.sql` (again if you already ran it: it now stops clock ticks queueing up), `018_npcs.sql`, `019_activities.sql`, `020_sports.sql`, `021_hourly_rounds.sql`. Then merge the open pull request.
 - [ ] In Vercel, set `SPORTS_SECRET` to a long random string (once; don't change it later).
 - [ ] Test on a real phone: sounds, touch gestures, the water slide, club lights.
 
 ## Done lately
+- [x] Games on the hour (UTC): 3-minute join countdown from the top of every hour, hunt until the next hour mark, red final 30 seconds, no early end when every ghost is caught (run `game-db/021_hourly_rounds.sql`).
 - [x] Renamed to Newtown: new logo, favicon, share picture, "mint" instead of coins, newtown.world and hello@newtown.world everywhere.
 - [x] Fixes: sign-out spinner, hunt countdown for ghosts, sign-in prompts for watchers, timeouts ("Reconnecting" screen), cars drive themselves, button press feedback, "My house" coming soon.
 - [x] Info bubbles over nearby buildings and tappable world events.
