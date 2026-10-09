@@ -1270,26 +1270,26 @@ export function Game({
         <div className="flex flex-col items-end gap-2">
           {guest ? (
             <div className="pointer-events-auto flex items-center gap-2">
-              <button onClick={() => setHowOpen(true)} className="glass grid h-9 w-9 shrink-0 place-items-center rounded-full font-display font-bold" aria-label="How it works">
+              <button onClick={() => setHowOpen(true)} className="glass grid size-8 shrink-0 place-items-center rounded-full font-display font-bold sm:size-9" aria-label="How it works">
                 ?
               </button>
-              <button onClick={() => setSignIn({ why: null })} className="whitespace-nowrap rounded-full bg-gold px-4 py-2 text-sm font-semibold text-ink shadow">
+              <button onClick={() => setSignIn({ why: null })} className="flex h-8 items-center whitespace-nowrap rounded-full bg-gold px-3.5 text-sm font-semibold text-ink shadow sm:h-9 sm:px-4">
                 Sign in to play
               </button>
             </div>
           ) : (
           <div className="pointer-events-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
-            <span className="glass hidden whitespace-nowrap rounded-full px-2.5 py-1.5 text-xs font-bold sm:inline" title="Your level (level up from the menu)">
+            <span className="glass hidden h-9 whitespace-nowrap rounded-full px-2.5 text-xs font-bold leading-9 sm:inline-block" title="Your level (level up from the menu)">
               Lv {me.level}
             </span>
             {me.bigFish && (
-              <span className="glass flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-1.5 text-xs font-bold text-[#1c7ed6] sm:px-2.5" title="You hold 10,000+ mint: everyone sees you as a big fish">
+              <span className="glass flex h-8 items-center gap-1 whitespace-nowrap rounded-full px-2 text-xs font-bold text-[#1c7ed6] sm:h-9 sm:px-2.5" title="You hold 10,000+ mint: everyone sees you as a big fish">
                 <Fish className="size-3.5" />
                 <span className="hidden sm:inline">Big fish</span>
               </span>
             )}
             {state.streak && <StreakPill streak={state.streak} onOpen={() => { setStreakOpen(true); setMenu(false); setFeedOpen(false); }} />}
-            <span className="glass whitespace-nowrap rounded-full px-2.5 py-1.5 text-xs sm:px-3 sm:text-sm" title={`${me.coins} mint · level ${me.level}`}>
+            <span className="glass inline-block h-8 whitespace-nowrap rounded-full px-2.5 text-xs leading-8 sm:h-9 sm:px-3 sm:text-sm sm:leading-9" title={`${me.coins} mint · level ${me.level}`}>
               <b className="text-gold-dark">{short(me.coins)}</b>
               <span className="hidden sm:inline"> mint</span>
               {me.bonusCoins > 0 && <span className="text-muted"> +{short(me.bonusCoins)}</span>}
@@ -1328,8 +1328,8 @@ export function Game({
       {/* Watchers on a computer: the Newtown logo, top centre. */}
       {guest && (
         <div className="pointer-events-none absolute inset-x-0 top-0 hidden justify-center p-4 sm:flex" title="Newtown">
-          <span className="glass flex items-center rounded-full py-1 pl-1.5 pr-3.5 shadow">
-            <Logo size={30} />
+          <span className="glass flex h-9 items-center rounded-full pl-1 pr-3.5 shadow">
+            <Logo size={28} />
           </span>
         </div>
       )}
