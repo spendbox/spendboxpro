@@ -1813,7 +1813,7 @@ export function Game({ state }: { state: GameState }) {
               )}
             </div>
           ) : !round || phase === "done" ? (
-            <p className="text-sm text-muted">Building the next city… A new game starts every hour, on the hour.</p>
+            <p className="text-sm text-muted">Building the next city…</p>
           ) : guest ? (
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <p className="flex-1 text-sm text-muted">
@@ -1821,14 +1821,9 @@ export function Game({ state }: { state: GameState }) {
                 <b className="text-ink sm:hidden">Newtown · </b>
                 <span className="mr-1.5 inline-block size-2 animate-pulse rounded-full bg-hit align-middle" />
                 <b className="text-ink">Watching live.</b> <span className="rounded bg-ink px-1 text-[10px] font-bold text-white">18+</span>{" "}
-                {phase === "join" ? (
-                  `Ghosts are getting ready. The hunt starts in ${countdown}.`
-                ) : (
-                  <>
-                    The hunt is on: {short(round.hidersRemaining)} still hidden, {short(round.pool)} mint in the pool. Next game at{" "}
-                    <LocalTime iso={round.seekEndsAt} />.
-                  </>
-                )}
+                {phase === "join"
+                  ? `Ghosts are getting ready. The hunt starts in ${countdown}.`
+                  : `The hunt is on: ${short(round.hidersRemaining)} still hidden, ${short(round.pool)} mint in the pool.`}
               </p>
               <div className="grid grid-cols-3 gap-2 text-sm sm:flex">
                 <button onClick={() => setHowOpen(true)} className="whitespace-nowrap rounded-xl bg-panel-2 px-3 py-2.5 font-semibold">
@@ -1851,13 +1846,7 @@ export function Game({ state }: { state: GameState }) {
                     <b className="tabular-nums text-ink">{countdown}</b>.
                   </>
                 ) : (
-                  <>
-                    The hunt is on. Jump in as a hunter and start searching. Want to be a ghost? The next game starts at{" "}
-                    <b className="text-ink">
-                      <LocalTime iso={round.seekEndsAt} />
-                    </b>
-                    : join in its first 3 minutes.
-                  </>
+                  "The hunt is on. Jump in as a hunter and start searching."
                 )}
               </p>
               <div className="flex gap-2">
@@ -2083,11 +2072,6 @@ function ModeButton({ on, onClick, children }: { on: boolean; onClick: () => voi
 }
 
 /** A list line with an icon in front (used in the pop-ups). */
-/** A time on this device's own clock ("11:00"), filled in on the phone itself. */
-function LocalTime({ iso }: { iso: string }) {
-  return <span suppressHydrationWarning>{new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>;
-}
-
 const EVENT_STYLE: Record<string, { label: string; colour: string }> = {
   emergency: { label: "Emergency", colour: "#e5484d" },
   weather: { label: "Weather", colour: "#1c7ed6" },

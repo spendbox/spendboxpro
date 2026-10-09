@@ -32,3 +32,24 @@ end $$;
 -- A game that's still running isn't touched by another tick.
 select tick() as again;
 select count(*) = 1 as one_open_game from rounds where status <> 'done';
+
+-- A game left over from the old timing (ending at an odd time, like 8:26) is pulled in to end on
+-- the next hour mark, so the next countdown starts on the dot.
+update rounds set join_ends_at = now() - interval '1 minute', seek_ends_at = now() + interval '26 minutes 17 seconds', status = 'seek'
+  where status <> 'done';
+select tick() as realign;
+do $$
+declare r public.rounds;
+begin
+  select * into r from rounds where status <> 'done';
+  if extract(minute from r.seek_ends_at at time zone 'UTC') <> 0 or extract(second from r.seek_ends_at at time zone 'UTC') <> 0 then
+    raise exception 'odd-time game should be pulled in to the hour, ends at %', r.seek_ends_at;
+  end if;
+  if r.seek_ends_at <= now() or r.seek_ends_at > now() + interval '1 hour' then
+    raise exception 'should end at the next hour mark, ends at %', r.seek_ends_at;
+  end if;
+  raise notice 'ok: old-timing game now ends at % (UTC)', to_char(r.seek_ends_at at time zone 'UTC', 'HH24:MI:SS');
+end $$;
+-- Games that have run out still finish as normal.
+update rounds set seek_ends_at = now() - interval '1 second' where status = 'seek';
+select tick() = 'round finished' as still_finishes;
