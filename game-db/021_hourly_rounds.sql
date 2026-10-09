@@ -1,8 +1,10 @@
 -- Newtown, part 21: games on the hour.
 -- Every game starts at the top of an hour (UTC): a 3-minute join window (ghosts sign up), then
 -- the hunt until the next hour mark, on the dot. Then the next game's countdown starts straight
--- away. Catching every ghost no longer ends the game early: the hunt always runs to the hour.
--- Safe to run more than once. Run after parts 1-20.
+-- away. A game that's already running on the old timing (say it started at 7:16) is pulled in
+-- to end at the next hour mark, so from then on every countdown starts at 8:00, 9:00... on the
+-- dot. Catching every ghost no longer ends the game early: the hunt always runs to the hour.
+-- Safe to run more than once (run it again if you ran an earlier copy). Run after parts 1-20.
 
 insert into public.game_settings (key, value, note) values
   ('join_minutes', 3, 'Join window at the start of every hour (minutes)'),
@@ -22,9 +24,22 @@ declare
   v_min_hunt int := coalesce(public.setting('min_hunt_minutes')::int, 15);
   v_hour timestamptz := date_trunc('hour', now() at time zone 'UTC') at time zone 'UTC';
   v_join_end timestamptz;
+  v_next timestamptz;
   v_out text := 'idle';
 begin
   select * into r from public.rounds where status <> 'done' for update;
+
+  -- Keep every game on the hour: one still running to an odd time (started on the old timing)
+  -- is pulled in to end at the next hour mark, so the next countdown starts on the dot.
+  if found and r.seek_ends_at > now()
+     and r.seek_ends_at <> date_trunc('hour', r.seek_ends_at at time zone 'UTC') at time zone 'UTC' then
+    v_next := v_hour + interval '1 hour';
+    update public.rounds
+      set seek_ends_at = v_next,
+          join_ends_at = least(join_ends_at, v_next - interval '1 minute')
+      where id = r.id
+      returning * into r;
+  end if;
 
   if not found then
     -- Too late in this hour for a proper hunt: line up for the next hour instead.
