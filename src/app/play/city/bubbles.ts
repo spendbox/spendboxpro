@@ -15,6 +15,9 @@
 import {
   Anchor,
   Award,
+  Baby,
+  Church,
+  School,
   BedDouble,
   Briefcase,
   Building2,
@@ -118,6 +121,8 @@ const STRUCTURE_LOOK: Record<StructureType, Look> = {
   court: { icon: Volleyball, color: C.food, outdoor: false },
   boxing: { icon: HandFist, color: C.civic, outdoor: false },
   wrestling: { icon: Award, color: C.night, outdoor: false },
+  capitol: { icon: Landmark, color: C.law, outdoor: false },
+  megamall: { icon: ShoppingBag, color: C.fun, outdoor: false },
 };
 const KIND_LOOK: Partial<Record<Tile["kind"], Look>> = {
   club: { icon: Music, color: C.night, outdoor: false },
@@ -136,6 +141,11 @@ const KIND_LOOK: Partial<Record<Tile["kind"], Look>> = {
   trees: { icon: Trees, color: C.green, outdoor: true },
   plaza: { icon: Landmark, color: C.green, outdoor: true },
   pond: { icon: Waves, color: C.work, outdoor: true },
+  school: { icon: School, color: C.law, outdoor: false },
+  worship: { icon: Church, color: C.night, outdoor: false },
+  pitch: { icon: Goal, color: C.green, outdoor: true },
+  playground: { icon: Baby, color: C.fun, outdoor: true },
+  monument: { icon: Landmark, color: C.grey, outdoor: true },
 };
 const DEFAULT_LOOK: Look = { icon: Building2, color: GOLD, outdoor: false };
 

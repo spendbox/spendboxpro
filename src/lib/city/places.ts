@@ -19,7 +19,8 @@ export type Flavor = {
 /** What a name can be given to: big buildings (structure types) and single-tile places. */
 export type LandmarkKey =
   | "mall" | "twin" | "museum" | "funfair" | "market" | "arena" | "campus" | "hotel" | "solar" | "airport" | "port" | "military" | "power" | "dam" | "oilrig" | "waterpark"
-  | "court" | "boxing" | "wrestling"
+  | "court" | "boxing" | "wrestling" | "capitol" | "megamall"
+  | "school" | "worship" | "monument"
   | "bridge" | "stadium" | "ferris" | "park" | "plaza" | "hospital" | "police" | "fire" | "clock" | "tower" | "club" | "restaurant" | "station" | "pond";
 
 /**

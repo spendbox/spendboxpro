@@ -5,7 +5,7 @@
 // with seats facing the action (see interiors.ts).
 
 import * as THREE from "three";
-import type { Tile } from "@/lib/city/layout";
+import { structureCentre, type Tile } from "@/lib/city/layout";
 import { createAthletes, faceRig, runRig, skinOf } from "./arenas";
 import { rngFrom } from "./kit";
 
@@ -136,20 +136,24 @@ export function createVenueGame(t: Tile): VenueGame | null {
       team.update();
     };
   } else {
-    // The stadium's pitch (the top of the middle of the bowl), three a side.
-    group.position.set(t.x + 0.5, 0.773, t.z + 0.5);
+    // The stadium's pitch, in the middle of the bowl: three a side, spread over the pitch.
+    const c = structureCentre(t.structure);
+    const big = (t.structure.w ?? 2) >= 3;
+    group.position.set(c.x, big ? 0.127 : 0.773, c.z);
+    // On the big stadium's pitch the players cover more ground (the same little people).
+    const spread = big ? 2.6 : 1;
     const home = [0xe03131, WHITE];
     const away = [0x1c7ed6, 0x18202b];
     team = createAthletes([0, 1, 2, 3, 4, 5].map((i) => ({ shirt: i < 3 ? home[0] : away[0], shorts: i < 3 ? home[1] : away[1], skin: skinOf(rnd), shoes: 0x111418 })));
-    const hold = [[-2.6, -1.2], [-2.6, 1.2], [-0.8, 0]];
+    const hold = [[-2.6, -1.2], [-2.6, 1.2], [-0.8, 0]].map(([hx, hz]) => [hx * spread, hz * spread]);
     team.rigs.forEach((r, i) => {
       const h = hold[i % 3];
       r.x = i < 3 ? h[0] : -h[0];
       r.z = h[1];
     });
     update = (time, dt) => {
-      const bx = Math.sin(time * 0.4) * 3.2 + Math.sin(time * 1.1) * 0.6;
-      const bz = Math.sin(time * 0.55 + 1) * 2.0;
+      const bx = (Math.sin(time * 0.4) * 3.2 + Math.sin(time * 1.1) * 0.6) * spread;
+      const bz = Math.sin(time * 0.55 + 1) * 2.0 * spread;
       ball.position.set(bx, 0.16 + Math.max(0, Math.sin(time * 1.7)) ** 8 * 0.9, bz);
       ball.rotation.x = time * 5;
       for (let side = 0; side < 2; side++) {

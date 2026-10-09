@@ -7,7 +7,7 @@
 // roughly one every quarter of a city unit), "r" the roof (or a terrace / deck high up),
 // "o" an open-air spot at street level (parks, plazas, markets, docks...).
 
-import { venueName, type CityPlan, type Sport, type StructureType, type Tile } from "@/lib/city/layout";
+import { structureCentre, venueName, type CityPlan, type Sport, type StructureType, type Tile } from "@/lib/city/layout";
 import { RAIL_Y } from "./trains";
 
 export type LevelKind = "interior" | "roof" | "outdoor";
@@ -125,8 +125,13 @@ export const ROOM_LABEL: Partial<Record<Tile["kind"], string>> = {
   fire: "Fire station",
   club: "Nightclub",
   restaurant: "Restaurant",
+  school: "School",
+  worship: "Place of worship",
+  pitch: "Football pitch",
+  playground: "Playground",
+  monument: "Monument",
 };
-const OUTDOOR = new Set<Tile["kind"]>(["park", "plaza", "trees", "pond", "ferris"]);
+const OUTDOOR = new Set<Tile["kind"]>(["park", "plaza", "trees", "pond", "ferris", "pitch", "playground", "monument"]);
 
 /** What a level is for, as the UI sees it (a club, a restaurant and a sports venue get their own icon). */
 export function levelUse(l: PlaceLevel): "room" | "club" | "restaurant" | "roof" | "outdoor" | "arena" {
@@ -352,15 +357,32 @@ export function levelsOf(t: Tile, plan: CityPlan): PlaceLevel[] {
     case "pond":
       R("o", "By the pond", "outdoor", "pond", x + 0.36, 0.08, z + 0.4, 0.06, 0.06);
       break;
+    case "school":
+      R("g", "Classroom", "interior", "lecture", x - 0.1, 0.08, z - 0.12, 0.28, 0.18);
+      R("o", "School yard", "outdoor", "plaza", x + 0.3, 0.08, z + 0.3, 0.06, 0.06, { weight: 0.7 });
+      break;
+    case "worship":
+      R("g", t.v === 1 ? "Church hall" : "Prayer hall", "interior", "gallery", x, 0.08, z - 0.05, 0.25, 0.25);
+      break;
+    case "pitch":
+      R("o", "On the pitch", "outdoor", "park", x, 0.08, z, 0.1, 0.1);
+      break;
+    case "playground":
+      R("o", "At the playground", "outdoor", "park", x + 0.2, 0.08, z + 0.2, 0.08, 0.08);
+      break;
+    case "monument":
+      R("o", "By the monument", "outdoor", "plaza", x + 0.3, 0.08, z + 0.3, 0.08, 0.08);
+      break;
   }
   return share(total, out);
 }
 
 function structureLevels(t: Tile, type: StructureType, plan: CityPlan): Draft[] {
   const out: Draft[] = [];
-  const c = 0.5;
-  const X = t.x + c;
-  const Z = t.z + c;
+  const centre = t.structure ? structureCentre(t.structure) : { x: t.x + 0.5, z: t.z + 0.5 };
+  const X = centre.x;
+  const Z = centre.z;
+  const big = (t.structure?.w ?? 2) >= 3;
   const R = (id: string, label: string, kind: LevelKind, theme: Theme, x: number, y: number, z: number, hw: number, hd: number, extra?: Partial<Draft>) =>
     out.push({ id, label, kind, theme, x, y, z, hw, hd, ry: 0, floor: id === "g" || id === "o" ? 0 : id === "r" ? 99 : Number(id.slice(1)), ...extra });
   switch (type) {
@@ -390,8 +412,24 @@ function structureLevels(t: Tile, type: StructureType, plan: CityPlan): Draft[] 
       break;
     case "arena":
       // The stands round the pitch first (the reason to come), then the concourse.
-      R("g", "The stands", "interior", "stands", X, 0.09, Z, 0.9, 0.75, { weight: 2.2 });
-      R("f1", "Concourse", "interior", "concourse", X + 0.88, 0.09, Z, 0.04, 0.2);
+      if (big) {
+        R("g", "The stands", "interior", "stands", X, 0.13, Z, 1.5, 1.2, { weight: 2.6 });
+        R("f1", "Concourse", "interior", "concourse", X + 1.7, 0.09, Z, 0.05, 0.3);
+        R("f2", "Executive box", "interior", "lounge", X, 0.44, Z - 1.08, 0.3, 0.04, { weight: 0.6 });
+      } else {
+        R("g", "The stands", "interior", "stands", X, 0.09, Z, 0.9, 0.75, { weight: 2.2 });
+        R("f1", "Concourse", "interior", "concourse", X + 0.88, 0.09, Z, 0.04, 0.2);
+      }
+      break;
+    case "capitol":
+      R("g", "Great hall", "interior", "gallery", X, 0.19, Z - 0.45, 0.6, 0.4);
+      R("f3", "Rotunda", "interior", "rotunda", X, 0.84, Z - 0.45, 0.38, 0.38, { weight: 0.8 });
+      R("o", "Capitol gardens", "outdoor", "park", X, 0.09, Z + 0.7, 0.1, 0.1, { weight: 0.8 });
+      break;
+    case "megamall":
+      R("g", "Shopping street", "interior", "mall", X, 0.09, Z - 0.35, 1.2, 0.2, { weight: 1.4 });
+      R("f1", "Floor 1 · Food court", "interior", "foodcourt", X, 0.34, Z - 0.87, 1.2, 0.28);
+      R("f2", `Floor 2 · ${venueName(plan, "club", t.x, t.z)}`, "interior", "club", X, 0.34, Z + 0.17, 1.2, 0.28, { weight: 0.8 });
       break;
     case "court":
       R("g", "Indoor court", "interior", "court", X, 0.09, Z - 0.5, 0.8, 0.4, { weight: 1.8 });

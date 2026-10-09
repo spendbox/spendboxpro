@@ -5,7 +5,7 @@
 // same for everyone. Also: a route along the roads for parades and chases, and a spot by the
 // road in front of a building for fire engines and ambulances to park.
 
-import { spiralXY, type CityPlan, type StructureType, type Tile } from "@/lib/city/layout";
+import { spiralXY, type CityPlan, type StructureType, type Tile, structureCentre, structureSize } from "@/lib/city/layout";
 import type { EventNeed } from "@/lib/world-events";
 import { RAIL_Y } from "../trains";
 import { BRIDGE_TOP } from "../world";
@@ -159,9 +159,9 @@ function nearestEdge(city: CityIndex, sx: number, sz: number) {
 
 function finish(city: CityIndex, t: Tile, ground: Ground, mode: "outskirts" | "pool" | null): Spot {
   const st = t.kind === "structure" && t.structure ? t.structure : null;
-  const w = st ? 2 : 1;
-  const x = st ? st.ax + 0.5 : t.x;
-  const z = st ? st.az + 0.5 : t.z;
+  const w = st ? Math.max(structureSize(st).w, structureSize(st).d) : 1;
+  const x = st ? structureCentre(st).x : t.x;
+  const z = st ? structureCentre(st).z : t.z;
   // Beyond the edge of the city, in the direction of this spot.
   const m = Math.max(Math.abs(x), Math.abs(z), 0.5);
   const out = (city.half + 3) / m;
