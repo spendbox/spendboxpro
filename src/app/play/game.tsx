@@ -52,7 +52,7 @@ import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
 import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
-import { Compass, Crown, Swords } from "lucide-react";
+import { Compass, Crown, Eye, EyeOff, Swords } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
 import { GhostsSheet } from "./ghost-duel/ghosts-sheet";
@@ -108,6 +108,8 @@ const DanceBar = dynamic(() => import("./dance-bar").then((m) => m.DanceBar));
 const FriendsSheet = dynamic(() => import("./friends-sheet").then((m) => m.FriendsSheet));
 const GhostCardSheet = dynamic(() => import("./ghost-duel/ghost-card").then((m) => m.GhostCardSheet));
 const DuelScreen = dynamic(() => import("./ghost-duel/duel-screen").then((m) => m.DuelScreen));
+
+const NO_GHOSTS: CityGhost[] = [];
 
 /** The map shows no searched spots, sweeps or hiding spots any more: only the ghosts' lights. */
 const NO_MARKERS: CityMarkers = { searchedEmpty: [], searchedHit: [], caught: [], left: [], me: null, decoy: null, sweeps: [], pending: null, recent: [], locked: [] };
@@ -330,6 +332,26 @@ export function Game({
   const [ghostFor, setGhostFor] = useState<BoardGhost | null>(null);
   const [ghostsOpen, setGhostsOpen] = useState(false);
   const [duelOn, setDuelOn] = useState<DuelView | null>(null);
+  // Duels you've closed (finished): never shown again, even if the map's copy is a beat behind.
+  const [closedDuels, setClosedDuels] = useState<number[]>([]);
+  // The ghosts' lights on the map: shown, or hidden with the eye button.
+  const [ghostsShown, setGhostsShown] = useState(true);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("hs-ghosts-hidden") === "1") {
+        const id = setTimeout(() => setGhostsShown(false), 0);
+        return () => clearTimeout(id);
+      }
+    } catch {}
+  }, []);
+  function toggleGhosts() {
+    const next = !ghostsShown;
+    setGhostsShown(next);
+    setMessage({ icon: next ? Eye : EyeOff, text: next ? "Ghosts are showing on the map." : "Ghosts are hidden. Tap the eye to show them again.", tone: "info" });
+    try {
+      localStorage.setItem("hs-ghosts-hidden", next ? "0" : "1");
+    } catch {}
+  }
   const [flyTo, setFlyTo] = useState<{ tile: number; at: number } | null>(null);
   const [ride, setRide] = useState<RideTarget | null>(null);
   // Everything there is to ride this round (from the 3D city).
@@ -816,10 +838,13 @@ export function Game({
   // notices for you (your trap went off, a drone swept you, you were found).
   const myLastSpot = isHider ? (entry?.visited.at(-1) ?? null) : null;
   const feed: FeedItem[] = useMemo(() => {
+    const myName = state.me.name;
     const pub = state.events
       .map((e) => {
         const n = describe(e, botName, myLastSpot, where);
-        return n ? ({ key: `e${e.id}`, at: e.at, text: n.text, tone: n.tone, avatar: n.avatar ?? null, icon: n.icon } as FeedItem) : null;
+        // Your own duel's result is on the duel screen already: list it, but don't pop it up too.
+        const mineDuel = e.kind === "duel" && !!myName && (e.detail?.ghost === myName || e.detail?.hunter === myName);
+        return n ? ({ key: `e${e.id}`, at: e.at, text: n.text, tone: n.tone, avatar: n.avatar ?? null, icon: n.icon, quiet: mineDuel } as FeedItem) : null;
       })
       .filter((x): x is FeedItem => x !== null);
     const mine = state.notifications.map((n) => ({
@@ -828,6 +853,7 @@ export function Game({
       text: n.tile !== null && n.kind === "trap" ? `${n.body} (near ${where(n.tile)})` : n.body,
       tone: n.kind === "caught" ? ("alarm" as const) : ("mine" as const),
       avatar: n.kind === "caught" || n.kind === "shield" ? me.avatar : null,
+      quiet: n.kind === "duel_won" || n.kind === "duel_lost",
       icon: (({ trap: "trap", trapped: "trap", swept: "drone", caught: "catch", shield: "shield", shielded: "shield", decoy: "decoy", streak: "flame", gift: "gift", spray: "gift", hug: "hug", handshake: "handshake", thanks: "hug", duel: "duel", duel_won: "duel", duel_lost: "duel" }) as Record<string, FeedIcon>)[n.kind] ?? "info",
     }));
     // World events that have started: news you can tap to fly there.
@@ -842,7 +868,7 @@ export function Game({
       })
       .filter((x): x is FeedItem => x !== null);
     return [...pub, ...mine, ...news].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 60);
-  }, [state.events, state.notifications, state.worldEvents, serverNowMs, botName, myLastSpot, where, me.avatar]);
+  }, [state.events, state.notifications, state.worldEvents, state.me.name, serverNowMs, botName, myLastSpot, where, me.avatar]);
   const unread = feed.filter((f) => Date.parse(f.at) > Date.parse(feedSeenAt)).length;
 
   // Hugs, handshakes and mint that arrived since you last opened My gifts.
@@ -870,8 +896,9 @@ export function Game({
     const fresh = feed.filter((f) => !seenKeys.current!.has(f.key));
     fresh.forEach((f) => seenKeys.current!.add(f.key));
     if (fresh.some((f) => f.key.startsWith("n") && f.tone === "alarm")) playSfx("caught");
-    if (!fresh.length || feedOpen || quietNow) return;
-    const id = setTimeout(() => setToasts((list) => [...fresh.slice(0, 2).reverse(), ...list].slice(0, 2)), 0);
+    const pop = fresh.filter((f) => !f.quiet);
+    if (!pop.length || feedOpen || quietNow) return;
+    const id = setTimeout(() => setToasts((list) => [...pop.slice(0, 2).reverse(), ...list].slice(0, 2)), 0);
     return () => clearTimeout(id);
   }, [feed, feedOpen, quietNow]);
   useEffect(() => {
@@ -1125,7 +1152,8 @@ export function Game({
   const rules = board?.rules ?? DEFAULT_RULES;
   // Your live duel: a ghost who's been challenged gets the pop-up (wherever they are); anyone
   // whose duel is under way (or a hunter waiting for an answer) gets the duel screen back.
-  const liveDuel = board?.duel && (board.duel.status === "asked" || board.duel.status === "playing") ? board.duel : null;
+  const liveDuel =
+    board?.duel && (board.duel.status === "asked" || board.duel.status === "playing") && !closedDuels.includes(board.duel.id) ? board.duel : null;
   const askedGhost = liveDuel && liveDuel.role === "ghost" && liveDuel.status === "asked" && duelOn?.id !== liveDuel.id ? liveDuel : null;
   const reopenDuel = liveDuel && !askedGhost && duelOn?.id !== liveDuel.id ? liveDuel : null;
   useEffect(() => {
@@ -1185,7 +1213,7 @@ export function Game({
             onBillboard={onBillboardTap}
             ads={ads}
             onAdViews={onAdViews}
-            ghosts={ghostLights}
+            ghosts={ghostsShown ? ghostLights : NO_GHOSTS}
             paused={signInShown}
             onGhost={openGhost}
             flyTo={flyTo}
@@ -1433,6 +1461,8 @@ export function Game({
           initial={duelOn}
           me={{ name: me.name ?? "You", avatar: me.avatar }}
           onClose={() => {
+            const closed = duelOn.id;
+            setClosedDuels((list) => [...list.slice(-20), closed]);
             setDuelOn(null);
             startTransition(() => router.refresh());
           }}
@@ -1882,6 +1912,17 @@ export function Game({
                 aria-label="Fold the bottom bar away"
               >
                 <ChevronDown className="size-4" />
+              </button>
+            )}
+            {ghostLights.length > 0 && !place && ride === null && (
+              <button
+                onClick={toggleGhosts}
+                className={cn("pointer-events-auto grid size-8 shrink-0 place-items-center rounded-full shadow sm:size-9", ghostsShown ? "glass" : "bg-ink text-white")}
+                aria-pressed={!ghostsShown}
+                aria-label={ghostsShown ? "Hide the ghosts" : "Show the ghosts"}
+                title={ghostsShown ? "Hide the ghosts" : "Show the ghosts"}
+              >
+                {ghostsShown ? <Eye className="size-4 text-[#1c7ed6]" /> : <EyeOff className="size-4" />}
               </button>
             )}
             {!guest && round && (
