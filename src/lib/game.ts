@@ -5,6 +5,7 @@ import { settleRecent } from "@/app/api/sports/settle";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { botNameFor } from "@/lib/bot-names";
+import { friendLists, NO_FRIENDS, type FriendLists } from "@/lib/friends";
 import { cleanAvatar, type Avatar } from "@/lib/avatar";
 import type { WorldEvent } from "@/lib/world-events";
 import type { TownHouse } from "@/lib/houses";
@@ -62,6 +63,8 @@ export type GameState = {
   worldEvents: WorldEvent[];
   /** Players' houses standing in this game's town, in slot order. */
   houses: TownHouse[];
+  /** Your friends (they stay friends from one town to the next) and friend requests. */
+  friends: FriendLists;
   /** A coin balloon drifting by just for you, if one's due (slot = which one). */
   balloon: { slot: number; coins: number } | null;
   site: { visits: number; players: number };
@@ -434,7 +437,14 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
     }
   };
 
-  const [, last, results, , , { data: visits }, { count: playerCount }, houses] = await Promise.all([
+  // Friends (best effort: before part 26 is run, there are none).
+  const friendsPart = async (): Promise<FriendLists> => {
+    if (guest) return NO_FRIENDS;
+    const { data, error } = await db.rpc("friends_of", { p_user: userId });
+    return error ? NO_FRIENDS : friendLists(data);
+  };
+
+  const [, last, results, , , { data: visits }, { count: playerCount }, houses, friends] = await Promise.all([
     roundPart(),
     lastPart(),
     loadResults(db, userId),
@@ -443,6 +453,7 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
     db.from("site_counters").select("value").eq("key", "visits").maybeSingle(),
     db.from("profiles").select("id", { count: "estimated", head: true }).eq("is_bot", false),
     round ? loadRoundHouses(db, round.id) : Promise.resolve([] as TownHouse[]),
+    friendsPart(),
   ]);
   const site = { visits: Number(visits?.value ?? 0), players: playerCount ?? 0 };
   const tileCount = round?.tile_count ?? 0;
@@ -507,6 +518,7 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
     caughtFaces,
     worldEvents,
     houses,
+    friends,
     events,
     results,
     lastResult: last ? { roundId: last.round_id, role: last.role, payout: num(last.payout), caught: last.caught } : null,

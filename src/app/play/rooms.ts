@@ -42,7 +42,7 @@ export type RoomMember = { id: string; name: string; avatar: unknown };
 export type SeatTaker = { id: string; name: string; avatar: unknown };
 /** Why you're no longer sitting: your 3 minutes were up, or someone sat there just before you. */
 export type SeatNotice = { kind: "stretch" | "bumped"; text: string };
-type Meta = { room: string | null; name: string; avatar: unknown; at: number; seat?: string | null; sitSince?: number };
+type Meta = { room: string | null; name: string; avatar: unknown; at: number; seat?: string | null; sitSince?: number; /** The place's name ("Lekki Tower · Floor 4"), for friends. */ place?: string };
 
 /** Key for a whole building (what its levels add up to in buildingCounts). */
 export const buildingRoom = (tile: number) => `b:${tile}`;
@@ -153,7 +153,7 @@ export function useRooms(
     if (!ch || !joined.current || !m) return;
     if (c && c.round === roundRef.current) {
       const seat = c.seat ? { seat: c.seat, sitSince: c.sitSince ?? c.at } : {};
-      void ch.track({ room: c.room.id, name: m.name, avatar: m.avatar, at: c.at, ...seat } satisfies Meta);
+      void ch.track({ room: c.room.id, name: m.name, avatar: m.avatar, at: c.at, place: c.room.name.slice(0, 80), ...seat } satisfies Meta);
     } else void ch.untrack();
   }, []);
 
@@ -258,6 +258,13 @@ export function useRooms(
       return () => clearTimeout(id);
     }
   }, [meId, leave]);
+
+  // Where everyone in a place is (for friends: "Ada is at Lekki Tower · Floor 4").
+  const placeOf = useMemo(() => {
+    const out: Record<string, { room: string; name: string }> = {};
+    for (const p of people) if (p.room) out[p.id] = { room: p.room, name: typeof p.place === "string" ? p.place.slice(0, 80) : "" };
+    return out;
+  }, [people]);
 
   const myRoom = myPlace?.room.id ?? null;
   const members: RoomMember[] = useMemo(
@@ -380,6 +387,8 @@ export function useRooms(
     leave,
     /** Everyone in your place (including you). */
     members,
+    /** Where each player in a place is right now, by player id: the room id and the place's name. */
+    placeOf,
     /** Seats in your place that other people are sitting on, by seat id ("<room>:seat:<n>"). */
     seats,
     /** The seat you're sitting on, or null. */

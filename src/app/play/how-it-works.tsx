@@ -84,6 +84,8 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
       </>,
       "Or hop on a hot-air balloon: up to 1,000 people float over the city together for 10 minutes and chat on the way.",
       "You can still message anyone privately from the People list. Tap where a ghost was caught to say hi to them.",
+      "When other real players are in the same place as you, a card pops up saying who they are (they're people, not NPCs), so you can say hi or add them as a friend.",
+      "Add friends from the menu (Friends), the People list or that card. Once they say yes, they stay your friends in every new town: you see their faces over the places they're in, get a nudge when they go somewhere, and can go straight to them. Remove a friend any time.",
       <>
         Switch back to <Ico icon={Gamepad2} />
         <b>Game</b> to search or move.
@@ -147,6 +149,7 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
     body: [
       "In Chat mode, tap any building to go inside: lobbies, floors, restaurants, clubs and rooftops. Tap the floor to walk around and tap glowing things to use them.",
       "Sit down, play mini games with the people around you (archery, darts, arcade, duels, trivia and more), order food, dance and spray mint in clubs.",
+      "In a club, tap Dance (or the dance floor): the music starts and you see yourself dancing in the middle of the crowd, with a glowing ring under you. Pick a move (groove, hands up, shaku shaku, disco point, body wave, gwara gwara, legwork, spin), dance with another player or one of the regulars, and drag to look round. Everyone in the club sees you dance.",
       "Hop on a ride: hot-air balloons, trains, buses, cars, boats, the Ferris wheel and water slides. They drive themselves, so just sit back and look around.",
       "Watch sport: football at the stadium, basketball, boxing and wrestling at the arenas (or tap Sports in Chat mode). Every match is a brand-new simulated game, shown live from above. A ticket costs a few mint, and you can bet mint on who wins before kick-off. Tickets and the sportsbook's cut of bets go into the game's prize pool. Mint only, just for fun.",
       "Sometimes you'll get a side quest (sitting down makes it more likely). Finish it for mint and special moves.",

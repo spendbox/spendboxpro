@@ -15,6 +15,7 @@ import {
   ShoppingBag,
   Star,
   Trophy,
+  Users,
   X,
   type LucideIcon,
 } from "@/components/icons";
@@ -58,6 +59,8 @@ type Entry = {
   disabled?: boolean;
   hint?: string;
   warm?: () => void;
+  /** A little red number on the icon (e.g. friend requests waiting). */
+  badge?: number;
 };
 
 /**
@@ -76,6 +79,8 @@ export function Menu({
   onSignOut,
   onMyStyle,
   onMyHouse,
+  onFriends,
+  friendRequests = 0,
   coins,
   level,
 }: {
@@ -92,6 +97,10 @@ export function Menu({
   onMyStyle?: () => void;
   /** Opens your house. Left out: the entry is hidden. */
   onMyHouse?: () => void;
+  /** Opens your friends. Left out: the entry is hidden. */
+  onFriends?: () => void;
+  /** Friend requests waiting for you (a red number on Friends). */
+  friendRequests?: number;
   /** Your mint balance, shown under your name. */
   coins?: number;
   /** Your level, shown straight away (the progress bar fills in a moment later). */
@@ -134,6 +143,7 @@ export function Menu({
       disabled: !hasResults,
       hint: hasResults ? undefined : "Shows up after your first round",
     },
+    onFriends && { key: "friends", label: "Friends", icon: Users, tint: "bg-[#ffe3f1] text-[#c2255c]", onClick: onFriends, badge: friendRequests },
     onMyStyle && { key: "style", label: "My style", icon: Gamepad2, tint: "bg-[#fbe3f6] text-[#b8268f]", onClick: onMyStyle },
     onMyHouse && { key: "house", label: "My house", icon: House, tint: "bg-[#d7f6ea] text-[#0f8f6a]", onClick: onMyHouse },
     { key: "badges", label: "Badges", icon: Award, tint: SHEETS.badges.tint, onClick: () => open("badges"), warm: warm("badges") },
@@ -259,8 +269,13 @@ export function Menu({
                   title={e.hint}
                   className="flex w-[calc((100%-0.75rem)/3)] flex-col items-center gap-1.5 rounded-2xl bg-white/70 px-1 pb-2 pt-2.5 text-xs font-semibold ring-1 ring-ink/5 hover:bg-white disabled:opacity-45"
                 >
-                  <span className={cn("grid size-9 place-items-center rounded-xl", e.tint)}>
+                  <span className={cn("relative grid size-9 place-items-center rounded-xl", e.tint)}>
                     <Icon className="size-[18px]" strokeWidth={2.25} />
+                    {!!e.badge && (
+                      <span className="absolute -right-1.5 -top-1.5 grid min-w-4 place-items-center rounded-full bg-hit px-1 text-[10px] font-bold text-white" aria-label={`${e.badge} waiting`}>
+                        {e.badge > 9 ? "9+" : e.badge}
+                      </span>
+                    )}
                   </span>
                   <span className="w-full truncate">{e.label}</span>
                 </button>

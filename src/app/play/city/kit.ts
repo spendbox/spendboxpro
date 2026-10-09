@@ -94,12 +94,12 @@ function icoGeo(detail: number) {
   }
   return g;
 }
-function roundGeo(w: number, h: number, d: number, r: number) {
-  const key = `${w.toFixed(3)}|${h.toFixed(3)}|${d.toFixed(3)}|${r.toFixed(3)}`;
+function roundGeo(w: number, h: number, d: number, r: number, seg = 2) {
+  const key = `${w.toFixed(3)}|${h.toFixed(3)}|${d.toFixed(3)}|${r.toFixed(3)}|${seg}`;
   let g = roundCache.get(key);
   if (!g) {
     const rr = Math.min(r, w / 2 - 0.001, h / 2 - 0.001, d / 2 - 0.001);
-    g = flat(new RoundedBoxGeometry(w, h, d, 2, Math.max(0.001, rr)).translate(0, h / 2, 0));
+    g = flat(new RoundedBoxGeometry(w, h, d, seg, Math.max(0.001, rr)).translate(0, h / 2, 0));
     roundCache.set(key, g);
   }
   return g;
@@ -144,6 +144,11 @@ export class Kit {
   aoHeight = 0.35;
   /** The floor height things stand on (for the darkening). */
   floorY = 0;
+  /**
+   * People: the bone of the skeleton that what's drawn now moves with (each vertex follows one
+   * bone fully). Null for everything else (no skinning data at all).
+   */
+  bone: number | null = null;
 
   /** Draw what fn draws moved to (x, y, z) and turned by ry. */
   at(x: number, y: number, z: number, ry: number, fn: () => void) {
@@ -192,6 +197,16 @@ export class Kit {
       colors[k * 3 + 2] = col.b * f;
     }
     g.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    if (this.bone !== null) {
+      const idx = new Uint16Array(n * 4);
+      const wts = new Float32Array(n * 4);
+      for (let k = 0; k < n; k++) {
+        idx[k * 4] = this.bone;
+        wts[k * 4] = 1;
+      }
+      g.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(idx, 4));
+      g.setAttribute("skinWeight", new THREE.BufferAttribute(wts, 4));
+    }
     if (layer === "tex" || layer === "texGlow") {
       const r = uv ?? { u0: 0, v0: 0, u1: 1, v1: 1 };
       const uvs = g.getAttribute("uv") as THREE.BufferAttribute;
@@ -205,9 +220,9 @@ export class Kit {
   box(x: number, y: number, z: number, w: number, h: number, d: number, color: number, o?: Opts) {
     this.push(unitBox, x, y, z, w, h, d, color, o);
   }
-  /** A box with rounded edges (cushions, mattresses, soft things). */
-  soft(x: number, y: number, z: number, w: number, h: number, d: number, color: number, r = 0.05, o?: Opts) {
-    this.push(roundGeo(w, h, d, r), x, y, z, 1, 1, 1, color, o);
+  /** A box with rounded edges (cushions, mattresses, soft things); seg: how smooth the edges are. */
+  soft(x: number, y: number, z: number, w: number, h: number, d: number, color: number, r = 0.05, o?: Opts & { seg?: number }) {
+    this.push(roundGeo(w, h, d, r, o?.seg ?? 2), x, y, z, 1, 1, 1, color, o);
   }
   /** A cylinder (or cone, with different radii) standing at (x, y, z). */
   cyl(x: number, y: number, z: number, rTop: number, rBot: number, h: number, color: number, segs = 16, o?: Opts & { open?: boolean }) {
@@ -239,6 +254,17 @@ export class Kit {
   shadow(x: number, z: number, w: number, d: number, a = 0.35) {
     const p = this.world(x, this.floorY, z);
     this.shadows.push({ x: p.x, z: p.z, w, d, a, y: p.y, ry: this.worldYaw() });
+  }
+
+  /** Everything drawn on one layer so far, merged into one geometry (and forgotten here), or null. */
+  take(layer: Layer = "solid") {
+    const list = this.lists[layer];
+    if (!list.length) return null;
+    const merged = mergeGeometries(list, false);
+    for (const g of list) g.dispose();
+    this.lists[layer] = [];
+    merged?.computeBoundingSphere();
+    return merged;
   }
 
   /** Merge everything into meshes, one per layer, using the given materials. */

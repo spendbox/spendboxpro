@@ -1,11 +1,13 @@
 # To do
 
 ## Now (owner)
-- [ ] In the Supabase SQL Editor run, in order: `game-db/021_hourly_rounds.sql` (again), `022_pool_and_ads.sql`, `023_houses.sql`, `024_play_style.sql`, `025_big_towns.sql`. (If 017–020 were never run, run them first.) Then merge the open pull request.
+- [ ] In the Supabase SQL Editor run, in order: `game-db/021_hourly_rounds.sql` (again), `022_pool_and_ads.sql`, `023_houses.sql`, `024_play_style.sql`, `025_big_towns.sql`, `026_friends.sql`. (If 017–020 were never run, run them first.) Then merge the open pull request.
 - [ ] In Vercel, set `SPORTS_SECRET` to a long random string (once; don't change it later).
 - [ ] Test on a real phone: sounds, touch gestures, the water slide, club lights.
 
 ## Done lately
+- [x] Planes are proper airliners now: rounded body with a nose and cockpit, a row of windows, swept wings with engines, a tall tail in an airline's colours, wingtip lights and strobes, and two vapour trails. They fly higher and slower. The plane parked at the airport is an airliner too.
+- [x] Friends (run `game-db/026_friends.sql`): add, say yes, remove; friends stay friends in every new town, their faces show over the places they're in, nudges to join them, and "your friends are in this town too". A card pops up when real players (not NPCs) are in the same place as you. People look much more natural (jointed bodies, faces from avatars, outfits from avatars) and stay fast. Clubs: dance with everyone, see yourself dancing, eight moves, partners, music and lights on the beat.
 - [x] Rides out of town: the railway runs on into the countryside, flat farmland round every town (no mountains in the way), scenery made around you while you ride (fields, farms, villages, trees and animals in each country's style), and famous places from the town's own country or city outside it (Third Mainland Bridge, Big Ben, Statue of Liberty, Lake Nakuru's flamingos and more).
 - [x] Towns: a real stadium bowl (4×4), domed capitols, mega malls, a glass-vaulted station on a curving railway, big lakes with causeways, the sea for huge towns, winding lanes, schools / mosques / churches / pitches / playgrounds / monuments in every neighbourhood, and new skyscraper districts (with supertalls) as the town grows.
 - [x] Houses, phase 1 (free): pick a style, colours, room and name; "Show my house in the game" puts it in the middle of every new town (+5 hiding spots each); switch off for the next game; "Visit my house".
@@ -26,7 +28,6 @@
   - Booby-trapped spot: green slime and a longer wait for the hunter who searches it.
   - Mirage: a fake ghost on hunters' maps for a minute.
   - Haunting: caught ghosts flicker lights and rattle chairs while hunters are inside buildings.
-- [ ] **Fix planes** so they look like airliners (fuselage, wings, tail, high and slow, trails), not drones.
 - [ ] **New level curve.** Cheap and fast to level 20, then harder every level to 100. Quests, games and streaks also earn level progress. Cap the daily mint refill (+25 per level is about 2,575 a day at level 100). Existing players keep their levels.
 - [ ] **Simple counters** (time spent, next-day return, players per round) and a plan for 10-20 friends playing for a few days, plus scheduled evening "peak hour" events.
 

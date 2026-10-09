@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { AvatarFace } from "@/components/avatar";
-import { cleanAvatar, type Avatar } from "@/lib/avatar";
+import { cleanAvatar, defaultAvatar, type Avatar } from "@/lib/avatar";
 import {
   addressOf,
   hash,
@@ -36,7 +36,8 @@ import { createFigures, type Figures, type Person, type Spot } from "./city/figu
 import { createInteractables, createWalker, type Interactables, type Item } from "./city/interact";
 import { coolingTowerGeometry, createPlumes, industryParts } from "./city/industry";
 import { createInterior, type Interior, type RoomItem } from "./city/interiors";
-import { disposeBlobTexture, disposeKitCaches } from "./city/kit";
+import { disposeBlobTexture, disposeKitCaches, rngFrom } from "./city/kit";
+import { clubBeat, type DanceMove } from "./city/dance-moves";
 import { EYE, levelsOf, levelUse, METRES, ROOM_LABEL, THEME_SPORT, type PlaceLevel } from "./city/levels";
 import { createLookControls } from "./city/look-controls";
 import { createPeople } from "./city/people";
@@ -48,6 +49,7 @@ import { clubParts, eggParts, fireStationParts, restaurantParts } from "./city/s
 import { createCabin, type Cabin } from "./city/rides";
 import { disposeVehicleCaches } from "./city/vehicles";
 import { createBoats } from "./city/boats";
+import { createAirliner, LIVERIES } from "./city/airliner";
 import { createSlideRide, createWaterpark, waterparkParts, type Slide, type SlideRide, type Waterpark } from "./city/waterpark";
 import { createVenueGame, venueParts, type VenueGame } from "./city/venues";
 import { BRIDGE_TOP, makeWorld, signalJunction } from "./city/world";
@@ -125,6 +127,13 @@ export type CityLevel = {
  */
 export type CityRoom = { id: string; name: string; capacity: number; kind: "building" | "balloon"; levels?: CityLevel[] };
 
+/** Someone dancing on the dance floor of the club you're in: their move, and who they dance with (a player's or an NPC's id). */
+export type CityDancer = { id: string; name: string; avatar: Avatar; move: DanceMove; with: string | null };
+/** A friend in a place in town (chat mode shows their face over it): the room id from useRooms ("b:12:f4", "balloon:2"). */
+export type CityFriendPin = { id: string; name: string; avatar: Avatar; room: string };
+/** You dancing: your id (so everyone places the dancers the same way), your move, your partner. */
+export type CityDance = { id: string; move: DanceMove; with: string | null };
+
 /** Where you are inside a building: its room id ("b:<tile>") and a level id from its levels. */
 export type CityPlace = { building: string; level: string };
 
@@ -153,7 +162,9 @@ export type CitySport = "football" | "basketball" | "boxing" | "wrestling";
  */
 export type CityInteract = { id: string; kind: InteractKind; label: string; place: string; sport?: CitySport };
 /** Someone sitting in a seat (a player): their name and avatar. */
-export type SeatTaker = { name: string; avatar: unknown };
+export type SeatTaker = { id?: string; name: string; avatar: unknown };
+/** Another real player in the place you're in (drawn standing about, unless sitting or dancing). */
+export type CityPerson = { id: string; name: string; avatar: unknown };
 
 /** A ghost caught this round: their face stays floating over the spot. */
 export type CaughtFace = { tile: number; name: string | null; avatar: unknown };
@@ -247,6 +258,19 @@ type Props = {
   clockOffsetMs?: number;
   /** Players' houses standing in this game (src/lib/houses.ts): drawn in their colours, each one a place. */
   houses?: TownHouse[];
+  /**
+   * In a club: dance on the dance floor (you're drawn dancing among everyone, and the camera
+   * circles round you; drag to look round). null: walk about as usual.
+   */
+  dance?: CityDance | null;
+  /** Other players dancing in the club you're in. */
+  dancers?: CityDancer[];
+  /** Your friends who are in a place right now: chat mode shows each one's face and name over it. */
+  friendsAt?: CityFriendPin[];
+  /** Open a building's place (as if it was tapped: onRoom is called with it), e.g. to go to a friend. A new `at` each time. */
+  openRoom?: { id: string; at: number } | null;
+  /** The other real players in the place you're in: the ones not sitting or dancing are drawn standing about. */
+  roomPeople?: CityPerson[];
 };
 
 type Part = { tile: number; x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number; color: number; tilt?: number };
@@ -970,10 +994,17 @@ function structureParts(t: Tile, plan: CityPlan, B: BoxFn, tree: TreeFn) {
       B(c + 0.7, 1.34, c - 0.55, 0.3, 0.16, 0.3, 0x4dabf7, 0, "cyl");
       B(c + 0.7, 1.5, c - 0.55, 0.32, 0.04, 0.32, 0x495057, 0, "cyl");
       B(c - 0.75, 0.09, c - 0.05, 0.42, 0.28, 0.3, 0xadb5bd, 0, "dome");
-      // Parked plane
-      B(c + 0.3, 0.13, c - 0.05, 0.5, 0.09, 0.09, 0xffffff);
-      B(c + 0.3, 0.15, c - 0.05, 0.13, 0.02, 0.5, 0xffffff);
-      B(c + 0.08, 0.19, c - 0.05, 0.08, 0.13, 0.02, 0xe5484d);
+      // A parked airliner: fuselage with a nose and tail cone, swept wings, engines, tail fin.
+      B(c + 0.6, 0.16, c - 0.05, 0.085, 0.58, 0.085, 0xf8f9fa, 0, "cyl", Math.PI / 2);
+      B(c + 0.6, 0.16, c - 0.05, 0.085, 0.07, 0.085, 0xf8f9fa, 0, "cone", -Math.PI / 2);
+      B(c + 0.02, 0.165, c - 0.05, 0.08, 0.1, 0.08, 0xf8f9fa, 0, "cone", Math.PI / 2);
+      for (const s of [-1, 1]) {
+        B(c + 0.27, 0.14, c - 0.05 + s * 0.16, 0.1, 0.012, 0.28, 0xdee2e6, -s * 0.45);
+        B(c + 0.36, 0.105, c - 0.05 + s * 0.11, 0.035, 0.08, 0.035, 0xadb5bd, 0, "cyl", -Math.PI / 2);
+        B(c + 0.05, 0.17, c - 0.05 + s * 0.06, 0.05, 0.008, 0.1, 0xf8f9fa, -s * 0.5);
+      }
+      B(c + 0.33, 0.175, c - 0.05, 0.4, 0.012, 0.087, 0x2f9e44);
+      B(c + 0.08, 0.2, c - 0.05, 0.1, 0.13, 0.012, 0x2f9e44, 0, undefined, 0.55);
       break;
     }
     case "port": {
@@ -1082,7 +1113,8 @@ function faceTexture(avatar: Avatar, ring: string) {
   canvas.width = canvas.height = 128;
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
-  const svg = renderToStaticMarkup(<AvatarFace avatar={avatar} size={128} ring={ring} />);
+  // As a picture on its own, an SVG needs its namespace (React leaves it out).
+  const svg = renderToStaticMarkup(<AvatarFace avatar={avatar} size={128} ring={ring} />).replace(/^<svg(?![^>]*xmlns=)/, '<svg xmlns="http://www.w3.org/2000/svg"');
   const img = new Image();
   img.onload = () => {
     canvas.getContext("2d")!.drawImage(img, 0, 0, 128, 128);
@@ -1197,6 +1229,11 @@ export function CityView({
   liveVenues,
   clockOffsetMs = 0,
   houses,
+  dance = null,
+  dancers,
+  friendsAt,
+  openRoom = null,
+  roomPeople,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const api = useRef<{
@@ -1216,6 +1253,10 @@ export function CityView({
     setCaughtFaces: (list: CaughtFace[] | undefined) => void;
     setWorldEvents: (list: WorldEvent[] | undefined) => void;
     setHouses: (list: TownHouse[] | undefined) => void;
+    setDance: (me: CityDance | null, others: CityDancer[]) => void;
+    setFriendPins: (list: CityFriendPin[]) => void;
+    setRoomPeople: (list: CityPerson[]) => void;
+    openRoom: (id: string) => void;
     focusEvent: (id: number) => void;
   } | null>(null);
   const cb = useRef({ onTile, onHover, onBillboard, onBalloon, onAdViews, interactive, onRoom, onBalloons, mode, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract });
@@ -1945,19 +1986,13 @@ export function CityView({
       out.set(b.cx + Math.cos(a) * R, b.h + b.lift + Math.sin(time * 0.5 + b.k) * 0.25 * b.bob, b.cz + Math.sin(a) * R * 0.78 + Math.sin(2 * a + b.k) * R * 0.18);
       dir?.set(-Math.sin(a) * R, 0, Math.cos(a) * R * 0.78 + Math.cos(2 * a + b.k) * R * 0.36).normalize();
     }
+    // Airliners crossing high over the town, slowly, trailing vapour (see ./city/airliner).
     const planes = [0, 1].map((k) => {
-      const g = new THREE.Group();
-      const white = new THREE.MeshLambertMaterial({ color: 0xffffff });
-      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.05, 0.9, 8).rotateZ(Math.PI / 2), white);
-      const wing = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.02, 0.9), white);
-      const tail = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.2, 0.02), new THREE.MeshLambertMaterial({ color: k ? 0xe5484d : 0x228be6 }));
-      tail.position.set(-0.4, 0.1, 0);
-      const light = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 6), new THREE.MeshBasicMaterial({ color: 0xff4d4f }));
-      light.position.set(0, 0, 0.46);
-      g.add(body, wing, tail, light);
-      g.userData = { t: k * 0.5, angle: 0.4 + k * 2.2, light };
-      moving.add(g);
-      return g;
+      const jet = createAirliner(LIVERIES[(k * 3) % LIVERIES.length]);
+      jet.group.scale.setScalar(2.4);
+      jet.group.userData = { t: k * 0.5, angle: 0.4 + k * 2.2, jet };
+      moving.add(jet.group);
+      return jet.group;
     });
     function updateAir(time: number, dt: number) {
       for (const b of balloons) {
@@ -1972,18 +2007,19 @@ export function CityView({
       }
       for (const p of planes) {
         const u = p.userData;
-        u.t += dt / 26;
+        // High and slow: a minute or so to cross, then a new heading.
+        u.t += dt / 70;
         if (u.t > 1) {
           u.t = 0;
           u.angle += 1.9;
         }
-        const span = radius * 3 + 30;
+        const span = radius * 3 + 70;
         const ca = Math.cos(u.angle);
         const sa = Math.sin(u.angle);
         const d = (u.t - 0.5) * span;
-        p.position.set(ca * d - sa * 4, 15 + radius * 0.3, sa * d + ca * 4);
+        p.position.set(ca * d - sa * 6, 24 + radius * 0.35, sa * d + ca * 6);
         p.rotation.y = -u.angle;
-        (u.light as THREE.Mesh).visible = Math.sin(time * 6) > 0.6;
+        (u.jet as ReturnType<typeof createAirliner>).update(time);
       }
     }
 
@@ -3734,6 +3770,95 @@ export function CityView({
         if (p.a < 0.02) p.sprite.visible = false;
       }
     }
+    // Friends in places (chat mode): their face, with their name under it, over the place
+    // they're in (just above its info bubble), side by side when several are in one place.
+    // Drawn as small page elements over the canvas (like the bubbles), so they're always on top.
+    type Pin = { root: HTMLDivElement; tile: number; balloon: number; building: string; slot: number; of: number; shown: boolean };
+    let pins: Pin[] = [];
+    const pinLayer = document.createElement("div");
+    pinLayer.style.cssText = "position:absolute;inset:0;z-index:2;pointer-events:none;overflow:hidden;contain:strict;";
+    el.appendChild(pinLayer);
+    let pinKey = "";
+    const pinAt = new THREE.Vector3();
+    function setFriendPins(list: CityFriendPin[]) {
+      const key = `${currentSeed}|${tiles.length}|${list.map((f) => `${f.id}@${f.room}|${f.name}|${JSON.stringify(f.avatar)}`).join(";")}`;
+      if (key === pinKey) return;
+      pinKey = key;
+      for (const p of pins) p.root.remove();
+      pins = [];
+      const counts = new Map<string, number>();
+      const placed: { f: CityFriendPin; building: string; tile: number; balloon: number }[] = [];
+      for (const f of list) {
+        const building = /^(b:\d+)/.exec(f.room)?.[1] ?? f.room;
+        let tile = -1;
+        let balloon = -1;
+        if (building.startsWith("b:")) {
+          tile = Number(building.slice(2));
+          if (!tileById.get(tile)) continue;
+        } else if (building.startsWith("balloon:")) {
+          balloon = Number(building.slice(8));
+          if (!balloons[balloon]) continue;
+        } else continue;
+        counts.set(building, (counts.get(building) ?? 0) + 1);
+        placed.push({ f, building, tile, balloon });
+      }
+      const seen = new Map<string, number>();
+      for (const { f, building, tile, balloon } of placed) {
+        const slot = seen.get(building) ?? 0;
+        seen.set(building, slot + 1);
+        const root = document.createElement("div");
+        root.style.cssText = "position:absolute;left:0;top:0;display:flex;flex-direction:column;align-items:center;gap:2px;will-change:transform;visibility:hidden;";
+        const face = document.createElement("img");
+        const svg = renderToStaticMarkup(<AvatarFace avatar={cleanAvatar(f.avatar, f.name)} size={40} />).replace(/^<svg(?![^>]*xmlns=)/, '<svg xmlns="http://www.w3.org/2000/svg"');
+        face.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+        face.alt = "";
+        face.style.cssText = "width:40px;height:40px;border-radius:999px;border:3px solid #d6336c;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.25);";
+        const name = document.createElement("div");
+        name.textContent = f.name;
+        name.style.cssText =
+          "max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 8px;border-radius:999px;background:#d6336c;color:#fff;font:700 11px/16px system-ui,sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.2);";
+        root.append(face, name);
+        pinLayer.appendChild(root);
+        pins.push({ root, tile, balloon, building, slot, of: counts.get(building) ?? 1, shown: false });
+      }
+    }
+    function updatePins() {
+      const on = chatMode && isRevealed && pins.length > 0;
+      pinLayer.style.display = on ? "" : "none";
+      if (!on) return;
+      const w = el.clientWidth || 1;
+      const h = el.clientHeight || 1;
+      for (const p of pins) {
+        if (p.balloon >= 0) {
+          const b = balloons[p.balloon];
+          pinAt.copy(b.obj.position);
+          pinAt.y += 0.75 * BALLOON_SCALE;
+        } else {
+          const t = tileById.get(p.tile);
+          if (!t) continue;
+          const c = t.structure ? structureCentre(t.structure) : t;
+          pinAt.set(c.x, t.top + 0.35, c.z);
+        }
+        const inside = (view?.kind === "place" && view.stage.building === p.building) || (view?.kind === "ride" && p.balloon === view.k);
+        pinAt.project(camera);
+        const show = !inside && pinAt.z < 1 && Math.abs(pinAt.x) < 1.1 && Math.abs(pinAt.y) < 1.1;
+        if (show !== p.shown) {
+          p.shown = show;
+          p.root.style.visibility = show ? "visible" : "hidden";
+        }
+        if (!show) continue;
+        // Above the place's info bubble, side by side when several friends are in one place.
+        const x = ((pinAt.x + 1) / 2) * w + (p.slot - (p.of - 1) / 2) * 48;
+        const y = ((1 - pinAt.y) / 2) * h - 52;
+        p.root.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`;
+      }
+    }
+    /** Open a building's place as if it had been tapped (onRoom), e.g. to go to a friend. */
+    function openRoomById(id: string) {
+      const m = /^b:(\d+)/.exec(id);
+      const r = m ? roomFor(Number(m[1])) : null;
+      if (r) cb.current.onRoom?.(r.room);
+    }
     function setMode(m: "game" | "chat") {
       chatMode = m === "chat";
       (hoverBox.material as THREE.LineBasicMaterial).color.set(chatMode ? 0x63e6be : 0xffb400);
@@ -3901,6 +4026,23 @@ export function CityView({
       playersKey: string;
       /** Moving parts of the room (club lights...). */
       update: ((time: number) => void) | null;
+      /** A club's dance floor: where it is, the spots kept free for players, the crowd dancing on it, and the players dancing (you too). */
+      floor: { x: number; z: number; w: number; d: number } | null;
+      slots: { x: number; z: number }[];
+      crowd: Figures | null;
+      dancers: Figures | null;
+      dancersKey: string;
+      /** Where you're dancing (room metres), or null. */
+      meAt: { x: number; z: number; ry: number } | null;
+      /** Regulars dancing with a player: which way they faced before. */
+      partnered: Map<string, number>;
+      /** You just started dancing: turn the camera to face you. And the glowing ring under you. */
+      danceCam: boolean;
+      meRing: THREE.Mesh | null;
+      /** Where the dance camera is (room metres). */
+      camAt: { x: number; z: number } | null;
+      /** Standing spots the regulars aren't using (for other players standing about). */
+      free: Spot[];
     };
     /** On a ride (not a balloon): the cabin drawn round you, the people in it, where it is. */
     type VehicleView = {
@@ -3943,6 +4085,7 @@ export function CityView({
     const pose = { pos: new THREE.Vector3(), quat: new THREE.Quaternion(), fov: 60 };
     const eul = new THREE.Euler(0, 0, 0, "YXZ");
     const rideEye = new THREE.Vector3();
+    const tmpV2 = new THREE.Vector3();
     const leanDir = new THREE.Vector3();
     const tmpV = new THREE.Vector3();
     /** How far the eye is below a balloon's middle (in the basket). */
@@ -4016,6 +4159,17 @@ export function CityView({
         players: null,
         playersKey: "",
         update: null,
+        floor: null,
+        slots: [],
+        crowd: null,
+        dancers: null,
+        dancersKey: "",
+        meAt: null,
+        partnered: new Map(),
+        danceCam: false,
+        meRing: null,
+        camAt: null,
+        free: [],
       };
       if (lvl.kind === "interior") {
         const interior = createInterior({
@@ -4048,6 +4202,7 @@ export function CityView({
         st.update = interior.update;
         setupUse(st, interior.seats, interior.items, interior.spots, npcs.length);
         st.walker = createWalker(interior.w, interior.d, interior.blocks);
+        if (interior.danceFloor) setupFloor(st, interior.danceFloor, interior.spots.slice(0, npcs.length), key);
       } else {
         const deck = lvl.kind === "roof" ? createDeck(lvl.theme, key, lvl.hw * 2 * METRES, lvl.hd * 2 * METRES) : createOpenAir(lvl.theme, key);
         const figures = createFigures(npcs, deck.spots, { key, tags: true });
@@ -4089,6 +4244,12 @@ export function CityView({
       st.figures?.dispose();
       st.interact?.dispose();
       st.players?.dispose();
+      st.crowd?.dispose();
+      st.dancers?.dispose();
+      if (st.meRing) {
+        st.meRing.geometry.dispose();
+        (st.meRing.material as THREE.Material).dispose();
+      }
     }
 
     // ---- things to use inside places, sitting down, and walking round
@@ -4098,6 +4259,7 @@ export function CityView({
     function setupUse(st: Stage, seats: Spot[], raw: RoomItem[], npcSpots: Spot[], npcCount: number) {
       st.seats = seats;
       st.npcSeats = new Set(npcSpots.slice(0, npcCount));
+      st.free = npcSpots.slice(npcCount).filter((sp) => sp.pose !== "sit");
       const counts: Record<string, number> = {};
       const things: Item[] = raw.map((it) => {
         const n = (counts[it.kind] = (counts[it.kind] ?? -1) + 1);
@@ -4119,7 +4281,16 @@ export function CityView({
     /** Players sitting here: draw them in their seats; keep the seat markers up to date. */
     function syncPlayers(st: Stage) {
       const mine = st.seats.map((_, n) => `${st.place}:seat:${n}`);
-      const key = mine.filter((id) => seatsNow[id] && id !== mySeatNow).map((id) => `${id}=${seatsNow[id].name}`).join("|") + `|me:${mySeatNow}`;
+      // Everyone else here who isn't sitting down or dancing stands about in a free spot.
+      const busy = new Set<string>([...Object.values(seatsNow).flatMap((w) => (w.id ? [w.id] : [])), ...dancersNow.map((d) => d.id)]);
+      const standing = roomPeopleNow
+        .filter((p) => !busy.has(p.id))
+        .sort((a, b) => (a.id < b.id ? -1 : 1))
+        .slice(0, st.free.length);
+      const key =
+        mine.filter((id) => seatsNow[id] && id !== mySeatNow).map((id) => `${id}=${seatsNow[id].name}`).join("|") +
+        `|me:${mySeatNow}|` +
+        standing.map((p) => `${p.id}=${p.name}=${JSON.stringify(p.avatar)}`).join(",");
       if (key === st.playersKey) return;
       st.playersKey = key;
       st.players?.dispose();
@@ -4132,6 +4303,10 @@ export function CityView({
         if (!who || id === mySeatNow || st.npcSeats.has(sp)) return;
         people.push({ id: `seat:${id}`, name: who.name, avatar: cleanAvatar(who.avatar, who.name), npc: false, seat: id });
         spots.push({ ...sp, act: "idle" });
+      });
+      standing.forEach((p, i) => {
+        people.push({ id: `here:${p.id}`, name: p.name, avatar: cleanAvatar(p.avatar, p.name), npc: false, seat: `here:${p.id}` });
+        spots.push({ ...st.free[i], act: st.free[i].act ?? "talk" });
       });
       if (people.length) {
         st.players = createFigures(people, spots, { key: st.place });
@@ -4156,6 +4331,161 @@ export function CityView({
       } else st.eyeTo = 1.6;
     }
     const stageTurn = (st: Stage) => (st.interior ? st.holder.rotation.y : st.level.ry);
+
+    // ---- the dance floor (clubs): a crowd dancing, the players dancing, and you
+    let danceNow: CityDance | null = null;
+    let dancersNow: CityDancer[] = [];
+    /** Lay out a club's dance floor: spots kept free for players near the middle, a crowd round them. */
+    function setupFloor(st: Stage, floor: { x: number; z: number; w: number; d: number }, npcSpots: Spot[], key: string) {
+      st.floor = floor;
+      const rnd = rngFrom(`${key}|floor`);
+      const taken = npcSpots.filter((sp) => sp.act === "dance");
+      const grid: { x: number; z: number }[] = [];
+      for (let gx = -floor.w / 2 + 0.55; gx <= floor.w / 2 - 0.55; gx += 0.72) {
+        for (let gz = -floor.d / 2 + 0.55; gz <= floor.d / 2 - 0.55; gz += 0.72) grid.push({ x: floor.x + gx + (rnd() - 0.5) * 0.18, z: floor.z + gz + (rnd() - 0.5) * 0.18 });
+      }
+      const free = grid.filter((p) => taken.every((sp) => Math.hypot(sp.x - p.x, sp.z - p.z) > 0.65));
+      free.sort((a, b) => Math.hypot(a.x - floor.x, a.z - floor.z) - Math.hypot(b.x - floor.x, b.z - floor.z));
+      // The middle is kept for players; a crowd dances round it (facing the DJ, more or less).
+      st.slots = free.slice(0, 10);
+      const around = free.slice(10).filter(() => rnd() < 0.6).slice(0, 12);
+      const people: Person[] = around.map((_, i) => ({ id: `crowd:${i}`, name: "", avatar: defaultAvatar(`${key}|crowd|${i}`), npc: false }));
+      const spots: Spot[] = around.map((p) => ({ x: p.x, z: p.z, ry: (rnd() - 0.5) * 1.4, pose: "stand", act: "dance" }));
+      if (people.length) {
+        st.crowd = createFigures(people, spots, { key, inert: true, tags: false });
+        st.holder.add(st.crowd.group);
+      }
+      syncDancers(st);
+    }
+    /** Draw the players dancing here (you too), each in their place with their move; partners face each other. */
+    function syncDancers(st: Stage) {
+      const fl = st.floor;
+      if (!fl) return;
+      const list: CityDancer[] = dancersNow.filter((d) => d.id !== danceNow?.id);
+      if (danceNow) list.push({ id: danceNow.id, name: "You", avatar: atmos.current.meAvatar, move: danceNow.move, with: danceNow.with });
+      // Everyone works out the same places (in id order), so all phones agree.
+      list.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+      const at = new Map<string, { x: number; z: number; ry: number }>();
+      const crowded = new Map<string, number>();
+      let next = 0;
+      const nextSlot = () => st.slots[next++ % Math.max(1, st.slots.length)] ?? { x: fl.x, z: fl.z };
+      const face = (from: { x: number; z: number }, to: { x: number; z: number }) => Math.atan2(to.x - from.x, to.z - from.z);
+      /** A spot next to someone (towards the middle of the floor; the next one round them, and so on). */
+      const beside = (p: { x: number; z: number }, who: string) => {
+        const n = crowded.get(who) ?? 0;
+        crowded.set(who, n + 1);
+        let a = Math.hypot(fl.x - p.x, fl.z - p.z) < 0.3 ? Math.PI / 2 : Math.atan2(fl.x - p.x, fl.z - p.z);
+        a += n * 2.1;
+        return { x: p.x + Math.sin(a) * 0.78, z: p.z + Math.cos(a) * 0.78 };
+      };
+      const npcFacing = new Map<string, number>();
+      const npcMoves = new Map<string, DanceMove>();
+      const later: CityDancer[] = [];
+      for (const d of list) {
+        const partner = d.with ? list.find((p) => p.id === d.with && p.id !== d.id) : undefined;
+        if (partner) {
+          const pp = at.get(partner.id);
+          if (!pp) {
+            later.push(d);
+            continue;
+          }
+          const p = beside(pp, partner.id);
+          at.set(d.id, { ...p, ry: face(p, pp) });
+          if (!partner.with || partner.with === d.id) pp.ry = face(pp, p);
+          continue;
+        }
+        const npc = d.with?.startsWith("npc:") ? st.figures?.where(d.with) : null;
+        if (npc && d.with) {
+          const p = beside(npc, d.with);
+          at.set(d.id, { ...p, ry: face(p, npc) });
+          if (!npcFacing.has(d.with)) npcFacing.set(d.with, face(npc, p));
+          npcMoves.set(d.with, d.move);
+          continue;
+        }
+        const p = nextSlot();
+        at.set(d.id, { ...p, ry: 0 });
+      }
+      for (const d of later) {
+        const pp = d.with ? at.get(d.with) : undefined;
+        if (pp) {
+          const p = beside(pp, d.with!);
+          at.set(d.id, { ...p, ry: face(p, pp) });
+          pp.ry = face(pp, p);
+        } else at.set(d.id, { ...nextSlot(), ry: 0 });
+      }
+      // (Re)build the dancers when who's dancing changes; moves and places change in place.
+      const key = list.map((d) => `${d.id}|${d.name}|${JSON.stringify(d.avatar)}`).join(";");
+      if (key !== st.dancersKey) {
+        st.dancersKey = key;
+        st.dancers?.dispose();
+        st.dancers = null;
+        if (list.length) {
+          const people: Person[] = list.map((d) => ({ id: d.id, name: d.name, avatar: d.avatar, npc: false, seat: `dancer:${d.id}` }));
+          const spots: Spot[] = list.map((d) => ({ ...(at.get(d.id) ?? { x: fl.x, z: fl.z, ry: 0 }), pose: "stand", act: "dance", move: d.move }));
+          st.dancers = createFigures(people, spots, { key: st.place });
+          st.holder.add(st.dancers.group);
+        }
+      }
+      for (const d of list) {
+        const p = at.get(d.id);
+        if (p) st.dancers?.place(d.id, p.x, p.z, p.ry);
+        st.dancers?.setMove(d.id, d.move);
+      }
+      // Regulars dancing with a player turn to them and copy their move; the rest go back to their own.
+      for (const [id, ry0] of st.partnered) {
+        if (npcMoves.has(id)) continue;
+        const w = st.figures?.where(id);
+        if (w) st.figures?.place(id, w.x, w.z, ry0);
+        st.figures?.setMove(id, null);
+        st.partnered.delete(id);
+      }
+      for (const [id, move] of npcMoves) {
+        const w = st.figures?.where(id);
+        if (!w) continue;
+        if (!st.partnered.has(id)) st.partnered.set(id, w.ry);
+        st.figures?.place(id, w.x, w.z, npcFacing.get(id) ?? w.ry);
+        st.figures?.setMove(id, move);
+      }
+      // You: the camera comes out to circle round you while you dance, and back in when you stop.
+      const mine = danceNow ? (at.get(danceNow.id) ?? null) : null;
+      const was = st.meAt;
+      st.meAt = mine ? { ...mine } : null;
+      if (mine && !st.meRing) {
+        // A glowing ring on the floor under you, pulsing with the beat, so you can always spot yourself.
+        st.meRing = new THREE.Mesh(
+          new THREE.RingGeometry(0.34, 0.44, 40).rotateX(-Math.PI / 2),
+          new THREE.MeshBasicMaterial({ color: 0x63e6be, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }),
+        );
+        st.meRing.renderOrder = 3;
+        st.holder.add(st.meRing);
+      }
+      if (mine && !was) st.danceCam = true;
+      if (view?.kind !== "place" || view.stage !== st) return;
+      if (mine && !was) startFlight("move", 0.9, null);
+      else if (!mine && was) {
+        st.local.x = was.x;
+        st.local.z = was.z;
+        st.walk = null;
+        aim.yaw = stageTurn(st) + was.ry + Math.PI;
+        aim.pitch = -0.1;
+        look.setLimits({ pitchMin: -1.0 - aim.pitch, pitchMax: 0.75 - aim.pitch, zoomMin: 0.55, zoomMax: 1.15 });
+        look.lookAt(0, 0);
+        startFlight("move", 0.8, null);
+      }
+    }
+    function setDance(me: CityDance | null, others: CityDancer[]) {
+      danceNow = me;
+      dancersNow = others;
+      if (view?.kind === "place") {
+        syncDancers(view.stage);
+        syncPlayers(view.stage);
+      }
+    }
+    let roomPeopleNow: CityPerson[] = [];
+    function setRoomPeople(list: CityPerson[]) {
+      roomPeopleNow = list;
+      if (view?.kind === "place") syncPlayers(view.stage);
+    }
     /** Walk to (x, z) in the room (round the furniture; `exact`: right to that spot, e.g. a seat). */
     function walkTo(st: Stage, x: number, z: number, exact = false) {
       const pts = st.walker?.path(st.local.x, st.local.z, x, z) ?? null;
@@ -4208,7 +4538,8 @@ export function CityView({
       if (st.players) {
         const hit = ray.intersectObjects(st.players.hits, true)[0];
         const id = hit ? st.players.seatOf(hit.object) : null;
-        if (id) return { id, kind: "seat", label: `${seatsNow[id]?.name ?? "Someone"}'s seat`, x: 0, y: 0, z: 0, r: 0, taken: seatsNow[id]?.name ?? null };
+        // (Someone standing about isn't a seat: the tap goes to the floor.)
+        if (id && !id.startsWith("here:")) return { id, kind: "seat", label: `${seatsNow[id]?.name ?? "Someone"}'s seat`, x: 0, y: 0, z: 0, r: 0, taken: seatsNow[id]?.name ?? null };
       }
       return st.interact?.pick(ray.ray) ?? null;
     }
@@ -4218,7 +4549,7 @@ export function CityView({
     function walkTap(clientX: number, clientY: number) {
       if (view?.kind !== "place" || flight) return false;
       const st = view.stage;
-      if (mySeatNow?.startsWith(`${st.place}:seat:`)) return false;
+      if (mySeatNow?.startsWith(`${st.place}:seat:`) || st.meAt) return false;
       const rect = renderer.domElement.getBoundingClientRect();
       pointer.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
       ray.setFromCamera(pointer, st.scene ? overlayCam : camera);
@@ -4617,6 +4948,33 @@ export function CityView({
         // The basket turns slowly to keep the middle of the city in front of you.
         const want = Math.atan2(rideEye.x, rideEye.z);
         if (Math.hypot(rideEye.x, rideEye.z) > 1.5) aim.yaw += turnTo(aim.yaw, want) * (1 - Math.exp(-dt / 9));
+      } else if (view?.kind === "place" && view.stage.meAt) {
+        // Dancing: the camera circles you (drag to go round), looking at you among the crowd.
+        const st = view.stage;
+        const me = st.meAt!;
+        if (st.danceCam) {
+          // Just started: stand the camera in front of you.
+          st.danceCam = false;
+          // Side-on when you're dancing with someone, so you see the two of you.
+          aim.yaw = stageTurn(st) + me.ry + (danceNow?.with ? 1.1 : 0);
+          aim.pitch = 0;
+          look.setLimits({ pitchMin: -0.35, pitchMax: 0.55, zoomMin: 0.65, zoomMax: 1.35 });
+          look.lookAt(0, 0);
+        }
+        const W = (st.interior?.w ?? 7) / 2 - 0.45;
+        const D = (st.interior?.d ?? 7) / 2 - 0.45;
+        const ly = aim.yaw + look.state.yaw - stageTurn(st);
+        const dist = 3.0 / Math.max(0.6, look.state.zoom);
+        const cx = Math.max(-W, Math.min(W, me.x + Math.sin(ly) * dist));
+        const cz = Math.max(-D, Math.min(D, me.z + Math.cos(ly) * dist));
+        st.camAt = { x: cx, z: cz };
+        // High enough to see over the crowd's heads.
+        stageToCity(st, cx, cz, 2.5 + look.state.pitch * 1.2, pose.pos);
+        stageToCity(st, me.x, me.z, 1.05, tmpV2);
+        tmpV2.sub(pose.pos);
+        pose.quat.setFromEuler(eul.set(Math.atan2(tmpV2.y, Math.hypot(tmpV2.x, tmpV2.z)), Math.atan2(-tmpV2.x, -tmpV2.z), 0, "YXZ"));
+        pose.fov = fovFor(78);
+        return;
       } else if (view?.kind === "place") {
         const st = view.stage;
         stepWalk(st, dt);
@@ -4773,6 +5131,23 @@ export function CityView({
         camLocal.set(st.local.x, 0, st.local.z);
         st.figures?.update(time, camLocal);
         st.players?.update(time, camLocal);
+        st.crowd?.update(time);
+        st.dancers?.update(time);
+        // While you dance, nobody stands between the camera and you.
+        const cam = st.meAt ? st.camAt : null;
+        for (const f of [st.crowd, st.figures, st.dancers]) {
+          if (!f) continue;
+          if (cam && st.meAt) f.clearView(cam.x, cam.z, st.meAt.x, st.meAt.z, 0.5, danceNow?.id);
+          else f.showAll();
+        }
+        if (st.meRing) {
+          st.meRing.visible = !!st.meAt;
+          if (st.meAt) {
+            st.meRing.position.set(st.meAt.x, 0.09, st.meAt.z);
+            const k = 1 + 0.12 * Math.max(0, Math.cos(clubBeat() * Math.PI * 2));
+            st.meRing.scale.set(k, k, 1);
+          }
+        }
         st.update?.(time);
         st.interact?.update(time, camLocal, st.hover);
       }
@@ -5270,6 +5645,7 @@ export function CityView({
         controls.update();
       }
       updatePills();
+      updatePins();
       const dist = riding ? 10 : camera.position.distanceTo(controls.target);
       const fog = scene.fog as THREE.Fog;
       fog.near = (dist + radius * 0.8) * (1 - fogFactor * 0.45);
@@ -5323,7 +5699,7 @@ export function CityView({
       if (currentSeed >= 0 && builtCount > 0) build(currentSeed, builtCount);
     }
 
-    api.current = { build, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setMode, setWorldEvents, setHouses, focusEvent: focusEventAt };
+    api.current = { build, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setMode, setWorldEvents, setHouses, setDance, setFriendPins, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt };
 
     return () => {
       alive = false;
@@ -5375,6 +5751,8 @@ export function CityView({
       disposeWater(waterGroup);
       countryside.dispose();
       country?.dispose();
+      for (const p of planes) (p.userData.jet as ReturnType<typeof createAirliner>).dispose();
+      pinLayer.remove();
       for (const g of hillTreeShapes.values()) g.dispose();
       renderer.dispose();
       el.removeChild(renderer.domElement);
@@ -5454,6 +5832,40 @@ export function CityView({
   useEffect(() => {
     if (focusEvent) api.current?.focusEvent(focusEvent.id);
   }, [focusEvent]);
+
+  const friendsKey = (friendsAt ?? []).map((f) => `${f.id}@${f.room}|${f.name}|${JSON.stringify(f.avatar)}`).join(";");
+  const friendsRef = useRef(friendsAt);
+  useEffect(() => {
+    friendsRef.current = friendsAt;
+  });
+  useEffect(() => {
+    api.current?.setFriendPins(friendsRef.current ?? []);
+  }, [friendsKey, tileCount, seed]);
+
+  const peopleKey = (roomPeople ?? []).map((p) => `${p.id}|${p.name}|${JSON.stringify(p.avatar)}`).join(";");
+  const peopleRef = useRef(roomPeople);
+  useEffect(() => {
+    peopleRef.current = roomPeople;
+  });
+  useEffect(() => {
+    api.current?.setRoomPeople(peopleRef.current ?? []);
+  }, [peopleKey]);
+
+  const openKey = openRoom ? `${openRoom.id}|${openRoom.at}` : "";
+  useEffect(() => {
+    if (openKey) api.current?.openRoom(openKey.split("|")[0]);
+  }, [openKey]);
+
+  // Dancing: only redo things when who's dancing (or how) actually changes.
+  const danceRef = useRef({ dance, dancers });
+  useEffect(() => {
+    danceRef.current = { dance, dancers };
+  });
+  const danceKey = dance ? `${dance.id}|${dance.move}|${dance.with ?? ""}` : "";
+  const dancersKey = (dancers ?? []).map((d) => `${d.id}|${d.move}|${d.with ?? ""}|${d.name}|${JSON.stringify(d.avatar)}`).join(";");
+  useEffect(() => {
+    api.current?.setDance(danceRef.current.dance ?? null, danceRef.current.dancers ?? []);
+  }, [danceKey, dancersKey]);
 
   return <div ref={host} className="absolute inset-0" />;
 }
