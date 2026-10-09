@@ -11,6 +11,7 @@ import * as THREE from "three";
 import { books, board, cityMap, dashboard, departures, floorTexture, painting, products, rug, sign, tvPicture, ART_STYLES, RUG_STYLES, Sheet, type FloorStyle } from "./interior-art";
 import { blobTexture, Kit, mixHex, pickOf, rngFrom, shadeHex, shadowMesh, type Rng, type UvRect } from "./kit";
 import { createAthletes, createCrowd, faceRig, runRig, skinOf, type AthleteLook } from "./arenas";
+import { clubBeat } from "./dance-moves";
 import type { Act, Spot } from "./figures";
 import type { Block, InteractKind } from "./interact";
 import type { Theme } from "./levels";
@@ -47,6 +48,8 @@ export type Interior = {
   items: RoomItem[];
   /** Where furniture stands (for walking round it). */
   blocks: Block[];
+  /** A club's dance floor (middle and size, metres), where players dance. */
+  danceFloor?: { x: number; z: number; w: number; d: number };
   /** Room size (metres), for keeping things inside. */
   w: number;
   d: number;
@@ -162,6 +165,8 @@ type Ctx = {
   nightHooks: ((n: number) => void)[];
   /** Places nobody walks (besides under the furniture), e.g. over the stadium's lower tiers. */
   blocks: Block[];
+  /** A club's dance floor. */
+  dance?: { x: number; z: number; w: number; d: number };
 };
 
 /** Something to use, at a point in the current drawing frame. */
@@ -886,10 +891,12 @@ function club(x: Ctx) {
     tiles.setColorAt(i * n1 + j, cols[(i + j) % cols.length]);
   }
   x.extras.push(tiles);
+  x.dance = { x: 0, z: fz, w: fw, d: fd };
   let lastBeat = -1;
   const dim = new THREE.Color();
-  x.anim.push((t) => {
-    const beat = Math.floor(t * 2.1);
+  x.anim.push(() => {
+    // The floor changes on every beat (the same beat the dancers move to).
+    const beat = Math.floor(clubBeat());
     if (beat === lastBeat) return;
     lastBeat = beat;
     for (let i = 0; i < n0; i++) for (let j = 0; j < n1; j++) {
@@ -993,6 +1000,57 @@ function club(x: Ctx) {
     cones.push(cone);
     x.extras.push(cone);
   }
+  // Spots of light thrown round the room by the mirror ball, sweeping over floor and walls.
+  const SPOTS = 56;
+  const dots = new THREE.InstancedMesh(
+    new THREE.CircleGeometry(0.09, 10),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
+    SPOTS,
+  );
+  dots.renderOrder = 3;
+  dots.frustumCulled = false;
+  const rays: THREE.Vector3[] = [];
+  for (let i = 0; i < SPOTS; i++) {
+    // Evenly round a sphere (a golden spiral), mostly pointing down and out.
+    const yy = -0.95 + (i / (SPOTS - 1)) * 1.3;
+    const r = Math.sqrt(1 - yy * yy);
+    const a = i * 2.39996;
+    rays.push(new THREE.Vector3(Math.cos(a) * r, yy, Math.sin(a) * r));
+  }
+  const dotCols = cols.map((c) => c.clone().lerp(new THREE.Color(0xffffff), 0.55));
+  for (let i = 0; i < SPOTS; i++) dots.setColorAt(i, dotCols[i % dotCols.length]);
+  x.extras.push(dots);
+  const ballAt = new THREE.Vector3(0, room.h - 0.6, fz);
+  const dir = new THREE.Vector3();
+  const hitAt = new THREE.Vector3();
+  const look = new THREE.Vector3();
+  const dm = new THREE.Matrix4();
+  const dq = new THREE.Quaternion();
+  const one = new THREE.Vector3(1, 1, 1);
+  const zAxis = new THREE.Vector3(0, 0, 1);
+  x.anim.push((t) => {
+    const spin = t * 0.8;
+    const pulse = 0.55 + 0.35 * Math.max(0, Math.cos(clubBeat() * Math.PI * 2));
+    (dots.material as THREE.MeshBasicMaterial).opacity = pulse;
+    for (let i = 0; i < SPOTS; i++) {
+      dir.copy(rays[i]).applyAxisAngle(THREE.Object3D.DEFAULT_UP, spin);
+      // Where the ray meets the floor or a wall (whichever comes first).
+      let best = Infinity;
+      if (dir.y < -0.01) best = Math.min(best, (0.08 - ballAt.y) / dir.y);
+      if (Math.abs(dir.x) > 0.01) best = Math.min(best, ((Math.sign(dir.x) * (W / 2 - 0.03)) - ballAt.x) / dir.x);
+      if (Math.abs(dir.z) > 0.01) best = Math.min(best, ((Math.sign(dir.z) * (D / 2 - 0.03)) - ballAt.z) / dir.z);
+      if (!Number.isFinite(best)) best = 3;
+      hitAt.copy(ballAt).addScaledVector(dir, best);
+      // Lie flat on whatever it landed on.
+      if (Math.abs(hitAt.y - 0.08) < 0.02) look.set(0, 1, 0);
+      else if (Math.abs(Math.abs(hitAt.x) - (W / 2 - 0.03)) < 0.02) look.set(-Math.sign(hitAt.x), 0, 0);
+      else look.set(0, 0, -Math.sign(hitAt.z));
+      dq.setFromUnitVectors(zAxis, look);
+      dm.compose(hitAt, dq, one);
+      dots.setMatrixAt(i, dm);
+    }
+    dots.instanceMatrix.needsUpdate = true;
+  });
   x.anim.push((t) => {
     ball.rotation.y = t * 0.8;
     lasers.rotation.y = Math.sin(t * 0.7) * 0.6;
@@ -2908,5 +2966,5 @@ export function createInterior(info: InteriorInfo): Interior {
     if (x.dark) warm.forEach((l, i) => l.color.setHSL((time * 0.07 + i * 0.4) % 1, 0.8, 0.6));
   }
 
-  return { group, views: x.views, spots, seats, items: x.items, blocks, w: room.w, d: room.d, setNight, setAlpha, update, dispose };
+  return { group, views: x.views, spots, seats, items: x.items, blocks, danceFloor: x.dance, w: room.w, d: room.d, setNight, setAlpha, update, dispose };
 }

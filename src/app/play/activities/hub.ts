@@ -165,7 +165,7 @@ export function useActivityRoom(
   roundId: number | null | undefined,
   roomId: string | null | undefined,
   me: ActivityPlayer | null,
-  opts: { doing?: string | null; onMessage?: (m: ActivityMsg) => void } = {},
+  opts: { doing?: string | readonly string[] | null; onMessage?: (m: ActivityMsg) => void } = {},
 ) {
   const topic = roundId != null && roomId ? `activity:${roundId}:${roomId}` : null;
   const [present, setPresent] = useState<PresentPlayer[]>([]);
@@ -197,16 +197,19 @@ export function useActivityRoom(
     };
   }, [topic, meId]);
 
-  // What you're doing, shared with the place while this part of the screen is open.
-  const doing = opts.doing ?? null;
+  // What you're doing (one thing or several), shared with the place while this part of the screen is open.
+  const doing = opts.doing == null ? "" : typeof opts.doing === "string" ? opts.doing : opts.doing.join("\n");
   useEffect(() => {
     const hub = hubRef.current;
     if (!hub || !doing) return;
-    const token = nextToken++;
-    hub.doing.set(token, doing);
+    const tokens = doing.split("\n").map((d) => {
+      const token = nextToken++;
+      hub.doing.set(token, d);
+      return token;
+    });
     track(hub);
     return () => {
-      hub.doing.delete(token);
+      for (const t of tokens) hub.doing.delete(t);
       track(hub);
     };
   }, [doing, topic, meId]);

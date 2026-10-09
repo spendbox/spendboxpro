@@ -27,12 +27,12 @@ for f in game-db/001_hide_and_seek.sql \
          game-db/017_world_events.sql \
          game-db/018_npcs.sql \
          game-db/019_activities.sql \
-         game-db/020_sports.sql game-db/021_hourly_rounds.sql game-db/022_pool_and_ads.sql game-db/023_houses.sql game-db/024_play_style.sql game-db/025_big_towns.sql; do
+         game-db/020_sports.sql game-db/021_hourly_rounds.sql game-db/022_pool_and_ads.sql game-db/023_houses.sql game-db/024_play_style.sql game-db/025_big_towns.sql game-db/026_friends.sql; do
   [ -f "$f" ] || continue
   $P -f "$f"
 done
 $P -f game-db/tests/game.test.sql 2>&1 | sed 's/^psql:[^ ]* NOTICE:  //'
-for t in round4 round5 ads badges2 age ads2 rooms round6 rooms2 round7 npcs activities sports hourly pool houses style bigtown; do
+for t in round4 round5 ads badges2 age ads2 rooms round6 rooms2 round7 npcs activities sports hourly pool houses style bigtown friends; do
   [ -f "game-db/tests/$t.test.sql" ] || continue
   $P -f "game-db/tests/$t.test.sql" 2>&1 | sed 's/^psql:[^ ]* NOTICE:  //'
 done

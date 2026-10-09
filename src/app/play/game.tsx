@@ -24,6 +24,7 @@ import {
   Clapperboard,
   Dices,
   Gamepad2,
+  Music,
   Repeat1,
 } from "lucide-react";
 /** Any of our line icons (Lucide or our own). */
@@ -61,11 +62,17 @@ import { bigSearch, buyShield, claimWorldEvent, joinRound, moveTo, placeDecoy, r
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import type { Sport } from "@/lib/sports/types";
 import type { ActivityItem } from "./activities/games";
+import { useActivityRoom } from "./activities/hub";
+import { playLoop } from "./activities/synth";
+import { isDanceMove, syncBeat, type DanceMove } from "./city/dance-moves";
+import { npcsFor } from "@/lib/npcs";
+import { addFriend } from "./friend-actions";
+import { FriendNudge, PeopleHere, type HerePerson } from "./people-here";
 import { useQuestTracker } from "./activities/quest-tracker";
 import { QuestBanner, QuestSheet } from "./activities/quest-ui";
 import { Chat } from "./chat";
 import { setEventSoundsEnabled } from "./city/event-sounds";
-import type { CityEvent, CityInteract, CityMarkers, CityRide, RideTarget } from "./city-view";
+import type { CityDancer, CityEvent, CityFriendPin, CityInteract, CityMarkers, CityRide, RideTarget } from "./city-view";
 import { FeedRow, NotificationsPanel, type FeedIcon, type FeedItem } from "./notifications";
 import { signOutNow } from "../login/actions";
 import { claimBalloon, recordVisit } from "./profile-actions";
@@ -95,6 +102,8 @@ const RoomActivityLayer = dynamic(() => import("./activities/room-layer").then((
 const AdvertiseExplainer = dynamic(() => import("@/components/advertise-explainer").then((m) => m.AdvertiseExplainer));
 const HouseSheet = dynamic(() => import("./houses/house-sheet").then((m) => m.HouseSheet));
 const StyleSheet = dynamic(() => import("./style/style-ui").then((m) => m.StyleSheet));
+const DanceBar = dynamic(() => import("./dance-bar").then((m) => m.DanceBar));
+const FriendsSheet = dynamic(() => import("./friends-sheet").then((m) => m.FriendsSheet));
 
 type Mode = "search" | "sweep" | "big";
 /** A building or balloon you can go into (from the 3D city), with its levels. */
@@ -308,6 +317,15 @@ export function Game({ state }: { state: GameState }) {
   const [questOpen, setQuestOpen] = useState(false);
   // Inside a building: which one, and which level (ground "g", floor "f<n>", rooftop "r").
   const [place, setPlace] = useState<{ building: string; level: string } | null>(null);
+  const [friendsOpen, setFriendsOpen] = useState(false);
+  const [friendBusy, setFriendBusy] = useState<string | null>(null);
+  /** Going to a friend: open their building (openRoom), then straight onto their floor (goTo). */
+  const [openReq, setOpenReq] = useState<{ id: string; at: number } | null>(null);
+  const [goTo, setGoTo] = useState<{ building: string; level: string } | null>(null);
+  /** A friend just went somewhere in town. */
+  const [nudge, setNudge] = useState<(HerePerson & { room: string; place: string }) | null>(null);
+  /** On a club's dance floor: your move and who you're dancing with (a player's or a regular's id). */
+  const [dancing, setDancing] = useState<{ move: DanceMove; with: string | null } | null>(null);
   const [pickPlace, setPickPlace] = useState<PlaceRoom | null>(null);
   const [placeRoom, setPlaceRoom] = useState<PlaceRoom | null>(null);
   const [pickRide, setPickRide] = useState(false);
@@ -376,6 +394,130 @@ export function Game({ state }: { state: GameState }) {
     ? Math.min(1, Math.max(0, (now - Date.parse(round.joinEndsAt)) / (Date.parse(round.seekEndsAt) - Date.parse(round.joinEndsAt))))
     : phase === "done" ? 1 : 0;
   useCitySound(sound, roundSeed, huntProgress);
+
+  // ---- the dance floor: in a club you can dance, and everyone there sees your move and who
+  // you're dancing with (shared through the place's activity channel).
+  const placeLevel = place && placeRoom?.id === place.building ? (placeRoom.levels?.find((l) => l.id === place.level) ?? null) : null;
+  const inClub = placeLevel?.kind === "club" && !!rooms.myRoom && !me.guest;
+  const danceDoing = dancing && inClub ? ["dance", `move:${dancing.move}`, ...(dancing.with ? [`with:${dancing.with}`] : [])] : null;
+  const club = useActivityRoom(round?.id ?? null, inClub ? rooms.myRoom : null, meP, { doing: danceDoing });
+  const dancers: CityDancer[] = useMemo(
+    () =>
+      club.present
+        .filter((p) => p.id !== me.id && p.doing.includes("dance"))
+        .map((p) => {
+          const mv = p.doing.find((d) => d.startsWith("move:"))?.slice(5);
+          const w = p.doing.find((d) => d.startsWith("with:"))?.slice(5) ?? null;
+          return { id: p.id, name: p.name, avatar: cleanAvatar(p.avatar, p.name), move: isDanceMove(mv) ? mv : "groove", with: w && w.length < 100 ? w : null };
+        }),
+    [club.present, me.id],
+  );
+  // The regulars on the dance floor (the same people the 3D view draws there).
+  const clubRoom = inClub ? rooms.myRoom : null;
+  const clubCapacity = placeLevel?.capacity ?? 0;
+  const danceNpcs = useMemo(() => (clubRoom ? npcsFor(clubRoom, roundSeed, clubCapacity, "club") : []), [clubRoom, roundSeed, clubCapacity]);
+  const isDancing = !!dancing && inClub;
+  // Leaving the club stops the dancing.
+  useEffect(() => {
+    if (inClub || !dancing) return;
+    const id = setTimeout(() => setDancing(null), 0);
+    return () => clearTimeout(id);
+  }, [inClub, dancing]);
+  // The club's music while you dance (when sounds are on); everyone moves in time with it.
+  useEffect(() => {
+    if (!isDancing || !sound) return;
+    return playLoop("disco", { seconds: 900, volume: 0.8, onBeat: syncBeat });
+  }, [isDancing, sound]);
+  function startDancing() {
+    if (me.guest) return setSignInWhy("Sign in to dance here.");
+    if (rooms.mySeat) rooms.stand();
+    setDancing((d) => d ?? { move: "groove", with: null });
+    playSfx("pop");
+  }
+
+  // ---- friends: they stay friends in every new town; see where they are and go to them.
+  const friendStatus = useMemo(() => {
+    const m = new Map<string, "friend" | "incoming" | "outgoing">();
+    for (const f of state.friends.friends) m.set(f.id, "friend");
+    for (const f of state.friends.incoming) m.set(f.id, "incoming");
+    for (const f of state.friends.outgoing) m.set(f.id, "outgoing");
+    return m;
+  }, [state.friends]);
+  const friendStatusOf = useCallback((id: string) => friendStatus.get(id) ?? null, [friendStatus]);
+  const friendsAt: CityFriendPin[] = useMemo(
+    () =>
+      state.friends.friends.flatMap((f) => {
+        const at = rooms.placeOf[f.id];
+        return at ? [{ id: f.id, name: f.name, avatar: f.avatar, room: at.room }] : [];
+      }),
+    [state.friends.friends, rooms.placeOf],
+  );
+  // The real players in the place you're in (not you, not NPCs).
+  const hereNow: HerePerson[] = useMemo(
+    () => rooms.members.filter((m) => m.id !== me.id).map((m) => ({ id: m.id, name: m.name, avatar: cleanAvatar(m.avatar, m.name) })),
+    [rooms.members, me.id],
+  );
+  async function befriend(p: { id: string; name: string }) {
+    if (me.guest) return setSignInWhy("Sign in to add friends.");
+    if (friendBusy) return;
+    setFriendBusy(p.id);
+    try {
+      const res = await addFriend(p.id);
+      if (!res.ok) return setMessage({ text: res.error, tone: "bad" });
+      playSfx("pop");
+      setMessage({
+        icon: Users,
+        text: res.status === "friends" ? `You and ${p.name} are friends now. You'll see where they are in every town.` : `Friend request sent to ${p.name}. You'll be friends when they say yes.`,
+        tone: "good",
+      });
+      startTransition(() => router.refresh());
+    } catch {
+      setMessage({ text: "Couldn't add them just now. Try again.", tone: "bad" });
+    } finally {
+      setFriendBusy(null);
+    }
+  }
+  function chatWith(p: { id: string; name: string }) {
+    if (me.guest) return setSignInWhy("Sign in to chat.");
+    setDmRequest({ id: p.id, name: p.name, at: Date.now() });
+    setChatOpen(true);
+  }
+  // A friend goes somewhere new in town: offer to join them.
+  const friendRooms = useRef<Map<string, string> | null>(null);
+  useEffect(() => {
+    const now = new Map(friendsAt.map((f) => [f.id, f.room]));
+    const before = friendRooms.current;
+    friendRooms.current = now;
+    if (!before || me.guest) return;
+    const moved = friendsAt.find((f) => before.get(f.id) !== f.room && f.room !== rooms.myRoom);
+    if (!moved) return;
+    const placeName = rooms.placeOf[moved.id]?.name ?? "";
+    const id = setTimeout(() => setNudge({ id: moved.id, name: moved.name, avatar: cleanAvatar(moved.avatar, moved.name), room: moved.room, place: placeName }), 0);
+    return () => clearTimeout(id);
+  }, [friendsAt, rooms.myRoom, rooms.placeOf, me.guest]);
+  const closeNudge = useCallback(() => setNudge(null), []);
+  // Each new town: say which friends are in it too.
+  const greetedRound = useRef<number | null>(null);
+  useEffect(() => {
+    if (!round || me.guest || greetedRound.current === round.id) return;
+    const playing = new Set(state.players.map((p) => p.id));
+    const here = state.friends.friends.filter((f) => playing.has(f.id) || rooms.placeOf[f.id]);
+    if (!here.length) return;
+    const names = here.slice(0, 3).map((f) => f.name).join(", ");
+    const roundId = round.id;
+    const id = setTimeout(() => {
+      greetedRound.current = roundId;
+      setMessage({
+        icon: Users,
+        text:
+          here.length === 1
+            ? `Your friend ${names} is in this town too. Open Friends in the menu to find them.`
+            : `Your friends are in this town too: ${names}${here.length > 3 ? ` and ${here.length - 3} more` : ""}. Open Friends in the menu to find them.`,
+        tone: "info",
+      });
+    }, 1500);
+    return () => clearTimeout(id);
+  }, [round, me.guest, state.players, state.friends.friends, rooms.placeOf]);
   const serverNowMs = Date.parse(state.serverNow);
   // Server clock minus this device's clock, so world events start at the same moment for everyone.
   const [clockOffset, setClockOffset] = useState(0);
@@ -393,7 +535,7 @@ export function Game({ state }: { state: GameState }) {
   function flyToEvent(id: number) {
     setToasts([]);
     if (place || ride !== null) leaveRoom();
-    setFocusEvent({ id, at: Date.now() });
+    setFocusEvent((f) => ({ id, at: (f?.at ?? 0) + 1 }));
   }
   // What's happening, where, for how long, and any coins to grab.
   const [eventInfo, setEventInfo] = useState<number | null>(null);
@@ -767,6 +909,12 @@ export function Game({ state }: { state: GameState }) {
   // Chat mode: tapping a building shows its levels (ground, floors, rooftop) to pick from;
   // nothing opens the chat by itself.
   function onRoom(room: PlaceRoom) {
+    // Going to a friend: straight onto their floor.
+    if (goTo && room.id === goTo.building) {
+      const level = room.levels?.find((l) => l.id === goTo.level);
+      setGoTo(null);
+      if (level) return goToLevel(room, level);
+    }
     if (place || ride !== null) return; // inside somewhere: taps just look around
     if (room.kind === "balloon") return boardRide({ kind: "balloon", index: Number(room.id.split(":")[1]), name: room.name, capacity: room.capacity });
     setPickPlace(room);
@@ -853,6 +1001,7 @@ export function Game({ state }: { state: GameState }) {
     // At a stadium or arena: the matches (anyone can look; tickets and bets need an account).
     if (item.kind === "match") return setSportsOpen(item.sport ?? "football");
     if (guest) return setSignInWhy(item.kind === "seat" ? "Sign in to sit down here." : `Sign in to use the ${item.label.toLowerCase() || "games"} here: play games, order food, sit down and chat with people.`);
+    if (item.kind === "dance") return startDancing();
     if (item.kind === "seat") {
       if (rooms.mySeat === item.id) return setActivity(item as ActivityItem);
       const res = rooms.sit(item.id);
@@ -881,6 +1030,30 @@ export function Game({ state }: { state: GameState }) {
   const rideList: CityRide[] = rides.length
     ? rides
     : Array.from({ length: Math.max(balloonCount, 1) }, (_, k) => ({ kind: "balloon" as const, index: k, name: `${BALLOON_NAMES[k % BALLOON_NAMES.length]} balloon`, capacity: 1000 }));
+
+  /** Go to where a friend is: their floor of a building, their balloon or their ride. */
+  function goToFriend(room: string, name: string) {
+    setFriendsOpen(false);
+    setNudge(null);
+    if (me.guest || rooms.myRoom === room) return;
+    setViewMode("chat");
+    const b = /^(b:\d+):(g|r|f\d+)$/.exec(room);
+    if (b) {
+      if (place || ride !== null) leaveRoom();
+      setGoTo({ building: b[1], level: b[2] });
+      setOpenReq((r) => ({ id: b[1], at: (r?.at ?? 0) + 1 }));
+      return;
+    }
+    const bal = /^balloon:(\d+)$/.exec(room);
+    const v = /^v:([a-z]+):(\d+)$/.exec(room);
+    const r = bal
+      ? (rideList.find((x) => x.kind === "balloon" && x.index === Number(bal[1])) ?? { kind: "balloon" as const, index: Number(bal[1]), name: "Hot-air balloon", capacity: 1000 })
+      : v
+        ? rideList.find((x) => x.kind === v[1] && x.index === Number(v[2]))
+        : undefined;
+    if (r) return boardRide(r);
+    setMessage({ text: `Couldn't get to ${name} right now. Try again in a moment.`, tone: "info" });
+  }
 
   function onTile(tile: number) {
     // Tapping where someone was caught: say hi to them.
@@ -1034,6 +1207,11 @@ export function Game({ state }: { state: GameState }) {
             ride={ride}
             onRides={setRides}
             houses={state.houses}
+            dance={isDancing && dancing ? { id: me.id, move: dancing.move, with: dancing.with } : null}
+            friendsAt={friendsAt}
+            openRoom={openReq}
+            roomPeople={place ? hereNow : undefined}
+            dancers={inClub ? dancers : undefined}
             onRideEnd={onRideEnd}
             onInteract={onInteract}
             seats={rooms.seats}
@@ -1206,6 +1384,8 @@ export function Game({ state }: { state: GameState }) {
           onResults={() => { setMenu(false); if (state.results) setShowResults(state.results.roundId); }}
           onMyStyle={guest ? undefined : () => { setMenu(false); setStyleOpen(true); }}
           onMyHouse={guest ? undefined : () => { setMenu(false); setHouseOpen(true); }}
+          onFriends={guest ? undefined : () => { setMenu(false); setFriendsOpen(true); }}
+          friendRequests={state.friends.incoming.length}
           coins={guest ? undefined : me.coins}
           level={guest ? undefined : me.level}
           onChangePin={() => router.push("/welcome")}
@@ -1214,6 +1394,22 @@ export function Game({ state }: { state: GameState }) {
       )}
       {howOpen && <HowItWorks onClose={() => setHowOpen(false)} />}
       {styleOpen && <StyleSheet onClose={() => setStyleOpen(false)} />}
+      {friendsOpen && !guest && (
+        <FriendsSheet
+          initial={state.friends}
+          placeOf={rooms.placeOf}
+          playing={Object.fromEntries(state.players.map((p) => [p.id, p.role]))}
+          suggestions={[...hereNow, ...state.players.filter((p) => p.id !== me.id && !hereNow.some((h) => h.id === p.id))]}
+          myRoom={rooms.myRoom}
+          onGo={(f, room) => goToFriend(room, f.name)}
+          onMessage={(f) => {
+            setFriendsOpen(false);
+            chatWith(f);
+          }}
+          onChanged={() => startTransition(() => router.refresh())}
+          onClose={() => setFriendsOpen(false)}
+        />
+      )}
       {editAvatar && (
         <AvatarEditor
           initial={me.avatar}
@@ -1713,6 +1909,10 @@ export function Game({ state }: { state: GameState }) {
             <QuestBanner quest={quests.quest} onOpen={() => setQuestOpen(true)} />
           </Safe>
         )}
+        {!guest && nudge && <FriendNudge friend={nudge} place={nudge.place} onJoin={() => goToFriend(nudge.room, nudge.name)} onClose={closeNudge} />}
+        {!guest && rooms.myRoom && !isDancing && (
+          <PeopleHere room={rooms.myRoom} people={hereNow} statusOf={friendStatusOf} busy={friendBusy} onChat={chatWith} onAddFriend={befriend} />
+        )}
         {busy && !message && (
           <p className="glass flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold" role="status">
             <span className="size-3.5 animate-spin rounded-full border-2 border-line border-t-gold" aria-hidden />
@@ -1788,6 +1988,8 @@ export function Game({ state }: { state: GameState }) {
                 externalNpc={npcTap}
                 enteredAt={rooms.enteredAt}
                 onGiveCoins={guest ? undefined : setGiveTo}
+                friendStatusOf={friendStatusOf}
+                onAddFriend={guest ? undefined : befriend}
               />
             </Safe>
           )}
@@ -1796,7 +1998,20 @@ export function Game({ state }: { state: GameState }) {
         <div className="glass pointer-events-auto w-full max-w-xl rounded-2xl p-3">
           {round && viewMode === "chat" ? (
             <div className="space-y-2 text-sm">
-              {place || ride !== null ? (
+              {isDancing && dancing ? (
+                <DanceBar
+                  move={dancing.move}
+                  partner={dancing.with}
+                  partners={[
+                    ...dancers.map((d) => ({ id: d.id, name: d.name, avatar: d.avatar, npc: false })),
+                    ...danceNpcs.map((n) => ({ id: n.id, name: n.name, avatar: n.avatar, npc: true })),
+                  ]}
+                  onMove={(m) => setDancing((d) => (d ? { ...d, move: m } : d))}
+                  onPartner={(id) => setDancing((d) => (d ? { ...d, with: id } : d))}
+                  onDanceOff={() => rooms.myRoom && setActivity({ id: `${rooms.myRoom}:dance:0`, kind: "dance", label: "Dance floor", place: rooms.myRoom })}
+                  onStop={() => setDancing(null)}
+                />
+              ) : place || ride !== null ? (
                 <>
                   <p className="flex items-center gap-2">
                     {ride !== null ? (
@@ -1823,6 +2038,12 @@ export function Game({ state }: { state: GameState }) {
                       <MessageCircle className="size-4" />
                       Chat
                     </button>
+                    {placeLevel?.kind === "club" && (
+                      <button onClick={startDancing} className="flex items-center gap-1.5 rounded-xl bg-[#e64980] px-3 py-2 font-semibold text-white">
+                        <Music className="size-4" />
+                        Dance
+                      </button>
+                    )}
                     {rooms.mySeat && (
                       <button onClick={() => rooms.stand()} className="flex items-center gap-1.5 rounded-xl bg-panel-2 px-3 py-2 font-semibold">
                         <Armchair className="size-4" />

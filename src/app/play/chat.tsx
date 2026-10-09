@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { ArrowDown, ArrowLeft, LoaderCircle, Mic, Pause } from "lucide-react";
+import { ArrowDown, ArrowLeft, LoaderCircle, Mic, Pause, UserCheck, UserPlus } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import { Bot, Building2, ChevronDown, ChevronUp, Coins, Fish, HotAirBalloon, Lock, LogOut, MessageCircle, Play, Users, X } from "@/components/icons";
 import type { Avatar } from "@/lib/avatar";
@@ -174,6 +174,8 @@ export function Chat({
   enteredAt = null,
   externalNpc = null,
   onGiveCoins,
+  friendStatusOf,
+  onAddFriend,
 }: {
   meId: string;
   meRole: "hider" | "seeker" | null;
@@ -208,6 +210,10 @@ export function Chat({
   externalNpc?: { id: string; at: number } | null;
   /** "Give coins" to a real player (shown in a private chat and on players in the people lists). */
   onGiveCoins?: (p: { id: string; name: string; avatar: unknown }) => void;
+  /** Whether someone is already your friend (or asked, or was asked). */
+  friendStatusOf?: (id: string) => "friend" | "incoming" | "outgoing" | null;
+  /** "Add friend" on players in the people lists. */
+  onAddFriend?: (p: { id: string; name: string }) => void;
 }) {
   const roomId = room?.id ?? null;
   const roomCap = room?.capacity ?? 30;
@@ -457,6 +463,29 @@ export function Chat({
         {!small && "Give"}
       </button>
     ) : null;
+
+  /** Add as a friend (or a little tick if you already are). */
+  const friendButton = (p: { id: string; name: string }) => {
+    if (!onAddFriend || p.id === meId || p.id === BOT_ID) return null;
+    const st = friendStatusOf?.(p.id) ?? null;
+    if (st === "friend")
+      return (
+        <span className="grid size-7 shrink-0 place-items-center rounded-full bg-[#d3f9d8] text-[#2b8a3e]" title={`${p.name} is your friend`} aria-label="Friends">
+          <UserCheck className="size-3.5" aria-hidden />
+        </span>
+      );
+    if (st === "outgoing") return <span className="shrink-0 rounded-full bg-panel-2 px-2 py-1 text-[11px] font-semibold text-muted">Requested</span>;
+    return (
+      <button
+        onClick={() => onAddFriend(p)}
+        className="flex shrink-0 items-center gap-1 rounded-full bg-[#ffe3f1] px-2.5 py-1 text-xs font-semibold text-[#c2255c] hover:bg-[#ffd0e6]"
+        aria-label={`Add ${p.name} as a friend`}
+      >
+        <UserPlus className="size-3.5" aria-hidden />
+        {st === "incoming" ? "Yes" : "Add"}
+      </button>
+    );
+  };
 
   function close() {
     onOpenChange(false);
@@ -733,6 +762,7 @@ export function Chat({
                               {ROLE_STYLE[player?.role ?? "watcher"].label}
                             </span>
                           </button>
+                          {friendButton(p)}
                           {giveButton({ id: p.id, name: p.name, avatar: p.avatar })}
                         </li>
                       );
@@ -783,6 +813,7 @@ export function Chat({
                       </span>
                       <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", ROLE_STYLE[p.role].pill)}>{ROLE_STYLE[p.role].label}</span>
                     </button>
+                    {friendButton(p)}
                     {giveButton({ id: p.id, name: p.name, avatar: p.avatar })}
                   </li>
                 ))}

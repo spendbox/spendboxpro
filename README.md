@@ -136,7 +136,30 @@ mark the next spots the city will grow into.
 Inside places: tap the floor to walk, tap glowing things to use them. Seats (one person, 3
 minutes at most; sitting makes a side quest more likely), mini games (archery, darts, arcade,
 pool, cards, trivia, dice and rock-paper-scissors duels, karaoke, piano, photo booth), menus to
-order from, a DJ deck and dance floor in clubs. NPCs ("regulars", marked NPC) have their own
+order from, a DJ deck and dance floor in clubs. In a club you can dance: you're drawn dancing
+in the middle of the floor (a glowing ring under you, the camera circling you; drag to look
+round) among a crowd, the regulars and the other players dancing there, all on the beat of the
+club music (120 a minute) with the floor lights and a mirror ball's light spots. Eight moves
+(groove, hands up, shaku shaku, disco point, body wave, gwara gwara, legwork, spin); pick a
+partner (a player or a regular) to dance face to face. Your move and partner are shared through
+the place's activity channel (`src/app/play/dance-bar.tsx`, `src/app/play/city/dance-moves.ts`).
+
+People (`src/app/play/city/figures.ts`): one skinned mesh per person on a 12-bone skeleton
+(hips, waist, chest, head, two-part arms and legs), so a whole body is one draw call plus the
+face. Natural proportions, a shaped head with nose and ears, the face from their avatar, hair
+in their style, hands with thumbs, knees, shoes with soles, and clothes from their avatar's
+outfit (hoodies, collars, jackets, agbadas, jerseys, overalls, stripes, camo...) or their job.
+They breathe, look round, talk with their hands, sit with bent knees and dance with their legs.
+Other real players in your place are drawn standing about (or sitting, or dancing), and when
+one is there a card pops up saying who (`src/app/play/people-here.tsx`).
+
+Friends (`game-db/026_friends.sql`, `src/app/play/friends-sheet.tsx`): add people by name, from
+the People list or the "real people here" card; they say yes (or ask back) and you're friends
+in every new town until one of you removes the other. Chat mode shows friends' faces over the
+places they're in, you get a nudge when a friend goes somewhere (Join takes you there), and
+each new town tells you which friends are in it too.
+
+NPCs ("regulars", marked NPC) have their own
 personalities: some gossip about where ghosts are, some give mint or side quests. Side quests
 (52 roles such as thief, detective, courier, DJ; `src/lib/quests.ts`) reward mint and a special
 move (steal a little from a player, a hint, a free search…). Code: `src/app/play/activities/`,
