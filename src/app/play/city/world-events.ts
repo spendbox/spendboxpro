@@ -40,6 +40,15 @@ export type WorldEventsHost = {
 
 export type WorldEventsLayer = ReturnType<typeof createWorldEvents>;
 
+/**
+ * A pin as drawn this frame: where its centre is, its size in world units (a camera-facing
+ * square, the round head in its upper part), how visible it is, and what it says.
+ */
+export type EventPin = { id: number; x: number; y: number; z: number; size: number; alpha: number; title: string; color: string; claimable: boolean; coins: number };
+
+/** Where the round head of a pin sits in its square (as a share of its size): up from the centre, and its radius. */
+export const PIN_HEAD = { up: 0.094, r: 0.36, top: 0.453 };
+
 type Inst = {
   ev: WorldEvent;
   start: number;
@@ -67,6 +76,9 @@ export function createWorldEvents(host: WorldEventsHost) {
   const tmp = new THREE.Vector3();
   const fwd = new THREE.Vector3();
   const right = new THREE.Vector3();
+  // The pins drawn this frame (reused records, never allocated per frame).
+  const pins: EventPin[] = [];
+  let pinN = 0;
 
   function release(inst: Inst) {
     if (inst.badge >= 0) ui.give(inst.badge);
@@ -174,6 +186,7 @@ export function createWorldEvents(host: WorldEventsHost) {
   }
 
   function update(dt: number, time: number, nowMs: number) {
+    pinN = 0;
     if (!host.parent.visible || !list.size) {
       if (!idle) {
         kit.idle();
@@ -217,7 +230,23 @@ export function createWorldEvents(host: WorldEventsHost) {
         inst.badge = ui.take();
         if (inst.badge >= 0) ui.badge(inst.badge, inst.scene.icon, CATEGORY_COLOR[kind.category] ?? "#495057", e.claimable ? "#ffe066" : "#ffffff");
       }
-      if (inst.badge >= 0) kit.badge(inst.badge, e.bx, e.by + Math.sin(time * 2 + e.id) * 0.06, e.bz, 1, e.life);
+      if (inst.badge >= 0) {
+        const py = e.by + Math.sin(time * 2 + e.id) * 0.06;
+        kit.badge(inst.badge, e.bx, py, e.bz, 1, e.life);
+        if (pinN >= pins.length) pins.push({ id: 0, x: 0, y: 0, z: 0, size: 1, alpha: 0, title: "", color: "", claimable: false, coins: 0 });
+        const p = pins[pinN++];
+        p.id = e.id;
+        p.x = e.bx;
+        p.y = py;
+        p.z = e.bz;
+        // Same size rule as Kit.badge().
+        p.size = Math.min(3.4, Math.max(0.42, host.camera.position.distanceTo(tmp.set(e.bx, py, e.bz)) * 0.052));
+        p.alpha = e.life;
+        p.title = kind.title;
+        p.color = CATEGORY_COLOR[kind.category] ?? "#495057";
+        p.claimable = e.claimable;
+        p.coins = kind.reward?.coins ?? 0;
+      }
       if (!inst.sounded) {
         inst.sounded = true;
         // Only a fresh event makes a sound (not one already running when you arrive).
@@ -277,6 +306,47 @@ export function createWorldEvents(host: WorldEventsHost) {
     return pick(ray);
   }
 
+  /** How many pins were drawn this frame; pin(k) is the k-th (valid until the next update). */
+  const pinCount = () => pinN;
+  const pin = (k: number): EventPin => pins[k];
+
+  /**
+   * Which event's pin is under a tap at screen position (clientX, clientY), or null. Only the
+   * round head counts (plus a few pixels), so taps just beside a pin still reach the map.
+   */
+  function pinAt(clientX: number, clientY: number): number | null {
+    if (!pinN) return null;
+    const cam = host.camera;
+    const rect = host.renderer.domElement.getBoundingClientRect();
+    // Pixels per world unit at depth 1.
+    const f = rect.height / (2 * Math.tan((cam.fov * Math.PI) / 360));
+    let best: number | null = null;
+    let bestD = Infinity;
+    for (let k = 0; k < pinN; k++) {
+      const p = pins[k];
+      if (p.alpha < 0.3) continue;
+      const depth = -tmp.set(p.x, p.y, p.z).applyMatrix4(cam.matrixWorldInverse).z;
+      if (depth < 0.1) continue;
+      tmp.set(p.x, p.y, p.z).project(cam);
+      const px = (f / depth) * p.size;
+      const sx = rect.left + ((tmp.x + 1) / 2) * rect.width;
+      const sy = rect.top + ((1 - tmp.y) / 2) * rect.height - PIN_HEAD.up * px;
+      const r = Math.max(14, PIN_HEAD.r * px + 4);
+      const dx = clientX - sx;
+      const dy = clientY - sy;
+      if (dx * dx + dy * dy > r * r || depth >= bestD) continue;
+      bestD = depth;
+      best = p.id;
+    }
+    return best;
+  }
+
+  /** An event's title (if it's on the map right now). */
+  function titleOf(id: number): string | null {
+    const inst = list.get(id);
+    return inst ? (WORLD_EVENT_BY_KEY[inst.ev.key]?.title ?? null) : null;
+  }
+
   /** A short label for a reward under the pointer (for hover text), or null. */
   function hoverAt(clientX: number, clientY: number): string | null {
     const id = pickAt(clientX, clientY);
@@ -294,5 +364,5 @@ export function createWorldEvents(host: WorldEventsHost) {
     ui.dispose();
   }
 
-  return { set, update, locate, ping, pick, pickAt, hoverAt, dispose };
+  return { set, update, locate, ping, pick, pickAt, pinAt, pinCount, pin, titleOf, hoverAt, dispose };
 }

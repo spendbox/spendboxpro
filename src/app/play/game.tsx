@@ -56,6 +56,8 @@ import { createClient } from "@/lib/supabase/client";
 import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
 import { bigSearch, buyShield, claimWorldEvent, joinRound, moveTo, placeDecoy, respawnMe, searchTile, sweepAround, type ActionResult } from "./actions";
 import { AvatarEditor } from "./avatar-editor";
+import { liveLabel, SPORTS } from "@/lib/sports/schedule";
+import type { Sport } from "@/lib/sports/types";
 import { ActivitySheet, GiveCoinsSheet, QuestBanner, QuestSheet, RoomActivityLayer, useQuestTracker, type ActivityItem } from "./activities";
 import { Chat } from "./chat";
 import { setEventSoundsEnabled } from "./city/event-sounds";
@@ -70,6 +72,7 @@ import { rideRoom, useRooms, type RoomInfo } from "./rooms";
 import { RIDE_ICONS, RIDE_INFO, RideIcon, type RideKindName } from "./ride-icon";
 import { Safe } from "./safe";
 import { Sheet } from "./sheet";
+import { SportsSheet } from "./sports/sportsbook";
 import { AdvertiseExplainer } from "@/components/advertise-explainer";
 import { playSfx, setSfxEnabled, useCitySound } from "./sound";
 import { StatsCard } from "./stats-card";
@@ -268,6 +271,8 @@ export function Game({ state }: { state: GameState }) {
   // Watchers who try to do something that needs an account: why, for the sign-in prompt.
   const [signInWhy, setSignInWhy] = useState<string | null>(null);
   const [houseSoon, setHouseSoon] = useState(false);
+  // Sports: the matches sheet (which sport to open on), or null.
+  const [sportsOpen, setSportsOpen] = useState<Sport | null>(null);
   const [confirmHide, setConfirmHide] = useState(false);
   const [howOpen, setHowOpen] = useState(false);
   const [editAvatar, setEditAvatar] = useState(false);
@@ -788,9 +793,11 @@ export function Game({ state }: { state: GameState }) {
   }
   // Inside a place: something glowing was tapped (a seat, the bar, darts, the DJ deck...).
   function onInteract(item: CityInteract) {
+    // At a stadium or arena: the matches (anyone can look; tickets and bets need an account).
+    if (item.kind === "match") return setSportsOpen(item.sport ?? "football");
     if (guest) return setSignInWhy(item.kind === "seat" ? "Sign in to sit down here." : `Sign in to use the ${item.label.toLowerCase() || "games"} here: play games, order food, sit down and chat with people.`);
     if (item.kind === "seat") {
-      if (rooms.mySeat === item.id) return setActivity(item);
+      if (rooms.mySeat === item.id) return setActivity(item as ActivityItem);
       const res = rooms.sit(item.id);
       if (res.ok) {
         playSfx("pop");
@@ -803,8 +810,15 @@ export function Game({ state }: { state: GameState }) {
       if (res.reason === "taken") return setMessage({ icon: Armchair, text: `${rooms.seats[item.id]?.name ?? "Someone"} is sitting there. Seats free up after 3 minutes at most.`, tone: "info" });
       return setMessage({ text: "You need to be in this room to sit there.", tone: "info" });
     }
-    setActivity(item);
+    setActivity(item as ActivityItem);
   }
+
+  // Sports on now (for the bubbles over stadiums and arenas): worked out once a minute.
+  const sportsMinute = Math.floor(now / 60_000);
+  const liveVenues = useMemo(() => {
+    const at = sportsMinute * 60_000 + 30_000;
+    return Object.fromEntries(SPORTS.map((sp) => [sp, liveLabel(sp, at).title])) as Record<Sport, string | null>;
+  }, [sportsMinute]);
 
   // What you can ride: the city's list, or just the balloons until it arrives.
   const rideList: CityRide[] = rides.length
@@ -977,6 +991,8 @@ export function Game({ state }: { state: GameState }) {
             worldEvents={state.worldEvents}
             focusEvent={focusEvent}
             onEventTap={onEventTap}
+          onEventInfo={setEventInfo}
+          liveVenues={liveVenues}
             clockOffsetMs={clockOffset}
             onHover={setHover}
             meAvatar={me.avatar}
@@ -1286,6 +1302,22 @@ export function Game({ state }: { state: GameState }) {
         </Sheet>
       )}
 
+      {sportsOpen && (
+        <Safe name="Sports">
+          <SportsSheet
+            sport={sportsOpen}
+            signedIn={!guest}
+            onClose={() => {
+              setSportsOpen(null);
+              startTransition(() => router.refresh());
+            }}
+            onSignIn={() => {
+              setSportsOpen(null);
+              setSignInWhy("Sign in to watch matches and bet coins on who wins.");
+            }}
+          />
+        </Safe>
+      )}
       {eventInfo !== null && (
         <EventInfoSheet
           event={state.worldEvents.find((w) => w.id === eventInfo) ?? null}
@@ -1762,6 +1794,10 @@ export function Game({ state }: { state: GameState }) {
                     <button onClick={() => setPickRide(true)} className="flex items-center gap-1.5 rounded-xl bg-[#e64980] px-3 py-2 font-semibold text-white">
                       <HotAirBalloon className="size-4" />
                       Hop on a ride
+                    </button>
+                    <button onClick={() => setSportsOpen("football")} className="flex items-center gap-1.5 rounded-xl bg-[#12a37a] px-3 py-2 font-semibold text-white">
+                      <Trophy className="size-4" />
+                      Sports
                     </button>
                     <button onClick={() => setHouseSoon(true)} className="flex items-center gap-1.5 rounded-xl bg-panel-2 px-3 py-2 font-semibold">
                       <House className="size-4 text-[#7048e8]" />

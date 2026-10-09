@@ -86,7 +86,7 @@ const NEEDS: Record<EventNeed, (Match | "outskirts" | "pool" | "scheduled")[]> =
   tower: [either(kind("tower"), big("twin", "hotel")), kind("office"), LOTS],
   office: [kind("office"), kind("tower"), LOTS],
   market: [big("market"), kind("plaza"), kind("park"), straightRoad],
-  stadium: [big("arena"), kind("stadium"), kind("park"), kind("plaza"), LOTS],
+  stadium: [big("arena"), big("court", "boxing", "wrestling"), kind("stadium"), kind("park"), kind("plaza"), LOTS],
   water: [either(kind("lake", "river", "pond"), big("port", "dam")), "pool"],
   river: [kind("river"), kind("lake", "pond"), big("port", "dam"), "pool"],
   park: [kind("park", "trees"), kind("pond", "plaza"), LOTS],

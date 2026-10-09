@@ -1,4 +1,6 @@
 import "server-only";
+import { after } from "next/server";
+import { settleRecent } from "@/app/api/sports/settle";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { botNameFor } from "@/lib/bot-names";
@@ -204,7 +206,11 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
     (head.status === "join" && Date.parse(head.join_ends_at) <= nowMs) ||
     (head.status === "seek" && Date.parse(head.seek_ends_at) <= nowMs);
   const nudge = due || nowMs - lastTickAt > 20_000;
-  if (nudge) lastTickAt = nowMs;
+  if (nudge) {
+    lastTickAt = nowMs;
+    // Pay out finished sports matches, after the page has gone back (never slows it down).
+    after(() => settleRecent(nowMs).catch((e) => console.error("settling matches failed", e)));
+  }
   const [, passive] = await Promise.all([
     nudge ? tickSoon(db).catch((e) => console.error("tick failed", e)) : null,
     guest ? Promise.resolve({ data: 0 }) : db.rpc("accrue_passive", { p_user: userId }).abortSignal(AbortSignal.timeout(5000)),

@@ -58,8 +58,8 @@ slides), plus private messages.
    `game-db/008_badge_collection.sql`, `game-db/009_levels_powerups.sql`,
    `game-db/010_ads_sponsors.sql`, `game-db/011_badges_hard.sql`, `game-db/012_age_codes.sql`,
    `game-db/013_ads_v2.sql`, `game-db/014_chat_rooms.sql`, `game-db/015_ghost_rules.sql`,
-   `game-db/016_place_rooms.sql`, `game-db/017_world_events.sql`, `game-db/018_npcs.sql` and
-   `game-db/019_activities.sql`,
+   `game-db/016_place_rooms.sql`, `game-db/017_world_events.sql`, `game-db/018_npcs.sql`,
+   `game-db/019_activities.sql` and `game-db/020_sports.sql`,
    in order, once each, on an empty database. In Supabase → Database → Extensions, switch on **pg_cron** first if you
    can: the file then schedules the round clock to run every minute. (Without it, the clock
    still moves whenever someone has the game open.)
@@ -107,6 +107,13 @@ personalities: some gossip about where ghosts are, some give coins or side quest
 (52 roles such as thief, detective, courier, DJ; `src/lib/quests.ts`) reward coins and a special
 move (steal a little from a player, a hint, a free search…). Code: `src/app/play/activities/`,
 `src/lib/npc/`, `game-db/018_npcs.sql`, `game-db/019_activities.sql`.
+
+Sport: football at stadiums, basketball, boxing and wrestling at arenas. Matches run on a fixed
+schedule and are simulated on the server from a secret seed (`src/lib/sports/`), so no two are
+alike and nobody can know the result early; the browser only ever gets the match up to "now"
+(`/api/sports/feed`). Tickets cost coins (burned); bets are pari-mutuel: winners share the pot,
+10% burns, everyone is refunded if nobody backed the winner (`game-db/020_sports.sql`). Optional
+env var `SPORTS_SECRET` (falls back to `SUPABASE_SECRET_KEY`).
 
 ## Avatars, badges and coin balloons
 

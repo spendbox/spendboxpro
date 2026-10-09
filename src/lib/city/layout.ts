@@ -53,7 +53,16 @@ export type StructureType =
   | "power"
   | "dam"
   | "oilrig"
-  | "waterpark";
+  | "waterpark"
+  // Sports venues (every city tries to have one of each, see placeVenues): "arena" is the
+  // football stadium; "court" a basketball court with an indoor hall; boxing and wrestling arenas.
+  | "court"
+  | "boxing"
+  | "wrestling";
+
+/** The sport played at a venue. */
+export type Sport = "football" | "basketball" | "boxing" | "wrestling";
+export const VENUE_SPORT: Partial<Record<StructureType, Sport>> = { arena: "football", court: "basketball", boxing: "boxing", wrestling: "wrestling" };
 
 export type Tile = {
   i: number;
@@ -126,7 +135,7 @@ export const STRUCTURE_LABEL: Record<StructureType, string> = {
   museum: "Museum",
   funfair: "Funfair",
   market: "Market",
-  arena: "Arena",
+  arena: "Football stadium",
   campus: "University",
   hotel: "Hotel",
   solar: "Solar farm",
@@ -137,6 +146,9 @@ export const STRUCTURE_LABEL: Record<StructureType, string> = {
   dam: "Dam",
   oilrig: "Oil rig",
   waterpark: "Water park",
+  court: "Basketball court",
+  boxing: "Boxing arena",
+  wrestling: "Wrestling arena",
 };
 
 /** Everything the city can be made of, for the help screen. */
@@ -219,6 +231,8 @@ export type CityPlan = {
   /** Billboard choice per 10×10 block (filled in as needed). */
   cache: Map<string, { x: number; z: number; face: number } | null>;
   structures: Map<string, StructureInfo | null>;
+  /** The 2×2 cells ("ax,az") kept for the sports venues, and which venue each one is. */
+  venues: Map<string, StructureType>;
   /** Easter egg choice per 7×7 block (filled in as needed). */
   eggs: Map<string, { x: number; z: number; face: number; egg: EasterEgg } | null>;
   /** A river winding across the city (along x or z), or none. */
@@ -370,7 +384,7 @@ export function makePlan(seed: number): CityPlan {
       hash(a.length, a.charCodeAt(0) + a.charCodeAt(a.length - 1) * 31, seed) -
       hash(b.length, b.charCodeAt(0) + b.charCodeAt(b.length - 1) * 31, seed),
   );
-  return {
+  const plan: CityPlan = {
     seed,
     city: { name: cityName, flavor, streets },
     xs,
@@ -385,9 +399,12 @@ export function makePlan(seed: number): CityPlan {
     rail,
     cache: new Map(),
     structures: new Map(),
+    venues: new Map(),
     eggs: new Map(),
     palette: PALETTES[Math.floor(r(7) * PALETTES.length)],
   };
+  placeVenues(plan);
+  return plan;
 }
 
 /** Index of the last line at or before v. */
@@ -465,11 +482,51 @@ function densityAt(plan: CityPlan, x: number, z: number) {
   return density + (smoothNoise(x / 3, z / 3, plan.seed + 7) - 0.5) * 0.3;
 }
 
+// (Stadiums and the other sports venues are placed on purpose, see placeVenues.)
 const STRUCTURES_BY_ZONE: { min: number; chance: number; types: StructureType[] }[] = [
   { min: 0.56, chance: 0.12, types: ["twin", "hotel", "mall", "museum"] },
-  { min: 0.24, chance: 0.14, types: ["mall", "market", "museum", "campus", "arena", "funfair", "hotel", "waterpark", "waterpark"] },
-  { min: -9, chance: 0.1, types: ["funfair", "solar", "arena", "campus", "market", "airport", "port", "military", "airport", "power", "oilrig", "dam", "dam", "waterpark"] },
+  { min: 0.24, chance: 0.14, types: ["mall", "market", "museum", "campus", "funfair", "hotel", "waterpark", "waterpark"] },
+  { min: -9, chance: 0.1, types: ["funfair", "solar", "campus", "market", "airport", "port", "military", "airport", "power", "oilrig", "dam", "dam", "waterpark"] },
 ];
+
+/**
+ * The sports venues: a football stadium, a basketball court, a boxing arena and a wrestling
+ * arena, each on a 2×2 cell of plain lots near the middle of the city (so even small cities
+ * have them), nearest first, not right next to each other. The stadium gets the nearest cell;
+ * the others take turns (by round). Cities with no room left (rare) go without.
+ */
+function placeVenues(plan: CityPlan) {
+  const cells: { ax: number; az: number; d: number }[] = [];
+  for (let kx = plan.x0 - 3; kx <= plan.x0 + 2; kx++) {
+    for (let kz = plan.z0 - 3; kz <= plan.z0 + 2; kz++) {
+      const x0 = plan.xs[kx];
+      const x1 = plan.xs[kx + 1];
+      const z0 = plan.zs[kz];
+      const z1 = plan.zs[kz + 1];
+      if (x0 === undefined || x1 === undefined || z0 === undefined || z1 === undefined) continue;
+      // Cells start at the street edge, two lots at a time (as in structureAt).
+      for (let ax = x0 + 1; ax + 1 < x1; ax += 2) {
+        for (let az = z0 + 1; az + 1 < z1; az += 2) {
+          const d = Math.hypot(ax + 0.5, az + 0.5) + hash(ax, az, plan.seed + 610) * 2.5;
+          if (d > 11) continue;
+          const members = [[ax, az], [ax + 1, az], [ax, az + 1], [ax + 1, az + 1]];
+          if (!members.every(([mx, mz]) => LOTS.includes(baseTile(plan, mx, mz).kind) && !onRail(plan, mx, mz))) continue;
+          cells.push({ ax, az, d });
+        }
+      }
+    }
+  }
+  cells.sort((a, b) => a.d - b.d);
+  const rest: StructureType[] = ["court", "boxing", "wrestling"];
+  rest.sort((a, b) => hash(a.length, a.charCodeAt(0), plan.seed + 611) - hash(b.length, b.charCodeAt(0), plan.seed + 611));
+  const taken: { ax: number; az: number }[] = [];
+  for (const type of ["arena", ...rest] as StructureType[]) {
+    const c = cells.find((c) => taken.every((o) => Math.abs(o.ax - c.ax) + Math.abs(o.az - c.az) >= 4));
+    if (!c) break;
+    taken.push(c);
+    plan.venues.set(`${c.ax},${c.az}`, type);
+  }
+}
 
 /**
  * Big 2×2 buildings. Blocks between streets are split into 2×2 cells starting at the street
@@ -490,7 +547,9 @@ function structureAt(plan: CityPlan, x: number, z: number) {
     const zone = STRUCTURES_BY_ZONE.find((zn) => d >= zn.min)!;
     const roll = hash(ax, az, plan.seed + 501);
     const members = [[ax, az], [ax + 1, az], [ax, az + 1], [ax + 1, az + 1]];
-    if (roll < zone.chance && members.every(([mx, mz]) => LOTS.includes(baseTile(plan, mx, mz).kind))) {
+    const venue = plan.venues.get(key);
+    if (venue) found = structureNamed(plan, venue, ax, az);
+    else if (roll < zone.chance && members.every(([mx, mz]) => LOTS.includes(baseTile(plan, mx, mz).kind))) {
       let type = zone.types[Math.floor(hash(ax, az, plan.seed + 502) * zone.types.length)];
       // A dam needs water next to it (the river or a lake); otherwise it's a power station.
       if (type === "dam" && !nearWater(plan, ax, az)) type = "power";
@@ -558,7 +617,13 @@ function structureName(plan: CityPlan, type: StructureType, ax: number, az: numb
     case "market":
       return plan.city.flavor.markets ? pick(plan.city.flavor.markets, 5) : `${city} Market`;
     case "arena":
-      return pick([`${city} Arena`, `${street} Stadium`, `${city} Sports Centre`], 6);
+      return pick([`${city} Stadium`, `${street} Stadium`, `${city} City Stadium`], 6);
+    case "court":
+      return pick([`${city} Indoor Sports Hall`, `${street} Basketball Court`, `${city} Hoops Arena`], 16);
+    case "boxing":
+      return pick([`${city} Boxing Arena`, `${street} Boxing Club`, `${city} Fight Night Arena`], 17);
+    case "wrestling":
+      return pick([`${city} Wrestling Arena`, `${street} Wrestling Hall`, `${city} Grapple Dome`], 18);
     case "campus":
       return pick([`University of ${city}`, `${city} Polytechnic`, `${street} College`], 7);
     case "hotel":
@@ -700,7 +765,7 @@ export function tileAt(plan: CityPlan, i: number): Tile {
   if (st) {
     const heights: Record<StructureType, number> = {
       mall: 1.2, twin: 7, museum: 1.8, funfair: 2.8, market: 0.7, arena: 1.1, campus: 1.6, hotel: 4.4, solar: 0.5, airport: 1.6, port: 1.8, military: 1.2,
-      power: 3.4, dam: 0.9, oilrig: 2.8, waterpark: 1.3,
+      power: 3.4, dam: 0.9, oilrig: 2.8, waterpark: 1.3, court: 0.9, boxing: 1.35, wrestling: 1.35,
     };
     const info = plan.structures.get(`${st.ax},${st.az}`);
     const structure: NonNullable<Tile["structure"]> = { type: st.type, name: st.name, ax: st.ax, az: st.az, anchor: st.anchor };

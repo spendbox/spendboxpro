@@ -7,7 +7,7 @@
 // roughly one every quarter of a city unit), "r" the roof (or a terrace / deck high up),
 // "o" an open-air spot at street level (parks, plazas, markets, docks...).
 
-import { venueName, type CityPlan, type StructureType, type Tile } from "@/lib/city/layout";
+import { venueName, type CityPlan, type Sport, type StructureType, type Tile } from "@/lib/city/layout";
 import { RAIL_Y } from "./trains";
 
 export type LevelKind = "interior" | "roof" | "outdoor";
@@ -41,6 +41,12 @@ export type Theme =
   | "club"
   | "restaurant"
   | "firehall"
+  // sports venues: the stands round a football pitch, an indoor basketball court, a boxing
+  // ring and a wrestling ring (seats facing the action, a big screen)
+  | "stands"
+  | "court"
+  | "boxing"
+  | "wrestling"
   // roofs and decks high up
   | "roofGarden"
   | "roofTerrace"
@@ -60,7 +66,11 @@ export type Theme =
   | "quay"
   | "parade"
   | "solar"
-  | "waterpark";
+  | "waterpark"
+  | "courtside";
+
+/** The sport at a venue level (its theme), or null for everything else. */
+export const THEME_SPORT: Partial<Record<Theme, Sport>> = { stands: "football", court: "basketball", boxing: "boxing", wrestling: "wrestling" };
 
 export type PlaceLevel = {
   id: string;
@@ -109,8 +119,9 @@ export const ROOM_LABEL: Partial<Record<Tile["kind"], string>> = {
 };
 const OUTDOOR = new Set<Tile["kind"]>(["park", "plaza", "trees", "pond", "ferris"]);
 
-/** What a level is for, as the UI sees it (a club and a restaurant get their own icon). */
-export function levelUse(l: PlaceLevel): "room" | "club" | "restaurant" | "roof" | "outdoor" {
+/** What a level is for, as the UI sees it (a club, a restaurant and a sports venue get their own icon). */
+export function levelUse(l: PlaceLevel): "room" | "club" | "restaurant" | "roof" | "outdoor" | "arena" {
+  if (THEME_SPORT[l.theme]) return "arena";
   if (l.theme === "club") return "club";
   if (l.theme === "restaurant" || l.theme === "foodcourt") return "restaurant";
   return l.kind === "interior" ? "room" : l.kind;
@@ -348,7 +359,19 @@ function structureLevels(t: Tile, type: StructureType, plan: CityPlan): Draft[] 
       R("o", "Market stalls", "outdoor", "market", X - 0.3, 0.09, Z - 0.3, 0.05, 0.05);
       break;
     case "arena":
-      R("g", "Concourse", "interior", "concourse", X + 0.88, 0.09, Z, 0.04, 0.2);
+      // The stands round the pitch first (the reason to come), then the concourse.
+      R("g", "The stands", "interior", "stands", X, 0.09, Z, 0.9, 0.75, { weight: 2.2 });
+      R("f1", "Concourse", "interior", "concourse", X + 0.88, 0.09, Z, 0.04, 0.2);
+      break;
+    case "court":
+      R("g", "Indoor court", "interior", "court", X, 0.09, Z - 0.5, 0.8, 0.4, { weight: 1.8 });
+      R("o", "Outdoor court", "outdoor", "courtside", X - 0.62, 0.09, Z + 0.86, 0.06, 0.06, { weight: 0.8 });
+      break;
+    case "boxing":
+      R("g", "Ringside", "interior", "boxing", X, 0.09, Z, 0.8, 0.8, { weight: 2 });
+      break;
+    case "wrestling":
+      R("g", "Ringside", "interior", "wrestling", X, 0.09, Z, 0.8, 0.8, { weight: 2 });
       break;
     case "campus":
       R("g", "Library", "interior", "library", X, 0.09, Z - 0.6, 0.66, 0.17);

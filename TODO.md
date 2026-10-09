@@ -4,6 +4,11 @@
 - [ ] Run `game-db/017_world_events.sql`, `018_npcs.sql`, `019_activities.sql` in the Supabase SQL Editor, in order (after 001-016), then deploy the `hide-and-seek` branch (PR #44).
 - [ ] Test on a real phone: sounds, touch gestures, the water slide, club lights.
 
+## In progress
+- [x] Fixes: sign-out spinner, hunt countdown for ghosts, sign-in prompts for watchers, timeouts ("Reconnecting" screen), cars drive themselves, button press feedback, "My house" coming soon.
+- [ ] Info bubbles over nearby buildings and tappable world events.
+- [ ] Sports: football, basketball, boxing, wrestling. Simulated matches in a tactical view, coin tickets, simple coin bets (run `game-db/020_sports.sql`).
+
 ## Next batch
 - [ ] **Daily streaks.** Any daily action counts (play a round, finish a side quest, send a gift or hug, ride something). Rewards grow at 3, 7, 14, 30, 60 and 100 days (small coins, badges). One free "freeze" a week. Flame icon on the home screen.
 - [ ] **Hugs, handshakes and a "My gifts" screen.** Free, with daily caps and a block button. "My gifts" in the menu shows who sent what, with a thank-you button. Counts towards quests and streaks.
@@ -21,8 +26,9 @@ Decide first:
 - [ ] Studios full-size as soon as they pay; levels unlock mansions and decorations for personal houses.
 - [ ] Legal check with a Nigerian lawyer: coin pools and stakes as gaming, subscription rules, showing contact details publicly.
 
-Stage 1: free private house
-- [ ] Free private house for everyone, a layout editor, free starter furniture, more furniture bought with coins.
+Stage 1: free private house (cheapest path: reuse what the city already draws)
+- [ ] Pick, don't build: choose one of the house styles the city already has, paint colours, a name sign, and a room style (living room, lounge, studio, club...).
+- [ ] Furniture slots instead of a free editor: tap a spot in the room, pick a chair, sofa, table, plant, lamp, TV, bar... (coins, burned). Free starter set.
 - [ ] "My house" button that always takes the owner home, even if the house is switched off in the city.
 
 Stage 2: paid publishing (N1500 a month)

@@ -7,18 +7,19 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar, type Avatar } from "@/lib/avatar";
-import { addressOf, hash, KIND_LABEL, makePlan, smoothNoise, stationName, spiralXY, STRUCTURE_LABEL, tileAt, type CityPlan, type Tile } from "@/lib/city/layout";
+import { addressOf, hash, KIND_LABEL, makePlan, smoothNoise, stationName, spiralXY, STRUCTURE_LABEL, tileAt, VENUE_SPORT, type CityPlan, type Tile } from "@/lib/city/layout";
 import { ABBREV } from "@/lib/city/places";
 import { daylight, weatherAt } from "@/lib/city/sky";
 import { npcsFor, type Npc } from "@/lib/npcs";
 import { createBirds } from "./city/birds";
+import { createBubbles, type BubbleSpot } from "./city/bubbles";
 import { createBuildingSite, createSites } from "./city/construction";
 import { createFigures, type Figures, type Person, type Spot } from "./city/figures";
 import { createInteractables, createWalker, type Interactables, type Item } from "./city/interact";
 import { coolingTowerGeometry, createPlumes, industryParts } from "./city/industry";
 import { createInterior, type Interior, type RoomItem } from "./city/interiors";
 import { disposeBlobTexture, disposeKitCaches } from "./city/kit";
-import { EYE, levelsOf, levelUse, METRES, ROOM_LABEL, type PlaceLevel } from "./city/levels";
+import { EYE, levelsOf, levelUse, METRES, ROOM_LABEL, THEME_SPORT, type PlaceLevel } from "./city/levels";
 import { createLookControls } from "./city/look-controls";
 import { createPeople } from "./city/people";
 import { createBasket, createDeck, createOpenAir, type Deck } from "./city/rooftops";
@@ -30,6 +31,7 @@ import { createCabin, type Cabin } from "./city/rides";
 import { disposeVehicleCaches } from "./city/vehicles";
 import { createBoats } from "./city/boats";
 import { createSlideRide, createWaterpark, waterparkParts, type Slide, type SlideRide, type Waterpark } from "./city/waterpark";
+import { createVenueGame, venueParts, type VenueGame } from "./city/venues";
 import { BRIDGE_TOP, makeWorld, signalJunction } from "./city/world";
 import { playSfx } from "./sound";
 import type { WorldEvent } from "@/lib/world-events";
@@ -83,8 +85,12 @@ export type CityLevel = {
   id: string;
   label: string;
   capacity: number;
-  /** What it is: a room, a nightclub, a restaurant (or food court), a rooftop, or open air. */
-  kind?: "room" | "club" | "restaurant" | "roof" | "outdoor";
+  /**
+   * What it is: a room, a nightclub, a restaurant (or food court), a rooftop, open air, or a
+   * sports venue ("arena": the stands at a stadium, an indoor court, ringside at a boxing or
+   * wrestling arena; it has a "match" thing to tap).
+   */
+  kind?: "room" | "club" | "restaurant" | "roof" | "outdoor" | "arena";
 };
 
 /**
@@ -110,12 +116,17 @@ export type TurnDir = "left" | "right" | "straight";
 
 /** Things you can do inside places (shown with a soft glow and a label; tap to use). */
 export type InteractKind =
-  | "seat" | "darts" | "archery" | "arcade" | "pool" | "cards" | "dance" | "dj" | "bar" | "jukebox" | "menu" | "stairs" | "window" | "piano" | "karaoke" | "slots-free" | "photo";
+  | "seat" | "darts" | "archery" | "arcade" | "pool" | "cards" | "dance" | "dj" | "bar" | "jukebox" | "menu" | "stairs" | "window" | "piano" | "karaoke" | "slots-free" | "photo"
+  /** At a sports venue: "Watch the match" / "Watch the fight" (by the big screen). */
+  | "match";
+/** The sport played at a venue. */
+export type CitySport = "football" | "basketball" | "boxing" | "wrestling";
 /**
  * Something tapped inside a place. id is stable for everyone: "<room>:seat:<n>" for seats,
- * "<room>:<kind>:<n>" for the rest; place is the room id ("b:12:f4").
+ * "<room>:<kind>:<n>" for the rest; place is the room id ("b:12:f4"). At a sports venue, "match"
+ * items and the seats there also say which sport it is.
  */
-export type CityInteract = { id: string; kind: InteractKind; label: string; place: string };
+export type CityInteract = { id: string; kind: InteractKind; label: string; place: string; sport?: CitySport };
 /** Someone sitting in a seat (a player): their name and avatar. */
 export type SeatTaker = { name: string; avatar: unknown };
 
@@ -196,6 +207,17 @@ type Props = {
   focusEvent?: { id: number; at: number } | null;
   /** An event's reward (cash, a treasure chest, a lost dog...) was tapped. */
   onEventTap?: (id: number) => void;
+  /**
+   * An event's pin (or the little title bubble over it) was tapped: show what's happening.
+   * Works in both modes, on the normal map view. Without it, pins have no bubbles and taps on
+   * them go through to whatever is underneath, as before.
+   */
+  onEventInfo?: (id: number) => void;
+  /**
+   * What's on at the sports venues right now: a short live label per sport ("Lions 2-1 Eagles"),
+   * or null / missing when nothing is. The venue's info bubble shows it (chat mode).
+   */
+  liveVenues?: Partial<Record<CitySport, string | null>>;
   /** Server clock minus this device's clock (ms), so events start on time everywhere. Default 0. */
   clockOffsetMs?: number;
 };
@@ -874,6 +896,11 @@ function structureParts(t: Tile, plan: CityPlan, B: BoxFn, tree: TreeFn) {
     case "waterpark":
       waterparkParts(t, B, tree);
       break;
+    case "court":
+    case "boxing":
+    case "wrestling":
+      venueParts(t, B);
+      break;
     case "solar": {
       for (let i = 0; i < 4; i++) {
         for (let j = 0; j < 3; j++) {
@@ -1040,6 +1067,8 @@ export function CityView({
   worldEvents,
   focusEvent = null,
   onEventTap,
+  onEventInfo,
+  liveVenues,
   clockOffsetMs = 0,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
@@ -1061,10 +1090,10 @@ export function CityView({
     setWorldEvents: (list: WorldEvent[] | undefined) => void;
     focusEvent: (id: number) => void;
   } | null>(null);
-  const cb = useRef({ onTile, onHover, onBillboard, onBalloon, onAdViews, interactive, onRoom, onBalloons, mode, onNpc, onSpots, onEventTap, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract });
+  const cb = useRef({ onTile, onHover, onBillboard, onBalloon, onAdViews, interactive, onRoom, onBalloons, mode, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract });
   const atmos = useRef({ progress, nightFirst, meAvatar });
   useEffect(() => {
-    cb.current = { onTile, onHover, onBillboard, onBalloon, onAdViews, interactive, onRoom, onBalloons, mode, onNpc, onSpots, onEventTap, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract };
+    cb.current = { onTile, onHover, onBillboard, onBalloon, onAdViews, interactive, onRoom, onBalloons, mode, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract };
     atmos.current = { progress, nightFirst, meAvatar };
   });
 
@@ -1528,6 +1557,8 @@ export function CityView({
     /** The Ferris wheels (for rides), and the water parks (their slides and swimmers). */
     let wheels: { obj: THREE.Group; wheel: THREE.Group; tile: number; scale: number }[] = [];
     let parks: Waterpark[] = [];
+    // Games going on outdoors at the sports venues (hoops on the court, a kick-about on the pitch).
+    let games: VenueGame[] = [];
 
     function buildLandmarks() {
       // Boards keep showing what they showed (no flicker when the city grows).
@@ -1537,6 +1568,8 @@ export function CityView({
       wheels = [];
       for (const p of parks) p.dispose();
       parks = [];
+      for (const g of games) g.dispose();
+      games = [];
       for (const b of boards) {
         life.remove(b.obj);
         b.obj.traverse((o) => {
@@ -1584,6 +1617,13 @@ export function CityView({
           obj.userData.lift = { cable, load, phase: t.r[0] * 6 };
           landmarks.push({ obj, spin: jib, tile: t.i, speed: 0.15, axis: "y" });
           life.add(obj);
+        }
+        if (t.structure?.anchor && (t.structure.type === "court" || t.structure.type === "arena")) {
+          const game = createVenueGame(t);
+          if (game) {
+            games.push(game);
+            life.add(game.group);
+          }
         }
         if (t.structure?.anchor && t.structure.type === "waterpark") {
           const park = createWaterpark(t, t.structure.name);
@@ -3332,7 +3372,9 @@ export function CityView({
     }
 
     // Count pills (a people icon and a number) over the busiest rooms (at most 40, for speed).
-    type Pill = { sprite: THREE.Sprite; balloon: number; id: string };
+    // A building's pill steps aside (fades out) while it has an info bubble, or one covers it.
+    type Pill = { sprite: THREE.Sprite; balloon: number; id: string; tile: number; hide: boolean; a: number };
+    let pillPicks = -1;
     let pills: Pill[] = [];
     const pillGroup = new THREE.Group();
     scene.add(pillGroup);
@@ -3355,6 +3397,7 @@ export function CityView({
       pills = [];
       for (const [id, n] of entries) {
         let balloon = -1;
+        let tile = -1;
         const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: pillTexture(n), depthTest: false, transparent: true, toneMapped: false }));
         sprite.center.set(0.5, 0);
         sprite.renderOrder = 9;
@@ -3362,18 +3405,22 @@ export function CityView({
           balloon = Number(id.slice(8));
           if (!balloons[balloon]) continue;
         } else if (id.startsWith("b:")) {
-          const t = tiles[Number(id.slice(2))];
+          tile = Number(id.slice(2));
+          const t = tiles[tile];
           if (!t) continue;
           const big = t.kind === "structure";
           sprite.position.set(t.x + (big ? 0.5 : 0), t.top + 0.35, t.z + (big ? 0.5 : 0));
         } else continue;
-        pills.push({ sprite, balloon, id });
+        pills.push({ sprite, balloon, id, tile, hide: false, a: 1 });
         pillGroup.add(sprite);
       }
     }
     function updatePills() {
       pillGroup.visible = chatMode && isRevealed;
       if (!pillGroup.visible) return;
+      const recheck = bubbles.picks() !== pillPicks;
+      pillPicks = bubbles.picks();
+      const bubbled = bubbles.active();
       for (const p of pills) {
         if (p.balloon >= 0) {
           const b = balloons[p.balloon];
@@ -3385,6 +3432,15 @@ export function CityView({
         // Keep them readable at any zoom.
         const k = Math.min(2.4, Math.max(0.35, camera.position.distanceTo(p.sprite.position) * 0.045));
         p.sprite.scale.set(k * 0.95, k * 0.386, 1);
+        if (p.balloon >= 0) continue;
+        if (recheck) {
+          const at = p.sprite.position;
+          // (The pill drawn on the sprite is about half its width.)
+          p.hide = bubbled && (bubbles.showsPlace(p.tile) || bubbles.covers(at.x, at.y, at.z, k * 0.55, k * 0.386));
+        }
+        p.a += ((p.hide ? 0 : 1) - p.a) * 0.25;
+        p.sprite.material.opacity = p.a;
+        if (p.a < 0.02) p.sprite.visible = false;
       }
     }
     function setMode(m: "game" | "chat") {
@@ -3395,8 +3451,123 @@ export function CityView({
     }
     function setRoomCounts(counts: Record<string, number>) {
       roomCountsNow = counts ?? {};
+      countByTile.clear();
+      for (const [id, n] of Object.entries(roomCountsNow)) if (id.startsWith("b:") && typeof n === "number" && n > 0) countByTile.set(Number(id.slice(2)), n);
       rebuildPills();
     }
+
+    // ---- info bubbles: over the places near the middle of the view (chat mode: name, what it
+    // is, who's inside; tap to go in) and over the world events' pins (both modes; tap for info).
+    const countByTile = new Map<number, number>();
+    let spotTiles: Tile[] | null = null;
+    let spotList: BubbleSpot[] = [];
+    const bubbleLabels = new Map<number, { name: string; tile: Tile } | null>();
+    // How tall each tile is, on a grid (to tell when a taller building hides a roof from view).
+    const tops = { x0: 0, z0: 0, w: 0, h: 0, max: 0, v: new Float32Array(0), at: new Int32Array(0) };
+    function bubbleSpots() {
+      if (spotTiles !== tiles) {
+        spotTiles = tiles;
+        bubbleLabels.clear();
+        spotList = [];
+        let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+        for (const t of tiles) {
+          x0 = Math.min(x0, t.x);
+          x1 = Math.max(x1, t.x);
+          z0 = Math.min(z0, t.z);
+          z1 = Math.max(z1, t.z);
+        }
+        tops.x0 = x0;
+        tops.z0 = z0;
+        tops.w = tiles.length ? x1 - x0 + 1 : 0;
+        tops.h = tiles.length ? z1 - z0 + 1 : 0;
+        tops.v = new Float32Array(tops.w * tops.h);
+        tops.at = new Int32Array(tops.w * tops.h).fill(-1);
+        tops.max = 0;
+        for (const t of tiles) {
+          const k = t.x - x0 + (t.z - z0) * tops.w;
+          tops.v[k] = t.top;
+          tops.max = Math.max(tops.max, t.top);
+          // Which place each tile belongs to (so a building never hides itself).
+          const a = anchorOf(t.i);
+          tops.at[k] = a ? a.anchor.i : -1;
+        }
+        const seen = new Set<number>();
+        for (const t of tiles) {
+          const a = anchorOf(t.i);
+          if (!a || seen.has(a.anchor.i)) continue;
+          seen.add(a.anchor.i);
+          const at = a.anchor;
+          spotList.push({ i: at.i, x: at.x + (a.big ? 0.5 : 0), y: at.top + 0.12, z: at.z + (a.big ? 0.5 : 0) });
+        }
+      }
+      return spotList;
+    }
+    const bubbles = createBubbles({
+      el,
+      canvas: renderer.domElement,
+      camera,
+      target: controls.target,
+      events: worldEventsLayer,
+      spots: bubbleSpots,
+      label: (i) => {
+        if (spotTiles !== tiles) bubbleSpots();
+        let l = bubbleLabels.get(i);
+        if (l === undefined) {
+          const r = roomFor(i);
+          l = r ? { name: r.room.name, tile: r.anchor } : null;
+          bubbleLabels.set(i, l);
+        }
+        return l;
+      },
+      count: (i) => countByTile.get(i) ?? 0,
+      note: (i) => {
+        // A match on at a stadium or arena: say so (the lead's live label, e.g. "Lions 2-1 Eagles").
+        const st = tiles[i]?.structure;
+        const sport = st ? VENUE_SPORT[st.type] : undefined;
+        const live = sport ? cb.current.liveVenues?.[sport] : null;
+        if (live === null || live === undefined) return null;
+        return live.trim() || (sport === "boxing" || sport === "wrestling" ? "Fight on now" : "Match on now");
+      },
+      hidden: (sp) => {
+        // Walk back from the roof towards the camera, tile by tile, until the line of sight is
+        // above everything: is a taller building in the way?
+        const c = camera.position;
+        const dx = c.x - sp.x;
+        const dy = c.y - sp.y;
+        const dz = c.z - sp.z;
+        if (dy <= 0.05 || !tops.w) return false;
+        const tMax = Math.min(1, (tops.max - sp.y) / dy);
+        if (tMax <= 0) return false;
+        const steps = Math.ceil((Math.hypot(dx, dz) * tMax) / 0.25);
+        for (let k = 1; k <= steps; k++) {
+          const t = (k / steps) * tMax;
+          const x = sp.x + dx * t;
+          const z = sp.z + dz * t;
+          const tx = Math.round(x);
+          const tz = Math.round(z);
+          const gx = tx - tops.x0;
+          const gz = tz - tops.z0;
+          if (gx < 0 || gz < 0 || gx >= tops.w || gz >= tops.h) continue;
+          const g = gx + gz * tops.w;
+          if (tops.at[g] === sp.i) continue;
+          // Buildings stand a little inside their lot.
+          if (Math.abs(x - tx) > 0.4 || Math.abs(z - tz) > 0.4) continue;
+          if (sp.y + dy * t < tops.v[g] * 0.92) return true;
+        }
+        return false;
+      },
+      onBuilding: (i) => {
+        if (!chatMode || !isRevealed || immersive()) return;
+        const r = roomFor(i);
+        if (!r) return;
+        showHover(i);
+        cb.current.onRoom?.(r.room);
+      },
+      onEvent: (id) => {
+        if (!isRevealed || immersive()) return;
+        cb.current.onEventInfo?.(id);
+      },
+    });
 
     // ---- looking round from one spot: riding a balloon, or inside a building / on its roof.
     // The camera flies there (eased, about 1.5 s) and then stays put: drag with one finger (or
@@ -4571,6 +4742,11 @@ export function CityView({
       if (immersive()) renderer.domElement.style.cursor = "grabbing";
     };
     const onUp = (e: PointerEvent) => {
+      // A press that started on an info bubble is the bubble's (a tap opens it; a drag only panned).
+      if (bubbles.release(e)) {
+        down = null;
+        return;
+      }
       if (!down) return;
       const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
       const quick = performance.now() - down.t < 600;
@@ -4588,13 +4764,20 @@ export function CityView({
         const it = itemUnder(e.clientX, e.clientY);
         if (it && view?.kind === "place") {
           playSfx("chime");
-          cb.current.onInteract?.({ id: it.id, kind: it.kind, label: it.label, place: view.stage.place });
+          const sport = THEME_SPORT[view.stage.level.theme];
+          cb.current.onInteract?.({ id: it.id, kind: it.kind, label: it.label, place: view.stage.place, ...(sport && (it.kind === "match" || it.kind === "seat") ? { sport } : {}) });
           return;
         }
         walkTap(e.clientX, e.clientY);
         return;
       }
       if (moved > 8 || !quick) return;
+      // An event's pin (drawn over everything): what's happening there.
+      const pinTap = isRevealed && cb.current.onEventInfo ? worldEventsLayer.pinAt(e.clientX, e.clientY) : null;
+      if (pinTap !== null) {
+        cb.current.onEventInfo?.(pinTap);
+        return;
+      }
       const eventTap = isRevealed ? worldEventsLayer.pickAt(e.clientX, e.clientY) : null;
       if (eventTap !== null) {
         cb.current.onEventTap?.(eventTap);
@@ -4662,6 +4845,7 @@ export function CityView({
       renderer.setSize(w, h);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
+      bubbles.resize(w, h);
     };
     const ro = new ResizeObserver(resize);
     ro.observe(el);
@@ -4714,6 +4898,15 @@ export function CityView({
         hoverQueued = null;
       }
       if (hoverQueued) {
+        const pinId = isRevealed && cb.current.onEventInfo ? worldEventsLayer.pinAt(hoverQueued.clientX, hoverQueued.clientY) : null;
+        if (pinId !== null) {
+          renderer.domElement.style.cursor = "pointer";
+          hoverBox.visible = false;
+          cb.current.onHover?.({ tile: -1, label: `${worldEventsLayer.titleOf(pinId) ?? "World event"} · tap for details` });
+          hoverQueued = null;
+        }
+      }
+      if (hoverQueued) {
         const balloonK = chatMode ? balloonUnder(hoverQueued.clientX, hoverQueued.clientY) : null;
         const board = balloonK === null && isRevealed ? boardUnder(hoverQueued.clientX, hoverQueued.clientY) : null;
         renderer.domElement.style.cursor = board || balloonK !== null ? "pointer" : "";
@@ -4740,6 +4933,7 @@ export function CityView({
         traffic.update(dt, time);
         updateLandmarks(dt, now);
         for (const p of parks) p.update(time);
+        for (const g of games) g.update(time, dt);
         updateBoards(dt, time, now);
         boats.update(time, dt);
         people.update(dt, now);
@@ -4789,6 +4983,9 @@ export function CityView({
       worldEventsLayer.update(dt, time, Date.now() + cb.current.clockOffsetMs);
       renderer.render(scene, camera);
       renderOverlays(time);
+      // After drawing: the camera's matrices are this frame's now.
+      const map = isRevealed && !immersive();
+      bubbles.update(dt, now, map && chatMode, map && !!cb.current.onEventInfo);
     };
     loop();
 
@@ -4841,11 +5038,13 @@ export function CityView({
       sites.dispose();
       buildingSite.dispose();
       worldEventsLayer.dispose();
+      bubbles.dispose();
       for (const p of pills) p.sprite.material.dispose();
       disposePills();
       for (const st of [leaving, view?.kind === "place" ? view.stage : null]) if (st) disposeStage(st);
       for (const vv of [leavingVehicle, view?.kind === "vehicle" ? view : null]) if (vv) disposeVehicle(vv);
       for (const p of parks) p.dispose();
+      for (const g of games) g.dispose();
       disposeVehicleCaches();
       basket.dispose();
       look.dispose();
