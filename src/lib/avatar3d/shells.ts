@@ -56,8 +56,8 @@ export type CapOptions = {
  */
 export function capShell(c: HeadCtx, NA: number, NR: number, edge: DirFn, thick?: DirFn, opts: CapOptions = {}) {
   const { smoothEdge = 0, floor, alpha } = opts;
-  NA = Math.max(16, Math.round(NA * c.lod));
-  NR = Math.max(6, Math.round(NR * c.lod));
+  NA = Math.max(c.lod < 0.1 ? 10 : 16, Math.round(NA * c.lod));
+  NR = Math.max(c.lod < 0.1 ? 4 : 6, Math.round(NR * c.lod));
   const U = (a: number, ph: number) => new Vector3(Math.sin(a) * Math.sin(ph), Math.cos(a), Math.sin(a) * Math.cos(ph));
   const pos: number[] = [], uv: number[] = [], idx: number[] = [], rgba: number[] = [];
   // How far down from the crown each column reaches (found by halving the search range).

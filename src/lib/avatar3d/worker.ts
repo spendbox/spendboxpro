@@ -11,7 +11,7 @@ type Req = { id: number; recipe: Record<string, number>; lod: number };
 self.onmessage = (ev: MessageEvent<Req>) => {
   const { id, recipe, lod } = ev.data;
   try {
-    const { packed, transfer } = pack(lod === LOD.far ? buildFar(cleanRecipe(recipe)) : buildAvatar(cleanRecipe(recipe), lod));
+    const { packed, transfer } = pack(lod === LOD.far ? buildFar(cleanRecipe(recipe)) : lod === LOD.farthest ? buildFar(cleanRecipe(recipe), "farthest") : buildAvatar(cleanRecipe(recipe), lod));
     (self as unknown as Worker).postMessage({ id, packed }, transfer);
   } catch (e) {
     (self as unknown as Worker).postMessage({ id, error: String(e) });

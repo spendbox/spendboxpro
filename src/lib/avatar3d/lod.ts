@@ -1,58 +1,61 @@
 // Levels of detail. Every level shares one skeleton, so every move plays the same way at every level.
+// All are real 3D models (sharp at any distance), just with fewer and fewer polygons:
 //
-//   own      your own avatar               up to 70k triangles, full detail, face moves
-//   near     players close by              up to 20k triangles
-//   far      players further off           under 5k triangles in ONE mesh (one draw call): the body
-//                                          built coarse, small details dropped, the face frozen,
-//                                          colours painted on its points instead of materials
-//   picture  players far away (or past the  a flat picture of the avatar (two triangles), drawn from
-//            30 nearest)                   the far level from 8 directions and in walking frames
-//
-// The far level is built here (in the worker); the picture is drawn on the page (impostor.ts).
+//   own       your own avatar          up to 70k triangles, full detail, face moves
+//   near      players close by         up to 20k triangles
+//   far       players further off      about 2k triangles (at most 3.5k) in ONE mesh: built coarse,
+//                                      no fingers, ears, teeth or jewellery, a simple frozen face,
+//                                      colours painted on its points instead of materials
+//   farthest  players far away         about 900 triangles (at most 1.5k), one mesh: body, hair and clothes only (no
+//                                      face, glasses, jewellery, fingers or ears)
 
 import { BufferAttribute, type BufferGeometry, Float32BufferAttribute, Matrix4 } from "three";
 import { buildAvatar } from "./avatar.ts";
 import type { MatKey, Model, Part } from "./parts.ts";
 import type { Recipe } from "./recipe.ts";
 
-export const LOD = { own: 1, near: 0.5, far: 0.17 } as const;
-/** Far-level triangle budget. */
-export const FAR_BUDGET = 5000;
-/** At most this many avatars are drawn in 3D; the rest are pictures. */
-export const MAX_3D = 30;
+export const LOD = { own: 1, near: 0.5, far: 0.17, farthest: 0.05 } as const;
+/** Triangle budgets. */
+export const FAR_BUDGET = 3500, FARTHEST_BUDGET = 1500;
+/** At most this many avatars get the near or far level; everyone else is drawn at the farthest. */
+export const MAX_DETAILED = 30;
 
-export type Level = "own" | "near" | "far" | "picture";
+export type Level = "own" | "near" | "far" | "farthest";
 
 /**
  * Which level each player is drawn at, from their distance to the camera (in avatar heights): near
- * within 4, far within 18, pictures beyond. Only the nearest MAX_3D players are drawn in 3D.
+ * within 4, far within 18, farthest beyond. Only the nearest MAX_DETAILED get near or far.
  */
 export function pickLevels(distances: number[], near = 4, far = 18): Level[] {
   const order = distances.map((d, i) => [d, i] as const).sort((a, b) => a[0] - b[0]);
   const out: Level[] = new Array(distances.length);
   order.forEach(([d, i], rank) => {
-    out[i] = rank >= MAX_3D || d > far ? "picture" : d > near ? "far" : "near";
+    out[i] = rank >= MAX_DETAILED || d > far ? "farthest" : d > near ? "far" : "near";
   });
   return out;
 }
 
-/** Too small to see from far away (or only there for the face's movement). */
-const DROP = /^(cornea|catchlight|caruncle|mouthCavity|teeth|tongue|nail|button|layerButton|jalabButton|beltLoop|stud|ring|hoop|drop|dropWire|chainStones|bead|capSeam|pendantGem|pendantBail|watchFace|fly|backPocket|layerPocket|iris|lids|strap\d|neckBand|hemBand|tieKnot|bowKnot|wrapKnot|chain[12]$|hand\d_[1-9])/;
+/** Too small to see from far away, or not wanted there: fingers, ears, teeth, jewellery, small trims. */
+const FAR_DROP = /^(cornea|catchlight|caruncle|mouthCavity|teeth|tongue|nail|button|layerButton|jalabButton|beltLoop|stud|ring|hoop|drop|dropWire|chain|pendant|watch|bead|capSeam|fly|backPocket|layerPocket|iris|lids|strap\d|neckBand|hemBand|tieKnot|bowKnot|wrapKnot|hand\d_[1-9]|ear\d|hairBand|capButton|capVisorUnder|waistband|collar|layerCollar)/;
+/** The farthest level also has no face (eyes, brows, the face's own surface), glasses, collars or separate strands. */
+const FARTHEST_DROP = /^(sclera|brow|faceUpper|faceLower|rim|lens|temple|bridge|collar|braid|loc\d|cornrow|hairBand|capVisorUnder|capButton|swimStrap|yoke|hemBorder|frontEmbroidery|lapel\d|layerCollar|layerEdge|layerHem|placket|sash|pocket|sole|beard|mustache|goatee|stubble)/;
 /** See-through materials (a faint shadow of stubble, the clear front of the eye): nothing to paint. */
 const SEE_THROUGH = new Set<MatKey>(["stubble", "cornea"]);
 
 /**
- * The far level: one skinned mesh. Each point carries matId, an index into meta.palette (the material
+ * The far and farthest levels: one skinned mesh. Each point carries matId, an index into meta.palette (the material
  * whose colour the page paints it with), and tint (colours painted on the points, multiplied in).
  */
-export function buildFar(r: Recipe): Model {
-  const m = buildAvatar(r, LOD.far), index = new Map(m.nodes.map((n, k) => [n.id, k]));
+export function buildFar(r: Recipe, level: "far" | "farthest" = "far"): Model {
+  // Also hidden: the tunic under an agbada, and (farthest) the hair under a cap or wrap.
+  const m = buildAvatar(r, LOD[level]), covered = (n: string) => (n === "tunic" && r.outfit === 4) || (level === "farthest" && n === "hair0" && r.hw > 0);
+  const drop = (n: string) => FAR_DROP.test(n) || (level === "farthest" && FARTHEST_DROP.test(n)) || covered(n), index = new Map(m.nodes.map((n, k) => [n.id, k]));
   // Model-space matrix of every node, for the rigid (head) parts.
   const M = new Map<string, Matrix4>();
   for (const n of m.nodes) M.set(n.id, (n.parent ? M.get(n.parent)!.clone() : new Matrix4()).multiply(new Matrix4().fromArray(n.matrix)));
   const palette: MatKey[] = [], geos: BufferGeometry[] = [];
   for (const p of m.parts) {
-    if (DROP.test(p.name) || SEE_THROUGH.has(p.mat)) continue;
+    if (drop(p.name) || SEE_THROUGH.has(p.mat)) continue;
     let pi = palette.indexOf(p.mat);
     if (pi < 0) pi = palette.push(p.mat) - 1;
     geos.push(asSkinned(p, M, index, pi));

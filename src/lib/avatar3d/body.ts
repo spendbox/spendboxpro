@@ -306,8 +306,9 @@ export function drapePoint(T: Torso, y: number, th: number, off: number, y1: num
  */
 export function limbGeo(pts: [number, number][], seg: number, lod: number, bend?: { at: number; a: number } | null, squash?: (y: number) => [number, number]) {
   // A whole number of samples per segment, so every profile point (the crotch joint, for one) is a row.
-  const sp = new SplineCurve(pts.map(([x, y]) => new Vector2(x, y))).getPoints((pts.length - 1) * Math.max(1, Math.round(3 * lod))).reverse();
-  const g = new LatheGeometry(sp, Math.max(8, Math.round(seg * lod))), p = g.attributes.position, v = new Vector3();
+  // (The farthest level: about 7 rings and 6 sides per limb.)
+  const tiny = lod < 0.1, sp = new SplineCurve(pts.map(([x, y]) => new Vector2(x, y))).getPoints(tiny ? Math.min(7, pts.length - 1) : (pts.length - 1) * Math.max(1, Math.round(3 * lod))).reverse();
+  const g = new LatheGeometry(sp, Math.max(lod < 0.3 ? 6 : 8, Math.round(seg * lod))), p = g.attributes.position, v = new Vector3();
   for (let i = 0; i < p.count; i++) {
     v.fromBufferAttribute(p, i);
     let sx = 1, sz = 0.92;
@@ -381,7 +382,7 @@ export function handGeos(k: number, fem: boolean, lod: number): { skin: BufferGe
   // Palm: the same shape as the forearm at the wrist (its top tucked inside the sleeve of skin there),
   // widest across the knuckles and thinner there, rounding over into the fingers. Fleshy pads under
   // the thumb (thenar) and little finger (hypothenar); the knuckles stand out a little on the back.
-  const PALM = 0.92, NU = Math.max(6, Math.round(14 * lod)), NA = Math.max(8, Math.round(16 * lod) & ~1), pos: number[] = [], idx: number[] = [];
+  const PALM = 0.92, NU = Math.max(lod < 0.3 ? 4 : 6, Math.round(14 * lod)), NA = Math.max(lod < 0.3 ? 6 : 8, Math.round(16 * lod) & ~1), pos: number[] = [], idx: number[] = [];
   for (let j = 0; j <= NU; j++) {
     const t = -0.25 + (1.25 * j) / NU, y = -t * PALM, end = t > 0.8 ? Math.sqrt(Math.max(0.03, 1 - ((t - 0.8) / 0.2) ** 2)) : 1;
     // Above the wrist it narrows a little, to stay just inside the forearm.

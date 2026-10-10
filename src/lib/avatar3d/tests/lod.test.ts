@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { FAR_BUDGET, MAX_3D, buildFar, pickLevels } from "../lod.ts";
+import { FARTHEST_BUDGET, FAR_BUDGET, MAX_DETAILED, buildFar, pickLevels } from "../lod.ts";
 import { MOVES, applyMove } from "../moves.ts";
 import { triangleCount } from "../parts.ts";
 import { CATALOGS, DEFAULT_RECIPE, type Recipe, randomRecipe } from "../recipe.ts";
@@ -17,18 +17,31 @@ for (const hair of [7, 8, 9, 10]) {
   }
 }
 
-test("the far level stays under its budget in one mesh, for the heaviest looks", () => {
+test("the far and farthest levels stay under budget in one mesh, for the heaviest looks", () => {
   for (const extra of BUSY) {
-    const m = buildFar({ ...DEFAULT_RECIPE, ...extra }), t = triangleCount(m);
-    assert.equal(m.parts.length, 1, "one mesh (one draw call)");
-    assert.ok(t <= FAR_BUDGET, `${JSON.stringify(extra)}: ${t} triangles (limit ${FAR_BUDGET})`);
+    for (const [level, budget] of [["far", FAR_BUDGET], ["farthest", FARTHEST_BUDGET]] as const) {
+      const m = buildFar({ ...DEFAULT_RECIPE, ...extra }, level), t = triangleCount(m);
+      assert.equal(m.parts.length, 1, "one mesh (one draw call)");
+      assert.ok(t <= budget, `${level} ${JSON.stringify(extra)}: ${t} triangles (limit ${budget})`);
+    }
   }
+});
+
+test("no fingers, ears, teeth or jewellery far away; no face at the farthest", () => {
+  const r = { ...DEFAULT_RECIPE, chain: 3, watch: 1, ear: 2, pierce: 6, glasses: 1 };
+  // The far level's palette names the materials it was painted from: none of the jewellery's.
+  for (const level of ["far", "farthest"] as const) {
+    const pal = buildFar(r, level).meta.palette!;
+    for (const k of ["gold", "chainMetal", "watchBand", "teeth", "nail", "earVC"] as const) assert.ok(!pal.includes(k), `${level} has ${k}`);
+  }
+  const pal = buildFar(r, "farthest").meta.palette!;
+  for (const k of ["sclera", "brow", "skinVC", "glassesFrame", "lidVC"] as const) assert.ok(!pal.includes(k), `farthest has ${k}`);
 });
 
 test("every option builds a sound far level", () => {
   for (const k of Object.keys(CATALOGS) as (keyof typeof CATALOGS)[]) {
-    for (let i = 0; i < CATALOGS[k].length; i++) {
-      const m = buildFar({ ...DEFAULT_RECIPE, [k]: i }), g = m.parts[0].geo;
+    for (let i = 0; i < CATALOGS[k].length; i++) for (const level of ["far", "farthest"] as const) {
+      const m = buildFar({ ...DEFAULT_RECIPE, [k]: i }, level), g = m.parts[0].geo;
       assert.deepEqual(nonFinite(m), [], `${k}=${i}`);
       const pal = m.meta.palette!, id = g.attributes.matId, sw = g.attributes.skinWeight, si = g.attributes.skinIndex;
       for (let v = 0; v < id.count; v++) {
@@ -44,7 +57,7 @@ test("every option builds a sound far level", () => {
 test("far avatars play every move", () => {
   for (let s = 0; s < 6; s++) {
     let n = 0;
-    const r = randomRecipe(() => ((n = (n * 9301 + 49297 + s * 7) % 233280) / 233280)), m = buildFar(r), { bones, root, rest } = rigOf(m);
+    const r = randomRecipe(() => ((n = (n * 9301 + 49297 + s * 7) % 233280) / 233280)), m = buildFar(r, s % 2 ? "farthest" : "far"), { bones, root, rest } = rigOf(m);
     for (const mv of MOVES) {
       for (let t = 0; t <= 7; t += 0.25) {
         applyMove(bones, rest, mv, t, m.meta.stride);
@@ -55,12 +68,12 @@ test("far avatars play every move", () => {
   }
 });
 
-test("only the nearest players are drawn in 3D; the rest are pictures", () => {
+test("only the nearest players get detail; everyone else is drawn at the farthest level", () => {
   const d = Array.from({ length: 100 }, (_, i) => i * 0.5);
   const lv = pickLevels(d);
-  assert.equal(lv.filter((l) => l !== "picture").length, MAX_3D);
+  assert.equal(lv.filter((l) => l !== "farthest").length, MAX_DETAILED);
   assert.equal(lv[0], "near");
   assert.equal(lv[20], "far");
-  assert.equal(lv[99], "picture");
-  assert.deepEqual(pickLevels([2, 50, 10]), ["near", "picture", "far"]);
+  assert.equal(lv[99], "farthest");
+  assert.deepEqual(pickLevels([2, 50, 10]), ["near", "farthest", "far"]);
 });

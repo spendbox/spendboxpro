@@ -246,7 +246,7 @@ function cornrows(c: HeadCtx): Part[] {
     if (best.length < 4) continue;
     const pts = best.filter((_, i) => i % 2 === 0).map((u) => skinPoint(c, u).multiplyScalar(1 + SCALP + R * 1.05));
     const cv = new CatmullRomCurve3(pts), len = cv.getLength();
-    const far = c.lod < 0.3, segs = Math.max(far ? 6 : 12, Math.round(len * 26 * c.lod));
+    const far = c.lod < 0.3, segs = Math.max(far ? 5 : 12, Math.round(len * (far ? 14 : 26) * c.lod));
     parts.push({
       name: `cornrow${k}`, mat: "hair", node: ROOT, surface: "closed",
       geo: tubeAlong(cv, segs, far ? 3 : 4, R, (t, a) => (1 + 0.16 * Math.sin(t * len * 90 + a * PI * 2)) * (t < 0.02 || t > 0.98 ? 0.6 : 1)),
@@ -261,7 +261,7 @@ function cornrows(c: HeadCtx): Part[] {
  * cylinder behind the head, and the first version here started at the hairline: both floated off it.)
  */
 function longFall(c: HeadCtx): BufferGeometry {
-  const NA = Math.max(16, Math.round(44 * c.lod)), NY = Math.max(12, Math.round(34 * c.lod)), span = 1.84, yBottom = -2.35;
+  const tiny = c.lod < 0.1, NA = Math.max(tiny ? 8 : 16, Math.round(44 * c.lod)), NY = Math.max(tiny ? 5 : 12, Math.round(34 * c.lod)), span = 1.84, yBottom = -2.35;
   const room = earRoom(c), pos: number[] = [], uv: number[] = [], idx: number[] = [];
   for (let i = 0; i <= NA; i++) {
     const ph = PI + span * (2 * (i / NA) - 1), dir = new Vector3(Math.sin(ph), 0, Math.cos(ph));
@@ -309,7 +309,7 @@ function gatheredPiece(c: HeadCtx, body: HairBody, kind: Gathered): Part[] {
   const base = skinPoint(c, where).multiplyScalar(1 + thick(where)), n = skinNormal(c, where);
   const tie = (r: number, at: Vector3): Part => ({
     name: "hairBand", mat: "hairTie", node: ROOT, surface: "closed",
-    geo: new TorusGeometry(r, 0.035, 8, 28).applyQuaternion(new Quaternion().setFromUnitVectors(new Vector3(0, 0, 1), n)).translate(at.x, at.y, at.z),
+    geo: new TorusGeometry(r, 0.035, c.lod < 0.3 ? 4 : 8, c.lod < 0.3 ? 12 : 28).applyQuaternion(new Quaternion().setFromUnitVectors(new Vector3(0, 0, 1), n)).translate(at.x, at.y, at.z),
   });
   if (kind === "ponytail") {
     // Gathered at the back of the head, then one smooth arc out from the tie and down the back,

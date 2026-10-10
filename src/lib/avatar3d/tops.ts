@@ -42,12 +42,13 @@ export function buildTop(d: Dress, top: TopStyle) {
   const { T, lod, add } = d, full = top.hem ?? -6.2, hem = Math.max(full, -6.3), edge = topEdge(top), off = (y: number) => topOff(top, y);
   const drape = (y: number, th: number) => drapePoint(T, y, th, off(y), hem);
   // Skin shows where the top doesn't reach (open necklines, armholes, a bare midriff).
-  if (edge || top.crop) add("torsoSkin", "chest", torsoGeo(T, lod, -1.3, -5.95, -0.012, 20, 22), "skin");
+  // (Never coarser than the top over it, or the two would cross.)
+  if (edge || top.crop) add("torsoSkin", "chest", torsoGeo(T, lod < 0.1 ? 0.25 : lod, -1.3, -5.95, lod < 0.3 ? -0.06 : -0.02, 20, 22), "skin");
   if (edge) {
     // (Many columns, few rows: the cut edge needs the columns to stay clean, the drop is smooth.)
     // (A V neck needs enough columns across its point even on other players.)
     const vee = top.neck === "v";
-    add("torso", "chest", sheetGeo(T, vee && lod >= 0.5 ? Math.max(lod, 0.75) : lod, 64, vee ? 16 : 22, 0, (u, v) => {
+    add("torso", "chest", sheetGeo(T, vee && lod >= 0.5 ? Math.max(lod, 0.75) : Math.max(lod, 0.25), 64, vee ? 16 : 22, 0, (u, v) => {
       const th = u * PI * 2;
       return [lerp(edge(th), hem, v ** 1.4), th];
     }, (y, th) => drape(y, th)), "top");

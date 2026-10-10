@@ -6,7 +6,6 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { OUTFITS } from "@/lib/avatar3d/catalog";
 import { getAvatarModel } from "@/lib/avatar3d/client";
 import { MOVES, applyMove } from "@/lib/avatar3d/moves";
-import { type Impostor, makeImpostor } from "@/lib/avatar3d/impostor";
 import { LOD } from "@/lib/avatar3d/lod";
 import { type MaterialSet, makeMaterials } from "@/lib/avatar3d/materials";
 import { triangleCount } from "@/lib/avatar3d/parts";
@@ -23,8 +22,8 @@ const SECTIONS: [RecipeKey, string][] = [
   ["layer", "Outer layer"], ["layerC", "Layer colour"], ["shoes", "Shoes"], ["shoeC", "Shoe colour"], ["watch", "Watch"], ["chain", "Chain"],
 ];
 
-/** Levels of detail (picture: drawn from the far level). */
-const DETAIL = [{ id: "own", n: "Own", lod: 1 }, { id: "near", n: "Nearby", lod: LOD.near }, { id: "far", n: "Far", lod: LOD.far }, { id: "picture", n: "Picture", lod: -1 }];
+/** Levels of detail. */
+const DETAIL = [{ id: "own", n: "Own", lod: 1 }, { id: "near", n: "Nearby", lod: LOD.near }, { id: "far", n: "Far", lod: LOD.far }, { id: "farthest", n: "Farthest", lod: LOD.farthest }];
 
 /** Camera framing: the face close up, or the whole body (target height, distance). */
 const VIEWS = { face: { y: -0.2, d: 6.4 }, body: { y: -6.9, d: 36 } };
@@ -47,8 +46,8 @@ export function AvatarLab({ initialRecipe, initialExpr, initialView, initialMove
   const [view, setView] = useState<keyof typeof VIEWS>(initialView === "body" ? "body" : "face");
   const errorRef = useRef<HTMLParagraphElement>(null);
   const stage = useRef<{
-    scene: THREE.Scene; renderer: THREE.WebGLRenderer; camera: THREE.Camera; aim: (v: keyof typeof VIEWS) => void;
-    current?: { obj?: AvatarObject; mats: MaterialSet; impostor?: Impostor };
+    scene: THREE.Scene; aim: (v: keyof typeof VIEWS) => void;
+    current?: { obj: AvatarObject; mats: MaterialSet };
   } | null>(null);
   const exprRef = useRef(expr);
   // ?move=<id> starts a move; ?mt=<seconds> freezes it at that moment (for screenshots).
@@ -104,7 +103,7 @@ export function AvatarLab({ initialRecipe, initialExpr, initialView, initialMove
     };
     // ?bg=<colour> paints the background (a gap in the skin then shows in that colour).
     if (params.get("bg")) scene.background = new THREE.Color(params.get("bg")!);
-    stage.current = { scene, renderer, camera, aim };
+    stage.current = { scene, aim };
 
     const resize = () => {
       const w = el.clientWidth, h = el.clientHeight;
@@ -125,12 +124,7 @@ export function AvatarLab({ initialRecipe, initialExpr, initialView, initialMove
       last = now;
       t += dt;
       controls.update();
-      const cur0 = stage.current?.current, imp = cur0?.impostor;
-      if (imp) {
-        const mv = MOVES[moveRef.current], tt = params.has("mt") ? Number(params.get("mt")) : t;
-        imp.update(camera, 0, mv.id === "walk" || mv.id === "run" ? (tt / mv.period) % 1 : null);
-      }
-      const cur = cur0?.obj ? (cur0 as { obj: AvatarObject }) : undefined;
+      const cur = stage.current?.current;
       if (cur && !still) {
         if (t > nextBlink && blinkT < 0) {
           blinkT = 0;
@@ -176,27 +170,10 @@ export function AvatarLab({ initialRecipe, initialExpr, initialView, initialMove
   useEffect(() => {
     let cancelled = false;
     const t0 = performance.now();
-    // The picture level is drawn from the far level.
-    getAvatarModel(recipe, lod < 0 ? LOD.far : lod).then((model) => {
+    getAvatarModel(recipe, lod).then((model) => {
       const s = stage.current;
       if (cancelled || !s) return;
       const mats = makeMaterials(recipe);
-      if (lod < 0) {
-        const impostor = makeImpostor(s.renderer, model, mats);
-        if (s.current) {
-          if (s.current.obj) s.scene.remove(s.current.obj.root);
-          if (s.current.impostor) {
-            s.scene.remove(s.current.impostor.mesh);
-            s.current.impostor.dispose();
-          }
-          s.current.mats.dispose();
-        }
-        s.current = { mats, impostor };
-        s.scene.add(impostor.mesh);
-        setInfo(`2 triangles (picture) · ${Math.round(performance.now() - t0)} ms`);
-        document.body.dataset.avatarReady = encodeRecipe(recipe) + "@" + lod;
-        return;
-      }
       const obj = mountModel(model, mats);
       // ?hide=name1,name2 hides parts by name (for checking what is drawn where).
       const hide = new URLSearchParams(location.search).get("hide")?.split(",") ?? [];
@@ -210,11 +187,7 @@ export function AvatarLab({ initialRecipe, initialExpr, initialView, initialMove
         }
       });
       if (s.current) {
-        if (s.current.obj) s.scene.remove(s.current.obj.root);
-        if (s.current.impostor) {
-          s.scene.remove(s.current.impostor.mesh);
-          s.current.impostor.dispose();
-        }
+        s.scene.remove(s.current.obj.root);
         s.current.mats.dispose();
       }
       s.current = { obj, mats };

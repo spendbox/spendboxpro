@@ -7,7 +7,7 @@ import { type Model, type PackedModel, unpack } from "./parts.ts";
 import { type Recipe, encodeRecipe } from "./recipe.ts";
 
 const CACHE_SIZE = 40;
-const build = (r: Recipe, lod: number) => (lod === LOD.far ? buildFar(r) : buildAvatar(r, lod));
+const build = (r: Recipe, lod: number) => (lod === LOD.far ? buildFar(r) : lod === LOD.farthest ? buildFar(r, "farthest") : buildAvatar(r, lod));
 const cache = new Map<string, Promise<Model>>();
 let worker: Worker | null | undefined;
 let nextId = 1;

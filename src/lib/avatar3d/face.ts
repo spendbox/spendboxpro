@@ -229,7 +229,8 @@ export function headSkin(c: HeadCtx): Part {
   // opens). All of it sits under the face patch and, for the mouth, in front of the mouth cavity.
   const eyeHole = (u: Vector3) => u.z > 0.4 && ((Math.abs(u.x) - 0.34) / 0.17) ** 2 + ((u.y - 0.06) / 0.12) ** 2 < 1;
   // Laid out around the neck axis, so the neck gets an even, dense grid for sculpting.
-  const NA = resEven(68, c.lod), NT = res(58, c.lod);
+  // (The farthest level has no face: a closed, round head, no openings for eyes or mouth.)
+  const tiny = c.lod < 0.1, NA = resEven(68, c.lod, 10), NT = res(58, c.lod, 7);
   const map = (u: Vector3) => headNeck(c, u);
   const pos: number[] = [], nor: number[] = [], kp: boolean[] = [], mh: boolean[] = [], free: number[] = [], idx: number[] = [];
   const aCut = SKIN_A_CUT, vCut = SKIN_V_CUT;
@@ -248,8 +249,8 @@ export function headSkin(c: HeadCtx): Part {
       const p = map(u).multiplyScalar(1 - 0.005 * patchInterior(u)), n = surfNormal(map, u);
       pos.push(p.x, p.y, p.z);
       nor.push(n.x, n.y, n.z);
-      kp.push(!eyeHole(u));
-      mh.push(inMouthHole(u));
+      kp.push(tiny || !eyeHole(u));
+      mh.push(!tiny && inMouthHole(u));
       // Never smooth under the face patch: it is shaped from the unsmoothed head, so the skin under it must stay put.
       free.push(neckBlendFreedom(u) * (1 - underPatch(u)));
     }

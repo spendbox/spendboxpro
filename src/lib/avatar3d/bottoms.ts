@@ -65,7 +65,9 @@ export function pelvisWear(d: Dress) {
 
 /** One leg: the garment down to its hem, and bare skin below it. */
 export function legWear(d: Dress, L: Legs, side: number, node: string, lod: number) {
-  const { add, look } = d, b = look.bottom;
+  const { add, look, O } = d, b = look.bottom;
+  // Under an abaya or jalabiya only the ankles show: far away, the legs can be much coarser.
+  if ((O.abaya || O.jalab) && lod < 0.3) lod *= 0.5;
   const skin = (from: number) => {
     const pts: [number, number][] = [[legR(L, from) * 0.97, from], ...L.pts.filter(([, y]) => y < from - 0.02)];
     return L.glutes(limbGeo(pts, 18, lod, null, L.squash), side);

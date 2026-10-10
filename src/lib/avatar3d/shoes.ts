@@ -30,7 +30,7 @@ type ShoeOpts = {
  */
 export function shoeGeo(len: number, wid: number, hgt: number, lod: number, o: ShoeOpts = {}) {
   const sole = !!o.sole, part = o.u0 !== undefined || o.u1 !== undefined, u0 = o.u0 ?? 0, u1 = o.u1 ?? 1;
-  const NU = Math.max(o.pitch && sole && lod >= 0.5 ? 14 : 8, Math.round((sole ? 12 : 18) * lod * (part ? 0.6 : 1))), NA = Math.max(o.pitch && sole && lod >= 0.5 ? 12 : 8, Math.round((sole ? 14 : 18) * lod) & ~1), pos: number[] = [], idx: number[] = [];
+  const NU = Math.max(o.pitch && sole && lod >= 0.5 ? 14 : lod < 0.1 ? 5 : lod < 0.3 ? 6 : 8, Math.round((sole ? 12 : 18) * lod * (part ? 0.6 : 1))), NA = Math.max(o.pitch && sole && lod >= 0.5 ? 12 : lod < 0.1 ? 6 : lod < 0.3 ? 6 : 8, Math.round((sole ? 14 : 18) * lod) & ~1), pos: number[] = [], idx: number[] = [];
   const grow = sole ? 1.04 : 1, pitch = o.pitch ?? 0, point = o.point ?? 0, slope = o.slope ?? 0.48;
   // End caps: the outline closes in a rounded curve at the heel and toe (rings bunch up there).
   const cap = (u: number) => Math.sqrt(Math.max(0, 1 - (u < 0.16 ? ((0.16 - u) / 0.16) ** 2 : u > 0.78 ? ((u - 0.78) / 0.22) ** 2 : 0)));
@@ -82,6 +82,12 @@ export function shoes(add: Add, S: ShoeStyle, node: string, ankle: number, fl: n
   if (kind === "heel") {
     const H = S.heel ?? 0.85;
     // The foot, tipped onto the ball of the foot, with a pointed pump: toe box and heel counter, thin sole.
+    if (lod < 0.1) {
+      // Farthest: the shoe as one tipped shape, and a thin heel.
+      add(`shoe${node}`, node, shoeGeo(fl * 0.95, 0.85, 0.6, lod, { pitch: H, point: 0.8, slope: 0.55 }).translate(0, floor + 0.06, 0), "shoe", "closed");
+      add(`heel${node}`, node, new CylinderGeometry(0.07, 0.035, H + 0.02, 4).translate(0, floor - H / 2 + 0.02, (0.08 - 0.24) * fl * 0.95), "sole", "closed");
+      return H;
+    }
     add(`foot${node}`, node, shoeGeo(fl * 0.92, 0.82, 0.62, lod * 0.75, { pitch: H, slope: 0.55 }).translate(0, floor + 0.08, 0), "skin", "closed");
     add(`shoe${node}`, node, shoeGeo(fl * 0.95, 0.88, 0.5, lod, { pitch: H, point: 0.8, u0: 0.58, u1: 1, slope: 0.3 }).translate(0, floor + 0.06, 0), "shoeDS");
     // (Far away: no separate heel counter or sole.)
