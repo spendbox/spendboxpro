@@ -60,7 +60,7 @@ export function DuelStatus({
         </p>
         <button onClick={onBeGhost} disabled={busy} className="flex shrink-0 items-center gap-1.5 rounded-xl bg-ink px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-50 sm:px-3 sm:py-2 sm:text-sm">
           <Ghost className="size-3.5 sm:size-4" />
-          Ghost · {short(rules.stake)}
+          Ghost · ₥{short(rules.stake)}
         </button>
       </div>
     );

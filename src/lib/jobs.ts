@@ -49,42 +49,42 @@ const J = (job: string, title: string, skill: Skill, pay: number, pass = 3): Job
 
 /** The job at each kind of place (CityRoom.type). Places not listed (houses, parks...) don't hire. More jobs will come. */
 export const JOBS: Record<string, Job> = {
-  restaurant: J("waiter", "Waiter", "hospitality", 6),
-  club: J("bartender", "Bartender", "entertainment", 8),
-  hotel: J("receptionist", "Hotel receptionist", "hospitality", 10),
-  spa: J("therapist", "Spa therapist", "hospitality", 9),
-  office: J("clerk", "Office clerk", "office", 8),
-  tower: J("analyst", "Business analyst", "office", 14, 4),
-  twin: J("analyst", "Business analyst", "office", 14, 4),
-  capitol: J("civil_servant", "Civil servant", "office", 12, 4),
-  bank: J("teller", "Bank teller", "finance", 15, 4),
-  mall: J("shop_assistant", "Shop assistant", "retail", 6),
-  megamall: J("store_manager", "Store manager", "retail", 11, 4),
-  market: J("trader", "Market trader", "retail", 5),
-  fuel: J("attendant", "Fuel attendant", "transport", 5),
-  station: J("ticket_officer", "Ticket officer", "transport", 7),
-  airport: J("check_in", "Check-in agent", "tourism", 12, 4),
-  intlairport: J("cabin_crew", "Cabin crew", "tourism", 16, 4),
-  spaceport: J("mission_control", "Mission control assistant", "tech", 20, 4),
-  port: J("dock_worker", "Dock worker", "industry", 9),
-  power: J("technician", "Plant technician", "industry", 12, 4),
-  solar: J("technician", "Plant technician", "industry", 12, 4),
-  dam: J("technician", "Plant technician", "industry", 12, 4),
-  oilrig: J("rig_hand", "Rig hand", "industry", 18, 4),
-  hospital: J("nurse", "Nurse", "health", 12, 4),
-  police: J("officer", "Police officer", "safety", 10, 4),
-  fire: J("firefighter", "Firefighter", "safety", 10, 4),
-  museum: J("guide", "Museum guide", "tourism", 8),
-  funfair: J("ride_operator", "Ride operator", "entertainment", 6),
-  waterpark: J("lifeguard", "Lifeguard", "fitness", 8),
-  arena: J("steward", "Stadium steward", "entertainment", 7),
-  stadium: J("steward", "Stadium steward", "entertainment", 7),
-  court: J("steward", "Arena steward", "entertainment", 7),
-  boxing: J("steward", "Arena steward", "entertainment", 7),
-  wrestling: J("steward", "Arena steward", "entertainment", 7),
-  gym: J("coach", "Fitness coach", "fitness", 9),
-  campus: J("lab_assistant", "Lab assistant", "education", 9),
-  school: J("teaching_assistant", "Teaching assistant", "education", 8),
+  restaurant: J("waiter", "Waiter", "hospitality", 18),
+  club: J("bartender", "Bartender", "entertainment", 24),
+  hotel: J("receptionist", "Hotel receptionist", "hospitality", 30),
+  spa: J("therapist", "Spa therapist", "hospitality", 27),
+  office: J("clerk", "Office clerk", "office", 24),
+  tower: J("analyst", "Business analyst", "office", 42, 4),
+  twin: J("analyst", "Business analyst", "office", 42, 4),
+  capitol: J("civil_servant", "Civil servant", "office", 36, 4),
+  bank: J("teller", "Bank teller", "finance", 45, 4),
+  mall: J("shop_assistant", "Shop assistant", "retail", 18),
+  megamall: J("store_manager", "Store manager", "retail", 33, 4),
+  market: J("trader", "Market trader", "retail", 15),
+  fuel: J("attendant", "Fuel attendant", "transport", 15),
+  station: J("ticket_officer", "Ticket officer", "transport", 21),
+  airport: J("check_in", "Check-in agent", "tourism", 36, 4),
+  intlairport: J("cabin_crew", "Cabin crew", "tourism", 48, 4),
+  spaceport: J("mission_control", "Mission control assistant", "tech", 60, 4),
+  port: J("dock_worker", "Dock worker", "industry", 27),
+  power: J("technician", "Plant technician", "industry", 36, 4),
+  solar: J("technician", "Plant technician", "industry", 36, 4),
+  dam: J("technician", "Plant technician", "industry", 36, 4),
+  oilrig: J("rig_hand", "Rig hand", "industry", 54, 4),
+  hospital: J("nurse", "Nurse", "health", 36, 4),
+  police: J("officer", "Police officer", "safety", 30, 4),
+  fire: J("firefighter", "Firefighter", "safety", 30, 4),
+  museum: J("guide", "Museum guide", "tourism", 24),
+  funfair: J("ride_operator", "Ride operator", "entertainment", 18),
+  waterpark: J("lifeguard", "Lifeguard", "fitness", 24),
+  arena: J("steward", "Stadium steward", "entertainment", 21),
+  stadium: J("steward", "Stadium steward", "entertainment", 21),
+  court: J("steward", "Arena steward", "entertainment", 21),
+  boxing: J("steward", "Arena steward", "entertainment", 21),
+  wrestling: J("steward", "Arena steward", "entertainment", 21),
+  gym: J("coach", "Fitness coach", "fitness", 27),
+  campus: J("lab_assistant", "Lab assistant", "education", 27),
+  school: J("teaching_assistant", "Teaching assistant", "education", 24),
 };
 
 /** The job a place gives, or null if it doesn't hire. */
@@ -205,7 +205,7 @@ export function buildInterview(plan: CityPlan, placeName: string, job: Job, key:
   return { questions, answers };
 }
 
-/** Pay an hour with a skill level's bonus (5% a level). */
-export function payWithSkill(pay: number, level: number, bonus = 0.05) {
+/** Pay an hour with a skill level's bonus (10% a level). */
+export function payWithSkill(pay: number, level: number, bonus = 0.1) {
   return Math.round(pay * (1 + level * bonus) * 100) / 100;
 }

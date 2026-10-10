@@ -114,7 +114,7 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
       "Any business can give you a job: offices, shops, restaurants, clubs, banks, hotels, the station, the airport and more. Go inside and tap Jobs.",
       "To get the job, pass a quick interview: 5 questions about the town you're in (its name, its streets, its station, its country...). Fail and that place won't see you again in this town, so look around first!",
       "A job pays mint by the hour while the town lasts (better jobs pay more), up to 8 paid hours a day. Collect your pay from My job in the menu. Pay is taxed 10%, and the tax goes into the prize pool.",
-      "Working builds skills (hospitality, finance, health care...). With a skill, the same kind of job in the next town needs no interview, and every skill level adds 5% to your pay.",
+      "Working builds skills (hospitality, finance, health care...). With a skill, the same kind of job in the next town needs no interview, and every skill level adds 10% to your pay.",
       "At work, tap Work a shift to play a quick game that fits the job. A medal score earns a tip.",
     ],
   },

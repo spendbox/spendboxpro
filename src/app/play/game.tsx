@@ -679,48 +679,58 @@ export function Game({
   const guest = me.guest;
 
   // First visits and train fares (game-db/035): the places already paid for in this town.
-  const visited = useRef<{ round: number; places: Set<string> }>({ round: -1, places: new Set() });
+  const [visitedNow, setVisited] = useState<{ round: number; places: ReadonlySet<string> }>({ round: -1, places: new Set() });
+  const visited = visitedNow.round === roundSeed ? visitedNow.places : null;
   useEffect(() => {
     if (guest || !roundSeed) return;
     let live = true;
     void myVisits().then((list) => {
-      if (live) visited.current = { round: roundSeed, places: new Set(list) };
+      if (live) setVisited({ round: roundSeed, places: new Set(list) });
     });
     return () => {
       live = false;
     };
   }, [guest, roundSeed]);
+  /** What going into this place costs you now: its first-visit fee, or 0 (been before, your own house, a guest). */
+  function visitCost(room: { id: string; kind?: string; type?: string }) {
+    if (guest || room.kind === "balloon") return 0;
+    if (visited?.has(room.id) || (myHouseTile !== null && room.id === `b:${myHouseTile}`)) return 0;
+    return visitFee(room.type);
+  }
+  function markVisited(place: string, been: boolean) {
+    setVisited((v) => {
+      const places = new Set(v.round === roundSeed ? v.places : []);
+      if (been) places.add(place);
+      else places.delete(place);
+      return { round: roundSeed, places };
+    });
+  }
   /**
    * Pay for going somewhere: a first visit to a place (once a town) or a train fare (every time).
    * Says no straight away if you can't afford it; otherwise lets you in at once and pays in the
-   * background (and puts you back out if that fails). Returns a note for the welcome message,
-   * or null if you can't go.
+   * background (and puts you back out if that fails). The cost is on the button you tapped, so
+   * nothing more is said about it. Returns false if you can't go.
    */
-  function payToGo(what: { kind: "visit"; place: string; type?: string; name: string } | { kind: "fare"; index: number; fare: number; name: string }): string | null {
-    if (guest) return "";
-    let fee = 0;
-    if (what.kind === "visit") {
-      if (visited.current.round !== roundSeed) visited.current = { round: roundSeed, places: new Set() };
-      if (visited.current.places.has(what.place) || (myHouseTile !== null && what.place === `b:${myHouseTile}`)) return "";
-      fee = visitFee(what.type);
-    } else fee = what.fare;
-    if (fee <= 0) return "";
+  function payToGo(what: { kind: "visit"; place: string; type?: string; name: string } | { kind: "fare"; index: number; fare: number; name: string }): boolean {
+    if (guest) return true;
+    const fee = what.kind === "visit" ? visitCost({ id: what.place, type: what.type }) : what.fare;
+    if (fee <= 0) return true;
     if (me.coins < fee) {
       setMessage({ icon: Coins, text: `${what.kind === "visit" ? `Your first visit to ${what.name}` : `A ticket for the ${what.name}`} costs ₥${short(fee)}, and you have ₥${short(me.coins)}.`, tone: "bad" });
-      return null;
+      return false;
     }
-    if (what.kind === "visit") visited.current.places.add(what.place);
+    if (what.kind === "visit") markVisited(what.place, true);
     const pay = what.kind === "visit" ? payVisit(what.place, what.type) : payFare(what.index, what.fare > TRAIN_FARE);
     void pay.then((res) => {
       // Only put you back out if you really can't go (not if the payment just didn't go through).
       if (!res.ok && res.kick) {
-        if (what.kind === "visit") visited.current.places.delete(what.place);
+        if (what.kind === "visit") markVisited(what.place, false);
         leaveRoom();
         setMessage({ icon: Coins, text: res.error, tone: "bad" });
       }
       startTransition(() => router.refresh());
     });
-    return what.kind === "visit" ? ` First visit: ₥${short(fee)} (half goes to the prize pool).` : ` Ticket: ₥${short(fee)}.`;
+    return true;
   }
 
   // The last 30 seconds before the hunt: a soft beep every second.
@@ -1060,8 +1070,7 @@ export function Game({
   }
   function goToLevel(room: PlaceRoom, level: { id: string; label: string; capacity: number }) {
     setPickPlace(null);
-    const feeNote = room.kind === "building" ? payToGo({ kind: "visit", place: room.id, type: room.type, name: room.name }) : "";
-    if (feeNote === null) return;
+    if (room.kind === "building" && !payToGo({ kind: "visit", place: room.id, type: room.type, name: room.name })) return;
     const info: RoomInfo = {
       id: `${room.id}:${level.id}`,
       name: `${room.name} · ${level.label}`,
@@ -1081,14 +1090,13 @@ export function Game({
       icon: Building2,
       text: guest
         ? `Welcome to ${info.name}. Sign in to chat with the people here.`
-        : `You're in ${info.name}.${feeNote} Tap the floor to walk, tap anything glowing to use it, and tap Chat to talk.`,
+        : `You're in ${info.name}. Tap the floor to walk, tap anything glowing to use it, and tap Chat to talk.`,
       tone: "info",
     });
   }
   // Hop on a ride: a balloon, train, bus, car, boat, Ferris wheel cabin or water slide.
   function boardRide(r: { kind: RideKindName; index: number; name: string; capacity: number; fare?: number }) {
-    const fareNote = r.fare ? payToGo({ kind: "fare", index: r.index, fare: r.fare, name: r.name }) : "";
-    if (fareNote === null) return;
+    if (r.fare && !payToGo({ kind: "fare", index: r.index, fare: r.fare, name: r.name })) return;
     setPickRide(false);
     setPlace(null);
     setActivity(null);
@@ -1114,7 +1122,7 @@ export function Game({
       setTimeout(() => setRide((cur) => (cur?.kind === r.kind && cur.index === r.index ? null : cur)), 60_000);
     }
     setRide({ kind: r.kind, index: r.index });
-    setMessage({ icon: RIDE_ICONS[r.kind], text: guest && r.kind !== "slide" ? "Enjoy the ride! Sign in to chat with the people on board." : RIDE_HELLO[r.kind] + fareNote, tone: "info" });
+    setMessage({ icon: RIDE_ICONS[r.kind], text: guest && r.kind !== "slide" ? "Enjoy the ride! Sign in to chat with the people on board." : RIDE_HELLO[r.kind], tone: "info" });
   }
   function leaveRoom() {
     rooms.leave();
@@ -1776,6 +1784,7 @@ export function Game({
           <p className="mt-1 text-sm text-muted">Where would you like to go? Each floor has its own people and its own chat.</p>
           <div className="mt-3 space-y-2">
             {(pickPlace.levels?.length ? pickPlace.levels : [{ id: "g", label: "Ground floor", capacity: pickPlace.capacity }]).map((lvl) => {
+              const cost = pickPlace.kind === "building" ? visitCost(pickPlace) : 0;
               const id = `${pickPlace.id}:${lvl.id}`;
               const here = rooms.counts[id] ?? 0;
               const Icon = lvl.id === "r" ? Sun : lvl.id === "g" ? DoorOpen : Layers;
@@ -1800,6 +1809,7 @@ export function Game({
                       </span>
                     )}
                   </span>
+                  {cost > 0 && !hereNow && <span className="shrink-0 rounded-full bg-gold/25 px-2 py-0.5 text-[11px] font-bold text-gold-dark">₥{short(cost)}</span>}
                   <span className="flex items-center gap-1 text-xs text-muted">
                     <Users className="size-3.5" />
                     {here}/{short(lvl.capacity)}
