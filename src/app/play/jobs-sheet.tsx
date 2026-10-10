@@ -260,7 +260,7 @@ function Status({ step, busy, onCollect, onQuit, onShift }: { step: Extract<Step
       {note && <p className="rounded-2xl bg-panel-2 p-3 text-sm">{note}</p>}
       {paid && paid.gross > 0 && (
         <p className="rounded-2xl bg-[#d3f9d8] p-3 text-sm">
-          Paid <b>₥{short(paid.net)}</b> (₥{short(paid.gross)} less ₥{short(paid.tax)} tax, which went into the prize pool).
+          Paid <b>₥{short(paid.net)}</b>.
           {paid.capped && " That's all the paid hours for today."}
         </p>
       )}
@@ -286,7 +286,7 @@ function Status({ step, busy, onCollect, onQuit, onShift }: { step: Extract<Step
           </span>
         </div>
         <button disabled={busy || status.owed < 0.01} onClick={onCollect} className="shrink-0 rounded-xl bg-ink px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">
-          {busy ? <LoaderCircle className="size-4 animate-spin" /> : "Collect"}
+          {busy ? <LoaderCircle className="size-4 animate-spin" /> : `Collect ₥${short(Math.floor(status.owed * (1 - status.tax) * 100) / 100)}`}
         </button>
       </div>
       <div>

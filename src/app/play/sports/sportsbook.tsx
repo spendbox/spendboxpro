@@ -281,7 +281,7 @@ export function SportsSheet({
         },
     );
     setSlip(null);
-    setNote({ id: m.id, tone: "ok", text: `Bet placed: ₥${short(res.amount)} on ${label}. Good luck!` });
+    setNote({ id: m.id, tone: "ok", text: `Bet placed on ${label}. Good luck!` });
   }
 
   // Watching a match: the tactical view (a ticket unlocks it).
@@ -941,7 +941,7 @@ function BetSlip({
             </>
           ) : (
             <>
-              {chosen && !problem ? `Bet ${whole(n)} on ${side?.short ?? chosen.label}` : "Place bet"}
+              {chosen && !problem ? `Bet ₥${whole(n)} on ${side?.short ?? chosen.label}` : "Place bet"}
             </>
           )}
         </button>
