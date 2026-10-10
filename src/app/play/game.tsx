@@ -91,6 +91,7 @@ import { Sheet } from "./sheet";
 import { Logo, LogoMark } from "@/components/logo";
 import { playSfx, setSfxEnabled, useCitySound } from "./sound";
 import { StatsCard } from "./stats-card";
+import { avatar3dEnabled } from "./avatar3d-flag";
 
 // The 3D city only runs in the browser.
 const CityView = dynamic(() => import("./city-view").then((m) => m.CityView), {
@@ -108,6 +109,7 @@ const PhoneSheet = dynamic(() => import("./phone/phone-sheet").then((m) => m.Pho
 const HowItWorks = dynamic(() => import("./how-it-works").then((m) => m.HowItWorks));
 const Results = dynamic(() => import("./results").then((m) => m.Results));
 const AvatarEditor = dynamic(() => import("./avatar-editor").then((m) => m.AvatarEditor));
+const AvatarStudio = dynamic(() => import("./avatar-studio").then((m) => m.AvatarStudio), { ssr: false });
 const SportsSheet = dynamic(() => import("./sports/sportsbook").then((m) => m.SportsSheet));
 const ActivitySheet = dynamic(() => import("./activities/activity-sheet").then((m) => m.ActivitySheet));
 const GiveCoinsSheet = dynamic(() => import("./activities/gift-sheet").then((m) => m.GiveCoinsSheet));
@@ -342,6 +344,9 @@ export function Game({
   const [confirmHide, setConfirmHide] = useState(false);
   const [howOpen, setHowOpen] = useState(false);
   const [editAvatar, setEditAvatar] = useState(false);
+  // The new 3D studio, while it is being tried out (see avatar3d-flag.ts).
+  // (Read in the browser only; it matters only once the studio is opened, so the server's false is harmless.)
+  const [studio3d] = useState(() => typeof window !== "undefined" && avatar3dEnabled());
   // The phone: the camera (a picture of the town, or a selfie) and the phone itself (gallery).
   const [camera, setCamera] = useState<"photo" | "selfie" | null>(null);
   const [phone, setPhone] = useState<"home" | "photos" | null>(null);
@@ -1634,7 +1639,14 @@ export function Game({
           greet={(f) => greet(f, false)}
         />
       )}
-      {editAvatar && (
+      {editAvatar && studio3d && (
+        <AvatarStudio
+          initial={me.avatar}
+          onClose={() => setEditAvatar(false)}
+          onSaved={() => { setEditAvatar(false); setMessage({ text: "Looking good! Your new look is saved.", tone: "good" }); router.refresh(); }}
+        />
+      )}
+      {editAvatar && !studio3d && (
         <AvatarEditor
           initial={me.avatar}
           onClose={() => setEditAvatar(false)}

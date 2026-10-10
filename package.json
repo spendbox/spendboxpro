@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "echo \"no unit tests yet\"",
+    "test": "node --test --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON \"src/**/*.test.ts\"",
     "test:db": "bash game-db/tests/run.sh"
   },
   "dependencies": {

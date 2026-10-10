@@ -1,6 +1,7 @@
 # To do
 
 ## Now (owner)
+- [ ] Try the new 3D avatar studio (see `avatar-reference/docs/AVATAR_SPEC.md`): open the game with `?avatar3d=1` on your phone, tap your look, design and save. Only your browser gets it; `?avatar3d=0` switches it back.
 - [ ] In the Supabase SQL Editor run `game-db/035_fees_and_jobs.sql` (first-visit fees, train fares, jobs). Until it's run, places and trains stay free and Jobs won't load.
 - [ ] In the Supabase SQL Editor run `game-db/036_minigames.sql` (minigame rewards). Until it's run, the games all play but good scores pay no mint.
 - [ ] Then run `game-db/037_better_pay.sql` (each skill level adds 10% pay, was 5%). The tripled hourly pay works without it.
