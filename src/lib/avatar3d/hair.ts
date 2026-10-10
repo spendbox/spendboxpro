@@ -88,7 +88,8 @@ const STYLES: Partial<Record<number, Style>> = {
   2: { body: LOW_FADE }, // low fade
   3: { body: { ...LOW_FADE, side: 0.055, top: 0.085, topFrom: 0.15, fade: 0.14, edgeDensity: 0.55, clumps: 0.015 } }, // short coils
   // Afro: a fuller body, rounding out gradually from the hairline (a short fade made steep, helmet-like walls).
-  4: { body: { top: 0.55, side: 0.3, topFrom: -0.1, fade: 0.45, edgeDensity: 0.6, frontLess: 0.45, clumps: 0.025, texture: "coil" }, res: [80, 32] },
+  // Dense: no scalp shows through.
+  4: { body: { top: 0.55, side: 0.3, topFrom: -0.1, fade: 0.45, edgeDensity: 1, frontLess: 0.45, clumps: 0.025, texture: "coil" }, res: [80, 32] },
   5: { body: SLEEK, gathered: "puff" },
   6: { body: SLEEK, gathered: "bun" },
   10: { body: { ...SLEEK, top: 0.04, side: 0.04 }, gathered: "fall" }, // long
@@ -114,8 +115,8 @@ function wrapShell(): { edge: DirFn; thick: DirFn } {
   return { edge, thick: (u) => 0.08 + 0.45 * smooth((u.y - edge(u)) / 0.7) * (1 - 0.3 * Math.max(u.z, 0)) + folds(u) };
 }
 
-/** Scalp thickness of the shell under braids, locs and cornrows (the parted scalp shows between them). */
-const SCALP = 0.012;
+/** Thickness of the hair layer under braids, locs and cornrows: short hair in the hair colour between them. */
+const SCALP = 0.022;
 
 type Layer = { edge: DirFn; thick: DirFn; alpha?: DirFn; mat: Part["mat"]; res: [number, number] };
 
@@ -126,7 +127,7 @@ function scalpLayers(c: HeadCtx, h: number): Layer[] {
     const b = bodyAt(st.body, E);
     return [{ edge: E, ...b, mat: st.body.texture === "coil" ? "hairBody" : "hairBodyStrand", res: st.res ?? [72, 26] }];
   }
-  if (h === 7 || h === 8 || h === 9) return [{ edge: E, thick: () => SCALP, mat: "scalp", res: [64, 22] }];
+  if (h === 7 || h === 8 || h === 9) return [{ edge: E, thick: () => SCALP, mat: "hair", res: [64, 22] }];
   if (h === 11) return [{ ...wrapShell(), mat: "wrap", res: [80, 30] }];
   return [];
 }

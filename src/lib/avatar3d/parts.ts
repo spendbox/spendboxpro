@@ -10,7 +10,7 @@ import {
 export type MatKey =
   | "skin" | "skinVC" | "earVC" | "lidVC" | "sclera" | "iris" | "cornea" | "catchlight" | "caruncle" | "brow"
   | "mouthCavity" | "teeth" | "tongue" | "gold" | "glassesFrame" | "lens" | "beard" | "stubble" | "hw" | "hwDark" | "hwSheen"
-  | "kufi" | "hair" | "hairStrand" | "hairBody" | "hairBodyStrand" | "scalp" | "hairTie" | "wrap";
+  | "kufi" | "hair" | "hairStrand" | "hairBody" | "hairBodyStrand" | "hairTie" | "wrap";
 
 /** A moving piece of the avatar. Parts hang from nodes; animation moves nodes. */
 export type Node = { id: string; parent: string | null; matrix: number[] };

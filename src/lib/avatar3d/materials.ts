@@ -214,7 +214,6 @@ export function makeMaterials(r: Recipe): MaterialSet {
       // shows through towards the hairline and down a fade.
       case "hairBody": return std(hair, 0.86, { side: DoubleSide, bumpMap: coilTexture(), bumpScale: 2.5, transparent: true, vertexColors: true });
       case "hairBodyStrand": return std(hair, 0.5, { side: DoubleSide, map: strandTexture(), transparent: true, vertexColors: true });
-      case "scalp": return std(hair.clone().lerp(skin, 0.45), 0.85);
       case "hairTie": return std(new Color(topHex).multiplyScalar(0.6), 0.8);
       // The headwrap hairstyle is made of the same fabric as the top.
       case "wrap": return std(wrapPattern ? "#ffffff" : topHex, 0.8, { side: DoubleSide, map: wrapPattern });
