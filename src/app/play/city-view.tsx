@@ -44,6 +44,7 @@ import { billboardTexture, botTexture, disposePills, pillTexture } from "./city/
 import { createTrains, railParts } from "./city/trains";
 import { createElevatedLife, elevatedParts } from "./city/elevated";
 import { createAircraft } from "./city/aircraft";
+import { setSceneSnapshot } from "./city/snapshot";
 import { createTraffic, type VehiclePose } from "./city/traffic";
 import { clubParts, eggParts, fireStationParts, restaurantParts } from "./city/street-bits";
 import { createCabin, type Cabin } from "./city/rides";
@@ -2311,6 +2312,19 @@ export function CityView({
     const people = createPeople(world, life);
     const trains = createTrains(world, life);
     const elevatedLife = createElevatedLife(world, life);
+    // For the photo booth: draw a fresh frame and copy it before the screen takes it.
+    let lastFrameTime = 0;
+    setSceneSnapshot(() => {
+      renderer.render(scene, camera);
+      renderOverlays(lastFrameTime);
+      const src = renderer.domElement;
+      const c = document.createElement("canvas");
+      c.dataset.photo = "1";
+      c.width = src.width;
+      c.height = src.height;
+      c.getContext("2d")?.drawImage(src, 0, 0);
+      return c;
+    });
     const aircraft = createAircraft(world, life);
     const traffic = createTraffic(world, life);
     const boats = createBoats(world, life);
@@ -5783,6 +5797,7 @@ export function CityView({
       worldEventsLayer.update(dt, time, Date.now() + cb.current.clockOffsetMs);
       renderer.render(scene, camera);
       renderOverlays(time);
+      lastFrameTime = time;
       // After drawing: the camera's matrices are this frame's now.
       const map = isRevealed && !immersive();
       if (aloft()) {
@@ -5853,6 +5868,7 @@ export function CityView({
       people.dispose();
       trains.dispose();
       elevatedLife.dispose();
+      setSceneSnapshot(null);
       aircraft.dispose();
       traffic.dispose();
       boats.dispose();
