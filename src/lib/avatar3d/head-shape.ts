@@ -47,6 +47,11 @@ export type SurfaceMap = (u: Vector3) => Vector3;
  */
 const sideOf = (x: number) => x / Math.sqrt(x * x + 0.0025);
 
+/** How softly the side of the face turns under into the jaw. */
+const JAW_ROUND = 0.12;
+/** How far the lower back of the skull curves in towards the neck (0 = the prototype's shape). */
+const NAPE_TUCK = 0.35;
+
 /** Skull and face: sculpts a direction on the unit sphere into a point on the skin. */
 export function deform(c: HeadCtx, u: Vector3): Vector3 {
   const F = c.F;
@@ -54,7 +59,9 @@ export function deform(c: HeadCtx, u: Vector3): Vector3 {
   // Under the jaw: flatten the bottom of the skull into a jaw plane that rises from the chin back to the jaw angle.
   const fr = smooth((z + 0.35) / 0.9);
   const jp = -0.56 - 0.3 * fr + 0.18 * Math.abs(x) * (1 - fr), jw = smooth((z + 0.3) / 0.25);
-  y = smax(y, -2 + (jp + 2) * jw, 0.07);
+  // Rounded over a width of JAW_ROUND: the bone's edge is softened by the tissue over it. (The prototype's
+  // 0.07 left an edge sharper than the mesh can follow, which showed as a jagged line along the jaw.)
+  y = smax(y, -2 + (jp + 2) * jw, JAW_ROUND);
   if (y < 0) {
     const t = -y;
     x *= 1 - 0.8 * F.jaw * t * t;
@@ -91,6 +98,9 @@ export function deform(c: HeadCtx, u: Vector3): Vector3 {
   // Longer skull: the back of the head extends behind the ears.
   const fzb = smooth((0.15 - z) / 0.55);
   z *= 0.9 * (1 - fzb) + (1 + 0.03 * bell((y - 0.3) / 0.8)) * fzb;
+  // Nape: below the bulge of the occiput the back of the skull curves in to meet the neck at about
+  // earlobe height. (The prototype's skull kept bulging down to jaw level before the neck began.)
+  z *= 1 - NAPE_TUCK * smooth((-z - 0.2) / 0.5) * smooth((-y - 0.05) / 0.4);
   return new Vector3(x * F.w * 0.95, y * F.h, z * F.d * 0.96);
 }
 
@@ -158,6 +168,19 @@ export function headNeck(c: HeadCtx, u: Vector3): Vector3 {
   // made the skin just above the neck move down faster than out, folding back on itself under the chin.)
   const w = smooth((s - s0) / wd), wy = w * w;
   return new Vector3(neck.x + (h.x - neck.x) * w, neck.y + (h.y - neck.y) * wy, neck.z + (h.z - neck.z) * w);
+}
+
+/**
+ * How free the skin at direction u is to be smoothed where the neck blends into the head: 0 outside
+ * the blend, rising to 1 in its middle (matches the blend in headNeck).
+ */
+export function neckBlendFreedom(u: Vector3): number {
+  const al = Math.acos(Math.max(-1, Math.min(1, u.dot(NP))));
+  if (al > 1.5) return 0;
+  const sn = Math.sin(Math.atan2(u.dot(NE2), u.dot(NE1)));
+  const fw = smooth((sn - 0.35) / 0.55), s = al / (1.2 - 0.25 * fw), s0 = 0.5 + 0.04 * fw, wd = 0.62 - 0.2 * fw;
+  const t = (s - (s0 - 0.12)) / (wd + 0.12);
+  return t <= 0 || t >= 1 ? 0 : Math.sin(PI * t);
 }
 
 /** A point on the face from front-view coordinates (x, y), or from a direction (x, y, z). */

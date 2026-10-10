@@ -194,7 +194,7 @@ export function glasses(c: HeadCtx): Part[] {
     if (kind === 3) {
       parts.push({ name: `lens${i}`, mat: "lens", node: ROOT, geo: new CircleGeometry(0.13, 30).applyMatrix4(o.matrix), surface: "sheet" });
     }
-    const outer = fc.clone().add(new Vector3(s * 0.14, 0, 0)), earP = facePoint(c, s * 0.97, 0.06, -0.15).p.add(new Vector3(s * 0.03, 0, 0));
+    const outer = fc.clone().add(new Vector3(s * 0.14, 0, 0)), earP = facePoint(c, s * 0.97, 0.16, -0.15).p.add(new Vector3(s * 0.03, 0, 0)); // rests on top of the ear
     parts.push({ name: `temple${i}`, mat: "glassesFrame", node: ROOT, geo: rodGeo(outer, earP, 0.01), surface: "closed" });
     if (s === 1) {
       const inR = fc.clone().add(new Vector3(-0.135, 0, 0)), ol = facePoint(c, -0.34, 0.06);

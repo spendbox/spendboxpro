@@ -42,7 +42,7 @@ test("all surfaces face outward", () => {
       const m = buildHead(r, lod);
       for (const p of m.parts) {
         const label = `${p.name} (lod ${lod}, face ${r.face}, nose ${r.nose})`;
-        assert.ok(windingAgreement(p.geo) >= 0.99, `${label}: triangles wound against their normals`);
+        assert.ok(windingAgreement(p.geo) >= 0.999, `${label}: triangles wound against their normals`);
         if (p.surface === "closed") assert.ok(signedVolume(p.geo) > 0, `${label}: wound inside out`);
       }
     }

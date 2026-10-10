@@ -13,13 +13,19 @@ const EAR_AH = [[0.06, -0.5], [-0.2, -0.44], [-0.4, -0.22], [-0.46, 0.06], [-0.3
 const EAR_IC = [[-0.38, 0.34], [-0.12, 0.4], [0.2, 0.3]] as const;
 const EAR_HC = [[0.58, 0.34], [0.38, 0.22], [0.14, 0.1]] as const;
 
+/**
+ * Where the ear sits and how big it is. Real ears run from brow height down to the base of the nose;
+ * the prototype's were about 20% too small and sat a tenth of a head too low (top level with the eyes).
+ */
+const EAR_Y = 0.03, EAR_SIZE = 1.18;
+
 function buildEar(c: HeadCtx, s: number) {
-  const A = facePoint(c, s * 0.97, -0.08, -0.2), n = A.n.clone(), sc = c.fem ? 0.9 : 1;
+  const A = facePoint(c, s * 0.97, EAR_Y, -0.2), n = A.n.clone(), sc = c.fem ? 0.9 : 1;
   // eb points up the ear, ea points from the back of the ear towards the face.
   const eb = new Vector3(0, 1, -0.3).normalize();
   eb.addScaledVector(n, -eb.dot(n)).normalize();
   const ea = new Vector3().crossVectors(n, eb).multiplyScalar(s).normalize();
-  const ca = 0.13 * sc, cb = 0.22 * sc;
+  const ca = 0.13 * sc * EAR_SIZE, cb = 0.22 * sc * EAR_SIZE;
   // Outline radius by angle: narrower towards the front-bottom (where the lobe tucks in).
   const R = (th: number) => {
     const co = Math.cos(th), sn = Math.sin(th);
@@ -34,17 +40,20 @@ function buildEar(c: HeadCtx, s: number) {
   };
   const base = (u: number, v: number) => 0.002 + 0.12 * sc * Math.pow(smooth((0.7 - u) / 1.25), 1.15) * (1 - 0.35 * smooth((-v - 0.55) / 0.3));
   // Relief height above the head at (u, v); rr is the normalised distance from the ear centre.
+  // At lower detail the ridges are made shallower: the coarser mesh can't follow sharp ones (they fold),
+  // and players further away are too small for the difference to show.
+  const dk = sc * (0.6 + 0.4 * Math.min(1, c.lod));
   const H = (u: number, v: number, rr: number) => {
     const lob = smooth((-v - 0.55) / 0.25), fr = smooth((u - 0.35) / 0.3);
     let z = base(u, v);
-    z += 0.03 * sc * bell((rr - 0.9) / 0.065) * (1 - fr * 0.8) * (1 - 0.6 * lob);
-    z -= 0.03 * sc * smooth((rr - 0.965) / 0.035) * (1 - 0.5 * lob);
-    z += 0.022 * sc * bell(segDist(u, v, EAR_HC) / 0.07) * smooth((rr - 0.3) / 0.2);
-    z += 0.026 * sc * bell(segDist(u, v, EAR_AH) / 0.085) * (1 - lob) + 0.017 * sc * bell(segDist(u, v, EAR_IC) / 0.07);
-    z -= 0.06 * sc * smooth(1 - Math.hypot(u - 0.12, v + 0.1) / 0.42);
-    z -= 0.025 * sc * bell(Math.hypot(u - 0.3, v + 0.08) / 0.1);
-    z -= 0.02 * sc * bell(Math.hypot(u + 0.1, v - 0.5) / 0.13);
-    z += 0.035 * sc * bell(Math.hypot(u - 0.58, v + 0.12) / 0.1) + 0.025 * sc * bell(Math.hypot(u - 0.08, v + 0.47) / 0.09);
+    z += 0.03 * dk * bell((rr - 0.9) / 0.065) * (1 - fr * 0.8) * (1 - 0.6 * lob);
+    z -= 0.03 * dk * smooth((rr - 0.965) / 0.035) * (1 - 0.5 * lob);
+    z += 0.022 * dk * bell(segDist(u, v, EAR_HC) / 0.07) * smooth((rr - 0.3) / 0.2);
+    z += 0.026 * dk * bell(segDist(u, v, EAR_AH) / 0.085) * (1 - lob) + 0.017 * dk * bell(segDist(u, v, EAR_IC) / 0.07);
+    z -= 0.06 * dk * smooth(1 - Math.hypot(u - 0.12, v + 0.1) / 0.42);
+    z -= 0.025 * dk * bell(Math.hypot(u - 0.3, v + 0.08) / 0.1);
+    z -= 0.02 * dk * bell(Math.hypot(u + 0.1, v - 0.5) / 0.13);
+    z += 0.035 * dk * bell(Math.hypot(u - 0.58, v + 0.12) / 0.1) + 0.025 * dk * bell(Math.hypot(u - 0.08, v + 0.47) / 0.09);
     return z;
   };
   const toUV = (r: number, th: number): [number, number] => {

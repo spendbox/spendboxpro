@@ -142,6 +142,11 @@ export function AvatarLab({ initialRecipe, initialExpr }: { initialRecipe?: stri
       if (cancelled || !s) return;
       const mats = makeMaterials(recipe);
       const obj = mountModel(model, mats);
+      // ?hide=name1,name2 hides parts by name (for checking what is drawn where).
+      const hide = new URLSearchParams(location.search).get("hide")?.split(",") ?? [];
+      obj.root.traverse((o) => {
+        if (hide.includes(o.name)) o.visible = false;
+      });
       if (s.current) {
         s.scene.remove(s.current.obj.root);
         s.current.mats.dispose();
