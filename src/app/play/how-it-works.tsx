@@ -115,6 +115,17 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
       "To get the job, pass a quick interview: 5 questions about the town you're in (its name, its streets, its station, its country...). Fail and that place won't see you again in this town, so look around first!",
       "A job pays mint by the hour while the town lasts (better jobs pay more), up to 8 paid hours a day. Collect your pay from My job in the menu. Pay is taxed 10%, and the tax goes into the prize pool.",
       "Working builds skills (hospitality, finance, health care...). With a skill, the same kind of job in the next town needs no interview, and every skill level adds 5% to your pay.",
+      "At work, tap Work a shift to play a quick game that fits the job. A medal score earns a tip.",
+    ],
+  },
+  {
+    icon: Gamepad2,
+    title: "Games",
+    body: [
+      "Tap Games (in the menu, or inside any place) for 100 quick games: heists, sport, water, shooting, board games, cards, arcade, party and town life. The ones that suit the place you're in come first.",
+      "Play alone, take turns with friends on one phone, or challenge someone in the same place: you both play the same level on your own phones and the best score wins. Board and card games can be played against the computer or someone online.",
+      "A bronze, silver or gold score pays ₥2, ₥4 or ₥6, for up to 10 games a day.",
+      "Robbing the bank? The job itself is a run of heist games. Fail one and the alarm goes off.",
     ],
   },
   {

@@ -63,7 +63,14 @@ sport, plus private messages. Explore stays locked while the town is still a bui
    Jobs pay by the hour until the town ends (at most 8 paid hours a day), taxed 10% into the
    pool, and build skills: with a skill, the same kind of job needs no interview, and each
    skill level adds 5% pay. Amounts of mint are written with the mint sign, ₥ (our own one-glyph
-   font, `src/app/fonts/mint-sign.woff2`). Ideas for 100 more minigames: `docs/MINIGAMES.md`.
+   font, `src/app/fonts/mint-sign.woff2`).
+8. **100 minigames** (`src/app/play/minigames/`, `game-db/036_minigames.sql`, list in
+   `docs/MINIGAMES.md`). The Games button opens all 100 in 9 categories, with the ones that suit
+   the place you're in first. Score games play alone, taking turns on one phone, or as a
+   challenge to someone in the same place (same seeded level on both phones); the 14 board and
+   card games play against a computer player, pass and play, or online. Bronze/silver/gold pay
+   ₥2/₥4/₥6 (10 rewarded games a day). The bank robbery's "job" step chains heist games, and
+   job shifts play a game that matches the skill.
 
 ## Setup
 
@@ -80,7 +87,8 @@ sport, plus private messages. Explore stays locked while the town is still a bui
    `game-db/025_big_towns.sql`, `game-db/026_friends.sql`, `game-db/027_streaks_levels.sql`,
    `game-db/028_hugs_gifts.sql`, `game-db/029_ghost_duels.sql`, `game-db/030_no_bot_ghost.sql`,
    `game-db/031_no_stalling.sql`, `game-db/032_bank_heist.sql`, `game-db/033_helicopters.sql`,
-   `game-db/034_phone_photos.sql` and `game-db/035_fees_and_jobs.sql`, in order, once each, on an empty database. In Supabase → Database → Extensions, switch on **pg_cron** first if you
+   `game-db/034_phone_photos.sql`, `game-db/035_fees_and_jobs.sql` and
+   `game-db/036_minigames.sql`, in order, once each, on an empty database. In Supabase → Database → Extensions, switch on **pg_cron** first if you
    can: the file then schedules the round clock to run every minute. (Without it, the clock
    still moves whenever someone has the game open.)
 2. **Email codes.** The app sends its own 4-digit sign-in codes through Resend, so nothing

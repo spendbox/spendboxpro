@@ -38,7 +38,13 @@ export type ActivityMsg =
   /** Karaoke: someone took the mic, the crowd's hype, the final score. */
   | { t: "mic"; sid: string; p: ActivityPlayer; song: string; secs: number }
   | { t: "hype"; sid: string; from: string; kind: number }
-  | { t: "mic_end"; sid: string; p: ActivityPlayer; score: number };
+  | { t: "mic_end"; sid: string; p: ActivityPlayer; score: number }
+  /** Minigames (../minigames): a challenge (the same seed for both), yes/no, a turn-game move, a score, walking away. */
+  | { t: "mg_invite"; cid: string; game: string; seed: number; from: ActivityPlayer; to: string; seats?: number }
+  | { t: "mg_reply"; cid: string; from: ActivityPlayer; ok: boolean }
+  | { t: "mg_move"; cid: string; from: string; k: number; m: unknown }
+  | { t: "mg_score"; cid: string; from: string; score: number }
+  | { t: "mg_quit"; cid: string; from: string };
 
 /** Someone on the channel and what they're doing (e.g. "dance"). */
 export type PresentPlayer = ActivityPlayer & { doing: string[] };

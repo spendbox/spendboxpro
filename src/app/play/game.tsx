@@ -15,6 +15,7 @@ import { cn } from "@/lib/cn";
 import {
   Armchair,
   Briefcase,
+  Gamepad2,
   Building2,
   CircleX,
   DoorOpen,
@@ -82,6 +83,7 @@ import { claimBalloon, recordVisit } from "./profile-actions";
 import { myVisits, payFare, payVisit } from "./fee-actions";
 import { TRAIN_FARE, visitFee } from "@/lib/fees";
 import { jobAt } from "@/lib/jobs";
+import type { Invite, PlayCtx } from "./minigames/shell";
 import { rideRoom, useRooms, type RoomInfo } from "./rooms";
 import { RIDE_ICONS, RIDE_INFO, RideIcon, type RideKindName } from "./ride-icon";
 import { Safe } from "./safe";
@@ -99,6 +101,8 @@ const CityView = dynamic(() => import("./city-view").then((m) => m.CityView), {
 // itself starts faster.
 const Menu = dynamic(() => import("./menu").then((m) => m.Menu));
 const JobsSheet = dynamic(() => import("./jobs-sheet").then((m) => m.JobsSheet));
+const GamesSheet = dynamic(() => import("./minigames/games-sheet").then((m) => m.GamesSheet));
+const MinigameInvites = dynamic(() => import("./minigames/invites").then((m) => m.MinigameInvites));
 const CameraMode = dynamic(() => import("./phone/camera").then((m) => m.CameraMode));
 const PhoneSheet = dynamic(() => import("./phone/phone-sheet").then((m) => m.PhoneSheet));
 const HowItWorks = dynamic(() => import("./how-it-works").then((m) => m.HowItWorks));
@@ -408,6 +412,8 @@ export function Game({
   /** On a club's dance floor: your move and who you're dancing with (a player's or a regular's id). */
   const [dancing, setDancing] = useState<{ move: DanceMove; with: string | null } | null>(null);
   const [pickPlace, setPickPlace] = useState<PlaceRoom | null>(null);
+  /** The minigames: open (maybe straight into a game, or a challenge you accepted), or closed. */
+  const [gamesOpen, setGamesOpen] = useState<{ game?: string; invite?: Invite | null } | null>(null);
   /** Jobs: at this place (apply), null (My job), or closed (undefined). */
   const [jobsAt, setJobsAt] = useState<{ id: string; name: string } | null | undefined>(undefined);
   const [placeRoom, setPlaceRoom] = useState<PlaceRoom | null>(null);
@@ -529,6 +535,11 @@ export function Game({
   const hereNow: HerePerson[] = useMemo(
     () => rooms.members.filter((m) => m.id !== me.id).map((m) => ({ id: m.id, name: m.name, avatar: cleanAvatar(m.avatar, m.name) })),
     [rooms.members, me.id],
+  );
+  // Where you are, for the minigames (the room's channel for challenges, who's here).
+  const playCtx: PlayCtx = useMemo(
+    () => ({ roundId: round?.id ?? null, roomId: place || ride !== null ? (rooms.myRoomInfo?.id ?? null) : null, me: meP, members: rooms.members }),
+    [round?.id, place, ride, rooms.myRoomInfo?.id, meP, rooms.members],
   );
   // Who you can add to a selfie: the people here, then your friends.
   const selfiePeople = useMemo(() => {
@@ -1494,12 +1505,23 @@ export function Game({
           level={guest ? undefined : me.level}
           onPhone={() => { setMenu(false); setPhone("home"); }}
           onMyJob={guest ? undefined : () => { setMenu(false); setJobsAt(null); }}
+          onGames={() => { setMenu(false); setGamesOpen({}); }}
           onChangePin={() => router.push("/welcome")}
           onSignOut={() => { setMenu(false); setConfirmSignOut(true); }}
         />
       )}
       {howOpen && <HowItWorks onClose={() => setHowOpen(false)} />}
-      {jobsAt !== undefined && <JobsSheet place={jobsAt} onClose={() => setJobsAt(undefined)} onChanged={() => startTransition(() => router.refresh())} />}
+      {jobsAt !== undefined && <JobsSheet place={jobsAt} ctx={playCtx} onClose={() => setJobsAt(undefined)} onChanged={() => startTransition(() => router.refresh())} />}
+      {gamesOpen && (
+        <GamesSheet
+          ctx={playCtx}
+          placeType={ride !== null ? ride.kind : (placeRoom?.type ?? null)}
+          placeName={ride !== null || place ? (rooms.myRoomInfo?.name ?? placeRoom?.name ?? null) : null}
+          open={gamesOpen.game ? { game: gamesOpen.game, invite: gamesOpen.invite } : null}
+          onClose={() => setGamesOpen(null)}
+        />
+      )}
+      {!guest && playCtx.roomId && !gamesOpen && <MinigameInvites ctx={playCtx} onAccept={(def, invite) => setGamesOpen({ game: def.id, invite })} />}
       {camera && round && (
         <CameraMode
           key={camera}
@@ -1994,6 +2016,12 @@ export function Game({
                     {chatUnread > 99 ? "99+" : chatUnread}
                   </span>
                 )}
+              </button>
+            )}
+            {!dockOpen && !isDancing && (place || ride !== null) && (
+              <button onClick={() => setGamesOpen({})} className="glass pointer-events-auto flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold shadow sm:text-sm">
+                <Gamepad2 className="size-4 text-[#7048e8]" />
+                Games
               </button>
             )}
             {!dockOpen && !isDancing && place && placeRoom && jobAt(placeRoom.type) && (

@@ -1,9 +1,23 @@
 # 100 minigames for Newtown
 
-A wish list, not built yet (except where it says **built**). Every game is short (under 2 minutes
-a round), works with one tap or a swipe on a phone, and has a **solo** way to play (against the
-clock, a target score or a bot) and a **multiplayer** way (head to head, a team, or everyone in
-the room at once). "Where" is the place or quest that opens it.
+**All 100 are built** (`src/app/play/minigames/`). This page started as the wish list; the tables
+below are the original ideas, and `registry.ts` is the final word on how each one plays.
+
+How they're used:
+
+- **Games button** (in the menu, and inside every place or ride): all 100, by category, with
+  the ones that suit the place you're in under **Here**. Search by name.
+- **Ways to play:** score games: alone, several people taking turns on one phone, or a
+  challenge to someone in the same place (both play the same level on their own phones; best
+  score wins). Board and card games: against the computer, pass and play, or online against
+  someone here (moves are sent between phones).
+- **Rewards** (`game-db/036_minigames.sql`): bronze, silver and gold scores pay ₥2, ₥4 and ₥6, for
+  up to 10 games a day, once every 45 seconds per game. Leaderboards for every game.
+- **Heists:** the bank robbery has a "job" step: two stealth games (three for the big job, ending
+  with the getaway drive), picked from the heist category. Fail one and the alarm goes off.
+  `HeistChain` (heist-chain.tsx) chains any games for any future heist.
+- **Jobs:** "Work a shift" plays a game that matches your job's skill (haggling or
+  stacking in a shop, drinks orders in a bar, hacking in an office, ...). A medal score earns a tip.
 
 Columns: **Solo** = how it plays alone. **Multi** = how it plays with others (H2H = head to head,
 Room = everyone in the place at once, Team = two sides, Turns = pass and play / take turns,

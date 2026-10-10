@@ -2,12 +2,13 @@
 
 ## Now (owner)
 - [ ] In the Supabase SQL Editor run `game-db/035_fees_and_jobs.sql` (first-visit fees, train fares, jobs). Until it's run, places and trains stay free and Jobs won't load.
-- [ ] Pick the next minigames to build from `docs/MINIGAMES.md`.
+- [ ] In the Supabase SQL Editor run `game-db/036_minigames.sql` (minigame rewards). Until it's run, the games all play but good scores pay no mint.
 - [ ] In the Supabase SQL Editor run, in order: `game-db/021_hourly_rounds.sql` (again), `022_pool_and_ads.sql`, `023_houses.sql`, `024_play_style.sql`, `025_big_towns.sql`, `026_friends.sql`, `027_streaks_levels.sql`, `028_hugs_gifts.sql`, `029_ghost_duels.sql`, `030_no_bot_ghost.sql`. (If 017–020 were never run, run them first.) Then merge the open pull request.
 - [ ] In Vercel, set `SPORTS_SECRET` to a long random string (once; don't change it later).
 - [ ] Test on a real phone: sounds, touch gestures, the water slide, club lights.
 
 ## Done lately
+- [x] all 100 minigames built (Games button in the menu and in every place): 9 categories, the ones that suit the place first, play alone, take turns on one phone, challenge someone here, or (board and card games) play the computer or someone online. Leaderboards; ₥2/₥4/₥6 for bronze/silver/gold. The bank robbery now has a job step of heist games (fail one and the alarm goes off), and jobs have "Work a shift" games that pay a tip.
 - [x] Sounds of what's close by (all subtle): a helicopter's rotor as one flies near, busier street sounds near roads (cars, motorbikes, horns), whispered nonsense near crowds, chatter in foreign-sounding tongues near airports, hotels and markets, dogs among the houses, cockerels on the farms.
 - [x] Going places costs a little mint (run `game-db/035_fees_and_jobs.sql`): ₥0.10–₥5 for the first visit to a place in each town, a fare for every train ride; half into the prize pool. Zoom buttons (+ and −) on computers.
 - [x] Jobs: any business hires after a 5-question interview about the town; fail and that place is closed to you for the town. Hourly pay (taxed 10% into the pool, 8 paid hours a day), skills that skip the interview next time and add pay.
