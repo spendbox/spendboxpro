@@ -94,19 +94,35 @@ function patternTexture(hex: string, kind: number) {
       }
     }
   } else if (kind === 2) {
-    const band = ["#E0A82E", "#1F6B3A", "#A8282A"];
-    for (let i = 0; i < 8; i++) {
-      if (!(i % 2)) continue;
-      x.fillStyle = band[(i >> 1) % 3];
-      x.fillRect(i * 32 + 6, 0, 20, 256);
-      for (let j = 0; j < 16; j++) {
-        x.fillStyle = j % 2 ? "#151515" : hex;
-        x.fillRect(i * 32 + 6, j * 16, 20, 6);
+    // Kente (Ghana): narrow woven strips sewn side by side. Each strip alternates blocks of bold
+    // weft bars with plainer warp-striped blocks, and neighbouring strips are offset by a block, so
+    // the cloth reads as a checkerboard of motifs. Gold, green, red and black, with the chosen colour.
+    const GOLD = "#E2A92B", GREEN = "#1E7A3C", RED = "#B8262B", BLACK = "#141414", strip = 32, block = 42;
+    for (let sx = 0; sx < 256 / strip; sx++) {
+      for (let by = -1; by < 256 / block + 1; by++) {
+        const x0 = sx * strip, y0 = by * block + (sx % 2) * (block / 2), motif = (sx + by) % 2 === 0;
+        if (motif) {
+          // Weft-faced block: stacked bars across the strip.
+          const bars = [GOLD, BLACK, GREEN, BLACK, RED, BLACK, GOLD];
+          bars.forEach((c, k) => {
+            x.fillStyle = c;
+            x.fillRect(x0, y0 + (k * block) / bars.length, strip, block / bars.length + 0.5);
+          });
+          x.fillStyle = hex;
+          x.fillRect(x0 + strip / 2 - 3, y0 + 4, 6, block - 8);
+        } else {
+          // Warp-faced block: the base colour with fine lengthwise stripes.
+          x.fillStyle = hex;
+          x.fillRect(x0, y0, strip, block);
+          for (const [dx, c] of [[4, GOLD], [9, GREEN], [strip - 11, RED], [strip - 6, GOLD]] as const) {
+            x.fillStyle = c;
+            x.fillRect(x0 + dx, y0, 2, block);
+          }
+        }
       }
-    }
-    for (let j = 0; j < 8; j++) {
-      x.fillStyle = "rgba(224,168,46,.55)";
-      x.fillRect(0, j * 32 + 14, 256, 4);
+      // The seam between strips.
+      x.fillStyle = "rgba(0,0,0,.35)";
+      x.fillRect(sx * strip, 0, 1, 256);
     }
   } else {
     for (let i = 0; i < 256; i += 16) {
@@ -114,7 +130,8 @@ function patternTexture(hex: string, kind: number) {
       x.fillRect(i, 0, 2, 256);
     }
   }
-  return texture(c, 5, 3);
+  // Kente's woven blocks are large; the other patterns repeat smaller.
+  return kind === 2 ? texture(c, 3, 2) : texture(c, 5, 3);
 }
 
 /** Fine strands for straighter hair (grey streaks, tinted by the hair colour). */
@@ -224,6 +241,9 @@ export function makeMaterials(r: Recipe): MaterialSet {
       // Clothes. The top's fabric carries the chosen pattern; topDS is the same cloth seen from both sides.
       case "top": return std(topPattern ? "#ffffff" : topC, 0.8, { map: topPattern });
       case "topDS": return std(topPattern ? "#ffffff" : topC, 0.8, { map: topPattern, side: DoubleSide });
+      // Ribbed knit collar: a little darker than the top, matt.
+      case "rib": return std(topC.clone().multiplyScalar(0.82), 0.9, { side: DoubleSide });
+      case "topEdgeDS": return std(topC.clone().multiplyScalar(0.8), 0.6, { side: DoubleSide });
       case "topEdge": return std(topC.clone().multiplyScalar(0.8), 0.6);
       case "trim": return std(topC.clone().multiplyScalar(0.6), 0.75);
       case "lapel": return std(topC.clone().multiplyScalar(0.75), 0.6);

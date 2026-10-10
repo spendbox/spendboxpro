@@ -37,9 +37,14 @@ export function bodyParams(r: Recipe): BodyParams {
 
 // ---- torso ----
 
-/** Torso rings: heights, and half-widths, front and back depths at each (before body-type scaling). */
-const TL = [-1.3, -1.42, -1.72, -2.1, -2.6, -3.15, -3.95, -4.8, -5.6, -6.35, -7.05, -7.4];
-const TX = [0.4, 0.68, 1.12, 1.5, 1.52, 1.48, 1.36, 1.27, 1.33, 1.52, 1.45, 1.3];
+/**
+ * Torso rings: heights, and half-widths, front and back depths at each (before body-type scaling).
+ * The shoulder line (acromion, -1.82) sits about a third of a head below the chin, and the slope from
+ * the neck to the shoulder is gentle, rounding over the deltoid. The hips curve out gradually from
+ * the waist to their widest at the top of the thighs (the greater trochanter, just above the crotch).
+ */
+const TL = [-1.3, -1.4, -1.56, -1.82, -2.45, -3.1, -3.95, -4.8, -5.6, -6.35, -7.05, -7.4];
+const TX = [0.4, 0.66, 1.12, 1.48, 1.52, 1.48, 1.36, 1.27, 1.34, 1.47, 1.53, 1.36];
 const TZF = [0.3, 0.5, 0.62, 0.8, 0.94, 1.0, 0.93, 0.8, 0.84, 0.84, 0.62, 0.5];
 const TZB = [0.36, 0.6, 0.74, 0.84, 0.92, 0.92, 0.88, 0.8, 0.84, 0.98, 0.86, 0.66];
 
@@ -63,6 +68,8 @@ export type Torso = {
   /** Where the legs join: each thigh's centre (x = ±legX) and radius at the crotch (y = CROTCH_Y). */
   legX: number;
   legR: number;
+  /** How far the buttocks push the skin out at (x, z), height y (also used on the thighs). */
+  glute(y: number, x: number, z: number): number;
 };
 
 /** The crotch: the torso ends here and the thighs carry on below. */
@@ -81,10 +88,12 @@ export function torsoModel(B: BodyParams): Torso {
   const X = TX.map((v, i) => v * [1 + t * 0.6, 1 + t, B.sh * (1 + t * 0.3), B.sh, (B.sh + B.ch) / 2, B.ch, B.rib, B.wa, (B.wa + B.hi) / 2, B.hi, B.hi, B.hi][i]);
   const ZF = TZF.map((v, i) => v * [1 + t * 0.3, 1 + t * 0.3, 1, (1 + B.chF) / 2, B.chF, B.chF, (B.chF + B.waF) / 2, B.waF, B.waF, B.hiF, B.hiF, 1][i]);
   const ZB = TZB.map((v, i) => v * [1 + t * 0.5, 1 + t * 0.6, 1 + t * 0.4, B.chB, B.chB, B.chB, (B.chB + B.waB) / 2, B.waB, B.waB, B.hiB, B.hiB, 1][i]);
-  const shY = L[3], del = 0.34 * B.armT * B.armD;
-  // The thighs sit side by side under the hips, touching at the top as most people's do.
-  const lu = (0.55 * B.legT + 0.45) * (B.gl > 1.3 ? 0.94 : 1), legX = Math.max(crInterp(L, X, -6.35) * 0.5 * B.stance, 0.82 * lu * 0.92);
-  const legR = Math.max(0.8 * (0.7 * B.legT + 0.3), legX * 1.02);
+  const shY = L[3] - 0.08, del = 0.3 * B.armT * B.armD;
+  // The thighs sit side by side under the hips, touching at the top as most people's do, and together
+  // as wide as the hips, so the outline runs on smoothly from the hip down the thigh. (Very muscular
+  // thighs may stand out a little past the hips, as they do in life.)
+  const hipX = crInterp(L, X, -7.05), legX = hipX * 0.5;
+  const legR = Math.min(Math.max(0.8 * (0.7 * B.legT + 0.3), legX * 1.02), hipX * 1.08 - legX);
   /**
    * Distance from the middle to the outside of the two thigh tops, along the direction (dx, dz).
    * A smooth blend of the two (not a hard join), so the crease between them is soft.
@@ -99,10 +108,13 @@ export function torsoModel(B: BodyParams): Torso {
   };
   /** The bare outline at height y and angle th (before muscles, bust and glutes), and the half-width there. */
   const outline = (y: number, th: number) => {
-    const sn = Math.sin(th), cs = Math.cos(th), x0 = crInterp(L, X, y), by = y - B.bellyY, bl = B.belly * bell(by / (by > 0 ? 1.05 : 0.62));
-    const zf = crInterp(L, ZF, y) + bl, zb = crInterp(L, ZB, y);
+    const sn = Math.sin(th), cs = Math.cos(th), x0 = crInterp(L, X, y), by = y - B.bellyY;
+    // Belly: a soft rounded mass, fuller below its middle than above (it settles), wrapping round to
+    // the flanks (love handles) rather than standing out only at the front.
+    const bl = B.belly * 0.85 * bell(by / (by > 0 ? 1.3 : 0.95));
+    const zf = crInterp(L, ZF, y) + bl, zb = crInterp(L, ZB, y) + bl * 0.15;
     // Deltoid caps: the top of each shoulder is part of the torso, so the arm grows out from under it.
-    const xr = x0 + bl * 0.42 + del * bell((y - shY + 0.05) / 0.5) * smooth((Math.abs(sn) - 0.5) / 0.45);
+    const xr = x0 + bl * 0.5 + del * bell((y - shY) / 0.6) * smooth((Math.abs(sn) - 0.35) / 0.6);
     const zr = zb + (zf - zb) * smooth((cs + 0.35) / 0.7);
     let px = xr * sn, pz = zr * cs;
     // Below the hips, the outline divides into the two thigh tops, meeting the legs exactly at the crotch.
@@ -114,7 +126,21 @@ export function torsoModel(B: BodyParams): Torso {
     }
     return [px, pz, xr];
   };
-  const P = (y: number, th: number, off = 0) => {
+  /**
+   * How far the buttocks stand out at a point (x, z) at height y: round, fading to nothing at the
+   * middle of the back (the cleft) and round towards the hips, and carrying on below the crotch onto
+   * the backs of the thighs (the legs use this too), so they curve under smoothly into the thighs.
+   */
+  const glute = (y: number, x: number, z: number) => {
+    if (!B.butt) return 0;
+    const xr = crInterp(L, X, Math.max(y, CROTCH_Y)), cs = z / (Math.hypot(x, z) || 1);
+    const back = smooth((-cs + 0.15) / 0.65) * smooth(Math.abs(x) / (0.3 * xr)), dy = y + 6.7;
+    let d = 0;
+    for (const sx of [-1, 1]) d += bell((x - sx * xr * 0.42) / (xr * 0.56));
+    return B.butt * 0.95 * d * (dy > 0 ? bell(dy / 0.85) : bell(dy / 0.75)) * back;
+  };
+  /** The skin surface at height y and angle th. */
+  const P0 = (y: number, th: number) => {
     const [px, pz, xr] = outline(y, th), [ax, az] = outline(y, th - 1e-3), [bx, bz] = outline(y, th + 1e-3);
     // Outward direction: square to the outline (which runs round towards +x as th grows).
     let nx = -(bz - az), nz = bx - ax;
@@ -122,7 +148,7 @@ export function torsoModel(B: BodyParams): Torso {
     nx /= nl;
     nz /= nl;
     const cs = Math.cos(th);
-    let d = off;
+    let d = 0;
     const front = smooth((cs - 0.1) / 0.4);
     if (B.pec) for (const sx of [-1, 1]) {
       const dy = y + 3.1;
@@ -136,25 +162,24 @@ export function torsoModel(B: BodyParams): Torso {
           (dy > 0 ? bell(dy / (0.55 + B.bust * 0.55)) : bell(dy / (0.42 + B.bust * 0.4))) * front;
       }
     }
-    if (B.butt) {
-      // Fading to nothing at the middle of the back: the cleft between the buttocks.
-      const back = smooth((-cs - 0.05) / 0.4) * smooth(Math.abs(px) / (0.3 * xr));
-      for (const sx of [-1, 1]) {
-        const dy = y + 6.75;
-        d += B.butt * 1.35 * bell((px - sx * xr * 0.42) / (xr * 0.46)) * (dy > 0 ? bell(dy / 0.6) : bell(dy / 0.44)) * back;
-      }
-    }
+    d += glute(y, px, pz);
     if (B.abs) {
       for (const sx of [-1, 1]) for (const ay of [-3.8, -4.35, -4.9]) d += 0.06 * B.abs * bell((px - sx * 0.3) / 0.19) * bell((y - ay) / 0.2) * front;
       d -= 0.03 * B.abs * bell(px / 0.07) * smooth((-3.5 - y) / 0.3) * smooth((y + 5.3) / 0.3) * front;
     }
     return new Vector3(px + nx * d, y, pz + nz * d);
   };
+  /** Outward direction of the skin (square to the surface, so layers keep their gap on slopes too). */
+  const N0 = (y: number, th: number) => {
+    const a = P0(y + 0.01, th).sub(P0(y - 0.01, th)), b = P0(y, th + 0.01).sub(P0(y, th - 0.01));
+    return b.cross(a).normalize();
+  };
+  const P = (y: number, th: number, off = 0) => (off ? P0(y, th).addScaledVector(N0(y, th), off) : P0(y, th));
   const N = (y: number, th: number, off = 0) => {
     const a = P(y + 0.01, th, off).sub(P(y - 0.01, th, off)), b = P(y, th + 0.01, off).sub(P(y, th - 0.01, off));
     return b.cross(a).normalize();
   };
-  return { P, N, L, X, ZF, ZB, shY, legX, legR };
+  return { P, N, L, X, ZF, ZB, shY, legX, legR, glute };
 }
 
 /** Average normals across the wrap-around seam of a grid (column 0 and column W-1 are the same points). */
@@ -449,7 +474,9 @@ export function shoeGeo(len: number, wid: number, hgt: number, lod: number, sole
       // Squarish cross-section, flat underneath, rounded on top.
       const x = hw * Math.sign(ca) * Math.pow(Math.abs(ca), sa < 0 ? 0.35 : 0.85);
       const y = sa < 0 ? -hh * Math.pow(-sa, 0.3) : hh * Math.pow(sa, 0.8);
-      pos.push(x * c, mid + y * Math.pow(c, 0.7), z);
+      // The toe and heel round over from the top: the bottom stays flat on the sole right to the tip.
+      const yy = mid + y, yc = bot + (yy - bot) * Math.pow(c, 0.7);
+      pos.push(x * Math.pow(c, 0.85), sa < 0 ? Math.max(bot, yc - (1 - c) * 0.02) : yc, z);
     }
   }
   const W = NA;

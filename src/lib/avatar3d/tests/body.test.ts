@@ -79,7 +79,7 @@ test("clothes and jewellery sit clear of what they cover (no flickering where th
     [{ outfit: 12, frame: 0 }, /^swimBottom$/, /^pelvis$/, 0.02],
     [{ outfit: 10 }, /^(shirtFront|lapel|tie)/, /^torso$/, 0.02],
     [{ outfit: 2 }, /^(hood|pocket)$/, /^torso$/, 0.015],
-    [{ outfit: 8, frame: 1 }, /^collar/, /^torso$/, 0.02],
+    [{ outfit: 8, frame: 1 }, /^collar\d/, /^torso$/, 0.02],
     [{ outfit: 8, frame: 1, butt: 3 }, /^skirt$/, /^pelvis$/, 0.02],
     [{ outfit: 11, frame: 1, butt: 3 }, /^(pencilSkirt|blazerTail)$/, /^pelvis$/, 0.02],
     [{ outfit: 5, frame: 1, butt: 3 }, /^dressSkirt$/, /^pelvis$/, 0.02],

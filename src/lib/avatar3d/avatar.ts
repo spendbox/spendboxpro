@@ -3,7 +3,7 @@
 // Nodes (moving pieces): avatar > head; avatar > body > chest > arm0/arm1 > hand0/hand1;
 // body > leg0/leg1. Index 0 is the avatar's right side (x < 0), 1 its left.
 
-import { type BufferGeometry, Matrix4, Object3D } from "three";
+import { type BufferGeometry, DoubleSide, Matrix4, Mesh, MeshBasicMaterial, Object3D, Raycaster, Vector3 } from "three";
 import { CROTCH_Y, THIGH_SQUASH, bodyParams, crInterp, handGeos, limbGeo, mirrorX, shoeGeo, torsoModel } from "./body.ts";
 import { HEAD_HEIGHT_SHARE, HEIGHTS, OUTFITS } from "./catalog.ts";
 import { type Dress, armClothes, cuff, robes, torsoClothes } from "./clothing.ts";
@@ -43,7 +43,18 @@ export function buildAvatar(r: Recipe, lod = 1): Model {
   node("body", "avatar", bo);
   node("chest", "body");
 
-  const d: Dress = { T, B, O, fem, lod, shirtless, add };
+  // The neck (part of the head's skin), in body space, for fitting collars to it.
+  const skin = head.parts.find((p) => p.name === "headSkin")!;
+  const neckMesh = new Mesh(skin.geo.clone().applyMatrix4(ho.matrix).applyMatrix4(bo.matrix.clone().invert()), new MeshBasicMaterial({ side: DoubleSide }));
+  neckMesh.updateMatrixWorld();
+  const ray = new Raycaster(), zc = (T.P(-1.4, 0).z + T.P(-1.4, PI).z) / 2;
+  const neck: Dress["neck"] = (y, th) => {
+    const centre = new Vector3(0, y, zc), q = T.P(y, th);
+    ray.set(centre, new Vector3(q.x, 0, q.z - zc).normalize());
+    const hit = ray.intersectObject(neckMesh, false)[0];
+    return hit ? { centre, dist: hit.distance } : null;
+  };
+  const d: Dress = { T, B, O, fem, lod, shirtless, add, neck };
   torsoClothes(d);
 
   // Arms: upper arm 3.0, forearm 2.4, hand 1.75 (elbow at the navel, wrist at the crotch, fingertips at mid-thigh).
@@ -97,21 +108,33 @@ export function buildAvatar(r: Recipe, lod = 1): Model {
     const t = smooth((-y - LT + 0.4) / 1.2);
     return [1 - 0.06 * t, THIGH_SQUASH + 0.06 * t];
   };
+  /** The buttocks carry on over the backs of the thighs (matching the hips exactly at the crotch). */
+  const glutes = (g: BufferGeometry, side: number) => {
+    const p = g.attributes.position;
+    for (let k = 0; k < p.count; k++) {
+      const x = p.getX(k), y = p.getY(k), z = p.getZ(k), r = Math.hypot(x, z);
+      const d = r > 1e-6 ? T.glute(topY + y, side * legX + x, z) : 0;
+      if (d) p.setXYZ(k, x + (x / r) * d, y, z + (z / r) * d);
+    }
+    g.computeVertexNormals();
+    return g;
+  };
   [-1, 1].forEach((side, i) => {
     const lo = new Object3D();
     lo.position.set(side * legX, topY, 0);
         node(`leg${i}`, "body", lo);
-    add(`leg${i}Skin`, `leg${i}`, limbGeo(legPts, 18, lod, null, lsq), legM);
+    add(`leg${i}Skin`, `leg${i}`, glutes(limbGeo(legPts, 18, lod, null, lsq), side), legM);
     if (shirtless && !(O.swim && fem)) {
       // Shorts (bodybuilder) or swim trunks.
       const sh: [number, number][] = legPts.filter(([, y]) => y > -2.4).map(([x, y]) => [x * 1.05 + 0.02, y]);
       sh.push([lerp(T.legR, kneeR, 0.44) * 1.05 + 0.02, -2.4]);
-      add(`leg${i}Shorts`, `leg${i}`, limbGeo(sh, 18, lod, null, lsq), O.swim ? "top" : "bottom");
+      add(`leg${i}Shorts`, `leg${i}`, glutes(limbGeo(sh, 18, lod, null, lsq), side), O.swim ? "top" : "bottom");
     }
     const fl = 2.45 * (B.h < 1 ? 0.92 : 1);
     // The shoe stands on the floor; the ankle is just inside its collar.
-    add(`shoe${i}`, `leg${i}`, shoeGeo(fl, 0.98, 0.95, lod).translate(0, -LT - LS - 0.38, 0), "shoe", "closed");
-    add(`sole${i}`, `leg${i}`, shoeGeo(fl, 0.98, 0.2, lod, true).translate(0, -LT - LS - 0.55, 0), "sole", "closed");
+    // Its upper sits down inside the sole's rim, so the sole wraps it with no gap.
+    add(`shoe${i}`, `leg${i}`, shoeGeo(fl * 0.985, 0.95, 1.05, lod).translate(0, -LT - LS - 0.48, 0), "shoe", "closed");
+    add(`sole${i}`, `leg${i}`, shoeGeo(fl, 0.98, 0.24, lod, true).translate(0, -LT - LS - 0.55, 0), "sole", "closed");
   });
   const floorY = topY - LT - LS - 0.55;
   robes(d, shX, floorY);

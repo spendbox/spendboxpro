@@ -6,7 +6,6 @@ import { type BodyParams, CROTCH_Y, type Torso, crInterp, drapePoint, limbGeo, s
 import type { Outfit } from "./catalog.ts";
 import { PI, bell, clamp01, smooth } from "./math.ts";
 import { type Part, ellGeo } from "./parts.ts";
-import { lathe } from "./shells.ts";
 
 export type Dress = {
   T: Torso;
@@ -16,6 +15,11 @@ export type Dress = {
   lod: number;
   /** Bodybuilders go shirtless; swimwear leaves the top bare too. */
   shirtless: boolean;
+  /**
+   * How far the neck's skin is from the neck's centre line, at height y in the direction of the torso
+   * point at angle th (body space). Lets the collar sit exactly where the neck meets the clothes.
+   */
+  neck: (y: number, th: number) => { centre: Vector3; dist: number } | null;
   add: (name: string, node: string, geo: BufferGeometry, mat: Part["mat"], surface?: Part["surface"]) => void;
 };
 
@@ -36,20 +40,27 @@ function atX(T: Torso, y: number, xs: number, front: boolean, o: number) {
  * Cloth hanging from the body, open at the hem: skirts, tunics, jacket tails. Each line down the
  * cloth follows the body (off it by off) but never comes back in once it has gone out, the way
  * fabric falls from the widest part of the hips or bottom. flare(t) widens it further, t running
- * from 0 at the top to 1 at the hem.
+ * from 0 at the top to 1 at the hem. Above the height follow it lies on the body (shoulders, chest)
+ * and only starts to hang below it.
  */
-function hangGeo(T: Torso, lod: number, y0: number, y1: number, off: number, flare: (t: number) => number, NV = 16, NA = 44) {
+function hangGeo(T: Torso, lod: number, y0: number, y1: number, off: number, flare: (t: number, dx: number, dz: number) => number, NV = 16, NA = 44, follow = Infinity) {
   NV = Math.max(3, Math.round(NV * lod));
   NA = Math.max(12, Math.round((NA * lod) / 2) * 2);
   const pos: number[] = [], uv: number[] = [], idx: number[] = [];
-  const cols = Array.from({ length: NA + 1 }, () => ({ r: 0, dx: 0, dz: 1 }));
+  // Each line down the cloth keeps one direction round the body (from the waist, which runs smoothly
+  // round), so neighbouring lines never cross; it hangs as far out as the body reaches that way.
+  const dirs = Array.from({ length: NA + 1 }, (_, i) => {
+    const q = T.P(-4.8, (i / NA) * PI * 2), l = Math.hypot(q.x, q.z);
+    return [q.x / l, q.z / l];
+  });
+  const reach = new Array(NA + 1).fill(0);
   for (let j = 0; j <= NV; j++) {
-    const t = j / NV, y = lerp(y0, y1, t);
+    const t = j / NV, y = lerp(y0, y1, t), w = smooth((follow - y) / 0.6);
     for (let i = 0; i <= NA; i++) {
-      const c = cols[i], q = T.P(Math.max(y, CROTCH_Y), (i / NA) * PI * 2, off), r = Math.hypot(q.x, q.z);
-      if (r > c.r) Object.assign(c, { r, dx: q.x / r, dz: q.z / r });
-      const R = c.r + flare(t);
-      pos.push(c.dx * R, y, c.dz * R);
+      const q = T.P(Math.max(y, CROTCH_Y), (i / NA) * PI * 2, off), [dx, dz] = dirs[i];
+      reach[i] = Math.max(reach[i], q.x * dx + q.z * dz);
+      const R = reach[i] + flare(t, dx, dz);
+      pos.push(lerp(q.x, dx * R, w), y, lerp(q.z, dz * R, w));
       uv.push(i / NA, (y0 - y) / 2);
     }
   }
@@ -66,6 +77,78 @@ function hangGeo(T: Torso, lod: number, y0: number, y1: number, off: number, fla
   return g;
 }
 
+/** A flat ribbon (strap) lying on the skin along a path of [height, angle] points, half-width w. */
+function ribbonGeo(T: Torso, path: [number, number][], off: number, w: number) {
+  const cv = new CatmullRomCurve3(path.map(([y, th]) => T.P(y, th, off))), n = 40, pos: number[] = [], idx: number[] = [];
+  const pts = cv.getSpacedPoints(n);
+  for (let k = 0; k <= n; k++) {
+    const p = pts[k], tan = cv.getTangentAt(k / n), out = new Vector3(p.x, 0, p.z).normalize();
+    const side = new Vector3().crossVectors(tan, out).normalize().multiplyScalar(w);
+    pos.push(p.x - side.x, p.y - side.y, p.z - side.z, p.x + side.x, p.y + side.y, p.z + side.z);
+    if (k < n) idx.push(2 * k, 2 * k + 1, 2 * k + 3, 2 * k, 2 * k + 3, 2 * k + 2);
+  }
+  const g = new BufferGeometry();
+  g.setAttribute("position", new Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+/**
+ * A ribbed collar exactly on the line where the neck comes out of the clothes: its top edge lies on
+ * the neck's skin and its lower edge on the cloth (off: the cloth's offset from the skin), so it
+ * joins the two with no gap and no ring standing off the neck.
+ */
+function collarGeo(d: Dress, off: number) {
+  const { T, lod } = d, NA = Math.max(16, Math.round(48 * lod)), rows: Vector3[][] = [];
+  for (let i = 0; i <= NA; i++) {
+    const th = (i / NA) * PI * 2;
+    // Walk down until the cloth comes out past the neck: that is the neck line.
+    let ye = NaN, hit: ReturnType<Dress["neck"]> = null;
+    for (let y = -1.3; y > -2.1; y -= 0.01) {
+      const h = d.neck(y, th);
+      if (!h) continue;
+      const q = T.P(y, th, off);
+      if (Math.hypot(q.x - h.centre.x, q.z - h.centre.z) >= h.dist) {
+        ye = y;
+        hit = h;
+        break;
+      }
+    }
+    if (!hit) return null;
+    // Pin the crossing down precisely (a coarse step leaves the collar edge wavy).
+    for (let lo = ye, hi = ye + 0.01, it = 0; it < 8; it++) {
+      const m = (lo + hi) / 2, h = d.neck(m, th), q = T.P(m, th, off);
+      if (h && Math.hypot(q.x - h.centre.x, q.z - h.centre.z) >= h.dist) ye = lo = m;
+      else hi = m;
+    }
+    // Rib profile: from the skin, out and over, down onto the cloth.
+    const at = (y: number, out: number) => {
+      const h = d.neck(y, th) ?? hit!, q = T.P(y, th, off), dir = new Vector3(q.x - h.centre.x, 0, q.z - h.centre.z).normalize();
+      const r = Math.max(h.dist, Math.hypot(q.x - h.centre.x, q.z - h.centre.z)) + out;
+      return new Vector3(h.centre.x + dir.x * r, y, h.centre.z + dir.z * r);
+    };
+    rows.push([at(ye + 0.09, 0.004), at(ye + 0.06, 0.03), at(ye + 0.01, 0.045), at(ye - 0.04, 0.035), at(ye - 0.08, 0.008)]);
+  }
+  const pos: number[] = [], idx: number[] = [], NR = rows[0].length;
+  for (const row of rows) for (const p of row) pos.push(p.x, p.y, p.z);
+  for (let i = 0; i < NA; i++) for (let j = 0; j < NR - 1; j++) {
+    const a = i * NR + j, b = a + 1, c = a + NR, e = c + 1;
+    idx.push(a, b, e, a, e, c);
+  }
+  const g = new BufferGeometry();
+  g.setAttribute("position", new Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  const P = g.attributes.position, N = g.attributes.normal, m = Math.round(NA / 4) * NR + 2;
+  if (N.getX(m) * P.getX(m) + N.getZ(m) * P.getZ(m) < 0) {
+    for (let i = 0; i < idx.length; i += 3) [idx[i + 1], idx[i + 2]] = [idx[i + 2], idx[i + 1]];
+    g.setIndex(idx);
+    g.computeVertexNormals();
+  }
+  return g;
+}
+
 /** The torso (chest node) and pelvis (body node): skin, top or bottom depending on the outfit. */
 export function torsoClothes(d: Dress) {
   const { T, B, O, lod, shirtless, add } = d;
@@ -76,9 +159,10 @@ export function torsoClothes(d: Dress) {
   add("pelvis", "body", torsoGeo(T, lod, bareTop ? -5.85 : -5.75, CROTCH_Y, bareTop ? (y) => 0.016 * smooth((y + 6.4) / 0.4) : 0, 18, 44),
     O.swim ? "skin" : O.bare ? "bottom" : lowM);
   if (!bareTop) {
-    // Neckline band.
-    const cy = -1.48, cx = crInterp(T.L, T.X, cy), cz = (crInterp(T.L, T.ZF, cy) + crInterp(T.L, T.ZB, cy)) / 2;
-    add("neckline", "chest", new TorusGeometry(1, 0.06 / cx, Math.max(4, Math.round(5 * lod)), Math.round(28 * lod)).rotateX(PI / 2).scale(cx, cz, cx).translate(0, cy, 0), "trim", "closed");
+    // (The cute dress has its own Peter Pan collar instead.)
+    const c = collarGeo(d, 0.02);
+    // Suits show the white shirt collar; the abaya's and agbada's necklines are embroidered in gold.
+    if (c && !O.cute) add("collar", "chest", c, O.suit ? "shirt" : O.abaya || O.robe ? "gold" : "rib");
   } else if (B.shirtless && !O.swim) {
     // Waistband of the trousers.
     add("waistband", "body", torsoGeo(T, lod, -5.85, -6.05, 0.04, 2, 44), "bottomDark");
@@ -146,7 +230,7 @@ function outfitExtras(d: Dress) {
         const y = lerp(-1.62, -4.42 - 0.2 * (1 - Math.abs(2 * u - 1)), v);
         return [y, lerp(-tw(y), tw(y), u)];
       }), "tie");
-      add("tieKnot", "chest", ellGeo(0.13, 0.12, 0.06, 10, lod, T.P(-1.6, 0, 0.13)), "tie", "closed");
+      add("tieKnot", "chest", ellGeo(0.1, 0.12, 0.045, 10, lod, T.P(-1.6, 0, 0.12)), "tie", "closed");
     }
     for (const [i, y] of [-4.55, -5.2].entries()) add(`button${i}`, "chest", ellGeo(0.07, 0.07, 0.04, 8, lod, T.P(y, 0, 0.1)), "trim", "closed");
     // The jacket carries on over the hips, hanging straight from them.
@@ -160,7 +244,7 @@ function outfitExtras(d: Dress) {
     // Bikini (feminine frame) or swim trunks (masculine frame).
     if (fem) {
       // High-cut bikini bottom: low on the hips, cut up towards the hip bone at the sides, fuller at the back.
-      add("swimBottom", "body", sheetGeo(T, lod, 48, 8, 0.05, (u, v) => {
+      add("swimBottom", "body", sheetGeo(T, lod, 48, 8, 0.065, (u, v) => {
         const th = u * PI * 2, side = Math.abs(Math.sin(th)), back = Math.cos(th) < 0;
         const bot = lerp(CROTCH_Y, -6.5, smooth(back ? (side - 0.55) / 0.45 : (side - 0.3) / 0.6));
         return [lerp(-6.12, bot, v), th];
@@ -178,10 +262,11 @@ function outfitExtras(d: Dress) {
       add("swimBand", "chest", torsoGeo(T, lod, bc - 0.55, bc - 0.7, 0.03, 2, 44), "top");
       // Halter straps: up from the point of each cup, then round the base of the neck to tie at the back.
       for (const sx of [-1, 1]) {
-        const pts: Vector3[] = [];
-        for (let k = 0; k <= 8; k++) pts.push(T.P(lerp(bc + 0.7, -1.5, k / 8), sx * lerp(0.5, 0.62, k / 8), 0.05));
-        for (let k = 1; k <= 8; k++) pts.push(T.P(lerp(-1.5, -1.44, k / 8), sx * lerp(0.62, PI - 0.06, k / 8), 0.05));
-        add(`swimStrap${sx > 0 ? 1 : 0}`, "chest", new TubeGeometry(new CatmullRomCurve3(pts), 16, 0.03, 5, false), "topEdge", "closed");
+        const path: [number, number][] = [];
+        for (let k = 0; k <= 8; k++) path.push([lerp(bc + 0.7, -1.58, k / 8), sx * lerp(0.5, 0.6, k / 8)]);
+        // Turning gently (easing round) so the strap bends rather than kinks.
+        for (let k = 1; k <= 10; k++) path.push([lerp(-1.58, -1.45, smooth(k / 10)), sx * lerp(0.6, PI - 0.06, (k / 10) ** 1.6)]);
+        add(`swimStrap${sx > 0 ? 1 : 0}`, "chest", ribbonGeo(T, path, 0.05, 0.035), "topEdgeDS");
       }
     }
   }
@@ -193,11 +278,13 @@ export function armClothes(d: Dress, node: string, armPts: [number, number][], L
   const longS = O.sl !== "short" && O.sl !== "puff" && O.sl !== "none" && !shirtless;
   add(`${node}Skin`, node, limbGeo(armPts, 16, lod, { at: L1, a: bendA }, squash), longS ? "top" : "skin");
   if (!shirtless && O.sl === "puff") {
-    const sv: [number, number][] = [[0.36 * at * B.armD * 1.1 + 0.03, -0.1], [0.62 * at * B.armD + 0.05, -0.45], [0.64 * at * B.armB + 0.05, -0.85], [0.5 * at * B.armB + 0.04, -1.2], [0.47 * at * B.armB + 0.035, -1.32]];
+    const sv: [number, number][] = [[0.16 * at, 0.12], [0.34 * at * B.armD, -0.1], [0.62 * at * B.armD + 0.05, -0.45], [0.64 * at * B.armB + 0.05, -0.85], [0.5 * at * B.armB + 0.04, -1.2], [0.47 * at * B.armB + 0.035, -1.32]];
     add(`${node}Sleeve`, node, limbGeo(sv, 16, lod), "topDS");
   }
   if (!shirtless && O.sl === "short") {
-    const sv: [number, number][] = [[0.36 * at * B.armD * 1.08 + 0.03, -0.18], [0.45 * at * B.armD * 1.07 + 0.035, -0.45], [0.48 * at * B.armB * 1.07 + 0.03, -1.0], [0.49 * at * B.armB * 1.08 + 0.035, -1.55]];
+    // The sleeve starts narrow inside the shoulder of the shirt and comes out of it, so the two are one
+    // piece of cloth (an open sleeve top would show as a ridge round the shoulder).
+    const sv: [number, number][] = [[0.16 * at, 0.12], [0.3 * at * B.armD, -0.12], [0.45 * at * B.armD * 1.07 + 0.035, -0.45], [0.48 * at * B.armB * 1.07 + 0.03, -1.0], [0.49 * at * B.armB * 1.08 + 0.035, -1.55]];
     add(`${node}Sleeve`, node, limbGeo(sv, 16, lod), "topDS");
   }
   if (O.sl === "flare" && !shirtless) {
@@ -223,33 +310,20 @@ export function robes(d: Dress, shX: number, floorY: number) {
     add("tunic", "body", hangGeo(T, lod, -5.9, -9.8, 0.1, (t) => 0.18 * t), "topDS");
   }
   if (O.robe) {
-    const k = shX / 1.5;
-    const pts: [number, number][] = [[3.4, -13.2], [3.3, -10.5], [3.0, -7.8], [2.6, -5.2], [2.25, -3.2], [2.0, -2.3], [1.6, -1.8], [1.15, -1.55], [0.76, -1.44], [0, -1.38]];
-    add("agbada", "chest", lathe(pts.map(([x, y]) => [x * k, y]), Math.round(28 * lod)).scale(1, 1, 0.62), "topDS");
-    add("agbadaEmbroidery", "chest", new TorusGeometry(0.72, 0.07, Math.max(4, Math.round(6 * lod)), Math.round(24 * lod), PI).rotateX(PI / 2 + 0.5).rotateZ(PI).translate(0, -1.85, 0.5), "gold", "closed");
+    // Agbada: the great outer robe. It lies on the shoulders and chest down to the armpits, then hangs
+    // full and wide to the shins, just inside the arms; its huge sleeves (armClothes) carry the billow.
+    add("agbada", "chest", hangGeo(T, lod, -1.95, floorY + 1.6, 0.07, (t, dx) => (0.25 + 0.45 * dx * dx) * smooth(t / 0.4) * (shX / 1.5) + 0.3 * t, 20, 40, -2.6), "topDS");
   }
   if (O.abaya || O.jalab) {
-    // Full-length robe sized to the torso, flaring to the floor.
-    const need = (y: number) => {
-      const x = Math.max(T.P(y, PI / 2).x, T.P(y, PI * 0.35).x * 1.02), z = Math.max(T.P(y, 0).z, -T.P(y, PI).z);
-      return Math.max(x, z / 0.78) * 1.03 + 0.06;
-    };
-    const yEnd = O.abaya ? floorY + 0.35 : floorY + 1.05, fl = O.abaya ? 0.07 : 0.02, rS = need(-2.6), nR = crInterp(T.L, T.X, -1.44) * 1.06 + 0.04;
-    const pts: [number, number][] = [[0, -1.36], [nR, -1.42], [nR + (rS - nR) * 0.45, -1.68], [nR + (rS - nR) * 0.82, -2.0], [rS, -2.4]];
-    let r = rS;
-    for (let y = -2.8; y > yEnd; y -= 0.4) {
-      r = Math.max(r + fl * 0.4, need(Math.max(y, -7.3)));
-      pts.push([r, y]);
-    }
-    pts.push([r + fl * 0.2, yEnd]);
-    pts.reverse();
-    add(O.abaya ? "abaya" : "jalabiya", "body", lathe(pts, Math.round(36 * lod)).scale(1, 1, 0.78), "topDS");
+    // Full-length robe: lies on the shoulders and chest, then falls straight from the bust at the
+    // front and from the hips and bottom behind, flaring towards the floor. (It starts under the
+    // shoulders, over the top's own cloth, so the collar shows above it.)
+    const yEnd = O.abaya ? floorY + 0.35 : floorY + 1.05, len = -1.95 - yEnd;
+    add(O.abaya ? "abaya" : "jalabiya", "body", hangGeo(T, lod, -1.95, yEnd, 0.04, (t) => (O.abaya ? 0.9 * t ** 1.4 : 0.25 * t) * (len / 11), 36, 44, -2.5), "topDS");
     if (O.jalab) {
-      const fz = T.P(-2.3, 0, 0.02);
-      add("placket", "chest", ellGeo(0.025, 0.8, 0.01, 6, lod, new Vector3(0, -2.3, fz.z + 0.02)), "trim", "closed");
-      for (let b = 0; b < 4; b++) add(`jalabButton${b}`, "chest", ellGeo(0.045, 0.045, 0.03, 8, lod, new Vector3(0, -1.75 - b * 0.38, fz.z + 0.04)), "trim", "closed");
-    } else {
-      add("abayaEmbroidery", "chest", new TorusGeometry(0.66, 0.05, Math.max(4, Math.round(6 * lod)), Math.round(24 * lod), PI).rotateX(PI / 2 + 0.45).rotateZ(PI).translate(0, -1.7, 0.44), "gold", "closed");
+      // Button placket down the chest.
+      add("placket", "chest", sheetGeo(T, lod, 2, 10, 0.05, (u, v) => [lerp(-1.75, -3.2, v), lerp(-0.035, 0.035, u)]), "trim");
+      for (let b = 0; b < 4; b++) add(`jalabButton${b}`, "chest", ellGeo(0.045, 0.045, 0.025, 8, lod, T.P(-1.95 - b * 0.38, 0, 0.07)), "trim", "closed");
     }
   }
   if (O.hood) {
