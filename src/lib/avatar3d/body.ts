@@ -11,6 +11,8 @@ import { BUILDS, BUSTS, BUTTS } from "./catalog.ts";
 import { PI, bell, clamp01, smax, smooth } from "./math.ts";
 import type { Recipe } from "./recipe.ts";
 
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+
 // ---- body-type settings ----
 
 /** Every body-type number (see BodyType in catalog.ts), plus the chest and glute sizes. */
@@ -134,10 +136,12 @@ export function torsoModel(B: BodyParams): Torso {
   const glute = (y: number, x: number, z: number) => {
     if (!B.butt) return 0;
     const xr = crInterp(L, X, Math.max(y, CROTCH_Y)), cs = z / (Math.hypot(x, z) || 1);
-    const back = smooth((-cs + 0.15) / 0.65) * smooth(Math.abs(x) / (0.3 * xr)), dy = y + 6.7;
+    // Tall and long: rising well up the lower back and running on down the backs of the thighs, so
+    // the whole shape is one long curve rather than a shelf.
+    const back = smooth((-cs + 0.15) / 0.65) * smooth(Math.abs(x) / (0.45 * xr)), dy = y + 6.85;
     let d = 0;
-    for (const sx of [-1, 1]) d += bell((x - sx * xr * 0.42) / (xr * 0.56));
-    return B.butt * 0.95 * d * (dy > 0 ? bell(dy / 0.85) : bell(dy / 0.75)) * back;
+    for (const sx of [-1, 1]) d += bell((x - sx * xr * 0.42) / (xr * 0.58));
+    return B.butt * 0.85 * d * (dy > 0 ? bell(dy / 1.2) : bell(dy / 1.05)) * back;
   };
   /** The skin surface at height y and angle th. */
   const P0 = (y: number, th: number) => {
@@ -162,12 +166,24 @@ export function torsoModel(B: BodyParams): Torso {
           (dy > 0 ? bell(dy / (0.55 + B.bust * 0.55)) : bell(dy / (0.42 + B.bust * 0.4))) * front;
       }
     }
-    d += glute(y, px, pz);
     if (B.abs) {
       for (const sx of [-1, 1]) for (const ay of [-3.8, -4.35, -4.9]) d += 0.06 * B.abs * bell((px - sx * 0.3) / 0.19) * bell((y - ay) / 0.2) * front;
       d -= 0.03 * B.abs * bell(px / 0.07) * smooth((-3.5 - y) / 0.3) * smooth((y + 5.3) / 0.3) * front;
     }
-    return new Vector3(px + nx * d, y, pz + nz * d);
+    // The buttocks push out square to the outline, turning towards straight out from each thigh's
+    // centre as the hips divide, so at the crotch they match the legs (which push out from their own
+    // centre) exactly, with no line where hips and thighs meet.
+    const g = glute(y, px, pz);
+    let gx = nx, gz = nz;
+    if (g) {
+      const split = smooth((SPLIT_Y - y) / (SPLIT_Y - CROTCH_Y)) ** 4, lx = px - Math.tanh(px / 0.2) * legX, ll = Math.hypot(lx, pz) || 1;
+      gx = lerp(nx, lx / ll, split);
+      gz = lerp(nz, pz / ll, split);
+      const gl = Math.hypot(gx, gz) || 1;
+      gx /= gl;
+      gz /= gl;
+    }
+    return new Vector3(px + nx * d + gx * g, y, pz + nz * d + gz * g);
   };
   /** Outward direction of the skin (square to the surface, so layers keep their gap on slopes too). */
   const N0 = (y: number, th: number) => {
@@ -289,7 +305,8 @@ export function drapePoint(T: Torso, y: number, th: number, off: number, y1: num
  * height (oval cross-sections) and a bend at a joint (elbow).
  */
 export function limbGeo(pts: [number, number][], seg: number, lod: number, bend?: { at: number; a: number } | null, squash?: (y: number) => [number, number]) {
-  const sp = new SplineCurve(pts.map(([x, y]) => new Vector2(x, y))).getPoints(Math.max(10, Math.round(Math.max(20, pts.length * 3) * lod))).reverse();
+  // A whole number of samples per segment, so every profile point (the crotch joint, for one) is a row.
+  const sp = new SplineCurve(pts.map(([x, y]) => new Vector2(x, y))).getPoints((pts.length - 1) * Math.max(1, Math.round(3 * lod))).reverse();
   const g = new LatheGeometry(sp, Math.max(8, Math.round(seg * lod))), p = g.attributes.position, v = new Vector3();
   for (let i = 0; i < p.count; i++) {
     v.fromBufferAttribute(p, i);

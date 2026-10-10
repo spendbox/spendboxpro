@@ -244,9 +244,10 @@ function outfitExtras(d: Dress) {
     // Bikini (feminine frame) or swim trunks (masculine frame).
     if (fem) {
       // High-cut bikini bottom: low on the hips, cut up towards the hip bone at the sides, fuller at the back.
-      add("swimBottom", "body", sheetGeo(T, lod, 48, 8, 0.065, (u, v) => {
+      add("swimBottom", "body", sheetGeo(T, lod, 56, 18, 0.065, (u, v) => {
         const th = u * PI * 2, side = Math.abs(Math.sin(th)), back = Math.cos(th) < 0;
-        const bot = lerp(CROTCH_Y, -6.5, smooth(back ? (side - 0.55) / 0.45 : (side - 0.3) / 0.6));
+        // At the back it ends just above the crotch line, on the hips (not over the join with the thighs).
+        const bot = lerp(back ? CROTCH_Y + 0.08 : CROTCH_Y, -6.5, smooth(back ? (side - 0.55) / 0.45 : (side - 0.3) / 0.6));
         return [lerp(-6.12, bot, v), th];
       }), "top");
     } else add("swimBottom", "body", torsoGeo(T, lod, -6.05, CROTCH_Y, 0.05, 8, 44), "top");

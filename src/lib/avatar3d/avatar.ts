@@ -3,7 +3,7 @@
 // Nodes (moving pieces): avatar > head; avatar > body > chest > arm0/arm1 > hand0/hand1;
 // body > leg0/leg1. Index 0 is the avatar's right side (x < 0), 1 its left.
 
-import { type BufferGeometry, DoubleSide, Matrix4, Mesh, MeshBasicMaterial, Object3D, Raycaster, Vector3 } from "three";
+import { type BufferGeometry, DoubleSide, type LatheGeometry, Matrix4, Mesh, MeshBasicMaterial, Object3D, Raycaster, Vector3 } from "three";
 import { CROTCH_Y, THIGH_SQUASH, bodyParams, crInterp, handGeos, limbGeo, mirrorX, shoeGeo, torsoModel } from "./body.ts";
 import { HEAD_HEIGHT_SHARE, HEIGHTS, OUTFITS } from "./catalog.ts";
 import { type Dress, armClothes, cuff, robes, torsoClothes } from "./clothing.ts";
@@ -113,10 +113,17 @@ export function buildAvatar(r: Recipe, lod = 1): Model {
     const p = g.attributes.position;
     for (let k = 0; k < p.count; k++) {
       const x = p.getX(k), y = p.getY(k), z = p.getZ(k), r = Math.hypot(x, z);
-      const d = r > 1e-6 ? T.glute(topY + y, side * legX + x, z) : 0;
+      // Only below the crotch: the leg's top, tucked inside the hips, stays tucked.
+      const d = r > 1e-6 && topY + y <= CROTCH_Y + 1e-6 ? T.glute(topY + y, side * legX + x, z) : 0;
       if (d) p.setXYZ(k, x + (x / r) * d, y, z + (z / r) * d);
     }
     g.computeVertexNormals();
+    // The row at the crotch would also average in the leg's hidden top (which turns inwards), lighting
+    // it as if it faced up; give it the shading of the leg just below so hips and thigh shade as one.
+    const n = g.attributes.normal, rows = g.attributes.position.count / ((g as LatheGeometry).parameters.segments + 1);
+    for (let k = 0; k < p.count; k++) {
+      if (Math.abs(p.getY(k) - jy) < 1e-4 && k % rows > 0) n.setXYZ(k, n.getX(k - 1), n.getY(k - 1), n.getZ(k - 1));
+    }
     return g;
   };
   [-1, 1].forEach((side, i) => {
