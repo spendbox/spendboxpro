@@ -66,9 +66,16 @@ export type StructureType =
   | "court"
   | "boxing"
   | "wrestling"
-  // Big landmarks (3×3 and up, see MEGAS): a domed capitol with gardens, a mega mall.
+  // Big landmarks (3×3 and up, see MEGAS): a domed capitol with gardens, a mega mall, a grand
+  // bank (every city has one), a big park, a gym, a spa, a cathedral and a grand mosque.
   | "capitol"
-  | "megamall";
+  | "megamall"
+  | "bank"
+  | "bigpark"
+  | "gym"
+  | "spa"
+  | "cathedral"
+  | "grandmosque";
 
 /** The sport played at a venue. */
 export type Sport = "football" | "basketball" | "boxing" | "wrestling";
@@ -190,6 +197,12 @@ export const STRUCTURE_LABEL: Record<StructureType, string> = {
   wrestling: "Wrestling arena",
   capitol: "Capitol",
   megamall: "Mega mall",
+  bank: "Bank",
+  bigpark: "City park",
+  gym: "Gym",
+  spa: "Spa",
+  cathedral: "Cathedral",
+  grandmosque: "Grand mosque",
 };
 
 /** Everything the city can be made of, for the help screen. */
@@ -198,7 +211,8 @@ export const CITY_ASSETS = {
     "Football stadiums (a bowl of stands round the pitch, under a ring of roof)", "Domed capitols in gardens, with a statue out front", "Mega malls under glass",
     "A grand station under a glass vault", "Airports", "Sea ports", "Military camps", "Shopping malls", "Twin towers with a sky bridge", "Domed museums", "Funfairs", "Open-air markets", "Arenas",
     "University campuses", "Hotels with rooftop pools", "Solar farms", "Power stations with steaming cooling towers", "Dams with spillways", "Oil rigs with gas flares",
-    "Water parks with twisting slides",
+    "Water parks with twisting slides", "A grand bank in every city (with a vault)", "Big city parks with a lake and a bandstand", "Gyms with a rooftop running track",
+    "Spas with pools and palms", "Cathedrals with twin spires", "Grand mosques with a great dome and four minarets",
   ],
   tiles: [
     "Skyscrapers (stepped, round glass, twisted, needle spire, helipad)",
@@ -595,19 +609,33 @@ export function makePlan(seed: number): CityPlan {
  * another landmark.
  */
 const MEGAS: { type: StructureType; w: number; d: number; min: number; max: number }[] = [
+  // Every city has its bank, close to the middle (so even a brand-new town has one).
+  { type: "bank", w: 3, d: 3, min: 2, max: 6.5 },
   { type: "arena", w: 4, d: 4, min: 3.5, max: 7.5 },
   { type: "capitol", w: 3, d: 3, min: 6.5, max: 11 },
   { type: "megamall", w: 3, d: 3, min: 11, max: 20 },
+  { type: "bigpark", w: 5, d: 5, min: 8, max: 15 },
+  { type: "gym", w: 3, d: 3, min: 6, max: 13 },
+  { type: "cathedral", w: 4, d: 4, min: 9, max: 17 },
+  { type: "grandmosque", w: 4, d: 4, min: 9, max: 17 },
+  { type: "spa", w: 3, d: 3, min: 10, max: 19 },
+  { type: "bigpark", w: 5, d: 5, min: 24, max: 40 },
   { type: "arena", w: 4, d: 4, min: 30, max: 44 },
   { type: "megamall", w: 3, d: 3, min: 38, max: 54 },
   { type: "capitol", w: 3, d: 3, min: 50, max: 68 },
   { type: "megamall", w: 3, d: 3, min: 62, max: 84 },
+  { type: "bank", w: 3, d: 3, min: 30, max: 50 },
+  { type: "gym", w: 3, d: 3, min: 34, max: 56 },
+  { type: "cathedral", w: 4, d: 4, min: 44, max: 66 },
+  { type: "grandmosque", w: 4, d: 4, min: 44, max: 66 },
+  { type: "spa", w: 3, d: 3, min: 50, max: 72 },
+  { type: "bigpark", w: 5, d: 5, min: 56, max: 80 },
 ];
 
 function placeMegas(plan: CityPlan) {
   const st = plan.rail && plan.rail.station !== null ? stationXZ(plan) : null;
   MEGAS.forEach((m, k) => {
-    for (let tries = 0; tries < 40; tries++) {
+    for (let tries = 0; tries < 80; tries++) {
       const angle = hash(k, tries, plan.seed + 700) * Math.PI * 2;
       const dist = m.min + hash(tries, k, plan.seed + 701) * (m.max - m.min);
       const ax = Math.round(Math.cos(angle) * dist - m.w / 2);
@@ -994,6 +1022,18 @@ function structureName(plan: CityPlan, type: StructureType, ax: number, az: numb
       return pick([`${city} City Hall`, `${city} State House`, `The ${city} Capitol`, `${city} Parliament`], 19);
     case "megamall":
       return pick([`${city} Mega Mall`, `${street} Galleria`, `${city} Grand Mall`, `The ${city} Dome`], 20);
+    case "bank":
+      return pick([`Central Bank of ${city}`, `${city} National Bank`, `${street} Bank`, `${city} Reserve Bank`, `First Bank of ${city}`], 21);
+    case "bigpark":
+      return pick([`${city} Central Park`, `${street} Gardens`, `${city} Botanical Gardens`, `Freedom Park`, `${city} Millennium Park`], 22);
+    case "gym":
+      return pick([`${city} Fitness Centre`, `${street} Gym`, `Iron ${city} Gym`, `${city} Sports Club`], 23);
+    case "spa":
+      return pick([`${city} Spa & Wellness`, `${street} Day Spa`, `Serenity Spa ${city}`, `The ${city} Retreat`], 24);
+    case "cathedral":
+      return pick([`${city} Cathedral`, `St. Peter's Cathedral`, `Holy Cross Cathedral`, `Cathedral of ${city}`, `Christ Church Cathedral`], 25);
+    case "grandmosque":
+      return pick([`${city} Central Mosque`, `${city} Grand Mosque`, `${street} Jumu'ah Mosque`, `National Mosque`], 26);
   }
 }
 
@@ -1154,6 +1194,7 @@ export function lotAt(plan: CityPlan, i: number): Tile {
     const heights: Record<StructureType, number> = {
       mall: 1.2, twin: 7, museum: 1.8, funfair: 2.8, market: 0.7, arena: 1.1, campus: 1.6, hotel: 4.4, solar: 0.5, airport: 1.6, port: 1.8, military: 1.2,
       power: 3.4, dam: 0.9, oilrig: 2.8, waterpark: 1.3, court: 0.9, boxing: 1.35, wrestling: 1.35, capitol: 2.3, megamall: 1.2,
+      bank: 1.6, bigpark: 0.6, gym: 1.3, spa: 0.8, cathedral: 3.4, grandmosque: 3.6,
     };
     const info = plan.structures.get(`${st.ax},${st.az}`);
     const structure: NonNullable<Tile["structure"]> = { type: st.type, name: st.name, ax: st.ax, az: st.az, anchor: st.anchor };
@@ -1242,7 +1283,7 @@ export function addressOf(plan: CityPlan, t: Tile): string {
 const mod = (a: number, n: number) => ((a % n) + n) % n;
 
 /** How tall each big landmark stands (for markers above it). */
-const MEGA_TOP: Partial<Record<StructureType, number>> = { arena: 1.1, capitol: 2.3, megamall: 1.2 };
+const MEGA_TOP: Partial<Record<StructureType, number>> = { arena: 1.1, capitol: 2.3, megamall: 1.2, bank: 1.6, bigpark: 0.6, gym: 1.3, spa: 0.8, cathedral: 3.4, grandmosque: 3.6 };
 
 /** A road tile: its direction, bends and junctions, roundabouts, road works. */
 function roadTile(plan: CityPlan, x: number, z: number, r: Tile["r"]): Tile {

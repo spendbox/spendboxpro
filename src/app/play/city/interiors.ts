@@ -2736,6 +2736,351 @@ function standsBowl(x: Ctx) {
   );
 }
 
+// ---------------------------------------------------------------- bank, gym, spa, church, mosque
+
+const BANK_PAL: Pal = { wall: 0xf3ede1, accentWall: 0x1f3b2c, trim: 0xe2d6bd, ceiling: 0xf8f3e8, floor: ["marble", 0xf2ece0, 0xc9bfa9], wood: 0x5c3d26, fabric: 0x1f3b2c, fabric2: 0xd9c7a7, accent: 0xc9a227, metal: 0xc9a227, art: [0x1f3b2c, 0xc9a227, 0xe8dcc8, 0x8c5a3c], frame: 0xc9a227, leaves: LEAVES, pot: 0x1f3b2c };
+const VAULT_PAL: Pal = { wall: 0x8d949c, accentWall: 0x6c737b, trim: 0x5f666e, ceiling: 0x5a6068, floor: ["concrete", 0x7d838a, 0x6e747b], wood: 0x4a4f55, fabric: 0x2b2f33, fabric2: 0xc9a227, accent: 0xc9a227, metal: 0xb8bec6, art: [0xc9a227], frame: 0x2b2f33, leaves: LEAVES, pot: 0x2b2f33 };
+const GYM_PAL: Pal = { wall: 0xdfe3e8, accentWall: 0xff6b1a, trim: 0xc9ced4, ceiling: 0x4a505a, floor: ["concrete", 0x3d4148, 0x33373d], wood: 0x2b2f36, fabric: 0xff6b1a, fabric2: 0x495057, accent: 0xff6b1a, metal: 0xadb5bd, art: [0xff6b1a, 0xffffff], frame: 0x1f2226, leaves: LEAVES, pot: 0x2b2f36 };
+const SPA_PAL: Pal = { wall: 0xf4efe6, accentWall: 0xb08458, trim: 0xe6dccb, ceiling: 0xfaf6ef, floor: ["stone", 0xe2d9c8, 0xd2c6b0], wood: 0xb08458, fabric: 0xf8f4ec, fabric2: 0x8fb5a3, accent: 0x8fb5a3, metal: 0xc8a96e, art: [0x8fb5a3, 0xe2d6bd, 0xb08458], frame: 0xb08458, leaves: LEAVES, pot: 0xe2d6bd };
+const CHURCH_PAL: Pal = { wall: 0xe9e1d0, accentWall: 0xd8ccb2, trim: 0xcfc1a4, ceiling: 0x9a8a72, floor: ["stone", 0xd6cdbb, 0xc2b79f], wood: 0x6b4a2f, fabric: 0x8b1e2d, fabric2: 0xd9c7a7, accent: 0xc9a227, metal: 0xc9a227, art: [0x2e4a8a, 0xc9a227, 0x8b1e2d, 0x2f6650], frame: 0xc9a227, leaves: LEAVES, pot: 0x6b4a2f };
+const MOSQUE_PAL: Pal = { wall: 0xf7f4ec, accentWall: 0x1f8a5b, trim: 0xe6dfcd, ceiling: 0xf2ece0, floor: ["carpet", 0x1f6b4a, 0x175a3d], wood: 0x6b4a2f, fabric: 0x1f8a5b, fabric2: 0xf2b632, accent: 0xf2b632, metal: 0xc9a227, art: [0x1f8a5b, 0xf2b632], frame: 0xc9a227, leaves: LEAVES, pot: 0x1f8a5b };
+
+/** A row of brass posts with a red rope between them (the queue at the bank). */
+function queueRope(x: Ctx, x0: number, z: number, n: number, gap: number) {
+  const { k } = x;
+  for (let p = 0; p < n; p++) {
+    const px = x0 + p * gap;
+    k.cyl(px, 0, z, 0.12, 0.14, 0.03, 0xc9a227, 12);
+    k.cyl(px, 0.03, z, 0.025, 0.025, 0.9, 0xc9a227, 8);
+    k.ball(px, 0.95, z, 0.045, 0xc9a227);
+    if (p < n - 1) k.box(px + gap / 2, 0.82, z, gap - 0.06, 0.03, 0.03, 0x9b1c2c, { noAo: true });
+  }
+}
+
+/** The big round steel door of a vault, set in a wall (in the wall's frame), open or shut. */
+function vaultDoor(x: Ctx, open: boolean) {
+  const { k } = x;
+  k.box(0, 0, 0.05, 3.4, 3.2, 0.1, 0x6c737b, { noAo: true });
+  k.cyl(0, 1.5, 0.1, 1.35, 1.35, 0.12, 0x495057, 32, { rx: Math.PI / 2, noAo: true });
+  if (open) {
+    // The door swung out to the side, the dark inside showing gold.
+    k.cyl(0, 1.5, 0.12, 1.15, 1.15, 0.02, 0x1d2024, 32, { rx: Math.PI / 2, noAo: true });
+    k.at(1.3, 0, 1.05, -1.2, () => {
+      k.cyl(0, 1.5, 0, 1.2, 1.2, 0.45, 0xb8bec6, 32, { rx: Math.PI / 2, noAo: true });
+      for (let s = 0; s < 6; s++) k.cyl(Math.cos((s / 6) * 6.28) * 0.75, 1.5 + Math.sin((s / 6) * 6.28) * 0.75, 0.25, 0.08, 0.08, 0.12, 0xdee2e6, 10, { rx: Math.PI / 2, noAo: true });
+    });
+  } else {
+    k.cyl(0, 1.5, 0.22, 1.2, 1.2, 0.2, 0xb8bec6, 32, { rx: Math.PI / 2, noAo: true });
+    k.ring(0, 1.5, 0.44, 0.5, 0.05, 0xdee2e6, { rx: 0 });
+    for (let s = 0; s < 3; s++) k.box(0, 1.47, 0.46, 1.1, 0.06, 0.04, 0xdee2e6, { rz: (s / 3) * Math.PI, noAo: true });
+    k.cyl(0, 1.5, 0.44, 0.14, 0.14, 0.1, 0x868e96, 16, { rx: Math.PI / 2, noAo: true });
+  }
+}
+
+function bankHall(x: Ctx) {
+  const { k, room, pal, info } = x;
+  const W = room.w;
+  const D = room.d;
+  // Columns down both sides, with gold capitals.
+  for (const side of [-1, 1]) {
+    for (let c = 0; c < 4; c++) {
+      const cz = -D / 2 + 2.5 + c * ((D - 5) / 3);
+      k.cyl(side * (W / 2 - 1.6), 0, cz, 0.32, 0.32, room.h - 0.5, 0xf7f1e6, 20);
+      k.box(side * (W / 2 - 1.6), room.h - 0.5, cz, 0.85, 0.3, 0.85, 0xe2d6bd, { noAo: true });
+      k.box(side * (W / 2 - 1.6), room.h - 0.62, cz, 0.75, 0.12, 0.75, pal.accent, { noAo: true });
+    }
+  }
+  // The tellers' counter across the back: wood, marble top, glass screens, gold numbers.
+  const cz = -D / 2 + 3.2;
+  k.box(0, 0, cz, W - 6, 1.1, 0.8, pal.wood);
+  k.box(0, 1.1, cz, W - 5.9, 0.06, 0.9, 0xf2ece0);
+  for (let t = 0; t < 5; t++) {
+    const tx = -((W - 6) / 2) + 1 + t * ((W - 8) / 4);
+    k.box(tx, 1.16, cz, 1.4, 0.9, 0.03, 0xd6e9f5, { layer: "glass" });
+    const uv = x.sheet.paint(96, 48, (c, w, h) => sign(c, w, h, String(t + 1), 0x1f3b2c, 0xf2c94c, { weight: 800 }));
+    k.quad(tx, 2.25, cz + 0.05, 0.3, 0.15, 0xffffff, { layer: "texGlow" }, uv);
+    spot(x, tx, cz - 0.7, 0, "stand");
+    spot(x, tx, cz + 1.0, Math.PI, "stand");
+  }
+  // The vault door, shut, in the wall behind the tellers.
+  atWall(x, 0, W / 2 - 3.5, () => vaultDoor(x, false));
+  // The bank's name in gold over the counter.
+  wallSign(x, 0, -2.5, 3.6, info.name.toUpperCase(), 0x1f3b2c, 0xf2c94c, 6.5, 0.7, true);
+  // The queue, a desk with forms, cash machines on a side wall, chandeliers.
+  queueRope(x, -3.5, cz + 2.2, 6, 1.2);
+  table(x, -W / 2 + 3.2, -1.2, Math.PI / 2, 2.2, 0.8, 0xf2ece0, pal.wood, { h: 1.05 });
+  for (let a = 0; a < 3; a++) {
+    atWall(x, 1, -2 + a * 1.4, () => {
+      k.box(0, 0, 0.25, 0.9, 1.7, 0.5, 0x2b2f33);
+      k.box(0, 1.15, 0.51, 0.5, 0.35, 0.02, 0x4dabf7, { layer: "glow" });
+      k.box(0, 0.95, 0.52, 0.5, 0.06, 0.06, 0x495057);
+    });
+  }
+  for (const px of [-W / 4, W / 4]) {
+    k.cyl(px, room.h - 1.6, 0.5, 0.9, 0.5, 0.6, pal.accent, 20, { noAo: true, open: true });
+    for (let b = 0; b < 8; b++) k.ball(px + Math.cos(b * 0.785) * 0.8, room.h - 1.65, 0.5 + Math.sin(b * 0.785) * 0.8, 0.09, 0xfff3dc, { layer: "glow" });
+    k.cyl(px, room.h - 1.0, 0.5, 0.01, 0.01, 1.0, 0x2b2b2b, 4, { noAo: true });
+    x.lamps.push({ x: px, y: room.h - 1.6, z: 0.5 });
+  }
+  bench(x, -W / 2 + 2.6, 2.2, Math.PI / 2, 2.2, 0x1f3b2c, pal.wood, 3);
+  bench(x, W / 2 - 2.6, 2.2, -Math.PI / 2, 2.2, 0x1f3b2c, pal.wood, 3);
+  plant(x, -W / 2 + 0.8, D / 2 - 0.8, 1.6, "palm");
+  plant(x, W / 2 - 0.8, D / 2 - 0.8, 1.6, "palm");
+  // A guard by the door.
+  spot(x, W / 2 - 1.2, D / 2 - 1.6, -Math.PI / 2, "stand");
+  x.views.push({ x: 0, z: D / 2 - 1.5, yaw: 0, pitch: -0.05 }, { x: -W / 2 + 2, z: D / 2 - 2, yaw: yawTo(-W / 2 + 2, D / 2 - 2, W / 4, -D / 2), pitch: -0.06 });
+}
+
+function vaultRoom(x: Ctx) {
+  const { k, room } = x;
+  const W = room.w;
+  const D = room.d;
+  // The open vault door in the front wall.
+  atWall(x, 2, 0, () => vaultDoor(x, true));
+  // Walls of safe-deposit boxes.
+  for (const side of [1, 3]) {
+    atWall(x, side, 0, () => {
+      for (let r = 0; r < 7; r++) for (let c = 0; c < 10; c++) {
+        k.box(-D / 2 + 1 + c * ((D - 2) / 9), 0.3 + r * 0.38, 0.04, 0.42, 0.32, 0.06, 0xb8bec6, { noAo: true });
+        k.box(-D / 2 + 1 + c * ((D - 2) / 9), 0.42 + r * 0.38, 0.08, 0.06, 0.06, 0.03, 0xc9a227, { noAo: true });
+      }
+    });
+  }
+  // Stacks of gold bars and money on steel shelves down the middle, a cage at the back.
+  for (const sx of [-1.4, 1.4]) {
+    k.box(sx, 0, 0, 1.2, 0.9, 3.5, 0x6c737b);
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 6; c++) {
+        k.box(sx - 0.35 + (r % 2) * 0.7, 0.9 + Math.floor(r / 2) * 0.12, -1.4 + c * 0.55, 0.28, 0.1, 0.5, 0xf2b632);
+      }
+    }
+    for (let c = 0; c < 4; c++) k.box(sx, 1.15, -1.2 + c * 0.8, 0.9, 0.25, 0.5, 0x2f9e44);
+  }
+  for (let b = 0; b < 9; b++) k.box(-2 + b * 0.5, 0, -D / 2 + 1.2, 0.04, 2.6, 0.04, 0x495057);
+  k.box(0, 2.6, -D / 2 + 1.2, 4.2, 0.05, 0.05, 0x495057);
+  for (let p = 0; p < 3; p++) k.box(-1 + p, 0, -D / 2 + 0.6, 0.6, 0.6, 0.6, 0x5c3d26);
+  // Red alarm lights and a laser grid on the floor.
+  for (const px of [-W / 2 + 0.6, W / 2 - 0.6]) k.ball(px, room.h - 0.3, -D / 2 + 0.6, 0.12, 0xff3b3b, { layer: "glow" });
+  for (let l = 0; l < 5; l++) k.box(0, 0.35 + l * 0.12, D / 2 - 2.5, W - 1, 0.01, 0.01, 0xff2d2d, { layer: "glow", noAo: true });
+  linearLights(x, 2, "z", 0xe9f2ff);
+  x.views.push({ x: 0, z: D / 2 - 1, yaw: 0, pitch: -0.12 });
+}
+
+function gymFloor(x: Ctx) {
+  const { k, room, pal } = x;
+  const W = room.w;
+  const D = room.d;
+  const orange = pal.accent;
+  // Rubber mats, a mirror wall (west), an orange stripe, the motto.
+  k.mat(0, 0.006, 0, W - 1.2, D - 1.2, 0x2b2f36);
+  atWall(x, 3, 0, () => {
+    k.box(0, 0.3, 0.03, D - 1.5, 2.4, 0.02, 0xc9e4f5, { layer: "glow", noAo: true });
+    k.box(0, 2.9, 0.04, D - 1, 0.12, 0.02, orange, { noAo: true });
+  });
+  wallSign(x, 0, 0, 3.6, "NO PAIN NO GAIN", 0x16191d, orange, 5, 0.6, true);
+  // Treadmills in a row along the east windows, facing out.
+  for (let t = 0; t < 6; t++) {
+    const tz = -D / 2 + 2.2 + t * 1.45;
+    k.at(W / 2 - 2.0, 0, tz, -Math.PI / 2, () => {
+      k.box(0, 0, 0, 0.75, 0.2, 1.8, 0x1f2226);
+      k.box(0, 0.2, 0, 0.55, 0.02, 1.5, 0x343a40);
+      for (const sx of [-0.33, 0.33]) k.box(sx, 0.2, -0.75, 0.05, 1.15, 0.05, pal.metal);
+      k.box(0, 1.3, -0.78, 0.7, 0.35, 0.08, 0x212529);
+      k.box(0, 1.35, -0.83, 0.5, 0.22, 0.01, 0x4dabf7, { layer: "glow" });
+      if (t % 2 === 0) spot(x, 0, 0.1, Math.PI, "stand");
+    });
+  }
+  // Weight racks along the back wall, benches with barbells in front.
+  for (const rx of [-3, 2]) {
+    const rz = -D / 2 + 0.9;
+    k.box(rx, 0, rz, 2.4, 0.9, 0.5, 0x343a40);
+    for (let d = 0; d < 7; d++) {
+      for (const sz of [-0.12, 0.12]) k.cyl(rx - 1.0 + d * 0.33, 0.97, rz + sz, 0.07 + d * 0.008, 0.07 + d * 0.008, 0.07, d % 2 ? 0x212529 : orange, 12, { rx: Math.PI / 2, noAo: true });
+    }
+    k.at(rx, 0, rz + 2.0, 0, () => {
+      k.box(0, 0, 0, 0.35, 0.45, 1.2, 0x212529);
+      k.soft(0, 0.45, 0, 0.32, 0.08, 1.2, 0xc92a2a, 0.03);
+      for (const sx of [-0.4, 0.4]) k.box(sx, 0, -0.45, 0.05, 1.0, 0.05, pal.metal, { noAo: true });
+      k.box(0, 1.0, -0.45, 1.6, 0.03, 0.03, pal.metal, { noAo: true });
+      for (const sx of [-0.7, 0.7]) k.cyl(sx, 1.0, -0.45, 0.22, 0.22, 0.05, 0x212529, 16, { rz: Math.PI / 2, noAo: true });
+      spot(x, 0, 0, Math.PI, "sit", 0.5);
+    });
+  }
+  // Punch bags hanging by the mirrors, and a stretching area with coloured mats.
+  for (let b = 0; b < 3; b++) {
+    const bz = -1.5 + b * 1.8;
+    k.cyl(-W / 2 + 2.2, room.h - 0.5, bz, 0.01, 0.01, 0.5, 0x2b2b2b, 4, { noAo: true });
+    k.cyl(-W / 2 + 2.2, room.h - 1.9, bz, 0.24, 0.24, 1.4, b === 1 ? orange : 0x212529, 16, { noAo: true });
+    spot(x, -W / 2 + 3.0, bz, -Math.PI / 2, "stand");
+  }
+  for (let m = 0; m < 4; m++) k.mat(-1.6 + m * 1.1, 0.012, 2.2, 0.7, 1.8, [0x4dabf7, 0xda77f2, 0x40c057, orange][m]);
+  plant(x, -W / 2 + 0.7, D / 2 - 0.7, 1.4, "snake");
+  linearLights(x, 3, "x", 0xffffff);
+  x.lamps.push({ x: 0, y: room.h - 0.3, z: 0 });
+  x.views.push({ x: -1, z: D / 2 - 0.8, yaw: yawTo(-1, D / 2 - 0.8, 0, -D / 2), pitch: -0.1 }, { x: -W / 2 + 1.2, z: D / 2 - 1, yaw: yawTo(-W / 2 + 1.2, D / 2 - 1, W / 4, -D / 2), pitch: -0.08 });
+}
+
+function spaRoom(x: Ctx) {
+  const { k, room, pal } = x;
+  const W = room.w;
+  const D = room.d;
+  // An indoor pool down the middle, with steps and soft lights in the water.
+  k.box(0, 0, -0.5, 4.6, 0.12, 8.4, 0xe6dccb);
+  k.box(0, 0.06, -0.5, 4.2, 0.07, 8.0, 0x3bc9db, { layer: "glow" });
+  for (let l = 0; l < 4; l++) for (const sx of [-1.95, 1.95]) k.ball(sx, 0.1, -3.8 + l * 2.2, 0.06, 0xc5f6fa, { layer: "glow" });
+  // Wooden slatted walls, candles, big plants.
+  slatWall(x, 0, 0, W - 2, room.h - 0.4, pal.wood);
+  for (let c = 0; c < 9; c++) {
+    k.cyl(-3.2 + c * 0.8, 0, -D / 2 + 0.6, 0.06, 0.06, 0.18 + (c % 3) * 0.1, 0xfffaf0, 10);
+    k.ball(-3.2 + c * 0.8, 0.24 + (c % 3) * 0.1, -D / 2 + 0.6, 0.03, 0xffc078, { layer: "glow" });
+  }
+  // Loungers both sides of the pool.
+  for (const side of [-1, 1]) {
+    for (let l = 0; l < 4; l++) {
+      const lz = -3.4 + l * 2.0;
+      k.at(side * 3.6, 0, lz, side * Math.PI / 2, () => {
+        k.box(0, 0, 0, 0.7, 0.35, 1.9, pal.wood);
+        k.soft(0, 0.35, 0.15, 0.68, 0.08, 1.5, 0xf8f4ec, 0.03);
+        k.soft(0, 0.43, -0.75, 0.68, 0.45, 0.12, 0xf8f4ec, 0.03, { rx: -0.6 });
+        spot(x, 0, 0.1, Math.PI, "sit", 0.45);
+      });
+    }
+    plant(x, side * (W / 2 - 0.8), -D / 2 + 0.8, 1.7, "palm");
+    plant(x, side * (W / 2 - 0.8), D / 2 - 0.8, 1.5, "tall");
+  }
+  // Massage tables at the back corner, and towels.
+  for (let m = 0; m < 2; m++) {
+    k.at(-W / 2 + 1.6, 0, 2.6 + m * 1.6, Math.PI / 2, () => {
+      k.box(0, 0, 0, 0.7, 0.75, 1.9, 0xf8f4ec);
+      k.soft(0, 0.75, 0, 0.72, 0.08, 1.92, 0x8fb5a3, 0.03);
+    });
+  }
+  for (let t = 0; t < 4; t++) k.soft(W / 2 - 1.2, 0.85 + t * 0.12, 3.6, 0.5, 0.1, 0.35, [0xffffff, 0x8fb5a3, 0xf8f4ec, 0xe2d6bd][t], 0.03);
+  k.box(W / 2 - 1.2, 0, 3.6, 0.7, 0.85, 0.5, pal.wood);
+  downlights(x, 4, 3, 1.5);
+  x.lamps.push({ x: 0, y: room.h - 0.3, z: -2 }, { x: 0, y: room.h - 0.3, z: 2 });
+  x.views.push({ x: 0, z: D / 2 - 1, yaw: 0, pitch: -0.1 }, { x: -W / 2 + 1.2, z: D / 2 - 1.2, yaw: yawTo(-W / 2 + 1.2, D / 2 - 1.2, 1, -D / 2), pitch: -0.08 });
+}
+
+/** Stained glass: a tall window of coloured panes (glowing), in a wall's frame. */
+function stainedGlass(x: Ctx, w: number, h: number, y: number, cols: number[]) {
+  const { k } = x;
+  const rows = 6;
+  const colsN = 3;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < colsN; c++) {
+      k.box(-w / 2 + (c + 0.5) * (w / colsN), y + r * (h / rows), 0.03, w / colsN - 0.04, h / rows - 0.04, 0.02, cols[(r + c * 2) % cols.length], { layer: "glow", noAo: true });
+    }
+  }
+  k.cyl(0, y + h, 0.04, w / 2, w / 2, 0.02, cols[0], 16, { rx: Math.PI / 2, layer: "glow", noAo: true });
+}
+
+function churchNave(x: Ctx) {
+  const { k, room, pal } = x;
+  const W = room.w;
+  const D = room.d;
+  const glassCols = [0x3b5bdb, 0xc92a2a, 0xf2b632, 0x2f9e44, 0x7048e8, 0x1c7ed6];
+  // A red carpet down the aisle, pews both sides (people sit facing the altar).
+  k.mat(0, 0.008, 1, 1.6, D - 5, 0x8b1e2d);
+  for (let r = 0; r < 9; r++) {
+    const pz = -D / 2 + 6 + r * 1.35;
+    for (const side of [-1, 1]) {
+      k.at(side * (W / 4 + 0.45), 0, pz, Math.PI, () => {
+        k.box(0, 0, 0, W / 2 - 2.4, 0.45, 0.45, pal.wood);
+        k.box(0, 0.45, -0.22, W / 2 - 2.4, 0.5, 0.06, pal.wood);
+        for (let s = 0; s < 4; s++) spot(x, -(W / 2 - 2.4) / 2 + 0.6 + s * ((W / 2 - 3.6) / 3), 0.05, 0, "sit", 0.45);
+      });
+    }
+  }
+  // Pillars and pointed arches down both sides, stained glass between them.
+  for (const side of [-1, 1]) {
+    for (let p = 0; p < 6; p++) {
+      const pz = -D / 2 + 3 + p * ((D - 5) / 5);
+      k.cyl(side * (W / 2 - 1.3), 0, pz, 0.28, 0.32, room.h - 2, 0xd8ccb2, 14);
+      k.box(side * (W / 2 - 1.3), room.h - 2, pz, 0.7, 0.3, 0.7, 0xcfc1a4, { noAo: true });
+    }
+    for (let g = 0; g < 5; g++) atWall(x, side === 1 ? 1 : 3, -D / 2 + 4.5 + g * ((D - 7) / 4) * (side === 1 ? 1 : -1) * (side === 1 ? 1 : 1), () => stainedGlass(x, 1.2, 4.0, 2.4, glassCols.slice(g % 3)));
+  }
+  // The altar on steps, a cross, candles, the pulpit, organ pipes and a great rose window.
+  k.box(0, 0, -D / 2 + 2.6, W - 3, 0.25, 4, 0xe2d6bd);
+  k.box(0, 0.25, -D / 2 + 2.2, 3.2, 1.0, 1.0, 0xf8f4ec);
+  k.box(0, 0.95, -D / 2 + 2.2, 3.3, 0.06, 1.1, 0xc9a227, { noAo: true });
+  for (let c = 0; c < 6; c++) {
+    k.cyl(-1.25 + c * 0.5, 1.01, -D / 2 + 2.2, 0.03, 0.03, 0.35, 0xfffaf0, 8);
+    k.ball(-1.25 + c * 0.5, 1.4, -D / 2 + 2.2, 0.035, 0xffc078, { layer: "glow" });
+  }
+  atWall(x, 0, 0, () => {
+    k.box(0, 2.0, 0.08, 0.3, 4.2, 0.12, 0xc9a227, { noAo: true });
+    k.box(0, 4.6, 0.08, 2.0, 0.3, 0.12, 0xc9a227, { noAo: true });
+    stainedGlass(x, 3.2, 3.0, 6.6, glassCols);
+    for (let p = 0; p < 14; p++) k.cyl(-W / 2 + 2.2 + p * 0.35 + (p > 6 ? W - 9 : 0), 2.2, 0.4, 0.1, 0.1, 2 + (p % 7) * 0.4, 0xd9c08a, 10, { noAo: true });
+  });
+  k.at(W / 2 - 2.6, 0.25, -D / 2 + 4.0, -0.6, () => {
+    k.cyl(0, 0, 0, 0.55, 0.45, 1.25, pal.wood, 8);
+    k.box(0, 1.25, 0.2, 0.6, 0.06, 0.4, pal.wood, { rx: -0.3 });
+  });
+  spot(x, 0, -D / 2 + 3.2, 0, "stand");
+  for (const pz of [-D / 4, D / 4]) {
+    k.cyl(0, room.h - 2.4, pz, 1.1, 0.4, 0.4, pal.accent, 16, { noAo: true, open: true });
+    for (let b = 0; b < 10; b++) k.ball(Math.cos(b * 0.628) * 1.0, room.h - 2.45, pz + Math.sin(b * 0.628) * 1.0, 0.08, 0xfff3dc, { layer: "glow" });
+    k.cyl(0, room.h - 2.0, pz, 0.01, 0.01, 2.0, 0x2b2b2b, 4, { noAo: true });
+    x.lamps.push({ x: 0, y: room.h - 2.4, z: pz });
+  }
+  x.views.push({ x: 0, z: D / 2 - 1.5, yaw: 0, pitch: 0.02 }, { x: -W / 2 + 2, z: D / 2 - 2, yaw: yawTo(-W / 2 + 2, D / 2 - 2, 0, -D / 2), pitch: 0.0 });
+}
+
+function mosqueHall(x: Ctx) {
+  const { k, room, pal } = x;
+  const W = room.w;
+  const D = room.d;
+  // Prayer-row lines woven into the carpet (gold stripes across).
+  for (let r = 0; r < 9; r++) k.mat(0, 0.012, -D / 2 + 3 + r * 1.3, W - 1.6, 0.06, pal.fabric2);
+  // The mihrab: a tall pointed niche in the far wall, tiled and edged in gold; the minbar steps.
+  atWall(x, 0, 0, () => {
+    k.box(0, 0, 0.1, 2.6, 4.2, 0.2, 0xe6dfcd, { noAo: true });
+    k.box(0, 0, 0.21, 1.8, 3.2, 0.02, 0x1f6b8a, { noAo: true });
+    k.cyl(0, 3.2, 0.21, 0.9, 0.9, 0.02, 0x1f6b8a, 20, { rx: Math.PI / 2, noAo: true });
+    k.box(0, 0, 0.22, 2.0, 0.1, 0.03, pal.accent, { noAo: true });
+    for (let t = 0; t < 6; t++) k.box(0, 0.4 + t * 0.45, 0.225, 1.6, 0.03, 0.01, pal.accent, { noAo: true });
+  });
+  k.at(2.6, 0, -D / 2 + 1.4, 0, () => {
+    for (let s = 0; s < 7; s++) k.box(0, 0, 0.6 - s * 0.2, 0.9, 0.25 + s * 0.25, 0.22, pal.wood);
+    k.box(0, 1.9, -0.75, 1.0, 1.6, 0.4, pal.wood);
+    k.cyl(0, 3.5, -0.75, 0.0, 0.35, 0.8, pal.accent, 8);
+  });
+  // A calligraphy band in gold round the top of the walls.
+  wallSign(x, 0, 0, room.h - 1.2, "بِسْمِ ٱللَّٰهِ", 0x1f8a5b, 0xf2b632, W - 2, 0.8, true);
+  for (const side of [1, 3]) wallSign(x, side, 0, room.h - 1.2, "ٱللَّٰهُ أَكْبَرُ", 0x1f8a5b, 0xf2b632, D - 2, 0.8, true);
+  // Pointed arched windows down the sides.
+  for (const side of [1, 3]) {
+    for (let a = 0; a < 5; a++) {
+      atWall(x, side, -D / 2 + 3 + a * ((D - 6) / 4), () => {
+        k.box(0, 1.6, 0.03, 1.0, 2.6, 0.02, 0x9ad1e8, { layer: "glow", noAo: true });
+        k.cyl(0, 4.2, 0.03, 0.5, 0.5, 0.02, 0x9ad1e8, 16, { rx: Math.PI / 2, layer: "glow", noAo: true });
+        k.box(0, 1.5, 0.05, 1.1, 0.06, 0.02, pal.accent, { noAo: true });
+      });
+    }
+  }
+  // Columns, and the great ring chandelier with its many lamps.
+  for (const sx of [-W / 4, W / 4]) {
+    for (let p = 0; p < 3; p++) {
+      const pz = -D / 2 + 4 + p * ((D - 7) / 2);
+      k.cyl(sx, 0, pz, 0.3, 0.3, room.h - 0.3, 0xf7f4ec, 16);
+      k.box(sx, 0, pz, 0.8, 0.5, 0.8, 0xe6dfcd);
+    }
+  }
+  const cy = room.h - 3.2;
+  k.ring(0, cy, 0, 3.2, 0.06, pal.metal, { rx: Math.PI / 2 });
+  k.ring(0, cy + 0.3, 0, 2.2, 0.05, pal.metal, { rx: Math.PI / 2 });
+  for (let b = 0; b < 24; b++) k.ball(Math.cos((b / 24) * 6.283) * 3.2, cy - 0.08, Math.sin((b / 24) * 6.283) * 3.2, 0.08, 0xfff3dc, { layer: "glow" });
+  for (let b = 0; b < 4; b++) k.cyl(Math.cos(b * 1.571) * 3.2, cy, Math.sin(b * 1.571) * 3.2, 0.006, 0.006, room.h - cy, 0x2b2b2b, 4, { noAo: true });
+  x.lamps.push({ x: 0, y: cy, z: 0 }, { x: 0, y: cy, z: -D / 3 });
+  // People in rows facing the mihrab, and a few reading by the wall.
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 6; c++) spot(x, -3.5 + c * 1.4, -D / 2 + 3.6 + r * 1.3, 0, "stand");
+  for (let s = 0; s < 3; s++) spot(x, -W / 2 + 1.2, 1 + s * 1.2, Math.PI / 2, "sit", 0.08);
+  x.views.push({ x: 0, z: D / 2 - 1.2, yaw: 0, pitch: 0.04 }, { x: W / 2 - 1.5, z: D / 2 - 1.5, yaw: yawTo(W / 2 - 1.5, D / 2 - 1.5, 0, -D / 2), pitch: 0.02 });
+}
+
 function plan(theme: Theme, rnd: Rng, variant?: InteriorInfo["variant"]): { room: Room; pal: Pal; build: (x: Ctx) => void } {
   const home = pickOf(rnd, HOME);
   if (theme === "lobby" && variant === "small") {
@@ -2810,6 +3155,18 @@ function plan(theme: Theme, rnd: Rng, variant?: InteriorInfo["variant"]): { room
     case "boxing":
     case "wrestling":
       return { room: { w: 24, d: 24, h: 11, walls: ["solid", "solid", "solid", "solid"] }, pal: SPORT_PAL, build: (x) => ringHall(x, theme === "wrestling") };
+    case "bank":
+      return { room: { w: 20, d: 14, h: 7, walls: ["solid", "tall", "glass", "tall"] }, pal: BANK_PAL, build: bankHall };
+    case "vault":
+      return { room: { w: 9, d: 9, h: 3.4, walls: ["solid", "solid", "solid", "solid"] }, pal: VAULT_PAL, build: vaultRoom };
+    case "gym":
+      return { room: { w: 18, d: 13, h: 5, walls: ["solid", "glass", "glass", "solid"], frame: 0x1f2226 }, pal: GYM_PAL, build: gymFloor };
+    case "spa":
+      return { room: { w: 14, d: 12, h: 4.2, walls: ["solid", "glass", "glass", "glass"], frame: 0xb08458 }, pal: SPA_PAL, build: spaRoom };
+    case "church":
+      return { room: { w: 16, d: 26, h: 12, walls: ["solid", "tall", "solid", "tall"] }, pal: CHURCH_PAL, build: churchNave };
+    case "mosque":
+      return { room: { w: 18, d: 18, h: 11, walls: ["solid", "tall", "solid", "tall"] }, pal: MOSQUE_PAL, build: mosqueHall };
     default:
       return { room: { w: 8, d: 6, h: 3, walls: ["glass", "solid", "solid", "solid"] }, pal: home, build: (x) => livingRoom(x, false) };
   }

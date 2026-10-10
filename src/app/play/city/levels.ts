@@ -50,6 +50,13 @@ export type Theme =
   | "club"
   | "restaurant"
   | "firehall"
+  // the grand bank's hall and its vault, a gym, a spa, a cathedral's nave, a mosque's prayer hall
+  | "bank"
+  | "vault"
+  | "gym"
+  | "spa"
+  | "church"
+  | "mosque"
   // sports venues: the stands round a football pitch, an indoor basketball court, a boxing
   // ring and a wrestling ring (seats facing the action, a big screen)
   | "stands"
@@ -482,6 +489,27 @@ function structureLevels(t: Tile, type: StructureType, plan: CityPlan): Draft[] 
       break;
     case "waterpark":
       R("o", "Poolside", "outdoor", "waterpark", X - 0.45, 0.09, Z + 0.62, 0.1, 0.1);
+      break;
+    case "bank":
+      R("g", "Banking hall", "interior", "bank", X, 0.21, Z - 0.4, 0.95, 0.45, { weight: 1.4 });
+      R("f1", "The vault", "interior", "vault", X, 0.21, Z - 0.9, 0.6, 0.2, { weight: 0.7 });
+      break;
+    case "bigpark":
+      R("o", "In the park", "outdoor", "park", X, 0.09, Z + 0.3, 0.1, 0.1, { weight: 1.6 });
+      break;
+    case "gym":
+      R("g", "Gym floor", "interior", "gym", X, 0.09, Z - 0.4, 1.1, 0.65, { weight: 1.4 });
+      break;
+    case "spa":
+      R("g", "Spa", "interior", "spa", X, 0.09, Z - 0.75, 1.05, 0.35, { weight: 1.2 });
+      R("o", "Pools", "outdoor", "waterpark", X, 0.09, Z + 0.55, 0.1, 0.1);
+      break;
+    case "cathedral":
+      R("g", "The nave", "interior", "church", X, 0.09, Z - 0.25, 0.38, 1.15, { weight: 1.4 });
+      break;
+    case "grandmosque":
+      R("g", "Prayer hall", "interior", "mosque", X, 0.09, Z - 0.75, 0.95, 0.55, { weight: 1.4 });
+      R("o", "Courtyard", "outdoor", "plaza", X, 0.09, Z + 0.55, 0.1, 0.1);
       break;
   }
   return out;
