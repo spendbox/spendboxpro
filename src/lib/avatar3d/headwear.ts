@@ -109,7 +109,8 @@ export function headwear(c: HeadCtx): Part[] {
     add("capVisor", visor.top);
     add("capVisorUnder", visor.under, "hwDark");
     add("capButton", ellGeo(0.07, 0.04, 0.07, 10, c.lod, new Vector3(0, F.h * 1.12 + hairT + 0.04, 0)), "hwDark", "closed");
-    [-0.9, 0, 0.9].forEach((a, i) => {
+    // Panel seams: too fine to see on other players.
+    if (c.lod >= 1) [-0.9, 0, 0.9].forEach((a, i) => {
       const pts: Vector3[] = [];
       for (let k = 0; k <= 12; k++) {
         const th = 0.05 + (k / 12) * 1.05, u = new Vector3(Math.sin(th) * Math.sin(a), Math.cos(th), Math.sin(th) * Math.cos(a));

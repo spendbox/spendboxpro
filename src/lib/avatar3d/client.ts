@@ -1,7 +1,7 @@
 // Asks the worker for avatar meshes and caches them, so each recipe is built once per detail level.
 // Falls back to building on the main thread if workers aren't available.
 
-import { buildHead } from "./head.ts";
+import { buildAvatar } from "./avatar.ts";
 import { type Model, type PackedModel, unpack } from "./parts.ts";
 import { type Recipe, encodeRecipe } from "./recipe.ts";
 
@@ -51,8 +51,8 @@ export function getAvatarModel(recipe: Recipe, lod: number): Promise<Model> {
         const id = nextId++;
         waiting.set(id, { resolve, reject });
         w.postMessage({ id, recipe, lod });
-      }).catch(() => buildHead(recipe, lod))
-    : Promise.resolve().then(() => buildHead(recipe, lod));
+      }).catch(() => buildAvatar(recipe, lod))
+    : Promise.resolve().then(() => buildAvatar(recipe, lod));
   cache.set(key, p);
   while (cache.size > CACHE_SIZE) {
     const [oldKey, old] = cache.entries().next().value!;

@@ -10,7 +10,9 @@ import {
 export type MatKey =
   | "skin" | "skinVC" | "earVC" | "lidVC" | "sclera" | "iris" | "cornea" | "catchlight" | "caruncle" | "brow"
   | "mouthCavity" | "teeth" | "tongue" | "gold" | "glassesFrame" | "lens" | "beard" | "stubble" | "hw" | "hwDark" | "hwSheen"
-  | "kufi" | "hair" | "hairStrand" | "hairBody" | "hairBodyStrand" | "hairTie" | "wrap";
+  | "kufi" | "hair" | "hairStrand" | "hairBody" | "hairBodyStrand" | "hairTie" | "wrap"
+  | "nail" | "top" | "topDS" | "topEdge" | "trim" | "bottom" | "bottomDark" | "shoe" | "sole" | "shirt" | "tie" | "lapel"
+  | "sash" | "collarWhite" | "watchBand" | "watchCase" | "watchFace" | "chainMetal" | "medal" | "iced" | "gem";
 
 /** A moving piece of the avatar. Parts hang from nodes; animation moves nodes. */
 export type Node = { id: string; parent: string | null; matrix: number[] };
@@ -26,8 +28,8 @@ export type Part = {
   surface: "closed" | "sheet";
 };
 
-/** meta.faceH: height scale of the chosen face (sizes the jaw drop). */
-export type Model = { nodes: Node[]; parts: Part[]; meta: { faceH: number } };
+/** meta.faceH: height scale of the chosen face (sizes the jaw drop). floorY: where the feet stand (whole avatars only). */
+export type Model = { nodes: Node[]; parts: Part[]; meta: { faceH: number; floorY?: number } };
 
 export const ROOT = "head";
 

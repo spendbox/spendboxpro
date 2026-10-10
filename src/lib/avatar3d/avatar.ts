@@ -1,0 +1,130 @@
+// The whole avatar: the head (head.ts) on the body, with clothes and jewellery, from a recipe.
+//
+// Nodes (moving pieces): avatar > head; avatar > body > chest > arm0/arm1 > hand0/hand1;
+// body > leg0/leg1. Index 0 is the avatar's right side (x < 0), 1 its left.
+
+import { type BufferGeometry, Matrix4, Object3D } from "three";
+import { CROTCH_Y, THIGH_SQUASH, bodyParams, crInterp, handGeos, limbGeo, mirrorX, shoeGeo, torsoModel } from "./body.ts";
+import { HEAD_HEIGHT_SHARE, HEIGHTS, OUTFITS } from "./catalog.ts";
+import { type Dress, armClothes, cuff, robes, torsoClothes } from "./clothing.ts";
+import { buildHead } from "./head.ts";
+import { chain, watch } from "./jewellery.ts";
+import { PI, smooth } from "./math.ts";
+import { type Model, type Node, type Part } from "./parts.ts";
+import type { Recipe } from "./recipe.ts";
+
+/** The neck joint: the body and head scale about this height (so height changes keep them joined). */
+const NECK_Y = -1.4;
+
+const matrixOf = (o: Object3D) => {
+  o.updateMatrix();
+  return o.matrix.toArray();
+};
+
+/** Level of detail: 1 for your own avatar, 0.5 for players nearby. */
+export function buildAvatar(r: Recipe, lod = 1): Model {
+  const head = buildHead(r, lod);
+  const B = bodyParams(r), fem = r.frame === 1, O = OUTFITS[r.outfit], T = torsoModel(B);
+  const shirtless = !!B.shirtless || !!O.swim;
+  const parts: Part[] = [], nodes: Node[] = [];
+  const add = (name: string, node: string, geo: BufferGeometry, mat: Part["mat"], surface: Part["surface"] = "sheet") => parts.push({ name, node, geo, mat, surface });
+  const node = (id: string, parent: string | null, o?: Object3D) => nodes.push({ id, parent, matrix: o ? matrixOf(o) : new Matrix4().toArray() });
+
+  // Height: the body stretches about the neck; the head grows only a little (head size varies far less than height).
+  const s = HEIGHTS[r.height].s, H = B.h * s, W = B.w * (1 + (s - 1) * 0.6), hs = 1 + (s - 1) * HEAD_HEIGHT_SHARE;
+  node("avatar", null);
+  const ho = new Object3D();
+  ho.position.set(0, NECK_Y + (-0.14 - NECK_Y) * hs, 0);
+  ho.scale.setScalar(hs);
+  node("head", "avatar", ho);
+  const bo = new Object3D();
+  bo.position.y = NECK_Y * (1 - H);
+  bo.scale.set(W, H, W);
+  node("body", "avatar", bo);
+  node("chest", "body");
+
+  const d: Dress = { T, B, O, fem, lod, shirtless, add };
+  torsoClothes(d);
+
+  // Arms: upper arm 3.0, forearm 2.4, hand 1.75 (elbow at the navel, wrist at the crotch, fingertips at mid-thigh).
+  const shY = T.shY, shX = crInterp(T.L, T.X, shY), L1 = 3.0 * B.limbL, L2 = 2.4 * B.limbL, at = B.armT, bendA = -0.16;
+  const armPts: [number, number][] = [
+    [0, -0.12], [0.3 * at * B.armD, -0.2], [0.44 * at * B.armD, -0.42], [0.47 * at * B.armB, -1.0], [0.46 * at * B.armB, -1.7], [0.4 * at, -2.5],
+    [0.35 * at, -L1], [0.42 * at * B.armF, -L1 - 0.55], [0.38 * at * B.armF, -L1 - 1.2], [0.29 * at, -L1 - L2 + 0.25], [0.25 * at, -L1 - L2],
+    [0.15 * at, -L1 - L2 - 0.15], [0, -L1 - L2 - 0.26],
+  ];
+  const sq = (y: number): [number, number] => {
+    const t = smooth((-y - L1 - 0.6) / (L2 - 0.6));
+    return [1 - 0.22 * t, 1 + 0.14 * t];
+  };
+  [-1, 1].forEach((side, i) => {
+    // The arm hangs just clear of the torso (wider bodies hold their arms further out).
+    const x0 = shX - 0.08;
+    let ang = 0.05 + 0.03 * Math.max(0, at - 1);
+    for (let y = shY - 1.4; y > Math.max(shY - (L1 + L2) * 0.95, -7.3); y -= 0.15) {
+      const rr = 0.44 * at * (y > shY - L1 ? B.armB : B.armF) * 0.8, xt = Math.max(T.P(y, PI / 2).x, T.P(y, PI * 0.4).x);
+      ang = Math.max(ang, Math.atan2(xt + rr - x0, shY - y));
+    }
+    const ao = new Object3D();
+    ao.position.set(side * x0, shY, 0);
+    ao.rotation.z = side * Math.min(ang, 0.5);
+    node(`arm${i}`, "chest", ao);
+    const longS = armClothes(d, `arm${i}`, armPts, L1, bendA, sq);
+    const ho2 = new Object3D();
+    ho2.position.set(0, -L1 - L2 * Math.cos(bendA), -L2 * Math.sin(bendA));
+    ho2.rotation.set(bendA, 0, 0);
+    node(`hand${i}`, `arm${i}`, ho2);
+    if (longS) cuff(d, `hand${i}`);
+    const hand = handGeos(B.limbL * (fem ? 0.92 : 1) * Math.max(0.92, Math.min(1.2, 0.75 + 0.25 * at)), fem, lod);
+    const place = (g: BufferGeometry) => (side < 0 ? mirrorX(g) : g);
+    hand.skin.forEach((g, k) => add(`hand${i}_${k}`, `hand${i}`, place(g), "skin", "closed"));
+    hand.nails.forEach((g, k) => add(`nail${i}_${k}`, `hand${i}`, place(g), "nail", "closed"));
+    if (side > 0) watch(add, `hand${i}`, r.watch, at, lod);
+  });
+
+  // Legs: thigh 4.0, shin 3.6, ankle about 0.75 above the floor. Each leg starts at the crotch with the
+  // same size and place as the hips' thigh tops (its flat top tucked just inside the hips).
+  const LT = 4.0 * B.limbL, LS = 3.6 * B.limbL, lt = B.legT, cf = B.calf, topY = -6.55, legX = T.legX, jy = CROTCH_Y - topY;
+  // The thigh tapers evenly from the hip to the knee.
+  const kneeR = 0.47 * (lt * 0.5 + 0.5), lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+  const legPts: [number, number][] = [
+    [0, jy + 0.16], [0.6 * T.legR, jy + 0.155], [0.86 * T.legR, jy + 0.12], [T.legR, jy], [lerp(T.legR, kneeR, 0.3), -2.0], [lerp(T.legR, kneeR, 0.75), -3.3],
+    [kneeR, -LT], [0.5 * cf, -LT - 0.7], [0.56 * cf, -LT - 1.25], [0.46 * cf, -LT - 2.0], [0.32 * (cf * 0.4 + 0.6), -LT - 2.9],
+    [0.27, -LT - LS + 0.15], [0.27, -LT - LS], [0, -LT - LS - 0.06],
+  ];
+  const legM: Part["mat"] = O.bare || O.swim || shirtless ? "skin" : O.match ? "top" : "bottom";
+  const lsq = (y: number): [number, number] => {
+    const t = smooth((-y - LT + 0.4) / 1.2);
+    return [1 - 0.06 * t, THIGH_SQUASH + 0.06 * t];
+  };
+  [-1, 1].forEach((side, i) => {
+    const lo = new Object3D();
+    lo.position.set(side * legX, topY, 0);
+        node(`leg${i}`, "body", lo);
+    add(`leg${i}Skin`, `leg${i}`, limbGeo(legPts, 18, lod, null, lsq), legM);
+    if (shirtless && !(O.swim && fem)) {
+      // Shorts (bodybuilder) or swim trunks.
+      const sh: [number, number][] = legPts.filter(([, y]) => y > -2.4).map(([x, y]) => [x * 1.05 + 0.02, y]);
+      sh.push([lerp(T.legR, kneeR, 0.44) * 1.05 + 0.02, -2.4]);
+      add(`leg${i}Shorts`, `leg${i}`, limbGeo(sh, 18, lod, null, lsq), O.swim ? "top" : "bottom");
+    }
+    const fl = 2.45 * (B.h < 1 ? 0.92 : 1);
+    // The shoe stands on the floor; the ankle is just inside its collar.
+    add(`shoe${i}`, `leg${i}`, shoeGeo(fl, 0.98, 0.95, lod).translate(0, -LT - LS - 0.38, 0), "shoe", "closed");
+    add(`sole${i}`, `leg${i}`, shoeGeo(fl, 0.98, 0.2, lod, true).translate(0, -LT - LS - 0.55, 0), "sole", "closed");
+  });
+  const floorY = topY - LT - LS - 0.55;
+  robes(d, shX, floorY);
+  chain(add, T, r.chain, O, lod);
+
+  // The head's own nodes hang from the avatar.
+  const headNodes = head.nodes.map((n) => (n.parent === null ? { ...n, parent: "avatar", matrix: nodes.find((m) => m.id === "head")!.matrix } : n));
+  return {
+    nodes: [...nodes.filter((n) => n.id !== "head"), ...headNodes],
+    parts: [...head.parts, ...parts],
+    meta: { faceH: head.meta.faceH, floorY: NECK_Y * (1 - H) + floorY * H },
+  };
+}
+
+/** Where the avatar's feet are, for placing it on the ground (before any posing). */
+export const footY = (m: Model) => m.meta.floorY ?? 0;

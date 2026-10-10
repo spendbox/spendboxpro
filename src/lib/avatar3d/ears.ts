@@ -132,7 +132,7 @@ export function ears(c: HeadCtx): Part[] {
     if (r.ear === 1) stud(lobe, 0.024);
     if (r.ear === 2) {
       const p = lobe.clone().addScaledVector(ear.eb, -0.05);
-      jewel("hoop", new TorusGeometry(0.06, 0.01, 8, 28).applyQuaternion(new Quaternion().setFromUnitVectors(Z, ear.ea)).translate(p.x, p.y, p.z));
+      jewel("hoop", new TorusGeometry(0.06, 0.01, c.lod < 1 ? 4 : 8, Math.max(14, Math.round(28 * c.lod))).applyQuaternion(new Quaternion().setFromUnitVectors(Z, ear.ea)).translate(p.x, p.y, p.z));
     }
     if (r.ear === 3) {
       stud(lobe, 0.02);
@@ -142,7 +142,7 @@ export function ears(c: HeadCtx): Part[] {
     }
     const ring = (th: number) => {
       const p = ear.rim(th), tg = ear.rim(th + 0.05).sub(ear.rim(th - 0.05)).normalize();
-      jewel("ring", new TorusGeometry(0.03, 0.006, 6, 20).applyQuaternion(new Quaternion().setFromUnitVectors(Z, tg)).translate(p.x, p.y, p.z));
+      jewel("ring", new TorusGeometry(0.03, 0.006, c.lod < 1 ? 3 : 6, Math.max(8, Math.round(20 * c.lod))).applyQuaternion(new Quaternion().setFromUnitVectors(Z, tg)).translate(p.x, p.y, p.z));
     };
     const P = r.pierce;
     if (P === 1 || P === 5 || P === 6) {

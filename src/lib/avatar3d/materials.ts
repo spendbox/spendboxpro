@@ -5,7 +5,7 @@ import {
   BackSide, CanvasTexture, Color, DoubleSide, type Material, MeshBasicMaterial, MeshStandardMaterial,
   type MeshStandardMaterialParameters, NoColorSpace, RepeatWrapping, SRGBColorSpace,
 } from "three";
-import { CLOTH_COLORS, HAIR_COLORS, IRIS, SKINS } from "./catalog.ts";
+import { BOTTOM_COLORS, CHAINS, CLOTH_COLORS, HAIR_COLORS, IRIS, OUTFITS, SKINS, WATCHES } from "./catalog.ts";
 import type { MatKey } from "./parts.ts";
 import type { Recipe } from "./recipe.ts";
 
@@ -179,6 +179,8 @@ export function makeMaterials(r: Recipe): MaterialSet {
   const skin = new Color(SKINS[r.skin].c), hair = new Color(HAIR_COLORS[r.hairC].c);
   const topHex = CLOTH_COLORS[r.top].c, wrapPattern = r.hair === 11 ? patternTexture(topHex, r.pattern) : null;
   const hwHex = CLOTH_COLORS[r.hwC].c, hwPattern = r.hw === 2 || r.hw === 3 ? patternTexture(hwHex, r.pattern) : null;
+  const topC = new Color(topHex), topPattern = patternTexture(topHex, r.pattern), bottomC = new Color(BOTTOM_COLORS[r.bottom].c);
+  const lightShoe = OUTFITS[r.outfit].shoe === "light", W = WATCHES[r.watch], chainHex = CHAINS[r.chain].c ?? "#D9A94E";
   const made = new Map<MatKey, Material>();
   const make = (key: MatKey): Material => {
     switch (key) {
@@ -217,6 +219,31 @@ export function makeMaterials(r: Recipe): MaterialSet {
       case "hairTie": return std(new Color(topHex).multiplyScalar(0.6), 0.8);
       // The headwrap hairstyle is made of the same fabric as the top.
       case "wrap": return std(wrapPattern ? "#ffffff" : topHex, 0.8, { side: DoubleSide, map: wrapPattern });
+      // Fingernails: pale pink-beige tinted by the skin, a little glossy.
+      case "nail": return std(new Color("#E9C9B4").lerp(skin, 0.5), 0.3);
+      // Clothes. The top's fabric carries the chosen pattern; topDS is the same cloth seen from both sides.
+      case "top": return std(topPattern ? "#ffffff" : topC, 0.8, { map: topPattern });
+      case "topDS": return std(topPattern ? "#ffffff" : topC, 0.8, { map: topPattern, side: DoubleSide });
+      case "topEdge": return std(topC.clone().multiplyScalar(0.8), 0.6);
+      case "trim": return std(topC.clone().multiplyScalar(0.6), 0.75);
+      case "lapel": return std(topC.clone().multiplyScalar(0.75), 0.6);
+      case "sash": return std(topC.clone().lerp(new Color("#ffffff"), 0.75), 0.7, { side: DoubleSide });
+      case "bottom": return std(bottomC, 0.85);
+      case "bottomDark": return std(bottomC.clone().multiplyScalar(0.6), 0.85);
+      case "shirt": return std("#F4F2EE", 0.7);
+      case "tie": return std("#7A1F2B", 0.55);
+      case "collarWhite": return std("#FFFFFF", 0.7, { side: DoubleSide });
+      case "shoe": return std(lightShoe ? "#ECEAE4" : "#2A1C14", 0.6);
+      case "sole": return std(lightShoe ? "#B9B5AC" : "#120C08", 0.8);
+      // Jewellery.
+      case "watchBand": return std(W.band ?? "#1B1B1E", W.metal ? 0.3 : 0.7, { metalness: W.metal ? 0.85 : 0 });
+      case "watchCase": return std(W.metal ? W.band! : "#2A2A2E", 0.3, { metalness: 0.85 });
+      case "watchFace": return std(W.face ?? "#ffffff", 0.3, W.screen ? { emissive: new Color("#1E8A7A"), emissiveIntensity: 0.6 } : {});
+      case "chainMetal": return std(chainHex, 0.22, { metalness: 0.95 });
+      // A flat medallion: less mirror-like than the chain, or with nothing to reflect it looks black.
+      case "medal": return std(chainHex, 0.38, { metalness: 0.55 });
+      case "iced": return std("#ffffff", 0.08, { metalness: 0.4, emissive: new Color("#BFD9FF"), emissiveIntensity: 0.35 });
+      case "gem": return std("#2E6FD8", 0.1, { metalness: 0.3 });
     }
   };
   return {

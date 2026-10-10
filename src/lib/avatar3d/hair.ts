@@ -215,7 +215,7 @@ function strands(c: HeadCtx, kind: "braids" | "locs"): Part[] {
       ? (t: number, a: number) => (1 + 0.14 * Math.sin(t * 22 + b + a * 2)) * (t > 0.93 ? 0.75 : 1)
       : (t: number, a: number) => (1 + 0.2 * Math.sin(t * 95 + a * PI * 2)) * (t > 0.95 ? 0.7 : 1);
     parts.push({ name: `${kind === "locs" ? "loc" : "braid"}${b}`, mat: "hair", node: ROOT, geo: tubeAlong(cv, segs, sides, S.r, shape), surface: "closed" });
-    if (kind === "braids" && b % 3 === 0) parts.push({ name: `bead${b}`, mat: "gold", node: ROOT, geo: ellGeo(0.05, 0.06, 0.05, 6, c.lod, cv.getPointAt(1)), surface: "closed" });
+    if (kind === "braids" && b % 3 === 0 && c.lod >= 1) parts.push({ name: `bead${b}`, mat: "gold", node: ROOT, geo: ellGeo(0.05, 0.06, 0.05, 6, c.lod, cv.getPointAt(1)), surface: "closed" });
   });
   return parts;
 }

@@ -155,15 +155,16 @@ export function brows(c: HeadCtx): { nodes: Node[]; parts: Part[] } {
       const q = facePoint(c, s * x, y);
       pts.push(q.p.addScaledVector(q.n, lift));
     }
-    const cv = new CatmullRomCurve3(pts), g = new TubeGeometry(cv, 24, B.th, 6, false), pa = g.attributes.position;
+    const S = Math.max(10, Math.round(24 * c.lod)), R = c.lod < 1 ? 4 : 6;
+    const cv = new CatmullRomCurve3(pts), g = new TubeGeometry(cv, S, B.th, R, false), pa = g.attributes.position;
     const cc = new Vector3(), o = new Vector3(), nn = new Vector3();
-    for (let j = 0; j <= 24; j++) {
-      const t = j / 24;
+    for (let j = 0; j <= S; j++) {
+      const t = j / S;
       cv.getPointAt(t, cc);
       nn.copy(cc).normalize();
       const f = (1 - (1 - B.tp) * Math.pow(t, 1.2)) * (t < 0.1 ? 0.55 + (0.45 * t) / 0.1 : 1) * (t > 0.94 ? 0.6 : 1);
-      for (let k = 0; k <= 6; k++) {
-        const ix = j * 7 + k;
+      for (let k = 0; k <= R; k++) {
+        const ix = j * (R + 1) + k;
         o.fromBufferAttribute(pa, ix).sub(cc);
         const dn = o.dot(nn);
         o.addScaledVector(nn, -dn * 0.6).multiplyScalar(f);
@@ -188,8 +189,8 @@ export function glasses(c: HeadCtx): Part[] {
     o.lookAt(fc.clone().add(new Vector3(s * 0.04, 0, 1)));
     o.updateMatrix();
     const rim = kind === 2
-      ? new TorusGeometry(0.15, 0.012, 8, 4).rotateZ(PI / 4).scale(1.12, 0.82, 1)
-      : new TorusGeometry(0.135, 0.011, 8, 36);
+      ? new TorusGeometry(0.15, 0.012, c.lod < 1 ? 4 : 8, 4).rotateZ(PI / 4).scale(1.12, 0.82, 1)
+      : new TorusGeometry(0.135, 0.011, c.lod < 1 ? 4 : 8, Math.max(16, Math.round(36 * c.lod)));
     parts.push({ name: `rim${i}`, mat: "glassesFrame", node: ROOT, geo: rim.applyMatrix4(o.matrix), surface: "closed" });
     if (kind === 3) {
       parts.push({ name: `lens${i}`, mat: "lens", node: ROOT, geo: new CircleGeometry(0.13, 30).applyMatrix4(o.matrix), surface: "sheet" });

@@ -9,13 +9,17 @@ import { triangleCount } from "@/lib/avatar3d/parts";
 import { CATALOGS, DEFAULT_RECIPE, type Recipe, type RecipeKey, encodeRecipe, parseRecipe, randomRecipe } from "@/lib/avatar3d/recipe";
 import { type AvatarObject, type FaceState, mountModel, updateFace } from "@/lib/avatar3d/scene";
 
-// The parts built so far (head, face, hair, facial hair, headwear). Colour lists show as swatches.
+// Every recipe option. Colour lists show as swatches.
 const SECTIONS: [RecipeKey, string][] = [
   ["face", "Face shape"], ["chin", "Chin"], ["fat", "Fullness"], ["skin", "Skin"], ["eye", "Eyes"], ["eyeC", "Eye colour"],
   ["brow", "Brows"], ["hair", "Hair"], ["hairC", "Hair colour"], ["nose", "Nose"], ["lips", "Lips"], ["lipT", "Lip tint"], ["ear", "Earrings"],
   ["pierce", "Piercings"], ["glasses", "Glasses"], ["facial", "Facial hair"], ["hw", "Headwear"], ["hwC", "Headwear colour"],
-  ["pattern", "Pattern (head tie, gele, headwrap)"], ["top", "Top colour (headwrap)"], ["frame", "Frame"], ["build", "Body type (neck)"],
+  ["frame", "Frame"], ["build", "Body type"], ["height", "Height"], ["bust", "Bust"], ["butt", "Hips"], ["outfit", "Outfit"],
+  ["top", "Top colour"], ["pattern", "Pattern"], ["bottom", "Bottom colour"], ["watch", "Watch"], ["chain", "Chain"],
 ];
+
+/** Camera framing: the face close up, or the whole body (target height, distance). */
+const VIEWS = { face: { y: -0.2, d: 6.4 }, body: { y: -6.9, d: 36 } };
 
 const EXPRESSIONS: { n: string; v: Partial<FaceState>; talk?: boolean }[] = [
   { n: "Neutral", v: {} }, { n: "Smile", v: { smile: 0.75, lid: 0.12 } }, { n: "Big smile", v: { smile: 1, open: 0.3, wide: 0.15, lid: 0.22 } },
@@ -23,7 +27,7 @@ const EXPRESSIONS: { n: string; v: Partial<FaceState>; talk?: boolean }[] = [
   { n: "Frown", v: { smile: -0.6, brow: -0.5, lid: 0.1 } }, { n: "Talking", v: { smile: 0.15 }, talk: true },
 ];
 
-export function AvatarLab({ initialRecipe, initialExpr }: { initialRecipe?: string; initialExpr: number }) {
+export function AvatarLab({ initialRecipe, initialExpr, initialView }: { initialRecipe?: string; initialExpr: number; initialView?: string }) {
   const box = useRef<HTMLDivElement>(null);
   const [recipe, setRecipe] = useState<Recipe>(() =>
     initialRecipe ? parseRecipe(initialRecipe) : { ...DEFAULT_RECIPE, skin: 4, eyeC: 1, nose: 2, lips: 1, frame: 1 },
@@ -31,8 +35,9 @@ export function AvatarLab({ initialRecipe, initialExpr }: { initialRecipe?: stri
   const [lod, setLod] = useState(1);
   const [expr, setExpr] = useState(Math.min(Math.max(0, initialExpr), EXPRESSIONS.length - 1));
   const [info, setInfo] = useState("Loading…");
+  const [view, setView] = useState<keyof typeof VIEWS>(initialView === "body" ? "body" : "face");
   const errorRef = useRef<HTMLParagraphElement>(null);
-  const stage = useRef<{ scene: THREE.Scene; current?: { obj: AvatarObject; mats: MaterialSet } } | null>(null);
+  const stage = useRef<{ scene: THREE.Scene; aim: (v: keyof typeof VIEWS) => void; current?: { obj: AvatarObject; mats: MaterialSet } } | null>(null);
   const exprRef = useRef(expr);
   useEffect(() => {
     exprRef.current = expr;
@@ -67,16 +72,21 @@ export function AvatarLab({ initialRecipe, initialExpr }: { initialRecipe?: stri
     controls.enablePan = false;
     controls.enableDamping = true;
     controls.minDistance = 2.5;
-    controls.maxDistance = 14;
-    controls.target.set(0, -0.2, 0);
-    camera.position.set(0, 0, 6.4);
     const params = new URLSearchParams(location.search);
     // ?yaw= and ?pitch= (radians) turn the camera, for screenshots from the side or below.
     const yaw = Number(params.get("yaw") || 0), pitch = Number(params.get("pitch") || 0);
-    camera.position.set(6.4 * Math.sin(yaw) * Math.cos(pitch), 6.4 * Math.sin(pitch) - 0.2, 6.4 * Math.cos(yaw) * Math.cos(pitch));
+    // ?tx=, ?ty= and ?d= aim the camera at a height and distance (close-ups of hands, feet...).
+    const aim = (v: keyof typeof VIEWS) => {
+      const y = params.has("ty") ? Number(params.get("ty")) : VIEWS[v].y, d = params.has("d") ? Number(params.get("d")) : VIEWS[v].d;
+      controls.minDistance = d * 0.4;
+      controls.maxDistance = d * 2.2;
+      const x = Number(params.get("tx") || 0);
+      controls.target.set(x, y, 0);
+      camera.position.set(x + d * Math.sin(yaw) * Math.cos(pitch), d * Math.sin(pitch) + y, d * Math.cos(yaw) * Math.cos(pitch));
+    };
     // ?bg=<colour> paints the background (a gap in the skin then shows in that colour).
     if (params.get("bg")) scene.background = new THREE.Color(params.get("bg")!);
-    stage.current = { scene };
+    stage.current = { scene, aim };
 
     const resize = () => {
       const w = el.clientWidth, h = el.clientHeight;
@@ -136,6 +146,8 @@ export function AvatarLab({ initialRecipe, initialExpr }: { initialRecipe?: stri
     };
   }, []);
 
+  useEffect(() => stage.current?.aim(view), [view]);
+
   // Rebuild whenever the recipe or detail level changes.
   useEffect(() => {
     let cancelled = false;
@@ -186,6 +198,9 @@ export function AvatarLab({ initialRecipe, initialExpr }: { initialRecipe?: stri
           </button>
           <button type="button" aria-pressed={lod < 1} className="rounded-full bg-white px-4 py-2 text-sm" onClick={() => setLod((l) => (l < 1 ? 1 : 0.5))}>
             {lod < 1 ? "Nearby detail (on)" : "Nearby detail"}
+          </button>
+          <button type="button" className="rounded-full bg-white px-4 py-2 text-sm" onClick={() => setView((v) => (v === "face" ? "body" : "face"))}>
+            {view === "face" ? "Whole body" : "Face"}
           </button>
         </div>
       </section>
