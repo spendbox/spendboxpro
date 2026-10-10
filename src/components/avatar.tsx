@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { BG, HAIR_COLOR, SKIN, TOP_COLOR, type Avatar } from "@/lib/avatar";
 
 /** Darken (or lighten, with a negative amount) a #rrggbb colour. */
@@ -77,71 +76,48 @@ export function AvatarFace({ avatar: a, size = 40, className, ring }: { avatar: 
         )}
         {/* Head */}
         <ellipse cx="60" cy="54" rx="26" ry="29" fill={`url(#${id}-face)`} />
-        <FaceFeatures a={a} hairLayer={<Hair kind={a.hair} color={hair} shadeColor={hairShade} />} />
+        {/* Cheeks */}
+        <ellipse cx="45" cy="64" rx="5" ry="3" fill="#ff8a8a" opacity="0.18" />
+        <ellipse cx="75" cy="64" rx="5" ry="3" fill="#ff8a8a" opacity="0.18" />
+        {/* Eyes */}
+        <Eyes kind={a.eyes} />
+        {/* Brows */}
+        <Brows kind={a.brows} color={a.hair === 9 ? shade(skin, 0.45) : hairShade} />
+        {/* Nose */}
+        <path d="M60 56 Q57 64 59 66 Q61 67 63 66" fill="none" stroke={shade(skin, 0.28)} strokeWidth="1.6" strokeLinecap="round" />
+        {/* Mouth */}
+        <Mouth kind={a.mouth} />
+        {/* Beard */}
+        {a.beard === 1 && <path d="M38 62 Q40 84 60 86 Q80 84 82 62 Q80 78 60 80 Q40 78 38 62 Z" fill={hair} opacity="0.35" />}
+        {a.beard === 2 && <path d="M36 58 Q38 90 60 92 Q82 90 84 58 Q80 74 70 76 Q60 72 50 76 Q40 74 36 58 Z" fill={hair} />}
+        {a.beard === 3 && <path d="M52 76 Q60 90 68 76 Q60 80 52 76 Z" fill={hair} />}
+        {(a.beard === 2 || a.beard === 4) && <path d="M50 70 Q60 66 70 70 Q66 73 60 71 Q54 73 50 70 Z" fill={hair} />}
+        {/* Hair on top */}
+        <Hair kind={a.hair} color={hair} shadeColor={hairShade} />
+        {/* Glasses */}
+        {a.glasses === 1 && (
+          <g fill="none" stroke="#2b2b2b" strokeWidth="2">
+            <circle cx="49" cy="54" r="7.5" />
+            <circle cx="71" cy="54" r="7.5" />
+            <path d="M56.5 54 L63.5 54" />
+          </g>
+        )}
+        {a.glasses === 2 && (
+          <g fill="none" stroke="#2b2b2b" strokeWidth="2">
+            <rect x="40" y="48" width="16" height="12" rx="2.5" />
+            <rect x="64" y="48" width="16" height="12" rx="2.5" />
+            <path d="M56 53 L64 53" />
+          </g>
+        )}
+        {a.glasses === 3 && (
+          <g>
+            <path d="M39 49 L57 49 L55 60 Q48 63 41 59 Z M63 49 L81 49 L79 59 Q72 63 65 60 Z" fill="#18202b" />
+            <path d="M57 51 L63 51" stroke="#18202b" strokeWidth="2" />
+          </g>
+        )}
       </g>
       {ring && <circle cx="60" cy="60" r="57.5" fill="none" stroke={ring} strokeWidth="5" />}
     </svg>
-  );
-}
-
-/**
- * Just the face: cheeks, eyes, brows, nose, mouth, beard and glasses, on a see-through
- * background, in the same 120 x 120 drawing as the portrait (e.g. to put on a 3D head).
- */
-export function AvatarFaceFeatures({ avatar: a, size = 120 }: { avatar: Avatar; size?: number }) {
-  return (
-    <svg viewBox="0 0 120 120" width={size} height={size} xmlns="http://www.w3.org/2000/svg">
-      <FaceFeatures a={a} />
-    </svg>
-  );
-}
-
-/** The face's features, shared by the portrait and AvatarFaceFeatures (hair goes in under the glasses). */
-function FaceFeatures({ a, hairLayer }: { a: Avatar; hairLayer?: ReactNode }) {
-  const skin = SKIN[a.skin];
-  const hair = HAIR_COLOR[a.hairColor];
-  const hairShade = shade(hair, 0.25);
-  return (
-    <>
-      {/* Cheeks */}
-      <ellipse cx="45" cy="64" rx="5" ry="3" fill="#ff8a8a" opacity="0.18" />
-      <ellipse cx="75" cy="64" rx="5" ry="3" fill="#ff8a8a" opacity="0.18" />
-      {/* Eyes */}
-      <Eyes kind={a.eyes} />
-      {/* Brows */}
-      <Brows kind={a.brows} color={a.hair === 9 ? shade(skin, 0.45) : hairShade} />
-      {/* Nose */}
-      <path d="M60 56 Q57 64 59 66 Q61 67 63 66" fill="none" stroke={shade(skin, 0.28)} strokeWidth="1.6" strokeLinecap="round" />
-      {/* Mouth */}
-      <Mouth kind={a.mouth} />
-      {/* Beard */}
-      {a.beard === 1 && <path d="M38 62 Q40 84 60 86 Q80 84 82 62 Q80 78 60 80 Q40 78 38 62 Z" fill={hair} opacity="0.35" />}
-      {a.beard === 2 && <path d="M36 58 Q38 90 60 92 Q82 90 84 58 Q80 74 70 76 Q60 72 50 76 Q40 74 36 58 Z" fill={hair} />}
-      {a.beard === 3 && <path d="M52 76 Q60 90 68 76 Q60 80 52 76 Z" fill={hair} />}
-      {(a.beard === 2 || a.beard === 4) && <path d="M50 70 Q60 66 70 70 Q66 73 60 71 Q54 73 50 70 Z" fill={hair} />}
-      {hairLayer}
-      {/* Glasses */}
-      {a.glasses === 1 && (
-        <g fill="none" stroke="#2b2b2b" strokeWidth="2">
-          <circle cx="49" cy="54" r="7.5" />
-          <circle cx="71" cy="54" r="7.5" />
-          <path d="M56.5 54 L63.5 54" />
-        </g>
-      )}
-      {a.glasses === 2 && (
-        <g fill="none" stroke="#2b2b2b" strokeWidth="2">
-          <rect x="40" y="48" width="16" height="12" rx="2.5" />
-          <rect x="64" y="48" width="16" height="12" rx="2.5" />
-          <path d="M56 53 L64 53" />
-        </g>
-      )}
-      {a.glasses === 3 && (
-        <g>
-          <path d="M39 49 L57 49 L55 60 Q48 63 41 59 Z M63 49 L81 49 L79 59 Q72 63 65 60 Z" fill="#18202b" />
-          <path d="M57 51 L63 51" stroke="#18202b" strokeWidth="2" />
-        </g>
-      )}
-    </>
   );
 }
 
