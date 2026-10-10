@@ -42,6 +42,7 @@ import { createPeople } from "./city/people";
 import { createBasket, createDeck, createOpenAir, type Deck } from "./city/rooftops";
 import { billboardTexture, botTexture, disposePills, pillTexture } from "./city/textures";
 import { createTrains, railParts } from "./city/trains";
+import { createElevatedLife, elevatedParts } from "./city/elevated";
 import { createTraffic, type VehiclePose } from "./city/traffic";
 import { clubParts, eggParts, fireStationParts, restaurantParts } from "./city/street-bits";
 import { createCabin, type Cabin } from "./city/rides";
@@ -323,6 +324,8 @@ function partsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "ti
   basePartsFor(t, plan, add);
   // The railway viaduct passes over some tiles (whatever is underneath).
   if (t.rail) railParts(t, plan, add);
+  // The monorail, the flyover and footbridges over the streets.
+  elevatedParts(t, plan, add);
 }
 
 /**
@@ -2306,6 +2309,7 @@ export function CityView({
     // ---- the city's moving parts and things being built (see ./city/*)
     const people = createPeople(world, life);
     const trains = createTrains(world, life);
+    const elevatedLife = createElevatedLife(world, life);
     const traffic = createTraffic(world, life);
     const boats = createBoats(world, life);
     const plumes = createPlumes(world, life);
@@ -2464,6 +2468,7 @@ export function CityView({
       people.build();
       // The railway runs on out into the farmland (not in a huge town drawn only round the camera).
       trains.build(win ? 0 : Math.max(0, Math.min(26, Math.floor(land.flat - 3))));
+      elevatedLife.build();
       traffic.build(plan);
       boats.build();
       buildLandmarks();
@@ -5715,6 +5720,7 @@ export function CityView({
         boats.update(time, dt);
         people.update(dt, now);
         trains.update(dt, now);
+        elevatedLife.update(dt, now);
         plumes.update(time, now);
         sites.update(now);
       }
@@ -5832,6 +5838,7 @@ export function CityView({
       birds.dispose();
       people.dispose();
       trains.dispose();
+      elevatedLife.dispose();
       traffic.dispose();
       boats.dispose();
       plumes.dispose();

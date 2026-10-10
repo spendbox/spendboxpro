@@ -223,9 +223,11 @@ export const CITY_ASSETS = {
     "Parks", "Woods", "Plazas with fountains or statues", "Ponds", "Ferris wheels", "Wind turbines", "Billboards",
     "Roads", "Winding lanes in the suburbs", "Bridges", "A river (sometimes)", "Big lakes with causeways and jetties", "The sea (when a town grows really big)",
     "Road works", "Hills and mountains around the city", "A railway on a viaduct sweeping round in curves",
+    "A monorail on tall pylons along a main street, with two stations", "Flyovers (elevated roads) with ramps and lamps",
+    "Footbridges over busy roads (steel truss, glass skywalk, white arch)",
   ],
   moving: [
-    "Cars, taxis, vans, buses, trucks and articulated lorries (and the odd traffic jam)", "Trains", "People out walking (with umbrellas when it rains)", "Boats",
+    "Cars, taxis, vans, buses, trucks and articulated lorries (and the odd traffic jam)", "Bullet trains", "A monorail train", "Cars on the flyover", "People out walking (with umbrellas when it rains)", "Boats",
     "Pigeons, gulls, swallows, geese flying in a V and the odd eagle", "Clouds", "Hot-air balloons", "Planes", "Buildings going up during the hunt",
     "Ferris wheels, carousels, cranes and turbines",
   ],
@@ -661,6 +663,104 @@ function placeMegas(plan: CityPlan) {
       return;
     }
   });
+}
+
+// ---------------------------------------------------------------- things up in the air
+// Over the streets (so nothing on the ground has to make way): a monorail on tall pylons along
+// one long central street, a flyover (an elevated road) along a street the other way, and
+// footbridges over busy roads here and there. Pure maths from the plan, worked out once.
+
+/** A straight stretch of street with something built above it, from `from` to `to` along it. */
+export type Elevated = { along: "x" | "z"; at: number; from: number; to: number; stations: number[] };
+
+const elevatedCache = new WeakMap<CityPlan, { mono: Elevated | null; flyover: Elevated | null }>();
+
+/** The longest unbroken stretch of road along a street (and through 0 if it can), or null. */
+function streetRun(plan: CityPlan, along: "x" | "z", at: number, breakOnRail: boolean) {
+  const road = (a: number) => {
+    const x = along === "x" ? a : at;
+    const z = along === "x" ? at : a;
+    if (breakOnRail && onRail(plan, x, z)) return false;
+    return isRoad(plan, x, z);
+  };
+  let best: { from: number; to: number } | null = null;
+  let start: number | null = null;
+  for (let a = -70; a <= 71; a++) {
+    const ok = a <= 70 && road(a);
+    if (ok && start === null) start = a;
+    if (!ok && start !== null) {
+      const run = { from: start, to: a - 1 };
+      const score = run.to - run.from + (run.from <= 2 && run.to >= -2 ? 40 : 0);
+      const bestScore = best ? best.to - best.from + (best.from <= 2 && best.to >= -2 ? 40 : 0) : -1;
+      if (score > bestScore) best = run;
+      start = null;
+    }
+  }
+  return best;
+}
+
+/** The monorail and the flyover for this city (either can be missing). */
+export function elevated(plan: CityPlan) {
+  const cached = elevatedCache.get(plan);
+  if (cached) return cached;
+  const monoAlong: "x" | "z" = plan.rail ? (plan.rail.along === "x" ? "z" : "x") : hash(3, 5, plan.seed + 1500) < 0.5 ? "x" : "z";
+  const linesFor = (along: "x" | "z") => (along === "z" ? plan.xs : plan.zs);
+  let mono: Elevated | null = null;
+  {
+    let best: { at: number; from: number; to: number } | null = null;
+    for (const at of linesFor(monoAlong).filter((v) => Math.abs(v) <= 9)) {
+      const run = streetRun(plan, monoAlong, at, false);
+      // It has to run through the middle of town.
+      if (!run || run.from > -4 || run.to < 4) continue;
+      // At most 36 long, centred on the middle.
+      const from = Math.max(run.from, -18);
+      const to = Math.min(run.to, 18);
+      if (to - from >= 10 && (!best || to - from > best.to - best.from)) best = { at, from, to };
+    }
+    if (best) {
+      const len = best.to - best.from;
+      mono = { along: monoAlong, at: best.at, from: best.from, to: best.to, stations: [best.from + Math.round(len * 0.3), best.from + Math.round(len * 0.7)] };
+    }
+  }
+  let flyover: Elevated | null = null;
+  {
+    const along: "x" | "z" = monoAlong === "x" ? "z" : "x";
+    let best: { at: number; from: number; to: number } | null = null;
+    for (const at of linesFor(along).filter((v) => Math.abs(v) >= 4 && Math.abs(v) <= 16)) {
+      const run = streetRun(plan, along, at, true);
+      if (run && run.to - run.from >= 10 && (!best || run.to - run.from > best.to - best.from)) best = { at, ...run };
+    }
+    if (best && hash(7, 11, plan.seed + 1501) < 0.85) {
+      // A flyover is a stretch, not the whole street: at most 26 long, as central as it gets.
+      const len = Math.min(26, best.to - best.from);
+      const mid = Math.max(best.from + len / 2, Math.min(best.to - len / 2, 0));
+      const from = Math.round(mid - len / 2);
+      flyover = { along, at: best.at, from, to: from + len, stations: [] };
+    }
+  }
+  const out = { mono, flyover };
+  elevatedCache.set(plan, out);
+  return out;
+}
+
+/** Is (x, z) on an elevated line (between its ends)? */
+export function onElevated(line: Elevated | null, x: number, z: number) {
+  if (!line) return false;
+  const a = line.along === "x" ? x : z;
+  const c = line.along === "x" ? z : x;
+  return c === line.at && a >= line.from && a <= line.to;
+}
+
+/** A footbridge over a straight stretch of busy road, and which style, or null. */
+export function footbridgeAt(plan: CityPlan, t: Tile): 0 | 1 | 2 | null {
+  if (t.kind !== "road" || t.works || t.incident || t.rail || (t.mask !== 5 && t.mask !== 10)) return null;
+  if (hash(t.x, t.z, plan.seed + 1510) > 0.045 || densityAt(plan, t.x, t.z) < 0.3) return null;
+  const { mono, flyover } = elevated(plan);
+  if (onElevated(mono, t.x, t.z) || onElevated(flyover, t.x, t.z)) return null;
+  // Not two in a row.
+  const along = t.mask === 10;
+  if (hash(t.x + (along ? 1 : 0), t.z + (along ? 0 : 1), plan.seed + 1510) <= 0.045) return null;
+  return Math.floor(hash(t.z, t.x, plan.seed + 1511) * 3) as 0 | 1 | 2;
 }
 
 /** Index of the last line at or before v. */
