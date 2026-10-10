@@ -17,7 +17,7 @@ export type Phase = "join" | "seek" | "done";
 
 export type GameEvent = {
   id: number;
-  kind: "moved" | "caught" | "searched" | "sweep" | "shielded" | "decoy" | "decoy_found" | "respawn" | "area_search" | "duel";
+  kind: "moved" | "caught" | "searched" | "sweep" | "shielded" | "decoy" | "decoy_found" | "respawn" | "area_search" | "duel" | "heist";
   /** Where it happened (-1 when it's secret, like a decoy going down or a respawn). */
   tile: number;
   at: string;
@@ -41,6 +41,11 @@ export type GameEvent = {
     winner?: "ghost" | "hunter";
     out?: boolean;
     golden?: boolean;
+    /** A bank robbery: did they get away, what they took, or what they lost when caught. */
+    success?: boolean;
+    loot?: number;
+    lost?: number;
+    plan?: "quiet" | "big";
   } | null;
 };
 

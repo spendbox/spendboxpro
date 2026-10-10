@@ -2802,8 +2802,10 @@ function bankHall(x: Ctx) {
     spot(x, tx, cz - 0.7, 0, "stand");
     spot(x, tx, cz + 1.0, Math.PI, "stand");
   }
-  // The vault door, shut, in the wall behind the tellers.
+  // The vault door, shut, in the wall behind the tellers (tap it to try robbing the bank).
   atWall(x, 0, W / 2 - 3.5, () => vaultDoor(x, false));
+  // (Things only light up within a few steps, so the button stands out on the hall floor.)
+  item(x, "vault", "Rob the vault", W / 2 - 7.5, 0, 0.8, 1.2);
   // The bank's name in gold over the counter.
   wallSign(x, 0, -2.5, 3.6, info.name.toUpperCase(), 0x1f3b2c, 0xf2c94c, 6.5, 0.7, true);
   // The queue, a desk with forms, cash machines on a side wall, chandeliers.
@@ -2835,8 +2837,9 @@ function vaultRoom(x: Ctx) {
   const { k, room } = x;
   const W = room.w;
   const D = room.d;
-  // The open vault door in the front wall.
+  // The open vault door in the front wall; the gold is there for the taking (at a price).
   atWall(x, 2, 0, () => vaultDoor(x, true));
+  item(x, "vault", "Rob the vault", 0, 0, 0, 1.4);
   // Walls of safe-deposit boxes.
   for (const side of [1, 3]) {
     atWall(x, side, 0, () => {

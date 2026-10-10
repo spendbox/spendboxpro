@@ -21,7 +21,8 @@ export type ActivityKind =
   | "piano"
   | "karaoke"
   | "slots-free"
-  | "photo";
+  | "photo"
+  | "vault";
 
 /** The thing tapped: { id, kind, label, place } (place = the room id). */
 export type ActivityItem = { id: string; kind: ActivityKind; label: string; place: string };
@@ -47,7 +48,8 @@ export type GameId =
   | "photo"
   | "piano"
   | "karaoke"
-  | "slots";
+  | "slots"
+  | "heist";
 
 /** The games on offer at each kind of thing (the first one opens). */
 export const GAMES_FOR: Record<ActivityKind, GameId[]> = {
@@ -68,6 +70,7 @@ export const GAMES_FOR: Record<ActivityKind, GameId[]> = {
   karaoke: ["karaoke"],
   "slots-free": ["slots", "reflex"],
   photo: ["photo"],
+  vault: ["heist"],
 };
 
 export const GAME_TITLE: Record<GameId, string> = {
@@ -91,6 +94,7 @@ export const GAME_TITLE: Record<GameId, string> = {
   piano: "Piano",
   karaoke: "Karaoke",
   slots: "Free slots",
+  heist: "Rob the bank",
 };
 
 /** A score worth coins: min earns coinsMin, top (or more) earns coinsMax. Mirrors the database. */

@@ -10,6 +10,7 @@ import { DanceFloor } from "./dance";
 import { Darts } from "./darts";
 import { DuelLobby } from "./duels";
 import { GAME_TITLE, GAMES_FOR, type ActivityItem, type GameId } from "./games";
+import { Heist } from "./heist";
 import type { ActivityPlayer } from "./hub";
 import { Jukebox } from "./jukebox";
 import { Karaoke } from "./karaoke";
@@ -116,5 +117,7 @@ function Game({ game, props, item, seating, onUseStairs }: { game: GameId; props
       return <Karaoke {...props} />;
     case "slots":
       return <Slots {...props} />;
+    case "heist":
+      return <Heist {...props} />;
   }
 }

@@ -155,7 +155,9 @@ export type TurnDir = "left" | "right" | "straight";
 export type InteractKind =
   | "seat" | "darts" | "archery" | "arcade" | "pool" | "cards" | "dance" | "dj" | "bar" | "jukebox" | "menu" | "stairs" | "window" | "piano" | "karaoke" | "slots-free" | "photo"
   /** At a sports venue: "Watch the match" / "Watch the fight" (by the big screen). */
-  | "match";
+  | "match"
+  /** In the bank: "Rob the vault". */
+  | "vault";
 /** The sport played at a venue. */
 export type CitySport = "football" | "basketball" | "boxing" | "wrestling";
 /**
