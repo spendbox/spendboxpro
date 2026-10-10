@@ -9,11 +9,12 @@ import { triangleCount } from "@/lib/avatar3d/parts";
 import { CATALOGS, DEFAULT_RECIPE, type Recipe, type RecipeKey, encodeRecipe, parseRecipe, randomRecipe } from "@/lib/avatar3d/recipe";
 import { type AvatarObject, type FaceState, mountModel, updateFace } from "@/lib/avatar3d/scene";
 
-// The parts the head-and-face step uses. Colour lists show as swatches.
+// The parts built so far (head, face, facial hair, headwear). Colour lists show as swatches.
 const SECTIONS: [RecipeKey, string][] = [
   ["face", "Face shape"], ["chin", "Chin"], ["fat", "Fullness"], ["skin", "Skin"], ["eye", "Eyes"], ["eyeC", "Eye colour"],
   ["brow", "Brows"], ["hairC", "Brow colour"], ["nose", "Nose"], ["lips", "Lips"], ["lipT", "Lip tint"], ["ear", "Earrings"],
-  ["pierce", "Piercings"], ["glasses", "Glasses"], ["frame", "Frame"], ["build", "Body type (neck)"],
+  ["pierce", "Piercings"], ["glasses", "Glasses"], ["facial", "Facial hair"], ["hw", "Headwear"], ["hwC", "Headwear colour"],
+  ["pattern", "Pattern (head tie, gele)"], ["hair", "Hairstyle (room left under caps)"], ["frame", "Frame"], ["build", "Body type (neck)"],
 ];
 
 const EXPRESSIONS: { n: string; v: Partial<FaceState>; talk?: boolean }[] = [

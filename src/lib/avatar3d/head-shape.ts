@@ -24,6 +24,8 @@ export type HeadCtx = {
   fem: boolean;
   /** Neck-base strength from the body type. */
   neck: number;
+  /** The head skin's grid as built (set by headSkin; see skinPoint). */
+  skinGrid?: { NA: number; NT: number; pos: Float32Array };
 };
 
 export function headCtx(recipe: Recipe, lod: number): HeadCtx {

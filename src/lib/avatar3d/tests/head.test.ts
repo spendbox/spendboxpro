@@ -98,3 +98,27 @@ test("a model survives the trip from the worker unchanged", () => {
     assert.equal(q.geo.morphAttributes.position?.length ?? 0, p.geo.morphAttributes.position?.length ?? 0);
   });
 });
+
+test("the face never folds over itself in any expression", () => {
+  const a = new Vector3(), b = new Vector3(), c = new Vector3();
+  const normal = (P: ReturnType<typeof morphed>, I: ArrayLike<number>, i: number) => {
+    a.fromBufferAttribute(P, I[i]);
+    b.fromBufferAttribute(P, I[i + 1]).sub(a);
+    c.fromBufferAttribute(P, I[i + 2]).sub(a);
+    return b.clone().cross(c);
+  };
+  for (const r of SAMPLES) {
+    const m = buildHead(r, 1);
+    for (const name of ["faceLower", "faceUpper"]) {
+      const g = part(m, name).geo, I = g.index!.array, rest = morphed(g);
+      for (const k of [0, 1, 2, 3]) {
+        const posed = morphed(g, k);
+        for (let i = 0; i < I.length; i += 3) {
+          const n0 = normal(rest, I, i);
+          if (n0.lengthSq() < 1e-14) continue;
+          assert.ok(n0.dot(normal(posed, I, i)) > 0, `${name} folds in mouth shape ${k} (face ${r.face}, lips ${r.lips})`);
+        }
+      }
+    }
+  }
+});

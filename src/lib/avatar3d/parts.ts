@@ -9,7 +9,8 @@ import {
 /** Names of the materials a part can ask for (made on the page by materials.ts). */
 export type MatKey =
   | "skin" | "skinVC" | "earVC" | "lidVC" | "sclera" | "iris" | "cornea" | "catchlight" | "caruncle" | "brow"
-  | "mouthCavity" | "teeth" | "tongue" | "gold" | "glassesFrame" | "lens";
+  | "mouthCavity" | "teeth" | "tongue" | "gold" | "glassesFrame" | "lens" | "beard" | "stubble" | "hw" | "hwDark" | "hwSheen"
+  | "kufi";
 
 /** A moving piece of the avatar. Parts hang from nodes; animation moves nodes. */
 export type Node = { id: string; parent: string | null; matrix: number[] };

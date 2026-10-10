@@ -74,7 +74,9 @@ export function signedVolume(g: BufferGeometry): number {
 
 /**
  * For sampled vertices of a layer, how far each sits outside the surfaces underneath, measured along
- * the ray from `from` through the vertex. Vertices with nothing underneath (over a hole) are skipped.
+ * the ray from `from` through the vertex (or, for points down on the neck, straight out from the
+ * neck's centre line, since a ray from the head's centre would only graze the neck). Vertices with
+ * nothing underneath (over a hole) are skipped.
  */
 export function layerGaps(layer: BufferAttribute, under: Part[], from: Vector3, samples = 300): number[] {
   const meshes = under.map((p) => new Mesh(p.geo, new MeshBasicMaterial({ side: DoubleSide })));
@@ -82,9 +84,10 @@ export function layerGaps(layer: BufferAttribute, under: Part[], from: Vector3, 
   const step = Math.max(1, Math.floor(layer.count / samples));
   for (let i = 0; i < layer.count; i += step) {
     p.fromBufferAttribute(layer, i);
-    dir.subVectors(p, from);
+    const o = p.y < NECK_Y ? new Vector3(0, p.y, NECK_Z) : from;
+    dir.subVectors(p, o);
     const dist = dir.length();
-    ray.set(from, dir.normalize());
+    ray.set(o, dir.normalize());
     ray.far = dist + 0.05;
     const hits = ray.intersectObjects(meshes, false);
     if (!hits.length) continue;
@@ -95,6 +98,9 @@ export function layerGaps(layer: BufferAttribute, under: Part[], from: Vector3, 
   }
   return gaps;
 }
+
+/** Below this height (head units) a point is on the neck, whose centre line runs down at z = NECK_Z. */
+const NECK_Y = -0.95, NECK_Z = -0.15;
 
 export const part = (m: Model, name: string) => {
   const p = m.parts.find((x) => x.name === name);

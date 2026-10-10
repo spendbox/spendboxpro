@@ -72,9 +72,13 @@ function mouthWarp(L: Lips, x: number, y: number, e: Expr, upper: boolean) {
   ox += e.smile * (0.03 * sx * wc + 0.018 * (x / ww) * inM);
   oy += e.smile * 0.045 * wc;
   dz += e.smile * (0.032 * g2((ax - 0.25) / 0.09, (y + 0.33) / 0.08) - 0.012 * wc);
+  // Opening: the lower lip drops, and the skin between it and the bottom of the patch stretches evenly
+  // (the drop shrinks steadily to nothing at the bottom edge, so no row can pass the one below it; the
+  // prototype's bell-shaped drop, cut short by the patch edge, bunched the chin skin into folds).
+  let drop = 0;
   if (upper) oy += e.open * 0.016 * f * Math.exp(-(((y - MY) / 0.07) ** 2));
   else {
-    oy -= e.open * 0.11 * f * Math.exp(-(((MY - y) / 0.22) ** 2));
+    drop = e.open * 0.11 * f * smooth((y - PATCH.yLo) / (MY - PATCH.yLo)) * smooth((PATCH.x - ax) / 0.08);
     // Only the lower lip itself rolls in a little as the mouth opens (the prototype's wider pull also sank
     // the chin below it into the skin underneath).
     dz -= e.open * 0.012 * f * Math.exp(-(((MY - y) / 0.07) ** 2));
@@ -83,7 +87,7 @@ function mouthWarp(L: Lips, x: number, y: number, e: Expr, upper: boolean) {
   ox -= e.pucker * 0.4 * x * g2(x / 0.26, (y - MY) / 0.12);
   dz += e.pucker * 0.05 * g2(x / 0.16, (y - MY) / 0.08);
   ox += e.wide * 0.18 * x * g2(x / 0.3, (y - MY) / 0.1);
-  return { ox: ox * E, oy: oy * E, dz: dz * E };
+  return { ox: ox * E, oy: oy * E - drop, dz: dz * E };
 }
 
 /**
@@ -172,6 +176,53 @@ const patchInterior = (u: Vector3) =>
 const MOUTH_HOLE = { x: 0.05 + MOUTH_W * 1.25, yLo: PATCH.yLo, yHi: -0.38 };
 const inMouthHole = (u: Vector3) => u.z > 0.5 && Math.abs(u.x) < MOUTH_HOLE.x && u.y < MOUTH_HOLE.yHi && u.y > MOUTH_HOLE.yLo;
 
+/** Grid row (fractional) of the head skin for an angle from the neck axis; inverse of headSkin's row layout. */
+const SKIN_A_CUT = 0.8, SKIN_V_CUT = 0.44;
+
+/**
+ * The head skin's surface in direction u, as actually built (read off its grid, so it includes the
+ * smoothing where the neck meets the jaw and the flat facets of the mesh). Layers over the skin
+ * (beards, caps) are built on it, so the gap between them is exact, wherever the skin curves. Falls
+ * back to the plain shape if headSkin hasn't run for this context.
+ */
+export function skinPoint(c: HeadCtx, u: Vector3): Vector3 {
+  const sd = c.skinGrid;
+  if (!sd) return headNeck(c, u);
+  const p = new Vector3();
+  const al = Math.acos(Math.max(-1, Math.min(1, u.dot(NP))));
+  const v = al < SKIN_A_CUT ? (al * SKIN_V_CUT) / SKIN_A_CUT : SKIN_V_CUT + ((al - SKIN_A_CUT) * (1 - SKIN_V_CUT)) / (PI - SKIN_A_CUT);
+  let ph = Math.atan2(u.dot(NE2), u.dot(NE1));
+  if (ph < 0) ph += PI * 2;
+  const fj = Math.min(sd.NT, v * sd.NT), fi = (ph / (PI * 2)) * sd.NA, j0 = Math.min(sd.NT - 1, Math.floor(fj)), i0 = Math.min(sd.NA - 1, Math.floor(fi));
+  const tj = fj - j0, ti = fi - i0, W = sd.NA + 1;
+  for (let k = 0; k < 3; k++) {
+    const at = (j: number, i: number) => sd.pos[3 * (j * W + i) + k];
+    p.setComponent(k, (at(j0, i0) * (1 - ti) + at(j0, i0 + 1) * ti) * (1 - tj) + (at(j0 + 1, i0) * (1 - ti) + at(j0 + 1, i0 + 1) * ti) * tj);
+  }
+  return p;
+}
+
+/**
+ * The outermost skin in direction u: the head skin, plus the face patch (its lift, the nose and the
+ * lips) where the patch covers it. Beards are built on this, so they sit over the nose and lips too.
+ */
+export function outerSkin(c: HeadCtx, u: Vector3, shape?: (typeof MOUTH_MORPHS)[number]): Vector3 {
+  if (!(u.z > 0 && Math.abs(u.x) < PATCH.x && u.y > PATCH.yLo && u.y < PATCH.yHi)) return skinPoint(c, u);
+  // Inside the patch's area the outer surface is the patch itself (the skin under it sits deeper), in
+  // the given mouth blend shape at full strength (or at rest).
+  const e: Expr = { smile: 0, open: 0, pucker: 0, wide: 0 };
+  if (shape) e[shape] = 1;
+  return patchPoint(c, u.x, u.y, e, u.y > MOUTH_Y);
+}
+
+/** A point of the face patch at front-view (x, y) in expression e (upper: on the upper half). */
+function patchPoint(c: HeadCtx, x: number, y: number, e: Expr, upper: boolean) {
+  const r = c.recipe, L: Lips = LIPS[r.lips], w = mouthWarp(L, x, y, e, upper), X = x + w.ox, Y = y + w.oy;
+  const d = headNeck(c, new Vector3(X, Y, Math.sqrt(Math.max(0, 1 - X * X - Y * Y)))).multiplyScalar(1.002);
+  d.z += noseShape(NOSES[r.nose], x, y).h + lipShape(L, x, y).h + w.dz;
+  return d;
+}
+
 /** The head and neck skin, with holes where the face patch's mouth and the eyes go. */
 export function headSkin(c: HeadCtx): Part {
   // Holes for the eyes, and behind the lips (so the lower lip never lies on hidden skin when the mouth
@@ -180,7 +231,8 @@ export function headSkin(c: HeadCtx): Part {
   // Laid out around the neck axis, so the neck gets an even, dense grid for sculpting.
   const NA = resEven(68, c.lod), NT = res(58, c.lod);
   const map = (u: Vector3) => headNeck(c, u);
-  const pos: number[] = [], nor: number[] = [], kp: boolean[] = [], mh: boolean[] = [], free: number[] = [], idx: number[] = [], aCut = 0.8, vCut = 0.44;
+  const pos: number[] = [], nor: number[] = [], kp: boolean[] = [], mh: boolean[] = [], free: number[] = [], idx: number[] = [];
+  const aCut = SKIN_A_CUT, vCut = SKIN_V_CUT;
   const rowAngle = (j: number) => {
     const v = j / NT;
     return v < vCut ? (aCut * v) / vCut : aCut + ((PI - aCut) * (v - vCut)) / (1 - vCut);
@@ -214,6 +266,7 @@ export function headSkin(c: HeadCtx): Part {
     }
   }
   relaxJunction(pos, NA, NT, free);
+  c.skinGrid = { NA, NT, pos: Float32Array.from(pos) };
   const geo = geoFrom(pos, idx, nor);
   creaseNormals(geo, NA, NT, free);
   return { name: "headSkin", mat: "skin", node: ROOT, geo, surface: "closed" };
@@ -225,12 +278,7 @@ export function facePatch(c: HeadCtx): Part[] {
   const skin = new Color(SKINS[r.skin].c), tint = LIP_TINTS[r.lipT], lipCol = skin.clone().lerp(new Color(tint.c), tint.k);
   const Z: Expr = { smile: 0, open: 0, pucker: 0, wide: 0 };
   const nx = Math.round(50 * c.lod), ny = Math.round(64 * c.lod), x0 = -PATCH.x, x1 = PATCH.x, y0 = PATCH.yLo, dy = (PATCH.yHi - PATCH.yLo) / ny;
-  const P = (x: number, y: number, e: Expr, up: boolean) => {
-    const w = mouthWarp(L, x, y, e, up), X = x + w.ox, Y = y + w.oy;
-    const d = headNeck(c, new Vector3(X, Y, Math.sqrt(Math.max(0, 1 - X * X - Y * Y)))).multiplyScalar(1.002);
-    d.z += noseShape(N, x, y).h + lipShape(L, x, y).h + w.dz;
-    return d;
-  };
+  const P = (x: number, y: number, e: Expr, up: boolean) => patchPoint(c, x, y, e, up);
   const Nrm = (x: number, y: number, e: Expr, up: boolean) => {
     const k = 0.004, a = P(x + k, y, e, up).sub(P(x - k, y, e, up)), b = P(x, y + k, e, up).sub(P(x, y - k, e, up));
     return a.cross(b).normalize();
