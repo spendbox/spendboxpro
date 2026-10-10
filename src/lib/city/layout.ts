@@ -75,7 +75,10 @@ export type StructureType =
   | "gym"
   | "spa"
   | "cathedral"
-  | "grandmosque";
+  | "grandmosque"
+  // An international airport (a runway, a terminal, a tower, jets, a helipad) and a spaceport.
+  | "intlairport"
+  | "spaceport";
 
 /** The sport played at a venue. */
 export type Sport = "football" | "basketball" | "boxing" | "wrestling";
@@ -203,6 +206,8 @@ export const STRUCTURE_LABEL: Record<StructureType, string> = {
   spa: "Spa",
   cathedral: "Cathedral",
   grandmosque: "Grand mosque",
+  intlairport: "International airport",
+  spaceport: "Spaceport",
 };
 
 /** Everything the city can be made of, for the help screen. */
@@ -213,6 +218,7 @@ export const CITY_ASSETS = {
     "University campuses", "Hotels with rooftop pools", "Solar farms", "Power stations with steaming cooling towers", "Dams with spillways", "Oil rigs with gas flares",
     "Water parks with twisting slides", "A grand bank in every city (with a vault)", "Big city parks with a lake and a bandstand", "Gyms with a rooftop running track",
     "Spas with pools and palms", "Cathedrals with twin spires", "Grand mosques with a great dome and four minarets",
+    "International airports with a runway, jets and a helipad", "Spaceports with a rocket that launches twice an hour",
   ],
   tiles: [
     "Skyscrapers (stepped, round glass, twisted, needle spire, helipad)",
@@ -622,6 +628,8 @@ const MEGAS: { type: StructureType; w: number; d: number; min: number; max: numb
   { type: "grandmosque", w: 4, d: 4, min: 9, max: 17 },
   { type: "spa", w: 3, d: 3, min: 10, max: 19 },
   { type: "bigpark", w: 5, d: 5, min: 24, max: 40 },
+  { type: "intlairport", w: 7, d: 5, min: 14, max: 26 },
+  { type: "spaceport", w: 5, d: 5, min: 18, max: 32 },
   { type: "arena", w: 4, d: 4, min: 30, max: 44 },
   { type: "megamall", w: 3, d: 3, min: 38, max: 54 },
   { type: "capitol", w: 3, d: 3, min: 50, max: 68 },
@@ -1134,6 +1142,10 @@ function structureName(plan: CityPlan, type: StructureType, ax: number, az: numb
       return pick([`${city} Cathedral`, `St. Peter's Cathedral`, `Holy Cross Cathedral`, `Cathedral of ${city}`, `Christ Church Cathedral`], 25);
     case "grandmosque":
       return pick([`${city} Central Mosque`, `${city} Grand Mosque`, `${street} Jumu'ah Mosque`, `National Mosque`], 26);
+    case "intlairport":
+      return pick([`${city} International Airport`, `${city} Gateway Airport`, `${street} International`], 27);
+    case "spaceport":
+      return pick([`${city} Spaceport`, `${city} Space Centre`, `${street} Launch Complex`, `Star Gate ${city}`], 28);
   }
 }
 
@@ -1294,7 +1306,7 @@ export function lotAt(plan: CityPlan, i: number): Tile {
     const heights: Record<StructureType, number> = {
       mall: 1.2, twin: 7, museum: 1.8, funfair: 2.8, market: 0.7, arena: 1.1, campus: 1.6, hotel: 4.4, solar: 0.5, airport: 1.6, port: 1.8, military: 1.2,
       power: 3.4, dam: 0.9, oilrig: 2.8, waterpark: 1.3, court: 0.9, boxing: 1.35, wrestling: 1.35, capitol: 2.3, megamall: 1.2,
-      bank: 1.6, bigpark: 0.6, gym: 1.3, spa: 0.8, cathedral: 3.4, grandmosque: 3.6,
+      bank: 1.6, bigpark: 0.6, gym: 1.3, spa: 0.8, cathedral: 3.4, grandmosque: 3.6, intlairport: 2.2, spaceport: 3.6,
     };
     const info = plan.structures.get(`${st.ax},${st.az}`);
     const structure: NonNullable<Tile["structure"]> = { type: st.type, name: st.name, ax: st.ax, az: st.az, anchor: st.anchor };
@@ -1383,7 +1395,7 @@ export function addressOf(plan: CityPlan, t: Tile): string {
 const mod = (a: number, n: number) => ((a % n) + n) % n;
 
 /** How tall each big landmark stands (for markers above it). */
-const MEGA_TOP: Partial<Record<StructureType, number>> = { arena: 1.1, capitol: 2.3, megamall: 1.2, bank: 1.6, bigpark: 0.6, gym: 1.3, spa: 0.8, cathedral: 3.4, grandmosque: 3.6 };
+const MEGA_TOP: Partial<Record<StructureType, number>> = { arena: 1.1, capitol: 2.3, megamall: 1.2, bank: 1.6, bigpark: 0.6, gym: 1.3, spa: 0.8, cathedral: 3.4, grandmosque: 3.6, intlairport: 2.2, spaceport: 3.6 };
 
 /** A road tile: its direction, bends and junctions, roundabouts, road works. */
 function roadTile(plan: CityPlan, x: number, z: number, r: Tile["r"]): Tile {

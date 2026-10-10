@@ -15,7 +15,7 @@ import { Sheet } from "./sheet";
 // Explore: everything to ride (balloons, trains, buses, cars, boats, the Ferris wheel, water
 // slides), and sport to watch (football, basketball, boxing, wrestling), in two tabs.
 
-const RIDE_ORDER: RideKindName[] = ["balloon", "train", "bus", "car", "boat", "ferris", "slide"];
+const RIDE_ORDER: RideKindName[] = ["balloon", "heli", "train", "bus", "car", "boat", "ferris", "slide"];
 
 export function ExploreSheet({
   tab,

@@ -9,7 +9,7 @@
 // (npc/grammar.ts + npc/lines.ts), so it almost never repeats.
 //
 // Room ids: "b:<tile>:g" ground floor, "b:<tile>:f<n>" floor n, "b:<tile>:r" roof, "b:<tile>:o"
-// open-air spot, "balloon:<k>", rides "v:<train|bus|car|boat|ferris|slide>:<n>". A building level
+// open-air spot, "balloon:<k>", rides "v:<train|bus|car|boat|ferris|slide|heli>:<n>". A building level
 // can't tell from its id whether it's a club, a restaurant, an office… so callers may pass a
 // `hint` (the level's theme, e.g. "lounge", "foodcourt", "office", or a PlaceKind itself).
 // Hints only change jobs: names, personalities and everything the server checks stay the same.
@@ -72,15 +72,15 @@ export type NpcMessage = {
 };
 
 /** "npc:<room>:<n>" for every kind of room the city has. */
-export const NPC_ID_RE = /^npc:(b:[0-9]{1,7}(?::(?:g|r|o|f[0-9]{1,3}))?|balloon:[0-9]{1,2}|v:(?:train|bus|car|boat|ferris|slide):[0-9]{1,7}):([0-7])$/;
+export const NPC_ID_RE = /^npc:(b:[0-9]{1,7}(?::(?:g|r|o|f[0-9]{1,3}))?|balloon:[0-9]{1,2}|v:(?:train|bus|car|boat|ferris|slide|heli):[0-9]{1,7}):([0-7])$/;
 
-const RIDE_RE = /^v:(train|bus|car|boat|ferris|slide):\d+$/;
+const RIDE_RE = /^v:(train|bus|car|boat|ferris|slide|heli):\d+$/;
 
 /** Level themes (and plain words) → the kind of people you meet there. */
 const HINTS: Record<string, PlaceKind> = {
   living: "home", upstairs: "home", house: "home", home: "home", flat: "home",
   lobby: "lobby", reception: "lobby", ground: "lobby",
-  office: "office", control: "office", tower: "office", bank: "office",
+  office: "office", control: "office", tower: "office", bank: "office", vault: "office",
   lounge: "club", club: "club", bar: "club", party: "club",
   foodcourt: "restaurant", restaurant: "restaurant", cafe: "restaurant", kitchen: "restaurant", buka: "restaurant",
   suite: "hotel", hotelLobby: "hotel", hotel: "hotel",
@@ -92,6 +92,7 @@ const HINTS: Record<string, PlaceKind> = {
   terminal: "terminal", concourse: "terminal", skybridge: "terminal", station: "terminal", airport: "terminal",
   roofGarden: "roof", roofTerrace: "roof", helipad: "roof", poolDeck: "roof", roof: "roof",
   platform: "works", damTop: "works", rigDeck: "works", solar: "works", power: "works", works: "works", factory: "works",
+  gym: "club", spa: "hotel", church: "museum", mosque: "museum",
   park: "outdoor", plaza: "outdoor", woods: "outdoor", pond: "outdoor", parade: "outdoor", outdoor: "outdoor", street: "outdoor",
   market: "market", funfair: "ferris", ferris: "ferris", quay: "boat", boat: "boat", port: "boat",
   floor: "floor", balloon: "balloon", train: "train", bus: "bus", car: "car", slide: "slide",
@@ -105,7 +106,8 @@ const HINTS: Record<string, PlaceKind> = {
 export function placeKind(roomId: string, hint?: string | null): PlaceKind {
   if (roomId.startsWith("balloon:")) return "balloon";
   const ride = RIDE_RE.exec(roomId);
-  if (ride) return ride[1] as PlaceKind;
+  // (Helicopter passengers are sightseers, like the balloon's.)
+  if (ride) return (ride[1] === "heli" ? "balloon" : ride[1]) as PlaceKind;
   const hinted = hint ? HINTS[hint] : undefined;
   if (hinted && hinted !== "balloon" && !["train", "bus", "car", "slide"].includes(hinted)) return hinted;
   if (roomId.endsWith(":r")) return "roof";

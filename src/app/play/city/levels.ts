@@ -511,6 +511,15 @@ function structureLevels(t: Tile, type: StructureType, plan: CityPlan): Draft[] 
       R("g", "Prayer hall", "interior", "mosque", X, 0.09, Z - 0.75, 0.95, 0.55, { weight: 1.4 });
       R("o", "Courtyard", "outdoor", "plaza", X, 0.09, Z + 0.55, 0.1, 0.1);
       break;
+    case "intlairport":
+      R("g", "Departures hall", "interior", "terminal", X - 0.5, 0.09, Z + 0.55, 1.4, 0.35, { weight: 1.6 });
+      R("f6", "Control tower", "interior", "tower", X + 2.55, 1.65, Z + 0.95, 0.05, 0.05, { weight: 0.6 });
+      R("r", "Helipad", "roof", "helipad", X - 2.4, 0.09, Z + 1.45, 0.25, 0.25, { weight: 0.8 });
+      break;
+    case "spaceport":
+      R("g", "Mission control", "interior", "control", X + 1.3, 0.09, Z + 1.35, 0.6, 0.3, { weight: 1.2 });
+      R("r", "Viewing deck", "roof", "roofTerrace", X - 1.4, 0.55, Z + 1.4, 0.4, 0.25, { weight: 1 });
+      break;
   }
   return out;
 }

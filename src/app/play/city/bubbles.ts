@@ -15,6 +15,7 @@
 import {
   Anchor,
   Bath,
+  Rocket,
   Dumbbell,
   MoonStar,
   Vault,
@@ -138,6 +139,8 @@ const STRUCTURE_LOOK: Record<StructureType, Look> = {
   spa: { icon: Bath, color: C.stay, outdoor: false },
   cathedral: { icon: Church, color: C.law, outdoor: false },
   grandmosque: { icon: MoonStar, color: C.green, outdoor: false },
+  intlairport: { icon: Plane, color: C.stay, outdoor: false },
+  spaceport: { icon: Rocket, color: C.night, outdoor: false },
 };
 const KIND_LOOK: Partial<Record<Tile["kind"], Look>> = {
   club: { icon: Music, color: C.night, outdoor: false },

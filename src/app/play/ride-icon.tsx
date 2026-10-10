@@ -1,8 +1,8 @@
-import { Bus, CarTaxiFront, FerrisWheel, Sailboat, TrainFront, WavesLadder } from "lucide-react";
+import { Bus, CarTaxiFront, FerrisWheel, Helicopter, Sailboat, TrainFront, WavesLadder } from "lucide-react";
 import { HotAirBalloon } from "@/components/icons";
 
 /** Everything you can ride in the city. */
-export type RideKindName = "balloon" | "train" | "bus" | "car" | "boat" | "ferris" | "slide";
+export type RideKindName = "balloon" | "train" | "bus" | "car" | "boat" | "ferris" | "slide" | "heli";
 
 /** How each ride looks in menus, and how long a trip lasts (null: until you get off). */
 export const RIDE_INFO: Record<RideKindName, { label: string; plural: string; colour: string; minutes: number | null; blurb: string }> = {
@@ -13,6 +13,7 @@ export const RIDE_INFO: Record<RideKindName, { label: string; plural: string; co
   boat: { label: "Boat", plural: "Boats", colour: "#1c7ed6", minutes: 6, blurb: "A gentle cruise on the water." },
   ferris: { label: "Ferris wheel", plural: "Ferris wheels", colour: "#7048e8", minutes: 3, blurb: "A cabin for eight, slowly up over the rooftops." },
   slide: { label: "Water slide", plural: "Water slides", colour: "#15aabf", minutes: null, blurb: "Whoosh down, twist, splash. Over in seconds." },
+  heli: { label: "Helicopter", plural: "Helicopters", colour: "#e8590c", minutes: 6, blurb: "A sightseeing flight over the town's landmarks, high above the towers." },
 };
 
 type IconLike = React.ComponentType<{ className?: string; style?: React.CSSProperties; "aria-hidden"?: boolean }>;
@@ -25,6 +26,7 @@ export const RIDE_ICONS: Record<RideKindName, IconLike> = {
   boat: Sailboat,
   ferris: FerrisWheel,
   slide: WavesLadder,
+  heli: Helicopter,
 };
 
 /** The icon for a ride (a hot-air balloon if we don't know which). */

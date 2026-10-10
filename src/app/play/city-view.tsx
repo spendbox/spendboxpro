@@ -43,6 +43,7 @@ import { createBasket, createDeck, createOpenAir, type Deck } from "./city/rooft
 import { billboardTexture, botTexture, disposePills, pillTexture } from "./city/textures";
 import { createTrains, railParts } from "./city/trains";
 import { createElevatedLife, elevatedParts } from "./city/elevated";
+import { createAircraft } from "./city/aircraft";
 import { createTraffic, type VehiclePose } from "./city/traffic";
 import { clubParts, eggParts, fireStationParts, restaurantParts } from "./city/street-bits";
 import { createCabin, type Cabin } from "./city/rides";
@@ -142,7 +143,7 @@ export type CityDance = { id: string; move: DanceMove; with: string | null };
 export type CityPlace = { building: string; level: string };
 
 /** Something you can ride. (For the `ride` prop a plain number still means hot-air balloon k.) */
-export type RideKind = "balloon" | "train" | "bus" | "car" | "boat" | "ferris" | "slide";
+export type RideKind = "balloon" | "train" | "bus" | "car" | "boat" | "ferris" | "slide" | "heli";
 export type RideTarget = { kind: RideKind; index: number };
 /**
  * A ride that exists this round (see onRides). Its chat room id is `v:<kind>:<index>`, except
@@ -2310,6 +2311,7 @@ export function CityView({
     const people = createPeople(world, life);
     const trains = createTrains(world, life);
     const elevatedLife = createElevatedLife(world, life);
+    const aircraft = createAircraft(world, life);
     const traffic = createTraffic(world, life);
     const boats = createBoats(world, life);
     const plumes = createPlumes(world, life);
@@ -2469,6 +2471,7 @@ export function CityView({
       // The railway runs on out into the farmland (not in a huge town drawn only round the camera).
       trains.build(win ? 0 : Math.max(0, Math.min(26, Math.floor(land.flat - 3))));
       elevatedLife.build();
+      aircraft.build();
       traffic.build(plan);
       boats.build();
       buildLandmarks();
@@ -4805,7 +4808,7 @@ export function CityView({
     }
 
     // ---- rides other than balloons: trains, buses, cars, boats, Ferris wheels, water slides
-    const RIDE_CAP: Record<RideKind, number> = { balloon: 1000, train: 300, bus: 40, car: 4, boat: 30, ferris: 8, slide: 1 };
+    const RIDE_CAP: Record<RideKind, number> = { balloon: 1000, train: 300, bus: 40, car: 4, boat: 30, ferris: 8, slide: 1, heli: 5 };
     let rideIdx: { buses: number[]; cars: number[] } = { buses: [], cars: [] };
     let slidesFlat: Slide[] = [];
     let ridesKey = "";
@@ -4823,6 +4826,8 @@ export function CityView({
           return !!wheels[r.index];
         case "slide":
           return !!slidesFlat[r.index];
+        case "heli":
+          return r.index >= 0 && r.index < aircraft.count;
         default:
           return !!balloons[r.index];
       }
@@ -4848,6 +4853,7 @@ export function CityView({
         out.push({ kind: "ferris", index: i, name, capacity: RIDE_CAP.ferris });
       });
       slidesFlat.forEach((sl, i) => out.push({ kind: "slide", index: i, name: sl.name, capacity: RIDE_CAP.slide }));
+      for (let i = 0; i < aircraft.count; i++) out.push({ kind: "heli", index: i, name: `${city} Sky Tours · helicopter ${i + 1}`, capacity: RIDE_CAP.heli });
       const key = out.map((r) => `${r.kind}${r.index}:${r.name}`).join("|");
       if (key !== ridesKey) {
         ridesKey = key;
@@ -4898,7 +4904,11 @@ export function CityView({
         color = (lmMat.cabins[best % lmMat.cabins.length].color as THREE.Color).getHex();
       }
       if (r.kind === "bus") traffic.setRide(rideIdx.buses[r.index], null);
-      const cabin = createCabin(r.kind === "train" ? "train" : r.kind === "bus" ? "bus" : r.kind === "car" ? "car" : r.kind === "boat" ? "boat" : "ferris", key, color);
+      if (r.kind === "heli") {
+        color = [0xe03131, 0x1c7ed6, 0xf59f00, 0x2f9e44][(r.index + plan.seed) % 4];
+        aircraft.setRide(r.index);
+      }
+      const cabin = createCabin(r.kind === "train" ? "train" : r.kind === "bus" ? "bus" : r.kind === "car" ? "car" : r.kind === "boat" ? "boat" : r.kind === "heli" ? "heli" : "ferris", key, color);
       scene.add(cabin.group);
       vv.cabin = cabin;
       // Fellow passengers (never in your own seat).
@@ -4917,6 +4927,7 @@ export function CityView({
     function endVehicle(vv: VehicleView) {
       if (vv.ride.kind === "car" || vv.ride.kind === "bus") traffic.setRide(-1, null);
       if (vv.ride.kind === "boat") boats.setRide(-1);
+      if (vv.ride.kind === "heli") aircraft.setRide(-1);
     }
     function disposeVehicle(vv: VehicleView) {
       vv.cabin?.dispose();
@@ -4936,6 +4947,8 @@ export function CityView({
           return traffic.pose(rideIdx.cars[r.index] ?? -1, out);
         case "boat":
           return boats.pose(r.index, time, out);
+        case "heli":
+          return aircraft.pose(r.index, time, out);
         case "ferris": {
           const w = wheels[r.index];
           if (!w) return false;
@@ -5721,6 +5734,7 @@ export function CityView({
         people.update(dt, now);
         trains.update(dt, now);
         elevatedLife.update(dt, now);
+        aircraft.update(time, Date.now() + cb.current.clockOffsetMs);
         plumes.update(time, now);
         sites.update(now);
       }
@@ -5839,6 +5853,7 @@ export function CityView({
       people.dispose();
       trains.dispose();
       elevatedLife.dispose();
+      aircraft.dispose();
       traffic.dispose();
       boats.dispose();
       plumes.dispose();

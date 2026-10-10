@@ -131,6 +131,7 @@ const RIDE_HELLO: Record<RideKindName, string> = {
   boat: "Cast off! Enjoy the cruise; drag to look around and tap Chat to talk to the deck.",
   ferris: "Your cabin is climbing. Drag to look around; tap Chat to talk to your cabin.",
   slide: "Hold on tight…",
+  heli: "Lift-off! You're in the co-pilot's seat: drag to look around (and look down through the floor); tap Chat to talk to the cabin.",
 };
 type Ad = { id: string; image: string; headline: string; brand: string; link: string | null };
 type Notice = { id: number; text: string; tone: "alarm" | "move" | "info" | "mine"; avatar?: ReturnType<typeof cleanAvatar> | null; icon?: FeedIcon };
