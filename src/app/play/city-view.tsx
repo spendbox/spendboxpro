@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { Minus, Plus } from "lucide-react";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar, defaultAvatar, type Avatar } from "@/lib/avatar";
@@ -42,6 +43,7 @@ import { createPeople } from "./city/people";
 import { createBasket, createDeck, createOpenAir, type Deck } from "./city/rooftops";
 import { billboardTexture, botTexture, disposePills, pillTexture } from "./city/textures";
 import { createTrains, railParts } from "./city/trains";
+import { MONORAIL_FARE, TRAIN_FARE } from "@/lib/fees";
 import { createElevatedLife, elevatedParts } from "./city/elevated";
 import { createAircraft } from "./city/aircraft";
 import { setSceneSnapshot } from "./city/snapshot";
@@ -54,7 +56,7 @@ import { createAirliner, LIVERIES } from "./city/airliner";
 import { createSlideRide, createWaterpark, waterparkParts, type Slide, type SlideRide, type Waterpark } from "./city/waterpark";
 import { createVenueGame, venueParts, type VenueGame } from "./city/venues";
 import { BRIDGE_TOP, makeWorld, signalJunction } from "./city/world";
-import { playSfx } from "./sound";
+import { playSfx, soundscape } from "./sound";
 import type { WorldEvent } from "@/lib/world-events";
 import { createWorldEvents } from "./city/world-events";
 import { placeHouses } from "@/lib/city/houses";
@@ -129,7 +131,8 @@ export type CityLevel = {
  * hot-air balloon (id "balloon:<k>"). Buildings list the levels you can go to (capacity is
  * their total); balloons have none.
  */
-export type CityRoom = { id: string; name: string; capacity: number; kind: "building" | "balloon"; levels?: CityLevel[] };
+/** A place you can go into. `type`: what it is (a tile kind like "office", a big building's type like "bank", or "home" / "station"). */
+export type CityRoom = { id: string; name: string; capacity: number; kind: "building" | "balloon"; type?: string; levels?: CityLevel[] };
 
 /** Someone dancing on the dance floor of the club you're in: their move, and who they dance with (a player's or an NPC's id). */
 export type CityDancer = { id: string; name: string; avatar: Avatar; move: DanceMove; with: string | null };
@@ -150,7 +153,7 @@ export type RideTarget = { kind: RideKind; index: number };
  * A ride that exists this round (see onRides). Its chat room id is `v:<kind>:<index>`, except
  * balloons, which keep `balloon:<k>`.
  */
-export type CityRide = { kind: RideKind; index: number; name: string; capacity: number };
+export type CityRide = { kind: RideKind; index: number; name: string; capacity: number; /** Mint to board (trains), each time. */ fare?: number };
 /** Which way to go at a junction when you're driving a car. */
 export type TurnDir = "left" | "right" | "straight";
 
@@ -1273,6 +1276,8 @@ export function CityView({
     focusEvent: (id: number) => void;
     setGhosts: (list: CityGhost[]) => void;
     flyToTile: (tile: number) => void;
+    /** Zoom in (dir 1) or out (dir -1) a step: the + and − buttons on a computer. */
+    zoom: (dir: number) => void;
   } | null>(null);
   const cb = useRef({ onHover, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused });
   const atmos = useRef({ progress, nightFirst, meAvatar });
@@ -3685,7 +3690,8 @@ export function CityView({
             ? anchor.name
             : `${shortAddress(addressOf(currentPlan, anchor))} · ${ROOM_LABEL[anchor.kind]}`;
       const capacity = levels.reduce((n, l) => n + l.capacity, 0);
-      const room: CityRoom = { id: `b:${anchor.i}`, name, capacity, kind: "building", levels: levels.map((l) => ({ id: l.id, label: l.label, capacity: l.capacity, kind: levelUse(l) })) };
+      const type = anchor.home ? "home" : anchor.station ? "station" : anchor.kind === "structure" && anchor.structure ? anchor.structure.type : anchor.kind;
+      const room: CityRoom = { id: `b:${anchor.i}`, name, capacity, kind: "building", type, levels: levels.map((l) => ({ id: l.id, label: l.label, capacity: l.capacity, kind: levelUse(l) })) };
       return { room, anchor, big, levels };
     }
     /** A name for signs inside a building (company, hotel, hospital...). */
@@ -4829,7 +4835,8 @@ export function CityView({
     function rideExists(r: RideTarget) {
       switch (r.kind) {
         case "train":
-          return r.index >= 0 && r.index < trains.count;
+          // (One past the railway's trains: the monorail.)
+          return r.index >= 0 && (r.index < trains.count || (r.index === trains.count && elevatedLife.hasTrain));
         case "bus":
           return rideIdx.buses[r.index] !== undefined;
         case "car":
@@ -4854,7 +4861,8 @@ export function CityView({
       if (!plan) return;
       const out: CityRide[] = balloons.map((_, k) => ({ kind: "balloon" as const, index: k, name: `${BALLOON_NAMES[k] ?? `Balloon ${k + 1}`} hot-air balloon`, capacity: RIDE_CAP.balloon }));
       const city = plan.city.name;
-      for (let i = 0; i < trains.count; i++) out.push({ kind: "train", index: i, name: `${city} train ${i + 1}`, capacity: RIDE_CAP.train });
+      for (let i = 0; i < trains.count; i++) out.push({ kind: "train", index: i, name: `${city} bullet train ${i + 1}`, capacity: RIDE_CAP.train, fare: TRAIN_FARE });
+      if (elevatedLife.hasTrain) out.push({ kind: "train", index: trains.count, name: `${city} Skyline monorail`, capacity: RIDE_CAP.train, fare: MONORAIL_FARE });
       const busLabel = ({ ng: "BRT bus", uk: "Double-decker bus", us: "City bus", gh: "Metro bus", ke: "City Hoppa bus", za: "Rea Vaya bus" } as Record<string, string>)[plan.city.flavor.id] ?? "City bus";
       rideIdx.buses.forEach((_, j) => out.push({ kind: "bus", index: j, name: `${busLabel} · route ${[12, 7, 25][j] ?? j + 1}`, capacity: RIDE_CAP.bus }));
       let cars = 0;
@@ -4890,7 +4898,7 @@ export function CityView({
       }
       const plan = currentPlan!;
       let color = 0xe03131;
-      if (r.kind === "train") color = [0xe03131, 0x1971c2, 0x2f9e44, 0xf08c00][Math.abs(currentSeed) % 4];
+      if (r.kind === "train") color = r.index === trains.count ? 0x1c7ed6 : [0xe03131, 0x1971c2, 0x2f9e44, 0xf08c00][Math.abs(currentSeed) % 4];
       else if (r.kind === "bus") color = [0xe03131, 0x1971c2, 0x2f9e44][Math.abs(plan.seed) % 3];
       else if (r.kind === "car") {
         const k = rideIdx.cars[r.index];
@@ -4954,7 +4962,7 @@ export function CityView({
       const out = vv.pose;
       switch (r.kind) {
         case "train":
-          return trains.pose(r.index, out);
+          return r.index === trains.count ? elevatedLife.pose(out) : trains.pose(r.index, out);
         case "bus":
           return traffic.pose(rideIdx.buses[r.index] ?? -1, out);
         case "car":
@@ -5679,6 +5687,82 @@ export function CityView({
 
     const clock = new THREE.Clock();
     let frame = 0;
+    // ---- what's close by, for the sounds (see soundscape in ./sound)
+    let listenT = 0;
+    const heard: VehiclePose = { x: 0, y: 0, z: 0, yaw: 0, speed: 0 };
+    const earRight = new THREE.Vector3();
+    const FOREIGN = new Set(["airport", "intlairport", "spaceport", "hotel", "port", "market", "megamall", "museum", "waterpark"]);
+    const CROWD = new Set(["tower", "office", "plaza", "club", "restaurant", "stadium", "hospital", "fuel", "school", "worship", "pitch", "playground", "monument", "ferris"]);
+    function listen(time: number) {
+      const sc = soundscape;
+      const inPlace = view?.kind === "place";
+      const onBoard = view?.kind === "vehicle" || view?.kind === "ride";
+      sc.inside = inPlace;
+      // Where you're listening from: where you are inside or on a ride, otherwise the spot
+      // you're looking at (quieter the higher up the camera is).
+      const at = inPlace || onBoard ? camera.position : controls.target;
+      const near = inPlace ? 1 : Math.max(0, Math.min(1, 1 - (camera.position.y - 1.5) / 16));
+      let street = 0;
+      let people = 0;
+      let homes = 0;
+      let foreign = 0;
+      let nature = 0;
+      let total = 0;
+      let found = 0;
+      const cx = Math.round(at.x);
+      const cz = Math.round(at.z);
+      for (let dx = -3; dx <= 3; dx++) {
+        for (let dz = -3; dz <= 3; dz++) {
+          const w = 1 / (1 + Math.hypot(dx, dz));
+          total += w;
+          const id = tileIndex.get(`${cx + dx},${cz + dz}`);
+          const t = id === undefined ? undefined : tileById.get(id);
+          if (!t) continue;
+          found++;
+          const k = t.kind === "structure" && t.structure ? t.structure.type : t.kind;
+          if (t.kind === "road" || t.kind === "bridge") street += w;
+          else if (t.kind === "house" || t.home) homes += w;
+          else if (t.kind === "park" || t.kind === "trees" || t.kind === "pond") nature += w;
+          if (FOREIGN.has(k) || t.station) foreign += w;
+          else if (CROWD.has(k) || t.kind === "structure") people += w;
+        }
+      }
+      const ease = (v: number) => Math.max(0, Math.min(1, v));
+      sc.street = ease((street / total) * 2.2) * near;
+      sc.people = ease((people / total) * 1.8) * near;
+      sc.homes = ease((homes / total) * 2) * near;
+      sc.foreign = ease((foreign / total) * 2.5) * near;
+      // Out of town (past the last tiles) is farmland; parks and woods have a touch of it too.
+      const outOfTown = Math.hypot(at.x, at.z) > radius + 2 || found < 8;
+      sc.farm = ease(outOfTown ? 1 : (nature / total) * 0.6) * (inPlace ? 0.4 : near || (onBoard ? 1 : 0));
+      // Inside a place, its own kind of crowd.
+      if (inPlace) {
+        sc.street *= 0.6;
+        sc.people = Math.max(sc.people, 0.5);
+      }
+      // The nearest helicopter (you're in one: loud and all round you).
+      let best = 0;
+      let pan = 0;
+      if (view?.kind === "vehicle" && view.ride.kind === "heli") best = 0.8;
+      else {
+        earRight.setFromMatrixColumn(camera.matrixWorld, 0);
+        for (let i = 0; i < aircraft.count; i++) {
+          if (!aircraft.pose(i, time, heard)) continue;
+          const dx = heard.x - camera.position.x;
+          const dy = heard.y - camera.position.y;
+          const dz = heard.z - camera.position.z;
+          const d = Math.hypot(dx, dy, dz);
+          const c = Math.max(0, 1 - d / 26);
+          if (c > best) {
+            best = c;
+            pan = (dx * earRight.x + dz * earRight.z) / Math.max(0.001, Math.hypot(dx, dz));
+          }
+        }
+      }
+      sc.heli = best;
+      sc.heliPan = pan;
+    }
+
     const loop = () => {
       frame = requestAnimationFrame(loop);
       // Frozen (behind the sign-in pop-up): the last picture stays, nothing moves. (Not in the
@@ -5771,6 +5855,11 @@ export function CityView({
       updateStages(time);
       const riding = updateView(dt);
       countryside.update(camera.position, view?.kind === "ride" || view?.kind === "vehicle", currentSeed);
+      listenT -= dt;
+      if (listenT <= 0) {
+        listenT = 0.3;
+        listen(time);
+      }
       if (!riding) {
         if (focus) {
           controls.target.lerp(focus, 0.06);
@@ -5855,7 +5944,29 @@ export function CityView({
       if (currentSeed >= 0 && builtCount > 0) build(currentSeed, builtCount);
     }
 
-    api.current = { build, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile };
+    // The zoom buttons (for computers, where scrolling may not reach the town): inside a place
+    // or on a ride they narrow the view like pinching; over the town they glide the camera in
+    // or out, as far as scrolling could.
+    let zoomAnim = 0;
+    function zoom(dir: number) {
+      if (look.enabled) return look.zoomBy(dir > 0 ? 0.8 : 1.25);
+      if (!controls.enabled) return;
+      const offset = camera.position.clone().sub(controls.target);
+      const from = offset.length();
+      const to = Math.min(controls.maxDistance, Math.max(controls.minDistance, from * (dir > 0 ? 0.75 : 1.33)));
+      const start = performance.now();
+      cancelAnimationFrame(zoomAnim);
+      const step = () => {
+        const t = Math.min(1, (performance.now() - start) / 260);
+        const e = 1 - (1 - t) ** 3;
+        const d = from + (to - from) * e;
+        camera.position.copy(controls.target).add(offset.clone().setLength(d));
+        if (t < 1) zoomAnim = requestAnimationFrame(step);
+      };
+      zoomAnim = requestAnimationFrame(step);
+    }
+
+    api.current = { build, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, zoom };
 
     return () => {
       alive = false;
@@ -6036,5 +6147,18 @@ export function CityView({
     api.current?.setDance(danceRef.current.dance ?? null, danceRef.current.dancers ?? []);
   }, [danceKey, dancersKey]);
 
-  return <div ref={host} className="absolute inset-0" />;
+  return (
+    <>
+      <div ref={host} className="absolute inset-0" />
+      {/* Zoom buttons on a computer (in case scrolling doesn't zoom). */}
+      <div className="pointer-events-auto absolute left-3 top-1/2 z-10 hidden -translate-y-1/2 flex-col overflow-hidden rounded-xl md:flex">
+        <button onClick={() => api.current?.zoom(1)} className="glass grid size-9 place-items-center text-lg font-bold leading-none" aria-label="Zoom in" title="Zoom in">
+          <Plus className="size-4" />
+        </button>
+        <button onClick={() => api.current?.zoom(-1)} className="glass grid size-9 place-items-center border-t border-black/10 text-lg font-bold leading-none" aria-label="Zoom out" title="Zoom out">
+          <Minus className="size-4" />
+        </button>
+      </div>
+    </>
+  );
 }

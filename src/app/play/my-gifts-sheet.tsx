@@ -27,9 +27,9 @@ function what(g: GiftItem) {
     case "handshake":
       return "shook your hand";
     case "spray":
-      return `sprayed you ${short(g.amount ?? 0)} mint`;
+      return `sprayed you ₥${short(g.amount ?? 0)}`;
     default:
-      return `gave you ${short(g.amount ?? 0)} mint`;
+      return `gave you ₥${short(g.amount ?? 0)}`;
   }
 }
 

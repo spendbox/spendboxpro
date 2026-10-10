@@ -1,11 +1,20 @@
 # To do
 
 ## Now (owner)
+- [ ] In the Supabase SQL Editor run `game-db/035_fees_and_jobs.sql` (first-visit fees, train fares, jobs). Until it's run, places and trains stay free and Jobs won't load.
+- [ ] Pick the next minigames to build from `docs/MINIGAMES.md`.
 - [ ] In the Supabase SQL Editor run, in order: `game-db/021_hourly_rounds.sql` (again), `022_pool_and_ads.sql`, `023_houses.sql`, `024_play_style.sql`, `025_big_towns.sql`, `026_friends.sql`, `027_streaks_levels.sql`, `028_hugs_gifts.sql`, `029_ghost_duels.sql`, `030_no_bot_ghost.sql`. (If 017–020 were never run, run them first.) Then merge the open pull request.
 - [ ] In Vercel, set `SPORTS_SECRET` to a long random string (once; don't change it later).
 - [ ] Test on a real phone: sounds, touch gestures, the water slide, club lights.
 
 ## Done lately
+- [x] Sounds of what's close by (all subtle): a helicopter's rotor as one flies near, busier street sounds near roads (cars, motorbikes, horns), whispered nonsense near crowds, chatter in foreign-sounding tongues near airports, hotels and markets, dogs among the houses, cockerels on the farms.
+- [x] Going places costs a little mint (run `game-db/035_fees_and_jobs.sql`): ₥0.10–₥5 for the first visit to a place in each town, a fare for every train ride; half into the prize pool. Zoom buttons (+ and −) on computers.
+- [x] Jobs: any business hires after a 5-question interview about the town; fail and that place is closed to you for the town. Hourly pay (taxed 10% into the pool, 8 paid hours a day), skills that skip the interview next time and add pay.
+- [x] Selfies: add up to 5 people (people here and friends), Portrait / Clear / B&W backgrounds, Auto / Tall / Square / Wide shapes.
+- [x] The mint sign ₥ instead of writing "mint" after amounts.
+- [x] Trains: every town has a curving railway for its bullet trains; the monorail sweeps round corners and can be ridden from Explore (₥1.50).
+- [x] A list of 100 minigame ideas (`docs/MINIGAMES.md`).
 - [x] The bot no longer plays as a ghost (run `game-db/030_no_bot_ghost.sql`), so "ghosts left" only counts real people. Ghosts join in the first 2 minutes (was 3), with beeps in the last 30 seconds. Explore is locked while the town is being built. Signing in and signing up happen in a pop-up over the frozen, blurred town. A house button flies you to your house. From a hot-air balloon you can see and tap the building bubbles. Logged-out visitors get Leave inside places and Advertise next to "Watching live".
 - [x] New core game: ghost duels (run `game-db/029_ghost_duels.sql`). Ghosts join in the first 3 minutes (now 2, part 30) and light up on the map (no hiding, no moving). Hunters (everyone else) tap a light to see the ghost's stats, chat, or challenge them (10 mint) to Rock-Paper-Scissors, first to 2, a minute at most. Ghosts get a 30-second pop-up anywhere. 3 wins: golden (safe, in the pool). 3 losses: out. Each loss: 80% of a third of the stake to the hunter, 20% to the pool. Hunters with 20 wins enter the pool. No more searching, sweeping or drones. Explore holds rides and sports. "Spray mint", not money.
 - [x] Daily streaks (run `game-db/027_streaks_levels.sql`): a flame next to your mint, one thing a day keeps it going (a game, a side quest, a gift or spray, a hug or handshake, a ride), a free freeze each week, mint and badges at 3, 7, 14, 30, 60 and 100 days.

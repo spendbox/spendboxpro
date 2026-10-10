@@ -175,7 +175,7 @@ export function DuelScreen({ initial, me, onClose }: { initial: DuelView; me: { 
               </p>
               <p className="mt-1 text-xs text-muted">If they don&apos;t answer in {left} seconds, you win.</p>
               <button onClick={() => void act("quit")} disabled={sending !== null} className="mt-3 rounded-xl bg-panel-2 px-4 py-2 text-sm font-semibold">
-                Call it off (get your {duel.fee} mint back)
+                Call it off (get your ₥{duel.fee} back)
               </button>
             </div>
           ) : (
@@ -240,16 +240,16 @@ export function DuelScreen({ initial, me, onClose }: { initial: DuelView; me: { 
               {duel.status === "void"
                 ? duel.reason === "game_over"
                   ? "The game ended first. Your mint came back."
-                  : `Called off. ${duel.role === "hunter" ? `Your ${duel.fee} mint came back.` : ""}`
+                  : `Called off. ${duel.role === "hunter" ? `Your ₥${duel.fee} came back.` : ""}`
                 : (REASON[duel.reason ?? "score"]?.[result === "won" ? "me" : "them"] ?? "").replace(/.$/, "$& ")}
               {duel.status === "done" &&
                 (duel.role === "hunter"
                   ? result === "won"
-                    ? `+${short(duel.reward)} mint, and your ${duel.fee} back.`
-                    : `You lost ${duel.fee} mint.`
+                    ? `+₥${short(duel.reward)}, and your ${duel.fee} back.`
+                    : `You lost ₥${duel.fee}.`
                   : result === "won"
                     ? "One step closer to golden."
-                    : `You lost ${short(duel.portion)} mint of your stake.`)}
+                    : `You lost ₥${short(duel.portion)} of your stake.`)}
             </p>
             {result === "won" && duel.role === "ghost" && (
               <p className="mt-2 flex items-center justify-center gap-1 text-xs font-semibold text-[#a37500]">

@@ -8,14 +8,50 @@ import { captureScene } from "../city/snapshot";
 // The phone camera's "lens": copies what the 3D view shows (no buttons or labels, just the
 // world), crops it like a phone photo (3:4 standing up, 4:3 on its side) and gives it the look
 // of a real phone picture: a touch warmer and punchier, soft corners, fine grain. Selfies put
-// your avatar up front with the town softly blurred behind, like portrait mode.
+// your avatar up front (and the friends you add next to you), with the town behind softly
+// blurred (portrait mode), sharp, or in black and white. Pictures can be tall, square or wide.
 
 export type ShotKind = "photo" | "selfie";
 export type Shot = { blob: Blob; url: string; width: number; height: number; kind: ShotKind };
+/** The picture's shape: "auto" follows the screen (3:4 standing up, 4:3 on its side). */
+export type ShotFrame = "auto" | "tall" | "square" | "wide";
+/** Behind you in a selfie: the town softly blurred, sharp, or in black and white. */
+export type ShotBackground = "blur" | "clear" | "mono";
+export type ShotStyle = { frame: ShotFrame; background: ShotBackground };
+export const DEFAULT_STYLE: ShotStyle = { frame: "auto", background: "blur" };
 
-/** The shape of the picture for this screen: standing up (3:4) or on its side (4:3). */
-export function shotAspect(viewW: number, viewH: number) {
+/** The shape of the picture (width ÷ height) for this screen and frame. */
+export function shotAspect(viewW: number, viewH: number, frame: ShotFrame = "auto") {
+  if (frame === "tall") return 3 / 4;
+  if (frame === "square") return 1;
+  if (frame === "wide") return 16 / 9;
   return viewH >= viewW ? 3 / 4 : 4 / 3;
+}
+
+/**
+ * Where everyone stands in a selfie (in a w × h picture): you first, up front in the middle,
+ * then the others either side of you, a step back (a little smaller) each. Draw back to front
+ * (the list comes back in drawing order, with `k` = who it is: 0 is you).
+ */
+export function selfieLayout(n: number, w: number, h: number) {
+  const tall = w < h;
+  const others = Math.max(0, n - 1);
+  // Everyone has to fit across the picture.
+  const me = Math.min(w * (tall ? 0.95 : 0.62), h * 0.86, (w * 0.98) / (1 + 0.62 * others));
+  const out: { k: number; x: number; y: number; size: number }[] = [];
+  const centre = w / 2 + (others ? 0 : w * (tall ? 0.03 : 0.08));
+  for (let k = n - 1; k >= 0; k--) {
+    if (k === 0) {
+      out.push({ k, x: centre - me / 2, y: h - me, size: me });
+      continue;
+    }
+    const rank = Math.ceil(k / 2);
+    const side = k % 2 ? -1 : 1;
+    const size = me * 0.82 * 0.92 ** (rank - 1);
+    const dx = me * 0.36 + (rank - 0.5) * size * 0.62;
+    out.push({ k, x: centre + side * dx - size / 2, y: h - size * 0.97, size });
+  }
+  return out;
 }
 
 const LONG = 1440;
@@ -54,7 +90,7 @@ function softBlur(src: HTMLCanvasElement, amount: number) {
 }
 
 /** The phone look: warmer, a little more contrast and colour, fine grain. */
-function grade(ctx: CanvasRenderingContext2D, w: number, h: number, selfie: boolean) {
+function grade(ctx: CanvasRenderingContext2D, w: number, h: number, selfie: boolean, mono = false) {
   const img = ctx.getImageData(0, 0, w, h);
   const d = img.data;
   const contrast = 1.07;
@@ -66,6 +102,14 @@ function grade(ctx: CanvasRenderingContext2D, w: number, h: number, selfie: bool
     let g = d[i + 1];
     let b = d[i + 2];
     const l = 0.299 * r + 0.587 * g + 0.114 * b;
+    if (mono) {
+      // Black and white, a little contrasty, the way phone "mono" looks.
+      const v = (l - 128) * 1.12 + 128;
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      const n = ((seed >> 16) % 9) - 4;
+      d[i] = d[i + 1] = d[i + 2] = v + n;
+      continue;
+    }
     r = l + (r - l) * sat;
     g = l + (g - l) * sat;
     b = l + (b - l) * sat;
@@ -99,12 +143,19 @@ function toJpeg(c: HTMLCanvasElement, q: number): Promise<Blob | null> {
  * Take a picture of what's on screen right now. Null when the 3D view can't be copied (some
  * phones won't hand it over).
  */
-export async function takeShot(kind: ShotKind, avatar: Avatar, view: { w: number; h: number }): Promise<Shot | null> {
+export async function takeShot(
+  kind: ShotKind,
+  avatar: Avatar,
+  view: { w: number; h: number },
+  style: ShotStyle = DEFAULT_STYLE,
+  /** Other people in the selfie with you. */
+  friends: Avatar[] = [],
+): Promise<Shot | null> {
   const scene = await captureScene();
   if (!scene) return null;
-  const tall = shotAspect(view.w, view.h) < 1;
-  const w = tall ? SHORT : LONG;
-  const h = tall ? LONG : SHORT;
+  const aspect = shotAspect(view.w, view.h, style.frame);
+  const w = aspect < 1 ? SHORT : aspect === 1 ? 1200 : aspect > 1.5 ? 1600 : LONG;
+  const h = Math.round(w / aspect);
   const c = document.createElement("canvas");
   c.dataset.photo = "1";
   c.width = w;
@@ -113,31 +164,34 @@ export async function takeShot(kind: ShotKind, avatar: Avatar, view: { w: number
   ctx.imageSmoothingQuality = "high";
 
   if (kind === "selfie") {
-    // Portrait mode: the town softly out of focus behind you, a little zoomed in.
-    const sharp = document.createElement("canvas");
-    sharp.width = w;
-    sharp.height = h;
-    cover(sharp.getContext("2d")!, scene, w, h);
-    const blurred = softBlur(sharp, 7);
-    ctx.save();
-    ctx.translate(w / 2, h / 2);
-    ctx.scale(1.06, 1.06);
-    ctx.drawImage(blurred, -w / 2, -h / 2, w, h);
-    ctx.restore();
-    grade(ctx, w, h, true);
-
-    const face = await avatarCutout(avatar);
-    if (face) {
-      // Up close, arm's length from the camera, a little off-centre.
-      const size = Math.min(w * (tall ? 0.95 : 0.62), h * 0.86);
-      const x = w / 2 - size / 2 + w * (tall ? 0.03 : 0.08);
-      const y = h - size;
+    if (style.background === "blur") {
+      // Portrait mode: the town softly out of focus behind you, a little zoomed in.
+      const sharp = document.createElement("canvas");
+      sharp.width = w;
+      sharp.height = h;
+      cover(sharp.getContext("2d")!, scene, w, h);
+      const blurred = softBlur(sharp, 7);
       ctx.save();
+      ctx.translate(w / 2, h / 2);
+      ctx.scale(1.06, 1.06);
+      ctx.drawImage(blurred, -w / 2, -h / 2, w, h);
+      ctx.restore();
+    } else cover(ctx, scene, w, h);
+    grade(ctx, w, h, true, style.background === "mono");
+
+    const faces = await Promise.all([avatar, ...friends].map((a) => avatarCutout(a)));
+    for (const { k, x, y, size } of selfieLayout(faces.length, w, h)) {
+      const face = faces[k];
+      if (!face) continue;
+      // Up close, arm's length from the camera (the others a step behind).
+      ctx.save();
+      if (style.background === "mono") ctx.filter = "grayscale(1)";
       ctx.shadowColor = "rgba(0,0,0,0.35)";
       ctx.shadowBlur = size * 0.06;
       ctx.shadowOffsetY = size * 0.015;
       ctx.drawImage(face, x, y, size, size);
       ctx.restore();
+      if (style.background === "mono") continue;
       // A soft light from the screen falling on the face.
       const glow = ctx.createRadialGradient(x + size * 0.48, y + size * 0.42, 0, x + size * 0.48, y + size * 0.42, size * 0.55);
       glow.addColorStop(0, "rgba(255,244,230,0.14)");

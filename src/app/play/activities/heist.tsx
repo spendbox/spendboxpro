@@ -86,7 +86,7 @@ export function Heist(props: GameProps) {
             icon: "star",
             from: props.me.id,
             text: res.result.success
-              ? `${props.me.name} robbed the bank and got away with ${short(res.result.loot)} mint!`
+              ? `${props.me.name} robbed the bank and got away with ₥${short(res.result.loot)}!`
               : `${props.me.name} tried to rob the bank and got caught!`,
           });
         }
@@ -113,7 +113,7 @@ export function Heist(props: GameProps) {
         <>
           <div className="rounded-2xl bg-gradient-to-br from-[#2b2f33] to-[#16191d] p-4 text-white">
             <p className="text-xs font-semibold uppercase tracking-wide text-white/60">In the vault (the prize pool)</p>
-            <p className="font-display text-3xl font-extrabold text-[#f2c94c]">{short(info.vault)} mint</p>
+            <p className="font-display text-3xl font-extrabold text-[#f2c94c]">₥{short(info.vault)}</p>
             <p className="mt-1 text-xs text-white/70">Get away and you take a share of it. Get caught and you add to it.</p>
           </div>
 
@@ -159,11 +159,11 @@ export function Heist(props: GameProps) {
                 Are you sure? {Math.round((1 - chosen.chance) * 100)} in 100 robbers get caught.
               </p>
               <p className="mt-1">
-                Caught: you lose your <b>{short(chosen.stake)} mint</b> stake and pay a fine of <b>{short(fineNow)} mint</b> ({Math.round(info.fineShare * 100)}% of what you have
+                Caught: you lose your <b>₥{short(chosen.stake)}</b> stake and pay a fine of <b>₥{short(fineNow)}</b> ({Math.round(info.fineShare * 100)}% of what you have
                 left). Both go into the prize pool, and the whole town hears about it.
               </p>
               <p className="mt-1">
-                Get away: your stake back plus <b className="text-[#2b8a3e]">{short(chosen.loot)} mint</b>.
+                Get away: your stake back plus <b className="text-[#2b8a3e]">₥{short(chosen.loot)}</b>.
               </p>
             </div>
           )}
@@ -186,7 +186,7 @@ export function Heist(props: GameProps) {
           ) : phase === "choose" ? (
             <BigButton onClick={() => setPhase("confirm")} disabled={!chosen || info.coins < chosen.stake}>
               <Vault className="size-5" />
-              {chosen && info.coins < chosen.stake ? `You need ${short(chosen.stake)} mint` : "Plan the job"}
+              {chosen && info.coins < chosen.stake ? `You need ₥${short(chosen.stake)}` : "Plan the job"}
             </BigButton>
           ) : phase === "confirm" ? (
             <div className="grid grid-cols-[auto_1fr] gap-2">
@@ -195,7 +195,7 @@ export function Heist(props: GameProps) {
               </BigButton>
               <BigButton onClick={() => void go()} className="bg-hit">
                 <Siren className="size-5" />
-                Do it ({short(chosen?.stake ?? 0)} mint)
+                Do it (₥{short(chosen?.stake ?? 0)})
               </BigButton>
             </div>
           ) : null}
@@ -214,10 +214,10 @@ export function Heist(props: GameProps) {
           <p className="relative font-display text-3xl font-extrabold">{result.success ? "You got away!" : "BUSTED!"}</p>
           <p className="relative mt-1 text-sm text-white/90">
             {result.success
-              ? `+${short(result.loot)} mint, and your ${short(result.stake)} stake back.`
-              : `The police caught you. You lost ${short(result.stake + result.fine)} mint (stake and fine), and it went into the prize pool.`}
+              ? `+₥${short(result.loot)}, and your ${short(result.stake)} stake back.`
+              : `The police caught you. You lost ₥${short(result.stake + result.fine)} (stake and fine), and it went into the prize pool.`}
           </p>
-          <p className="relative mt-2 text-xs text-white/70">You now have {short(result.coins)} mint. The police will be watching you for the next hour.</p>
+          <p className="relative mt-2 text-xs text-white/70">You now have ₥{short(result.coins)}. The police will be watching you for the next hour.</p>
         </div>
       )}
 

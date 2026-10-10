@@ -109,6 +109,7 @@ export function ExploreSheet({
                       >
                         <RideIcon kind={r.kind} className="size-5 shrink-0" style={{ color: info.colour }} />
                         <span className="min-w-0 flex-1 truncate font-semibold">{r.name}</span>
+                        {r.fare ? <span className="shrink-0 rounded-full bg-gold/25 px-2 py-0.5 text-[11px] font-bold text-gold-dark">₥{short(r.fare)}</span> : null}
                         <span className="flex shrink-0 items-center gap-1 text-xs text-muted">
                           <Users className="size-3.5" />
                           {short(counts[rideRoom(r.kind, r.index)] ?? 0)}/{short(r.capacity)}

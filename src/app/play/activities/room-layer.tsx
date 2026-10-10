@@ -173,7 +173,7 @@ export function RoomActivityLayer({
           <div key={rain.id} className="act-pop flex max-w-[min(24rem,100%)] items-center gap-2 rounded-2xl bg-[#2b8a3e] px-3 py-1.5 text-xs font-semibold text-white shadow-lg sm:py-2 sm:text-sm">
             <Face p={rain.from} size={24} />
             <span>
-              {rain.from.id === me?.id ? "You" : rain.from.name} sprayed {rain.amount} mint!
+              {rain.from.id === me?.id ? "You" : rain.from.name} sprayed ₥{rain.amount}!
               {rain.mine > 0 && <b className="ml-1 text-gold">+{rain.mine} for you!</b>}
             </span>
           </div>

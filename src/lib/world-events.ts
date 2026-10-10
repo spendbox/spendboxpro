@@ -174,7 +174,7 @@ export const WORLD_EVENTS: WorldEventKind[] = [
   E(92, "lucky_street", "Lucky street", "Lucky street! Searches around {place} are free for a while.", "twist", "road", 3, { twist: true, radius: 1 }),
   E(93, "bot_tantrum", "Bot tantrum", "The bot is throwing a tantrum and has moved somewhere new!", "twist", "any", 1, { twist: true }),
   E(94, "spotlight", "Spotlight", "Spotlight on {place}! Every move there lights up.", "twist", "any", 3, { twist: true, radius: 2 }),
-  E(95, "golden_balloon", "Golden balloon", "A golden balloon worth 50 mint is floating over {place}!", "twist", "sky", 3, { twist: true, reward: { coins: 50, slots: 1 } }),
+  E(95, "golden_balloon", "Golden balloon", "A golden balloon worth ₥50 is floating over {place}!", "twist", "sky", 3, { twist: true, reward: { coins: 50, slots: 1 } }),
   E(96, "quiet_hour", "Quiet spell", "Shhh… a quiet spell. No news for 5 minutes.", "twist", "any", 5, { twist: true }),
   E(97, "bounty_board", "Bounty board", "Bounty! Whoever catches {name} gets 100 extra mint.", "twist", "any", 6, { twist: true }),
   E(98, "safe_house", "Safe house", "{place} is a safe house: nobody can be found there for 3 minutes.", "twist", "any", 3, { twist: true, radius: 1 }),

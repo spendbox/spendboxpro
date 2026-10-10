@@ -33,7 +33,7 @@ function say(message: string | undefined) {
     frozen: "Your account is paused right now.",
     cooldown: `The police are still watching you. Try again in ${Math.ceil(n(arg) / 60)} minutes.`,
     empty_vault: "The vault is nearly empty. It isn't worth the risk yet.",
-    not_enough: `You need ${arg ?? 100} mint to pull this job.`,
+    not_enough: `You need ₥${arg ?? 100} to pull this job.`,
     bad_plan: "Pick a plan.",
   };
   if (map[code]) return map[code];

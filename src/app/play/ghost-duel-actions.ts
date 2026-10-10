@@ -27,7 +27,7 @@ function say(message: string | undefined, fallback: string) {
     busy: "That ghost is in a duel right now. Try again in a moment.",
     you_busy: "Finish your duel first.",
     cooldown: `Catch your breath: you can challenge again in ${n ?? "a few"} seconds.`,
-    not_enough: `A challenge costs ${n ?? 10} mint, and you don't have enough.`,
+    not_enough: `A challenge costs ₥${n ?? 10}, and you don't have enough.`,
     no_duel: "That duel isn't there any more.",
     not_yours: "That isn't your duel.",
     bad_move: "Pick rock, paper or scissors.",

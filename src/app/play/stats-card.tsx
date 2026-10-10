@@ -96,7 +96,7 @@ export function StatsCard({
         <dl className="mt-2 grid grid-cols-3 gap-1 text-center sm:mt-3">
           {[
             ["Ghosts", short(hidden), `${hidden.toLocaleString("en")} of ${hidersTotal.toLocaleString("en")} ghosts still lit up`, `of ${short(hidersTotal)}`],
-            ["Pool", short(pool), `${pool.toLocaleString("en")} mint in the pool`, "mint"],
+            ["Pool", short(pool), `₥${pool.toLocaleString("en")} in the pool`, "mint"],
             ["Golden", short(golden), `${golden.toLocaleString("en")} ghosts turned golden`, "safe"],
           ].map(([k, v, full, sub]) => (
             <div key={k} className="min-w-0 rounded-lg bg-white/60 px-0.5 py-1 sm:rounded-xl sm:px-1 sm:py-1.5" title={full}>
@@ -107,7 +107,7 @@ export function StatsCard({
           ))}
         </dl>
         {sponsor && (
-          <div className="mt-2 flex items-center gap-1.5 rounded-xl bg-gold/20 px-2 py-1 text-[11px] font-semibold text-gold-dark" title={`${sponsor.name} added ${sponsor.coins.toLocaleString("en")} mint to this pool`}>
+          <div className="mt-2 flex items-center gap-1.5 rounded-xl bg-gold/20 px-2 py-1 text-[11px] font-semibold text-gold-dark" title={`${sponsor.name} added ₥${sponsor.coins.toLocaleString("en")} to this pool`}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             {sponsor.logo && <img src={sponsor.logo} alt="" className="size-4 rounded object-contain" />}
             <Trophy className="size-3.5 shrink-0" />

@@ -207,7 +207,7 @@ export function GhostCardSheet({
           className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-ink px-4 py-3 font-semibold text-white disabled:opacity-40"
         >
           {busy ? <LoaderCircle className="size-4 animate-spin" /> : <Swords className="size-4" />}
-          Challenge · {card?.fee ?? rules.fee} mint
+          Challenge · ₥{card?.fee ?? rules.fee}
         </button>
       </div>
       <p className="mt-2 text-center text-xs text-muted">

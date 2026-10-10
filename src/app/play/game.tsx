@@ -14,6 +14,7 @@ import type { GameEvent, GameState } from "@/lib/game";
 import { cn } from "@/lib/cn";
 import {
   Armchair,
+  Briefcase,
   Building2,
   CircleX,
   DoorOpen,
@@ -78,6 +79,9 @@ import type { CityDancer, CityEvent, CityFriendPin, CityGhost, CityInteract, Cit
 import { FeedRow, NotificationsPanel, type FeedIcon, type FeedItem } from "./notifications";
 import { signOutNow } from "../login/actions";
 import { claimBalloon, recordVisit } from "./profile-actions";
+import { myVisits, payFare, payVisit } from "./fee-actions";
+import { TRAIN_FARE, visitFee } from "@/lib/fees";
+import { jobAt } from "@/lib/jobs";
 import { rideRoom, useRooms, type RoomInfo } from "./rooms";
 import { RIDE_ICONS, RIDE_INFO, RideIcon, type RideKindName } from "./ride-icon";
 import { Safe } from "./safe";
@@ -94,6 +98,7 @@ const CityView = dynamic(() => import("./city-view").then((m) => m.CityView), {
 // Panels people open now and then: their code only loads when first opened, so the town
 // itself starts faster.
 const Menu = dynamic(() => import("./menu").then((m) => m.Menu));
+const JobsSheet = dynamic(() => import("./jobs-sheet").then((m) => m.JobsSheet));
 const CameraMode = dynamic(() => import("./phone/camera").then((m) => m.CameraMode));
 const PhoneSheet = dynamic(() => import("./phone/phone-sheet").then((m) => m.PhoneSheet));
 const HowItWorks = dynamic(() => import("./how-it-works").then((m) => m.HowItWorks));
@@ -122,6 +127,8 @@ type PlaceRoom = {
   name: string;
   capacity: number;
   kind: "building" | "balloon";
+  /** What the place is ("office", "bank", "home"...; see CityRoom). */
+  type?: string;
   levels?: { id: string; label: string; capacity: number; kind?: string }[];
 };
 // Same order as the balloons in the 3D city (used until the city lists its rides).
@@ -244,8 +251,8 @@ function describe(e: GameEvent, botName: string, myTile: number | null, where: (
     const d = e.detail ?? {};
     const who = d.name ?? "Someone";
     const avatar = d.avatar ? cleanAvatar(d.avatar, who) : null;
-    if (d.success) return { id: e.id, tone: "alarm", icon: "coin", avatar, text: `${who} robbed the bank and got away with ${short(d.loot ?? 0)} mint from the prize pool!` };
-    return { id: e.id, tone: "alarm", icon: "catch", avatar, text: `${who} tried to rob the bank and got caught! ${short(d.lost ?? 0)} mint went into the prize pool.` };
+    if (d.success) return { id: e.id, tone: "alarm", icon: "coin", avatar, text: `${who} robbed the bank and got away with ₥${short(d.loot ?? 0)} from the prize pool!` };
+    return { id: e.id, tone: "alarm", icon: "catch", avatar, text: `${who} tried to rob the bank and got caught! ₥${short(d.lost ?? 0)} went into the prize pool.` };
   }
   if (e.kind === "moved") {
     if (myTile !== null && e.tile === myTile) return null;
@@ -401,6 +408,8 @@ export function Game({
   /** On a club's dance floor: your move and who you're dancing with (a player's or a regular's id). */
   const [dancing, setDancing] = useState<{ move: DanceMove; with: string | null } | null>(null);
   const [pickPlace, setPickPlace] = useState<PlaceRoom | null>(null);
+  /** Jobs: at this place (apply), null (My job), or closed (undefined). */
+  const [jobsAt, setJobsAt] = useState<{ id: string; name: string } | null | undefined>(undefined);
   const [placeRoom, setPlaceRoom] = useState<PlaceRoom | null>(null);
   const [pickRide, setPickRide] = useState(false);
   const [exploreTab, setExploreTab] = useState<"rides" | "sports">("rides");
@@ -521,6 +530,11 @@ export function Game({
     () => rooms.members.filter((m) => m.id !== me.id).map((m) => ({ id: m.id, name: m.name, avatar: cleanAvatar(m.avatar, m.name) })),
     [rooms.members, me.id],
   );
+  // Who you can add to a selfie: the people here, then your friends.
+  const selfiePeople = useMemo(() => {
+    const seen = new Set(hereNow.map((p) => p.id));
+    return [...hereNow, ...state.friends.friends.filter((f) => !seen.has(f.id)).map((f) => ({ id: f.id, name: f.name, avatar: cleanAvatar(f.avatar, f.name) }))];
+  }, [hereNow, state.friends.friends]);
   async function befriend(p: { id: string; name: string }) {
     if (me.guest) return setSignInWhy("Sign in to add friends.");
     if (friendBusy) return;
@@ -613,7 +627,7 @@ export function Game({
     if (res.ok) {
       playSfx("pop");
       quests.track({ type: "event" });
-      setMessage({ icon: Coins, text: `You grabbed ${short(Number(res.data.coins))} mint!`, tone: "good" });
+      setMessage({ icon: Coins, text: `You grabbed ₥${short(Number(res.data.coins))}!`, tone: "good" });
       startTransition(() => router.refresh());
     } else setMessage({ text: res.error, tone: "info" });
   }
@@ -652,6 +666,51 @@ export function Game({
     return () => clearTimeout(id);
   }, [seatNotice, clearSeatNotice]);
   const guest = me.guest;
+
+  // First visits and train fares (game-db/035): the places already paid for in this town.
+  const visited = useRef<{ round: number; places: Set<string> }>({ round: -1, places: new Set() });
+  useEffect(() => {
+    if (guest || !roundSeed) return;
+    let live = true;
+    void myVisits().then((list) => {
+      if (live) visited.current = { round: roundSeed, places: new Set(list) };
+    });
+    return () => {
+      live = false;
+    };
+  }, [guest, roundSeed]);
+  /**
+   * Pay for going somewhere: a first visit to a place (once a town) or a train fare (every time).
+   * Says no straight away if you can't afford it; otherwise lets you in at once and pays in the
+   * background (and puts you back out if that fails). Returns a note for the welcome message,
+   * or null if you can't go.
+   */
+  function payToGo(what: { kind: "visit"; place: string; type?: string; name: string } | { kind: "fare"; index: number; fare: number; name: string }): string | null {
+    if (guest) return "";
+    let fee = 0;
+    if (what.kind === "visit") {
+      if (visited.current.round !== roundSeed) visited.current = { round: roundSeed, places: new Set() };
+      if (visited.current.places.has(what.place) || (myHouseTile !== null && what.place === `b:${myHouseTile}`)) return "";
+      fee = visitFee(what.type);
+    } else fee = what.fare;
+    if (fee <= 0) return "";
+    if (me.coins < fee) {
+      setMessage({ icon: Coins, text: `${what.kind === "visit" ? `Your first visit to ${what.name}` : `A ticket for the ${what.name}`} costs ₥${short(fee)}, and you have ₥${short(me.coins)}.`, tone: "bad" });
+      return null;
+    }
+    if (what.kind === "visit") visited.current.places.add(what.place);
+    const pay = what.kind === "visit" ? payVisit(what.place, what.type) : payFare(what.index, what.fare > TRAIN_FARE);
+    void pay.then((res) => {
+      // Only put you back out if you really can't go (not if the payment just didn't go through).
+      if (!res.ok && res.kick) {
+        if (what.kind === "visit") visited.current.places.delete(what.place);
+        leaveRoom();
+        setMessage({ icon: Coins, text: res.error, tone: "bad" });
+      }
+      startTransition(() => router.refresh());
+    });
+    return what.kind === "visit" ? ` First visit: ₥${short(fee)} (half goes to the prize pool).` : ` Ticket: ₥${short(fee)}.`;
+  }
 
   // The last 30 seconds before the hunt: a soft beep every second.
   const joinLeft = round && phase === "join" ? Math.ceil((Date.parse(round.joinEndsAt) - now) / 1000) : null;
@@ -698,7 +757,7 @@ export function Game({
   useEffect(() => {
     if (passiveGained <= 0) return;
     const id = setTimeout(
-      () => setMessage({ icon: Coins, text: `Passive income: +${short(passiveGained)} mint. You earn up to ${short(state.prices.passivePerDay)} a day while you have under ${short(state.prices.passiveTarget)}.`, tone: "good" }),
+      () => setMessage({ icon: Coins, text: `Passive income: +₥${short(passiveGained)}. You earn up to ${short(state.prices.passivePerDay)} a day while you have under ${short(state.prices.passiveTarget)}.`, tone: "good" }),
       0,
     );
     return () => clearTimeout(id);
@@ -725,7 +784,7 @@ export function Game({
     fetch("/api/ads/track", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ views }), keepalive: true }).catch(() => {});
   }, []);
   const AD_WHY: Record<string, string> = {
-    signed_out: "Sign in to earn 5 mint when you tap an ad's button (up to 5 ads a day).",
+    signed_out: "Sign in to earn ₥5 when you tap an ad's button (up to 5 ads a day).",
     daily_limit: "You've had all 5 ad rewards for today. More tomorrow!",
     already_today: "You've already been rewarded for this ad today.",
     pool_empty: "This ad's mint has run out.",
@@ -752,7 +811,7 @@ export function Game({
       const d = (await res.json()) as { coins?: number; leftToday?: number; reason?: string };
       const note =
         d.coins && d.coins > 0
-          ? `+${d.coins} mint from ${o.ad.brand}!${d.leftToday ? ` (${d.leftToday} more ad rewards today)` : " That's all your ad rewards for today."}`
+          ? `+₥${d.coins} from ${o.ad.brand}!${d.leftToday ? ` (${d.leftToday} more ad rewards today)` : " That's all your ad rewards for today."}`
           : (d.reason && AD_WHY[d.reason]) || null;
       if (d.coins && d.coins > 0) {
         playSfx("pop");
@@ -990,6 +1049,8 @@ export function Game({
   }
   function goToLevel(room: PlaceRoom, level: { id: string; label: string; capacity: number }) {
     setPickPlace(null);
+    const feeNote = room.kind === "building" ? payToGo({ kind: "visit", place: room.id, type: room.type, name: room.name }) : "";
+    if (feeNote === null) return;
     const info: RoomInfo = {
       id: `${room.id}:${level.id}`,
       name: `${room.name} · ${level.label}`,
@@ -1009,12 +1070,14 @@ export function Game({
       icon: Building2,
       text: guest
         ? `Welcome to ${info.name}. Sign in to chat with the people here.`
-        : `You're in ${info.name}. Tap the floor to walk, tap anything glowing to use it, and tap Chat to talk.`,
+        : `You're in ${info.name}.${feeNote} Tap the floor to walk, tap anything glowing to use it, and tap Chat to talk.`,
       tone: "info",
     });
   }
   // Hop on a ride: a balloon, train, bus, car, boat, Ferris wheel cabin or water slide.
-  function boardRide(r: { kind: RideKindName; index: number; name: string; capacity: number }) {
+  function boardRide(r: { kind: RideKindName; index: number; name: string; capacity: number; fare?: number }) {
+    const fareNote = r.fare ? payToGo({ kind: "fare", index: r.index, fare: r.fare, name: r.name }) : "";
+    if (fareNote === null) return;
     setPickRide(false);
     setPlace(null);
     setActivity(null);
@@ -1040,7 +1103,7 @@ export function Game({
       setTimeout(() => setRide((cur) => (cur?.kind === r.kind && cur.index === r.index ? null : cur)), 60_000);
     }
     setRide({ kind: r.kind, index: r.index });
-    setMessage({ icon: RIDE_ICONS[r.kind], text: guest && r.kind !== "slide" ? "Enjoy the ride! Sign in to chat with the people on board." : RIDE_HELLO[r.kind], tone: "info" });
+    setMessage({ icon: RIDE_ICONS[r.kind], text: guest && r.kind !== "slide" ? "Enjoy the ride! Sign in to chat with the people on board." : RIDE_HELLO[r.kind] + fareNote, tone: "info" });
   }
   function leaveRoom() {
     rooms.leave();
@@ -1148,7 +1211,7 @@ export function Game({
       if (res.ok) playSfx("pop");
       setMessage(
         res.ok
-          ? { icon: Coins, text: `Pop! +${res.coins} mint.${res.leftToday > 0 ? ` ${res.leftToday} more balloon${res.leftToday === 1 ? "" : "s"} today.` : " That's all for today."}`, tone: "good" }
+          ? { icon: Coins, text: `Pop! +₥${res.coins}.${res.leftToday > 0 ? ` ${res.leftToday} more balloon${res.leftToday === 1 ? "" : "s"} today.` : " That's all for today."}`, tone: "good" }
           : { text: res.error, tone: "info" },
       );
       router.refresh();
@@ -1332,9 +1395,8 @@ export function Game({
               </span>
             )}
             {state.streak && <StreakPill streak={state.streak} onOpen={() => { setStreakOpen(true); setMenu(false); setFeedOpen(false); }} />}
-            <span className="glass inline-block h-8 whitespace-nowrap rounded-full px-2.5 text-xs leading-8 sm:h-9 sm:px-3 sm:text-sm sm:leading-9" title={`${me.coins} mint · level ${me.level}`}>
-              <b className="text-gold-dark">{short(me.coins)}</b>
-              <span className="hidden sm:inline"> mint</span>
+            <span className="glass inline-block h-8 whitespace-nowrap rounded-full px-2.5 text-xs leading-8 sm:h-9 sm:px-3 sm:text-sm sm:leading-9" title={`₥${me.coins} · level ${me.level}`}>
+              <b className="text-gold-dark">₥{short(me.coins)}</b>
               {me.bonusCoins > 0 && <span className="text-muted"> +{short(me.bonusCoins)}</span>}
             </span>
             <button
@@ -1431,11 +1493,13 @@ export function Game({
           coins={guest ? undefined : me.coins}
           level={guest ? undefined : me.level}
           onPhone={() => { setMenu(false); setPhone("home"); }}
+          onMyJob={guest ? undefined : () => { setMenu(false); setJobsAt(null); }}
           onChangePin={() => router.push("/welcome")}
           onSignOut={() => { setMenu(false); setConfirmSignOut(true); }}
         />
       )}
       {howOpen && <HowItWorks onClose={() => setHowOpen(false)} />}
+      {jobsAt !== undefined && <JobsSheet place={jobsAt} onClose={() => setJobsAt(undefined)} onChanged={() => startTransition(() => router.refresh())} />}
       {camera && round && (
         <CameraMode
           key={camera}
@@ -1447,6 +1511,7 @@ export function Game({
           onClose={() => setCamera(null)}
           onOpenGallery={() => { setCamera(null); setPhone("photos"); }}
           onSignIn={() => { setCamera(null); setSignIn({ why: "Sign in to keep your pictures. Your gallery goes with you to every town." }); }}
+          people={selfiePeople}
         />
       )}
       {phone && (
@@ -1488,7 +1553,7 @@ export function Game({
           }}
           onSignIn={() => {
             setGhostFor(null);
-            setSignInWhy("Sign in to challenge ghosts: 10 mint a duel, and you win a slice of their stake if you beat them.");
+            setSignInWhy("Sign in to challenge ghosts: ₥10 a duel, and you win a slice of their stake if you beat them.");
           }}
           onClose={() => setGhostFor(null)}
         />
@@ -1572,7 +1637,7 @@ export function Game({
           </p>
           <div className="mt-3 rounded-2xl bg-panel-2 p-4 text-center">
             <p className="text-sm text-muted">You&apos;re putting down</p>
-            <p className="font-display text-4xl font-extrabold">{short(state.prices.stake)} mint</p>
+            <p className="font-display text-4xl font-extrabold">₥{short(state.prices.stake)}</p>
             <p className="text-xs text-muted">You have {short(me.coins)}. After this: {short(Math.max(0, me.coins - state.prices.stake))}.</p>
           </div>
           <ul className="mt-3 space-y-1.5 text-sm text-ink/80">
@@ -1808,7 +1873,7 @@ export function Game({
           ) : openAd.reward > 0 && !openAd.tapped ? (
             <p className="mt-2 rounded-xl bg-gold/15 px-3 py-2 text-sm font-semibold text-gold-dark">
               <Coins className="mr-1 inline size-4 align-[-0.15em]" />
-              Tap {openAd.ad.link ? `Visit ${openAd.ad.brand}` : "the button"} below to earn {openAd.reward} mint.
+              Tap {openAd.ad.link ? `Visit ${openAd.ad.brand}` : "the button"} below to earn ₥{openAd.reward}.
             </p>
           ) : null}
           <div className="mt-4 flex gap-2">
@@ -1931,6 +1996,15 @@ export function Game({
                 )}
               </button>
             )}
+            {!dockOpen && !isDancing && place && placeRoom && jobAt(placeRoom.type) && (
+              <button
+                onClick={() => (guest ? setSignInWhy("Sign in to apply for jobs and earn mint by the hour.") : setJobsAt({ id: placeRoom.id, name: placeRoom.name }))}
+                className="glass pointer-events-auto flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold shadow sm:text-sm"
+              >
+                <Briefcase className="size-4 text-[#1971c2]" />
+                Jobs
+              </button>
+            )}
             {!dockOpen && !isDancing && (place || ride !== null) && (
               <button onClick={leaveRoom} className="glass pointer-events-auto flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold shadow sm:text-sm">
                 <LogOut className="size-4" />
@@ -2029,7 +2103,7 @@ export function Game({
                 <b className="text-ink">Watching live.</b> <span className="rounded bg-ink px-1 text-[10px] font-bold text-white">18+</span>{" "}
                 {phase === "join"
                   ? `Ghosts are getting ready. The hunt starts in ${countdown}.`
-                  : `The hunt is on: ${short(board?.ghosts.length ?? round.hidersRemaining)} ghosts lit up, ${short(round.pool)} mint in the pool. Tap a light to see a ghost.`}
+                  : `The hunt is on: ${short(board?.ghosts.length ?? round.hidersRemaining)} ghosts lit up, ₥${short(round.pool)} in the pool. Tap a light to see a ghost.`}
               </p>
               <div className="grid grid-cols-3 gap-2 text-sm sm:flex">
                 <button onClick={() => setHowOpen(true)} className="whitespace-nowrap rounded-xl bg-panel-2 px-3 py-2.5 font-semibold">
@@ -2192,7 +2266,7 @@ function EventInfoSheet({
           {event.claimed
             ? "You grabbed this one."
             : slots > 0
-              ? `${kind.reward.coins} mint for the first ${kind.reward.slots === 1 ? "person" : `${kind.reward.slots} people`} to tap it. ${slots} left.`
+              ? `₥${kind.reward.coins} for the first ${kind.reward.slots === 1 ? "person" : `${kind.reward.slots} people`} to tap it. ${slots} left.`
               : "All grabbed. Be quicker next time!"}
         </p>
       )}
@@ -2204,7 +2278,7 @@ function EventInfoSheet({
         {canGrab && (
           <button onClick={onGrab} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gold py-2.5 font-semibold text-ink">
             <Coins className="size-4" />
-            Grab {kind.reward!.coins} mint
+            Grab ₥{kind.reward!.coins}
           </button>
         )}
       </div>

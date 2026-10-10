@@ -1,8 +1,9 @@
 // Things built up over the streets (see elevated() in src/lib/city/layout.ts):
 //
-// - The monorail: a white beam on tall pylons along one long central street, two stations with
-//   platforms, canopies and lift towers, and a sleek train gliding along the top, stopping at
-//   the stations (createElevatedLife).
+// - The monorail: a white beam on tall pylons along one long central street, sweeping round
+//   corners onto cross streets at its ends, two stations with platforms, canopies and lift
+//   towers, and a sleek bullet-nosed train gliding along the top, stopping at the stations
+//   (createElevatedLife). You can ride it (Explore, with the trains).
 // - The flyover: an elevated road over the middle of another street (the traffic below drives
 //   either side of its piers), with ramps at both ends, parapets, lamps and cars driving on it.
 // - Footbridges over busy roads, in three styles: a steel truss, a glass skywalk and a white arch.
@@ -11,7 +12,8 @@
 // the moving train and cars are a few instanced meshes.
 
 import * as THREE from "three";
-import { elevated, footbridgeAt, onElevated, type CityPlan, type Elevated, type Tile } from "@/lib/city/layout";
+import { elevated, footbridgeAt, MONO_STEP, onElevated, onMono, type CityPlan, type Elevated, type MonoLine, type Tile } from "@/lib/city/layout";
+import type { VehiclePose } from "./traffic";
 import { grown, keyOf, type World } from "./world";
 
 type PartSpec = { x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number; color: number; tilt?: number };
@@ -36,22 +38,39 @@ function frame(t: Tile, along: "x" | "z", add: Add) {
 
 const alongOf = (line: Elevated, t: Tile) => (line.along === "x" ? t.x : t.z);
 
-function monoParts(t: Tile, line: Elevated, plan: CityPlan, add: Add) {
+function monoParts(t: Tile, line: MonoLine, plan: CityPlan, add: Add) {
+  const flyCross = onElevated(elevated(plan).flyover, t.x, t.z);
+  // The beam, a step at a time along the route (round the curves too), with a blue stripe down
+  // each side, and pylons every 2 along it where they stand in the street.
+  for (const k of line.tiles.get(`${t.x},${t.z}`) ?? []) {
+    const p = line.path[k];
+    const q = line.path[k + 1];
+    const x = (p.x + q.x) / 2;
+    const z = (p.z + q.z) / 2;
+    const dx = q.x - p.x;
+    const dz = q.z - p.z;
+    const len = Math.hypot(dx, dz);
+    const ry = Math.atan2(-dz, dx);
+    const nx = -dz / len;
+    const nz = dx / len;
+    add("building", { x, y: MONO_Y - 0.14, z, sx: len + 0.03, sy: 0.14, sz: 0.14, ry, color: WHITE });
+    for (const c of [-0.072, 0.072]) add("paint", { x: x + nx * c, y: MONO_Y - 0.08, z: z + nz * c, sx: len + 0.03, sy: 0.025, sz: 0.004, ry, color: 0x1c7ed6 });
+    const every = Math.round(2 / MONO_STEP);
+    if (k % every === 0 && t.kind === "road" && !t.rail && !flyCross) {
+      add("cyl", { x: p.x, y: 0.06, z: p.z, sx: 0.12, sy: MONO_Y - 0.28, sz: 0.12, ry, color: CONCRETE });
+      add("building", { x: p.x, y: MONO_Y - 0.26, z: p.z, sx: 0.26, sy: 0.12, sz: 0.2, ry, color: CONCRETE });
+    }
+    // Buffers at the ends.
+    if (k === 0 || k === line.path.length - 2) {
+      const e = k === 0 ? p : q;
+      add("building", { x: e.x, y: MONO_Y - 0.14, z: e.z, sx: 0.06, sy: 0.22, sz: 0.22, ry, color: 0xe03131 });
+    }
+  }
+  // Stations (on the straight): platforms both sides, a curved canopy, glass screens, and a lift
+  // tower down to the pavement.
+  if (!onElevated(line, t.x, t.z)) return;
   const P = frame(t, line.along, add);
   const a = alongOf(line, t);
-  const flyCross = onElevated(elevated(plan).flyover, t.x, t.z);
-  // The beam, with a blue stripe down each side.
-  P("building", 0, 0, MONO_Y - 0.14, 1.02, 0.14, 0.14, WHITE);
-  for (const c of [-0.072, 0.072]) P("paint", 0, c, MONO_Y - 0.08, 1.02, 0.025, 0.004, 0x1c7ed6);
-  // Pylons every other step (not where the railway or the flyover is in the way).
-  if (a % 2 === 0 && !t.rail && !flyCross) {
-    P("cyl", 0, 0, 0.06, 0.12, MONO_Y - 0.28, 0.12, CONCRETE);
-    P("building", 0, 0, MONO_Y - 0.26, 0.26, 0.12, 0.2, CONCRETE);
-  }
-  // Buffers at the ends.
-  if (a === line.from || a === line.to) P("building", a === line.from ? -0.5 : 0.5, 0, MONO_Y - 0.14, 0.06, 0.22, 0.22, 0xe03131);
-  // Stations: platforms both sides, a curved canopy, glass screens, and a lift tower down to the
-  // pavement.
   const k = line.stations.findIndex((s) => Math.abs(s - a) <= 1);
   if (k >= 0) {
     for (const c of [-0.24, 0.24]) {
@@ -149,7 +168,7 @@ function footbridgeParts(t: Tile, style: 0 | 1 | 2, add: Add) {
 /** The fixed parts up in the air over this tile (if any). */
 export function elevatedParts(t: Tile, plan: CityPlan, add: Add) {
   const { mono, flyover } = elevated(plan);
-  if (mono && onElevated(mono, t.x, t.z)) monoParts(t, mono, plan, add);
+  if (mono && onMono(mono, t.x, t.z)) monoParts(t, mono, plan, add);
   if (flyover && onElevated(flyover, t.x, t.z)) flyoverParts(t, flyover, add);
   const fb = footbridgeAt(plan, t);
   if (fb !== null) footbridgeParts(t, fb, add);
@@ -176,7 +195,7 @@ export function createElevatedLife(world: World, parent: THREE.Object3D) {
   let lo = 0;
   let hi = 0;
   let stations: number[] = [];
-  let line: Elevated | null = null;
+  let line: MonoLine | null = null;
   let fly: Elevated | null = null;
   let flyCars: { pos: number; dir: number; speed: number; color: number }[] = [];
   let body: THREE.InstancedMesh | null = null;
@@ -236,11 +255,20 @@ export function createElevatedLife(world: World, parent: THREE.Object3D) {
     line = e.mono;
     fly = e.flyover;
     if (line) {
-      const sp = span(line);
-      if (sp && sp.max - sp.min >= 6) {
-        lo = sp.min - 0.4;
-        hi = sp.max + 0.4;
-        stations = line.stations.filter((x) => x > lo + 1.2 && x < hi - 1.2);
+      // The part of the route over tiles that are in town right now (all of it, except in a
+      // huge town drawn only round the camera).
+      let min = Infinity;
+      let max = -Infinity;
+      for (let k = 0; k < line.path.length; k++) {
+        const pt = line.path[k];
+        if (!world.tileIndex.has(keyOf(Math.round(pt.x), Math.round(pt.z)))) continue;
+        min = Math.min(min, pt.s);
+        max = Math.max(max, pt.s);
+      }
+      if (Number.isFinite(min) && max - min >= 6) {
+        lo = min + 0.1;
+        hi = max - 0.1;
+        stations = line.stationS.filter((x) => x > lo + 1.2 && x < hi - 1.2);
         train = { pos: lo + (M_CARS * (M_CAR + M_GAP)) / 2, dir: 1, speed: 0, wait: 3, called: -Infinity };
         body = made(box, mat, M_CARS);
         wins = made(box, winMat, M_CARS);
@@ -295,6 +323,29 @@ export function createElevatedLife(world: World, parent: THREE.Object3D) {
     }
   }
 
+  /** Where the monorail is at distance a along its route (x, z, and the way it runs). */
+  const mp = { x: 0, z: 0, dx: 1, dz: 0 };
+  function monoAt(l: MonoLine, a: number) {
+    const f = Math.max(0, Math.min(l.path.length - 1.001, a / MONO_STEP));
+    const k = Math.floor(f);
+    const p0 = l.path[k];
+    const p1 = l.path[Math.min(l.path.length - 1, k + 1)];
+    const t = f - k;
+    mp.x = p0.x + (p1.x - p0.x) * t;
+    mp.z = p0.z + (p1.z - p0.z) * t;
+    mp.dx = p0.dx + (p1.dx - p0.dx) * t;
+    mp.dz = p0.dz + (p1.dz - p0.dz) * t;
+    const n = Math.hypot(mp.dx, mp.dz) || 1;
+    mp.dx /= n;
+    mp.dz /= n;
+    return mp;
+  }
+  function monoShown(l: MonoLine, a: number, now: number) {
+    const p = monoAt(l, a);
+    const tile = world.tileIndex.get(keyOf(Math.round(p.x), Math.round(p.z)));
+    return tile !== undefined && grown(world, tile, now);
+  }
+
   /** A point on a line at position a (and c across it). */
   function at(l: Elevated, a: number, c: number) {
     return l.along === "x" ? { x: a, z: l.at + c } : { x: l.at + c, z: a };
@@ -314,11 +365,12 @@ export function createElevatedLife(world: World, parent: THREE.Object3D) {
     if (train && line && body && wins && noses) {
       stepTrain(train, dt);
       const L = M_CARS * (M_CAR + M_GAP) - M_GAP;
-      const sc = shown(line, train.pos, now) ? 1 : 0.0001;
-      q.setFromAxisAngle(up, yawOf(line, 1));
+      const sc = monoShown(line, train.pos, now) ? 1 : 0.0001;
       for (let c = 0; c < M_CARS; c++) {
         const a = train.pos - L / 2 + M_CAR / 2 + c * (M_CAR + M_GAP);
-        const p = at(line, a, 0);
+        // Each car turns with the curve under it.
+        const p = monoAt(line, a);
+        q.setFromAxisAngle(up, Math.atan2(-p.dz, p.dx));
         m4.compose(v.set(p.x, MONO_Y, p.z), q, s.set(M_CAR * sc, 0.16 * sc, 0.17 * sc));
         body.setMatrixAt(c, m4);
         m4.compose(v.set(p.x, MONO_Y + 0.075, p.z), q, s.set((M_CAR - 0.08) * sc, 0.05 * sc, 0.176 * sc));
@@ -327,8 +379,8 @@ export function createElevatedLife(world: World, parent: THREE.Object3D) {
       // Rounded blue noses at both ends.
       for (let e = 0; e < 2; e++) {
         const a = train.pos + (e ? 1 : -1) * (L / 2);
-        const p = at(line, a, 0);
-        q.setFromAxisAngle(up, yawOf(line, e ? 1 : -1));
+        const p = monoAt(line, a);
+        q.setFromAxisAngle(up, Math.atan2(-p.dz, p.dx) + (e ? 0 : Math.PI));
         m4.compose(v.set(p.x, MONO_Y + 0.08, p.z), q, s.set(0.3 * sc, 0.16 * sc, 0.17 * sc));
         noses.setMatrixAt(e, m4);
       }
@@ -361,5 +413,20 @@ export function createElevatedLife(world: World, parent: THREE.Object3D) {
     winMat.dispose();
   }
 
-  return { build, update, dispose };
+  /**
+   * Where the monorail's middle car is (its floor), facing +along the route; for riding it.
+   * False if there's no monorail running.
+   */
+  function pose(out: VehiclePose) {
+    if (!train || !line) return false;
+    const p = monoAt(line, train.pos);
+    out.x = p.x;
+    out.z = p.z;
+    out.y = MONO_Y;
+    out.yaw = Math.atan2(-p.dx, -p.dz);
+    out.speed = train.speed * train.dir;
+    return true;
+  }
+
+  return { build, update, pose, dispose, get hasTrain() { return !!train; } };
 }

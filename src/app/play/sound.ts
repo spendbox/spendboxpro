@@ -9,6 +9,11 @@ import { daylight, weatherAt } from "@/lib/city/sky";
 //    a rare far-off horn, muffled people chatting, quiet birds by day, faint crickets by
 //    night, a distant dog now and then, a very rare cat, and rain when it rains.
 //    Everything is mixed low so it sits in the background.
+//    On top of that, sounds of what's close to you (the 3D view keeps `soundscape` up to
+//    date): a helicopter's rotor coming and going as one flies near, busier street sounds
+//    (cars, motorbikes, horns) near the roads, people whispering nonsense near crowds, chatter
+//    in a foreign-sounding tongue near airports, hotels and markets, dogs among the houses,
+//    and cockerels crowing out on the farms. All subtle.
 // 2. Game sound effects (playSfx): short, soft "game" sounds for searching, finding,
 //    moving, countdown ticks and so on.
 //
@@ -84,12 +89,39 @@ function panner(ctx: BaseAudioContext, pan: number): AudioNode & { pan?: AudioPa
 // City ambience
 // ---------------------------------------------------------------------------------------
 
+/**
+ * What's around you, 0 (nothing) to 1 (right next to it), kept up to date by the 3D view a few
+ * times a second. The ambience turns each up or down to match.
+ */
+export const soundscape = {
+  /** The nearest helicopter, and which side it's on (-1 left, 1 right). */
+  heli: 0,
+  heliPan: 0,
+  /** Roads and traffic. */
+  street: 0,
+  /** Crowds: shops, offices, squares, clubs. */
+  people: 0,
+  /** Houses (dogs). */
+  homes: 0,
+  /** Farmland and the countryside (cockerels, dogs). */
+  farm: 0,
+  /** Airports, hotels, markets, the port: people talking in other languages. */
+  foreign: 0,
+  /** Inside a building (outside sounds muffled). */
+  inside: false,
+};
+
 type Mood = { night: boolean; rain: number };
 
 type Engine = {
   ctx: AudioContext;
   master: GainNode; // everything goes through here (used for the fade in/out)
   traffic: GainNode;
+  /** The street close by (louder near roads). */
+  street: GainNode;
+  /** A helicopter's rotor, and which side it's on. */
+  heli: GainNode;
+  heliPan: AudioNode & { pan?: AudioParam };
   crowd: GainNode;
   rain: GainNode;
   events: GainNode; // one-off sounds (cars, birds, dogs...)
@@ -276,6 +308,196 @@ function cat(e: Engine) {
   vib.stop(t + len + 0.05);
 }
 
+// ---- sounds of what's close by
+
+// Vowels by their two main resonances (formants), for made-up speech.
+const VOWELS: [number, number][] = [
+  [800, 1200], // a
+  [500, 1900], // e
+  [320, 2300], // i
+  [500, 900], // o
+  [350, 800], // u
+  [650, 1700], // æ
+];
+
+// Someone whispering nonsense: breathy syllables (noise through vowel resonances), with hissy
+// consonants in between. No pitch at all, which is what makes a whisper a whisper.
+function whisper(e: Engine, level: number) {
+  const { ctx } = e;
+  const buf = noise(ctx).white;
+  const p = panner(ctx, rand(-0.8, 0.8));
+  const out = ctx.createGain();
+  out.gain.value = rand(0.05, 0.09) * level;
+  out.connect(p).connect(e.events);
+  let t = ctx.currentTime + 0.05;
+  const syllables = Math.floor(rand(3, 9));
+  for (let k = 0; k < syllables; k++) {
+    // A consonant: s, sh, f, h or a little t/k click.
+    const c = Math.floor(rand(0, 5));
+    const clen = c === 4 ? 0.018 : rand(0.04, 0.09);
+    const cs = noiseSource(ctx, buf);
+    const cf = c === 0 ? filter(ctx, "highpass", 4800) : c === 1 ? filter(ctx, "bandpass", 2600, 2) : c === 2 ? filter(ctx, "bandpass", 6000, 0.6) : filter(ctx, "bandpass", 1500, 0.8);
+    const cg = ctx.createGain();
+    cg.gain.setValueAtTime(0.0001, t);
+    cg.gain.exponentialRampToValueAtTime(c === 3 ? 0.25 : 0.5, t + 0.01);
+    cg.gain.exponentialRampToValueAtTime(0.0001, t + clen);
+    cs.connect(cf).connect(cg).connect(out);
+    cs.start(t, rand(0, 2));
+    cs.stop(t + clen + 0.02);
+    t += clen * 0.8;
+    // The vowel.
+    const [f1, f2] = VOWELS[Math.floor(rand(0, VOWELS.length))];
+    const vlen = rand(0.08, 0.2);
+    const vs = noiseSource(ctx, buf);
+    const vg = ctx.createGain();
+    vg.gain.setValueAtTime(0.0001, t);
+    vg.gain.exponentialRampToValueAtTime(1, t + 0.025);
+    vg.gain.exponentialRampToValueAtTime(0.0001, t + vlen);
+    for (const [f, q, g] of [[f1, 9, 1], [f2, 11, 0.6]] as const) {
+      const bp = filter(ctx, "bandpass", f * rand(0.92, 1.08), q);
+      const gg = ctx.createGain();
+      gg.gain.value = g;
+      vs.connect(bp).connect(gg).connect(vg);
+    }
+    vg.connect(out);
+    vs.start(t, rand(0, 2));
+    vs.stop(t + vlen + 0.02);
+    t += vlen + (Math.random() < 0.25 ? rand(0.12, 0.3) : rand(0.01, 0.05));
+  }
+}
+
+// Someone a little way off talking in a language you don't know: a voice (a buzzy note with a
+// sing-song pitch) shaped into made-up syllables, muffled by distance. Each speaker gets their
+// own pitch, speed and tune, so it never sounds like one language.
+function chatter(e: Engine, level: number) {
+  const { ctx } = e;
+  const t0 = ctx.currentTime + 0.05;
+  const base = Math.random() < 0.5 ? rand(95, 140) : rand(170, 240);
+  const speed = rand(0.75, 1.25);
+  const tonal = Math.random() < 0.4; // each syllable its own tune, or one rising and falling line
+  const syllables = Math.floor(rand(5, 14));
+  const o = ctx.createOscillator();
+  o.type = "sawtooth";
+  const voice = ctx.createGain();
+  voice.gain.value = 0;
+  const f1 = filter(ctx, "bandpass", 700, 6);
+  const f2 = filter(ctx, "bandpass", 1500, 8);
+  const g2 = ctx.createGain();
+  g2.gain.value = 0.5;
+  const lp = filter(ctx, "lowpass", 2200);
+  const out = ctx.createGain();
+  out.gain.value = rand(0.02, 0.035) * level;
+  const p = panner(ctx, rand(-0.8, 0.8));
+  o.connect(voice);
+  voice.connect(f1).connect(lp);
+  voice.connect(f2).connect(g2).connect(lp);
+  lp.connect(out).connect(p).connect(e.events);
+  let t = t0;
+  o.frequency.setValueAtTime(base, t);
+  for (let k = 0; k < syllables; k++) {
+    const len = rand(0.09, 0.2) / speed;
+    const [a, b] = VOWELS[Math.floor(rand(0, VOWELS.length))];
+    f1.frequency.setTargetAtTime(a, t, 0.02);
+    f2.frequency.setTargetAtTime(b, t, 0.02);
+    const pitch = tonal ? base * [1, 1.25, 0.85, 1.12][Math.floor(rand(0, 4))] : base * (1 + 0.25 * Math.sin((k / syllables) * Math.PI) - 0.1 * (k / syllables));
+    o.frequency.setTargetAtTime(pitch, t, tonal ? 0.03 : 0.08);
+    voice.gain.setTargetAtTime(rand(0.6, 1), t, 0.015);
+    voice.gain.setTargetAtTime(0.05, t + len * 0.75, 0.02);
+    t += len + (Math.random() < 0.15 ? rand(0.15, 0.35) : 0.02);
+  }
+  voice.gain.setTargetAtTime(0, t, 0.03);
+  o.start(t0);
+  o.stop(t + 0.3);
+}
+
+// A cockerel crowing far off: "cock-a-doodle-doo", four short notes and a long last one.
+function rooster(e: Engine, level: number) {
+  const { ctx } = e;
+  const t0 = ctx.currentTime + 0.05;
+  const base = rand(520, 680);
+  const o = ctx.createOscillator();
+  o.type = "sawtooth";
+  const formant = filter(ctx, "bandpass", 1300, 3);
+  const lp = filter(ctx, "lowpass", 2600);
+  const g = ctx.createGain();
+  g.gain.value = 0;
+  const p = panner(ctx, rand(-0.9, 0.9));
+  const out = ctx.createGain();
+  out.gain.value = rand(0.025, 0.045) * level;
+  o.connect(formant).connect(lp).connect(g).connect(out).connect(p).connect(e.events);
+  const notes: [number, number, number][] = [
+    [1, 0.12, 0.06],
+    [1.15, 0.1, 0.05],
+    [1.3, 0.12, 0.05],
+    [1.45, 0.7, 0],
+  ];
+  let t = t0;
+  for (const [f, len, gap] of notes) {
+    o.frequency.setValueAtTime(base * f * 0.9, t);
+    o.frequency.linearRampToValueAtTime(base * f * (len > 0.5 ? 1.08 : 1), t + len * 0.4);
+    if (len > 0.5) o.frequency.linearRampToValueAtTime(base * f * 0.8, t + len);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(1, t + 0.02);
+    g.gain.setValueAtTime(1, t + len * 0.75);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    t += len + gap;
+  }
+  o.start(t0);
+  o.stop(t + 0.05);
+}
+
+// A motorbike (an okada, a moped) buzzing past: a rough little engine note that rises and
+// falls as it goes by.
+function motorbike(e: Engine, level: number) {
+  const { ctx } = e;
+  const t = ctx.currentTime + 0.05;
+  const dur = rand(2, 3.5);
+  const mid = t + dur * rand(0.4, 0.6);
+  const o = ctx.createOscillator();
+  o.type = "sawtooth";
+  const f = rand(70, 95);
+  o.frequency.setValueAtTime(f, t);
+  o.frequency.linearRampToValueAtTime(f * 1.25, mid);
+  o.frequency.linearRampToValueAtTime(f * 0.85, t + dur);
+  const lp = filter(ctx, "lowpass", 900);
+  const g = ctx.createGain();
+  const peak = rand(0.025, 0.045) * level;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(peak, mid);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  const dir = Math.random() < 0.5 ? 1 : -1;
+  const p = panner(ctx, -0.8 * dir);
+  if (p.pan) p.pan.linearRampToValueAtTime(0.8 * dir, t + dur);
+  o.connect(lp).connect(g).connect(p).connect(e.events);
+  o.start(t);
+  o.stop(t + dur + 0.05);
+}
+
+// The helicopter: a low "wop-wop-wop" (rumbling noise chopped by the blades) and a faint
+// turbine whine. Always running; its loudness and side follow the nearest helicopter.
+function startHeli(e: Engine) {
+  const { ctx } = e;
+  const src = noiseSource(ctx, noise(ctx).brown, true);
+  const lp = filter(ctx, "lowpass", 520);
+  const chop = ctx.createGain();
+  chop.gain.value = 0.35;
+  const lfo = ctx.createOscillator();
+  lfo.type = "square";
+  lfo.frequency.value = 11;
+  const depth = ctx.createGain();
+  depth.gain.value = 0.32;
+  lfo.connect(depth).connect(chop.gain);
+  src.connect(lp).connect(chop).connect(e.heli);
+  const whine = ctx.createOscillator();
+  whine.frequency.value = 1850;
+  const wg = ctx.createGain();
+  wg.gain.value = 0.012;
+  whine.connect(wg).connect(e.heli);
+  src.start(ctx.currentTime, rand(0, 3));
+  lfo.start();
+  whine.start();
+}
+
 // Muffled chatter: a few "voices" of filtered noise whose loudness and pitch wander
 // like syllables, so it reads as people talking a way off rather than static.
 function startCrowd(e: Engine, voices: number) {
@@ -329,6 +551,12 @@ function every(e: Engine, fn: () => void, min: number, max: number) {
 function setMix(e: Engine, mood: Mood, smooth: number) {
   const t = e.ctx.currentTime;
   e.traffic.gain.setTargetAtTime(mood.night ? 0.045 : 0.09, t, smooth);
+  // What's close by.
+  const sc = soundscape;
+  const muffle = sc.inside ? 0.35 : 1;
+  e.street.gain.setTargetAtTime(sc.street * (mood.night ? 0.05 : 0.09) * muffle, t, 0.4);
+  e.heli.gain.setTargetAtTime(sc.heli * sc.heli * 0.12 * (sc.inside ? 0.5 : 1), t, 0.3);
+  e.heliPan.pan?.setTargetAtTime(Math.max(-0.9, Math.min(0.9, sc.heliPan)), t, 0.3);
   e.crowd.gain.setTargetAtTime((mood.night ? 0.012 : 0.03) * (1 - mood.rain * 0.6), t, smooth);
   e.rain.gain.setTargetAtTime(mood.rain * 0.2, t, smooth);
 }
@@ -363,7 +591,12 @@ export function useCitySound(on: boolean, roundId: number, progress: number) {
     const events = ctx.createGain();
     events.gain.value = 1;
     events.connect(master);
-    const e: Engine = { ctx, master, traffic: bus(), crowd: bus(), rain: bus(), events, timers: new Set(), mood };
+    const heliPan = panner(ctx, 0);
+    heliPan.connect(master);
+    const heli = ctx.createGain();
+    heli.gain.value = 0;
+    heli.connect(heliPan);
+    const e: Engine = { ctx, master, traffic: bus(), street: bus(), heli, heliPan, crowd: bus(), rain: bus(), events, timers: new Set(), mood };
     engine.current = e;
 
     // The steady beds: distant traffic rumble and (when it rains) rain hiss.
@@ -371,6 +604,11 @@ export function useCitySound(on: boolean, roundId: number, progress: number) {
     const trafficSrc = noiseSource(ctx, n.brown, true);
     trafficSrc.connect(filter(ctx, "lowpass", 340)).connect(e.traffic);
     trafficSrc.start();
+    // The street close by: brighter and busier than the far-off rumble.
+    const streetSrc = noiseSource(ctx, n.brown, true);
+    streetSrc.connect(filter(ctx, "bandpass", 520, 0.6)).connect(e.street);
+    streetSrc.start(ctx.currentTime, 1.5);
+    startHeli(e);
     const rainSrc = noiseSource(ctx, n.white, true);
     rainSrc.connect(filter(ctx, "highpass", 1500)).connect(filter(ctx, "lowpass", 7000)).connect(e.rain);
     rainSrc.start();
@@ -385,6 +623,19 @@ export function useCitySound(on: boolean, roundId: number, progress: number) {
     every(e, () => m().night && m().rain < 0.4 && crickets(e), 2500, 7000);
     every(e, () => m().rain < 0.6 && dog(e), 25000, 60000);
     every(e, () => m().rain < 0.4 && Math.random() < 0.5 && cat(e), 60000, 140000);
+
+    // What's close by (see soundscape), checked often, played now and then.
+    const sc = soundscape;
+    const out = () => (sc.inside ? 0.45 : 1);
+    every(e, () => setMix(e, m(), 0.4), 300, 400);
+    every(e, () => sc.street > 0.25 && Math.random() < sc.street && carPass(e), 2500, 6000);
+    every(e, () => sc.street > 0.3 && Math.random() < sc.street * (m().night ? 0.3 : 0.8) && motorbike(e, sc.street * out()), 6000, 16000);
+    every(e, () => sc.street > 0.4 && Math.random() < sc.street * 0.35 && horn(e), 12000, 30000);
+    every(e, () => sc.people > 0.15 && Math.random() < sc.people && whisper(e, sc.people), 2500, 7000);
+    every(e, () => sc.foreign > 0.15 && Math.random() < sc.foreign && chatter(e, sc.foreign), 2500, 6500);
+    every(e, () => sc.people > 0.4 && Math.random() < sc.people * 0.3 && chatter(e, sc.people * 0.7), 6000, 15000);
+    every(e, () => (sc.homes > 0.2 || sc.farm > 0.2) && m().rain < 0.6 && Math.random() < Math.max(sc.homes, sc.farm) && dog(e), 7000, 18000);
+    every(e, () => !m().night && m().rain < 0.4 && Math.random() < Math.max(sc.farm, sc.homes * 0.25, 0.04) && rooster(e, Math.max(0.3, sc.farm) * out()), 9000, 26000);
 
     // Fade in gently.
     master.gain.setTargetAtTime(MASTER, ctx.currentTime, 0.8);

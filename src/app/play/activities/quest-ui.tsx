@@ -154,7 +154,7 @@ export function QuestCelebration() {
           <span className="min-w-0">
             <span className="block text-xs font-bold uppercase tracking-wide text-gold">Side quest complete!</span>
             <span className="block truncate font-display text-lg font-extrabold leading-tight">{shown.title}</span>
-            <span className="block text-sm text-white/80">{shown.action ? "Your special move is ready" : `+${shown.reward} mint`}</span>
+            <span className="block text-sm text-white/80">{shown.action ? "Your special move is ready" : `+₥${shown.reward}`}</span>
           </span>
         </div>
       </div>
@@ -203,7 +203,7 @@ export function QuestBanner({ quest, onOpen }: { quest: QuestState | null; onOpe
         {flash ? (
           <>
             <span className="block text-[11px] font-semibold uppercase tracking-wide text-gold">{fresh ? "New side quest!" : "Quest complete!"}</span>
-            <span className="block truncate text-sm font-semibold">{fresh ? quest.role : finished?.action ? "Tap to use your special move" : `+${quest.reward} mint`}</span>
+            <span className="block truncate text-sm font-semibold">{fresh ? quest.role : finished?.action ? "Tap to use your special move" : `+₥${quest.reward}`}</span>
           </>
         ) : (
           <>
@@ -335,7 +335,7 @@ export function QuestSheet({
           </ol>
           <p className="flex items-center gap-1.5 text-sm">
             <Coins className="size-4 text-gold-dark" />
-            {quest.reward > 0 ? `Reward: ${quest.reward} mint` : "No mint for this one"}
+            {quest.reward > 0 ? `Reward: ₥${quest.reward}` : "No mint for this one"}
             {quest.action ? ` + ${ACTION_INFO[quest.action].label.toLowerCase()}` : ""}
             {quest.status === "done" && <b className="ml-auto text-me">Done!</b>}
           </p>
@@ -410,7 +410,7 @@ function StealPicker({ targets, busy, onPick }: { targets: StealTarget[] | null;
                 <Face p={t} size={30} />
                 <span className="min-w-0 flex-1 truncate text-sm font-semibold">{t.name}</span>
                 {t.bigFish && (
-                  <span className="rounded-full bg-[#0b7285]/15 px-2 py-0.5 text-[11px] font-semibold text-[#0b7285]" title={`Over ${BIG_FISH_COINS.toLocaleString("en")} mint`}>
+                  <span className="rounded-full bg-[#0b7285]/15 px-2 py-0.5 text-[11px] font-semibold text-[#0b7285]" title={`Over ₥${BIG_FISH_COINS.toLocaleString("en")}`}>
                     Big fish
                   </span>
                 )}
@@ -432,7 +432,7 @@ function ActionResult({ result }: { result: QuestActionResult }) {
     case "steal":
       return (
         <p className="act-pop text-sm font-semibold">
-          You swiped {result.amount} mint from {result.target}! They know it was you, so watch your back.
+          You swiped ₥{result.amount} from {result.target}! They know it was you, so watch your back.
         </p>
       );
     case "ghost_near":

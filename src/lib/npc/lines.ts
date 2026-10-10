@@ -331,8 +331,8 @@ export const BASE: Rules = {
   // ---------------------------------------------------------------- coins
   gift_offer: ["You know what? You look like you need small something.", "Wait, wait. Hold on.", "Let me do something nice today."],
   gift_yes: [
-    "Here, take {mint} mint. Buy yourself something cold.", "{mint} mint for you. Don't spend it all on #street_food#. Or do.",
-    "Take {mint} mint. Pay it forward one day.", "Here: {mint} mint. Go and win something with it!",
+    "Here, take ₥{mint}. Buy yourself something cold.", "₥{mint} for you. Don't spend it all on #street_food#. Or do.",
+    "Take ₥{mint}. Pay it forward one day.", "Here: ₥{mint}. Go and win something with it!",
   ],
   gift_no: ["I'd love to help, but my wallet is crying today. Next time.", "Not today, my friend. Ask me again another round.", "Ah, I just spent my last mint on #street_food#. Sorry!"],
   gift_already: ["I already gave you something this round! Greedy.", "One gift per round, my dear. Come back next round."],

@@ -537,14 +537,14 @@ export function makePlan(seed: number): CityPlan {
     }
   }
 
-  // About two cities in three have a railway: a viaduct sweeping across the city in gentle
+  // Every city has a railway for its bullet trains: a viaduct sweeping across the city in
   // S-bends, with a big glass station hall on a straight stretch near the middle.
   let rail: CityPlan["rail"] = null;
-  if (r(80) < 0.7) {
+  {
     const along: "x" | "z" = r(81) < 0.5 ? "x" : "z";
     const wave = 7 + r(83) * 6;
-    // Now and then nearly straight; mostly properly curvy (but gentle enough for trains).
-    const amp = Math.min(wave * 0.42, r(84) < 0.15 ? 0.6 : 2.5 + r(85) * 2.5);
+    // Always properly curvy (but gentle enough for trains).
+    const amp = Math.min(wave * 0.42, 3 + r(85) * 2.5);
     const phase = r(86) * Math.PI * 2;
     const at0 = Math.round((r(82) - 0.5) * 8);
     // The station: on a crest of the curve nearest the middle (where the line runs straight).
@@ -681,7 +681,21 @@ function placeMegas(plan: CityPlan) {
 /** A straight stretch of street with something built above it, from `from` to `to` along it. */
 export type Elevated = { along: "x" | "z"; at: number; from: number; to: number; stations: number[] };
 
-const elevatedCache = new WeakMap<CityPlan, { mono: Elevated | null; flyover: Elevated | null }>();
+/** A point on the monorail's smooth route: where (x, z), which way it runs (unit dx, dz), how far along (s). */
+export type MonoPoint = { x: number; z: number; dx: number; dz: number; s: number };
+
+/**
+ * The monorail: its main straight (along/at/from/to, with the two stations on it, as street
+ * positions) plus legs that sweep round the corners onto cross streets at one or both ends, as
+ * one smooth route sampled every MONO_STEP (path), how long it is, where the stations are along
+ * it (stationS), and which samples pass over each tile (tiles, by "x,z").
+ */
+export type MonoLine = Elevated & { path: MonoPoint[]; length: number; stationS: number[]; tiles: Map<string, number[]> };
+
+/** Distance between the monorail route's samples. */
+export const MONO_STEP = 0.25;
+
+const elevatedCache = new WeakMap<CityPlan, { mono: MonoLine | null; flyover: Elevated | null }>();
 
 /** The longest unbroken stretch of road along a street (and through 0 if it can), or null. */
 function streetRun(plan: CityPlan, along: "x" | "z", at: number, breakOnRail: boolean) {
@@ -707,13 +721,62 @@ function streetRun(plan: CityPlan, along: "x" | "z", at: number, breakOnRail: bo
   return best;
 }
 
+/**
+ * Round a route of street corners into a smooth line (each corner a sweeping curve of radius up
+ * to `r`), sampled every MONO_STEP.
+ */
+function smoothRoute(corners: { x: number; z: number }[], r: number): MonoPoint[] {
+  const dense: { x: number; z: number }[] = [corners[0]];
+  for (let i = 1; i < corners.length; i++) {
+    const p = corners[i];
+    const prev = corners[i - 1];
+    if (i === corners.length - 1) {
+      dense.push(p);
+      break;
+    }
+    const next = corners[i + 1];
+    const lin = Math.hypot(p.x - prev.x, p.z - prev.z);
+    const lout = Math.hypot(next.x - p.x, next.z - p.z);
+    const rr = Math.min(r, lin / 2, lout / 2);
+    const a = { x: p.x + ((prev.x - p.x) / lin) * rr, z: p.z + ((prev.z - p.z) / lin) * rr };
+    const b = { x: p.x + ((next.x - p.x) / lout) * rr, z: p.z + ((next.z - p.z) / lout) * rr };
+    dense.push(a);
+    // A quarter-circle-ish sweep (a quadratic curve through the corner's tangent points).
+    for (let k = 1; k < 16; k++) {
+      const t = k / 16;
+      const u = 1 - t;
+      dense.push({ x: u * u * a.x + 2 * u * t * p.x + t * t * b.x, z: u * u * a.z + 2 * u * t * p.z + t * t * b.z });
+    }
+    dense.push(b);
+  }
+  // Even steps along it.
+  const out: MonoPoint[] = [];
+  let s = 0;
+  let next = 0;
+  for (let i = 1; i < dense.length; i++) {
+    const p = dense[i - 1];
+    const q = dense[i];
+    const len = Math.hypot(q.x - p.x, q.z - p.z);
+    if (len < 1e-6) continue;
+    while (next <= s + len + 1e-9) {
+      const t = (next - s) / len;
+      out.push({ x: p.x + (q.x - p.x) * t, z: p.z + (q.z - p.z) * t, dx: (q.x - p.x) / len, dz: (q.z - p.z) / len, s: next });
+      next += MONO_STEP;
+    }
+    s += len;
+  }
+  return out;
+}
+
 /** The monorail and the flyover for this city (either can be missing). */
 export function elevated(plan: CityPlan) {
   const cached = elevatedCache.get(plan);
   if (cached) return cached;
   const monoAlong: "x" | "z" = plan.rail ? (plan.rail.along === "x" ? "z" : "x") : hash(3, 5, plan.seed + 1500) < 0.5 ? "x" : "z";
+  const crossAlong: "x" | "z" = monoAlong === "x" ? "z" : "x";
   const linesFor = (along: "x" | "z") => (along === "z" ? plan.xs : plan.zs);
-  let mono: Elevated | null = null;
+  let mono: MonoLine | null = null;
+  const legStreets: number[] = [];
   {
     let best: { at: number; from: number; to: number } | null = null;
     for (const at of linesFor(monoAlong).filter((v) => Math.abs(v) <= 9)) {
@@ -726,15 +789,77 @@ export function elevated(plan: CityPlan) {
       if (to - from >= 10 && (!best || to - from > best.to - best.from)) best = { at, from, to };
     }
     if (best) {
-      const len = best.to - best.from;
-      mono = { along: monoAlong, at: best.at, from: best.from, to: best.to, stations: [best.from + Math.round(len * 0.3), best.from + Math.round(len * 0.7)] };
+      const P = (a: number, c: number) => (monoAlong === "x" ? { x: a, z: c } : { x: c, z: a });
+      const road = (a: number, c: number) => {
+        const p = P(a, c);
+        return isRoad(plan, p.x, p.z);
+      };
+      // At each end, sweep round a corner onto a cross street (as long a run as it has, up to
+      // 9), so the line curves through town instead of running dead straight.
+      const crossing = linesFor(crossAlong);
+      const leg = (end: number, inward: number, avoid: number) => {
+        let pick: { a: number; dir: number; len: number } | null = null;
+        for (const a of crossing) {
+          // Near this end of the straight, leaving at least 10 of straight in the middle.
+          if ((end - a) * inward > 0 || (a - end) * inward > 4) continue;
+          for (const dir of [1, -1]) {
+            let len = 0;
+            while (len < 9 && road(a, best!.at + dir * (len + 1))) len++;
+            if (len < 4) continue;
+            const score = len + (dir === avoid ? -3 : 0) + Math.abs(a - end) * -0.5;
+            if (!pick || score > pick.len + (pick.dir === avoid ? -3 : 0) + Math.abs(pick.a - end) * -0.5) pick = { a, dir, len };
+          }
+        }
+        return pick;
+      };
+      const flip = hash(9, 4, plan.seed + 1502) < 0.5 ? 1 : -1;
+      const head = leg(best.from, 1, 0);
+      // The far end turns the other way when it can (an S through town), sometimes the same (a U).
+      const tail = leg(best.to, -1, head ? (flip > 0 ? head.dir : -head.dir) : 0);
+      const from = head ? head.a : best.from;
+      const to = tail ? tail.a : best.to;
+      if (to - from >= 10) {
+        const corners: { x: number; z: number }[] = [];
+        if (head) corners.push(P(head.a, best.at + head.dir * head.len));
+        corners.push(P(from, best.at), P(to, best.at));
+        if (tail) corners.push(P(tail.a, best.at + tail.dir * tail.len));
+        if (head) legStreets.push(head.a);
+        if (tail) legStreets.push(tail.a);
+        const path = smoothRoute(corners, 1.5);
+        const length = path[path.length - 1].s;
+        const len = to - from;
+        const stations = [from + Math.round(len * 0.3), from + Math.round(len * 0.7)];
+        // A station's distance along the route: the sample nearest its spot on the straight.
+        const stationS = stations.map((a) => {
+          const p = P(a, best!.at);
+          let bs = 0;
+          let bd = Infinity;
+          for (const q of path) {
+            const d = Math.hypot(q.x - p.x, q.z - p.z);
+            if (d < bd) {
+              bd = d;
+              bs = q.s;
+            }
+          }
+          return bs;
+        });
+        const tiles = new Map<string, number[]>();
+        for (let k = 0; k < path.length - 1; k++) {
+          const key = `${Math.round((path[k].x + path[k + 1].x) / 2)},${Math.round((path[k].z + path[k + 1].z) / 2)}`;
+          const list = tiles.get(key);
+          if (list) list.push(k);
+          else tiles.set(key, [k]);
+        }
+        mono = { along: monoAlong, at: best.at, from, to, stations, path, length, stationS, tiles };
+      }
     }
   }
   let flyover: Elevated | null = null;
   {
-    const along: "x" | "z" = monoAlong === "x" ? "z" : "x";
+    const along = crossAlong;
     let best: { at: number; from: number; to: number } | null = null;
-    for (const at of linesFor(along).filter((v) => Math.abs(v) >= 4 && Math.abs(v) <= 16)) {
+    // (Not along a street the monorail turns onto.)
+    for (const at of linesFor(along).filter((v) => Math.abs(v) >= 4 && Math.abs(v) <= 16 && !legStreets.includes(v))) {
       const run = streetRun(plan, along, at, true);
       if (run && run.to - run.from >= 10 && (!best || run.to - run.from > best.to - best.from)) best = { at, ...run };
     }
@@ -759,12 +884,17 @@ export function onElevated(line: Elevated | null, x: number, z: number) {
   return c === line.at && a >= line.from && a <= line.to;
 }
 
+/** Does the monorail pass over (x, z)? */
+export function onMono(line: MonoLine | null, x: number, z: number) {
+  return !!line && line.tiles.has(`${x},${z}`);
+}
+
 /** A footbridge over a straight stretch of busy road, and which style, or null. */
 export function footbridgeAt(plan: CityPlan, t: Tile): 0 | 1 | 2 | null {
   if (t.kind !== "road" || t.works || t.incident || t.rail || (t.mask !== 5 && t.mask !== 10)) return null;
   if (hash(t.x, t.z, plan.seed + 1510) > 0.045 || densityAt(plan, t.x, t.z) < 0.3) return null;
   const { mono, flyover } = elevated(plan);
-  if (onElevated(mono, t.x, t.z) || onElevated(flyover, t.x, t.z)) return null;
+  if (onMono(mono, t.x, t.z) || onElevated(flyover, t.x, t.z)) return null;
   // Not two in a row.
   const along = t.mask === 10;
   if (hash(t.x + (along ? 1 : 0), t.z + (along ? 0 : 1), plan.seed + 1510) <= 0.045) return null;
