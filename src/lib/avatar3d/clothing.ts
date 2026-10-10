@@ -95,6 +95,30 @@ function ribbonGeo(T: Torso, path: [number, number][], off: number, w: number) {
 }
 
 /**
+ * Where the neck comes out of the body or clothes (off: their offset from the skin) at angle th: the
+ * height, and the neck there. Walks down until the surface comes out past the neck, then pins the
+ * crossing down precisely (a coarse step would leave collars and chains wavy).
+ */
+export function neckLine(d: Dress, th: number, off: number) {
+  const { T } = d, outside = (y: number) => {
+    const h = d.neck(y, th), q = T.P(y, th, off);
+    return h && Math.hypot(q.x - h.centre.x, q.z - h.centre.z) >= h.dist ? h : null;
+  };
+  for (let y = -1.3; y > -2.1; y -= 0.04) {
+    let hit = outside(y);
+    if (!hit) continue;
+    let ye = y;
+    for (let lo = y, hi = y + 0.04, it = 0; it < 9; it++) {
+      const m = (lo + hi) / 2, h = outside(m);
+      if (h) [ye, lo, hit] = [m, m, h];
+      else hi = m;
+    }
+    return { y: ye, hit };
+  }
+  return null;
+}
+
+/**
  * A ribbed collar exactly on the line where the neck comes out of the clothes: its top edge lies on
  * the neck's skin and its lower edge on the cloth (off: the cloth's offset from the skin), so it
  * joins the two with no gap and no ring standing off the neck.
@@ -102,26 +126,9 @@ function ribbonGeo(T: Torso, path: [number, number][], off: number, w: number) {
 function collarGeo(d: Dress, off: number) {
   const { T, lod } = d, NA = Math.max(16, Math.round(48 * lod)), rows: Vector3[][] = [];
   for (let i = 0; i <= NA; i++) {
-    const th = (i / NA) * PI * 2;
-    // Walk down until the cloth comes out past the neck: that is the neck line.
-    let ye = NaN, hit: ReturnType<Dress["neck"]> = null;
-    for (let y = -1.3; y > -2.1; y -= 0.01) {
-      const h = d.neck(y, th);
-      if (!h) continue;
-      const q = T.P(y, th, off);
-      if (Math.hypot(q.x - h.centre.x, q.z - h.centre.z) >= h.dist) {
-        ye = y;
-        hit = h;
-        break;
-      }
-    }
-    if (!hit) return null;
-    // Pin the crossing down precisely (a coarse step leaves the collar edge wavy).
-    for (let lo = ye, hi = ye + 0.01, it = 0; it < 8; it++) {
-      const m = (lo + hi) / 2, h = d.neck(m, th), q = T.P(m, th, off);
-      if (h && Math.hypot(q.x - h.centre.x, q.z - h.centre.z) >= h.dist) ye = lo = m;
-      else hi = m;
-    }
+    const th = (i / NA) * PI * 2, line = neckLine(d, th, off);
+    if (!line) return null;
+    const { y: ye, hit } = line;
     // Rib profile: from the skin, out and over, down onto the cloth.
     const at = (y: number, out: number) => {
       const h = d.neck(y, th) ?? hit!, q = T.P(y, th, off), dir = new Vector3(q.x - h.centre.x, 0, q.z - h.centre.z).normalize();

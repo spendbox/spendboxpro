@@ -21,6 +21,18 @@ const matrixOf = (o: Object3D) => {
   return o.matrix.toArray();
 };
 
+/** Only the triangles of g between heights y0 and y1 (the neck), so tests against it are quick. */
+function neckBand(g: BufferGeometry, y0: number, y1: number) {
+  const p = g.attributes.position, I = g.index!.array, keep: number[] = [];
+  for (let i = 0; i < I.length; i += 3) {
+    const ys = [p.getY(I[i]), p.getY(I[i + 1]), p.getY(I[i + 2])];
+    if (Math.max(...ys) >= y0 && Math.min(...ys) <= y1) keep.push(I[i], I[i + 1], I[i + 2]);
+  }
+  g.setIndex(keep);
+  g.computeBoundingSphere();
+  return g;
+}
+
 /** Level of detail: 1 for your own avatar, 0.5 for players nearby. */
 export function buildAvatar(r: Recipe, lod = 1): Model {
   const head = buildHead(r, lod);
@@ -45,7 +57,7 @@ export function buildAvatar(r: Recipe, lod = 1): Model {
 
   // The neck (part of the head's skin), in body space, for fitting collars to it.
   const skin = head.parts.find((p) => p.name === "headSkin")!;
-  const neckMesh = new Mesh(skin.geo.clone().applyMatrix4(ho.matrix).applyMatrix4(bo.matrix.clone().invert()), new MeshBasicMaterial({ side: DoubleSide }));
+  const neckMesh = new Mesh(neckBand(skin.geo.clone().applyMatrix4(ho.matrix).applyMatrix4(bo.matrix.clone().invert()), -2.3, -1.1), new MeshBasicMaterial({ side: DoubleSide }));
   neckMesh.updateMatrixWorld();
   const ray = new Raycaster(), zc = (T.P(-1.4, 0).z + T.P(-1.4, PI).z) / 2;
   const neck: Dress["neck"] = (y, th) => {
@@ -145,7 +157,7 @@ export function buildAvatar(r: Recipe, lod = 1): Model {
   });
   const floorY = topY - LT - LS - 0.55;
   robes(d, shX, floorY);
-  chain(add, T, r.chain, O, lod);
+  chain(d, r.chain);
   // The hijab's drape is refitted to the body (the head alone doesn't know where the shoulders are).
   const hijab = head.parts.findIndex((p) => p.name === "hijabDrape");
   if (hijab >= 0) {

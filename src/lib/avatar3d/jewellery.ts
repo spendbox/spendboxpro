@@ -1,12 +1,13 @@
 // Jewellery on the body: wristwatches and neck chains. (Earrings and piercings are with the ears.)
 
 import { BufferGeometry, CatmullRomCurve3, CircleGeometry, CylinderGeometry, Float32BufferAttribute, Matrix4, Object3D, Quaternion, SphereGeometry, TorusGeometry, TubeGeometry, Vector3 } from "three";
-import type { Torso } from "./body.ts";
-import { CHAINS, type Outfit } from "./catalog.ts";
+import { CHAINS } from "./catalog.ts";
+import { type Dress, neckLine } from "./clothing.ts";
 import { PI } from "./math.ts";
 import { type Part, ellGeo } from "./parts.ts";
 
 type Add = (name: string, node: string, geo: BufferGeometry, mat: Part["mat"], surface?: Part["surface"]) => void;
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 /** Joins geometries into one (fewer draw calls for chains made of many links). */
 function merge(list: BufferGeometry[]) {
@@ -41,36 +42,56 @@ export function watch(add: Add, node: string, index: number, at: number, lod: nu
   add("watchFace", node, new CircleGeometry(0.155, n).rotateY(PI / 2).translate(0.215 * at + 0.105, 0.42, 0), "watchFace", "sheet");
 }
 
-/** A neck chain: rests on the trapezius close to the neck, then falls onto the chest. */
-export function chain(add: Add, T: Torso, index: number, O: Outfit, lod: number) {
+/**
+ * A neck chain, where a real one rests: at the back just below the neck (over the bony bump at its
+ * base), at the sides on the slope from the neck to the shoulders, close to the neck, then falling
+ * over the collarbones to the breastbone at the front. It follows the measured line where the neck
+ * meets the body or clothes, so it fits every build and neckline.
+ */
+export function chain(d: Dress, index: number) {
   if (!index) return;
-  const C = CHAINS[index], off = O.suit ? 0.12 : 0.07, r = C.r ?? 0.03;
+  const { add, T, O, lod } = d, C = CHAINS[index], r = C.r ?? 0.03;
+  // The neck line round the body (measured once, at 36 angles), and the chain's height just below it.
+  // It lies right on the cloth (or skin); over a suit, on the lapels.
+  const clothOff = O.sl === "none" || O.swim ? 0 : 0.02, off = O.suit ? 0.1 : clothOff + 0.025, line: number[] = [];
+  for (let k = 0; k <= 36; k++) line.push(neckLine(d, (k / 36) * PI * 2, clothOff)?.y ?? -1.5);
+  // Where it rests at each angle: a set distance across the surface from the neck line (measured
+  // along the body, so on the near-flat slope to the shoulders it stays close to the neck).
+  const rest: number[] = line.map((y0, k) => {
+    const th = (k / 36) * PI * 2, p0 = T.P(y0, th, clothOff);
+    let y = y0;
+    while (y > y0 - 0.6 && T.P(y, th, clothOff).distanceTo(p0) < 0.09 + r) y -= 0.01;
+    return y;
+  });
+  const base = (th: number) => {
+    const u = ((((th / (PI * 2)) % 1) + 1) % 1) * 36, k = Math.floor(u);
+    return lerp(rest[k], rest[k + 1], u - k);
+  };
   /** The chain's path round the neck, and the body's outward direction under each point. */
   const path = (drop: number) => {
-    const pts: Vector3[] = [], nor: Vector3[] = [], o2 = off + r + 0.02;
+    const pts: Vector3[] = [], nor: Vector3[] = [], o2 = off + r;
     for (let k = 0; k < 72; k++) {
       const th = (k / 72) * PI * 2, c = Math.cos(th), f = Math.pow(Math.max(0, c), 1.25);
-      const y = -1.48 - drop * f - 0.06 * (1 - Math.abs(c)), rx = 0.74 + 0.62 * drop * f * (1 - 0.5 * f) + 0.12 * (1 - Math.abs(c));
-      // The widest point of the body at this height (angle thM): the chain passes it at the sides, so
-      // the front and back halves meet there without a jump.
-      let M = 0, thM = PI / 2;
-      for (let a = PI / 2 - 0.5; a <= PI / 2 + 0.5; a += 0.05) {
-        const x = T.P(y, a, o2).x;
-        if (x > M) [M, thM] = [x, a];
+      // Width at the side of the neck: just outside the neck line there.
+      const y = base(th) - drop * f, side = T.P(base(PI / 2), PI / 2, o2).x, rx = side + 0.62 * drop * f * (1 - 0.5 * f);
+      let a = th;
+      if (c > 0) {
+        // At the front the chain hangs in a U narrower than the chest: find the angle where the body is
+        // tx out to the side (x grows from the middle to the side, reaching the same point as the
+        // back half at the side, so the two halves meet smoothly).
+        const s = Math.sin(th), q = Math.abs(s), xs = T.P(y, PI / 2, o2).x, tx = Math.min(rx * q, xs);
+        let lo = 0, hi = PI / 2;
+        for (let it = 0; it < 22; it++) {
+          const m = (lo + hi) / 2;
+          if (T.P(y, m, o2).x < tx) lo = m;
+          else hi = m;
+        }
+        a = Math.sign(s) * (lo + hi) / 2;
       }
-      const sn = Math.abs(Math.sin(th)), w = sn ** 6, tx = (w * M + (1 - w) * Math.min(rx * sn, M)) * 0.999;
-      // Find the angle where the body is tx out to the side (x only grows towards thM, then shrinks).
-      let lo = c >= 0 ? 0 : thM, hi = c >= 0 ? thM : PI;
-      for (let it = 0; it < 22; it++) {
-        const m = (lo + hi) / 2, px = T.P(y, m, o2).x;
-        if (c >= 0 ? px < tx : px > tx) lo = m;
-        else hi = m;
-      }
-      if (Math.sin(th) < 0) [lo, hi] = [-lo, -hi];
-      const p = T.P(y, (lo + hi) / 2, o2);
-      if (c > 0) p.z = Math.max(p.z, T.P(y + 0.45, (lo + hi) / 2, o2).z - 0.1);
+      const p = T.P(y, a, o2);
+      if (c > 0) p.z = Math.max(p.z, T.P(y + 0.45, a, o2).z - 0.1);
       pts.push(p);
-      nor.push(T.N(y, (lo + hi) / 2, o2));
+      nor.push(T.N(y, a, o2));
     }
     const cv = new CatmullRomCurve3(pts, true);
     return Object.assign(cv, { normalAt: (t: number) => nor[Math.round(t * nor.length) % nor.length] });
