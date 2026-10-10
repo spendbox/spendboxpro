@@ -70,6 +70,16 @@ a[href]:active,
   }
 }
 
+/* The phone camera: the white flash, and the new picture popping into the gallery button. */
+@keyframes phone-flash {
+  0% { opacity: 0.95; }
+  100% { opacity: 0; }
+}
+@keyframes phone-thumb {
+  0% { transform: scale(1.8); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
 /* "The hunt has started" card: pops in with a little bounce. */
 @keyframes start-pop {
   0% { transform: scale(0.6) rotate(-4deg); opacity: 0; }
