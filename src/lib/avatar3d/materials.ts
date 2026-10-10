@@ -61,7 +61,8 @@ export function makeMaterials(r: Recipe): MaterialSet {
   const make = (key: MatKey): Material => {
     switch (key) {
       case "skin": return std(skin, 0.56, SKIN_GLOW);
-      case "skinVC": return std("#ffffff", 0.5, { ...SKIN_GLOW, vertexColors: true });
+      // Same shine as the head skin, so the face patch's edge doesn't show.
+      case "skinVC": return std("#ffffff", 0.56, { ...SKIN_GLOW, vertexColors: true });
       case "earVC": return std("#ffffff", 0.56, { ...SKIN_GLOW, vertexColors: true, side: DoubleSide });
       case "lidVC": return std("#ffffff", 0.55, { ...SKIN_GLOW, vertexColors: true, side: DoubleSide });
       case "sclera": return std("#ffffff", 0.3, { vertexColors: true });

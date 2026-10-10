@@ -73,6 +73,8 @@ export function AvatarLab({ initialRecipe, initialExpr }: { initialRecipe?: stri
     // ?yaw= and ?pitch= (radians) turn the camera, for screenshots from the side or below.
     const yaw = Number(params.get("yaw") || 0), pitch = Number(params.get("pitch") || 0);
     camera.position.set(6.4 * Math.sin(yaw) * Math.cos(pitch), 6.4 * Math.sin(pitch) - 0.2, 6.4 * Math.cos(yaw) * Math.cos(pitch));
+    // ?bg=<colour> paints the background (a gap in the skin then shows in that colour).
+    if (params.get("bg")) scene.background = new THREE.Color(params.get("bg")!);
     stage.current = { scene };
 
     const resize = () => {
@@ -144,8 +146,14 @@ export function AvatarLab({ initialRecipe, initialExpr }: { initialRecipe?: stri
       const obj = mountModel(model, mats);
       // ?hide=name1,name2 hides parts by name (for checking what is drawn where).
       const hide = new URLSearchParams(location.search).get("hide")?.split(",") ?? [];
+      // ?inside=1 paints the inside of surfaces bright green (shows skin that faces the wrong way).
+      const inside = new URLSearchParams(location.search).has("inside");
       obj.root.traverse((o) => {
         if (hide.includes(o.name)) o.visible = false;
+        if (inside && o instanceof THREE.Mesh && o.name === "headSkin") {
+          const back = new THREE.Mesh(o.geometry, new THREE.MeshBasicMaterial({ color: 0x00ff00, side: THREE.BackSide }));
+          o.add(back);
+        }
       });
       if (s.current) {
         s.scene.remove(s.current.obj.root);

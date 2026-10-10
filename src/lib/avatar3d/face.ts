@@ -51,13 +51,22 @@ export function lipShape(L: Lips, x: number, y: number) {
   return { h: 0.042 * L.d * gu + 0.052 * L.d * gl + sulcus, mask: clamp01(Math.max(gu, gl) * 1.7 - 0.28) };
 }
 
+/**
+ * Front-view area the face patch covers. Its edges must lie where the face is seen square-on, never
+ * on an outline (an edge on an outline shows). The prototype's bottom edge (-0.8) wrapped under the
+ * chin and ended right on its outline; this one ends on the front of the chin, below the lower lip.
+ */
+const PATCH = { x: 0.38, yLo: -0.68, yHi: 0.16 };
+
 export const MOUTH_MORPHS = ["smile", "open", "pucker", "wide"] as const;
 type Expr = Record<(typeof MOUTH_MORPHS)[number], number>;
 
 /** How the skin around the mouth slides for an expression (front-view offsets, plus depth). */
 function mouthWarp(L: Lips, x: number, y: number, e: Expr, upper: boolean) {
   const ax = Math.abs(x), sx = Math.sign(x), ww = MOUTH_W * L.w, MY = MOUTH_Y;
-  const E = smooth((0.38 - ax) / 0.08) * smooth((y + 0.8) / 0.12) * smooth((0.16 - y) / 0.12);
+  // Movement fades out towards the patch's edges, so they stay put on the skin (the bottom fades over a longer
+  // distance: opening the mouth pulls the chin down, and its lowest rows must not slide off the opening).
+  const E = smooth((PATCH.x - ax) / 0.08) * smooth((y - PATCH.yLo) / 0.16) * smooth((PATCH.yHi - y) / 0.12);
   const wc = g2((ax - ww) / 0.1, (y - MY) / 0.09), inM = g2(x / (ww * 1.1), (y - MY) / 0.09), f = Math.exp(-Math.pow(ax / (ww * 1.02), 4));
   let ox = 0, oy = 0, dz = 0;
   ox += e.smile * (0.03 * sx * wc + 0.018 * (x / ww) * inM);
@@ -66,7 +75,9 @@ function mouthWarp(L: Lips, x: number, y: number, e: Expr, upper: boolean) {
   if (upper) oy += e.open * 0.016 * f * Math.exp(-(((y - MY) / 0.07) ** 2));
   else {
     oy -= e.open * 0.11 * f * Math.exp(-(((MY - y) / 0.22) ** 2));
-    dz -= e.open * 0.012 * f * Math.exp(-(((MY - y) / 0.1) ** 2));
+    // Only the lower lip itself rolls in a little as the mouth opens (the prototype's wider pull also sank
+    // the chin below it into the skin underneath).
+    dz -= e.open * 0.012 * f * Math.exp(-(((MY - y) / 0.07) ** 2));
   }
   ox -= e.open * 0.1 * x * inM;
   ox -= e.pucker * 0.4 * x * g2(x / 0.26, (y - MY) / 0.12);
@@ -81,6 +92,9 @@ function mouthWarp(L: Lips, x: number, y: number, e: Expr, upper: boolean) {
  * neck; without this they fold into slivers that show as a jagged line along the jaw. The band's ends
  * stay fixed, so the face and the lower neck are untouched.
  */
+/** Smoothing passes: enough to fill the groove where the jaw's underside meets the neck, as soft tissue does. */
+const RELAX_STEPS = 40;
+
 function relaxJunction(pos: number[], NA: number, NT: number, free: number[]) {
   const W = NA + 1;
   for (let i = 0; i <= NA; i++) {
@@ -99,7 +113,7 @@ function relaxJunction(pos: number[], NA: number, NT: number, free: number[]) {
     if (ids.length < 4) continue;
     let col = ids.map((id) => new Vector3(pos[3 * id], pos[3 * id + 1], pos[3 * id + 2]));
     const f = ids.map((id) => free[id]);
-    for (let it = 0; it < 12; it++) {
+    for (let it = 0; it < RELAX_STEPS; it++) {
       col = col.map((p, k) => (k === 0 || k === col.length - 1 ? p : p.clone().lerp(col[k - 1].clone().add(col[k + 1]).multiplyScalar(0.5), 0.5 * f[k])));
     }
     // Even spacing along the smoothed column, keeping both ends where they were.
@@ -119,10 +133,11 @@ function relaxJunction(pos: number[], NA: number, NT: number, free: number[]) {
 
 /**
  * Where the surface turns a sharp corner (throat to the underside of the chin), a normal measured
- * across the corner points the wrong way and shades as a dark crease. There, ease the normal toward
- * the mesh's own (face-averaged) normal; everywhere else keep the exact normal from the shape.
+ * across the corner points the wrong way and shades as a dark crease, and where relaxJunction moved
+ * the skin the exact normal no longer fits (it shaded as a bright streak along the jaw). There, ease
+ * the normal toward the mesh's own (face-averaged) normal; everywhere else keep the exact normal.
  */
-function creaseNormals(geo: BufferGeometry, NA: number, NT: number) {
+function creaseNormals(geo: BufferGeometry, NA: number, NT: number, free: number[]) {
   const exact = geo.attributes.normal.clone();
   geo.computeVertexNormals();
   const n = geo.attributes.normal, W = NA + 1, a = new Vector3(), m = new Vector3(), s = new Vector3();
@@ -138,23 +153,34 @@ function creaseNormals(geo: BufferGeometry, NA: number, NT: number) {
   for (let i = 0; i < n.count; i++) {
     a.fromBufferAttribute(exact, i);
     m.fromBufferAttribute(n, i);
-    const w = smooth((0.9 - a.dot(m)) / 0.4);
+    // Also wherever relaxJunction moved the skin: the exact normal belongs to the shape before smoothing.
+    const w = Math.max(smooth((0.9 - a.dot(m)) / 0.4), smooth(free[i] * 4));
     a.lerp(m, w).normalize();
     n.setXYZ(i, a.x, a.y, a.z);
   }
 }
 
+/** The face patch's area, feathered out by a small margin. */
+const underPatch = (u: Vector3) =>
+  u.z <= 0 ? 0 : smooth((PATCH.x + 0.08 - Math.abs(u.x)) / 0.08) * smooth((u.y - PATCH.yLo + 0.08) / 0.08) * smooth((PATCH.yHi + 0.08 - u.y) / 0.08);
+
+/** 1 well inside the face patch's area, falling to 0 at its edges. */
+const patchInterior = (u: Vector3) =>
+  u.z <= 0 ? 0 : smooth((PATCH.x - Math.abs(u.x)) / 0.06) * smooth((u.y - PATCH.yLo) / 0.06) * smooth((PATCH.yHi - u.y) / 0.06);
+
+/** The opening in the skin behind the lips (front-view x, y). The mouth cavity is sized to cover it. */
+const MOUTH_HOLE = { x: 0.05 + MOUTH_W * 1.25, yLo: PATCH.yLo, yHi: -0.38 };
+const inMouthHole = (u: Vector3) => u.z > 0.5 && Math.abs(u.x) < MOUTH_HOLE.x && u.y < MOUTH_HOLE.yHi && u.y > MOUTH_HOLE.yLo;
+
 /** The head and neck skin, with holes where the face patch's mouth and the eyes go. */
 export function headSkin(c: HeadCtx): Part {
-  // Hole behind the lips (wide and deep enough that the lower lip never lies on hidden skin when the mouth
-  // opens), and holes for the eyes. All of it sits under the face patch, so the hole edges never show.
-  const keep = (u: Vector3) =>
-    !(u.z > 0.5 && Math.abs(u.x) < 0.05 + MOUTH_W * 1.25 && u.y < -0.38 && u.y > -0.68) &&
-    !(u.z > 0.4 && ((Math.abs(u.x) - 0.34) / 0.17) ** 2 + ((u.y - 0.06) / 0.12) ** 2 < 1);
+  // Holes for the eyes, and behind the lips (so the lower lip never lies on hidden skin when the mouth
+  // opens). All of it sits under the face patch and, for the mouth, in front of the mouth cavity.
+  const eyeHole = (u: Vector3) => u.z > 0.4 && ((Math.abs(u.x) - 0.34) / 0.17) ** 2 + ((u.y - 0.06) / 0.12) ** 2 < 1;
   // Laid out around the neck axis, so the neck gets an even, dense grid for sculpting.
   const NA = resEven(68, c.lod), NT = res(58, c.lod);
   const map = (u: Vector3) => headNeck(c, u);
-  const pos: number[] = [], nor: number[] = [], kp: boolean[] = [], free: number[] = [], idx: number[] = [], aCut = 0.8, vCut = 0.44;
+  const pos: number[] = [], nor: number[] = [], kp: boolean[] = [], mh: boolean[] = [], free: number[] = [], idx: number[] = [], aCut = 0.8, vCut = 0.44;
   const rowAngle = (j: number) => {
     const v = j / NT;
     return v < vCut ? (aCut * v) / vCut : aCut + ((PI - aCut) * (v - vCut)) / (1 - vCut);
@@ -165,24 +191,31 @@ export function headSkin(c: HeadCtx): Part {
       const ph = (i / NA) * PI * 2;
       const u = NP.clone().multiplyScalar(Math.cos(al)).addScaledVector(NE1, Math.cos(ph) * Math.sin(al))
         .addScaledVector(NE2, Math.sin(ph) * Math.sin(al)).normalize();
-      const p = map(u), n = surfNormal(map, u);
+      // Hidden skin under the face patch sits a little deeper, tapering to nothing at the patch's edges: its
+      // coarse mesh cuts across hollows (between lip and chin) and could otherwise reach the patch above it.
+      const p = map(u).multiplyScalar(1 - 0.005 * patchInterior(u)), n = surfNormal(map, u);
       pos.push(p.x, p.y, p.z);
       nor.push(n.x, n.y, n.z);
-      kp.push(keep(u));
-      free.push(neckBlendFreedom(u));
+      kp.push(!eyeHole(u));
+      mh.push(inMouthHole(u));
+      // Never smooth under the face patch: it is shaped from the unsmoothed head, so the skin under it must stay put.
+      free.push(neckBlendFreedom(u) * (1 - underPatch(u)));
     }
   }
   const W = NA + 1;
   for (let j = 0; j < NT; j++) {
     for (let i = 0; i < NA; i++) {
       const a = j * W + i, b = a + 1, cc = a + W, d = cc + 1;
-      if (kp[a] && kp[b] && kp[d]) idx.push(a, d, b);
-      if (kp[a] && kp[d] && kp[cc]) idx.push(a, cc, d);
+      // A triangle goes if it touches an eye hole, but only if it lies wholly inside the mouth hole: the
+      // mouth hole then comes out slightly smaller than drawn, never larger (a larger one reached past the
+      // face patch's edge and the mouth cavity, and showed as see-through slits).
+      if (kp[a] && kp[b] && kp[d] && !(mh[a] && mh[b] && mh[d])) idx.push(a, d, b);
+      if (kp[a] && kp[d] && kp[cc] && !(mh[a] && mh[d] && mh[cc])) idx.push(a, cc, d);
     }
   }
   relaxJunction(pos, NA, NT, free);
   const geo = geoFrom(pos, idx, nor);
-  creaseNormals(geo, NA, NT);
+  creaseNormals(geo, NA, NT, free);
   return { name: "headSkin", mat: "skin", node: ROOT, geo, surface: "closed" };
 }
 
@@ -191,6 +224,7 @@ export function facePatch(c: HeadCtx): Part[] {
   const r = c.recipe, N = NOSES[r.nose], L: Lips = LIPS[r.lips];
   const skin = new Color(SKINS[r.skin].c), tint = LIP_TINTS[r.lipT], lipCol = skin.clone().lerp(new Color(tint.c), tint.k);
   const Z: Expr = { smile: 0, open: 0, pucker: 0, wide: 0 };
+  const nx = Math.round(50 * c.lod), ny = Math.round(64 * c.lod), x0 = -PATCH.x, x1 = PATCH.x, y0 = PATCH.yLo, dy = (PATCH.yHi - PATCH.yLo) / ny;
   const P = (x: number, y: number, e: Expr, up: boolean) => {
     const w = mouthWarp(L, x, y, e, up), X = x + w.ox, Y = y + w.oy;
     const d = headNeck(c, new Vector3(X, Y, Math.sqrt(Math.max(0, 1 - X * X - Y * Y)))).multiplyScalar(1.002);
@@ -201,8 +235,8 @@ export function facePatch(c: HeadCtx): Part[] {
     const k = 0.004, a = P(x + k, y, e, up).sub(P(x - k, y, e, up)), b = P(x, y + k, e, up).sub(P(x, y - k, e, up));
     return a.cross(b).normalize();
   };
-  const nx = Math.round(50 * c.lod), ny = Math.round(64 * c.lod), x0 = -0.38, x1 = 0.38, y0 = -0.8, dy = 0.96 / ny;
-  const seam = Math.round(22 * c.lod), ww = MOUTH_W * L.w;
+  // The upper and lower halves meet on the mouth line.
+  const seam = Math.round((MOUTH_Y - y0) / dy), ww = MOUTH_W * L.w;
   const parts: Part[] = [];
   for (const up of [false, true]) {
     const j0 = up ? seam : 0, j1 = up ? ny : seam, pos: number[] = [], nor: number[] = [], cols: number[] = [], idx: number[] = [];
@@ -239,9 +273,12 @@ export function facePatch(c: HeadCtx): Part[] {
 
   // Inside of the mouth: dark cavity, upper teeth on the head, lower teeth and tongue on the jaw.
   const mq = facePoint(c, 0, MOUTH_Y), mpt = mq.p, mnrm = mq.n, R = MOUTH_W * 0.765 * L.w;
+  // The cavity covers the whole opening in the skin (plus a margin), so the open mouth never shows through to
+  // the inside of the head. (The prototype's was sized to the lips, narrower than the opening.)
+  const hc = facePoint(c, 0, (MOUTH_HOLE.yLo + MOUTH_HOLE.yHi) / 2);
   parts.push({
     name: "mouthCavity", mat: "mouthCavity", node: ROOT, surface: "sheet",
-    geo: ellGeo(R + 0.05, 0.12, 0.13, 16, c.lod, mpt.clone().addScaledVector(mnrm, -0.14)),
+    geo: ellGeo(MOUTH_HOLE.x + 0.04, (MOUTH_HOLE.yHi - MOUTH_HOLE.yLo) / 2 + 0.04, 0.13, 16, c.lod, hc.p.clone().addScaledVector(hc.n, -0.14)),
   });
   const arc = (r0: number, r1: number, h: number, at: Vector3) => new CylinderGeometry(r0, r1, h, 20, 1, true, -1, 2).translate(at.x, at.y, at.z);
   parts.push({
