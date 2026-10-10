@@ -22,6 +22,7 @@ import {
   Sun,
   Clapperboard,
   Music,
+  Camera,
 } from "lucide-react";
 /** Any of our line icons (Lucide or our own). */
 type LucideIcon = React.ComponentType<{ className?: string; style?: React.CSSProperties; "aria-hidden"?: boolean }>;
@@ -93,6 +94,8 @@ const CityView = dynamic(() => import("./city-view").then((m) => m.CityView), {
 // Panels people open now and then: their code only loads when first opened, so the town
 // itself starts faster.
 const Menu = dynamic(() => import("./menu").then((m) => m.Menu));
+const CameraMode = dynamic(() => import("./phone/camera").then((m) => m.CameraMode));
+const PhoneSheet = dynamic(() => import("./phone/phone-sheet").then((m) => m.PhoneSheet));
 const HowItWorks = dynamic(() => import("./how-it-works").then((m) => m.HowItWorks));
 const Results = dynamic(() => import("./results").then((m) => m.Results));
 const AvatarEditor = dynamic(() => import("./avatar-editor").then((m) => m.AvatarEditor));
@@ -328,6 +331,9 @@ export function Game({
   const [confirmHide, setConfirmHide] = useState(false);
   const [howOpen, setHowOpen] = useState(false);
   const [editAvatar, setEditAvatar] = useState(false);
+  // The phone: the camera (a picture of the town, or a selfie) and the phone itself (gallery).
+  const [camera, setCamera] = useState<"photo" | "selfie" | null>(null);
+  const [phone, setPhone] = useState<"home" | "photos" | null>(null);
   // The round card (top left) and the bottom bar (Explore, Chat, Ghosts, My house) start folded
   // away on every visit, so the town gets the screen; tap either to open it.
   const [statsMin, setStatsMin] = useState(true);
@@ -1281,7 +1287,7 @@ export function Game({
       )}
 
       {/* Top: round clock and numbers (stacked, so big numbers fit) */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-2.5 sm:p-4">
+      <div className={cn("pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-2.5 sm:p-4", camera && "hidden")}>
         {round ? (
           <StatsCard
             city={plan.city.name}
@@ -1424,11 +1430,34 @@ export function Game({
           newGifts={newGifts}
           coins={guest ? undefined : me.coins}
           level={guest ? undefined : me.level}
+          onPhone={() => { setMenu(false); setPhone("home"); }}
           onChangePin={() => router.push("/welcome")}
           onSignOut={() => { setMenu(false); setConfirmSignOut(true); }}
         />
       )}
       {howOpen && <HowItWorks onClose={() => setHowOpen(false)} />}
+      {camera && round && (
+        <CameraMode
+          key={camera}
+          avatar={me.avatar}
+          initialKind={camera}
+          city={plan.city.name}
+          place={ride !== null ? (rooms.myRoomInfo?.name ?? RIDE_INFO[ride.kind].label) : place ? (rooms.myRoomInfo?.name ?? placeRoom?.name ?? null) : null}
+          guest={guest}
+          onClose={() => setCamera(null)}
+          onOpenGallery={() => { setCamera(null); setPhone("photos"); }}
+          onSignIn={() => { setCamera(null); setSignIn({ why: "Sign in to keep your pictures. Your gallery goes with you to every town." }); }}
+        />
+      )}
+      {phone && (
+        <PhoneSheet
+          guest={guest}
+          initialScreen={phone}
+          onClose={() => setPhone(null)}
+          onCamera={(kind) => { setPhone(null); if (round) setCamera(kind); }}
+          onSignIn={() => { setPhone(null); setSignIn({ why: "Sign in to keep your pictures. Your gallery goes with you to every town." }); }}
+        />
+      )}
       {ghostsOpen && board && (
         <GhostsSheet
           ghosts={board.ghosts}
@@ -1814,7 +1843,7 @@ export function Game({
 
 
       {/* Bottom: messages, controls and chat */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-1.5 p-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:gap-2 sm:p-4">
+      <div className={cn("pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-1.5 p-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:gap-2 sm:p-4", camera && "hidden")}>
         {!guest && (
           <Safe name="Quest banner">
             <QuestBanner quest={quests.quest} onOpen={() => setQuestOpen(true)} />
@@ -1933,6 +1962,16 @@ export function Game({
                 title={ghostsShown ? "Hide the ghosts" : "Show the ghosts"}
               >
                 {ghostsShown ? <Eye className="size-4 text-[#1c7ed6]" /> : <EyeOff className="size-4" />}
+              </button>
+            )}
+            {round && (
+              <button
+                onClick={() => { setCamera("photo"); setMenu(false); setFeedOpen(false); }}
+                className="pointer-events-auto grid size-8 shrink-0 place-items-center rounded-full bg-ink text-white shadow sm:size-9"
+                aria-label="Camera: take a picture or a selfie"
+                title="Take a picture or a selfie"
+              >
+                <Camera className="size-4" />
               </button>
             )}
             {!guest && round && (

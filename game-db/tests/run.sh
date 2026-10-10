@@ -47,9 +47,9 @@ for t in streaks hugs duels; do
   $P -f "game-db/tests/$t.test.sql" 2>&1 | sed 's/^psql:[^ ]* NOTICE:  //'
 done
 # Part 30 takes the bot out of the ghosts, which the scenarios above still count on; part 31
-# adds the throw clock; part 32 the bank robbery; part 33 helicopter rides. Each test runs
-# its own part.
-for t in nobot stalling heist heli; do
+# adds the throw clock; part 32 the bank robbery; part 33 helicopter rides; part 34 the phone
+# gallery. Each test runs its own part.
+for t in nobot stalling heist heli phone; do
   [ -f "game-db/tests/$t.test.sql" ] || continue
   $P -f "game-db/tests/$t.test.sql" 2>&1 | sed 's/^psql:[^ ]* NOTICE:  //'
 done

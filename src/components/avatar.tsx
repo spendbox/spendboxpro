@@ -11,13 +11,26 @@ function shade(hex: string, amount: number) {
  * A player's portrait, drawn in SVG from their choices: soft shading, layered hair, proper
  * eyes, and clothes. Scales to any size.
  */
-export function AvatarFace({ avatar: a, size = 40, className, ring }: { avatar: Avatar; size?: number; className?: string; ring?: string }) {
+export function AvatarFace({
+  avatar: a,
+  size = 40,
+  className,
+  ring,
+  cutout,
+}: {
+  avatar: Avatar;
+  size?: number;
+  className?: string;
+  ring?: string;
+  /** Just the person (no round backdrop), e.g. to stand them in front of a photo. */
+  cutout?: boolean;
+}) {
   const skin = SKIN[a.skin];
   const skinShade = shade(skin, 0.12);
   const hair = HAIR_COLOR[a.hairColor];
   const hairShade = shade(hair, 0.25);
   const top = TOP_COLOR[a.topColor];
-  const id = `av${[a.skin, a.hair, a.hairColor, a.top, a.topColor, a.bg].join("-")}`;
+  const id = `av${cutout ? "c" : ""}${[a.skin, a.hair, a.hairColor, a.top, a.topColor, a.bg].join("-")}`;
   return (
     <svg viewBox="0 0 120 120" width={size} height={size} className={className} role="img" aria-label="Player avatar">
       <defs>
@@ -38,14 +51,14 @@ export function AvatarFace({ avatar: a, size = 40, className, ring }: { avatar: 
           <stop offset="1" stopColor={shade(MATERIAL[a.top] ?? top, 0.22)} />
         </linearGradient>
         <clipPath id={`${id}-clip`}>
-          <circle cx="60" cy="60" r="60" />
+          {cutout ? <rect width="120" height="120" /> : <circle cx="60" cy="60" r="60" />}
         </clipPath>
         <clipPath id={`${id}-body`}>
           <path d={BODY} />
         </clipPath>
       </defs>
       <g clipPath={`url(#${id}-clip)`}>
-        <rect width="120" height="120" fill={`url(#${id}-bg)`} />
+        {!cutout && <rect width="120" height="120" fill={`url(#${id}-bg)`} />}
         {/* Hair that falls behind the head */}
         {[4, 6, 10, 11].includes(a.hair) && (
           <path

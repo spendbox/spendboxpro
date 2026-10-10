@@ -433,7 +433,8 @@ export type Sfx =
   | "splash"
   | "rustle"
   | "whoosh"
-  | "chime";
+  | "chime"
+  | "shutter";
 
 let sfxOn = true;
 let sfx: { ctx: AudioContext; out: GainNode } | null = null;
@@ -683,6 +684,13 @@ export function playSfx(name: Sfx, opts: { delay?: number } = {}) {
       // A little two-note chime (sitting down, a lift arriving)
       tone(ctx, out, now, { dur: 0.25, freq: 784, gain: 0.18 });
       tone(ctx, out, now, { at: 0.12, dur: 0.35, freq: 1047, gain: 0.16 });
+      break;
+    case "shutter":
+      // A phone camera: two quick mechanical clicks
+      hiss(ctx, out, now, { dur: 0.035, type: "highpass", freq: 1800, gain: 0.55 });
+      tone(ctx, out, now, { dur: 0.03, freq: 1400, to: 600, type: "square", gain: 0.08, lowpass: 3000 });
+      hiss(ctx, out, now, { at: 0.075, dur: 0.05, type: "bandpass", freq: 2600, q: 0.9, gain: 0.45 });
+      tone(ctx, out, now, { at: 0.075, dur: 0.04, freq: 900, to: 400, type: "square", gain: 0.06, lowpass: 2400 });
       break;
   }
 }

@@ -69,7 +69,8 @@ sport, plus private messages. Explore stays locked while the town is still a bui
    `game-db/022_pool_and_ads.sql`, `game-db/023_houses.sql`, `game-db/024_play_style.sql`,
    `game-db/025_big_towns.sql`, `game-db/026_friends.sql`, `game-db/027_streaks_levels.sql`,
    `game-db/028_hugs_gifts.sql`, `game-db/029_ghost_duels.sql`, `game-db/030_no_bot_ghost.sql`,
-   `game-db/031_no_stalling.sql`, `game-db/032_bank_heist.sql` and `game-db/033_helicopters.sql`, in order, once each, on an empty database. In Supabase → Database → Extensions, switch on **pg_cron** first if you
+   `game-db/031_no_stalling.sql`, `game-db/032_bank_heist.sql`, `game-db/033_helicopters.sql` and
+   `game-db/034_phone_photos.sql`, in order, once each, on an empty database. In Supabase → Database → Extensions, switch on **pg_cron** first if you
    can: the file then schedules the round clock to run every minute. (Without it, the clock
    still moves whenever someone has the game open.)
 2. **Email codes.** The app sends its own 4-digit sign-in codes through Resend, so nothing

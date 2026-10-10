@@ -7,7 +7,7 @@ import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar } from "@/lib/avatar";
 import { makePlan } from "@/lib/city/layout";
 import { cn } from "@/lib/cn";
-import { snapshotScene } from "../city/snapshot";
+import { captureScene } from "../city/snapshot";
 import { playSfx } from "../sound";
 import { useActivityRoom } from "./hub";
 import { questEvent } from "./quest-store";
@@ -55,44 +55,6 @@ function rng(seed: string) {
     h = Math.imul(h ^ (h >>> 13), 1274126177);
     return ((h >>> 0) % 100000) / 100000;
   };
-}
-
-/** True when a copied picture came out empty (some phones won't hand the 3D view over). */
-function blank(c: HTMLCanvasElement) {
-  try {
-    const px = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
-    let bright = 0;
-    for (let i = 0; i < px.length; i += 4 * 997) bright += px[i] + px[i + 1] + px[i + 2];
-    return bright <= 2000;
-  } catch {
-    return true;
-  }
-}
-
-/** The live 3D scene (the city, or the room you're in), copied off the screen, or null. */
-function captureScene(): Promise<HTMLCanvasElement | null> {
-  // Best: the city view draws a fresh frame for us.
-  const snap = snapshotScene();
-  if (snap && snap.width >= 100 && !blank(snap)) return Promise.resolve(snap);
-  // The biggest canvas on the page that isn't one of ours (the 3D view).
-  const src = [...document.querySelectorAll<HTMLCanvasElement>("canvas:not([data-photo])")].sort((a, b) => b.width * b.height - a.width * a.height)[0];
-  if (!src || src.width < 100) return Promise.resolve(null);
-  return new Promise((resolve) => {
-    // Right after the city draws a frame (its own callback runs first), the picture is still there.
-    requestAnimationFrame(() => {
-      try {
-        const c = document.createElement("canvas");
-        c.dataset.photo = "1";
-        c.width = src.width;
-        c.height = src.height;
-        const ctx = c.getContext("2d")!;
-        ctx.drawImage(src, 0, 0);
-        resolve(blank(c) ? null : c);
-      } catch {
-        resolve(null);
-      }
-    });
-  });
 }
 
 /** Draw `img` to cover the box (like CSS object-fit: cover). */

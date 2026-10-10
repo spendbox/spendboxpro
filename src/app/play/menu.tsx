@@ -1,7 +1,7 @@
 "use client";
 
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { ChevronRight, KeyRound } from "lucide-react";
+import { ChevronRight, KeyRound, Smartphone } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import {
   Award,
@@ -81,6 +81,7 @@ export function Menu({
   onMyStyle,
   onMyHouse,
   onFriends,
+  onPhone,
   friendRequests = 0,
   onMyGifts,
   newGifts = 0,
@@ -102,6 +103,8 @@ export function Menu({
   onMyHouse?: () => void;
   /** Opens your friends. Left out: the entry is hidden. */
   onFriends?: () => void;
+  /** Opens your phone (camera and gallery). */
+  onPhone?: () => void;
   /** Friend requests waiting for you (a red number on Friends). */
   friendRequests?: number;
   /** Opens My gifts. Left out: the entry is hidden. */
@@ -144,6 +147,7 @@ export function Menu({
   const progress = info ? (info.max ? 100 : Math.min(100, (have / Math.max(1, need)) * 100)) : 0;
 
   const all: (Entry | undefined)[] = [
+    onPhone && { key: "phone", label: "Phone", icon: Smartphone, tint: "bg-[#1f2328] text-white", onClick: onPhone },
     { key: "how", label: "How it works", icon: CircleHelp, tint: "bg-[#e3edff] text-[#2d6bff]", onClick: onHowItWorks },
     {
       key: "result",
