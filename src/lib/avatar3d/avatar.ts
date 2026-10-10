@@ -13,6 +13,7 @@ import { chain, watch } from "./jewellery.ts";
 import { PI, smooth } from "./math.ts";
 import { type Model, type Node, type Part } from "./parts.ts";
 import type { Recipe } from "./recipe.ts";
+import { buildRig } from "./rig.ts";
 import { shoes } from "./shoes.ts";
 import { resolveLook } from "./wardrobe.ts";
 
@@ -167,11 +168,13 @@ export function buildAvatar(r: Recipe, lod = 1): Model {
     add("hijabDrape", "chest", hijabDrape(d, ring), "hw");
   }
 
-  // The head's own nodes hang from the avatar.
-  const headNodes = head.nodes.map((n) => (n.parent === null ? { ...n, parent: "avatar", matrix: nodes.find((m) => m.id === "head")!.matrix } : n));
+  // The skeleton: model-space matrices of the build nodes, then bones and skin weights.
+  const M = new Map<string, Matrix4>();
+  for (const n of nodes) M.set(n.id, (n.parent ? M.get(n.parent)!.clone() : new Matrix4()).multiply(new Matrix4().fromArray(n.matrix)));
+  const rig = buildRig({ M, headNodes: head.nodes, shY: T.shY, L1, L2, LT, LS, jy, ballZ: 0.48 * 2.45 * (B.h < 1 ? 0.92 : 1), legX });
   return {
-    nodes: [...nodes.filter((n) => n.id !== "head"), ...headNodes],
-    parts: [...head.parts, ...parts],
+    nodes: rig.nodes,
+    parts: [...head.parts, ...parts].map(rig.skin),
     meta: { faceH: head.meta.faceH, floorY: NECK_Y * (1 - H) + floorY * H },
   };
 }

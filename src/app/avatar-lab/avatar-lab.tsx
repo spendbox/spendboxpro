@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { OUTFITS } from "@/lib/avatar3d/catalog";
 import { getAvatarModel } from "@/lib/avatar3d/client";
+import { MOVES, applyMove } from "@/lib/avatar3d/moves";
 import { type MaterialSet, makeMaterials } from "@/lib/avatar3d/materials";
 import { triangleCount } from "@/lib/avatar3d/parts";
 import { CATALOGS, DEFAULT_RECIPE, type Recipe, type RecipeKey, encodeRecipe, parseRecipe, randomRecipe } from "@/lib/avatar3d/recipe";
@@ -29,7 +30,7 @@ const EXPRESSIONS: { n: string; v: Partial<FaceState>; talk?: boolean }[] = [
   { n: "Frown", v: { smile: -0.6, brow: -0.5, lid: 0.1 } }, { n: "Talking", v: { smile: 0.15 }, talk: true },
 ];
 
-export function AvatarLab({ initialRecipe, initialExpr, initialView }: { initialRecipe?: string; initialExpr: number; initialView?: string }) {
+export function AvatarLab({ initialRecipe, initialExpr, initialView, initialMove }: { initialRecipe?: string; initialExpr: number; initialView?: string; initialMove?: string }) {
   const box = useRef<HTMLDivElement>(null);
   const [recipe, setRecipe] = useState<Recipe>(() =>
     initialRecipe ? parseRecipe(initialRecipe) : { ...DEFAULT_RECIPE, skin: 4, eyeC: 1, nose: 2, lips: 1, frame: 1 },
@@ -41,6 +42,12 @@ export function AvatarLab({ initialRecipe, initialExpr, initialView }: { initial
   const errorRef = useRef<HTMLParagraphElement>(null);
   const stage = useRef<{ scene: THREE.Scene; aim: (v: keyof typeof VIEWS) => void; current?: { obj: AvatarObject; mats: MaterialSet } } | null>(null);
   const exprRef = useRef(expr);
+  // ?move=<id> starts a move; ?mt=<seconds> freezes it at that moment (for screenshots).
+  const [move, setMove] = useState(() => Math.max(0, MOVES.findIndex((m) => m.id === initialMove)));
+  const moveRef = useRef(move);
+  useEffect(() => {
+    moveRef.current = move;
+  }, [move]);
   useEffect(() => {
     exprRef.current = expr;
   }, [expr]);
@@ -134,6 +141,7 @@ export function AvatarLab({ initialRecipe, initialExpr, initialView }: { initial
         }
         updateFace(cur.obj, target, blink, gaze, X.talk ? dt * 2 : dt);
       } else if (cur) updateFace(cur.obj, EXPRESSIONS[exprRef.current].v, 0, { x: 0, y: 0 }, 1);
+      if (cur) applyMove(cur.obj.nodes, cur.obj.rest, MOVES[moveRef.current], params.has("mt") ? Number(params.get("mt")) : t);
       renderer.render(scene, camera);
       raf = requestAnimationFrame(tick);
     };
@@ -210,6 +218,15 @@ export function AvatarLab({ initialRecipe, initialExpr, initialView }: { initial
       </section>
       <section className="grid content-start gap-4">
         <div>
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Move</h2>
+          <div className="mb-4 flex flex-wrap gap-2">
+            {MOVES.map((m, i) => (
+              <button key={m.id} type="button" aria-pressed={i === move} onClick={() => setMove(i)}
+                className={`rounded-xl border px-3 py-1.5 text-sm ${i === move ? "border-teal-700 bg-teal-50" : "border-slate-300 bg-white"}`}>
+                {m.n}
+              </button>
+            ))}
+          </div>
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Expression</h2>
           <div className="flex flex-wrap gap-2">
             {EXPRESSIONS.map((x, i) => (

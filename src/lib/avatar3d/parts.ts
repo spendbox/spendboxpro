@@ -27,6 +27,11 @@ export type Part = {
   morphs?: string[];
   /** Kind of surface, for the shape tests: "closed" shells must face outward; "sheet" is see-through/double-sided. */
   surface: "closed" | "sheet";
+  /**
+   * Skinned: the geometry is in the avatar's own space and moves with up to four bones per point
+   * (attributes skinIndex: positions in Model.nodes, skinWeight). Otherwise it moves rigidly with its node.
+   */
+  skinned?: boolean;
 };
 
 /** meta.faceH: height scale of the chosen face (sizes the jaw drop). floorY: where the feet stand (whole avatars only). */
