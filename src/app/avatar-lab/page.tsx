@@ -1,0 +1,17 @@
+import type { Metadata } from "next";
+import { AvatarLab } from "./avatar-lab";
+
+// Test page for the new 3D avatar, built step by step (currently: head and face).
+// Not linked from anywhere, and kept out of search results.
+
+export const metadata: Metadata = {
+  title: "Avatar lab",
+  robots: { index: false, follow: false },
+};
+
+// ?r=<recipe text> opens a given avatar, ?e=<number> picks an expression (used for screenshots).
+export default async function Page({ searchParams }: PageProps<"/avatar-lab">) {
+  const q = await searchParams;
+  const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+  return <AvatarLab initialRecipe={one(q.r)} initialExpr={Number(one(q.e)) || 0} />;
+}
