@@ -365,7 +365,7 @@ export const QUESTS: QuestDef[] = [
     key: "courier",
     title: "Courier",
     role: "Today you are a courier.",
-    brief: "Deliver a parcel of 50 mint to any player (tap someone, then Give mint).",
+    brief: "Deliver a parcel of ₥50 to any player (tap someone, then Give mint).",
     icon: "courier",
     fits: "any",
     steps: [{ type: "gift", coins: 50 }],
@@ -375,7 +375,7 @@ export const QUESTS: QuestDef[] = [
     key: "philanthropist",
     title: "Philanthropist",
     role: "Today you are a philanthropist.",
-    brief: "Share the love: give 100 mint in total to at least 2 different players.",
+    brief: "Share the love: give ₥100 in total to at least 2 different players.",
     icon: "gift",
     fits: "any",
     steps: [{ type: "gift", coins: 100 }, { type: "gift_people", count: 2 }],
@@ -385,7 +385,7 @@ export const QUESTS: QuestDef[] = [
     key: "good_samaritan",
     title: "Good Samaritan",
     role: "Today you are a Good Samaritan.",
-    brief: "Give 20 mint to someone who could use it.",
+    brief: "Give ₥20 to someone who could use it.",
     icon: "gift",
     fits: "any",
     steps: [{ type: "gift", coins: 20 }],
@@ -407,7 +407,7 @@ export const QUESTS: QuestDef[] = [
     key: "party_starter",
     title: "Party starter",
     role: "Today you start the party.",
-    brief: "Hit a club dance floor, do a dance-off and spray 100 mint on the dancers.",
+    brief: "Hit a club dance floor, do a dance-off and spray ₥100 on the dancers.",
     icon: "party",
     fits: "any",
     steps: [{ type: "play_game", count: 1, game: "dance" }, { type: "spray", coins: 100 }],
@@ -417,7 +417,7 @@ export const QUESTS: QuestDef[] = [
     key: "big_spender",
     title: "Big spender",
     role: "Today you are the big spender.",
-    brief: "Make it rain: spray 300 mint on a dance floor.",
+    brief: "Make it rain: spray ₥300 on a dance floor.",
     icon: "coins",
     fits: "any",
     steps: [{ type: "spray", coins: 300 }],
@@ -821,9 +821,9 @@ export function stepLabel(step: QuestStep): string {
     case "order_food":
       return `Order at ${step.count} different ${step.where === "bar" ? "bars" : step.where === "restaurant" ? "restaurants" : "places"}`;
     case "spray":
-      return `Spray ${step.coins} mint on a dance floor`;
+      return `Spray ₥${step.coins} on a dance floor`;
     case "gift":
-      return `Give ${step.coins} mint away`;
+      return `Give ₥${step.coins} away`;
     case "gift_people":
       return `Give mint to ${step.count} different players`;
     case "search_tiles":
@@ -847,7 +847,7 @@ export function stepProgressText(step: QuestStep, value: number) {
   const v = Math.min(Math.floor(value), target);
   if (step.type === "survive_minutes") return `${Math.floor(v / 60)}/${step.minutes} min`;
   if (step.type === "sit_seconds" || step.type === "stay_seconds") return `${v}/${target} s`;
-  if (step.type === "spray" || step.type === "gift") return `${v}/${target} mint`;
+  if (step.type === "spray" || step.type === "gift") return `₥${v}/${target}`;
   return `${v}/${target}`;
 }
 

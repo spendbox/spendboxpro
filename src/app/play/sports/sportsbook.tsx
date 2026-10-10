@@ -281,7 +281,7 @@ export function SportsSheet({
         },
     );
     setSlip(null);
-    setNote({ id: m.id, tone: "ok", text: `Bet placed: ${short(res.amount)} mint on ${label}. Good luck!` });
+    setNote({ id: m.id, tone: "ok", text: `Bet placed: ₥${short(res.amount)} on ${label}. Good luck!` });
   }
 
   // Watching a match: the tactical view (a ticket unlocks it).
@@ -389,7 +389,7 @@ export function SportsSheet({
             <h2 className="truncate font-display text-xl font-bold leading-tight">{SPORT_INFO[tab].place}</h2>
             <p className="truncate text-sm text-muted">
               {signedIn && board?.coins !== null && board?.coins !== undefined
-                ? `You have ${whole(board.coins)} mint`
+                ? `You have ₥${whole(board.coins)}`
                 : "Watch live matches and bet mint"}
             </p>
           </div>
@@ -521,7 +521,7 @@ export function SportsSheet({
         <div className="space-y-1 rounded-2xl bg-panel-2 px-3 py-2.5 text-xs text-muted">
           <p className="font-semibold text-ink">Mint only, just for fun. Mint has no cash value.</p>
           <p>
-            Bets: {whole(limits.min)}–{whole(limits.max)} mint a match, up to {whole(limits.dailyMax)} a day, until kick-off. Winners share
+            Bets: ₥{whole(limits.min)}–{whole(limits.max)} a match, up to {whole(limits.dailyMax)} a day, until kick-off. Winners share
             the pool by stake (the house keeps {Math.round(limits.burnShare * 100)}%, never from winners&apos; own mint). If nobody picks
             the winner, everyone gets their mint back.
           </p>
@@ -643,7 +643,7 @@ function MatchCard({
             </>
           ) : (
             <>
-              <Ticket className="hidden size-4 shrink-0 min-[400px]:block" /> Watch · {short(price)} mint
+              <Ticket className="hidden size-4 shrink-0 min-[400px]:block" /> Watch · ₥{short(price)}
             </>
           )}
         </button>
@@ -702,7 +702,7 @@ function PoolBar({ match: m, pool }: { match: MatchInfo; pool: Record<string, nu
     <div className="space-y-1.5">
       <div className="flex items-baseline justify-between gap-2 text-xs">
         <span className="font-semibold text-muted">Betting pool</span>
-        <span className="font-bold tabular-nums">{total > 0 ? `${whole(total)} mint` : "No bets yet"}</span>
+        <span className="font-bold tabular-nums">{total > 0 ? `₥${whole(total)}` : "No bets yet"}</span>
       </div>
       <div className="flex h-2 overflow-hidden rounded-full bg-panel-2" aria-hidden>
         {total > 0 &&
@@ -834,15 +834,15 @@ function BetSlip({
   if (closed) problem = "Bets are closed: it's kicked off";
   else if (!chosen) problem = "Pick who you think will win.";
   else if (!Number.isInteger(n) || n <= 0) problem = "How much mint?";
-  else if (n < limits.min) problem = `Bets start at ${short(limits.min)} mint.`;
+  else if (n < limits.min) problem = `Bets start at ₥${short(limits.min)}.`;
   else if (n > leftMatch)
     problem =
       leftMatch < limits.min
-        ? `You've bet the most allowed on this match (${short(limits.max)} mint).`
+        ? `You've bet the most allowed on this match (₥${short(limits.max)}).`
         : `You can bet ${short(leftMatch)} more mint on this match.`;
   else if (n > leftToday)
     problem = leftToday < limits.min ? "That's today's betting limit. Come back tomorrow!" : `You can bet ${short(leftToday)} more mint today.`;
-  else if (coins !== null && n > coins) problem = `You only have ${short(Math.floor(coins))} mint.`;
+  else if (coins !== null && n > coins) problem = `You only have ₥${short(Math.floor(coins))}.`;
 
   const est = chosen && !problem ? estimate(pool, chosen.key, n, limits.burnShare) : null;
   const side = chosen ? sideOf(m, chosen.key) : null;
@@ -912,11 +912,11 @@ function BetSlip({
         <p className="rounded-xl bg-panel px-3 py-2 text-sm">
           {est.refund ? (
             <>
-              Nobody has backed anyone else yet, so for now you&apos;d just get your <b>{short(n)} mint</b> back.
+              Nobody has backed anyone else yet, so for now you&apos;d just get your <b>₥{short(n)}</b> back.
             </>
           ) : (
             <>
-              About <b className="text-me">{short(est.payout)} mint</b> {side ? "if they win" : "if it's a draw"}.
+              About <b className="text-me">₥{short(est.payout)}</b> {side ? "if they win" : "if it's a draw"}.
               <span className="block text-xs text-muted">The pool can still change until kick-off.</span>
             </>
           )}
@@ -947,7 +947,7 @@ function BetSlip({
         </button>
       </div>
       <p className="text-center text-[11px] text-muted">
-        Today: {whole(today)} of {whole(limits.dailyMax)} mint bet · This match: {whole(mine)} of {whole(limits.max)}
+        Today: ₥{whole(today)} of {whole(limits.dailyMax)} bet · This match: {whole(mine)} of {whole(limits.max)}
       </p>
     </div>
   );
@@ -1126,7 +1126,7 @@ function LockedPanel({
           </>
         ) : signedIn ? (
           <>
-            <Ticket className="size-4" /> Buy ticket · {short(price)} mint
+            <Ticket className="size-4" /> Buy ticket · ₥{short(price)}
           </>
         ) : (
           "Sign in to watch"

@@ -12,6 +12,15 @@ const body = localFont({
   display: "swap",
 });
 
+// The mint sign (₥, an M with two bars through it): one glyph, used for every amount of mint.
+const mintSign = localFont({
+  src: "./fonts/mint-sign.woff2",
+  variable: "--font-mint",
+  display: "block",
+  adjustFontFallback: false,
+  declarations: [{ prop: "unicode-range", value: "U+20A5" }],
+});
+
 const display = localFont({
   src: "./fonts/bricolage-grotesque.woff2",
   variable: "--font-display-face",
@@ -38,7 +47,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${body.variable} ${display.variable} h-full antialiased`}>
+    <html lang="en" className={`${body.variable} ${display.variable} ${mintSign.variable} h-full antialiased`}>
       <body className="min-h-full font-sans">
         {children}
         <TapFeedback />

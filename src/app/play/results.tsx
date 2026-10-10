@@ -55,7 +55,7 @@ export function Results({
             {mine.won > 0 ? (
               <>
                 <p className="text-sm text-muted">You won</p>
-                <p className="font-display text-3xl font-extrabold">+{short(mine.won)} mint</p>
+                <p className="font-display text-3xl font-extrabold">+₥{short(mine.won)}</p>
                 <p className="text-sm">
                   {mine.role === "hider" && !mine.caught ? "You made it to the end as a ghost. " : ""}
                   {mine.detail && <span className="text-muted">({mine.detail})</span>}

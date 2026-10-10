@@ -1,18 +1,35 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Image as ImageIcon, LoaderCircle, SwitchCamera, X, Zap } from "lucide-react";
+import { Check, Image as ImageIcon, LoaderCircle, SwitchCamera, UserPlus, X, Zap } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import type { Avatar } from "@/lib/avatar";
 import { cn } from "@/lib/cn";
 import { useEscape } from "../menu/escape";
 import { playSfx } from "../sound";
 import { addShot, useGallery } from "./gallery";
-import { shotAspect, takeShot, type ShotKind } from "./lens";
+import { DEFAULT_STYLE, selfieLayout, shotAspect, takeShot, type ShotBackground, type ShotFrame, type ShotKind, type ShotStyle } from "./lens";
 
 // The phone camera: a viewfinder over the town. You can still move around and turn the view
 // while it's open, then tap the big button. Photo takes the town; Selfie turns the camera
-// round and puts you in the picture. Every picture goes straight into your gallery.
+// round and puts you in the picture, with anyone you add from the people here and your
+// friends. Pick the picture's shape (tall, square, wide) and, for selfies, what's behind you
+// (blurred, clear, black and white). Every picture goes straight into your gallery.
+
+/** Most people you can add to a selfie (besides you). */
+const MAX_WITH = 5;
+const FRAMES: { key: ShotFrame; label: string }[] = [
+  { key: "auto", label: "Auto" },
+  { key: "tall", label: "Tall" },
+  { key: "square", label: "Square" },
+  { key: "wide", label: "Wide" },
+];
+const BACKGROUNDS: { key: ShotBackground; label: string }[] = [
+  { key: "blur", label: "Portrait" },
+  { key: "clear", label: "Clear" },
+  { key: "mono", label: "B&W" },
+];
+type Person = { id: string; name: string; avatar: Avatar };
 
 function useViewport() {
   const [v, setV] = useState({ w: 0, h: 0 });
@@ -34,8 +51,11 @@ export function CameraMode({
   onClose,
   onOpenGallery,
   onSignIn,
+  people = [],
 }: {
   avatar: Avatar;
+  /** People you can add to a selfie: the people here, then your friends. */
+  people?: Person[];
   /** Where you are (a building, a ride), or null out in the town. */
   place: string | null;
   city: string;
@@ -46,6 +66,10 @@ export function CameraMode({
   onSignIn: () => void;
 }) {
   const [kind, setKind] = useState<ShotKind>(initialKind);
+  const [style, setStyle] = useState<ShotStyle>(DEFAULT_STYLE);
+  const [withIds, setWithIds] = useState<string[]>([]);
+  const [picking, setPicking] = useState(false);
+  const withPeople = withIds.map((id) => people.find((p) => p.id === id)).filter((p): p is Person => !!p);
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState(0);
   const [note, setNote] = useState<{ text: string; tone: "good" | "bad" | "info"; signIn?: boolean } | null>(null);
@@ -67,25 +91,24 @@ export function CameraMode({
     setBusy(true);
     playSfx("shutter");
     setFlash((f) => f + 1);
-    const shot = await takeShot(kind, avatar, view).catch(() => null);
+    const shot = await takeShot(kind, avatar, view, style, kind === "selfie" ? withPeople.map((p) => p.avatar) : []).catch(() => null);
     setBusy(false);
     if (!shot) return say("The camera couldn't see the town just now. Try again.", "bad");
     if (guest) {
       void addShot(shot, { place, city }, true);
       return say("Got it! Sign in to keep your pictures in your gallery.", "info", true);
     }
-    say(kind === "selfie" ? "Selfie saved to your gallery" : "Saved to your gallery", "good");
+    say(kind === "selfie" ? (withPeople.length ? `Group selfie with ${withPeople.length === 1 ? withPeople[0].name : `${withPeople.length} people`} saved` : "Selfie saved to your gallery") : "Saved to your gallery", "good");
     const error = await addShot(shot, { place, city }, false);
     if (error) say(error, "bad");
   }
 
   // The viewfinder: the biggest box of the picture's shape that fits the screen, in the middle
   // (exactly the part of the screen the picture keeps).
-  const aspect = shotAspect(view.w || 3, view.h || 4);
+  const aspect = shotAspect(view.w || 3, view.h || 4, style.frame);
   const fw = view.w && view.h ? Math.min(view.w, view.h * aspect) : 0;
   const fh = fw / aspect;
-  const tall = aspect < 1;
-  const face = Math.min(fw * (tall ? 0.95 : 0.62), fh * 0.86);
+  const everyone = [avatar, ...withPeople.map((p) => p.avatar)];
 
   return (
     <div className="pointer-events-none fixed inset-0 z-40 select-none" role="dialog" aria-label="Camera">
@@ -107,16 +130,20 @@ export function CameraMode({
           ))}
           {kind === "selfie" && (
             <>
-              {/* Portrait mode: the town goes soft behind you. */}
-              <div className="absolute inset-0 backdrop-blur-[3px]" />
-              <div
-                className="absolute bottom-0"
-                style={{ width: face, height: face, left: fw / 2 - face / 2 + fw * (tall ? 0.03 : 0.08), filter: "drop-shadow(0 6px 14px rgba(0,0,0,0.35))" }}
-              >
-                <AvatarFace avatar={avatar} size={face} cutout className="h-full w-full" />
-              </div>
+              {/* Behind you: soft (portrait mode), clear, or black and white. */}
+              {style.background === "blur" && <div className="absolute inset-0 backdrop-blur-[3px]" />}
+              {style.background === "mono" && <div className="absolute inset-0 backdrop-grayscale" />}
+              {selfieLayout(everyone.length, fw, fh).map(({ k, x, y, size }) => (
+                <div
+                  key={k}
+                  className="absolute"
+                  style={{ width: size, height: size, left: x, top: y, filter: `drop-shadow(0 6px 14px rgba(0,0,0,0.35))${style.background === "mono" ? " grayscale(1)" : ""}` }}
+                >
+                  <AvatarFace avatar={everyone[k]} size={size} cutout className="h-full w-full" />
+                </div>
+              ))}
               <span className="absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-[#f5c542] px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-black">
-                Portrait
+                {BACKGROUNDS.find((b) => b.key === style.background)?.label}
               </span>
             </>
           )}
@@ -191,6 +218,59 @@ export function CameraMode({
             <SwitchCamera className="size-6" />
           </button>
         </div>
+        {/* The picture's shape, what's behind you, and who's in it with you. */}
+        <div className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-1.5 text-[11px] font-semibold">
+          <div className="flex gap-0.5 rounded-full bg-black/40 p-0.5">
+            {FRAMES.map((f) => (
+              <button key={f.key} onClick={() => setStyle((s) => ({ ...s, frame: f.key }))} className={cn("rounded-full px-2 py-0.5", style.frame === f.key ? "bg-white/90 text-black" : "text-white/80")} aria-pressed={style.frame === f.key}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+          {kind === "selfie" && (
+            <div className="flex gap-0.5 rounded-full bg-black/40 p-0.5">
+              {BACKGROUNDS.map((b) => (
+                <button key={b.key} onClick={() => setStyle((s) => ({ ...s, background: b.key }))} className={cn("rounded-full px-2 py-0.5", style.background === b.key ? "bg-white/90 text-black" : "text-white/80")} aria-pressed={style.background === b.key}>
+                  {b.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {kind === "selfie" && (
+            <button onClick={() => setPicking((v) => !v)} className={cn("flex items-center gap-1 rounded-full px-2.5 py-1", picking ? "bg-white/90 text-black" : "bg-black/40 text-white")} aria-expanded={picking}>
+              <UserPlus className="size-3.5" />
+              {withPeople.length ? `${withPeople.length + 1} in it` : "Add people"}
+            </button>
+          )}
+        </div>
+        {kind === "selfie" && picking && (
+          <div className="pointer-events-auto max-h-44 w-full max-w-xs overflow-y-auto rounded-2xl bg-black/75 p-2 text-white backdrop-blur">
+            {people.length ? (
+              <ul className="space-y-1">
+                {people.map((p) => {
+                  const on = withIds.includes(p.id);
+                  const full = !on && withIds.length >= MAX_WITH;
+                  return (
+                    <li key={p.id}>
+                      <button
+                        disabled={full}
+                        onClick={() => setWithIds((ids) => (on ? ids.filter((x) => x !== p.id) : [...ids, p.id]))}
+                        className={cn("flex w-full items-center gap-2 rounded-xl px-2 py-1 text-left text-sm", on ? "bg-white/20" : "hover:bg-white/10", full && "opacity-40")}
+                      >
+                        <AvatarFace avatar={p.avatar} size={28} />
+                        <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                        {on && <Check className="size-4 text-[#69db7c]" strokeWidth={3} />}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="p-2 text-xs text-white/80">Nobody to add yet. Go somewhere with other players, or add friends, and they can be in your selfies.</p>
+            )}
+            <p className="px-2 pt-1 text-[10px] text-white/60">Up to {MAX_WITH} people with you.</p>
+          </div>
+        )}
         <div className="pointer-events-auto flex gap-1 rounded-full bg-black/40 p-1 text-xs font-bold uppercase tracking-wider">
           {(["photo", "selfie"] as const).map((k) => (
             <button

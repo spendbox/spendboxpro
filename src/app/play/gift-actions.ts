@@ -50,7 +50,7 @@ export async function giveCoins(
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Sign in to give mint." };
   if (typeof toId !== "string" || !UUID_RE.test(toId)) return { ok: false, error: "Pick a player." };
-  if (!Number.isInteger(amount) || amount < 1 || amount > 10_000) return { ok: false, error: "Pick between 1 and 10,000 mint." };
+  if (!Number.isInteger(amount) || amount < 1 || amount > 10_000) return { ok: false, error: "Pick between ₥1 and ₥10,000." };
   const text = typeof note === "string" ? note.replace(/\s+/g, " ").trim().slice(0, 80) : "";
   const { data, error } = await createAdminClient().rpc("give_coins", { p_from: userId, p_to: toId, p_amount: amount, p_note: text || null });
   if (error || !data) return { ok: false, error: friendly(error?.message, "Couldn't send the mint. Try again.") };
@@ -67,7 +67,7 @@ export async function sprayCoins(
   if (!userId) return { ok: false, error: "Sign in to spray." };
   const ids = Array.isArray(targets) ? [...new Set(targets.filter((t) => typeof t === "string" && UUID_RE.test(t)))].slice(0, 30) : [];
   if (!ids.length) return { ok: false, error: "Nobody to spray right now. Wait for some dancers!" };
-  if (!Number.isInteger(amount) || amount < 10 || amount > 500) return { ok: false, error: "Spray between 10 and 500 mint." };
+  if (!Number.isInteger(amount) || amount < 10 || amount > 500) return { ok: false, error: "Spray between ₥10 and ₥500." };
   const { data, error } = await createAdminClient().rpc("spray_coins", { p_from: userId, p_targets: ids, p_amount: amount });
   if (error || !data) return { ok: false, error: friendly(error?.message, "Couldn't spray. Try again.") };
   const d = data as { amount: number; shares: { id: string; name: string; coins: number }[]; balance: number };

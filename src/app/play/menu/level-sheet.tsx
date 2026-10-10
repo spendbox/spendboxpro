@@ -45,7 +45,7 @@ export function LevelSheet({ me }: { me: { id: string } }) {
     try {
       const res = await upgradeLevel();
       if (res.ok) {
-        setNote({ ok: true, party: true, text: `You're level ${res.level}! (${short(res.cost)} mint spent)` });
+        setNote({ ok: true, party: true, text: `You're level ${res.level}! (₥${short(res.cost)} spent)` });
         await levelStore.refresh(me.id, true);
       } else {
         setNote({ ok: false, text: res.error || "Couldn't level up. Try again." });
@@ -104,7 +104,7 @@ export function LevelSheet({ me }: { me: { id: string } }) {
         ) : confirm ? (
           <div className="rounded-xl bg-white/10 p-2 text-xs">
             <p>
-              Spend <b>{short(info.nextCost)} mint</b> to reach level {next}? The mint is used up.
+              Spend <b>₥{short(info.nextCost)}</b> to reach level {next}? The mint is used up.
             </p>
             <div className="mt-2 grid grid-cols-2 gap-2">
               <button onClick={() => setConfirm(false)} disabled={busy} className="rounded-lg bg-white/15 py-2 font-semibold">
@@ -125,7 +125,7 @@ export function LevelSheet({ me }: { me: { id: string } }) {
               disabled={!enoughCoins}
               className="w-full rounded-xl bg-gold py-2 text-sm font-semibold text-ink disabled:opacity-50"
             >
-              Upgrade to level {next} for {short(info.nextCost)} mint
+              Upgrade to level {next} for ₥{short(info.nextCost)}
             </button>
             {!enoughCoins && (
               <p className="mt-1 text-center text-[11px] text-white/70">

@@ -55,6 +55,16 @@ sport, plus private messages. Explore stays locked while the town is still a bui
    blackout) are switched off by part 29 (`world_event_kinds.enabled`), and so are the 12 side
    quests about hiding and hunting.
 
+7. **Going places and jobs** (`game-db/035_fees_and_jobs.sql`). The first visit to a place in
+   each town costs ₥0.10 (a house) to ₥5 (an international airport), once per town; train
+   fares (₥1, the monorail ₥1.50) are paid every time. Half of every fee goes into the prize pool,
+   the rest burns. Any business hires (`src/lib/jobs.ts`): a 5-question interview about the town
+   (asked and marked on the server); a score under the pass mark bars that place for the town.
+   Jobs pay by the hour until the town ends (at most 8 paid hours a day), taxed 10% into the
+   pool, and build skills: with a skill, the same kind of job needs no interview, and each
+   skill level adds 5% pay. Amounts of mint are written with the mint sign, ₥ (our own one-glyph
+   font, `src/app/fonts/mint-sign.woff2`). Ideas for 100 more minigames: `docs/MINIGAMES.md`.
+
 ## Setup
 
 1. **Database.** In Supabase → SQL Editor, run `game-db/001_hide_and_seek.sql`,
@@ -69,8 +79,8 @@ sport, plus private messages. Explore stays locked while the town is still a bui
    `game-db/022_pool_and_ads.sql`, `game-db/023_houses.sql`, `game-db/024_play_style.sql`,
    `game-db/025_big_towns.sql`, `game-db/026_friends.sql`, `game-db/027_streaks_levels.sql`,
    `game-db/028_hugs_gifts.sql`, `game-db/029_ghost_duels.sql`, `game-db/030_no_bot_ghost.sql`,
-   `game-db/031_no_stalling.sql`, `game-db/032_bank_heist.sql`, `game-db/033_helicopters.sql` and
-   `game-db/034_phone_photos.sql`, in order, once each, on an empty database. In Supabase → Database → Extensions, switch on **pg_cron** first if you
+   `game-db/031_no_stalling.sql`, `game-db/032_bank_heist.sql`, `game-db/033_helicopters.sql`,
+   `game-db/034_phone_photos.sql` and `game-db/035_fees_and_jobs.sql`, in order, once each, on an empty database. In Supabase → Database → Extensions, switch on **pg_cron** first if you
    can: the file then schedules the round clock to run every minute. (Without it, the clock
    still moves whenever someone has the game open.)
 2. **Email codes.** The app sends its own 4-digit sign-in codes through Resend, so nothing

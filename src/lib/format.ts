@@ -5,3 +5,6 @@ export const short = (n: number) =>
     : Number.isInteger(n)
       ? n.toLocaleString("en")
       : n.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** An amount of mint with the mint sign: 50 → "₥50", 0.5 → "₥0.50", 12,400 → "₥12.4k". */
+export const mint = (n: number) => `₥${short(n)}`;

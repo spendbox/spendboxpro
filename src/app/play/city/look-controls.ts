@@ -158,6 +158,10 @@ export function createLookControls(dom: HTMLElement) {
         state.pitch = target.pitch;
       }
     },
+    /** Zoom by a step (the + and − buttons): below 1 zooms in. */
+    zoomBy(f: number) {
+      target.zoom = clampZoom(target.zoom * f);
+    },
     resetZoom(snap = false) {
       target.zoom = 1;
       if (snap) state.zoom = 1;

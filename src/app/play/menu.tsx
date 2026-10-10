@@ -1,7 +1,7 @@
 "use client";
 
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { ChevronRight, KeyRound, Smartphone } from "lucide-react";
+import { Briefcase, ChevronRight, KeyRound, Smartphone } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import {
   Award,
@@ -82,6 +82,7 @@ export function Menu({
   onMyHouse,
   onFriends,
   onPhone,
+  onMyJob,
   friendRequests = 0,
   onMyGifts,
   newGifts = 0,
@@ -105,6 +106,8 @@ export function Menu({
   onFriends?: () => void;
   /** Opens your phone (camera and gallery). */
   onPhone?: () => void;
+  /** Opens My job (pay, skills). Left out: the entry is hidden. */
+  onMyJob?: () => void;
   /** Friend requests waiting for you (a red number on Friends). */
   friendRequests?: number;
   /** Opens My gifts. Left out: the entry is hidden. */
@@ -148,6 +151,7 @@ export function Menu({
 
   const all: (Entry | undefined)[] = [
     onPhone && { key: "phone", label: "Phone", icon: Smartphone, tint: "bg-[#1f2328] text-white", onClick: onPhone },
+    onMyJob && { key: "job", label: "My job", icon: Briefcase, tint: "bg-[#e7f5ff] text-[#1971c2]", onClick: onMyJob },
     { key: "how", label: "How it works", icon: CircleHelp, tint: "bg-[#e3edff] text-[#2d6bff]", onClick: onHowItWorks },
     {
       key: "result",
@@ -200,9 +204,9 @@ export function Menu({
                   </span>
                 )}
                 {coins !== undefined && (
-                  <span className="flex min-w-0 items-center gap-1 rounded-full bg-gold/25 px-2 py-0.5 text-[11px] font-bold text-ink" title={`${coins} mint`}>
+                  <span className="flex min-w-0 items-center gap-1 rounded-full bg-gold/25 px-2 py-0.5 text-[11px] font-bold text-ink" title={`₥${coins}`}>
                     <Coins className="size-3 shrink-0 text-gold-dark" strokeWidth={2.5} />
-                    <span className="truncate">{short(coins)} mint</span>
+                    <span className="truncate">₥{short(coins)}</span>
                   </span>
                 )}
                 {lvl === null && coins === undefined && (
@@ -242,7 +246,7 @@ export function Menu({
                             : `${left} more round${left === 1 ? "" : "s"} to level ${next}`
                           : canUpgrade
                             ? `Level ${next} is ready!`
-                            : `Level ${next}: ${short(info.nextCost)} mint`}
+                            : `Level ${next}: ₥${short(info.nextCost)}`}
                     </span>
                     {!ready && !info.max && (
                       <span className="shrink-0 tabular-nums text-white/60">

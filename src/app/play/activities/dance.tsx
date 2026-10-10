@@ -284,7 +284,7 @@ function Spray({ dancers, send, ...props }: GameProps & { dancers: ActivityPlaye
     send({ t: "spray", from: props.me, amount: res.amount, shares: res.shares });
     questEvent({ type: "spray", amount: res.amount });
     playSfx("found");
-    setMsg({ text: `You sprayed ${res.amount} mint on ${res.shares.length === 1 ? res.shares[0].name : `${res.shares.length} dancers`}!`, ok: true });
+    setMsg({ text: `You sprayed ₥${res.amount} on ${res.shares.length === 1 ? res.shares[0].name : `${res.shares.length} dancers`}!`, ok: true });
     setTarget(null);
   }
 
@@ -337,7 +337,7 @@ function Spray({ dancers, send, ...props }: GameProps & { dancers: ActivityPlaye
       </div>
       <BigButton tone="gold" onClick={() => void spray()} disabled={busy || pool.length === 0}>
         <Coins className="size-5" />
-        {busy ? "Spraying…" : `Spray ${amount} mint ${target ? `on ${target.name}` : `on ${Math.min(pool.length, 10)} dancer${pool.length === 1 ? "" : "s"}`}`}
+        {busy ? "Spraying…" : `Spray ₥${amount} ${target ? `on ${target.name}` : `on ${Math.min(pool.length, 10)} dancer${pool.length === 1 ? "" : "s"}`}`}
       </BigButton>
       {msg && <p className={cn("act-pop rounded-2xl px-3 py-2 text-center text-sm font-semibold", msg.ok ? "bg-me/15 text-me" : "bg-hit/10 text-hit")}>{msg.text}</p>}
     </div>

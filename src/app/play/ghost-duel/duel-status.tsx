@@ -84,7 +84,7 @@ export function DuelStatus({
             </span>
           ) : (
             <>
-              <b>You&apos;re a ghost.</b> <span className="text-muted">{short(me.stake)} mint staked.</span>{" "}
+              <b>You&apos;re a ghost.</b> <span className="text-muted">₥{short(me.stake)} staked.</span>{" "}
               <span className="hidden text-muted sm:inline">Everyone can see your light.</span>
               <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
                 <Dots n={me.wins} max={rules.goldenWins} tone="win" />
@@ -108,7 +108,7 @@ export function DuelStatus({
           <b className="hidden sm:inline">Tap a ghost&apos;s light to challenge them</b>
         </span>
         <span className="text-[11px] text-muted sm:text-xs">
-          {short(rules.fee)} mint a duel ·{" "}
+          ₥{short(rules.fee)} a duel ·{" "}
           {me.inPool ? (
             <b className="text-[#2b8a3e]">You&apos;re in the prize pool!</b>
           ) : (
