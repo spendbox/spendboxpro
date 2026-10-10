@@ -83,6 +83,7 @@ export function Menu({
   onFriends,
   onPhone,
   onMyJob,
+  onGames,
   friendRequests = 0,
   onMyGifts,
   newGifts = 0,
@@ -108,6 +109,8 @@ export function Menu({
   onPhone?: () => void;
   /** Opens My job (pay, skills). Left out: the entry is hidden. */
   onMyJob?: () => void;
+  /** Opens the games (all 100 minigames). */
+  onGames?: () => void;
   /** Friend requests waiting for you (a red number on Friends). */
   friendRequests?: number;
   /** Opens My gifts. Left out: the entry is hidden. */
@@ -151,6 +154,7 @@ export function Menu({
 
   const all: (Entry | undefined)[] = [
     onPhone && { key: "phone", label: "Phone", icon: Smartphone, tint: "bg-[#1f2328] text-white", onClick: onPhone },
+    onGames && { key: "games", label: "Games", icon: Gamepad2, tint: "bg-[#e5dbff] text-[#5f3dc4]", onClick: onGames },
     onMyJob && { key: "job", label: "My job", icon: Briefcase, tint: "bg-[#e7f5ff] text-[#1971c2]", onClick: onMyJob },
     { key: "how", label: "How it works", icon: CircleHelp, tint: "bg-[#e3edff] text-[#2d6bff]", onClick: onHowItWorks },
     {

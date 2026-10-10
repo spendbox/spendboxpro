@@ -6,12 +6,24 @@ import { cn } from "@/lib/cn";
 import { short } from "@/lib/format";
 import { bankHeistInfo, robBank, type HeistInfo, type HeistResult } from "../heist-actions";
 import { playSfx } from "../sound";
+import { HeistChain } from "../minigames/heist-chain";
 import { useActivityRoom } from "./hub";
 import { BigButton, Confetti, GameHeader, type GameProps, useSecondsLeft } from "./ui";
 
 // Rob the bank: the vault holds the game's prize pool. Pick a plan (a quiet job or a big
-// heist), see the odds and what's at stake, and go. The server rolls the dice; this screen
-// plays out the tension (alarms, a cracking bar) and then the getaway or the arrest.
+// heist), see the odds and what's at stake, and go. First you have to get in: a chain of heist
+// minigames (two for the quiet job, three with the getaway for the big heist); fail one and the
+// alarm goes off before you reach the vault (nothing lost). Then the server rolls the dice;
+// this screen plays out the tension (alarms, a cracking bar) and then the getaway or the arrest.
+
+const STEALTH = ["lock-pick", "laser-maze", "safe-cracker", "vault-code", "hacker-grid", "wire-cut", "guard-patrol"];
+/** The games for a job: two stealth games (and the getaway, for the big heist). */
+function jobGames(plan: "quiet" | "big") {
+  const pool = [...STEALTH];
+  const pickOne = () => pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
+  const out = [pickOne(), pickOne()];
+  return plan === "big" ? [...out, "getaway-driver"] : out;
+}
 
 const PLAN_INFO = {
   quiet: { title: "The quiet job", line: "Slip in after hours and crack a side safe.", icon: Footprints, color: "#1c7ed6" },
@@ -32,7 +44,9 @@ export function Heist(props: GameProps) {
   const [info, setInfo] = useState<HeistInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [plan, setPlan] = useState<"quiet" | "big">("quiet");
-  const [phase, setPhase] = useState<"choose" | "confirm" | "running" | "done">("choose");
+  const [phase, setPhase] = useState<"choose" | "confirm" | "job" | "running" | "done">("choose");
+  const [job, setJob] = useState<string[]>([]);
+  const [alarm, setAlarm] = useState(false);
   const [step, setStep] = useState(0);
   const [result, setResult] = useState<HeistResult | null>(null);
   const timers = useRef<number[]>([]);
@@ -109,7 +123,27 @@ export function Heist(props: GameProps) {
         </p>
       )}
 
-      {info && phase !== "done" && (
+      {phase === "job" && (
+        <HeistChain
+          games={job}
+          ctx={{ roundId: props.roundId, roomId: props.roomId, me: props.me, members: props.members }}
+          onCancel={() => setPhase("choose")}
+          onDone={(passed) => {
+            if (passed) void go();
+            else {
+              playSfx("caught");
+              setAlarm(true);
+              setPhase("choose");
+            }
+          }}
+        />
+      )}
+      {alarm && phase === "choose" && (
+        <p className="flex items-center gap-2 rounded-xl bg-hit/10 px-3 py-2 text-sm font-semibold text-hit">
+          <Siren className="size-4 shrink-0" /> The alarm went off before you reached the vault. You slipped away with your mint. Try again when you&apos;re ready.
+        </p>
+      )}
+      {info && phase !== "done" && phase !== "job" && (
         <>
           <div className="rounded-2xl bg-gradient-to-br from-[#2b2f33] to-[#16191d] p-4 text-white">
             <p className="text-xs font-semibold uppercase tracking-wide text-white/60">In the vault (the prize pool)</p>
@@ -165,6 +199,9 @@ export function Heist(props: GameProps) {
               <p className="mt-1">
                 Get away: your stake back plus <b className="text-[#2b8a3e]">₥{short(chosen.loot)}</b>.
               </p>
+              <p className="mt-1 text-muted">
+                First you have to get in: {plan === "big" ? "three heist games (the last one is the getaway)" : "two heist games"}. Fail one and the alarm goes off before you reach the vault (you keep your mint).
+              </p>
             </div>
           )}
 
@@ -193,7 +230,14 @@ export function Heist(props: GameProps) {
               <BigButton tone="soft" onClick={() => setPhase("choose")} className="w-auto px-5">
                 Back out
               </BigButton>
-              <BigButton onClick={() => void go()} className="bg-hit">
+              <BigButton
+                onClick={() => {
+                  setJob(jobGames(plan));
+                  setAlarm(false);
+                  setPhase("job");
+                }}
+                className="bg-hit"
+              >
                 <Siren className="size-5" />
                 Do it (₥{short(chosen?.stake ?? 0)})
               </BigButton>

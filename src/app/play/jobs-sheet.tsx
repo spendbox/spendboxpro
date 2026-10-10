@@ -6,10 +6,14 @@ import { cn } from "@/lib/cn";
 import { short } from "@/lib/format";
 import { INTERVIEW_LENGTH, payWithSkill, SKILLS, type Job, type Skill } from "@/lib/jobs";
 import { applyForJob, collectPay, jobOffer, jobStatus, quitJob, type JobOffer, type JobStatus, type Pay } from "./job-actions";
+import { claimMinigameReward } from "./minigame-actions";
+import { MINIGAME_BY_ID, SHIFT_GAMES } from "./minigames/registry";
+import { MiniGamePlayer, type PlayCtx } from "./minigames/shell";
 import { Sheet } from "./sheet";
 
 // Jobs: apply at the place you're in (a short trivia interview about the town), or look at your
-// job: pay waiting to be collected (taxed), quitting, and your skills.
+// job: pay waiting to be collected (taxed), quitting, and your skills. "Work a shift" plays a
+// minigame that fits the job (the kitchen rush for a waiter, the taxi rush for a ticket officer); a good shift earns a tip.
 
 type Step =
   | { kind: "loading" }
@@ -17,13 +21,17 @@ type Step =
   | { kind: "offer"; offer: JobOffer }
   | { kind: "interview"; offer: JobOffer; at: number; answers: number[] }
   | { kind: "result"; hired: boolean; score: number; outOf: number; pass: number; job: Job; skipped: boolean }
-  | { kind: "status"; status: JobStatus; paid?: Pay; note?: string };
+  | { kind: "status"; status: JobStatus; paid?: Pay; note?: string }
+  | { kind: "shift"; game: string; status: JobStatus };
 
 export function JobsSheet({
   place,
+  ctx,
   onClose,
   onChanged,
 }: {
+  /** Where you are (for the shift minigames). */
+  ctx: PlayCtx;
   /** Apply here (the place you're in), or null to just see your job. */
   place: { id: string; name: string } | null;
   onClose: () => void;
@@ -141,7 +149,38 @@ export function JobsSheet({
       )}
 
       {step.kind === "status" && (
-        <Status step={step} busy={busy} onCollect={() => showStatus(undefined, collectPay)} onQuit={() => showStatus("You left your job.", quitJob)} />
+        <Status
+          step={step}
+          busy={busy}
+          onCollect={() => showStatus(undefined, collectPay)}
+          onQuit={() => showStatus("You left your job.", quitJob)}
+          onShift={(skill) => {
+            const list = SHIFT_GAMES[skill] ?? ["order-up"];
+            setStep({ kind: "shift", game: list[Math.floor(Math.random() * list.length)], status: step.status });
+          }}
+        />
+      )}
+      {step.kind === "shift" && MINIGAME_BY_ID.get(step.game) && (
+        <div className="mt-3">
+          <MiniGamePlayer
+            def={MINIGAME_BY_ID.get(step.game)!}
+            ctx={ctx}
+            onClose={() => setStep({ kind: "status", status: step.status })}
+            task={{
+              label: "Your shift: do well for a tip",
+              passGrade: 1,
+              onDone: async (_score, grade) => {
+                let note = "Shift over. Not your best: no tip this time.";
+                if (grade > 0) {
+                  const res = await claimMinigameReward(step.game, grade).catch(() => null);
+                  note = res?.ok && res.coins > 0 ? `Great shift! Your boss tipped you ₥${short(res.coins)}.` : "Great shift! (No more tips today.)";
+                  onChanged();
+                }
+                void showStatus(note);
+              },
+            }}
+          />
+        </div>
       )}
     </Sheet>
   );
@@ -212,7 +251,7 @@ function Interview({ step, busy, onAnswer }: { step: Extract<Step, { kind: "inte
   );
 }
 
-function Status({ step, busy, onCollect, onQuit }: { step: Extract<Step, { kind: "status" }>; busy: boolean; onCollect: () => void; onQuit: () => void }) {
+function Status({ step, busy, onCollect, onQuit, onShift }: { step: Extract<Step, { kind: "status" }>; busy: boolean; onCollect: () => void; onQuit: () => void; onShift: (skill: Skill) => void }) {
   const { status, paid, note } = step;
   const job = status.job;
   const level = (s: Skill) => status.skills.find((k) => k.skill === s)?.level ?? 0;
@@ -278,6 +317,11 @@ function Status({ step, busy, onCollect, onQuit }: { step: Extract<Step, { kind:
           <p className="mt-1 text-sm text-muted">Work a job to earn skills. With a skill, the same kind of job needs no interview in the next town, and pays more as your skill grows.</p>
         )}
       </div>
+      {job && (
+        <button onClick={() => onShift(job.skill)} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#1971c2] py-3 font-semibold text-white">
+          <Briefcase className="size-4" /> Work a shift (a quick game for a tip)
+        </button>
+      )}
       {job && (
         <button disabled={busy} onClick={onQuit} className="flex w-full items-center justify-center gap-2 rounded-2xl py-2 text-sm font-semibold text-hit hover:bg-panel-2 disabled:opacity-50">
           <DoorOpen className="size-4" /> Quit my job

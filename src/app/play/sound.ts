@@ -694,6 +694,10 @@ let sfx: { ctx: AudioContext; out: GainNode } | null = null;
 export function setSfxEnabled(on: boolean) {
   sfxOn = on;
 }
+/** Are game sounds on? (Other sound makers, like the minigames', check this.) */
+export function sfxEnabled() {
+  return sfxOn;
+}
 
 function sfxEngine() {
   if (sfx) return sfx;
