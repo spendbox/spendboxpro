@@ -70,7 +70,7 @@ import { GreetButtons } from "./greet-buttons";
 import { MyGiftsSheet } from "./my-gifts-sheet";
 import { StreakPill, StreakSheet } from "./streak-sheet";
 import { useQuestTracker } from "./activities/quest-tracker";
-import { QuestBanner, QuestSheet } from "./activities/quest-ui";
+import { QuestBanner, QuestCelebration, QuestSheet } from "./activities/quest-ui";
 import { Chat } from "./chat";
 import { setEventSoundsEnabled } from "./city/event-sounds";
 import type { CityDancer, CityEvent, CityFriendPin, CityGhost, CityInteract, CityMarkers, CityRide, RideTarget } from "./city-view";
@@ -1809,6 +1809,7 @@ export function Game({
         {!guest && (
           <Safe name="Quest banner">
             <QuestBanner quest={quests.quest} onOpen={() => setQuestOpen(true)} />
+            <QuestCelebration />
           </Safe>
         )}
         {!guest && nudge && <FriendNudge friend={nudge} place={nudge.place} onJoin={() => goToFriend(nudge.room, nudge.name)} onClose={closeNudge} />}
