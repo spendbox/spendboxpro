@@ -8,7 +8,7 @@ import { hairThickness, hairUnder } from "./hair.ts";
 import type { HeadCtx } from "./head-shape.ts";
 import { PI, bell, smooth } from "./math.ts";
 import { type Part, ROOT, ellGeo } from "./parts.ts";
-import { type DirFn, capShell, earLine, lathe } from "./shells.ts";
+import { type DirFn, capShell, earClear, lathe } from "./shells.ts";
 
 /** Thickness of each hairstyle close to the head (fraction of the radius), so caps sit on top of it. */
 const HAIR_THICKNESS = [0, 0.025, 0.09, 0.115, 0.115, 0.03, 0.03, 0.06, 0.06, 0.075, 0.055, 0.03];
@@ -104,7 +104,7 @@ export function headwear(c: HeadCtx): Part[] {
   if (w === 1) {
     // Face cap: six-panel crown, a curved peak (visor) at the front, top button.
     const crown = (u: Vector3) => hairT + 0.05 + 0.05 * smooth((u.y - 0.4) / 0.5), rim: DirFn = (u) => 0.3 + 0.16 * u.z;
-    add("capCrown", capShell(c, 72, 22, rim, crown, 0, overHair));
+    add("capCrown", capShell(c, 72, 22, rim, crown, { floor: overHair }));
     const visor = capVisor(c, rim, (u) => Math.max(overHair(u), 0.1 * crown(u)));
     add("capVisor", visor.top);
     add("capVisorUnder", visor.under, "hwDark");
@@ -120,19 +120,20 @@ export function headwear(c: HeadCtx): Part[] {
   }
   if (w === 4) {
     // Kufi: snug round cap with an embroidered band (the band is in its texture).
-    add("kufi", capShell(c, 72, 20, () => 0.4, (u) => hairT + 0.04 - 0.04 * smooth((u.y - 0.85) / 0.15), 0, overHair), "kufi");
+    add("kufi", capShell(c, 72, 20, () => 0.4, (u) => hairT + 0.04 - 0.04 * smooth((u.y - 0.85) / 0.15), { floor: overHair }), "kufi");
   }
   if (w === 5) {
     // Fila (abeti-aja): soft cap whose crown folds over to one side, with its two flaps.
     add("fila", capShell(c, 72, 24, () => 0.38,
-      (u) => hairT + 0.05 + 0.32 * smooth((u.y - 0.55) / 0.4) * smooth((u.x + 0.1) / 0.7) + 0.1 * smooth((u.y - 0.7) / 0.3), 0, overHair));
+      (u) => hairT + 0.05 + 0.32 * smooth((u.y - 0.55) / 0.4) * smooth((u.x + 0.1) / 0.7) + 0.1 * smooth((u.y - 0.7) / 0.3), { floor: overHair }));
     for (const [i, z] of [0.24, -0.3].entries()) {
       add(`filaFlap${i}`, placed(ellGeo(0.12, 0.2, 0.14, 12, c.lod), new Vector3(F.w * 0.95, F.h * 0.86, z), [0, 0, -0.7]), "hw", "closed");
     }
   }
   if (w === 2 || w === 3) {
     // Head tie / gele base: wraps the head above the ears, fuller at the back.
-    const edge = (u: Vector3) => Math.max(u.z >= 0 ? 0.38 * u.z + 0.08 * (1 - u.z) : 0.08 + 0.75 * u.z, earLine(u) + 0.06);
+    const overEar = earClear(c, 0.06);
+    const edge = (u: Vector3) => Math.max(u.z >= 0 ? 0.38 * u.z + 0.08 * (1 - u.z) : 0.08 + 0.75 * u.z, overEar(u));
     add("wrap", capShell(c, 80, 26, edge, (u) =>
       hairT + 0.08 + 0.12 * smooth((u.y - 0.3) / 0.6) + 0.12 * smooth(-u.z) * smooth((u.y + 0.2) / 0.6) + 0.012 * Math.sin(Math.atan2(u.x, u.z) * 7 + u.y * 12)));
     if (w === 2) {
@@ -166,7 +167,7 @@ export function headwear(c: HeadCtx): Part[] {
     // The cap ends at the neck, where the drape takes over (the prototype's ran on down the neck under the drape).
     add("hijab", capShell(c, 84, 34, (u) => (inFace(u) ? 2 : -0.9),
       // (Extra thickness low down, where its edge tucks into the drape: there it stays well off the neck.)
-      (u) => 0.05 + 0.1 * bell((Math.abs(u.x) - 0.95) / 0.25) * smooth((u.y + 0.6) / 0.4) + 0.04 * smooth((-u.z - 0.2) / 0.6) + 0.06 * smooth((-u.y - 0.6) / 0.2), 14));
+      (u) => 0.05 + 0.1 * bell((Math.abs(u.x) - 0.95) / 0.25) * smooth((u.y + 0.6) / 0.4) + 0.04 * smooth((-u.z - 0.2) / 0.6) + 0.06 * smooth((-u.y - 0.6) / 0.2), { smoothEdge: 14 }));
     const k = c.fem ? 0.86 : 1;
     // Profile traced from the bottom up, so the surface faces outward.
     const drape = lathe([[0, -3.06], [1.9 * k, -3.05], [1.82 * k, -2.75], [1.62 * k, -2.35], [1.3 * k, -1.8], [1.08 * k, -1.3], [1.0 * k, -0.95]], Math.max(16, Math.round(40 * c.lod)));

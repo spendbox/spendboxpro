@@ -3,7 +3,7 @@
 
 import {
   BackSide, CanvasTexture, Color, DoubleSide, type Material, MeshBasicMaterial, MeshStandardMaterial,
-  type MeshStandardMaterialParameters, RepeatWrapping, SRGBColorSpace,
+  type MeshStandardMaterialParameters, NoColorSpace, RepeatWrapping, SRGBColorSpace,
 } from "three";
 import { CLOTH_COLORS, HAIR_COLORS, IRIS, SKINS } from "./catalog.ts";
 import type { MatKey } from "./parts.ts";
@@ -132,6 +132,26 @@ function strandTexture() {
   return texture(c, 6, 1);
 }
 
+/** Tiny coils and kinks, as a bump map: makes coily hair read as hair rather than a smooth shell. */
+function coilTexture() {
+  const [c, x] = canvas(256, 256);
+  let seed = 11;
+  const r = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  x.fillStyle = "#808080";
+  x.fillRect(0, 0, 256, 256);
+  x.lineWidth = 2;
+  for (let i = 0; i < 900; i++) {
+    const v = Math.floor(70 + r() * 140);
+    x.strokeStyle = `rgb(${v},${v},${v})`;
+    x.beginPath();
+    x.arc(r() * 256, r() * 256, 2 + r() * 4, r() * 6.3, r() * 6.3 + 3 + r() * 3);
+    x.stroke();
+  }
+  const t = texture(c, 10, 6);
+  t.colorSpace = NoColorSpace; // a height map, not a colour
+  return t;
+}
+
 /** Kufi: cap colour with a gold embroidered band at the rim and a light dotted pattern. */
 function kufiTexture(hex: string) {
   const [c, x] = canvas(256, 128);
@@ -188,10 +208,12 @@ export function makeMaterials(r: Recipe): MaterialSet {
       case "hwDark": return std(new Color(hwHex).multiplyScalar(0.62), 0.8);
       case "hwSheen": return std(new Color(hwHex).lerp(new Color("#ffffff"), 0.25), 0.32, { side: DoubleSide, metalness: 0.3 });
       case "kufi": return std("#ffffff", 0.7, { side: DoubleSide, map: kufiTexture(hwHex) });
-      case "hair": return std(hair, 0.72, { side: DoubleSide });
+      case "hair": return std(hair, 0.86, { side: DoubleSide, bumpMap: coilTexture(), bumpScale: 2.5 });
       case "hairStrand": return std(hair, 0.5, { side: DoubleSide, map: strandTexture() });
-      // Close-cut hair: the scalp shows through, so it is mixed with the skin tone.
-      case "buzz": return std(hair.clone().lerp(skin, 0.3), 0.95);
+      // A hairstyle's body: see-through by a set amount per point (each point's alpha), so the scalp
+      // shows through towards the hairline and down a fade.
+      case "hairBody": return std(hair, 0.86, { side: DoubleSide, bumpMap: coilTexture(), bumpScale: 2.5, transparent: true, vertexColors: true });
+      case "hairBodyStrand": return std(hair, 0.5, { side: DoubleSide, map: strandTexture(), transparent: true, vertexColors: true });
       case "scalp": return std(hair.clone().lerp(skin, 0.45), 0.85);
       case "hairTie": return std(new Color(topHex).multiplyScalar(0.6), 0.8);
       // The headwrap hairstyle is made of the same fabric as the top.

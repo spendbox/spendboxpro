@@ -1,7 +1,7 @@
 // Shape tests for hair, and for caps worn over it. Run with: npm test
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Vector3 } from "three";
+import { type BufferGeometry, Vector3 } from "three";
 
 import { buildHead } from "../head.ts";
 import { CATALOGS, DEFAULT_RECIPE } from "../recipe.ts";
@@ -65,4 +65,52 @@ test("the cap's peak faces up and sticks out in front", () => {
   }
   assert.ok(up / N.count > 0.3, "cap peak's top faces down");
   assert.ok(front > 0.9, "cap peak doesn't reach out past the forehead");
+});
+
+/** Shortest distance from any point of one part to any point of another (sampled). */
+function nearest(a: Vector3[], b: Vector3[]) {
+  let m = Infinity;
+  for (const p of a) for (const q of b) m = Math.min(m, p.distanceToSquared(q));
+  return Math.sqrt(m);
+}
+const points = (geo: BufferGeometry, step = 1) => {
+  const P = geo.attributes.position, out: Vector3[] = [];
+  for (let i = 0; i < P.count; i += step) out.push(new Vector3(P.getX(i), P.getY(i), P.getZ(i)));
+  return out;
+};
+
+test("hair grows round the ears, not over them, with a sideburn in front", () => {
+  for (const hair of [1, 2, 3, 4]) {
+    for (const frame of [0, 1]) {
+      const m = buildHead({ ...DEFAULT_RECIPE, hair, frame }, 1), ear = points(part(m, "ear1").geo, 3);
+      for (const p of m.parts.filter((q) => scalp(q.name))) {
+        const gap = nearest(points(p.geo, 2), ear);
+        assert.ok(gap >= 0.015, `${p.name} (hair ${hair}, frame ${frame}) touches the ear (${gap.toFixed(3)})`);
+      }
+      // Sideburn: hair comes down beside the ear's front edge, below the top of the ear.
+      const earFront = Math.max(...ear.map((v) => v.z)), earTop = Math.max(...ear.map((v) => v.y));
+      const shell = points(part(m, "hair0").geo);
+      assert.ok(shell.some((v) => v.x > 0.6 && v.z > earFront && v.z < earFront + 0.2 && v.y < earTop - 0.15), `no sideburn (hair ${hair}, frame ${frame})`);
+    }
+  }
+});
+
+test("braids, locs and cornrows lie on the head, never through it", () => {
+  for (const hair of [7, 8, 9]) {
+    const m = buildHead({ ...DEFAULT_RECIPE, hair }, 1), skin = [part(m, "headSkin")];
+    for (const p of m.parts.filter((q) => /^(braid|loc|cornrow)\d/.test(q.name))) {
+      const worst = Math.min(...layerGaps(p.geo.attributes.position as never, skin, from, 200));
+      assert.ok(worst >= -0.005, `${p.name} goes into the head (${worst.toFixed(3)})`);
+    }
+  }
+});
+
+test("long hair hugs the head from the crown", () => {
+  const m = buildHead({ ...DEFAULT_RECIPE, hair: 10 }, 1), fall = points(part(m, "hairFall").geo), skin = points(part(m, "headSkin").geo, 2);
+  // The upper part of the fall (on the head) stays within a few hundredths of the skin.
+  const top = [...fall].sort((a, b) => b.y - a.y).slice(0, Math.round(fall.length * 0.25));
+  for (const p of top.filter((_, i) => i % 7 === 0)) {
+    const d = nearest([p], skin);
+    assert.ok(d < 0.12, `long hair floats ${d.toFixed(3)} off the head at y ${p.y.toFixed(2)}`);
+  }
 });

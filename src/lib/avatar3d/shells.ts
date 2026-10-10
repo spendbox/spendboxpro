@@ -4,6 +4,7 @@
 import {
   BufferGeometry, type Curve, Float32BufferAttribute, LatheGeometry, SphereGeometry, SplineCurve, TubeGeometry, Vector2, Vector3,
 } from "three";
+import { EAR_Y } from "./ears.ts";
 import { MOUTH_MORPHS, outerSkin, skinPoint } from "./face.ts";
 import type { HeadCtx } from "./head-shape.ts";
 import { PI, smooth } from "./math.ts";
@@ -18,25 +19,47 @@ export const wave = (a: number, f: number): DirFn => (u) =>
 export function hairline(u: Vector3, f = 0.6, s = 0.12, b = -0.55) {
   return u.z > 0 ? s + (f - s) * Math.pow(u.z, 1.3) : s + (b - s) * Math.pow(-u.z, 1.1);
 }
+/** Horizontal angle round the head of direction u: 0 straight ahead, +-PI/2 at the sides, +-PI behind. */
+export const around = (u: Vector3) => Math.atan2(u.x, u.z);
+
 /**
- * Lowest height (direction y) a wrap can come down to around each ear: an arch over the ear,
- * flat (no limit) elsewhere. The peak sits a little above the top of the ear.
+ * Where the ears are in scalp terms (matching ears.ts): the horizontal angle of the ear's middle,
+ * half its angular width, and the direction-height of its top and bottom.
  */
-export const earLine = (u: Vector3) => -1 + 1.36 * Math.exp(-(((u.z + 0.02) / 0.34) ** 2)) * smooth((Math.abs(u.x) - 0.5) / 0.25);
+export function earSpot(c: HeadCtx) {
+  const sc = c.fem ? 0.9 : 1;
+  return { mid: 1.785, half: 0.185 * sc, top: EAR_Y + 0.28 * sc, bottom: EAR_Y - 0.25 * sc };
+}
+
+/** An arch over each ear, `gap` above its top: the lowest a wrap or hairline may come there (-1 elsewhere). */
+export function earClear(c: HeadCtx, gap: number): DirFn {
+  const e = earSpot(c), front = e.mid - e.half - 0.05, back = e.mid + e.half + 0.05;
+  return (u) => {
+    const a = Math.abs(around(u)), over = smooth((a - front + 0.08) / 0.08) * smooth((back + 0.08 - a) / 0.08);
+    return -1 + (e.top + gap + 1) * over;
+  };
+}
+
+export type CapOptions = {
+  /** Evens out the edge between neighbouring columns (for edges that jump, like a hijab's face opening). */
+  smoothEdge?: number;
+  /** Least thickness, kept even at the edge (a cap over hair stays outside the hair down to its rim). */
+  floor?: DirFn;
+  /** See-through-ness per point, 0..1 (thinning hair: fades, soft hairlines). Adds a colour-with-alpha attribute. */
+  alpha?: DirFn;
+};
 
 /**
  * A cap laid out from the crown down to an edge (where direction y = edge(u)), so its edge is a smooth
  * curve instead of a staircase. thick(u) is the distance off the skin as a fraction of the radius; it
  * eases in over the last stretch above the edge so the edge meets the skin closely.
- * smoothEdge evens out the edge between neighbouring columns (for edges that jump, like a hijab's
- * face opening, where the jump would fold the surface). floor(u) is a least thickness kept even at the
- * edge (a cap over hair stays outside the hair all the way down to its rim).
  */
-export function capShell(c: HeadCtx, NA: number, NR: number, edge: DirFn, thick?: DirFn, smoothEdge = 0, floor?: DirFn) {
+export function capShell(c: HeadCtx, NA: number, NR: number, edge: DirFn, thick?: DirFn, opts: CapOptions = {}) {
+  const { smoothEdge = 0, floor, alpha } = opts;
   NA = Math.max(16, Math.round(NA * c.lod));
   NR = Math.max(6, Math.round(NR * c.lod));
   const U = (a: number, ph: number) => new Vector3(Math.sin(a) * Math.sin(ph), Math.cos(a), Math.sin(a) * Math.cos(ph));
-  const pos: number[] = [], uv: number[] = [], idx: number[] = [];
+  const pos: number[] = [], uv: number[] = [], idx: number[] = [], rgba: number[] = [];
   // How far down from the crown each column reaches (found by halving the search range).
   let ends = Array.from({ length: NA + 1 }, (_, i) => {
     const ph = (i / NA) * PI * 2;
@@ -64,6 +87,7 @@ export function capShell(c: HeadCtx, NA: number, NR: number, edge: DirFn, thick?
       const d = skinPoint(c, u).multiplyScalar(1.004 + Math.max(fl, ex * (0.1 + 0.9 * e)));
       pos.push(d.x, d.y, d.z);
       uv.push(i / NA, j / NR);
+      if (alpha) rgba.push(1, 1, 1, alpha(u));
     }
   }
   const W = NR + 1;
@@ -76,6 +100,7 @@ export function capShell(c: HeadCtx, NA: number, NR: number, edge: DirFn, thick?
   const g = new BufferGeometry();
   g.setAttribute("position", new Float32BufferAttribute(pos, 3));
   g.setAttribute("uv", new Float32BufferAttribute(uv, 2));
+  if (alpha) g.setAttribute("color", new Float32BufferAttribute(rgba, 4));
   g.setIndex(idx);
   g.computeVertexNormals();
   // The seam (first and last column) and the crown (first row) are shared points: share their normals.

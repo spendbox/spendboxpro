@@ -16,7 +16,7 @@ export const LOCKED_IDS: Record<string, string[]> = {
   nose: ["button","small","straight","wide","broad","long","pointed","round","flat-bridge"],
   lips: ["natural","full","thin","wide","small","heart","pouty","broad-full"],
   lipT: ["natural","deep","rosy","berry","nude"],
-  hair: ["bald","buzz","low-fade","short-coils","afro","puff","bun","cornrows","box-braids","locs","long","headwrap"],
+  hair: ["bald","buzz","low-fade","short-coils","afro","puff","bun","cornrows","box-braids","locs","long","headwrap","ponytail"],
   hairC: ["black","dark-brown","brown","auburn","honey-blonde","grey","burgundy","platinum","red","purple","blue"],
   facial: ["none","stubble","mustache","goatee","short-beard","full-beard"],
   frame: ["masculine","feminine"],

@@ -9,7 +9,7 @@ import { MOUTH_MORPHS, MOUTH_W, MOUTH_Y } from "./face.ts";
 import { type HeadCtx, NP } from "./head-shape.ts";
 import { clamp01, smooth } from "./math.ts";
 import { type Part, ROOT } from "./parts.ts";
-import { type DirFn, type ShellGrid, maskShell, wave } from "./shells.ts";
+import { type DirFn, type ShellGrid, around, earSpot, maskShell, wave } from "./shells.ts";
 
 /** Soft "x is below edge" (1 well below, 0 well above), over a width w. */
 const below = (x: number, edge: number, w: number) => smooth((edge - x) / w + 0.5);
@@ -30,7 +30,7 @@ function lipsArea(c: HeadCtx): DirFn {
 
 /** Where a beard grows: jaw, chin, cheeks below the cheek line and upper neck; not the lips. */
 function beardArea(c: HeadCtx): DirFn {
-  const lips = lipsArea(c);
+  const lips = lipsArea(c), ear = earSpot(c), earFront = ear.mid - ear.half - 0.03;
   return (u) => {
     const ax = Math.abs(u.x), al = Math.acos(Math.max(-1, Math.min(1, u.dot(NP))));
     const neck = smooth((al - 0.8) / 0.1), front = smooth((u.z + 0.34) / 0.08);
@@ -39,8 +39,9 @@ function beardArea(c: HeadCtx): DirFn {
     // Facial hair starts just below the nostrils (the prototype's ran up to the base of the nose).
     const nose = below(ax, 0.22, 0.05) * smooth((u.y + 0.3) / 0.03);
     const mouth = Math.max(lips(u), nose);
-    const sideburnTop = smooth((ax - 0.86) / 0.04) * smooth((u.y + 0.25) / 0.04) * below(u.z, 0.05, 0.04);
-    return neck * front * cheeks * (1 - mouth) * (1 - sideburnTop);
+    // Up the sideburn to meet the hair just in front of the ear, never onto or behind the ear.
+    const ahead = below(Math.abs(around(u)), earFront, 0.05);
+    return neck * front * cheeks * (1 - mouth) * ahead;
   };
 }
 

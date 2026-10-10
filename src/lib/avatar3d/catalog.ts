@@ -128,8 +128,8 @@ export const LIP_TINTS = [
 const named = (ids: string[], names: string[]): Option[] => ids.map((id, i) => ({ id, n: names[i] }));
 
 export const HAIRS = named(
-  ["bald", "buzz", "low-fade", "short-coils", "afro", "puff", "bun", "cornrows", "box-braids", "locs", "long", "headwrap"],
-  ["Bald", "Buzz", "Low fade", "Short coils", "Afro", "Puff", "Bun", "Cornrows", "Box braids", "Locs", "Long", "Headwrap"],
+  ["bald", "buzz", "low-fade", "short-coils", "afro", "puff", "bun", "cornrows", "box-braids", "locs", "long", "headwrap", "ponytail"],
+  ["Bald", "Buzz", "Low fade", "Short coils", "Afro", "Puff", "Bun", "Cornrows", "Box braids", "Locs", "Long", "Headwrap", "Ponytail"],
 );
 
 // Prototype order kept; extra colours appended so older 2D avatars keep their hair colour.

@@ -17,7 +17,8 @@ const EAR_HC = [[0.58, 0.34], [0.38, 0.22], [0.14, 0.1]] as const;
  * Where the ear sits and how big it is. Real ears run from brow height down to the base of the nose;
  * the prototype's were about 20% too small and sat a tenth of a head too low (top level with the eyes).
  */
-const EAR_Y = 0.03, EAR_SIZE = 1.18;
+export const EAR_Y = 0.03;
+const EAR_SIZE = 1.18;
 
 function buildEar(c: HeadCtx, s: number) {
   const A = facePoint(c, s * 0.97, EAR_Y, -0.2), n = A.n.clone(), sc = c.fem ? 0.9 : 1;
@@ -80,7 +81,7 @@ function buildEar(c: HeadCtx, s: number) {
     return P3(u, v, H(u, v, 0.95) + off);
   };
 
-  const NR = res(18, c.lod), NT = resEven(52, c.lod), pos: number[] = [], cols: number[] = [], idx: number[] = [];
+  const NR = res(14, c.lod), NT = resEven(40, c.lod), pos: number[] = [], cols: number[] = [], idx: number[] = [];
   const skin = new Color(SKINS[c.recipe.skin].c), rimCol = new Color("#9A4A3C");
   for (const back of [0, 1]) {
     for (let j = 0; j <= NR; j++) {
