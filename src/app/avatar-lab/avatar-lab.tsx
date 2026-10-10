@@ -9,12 +9,12 @@ import { triangleCount } from "@/lib/avatar3d/parts";
 import { CATALOGS, DEFAULT_RECIPE, type Recipe, type RecipeKey, encodeRecipe, parseRecipe, randomRecipe } from "@/lib/avatar3d/recipe";
 import { type AvatarObject, type FaceState, mountModel, updateFace } from "@/lib/avatar3d/scene";
 
-// The parts built so far (head, face, facial hair, headwear). Colour lists show as swatches.
+// The parts built so far (head, face, hair, facial hair, headwear). Colour lists show as swatches.
 const SECTIONS: [RecipeKey, string][] = [
   ["face", "Face shape"], ["chin", "Chin"], ["fat", "Fullness"], ["skin", "Skin"], ["eye", "Eyes"], ["eyeC", "Eye colour"],
-  ["brow", "Brows"], ["hairC", "Brow colour"], ["nose", "Nose"], ["lips", "Lips"], ["lipT", "Lip tint"], ["ear", "Earrings"],
+  ["brow", "Brows"], ["hair", "Hair"], ["hairC", "Hair colour"], ["nose", "Nose"], ["lips", "Lips"], ["lipT", "Lip tint"], ["ear", "Earrings"],
   ["pierce", "Piercings"], ["glasses", "Glasses"], ["facial", "Facial hair"], ["hw", "Headwear"], ["hwC", "Headwear colour"],
-  ["pattern", "Pattern (head tie, gele)"], ["hair", "Hairstyle (room left under caps)"], ["frame", "Frame"], ["build", "Body type (neck)"],
+  ["pattern", "Pattern (head tie, gele, headwrap)"], ["top", "Top colour (headwrap)"], ["frame", "Frame"], ["build", "Body type (neck)"],
 ];
 
 const EXPRESSIONS: { n: string; v: Partial<FaceState>; talk?: boolean }[] = [

@@ -99,8 +99,10 @@ test("hijab hides the ears; other headwear keeps them", () => {
 });
 
 test("head with the heaviest extras stays within budget", () => {
-  const busy = { ...DEFAULT_RECIPE, hw: 3, facial: 5, glasses: 3, ear: 3, pierce: 6 };
+  // Box braids, a cap, a full beard, sunglasses and all the jewellery: the heaviest head there is. The
+  // whole avatar's budget is 70k (own) / 20k (nearby), so this leaves about 22k / 2k for the body.
+  const busy = { ...DEFAULT_RECIPE, hair: 8, hw: 1, facial: 5, glasses: 3, ear: 3, pierce: 6 };
   const full = triangleCount(buildHead(busy, 1)), near = triangleCount(buildHead(busy, 0.5));
-  assert.ok(full <= 44000, `own avatar's head with extras is ${full} triangles (limit 44k)`);
-  assert.ok(near <= 15000, `nearby player's head with extras is ${near} triangles (limit 15k)`);
+  assert.ok(full <= 48000, `own avatar's head with extras is ${full} triangles (limit 48k)`);
+  assert.ok(near <= 18000, `nearby player's head with extras is ${near} triangles (limit 18k)`);
 });

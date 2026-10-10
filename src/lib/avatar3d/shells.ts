@@ -1,7 +1,9 @@
 // Shells: surfaces that sit a set distance off the head (hair, beards, caps, wraps). Each follows the
 // chosen face shape, because it is built from the same direction-to-skin functions as the skin itself.
 
-import { BufferGeometry, Float32BufferAttribute, LatheGeometry, SphereGeometry, SplineCurve, Vector2, Vector3 } from "three";
+import {
+  BufferGeometry, type Curve, Float32BufferAttribute, LatheGeometry, SphereGeometry, SplineCurve, TubeGeometry, Vector2, Vector3,
+} from "three";
 import { MOUTH_MORPHS, outerSkin, skinPoint } from "./face.ts";
 import type { HeadCtx } from "./head-shape.ts";
 import { PI, smooth } from "./math.ts";
@@ -27,9 +29,10 @@ export const earLine = (u: Vector3) => -1 + 1.36 * Math.exp(-(((u.z + 0.02) / 0.
  * curve instead of a staircase. thick(u) is the distance off the skin as a fraction of the radius; it
  * eases in over the last stretch above the edge so the edge meets the skin closely.
  * smoothEdge evens out the edge between neighbouring columns (for edges that jump, like a hijab's
- * face opening, where the jump would fold the surface).
+ * face opening, where the jump would fold the surface). floor(u) is a least thickness kept even at the
+ * edge (a cap over hair stays outside the hair all the way down to its rim).
  */
-export function capShell(c: HeadCtx, NA: number, NR: number, edge: DirFn, thick?: DirFn, smoothEdge = 0) {
+export function capShell(c: HeadCtx, NA: number, NR: number, edge: DirFn, thick?: DirFn, smoothEdge = 0, floor?: DirFn) {
   NA = Math.max(16, Math.round(NA * c.lod));
   NR = Math.max(6, Math.round(NR * c.lod));
   const U = (a: number, ph: number) => new Vector3(Math.sin(a) * Math.sin(ph), Math.cos(a), Math.sin(a) * Math.cos(ph));
@@ -55,10 +58,10 @@ export function capShell(c: HeadCtx, NA: number, NR: number, edge: DirFn, thick?
   for (let i = 0; i <= NA; i++) {
     const ph = (i / NA) * PI * 2, lo = ends[i];
     for (let j = 0; j <= NR; j++) {
-      const a = (lo * j) / NR, u = U(a, ph), e = smooth((lo - a) / 0.16), ex = thick ? thick(u) : 0;
+      const a = (lo * j) / NR, u = U(a, ph), e = smooth((lo - a) / 0.16), ex = thick ? thick(u) : 0, fl = floor ? floor(u) : 0;
       // Built over the real skin (head, neck and the smoothing where they meet), so wraps that come down
       // the back of the neck stay outside it.
-      const d = skinPoint(c, u).multiplyScalar(1.004 + ex * (0.1 + 0.9 * e));
+      const d = skinPoint(c, u).multiplyScalar(1.004 + Math.max(fl, ex * (0.1 + 0.9 * e)));
       pos.push(d.x, d.y, d.z);
       uv.push(i / NA, j / NR);
     }
@@ -223,6 +226,21 @@ export function maskShell(c: HeadCtx, grid: ShellGrid, mask: DirFn, thick: DirFn
 }
 /** Masked shells are trimmed where the mask falls below CUT, and stand EDGE_LIFT off the skin there. */
 const CUT = 0.05, EDGE_LIFT = 0.006;
+
+/** A tube along a curve whose radius is scaled by fn(t along, a around) (braids, cornrows, locs). */
+export function tubeAlong(curve: Curve<Vector3>, segs: number, sides: number, r: number, fn: (t: number, a: number) => number) {
+  const g = new TubeGeometry(curve, segs, r, sides, false), p = g.attributes.position, ctr = new Vector3(), o = new Vector3();
+  for (let i = 0; i <= segs; i++) {
+    curve.getPointAt(i / segs, ctr);
+    for (let j = 0; j <= sides; j++) {
+      const ix = i * (sides + 1) + j;
+      o.fromBufferAttribute(p, ix).sub(ctr).multiplyScalar(fn(i / segs, j / sides));
+      p.setXYZ(ix, ctr.x + o.x, ctr.y + o.y, ctr.z + o.z);
+    }
+  }
+  g.computeVertexNormals();
+  return g;
+}
 
 /** A surface of revolution around the vertical axis through a smooth profile of [radius, y] points. */
 export function lathe(pts: [number, number][], seg = 22) {

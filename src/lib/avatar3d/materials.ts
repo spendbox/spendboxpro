@@ -117,6 +117,21 @@ function patternTexture(hex: string, kind: number) {
   return texture(c, 5, 3);
 }
 
+/** Fine strands for straighter hair (grey streaks, tinted by the hair colour). */
+function strandTexture() {
+  const [c, x] = canvas(256, 64);
+  let seed = 3;
+  const r = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  x.fillStyle = "#d9d9d9";
+  x.fillRect(0, 0, 256, 64);
+  for (let i = 0; i < 420; i++) {
+    const v = 140 + Math.floor(r() * 115);
+    x.fillStyle = `rgba(${v},${v},${v},.55)`;
+    x.fillRect(r() * 256, 0, 1 + r() * 1.5, 64);
+  }
+  return texture(c, 6, 1);
+}
+
 /** Kufi: cap colour with a gold embroidered band at the rim and a light dotted pattern. */
 function kufiTexture(hex: string) {
   const [c, x] = canvas(256, 128);
@@ -142,6 +157,7 @@ export type MaterialSet = { get(key: MatKey): Material; dispose(): void };
 /** All materials one avatar needs. Call dispose() when the avatar is removed. */
 export function makeMaterials(r: Recipe): MaterialSet {
   const skin = new Color(SKINS[r.skin].c), hair = new Color(HAIR_COLORS[r.hairC].c);
+  const topHex = CLOTH_COLORS[r.top].c, wrapPattern = r.hair === 11 ? patternTexture(topHex, r.pattern) : null;
   const hwHex = CLOTH_COLORS[r.hwC].c, hwPattern = r.hw === 2 || r.hw === 3 ? patternTexture(hwHex, r.pattern) : null;
   const made = new Map<MatKey, Material>();
   const make = (key: MatKey): Material => {
@@ -172,6 +188,14 @@ export function makeMaterials(r: Recipe): MaterialSet {
       case "hwDark": return std(new Color(hwHex).multiplyScalar(0.62), 0.8);
       case "hwSheen": return std(new Color(hwHex).lerp(new Color("#ffffff"), 0.25), 0.32, { side: DoubleSide, metalness: 0.3 });
       case "kufi": return std("#ffffff", 0.7, { side: DoubleSide, map: kufiTexture(hwHex) });
+      case "hair": return std(hair, 0.72, { side: DoubleSide });
+      case "hairStrand": return std(hair, 0.5, { side: DoubleSide, map: strandTexture() });
+      // Close-cut hair: the scalp shows through, so it is mixed with the skin tone.
+      case "buzz": return std(hair.clone().lerp(skin, 0.3), 0.95);
+      case "scalp": return std(hair.clone().lerp(skin, 0.45), 0.85);
+      case "hairTie": return std(new Color(topHex).multiplyScalar(0.6), 0.8);
+      // The headwrap hairstyle is made of the same fabric as the top.
+      case "wrap": return std(wrapPattern ? "#ffffff" : topHex, 0.8, { side: DoubleSide, map: wrapPattern });
     }
   };
   return {
