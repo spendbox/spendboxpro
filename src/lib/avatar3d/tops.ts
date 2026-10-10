@@ -47,7 +47,7 @@ export function buildTop(d: Dress, top: TopStyle) {
     // (Many columns, few rows: the cut edge needs the columns to stay clean, the drop is smooth.)
     // (A V neck needs enough columns across its point even on other players.)
     const vee = top.neck === "v";
-    add("torso", "chest", sheetGeo(T, vee ? Math.max(lod, 0.75) : lod, 64, vee ? 16 : 22, 0, (u, v) => {
+    add("torso", "chest", sheetGeo(T, vee && lod >= 0.5 ? Math.max(lod, 0.75) : lod, 64, vee ? 16 : 22, 0, (u, v) => {
       const th = u * PI * 2;
       return [lerp(edge(th), hem, v ** 1.4), th];
     }, (y, th) => drape(y, th)), "top");

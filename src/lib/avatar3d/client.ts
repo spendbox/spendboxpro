@@ -2,10 +2,12 @@
 // Falls back to building on the main thread if workers aren't available.
 
 import { buildAvatar } from "./avatar.ts";
+import { LOD, buildFar } from "./lod.ts";
 import { type Model, type PackedModel, unpack } from "./parts.ts";
 import { type Recipe, encodeRecipe } from "./recipe.ts";
 
 const CACHE_SIZE = 40;
+const build = (r: Recipe, lod: number) => (lod === LOD.far ? buildFar(r) : buildAvatar(r, lod));
 const cache = new Map<string, Promise<Model>>();
 let worker: Worker | null | undefined;
 let nextId = 1;
@@ -51,8 +53,8 @@ export function getAvatarModel(recipe: Recipe, lod: number): Promise<Model> {
         const id = nextId++;
         waiting.set(id, { resolve, reject });
         w.postMessage({ id, recipe, lod });
-      }).catch(() => buildAvatar(recipe, lod))
-    : Promise.resolve().then(() => buildAvatar(recipe, lod));
+      }).catch(() => build(recipe, lod))
+    : Promise.resolve().then(() => build(recipe, lod));
   cache.set(key, p);
   while (cache.size > CACHE_SIZE) {
     const [oldKey, old] = cache.entries().next().value!;

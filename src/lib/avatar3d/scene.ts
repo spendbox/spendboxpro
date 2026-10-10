@@ -1,10 +1,12 @@
 // Turns a built model into three.js objects, and drives the face (blink, look around, expressions).
 
-import { Bone, Group, Matrix4, Mesh, type Object3D, Skeleton, SkinnedMesh } from "three";
+import {
+  Bone, BufferAttribute, type BufferGeometry, Color, Group, type Material, Matrix4, Mesh, type MeshStandardMaterial, type Object3D, SRGBColorSpace, Skeleton, SkinnedMesh,
+} from "three";
 import { LID_MORPHS } from "./eyes.ts";
 import { MOUTH_MORPHS } from "./face.ts";
 import type { MaterialSet } from "./materials.ts";
-import type { Model } from "./parts.ts";
+import type { MatKey, Model } from "./parts.ts";
 
 export type FaceState = { smile: number; open: number; pucker: number; wide: number; brow: number; lid: number };
 export const NEUTRAL: FaceState = { smile: 0, open: 0, pucker: 0, wide: 0, brow: 0, lid: 0 };
@@ -48,6 +50,7 @@ export function mountModel(model: Model, mats: MaterialSet): AvatarObject {
   const rest = new Map(bones.map((b) => [b.name, { p: b.position.clone(), q: b.quaternion.clone() }]));
   const mouth: Mesh[] = [], lids: Mesh[] = [];
   for (const p of model.parts) {
+    if (p.mat === "farVC") paintFar(p.geo, model.meta.palette ?? [], mats);
     const m = p.skinned ? new SkinnedMesh(p.geo, mats.get(p.mat)) : new Mesh(p.geo, mats.get(p.mat));
     m.name = p.name;
     if (p.mat === "cornea") m.renderOrder = 1;
@@ -60,6 +63,36 @@ export function mountModel(model: Model, mats: MaterialSet): AvatarObject {
     if (p.morphs?.[0] === LID_MORPHS[0]) lids.push(m);
   }
   return { root, nodes, rest, mouth, lids, face: { ...NEUTRAL }, faceH: model.meta.faceH, stride: model.meta.stride ?? 1 };
+}
+
+/** The average colour of a material: its colour times its picture's average colour (if it has one). */
+function averageColor(m: Material) {
+  const sm = m as MeshStandardMaterial, c = sm.color ? sm.color.clone() : new Color(1, 1, 1), img = sm.map?.image as CanvasImageSource | undefined;
+  if (img && typeof document !== "undefined") {
+    // (Averaged over a 16 x 16 copy: shrinking straight to one pixel only samples a few.)
+    const cv = document.createElement("canvas"), S = 16;
+    cv.width = cv.height = S;
+    const x = cv.getContext("2d")!;
+    x.drawImage(img, 0, 0, S, S);
+    const d = x.getImageData(0, 0, S, S).data, avg = new Color(0, 0, 0), one = new Color();
+    for (let i = 0; i < d.length; i += 4) avg.add(one.setRGB(d[i] / 255, d[i + 1] / 255, d[i + 2] / 255, SRGBColorSpace));
+    c.multiply(avg.multiplyScalar(1 / (S * S)));
+  }
+  return c;
+}
+
+/** Paints the far level's points: each one's material colour (palette[matId]) times its tint. */
+function paintFar(g: BufferGeometry, palette: MatKey[], mats: MaterialSet) {
+  if (g.attributes.color) return;
+  const cols = palette.map((k) => averageColor(mats.get(k))), id = g.attributes.matId, tint = g.attributes.tint, n = id.count;
+  const out = new Float32Array(n * 3);
+  for (let k = 0; k < n; k++) {
+    const c = cols[id.getX(k)] ?? cols[0];
+    out[k * 3] = c.r * tint.getX(k);
+    out[k * 3 + 1] = c.g * tint.getY(k);
+    out[k * 3 + 2] = c.b * tint.getZ(k);
+  }
+  g.setAttribute("color", new BufferAttribute(out, 3));
 }
 
 /**

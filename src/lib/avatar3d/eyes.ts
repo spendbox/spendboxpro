@@ -190,7 +190,7 @@ export function glasses(c: HeadCtx): Part[] {
     o.updateMatrix();
     const rim = kind === 2
       ? new TorusGeometry(0.15, 0.012, c.lod < 1 ? 4 : 8, 4).rotateZ(PI / 4).scale(1.12, 0.82, 1)
-      : new TorusGeometry(0.135, 0.011, c.lod < 1 ? 4 : 8, Math.max(16, Math.round(36 * c.lod)));
+      : new TorusGeometry(0.135, 0.011, c.lod < 1 ? 4 : 8, Math.max(c.lod < 0.3 ? 10 : 16, Math.round(36 * c.lod)));
     parts.push({ name: `rim${i}`, mat: "glassesFrame", node: ROOT, geo: rim.applyMatrix4(o.matrix), surface: "closed" });
     if (kind === 3) {
       parts.push({ name: `lens${i}`, mat: "lens", node: ROOT, geo: new CircleGeometry(0.13, 30).applyMatrix4(o.matrix), surface: "sheet" });

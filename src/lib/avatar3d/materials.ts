@@ -2,7 +2,7 @@
 // because textures are drawn on a canvas. Materials for the same recipe colours are shared.
 
 import {
-  BackSide, CanvasTexture, Color, DoubleSide, FrontSide, type Material, type Side, MeshBasicMaterial, MeshStandardMaterial,
+  BackSide, CanvasTexture, Color, DoubleSide, FrontSide, type Material, type Side, MeshBasicMaterial, MeshLambertMaterial, MeshStandardMaterial,
   type MeshStandardMaterialParameters, NoColorSpace, RepeatWrapping, SRGBColorSpace,
 } from "three";
 import { BOTTOM_COLORS, CHAINS, CLOTH_COLORS, HAIR_COLORS, IRIS, SHOE_COLORS, SKINS, WATCHES } from "./catalog.ts";
@@ -257,6 +257,8 @@ export function makeMaterials(r: Recipe): MaterialSet {
   const make = (key: MatKey): Material => {
     switch (key) {
       case "skin": return std(skin, 0.56, SKIN_GLOW);
+      // The far level: one material, colours painted on its points; cheap lighting; seen from both sides.
+      case "farVC": return new MeshLambertMaterial({ vertexColors: true, side: DoubleSide });
       // Same shine as the head skin, so the face patch's edge doesn't show.
       case "skinVC": return std("#ffffff", 0.56, { ...SKIN_GLOW, vertexColors: true });
       case "earVC": return std("#ffffff", 0.56, { ...SKIN_GLOW, vertexColors: true, side: DoubleSide });

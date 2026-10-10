@@ -179,8 +179,10 @@ function skinNormal(c: HeadCtx, u: Vector3) {
  * them all from one ring round the head, like a fringe off a cap.)
  */
 function strands(c: HeadCtx, kind: "braids" | "locs"): Part[] {
-  const S = STRANDS[kind], E = hairlineFor(c), room = earRoom(c), parts: Part[] = [];
-  const segs = Math.max(8, Math.round(16 * c.lod)), sides = c.lod < 1 ? 3 : 4;
+  // Far away: a third as many strands, thicker, so the hair keeps its mass in far fewer triangles.
+  const far = c.lod < 0.3, S0 = STRANDS[kind], S = far ? { ...S0, count: Math.round(S0.count / 3), r: S0.r * 1.7 } : S0;
+  const E = hairlineFor(c), room = earRoom(c), parts: Part[] = [];
+  const segs = Math.max(far ? 5 : 8, Math.round(16 * c.lod)), sides = c.lod < 1 ? 3 : 4;
   // Roots: an even spiral of points over the sphere, kept where hair grows.
   const roots: Vector3[] = [];
   const total = Math.round(S.count * 2.6);
@@ -225,7 +227,8 @@ function strands(c: HeadCtx, kind: "braids" | "locs"): Part[] {
  * ear to ear, the parted scalp showing between them. (The prototype had nine short rows on top only.)
  */
 function cornrows(c: HeadCtx): Part[] {
-  const E = hairlineFor(c), parts: Part[] = [], rows = 13;
+  // (Far away: 8 wider rows in place of 13.)
+  const E = hairlineFor(c), parts: Part[] = [], rows = c.lod < 0.3 ? 8 : 13, R = c.lod < 0.3 ? CORNROW_R * 1.5 : CORNROW_R;
   for (let k = 0; k < rows; k++) {
     // Each row lies in an upright plane (x = s) and runs round the head inside the hairline.
     const s = -0.86 + (1.72 * k) / (rows - 1), rc = Math.sqrt(1 - s * s);
@@ -241,12 +244,12 @@ function cornrows(c: HeadCtx): Part[] {
     }
     if (dirs.length > best.length) best = dirs;
     if (best.length < 4) continue;
-    const pts = best.filter((_, i) => i % 2 === 0).map((u) => skinPoint(c, u).multiplyScalar(1 + SCALP + CORNROW_R * 1.05));
+    const pts = best.filter((_, i) => i % 2 === 0).map((u) => skinPoint(c, u).multiplyScalar(1 + SCALP + R * 1.05));
     const cv = new CatmullRomCurve3(pts), len = cv.getLength();
-    const segs = Math.max(12, Math.round(len * 26 * c.lod));
+    const far = c.lod < 0.3, segs = Math.max(far ? 6 : 12, Math.round(len * 26 * c.lod));
     parts.push({
       name: `cornrow${k}`, mat: "hair", node: ROOT, surface: "closed",
-      geo: tubeAlong(cv, segs, 4, CORNROW_R, (t, a) => (1 + 0.16 * Math.sin(t * len * 90 + a * PI * 2)) * (t < 0.02 || t > 0.98 ? 0.6 : 1)),
+      geo: tubeAlong(cv, segs, far ? 3 : 4, R, (t, a) => (1 + 0.16 * Math.sin(t * len * 90 + a * PI * 2)) * (t < 0.02 || t > 0.98 ? 0.6 : 1)),
     });
   }
   return parts;

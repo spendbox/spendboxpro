@@ -91,7 +91,7 @@ export function legWear(d: Dress, L: Legs, side: number, node: string, lod: numb
   };
   const pts: [number, number][] = L.pts.filter(([, y]) => y > hemY + 0.2).map(([, y]) => [ease(y), y]);
   // Extra rows down the leg so the straight fall keeps its shape.
-  for (let y = L.jy - 0.5; y > hemY + 0.1; y -= 0.6) if (!pts.some(([, py]) => Math.abs(py - y) < 0.2)) pts.push([ease(y), y]);
+  if (lod >= 0.3) for (let y = L.jy - 0.5; y > hemY + 0.1; y -= 0.6) if (!pts.some(([, py]) => Math.abs(py - y) < 0.2)) pts.push([ease(y), y]);
   pts.sort((p, q) => q[1] - p[1]);
   pts[0][0] = 0; // the garment's top is closed off inside the hips, like the leg's
   // The hem turns in to the leg, showing the cloth's thickness (round the ankle for full-length legs).
@@ -114,7 +114,7 @@ export function skirtWear(d: Dress) {
   if (b.wrap) {
     // The wrapper's end crosses the front and is tucked in at the waist with a knot.
     add("wrapPanel", "body", sheetGeo(T, lod, 8, 18, 0, (u, v) => {
-      const y = lerp(-5.62, b.hem ?? -13, v), a = lerp(-0.25, 0.9, u) + 0.25 * v;
+      const y = lerp(y0 + 0.02, b.hem ?? -13, v), a = lerp(-0.25, 0.9, u) + 0.25 * v;
       return [y, a];
     }, (y, th) => {
       const p = T.P(Math.max(y, -7.05), th, 0.09), r = Math.hypot(p.x, p.z);

@@ -13,7 +13,7 @@ export type MatKey =
   | "kufi" | "hair" | "hairStrand" | "hairBody" | "hairBodyStrand" | "hairTie" | "wrap"
   | "nail" | "rib" | "top" | "topDS" | "topEdge" | "topEdgeDS" | "trim" | "bottom" | "bottomDark" | "shoe" | "sole" | "shirt" | "tie" | "lapel"
   | "sash" | "collarWhite" | "watchBand" | "watchCase" | "watchFace" | "chainMetal" | "medal" | "iced" | "gem"
-  | "jeans" | "jeansDark" | "bottomPat" | "bottomPatDS" | "bottomDS" | "layer" | "layerDS" | "layerTrim" | "layerRib" | "embroid" | "shoeDS";
+  | "farVC" | "jeans" | "jeansDark" | "bottomPat" | "bottomPatDS" | "bottomDS" | "layer" | "layerDS" | "layerTrim" | "layerRib" | "embroid" | "shoeDS";
 
 /** A moving piece of the avatar. Parts hang from nodes; animation moves nodes. */
 export type Node = { id: string; parent: string | null; matrix: number[] };
@@ -38,7 +38,7 @@ export type Part = {
 
 /** meta.faceH: height scale of the chosen face (sizes the jaw drop). floorY: where the feet stand (whole avatars only). */
 /** stride: how long a step the outfit allows (1, or less in a narrow long wrapper or pencil skirt). */
-export type Model = { nodes: Node[]; parts: Part[]; meta: { faceH: number; floorY?: number; stride?: number } };
+export type Model = { nodes: Node[]; parts: Part[]; meta: { faceH: number; floorY?: number; stride?: number; palette?: MatKey[] } };
 
 export const ROOT = "head";
 
