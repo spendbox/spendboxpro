@@ -1,7 +1,7 @@
 // Clothing: the top and bottom on the torso, sleeves, skirts, robes, hood, suit details, swimwear and
 // shoes, for each outfit in OUTFITS. Built over the body's torso shape so it fits every body type.
 
-import { BufferGeometry, CatmullRomCurve3, CylinderGeometry, Float32BufferAttribute, TorusGeometry, TubeGeometry, Vector3 } from "three";
+import { BufferGeometry, CatmullRomCurve3, Float32BufferAttribute, TorusGeometry, TubeGeometry, Vector3 } from "three";
 import { type BodyParams, CROTCH_Y, type Torso, crInterp, drapePoint, limbGeo, sheetGeo, torsoGeo } from "./body.ts";
 import type { Outfit } from "./catalog.ts";
 import { PI, bell, clamp01, smooth } from "./math.ts";
@@ -289,9 +289,53 @@ export function armClothes(d: Dress, node: string, armPts: [number, number][], L
     add(`${node}Sleeve`, node, limbGeo(sv, 16, lod), "topDS");
   }
   if (O.sl === "flare" && !shirtless) {
-    add(`${node}Flare`, node, new CylinderGeometry(0.6 * at, (O.abaya ? 1.05 : 1.5) * at, 4.2, Math.round(20 * lod), Math.round(8 * lod), true).translate(0, -2.1, 0), "topDS");
+    // Wide sleeve: starts narrow inside the shoulder (no open top showing) and flares to the wrist.
+    const bot = (O.abaya ? 1.05 : 1.5) * at;
+    add(`${node}Flare`, node, limbGeo([[0.16 * at, 0.12], [0.42 * at * B.armD, -0.15], [0.62 * at, -0.6], [lerp(0.62 * at, bot, 0.5), -2.4], [bot, -4.2]], 16, lod), "topDS");
   }
   return longS;
+}
+
+/**
+ * The hijab's drape, fitted to the body: from where the head's hijab ends round the neck (ring: its
+ * points round the neck at each angle, body space), down over the shoulders and chest on top of the
+ * clothes, ending a little lower at the front and back than at the sides, as fabric falls.
+ */
+export function hijabDrape(d: Dress, ring: (th: number) => Vector3) {
+  const { T, lod } = d, NA = Math.max(20, Math.round(56 * lod)), NV = Math.max(8, Math.round(16 * lod)), off = 0.16, yS = -1.8;
+  const pos: number[] = [], idx: number[] = [];
+  for (let j = 0; j <= NV; j++) {
+    const v = j / NV;
+    for (let i = 0; i <= NA; i++) {
+      const th = (i / NA) * PI * 2, cs = Math.cos(th), top = ring(th);
+      const hem = lerp(-2.4, cs > 0 ? -3.15 : -3.35, Math.abs(cs) ** 1.5);
+      let p: Vector3;
+      if (v < 0.3) {
+        // From the neck ring, out and down onto the shoulders, bowed a little outward.
+        const t = smooth(v / 0.3), land = T.P(yS, th, off), bow = 0.08 * Math.sin(PI * t);
+        p = top.clone().lerp(land, t);
+        const out = new Vector3(p.x, 0, p.z).normalize();
+        p.addScaledVector(out, bow);
+      } else p = T.P(lerp(yS, hem, (v - 0.3) / 0.7), th, off);
+      pos.push(p.x, p.y, p.z);
+    }
+  }
+  const W = NA + 1;
+  for (let j = 0; j < NV; j++) for (let i = 0; i < NA; i++) {
+    const a = j * W + i, b = a + 1, c = a + W, e = c + 1;
+    idx.push(a, e, b, a, c, e);
+  }
+  const g = new BufferGeometry();
+  g.setAttribute("position", new Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  const P = g.attributes.position, N = g.attributes.normal, m = Math.round(NV * 0.6) * W + Math.round(NA / 4);
+  if (N.getX(m) * P.getX(m) + N.getZ(m) * P.getZ(m) < 0) {
+    for (let i = 0; i < idx.length; i += 3) [idx[i + 1], idx[i + 2]] = [idx[i + 2], idx[i + 1]];
+    g.setIndex(idx);
+    g.computeVertexNormals();
+  }
+  return g;
 }
 
 /** Cuff at the wrist of a long sleeve (in the hand node's frame). */

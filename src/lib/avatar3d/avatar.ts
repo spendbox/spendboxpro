@@ -6,7 +6,7 @@
 import { type BufferGeometry, DoubleSide, type LatheGeometry, Matrix4, Mesh, MeshBasicMaterial, Object3D, Raycaster, Vector3 } from "three";
 import { CROTCH_Y, THIGH_SQUASH, bodyParams, crInterp, handGeos, limbGeo, mirrorX, shoeGeo, torsoModel } from "./body.ts";
 import { HEAD_HEIGHT_SHARE, HEIGHTS, OUTFITS } from "./catalog.ts";
-import { type Dress, armClothes, cuff, robes, torsoClothes } from "./clothing.ts";
+import { type Dress, armClothes, cuff, hijabDrape, robes, torsoClothes } from "./clothing.ts";
 import { buildHead } from "./head.ts";
 import { chain, watch } from "./jewellery.ts";
 import { PI, smooth } from "./math.ts";
@@ -146,6 +146,15 @@ export function buildAvatar(r: Recipe, lod = 1): Model {
   const floorY = topY - LT - LS - 0.55;
   robes(d, shX, floorY);
   chain(add, T, r.chain, O, lod);
+  // The hijab's drape is refitted to the body (the head alone doesn't know where the shoulders are).
+  const hijab = head.parts.findIndex((p) => p.name === "hijabDrape");
+  if (hijab >= 0) {
+    head.parts.splice(hijab, 1);
+    const toBody = new Matrix4().copy(bo.matrix).invert().multiply(ho.matrix), k = fem ? 0.86 : 1;
+    // Where the head's hijab ends round the neck (the top of its own drape), at each angle.
+    const ring = (th: number) => new Vector3(1.0 * k * Math.sin(th), -0.95, 0.86 * k * Math.cos(th) - 0.06).applyMatrix4(toBody);
+    add("hijabDrape", "chest", hijabDrape(d, ring), "hw");
+  }
 
   // The head's own nodes hang from the avatar.
   const headNodes = head.nodes.map((n) => (n.parent === null ? { ...n, parent: "avatar", matrix: nodes.find((m) => m.id === "head")!.matrix } : n));
