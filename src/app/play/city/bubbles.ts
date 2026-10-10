@@ -14,6 +14,11 @@
 
 import {
   Anchor,
+  Bath,
+  Rocket,
+  Dumbbell,
+  MoonStar,
+  Vault,
   Award,
   Baby,
   Church,
@@ -128,6 +133,14 @@ const STRUCTURE_LOOK: Record<StructureType, Look> = {
   wrestling: { icon: Award, color: C.night, outdoor: false },
   capitol: { icon: Landmark, color: C.law, outdoor: false },
   megamall: { icon: ShoppingBag, color: C.fun, outdoor: false },
+  bank: { icon: Vault, color: C.power, outdoor: false },
+  bigpark: { icon: Trees, color: C.green, outdoor: true },
+  gym: { icon: Dumbbell, color: C.civic, outdoor: false },
+  spa: { icon: Bath, color: C.stay, outdoor: false },
+  cathedral: { icon: Church, color: C.law, outdoor: false },
+  grandmosque: { icon: MoonStar, color: C.green, outdoor: false },
+  intlairport: { icon: Plane, color: C.stay, outdoor: false },
+  spaceport: { icon: Rocket, color: C.night, outdoor: false },
 };
 const KIND_LOOK: Partial<Record<Tile["kind"], Look>> = {
   club: { icon: Music, color: C.night, outdoor: false },

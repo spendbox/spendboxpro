@@ -34,9 +34,9 @@ const MAX_VOICE_BYTES = 1_500_000;
 const VOICE_TYPES = ["audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "audio/aac", "audio/wav"];
 // Same list as chat_room_ok in the database (game-db/016_place_rooms.sql, rides added in
 // 017_world_events.sql): a building level (g, f1…f200, r), a whole building (old), balloon 0…50,
-// or a ride "v:<train|bus|car|boat|ferris|slide>:<n>".
+// or a ride "v:<train|bus|car|boat|ferris|slide|heli>:<n>".
 const ROOM_RE =
-  /^(b:[0-9]{1,7}(:(g|r|f([1-9]|[1-9][0-9]|1[0-9][0-9]|200)))?|balloon:([0-9]|[1-4][0-9]|50)|v:(train|bus|car|boat|ferris|slide):[0-9]{1,7})$/;
+  /^(b:[0-9]{1,7}(:(g|r|f([1-9]|[1-9][0-9]|1[0-9][0-9]|200)))?|balloon:([0-9]|[1-4][0-9]|50)|v:(train|bus|car|boat|ferris|slide|heli):[0-9]{1,7})$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const FRIENDLY: Record<string, string> = {

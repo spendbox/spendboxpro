@@ -92,6 +92,79 @@ const iconKey = (q: QuestState | null): QuestIcon => (q ? (QUEST_BY_KEY[q.key]?.
 const waiting = (q: QuestState | null) => !!q && q.status === "done" && !!q.action && !q.actionUsed;
 
 /**
+ * A side quest was just finished: confetti rains down the whole screen and a card says so, with
+ * the reward. Shown once per quest, whatever the quest pill is doing.
+ */
+export function QuestCelebration() {
+  const { finished } = useQuestSnapshot();
+  const [shown, setShown] = useState<{ id: string; title: string; reward: number; action: boolean; pieces: Piece[] } | null>(null);
+  const [seen] = useState(() => new Set<string>());
+  useEffect(() => {
+    if (!finished || seen.has(String(finished.id))) return;
+    seen.add(String(finished.id));
+    const pieces = Array.from({ length: 90 }, (_, i) => ({
+      left: Math.random() * 100,
+      drift: (Math.random() - 0.5) * 160,
+      delay: Math.random() * 0.9,
+      fall: 2.2 + Math.random() * 1.6,
+      spin: 360 + Math.random() * 720,
+      w: 7 + Math.random() * 7,
+      round: i % 5 === 0,
+      color: ["#ffc53d", "#e5484d", "#12a37a", "#2f6fd1", "#7048e8", "#e64980", "#ffffff"][i % 7],
+    }));
+    const t0 = window.setTimeout(() => {
+      setShown({ id: String(finished.id), title: finished.title, reward: finished.reward, action: !!finished.action, pieces });
+      playSfx("levelup");
+    }, 0);
+    const t1 = window.setTimeout(() => setShown(null), 4200);
+    return () => {
+      window.clearTimeout(t0);
+      window.clearTimeout(t1);
+    };
+  }, [finished, seen]);
+  if (!shown) return null;
+  return (
+    <div className="pointer-events-none fixed inset-0 z-[60] overflow-hidden" aria-live="polite">
+      <style>{`@keyframes quest-confetti { 0% { transform: translate3d(0, -12vh, 0) rotate(0) } 100% { transform: translate3d(var(--drift), 112vh, 0) rotate(var(--spin)) } }
+@keyframes quest-card { 0% { transform: scale(.5); opacity: 0 } 12% { transform: scale(1.08); opacity: 1 } 20% { transform: scale(1) } 85% { opacity: 1 } 100% { opacity: 0; transform: translateY(-12px) } }
+@media (prefers-reduced-motion: reduce) { .quest-bit { display: none } }`}</style>
+      {shown.pieces.map((b, i) => (
+        <span
+          key={i}
+          className="quest-bit absolute top-0 block"
+          style={
+            {
+              left: `${b.left}%`,
+              width: b.w,
+              height: b.round ? b.w : b.w * 0.45,
+              borderRadius: b.round ? 999 : 2,
+              background: b.color,
+              animation: `quest-confetti ${b.fall}s cubic-bezier(.25,.6,.45,1) ${b.delay}s both`,
+              "--drift": `${b.drift}px`,
+              "--spin": `${b.spin}deg`,
+            } as React.CSSProperties
+          }
+        />
+      ))}
+      <div className="absolute inset-x-0 top-[22%] flex justify-center px-4">
+        <div className="flex items-center gap-3 rounded-2xl bg-[#18202b]/95 px-4 py-3 text-white shadow-2xl ring-2 ring-gold" style={{ animation: "quest-card 4.2s ease-out both" }}>
+          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-gold text-ink">
+            <Trophy className="size-6" />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-xs font-bold uppercase tracking-wide text-gold">Side quest complete!</span>
+            <span className="block truncate font-display text-lg font-extrabold leading-tight">{shown.title}</span>
+            <span className="block text-sm text-white/80">{shown.action ? "Your special move is ready" : `+${shown.reward} mint`}</span>
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type Piece = { left: number; drift: number; delay: number; fall: number; spin: number; w: number; round: boolean; color: string };
+
+/**
  * A small pill for the active side quest: its title, steps done and time left. Glows when a
  * special move is waiting. When a quest has just arrived (or just been finished) it opens up
  * for a few seconds with the news. Renders nothing without a quest.

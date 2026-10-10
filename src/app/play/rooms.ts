@@ -29,7 +29,7 @@ export type RoomInfo = {
   /** A building level, a hot-air balloon, or another ride ("v:<kind>:<n>": train, bus, car, boat, Ferris wheel, slide). */
   kind: "building" | "balloon" | "ride";
   /** Rides: what you're on. */
-  ride?: "train" | "bus" | "car" | "boat" | "ferris" | "slide";
+  ride?: "train" | "bus" | "car" | "boat" | "ferris" | "slide" | "heli";
   /** Rides that end by themselves: how long they last (ms). Balloons always last RIDE_MS. */
   rideMs?: number;
   /** Building levels: "g" (ground), "f<n>" (floor n, 1 … 200) or "r" (rooftop). */

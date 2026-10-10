@@ -1,7 +1,7 @@
 // The railway: a viaduct on legs above one long street (with a station part way along), and
-// two trains (an engine and carriages) shuttling back and forth on it, one on each track,
-// stopping at the station. Windows light up at night. The viaduct itself is drawn with the
-// rest of the city (railParts, below); the trains are three instanced meshes.
+// two bullet trains (streamlined noses at both ends) shuttling back and forth on it, one on
+// each track, stopping at the station. Windows light up at night. The viaduct itself is drawn
+// with the rest of the city (railParts, below); the trains are four instanced meshes.
 
 import * as THREE from "three";
 import { railCentre, railRow, type CityPlan, type Tile } from "@/lib/city/layout";
@@ -125,6 +125,9 @@ export function createTrains(world: World, parent: THREE.Object3D) {
   const bodyMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
   const windowMat = new THREE.MeshLambertMaterial({ color: 0x2b3a4f, emissive: 0x0b1a2a, emissiveIntensity: 0.3 });
   const roofMat = new THREE.MeshLambertMaterial({ color: 0x868e96 });
+  // Streamlined noses at both ends of each train (they're bullet trains now).
+  const noseGeo = new THREE.SphereGeometry(0.5, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2).rotateZ(-Math.PI / 2);
+  let noses: THREE.InstancedMesh | null = null;
   let body: THREE.InstancedMesh | null = null;
   let windows: THREE.InstancedMesh | null = null;
   let roofs: THREE.InstancedMesh | null = null;
@@ -151,12 +154,12 @@ export function createTrains(world: World, parent: THREE.Object3D) {
   let townHi = 0;
 
   function clear() {
-    for (const m of [body, windows, roofs, ...outer]) {
+    for (const m of [body, windows, roofs, noses, ...outer]) {
       if (!m) continue;
       parent.remove(m);
       m.dispose();
     }
-    body = windows = roofs = null;
+    body = windows = roofs = noses = null;
     outer = [];
     trains = [];
   }
@@ -270,11 +273,14 @@ export function createTrains(world: World, parent: THREE.Object3D) {
     body = new THREE.InstancedMesh(bodyGeo, bodyMat, total);
     windows = new THREE.InstancedMesh(bodyGeo, windowMat, total);
     roofs = new THREE.InstancedMesh(bodyGeo, roofMat, total);
+    noses = new THREE.InstancedMesh(noseGeo, bodyMat, trains.length * 2);
     let k = 0;
     for (const tr of trains) {
-      for (let c = 0; c < tr.cars; c++, k++) body.setColorAt(k, color.setHex(c === 0 ? tr.body : 0xf1f3f5));
+      // White carriages with a stripe in the line's colour (the stripe is the windows' band).
+      for (let c = 0; c < tr.cars; c++, k++) body.setColorAt(k, color.setHex(c === 0 || c === tr.cars - 1 ? tr.body : 0xf1f3f5));
     }
-    for (const m of [body, windows, roofs]) {
+    for (let n = 0; n < trains.length * 2; n++) noses.setColorAt(n, color.setHex(trains[n >> 1].body));
+    for (const m of [body, windows, roofs, noses]) {
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       m.frustumCulled = false;
       parent.add(m);
@@ -356,6 +362,25 @@ export function createTrains(world: World, parent: THREE.Object3D) {
     body.instanceMatrix.needsUpdate = true;
     windows.instanceMatrix.needsUpdate = true;
     roofs.instanceMatrix.needsUpdate = true;
+    if (noses) {
+      let n = 0;
+      for (const tr of trains) {
+        const L = length(tr);
+        const mid = Math.round(tr.pos);
+        const row = railRow(plan, mid);
+        const tile = world.tileIndex.get(along === "z" ? keyOf(row, mid) : keyOf(mid, row));
+        const show = mid < townLo || mid > townHi || (tile !== undefined && grown(world, tile, now));
+        const sc = show ? 1 : 0.0001;
+        for (const end of [-1, 1]) {
+          const f = railFrame(plan, tr.pos + (end * L) / 2);
+          q.setFromAxisAngle(up, Math.atan2(-f.dz, f.dx) + (end < 0 ? Math.PI : 0));
+          const cross = tr.track * 0.1;
+          m4.compose(v.set(f.x + f.nx * cross, RAIL_Y + 0.02 + 0.075, f.z + f.nz * cross), q, s.set(0.34 * sc, 0.15 * sc, 0.17 * sc));
+          noses.setMatrixAt(n++, m4);
+        }
+      }
+      noses.instanceMatrix.needsUpdate = true;
+    }
   }
 
   /**
@@ -384,6 +409,7 @@ export function createTrains(world: World, parent: THREE.Object3D) {
   function dispose() {
     clear();
     bodyGeo.dispose();
+    noseGeo.dispose();
     bodyMat.dispose();
     outerMat.dispose();
     windowMat.dispose();

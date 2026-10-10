@@ -70,7 +70,7 @@ import { GreetButtons } from "./greet-buttons";
 import { MyGiftsSheet } from "./my-gifts-sheet";
 import { StreakPill, StreakSheet } from "./streak-sheet";
 import { useQuestTracker } from "./activities/quest-tracker";
-import { QuestBanner, QuestSheet } from "./activities/quest-ui";
+import { QuestBanner, QuestCelebration, QuestSheet } from "./activities/quest-ui";
 import { Chat } from "./chat";
 import { setEventSoundsEnabled } from "./city/event-sounds";
 import type { CityDancer, CityEvent, CityFriendPin, CityGhost, CityInteract, CityMarkers, CityRide, RideTarget } from "./city-view";
@@ -131,6 +131,7 @@ const RIDE_HELLO: Record<RideKindName, string> = {
   boat: "Cast off! Enjoy the cruise; drag to look around and tap Chat to talk to the deck.",
   ferris: "Your cabin is climbing. Drag to look around; tap Chat to talk to your cabin.",
   slide: "Hold on tight…",
+  heli: "Lift-off! You're in the co-pilot's seat: drag to look around (and look down through the floor); tap Chat to talk to the cabin.",
 };
 type Ad = { id: string; image: string; headline: string; brand: string; link: string | null };
 type Notice = { id: number; text: string; tone: "alarm" | "move" | "info" | "mine"; avatar?: ReturnType<typeof cleanAvatar> | null; icon?: FeedIcon };
@@ -235,6 +236,13 @@ function describe(e: GameEvent, botName: string, myTile: number | null, where: (
     if (d.winner === "hunter")
       return { id: e.id, tone: "alarm", icon: "catch", avatar, text: d.out ? `${hunter} beat ${ghost}. That's three losses: ${ghost} is out!` : `${hunter} beat ${ghost} in a duel.` };
     return { id: e.id, tone: "info", icon: d.golden ? "coin" : "shield", avatar, text: d.golden ? `${ghost} beat ${hunter} and turned golden!` : `${ghost} beat ${hunter} in a duel.` };
+  }
+  if (e.kind === "heist") {
+    const d = e.detail ?? {};
+    const who = d.name ?? "Someone";
+    const avatar = d.avatar ? cleanAvatar(d.avatar, who) : null;
+    if (d.success) return { id: e.id, tone: "alarm", icon: "coin", avatar, text: `${who} robbed the bank and got away with ${short(d.loot ?? 0)} mint from the prize pool!` };
+    return { id: e.id, tone: "alarm", icon: "catch", avatar, text: `${who} tried to rob the bank and got caught! ${short(d.lost ?? 0)} mint went into the prize pool.` };
   }
   if (e.kind === "moved") {
     if (myTile !== null && e.tile === myTile) return null;
@@ -843,7 +851,8 @@ export function Game({
       .map((e) => {
         const n = describe(e, botName, myLastSpot, where);
         // Your own duel's result is on the duel screen already: list it, but don't pop it up too.
-        const mineDuel = e.kind === "duel" && !!myName && (e.detail?.ghost === myName || e.detail?.hunter === myName);
+        const mineDuel =
+          !!myName && ((e.kind === "duel" && (e.detail?.ghost === myName || e.detail?.hunter === myName)) || (e.kind === "heist" && e.detail?.name === myName));
         return n ? ({ key: `e${e.id}`, at: e.at, text: n.text, tone: n.tone, avatar: n.avatar ?? null, icon: n.icon, quiet: mineDuel } as FeedItem) : null;
       })
       .filter((x): x is FeedItem => x !== null);
@@ -853,8 +862,8 @@ export function Game({
       text: n.tile !== null && n.kind === "trap" ? `${n.body} (near ${where(n.tile)})` : n.body,
       tone: n.kind === "caught" ? ("alarm" as const) : ("mine" as const),
       avatar: n.kind === "caught" || n.kind === "shield" ? me.avatar : null,
-      quiet: n.kind === "duel_won" || n.kind === "duel_lost",
-      icon: (({ trap: "trap", trapped: "trap", swept: "drone", caught: "catch", shield: "shield", shielded: "shield", decoy: "decoy", streak: "flame", gift: "gift", spray: "gift", hug: "hug", handshake: "handshake", thanks: "hug", duel: "duel", duel_won: "duel", duel_lost: "duel" }) as Record<string, FeedIcon>)[n.kind] ?? "info",
+      quiet: n.kind === "duel_won" || n.kind === "duel_lost" || n.kind === "heist",
+      icon: (({ trap: "trap", trapped: "trap", swept: "drone", caught: "catch", shield: "shield", shielded: "shield", decoy: "decoy", streak: "flame", gift: "gift", spray: "gift", hug: "hug", handshake: "handshake", thanks: "hug", duel: "duel", duel_won: "duel", duel_lost: "duel", heist: "coin" }) as Record<string, FeedIcon>)[n.kind] ?? "info",
     }));
     // World events that have started: news you can tap to fly there.
     const news = state.worldEvents
@@ -1809,6 +1818,7 @@ export function Game({
         {!guest && (
           <Safe name="Quest banner">
             <QuestBanner quest={quests.quest} onOpen={() => setQuestOpen(true)} />
+            <QuestCelebration />
           </Safe>
         )}
         {!guest && nudge && <FriendNudge friend={nudge} place={nudge.place} onJoin={() => goToFriend(nudge.room, nudge.name)} onClose={closeNudge} />}

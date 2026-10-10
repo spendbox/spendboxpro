@@ -1,0 +1,17 @@
+knight-slim.glb
+  The Knight from "KayKit: Adventurers Character Pack 1.0" by Kay Lousberg (www.kaylousberg.com).
+  License: Creative Commons Zero (CC0), free for personal, educational and commercial use.
+  https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0
+  Slimmed for the web: weapons and shields removed, 6 of 76 animations kept (Idle, Walking_A,
+  Running_A, Jump_Full_Short, Cheer, Sit_Floor_Idle), meshopt-compressed.
+
+avatar-placeholder.glb
+  A simple placeholder figure made for this project.
+
+people/ (male.glb, female.glb, hair-*.glb, beard.glb, moves.glb)
+  "Universal Base Characters" (the Superhero male and female bodies with eyes and eyebrows, and
+  the hairstyles) and "Universal Animation Library" by Quaternius (quaternius.com).
+  License: Creative Commons Zero (CC0), free for personal, educational and commercial use.
+  Converted for the web: FBX bodies turned into glTF on one shared skeleton, smaller pictures,
+  compressed shapes; 12 of the library's 43 animations kept. The tank top and shorts are painted
+  on by the test page.

@@ -1,5 +1,6 @@
 // What you see round you on a ride: the inside of a train carriage, the front seat on the top
-// deck of a bus, the driver's seat of a car, the deck of a river boat, a Ferris wheel cabin.
+// deck of a bus, the driver's seat of a car, the deck of a river boat, a Ferris wheel cabin, a
+// helicopter's cockpit.
 // Built in metres (floor of the vehicle at y = 0 for the train and the bus's road level, facing
 // -z = the way it goes) and drawn by the city view over the city, like rooms: the city shows
 // through the windows, gliding past. `eye` is where your eyes are; `spots` seat other people.
@@ -9,7 +10,7 @@ import { sign, Sheet } from "./interior-art";
 import { Kit, mixHex, rngFrom, shadeHex, shadowMesh } from "./kit";
 import type { Spot } from "./figures";
 
-export type CabinKind = "train" | "bus" | "car" | "boat" | "ferris";
+export type CabinKind = "train" | "bus" | "car" | "boat" | "ferris" | "heli";
 
 export type Cabin = {
   kind: CabinKind;
@@ -264,6 +265,63 @@ function gondola(x: Ctx, color: number) {
   return { eye: new THREE.Vector3(0, F + 1.18, 0.62), aim: { yaw: 0, pitch: -0.2, pitchMin: -1.1, pitchMax: 0.5 } };
 }
 
+// ---------------------------------------------------------------- helicopter (cockpit)
+
+function heli(x: Ctx, body: number, key: string) {
+  const { k } = x;
+  const rnd = rngFrom(key);
+  const F = -0.55;
+  k.floorY = F;
+  const dark = 0x2b2f33;
+  const seat = [0x343a40, 0x5c4033, 0x1f3b5c][Math.floor(rnd() * 3)];
+  // Floor at the back, a glass panel at your feet at the front (look straight down!).
+  k.box(0, F - 0.06, 0.55, 1.7, 0.06, 1.7, 0x495057, { noAo: true });
+  k.quad(0, F - 0.03, -0.75, 1.5, 0.9, 0xffffff, { layer: "glass", rx: -Math.PI / 2 });
+  k.box(0, F - 0.08, -0.75, 1.56, 0.04, 0.96, dark, { noAo: true });
+  k.box(0, F - 0.06, -0.75, 1.4, 0.05, 0.8, dark, { noAo: true });
+  // Doors and a low wall in the helicopter's colour down both sides.
+  for (const side of [-1, 1]) {
+    k.box(side * 0.85, F, 0.3, 0.06, 0.55, 2.0, body, { noAo: true });
+    k.quad(side * 0.85, F + 1.05, 0.3, 2.0, 0.95, 0xffffff, { layer: "glass", ry: side * Math.PI / 2 });
+    k.box(side * 0.85, F + 0.55, 0.3, 0.07, 0.04, 2.0, 0xf1f3f5, { noAo: true });
+    k.box(side * 0.85, F, 1.32, 0.08, 1.6, 0.08, dark, { noAo: true });
+  }
+  // The bubble: glass all round the front and over your head, on a thin frame.
+  for (let s = 0; s < 5; s++) {
+    const a = -0.7 + s * 0.35;
+    k.at(Math.sin(a) * 0.95, F, -0.75 + -Math.cos(a) * 0.45, a, () => {
+      k.quad(0, 0.85, 0, 0.36, 1.25, 0xffffff, { layer: "glass", rx: 0.25 });
+    });
+    k.box(Math.sin(a - 0.175) * 0.97, F + 0.2, -0.75 - Math.cos(a - 0.175) * 0.47, 0.022, 1.35, 0.022, dark, { noAo: true, rx: 0.25 });
+  }
+  k.quad(0, F + 1.6, -0.1, 1.7, 1.6, 0xffffff, { layer: "glass", rx: -Math.PI / 2 });
+  for (const sx of [-0.55, 0.55]) k.box(sx, F + 1.6, -0.1, 0.04, 0.04, 1.8, dark, { noAo: true });
+  k.box(0, F + 1.62, 1.0, 1.7, 0.06, 0.7, body, { noAo: true });
+  // The instrument panel, low and in front of the pilot (your side stays clear), and a console.
+  k.soft(0.42, F + 0.32, -1.1, 0.62, 0.26, 0.22, dark, 0.05);
+  for (const sx of [0.3, 0.54]) k.box(sx, F + 0.48, -1.02, 0.2, 0.12, 0.02, sx < 0.4 ? 0x51cf66 : 0x4dabf7, { layer: "glow", rx: -0.5 });
+  k.box(0, F, -0.65, 0.22, 0.42, 0.5, dark);
+  k.box(0, F + 0.42, -0.62, 0.18, 0.02, 0.32, 0x4dabf7, { layer: "glow", rx: -0.3 });
+  for (const sx of [-0.42, 0.42]) {
+    k.cyl(sx, F, -0.45, 0.02, 0.02, 0.55, dark, 6, { noAo: true, rx: -0.25 });
+    k.ball(sx, F + 0.55, -0.6, 0.04, 0x1f1f1f, { w: 8, h: 6 });
+  }
+  // Two seats up front (the pilot flies on the right), and a bench for three behind.
+  for (const sx of [-0.42, 0.42]) {
+    k.soft(sx, F + 0.25, -0.2, 0.5, 0.14, 0.5, seat, 0.05);
+    k.soft(sx, F + 0.35, 0.08, 0.5, 0.75, 0.12, seat, 0.05, { rx: 0.12 });
+    k.box(sx, F, -0.2, 0.3, 0.25, 0.3, dark);
+  }
+  k.soft(0, F + 0.25, 0.75, 1.5, 0.14, 0.5, seat, 0.05);
+  k.soft(0, F + 0.35, 1.03, 1.5, 0.75, 0.12, seat, 0.05, { rx: 0.1 });
+  k.box(0, F, 0.75, 1.4, 0.25, 0.4, dark);
+  sit(x, 0.42, -0.28, Math.PI, 0.38, F);
+  if (rnd() < 0.7) sit(x, -0.5, 0.68, Math.PI, 0.38, F);
+  if (rnd() < 0.5) sit(x, 0.5, 0.68, Math.PI, 0.38, F);
+  // You're in the co-pilot's seat: the whole city in front and below.
+  return { eye: new THREE.Vector3(-0.42, F + 1.05, -0.22), aim: { yaw: 0, pitch: -0.35, pitchMin: -1.35, pitchMax: 0.45 } };
+}
+
 // ---------------------------------------------------------------- putting it together
 
 export function createCabin(kind: CabinKind, key: string, color: number): Cabin {
@@ -271,7 +329,17 @@ export function createCabin(kind: CabinKind, key: string, color: number): Cabin 
   const k = new Kit();
   const x: Ctx = { k, sheet, spots: [] };
   const built =
-    kind === "train" ? train(x, color, key) : kind === "bus" ? bus(x, color, key) : kind === "car" ? car(x, color, key) : kind === "boat" ? boat(x, color, key) : gondola(x, color);
+    kind === "train"
+      ? train(x, color, key)
+      : kind === "bus"
+        ? bus(x, color, key)
+        : kind === "car"
+          ? car(x, color, key)
+          : kind === "boat"
+            ? boat(x, color, key)
+            : kind === "heli"
+              ? heli(x, color, key)
+              : gondola(x, color);
   const tex = sheet.finish();
   const mats = {
     solid: new THREE.MeshLambertMaterial({ vertexColors: true }),
