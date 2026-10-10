@@ -367,7 +367,7 @@ export const BOTTOMS: BottomStyle[] = [
   { id: "leggings", n: "Leggings", kind: "leggings", fit: 0.012 },
   { id: "midi-skirt", n: "Midi skirt", kind: "skirt", hem: -11.0, flare: 0.5 },
   { id: "mini-skirt", n: "Mini skirt", kind: "skirt", hem: -8.6, flare: 0.15 },
-  { id: "wrapper", n: "Wrapper (iro)", kind: "skirt", hem: -13.3, flare: 0.12, wrap: 1, native: 1 },
+  { id: "wrapper", n: "Wrapper (iro)", kind: "skirt", hem: -13.3, flare: 0.24, wrap: 1, native: 1 },
   { id: "sokoto", n: "Sokoto", kind: "trousers", fit: 0.2, cuff: 1, native: 1 },
 ];
 

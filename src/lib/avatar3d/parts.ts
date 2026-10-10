@@ -32,10 +32,13 @@ export type Part = {
    * (attributes skinIndex: positions in Model.nodes, skinWeight). Otherwise it moves rigidly with its node.
    */
   skinned?: boolean;
+  /** Hanging cloth that fits close round the legs (a wrapper, a pencil skirt): it follows the legs closely. */
+  tight?: boolean;
 };
 
 /** meta.faceH: height scale of the chosen face (sizes the jaw drop). floorY: where the feet stand (whole avatars only). */
-export type Model = { nodes: Node[]; parts: Part[]; meta: { faceH: number; floorY?: number } };
+/** stride: how long a step the outfit allows (1, or less in a narrow long wrapper or pencil skirt). */
+export type Model = { nodes: Node[]; parts: Part[]; meta: { faceH: number; floorY?: number; stride?: number } };
 
 export const ROOT = "head";
 

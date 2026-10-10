@@ -77,7 +77,7 @@ export function legWear(d: Dress, L: Legs, side: number, node: string, lod: numb
     return;
   }
   // How far the hem is down: trousers to the top of the shoe, shorts above the knee.
-  const hemY = b.kind === "shorts" ? L.jy - (b.hem ?? 2.4) : b.kind === "leggings" ? L.ankle + 0.05 : L.ankle - 0.2;
+  const hemY = b.kind === "shorts" ? L.jy - (b.hem ?? 2.4) : b.kind === "leggings" || b.cuff ? L.ankle + 0.08 : L.ankle - 0.25;
   const fit = b.fit ?? 0.1, straight = L.kneeR + fit;
   const ease = (y: number) => {
     const r = legR(L, y);
@@ -89,13 +89,14 @@ export function legWear(d: Dress, L: Legs, side: number, node: string, lod: numb
     if (b.cuff) g = lerp(g, r + 0.05, smooth((y - (L.ankle + 1.1)) / -0.9));
     return g;
   };
-  const pts: [number, number][] = L.pts.filter(([, y]) => y > hemY + 0.05).map(([, y]) => [ease(y), y]);
+  const pts: [number, number][] = L.pts.filter(([, y]) => y > hemY + 0.2).map(([, y]) => [ease(y), y]);
   // Extra rows down the leg so the straight fall keeps its shape.
   for (let y = L.jy - 0.5; y > hemY + 0.1; y -= 0.6) if (!pts.some(([, py]) => Math.abs(py - y) < 0.2)) pts.push([ease(y), y]);
   pts.sort((p, q) => q[1] - p[1]);
   pts[0][0] = 0; // the garment's top is closed off inside the hips, like the leg's
   // The hem turns in to the leg, showing the cloth's thickness (round the ankle for full-length legs).
-  const inner = Math.max(legR(L, hemY), 0.24) + 0.008;
+  // (Full-length legs stay wide enough at the hem to fall over the top of the shoe as it tips.)
+  const inner = Math.max(legR(L, hemY), b.kind === "trousers" && !b.cuff ? 0.36 : 0.24) + 0.008;
   pts.push([Math.max(ease(hemY), inner + 0.01), hemY], [inner, hemY - 0.004]);
   add(`${node}Wear`, node, L.glutes(limbGeo(pts, 18, lod, null, L.squash), side), look.bottomMat);
   if (b.cuff) add(`${node}Cuff`, node, limbGeo([[legR(L, hemY + 0.25) + 0.065, hemY + 0.28], [legR(L, hemY) + 0.06, hemY + 0.02], [legR(L, hemY) + 0.012, hemY - 0.005]], 18, lod, null, L.squash), look.bottomMat === "jeans" ? "jeansDark" : "bottomDark");

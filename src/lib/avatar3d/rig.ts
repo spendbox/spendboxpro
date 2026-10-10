@@ -98,21 +98,35 @@ export function buildRig(R: RigInput): Rig {
   };
   const shX = new Vector3().copy(pos.get("upperArm1")!).applyMatrix4(bodyInv).x;
   /** The torso and everything on it (clothes, robes, chains): spine, shoulders, and the tops of the thighs. */
-  const torsoW = (p: Vector3, hanging: boolean): W => {
+  const torsoW = (p: Vector3, hanging: boolean, tight = false): W => {
     const w: W = new Map(), q = p.clone().applyMatrix4(bodyInv), side = q.x < 0 ? 0 : 1, ax = Math.abs(q.x);
     // Shoulders: the deltoid goes with the arm, the top of the shoulder with the collarbone.
-    const arm = 0.8 * smooth((ax - shX * 0.72) / (shX * 0.35)) * smooth((q.y - (R.shY - 1.2)) / 0.7);
+    // (Only the cap of the shoulder: the side of the chest below the armpit stays with the chest.)
+    const arm = 0.8 * smooth((ax - shX * 0.74) / (shX * 0.32)) * smooth((q.y - (R.shY - 0.95)) / 0.6);
     const clav = (1 - arm) * 0.6 * smooth((ax - 0.35) / 0.55) * smooth((q.y - (R.shY - 0.9)) / 0.6);
     add(w, `upperArm${side}`, arm);
     add(w, `clavicle${side}`, clav);
     let rest = 1 - arm - clav;
     // Below the waist the hips divide into the thighs: there the cloth and skin follow the legs.
-    const split = hanging ? 0.5 * smooth((CROTCH_Y + 0.2 - q.y) / 0.6) + 0.15 * smooth((CROTCH_Y - q.y) / 3) : 0.7 * smooth((-6.45 - q.y) / (-6.45 - CROTCH_Y));
-    if (split > 0) {
-      const s = smooth(0.5 + q.x / (R.legX * (hanging ? 3 : 1.6)));
-      add(w, "thigh1", rest * split * s);
-      add(w, "thigh0", rest * split * (1 - s));
-      rest *= 1 - split;
+    if (hanging) {
+      // Skirts and robes: from the hips down the cloth goes more and more with the leg on its side
+      // (blended across the middle, where it hangs between the legs), and below the knee partly with
+      // the shin too, so the legs stay inside it as they swing forward and back.
+      const legs = smooth((-6.0 - q.y) / 1.3), s = smooth(0.5 + q.x / (R.legX * 0.4));
+      const kneeY = CROTCH_Y - R.LT + 0.6, shinPart = tight ? 0.95 * smooth((kneeY + 0.4 - q.y) / 1.0) : 0.4 * smooth((kneeY - q.y) / 2.0);
+      for (const [side, k] of [[1, s], [0, 1 - s]] as const) {
+        add(w, `thigh${side}`, rest * legs * k * (1 - shinPart));
+        add(w, `shin${side}`, rest * legs * k * shinPart);
+      }
+      rest *= 1 - legs;
+    } else {
+      const split = 0.7 * smooth((-6.45 - q.y) / (-6.45 - CROTCH_Y));
+      if (split > 0) {
+        const s = smooth(0.5 + q.x / (R.legX * 1.6));
+        add(w, "thigh1", rest * split * s);
+        add(w, "thigh0", rest * split * (1 - s));
+        rest *= 1 - split;
+      }
     }
     spineW(w, q.y, rest);
     return w;
@@ -128,12 +142,16 @@ export function buildRig(R: RigInput): Rig {
     add(w, `hand${i}`, top * fore * hand);
     return w;
   };
-  /** A point on a leg (leg node frame): hip, knee, ankle, ball of the foot. */
-  const legW = (i: number, p: Vector3): W => {
+  /**
+   * A point on a leg (leg node frame): hip, knee, ankle, ball of the foot. Shoes (and bare feet) move
+   * with the foot as one piece, flexing only a little at the ball; the leg and anything worn on it
+   * (trouser hems over the shoe) follow the shin, not the foot.
+   */
+  const legW = (i: number, p: Vector3, shoe: boolean, shaft: boolean): W => {
     const w: W = new Map(), q = p.clone().applyMatrix4(M.get(`leg${i}`)!.clone().invert()), s = -q.y;
     // At the crotch the leg matches the hips (70% thigh), becoming all thigh further down.
     const thigh = 0.7 + 0.3 * smooth((s + R.jy) / 1.0), shin = smooth((s - (R.LT - 0.35)) / 0.7);
-    const foot = smooth((s - (R.LT + R.LS - 0.12)) / 0.25), toe = smooth((q.z - (R.ballZ - 0.15)) / 0.3);
+    const foot = shoe ? 1 : shaft ? smooth((s - (R.LT + R.LS - 0.45)) / 0.5) : 0, toe = shoe ? 0.5 * smooth((q.z - (R.ballZ - 0.3)) / 0.6) : 0;
     add(w, "hips", 1 - thigh);
     add(w, `thigh${i}`, thigh * (1 - shin));
     add(w, `shin${i}`, thigh * shin * (1 - foot));
@@ -161,8 +179,11 @@ export function buildRig(R: RigInput): Rig {
     const arm = /^(arm|hand)(\d)$/.exec(node), leg = /^leg(\d)$/.exec(node);
     if (node === "head" && HEAD_SKINNED.test(p.name)) wf = neckW;
     else if (arm) wf = (v) => armW(+arm[2], v);
-    else if (leg) wf = (v) => legW(+leg[1], v);
-    else if (node === "chest" || node === "body") wf = (v) => torsoW(v, HANGING.test(p.name));
+    else if (leg) {
+      const shoe = /^(shoe|sole|foot|heel|strap)/.test(p.name), shaft = p.name.startsWith("bootShaft");
+      wf = (v) => legW(+leg[1], v, shoe, shaft);
+    }
+    else if (node === "chest" || node === "body") wf = (v) => torsoW(v, HANGING.test(p.name), !!p.tight);
     else return p; // the head's rigid parts (face, eyes, hair, headwear...) stay on their nodes
     g.applyMatrix4(M.get(node)!);
     const P = g.attributes.position, n = P.count, si = new Float32Array(n * 4), sw = new Float32Array(n * 4), v = new Vector3();

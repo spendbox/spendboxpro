@@ -43,7 +43,10 @@ export function buildAvatar(r: Recipe, lod = 1): Model {
   const B = bodyParams(r), fem = r.frame === 1, look = resolveLook(r), O = look.O, T = torsoModel(B);
   const shirtless = !!O.swim;
   const parts: Part[] = [], nodes: Node[] = [];
-  const add = (name: string, node: string, geo: BufferGeometry, mat: Part["mat"], surface: Part["surface"] = "sheet") => parts.push({ name, node, geo, mat, surface });
+  // (Narrow long garments are marked tight: they follow the legs closely.)
+  const tightNames = /^(skirt|wrapPanel|pencilSkirt)$/, tight = !!(look.bottom?.wrap || O.pencil);
+  const add = (name: string, node: string, geo: BufferGeometry, mat: Part["mat"], surface: Part["surface"] = "sheet") =>
+    parts.push({ name, node, geo, mat, surface, ...(tight && tightNames.test(name) ? { tight: true } : {}) });
   const node = (id: string, parent: string | null, o?: Object3D) => nodes.push({ id, parent, matrix: o ? matrixOf(o) : new Matrix4().toArray() });
 
   // Height: the body stretches about the neck; the head grows only a little (head size varies far less than height).
@@ -175,7 +178,8 @@ export function buildAvatar(r: Recipe, lod = 1): Model {
   return {
     nodes: rig.nodes,
     parts: [...head.parts, ...parts].map(rig.skin),
-    meta: { faceH: head.meta.faceH, floorY: NECK_Y * (1 - H) + floorY * H },
+    // Narrow long garments allow only short steps.
+    meta: { faceH: head.meta.faceH, floorY: NECK_Y * (1 - H) + floorY * H, stride: look.bottom?.wrap || O.pencil ? 0.5 : 1 },
   };
 }
 

@@ -20,6 +20,8 @@ export type AvatarObject = {
   /** Current expression (eased toward the target each frame). */
   face: FaceState;
   faceH: number;
+  /** How long a step the outfit allows (pass to applyMove). */
+  stride: number;
 };
 
 /**
@@ -57,7 +59,7 @@ export function mountModel(model: Model, mats: MaterialSet): AvatarObject {
     if (p.morphs?.[0] === MOUTH_MORPHS[0]) mouth.push(m);
     if (p.morphs?.[0] === LID_MORPHS[0]) lids.push(m);
   }
-  return { root, nodes, rest, mouth, lids, face: { ...NEUTRAL }, faceH: model.meta.faceH };
+  return { root, nodes, rest, mouth, lids, face: { ...NEUTRAL }, faceH: model.meta.faceH, stride: model.meta.stride ?? 1 };
 }
 
 /**

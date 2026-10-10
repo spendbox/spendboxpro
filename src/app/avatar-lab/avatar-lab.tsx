@@ -141,7 +141,7 @@ export function AvatarLab({ initialRecipe, initialExpr, initialView, initialMove
         }
         updateFace(cur.obj, target, blink, gaze, X.talk ? dt * 2 : dt);
       } else if (cur) updateFace(cur.obj, EXPRESSIONS[exprRef.current].v, 0, { x: 0, y: 0 }, 1);
-      if (cur) applyMove(cur.obj.nodes, cur.obj.rest, MOVES[moveRef.current], params.has("mt") ? Number(params.get("mt")) : t);
+      if (cur) applyMove(cur.obj.nodes, cur.obj.rest, MOVES[moveRef.current], params.has("mt") ? Number(params.get("mt")) : t, cur.obj.stride);
       renderer.render(scene, camera);
       raf = requestAnimationFrame(tick);
     };

@@ -12,10 +12,15 @@ import { Euler, type Object3D, Quaternion, Vector3 } from "three";
 type V3 = [number, number, number];
 /** Where a foot goes, relative to where it rests: forward (z), up (y), sideways (x); pitch tips the toes down. */
 export type FootTarget = { x?: number; y: number; z: number; pitch: number; toe?: number };
-export type Pose = { rot: Record<string, V3>; hips?: V3; feet?: [FootTarget, FootTarget] };
+/**
+ * rot: rotations (radians, about the avatar's axes); twist: turns about a bone's own length after
+ * that (the forearm and wrist turning the palm); hips: how the hips shift; feet: where each foot goes.
+ */
+export type Pose = { rot: Record<string, V3>; twist?: Record<string, number>; hips?: V3; feet?: [FootTarget, FootTarget] };
 
 /** What a move needs to know about this body. */
-export type Dims = { height: number; leg: number; ankle: number; ball: number };
+/** stride: 1 normally; less in narrow long garments (a fitted wrapper allows only short steps). */
+export type Dims = { height: number; leg: number; ankle: number; ball: number; stride: number };
 
 export type Move = {
   id: string;
@@ -41,33 +46,38 @@ function stride(ph: number, duty: number, step: number, lift: number, D: Dims): 
     const u = ph / duty, z = step * (0.5 - u);
     // Heel strike (toes up) -> flat -> heel rises and the foot rolls over the ball of the foot (toe-off).
     const heelUp = s01((u - 0.6) / 0.4), pitch = -0.25 * (1 - s01(u / 0.15)) + 0.6 * heelUp;
-    return { z, y: D.ball * Math.sin(Math.max(0, pitch)), pitch, toe: -0.6 * heelUp };
+    return { z, y: D.ball * Math.sin(Math.max(0, pitch)), pitch, toe: -0.5 * heelUp };
   }
   // Swing: the knee folds and the heel comes up high behind first (the foot lags behind the knee),
   // then the leg swings through low and reaches forward, toes up, for the next heel strike.
   const u = (ph - duty) / (1 - duty), z = step * (-0.5 + s01((u - 0.08) / 0.92));
   const pitch = 0.6 * (1 - s01(u / 0.35)) - 0.25 * s01((u - 0.6) / 0.4);
-  const heel = D.height * (lift / D.height > 0.1 ? 0.16 : 0.1) * Math.sin(Math.PI * Math.min(1, u / 0.6));
+  // (Limited so the knee folds no further than in real jogging, about 100 degrees.)
+  const heel = D.height * D.stride * (lift / D.stride / D.height > 0.1 ? 0.11 : 0.08) * Math.sin(Math.PI * Math.min(1, u / 0.6));
   return { z, y: heel + lift * 0.4 * Math.sin(Math.PI * u) + D.ball * Math.sin(Math.max(0, pitch)) * (1 - u), pitch, toe: 0 };
 }
 
 const walk = (run: boolean): Move["pose"] => (t, D) => {
-  const P = run ? 0.72 : 1.1, ph = frac(t / P), duty = run ? 0.38 : 0.6, step = D.height * (run ? 0.46 : 0.38);
-  const lift = D.height * (run ? 0.13 : 0.06), c = Math.cos(TAU * ph), sn = Math.sin(TAU * ph), c2 = Math.cos(2 * TAU * ph);
+  const P = run ? 0.72 : 1.1, ph = frac(t / P), duty = run ? 0.38 : 0.6, step = D.height * (run ? 0.46 : 0.38) * D.stride;
+  const lift = D.height * (run ? 0.13 : 0.06) * D.stride, c = Math.cos(TAU * ph), sn = Math.sin(TAU * ph), c2 = Math.cos(2 * TAU * ph);
   // Right foot strikes at 0, left at 0.5.
   const feet: [FootTarget, FootTarget] = [stride(ph, duty, step, lift, D), stride(frac(ph + 0.5), duty, step, lift, D)];
-  const bob = D.height * (run ? 0.022 : 0.011), lean = run ? 0.16 : 0.04;
-  // The pelvis: lowest at heel strike (both feet down), highest over the standing leg; sways to the
-  // standing side; turns with the forward leg; the swinging side drops a little.
-  const hips: V3 = [D.height * 0.006 * sn, -bob * c2 - (run ? D.height * 0.03 : 0), 0];
+  // The pelvis, as measured in human gait (sizes for a 1.75 m adult): it rises and falls about 2.5 cm
+  // twice a stride (lowest with both feet down, highest over the standing leg), shifts about 2 cm
+  // over the standing leg, turns about 5 degrees with the forward leg, and drops about 5 degrees on
+  // the swinging side. Running: all larger. The lower back and chest turn the other way, keeping the
+  // shoulders level and square.
+  const bob = D.height * (run ? 0.022 : 0.013), lean = run ? 0.16 : 0.04;
+  const turn = run ? 0.13 : 0.085, drop = run ? 0.1 : 0.08, shift = D.height * (run ? 0.008 : 0.013);
+  const hips: V3 = [-shift * sn, -bob * c2 - (run ? D.height * 0.03 : 0), 0];
   const swingArm = run ? 0.65 : 0.32, elbow = run ? 1.5 : 0.22;
   return {
     hips,
     feet,
     rot: {
-      hips: [lean * 0.5, 0.09 * c, 0.045 * sn],
-      spine: [lean * 0.3, -0.05 * c, -0.02 * sn],
-      chest: [lean * 0.3 + 0.02 * c2, -0.07 * c, -0.02 * sn],
+      hips: [lean * 0.5 + 0.03 * c2, turn * c, -drop * sn],
+      spine: [lean * 0.3, -turn * 0.6 * c, drop * 0.7 * sn],
+      chest: [lean * 0.3 + 0.02 * c2, -turn * 0.7 * c, drop * 0.3 * sn],
       neck: [-lean * 0.6, 0.06 * c, 0.02 * sn],
       skull: [-lean * 0.3, 0.04 * c, 0],
       // Arms swing opposite the legs: the right arm forward as the left leg is forward.
@@ -119,7 +129,7 @@ export const MOVES: Move[] = [
     pose: (t) => {
       // Right hand raised beside the head: upper arm out to the side and a little forward at about
       // shoulder height, forearm standing up from the bent elbow, waving side to side from the elbow.
-      const wv = Math.sin(TAU * t * 1.6);
+      const wv = Math.sin(TAU * t * 1.6), wr = Math.sin(TAU * t * 1.6 + 0.9), palm = Number(globalThis.process?.env?.PALM ?? -1.4);
       return {
         feet: standing(),
         rot: {
@@ -128,11 +138,14 @@ export const MOVES: Move[] = [
           skull: [0.03, -0.12, 0.05],
           clavicle0: [0, 0, -0.14],
           upperArm0: [-0.45, 0, -1.3],
-          forearm0: [0, 0, -1.35 + 0.35 * wv],
-          hand0: [0, 0, 0.12 * wv],
+          forearm0: [0, 0, -1.35 + 0.3 * wv],
+          // The wrist rocks a little with each wave, trailing the forearm.
+          hand0: [0.1 * wr, 0, 0.22 * wr],
           upperArm1: [0, 0, 0.03],
           forearm1: [-0.15, 0, 0],
         },
+        // The palm turns to face forward: the turn shared along the forearm and wrist, as in life.
+        twist: { forearm0: palm * 0.6, hand0: palm * 0.4 },
       };
     },
   },
@@ -164,7 +177,7 @@ export const MOVES: Move[] = [
       const ph = frac(t / 1.6), crouch = s01(ph / 0.22) * (1 - s01((ph - 0.24) / 0.08)) + s01((ph - 0.82) / 0.06) * (1 - s01((ph - 0.92) / 0.08));
       const air = ph > 0.32 && ph < 0.86 ? Math.sin((Math.PI * (ph - 0.32)) / 0.54) : 0, H = D.height * 0.16 * air;
       const arms = s01((ph - 0.22) / 0.1) * (1 - s01((ph - 0.6) / 0.25));
-      const tuck = air * 0.5;
+      const tuck = air * 0.5 * D.stride;
       const feet: [FootTarget, FootTarget] = [
         { y: H + D.height * 0.03 * tuck, z: -D.height * 0.01 * tuck, pitch: 0.35 * air },
         { y: H + D.height * 0.03 * tuck, z: -D.height * 0.01 * tuck, pitch: 0.35 * air },
@@ -173,7 +186,8 @@ export const MOVES: Move[] = [
         hips: [0, -D.height * 0.09 * crouch + H, 0],
         feet,
         rot: {
-          hips: [0.35 * crouch, 0, 0],
+          // Hips fold into the crouch, straighten at take-off, tuck in the air, fold again on landing.
+          hips: [0.35 * crouch - 0.12 * arms * (1 - air) + 0.22 * tuck, 0, 0],
           spine: [0.15 * crouch, 0, 0],
           chest: [0.1 * crouch - 0.08 * arms, 0, 0],
           skull: [-0.2 * crouch, 0, 0],
@@ -215,18 +229,19 @@ const BODY = ["hips", "spine", "chest", "neck", "skull", "clavicle0", "upperArm0
   "thigh0", "shin0", "foot0", "toe0", "thigh1", "shin1", "foot1", "toe1"];
 
 /** Sizes of this body for the moves (from the skeleton's rest offsets). */
-export function dims(rest: Rest): Dims {
+export function dims(rest: Rest, stride = 1): Dims {
   const v = (id: string) => rest.get(id)!.p;
   const leg = v("shin1").length() + v("foot1").length();
   const ankle = v("hips").y + v("thigh1").y + v("shin1").y + v("foot1").y;
-  return { height: 1 - (ankle - 0.55), leg, ankle, ball: Math.hypot(v("toe1").y, v("toe1").z) };
+  return { height: 1 - (ankle - 0.55), leg, ankle, ball: Math.hypot(v("toe1").y, v("toe1").z), stride };
 }
 
-const e = new Euler(), q = new Quaternion(), down = new Vector3(0, -1, 0);
+const e = new Euler(), q = new Quaternion(), down = new Vector3(0, -1, 0), Y = new Vector3(0, 1, 0);
 
 /** Poses the skeleton (bones by name, with their rest transforms) for a move at time t. */
-export function applyMove(bones: Record<string, Object3D>, rest: Rest, move: Move, t: number) {
-  const D = dims(rest), P = move.pose(t, D);
+/** stride: the model's meta.stride (short steps in narrow long garments). */
+export function applyMove(bones: Record<string, Object3D>, rest: Rest, move: Move, t: number, stride = 1) {
+  const D = dims(rest, stride), P = move.pose(t, D);
   for (const id of BODY) {
     const b = bones[id], r = rest.get(id);
     if (!b || !r) continue;
@@ -234,6 +249,8 @@ export function applyMove(bones: Record<string, Object3D>, rest: Rest, move: Mov
     const a = P.rot[id];
     b.quaternion.copy(r.q);
     if (a) b.quaternion.multiply(q.setFromEuler(e.set(a[0], a[1], a[2], "YXZ")));
+    const tw = P.twist?.[id];
+    if (tw) b.quaternion.multiply(q.setFromAxisAngle(Y, tw));
   }
   if (P.hips) bones.hips.position.add(new Vector3(...P.hips));
   // Knees never quite lock: the hips sit a touch lower, which also leaves the legs room to reach.
@@ -261,6 +278,14 @@ function solveLeg(bones: Record<string, Object3D>, rest: Rest, i: number, f: Foo
   const qT = new Quaternion().setFromUnitVectors(down, dT.clone().applyQuaternion(yaw.clone().invert())).premultiply(yaw);
   const qS = new Quaternion().setFromUnitVectors(dT, dS).multiply(qT);
   const qF = yaw.clone().multiply(new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), f.pitch));
+  // Keep the ankle within what a real one does: from about 20 degrees up (toes towards the shin) to
+  // 35 degrees down from square to the shin.
+  const fd = new Vector3(0, 0, 1).applyQuaternion(qF), ang = fd.angleTo(dS) - Math.PI / 2;
+  const lim = Math.min(Math.max(ang, -0.35), 0.6);
+  if (lim !== ang) {
+    const axis = new Vector3().crossVectors(dS, fd).normalize();
+    if (axis.lengthSq() > 0.5) qF.premultiply(new Quaternion().setFromAxisAngle(axis, lim - ang));
+  }
   thigh.quaternion.copy(qh.clone().invert().multiply(qT));
   shin.quaternion.copy(qT.clone().invert().multiply(qS));
   foot.quaternion.copy(qS.clone().invert().multiply(qF));
