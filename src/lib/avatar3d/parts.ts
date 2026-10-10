@@ -12,7 +12,8 @@ export type MatKey =
   | "mouthCavity" | "teeth" | "tongue" | "gold" | "glassesFrame" | "lens" | "beard" | "stubble" | "hw" | "hwDark" | "hwSheen"
   | "kufi" | "hair" | "hairStrand" | "hairBody" | "hairBodyStrand" | "hairTie" | "wrap"
   | "nail" | "rib" | "top" | "topDS" | "topEdge" | "topEdgeDS" | "trim" | "bottom" | "bottomDark" | "shoe" | "sole" | "shirt" | "tie" | "lapel"
-  | "sash" | "collarWhite" | "watchBand" | "watchCase" | "watchFace" | "chainMetal" | "medal" | "iced" | "gem";
+  | "sash" | "collarWhite" | "watchBand" | "watchCase" | "watchFace" | "chainMetal" | "medal" | "iced" | "gem"
+  | "jeans" | "jeansDark" | "bottomPat" | "bottomPatDS" | "bottomDS" | "layer" | "layerDS" | "layerTrim" | "layerRib" | "embroid" | "shoeDS";
 
 /** A moving piece of the avatar. Parts hang from nodes; animation moves nodes. */
 export type Node = { id: string; parent: string | null; matrix: number[] };

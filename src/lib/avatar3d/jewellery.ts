@@ -126,7 +126,7 @@ export function chain(d: Dress, index: number) {
       if (stones.length) add(`chainStones${i}`, "chest", merge(stones), "iced", "closed");
     } else {
       // Plain chains, and chunky ones seen from a distance: a smooth rope.
-      add(`chain${i}`, "chest", new TubeGeometry(cv, Math.round(100 * lod), C.big ? r * 0.75 : r, lod < 1 ? 4 : 5, true), C.iced ? "iced" : "chainMetal", "closed");
+      add(`chain${i}`, "chest", new TubeGeometry(cv, Math.round((lod < 1 ? 50 : 100) * lod), C.big ? r * 0.75 : r, lod < 1 ? 4 : 5, true), C.iced ? "iced" : "chainMetal", "closed");
     }
   });
   if (C.pend) {

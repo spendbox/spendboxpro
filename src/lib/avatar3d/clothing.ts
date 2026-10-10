@@ -1,9 +1,13 @@
 // Clothing: the top and bottom on the torso, sleeves, skirts, robes, hood, suit details, swimwear and
 // shoes, for each outfit in OUTFITS. Built over the body's torso shape so it fits every body type.
 
-import { BufferGeometry, CatmullRomCurve3, Float32BufferAttribute, TorusGeometry, TubeGeometry, Vector3 } from "three";
+import { BufferGeometry, CatmullRomCurve3, Float32BufferAttribute, TubeGeometry, Vector3 } from "three";
 import { type BodyParams, CROTCH_Y, type Torso, crInterp, drapePoint, limbGeo, sheetGeo, torsoGeo } from "./body.ts";
 import type { Outfit } from "./catalog.ts";
+import type { Look } from "./wardrobe.ts";
+import { buildTop, topOff } from "./tops.ts";
+import { pelvisWear, skirtWear } from "./bottoms.ts";
+import { buildLayer } from "./layers.ts";
 import { PI, bell, clamp01, smooth } from "./math.ts";
 import { type Part, ellGeo } from "./parts.ts";
 
@@ -11,9 +15,11 @@ export type Dress = {
   T: Torso;
   B: BodyParams;
   O: Outfit;
+  /** Everything worn (separates, layer, shoes); O is look.O. */
+  look: Look;
   fem: boolean;
   lod: number;
-  /** Bodybuilders go shirtless; swimwear leaves the top bare too. */
+  /** Swimwear leaves the top bare. */
   shirtless: boolean;
   /**
    * How far the neck's skin is from the neck's centre line, at height y in the direction of the torso
@@ -23,7 +29,7 @@ export type Dress = {
   add: (name: string, node: string, geo: BufferGeometry, mat: Part["mat"], surface?: Part["surface"]) => void;
 };
 
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 /** Point on the torso surface at height y and horizontal position xs (front or back). */
 function atX(T: Torso, y: number, xs: number, front: boolean, o: number) {
@@ -43,7 +49,7 @@ function atX(T: Torso, y: number, xs: number, front: boolean, o: number) {
  * from 0 at the top to 1 at the hem. Above the height follow it lies on the body (shoulders, chest)
  * and only starts to hang below it.
  */
-function hangGeo(T: Torso, lod: number, y0: number, y1: number, off: number, flare: (t: number, dx: number, dz: number) => number, NV = 16, NA = 44, follow = Infinity) {
+export function hangGeo(T: Torso, lod: number, y0: number, y1: number, off: number, flare: (t: number, dx: number, dz: number) => number, NV = 16, NA = 44, follow = Infinity) {
   NV = Math.max(3, Math.round(NV * lod));
   NA = Math.max(12, Math.round((NA * lod) / 2) * 2);
   const pos: number[] = [], uv: number[] = [], idx: number[] = [];
@@ -78,7 +84,7 @@ function hangGeo(T: Torso, lod: number, y0: number, y1: number, off: number, fla
 }
 
 /** A flat ribbon (strap) lying on the skin along a path of [height, angle] points, half-width w. */
-function ribbonGeo(T: Torso, path: [number, number][], off: number, w: number) {
+export function ribbonGeo(T: Torso, path: [number, number][], off: number, w: number) {
   const cv = new CatmullRomCurve3(path.map(([y, th]) => T.P(y, th, off))), n = 40, pos: number[] = [], idx: number[] = [];
   const pts = cv.getSpacedPoints(n);
   for (let k = 0; k <= n; k++) {
@@ -118,12 +124,23 @@ export function neckLine(d: Dress, th: number, off: number) {
   return null;
 }
 
+/** The neck line's height all the way round (measured at 36 angles once, then read in between). */
+export function neckLineFn(d: Dress, off: number) {
+  const ys: number[] = [];
+  for (let k = 0; k <= 36; k++) ys.push(neckLine(d, (k / 36) * PI * 2, off)?.y ?? -1.32);
+  return (th: number) => {
+    const u = ((((th / (PI * 2)) % 1) + 1) % 1) * 36, k = Math.floor(u);
+    return lerp(ys[k], ys[k + 1], u - k);
+  };
+}
+
 /**
  * A ribbed collar exactly on the line where the neck comes out of the clothes: its top edge lies on
  * the neck's skin and its lower edge on the cloth (off: the cloth's offset from the skin), so it
- * joins the two with no gap and no ring standing off the neck.
+ * joins the two with no gap and no ring standing off the neck. height: how far up the neck it stands
+ * (taller for a mandarin collar).
  */
-function collarGeo(d: Dress, off: number) {
+export function collarGeo(d: Dress, off: number, height = 0.09) {
   const { T, lod } = d, NA = Math.max(16, Math.round(48 * lod)), rows: Vector3[][] = [];
   for (let i = 0; i <= NA; i++) {
     const th = (i / NA) * PI * 2, line = neckLine(d, th, off);
@@ -135,7 +152,8 @@ function collarGeo(d: Dress, off: number) {
       const r = Math.max(h.dist, Math.hypot(q.x - h.centre.x, q.z - h.centre.z)) + out;
       return new Vector3(h.centre.x + dir.x * r, y, h.centre.z + dir.z * r);
     };
-    rows.push([at(ye + 0.09, 0.004), at(ye + 0.06, 0.03), at(ye + 0.01, 0.045), at(ye - 0.04, 0.035), at(ye - 0.08, 0.008)]);
+    // It lies nearly flat: a low ridge, not a ring standing off the neck.
+    rows.push([at(ye + height, 0.003), at(ye + height - 0.03, 0.014), at(ye + 0.01, 0.02), at(ye - 0.04, 0.015), at(ye - 0.08, 0.005)]);
   }
   const pos: number[] = [], idx: number[] = [], NR = rows[0].length;
   for (const row of rows) for (const p of row) pos.push(p.x, p.y, p.z);
@@ -156,32 +174,34 @@ function collarGeo(d: Dress, off: number) {
   return g;
 }
 
-/** The torso (chest node) and pelvis (body node): skin, top or bottom depending on the outfit. */
+/**
+ * The torso (chest node) and hips (body node): a separates top, or the one-piece outfit's own; the
+ * bottom on the hips (or the outfit's); skirts; and an outer layer over it all.
+ */
 export function torsoClothes(d: Dress) {
-  const { T, B, O, lod, shirtless, add } = d;
-  const bareTop = shirtless || O.sl === "none", hemY = O.suit ? -6.5 : -6.2;
-  add("torso", "chest", torsoGeo(T, lod, -1.3, bareTop ? -5.95 : hemY, bareTop ? 0 : (y) => 0.02 + 0.07 * smooth((-5.3 - y) / 0.9), 40, 36, !bareTop), bareTop ? "skin" : "top");
-  const lowM: Part["mat"] = shirtless ? "bottom" : O.match ? "top" : "bottom";
-  // The hips end exactly where the legs begin (bare skin overlaps the torso's lower edge a touch).
-  add("pelvis", "body", torsoGeo(T, lod, bareTop ? -5.85 : -5.75, CROTCH_Y, bareTop ? (y) => 0.016 * smooth((y + 6.4) / 0.4) : 0, 18, 44),
-    O.swim ? "skin" : O.bare ? "bottom" : lowM);
-  if (!bareTop) {
+  const { T, O, lod, shirtless, add, look } = d;
+  const bareTop = shirtless || O.sl === "none";
+  if (look.top) buildTop(d, look.top);
+  else {
+    add("torso", "chest", torsoGeo(T, lod, -1.3, bareTop ? -5.95 : O.suit ? -6.5 : -6.2, bareTop ? 0 : (y) => 0.02 + 0.07 * smooth((-5.3 - y) / 0.9), 40, 36, !bareTop), bareTop ? "skin" : "top");
     // (The cute dress has its own Peter Pan collar instead.)
-    const c = collarGeo(d, 0.02);
+    const c = bareTop ? null : collarGeo(d, 0.02);
     // Suits show the white shirt collar; the abaya's and agbada's necklines are embroidered in gold.
     if (c && !O.cute) add("collar", "chest", c, O.suit ? "shirt" : O.abaya || O.robe ? "gold" : "rib");
-  } else if (B.shirtless && !O.swim) {
-    // Waistband of the trousers.
-    add("waistband", "body", torsoGeo(T, lod, -5.85, -6.05, 0.04, 2, 44), "bottomDark");
   }
-  outfitExtras(d);
+  if (look.bottom) pelvisWear(d);
+  else {
+    // The hips end exactly where the legs begin (bare skin overlaps the torso's lower edge a touch).
+    add("pelvis", "body", torsoGeo(T, lod, bareTop ? -5.85 : -5.75, CROTCH_Y, bareTop ? (y) => 0.016 * smooth((y + 6.4) / 0.4) : 0, 18, 44), O.swim ? "skin" : "bottom");
+  }
+  if (!look.top) outfitExtras(d);
+  if (look.bottom?.kind === "skirt") skirtWear(d);
+  if (look.layer) buildLayer(d, look.layer);
 }
 
 /** Pieces that sit on the torso: dress bodices and skirts, suit fronts, swimwear. */
 function outfitExtras(d: Dress) {
   const { T, B, O, fem, lod, add } = d;
-  // The bodybuilder body type always goes shirtless in shorts (as in the reference studio); only swimwear changes that.
-  if (B.shirtless && !O.swim) return;
   const xr = (y: number) => crInterp(T.L, T.X, y), hipR = xr(-6.35) * 1.04;
   if (O.sl === "none" && !O.swim) {
     // Sleeveless dress top: fitted bodice from under the arms, with shoulder straps.
@@ -280,22 +300,39 @@ function outfitExtras(d: Dress) {
   }
 }
 
-/** Sleeves (a separate layer over the arm, or the whole arm in fabric for long sleeves), and cuffs. */
+/**
+ * Sleeves: a separate piece over the arm for short, puff, wide and flared sleeves, or the arm itself in
+ * the top's cloth for long sleeves (and in the jacket's cloth under an outer layer). Returns whether
+ * the sleeve reaches the wrist (for a cuff).
+ */
 export function armClothes(d: Dress, node: string, armPts: [number, number][], L1: number, bendA: number, squash: (y: number) => [number, number]) {
-  const { B, O, lod, shirtless, add } = d, at = B.armT;
-  const longS = O.sl !== "short" && O.sl !== "puff" && O.sl !== "none" && !shirtless;
-  add(`${node}Skin`, node, limbGeo(armPts, 16, lod, { at: L1, a: bendA }, squash), longS ? "top" : "skin");
-  if (!shirtless && O.sl === "puff") {
+  const { B, O, lod, shirtless, add, look } = d, at = B.armT, sl = O.sl, lay = look.layer;
+  const longS = !shirtless && (sl === "long" || sl === "flare");
+  // Under a jacket the arm is the jacket's sleeve: a little fuller than the arm.
+  let pts: [number, number][] = lay ? armPts.map(([r, y], k) => [r > 0 && k < armPts.length - 2 ? r + 0.07 : r, y]) : armPts;
+  if (lay || longS) {
+    // A sleeve runs straight to an open end just past the wrist, where it turns in to show the
+    // cloth's thickness, and the hand comes out of it (no cuff ring, no turned-up band).
+    const wristY = armPts[armPts.length - 3][1], wr = armPts[armPts.length - 3][0] + (lay ? 0.07 : 0);
+    pts = [...pts.slice(0, -3), [wr + 0.035, wristY - 0.02], [wr + 0.005, wristY - 0.03], [wr - 0.04, wristY + 0.1]];
+  }
+  add(`${node}Skin`, node, limbGeo(pts, 16, lod, { at: L1, a: bendA }, squash), lay ? "layer" : longS ? "top" : "skin");
+  if (shirtless || lay) return !!lay || longS;
+  if (sl === "puff") {
     const sv: [number, number][] = [[0.16 * at, 0.12], [0.34 * at * B.armD, -0.1], [0.62 * at * B.armD + 0.05, -0.45], [0.64 * at * B.armB + 0.05, -0.85], [0.5 * at * B.armB + 0.04, -1.2], [0.47 * at * B.armB + 0.035, -1.32]];
     add(`${node}Sleeve`, node, limbGeo(sv, 16, lod), "topDS");
   }
-  if (!shirtless && O.sl === "short") {
+  if (sl === "short") {
     // The sleeve starts narrow inside the shoulder of the shirt and comes out of it, so the two are one
     // piece of cloth (an open sleeve top would show as a ridge round the shoulder).
     const sv: [number, number][] = [[0.16 * at, 0.12], [0.3 * at * B.armD, -0.12], [0.45 * at * B.armD * 1.07 + 0.035, -0.45], [0.48 * at * B.armB * 1.07 + 0.03, -1.0], [0.49 * at * B.armB * 1.08 + 0.035, -1.55]];
     add(`${node}Sleeve`, node, limbGeo(sv, 16, lod), "topDS");
   }
-  if (O.sl === "flare" && !shirtless) {
+  if (sl === "wide") {
+    // Wide sleeve of a dashiki or buba: loose, to just past the elbow.
+    add(`${node}Sleeve`, node, limbGeo([[0.16 * at, 0.12], [0.42 * at * B.armD, -0.15], [0.6 * at + 0.05, -0.6], [0.68 * at + 0.08, -1.8], [0.74 * at + 0.1, -L1 - 0.3]], 16, lod), "topDS");
+  }
+  if (sl === "flare") {
     // Wide sleeve: starts narrow inside the shoulder (no open top showing) and flares to the wrist.
     const bot = (O.abaya ? 1.05 : 1.5) * at;
     add(`${node}Flare`, node, limbGeo([[0.16 * at, 0.12], [0.42 * at * B.armD, -0.15], [0.62 * at, -0.6], [lerp(0.62 * at, bot, 0.5), -2.4], [bot, -4.2]], 16, lod), "topDS");
@@ -345,11 +382,6 @@ export function hijabDrape(d: Dress, ring: (th: number) => Vector3) {
   return g;
 }
 
-/** Cuff at the wrist of a long sleeve (in the hand node's frame). */
-export function cuff(d: Dress, node: string) {
-  d.add(`${node}Cuff`, node, new TorusGeometry(0.3 * d.B.armT, 0.05, Math.max(4, Math.round(6 * d.lod)), Math.round(18 * d.lod)).rotateX(PI / 2).scale(0.82, 1, 1.12).translate(0, 0.25, 0), "trim", "closed");
-}
-
 /** Full-length and over-garments hung from the body: dress and tunic skirts, agbada robe, abaya, jalabiya, hood. */
 export function robes(d: Dress, shX: number, floorY: number) {
   const { T, B, O, lod, shirtless, add } = d;
@@ -382,23 +414,24 @@ export function robes(d: Dress, shX: number, floorY: number) {
     // Hood lying on the shoulders behind the neck, and the front pocket.
     // The hood lies down on the upper back: a soft fold of cloth from round the neck, hanging in a U,
     // fuller in the middle, with a rolled edge.
-    const bottom = (th: number) => -1.6 - 1.35 * bell((th - PI) / 0.95), top = -1.36;
+    // (Under a jacket it lies over the jacket's collar.)
+    const bottom = (th: number) => -1.6 - 1.35 * bell((th - PI) / 0.95), top = -1.36, hoodOff = topOff(d.look.top, -1.6) + (d.look.layer ? 0.15 : 0.05);
     const hoodAt = (y: number, th: number, o: number) => {
       const v = clamp01((top - y) / (top - bottom(th)));
       return T.P(y, th, o + 0.16 * Math.sin(PI * Math.min(1, v * 0.95)) * smooth((Math.abs(Math.cos(th)) - 0.1) / 0.5));
     };
-    add("hood", "chest", sheetGeo(T, lod, 28, 8, 0.07, (u, v) => {
+    add("hood", "chest", sheetGeo(T, lod, 28, 8, hoodOff, (u, v) => {
       const th = lerp(0.62, 2 * PI - 0.62, u);
       return [lerp(top, bottom(th), v), th];
     }, hoodAt), "topDS");
     const rim: Vector3[] = [];
     for (let k = 0; k <= 24; k++) {
       const th = lerp(0.62, 2 * PI - 0.62, k / 24);
-      rim.push(hoodAt(bottom(th), th, 0.1));
+      rim.push(hoodAt(bottom(th), th, hoodOff + 0.03));
     }
     add("hoodRim", "chest", new TubeGeometry(new CatmullRomCurve3(rim), Math.round(32 * lod), 0.07, Math.max(4, Math.round(6 * lod)), false), "top", "closed");
     // Kangaroo pocket on the loose front: wider at the bottom, with slanted openings at the sides.
-    const hem = -6.2, front = (y: number, th: number, o: number) => drapePoint(T, y, th, 0.02 + 0.07 * smooth((-5.3 - y) / 0.9) + o, hem);
+    const hem = d.look.top?.hem ?? -6.2, front = (y: number, th: number, o: number) => drapePoint(T, y, th, topOff(d.look.top, y) + o, hem);
     add("pocket", "chest", sheetGeo(T, lod, 14, 6, 0.035, (u, v) => {
       const y = lerp(-5.05, -6.0, v), half = lerp(0.42, 0.62, v) * B.wa;
       return [y, lerp(-half, half, u)];

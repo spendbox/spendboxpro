@@ -332,7 +332,7 @@ export function limbGeo(pts: [number, number][], seg: number, lod: number, bend?
 /** A finger: a tube along a curve with a radius profile and a rounded tip. */
 function fingerGeo(curve: CatmullRomCurve3, rad: (t: number) => number, NR: number, NS: number, lod: number) {
   NR = Math.max(4, Math.round(NR * lod));
-  NS = Math.max(5, Math.round(NS * lod));
+  NS = Math.max(4, Math.round(NS * lod * (lod < 1 ? 0.7 : 1)));
   const pts = curve.getSpacedPoints(NS), fr = curve.computeFrenetFrames(NS, false), pos: number[] = [], idx: number[] = [];
   for (let i = 0; i <= NS; i++) {
     const r = rad(i / NS), P = pts[i], N = fr.normals[i], Bn = fr.binormals[i];
@@ -342,7 +342,7 @@ function fingerGeo(curve: CatmullRomCurve3, rad: (t: number) => number, NR: numb
     }
   }
   // Rounded fingertip: a few rings closing in a quarter circle beyond the end of the curve.
-  const T = fr.tangents[NS], rEnd = rad(1), CAP = [0.45, 0.75, 0.93];
+  const T = fr.tangents[NS], rEnd = rad(1), CAP = lod < 1 ? [0.75] : [0.45, 0.75, 0.93];
   for (const c of CAP) {
     const r = rEnd * Math.sqrt(1 - c * c), P = pts[NS].clone().addScaledVector(T, rEnd * c * 0.9), N = fr.normals[NS], Bn = fr.binormals[NS];
     for (let j = 0; j <= NR; j++) {
@@ -467,52 +467,6 @@ export function handGeos(k: number, fem: boolean, lod: number): { skin: BufferGe
   skin.push(fingerGeo(tc, (t) => tr * (1.1 - 0.38 * t) * (1 + 0.05 * bell((t - 0.6) / 0.06)), 7, 11, lod));
   if (lod >= 1) nail(tc, tr * 0.72, 0.075 * k, new Vector3(0.5, 0, 1));
   return { skin, nails };
-}
-
-/**
- * A shoe, toe pointing +z, with the ankle at the origin over the back quarter of the foot (as in a
- * real foot). The outline is narrow at the heel and widest across the ball of the foot; the top is
- * high round the ankle and slopes down to the toe, which lifts slightly off the ground (toe spring).
- * The bottom is flat at y = 0. sole: a thin slab with the same outline, a little larger.
- */
-export function shoeGeo(len: number, wid: number, hgt: number, lod: number, sole = false) {
-  const NU = Math.max(8, Math.round((sole ? 12 : 18) * lod)), NA = Math.max(8, Math.round((sole ? 14 : 18) * lod) & ~1), pos: number[] = [], idx: number[] = [];
-  const grow = sole ? 1.04 : 1;
-  // End caps: the outline closes in a rounded curve at the heel and toe (rings bunch up there).
-  const cap = (u: number) => Math.sqrt(Math.max(0, 1 - (u < 0.16 ? ((0.16 - u) / 0.16) ** 2 : u > 0.78 ? ((u - 0.78) / 0.22) ** 2 : 0)));
-  for (let j = 0; j <= NU; j++) {
-    const u = 0.5 - 0.5 * Math.cos((PI * j) / NU), c = cap(u), z = (u - 0.24) * len * grow;
-    const hw = 0.5 * wid * grow * (0.7 + 0.3 * smooth((u - 0.1) / 0.55) - 0.06 * smooth((u - 0.85) / 0.15));
-    const spring = 0.045 * len * smooth((u - 0.72) / 0.28);
-    const top = sole ? hgt : hgt * (1 - 0.48 * smooth((u - 0.3) / 0.6));
-    const bot = spring, mid = (bot + top) / 2, hh = (top - bot) / 2;
-    for (let i = 0; i < NA; i++) {
-      const a = (i / NA) * PI * 2, ca = Math.cos(a), sa = Math.sin(a);
-      // Squarish cross-section, flat underneath, rounded on top.
-      const x = hw * Math.sign(ca) * Math.pow(Math.abs(ca), sa < 0 ? 0.35 : 0.85);
-      const y = sa < 0 ? -hh * Math.pow(-sa, 0.3) : hh * Math.pow(sa, 0.8);
-      // The toe and heel round over from the top: the bottom stays flat on the sole right to the tip.
-      const yy = mid + y, yc = bot + (yy - bot) * Math.pow(c, 0.7);
-      pos.push(x * Math.pow(c, 0.85), sa < 0 ? Math.max(bot, yc - (1 - c) * 0.02) : yc, z);
-    }
-  }
-  const W = NA;
-  for (let j = 0; j < NU; j++) for (let i = 0; i < NA; i++) {
-    const a = j * W + i, b = j * W + ((i + 1) % NA), cc = a + W, d = b + W;
-    idx.push(a, b, d, a, d, cc);
-  }
-  const g = new BufferGeometry();
-  g.setAttribute("position", new Float32BufferAttribute(pos, 3));
-  g.setIndex(idx);
-  g.computeVertexNormals();
-  // Make sure it faces outward (the side of a ring at the widest part should point away from the middle).
-  const P = g.attributes.position, N = g.attributes.normal, k = Math.round(NU * 0.6) * W;
-  if (N.getX(k) * P.getX(k) < 0) {
-    for (let i = 0; i < idx.length; i += 3) [idx[i + 1], idx[i + 2]] = [idx[i + 2], idx[i + 1]];
-    g.setIndex(idx);
-    g.computeVertexNormals();
-  }
-  return g;
 }
 
 /** Mirror a geometry left-right (and fix its winding, which mirroring turns inside out). */

@@ -3,7 +3,7 @@
 // Only ever ADD to this file (new keys at the end of KEYS, new ids at the end of a list), and only
 // after adding the same entries at the end of catalog.ts / recipe.ts. Never edit or remove a line.
 
-export const LOCKED_KEYS = ["face","chin","fat","skin","eye","eyeC","brow","nose","lips","lipT","hair","hairC","facial","frame","build","bust","butt","outfit","top","pattern","bottom","glasses","ear","pierce","hw","hwC","watch","chain","bg","height"];
+export const LOCKED_KEYS = ["face","chin","fat","skin","eye","eyeC","brow","nose","lips","lipT","hair","hairC","facial","frame","build","bust","butt","outfit","top","pattern","bottom","glasses","ear","pierce","hw","hwC","watch","chain","bg","height","topStyle","bottomStyle","layer","layerC","shoes","shoeC"];
 
 export const LOCKED_IDS: Record<string, string[]> = {
   face: ["oval","round","square","heart","long","diamond","wide","soft-square"],
@@ -36,4 +36,10 @@ export const LOCKED_IDS: Record<string, string[]> = {
   chain: ["none","gold-chain","silver-chain","gold-cuban","iced-cuban","pendant","layered"],
   bg: ["butter","sky","mint","blush","lilac","peach","aqua","cloud"],
   height: ["average","short","tall","very-short","very-tall"],
+  topStyle: ["outfit","t-shirt","long-sleeve","hoodie","crop-top","tank-top","sweater","shirt","polo","blouse","dashiki","buba","senator"],
+  bottomStyle: ["outfit","trousers","jeans","shorts","joggers","leggings","midi-skirt","mini-skirt","wrapper","sokoto"],
+  layer: ["none","denim-jacket","bomber","blazer","cardigan","leather-jacket"],
+  layerC: ["navy","forest","brick","gold","white","black","plum","teal","orange","royal-blue","red","green","pink"],
+  shoes: ["outfit","sneakers","dress-shoes","loafers","heels","sandals","boots"],
+  shoeC: ["default","white","black","brown","tan","red","navy","gold","nude"],
 };

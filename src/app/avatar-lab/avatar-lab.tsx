@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { OUTFITS } from "@/lib/avatar3d/catalog";
 import { getAvatarModel } from "@/lib/avatar3d/client";
 import { type MaterialSet, makeMaterials } from "@/lib/avatar3d/materials";
 import { triangleCount } from "@/lib/avatar3d/parts";
@@ -15,7 +16,8 @@ const SECTIONS: [RecipeKey, string][] = [
   ["brow", "Brows"], ["hair", "Hair"], ["hairC", "Hair colour"], ["nose", "Nose"], ["lips", "Lips"], ["lipT", "Lip tint"], ["ear", "Earrings"],
   ["pierce", "Piercings"], ["glasses", "Glasses"], ["facial", "Facial hair"], ["hw", "Headwear"], ["hwC", "Headwear colour"],
   ["frame", "Frame"], ["build", "Body type"], ["height", "Height"], ["bust", "Bust"], ["butt", "Hips"], ["outfit", "Outfit"],
-  ["top", "Top colour"], ["pattern", "Pattern"], ["bottom", "Bottom colour"], ["watch", "Watch"], ["chain", "Chain"],
+  ["topStyle", "Top"], ["top", "Top colour"], ["pattern", "Pattern"], ["bottomStyle", "Bottom"], ["bottom", "Bottom colour"],
+  ["layer", "Outer layer"], ["layerC", "Layer colour"], ["shoes", "Shoes"], ["shoeC", "Shoe colour"], ["watch", "Watch"], ["chain", "Chain"],
 ];
 
 /** Camera framing: the face close up, or the whole body (target height, distance). */
@@ -182,7 +184,9 @@ export function AvatarLab({ initialRecipe, initialExpr, initialView }: { initial
     };
   }, [recipe, lod]);
 
-  const set = (k: RecipeKey, i: number) => setRecipe((r) => ({ ...r, [k]: i }));
+  // Choosing a top or bottom switches a one-piece outfit (dress, robe, suit) to separates.
+  const set = (k: RecipeKey, i: number) =>
+    setRecipe((r) => ({ ...r, [k]: i, ...((k === "topStyle" || k === "bottomStyle") && i && !OUTFITS[r.outfit].sep ? { outfit: 0 } : {}) }));
 
   return (
     <main className="mx-auto grid max-w-6xl gap-4 px-4 py-4 md:grid-cols-[1.3fr_1fr]">
@@ -217,7 +221,7 @@ export function AvatarLab({ initialRecipe, initialExpr, initialView }: { initial
           </div>
         </div>
         {SECTIONS.map(([k, label]) => {
-          const list = CATALOGS[k] as readonly { id: string; n: string; c?: string }[];
+          const list = CATALOGS[k] as readonly { id: string; n: string; c?: string; retired?: unknown }[];
           return (
             <div key={k}>
               <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -225,7 +229,7 @@ export function AvatarLab({ initialRecipe, initialExpr, initialView }: { initial
               </h2>
               <div className="flex flex-wrap gap-2">
                 {list.map((o, i) =>
-                  o.c ? (
+                  o.retired ? null : o.c ? (
                     <button key={o.id} type="button" title={o.n} aria-label={o.n} aria-pressed={i === recipe[k]} onClick={() => set(k, i)}
                       className={`h-9 w-9 rounded-full border-2 border-white ${i === recipe[k] ? "ring-2 ring-teal-700" : "ring-1 ring-slate-300"}`}
                       style={{ background: o.c }} />

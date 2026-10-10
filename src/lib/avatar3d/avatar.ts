@@ -4,14 +4,17 @@
 // body > leg0/leg1. Index 0 is the avatar's right side (x < 0), 1 its left.
 
 import { type BufferGeometry, DoubleSide, type LatheGeometry, Matrix4, Mesh, MeshBasicMaterial, Object3D, Raycaster, Vector3 } from "three";
-import { CROTCH_Y, THIGH_SQUASH, bodyParams, crInterp, handGeos, limbGeo, mirrorX, shoeGeo, torsoModel } from "./body.ts";
-import { HEAD_HEIGHT_SHARE, HEIGHTS, OUTFITS } from "./catalog.ts";
-import { type Dress, armClothes, cuff, hijabDrape, robes, torsoClothes } from "./clothing.ts";
+import { CROTCH_Y, THIGH_SQUASH, bodyParams, crInterp, handGeos, limbGeo, mirrorX, torsoModel } from "./body.ts";
+import { type Legs, legWear } from "./bottoms.ts";
+import { HEAD_HEIGHT_SHARE, HEIGHTS } from "./catalog.ts";
+import { type Dress, armClothes, hijabDrape, robes, torsoClothes } from "./clothing.ts";
 import { buildHead } from "./head.ts";
 import { chain, watch } from "./jewellery.ts";
 import { PI, smooth } from "./math.ts";
 import { type Model, type Node, type Part } from "./parts.ts";
 import type { Recipe } from "./recipe.ts";
+import { shoes } from "./shoes.ts";
+import { resolveLook } from "./wardrobe.ts";
 
 /** The neck joint: the body and head scale about this height (so height changes keep them joined). */
 const NECK_Y = -1.4;
@@ -36,8 +39,8 @@ function neckBand(g: BufferGeometry, y0: number, y1: number) {
 /** Level of detail: 1 for your own avatar, 0.5 for players nearby. */
 export function buildAvatar(r: Recipe, lod = 1): Model {
   const head = buildHead(r, lod);
-  const B = bodyParams(r), fem = r.frame === 1, O = OUTFITS[r.outfit], T = torsoModel(B);
-  const shirtless = !!B.shirtless || !!O.swim;
+  const B = bodyParams(r), fem = r.frame === 1, look = resolveLook(r), O = look.O, T = torsoModel(B);
+  const shirtless = !!O.swim;
   const parts: Part[] = [], nodes: Node[] = [];
   const add = (name: string, node: string, geo: BufferGeometry, mat: Part["mat"], surface: Part["surface"] = "sheet") => parts.push({ name, node, geo, mat, surface });
   const node = (id: string, parent: string | null, o?: Object3D) => nodes.push({ id, parent, matrix: o ? matrixOf(o) : new Matrix4().toArray() });
@@ -66,7 +69,7 @@ export function buildAvatar(r: Recipe, lod = 1): Model {
     const hit = ray.intersectObject(neckMesh, false)[0];
     return hit ? { centre, dist: hit.distance } : null;
   };
-  const d: Dress = { T, B, O, fem, lod, shirtless, add, neck };
+  const d: Dress = { T, B, O, look, fem, lod, shirtless, add, neck };
   torsoClothes(d);
 
   // Arms: upper arm 3.0, forearm 2.4, hand 1.75 (elbow at the navel, wrist at the crotch, fingertips at mid-thigh).
@@ -92,12 +95,11 @@ export function buildAvatar(r: Recipe, lod = 1): Model {
     ao.position.set(side * x0, shY, 0);
     ao.rotation.z = side * Math.min(ang, 0.5);
     node(`arm${i}`, "chest", ao);
-    const longS = armClothes(d, `arm${i}`, armPts, L1, bendA, sq);
+    armClothes(d, `arm${i}`, armPts, L1, bendA, sq);
     const ho2 = new Object3D();
     ho2.position.set(0, -L1 - L2 * Math.cos(bendA), -L2 * Math.sin(bendA));
     ho2.rotation.set(bendA, 0, 0);
     node(`hand${i}`, `arm${i}`, ho2);
-    if (longS) cuff(d, `hand${i}`);
     const hand = handGeos(B.limbL * (fem ? 0.92 : 1) * Math.max(0.92, Math.min(1.2, 0.75 + 0.25 * at)), fem, lod);
     const place = (g: BufferGeometry) => (side < 0 ? mirrorX(g) : g);
     hand.skin.forEach((g, k) => add(`hand${i}_${k}`, `hand${i}`, place(g), "skin", "closed"));
@@ -115,7 +117,6 @@ export function buildAvatar(r: Recipe, lod = 1): Model {
     [kneeR, -LT], [0.5 * cf, -LT - 0.7], [0.56 * cf, -LT - 1.25], [0.46 * cf, -LT - 2.0], [0.32 * (cf * 0.4 + 0.6), -LT - 2.9],
     [0.27, -LT - LS + 0.15], [0.27, -LT - LS], [0, -LT - LS - 0.06],
   ];
-  const legM: Part["mat"] = O.bare || O.swim || shirtless ? "skin" : O.match ? "top" : "bottom";
   const lsq = (y: number): [number, number] => {
     const t = smooth((-y - LT + 0.4) / 1.2);
     return [1 - 0.06 * t, THIGH_SQUASH + 0.06 * t];
@@ -138,24 +139,22 @@ export function buildAvatar(r: Recipe, lod = 1): Model {
     }
     return g;
   };
+  const legs: Legs = { pts: legPts, squash: lsq, glutes, jy, ankle: -LT - LS, kneeY: -LT, kneeR };
+  let heel = 0;
   [-1, 1].forEach((side, i) => {
     const lo = new Object3D();
     lo.position.set(side * legX, topY, 0);
-        node(`leg${i}`, "body", lo);
-    add(`leg${i}Skin`, `leg${i}`, glutes(limbGeo(legPts, 18, lod, null, lsq), side), legM);
-    if (shirtless && !(O.swim && fem)) {
-      // Shorts (bodybuilder) or swim trunks.
+    node(`leg${i}`, "body", lo);
+    legWear(d, legs, side, `leg${i}`, lod);
+    if (O.swim && !fem) {
+      // Swim trunks.
       const sh: [number, number][] = legPts.filter(([, y]) => y > -2.4).map(([x, y]) => [x * 1.05 + 0.02, y]);
       sh.push([lerp(T.legR, kneeR, 0.44) * 1.05 + 0.02, -2.4]);
-      add(`leg${i}Shorts`, `leg${i}`, glutes(limbGeo(sh, 18, lod, null, lsq), side), O.swim ? "top" : "bottom");
+      add(`leg${i}Shorts`, `leg${i}`, glutes(limbGeo(sh, 18, lod, null, lsq), side), "top");
     }
-    const fl = 2.45 * (B.h < 1 ? 0.92 : 1);
-    // The shoe stands on the floor; the ankle is just inside its collar.
-    // Its upper sits down inside the sole's rim, so the sole wraps it with no gap.
-    add(`shoe${i}`, `leg${i}`, shoeGeo(fl * 0.985, 0.95, 1.05, lod).translate(0, -LT - LS - 0.48, 0), "shoe", "closed");
-    add(`sole${i}`, `leg${i}`, shoeGeo(fl, 0.98, 0.24, lod, true).translate(0, -LT - LS - 0.55, 0), "sole", "closed");
+    heel = shoes(add, look.shoe, `leg${i}`, -LT - LS, 2.45 * (B.h < 1 ? 0.92 : 1), 0.29, lod);
   });
-  const floorY = topY - LT - LS - 0.55;
+  const floorY = topY - LT - LS - 0.55 - heel;
   robes(d, shX, floorY);
   chain(d, r.chain);
   // The hijab's drape is refitted to the body (the head alone doesn't know where the shoulders are).

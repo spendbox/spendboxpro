@@ -2,10 +2,11 @@
 // because textures are drawn on a canvas. Materials for the same recipe colours are shared.
 
 import {
-  BackSide, CanvasTexture, Color, DoubleSide, type Material, MeshBasicMaterial, MeshStandardMaterial,
+  BackSide, CanvasTexture, Color, DoubleSide, FrontSide, type Material, type Side, MeshBasicMaterial, MeshStandardMaterial,
   type MeshStandardMaterialParameters, NoColorSpace, RepeatWrapping, SRGBColorSpace,
 } from "three";
-import { BOTTOM_COLORS, CHAINS, CLOTH_COLORS, HAIR_COLORS, IRIS, OUTFITS, SKINS, WATCHES } from "./catalog.ts";
+import { BOTTOM_COLORS, CHAINS, CLOTH_COLORS, HAIR_COLORS, IRIS, SHOE_COLORS, SKINS, WATCHES } from "./catalog.ts";
+import { resolveLook } from "./wardrobe.ts";
 import type { MatKey } from "./parts.ts";
 import type { Recipe } from "./recipe.ts";
 
@@ -189,6 +190,55 @@ function kufiTexture(hex: string) {
   return texture(c, 6, 1);
 }
 
+/** Denim: a diagonal twill weave with faint fading, in the given colour. */
+function denimTexture(hex: string) {
+  const [c, x] = canvas(128, 128);
+  x.fillStyle = hex;
+  x.fillRect(0, 0, 128, 128);
+  let seed = 5;
+  const r = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  x.lineWidth = 1;
+  for (let i = -128; i < 128; i += 3) {
+    x.strokeStyle = `rgba(255,255,255,${0.06 + r() * 0.06})`;
+    x.beginPath();
+    x.moveTo(i, 0);
+    x.lineTo(i + 128, 128);
+    x.stroke();
+  }
+  for (let i = 0; i < 400; i++) {
+    x.fillStyle = `rgba(255,255,255,${r() * 0.08})`;
+    x.fillRect(r() * 128, r() * 128, 1 + r() * 3, 1);
+  }
+  return texture(c, 8, 8);
+}
+
+/** Native embroidery: a dark band with gold geometric stitching and a thin line of the cloth's colour. */
+function embroideryTexture(hex: string) {
+  const [c, x] = canvas(128, 64);
+  x.fillStyle = "#1A1410";
+  x.fillRect(0, 0, 128, 64);
+  x.fillStyle = "#D9B45A";
+  for (let i = 0; i < 8; i++) {
+    const cx = i * 16 + 8;
+    x.beginPath();
+    x.moveTo(cx, 12);
+    x.lineTo(cx + 7, 32);
+    x.lineTo(cx, 52);
+    x.lineTo(cx - 7, 32);
+    x.closePath();
+    x.fill();
+    x.fillStyle = "#1A1410";
+    x.fillRect(cx - 2, 28, 4, 8);
+    x.fillStyle = "#D9B45A";
+  }
+  x.fillRect(0, 3, 128, 3);
+  x.fillRect(0, 58, 128, 3);
+  x.fillStyle = hex;
+  x.fillRect(0, 0, 128, 2);
+  x.fillRect(0, 62, 128, 2);
+  return texture(c, 6, 1);
+}
+
 export type MaterialSet = { get(key: MatKey): Material; dispose(): void };
 
 /** All materials one avatar needs. Call dispose() when the avatar is removed. */
@@ -197,7 +247,12 @@ export function makeMaterials(r: Recipe): MaterialSet {
   const topHex = CLOTH_COLORS[r.top].c, wrapPattern = r.hair === 11 ? patternTexture(topHex, r.pattern) : null;
   const hwHex = CLOTH_COLORS[r.hwC].c, hwPattern = r.hw === 2 || r.hw === 3 ? patternTexture(hwHex, r.pattern) : null;
   const topC = new Color(topHex), topPattern = patternTexture(topHex, r.pattern), bottomC = new Color(BOTTOM_COLORS[r.bottom].c);
-  const lightShoe = OUTFITS[r.outfit].shoe === "light", W = WATCHES[r.watch], chainHex = CHAINS[r.chain].c ?? "#D9A94E";
+  const W = WATCHES[r.watch], chainHex = CHAINS[r.chain].c ?? "#D9A94E", look = resolveLook(r);
+  const shoeHex = r.shoeC ? SHOE_COLORS[r.shoeC].c : look.shoe.c ?? "#2A1C14", soleHex = look.shoe.sole ?? "#120C08";
+  const L = look.layer, layerC = new Color(CLOTH_COLORS[r.layerC].c), bottomPattern = patternTexture(BOTTOM_COLORS[r.bottom].c, r.pattern || 1);
+  const layerMap = L?.denim ? denimTexture(CLOTH_COLORS[r.layerC].c) : null;
+  const layerMat = (side: Side, tint = 1) =>
+    std(layerMap ? new Color(tint, tint, tint) : layerC.clone().multiplyScalar(tint), L?.leather ? 0.38 : 0.8, { side, map: layerMap });
   const made = new Map<MatKey, Material>();
   const make = (key: MatKey): Material => {
     switch (key) {
@@ -242,7 +297,7 @@ export function makeMaterials(r: Recipe): MaterialSet {
       case "top": return std(topPattern ? "#ffffff" : topC, 0.8, { map: topPattern });
       case "topDS": return std(topPattern ? "#ffffff" : topC, 0.8, { map: topPattern, side: DoubleSide });
       // Ribbed knit collar: a little darker than the top, matt.
-      case "rib": return std(topC.clone().multiplyScalar(0.82), 0.9, { side: DoubleSide });
+      case "rib": return std(topPattern ? new Color(0.93, 0.93, 0.93) : topC.clone().multiplyScalar(0.93), 0.9, { side: DoubleSide, map: topPattern });
       case "topEdgeDS": return std(topC.clone().multiplyScalar(0.8), 0.6, { side: DoubleSide });
       case "topEdge": return std(topC.clone().multiplyScalar(0.8), 0.6);
       case "trim": return std(topC.clone().multiplyScalar(0.6), 0.75);
@@ -253,8 +308,22 @@ export function makeMaterials(r: Recipe): MaterialSet {
       case "shirt": return std("#F4F2EE", 0.7);
       case "tie": return std("#7A1F2B", 0.55);
       case "collarWhite": return std("#FFFFFF", 0.7, { side: DoubleSide });
-      case "shoe": return std(lightShoe ? "#ECEAE4" : "#2A1C14", 0.6);
-      case "sole": return std(lightShoe ? "#B9B5AC" : "#120C08", 0.8);
+      case "shoe": return std(shoeHex, look.shoe.kind === "heel" || look.shoe.kind === "dress" ? 0.3 : 0.6);
+      case "shoeDS": return std(shoeHex, look.shoe.kind === "heel" ? 0.3 : 0.6, { side: DoubleSide });
+      case "sole": return std(soleHex, 0.8);
+      // Bottoms: denim, a native print (wrapper, sokoto: the chosen pattern, or Ankara), skirts seen from both sides.
+      case "jeans": return std("#ffffff", 0.9, { map: denimTexture(BOTTOM_COLORS[r.bottom].c) });
+      case "jeansDark": return std(bottomC.clone().multiplyScalar(0.55), 0.9);
+      case "bottomPat": return std("#ffffff", 0.8, { map: bottomPattern });
+      case "bottomPatDS": return std("#ffffff", 0.8, { map: bottomPattern, side: DoubleSide });
+      case "bottomDS": return std(bottomC, 0.85, { side: DoubleSide });
+      // Outer layer: its colour; leather is smoother and shinier; denim has its weave.
+      case "layer": return layerMat(FrontSide);
+      case "layerDS": return layerMat(DoubleSide);
+      case "layerTrim": return layerMat(DoubleSide, 0.78);
+      case "layerRib": return std(layerC.clone().multiplyScalar(0.82), 0.9, { side: DoubleSide });
+      // Embroidery on native tops: gold thread on a dark band.
+      case "embroid": return std("#ffffff", 0.55, { map: embroideryTexture(topHex), metalness: 0.15, side: DoubleSide });
       // Jewellery.
       case "watchBand": return std(W.band ?? "#1B1B1E", W.metal ? 0.3 : 0.7, { metalness: W.metal ? 0.85 : 0 });
       case "watchCase": return std(W.metal ? W.band! : "#2A2A2E", 0.3, { metalness: 0.85 });

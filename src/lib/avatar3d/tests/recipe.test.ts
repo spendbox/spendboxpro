@@ -9,6 +9,7 @@ import {
   CATALOGS, DEFAULT_RECIPE, RECIPE_KEYS, decodeRecipe, encodeRecipe, fromLegacyAvatar, parseRecipe, randomRecipe,
   sameRecipe, seededRecipe, toStored, type Recipe,
 } from "../recipe.ts";
+import type { Option } from "../catalog.ts";
 import { LOCKED_IDS, LOCKED_KEYS } from "./catalog-lock.ts";
 import { RECIPE_FIXTURES } from "./fixtures.ts";
 
@@ -52,7 +53,8 @@ test("default recipe is valid", () => {
 
 test("saved fixtures still load exactly", () => {
   for (const f of RECIPE_FIXTURES) {
-    assert.deepEqual(parseRecipe(f.input), f.expect, f.name);
+    // Keys added after a fixture was written read as their defaults.
+    assert.deepEqual(parseRecipe(f.input), { ...DEFAULT_RECIPE, ...f.expect }, f.name);
   }
 });
 
@@ -71,9 +73,10 @@ test("text and JSON forms round-trip", () => {
 test("every single option survives a round-trip", () => {
   for (const k of RECIPE_KEYS) {
     for (let i = 0; i < CATALOGS[k].length; i++) {
-      const r = { ...DEFAULT_RECIPE, [k]: i };
-      assert.equal(parseRecipe(encodeRecipe(r))[k], i, `${k}=${i} (text)`);
-      assert.equal(parseRecipe(toStored(r))[k], i, `${k}=${i} (JSON)`);
+      // A retired option loads as its replacement.
+      const r = { ...DEFAULT_RECIPE, [k]: i }, want = (CATALOGS[k][i] as Option).retired?.use ?? i;
+      assert.equal(parseRecipe(encodeRecipe(r))[k], want, `${k}=${i} (text)`);
+      assert.equal(parseRecipe(toStored(r))[k], want, `${k}=${i} (JSON)`);
     }
   }
 });

@@ -6,10 +6,11 @@ import { type BufferAttribute, DoubleSide, Mesh, MeshBasicMaterial, Raycaster, V
 import { buildAvatar } from "../avatar.ts";
 import { buildHead } from "../head.ts";
 import { type Model, type Part, triangleCount } from "../parts.ts";
-import { CATALOGS, DEFAULT_RECIPE, type Recipe } from "../recipe.ts";
+import { CATALOGS, DEFAULT_RECIPE, type Recipe, cleanRecipe } from "../recipe.ts";
+import { resolveLook } from "../wardrobe.ts";
 import { nonFinite, signedVolume, windingAgreement } from "./geometry-checks.ts";
 
-const BODY_KEYS = ["build", "frame", "bust", "butt", "height", "outfit", "top", "pattern", "bottom", "watch", "chain"] as const;
+const BODY_KEYS = ["build", "frame", "bust", "butt", "height", "outfit", "top", "pattern", "bottom", "watch", "chain", "topStyle", "bottomStyle", "layer", "shoes"] as const;
 
 /** The parts that belong to the body (everything the head builder didn't make). */
 function bodyParts(m: Model, r: Recipe, lod: number): Part[] {
@@ -108,11 +109,14 @@ test("the whole avatar stays within budget with the heaviest options", () => {
   // both frames and the heaviest chains. Budgets: 70k for your own avatar, 20k for players nearby.
   const head = { hair: 8, hw: 1, facial: 5, glasses: 3, ear: 3, pierce: 6, watch: 3 };
   let own = 0, near = 0, ownAt = "", nearAt = "";
-  for (let outfit = 0; outfit < CATALOGS.outfit.length; outfit++) {
+  // Every outfit; and separates with the busiest tops, bottoms, jackets and shoes.
+  const looks: Partial<Recipe>[] = [...CATALOGS.outfit.map((_, outfit) => ({ outfit }))];
+  for (const topStyle of [3, 7, 10, 12]) for (const layer of [0, 1, 3]) looks.push({ outfit: 0, topStyle, layer, bottomStyle: 8, shoes: 4 });
+  for (const look of looks) {
     for (const frame of [0, 1]) {
       for (const chain of [4, 6]) {
-        for (const build of [0, 4]) {
-          const r = { ...DEFAULT_RECIPE, ...head, outfit, frame, chain, build }, tag = JSON.stringify({ outfit, frame, chain, build });
+        for (const build of [0, 6]) {
+          const r = { ...DEFAULT_RECIPE, ...head, ...look, frame, chain, build }, tag = JSON.stringify({ ...look, frame, chain, build });
           const a = triangleCount(buildAvatar(r, 1)), b = triangleCount(buildAvatar(r, 0.5));
           if (a > own) [own, ownAt] = [a, tag];
           if (b > near) [near, nearAt] = [b, tag];
@@ -129,4 +133,28 @@ test("height moves the feet, not the head", () => {
   const floor = (height: number) => buildAvatar({ ...DEFAULT_RECIPE, height }, 1).meta.floorY!;
   assert.ok(Number.isFinite(floor(0)), "floorY is set");
   assert.ok(floor(3) > floor(0) && floor(0) > floor(4), "shorter avatars' feet are higher");
+});
+
+test("recipes saved before the wardrobe existed keep their outfit", () => {
+  // Wardrobe choices at 0 mean "from the outfit": T-shirt, long sleeve and hoodie with trousers;
+  // one-piece outfits as they were.
+  const tops = ["T-shirt", "Long sleeve", "Hoodie"];
+  for (let outfit = 0; outfit < 3; outfit++) {
+    const look = resolveLook({ ...DEFAULT_RECIPE, outfit });
+    assert.equal(look.top?.n, tops[outfit]);
+    assert.equal(look.bottom?.kind, "trousers");
+    assert.equal(look.layer, null);
+  }
+  assert.equal(resolveLook({ ...DEFAULT_RECIPE, outfit: 5 }).top, null, "a dress stays a dress");
+  assert.equal(resolveLook({ ...DEFAULT_RECIPE, outfit: 5 }).bottom, null);
+  assert.equal(resolveLook({ ...DEFAULT_RECIPE, outfit: 10 }).bottomMat, "top", "suit trousers match the jacket");
+});
+
+test("a retired option loads as its replacement", () => {
+  assert.equal(cleanRecipe({ ...DEFAULT_RECIPE, build: 4 }).build, 0, "bodybuilder loads as athletic");
+});
+
+test("high heels lift the avatar by the heel's height", () => {
+  const flat = buildAvatar({ ...DEFAULT_RECIPE, shoes: 1 }, 1).meta.floorY!, heels = buildAvatar({ ...DEFAULT_RECIPE, shoes: 4 }, 1).meta.floorY!;
+  assert.ok(flat - heels > 0.7, `heels lower the floor by ${(flat - heels).toFixed(2)}`);
 });

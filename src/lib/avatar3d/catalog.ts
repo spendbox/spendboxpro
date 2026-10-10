@@ -7,7 +7,11 @@
 //
 // Shape numbers come from the reference prototype (avatar-reference/newtown-avatar-studio).
 
-export type Option = { id: string; n: string };
+/**
+ * retired: no longer offered. The entry stays (saved recipes point at it by position) but menus hide
+ * it, and a recipe that still uses it loads as option `use` instead.
+ */
+export type Option = { id: string; n: string; retired?: { use: number } };
 export type Swatch = Option & { c: string };
 
 export const FACES = [
@@ -173,7 +177,8 @@ export const BUILDS: BodyType[] = [
   { id: "ectomorphic", n: "Ectomorphic", gl: 0.6, sh: 0.8, trap: -0.08, slump: 0.12, ch: 0.8, chF: 0.75, chB: 0.85, rib: 0.8, wa: 0.8, waF: 0.8, waB: 0.85, hi: 0.85, hiF: 0.85, hiB: 0.85, armT: 0.66, armD: 0.68, armB: 0.66, armF: 0.7, legT: 0.68, calf: 0.72, limbL: 1.07, h: 1.04, neck: -0.25 },
   { id: "sturdy", n: "Sturdy", sh: 1.14, trap: 0.12, ch: 1.14, chF: 1.15, chB: 1.12, rib: 1.2, wa: 1.3, waF: 1.35, waB: 1.15, hi: 1.25, hiF: 1.2, hiB: 1.15, belly: 0.68, bellyY: -5.35, gl: 1.2, armT: 1.3, armD: 1.2, armB: 1.3, armF: 1.25, legT: 1.38, calf: 1.35, neck: 0.25 },
   { id: "average", n: "Average", neck: 0 },
-  { id: "bodybuilder", n: "Bodybuilder", sh: 1.4, trap: 0.35, ch: 1.28, chF: 1.18, chB: 1.2, rib: 1.12, wa: 0.84, waF: 0.9, waB: 0.95, hi: 1.12, hiF: 1.05, hiB: 1.18, gl: 1.4, pec: 0.13, abs: 1, armT: 1.5, armD: 1.6, armB: 1.65, armF: 1.45, legT: 1.55, calf: 1.6, stance: 1.15, shirtless: 1, neck: 0.6 },
+  // Retired: avatars that used it load as Athletic.
+  { id: "bodybuilder", n: "Bodybuilder", retired: { use: 0 }, sh: 1.4, trap: 0.35, ch: 1.28, chF: 1.18, chB: 1.2, rib: 1.12, wa: 0.84, waF: 0.9, waB: 0.95, hi: 1.12, hiF: 1.05, hiB: 1.18, gl: 1.4, pec: 0.13, abs: 1, armT: 1.5, armD: 1.6, armB: 1.65, armF: 1.45, legT: 1.55, calf: 1.6, stance: 1.15, shirtless: 1, neck: 0.6 },
   { id: "lean", n: "Lean", sh: 1.08, ch: 1.05, chF: 1.05, rib: 0.98, wa: 0.88, waF: 0.9, hi: 0.92, pec: 0.03, armT: 0.95, armD: 1.05, armF: 0.95, legT: 0.95, calf: 0.95, neck: 0.1 },
   { id: "stocky", n: "Stocky", sh: 1.1, trap: 0.22, ch: 1.2, chF: 1.25, chB: 1.15, rib: 1.35, wa: 1.5, waF: 1.5, waB: 1.25, hi: 1.45, hiF: 1.3, hiB: 1.25, belly: 0.82, bellyY: -5.1, gl: 1.2, armT: 1.38, armD: 1.25, armB: 1.35, armF: 1.3, legT: 1.55, calf: 1.5, stance: 1.22, limbL: 0.96, neck: 0.3 },
   { id: "petite", n: "Petite", sh: 0.9, ch: 0.92, rib: 0.92, wa: 0.92, hi: 0.94, armT: 0.85, legT: 0.88, calf: 0.88, limbL: 0.9, h: 0.87, w: 0.92, neck: -0.1 },
@@ -197,16 +202,20 @@ export const BUTTS = [
   { id: "extra", n: "Extra", v: 0.46 },
 ];
 
-/** sl = sleeve style; flags pick the garment pieces; match = trousers use the top colour; bare = legs show. */
+/**
+ * sl = sleeve style; flags pick the garment pieces; match = trousers use the top colour; bare = legs show.
+ * sep = separates: the top and bottom come from the Top and Bottom choices (TOPS, BOTTOMS); the others
+ * are one-piece outfits.
+ */
 export type Outfit = Option & {
-  sl: "short" | "long" | "flare" | "puff" | "none";
+  sl: "short" | "long" | "flare" | "puff" | "none" | "wide";
   shoe: "light" | "dark";
 } & Partial<Record<"hood" | "tunic" | "robe" | "match" | "skirt" | "bare" | "abaya" | "jalab" | "cute" | "mini" |
-  "suit" | "tie" | "pencil" | "swim", 1>>;
+  "suit" | "tie" | "pencil" | "swim" | "sep", 1>>;
 export const OUTFITS: Outfit[] = [
-  { id: "t-shirt", n: "T-shirt", sl: "short", shoe: "light" },
-  { id: "long-sleeve", n: "Long sleeve", sl: "long", shoe: "light" },
-  { id: "hoodie", n: "Hoodie", sl: "long", hood: 1, shoe: "light" },
+  { id: "t-shirt", n: "T-shirt", sl: "short", shoe: "light", sep: 1 },
+  { id: "long-sleeve", n: "Long sleeve", sl: "long", shoe: "light", sep: 1 },
+  { id: "hoodie", n: "Hoodie", sl: "long", hood: 1, shoe: "light", sep: 1 },
   { id: "kaftan", n: "Kaftan", sl: "long", tunic: 1, match: 1, shoe: "dark" },
   { id: "agbada", n: "Agbada", sl: "flare", tunic: 1, robe: 1, match: 1, shoe: "dark" },
   { id: "dress", n: "Dress", sl: "short", skirt: 1, bare: 1, shoe: "dark" },
@@ -307,3 +316,101 @@ export const HEIGHTS = [
   { id: "very-tall", n: "Very tall", s: 1.11 },
 ];
 export const HEAD_HEIGHT_SHARE = 0.35;
+
+// ---- the wardrobe: separate tops, bottoms, an outer layer and shoes (added after the prototype) ----
+// Option 0 of each is "from the outfit", so recipes saved before these lists existed look the same.
+
+/**
+ * A top. sl = sleeves; hem = height of the hem (body units: navel about -5.2, hip -6.3); neck = the
+ * neckline; loose = how far it stands off the body; knit = ribbed hem and cuffs; tank = straps instead
+ * of shoulders; buttons = a button placket down the front; trim = embroidered neckline (native tops).
+ */
+export type TopStyle = Option & {
+  sl?: "short" | "long" | "none" | "puff" | "wide";
+  hem?: number;
+  neck?: "crew" | "v" | "collar" | "scoop" | "boat" | "mandarin";
+} & Partial<Record<"knit" | "hood" | "tank" | "buttons" | "crop", 1>> & { loose?: number; trim?: "dashiki" | "senator" | "buba" };
+export const TOPS: TopStyle[] = [
+  { id: "outfit", n: "From outfit" },
+  { id: "t-shirt", n: "T-shirt", sl: "short", hem: -6.2, neck: "crew" },
+  { id: "long-sleeve", n: "Long sleeve", sl: "long", hem: -6.2, neck: "crew" },
+  { id: "hoodie", n: "Hoodie", sl: "long", hem: -6.3, neck: "crew", hood: 1, knit: 1, loose: 0.05 },
+  { id: "crop-top", n: "Crop top", sl: "short", hem: -4.35, neck: "scoop", crop: 1 },
+  { id: "tank-top", n: "Tank top", sl: "none", hem: -6.1, neck: "scoop", tank: 1 },
+  { id: "sweater", n: "Sweater", sl: "long", hem: -6.3, neck: "crew", knit: 1, loose: 0.05 },
+  { id: "shirt", n: "Shirt", sl: "long", hem: -6.45, neck: "collar", buttons: 1 },
+  { id: "polo", n: "Polo", sl: "short", hem: -6.3, neck: "collar", buttons: 1 },
+  { id: "blouse", n: "Blouse", sl: "puff", hem: -6.0, neck: "v", loose: 0.04 },
+  { id: "dashiki", n: "Dashiki", sl: "wide", hem: -7.0, neck: "v", trim: "dashiki", loose: 0.08 },
+  { id: "buba", n: "Buba", sl: "wide", hem: -6.9, neck: "boat", trim: "buba", loose: 0.07 },
+  { id: "senator", n: "Senator top", sl: "long", hem: -7.5, neck: "mandarin", trim: "senator", loose: 0.04 },
+];
+
+/**
+ * A bottom. kind: trousers (legs to the ankle), shorts (to above the knee), skirt (hangs from the waist),
+ * leggings (skin-tight). fit = how loose the legs are at the hem; hem = where the legs or skirt end
+ * (from the crotch down for legs; a height for skirts); denim = jeans; cuff = gathered at the ankle;
+ * native = woven in the outfit's pattern.
+ */
+export type BottomStyle = Option & {
+  kind?: "trousers" | "shorts" | "skirt" | "leggings";
+  fit?: number;
+  hem?: number;
+  flare?: number;
+} & Partial<Record<"denim" | "cuff" | "wrap" | "native" | "pockets", 1>>;
+export const BOTTOMS: BottomStyle[] = [
+  { id: "outfit", n: "From outfit" },
+  { id: "trousers", n: "Trousers", kind: "trousers", fit: 0.1 },
+  { id: "jeans", n: "Jeans", kind: "trousers", fit: 0.05, denim: 1, pockets: 1 },
+  { id: "shorts", n: "Shorts", kind: "shorts", fit: 0.12, hem: 2.4, pockets: 1 },
+  { id: "joggers", n: "Joggers", kind: "trousers", fit: 0.12, cuff: 1 },
+  { id: "leggings", n: "Leggings", kind: "leggings", fit: 0.012 },
+  { id: "midi-skirt", n: "Midi skirt", kind: "skirt", hem: -11.0, flare: 0.5 },
+  { id: "mini-skirt", n: "Mini skirt", kind: "skirt", hem: -8.6, flare: 0.15 },
+  { id: "wrapper", n: "Wrapper (iro)", kind: "skirt", hem: -13.3, flare: 0.12, wrap: 1, native: 1 },
+  { id: "sokoto", n: "Sokoto", kind: "trousers", fit: 0.2, cuff: 1, native: 1 },
+];
+
+/** An outer layer, worn over the top: an open-front jacket. collar: its collar; knit = cardigan. */
+export type LayerStyle = Option & {
+  collar?: "shirt" | "lapel" | "band" | "none";
+  hem?: number;
+} & Partial<Record<"knit" | "leather" | "denim" | "ribbed", 1>>;
+export const LAYERS: LayerStyle[] = [
+  { id: "none", n: "None" },
+  { id: "denim-jacket", n: "Denim jacket", collar: "shirt", hem: -5.9, denim: 1 },
+  { id: "bomber", n: "Bomber jacket", collar: "band", hem: -6.0, ribbed: 1 },
+  { id: "blazer", n: "Blazer", collar: "lapel", hem: -7.0 },
+  { id: "cardigan", n: "Cardigan", collar: "none", hem: -6.5, knit: 1 },
+  { id: "leather-jacket", n: "Leather jacket", collar: "lapel", hem: -5.9, leather: 1 },
+];
+
+/** Shoes. heel = how high the heel lifts the foot (body units; about 0.9 is a 10 cm heel). */
+export type ShoeStyle = Option & {
+  kind?: "sneaker" | "dress" | "loafer" | "heel" | "sandal" | "boot";
+  c?: string;
+  sole?: string;
+  heel?: number;
+};
+export const SHOES: ShoeStyle[] = [
+  { id: "outfit", n: "From outfit" },
+  { id: "sneakers", n: "Sneakers", kind: "sneaker", c: "#ECEAE4", sole: "#F7F5F0" },
+  { id: "dress-shoes", n: "Dress shoes", kind: "dress", c: "#2A1C14", sole: "#120C08", heel: 0.08 },
+  { id: "loafers", n: "Loafers", kind: "loafer", c: "#5A341C", sole: "#2A1A10", heel: 0.06 },
+  { id: "heels", n: "High heels", kind: "heel", c: "#141414", sole: "#141414", heel: 0.85 },
+  { id: "sandals", n: "Sandals", kind: "sandal", c: "#6B4426", sole: "#3A2616" },
+  { id: "boots", n: "Boots", kind: "boot", c: "#4A2E1C", sole: "#1A110B", heel: 0.12 },
+];
+
+/** Shoe colour; 0 keeps the style's own colour. */
+export const SHOE_COLORS: Swatch[] = [
+  { id: "default", n: "Style colour", c: "#9A9A9A" },
+  { id: "white", n: "White", c: "#ECEAE4" },
+  { id: "black", n: "Black", c: "#161616" },
+  { id: "brown", n: "Brown", c: "#5A341C" },
+  { id: "tan", n: "Tan", c: "#B07A48" },
+  { id: "red", n: "Red", c: "#B0262C" },
+  { id: "navy", n: "Navy", c: "#1F2A44" },
+  { id: "gold", n: "Gold", c: "#C9A227" },
+  { id: "nude", n: "Nude", c: "#C89A7A" },
+];

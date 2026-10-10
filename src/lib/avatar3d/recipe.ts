@@ -10,7 +10,7 @@
 import {
   BACKGROUNDS, BOTTOM_COLORS, BROWS, BUILDS, BUSTS, BUTTS, CHAINS, CHINS, CLOTH_COLORS, EARRINGS, EYES, FACES,
   FACIAL_HAIR, FRAMES, FULLNESS, GLASSES, HAIRS, HAIR_COLORS, HEADWEAR, HEIGHTS, IRIS, LIPS, LIP_TINTS, NOSES,
-  OUTFITS, PATTERNS, PIERCINGS, SKINS, WATCHES, type Option,
+  OUTFITS, PATTERNS, PIERCINGS, SKINS, WATCHES, type Option, TOPS, BOTTOMS, LAYERS, SHOES, SHOE_COLORS,
 } from "./catalog.ts";
 import { isLegacyAvatar, legacyParts } from "./legacy.ts";
 
@@ -49,6 +49,13 @@ export const CATALOGS = {
   // added after the prototype
   bg: BACKGROUNDS,
   height: HEIGHTS,
+  // the wardrobe: separate top and bottom styles, an outer layer, shoes
+  topStyle: TOPS,
+  bottomStyle: BOTTOMS,
+  layer: LAYERS,
+  layerC: CLOTH_COLORS,
+  shoes: SHOES,
+  shoeC: SHOE_COLORS,
 } satisfies Record<string, readonly Option[]>;
 
 export type RecipeKey = keyof typeof CATALOGS;
@@ -75,7 +82,7 @@ export function cleanRecipe(input: Partial<Record<string, unknown>>): Recipe {
   const out = { ...DEFAULT_RECIPE };
   for (const k of RECIPE_KEYS) {
     const v = input[k];
-    if (inRange(k, v)) out[k] = v;
+    if (inRange(k, v)) out[k] = (CATALOGS[k][v] as Option).retired?.use ?? v;
   }
   return out;
 }
@@ -164,7 +171,10 @@ export function seededRecipe(seed: string): Recipe {
 
 /** A random but sensible avatar. rand returns numbers in [0, 1). */
 export function randomRecipe(rand: () => number = Math.random): Recipe {
-  const pick = (k: RecipeKey) => Math.floor(rand() * CATALOGS[k].length);
+  const pick = (k: RecipeKey) => {
+    const i = Math.floor(rand() * CATALOGS[k].length);
+    return (CATALOGS[k][i] as Option).retired?.use ?? i;
+  };
   const r = { ...DEFAULT_RECIPE };
   for (const k of RECIPE_KEYS) r[k] = pick(k);
   const fem = r.frame === 1;
@@ -176,6 +186,7 @@ export function randomRecipe(rand: () => number = Math.random): Recipe {
   if (rand() < 0.6) r.hw = 0;
   if (rand() < 0.6) r.chain = 0;
   if (rand() < 0.5) r.watch = 0;
+  if (rand() < 0.6) r.layer = 0;
   if (rand() < 0.7) r.pierce = 0;
   if (!fem && rand() < 0.6) r.ear = 0;
   if (rand() < 0.5) r.bust = 0;
