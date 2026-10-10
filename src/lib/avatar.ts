@@ -1,6 +1,8 @@
 // A player's face: a handful of choices that the avatar drawing (components/avatar.tsx) turns
 // into a portrait. Kept small so it travels with chat messages and notifications.
 
+import { decodeRecipe, parseRecipe } from "./avatar3d/recipe.ts";
+
 export type Avatar = {
   skin: number;
   hair: number;
@@ -14,6 +16,11 @@ export type Avatar = {
   topColor: number;
   bg: number;
   earrings: number;
+  /**
+   * The 3D avatar's recipe, in its short text form (see lib/avatar3d/recipe.ts). Missing for players who
+   * haven't opened the new avatar studio yet: their 3D look is worked out from the fields above.
+   */
+  r3?: string;
 };
 
 export const SKIN = ["#f6d7c3", "#eec3a0", "#d9a37a", "#c08458", "#9c6440", "#7a4a2c", "#5c3620", "#3f2416"];
@@ -87,7 +94,7 @@ export function cleanAvatar(input: unknown, fallbackSeed: string): Avatar {
   const base = defaultAvatar(fallbackSeed);
   if (!input || typeof input !== "object") return base;
   const src = input as Record<string, unknown>;
-  const limits: Record<keyof Avatar, number> = {
+  const limits: Record<Exclude<keyof Avatar, "r3">, number> = {
     skin: SKIN.length,
     hair: AVATAR_PARTS.hair.length,
     hairColor: HAIR_COLOR.length,
@@ -101,10 +108,17 @@ export function cleanAvatar(input: unknown, fallbackSeed: string): Avatar {
     bg: BG.length,
     earrings: AVATAR_PARTS.earrings.length,
   };
-  const out = { ...base };
-  for (const key of Object.keys(limits) as (keyof Avatar)[]) {
+  const out: Avatar = { ...base };
+  for (const key of Object.keys(limits) as (keyof typeof limits)[]) {
     const v = Number(src[key]);
     if (Number.isInteger(v) && v >= 0 && v < limits[key]) out[key] = v;
   }
+  // Keep a 3D recipe only if it reads as one.
+  if (typeof src.r3 === "string" && src.r3.length <= 80 && decodeRecipe(src.r3)) out.r3 = src.r3;
   return out;
+}
+
+/** The 3D recipe for an avatar: its own, or worked out from its 2D choices. */
+export function recipeOf(a: Avatar) {
+  return (a.r3 && decodeRecipe(a.r3)) || parseRecipe(a);
 }

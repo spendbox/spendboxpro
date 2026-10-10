@@ -139,3 +139,40 @@ export const LEGACY_SIZES: Record<string, number> = {
   topColor: TOP_COLOR.length,
   bg: BG_COUNT,
 };
+
+/** The old option whose new option is v (or the nearest one). */
+function inverse(table: readonly number[], v: number) {
+  const exact = table.indexOf(v);
+  if (exact >= 0) return exact;
+  let best = 0;
+  table.forEach((t, i) => {
+    if (Math.abs(t - v) < Math.abs(table[best] - v)) best = i;
+  });
+  return best;
+}
+
+/** New top styles (TOPS) and outer layers (LAYERS) -> old tops, where there is a close match. */
+const TOP_STYLE_TO_OLD = [-1, 0, 2, 1, 0, 8, 6, 2, 5, 7, 20, 20, 2];
+const LAYER_TO_OLD = [-1, 11, 13, 14, 3, 12];
+
+/**
+ * The other way round: a recipe -> the nearest old 2D avatar fields, for the places that still draw
+ * the old flat portrait until they show pictures of the 3D avatar.
+ */
+export function legacyFromRecipe(r: Recipe) {
+  const top = LAYER_TO_OLD[r.layer] > 0 ? LAYER_TO_OLD[r.layer]
+    : TOP_STYLE_TO_OLD[r.topStyle] > 0 ? TOP_STYLE_TO_OLD[r.topStyle]
+      : inverse(TOP.map(([o]) => o), r.outfit);
+  return {
+    skin: inverse(SKIN, r.skin),
+    hair: inverse(HAIR, r.hair),
+    hairColor: inverse(HAIR_COLOR, r.hairC),
+    brows: inverse(BROWS, r.brow),
+    beard: inverse(BEARD, r.facial),
+    glasses: inverse(GLASSES, r.glasses),
+    earrings: inverse(EARRINGS, Math.min(r.ear, 2)),
+    topColor: inverse(TOP_COLOR, r.top),
+    top,
+    bg: r.bg % BG_COUNT,
+  };
+}
