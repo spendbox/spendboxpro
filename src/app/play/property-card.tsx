@@ -133,6 +133,14 @@ export function PropertyCard({ info, market, jobs, onClose }: { info: PropertyIn
         </div>
       )}
       {!market && <p className="mt-4 text-center text-xs text-muted">Sign in to buy property.</p>}
+      {(market?.owners ?? []).length === 0 && (
+        <a href={`/business?building=${encodeURIComponent(info.id)}`} className="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-gold/10 px-4 py-3 text-sm ring-1 ring-gold/30">
+          <span>
+            <b>Own a real business?</b> Lease this building for a year: your name and logo on the map, lit up for every player.
+          </span>
+          <span className="shrink-0 font-semibold text-gold-dark">Lease →</span>
+        </a>
+      )}
     </Sheet>
   );
 }

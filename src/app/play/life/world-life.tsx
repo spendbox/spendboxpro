@@ -1,15 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Briefcase, HeartPulse, House, MapPin, Wallet, X } from "@/components/icons";
-import { makePlan, spiralIndex, type CityPlan } from "@/lib/city/layout";
+import { Briefcase, Handshake, HeartPulse, House, MapPin, Sparkles, Wallet, X } from "@/components/icons";
+import { makePlan, spiralIndex, tileAt, type CityPlan } from "@/lib/city/layout";
 import { BUILDING_LABEL } from "@/lib/world/buildings";
 import type { RegionMap } from "@/lib/world/compile";
 import { regionMap } from "@/lib/world";
 import { ownedSpot } from "@/lib/world/owned";
 import type { PropertyInfo } from "@/lib/world/property";
-import type { BuildingOwner, LifeStatus, Neighbour, PaySettled, PropertyApi, PropertyResult, WorkStatus } from "@/lib/world/property-api";
-import { COMMUTE_LABEL } from "@/lib/world/work";
+import type { BuildingOwner, InterviewStart, LifeStatus, Neighbour, PaySettled, PropertyApi, PropertyResult, WorkStatus } from "@/lib/world/property-api";
+import { COMMUTE_LABEL, needsInterview, type Commute } from "@/lib/world/work";
+import { dayOf, EXERCISE } from "@/lib/world/day";
 import type { Workplace } from "@/lib/world/workplace";
 import { PropertyCard } from "../property-card";
 import { Sheet } from "../sheet";
@@ -21,6 +22,11 @@ import { MapSearch, type SearchHit } from "./map-search";
 import { StartLife } from "./start-life";
 import { useLife } from "./use-life";
 import { WorkSheet } from "./work-sheet";
+import { BusinessSheet } from "./business-sheet";
+import { ServicesSheet } from "./services-sheet";
+import type { MapBusiness } from "@/lib/world/business";
+import type { OwnedProperty } from "@/lib/world/owned";
+import { InterviewSheet, MomentSheet } from "./moments";
 
 /** Each region's plan for finding jobs near home, worked out once (only when Work is opened). */
 const plans = new Map<string, CityPlan>();
@@ -42,7 +48,22 @@ const paid = (p: PaySettled | undefined) =>
  * budget, buy a home first), and buying from a property's card. Gives the city view what it needs
  * (owned buildings, where to fly, what to do when a property is tapped) and the screens to show.
  */
-export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { api: PropertyApi; regionId: string | null; signedIn: boolean; budget: number; onChanged?: () => void }) {
+export function useWorldLife({
+  api,
+  regionId,
+  signedIn,
+  budget,
+  pretend,
+  onChanged,
+}: {
+  api: PropertyApi;
+  regionId: string | null;
+  signedIn: boolean;
+  budget: number;
+  /** The world lab: payments are pretend. */
+  pretend?: boolean;
+  onChanged?: () => void;
+}) {
   const region = useMemo(() => regionMap(regionId), [regionId]);
   const { assets, owned, loaded, refresh } = useLife(api, signedIn ? regionId : null);
   const [property, setProperty] = useState<PropertyInfo | null>(null);
@@ -59,6 +80,12 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
   const [neighbours, setNeighbours] = useState<Neighbour[] | null>(null);
   const [status, setStatus] = useState<LifeStatus | null>(null);
   const [lifeOpen, setLifeOpen] = useState(false);
+  const [interview, setInterview] = useState<{ start: Extract<InterviewStart, { ok: true }>; hire: (ticket: string) => void } | null>(null);
+  const [moment, setMoment] = useState(false);
+  const [servicesOpen, setServicesOpen] = useState(false);
+  const loadServices = useCallback(() => api.serviceBoard(), [api]);
+  const [businesses, setBusinesses] = useState<MapBusiness[]>([]);
+  const [business, setBusiness] = useState<MapBusiness | null>(null);
   const [confirm, setConfirm] = useState<{ title: string; text: string; yes: string; run: () => void } | null>(null);
 
   useEffect(() => {
@@ -74,6 +101,34 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
       clearInterval(every);
     };
   }, [api, signedIn, regionId]);
+
+  // Real businesses on the map (everyone sees them, signed in or not).
+  useEffect(() => {
+    if (!regionId) return;
+    let alive = true;
+    const load = () => void api.mapBusinesses(regionId).then((list) => alive && setBusinesses(list)).catch(() => {});
+    const first = setTimeout(load, 0);
+    const every = setInterval(load, 5 * 60_000);
+    return () => {
+      alive = false;
+      clearTimeout(first);
+      clearInterval(every);
+    };
+  }, [api, regionId]);
+
+  // Back from paying for a pack: check it with Paystack, then tidy the address.
+  useEffect(() => {
+    if (!signedIn) return;
+    const ref = new URLSearchParams(window.location.search).get("pack");
+    if (!ref) return;
+    void api.confirmPack(ref).then(async (r) => {
+      setMessage(r.ok ? { text: `Your pack is in: ₥${(r.mint ?? 0).toLocaleString("en-GB")} to start with.`, good: true } : { text: r.error ?? "That payment hasn't gone through.", good: false });
+      const url = new URL(window.location.href);
+      url.searchParams.delete("pack");
+      window.history.replaceState(null, "", url);
+      await refresh();
+    });
+  }, [api, signedIn, refresh]);
 
   useEffect(() => {
     if (!message) return;
@@ -126,11 +181,20 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
           current: work?.job ? { place: work.job.place, job: work.job.job } : null,
           busy,
           onTake: (wp, job, mode) => {
-            const take = () =>
+            const hire = (ticket?: string) =>
               act(
-                () => api.takeJob(wp.id, job.job, mode),
+                () => api.takeJob(wp.id, job.job, mode, ticket),
                 (r) => `You're a ${job.title} now. Pay builds up every game day (2 hours).${paid(r.pay)}`,
               );
+            // Skilled jobs: an interview first, then the job with the pass it hands back.
+            const take = async () => {
+              if (!needsInterview(job)) return void hire();
+              setBusy(true);
+              const start = await api.interviewStart(wp.id, job.job).catch(() => ({ ok: false as const, error: "Couldn't start the interview. Try again." }));
+              setBusy(false);
+              if (!start.ok) return setMessage({ text: start.error, good: false });
+              setInterview({ start, hire });
+            };
             const now = work?.job;
             if (!now) return void take();
             // One main job at a time: say so before swapping.
@@ -138,11 +202,19 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
               title: "Switch jobs?",
               text: `You're a ${now.title} at ${now.placeName}. You can have one main job, so becoming a ${job.title} means leaving it. The pay you've earned there is collected first.`,
               yes: `Switch to ${job.title}`,
-              run: take,
+              run: () => void take(),
             });
           },
         }
       : undefined;
+
+  const day = dayOf({
+    homeUnit,
+    job: work?.job ? { place: work.job.place, mode: work.job.mode as Commute } : null,
+    hustleHours: status?.hustle?.hours ?? 0,
+    course: status?.courses.find((c) => !c.done)?.course ?? null,
+    exercise: status?.exercise ?? "none",
+  });
 
   const home = homeUnit ? (assets?.units ?? []).find((u) => u.unit === homeUnit) : undefined;
   const homeSpot = homeUnit ? ownedSpot(homeUnit.split("/")[0]) : null;
@@ -174,6 +246,12 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
           </button>
         )}
         {signedIn && life && (
+          <button onClick={() => setServicesOpen(true)} className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold" aria-label="Services">
+            <Handshake className="size-4" />
+            <span className="max-sm:hidden">Services</span>
+          </button>
+        )}
+        {signedIn && life && (
           <button onClick={() => setLifeOpen(true)} className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold" aria-label="Life">
             <HeartPulse className={`size-4 ${status && status.health < 30 ? "text-hit" : ""}`} />
             <span className="max-sm:hidden">Life</span>
@@ -194,6 +272,13 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
           </button>
         )}
       </div>
+      {status?.event && !moment && (
+        <div className="pointer-events-none absolute inset-x-0 top-24 z-10 flex justify-center px-3 sm:top-28">
+          <button onClick={() => setMoment(true)} className="pointer-events-auto flex items-center gap-2 rounded-full bg-gold px-4 py-2 text-sm font-semibold text-ink shadow-lg ring-4 ring-gold/30">
+            <Sparkles className="size-4" /> Breakthrough {status.event.source === "job" ? "at work" : "in your hustle"}: {status.event.title}
+          </button>
+        </div>
+      )}
       {message && (
         <div className="pointer-events-auto absolute inset-x-0 bottom-24 z-50 flex justify-center px-3">
           <p className={`flex max-w-sm items-center gap-2 rounded-2xl px-4 py-2.5 text-sm shadow-lg ${message.good ? "bg-ink text-white" : "bg-hit text-white"}`}>
@@ -211,7 +296,18 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
           prices={region.region.prices}
           started={!!life}
           busy={busy}
+          granted={life?.granted ?? 0}
+          pretend={pretend}
           onStart={() => act(() => api.startLife(region.region.id), () => null)}
+          onPack={async (id) => {
+            setBusy(true);
+            const r = await api.startPack(id, region.region.id);
+            setBusy(false);
+            if (!r.ok) return setMessage({ text: r.error, good: false });
+            if (r.url) return void window.location.assign(r.url);
+            setMessage({ text: "Your pack is in. Now find your first home!", good: true });
+            await refresh();
+          }}
           onClose={() => setWelcomeShut(true)}
         />
       )}
@@ -238,10 +334,26 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
       {workOpen && jobs && (
         <WorkSheet
           status={work}
+          life={status}
+          day={day}
+          onStartHustle={(id) => {
+            const run = () => act(() => api.startHustle(id), () => "Your side hustle has started. It earns by the game day.");
+            if (!status?.hustle) return void run();
+            setConfirm({ title: "Change side hustle?", text: `You can have one side hustle. Starting this one stops ${status.hustle.title} (what it made is collected first).`, yes: "Change", run });
+          }}
+          onStopHustle={() =>
+            setConfirm({ title: "Stop your side hustle?", text: "What it made so far is collected first. Its start-up cost doesn't come back.", yes: "Stop it", run: () => act(() => api.stopHustle(), () => "Side hustle stopped.") })
+          }
           region={region}
           plan={plan}
           ctx={jobs}
-          onCollect={() => act(() => api.collectPay(), (r) => `+₥${money(r.pay?.net ?? 0)} pay, after ₥${money(r.pay?.tax ?? 0)} income tax and ₥${money(r.pay?.fares ?? 0)} fares.`)}
+          onCollect={() =>
+            act(
+              () => api.collectPay(),
+              (r) =>
+                `+₥${money((r.pay?.net ?? 0) + (r.pay?.hustle?.net ?? 0))} after tax and fares${r.pay?.hustle?.gross ? ` (₥${money(r.pay.hustle.net)} from your side hustle)` : ""}.`,
+            )
+          }
           onMode={(mode, perDay) =>
             setConfirm({
               title: mode === "walk" ? "Walk to work from now on?" : `Go by ${COMMUTE_LABEL[mode].toLowerCase()} from now on?`,
@@ -295,6 +407,7 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
           region={region}
           busy={busy}
           loadMoney={api.money}
+          loadTime={api.lifeTime}
           onBudget={(b) => act(() => api.setBudget(b), () => "Budget saved. Everything you earn is shared out by it now.")}
           onMove={(from, to, amount) => act(() => api.movePot(from, to, amount), () => `Moved ₥${money(amount)}.`)}
           onClose={() => setAssetsOpen(false)}
@@ -305,6 +418,44 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
             setAssetsOpen(false);
           }}
         />
+      )}
+      {servicesOpen && (
+        <ServicesSheet
+          load={loadServices}
+          busy={busy}
+          onBook={(id, title, cost) =>
+            setConfirm({
+              title: `Book ${title}?`,
+              text: `₥${money(cost)} is held from your Savings (then wallet) and goes to them when you confirm it's done. You can cancel until they start.`,
+              yes: `Book for ₥${money(cost)}`,
+              run: () => act(() => api.serviceBook(id), () => "Booked. You'll see it under Services → Yours."),
+            })
+          }
+          onTake={(id, title) =>
+            setConfirm({
+              title: `Take on "${title}"?`,
+              text: "Their money is held now and paid to you when they confirm it's done (or 6 hours after you mark it done), less VAT.",
+              yes: "Take it on",
+              run: () => act(() => api.serviceTake(id), () => "It's yours to do. Mark it done under Services → Yours."),
+            })
+          }
+          onJob={(id, action) =>
+            act(
+              () => api.serviceJob(id, action),
+              () => ({ done: "Marked done. They'll confirm and pay.", confirm: "Paid. Thanks for using a local service!", decline: "Declined; they get their money back.", cancel: "Cancelled; your money's back." })[action],
+            )
+          }
+          onPost={async (what, f) => {
+            const r = what === "offer" ? await api.serviceOffer(f) : await api.serviceRequest(f);
+            if (r.ok) setMessage({ text: what === "offer" ? "Your service is up." : "Your request is up.", good: true });
+            return r;
+          }}
+          onCloseItem={(id) => act(() => api.serviceClose(id), () => "Closed.")}
+          onClose={() => setServicesOpen(false)}
+        />
+      )}
+      {business && (
+        <BusinessSheet b={business} onHit={(kind) => void api.hitBusiness(business.id, kind)} onClose={() => setBusiness(null)} />
       )}
       {confirm && (
         <div className="fixed inset-0 z-[60] grid place-items-center bg-ink/40 p-4" onClick={() => setConfirm(null)}>
@@ -332,6 +483,8 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
       {lifeOpen && (
         <LifeSheet
           status={status}
+          day={day}
+          onExercise={(e) => act(() => api.setExercise(e), () => (e === "none" ? "No exercise for now." : `${EXERCISE[e].label} it is.`))}
           skills={work?.skills ?? {}}
           prices={region.region.prices}
           busy={busy}
@@ -341,8 +494,69 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
           onClose={() => setLifeOpen(false)}
         />
       )}
+      {moment && status?.event && (
+        <MomentSheet
+          event={status.event}
+          onAnswer={async (choice) => {
+            const r = await api.answerEvent(choice);
+            await refresh();
+            return r;
+          }}
+          onClose={() => {
+            setMoment(false);
+            void api.lifeStatus().then(setStatus);
+          }}
+        />
+      )}
+      {interview && (
+        <InterviewSheet
+          start={interview.start}
+          onSubmit={(answers) => api.interviewSubmit(interview.start.token, answers)}
+          onPassed={(ticket) => {
+            const hire = interview.hire;
+            setInterview(null);
+            hire(ticket);
+          }}
+          onClose={() => setInterview(null)}
+        />
+      )}
     </>
   ) : null;
 
-  return { owned, flyTo, onProperty, onWorkplace: setPlace, overlay };
+  // Leased buildings stand as their business made them (a refit, more storeys), with its name.
+  const shown = useMemo<OwnedProperty[]>(() => {
+    if (!region || !businesses.length) return owned;
+    const plan = planOf(region);
+    const extra: OwnedProperty[] = [];
+    for (const b of businesses) {
+      const s = ownedSpot(b.building);
+      const base = s ? tileAt(plan, spiralIndex(s.x, s.z)).building : undefined;
+      if (!base || owned.some((o) => o.id === b.building)) continue;
+      extra.push({ id: b.building, building: { ...base, kind: b.kind ?? base.kind, storeys: b.storeys ?? base.storeys, state: "built" } as typeof base, name: b.name });
+    }
+    return extra.length ? [...owned, ...extra] : owned;
+  }, [owned, businesses, region]);
+
+  // Upgraded businesses (with a logo) go on the billboards.
+  const billboardAds = useMemo(
+    () => businesses.filter((b) => b.billboard && b.logo).map((b) => ({ id: `bz:${b.id}`, image: b.logo!, headline: b.about.slice(0, 60), brand: b.name, link: b.website })),
+    [businesses],
+  );
+  const openBusiness = useCallback(
+    (b: MapBusiness | string) => {
+      const found = typeof b === "string" ? businesses.find((x) => x.id === b) : b;
+      if (!found) return;
+      setBusiness(found);
+      void api.hitBusiness(found.id, "view");
+    },
+    [api, businesses],
+  );
+  const businessViews = useCallback(
+    (views: Record<string, number>) => {
+      for (const id of Object.keys(views)) if (id.startsWith("bz:")) void api.hitBusiness(id.slice(3), "billboard");
+    },
+    [api],
+  );
+
+  return { owned: shown, flyTo, onProperty, onWorkplace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay };
 }

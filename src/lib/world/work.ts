@@ -10,7 +10,7 @@
 import type { Building } from "./buildings.ts";
 import type { Prices } from "./region.ts";
 
-export type WorkSkill = "retail" | "office" | "finance" | "industry" | "building" | "farming" | "hospitality" | "health" | "transport" | "tourism" | "education" | "public" | "entertainment";
+export type WorkSkill = "retail" | "office" | "finance" | "industry" | "building" | "farming" | "hospitality" | "health" | "transport" | "tourism" | "education" | "public" | "entertainment" | "beauty" | "food" | "tech";
 
 export const WORK_SKILLS: Record<WorkSkill, string> = {
   retail: "Selling",
@@ -26,6 +26,9 @@ export const WORK_SKILLS: Record<WorkSkill, string> = {
   education: "Education",
   public: "Public service",
   entertainment: "Entertainment",
+  beauty: "Beauty",
+  food: "Cooking",
+  tech: "Tech repairs",
 };
 
 /** A certificate some jobs need, earned by finishing a course (src/lib/world/living.ts). */
@@ -77,6 +80,16 @@ const BY_PLACE: Record<string, WorkJob[]> = {
 
 /** A building site takes on labourers; an unfinished building takes on nobody. */
 const SITE: WorkJob[] = [J("labourer", "Labourer", "building", 70_000), J("site_foreman", "Site foreman", "building", 250_000, 3)];
+
+/** Skilled and better-paid jobs need an interview: a skill level of 2 or more, a certificate, or ₦200,000 a month and up. */
+export function needsInterview(j: Pick<WorkJob, "level" | "cert" | "month">) {
+  return j.level >= 2 || !!j.cert || j.month >= 200_000;
+}
+
+/** The right answers an interview needs (of 5): more for senior jobs, one more when your mind is stressed. */
+export function interviewPass(j: Pick<WorkJob, "level" | "month">, stressed: boolean) {
+  return Math.min(5, (j.level >= 5 || j.month >= 600_000 ? 4 : 3) + (stressed ? 1 : 0));
+}
 
 /** The jobs in a building on the map (none in homes, land or unfinished buildings). */
 export function jobsInBuilding(b: Pick<Building, "kind" | "state">): WorkJob[] {

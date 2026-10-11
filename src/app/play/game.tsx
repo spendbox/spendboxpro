@@ -98,6 +98,11 @@ import { useWorldLife } from "./life/world-life";
 import * as propertyActions from "./property-actions";
 import * as workActions from "./work-actions";
 import * as livingActions from "./living-actions";
+import * as dayActions from "./day-actions";
+import * as interviewActions from "./interview-actions";
+import * as packActions from "./pack-actions";
+import * as businessActions from "./business-actions";
+import * as serviceActions from "./service-actions";
 import { REGIONS } from "@/lib/world";
 
 // The 3D city only runs in the browser.
@@ -133,7 +138,7 @@ const DuelScreen = dynamic(() => import("./ghost-duel/duel-screen").then((m) => 
 const NO_GHOSTS: CityGhost[] = [];
 const NO_EVENTS: CityEvent[] = [];
 /** Property on the real map, through the server (game-db/038_property.sql). */
-const PROPERTY_API = { ...propertyActions, ...workActions, ...livingActions };
+const PROPERTY_API = { ...propertyActions, ...workActions, ...livingActions, ...dayActions, ...interviewActions, ...packActions, ...businessActions, ...serviceActions };
 const noSubscribe = () => () => {};
 const noWorld = () => null;
 
@@ -842,6 +847,8 @@ export function Game({
     pool_empty: "This ad's mint has run out.",
   };
   async function onBillboardTap(info: { id: string; tile: number; adId: string | null }) {
+    // A business's billboard: its card.
+    if (info.adId?.startsWith("bz:")) return worldLife.onBusiness(info.adId.slice(3));
     const ad = info.adId ? ads.find((a) => a.id === info.adId) : null;
     if (!ad) return setAdvertise({ tile: info.tile });
     setOpenAd({ ad, tile: info.tile, reward: 0, note: null, tapped: false });
@@ -1340,12 +1347,17 @@ export function Game({
             onArea={setWorldArea}
             onProperty={worldId ? worldLife.onProperty : undefined}
             onWorkplace={worldId ? worldLife.onWorkplace : undefined}
+            businesses={worldId ? worldLife.businesses : undefined}
+            onBusiness={worldId ? worldLife.onBusiness : undefined}
             owned={worldId ? worldLife.owned : undefined}
             markers={worldId ? NO_MARKERS : markers}
             events={worldId ? NO_EVENTS : cityEvents}
             onBillboard={onBillboardTap}
-            ads={ads}
-            onAdViews={onAdViews}
+            ads={worldId && worldLife.billboardAds.length ? [...ads, ...worldLife.billboardAds] : ads}
+            onAdViews={worldId ? (views) => {
+              worldLife.businessViews(views);
+              onAdViews(Object.fromEntries(Object.entries(views).filter(([id]) => !id.startsWith("bz:"))));
+            } : onAdViews}
             ghosts={ghostsShown && !worldId ? ghostLights : NO_GHOSTS}
             paused={signInShown}
             onGhost={openGhost}

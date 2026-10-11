@@ -3,11 +3,14 @@
 // the screens don't care which.
 
 import type { Building, UnitUse } from "./buildings.ts";
+import type { BusinessHit, MapBusiness } from "./business.ts";
+import type { Exercise } from "./day.ts";
+import type { ServiceBoard, ServiceForm } from "./services.ts";
 import type { Budget, Pot } from "./living.ts";
 import type { Commute } from "./work.ts";
 
 /** What collecting pay came to (mint): game days, pay, income tax, fares, what's left. */
-export type PaySettled = { days: number; gross: number; tax: number; fares: number; net: number };
+export type PaySettled = { days: number; gross: number; tax: number; fares: number; net: number; hustle?: { gross: number; tax: number; net: number } };
 
 export type PropertyResult = { ok: true; coins?: number; home?: boolean; rent?: number; pay?: PaySettled } | { ok: false; error: string };
 
@@ -62,7 +65,16 @@ export type LifeStatus = {
   payOwed: number;
   /** Your home's bills a game day (mint). */
   bills: { power: number; waste: number } | null;
+  mind: number;
+  exercise: Exercise;
+  hustle: { hustle: string; title: string; skill: string; payDay: number; swing: number; hours: number; paidUntil: string; boost: number; boostUntil: string | null; stalledUntil: string | null } | null;
+  /** A breakthrough waiting for your answer. */
+  event: { id: string; source: "job" | "hustle"; key: string; title: string; expiresAt: string; text: string; choices: string[] } | null;
 };
+
+export type InterviewStart = { ok: true; token: string; questions: { id: string; q: string; options: string[] }[]; need: number; title: string } | { ok: false; error: string };
+export type InterviewResult = { ok: true; passed: boolean; score: number; need: number; ticket?: string } | { ok: false; error: string };
+export type EventResult = { ok: true; won: boolean; said: string; bonus: number; stall?: number } | { ok: false; error: string };
 
 /** Money in (positive) and out (negative) by kind over a time (see groupOf in ./living). */
 export type MoneyFlow = Record<string, number>;
@@ -78,7 +90,7 @@ export type PropertyApi = {
   ownedBuildings: (region: string) => Promise<OwnedBuildingRow[]>;
   buildingOwners: (buildingId: string) => Promise<BuildingOwner[]>;
   workStatus: () => Promise<WorkStatus | null>;
-  takeJob: (placeId: string, job: string, mode: Commute) => Promise<PropertyResult>;
+  takeJob: (placeId: string, job: string, mode: Commute, ticket?: string) => Promise<PropertyResult>;
   setCommute: (mode: Commute) => Promise<PropertyResult>;
   collectPay: () => Promise<PropertyResult>;
   quitJob: () => Promise<PropertyResult>;
@@ -90,6 +102,25 @@ export type PropertyApi = {
   procedure: (id: string) => Promise<PropertyResult>;
   enrol: (id: string) => Promise<PropertyResult>;
   money: (hours: number) => Promise<MoneyFlow>;
+  lifeTime: (hours: number) => Promise<Record<string, number>>;
+  startHustle: (id: string) => Promise<PropertyResult>;
+  stopHustle: () => Promise<PropertyResult>;
+  setExercise: (ex: Exercise) => Promise<PropertyResult>;
+  interviewStart: (placeId: string, job: string) => Promise<InterviewStart>;
+  interviewSubmit: (token: string, answers: number[]) => Promise<InterviewResult>;
+  answerEvent: (choice: number) => Promise<EventResult>;
+  /** Pay for a starter pack: a Paystack page to go to (or, in the lab, the mint at once). */
+  startPack: (pack: string, region: string) => Promise<{ ok: true; url?: string; coins?: number } | { ok: false; error: string }>;
+  confirmPack: (reference: string) => Promise<{ ok: boolean; mint?: number; error?: string }>;
+  mapBusinesses: (region: string) => Promise<MapBusiness[]>;
+  hitBusiness: (id: string, kind: BusinessHit) => Promise<void>;
+  serviceBoard: () => Promise<ServiceBoard | null>;
+  serviceOffer: (f: ServiceForm) => Promise<PropertyResult>;
+  serviceRequest: (f: ServiceForm) => Promise<PropertyResult>;
+  serviceClose: (id: string) => Promise<PropertyResult>;
+  serviceBook: (offerId: string) => Promise<PropertyResult>;
+  serviceTake: (requestId: string) => Promise<PropertyResult>;
+  serviceJob: (jobId: string, action: "done" | "confirm" | "decline" | "cancel") => Promise<PropertyResult>;
 };
 
 /** The purchase tax (the database's property_buy_tax), for showing what a unit really costs. */

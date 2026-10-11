@@ -24,7 +24,7 @@ export function WorldLab({ region }: { region: string }) {
   // A pretend wallet kept in this browser (the server never has one).
   const api = useSyncExternalStore(noSubscribe, labApi, noApi);
   const r = REGIONS[region];
-  const life = useWorldLife({ api: api ?? SERVERLESS, regionId: r ? region : null, signedIn: !!api, budget: BUDGET });
+  const life = useWorldLife({ api: api ?? SERVERLESS, regionId: r ? region : null, signedIn: !!api, budget: BUDGET, pretend: true });
   if (!r) return <main className="grid min-h-dvh place-items-center text-muted">No region called “{region}”.</main>;
   const credit = r.water || r.roads.length > 0;
   return (
@@ -46,6 +46,8 @@ export function WorldLab({ region }: { region: string }) {
         onArea={setArea}
         onProperty={life.onProperty}
         onWorkplace={life.onWorkplace}
+        businesses={life.businesses}
+        onBusiness={life.onBusiness}
         owned={life.owned}
         flyTo={life.flyTo}
       />
@@ -86,4 +88,22 @@ const SERVERLESS = {
   procedure: async () => ({ ok: false as const, error: "" }),
   enrol: async () => ({ ok: false as const, error: "" }),
   money: async () => ({}),
+  lifeTime: async () => ({}),
+  startHustle: async () => ({ ok: false as const, error: "" }),
+  stopHustle: async () => ({ ok: false as const, error: "" }),
+  setExercise: async () => ({ ok: false as const, error: "" }),
+  interviewStart: async () => ({ ok: false as const, error: "" }),
+  interviewSubmit: async () => ({ ok: false as const, error: "" }),
+  answerEvent: async () => ({ ok: false as const, error: "" }),
+  startPack: async () => ({ ok: false as const, error: "" }),
+  confirmPack: async () => ({ ok: false }),
+  mapBusinesses: async () => [],
+  hitBusiness: async () => {},
+  serviceBoard: async () => null,
+  serviceOffer: async () => ({ ok: false as const, error: "" }),
+  serviceRequest: async () => ({ ok: false as const, error: "" }),
+  serviceClose: async () => ({ ok: false as const, error: "" }),
+  serviceBook: async () => ({ ok: false as const, error: "" }),
+  serviceTake: async () => ({ ok: false as const, error: "" }),
+  serviceJob: async () => ({ ok: false as const, error: "" }),
 };

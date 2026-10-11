@@ -16,6 +16,7 @@ import {
   SICK_BELOW,
   type Course,
 } from "@/lib/world/living";
+import { dayPlan, EXERCISE, EXERCISES, mindWord, STRESSED_BELOW, type DayInput, type Exercise } from "@/lib/world/day";
 import type { LifeStatus } from "@/lib/world/property-api";
 import { mintLocal } from "@/lib/world/value";
 import { GAME_DAY_HOURS, skillLevel, WORK_SKILLS, type Cert } from "@/lib/world/work";
@@ -25,7 +26,7 @@ const fmt = (n: number) => n.toLocaleString("en-GB", { maximumFractionDigits: 2 
 
 type Tab = "health" | "school" | "looks";
 const TABS: { id: Tab; label: string; icon: typeof HeartPulse }[] = [
-  { id: "health", label: "Health", icon: HeartPulse },
+  { id: "health", label: "Body & Mind", icon: HeartPulse },
   { id: "school", label: "School", icon: GraduationCap },
   { id: "looks", label: "Looks", icon: Sparkles },
 ];
@@ -51,15 +52,20 @@ const OPENS: Partial<Record<Cert, string>> = {
 /** Your life: health and care, school, and treats. */
 export function LifeSheet({
   status,
+  day,
   skills,
   prices,
   busy,
+  onExercise,
   onCare,
   onEnrol,
   onProcedure,
   onClose,
 }: {
   status: LifeStatus | null;
+  /** Your day as you live it now. */
+  day: DayInput | null;
+  onExercise: (e: Exercise) => void;
   /** Game days worked in each skill. */
   skills: Record<string, number>;
   prices: Prices;
@@ -76,6 +82,8 @@ export function LifeSheet({
     return () => clearInterval(t);
   }, []);
   const health = status?.health ?? 80;
+  const mind = status?.mind ?? 70;
+  const plan = day ? dayPlan(day) : null;
   const essentials = (status?.pots.essentials ?? 0) + (status?.wallet ?? 0);
   const savings = (status?.pots.savings ?? 0) + (status?.wallet ?? 0);
   const treats = (status?.pots.fun ?? 0) + (status?.pots.savings ?? 0) + (status?.wallet ?? 0);
@@ -100,45 +108,69 @@ export function LifeSheet({
 
       {tab === "health" && (
         <div className="mt-4">
-          <div className="flex items-center gap-4 rounded-3xl bg-ink/[0.04] p-4">
-            <div className="relative grid size-20 shrink-0 place-items-center">
-              <svg viewBox="0 0 36 36" className="absolute inset-0 -rotate-90">
-                <circle cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" strokeWidth="3.5" className="text-ink/10" />
-                <circle cx="18" cy="18" r="15.5" fill="none" stroke={tone} strokeWidth="3.5" strokeLinecap="round" strokeDasharray={`${(health / 100) * 97.4} 97.4`} />
-              </svg>
-              <span className="font-display text-xl font-extrabold tabular-nums">{Math.round(health)}</span>
-            </div>
-            <div>
-              <p className="font-semibold">{healthWord(health)}</p>
-              <p className="text-xs text-muted">
-                Health drops a little every game day. Below {SICK_BELOW} you&apos;re unwell (half pay); below {BEDRIDDEN_BELOW}, no work at all. Below {AUTO_CARE_BELOW}, a public clinic
-                check-up happens by itself, paid from Essentials.
-              </p>
-            </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Meter label="Body" value={health} word={healthWord(health)} colour={tone} />
+            <Meter label="Mind" value={mind} word={mindWord(mind)} colour={mind >= 50 ? "#7048e8" : mind >= STRESSED_BELOW ? "#f08c00" : "#e03131"} />
           </div>
-          {recovering && (
-            <p className="mt-3 rounded-2xl bg-gold/15 p-3 text-xs">Recovering until {new Date(status!.recoveringUntil!).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" })}: no work till then.</p>
+          {plan && (
+            <p className="mt-2 text-center text-[11px] text-muted">
+              Living like this: body {plan.body > 0 ? "+" : ""}
+              {plan.body}, mind {plan.mind > 0 ? "+" : ""}
+              {plan.mind} a game day. Free time helps your mind; exercise helps your body; long days and debts wear you down.
+            </p>
           )}
-          <ul className="mt-3 divide-y divide-ink/5 rounded-2xl ring-1 ring-ink/5">
-            {CARE.map((c) => {
-              const price = priceOf(c.fee, prices, !c.public);
+          {recovering && (
+            <p className="mt-3 rounded-2xl bg-gold/15 p-3 text-xs">Away until {new Date(status!.recoveringUntil!).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" })}: no work till then.</p>
+          )}
+
+          <h3 className="mt-5 text-sm font-semibold">Exercise</h3>
+          <div className="mt-2 grid grid-cols-2 gap-1.5">
+            {EXERCISES.map((e) => {
+              const x = EXERCISE[e];
+              const on = (status?.exercise ?? "none") === e;
+              const fits = !day || dayPlan({ ...day, exercise: e }).fits;
               return (
-                <li key={c.id} className="flex items-center gap-3 px-3 py-2.5">
-                  <Stethoscope className="size-4 shrink-0 text-muted" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium">{c.title}</p>
-                    <p className="text-xs text-muted">
-                      {c.health >= 100 ? "Back to full health" : `+${c.health} health`} · {c.what}
-                    </p>
-                  </div>
-                  <Price total={price.total} prices={prices} vat={price.tax > 0} />
-                  <button disabled={busy || essentials < price.total || health >= 99} onClick={() => onCare(c.id)} className="h-8 shrink-0 rounded-full bg-ink px-3 text-xs font-semibold text-white disabled:opacity-40">
-                    Go
-                  </button>
-                </li>
+                <button
+                  key={e}
+                  disabled={busy || on || !fits}
+                  onClick={() => onExercise(e)}
+                  className={`rounded-2xl p-2.5 text-left text-xs ${on ? "bg-ink text-white" : "bg-ink/5 disabled:opacity-40"}`}
+                >
+                  <span className="block font-semibold">{x.label}</span>
+                  <span className={`block ${on ? "opacity-70" : "text-muted"}`}>{fits ? x.what : "Won't fit in your day"}</span>
+                </button>
               );
             })}
-          </ul>
+          </div>
+
+          {(["body", "mind"] as const).map((meter) => (
+            <section key={meter} className="mt-5">
+              <h3 className="text-sm font-semibold">{meter === "body" ? "Care for your body" : "Care for your mind"}</h3>
+              {meter === "body" && <p className="text-[11px] text-muted">Below {AUTO_CARE_BELOW}, a public clinic check-up happens by itself. Below {SICK_BELOW}: half pay; below {BEDRIDDEN_BELOW}: no work.</p>}
+              {meter === "mind" && <p className="text-[11px] text-muted">Below {STRESSED_BELOW}, interviews are harder; below 10 you burn out and can&apos;t work.</p>}
+              <ul className="mt-2 divide-y divide-ink/5 rounded-2xl ring-1 ring-ink/5">
+                {CARE.filter((c) => c.meter === meter).map((c) => {
+                  const price = priceOf(c.fee, prices, !c.public);
+                  const can = c.away ? treats : essentials;
+                  return (
+                    <li key={c.id} className="flex items-center gap-3 px-3 py-2.5">
+                      <Stethoscope className="size-4 shrink-0 text-muted" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium">{c.title}</p>
+                        <p className="text-xs text-muted">
+                          {[c.health >= 100 ? "Body back to full" : c.health ? `+${c.health} body` : "", c.mind ? `+${c.mind} mind` : "", c.away ? `${c.away} game days off` : ""].filter(Boolean).join(" · ")} · {c.what}
+                        </p>
+                      </div>
+                      <Price total={price.total} prices={prices} vat={price.tax > 0} />
+                      <button disabled={busy || can < price.total || (c.away ? recovering : false)} onClick={() => onCare(c.id)} className="h-8 shrink-0 rounded-full bg-ink px-3 text-xs font-semibold text-white disabled:opacity-40">
+                        Go
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ))}
         </div>
       )}
 
@@ -204,6 +236,24 @@ export function LifeSheet({
         </div>
       )}
     </Sheet>
+  );
+}
+
+function Meter({ label, value, word, colour }: { label: string; value: number; word: string; colour: string }) {
+  return (
+    <div className="flex items-center gap-3 rounded-3xl bg-ink/[0.04] p-3">
+      <div className="relative grid size-14 shrink-0 place-items-center">
+        <svg viewBox="0 0 36 36" className="absolute inset-0 -rotate-90">
+          <circle cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" strokeWidth="3.5" className="text-ink/10" />
+          <circle cx="18" cy="18" r="15.5" fill="none" stroke={colour} strokeWidth="3.5" strokeLinecap="round" strokeDasharray={`${(value / 100) * 97.4} 97.4`} />
+        </svg>
+        <span className="font-display text-base font-extrabold tabular-nums">{Math.round(value)}</span>
+      </div>
+      <div className="min-w-0">
+        <p className="text-xs text-muted">{label}</p>
+        <p className="text-sm font-semibold leading-tight">{word}</p>
+      </div>
+    </div>
   );
 }
 

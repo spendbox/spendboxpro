@@ -35,6 +35,7 @@ import { BUILDING_LABEL, type Building } from "@/lib/world/buildings";
 import { shortMint, toMint, valueOf } from "@/lib/world/value";
 import { propertyInfo, type PropertyInfo } from "@/lib/world/property";
 import { workplaceOfTile, type Workplace } from "@/lib/world/workplace";
+import type { MapBusiness } from "@/lib/world/business";
 import type { OwnedProperty } from "@/lib/world/owned";
 import { daylight, weatherAt } from "@/lib/city/sky";
 import { npcsFor, type Npc } from "@/lib/npcs";
@@ -214,6 +215,10 @@ type Props = {
   onArea?: (name: string | null) => void;
   /** A real place: a property was tapped (instead of going inside): what it is and what it's worth. */
   onProperty?: (info: PropertyInfo) => void;
+  /** A real place: businesses that lease buildings (they glow, with their logo over them). */
+  businesses?: MapBusiness[];
+  /** A business's building (or its logo) was tapped. */
+  onBusiness?: (b: MapBusiness) => void;
   /** A real place: a landmark where people work was tapped (a market, the airport...): its jobs. */
   onWorkplace?: (place: Workplace) => void;
   /** A real place's owned properties: they stand as bought, with their owners' names (src/lib/world/owned). */
@@ -1295,6 +1300,8 @@ export function CityView({
   onArea,
   onProperty,
   onWorkplace,
+  businesses,
+  onBusiness,
   owned,
   meAvatar,
   coinBalloon,
@@ -1341,6 +1348,7 @@ export function CityView({
   const api = useRef<{
     build: (seed: number, count: number, region?: string | null) => void;
     setOwned: (list: OwnedProperty[] | undefined) => void;
+    setBusinesses: (list: MapBusiness[]) => void;
     setMarkers: (m: CityMarkers) => void;
     playEvents: (e: CityEvent[]) => void;
     setBalloon: (slot: number | null) => void;
@@ -1365,10 +1373,10 @@ export function CityView({
     /** Zoom in (dir 1) or out (dir -1) a step: the + and − buttons on a computer. */
     zoom: (dir: number) => void;
   } | null>(null);
-  const cb = useRef({ onHover, onArea, onProperty, onWorkplace, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused });
+  const cb = useRef({ onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused });
   const atmos = useRef({ progress, nightFirst, meAvatar });
   useEffect(() => {
-    cb.current = { onHover, onArea, onProperty, onWorkplace, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused };
+    cb.current = { onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused };
     atmos.current = { progress, nightFirst, meAvatar };
   });
 
@@ -3844,6 +3852,11 @@ export function CityView({
         cb.current.onWorkplace!(place);
         return true;
       }
+      const biz = businessByBuilding.get(anchor.building.id);
+      if (biz && cb.current.onBusiness) {
+        cb.current.onBusiness(biz);
+        return true;
+      }
       if (!cb.current.onProperty) return false;
       const info = propertyInfo(anchor.building, anchor.x, anchor.z, shortAddress(addressOf(currentPlan, anchor)), region);
       cb.current.onProperty({ ...info, workplace: workplaceOfTile(currentPlan, anchor) });
@@ -4135,6 +4148,101 @@ export function CityView({
         const x = ((ghostAt.x + 1) / 2) * w;
         const y = ((1 - ghostAt.y) / 2) * h - 8;
         g.root.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`;
+      }
+    }
+    // ---- businesses: a building a real business leases glows (a soft ring of light; brighter
+    // with a bright sign) with its logo and name over it (a page element, easy to tap).
+    type BizLight = { b: MapBusiness; tile: number; ring: THREE.Mesh; beam: THREE.Mesh; root: HTMLButtonElement; shown: boolean };
+    let bizLights: BizLight[] = [];
+    const businessByBuilding = new Map<string, MapBusiness>();
+    let bizKey = "";
+    const bizGroup = new THREE.Group();
+    scene.add(bizGroup);
+    const bizLayer = document.createElement("div");
+    bizLayer.style.cssText = "position:absolute;inset:0;z-index:2;pointer-events:none;overflow:hidden;contain:strict;";
+    el.appendChild(bizLayer);
+    const bizAt = new THREE.Vector3();
+    function setBusinesses(list: MapBusiness[]) {
+      const key = list.map((b) => `${b.id}|${b.building}|${b.name}|${b.logo}|${b.glow}`).join(";");
+      if (key === bizKey) return;
+      bizKey = key;
+      for (const l of bizLights) {
+        l.root.remove();
+        bizGroup.remove(l.ring, l.beam);
+        (l.ring.material as THREE.Material).dispose();
+        (l.beam.material as THREE.Material).dispose();
+      }
+      bizLights = [];
+      businessByBuilding.clear();
+      for (const b of list) {
+        const m = /:(-?\d+),(-?\d+)$/.exec(b.building);
+        if (!m) continue;
+        businessByBuilding.set(b.building, b);
+        const tile = spiralIndex(Number(m[1]), Number(m[2]));
+        const bright = b.glow >= 2;
+        const ring = new THREE.Mesh(markerGeo.ring, new THREE.MeshBasicMaterial({ color: 0xffd43b, transparent: true, opacity: bright ? 0.95 : 0.7, depthWrite: false, blending: THREE.AdditiveBlending }));
+        const beam = new THREE.Mesh(
+          markerGeo.beam,
+          new THREE.MeshBasicMaterial({ color: 0xffe066, transparent: true, opacity: bright ? 0.3 : 0.14, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }),
+        );
+        ring.renderOrder = 4;
+        beam.renderOrder = 4;
+        bizGroup.add(ring, beam);
+        const root = document.createElement("button");
+        root.type = "button";
+        root.setAttribute("aria-label", `${b.name}: ${b.category}`);
+        root.style.cssText =
+          "position:absolute;left:0;top:0;display:flex;align-items:center;gap:6px;will-change:transform;visibility:hidden;pointer-events:auto;cursor:pointer;" +
+          `padding:3px 10px 3px 3px;border-radius:999px;background:#fff;border:2px solid #f5c400;box-shadow:0 0 ${bright ? 18 : 10}px ${bright ? 6 : 3}px #ffd43b99,0 2px 6px rgba(0,0,0,.2);`;
+        const size = bright ? 34 : 26;
+        const badge = document.createElement(b.logo ? "img" : "div");
+        if (b.logo) {
+          (badge as HTMLImageElement).src = b.logo;
+          (badge as HTMLImageElement).alt = "";
+        } else badge.textContent = b.name.slice(0, 1).toUpperCase();
+        badge.style.cssText = `width:${size}px;height:${size}px;border-radius:999px;object-fit:contain;background:#fff8db;display:grid;place-items:center;font:800 13px system-ui,sans-serif;color:#7c5a00;`;
+        const name = document.createElement("span");
+        name.textContent = b.name;
+        name.style.cssText = `max-width:${bright ? 150 : 110}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:700 ${bright ? 12 : 11}px/16px system-ui,sans-serif;color:#1a1a1a;`;
+        root.append(badge, name);
+        root.addEventListener("click", (e) => {
+          e.stopPropagation();
+          cb.current.onBusiness?.(b);
+        });
+        root.addEventListener("pointerdown", (e) => e.stopPropagation());
+        bizLayer.appendChild(root);
+        bizLights.push({ b, tile, ring, beam, root, shown: false });
+      }
+    }
+    function updateBusinesses(time: number) {
+      bizGroup.visible = bizLights.length > 0 && !!regionNow;
+      const on = bizGroup.visible && isRevealed && !immersive();
+      bizLayer.style.display = on ? "" : "none";
+      if (!bizGroup.visible) return;
+      const w = el.clientWidth || 1;
+      const h = el.clientHeight || 1;
+      const far = camera.position.y > 60;
+      for (const l of bizLights) {
+        const p = posOf(l.tile);
+        const top = topOf(l.tile);
+        const k = 0.8 + 0.2 * Math.sin(time * 1.5 + l.tile);
+        l.ring.position.set(p.x, top + 0.12, p.z);
+        l.ring.scale.setScalar((l.b.glow >= 2 ? 1.5 : 1.15) * k);
+        l.beam.position.set(p.x, 0, p.z);
+        l.beam.scale.set(0.9, top + (l.b.glow >= 2 ? 4 : 1.5), 0.9);
+        if (!on) continue;
+        bizAt.set(p.x, top + 0.45, p.z);
+        bizAt.project(camera);
+        // Logos show when you're close enough to read them (bright signs from further out).
+        const show = (!far || l.b.glow >= 2) && bizAt.z < 1 && Math.abs(bizAt.x) < 1.05 && Math.abs(bizAt.y) < 1.05;
+        if (show !== l.shown) {
+          l.shown = show;
+          l.root.style.visibility = show ? "visible" : "hidden";
+        }
+        if (!show) continue;
+        const x = ((bizAt.x + 1) / 2) * w;
+        const y = ((1 - bizAt.y) / 2) * h - 6;
+        l.root.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`;
       }
     }
     const flyToTile = (tile: number) => {
@@ -6088,6 +6196,7 @@ export function CityView({
       kites.update(time, world.night);
       updatePins();
       updateGhosts(time);
+      updateBusinesses(time);
       const dist = riding ? 10 : camera.position.distanceTo(controls.target);
       const fog = scene.fog as THREE.Fog;
       fog.near = (dist + radius * 0.8) * (1 - fogFactor * 0.45);
@@ -6198,7 +6307,7 @@ export function CityView({
       ownedNow = next;
       if (regionNow && currentSeed >= 0 && builtCount > 0) build(currentSeed, builtCount);
     }
-    api.current = { build: buildFor, setOwned, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, zoom };
+    api.current = { build: buildFor, setOwned, setBusinesses, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, zoom };
 
     return () => {
       alive = false;
@@ -6350,6 +6459,9 @@ export function CityView({
   useEffect(() => {
     if (flyTo) api.current?.flyToTile(flyTo.tile);
   }, [flyTo]);
+  useEffect(() => {
+    api.current?.setBusinesses(businesses ?? []);
+  }, [businesses]);
 
   const friendsKey = (friendsAt ?? []).map((f) => `${f.id}@${f.room}|${f.name}|${JSON.stringify(f.avatar)}`).join(";");
   const friendsRef = useRef(friendsAt);

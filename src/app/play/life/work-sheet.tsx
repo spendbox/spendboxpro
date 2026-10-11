@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Briefcase, Coins, MapPin } from "@/components/icons";
 import type { CityPlan } from "@/lib/city/layout";
 import type { RegionMap } from "@/lib/world/compile";
-import type { WorkStatus } from "@/lib/world/property-api";
+import { dayPlan, type DayInput } from "@/lib/world/day";
+import type { LifeStatus, WorkStatus } from "@/lib/world/property-api";
 import { mintLocal } from "@/lib/world/value";
 import {
   COMMUTE_LABEL,
@@ -13,6 +14,7 @@ import {
   fareMint,
   fareOrBus,
   INCOME_TAX,
+  needsInterview,
   payDay,
   settle,
   skillLevel,
@@ -23,6 +25,7 @@ import {
 } from "@/lib/world/work";
 import { workplacesNear } from "@/lib/world/workplace";
 import { Sheet } from "../sheet";
+import { DayBar, HustleSection } from "./day-ui";
 import { tripLine, type JobsContext } from "./jobs-here";
 
 const fmt = (n: number) => n.toLocaleString("en-GB", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
@@ -30,9 +33,13 @@ const fmt = (n: number) => n.toLocaleString("en-GB", { minimumFractionDigits: 0,
 /** Your job: pay waiting, how you get there and what it costs, your skills; or the best jobs near home. */
 export function WorkSheet({
   status,
+  life,
+  day,
   region,
   plan,
   ctx,
+  onStartHustle,
+  onStopHustle,
   onCollect,
   onMode,
   onQuit,
@@ -40,10 +47,16 @@ export function WorkSheet({
   onClose,
 }: {
   status: WorkStatus | null;
+  /** Your life now (side hustle, body and mind). */
+  life: LifeStatus | null;
+  /** Your day as you live it now. */
+  day: DayInput;
   region: RegionMap;
   /** The map's plan (for finding jobs near your home). */
   plan: CityPlan | null;
   ctx: JobsContext;
+  onStartHustle: (id: string) => void;
+  onStopHustle: () => void;
   onCollect: () => void;
   /** Switch how you get to work (the game asks you to confirm first); `perDay` is what it would cost a game day. */
   onMode: (mode: Commute, perDay: number) => void;
@@ -63,6 +76,8 @@ export function WorkSheet({
 
   const km = job && ctx.homeUnit ? tripKmBetween(ctx.homeUnit, job.place) : null;
   const fare = job && km !== null ? fareOrBus(job.mode, km, prices) : 0;
+  const hustle = life?.hustle ?? null;
+  const hustleWaiting = hustle ? hustle.payDay * Math.min(7, Math.max(0, (now - Date.parse(hustle.paidUntil)) / 7_200_000)) : 0;
   const waiting = job ? settle({ payDay: job.payDay, paidUntil: Date.parse(job.paidUntil) }, now, skills[job.skill] ?? 0, fare) : null;
 
   const best = useMemo(() => {
@@ -92,6 +107,12 @@ export function WorkSheet({
       }
     >
 
+      <DayBar plan={dayPlan(day)} />
+      {!job && hustleWaiting >= 0.01 && (
+        <button disabled={ctx.busy} onClick={onCollect} className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-full bg-gold text-sm font-semibold text-ink disabled:opacity-50">
+          <Coins className="size-4" /> Collect about ₥{fmt(hustleWaiting * 0.93)} from your hustle
+        </button>
+      )}
       {job ? (
         <>
           <div className="mt-3 rounded-2xl bg-ink/[0.04] p-3.5">
@@ -111,11 +132,12 @@ export function WorkSheet({
                     : `Waiting: ${fmt(waiting.days)} game ${waiting.days === 1 ? "day" : "days"} · ₥${fmt(waiting.gross)} pay − ₥${fmt(waiting.tax)} tax − ₥${fmt(waiting.fares)} fares`}
                 </p>
                 <button
-                  disabled={ctx.busy || waiting.gross < 0.01}
+                  disabled={ctx.busy || waiting.gross + hustleWaiting < 0.01}
                   onClick={onCollect}
                   className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-full bg-gold font-semibold text-ink disabled:opacity-50"
                 >
                   <Coins className="size-4" /> Collect ₥{fmt(waiting.net)}
+                  {hustleWaiting >= 0.01 ? ` + about ₥${fmt(hustleWaiting * 0.93)} from your hustle` : ""}
                 </button>
                 {waiting.days >= 6 && <p className="mt-1 text-center text-[11px] text-hit">Pay only waits a game week: collect it soon.</p>}
               </div>
@@ -187,13 +209,26 @@ export function WorkSheet({
                     <p className="text-[11px] text-muted">{COMMUTE_LABEL[trip.mode].toLowerCase()}</p>
                   </div>
                   <button disabled={ctx.busy} onClick={() => ctx.onTake(place, j, trip.mode)} className="h-8 shrink-0 rounded-full bg-ink px-3 text-xs font-semibold text-white disabled:opacity-40">
-                    Take
+                    {needsInterview(j) ? "Interview" : "Take"}
                   </button>
                 </li>
               ))}
             </ul>
           )}
         </>
+      )}
+
+      {ctx.homeUnit && (
+        <HustleSection
+          status={life}
+          day={{ ...day, hustleHours: 0 }}
+          skills={skills}
+          prices={prices}
+          busy={ctx.busy}
+          now={now}
+          onStart={onStartHustle}
+          onStop={onStopHustle}
+        />
       )}
 
       {Object.keys(skills).length > 0 && (

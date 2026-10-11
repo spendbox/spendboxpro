@@ -1,12 +1,37 @@
 "use client";
 
-import { House, Search } from "@/components/icons";
+import { House, Search, Sparkles } from "@/components/icons";
+import { PACKS } from "@/lib/world/packs";
 import type { Prices } from "@/lib/world/region";
 import { mintLocal } from "@/lib/world/value";
 import { Sheet } from "../sheet";
 
 /** The first thing on a real map: your starting budget, and why a home comes first. */
-export function StartLife({ place, budget, prices, started, busy, onStart, onClose }: { place: string; budget: number; prices: Prices; started: boolean; busy: boolean; onStart: () => void; onClose: () => void }) {
+export function StartLife({
+  place,
+  budget,
+  prices,
+  started,
+  busy,
+  granted,
+  pretend,
+  onStart,
+  onPack,
+  onClose,
+}: {
+  place: string;
+  budget: number;
+  prices: Prices;
+  started: boolean;
+  busy: boolean;
+  /** What your life started with so far (packs only top up to more). */
+  granted: number;
+  /** The world lab: packs are pretend, nothing is paid. */
+  pretend?: boolean;
+  onStart: () => void;
+  onPack: (id: string) => void;
+  onClose: () => void;
+}) {
   const local = `about ${mintLocal(budget, prices)}`;
   return (
     <Sheet onClose={onClose}>
@@ -35,6 +60,32 @@ export function StartLife({ place, budget, prices, started, busy, onStart, onClo
           Your home earns no rent, but you live free and it grows in value.
         </li>
       </ul>
+      {/* One pack per account: once you've started bigger than free, they're gone. */}
+      {granted <= PACKS[0].mint && (
+        <div className="mt-4">
+          <p className="flex items-center gap-1.5 text-sm font-semibold">
+            <Sparkles className="size-4 text-gold-dark" /> Or start bigger, once
+          </p>
+          <div className="mt-2 grid grid-cols-3 gap-1.5">
+            {PACKS.filter((p) => p.naira > 0).map((p) => (
+              <button
+                key={p.id}
+                disabled={busy || p.mint <= granted}
+                onClick={() => onPack(p.id)}
+                className="rounded-2xl bg-ink/[0.04] px-2 py-3 text-center ring-1 ring-ink/5 hover:bg-gold/15 disabled:opacity-40"
+              >
+                <span className="block text-[11px] font-semibold uppercase tracking-wide text-gold-dark">{p.label}</span>
+                <span className="block font-display text-base font-extrabold tabular-nums">₥{(p.mint / 1000).toLocaleString("en-GB")}k</span>
+                <span className="block text-xs font-semibold">₦{p.naira.toLocaleString("en-GB")}</span>
+                <span className="mt-1 block text-[10px] leading-tight text-muted">{p.what}</span>
+              </button>
+            ))}
+          </div>
+          <p className="mt-1.5 text-[11px] text-muted">
+            {pretend ? "In this test page packs are pretend: nothing is paid." : "Paid once through Paystack. Mint can't be turned back into cash."}
+          </p>
+        </div>
+      )}
       <button
         onClick={started ? onClose : onStart}
         disabled={busy}

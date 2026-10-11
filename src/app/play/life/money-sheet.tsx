@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Landmark, PiggyBank, Trash2, Zap } from "@/components/icons";
 import type { RegionMap } from "@/lib/world/compile";
+import { TIME_KIND } from "@/lib/world/day";
 import { BUDGET_PRESETS, groupOf, MONEY_GROUP, POT_INFO, POTS, type Budget, type MoneyGroup, type Pot } from "@/lib/world/living";
 import type { OwnedProperty } from "@/lib/world/owned";
 import type { AssetsData, AssetUnit, LifeStatus, MoneyFlow } from "@/lib/world/property-api";
@@ -13,9 +14,10 @@ import { AssetsBody, unitValueNow } from "./assets-sheet";
 const fmt = (n: number) => Math.round(n).toLocaleString("en-GB");
 const fmt2 = (n: number) => n.toLocaleString("en-GB", { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 });
 
-type Tab = "overview" | "budget" | "spending" | "property";
+type Tab = "overview" | "income" | "budget" | "spending" | "property";
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
+  { id: "income", label: "Income" },
   { id: "budget", label: "Budget" },
   { id: "spending", label: "Spending" },
   { id: "property", label: "Property" },
@@ -29,6 +31,7 @@ export function MoneySheet({
   region,
   busy,
   loadMoney,
+  loadTime,
   onBudget,
   onMove,
   onCollect,
@@ -41,6 +44,7 @@ export function MoneySheet({
   region: RegionMap;
   busy: boolean;
   loadMoney: (hours: number) => Promise<MoneyFlow>;
+  loadTime: (hours: number) => Promise<Record<string, number>>;
   onBudget: (b: Budget) => void;
   onMove: (from: Pot | "wallet", to: Pot | "wallet", amount: number) => void;
   onCollect: () => void;
@@ -70,6 +74,7 @@ export function MoneySheet({
         {tab === "overview" && (
           <Overview status={status} wallet={wallet} pots={pots} property={property} worth={worth} prices={prices} busy={busy} onMove={onMove} onTab={setTab} />
         )}
+        {tab === "income" && <IncomeTab loadMoney={loadMoney} loadTime={loadTime} assets={assets} prices={prices} />}
         {tab === "budget" && status && <BudgetTab budget={status.budget} busy={busy} onSave={onBudget} />}
         {tab === "spending" && <Spending load={loadMoney} prices={prices} />}
         {tab === "property" && <AssetsBody assets={assets} owned={owned} region={region} busy={busy} onCollect={onCollect} onShow={onShow} />}
@@ -401,6 +406,113 @@ function Bars({ title, rows, biggest }: { title: string; rows: [MoneyGroup, numb
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/** Where your income comes from (job, side hustle, rent, bonuses), each property's rent, and where your time goes. */
+function IncomeTab({
+  loadMoney,
+  loadTime,
+  assets,
+  prices,
+}: {
+  loadMoney: (hours: number) => Promise<MoneyFlow>;
+  loadTime: (hours: number) => Promise<Record<string, number>>;
+  assets: AssetsData;
+  prices: RegionMap["region"]["prices"];
+}) {
+  const [hours, setHours] = useState(24);
+  const [got, setGot] = useState<{ hours: number; money: MoneyFlow; time: Record<string, number> } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void Promise.all([loadMoney(hours), loadTime(hours)]).then(([money, time]) => alive && setGot({ hours, money, time }));
+    return () => {
+      alive = false;
+    };
+  }, [loadMoney, loadTime, hours]);
+  const m = got?.money ?? {};
+  const sources = [
+    { label: "Main job", value: (m.work_pay ?? 0) + (m.public_pay ?? 0), colour: "#2f9e44" },
+    { label: "Side hustle", value: m.hustle_pay ?? 0, colour: "#d6336c" },
+    { label: "Rent", value: m.rent ?? 0, colour: "#37b24d" },
+    { label: "Breakthrough bonuses", value: m.bonus ?? 0, colour: "#f59f00" },
+  ];
+  const total = sources.reduce((t, x) => t + x.value, 0);
+  const time = Object.entries(got?.time ?? {}).sort((a, b) => b[1] - a[1]);
+  const timeTotal = Math.max(1e-9, ...time.map(([, h]) => h));
+  const let_ = assets.units.filter((u) => u.let);
+  const loading = !got || got.hours !== hours;
+  return (
+    <div>
+      <div className="flex gap-1.5">
+        {PERIODS.map((p) => (
+          <button key={p.hours} onClick={() => setHours(p.hours)} className={`h-8 flex-1 rounded-full text-xs font-semibold ${hours === p.hours ? "bg-ink text-white" : "bg-ink/5"}`}>
+            {p.label}
+          </button>
+        ))}
+      </div>
+      {loading ? (
+        <p className="mt-6 text-center text-sm text-muted">Adding it up…</p>
+      ) : (
+        <>
+          <div className="mt-4 rounded-3xl bg-me/10 p-4">
+            <p className="text-sm text-muted">Earned (before tax)</p>
+            <p className="font-display text-3xl font-extrabold tabular-nums">₥{fmt2(total)}</p>
+            <p className="text-sm text-muted">about {mintLocal(total, prices)}</p>
+          </div>
+          <ul className="mt-3 space-y-2">
+            {sources.map((x) => (
+              <li key={x.label} className="text-sm">
+                <div className="flex justify-between">
+                  <span>{x.label}</span>
+                  <span className="font-semibold tabular-nums">₥{fmt2(x.value)}</span>
+                </div>
+                <div className="mt-1 h-2 overflow-hidden rounded-full bg-ink/5">
+                  <div className="h-full rounded-full" style={{ width: `${total > 0 ? Math.max(x.value > 0 ? 2 : 0, (x.value / total) * 100) : 0}%`, background: x.colour }} />
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          {let_.length > 0 && (
+            <>
+              <p className="mt-5 text-sm font-semibold">What each property earns</p>
+              <ul className="mt-2 divide-y divide-ink/5 rounded-2xl ring-1 ring-ink/5">
+                {let_.map((u) => (
+                  <li key={u.unit} className="flex justify-between px-3 py-2 text-sm">
+                    <span className="truncate">
+                      {u.label}
+                      {u.name ? `, ${u.name}` : ""}
+                    </span>
+                    <span className="shrink-0 font-semibold tabular-nums">₥{fmt2(u.rentDay)}/day</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          <p className="mt-5 text-sm font-semibold">Where your time went</p>
+          {time.length === 0 ? (
+            <p className="mt-1 text-xs text-muted">Nothing yet in this time.</p>
+          ) : (
+            <ul className="mt-2 space-y-2">
+              {time.map(([kind, h]) => (
+                <li key={kind} className="text-sm">
+                  <div className="flex justify-between">
+                    <span>{TIME_KIND[kind]?.label ?? kind}</span>
+                    <span className="font-semibold tabular-nums">{fmt2(h)} h</span>
+                  </div>
+                  <div className="mt-1 h-2 overflow-hidden rounded-full bg-ink/5">
+                    <div className="h-full rounded-full" style={{ width: `${(h / timeTotal) * 100}%`, background: TIME_KIND[kind]?.colour ?? "#868e96" }} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-2 text-[11px] text-muted">Game hours: a game day is 2 real hours.</p>
+        </>
+      )}
     </div>
   );
 }
