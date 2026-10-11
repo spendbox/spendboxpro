@@ -14,6 +14,7 @@ import type { BuildingOwner, InterviewStart, LifeStatus, Neighbour, PaySettled, 
 import { cheapestCommute, COMMUTE_LABEL, dayNet, fareMint, needsInterview, payDay, tripKmBetween, tripWords, type Commute } from "@/lib/world/work";
 import { ferryKmBetween } from "@/lib/world/trips";
 import { dayOf, EXERCISE } from "@/lib/world/day";
+import { HUSTLES, hustleDay, hustleStart } from "@/lib/world/hustles";
 import type { Workplace } from "@/lib/world/workplace";
 import { PropertyCard } from "../property-card";
 import { Sheet } from "../sheet";
@@ -421,7 +422,7 @@ export function useWorldLife({
             // One main job at a time: say so before swapping.
             setConfirm({
               title: now ? "Switch jobs?" : "Work at a loss?",
-              text: [now ? `You're a ${now.title} at ${now.placeName}. You can have one main job, so becoming a ${job.title} means leaving it. The pay you've earned there is collected first.` : "", loss]
+              text: [now ? `Your job as ${now.title} at ${now.placeName} ends, and the pay you've earned there goes into your wallet now.` : "", loss]
                 .filter(Boolean)
                 .join(" "),
               yes: now ? `Switch to ${job.title}` : "Take it anyway",
@@ -434,7 +435,7 @@ export function useWorldLife({
   const day = dayOf({
     homeUnit,
     job: work?.job ? { place: work.job.place, mode: work.job.mode as Commute } : null,
-    hustleHours: status?.hustle?.hours ?? 0,
+    hustleHours: (status?.hustles ?? (status?.hustle ? [status.hustle] : [])).reduce((t, h) => t + h.hours, 0),
     course: status?.courses.find((c) => !c.done)?.course ?? null,
     exercise: status?.exercise ?? "none",
   });
@@ -638,23 +639,29 @@ export function useWorldLife({
           life={status}
           day={day}
           onStartHustle={(id) => {
-            const run = () => act(() => api.startHustle(id), () => "Your side hustle has started. It earns by the game day.");
-            if (!status?.hustle) return void run();
-            setConfirm({ title: "Change side hustle?", text: `You can have one side hustle. Starting this one stops ${status.hustle.title} (what it made is collected first).`, yes: "Change", run });
+            // Say what it costs before it's spent.
+            const h = HUSTLES.find((x) => x.id === id);
+            if (!h) return;
+            const cost = hustleStart(h, region.region.prices);
+            setConfirm({
+              title: `Start ${h.title.toLowerCase()}?`,
+              text: `It costs ${cash(cost)} to start (${h.what.toLowerCase()}), paid once from your Savings, and takes ${h.hours} hours a game day. It earns about ${cash(hustleDay(h, region.region.prices, work?.skills[h.skill] ?? 0))} a game day, paid into your wallet every game week. Your other side hustles carry on.`,
+              yes: `Start for ${cash(cost)}`,
+              run: () => act(() => api.startHustle(id), () => `${h.title} has started. It earns by the game day.`),
+            });
           }}
-          onStopHustle={() =>
-            setConfirm({ title: "Stop your side hustle?", text: "What it made so far is collected first. Its start-up cost doesn't come back.", yes: "Stop it", run: () => act(() => api.stopHustle(), () => "Side hustle stopped.") })
-          }
+          onStopHustle={(id) => {
+            const h = (status?.hustles ?? (status?.hustle ? [status.hustle] : [])).find((x) => x.hustle === id);
+            setConfirm({
+              title: `Stop ${h ? h.title.toLowerCase() : "this side hustle"}?`,
+              text: "What it made so far goes into your wallet now. Its start-up cost doesn't come back.",
+              yes: "Stop it",
+              run: () => act(() => api.stopHustle(id), () => `${h?.title ?? "Side hustle"} stopped.`),
+            });
+          }}
           region={region}
           plan={plan}
           ctx={jobs}
-          onCollect={() =>
-            act(
-              () => api.collectPay(),
-              (r) =>
-                `+${cash((r.pay?.net ?? 0) + (r.pay?.hustle?.net ?? 0))} after tax and fares${r.pay?.hustle?.gross ? ` (${cash(r.pay.hustle.net)} from your side hustle)` : ""}.`,
-            )
-          }
           onMode={(mode, perDay) =>
             setConfirm({
               title: mode === "walk" ? "Walk to work from now on?" : `Go by ${COMMUTE_LABEL[mode].toLowerCase()} from now on?`,
@@ -670,7 +677,7 @@ export function useWorldLife({
           onQuit={() =>
             setConfirm({
               title: `Leave your job${work?.job ? ` as ${work.job.title}` : ""}?`,
-              text: "Your pay so far is collected first. You can look for another job any time.",
+              text: "Your pay so far goes into your wallet now. You can look for another job any time.",
               yes: "Leave job",
               run: () => void act(() => api.quitJob(), (r) => `You've left your job.${paid(r.pay)}`),
             })
@@ -912,22 +919,23 @@ export function useWorldLife({
       )}
       {confirm && (
         <div className="fixed inset-0 z-[60] grid place-items-center bg-ink/40 p-4" onClick={() => setConfirm(null)}>
-          <div className="w-full max-w-xs rounded-3xl bg-panel p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-sm rounded-3xl bg-panel p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="font-display text-lg font-extrabold">{confirm.title}</h3>
             <p className="mt-2 text-sm text-muted">{confirm.text}</p>
-            <div className="mt-4 flex gap-2">
-              <button onClick={() => setConfirm(null)} className="h-10 flex-1 rounded-full bg-ink/5 text-sm font-semibold">
-                Not now
-              </button>
+            {/* The main button first and full width (its words can be long), "Not now" under it. */}
+            <div className="mt-4 flex flex-col gap-2">
               <button
                 onClick={() => {
                   const run = confirm.run;
                   setConfirm(null);
                   run();
                 }}
-                className="h-10 flex-1 rounded-full bg-ink px-3 text-sm font-semibold text-white"
+                className="min-h-11 w-full rounded-full bg-ink px-4 py-2.5 text-center text-sm font-semibold leading-snug text-white"
               >
                 {confirm.yes}
+              </button>
+              <button onClick={() => setConfirm(null)} className="min-h-11 w-full rounded-full bg-ink/5 px-4 text-sm font-semibold">
+                Not now
               </button>
             </div>
           </div>

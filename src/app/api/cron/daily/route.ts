@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sendAdReports } from "@/lib/ad-emails";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { tickLife } from "@/app/play/life-tick";
 
 // Vercel runs this once a day (see vercel.json): tops broke players up to the floor,
 // deletes chats (and voice notes) from finished maps, and nudges the round clock in
@@ -33,6 +34,18 @@ export async function GET(request: Request) {
     const { count } = await db.from("chat_messages").delete({ count: "exact" }).in("round_id", batch);
     removed += count ?? 0;
   }
+  // Pay day for players who haven't been in: a game week or more of pay from their job and side
+  // hustles goes into their wallets (tickLife pays it; game-db/049_reports_and_work.sql).
+  let paid = 0;
+  try {
+    const { data: due } = await db.rpc("life_pay_due", { p_limit: 500 });
+    for (const id of (due ?? []) as string[]) {
+      await tickLife(id);
+      paid++;
+    }
+  } catch (e) {
+    console.error("Weekly pay run failed", e);
+  }
   // Advertisers' and sponsors' daily report emails (never allowed to break this job).
   let ads: unknown = null;
   try {
@@ -40,5 +53,5 @@ export async function GET(request: Request) {
   } catch (e) {
     console.error("Ad reports failed", e);
   }
-  return NextResponse.json({ ok: true, tick: tick.data, upkeep: upkeep.data, chatRemoved: removed, ads });
+  return NextResponse.json({ ok: true, tick: tick.data, upkeep: upkeep.data, chatRemoved: removed, ads, paid });
 }

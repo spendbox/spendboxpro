@@ -21,7 +21,9 @@ function say(message: string | undefined): PropertyResult {
     no_life: "Start your life first.",
     home_first: "Buy a home first.",
     not_enough: `You need ₥${arg} to start that.`,
-    already: "That's already your side hustle.",
+    already: "That's already one of your side hustles.",
+    too_many: `You can run ${arg ?? 3} side hustles at once. Stop one first.`,
+    no_hustle: "You don't run that side hustle.",
     bad_item: "That isn't on offer.",
   };
   if (words[code]) return { ok: false, error: words[code] };
@@ -34,7 +36,7 @@ async function region(userId: string) {
   return data ? regionMap(data.region as string) : null;
 }
 
-/** Start a side hustle (the one you had stops). */
+/** Start a side hustle beside the ones you run (up to 3; game-db/049_reports_and_work.sql). */
 export async function startHustle(id: string): Promise<PropertyResult> {
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Please sign in again." };
@@ -46,7 +48,9 @@ export async function startHustle(id: string): Promise<PropertyResult> {
   const db = createAdminClient();
   const { data: skill } = await db.from("life_skills").select("days").eq("user_id", userId).eq("skill", h.skill).maybeSingle();
   if (h.level && skillLevel(n(skill?.days)) < h.level) return { ok: false, error: `You need ${h.skill} level ${h.level} for that.` };
-  if (!(await dayFits(userId, { hustleHours: h.hours })).fits) return { ok: false, error: "That won't fit in your day. Cut back somewhere first." };
+  // Hustles add up: the day must still leave 4 hours' sleep with this one too.
+  const fit = await dayFits(userId, (day) => ({ hustleHours: day.hustleHours + h.hours }));
+  if (!fit.fits) return { ok: false, error: "That won't fit in your day, even with short nights. Stop another hustle, a course or some exercise first." };
   const { data, error } = await db.rpc("life_hustle_start", {
     p_user: userId,
     p_hustle: h.id,
@@ -61,12 +65,14 @@ export async function startHustle(id: string): Promise<PropertyResult> {
   return { ok: true, coins: n((data as Record<string, unknown>)?.coins) };
 }
 
-/** Stop your side hustle (what it made is collected first). */
-export async function stopHustle(): Promise<PropertyResult> {
+/** Stop one side hustle, or all of them (what they made is paid into your wallet first). */
+export async function stopHustle(id?: string): Promise<PropertyResult> {
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Please sign in again." };
   await tickLife(userId);
-  const { data, error } = await createAdminClient().rpc("life_hustle_stop", { p_user: userId });
+  const { data, error } = id
+    ? await createAdminClient().rpc("life_hustle_stop", { p_user: userId, p_hustle: String(id).slice(0, 30) })
+    : await createAdminClient().rpc("life_hustle_stop", { p_user: userId });
   if (error) return say(error.message);
   const d = (data ?? {}) as Record<string, unknown>;
   return { ok: true, pay: { days: n(d.days), gross: 0, tax: 0, fares: 0, net: 0, hustle: { gross: n(d.gross), tax: n(d.tax), net: n(d.net) } } };

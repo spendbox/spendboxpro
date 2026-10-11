@@ -76,10 +76,15 @@ export type LifeStatus = {
   bills: { power: number; waste: number } | null;
   mind: number;
   exercise: Exercise;
-  hustle: { hustle: string; title: string; skill: string; payDay: number; swing: number; hours: number; paidUntil: string; boost: number; boostUntil: string | null; stalledUntil: string | null } | null;
+  /** Your first side hustle (as before), and all of them (game-db/049: several at once). */
+  hustle: HustleRun | null;
+  hustles?: HustleRun[];
   /** A breakthrough waiting for your answer. */
   event: { id: string; source: "job" | "hustle"; key: string; title: string; expiresAt: string; text: string; choices: string[] } | null;
 };
+
+/** A side hustle you run: what it earns a game day, its hours, and when it was last paid in. */
+export type HustleRun = { hustle: string; title: string; skill: string; payDay: number; swing: number; hours: number; paidUntil: string; boost: number; boostUntil: string | null; stalledUntil: string | null };
 
 export type InterviewStart = { ok: true; token: string; questions: { id: string; q: string; options: string[] }[]; need: number; title: string } | { ok: false; error: string };
 export type InterviewResult = { ok: true; passed: boolean; score: number; need: number; ticket?: string } | { ok: false; error: string };
@@ -113,7 +118,8 @@ export type PropertyApi = {
   money: (hours: number) => Promise<MoneyFlow>;
   lifeTime: (hours: number) => Promise<Record<string, number>>;
   startHustle: (id: string) => Promise<PropertyResult>;
-  stopHustle: () => Promise<PropertyResult>;
+  /** Stop one side hustle (by id), or all of them. */
+  stopHustle: (id?: string) => Promise<PropertyResult>;
   setExercise: (ex: Exercise) => Promise<PropertyResult>;
   interviewStart: (placeId: string, job: string) => Promise<InterviewStart>;
   interviewSubmit: (token: string, answers: number[]) => Promise<InterviewResult>;

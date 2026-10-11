@@ -114,7 +114,7 @@ export async function enrol(id: string): Promise<PropertyResult> {
   const m = await me();
   if (!m) return { ok: false, error: "Please sign in again." };
   if (!c) return say("bad_item");
-  if (!(await dayFits(m.userId, { studyHours: STUDY_HOURS[c.kind] })).fits) return { ok: false, error: "That won't fit in your day. Drop your side hustle or some exercise first." };
+  if (!(await dayFits(m.userId, { studyHours: STUDY_HOURS[c.kind] })).fits) return { ok: false, error: "That won't fit in your day, even with only 4 hours' sleep. Stop a side hustle or some exercise first." };
   const { data, error } = await createAdminClient().rpc("life_enrol", {
     p_user: m.userId,
     p_course: c.id,

@@ -100,7 +100,7 @@ export async function takeJob(placeId: string, jobId: string, mode: Commute, tic
     if (!pass || pass.user !== userId || pass.place !== placeId || pass.job !== jobId) return { ok: false, error: "This job needs an interview first." };
   }
   const fit = await dayFits(userId, { job: true, commute: { mode, km } });
-  if (!fit.fits) return { ok: false, error: "That won't fit in your day. Drop your side hustle, a course or some exercise first." };
+  if (!fit.fits) return { ok: false, error: "That won't fit in your day, even with only 4 hours' sleep. Stop a side hustle, a course or some exercise first." };
   const { data, error } = await createAdminClient().rpc("life_work_take", {
     p_user: userId,
     p_region: region,
@@ -130,7 +130,7 @@ export async function setCommute(mode: Commute): Promise<PropertyResult> {
   const km = tripKmBetween(now.home, now.job.place_id as string);
   const map = regionMap(now.region);
   if (km === null || !map || fareMint(mode, km, map.region.prices, ferryKmBetween(now.home, now.job.place_id as string)) === null) return { ok: false, error: "It's too far to go that way." };
-  if (!(await dayFits(userId, { commute: { mode, km } })).fits) return { ok: false, error: "That way takes too long to fit in your day." };
+  if (!(await dayFits(userId, { commute: { mode, km } })).fits) return { ok: false, error: "That way takes too long, even with only 4 hours' sleep." };
   const { data, error } = await createAdminClient().rpc("life_work_mode", { p_user: userId, p_mode: mode, p_old_fare: now.fare });
   if (error) return say(error.message);
   const d = (data ?? {}) as Record<string, unknown>;
