@@ -143,6 +143,41 @@ const FriendsSheet = dynamic(() => import("./friends-sheet").then((m) => m.Frien
 const GhostCardSheet = dynamic(() => import("./ghost-duel/ghost-card").then((m) => m.GhostCardSheet));
 const DuelScreen = dynamic(() => import("./ghost-duel/duel-screen").then((m) => m.DuelScreen));
 
+/**
+ * The pop-ups people open most, fetched one after another once the city is up and nothing else is
+ * going on, so the first tap opens them at once instead of waiting for their code to download.
+ * (The 3D studio, games and sport stay on demand: they're big and rarely opened first.)
+ */
+const PRELOAD: (() => Promise<unknown>)[] = [
+  () => import("./menu"),
+  () => import("./phone/phone-sheet"),
+  () => import("./friends-sheet"),
+  () => import("./how-it-works"),
+  () => import("./activities/activity-sheet"),
+  () => import("./activities/gift-sheet"),
+  () => import("./houses/house-sheet"),
+  () => import("./sign-in-overlay"),
+  () => import("./phone/camera"),
+  () => import("./style/style-ui"),
+  () => import("@/components/advertise-explainer"),
+];
+function usePreloadSheets() {
+  useEffect(() => {
+    let alive = true;
+    // Older Safari has no idle callback: a short timer then.
+    const idle = (f: () => void) => ("requestIdleCallback" in window ? window.requestIdleCallback(f, { timeout: 3000 }) : setTimeout(f, 300));
+    const next = (k: number) => {
+      if (!alive || k >= PRELOAD.length) return;
+      idle(() => void PRELOAD[k]().catch(() => {}).finally(() => next(k + 1)));
+    };
+    const start = setTimeout(() => next(0), 2500);
+    return () => {
+      alive = false;
+      clearTimeout(start);
+    };
+  }, []);
+}
+
 const NO_GHOSTS: CityGhost[] = [];
 const NO_EVENTS: CityEvent[] = [];
 /** Property on the real map, through the server (game-db/038_property.sql). */
@@ -385,6 +420,7 @@ export function Game({
   /** On a real place: the area pointed at, or in the middle of the view. */
   const [worldArea, setWorldArea] = useState<string | null>(null);
   // A life on the real map: search, assets, buying a home first (see ./life/world-life).
+  usePreloadSheets();
   /** A building being gone into from its card (its room id), so it opens on the ground floor. */
   const entering = useRef<string | null>(null);
   /**

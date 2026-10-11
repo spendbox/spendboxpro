@@ -180,7 +180,19 @@ export function useWorldLife({
   const [place, setPlace] = useState<Workplace | null>(null);
   const [homeOpen, setHomeOpen] = useState(false);
   const [neighbours, setNeighbours] = useState<Neighbour[] | null>(null);
-  const [status, setStatus] = useState<LifeStatus | null>(null);
+  const [status, setStatusNow] = useState<LifeStatus | null>(null);
+  /** When your life was last brought up to now (a heavy call: opening a screen skips it when it's fresh). */
+  const statusAt = useRef(0);
+  const setStatus = useCallback((st: LifeStatus | null) => {
+    statusAt.current = Date.now();
+    setStatusNow(st);
+  }, []);
+  /** Bring your life up to now in the background, unless that happened in the last half minute. */
+  const freshenStatus = () => {
+    if (Date.now() - statusAt.current < 30_000) return;
+    statusAt.current = Date.now();
+    void api.lifeStatus().then(setStatus);
+  };
   const [lifeOpen, setLifeOpen] = useState(false);
   const [interview, setInterview] = useState<{ start: Extract<InterviewStart, { ok: true }>; hire: (ticket: string) => void } | null>(null);
   const [moment, setMoment] = useState(false);
@@ -222,7 +234,21 @@ export function useWorldLife({
       clearTimeout(t);
       clearInterval(every);
     };
-  }, [api, signedIn, regionId]);
+  }, [api, signedIn, regionId, setStatus]);
+
+  // Get the heavy map work done while nothing else is happening, so screens that need it (Income's
+  // jobs near you, the fares to islands) open at once instead of working it out on the tap.
+  useEffect(() => {
+    if (!region) return;
+    const warm = () => {
+      planOf(region);
+      ferryKmBetween(`${region.region.id}:0,0`, `${region.region.id}:1,1`);
+    };
+    // Older Safari has no idle callback: a timer then.
+    const idle = "requestIdleCallback" in window;
+    const t = idle ? window.requestIdleCallback(warm, { timeout: 8000 }) : window.setTimeout(warm, 4000);
+    return () => (idle ? window.cancelIdleCallback(t) : window.clearTimeout(t));
+  }, [region]);
 
   // Real businesses on the map (everyone sees them, signed in or not).
   useEffect(() => {
@@ -752,6 +778,15 @@ export function useWorldLife({
           }
         />
       )}
+      {assetsOpen && !assets && (
+        <Sheet onClose={() => setAssetsOpen(false)} wide title="Finance">
+          <div className="animate-pulse space-y-3" aria-label="Loading">
+            <div className="h-8 rounded-full bg-ink/5" />
+            <div className="h-28 rounded-3xl bg-ink/5" />
+            <div className="h-20 rounded-2xl bg-ink/5" />
+          </div>
+        </Sheet>
+      )}
       {assetsOpen && assets && (
         <MoneySheet
           status={status}
@@ -965,7 +1000,8 @@ export function useWorldLife({
           }}
           onClose={() => {
             setMoment(false);
-            void api.lifeStatus().then(setStatus);
+            statusAt.current = 0;
+            freshenStatus();
           }}
         />
       )}
@@ -1041,7 +1077,9 @@ export function useWorldLife({
   /** Your cash at the top (beside the menu) opens Finance. */
   const openFinance = () => {
     setAssetsOpen(true);
-    void api.lifeStatus().then(setStatus);
+    // Shown at once from what's here; brought up to date behind it (not on every open).
+    freshenStatus();
+    if (!assets) void refresh();
   };
   /** Something in Finance wants you: the guide's budget step, a power cut, an offer. */
   const financeGlow = step === "budget";

@@ -141,17 +141,29 @@ const PERIODS = [
 ];
 
 /** Income and expenses over a period, each in its own tab with its total. */
+/** The last income and expenses seen for each period: shown at once next time while fresh ones load. */
+const flowSeen = new Map<number, MoneyFlow>();
+
 function Flow({ loadMoney }: { loadMoney: (hours: number) => Promise<MoneyFlow> }) {
   const [hours, setHours] = useState(24);
   const [side, setSide] = useState<"in" | "out">("in");
-  const [got, setGot] = useState<{ hours: number; money: MoneyFlow } | null>(null);
+  const [got, setGot] = useState<{ hours: number; money: MoneyFlow } | null>(() => (flowSeen.has(24) ? { hours: 24, money: flowSeen.get(24)! } : null));
   useEffect(() => {
     let alive = true;
-    void loadMoney(hours).then((money) => alive && setGot({ hours, money }));
+    void loadMoney(hours).then((money) => {
+      flowSeen.set(hours, money);
+      if (alive) setGot({ hours, money });
+    });
     return () => {
       alive = false;
     };
   }, [loadMoney, hours]);
+  const pick = (h: number) => {
+    setHours(h);
+    // What we saw last time for that period, straight away.
+    const seen = flowSeen.get(h);
+    if (seen) setGot({ hours: h, money: seen });
+  };
   const sum = (kinds: string[]) => kinds.reduce((t, k) => t + (got?.money[k] ?? 0), 0);
   const ins = useMemo(() => INCOME.map((g) => ({ ...g, v: sum(g.kinds) })).filter((g) => g.v > 0.004), [got]); // eslint-disable-line react-hooks/exhaustive-deps
   const outs = useMemo(() => EXPENSES.map((g) => ({ ...g, v: -sum(g.kinds) })).filter((g) => g.v > 0.004), [got]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -164,7 +176,7 @@ function Flow({ loadMoney }: { loadMoney: (hours: number) => Promise<MoneyFlow> 
     <div className="mt-4">
       <div className="flex gap-1.5">
         {PERIODS.map((p) => (
-          <button key={p.hours} onClick={() => setHours(p.hours)} className={`h-8 flex-1 rounded-full text-xs font-semibold ${hours === p.hours ? "bg-ink text-white" : "bg-ink/5"}`}>
+          <button key={p.hours} onClick={() => pick(p.hours)} className={`h-8 flex-1 rounded-full text-xs font-semibold ${hours === p.hours ? "bg-ink text-white" : "bg-ink/5"}`}>
             {p.label}
           </button>
         ))}

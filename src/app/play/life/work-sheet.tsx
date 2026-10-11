@@ -104,8 +104,9 @@ export function WorkSheet({
   const gross = job ? Math.round(job.payDay * (1 + skillLevel(skills[job.skill] ?? 0) * SKILL_BONUS) * 100) / 100 : 0;
   const tax = Math.round(gross * INCOME_TAX * 100) / 100;
 
+  // Worked out only when "Jobs near me" is open (it looks at every place round your home).
   const best = useMemo(() => {
-    if (!plan || !ctx.homeUnit) return [];
+    if (open !== "jobs" || !plan || !ctx.homeUnit) return [];
     const m = /:(-?\d+),(-?\d+)/.exec(ctx.homeUnit);
     if (!m) return [];
     const rows = workplacesNear(plan, Number(m[1]), Number(m[2]), 14).flatMap((p) =>
@@ -117,7 +118,7 @@ export function WorkSheet({
         }),
     );
     return rows.sort((a, b) => b.net - a.net).slice(0, 8);
-  }, [job, plan, ctx.homeUnit, skills, prices]);
+  }, [open, job, plan, ctx.homeUnit, skills, prices]);
 
   const skillList = Object.entries(skills)
     .filter(([, d]) => d > 0)
