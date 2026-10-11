@@ -37,7 +37,11 @@ and Directions (Google Maps) buttons. Anything arranged with them happens outsid
 | Refit | a tenth of the lease (at least ₦25,000) | Turn it into shopfronts, a plaza, offices, a glass tower, a warehouse... |
 | Add a storey | a quarter of the lease (at least ₦50,000) | One more floor, from 30 days after the lease starts |
 
-**Any upgrade puts the business on the city's billboards** for the rest of its lease (it needs a logo).
+**Advertising is leasing a building** (part 47, `game-db/047_ads_are_property.sql`): every lease is on the
+city's billboards from day one, showing its logo until the business uploads a billboard design, which it can
+swap any time, free, from `/advertiser`. A lease runs a year, or until its building and billboards have been
+tapped (opening its card) as many times as it paid for, one tap for every ₦20 (`lease_naira_per_click`),
+whichever comes first. Players no longer get mint for tapping ads (`ad_rewards_per_day` is 0).
 
 ## Numbers
 

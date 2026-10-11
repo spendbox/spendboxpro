@@ -89,6 +89,8 @@ export function Menu({
   newGifts = 0,
   coins,
   level,
+  life,
+  onCurrency,
 }: {
   me: { id: string; name: string | null; avatar: Avatar };
   city: string;
@@ -121,6 +123,10 @@ export function Menu({
   coins?: number;
   /** Your level, shown straight away (the progress bar fills in a moment later). */
   level?: number;
+  /** The life on the real map: no rounds (no last result), no shop yet; How it works is the guide. */
+  life?: boolean;
+  /** Choose the currency money is shown in. */
+  onCurrency?: () => void;
 }) {
   const [sheet, setSheet] = useState<SheetName | null>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -156,8 +162,9 @@ export function Menu({
     onPhone && { key: "phone", label: "Phone", icon: Smartphone, tint: "bg-[#1f2328] text-white", onClick: onPhone },
     onGames && { key: "games", label: "Games", icon: Gamepad2, tint: "bg-[#e5dbff] text-[#5f3dc4]", onClick: onGames },
     onMyJob && { key: "job", label: "My job", icon: Briefcase, tint: "bg-[#e7f5ff] text-[#1971c2]", onClick: onMyJob },
-    { key: "how", label: "How it works", icon: CircleHelp, tint: "bg-[#e3edff] text-[#2d6bff]", onClick: onHowItWorks },
-    {
+    { key: "how", label: life ? "How to play" : "How it works", icon: CircleHelp, tint: "bg-[#e3edff] text-[#2d6bff]", onClick: onHowItWorks },
+    onCurrency && { key: "currency", label: "Currency", icon: Coins, tint: "bg-[#fff1c7] text-gold-dark", onClick: onCurrency },
+    life ? undefined : {
       key: "result",
       label: "Last result",
       icon: ChartColumn,
@@ -312,6 +319,7 @@ export function Menu({
           </nav>
 
           {/* A peek at the shop that's on its way. */}
+          {!life && (
           <div className="mt-1.5 flex items-center gap-2.5 rounded-2xl bg-gradient-to-br from-[#ffe27a] via-[#ffb86b] to-[#ff7ab6] py-2 pl-2.5 pr-3 text-ink">
             <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/55">
               <ShoppingBag className="size-[18px]" strokeWidth={2.25} />
@@ -324,6 +332,7 @@ export function Menu({
               <span className="block truncate text-[11px] text-ink/75">Swap mint for tees, tickets, vouchers and gadgets.</span>
             </span>
           </div>
+          )}
 
           {/* Account */}
           <div className="mt-3 grid grid-cols-2 gap-1.5 border-t border-line/80 pt-3">

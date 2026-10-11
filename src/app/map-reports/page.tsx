@@ -43,7 +43,7 @@ export default async function MapReportsPage({ searchParams }: { searchParams: P
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-5 px-4 py-8">
       <div>
-        <Link href="/play?world=lagos" className="inline-flex items-center gap-1 text-sm font-medium text-muted">
+        <Link href="/play" className="inline-flex items-center gap-1 text-sm font-medium text-muted">
           <ArrowLeft className="size-4" /> Back to the map
         </Link>
         <h1 className="mt-3 font-display text-3xl font-bold">Map reports</h1>

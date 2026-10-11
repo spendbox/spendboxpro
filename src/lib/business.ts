@@ -172,14 +172,49 @@ const logoUrl = (path: unknown) => (typeof path === "string" && path ? createAdm
 export async function businessesIn(region: string): Promise<MapBusiness[]> {
   const { data, error } = await createAdminClient().rpc("businesses_in", { p_region: region });
   if (error || !Array.isArray(data)) return [];
-  return (data as Record<string, unknown>[]).map((b) => ({ ...(b as unknown as MapBusiness), logo: logoUrl(b.logo) }));
+  return (data as Record<string, unknown>[]).map((b) => ({ ...(b as unknown as MapBusiness), logo: logoUrl(b.logo), billboardImage: logoUrl(b.billboardImage) }));
 }
 
-export type MyBusiness = MapBusiness & { status: string; startsAt: string | null; endsAt: string | null; priceKobo: number; hits: Record<string, number>; week: Record<string, number> };
+export type MyBusiness = MapBusiness & {
+  status: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  priceKobo: number;
+  hits: Record<string, number>;
+  week: Record<string, number>;
+  /** Taps (on the building or a billboard) the lease covers, and used so far. */
+  clickCap: number | null;
+  clicks: number;
+};
 
 /** An account's buildings with their numbers. */
 export async function myBusinesses(advertiserId: string): Promise<MyBusiness[]> {
   const { data, error } = await createAdminClient().rpc("business_mine", { p_advertiser: advertiserId });
   if (error || !Array.isArray(data)) return [];
-  return (data as Record<string, unknown>[]).map((b) => ({ ...(b as unknown as MyBusiness), logo: logoUrl(b.logo), priceKobo: Number(b.priceKobo) }));
+  return (data as Record<string, unknown>[]).map((b) => ({
+    ...(b as unknown as MyBusiness),
+    logo: logoUrl(b.logo),
+    billboardImage: logoUrl(b.billboardImage),
+    priceKobo: Number(b.priceKobo),
+    clickCap: b.clickCap == null ? null : Number(b.clickCap),
+    clicks: Number(b.clicks ?? 0),
+  }));
+}
+
+/** Swap a live lease's billboard design for a new picture (free, any time). */
+export async function setBillboard(advertiserId: string, leaseId: string, form: FormData): Promise<{ ok: true } | { ok: false; error: string }> {
+  const img = await readImage(form.get("image"));
+  if (!img) return { ok: false, error: "Choose a picture first." };
+  if (!img.ok) return img;
+  const path = await uploadImage(img, "billboards");
+  if (!path) return { ok: false, error: "We couldn't save that picture. Please try again." };
+  const db = createAdminClient();
+  const { data, error } = await db.rpc("business_billboard_set", { p_advertiser: advertiserId, p_lease: leaseId, p_path: path });
+  if (error) {
+    await db.storage.from(AD_BUCKET).remove([path]);
+    return { ok: false, error: "That lease isn't live any more." };
+  }
+  // The old design goes (never the logo, which the building still shows).
+  if (typeof data === "string" && data.startsWith("billboards/")) await db.storage.from(AD_BUCKET).remove([data]);
+  return { ok: true };
 }

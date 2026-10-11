@@ -18,14 +18,15 @@ export default async function BusinessPage({ searchParams }: { searchParams: Pro
   return (
     <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 px-4 py-8">
       <div>
-        <Link href="/play?world=lagos" className="inline-flex items-center gap-1 text-sm font-medium text-muted">
+        <Link href="/play" className="inline-flex items-center gap-1 text-sm font-medium text-muted">
           <ArrowLeft className="size-4" />
           Back to the map
         </Link>
         <h1 className="mt-3 font-display text-3xl font-bold">Put your business on the map</h1>
         <p className="mt-2 text-muted">
-          Lease a building in Lagos for a year. It shows your name and logo, glows for every player, and opens a card with what you do, your real address and how to
-          reach you. Upgrade it to stand out more and to go on the city&apos;s billboards. You&apos;ll see how many people tapped, called and asked for directions.
+          Lease a building in Lagos for a year. It shows your name and logo, glows for every player, opens a card with what you do, your real address and how to
+          reach you, and puts your design on the city&apos;s billboards (swap it any time, free). It runs a year, or until your building and billboards have been
+          tapped as many times as your lease covers: one tap for every ₦20. You&apos;ll see how many people tapped, called and asked for directions.
         </p>
       </div>
       {!offer ? (

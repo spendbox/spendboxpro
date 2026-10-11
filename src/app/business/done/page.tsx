@@ -35,7 +35,7 @@ export default async function BusinessDone({ searchParams }: { searchParams: Pro
         <Link href="/advertiser" className="rounded-xl bg-gold px-5 py-3 font-semibold text-ink">
           Your numbers
         </Link>
-        <Link href="/play?world=lagos" className="rounded-xl border border-line px-5 py-3 font-semibold">
+        <Link href="/play" className="rounded-xl border border-line px-5 py-3 font-semibold">
           See the map
         </Link>
       </div>

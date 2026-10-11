@@ -51,17 +51,45 @@ export function shortMint(mint: number) {
   return `₥${mint.toLocaleString("en-GB")}`;
 }
 
-/** A short local price: "₦148m" / "₦4.5m" / "₦1.2bn". */
+/**
+ * The money amounts are shown in beside mint, chosen by each player (they can change it any
+ * time): what one of each is worth in naira, roughly (the region's prices are in naira).
+ */
+export const CURRENCIES = [
+  { code: "NGN", symbol: "₦", name: "Naira", naira: 1 },
+  { code: "USD", symbol: "$", name: "US dollar", naira: 1550 },
+  { code: "GBP", symbol: "£", name: "British pound", naira: 2050 },
+  { code: "EUR", symbol: "€", name: "Euro", naira: 1780 },
+  { code: "CAD", symbol: "C$", name: "Canadian dollar", naira: 1120 },
+  { code: "GHS", symbol: "GH₵", name: "Ghana cedi", naira: 100 },
+  { code: "KES", symbol: "KSh", name: "Kenyan shilling", naira: 12 },
+  { code: "ZAR", symbol: "R", name: "South African rand", naira: 88 },
+] as const;
+export type CurrencyCode = (typeof CURRENCIES)[number]["code"];
+
+let shown: CurrencyCode = "NGN";
+/** Show amounts in this currency from now on (the screens show it the next time they draw). */
+export function setShownCurrency(code: string) {
+  if (CURRENCIES.some((c) => c.code === code)) shown = code as CurrencyCode;
+}
+export const shownCurrency = () => shown;
+
+/** A short local price, in the player's chosen currency: "₦148m" / "$95k" / "£1.2". */
 export function shortLocal(amount: number, prices: Prices) {
-  const s = prices.symbol;
+  const c = CURRENCIES.find((x) => x.code === shown) ?? CURRENCIES[0];
+  // The region's prices are in its own money (naira); other currencies convert from it.
+  const own = c.code === "NGN" || prices.symbol !== "₦";
+  const s = own ? prices.symbol : c.symbol;
+  const v = own ? amount : amount / c.naira;
   const one = (n: number, whole: boolean) => (whole ? n.toFixed(0) : n.toFixed(1).replace(/\.0$/, ""));
-  if (amount >= 1e9) return `${s}${one(amount / 1e9, amount >= 1e10)}bn`;
-  if (amount >= 1e6) return `${s}${one(amount / 1e6, amount >= 1e8)}m`;
-  if (amount >= 1e3) return `${s}${Math.round(amount / 1e3)}k`;
-  return `${s}${Math.round(amount)}`;
+  if (v >= 1e9) return `${s}${one(v / 1e9, v >= 1e10)}bn`;
+  if (v >= 1e6) return `${s}${one(v / 1e6, v >= 1e8)}m`;
+  if (v >= 1e3) return `${s}${v >= 1e4 ? Math.round(v / 1e3) : one(v / 1e3, false)}k`;
+  if (v >= 10) return `${s}${Math.round(v)}`;
+  return `${s}${v.toFixed(2).replace(/\.00$/, "")}`;
 }
 
-/** Mint in the region's own money, short: ₥60,000 in Lagos is "₦90m". */
+/** Mint in the player's chosen money, short: ₥60,000 in Lagos is "₦90m". */
 export function mintLocal(mint: number, prices: Prices) {
   return shortLocal(mint * prices.perMint, prices);
 }
