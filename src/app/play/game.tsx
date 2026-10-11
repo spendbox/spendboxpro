@@ -94,8 +94,8 @@ import { StatsCard } from "./stats-card";
 import { avatar3dEnabled } from "./avatar3d-flag";
 import { worldPreview } from "./world-flag";
 import { PlacePill } from "./place-pill";
-import { PropertyCard } from "./property-card";
-import type { PropertyInfo } from "@/lib/world/property";
+import { useWorldLife } from "./life/world-life";
+import * as propertyActions from "./property-actions";
 import { REGIONS } from "@/lib/world";
 
 // The 3D city only runs in the browser.
@@ -130,6 +130,8 @@ const DuelScreen = dynamic(() => import("./ghost-duel/duel-screen").then((m) => 
 
 const NO_GHOSTS: CityGhost[] = [];
 const NO_EVENTS: CityEvent[] = [];
+/** Property on the real map, through the server (game-db/038_property.sql). */
+const PROPERTY_API = propertyActions;
 const noSubscribe = () => () => {};
 const noWorld = () => null;
 
@@ -361,8 +363,14 @@ export function Game({
   const worldRegion = worldId ? REGIONS[worldId] : null;
   /** On a real place: the area pointed at, or in the middle of the view. */
   const [worldArea, setWorldArea] = useState<string | null>(null);
-  /** On a real place: the property tapped, shown in a card. */
-  const [property, setProperty] = useState<PropertyInfo | null>(null);
+  // A life on the real map: search, assets, buying a home first (see ./life/world-life).
+  const worldLife = useWorldLife({
+    api: PROPERTY_API,
+    regionId: worldId,
+    signedIn: !state.me.guest,
+    budget: 5000,
+    onChanged: () => startTransition(() => router.refresh()),
+  });
   // The phone: the camera (a picture of the town, or a selfie) and the phone itself (gallery).
   const [camera, setCamera] = useState<"photo" | "selfie" | null>(null);
   const [phone, setPhone] = useState<"home" | "photos" | null>(null);
@@ -1300,7 +1308,7 @@ export function Game({
       if (m.golden) return { icon: Crown, text: "You're golden!", colour: "#e8a800" };
       return { icon: Ghost, text: `You're a ghost · ${m.wins} won · ${m.losses} lost` };
     }
-    if (board?.phase === "seek") return { icon: Swords, text: `Explore · Chat · Ghosts ${board.ghosts.length}` };
+    if (board?.phase === "seek" && !worldId) return { icon: Swords, text: `Explore · Chat · Ghosts ${board.ghosts.length}` };
     return { icon: Compass, text: "Explore · Chat", colour: "#e64980" };
   })();
   const duelStrip = board ? (
@@ -1328,7 +1336,8 @@ export function Game({
             tileCount={round?.tileCount ?? 0}
             region={worldId}
             onArea={setWorldArea}
-            onProperty={worldId ? setProperty : undefined}
+            onProperty={worldId ? worldLife.onProperty : undefined}
+            owned={worldId ? worldLife.owned : undefined}
             markers={worldId ? NO_MARKERS : markers}
             events={worldId ? NO_EVENTS : cityEvents}
             onBillboard={onBillboardTap}
@@ -1337,7 +1346,7 @@ export function Game({
             ghosts={ghostsShown && !worldId ? ghostLights : NO_GHOSTS}
             paused={signInShown}
             onGhost={openGhost}
-            flyTo={flyTo}
+            flyTo={worldId ? (worldLife.flyTo ?? flyTo) : flyTo}
             roomCounts={rooms.buildingCounts}
             onRoom={onRoom}
             ride={ride}
@@ -1375,7 +1384,7 @@ export function Game({
           />
         </Safe>
       )}
-      {property && <PropertyCard info={property} onClose={() => setProperty(null)} />}
+      {worldId && worldLife.overlay}
       {worldRegion && (worldRegion.water || worldRegion.roads.length > 0) && (
         // The map data's credit (its licence asks for it): small and out of the way.
         <a
@@ -2073,7 +2082,7 @@ export function Game({
                 )}
               </button>
             )}
-            {!dockOpen && !isDancing && (place || ride !== null) && (
+            {!dockOpen && !isDancing && !worldId && (place || ride !== null) && (
               <button onClick={() => setGamesOpen({})} className="glass pointer-events-auto flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold shadow sm:text-sm">
                 <Gamepad2 className="size-4 text-[#7048e8]" />
                 Games
@@ -2268,7 +2277,7 @@ export function Game({
                 </>
               ) : (
                 <>
-                  {duelStrip}
+                  {!worldId && duelStrip}
                   {/* On phones the tip makes way for the town. */}
                   <p className="hidden border-t border-line pt-2 text-xs text-muted sm:block">
                     Tap any building to go inside (the numbers show who&apos;s there), or Explore rides and sports. The house button flies you to your house.

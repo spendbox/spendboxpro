@@ -6,6 +6,10 @@ import { createLucideIcon } from "lucide-react";
 
 export {
   Ambulance,
+  KeyRound,
+  TrainFront,
+  TrendingUp,
+  Wallet,
   ArrowUpFromLine,
   Award,
   Bell,

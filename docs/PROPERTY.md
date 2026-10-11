@@ -224,7 +224,24 @@ Still to do in step 1:
 1. Owner to check the Lagos prices (`districts.ts`, `prices.ts`) against what they know.
 2. Plazas and estates across several joined lots, as one big building.
 
-**Step 2: the start of a life**
+**Step 2: the start of a life** — done (owner: run `game-db/038_property.sql`):
+- Starting budget ₥5,000 (`start_grant`), once; you must buy a home before anything else, and
+  the first home you buy is your home.
+- Every unit's price is worked out on the server from the map (never trusted from the phone);
+  the database checks it's not owned and you can afford it with the 3% tax, records the sale and
+  saves the building as bought. The price is burned; the tax goes to the treasuries.
+- Treasuries: Lagos State (70% of each tax) and Nigeria (30%), open to read (`treasury_report`).
+- Your homes: live in any of them. Your other units: let them out; they earn rent by the second
+  (homes about 6% of their value a game year, business units 9%), collected when you ask, less
+  10% rent tax. Your home never earns rent.
+- Name a building you own all of.
+- Search on the map (districts, neighbourhoods, landmarks, stations, your own property) flies
+  you there; Assets shows cash, property worth now against what you paid, rent a day, rent
+  waiting, and each unit (tap to fly to it).
+- Ghosts and the Games button are hidden on the real map.
+- Try it without signing in at `/world-lab` (a pretend wallet in your browser).
+
+Step 2 plan, as written:
 4. The search bar: places, addresses, neighbourhoods, properties; it flies the camera there.
 5. Database: wallets, ownership, units, sales history, every mint movement recorded.
 6. Starting budget, then buy a home, then primary residence.
