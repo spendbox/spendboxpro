@@ -7,6 +7,7 @@
 // but a given tile always looks the same for everyone during that round.
 
 import type { HouseInterior, HouseStyle, TownHouse } from "@/lib/houses";
+import type { RegionMap } from "@/lib/world/compile";
 import { ABBREV, CLUB_NAMES, eggChoices, FLAVORS, landmarkChoices, nameOf, RESTAURANT_NAMES, type EasterEgg, type Flavor, type LandmarkKey, type Named } from "./places";
 
 export type TileKind =
@@ -334,6 +335,11 @@ export type CityPlan = {
   palette: Palette;
   /** Players' houses in this game, by tile (set by placeHouses in ./houses.ts). */
   homes?: Map<number, TownHouse>;
+  /**
+   * A real place (src/lib/world): its land and water, main roads, landmarks and districts come
+   * from the map, and the layout fills in the streets and buildings between them.
+   */
+  region?: RegionMap;
 };
 
 /** A big landmark of 3×3 tiles or more. */
@@ -381,6 +387,7 @@ export function structureCentre(st: { ax: number; az: number; w?: number; d?: nu
 
 /** Is (x, z) in a big lake? */
 export function inLake(plan: CityPlan, x: number, z: number) {
+  if (plan.region) return plan.region.waterAt(x, z) === 1;
   for (const L of plan.lakes) {
     const dx = (x - L.x) / L.rx;
     const dz = (z - L.z) / L.rz;
@@ -393,6 +400,7 @@ export function inLake(plan: CityPlan, x: number, z: number) {
 
 /** Is (x, z) out at sea? */
 export function inSea(plan: CityPlan, x: number, z: number) {
+  if (plan.region) return plan.region.waterAt(x, z) === 2;
   const { nx, nz, dist } = plan.sea;
   const out = x * nx + z * nz;
   if (out < dist - 6) return false;
@@ -469,19 +477,20 @@ const PALETTES: Palette[] = [
 ];
 
 /** Street positions: irregular gaps (2 to 5 lots wide), so blocks come in different sizes. */
-function streetLines(seed: number, salt: number) {
+function streetLines(seed: number, salt: number, lo = -160, hi = 160) {
   const out: number[] = [];
   const gap = (k: number) => {
     const g = hash(k, salt, seed + 41);
     return 3 + (g < 0.25 ? 0 : g < 0.6 ? 1 : g < 0.85 ? 2 : 3);
   };
   const start = Math.floor(hash(salt, 1, seed + 42) * 4) - 1;
-  for (let p = start, k = 0; p <= 160; p += gap(k++)) out.push(p);
-  for (let p = start - gap(-1), k = -2; p >= -160; p -= gap(k--)) out.unshift(p);
+  for (let p = start, k = 0; p <= hi; p += gap(k++)) out.push(p);
+  for (let p = start - gap(-1), k = -2; p >= lo; p -= gap(k--)) out.unshift(p);
   return out;
 }
 
-export function makePlan(seed: number): CityPlan {
+export function makePlan(seed: number, region?: RegionMap | null): CityPlan {
+  if (region) return regionPlan(seed, region);
   const r = (k: number) => hash(seed, k, 9173);
   // Downtowns can be anywhere (not always the middle), and some cities barely have one.
   const centres: CityPlan["centres"] = [];
@@ -607,6 +616,59 @@ export function makePlan(seed: number): CityPlan {
   };
   placeMegas(plan);
   placeVenues(plan);
+  return plan;
+}
+
+/**
+ * A real place: no made-up river, lakes, sea or railway (the map has the real ones), downtowns
+ * where the real districts are, and the real landmarks where they really stand.
+ */
+function regionPlan(seed: number, region: RegionMap): CityPlan {
+  const { bounds } = region;
+  const lo = Math.min(bounds.x0, bounds.z0) - 4;
+  const hi = Math.max(bounds.x1, bounds.z1) + 4;
+  const xs = streetLines(seed, 1, lo, hi);
+  const zs = streetLines(seed, 2, lo, hi);
+  const flavor = FLAVORS.find((f) => f.id === region.region.flavor) ?? FLAVORS[0];
+  const streets = [...flavor.streets].sort(
+    (a, b) =>
+      hash(a.length, a.charCodeAt(0) + a.charCodeAt(a.length - 1) * 31, seed) -
+      hash(b.length, b.charCodeAt(0) + b.charCodeAt(b.length - 1) * 31, seed),
+  );
+  const r = (k: number) => hash(seed, k, 9173);
+  const plan: CityPlan = {
+    seed,
+    city: { name: region.region.name, flavor, streets },
+    xs,
+    zs,
+    xAt: new Map(xs.map((v, k) => [v, k])),
+    zAt: new Map(zs.map((v, k) => [v, k])),
+    x0: xs.findIndex((v) => v >= 0),
+    z0: zs.findIndex((v) => v >= 0),
+    style: { towers: 1, green: 0, gaps: 0.1, roundabouts: 0.08 },
+    centres: region.centres,
+    river: null,
+    rail: null,
+    lakes: [],
+    sea: { nx: 0, nz: 1, dist: Infinity },
+    megas: [],
+    megaAt: new Map(),
+    lanes: new Map(),
+    features: new Map(),
+    cache: new Map(),
+    structures: new Map(),
+    venues: new Map(),
+    eggs: new Map(),
+    palette: PALETTES.find((p) => p.name === region.region.palette) ?? PALETTES[Math.floor(r(7) * PALETTES.length)],
+    region,
+  };
+  for (const l of region.landmarks) {
+    const mega: Mega = { type: l.type, ax: l.ax, az: l.az, w: l.w, d: l.d, name: l.name };
+    if (l.inside) mega.inside = l.inside;
+    const id = plan.megas.length;
+    plan.megas.push(mega);
+    for (let x = l.ax; x < l.ax + l.w; x++) for (let z = l.az; z < l.az + l.d; z++) plan.megaAt.set(nkey(x, z), id);
+  }
   return plan;
 }
 
@@ -920,6 +982,12 @@ const gapEW = (plan: CityPlan, j: number, k: number) => hash(j * 11 + 5, k * 17 
 
 /** Is there road at (x, z)? */
 export function isRoad(plan: CityPlan, x: number, z: number) {
+  if (plan.region) {
+    // A real place: its main roads and bridges from the map; side streets stop at the water.
+    if (plan.megaAt.has(nkey(x, z)) || plan.region.spotAt(x, z)) return false;
+    if (plan.region.roadAt(x, z)) return true;
+    if (plan.region.waterAt(x, z)) return false;
+  }
   // Big landmarks take over the streets through their spot, and roads stop at the sea.
   if (plan.megaAt.has(nkey(x, z)) || inSea(plan, x, z)) return false;
   const k = plan.xAt.get(x);
@@ -1098,6 +1166,9 @@ const STRUCTURES_BY_ZONE: { min: number; chance: number; types: StructureType[] 
   { min: -9, chance: 0.1, types: ["funfair", "solar", "campus", "market", "airport", "port", "military", "airport", "power", "oilrig", "dam", "dam", "waterpark"] },
 ];
 
+/** Too big or too particular to make up in a real place: only where the map has them. */
+const MAP_ONLY = new Set<StructureType>(["airport", "port", "military", "power", "dam", "oilrig", "solar"]);
+
 /**
  * The smaller sports venues: a basketball court, a boxing arena and a wrestling arena, each on
  * a 2×2 cell of plain lots near the middle of the city (so even small cities have them), nearest
@@ -1154,6 +1225,7 @@ function structureAt(plan: CityPlan, x: number, z: number) {
     let found: StructureInfo | null = null;
     const d = densityAt(plan, ax + 0.5, az + 0.5);
     const zone = STRUCTURES_BY_ZONE.find((zn) => d >= zn.min)!;
+    const types = plan.region ? zone.types.filter((t) => !MAP_ONLY.has(t)) : zone.types;
     const roll = hash(ax, az, plan.seed + 501);
     const members = [[ax, az], [ax + 1, az], [ax, az + 1], [ax + 1, az + 1]];
     const venue = plan.venues.get(key);
@@ -1162,7 +1234,7 @@ function structureAt(plan: CityPlan, x: number, z: number) {
       roll < zone.chance &&
       members.every(([mx, mz]) => LOTS.includes(baseTile(plan, mx, mz).kind) && !onRail(plan, mx, mz) && !isForecourt(plan, mx, mz))
     ) {
-      let type = zone.types[Math.floor(hash(ax, az, plan.seed + 502) * zone.types.length)];
+      let type = types[Math.floor(hash(ax, az, plan.seed + 502) * types.length)];
       // A dam needs water next to it (the river or a lake); otherwise it's a power station.
       if (type === "dam" && !nearWater(plan, ax, az)) type = "power";
       found = structureNamed(plan, type, ax, az);
@@ -1192,6 +1264,8 @@ type StructureInfo = { type: StructureType; name: string; inside?: string[]; aro
  * time), then the flavour's. Null now and then (or when there are none): the caller makes one up.
  */
 function famous(plan: CityPlan, key: LandmarkKey, x: number, z: number, salt: number, chance = 0.85): Named | null {
+  // A real place's famous names belong to its real landmarks (see src/lib/world), not made-up copies.
+  if (plan.region) return null;
   const { local, wide } = landmarkChoices(plan.city.flavor.id, plan.city.name, key);
   const roll = hash(x, z, plan.seed + salt);
   const k = hash(z, x, plan.seed + salt + 1);
@@ -1427,7 +1501,7 @@ export function lotAt(plan: CityPlan, i: number): Tile {
     return { i, x, z, kind: "plaza", top: 1.9, r: t.r, forecourt: true };
   }
   if (!LOTS.includes(t.kind)) {
-    const named = t.rail ? undefined : tileName(plan, t);
+    const named = t.rail || t.name ? undefined : tileName(plan, t);
     if (named) t.name = named;
     return t;
   }
@@ -1564,6 +1638,20 @@ function baseTile(plan: CityPlan, x: number, z: number): Tile {
     if (m.inside) structure.inside = m.inside;
     return { i, x, z, kind: "structure", top: MEGA_TOP[m.type] ?? 1.5, r, structure };
   }
+  // A real place's water: the map's bridges cross it as roads over the water.
+  if (plan.region) {
+    const spot = plan.region.spotAt(x, z);
+    if (spot) {
+      const tops: Partial<Record<TileKind, number>> = { club: 0.85, restaurant: 0.75, hospital: 1.7, worship: 1.6, school: 0.9, police: 1.1, fire: 1, monument: 1.4, clock: 2.6, ferris: 2.6, stadium: 1.1 };
+      return { i, x, z, kind: spot.kind, top: tops[spot.kind] ?? 1, r, v: Math.floor(r[2] * 2), name: spot.name };
+    }
+    const w = plan.region.waterAt(x, z);
+    if (w && plan.region.roadAt(x, z)) {
+      const t = roadTile(plan, x, z, r);
+      return { ...t, top: 0.05, roundabout: false, works: undefined, incident: undefined, causeway: true };
+    }
+    if (w) return { i, x, z, kind: "lake", top: 0.1, r, sea: w === 2 || undefined, jetty: jettyAt(plan, x, z) };
+  }
   // The sea (only very big towns get this far out).
   if (inSea(plan, x, z)) return { i, x, z, kind: "lake", top: 0.1, r, sea: true, jetty: jettyAt(plan, x, z) };
 
@@ -1591,7 +1679,7 @@ function baseTile(plan: CityPlan, x: number, z: number): Tile {
   if (onLine) return { i, x, z, kind: r[0] < 0.75 ? "park" : "plaza", top: r[0] < 0.75 ? 0.9 : 0.6, r };
 
   // The odd small lake, inside a block, away from the busiest areas.
-  if (Math.hypot(x, z) > 9 && smoothNoise(x / 4 - 9, z / 4 + 4, s + 23) > 0.88) return { i, x, z, kind: "lake", top: 0.1, r };
+  if (!plan.region && Math.hypot(x, z) > 9 && smoothNoise(x / 4 - 9, z / 4 + 4, s + 23) > 0.88) return { i, x, z, kind: "lake", top: 0.1, r };
 
   const density = densityAt(plan, x, z);
 
@@ -1627,7 +1715,7 @@ function baseTile(plan: CityPlan, x: number, z: number): Tile {
     const tops: Partial<Record<TileKind, number>> = { school: 0.9, worship: 1.6, pitch: 0.3, playground: 0.5, monument: 1.4 };
     return { i, x, z, kind: feature, top: tops[feature] ?? 0.8, r, v: Math.floor(r[2] * 2) };
   }
-  if (Math.hypot(x, z) > 13 && r[2] < 0.035) return { i, x, z, kind: "turbine", top: 3.2, r };
+  if (!plan.region && Math.hypot(x, z) > 13 && r[2] < 0.035) return { i, x, z, kind: "turbine", top: 3.2, r };
   if (r[3] > 0.997) return { i, x, z, kind: "ferris", top: 2.6, r };
   if (r[0] < 0.16) return { i, x, z, kind: "trees", top: 1, r };
   if (r[0] < 0.175) return { i, x, z, kind: "watertower", top: 2.2, r };

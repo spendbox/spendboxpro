@@ -1,6 +1,7 @@
 # To do
 
 ## Now (owner)
+- [ ] Let the cloud sessions reach OpenStreetMap (for the real Lagos map): in the Claude Code environment settings, Network access, add `overpass-api.de` to the allowed domains. Then ask for the Lagos bake (`npm run bake:world -- lagos`).
 - [ ] Try the new 3D avatar studio (see `avatar-reference/docs/AVATAR_SPEC.md`): open the game with `?avatar3d=1` on your phone, tap your look, design and save. Only your browser gets it; `?avatar3d=0` switches it back.
 - [ ] In the Supabase SQL Editor run `game-db/035_fees_and_jobs.sql` (first-visit fees, train fares, jobs). Until it's run, places and trains stay free and Jobs won't load.
 - [ ] In the Supabase SQL Editor run `game-db/036_minigames.sql` (minigame rewards). Until it's run, the games all play but good scores pay no mint.
@@ -38,6 +39,14 @@
 - [x] Fixes: sign-out spinner, hunt countdown for ghosts, sign-in prompts for watchers, timeouts ("Reconnecting" screen), cars drive themselves, button press feedback, "My house" coming soon.
 - [x] Info bubbles over nearby buildings and tappable world events.
 - [x] Sports: football, basketball, boxing, wrestling. Simulated matches in a tactical view, mint tickets, simple mint bets (run `game-db/020_sports.sql`).
+
+## Real-world map (see `docs/WORLD.md`)
+- [x] Step 1, the foundation: one tile = 100 m, regions placed by real latitude and longitude, Lagos (45 × 25 km) drawn round the camera, its districts and landmarks, a fixes file, the bake script, `/world-lab` and `/play?world=lagos` to see it.
+- [ ] Step 2: bake Lagos's real coastline, lagoon, creeks, islands and main roads from OpenStreetMap (needs the network access above). Check the landmarks against the map.
+- [ ] Step 3: smooth long bridges on piers (Third Mainland Bridge and its curves, Carter, Eko, Lekki–Ikoyi Link), rail lines, beaches, Makoko stilt houses, landmarks at real size. Drawing in chunks.
+- [ ] Step 4: zoomed-out map to tap and fly anywhere.
+- [ ] Step 5: the game on the permanent map. The hourly game is on hold and becomes something else (owner to decide).
+- [ ] Later (not now): 3D avatars for characters and players walking the world, and the avatar studio for them.
 
 ## Next batch
 - [ ] **Replacements for what the duels switched off** (owner to decide):
