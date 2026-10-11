@@ -8,6 +8,7 @@ import {
   BEDRIDDEN_BELOW,
   CARE,
   CERT_LABEL,
+  COURSE_KINDS,
   COURSES,
   healthWord,
   priceOf,
@@ -84,8 +85,7 @@ export function LifeSheet({
   const tone = health >= AUTO_CARE_BELOW ? "#2f9e44" : health >= SICK_BELOW ? "#f08c00" : "#e03131";
 
   return (
-    <Sheet onClose={onClose} wide>
-      <h2 className="font-display text-xl font-extrabold">Life</h2>
+    <Sheet onClose={onClose} wide title="Life">
       <div className="mt-3 flex gap-1 rounded-full bg-ink/5 p-1">
         {TABS.map((t) => (
           <button
@@ -158,11 +158,21 @@ export function LifeSheet({
               ))}
             </div>
           )}
-          <ul className="mt-3 divide-y divide-ink/5 rounded-2xl ring-1 ring-ink/5">
-            {COURSES.map((c) => (
-              <CourseRow key={c.id} c={c} prices={prices} skills={skills} done={!!status?.courses.some((x) => x.course === c.id)} canPay={savings} busy={busy || !!studying} onEnrol={onEnrol} />
-            ))}
-          </ul>
+          {COURSE_KINDS.map((k) => {
+            const list = COURSES.filter((c) => c.kind === k.kind);
+            if (!list.length) return null;
+            return (
+              <section key={k.kind} className="mt-4">
+                <h3 className="text-sm font-semibold">{k.label}</h3>
+                <p className="text-[11px] text-muted">{k.what}</p>
+                <ul className="mt-2 space-y-2">
+                  {list.map((c) => (
+                    <CourseRow key={c.id} c={c} prices={prices} skills={skills} done={!!status?.courses.some((x) => x.course === c.id)} canPay={savings} busy={busy || !!studying} onEnrol={onEnrol} />
+                  ))}
+                </ul>
+              </section>
+            );
+          })}
         </div>
       )}
 
@@ -231,25 +241,36 @@ function CourseRow({ c, prices, skills, done, canPay, busy, onEnrol }: { c: Cour
   const price = priceOf(c.fee, prices, false);
   const level = skillLevel((skills[c.skill] ?? 0) + c.grants);
   return (
-    <li className="flex items-center gap-3 px-3 py-2.5">
-      <GraduationCap className="size-4 shrink-0 text-muted" />
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium">
-          {c.title}
-          {done && <span className="ml-2 rounded-full bg-me/15 px-2 py-0.5 text-[11px] font-semibold text-me">Done</span>}
-        </p>
-        <p className="text-xs text-muted">
-          {gameDays(c.days)} · {c.public ? "public" : "private"} · {WORK_SKILLS[c.skill]} to level {level}
-          {c.cert ? ` · opens ${OPENS[c.cert]}` : ""}
-        </p>
+    <li className="rounded-2xl p-3 ring-1 ring-ink/5">
+      <div className="flex items-start gap-3">
+        <GraduationCap className="mt-0.5 size-4 shrink-0 text-muted" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">{c.title}</p>
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            <Chip>{gameDays(c.days)}</Chip>
+            <Chip>{c.public ? "Public" : "Private"}</Chip>
+            <Chip>
+              {WORK_SKILLS[c.skill]} to level {level}
+            </Chip>
+            {c.cert && <Chip strong>Opens {OPENS[c.cert]}</Chip>}
+          </div>
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="text-sm font-semibold tabular-nums">₥{fmt(price.total)}</p>
+          <p className="text-[11px] text-muted">{mintLocal(price.total, prices)}</p>
+          {done ? (
+            <span className="mt-1 inline-block rounded-full bg-me/15 px-2.5 py-1 text-xs font-semibold text-me">Done</span>
+          ) : (
+            <button disabled={busy || canPay < price.total} onClick={() => onEnrol(c.id)} className="mt-1 h-8 rounded-full bg-ink px-3 text-xs font-semibold text-white disabled:opacity-40">
+              Enrol
+            </button>
+          )}
+        </div>
       </div>
-      <div className="shrink-0 text-right">
-        <p className="text-sm font-semibold tabular-nums">₥{fmt(price.total)}</p>
-        <p className="text-[11px] text-muted">{mintLocal(price.total, prices)}</p>
-      </div>
-      <button disabled={busy || done || canPay < price.total} onClick={() => onEnrol(c.id)} className="h-8 shrink-0 rounded-full bg-ink px-3 text-xs font-semibold text-white disabled:opacity-40">
-        Enrol
-      </button>
     </li>
   );
+}
+
+function Chip({ children, strong }: { children: React.ReactNode; strong?: boolean }) {
+  return <span className={`rounded-full px-2 py-0.5 text-[11px] ${strong ? "bg-gold/20 font-semibold text-gold-dark" : "bg-ink/5 text-muted"}`}>{children}</span>;
 }

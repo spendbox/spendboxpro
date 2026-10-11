@@ -45,7 +45,8 @@ export function WorkSheet({
   plan: CityPlan | null;
   ctx: JobsContext;
   onCollect: () => void;
-  onMode: (mode: Commute) => void;
+  /** Switch how you get to work (the game asks you to confirm first); `perDay` is what it would cost a game day. */
+  onMode: (mode: Commute, perDay: number) => void;
   onQuit: () => void;
   onShow: (placeId: string) => void;
   onClose: () => void;
@@ -81,10 +82,15 @@ export function WorkSheet({
   }, [job, plan, ctx.homeUnit, skills, prices]);
 
   return (
-    <Sheet onClose={onClose} wide>
-      <h2 className="flex items-center gap-2 font-display text-xl font-extrabold">
-        <Briefcase className="size-5" /> Work
-      </h2>
+    <Sheet
+      onClose={onClose}
+      wide
+      title={
+        <span className="flex items-center gap-2">
+          <Briefcase className="size-5" /> Work
+        </span>
+      }
+    >
 
       {job ? (
         <>
@@ -117,20 +123,34 @@ export function WorkSheet({
           </div>
 
           <h3 className="mt-5 text-sm font-semibold">Getting there</h3>
-          <p className="text-xs text-muted">{km === null ? "From your home" : `${km} km from your home, there and back each game day`}</p>
-          <div className="mt-2 grid grid-cols-5 gap-1.5">
-            {COMMUTES.map((mode) => {
+          {(() => {
+            const cur = km === null ? null : fareMint(job.mode, km, prices);
+            return (
+              <div className="mt-2 flex items-center justify-between rounded-2xl bg-ink px-4 py-3 text-white">
+                <div>
+                  <p className="text-[11px] opacity-70">You go by</p>
+                  <p className="font-semibold">{COMMUTE_LABEL[job.mode]}</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-semibold tabular-nums">{!cur ? "Free" : `₥${fmt(2 * cur)} a day`}</p>
+                  <p className="text-[11px] opacity-70">{km === null ? "" : `${km} km each way`}</p>
+                </div>
+              </div>
+            );
+          })()}
+          <p className="mt-3 text-xs text-muted">Or go another way (tap to switch):</p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {COMMUTES.filter((m) => m !== job.mode).map((mode) => {
               const f = km === null ? null : fareMint(mode, km, prices);
-              const on = job.mode === mode;
               return (
                 <button
                   key={mode}
-                  disabled={ctx.busy || f === null || on}
-                  onClick={() => onMode(mode)}
-                  className={`rounded-xl px-1 py-2 text-center text-xs ${on ? "bg-ink text-white" : "bg-ink/5 disabled:opacity-40"}`}
+                  disabled={ctx.busy || f === null}
+                  onClick={() => onMode(mode, f === null ? 0 : 2 * f)}
+                  className="inline-flex items-baseline gap-1.5 rounded-full bg-ink/5 px-3 py-1.5 text-xs hover:bg-ink/10 disabled:opacity-40"
                 >
-                  <span className="block font-semibold">{COMMUTE_LABEL[mode]}</span>
-                  <span className="block tabular-nums">{f === null ? "too far" : f === 0 ? "free" : `₥${fmt(2 * f)}/day`}</span>
+                  <span className="font-semibold">{COMMUTE_LABEL[mode]}</span>
+                  <span className="tabular-nums text-muted">{f === null ? "too far" : f === 0 ? "free" : `₥${fmt(2 * f)}/day`}</span>
                 </button>
               );
             })}

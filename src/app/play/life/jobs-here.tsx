@@ -3,6 +3,7 @@
 import { Briefcase } from "@/components/icons";
 import type { Prices } from "@/lib/world/region";
 import { mintLocal } from "@/lib/world/value";
+import { CERT_LABEL } from "@/lib/world/living";
 import { cheapestCommute, COMMUTE_LABEL, fareMint, INCOME_TAX, payDay, skillLevel, tripKmBetween, WORK_SKILLS, type Commute, type WorkJob } from "@/lib/world/work";
 import type { Workplace } from "@/lib/world/workplace";
 
@@ -12,6 +13,8 @@ export type JobsContext = {
   homeUnit: string | null;
   /** Game days worked in each skill. */
   skills: Record<string, number>;
+  /** Certificates you've earned (from finished courses). */
+  certs: string[];
   /** Your job now. */
   current: { place: string; job: string } | null;
   busy: boolean;
@@ -43,15 +46,17 @@ export function JobsHere({ place, ctx }: { place: Workplace; ctx: JobsContext })
           const day = payDay(j, ctx.prices);
           const net = day * (1 - INCOME_TAX) - 2 * trip.fare;
           const level = skillLevel(ctx.skills[j.skill] ?? 0);
-          const short = level < j.level;
+          const noCert = !!j.cert && !ctx.certs.includes(j.cert);
+          const short = level < j.level || noCert;
           const mine = ctx.current?.place === place.id && ctx.current.job === j.job;
           return (
             <li key={j.job} className="flex items-center gap-3 px-3 py-2.5">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{j.title}</p>
                 <p className="truncate text-xs text-muted">
-                  {WORK_SKILLS[j.skill]}
-                  {j.level > 0 ? ` level ${j.level}` : ", no experience needed"}
+                  {j.level > 0 ? `Needs ${WORK_SKILLS[j.skill].toLowerCase()} level ${j.level}` : "No experience needed"}
+                  {j.cert ? ` and a ${CERT_LABEL[j.cert]}` : ""}
+                  {j.state ? " · paid by the state" : ""}
                 </p>
               </div>
               <div className="shrink-0 text-right">
@@ -66,10 +71,10 @@ export function JobsHere({ place, ctx }: { place: Workplace; ctx: JobsContext })
                 <button
                   disabled={ctx.busy || !ctx.homeUnit || short}
                   onClick={() => ctx.onTake(place, j, trip.mode)}
-                  title={!ctx.homeUnit ? "Buy a home first" : short ? `Needs ${WORK_SKILLS[j.skill]} level ${j.level} (you have ${level})` : `Start as ${j.title}`}
+                  title={!ctx.homeUnit ? "Buy a home first" : noCert ? `Needs a ${CERT_LABEL[j.cert!]}: see Life → School` : short ? `Needs ${WORK_SKILLS[j.skill]} level ${j.level} (you have ${level})` : ctx.current ? `Leave your job and start as ${j.title}` : `Start as ${j.title}`}
                   className="h-8 shrink-0 rounded-full bg-ink px-3 text-xs font-semibold text-white disabled:opacity-40"
                 >
-                  {short ? `Lvl ${j.level}` : "Take"}
+                  {noCert ? "Course" : level < j.level ? `Lvl ${j.level}` : ctx.current ? "Switch" : "Take"}
                 </button>
               )}
             </li>
