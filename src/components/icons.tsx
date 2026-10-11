@@ -10,6 +10,7 @@ export {
   TrainFront,
   TrendingUp,
   Wallet,
+  Briefcase,
   ArrowUpFromLine,
   Award,
   Bell,

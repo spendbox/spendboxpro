@@ -8,6 +8,7 @@ import type { Building } from "@/lib/world/buildings";
 import { cleanPropertyName, ownedSpot } from "@/lib/world/owned";
 import { rentPerDay, type AssetsData, type BuildingOwner, type OwnedBuildingRow, type PropertyResult } from "@/lib/world/property-api";
 import { toMint, valueOf } from "@/lib/world/value";
+import { collectPay } from "./work-actions";
 
 // Owning property on the real map (docs/PROPERTY.md; the database part is
 // game-db/038_property.sql). The price of a unit is always worked out here, from the map, never
@@ -104,6 +105,8 @@ export async function buyUnit(unitId: string): Promise<PropertyResult> {
 export async function setHome(unitId: string): Promise<PropertyResult> {
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Please sign in again." };
+  // Pay up to now is settled with the fares from where you lived.
+  await collectPay();
   const { error } = await createAdminClient().rpc("property_set_home", { p_user: userId, p_unit: unitId });
   return error ? say(error.message) : { ok: true };
 }

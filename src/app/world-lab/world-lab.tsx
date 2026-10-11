@@ -45,6 +45,7 @@ export function WorldLab({ region }: { region: string }) {
         nightFirst={false}
         onArea={setArea}
         onProperty={life.onProperty}
+        onWorkplace={life.onWorkplace}
         owned={life.owned}
         flyTo={life.flyTo}
       />
@@ -72,4 +73,10 @@ const SERVERLESS = {
   myAssets: async () => null,
   ownedBuildings: async () => [],
   buildingOwners: async () => [],
+  workStatus: async () => null,
+  takeJob: async () => ({ ok: false as const, error: "" }),
+  setCommute: async () => ({ ok: false as const, error: "" }),
+  collectPay: async () => ({ ok: false as const, error: "" }),
+  quitJob: async () => ({ ok: false as const, error: "" }),
+  neighbours: async () => [],
 };

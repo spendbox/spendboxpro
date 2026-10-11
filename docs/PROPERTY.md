@@ -259,7 +259,7 @@ Step 2 plan, as written:
 
 **Step 4: changing the city**
 14. Improve, demolish, rebuild.
-15. Jobs and school tied to the new map.
+15. Jobs tied to the new map (done, with fares to work and neighbours: `docs/WORK.md`); school next.
 
 **Step 5: later**
 16. Ad revenue sharing, once real revenue exists and the lawyer agrees.
