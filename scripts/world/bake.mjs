@@ -4,9 +4,12 @@
 //
 //   npm run bake:world -- lagos           uses the downloaded data if it's there
 //   npm run bake:world -- lagos --fresh   downloads it again
+//   npm run bake:world -- lagos --from-files
+//       uses downloaded files instead of asking overpass-api.de: the sea and tidal water from
+//       scripts/world/clip-water.py, and roads from .cache/<id>-roads.json if there is one
 //
-// Needs curl and access to overpass-api.de. Downloads are kept in scripts/world/.cache (not
-// committed). Prints a small map of the result to check by eye.
+// Needs curl and access to overpass-api.de (or the files). Downloads are kept in
+// scripts/world/.cache (not committed). Prints a small map of the result to check by eye.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -21,6 +24,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..", "..");
 const id = process.argv[2];
 const fresh = process.argv.includes("--fresh");
+const fromFiles = process.argv.includes("--from-files");
 const region = REGIONS[id];
 if (!region) {
   console.error(`Which region? One of: ${Object.keys(REGIONS).join(", ")}`);
@@ -37,9 +41,41 @@ function overpass(name, query) {
   console.log(`Downloading ${name} from OpenStreetMap…`);
   const q = join(cacheDir, `${id}-${name}.query`);
   writeFileSync(q, query);
-  const out = execFileSync("curl", ["-sS", "--fail", "-m", "900", "--data-urlencode", `data@${q}`, OVERPASS], { maxBuffer: 1 << 30 });
-  writeFileSync(file, out);
-  return JSON.parse(out.toString("utf8"));
+  // Busy servers fail now and then: try again a few times, waiting longer each time.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const out = execFileSync("curl", ["-sS", "--fail", "-m", "900", "--data-urlencode", `data@${q}`, OVERPASS], { maxBuffer: 1 << 30 });
+      writeFileSync(file, out);
+      return JSON.parse(out.toString("utf8"));
+    } catch (e) {
+      if (attempt >= 30) throw e;
+      const wait = Math.min(60, 5 * 2 ** attempt);
+      console.log(`  failed (${String(e.message).split("\n").pop()}), trying again in ${wait} s`);
+      execFileSync("sleep", [String(wait)]);
+    }
+  }
+}
+
+/** A big area asked for in smaller pieces (servers turn down very big questions), joined up. */
+function overpassPieces(name, body, cols, rows) {
+  const seen = new Set();
+  const elements = [];
+  const s0 = region.box.south - m, w0 = region.box.west - m, n0 = region.box.north + m, e0 = region.box.east + m;
+  for (let i = 0; i < cols; i++) {
+    for (let j = 0; j < rows; j++) {
+      const b = [s0 + ((n0 - s0) * j) / rows, w0 + ((e0 - w0) * i) / cols, s0 + ((n0 - s0) * (j + 1)) / rows, w0 + ((e0 - w0) * (i + 1)) / cols]
+        .map((v) => v.toFixed(5))
+        .join(",");
+      for (const e of overpass(`${name}-${i}-${j}`, `[out:json][timeout:600];\n(\n${body(b)}\n);\nout geom;`).elements) {
+        const key = `${e.type}${e.id}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          elements.push(e);
+        }
+      }
+    }
+  }
+  return elements;
 }
 
 // ---------------------------------------------------------------- the region's tiles
@@ -55,19 +91,31 @@ const RANKS = ["tertiary", "secondary", "primary", "trunk", "motorway"];
 const minRank = RANKS.indexOf(region.bake?.roads ?? "secondary");
 const wanted = RANKS.slice(minRank).join("|");
 
-const osm = overpass(
-  "map",
-  `[out:json][timeout:600];
-(
-  way["natural"="coastline"](${bbox});
-  way["natural"="water"](${bbox});
-  relation["natural"="water"](${bbox});
-  way["waterway"="riverbank"](${bbox});
-  relation["waterway"="riverbank"](${bbox});
-  way["highway"~"^(${wanted})$"](${bbox});
-);
-out geom;`,
-);
+const readCache = (name) => {
+  const file = join(cacheDir, `${id}-${name}.json`);
+  return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")).elements : [];
+};
+// The sea comes from OpenStreetMap's coastline file when it's been cut out (clip-water.py),
+// otherwise from the coastlines themselves.
+const seaFile = readCache("water");
+const osm = fromFiles
+  ? { elements: [...seaFile, ...readCache("roads")] }
+  : {
+      elements: [
+        ...seaFile,
+        ...overpassPieces(
+          "water",
+          (b) => `${seaFile.length ? "" : `  way["natural"="coastline"](${b});\n`}  way["natural"="water"](${b});
+  relation["natural"="water"](${b});
+  way["waterway"="riverbank"](${b});
+  relation["waterway"="riverbank"](${b});`,
+          2,
+          1,
+        ),
+        ...overpassPieces("roads", (b) => `  way["highway"~"^(${wanted})$"](${b});`, 3, 2),
+      ],
+    };
+void bbox;
 console.log(`${osm.elements.length} map features`);
 
 // ---------------------------------------------------------------- land and water
@@ -302,7 +350,7 @@ for (const e of roads) {
 
 // ---------------------------------------------------------------- landmarks
 const pattern = (l) => l.osm ?? l.name.replace(/\s*[(,].*$/, "").replace(/[.*+?^${}()|[\]\\"]/g, "\\$&");
-const wantedMarks = region.landmarks.filter((l) => l.approx);
+const wantedMarks = fromFiles ? [] : region.landmarks.filter((l) => l.approx);
 const found = {};
 const missed = [];
 if (wantedMarks.length) {
