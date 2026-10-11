@@ -42,6 +42,7 @@ import { workplaceById } from "@/lib/world/workplace";
 import { FIRST_NAMES, SURNAMES } from "@/lib/npc/names";
 import { hash } from "@/lib/city/noise";
 import { packById } from "@/lib/world/packs";
+import { checkServiceForm, gameService, SERVICE_VAT, type ServiceJob, type ServiceOffer, type ServiceRequest } from "@/lib/world/services";
 import { dayOf, dayPlan, EXERCISE, hoursOf, STRESSED_BELOW, workFactor, type Exercise } from "@/lib/world/day";
 import { hustleById, hustleDay, hustleStart } from "@/lib/world/hustles";
 import { interviewStart, interviewSubmit, labDrawEvent, labMarkEvent } from "@/app/play/interview-actions";
@@ -55,6 +56,8 @@ type Saved = {
   buildings: Record<string, { building: Building; name: string | null }>;
   job?: (NonNullable<WorkStatus["job"]> & { paid: number; state?: boolean }) | null;
   skills?: Record<string, number>;
+  /** Services: yours, and jobs with pretend providers. */
+  services?: { offers: ServiceOffer[]; requests: ServiceRequest[]; jobs: (ServiceJob & { effect?: { body?: number; mind?: number } })[] };
   /** The starting budget so far, and the pack bought (the lab pretends to pay). */
   granted?: number;
   pack?: string;
@@ -688,6 +691,77 @@ export function makeLabApi(budget: number): PropertyApi {
       return [];
     },
     async hitBusiness() {},
+    async serviceBoard() {
+      const sv = (s.services ??= { offers: [], requests: [], jobs: [] });
+      // Pretend providers do the job a minute after it's booked.
+      for (const j of sv.jobs) if (j.status === "held" && Date.now() - Date.parse(j.createdAt) > 60_000) {
+        j.status = "done";
+        j.doneAt = new Date().toISOString();
+      }
+      save();
+      const pretend: ServiceOffer[] = [
+        { id: "lab-home", kind: "game", category: "home", title: "Home makeover", about: "I'll arrange and decorate your place so it feels like home.", price: 40, area: "Yaba", phone: null, whatsapp: null, provider: "Kemi A. (pretend)", mine: false },
+        { id: "lab-fit", kind: "game", category: "fitness", title: "Personal training", about: "An hour of training at the park, all levels.", price: 15, area: "Surulere", phone: null, whatsapp: null, provider: "Tunde O. (pretend)", mine: false },
+        { id: "lab-hair", kind: "real", category: "Hair and beauty", title: "Braids at home", about: "Knotless braids and cornrows, I come to you.", price: 15000, area: "Ikeja", phone: "08000000000", whatsapp: null, provider: "Ada N. (pretend)", mine: false },
+      ];
+      return { offers: [...sv.offers, ...pretend], requests: sv.requests, jobs: sv.jobs, canOffer: s.units.length > 0 };
+    },
+    async serviceOffer(f) {
+      const bad = checkServiceForm(f);
+      if (bad) return fail(bad);
+      if (!s.units.length) return fail("Only people who own property can offer services. Buy a property first.");
+      const sv = (s.services ??= { offers: [], requests: [], jobs: [] });
+      sv.offers.unshift({ id: `mine-${Date.now()}`, kind: f.kind, category: f.category, title: f.title.trim(), about: f.about.trim(), price: Number(f.price), area: f.area.trim(), phone: f.phone || null, whatsapp: f.whatsapp || null, provider: "You", mine: true });
+      save();
+      return { ok: true };
+    },
+    async serviceRequest(f) {
+      const bad = checkServiceForm(f);
+      if (bad) return fail(bad);
+      const sv = (s.services ??= { offers: [], requests: [], jobs: [] });
+      sv.requests.unshift({ id: `req-${Date.now()}`, kind: f.kind, category: f.category, title: f.title.trim(), about: f.about.trim(), budget: Number(f.price), area: f.area.trim(), phone: f.phone || null, whatsapp: f.whatsapp || null, by: "You", mine: true, status: "open" });
+      save();
+      return { ok: true };
+    },
+    async serviceClose(id) {
+      const sv = (s.services ??= { offers: [], requests: [], jobs: [] });
+      sv.offers = sv.offers.filter((o) => o.id !== id);
+      sv.requests = sv.requests.filter((r) => r.id !== id);
+      save();
+      return { ok: true };
+    },
+    async serviceBook(offerId) {
+      const board = await this.serviceBoard();
+      const o = board?.offers.find((x) => x.id === offerId && x.kind === "game");
+      if (!o || o.mine) return fail("That isn't available.");
+      if (canSpend(["savings"]) < o.price) return fail(`You need ₥${o.price} for that.`);
+      spend(["savings"], o.price);
+      log("service_hold", -o.price);
+      const g = gameService(o.category);
+      s.services!.jobs.unshift({ id: `job-${Date.now()}`, title: o.title, category: o.category, price: o.price, status: "held", buying: true, other: o.provider, doneAt: null, createdAt: new Date().toISOString(), effect: { body: g?.body, mind: g?.mind } });
+      save();
+      return { ok: true };
+    },
+    async serviceTake() {
+      return fail("In the test page nobody else posts requests.");
+    },
+    async serviceJob(jobId, action) {
+      const j = s.services?.jobs.find((x) => x.id === jobId);
+      if (!j) return fail("That isn't there.");
+      if (action === "confirm" && (j.status === "held" || j.status === "done")) {
+        j.status = "paid";
+        const l = L();
+        l.mind = Math.min(100, (l.mind ?? 70) + (j.effect?.mind ?? 0));
+        l.health = Math.min(100, l.health + (j.effect?.body ?? 0));
+      } else if (action === "cancel" && j.status === "held") {
+        j.status = "refunded";
+        s.coins = r2(s.coins + j.price);
+        log("service_refund", j.price);
+      } else return fail("That can't be done now.");
+      void SERVICE_VAT;
+      save();
+      return { ok: true };
+    },
     async buildingOwners(buildingId) {
       return s.units.filter((u) => u.building === buildingId).map((u) => ({ unit: u.unit, name: "You", mine: true }));
     },

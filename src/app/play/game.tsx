@@ -102,6 +102,7 @@ import * as dayActions from "./day-actions";
 import * as interviewActions from "./interview-actions";
 import * as packActions from "./pack-actions";
 import * as businessActions from "./business-actions";
+import * as serviceActions from "./service-actions";
 import { REGIONS } from "@/lib/world";
 
 // The 3D city only runs in the browser.
@@ -137,7 +138,7 @@ const DuelScreen = dynamic(() => import("./ghost-duel/duel-screen").then((m) => 
 const NO_GHOSTS: CityGhost[] = [];
 const NO_EVENTS: CityEvent[] = [];
 /** Property on the real map, through the server (game-db/038_property.sql). */
-const PROPERTY_API = { ...propertyActions, ...workActions, ...livingActions, ...dayActions, ...interviewActions, ...packActions, ...businessActions };
+const PROPERTY_API = { ...propertyActions, ...workActions, ...livingActions, ...dayActions, ...interviewActions, ...packActions, ...businessActions, ...serviceActions };
 const noSubscribe = () => () => {};
 const noWorld = () => null;
 

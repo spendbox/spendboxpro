@@ -12,6 +12,7 @@ export {
   Wallet,
   Briefcase,
   Globe,
+  Handshake,
   Phone,
   GraduationCap,
   PiggyBank,

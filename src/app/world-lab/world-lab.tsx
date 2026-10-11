@@ -99,4 +99,11 @@ const SERVERLESS = {
   confirmPack: async () => ({ ok: false }),
   mapBusinesses: async () => [],
   hitBusiness: async () => {},
+  serviceBoard: async () => null,
+  serviceOffer: async () => ({ ok: false as const, error: "" }),
+  serviceRequest: async () => ({ ok: false as const, error: "" }),
+  serviceClose: async () => ({ ok: false as const, error: "" }),
+  serviceBook: async () => ({ ok: false as const, error: "" }),
+  serviceTake: async () => ({ ok: false as const, error: "" }),
+  serviceJob: async () => ({ ok: false as const, error: "" }),
 };

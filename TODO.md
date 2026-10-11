@@ -7,6 +7,7 @@
 - [ ] Then run `game-db/041_your_day.sql` (side hustles, Body and Mind, exercise, interviews, breakthroughs; see `docs/DAY.md`). Run it after 040 (and again after 040 if you ever re-run 040).
 - [ ] Then run `game-db/042_starter_packs.sql` (starter packs paid through Paystack; see `docs/PACKS.md`). Paystack's webhook URL must already point at `/api/paystack/webhook` (it does for ads).
 - [ ] Then run `game-db/043_business.sql` (real businesses leasing buildings; see `docs/BUSINESS.md`). Leases and upgrades are paid through the same Paystack webhook.
+- [ ] Then run `game-db/044_services.sql` (services between people; see `docs/SERVICES.md`).
 - [ ] In Vercel, set `GAME_SECRET` to a long random string (seals interview answers and passes; without it the service key is used).
 - [ ] Let the cloud sessions reach OpenStreetMap (for the real Lagos map): in the Claude Code environment settings, Network access, add `overpass-api.de` to the allowed domains. Then ask for the Lagos bake (`npm run bake:world -- lagos`).
 - [ ] Try the new 3D avatar studio (see `avatar-reference/docs/AVATAR_SPEC.md`): open the game with `?avatar3d=1` on your phone, tap your look, design and save. Only your browser gets it; `?avatar3d=0` switches it back.

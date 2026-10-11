@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Briefcase, HeartPulse, House, MapPin, Sparkles, Wallet, X } from "@/components/icons";
+import { Briefcase, Handshake, HeartPulse, House, MapPin, Sparkles, Wallet, X } from "@/components/icons";
 import { makePlan, spiralIndex, tileAt, type CityPlan } from "@/lib/city/layout";
 import { BUILDING_LABEL } from "@/lib/world/buildings";
 import type { RegionMap } from "@/lib/world/compile";
@@ -23,6 +23,7 @@ import { StartLife } from "./start-life";
 import { useLife } from "./use-life";
 import { WorkSheet } from "./work-sheet";
 import { BusinessSheet } from "./business-sheet";
+import { ServicesSheet } from "./services-sheet";
 import type { MapBusiness } from "@/lib/world/business";
 import type { OwnedProperty } from "@/lib/world/owned";
 import { InterviewSheet, MomentSheet } from "./moments";
@@ -81,6 +82,8 @@ export function useWorldLife({
   const [lifeOpen, setLifeOpen] = useState(false);
   const [interview, setInterview] = useState<{ start: Extract<InterviewStart, { ok: true }>; hire: (ticket: string) => void } | null>(null);
   const [moment, setMoment] = useState(false);
+  const [servicesOpen, setServicesOpen] = useState(false);
+  const loadServices = useCallback(() => api.serviceBoard(), [api]);
   const [businesses, setBusinesses] = useState<MapBusiness[]>([]);
   const [business, setBusiness] = useState<MapBusiness | null>(null);
   const [confirm, setConfirm] = useState<{ title: string; text: string; yes: string; run: () => void } | null>(null);
@@ -240,6 +243,12 @@ export function useWorldLife({
           <button onClick={() => setWorkOpen(true)} className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold" aria-label="Work">
             <Briefcase className="size-4" />
             <span className="max-sm:hidden">Work</span>
+          </button>
+        )}
+        {signedIn && life && (
+          <button onClick={() => setServicesOpen(true)} className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold" aria-label="Services">
+            <Handshake className="size-4" />
+            <span className="max-sm:hidden">Services</span>
           </button>
         )}
         {signedIn && life && (
@@ -408,6 +417,41 @@ export function useWorldLife({
             if (s) fly(s.x, s.z);
             setAssetsOpen(false);
           }}
+        />
+      )}
+      {servicesOpen && (
+        <ServicesSheet
+          load={loadServices}
+          busy={busy}
+          onBook={(id, title, cost) =>
+            setConfirm({
+              title: `Book ${title}?`,
+              text: `₥${money(cost)} is held from your Savings (then wallet) and goes to them when you confirm it's done. You can cancel until they start.`,
+              yes: `Book for ₥${money(cost)}`,
+              run: () => act(() => api.serviceBook(id), () => "Booked. You'll see it under Services → Yours."),
+            })
+          }
+          onTake={(id, title) =>
+            setConfirm({
+              title: `Take on "${title}"?`,
+              text: "Their money is held now and paid to you when they confirm it's done (or 6 hours after you mark it done), less VAT.",
+              yes: "Take it on",
+              run: () => act(() => api.serviceTake(id), () => "It's yours to do. Mark it done under Services → Yours."),
+            })
+          }
+          onJob={(id, action) =>
+            act(
+              () => api.serviceJob(id, action),
+              () => ({ done: "Marked done. They'll confirm and pay.", confirm: "Paid. Thanks for using a local service!", decline: "Declined; they get their money back.", cancel: "Cancelled; your money's back." })[action],
+            )
+          }
+          onPost={async (what, f) => {
+            const r = what === "offer" ? await api.serviceOffer(f) : await api.serviceRequest(f);
+            if (r.ok) setMessage({ text: what === "offer" ? "Your service is up." : "Your request is up.", good: true });
+            return r;
+          }}
+          onCloseItem={(id) => act(() => api.serviceClose(id), () => "Closed.")}
+          onClose={() => setServicesOpen(false)}
         />
       )}
       {business && (

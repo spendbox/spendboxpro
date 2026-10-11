@@ -5,6 +5,7 @@
 import type { Building, UnitUse } from "./buildings.ts";
 import type { BusinessHit, MapBusiness } from "./business.ts";
 import type { Exercise } from "./day.ts";
+import type { ServiceBoard, ServiceForm } from "./services.ts";
 import type { Budget, Pot } from "./living.ts";
 import type { Commute } from "./work.ts";
 
@@ -113,6 +114,13 @@ export type PropertyApi = {
   confirmPack: (reference: string) => Promise<{ ok: boolean; mint?: number; error?: string }>;
   mapBusinesses: (region: string) => Promise<MapBusiness[]>;
   hitBusiness: (id: string, kind: BusinessHit) => Promise<void>;
+  serviceBoard: () => Promise<ServiceBoard | null>;
+  serviceOffer: (f: ServiceForm) => Promise<PropertyResult>;
+  serviceRequest: (f: ServiceForm) => Promise<PropertyResult>;
+  serviceClose: (id: string) => Promise<PropertyResult>;
+  serviceBook: (offerId: string) => Promise<PropertyResult>;
+  serviceTake: (requestId: string) => Promise<PropertyResult>;
+  serviceJob: (jobId: string, action: "done" | "confirm" | "decline" | "cancel") => Promise<PropertyResult>;
 };
 
 /** The purchase tax (the database's property_buy_tax), for showing what a unit really costs. */
