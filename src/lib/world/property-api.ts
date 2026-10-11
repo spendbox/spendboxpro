@@ -6,6 +6,7 @@ import type { Building, UnitUse } from "./buildings.ts";
 import type { BusinessHit, MapBusiness } from "./business.ts";
 import type { Exercise } from "./day.ts";
 import type { ServiceBoard, ServiceForm } from "./services.ts";
+import type { ReportKind } from "./reports.ts";
 import type { Budget, Pot } from "./living.ts";
 import type { Commute } from "./work.ts";
 
@@ -121,6 +122,7 @@ export type PropertyApi = {
   serviceBook: (offerId: string) => Promise<PropertyResult>;
   serviceTake: (requestId: string) => Promise<PropertyResult>;
   serviceJob: (jobId: string, action: "done" | "confirm" | "decline" | "cancel") => Promise<PropertyResult>;
+  reportMap: (r: { region: string; x: number; z: number; kind: ReportKind; note: string }) => Promise<PropertyResult>;
 };
 
 /** The purchase tax (the database's property_buy_tax), for showing what a unit really costs. */

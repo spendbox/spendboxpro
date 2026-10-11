@@ -46,6 +46,7 @@ export function WorldLab({ region }: { region: string }) {
         onArea={setArea}
         onProperty={life.onProperty}
         onWorkplace={life.onWorkplace}
+        centerRef={life.centerRef}
         businesses={life.businesses}
         onBusiness={life.onBusiness}
         owned={life.owned}
@@ -106,4 +107,5 @@ const SERVERLESS = {
   serviceBook: async () => ({ ok: false as const, error: "" }),
   serviceTake: async () => ({ ok: false as const, error: "" }),
   serviceJob: async () => ({ ok: false as const, error: "" }),
+  reportMap: async () => ({ ok: false as const, error: "" }),
 };
