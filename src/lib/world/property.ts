@@ -10,7 +10,10 @@ export type PropertyUnit = { id: string; label: string; use: UnitUse; floor: num
 
 export type PropertyInfo = {
   id: string;
+  /** Its owner's name for it, or what it is ("Block of flats"). */
   title: string;
+  /** What it is, when it has its own name. */
+  kind: string | null;
   /** "Unfinished", "Building site" or null when it's finished. */
   state: string | null;
   address: string;
@@ -39,7 +42,8 @@ export function propertyInfo(b: Building, x: number, z: number, address: string,
   const v = valueOf(b, region.landPriceAt(x, z), prices);
   return {
     id: b.id,
-    title: BUILDING_LABEL[b.kind],
+    title: b.name ?? BUILDING_LABEL[b.kind],
+    kind: b.name ? BUILDING_LABEL[b.kind] : null,
     state: b.state === "uncompleted" ? "Unfinished" : b.state === "site" ? "Building site" : null,
     address,
     area: region.areaAt(x, z),

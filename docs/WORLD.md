@@ -74,6 +74,9 @@ If two landmarks overlap, the later one is left out and the tests report it.
   lined up with its line: platforms, canopies, a hall, stairs and a lift up to raised platforms.
 - **Pedestrian crossings**, six kinds: zebra, with their own lights, ladder, with a refuge island,
   yellow school crossings by schools, raised. Where the map has them, and on busy streets.
+- **People walking** keep to streets with pavements, and cross at junction zebras and the
+  crossings: never along an expressway, across wide tarmac, on a road over water, or on the water
+  itself (boats are for that).
 - **Traffic** follows how busy each road is (the area's crowd and the kind of road), with more
   cars and longer jams in the Lagos rush hours. Later it will also follow how many players live
   and visit there.

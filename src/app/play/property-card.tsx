@@ -24,6 +24,7 @@ export function PropertyCard({ info, onClose }: { info: PropertyInfo; onClose: (
               {info.address} · {info.area}
             </span>
           </p>
+          {info.kind && <p className="mt-0.5 text-sm text-muted">{info.kind}</p>}
           {info.estate && <p className="mt-0.5 text-sm text-muted">In {info.estate} (a gated estate)</p>}
         </div>
         <button onClick={onClose} className="grid size-8 shrink-0 place-items-center rounded-full hover:bg-ink/5" aria-label="Close">

@@ -66,6 +66,19 @@ chart.
 
 **Landmarks can't be bought.** They belong to the city (later the government, see section 8).
 
+## 2b. Owned property never disappears
+
+- When a property is bought, its whole building (kind, storeys, units, look) is saved with the
+  purchase (`src/lib/world/owned.ts`). On the map an owned property always stands as bought, even
+  if the map data is baked again, an area is corrected, or the rules that make buildings change.
+- Every building and unit id comes from where it stands on the region's fixed map, so ids never
+  change as the map grows.
+- Before a map update goes out, `checkOwned` lists every owned property the new map would put
+  something else on (a road, water, a bridge or railway, a landmark). The update is then routed
+  round it, or the owner offered a swap for an equal property; nobody's property is just removed.
+- Owners can give their property its own name ("Ada's Place", 2 to 40 characters): the map bubble
+  and its card show it, with what it is underneath.
+
 ## 3. Money coming in: how real estate earns
 
 Like real estate, not every property pays out. Each unit is one of these:

@@ -68,6 +68,8 @@ export type Building = {
   look: [number, number, number, number, number];
   /** Which way its front (gate, door, shopfronts) faces: 0 +z, 1 +x, 2 -z, 3 -x. */
   face: 0 | 1 | 2 | 3;
+  /** Its owner's name for it ("Ada's Place"), if they've given it one (see ./owned). */
+  name?: string;
   /** Part of a gated estate: its name, and which sides of this lot carry the estate's wall. */
   estate?: { id: string; name: string; walls: [boolean, boolean, boolean, boolean]; gate: boolean };
 };

@@ -3830,7 +3830,7 @@ export function CityView({
     /** A property on the real map: what it is and what it's worth ("Block of flats · ₥31,240"). */
     function propertyName(b: Building, at: Tile, region: RegionMap) {
       const kind = BUILDING_LABEL[b.kind];
-      const what = b.state === "site" ? "Building site" : b.state === "uncompleted" ? `Unfinished ${kind.toLowerCase()}` : kind;
+      const what = b.name ?? (b.state === "site" ? "Building site" : b.state === "uncompleted" ? `Unfinished ${kind.toLowerCase()}` : kind);
       const value = valueOf(b, region.landPriceAt(at.x, at.z), region.region.prices).total;
       return `${what} · ${shortMint(toMint(value, region.region.prices))}`;
     }

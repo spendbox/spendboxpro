@@ -8,6 +8,7 @@
 
 import type { HouseInterior, HouseStyle, TownHouse } from "@/lib/houses";
 import type { RegionMap } from "@/lib/world/compile";
+import type { OwnedProperty } from "@/lib/world/owned";
 import { buildingFor, buildingTop, ESTATE_KINDS, wealthOf, type Building, type EstatePlan } from "@/lib/world/buildings";
 import { ABBREV, CLUB_NAMES, eggChoices, FLAVORS, landmarkChoices, nameOf, RESTAURANT_NAMES, type EasterEgg, type Flavor, type LandmarkKey, type Named } from "./places";
 
@@ -145,6 +146,8 @@ export type Tile = {
    * big interchange drawn two or more tiles wide): plain asphalt, no lights or crossings.
    */
   wide?: boolean;
+  /** A real place's expressway (no pavements: nobody walks along it). */
+  express?: boolean;
   /** A real place's tile kept clear of buildings: under a deck, beside a railway, a station's site. */
   clear?: "deck" | "track" | "station";
   /** A pedestrian crossing on this stretch: 0 zebra, 1 with lights, 2 ladder, 3 refuge island, 4 school, 5 raised. */
@@ -327,6 +330,11 @@ export type CityPlan = {
   palette: Palette;
   /** Players' houses in this game, by tile (set by placeHouses in ./houses.ts). */
   homes?: Map<number, TownHouse>;
+  /**
+   * A real place's owned properties, by building id: they stand exactly as bought, whatever the
+   * map would put there now (src/lib/world/owned). Set by placeOwned.
+   */
+  owned?: Map<string, OwnedProperty>;
   /**
    * A real place (src/lib/world): its land and water, main roads, landmarks and districts come
    * from the map, and the layout fills in the streets and buildings between them.
@@ -1487,9 +1495,46 @@ function homeTile(t: Tile, h: TownHouse): Tile {
   };
 }
 
+/** Put a real place's owned properties on its plan (they then always stand as bought). */
+export function placeOwned(plan: CityPlan, owned: OwnedProperty[] | null | undefined) {
+  plan.owned = owned?.length ? new Map(owned.map((o) => [o.id, o])) : undefined;
+}
+
+/** The lot an owned property stands on: its saved building, its owner's name. */
+function ownedTile(i: number, x: number, z: number, o: OwnedProperty, seed: number): Tile {
+  const b = o.name ? { ...o.building, name: o.name } : o.building;
+  const business = ["shops", "plaza", "mixed", "offices", "warehouse"].includes(b.kind);
+  const kind: TileKind = b.kind === "glass" || b.kind === "apartments" ? "tower" : business ? "office" : "house";
+  const r: Tile["r"] = [hash(x, z, seed), hash(x, z, seed + 1), hash(x, z, seed + 2), hash(x, z, seed + 3)];
+  return { i, x, z, kind, top: buildingTop(b), r, building: b };
+}
+
+/**
+ * What a real place's map would put on a tile, ignoring who owns what: for checking a map update
+ * against owned properties (src/lib/world/owned, checkOwned).
+ */
+export function mapPutsAt(plan: CityPlan, x: number, z: number): Building | "road" | "water" | "deck" | "landmark" | "open" {
+  const owned = plan.owned;
+  plan.owned = undefined;
+  try {
+    const t = lotAt(plan, spiralIndex(x, z));
+    if (t.building) return t.building;
+    if (t.kind === "road" || t.kind === "bridge") return "road";
+    if (t.kind === "lake" || t.kind === "river") return "water";
+    if (t.clear) return "deck";
+    if (t.kind === "structure" || t.name) return "landmark";
+    return "open";
+  } finally {
+    plan.owned = owned;
+  }
+}
+
 /** What the city plan puts on tile i, before any player's house. */
 export function lotAt(plan: CityPlan, i: number): Tile {
   const [x, z] = spiralXY(i);
+  // Owned property stands as bought, whatever the map would put here now.
+  const owned = plan.owned && plan.region ? plan.owned.get(`${plan.region.region.id}:${x},${z}`) : undefined;
+  if (owned) return ownedTile(i, x, z, owned, plan.seed);
   let t = baseTile(plan, x, z);
   t.i = i;
   if (onRail(plan, x, z)) {
@@ -1672,9 +1717,12 @@ function roadTile(plan: CityPlan, x: number, z: number, r: Tile["r"]): Tile {
     let around = 0;
     for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) if ((dx || dz) && isRoad(plan, x + dx, z + dz)) around++;
     if (around >= 5) return { i: -1, x, z, kind: "road", top: 0.05, road: dir, mask, roundabout: false, r, wide: true };
+    const kind = plan.region.roadAt(x, z)?.kind;
+    const express = kind === "motorway" || kind === "trunk" || undefined;
     // Pedestrian crossings: where the map has one, and now and then on busy streets.
     const crossing = straight && !works && !incident ? crossingOf(plan, x, z, mask) : undefined;
-    if (crossing !== undefined) return { i: -1, x, z, kind: "road", top: 0.05, road: dir, mask, roundabout: false, r, crossing };
+    if (crossing !== undefined) return { i: -1, x, z, kind: "road", top: 0.05, road: dir, mask, roundabout: false, r, crossing, express };
+    if (express) return { i: -1, x, z, kind: "road", top: works ? 0.45 : roundabout ? 0.3 : 0.05, road: dir, mask, roundabout, r, works: works || undefined, incident, express };
   }
   return { i: -1, x, z, kind: "road", top: works ? 0.45 : roundabout ? 0.3 : 0.05, road: dir, mask, roundabout, r, works: works || undefined, incident };
 }
