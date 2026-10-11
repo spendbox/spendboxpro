@@ -318,6 +318,8 @@ type Props = {
   onGhost?: (id: string) => void;
   /** Fly the camera over a spot (a new `at` each time), e.g. a ghost picked from a list. */
   flyTo?: { tile: number; at: number } | null;
+  /** Filled in with a way to ask which tile is in the middle of the view (for reporting a problem there). */
+  centerRef?: { current: (() => { x: number; z: number }) | null };
   /** Freeze the town (it stops moving and drawing), e.g. behind the sign-in pop-up. */
   paused?: boolean;
 };
@@ -1342,6 +1344,7 @@ export function CityView({
   ghosts,
   onGhost,
   flyTo = null,
+  centerRef,
   paused = false,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
@@ -1349,6 +1352,7 @@ export function CityView({
     build: (seed: number, count: number, region?: string | null) => void;
     setOwned: (list: OwnedProperty[] | undefined) => void;
     setBusinesses: (list: MapBusiness[]) => void;
+    center: () => { x: number; z: number };
     setMarkers: (m: CityMarkers) => void;
     playEvents: (e: CityEvent[]) => void;
     setBalloon: (slot: number | null) => void;
@@ -6307,7 +6311,8 @@ export function CityView({
       ownedNow = next;
       if (regionNow && currentSeed >= 0 && builtCount > 0) build(currentSeed, builtCount);
     }
-    api.current = { build: buildFor, setOwned, setBusinesses, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, zoom };
+    const center = () => ({ x: Math.round(controls.target.x), z: Math.round(controls.target.z) });
+    api.current = { center, build: buildFor, setOwned, setBusinesses, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, zoom };
 
     return () => {
       alive = false;
@@ -6462,6 +6467,9 @@ export function CityView({
   useEffect(() => {
     api.current?.setBusinesses(businesses ?? []);
   }, [businesses]);
+  useEffect(() => {
+    if (centerRef) centerRef.current = () => api.current?.center() ?? { x: 0, z: 0 };
+  }, [centerRef]);
 
   const friendsKey = (friendsAt ?? []).map((f) => `${f.id}@${f.room}|${f.name}|${JSON.stringify(f.avatar)}`).join(";");
   const friendsRef = useRef(friendsAt);

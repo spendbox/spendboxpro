@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Building2, House, KeyRound, MapPin, Pencil, Store, Trees, X } from "@/components/icons";
+import { Building2, Flag, House, KeyRound, MapPin, Pencil, Store, Trees, X } from "@/components/icons";
 import type { PropertyInfo, PropertyUnit } from "@/lib/world/property";
 import { BUY_TAX, type BuildingOwner } from "@/lib/world/property-api";
 import { JobsHere, type JobsContext } from "./life/jobs-here";
@@ -29,7 +29,7 @@ export type Market = {
 };
 
 /** A property on the real map, tapped: what it is, what it's worth, and every unit in it. */
-export function PropertyCard({ info, market, jobs, onClose }: { info: PropertyInfo; market?: Market; jobs?: JobsContext; onClose: () => void }) {
+export function PropertyCard({ info, market, jobs, onReport, onClose }: { info: PropertyInfo; market?: Market; jobs?: JobsContext; onReport?: () => void; onClose: () => void }) {
   const owners = new Map((market?.owners ?? []).map((o) => [o.unit, o]));
   const mineAll = !!market?.owners && info.units.every((u) => owners.get(u.id)?.mine);
   const [renaming, setRenaming] = useState(false);
@@ -133,6 +133,11 @@ export function PropertyCard({ info, market, jobs, onClose }: { info: PropertyIn
         </div>
       )}
       {!market && <p className="mt-4 text-center text-xs text-muted">Sign in to buy property.</p>}
+      {onReport && (
+        <button onClick={onReport} className="mt-4 flex items-center gap-1.5 text-xs font-medium text-muted hover:text-ink">
+          <Flag className="size-3.5" /> Report a problem with this building
+        </button>
+      )}
       {(market?.owners ?? []).length === 0 && (
         <a href={`/business?building=${encodeURIComponent(info.id)}`} className="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-gold/10 px-4 py-3 text-sm ring-1 ring-gold/30">
           <span>

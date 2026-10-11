@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Briefcase, Handshake, HeartPulse, House, MapPin, Sparkles, Wallet, X } from "@/components/icons";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Briefcase, Flag, Handshake, HeartPulse, House, MapPin, Sparkles, Wallet, X } from "@/components/icons";
 import { makePlan, spiralIndex, tileAt, type CityPlan } from "@/lib/city/layout";
 import { BUILDING_LABEL } from "@/lib/world/buildings";
 import type { RegionMap } from "@/lib/world/compile";
@@ -24,6 +24,7 @@ import { useLife } from "./use-life";
 import { WorkSheet } from "./work-sheet";
 import { BusinessSheet } from "./business-sheet";
 import { ServicesSheet } from "./services-sheet";
+import { ReportSheet } from "./report-sheet";
 import type { MapBusiness } from "@/lib/world/business";
 import type { OwnedProperty } from "@/lib/world/owned";
 import { InterviewSheet, MomentSheet } from "./moments";
@@ -83,6 +84,8 @@ export function useWorldLife({
   const [interview, setInterview] = useState<{ start: Extract<InterviewStart, { ok: true }>; hire: (ticket: string) => void } | null>(null);
   const [moment, setMoment] = useState(false);
   const [servicesOpen, setServicesOpen] = useState(false);
+  const [report, setReport] = useState<{ x: number; z: number; where: string } | null>(null);
+  const centerRef = useRef<(() => { x: number; z: number }) | null>(null);
   const loadServices = useCallback(() => api.serviceBoard(), [api]);
   const [businesses, setBusinesses] = useState<MapBusiness[]>([]);
   const [business, setBusiness] = useState<MapBusiness | null>(null);
@@ -115,6 +118,15 @@ export function useWorldLife({
       clearInterval(every);
     };
   }, [api, regionId]);
+
+  // A link to a spot (?at=x,z, from the map reports page): fly there.
+  useEffect(() => {
+    if (!regionId) return;
+    const m = /^(-?\d+),(-?\d+)$/.exec(new URLSearchParams(window.location.search).get("at") ?? "");
+    if (!m) return;
+    const t = setTimeout(() => setFlyTo({ tile: spiralIndex(Number(m[1]), Number(m[2])), at: Date.now() }), 1500);
+    return () => clearTimeout(t);
+  }, [regionId]);
 
   // Back from paying for a pack: check it with Paystack, then tidy the address.
   useEffect(() => {
@@ -329,6 +341,11 @@ export function useWorldLife({
           <div className="mt-4">
             {jobs ? <JobsHere place={place} ctx={jobs} /> : <p className="text-sm text-muted">Sign in to work here.</p>}
           </div>
+          {signedIn && (
+            <button onClick={() => setReport({ x: place.x, z: place.z, where: place.name })} className="mt-4 flex items-center gap-1.5 text-xs font-medium text-muted hover:text-ink">
+              <Flag className="size-3.5" /> Report a problem with this place
+            </button>
+          )}
         </Sheet>
       )}
       {workOpen && jobs && (
@@ -375,6 +392,14 @@ export function useWorldLife({
         <PropertyCard
           key={property.id}
           jobs={jobs}
+          onReport={
+            signedIn
+              ? () => {
+                  const sp = ownedSpot(property.id);
+                  if (sp) setReport({ x: sp.x, z: sp.z, where: `${property.title}, ${property.address}` });
+                }
+              : undefined
+          }
           info={property}
           onClose={() => setProperty(null)}
           market={
@@ -453,6 +478,30 @@ export function useWorldLife({
           onCloseItem={(id) => act(() => api.serviceClose(id), () => "Closed.")}
           onClose={() => setServicesOpen(false)}
         />
+      )}
+      {report && (
+        <ReportSheet
+          where={report.where}
+          pretend={pretend}
+          onSend={async (kind, note) => {
+            const r = await api.reportMap({ region: region.region.id, x: report.x, z: report.z, kind, note });
+            if (r.ok) setMessage({ text: pretend ? "Report noted (test page: not sent)." : "Thanks! We'll look at it and let you know when it's fixed.", good: true });
+            return r;
+          }}
+          onClose={() => setReport(null)}
+        />
+      )}
+      {signedIn && (
+        <button
+          onClick={() => {
+            const c = centerRef.current?.();
+            if (c) setReport({ x: c.x, z: c.z, where: `${region.areaAt(c.x, c.z)}: the middle of your screen` });
+          }}
+          className="glass pointer-events-auto absolute bottom-7 left-2.5 z-10 flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold sm:left-4"
+          aria-label="Report a problem with the map"
+        >
+          <Flag className="size-3.5" /> <span className="max-sm:hidden">Report a problem</span>
+        </button>
       )}
       {business && (
         <BusinessSheet b={business} onHit={(kind) => void api.hitBusiness(business.id, kind)} onClose={() => setBusiness(null)} />
@@ -558,5 +607,5 @@ export function useWorldLife({
     [api],
   );
 
-  return { owned: shown, flyTo, onProperty, onWorkplace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay };
+  return { centerRef, owned: shown, flyTo, onProperty, onWorkplace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay };
 }

@@ -762,6 +762,10 @@ export function makeLabApi(budget: number): PropertyApi {
       save();
       return { ok: true };
     },
+    async reportMap() {
+      // The test page doesn't send reports anywhere.
+      return { ok: true };
+    },
     async buildingOwners(buildingId) {
       return s.units.filter((u) => u.building === buildingId).map((u) => ({ unit: u.unit, name: "You", mine: true }));
     },
