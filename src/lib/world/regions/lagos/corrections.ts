@@ -12,4 +12,16 @@
 
 import type { Correction } from "../../region.ts";
 
-export const CORRECTIONS: Correction[] = [];
+export const CORRECTIONS: Correction[] = [
+  {
+    kind: "landmark",
+    note: "Its real spot (6.4500, 3.3964) is ~120 m from Freedom Park and City Hall: just west of them (~180 m) so all three fit.",
+    id: "holy-cross-cathedral",
+    set: { at: { lat: 6.45015, lon: 3.39481 }, approx: false },
+  },
+  {
+    kind: "no-landmark",
+    note: "The map has it at 6.6229, 3.3569, just north of the area Lagos covers for now. Take this out when the area grows north.",
+    id: "new-afrika-shrine",
+  },
+];

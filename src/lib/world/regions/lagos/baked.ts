@@ -1571,4 +1571,93 @@ export const ROUTES: Road[] = [
  }
 ];
 
-export const FOUND: Record<string, LatLon> = {};
+export const FOUND: Record<string, LatLon> = {
+ "city-hall": {
+  "lat": 6.45066,
+  "lon": 3.39752
+ },
+ "cathedral-church-of-christ": {
+  "lat": 6.45089,
+  "lon": 3.3902
+ },
+ "holy-cross-cathedral": {
+  "lat": 6.45,
+  "lon": 3.39644
+ },
+ "central-mosque": {
+  "lat": 6.4574,
+  "lon": 3.38817
+ },
+ "tafawa-balewa-square": {
+  "lat": 6.44863,
+  "lon": 3.40098
+ },
+ "freedom-park": {
+  "lat": 6.44894,
+  "lon": 3.39655
+ },
+ "onikan-stadium": {
+  "lat": 6.44267,
+  "lon": 3.40202
+ },
+ "obas-palace": {
+  "lat": 6.46174,
+  "lon": 3.38936
+ },
+ "terra-kulture": {
+  "lat": 6.42526,
+  "lon": 3.42665
+ },
+ "civic-centre": {
+  "lat": 6.44012,
+  "lon": 3.43087
+ },
+ "landmark-centre": {
+  "lat": 6.42321,
+  "lon": 3.44535
+ },
+ "ikoyi-club": {
+  "lat": 6.45201,
+  "lon": 3.42791
+ },
+ "nike-art-gallery": {
+  "lat": 6.43247,
+  "lon": 3.48222
+ },
+ "national-theatre": {
+  "lat": 6.47478,
+  "lon": 3.36885
+ },
+ "national-stadium": {
+  "lat": 6.49827,
+  "lon": 3.36457
+ },
+ "teslim-balogun-stadium": {
+  "lat": 6.49971,
+  "lon": 3.36077
+ },
+ "unilag": {
+  "lat": 6.51496,
+  "lon": 3.38938
+ },
+ "yabatech": {
+  "lat": 6.51857,
+  "lon": 3.37424
+ },
+ "luth": {
+  "lat": 6.51804,
+  "lon": 3.35588
+ },
+ "computer-village": {
+  "lat": 6.5943,
+  "lon": 3.34044
+ },
+ "new-afrika-shrine": {
+  "lat": 6.62287,
+  "lon": 3.35689
+ },
+ "ikeja-city-mall": {
+  "lat": 6.61432,
+  "lon": 3.3578
+ }
+};
