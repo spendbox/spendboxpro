@@ -45,8 +45,11 @@ function overpass(name, query) {
   for (let attempt = 1; ; attempt++) {
     try {
       const out = execFileSync("curl", ["-sS", "--fail", "-m", "900", "--data-urlencode", `data@${q}`, OVERPASS], { maxBuffer: 1 << 30 });
+      const json = JSON.parse(out.toString("utf8"));
+      // A server that ran out of time still answers, but with nothing in it: try again.
+      if (/error/i.test(json.remark ?? "")) throw new Error(json.remark);
       writeFileSync(file, out);
-      return JSON.parse(out.toString("utf8"));
+      return json;
     } catch (e) {
       if (attempt >= 8) throw e;
       const wait = Math.min(60, 5 * 2 ** attempt);
@@ -356,15 +359,16 @@ const missed = [];
 // Asked about a few at a time (a busy server turns down one big question). A batch that still
 // fails is skipped: those landmarks stay where landmarks.ts puts them, and the bake carries on.
 const marks = [];
-for (let k = 0; k < wantedMarks.length; k += 6) {
-  const batch = wantedMarks.slice(k, k + 6);
+// Everything with a name round each one (quick for the server), matched here.
+for (let k = 0; k < wantedMarks.length; k += 3) {
+  const batch = wantedMarks.slice(k, k + 3);
   try {
     marks.push(
       ...overpass(
-        `landmarks-${k / 6}`,
+        `landmarks-${k / 3}`,
         `[out:json][timeout:120];
 (
-${batch.map((l) => `  nwr(around:2500,${l.at.lat},${l.at.lon})["name"~"${pattern(l)}",i];`).join("\n")}
+${batch.map((l) => `  nwr["name"](${(l.at.lat - 0.022).toFixed(4)},${(l.at.lon - 0.022).toFixed(4)},${(l.at.lat + 0.022).toFixed(4)},${(l.at.lon + 0.022).toFixed(4)});`).join("\n")}
 );
 out center tags;`,
       ).elements,
