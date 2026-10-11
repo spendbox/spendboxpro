@@ -24,7 +24,7 @@ export function WorldLab({ region }: { region: string }) {
   // A pretend wallet kept in this browser (the server never has one).
   const api = useSyncExternalStore(noSubscribe, labApi, noApi);
   const r = REGIONS[region];
-  const life = useWorldLife({ api: api ?? SERVERLESS, regionId: r ? region : null, signedIn: !!api, budget: BUDGET });
+  const life = useWorldLife({ api: api ?? SERVERLESS, regionId: r ? region : null, signedIn: !!api, budget: BUDGET, pretend: true });
   if (!r) return <main className="grid min-h-dvh place-items-center text-muted">No region called “{region}”.</main>;
   const credit = r.water || r.roads.length > 0;
   return (
@@ -93,4 +93,6 @@ const SERVERLESS = {
   interviewStart: async () => ({ ok: false as const, error: "" }),
   interviewSubmit: async () => ({ ok: false as const, error: "" }),
   answerEvent: async () => ({ ok: false as const, error: "" }),
+  startPack: async () => ({ ok: false as const, error: "" }),
+  confirmPack: async () => ({ ok: false }),
 };

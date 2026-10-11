@@ -44,7 +44,22 @@ const paid = (p: PaySettled | undefined) =>
  * budget, buy a home first), and buying from a property's card. Gives the city view what it needs
  * (owned buildings, where to fly, what to do when a property is tapped) and the screens to show.
  */
-export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { api: PropertyApi; regionId: string | null; signedIn: boolean; budget: number; onChanged?: () => void }) {
+export function useWorldLife({
+  api,
+  regionId,
+  signedIn,
+  budget,
+  pretend,
+  onChanged,
+}: {
+  api: PropertyApi;
+  regionId: string | null;
+  signedIn: boolean;
+  budget: number;
+  /** The world lab: payments are pretend. */
+  pretend?: boolean;
+  onChanged?: () => void;
+}) {
   const region = useMemo(() => regionMap(regionId), [regionId]);
   const { assets, owned, loaded, refresh } = useLife(api, signedIn ? regionId : null);
   const [property, setProperty] = useState<PropertyInfo | null>(null);
@@ -78,6 +93,20 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
       clearInterval(every);
     };
   }, [api, signedIn, regionId]);
+
+  // Back from paying for a pack: check it with Paystack, then tidy the address.
+  useEffect(() => {
+    if (!signedIn) return;
+    const ref = new URLSearchParams(window.location.search).get("pack");
+    if (!ref) return;
+    void api.confirmPack(ref).then(async (r) => {
+      setMessage(r.ok ? { text: `Your pack is in: ₥${(r.mint ?? 0).toLocaleString("en-GB")} to start with.`, good: true } : { text: r.error ?? "That payment hasn't gone through.", good: false });
+      const url = new URL(window.location.href);
+      url.searchParams.delete("pack");
+      window.history.replaceState(null, "", url);
+      await refresh();
+    });
+  }, [api, signedIn, refresh]);
 
   useEffect(() => {
     if (!message) return;
@@ -239,7 +268,18 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
           prices={region.region.prices}
           started={!!life}
           busy={busy}
+          granted={life?.granted ?? 0}
+          pretend={pretend}
           onStart={() => act(() => api.startLife(region.region.id), () => null)}
+          onPack={async (id) => {
+            setBusy(true);
+            const r = await api.startPack(id, region.region.id);
+            setBusy(false);
+            if (!r.ok) return setMessage({ text: r.error, good: false });
+            if (r.url) return void window.location.assign(r.url);
+            setMessage({ text: "Your pack is in. Now find your first home!", good: true });
+            await refresh();
+          }}
           onClose={() => setWelcomeShut(true)}
         />
       )}

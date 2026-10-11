@@ -107,6 +107,9 @@ export type PropertyApi = {
   interviewStart: (placeId: string, job: string) => Promise<InterviewStart>;
   interviewSubmit: (token: string, answers: number[]) => Promise<InterviewResult>;
   answerEvent: (choice: number) => Promise<EventResult>;
+  /** Pay for a starter pack: a Paystack page to go to (or, in the lab, the mint at once). */
+  startPack: (pack: string, region: string) => Promise<{ ok: true; url?: string; coins?: number } | { ok: false; error: string }>;
+  confirmPack: (reference: string) => Promise<{ ok: boolean; mint?: number; error?: string }>;
 };
 
 /** The purchase tax (the database's property_buy_tax), for showing what a unit really costs. */

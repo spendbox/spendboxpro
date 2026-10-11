@@ -41,6 +41,7 @@ import { fareMint, fareOrBus, GAME_DAY_HOURS, HOLD_DAYS, INCOME_TAX, payDay, SKI
 import { workplaceById } from "@/lib/world/workplace";
 import { FIRST_NAMES, SURNAMES } from "@/lib/npc/names";
 import { hash } from "@/lib/city/noise";
+import { packById } from "@/lib/world/packs";
 import { dayOf, dayPlan, EXERCISE, hoursOf, STRESSED_BELOW, workFactor, type Exercise } from "@/lib/world/day";
 import { hustleById, hustleDay, hustleStart } from "@/lib/world/hustles";
 import { interviewStart, interviewSubmit, labDrawEvent, labMarkEvent } from "@/app/play/interview-actions";
@@ -54,6 +55,9 @@ type Saved = {
   buildings: Record<string, { building: Building; name: string | null }>;
   job?: (NonNullable<WorkStatus["job"]> & { paid: number; state?: boolean }) | null;
   skills?: Record<string, number>;
+  /** The starting budget so far, and the pack bought (the lab pretends to pay). */
+  granted?: number;
+  pack?: string;
   life?: {
     budget: Budget;
     pots: Record<Pot, number>;
@@ -321,9 +325,10 @@ export function makeLabApi(budget: number): PropertyApi {
   };
   return {
     async startLife(region) {
-      if (!s.region) {
+      if (!s.region && !s.granted) {
         s.region = region;
         s.coins += budget;
+        s.granted = budget;
         save();
       }
       return { ok: true, coins: s.coins };
@@ -393,7 +398,7 @@ export function makeLabApi(budget: number): PropertyApi {
     async myAssets() {
       const now = Date.now();
       return {
-        life: s.region ? { region: s.region, home_unit: s.home, granted: budget, started_at: "" } : null,
+        life: s.region ? { region: s.region, home_unit: s.home, granted: s.granted ?? budget, started_at: "" } : null,
         coins: s.coins,
         units: s.units.map((u) => ({ ...u, name: s.buildings[u.building]?.name ?? null, waiting: u.let ? Math.round(((u.rentDay * (now - u.collectedAt)) / 86_400_000) * 0.9 * 100) / 100 : 0 })),
       };
@@ -634,6 +639,22 @@ export function makeLabApi(budget: number): PropertyApi {
       }
       save();
       return { ok: true, won: mark.won, said: mark.said, bonus, stall: e.source === "hustle" ? mark.stall : 0 };
+    },
+    async startPack(packId, region) {
+      // The lab's pretend shop: no real payment, the pack's mint at once.
+      const pack = packById(packId);
+      if (!pack || pack.naira <= 0) return { ok: false, error: "That pack isn't on offer." };
+      if (s.home) return { ok: false, error: "Packs are for starting out, before your first home." };
+      if (s.pack) return { ok: false, error: "You've had a pack already." };
+      if (!s.region) s.region = region;
+      s.coins = r2(s.coins + Math.max(0, pack.mint - (s.granted ?? 0)));
+      s.granted = pack.mint;
+      s.pack = pack.id;
+      save();
+      return { ok: true, coins: s.coins };
+    },
+    async confirmPack() {
+      return { ok: false };
     },
     async buildingOwners(buildingId) {
       return s.units.filter((u) => u.building === buildingId).map((u) => ({ unit: u.unit, name: "You", mine: true }));
