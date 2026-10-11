@@ -35,7 +35,9 @@ export const LANDMARKS: Landmark[] = [
   { id: "national-theatre", name: "National Theatre", type: "museum", w: 3, d: 3, at: { lat: 6.4760, lon: 3.3685 }, approx: true },
   { id: "national-stadium", name: "National Stadium, Surulere", type: "arena", at: { lat: 6.4985, lon: 3.3650 }, approx: true },
   { id: "teslim-balogun-stadium", name: "Teslim Balogun Stadium", type: "arena", w: 3, d: 3, at: { lat: 6.4990, lon: 3.3585 }, approx: true },
-  { id: "unilag", name: "University of Lagos (Unilag)", type: "campus", w: 4, d: 4, inside: ["Unilag Main Library", "Senate Building · Lecture theatre"], at: { lat: 6.5155, lon: 3.3920 }, approx: true },
+  // The Akoka campus, on the lagoon in the Yaba axis: about 1.1 × 0.9 km of land (the real campus
+  // runs on along the lagoon front). Checked against the baked map: all land, no main road.
+  { id: "unilag", name: "University of Lagos (Unilag)", type: "campus", w: 11, d: 9, inside: ["Unilag Main Library", "Senate Building · Lecture theatre"], at: { lat: 6.51438, lon: 3.39346 } },
   { id: "yabatech", name: "Yaba College of Technology", type: "campus", w: 3, d: 2, at: { lat: 6.5190, lon: 3.3720 }, approx: true },
   { id: "tejuosho-market", name: "Tejuosho Market", type: "market", at: { lat: 6.5090, lon: 3.3700 }, approx: true },
   { id: "luth", name: "Lagos University Teaching Hospital (LUTH)", type: "hospital", at: { lat: 6.5180, lon: 3.3540 }, approx: true },

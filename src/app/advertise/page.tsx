@@ -9,7 +9,7 @@ import { CONTACT_EMAIL, SITE_DOMAIN } from "@/lib/brand";
 
 export const metadata: Metadata = {
   title: "Advertise",
-  description: "Lease a building in Newtown's Lagos for a year, with your design on the city's billboards. From ₦60,000 a year.",
+  description: "Lease a building in Newtown's Lagos for a year, with your design on the city's billboards. From ₦20,000 a year.",
 };
 
 async function stats() {

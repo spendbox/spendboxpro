@@ -170,3 +170,19 @@ test("spots are named by their water, nearest neighbourhood, or district", () =>
   const yaba = toTile(lagos.frame, { lat: 6.5085, lon: 3.3755 });
   assert.equal(lagos.areaAt(Math.round(yaba.x), Math.round(yaba.z)), "Sabo · Yaba");
 });
+
+test("no Lagos bridge or flyover ends in mid-air or meets another with a step", () => {
+  // If a fresh bake fails this, the fault's spot (tiles) says where to look; fix the rule in
+  // spans.ts (or add a correction) rather than letting a broken deck into the game.
+  assert.deepEqual(compileRegion(LAGOS).spanFaults, []);
+});
+
+test("no Lagos landmark stands under a raised deck", () => {
+  const map = compileRegion(LAGOS);
+  for (const lm of map.landmarks) {
+    for (const d of map.decks) {
+      const over = d.pts.find((q) => q.y > 0.15 && q.x > lm.ax - 0.5 && q.x < lm.ax + lm.w - 0.5 && q.z > lm.az - 0.5 && q.z < lm.az + lm.d - 0.5);
+      assert.equal(over, undefined, `${lm.name} has a deck over it`);
+    }
+  }
+});

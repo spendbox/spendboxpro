@@ -1426,7 +1426,8 @@ export function Game({
             clockOffsetMs={clockOffset}
             onHover={setHover}
             meAvatar={me.avatar}
-            coinBalloon={state.balloon?.slot ?? null}
+            // The coin balloon is gone: nothing in the city hands out mint for a tap.
+            coinBalloon={null}
             onBalloon={popBalloon}
             progress={huntProgress}
             nightFirst={(round?.id ?? 0) % 2 === 1}

@@ -796,6 +796,123 @@ function spaceport(t: Tile, B: BoxFn, tree: TreeFn) {
 }
 
 /** Draws a big landmark from its corner (anchor) tile. False if it isn't one of these. */
+/**
+ * A real university campus at its true size (Unilag at Akoka is 11 × 9 tiles): a gate and a
+ * boulevard in from the street side, the Senate tower and the Main Library in the middle, rows
+ * of faculty blocks, hostels along the back, a sports centre with a running track, and a
+ * promenade of trees and benches along the far side (the lagoon front). Laid out from the
+ * campus's own size, so any big campus works.
+ */
+function campus(t: Tile, B: BoxFn, tree: TreeFn) {
+  const st = t.structure!;
+  const w = st.w ?? 4;
+  const d = st.d ?? 4;
+  const cx = (w - 1) / 2;
+  const cz = (d - 1) / 2;
+  const x0 = -0.5;
+  const z0 = -0.5;
+  const ROAD = 0x5c636b;
+  const PATH = 0xe9dfc8;
+  const BRICK = 0xb5523b;
+  const CREAM = 0xefe3c8;
+  const r = (k: number) => {
+    const v = Math.sin((t.x * 12.9898 + t.z * 78.233 + k * 37.719) * 0.5) * 43758.5453;
+    return v - Math.floor(v);
+  };
+  B(cx, 0.02, cz, w - 0.04, 0.07, d - 0.04, GRASS, 0, "ground");
+  // A ring road just inside the fence, and a boulevard in from the gate on the west side.
+  B(cx, 0.095, z0 + 0.35, w - 0.7, 0.006, 0.22, ROAD, 0, "ground");
+  B(cx, 0.095, z0 + d - 0.35, w - 0.7, 0.006, 0.22, ROAD, 0, "ground");
+  B(x0 + 0.35, 0.095, cz, 0.22, 0.006, d - 0.7, ROAD, 0, "ground");
+  B(x0 + w - 0.35, 0.095, cz, 0.22, 0.006, d - 0.7, ROAD, 0, "ground");
+  B(x0 + w * 0.3, 0.096, cz, w * 0.6, 0.006, 0.26, ROAD, 0, "ground");
+  for (let k = 0; k < 8; k++) B(x0 + 0.5 + (k * w * 0.55) / 8, 0.1, cz, 0.12, 0.004, 0.02, 0xffffff, 0, "paint");
+  // A low fence all round.
+  for (const side of [-1, 1]) {
+    B(cx, 0.09, cz + side * (d / 2 - 0.04), w - 0.06, 0.08, 0.02, 0xdee2e6);
+    B(cx + side * (w / 2 - 0.04), 0.09, cz, 0.02, 0.08, d - 0.06, 0xdee2e6);
+  }
+  // The main gate: two pillars and a beam with the university's colours.
+  for (const side of [-1, 1]) B(x0 + 0.05, 0.09, cz + side * 0.24, 0.12, 0.42, 0.1, CREAM);
+  B(x0 + 0.05, 0.5, cz, 0.14, 0.1, 0.6, 0x1c3f94);
+  B(x0 + 0.06, 0.52, cz, 0.15, 0.04, 0.4, 0xf1c40f, 0, "paint");
+  // Trees along the boulevard.
+  for (let k = 1; k < 7; k++) for (const side of [-1, 1]) tree(x0 + 0.4 + (k * w * 0.5) / 7, cz + side * 0.32, 0.4, r(k + side));
+
+  // The middle: the Senate tower (tall, cream bands of windows) and the Main Library beside it,
+  // round a square with a fountain.
+  const sx = x0 + w * 0.6;
+  B(sx, 0.09, cz, 1.4, 0.01, 1.4, PATH, 0, "ground");
+  B(sx, 0.1, cz, 0.36, 0.06, 0.36, 0xcfd6dd, 0, "disc");
+  B(sx, 0.13, cz, 0.3, 0.02, 0.3, 0x5fb0e8, 0, "waterDisc");
+  const tx = sx + 0.15;
+  const tz = cz - 1.05;
+  B(tx, 0.09, tz, 0.9, 0.3, 0.55, CREAM);
+  B(tx, 0.39, tz, 0.55, 2.7, 0.4, 0xd8cbb0);
+  for (let y = 0.55; y < 3; y += 0.22) B(tx, y, tz, 0.562, 0.07, 0.412, 0x3b5068, 0, "glass");
+  B(tx, 3.09, tz, 0.4, 0.12, 0.3, 0x8a6a4a);
+  const lx = sx + 0.1;
+  const lz = cz + 1.0;
+  B(lx, 0.09, lz, 1.2, 0.62, 0.6, CREAM);
+  B(lx, 0.25, lz - 0.305, 1.21, 0.3, 0.01, 0x4c6e91, 0, "glass");
+  for (let k = -3; k <= 3; k++) B(lx + k * 0.16, 0.09, lz - 0.34, 0.04, 0.55, 0.04, 0xffffff, 0, "cyl");
+  B(lx, 0.71, lz, 1.26, 0.06, 0.66, 0x8a6a4a);
+
+  // Faculty blocks in rows: brick and cream, two or three storeys, between the paths. Not on
+  // the boulevard, the middle square, or the sports centre and hostels at the ends.
+  const busy = (x: number, z: number) =>
+    Math.abs(z - cz) < 0.7 ||
+    (Math.abs(x - sx) < 1.0 && Math.abs(z - cz) < 1.6) ||
+    x < x0 + 0.9 ||
+    x > x0 + w - 0.9 ||
+    z < z0 + 0.9 ||
+    z > z0 + d - 0.9 ||
+    (x > x0 + w * 0.72 && z < z0 + d * 0.42) ||
+    (x < x0 + w * 0.3 && z > z0 + d * 0.62);
+  let n = 0;
+  for (let fx = x0 + 1.2; fx < x0 + w - 0.8; fx += 1.05) {
+    for (let fz = z0 + 1.15; fz < z0 + d - 0.8; fz += 0.95) {
+      if (busy(fx, fz)) continue;
+      n++;
+      const h = 0.35 + r(n) * 0.35;
+      const color = r(n + 50) < 0.5 ? BRICK : CREAM;
+      const long = r(n + 90) < 0.5;
+      B(fx, 0.09, fz, long ? 0.75 : 0.45, h, long ? 0.4 : 0.6, color);
+      B(fx, 0.09 + h * 0.55, fz, (long ? 0.75 : 0.45) + 0.01, 0.06, (long ? 0.4 : 0.6) + 0.01, 0x4c6e91, 0, "glass");
+      B(fx, 0.09 + h, fz, (long ? 0.75 : 0.45) + 0.04, 0.04, (long ? 0.4 : 0.6) + 0.04, 0x6b5440);
+      B(fx, 0.092, fz + 0.42, 0.08, 0.004, 0.3, PATH, 0, "ground");
+      tree(fx + 0.38, fz + 0.3, 0.35, r(n + 7));
+    }
+  }
+
+  // Hostels along the back (tall blocks of rooms with balconies).
+  for (let k = 0; k < Math.max(2, Math.floor(w * 0.3 / 0.75)); k++) {
+    const hx = x0 + 0.95 + k * 0.75;
+    const hz = z0 + d - 1.15;
+    B(hx, 0.09, hz, 0.55, 0.95, 0.4, k % 2 ? 0xf1e3c8 : 0xe3c9a0);
+    for (let y = 0.25; y < 1; y += 0.18) B(hx, 0.09 + y, hz - 0.205, 0.5, 0.03, 0.03, 0x495057);
+  }
+
+  // The sports centre: a running track round a football pitch, a small stand.
+  const px = x0 + w * 0.86;
+  const pz = z0 + d * 0.22;
+  const ta = Math.min(1.2, w * 0.12);
+  const tb = Math.min(0.8, d * 0.14);
+  B(px, 0.09, pz, ta * 2, 0.012, tb * 2, 0xc0573e, 0, "disc");
+  B(px, 0.1, pz, ta * 1.6, 0.012, tb * 1.45, 0x3f9a4b, 0, "disc");
+  B(px, 0.111, pz, ta * 1.1, 0.003, tb * 0.9, 0x4cad59, 0, "paint");
+  B(px, 0.115, pz, 0.01, 0.002, tb * 0.9, 0xffffff, 0, "paint");
+  B(px, 0.09, pz + tb + 0.2, ta * 1.2, 0.18, 0.2, 0xdee2e6);
+  B(px, 0.27, pz + tb + 0.26, ta * 1.2, 0.02, 0.32, 0x1c3f94);
+
+  // The lagoon front (the far east side): a promenade under palms, benches looking out.
+  B(x0 + w - 0.62, 0.093, cz, 0.16, 0.004, d - 1.4, PATH, 0, "ground");
+  for (let z = z0 + 0.9; z < z0 + d - 0.8; z += 0.55) {
+    tree(x0 + w - 0.48, z, 0.42, r(z * 10));
+    B(x0 + w - 0.75, 0.09, z + 0.25, 0.05, 0.04, 0.16, 0x8c6a4f);
+  }
+}
+
 export function megaParts(t: Tile, B: BoxFn, tree: TreeFn): boolean {
   const st = t.structure;
   if (!st || !st.w) return false;
@@ -810,6 +927,7 @@ export function megaParts(t: Tile, B: BoxFn, tree: TreeFn): boolean {
   else if (st.type === "grandmosque") grandmosque(t, B, tree);
   else if (st.type === "intlairport") intlairport(t, B, tree);
   else if (st.type === "spaceport") spaceport(t, B, tree);
+  else if (st.type === "campus" && (st.w > 2 || (st.d ?? 2) > 2)) campus(t, B, tree);
   else return false;
   return true;
 }

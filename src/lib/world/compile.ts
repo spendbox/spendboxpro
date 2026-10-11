@@ -6,7 +6,7 @@ import type { StructureType, TileKind } from "@/lib/city/layout";
 import { type Frame, type LatLon, toTile, tileBounds } from "./geo.ts";
 import type { BakedGrid, Landmark, Region, Road, RoadKind } from "./region.ts";
 import { fillArea, line4 } from "./raster.ts";
-import { chainLines, findJoins, piecesOf, placeStations, tilesUnder, type Piece, type SpanLine, type StationPlan } from "./spans.ts";
+import { auditSpans, chainLines, findJoins, piecesOf, placeStations, tilesUnder, type Piece, type SpanFault, type SpanLine, type StationPlan } from "./spans.ts";
 
 export { fillArea, line4 };
 
@@ -55,6 +55,8 @@ export type RegionMap = {
   areaAt: (x: number, z: number) => string;
   /** Landmarks left out because they overlapped one placed before them (worth a correction). */
   skipped: { id: string; reason: string }[];
+  /** Decks that end in mid-air or meet another with a step (the tests want none). */
+  spanFaults: SpanFault[];
 };
 
 /** Every big building type's size in tiles when a landmark doesn't give one. */
@@ -141,6 +143,30 @@ export function compileRegion(region: Region): RegionMap {
     return name ? { kind: KIND[v & 7], bridge: v > 8, name } : { kind: KIND[v & 7], bridge: v > 8 };
   };
 
+  // ---- bridges, flyovers and railways, with their real curves
+  // Chained per level, so a deck on the second level never merges with one below it.
+  const bridgeRoads = [...region.roads, ...region.corrections.flatMap((c) => (c.kind === "road" ? [c.road] : []))].filter((r) => r.bridge);
+  const levels = [...new Set(bridgeRoads.map((r) => r.layer ?? 1))];
+  const bridgeLines = levels.flatMap((layer) =>
+    chainLines(bridgeRoads.filter((r) => (r.layer ?? 1) === layer).map((r) => r.path.map(([lat, lon]) => at({ lat, lon })))).map((pts) => ({ pts, layer })),
+  );
+  const majorAt = (p: { x: number; z: number }) => {
+    const r = roadAt(Math.round(p.x), Math.round(p.z));
+    return !!r && (r.kind === "motorway" || r.kind === "trunk");
+  };
+  const overWater = (x: number, z: number) => waterAt(x, z) > 0;
+  const lines: SpanLine[] = bridgeLines.map(({ pts, layer }) => ({ kind: "road", pts, raised: true, overWater, major: majorAt(pts[Math.floor(pts.length / 2)]), layer }));
+  for (const raised of [true, false]) {
+    for (const pts of chainLines(region.rail.filter((r) => !!r.bridge === raised).map((r) => r.path.map(([lat, lon]) => at({ lat, lon }))))) {
+      lines.push({ kind: "rail", pts, raised, overWater, major: false });
+    }
+  }
+  findJoins(lines);
+  // The ground under every raised deck: no landmark stands there (a stadium's bowl or a
+  // tower would have a flyover running through it).
+  const underDeck = new Set<number>();
+  for (const line of lines) if (line.raised) tilesUnder(line, (x, z) => underDeck.add(tileKey(x, z)));
+
   // ---- landmarks
   const removed = new Set(region.corrections.flatMap((c) => (c.kind === "no-landmark" ? [c.id] : [])));
   const patched: Landmark[] = region.landmarks
@@ -189,6 +215,7 @@ export function compileRegion(region: Region): RegionMap {
       for (let x = ax; x < ax + w; x++) {
         for (let z = az; z < az + d; z++) {
           if (!inside(x, z) || taken.has(tileKey(x, z))) return Infinity;
+          if (underDeck.has(tileKey(x, z))) roads += 100;
           const mine = own.get(tileKey(x, z));
           if (mine && mine !== l.id) return Infinity;
           if (road[cell(x, z)]) roads++;
@@ -202,7 +229,8 @@ export function compileRegion(region: Region): RegionMap {
     const here = fits(ax, az, w, d);
     if (here >= 100 && here < Infinity) {
       const sizes = [[w, d], [w - 1, d - 1], [w - 2, d - 2]].filter(([sw, sd]) => sw >= 2 && sd >= 2);
-      const reach = Math.max(3, Math.ceil(Math.max(w, d) / 2) + 1);
+      // Further when it would stand under a deck: moving it beats a flyover through it.
+      const reach = Math.max(3, Math.ceil(Math.max(w, d) / 2) + 1) + (here >= 10000 ? 3 : 0);
       for (const [sw, sd] of sizes) {
         const bx = Math.round(c.x - (sw - 1) / 2);
         const bz = Math.round(c.z - (sd - 1) / 2);
@@ -314,25 +342,6 @@ export function compileRegion(region: Region): RegionMap {
     if (spot) footbridges.add(tileKey(x + spot[0], z + spot[1]));
   }
 
-  // ---- bridges, flyovers and railways, with their real curves
-  // Chained per level, so a deck on the second level never merges with one below it.
-  const bridgeRoads = [...region.roads, ...region.corrections.flatMap((c) => (c.kind === "road" ? [c.road] : []))].filter((r) => r.bridge);
-  const levels = [...new Set(bridgeRoads.map((r) => r.layer ?? 1))];
-  const bridgeLines = levels.flatMap((layer) =>
-    chainLines(bridgeRoads.filter((r) => (r.layer ?? 1) === layer).map((r) => r.path.map(([lat, lon]) => at({ lat, lon })))).map((pts) => ({ pts, layer })),
-  );
-  const majorAt = (p: { x: number; z: number }) => {
-    const r = roadAt(Math.round(p.x), Math.round(p.z));
-    return !!r && (r.kind === "motorway" || r.kind === "trunk");
-  };
-  const overWater = (x: number, z: number) => waterAt(x, z) > 0;
-  const lines: SpanLine[] = bridgeLines.map(({ pts, layer }) => ({ kind: "road", pts, raised: true, overWater, major: majorAt(pts[Math.floor(pts.length / 2)]), layer }));
-  for (const raised of [true, false]) {
-    for (const pts of chainLines(region.rail.filter((r) => !!r.bridge === raised).map((r) => r.path.map(([lat, lon]) => at({ lat, lon }))))) {
-      lines.push({ kind: "rail", pts, raised, overWater, major: false });
-    }
-  }
-  findJoins(lines);
   const pieces = new Map<number, Piece[]>();
   const clear = new Map<number, "deck" | "track" | "station">();
   const decks: RegionMap["decks"] = [];
@@ -404,6 +413,7 @@ export function compileRegion(region: Region): RegionMap {
     stations,
     crossingAt: (x, z) => crossings.get(tileKey(x, z)),
     skipped,
+    spanFaults: auditSpans(lines),
   };
   cache.set(region, map);
   return map;

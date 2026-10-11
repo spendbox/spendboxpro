@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { chainLines, DECK, findJoins, LEVEL, piecesOf, placeStations, tilesUnder, type SpanLine } from "../spans.ts";
+import { auditSpans, chainLines, DECK, findJoins, LEVEL, piecesOf, placeStations, tilesUnder, type SpanLine } from "../spans.ts";
 
 const straight = (len: number, kind: SpanLine["kind"] = "road", raised = true): SpanLine => ({
   kind,
@@ -78,4 +78,41 @@ test("a deck on a higher level stands clear above one below it", () => {
   const high = piecesOf({ ...straight(10), layer: 2 });
   const top = (ps: typeof low) => Math.max(...ps.map((p) => p.ay));
   assert.ok(top(high) - top(low) >= LEVEL - 1e-9);
+});
+
+test("two carriageways that end side by side both come down (they don't hold each other up)", () => {
+  const a: SpanLine = { ...straight(6), pts: [{ x: 0, z: 0 }, { x: 6, z: 0 }] };
+  const b: SpanLine = { ...straight(6), pts: [{ x: 0, z: 0.25 }, { x: 6, z: 0.25 }] };
+  findJoins([a, b]);
+  assert.deepEqual(a.joins, [false, false]);
+  for (const l of [a, b]) {
+    const ps = piecesOf(l);
+    assert.ok(ps[0].ay < 0.1 && ps[ps.length - 1].by < 0.1);
+  }
+  assert.deepEqual(auditSpans([a, b]), []);
+});
+
+test("a ramp up to a higher level meets it with no step", () => {
+  const high: SpanLine = { ...straight(10), layer: 2 };
+  const ramp: SpanLine = { ...straight(6), pts: [{ x: 5, z: 0.1 }, { x: 5, z: 6 }] };
+  findJoins([high, ramp]);
+  const ps = piecesOf(ramp);
+  const top = piecesOf(high)[14].ay;
+  assert.ok(Math.abs(ps[0].ay - top) < 0.05, `${ps[0].ay} vs ${top}`);
+  assert.deepEqual(auditSpans([high, ramp]), []);
+});
+
+test("a short stub off a flyover still reaches the ground", () => {
+  const main: SpanLine = { ...straight(10) };
+  const stub: SpanLine = { ...straight(0.5), pts: [{ x: 5, z: 0.1 }, { x: 5, z: 0.6 }] };
+  findJoins([main, stub]);
+  const ps = piecesOf(stub);
+  assert.ok(ps[ps.length - 1].by < 0.1, String(ps[ps.length - 1].by));
+});
+
+test("the checker catches a deck left hanging in mid-air", () => {
+  const l: SpanLine = { ...straight(6), joins: [false, true] };
+  const faults = auditSpans([l]);
+  assert.equal(faults.length, 1);
+  assert.equal(faults[0].what, "hanging");
 });

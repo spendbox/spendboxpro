@@ -7,24 +7,25 @@ import type { BuildingKind } from "./buildings.ts";
 
 /** A yearly lease by the size of the building, in naira, before the area's own price. */
 const BASE: Record<BuildingKind, number> = {
-  shops: 60_000,
-  mixed: 60_000,
-  rooming: 60_000,
-  bungalow: 60_000,
-  land: 60_000,
-  farm: 60_000,
-  duplex: 250_000,
-  terrace: 250_000,
-  flats: 250_000,
-  warehouse: 250_000,
-  offices: 250_000,
-  plaza: 1_500_000,
-  apartments: 1_500_000,
-  glass: 10_000_000,
+  shops: 20_000,
+  mixed: 25_000,
+  rooming: 20_000,
+  bungalow: 20_000,
+  land: 20_000,
+  farm: 20_000,
+  duplex: 60_000,
+  terrace: 60_000,
+  flats: 80_000,
+  warehouse: 80_000,
+  offices: 120_000,
+  plaza: 250_000,
+  apartments: 250_000,
+  glass: 600_000,
 };
 
-export const LEASE_MIN = 60_000;
-export const LEASE_MAX = 10_000_000;
+/** Every lease is between these (naira a year): ₦20,000 for a shopfront in a quiet area, up to ₦1m for a glass tower in Ikoyi. */
+export const LEASE_MIN = 20_000;
+export const LEASE_MAX = 1_000_000;
 
 /**
  * What a building costs to lease for a year (naira): its size, and how dear its area is (land in
@@ -72,9 +73,9 @@ export const UPGRADES: Upgrade[] = [
 
 /** What an upgrade costs (naira): a bright sign is flat; a refit a tenth of the lease, a storey a quarter. */
 export function upgradePrice(id: Upgrade["id"], leaseNaira: number) {
-  if (id === "bright") return 50_000;
-  if (id === "rebuild") return Math.max(25_000, Math.round(leaseNaira / 10 / 5_000) * 5_000);
-  return Math.max(50_000, Math.round(leaseNaira / 4 / 5_000) * 5_000);
+  if (id === "bright") return 15_000;
+  if (id === "rebuild") return Math.max(10_000, Math.round(leaseNaira / 10 / 5_000) * 5_000);
+  return Math.max(15_000, Math.round(leaseNaira / 4 / 5_000) * 5_000);
 }
 
 /** Days after a lease starts before a storey can be added. */

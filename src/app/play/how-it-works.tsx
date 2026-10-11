@@ -99,7 +99,7 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
     body: [
       "Mint is just for playing: it can't be bought or cashed out.",
       "Mint spent during a game goes into its prize pool (see above). Sometimes a brand sponsors the pool and adds extra mint.",
-      "Tap a billboard to see the ad on it, then tap the ad's button to earn ₥5, paid by the brand (up to 5 ads a day). Keep an eye out for golden mint balloons too.",
+      "Tap a billboard to see the ad on it, then tap the ad's button to earn ₥5, paid by the brand (up to 5 ads a day).",
       "Running low? While you're under your refill line you earn passive income every hour: up to ₥100 a day at level 1, and 25 more for every level after that, up to level 40 (1,075 a day).",
       "Anyone holding ₥10,000 or more is a big fish, and everyone can see it.",
       "You can give mint to other players, and spray mint on the dance floor in clubs.",
