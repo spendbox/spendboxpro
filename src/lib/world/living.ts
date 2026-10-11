@@ -32,7 +32,7 @@ export const BUDGET_PRESETS: { id: string; label: string; budget: Budget }[] = [
   { id: "balanced", label: "Balanced", budget: { essentials: 25, travel: 15, savings: 20, fun: 10 } },
   { id: "saver", label: "Big saver", budget: { essentials: 25, travel: 15, savings: 45, fun: 0 } },
   { id: "treat", label: "Treat myself", budget: { essentials: 25, travel: 15, savings: 5, fun: 30 } },
-  { id: "none", label: "No pots", budget: { essentials: 0, travel: 0, savings: 0, fun: 0 } },
+  { id: "none", label: "Spend it all", budget: { essentials: 0, travel: 0, savings: 0, fun: 0 } },
 ];
 export const DEFAULT_BUDGET = BUDGET_PRESETS[0].budget;
 

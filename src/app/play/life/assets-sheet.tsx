@@ -7,10 +7,9 @@ import { BUILDING_LABEL } from "@/lib/world/buildings";
 import { RENT_LEVEL, type MarketBoard, type Offer, type RentLevel } from "@/lib/world/market";
 import { ownedSpot, type OwnedProperty } from "@/lib/world/owned";
 import type { AssetsData, AssetUnit } from "@/lib/world/property-api";
-import { toMint, valueOf } from "@/lib/world/value";
+import { cash, toMint, valueOf } from "@/lib/world/value";
 
 const fmt = (n: number) => Math.round(n).toLocaleString("en-GB");
-const fmt2 = (n: number) => n.toLocaleString("en-GB", { maximumFractionDigits: 2 });
 const ICON: Record<AssetUnit["use"], typeof House> = { home: House, shop: Store, office: Building2, industry: Building2, land: Trees };
 const LEVELS: RentLevel[] = ["low", "fair", "high"];
 
@@ -80,12 +79,12 @@ export function AssetsBody({
     <div>
       <div className="grid grid-cols-3 gap-2 text-center">
         <Stat label="Owned" value={String(rows.length)} />
-        <Stat label="Worth" value={`₥${fmt(worth)}`} note={paid ? `${worth >= paid ? "+" : ""}${(((worth - paid) / paid) * 100).toFixed(1)}%` : undefined} />
-        <Stat label="Rent a day" value={`₥${fmt(daily)}`} />
+        <Stat label="Worth" value={`${cash(worth)}`} note={paid ? `${worth >= paid ? "+" : ""}${(((worth - paid) / paid) * 100).toFixed(1)}%` : undefined} />
+        <Stat label="Rent a day" value={`${cash(daily)}`} />
       </div>
       {waiting >= 0.01 && (
         <button disabled={busy} onClick={onCollect} className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-full bg-gold font-semibold text-ink disabled:opacity-50">
-          <Coins className="size-4" /> Collect ₥{waiting.toFixed(2)}
+          <Coins className="size-4" /> Collect {cash(waiting)}
         </button>
       )}
 
@@ -96,14 +95,14 @@ export function AssetsBody({
             {board!.received.map((o) => (
               <li key={o.id} className="rounded-2xl bg-gold/10 p-3 ring-1 ring-gold/30">
                 <p className="text-sm">
-                  <b>{o.who}</b> offers <b className="tabular-nums">₥{fmt2(o.price)}</b> for {o.label ?? "your unit"}
+                  <b>{o.who}</b> offers <b className="tabular-nums">{cash(o.price)}</b> for {o.label ?? "your unit"}
                 </p>
                 {o.status === "countered" ? (
-                  <p className="mt-1 text-xs text-muted">You asked ₥{fmt2(o.counter ?? 0)}. Waiting for them.</p>
+                  <p className="mt-1 text-xs text-muted">You asked {cash(o.counter ?? 0)}. Waiting for them.</p>
                 ) : (
                   <div className="mt-2 flex gap-1.5">
                     <button disabled={busy} onClick={() => owning.onAnswer(o, "accept")} className={`${btn} bg-ink text-white`}>
-                      Sell for ₥{fmt2(o.price)}
+                      Sell for {cash(o.price)}
                     </button>
                     <button disabled={busy} onClick={() => owning.onCounter(o)} className={`${btn} bg-ink/5`}>
                       Ask more
@@ -128,15 +127,15 @@ export function AssetsBody({
               <li key={o.id} className="flex items-center gap-2 px-3 py-2.5">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">
-                    ₥{fmt2(o.price)} for {o.label ?? "a unit"}
+                    {cash(o.price)} for {o.label ?? "a unit"}
                   </p>
                   <p className="truncate text-xs text-muted">
-                    {o.status === "open" ? `Waiting for ${o.who}` : o.status === "countered" ? `${o.who} asks ₥${fmt2(o.counter ?? 0)}` : STATUS[o.status]}
+                    {o.status === "open" ? `Waiting for ${o.who}` : o.status === "countered" ? `${o.who} asks ${cash(o.counter ?? 0)}` : STATUS[o.status]}
                   </p>
                 </div>
                 {o.status === "countered" && (
                   <button disabled={busy} onClick={() => owning.onReply(o, "accept")} className={`${btn} shrink-0 bg-ink text-white`}>
-                    Pay ₥{fmt2(o.counter ?? 0)}
+                    Pay {cash(o.counter ?? 0)}
                   </button>
                 )}
                 {(o.status === "open" || o.status === "countered") && (
@@ -170,14 +169,14 @@ export function AssetsBody({
                     <p className="truncate text-sm font-medium">{u.label}</p>
                     <p className="mt-0.5 flex flex-wrap gap-1">
                       {isHome && <Chip tone="me">Home</Chip>}
-                      {u.let && (tenantIn(u) ? <Chip tone="gold">Tenant in · ₥{fmt2(u.rentDay * RENT_LEVEL[level].factor)}/day</Chip> : <Chip>Finding a tenant {inTime(u.tenantFrom)}</Chip>)}
-                      {u.forSale != null && <Chip tone="gold">For sale ₥{fmt2(u.forSale)}</Chip>}
+                      {u.let && (tenantIn(u) ? <Chip tone="gold">Tenant in · {cash(u.rentDay * RENT_LEVEL[level].factor)}/day</Chip> : <Chip>Finding a tenant {inTime(u.tenantFrom)}</Chip>)}
+                      {u.forSale != null && <Chip tone="gold">For sale {cash(u.forSale)}</Chip>}
                       {u.loan && <Chip>Behind your loan</Chip>}
                       {!isHome && !u.let && u.forSale == null && <span className="truncate text-xs text-muted">{what}</span>}
                     </p>
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="text-sm font-semibold tabular-nums">₥{fmt(now)}</p>
+                    <p className="text-sm font-semibold tabular-nums">{cash(now)}</p>
                     <p className={`flex items-center justify-end gap-0.5 text-[11px] ${gain >= 0 ? "text-me" : "text-hit"}`}>
                       <TrendingUp className="size-3" />
                       {gain >= 0 ? "+" : ""}
@@ -205,7 +204,7 @@ export function AssetsBody({
                               className={`flex-1 rounded-xl px-2 py-1.5 text-center ${level === l ? "bg-ink text-white" : "bg-panel ring-1 ring-ink/10"}`}
                             >
                               <span className="block text-xs font-semibold">{RENT_LEVEL[l].label}</span>
-                              <span className="block text-[11px] tabular-nums opacity-80">₥{fmt2(u.rentDay * RENT_LEVEL[l].factor)}/day</span>
+                              <span className="block text-[11px] tabular-nums opacity-80">{cash(u.rentDay * RENT_LEVEL[l].factor)}/day</span>
                             </button>
                           ))}
                         </div>
@@ -214,7 +213,7 @@ export function AssetsBody({
                     )}
                     {!isHome && (
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs font-semibold">{u.forSale != null ? `On sale for ₥${fmt2(u.forSale)}` : "Sell it"}</p>
+                        <p className="text-xs font-semibold">{u.forSale != null ? `On sale for ${cash(u.forSale)}` : "Sell it"}</p>
                         <div className="flex gap-1.5">
                           {u.forSale != null && (
                             <button disabled={busy} onClick={() => owning.onUnsell(u)} className={`${btn} bg-ink/5`}>
@@ -249,8 +248,8 @@ export function AssetsBody({
         {board?.loan ? (
           <>
             <div className="mt-2 grid grid-cols-2 gap-2 text-center">
-              <Stat label="You owe" value={`₥${fmt2(board.loan.balance)}`} />
-              <Stat label={`Next ₥${fmt2(board.loan.instalment)}`} value={inTime(board.loan.nextDue)} />
+              <Stat label="You owe" value={`${cash(board.loan.balance)}`} />
+              <Stat label={`Next ${cash(board.loan.instalment)}`} value={inTime(board.loan.nextDue)} />
             </div>
             {board.loan.missed > 0 && (
               <p className="mt-2 text-xs font-semibold text-hit">
@@ -264,7 +263,7 @@ export function AssetsBody({
         ) : (
           <>
             <p className="mt-1 text-xs text-muted">
-              {board && board.canBorrow >= 10 ? `Borrow up to ₥${fmt2(board.canBorrow)} against your property, at ${Math.round(board.rate * 100)}% a game year.` : "Buy property to borrow against it."}
+              {board && board.canBorrow >= 10 ? `Borrow up to ${cash(board.canBorrow)} against your property, at ${Math.round(board.rate * 100)}% a game year.` : "Buy property to borrow against it."}
             </p>
             {board && board.canBorrow >= 10 && (
               <button disabled={busy} onClick={owning.onBorrow} className="mt-3 h-9 w-full rounded-full bg-ink text-sm font-semibold text-white disabled:opacity-40">

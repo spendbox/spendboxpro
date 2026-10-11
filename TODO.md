@@ -12,6 +12,7 @@
 - [ ] Then run `game-db/045_map_reports.sql` (players report map problems; you read them at `/map-reports` while signed in with the `ADMIN_EMAIL` email; see `docs/MAP_REPORTS.md`).
 - [ ] Then run `game-db/046_market.sql` (the player market: selling, offers, tenants, World Bank loans; see `docs/MARKET.md`). If you ever run 038 or 040 again, run 046 again after them.
 - [ ] Then run `game-db/047_ads_are_property.sql` (advertising is leasing a building: billboards included, a design you can swap, ends after a year or its taps; no mint for tapping ads; see `docs/BUSINESS.md`).
+- [ ] Then run `game-db/048_trips.sql` (going into a building costs the fare from where you last were).
 - [ ] In Vercel, set `GAME_SECRET` to a long random string (seals interview answers and passes; without it the service key is used).
 - [ ] Let the cloud sessions reach OpenStreetMap (for the real Lagos map): in the Claude Code environment settings, Network access, add `overpass-api.de` to the allowed domains. Then ask for the real pedestrian crossings (the list is still empty: the download failed) and a fresh Lagos bake (`npm run bake:world -- lagos`).
 - [ ] Try the new 3D avatar studio (see `avatar-reference/docs/AVATAR_SPEC.md`): open the game with `?avatar3d=1` on your phone, tap your look, design and save. Only your browser gets it; `?avatar3d=0` switches it back.

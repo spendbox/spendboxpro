@@ -1,5 +1,6 @@
 "use client";
 
+import { cash } from "@/lib/world/value";
 import { useState } from "react";
 import { Briefcase, Sparkles } from "@/components/icons";
 import type { EventResult, InterviewResult, InterviewStart, LifeStatus } from "@/lib/world/property-api";
@@ -105,7 +106,7 @@ export function MomentSheet({ event, onAnswer, onClose }: { event: NonNullable<L
             )}
             {result.won && (
               <p className="mt-1 text-sm font-semibold">
-                {event.source === "job" ? `+₥${result.bonus.toLocaleString("en-GB")} bonus and extra experience.` : "Double earnings for three game days."}
+                {event.source === "job" ? `+${cash(result.bonus)} bonus and extra experience.` : "Double earnings for three game days."}
               </p>
             )}
             <button onClick={onClose} className="mt-3 h-10 w-full rounded-full bg-ink text-sm font-semibold text-white">

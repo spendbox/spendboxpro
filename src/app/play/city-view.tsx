@@ -32,7 +32,7 @@ import { regionMap } from "@/lib/world";
 import type { RegionMap } from "@/lib/world/compile";
 import { toTile } from "@/lib/world/geo";
 import { BUILDING_LABEL, type Building } from "@/lib/world/buildings";
-import { shortMint, toMint, valueOf } from "@/lib/world/value";
+import { shortLocal, valueOf } from "@/lib/world/value";
 import { propertyInfo, type PropertyInfo } from "@/lib/world/property";
 import { workplaceOfTile, type Workplace } from "@/lib/world/workplace";
 import type { MapBusiness } from "@/lib/world/business";
@@ -1442,6 +1442,8 @@ export function CityView({
       paint: { geometry: geo.top, material: mat(), shadow: false },
       building: { geometry: geo.box, material: mat(), shadow: true },
       glass: { geometry: geo.box, material: mat({ emissive: 0x0b1a2a, emissiveIntensity: 0.2 }), shadow: false },
+      // A glass tower's skin: tinted, and it doesn't light up at night (its window bands do).
+      curtain: { geometry: geo.box, material: mat({ emissive: 0x0b1a2a, emissiveIntensity: 0.15 }), shadow: true },
       roof: { geometry: geo.roof, material: mat({ flatShading: true }), shadow: true },
       crown: { geometry: geo.crown, material: mat({ flatShading: true }), shadow: true },
       // Thin and many: their shadows aren't worth drawing every tree again.
@@ -3874,7 +3876,7 @@ export function CityView({
       const kind = BUILDING_LABEL[b.kind];
       const what = b.name ?? (b.state === "site" ? "Building site" : b.state === "uncompleted" ? `Unfinished ${kind.toLowerCase()}` : kind);
       const value = valueOf(b, region.landPriceAt(at.x, at.z), region.region.prices).total;
-      return `${what} · ${shortMint(toMint(value, region.region.prices))}`;
+      return `${what} · ${shortLocal(value, region.region.prices)}`;
     }
     /** A name for signs inside a building (company, hotel, hospital...). */
     function signName(anchor: Tile) {

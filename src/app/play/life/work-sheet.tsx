@@ -1,10 +1,11 @@
 "use client";
 
+import { cash } from "@/lib/world/value";
 import { useEffect, useMemo, useState } from "react";
 import { Briefcase, Coins, MapPin } from "@/components/icons";
 import type { CityPlan } from "@/lib/city/layout";
 import type { RegionMap } from "@/lib/world/compile";
-import { DAY_HOURS, dayPlan, type DayInput } from "@/lib/world/day";
+import { dayPlan, type DayInput } from "@/lib/world/day";
 import { HUSTLES, hustleDay, hustleStart } from "@/lib/world/hustles";
 import type { LifeStatus, WorkStatus } from "@/lib/world/property-api";
 import {
@@ -29,9 +30,8 @@ import { Sheet } from "../sheet";
 import { tripLine, type JobsContext } from "./jobs-here";
 
 const fmt = (n: number) => n.toLocaleString("en-GB", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-const money = (n: number) => (n < 0 ? `−₥${fmt(-n)}` : `₥${fmt(n)}`);
+const money = (n: number) => (n < 0 ? `−${cash(-n)}` : `${cash(n)}`);
 
-const DAY_COLOUR: Record<string, string> = { sleep: "#adb5bd", job: "#2f9e44", commute: "#f08c00", hustle: "#d6336c", study: "#1971c2", exercise: "#12b886", free: "#ffd43b" };
 
 /** Work, kept simple: your job and what you keep, collect, how you travel, your day, a side hustle. */
 export function WorkSheet({
@@ -49,6 +49,10 @@ export function WorkSheet({
   onShow,
   onClose,
   glow,
+  rent,
+  onRent,
+  onProperty,
+  onGoToWork,
 }: {
   status: WorkStatus | null;
   life: LifeStatus | null;
@@ -67,6 +71,13 @@ export function WorkSheet({
   onClose: () => void;
   /** The guide's next step: make "Jobs near me" glow. */
   glow?: boolean;
+  /** Your property's income: rent a day from tenants, and rent waiting to collect. */
+  rent: { daily: number; waiting: number; units: number; let: number };
+  onRent: () => void;
+  /** Open your property (Finance). */
+  onProperty: () => void;
+  /** Go to your workplace on the map. */
+  onGoToWork: (placeId: string) => void;
 }) {
   const prices = region.region.prices;
   const job = status?.job ?? null;
@@ -87,7 +98,6 @@ export function WorkSheet({
   const keep = job ? dayNet(job.payDay, skills[job.skill] ?? 0, fare) : 0;
   const gross = job ? Math.round(job.payDay * (1 + skillLevel(skills[job.skill] ?? 0) * SKILL_BONUS) * 100) / 100 : 0;
   const tax = Math.round(gross * INCOME_TAX * 100) / 100;
-  const today = dayPlan(day);
 
   const best = useMemo(() => {
     if (!plan || !ctx.homeUnit) return [];
@@ -107,7 +117,6 @@ export function WorkSheet({
   const skillList = Object.entries(skills)
     .filter(([, d]) => d > 0)
     .sort((a, b) => b[1] - a[1]);
-  const blocks = [...today.blocks, { id: "free", label: "Free", hours: today.free }].filter((b) => b.hours > 0);
 
   return (
     <Sheet
@@ -115,16 +124,19 @@ export function WorkSheet({
       wide
       title={
         <span className="flex items-center gap-2">
-          <Briefcase className="size-5" /> Work
+          <Briefcase className="size-5" /> Income
         </span>
       }
     >
       {job ? (
         <div className="rounded-3xl bg-ink/[0.04] p-4">
           <p className="font-display text-lg font-extrabold leading-tight">{job.title}</p>
-          <button onClick={() => onShow(job.place)} className="flex max-w-full items-center gap-1 text-sm text-muted hover:text-ink">
+          <p className="flex max-w-full items-center gap-1 text-sm text-muted">
             <MapPin className="size-3.5 shrink-0" />
             <span className="truncate">{job.placeName}</span>
+          </p>
+          <button onClick={() => onGoToWork(job.place)} className="mt-2 flex h-9 items-center gap-1.5 rounded-full bg-[#f08c00] px-4 text-sm font-semibold text-white">
+            <MapPin className="size-4" /> Go to work
           </button>
           <div className="mt-3 grid grid-cols-4 gap-1.5 text-center">
             <Tile label="Pay" value={money(gross)} />
@@ -263,20 +275,25 @@ export function WorkSheet({
         </Section>
       )}
 
-      <Section title="Your day" right={`${fmt(today.free)}h free`}>
-        <div className="flex h-3 overflow-hidden rounded-full">
-          {blocks.map((b) => (
-            <div key={b.id} title={`${b.label} ${fmt(b.hours)}h`} style={{ width: `${(b.hours / DAY_HOURS) * 100}%`, background: DAY_COLOUR[b.id] }} />
-          ))}
-        </div>
-        <div className="mt-1.5 flex flex-wrap gap-x-3 text-[11px] text-muted">
-          {blocks.map((b) => (
-            <span key={b.id} className="flex items-center gap-1">
-              <span className="size-2 rounded-full" style={{ background: DAY_COLOUR[b.id] }} />
-              {b.label} {fmt(b.hours)}h
-            </span>
-          ))}
-        </div>
+
+      <Section title="Assets" right={rent.units ? `${rent.let} of ${rent.units} let` : undefined}>
+        {rent.units === 0 ? (
+          <p className="text-xs text-muted">Property you let out earns rent here. Buy a room or a shop to rent out.</p>
+        ) : (
+          <div className="flex items-center justify-between gap-3 rounded-2xl bg-ink/[0.04] px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">{rent.daily > 0 ? `${cash(rent.daily)} a day in rent` : "No tenants yet"}</p>
+              <button onClick={onProperty} className="text-xs font-semibold text-gold-dark">
+                See your property
+              </button>
+            </div>
+            {rent.waiting >= 0.01 && (
+              <button disabled={ctx.busy} onClick={onRent} className="h-8 shrink-0 rounded-full bg-gold px-3 text-xs font-semibold text-ink disabled:opacity-40">
+                Collect {cash(rent.waiting)}
+              </button>
+            )}
+          </div>
+        )}
       </Section>
 
       {skillList.length > 0 && (

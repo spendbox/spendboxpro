@@ -2,27 +2,41 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { RegionMap } from "@/lib/world/compile";
-import { TIME_KIND } from "@/lib/world/day";
-import { BUDGET_PRESETS, groupOf, MONEY_GROUP, POT_INFO, POTS, type Budget, type MoneyGroup, type Pot } from "@/lib/world/living";
+import { BUDGET_PRESETS, POT_INFO, POTS, type Budget, type Pot } from "@/lib/world/living";
 import type { OwnedProperty } from "@/lib/world/owned";
 import type { AssetsData, AssetUnit, LifeStatus, MoneyFlow } from "@/lib/world/property-api";
-import { mintLocal } from "@/lib/world/value";
+import { cash, CURRENCIES, shownCurrency } from "@/lib/world/value";
 import { Sheet } from "../sheet";
 import { AssetsBody, unitValueNow, type Owning } from "./assets-sheet";
 
-const fmt = (n: number) => Math.round(n).toLocaleString("en-GB");
-const fmt2 = (n: number) => n.toLocaleString("en-GB", { maximumFractionDigits: 2 });
-type Prices = RegionMap["region"]["prices"];
-
-export type Tab = "home" | "flow" | "budget" | "property";
+export type Tab = "home" | "budget" | "property";
 const TABS: { id: Tab; label: string }[] = [
   { id: "home", label: "Overview" },
-  { id: "flow", label: "In & out" },
   { id: "budget", label: "Budget" },
   { id: "property", label: "Property" },
 ];
 
-/** Money, kept simple: what you have, what came in and went out, your budget, your property. */
+/** Where money came from, by the ledger's kinds. */
+const INCOME: { label: string; kinds: string[]; colour: string }[] = [
+  { label: "Job", kinds: ["work_pay", "public_pay", "bonus"], colour: "#2f9e44" },
+  { label: "Side hustle", kinds: ["hustle_pay"], colour: "#d6336c" },
+  { label: "Rent", kinds: ["rent"], colour: "#37b24d" },
+  { label: "Property sold", kinds: ["property_sale"], colour: "#495057" },
+];
+/** Where it went. */
+const EXPENSES: { label: string; kinds: string[]; colour: string }[] = [
+  { label: "Tax", kinds: ["income_tax", "rent_tax", "vat", "sale_tax"], colour: "#7048e8" },
+  { label: "Bills", kinds: ["power_bill", "waste_bill"], colour: "#f59f00" },
+  { label: "Travel", kinds: ["commute"], colour: "#f08c00" },
+  { label: "Health", kinds: ["health_care", "gym"], colour: "#e03131" },
+  { label: "Education", kinds: ["school_fees"], colour: "#1971c2" },
+  { label: "Looks", kinds: ["procedure"], colour: "#d6336c" },
+  { label: "Loan", kinds: ["loan_repay"], colour: "#0c8599" },
+  { label: "Side hustle", kinds: ["hustle_start"], colour: "#868e96" },
+  { label: "Property bought", kinds: ["property_buy", "property_tax"], colour: "#495057" },
+];
+
+/** Finance: what you're worth, what came in and went out, your budget, your property, your currency. */
 export function MoneySheet({
   status,
   assets,
@@ -30,15 +44,15 @@ export function MoneySheet({
   region,
   busy,
   loadMoney,
-  loadTime,
   onBudget,
-  onMove,
   onCollect,
   onShow,
   onClose,
   owning,
   startTab,
   glowBudget,
+  currency,
+  onCurrency,
 }: {
   status: LifeStatus | null;
   assets: AssetsData;
@@ -46,9 +60,7 @@ export function MoneySheet({
   region: RegionMap;
   busy: boolean;
   loadMoney: (hours: number) => Promise<MoneyFlow>;
-  loadTime: (hours: number) => Promise<Record<string, number>>;
   onBudget: (b: Budget) => void;
-  onMove: (from: Pot | "wallet", to: Pot | "wallet", amount: number) => void;
   onCollect: () => void;
   onShow: (u: AssetUnit) => void;
   onClose: () => void;
@@ -57,14 +69,20 @@ export function MoneySheet({
   startTab?: Tab;
   /** The guide's next step: set your budget (the Save button glows, and works without a change). */
   glowBudget?: boolean;
+  /** The currency money is shown in, and choosing it. */
+  currency: string;
+  onCurrency: (code: string) => void;
 }) {
   const [tab, setTab] = useState<Tab>(startTab ?? "home");
-  const prices = region.region.prices;
   const property = assets.units.reduce((t, u) => t + unitValueNow(u, owned, region), 0);
   const wallet = status?.wallet ?? assets.coins;
-  const pots = POTS.reduce((t, p) => t + (status?.pots[p] ?? 0), 0);
+  // Money set aside by the budget counts as cash: it's yours to spend on what it's for.
+  const aside = POTS.reduce((t, p) => t + (status?.pots[p] ?? 0), 0);
+  const cashNow = wallet + aside;
+  const worth = cashNow + property;
+  const owed = (status?.powerOwed ?? 0) + (status?.wasteOwed ?? 0);
   return (
-    <Sheet onClose={onClose} wide title="Money">
+    <Sheet onClose={onClose} wide title="Finance">
       <div className="flex gap-1 rounded-full bg-ink/5 p-1">
         {TABS.map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)} className={`relative h-8 flex-1 rounded-full text-xs font-semibold transition ${tab === t.id ? "bg-panel shadow-sm" : "text-muted"}`}>
@@ -74,8 +92,42 @@ export function MoneySheet({
         ))}
       </div>
       <div className="mt-4">
-        {tab === "home" && <Home status={status} wallet={wallet} pots={pots} property={property} prices={prices} busy={busy} onMove={onMove} />}
-        {tab === "flow" && <Flow loadMoney={loadMoney} loadTime={loadTime} prices={prices} />}
+        {tab === "home" && (
+          <div>
+            <div className="rounded-3xl bg-gradient-to-br from-gold/25 to-me/10 p-4 text-center">
+              <p className="text-sm text-muted">Net worth</p>
+              <p className="font-display text-3xl font-extrabold tabular-nums sm:text-4xl">{cash(worth, { full: true })}</p>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                <span>
+                  <b className="block text-sm tabular-nums">{cash(cashNow, { full: true })}</b>
+                  <span className="text-muted">Cash</span>
+                </span>
+                <span>
+                  <b className="block text-sm tabular-nums">{cash(property, { full: true })}</b>
+                  <span className="text-muted">Assets</span>
+                </span>
+              </div>
+            </div>
+            {(owed > 0.004 || status?.powerCut) && (
+              <p className="mt-3 rounded-xl bg-hit/10 px-3 py-2 text-xs font-semibold text-hit">
+                {status?.powerCut ? "Power cut: pay your bills to get the lights back. " : ""}
+                {owed > 0.004 ? `${cash(owed)} in bills unpaid.` : ""}
+              </p>
+            )}
+            <Flow loadMoney={loadMoney} />
+            <div className="mt-5 flex items-center justify-between gap-2">
+              <span className="text-sm font-semibold">Show money in</span>
+              <select value={currency} onChange={(e) => onCurrency(e.target.value)} className="h-9 rounded-full bg-ink/5 px-3 text-sm font-semibold" aria-label="Currency">
+                {CURRENCIES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.symbol} {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {shownCurrency() !== "NGN" && shownCurrency() !== "MINT" && <p className="mt-1 text-right text-[11px] text-muted">Rates are rough. Payments are in naira.</p>}
+          </div>
+        )}
         {tab === "budget" && status && <BudgetTab budget={status.budget} busy={busy} onSave={onBudget} first={glowBudget} />}
         {tab === "property" && <AssetsBody assets={assets} owned={owned} region={region} busy={busy} owning={owning} onCollect={onCollect} onShow={onShow} />}
       </div>
@@ -83,169 +135,33 @@ export function MoneySheet({
   );
 }
 
-function Home({
-  status,
-  wallet,
-  pots,
-  property,
-  prices,
-  busy,
-  onMove,
-}: {
-  status: LifeStatus | null;
-  wallet: number;
-  pots: number;
-  property: number;
-  prices: Prices;
-  busy: boolean;
-  onMove: (from: Pot | "wallet", to: Pot | "wallet", amount: number) => void;
-}) {
-  const worth = wallet + pots + property;
-  const [moving, setMoving] = useState<Pot | "wallet" | null>(null);
-  const [to, setTo] = useState<Pot | "wallet">("wallet");
-  const [amount, setAmount] = useState("");
-  const jars: (Pot | "wallet")[] = ["wallet", ...POTS];
-  const balance = (p: Pot | "wallet") => (p === "wallet" ? wallet : (status?.pots[p] ?? 0));
-  const owed = (status?.powerOwed ?? 0) + (status?.wasteOwed ?? 0);
-  const bills = status?.bills ? status.bills.power + status.bills.waste : 0;
-  return (
-    <div>
-      <div className="rounded-3xl bg-gradient-to-br from-gold/25 to-me/10 p-4 text-center">
-        <p className="text-sm text-muted">You&apos;re worth</p>
-        <p className="font-display text-4xl font-extrabold tabular-nums">₥{fmt(worth)}</p>
-        <p className="text-sm text-muted">{mintLocal(worth, prices)}</p>
-        <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-          <span>
-            <b className="block text-sm tabular-nums">₥{fmt(wallet)}</b>
-            <span className="text-muted">Cash</span>
-          </span>
-          <span>
-            <b className="block text-sm tabular-nums">₥{fmt(pots)}</b>
-            <span className="text-muted">Set aside</span>
-          </span>
-          <span>
-            <b className="block text-sm tabular-nums">₥{fmt(property)}</b>
-            <span className="text-muted">Property</span>
-          </span>
-        </div>
-      </div>
-
-      <p className="mt-4 text-sm font-semibold">Pots</p>
-      <p className="text-[11px] text-muted">
-        {pots < 0.01
-          ? "Empty until you're paid: each pay is shared into these by your budget (bills come from Essentials, fares from Travel). Your cash now stays as cash."
-          : "Each pay is shared into these by your budget. Tap one to move money."}
-      </p>
-      <div className="mt-2 grid grid-cols-5 gap-1.5">
-        {jars.map((p) => (
-          <button
-            key={p}
-            onClick={() => {
-              setMoving(moving === p ? null : p);
-              setTo(p === "wallet" ? "savings" : "wallet");
-              setAmount("");
-            }}
-            className={`relative overflow-hidden rounded-2xl bg-ink/[0.04] px-1 pb-2 pt-3 text-center ring-2 ${moving === p ? "ring-ink/30" : "ring-transparent"}`}
-          >
-            <span className="absolute inset-x-0 top-0 h-1" style={{ background: POT_INFO[p].colour }} />
-            <span className="block text-[11px] text-muted">{p === "wallet" ? "Cash" : POT_INFO[p].label}</span>
-            <span className="block text-sm font-bold tabular-nums">₥{fmt(balance(p))}</span>
-          </button>
-        ))}
-      </div>
-      {moving && (
-        <form
-          className="mt-2 flex items-center gap-2 rounded-2xl bg-ink/[0.04] p-2 text-sm"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const v = Number(amount);
-            if (v > 0) onMove(moving, to, v);
-            setMoving(null);
-          }}
-        >
-          <input
-            inputMode="decimal"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))}
-            placeholder="₥"
-            className="h-8 w-20 rounded-full bg-panel px-3 tabular-nums outline-none ring-1 ring-ink/10"
-            autoFocus
-          />
-          <span className="text-muted">to</span>
-          <select value={to} onChange={(e) => setTo(e.target.value as Pot | "wallet")} className="h-8 min-w-0 flex-1 rounded-full bg-panel px-2 ring-1 ring-ink/10">
-            {jars
-              .filter((p) => p !== moving)
-              .map((p) => (
-                <option key={p} value={p}>
-                  {p === "wallet" ? "Cash" : POT_INFO[p].label}
-                </option>
-              ))}
-          </select>
-          <button disabled={busy || !(Number(amount) > 0)} className="h-8 rounded-full bg-ink px-3 font-semibold text-white disabled:opacity-40">
-            Move
-          </button>
-        </form>
-      )}
-
-      {status?.bills && (
-        <div className="mt-4 flex items-center justify-between rounded-2xl bg-ink/[0.04] px-4 py-3 text-sm">
-          <span>Bills</span>
-          <span className="text-right">
-            <b className="tabular-nums">₥{fmt2(bills)}</b> <span className="text-muted">a day</span>
-            {owed > 0 && <span className="block text-xs font-semibold text-hit">{status.powerCut ? "Power cut · " : ""}You owe ₥{fmt2(owed)}</span>}
-          </span>
-        </div>
-      )}
-      {(status?.payOwed ?? 0) > 0 && (
-        <p className="mt-2 rounded-2xl bg-ink/[0.04] px-4 py-3 text-sm">
-          The state owes you <b>₥{fmt2(status!.payOwed)}</b>
-        </p>
-      )}
-    </div>
-  );
-}
-
 const PERIODS = [
   { hours: 24, label: "Today" },
   { hours: 168, label: "This week" },
 ];
-const IN: MoneyGroup[] = ["pay", "rent"];
 
-function Flow({ loadMoney, loadTime, prices }: { loadMoney: (hours: number) => Promise<MoneyFlow>; loadTime: (hours: number) => Promise<Record<string, number>>; prices: Prices }) {
+/** Income and expenses over a period, each in its own tab with its total. */
+function Flow({ loadMoney }: { loadMoney: (hours: number) => Promise<MoneyFlow> }) {
   const [hours, setHours] = useState(24);
-  const [got, setGot] = useState<{ hours: number; money: MoneyFlow; time: Record<string, number> } | null>(null);
+  const [side, setSide] = useState<"in" | "out">("in");
+  const [got, setGot] = useState<{ hours: number; money: MoneyFlow } | null>(null);
   useEffect(() => {
     let alive = true;
-    void Promise.all([loadMoney(hours), loadTime(hours)]).then(([money, time]) => alive && setGot({ hours, money, time }));
+    void loadMoney(hours).then((money) => alive && setGot({ hours, money }));
     return () => {
       alive = false;
     };
-  }, [loadMoney, loadTime, hours]);
-  const groups = useMemo(() => {
-    const g = new Map<MoneyGroup, number>();
-    for (const [kind, v] of Object.entries(got?.money ?? {})) {
-      if (kind === "start_grant") continue;
-      // The tax on buying property belongs with the purchase (it isn't money lost).
-      const group = kind === "property_tax" ? "property" : groupOf(kind);
-      g.set(group, (g.get(group) ?? 0) + v);
-    }
-    return g;
-  }, [got]);
-  const ins = IN.map((k) => [k, groups.get(k) ?? 0] as const).filter(([, v]) => v > 0.004);
-  const outs = [...groups]
-    .filter(([k, v]) => !IN.includes(k) && k !== "property" && k !== "borrowed" && v < -0.004)
-    .map(([k, v]) => [k, -v] as const)
-    .sort((a, b) => b[1] - a[1]);
-  const totalIn = ins.reduce((t, [, v]) => t + v, 0);
-  const totalOut = outs.reduce((t, [, v]) => t + v, 0);
-  const left = totalIn - totalOut;
-  const bought = -(groups.get("property") ?? 0);
-  const time = Object.entries(got?.time ?? {})
-    .filter(([, h]) => h >= 0.1)
-    .sort((a, b) => b[1] - a[1]);
+  }, [loadMoney, hours]);
+  const sum = (kinds: string[]) => kinds.reduce((t, k) => t + (got?.money[k] ?? 0), 0);
+  const ins = useMemo(() => INCOME.map((g) => ({ ...g, v: sum(g.kinds) })).filter((g) => g.v > 0.004), [got]); // eslint-disable-line react-hooks/exhaustive-deps
+  const outs = useMemo(() => EXPENSES.map((g) => ({ ...g, v: -sum(g.kinds) })).filter((g) => g.v > 0.004), [got]); // eslint-disable-line react-hooks/exhaustive-deps
+  const totalIn = ins.reduce((t, g) => t + g.v, 0);
+  const totalOut = outs.reduce((t, g) => t + g.v, 0);
+  const rows = side === "in" ? ins : outs;
+  const total = side === "in" ? totalIn : totalOut;
   const loading = !got || got.hours !== hours;
   return (
-    <div>
+    <div className="mt-4">
       <div className="flex gap-1.5">
         {PERIODS.map((p) => (
           <button key={p.hours} onClick={() => setHours(p.hours)} className={`h-8 flex-1 rounded-full text-xs font-semibold ${hours === p.hours ? "bg-ink text-white" : "bg-ink/5"}`}>
@@ -253,57 +169,29 @@ function Flow({ loadMoney, loadTime, prices }: { loadMoney: (hours: number) => P
           </button>
         ))}
       </div>
-      {loading ? (
-        <p className="py-8 text-center text-sm text-muted">Adding it up…</p>
-      ) : (
-        <>
-          <div className="mt-4 rounded-3xl bg-ink/[0.04] p-4 text-center">
-            <p className="text-sm text-muted">{left >= 0 ? "You made" : "You lost"}</p>
-            <p className={`font-display text-3xl font-extrabold tabular-nums ${left >= 0 ? "text-me" : "text-hit"}`}>₥{fmt2(Math.abs(left))}</p>
-            <p className="text-sm text-muted">{mintLocal(Math.abs(left), prices)}</p>
-          </div>
-          <Rows title="In" total={totalIn} rows={ins.map(([k, v]) => [MONEY_GROUP[k].label, v, MONEY_GROUP[k].colour] as const)} empty="Nothing came in" />
-          <Rows title="Out" total={totalOut} rows={outs.map(([k, v]) => [MONEY_GROUP[k].label, v, MONEY_GROUP[k].colour] as const)} empty="Nothing went out" />
-          {bought > 0.004 && <p className="mt-3 text-xs text-muted">Also bought property: ₥{fmt2(bought)} with tax (still yours)</p>}
-          {bought < -0.004 && <p className="mt-3 text-xs text-muted">Also sold property: ₥{fmt2(-bought)} after tax</p>}
-          {(groups.get("borrowed") ?? 0) > 0.004 && <p className="mt-1 text-xs text-muted">Borrowed from the World Bank: ₥{fmt2(groups.get("borrowed") ?? 0)}</p>}
-          {time.length > 0 && (
-            <>
-              <p className="mt-5 text-sm font-semibold">Your time</p>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {time.map(([k, h]) => (
-                  <span key={k} className="flex items-center gap-1.5 rounded-full bg-ink/5 px-2.5 py-1 text-xs">
-                    <span className="size-2 rounded-full" style={{ background: TIME_KIND[k]?.colour ?? "#868e96" }} />
-                    {TIME_KIND[k]?.label ?? k} <b>{fmt(h)}h</b>
-                  </span>
-                ))}
-              </div>
-            </>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-function Rows({ title, total, rows, empty }: { title: string; total: number; rows: (readonly [string, number, string])[]; empty: string }) {
-  return (
-    <div className="mt-4">
-      <div className="flex justify-between text-sm font-semibold">
-        <span>{title}</span>
-        <span className="tabular-nums">₥{fmt2(total)}</span>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        {(
+          [
+            ["in", "Income", totalIn, "text-me"],
+            ["out", "Expenses", totalOut, "text-hit"],
+          ] as const
+        ).map(([id, label, v, tone]) => (
+          <button key={id} onClick={() => setSide(id)} className={`rounded-2xl p-3 text-left ring-2 ${side === id ? "bg-panel ring-ink/20" : "bg-ink/[0.04] ring-transparent"}`}>
+            <span className="block text-xs text-muted">{label}</span>
+            <span className={`block font-display text-lg font-extrabold tabular-nums ${tone}`}>{loading ? "…" : cash(v)}</span>
+          </button>
+        ))}
       </div>
-      {rows.length === 0 ? (
-        <p className="mt-1 text-xs text-muted">{empty}</p>
-      ) : (
-        <ul className="mt-2 space-y-1.5">
-          {rows.map(([label, v, colour]) => (
-            <li key={label} className="flex items-center gap-2 text-sm">
-              <span className="w-20 shrink-0 text-muted">{label}</span>
+      {!loading && (
+        <ul className="mt-3 space-y-1.5">
+          {rows.length === 0 && <li className="text-xs text-muted">{side === "in" ? "Nothing came in yet." : "Nothing went out yet."}</li>}
+          {rows.map((g) => (
+            <li key={g.label} className="flex items-center gap-2 text-sm">
+              <span className="w-24 shrink-0 text-muted">{g.label}</span>
               <span className="h-2 flex-1 overflow-hidden rounded-full bg-ink/5">
-                <span className="block h-full rounded-full" style={{ width: `${Math.max(3, (v / Math.max(total, 1e-9)) * 100)}%`, background: colour }} />
+                <span className="block h-full rounded-full" style={{ width: `${Math.max(3, (g.v / Math.max(total, 1e-9)) * 100)}%`, background: g.colour }} />
               </span>
-              <span className="w-16 shrink-0 text-right tabular-nums">₥{fmt2(v)}</span>
+              <span className="w-20 shrink-0 text-right tabular-nums">{cash(g.v)}</span>
             </li>
           ))}
         </ul>
@@ -319,7 +207,7 @@ function BudgetTab({ budget, busy, onSave, first }: { budget: Budget; busy: bool
   const set = (p: Pot, v: number) => setB({ ...b, [p]: Math.max(0, Math.min(100 - (used - b[p]), Math.round(v))) });
   return (
     <div>
-      <p className="text-sm text-muted">Where each ₥100 you earn goes.</p>
+      <p className="text-sm text-muted">How each pay is shared out: set aside for bills, fares, savings and treats, the rest to spend.</p>
       <div className="mt-3 flex h-4 overflow-hidden rounded-full bg-ink/5">
         {POTS.map((p) => (
           <div key={p} style={{ width: `${b[p]}%`, background: POT_INFO[p].colour }} />
@@ -347,7 +235,7 @@ function BudgetTab({ budget, busy, onSave, first }: { budget: Budget; busy: bool
         <li className="flex items-center gap-3 text-sm">
           <span className="flex w-24 shrink-0 items-center gap-2">
             <span className="size-2.5 rounded-full" style={{ background: POT_INFO.wallet.colour }} />
-            Cash
+            To spend
           </span>
           <span className="flex-1 text-xs text-muted">the rest</span>
           <span className="w-10 text-right font-semibold tabular-nums">{100 - used}%</span>

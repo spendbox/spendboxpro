@@ -50,7 +50,7 @@ done
 # adds the throw clock; part 32 the bank robbery; part 33 helicopter rides; part 34 the phone
 # gallery; part 35 first-visit fees, fares and jobs; part 36 minigame rewards; part 37 better
 # pay; part 38 property on the real map; part 39 work on the real map; part 40 living (pots, bills, health, school); part 41 your day; parts 42-46 packs, business, services, map reports and the market. Each test runs its own part.
-for t in nobot stalling heist heli phone jobs minigames pay property work living day packs business services reports market adsprop; do
+for t in nobot stalling heist heli phone jobs minigames pay property work living day packs business services reports market adsprop trips; do
   [ -f "game-db/tests/$t.test.sql" ] || continue
   $P -f "game-db/tests/$t.test.sql" 2>&1 | sed 's/^psql:[^ ]* NOTICE:  //'
 done

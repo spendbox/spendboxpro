@@ -4,6 +4,8 @@ import { useState, useSyncExternalStore } from "react";
 import { CityView, type CityEvent, type CityMarkers } from "@/app/play/city-view";
 import { useWorldLife } from "@/app/play/life/world-life";
 import { PlacePill } from "@/app/play/place-pill";
+import { Wallet } from "@/components/icons";
+import { cash } from "@/lib/world/value";
 import { defaultAvatar } from "@/lib/avatar";
 import { REGIONS } from "@/lib/world";
 import { makeLabApi } from "./lab-api";
@@ -21,6 +23,8 @@ const BUDGET = 5000;
 
 export function WorldLab({ region }: { region: string }) {
   const [area, setArea] = useState<string | null>(null);
+  // ?night shows the city at night (for checking night lights).
+  const night = useSyncExternalStore(noSubscribe, () => location.search.includes("night"), () => false);
   // A pretend wallet kept in this browser (the server never has one).
   const api = useSyncExternalStore(noSubscribe, labApi, noApi);
   const r = REGIONS[region];
@@ -41,7 +45,7 @@ export function WorldLab({ region }: { region: string }) {
         meAvatar={AVATAR}
         coinBalloon={null}
         onBalloon={noop}
-        progress={0.25}
+        progress={night ? 0.95 : 0.25}
         nightFirst={false}
         onArea={setArea}
         onProperty={life.onProperty}
@@ -54,6 +58,13 @@ export function WorldLab({ region }: { region: string }) {
       />
       <div className="pointer-events-none absolute left-2.5 top-2.5 sm:left-4 sm:top-4">
         <PlacePill area={area} state={r.state} />
+      </div>
+      {/* Your cash, top right (as in the game): opens Finance. */}
+      <div className="pointer-events-none absolute right-2.5 top-2.5 sm:right-4 sm:top-4">
+        <button onClick={life.openFinance} className="glass pointer-events-auto flex h-9 items-center gap-1.5 rounded-full px-3 text-sm font-bold" aria-label="Finance">
+          <Wallet className="size-4 text-gold-dark" />
+          {cash(life.cashNow)}
+        </button>
       </div>
       {life.overlay}
       {credit && (
@@ -108,6 +119,7 @@ const SERVERLESS = {
   serviceTake: async () => ({ ok: false as const, error: "" }),
   serviceJob: async () => ({ ok: false as const, error: "" }),
   reportMap: async () => ({ ok: false as const, error: "" }),
+  travelTo: async () => ({ ok: false as const, error: "" }),
   setRentLevel: async () => ({ ok: false as const, error: "" }),
   listUnit: async () => ({ ok: false as const, error: "" }),
   unlistUnit: async () => ({ ok: false as const, error: "" }),

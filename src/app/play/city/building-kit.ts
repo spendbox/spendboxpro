@@ -294,7 +294,7 @@ export function buildingParts(t: Tile, b: Building, pal: Palette, B0: BoxFn, add
       windows(0, -0.1, 0.84, 0.6, BASE + STOREY, b.storeys - 1);
       if (l3 > 0.5) {
         // A glass atrium in the middle.
-        B(0, BASE, -0.1, 0.24, h + 0.12, 0.62, 0x9ec5e8, 0, "glass");
+        B(0, BASE, -0.1, 0.24, h + 0.12, 0.62, 0x9ec5e8, 0, "curtain");
       }
       B(0, BASE + h, 0.2, 0.6, 0.14, 0.03, pick(SIGNS, l0));
       // Parking out front.
@@ -323,7 +323,7 @@ export function buildingParts(t: Tile, b: Building, pal: Palette, B0: BoxFn, add
       } else {
         // A glass front on a solid block.
         B(0, BASE, -0.05, w, h, 0.5, office);
-        B(0, BASE, 0.21, w * 0.9, h, 0.03, pick(GLASS, l1), 0, "glass");
+        B(0, BASE, 0.21, w * 0.9, h, 0.03, pick(GLASS, l1), 0, "curtain");
         windows(0, -0.05, w, 0.5, BASE, b.storeys, WINDOW);
       }
       B(-w * 0.2, BASE + h, 0, 0.18, 0.1, 0.18, 0xced4da);
@@ -336,22 +336,26 @@ export function buildingParts(t: Tile, b: Building, pal: Palette, B0: BoxFn, add
       const color = pick(GLASS, l0);
       const style = l3;
       if (style < 0.35) {
-        B(0, BASE, 0, w, h * 0.78, w, color, 0, "glass");
-        B(0, BASE + h * 0.78, 0, w * 0.76, h * 0.22, w * 0.76, color, 0, "glass");
+        B(0, BASE, 0, w, h * 0.78, w, color, 0, "curtain");
+        B(0, BASE + h * 0.78, 0, w * 0.76, h * 0.22, w * 0.76, color, 0, "curtain");
         B(0, BASE + h, 0, 0.06, 0.4, 0.06, 0xdee2e6, 0, "cone");
       } else if (style < 0.7) {
         // Three tiers.
-        B(0, BASE, 0, w, h * 0.5, w, color, 0, "glass");
-        B(0, BASE + h * 0.5, 0, w * 0.82, h * 0.3, w * 0.82, color, 0, "glass");
-        B(0, BASE + h * 0.8, 0, w * 0.62, h * 0.2, w * 0.62, color, 0, "glass");
+        B(0, BASE, 0, w, h * 0.5, w, color, 0, "curtain");
+        B(0, BASE + h * 0.5, 0, w * 0.82, h * 0.3, w * 0.82, color, 0, "curtain");
+        B(0, BASE + h * 0.8, 0, w * 0.62, h * 0.2, w * 0.62, color, 0, "curtain");
         B(0, BASE + h, 0, w * 0.5, 0.03, w * 0.5, 0x495057, 0, "cyl");
         B(0, BASE + h + 0.035, 0, 0.16, 0.004, 0.04, 0xffffff, 0, "paint");
       } else {
         // Slim slab with a sloped crown.
-        B(0, BASE, 0, w, h, w * 0.7, color, 0, "glass");
-        B(0, BASE + h, 0, w, 0.3, w * 0.7, color, 0, "glass", 0.5);
+        B(0, BASE, 0, w, h, w * 0.7, color, 0, "curtain");
+        B(0, BASE + h, 0, w, 0.3, w * 0.7, color, 0, "curtain", 0.5);
       }
-      for (let y = 1.2; y < h * 0.78; y += 1.2) B(0, BASE + y, 0, w + 0.015, 0.03, w * (style >= 0.7 ? 0.7 : 1) + 0.015, 0xe9ecef);
+      // Lit window bands every other storey (they glow at night; the glass between stays dark).
+      const deep = w * (style >= 0.7 ? 0.7 : 1);
+      const top = style >= 0.7 ? h : h * 0.78;
+      for (let y = STOREY * 0.4; y < top - STOREY * 0.3; y += STOREY * 2) B(0, BASE + y, 0, w + 0.01, STOREY * 0.28, deep + 0.01, WINDOW, 0, "glass");
+      for (let y = 1.2; y < h * 0.78; y += 1.2) B(0, BASE + y, 0, w + 0.015, 0.03, deep + 0.015, 0xe9ecef);
       // A podium of shops at the foot.
       if (l4 > 0.4) B(0, BASE, 0.3, w + 0.1, STOREY, 0.2, office);
       break;
