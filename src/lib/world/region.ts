@@ -7,6 +7,7 @@
 // fix never moves anything else.
 
 import type { StructureType, TileKind } from "@/lib/city/layout";
+import type { BuildingKind } from "./buildings.ts";
 import type { LatLon, LatLonBox } from "./geo.ts";
 
 /** [latitude, longitude] pairs: the shape of a road or an area. */
@@ -68,6 +69,21 @@ export type District = {
   radiusKm: number;
   /** How built-up its middle is: about 0.4 quiet suburb, 0.7 busy, 1.1+ skyscrapers. */
   density: number;
+  /** What land costs in its middle, per m², in the region's currency (see Prices). */
+  landPrice?: number;
+};
+
+/** Real prices for a region, in its own currency (see docs/PROPERTY.md, section 2). */
+export type Prices = {
+  /** The local currency ("NGN"), and how much of it one mint is worth. */
+  currency: string;
+  /** Shown before local amounts ("₦"). */
+  symbol: string;
+  perMint: number;
+  /** Land per m² where no district says otherwise. */
+  land: number;
+  /** What it costs to build, per m² of floor, by kind of building. */
+  build: Record<BuildingKind, number>;
 };
 
 export type Correction =
@@ -96,8 +112,14 @@ export type Region = {
   seed: number;
   /** The city's colours (see PALETTES in src/lib/city/layout.ts). */
   palette?: string;
-  /** The part of the world this region covers. */
+  /**
+   * Where its own flat map is centred. Fixed for good: every building's address (and so who owns
+   * it) is counted from here, so the box can grow without anything moving.
+   */
+  origin: LatLon;
+  /** The part of the world this region covers (it can grow; the origin stays). */
   box: LatLonBox;
+  prices: Prices;
   /** Where the camera starts. */
   start: LatLon;
   landmarks: Landmark[];

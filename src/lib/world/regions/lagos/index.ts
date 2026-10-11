@@ -6,6 +6,7 @@ import { AREAS, FOUND, ROAD_GRID, ROUTES, WATER } from "./baked.ts";
 import { CORRECTIONS } from "./corrections.ts";
 import { DISTRICTS } from "./districts.ts";
 import { LANDMARKS } from "./landmarks.ts";
+import { PRICES } from "./prices.ts";
 
 export const LAGOS: Region = {
   id: "lagos",
@@ -15,7 +16,11 @@ export const LAGOS: Region = {
   flavor: "ng",
   seed: 6453339,
   palette: "coastal",
+  // The middle of the first box (Ikeja to the coast, Festac to Ajah). Never change it: every
+  // building's address is counted from here.
+  origin: { lat: 6.5045, lon: 3.4025 },
   box: { south: 6.392, west: 3.2, north: 6.617, east: 3.605 },
+  prices: PRICES,
   start: { lat: 6.4535, lon: 3.3925 },
   landmarks: LANDMARKS,
   districts: DISTRICTS,

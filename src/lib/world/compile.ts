@@ -27,6 +27,8 @@ export type RegionMap = {
   spotAt: (x: number, z: number) => Spot | undefined;
   /** Downtowns and quieter districts, for how built-up each spot is (as CityPlan centres). */
   centres: { x: number; z: number; radius: number; weight: number }[];
+  /** What land costs at a spot, per m², in the region's currency: the districts' prices blended. */
+  landPriceAt: (x: number, z: number) => number;
   /** What a spot is called: its neighbourhood or town, its district, or the water. */
   areaAt: (x: number, z: number) => string;
   /** Landmarks left out because they overlapped one placed before them (worth a correction). */
@@ -54,7 +56,7 @@ const cache = new WeakMap<Region, RegionMap>();
 export function compileRegion(region: Region): RegionMap {
   const hit = cache.get(region);
   if (hit) return hit;
-  const frame: Frame = { origin: { lat: (region.box.north + region.box.south) / 2, lon: (region.box.west + region.box.east) / 2 } };
+  const frame: Frame = { origin: region.origin };
   const bounds = tileBounds(frame, region.box);
   const W = bounds.x1 - bounds.x0 + 1;
   const H = bounds.z1 - bounds.z0 + 1;
@@ -211,6 +213,20 @@ export function compileRegion(region: Region): RegionMap {
     return near;
   };
 
+  // ---- land prices: each district's price fades out over about its radius into its
+  // neighbours' (and the region's own price where no district reaches)
+  const priced = region.districts.flatMap((d) => (d.landPrice ? [{ ...at(d.at), r: d.radiusKm * 10, p: d.landPrice }] : []));
+  const landPriceAt = (x: number, z: number) => {
+    let sum = 0.15 * region.prices.land;
+    let weight = 0.15;
+    for (const d of priced) {
+      const k = Math.exp(-((Math.hypot(x - d.x, z - d.z) / (d.r * 1.4)) ** 2));
+      sum += k * d.p;
+      weight += k;
+    }
+    return sum / weight;
+  };
+
   const map: RegionMap = {
     region,
     frame,
@@ -222,6 +238,7 @@ export function compileRegion(region: Region): RegionMap {
     spotAt: (x, z) => spots.get(tileKey(x, z)),
     centres,
     areaAt,
+    landPriceAt,
     skipped,
   };
   cache.set(region, map);

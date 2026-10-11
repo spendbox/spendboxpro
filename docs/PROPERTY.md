@@ -179,7 +179,7 @@ Only ever a share of the ad revenue the game actually earns, never new money:
    (a Yaba flat for ₥35,000 ≈ ₦50 million). Prices then make sense in every country.
 2. **How fast property earns.** Real property returns about 5–8% a year. With one game year per
    real month (see `docs/LIFE.md`), 6% a game year is 6% a real month: noticeable, not instant.
-3. **Starting budget:** for example ₥2,000, enough for a room or small flat in the cheaper areas.
+3. **Starting budget:** ₥5,000 (about ₦7.5m): enough for a room in most of Lagos (see section 11).
 4. **Ghosts and the minigames:** ghosts go completely. Suggestion for the minigames: take them
    out of the menus but keep the code, since many can come back as things to do inside places
    (darts in a bar, cards at home).
@@ -188,7 +188,20 @@ Only ever a share of the ad revenue the game actually earns, never new money:
 
 ## 11. The order to build it
 
-**Step 1: buildings worth owning**
+**Step 1: buildings worth owning** — first part done:
+- Lagos's map origin is fixed for good, so every building keeps its address (`lagos:<x>,<z>`)
+  and every unit its id (`lagos:<x>,<z>/<n>`) as the map grows.
+- 14 kinds of building (`src/lib/world/buildings.ts`, drawn by `src/app/play/city/building-kit.ts`),
+  chosen by how busy and how wealthy each spot is, some left unfinished or as building sites, each
+  split into units: about 22,600 properties and 107,000 units in Lagos.
+- Values: land + building (`src/lib/world/value.ts`), Lagos prices in
+  `src/lib/world/regions/lagos/prices.ts` and `districts.ts`; the map's bubbles show each
+  property's kind and value.
+- Prices today (1 mint = ₦1,500): a room from about ₥2,000–₥3,500 (₦3–5m), the middle unit about
+  ₥8,600, a bungalow about ₥48,000, a top floor of an Eko Atlantic tower about ₥820,000. A starting
+  budget of ₥5,000 could buy any of about 41,000 homes (mostly rooms), so ₥5,000 looks right.
+
+Still to do in step 1:
 1. Every building and unit gets a permanent identity on the real map (not tied to hourly rounds).
 2. The building recipe: many kinds, floors and units, states (uncompleted and so on).
 3. The value formula (land + building) and the price tables for Lagos.

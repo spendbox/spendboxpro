@@ -82,7 +82,7 @@ function overpassPieces(name, body, cols, rows) {
 }
 
 // ---------------------------------------------------------------- the region's tiles
-const frame = { origin: { lat: (region.box.north + region.box.south) / 2, lon: (region.box.west + region.box.east) / 2 } };
+const frame = { origin: region.origin };
 const B = tileBounds(frame, region.box);
 const W = B.x1 - B.x0 + 1;
 const H = B.z1 - B.z0 + 1;

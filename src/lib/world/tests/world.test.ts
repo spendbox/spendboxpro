@@ -6,6 +6,7 @@ import { compileRegion, fillArea, line4 } from "../compile.ts";
 import { toLatLon, toTile, tileBounds, worldOffset } from "../geo.ts";
 import type { Region } from "../region.ts";
 import { LAGOS } from "../regions/lagos/index.ts";
+import { PRICES } from "../regions/lagos/prices.ts";
 
 const frame = { origin: { lat: 6.5, lon: 3.4 } };
 
@@ -67,7 +68,9 @@ function tiny(extra: Partial<Region> = {}): Region {
     state: "Tiny State",
     flavor: "ng",
     seed: 1,
+    origin: { lat: 0, lon: 0 },
     box: { south: -d, west: -d, north: d, east: d },
+    prices: { currency: "NGN", symbol: "₦", perMint: 1500, land: 50_000, build: PRICES.build },
     start: { lat: 0, lon: 0 },
     landmarks: [],
     districts: [],

@@ -8,6 +8,7 @@
 
 import type { HouseInterior, HouseStyle, TownHouse } from "@/lib/houses";
 import type { RegionMap } from "@/lib/world/compile";
+import { buildingFor, buildingTop, wealthOf, type Building } from "@/lib/world/buildings";
 import { ABBREV, CLUB_NAMES, eggChoices, FLAVORS, landmarkChoices, nameOf, RESTAURANT_NAMES, type EasterEgg, type Flavor, type LandmarkKey, type Named } from "./places";
 
 export type TileKind =
@@ -139,6 +140,8 @@ export type Tile = {
   forecourt?: boolean;
   /** Open sea (big towns reach the coast). */
   sea?: boolean;
+  /** A real place's property here: its kind, storeys, state and units (src/lib/world/buildings). */
+  building?: Building;
   /** A lake or sea tile by the shore with a wooden jetty (which side faces land: 0 +x, 1 -x, 2 +z, 3 -z). */
   jetty?: number;
   /** A player's house stands here (see src/lib/city/houses.ts). */
@@ -268,28 +271,8 @@ export function spiralIndex(x: number, z: number): number {
   return big - 6 * k - (k - z) - 1;
 }
 
-/** Integer hash → 0..1, stable for the same inputs. */
-export function hash(x: number, z: number, s: number) {
-  let h = Math.imul(x | 0, 374761393) ^ Math.imul(z | 0, 668265263) ^ Math.imul(s | 0, 2147483647);
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  h ^= h >>> 16;
-  return (h >>> 0) / 4294967296;
-}
-
-/** Smooth random field (value noise), 0..1. */
-export function smoothNoise(x: number, z: number, s: number) {
-  const x0 = Math.floor(x);
-  const z0 = Math.floor(z);
-  const fx = x - x0;
-  const fz = z - z0;
-  const u = fx * fx * (3 - 2 * fx);
-  const v = fz * fz * (3 - 2 * fz);
-  const a = hash(x0, z0, s);
-  const b = hash(x0 + 1, z0, s);
-  const c = hash(x0, z0 + 1, s);
-  const d = hash(x0 + 1, z0 + 1, s);
-  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
-}
+export { hash, smoothNoise } from "./noise";
+import { hash, smoothNoise } from "./noise";
 
 export type CityPlan = {
   seed: number;
@@ -1503,6 +1486,7 @@ export function lotAt(plan: CityPlan, i: number): Tile {
   if (!LOTS.includes(t.kind)) {
     const named = t.rail || t.name ? undefined : tileName(plan, t);
     if (named) t.name = named;
+    if (!t.rail) withBuilding(plan, t);
     return t;
   }
   const st = t.rail ? null : structureAt(plan, x, z);
@@ -1533,7 +1517,18 @@ export function lotAt(plan: CityPlan, i: number): Tile {
   if (named) t.name = named;
   const egg = blockEgg(plan, x, z);
   if (egg && egg.x === x && egg.z === z) t.egg = { ...egg.egg, face: egg.face };
+  withBuilding(plan, t);
   return t;
+}
+
+/** A real place: every house, office and tower lot is a property you could own (src/lib/world/buildings). */
+function withBuilding(plan: CityPlan, t: Tile) {
+  if (!plan.region) return;
+  const b = buildingFor(plan.region.region.id, t, densityAt(plan, t.x, t.z), plan.seed, wealthOf(plan.region.landPriceAt(t.x, t.z)));
+  if (b) {
+    t.building = b;
+    t.top = buildingTop(b);
+  }
 }
 
 // ---------------------------------------------------------------- addresses

@@ -29,6 +29,8 @@ import { ABBREV } from "@/lib/city/places";
 import { regionMap } from "@/lib/world";
 import type { RegionMap } from "@/lib/world/compile";
 import { toTile } from "@/lib/world/geo";
+import { BUILDING_LABEL, type Building } from "@/lib/world/buildings";
+import { shortMint, toMint, valueOf } from "@/lib/world/value";
 import { daylight, weatherAt } from "@/lib/city/sky";
 import { npcsFor, type Npc } from "@/lib/npcs";
 import { createBirds } from "./city/birds";
@@ -51,6 +53,7 @@ import { createElevatedLife, elevatedParts } from "./city/elevated";
 import { createAircraft } from "./city/aircraft";
 import { createFarCity, MAP_MARGIN } from "./city/far-city";
 import { createKites } from "./city/kites";
+import { buildingParts } from "./city/building-kit";
 import { setSceneSnapshot } from "./city/snapshot";
 import { createTraffic, type VehiclePose } from "./city/traffic";
 import { clubParts, eggParts, fireStationParts, restaurantParts } from "./city/street-bits";
@@ -575,6 +578,13 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
 
   if (t.kind === "structure") {
     if (t.structure!.anchor) structureParts(t, plan, B, tree);
+    return;
+  }
+
+  // A real place's property (a bungalow, flats, shops, a plot...): see ./city/building-kit.
+  if (t.building && !t.home) {
+    buildingParts(t, t.building, pal, B, add, tree);
+    if (t.egg) eggParts(t, B);
     return;
   }
 
@@ -3773,11 +3783,20 @@ export function CityView({
           ? anchor.structure.name
           : anchor.name
             ? anchor.name
-            : `${shortAddress(addressOf(currentPlan, anchor))} · ${ROOM_LABEL[anchor.kind]}`;
+            : anchor.building && currentPlan.region
+              ? propertyName(anchor.building, anchor, currentPlan.region)
+              : `${shortAddress(addressOf(currentPlan, anchor))} · ${ROOM_LABEL[anchor.kind]}`;
       const capacity = levels.reduce((n, l) => n + l.capacity, 0);
       const type = anchor.home ? "home" : anchor.station ? "station" : anchor.kind === "structure" && anchor.structure ? anchor.structure.type : anchor.kind;
       const room: CityRoom = { id: `b:${anchor.i}`, name, capacity, kind: "building", type, levels: levels.map((l) => ({ id: l.id, label: l.label, capacity: l.capacity, kind: levelUse(l) })) };
       return { room, anchor, big, levels };
+    }
+    /** A property on the real map: what it is and what it's worth ("Block of flats · ₥31,240"). */
+    function propertyName(b: Building, at: Tile, region: RegionMap) {
+      const kind = BUILDING_LABEL[b.kind];
+      const what = b.state === "site" ? "Building site" : b.state === "uncompleted" ? `Unfinished ${kind.toLowerCase()}` : kind;
+      const value = valueOf(b, region.landPriceAt(at.x, at.z), region.region.prices).total;
+      return `${what} · ${shortMint(toMint(value, region.region.prices))}`;
     }
     /** A name for signs inside a building (company, hotel, hospital...). */
     function signName(anchor: Tile) {
