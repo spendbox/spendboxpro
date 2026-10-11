@@ -85,8 +85,11 @@ export async function buyUnit(unitId: string): Promise<PropertyResult> {
   const prices = map.region.prices;
   const value = valueOf(found.building, map.landPriceAt(found.x, found.z), prices);
   const price = Math.max(1, toMint(value.units[Number(m[2])], prices));
-  // Short in your wallet? What's in Savings tops it up (that's what Savings is for).
   const db = createAdminClient();
+  // A building a real business leases isn't for sale while the lease runs.
+  const { count: leased } = await db.from("business_leases").select("id", { count: "exact", head: true }).eq("building_id", m[1]).eq("status", "live");
+  if (leased) return { ok: false, error: "A business leases that building, so it isn't for sale." };
+  // Short in your wallet? What's in Savings tops it up (that's what Savings is for).
   const cost = Math.round(price * (1 + BUY_TAX) * 100) / 100;
   const [{ data: prof }, { data: pot }] = await Promise.all([
     db.from("profiles").select("coins").eq("id", userId).maybeSingle(),

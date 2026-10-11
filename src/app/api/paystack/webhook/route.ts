@@ -1,6 +1,7 @@
 import { after, NextResponse } from "next/server";
 import { confirmPack } from "@/app/play/pack-actions";
 import { confirmPayment } from "@/lib/ads";
+import { confirmBusinessPayment } from "@/lib/business";
 import { webhookIsGenuine } from "@/lib/paystack";
 
 // Gives the follow-up (emails) time to finish after we've answered Paystack.
@@ -30,6 +31,16 @@ export async function POST(request: Request) {
         await confirmPayment(reference);
       } catch (error) {
         console.error("Webhook payment confirmation failed", reference, error);
+      }
+    });
+  }
+  // Business leases and their upgrades (src/lib/business.ts).
+  if (event.event === "charge.success" && typeof reference === "string" && /^bz-/.test(reference)) {
+    after(async () => {
+      try {
+        await confirmBusinessPayment(reference);
+      } catch (error) {
+        console.error("Webhook business confirmation failed", reference, error);
       }
     });
   }

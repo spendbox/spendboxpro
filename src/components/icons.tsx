@@ -11,6 +11,8 @@ export {
   TrendingUp,
   Wallet,
   Briefcase,
+  Globe,
+  Phone,
   GraduationCap,
   PiggyBank,
   Trash2,

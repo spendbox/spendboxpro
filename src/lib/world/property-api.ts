@@ -3,6 +3,7 @@
 // the screens don't care which.
 
 import type { Building, UnitUse } from "./buildings.ts";
+import type { BusinessHit, MapBusiness } from "./business.ts";
 import type { Exercise } from "./day.ts";
 import type { Budget, Pot } from "./living.ts";
 import type { Commute } from "./work.ts";
@@ -110,6 +111,8 @@ export type PropertyApi = {
   /** Pay for a starter pack: a Paystack page to go to (or, in the lab, the mint at once). */
   startPack: (pack: string, region: string) => Promise<{ ok: true; url?: string; coins?: number } | { ok: false; error: string }>;
   confirmPack: (reference: string) => Promise<{ ok: boolean; mint?: number; error?: string }>;
+  mapBusinesses: (region: string) => Promise<MapBusiness[]>;
+  hitBusiness: (id: string, kind: BusinessHit) => Promise<void>;
 };
 
 /** The purchase tax (the database's property_buy_tax), for showing what a unit really costs. */

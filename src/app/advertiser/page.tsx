@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { ArrowLeft } from "@/components/icons";
 import { adPricing, advertiserAds } from "@/lib/ads";
 import { paystackEnabled } from "@/lib/paystack";
+import { myBusinesses } from "@/lib/business";
+import { BusinessCard } from "./business-card";
 import { AdCard, SignOutButton } from "./portal";
 import { currentAdvertiserId } from "./session";
 import { SignInForm } from "./sign-in-form";
@@ -60,6 +62,7 @@ export default async function AdvertiserPage({
 
   const pricing = await adPricing();
   const payments = paystackEnabled();
+  const businesses = await myBusinesses(me!).catch(() => []);
   return (
     <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-6 px-4 py-8">
       <div className="flex items-start justify-between gap-4">
@@ -73,6 +76,16 @@ export default async function AdvertiserPage({
         </div>
         <SignOutButton />
       </div>
+
+      {businesses.length > 0 && (
+        <>
+          <h2 className="font-display text-2xl font-bold">Your business on the map</h2>
+          {businesses.map((b) => (
+            <BusinessCard key={b.id} b={b} />
+          ))}
+          <h2 className="font-display text-2xl font-bold">Your ads</h2>
+        </>
+      )}
 
       {data.ads.length === 0 ? (
         <section className="rounded-2xl border border-line bg-panel p-6 text-center">

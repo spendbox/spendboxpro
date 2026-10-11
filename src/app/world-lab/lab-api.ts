@@ -656,6 +656,38 @@ export function makeLabApi(budget: number): PropertyApi {
     async confirmPack() {
       return { ok: false };
     },
+    async mapBusinesses(region) {
+      // The lab has no real businesses: one sample shows what a leased building looks like.
+      const plan = planFor(region);
+      for (let r = 0; r < 12; r++) {
+        for (let dx = -r; dx <= r; dx++) {
+          for (const dz of [-r, r]) {
+            const t = tileAt(plan, spiralIndex(-27 + dx, -5 + dz));
+            if (t.building?.kind !== "plaza" && t.building?.kind !== "shops") continue;
+            return [
+              {
+                id: "00000000-0000-4000-8000-000000000000",
+                building: t.building.id,
+                name: "Your Business Here",
+                category: "Sample",
+                about: "A sample: this is how a real business that leases a building shows on the map, with its logo, what it does and how to reach it.",
+                address: "Your real address, Lagos",
+                phone: null,
+                whatsapp: null,
+                website: null,
+                logo: null,
+                glow: 2,
+                kind: null,
+                storeys: null,
+                billboard: false,
+              },
+            ];
+          }
+        }
+      }
+      return [];
+    },
+    async hitBusiness() {},
     async buildingOwners(buildingId) {
       return s.units.filter((u) => u.building === buildingId).map((u) => ({ unit: u.unit, name: "You", mine: true }));
     },

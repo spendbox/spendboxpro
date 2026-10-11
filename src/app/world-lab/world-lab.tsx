@@ -46,6 +46,8 @@ export function WorldLab({ region }: { region: string }) {
         onArea={setArea}
         onProperty={life.onProperty}
         onWorkplace={life.onWorkplace}
+        businesses={life.businesses}
+        onBusiness={life.onBusiness}
         owned={life.owned}
         flyTo={life.flyTo}
       />
@@ -95,4 +97,6 @@ const SERVERLESS = {
   answerEvent: async () => ({ ok: false as const, error: "" }),
   startPack: async () => ({ ok: false as const, error: "" }),
   confirmPack: async () => ({ ok: false }),
+  mapBusinesses: async () => [],
+  hitBusiness: async () => {},
 };

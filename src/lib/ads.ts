@@ -171,7 +171,7 @@ export async function uploadImage(img: Picture, folder: string) {
 
 type Contact = { name: string; email: string; phone: string | null };
 
-function readContact(form: FormData): { ok: true; contact: Contact } | { ok: false; error: string } {
+export function readContact(form: FormData): { ok: true; contact: Contact } | { ok: false; error: string } {
   const name = clean(form.get("contact_name"), 80);
   const email = clean(form.get("contact_email"), 120).toLowerCase();
   const phone = clean(form.get("contact_phone"), 30);

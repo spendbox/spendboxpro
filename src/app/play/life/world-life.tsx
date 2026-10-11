@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Briefcase, HeartPulse, House, MapPin, Sparkles, Wallet, X } from "@/components/icons";
-import { makePlan, spiralIndex, type CityPlan } from "@/lib/city/layout";
+import { makePlan, spiralIndex, tileAt, type CityPlan } from "@/lib/city/layout";
 import { BUILDING_LABEL } from "@/lib/world/buildings";
 import type { RegionMap } from "@/lib/world/compile";
 import { regionMap } from "@/lib/world";
@@ -22,6 +22,9 @@ import { MapSearch, type SearchHit } from "./map-search";
 import { StartLife } from "./start-life";
 import { useLife } from "./use-life";
 import { WorkSheet } from "./work-sheet";
+import { BusinessSheet } from "./business-sheet";
+import type { MapBusiness } from "@/lib/world/business";
+import type { OwnedProperty } from "@/lib/world/owned";
 import { InterviewSheet, MomentSheet } from "./moments";
 
 /** Each region's plan for finding jobs near home, worked out once (only when Work is opened). */
@@ -78,6 +81,8 @@ export function useWorldLife({
   const [lifeOpen, setLifeOpen] = useState(false);
   const [interview, setInterview] = useState<{ start: Extract<InterviewStart, { ok: true }>; hire: (ticket: string) => void } | null>(null);
   const [moment, setMoment] = useState(false);
+  const [businesses, setBusinesses] = useState<MapBusiness[]>([]);
+  const [business, setBusiness] = useState<MapBusiness | null>(null);
   const [confirm, setConfirm] = useState<{ title: string; text: string; yes: string; run: () => void } | null>(null);
 
   useEffect(() => {
@@ -93,6 +98,20 @@ export function useWorldLife({
       clearInterval(every);
     };
   }, [api, signedIn, regionId]);
+
+  // Real businesses on the map (everyone sees them, signed in or not).
+  useEffect(() => {
+    if (!regionId) return;
+    let alive = true;
+    const load = () => void api.mapBusinesses(regionId).then((list) => alive && setBusinesses(list)).catch(() => {});
+    const first = setTimeout(load, 0);
+    const every = setInterval(load, 5 * 60_000);
+    return () => {
+      alive = false;
+      clearTimeout(first);
+      clearInterval(every);
+    };
+  }, [api, regionId]);
 
   // Back from paying for a pack: check it with Paystack, then tidy the address.
   useEffect(() => {
@@ -391,6 +410,9 @@ export function useWorldLife({
           }}
         />
       )}
+      {business && (
+        <BusinessSheet b={business} onHit={(kind) => void api.hitBusiness(business.id, kind)} onClose={() => setBusiness(null)} />
+      )}
       {confirm && (
         <div className="fixed inset-0 z-[60] grid place-items-center bg-ink/40 p-4" onClick={() => setConfirm(null)}>
           <div className="w-full max-w-xs rounded-3xl bg-panel p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -457,5 +479,40 @@ export function useWorldLife({
     </>
   ) : null;
 
-  return { owned, flyTo, onProperty, onWorkplace: setPlace, overlay };
+  // Leased buildings stand as their business made them (a refit, more storeys), with its name.
+  const shown = useMemo<OwnedProperty[]>(() => {
+    if (!region || !businesses.length) return owned;
+    const plan = planOf(region);
+    const extra: OwnedProperty[] = [];
+    for (const b of businesses) {
+      const s = ownedSpot(b.building);
+      const base = s ? tileAt(plan, spiralIndex(s.x, s.z)).building : undefined;
+      if (!base || owned.some((o) => o.id === b.building)) continue;
+      extra.push({ id: b.building, building: { ...base, kind: b.kind ?? base.kind, storeys: b.storeys ?? base.storeys, state: "built" } as typeof base, name: b.name });
+    }
+    return extra.length ? [...owned, ...extra] : owned;
+  }, [owned, businesses, region]);
+
+  // Upgraded businesses (with a logo) go on the billboards.
+  const billboardAds = useMemo(
+    () => businesses.filter((b) => b.billboard && b.logo).map((b) => ({ id: `bz:${b.id}`, image: b.logo!, headline: b.about.slice(0, 60), brand: b.name, link: b.website })),
+    [businesses],
+  );
+  const openBusiness = useCallback(
+    (b: MapBusiness | string) => {
+      const found = typeof b === "string" ? businesses.find((x) => x.id === b) : b;
+      if (!found) return;
+      setBusiness(found);
+      void api.hitBusiness(found.id, "view");
+    },
+    [api, businesses],
+  );
+  const businessViews = useCallback(
+    (views: Record<string, number>) => {
+      for (const id of Object.keys(views)) if (id.startsWith("bz:")) void api.hitBusiness(id.slice(3), "billboard");
+    },
+    [api],
+  );
+
+  return { owned: shown, flyTo, onProperty, onWorkplace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay };
 }
