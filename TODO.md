@@ -40,6 +40,9 @@
 - [x] Info bubbles over nearby buildings and tappable world events.
 - [x] Sports: football, basketball, boxing, wrestling. Simulated matches in a tactical view, mint tickets, simple mint bets (run `game-db/020_sports.sql`).
 
+## The big plan
+Everything Newtown is becoming (life, careers, money, property, love, news, voice, culture, events, time) and the order to build it: `docs/LIFE.md`.
+
 ## Real-world map (see `docs/WORLD.md`)
 - [x] Step 1, the foundation: one tile = 100 m, regions placed by real latitude and longitude, Lagos (45 × 25 km) drawn round the camera, its districts and landmarks, a fixes file, the bake script, `/world-lab` and `/play?world=lagos` to see it.
 - [ ] Step 2: bake Lagos's real coastline, lagoon, creeks, islands and main roads from OpenStreetMap (needs the network access above). Check the landmarks against the map.
