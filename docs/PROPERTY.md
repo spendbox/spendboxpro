@@ -201,10 +201,15 @@ Only ever a share of the ad revenue the game actually earns, never new money:
   ₥8,600, a bungalow about ₥48,000, a top floor of an Eko Atlantic tower about ₥820,000. A starting
   budget of ₥5,000 could buy any of about 41,000 homes (mostly rooms), so ₥5,000 looks right.
 
+- Several shapes per kind (L, T, twin and courtyard blocks, setbacks, gabled, hipped and flat
+  roofs, porches, balconies, parked cars), every building facing its street, and about 150 gated
+  estates (a block of matching houses in one wall, with its own name).
+- Tapping a property shows its card: what it is, where, its value (land and building) and every
+  unit with its own value and how it can earn.
+
 Still to do in step 1:
-1. Tapping a property shows its units, each one's value, and what it could earn.
-2. Owner to check the Lagos prices (`districts.ts`, `prices.ts`) against what they know.
-3. Gated estates (a whole block of matching houses inside one wall) and plazas across joined lots.
+1. Owner to check the Lagos prices (`districts.ts`, `prices.ts`) against what they know.
+2. Plazas and estates across several joined lots, as one big building.
 
 **Step 2: the start of a life**
 4. The search bar: places, addresses, neighbourhoods, properties; it flies the camera there.

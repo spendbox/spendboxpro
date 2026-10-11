@@ -8,7 +8,7 @@
 
 import type { HouseInterior, HouseStyle, TownHouse } from "@/lib/houses";
 import type { RegionMap } from "@/lib/world/compile";
-import { buildingFor, buildingTop, wealthOf, type Building } from "@/lib/world/buildings";
+import { buildingFor, buildingTop, ESTATE_KINDS, wealthOf, type Building, type EstatePlan } from "@/lib/world/buildings";
 import { ABBREV, CLUB_NAMES, eggChoices, FLAVORS, landmarkChoices, nameOf, RESTAURANT_NAMES, type EasterEgg, type Flavor, type LandmarkKey, type Named } from "./places";
 
 export type TileKind =
@@ -140,6 +140,11 @@ export type Tile = {
   forecourt?: boolean;
   /** Open sea (big towns reach the coast). */
   sea?: boolean;
+  /**
+   * A real place's road tile in the middle of a wide stretch of tarmac (a dual carriageway or a
+   * big interchange drawn two or more tiles wide): plain asphalt, no lights or crossings.
+   */
+  wide?: boolean;
   /** A real place's property here: its kind, storeys, state and units (src/lib/world/buildings). */
   building?: Building;
   /** A lake or sea tile by the shore with a wooden jetty (which side faces land: 0 +x, 1 -x, 2 +z, 3 -z). */
@@ -936,6 +941,18 @@ export function onMono(line: MonoLine | null, x: number, z: number) {
 
 /** A footbridge over a straight stretch of busy road, and which style, or null. */
 export function footbridgeAt(plan: CityPlan, t: Tile): 0 | 1 | 2 | null {
+  if (plan.region) {
+    // Over any stretch that runs straight through (real ones are often by a junction).
+    const m = t.mask ?? 0;
+    if (t.kind !== "road" || t.works || t.rail || t.roundabout || ((m & 5) !== 5 && (m & 10) !== 10)) return null;
+    // A real place: where the map has one, and now and then over the expressways (Lagos has
+    // footbridges every few hundred metres along them).
+    const road = plan.region.roadAt(t.x, t.z);
+    if (!road || road.bridge || t.causeway) return null;
+    const busy = road.kind === "motorway" || road.kind === "trunk";
+    if (!plan.region.footbridgeAt(t.x, t.z) && !(busy && hash(t.x, t.z, plan.seed + 1512) < 0.07)) return null;
+    return Math.floor(hash(t.z, t.x, plan.seed + 1511) * 3) as 0 | 1 | 2;
+  }
   if (t.kind !== "road" || t.works || t.incident || t.rail || (t.mask !== 5 && t.mask !== 10)) return null;
   if (hash(t.x, t.z, plan.seed + 1510) > 0.045 || densityAt(plan, t.x, t.z) < 0.3) return null;
   const { mono, flyover } = elevated(plan);
@@ -1521,10 +1538,47 @@ export function lotAt(plan: CityPlan, i: number): Tile {
   return t;
 }
 
+/** Which way a lot faces: towards a road next to it (0 +z, 1 +x, 2 -z, 3 -x), else a stable pick. */
+function faceOf(plan: CityPlan, x: number, z: number): 0 | 1 | 2 | 3 {
+  const sides: [number, number][] = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+  const start = Math.floor(hash(x, z, plan.seed + 7790) * 4);
+  for (let k = 0; k < 4; k++) {
+    const f = (start + k) % 4;
+    if (isRoad(plan, x + sides[f][0], z + sides[f][1])) return f as 0 | 1 | 2 | 3;
+  }
+  return start as 0 | 1 | 2 | 3;
+}
+
+/**
+ * A gated estate, now and then, on a block of a well-off quiet area: every house lot in the block
+ * the same kind of house, one wall round the outside, a gate. Null for most blocks.
+ */
+function estateOf(plan: CityPlan, x: number, z: number, wealth: number): EstatePlan | null {
+  if (wealth < 0.35 || plan.xAt.has(x) || plan.zAt.has(z)) return null;
+  const kx = below(plan.xs, x);
+  const kz = below(plan.zs, z);
+  if (hash(kx, kz, plan.seed + 7800) > 0.16) return null;
+  const r = (k: number) => hash(kx, kz, plan.seed + 7801 + k);
+  const sides: [number, number][] = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+  const walls = sides.map(([dx, dz]) => isRoad(plan, x + dx, z + dz)) as [boolean, boolean, boolean, boolean];
+  const streets = plan.city.streets;
+  const name = `${streets[Math.floor(r(1) * streets.length) % streets.length]} ${["Estate", "Gardens", "Court", "Close", "Villas"][Math.floor(r(2) * 5) % 5]}`;
+  return {
+    id: `${plan.region!.region.id}:estate:${kx},${kz}`,
+    name,
+    kind: ESTATE_KINDS[Math.floor(r(3) * ESTATE_KINDS.length) % ESTATE_KINDS.length],
+    look: [r(4), r(5), r(6), r(7), r(8)],
+    walls,
+    gate: walls.some(Boolean) && hash(x, z, plan.seed + 7802) < 0.25,
+  };
+}
+
 /** A real place: every house, office and tower lot is a property you could own (src/lib/world/buildings). */
 function withBuilding(plan: CityPlan, t: Tile) {
   if (!plan.region) return;
-  const b = buildingFor(plan.region.region.id, t, densityAt(plan, t.x, t.z), plan.seed, wealthOf(plan.region.landPriceAt(t.x, t.z)));
+  const wealth = wealthOf(plan.region.landPriceAt(t.x, t.z));
+  const estate = t.kind === "house" ? estateOf(plan, t.x, t.z, wealth) : null;
+  const b = buildingFor(plan.region.region.id, t, densityAt(plan, t.x, t.z), plan.seed, wealth, { face: faceOf(plan, t.x, t.z), estate });
   if (b) {
     t.building = b;
     t.top = buildingTop(b);
@@ -1609,6 +1663,12 @@ function roadTile(plan: CityPlan, x: number, z: number, r: Tile["r"]): Tile {
   const works = straight && Math.hypot(x, z) > 2.5 && hash(x, z, s + 1201) < 0.02;
   const roll = hash(x, z, s + 1301);
   const incident = straight && !works ? (roll < 0.007 ? "breakdown" : roll < 0.011 ? "police" : undefined) : undefined;
+  if (plan.region) {
+    // In a wide stretch of tarmac (most of the 3×3 round it is road): plain asphalt.
+    let around = 0;
+    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) if ((dx || dz) && isRoad(plan, x + dx, z + dz)) around++;
+    if (around >= 5) return { i: -1, x, z, kind: "road", top: 0.05, road: dir, mask, roundabout: false, r, wide: true };
+  }
   return { i: -1, x, z, kind: "road", top: works ? 0.45 : roundabout ? 0.3 : 0.05, road: dir, mask, roundabout, r, works: works || undefined, incident };
 }
 

@@ -57,6 +57,18 @@ coordinates from any map app (latitude first).
 
 If two landmarks overlap, the later one is left out and the tests report it.
 
+## Names, bridges over the roads
+
+- **Names:** the pill shows a spot's neighbourhood and its district ("Sabo · Yaba"). The
+  neighbourhoods come from OpenStreetMap's place names; it doesn't have every well-known name (it
+  has no "Yaba", only the local government areas), so missing ones go in `corrections.ts`
+  (`kind: "area"`), and the districts in `districts.ts` fill in the rest.
+- **Flyovers:** wherever the map raises a road over land (interchanges, bridge approaches), a deck
+  on piers with ramps down to the street.
+- **Footbridges:** the 189 from the map over the roads, plus extras along the expressways.
+- **Wide roads:** where a dual carriageway comes out two tiles wide, it's plain tarmac (no traffic
+  lights or crossings in the middle of it).
+
 ## Seeing it
 
 - `/world-lab` shows Lagos on its own, without signing in.

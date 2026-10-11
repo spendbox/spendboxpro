@@ -27,9 +27,16 @@ export type RegionMap = {
   spotAt: (x: number, z: number) => Spot | undefined;
   /** Downtowns and quieter districts, for how built-up each spot is (as CityPlan centres). */
   centres: { x: number; z: number; radius: number; weight: number }[];
+  /** Is there a footbridge over the road here (from the map)? */
+  footbridgeAt: (x: number, z: number) => boolean;
+  /** A road raised over land here (a flyover, an interchange, a bridge's approach)? */
+  flyoverAt: (x: number, z: number) => boolean;
   /** What land costs at a spot, per m², in the region's currency: the districts' prices blended. */
   landPriceAt: (x: number, z: number) => number;
-  /** What a spot is called: its neighbourhood or town, its district, or the water. */
+  /**
+   * What a spot is called: "Akoka · Yaba" (its neighbourhood and its district), just the district
+   * when no neighbourhood is near, or the water's own name.
+   */
   areaAt: (x: number, z: number) => string;
   /** Landmarks left out because they overlapped one placed before them (worth a correction). */
   skipped: { id: string; reason: string }[];
@@ -178,7 +185,9 @@ export function compileRegion(region: Region): RegionMap {
   const REACH: Record<string, number> = { neighbourhood: 12, village: 15, suburb: 25, town: 40 };
   const AREA_CELL = 20;
   const areaCells = new Map<number, { name: string; x: number; z: number; reach: number }[]>();
-  for (const a of region.areas) {
+  const noArea = new Set(region.corrections.flatMap((c) => (c.kind === "no-area" ? [c.name] : [])));
+  const areas = [...region.areas.filter((a) => !noArea.has(a.name)), ...region.corrections.flatMap((c) => (c.kind === "area" ? [c.area] : []))];
+  for (const a of areas) {
     const c = at({ lat: a.at[0], lon: a.at[1] });
     const key = tileKey(Math.floor(c.x / AREA_CELL), Math.floor(c.z / AREA_CELL));
     const list = areaCells.get(key) ?? [];
@@ -203,14 +212,16 @@ export function compileRegion(region: Region): RegionMap {
         }
       }
     }
-    if (best) return best;
-    let near = region.name;
+    // The district: the nearest by its size (Yaba, Surulere...), when one reaches this far.
+    let district: string | null = null;
     let nearScore = Infinity;
     for (const d of districtAt) {
       const score = Math.hypot(x - d.x, z - d.z) / d.r;
-      if (score < nearScore) [near, nearScore] = [d.name, score];
+      if (score < nearScore) [district, nearScore] = [d.name, score];
     }
-    return near;
+    if (nearScore > 2.5) district = null;
+    if (best && district && best !== district) return `${best} · ${district}`;
+    return best ?? district ?? region.name;
   };
 
   // ---- land prices: each district's price fades out over about its radius into its
@@ -227,6 +238,16 @@ export function compileRegion(region: Region): RegionMap {
     return sum / weight;
   };
 
+  // ---- footbridges: on the road tile under each one's middle (or the road right next to it)
+  const footbridges = new Set<number>();
+  for (const [lat, lon] of region.footbridges) {
+    const c = at({ lat, lon });
+    const x = Math.round(c.x);
+    const z = Math.round(c.z);
+    const spot = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].find(([dx, dz]) => road[cell(x + dx, z + dz)] && inside(x + dx, z + dz));
+    if (spot) footbridges.add(tileKey(x + spot[0], z + spot[1]));
+  }
+
   const map: RegionMap = {
     region,
     frame,
@@ -239,6 +260,8 @@ export function compileRegion(region: Region): RegionMap {
     centres,
     areaAt,
     landPriceAt,
+    footbridgeAt: (x, z) => footbridges.has(tileKey(x, z)),
+    flyoverAt: (x, z) => inside(x, z) && road[cell(x, z)] > 8 && !water[cell(x, z)],
     skipped,
   };
   cache.set(region, map);

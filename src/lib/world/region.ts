@@ -96,7 +96,11 @@ export type Correction =
   /** Change a landmark (by its id): move it, rename it, resize it. */
   | { kind: "landmark"; note?: string; id: string; set: Partial<Omit<Landmark, "id">> }
   /** Take a landmark out. */
-  | { kind: "no-landmark"; note?: string; id: string };
+  | { kind: "no-landmark"; note?: string; id: string }
+  /** Add a named place the map data doesn't have (or doesn't have where it should be). */
+  | { kind: "area"; note?: string; area: Area }
+  /** Take a wrongly named place out (by its name). */
+  | { kind: "no-area"; note?: string; name: string };
 
 export type Region = {
   id: string;
@@ -133,6 +137,8 @@ export type Region = {
    * smoothly. Their tiles are roads too.
    */
   roads: Road[];
+  /** Footbridges over the roads, from the map: [latitude, longitude] of each one's middle. */
+  footbridges: [number, number][];
   /** Named neighbourhoods and towns from the map (Obalende, Ojuelegba...), for naming spots. */
   areas: Area[];
   /** Where the map data has each landmark (by id), found by the bake: used for landmarks marked approx. */

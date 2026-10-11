@@ -412,6 +412,24 @@ out;`,
   }
 }
 
+// ---------------------------------------------------------------- footbridges over the roads
+let footbridges = [];
+if (!fromFiles) {
+  try {
+    const els = overpassPieces("footbridges", (b) => `  way["highway"~"^(footway|pedestrian|path|steps|cycleway)$"]["bridge"](${b});`, 2, 1);
+    // Short ones only (over a road, not along a river), by their middle.
+    footbridges = els
+      .filter((e) => e.geometry && e.tags.bridge !== "no" && lengthOf(e.geometry) < 160)
+      .map((e) => {
+        const p = middle(e.geometry);
+        return [+p.lat.toFixed(5), +p.lon.toFixed(5)];
+      })
+      .filter(([lat, lon]) => region.box.south <= lat && lat <= region.box.north && region.box.west <= lon && lon <= region.box.east);
+  } catch {
+    console.log("  couldn't get the footbridges");
+  }
+}
+
 // ---------------------------------------------------------------- write it out
 function rows(cells, letter, none) {
   const out = [];
@@ -451,6 +469,8 @@ export const ROUTES: Road[] = ${JSON.stringify(routes, null, 1)};
 
 export const FOUND: Record<string, LatLon> = ${JSON.stringify(found, null, 1)};
 
+export const FOOTBRIDGES: [number, number][] = ${JSON.stringify(footbridges)};
+
 export const AREAS: Area[] = [
 ${areas.map((a) => `  ${JSON.stringify(a)},`).join("\n")}
 ];
@@ -461,7 +481,7 @@ ${areas.map((a) => `  ${JSON.stringify(a)},`).join("\n")}
 const count = (arr, f) => arr.reduce((n, v) => n + (f(v) ? 1 : 0), 0);
 console.log(`Wrote ${file}`);
 console.log(`${W} × ${H} tiles: ${count(waterTiles, (v) => v === 1)} lagoon, ${count(waterTiles, (v) => v === 2)} sea, ${count(roadTiles, (v) => v > 0)} road (${kept} of ${roads.length} roads kept), ${routes.length} long bridges`);
-console.log(`${areas.length} named neighbourhoods and towns`);
+console.log(`${areas.length} named neighbourhoods and towns, ${footbridges.length} footbridges`);
 console.log(`Landmarks found in the map: ${Object.keys(found).length} of ${wantedMarks.length}${missed.length ? `; not found: ${missed.join(", ")}` : ""}`);
 const step = 3;
 for (let z = 0; z < H; z += step * 2) {

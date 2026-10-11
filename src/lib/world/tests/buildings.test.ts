@@ -95,3 +95,14 @@ test("rich areas have no rooming houses; poor areas have plenty", () => {
   assert.ok(count(0) > 300, String(count(0)));
   assert.ok(wealthOf(1_100_000) > 0.9 && wealthOf(35_000) < 0.1);
 });
+
+test("a tapped property shows its units, each with a value, adding up to the whole", async () => {
+  const { propertyInfo } = await import("../property.ts");
+  const map = compileRegion(LAGOS);
+  const b = sample("office", 0.4, 200).find((x) => x.units.length > 3 && x.state === "built")!;
+  const info = propertyInfo(b, 0, 0, "1 Test Street", map);
+  assert.equal(info.units.length, b.units.length);
+  const sum = info.units.reduce((t, u) => t + u.mint, 0);
+  assert.ok(Math.abs(sum - info.mint) <= info.units.length, `${sum} vs ${info.mint}`);
+  assert.ok(info.units.every((u) => u.earns.length > 0 && u.local.startsWith("₦")));
+});

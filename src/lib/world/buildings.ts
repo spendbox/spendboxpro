@@ -64,9 +64,16 @@ export type Building = {
   /** The plot it stands on (m²). */
   plot: number;
   units: Unit[];
-  /** Shape choices for drawing it (0..1, stable). */
-  look: [number, number, number];
+  /** Shape choices for drawing it (0..1, stable): colours, footprint, roof, extras. */
+  look: [number, number, number, number, number];
+  /** Which way its front (gate, door, shopfronts) faces: 0 +z, 1 +x, 2 -z, 3 -x. */
+  face: 0 | 1 | 2 | 3;
+  /** Part of a gated estate: its name, and which sides of this lot carry the estate's wall. */
+  estate?: { id: string; name: string; walls: [boolean, boolean, boolean, boolean]; gate: boolean };
 };
+
+/** A gated estate: a whole block of matching houses inside one wall (decided per block). */
+export type EstatePlan = { id: string; name: string; kind: BuildingKind; look: [number, number, number, number, number]; walls: [boolean, boolean, boolean, boolean]; gate: boolean };
 
 export const BUILDING_LABEL: Record<BuildingKind, string> = {
   bungalow: "Bungalow",
@@ -258,21 +265,35 @@ const LOTS = new Set<Tile["kind"]>(["house", "office", "tower"]);
  * park, a landmark, a school...). `density` is how built-up the spot is (the layout's); `wealth`
  * how well-off the area is (see wealthOf).
  */
-export function buildingFor(regionId: string, t: Tile, density: number, seed: number, wealth = 0.5): Building | null {
+export function buildingFor(
+  regionId: string,
+  t: Tile,
+  density: number,
+  seed: number,
+  wealth = 0.5,
+  where: { face?: 0 | 1 | 2 | 3; estate?: EstatePlan | null } = {},
+): Building | null {
   if (!LOTS.has(t.kind) || t.home) return null;
   const id = `${regionId}:${t.x},${t.z}`;
   const h = (k: number) => hash(t.x, t.z, seed + 7700 + k);
   const zone = t.kind === "tower" ? "central" : t.kind === "office" ? "busy" : density < 0.04 ? "edge" : "quiet";
   const mix = zone === "central" ? CENTRAL : zone === "busy" ? BUSY : zone === "edge" ? EDGE : QUIET;
-  const kind = pickFrom(shifted(mix, wealth), h(1));
+  const estate = zone === "quiet" ? where.estate : null;
+  const kind = estate ? estate.kind : pickFrom(shifted(mix, wealth), h(1));
   const open = kind === "land" || kind === "farm";
   const roll = h(2);
   const r3 = h(3);
   const state: BuildingState = open ? "built" : r3 < SITE ? "site" : r3 < SITE + UNFINISHED[zone] ? "uncompleted" : "built";
   const storeys = storeysFor(kind, roll, density);
   const plot = plotFor(kind, h(4));
-  return { id, kind, state, storeys, plot, units: unitsFor(id, kind, storeys, plot, roll), look: [h(5), h(6), h(7)] };
+  const look: Building["look"] = estate ? estate.look : [h(5), h(6), h(7), h(8), h(9)];
+  const b: Building = { id, kind, state: estate ? "built" : state, storeys, plot, units: unitsFor(id, kind, storeys, plot, roll), look, face: where.face ?? 0 };
+  if (estate) b.estate = { id: estate.id, name: estate.name, walls: estate.walls, gate: estate.gate };
+  return b;
 }
+
+/** The kinds a gated estate is built of. */
+export const ESTATE_KINDS: BuildingKind[] = ["duplex", "terrace", "bungalow", "duplex", "terrace"];
 
 /** How tall a building stands (city units), for the layout's `top`. */
 export const STOREY = 0.3;

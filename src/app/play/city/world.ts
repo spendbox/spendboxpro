@@ -62,7 +62,7 @@ export function grown(w: World, tile: number, now: number) {
 
 /** A street crossing with traffic lights and zebra crossings (not a bend, straight or roundabout). */
 export function signalJunction(t: Tile) {
-  if (t.kind !== "road" || t.roundabout) return false;
+  if (t.kind !== "road" || t.roundabout || t.wide) return false;
   const m = t.mask ?? 0;
   return ![3, 6, 12, 9, 5, 10, 1, 4, 2, 8].includes(m);
 }

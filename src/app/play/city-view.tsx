@@ -31,6 +31,7 @@ import type { RegionMap } from "@/lib/world/compile";
 import { toTile } from "@/lib/world/geo";
 import { BUILDING_LABEL, type Building } from "@/lib/world/buildings";
 import { shortMint, toMint, valueOf } from "@/lib/world/value";
+import { propertyInfo, type PropertyInfo } from "@/lib/world/property";
 import { daylight, weatherAt } from "@/lib/city/sky";
 import { npcsFor, type Npc } from "@/lib/npcs";
 import { createBirds } from "./city/birds";
@@ -206,6 +207,8 @@ type Props = {
    * it), or else the one in the middle of the view ("Yaba", "Lagos Lagoon"). Called when it changes.
    */
   onArea?: (name: string | null) => void;
+  /** A real place: a property was tapped (instead of going inside): what it is and what it's worth. */
+  onProperty?: (info: PropertyInfo) => void;
   /** Your face, floating over your hiding spot. */
   meAvatar: Avatar;
   /** A coin balloon drifting by just for you (its slot number), or none. */
@@ -492,6 +495,12 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
 
   if (t.kind === "road") {
     const m = t.mask ?? 0;
+    // Inside a wide stretch of tarmac (a real place's dual carriageways): plain asphalt.
+    if (t.wide) {
+      add("ground", { x, y: 0, z, sx: 1, sy: 0.06, sz: 1, ry: 0, color: ASPHALT });
+      if ((x + z) % 3 === 0) add("paint", { x, y: 0.061, z, sx: 0.04, sy: 0.005, sz: 0.04, ry: 0, color: 0xffffff });
+      return;
+    }
     // Bends: pavement with a curved stretch of road sweeping round the corner.
     const bend: Record<number, [number, number, number]> = { 3: [0.5, -0.5, Math.PI], 6: [0.5, 0.5, Math.PI / 2], 12: [-0.5, 0.5, 0], 9: [-0.5, -0.5, -Math.PI / 2] };
     if (bend[m]) {
@@ -1259,6 +1268,7 @@ export function CityView({
   onBillboard,
   onHover,
   onArea,
+  onProperty,
   meAvatar,
   coinBalloon,
   onBalloon,
@@ -1327,10 +1337,10 @@ export function CityView({
     /** Zoom in (dir 1) or out (dir -1) a step: the + and − buttons on a computer. */
     zoom: (dir: number) => void;
   } | null>(null);
-  const cb = useRef({ onHover, onArea, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused });
+  const cb = useRef({ onHover, onArea, onProperty, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused });
   const atmos = useRef({ progress, nightFirst, meAvatar });
   useEffect(() => {
-    cb.current = { onHover, onArea, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused };
+    cb.current = { onHover, onArea, onProperty, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused };
     atmos.current = { progress, nightFirst, meAvatar };
   });
 
@@ -3791,6 +3801,13 @@ export function CityView({
       const room: CityRoom = { id: `b:${anchor.i}`, name, capacity, kind: "building", type, levels: levels.map((l) => ({ id: l.id, label: l.label, capacity: l.capacity, kind: levelUse(l) })) };
       return { room, anchor, big, levels };
     }
+    /** A real place's property was tapped: show what it is (when someone's listening). */
+    function tapProperty(anchor: Tile) {
+      const region = currentPlan?.region;
+      if (!anchor.building || !region || !cb.current.onProperty || !currentPlan) return false;
+      cb.current.onProperty(propertyInfo(anchor.building, anchor.x, anchor.z, shortAddress(addressOf(currentPlan, anchor)), region));
+      return true;
+    }
     /** A property on the real map: what it is and what it's worth ("Block of flats · ₥31,240"). */
     function propertyName(b: Building, at: Tile, region: RegionMap) {
       const kind = BUILDING_LABEL[b.kind];
@@ -4212,7 +4229,7 @@ export function CityView({
         const r = roomFor(i);
         if (!r) return;
         showHover(i);
-        cb.current.onRoom?.(r.room);
+        if (!tapProperty(r.anchor)) cb.current.onRoom?.(r.room);
       },
       onEvent: (id) => {
         if (!isRevealed || immersive()) return;
@@ -5742,7 +5759,7 @@ export function CityView({
       const r = isRevealed ? roomFor(tile) : null;
       if (r) {
         showHover(tile);
-        cb.current.onRoom?.(r.room);
+        if (!tapProperty(r.anchor)) cb.current.onRoom?.(r.room);
       }
     };
     let hoverQueued: PointerEvent | null = null;

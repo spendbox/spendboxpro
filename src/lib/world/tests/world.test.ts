@@ -78,6 +78,7 @@ function tiny(extra: Partial<Region> = {}): Region {
     roadGrid: null,
     roads: [],
     areas: [],
+    footbridges: [],
     found: {},
     corrections: [],
     ...extra,
@@ -158,10 +159,11 @@ test("spots are named by their water, nearest neighbourhood, or district", () =>
     }),
   );
   assert.equal(map.areaAt(-5, -5), "Tiny Lagoon");
-  assert.equal(map.areaAt(4, 4), "Corner");
+  assert.equal(map.areaAt(4, 4), "Corner · Middle");
   // With no neighbourhood near enough, the district's name.
   const plain = compileRegion(tiny({ districts: [{ id: "mid", name: "Middle", at: { lat: 0, lon: 0 }, radiusKm: 1, density: 0.5 }] }));
   assert.equal(plain.areaAt(-3, 0), "Middle");
   const lagos = compileRegion(LAGOS);
-  assert.equal(lagos.areaAt(0, 0) !== "", true);
+  const yaba = toTile(lagos.frame, { lat: 6.5085, lon: 3.3755 });
+  assert.equal(lagos.areaAt(Math.round(yaba.x), Math.round(yaba.z)), "Sabo · Yaba");
 });

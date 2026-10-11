@@ -94,6 +94,8 @@ import { StatsCard } from "./stats-card";
 import { avatar3dEnabled } from "./avatar3d-flag";
 import { worldPreview } from "./world-flag";
 import { PlacePill } from "./place-pill";
+import { PropertyCard } from "./property-card";
+import type { PropertyInfo } from "@/lib/world/property";
 import { REGIONS } from "@/lib/world";
 
 // The 3D city only runs in the browser.
@@ -359,6 +361,8 @@ export function Game({
   const worldRegion = worldId ? REGIONS[worldId] : null;
   /** On a real place: the area pointed at, or in the middle of the view. */
   const [worldArea, setWorldArea] = useState<string | null>(null);
+  /** On a real place: the property tapped, shown in a card. */
+  const [property, setProperty] = useState<PropertyInfo | null>(null);
   // The phone: the camera (a picture of the town, or a selfie) and the phone itself (gallery).
   const [camera, setCamera] = useState<"photo" | "selfie" | null>(null);
   const [phone, setPhone] = useState<"home" | "photos" | null>(null);
@@ -1324,6 +1328,7 @@ export function Game({
             tileCount={round?.tileCount ?? 0}
             region={worldId}
             onArea={setWorldArea}
+            onProperty={worldId ? setProperty : undefined}
             markers={worldId ? NO_MARKERS : markers}
             events={worldId ? NO_EVENTS : cityEvents}
             onBillboard={onBillboardTap}
@@ -1370,6 +1375,7 @@ export function Game({
           />
         </Safe>
       )}
+      {property && <PropertyCard info={property} onClose={() => setProperty(null)} />}
       {worldRegion && (worldRegion.water || worldRegion.roads.length > 0) && (
         // The map data's credit (its licence asks for it): small and out of the way.
         <a
