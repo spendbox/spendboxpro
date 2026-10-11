@@ -79,4 +79,11 @@ const SERVERLESS = {
   collectPay: async () => ({ ok: false as const, error: "" }),
   quitJob: async () => ({ ok: false as const, error: "" }),
   neighbours: async () => [],
+  lifeStatus: async () => null,
+  setBudget: async () => ({ ok: false as const, error: "" }),
+  movePot: async () => ({ ok: false as const, error: "" }),
+  care: async () => ({ ok: false as const, error: "" }),
+  procedure: async () => ({ ok: false as const, error: "" }),
+  enrol: async () => ({ ok: false as const, error: "" }),
+  money: async () => ({}),
 };

@@ -28,17 +28,26 @@ export const WORK_SKILLS: Record<WorkSkill, string> = {
   entertainment: "Entertainment",
 };
 
-/** A job: an id (stable), its title, the skill it builds, pay a month (local money) and the skill level it needs. */
-export type WorkJob = { job: string; title: string; skill: WorkSkill; month: number; level: number };
+/** A certificate some jobs need, earned by finishing a course (src/lib/world/living.ts). */
+export type Cert = "nursing" | "mbbs" | "pilot" | "teaching" | "masters" | "ican";
 
-const J = (job: string, title: string, skill: WorkSkill, month: number, level = 0): WorkJob => ({ job, title, skill, month, level });
+/**
+ * A job: an id (stable), its title, the skill it builds, pay a month (local money), the skill
+ * level it needs, a certificate it needs, and whether it's an essential public service (paid by
+ * the state from taxes, not by a business).
+ */
+export type WorkJob = { job: string; title: string; skill: WorkSkill; month: number; level: number; cert?: Cert; state?: boolean };
+
+const J = (job: string, title: string, skill: WorkSkill, month: number, level = 0, more: { cert?: Cert; state?: boolean } = {}): WorkJob => ({ job, title, skill, month, level, ...more });
+/** An essential public service: paid by the state from taxes. */
+const S = { state: true };
 
 /** Who works in each kind of building, from the first job anyone can get up to the best. */
 const BY_BUILDING: Partial<Record<Building["kind"], WorkJob[]>> = {
   shops: [J("shop_assistant", "Shop assistant", "retail", 80_000), J("shop_supervisor", "Shop supervisor", "retail", 150_000, 2)],
   mixed: [J("shop_assistant", "Shop assistant", "retail", 80_000)],
-  plaza: [J("sales_assistant", "Sales assistant", "retail", 90_000), J("store_manager", "Store manager", "retail", 300_000, 3), J("accountant", "Accountant", "finance", 350_000, 3)],
-  offices: [J("office_assistant", "Office assistant", "office", 100_000), J("admin_officer", "Admin officer", "office", 200_000, 2), J("accountant", "Accountant", "finance", 350_000, 3), J("manager", "Manager", "office", 600_000, 5)],
+  plaza: [J("sales_assistant", "Sales assistant", "retail", 90_000), J("store_manager", "Store manager", "retail", 300_000, 3), J("accountant", "Accountant", "finance", 350_000, 3, { cert: "ican" })],
+  offices: [J("office_assistant", "Office assistant", "office", 100_000), J("admin_officer", "Admin officer", "office", 200_000, 2), J("accountant", "Accountant", "finance", 350_000, 3, { cert: "ican" }), J("manager", "Manager", "office", 600_000, 5)],
   glass: [J("receptionist", "Receptionist", "office", 150_000), J("analyst", "Analyst", "finance", 500_000, 3), J("manager", "Manager", "office", 1_200_000, 6)],
   warehouse: [J("loader", "Loader", "industry", 80_000), J("forklift", "Forklift operator", "industry", 150_000, 2), J("warehouse_manager", "Warehouse manager", "industry", 350_000, 4)],
   farm: [J("farm_hand", "Farm hand", "farming", 60_000), J("farm_manager", "Farm manager", "farming", 200_000, 3)],
@@ -49,18 +58,18 @@ const BY_PLACE: Record<string, WorkJob[]> = {
   market: [J("porter", "Market porter", "retail", 60_000), J("trader_assistant", "Trader's assistant", "retail", 80_000), J("market_trader", "Market trader", "retail", 200_000, 2)],
   megamall: [J("sales_assistant", "Sales assistant", "retail", 100_000), J("cashier", "Cashier", "retail", 120_000, 1), J("store_manager", "Store manager", "retail", 400_000, 3)],
   hotel: [J("housekeeper", "Housekeeper", "hospitality", 90_000), J("hotel_receptionist", "Receptionist", "hospitality", 150_000, 1), J("chef", "Chef", "hospitality", 250_000, 3), J("hotel_manager", "Hotel manager", "hospitality", 900_000, 6)],
-  hospital: [J("hospital_porter", "Hospital porter", "health", 80_000), J("nurse", "Nurse", "health", 300_000, 3), J("doctor", "Doctor", "health", 900_000, 6)],
-  intlairport: [J("airport_cleaner", "Airport cleaner", "transport", 80_000), J("check_in", "Check-in agent", "tourism", 250_000, 1), J("cabin_crew", "Cabin crew", "tourism", 600_000, 3), J("pilot", "Pilot", "transport", 3_000_000, 8)],
+  hospital: [J("hospital_porter", "Hospital porter", "health", 80_000, 0, S), J("nurse", "Nurse", "health", 300_000, 3, { ...S, cert: "nursing" }), J("doctor", "Doctor", "health", 900_000, 6, { ...S, cert: "mbbs" })],
+  intlairport: [J("airport_cleaner", "Airport cleaner", "transport", 80_000), J("check_in", "Check-in agent", "tourism", 250_000, 1), J("cabin_crew", "Cabin crew", "tourism", 600_000, 3), J("pilot", "Pilot", "transport", 3_000_000, 8, { cert: "pilot" })],
   airport: [J("airport_cleaner", "Airport cleaner", "transport", 80_000), J("check_in", "Check-in agent", "tourism", 250_000, 1)],
   port: [J("dock_worker", "Dock worker", "industry", 120_000), J("crane_operator", "Crane operator", "industry", 300_000, 3), J("port_manager", "Port manager", "industry", 1_000_000, 6)],
-  campus: [J("campus_cleaner", "Cleaner", "education", 70_000), J("lab_assistant", "Lab assistant", "education", 150_000, 1), J("lecturer", "Lecturer", "education", 450_000, 5)],
-  school: [J("school_cleaner", "Cleaner", "education", 70_000), J("teacher", "Teacher", "education", 150_000, 2)],
-  capitol: [J("messenger", "Messenger", "public", 70_000), J("civil_servant", "Civil servant", "public", 180_000, 2), J("director", "Director", "public", 700_000, 6)],
+  campus: [J("campus_cleaner", "Cleaner", "education", 70_000, 0, S), J("lab_assistant", "Lab assistant", "education", 150_000, 1, S), J("lecturer", "Lecturer", "education", 450_000, 5, { ...S, cert: "masters" })],
+  school: [J("school_cleaner", "Cleaner", "education", 70_000, 0, S), J("teacher", "Teacher", "education", 150_000, 2, { ...S, cert: "teaching" })],
+  capitol: [J("waste_collector", "Waste collector", "public", 80_000, 0, S), J("messenger", "Messenger", "public", 70_000, 0, S), J("civil_servant", "Civil servant", "public", 180_000, 2, S), J("director", "Director", "public", 700_000, 6, S)],
   museum: [J("guide", "Guide", "tourism", 100_000), J("curator", "Curator", "tourism", 300_000, 4)],
   arena: [J("steward", "Steward", "entertainment", 70_000), J("groundskeeper", "Groundskeeper", "entertainment", 90_000, 1)],
   stadium: [J("steward", "Steward", "entertainment", 70_000), J("groundskeeper", "Groundskeeper", "entertainment", 90_000, 1)],
   club: [J("bartender", "Bartender", "entertainment", 100_000), J("dj", "DJ", "entertainment", 300_000, 3)],
-  bigpark: [J("gardener", "Gardener", "public", 60_000)],
+  bigpark: [J("gardener", "Gardener", "public", 60_000, 0, S)],
   cathedral: [J("caretaker", "Caretaker", "public", 60_000)],
   grandmosque: [J("caretaker", "Caretaker", "public", 60_000)],
   worship: [J("caretaker", "Caretaker", "public", 60_000)],

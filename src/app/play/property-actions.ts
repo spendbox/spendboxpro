@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { REGIONS, regionMap } from "@/lib/world";
 import type { Building } from "@/lib/world/buildings";
 import { cleanPropertyName, ownedSpot } from "@/lib/world/owned";
-import { rentPerDay, type AssetsData, type BuildingOwner, type OwnedBuildingRow, type PropertyResult } from "@/lib/world/property-api";
+import { BUY_TAX, rentPerDay, type AssetsData, type BuildingOwner, type OwnedBuildingRow, type PropertyResult } from "@/lib/world/property-api";
 import { toMint, valueOf } from "@/lib/world/value";
 import { collectPay } from "./work-actions";
 
@@ -85,7 +85,18 @@ export async function buyUnit(unitId: string): Promise<PropertyResult> {
   const prices = map.region.prices;
   const value = valueOf(found.building, map.landPriceAt(found.x, found.z), prices);
   const price = Math.max(1, toMint(value.units[Number(m[2])], prices));
-  const { data, error } = await createAdminClient().rpc("property_buy", {
+  // Short in your wallet? What's in Savings tops it up (that's what Savings is for).
+  const db = createAdminClient();
+  const cost = Math.round(price * (1 + BUY_TAX) * 100) / 100;
+  const [{ data: prof }, { data: pot }] = await Promise.all([
+    db.from("profiles").select("coins").eq("id", userId).maybeSingle(),
+    db.from("life_pots").select("balance").eq("user_id", userId).eq("pot", "savings").maybeSingle(),
+  ]);
+  const short = Math.round((cost - n(prof?.coins)) * 100) / 100;
+  if (short > 0 && n(pot?.balance) > 0) {
+    await db.rpc("life_pot_move", { p_user: userId, p_from: "savings", p_to: "wallet", p_amount: Math.min(short, n(pot?.balance)) });
+  }
+  const { data, error } = await db.rpc("property_buy", {
     p_user: userId,
     p_region: found.region,
     p_unit: unitId,
