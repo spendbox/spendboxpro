@@ -37,6 +37,8 @@ export type RegionMap = {
   flyoverAt: (x: number, z: number) => boolean;
   /** The pieces of bridges, flyovers and railways to draw on this tile (by where each one's middle is). */
   piecesAt: (x: number, z: number) => Piece[] | undefined;
+  /** Every road bridge and flyover deck as a path along its top (tiles, y the deck's height), for traffic. */
+  decks: { pts: { x: number; y: number; z: number }[]; width: number }[];
   /** Kept clear of buildings: under a deck, along a railway on the ground, or a station's site. */
   clearAt: (x: number, z: number) => "deck" | "track" | "station" | undefined;
   /** A station standing on this tile (its middle). */
@@ -153,6 +155,15 @@ export function compileRegion(region: Region): RegionMap {
   const spots = new Map<number, Spot>();
   const taken = new Set<number>();
   const skipped: RegionMap["skipped"] = [];
+  // Every landmark's own spot, so one moved off a road never lands on another's.
+  const own = new Map<number, string>();
+  for (const l of patched) {
+    const c = at(l.at);
+    const [w, d] = isStructureType(l.type) ? [l.w ?? (SIZE[l.type] ?? [2, 2])[0], l.d ?? (SIZE[l.type] ?? [2, 2])[1]] : [1, 1];
+    const ax = Math.round(c.x - (w - 1) / 2);
+    const az = Math.round(c.z - (d - 1) / 2);
+    for (let x = ax; x < ax + w; x++) for (let z = az; z < az + d; z++) if (!own.has(tileKey(x, z))) own.set(tileKey(x, z), l.id);
+  }
   for (const l of patched) {
     const c = at(l.at);
     if (!isStructureType(l.type)) {
@@ -167,10 +178,52 @@ export function compileRegion(region: Region): RegionMap {
       continue;
     }
     const [dw, dd] = SIZE[l.type] ?? [2, 2];
-    const w = l.w ?? dw;
-    const d = l.d ?? dd;
-    const ax = Math.round(c.x - (w - 1) / 2);
-    const az = Math.round(c.z - (d - 1) / 2);
+    let w = l.w ?? dw;
+    let d = l.d ?? dd;
+    // Where it stands: on its real spot, unless that would cut a main road in two (a road
+    // through a landmark stops at it). Then the nearest spot a few tiles off that doesn't, or,
+    // where the streets are too close together for that, a slightly smaller one on its spot.
+    const fits = (ax: number, az: number, w: number, d: number) => {
+      let roads = 0;
+      let wet = 0;
+      for (let x = ax; x < ax + w; x++) {
+        for (let z = az; z < az + d; z++) {
+          if (!inside(x, z) || taken.has(tileKey(x, z))) return Infinity;
+          const mine = own.get(tileKey(x, z));
+          if (mine && mine !== l.id) return Infinity;
+          if (road[cell(x, z)]) roads++;
+          if (water[cell(x, z)]) wet++;
+        }
+      }
+      return roads * 100 + wet;
+    };
+    let ax = Math.round(c.x - (w - 1) / 2);
+    let az = Math.round(c.z - (d - 1) / 2);
+    const here = fits(ax, az, w, d);
+    if (here >= 100 && here < Infinity) {
+      const sizes = [[w, d], [w - 1, d - 1], [w - 2, d - 2]].filter(([sw, sd]) => sw >= 2 && sd >= 2);
+      const reach = Math.max(3, Math.ceil(Math.max(w, d) / 2) + 1);
+      for (const [sw, sd] of sizes) {
+        const bx = Math.round(c.x - (sw - 1) / 2);
+        const bz = Math.round(c.z - (sd - 1) / 2);
+        let best: { ax: number; az: number; score: number } | null = null;
+        for (let dx = -reach; dx <= reach; dx++) {
+          for (let dz = -reach; dz <= reach; dz++) {
+            const f = fits(bx + dx, bz + dz, sw, sd);
+            if (f >= 100 || f > here % 100) continue;
+            const score = f + Math.hypot(dx, dz);
+            if (!best || score < best.score) best = { ax: bx + dx, az: bz + dz, score };
+          }
+        }
+        if (best) {
+          ax = best.ax;
+          az = best.az;
+          w = sw;
+          d = sd;
+          break;
+        }
+      }
+    }
     let free = inside(ax, az) && inside(ax + w - 1, az + d - 1);
     if (!free) {
       skipped.push({ id: l.id, reason: "outside the region" });
@@ -282,8 +335,13 @@ export function compileRegion(region: Region): RegionMap {
   findJoins(lines);
   const pieces = new Map<number, Piece[]>();
   const clear = new Map<number, "deck" | "track" | "station">();
+  const decks: RegionMap["decks"] = [];
   for (const line of lines) {
-    for (const p of piecesOf(line)) {
+    const ps = piecesOf(line);
+    if (line.kind === "road" && line.raised && ps.length > 1) {
+      decks.push({ pts: [{ x: ps[0].ax, y: ps[0].ay, z: ps[0].az }, ...ps.map((p) => ({ x: p.bx, y: p.by, z: p.bz }))], width: ps[0].width });
+    }
+    for (const p of ps) {
       const key = tileKey(Math.round((p.ax + p.bx) / 2), Math.round((p.az + p.bz) / 2));
       const list = pieces.get(key);
       if (list) list.push(p);
@@ -340,6 +398,7 @@ export function compileRegion(region: Region): RegionMap {
     footbridgeAt: (x, z) => footbridges.has(tileKey(x, z)),
     flyoverAt: (x, z) => inside(x, z) && road[cell(x, z)] > 8 && !water[cell(x, z)],
     piecesAt: (x, z) => pieces.get(tileKey(x, z)),
+    decks,
     clearAt: (x, z) => clear.get(tileKey(x, z)),
     stationAt: (x, z) => stationTiles.get(tileKey(x, z)),
     stations,
