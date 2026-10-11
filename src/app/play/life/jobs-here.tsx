@@ -4,7 +4,7 @@ import { Briefcase } from "@/components/icons";
 import type { Prices } from "@/lib/world/region";
 import { mintLocal } from "@/lib/world/value";
 import { CERT_LABEL } from "@/lib/world/living";
-import { cheapestCommute, COMMUTE_LABEL, fareMint, INCOME_TAX, needsInterview, payDay, skillLevel, tripKmBetween, WORK_SKILLS, type Commute, type WorkJob } from "@/lib/world/work";
+import { cheapestCommute, COMMUTE_LABEL, dayNet, fareMint, needsInterview, payDay, skillLevel, tripKmBetween, WORK_SKILLS, type Commute, type WorkJob } from "@/lib/world/work";
 import type { Workplace } from "@/lib/world/workplace";
 
 /** What the jobs list needs to know about you, and what to do when you take one. */
@@ -44,7 +44,7 @@ export function JobsHere({ place, ctx }: { place: Workplace; ctx: JobsContext })
       <ul className="mt-2 divide-y divide-ink/5 rounded-2xl ring-1 ring-ink/5">
         {place.jobs.map((j) => {
           const day = payDay(j, ctx.prices);
-          const net = day * (1 - INCOME_TAX) - 2 * trip.fare;
+          const net = dayNet(day, ctx.skills[j.skill] ?? 0, trip.fare);
           const level = skillLevel(ctx.skills[j.skill] ?? 0);
           const noCert = !!j.cert && !ctx.certs.includes(j.cert);
           const short = level < j.level || noCert;
@@ -63,8 +63,9 @@ export function JobsHere({ place, ctx }: { place: Workplace; ctx: JobsContext })
               <div className="shrink-0 text-right">
                 <p className="text-sm font-semibold tabular-nums">₥{fmt(day)}/day</p>
                 <p className="text-[11px] text-muted">
-                  {mintLocal(day * 30, ctx.prices)}/month{ctx.homeUnit ? ` · ₥${fmt(net)} after tax & fares` : ""}
+                  {mintLocal(day * 30, ctx.prices)}/month{ctx.homeUnit && net >= 0 ? ` · ₥${fmt(net)} after tax & fares` : ""}
                 </p>
+                {ctx.homeUnit && net < 0 && <p className="text-[11px] font-semibold text-hit">You&apos;d lose ₥{fmt(-net)} a day: fares cost more than it pays</p>}
               </div>
               {mine ? (
                 <span className="shrink-0 rounded-full bg-me/15 px-2.5 py-1 text-xs font-semibold text-me">Yours</span>

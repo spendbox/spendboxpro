@@ -119,6 +119,11 @@ export function payDay(job: Pick<WorkJob, "month">, prices: Prices) {
   return Math.round((job.month / 30 / prices.perMint) * 100) / 100;
 }
 
+/** What a job leaves you a game day, after income tax and two trips at `fareTrip` (negative: a loss). */
+export function dayNet(payDay: number, skillDays: number, fareTrip: number) {
+  return Math.round((payDay * (1 + skillLevel(skillDays) * SKILL_BONUS) * (1 - INCOME_TAX) - 2 * fareTrip) * 100) / 100;
+}
+
 /** A skill's level from the game days worked in it: 5 days for level 1, 20 for 2, 45 for 3... with no top. */
 export function skillLevel(days: number) {
   return Math.floor(Math.sqrt(Math.max(0, days) / 5));
