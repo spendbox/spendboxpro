@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { chainLines, DECK, piecesOf, placeStations, tilesUnder, type SpanLine } from "../spans.ts";
+import { chainLines, DECK, findJoins, LEVEL, piecesOf, placeStations, tilesUnder, type SpanLine } from "../spans.ts";
 
 const straight = (len: number, kind: SpanLine["kind"] = "road", raised = true): SpanLine => ({
   kind,
@@ -61,4 +61,21 @@ test("a station stands on its railway, lined up with it", () => {
   assert.ok(Math.abs(st.x - st.z) < 1e-9, "on the line");
   assert.ok(Math.abs(st.ry + Math.PI / 4) < 1e-9, "along it");
   assert.equal(placeStations([{ name: "Far", x: 50, z: 0 }], [rail]).length, 0);
+});
+
+test("where one bridge joins another, its deck stays up and meets it (no dip to the ground)", () => {
+  const main: SpanLine = { ...straight(10), pts: [{ x: 0, z: 0 }, { x: 10, z: 0 }] };
+  const branch: SpanLine = { ...straight(5), pts: [{ x: 5, z: 0.1 }, { x: 5, z: 5 }] };
+  findJoins([main, branch]);
+  assert.deepEqual(branch.joins, [true, false]);
+  const pieces = piecesOf(branch);
+  assert.ok(pieces[0].ay > DECK.land - 0.01, `starts up at ${pieces[0].ay}`);
+  assert.ok(pieces[pieces.length - 1].by < 0.1, "comes down at its free end");
+});
+
+test("a deck on a higher level stands clear above one below it", () => {
+  const low = piecesOf(straight(10));
+  const high = piecesOf({ ...straight(10), layer: 2 });
+  const top = (ps: typeof low) => Math.max(...ps.map((p) => p.ay));
+  assert.ok(top(high) - top(low) >= LEVEL - 1e-9);
 });

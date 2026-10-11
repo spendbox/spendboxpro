@@ -35,6 +35,8 @@ export type Road = {
   kind: RoadKind;
   /** Crosses water (Third Mainland Bridge, Carter Bridge...). */
   bridge?: boolean;
+  /** Where bridges cross each other: which level (1 just above the ground, 2 above that...). */
+  layer?: number;
   path: Path;
 };
 

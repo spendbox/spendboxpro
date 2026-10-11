@@ -1778,6 +1778,7 @@ export const ROUTES: Road[] = [
   "name": "Apapa Road",
   "kind": "motorway",
   "bridge": true,
+  "layer": 2,
   "path": [
    [
     6.47862,
@@ -1822,6 +1823,7 @@ export const ROUTES: Road[] = [
   "name": "Apapa Road",
   "kind": "motorway",
   "bridge": true,
+  "layer": 2,
   "path": [
    [
     6.45309,
@@ -2034,6 +2036,7 @@ export const ROUTES: Road[] = [
   "name": "Ring Road",
   "kind": "motorway",
   "bridge": true,
+  "layer": 2,
   "path": [
    [
     6.44143,
@@ -2078,6 +2081,7 @@ export const ROUTES: Road[] = [
   "name": "Maroko Road",
   "kind": "trunk",
   "bridge": true,
+  "layer": 3,
   "path": [
    [
     6.43741,
@@ -2730,6 +2734,7 @@ export const ROUTES: Road[] = [
   "name": "Ikorodu Road",
   "kind": "motorway",
   "bridge": true,
+  "layer": 2,
   "path": [
    [
     6.57791,
@@ -2834,6 +2839,7 @@ export const ROUTES: Road[] = [
   "name": "Diya Street",
   "kind": "secondary",
   "bridge": true,
+  "layer": 3,
   "path": [
    [
     6.54715,
@@ -3022,6 +3028,7 @@ export const ROUTES: Road[] = [
   "name": "Lagos-Ibadan Expressway",
   "kind": "motorway",
   "bridge": true,
+  "layer": 2,
   "path": [
    [
     6.62822,
@@ -3250,6 +3257,7 @@ export const ROUTES: Road[] = [
   "name": "Maryland-Opebi-Ojota Link Bridge",
   "kind": "primary",
   "bridge": true,
+  "layer": 2,
   "path": [
    [
     6.58305,
@@ -3580,6 +3588,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w87798459",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.47347,
@@ -3598,6 +3607,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w87798466",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.4701,
@@ -3616,6 +3626,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w87798475",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.47004,
@@ -3638,6 +3649,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w88675618",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.60746,
@@ -3688,6 +3700,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w133795066",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.49114,
@@ -3801,6 +3814,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w588150734",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.48331,
@@ -3815,6 +3829,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w588385794",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.48311,
@@ -3829,6 +3844,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w588385797",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.48116,
@@ -3859,6 +3875,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w588409513",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.48864,
@@ -3888,6 +3905,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w662455004",
   "name": "LRMT Blue Line",
+  "bridge": false,
   "path": [
    [
     6.47448,
@@ -3926,6 +3944,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w671558235",
   "name": "LRMT Blue Line",
+  "bridge": false,
   "path": [
    [
     6.47849,
@@ -4015,6 +4034,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w919669839",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.62712,
@@ -4029,6 +4049,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w919669840",
   "name": "Lagos–Ibadan SGR",
+  "bridge": false,
   "path": [
    [
     6.6272,
@@ -4043,6 +4064,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w919669841",
   "name": "Lagos–Ibadan SGR",
+  "bridge": false,
   "path": [
    [
     6.62133,
@@ -4057,6 +4079,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w919669847",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.62145,
@@ -4071,6 +4094,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w919669849",
   "name": "Lagos–Ibadan SGR",
+  "bridge": false,
   "path": [
    [
     6.61823,
@@ -4085,6 +4109,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w919669850",
   "name": "Lagos–Ibadan SGR",
+  "bridge": false,
   "path": [
    [
     6.62135,
@@ -4099,6 +4124,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w919669856",
   "name": "Lagos–Ibadan SGR",
+  "bridge": false,
   "path": [
    [
     6.60745,
@@ -4113,6 +4139,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w919669863",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.61828,
@@ -4135,6 +4162,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w919669865",
   "name": "Lagos–Ibadan SGR",
+  "bridge": false,
   "path": [
    [
     6.61825,
@@ -4149,6 +4177,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w919669868",
   "name": "Lagos–Ibadan SGR",
+  "bridge": false,
   "path": [
    [
     6.52038,
@@ -4175,6 +4204,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w919669869",
   "name": "Lagos–Ibadan SGR",
+  "bridge": false,
   "path": [
    [
     6.60745,
@@ -4225,6 +4255,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w919669870",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.68269,
@@ -4279,6 +4310,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w956421072",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.5015,
@@ -4345,6 +4377,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w956421074",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.50225,
@@ -4359,6 +4392,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w956421076",
   "name": "Lagos–Ibadan SGR",
+  "bridge": false,
   "path": [
    [
     6.50104,
@@ -4373,6 +4407,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w956421077",
   "name": "Lagos–Ibadan SGR",
+  "bridge": false,
   "path": [
    [
     6.49664,
@@ -4387,6 +4422,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w956421078",
   "name": "Lagos–Ibadan SGR",
+  "bridge": false,
   "path": [
    [
     6.50102,
@@ -4401,6 +4437,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w956421079",
   "name": "Lagos–Ibadan SGR",
+  "bridge": false,
   "path": [
    [
     6.50231,
@@ -4415,6 +4452,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w987499802",
   "name": "Lagos–Ibadan SGR",
+  "bridge": false,
   "path": [
    [
     6.62719,
@@ -4481,6 +4519,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w987499803",
   "name": "Lagos–Ibadan SGR",
+  "bridge": false,
   "path": [
    [
     6.68425,
@@ -4543,6 +4582,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1070947188",
   "name": "Lagos–Ibadan SGR",
+  "bridge": false,
   "path": [
    [
     6.49782,
@@ -4565,6 +4605,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1070947189",
   "name": "Lagos–Ibadan SGR",
+  "bridge": false,
   "path": [
    [
     6.50581,
@@ -4587,6 +4628,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1070947190",
   "name": "Lagos–Ibadan SGR",
+  "bridge": false,
   "path": [
    [
     6.49792,
@@ -4605,6 +4647,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1070947191",
   "name": "Lagos–Ibadan SGR",
+  "bridge": false,
   "path": [
    [
     6.50572,
@@ -4627,6 +4670,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1070947193",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.48866,
@@ -4657,6 +4701,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1071098794",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.48137,
@@ -4671,6 +4716,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1071098796",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.48311,
@@ -4685,6 +4731,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1071098798",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.43845,
@@ -4823,6 +4870,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1071098807",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.46238,
@@ -4924,6 +4972,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1157505497",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.4877,
@@ -4938,6 +4987,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1157505498",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.48344,
@@ -5005,6 +5055,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1180991621",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.47005,
@@ -5023,6 +5074,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1180991624",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.47047,
@@ -5037,6 +5089,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1181830086",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.47012,
@@ -5051,6 +5104,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1181830087",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.47405,
@@ -5081,6 +5135,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1181830088",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.47472,
@@ -5095,6 +5150,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1181830089",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.47399,
@@ -5109,6 +5165,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1182055775",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.48772,
@@ -5123,6 +5180,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1182072105",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.48249,
@@ -5141,6 +5199,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1182072106",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.48247,
@@ -5155,6 +5214,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1182341572",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.48146,
@@ -5177,6 +5237,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1182341788",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.47193,
@@ -5191,6 +5252,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1182784466",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.47004,
@@ -5205,6 +5267,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1182784468",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.47501,
@@ -5247,6 +5310,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1182784592",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.48775,
@@ -5265,6 +5329,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1182790318",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.49414,
@@ -5279,6 +5344,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1324950545",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.48249,
@@ -5293,6 +5359,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1324950546",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.48341,
@@ -5311,6 +5378,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1433254426",
   "name": "Railway",
+  "bridge": false,
   "path": [
    [
     6.46629,
@@ -5329,6 +5397,7 @@ export const RAIL: Rail[] = [
  {
   "id": "osm-w1483307172",
   "name": "Lagos–Ibadan SGR",
+  "bridge": false,
   "path": [
    [
     6.5023,

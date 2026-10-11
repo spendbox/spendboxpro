@@ -28,10 +28,25 @@ export type Piece = {
 export type StationPlan = { name: string; x: number; z: number; /** Along the line (radians, as ry). */ ry: number; raised: boolean };
 
 /** A line in tiles, with what it is. */
-export type SpanLine = { kind: SpanKind; pts: { x: number; z: number }[]; raised: boolean; overWater: (x: number, z: number) => boolean; major: boolean };
+export type SpanLine = {
+  kind: SpanKind;
+  pts: { x: number; z: number }[];
+  raised: boolean;
+  overWater: (x: number, z: number) => boolean;
+  major: boolean;
+  /** Its level where bridges cross (1 the usual, 2 above that...). */
+  layer?: number;
+  /**
+   * Whether each end (start, end) joins another bridge rather than coming down to the road:
+   * a joined end stays up, so an interchange's decks meet instead of dipping to the ground.
+   */
+  joins?: [boolean, boolean];
+};
 
 /** How high a road deck runs over land and over water, and a railway viaduct. */
 export const DECK = { land: 0.62, water: 0.5, rail: 0.55 };
+/** How much higher each level above the first stands (decks that cross never touch). */
+export const LEVEL = 0.32;
 /** How long (tiles) a ramp up or down takes. */
 const RAMP = 1.2;
 /** How long each drawn piece is at most (tiles). */
@@ -93,13 +108,17 @@ export function piecesOf(line: SpanLine): Piece[] {
     return { x: pts[k - 1].x + (pts[k].x - pts[k - 1].x) * f, z: pts[k - 1].z + (pts[k].z - pts[k - 1].z) * f };
   };
   const ground = line.kind === "rail" && !line.raised;
-  const top = (p: { x: number; z: number }) => (line.kind === "rail" ? DECK.rail : line.overWater(Math.round(p.x), Math.round(p.z)) ? DECK.water : DECK.land);
+  const extra = ((line.layer ?? 1) - 1) * LEVEL;
+  const top = (p: { x: number; z: number }) => extra + (line.kind === "rail" ? DECK.rail : line.overWater(Math.round(p.x), Math.round(p.z)) ? DECK.water : DECK.land);
   // Short bridges (over a canal, a creek) only hump up a little; long ones ramp to full height.
-  const ramp = Math.min(RAMP, total / 2.5);
+  // An end that joins another bridge doesn't come down at all.
+  const [joinA, joinB] = line.joins ?? [false, false];
+  const ramps = (joinA ? 0 : 1) + (joinB ? 0 : 1);
+  const ramp = Math.min(RAMP + extra * 2, total / Math.max(1, ramps * 1.25));
   const height = (s: number, p: { x: number; z: number }) => {
     if (ground) return 0.07;
-    const up = Math.min(1, s / ramp, (total - s) / ramp);
-    const full = total < 2 ? 0.22 : top(p);
+    const up = Math.min(1, joinA ? 1 : s / ramp, joinB ? 1 : (total - s) / ramp);
+    const full = total < 2 && !joinA && !joinB ? 0.22 : top(p);
     return 0.07 + (full - 0.07) * Math.max(0, up);
   };
   const n = Math.max(1, Math.ceil(total / STEP));
@@ -116,6 +135,29 @@ export function piecesOf(line: SpanLine): Piece[] {
     out.push({ kind: line.kind, ax: a.x, az: a.z, ay, bx: b.x, bz: b.z, by: height(s1, b), width: line.kind === "rail" ? 0.3 : line.major ? 0.44 : 0.32, pier, ground });
   }
   return out;
+}
+
+/** How far a point is from a line's nearest stretch (tiles). */
+function distanceTo(p: { x: number; z: number }, pts: { x: number; z: number }[]) {
+  let best = Infinity;
+  for (let k = 1; k < pts.length; k++) {
+    const a = pts[k - 1];
+    const b = pts[k];
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const f = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / (dx * dx + dz * dz || 1)));
+    best = Math.min(best, Math.hypot(p.x - (a.x + dx * f), p.z - (a.z + dz * f)));
+  }
+  return best;
+}
+
+/** For each line, whether its ends join another line of the same kind (see SpanLine.joins). */
+export function findJoins(lines: SpanLine[]) {
+  for (const l of lines) {
+    if (!l.raised) continue;
+    const ends = [l.pts[0], l.pts[l.pts.length - 1]];
+    l.joins = ends.map((e) => lines.some((o) => o !== l && o.kind === l.kind && o.raised && distanceTo(e, o.pts) < 0.35)) as [boolean, boolean];
+  }
 }
 
 /** Every tile a line's deck covers (its centre line, and its edges), for keeping buildings off it. */
