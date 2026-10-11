@@ -32,7 +32,23 @@ house). Each unit can be owned, rented out or made someone's home.
 
 ## 2. What a property is worth
 
-**Value = floor area × local price per m² × building factor × demand.**
+A property's value is **land + building**, like real property:
+
+- **Land value** = plot area × the area's price per m² of land × demand. Land is what location
+  and popularity move. It never depreciates on its own.
+- **Building value** = floor area × building cost per m² (by kind: a glass tower costs more to
+  build than a bungalow) × condition (new, ageing, uncompleted, damaged) × upgrades (a pool, a
+  generator, security, a lift: a few percent each).
+- **A unit's value** (a flat, a floor, a shop) is its share of both: its floor area, times a small
+  factor for its floor (higher floors and penthouses more; ground-floor shops on a busy road more).
+  A building's units always add up to the whole building.
+
+This makes rebuilding meaningful. Demolish an old block and the land keeps its value, and a new
+building adds its own. An uncompleted building on Ikoyi land is still worth a lot, for the land.
+
+**Not valued:** the rooms and parts inside a building (a kitchen, a stage, a bar). They make a
+place useful and bring visitors, which earns entry fees, but they don't set its price. Valuing
+parts by how much they're used would be confusing for players and easy to fake with fake visits.
 
 - **Local price per m²:** a table of real prices by area, worldwide. For Lagos, Ikoyi, Victoria
   Island and Lekki are high; Yaba, Surulere and Ikeja are middle; Ajegunle, Mushin and the edges
@@ -41,7 +57,9 @@ house). Each unit can be owned, rented out or made someone's home.
 - **Building factor:** its kind, how many storeys, its condition (new, aged, uncompleted,
   damaged) and its improvements.
 - **Demand:** rises with how many people own property nearby, how many live there, and how many
-  visit. It's worked out for each neighbourhood every game day, so values move.
+  distinct, genuine people visit. It's worked out for each neighbourhood every game day and
+  moves land values only, a little at a time (capped per day), so nobody can pump a street
+  overnight.
 
 Players see **their assets grow**: today's value, the change since they bought it, and a small
 chart.
@@ -58,7 +76,25 @@ chart.
 - **Jobs:** they already exist (interviews, shifts, pay); school and courses unlock better ones.
 - **Ads (later):** a share of the real ad revenue in each area. See section 7.
 
-## 4. Money going out
+## 4. Taxes and treasuries
+
+Every money movement is taxed, and every tax goes to a public treasury:
+
+- **The state treasury** (Lagos State): property tax, tax on sales, on earnings, on entry fees.
+- **The country treasury** (Nigeria): a share of those taxes, plus import and company taxes later.
+- **The World Bank:** funded by loan interest and its own fees; it lends to players.
+
+Anyone can open each treasury and see its balance, what came in and what was spent, item by
+item (roads, rebuilding after a flood, government salaries).
+
+**Later, with politics:**
+- A **governor** can appoint people and spend from the state treasury.
+- A **president** can do the same with the country treasury.
+- A **local government chairman** can spend a local budget.
+
+Until then the game runs the treasuries itself: roads, repairs, events.
+
+## 5. Money going out
 
 So money doesn't only pile up:
 
@@ -72,7 +108,7 @@ So money doesn't only pile up:
 Every way mint is made or destroyed goes into the `coin_supply_daily` view, so the books balance.
 That rule is already in `TODO.md`.
 
-## 5. Starting a life
+## 6. Starting a life
 
 1. A new player gets a **starting budget**.
 2. They **search** the map for property in their budget: a search bar, not a phone. Search finds
@@ -87,7 +123,7 @@ That rule is already in `TODO.md`.
 The budget decides where they can start. Someone can start in a ₦1 million room and work up to
 an Ikoyi penthouse.
 
-## 6. Trading and loans
+## 7. Trading and loans
 
 - **Offers:** offer to buy anyone's property; the owner accepts, refuses or counters. Payment is
   held until both agree.
@@ -96,7 +132,7 @@ an Ikoyi penthouse.
 - **People search:** find players by name, see their public profile, message them, add friends
   (friends already exist).
 
-## 7. Ads: sharing real revenue (later)
+## 8. Ads: sharing real revenue (later)
 
 Only ever a share of the ad revenue the game actually earns, never new money:
 
@@ -112,7 +148,7 @@ Only ever a share of the ad revenue the game actually earns, never new money:
 4. **Cashing out real money** needs identity checks and tax handling, and must be cleared with a
    lawyer first. It's the item already on the to-do list, now more important than ever.
 
-## 8. Later
+## 9. Later
 
 - Improving, demolishing and rebuilding.
 - Government roles (councillor, local government chairman, governor) and the rules they can set
@@ -121,7 +157,7 @@ Only ever a share of the ad revenue the game actually earns, never new money:
 
 ---
 
-## 9. Decisions to make (owner)
+## 10. Decisions to make (owner)
 
 1. **What a mint is worth.** Today jobs pay ₥15–₥60 an hour and fees are under ₥5, so 1 mint is
    roughly like $1. Suggestion: keep that everywhere, and show the local equivalent beside prices
@@ -135,19 +171,20 @@ Only ever a share of the ad revenue the game actually earns, never new money:
 
 ---
 
-## 10. The order to build it
+## 11. The order to build it
 
 **Step 1: buildings worth owning**
 1. Every building and unit gets a permanent identity on the real map (not tied to hourly rounds).
 2. The building recipe: many kinds, floors and units, states (uncompleted and so on).
-3. The value formula and the price table for Lagos.
+3. The value formula (land + building) and the price tables for Lagos.
 
 **Step 2: the start of a life**
 4. The search bar: places, addresses, neighbourhoods, properties; it flies the camera there.
 5. Database: wallets, ownership, units, sales history, every mint movement recorded.
 6. Starting budget, then buy a home, then primary residence.
 7. The Assets screen (replacing houses), with growing values.
-8. Earnings every minute, and entry fees.
+8. Earnings every minute, and entry fees; taxes into the state and country treasuries, which
+   anyone can view.
 9. Hide ghosts and the minigames.
 
 **Step 3: a market**
@@ -162,4 +199,5 @@ Only ever a share of the ad revenue the game actually earns, never new money:
 
 **Step 5: later**
 16. Ad revenue sharing, once real revenue exists and the lawyer agrees.
-17. Government roles and contracts.
+17. Government roles: governor (appoints, spends the state treasury), president (the country
+    treasury), local government chairman; contracts.
