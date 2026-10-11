@@ -9,6 +9,7 @@ import type { ServiceBoard, ServiceForm } from "./services.ts";
 import type { ReportKind } from "./reports.ts";
 import type { Budget, Pot } from "./living.ts";
 import type { Commute } from "./work.ts";
+import type { Listing, MarketBoard, RentLevel } from "./market.ts";
 
 /** What collecting pay came to (mint): game days, pay, income tax, fares, what's left. */
 export type PaySettled = { days: number; gross: number; tax: number; fares: number; net: number; hustle?: { gross: number; tax: number; net: number } };
@@ -30,6 +31,13 @@ export type AssetUnit = {
   name: string | null;
   /** Rent earned and not yet collected. */
   waiting: number;
+  /** When the tenant moved in (or will): null when not let. */
+  tenantFrom?: string | null;
+  rentLevel?: RentLevel;
+  /** Your asking price, when it's up for sale. */
+  forSale?: number | null;
+  /** It stands behind your World Bank loan. */
+  loan?: boolean;
 };
 
 export type AssetsData = {
@@ -39,7 +47,7 @@ export type AssetsData = {
 };
 
 export type OwnedBuildingRow = { id: string; building: Building; name: string | null };
-export type BuildingOwner = { unit: string; name: string; mine: boolean };
+export type BuildingOwner = { unit: string; name: string; mine: boolean; forSale?: number | null; home?: boolean };
 
 /** Your job on the real map (if any) and your skills (game days worked in each). */
 export type WorkStatus = {
@@ -123,6 +131,18 @@ export type PropertyApi = {
   serviceTake: (requestId: string) => Promise<PropertyResult>;
   serviceJob: (jobId: string, action: "done" | "confirm" | "decline" | "cancel") => Promise<PropertyResult>;
   reportMap: (r: { region: string; x: number; z: number; kind: ReportKind; note: string }) => Promise<PropertyResult>;
+  // The player market (./market).
+  setRentLevel: (unitId: string, level: RentLevel) => Promise<PropertyResult>;
+  listUnit: (unitId: string, price: number) => Promise<PropertyResult>;
+  unlistUnit: (unitId: string) => Promise<PropertyResult>;
+  buyListed: (unitId: string, price: number) => Promise<PropertyResult>;
+  makeOffer: (unitId: string, price: number) => Promise<PropertyResult>;
+  answerOffer: (offerId: string, action: "accept" | "refuse" | "counter", counter?: number) => Promise<PropertyResult>;
+  replyOffer: (offerId: string, action: "accept" | "withdraw") => Promise<PropertyResult>;
+  marketBoard: () => Promise<MarketBoard | null>;
+  marketListings: (region: string) => Promise<Listing[]>;
+  takeLoan: (amount: number, months: number) => Promise<PropertyResult>;
+  repayLoan: (amount: number) => Promise<PropertyResult>;
 };
 
 /** The purchase tax (the database's property_buy_tax), for showing what a unit really costs. */

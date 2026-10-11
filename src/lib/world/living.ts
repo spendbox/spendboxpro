@@ -198,7 +198,7 @@ export function priceOf(fee: number, prices: Prices, vat: boolean) {
 // ---------------------------------------------------------------- where money went
 
 /** Money in and out, by kind (the ledger's kinds), in groups people understand. */
-export type MoneyGroup = "pay" | "rent" | "tax" | "bills" | "travel" | "health" | "school" | "looks" | "property" | "other";
+export type MoneyGroup = "pay" | "rent" | "tax" | "bills" | "travel" | "health" | "school" | "looks" | "loan" | "property" | "borrowed" | "other";
 
 export const MONEY_GROUP: Record<MoneyGroup, { label: string; colour: string }> = {
   pay: { label: "Pay", colour: "#2f9e44" },
@@ -209,7 +209,9 @@ export const MONEY_GROUP: Record<MoneyGroup, { label: string; colour: string }> 
   health: { label: "Health", colour: "#e03131" },
   school: { label: "School", colour: "#1971c2" },
   looks: { label: "Looks", colour: "#d6336c" },
+  loan: { label: "Loan", colour: "#0c8599" },
   property: { label: "Property", colour: "#495057" },
+  borrowed: { label: "Borrowed", colour: "#0c8599" },
   other: { label: "Other", colour: "#868e96" },
 };
 
@@ -232,6 +234,10 @@ const KIND_GROUP: Record<string, MoneyGroup> = {
   school_fees: "school",
   procedure: "looks",
   property_buy: "property",
+  property_sale: "property",
+  sale_tax: "property",
+  loan: "borrowed",
+  loan_repay: "loan",
 };
 
 export const groupOf = (kind: string): MoneyGroup => KIND_GROUP[kind] ?? "other";

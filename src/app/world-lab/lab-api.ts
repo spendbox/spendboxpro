@@ -47,12 +47,15 @@ import { dayOf, dayPlan, EXERCISE, hoursOf, STRESSED_BELOW, workFactor, type Exe
 import { hustleById, hustleDay, hustleStart } from "@/lib/world/hustles";
 import { interviewStart, interviewSubmit, labDrawEvent, labMarkEvent } from "@/app/play/interview-actions";
 import { needsInterview } from "@/lib/world/work";
+import { instalment, LOAN_LTV, LOAN_MISSES, LOAN_MONTH_HOURS, LOAN_RATE, OFFER_HOURS, RENT_LEVEL, SALE_TAX, TENANT_WAIT_HOURS, type Loan, type Offer, type RentLevel } from "@/lib/world/market";
 
 type Saved = {
   coins: number;
   region: string | null;
   home: string | null;
-  units: (AssetUnit & { collectedAt: number })[];
+  units: (AssetUnit & { collectedAt: number; tenantAt?: number | null; listedAt?: number })[];
+  /** The market: offers pretend bidders made on your units, and your World Bank loan. */
+  market?: { offers: (Offer & { at: number })[]; loan: (Loan & { due: number }) | null; n: number };
   buildings: Record<string, { building: Building; name: string | null }>;
   job?: (NonNullable<WorkStatus["job"]> & { paid: number; state?: boolean }) | null;
   skills?: Record<string, number>;
@@ -114,6 +117,8 @@ export function makeLabApi(budget: number): PropertyApi {
   try {
     const raw = localStorage.getItem(KEY);
     if (raw) s = JSON.parse(raw) as Saved;
+    // Units let out before tenants existed already have theirs.
+    for (const u of s.units) if (u.let && u.tenantAt === undefined) u.tenantAt = u.collectedAt;
   } catch {
     // A private window: start fresh each time.
   }
@@ -309,14 +314,93 @@ export function makeLabApi(budget: number): PropertyApi {
       return;
     }
   };
+  /** Rent a let unit has earned since it was collected: only once its tenant is in. */
+  const rentWaiting = (u: Saved["units"][number], now: number) => {
+    if (!u.let || u.tenantAt == null || u.tenantAt > now) return 0;
+    return (u.rentDay * RENT_LEVEL[u.rentLevel ?? "fair"].factor * (now - Math.max(u.collectedAt, u.tenantAt))) / 86_400_000;
+  };
+  const tenantAt = (level: RentLevel) => Date.now() + TENANT_WAIT_HOURS * RENT_LEVEL[level].wait * (0.5 + Math.random()) * 3_600_000;
+  const M = () => (s.market ??= { offers: [], loan: null, n: 0 });
+  /** World Bank payments come due each game month: from Savings, then the wallet. */
+  const loanTick = () => {
+    const ln = M().loan;
+    if (!ln) return;
+    while (ln.due <= Date.now()) {
+      const interest = r2((ln.balance * ln.rate) / 12);
+      const pay = Math.min(ln.instalment, r2(ln.balance + interest));
+      if (canSpend(["savings"]) >= pay) {
+        spend(["savings"], pay);
+        log("loan_repay", -pay);
+        ln.balance = r2(ln.balance + interest - pay);
+        ln.missed = 0;
+      } else {
+        ln.balance = r2(ln.balance + interest);
+        ln.missed += 1;
+      }
+      ln.due += LOAN_MONTH_HOURS * 3_600_000;
+      ln.nextDue = new Date(ln.due).toISOString();
+      if (ln.balance <= 0.01) {
+        M().loan = null;
+        for (const u of s.units) u.loan = false;
+        return;
+      }
+      if (ln.missed >= LOAN_MISSES) {
+        // The bank takes the property behind the loan.
+        accrue();
+        const taken = new Set(s.units.filter((u) => u.loan).map((u) => u.unit));
+        s.units = s.units.filter((u) => !taken.has(u.unit));
+        if (s.home && taken.has(s.home)) s.home = null;
+        M().offers = M().offers.filter((o) => !taken.has(o.unit));
+        M().loan = null;
+        return;
+      }
+    }
+  };
+  /** Pretend bidders: a unit up for sale gets an offer a couple of minutes later (nobody else plays here). */
+  const bidders = () => {
+    const now = Date.now();
+    for (const u of s.units) {
+      if (!u.forSale || !u.listedAt || now - u.listedAt < 120_000) continue;
+      if (M().offers.some((o) => o.unit === u.unit && (o.status === "open" || o.status === "countered"))) continue;
+      const k = M().n++;
+      const who = `${FIRST_NAMES[(k * 7919 + 13) % FIRST_NAMES.length]} ${SURNAMES[(k * 104729 + 7) % SURNAMES.length][0]}.`;
+      M().offers.push({ id: `lab-${k}`, unit: u.unit, label: u.label, price: Math.round(u.forSale * (0.85 + Math.random() * 0.15)), counter: null, status: "open", expiresAt: new Date(now + OFFER_HOURS * 3_600_000).toISOString(), who, at: now });
+      u.listedAt = now + 3_600_000;
+    }
+    for (const o of M().offers) if ((o.status === "open" || o.status === "countered") && Date.parse(o.expiresAt) < now) o.status = "lapsed";
+    M().offers = M().offers.filter((o) => o.status === "open" || o.status === "countered" || now - o.at < 2 * 86_400_000);
+  };
+  /** A pretend bidder buys one of your units at a price: the bank is paid first if it's behind your loan. */
+  const sell = (unitId: string, price: number) => {
+    accrue();
+    const u = s.units.find((x) => x.unit === unitId);
+    if (!u) return;
+    const tax = r2(price * SALE_TAX);
+    let net = r2(price - tax);
+    const ln = M().loan;
+    if (u.loan && ln) {
+      const toBank = Math.min(ln.balance, net);
+      ln.balance = r2(ln.balance - toBank);
+      net = r2(net - toBank);
+      log("loan_repay", -toBank);
+      if (ln.balance <= 0.01) {
+        M().loan = null;
+        for (const x of s.units) x.loan = false;
+      }
+    }
+    log("property_sale", price);
+    log("sale_tax", -tax);
+    s.coins = r2(s.coins + net);
+    s.units = s.units.filter((x) => x.unit !== unitId);
+    for (const o of M().offers) if (o.unit === unitId && (o.status === "open" || o.status === "countered")) o.status = "void";
+  };
   /** Rent let units have earned (in full, its 10% tax apart), shared into pots. */
   const accrue = () => {
     tick();
     const now = Date.now();
     let rent = 0;
     for (const u of s.units) {
-      if (!u.let) continue;
-      rent += (u.rentDay * (now - u.collectedAt)) / 86_400_000;
+      rent += rentWaiting(u, now);
       u.collectedAt = now;
     }
     rent = r2(rent);
@@ -369,7 +453,11 @@ export function makeLabApi(budget: number): PropertyApi {
       const u = s.units.find((x) => x.unit === unitId && x.use === "home");
       if (!u) return fail("That isn't yours.");
       settleNow();
+      accrue();
       u.let = false;
+      u.tenantAt = null;
+      u.forSale = null;
+      for (const o of M().offers) if (o.unit === unitId && (o.status === "open" || o.status === "countered")) o.status = "void";
       s.home = unitId;
       save();
       return { ok: true };
@@ -379,6 +467,8 @@ export function makeLabApi(budget: number): PropertyApi {
       if (!u) return fail("That isn't yours.");
       if (on && s.home === unitId) return fail("That's your home. Move somewhere else first to let it out.");
       const rent = accrue();
+      if (on && !u.let) u.tenantAt = tenantAt(u.rentLevel ?? "fair");
+      if (!on) u.tenantAt = null;
       u.let = on;
       save();
       return { ok: true, coins: s.coins, rent };
@@ -399,11 +489,19 @@ export function makeLabApi(budget: number): PropertyApi {
       return { ok: true };
     },
     async myAssets() {
+      loanTick();
+      bidders();
+      save();
       const now = Date.now();
       return {
         life: s.region ? { region: s.region, home_unit: s.home, granted: s.granted ?? budget, started_at: "" } : null,
         coins: s.coins,
-        units: s.units.map((u) => ({ ...u, name: s.buildings[u.building]?.name ?? null, waiting: u.let ? Math.round(((u.rentDay * (now - u.collectedAt)) / 86_400_000) * 0.9 * 100) / 100 : 0 })),
+        units: s.units.map((u) => ({
+          ...u,
+          name: s.buildings[u.building]?.name ?? null,
+          waiting: r2(rentWaiting(u, now) * 0.9),
+          tenantFrom: u.let && u.tenantAt != null ? new Date(u.tenantAt).toISOString() : null,
+        })),
       };
     },
     async ownedBuildings() {
@@ -767,7 +865,111 @@ export function makeLabApi(budget: number): PropertyApi {
       return { ok: true };
     },
     async buildingOwners(buildingId) {
-      return s.units.filter((u) => u.building === buildingId).map((u) => ({ unit: u.unit, name: "You", mine: true }));
+      return s.units.filter((u) => u.building === buildingId).map((u) => ({ unit: u.unit, name: "You", mine: true, forSale: u.forSale ?? null, home: s.home === u.unit }));
+    },
+    async setRentLevel(unitId, level) {
+      const u = s.units.find((x) => x.unit === unitId);
+      if (!u) return fail("That isn't yours.");
+      if ((u.rentLevel ?? "fair") === level) return { ok: true };
+      const rent = accrue();
+      u.rentLevel = level;
+      if (u.let) u.tenantAt = tenantAt(level);
+      save();
+      return { ok: true, rent };
+    },
+    async listUnit(unitId, price) {
+      const u = s.units.find((x) => x.unit === unitId);
+      if (!u) return fail("That isn't yours.");
+      if (s.home === unitId) return fail("That's your home. Move somewhere else first to sell it.");
+      if (!(price > 0)) return fail("That price doesn't work.");
+      u.forSale = r2(price);
+      u.listedAt = Date.now();
+      save();
+      return { ok: true };
+    },
+    async unlistUnit(unitId) {
+      const u = s.units.find((x) => x.unit === unitId);
+      if (u) u.forSale = null;
+      save();
+      return { ok: true };
+    },
+    async buyListed() {
+      return fail("Nobody else sells on this test page.");
+    },
+    async makeOffer() {
+      return fail("Nobody else owns property on this test page.");
+    },
+    async answerOffer(offerId, action, counter) {
+      bidders();
+      const o = M().offers.find((x) => x.id === offerId && x.status === "open");
+      if (!o) return fail("That offer isn't open any more.");
+      if (action === "accept") {
+        o.status = "accepted";
+        sell(o.unit, o.price);
+      } else if (action === "refuse") o.status = "refused";
+      else {
+        if (!counter || counter <= o.price) return fail("A counter-offer must be higher than the offer.");
+        // The pretend bidder takes a counter up to 10% over their offer.
+        if (counter <= o.price * 1.1) {
+          o.status = "accepted";
+          o.price = r2(counter);
+          sell(o.unit, o.price);
+        } else o.status = "refused";
+      }
+      save();
+      return { ok: true, coins: s.coins };
+    },
+    async replyOffer() {
+      return fail("That offer isn't open any more.");
+    },
+    async marketBoard() {
+      loanTick();
+      bidders();
+      save();
+      const ln = M().loan;
+      const mine = new Set(s.units.map((u) => u.unit));
+      return {
+        made: [],
+        received: M().offers.filter((o) => mine.has(o.unit) && (o.status === "open" || o.status === "countered")),
+        loan: ln ? { id: ln.id, principal: ln.principal, balance: ln.balance, rate: ln.rate, instalment: ln.instalment, months: ln.months, nextDue: ln.nextDue, missed: ln.missed } : null,
+        canBorrow: ln ? 0 : r2(s.units.reduce((t, u) => t + u.price, 0) * LOAN_LTV),
+        rate: LOAN_RATE,
+        misses: LOAN_MISSES,
+      };
+    },
+    async marketListings() {
+      return s.units.filter((u) => u.forSale).map((u) => ({ unit: u.unit, building: u.building, label: u.label, use: u.use, price: u.forSale!, who: "You", mine: true }));
+    },
+    async takeLoan(amount, months) {
+      loanTick();
+      if (!s.region) return fail("Start your life first.");
+      if (M().loan) return fail("You already have a loan.");
+      const limit = r2(s.units.reduce((t, u) => t + u.price, 0) * LOAN_LTV);
+      if (!(amount >= 10) || amount > limit) return fail(`The World Bank lends you up to ₥${limit.toLocaleString("en-GB")} right now.`);
+      const due = Date.now() + LOAN_MONTH_HOURS * 3_600_000;
+      M().loan = { id: `lab-loan-${M().n++}`, principal: r2(amount), balance: r2(amount), rate: LOAN_RATE, instalment: instalment(amount, months), months, nextDue: new Date(due).toISOString(), missed: 0, due };
+      for (const u of s.units) u.loan = true;
+      s.coins = r2(s.coins + amount);
+      log("loan", amount);
+      save();
+      return { ok: true, coins: s.coins };
+    },
+    async repayLoan(amount) {
+      loanTick();
+      const ln = M().loan;
+      if (!ln) return fail("You don't have a loan.");
+      const pay = Math.min(r2(amount), ln.balance);
+      if (!(pay > 0)) return fail("That amount doesn't work.");
+      if (canSpend(["savings"]) < pay) return fail(`You need ₥${pay.toLocaleString("en-GB")} for that.`);
+      spend(["savings"], pay);
+      log("loan_repay", -pay);
+      ln.balance = r2(ln.balance - pay);
+      if (ln.balance <= 0.01) {
+        M().loan = null;
+        for (const u of s.units) u.loan = false;
+      }
+      save();
+      return { ok: true, coins: s.coins };
     },
   };
 }

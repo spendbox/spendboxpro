@@ -63,6 +63,7 @@ import { buildingParts } from "./city/building-kit";
 import { CLEAR_GROUND, crossingParts, pieceParts, stationParts } from "./city/spans-kit";
 import { setSceneSnapshot } from "./city/snapshot";
 import { createTraffic, type VehiclePose } from "./city/traffic";
+import { createDeckTraffic } from "./city/deck-traffic";
 import { clubParts, eggParts, fireStationParts, restaurantParts } from "./city/street-bits";
 import { createCabin, type Cabin } from "./city/rides";
 import { disposeVehicleCaches } from "./city/vehicles";
@@ -2448,6 +2449,7 @@ export function CityView({
     });
     const aircraft = createAircraft(world, life);
     const traffic = createTraffic(world, life);
+    const deckTraffic = createDeckTraffic(world, life);
     const boats = createBoats(world, life);
     const plumes = createPlumes(world, life);
     const sites = createSites(world, life);
@@ -2637,6 +2639,7 @@ export function CityView({
       elevatedLife.build();
       aircraft.build();
       traffic.build(plan);
+      deckTraffic.build(plan.region, plan.palette.car);
       boats.build();
       buildLandmarks();
       plumes.build();
@@ -6143,6 +6146,7 @@ export function CityView({
       updateShakes(now);
       if (life.visible) {
         traffic.update(dt, time);
+        deckTraffic.update(dt);
         updateLandmarks(dt, now);
         for (const p of parks) p.update(time);
         for (const g of games) g.update(time, dt);
@@ -6328,6 +6332,7 @@ export function CityView({
       setSceneSnapshot(null);
       aircraft.dispose();
       traffic.dispose();
+      deckTraffic.dispose();
       boats.dispose();
       plumes.dispose();
       sites.dispose();

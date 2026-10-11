@@ -159,6 +159,8 @@ export async function renameBuilding(buildingId: string, name: string): Promise<
 export async function myAssets(): Promise<AssetsData | null> {
   const userId = await currentUserId();
   if (!userId) return null;
+  // World Bank payments that have come due are taken first.
+  await createAdminClient().rpc("loan_tick", { p_user: userId });
   const { data, error } = await createAdminClient().rpc("my_assets", { p_user: userId });
   if (error) return null;
   return data as AssetsData;
@@ -178,5 +180,11 @@ export async function buildingOwners(buildingId: string): Promise<BuildingOwner[
   const userId = await currentUserId();
   const { data, error } = await createAdminClient().rpc("building_owners", { p_building: buildingId });
   if (error || !Array.isArray(data)) return [];
-  return (data as { unit: string; owner: string; name: string }[]).map((o) => ({ unit: o.unit, name: o.name, mine: o.owner === userId }));
+  return (data as { unit: string; owner: string; name: string; forSale?: number | null; home?: boolean }[]).map((o) => ({
+    unit: o.unit,
+    name: o.name,
+    mine: o.owner === userId,
+    forSale: o.forSale == null ? null : Number(o.forSale),
+    home: !!o.home,
+  }));
 }

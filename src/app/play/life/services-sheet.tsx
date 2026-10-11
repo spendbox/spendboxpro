@@ -84,13 +84,11 @@ export function ServicesSheet({
           ))}
         </div>
       )}
-      <p className="mt-2 text-[11px] text-muted">
-        {tab === "yours"
-          ? "Your jobs, offers and requests."
-          : kind === "game"
-            ? `Paid in mint: the price is held when you book and goes to them when you confirm it's done (or by itself 6 hours after they finish), less ${SERVICE_VAT * 100}% VAT.`
-            : "Agreed and paid outside the game: the game only shows how to reach each other. Meet safely, and report anything wrong."}
-      </p>
+      {tab !== "yours" && (
+        <p className="mt-2 text-[11px] text-muted" title={kind === "game" ? `The price is held when you book and paid when it's done, less ${SERVICE_VAT * 100}% VAT.` : undefined}>
+          {kind === "game" ? "Paid in mint, only once it's done." : "Paid in person, outside the game. Meet safely."}
+        </p>
+      )}
 
       {!board ? (
         <p className="mt-6 text-center text-sm text-muted">Looking…</p>
@@ -101,14 +99,14 @@ export function ServicesSheet({
             <li key={o.id} className="rounded-2xl p-3 ring-1 ring-ink/5">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold">{o.title}</p>
-                  <p className="text-xs text-muted">
+                  <p className="truncate text-sm font-semibold">{o.title}</p>
+                  <p className="truncate text-xs text-muted">
                     {o.provider} · {label(o.kind, o.category)}
                   </p>
                 </div>
                 <p className="shrink-0 text-sm font-semibold tabular-nums">{price(o.kind, o.price)}</p>
               </div>
-              <p className="mt-1 text-sm">{o.about}</p>
+              <p className="mt-1 line-clamp-2 text-xs text-muted">{o.about}</p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <span className="flex items-center gap-1 rounded-full bg-ink/5 px-2 py-0.5 text-[11px] text-muted">
                   <MapPin className="size-3" /> {o.area}
@@ -134,7 +132,7 @@ export function ServicesSheet({
       ) : tab === "requests" ? (
         <>
           <button onClick={() => setForm("request")} className="mt-3 h-10 w-full rounded-full bg-gold text-sm font-semibold text-ink">
-            Post what you need
+            + Ask for something
           </button>
           <ul className="mt-3 space-y-2">
             {requests.length === 0 && <li className="py-6 text-center text-sm text-muted">No requests yet.</li>}
@@ -152,7 +150,7 @@ export function ServicesSheet({
                     <span className="block text-[11px] font-normal text-muted">they&apos;ll pay</span>
                   </p>
                 </div>
-                <p className="mt-1 text-sm">{r.about}</p>
+                <p className="mt-1 line-clamp-2 text-xs text-muted">{r.about}</p>
                 <div className="mt-2 flex justify-end gap-2">
                   {r.mine ? (
                     <button onClick={() => onCloseItem(r.id)} className="h-8 rounded-full bg-ink/5 px-3 text-xs font-semibold">
@@ -179,14 +177,14 @@ export function ServicesSheet({
         <>
           {board.canOffer ? (
             <button onClick={() => setForm("offer")} className="mt-3 h-10 w-full rounded-full bg-gold text-sm font-semibold text-ink">
-              Offer a service
+              + Offer a service
             </button>
           ) : (
-            <p className="mt-3 rounded-2xl bg-ink/[0.04] p-3 text-xs text-muted">Only people who own property can offer services. Buy a property, and you can offer in-game and real-life services here.</p>
+            <p className="mt-3 rounded-2xl bg-ink/[0.04] p-3 text-xs text-muted">Own property to offer services.</p>
           )}
           <h3 className="mt-4 text-sm font-semibold">Jobs</h3>
-          {jobs.length === 0 ? <p className="mt-1 text-xs text-muted">None yet.</p> : <ul className="mt-2 space-y-2">{jobs.map((j) => <JobRow key={j.id} j={j} busy={busy} onJob={onJob} />)}</ul>}
-          <h3 className="mt-4 text-sm font-semibold">Your offers and requests</h3>
+          {jobs.length === 0 ? <p className="mt-1 text-xs text-muted">None yet. Book one under Find.</p> : <ul className="mt-2 space-y-2">{jobs.map((j) => <JobRow key={j.id} j={j} busy={busy} onJob={onJob} />)}</ul>}
+          {(board.offers ?? []).some((o) => o.mine) || (board.requests ?? []).some((r) => r.mine) ? <h3 className="mt-4 text-sm font-semibold">Posted by you</h3> : null}
           <ul className="mt-2 space-y-1.5">
             {[...(board.offers ?? []).filter((o) => o.mine).map((o) => ({ id: o.id, text: `Offer: ${o.title} · ${price(o.kind, o.price)}` })), ...(board.requests ?? []).filter((r) => r.mine).map((r) => ({ id: r.id, text: `Request: ${r.title} · ${price(r.kind, r.budget)}` }))].map((x) => (
               <li key={x.id} className="flex items-center justify-between gap-2 rounded-xl bg-ink/[0.04] px-3 py-2 text-sm">
@@ -224,10 +222,10 @@ function Contact({ phone, whatsapp }: { phone: string | null; whatsapp: string |
 
 function JobRow({ j, busy, onJob }: { j: ServiceJob; busy: boolean; onJob: (id: string, action: "done" | "confirm" | "decline" | "cancel") => void }) {
   const state: Record<ServiceJob["status"], string> = {
-    held: j.buying ? "Booked: waiting for them" : "Booked: do it, then mark it done",
-    done: j.buying ? "They say it's done: confirm to pay" : "Done: waiting for them to confirm",
+    held: j.buying ? "Waiting for them" : "To do",
+    done: j.buying ? "Done? Confirm to pay" : "Waiting for them to confirm",
     paid: "Paid",
-    refunded: "Cancelled, money back",
+    refunded: "Cancelled, refunded",
   };
   const btn = "h-8 rounded-full px-3 text-xs font-semibold disabled:opacity-40";
   return (
@@ -244,7 +242,7 @@ function JobRow({ j, busy, onJob }: { j: ServiceJob; busy: boolean; onJob: (id: 
       <div className="mt-2 flex justify-end gap-2">
         {j.buying && (j.status === "held" || j.status === "done") && (
           <button disabled={busy} onClick={() => onJob(j.id, "confirm")} className={`${btn} bg-ink text-white`}>
-            It&apos;s done: pay
+            Done: pay
           </button>
         )}
         {j.buying && j.status === "held" && (
