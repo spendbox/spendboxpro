@@ -36,7 +36,7 @@ export function PropertyCard({ info, market, jobs, onClose }: { info: PropertyIn
   const [name, setName] = useState(info.kind ? info.title : "");
   return (
     <Sheet onClose={onClose} wide>
-      <div className="flex items-start justify-between gap-3">
+      <div className="sticky -top-5 z-10 -mx-5 -mt-5 flex items-start justify-between gap-3 bg-panel/95 px-5 pb-2 pt-5 backdrop-blur">
         <div className="min-w-0">
           <h2 className="font-display text-lg font-extrabold leading-tight">
             {info.title}
@@ -51,7 +51,7 @@ export function PropertyCard({ info, market, jobs, onClose }: { info: PropertyIn
           {info.kind && <p className="mt-0.5 text-sm text-muted">{info.kind}</p>}
           {info.estate && <p className="mt-0.5 text-sm text-muted">In {info.estate} (a gated estate)</p>}
         </div>
-        <button onClick={onClose} className="grid size-8 shrink-0 place-items-center rounded-full hover:bg-ink/5" aria-label="Close">
+        <button onClick={onClose} className="grid size-9 shrink-0 place-items-center rounded-full bg-ink/5 hover:bg-ink/10" aria-label="Close">
           <X className="size-4" />
         </button>
       </div>
@@ -62,11 +62,11 @@ export function PropertyCard({ info, market, jobs, onClose }: { info: PropertyIn
           <span className="font-display text-2xl font-extrabold tabular-nums">₥{fmt(info.mint)}</span>
         </div>
         <p className="text-right text-xs text-muted">about {info.local}</p>
-        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-          <span>Land ₥{fmt(info.landMint)}</span>
-          <span>Building ₥{fmt(info.buildingMint)}</span>
-          <span>Plot {fmt(info.plot)} m²</span>
-          {info.storeys > 0 && <span>{info.storeys} {info.storeys === 1 ? "storey" : "storeys"}</span>}
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          <Pill label="Land" value={`₥${fmt(info.landMint)}`} />
+          <Pill label="Building" value={`₥${fmt(info.buildingMint)}`} />
+          <Pill label="Plot" value={`${fmt(info.plot)} m²`} />
+          {info.storeys > 0 && <Pill label={info.storeys === 1 ? "Storey" : "Storeys"} value={String(info.storeys)} />}
         </div>
       </div>
 
@@ -134,6 +134,16 @@ export function PropertyCard({ info, market, jobs, onClose }: { info: PropertyIn
       )}
       {!market && <p className="mt-4 text-center text-xs text-muted">Sign in to buy property.</p>}
     </Sheet>
+  );
+}
+
+/** A small labelled chip: "Land ₥24,058". */
+function Pill({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="inline-flex items-baseline gap-1.5 rounded-full bg-panel px-3 py-1 text-xs shadow-sm ring-1 ring-ink/5">
+      <span className="text-muted">{label}</span>
+      <span className="font-semibold tabular-nums">{value}</span>
+    </span>
   );
 }
 

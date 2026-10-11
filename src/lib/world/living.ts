@@ -132,8 +132,19 @@ export const PROCEDURES: Procedure[] = [
 
 // ---------------------------------------------------------------- learning
 
+/** What kind of course: a short course, a diploma or certificate, a degree, a licence. */
+export type CourseKind = "short" | "diploma" | "degree" | "licence";
+
+export const COURSE_KINDS: { kind: CourseKind; label: string; what: string }[] = [
+  { kind: "short", label: "Short courses", what: "A few game days: a quick step up in a skill" },
+  { kind: "diploma", label: "Diplomas and certificates", what: "Professional qualifications that open skilled jobs" },
+  { kind: "degree", label: "Degrees", what: "Long, and the way into the top jobs" },
+  { kind: "licence", label: "Licences", what: "Training for a licensed job" },
+];
+
 export type Course = {
   id: string;
+  kind: CourseKind;
   title: string;
   /** Who runs it: public (cheap, the fee goes to the state) or private. */
   public: boolean;
@@ -147,15 +158,15 @@ export type Course = {
 };
 
 export const COURSES: Course[] = [
-  { id: "sales", title: "Sales and customer service", public: false, fee: 30_000, days: 5, skill: "retail", grants: 20 },
-  { id: "computer", title: "Computer skills", public: false, fee: 50_000, days: 10, skill: "office", grants: 20 },
-  { id: "catering", title: "Catering and hotel management", public: true, fee: 120_000, days: 30, skill: "hospitality", grants: 45 },
-  { id: "teaching", title: "Teacher training (NCE)", public: true, fee: 150_000, days: 60, skill: "education", grants: 20, cert: "teaching" },
-  { id: "ican", title: "Chartered accountancy (ICAN)", public: false, fee: 400_000, days: 60, skill: "finance", grants: 45, cert: "ican" },
-  { id: "nursing", title: "Nursing diploma", public: true, fee: 300_000, days: 90, skill: "health", grants: 45, cert: "nursing" },
-  { id: "masters", title: "Master's degree", public: true, fee: 600_000, days: 120, skill: "education", grants: 125, cert: "masters" },
-  { id: "mbbs", title: "Medicine (MBBS)", public: true, fee: 1_500_000, days: 360, skill: "health", grants: 180, cert: "mbbs" },
-  { id: "pilot", title: "Pilot licence", public: false, fee: 30_000_000, days: 180, skill: "transport", grants: 320, cert: "pilot" },
+  { id: "sales", kind: "short", title: "Sales and customer service", public: false, fee: 30_000, days: 5, skill: "retail", grants: 20 },
+  { id: "computer", kind: "short", title: "Computer skills", public: false, fee: 50_000, days: 10, skill: "office", grants: 20 },
+  { id: "catering", kind: "diploma", title: "Catering and hotel management", public: true, fee: 120_000, days: 30, skill: "hospitality", grants: 45 },
+  { id: "teaching", kind: "diploma", title: "Teacher training (NCE)", public: true, fee: 150_000, days: 60, skill: "education", grants: 20, cert: "teaching" },
+  { id: "ican", kind: "diploma", title: "Chartered accountancy (ICAN)", public: false, fee: 400_000, days: 60, skill: "finance", grants: 45, cert: "ican" },
+  { id: "nursing", kind: "diploma", title: "Nursing diploma", public: true, fee: 300_000, days: 90, skill: "health", grants: 45, cert: "nursing" },
+  { id: "masters", kind: "degree", title: "Master's degree", public: true, fee: 600_000, days: 120, skill: "education", grants: 125, cert: "masters" },
+  { id: "mbbs", kind: "degree", title: "Medicine (MBBS)", public: true, fee: 1_500_000, days: 360, skill: "health", grants: 180, cert: "mbbs" },
+  { id: "pilot", kind: "licence", title: "Pilot licence", public: false, fee: 30_000_000, days: 180, skill: "transport", grants: 320, cert: "pilot" },
 ];
 
 export const CERT_LABEL: Record<Cert, string> = {

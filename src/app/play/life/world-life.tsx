@@ -59,6 +59,7 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
   const [neighbours, setNeighbours] = useState<Neighbour[] | null>(null);
   const [status, setStatus] = useState<LifeStatus | null>(null);
   const [lifeOpen, setLifeOpen] = useState(false);
+  const [confirm, setConfirm] = useState<{ title: string; text: string; yes: string; run: () => void } | null>(null);
 
   useEffect(() => {
     if (!signedIn || !regionId) return;
@@ -121,13 +122,25 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
           prices: region.region.prices,
           homeUnit,
           skills: work?.skills ?? {},
+          certs: (status?.courses ?? []).filter((c) => c.done && c.cert).map((c) => c.cert!),
           current: work?.job ? { place: work.job.place, job: work.job.job } : null,
           busy,
-          onTake: (wp, job, mode) =>
-            act(
-              () => api.takeJob(wp.id, job.job, mode),
-              (r) => `You're a ${job.title} now. Pay builds up every game day (2 hours).${paid(r.pay)}`,
-            ),
+          onTake: (wp, job, mode) => {
+            const take = () =>
+              act(
+                () => api.takeJob(wp.id, job.job, mode),
+                (r) => `You're a ${job.title} now. Pay builds up every game day (2 hours).${paid(r.pay)}`,
+              );
+            const now = work?.job;
+            if (!now) return void take();
+            // One main job at a time: say so before swapping.
+            setConfirm({
+              title: "Switch jobs?",
+              text: `You're a ${now.title} at ${now.placeName}. You can have one main job, so becoming a ${job.title} means leaving it. The pay you've earned there is collected first.`,
+              yes: `Switch to ${job.title}`,
+              run: take,
+            });
+          },
         }
       : undefined;
 
@@ -205,7 +218,7 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
       {homeOpen && homeSpot && <HomeCard label={homeLabel} area={region.areaAt(homeSpot.x, homeSpot.z)} neighbours={neighbours} onClose={() => setHomeOpen(false)} />}
       {place && (
         <Sheet onClose={() => setPlace(null)} wide>
-          <div className="flex items-start justify-between gap-3">
+          <div className="sticky -top-5 z-10 -mx-5 -mt-5 flex items-start justify-between gap-3 bg-panel/95 px-5 pb-2 pt-5 backdrop-blur">
             <div className="min-w-0">
               <h2 className="font-display text-lg font-extrabold leading-tight">{place.name}</h2>
               <p className="mt-1 flex items-center gap-1 text-sm text-muted">
@@ -229,7 +242,14 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
           plan={plan}
           ctx={jobs}
           onCollect={() => act(() => api.collectPay(), (r) => `+₥${money(r.pay?.net ?? 0)} pay, after ₥${money(r.pay?.tax ?? 0)} income tax and ₥${money(r.pay?.fares ?? 0)} fares.`)}
-          onMode={(mode) => act(() => api.setCommute(mode), (r) => `${mode === "walk" ? "You'll walk to work" : `You'll go by ${COMMUTE_LABEL[mode].toLowerCase()}`} from now on.${paid(r.pay)}`)}
+          onMode={(mode, perDay) =>
+            setConfirm({
+              title: mode === "walk" ? "Walk to work from now on?" : `Go by ${COMMUTE_LABEL[mode].toLowerCase()} from now on?`,
+              text: `${perDay ? `It costs ₥${money(perDay)} a game day, there and back, from your Travel pot.` : "It's free."} Pay so far is settled at your old fare first.`,
+              yes: mode === "walk" ? "Walk from now on" : `Go by ${COMMUTE_LABEL[mode].toLowerCase()}`,
+              run: () => act(() => api.setCommute(mode), (r) => `${mode === "walk" ? "You'll walk to work" : `You'll go by ${COMMUTE_LABEL[mode].toLowerCase()}`} from now on.${paid(r.pay)}`),
+            })
+          }
           onQuit={() => act(() => api.quitJob(), (r) => `You've left your job.${paid(r.pay)}`)}
           onShow={(id) => {
             const s = ownedSpot(id);
@@ -285,6 +305,29 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
             setAssetsOpen(false);
           }}
         />
+      )}
+      {confirm && (
+        <div className="fixed inset-0 z-[60] grid place-items-center bg-ink/40 p-4" onClick={() => setConfirm(null)}>
+          <div className="w-full max-w-xs rounded-3xl bg-panel p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-display text-lg font-extrabold">{confirm.title}</h3>
+            <p className="mt-2 text-sm text-muted">{confirm.text}</p>
+            <div className="mt-4 flex gap-2">
+              <button onClick={() => setConfirm(null)} className="h-10 flex-1 rounded-full bg-ink/5 text-sm font-semibold">
+                Not now
+              </button>
+              <button
+                onClick={() => {
+                  const run = confirm.run;
+                  setConfirm(null);
+                  run();
+                }}
+                className="h-10 flex-1 rounded-full bg-ink px-3 text-sm font-semibold text-white"
+              >
+                {confirm.yes}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       {lifeOpen && (
         <LifeSheet

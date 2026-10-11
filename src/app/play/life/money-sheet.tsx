@@ -54,8 +54,7 @@ export function MoneySheet({
   const wallet = status?.wallet ?? assets.coins;
   const worth = wallet + pots + property;
   return (
-    <Sheet onClose={onClose} wide>
-      <h2 className="font-display text-xl font-extrabold">Money</h2>
+    <Sheet onClose={onClose} wide title="Money">
       <div className="mt-3 flex gap-1 rounded-full bg-ink/5 p-1">
         {TABS.map((t) => (
           <button
