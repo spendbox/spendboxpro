@@ -85,14 +85,29 @@ export function dayPlan(d: DayInput): DayPlan {
   if (ex.hours > 0) blocks.push({ id: "exercise", label: ex.label, hours: ex.hours });
   const busy = blocks.reduce((t, b) => t + b.hours, 0);
   const free = Math.max(0, DAY_HOURS - busy);
+  const effects = dayEffects(d, busy, free);
+  const sum = (k: "body" | "mind") => Math.round(effects.reduce((t, e) => t + e[k], 0) * 100) / 100;
+  return { blocks, busy, free, fits: free >= MIN_FREE_HOURS, body: sum("body"), mind: sum("mind") };
+}
+
+/** What adds to your body and mind each game day, and what wears them down (they add up to dayPlan's). */
+export type DayEffect = { label: string; body: number; mind: number };
+
+function dayEffects(d: DayInput, busy: number, free: number): DayEffect[] {
+  const ex = EXERCISE[d.exercise];
   const working = busy - SLEEP_HOURS - ex.hours;
-  let mind = free >= 6 ? 2 : free >= 4 ? 1 : free >= 2 ? 0 : -1.5;
-  if (working > LONG_DAY) mind -= 1;
-  if (d.owing) mind -= 1;
-  mind += ex.mind;
-  let body = -BODY_DECAY + ex.body;
-  if (working > LONG_DAY) body -= 0.5;
-  return { blocks, busy, free, fits: free >= MIN_FREE_HOURS, body: Math.round(body * 100) / 100, mind: Math.round(mind * 100) / 100 };
+  const out: DayEffect[] = [{ label: "Daily wear and tear", body: -BODY_DECAY, mind: 0 }];
+  out.push({ label: `Free time (${Math.round(free * 10) / 10}h a day)`, body: 0, mind: free >= 6 ? 2 : free >= 4 ? 1 : free >= 2 ? 0 : -1.5 });
+  if (ex.hours > 0) out.push({ label: ex.label, body: ex.body, mind: ex.mind });
+  if (working > LONG_DAY) out.push({ label: "Long working days", body: -0.5, mind: -1 });
+  if (d.owing) out.push({ label: "Unpaid bills", body: 0, mind: -1 });
+  return out;
+}
+
+/** The same, for showing: each thing that adds to or wears down your body or mind. */
+export function dayEffectsOf(d: DayInput): DayEffect[] {
+  const p = dayPlan(d);
+  return dayEffects(d, p.busy, p.free);
 }
 
 export function mindWord(mind: number) {

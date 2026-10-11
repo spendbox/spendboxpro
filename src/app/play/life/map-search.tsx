@@ -28,9 +28,11 @@ export function searchable(region: RegionMap, mine: AssetUnit[]): SearchHit[] {
 }
 
 /** The search box on a real map: type a place, pick it, and the camera flies there. */
-export function MapSearch({ region, mine, onPick }: { region: RegionMap; mine: AssetUnit[]; onPick: (hit: SearchHit) => void }) {
+export function MapSearch({ region, mine, onPick, compact }: { region: RegionMap; mine: AssetUnit[]; onPick: (hit: SearchHit) => void; compact?: boolean }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
+  // Compact: a round search button that opens into the box (on a computer, always the box).
+  const [shown, setShown] = useState(false);
   const all = useMemo(() => searchable(region, mine), [region, mine]);
   const hits = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -40,57 +42,73 @@ export function MapSearch({ region, mine, onPick }: { region: RegionMap; mine: A
     const seen = new Set<string>();
     return [...starts, ...has].filter((h) => !seen.has(h.label + h.note) && seen.add(h.label + h.note)).slice(0, 8);
   }, [all, q]);
-  return (
-    <div className="pointer-events-auto relative w-[min(20rem,calc(100vw-1.5rem))]">
-      <label className="glass flex h-9 items-center gap-2 rounded-full px-3 text-sm">
-        <Search className="size-4 shrink-0 text-muted" />
-        <input
-          value={q}
-          onChange={(e) => {
-            setQ(e.target.value);
-            setOpen(true);
-          }}
-          onFocus={() => setOpen(true)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && hits[0]) {
-              onPick(hits[0]);
-              setOpen(false);
-            }
-            if (e.key === "Escape") setOpen(false);
-          }}
-          placeholder="Search Lagos: Yaba, National Theatre…"
-          className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted"
-          aria-label="Search the map"
-        />
-        {q && (
-          <button onClick={() => setQ("")} aria-label="Clear">
-            <X className="size-4 text-muted" />
-          </button>
+  if (compact && !shown)
+    return (
+      <>
+        <button onClick={() => setShown(true)} className="glass pointer-events-auto grid size-9 place-items-center rounded-full sm:hidden" aria-label="Search the map">
+          <Search className="size-4" />
+        </button>
+        <div className="max-sm:hidden">{box()}</div>
+      </>
+    );
+  return box();
+
+  function box() {
+    return (
+      <div className={`pointer-events-auto relative ${compact ? "w-[min(18rem,calc(100vw-1.5rem))]" : "w-[min(20rem,calc(100vw-1.5rem))]"}`}>
+        <label className="glass flex h-9 items-center gap-2 rounded-full px-3 text-sm">
+          <Search className="size-4 shrink-0 text-muted" />
+          <input
+            value={q}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setOpen(true);
+            }}
+            onFocus={() => setOpen(true)}
+            onBlur={() => !q && setShown(false)}
+            autoFocus={shown}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && hits[0]) {
+                onPick(hits[0]);
+                setOpen(false);
+              }
+              if (e.key === "Escape") setOpen(false);
+            }}
+            placeholder="Search Lagos: Yaba, National Theatre…"
+            className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted"
+            aria-label="Search the map"
+          />
+          {q && (
+            <button onClick={() => setQ("")} aria-label="Clear">
+              <X className="size-4 text-muted" />
+            </button>
+          )}
+        </label>
+        {open && hits.length > 0 && (
+          <ul className="absolute inset-x-0 top-11 z-20 overflow-hidden rounded-2xl bg-panel shadow-xl ring-1 ring-ink/10">
+            {hits.map((h) => {
+              const Icon = ICON[h.kind];
+              return (
+                <li key={h.label + h.note + h.x}>
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      onPick(h);
+                      setQ(h.label);
+                      setOpen(false);
+                    }}
+                    className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-ink/5"
+                  >
+                    <Icon className="size-4 shrink-0 text-muted" />
+                    <span className="min-w-0 flex-1 truncate">{h.label}</span>
+                    <span className="shrink-0 text-xs text-muted">{h.note}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
         )}
-      </label>
-      {open && hits.length > 0 && (
-        <ul className="absolute inset-x-0 top-11 z-20 overflow-hidden rounded-2xl bg-panel shadow-xl ring-1 ring-ink/10">
-          {hits.map((h) => {
-            const Icon = ICON[h.kind];
-            return (
-              <li key={h.label + h.note + h.x}>
-                <button
-                  onClick={() => {
-                    onPick(h);
-                    setQ(h.label);
-                    setOpen(false);
-                  }}
-                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-ink/5"
-                >
-                  <Icon className="size-4 shrink-0 text-muted" />
-                  <span className="min-w-0 flex-1 truncate">{h.label}</span>
-                  <span className="shrink-0 text-xs text-muted">{h.note}</span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
-  );
+      </div>
+    );
+  }
 }

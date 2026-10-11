@@ -16,7 +16,7 @@ import {
   SICK_BELOW,
   type Course,
 } from "@/lib/world/living";
-import { dayPlan, EXERCISE, EXERCISES, mindWord, STRESSED_BELOW, type DayInput, type Exercise } from "@/lib/world/day";
+import { dayEffectsOf, dayPlan, EXERCISE, EXERCISES, mindWord, STRESSED_BELOW, type DayInput, type Exercise } from "@/lib/world/day";
 import type { LifeStatus } from "@/lib/world/property-api";
 import { mintLocal } from "@/lib/world/value";
 import { GAME_DAY_HOURS, skillLevel, WORK_SKILLS, type Cert } from "@/lib/world/work";
@@ -92,6 +92,8 @@ export function LifeSheet({
   const tone = health >= AUTO_CARE_BELOW ? "#2f9e44" : health >= SICK_BELOW ? "#f08c00" : "#e03131";
 
   const [kind, setKind] = useState(COURSE_KINDS[0].kind);
+  const [explain, setExplain] = useState<"body" | "mind" | null>(null);
+  const effects = day ? dayEffectsOf(day).filter((e) => (explain === "body" ? e.body : e.mind) !== 0) : [];
   const exercise = status?.exercise ?? "none";
 
   return (
@@ -111,9 +113,41 @@ export function LifeSheet({
       {tab === "health" && (
         <div className="mt-4">
           <div className="grid grid-cols-2 gap-2">
-            <Meter label="Body" value={health} word={healthWord(health)} colour={tone} change={plan?.body} />
-            <Meter label="Mind" value={mind} word={mindWord(mind)} colour={mind >= 50 ? "#7048e8" : mind >= STRESSED_BELOW ? "#f08c00" : "#e03131"} change={plan?.mind} />
+            <Meter label="Body" value={health} word={healthWord(health)} colour={tone} change={plan?.body} on={explain === "body"} onTap={() => setExplain(explain === "body" ? null : "body")} />
+            <Meter
+              label="Mind"
+              value={mind}
+              word={mindWord(mind)}
+              colour={mind >= 50 ? "#7048e8" : mind >= STRESSED_BELOW ? "#f08c00" : "#e03131"}
+              change={plan?.mind}
+              on={explain === "mind"}
+              onTap={() => setExplain(explain === "mind" ? null : "mind")}
+            />
           </div>
+          {explain ? (
+            <div className="mt-2 rounded-2xl bg-ink/[0.04] p-3">
+              <p className="text-xs font-semibold">Your {explain} each game day</p>
+              <ul className="mt-1.5 space-y-1">
+                {effects.map((e) => {
+                  const v = explain === "body" ? e.body : e.mind;
+                  return (
+                    <li key={e.label} className="flex justify-between gap-2 text-xs">
+                      <span>{e.label}</span>
+                      <b className={`tabular-nums ${v > 0 ? "text-me" : "text-hit"}`}>
+                        {v > 0 ? "+" : ""}
+                        {fmt(v)}
+                      </b>
+                    </li>
+                  );
+                })}
+              </ul>
+              <p className="mt-1.5 text-[11px] text-muted">
+                {explain === "body" ? "Exercise and seeing a doctor (below) build it up." : "Free time, exercise, talking to someone and a weekend away (below) build it up."}
+              </p>
+            </div>
+          ) : (
+            <p className="mt-1.5 text-center text-[11px] text-muted">Tap Body or Mind to see what adds to it and what uses it up.</p>
+          )}
           {health < SICK_BELOW && <p className="mt-2 text-xs font-semibold text-hit">{health < BEDRIDDEN_BELOW ? "Too ill to work. See a doctor." : "Unwell: half pay until you're better."}</p>}
           {mind < STRESSED_BELOW && <p className="mt-2 text-xs font-semibold text-hit">Stressed: interviews are harder. Rest or talk to someone.</p>}
           {recovering && (
@@ -226,9 +260,9 @@ export function LifeSheet({
   );
 }
 
-function Meter({ label, value, word, colour, change }: { label: string; value: number; word: string; colour: string; change?: number }) {
+function Meter({ label, value, word, colour, change, on, onTap }: { label: string; value: number; word: string; colour: string; change?: number; on?: boolean; onTap?: () => void }) {
   return (
-    <div className="flex items-center gap-3 rounded-3xl bg-ink/[0.04] p-3">
+    <button onClick={onTap} className={`flex items-center gap-3 rounded-3xl p-3 text-left ${on ? "bg-ink/[0.08] ring-2 ring-ink/20" : "bg-ink/[0.04]"}`}>
       <div className="relative grid size-14 shrink-0 place-items-center">
         <svg viewBox="0 0 36 36" className="absolute inset-0 -rotate-90">
           <circle cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" strokeWidth="3.5" className="text-ink/10" />
@@ -246,7 +280,7 @@ function Meter({ label, value, word, colour, change }: { label: string; value: n
           </p>
         )}
       </div>
-    </div>
+    </button>
   );
 }
 
