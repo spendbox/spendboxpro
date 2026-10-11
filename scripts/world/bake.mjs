@@ -369,7 +369,7 @@ if (!fromFiles) {
     );
     rail = els
       .filter((e) => e.type === "way" && e.geometry && lengthOf(e.geometry) > 30)
-      .map((e) => ({ id: `osm-w${e.id}`, name: e.tags.name ?? e.tags.ref ?? "Railway", bridge: isBridge(e.tags), path: shape(e.geometry, 0.05) }));
+      .map((e) => ({ id: `osm-w${e.id}`, name: e.tags.name ?? e.tags.ref ?? "Railway", bridge: !!isBridge(e.tags), path: shape(e.geometry, 0.05) }));
     const seen = new Set();
     stations = els
       .filter((e) => e.type === "node" && e.tags.name && !seen.has(e.tags.name) && seen.add(e.tags.name))
@@ -379,7 +379,7 @@ if (!fromFiles) {
   }
   try {
     // 0 zebra, 1 with its own traffic lights, 2 marked (ladder), 3 with a refuge island.
-    const els = overpassPieces("crossings", (b) => `  node["highway"="crossing"](${b});`, 2, 1);
+    const els = overpassPieces("crossings", (b) => `  node["highway"="crossing"](${b});`, 4, 2);
     crossings = els.map((e) => {
       const t = e.tags ?? {};
       const type = t["crossing:island"] === "yes" ? 3 : t.crossing === "traffic_signals" ? 1 : t.crossing === "zebra" || t.crossing_ref === "zebra" ? 0 : 2;

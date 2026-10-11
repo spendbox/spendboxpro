@@ -274,7 +274,7 @@ export function compileRegion(region: Region): RegionMap {
   const overWater = (x: number, z: number) => waterAt(x, z) > 0;
   const lines: SpanLine[] = bridgeLines.map((pts) => ({ kind: "road", pts, raised: true, overWater, major: majorAt(pts[Math.floor(pts.length / 2)]) }));
   for (const raised of [true, false]) {
-    for (const pts of chainLines(region.rail.filter((r) => r.bridge === raised).map((r) => r.path.map(([lat, lon]) => at({ lat, lon }))))) {
+    for (const pts of chainLines(region.rail.filter((r) => !!r.bridge === raised).map((r) => r.path.map(([lat, lon]) => at({ lat, lon }))))) {
       lines.push({ kind: "rail", pts, raised, overWater, major: false });
     }
   }

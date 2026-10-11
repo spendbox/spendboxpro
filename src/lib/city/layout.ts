@@ -1689,10 +1689,11 @@ function crossingOf(plan: CityPlan, x: number, z: number, mask: number): number 
   if (real !== undefined) return school ? 4 : real;
   const road = region.roadAt(x, z);
   const busy = densityAt(plan, x, z);
-  if (school && hash(x, z, plan.seed + 1601) < 0.5) return 4;
-  if (!road || busy < 0.18 || hash(x, z, plan.seed + 1602) > 0.06) return undefined;
+  if (school && hash(x, z, plan.seed + 1601) < 0.3) return 4;
+  // More often on the main roads, now and then on busy side streets.
+  if (busy < 0.1 || hash(x, z, plan.seed + 1602) > (road ? 0.12 : 0.05)) return undefined;
   // Raised crossings on quieter streets, lights on the big roads, the rest painted.
-  const big = road.kind === "motorway" || road.kind === "trunk" || road.kind === "primary";
+  const big = !!road && (road.kind === "motorway" || road.kind === "trunk" || road.kind === "primary");
   const roll = hash(z, x, plan.seed + 1603);
   return big ? (roll < 0.5 ? 1 : roll < 0.8 ? 3 : 0) : roll < 0.3 ? 5 : roll < 0.7 ? 0 : 2;
 }

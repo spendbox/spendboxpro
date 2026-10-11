@@ -58,7 +58,7 @@ export type Landmark = {
 };
 
 /** A stretch of railway with its real curves (raised on a viaduct where `bridge`). */
-export type Rail = { id: string; name: string; bridge: boolean; path: Path };
+export type Rail = { id: string; name: string; bridge?: boolean; path: Path };
 
 /** A railway station: its name and where it is (it's built along the nearest railway). */
 export type Station = { name: string; at: [number, number] };

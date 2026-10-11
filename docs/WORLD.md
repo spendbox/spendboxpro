@@ -63,8 +63,20 @@ If two landmarks overlap, the later one is left out and the tests report it.
   neighbourhoods come from OpenStreetMap's place names; it doesn't have every well-known name (it
   has no "Yaba", only the local government areas), so missing ones go in `corrections.ts`
   (`kind: "area"`), and the districts in `districts.ts` fill in the rest.
-- **Flyovers:** wherever the map raises a road over land (interchanges, bridge approaches), a deck
-  on piers with ramps down to the street.
+- **Bridges and flyovers** (140 from the map, over water and over land, Third Mainland Bridge
+  included) and **railways** (the Blue Line on its viaduct, the Red Line and the Lagos–Ibadan line
+  on the ground) follow their real curves as smooth decks: up a ramp off the road, along on piers,
+  down again (`src/lib/world/spans.ts`, drawn by `src/app/play/city/spans-kit.ts`). The ground
+  under a deck, along a railway and round a station is kept clear, so nothing passes through a
+  building. The water under a bridge stays open. Bridges show from far away too.
+- **Stations:** the 12 the map has (Marina, National Theatre, Iganmu, Alaba, Mile 2 on the Blue
+  Line; Oyingbo, Mobolaji Johnson, Yaba, Mushin, Oshodi, Ikeja, Agege on the Red Line), each
+  lined up with its line: platforms, canopies, a hall, stairs and a lift up to raised platforms.
+- **Pedestrian crossings**, six kinds: zebra, with their own lights, ladder, with a refuge island,
+  yellow school crossings by schools, raised. Where the map has them, and on busy streets.
+- **Traffic** follows how busy each road is (the area's crowd and the kind of road), with more
+  cars and longer jams in the Lagos rush hours. Later it will also follow how many players live
+  and visit there.
 - **Footbridges:** the 189 from the map over the roads, plus extras along the expressways.
 - **Wide roads:** where a dual carriageway comes out two tiles wide, it's plain tarmac (no traffic
   lights or crossings in the middle of it).

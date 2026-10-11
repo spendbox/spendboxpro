@@ -89,14 +89,14 @@ export function stationParts(st: StationPlan, add: AddFn) {
     P("building", 0, side * 0.27, y + 0.36, 1.5, 0.025, 0.26, side > 0 ? 0x1c7ed6 : 0x1971c2);
   }
   // The station hall on the ground beside the line, with glass and a name board.
-  P("building", 0, 0.62, 0.06, 0.9, 0.42, 0.32, 0xf1f3f5);
-  P("glass", 0, 0.46, 0.12, 0.8, 0.22, 0.01, 0x9ec5fe);
-  P("building", 0, 0.62, 0.48, 0.96, 0.04, 0.38, 0x1c7ed6);
-  P("paint", 0, 0.455, 0.36, 0.5, 0.06, 0.004, 0xffffff);
+  P("building", 0, 0.72, 0.06, 0.9, 0.42, 0.32, 0xf1f3f5);
+  P("glass", 0, 0.56, 0.12, 0.8, 0.22, 0.01, 0x9ec5fe);
+  P("building", 0, 0.72, 0.48, 0.96, 0.04, 0.38, 0x1c7ed6);
+  P("paint", 0, 0.555, 0.36, 0.5, 0.06, 0.004, 0xffffff);
   if (st.raised) {
     // Stairs and a lift up to the platform.
-    P("building", 0.55, 0.42, 0.06, 0.14, 0.5, 0.14, 0xadb5bd);
-    P("glass", 0.55, 0.42, 0.1, 0.145, 0.4, 0.145, 0x9ec5fe);
+    P("building", 0.55, 0.48, 0.06, 0.14, 0.5, 0.14, 0xadb5bd);
+    P("glass", 0.55, 0.48, 0.1, 0.145, 0.4, 0.145, 0x9ec5fe);
   }
 }
 
