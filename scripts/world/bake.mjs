@@ -48,7 +48,7 @@ function overpass(name, query) {
       writeFileSync(file, out);
       return JSON.parse(out.toString("utf8"));
     } catch (e) {
-      if (attempt >= 30) throw e;
+      if (attempt >= 8) throw e;
       const wait = Math.min(60, 5 * 2 ** attempt);
       console.log(`  failed (${String(e.message).split("\n").pop()}), trying again in ${wait} s`);
       execFileSync("sleep", [String(wait)]);
@@ -353,27 +353,37 @@ const pattern = (l) => l.osm ?? l.name.replace(/\s*[(,].*$/, "").replace(/[.*+?^
 const wantedMarks = fromFiles ? [] : region.landmarks.filter((l) => l.approx);
 const found = {};
 const missed = [];
-if (wantedMarks.length) {
-  const marks = overpass(
-    "landmarks",
-    `[out:json][timeout:300];
+// Asked about a few at a time (a busy server turns down one big question). A batch that still
+// fails is skipped: those landmarks stay where landmarks.ts puts them, and the bake carries on.
+const marks = [];
+for (let k = 0; k < wantedMarks.length; k += 6) {
+  const batch = wantedMarks.slice(k, k + 6);
+  try {
+    marks.push(
+      ...overpass(
+        `landmarks-${k / 6}`,
+        `[out:json][timeout:120];
 (
-${wantedMarks.map((l) => `  nwr(around:2500,${l.at.lat},${l.at.lon})["name"~"${pattern(l)}",i];`).join("\n")}
+${batch.map((l) => `  nwr(around:2500,${l.at.lat},${l.at.lon})["name"~"${pattern(l)}",i];`).join("\n")}
 );
 out center tags;`,
-  );
-  for (const l of wantedMarks) {
-    const re = new RegExp(pattern(l), "i");
-    let best = null;
-    for (const e of marks.elements) {
-      const p = e.type === "node" ? { lat: e.lat, lon: e.lon } : e.center;
-      if (!p || !re.test(e.tags?.name ?? "")) continue;
-      const d = metres(l.at, p);
-      if (d <= 2500 && (!best || d < best.d)) best = { d, p };
-    }
-    if (best) found[l.id] = { lat: +best.p.lat.toFixed(5), lon: +best.p.lon.toFixed(5) };
-    else missed.push(l.name);
+      ).elements,
+    );
+  } catch {
+    console.log(`  couldn't look up: ${batch.map((l) => l.name).join(", ")}`);
   }
+}
+for (const l of wantedMarks) {
+  const re = new RegExp(pattern(l), "i");
+  let best = null;
+  for (const e of marks) {
+    const p = e.type === "node" ? { lat: e.lat, lon: e.lon } : e.center;
+    if (!p || !re.test(e.tags?.name ?? "")) continue;
+    const d = metres(l.at, p);
+    if (d <= 2500 && (!best || d < best.d)) best = { d, p };
+  }
+  if (best) found[l.id] = { lat: +best.p.lat.toFixed(5), lon: +best.p.lon.toFixed(5) };
+  else missed.push(l.name);
 }
 
 // ---------------------------------------------------------------- write it out
