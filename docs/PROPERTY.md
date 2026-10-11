@@ -202,9 +202,9 @@ Only ever a share of the ad revenue the game actually earns, never new money:
   budget of ₥5,000 could buy any of about 41,000 homes (mostly rooms), so ₥5,000 looks right.
 
 Still to do in step 1:
-1. Every building and unit gets a permanent identity on the real map (not tied to hourly rounds).
-2. The building recipe: many kinds, floors and units, states (uncompleted and so on).
-3. The value formula (land + building) and the price tables for Lagos.
+1. Tapping a property shows its units, each one's value, and what it could earn.
+2. Owner to check the Lagos prices (`districts.ts`, `prices.ts`) against what they know.
+3. Gated estates (a whole block of matching houses inside one wall) and plazas across joined lots.
 
 **Step 2: the start of a life**
 4. The search bar: places, addresses, neighbourhoods, properties; it flies the camera there.
