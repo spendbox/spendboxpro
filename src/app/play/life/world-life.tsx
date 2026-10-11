@@ -95,6 +95,7 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
         <StartLife
           place={region.region.name}
           budget={life ? coins : budget}
+          prices={region.region.prices}
           started={!!life}
           busy={busy}
           onStart={() => act(() => api.startLife(region.region.id), () => null)}

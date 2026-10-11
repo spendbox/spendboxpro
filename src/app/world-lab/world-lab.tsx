@@ -17,7 +17,7 @@ let lab: ReturnType<typeof makeLabApi> | null = null;
 const labApi = () => (lab ??= makeLabApi(BUDGET));
 const noApi = () => null;
 /** The lab's pretend starting budget (the real one is the database's start_grant). */
-const BUDGET = 5000;
+const BUDGET = 60_000;
 
 export function WorldLab({ region }: { region: string }) {
   const [area, setArea] = useState<string | null>(null);

@@ -368,7 +368,7 @@ export function Game({
     api: PROPERTY_API,
     regionId: worldId,
     signedIn: !state.me.guest,
-    budget: 5000,
+    budget: 60_000,
     onChanged: () => startTransition(() => router.refresh()),
   });
   // The phone: the camera (a picture of the town, or a selfie) and the phone itself (gallery).

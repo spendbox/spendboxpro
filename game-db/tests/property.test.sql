@@ -40,16 +40,16 @@ begin
   perform pg_temp.fails('no buying before starting a life', 'no_life', format('select property_buy(%L, %L, %L, %L, 100, %L, 90, %L, 1)', a, 'lagos', 'lagos:5,7/0', snap, 'home', 'Flat'));
 
   v := life_start(a, 'lagos');
-  perform pg_temp.check((v->>'started')::boolean and (v->>'coins')::numeric = 5000, 'the starting budget arrives');
+  perform pg_temp.check((v->>'started')::boolean and (v->>'coins')::numeric = 60000, 'the starting budget arrives');
   v := life_start(a, 'lagos');
-  perform pg_temp.check(not (v->>'started')::boolean and (v->>'coins')::numeric = 5000, 'only once');
+  perform pg_temp.check(not (v->>'started')::boolean and (v->>'coins')::numeric = 60000, 'only once');
 
   perform pg_temp.fails('a home first', 'home_first', format('select property_buy(%L, %L, %L, %L, 100, %L, 30, %L, 1)', a, 'lagos', 'lagos:9,9/0', shop, 'shop', 'Shop 1'));
-  perform pg_temp.fails('not more than you have (price + tax)', 'not_enough', format('select property_buy(%L, %L, %L, %L, 4900, %L, 90, %L, 10)', a, 'lagos', 'lagos:5,7/0', snap, 'home', 'Flat'));
+  perform pg_temp.fails('not more than you have (price + tax)', 'not_enough', format('select property_buy(%L, %L, %L, %L, 59000, %L, 90, %L, 10)', a, 'lagos', 'lagos:5,7/0', snap, 'home', 'Flat'));
   perform pg_temp.fails('a unit id must say where it is', 'bad_unit', format('select property_buy(%L, %L, %L, %L, 100, %L, 90, %L, 1)', a, 'lagos', 'lagos:5,7', snap, 'home', 'Flat'));
 
   v := property_buy(a, 'lagos', 'lagos:5,7/0', snap, 3000, 'home', 95, 'Flat, ground floor, left', 10);
-  perform pg_temp.check((v->>'home')::boolean and (v->>'coins')::numeric = 5000 - 3000 - 90, 'bought a home: price and 3% tax');
+  perform pg_temp.check((v->>'home')::boolean and (v->>'coins')::numeric = 60000 - 3000 - 90, 'bought a home: price and 3% tax');
   perform pg_temp.check((select home_unit from lives where user_id = a) = 'lagos:5,7/0', 'it is your home');
   perform pg_temp.check((select balance from treasuries where id = 'ng-la') = 63 and (select balance from treasuries where id = 'ng') = 27, 'tax split 70/30 between Lagos State and Nigeria');
 

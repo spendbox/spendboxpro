@@ -24,12 +24,14 @@
 -- Safe to run more than once. Run after parts 1-37.
 
 insert into public.game_settings (key, value, note) values
-  ('start_grant',          5000, 'Mint to start a life on the real map with (once)'),
+  ('start_grant',         60000, 'Mint to start a life on the real map with (once)'),
   ('property_buy_tax',     0.03, 'Tax on buying property (into the treasuries)'),
   ('property_rent_tax',    0.10, 'Tax on rent (into the treasuries)'),
   ('treasury_state_share', 0.7,  'Share of each tax that goes to the state (the rest to the country)'),
   ('property_price_max',   100000000, 'Dearest unit the game will sell (a sanity check)')
 on conflict (key) do update set note = excluded.note;
+-- The first version started lives with 5,000; move that old default up (a value set by hand stays).
+update public.game_settings set value = 60000 where key = 'start_grant' and value = 5000;
 
 -- ============================================================ lives, buildings, units
 create table if not exists public.lives (

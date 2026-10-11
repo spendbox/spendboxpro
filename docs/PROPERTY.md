@@ -192,7 +192,7 @@ Only ever a share of the ad revenue the game actually earns, never new money:
    (a Yaba flat for ₥35,000 ≈ ₦50 million). Prices then make sense in every country.
 2. **How fast property earns.** Real property returns about 5–8% a year. With one game year per
    real month (see `docs/LIFE.md`), 6% a game year is 6% a real month: noticeable, not instant.
-3. **Starting budget:** ₥5,000 (about ₦7.5m): enough for a room in most of Lagos (see section 11).
+3. **Starting budget:** ₥60,000 for now (about ₦90m): a room, a flat or a small house in much of Lagos.
 4. **Ghosts and the minigames:** ghosts go completely. Suggestion for the minigames: take them
    out of the menus but keep the code, since many can come back as things to do inside places
    (darts in a bar, cards at home).
@@ -212,7 +212,7 @@ Only ever a share of the ad revenue the game actually earns, never new money:
   property's kind and value.
 - Prices today (1 mint = ₦1,500): a room from about ₥2,000–₥3,500 (₦3–5m), the middle unit about
   ₥8,600, a bungalow about ₥48,000, a top floor of an Eko Atlantic tower about ₥820,000. A starting
-  budget of ₥5,000 could buy any of about 41,000 homes (mostly rooms), so ₥5,000 looks right.
+  budget of ₥5,000 could buy any of about 41,000 homes (mostly rooms); the owner chose ₥60,000 for now.
 
 - Several shapes per kind (L, T, twin and courtyard blocks, setbacks, gabled, hipped and flat
   roofs, porches, balconies, parked cars), every building facing its street, and about 150 gated
@@ -225,7 +225,8 @@ Still to do in step 1:
 2. Plazas and estates across several joined lots, as one big building.
 
 **Step 2: the start of a life** — done (owner: run `game-db/038_property.sql`):
-- Starting budget ₥5,000 (`start_grant`), once; you must buy a home before anything else, and
+- Starting budget ₥60,000 (about ₦90m; `start_grant`), once, with the naira equivalent shown beside
+  your cash and property; you must buy a home before anything else, and
   the first home you buy is your home.
 - Every unit's price is worked out on the server from the map (never trusted from the phone);
   the database checks it's not owned and you can afford it with the 3% tax, records the sale and

@@ -5,7 +5,7 @@ import type { RegionMap } from "@/lib/world/compile";
 import { BUILDING_LABEL } from "@/lib/world/buildings";
 import { ownedSpot, type OwnedProperty } from "@/lib/world/owned";
 import type { AssetsData, AssetUnit } from "@/lib/world/property-api";
-import { toMint, valueOf } from "@/lib/world/value";
+import { mintLocal, toMint, valueOf } from "@/lib/world/value";
 import { Sheet } from "../sheet";
 
 const fmt = (n: number) => Math.round(n).toLocaleString("en-GB");
@@ -44,13 +44,14 @@ export function AssetsSheet({
   const waiting = assets.units.reduce((t, u) => t + u.waiting, 0);
   const daily = assets.units.reduce((t, u) => t + (u.let ? u.rentDay : 0), 0);
   const home = assets.life?.home_unit ?? null;
+  const prices = region.region.prices;
   return (
     <Sheet onClose={onClose} wide>
       <h2 className="font-display text-xl font-extrabold">Your assets</h2>
       <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-        <Stat label="Cash" value={`₥${fmt(assets.coins)}`} />
-        <Stat label="Property" value={`₥${fmt(worth)}`} note={paid ? `${worth >= paid ? "+" : ""}${(((worth - paid) / paid) * 100).toFixed(1)}%` : undefined} />
-        <Stat label="Rent a day" value={`₥${fmt(daily)}`} />
+        <Stat label="Cash" value={`₥${fmt(assets.coins)}`} local={mintLocal(assets.coins, prices)} />
+        <Stat label="Property" value={`₥${fmt(worth)}`} local={mintLocal(worth, prices)} note={paid ? `${worth >= paid ? "+" : ""}${(((worth - paid) / paid) * 100).toFixed(1)}%` : undefined} />
+        <Stat label="Rent a day" value={`₥${fmt(daily)}`} local={mintLocal(daily, prices)} />
       </div>
       {waiting >= 0.01 && (
         <button disabled={busy} onClick={onCollect} className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-full bg-gold font-semibold text-ink disabled:opacity-50">
@@ -86,6 +87,7 @@ export function AssetsSheet({
                 </div>
                 <div className="shrink-0 text-right">
                   <p className="text-sm font-semibold tabular-nums">₥{fmt(now)}</p>
+                  <p className="text-[11px] text-muted">{mintLocal(now, prices)}</p>
                   <p className={`flex items-center justify-end gap-0.5 text-[11px] ${gain >= 0 ? "text-me" : "text-hit"}`}>
                     <TrendingUp className="size-3" />
                     {gain >= 0 ? "+" : ""}
@@ -104,11 +106,12 @@ export function AssetsSheet({
   );
 }
 
-function Stat({ label, value, note }: { label: string; value: string; note?: string }) {
+function Stat({ label, value, local, note }: { label: string; value: string; local: string; note?: string }) {
   return (
     <div className="rounded-2xl bg-ink/[0.04] px-2 py-2.5">
       <p className="text-[11px] text-muted">{label}</p>
       <p className="font-display text-base font-extrabold tabular-nums">{value}</p>
+      <p className="text-[11px] text-muted">{local}</p>
       {note && <p className="text-[11px] text-muted">{note}</p>}
     </div>
   );
