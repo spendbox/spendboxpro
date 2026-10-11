@@ -5,6 +5,10 @@
 import type { StructureType, TileKind } from "@/lib/city/layout";
 import { type Frame, type LatLon, toTile, tileBounds } from "./geo.ts";
 import type { BakedGrid, Landmark, Region, Road, RoadKind } from "./region.ts";
+import { fillArea, line4 } from "./raster.ts";
+import { chainLines, piecesOf, placeStations, tilesUnder, type Piece, type SpanLine, type StationPlan } from "./spans.ts";
+
+export { fillArea, line4 };
 
 /** 0 land, 1 lagoon or creek, 2 sea. */
 export type Water = 0 | 1 | 2;
@@ -31,6 +35,15 @@ export type RegionMap = {
   footbridgeAt: (x: number, z: number) => boolean;
   /** A road raised over land here (a flyover, an interchange, a bridge's approach)? */
   flyoverAt: (x: number, z: number) => boolean;
+  /** The pieces of bridges, flyovers and railways to draw on this tile (by where each one's middle is). */
+  piecesAt: (x: number, z: number) => Piece[] | undefined;
+  /** Kept clear of buildings: under a deck, along a railway on the ground, or a station's site. */
+  clearAt: (x: number, z: number) => "deck" | "track" | "station" | undefined;
+  /** A station standing on this tile (its middle). */
+  stationAt: (x: number, z: number) => StationPlan | undefined;
+  stations: StationPlan[];
+  /** A pedestrian crossing from the map on this road tile: 0 zebra, 1 lights, 2 ladder, 3 island. */
+  crossingAt: (x: number, z: number) => number | undefined;
   /** What land costs at a spot, per m², in the region's currency: the districts' prices blended. */
   landPriceAt: (x: number, z: number) => number;
   /**
@@ -248,6 +261,68 @@ export function compileRegion(region: Region): RegionMap {
     if (spot) footbridges.add(tileKey(x + spot[0], z + spot[1]));
   }
 
+  // ---- bridges, flyovers and railways, with their real curves
+  const bridgeLines = chainLines(
+    [...region.roads, ...region.corrections.flatMap((c) => (c.kind === "road" ? [c.road] : []))]
+      .filter((r) => r.bridge)
+      .map((r) => r.path.map(([lat, lon]) => at({ lat, lon }))),
+  );
+  const majorAt = (p: { x: number; z: number }) => {
+    const r = roadAt(Math.round(p.x), Math.round(p.z));
+    return !!r && (r.kind === "motorway" || r.kind === "trunk");
+  };
+  const overWater = (x: number, z: number) => waterAt(x, z) > 0;
+  const lines: SpanLine[] = bridgeLines.map((pts) => ({ kind: "road", pts, raised: true, overWater, major: majorAt(pts[Math.floor(pts.length / 2)]) }));
+  for (const raised of [true, false]) {
+    for (const pts of chainLines(region.rail.filter((r) => r.bridge === raised).map((r) => r.path.map(([lat, lon]) => at({ lat, lon }))))) {
+      lines.push({ kind: "rail", pts, raised, overWater, major: false });
+    }
+  }
+  const pieces = new Map<number, Piece[]>();
+  const clear = new Map<number, "deck" | "track" | "station">();
+  for (const line of lines) {
+    for (const p of piecesOf(line)) {
+      const key = tileKey(Math.round((p.ax + p.bx) / 2), Math.round((p.az + p.bz) / 2));
+      const list = pieces.get(key);
+      if (list) list.push(p);
+      else pieces.set(key, [p]);
+    }
+    tilesUnder(line, (x, z) => {
+      if (!inside(x, z) || waterAt(x, z)) return;
+      const key = tileKey(x, z);
+      if (line.kind === "rail" && !line.raised) clear.set(key, "track");
+      else if (!clear.has(key)) clear.set(key, "deck");
+    });
+  }
+  const stations = placeStations(
+    region.stations.map((s) => ({ name: s.name, ...at({ lat: s.at[0], lon: s.at[1] }) })),
+    lines,
+  );
+  const stationTiles = new Map<number, StationPlan>();
+  for (const st of stations) {
+    stationTiles.set(tileKey(Math.round(st.x), Math.round(st.z)), st);
+    // Its site: a tile either side along the line, and the tiles beside it (the station hall).
+    const ax = Math.cos(st.ry);
+    const az = -Math.sin(st.ry);
+    for (let a = -1; a <= 1; a++) {
+      for (let c = -1; c <= 1; c++) {
+        const x = Math.round(st.x + ax * a - az * c * 0.8);
+        const z = Math.round(st.z + az * a + ax * c * 0.8);
+        if (inside(x, z) && !waterAt(x, z)) clear.set(tileKey(x, z), "station");
+      }
+    }
+  }
+
+  // ---- pedestrian crossings from the map, on the road tile under each (or right next to it)
+  const crossings = new Map<number, number>();
+  for (const [lat, lon, type] of region.crossings) {
+    const c = at({ lat, lon });
+    const x = Math.round(c.x);
+    const z = Math.round(c.z);
+    const spot = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].find(([dx, dz]) => inside(x + dx, z + dz) && road[cell(x + dx, z + dz)] && road[cell(x + dx, z + dz)] < 8);
+    if (spot) crossings.set(tileKey(x + spot[0], z + spot[1]), type);
+  }
+
   const map: RegionMap = {
     region,
     frame,
@@ -262,6 +337,11 @@ export function compileRegion(region: Region): RegionMap {
     landPriceAt,
     footbridgeAt: (x, z) => footbridges.has(tileKey(x, z)),
     flyoverAt: (x, z) => inside(x, z) && road[cell(x, z)] > 8 && !water[cell(x, z)],
+    piecesAt: (x, z) => pieces.get(tileKey(x, z)),
+    clearAt: (x, z) => clear.get(tileKey(x, z)),
+    stationAt: (x, z) => stationTiles.get(tileKey(x, z)),
+    stations,
+    crossingAt: (x, z) => crossings.get(tileKey(x, z)),
     skipped,
   };
   cache.set(region, map);
@@ -279,48 +359,4 @@ function readGrid(g: BakedGrid, inside: (x: number, z: number) => boolean, put: 
       x += n;
     }
   });
-}
-
-/**
- * Every tile a straight line between two points passes through, stepping only sideways or
- * up/down (never corner to corner), so a road drawn from it is always joined up.
- */
-export function line4(x0: number, z0: number, x1: number, z1: number, put: (x: number, z: number) => void) {
-  let x = Math.round(x0);
-  let z = Math.round(z0);
-  const tx = Math.round(x1);
-  const tz = Math.round(z1);
-  const dx = x1 - x0;
-  const dz = z1 - z0;
-  const off = (px: number, pz: number) => Math.abs(dz * (px - x0) - dx * (pz - z0));
-  put(x, z);
-  while (x !== tx || z !== tz) {
-    const sx = Math.sign(tx - x);
-    const sz = Math.sign(tz - z);
-    if (sx && sz) {
-      if (off(x + sx, z) <= off(x, z + sz)) x += sx;
-      else z += sz;
-    } else if (sx) x += sx;
-    else z += sz;
-    put(x, z);
-  }
-}
-
-/** Every tile whose middle is inside a shape (points in order round it). */
-export function fillArea(ring: { x: number; z: number }[], put: (x: number, z: number) => void) {
-  if (ring.length < 3) return;
-  const zs = ring.map((p) => p.z);
-  const zMin = Math.ceil(Math.min(...zs));
-  const zMax = Math.floor(Math.max(...zs));
-  for (let z = zMin; z <= zMax; z++) {
-    // Where each edge crosses this row, left to right; fill between pairs.
-    const cuts: number[] = [];
-    for (let k = 0; k < ring.length; k++) {
-      const a = ring[k];
-      const b = ring[(k + 1) % ring.length];
-      if ((a.z <= z && b.z > z) || (b.z <= z && a.z > z)) cuts.push(a.x + ((z - a.z) / (b.z - a.z)) * (b.x - a.x));
-    }
-    cuts.sort((p, q) => p - q);
-    for (let k = 0; k + 1 < cuts.length; k += 2) for (let x = Math.ceil(cuts[k]); x <= Math.floor(cuts[k + 1]); x++) put(x, z);
-  }
 }

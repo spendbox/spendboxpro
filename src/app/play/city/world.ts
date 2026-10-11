@@ -24,7 +24,22 @@ export type World = {
   progress: number;
   /** False while the map is still a building site (the join window). */
   revealed: boolean;
+  /**
+   * A real place: how busy a road tile is (about 0.3 a quiet street, 1 a busy road, 2+ an
+   * expressway through a crowded area), for how much traffic it gets. Null for made-up towns.
+   */
+  busy: ((x: number, z: number) => number) | null;
 };
+
+/**
+ * How much of the rush hour it is in Lagos (0 quiet, 1 the worst): mornings round 8, evenings
+ * round 6, on the real clock (UTC+1).
+ */
+export function rushHour(now = Date.now()) {
+  const h = (((now / 3_600_000 + 1) % 24) + 24) % 24;
+  const peak = (centre: number, width: number) => Math.exp(-(((h - centre) / width) ** 2));
+  return Math.max(peak(8, 1.6), peak(18, 2));
+}
 
 export function makeWorld(): World {
   return {
@@ -40,6 +55,7 @@ export function makeWorld(): World {
     rain: 0,
     progress: 0,
     revealed: true,
+    busy: null,
   };
 }
 

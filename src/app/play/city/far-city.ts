@@ -52,6 +52,14 @@ export function createFarCity(parent: THREE.Object3D) {
   blocks.userData.name = "farBlocks";
   group.add(blocks);
   // Pushed back a little in depth: each near tile's own ground always draws over it.
+  // Bridges and flyovers far off: one plain deck per piece (and its pier), so Third Mainland
+  // Bridge still crosses the lagoon from far away.
+  const MAX_DECKS = 4000;
+  const decks = new THREE.InstancedMesh(blockGeometry(), new THREE.MeshLambertMaterial({ color: 0xc9ccd1 }), MAX_DECKS);
+  decks.count = 0;
+  decks.frustumCulled = false;
+  decks.userData.name = "farDecks";
+  group.add(decks);
   const mapMat = new THREE.MeshLambertMaterial({ color: 0xffffff, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 2 });
   const map = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), mapMat);
   map.receiveShadow = true;
@@ -180,6 +188,33 @@ export function createFarCity(parent: THREE.Object3D) {
         }
       }
       blocks.count = n;
+      // Decks of bridges in the middle ring (the near ring draws its own in full).
+      let d = 0;
+      const tilt = new THREE.Quaternion();
+      const zAxis = new THREE.Vector3(0, 0, 1);
+      const yAxis = new THREE.Vector3(0, 1, 0);
+      for (let x = cx - FAR_BLOCKS; x <= cx + FAR_BLOCKS && d < MAX_DECKS; x++) {
+        for (let z = cz - FAR_BLOCKS; z <= cz + FAR_BLOCKS && d < MAX_DECKS; z++) {
+          if (Math.abs(x - cx) <= inner && Math.abs(z - cz) <= inner) continue;
+          for (const p of region.piecesAt(x, z) ?? []) {
+            if (p.ground || d >= MAX_DECKS) continue;
+            const dx = p.bx - p.ax;
+            const dz = p.bz - p.az;
+            const flat = Math.hypot(dx, dz);
+            q.setFromAxisAngle(yAxis, -Math.atan2(dz, dx)).multiply(tilt.setFromAxisAngle(zAxis, Math.atan2(p.by - p.ay, flat)));
+            m4.compose(pos.set((p.ax + p.bx) / 2, (p.ay + p.by) / 2 - 0.07, (p.az + p.bz) / 2), q, scale.set(Math.hypot(flat, p.by - p.ay) + 0.02, 0.07, p.width));
+            decks.setMatrixAt(d++, m4);
+            if (p.pier && d < MAX_DECKS) {
+              q.identity();
+              m4.compose(pos.set(p.ax, 0, p.az), q, scale.set(0.09, Math.max(0.05, p.ay - 0.08), 0.09));
+              decks.setMatrixAt(d++, m4);
+            }
+          }
+        }
+      }
+      decks.count = d;
+      decks.instanceMatrix.needsUpdate = true;
+      q.identity();
       blocks.instanceMatrix.needsUpdate = true;
       if (blocks.instanceColor) blocks.instanceColor.needsUpdate = true;
       group.visible = true;
@@ -195,6 +230,8 @@ export function createFarCity(parent: THREE.Object3D) {
     dispose() {
       parent.remove(group);
       blocks.geometry.dispose();
+      decks.geometry.dispose();
+      (decks.material as THREE.Material).dispose();
       blockMat.dispose();
       map.geometry.dispose();
       mapMat.map?.dispose();

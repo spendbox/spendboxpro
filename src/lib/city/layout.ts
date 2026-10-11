@@ -145,6 +145,10 @@ export type Tile = {
    * big interchange drawn two or more tiles wide): plain asphalt, no lights or crossings.
    */
   wide?: boolean;
+  /** A real place's tile kept clear of buildings: under a deck, beside a railway, a station's site. */
+  clear?: "deck" | "track" | "station";
+  /** A pedestrian crossing on this stretch: 0 zebra, 1 with lights, 2 ladder, 3 refuge island, 4 school, 5 raised. */
+  crossing?: number;
   /** A real place's property here: its kind, storeys, state and units (src/lib/world/buildings). */
   building?: Building;
   /** A lake or sea tile by the shore with a wooden jetty (which side faces land: 0 +x, 1 -x, 2 +z, 3 -z). */
@@ -1668,8 +1672,35 @@ function roadTile(plan: CityPlan, x: number, z: number, r: Tile["r"]): Tile {
     let around = 0;
     for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) if ((dx || dz) && isRoad(plan, x + dx, z + dz)) around++;
     if (around >= 5) return { i: -1, x, z, kind: "road", top: 0.05, road: dir, mask, roundabout: false, r, wide: true };
+    // Pedestrian crossings: where the map has one, and now and then on busy streets.
+    const crossing = straight && !works && !incident ? crossingOf(plan, x, z, mask) : undefined;
+    if (crossing !== undefined) return { i: -1, x, z, kind: "road", top: 0.05, road: dir, mask, roundabout: false, r, crossing };
   }
   return { i: -1, x, z, kind: "road", top: works ? 0.45 : roundabout ? 0.3 : 0.05, road: dir, mask, roundabout, r, works: works || undefined, incident };
+}
+
+/** A pedestrian crossing on a straight stretch of a real place's road, or undefined. */
+function crossingOf(plan: CityPlan, x: number, z: number, mask: number): number | undefined {
+  const region = plan.region!;
+  const real = region.crossingAt(x, z);
+  // Next to a school: the yellow school crossing.
+  const side = mask === 10 ? [[0, 1], [0, -1]] : [[1, 0], [-1, 0]];
+  const school = side.some(([dx, dz]) => baseKindNear(plan, x + dx, z + dz) === "school");
+  if (real !== undefined) return school ? 4 : real;
+  const road = region.roadAt(x, z);
+  const busy = densityAt(plan, x, z);
+  if (school && hash(x, z, plan.seed + 1601) < 0.5) return 4;
+  if (!road || busy < 0.18 || hash(x, z, plan.seed + 1602) > 0.06) return undefined;
+  // Raised crossings on quieter streets, lights on the big roads, the rest painted.
+  const big = road.kind === "motorway" || road.kind === "trunk" || road.kind === "primary";
+  const roll = hash(z, x, plan.seed + 1603);
+  return big ? (roll < 0.5 ? 1 : roll < 0.8 ? 3 : 0) : roll < 0.3 ? 5 : roll < 0.7 ? 0 : 2;
+}
+
+/** The neighbourhood place on a tile (a school...) without working out the whole tile. */
+function baseKindNear(plan: CityPlan, x: number, z: number): TileKind | null {
+  if (isRoad(plan, x, z) || plan.megaAt.has(nkey(x, z))) return null;
+  return featureAt(plan, x, z);
 }
 
 /** A wooden jetty on some lake and sea tiles right by the shore (facing the land). */
@@ -1701,11 +1732,18 @@ function baseTile(plan: CityPlan, x: number, z: number): Tile {
       return { i, x, z, kind: spot.kind, top: tops[spot.kind] ?? 1, r, v: Math.floor(r[2] * 2), name: spot.name };
     }
     const w = plan.region.waterAt(x, z);
-    if (w && plan.region.roadAt(x, z)) {
+    const onWater = w ? plan.region.roadAt(x, z) : undefined;
+    // A road over water that isn't a bridge (the map's road runs along the shore): a causeway.
+    // Bridges are drawn as raised decks along their real curves (src/lib/world/spans), so under
+    // them the water is open.
+    if (onWater && !onWater.bridge) {
       const t = roadTile(plan, x, z, r);
       return { ...t, top: 0.05, roundabout: false, works: undefined, incident: undefined, causeway: true };
     }
-    if (w) return { i, x, z, kind: "lake", top: 0.1, r, sea: w === 2 || undefined, jetty: jettyAt(plan, x, z) };
+    if (w) return { i, x, z, kind: "lake", top: 0.1, r, sea: w === 2 || undefined, jetty: onWater ? undefined : jettyAt(plan, x, z) };
+    // Under a deck, along a railway on the ground, a station's site: never a building.
+    const clear = plan.region.clearAt(x, z);
+    if (clear && !isRoad(plan, x, z)) return { i, x, z, kind: "plaza", top: clear === "station" ? 1.2 : 0.1, r, clear };
   }
   // The sea (only very big towns get this far out).
   if (inSea(plan, x, z)) return { i, x, z, kind: "lake", top: 0.1, r, sea: true, jetty: jettyAt(plan, x, z) };
@@ -1794,7 +1832,7 @@ export function roughAt(plan: CityPlan, x: number, z: number): { h: number; colo
     return { h: MEGA_TOP[m.type] ?? 1.5, color: m.type === "bigpark" ? 0x8cc97e : 0xe9e4da };
   }
   if (plan.region) {
-    if (plan.region.waterAt(x, z) || plan.region.roadAt(x, z)) return null;
+    if (plan.region.waterAt(x, z) || plan.region.roadAt(x, z) || plan.region.clearAt(x, z)) return null;
     if (plan.region.spotAt(x, z)) return { h: 1.2, color: 0xe9e4da };
   } else if (inSea(plan, x, z) || inLake(plan, x, z) || inRiver(plan, x, z)) return null;
   if (plan.xAt.has(x) || plan.zAt.has(z)) return null;
@@ -1810,4 +1848,17 @@ export function roughAt(plan: CityPlan, x: number, z: number): { h: number; colo
   if (density > 0.24) return { h: 0.9 + r1 * 1.8 + density * 1.2, color: pick(pal.offices, r0) };
   if (r0 < 0.16) return { h: 0.45, color: pick(pal.leaves, r1) };
   return { h: 0.7, color: pick(pal.roofs, r1) };
+}
+
+/**
+ * How busy a real place's road is, for how much traffic it gets: the area's crowd (its density)
+ * times the kind of road (an expressway carries far more than a side street). About 0.3 on a
+ * quiet street up to 3 on an expressway through a crowded area. (Later also how many players live
+ * and visit there.)
+ */
+export function busyAt(plan: CityPlan, x: number, z: number) {
+  const crowd = 0.35 + Math.max(0, Math.min(1.4, densityAt(plan, x, z)));
+  const kind = plan.region?.roadAt(x, z)?.kind;
+  const road = kind === "motorway" ? 2 : kind === "trunk" ? 1.7 : kind === "primary" ? 1.35 : kind === "secondary" ? 1.1 : kind === "tertiary" ? 0.9 : 0.6;
+  return crowd * road;
 }

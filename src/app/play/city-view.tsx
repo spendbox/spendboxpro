@@ -21,6 +21,7 @@ import {
   structureCentre,
   structureSize,
   tileAt,
+  busyAt,
   VENUE_SPORT,
   type CityPlan,
   type Tile,
@@ -55,6 +56,7 @@ import { createAircraft } from "./city/aircraft";
 import { createFarCity, MAP_MARGIN } from "./city/far-city";
 import { createKites } from "./city/kites";
 import { buildingParts } from "./city/building-kit";
+import { CLEAR_GROUND, crossingParts, pieceParts, stationParts } from "./city/spans-kit";
 import { setSceneSnapshot } from "./city/snapshot";
 import { createTraffic, type VehiclePose } from "./city/traffic";
 import { clubParts, eggParts, fireStationParts, restaurantParts } from "./city/street-bits";
@@ -369,6 +371,13 @@ function geometries() {
 // ---------------------------------------------------------------- what stands on a tile
 function partsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "tile">) => void) {
   basePartsFor(t, plan, add);
+  // A real place's bridges, flyovers, railways and stations along their real curves.
+  const region = plan.region;
+  if (region) {
+    for (const p of region.piecesAt(t.x, t.z) ?? []) pieceParts(p, add);
+    const st = region.stationAt(t.x, t.z);
+    if (st) stationParts(st, add);
+  }
   // The railway viaduct passes over some tiles (whatever is underneath).
   if (t.rail) railParts(t, plan, add);
   // The monorail, the flyover and footbridges over the streets.
@@ -543,8 +552,11 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
         add("trunk", { x: lx, y: 0.06, z: lz, sx: 0.3, sy: 0.5, sz: 0.3, ry: 0, color: 0x495057 });
         add("lamp", { x: lx - (along ? 0 : side * 0.12), y: 0.56, z: lz - (along ? side * 0.12 : 0), sx: 0.11, sy: 0.07, sz: 0.11, ry: 0, color: 0xffffff });
       }
-      for (const o of [-0.25, 0.25]) {
-        add("paint", { x: x + (along ? o : 0), y: 0.061, z: z + (along ? 0 : o), sx: along ? 0.22 : 0.04, sy: 0.005, sz: along ? 0.04 : 0.22, ry: 0, color: 0xffffff });
+      if (t.crossing !== undefined) crossingParts(t, t.crossing, along, add);
+      else {
+        for (const o of [-0.25, 0.25]) {
+          add("paint", { x: x + (along ? o : 0), y: 0.061, z: z + (along ? 0 : o), sx: along ? 0.22 : 0.04, sy: 0.005, sz: along ? 0.04 : 0.22, ry: 0, color: 0xffffff });
+        }
       }
       // Dead end: a turning circle.
       if (m === 1 || m === 4 || m === 2 || m === 8) add("disc", { x, y: 0.0, z, sx: 1.05, sy: 0.061, sz: 1.05, ry: 0, color: ASPHALT });
@@ -587,6 +599,12 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
 
   if (t.kind === "structure") {
     if (t.structure!.anchor) structureParts(t, plan, B, tree);
+    return;
+  }
+
+  // Kept clear under a deck, along a railway, round a station (./city/spans-kit draws those).
+  if (t.clear) {
+    B(0, 0.08, 0, 0.98, 0.004, 0.98, CLEAR_GROUND[t.clear], 0, "ground");
     return;
   }
 
@@ -2585,6 +2603,7 @@ export function CityView({
       world.tileIndex = tileIndex;
       world.blocked = blocked;
       world.born = born;
+      world.busy = plan.region ? (bx, bz) => busyAt(plan, bx, bz) : null;
       birds.build(newSeed);
       people.build();
       // The railway runs on out into the farmland (not in a huge town drawn only round the camera).

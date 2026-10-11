@@ -57,6 +57,12 @@ export type Landmark = {
   osm?: string;
 };
 
+/** A stretch of railway with its real curves (raised on a viaduct where `bridge`). */
+export type Rail = { id: string; name: string; bridge: boolean; path: Path };
+
+/** A railway station: its name and where it is (it's built along the nearest railway). */
+export type Station = { name: string; at: [number, number] };
+
 /** A named neighbourhood, town or village: its middle, and how big a place it is. */
 export type Area = { name: string; at: [number, number]; kind: "town" | "suburb" | "neighbourhood" | "village" };
 
@@ -139,6 +145,14 @@ export type Region = {
   roads: Road[];
   /** Footbridges over the roads, from the map: [latitude, longitude] of each one's middle. */
   footbridges: [number, number][];
+  /** Railways and their stations, from the map. */
+  rail: Rail[];
+  stations: Station[];
+  /**
+   * Pedestrian crossings from the map: [latitude, longitude, type]: 0 zebra, 1 with its own
+   * traffic lights, 2 marked (ladder), 3 with a refuge island.
+   */
+  crossings: [number, number, number][];
   /** Named neighbourhoods and towns from the map (Obalende, Ojuelegba...), for naming spots. */
   areas: Area[];
   /** Where the map data has each landmark (by id), found by the bake: used for landmarks marked approx. */

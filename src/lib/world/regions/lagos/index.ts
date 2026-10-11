@@ -2,7 +2,7 @@
 // Later more of Lagos State (Badagry, Ikorodu, Epe) joins on by making the box bigger.
 
 import type { Region } from "../../region.ts";
-import { AREAS, FOOTBRIDGES, FOUND, ROAD_GRID, ROUTES, WATER } from "./baked.ts";
+import { AREAS, CROSSINGS, FOOTBRIDGES, FOUND, RAIL, ROAD_GRID, ROUTES, STATIONS, WATER } from "./baked.ts";
 import { CORRECTIONS } from "./corrections.ts";
 import { DISTRICTS } from "./districts.ts";
 import { LANDMARKS } from "./landmarks.ts";
@@ -29,6 +29,9 @@ export const LAGOS: Region = {
   roads: ROUTES,
   areas: AREAS,
   footbridges: FOOTBRIDGES,
+  rail: RAIL,
+  stations: STATIONS,
+  crossings: CROSSINGS,
   found: FOUND,
   corrections: CORRECTIONS,
   bake: {

@@ -6,7 +6,7 @@
 
 import * as THREE from "three";
 import { hash, type CityPlan, type Tile } from "@/lib/city/layout";
-import { BRIDGE_TOP, DIRS, keyOf, type World } from "./world";
+import { BRIDGE_TOP, DIRS, keyOf, rushHour, type World } from "./world";
 
 /** Vehicle kinds: 0 car, 1 taxi, 2 delivery van, 3 bus, 4 truck, 5 articulated lorry. */
 type Car = {
@@ -221,9 +221,21 @@ export function createTraffic(world: World, parent: THREE.Object3D) {
       cars = [];
       ride = -1;
     }
-    const n = Math.min(160, Math.floor(roads.length / 4));
+    // A real place: as many cars as its roads are busy (crowded areas, big roads, the rush hour
+    // all bring more), each one more likely on a busier road. A made-up town: one per 4 stretches.
+    const busy = world.busy;
+    const rush = busy ? rushHour() : 0;
+    const weights = busy ? roads.map((t) => busy(t.x, t.z) * (1 + rush * 0.8)) : null;
+    const total = weights ? weights.reduce((a, w) => a + w, 0) : 0;
+    const n = weights ? Math.min(300, Math.floor(total / 3)) : Math.min(160, Math.floor(roads.length / 4));
+    const pickRoad = () => {
+      if (!weights) return roads[Math.floor(Math.random() * roads.length)];
+      let left = Math.random() * total;
+      for (let k = 0; k < roads.length; k++) if ((left -= weights[k]) < 0) return roads[k];
+      return roads[roads.length - 1];
+    };
     for (let tries = 0; cars.length < n && tries < n * 3 && roads.length; tries++) {
-      const t = roads[Math.floor(Math.random() * roads.length)];
+      const t = pickRoad();
       const c = newCar(t, pickKind(t));
       if (c) cars.push(c);
     }
@@ -286,14 +298,19 @@ export function createTraffic(world: World, parent: THREE.Object3D) {
       c.slot = -1;
     }
     const roadCount = world.tiles.reduce((n, t) => n + (t.kind === "road" ? 1 : 0), 0);
-    const want = Math.min(3, Math.floor(roadCount / 80));
+    // A real place jams more where it's busy, and far more in the rush hour.
+    const busy = world.busy;
+    const rush = busy ? rushHour() : 0;
+    const want = busy ? Math.min(10, Math.floor((roadCount / 60) * (1 + rush * 1.5))) : Math.min(3, Math.floor(roadCount / 80));
     if (!want) return;
     const cands: { h: Tile; dx: number; dz: number; score: number }[] = [];
     for (const t of world.tiles) {
       const m = t.mask ?? 0;
       const arms = (m & 1) + ((m >> 1) & 1) + ((m >> 2) & 1) + ((m >> 3) & 1);
       if (t.kind !== "road" || arms < 3) continue;
-      DIRS.forEach(([dx, dz], d) => cands.push({ h: t, dx, dz, score: hash(t.x * 4 + d, t.z, seedV + 1401) }));
+      // The busiest junctions first (a real place), else any.
+      const weight = busy ? 1 / (0.2 + busy(t.x, t.z)) : 1;
+      DIRS.forEach(([dx, dz], d) => cands.push({ h: t, dx, dz, score: hash(t.x * 4 + d, t.z, seedV + 1401) * weight }));
     }
     cands.sort((a, b) => a.score - b.score);
     for (const c of cands) {
@@ -313,7 +330,9 @@ export function createTraffic(world: World, parent: THREE.Object3D) {
       keys.forEach((k, n) => jamSeg.set(k, { jam: j, i: n - 1 }));
       const r = (n: number) => hash(c.h.x, c.h.z, seedV + 1410 + n);
       const period = 45 + r(1) * 40;
-      jams.push({ stop: K - 0.68, tail: 0, count: 0, active: false, period, on: 12 + r(2) * 10, offset: r(3) * period });
+      // In the rush hour a jam lasts most of its cycle ("go-slow").
+      const on = Math.min(period * 0.85, (12 + r(2) * 10) * (1 + rush * 2.5));
+      jams.push({ stop: K - 0.68, tail: 0, count: 0, active: false, period, on, offset: r(3) * period });
     }
   }
 

@@ -166,58 +166,7 @@ function footbridgeParts(t: Tile, style: 0 | 1 | 2, add: Add) {
 }
 
 /** The fixed parts up in the air over this tile (if any). */
-/**
- * A real place's flyovers: wherever the map raises a road over land (interchanges, a bridge's
- * approaches), a deck on pillars over the tile, joined to its raised neighbours, sloping down to
- * meet the road where the raised stretch ends.
- */
-function regionFlyoverParts(t: Tile, plan: CityPlan, add: Add) {
-  const region = plan.region!;
-  const raised = (x: number, z: number) => region.flyoverAt(x, z);
-  /** How far up (0..1): a ramp over the first two tiles from a ground-level road. */
-  const lift = (x: number, z: number) => {
-    if (!raised(x, z)) return 0;
-    for (let r = 1; r <= 2; r++) {
-      for (let k = 0; k < r; k++) {
-        for (const [dx, dz] of [[r - k, k], [-k, r - k], [-(r - k), -k], [k, -(r - k)]]) {
-          const nx = x + dx;
-          const nz = z + dz;
-          if (!raised(nx, nz) && region.roadAt(nx, nz)) return r / 3;
-        }
-      }
-    }
-    return 1;
-  };
-  const yAt = (l: number) => 0.06 + (FLY_Y - 0.06) * l;
-  const here = yAt(lift(t.x, t.z));
-  let joined = 0;
-  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-    const nx = t.x + dx;
-    const nz = t.z + dz;
-    if (!raised(nx, nz) && !region.roadAt(nx, nz)) continue;
-    joined++;
-    // Half a deck from the middle of this tile to its edge, meeting the neighbour halfway.
-    const edge = (here + yAt(lift(nx, nz))) / 2;
-    const along: "x" | "z" = dx ? "x" : "z";
-    const P = frame(t, along, add);
-    const s = dx + dz;
-    const rise = Math.atan2((edge - here) * s, 0.5);
-    const len = Math.hypot(0.5, edge - here) + 0.02;
-    const mid = (here + edge) / 2;
-    P("building", s * 0.25, 0, mid - 0.07, len, 0.07, FLY_W, CONCRETE, rise);
-    P("ground", s * 0.25, 0, mid - 0.004, len, 0.006, FLY_W - 0.04, 0x4a5058, rise);
-    for (const c of [-FLY_W / 2 + 0.01, FLY_W / 2 - 0.01]) P("building", s * 0.25, c, mid - 0.004, len, 0.045, 0.02, 0xdee2e6, rise);
-  }
-  if (!joined) return;
-  // A pier under it once it's up (every other tile).
-  if (here > 0.35 && (t.x + t.z) % 2 === 0) {
-    add("building", { x: t.x, y: 0.06, z: t.z, sx: 0.12, sy: here - 0.13, sz: 0.12, ry: 0, color: CONCRETE });
-    add("building", { x: t.x, y: here - 0.14, z: t.z, sx: 0.2, sy: 0.07, sz: 0.2, ry: 0, color: CONCRETE });
-  }
-}
-
 export function elevatedParts(t: Tile, plan: CityPlan, add: Add) {
-  if (plan.region?.flyoverAt(t.x, t.z)) regionFlyoverParts(t, plan, add);
   const { mono, flyover } = elevated(plan);
   if (mono && onMono(mono, t.x, t.z)) monoParts(t, mono, plan, add);
   if (flyover && onElevated(flyover, t.x, t.z)) flyoverParts(t, flyover, add);
