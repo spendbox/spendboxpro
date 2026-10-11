@@ -93,6 +93,8 @@ export type MapBusiness = {
   whatsapp: string | null;
   website: string | null;
   logo: string | null;
+  /** Its design on the billboards (the logo until one is uploaded). */
+  billboardImage?: string | null;
   /** 1 a soft glow; 2 a bright sign. */
   glow: number;
   kind: BuildingKind | null;

@@ -2,16 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { connection } from "next/server";
 import { ArrowLeft, Plus } from "@/components/icons";
-import { adPricing } from "@/lib/ads";
-import { paystackEnabled } from "@/lib/paystack";
+import { LEASE_MIN } from "@/lib/world/business";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { AdForm } from "./advertise-forms";
 import { Logo } from "@/components/logo";
 import { CONTACT_EMAIL, SITE_DOMAIN } from "@/lib/brand";
 
 export const metadata: Metadata = {
   title: "Advertise",
-  description: "Put your brand on every billboard in the Newtown city. From ₦5,000 a week, live in minutes.",
+  description: "Lease a building in Newtown's Lagos for a year, with your design on the city's billboards. From ₦60,000 a year.",
 };
 
 async function stats() {
@@ -29,41 +27,32 @@ async function stats() {
 
 const fmt = (n: number) => Math.round(n).toLocaleString("en-NG");
 
+/** Taps each ₦ of a lease buys (the database's lease_naira_per_click). */
+const NAIRA_PER_TAP = 20;
+
 export default async function AdvertisePage() {
   await connection(); // live numbers on every visit
-  const [pricing, s] = await Promise.all([adPricing(), stats()]);
-  const enabled = paystackEnabled();
-  const ngnPerCoin = Math.round(1 / pricing.coinsPerNgn);
+  const s = await stats();
 
   const faq: [string, React.ReactNode][] = [
     [
-      "What exactly am I paying for?",
+      "What am I paying for?",
       <>
-        Real people acting on your ad. Your budget becomes a pool of mint (₦{fmt(ngnPerCoin)} = 1 mint). Players tap your billboard to
-        open the ad, and each signed-in player who then taps its button (&ldquo;Visit&rdquo; your link) gets {fmt(pricing.viewReward)} mint
-        from your pool. That button tap is a <b>paid view</b>.
+        A building in Newtown&apos;s Lagos for a year: your name and logo on it, lit up for every player, a card with what you do and how to reach you, and your
+        own design on the city&apos;s billboards. Prices start at ₦{fmt(LEASE_MIN)} a year, by the building&apos;s size and where it is.
       </>,
     ],
     [
-      "Do I pay when my billboard is just on screen?",
-      "No. Billboards passing by on someone's screen are never charged, and neither is opening the ad. You only pay when a player taps your ad's button.",
+      "How long does it run?",
+      <>
+        A year, or until people have tapped your building or your billboard (opening your card) as many times as your lease covers, whichever comes first.
+        Each ₦{NAIRA_PER_TAP} of your lease covers one tap: a ₦{fmt(LEASE_MIN)} lease covers {fmt(LEASE_MIN / NAIRA_PER_TAP)} taps.
+      </>,
     ],
-    [
-      "What are free views?",
-      `Everyone who opens your ad without earning from it: people watching without an account, players who've already earned mint from ${fmt(
-        pricing.rewardsPerDay,
-      )} ads today, and anyone who looks without tapping the button. They get no mint, and those views are free for you.`,
-    ],
-    [
-      "Can one person drain my budget?",
-      `No. Each player can earn from your ad once a day, and from ${fmt(pricing.rewardsPerDay)} ads a day at most.`,
-    ],
-    [
-      "What happens when my mint runs out, or my weeks end?",
-      "Your ad stops showing. You can top up any time to keep it going. Unused mint at the end of your run expires, so we spread your mint evenly over your weeks.",
-    ],
-    ["Can I change my ad?", "Yes. Change the picture, headline or link, pause or resume, and top up from your ad page. Changes go live in minutes."],
-    ["Who will see it?", "Adults (18+) playing and watching Newtown, mostly in Nigeria, in every city on the map."],
+    ["Can I change my billboard?", "Yes, any time and free: upload a new design from your business page and it's on the billboards in minutes."],
+    ["Do players get paid to look?", "No. Players don't get mint for tapping ads; they tap because they're interested."],
+    ["What do I see?", "Building taps, card views, billboard views, calls, WhatsApp messages, website visits and directions, all time and this week."],
+    ["Who will see it?", "Adults (18+) living their lives in Newtown's Lagos, mostly in Nigeria."],
     ["How do I reach you?", `Email ${CONTACT_EMAIL} and a real person will get back to you. Newtown lives at ${SITE_DOMAIN}.`],
   ];
 
@@ -71,25 +60,24 @@ export default async function AdvertisePage() {
     <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-10 px-4 py-8">
       <div>
         <div className="flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-1 text-sm font-medium text-muted">
+          <Link href="/play" className="flex items-center gap-1 text-sm font-medium text-muted">
             <ArrowLeft className="size-4" />
             Back to the city
           </Link>
           <Link href="/advertiser" className="text-sm font-medium text-muted underline">
-            Manage your ads
+            Your business page
           </Link>
         </div>
         <Logo size={34} className="mt-6" />
         <p className="mt-4 text-sm font-semibold uppercase tracking-wide text-gold-dark">Advertise on Newtown</p>
-        <h1 className="mt-1 font-display text-4xl font-bold leading-tight sm:text-5xl">Put your brand on every billboard in the city</h1>
+        <h1 className="mt-1 font-display text-4xl font-bold leading-tight sm:text-5xl">Own a building in Lagos, and the billboards with it</h1>
         <p className="mt-3 text-lg text-muted">
-          Players get mint for tapping your ad, so they actually look. You only pay for real taps. From ₦{fmt(pricing.minWeeklyNgn)} a
-          week, live in minutes.
+          Lease a real-looking building for a year with your name and logo on it, and put your design on the city&apos;s billboards. From ₦{fmt(LEASE_MIN)} a year.
         </p>
         <div className="mt-5 flex flex-wrap items-center gap-3">
-          <a href="#book" className="rounded-xl bg-gold px-5 py-3 font-semibold text-ink shadow-sm">
-            Create my ad
-          </a>
+          <Link href="/play" className="rounded-xl bg-gold px-5 py-3 font-semibold text-ink shadow-sm">
+            Choose a building
+          </Link>
           {s.players > 0 && (
             <span className="text-sm text-muted">
               {fmt(s.players)} players{s.visits > 0 ? ` · ${fmt(s.visits)} visits so far` : ""}
@@ -99,33 +87,19 @@ export default async function AdvertisePage() {
       </div>
 
       <section className="grid gap-3 sm:grid-cols-3">
-        <Step n={1} title="Pay" text="Pick a weekly budget and how many weeks. Pay with Paystack." />
-        <Step n={2} title="Upload" text="Add your picture, headline and (optional) link." />
-        <Step n={3} title="Live" text="Your ad is on billboards straight away. Track it from your ad page." />
+        <Step n={1} title="Choose" text="Open the map, tap a building and choose Lease. Landmarks and players' buildings aren't for lease." />
+        <Step n={2} title="Pay once" text="One payment through Paystack for the year: your name, logo, details and billboard design." />
+        <Step n={3} title="Live" text="Your building glows and your billboards go up. Swap the design any time from your business page." />
       </section>
 
       <section className="rounded-2xl border border-line bg-panel p-5">
-        <h2 className="font-display text-xl font-bold">How it works</h2>
+        <h2 className="font-display text-xl font-bold">How long it runs</h2>
         <p className="mt-2 text-ink">
-          Your budget fills your ad with mint (₦{fmt(ngnPerCoin)} = 1 mint). Every player who taps your billboard gets{" "}
-          {fmt(pricing.viewReward)} mint from it, so <b>₦{fmt(pricing.viewReward * ngnPerCoin)} buys one person really looking</b> at
-          your ad.
+          A year, or until people have tapped your building or billboard as many times as your lease covers (<b>one tap for every ₦{NAIRA_PER_TAP}</b>),
+          whichever comes first. Your business page shows how many are left.
         </p>
-        <p className="mt-2 text-sm text-muted">
-          People watching without an account can tap your ad too: free for you. Players are adults (18+).
-        </p>
+        <p className="mt-2 text-sm text-muted">Players are adults (18+). Nobody is paid to tap your ad.</p>
       </section>
-
-      <div id="book" className="scroll-mt-4">
-        {enabled ? (
-          <AdForm pricing={pricing} />
-        ) : (
-          <section className="rounded-2xl border border-line bg-panel-2 p-5 text-center">
-            <h2 className="font-display text-xl font-bold">Payments aren&apos;t switched on yet</h2>
-            <p className="mt-2 text-muted">We&apos;re getting ready to take bookings. Please check back soon.</p>
-          </section>
-        )}
-      </div>
 
       <section>
         <h2 className="font-display text-xl font-bold">Questions</h2>
@@ -147,7 +121,7 @@ export default async function AdvertisePage() {
         <Link href="/advertise/policy" className="font-medium text-ink underline">
           advertising policy
         </Link>{" "}
-        before you book.
+        before you lease.
       </p>
     </main>
   );

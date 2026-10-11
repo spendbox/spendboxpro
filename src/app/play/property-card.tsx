@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { DoorOpen } from "lucide-react";
 import { Building2, Flag, House, KeyRound, MapPin, Pencil, Store, Trees, X } from "@/components/icons";
 import type { PropertyInfo, PropertyUnit } from "@/lib/world/property";
 import { BUY_TAX, type BuildingOwner } from "@/lib/world/property-api";
@@ -36,7 +37,22 @@ export type Market = {
 };
 
 /** A property on the real map, tapped: what it is, what it's worth, and every unit in it. */
-export function PropertyCard({ info, market, jobs, onReport, onClose }: { info: PropertyInfo; market?: Market; jobs?: JobsContext; onReport?: () => void; onClose: () => void }) {
+export function PropertyCard({
+  info,
+  market,
+  jobs,
+  onReport,
+  onEnter,
+  onClose,
+}: {
+  info: PropertyInfo;
+  market?: Market;
+  jobs?: JobsContext;
+  onReport?: () => void;
+  /** Go inside. */
+  onEnter?: () => void;
+  onClose: () => void;
+}) {
   const owners = new Map((market?.owners ?? []).map((o) => [o.unit, o]));
   const mineAll = !!market?.owners && info.units.every((u) => owners.get(u.id)?.mine);
   const [renaming, setRenaming] = useState(false);
@@ -62,6 +78,12 @@ export function PropertyCard({ info, market, jobs, onReport, onClose }: { info: 
           <X className="size-4" />
         </button>
       </div>
+
+      {onEnter && !info.state && (
+        <button onClick={onEnter} className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-full bg-ink text-sm font-semibold text-white">
+          <DoorOpen className="size-4" /> Go inside
+        </button>
+      )}
 
       <div className="mt-4 rounded-2xl bg-ink/[0.04] p-3.5">
         <div className="flex items-baseline justify-between gap-2">
@@ -149,7 +171,7 @@ export function PropertyCard({ info, market, jobs, onReport, onClose }: { info: 
       {(market?.owners ?? []).length === 0 && (
         <a href={`/business?building=${encodeURIComponent(info.id)}`} className="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-gold/10 px-4 py-3 text-sm ring-1 ring-gold/30">
           <span>
-            <b>Own a real business?</b> Lease this building for a year: your name and logo on the map, lit up for every player.
+            <b>Advertise here.</b> Lease this building for a year: your name and logo on it, lit up for every player, and your design on the billboards.
           </span>
           <span className="shrink-0 font-semibold text-gold-dark">Lease →</span>
         </a>

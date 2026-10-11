@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Briefcase, Flag, Handshake, HeartPulse, House, MapPin, Search, Sparkles, Wallet, X } from "@/components/icons";
+import { Briefcase, Flag, HeartPulse, House, MapPin, Search, Sparkles, Wallet, X } from "@/components/icons";
 import { addressOf, makePlan, spiralIndex, tileAt, type CityPlan } from "@/lib/city/layout";
 import { BUILDING_LABEL } from "@/lib/world/buildings";
 import type { RegionMap } from "@/lib/world/compile";
@@ -31,6 +31,8 @@ import type { MapBusiness } from "@/lib/world/business";
 import type { OwnedProperty } from "@/lib/world/owned";
 import { InterviewSheet, MomentSheet } from "./moments";
 import { AmountSheet, LoanSheet } from "./amount-sheet";
+import { CurrencySheet } from "./currency-pick";
+import { setShownCurrency } from "@/lib/world/value";
 import { buyerPays, sellerGets, OFFER_HOURS, type Listing, type MarketBoard } from "@/lib/world/market";
 import { BUY_TAX } from "@/lib/world/property-api";
 
@@ -46,6 +48,7 @@ function planOf(region: RegionMap) {
 }
 
 const GUIDE_KEY = "newtown.guide";
+const CURRENCY_KEY = "newtown.currency";
 type GuideStep = "home" | "job" | "budget" | "life" | "chat";
 const GUIDE: Record<GuideStep, { n: number; text: string }> = {
   home: { n: 1, text: "Find a home you can afford. Tap Find a home." },
@@ -104,6 +107,7 @@ export function useWorldLife({
   budget,
   pretend,
   onChanged,
+  onEnter,
 }: {
   api: PropertyApi;
   regionId: string | null;
@@ -112,6 +116,8 @@ export function useWorldLife({
   /** The world lab: payments are pretend. */
   pretend?: boolean;
   onChanged?: () => void;
+  /** Go inside a building (the game's insides); left out where there are none (the test page). */
+  onEnter?: (buildingId: string) => void;
 }) {
   const region = useMemo(() => regionMap(regionId), [regionId]);
   const { assets, owned, loaded, refresh } = useLife(api, signedIn ? regionId : null);
@@ -123,6 +129,24 @@ export function useWorldLife({
   const [assetsOpen, setAssetsOpen] = useState(false);
   const [welcomeShut, setWelcomeShut] = useState(false);
   const [finderOpen, setFinderOpen] = useState(false);
+  // The currency amounts show in beside mint (kept in this browser; change it any time).
+  const [currency, setCurrency] = useState(() => {
+    try {
+      return localStorage.getItem(CURRENCY_KEY) ?? "NGN";
+    } catch {
+      return "NGN";
+    }
+  });
+  setShownCurrency(currency);
+  const chooseCurrency = (code: string) => {
+    setCurrency(code);
+    try {
+      localStorage.setItem(CURRENCY_KEY, code);
+    } catch {
+      // Not kept: back to naira next time.
+    }
+  };
+  const [currencyOpen, setCurrencyOpen] = useState(false);
   /** The first-day guide: which steps are done (kept in this browser). */
   const [guide, setGuide] = useState<Record<string, boolean>>(() => {
     try {
@@ -332,11 +356,17 @@ export function useWorldLife({
           current: work?.job ? { place: work.job.place, job: work.job.job } : null,
           busy,
           onTake: (wp, job, mode) => {
+            // Hired: the Work screen opens, so you see your pay, tax and fares straight away.
             const hire = (ticket?: string) =>
               act(
                 () => api.takeJob(wp.id, job.job, mode, ticket),
                 (r) => `You're a ${job.title} now. Pay builds up every game day (2 hours).${paid(r.pay)}`,
-              );
+              ).then((r) => {
+                if (!r.ok) return;
+                setPlace(null);
+                setProperty(null);
+                setWorkOpen(true);
+              });
             // Skilled jobs: an interview first, then the job with the pass it hands back.
             const take = async () => {
               if (!needsInterview(job)) return void hire();
@@ -426,7 +456,6 @@ export function useWorldLife({
                   if (step === "life") markGuide("life");
                 }}
               />
-              <LifeButton icon={Handshake} label="Services" onClick={() => setServicesOpen(true)} />
             </>
           )}
         </div>
@@ -465,6 +494,8 @@ export function useWorldLife({
       )}
       {showWelcome && (
         <StartLife
+          currency={currency}
+          onCurrency={chooseCurrency}
           place={region.region.name}
           budget={life ? coins : budget}
           prices={region.region.prices}
@@ -587,6 +618,15 @@ export function useWorldLife({
       {property && (
         <PropertyCard
           key={property.id}
+          onEnter={
+            onEnter
+              ? () => {
+                  const id = property.id;
+                  setProperty(null);
+                  onEnter(id);
+                }
+              : undefined
+          }
           jobs={jobs}
           onReport={
             signedIn
@@ -653,7 +693,7 @@ export function useWorldLife({
               () => api.setBudget(b),
               () => {
                 markGuide("budget");
-                return "Budget saved. Everything you earn is shared out by it now.";
+                return "Budget saved. From your next pay, it's shared into your pots.";
               },
             )
           }
@@ -782,6 +822,7 @@ export function useWorldLife({
       {business && (
         <BusinessSheet b={business} onHit={(kind) => void api.hitBusiness(business.id, kind)} onClose={() => setBusiness(null)} />
       )}
+      {currencyOpen && <CurrencySheet value={currency} onPick={chooseCurrency} onClose={() => setCurrencyOpen(false)} />}
       {ask && (
         <AmountSheet
           key={ask.title}
@@ -892,9 +933,12 @@ export function useWorldLife({
     return extra.length ? [...owned, ...extra] : owned;
   }, [owned, businesses, region]);
 
-  // Upgraded businesses (with a logo) go on the billboards.
+  // Every leased building's design goes on the billboards (its logo until it uploads one).
   const billboardAds = useMemo(
-    () => businesses.filter((b) => b.billboard && b.logo).map((b) => ({ id: `bz:${b.id}`, image: b.logo!, headline: b.about.slice(0, 60), brand: b.name, link: b.website })),
+    () =>
+      businesses
+        .filter((b) => b.billboard && (b.billboardImage ?? b.logo))
+        .map((b) => ({ id: `bz:${b.id}`, image: (b.billboardImage ?? b.logo)!, headline: b.about.slice(0, 60), brand: b.name, link: b.website })),
     [businesses],
   );
   const openBusiness = useCallback(
@@ -913,5 +957,16 @@ export function useWorldLife({
     [api],
   );
 
-  return { centerRef, owned: shown, flyTo, onProperty, onWorkplace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay };
+  /** From the menu: How to play starts the guide again; Currency opens the picker. */
+  const restartGuide = () => {
+    try {
+      localStorage.removeItem(GUIDE_KEY);
+    } catch {
+      // Fine: it starts again in this visit anyway.
+    }
+    setGuide({});
+    setWelcomeShut(false);
+  };
+  const openCurrency = () => setCurrencyOpen(true);
+  return { centerRef, owned: shown, flyTo, onProperty, onWorkplace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency };
 }

@@ -4,7 +4,8 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
-import { addressOf, makePlan, tileAt } from "@/lib/city/layout";
+import { addressOf, makePlan, spiralIndex, tileAt } from "@/lib/city/layout";
+import { ownedSpot } from "@/lib/world/owned";
 import { houseTileOf } from "@/lib/city/houses";
 import { homeLabel } from "@/lib/houses";
 import type { WelcomeNeeds } from "@/lib/welcome";
@@ -55,7 +56,7 @@ import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
 import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
-import { Compass, Crown, Eye, EyeOff, Swords } from "lucide-react";
+import { Compass, Crown, Eye, EyeOff, ImageIcon, Smartphone, Swords, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
 import { GhostsSheet } from "./ghost-duel/ghosts-sheet";
@@ -94,6 +95,7 @@ import { StatsCard } from "./stats-card";
 import { avatar3dEnabled } from "./avatar3d-flag";
 import { worldPreview } from "./world-flag";
 import { PlacePill } from "./place-pill";
+import { CityCard } from "./city-card";
 import { useWorldLife } from "./life/world-life";
 import * as propertyActions from "./property-actions";
 import * as workActions from "./work-actions";
@@ -142,7 +144,11 @@ const NO_EVENTS: CityEvent[] = [];
 /** Property on the real map, through the server (game-db/038_property.sql). */
 const PROPERTY_API = { ...propertyActions, ...workActions, ...livingActions, ...dayActions, ...interviewActions, ...packActions, ...businessActions, ...serviceActions, ...reportActions, ...marketActions };
 const noSubscribe = () => () => {};
-const noWorld = () => null;
+const noWorld = worldPreview;
+const NO_HOUSES: GameState["houses"] = [];
+/** Notices from the old hunt (traps, drones, catches, duels), left out on the real map. */
+const HUNT_NOTICES = new Set<string>(["trap", "drone", "catch", "shield", "decoy", "duel"]);
+const NO_WORLD_EVENTS: GameState["worldEvents"] = [];
 
 /** The map shows no searched spots, sweeps or hiding spots any more: only the ghosts' lights. */
 const NO_MARKERS: CityMarkers = { searchedEmpty: [], searchedHit: [], caught: [], left: [], me: null, decoy: null, sweeps: [], pending: null, recent: [], locked: [] };
@@ -362,12 +368,14 @@ export function Game({
   const [sportsOpen, setSportsOpen] = useState<Sport | null>(null);
   const [confirmHide, setConfirmHide] = useState(false);
   const [howOpen, setHowOpen] = useState(false);
+  /** The real map: the city card (tap the place's name) and the phone's own menu (bottom right). */
+  const [cityOpen, setCityOpen] = useState(false);
+  const [phoneHub, setPhoneHub] = useState(false);
   const [editAvatar, setEditAvatar] = useState(false);
   // The new 3D studio, while it is being tried out (see avatar3d-flag.ts).
   // (Read in the browser only; it matters only once the studio is opened, so the server's false is harmless.)
   const [studio3d] = useState(() => typeof window !== "undefined" && avatar3dEnabled());
-  // A real place (Lagos...) shown instead of the hourly town, while it is being built (see
-  // world-flag.ts). The server never has it, so the browser takes it up after the first paint.
+  // The real place everyone lives in (Lagos): the hourly towns and their countdown are off.
   const worldId = useSyncExternalStore(noSubscribe, worldPreview, noWorld);
   const worldRegion = worldId ? REGIONS[worldId] : null;
   /** On a real place: the area pointed at, or in the middle of the view. */
@@ -379,6 +387,11 @@ export function Game({
     signedIn: !state.me.guest,
     budget: 5000,
     onChanged: () => startTransition(() => router.refresh()),
+    // A building's card: Go inside, as if its bubble had been tapped.
+    onEnter: (id: string) => {
+      const sp = ownedSpot(id);
+      if (sp) setOpenReq((r) => ({ id: `b:${spiralIndex(sp.x, sp.z)}`, at: (r?.at ?? 0) + 1 }));
+    },
   });
   // The phone: the camera (a picture of the town, or a selfie) and the phone itself (gallery).
   const [camera, setCamera] = useState<"photo" | "selfie" | null>(null);
@@ -476,6 +489,10 @@ export function Game({
   const meP = useMemo(() => (state.me.guest ? null : { id: state.me.id, name: state.me.name ?? "Player", avatar: state.me.avatar as unknown }), [state.me.guest, state.me.id, state.me.name, state.me.avatar]);
 
   const { round, entry, me } = state;
+  // On the real map, the billboards also carry the businesses leasing buildings (kept the same
+  // list between renders, so the billboards aren't set up again every second).
+  const lifeAds = worldLife.billboardAds;
+  const allAds = useMemo(() => (worldId && lifeAds.length ? [...ads, ...lifeAds] : ads), [worldId, lifeAds, ads]);
   const now = useNow(state.serverNow);
   const phase = round?.status ?? "done";
   const countdown = clock(Date.parse((phase === "join" ? round?.joinEndsAt : round?.seekEndsAt) ?? "") - now);
@@ -842,12 +859,8 @@ export function Game({
     if (!Object.keys(views).length) return;
     fetch("/api/ads/track", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ views }), keepalive: true }).catch(() => {});
   }, []);
-  const AD_WHY: Record<string, string> = {
-    signed_out: "Sign in to earn ₥5 when you tap an ad's button (up to 5 ads a day).",
-    daily_limit: "You've had all 5 ad rewards for today. More tomorrow!",
-    already_today: "You've already been rewarded for this ad today.",
-    pool_empty: "This ad's mint has run out.",
-  };
+  // Ads no longer pay players anything (game-db/047), so there's nothing to say about rewards.
+  const AD_WHY: Record<string, string> = {};
   async function onBillboardTap(info: { id: string; tile: number; adId: string | null }) {
     // A business's billboard: its card.
     if (info.adId?.startsWith("bz:")) return worldLife.onBusiness(info.adId.slice(3));
@@ -959,14 +972,15 @@ export function Game({
       refreshingSince.current = Date.now();
       startRefresh(() => router.refresh());
     };
-    const id = setInterval(refresh, 4000);
+    // The real map's life keeps itself up to date; the old hourly game needed this every 4 s.
+    const id = setInterval(refresh, worldId ? 60_000 : 4000);
     const onVisible = () => refresh();
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [router]);
+  }, [router, worldId]);
 
   // Everything worth knowing, newest first: public happenings (moves, catches) and private
   // notices for you (your trap went off, a drone swept you, you were found).
@@ -1002,8 +1016,10 @@ export function Game({
         return { key: `w${w.id}`, at: w.startsAt, text: `${kind.title}: ${text}`, tone: "info" as const, avatar: null, icon, eventId: w.id } as FeedItem;
       })
       .filter((x): x is FeedItem => x !== null);
+    // The real map: only notices for you (offers, sales, gifts...), none of the old hunt's.
+    if (worldId) return mine.filter((n) => !HUNT_NOTICES.has(n.icon)).sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 60);
     return [...pub, ...mine, ...news].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 60);
-  }, [state.events, state.notifications, state.worldEvents, state.me.name, serverNowMs, botName, myLastSpot, where, me.avatar]);
+  }, [state.events, state.notifications, state.worldEvents, state.me.name, serverNowMs, botName, myLastSpot, where, me.avatar, worldId]);
   const unread = feed.filter((f) => Date.parse(f.at) > Date.parse(feedSeenAt)).length;
 
   // Hugs, handshakes and mint that arrived since you last opened My gifts.
@@ -1045,7 +1061,8 @@ export function Game({
   // When a round finishes, show its results once (remembered on this device).
   const resultsId = state.results?.roundId ?? null;
   useEffect(() => {
-    if (!resultsId) return;
+    // The real map has no rounds: no results to show.
+    if (!resultsId || worldId) return;
     let seenResults = 0;
     try {
       seenResults = Number(localStorage.getItem("hs-results-seen") ?? 0);
@@ -1059,7 +1076,7 @@ export function Game({
       } catch {}
     }, 400);
     return () => clearTimeout(id);
-  }, [resultsId, state.results]);
+  }, [resultsId, state.results, worldId]);
 
   // Messages fade after a while.
   useEffect(() => {
@@ -1284,7 +1301,7 @@ export function Game({
       const g = ghostList?.find((x) => x.id === id);
       if (g) setGhostFor(g);
     },
-    [ghostList],
+    [ghostList, setGhostFor],
   );
   const rules = board?.rules ?? DEFAULT_RULES;
   // Your live duel: a ghost who's been challenged gets the pop-up (wherever they are); anyone
@@ -1356,7 +1373,7 @@ export function Game({
             markers={worldId ? NO_MARKERS : markers}
             events={worldId ? NO_EVENTS : cityEvents}
             onBillboard={onBillboardTap}
-            ads={worldId && worldLife.billboardAds.length ? [...ads, ...worldLife.billboardAds] : ads}
+            ads={allAds}
             onAdViews={worldId ? (views) => {
               worldLife.businessViews(views);
               onAdViews(Object.fromEntries(Object.entries(views).filter(([id]) => !id.startsWith("bz:"))));
@@ -1369,7 +1386,7 @@ export function Game({
             onRoom={onRoom}
             ride={ride}
             onRides={setRides}
-            houses={state.houses}
+            houses={worldId ? NO_HOUSES : state.houses}
             dance={isDancing && dancing ? { id: me.id, move: dancing.move, with: dancing.with } : null}
             friendsAt={friendsAt}
             openRoom={openReq}
@@ -1387,7 +1404,7 @@ export function Game({
             onBalloons={setBalloonCount}
             revealed={phase !== "join" || !!worldId}
             caughtFaces={worldId ? undefined : state.caughtFaces}
-            worldEvents={state.worldEvents}
+            worldEvents={worldId ? NO_WORLD_EVENTS : state.worldEvents}
             focusEvent={focusEvent}
             onEventTap={onEventTap}
           onEventInfo={setEventInfo}
@@ -1434,7 +1451,7 @@ export function Game({
       {/* Top: round clock and numbers (stacked, so big numbers fit) */}
       <div className={cn("pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-2.5 sm:p-4", camera && "hidden")}>
         {worldRegion ? (
-          <PlacePill area={worldArea} state={worldRegion.state} />
+          <PlacePill area={worldArea} state={worldRegion.state} onClick={() => setCityOpen(true)} />
         ) : round ? (
           <StatsCard
             city={plan.city.name}
@@ -1469,20 +1486,23 @@ export function Game({
             </div>
           ) : (
           <div className="pointer-events-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+            {!worldId && (
             <span className="glass hidden h-9 whitespace-nowrap rounded-full px-2.5 text-xs font-bold leading-9 sm:inline-block" title="Your level (level up from the menu)">
               Lv {me.level}
             </span>
-            {me.bigFish && (
+            )}
+            {me.bigFish && !worldId && (
               <span className="glass flex h-8 items-center gap-1 whitespace-nowrap rounded-full px-2 text-xs font-bold text-[#1c7ed6] sm:h-9 sm:px-2.5" title="You hold 10,000+ mint: everyone sees you as a big fish">
                 <Fish className="size-3.5" />
                 <span className="hidden sm:inline">Big fish</span>
               </span>
             )}
-            {state.streak && <StreakPill streak={state.streak} onOpen={() => { setStreakOpen(true); setMenu(false); setFeedOpen(false); }} />}
+            {state.streak && !worldId && <StreakPill streak={state.streak} onOpen={() => { setStreakOpen(true); setMenu(false); setFeedOpen(false); }} />}
             <span className="glass inline-block h-8 whitespace-nowrap rounded-full px-2.5 text-xs leading-8 sm:h-9 sm:px-3 sm:text-sm sm:leading-9" title={`₥${me.coins} · level ${me.level}`}>
               <b className="text-gold-dark">₥{short(me.coins)}</b>
               {me.bonusCoins > 0 && <span className="text-muted"> +{short(me.bonusCoins)}</span>}
             </span>
+            {!worldId && (
             <button
               onClick={() => {
                 setFeedOpen((v) => !v);
@@ -1502,6 +1522,7 @@ export function Game({
                 </span>
               )}
             </button>
+            )}
             <button
               onClick={() => { setMenu((v) => !v); setFeedOpen(false); }}
               className="glass grid size-8 shrink-0 place-items-center rounded-full text-base font-semibold sm:size-9"
@@ -1524,7 +1545,7 @@ export function Game({
       )}
 
       {/* Latest notices pop up under the bell; the bell opens the full list. */}
-      <div className={cn("pointer-events-none absolute right-3 z-10 flex w-[min(19rem,calc(100vw-1.5rem))] flex-col items-end gap-1.5 sm:right-4 sm:top-16", statsMin ? "top-14" : "top-[14.5rem]")}>
+      <div className={cn("pointer-events-none absolute right-3 z-10 flex w-[min(19rem,calc(100vw-1.5rem))] flex-col items-end gap-1.5 sm:right-4 sm:top-16", statsMin ? "top-14" : "top-[14.5rem]", worldId && "hidden")}>
         {!feedOpen &&
           !menu &&
           toasts.map((n) => (
@@ -1565,11 +1586,13 @@ export function Game({
           city={plan.city.name}
           hasResults={Boolean(state.results)}
           onClose={() => setMenu(false)}
-          onHowItWorks={() => { setMenu(false); setHowOpen(true); }}
+          onHowItWorks={() => { setMenu(false); if (worldId) worldLife.restartGuide(); else setHowOpen(true); }}
+          life={!!worldId}
+          onCurrency={worldId ? () => { setMenu(false); worldLife.openCurrency(); } : undefined}
           onEditAvatar={() => { setMenu(false); setEditAvatar(true); }}
           onResults={() => { setMenu(false); if (state.results) setShowResults(state.results.roundId); }}
-          onMyStyle={guest ? undefined : () => { setMenu(false); setStyleOpen(true); }}
-          onMyHouse={guest ? undefined : () => { setMenu(false); setHouseOpen(true); }}
+          onMyStyle={guest || worldId ? undefined : () => { setMenu(false); setStyleOpen(true); }}
+          onMyHouse={guest || worldId ? undefined : () => { setMenu(false); setHouseOpen(true); }}
           onFriends={guest ? undefined : () => { setMenu(false); setFriendsOpen(true); }}
           friendRequests={state.friends.incoming.length}
           onMyGifts={guest ? undefined : () => { setMenu(false); openGifts(); }}
@@ -1577,8 +1600,8 @@ export function Game({
           coins={guest ? undefined : me.coins}
           level={guest ? undefined : me.level}
           onPhone={() => { setMenu(false); setPhone("home"); }}
-          onMyJob={guest ? undefined : () => { setMenu(false); setJobsAt(null); }}
-          onGames={() => { setMenu(false); setGamesOpen({}); }}
+          onMyJob={guest || worldId ? undefined : () => { setMenu(false); setJobsAt(null); }}
+          onGames={worldId ? undefined : () => { setMenu(false); setGamesOpen({}); }}
           onChangePin={() => router.push("/welcome")}
           onSignOut={() => { setMenu(false); setConfirmSignOut(true); }}
         />
@@ -1595,12 +1618,12 @@ export function Game({
         />
       )}
       {!guest && playCtx.roomId && !gamesOpen && <MinigameInvites ctx={playCtx} onAccept={(def, invite) => setGamesOpen({ game: def.id, invite })} />}
-      {camera && round && (
+      {camera && (round || worldId) && (
         <CameraMode
           key={camera}
           avatar={me.avatar}
           initialKind={camera}
-          city={plan.city.name}
+          city={worldRegion?.name ?? plan.city.name}
           place={ride !== null ? (rooms.myRoomInfo?.name ?? RIDE_INFO[ride.kind].label) : place ? (rooms.myRoomInfo?.name ?? placeRoom?.name ?? null) : null}
           guest={guest}
           onClose={() => setCamera(null)}
@@ -1614,7 +1637,7 @@ export function Game({
           guest={guest}
           initialScreen={phone}
           onClose={() => setPhone(null)}
-          onCamera={(kind) => { setPhone(null); if (round) setCamera(kind); }}
+          onCamera={(kind) => { setPhone(null); if (round || worldId) setCamera(kind); }}
           onSignIn={() => { setPhone(null); setSignIn({ why: "Sign in to keep your pictures. Your gallery goes with you to every town." }); }}
         />
       )}
@@ -1653,7 +1676,7 @@ export function Game({
           onClose={() => setGhostFor(null)}
         />
       )}
-      {duelOn && (
+      {duelOn && !worldId && (
         <DuelScreen
           key={duelOn.id}
           initial={duelOn}
@@ -1666,7 +1689,7 @@ export function Game({
           }}
         />
       )}
-      {askedGhost && !guest && (
+      {askedGhost && !guest && !worldId && (
         <div className="pointer-events-none fixed inset-x-0 top-3 z-50 flex justify-center px-3">
           <ChallengePopup
             key={askedGhost.id}
@@ -1713,7 +1736,7 @@ export function Game({
           onSaved={() => { setEditAvatar(false); setMessage({ text: "Looking good! Your new look is saved.", tone: "good" }); router.refresh(); }}
         />
       )}
-      {startCard && (
+      {startCard && !worldId && (
         <button
           onClick={() => setStartCard(null)}
           className="absolute inset-0 z-40 grid place-items-center bg-ink/25 px-6 backdrop-blur-[2px]"
@@ -1951,10 +1974,10 @@ export function Game({
       )}
       {advertise && (
         <Sheet onClose={() => setAdvertise(null)}>
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted">Billboard · {where(advertise.tile)}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">Billboard{worldId ? "" : ` · ${where(advertise.tile)}`}</p>
           <h2 className="font-display text-xl font-bold">Your brand could be here</h2>
           <p className="mt-2 text-sm text-muted">
-            Billboards in every city show ads to everyone playing and watching. Pay online, upload your design, and it can be live in minutes.
+            Lease a building in Lagos for a year and your design goes on the city&apos;s billboards too. Swap it any time.
           </p>
           <div className="mt-4 flex gap-2">
             <button onClick={() => setAdvertise(null)} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold">
@@ -2013,13 +2036,13 @@ export function Game({
 
       {/* Bottom: messages, controls and chat */}
       <div className={cn("pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-1.5 p-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:gap-2 sm:p-4", camera && "hidden")}>
-        {!guest && (
+        {!guest && !worldId && (
           <Safe name="Quest banner">
             <QuestBanner quest={quests.quest} onOpen={() => setQuestOpen(true)} />
             <QuestCelebration />
           </Safe>
         )}
-        {!guest && nudge && <FriendNudge friend={nudge} place={nudge.place} onJoin={() => goToFriend(nudge.room, nudge.name)} onClose={closeNudge} />}
+        {!guest && !worldId && nudge && <FriendNudge friend={nudge} place={nudge.place} onJoin={() => goToFriend(nudge.room, nudge.name)} onClose={closeNudge} />}
         {!guest && rooms.myRoom && !isDancing && (
           <PeopleHere room={rooms.myRoom} people={hereNow} statusOf={friendStatusOf} busy={friendBusy} onChat={chatWith} onAddFriend={befriend} greet={greet} />
         )}
@@ -2055,6 +2078,24 @@ export function Game({
           </button>
         )}
 
+        {/* The real map, inside a building: where you are, change floor, leave. */}
+        {worldId && place && (
+          <div className="glass pointer-events-auto flex max-w-xl items-center gap-2 rounded-2xl p-2 pl-3 text-sm">
+            <Building2 className="size-4 shrink-0 text-[#7048e8]" />
+            <b className="min-w-0 flex-1 truncate">{rooms.myRoomInfo?.name ?? placeRoom?.name ?? "Inside"}</b>
+            {placeRoom && placeRoom.id === place.building && (placeRoom.levels?.length ?? 0) > 1 && (
+              <button onClick={() => setPickPlace(placeRoom)} className="flex shrink-0 items-center gap-1 rounded-xl bg-panel-2 px-3 py-2 text-xs font-semibold">
+                <Layers className="size-4" /> Floor
+              </button>
+            )}
+            <button onClick={leaveRoom} className="flex shrink-0 items-center gap-1 rounded-xl bg-ink px-3 py-2 text-xs font-semibold text-white">
+              <LogOut className="size-4" /> Leave
+            </button>
+          </div>
+        )}
+        {/* The old hourly game's bar (Explore, Chat, Ghosts...): off on the real map for now. */}
+        {!worldId && (
+          <>
         <div className={cn("flex w-full max-w-xl items-end gap-2", dockOpen ? "justify-between" : "justify-center")}>
           {dockOpen ? (
             round ? (
@@ -2306,7 +2347,67 @@ export function Game({
           )}
         </div>
         )}
+          </>
+        )}
       </div>
+
+      {/* The real map: your phone, bottom right (camera, photos, notifications). */}
+      {worldId && !camera && !guest && (
+        <button
+          onClick={() => {
+            setPhoneHub(true);
+            setMenu(false);
+            setFeedSeenAt(new Date(now).toISOString());
+          }}
+          className="pointer-events-auto absolute bottom-4 right-3 z-20 grid size-12 place-items-center rounded-2xl bg-ink text-white shadow-lg sm:bottom-6 sm:right-4"
+          aria-label="Your phone"
+        >
+          <Smartphone className="size-5" />
+          {unread > 0 && (
+            <span className="absolute -right-1.5 -top-1.5 grid min-w-5 place-items-center rounded-full bg-hit px-1 text-[11px] font-semibold text-white">{unread > 9 ? "9+" : unread}</span>
+          )}
+        </button>
+      )}
+      {phoneHub && (
+        <Sheet onClose={() => setPhoneHub(false)} title="Your phone">
+          <div className="grid grid-cols-3 gap-2">
+            {(
+              [
+                ["Camera", Camera, () => setCamera("photo")],
+                ["Selfie", User, () => setCamera("selfie")],
+                ["Photos", ImageIcon, () => setPhone("photos")],
+              ] as const
+            ).map(([label, Icon, go]) => (
+              <button
+                key={label}
+                onClick={() => {
+                  setPhoneHub(false);
+                  go();
+                }}
+                className="flex flex-col items-center gap-1.5 rounded-2xl bg-ink/[0.04] py-3 text-xs font-semibold hover:bg-ink/[0.07]"
+              >
+                <Icon className="size-5" />
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-4 text-sm font-semibold">Notifications</p>
+          {feed.length === 0 ? (
+            <p className="mt-1 text-xs text-muted">Nothing yet.</p>
+          ) : (
+            <ul className="mt-2 space-y-1.5">
+              {feed.slice(0, 12).map((f) => (
+                <li key={f.key}>
+                  <FeedRow item={f} now={now} compact />
+                </li>
+              ))}
+            </ul>
+          )}
+        </Sheet>
+      )}
+      {cityOpen && worldRegion && (
+        <CityCard city={worldRegion.name} area={worldArea} online={online} players={state.site.players} onClose={() => setCityOpen(false)} />
+      )}
     </main>
   );
 }

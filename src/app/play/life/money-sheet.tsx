@@ -121,7 +121,7 @@ function Home({
           </span>
           <span>
             <b className="block text-sm tabular-nums">₥{fmt(pots)}</b>
-            <span className="text-muted">In pots</span>
+            <span className="text-muted">Set aside</span>
           </span>
           <span>
             <b className="block text-sm tabular-nums">₥{fmt(property)}</b>
@@ -131,6 +131,11 @@ function Home({
       </div>
 
       <p className="mt-4 text-sm font-semibold">Pots</p>
+      <p className="text-[11px] text-muted">
+        {pots < 0.01
+          ? "Empty until you're paid: each pay is shared into these by your budget (bills come from Essentials, fares from Travel). Your cash now stays as cash."
+          : "Each pay is shared into these by your budget. Tap one to move money."}
+      </p>
       <div className="mt-2 grid grid-cols-5 gap-1.5">
         {jars.map((p) => (
           <button

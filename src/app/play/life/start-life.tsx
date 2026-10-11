@@ -6,6 +6,7 @@ import { PACKS, type Pack } from "@/lib/world/packs";
 import type { Prices } from "@/lib/world/region";
 import { mintLocal } from "@/lib/world/value";
 import { Sheet } from "../sheet";
+import { CurrencyChips } from "./currency-pick";
 
 /** The first thing on a real map: your starting budget, and why a home comes first. */
 export function StartLife({
@@ -20,6 +21,8 @@ export function StartLife({
   onPack,
   onClose,
   onFind,
+  currency,
+  onCurrency,
 }: {
   place: string;
   budget: number;
@@ -35,6 +38,9 @@ export function StartLife({
   onClose: () => void;
   /** Open the home search. */
   onFind: () => void;
+  /** The currency amounts show in beside mint, and choosing it. */
+  currency: string;
+  onCurrency: (code: string) => void;
 }) {
   const [pick, setPick] = useState<Pack["id"] | null>(null);
   const local = `about ${mintLocal(budget, prices)}`;
@@ -68,6 +74,10 @@ export function StartLife({
     <Sheet onClose={onClose}>
       <h2 className="font-display text-xl font-extrabold">Start your life in {place}</h2>
       <p className="mt-1 text-sm text-muted">Pick how your story begins. Then buy your first home.</p>
+      <p className="mt-3 text-xs font-semibold">Your currency (change it any time)</p>
+      <div className="mt-1.5">
+        <CurrencyChips value={currency} onPick={onCurrency} />
+      </div>
       <p className="mt-3 flex items-center gap-1.5 rounded-xl bg-gold/15 px-3 py-2 text-xs font-semibold text-gold-dark">
         <Sparkles className="size-4 shrink-0" /> One-time offer: you choose once, and you won&apos;t see this again.
       </p>
@@ -94,7 +104,8 @@ export function StartLife({
               </span>
               <span className="shrink-0 text-right">
                 <span className="block font-display text-base font-extrabold tabular-nums">₥{p.mint.toLocaleString("en-GB")}</span>
-                <span className={`block text-xs font-semibold ${free ? "text-me" : ""}`}>{free ? "Free" : `₦${p.naira.toLocaleString("en-GB")}`}</span>
+                <span className="block text-[11px] text-muted">worth {mintLocal(p.mint, prices)}</span>
+                <span className={`block text-xs font-semibold ${free ? "text-me" : ""}`}>{free ? "Free" : `Pay ₦${p.naira.toLocaleString("en-GB")}`}</span>
               </span>
             </button>
           );

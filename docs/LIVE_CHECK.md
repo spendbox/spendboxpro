@@ -19,6 +19,7 @@ order: open it on GitHub (the `game-db` folder), copy all of it, paste it into t
 - [ ] `044_services.sql`: services between players
 - [ ] `045_map_reports.sql`: map problem reports
 - [ ] `046_market.sql`: selling, offers, tenants, World Bank loans
+- [ ] `047_ads_are_property.sql`: advertising is leasing a building
 
 If one shows a red error, stop and send me the error text.
 

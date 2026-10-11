@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { MyBusiness } from "@/lib/business";
 import { BUSINESS_KINDS, STOREY_AFTER_DAYS, upgradePrice, UPGRADES } from "@/lib/world/business";
-import { checkoutUpgrade } from "../business/actions";
+import { changeBillboard, checkoutUpgrade } from "../business/actions";
 
 const fmt = (n: number) => Math.round(n).toLocaleString("en-NG");
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Africa/Lagos" }) : "");
@@ -62,10 +62,26 @@ export function BusinessCard({ b }: { b: MyBusiness }) {
         ))}
       </div>
 
+      {b.clickCap !== null && (
+        <div>
+          <div className="flex items-baseline justify-between text-sm">
+            <span className="font-semibold">Taps used</span>
+            <span className="tabular-nums text-muted">
+              {fmt(b.clicks)} of {fmt(b.clickCap)}
+            </span>
+          </div>
+          <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-panel-2">
+            <div className="h-full rounded-full bg-gold" style={{ width: `${Math.min(100, (b.clicks / Math.max(1, b.clickCap)) * 100)}%` }} />
+          </div>
+          <p className="mt-1 text-xs text-muted">Your lease runs until {day(b.endsAt)}, or until these taps are used up, whichever comes first.</p>
+        </div>
+      )}
+
+      {live && <BillboardDesign b={b} />}
+
       {live && (
         <div className="flex flex-col gap-2">
           <p className="text-sm font-semibold">Upgrades</p>
-          <p className="text-xs text-muted">Any upgrade also puts your business on the city&apos;s billboards for the rest of your lease.</p>
           {UPGRADES.map((u) => {
             const done = u.id === "bright" && b.glow >= 2;
             const wait = u.id === "storey" && !monthIn;
@@ -98,5 +114,38 @@ export function BusinessCard({ b }: { b: MyBusiness }) {
         </div>
       )}
     </section>
+  );
+}
+
+/** Your design on the city's billboards: shown here, and swapped for a new picture any time, free. */
+function BillboardDesign({ b }: { b: MyBusiness }) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  return (
+    <form
+      className="flex flex-col gap-2"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        setNote(null);
+        const res = await changeBillboard(b.id, new FormData(e.currentTarget));
+        setBusy(false);
+        setNote(res.ok ? { ok: true, text: "New design saved. It's on the billboards in a few minutes." } : { ok: false, text: res.error });
+      }}
+    >
+      <p className="text-sm font-semibold">Your billboard</p>
+      {b.billboardImage && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={b.billboardImage} alt="Your billboard design" className="aspect-[2/1] w-full rounded-xl bg-panel-2 object-cover" />
+      )}
+      <p className="text-xs text-muted">A wide picture works best (2:1, under 2 MB, JPG, PNG or WebP). Change it as often as you like, free.</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <input name="image" type="file" accept="image/jpeg,image/png,image/webp" required className="min-w-0 flex-1 text-sm" />
+        <button disabled={busy} className="rounded-xl bg-ink px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">
+          {busy ? "Saving…" : "Use this design"}
+        </button>
+      </div>
+      {note && <p className={`text-sm ${note.ok ? "text-me" : "text-hit"}`}>{note.text}</p>}
+    </form>
   );
 }
