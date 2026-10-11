@@ -34,6 +34,7 @@ import { toTile } from "@/lib/world/geo";
 import { BUILDING_LABEL, type Building } from "@/lib/world/buildings";
 import { shortMint, toMint, valueOf } from "@/lib/world/value";
 import { propertyInfo, type PropertyInfo } from "@/lib/world/property";
+import { workplaceOfTile, type Workplace } from "@/lib/world/workplace";
 import type { OwnedProperty } from "@/lib/world/owned";
 import { daylight, weatherAt } from "@/lib/city/sky";
 import { npcsFor, type Npc } from "@/lib/npcs";
@@ -213,6 +214,8 @@ type Props = {
   onArea?: (name: string | null) => void;
   /** A real place: a property was tapped (instead of going inside): what it is and what it's worth. */
   onProperty?: (info: PropertyInfo) => void;
+  /** A real place: a landmark where people work was tapped (a market, the airport...): its jobs. */
+  onWorkplace?: (place: Workplace) => void;
   /** A real place's owned properties: they stand as bought, with their owners' names (src/lib/world/owned). */
   owned?: OwnedProperty[];
   /** Your face, floating over your hiding spot. */
@@ -1291,6 +1294,7 @@ export function CityView({
   onHover,
   onArea,
   onProperty,
+  onWorkplace,
   owned,
   meAvatar,
   coinBalloon,
@@ -1361,10 +1365,10 @@ export function CityView({
     /** Zoom in (dir 1) or out (dir -1) a step: the + and − buttons on a computer. */
     zoom: (dir: number) => void;
   } | null>(null);
-  const cb = useRef({ onHover, onArea, onProperty, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused });
+  const cb = useRef({ onHover, onArea, onProperty, onWorkplace, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused });
   const atmos = useRef({ progress, nightFirst, meAvatar });
   useEffect(() => {
-    cb.current = { onHover, onArea, onProperty, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused };
+    cb.current = { onHover, onArea, onProperty, onWorkplace, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused };
     atmos.current = { progress, nightFirst, meAvatar };
   });
 
@@ -3833,8 +3837,16 @@ export function CityView({
     /** A real place's property was tapped: show what it is (when someone's listening). */
     function tapProperty(anchor: Tile) {
       const region = currentPlan?.region;
-      if (!anchor.building || !region || !cb.current.onProperty || !currentPlan) return false;
-      cb.current.onProperty(propertyInfo(anchor.building, anchor.x, anchor.z, shortAddress(addressOf(currentPlan, anchor)), region));
+      if (!region || !currentPlan) return false;
+      if (!anchor.building) {
+        const place = cb.current.onWorkplace ? workplaceOfTile(currentPlan, anchor) : null;
+        if (!place) return false;
+        cb.current.onWorkplace!(place);
+        return true;
+      }
+      if (!cb.current.onProperty) return false;
+      const info = propertyInfo(anchor.building, anchor.x, anchor.z, shortAddress(addressOf(currentPlan, anchor)), region);
+      cb.current.onProperty({ ...info, workplace: workplaceOfTile(currentPlan, anchor) });
       return true;
     }
     /** A property on the real map: what it is and what it's worth ("Block of flats · ₥31,240"). */

@@ -5,6 +5,7 @@
 import { BUILDING_LABEL, type Building, type UnitUse } from "./buildings.ts";
 import type { RegionMap } from "./compile.ts";
 import { shortLocal, toMint, valueOf } from "./value.ts";
+import type { Workplace } from "./workplace.ts";
 
 export type PropertyUnit = { id: string; label: string; use: UnitUse; floor: number; area: number; mint: number; local: string; earns: string };
 
@@ -26,6 +27,8 @@ export type PropertyInfo = {
   landMint: number;
   buildingMint: number;
   units: PropertyUnit[];
+  /** Who works here (shops, offices, warehouses, building sites), when anyone does. */
+  workplace?: Workplace | null;
 };
 
 /** How a unit of this use can earn (as real estate does). */

@@ -6,8 +6,12 @@ import { makePlan, spiralIndex, tileAt, type CityPlan } from "@/lib/city/layout"
 import { regionMap } from "@/lib/world";
 import type { Building } from "@/lib/world/buildings";
 import { cleanPropertyName, ownedSpot } from "@/lib/world/owned";
-import { BUY_TAX, rentPerDay, type AssetUnit, type PropertyApi, type PropertyResult } from "@/lib/world/property-api";
+import { BUY_TAX, rentPerDay, type AssetUnit, type Neighbour, type PropertyApi, type PropertyResult, type WorkStatus } from "@/lib/world/property-api";
 import { toMint, valueOf } from "@/lib/world/value";
+import { fareMint, fareOrBus, payDay, settle, skillLevel, tripKmBetween, type Commute } from "@/lib/world/work";
+import { workplaceById } from "@/lib/world/workplace";
+import { FIRST_NAMES, SURNAMES } from "@/lib/npc/names";
+import { hash } from "@/lib/city/noise";
 
 type Saved = {
   coins: number;
@@ -15,7 +19,29 @@ type Saved = {
   home: string | null;
   units: (AssetUnit & { collectedAt: number })[];
   buildings: Record<string, { building: Building; name: string | null }>;
+  job?: (NonNullable<WorkStatus["job"]> & { paid: number }) | null;
+  skills?: Record<string, number>;
 };
+
+/** Pretend neighbours for the lab (nobody else plays here): the same few for the same home. */
+function pretendNeighbours(home: string, building: Building | undefined): Neighbour[] {
+  const bid = home.split("/")[0];
+  const m = /:(-?\d+),(-?\d+)/.exec(bid);
+  if (!m) return [];
+  const seed = Math.floor(hash(Number(m[1]), Number(m[2]), 77) * 1e6);
+  const pick = (k: number) => `${FIRST_NAMES[(seed + k * 7919) % FIRST_NAMES.length]} ${SURNAMES[(seed + k * 104729) % SURNAMES.length][0]}.`;
+  const out: Neighbour[] = [];
+  const others = (building?.units ?? []).filter((u) => u.id !== home && u.use === "home");
+  const inside = Math.min(others.length, seed % 3);
+  for (let k = 0; k < inside; k++) out.push({ name: pick(k), sameBuilding: true, unit: others[(seed + k) % others.length].label, building: bid, tiles: 0 });
+  const around = 1 + (seed % 4);
+  for (let k = 0; k < around; k++) {
+    const dx = ((seed >> k) % 9) - 4 || 1;
+    const dz = ((seed >> (k + 3)) % 9) - 4;
+    out.push({ name: pick(k + 5), sameBuilding: false, unit: null, building: `${bid.split(":")[0]}:${Number(m[1]) + dx},${Number(m[2]) + dz}`, tiles: Math.round(Math.hypot(dx, dz) * 10) / 10 });
+  }
+  return out.sort((a, b) => a.tiles - b.tiles);
+}
 
 const KEY = "newtown.world-lab.wallet";
 
@@ -45,6 +71,21 @@ export function makeLabApi(budget: number): PropertyApi {
     return p;
   };
   const fail = (error: string): PropertyResult => ({ ok: false, error });
+  /** Pay the job up to now, as the database would. */
+  const settleNow = () => {
+    const j = s.job;
+    if (!j || !s.home) return { days: 0, gross: 0, tax: 0, fares: 0, net: 0 };
+    const map = regionMap(j.place.split(":")[0])!;
+    const fare = fareOrBus(j.mode as Commute, tripKmBetween(s.home, j.place) ?? 0, map.region.prices);
+    const now = Date.now();
+    const pay = settle({ payDay: j.payDay, paidUntil: j.paid }, now, s.skills?.[j.skill] ?? 0, fare);
+    pay.fares = Math.min(pay.fares, Math.round((s.coins + pay.gross - pay.tax) * 100) / 100);
+    pay.net = Math.round((pay.gross - pay.tax - pay.fares) * 100) / 100;
+    s.coins = Math.round((s.coins + pay.net) * 100) / 100;
+    s.skills = { ...s.skills, [j.skill]: (s.skills?.[j.skill] ?? 0) + pay.days };
+    j.paid = now;
+    return pay;
+  };
   const accrue = () => {
     const now = Date.now();
     let rent = 0;
@@ -88,6 +129,7 @@ export function makeLabApi(budget: number): PropertyApi {
     async setHome(unitId) {
       const u = s.units.find((x) => x.unit === unitId && x.use === "home");
       if (!u) return fail("That isn't yours.");
+      settleNow();
       u.let = false;
       s.home = unitId;
       save();
@@ -129,6 +171,52 @@ export function makeLabApi(budget: number): PropertyApi {
     },
     async ownedBuildings() {
       return Object.entries(s.buildings).map(([id, b]) => ({ id, building: b.building, name: b.name }));
+    },
+    async workStatus() {
+      if (!s.job) return { job: null, skills: s.skills ?? {} };
+      const { paid, ...job } = s.job;
+      return { job: { ...job, paidUntil: new Date(paid).toISOString() }, skills: s.skills ?? {} };
+    },
+    async takeJob(placeId, jobId, mode) {
+      if (!s.region) return fail("Start your life first.");
+      if (!s.home) return fail("Buy a home first: you need somewhere to live before you can work.");
+      const region = placeId.split(":")[0];
+      const map = regionMap(region);
+      const place = map ? workplaceById(planFor(region), placeId) : null;
+      const job = place?.jobs.find((j) => j.job === jobId);
+      if (!map || !place || !job) return fail("That job isn't there any more.");
+      if (s.job?.place === placeId && s.job.job === jobId) return fail("That's already your job.");
+      if (skillLevel(s.skills?.[job.skill] ?? 0) < job.level) return fail(`This job needs level ${job.level} in its skill. Start lower and work up.`);
+      const km = tripKmBetween(s.home, placeId) ?? 0;
+      if (fareMint(mode, km, map.region.prices) === null) return fail("It's too far to get there that way.");
+      const pay = settleNow();
+      s.job = { place: placeId, placeName: place.name, job: job.job, title: job.title, skill: job.skill, payDay: payDay(job, map.region.prices), mode, hiredAt: new Date().toISOString(), paidUntil: "", paid: Date.now() };
+      save();
+      return { ok: true, coins: s.coins, pay };
+    },
+    async setCommute(mode) {
+      if (!s.job || !s.home) return fail("You don't have a job right now.");
+      const map = regionMap(s.job.place.split(":")[0])!;
+      if (fareMint(mode, tripKmBetween(s.home, s.job.place) ?? 0, map.region.prices) === null) return fail("It's too far to go that way.");
+      const pay = settleNow();
+      s.job.mode = mode;
+      save();
+      return { ok: true, coins: s.coins, pay };
+    },
+    async collectPay() {
+      const pay = settleNow();
+      save();
+      return { ok: true, coins: s.coins, pay };
+    },
+    async quitJob() {
+      const pay = settleNow();
+      s.job = null;
+      save();
+      return { ok: true, coins: s.coins, pay };
+    },
+    async neighbours() {
+      if (!s.home) return [];
+      return pretendNeighbours(s.home, s.buildings[s.home.split("/")[0]]?.building);
     },
     async buildingOwners(buildingId) {
       return s.units.filter((u) => u.building === buildingId).map((u) => ({ unit: u.unit, name: "You", mine: true }));

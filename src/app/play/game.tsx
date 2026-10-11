@@ -96,6 +96,7 @@ import { worldPreview } from "./world-flag";
 import { PlacePill } from "./place-pill";
 import { useWorldLife } from "./life/world-life";
 import * as propertyActions from "./property-actions";
+import * as workActions from "./work-actions";
 import { REGIONS } from "@/lib/world";
 
 // The 3D city only runs in the browser.
@@ -131,7 +132,7 @@ const DuelScreen = dynamic(() => import("./ghost-duel/duel-screen").then((m) => 
 const NO_GHOSTS: CityGhost[] = [];
 const NO_EVENTS: CityEvent[] = [];
 /** Property on the real map, through the server (game-db/038_property.sql). */
-const PROPERTY_API = propertyActions;
+const PROPERTY_API = { ...propertyActions, ...workActions };
 const noSubscribe = () => () => {};
 const noWorld = () => null;
 
@@ -1337,6 +1338,7 @@ export function Game({
             region={worldId}
             onArea={setWorldArea}
             onProperty={worldId ? worldLife.onProperty : undefined}
+            onWorkplace={worldId ? worldLife.onWorkplace : undefined}
             owned={worldId ? worldLife.owned : undefined}
             markers={worldId ? NO_MARKERS : markers}
             events={worldId ? NO_EVENTS : cityEvents}

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Building2, House, KeyRound, MapPin, Pencil, Store, Trees, X } from "@/components/icons";
 import type { PropertyInfo, PropertyUnit } from "@/lib/world/property";
 import { BUY_TAX, type BuildingOwner } from "@/lib/world/property-api";
+import { JobsHere, type JobsContext } from "./life/jobs-here";
 import { Sheet } from "./sheet";
 
 const fmt = (n: number) => n.toLocaleString("en-GB");
@@ -28,7 +29,7 @@ export type Market = {
 };
 
 /** A property on the real map, tapped: what it is, what it's worth, and every unit in it. */
-export function PropertyCard({ info, market, onClose }: { info: PropertyInfo; market?: Market; onClose: () => void }) {
+export function PropertyCard({ info, market, jobs, onClose }: { info: PropertyInfo; market?: Market; jobs?: JobsContext; onClose: () => void }) {
   const owners = new Map((market?.owners ?? []).map((o) => [o.unit, o]));
   const mineAll = !!market?.owners && info.units.every((u) => owners.get(u.id)?.mine);
   const [renaming, setRenaming] = useState(false);
@@ -126,6 +127,11 @@ export function PropertyCard({ info, market, onClose }: { info: PropertyInfo; ma
           );
         })}
       </ul>
+      {info.workplace && jobs && (
+        <div className="mt-5">
+          <JobsHere place={info.workplace} ctx={jobs} />
+        </div>
+      )}
       {!market && <p className="mt-4 text-center text-xs text-muted">Sign in to buy property.</p>}
     </Sheet>
   );
