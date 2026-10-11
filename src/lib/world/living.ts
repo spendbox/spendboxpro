@@ -93,13 +93,19 @@ export const AUTO_CARE_BELOW = 50;
 /** VAT on private health care and treats (into the treasuries). */
 export const VAT = 0.075;
 
-export type Care = { id: string; title: string; what: string; fee: number; health: number; public: boolean };
+/**
+ * Care for body or mind: what it gives to each (100 = back to full), and game days away from work
+ * (a holiday). Public care is cheap and its fee goes to the state; private care costs more, plus VAT.
+ */
+export type Care = { id: string; meter: "body" | "mind"; title: string; what: string; fee: number; health: number; mind?: number; away?: number; public: boolean };
 
-/** Health care: public clinics are cheap (the fee goes to the state); private care costs more and helps more. */
 export const CARE: Care[] = [
-  { id: "clinic", title: "Check-up at a public clinic", what: "A quick check and medicine. The fee goes to the state.", fee: 5_000, health: 25, public: true },
-  { id: "hospital", title: "Private hospital visit", what: "A doctor, tests and treatment.", fee: 35_000, health: 45, public: false },
-  { id: "full", title: "Full medical (private)", what: "Everything checked and treated: back to full health.", fee: 150_000, health: 100, public: false },
+  { id: "clinic", meter: "body", title: "Check-up at a public clinic", what: "A quick check and medicine. The fee goes to the state.", fee: 5_000, health: 25, public: true },
+  { id: "hospital", meter: "body", title: "Private hospital visit", what: "A doctor, tests and treatment.", fee: 35_000, health: 45, public: false },
+  { id: "full", meter: "body", title: "Full medical (private)", what: "Everything checked and treated: back to full health.", fee: 150_000, health: 100, public: false },
+  { id: "counselling", meter: "mind", title: "Counselling at a public centre", what: "Someone to talk things through with. The fee goes to the state.", fee: 10_000, health: 0, mind: 20, public: true },
+  { id: "therapist", meter: "mind", title: "A private therapist", what: "An hour with a therapist who listens.", fee: 40_000, health: 0, mind: 40, public: false },
+  { id: "holiday", meter: "mind", title: "A weekend away", what: "Three game days at the beach in Badagry: no work, all rest.", fee: 250_000, health: 10, mind: 60, away: 3, public: false },
 ];
 export const AUTO_CARE = CARE[0];
 
@@ -210,6 +216,10 @@ export const MONEY_GROUP: Record<MoneyGroup, { label: string; colour: string }> 
 const KIND_GROUP: Record<string, MoneyGroup> = {
   work_pay: "pay",
   public_pay: "pay",
+  hustle_pay: "pay",
+  bonus: "pay",
+  gym: "health",
+  hustle_start: "other",
   rent: "rent",
   income_tax: "tax",
   rent_tax: "tax",

@@ -4,7 +4,7 @@ import { Briefcase } from "@/components/icons";
 import type { Prices } from "@/lib/world/region";
 import { mintLocal } from "@/lib/world/value";
 import { CERT_LABEL } from "@/lib/world/living";
-import { cheapestCommute, COMMUTE_LABEL, fareMint, INCOME_TAX, payDay, skillLevel, tripKmBetween, WORK_SKILLS, type Commute, type WorkJob } from "@/lib/world/work";
+import { cheapestCommute, COMMUTE_LABEL, fareMint, INCOME_TAX, needsInterview, payDay, skillLevel, tripKmBetween, WORK_SKILLS, type Commute, type WorkJob } from "@/lib/world/work";
 import type { Workplace } from "@/lib/world/workplace";
 
 /** What the jobs list needs to know about you, and what to do when you take one. */
@@ -56,6 +56,7 @@ export function JobsHere({ place, ctx }: { place: Workplace; ctx: JobsContext })
                 <p className="truncate text-xs text-muted">
                   {j.level > 0 ? `Needs ${WORK_SKILLS[j.skill].toLowerCase()} level ${j.level}` : "No experience needed"}
                   {j.cert ? ` and a ${CERT_LABEL[j.cert]}` : ""}
+                  {needsInterview(j) ? " · interview" : ""}
                   {j.state ? " · paid by the state" : ""}
                 </p>
               </div>
@@ -74,7 +75,7 @@ export function JobsHere({ place, ctx }: { place: Workplace; ctx: JobsContext })
                   title={!ctx.homeUnit ? "Buy a home first" : noCert ? `Needs a ${CERT_LABEL[j.cert!]}: see Life → School` : short ? `Needs ${WORK_SKILLS[j.skill]} level ${j.level} (you have ${level})` : ctx.current ? `Leave your job and start as ${j.title}` : `Start as ${j.title}`}
                   className="h-8 shrink-0 rounded-full bg-ink px-3 text-xs font-semibold text-white disabled:opacity-40"
                 >
-                  {noCert ? "Course" : level < j.level ? `Lvl ${j.level}` : ctx.current ? "Switch" : "Take"}
+                  {noCert ? "Course" : level < j.level ? `Lvl ${j.level}` : needsInterview(j) ? "Interview" : ctx.current ? "Switch" : "Take"}
                 </button>
               )}
             </li>

@@ -1,15 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Briefcase, HeartPulse, House, MapPin, Wallet, X } from "@/components/icons";
+import { Briefcase, HeartPulse, House, MapPin, Sparkles, Wallet, X } from "@/components/icons";
 import { makePlan, spiralIndex, type CityPlan } from "@/lib/city/layout";
 import { BUILDING_LABEL } from "@/lib/world/buildings";
 import type { RegionMap } from "@/lib/world/compile";
 import { regionMap } from "@/lib/world";
 import { ownedSpot } from "@/lib/world/owned";
 import type { PropertyInfo } from "@/lib/world/property";
-import type { BuildingOwner, LifeStatus, Neighbour, PaySettled, PropertyApi, PropertyResult, WorkStatus } from "@/lib/world/property-api";
-import { COMMUTE_LABEL } from "@/lib/world/work";
+import type { BuildingOwner, InterviewStart, LifeStatus, Neighbour, PaySettled, PropertyApi, PropertyResult, WorkStatus } from "@/lib/world/property-api";
+import { COMMUTE_LABEL, needsInterview, type Commute } from "@/lib/world/work";
+import { dayOf, EXERCISE } from "@/lib/world/day";
 import type { Workplace } from "@/lib/world/workplace";
 import { PropertyCard } from "../property-card";
 import { Sheet } from "../sheet";
@@ -21,6 +22,7 @@ import { MapSearch, type SearchHit } from "./map-search";
 import { StartLife } from "./start-life";
 import { useLife } from "./use-life";
 import { WorkSheet } from "./work-sheet";
+import { InterviewSheet, MomentSheet } from "./moments";
 
 /** Each region's plan for finding jobs near home, worked out once (only when Work is opened). */
 const plans = new Map<string, CityPlan>();
@@ -59,6 +61,8 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
   const [neighbours, setNeighbours] = useState<Neighbour[] | null>(null);
   const [status, setStatus] = useState<LifeStatus | null>(null);
   const [lifeOpen, setLifeOpen] = useState(false);
+  const [interview, setInterview] = useState<{ start: Extract<InterviewStart, { ok: true }>; hire: (ticket: string) => void } | null>(null);
+  const [moment, setMoment] = useState(false);
   const [confirm, setConfirm] = useState<{ title: string; text: string; yes: string; run: () => void } | null>(null);
 
   useEffect(() => {
@@ -126,11 +130,20 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
           current: work?.job ? { place: work.job.place, job: work.job.job } : null,
           busy,
           onTake: (wp, job, mode) => {
-            const take = () =>
+            const hire = (ticket?: string) =>
               act(
-                () => api.takeJob(wp.id, job.job, mode),
+                () => api.takeJob(wp.id, job.job, mode, ticket),
                 (r) => `You're a ${job.title} now. Pay builds up every game day (2 hours).${paid(r.pay)}`,
               );
+            // Skilled jobs: an interview first, then the job with the pass it hands back.
+            const take = async () => {
+              if (!needsInterview(job)) return void hire();
+              setBusy(true);
+              const start = await api.interviewStart(wp.id, job.job).catch(() => ({ ok: false as const, error: "Couldn't start the interview. Try again." }));
+              setBusy(false);
+              if (!start.ok) return setMessage({ text: start.error, good: false });
+              setInterview({ start, hire });
+            };
             const now = work?.job;
             if (!now) return void take();
             // One main job at a time: say so before swapping.
@@ -138,11 +151,19 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
               title: "Switch jobs?",
               text: `You're a ${now.title} at ${now.placeName}. You can have one main job, so becoming a ${job.title} means leaving it. The pay you've earned there is collected first.`,
               yes: `Switch to ${job.title}`,
-              run: take,
+              run: () => void take(),
             });
           },
         }
       : undefined;
+
+  const day = dayOf({
+    homeUnit,
+    job: work?.job ? { place: work.job.place, mode: work.job.mode as Commute } : null,
+    hustleHours: status?.hustle?.hours ?? 0,
+    course: status?.courses.find((c) => !c.done)?.course ?? null,
+    exercise: status?.exercise ?? "none",
+  });
 
   const home = homeUnit ? (assets?.units ?? []).find((u) => u.unit === homeUnit) : undefined;
   const homeSpot = homeUnit ? ownedSpot(homeUnit.split("/")[0]) : null;
@@ -194,6 +215,13 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
           </button>
         )}
       </div>
+      {status?.event && !moment && (
+        <div className="pointer-events-none absolute inset-x-0 top-24 z-10 flex justify-center px-3 sm:top-28">
+          <button onClick={() => setMoment(true)} className="pointer-events-auto flex items-center gap-2 rounded-full bg-gold px-4 py-2 text-sm font-semibold text-ink shadow-lg ring-4 ring-gold/30">
+            <Sparkles className="size-4" /> Breakthrough {status.event.source === "job" ? "at work" : "in your hustle"}: {status.event.title}
+          </button>
+        </div>
+      )}
       {message && (
         <div className="pointer-events-auto absolute inset-x-0 bottom-24 z-50 flex justify-center px-3">
           <p className={`flex max-w-sm items-center gap-2 rounded-2xl px-4 py-2.5 text-sm shadow-lg ${message.good ? "bg-ink text-white" : "bg-hit text-white"}`}>
@@ -238,10 +266,26 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
       {workOpen && jobs && (
         <WorkSheet
           status={work}
+          life={status}
+          day={day}
+          onStartHustle={(id) => {
+            const run = () => act(() => api.startHustle(id), () => "Your side hustle has started. It earns by the game day.");
+            if (!status?.hustle) return void run();
+            setConfirm({ title: "Change side hustle?", text: `You can have one side hustle. Starting this one stops ${status.hustle.title} (what it made is collected first).`, yes: "Change", run });
+          }}
+          onStopHustle={() =>
+            setConfirm({ title: "Stop your side hustle?", text: "What it made so far is collected first. Its start-up cost doesn't come back.", yes: "Stop it", run: () => act(() => api.stopHustle(), () => "Side hustle stopped.") })
+          }
           region={region}
           plan={plan}
           ctx={jobs}
-          onCollect={() => act(() => api.collectPay(), (r) => `+₥${money(r.pay?.net ?? 0)} pay, after ₥${money(r.pay?.tax ?? 0)} income tax and ₥${money(r.pay?.fares ?? 0)} fares.`)}
+          onCollect={() =>
+            act(
+              () => api.collectPay(),
+              (r) =>
+                `+₥${money((r.pay?.net ?? 0) + (r.pay?.hustle?.net ?? 0))} after tax and fares${r.pay?.hustle?.gross ? ` (₥${money(r.pay.hustle.net)} from your side hustle)` : ""}.`,
+            )
+          }
           onMode={(mode, perDay) =>
             setConfirm({
               title: mode === "walk" ? "Walk to work from now on?" : `Go by ${COMMUTE_LABEL[mode].toLowerCase()} from now on?`,
@@ -295,6 +339,7 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
           region={region}
           busy={busy}
           loadMoney={api.money}
+          loadTime={api.lifeTime}
           onBudget={(b) => act(() => api.setBudget(b), () => "Budget saved. Everything you earn is shared out by it now.")}
           onMove={(from, to, amount) => act(() => api.movePot(from, to, amount), () => `Moved ₥${money(amount)}.`)}
           onClose={() => setAssetsOpen(false)}
@@ -332,6 +377,8 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
       {lifeOpen && (
         <LifeSheet
           status={status}
+          day={day}
+          onExercise={(e) => act(() => api.setExercise(e), () => (e === "none" ? "No exercise for now." : `${EXERCISE[e].label} it is.`))}
           skills={work?.skills ?? {}}
           prices={region.region.prices}
           busy={busy}
@@ -339,6 +386,32 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
           onEnrol={(id) => act(() => api.enrol(id), () => "Enrolled. It finishes by itself; you can keep working meanwhile.")}
           onProcedure={(id) => act(() => api.procedure(id), () => "Booked and done. Take it easy while you recover.")}
           onClose={() => setLifeOpen(false)}
+        />
+      )}
+      {moment && status?.event && (
+        <MomentSheet
+          event={status.event}
+          onAnswer={async (choice) => {
+            const r = await api.answerEvent(choice);
+            await refresh();
+            return r;
+          }}
+          onClose={() => {
+            setMoment(false);
+            void api.lifeStatus().then(setStatus);
+          }}
+        />
+      )}
+      {interview && (
+        <InterviewSheet
+          start={interview.start}
+          onSubmit={(answers) => api.interviewSubmit(interview.start.token, answers)}
+          onPassed={(ticket) => {
+            const hire = interview.hire;
+            setInterview(null);
+            hire(ticket);
+          }}
+          onClose={() => setInterview(null)}
         />
       )}
     </>

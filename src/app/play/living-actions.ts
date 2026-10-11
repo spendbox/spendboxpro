@@ -5,7 +5,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { regionMap } from "@/lib/world";
 import { careById, cleanBudget, courseById, POTS, priceOf, procedureById, type Budget, type Pot } from "@/lib/world/living";
 import type { LifeStatus, MoneyFlow, PropertyResult } from "@/lib/world/property-api";
-import { tickLife } from "./life-tick";
+import { STUDY_HOURS } from "@/lib/world/day";
+import { dayFits, tickLife } from "./life-tick";
 
 // Living on the real map (docs/LIVING.md; the database part is game-db/040_living.sql): your
 // budget and pots, health care, treats and school. Every price is worked out here.
@@ -78,7 +79,11 @@ export async function care(id: string): Promise<PropertyResult> {
     p_fee: price.base,
     p_vat: price.tax,
     p_gain: c.health,
+    p_mind_gain: c.mind ?? 0,
+    p_away_days: c.away ?? 0,
     p_public: c.public,
+    // A weekend away comes out of Treats; care out of Essentials.
+    p_pots: c.away ? ["fun", "savings"] : ["essentials"],
   });
   if (error) return say(error.message);
   return { ok: true, coins: n((data as Record<string, unknown>)?.coins) };
@@ -109,6 +114,7 @@ export async function enrol(id: string): Promise<PropertyResult> {
   const m = await me();
   if (!m) return { ok: false, error: "Please sign in again." };
   if (!c) return say("bad_item");
+  if (!(await dayFits(m.userId, { studyHours: STUDY_HOURS[c.kind] })).fits) return { ok: false, error: "That won't fit in your day. Drop your side hustle or some exercise first." };
   const { data, error } = await createAdminClient().rpc("life_enrol", {
     p_user: m.userId,
     p_course: c.id,

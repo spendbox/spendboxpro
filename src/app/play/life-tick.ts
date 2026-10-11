@@ -1,38 +1,108 @@
 import "server-only";
 
+import { randomBytes } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { regionMap } from "@/lib/world";
+import { drawEvent, EVENT_HOURS, eventComes, showEvent } from "@/lib/world/breakthroughs";
+import { dayOf, dayPlan, EXERCISE, hoursOf, type DayInput, type Exercise } from "@/lib/world/day";
 import { AUTO_CARE, billsFor, priceOf } from "@/lib/world/living";
 import type { LifeStatus } from "@/lib/world/property-api";
+import { GAME_DAY_HOURS, type Commute } from "@/lib/world/work";
+
+/** Everything about a player's day as the database has it. */
+export async function lifeRows(userId: string) {
+  const db = createAdminClient();
+  const [{ data: life }, { data: job }, { data: hustle }, { data: course }] = await Promise.all([
+    db.from("lives").select("region, home_unit, exercise, health_at, power_owed, waste_owed").eq("user_id", userId).maybeSingle(),
+    db.from("life_jobs").select("place_id, mode, skill, pay_day").eq("user_id", userId).maybeSingle(),
+    db.from("life_hustles").select("hustle, hours").eq("user_id", userId).maybeSingle(),
+    db.from("life_courses").select("course").eq("user_id", userId).is("done_at", null).maybeSingle(),
+  ]);
+  if (!life) return null;
+  const day: DayInput = dayOf({
+    homeUnit: (life.home_unit as string) ?? null,
+    job: job ? { place: job.place_id as string, mode: job.mode as Commute } : null,
+    hustleHours: hustle ? Number(hustle.hours) : 0,
+    course: (course?.course as string) ?? null,
+    exercise: ((life.exercise as Exercise) ?? "none") as Exercise,
+    owing: Number(life.power_owed) + Number(life.waste_owed) > 0,
+  });
+  return { life, job, hustle, course, day };
+}
 
 /**
- * Bring a player's life up to now (game-db/040_living.sql's life_tick): the bills for their home
- * are worked out here from its size, and the price of a check-up, never taken from the phone.
- * Every life action calls this first, so health, bills and finished courses are always current.
+ * Bring a player's life up to now (game-db/041_your_day.sql's life_tick): bills for their home,
+ * the gym, how their days move body and mind, and the hours they spent, all worked out here from
+ * the map and the rules, never taken from the phone. Then, now and then, a breakthrough moment
+ * (src/lib/world/breakthroughs.ts). Every life action calls this first.
  */
 export async function tickLife(userId: string): Promise<LifeStatus | null> {
-  const db = createAdminClient();
-  const { data: life } = await db.from("lives").select("region, home_unit").eq("user_id", userId).maybeSingle();
-  if (!life) return null;
+  const rows = await lifeRows(userId);
+  if (!rows) return null;
+  const { life, job, hustle } = rows;
   const map = regionMap(life.region as string);
   if (!map) return null;
   const prices = map.region.prices;
+  const db = createAdminClient();
   let bills: LifeStatus["bills"] = null;
   if (life.home_unit) {
     const { data: unit } = await db.from("property_units").select("area").eq("unit_id", life.home_unit).maybeSingle();
     const b = billsFor(Number(unit?.area ?? 30), prices);
     bills = { power: b.power, waste: b.waste };
   }
+  const plan = dayPlan(rows.day);
+  const ex = EXERCISE[rows.day.exercise];
+  const days = Math.max(0, (Date.now() - Date.parse(String(life.health_at))) / (GAME_DAY_HOURS * 3_600_000));
   const { data, error } = await db.rpc("life_tick", {
     p_user: userId,
     p_power_day: bills?.power ?? 0,
     p_waste_day: bills?.waste ?? 0,
     p_care_fee: priceOf(AUTO_CARE.fee, prices, false).total,
+    p_body_day: plan.body,
+    p_mind_day: plan.mind,
+    p_gym_day: ex.fee ? Math.round((ex.fee / 30 / prices.perMint) * 100) / 100 : 0,
+    p_hours: hoursOf(plan),
   });
   if (error || !data) {
     if (error) console.error("life_tick failed", error.message);
     return null;
   }
-  const s = data as Omit<LifeStatus, "bills">;
-  return { ...s, health: Number(s.health), wallet: Number(s.wallet), powerOwed: Number(s.powerOwed), wasteOwed: Number(s.wasteOwed), payOwed: Number(s.payOwed), bills };
+  const s = data as Omit<LifeStatus, "bills" | "event"> & { event: { id: string; source: "job" | "hustle"; key: string; title: string; expiresAt: string } | null };
+  let event = s.event;
+
+  // Now and then, a breakthrough moment at work or in the side hustle.
+  if (!event) {
+    const sources: { source: "job" | "hustle"; of: string }[] = [];
+    if (job) sources.push({ source: "job", of: job.skill as string });
+    if (hustle) sources.push({ source: "hustle", of: hustle.hustle as string });
+    for (const src of sources) {
+      if (!eventComes(src.source, days)) continue;
+      const b = drawEvent(src.source, src.of);
+      if (!b) continue;
+      const id = `evt-${randomBytes(8).toString("hex")}`;
+      const { data: opened } = await db.rpc("life_event_open", { p_user: userId, p_id: id, p_source: src.source, p_key: b.id, p_title: b.title, p_hours: EVENT_HOURS });
+      if (opened) event = { id, source: src.source, key: b.id, title: b.title, expiresAt: new Date(Date.now() + EVENT_HOURS * 3_600_000).toISOString() };
+      break;
+    }
+  }
+  const shown = event ? showEvent(event.key) : null;
+  return {
+    ...s,
+    health: Number(s.health),
+    mind: Number(s.mind),
+    wallet: Number(s.wallet),
+    powerOwed: Number(s.powerOwed),
+    wasteOwed: Number(s.wasteOwed),
+    payOwed: Number(s.payOwed),
+    bills,
+    event: event && shown ? { ...event, text: shown.text, choices: shown.choices } : null,
+  };
+}
+
+/** Whether a day with this change would still fit in 24 hours (with an hour to yourself). */
+export async function dayFits(userId: string, change: Partial<DayInput>) {
+  const rows = await lifeRows(userId);
+  if (!rows) return { fits: true, plan: null };
+  const plan = dayPlan({ ...rows.day, ...change });
+  return { fits: plan.fits, plan };
 }

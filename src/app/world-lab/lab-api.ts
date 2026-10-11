@@ -18,8 +18,7 @@ import {
   DEFAULT_BUDGET,
   HEALTH_DECAY,
   HEALTH_START,
-  payFactor,
-  POTS,
+    POTS,
   priceOf,
   procedureById,
   splitIncome,
@@ -42,6 +41,10 @@ import { fareMint, fareOrBus, GAME_DAY_HOURS, HOLD_DAYS, INCOME_TAX, payDay, SKI
 import { workplaceById } from "@/lib/world/workplace";
 import { FIRST_NAMES, SURNAMES } from "@/lib/npc/names";
 import { hash } from "@/lib/city/noise";
+import { dayOf, dayPlan, EXERCISE, hoursOf, STRESSED_BELOW, workFactor, type Exercise } from "@/lib/world/day";
+import { hustleById, hustleDay, hustleStart } from "@/lib/world/hustles";
+import { interviewStart, interviewSubmit, labDrawEvent, labMarkEvent } from "@/app/play/interview-actions";
+import { needsInterview } from "@/lib/world/work";
 
 type Saved = {
   coins: number;
@@ -64,6 +67,13 @@ type Saved = {
     courses: { course: string; title: string; cert: string | null; skill: string; grants: number; startedAt: number; endsAt: number; done: boolean }[];
     procedures: { procedure: string; title: string; at: number }[];
     log: { kind: string; amount: number; at: number }[];
+    mind?: number;
+    exercise?: Exercise;
+    hustle?: { hustle: string; title: string; skill: string; payDay: number; swing: number; hours: number; paid: number; boost: number; boostUntil: number | null; stalledUntil: number | null } | null;
+    hours?: { kind: string; hours: number; at: number }[];
+    event?: { token: string; id: string; source: "job" | "hustle"; title: string; text: string; choices: string[]; expiresAt: number } | null;
+    eventAt?: number;
+    fails?: Record<string, number>;
   };
 };
 
@@ -169,10 +179,38 @@ export function makeLabApi(budget: number): PropertyApi {
     return { power: b.power, waste: b.waste };
   };
   /** Bring life up to now, as the database's life_tick does. */
+  /** The day as you live it now. */
+  const plan = (change: Partial<ReturnType<typeof dayOf>> = {}) => {
+    const l = L();
+    const course = l.courses.find((c) => !c.done)?.course ?? null;
+    const input = dayOf({
+      homeUnit: s.home,
+      job: s.job ? { place: s.job.place, mode: s.job.mode as Commute } : null,
+      hustleHours: l.hustle?.hours ?? 0,
+      course,
+      exercise: l.exercise ?? "none",
+      owing: l.powerOwed + l.wasteOwed > 0,
+    });
+    return dayPlan({ ...input, ...change });
+  };
   const tick = () => {
     const l = L();
     const now = Date.now();
-    let health = Math.max(0, l.health - (HEALTH_DECAY * (now - l.healthAt)) / DAY_MS);
+    const p = plan();
+    const days = Math.min(30, Math.max(0, (now - l.healthAt) / DAY_MS));
+    let health = Math.min(100, Math.max(0, l.health + p.body * days));
+    l.mind = r2(Math.min(100, Math.max(0, (l.mind ?? 70) + p.mind * days)));
+    const gym = EXERCISE[l.exercise ?? "none"].fee;
+    if (gym) {
+      const due = r2((gym / 30 / prices().perMint) * days);
+      const paid = spend(["essentials"], due);
+      log("gym", -paid);
+      if (paid < due) l.exercise = "walk";
+    }
+    if (days > 0.01) for (const [kind, h] of Object.entries(hoursOf(p))) (l.hours ??= []).push({ kind, hours: r2(h * days), at: now });
+    l.hours = (l.hours ?? []).filter((x) => x.at > now - 8 * 86_400_000);
+    if (l.event && l.event.expiresAt <= now) l.event = null;
+    void HEALTH_DECAY;
     const b = bills();
     if (b) {
       const days = Math.min(30, Math.max(0, (now - l.billsAt) / DAY_MS));
@@ -212,7 +250,7 @@ export function makeLabApi(budget: number): PropertyApi {
     const days = Math.max(0, Math.min(HOLD_DAYS, (now - j.paid) / DAY_MS));
     const start = now - days * DAY_MS;
     const rec = l.recoveringUntil && l.recoveringUntil > start ? Math.min(days, (Math.min(now, l.recoveringUntil) - start) / DAY_MS) : 0;
-    const factor = payFactor(l.health);
+    const factor = workFactor(l.health, l.mind ?? 70);
     const work = factor === 0 ? 0 : Math.max(0, days - rec);
     const gross = r2(j.payDay * (1 + skillLevel(s.skills?.[j.skill] ?? 0) * SKILL_BONUS) * work * factor);
     const tax = r2(gross * INCOME_TAX);
@@ -225,6 +263,44 @@ export function makeLabApi(budget: number): PropertyApi {
     s.skills = { ...s.skills, [j.skill]: (s.skills?.[j.skill] ?? 0) + work };
     j.paid = now;
     return { days: r2(days), gross, tax, fares, net: r2(gross - tax - fares) };
+  };
+  /** What the side hustle made up to now, as the database's life_hustle_collect does. */
+  const settleHustle = () => {
+    const l = L();
+    const h = l.hustle;
+    if (!h) return { gross: 0, tax: 0, net: 0 };
+    const now = Date.now();
+    const days = Math.max(0, Math.min(HOLD_DAYS, (now - h.paid) / DAY_MS));
+    const start = now - days * DAY_MS;
+    const over = (until: number | null) => (until && until > start ? Math.min(days, (Math.min(now, until) - start) / DAY_MS) : 0);
+    const factor = workFactor(l.health, l.mind ?? 70);
+    const work = factor === 0 ? 0 : Math.max(0, days - Math.max(over(h.stalledUntil), over(l.recoveringUntil)));
+    const boosted = Math.min(work, over(h.boostUntil));
+    const gross = Math.max(0, r2(h.payDay * (1 + skillLevel(s.skills?.[h.skill] ?? 0) * SKILL_BONUS) * (work + boosted * (h.boost - 1)) * factor * (1 + h.swing * (Math.random() * 2 - 1))));
+    const tax = r2(gross * INCOME_TAX);
+    log("hustle_pay", gross);
+    log("income_tax", -tax);
+    income(gross - tax);
+    s.skills = { ...s.skills, [h.skill]: (s.skills?.[h.skill] ?? 0) + work };
+    h.paid = now;
+    return { gross, tax, net: r2(gross - tax) };
+  };
+  /** Now and then a breakthrough (drawn on the server, which keeps the best answer). */
+  const maybeEvent = async (days: number) => {
+    const l = L();
+    if (l.event || (l.eventAt && l.eventAt > Date.now() - 4 * 3_600_000)) return;
+    const sources: ["job" | "hustle", string][] = [];
+    if (s.job) sources.push(["job", s.job.skill]);
+    if (l.hustle) sources.push(["hustle", l.hustle.hustle]);
+    for (const [source, of] of sources) {
+      const rate = source === "job" ? 1 / 10 : 1 / 6;
+      if (Math.random() >= 1 - Math.exp(-rate * Math.min(days, 7))) continue;
+      const e = await labDrawEvent(source, of).catch(() => null);
+      if (!e) return;
+      l.event = { token: e.token, id: e.id, source, title: e.title, text: e.text, choices: [...e.choices], expiresAt: Date.now() + 2 * 3_600_000 };
+      l.eventAt = Date.now();
+      return;
+    }
   };
   /** Rent let units have earned (in full, its 10% tax apart), shared into pots. */
   const accrue = () => {
@@ -331,7 +407,7 @@ export function makeLabApi(budget: number): PropertyApi {
       void state;
       return { job: { ...job, paidUntil: new Date(paid).toISOString() }, skills: s.skills ?? {} };
     },
-    async takeJob(placeId, jobId, mode) {
+    async takeJob(placeId, jobId, mode, ticket) {
       if (!s.region) return fail("Start your life first.");
       if (!s.home) return fail("Buy a home first: you need somewhere to live before you can work.");
       const region = placeId.split(":")[0];
@@ -344,6 +420,8 @@ export function makeLabApi(budget: number): PropertyApi {
       if (job.cert && !L().courses.some((c) => c.done && c.cert === job.cert)) return fail("This job needs a certificate. Take the course under Life → School.");
       const km = tripKmBetween(s.home, placeId) ?? 0;
       if (fareMint(mode, km, map.region.prices) === null) return fail("It's too far to get there that way.");
+      if (needsInterview(job) && !ticket) return fail("This job needs an interview first.");
+      if (!plan({ job: true, commute: { mode, km } }).fits) return fail("That won't fit in your day. Drop your side hustle, a course or some exercise first.");
       const pay = settleNow();
       s.job = { place: placeId, placeName: place.name, job: job.job, title: job.title, skill: job.skill, payDay: payDay(job, map.region.prices), mode, hiredAt: new Date().toISOString(), paidUntil: "", paid: Date.now(), state: !!job.state };
       save();
@@ -360,8 +438,9 @@ export function makeLabApi(budget: number): PropertyApi {
     },
     async collectPay() {
       const pay = settleNow();
+      const hustle = settleHustle();
       save();
-      return { ok: true, coins: s.coins, pay };
+      return { ok: true, coins: s.coins, pay: { ...pay, hustle } };
     },
     async quitJob() {
       const pay = settleNow();
@@ -375,10 +454,19 @@ export function makeLabApi(budget: number): PropertyApi {
     },
     async lifeStatus(): Promise<LifeStatus | null> {
       if (!s.region) return null;
+      const before = L().healthAt;
       tick();
+      await maybeEvent((Date.now() - before) / DAY_MS);
       save();
       const l = L();
+      const h = l.hustle;
       return {
+        mind: l.mind ?? 70,
+        exercise: l.exercise ?? "none",
+        hustle: h
+          ? { hustle: h.hustle, title: h.title, skill: h.skill, payDay: h.payDay, swing: h.swing, hours: h.hours, paidUntil: new Date(h.paid).toISOString(), boost: h.boost, boostUntil: h.boostUntil ? new Date(h.boostUntil).toISOString() : null, stalledUntil: h.stalledUntil ? new Date(h.stalledUntil).toISOString() : null }
+          : null,
+        event: l.event ? { id: l.event.id, source: l.event.source, key: l.event.id, title: l.event.title, expiresAt: new Date(l.event.expiresAt).toISOString(), text: l.event.text, choices: l.event.choices } : null,
         health: l.health,
         powerOwed: l.powerOwed,
         wasteOwed: l.wasteOwed,
@@ -416,11 +504,16 @@ export function makeLabApi(budget: number): PropertyApi {
       if (!c || !s.region) return fail("That isn't on offer.");
       tick();
       const price = priceOf(c.fee, prices(), !c.public);
-      if (canSpend(["essentials"]) < price.total) return fail(`You need ₥${price.total} for that.`);
-      spend(["essentials"], price.total);
+      const pots: Pot[] = c.away ? ["fun", "savings"] : ["essentials"];
+      const l = L();
+      if (c.away && l.recoveringUntil && l.recoveringUntil > Date.now()) return fail("You're away already.");
+      if (canSpend(pots) < price.total) return fail(`You need ₥${price.total.toLocaleString("en-GB")} for that.`);
+      spend(pots, price.total);
       log("health_care", -price.base);
       log("vat", -price.tax);
-      L().health = c.health >= 100 ? 100 : Math.min(100, L().health + c.health);
+      l.health = c.health >= 100 ? 100 : Math.min(100, l.health + c.health);
+      l.mind = Math.min(100, (l.mind ?? 70) + (c.mind ?? 0));
+      if (c.away) l.recoveringUntil = Date.now() + c.away * DAY_MS;
       save();
       return { ok: true, coins: s.coins };
     },
@@ -448,6 +541,7 @@ export function makeLabApi(budget: number): PropertyApi {
       const l = L();
       if (l.courses.some((x) => !x.done)) return fail("Finish the course you're on first.");
       if (l.courses.some((x) => x.course === c.id)) return fail("You've done that course already.");
+      if (!plan({ studyHours: { short: 2, diploma: 3, degree: 4, licence: 4 }[c.kind] }).fits) return fail("That won't fit in your day. Drop your side hustle or some exercise first.");
       const fee = priceOf(c.fee, prices(), false).total;
       if (canSpend(["savings"]) < fee) return fail(`You need ₥${fee.toLocaleString("en-GB")} for that.`);
       spend(["savings"], fee);
@@ -461,6 +555,85 @@ export function makeLabApi(budget: number): PropertyApi {
       const out: MoneyFlow = {};
       for (const x of L().log) if (x.at >= since) out[x.kind] = r2((out[x.kind] ?? 0) + x.amount);
       return out;
+    },
+    async lifeTime(hours) {
+      const since = Date.now() - hours * 3_600_000;
+      const out: Record<string, number> = {};
+      for (const x of L().hours ?? []) if (x.at >= since) out[x.kind] = r2((out[x.kind] ?? 0) + x.hours);
+      return out;
+    },
+    async startHustle(id) {
+      const h = hustleById(id);
+      if (!h || !s.region) return fail("That isn't on offer.");
+      if (!s.home) return fail("Buy a home first.");
+      tick();
+      const l = L();
+      if (l.hustle?.hustle === id) return fail("That's already your side hustle.");
+      if (h.level && skillLevel(s.skills?.[h.skill] ?? 0) < h.level) return fail(`You need ${h.skill} level ${h.level} for that.`);
+      if (!plan({ hustleHours: h.hours }).fits) return fail("That won't fit in your day. Cut back somewhere first.");
+      const cost = hustleStart(h, prices());
+      if (canSpend(["savings"]) < cost) return fail(`You need ₥${cost.toLocaleString("en-GB")} to start that.`);
+      settleHustle();
+      spend(["savings"], cost);
+      log("hustle_start", -cost);
+      l.hustle = { hustle: h.id, title: h.title, skill: h.skill, payDay: hustleDay(h, prices()), swing: h.swing, hours: h.hours, paid: Date.now(), boost: 1, boostUntil: null, stalledUntil: null };
+      save();
+      return { ok: true, coins: s.coins };
+    },
+    async stopHustle() {
+      const hustle = settleHustle();
+      L().hustle = null;
+      save();
+      return { ok: true, pay: { days: 0, gross: 0, tax: 0, fares: 0, net: 0, hustle } };
+    },
+    async setExercise(ex) {
+      if (!(ex in EXERCISE)) return fail("That isn't on offer.");
+      tick();
+      if (!plan({ exercise: ex }).fits) return fail("That won't fit in your day.");
+      L().exercise = ex;
+      save();
+      return { ok: true };
+    },
+    async interviewStart(placeId, jobId) {
+      const until = L().fails?.[`${placeId}/${jobId}`];
+      if (until && until > Date.now()) return { ok: false, error: `You can try this interview again at ${new Date(until).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}.` };
+      const r = await interviewStart(placeId, jobId);
+      // The lab's pretend mind: one more right answer when stressed.
+      if (r.ok && (L().mind ?? 70) < STRESSED_BELOW) return { ...r, need: Math.min(5, r.need + 1) };
+      return r;
+    },
+    async interviewSubmit(token, answers) {
+      const r = await interviewSubmit(token, answers);
+      if (r.ok && !r.passed) {
+        const t = JSON.parse(atob(token.split(".")[0].replace(/-/g, "+").replace(/_/g, "/"))) as { place: string; job: string };
+        L().fails = { ...L().fails, [`${t.place}/${t.job}`]: Date.now() + 14 * 3_600_000 };
+        save();
+      }
+      return r;
+    },
+    async answerEvent(choice) {
+      const l = L();
+      const e = l.event;
+      if (!e || e.expiresAt <= Date.now()) return { ok: false, error: "That moment has passed." };
+      const mark = await labMarkEvent(e.token, choice);
+      l.event = null;
+      if (!mark) return { ok: false, error: "That moment has passed." };
+      let bonus = 0;
+      if (mark.won && e.source === "job" && s.job) {
+        bonus = r2(s.job.payDay * 3);
+        log("bonus", bonus);
+        income(bonus);
+        s.skills = { ...s.skills, [s.job.skill]: (s.skills?.[s.job.skill] ?? 0) + 3 };
+      }
+      if (e.source === "hustle" && l.hustle) {
+        settleHustle();
+        if (mark.won) {
+          l.hustle.boost = 2;
+          l.hustle.boostUntil = Date.now() + 3 * DAY_MS;
+        } else if (mark.stall) l.hustle.stalledUntil = Date.now() + mark.stall * DAY_MS;
+      }
+      save();
+      return { ok: true, won: mark.won, said: mark.said, bonus, stall: e.source === "hustle" ? mark.stall : 0 };
     },
     async buildingOwners(buildingId) {
       return s.units.filter((u) => u.building === buildingId).map((u) => ({ unit: u.unit, name: "You", mine: true }));

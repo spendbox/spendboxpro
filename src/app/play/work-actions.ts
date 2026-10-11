@@ -5,10 +5,11 @@ import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { regionMap } from "@/lib/world";
 import type { Neighbour, PaySettled, PropertyResult, WorkStatus } from "@/lib/world/property-api";
-import { COMMUTES, fareMint, fareOrBus, payDay, tripKmBetween, type Commute } from "@/lib/world/work";
+import { COMMUTES, fareMint, fareOrBus, needsInterview, payDay, tripKmBetween, type Commute } from "@/lib/world/work";
 import { CERT_LABEL } from "@/lib/world/living";
 import { workplaceById } from "@/lib/world/workplace";
-import { tickLife } from "./life-tick";
+import { unseal } from "@/lib/game-seal";
+import { dayFits, tickLife } from "./life-tick";
 
 // Working on the real map (docs/WORK.md; the database part is game-db/039_work.sql). What a job
 // pays and what the trip to it costs are always worked out here, from the map, never taken from
@@ -74,7 +75,7 @@ export async function workStatus(): Promise<WorkStatus | null> {
 }
 
 /** Take a job at a workplace on the map, getting there by `mode`. */
-export async function takeJob(placeId: string, jobId: string, mode: Commute): Promise<PropertyResult> {
+export async function takeJob(placeId: string, jobId: string, mode: Commute, ticket?: string): Promise<PropertyResult> {
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Sign in to work." };
   if (!COMMUTES.includes(mode)) return say("bad_mode");
@@ -91,6 +92,13 @@ export async function takeJob(placeId: string, jobId: string, mode: Commute): Pr
     const { data: done } = await createAdminClient().from("life_courses").select("course").eq("user_id", userId).eq("cert", job.cert).not("done_at", "is", null).limit(1);
     if (!done?.length) return { ok: false, error: `This job needs a ${CERT_LABEL[job.cert]}. Take the course under Life → School.` };
   }
+  // Skilled jobs need a passed interview (a sealed pass from interview-actions.ts, for this job here).
+  if (needsInterview(job)) {
+    const pass = ticket ? unseal<{ user: string; place: string; job: string }>(ticket) : null;
+    if (!pass || pass.user !== userId || pass.place !== placeId || pass.job !== jobId) return { ok: false, error: "This job needs an interview first." };
+  }
+  const fit = await dayFits(userId, { job: true, commute: { mode, km } });
+  if (!fit.fits) return { ok: false, error: "That won't fit in your day. Drop your side hustle, a course or some exercise first." };
   const { data, error } = await createAdminClient().rpc("life_work_take", {
     p_user: userId,
     p_region: region,
@@ -120,21 +128,26 @@ export async function setCommute(mode: Commute): Promise<PropertyResult> {
   const km = tripKmBetween(now.home, now.job.place_id as string);
   const map = regionMap(now.region);
   if (km === null || !map || fareMint(mode, km, map.region.prices) === null) return { ok: false, error: "It's too far to go that way." };
+  if (!(await dayFits(userId, { commute: { mode, km } })).fits) return { ok: false, error: "That way takes too long to fit in your day." };
   const { data, error } = await createAdminClient().rpc("life_work_mode", { p_user: userId, p_mode: mode, p_old_fare: now.fare });
   if (error) return say(error.message);
   const d = (data ?? {}) as Record<string, unknown>;
   return { ok: true, coins: n(d.coins), pay: settled(d) };
 }
 
-/** Collect your pay (less income tax and fares). */
+/** Collect your pay and what your side hustle made (less income tax and fares). */
 export async function collectPay(): Promise<PropertyResult> {
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Please sign in again." };
   const now = await whereYouAre(userId);
-  const { data, error } = await createAdminClient().rpc("life_work_collect", { p_user: userId, p_fare_trip: now.fare });
+  const db = createAdminClient();
+  const { data, error } = await db.rpc("life_work_collect", { p_user: userId, p_fare_trip: now.fare });
   if (error) return say(error.message);
+  const { data: h } = await db.rpc("life_hustle_collect", { p_user: userId });
   const d = (data ?? {}) as Record<string, unknown>;
-  return { ok: true, coins: n(d.coins), pay: settled(d) };
+  const hd = (h ?? {}) as Record<string, unknown>;
+  const { data: prof } = await db.from("profiles").select("coins").eq("id", userId).maybeSingle();
+  return { ok: true, coins: n(prof?.coins ?? d.coins), pay: { ...settled(d), hustle: { gross: n(hd.gross), tax: n(hd.tax), net: n(hd.net) } } };
 }
 
 /** Leave your job (paid up first). */

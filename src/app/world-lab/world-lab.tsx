@@ -86,4 +86,11 @@ const SERVERLESS = {
   procedure: async () => ({ ok: false as const, error: "" }),
   enrol: async () => ({ ok: false as const, error: "" }),
   money: async () => ({}),
+  lifeTime: async () => ({}),
+  startHustle: async () => ({ ok: false as const, error: "" }),
+  stopHustle: async () => ({ ok: false as const, error: "" }),
+  setExercise: async () => ({ ok: false as const, error: "" }),
+  interviewStart: async () => ({ ok: false as const, error: "" }),
+  interviewSubmit: async () => ({ ok: false as const, error: "" }),
+  answerEvent: async () => ({ ok: false as const, error: "" }),
 };
