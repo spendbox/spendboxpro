@@ -49,8 +49,8 @@ done
 # Part 30 takes the bot out of the ghosts, which the scenarios above still count on; part 31
 # adds the throw clock; part 32 the bank robbery; part 33 helicopter rides; part 34 the phone
 # gallery; part 35 first-visit fees, fares and jobs; part 36 minigame rewards; part 37 better
-# pay. Each test runs its own part.
-for t in nobot stalling heist heli phone jobs minigames pay; do
+# pay; part 38 property on the real map. Each test runs its own part.
+for t in nobot stalling heist heli phone jobs minigames pay property; do
   [ -f "game-db/tests/$t.test.sql" ] || continue
   $P -f "game-db/tests/$t.test.sql" 2>&1 | sed 's/^psql:[^ ]* NOTICE:  //'
 done

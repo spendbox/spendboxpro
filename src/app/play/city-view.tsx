@@ -22,6 +22,7 @@ import {
   structureSize,
   tileAt,
   busyAt,
+  placeOwned,
   VENUE_SPORT,
   type CityPlan,
   type Tile,
@@ -33,6 +34,7 @@ import { toTile } from "@/lib/world/geo";
 import { BUILDING_LABEL, type Building } from "@/lib/world/buildings";
 import { shortMint, toMint, valueOf } from "@/lib/world/value";
 import { propertyInfo, type PropertyInfo } from "@/lib/world/property";
+import type { OwnedProperty } from "@/lib/world/owned";
 import { daylight, weatherAt } from "@/lib/city/sky";
 import { npcsFor, type Npc } from "@/lib/npcs";
 import { createBirds } from "./city/birds";
@@ -211,6 +213,8 @@ type Props = {
   onArea?: (name: string | null) => void;
   /** A real place: a property was tapped (instead of going inside): what it is and what it's worth. */
   onProperty?: (info: PropertyInfo) => void;
+  /** A real place's owned properties: they stand as bought, with their owners' names (src/lib/world/owned). */
+  owned?: OwnedProperty[];
   /** Your face, floating over your hiding spot. */
   meAvatar: Avatar;
   /** A coin balloon drifting by just for you (its slot number), or none. */
@@ -1287,6 +1291,7 @@ export function CityView({
   onHover,
   onArea,
   onProperty,
+  owned,
   meAvatar,
   coinBalloon,
   onBalloon,
@@ -1331,6 +1336,7 @@ export function CityView({
   const host = useRef<HTMLDivElement>(null);
   const api = useRef<{
     build: (seed: number, count: number, region?: string | null) => void;
+    setOwned: (list: OwnedProperty[] | undefined) => void;
     setMarkers: (m: CityMarkers) => void;
     playEvents: (e: CityEvent[]) => void;
     setBalloon: (slot: number | null) => void;
@@ -1469,6 +1475,9 @@ export function CityView({
     let currentSeed = -1;
     /** The real place being shown (src/lib/world), or null for a made-up town. */
     let regionNow: RegionMap | null = null;
+    /** Its owned properties, and a key to spot changes. */
+    let ownedNow: OwnedProperty[] = [];
+    let ownedKey = "";
     /** How many tiles the town has (the last build). */
     let builtCount = 0;
     /**
@@ -2454,6 +2463,7 @@ export function CityView({
       // blocks it has already worked out, so the next part of town is quicker to draw).
       const plan = regionNow && sameCity && currentPlan?.region === regionNow ? currentPlan : makePlan(newSeed, regionNow);
       placeHouses(plan, count, homesNow);
+      if (regionNow) placeOwned(plan, ownedNow);
       // The spiral ring the last tile is on: the town is (2 × ring + 1) tiles across.
       const ring = Math.ceil((Math.sqrt(count) - 1) / 2);
       const moved = Boolean(centre) && sameCity;
@@ -4120,6 +4130,11 @@ export function CityView({
       const p = posOf(tile);
       focus = null;
       eventFly = new THREE.Vector3(p.x, 0, p.z);
+      // A long jump across a real place: draw the destination in full straight away, so it's
+      // ready when the camera gets there (instead of after the glide).
+      if (regionNow && win && Math.max(Math.abs(p.x - win.cx), Math.abs(p.z - win.cz)) > DETAIL * 0.45) {
+        build(currentSeed, builtCount, { cx: Math.round(p.x), cz: Math.round(p.z) });
+      }
       // Outline the building there, so it's easy to spot.
       showHover(tile);
     };
@@ -6163,7 +6178,15 @@ export function CityView({
       const ring = Math.max(-b.x0, b.x1, -b.z0, b.z1);
       build(regionNow.region.seed, (2 * ring + 1) ** 2);
     }
-    api.current = { build: buildFor, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, zoom };
+    function setOwned(list: OwnedProperty[] | undefined) {
+      const next = list ?? [];
+      const key = next.map((o) => `${o.id}:${o.name ?? ""}`).join("|");
+      if (key === ownedKey) return;
+      ownedKey = key;
+      ownedNow = next;
+      if (regionNow && currentSeed >= 0 && builtCount > 0) build(currentSeed, builtCount);
+    }
+    api.current = { build: buildFor, setOwned, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, zoom };
 
     return () => {
       alive = false;
@@ -6234,6 +6257,10 @@ export function CityView({
   useEffect(() => {
     api.current?.build(seed, tileCount, region);
   }, [seed, tileCount, region]);
+
+  useEffect(() => {
+    api.current?.setOwned(owned);
+  }, [owned]);
 
   useEffect(() => {
     api.current?.setHouses(houses);

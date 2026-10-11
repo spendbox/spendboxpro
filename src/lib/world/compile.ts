@@ -6,7 +6,7 @@ import type { StructureType, TileKind } from "@/lib/city/layout";
 import { type Frame, type LatLon, toTile, tileBounds } from "./geo.ts";
 import type { BakedGrid, Landmark, Region, Road, RoadKind } from "./region.ts";
 import { fillArea, line4 } from "./raster.ts";
-import { chainLines, piecesOf, placeStations, tilesUnder, type Piece, type SpanLine, type StationPlan } from "./spans.ts";
+import { chainLines, findJoins, piecesOf, placeStations, tilesUnder, type Piece, type SpanLine, type StationPlan } from "./spans.ts";
 
 export { fillArea, line4 };
 
@@ -262,22 +262,24 @@ export function compileRegion(region: Region): RegionMap {
   }
 
   // ---- bridges, flyovers and railways, with their real curves
-  const bridgeLines = chainLines(
-    [...region.roads, ...region.corrections.flatMap((c) => (c.kind === "road" ? [c.road] : []))]
-      .filter((r) => r.bridge)
-      .map((r) => r.path.map(([lat, lon]) => at({ lat, lon }))),
+  // Chained per level, so a deck on the second level never merges with one below it.
+  const bridgeRoads = [...region.roads, ...region.corrections.flatMap((c) => (c.kind === "road" ? [c.road] : []))].filter((r) => r.bridge);
+  const levels = [...new Set(bridgeRoads.map((r) => r.layer ?? 1))];
+  const bridgeLines = levels.flatMap((layer) =>
+    chainLines(bridgeRoads.filter((r) => (r.layer ?? 1) === layer).map((r) => r.path.map(([lat, lon]) => at({ lat, lon })))).map((pts) => ({ pts, layer })),
   );
   const majorAt = (p: { x: number; z: number }) => {
     const r = roadAt(Math.round(p.x), Math.round(p.z));
     return !!r && (r.kind === "motorway" || r.kind === "trunk");
   };
   const overWater = (x: number, z: number) => waterAt(x, z) > 0;
-  const lines: SpanLine[] = bridgeLines.map((pts) => ({ kind: "road", pts, raised: true, overWater, major: majorAt(pts[Math.floor(pts.length / 2)]) }));
+  const lines: SpanLine[] = bridgeLines.map(({ pts, layer }) => ({ kind: "road", pts, raised: true, overWater, major: majorAt(pts[Math.floor(pts.length / 2)]), layer }));
   for (const raised of [true, false]) {
     for (const pts of chainLines(region.rail.filter((r) => !!r.bridge === raised).map((r) => r.path.map(([lat, lon]) => at({ lat, lon }))))) {
       lines.push({ kind: "rail", pts, raised, overWater, major: false });
     }
   }
+  findJoins(lines);
   const pieces = new Map<number, Piece[]>();
   const clear = new Map<number, "deck" | "track" | "station">();
   for (const line of lines) {

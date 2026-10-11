@@ -60,7 +60,7 @@ function overpass(name, query, tries = 8) {
 }
 
 /** A big area asked for in smaller pieces (servers turn down very big questions), joined up. */
-function overpassPieces(name, body, cols, rows) {
+function overpassPieces(name, body, cols, rows, tries = 8) {
   const seen = new Set();
   const elements = [];
   const s0 = region.box.south - m, w0 = region.box.west - m, n0 = region.box.north + m, e0 = region.box.east + m;
@@ -69,7 +69,7 @@ function overpassPieces(name, body, cols, rows) {
       const b = [s0 + ((n0 - s0) * j) / rows, w0 + ((e0 - w0) * i) / cols, s0 + ((n0 - s0) * (j + 1)) / rows, w0 + ((e0 - w0) * (i + 1)) / cols]
         .map((v) => v.toFixed(5))
         .join(",");
-      for (const e of overpass(`${name}-${i}-${j}`, `[out:json][timeout:600];\n(\n${body(b)}\n);\nout geom;`).elements) {
+      for (const e of overpass(`${name}-${i}-${j}`, `[out:json][timeout:600];\n(\n${body(b)}\n);\nout geom;`, tries).elements) {
         const key = `${e.type}${e.id}`;
         if (!seen.has(key)) {
           seen.add(key);
@@ -350,7 +350,9 @@ const routes = [];
 const shape = (geometry, tol) => simplify(geometry.map((g) => ({ ...at(g.lat, g.lon), g })), tol).map((p) => [+p.g.lat.toFixed(5), +p.g.lon.toFixed(5)]);
 for (const e of roads) {
   if (!isBridge(e.tags) || !keep(e) || lengthOf(e.geometry) < 40) continue;
-  routes.push({ id: `osm-w${e.id}`, name: label(e.tags) || "Bridge", kind: e.tags.highway, bridge: true, path: shape(e.geometry, 0.05) });
+  // Which level it's on where flyovers cross (the map's "layer": 1 just above the ground).
+  const layer = Math.max(1, Math.min(4, Number(e.tags.layer) || 1));
+  routes.push({ id: `osm-w${e.id}`, name: label(e.tags) || "Bridge", kind: e.tags.highway, bridge: true, ...(layer > 1 ? { layer } : {}), path: shape(e.geometry, 0.05) });
 }
 
 // ---------------------------------------------------------------- railways, stations, crossings
@@ -379,7 +381,7 @@ if (!fromFiles) {
   }
   try {
     // 0 zebra, 1 with its own traffic lights, 2 marked (ladder), 3 with a refuge island.
-    const els = overpassPieces("crossings", (b) => `  node["highway"="crossing"](${b});`, 4, 2);
+    const els = overpassPieces("crossings", (b) => `  node["highway"="crossing"](${b});`, 4, 2, 2);
     crossings = els.map((e) => {
       const t = e.tags ?? {};
       const type = t["crossing:island"] === "yes" ? 3 : t.crossing === "traffic_signals" ? 1 : t.crossing === "zebra" || t.crossing_ref === "zebra" ? 0 : 2;
