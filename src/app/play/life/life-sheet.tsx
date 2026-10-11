@@ -31,12 +31,11 @@ const TABS: { id: Tab; label: string; icon: typeof HeartPulse }[] = [
   { id: "looks", label: "Looks", icon: Sparkles },
 ];
 
-/** "90 game days (about 7½ real days)". */
+/** How long a course takes in real time: "7½ days", "10 hours". */
 function gameDays(days: number) {
   const hours = days * GAME_DAY_HOURS;
   const d = Math.round((hours / 24) * 2) / 2;
-  const real = hours < 24 ? `${hours} real hours` : `about ${d} real ${d === 1 ? "day" : "days"}`;
-  return `${days} game ${days === 1 ? "day" : "days"} (${real})`;
+  return hours < 24 ? `${hours} hours` : `${String(d).replace(".5", "½")} ${d === 1 ? "day" : "days"}`;
 }
 
 /** Which jobs a certificate opens (by title). */
@@ -92,9 +91,12 @@ export function LifeSheet({
   const certs = (status?.courses ?? []).filter((c) => c.done && c.cert).map((c) => c.cert as Cert);
   const tone = health >= AUTO_CARE_BELOW ? "#2f9e44" : health >= SICK_BELOW ? "#f08c00" : "#e03131";
 
+  const [kind, setKind] = useState(COURSE_KINDS[0].kind);
+  const exercise = status?.exercise ?? "none";
+
   return (
     <Sheet onClose={onClose} wide title="Life">
-      <div className="mt-3 flex gap-1 rounded-full bg-ink/5 p-1">
+      <div className="flex gap-1 rounded-full bg-ink/5 p-1">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -109,78 +111,65 @@ export function LifeSheet({
       {tab === "health" && (
         <div className="mt-4">
           <div className="grid grid-cols-2 gap-2">
-            <Meter label="Body" value={health} word={healthWord(health)} colour={tone} />
-            <Meter label="Mind" value={mind} word={mindWord(mind)} colour={mind >= 50 ? "#7048e8" : mind >= STRESSED_BELOW ? "#f08c00" : "#e03131"} />
+            <Meter label="Body" value={health} word={healthWord(health)} colour={tone} change={plan?.body} />
+            <Meter label="Mind" value={mind} word={mindWord(mind)} colour={mind >= 50 ? "#7048e8" : mind >= STRESSED_BELOW ? "#f08c00" : "#e03131"} change={plan?.mind} />
           </div>
-          {plan && (
-            <p className="mt-2 text-center text-[11px] text-muted">
-              Living like this: body {plan.body > 0 ? "+" : ""}
-              {plan.body}, mind {plan.mind > 0 ? "+" : ""}
-              {plan.mind} a game day. Free time helps your mind; exercise helps your body; long days and debts wear you down.
-            </p>
-          )}
+          {health < SICK_BELOW && <p className="mt-2 text-xs font-semibold text-hit">{health < BEDRIDDEN_BELOW ? "Too ill to work. See a doctor." : "Unwell: half pay until you're better."}</p>}
+          {mind < STRESSED_BELOW && <p className="mt-2 text-xs font-semibold text-hit">Stressed: interviews are harder. Rest or talk to someone.</p>}
           {recovering && (
-            <p className="mt-3 rounded-2xl bg-gold/15 p-3 text-xs">Away until {new Date(status!.recoveringUntil!).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" })}: no work till then.</p>
+            <p className="mt-2 rounded-2xl bg-gold/15 p-3 text-xs">Away until {new Date(status!.recoveringUntil!).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" })}: no work till then.</p>
           )}
 
           <h3 className="mt-5 text-sm font-semibold">Exercise</h3>
-          <div className="mt-2 grid grid-cols-2 gap-1.5">
+          <div className="mt-2 flex flex-wrap gap-1.5">
             {EXERCISES.map((e) => {
-              const x = EXERCISE[e];
-              const on = (status?.exercise ?? "none") === e;
               const fits = !day || dayPlan({ ...day, exercise: e }).fits;
               return (
                 <button
                   key={e}
-                  disabled={busy || on || !fits}
+                  disabled={busy || exercise === e || !fits}
                   onClick={() => onExercise(e)}
-                  className={`rounded-2xl p-2.5 text-left text-xs ${on ? "bg-ink text-white" : "bg-ink/5 disabled:opacity-40"}`}
+                  title={fits ? EXERCISE[e].what : "Won't fit in your day"}
+                  className={`h-8 rounded-full px-3 text-xs font-semibold ${exercise === e ? "bg-ink text-white" : "bg-ink/5 disabled:opacity-40"}`}
                 >
-                  <span className="block font-semibold">{x.label}</span>
-                  <span className={`block ${on ? "opacity-70" : "text-muted"}`}>{fits ? x.what : "Won't fit in your day"}</span>
+                  {EXERCISE[e].label}
                 </button>
               );
             })}
           </div>
+          <p className="mt-1.5 text-[11px] text-muted">{EXERCISE[exercise].what}</p>
 
-          {(["body", "mind"] as const).map((meter) => (
-            <section key={meter} className="mt-5">
-              <h3 className="text-sm font-semibold">{meter === "body" ? "Care for your body" : "Care for your mind"}</h3>
-              {meter === "body" && <p className="text-[11px] text-muted">Below {AUTO_CARE_BELOW}, a public clinic check-up happens by itself. Below {SICK_BELOW}: half pay; below {BEDRIDDEN_BELOW}: no work.</p>}
-              {meter === "mind" && <p className="text-[11px] text-muted">Below {STRESSED_BELOW}, interviews are harder; below 10 you burn out and can&apos;t work.</p>}
-              <ul className="mt-2 divide-y divide-ink/5 rounded-2xl ring-1 ring-ink/5">
-                {CARE.filter((c) => c.meter === meter).map((c) => {
-                  const price = priceOf(c.fee, prices, !c.public);
-                  const can = c.away ? treats : essentials;
-                  return (
-                    <li key={c.id} className="flex items-center gap-3 px-3 py-2.5">
-                      <Stethoscope className="size-4 shrink-0 text-muted" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium">{c.title}</p>
-                        <p className="text-xs text-muted">
-                          {[c.health >= 100 ? "Body back to full" : c.health ? `+${c.health} body` : "", c.mind ? `+${c.mind} mind` : "", c.away ? `${c.away} game days off` : ""].filter(Boolean).join(" · ")} · {c.what}
-                        </p>
-                      </div>
-                      <Price total={price.total} prices={prices} vat={price.tax > 0} />
-                      <button disabled={busy || can < price.total || (c.away ? recovering : false)} onClick={() => onCare(c.id)} className="h-8 shrink-0 rounded-full bg-ink px-3 text-xs font-semibold text-white disabled:opacity-40">
-                        Go
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          ))}
+          <h3 className="mt-5 text-sm font-semibold">Feel better</h3>
+          <ul className="mt-2 divide-y divide-ink/5 rounded-2xl ring-1 ring-ink/5">
+            {CARE.map((c) => {
+              const price = priceOf(c.fee, prices, !c.public);
+              const can = c.away ? treats : essentials;
+              return (
+                <li key={c.id} className="flex items-center gap-3 px-3 py-2.5">
+                  {c.meter === "body" ? <Stethoscope className="size-4 shrink-0 text-muted" /> : <HeartPulse className="size-4 shrink-0 text-muted" />}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{c.title}</p>
+                    <p className="mt-0.5 flex flex-wrap gap-1">
+                      {c.health > 0 && <Chip strong>{c.health >= 100 ? "Body full" : `+${c.health} body`}</Chip>}
+                      {!!c.mind && <Chip strong>+{c.mind} mind</Chip>}
+                      {!!c.away && <Chip>{c.away} days off</Chip>}
+                    </p>
+                  </div>
+                  <Price total={price.total} prices={prices} />
+                  <button disabled={busy || can < price.total || (c.away ? recovering : false)} onClick={() => onCare(c.id)} className="h-8 shrink-0 rounded-full bg-ink px-3 text-xs font-semibold text-white disabled:opacity-40">
+                    Go
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="mt-1.5 text-[11px] text-muted">Below {AUTO_CARE_BELOW} body, a clinic check-up happens by itself.</p>
         </div>
       )}
 
       {tab === "school" && (
         <div className="mt-4">
-          {studying ? (
-            <Studying course={studying} now={now} />
-          ) : (
-            <p className="text-sm text-muted">Study while you work. A course counts as experience in its skill and some give the certificate a better job needs. Fees come from Savings.</p>
-          )}
+          {studying && <Studying course={studying} now={now} />}
           {certs.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-1.5">
               {certs.map((c) => (
@@ -190,28 +179,26 @@ export function LifeSheet({
               ))}
             </div>
           )}
-          {COURSE_KINDS.map((k) => {
-            const list = COURSES.filter((c) => c.kind === k.kind);
-            if (!list.length) return null;
-            return (
-              <section key={k.kind} className="mt-4">
-                <h3 className="text-sm font-semibold">{k.label}</h3>
-                <p className="text-[11px] text-muted">{k.what}</p>
-                <ul className="mt-2 space-y-2">
-                  {list.map((c) => (
-                    <CourseRow key={c.id} c={c} prices={prices} skills={skills} done={!!status?.courses.some((x) => x.course === c.id)} canPay={savings} busy={busy || !!studying} onEnrol={onEnrol} />
-                  ))}
-                </ul>
-              </section>
-            );
-          })}
+          <div className={`${studying || certs.length ? "mt-4" : ""} flex flex-wrap gap-1.5`}>
+            {COURSE_KINDS.filter((k) => COURSES.some((c) => c.kind === k.kind)).map((k) => (
+              <button key={k.kind} onClick={() => setKind(k.kind)} className={`h-8 rounded-full px-3 text-xs font-semibold ${kind === k.kind ? "bg-ink text-white" : "bg-ink/5"}`}>
+                {k.label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1.5 text-[11px] text-muted">{COURSE_KINDS.find((k) => k.kind === kind)?.what}. Study while you work; fees from Savings.</p>
+          <ul className="mt-2 divide-y divide-ink/5 rounded-2xl ring-1 ring-ink/5">
+            {COURSES.filter((c) => c.kind === kind).map((c) => (
+              <CourseRow key={c.id} c={c} prices={prices} skills={skills} done={!!status?.courses.some((x) => x.course === c.id)} canPay={savings} busy={busy || !!studying} onEnrol={onEnrol} />
+            ))}
+          </ul>
         </div>
       )}
 
       {tab === "looks" && (
         <div className="mt-4">
-          <p className="text-sm text-muted">At a private clinic (plus 7.5% VAT), paid from Treats, then Savings. Some take game days off work to recover. They&apos;ll show on your avatar when 3D avatars arrive.</p>
-          <ul className="mt-3 divide-y divide-ink/5 rounded-2xl ring-1 ring-ink/5">
+          <p className="text-xs text-muted">Private clinic, paid from Treats, then Savings.</p>
+          <ul className="mt-2 divide-y divide-ink/5 rounded-2xl ring-1 ring-ink/5">
             {PROCEDURES.map((p) => {
               const price = priceOf(p.fee, prices, true);
               const had = status?.procedures.some((x) => x.procedure === p.id);
@@ -219,13 +206,13 @@ export function LifeSheet({
                 <li key={p.id} className="flex items-center gap-3 px-3 py-2.5">
                   <Sparkles className="size-4 shrink-0 text-muted" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium">
+                    <p className="truncate text-sm font-medium">
                       {p.title}
                       {had && <span className="ml-2 rounded-full bg-me/15 px-2 py-0.5 text-[11px] font-semibold text-me">Done</span>}
                     </p>
-                    <p className="text-xs text-muted">{p.recovery ? `${gameDays(p.recovery)} to recover` : "No time off"}</p>
+                    <p className="text-xs text-muted">{p.recovery ? `${p.recovery} days off` : "No time off"}</p>
                   </div>
-                  <Price total={price.total} prices={prices} vat />
+                  <Price total={price.total} prices={prices} />
                   <button disabled={busy || recovering || treats < price.total} onClick={() => onProcedure(p.id)} className="h-8 shrink-0 rounded-full bg-ink px-3 text-xs font-semibold text-white disabled:opacity-40">
                     Book
                   </button>
@@ -239,7 +226,7 @@ export function LifeSheet({
   );
 }
 
-function Meter({ label, value, word, colour }: { label: string; value: number; word: string; colour: string }) {
+function Meter({ label, value, word, colour, change }: { label: string; value: number; word: string; colour: string; change?: number }) {
   return (
     <div className="flex items-center gap-3 rounded-3xl bg-ink/[0.04] p-3">
       <div className="relative grid size-14 shrink-0 place-items-center">
@@ -252,6 +239,12 @@ function Meter({ label, value, word, colour }: { label: string; value: number; w
       <div className="min-w-0">
         <p className="text-xs text-muted">{label}</p>
         <p className="text-sm font-semibold leading-tight">{word}</p>
+        {change !== undefined && (
+          <p className={`text-[11px] font-semibold ${change > 0 ? "text-me" : change < 0 ? "text-hit" : "text-muted"}`}>
+            {change > 0 ? "+" : ""}
+            {fmt(change)} a day
+          </p>
+        )}
       </div>
     </div>
   );
@@ -291,32 +284,26 @@ function CourseRow({ c, prices, skills, done, canPay, busy, onEnrol }: { c: Cour
   const price = priceOf(c.fee, prices, false);
   const level = skillLevel((skills[c.skill] ?? 0) + c.grants);
   return (
-    <li className="rounded-2xl p-3 ring-1 ring-ink/5">
-      <div className="flex items-start gap-3">
-        <GraduationCap className="mt-0.5 size-4 shrink-0 text-muted" />
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium">{c.title}</p>
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            <Chip>{gameDays(c.days)}</Chip>
-            <Chip>{c.public ? "Public" : "Private"}</Chip>
-            <Chip>
-              {WORK_SKILLS[c.skill]} to level {level}
-            </Chip>
-            {c.cert && <Chip strong>Opens {OPENS[c.cert]}</Chip>}
-          </div>
-        </div>
-        <div className="shrink-0 text-right">
-          <p className="text-sm font-semibold tabular-nums">₥{fmt(price.total)}</p>
-          <p className="text-[11px] text-muted">{mintLocal(price.total, prices)}</p>
-          {done ? (
-            <span className="mt-1 inline-block rounded-full bg-me/15 px-2.5 py-1 text-xs font-semibold text-me">Done</span>
-          ) : (
-            <button disabled={busy || canPay < price.total} onClick={() => onEnrol(c.id)} className="mt-1 h-8 rounded-full bg-ink px-3 text-xs font-semibold text-white disabled:opacity-40">
-              Enrol
-            </button>
-          )}
-        </div>
+    <li className="flex items-center gap-3 px-3 py-2.5">
+      <GraduationCap className="size-4 shrink-0 text-muted" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{c.title}</p>
+        <p className="mt-0.5 flex flex-wrap gap-1">
+          {c.cert && <Chip strong>Opens {OPENS[c.cert]}</Chip>}
+          <Chip>
+            {WORK_SKILLS[c.skill]} Lv {level}
+          </Chip>
+          <Chip>{gameDays(c.days)}</Chip>
+        </p>
       </div>
+      <Price total={price.total} prices={prices} />
+      {done ? (
+        <span className="shrink-0 rounded-full bg-me/15 px-2.5 py-1 text-xs font-semibold text-me">Done</span>
+      ) : (
+        <button disabled={busy || canPay < price.total} onClick={() => onEnrol(c.id)} className="h-8 shrink-0 rounded-full bg-ink px-3 text-xs font-semibold text-white disabled:opacity-40">
+          Enrol
+        </button>
+      )}
     </li>
   );
 }

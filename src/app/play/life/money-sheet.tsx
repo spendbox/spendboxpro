@@ -8,13 +8,13 @@ import type { OwnedProperty } from "@/lib/world/owned";
 import type { AssetsData, AssetUnit, LifeStatus, MoneyFlow } from "@/lib/world/property-api";
 import { mintLocal } from "@/lib/world/value";
 import { Sheet } from "../sheet";
-import { AssetsBody, unitValueNow } from "./assets-sheet";
+import { AssetsBody, unitValueNow, type Owning } from "./assets-sheet";
 
 const fmt = (n: number) => Math.round(n).toLocaleString("en-GB");
 const fmt2 = (n: number) => n.toLocaleString("en-GB", { maximumFractionDigits: 2 });
 type Prices = RegionMap["region"]["prices"];
 
-type Tab = "home" | "flow" | "budget" | "property";
+export type Tab = "home" | "flow" | "budget" | "property";
 const TABS: { id: Tab; label: string }[] = [
   { id: "home", label: "Overview" },
   { id: "flow", label: "In & out" },
@@ -36,6 +36,8 @@ export function MoneySheet({
   onCollect,
   onShow,
   onClose,
+  owning,
+  startTab,
 }: {
   status: LifeStatus | null;
   assets: AssetsData;
@@ -49,8 +51,11 @@ export function MoneySheet({
   onCollect: () => void;
   onShow: (u: AssetUnit) => void;
   onClose: () => void;
+  owning: Owning;
+  /** Open on this tab (the Property tab when there are offers to answer). */
+  startTab?: Tab;
 }) {
-  const [tab, setTab] = useState<Tab>("home");
+  const [tab, setTab] = useState<Tab>(startTab ?? "home");
   const prices = region.region.prices;
   const property = assets.units.reduce((t, u) => t + unitValueNow(u, owned, region), 0);
   const wallet = status?.wallet ?? assets.coins;
@@ -59,8 +64,9 @@ export function MoneySheet({
     <Sheet onClose={onClose} wide title="Money">
       <div className="flex gap-1 rounded-full bg-ink/5 p-1">
         {TABS.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)} className={`h-8 flex-1 rounded-full text-xs font-semibold transition ${tab === t.id ? "bg-panel shadow-sm" : "text-muted"}`}>
+          <button key={t.id} onClick={() => setTab(t.id)} className={`relative h-8 flex-1 rounded-full text-xs font-semibold transition ${tab === t.id ? "bg-panel shadow-sm" : "text-muted"}`}>
             {t.label}
+            {t.id === "property" && (owning.board?.received.some((o) => o.status === "open") ?? false) && <span className="absolute right-2 top-1.5 size-2 rounded-full bg-hit" />}
           </button>
         ))}
       </div>
@@ -68,7 +74,7 @@ export function MoneySheet({
         {tab === "home" && <Home status={status} wallet={wallet} pots={pots} property={property} prices={prices} busy={busy} onMove={onMove} />}
         {tab === "flow" && <Flow loadMoney={loadMoney} loadTime={loadTime} prices={prices} />}
         {tab === "budget" && status && <BudgetTab budget={status.budget} busy={busy} onSave={onBudget} />}
-        {tab === "property" && <AssetsBody assets={assets} owned={owned} region={region} busy={busy} onCollect={onCollect} onShow={onShow} />}
+        {tab === "property" && <AssetsBody assets={assets} owned={owned} region={region} busy={busy} owning={owning} onCollect={onCollect} onShow={onShow} />}
       </div>
     </Sheet>
   );
@@ -219,7 +225,7 @@ function Flow({ loadMoney, loadTime, prices }: { loadMoney: (hours: number) => P
   }, [got]);
   const ins = IN.map((k) => [k, groups.get(k) ?? 0] as const).filter(([, v]) => v > 0.004);
   const outs = [...groups]
-    .filter(([k, v]) => !IN.includes(k) && k !== "property" && v < -0.004)
+    .filter(([k, v]) => !IN.includes(k) && k !== "property" && k !== "borrowed" && v < -0.004)
     .map(([k, v]) => [k, -v] as const)
     .sort((a, b) => b[1] - a[1]);
   const totalIn = ins.reduce((t, [, v]) => t + v, 0);
@@ -251,6 +257,8 @@ function Flow({ loadMoney, loadTime, prices }: { loadMoney: (hours: number) => P
           <Rows title="In" total={totalIn} rows={ins.map(([k, v]) => [MONEY_GROUP[k].label, v, MONEY_GROUP[k].colour] as const)} empty="Nothing came in" />
           <Rows title="Out" total={totalOut} rows={outs.map(([k, v]) => [MONEY_GROUP[k].label, v, MONEY_GROUP[k].colour] as const)} empty="Nothing went out" />
           {bought > 0.004 && <p className="mt-3 text-xs text-muted">Also bought property: ₥{fmt2(bought)} with tax (still yours)</p>}
+          {bought < -0.004 && <p className="mt-3 text-xs text-muted">Also sold property: ₥{fmt2(-bought)} after tax</p>}
+          {(groups.get("borrowed") ?? 0) > 0.004 && <p className="mt-1 text-xs text-muted">Borrowed from the World Bank: ₥{fmt2(groups.get("borrowed") ?? 0)}</p>}
           {time.length > 0 && (
             <>
               <p className="mt-5 text-sm font-semibold">Your time</p>

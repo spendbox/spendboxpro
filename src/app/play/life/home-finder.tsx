@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { House, Search } from "@/components/icons";
 import { HOME_KIND_LABEL, type AreaHomes, type HomeFind, type HomeKind } from "@/lib/world/homes";
+import type { Listing } from "@/lib/world/market";
 import type { Prices } from "@/lib/world/region";
 import { mintLocal } from "@/lib/world/value";
 import { Sheet } from "../sheet";
@@ -12,12 +13,17 @@ const KINDS: (HomeKind | "all")[] = ["all", "room", "flat", "house"];
 /** Quick search for a home: what your money buys, area by area. Tap one to fly there and see it. */
 export function HomeFinder({
   areas,
+  listings,
   coins,
   prices,
   onPick,
+  onListing,
   onClose,
 }: {
   areas: AreaHomes[];
+  /** Homes other players are selling (null while loading). */
+  listings: (Listing & { area: string })[] | null;
+  onListing: (l: Listing) => void;
   coins: number;
   prices: Prices;
   onPick: (find: HomeFind) => void;
@@ -33,6 +39,10 @@ export function HomeFinder({
       .map((a) => ({ ...a, homes: a.homes.filter((h) => (kind === "all" || h.kind === kind) && (all || h.mint <= coins)) }))
       .filter((a) => a.homes.length > 0);
   }, [areas, q, kind, all, coins]);
+  const sales = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    return (listings ?? []).filter((l) => l.use === "home" && (!t || l.area.toLowerCase().includes(t)) && (all || l.price <= coins));
+  }, [listings, q, all, coins]);
   return (
     <Sheet onClose={onClose} title="Find a home">
       <p className="text-sm text-muted">
@@ -56,6 +66,28 @@ export function HomeFinder({
           {all ? "Showing all prices" : "Only what I can afford"}
         </button>
       </div>
+      {sales.length > 0 && (
+        <>
+          <p className="mt-4 text-sm font-semibold">For sale by players</p>
+          <ul className="mt-2 divide-y divide-ink/5 rounded-2xl ring-1 ring-gold/30">
+            {sales.slice(0, 20).map((l) => (
+              <li key={l.unit}>
+                <button onClick={() => onListing(l)} className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-ink/[0.03]">
+                  <House className="size-4 shrink-0 text-muted" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{l.label}</span>
+                    <span className="block truncate text-xs text-muted">
+                      {l.area} · {l.mine ? "yours" : l.who}
+                    </span>
+                  </span>
+                  <span className={`shrink-0 text-sm font-semibold tabular-nums ${l.price <= coins ? "text-me" : ""}`}>₥{l.price.toLocaleString("en-GB")}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-4 text-sm font-semibold">From the city</p>
+        </>
+      )}
       <ul className="mt-3 divide-y divide-ink/5 rounded-2xl ring-1 ring-ink/5">
         {rows.slice(0, 60).map((a) => (
           <li key={a.area} className="px-3 py-2.5">

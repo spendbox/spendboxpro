@@ -30,6 +30,9 @@ import { ReportSheet } from "./report-sheet";
 import type { MapBusiness } from "@/lib/world/business";
 import type { OwnedProperty } from "@/lib/world/owned";
 import { InterviewSheet, MomentSheet } from "./moments";
+import { AmountSheet, LoanSheet } from "./amount-sheet";
+import { buyerPays, sellerGets, OFFER_HOURS, type Listing, type MarketBoard } from "@/lib/world/market";
+import { BUY_TAX } from "@/lib/world/property-api";
 
 /** Each region's plan for finding jobs near home, worked out once (only when Work is opened). */
 const plans = new Map<string, CityPlan>();
@@ -93,15 +96,33 @@ export function useWorldLife({
   const [businesses, setBusinesses] = useState<MapBusiness[]>([]);
   const [business, setBusiness] = useState<MapBusiness | null>(null);
   const [confirm, setConfirm] = useState<{ title: string; text: string; yes: string; run: () => void } | null>(null);
+  const [board, setBoard] = useState<MarketBoard | null>(null);
+  /** Asking for an amount: a sale price, an offer, a counter-offer, a loan payment. */
+  const [ask, setAsk] = useState<{
+    title: string;
+    text: string;
+    initial: number;
+    max?: number;
+    note?: (n: number) => string;
+    cta: (n: number) => string;
+    run: (n: number) => Promise<PropertyResult>;
+    done: (n: number) => string;
+  } | null>(null);
+  const [loanOpen, setLoanOpen] = useState(false);
+  const [listings, setListings] = useState<Listing[] | null>(null);
 
   useEffect(() => {
     if (!signedIn || !regionId) return;
     const t = setTimeout(() => {
       void api.workStatus().then(setWork);
       void api.lifeStatus().then(setStatus);
+      void api.marketBoard().then(setBoard);
     }, 0);
-    // Bills, health and school move on with time: look again now and then.
-    const every = setInterval(() => void api.lifeStatus().then(setStatus), 120_000);
+    // Bills, health, school and offers move on with time: look again now and then.
+    const every = setInterval(() => {
+      void api.lifeStatus().then(setStatus);
+      void api.marketBoard().then(setBoard);
+    }, 120_000);
     return () => {
       clearTimeout(t);
       clearInterval(every);
@@ -160,9 +181,20 @@ export function useWorldLife({
     [api, signedIn],
   );
 
+  const askSell = (unitId: string, label: string, worth: number, now?: number | null) =>
+    setAsk({
+      title: `Sell ${label}`,
+      text: `It's worth about ₥${money(Math.round(worth))}. Anyone can buy it at your price, or make you an offer. A tenant living there stays.`,
+      initial: Math.round(now ?? worth),
+      note: (n) => `You get ₥${money(sellerGets(n))} after the 2% tax (a loan on it is paid off first).`,
+      cta: (n) => `Put it up for ₥${money(n)}`,
+      run: (n) => api.listUnit(unitId, n),
+      done: (n) => `${label} is up for sale at ₥${money(n)}.`,
+    });
+
   const fly = (x: number, z: number) => setFlyTo({ tile: spiralIndex(Math.round(x), Math.round(z)), at: Date.now() });
 
-  async function act(run: () => Promise<PropertyResult>, done: (r: PropertyResult & { ok: true }) => string | null) {
+  async function act(run: () => Promise<PropertyResult>, done: (r: PropertyResult & { ok: true }) => string | null): Promise<PropertyResult> {
     setBusy(true);
     const r = await run();
     setBusy(false);
@@ -172,11 +204,13 @@ export function useWorldLife({
       if (text) setMessage({ text, good: true });
     }
     await refresh();
-    const [w, st] = await Promise.all([api.workStatus(), api.lifeStatus()]);
+    const [w, st, bd] = await Promise.all([api.workStatus(), api.lifeStatus(), api.marketBoard()]);
     setWork(w);
     setStatus(st);
+    setBoard(bd);
     if (property) void api.buildingOwners(property.id).then(setOwners);
     onChanged?.();
+    return r;
   }
 
   const life = assets?.life ?? null;
@@ -191,6 +225,18 @@ export function useWorldLife({
   const openFinder = () => {
     setWelcomeShut(true);
     setFinderOpen(true);
+    setListings(null);
+    if (region) void api.marketListings(region.region.id).then(setListings);
+  };
+  /** Open a building's card by its id: as bought if someone owns it, else as the map has it. */
+  const showBuilding = (id: string) => {
+    const sp = ownedSpot(id);
+    if (!region || !sp) return;
+    fly(sp.x, sp.z);
+    const plan = planOf(region);
+    const t = tileAt(plan, spiralIndex(sp.x, sp.z));
+    const b = owned.find((o) => o.id === id)?.building ?? t.building;
+    if (b) onProperty(propertyInfo(b, sp.x, sp.z, addressOf(plan, t), region));
   };
   const pickHome = (h: HomeFind) => {
     if (!region) return;
@@ -316,7 +362,7 @@ export function useWorldLife({
           >
             <Wallet className="size-4" />
             <span className="max-sm:hidden">Money</span>
-            {status?.powerCut && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-hit" />}
+            {(status?.powerCut || board?.received.some((o) => o.status === "open")) && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-hit" />}
           </button>
         )}
       </div>
@@ -370,7 +416,23 @@ export function useWorldLife({
         />
       )}
       {finderOpen && region && (
-        <HomeFinder areas={finds} coins={coins} prices={region.region.prices} onPick={pickHome} onClose={() => setFinderOpen(false)} />
+        <HomeFinder
+          areas={finds}
+          listings={
+            listings?.map((l) => {
+              const sp = ownedSpot(l.building);
+              return { ...l, area: sp ? region.areaAt(sp.x, sp.z) : "" };
+            }) ?? null
+          }
+          coins={coins}
+          prices={region.region.prices}
+          onPick={pickHome}
+          onListing={(l) => {
+            setFinderOpen(false);
+            showBuilding(l.building);
+          }}
+          onClose={() => setFinderOpen(false)}
+        />
       )}
       {homeOpen && homeSpot && <HomeCard label={homeLabel} area={region.areaAt(homeSpot.x, homeSpot.z)} neighbours={neighbours} onClose={() => setHomeOpen(false)} />}
       {place && (
@@ -472,6 +534,25 @@ export function useWorldLife({
                   onHome: (u) => act(() => api.setHome(u.id), () => `You live at ${u.label} now.`),
                   onLet: (u, on) => act(() => api.letUnit(u.id, on), () => (on ? `${u.label} is up for rent.` : `${u.label} isn't let any more.`)),
                   onRename: (name) => act(() => api.renameBuilding(property.id, name), () => (name.trim() ? `Renamed ${name.trim()}.` : "Name cleared.")),
+                  onBuyListed: (u, price) =>
+                    setConfirm({
+                      title: `Buy ${u.label}?`,
+                      text: `₥${money(price)} to its owner, plus ${Math.round(BUY_TAX * 100)}% tax: ₥${money(buyerPays(price, BUY_TAX))} in all. A tenant living there stays.`,
+                      yes: `Buy for ₥${money(buyerPays(price, BUY_TAX))}`,
+                      run: () => void act(() => api.buyListed(u.id, price), (r) => (r.home ? `${u.label} is yours, and your home. Welcome!` : `${u.label} is yours.`)),
+                    }),
+                  onOffer: (u) =>
+                    setAsk({
+                      title: `Offer for ${u.label}`,
+                      text: `It's worth about ₥${money(u.mint)}. What you offer (and the ${Math.round(BUY_TAX * 100)}% tax) is held from your wallet until the owner answers, for up to ${OFFER_HOURS} hours.`,
+                      initial: Math.round(u.mint),
+                      note: (n) => `₥${money(buyerPays(n, BUY_TAX))} held with the tax. You get it back if they say no.`,
+                      cta: (n) => `Offer ₥${money(n)}`,
+                      run: (n) => api.makeOffer(u.id, n),
+                      done: () => "Offer sent. You'll see the answer under Money → Property.",
+                    }),
+                  onSell: (u) => askSell(u.id, u.label, u.mint),
+                  onUnsell: (u) => act(() => api.unlistUnit(u.id), () => `${u.label} is off the market.`),
                 }
               : undefined
           }
@@ -494,6 +575,58 @@ export function useWorldLife({
             const s = ownedSpot(u.building);
             if (s) fly(s.x, s.z);
             setAssetsOpen(false);
+          }}
+          startTab={board?.received.some((o) => o.status === "open") ? "property" : undefined}
+          owning={{
+            board,
+            onLet: (u, on) => act(() => api.letUnit(u.unit, on), () => (on ? `${u.label} is up for rent. Rent starts when a tenant moves in.` : `${u.label} isn't let any more.`)),
+            onLevel: (u, level) => act(() => api.setRentLevel(u.unit, level), () => (u.let ? "Rent changed. Finding a tenant at the new rent." : "Rent changed.")),
+            onSell: (u, worth) => askSell(u.unit, u.label, worth, u.forSale),
+            onUnsell: (u) => act(() => api.unlistUnit(u.unit), () => `${u.label} is off the market.`),
+            onAnswer: (o, action) =>
+              action === "accept"
+                ? setConfirm({
+                    title: `Sell to ${o.who}?`,
+                    text: `${o.label ?? "It"} goes to them for ₥${money(o.price)}. You get ₥${money(sellerGets(o.price))} after the 2% tax (a loan on it is paid off first).`,
+                    yes: `Sell for ₥${money(o.price)}`,
+                    run: () => void act(() => api.answerOffer(o.id, "accept"), () => `Sold to ${o.who}.`),
+                  })
+                : act(() => api.answerOffer(o.id, "refuse"), () => "Offer turned down."),
+            onCounter: (o) =>
+              setAsk({
+                title: "Ask for more",
+                text: `${o.who} offered ₥${money(o.price)}. Ask for a higher price: they can take it or leave it.`,
+                initial: Math.round(o.price * 1.1),
+                note: (n) => `You'd get ₥${money(sellerGets(n))} after the 2% tax.`,
+                cta: (n) => `Ask ₥${money(n)}`,
+                run: (n) => api.answerOffer(o.id, "counter", n),
+                done: () => "Sent. You'll see their answer here.",
+              }),
+            onReply: (o, action) =>
+              action === "accept"
+                ? setConfirm({
+                    title: `Pay ₥${money(o.counter ?? 0)}?`,
+                    text: `${o.label ?? "It"} becomes yours. What your offer held counts towards it; the rest (with the 3% tax) comes from your wallet.`,
+                    yes: `Pay ₥${money(o.counter ?? 0)}`,
+                    run: () => void act(() => api.replyOffer(o.id, "accept"), () => `${o.label ?? "It"} is yours.`),
+                  })
+                : act(() => api.replyOffer(o.id, "withdraw"), () => "Offer withdrawn. Your mint is back."),
+            onBorrow: () => setLoanOpen(true),
+            onFind: () => {
+              setAssetsOpen(false);
+              openFinder();
+            },
+            onRepay: () =>
+              board?.loan &&
+              setAsk({
+                title: "Pay off your loan",
+                text: `You owe ₥${money(board.loan.balance)}. Paying early saves interest. It comes from Savings, then your wallet.`,
+                initial: board.loan.balance,
+                max: board.loan.balance,
+                cta: (n) => `Pay ₥${money(n)}`,
+                run: (n) => api.repayLoan(n),
+                done: (n) => (n >= (board.loan?.balance ?? 0) ? "Loan paid off. Your property is free." : `Paid ₥${money(n)}.`),
+              }),
           }}
         />
       )}
@@ -558,6 +691,36 @@ export function useWorldLife({
       )}
       {business && (
         <BusinessSheet b={business} onHit={(kind) => void api.hitBusiness(business.id, kind)} onClose={() => setBusiness(null)} />
+      )}
+      {ask && (
+        <AmountSheet
+          key={ask.title}
+          title={ask.title}
+          text={ask.text}
+          initial={ask.initial}
+          max={ask.max}
+          busy={busy}
+          note={ask.note}
+          cta={ask.cta}
+          onSubmit={async (n) => {
+            const r = await act(() => ask.run(n), () => ask.done(n));
+            if (r.ok) setAsk(null);
+          }}
+          onClose={() => setAsk(null)}
+        />
+      )}
+      {loanOpen && board && (
+        <LoanSheet
+          max={board.canBorrow}
+          rate={board.rate}
+          misses={board.misses}
+          busy={busy}
+          onSubmit={async (amount, months) => {
+            const r = await act(() => api.takeLoan(amount, months), () => `₥${money(amount)} from the World Bank is in your wallet.`);
+            if (r.ok) setLoanOpen(false);
+          }}
+          onClose={() => setLoanOpen(false)}
+        />
       )}
       {confirm && (
         <div className="fixed inset-0 z-[60] grid place-items-center bg-ink/40 p-4" onClick={() => setConfirm(null)}>

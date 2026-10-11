@@ -26,6 +26,13 @@ export type Market = {
   onHome: (unit: PropertyUnit) => void;
   onLet: (unit: PropertyUnit, on: boolean) => void;
   onRename: (name: string) => void;
+  /** Buy a unit another player has up for sale, at their price. */
+  onBuyListed: (unit: PropertyUnit, price: number) => void;
+  /** Make an offer on a unit another player owns. */
+  onOffer: (unit: PropertyUnit) => void;
+  /** Put one of yours up for sale (or change its price), or take it off. */
+  onSell: (unit: PropertyUnit) => void;
+  onUnsell: (unit: PropertyUnit) => void;
 };
 
 /** A property on the real map, tapped: what it is, what it's worth, and every unit in it. */
@@ -116,6 +123,7 @@ export function PropertyCard({ info, market, jobs, onReport, onClose }: { info: 
                 <p className="truncate text-sm font-medium">{u.label}</p>
                 <p className="truncate text-xs text-muted">
                   {fmt(u.area)} m² · {owner ? (owner.mine ? "Yours" : `Owned by ${owner.name}`) : u.earns}
+                  {owner?.forSale != null ? ` · for sale ₥${fmt(owner.forSale)}` : owner?.home && !owner.mine ? " · their home" : ""}
                 </p>
               </div>
               <div className="shrink-0 text-right">
@@ -163,7 +171,28 @@ function Pill({ label, value }: { label: string; value: string }) {
 function UnitAction({ u, owner, market }: { u: PropertyUnit; owner: BuildingOwner | undefined; market: Market }) {
   const btn = "h-8 shrink-0 rounded-full px-3 text-xs font-semibold disabled:opacity-40";
   if (market.owners === null) return <span className="w-14" />;
-  if (owner && !owner.mine) return null;
+  if (owner && !owner.mine) {
+    if (owner.forSale != null) {
+      const cost = Math.round(owner.forSale * (1 + BUY_TAX));
+      const needHome = !market.homeUnit && u.use !== "home";
+      return (
+        <button
+          disabled={market.busy || !market.started || needHome || market.coins < cost}
+          onClick={() => market.onBuyListed(u, owner.forSale!)}
+          title={needHome ? "Buy a home first" : `₥${fmt(cost)} with the ${Math.round(BUY_TAX * 100)}% tax`}
+          className={`${btn} bg-ink text-white`}
+        >
+          Buy
+        </button>
+      );
+    }
+    if (owner.home) return null;
+    return (
+      <button disabled={market.busy || !market.started} onClick={() => market.onOffer(u)} className={`${btn} bg-ink/5`}>
+        Offer
+      </button>
+    );
+  }
   if (owner?.mine) {
     if (market.homeUnit === u.id) return <span className="shrink-0 rounded-full bg-me/15 px-2.5 py-1 text-xs font-semibold text-me">Home</span>;
     const letting = market.letting.has(u.id);
@@ -178,6 +207,15 @@ function UnitAction({ u, owner, market }: { u: PropertyUnit; owner: BuildingOwne
           <button disabled={market.busy} onClick={() => market.onLet(u, !letting)} className={`${btn} ${letting ? "bg-gold/20 text-gold-dark" : "bg-ink/5"}`}>
             <KeyRound className="mr-1 inline size-3" />
             {letting ? "Let · stop" : "Let out"}
+          </button>
+        )}
+        {owner.forSale != null ? (
+          <button disabled={market.busy} onClick={() => market.onUnsell(u)} className={`${btn} bg-gold/20 text-gold-dark`}>
+            On sale · stop
+          </button>
+        ) : (
+          <button disabled={market.busy} onClick={() => market.onSell(u)} className={`${btn} bg-ink/5`}>
+            Sell
           </button>
         )}
       </div>
