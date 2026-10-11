@@ -9,7 +9,7 @@ import { regionMap } from "@/lib/world";
 import { ownedSpot } from "@/lib/world/owned";
 import type { PropertyInfo } from "@/lib/world/property";
 import type { BuildingOwner, InterviewStart, LifeStatus, Neighbour, PaySettled, PropertyApi, PropertyResult, WorkStatus } from "@/lib/world/property-api";
-import { COMMUTE_LABEL, needsInterview, type Commute } from "@/lib/world/work";
+import { COMMUTE_LABEL, dayNet, fareMint, needsInterview, payDay, tripKmBetween, type Commute } from "@/lib/world/work";
 import { dayOf, EXERCISE } from "@/lib/world/day";
 import type { Workplace } from "@/lib/world/workplace";
 import { PropertyCard } from "../property-card";
@@ -207,13 +207,20 @@ export function useWorldLife({
               if (!start.ok) return setMessage({ text: start.error, good: false });
               setInterview({ start, hire });
             };
+            // Running at a loss: fares there and back cost more than the pay after tax.
+            const km = homeUnit ? tripKmBetween(homeUnit, wp.id) : null;
+            const fare = km === null ? 0 : (fareMint(mode, km, region.region.prices) ?? 0);
+            const net = dayNet(payDay(job, region.region.prices), work?.skills[job.skill] ?? 0, fare);
+            const loss = net < 0 ? `Heads up: you'd run at a loss. After income tax, ${job.title} pays less than your fares there and back, so you'd lose about ₥${money(-net)} every game day.` : "";
             const now = work?.job;
-            if (!now) return void take();
+            if (!now && !loss) return void take();
             // One main job at a time: say so before swapping.
             setConfirm({
-              title: "Switch jobs?",
-              text: `You're a ${now.title} at ${now.placeName}. You can have one main job, so becoming a ${job.title} means leaving it. The pay you've earned there is collected first.`,
-              yes: `Switch to ${job.title}`,
+              title: now ? "Switch jobs?" : "Work at a loss?",
+              text: [now ? `You're a ${now.title} at ${now.placeName}. You can have one main job, so becoming a ${job.title} means leaving it. The pay you've earned there is collected first.` : "", loss]
+                .filter(Boolean)
+                .join(" "),
+              yes: now ? `Switch to ${job.title}` : "Take it anyway",
               run: () => void take(),
             });
           },
@@ -374,7 +381,11 @@ export function useWorldLife({
           onMode={(mode, perDay) =>
             setConfirm({
               title: mode === "walk" ? "Walk to work from now on?" : `Go by ${COMMUTE_LABEL[mode].toLowerCase()} from now on?`,
-              text: `${perDay ? `It costs ₥${money(perDay)} a game day, there and back, from your Travel pot.` : "It's free."} Pay so far is settled at your old fare first.`,
+              text: `${perDay ? `It costs ₥${money(perDay)} a game day, there and back, from your Travel pot.` : "It's free."} Pay so far is settled at your old fare first.${
+                work?.job && dayNet(work.job.payDay, work.skills[work.job.skill] ?? 0, perDay / 2) < 0
+                  ? ` Heads up: this way you'd run at a loss, about ₥${money(-dayNet(work.job.payDay, work.skills[work.job.skill] ?? 0, perDay / 2))} every game day after tax.`
+                  : ""
+              }`,
               yes: mode === "walk" ? "Walk from now on" : `Go by ${COMMUTE_LABEL[mode].toLowerCase()}`,
               run: () => act(() => api.setCommute(mode), (r) => `${mode === "walk" ? "You'll walk to work" : `You'll go by ${COMMUTE_LABEL[mode].toLowerCase()}`} from now on.${paid(r.pay)}`),
             })

@@ -13,7 +13,7 @@ import {
   daysForLevel,
   fareMint,
   fareOrBus,
-  INCOME_TAX,
+  dayNet,
   needsInterview,
   payDay,
   settle,
@@ -90,7 +90,7 @@ export function WorkSheet({
         .filter((j) => skillLevel(skills[j.skill] ?? 0) >= j.level)
         .map((j) => {
           const trip = tripLine(ctx.homeUnit, p.id, prices);
-          return { place: p, job: j, trip, net: payDay(j, prices) * (1 - INCOME_TAX) - 2 * trip.fare };
+          return { place: p, job: j, trip, net: dayNet(payDay(j, prices), skills[j.skill] ?? 0, trip.fare) };
         }),
     );
     return rows.sort((a, b) => b.net - a.net).slice(0, 10);
@@ -160,6 +160,18 @@ export function WorkSheet({
               </div>
             );
           })()}
+          {(() => {
+            const net = dayNet(job.payDay, skills[job.skill] ?? 0, fare);
+            if (net >= 0) return null;
+            return (
+              <div className="mt-2 rounded-2xl bg-hit/10 p-3 text-sm">
+                <p className="font-semibold text-hit">You&apos;re working at a loss: ₥{fmt(-net)} a day</p>
+                <p className="mt-0.5 text-xs">
+                  After income tax, your pay doesn&apos;t cover your fares there and back. Go a cheaper way, find a job nearer home, or move closer to this one.
+                </p>
+              </div>
+            );
+          })()}
           <p className="mt-3 text-xs text-muted">Or go another way (tap to switch):</p>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {COMMUTES.filter((m) => m !== job.mode).map((mode) => {
@@ -172,7 +184,10 @@ export function WorkSheet({
                   className="inline-flex items-baseline gap-1.5 rounded-full bg-ink/5 px-3 py-1.5 text-xs hover:bg-ink/10 disabled:opacity-40"
                 >
                   <span className="font-semibold">{COMMUTE_LABEL[mode]}</span>
-                  <span className="tabular-nums text-muted">{f === null ? "too far" : f === 0 ? "free" : `₥${fmt(2 * f)}/day`}</span>
+                  <span className={`tabular-nums ${f !== null && dayNet(job.payDay, skills[job.skill] ?? 0, f) < 0 ? "font-semibold text-hit" : "text-muted"}`}>
+                    {f === null ? "too far" : f === 0 ? "free" : `₥${fmt(2 * f)}/day`}
+                    {f !== null && dayNet(job.payDay, skills[job.skill] ?? 0, f) < 0 ? " · at a loss" : ""}
+                  </span>
                 </button>
               );
             })}
@@ -205,7 +220,7 @@ export function WorkSheet({
                     </button>
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="text-sm font-semibold tabular-nums">₥{fmt(net)}/day</p>
+                    <p className={`text-sm font-semibold tabular-nums ${net < 0 ? "text-hit" : ""}`}>{net < 0 ? `−₥${fmt(-net)}/day` : `₥${fmt(net)}/day`}</p>
                     <p className="text-[11px] text-muted">{COMMUTE_LABEL[trip.mode].toLowerCase()}</p>
                   </div>
                   <button disabled={ctx.busy} onClick={() => ctx.onTake(place, j, trip.mode)} className="h-8 shrink-0 rounded-full bg-ink px-3 text-xs font-semibold text-white disabled:opacity-40">

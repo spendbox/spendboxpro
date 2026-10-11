@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { PRICES } from "../regions/lagos/prices.ts";
-import { cheapestCommute, daysForLevel, fareMint, fareOrBus, jobsAtPlace, jobsInBuilding, payDay, settle, skillLevel, tripKm, tripKmBetween } from "../work.ts";
+import { cheapestCommute, dayNet, daysForLevel, fareMint, fareOrBus, jobsAtPlace, jobsInBuilding, payDay, settle, skillLevel, tripKm, tripKmBetween } from "../work.ts";
 
 test("businesses hire, homes and unfinished buildings don't", () => {
   assert.ok(jobsInBuilding({ kind: "offices", state: "built" }).length >= 3);
@@ -59,4 +59,10 @@ test("settling pay: game days, tax, fares, and only a game week waits", () => {
   const long = settle({ payDay: 2, paidUntil: 0 }, 100 * h, 5, 0);
   assert.equal(long.days, 7);
   assert.equal(long.gross, 14.42);
+});
+
+test("a job can run at a loss when the fares cost more than the pay", () => {
+  // ₥2 a day, less 7% tax = ₥1.86; two taxi trips at ₥2 each = ₥4: a ₥2.14 loss.
+  assert.equal(dayNet(2, 0, 2), -2.14);
+  assert.ok(dayNet(2, 0, 0) > 0);
 });
