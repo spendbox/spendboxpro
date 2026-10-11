@@ -4,8 +4,12 @@ Newtown is a second life in the real world: the real Lagos first, then the whole
 you can become who you want. Doctor, chef, footballer, space pilot, landlord, inventor. The world
 changes over time, every place has its own culture, and no two days are the same.
 
-This is the plan for everything. How the map itself is built is in `docs/WORLD.md`; what's
+This is the plan for everything. How the map itself is built is in `docs/WORLD.md`; property,
+money and how a new player starts are in `docs/PROPERTY.md` (that plan comes first now); what's
 being worked on right now is in `TODO.md`.
+
+**Changed since this was written:** no more ghosts; the minigames come out of the menus (kept for
+later, inside places); a player's life starts by buying a home (see `docs/PROPERTY.md`).
 
 ---
 
