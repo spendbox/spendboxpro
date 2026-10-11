@@ -1,6 +1,7 @@
 # To do
 
 ## Now (owner)
+- [ ] Follow `docs/LIVE_CHECK.md`: switch the real-map game on (database, Vercel settings, Paystack) and try it on your phone, step by step.
 - [ ] In the Supabase SQL Editor run `game-db/038_property.sql` (owning property on the real map: starting budget of ₥5,000, buying, homes, rent, treasuries). Until it's run, `/play?world=lagos` shows the map but buying won't work. Already ran it? Run it again: it is safe and sets the starting budget back to ₥5,000.
 - [ ] Then run `game-db/039_work.sql` (jobs on the real map, fares to work, neighbours; see `docs/WORK.md`). Until it's run, Work and neighbours won't load.
 - [ ] Then run `game-db/040_living.sql` (money pots and budget, bills, health, school, looks, essential services paid from tax; see `docs/LIVING.md`). Run it after 038 and 039 (and again if you ever run 038 again): the game's Money and Life screens need it.
@@ -11,7 +12,7 @@
 - [ ] Then run `game-db/045_map_reports.sql` (players report map problems; you read them at `/map-reports` while signed in with the `ADMIN_EMAIL` email; see `docs/MAP_REPORTS.md`).
 - [ ] Then run `game-db/046_market.sql` (the player market: selling, offers, tenants, World Bank loans; see `docs/MARKET.md`). If you ever run 038 or 040 again, run 046 again after them.
 - [ ] In Vercel, set `GAME_SECRET` to a long random string (seals interview answers and passes; without it the service key is used).
-- [ ] Let the cloud sessions reach OpenStreetMap (for the real Lagos map): in the Claude Code environment settings, Network access, add `overpass-api.de` to the allowed domains. Then ask for the Lagos bake (`npm run bake:world -- lagos`).
+- [ ] Let the cloud sessions reach OpenStreetMap (for the real Lagos map): in the Claude Code environment settings, Network access, add `overpass-api.de` to the allowed domains. Then ask for the real pedestrian crossings (the list is still empty: the download failed) and a fresh Lagos bake (`npm run bake:world -- lagos`).
 - [ ] Try the new 3D avatar studio (see `avatar-reference/docs/AVATAR_SPEC.md`): open the game with `?avatar3d=1` on your phone, tap your look, design and save. Only your browser gets it; `?avatar3d=0` switches it back.
 - [ ] In the Supabase SQL Editor run `game-db/035_fees_and_jobs.sql` (first-visit fees, train fares, jobs). Until it's run, places and trains stay free and Jobs won't load.
 - [ ] In the Supabase SQL Editor run `game-db/036_minigames.sql` (minigame rewards). Until it's run, the games all play but good scores pay no mint.
