@@ -21,6 +21,7 @@ import {
   structureCentre,
   structureSize,
   tileAt,
+  busyAt,
   VENUE_SPORT,
   type CityPlan,
   type Tile,
@@ -29,6 +30,9 @@ import { ABBREV } from "@/lib/city/places";
 import { regionMap } from "@/lib/world";
 import type { RegionMap } from "@/lib/world/compile";
 import { toTile } from "@/lib/world/geo";
+import { BUILDING_LABEL, type Building } from "@/lib/world/buildings";
+import { shortMint, toMint, valueOf } from "@/lib/world/value";
+import { propertyInfo, type PropertyInfo } from "@/lib/world/property";
 import { daylight, weatherAt } from "@/lib/city/sky";
 import { npcsFor, type Npc } from "@/lib/npcs";
 import { createBirds } from "./city/birds";
@@ -49,6 +53,10 @@ import { createTrains, railParts } from "./city/trains";
 import { MONORAIL_FARE, TRAIN_FARE } from "@/lib/fees";
 import { createElevatedLife, elevatedParts } from "./city/elevated";
 import { createAircraft } from "./city/aircraft";
+import { createFarCity, MAP_MARGIN } from "./city/far-city";
+import { createKites } from "./city/kites";
+import { buildingParts } from "./city/building-kit";
+import { CLEAR_GROUND, crossingParts, pieceParts, stationParts } from "./city/spans-kit";
 import { setSceneSnapshot } from "./city/snapshot";
 import { createTraffic, type VehiclePose } from "./city/traffic";
 import { clubParts, eggParts, fireStationParts, restaurantParts } from "./city/street-bits";
@@ -196,6 +204,13 @@ type Props = {
   /** A billboard was tapped: which board, and the ad it was showing (null = "advertise here"). */
   onBillboard: (info: { id: string; tile: number; adId: string | null }) => void;
   onHover?: (info: { tile: number; label: string } | null) => void;
+  /**
+   * A real place: the name of the area being pointed at (a mouse over it, or a finger held on
+   * it), or else the one in the middle of the view ("Yaba", "Lagos Lagoon"). Called when it changes.
+   */
+  onArea?: (name: string | null) => void;
+  /** A real place: a property was tapped (instead of going inside): what it is and what it's worth. */
+  onProperty?: (info: PropertyInfo) => void;
   /** Your face, floating over your hiding spot. */
   meAvatar: Avatar;
   /** A coin balloon drifting by just for you (its slot number), or none. */
@@ -299,6 +314,11 @@ type Part = { tile: number; x: number; y: number; z: number; sx: number; sy: num
 
 /** A very big town draws only this many tiles each way round the camera (see build). */
 const WINDOW = 40;
+/**
+ * A real place (src/lib/world) draws full detail only this many tiles each way round the camera;
+ * beyond it, plain blocks and a painted map (./city/far-city) keep a strict drawing budget.
+ */
+const DETAIL = 18;
 const SKY = 0xd7ebf7;
 const BALLOON_NAMES = ["Red", "Yellow", "Blue", "Purple", "Mint"];
 const GROUND = 0xd3e4c8;
@@ -313,28 +333,51 @@ const FLASH_TAG = 2000;
 const FLASH = { hazard: 0, policeRed: 1, policeBlue: 2, works: 3 } as const;
 
 // ---------------------------------------------------------------- shapes
+// Kept to as few triangles as they can be: there are thousands of each in a big town (a
+// traffic-light bulb is 8 triangles, not 80), so this is most of what a frame costs.
+/** A unit box standing on y = 0, without its bottom face (it's never seen). */
+function boxNoBottom() {
+  const g = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+  const idx = g.index!.array;
+  // BoxGeometry's faces are +x, -x, +y, -y, +z, -z, two triangles (six indices) each.
+  const keep = [...idx.slice(0, 18), ...idx.slice(24)];
+  g.setIndex(keep);
+  g.clearGroups();
+  return g;
+}
 function geometries() {
   const box = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+  // The ground under each tile is never seen from below.
+  const slab = boxNoBottom();
+  // Road paint and the like: only the top is ever seen.
+  const top = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2).translate(0, 1, 0);
   const roof = new THREE.CylinderGeometry(0, 1, 1, 4, 1).rotateY(Math.PI / 4).translate(0, 0.5, 0);
   const crown = new THREE.IcosahedronGeometry(0.5, 0).translate(0, 0.5, 0);
   const trunk = new THREE.CylinderGeometry(0.05, 0.07, 1, 5).translate(0, 0.5, 0);
-  const disc = new THREE.CylinderGeometry(0.5, 0.5, 1, 20).translate(0, 0.5, 0);
+  const disc = new THREE.CylinderGeometry(0.5, 0.5, 1, 12).translate(0, 0.5, 0);
   // Half a ring, standing up: the arch under a bridge.
   const arch = new THREE.TorusGeometry(0.29, 0.035, 6, 18, Math.PI);
-  const cyl = new THREE.CylinderGeometry(0.5, 0.5, 1, 20).translate(0, 0.5, 0);
-  const cone = new THREE.ConeGeometry(0.5, 1, 16).translate(0, 0.5, 0);
-  const dome = new THREE.SphereGeometry(0.5, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2);
+  const cyl = new THREE.CylinderGeometry(0.5, 0.5, 1, 10).translate(0, 0.5, 0);
+  const cone = new THREE.ConeGeometry(0.5, 1, 10).translate(0, 0.5, 0);
+  const dome = new THREE.SphereGeometry(0.5, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2);
   // A quarter ring lying flat, centred on a tile corner: a bend in the road.
   const curve = new THREE.RingGeometry(0.2, 0.8, 14, 1, 0, Math.PI / 2).rotateX(-Math.PI / 2);
   const curveLine = new THREE.RingGeometry(0.485, 0.515, 14, 1, 0, Math.PI / 2).rotateX(-Math.PI / 2);
-  const lamp = new THREE.SphereGeometry(0.5, 8, 6);
+  const lamp = new THREE.OctahedronGeometry(0.5, 0);
   const cooling = coolingTowerGeometry();
-  return { box, roof, crown, trunk, disc, arch, cyl, cone, dome, curve, curveLine, lamp, cooling };
+  return { box, slab, top, roof, crown, trunk, disc, arch, cyl, cone, dome, curve, curveLine, lamp, cooling };
 }
 
 // ---------------------------------------------------------------- what stands on a tile
 function partsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "tile">) => void) {
   basePartsFor(t, plan, add);
+  // A real place's bridges, flyovers, railways and stations along their real curves.
+  const region = plan.region;
+  if (region) {
+    for (const p of region.piecesAt(t.x, t.z) ?? []) pieceParts(p, add);
+    const st = region.stationAt(t.x, t.z);
+    if (st) stationParts(st, add);
+  }
   // The railway viaduct passes over some tiles (whatever is underneath).
   if (t.rail) railParts(t, plan, add);
   // The monorail, the flyover and footbridges over the streets.
@@ -461,6 +504,12 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
 
   if (t.kind === "road") {
     const m = t.mask ?? 0;
+    // Inside a wide stretch of tarmac (a real place's dual carriageways): plain asphalt.
+    if (t.wide) {
+      add("ground", { x, y: 0, z, sx: 1, sy: 0.06, sz: 1, ry: 0, color: ASPHALT });
+      if ((x + z) % 3 === 0) add("paint", { x, y: 0.061, z, sx: 0.04, sy: 0.005, sz: 0.04, ry: 0, color: 0xffffff });
+      return;
+    }
     // Bends: pavement with a curved stretch of road sweeping round the corner.
     const bend: Record<number, [number, number, number]> = { 3: [0.5, -0.5, Math.PI], 6: [0.5, 0.5, Math.PI / 2], 12: [-0.5, 0.5, 0], 9: [-0.5, -0.5, -Math.PI / 2] };
     if (bend[m]) {
@@ -503,8 +552,11 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
         add("trunk", { x: lx, y: 0.06, z: lz, sx: 0.3, sy: 0.5, sz: 0.3, ry: 0, color: 0x495057 });
         add("lamp", { x: lx - (along ? 0 : side * 0.12), y: 0.56, z: lz - (along ? side * 0.12 : 0), sx: 0.11, sy: 0.07, sz: 0.11, ry: 0, color: 0xffffff });
       }
-      for (const o of [-0.25, 0.25]) {
-        add("paint", { x: x + (along ? o : 0), y: 0.061, z: z + (along ? 0 : o), sx: along ? 0.22 : 0.04, sy: 0.005, sz: along ? 0.04 : 0.22, ry: 0, color: 0xffffff });
+      if (t.crossing !== undefined) crossingParts(t, t.crossing, along, add);
+      else {
+        for (const o of [-0.25, 0.25]) {
+          add("paint", { x: x + (along ? o : 0), y: 0.061, z: z + (along ? 0 : o), sx: along ? 0.22 : 0.04, sy: 0.005, sz: along ? 0.04 : 0.22, ry: 0, color: 0xffffff });
+        }
       }
       // Dead end: a turning circle.
       if (m === 1 || m === 4 || m === 2 || m === 8) add("disc", { x, y: 0.0, z, sx: 1.05, sy: 0.061, sz: 1.05, ry: 0, color: ASPHALT });
@@ -547,6 +599,19 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
 
   if (t.kind === "structure") {
     if (t.structure!.anchor) structureParts(t, plan, B, tree);
+    return;
+  }
+
+  // Kept clear under a deck, along a railway, round a station (./city/spans-kit draws those).
+  if (t.clear) {
+    B(0, 0.08, 0, 0.98, 0.004, 0.98, CLEAR_GROUND[t.clear], 0, "ground");
+    return;
+  }
+
+  // A real place's property (a bungalow, flats, shops, a plot...): see ./city/building-kit.
+  if (t.building && !t.home) {
+    buildingParts(t, t.building, pal, B, add, tree);
+    if (t.egg) eggParts(t, B);
     return;
   }
 
@@ -1220,6 +1285,8 @@ export function CityView({
   events,
   onBillboard,
   onHover,
+  onArea,
+  onProperty,
   meAvatar,
   coinBalloon,
   onBalloon,
@@ -1288,16 +1355,17 @@ export function CityView({
     /** Zoom in (dir 1) or out (dir -1) a step: the + and − buttons on a computer. */
     zoom: (dir: number) => void;
   } | null>(null);
-  const cb = useRef({ onHover, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused });
+  const cb = useRef({ onHover, onArea, onProperty, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused });
   const atmos = useRef({ progress, nightFirst, meAvatar });
   useEffect(() => {
-    cb.current = { onHover, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused };
+    cb.current = { onHover, onArea, onProperty, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused };
     atmos.current = { progress, nightFirst, meAvatar };
   });
 
   // Set up the scene once.
   useEffect(() => {
     const el = host.current!;
+    const statsOn = typeof location !== "undefined" && new URLSearchParams(location.search).has("stats");
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
     // Phones have very dense screens; 1.5× looks just as sharp and draws much faster.
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, window.innerWidth < 700 ? 1.5 : 2));
@@ -1334,7 +1402,11 @@ export function CityView({
     scene.add(sun, sun.target);
 
     // The flat ground the city stands on (a circle; the countryside starts round its edge).
-    const base = new THREE.Mesh(new THREE.CircleGeometry(1, 64).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: GROUND }));
+    // Pushed back in depth, so whatever lies on it (a real place's painted map) always wins.
+    const base = new THREE.Mesh(
+      new THREE.CircleGeometry(1, 64).rotateX(-Math.PI / 2),
+      new THREE.MeshLambertMaterial({ color: GROUND, polygonOffset: true, polygonOffsetFactor: 4, polygonOffsetUnits: 8 }),
+    );
     base.receiveShadow = true;
     base.position.y = -0.01;
     scene.add(base);
@@ -1343,13 +1415,14 @@ export function CityView({
     const mat = (opts: THREE.MeshLambertMaterialParameters = {}) => new THREE.MeshLambertMaterial({ color: 0xffffff, ...opts });
     const lampMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const meshDefs: Record<string, { geometry: THREE.BufferGeometry; material: THREE.Material; shadow: boolean }> = {
-      ground: { geometry: geo.box, material: mat(), shadow: false },
-      paint: { geometry: geo.box, material: mat(), shadow: false },
+      ground: { geometry: geo.slab, material: mat(), shadow: false },
+      paint: { geometry: geo.top, material: mat(), shadow: false },
       building: { geometry: geo.box, material: mat(), shadow: true },
       glass: { geometry: geo.box, material: mat({ emissive: 0x0b1a2a, emissiveIntensity: 0.2 }), shadow: false },
       roof: { geometry: geo.roof, material: mat({ flatShading: true }), shadow: true },
       crown: { geometry: geo.crown, material: mat({ flatShading: true }), shadow: true },
-      trunk: { geometry: geo.trunk, material: mat(), shadow: true },
+      // Thin and many: their shadows aren't worth drawing every tree again.
+      trunk: { geometry: geo.trunk, material: mat(), shadow: false },
       disc: { geometry: geo.disc, material: mat(), shadow: false },
       arch: { geometry: geo.arch, material: mat(), shadow: true },
       cyl: { geometry: geo.cyl, material: mat(), shadow: true },
@@ -1371,6 +1444,8 @@ export function CityView({
 
     const city = new THREE.Group();
     scene.add(city);
+    const farCity = createFarCity(scene);
+    const kites = createKites(scene);
     const moving = new THREE.Group();
     scene.add(moving);
     const markerGroup = new THREE.Group();
@@ -2145,8 +2220,9 @@ export function CityView({
       const range = 0.35 + 0.9 * smoothNoise(x / 55, z / 55, land.seed + 4);
       return -0.02 + hills + ridges * range * land.peaks * smooth(land.start, land.full, e);
     }
-    function buildTerrain(seedV: number, R: number) {
-      const key = `${seedV}:${R}`;
+    /** The land round the town; `gentle`: only low hills far off (real places like Lagos). */
+    function buildTerrain(seedV: number, R: number, gentle = false) {
+      const key = `${seedV}:${R}:${gentle}`;
       if (key === terrainKey) return;
       terrainKey = key;
       const rr = (k: number) => hash(seedV, k, 5151);
@@ -2154,6 +2230,10 @@ export function CityView({
       land.half = R + 1.2;
       land.hills = 0.45 + rr(1) * 0.9;
       land.peaks = (9 + R * 0.5) * (0.6 + rr(2) * 0.8);
+      if (gentle) {
+        land.hills = 0.2;
+        land.peaks = 3;
+      }
       land.flat = 16 + R * 0.35;
       land.start = land.flat + 14 + R * 0.4;
       land.full = land.start + 30 + R * 1.2;
@@ -2178,7 +2258,7 @@ export function CityView({
       const N = 60;
       const M = 144;
       const r0 = land.half - 0.8;
-      const rOut = R * 14 + 80;
+      const rOut = gentle ? R + 500 : R * 14 + 80;
       const pos = new Float32Array((N + 1) * M * 3);
       const col = new Float32Array((N + 1) * M * 3);
       const cc = new THREE.Color();
@@ -2358,7 +2438,10 @@ export function CityView({
     let lifeAt = 0;
 
     // ---- build / grow the city
+    /** How long the last build took (ms), for the ?stats budget checks. */
+    let buildMs = 0;
     function build(newSeed: number, count: number, centre?: { cx: number; cz: number }) {
+      const buildStart = performance.now();
       const sameCity = newSeed === currentSeed;
       if (!sameCity) {
         born = new Map();
@@ -2377,13 +2460,13 @@ export function CityView({
       if (regionNow) {
         // A real place: always only the part round the camera, never past its edges.
         const b = regionNow.bounds;
-        const fit = (v: number, lo: number, hi: number) => (hi - lo < 2 * WINDOW ? Math.round((lo + hi) / 2) : Math.max(lo + WINDOW, Math.min(hi - WINDOW, v)));
+        const fit = (v: number, lo: number, hi: number) => (hi - lo < 2 * DETAIL ? Math.round((lo + hi) / 2) : Math.max(lo + DETAIL, Math.min(hi - DETAIL, v)));
         const start = toTile(regionNow.frame, regionNow.region.start);
         const c = centre ?? (sameCity && win ? win : { cx: Math.round(start.x), cz: Math.round(start.z) });
         win = { cx: fit(c.cx, b.x0, b.x1), cz: fit(c.cz, b.z0, b.z1) };
         tiles = [];
-        for (let x = win.cx - WINDOW; x <= win.cx + WINDOW; x++) {
-          for (let z = win.cz - WINDOW; z <= win.cz + WINDOW; z++) if (regionNow.inside(x, z)) tiles.push(tileAt(plan, spiralIndex(x, z)));
+        for (let x = win.cx - DETAIL; x <= win.cx + DETAIL; x++) {
+          for (let z = win.cz - DETAIL; z <= win.cz + DETAIL; z++) if (regionNow.inside(x, z)) tiles.push(tileAt(plan, spiralIndex(x, z)));
         }
         tiles.sort((a, b2) => a.i - b2.i);
       } else if (ring <= WINDOW) {
@@ -2447,7 +2530,8 @@ export function CityView({
         m.dispose();
       }
       disposeWater(waterGroup);
-      waterGroup = buildWater(tiles, newSeed);
+      const region = regionNow;
+      waterGroup = buildWater(tiles, newSeed, region ? (x, z) => region.waterAt(x, z) : undefined);
       if (waterGroup) city.add(waterGroup);
       meshes = {};
       growing = [];
@@ -2476,9 +2560,17 @@ export function CityView({
       flashState = -1;
 
       // radius: half the width of what's drawn. The hills start beyond the whole town.
-      radius = win ? WINDOW + 1.5 : tiles.reduce((m, t) => Math.max(m, Math.abs(t.x), Math.abs(t.z)), 4) + 1.5;
+      // The far rings round a real place: plain blocks, then the painted map.
+      if (regionNow && win) farCity.build(plan, win.cx, win.cz, DETAIL);
+      else farCity.clear();
+      kites.build(tiles, newSeed);
+      radius = win ? (regionNow ? DETAIL : WINDOW) + 1.5 : tiles.reduce((m, t) => Math.max(m, Math.abs(t.x), Math.abs(t.z)), 4) + 1.5;
       tallest = tiles.reduce((m, t) => Math.max(m, t.top), 0);
-      buildTerrain(newSeed, win ? ring + 1.5 : radius);
+      if (regionNow) {
+        // Flat all the way out past the painted map round a real place.
+        const b = regionNow.bounds;
+        buildTerrain(newSeed, Math.hypot(Math.max(-b.x0, b.x1), Math.max(-b.z0, b.z1)) + MAP_MARGIN * 1.5, true);
+      } else buildTerrain(newSeed, win ? ring + 1.5 : radius);
       const ox = win?.cx ?? 0;
       const oz = win?.cz ?? 0;
       const sc = sun.shadow.camera;
@@ -2490,7 +2582,8 @@ export function CityView({
       sun.position.set(ox - radius * 1.2, radius * 2 + 12, oz + radius * 0.9);
       sun.target.position.set(ox, 0, oz);
       sun.target.updateMatrixWorld();
-      controls.maxDistance = Math.max(30, radius * (win ? 3 : 4.5));
+      // A real place can be seen from high up: the far rings keep that cheap.
+      controls.maxDistance = regionNow ? 170 : Math.max(30, radius * (win ? 3 : 4.5));
       if (!framed) {
         framed = true;
         const d = (radius * 2.3 + 8) * Math.max(1, 0.95 / camera.aspect);
@@ -2510,6 +2603,7 @@ export function CityView({
       world.tileIndex = tileIndex;
       world.blocked = blocked;
       world.born = born;
+      world.busy = plan.region ? (bx, bz) => busyAt(plan, bx, bz) : null;
       birds.build(newSeed);
       people.build();
       // The railway runs on out into the farmland (not in a huge town drawn only round the camera).
@@ -2535,10 +2629,14 @@ export function CityView({
         hideRoof(view.stage, true);
       }
       syncView();
+      buildMs = Math.round(performance.now() - buildStart);
     }
 
     /** The part of a very big town the building site covers (null: all of it). */
-    const siteBox = () => (win ? { x0: win.cx - WINDOW, x1: win.cx + WINDOW, z0: win.cz - WINDOW, z1: win.cz + WINDOW } : null);
+    const siteBox = () => {
+      const h = regionNow ? DETAIL : WINDOW;
+      return win ? { x0: win.cx - h, x1: win.cx + h, z0: win.cz - h, z1: win.cz + h } : null;
+    };
 
     /**
      * A very big town: when the camera has wandered well away from the middle of what's drawn,
@@ -2552,8 +2650,9 @@ export function CityView({
       if (view || eventFly) return;
       const tx = controls.target.x;
       const tz = controls.target.z;
-      if (Math.max(Math.abs(tx - win.cx), Math.abs(tz - win.cz)) < WINDOW * 0.45) return;
-      const step = 10;
+      const h = regionNow ? DETAIL : WINDOW;
+      if (Math.max(Math.abs(tx - win.cx), Math.abs(tz - win.cz)) < h * 0.45) return;
+      const step = regionNow ? 4 : 10;
       build(currentSeed, builtCount, { cx: Math.round(tx / step) * step, cz: Math.round(tz / step) * step });
     }
 
@@ -3713,11 +3812,27 @@ export function CityView({
           ? anchor.structure.name
           : anchor.name
             ? anchor.name
-            : `${shortAddress(addressOf(currentPlan, anchor))} · ${ROOM_LABEL[anchor.kind]}`;
+            : anchor.building && currentPlan.region
+              ? propertyName(anchor.building, anchor, currentPlan.region)
+              : `${shortAddress(addressOf(currentPlan, anchor))} · ${ROOM_LABEL[anchor.kind]}`;
       const capacity = levels.reduce((n, l) => n + l.capacity, 0);
       const type = anchor.home ? "home" : anchor.station ? "station" : anchor.kind === "structure" && anchor.structure ? anchor.structure.type : anchor.kind;
       const room: CityRoom = { id: `b:${anchor.i}`, name, capacity, kind: "building", type, levels: levels.map((l) => ({ id: l.id, label: l.label, capacity: l.capacity, kind: levelUse(l) })) };
       return { room, anchor, big, levels };
+    }
+    /** A real place's property was tapped: show what it is (when someone's listening). */
+    function tapProperty(anchor: Tile) {
+      const region = currentPlan?.region;
+      if (!anchor.building || !region || !cb.current.onProperty || !currentPlan) return false;
+      cb.current.onProperty(propertyInfo(anchor.building, anchor.x, anchor.z, shortAddress(addressOf(currentPlan, anchor)), region));
+      return true;
+    }
+    /** A property on the real map: what it is and what it's worth ("Block of flats · ₥31,240"). */
+    function propertyName(b: Building, at: Tile, region: RegionMap) {
+      const kind = BUILDING_LABEL[b.kind];
+      const what = b.name ?? (b.state === "site" ? "Building site" : b.state === "uncompleted" ? `Unfinished ${kind.toLowerCase()}` : kind);
+      const value = valueOf(b, region.landPriceAt(at.x, at.z), region.region.prices).total;
+      return `${what} · ${shortMint(toMint(value, region.region.prices))}`;
     }
     /** A name for signs inside a building (company, hotel, hospital...). */
     function signName(anchor: Tile) {
@@ -4133,7 +4248,7 @@ export function CityView({
         const r = roomFor(i);
         if (!r) return;
         showHover(i);
-        cb.current.onRoom?.(r.room);
+        if (!tapProperty(r.anchor)) cb.current.onRoom?.(r.room);
       },
       onEvent: (id) => {
         if (!isRevealed || immersive()) return;
@@ -5575,10 +5690,13 @@ export function CityView({
     let down: { x: number; y: number; t: number } | null = null;
     const onDown = (e: PointerEvent) => {
       down = { x: e.clientX, y: e.clientY, t: performance.now() };
+      // A finger held on the map names the area under it (see updateArea).
+      if (e.pointerType !== "mouse") areaPointer = { x: e.clientX, y: e.clientY };
       eventFly = null;
       if (immersive()) renderer.domElement.style.cursor = "grabbing";
     };
     const onUp = (e: PointerEvent) => {
+      if (e.pointerType !== "mouse") areaPointer = null;
       // A press that started on an info bubble is the bubble's (a tap opens it; a drag only panned).
       if (bubbles.release(e)) {
         down = null;
@@ -5660,14 +5778,51 @@ export function CityView({
       const r = isRevealed ? roomFor(tile) : null;
       if (r) {
         showHover(tile);
-        cb.current.onRoom?.(r.room);
+        if (!tapProperty(r.anchor)) cb.current.onRoom?.(r.room);
       }
     };
     let hoverQueued: PointerEvent | null = null;
     const onMove = (e: PointerEvent) => {
       if (e.pointerType === "mouse" && !down) hoverQueued = e;
+      if (e.pointerType === "mouse") areaPointer = { x: e.clientX, y: e.clientY };
     };
-    const onLeave = () => showHover(null);
+    const onLeave = () => {
+      showHover(null);
+      areaPointer = null;
+    };
+
+    // ---- the name of the area being pointed at (a real place only)
+    /** Where the mouse is, or a finger is held down (null: name the middle of the view). */
+    let areaPointer: { x: number; y: number } | null = null;
+    let areaName: string | null = null;
+    let areaCheckAt = 0;
+    const areaRay = new THREE.Raycaster();
+    const areaNdc = new THREE.Vector2();
+    const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const areaHit = new THREE.Vector3();
+    function updateArea(now: number) {
+      if (now < areaCheckAt) return;
+      areaCheckAt = now + 200;
+      let name: string | null = null;
+      if (regionNow && !immersive()) {
+        let x = controls.target.x;
+        let z = controls.target.z;
+        if (areaPointer) {
+          const r = renderer.domElement.getBoundingClientRect();
+          areaNdc.set(((areaPointer.x - r.left) / r.width) * 2 - 1, -((areaPointer.y - r.top) / r.height) * 2 + 1);
+          areaRay.setFromCamera(areaNdc, camera);
+          if (areaRay.ray.intersectPlane(groundPlane, areaHit)) {
+            x = areaHit.x;
+            z = areaHit.z;
+          }
+        }
+        name = regionNow.areaAt(Math.round(x), Math.round(z));
+      }
+      if (name !== areaName) {
+        areaName = name;
+        cb.current.onArea?.(name);
+      }
+    }
     renderer.domElement.addEventListener("pointerdown", onDown);
     renderer.domElement.addEventListener("pointerup", onUp);
     renderer.domElement.addEventListener("pointermove", onMove);
@@ -5902,6 +6057,8 @@ export function CityView({
         controls.update();
       }
       updatePills();
+      updateArea(time * 1000);
+      kites.update(time, world.night);
       updatePins();
       updateGhosts(time);
       const dist = riding ? 10 : camera.position.distanceTo(controls.target);
@@ -5910,6 +6067,13 @@ export function CityView({
       fog.far = (dist + radius * 4 + 30) * (1 - fogFactor * 0.3);
       worldEventsLayer.update(dt, time, Date.now() + cb.current.clockOffsetMs);
       renderer.render(scene, camera);
+      if (statsOn) {
+        // ?stats: what the last frame cost, for checking the drawing budget (see the world lab).
+        const info = renderer.info.render;
+        const w = window as unknown as { __cityStats?: unknown; __cityCam?: unknown };
+        w.__cityStats = { triangles: info.triangles, calls: info.calls, ms: Math.round((time - lastFrameTime) * 1000), tiles: tiles.length, buildMs };
+        w.__cityCam = { camera, controls, scene };
+      }
       renderOverlays(time);
       lastFrameTime = time;
       // After drawing: the camera's matrices are this frame's now.
@@ -6059,6 +6223,8 @@ export function CityView({
       clearGhosts();
       ghostLayer.remove();
       for (const g of hillTreeShapes.values()) g.dispose();
+      farCity.dispose();
+      kites.dispose();
       renderer.dispose();
       el.removeChild(renderer.domElement);
       api.current = null;

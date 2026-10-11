@@ -35,7 +35,7 @@ const OVERPASS = process.env.OVERPASS_URL ?? "https://overpass-api.de/api/interp
 const cacheDir = join(here, ".cache");
 mkdirSync(cacheDir, { recursive: true });
 
-function overpass(name, query) {
+function overpass(name, query, tries = 8) {
   const file = join(cacheDir, `${id}-${name}.json`);
   if (!fresh && existsSync(file)) return JSON.parse(readFileSync(file, "utf8"));
   console.log(`Downloading ${name} from OpenStreetMap…`);
@@ -51,7 +51,7 @@ function overpass(name, query) {
       writeFileSync(file, out);
       return json;
     } catch (e) {
-      if (attempt >= 8) throw e;
+      if (attempt >= tries) throw e;
       const wait = Math.min(60, 5 * 2 ** attempt);
       console.log(`  failed (${String(e.message).split("\n").pop()}), trying again in ${wait} s`);
       execFileSync("sleep", [String(wait)]);
@@ -82,7 +82,7 @@ function overpassPieces(name, body, cols, rows) {
 }
 
 // ---------------------------------------------------------------- the region's tiles
-const frame = { origin: { lat: (region.box.north + region.box.south) / 2, lon: (region.box.west + region.box.east) / 2 } };
+const frame = { origin: region.origin };
 const B = tileBounds(frame, region.box);
 const W = B.x1 - B.x0 + 1;
 const H = B.z1 - B.z0 + 1;
@@ -344,17 +344,57 @@ function simplify(pts, tol) {
   if (worst <= tol) return [a, b];
   return [...simplify(pts.slice(0, at2 + 1), tol).slice(0, -1), ...simplify(pts.slice(at2), tol)];
 }
+// Every bridge and flyover (over water or over land) with its real curves, for drawing them as
+// smooth decks on piers: kept to within about 5 m of the real line.
 const routes = [];
+const shape = (geometry, tol) => simplify(geometry.map((g) => ({ ...at(g.lat, g.lon), g })), tol).map((p) => [+p.g.lat.toFixed(5), +p.g.lon.toFixed(5)]);
 for (const e of roads) {
-  if (!isBridge(e.tags) || !keep(e) || lengthOf(e.geometry) < 300) continue;
-  const pts = simplify(e.geometry.map((g) => ({ ...at(g.lat, g.lon), g })), 0.15).map((p) => [+p.g.lat.toFixed(5), +p.g.lon.toFixed(5)]);
-  routes.push({ id: `osm-w${e.id}`, name: label(e.tags) || "Bridge", kind: e.tags.highway, bridge: true, path: pts });
+  if (!isBridge(e.tags) || !keep(e) || lengthOf(e.geometry) < 40) continue;
+  routes.push({ id: `osm-w${e.id}`, name: label(e.tags) || "Bridge", kind: e.tags.highway, bridge: true, path: shape(e.geometry, 0.05) });
+}
+
+// ---------------------------------------------------------------- railways, stations, crossings
+let rail = [];
+let stations = [];
+let crossings = [];
+if (!fromFiles) {
+  try {
+    const els = overpassPieces(
+      "rail",
+      (b) => `  way["railway"~"^(rail|light_rail|subway|narrow_gauge)$"][!"service"](${b});
+  node["railway"~"^(station|halt)$"](${b});
+  node["public_transport"="station"]["train"="yes"](${b});`,
+      2,
+      1,
+    );
+    rail = els
+      .filter((e) => e.type === "way" && e.geometry && lengthOf(e.geometry) > 30)
+      .map((e) => ({ id: `osm-w${e.id}`, name: e.tags.name ?? e.tags.ref ?? "Railway", bridge: !!isBridge(e.tags), path: shape(e.geometry, 0.05) }));
+    const seen = new Set();
+    stations = els
+      .filter((e) => e.type === "node" && e.tags.name && !seen.has(e.tags.name) && seen.add(e.tags.name))
+      .map((e) => ({ name: e.tags.name, at: [+e.lat.toFixed(5), +e.lon.toFixed(5)] }));
+  } catch {
+    console.log("  couldn't get the railways");
+  }
+  try {
+    // 0 zebra, 1 with its own traffic lights, 2 marked (ladder), 3 with a refuge island.
+    const els = overpassPieces("crossings", (b) => `  node["highway"="crossing"](${b});`, 4, 2);
+    crossings = els.map((e) => {
+      const t = e.tags ?? {};
+      const type = t["crossing:island"] === "yes" ? 3 : t.crossing === "traffic_signals" ? 1 : t.crossing === "zebra" || t.crossing_ref === "zebra" ? 0 : 2;
+      return [+e.lat.toFixed(5), +e.lon.toFixed(5), type];
+    });
+  } catch {
+    console.log("  couldn't get the crossings");
+  }
 }
 
 // ---------------------------------------------------------------- landmarks
 const pattern = (l) => l.osm ?? l.name.replace(/\s*[(,].*$/, "").replace(/[.*+?^${}()|[\]\\"]/g, "\\$&");
 const wantedMarks = fromFiles ? [] : region.landmarks.filter((l) => l.approx);
-const found = {};
+// What earlier bakes found stays, unless this one finds it again.
+const found = { ...region.found };
 const missed = [];
 // Asked about a few at a time (a busy server turns down one big question). A batch that still
 // fails is skipped: those landmarks stay where landmarks.ts puts them, and the bake carries on.
@@ -371,6 +411,7 @@ for (let k = 0; k < wantedMarks.length; k += 3) {
 ${batch.map((l) => `  nwr["name"](${(l.at.lat - 0.022).toFixed(4)},${(l.at.lon - 0.022).toFixed(4)},${(l.at.lat + 0.022).toFixed(4)},${(l.at.lon + 0.022).toFixed(4)});`).join("\n")}
 );
 out center tags;`,
+        2,
       ).elements,
     );
   } catch {
@@ -388,6 +429,46 @@ for (const l of wantedMarks) {
   }
   if (best) found[l.id] = { lat: +best.p.lat.toFixed(5), lon: +best.p.lon.toFixed(5) };
   else missed.push(l.name);
+}
+
+// ---------------------------------------------------------------- named neighbourhoods and towns
+const KIND = { city: "town", town: "town", suburb: "suburb", quarter: "neighbourhood", neighbourhood: "neighbourhood", city_block: "neighbourhood", village: "village", hamlet: "village" };
+let areas = [];
+if (!fromFiles) {
+  try {
+    const els = overpass(
+      "areas",
+      `[out:json][timeout:120];
+node["place"~"^(${Object.keys(KIND).join("|")})$"]["name"](${bbox});
+out;`,
+    ).elements;
+    const seen = new Set();
+    areas = els
+      .filter((e) => e.tags.name !== region.name && region.box.south <= e.lat && e.lat <= region.box.north && region.box.west <= e.lon && e.lon <= region.box.east)
+      .map((e) => ({ name: e.tags["name:en"] ?? e.tags.name, at: [+e.lat.toFixed(5), +e.lon.toFixed(5)], kind: KIND[e.tags.place] }))
+      .filter((a) => !seen.has(a.name) && seen.add(a.name))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } catch {
+    console.log("  couldn't get the neighbourhood names (the districts are used instead)");
+  }
+}
+
+// ---------------------------------------------------------------- footbridges over the roads
+let footbridges = [];
+if (!fromFiles) {
+  try {
+    const els = overpassPieces("footbridges", (b) => `  way["highway"~"^(footway|pedestrian|path|steps|cycleway)$"]["bridge"](${b});`, 2, 1);
+    // Short ones only (over a road, not along a river), by their middle.
+    footbridges = els
+      .filter((e) => e.geometry && e.tags.bridge !== "no" && lengthOf(e.geometry) < 160)
+      .map((e) => {
+        const p = middle(e.geometry);
+        return [+p.lat.toFixed(5), +p.lon.toFixed(5)];
+      })
+      .filter(([lat, lon]) => region.box.south <= lat && lat <= region.box.north && region.box.west <= lon && lon <= region.box.east);
+  } catch {
+    console.log("  couldn't get the footbridges");
+  }
 }
 
 // ---------------------------------------------------------------- write it out
@@ -419,7 +500,7 @@ writeFileSync(
 // ${new Date().toISOString().slice(0, 10)}. Don't edit by hand: put fixes in corrections.ts.
 
 import type { LatLon } from "../../geo.ts";
-import type { BakedGrid, Road } from "../../region.ts";
+import type { Area, BakedGrid, Rail, Road, Station } from "../../region.ts";
 
 export const WATER: BakedGrid | null = ${grid2(waterRows)};
 
@@ -428,6 +509,18 @@ export const ROAD_GRID: BakedGrid | null = ${grid2(roadRows)};
 export const ROUTES: Road[] = ${JSON.stringify(routes, null, 1)};
 
 export const FOUND: Record<string, LatLon> = ${JSON.stringify(found, null, 1)};
+
+export const FOOTBRIDGES: [number, number][] = ${JSON.stringify(footbridges)};
+
+export const RAIL: Rail[] = ${JSON.stringify(rail, null, 1)};
+
+export const STATIONS: Station[] = ${JSON.stringify(stations)};
+
+export const CROSSINGS: [number, number, number][] = ${JSON.stringify(crossings)};
+
+export const AREAS: Area[] = [
+${areas.map((a) => `  ${JSON.stringify(a)},`).join("\n")}
+];
 `,
 );
 
@@ -435,6 +528,7 @@ export const FOUND: Record<string, LatLon> = ${JSON.stringify(found, null, 1)};
 const count = (arr, f) => arr.reduce((n, v) => n + (f(v) ? 1 : 0), 0);
 console.log(`Wrote ${file}`);
 console.log(`${W} × ${H} tiles: ${count(waterTiles, (v) => v === 1)} lagoon, ${count(waterTiles, (v) => v === 2)} sea, ${count(roadTiles, (v) => v > 0)} road (${kept} of ${roads.length} roads kept), ${routes.length} long bridges`);
+console.log(`${areas.length} named neighbourhoods and towns, ${footbridges.length} footbridges, ${rail.length} stretches of railway, ${stations.length} stations, ${crossings.length} crossings, ${routes.length} bridges and flyovers`);
 console.log(`Landmarks found in the map: ${Object.keys(found).length} of ${wantedMarks.length}${missed.length ? `; not found: ${missed.join(", ")}` : ""}`);
 const step = 3;
 for (let z = 0; z < H; z += step * 2) {

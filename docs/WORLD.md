@@ -11,8 +11,11 @@ same map so you can zoom out to the whole world and fly anywhere.
 - **A region** (a city now, countries later) has its own flat map centred on the middle of its
   area, so shapes and distances in it are true. Where it sits on the world map comes from its real
   latitude and longitude (`src/lib/world/geo.ts`).
-- **Only the part round the camera is drawn** (81 × 81 tiles, about 8 × 8 km), however big the
-  region is. Nothing is stored tile by tile. Every tile is worked out from the region's data the
+- **Three rings round the camera, on a strict drawing budget** (`src/app/play/city/far-city.ts`):
+  full detail for about 1.8 km each way; one plain block per building out to about 7 km; then one
+  painted map of the whole region and the land and sea round it, out to the horizon. A frame
+  stays around 350,000 triangles however far you zoom out (it was over 2 million). Open
+  `/world-lab?stats` to see the numbers. Nothing is stored tile by tile. Every tile is worked out from the region's data the
   same way every time, so the city never changes unless its data changes.
 
 ## What a region is made of
@@ -54,6 +57,33 @@ coordinates from any map app (latitude first).
 
 If two landmarks overlap, the later one is left out and the tests report it.
 
+## Names, bridges over the roads
+
+- **Names:** the pill shows a spot's neighbourhood and its district ("Sabo · Yaba"). The
+  neighbourhoods come from OpenStreetMap's place names; it doesn't have every well-known name (it
+  has no "Yaba", only the local government areas), so missing ones go in `corrections.ts`
+  (`kind: "area"`), and the districts in `districts.ts` fill in the rest.
+- **Bridges and flyovers** (140 from the map, over water and over land, Third Mainland Bridge
+  included) and **railways** (the Blue Line on its viaduct, the Red Line and the Lagos–Ibadan line
+  on the ground) follow their real curves as smooth decks: up a ramp off the road, along on piers,
+  down again (`src/lib/world/spans.ts`, drawn by `src/app/play/city/spans-kit.ts`). The ground
+  under a deck, along a railway and round a station is kept clear, so nothing passes through a
+  building. The water under a bridge stays open. Bridges show from far away too.
+- **Stations:** the 12 the map has (Marina, National Theatre, Iganmu, Alaba, Mile 2 on the Blue
+  Line; Oyingbo, Mobolaji Johnson, Yaba, Mushin, Oshodi, Ikeja, Agege on the Red Line), each
+  lined up with its line: platforms, canopies, a hall, stairs and a lift up to raised platforms.
+- **Pedestrian crossings**, six kinds: zebra, with their own lights, ladder, with a refuge island,
+  yellow school crossings by schools, raised. Where the map has them, and on busy streets.
+- **People walking** keep to streets with pavements, and cross at junction zebras and the
+  crossings: never along an expressway, across wide tarmac, on a road over water, or on the water
+  itself (boats are for that).
+- **Traffic** follows how busy each road is (the area's crowd and the kind of road), with more
+  cars and longer jams in the Lagos rush hours. Later it will also follow how many players live
+  and visit there.
+- **Footbridges:** the 189 from the map over the roads, plus extras along the expressways.
+- **Wide roads:** where a dual carriageway comes out two tiles wide, it's plain tarmac (no traffic
+  lights or crossings in the middle of it).
+
 ## Seeing it
 
 - `/world-lab` shows Lagos on its own, without signing in.
@@ -62,8 +92,8 @@ If two landmarks overlap, the later one is left out and the tests report it.
 
 ## Still to come
 
-1. Drawing in chunks, so moving round doesn't redraw the whole 81 × 81 view (now it redraws every
-   ~1.8 km).
+1. Drawing in chunks, so moving round doesn't redraw the near ring (now about a tenth of a second
+   every ~800 m).
 2. Long bridges drawn smoothly on piers along their real curves (Third Mainland Bridge, Carter,
    Eko, Lekki–Ikoyi Link) instead of tile by tile. Rail lines (Blue and Red lines). Beaches, stilt
    villages (Makoko), and landmarks built to their real sizes and shapes.

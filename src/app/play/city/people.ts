@@ -1,6 +1,8 @@
 // People out walking along the edges of the streets: little instanced figures with swinging
 // legs and a bob in their step, all in different clothes. Now and then one crosses the road at
-// a zebra crossing. Fewer people about at night, and umbrellas come out when it rains.
+// a zebra crossing. On a real place they keep to streets with pavements: never along an
+// expressway, across a wide stretch of tarmac, or on a road over water, and they cross only at
+// the junctions' zebras and the crossings. Fewer people about at night, and umbrellas come out when it rains.
 // Five instanced meshes in all (shirts, trousers, heads, legs, umbrellas).
 
 import * as THREE from "three";
@@ -15,8 +17,9 @@ type Person = {
   /** Which side of the street (+1 / -1), and where they are across it right now (crossing). */
   side: number;
   across: number;
-  /** About to cross at the zebra on this stretch. */
+  /** About to cross at the zebra on this stretch, and where along it (0 a mid-street crossing, 0.36 by a junction). */
   cross: boolean;
+  crossAt: number;
   bridgeFrom: boolean;
   bridgeTo: boolean;
   phase: number;
@@ -27,6 +30,13 @@ const SHIRTS = [0xe5484d, 0x4dabf7, 0xffd43b, 0x69db7c, 0xf783ac, 0xffffff, 0x84
 const TROUSERS = [0x343a40, 0x1c3f6e, 0x495057, 0x5c4033, 0x2b2f33, 0x7a6a58];
 const SKIN = [0xf1c27d, 0xe0ac69, 0xc68642, 0x8d5524, 0x5c3a1e, 0xffdbac];
 const BROLLIES = [0xe5484d, 0x1c3faa, 0xffd43b, 0x2f9e44, 0x343a40, 0xda77f2];
+
+/** Somewhere people can walk: a street with pavements (not an expressway, wide tarmac or a causeway). */
+function walkable(world: World, x: number, z: number) {
+  if (!roadAt(world, x, z)) return false;
+  const t = world.byIndex.get(world.tileIndex.get(keyOf(x, z)) ?? -1);
+  return !!t && !t.roundabout && !t.wide && !t.express && !t.causeway;
+}
 
 export function createPeople(world: World, parent: THREE.Object3D) {
   const torsoGeo = new THREE.CylinderGeometry(0.028, 0.034, 0.08, 6).translate(0, 0.1, 0);
@@ -68,12 +78,12 @@ export function createPeople(world: World, parent: THREE.Object3D) {
 
   function build() {
     clear();
-    const roads = world.tiles.filter((t) => (t.kind === "road" || t.kind === "bridge") && !t.works && !t.roundabout);
+    const roads = world.tiles.filter((t) => (t.kind === "road" || t.kind === "bridge") && !t.works && walkable(world, t.x, t.z));
     const n = Math.min(150, Math.floor(roads.length / 2.5));
     people = [];
     for (let k = 0; k < n; k++) {
       const t = roads[Math.floor(Math.random() * roads.length)];
-      const options = DIRS.filter(([ox, oz]) => roadAt(world, t.x + ox, t.z + oz));
+      const options = DIRS.filter(([ox, oz]) => walkable(world, t.x + ox, t.z + oz));
       if (!options.length) continue;
       const [ox, oz] = options[Math.floor(Math.random() * options.length)];
       const side = Math.random() < 0.5 ? 1 : -1;
@@ -85,6 +95,7 @@ export function createPeople(world: World, parent: THREE.Object3D) {
         side,
         across: side,
         cross: false,
+        crossAt: 0.36,
         bridgeFrom: t.kind === "bridge",
         bridgeTo: isBridgeAt(world, t.x + ox, t.z + oz),
         phase: Math.random() * 10,
@@ -124,7 +135,7 @@ export function createPeople(world: World, parent: THREE.Object3D) {
     const options: [number, number][] = [];
     for (const [ox, oz] of DIRS) {
       if (ox === -dx && oz === -dz) continue;
-      if (roadAt(world, x + ox, z + oz) && world.byIndex.get(world.tileIndex.get(keyOf(x + ox, z + oz)) ?? -1)?.roundabout !== true) options.push([x + ox, z + oz]);
+      if (walkable(world, x + ox, z + oz)) options.push([x + ox, z + oz]);
     }
     if (!options.length) return p.from;
     const ahead = options.find(([nx, nz]) => nx - x === dx && nz - z === dz);
@@ -145,7 +156,7 @@ export function createPeople(world: World, parent: THREE.Object3D) {
       let dx = p.to[0] - p.from[0];
       let dz = p.to[1] - p.from[1];
       let crossing = false;
-      if (p.cross && p.t >= 0.36 && p.t <= 0.5) {
+      if (p.cross && p.t >= p.crossAt && p.t <= p.crossAt + 0.14) {
         // At the zebra: stop going along, walk across.
         crossing = true;
         const goal = -p.side;
@@ -168,8 +179,11 @@ export function createPeople(world: World, parent: THREE.Object3D) {
         p.bridgeTo = isBridgeAt(world, next[0], next[1]);
         dx = p.to[0] - p.from[0];
         dz = p.to[1] - p.from[1];
-        // Leaving a crossing with zebras: sometimes cross over to the other pavement.
-        p.cross = !!at && signalJunction(at) && Math.random() < 0.3;
+        // Leaving a crossing with zebras: sometimes cross over to the other pavement. At a
+        // crossing in the middle of a street, cross right there.
+        const midCrossing = !!at && at.crossing !== undefined;
+        p.cross = !!at && (signalJunction(at) || midCrossing) && Math.random() < (midCrossing ? 0.5 : 0.3);
+        p.crossAt = midCrossing ? 0 : 0.36;
       }
       const lane = p.bridgeFrom || p.bridgeTo ? 0.22 : 0.43;
       const tx = p.from[0] + dx * p.t - dz * p.across * lane;

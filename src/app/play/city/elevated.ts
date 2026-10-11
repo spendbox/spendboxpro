@@ -123,7 +123,7 @@ function flyoverParts(t: Tile, line: Elevated, add: Add) {
 
 function footbridgeParts(t: Tile, style: 0 | 1 | 2, add: Add) {
   // The road runs along x (mask 10) or z (mask 5); the bridge goes across it.
-  const roadAlong: "x" | "z" = t.mask === 10 ? "x" : "z";
+  const roadAlong: "x" | "z" = ((t.mask ?? 0) & 10) === 10 ? "x" : "z";
   // Draw in a frame where a runs ACROSS the road (the bridge's length) and c along it.
   const P = frame(t, roadAlong === "x" ? "z" : "x", add);
   const deck = 0.5;

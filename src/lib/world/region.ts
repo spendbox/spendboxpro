@@ -7,6 +7,7 @@
 // fix never moves anything else.
 
 import type { StructureType, TileKind } from "@/lib/city/layout";
+import type { BuildingKind } from "./buildings.ts";
 import type { LatLon, LatLonBox } from "./geo.ts";
 
 /** [latitude, longitude] pairs: the shape of a road or an area. */
@@ -56,6 +57,15 @@ export type Landmark = {
   osm?: string;
 };
 
+/** A stretch of railway with its real curves (raised on a viaduct where `bridge`). */
+export type Rail = { id: string; name: string; bridge?: boolean; path: Path };
+
+/** A railway station: its name and where it is (it's built along the nearest railway). */
+export type Station = { name: string; at: [number, number] };
+
+/** A named neighbourhood, town or village: its middle, and how big a place it is. */
+export type Area = { name: string; at: [number, number]; kind: "town" | "suburb" | "neighbourhood" | "village" };
+
 /** A part of town with its own character: busy high-rises, quiet leafy streets, crowded markets. */
 export type District = {
   id: string;
@@ -65,6 +75,21 @@ export type District = {
   radiusKm: number;
   /** How built-up its middle is: about 0.4 quiet suburb, 0.7 busy, 1.1+ skyscrapers. */
   density: number;
+  /** What land costs in its middle, per m², in the region's currency (see Prices). */
+  landPrice?: number;
+};
+
+/** Real prices for a region, in its own currency (see docs/PROPERTY.md, section 2). */
+export type Prices = {
+  /** The local currency ("NGN"), and how much of it one mint is worth. */
+  currency: string;
+  /** Shown before local amounts ("₦"). */
+  symbol: string;
+  perMint: number;
+  /** Land per m² where no district says otherwise. */
+  land: number;
+  /** What it costs to build, per m² of floor, by kind of building. */
+  build: Record<BuildingKind, number>;
 };
 
 export type Correction =
@@ -77,20 +102,34 @@ export type Correction =
   /** Change a landmark (by its id): move it, rename it, resize it. */
   | { kind: "landmark"; note?: string; id: string; set: Partial<Omit<Landmark, "id">> }
   /** Take a landmark out. */
-  | { kind: "no-landmark"; note?: string; id: string };
+  | { kind: "no-landmark"; note?: string; id: string }
+  /** Add a named place the map data doesn't have (or doesn't have where it should be). */
+  | { kind: "area"; note?: string; area: Area }
+  /** Take a wrongly named place out (by its name). */
+  | { kind: "no-area"; note?: string; name: string };
 
 export type Region = {
   id: string;
   /** The name players see ("Lagos"). */
   name: string;
+  /** The state or province it's in, as players see it ("Lagos State"). */
+  state: string;
+  /** What its open water is called, for naming the spot under the pointer. */
+  waterNames?: { lagoon?: string; sea?: string };
   /** The street-name style (see FLAVORS in src/lib/city/places.ts). */
   flavor: string;
   /** Fixed for good, so the same city is built every time. */
   seed: number;
   /** The city's colours (see PALETTES in src/lib/city/layout.ts). */
   palette?: string;
-  /** The part of the world this region covers. */
+  /**
+   * Where its own flat map is centred. Fixed for good: every building's address (and so who owns
+   * it) is counted from here, so the box can grow without anything moving.
+   */
+  origin: LatLon;
+  /** The part of the world this region covers (it can grow; the origin stays). */
   box: LatLonBox;
+  prices: Prices;
   /** Where the camera starts. */
   start: LatLon;
   landmarks: Landmark[];
@@ -104,6 +143,18 @@ export type Region = {
    * smoothly. Their tiles are roads too.
    */
   roads: Road[];
+  /** Footbridges over the roads, from the map: [latitude, longitude] of each one's middle. */
+  footbridges: [number, number][];
+  /** Railways and their stations, from the map. */
+  rail: Rail[];
+  stations: Station[];
+  /**
+   * Pedestrian crossings from the map: [latitude, longitude, type]: 0 zebra, 1 with its own
+   * traffic lights, 2 marked (ladder), 3 with a refuge island.
+   */
+  crossings: [number, number, number][];
+  /** Named neighbourhoods and towns from the map (Obalende, Ojuelegba...), for naming spots. */
+  areas: Area[];
   /** Where the map data has each landmark (by id), found by the bake: used for landmarks marked approx. */
   found: Record<string, LatLon>;
   corrections: Correction[];

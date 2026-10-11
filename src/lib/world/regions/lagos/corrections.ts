@@ -7,12 +7,20 @@
 //   { kind: "no-road", note: "...", area: [...] }                          take the main roads out of an area
 //   { kind: "landmark", note: "...", id: "...", set: { at: { lat, lon } } } move/rename/resize
 //   { kind: "no-landmark", note: "...", id: "..." }                        take a landmark out
+//   { kind: "area", note: "...", area: { name, at: [lat, lon], kind } }    add a named place
+//   { kind: "no-area", note: "...", name: "..." }                          take a wrong name out
 //
 // Coordinates can be copied from any map app (latitude first).
 
 import type { Correction } from "../../region.ts";
 
 export const CORRECTIONS: Correction[] = [
+  // Well-known places OpenStreetMap doesn't name as places (only as roads, bus stops or markets).
+  { kind: "area", note: "Not a place in OpenStreetMap.", area: { name: "Sabo", at: [6.5085, 3.3755], kind: "neighbourhood" } },
+  { kind: "area", note: "Not a place in OpenStreetMap.", area: { name: "Ojuelegba", at: [6.5045, 3.3635], kind: "neighbourhood" } },
+  { kind: "area", note: "Not a place in OpenStreetMap.", area: { name: "Fadeyi", at: [6.5300, 3.3720], kind: "neighbourhood" } },
+  { kind: "area", note: "Not a place in OpenStreetMap.", area: { name: "Obalende", at: [6.4495, 3.4040], kind: "neighbourhood" } },
+  { kind: "area", note: "Not a place in OpenStreetMap.", area: { name: "Oniru", at: [6.4370, 3.4560], kind: "neighbourhood" } },
   {
     kind: "landmark",
     note: "Its real spot (6.4500, 3.3964) is ~120 m from Freedom Park and City Hall: just west of them (~180 m) so all three fit.",

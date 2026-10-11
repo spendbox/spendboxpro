@@ -8,6 +8,8 @@
 
 import type { HouseInterior, HouseStyle, TownHouse } from "@/lib/houses";
 import type { RegionMap } from "@/lib/world/compile";
+import type { OwnedProperty } from "@/lib/world/owned";
+import { buildingFor, buildingTop, ESTATE_KINDS, wealthOf, type Building, type EstatePlan } from "@/lib/world/buildings";
 import { ABBREV, CLUB_NAMES, eggChoices, FLAVORS, landmarkChoices, nameOf, RESTAURANT_NAMES, type EasterEgg, type Flavor, type LandmarkKey, type Named } from "./places";
 
 export type TileKind =
@@ -139,6 +141,19 @@ export type Tile = {
   forecourt?: boolean;
   /** Open sea (big towns reach the coast). */
   sea?: boolean;
+  /**
+   * A real place's road tile in the middle of a wide stretch of tarmac (a dual carriageway or a
+   * big interchange drawn two or more tiles wide): plain asphalt, no lights or crossings.
+   */
+  wide?: boolean;
+  /** A real place's expressway (no pavements: nobody walks along it). */
+  express?: boolean;
+  /** A real place's tile kept clear of buildings: under a deck, beside a railway, a station's site. */
+  clear?: "deck" | "track" | "station";
+  /** A pedestrian crossing on this stretch: 0 zebra, 1 with lights, 2 ladder, 3 refuge island, 4 school, 5 raised. */
+  crossing?: number;
+  /** A real place's property here: its kind, storeys, state and units (src/lib/world/buildings). */
+  building?: Building;
   /** A lake or sea tile by the shore with a wooden jetty (which side faces land: 0 +x, 1 -x, 2 +z, 3 -z). */
   jetty?: number;
   /** A player's house stands here (see src/lib/city/houses.ts). */
@@ -268,28 +283,8 @@ export function spiralIndex(x: number, z: number): number {
   return big - 6 * k - (k - z) - 1;
 }
 
-/** Integer hash → 0..1, stable for the same inputs. */
-export function hash(x: number, z: number, s: number) {
-  let h = Math.imul(x | 0, 374761393) ^ Math.imul(z | 0, 668265263) ^ Math.imul(s | 0, 2147483647);
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  h ^= h >>> 16;
-  return (h >>> 0) / 4294967296;
-}
-
-/** Smooth random field (value noise), 0..1. */
-export function smoothNoise(x: number, z: number, s: number) {
-  const x0 = Math.floor(x);
-  const z0 = Math.floor(z);
-  const fx = x - x0;
-  const fz = z - z0;
-  const u = fx * fx * (3 - 2 * fx);
-  const v = fz * fz * (3 - 2 * fz);
-  const a = hash(x0, z0, s);
-  const b = hash(x0 + 1, z0, s);
-  const c = hash(x0, z0 + 1, s);
-  const d = hash(x0 + 1, z0 + 1, s);
-  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
-}
+export { hash, smoothNoise } from "./noise";
+import { hash, smoothNoise } from "./noise";
 
 export type CityPlan = {
   seed: number;
@@ -335,6 +330,11 @@ export type CityPlan = {
   palette: Palette;
   /** Players' houses in this game, by tile (set by placeHouses in ./houses.ts). */
   homes?: Map<number, TownHouse>;
+  /**
+   * A real place's owned properties, by building id: they stand exactly as bought, whatever the
+   * map would put there now (src/lib/world/owned). Set by placeOwned.
+   */
+  owned?: Map<string, OwnedProperty>;
   /**
    * A real place (src/lib/world): its land and water, main roads, landmarks and districts come
    * from the map, and the layout fills in the streets and buildings between them.
@@ -953,6 +953,18 @@ export function onMono(line: MonoLine | null, x: number, z: number) {
 
 /** A footbridge over a straight stretch of busy road, and which style, or null. */
 export function footbridgeAt(plan: CityPlan, t: Tile): 0 | 1 | 2 | null {
+  if (plan.region) {
+    // Over any stretch that runs straight through (real ones are often by a junction).
+    const m = t.mask ?? 0;
+    if (t.kind !== "road" || t.works || t.rail || t.roundabout || ((m & 5) !== 5 && (m & 10) !== 10)) return null;
+    // A real place: where the map has one, and now and then over the expressways (Lagos has
+    // footbridges every few hundred metres along them).
+    const road = plan.region.roadAt(t.x, t.z);
+    if (!road || road.bridge || t.causeway) return null;
+    const busy = road.kind === "motorway" || road.kind === "trunk";
+    if (!plan.region.footbridgeAt(t.x, t.z) && !(busy && hash(t.x, t.z, plan.seed + 1512) < 0.07)) return null;
+    return Math.floor(hash(t.z, t.x, plan.seed + 1511) * 3) as 0 | 1 | 2;
+  }
   if (t.kind !== "road" || t.works || t.incident || t.rail || (t.mask !== 5 && t.mask !== 10)) return null;
   if (hash(t.x, t.z, plan.seed + 1510) > 0.045 || densityAt(plan, t.x, t.z) < 0.3) return null;
   const { mono, flyover } = elevated(plan);
@@ -1483,9 +1495,46 @@ function homeTile(t: Tile, h: TownHouse): Tile {
   };
 }
 
+/** Put a real place's owned properties on its plan (they then always stand as bought). */
+export function placeOwned(plan: CityPlan, owned: OwnedProperty[] | null | undefined) {
+  plan.owned = owned?.length ? new Map(owned.map((o) => [o.id, o])) : undefined;
+}
+
+/** The lot an owned property stands on: its saved building, its owner's name. */
+function ownedTile(i: number, x: number, z: number, o: OwnedProperty, seed: number): Tile {
+  const b = o.name ? { ...o.building, name: o.name } : o.building;
+  const business = ["shops", "plaza", "mixed", "offices", "warehouse"].includes(b.kind);
+  const kind: TileKind = b.kind === "glass" || b.kind === "apartments" ? "tower" : business ? "office" : "house";
+  const r: Tile["r"] = [hash(x, z, seed), hash(x, z, seed + 1), hash(x, z, seed + 2), hash(x, z, seed + 3)];
+  return { i, x, z, kind, top: buildingTop(b), r, building: b };
+}
+
+/**
+ * What a real place's map would put on a tile, ignoring who owns what: for checking a map update
+ * against owned properties (src/lib/world/owned, checkOwned).
+ */
+export function mapPutsAt(plan: CityPlan, x: number, z: number): Building | "road" | "water" | "deck" | "landmark" | "open" {
+  const owned = plan.owned;
+  plan.owned = undefined;
+  try {
+    const t = lotAt(plan, spiralIndex(x, z));
+    if (t.building) return t.building;
+    if (t.kind === "road" || t.kind === "bridge") return "road";
+    if (t.kind === "lake" || t.kind === "river") return "water";
+    if (t.clear) return "deck";
+    if (t.kind === "structure" || t.name) return "landmark";
+    return "open";
+  } finally {
+    plan.owned = owned;
+  }
+}
+
 /** What the city plan puts on tile i, before any player's house. */
 export function lotAt(plan: CityPlan, i: number): Tile {
   const [x, z] = spiralXY(i);
+  // Owned property stands as bought, whatever the map would put here now.
+  const owned = plan.owned && plan.region ? plan.owned.get(`${plan.region.region.id}:${x},${z}`) : undefined;
+  if (owned) return ownedTile(i, x, z, owned, plan.seed);
   let t = baseTile(plan, x, z);
   t.i = i;
   if (onRail(plan, x, z)) {
@@ -1503,6 +1552,7 @@ export function lotAt(plan: CityPlan, i: number): Tile {
   if (!LOTS.includes(t.kind)) {
     const named = t.rail || t.name ? undefined : tileName(plan, t);
     if (named) t.name = named;
+    if (!t.rail) withBuilding(plan, t);
     return t;
   }
   const st = t.rail ? null : structureAt(plan, x, z);
@@ -1533,7 +1583,55 @@ export function lotAt(plan: CityPlan, i: number): Tile {
   if (named) t.name = named;
   const egg = blockEgg(plan, x, z);
   if (egg && egg.x === x && egg.z === z) t.egg = { ...egg.egg, face: egg.face };
+  withBuilding(plan, t);
   return t;
+}
+
+/** Which way a lot faces: towards a road next to it (0 +z, 1 +x, 2 -z, 3 -x), else a stable pick. */
+function faceOf(plan: CityPlan, x: number, z: number): 0 | 1 | 2 | 3 {
+  const sides: [number, number][] = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+  const start = Math.floor(hash(x, z, plan.seed + 7790) * 4);
+  for (let k = 0; k < 4; k++) {
+    const f = (start + k) % 4;
+    if (isRoad(plan, x + sides[f][0], z + sides[f][1])) return f as 0 | 1 | 2 | 3;
+  }
+  return start as 0 | 1 | 2 | 3;
+}
+
+/**
+ * A gated estate, now and then, on a block of a well-off quiet area: every house lot in the block
+ * the same kind of house, one wall round the outside, a gate. Null for most blocks.
+ */
+function estateOf(plan: CityPlan, x: number, z: number, wealth: number): EstatePlan | null {
+  if (wealth < 0.35 || plan.xAt.has(x) || plan.zAt.has(z)) return null;
+  const kx = below(plan.xs, x);
+  const kz = below(plan.zs, z);
+  if (hash(kx, kz, plan.seed + 7800) > 0.16) return null;
+  const r = (k: number) => hash(kx, kz, plan.seed + 7801 + k);
+  const sides: [number, number][] = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+  const walls = sides.map(([dx, dz]) => isRoad(plan, x + dx, z + dz)) as [boolean, boolean, boolean, boolean];
+  const streets = plan.city.streets;
+  const name = `${streets[Math.floor(r(1) * streets.length) % streets.length]} ${["Estate", "Gardens", "Court", "Close", "Villas"][Math.floor(r(2) * 5) % 5]}`;
+  return {
+    id: `${plan.region!.region.id}:estate:${kx},${kz}`,
+    name,
+    kind: ESTATE_KINDS[Math.floor(r(3) * ESTATE_KINDS.length) % ESTATE_KINDS.length],
+    look: [r(4), r(5), r(6), r(7), r(8)],
+    walls,
+    gate: walls.some(Boolean) && hash(x, z, plan.seed + 7802) < 0.25,
+  };
+}
+
+/** A real place: every house, office and tower lot is a property you could own (src/lib/world/buildings). */
+function withBuilding(plan: CityPlan, t: Tile) {
+  if (!plan.region) return;
+  const wealth = wealthOf(plan.region.landPriceAt(t.x, t.z));
+  const estate = t.kind === "house" ? estateOf(plan, t.x, t.z, wealth) : null;
+  const b = buildingFor(plan.region.region.id, t, densityAt(plan, t.x, t.z), plan.seed, wealth, { face: faceOf(plan, t.x, t.z), estate });
+  if (b) {
+    t.building = b;
+    t.top = buildingTop(b);
+  }
 }
 
 // ---------------------------------------------------------------- addresses
@@ -1614,7 +1712,44 @@ function roadTile(plan: CityPlan, x: number, z: number, r: Tile["r"]): Tile {
   const works = straight && Math.hypot(x, z) > 2.5 && hash(x, z, s + 1201) < 0.02;
   const roll = hash(x, z, s + 1301);
   const incident = straight && !works ? (roll < 0.007 ? "breakdown" : roll < 0.011 ? "police" : undefined) : undefined;
+  if (plan.region) {
+    // In a wide stretch of tarmac (most of the 3×3 round it is road): plain asphalt.
+    let around = 0;
+    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) if ((dx || dz) && isRoad(plan, x + dx, z + dz)) around++;
+    if (around >= 5) return { i: -1, x, z, kind: "road", top: 0.05, road: dir, mask, roundabout: false, r, wide: true };
+    const kind = plan.region.roadAt(x, z)?.kind;
+    const express = kind === "motorway" || kind === "trunk" || undefined;
+    // Pedestrian crossings: where the map has one, and now and then on busy streets.
+    const crossing = straight && !works && !incident ? crossingOf(plan, x, z, mask) : undefined;
+    if (crossing !== undefined) return { i: -1, x, z, kind: "road", top: 0.05, road: dir, mask, roundabout: false, r, crossing, express };
+    if (express) return { i: -1, x, z, kind: "road", top: works ? 0.45 : roundabout ? 0.3 : 0.05, road: dir, mask, roundabout, r, works: works || undefined, incident, express };
+  }
   return { i: -1, x, z, kind: "road", top: works ? 0.45 : roundabout ? 0.3 : 0.05, road: dir, mask, roundabout, r, works: works || undefined, incident };
+}
+
+/** A pedestrian crossing on a straight stretch of a real place's road, or undefined. */
+function crossingOf(plan: CityPlan, x: number, z: number, mask: number): number | undefined {
+  const region = plan.region!;
+  const real = region.crossingAt(x, z);
+  // Next to a school: the yellow school crossing.
+  const side = mask === 10 ? [[0, 1], [0, -1]] : [[1, 0], [-1, 0]];
+  const school = side.some(([dx, dz]) => baseKindNear(plan, x + dx, z + dz) === "school");
+  if (real !== undefined) return school ? 4 : real;
+  const road = region.roadAt(x, z);
+  const busy = densityAt(plan, x, z);
+  if (school && hash(x, z, plan.seed + 1601) < 0.3) return 4;
+  // More often on the main roads, now and then on busy side streets.
+  if (busy < 0.1 || hash(x, z, plan.seed + 1602) > (road ? 0.12 : 0.05)) return undefined;
+  // Raised crossings on quieter streets, lights on the big roads, the rest painted.
+  const big = !!road && (road.kind === "motorway" || road.kind === "trunk" || road.kind === "primary");
+  const roll = hash(z, x, plan.seed + 1603);
+  return big ? (roll < 0.5 ? 1 : roll < 0.8 ? 3 : 0) : roll < 0.3 ? 5 : roll < 0.7 ? 0 : 2;
+}
+
+/** The neighbourhood place on a tile (a school...) without working out the whole tile. */
+function baseKindNear(plan: CityPlan, x: number, z: number): TileKind | null {
+  if (isRoad(plan, x, z) || plan.megaAt.has(nkey(x, z))) return null;
+  return featureAt(plan, x, z);
 }
 
 /** A wooden jetty on some lake and sea tiles right by the shore (facing the land). */
@@ -1646,11 +1781,18 @@ function baseTile(plan: CityPlan, x: number, z: number): Tile {
       return { i, x, z, kind: spot.kind, top: tops[spot.kind] ?? 1, r, v: Math.floor(r[2] * 2), name: spot.name };
     }
     const w = plan.region.waterAt(x, z);
-    if (w && plan.region.roadAt(x, z)) {
+    const onWater = w ? plan.region.roadAt(x, z) : undefined;
+    // A road over water that isn't a bridge (the map's road runs along the shore): a causeway.
+    // Bridges are drawn as raised decks along their real curves (src/lib/world/spans), so under
+    // them the water is open.
+    if (onWater && !onWater.bridge) {
       const t = roadTile(plan, x, z, r);
       return { ...t, top: 0.05, roundabout: false, works: undefined, incident: undefined, causeway: true };
     }
-    if (w) return { i, x, z, kind: "lake", top: 0.1, r, sea: w === 2 || undefined, jetty: jettyAt(plan, x, z) };
+    if (w) return { i, x, z, kind: "lake", top: 0.1, r, sea: w === 2 || undefined, jetty: onWater ? undefined : jettyAt(plan, x, z) };
+    // Under a deck, along a railway on the ground, a station's site: never a building.
+    const clear = plan.region.clearAt(x, z);
+    if (clear && !isRoad(plan, x, z)) return { i, x, z, kind: "plaza", top: clear === "station" ? 1.2 : 0.1, r, clear };
   }
   // The sea (only very big towns get this far out).
   if (inSea(plan, x, z)) return { i, x, z, kind: "lake", top: 0.1, r, sea: true, jetty: jettyAt(plan, x, z) };
@@ -1724,4 +1866,48 @@ function baseTile(plan: CityPlan, x: number, z: number): Tile {
   if (r[0] >= 0.182 && r[0] < 0.192 && nextToRoad) return { i, x, z, kind: "restaurant", top: 0.75, r, v: Math.floor(r[2] * 2) };
   const v = Math.floor(r[1] * 3);
   return { i, x, z, kind: "house", top: v === 2 ? 1.1 : 0.95, r, v };
+}
+
+// ---------------------------------------------------------------- far away
+/**
+ * Roughly what stands on a tile, for drawing it far away as one plain block: how tall, what
+ * colour, or null for open ground (streets, water, open squares). Much quicker than lotAt (no
+ * street-shape or big-building checks), and close enough that it matches when you come nearer.
+ */
+export function roughAt(plan: CityPlan, x: number, z: number): { h: number; color: number } | null {
+  const mi = plan.megaAt.get(nkey(x, z));
+  if (mi !== undefined) {
+    const m = plan.megas[mi];
+    return { h: MEGA_TOP[m.type] ?? 1.5, color: m.type === "bigpark" ? 0x8cc97e : 0xe9e4da };
+  }
+  if (plan.region) {
+    if (plan.region.waterAt(x, z) || plan.region.roadAt(x, z) || plan.region.clearAt(x, z)) return null;
+    if (plan.region.spotAt(x, z)) return { h: 1.2, color: 0xe9e4da };
+  } else if (inSea(plan, x, z) || inLake(plan, x, z) || inRiver(plan, x, z)) return null;
+  if (plan.xAt.has(x) || plan.zAt.has(z)) return null;
+  const s = plan.seed;
+  const r0 = hash(x, z, s);
+  const r1 = hash(x, z, s + 1);
+  const pal = plan.palette;
+  const pick = (list: number[], v: number) => list[Math.floor(v * list.length) % list.length];
+  const density = densityAt(plan, x, z);
+  const green = smoothNoise(x / 6 + 31, z / 6 - 17, s + 11) - plan.style.green;
+  if (green > 0.7 && density < 0.6) return { h: 0.35, color: pick(pal.leaves, r1) };
+  if (density > 0.56) return { h: Math.max(1.6, (1.6 + density * 5.5 * (0.5 + r1 * 0.9)) * plan.style.towers), color: pick(pal.towers, r0) };
+  if (density > 0.24) return { h: 0.9 + r1 * 1.8 + density * 1.2, color: pick(pal.offices, r0) };
+  if (r0 < 0.16) return { h: 0.45, color: pick(pal.leaves, r1) };
+  return { h: 0.7, color: pick(pal.roofs, r1) };
+}
+
+/**
+ * How busy a real place's road is, for how much traffic it gets: the area's crowd (its density)
+ * times the kind of road (an expressway carries far more than a side street). About 0.3 on a
+ * quiet street up to 3 on an expressway through a crowded area. (Later also how many players live
+ * and visit there.)
+ */
+export function busyAt(plan: CityPlan, x: number, z: number) {
+  const crowd = 0.35 + Math.max(0, Math.min(1.4, densityAt(plan, x, z)));
+  const kind = plan.region?.roadAt(x, z)?.kind;
+  const road = kind === "motorway" ? 2 : kind === "trunk" ? 1.7 : kind === "primary" ? 1.35 : kind === "secondary" ? 1.1 : kind === "tertiary" ? 0.9 : 0.6;
+  return crowd * road;
 }

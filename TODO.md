@@ -43,6 +43,13 @@
 ## The big plan
 Everything Newtown is becoming (life, careers, money, property, love, news, voice, culture, events, time) and the order to build it: `docs/LIFE.md`.
 
+## Property and money (see `docs/PROPERTY.md`) — next
+- [ ] Owner to decide: what a mint is worth (suggested: about $1, local price shown beside it), how fast property earns (suggested 6% a game year), the starting budget (suggested ₥2,000), and taking the minigames out of the menus.
+- [ ] Step 1: buildings worth owning (permanent identities, many kinds made from rules, floors and units, the value formula and Lagos prices).
+- [ ] Step 2: search bar, wallets and ownership, buy a home first, primary residence, the Assets screen, earnings every minute and entry fees; ghosts and minigames out.
+- [ ] Step 3: offers, sales, rent, World Bank loans, people search, values that move with demand.
+- [ ] Later: improve/demolish/rebuild, ad revenue sharing (after the lawyer), government roles and contracts.
+
 ## Real-world map (see `docs/WORLD.md`)
 - [x] Step 1, the foundation: one tile = 100 m, regions placed by real latitude and longitude, Lagos (45 × 25 km) drawn round the camera, its districts and landmarks, a fixes file, the bake script, `/world-lab` and `/play?world=lagos` to see it.
 - [ ] Step 2: bake Lagos's real coastline, lagoon, creeks, islands and main roads from OpenStreetMap (needs the network access above). Check the landmarks against the map.
