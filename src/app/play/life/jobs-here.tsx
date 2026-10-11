@@ -2,7 +2,7 @@
 
 import { Briefcase } from "@/components/icons";
 import type { Prices } from "@/lib/world/region";
-import { mintLocal } from "@/lib/world/value";
+import { cash } from "@/lib/world/value";
 import { CERT_LABEL } from "@/lib/world/living";
 import { cheapestCommute, COMMUTE_LABEL, dayNet, fareMint, needsInterview, payDay, skillLevel, tripKmBetween, WORK_SKILLS, type Commute, type WorkJob } from "@/lib/world/work";
 import type { Workplace } from "@/lib/world/workplace";
@@ -21,7 +21,6 @@ export type JobsContext = {
   onTake: (place: Workplace, job: WorkJob, mode: Commute) => void;
 };
 
-const fmt = (n: number) => n.toLocaleString("en-GB", { maximumFractionDigits: 2 });
 
 /** How far a workplace is from your home and the cheapest way there ("2.1 km · walk, free"). */
 export function tripLine(homeUnit: string | null, placeId: string, prices: Prices) {
@@ -29,7 +28,7 @@ export function tripLine(homeUnit: string | null, placeId: string, prices: Price
   if (km === null) return { km: null, mode: "walk" as Commute, fare: 0, text: "Buy a home to see the trip" };
   const mode = cheapestCommute(km);
   const fare = fareMint(mode, km, prices) ?? 0;
-  return { km, mode, fare, text: `${km} km from home · ${COMMUTE_LABEL[mode].toLowerCase()}${fare ? ` ₥${fmt(fare)} a trip` : ", free"}` };
+  return { km, mode, fare, text: `${km} km from home · ${COMMUTE_LABEL[mode].toLowerCase()}${fare ? ` ${cash(fare)} a trip` : ", free"}` };
 }
 
 /** The jobs at a place: pay, the skill they need, the trip from your home, and a button to take one. */
@@ -50,7 +49,8 @@ export function JobsHere({ place, ctx }: { place: Workplace; ctx: JobsContext })
           const short = level < j.level || noCert;
           const mine = ctx.current?.place === place.id && ctx.current.job === j.job;
           return (
-            <li key={j.job} className="flex items-center gap-3 px-3 py-2.5">
+            <li key={j.job} className="px-3 py-2.5">
+              <div className="flex items-center gap-3">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{j.title}</p>
                 <p className="truncate text-xs text-muted">
@@ -61,11 +61,8 @@ export function JobsHere({ place, ctx }: { place: Workplace; ctx: JobsContext })
                 </p>
               </div>
               <div className="shrink-0 text-right">
-                <p className="text-sm font-semibold tabular-nums">₥{fmt(day)}/day</p>
-                <p className="text-[11px] text-muted">
-                  {mintLocal(day * 30, ctx.prices)}/month{ctx.homeUnit && net >= 0 ? ` · ₥${fmt(net)} after tax & fares` : ""}
-                </p>
-                {ctx.homeUnit && net < 0 && <p className="text-[11px] font-semibold text-hit">You&apos;d lose ₥{fmt(-net)} a day: fares cost more than it pays</p>}
+                <p className="text-sm font-semibold tabular-nums">{cash(day)}/day</p>
+                <p className="text-[11px] text-muted">{cash(day * 30)}/month</p>
               </div>
               {mine ? (
                 <span className="shrink-0 rounded-full bg-me/15 px-2.5 py-1 text-xs font-semibold text-me">Yours</span>
@@ -73,17 +70,24 @@ export function JobsHere({ place, ctx }: { place: Workplace; ctx: JobsContext })
                 <button
                   disabled={ctx.busy || !ctx.homeUnit || short}
                   onClick={() => ctx.onTake(place, j, trip.mode)}
-                  title={!ctx.homeUnit ? "Buy a home first" : noCert ? `Needs a ${CERT_LABEL[j.cert!]}: see Life → School` : short ? `Needs ${WORK_SKILLS[j.skill]} level ${j.level} (you have ${level})` : ctx.current ? `Leave your job and start as ${j.title}` : `Start as ${j.title}`}
+                  title={!ctx.homeUnit ? "Buy a home first" : noCert ? `Needs a ${CERT_LABEL[j.cert!]}: see Life → Education` : short ? `Needs ${WORK_SKILLS[j.skill]} level ${j.level} (you have ${level})` : ctx.current ? `Leave your job and start as ${j.title}` : `Start as ${j.title}`}
                   className="h-8 shrink-0 rounded-full bg-ink px-3 text-xs font-semibold text-white disabled:opacity-40"
                 >
                   {noCert ? "Course" : level < j.level ? `Lvl ${j.level}` : needsInterview(j) ? "Interview" : ctx.current ? "Switch" : "Take"}
                 </button>
               )}
+              </div>
+              {ctx.homeUnit &&
+                (net < 0 ? (
+                  <p className="mt-1 text-[11px] font-semibold text-hit">You&apos;d lose {cash(-net)} a day: fares cost more than it pays.</p>
+                ) : (
+                  <p className="mt-1 text-[11px] text-muted">You keep {cash(net)} a day after tax and fares.</p>
+                ))}
             </li>
           );
         })}
       </ul>
-      <p className="mt-1.5 text-[11px] text-muted">A game day is 2 real hours. Pay waits up to a game week (14 hours); collect it from Work.</p>
+      <p className="mt-1.5 text-[11px] text-muted">A game day is 2 real hours. Pay waits up to a game week (14 hours); collect it from Income.</p>
     </div>
   );
 }

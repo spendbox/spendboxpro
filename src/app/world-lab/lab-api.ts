@@ -37,7 +37,7 @@ import {
   type WorkStatus,
 } from "@/lib/world/property-api";
 import { toMint, valueOf } from "@/lib/world/value";
-import { fareMint, fareOrBus, GAME_DAY_HOURS, HOLD_DAYS, INCOME_TAX, payDay, SKILL_BONUS, skillLevel, tripKmBetween, type Commute } from "@/lib/world/work";
+import { cheapestCommute, fareMint, fareOrBus, GAME_DAY_HOURS, HOLD_DAYS, INCOME_TAX, payDay, SKILL_BONUS, skillLevel, tripKmBetween, type Commute } from "@/lib/world/work";
 import { workplaceById } from "@/lib/world/workplace";
 import { FIRST_NAMES, SURNAMES } from "@/lib/npc/names";
 import { hash } from "@/lib/city/noise";
@@ -54,6 +54,8 @@ type Saved = {
   region: string | null;
   home: string | null;
   units: (AssetUnit & { collectedAt: number; tenantAt?: number | null; listedAt?: number })[];
+  /** Where you last went into (a building id). */
+  at?: string | null;
   /** The market: offers pretend bidders made on your units, and your World Bank loan. */
   market?: { offers: (Offer & { at: number })[]; loan: (Loan & { due: number }) | null; n: number };
   buildings: Record<string, { building: Building; name: string | null }>;
@@ -494,7 +496,7 @@ export function makeLabApi(budget: number): PropertyApi {
       save();
       const now = Date.now();
       return {
-        life: s.region ? { region: s.region, home_unit: s.home, granted: s.granted ?? budget, started_at: "" } : null,
+        life: s.region ? { region: s.region, home_unit: s.home, granted: s.granted ?? budget, started_at: "", at_place: s.at ?? null } : null,
         coins: s.coins,
         units: s.units.map((u) => ({
           ...u,
@@ -866,6 +868,23 @@ export function makeLabApi(budget: number): PropertyApi {
     },
     async buildingOwners(buildingId) {
       return s.units.filter((u) => u.building === buildingId).map((u) => ({ unit: u.unit, name: "You", mine: true, forSale: u.forSale ?? null, home: s.home === u.unit }));
+    },
+    async travelTo(buildingId) {
+      const spot = ownedSpot(buildingId);
+      if (!spot) return fail("That place isn't on the map.");
+      if (!s.region) return fail("Start your life first.");
+      const from = s.at ?? s.home;
+      const km = from ? tripKmBetween(from, buildingId) : null;
+      const fare = km === null ? 0 : (fareMint(cheapestCommute(km), km, prices()) ?? 0);
+      if (fare > 0) {
+        tick();
+        if (canSpend(["travel"]) < fare) return fail("You don't have enough for the fare there.");
+        spend(["travel"], fare);
+        log("commute", -fare);
+      }
+      s.at = buildingId;
+      save();
+      return { ok: true, fare, coins: s.coins };
     },
     async setRentLevel(unitId, level) {
       const u = s.units.find((x) => x.unit === unitId);

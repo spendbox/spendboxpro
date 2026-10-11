@@ -1,5 +1,6 @@
 "use client";
 
+import { cash } from "@/lib/world/value";
 import { useState } from "react";
 import { DoorOpen } from "lucide-react";
 import { Building2, Flag, House, KeyRound, MapPin, Pencil, Store, Trees, X } from "@/components/icons";
@@ -43,14 +44,16 @@ export function PropertyCard({
   jobs,
   onReport,
   onEnter,
+  enterLabel,
   onClose,
 }: {
   info: PropertyInfo;
   market?: Market;
   jobs?: JobsContext;
   onReport?: () => void;
-  /** Go inside. */
+  /** Go inside, and what the button says (with the fare there). */
   onEnter?: () => void;
+  enterLabel?: string;
   onClose: () => void;
 }) {
   const owners = new Map((market?.owners ?? []).map((o) => [o.unit, o]));
@@ -80,20 +83,19 @@ export function PropertyCard({
       </div>
 
       {onEnter && !info.state && (
-        <button onClick={onEnter} className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-full bg-ink text-sm font-semibold text-white">
-          <DoorOpen className="size-4" /> Go inside
+        <button onClick={onEnter} className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-full bg-[#f08c00] text-sm font-semibold text-white">
+          <DoorOpen className="size-4" /> {enterLabel ?? "Go inside"}
         </button>
       )}
 
       <div className="mt-4 rounded-2xl bg-ink/[0.04] p-3.5">
         <div className="flex items-baseline justify-between gap-2">
           <span className="text-sm text-muted">Worth</span>
-          <span className="font-display text-2xl font-extrabold tabular-nums">₥{fmt(info.mint)}</span>
+          <span className="font-display text-2xl font-extrabold tabular-nums">{cash(info.mint)}</span>
         </div>
-        <p className="text-right text-xs text-muted">about {info.local}</p>
         <div className="mt-3 flex flex-wrap gap-1.5">
-          <Pill label="Land" value={`₥${fmt(info.landMint)}`} />
-          <Pill label="Building" value={`₥${fmt(info.buildingMint)}`} />
+          <Pill label="Land" value={`${cash(info.landMint)}`} />
+          <Pill label="Building" value={`${cash(info.buildingMint)}`} />
           <Pill label="Plot" value={`${fmt(info.plot)} m²`} />
           {info.storeys > 0 && <Pill label={info.storeys === 1 ? "Storey" : "Storeys"} value={String(info.storeys)} />}
         </div>
@@ -145,12 +147,11 @@ export function PropertyCard({
                 <p className="truncate text-sm font-medium">{u.label}</p>
                 <p className="truncate text-xs text-muted">
                   {fmt(u.area)} m² · {owner ? (owner.mine ? "Yours" : `Owned by ${owner.name}`) : u.earns}
-                  {owner?.forSale != null ? ` · for sale ₥${fmt(owner.forSale)}` : owner?.home && !owner.mine ? " · their home" : ""}
+                  {owner?.forSale != null ? ` · for sale ${cash(owner.forSale)}` : owner?.home && !owner.mine ? " · their home" : ""}
                 </p>
               </div>
               <div className="shrink-0 text-right">
-                <p className="text-sm font-semibold tabular-nums">₥{fmt(u.mint)}</p>
-                <p className="text-[11px] text-muted">{u.local}</p>
+                <p className="text-sm font-semibold tabular-nums">{cash(u.mint)}</p>
               </div>
               {market && <UnitAction u={u} owner={owner} market={market} />}
             </li>
@@ -201,7 +202,7 @@ function UnitAction({ u, owner, market }: { u: PropertyUnit; owner: BuildingOwne
         <button
           disabled={market.busy || !market.started || needHome || market.coins < cost}
           onClick={() => market.onBuyListed(u, owner.forSale!)}
-          title={needHome ? "Buy a home first" : `₥${fmt(cost)} with the ${Math.round(BUY_TAX * 100)}% tax`}
+          title={needHome ? "Buy a home first" : `${cash(cost)} with the ${Math.round(BUY_TAX * 100)}% tax`}
           className={`${btn} bg-ink text-white`}
         >
           Buy
@@ -250,7 +251,7 @@ function UnitAction({ u, owner, market }: { u: PropertyUnit; owner: BuildingOwne
     <button
       disabled={market.busy || !market.started || needHome || short}
       onClick={() => market.onBuy(u)}
-      title={needHome ? "Buy a home first" : short ? `You need ₥${fmt(cost)} with tax` : `₥${fmt(cost)} with the ${Math.round(BUY_TAX * 100)}% tax`}
+      title={needHome ? "Buy a home first" : short ? `You need ${cash(cost)} with tax` : `${cash(cost)} with the ${Math.round(BUY_TAX * 100)}% tax`}
       className={`${btn} bg-ink text-white`}
     >
       Buy

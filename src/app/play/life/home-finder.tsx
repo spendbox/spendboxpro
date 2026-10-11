@@ -5,7 +5,7 @@ import { House, Search } from "@/components/icons";
 import { HOME_KIND_LABEL, type AreaHomes, type HomeFind, type HomeKind } from "@/lib/world/homes";
 import type { Listing } from "@/lib/world/market";
 import type { Prices } from "@/lib/world/region";
-import { mintLocal } from "@/lib/world/value";
+import { cash } from "@/lib/world/value";
 import { Sheet } from "../sheet";
 
 const KINDS: (HomeKind | "all")[] = ["all", "room", "flat", "house"];
@@ -15,7 +15,6 @@ export function HomeFinder({
   areas,
   listings,
   coins,
-  prices,
   onPick,
   onListing,
   onClose,
@@ -46,7 +45,7 @@ export function HomeFinder({
   return (
     <Sheet onClose={onClose} title="Find a home">
       <p className="text-sm text-muted">
-        You have <b className="text-ink">₥{coins.toLocaleString("en-GB")}</b> ({mintLocal(coins, prices)}). Tap a home to see it.
+        You have <b className="text-ink">{cash(coins)}</b>. Tap a home to see it.
       </p>
       <label className="mt-3 flex h-10 items-center gap-2 rounded-full bg-ink/5 px-3 text-sm">
         <Search className="size-4 shrink-0 text-muted" />
@@ -80,7 +79,7 @@ export function HomeFinder({
                       {l.area} · {l.mine ? "yours" : l.who}
                     </span>
                   </span>
-                  <span className={`shrink-0 text-sm font-semibold tabular-nums ${l.price <= coins ? "text-me" : ""}`}>₥{l.price.toLocaleString("en-GB")}</span>
+                  <span className={`shrink-0 text-sm font-semibold tabular-nums ${l.price <= coins ? "text-me" : ""}`}>{cash(l.price)}</span>
                 </button>
               </li>
             ))}
@@ -103,7 +102,7 @@ export function HomeFinder({
                   >
                     <House className="size-3.5" />
                     <span className="font-semibold">{HOME_KIND_LABEL[h.kind]}</span>
-                    <span className="tabular-nums">₥{h.mint.toLocaleString("en-GB")}</span>
+                    <span className="tabular-nums">{cash(h.mint)}</span>
                   </button>
                 );
               })}

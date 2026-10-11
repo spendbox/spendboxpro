@@ -28,11 +28,28 @@ export function searchable(region: RegionMap, mine: AssetUnit[]): SearchHit[] {
 }
 
 /** The search box on a real map: type a place, pick it, and the camera flies there. */
-export function MapSearch({ region, mine, onPick, compact }: { region: RegionMap; mine: AssetUnit[]; onPick: (hit: SearchHit) => void; compact?: boolean }) {
+export function MapSearch({
+  region,
+  mine,
+  onPick,
+  compact,
+  onOpenChange,
+}: {
+  region: RegionMap;
+  mine: AssetUnit[];
+  onPick: (hit: SearchHit) => void;
+  compact?: boolean;
+  /** Compact: tells when the box opens and closes (the life buttons make way on phones). */
+  onOpenChange?: (open: boolean) => void;
+}) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   // Compact: a round search button that opens into the box (on a computer, always the box).
-  const [shown, setShown] = useState(false);
+  const [shown, setShownState] = useState(false);
+  const setShown = (v: boolean) => {
+    setShownState(v);
+    onOpenChange?.(v);
+  };
   const all = useMemo(() => searchable(region, mine), [region, mine]);
   const hits = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -65,7 +82,6 @@ export function MapSearch({ region, mine, onPick, compact }: { region: RegionMap
               setOpen(true);
             }}
             onFocus={() => setOpen(true)}
-            onBlur={() => !q && setShown(false)}
             autoFocus={shown}
             onKeyDown={(e) => {
               if (e.key === "Enter" && hits[0]) {
@@ -78,8 +94,16 @@ export function MapSearch({ region, mine, onPick, compact }: { region: RegionMap
             className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted"
             aria-label="Search the map"
           />
-          {q && (
-            <button onClick={() => setQ("")} aria-label="Clear">
+          {(q || (compact && shown)) && (
+            <button
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                setQ("");
+                setOpen(false);
+                if (compact) setShown(false);
+              }}
+              aria-label={compact && shown ? "Close search" : "Clear"}
+            >
               <X className="size-4 text-muted" />
             </button>
           )}
@@ -96,6 +120,7 @@ export function MapSearch({ region, mine, onPick, compact }: { region: RegionMap
                       onPick(h);
                       setQ(h.label);
                       setOpen(false);
+                      if (compact) setShown(false);
                     }}
                     className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-ink/5"
                   >

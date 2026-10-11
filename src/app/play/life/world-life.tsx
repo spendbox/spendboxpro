@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Briefcase, Flag, HeartPulse, House, MapPin, Search, Sparkles, Wallet, X } from "@/components/icons";
+import { Briefcase, Flag, HeartPulse, House, MapPin, Search, Sparkles, X } from "@/components/icons";
 import { addressOf, makePlan, spiralIndex, tileAt, type CityPlan } from "@/lib/city/layout";
 import { BUILDING_LABEL } from "@/lib/world/buildings";
 import type { RegionMap } from "@/lib/world/compile";
@@ -10,7 +10,7 @@ import { ownedSpot } from "@/lib/world/owned";
 import { propertyInfo, type PropertyInfo } from "@/lib/world/property";
 import { homesByArea, type HomeFind } from "@/lib/world/homes";
 import type { BuildingOwner, InterviewStart, LifeStatus, Neighbour, PaySettled, PropertyApi, PropertyResult, WorkStatus } from "@/lib/world/property-api";
-import { COMMUTE_LABEL, dayNet, fareMint, needsInterview, payDay, tripKmBetween, type Commute } from "@/lib/world/work";
+import { cheapestCommute, COMMUTE_LABEL, dayNet, fareMint, needsInterview, payDay, tripKmBetween, type Commute } from "@/lib/world/work";
 import { dayOf, EXERCISE } from "@/lib/world/day";
 import type { Workplace } from "@/lib/world/workplace";
 import { PropertyCard } from "../property-card";
@@ -32,8 +32,8 @@ import type { OwnedProperty } from "@/lib/world/owned";
 import { InterviewSheet, MomentSheet } from "./moments";
 import { AmountSheet, LoanSheet } from "./amount-sheet";
 import { CurrencySheet } from "./currency-pick";
-import { setShownCurrency } from "@/lib/world/value";
-import { buyerPays, sellerGets, OFFER_HOURS, type Listing, type MarketBoard } from "@/lib/world/market";
+import { cash, setShownCurrency } from "@/lib/world/value";
+import { buyerPays, sellerGets, OFFER_HOURS, RENT_LEVEL, type Listing, type MarketBoard } from "@/lib/world/market";
 import { BUY_TAX } from "@/lib/world/property-api";
 
 /** Each region's plan for finding jobs near home, worked out once (only when Work is opened). */
@@ -49,13 +49,12 @@ function planOf(region: RegionMap) {
 
 const GUIDE_KEY = "newtown.guide";
 const CURRENCY_KEY = "newtown.currency";
-type GuideStep = "home" | "job" | "budget" | "life" | "chat";
+type GuideStep = "home" | "job" | "budget" | "life";
 const GUIDE: Record<GuideStep, { n: number; text: string }> = {
   home: { n: 1, text: "Find a home you can afford. Tap Find a home." },
-  job: { n: 2, text: "Get a job near home. Tap Work, then Jobs near me." },
-  budget: { n: 3, text: "Set your budget: how your pay is shared out. Tap Money." },
+  job: { n: 2, text: "Get a job near home. Tap Income, then Jobs near me." },
+  budget: { n: 3, text: "Set your budget: how your pay is shared out. Tap your cash at the top." },
   life: { n: 4, text: "Look after your body and mind. Tap Life." },
-  chat: { n: 0, text: "All set! Tap Chat at the bottom to talk to people around you." },
 };
 /** The glow on the button for the guide's next step: a gold ring, and a ripple round it (see Ripple). */
 const GLOW = "outline outline-2 outline-offset-2 outline-gold";
@@ -91,9 +90,8 @@ function LifeButton({
   );
 }
 
-const money = (n: number) => n.toLocaleString("en-GB", { maximumFractionDigits: 2 });
 const paid = (p: PaySettled | undefined) =>
-  p && p.gross > 0 ? ` Collected ₥${money(p.net)} pay (after ₥${money(p.tax)} tax and ₥${money(p.fares)} fares).` : "";
+  p && p.gross > 0 ? ` Collected ${cash(p.net)} pay (after ${cash(p.tax)} tax and ${cash(p.fares)} fares).` : "";
 
 /**
  * A life on a real map (docs/PROPERTY.md): the search box, your assets, the welcome (start with a
@@ -108,6 +106,7 @@ export function useWorldLife({
   pretend,
   onChanged,
   onEnter,
+  beforeHome,
 }: {
   api: PropertyApi;
   regionId: string | null;
@@ -118,6 +117,8 @@ export function useWorldLife({
   onChanged?: () => void;
   /** Go inside a building (the game's insides); left out where there are none (the test page). */
   onEnter?: (buildingId: string) => void;
+  /** Before flying home: leave the building you're in. */
+  beforeHome?: () => void;
 }) {
   const region = useMemo(() => regionMap(regionId), [regionId]);
   const { assets, owned, loaded, refresh } = useLife(api, signedIn ? regionId : null);
@@ -129,6 +130,8 @@ export function useWorldLife({
   const [assetsOpen, setAssetsOpen] = useState(false);
   const [welcomeShut, setWelcomeShut] = useState(false);
   const [finderOpen, setFinderOpen] = useState(false);
+  /** The search box is open (on phones the life buttons make way for it). */
+  const [searching, setSearching] = useState(false);
   // The currency amounts show in beside mint (kept in this browser; change it any time).
   const [currency, setCurrency] = useState(() => {
     try {
@@ -137,7 +140,7 @@ export function useWorldLife({
       return "NGN";
     }
   });
-  setShownCurrency(currency);
+  setShownCurrency(currency, region?.region.prices.perMint);
   const chooseCurrency = (code: string) => {
     setCurrency(code);
     try {
@@ -147,6 +150,10 @@ export function useWorldLife({
     }
   };
   const [currencyOpen, setCurrencyOpen] = useState(false);
+  /** Which Finance tab to open on next (the Income screen's "See your property" opens Property). */
+  /** When this screen opened (tenants who've moved in by then count towards rent a day). */
+  const [clock] = useState(() => Date.now());
+  const [financeTab, setFinanceTab] = useState<"home" | "budget" | "property" | null>(null);
   /** The first-day guide: which steps are done (kept in this browser). */
   const [guide, setGuide] = useState<Record<string, boolean>>(() => {
     try {
@@ -243,7 +250,7 @@ export function useWorldLife({
     const ref = new URLSearchParams(window.location.search).get("pack");
     if (!ref) return;
     void api.confirmPack(ref).then(async (r) => {
-      setMessage(r.ok ? { text: `Your pack is in: ₥${(r.mint ?? 0).toLocaleString("en-GB")} to start with.`, good: true } : { text: r.error ?? "That payment hasn't gone through.", good: false });
+      setMessage(r.ok ? { text: `Your pack is in: ${cash((r.mint ?? 0))} to start with.`, good: true } : { text: r.error ?? "That payment hasn't gone through.", good: false });
       const url = new URL(window.location.href);
       url.searchParams.delete("pack");
       window.history.replaceState(null, "", url);
@@ -269,15 +276,42 @@ export function useWorldLife({
   const askSell = (unitId: string, label: string, worth: number, now?: number | null) =>
     setAsk({
       title: `Sell ${label}`,
-      text: `It's worth about ₥${money(Math.round(worth))}. Anyone can buy it at your price, or make you an offer. A tenant living there stays.`,
+      text: `It's worth about ${cash(Math.round(worth))}. Anyone can buy it at your price, or make you an offer. A tenant living there stays.`,
       initial: Math.round(now ?? worth),
-      note: (n) => `You get ₥${money(sellerGets(n))} after the 2% tax (a loan on it is paid off first).`,
-      cta: (n) => `Put it up for ₥${money(n)}`,
+      note: (n) => `You get ${cash(sellerGets(n))} after the 2% tax (a loan on it is paid off first).`,
+      cta: (n) => `Put it up for ${cash(n)}`,
       run: (n) => api.listUnit(unitId, n),
-      done: (n) => `${label} is up for sale at ₥${money(n)}.`,
+      done: (n) => `${label} is up for sale at ${cash(n)}.`,
     });
 
-  const fly = (x: number, z: number) => setFlyTo({ tile: spiralIndex(Math.round(x), Math.round(z)), at: Date.now() });
+  /** The trip to a building from where you last were (or home): the cheapest way, and its fare. */
+  const tripTo = (id: string) => {
+    const from = assets?.life?.at_place ?? homeUnit;
+    const km = from && region ? tripKmBetween(from, id) : null;
+    if (km === null || !region) return null;
+    const mode = cheapestCommute(km);
+    return { mode, fare: fareMint(mode, km, region.region.prices) ?? 0 };
+  };
+  const tripLabel = (id: string) => {
+    const t = signedIn ? tripTo(id) : null;
+    return t && t.fare > 0 ? `Go inside · ${cash(t.fare)} by ${COMMUTE_LABEL[t.mode].toLowerCase()}` : "Go inside";
+  };
+  /** Go into a building: pay the fare there (signed in), then in. */
+  const goInside = async (id: string) => {
+    if (signedIn) {
+      setBusy(true);
+      const r = await api.travelTo(id);
+      setBusy(false);
+      if (!r.ok) return setMessage({ text: r.error, good: false });
+      if (r.fare) setMessage({ text: `${cash(r.fare)} fare there.`, good: true });
+      void refresh();
+    }
+    onEnter?.(id);
+  };
+
+  // Each fly is a new request, even to the same spot (a running count, not the clock).
+  const flies = useRef(0);
+  const fly = (x: number, z: number) => setFlyTo({ tile: spiralIndex(Math.round(x), Math.round(z)), at: ++flies.current });
 
   async function act(run: () => Promise<PropertyResult>, done: (r: PropertyResult & { ok: true }) => string | null): Promise<PropertyResult> {
     setBusy(true);
@@ -316,9 +350,7 @@ export function useWorldLife({
             ? "budget"
             : !guide.life
               ? "life"
-              : !guide.chat && !pretend
-                ? "chat"
-                : null;
+              : null;
   const finds = useMemo(() => (finderOpen && region ? homesByArea(region, planOf(region)) : []), [finderOpen, region]);
   const openFinder = () => {
     setWelcomeShut(true);
@@ -380,7 +412,7 @@ export function useWorldLife({
             const km = homeUnit ? tripKmBetween(homeUnit, wp.id) : null;
             const fare = km === null ? 0 : (fareMint(mode, km, region.region.prices) ?? 0);
             const net = dayNet(payDay(job, region.region.prices), work?.skills[job.skill] ?? 0, fare);
-            const loss = net < 0 ? `Heads up: you'd run at a loss. After income tax, ${job.title} pays less than your fares there and back, so you'd lose about ₥${money(-net)} every game day.` : "";
+            const loss = net < 0 ? `Heads up: you'd run at a loss. After income tax, ${job.title} pays less than your fares there and back, so you'd lose about ${cash(-net)} every game day.` : "";
             const now = work?.job;
             if (!now && !loss) return void take();
             // One main job at a time: say so before swapping.
@@ -411,6 +443,7 @@ export function useWorldLife({
 
   const goHome = () => {
     if (!homeSpot) return;
+    beforeHome?.();
     fly(homeSpot.x, homeSpot.z);
     setHomeOpen(true);
     setNeighbours(null);
@@ -420,7 +453,7 @@ export function useWorldLife({
   const overlay = region ? (
     <>
       {/* Your life, under the place's name card: Home, Work, Money, Life, Services (first only Find a home). */}
-      <div className="pointer-events-none absolute left-2.5 top-14 z-10 flex max-w-[calc(100vw-4.5rem)] flex-col items-start gap-2 sm:left-4 sm:top-16 sm:max-w-md">
+      <div className={`pointer-events-none absolute left-2.5 top-14 z-10 flex max-w-[calc(100vw-4.5rem)] flex-col items-start gap-2 sm:left-4 sm:top-16 sm:max-w-md ${searching ? "max-sm:hidden" : ""}`}>
         <div className="flex flex-wrap gap-1.5">
           {signedIn && loaded && !homeUnit && (
             <button
@@ -435,17 +468,7 @@ export function useWorldLife({
           {signedIn && homeUnit && (
             <>
               <LifeButton icon={House} label="Home" onClick={goHome} />
-              <LifeButton icon={Briefcase} label="Work" glow={step === "job"} onClick={() => setWorkOpen(true)} />
-              <LifeButton
-                icon={Wallet}
-                label="Money"
-                glow={step === "budget"}
-                dot={!!(status?.powerCut || board?.received.some((o) => o.status === "open"))}
-                onClick={() => {
-                  setAssetsOpen(true);
-                  void api.lifeStatus().then(setStatus);
-                }}
-              />
+              <LifeButton icon={Briefcase} label="Income" glow={step === "job"} onClick={() => setWorkOpen(true)} />
               <LifeButton
                 icon={HeartPulse}
                 label="Life"
@@ -462,18 +485,18 @@ export function useWorldLife({
         {step && GUIDE[step] && (
           <div className="pointer-events-auto flex max-w-xs items-start gap-2 rounded-2xl bg-ink px-3 py-2 text-white shadow-lg">
             <p className="min-w-0 flex-1 text-xs leading-snug">
-              <b className="text-gold">{GUIDE[step].n ? `Step ${GUIDE[step].n} of 4 · ` : ""}</b>
+              <b className="text-gold">{`Step ${GUIDE[step].n} of 4 · `}</b>
               {GUIDE[step].text}
             </p>
-            <button onClick={() => markGuide(step === "chat" ? "chat" : "done")} className="shrink-0 text-[11px] font-semibold text-white/70 hover:text-white">
-              {step === "chat" ? "Got it" : "Skip"}
+            <button onClick={() => markGuide("done")} className="shrink-0 text-[11px] font-semibold text-white/70 hover:text-white">
+              Skip
             </button>
           </div>
         )}
       </div>
       {/* Search the map: top right, under your mint and the menu. */}
       <div className="pointer-events-none absolute right-2.5 top-14 z-10 flex justify-end sm:right-4 sm:top-16">
-        <MapSearch region={region} mine={assets?.units ?? []} onPick={(h: SearchHit) => fly(h.x, h.z)} compact />
+        <MapSearch region={region} mine={assets?.units ?? []} onPick={(h: SearchHit) => fly(h.x, h.z)} compact onOpenChange={setSearching} />
       </div>
       {status?.event && !moment && (
         <div className="pointer-events-none absolute inset-x-0 top-40 z-10 flex justify-center px-3 sm:top-32">
@@ -573,6 +596,24 @@ export function useWorldLife({
       {workOpen && jobs && (
         <WorkSheet
           glow={step === "job"}
+          rent={{
+            daily: (assets?.units ?? []).reduce((t, u) => t + (u.let && u.tenantFrom && Date.parse(u.tenantFrom) <= clock ? u.rentDay * RENT_LEVEL[u.rentLevel ?? "fair"].factor : 0), 0),
+            waiting: (assets?.units ?? []).reduce((t, u) => t + u.waiting, 0),
+            units: (assets?.units ?? []).filter((u) => u.unit !== homeUnit).length,
+            let: (assets?.units ?? []).filter((u) => u.let).length,
+          }}
+          onRent={() => act(() => api.collectRent(), (r) => `+${cash(r.rent ?? 0)} rent (after tax).`)}
+          onProperty={() => {
+            setWorkOpen(false);
+            setFinanceTab("property");
+            setAssetsOpen(true);
+          }}
+          onGoToWork={(id) => {
+            const s = ownedSpot(id);
+            if (s) fly(s.x, s.z);
+            setWorkOpen(false);
+            void goInside(id);
+          }}
           status={work}
           life={status}
           day={day}
@@ -591,22 +632,29 @@ export function useWorldLife({
             act(
               () => api.collectPay(),
               (r) =>
-                `+₥${money((r.pay?.net ?? 0) + (r.pay?.hustle?.net ?? 0))} after tax and fares${r.pay?.hustle?.gross ? ` (₥${money(r.pay.hustle.net)} from your side hustle)` : ""}.`,
+                `+${cash((r.pay?.net ?? 0) + (r.pay?.hustle?.net ?? 0))} after tax and fares${r.pay?.hustle?.gross ? ` (${cash(r.pay.hustle.net)} from your side hustle)` : ""}.`,
             )
           }
           onMode={(mode, perDay) =>
             setConfirm({
               title: mode === "walk" ? "Walk to work from now on?" : `Go by ${COMMUTE_LABEL[mode].toLowerCase()} from now on?`,
-              text: `${perDay ? `It costs ₥${money(perDay)} a game day, there and back.` : "It's free."}${
+              text: `${perDay ? `It costs ${cash(perDay)} a game day, there and back.` : "It's free."}${
                 work?.job && dayNet(work.job.payDay, work.skills[work.job.skill] ?? 0, perDay / 2) < 0
-                  ? ` Heads up: this way you'd run at a loss, about ₥${money(-dayNet(work.job.payDay, work.skills[work.job.skill] ?? 0, perDay / 2))} every game day after tax.`
+                  ? ` Heads up: this way you'd run at a loss, about ${cash(-dayNet(work.job.payDay, work.skills[work.job.skill] ?? 0, perDay / 2))} every game day after tax.`
                   : ""
               }`,
               yes: mode === "walk" ? "Walk from now on" : `Go by ${COMMUTE_LABEL[mode].toLowerCase()}`,
               run: () => act(() => api.setCommute(mode), (r) => `${mode === "walk" ? "You'll walk to work" : `You'll go by ${COMMUTE_LABEL[mode].toLowerCase()}`} from now on.${paid(r.pay)}`),
             })
           }
-          onQuit={() => act(() => api.quitJob(), (r) => `You've left your job.${paid(r.pay)}`)}
+          onQuit={() =>
+            setConfirm({
+              title: `Leave your job${work?.job ? ` as ${work.job.title}` : ""}?`,
+              text: "Your pay so far is collected first. You can look for another job any time.",
+              yes: "Leave job",
+              run: () => void act(() => api.quitJob(), (r) => `You've left your job.${paid(r.pay)}`),
+            })
+          }
           onShow={(id) => {
             const s = ownedSpot(id);
             if (s) fly(s.x, s.z);
@@ -623,10 +671,11 @@ export function useWorldLife({
               ? () => {
                   const id = property.id;
                   setProperty(null);
-                  onEnter(id);
+                  void goInside(id);
                 }
               : undefined
           }
+          enterLabel={tripLabel(property.id)}
           jobs={jobs}
           onReport={
             signedIn
@@ -658,19 +707,19 @@ export function useWorldLife({
                   onBuyListed: (u, price) =>
                     setConfirm({
                       title: `Buy ${u.label}?`,
-                      text: `₥${money(price)} to its owner, plus ${Math.round(BUY_TAX * 100)}% tax: ₥${money(buyerPays(price, BUY_TAX))} in all. A tenant living there stays.`,
-                      yes: `Buy for ₥${money(buyerPays(price, BUY_TAX))}`,
+                      text: `${cash(price)} to its owner, plus ${Math.round(BUY_TAX * 100)}% tax: ${cash(buyerPays(price, BUY_TAX))} in all. A tenant living there stays.`,
+                      yes: `Buy for ${cash(buyerPays(price, BUY_TAX))}`,
                       run: () => void act(() => api.buyListed(u.id, price), (r) => (r.home ? `${u.label} is yours, and your home. Welcome!` : `${u.label} is yours.`)),
                     }),
                   onOffer: (u) =>
                     setAsk({
                       title: `Offer for ${u.label}`,
-                      text: `It's worth about ₥${money(u.mint)}. What you offer (and the ${Math.round(BUY_TAX * 100)}% tax) is held from your wallet until the owner answers, for up to ${OFFER_HOURS} hours.`,
+                      text: `It's worth about ${cash(u.mint)}. What you offer (and the ${Math.round(BUY_TAX * 100)}% tax) is held from your wallet until the owner answers, for up to ${OFFER_HOURS} hours.`,
                       initial: Math.round(u.mint),
-                      note: (n) => `₥${money(buyerPays(n, BUY_TAX))} held with the tax. You get it back if they say no.`,
-                      cta: (n) => `Offer ₥${money(n)}`,
+                      note: (n) => `${cash(buyerPays(n, BUY_TAX))} held with the tax. You get it back if they say no.`,
+                      cta: (n) => `Offer ${cash(n)}`,
                       run: (n) => api.makeOffer(u.id, n),
-                      done: () => "Offer sent. You'll see the answer under Money → Property.",
+                      done: () => "Offer sent. You'll see the answer in Finance → Property.",
                     }),
                   onSell: (u) => askSell(u.id, u.label, u.mint),
                   onUnsell: (u) => act(() => api.unlistUnit(u.id), () => `${u.label} is off the market.`),
@@ -687,25 +736,28 @@ export function useWorldLife({
           region={region}
           busy={busy}
           loadMoney={api.money}
-          loadTime={api.lifeTime}
+          currency={currency}
+          onCurrency={chooseCurrency}
           onBudget={(b) =>
             act(
               () => api.setBudget(b),
               () => {
                 markGuide("budget");
-                return "Budget saved. From your next pay, it's shared into your pots.";
+                return "Budget saved. Your next pay is shared out by it.";
               },
             )
           }
-          onMove={(from, to, amount) => act(() => api.movePot(from, to, amount), () => `Moved ₥${money(amount)}.`)}
-          onClose={() => setAssetsOpen(false)}
-          onCollect={() => act(() => api.collectRent(), (r) => `+₥${(r.rent ?? 0).toFixed(2)} rent (after tax), shared into your pots.`)}
+          onClose={() => {
+            setAssetsOpen(false);
+            setFinanceTab(null);
+          }}
+          onCollect={() => act(() => api.collectRent(), (r) => `+${cash(r.rent ?? 0)} rent (after tax).`)}
           onShow={(u) => {
             const s = ownedSpot(u.building);
             if (s) fly(s.x, s.z);
             setAssetsOpen(false);
           }}
-          startTab={step === "budget" ? "budget" : board?.received.some((o) => o.status === "open") ? "property" : undefined}
+          startTab={financeTab ?? (step === "budget" ? "budget" : board?.received.some((o) => o.status === "open") ? "property" : undefined)}
           glowBudget={step === "budget"}
           owning={{
             board,
@@ -717,27 +769,27 @@ export function useWorldLife({
               action === "accept"
                 ? setConfirm({
                     title: `Sell to ${o.who}?`,
-                    text: `${o.label ?? "It"} goes to them for ₥${money(o.price)}. You get ₥${money(sellerGets(o.price))} after the 2% tax (a loan on it is paid off first).`,
-                    yes: `Sell for ₥${money(o.price)}`,
+                    text: `${o.label ?? "It"} goes to them for ${cash(o.price)}. You get ${cash(sellerGets(o.price))} after the 2% tax (a loan on it is paid off first).`,
+                    yes: `Sell for ${cash(o.price)}`,
                     run: () => void act(() => api.answerOffer(o.id, "accept"), () => `Sold to ${o.who}.`),
                   })
                 : act(() => api.answerOffer(o.id, "refuse"), () => "Offer turned down."),
             onCounter: (o) =>
               setAsk({
                 title: "Ask for more",
-                text: `${o.who} offered ₥${money(o.price)}. Ask for a higher price: they can take it or leave it.`,
+                text: `${o.who} offered ${cash(o.price)}. Ask for a higher price: they can take it or leave it.`,
                 initial: Math.round(o.price * 1.1),
-                note: (n) => `You'd get ₥${money(sellerGets(n))} after the 2% tax.`,
-                cta: (n) => `Ask ₥${money(n)}`,
+                note: (n) => `You'd get ${cash(sellerGets(n))} after the 2% tax.`,
+                cta: (n) => `Ask ${cash(n)}`,
                 run: (n) => api.answerOffer(o.id, "counter", n),
                 done: () => "Sent. You'll see their answer here.",
               }),
             onReply: (o, action) =>
               action === "accept"
                 ? setConfirm({
-                    title: `Pay ₥${money(o.counter ?? 0)}?`,
+                    title: `Pay ${cash(o.counter ?? 0)}?`,
                     text: `${o.label ?? "It"} becomes yours. What your offer held counts towards it; the rest (with the 3% tax) comes from your wallet.`,
-                    yes: `Pay ₥${money(o.counter ?? 0)}`,
+                    yes: `Pay ${cash(o.counter ?? 0)}`,
                     run: () => void act(() => api.replyOffer(o.id, "accept"), () => `${o.label ?? "It"} is yours.`),
                   })
                 : act(() => api.replyOffer(o.id, "withdraw"), () => "Offer withdrawn. Your mint is back."),
@@ -750,12 +802,12 @@ export function useWorldLife({
               board?.loan &&
               setAsk({
                 title: "Pay off your loan",
-                text: `You owe ₥${money(board.loan.balance)}. Paying early saves interest. It comes from Savings, then your wallet.`,
+                text: `You owe ${cash(board.loan.balance)}. Paying early saves interest. It comes from Savings, then your wallet.`,
                 initial: board.loan.balance,
                 max: board.loan.balance,
-                cta: (n) => `Pay ₥${money(n)}`,
+                cta: (n) => `Pay ${cash(n)}`,
                 run: (n) => api.repayLoan(n),
-                done: (n) => (n >= (board.loan?.balance ?? 0) ? "Loan paid off. Your property is free." : `Paid ₥${money(n)}.`),
+                done: (n) => (n >= (board.loan?.balance ?? 0) ? "Loan paid off. Your property is free." : `Paid ${cash(n)}.`),
               }),
           }}
         />
@@ -767,8 +819,8 @@ export function useWorldLife({
           onBook={(id, title, cost) =>
             setConfirm({
               title: `Book ${title}?`,
-              text: `₥${money(cost)} is held from your Savings (then wallet) and goes to them when you confirm it's done. You can cancel until they start.`,
-              yes: `Book for ₥${money(cost)}`,
+              text: `${cash(cost)} is held from your Savings (then wallet) and goes to them when you confirm it's done. You can cancel until they start.`,
+              yes: `Book for ${cash(cost)}`,
               run: () => act(() => api.serviceBook(id), () => "Booked. You'll see it under Services → Yours."),
             })
           }
@@ -807,18 +859,6 @@ export function useWorldLife({
           onClose={() => setReport(null)}
         />
       )}
-      {signedIn && homeUnit && (
-        <button
-          onClick={() => {
-            const c = centerRef.current?.();
-            if (c) setReport({ x: c.x, z: c.z, where: `${region.areaAt(c.x, c.z)}: the middle of your screen` });
-          }}
-          className="glass pointer-events-auto absolute bottom-7 left-2.5 z-10 flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold sm:left-4"
-          aria-label="Report a problem with the map"
-        >
-          <Flag className="size-3.5" /> <span className="max-sm:hidden">Report a problem</span>
-        </button>
-      )}
       {business && (
         <BusinessSheet b={business} onHit={(kind) => void api.hitBusiness(business.id, kind)} onClose={() => setBusiness(null)} />
       )}
@@ -847,7 +887,7 @@ export function useWorldLife({
           misses={board.misses}
           busy={busy}
           onSubmit={async (amount, months) => {
-            const r = await act(() => api.takeLoan(amount, months), () => `₥${money(amount)} from the World Bank is in your wallet.`);
+            const r = await act(() => api.takeLoan(amount, months), () => `${cash(amount)} from the World Bank is in your wallet.`);
             if (r.ok) setLoanOpen(false);
           }}
           onClose={() => setLoanOpen(false)}
@@ -968,5 +1008,18 @@ export function useWorldLife({
     setWelcomeShut(false);
   };
   const openCurrency = () => setCurrencyOpen(true);
-  return { centerRef, owned: shown, flyTo, onProperty, onWorkplace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency };
+  /** From the menu: report a problem with the map where you're looking. */
+  const openReport = () => {
+    const c = centerRef.current?.();
+    if (c && region) setReport({ x: c.x, z: c.z, where: `${region.areaAt(c.x, c.z)}: the middle of your screen` });
+  };
+  /** Your cash at the top (beside the menu) opens Finance. */
+  const openFinance = () => {
+    setAssetsOpen(true);
+    void api.lifeStatus().then(setStatus);
+  };
+  /** Something in Finance wants you: the guide's budget step, a power cut, an offer. */
+  const financeGlow = step === "budget";
+  const financeDot = !!(status?.powerCut || board?.received.some((o) => o.status === "open"));
+  return { centerRef, owned: shown, flyTo, onProperty, onWorkplace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit };
 }

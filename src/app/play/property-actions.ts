@@ -8,6 +8,7 @@ import type { Building } from "@/lib/world/buildings";
 import { cleanPropertyName, ownedSpot } from "@/lib/world/owned";
 import { BUY_TAX, rentPerDay, type AssetsData, type BuildingOwner, type OwnedBuildingRow, type PropertyResult } from "@/lib/world/property-api";
 import { toMint, valueOf } from "@/lib/world/value";
+import { cheapestCommute, fareMint, tripKmBetween } from "@/lib/world/work";
 import { collectPay } from "./work-actions";
 
 // Owning property on the real map (docs/PROPERTY.md; the database part is
@@ -187,4 +188,25 @@ export async function buildingOwners(buildingId: string): Promise<BuildingOwner[
     forSale: o.forSale == null ? null : Number(o.forSale),
     home: !!o.home,
   }));
+}
+
+/** Go to a building: the fare from where you last were (or home), the cheapest way, and you're there. */
+export async function travelTo(buildingId: string): Promise<PropertyResult> {
+  const spot = ownedSpot(buildingId);
+  if (!spot || !REGIONS[spot.region]) return { ok: false, error: "That place isn't on the map." };
+  const userId = await currentUserId();
+  if (!userId) return { ok: true, fare: 0 };
+  const db = createAdminClient();
+  const { data: life } = await db.from("lives").select("home_unit, at_place").eq("user_id", userId).maybeSingle();
+  if (!life) return { ok: false, error: "Start your life first." };
+  const from = (life.at_place as string | null) ?? (life.home_unit as string | null);
+  const km = from ? tripKmBetween(from, buildingId) : null;
+  const fare = km === null ? 0 : (fareMint(cheapestCommute(km), km, regionMap(spot.region)!.region.prices) ?? 0);
+  const { data, error } = await db.rpc("life_go", { p_user: userId, p_place: buildingId, p_fare: fare });
+  if (error) {
+    const [code] = error.message.split(":");
+    if (code === "not_enough") return { ok: false, error: "You don't have enough for the fare there." };
+    return say(error.message);
+  }
+  return { ok: true, fare: n(data) };
 }

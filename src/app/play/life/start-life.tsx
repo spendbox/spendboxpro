@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Check, House, Search, Sparkles } from "@/components/icons";
 import { PACKS, type Pack } from "@/lib/world/packs";
 import type { Prices } from "@/lib/world/region";
-import { mintLocal } from "@/lib/world/value";
+import { cash } from "@/lib/world/value";
 import { Sheet } from "../sheet";
 import { CurrencyChips } from "./currency-pick";
 
@@ -12,7 +12,6 @@ import { CurrencyChips } from "./currency-pick";
 export function StartLife({
   place,
   budget,
-  prices,
   started,
   busy,
   granted,
@@ -43,7 +42,6 @@ export function StartLife({
   onCurrency: (code: string) => void;
 }) {
   const [pick, setPick] = useState<Pack["id"] | null>(null);
-  const local = `about ${mintLocal(budget, prices)}`;
   const chosen = PACKS.find((p) => p.id === pick);
   if (started)
     return (
@@ -53,7 +51,7 @@ export function StartLife({
         </div>
         <h2 className="mt-3 font-display text-xl font-extrabold">Find your first home</h2>
         <p className="mt-2 text-sm text-muted">
-          You have <b className="text-ink">₥{budget.toLocaleString("en-GB")}</b> ({local}). Buy a room, a flat or a house to live in.
+          You have <b className="text-ink">{cash(budget)}</b>. Buy a room, a flat or a house to live in.
         </p>
         <ul className="mt-4 space-y-2 text-sm">
           <li className="flex items-start gap-2">
@@ -103,8 +101,7 @@ export function StartLife({
                 <span className="block text-[11px] text-muted">{p.what}</span>
               </span>
               <span className="shrink-0 text-right">
-                <span className="block font-display text-base font-extrabold tabular-nums">₥{p.mint.toLocaleString("en-GB")}</span>
-                <span className="block text-[11px] text-muted">worth {mintLocal(p.mint, prices)}</span>
+                <span className="block font-display text-base font-extrabold tabular-nums">{cash(p.mint)}</span>
                 <span className={`block text-xs font-semibold ${free ? "text-me" : ""}`}>{free ? "Free" : `Pay ₦${p.naira.toLocaleString("en-GB")}`}</span>
               </span>
             </button>
@@ -124,8 +121,8 @@ export function StartLife({
           : !chosen
             ? "Pick one to continue"
             : chosen.naira === 0
-              ? `Start free with ₥${chosen.mint.toLocaleString("en-GB")}`
-              : `Pay ₦${chosen.naira.toLocaleString("en-GB")} for ₥${chosen.mint.toLocaleString("en-GB")}`}
+              ? `Start free with ${cash(chosen.mint)}`
+              : `Pay ₦${chosen.naira.toLocaleString("en-GB")} for ${cash(chosen.mint)}`}
       </button>
     </Sheet>
   );

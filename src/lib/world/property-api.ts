@@ -14,7 +14,7 @@ import type { Listing, MarketBoard, RentLevel } from "./market.ts";
 /** What collecting pay came to (mint): game days, pay, income tax, fares, what's left. */
 export type PaySettled = { days: number; gross: number; tax: number; fares: number; net: number; hustle?: { gross: number; tax: number; net: number } };
 
-export type PropertyResult = { ok: true; coins?: number; home?: boolean; rent?: number; pay?: PaySettled } | { ok: false; error: string };
+export type PropertyResult = { ok: true; coins?: number; home?: boolean; rent?: number; pay?: PaySettled; fare?: number } | { ok: false; error: string };
 
 export type AssetUnit = {
   unit: string;
@@ -41,7 +41,7 @@ export type AssetUnit = {
 };
 
 export type AssetsData = {
-  life: { region: string; home_unit: string | null; granted: number; started_at: string } | null;
+  life: { region: string; home_unit: string | null; granted: number; started_at: string; at_place?: string | null } | null;
   coins: number;
   units: AssetUnit[];
 };
@@ -131,6 +131,8 @@ export type PropertyApi = {
   serviceTake: (requestId: string) => Promise<PropertyResult>;
   serviceJob: (jobId: string, action: "done" | "confirm" | "decline" | "cancel") => Promise<PropertyResult>;
   reportMap: (r: { region: string; x: number; z: number; kind: ReportKind; note: string }) => Promise<PropertyResult>;
+  /** Go to a building: pay the fare from where you last were (the cheapest way), and be there. */
+  travelTo: (buildingId: string) => Promise<PropertyResult>;
   // The player market (./market).
   setRentLevel: (unitId: string, level: RentLevel) => Promise<PropertyResult>;
   listUnit: (unitId: string, price: number) => Promise<PropertyResult>;

@@ -1,7 +1,7 @@
 "use client";
 
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { Briefcase, ChevronRight, KeyRound, Smartphone } from "lucide-react";
+import { Briefcase, ChevronRight, Flag, KeyRound, Smartphone } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import {
   Award,
@@ -91,6 +91,7 @@ export function Menu({
   level,
   life,
   onCurrency,
+  onReport,
 }: {
   me: { id: string; name: string | null; avatar: Avatar };
   city: string;
@@ -127,6 +128,8 @@ export function Menu({
   life?: boolean;
   /** Choose the currency money is shown in. */
   onCurrency?: () => void;
+  /** Report a problem with the map where you're looking. */
+  onReport?: () => void;
 }) {
   const [sheet, setSheet] = useState<SheetName | null>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -164,6 +167,7 @@ export function Menu({
     onMyJob && { key: "job", label: "My job", icon: Briefcase, tint: "bg-[#e7f5ff] text-[#1971c2]", onClick: onMyJob },
     { key: "how", label: life ? "How to play" : "How it works", icon: CircleHelp, tint: "bg-[#e3edff] text-[#2d6bff]", onClick: onHowItWorks },
     onCurrency && { key: "currency", label: "Currency", icon: Coins, tint: "bg-[#fff1c7] text-gold-dark", onClick: onCurrency },
+    onReport && { key: "report", label: "Report a problem", icon: Flag, tint: "bg-[#ffe3e3] text-[#e03131]", onClick: onReport },
     life ? undefined : {
       key: "result",
       label: "Last result",

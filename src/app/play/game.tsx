@@ -48,8 +48,12 @@ import {
   Sparkles,
   Timer,
   Users,
+  Volume2,
+  VolumeX,
+  Wallet,
   X,
 } from "@/components/icons";
+import { cash } from "@/lib/world/value";
 import { short } from "@/lib/format";
 import { createClient } from "@/lib/supabase/client";
 import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
@@ -387,6 +391,8 @@ export function Game({
     signedIn: !state.me.guest,
     budget: 5000,
     onChanged: () => startTransition(() => router.refresh()),
+    // Home from inside a building: out of it first.
+    beforeHome: () => leaveInside.current(),
     // A building's card: Go inside, as if its bubble had been tapped.
     onEnter: (id: string) => {
       const sp = ownedSpot(id);
@@ -402,6 +408,8 @@ export function Game({
   const [dockOpen, setDockOpen] = useState(false);
   const [chatUnread, setChatUnread] = useState(0);
   const [sound, setSound] = useState(true);
+  /** Leave the building you're in, if any (set once leaveRoom exists, below). */
+  const leaveInside = useRef<() => void>(() => {});
   const [busy, setBusy] = useState(false);
   // Ghost duels: a ghost's card (tapped on the map), the list of ghosts, the duel on screen,
   // and flying the camera over to a ghost's light.
@@ -1127,7 +1135,8 @@ export function Game({
   }
   function goToLevel(room: PlaceRoom, level: { id: string; label: string; capacity: number }) {
     setPickPlace(null);
-    if (room.kind === "building" && !payToGo({ kind: "visit", place: room.id, type: room.type, name: room.name })) return;
+    // The real map charges the fare there instead of a first-visit fee (see useWorldLife's goInside).
+    if (room.kind === "building" && !worldId && !payToGo({ kind: "visit", place: room.id, type: room.type, name: room.name })) return;
     const info: RoomInfo = {
       id: `${room.id}:${level.id}`,
       name: `${room.name} · ${level.label}`,
@@ -1187,6 +1196,11 @@ export function Game({
     setPlace(null);
     setActivity(null);
   }
+  useEffect(() => {
+    leaveInside.current = () => {
+      if (place) leaveRoom();
+    };
+  });
   // The house button: fly over to your house (or build one, if it isn't in this town).
   function showMyHouse() {
     if (myHouseTile === null) return setHouseOpen(true);
@@ -1498,10 +1512,27 @@ export function Game({
               </span>
             )}
             {state.streak && !worldId && <StreakPill streak={state.streak} onOpen={() => { setStreakOpen(true); setMenu(false); setFeedOpen(false); }} />}
+            {worldId ? (
+              // Your cash at hand: opens Finance.
+              <button
+                onClick={() => { setMenu(false); worldLife.openFinance(); }}
+                className={cn(
+                  "glass relative flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-bold sm:h-9 sm:px-3 sm:text-sm",
+                  worldLife.financeGlow && "outline outline-2 outline-offset-2 outline-gold",
+                )}
+                aria-label="Finance"
+              >
+                <Wallet className="size-4 text-gold-dark" />
+                {cash(me.coins)}
+                {worldLife.financeDot && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-hit" />}
+                {worldLife.financeGlow && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/60" />}
+              </button>
+            ) : (
             <span className="glass inline-block h-8 whitespace-nowrap rounded-full px-2.5 text-xs leading-8 sm:h-9 sm:px-3 sm:text-sm sm:leading-9" title={`₥${me.coins} · level ${me.level}`}>
               <b className="text-gold-dark">₥{short(me.coins)}</b>
               {me.bonusCoins > 0 && <span className="text-muted"> +{short(me.bonusCoins)}</span>}
             </span>
+            )}
             {!worldId && (
             <button
               onClick={() => {
@@ -1588,7 +1619,7 @@ export function Game({
           onClose={() => setMenu(false)}
           onHowItWorks={() => { setMenu(false); if (worldId) worldLife.restartGuide(); else setHowOpen(true); }}
           life={!!worldId}
-          onCurrency={worldId ? () => { setMenu(false); worldLife.openCurrency(); } : undefined}
+          onReport={worldId ? () => { setMenu(false); worldLife.openReport(); } : undefined}
           onEditAvatar={() => { setMenu(false); setEditAvatar(true); }}
           onResults={() => { setMenu(false); if (state.results) setShowResults(state.results.roundId); }}
           onMyStyle={guest || worldId ? undefined : () => { setMenu(false); setStyleOpen(true); }}
@@ -2088,6 +2119,11 @@ export function Game({
                 <Layers className="size-4" /> Floor
               </button>
             )}
+            {!guest && (
+              <button onClick={() => setPhoneHub(true)} className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#f08c00] text-white" aria-label="Your phone">
+                <Smartphone className="size-4" />
+              </button>
+            )}
             <button onClick={leaveRoom} className="flex shrink-0 items-center gap-1 rounded-xl bg-ink px-3 py-2 text-xs font-semibold text-white">
               <LogOut className="size-4" /> Leave
             </button>
@@ -2352,14 +2388,14 @@ export function Game({
       </div>
 
       {/* The real map: your phone, bottom right (camera, photos, notifications). */}
-      {worldId && !camera && !guest && (
+      {worldId && !camera && !guest && !place && (
         <button
           onClick={() => {
             setPhoneHub(true);
             setMenu(false);
             setFeedSeenAt(new Date(now).toISOString());
           }}
-          className="pointer-events-auto absolute bottom-4 right-3 z-20 grid size-12 place-items-center rounded-2xl bg-ink text-white shadow-lg sm:bottom-6 sm:right-4"
+          className="pointer-events-auto absolute bottom-4 right-3 z-20 grid size-12 place-items-center rounded-2xl bg-[#f08c00] text-white shadow-lg sm:bottom-6 sm:right-4"
           aria-label="Your phone"
         >
           <Smartphone className="size-5" />
@@ -2404,6 +2440,16 @@ export function Game({
             </ul>
           )}
         </Sheet>
+      )}
+      {/* The city's sounds, on or off: bottom left. */}
+      {worldId && !camera && (
+        <button
+          onClick={() => { setSound(!sound); saveView({ sound: !sound }); }}
+          className="glass pointer-events-auto absolute bottom-6 left-2.5 z-10 grid size-9 place-items-center rounded-full sm:left-4"
+          aria-label={sound ? "Turn the city's sound off" : "Turn the city's sound on"}
+        >
+          {sound ? <Volume2 className="size-4" /> : <VolumeX className="size-4 text-muted" />}
+        </button>
       )}
       {cityOpen && worldRegion && (
         <CityCard city={worldRegion.name} area={worldArea} online={online} players={state.site.players} onClose={() => setCityOpen(false)} />

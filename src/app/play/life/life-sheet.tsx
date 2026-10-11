@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { GraduationCap, HeartPulse, Sparkles, Stethoscope } from "@/components/icons";
+import { Clock, GraduationCap, HeartPulse, Sparkles, Stethoscope } from "@/components/icons";
 import type { Prices } from "@/lib/world/region";
 import {
   AUTO_CARE_BELOW,
@@ -18,18 +18,20 @@ import {
 } from "@/lib/world/living";
 import { dayEffectsOf, dayPlan, EXERCISE, EXERCISES, mindWord, STRESSED_BELOW, type DayInput, type Exercise } from "@/lib/world/day";
 import type { LifeStatus } from "@/lib/world/property-api";
-import { mintLocal } from "@/lib/world/value";
+import { cash } from "@/lib/world/value";
 import { GAME_DAY_HOURS, skillLevel, WORK_SKILLS, type Cert } from "@/lib/world/work";
 import { Sheet } from "../sheet";
 
 const fmt = (n: number) => n.toLocaleString("en-GB", { maximumFractionDigits: 2 });
 
-type Tab = "health" | "school" | "looks";
+type Tab = "day" | "health" | "school" | "looks";
 const TABS: { id: Tab; label: string; icon: typeof HeartPulse }[] = [
+  { id: "day", label: "Your day", icon: Clock },
   { id: "health", label: "Body & Mind", icon: HeartPulse },
-  { id: "school", label: "School", icon: GraduationCap },
+  { id: "school", label: "Education", icon: GraduationCap },
   { id: "looks", label: "Looks", icon: Sparkles },
 ];
+const DAY_COLOUR: Record<string, string> = { sleep: "#adb5bd", job: "#2f9e44", commute: "#f08c00", hustle: "#d6336c", study: "#1971c2", exercise: "#12b886", free: "#ffd43b" };
 
 /** How long a course takes in real time: "7½ days", "10 hours". */
 function gameDays(days: number) {
@@ -74,7 +76,7 @@ export function LifeSheet({
   onProcedure: (id: string) => void;
   onClose: () => void;
 }) {
-  const [tab, setTab] = useState<Tab>("health");
+  const [tab, setTab] = useState<Tab>("day");
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30_000);
@@ -103,12 +105,42 @@ export function LifeSheet({
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`flex h-8 flex-1 items-center justify-center gap-1.5 rounded-full text-xs font-semibold transition ${tab === t.id ? "bg-panel shadow-sm" : "text-muted"}`}
+            className={`flex h-8 flex-1 items-center justify-center gap-1 rounded-full text-[11px] font-semibold transition sm:text-xs ${tab === t.id ? "bg-panel shadow-sm" : "text-muted"}`}
           >
-            <t.icon className="size-3.5" /> {t.label}
+            <t.icon className="size-3.5 max-[380px]:hidden" /> {t.label}
           </button>
         ))}
       </div>
+
+      {tab === "day" && plan && (
+        <div className="mt-4">
+          <div className="flex items-baseline justify-between">
+            <p className="text-sm font-semibold">A game day (2 real hours)</p>
+            <p className="text-xs text-muted">{fmt(plan.free)}h free</p>
+          </div>
+          <div className="mt-2 flex h-4 overflow-hidden rounded-full">
+            {[...plan.blocks, { id: "free", label: "Free time", hours: plan.free }]
+              .filter((b) => b.hours > 0)
+              .map((b) => (
+                <div key={b.id} title={`${b.label} ${fmt(b.hours)}h`} style={{ width: `${(b.hours / 24) * 100}%`, background: DAY_COLOUR[b.id] }} />
+              ))}
+          </div>
+          <ul className="mt-3 space-y-1.5">
+            {[...plan.blocks, { id: "free", label: "Free time", hours: plan.free }]
+              .filter((b) => b.hours > 0)
+              .map((b) => (
+                <li key={b.id} className="flex items-center gap-2 text-sm">
+                  <span className="size-2.5 rounded-full" style={{ background: DAY_COLOUR[b.id] }} />
+                  <span className="flex-1">{b.label}</span>
+                  <b className="tabular-nums">{fmt(b.hours)}h</b>
+                </li>
+              ))}
+          </ul>
+          <p className="mt-3 text-xs text-muted">
+            {plan.free < 4 ? "Not much free time: your mind wears down. Drop a side hustle or work nearer home." : "Free time keeps your mind well. Exercise is in Body & Mind."}
+          </p>
+        </div>
+      )}
 
       {tab === "health" && (
         <div className="mt-4">
@@ -284,14 +316,11 @@ function Meter({ label, value, word, colour, change, on, onTap }: { label: strin
   );
 }
 
-function Price({ total, prices, vat }: { total: number; prices: Prices; vat?: boolean }) {
+function Price({ total, vat }: { total: number; prices?: Prices; vat?: boolean }) {
   return (
     <div className="shrink-0 text-right">
-      <p className="text-sm font-semibold tabular-nums">₥{fmt(total)}</p>
-      <p className="text-[11px] text-muted">
-        {mintLocal(total, prices)}
-        {vat ? " inc. VAT" : ""}
-      </p>
+      <p className="text-sm font-semibold tabular-nums">{cash(total)}</p>
+      {vat && <p className="text-[11px] text-muted">inc. VAT</p>}
     </div>
   );
 }
