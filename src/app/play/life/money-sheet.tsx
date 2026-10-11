@@ -38,6 +38,7 @@ export function MoneySheet({
   onClose,
   owning,
   startTab,
+  glowBudget,
 }: {
   status: LifeStatus | null;
   assets: AssetsData;
@@ -54,6 +55,8 @@ export function MoneySheet({
   owning: Owning;
   /** Open on this tab (the Property tab when there are offers to answer). */
   startTab?: Tab;
+  /** The guide's next step: set your budget (the Save button glows, and works without a change). */
+  glowBudget?: boolean;
 }) {
   const [tab, setTab] = useState<Tab>(startTab ?? "home");
   const prices = region.region.prices;
@@ -73,7 +76,7 @@ export function MoneySheet({
       <div className="mt-4">
         {tab === "home" && <Home status={status} wallet={wallet} pots={pots} property={property} prices={prices} busy={busy} onMove={onMove} />}
         {tab === "flow" && <Flow loadMoney={loadMoney} loadTime={loadTime} prices={prices} />}
-        {tab === "budget" && status && <BudgetTab budget={status.budget} busy={busy} onSave={onBudget} />}
+        {tab === "budget" && status && <BudgetTab budget={status.budget} busy={busy} onSave={onBudget} first={glowBudget} />}
         {tab === "property" && <AssetsBody assets={assets} owned={owned} region={region} busy={busy} owning={owning} onCollect={onCollect} onShow={onShow} />}
       </div>
     </Sheet>
@@ -304,7 +307,7 @@ function Rows({ title, total, rows, empty }: { title: string; total: number; row
   );
 }
 
-function BudgetTab({ budget, busy, onSave }: { budget: Budget; busy: boolean; onSave: (b: Budget) => void }) {
+function BudgetTab({ budget, busy, onSave, first }: { budget: Budget; busy: boolean; onSave: (b: Budget) => void; first?: boolean }) {
   const [b, setB] = useState<Budget>(budget);
   const used = POTS.reduce((t, p) => t + b[p], 0);
   const changed = POTS.some((p) => b[p] !== budget[p]);
@@ -345,8 +348,13 @@ function BudgetTab({ budget, busy, onSave }: { budget: Budget; busy: boolean; on
           <span className="w-10 text-right font-semibold tabular-nums">{100 - used}%</span>
         </li>
       </ul>
-      <button disabled={busy || !changed} onClick={() => onSave(b)} className="mt-4 h-11 w-full rounded-full bg-ink font-semibold text-white disabled:opacity-40">
-        Save
+      <button
+        disabled={busy || (!changed && !first)}
+        onClick={() => onSave(b)}
+        className={`relative mt-4 h-11 w-full rounded-full bg-ink font-semibold text-white disabled:opacity-40 ${first ? "ring-2 ring-gold" : ""}`}
+      >
+        {first && !changed ? "Keep this budget" : "Save"}
+        {first && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/60" />}
       </button>
     </div>
   );

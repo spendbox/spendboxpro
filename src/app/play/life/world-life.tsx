@@ -45,6 +45,49 @@ function planOf(region: RegionMap) {
   return p;
 }
 
+const GUIDE_KEY = "newtown.guide";
+type GuideStep = "home" | "job" | "budget" | "life" | "chat";
+const GUIDE: Record<GuideStep, { n: number; text: string }> = {
+  home: { n: 1, text: "Find a home you can afford. Tap Find a home." },
+  job: { n: 2, text: "Get a job near home. Tap Work, then Jobs near me." },
+  budget: { n: 3, text: "Set your budget: how your pay is shared out. Tap Money." },
+  life: { n: 4, text: "Look after your body and mind. Tap Life." },
+  chat: { n: 0, text: "All set! Tap Chat at the bottom to talk to people around you." },
+};
+/** The glow on the button for the guide's next step: a gold ring, and a ripple round it (see Ripple). */
+const GLOW = "outline outline-2 outline-offset-2 outline-gold";
+
+/** A gold ripple round a button the guide points at (the button must be relative). */
+export function Ripple() {
+  return <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/60" />;
+}
+
+/** One of your life's buttons under the place's name: an icon and its name. */
+function LifeButton({
+  icon: Icon,
+  label,
+  onClick,
+  glow,
+  dot,
+  warn,
+}: {
+  icon: typeof House;
+  label: string;
+  onClick: () => void;
+  glow?: boolean;
+  dot?: boolean;
+  warn?: boolean;
+}) {
+  return (
+    <button onClick={onClick} className={`glass pointer-events-auto relative flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold ${glow ? GLOW : ""}`}>
+      <Icon className={`size-4 ${warn ? "text-hit" : ""}`} />
+      {label}
+      {dot && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-hit" />}
+      {glow && <Ripple />}
+    </button>
+  );
+}
+
 const money = (n: number) => n.toLocaleString("en-GB", { maximumFractionDigits: 2 });
 const paid = (p: PaySettled | undefined) =>
   p && p.gross > 0 ? ` Collected ₥${money(p.net)} pay (after ₥${money(p.tax)} tax and ₥${money(p.fares)} fares).` : "";
@@ -80,6 +123,24 @@ export function useWorldLife({
   const [assetsOpen, setAssetsOpen] = useState(false);
   const [welcomeShut, setWelcomeShut] = useState(false);
   const [finderOpen, setFinderOpen] = useState(false);
+  /** The first-day guide: which steps are done (kept in this browser). */
+  const [guide, setGuide] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(GUIDE_KEY) ?? "{}") as Record<string, boolean>;
+    } catch {
+      return {};
+    }
+  });
+  const markGuide = (k: string) =>
+    setGuide((g) => {
+      const next = { ...g, [k]: true };
+      try {
+        localStorage.setItem(GUIDE_KEY, JSON.stringify(next));
+      } catch {
+        // Not kept: the guide just shows again next time.
+      }
+      return next;
+    });
   const [work, setWork] = useState<WorkStatus | null>(null);
   const [workOpen, setWorkOpen] = useState(false);
   const [place, setPlace] = useState<Workplace | null>(null);
@@ -218,9 +279,22 @@ export function useWorldLife({
   const letting = useMemo(() => new Set((assets?.units ?? []).filter((u) => u.let).map((u) => u.unit)), [assets]);
   const coins = assets?.coins ?? 0;
   const showWelcome = signedIn && loaded && !homeUnit && !welcomeShut && !property && !place && !finderOpen;
-  // Buttons come in as you need them: first only a home search; Work and Money once you have a
-  // home; Life and Services once you've worked.
-  const worked = !!work?.job || Object.values(work?.skills ?? {}).some((d) => d > 0);
+  // First only a home search; once you have a home, all of Home, Work, Money, Life and Services.
+  // The guide's next step: a home, a job, a budget, body and mind, then where to chat.
+  const step: GuideStep | null =
+    !signedIn || !loaded || !life || guide.done
+      ? null
+      : !homeUnit
+        ? "home"
+        : !work?.job && !status?.hustle
+          ? "job"
+          : !guide.budget
+            ? "budget"
+            : !guide.life
+              ? "life"
+              : !guide.chat && !pretend
+                ? "chat"
+                : null;
   const finds = useMemo(() => (finderOpen && region ? homesByArea(region, planOf(region)) : []), [finderOpen, region]);
   const openFinder = () => {
     setWelcomeShut(true);
@@ -315,59 +389,65 @@ export function useWorldLife({
 
   const overlay = region ? (
     <>
-      <div className="pointer-events-none absolute inset-x-0 top-12 z-10 flex flex-wrap justify-center gap-2 px-3 sm:top-16">
-        {signedIn && loaded && !homeUnit && (
-          <button
-            onClick={() => (life ? openFinder() : setWelcomeShut(false))}
-            className="pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-gold px-3.5 text-sm font-semibold text-ink shadow-lg"
-            aria-label="Find a home"
-          >
-            <Search className="size-4" />
-            Find a home
-          </button>
-        )}
-        <MapSearch region={region} mine={assets?.units ?? []} onPick={(h: SearchHit) => fly(h.x, h.z)} />
-        {signedIn && homeUnit && (
-          <button onClick={goHome} className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold" aria-label="Go home">
-            <House className="size-4" />
-            <span className="max-sm:hidden">Home</span>
-          </button>
-        )}
-        {signedIn && homeUnit && (
-          <button onClick={() => setWorkOpen(true)} className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold" aria-label="Work">
-            <Briefcase className="size-4" />
-            <span className="max-sm:hidden">Work</span>
-          </button>
-        )}
-        {signedIn && homeUnit && worked && (
-          <button onClick={() => setServicesOpen(true)} className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold" aria-label="Services">
-            <Handshake className="size-4" />
-            <span className="max-sm:hidden">Services</span>
-          </button>
-        )}
-        {signedIn && homeUnit && worked && (
-          <button onClick={() => setLifeOpen(true)} className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold" aria-label="Life">
-            <HeartPulse className={`size-4 ${status && status.health < 30 ? "text-hit" : ""}`} />
-            <span className="max-sm:hidden">Life</span>
-          </button>
-        )}
-        {signedIn && homeUnit && (
-          <button
-            onClick={() => {
-              setAssetsOpen(true);
-              void api.lifeStatus().then(setStatus);
-            }}
-            className="glass pointer-events-auto relative flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold"
-            aria-label="Money"
-          >
-            <Wallet className="size-4" />
-            <span className="max-sm:hidden">Money</span>
-            {(status?.powerCut || board?.received.some((o) => o.status === "open")) && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-hit" />}
-          </button>
+      {/* Your life, under the place's name card: Home, Work, Money, Life, Services (first only Find a home). */}
+      <div className="pointer-events-none absolute left-2.5 top-14 z-10 flex max-w-[calc(100vw-4.5rem)] flex-col items-start gap-2 sm:left-4 sm:top-16 sm:max-w-md">
+        <div className="flex flex-wrap gap-1.5">
+          {signedIn && loaded && !homeUnit && (
+            <button
+              onClick={() => (life ? openFinder() : setWelcomeShut(false))}
+              className={`pointer-events-auto relative flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-gold px-3.5 text-sm font-semibold text-ink shadow-lg ${step === "home" ? GLOW : ""}`}
+            >
+              <Search className="size-4" />
+              Find a home
+              {step === "home" && <Ripple />}
+            </button>
+          )}
+          {signedIn && homeUnit && (
+            <>
+              <LifeButton icon={House} label="Home" onClick={goHome} />
+              <LifeButton icon={Briefcase} label="Work" glow={step === "job"} onClick={() => setWorkOpen(true)} />
+              <LifeButton
+                icon={Wallet}
+                label="Money"
+                glow={step === "budget"}
+                dot={!!(status?.powerCut || board?.received.some((o) => o.status === "open"))}
+                onClick={() => {
+                  setAssetsOpen(true);
+                  void api.lifeStatus().then(setStatus);
+                }}
+              />
+              <LifeButton
+                icon={HeartPulse}
+                label="Life"
+                glow={step === "life"}
+                warn={!!status && status.health < 30}
+                onClick={() => {
+                  setLifeOpen(true);
+                  if (step === "life") markGuide("life");
+                }}
+              />
+              <LifeButton icon={Handshake} label="Services" onClick={() => setServicesOpen(true)} />
+            </>
+          )}
+        </div>
+        {step && GUIDE[step] && (
+          <div className="pointer-events-auto flex max-w-xs items-start gap-2 rounded-2xl bg-ink px-3 py-2 text-white shadow-lg">
+            <p className="min-w-0 flex-1 text-xs leading-snug">
+              <b className="text-gold">{GUIDE[step].n ? `Step ${GUIDE[step].n} of 4 · ` : ""}</b>
+              {GUIDE[step].text}
+            </p>
+            <button onClick={() => markGuide(step === "chat" ? "chat" : "done")} className="shrink-0 text-[11px] font-semibold text-white/70 hover:text-white">
+              {step === "chat" ? "Got it" : "Skip"}
+            </button>
+          </div>
         )}
       </div>
+      {/* Search the map: top right, under your mint and the menu. */}
+      <div className="pointer-events-none absolute right-2.5 top-14 z-10 flex justify-end sm:right-4 sm:top-16">
+        <MapSearch region={region} mine={assets?.units ?? []} onPick={(h: SearchHit) => fly(h.x, h.z)} compact />
+      </div>
       {status?.event && !moment && (
-        <div className="pointer-events-none absolute inset-x-0 top-24 z-10 flex justify-center px-3 sm:top-28">
+        <div className="pointer-events-none absolute inset-x-0 top-40 z-10 flex justify-center px-3 sm:top-32">
           <button onClick={() => setMoment(true)} className="pointer-events-auto flex items-center gap-2 rounded-full bg-gold px-4 py-2 text-sm font-semibold text-ink shadow-lg ring-4 ring-gold/30">
             <Sparkles className="size-4" /> Breakthrough {status.event.source === "job" ? "at work" : "in your hustle"}: {status.event.title}
           </button>
@@ -461,6 +541,7 @@ export function useWorldLife({
       )}
       {workOpen && jobs && (
         <WorkSheet
+          glow={step === "job"}
           status={work}
           life={status}
           day={day}
@@ -485,7 +566,7 @@ export function useWorldLife({
           onMode={(mode, perDay) =>
             setConfirm({
               title: mode === "walk" ? "Walk to work from now on?" : `Go by ${COMMUTE_LABEL[mode].toLowerCase()} from now on?`,
-              text: `${perDay ? `It costs ₥${money(perDay)} a game day, there and back, from your Travel pot.` : "It's free."} Pay so far is settled at your old fare first.${
+              text: `${perDay ? `It costs ₥${money(perDay)} a game day, there and back.` : "It's free."}${
                 work?.job && dayNet(work.job.payDay, work.skills[work.job.skill] ?? 0, perDay / 2) < 0
                   ? ` Heads up: this way you'd run at a loss, about ₥${money(-dayNet(work.job.payDay, work.skills[work.job.skill] ?? 0, perDay / 2))} every game day after tax.`
                   : ""
@@ -567,7 +648,15 @@ export function useWorldLife({
           busy={busy}
           loadMoney={api.money}
           loadTime={api.lifeTime}
-          onBudget={(b) => act(() => api.setBudget(b), () => "Budget saved. Everything you earn is shared out by it now.")}
+          onBudget={(b) =>
+            act(
+              () => api.setBudget(b),
+              () => {
+                markGuide("budget");
+                return "Budget saved. Everything you earn is shared out by it now.";
+              },
+            )
+          }
           onMove={(from, to, amount) => act(() => api.movePot(from, to, amount), () => `Moved ₥${money(amount)}.`)}
           onClose={() => setAssetsOpen(false)}
           onCollect={() => act(() => api.collectRent(), (r) => `+₥${(r.rent ?? 0).toFixed(2)} rent (after tax), shared into your pots.`)}
@@ -576,7 +665,8 @@ export function useWorldLife({
             if (s) fly(s.x, s.z);
             setAssetsOpen(false);
           }}
-          startTab={board?.received.some((o) => o.status === "open") ? "property" : undefined}
+          startTab={step === "budget" ? "budget" : board?.received.some((o) => o.status === "open") ? "property" : undefined}
+          glowBudget={step === "budget"}
           owning={{
             board,
             onLet: (u, on) => act(() => api.letUnit(u.unit, on), () => (on ? `${u.label} is up for rent. Rent starts when a tenant moves in.` : `${u.label} isn't let any more.`)),
