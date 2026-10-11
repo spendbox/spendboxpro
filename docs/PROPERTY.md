@@ -66,15 +66,30 @@ chart.
 
 **Landmarks can't be bought.** They belong to the city (later the government, see section 8).
 
-## 3. Money coming in
+## 3. Money coming in: how real estate earns
 
-- **Owning:** each property earns its owner a share of its value, paid every minute (worked out
-  when they look, not stored minute by minute).
-- **Visits:** each time someone enters a property, the owner gets a small entry fee.
-- **Rent:** a unit can be let to another player.
+Like real estate, not every property pays out. Each unit is one of these:
+
+| Kind | Earns | Value over time |
+| --- | --- | --- |
+| **Your home** (primary residence) | Nothing, but you pay no rent | Grows with the land (and the area's demand); the building ages unless kept up |
+| **Rental home** (a room, flat, house let out) | Rent each game month (every 2½ real days), only while a tenant is in | As above |
+| **Commercial** (a shop, office, plaza, warehouse) | Rent each game day, higher than homes, from businesses (players or NPCs) | As above; empty more often when the street is quiet |
+| **Land** (an empty plot) | Nothing | Grows with demand; build on it to make it earn |
+
+- **Tenants:** each area has a share of NPC tenants looking (more in busy areas). A unit put up
+  for rent fills sooner if the rent is fair and the area is popular, and can sit empty if
+  not. Players can rent too.
+- **Rent levels** follow real ones: homes earn about 5–7% of their value a year in rent,
+  commercial about 8–10% (a game year is a real month).
+- **Entry fees:** each time someone enters a property, the owner gets a small fee.
 - **Selling:** at the asking price, or by accepting an offer.
 - **Jobs:** they already exist (interviews, shifts, pay); school and courses unlock better ones.
-- **Ads (later):** a share of the real ad revenue in each area. See section 7.
+- **Ads (later):** a share of the real ad revenue in each area. See section 8.
+
+**Transport costs** are part of living somewhere: every trip (walk free; okada, keke, danfo, BRT,
+train, ferry, taxi, plane) costs by distance and mode, so living far from where you work or
+play costs you every day. That's one reason central places are worth more.
 
 ## 4. Taxes and treasuries
 
