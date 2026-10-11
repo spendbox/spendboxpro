@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Briefcase, Flag, Handshake, HeartPulse, House, MapPin, Sparkles, Wallet, X } from "@/components/icons";
-import { makePlan, spiralIndex, tileAt, type CityPlan } from "@/lib/city/layout";
+import { Briefcase, Flag, Handshake, HeartPulse, House, MapPin, Search, Sparkles, Wallet, X } from "@/components/icons";
+import { addressOf, makePlan, spiralIndex, tileAt, type CityPlan } from "@/lib/city/layout";
 import { BUILDING_LABEL } from "@/lib/world/buildings";
 import type { RegionMap } from "@/lib/world/compile";
 import { regionMap } from "@/lib/world";
 import { ownedSpot } from "@/lib/world/owned";
-import type { PropertyInfo } from "@/lib/world/property";
+import { propertyInfo, type PropertyInfo } from "@/lib/world/property";
+import { homesByArea, type HomeFind } from "@/lib/world/homes";
 import type { BuildingOwner, InterviewStart, LifeStatus, Neighbour, PaySettled, PropertyApi, PropertyResult, WorkStatus } from "@/lib/world/property-api";
 import { COMMUTE_LABEL, dayNet, fareMint, needsInterview, payDay, tripKmBetween, type Commute } from "@/lib/world/work";
 import { dayOf, EXERCISE } from "@/lib/world/day";
@@ -19,6 +20,7 @@ import { MoneySheet } from "./money-sheet";
 import { HomeCard } from "./home-card";
 import { JobsHere, type JobsContext } from "./jobs-here";
 import { MapSearch, type SearchHit } from "./map-search";
+import { HomeFinder } from "./home-finder";
 import { StartLife } from "./start-life";
 import { useLife } from "./use-life";
 import { WorkSheet } from "./work-sheet";
@@ -74,6 +76,7 @@ export function useWorldLife({
   const [flyTo, setFlyTo] = useState<{ tile: number; at: number } | null>(null);
   const [assetsOpen, setAssetsOpen] = useState(false);
   const [welcomeShut, setWelcomeShut] = useState(false);
+  const [finderOpen, setFinderOpen] = useState(false);
   const [work, setWork] = useState<WorkStatus | null>(null);
   const [workOpen, setWorkOpen] = useState(false);
   const [place, setPlace] = useState<Workplace | null>(null);
@@ -180,7 +183,23 @@ export function useWorldLife({
   const homeUnit = life?.home_unit ?? null;
   const letting = useMemo(() => new Set((assets?.units ?? []).filter((u) => u.let).map((u) => u.unit)), [assets]);
   const coins = assets?.coins ?? 0;
-  const showWelcome = signedIn && loaded && !homeUnit && !welcomeShut && !property && !place;
+  const showWelcome = signedIn && loaded && !homeUnit && !welcomeShut && !property && !place && !finderOpen;
+  // Buttons come in as you need them: first only a home search; Work and Money once you have a
+  // home; Life and Services once you've worked.
+  const worked = !!work?.job || Object.values(work?.skills ?? {}).some((d) => d > 0);
+  const finds = useMemo(() => (finderOpen && region ? homesByArea(region, planOf(region)) : []), [finderOpen, region]);
+  const openFinder = () => {
+    setWelcomeShut(true);
+    setFinderOpen(true);
+  };
+  const pickHome = (h: HomeFind) => {
+    if (!region) return;
+    setFinderOpen(false);
+    fly(h.x, h.z);
+    const plan = planOf(region);
+    const t = tileAt(plan, spiralIndex(h.x, h.z));
+    if (t.building) onProperty(propertyInfo(t.building, h.x, h.z, addressOf(plan, t), region));
+  };
   const plan = useMemo(() => (workOpen && region ? planOf(region) : null), [workOpen, region]);
 
   const jobs: JobsContext | undefined =
@@ -250,7 +269,17 @@ export function useWorldLife({
 
   const overlay = region ? (
     <>
-      <div className="pointer-events-none absolute inset-x-0 top-12 z-10 flex justify-center gap-2 px-3 sm:top-16">
+      <div className="pointer-events-none absolute inset-x-0 top-12 z-10 flex flex-wrap justify-center gap-2 px-3 sm:top-16">
+        {signedIn && loaded && !homeUnit && (
+          <button
+            onClick={() => (life ? openFinder() : setWelcomeShut(false))}
+            className="pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-gold px-3.5 text-sm font-semibold text-ink shadow-lg"
+            aria-label="Find a home"
+          >
+            <Search className="size-4" />
+            Find a home
+          </button>
+        )}
         <MapSearch region={region} mine={assets?.units ?? []} onPick={(h: SearchHit) => fly(h.x, h.z)} />
         {signedIn && homeUnit && (
           <button onClick={goHome} className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold" aria-label="Go home">
@@ -258,25 +287,25 @@ export function useWorldLife({
             <span className="max-sm:hidden">Home</span>
           </button>
         )}
-        {signedIn && life && (
+        {signedIn && homeUnit && (
           <button onClick={() => setWorkOpen(true)} className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold" aria-label="Work">
             <Briefcase className="size-4" />
             <span className="max-sm:hidden">Work</span>
           </button>
         )}
-        {signedIn && life && (
+        {signedIn && homeUnit && worked && (
           <button onClick={() => setServicesOpen(true)} className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold" aria-label="Services">
             <Handshake className="size-4" />
             <span className="max-sm:hidden">Services</span>
           </button>
         )}
-        {signedIn && life && (
+        {signedIn && homeUnit && worked && (
           <button onClick={() => setLifeOpen(true)} className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold" aria-label="Life">
             <HeartPulse className={`size-4 ${status && status.health < 30 ? "text-hit" : ""}`} />
             <span className="max-sm:hidden">Life</span>
           </button>
         )}
-        {signedIn && (
+        {signedIn && homeUnit && (
           <button
             onClick={() => {
               setAssetsOpen(true);
@@ -317,7 +346,15 @@ export function useWorldLife({
           busy={busy}
           granted={life?.granted ?? 0}
           pretend={pretend}
-          onStart={() => act(() => api.startLife(region.region.id), () => null)}
+          onStart={() =>
+            act(
+              () => api.startLife(region.region.id),
+              () => {
+                openFinder();
+                return null;
+              },
+            )
+          }
           onPack={async (id) => {
             setBusy(true);
             const r = await api.startPack(id, region.region.id);
@@ -326,9 +363,14 @@ export function useWorldLife({
             if (r.url) return void window.location.assign(r.url);
             setMessage({ text: "Your pack is in. Now find your first home!", good: true });
             await refresh();
+            openFinder();
           }}
           onClose={() => setWelcomeShut(true)}
+          onFind={openFinder}
         />
+      )}
+      {finderOpen && region && (
+        <HomeFinder areas={finds} coins={coins} prices={region.region.prices} onPick={pickHome} onClose={() => setFinderOpen(false)} />
       )}
       {homeOpen && homeSpot && <HomeCard label={homeLabel} area={region.areaAt(homeSpot.x, homeSpot.z)} neighbours={neighbours} onClose={() => setHomeOpen(false)} />}
       {place && (
@@ -502,7 +544,7 @@ export function useWorldLife({
           onClose={() => setReport(null)}
         />
       )}
-      {signedIn && (
+      {signedIn && homeUnit && (
         <button
           onClick={() => {
             const c = centerRef.current?.();

@@ -1,0 +1,90 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { House, Search } from "@/components/icons";
+import { HOME_KIND_LABEL, type AreaHomes, type HomeFind, type HomeKind } from "@/lib/world/homes";
+import type { Prices } from "@/lib/world/region";
+import { mintLocal } from "@/lib/world/value";
+import { Sheet } from "../sheet";
+
+const KINDS: (HomeKind | "all")[] = ["all", "room", "flat", "house"];
+
+/** Quick search for a home: what your money buys, area by area. Tap one to fly there and see it. */
+export function HomeFinder({
+  areas,
+  coins,
+  prices,
+  onPick,
+  onClose,
+}: {
+  areas: AreaHomes[];
+  coins: number;
+  prices: Prices;
+  onPick: (find: HomeFind) => void;
+  onClose: () => void;
+}) {
+  const [kind, setKind] = useState<HomeKind | "all">("all");
+  const [q, setQ] = useState("");
+  const [all, setAll] = useState(false);
+  const rows = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    return areas
+      .filter((a) => !t || a.area.toLowerCase().includes(t))
+      .map((a) => ({ ...a, homes: a.homes.filter((h) => (kind === "all" || h.kind === kind) && (all || h.mint <= coins)) }))
+      .filter((a) => a.homes.length > 0);
+  }, [areas, q, kind, all, coins]);
+  return (
+    <Sheet onClose={onClose} title="Find a home">
+      <p className="text-sm text-muted">
+        You have <b className="text-ink">₥{coins.toLocaleString("en-GB")}</b> ({mintLocal(coins, prices)}). Tap a home to see it.
+      </p>
+      <label className="mt-3 flex h-10 items-center gap-2 rounded-full bg-ink/5 px-3 text-sm">
+        <Search className="size-4 shrink-0 text-muted" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Area: Yaba, Surulere…" className="min-w-0 flex-1 bg-transparent outline-none" aria-label="Search areas" />
+      </label>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {KINDS.map((k) => (
+          <button
+            key={k}
+            onClick={() => setKind(k)}
+            className={`h-8 rounded-full px-3 text-xs font-semibold ${kind === k ? "bg-ink text-white" : "bg-ink/5"}`}
+          >
+            {k === "all" ? "All" : `${HOME_KIND_LABEL[k]}s`}
+          </button>
+        ))}
+        <button onClick={() => setAll(!all)} className={`h-8 rounded-full px-3 text-xs font-semibold ${all ? "bg-ink/5" : "bg-me/15 text-me"}`}>
+          {all ? "Showing all prices" : "Only what I can afford"}
+        </button>
+      </div>
+      <ul className="mt-3 divide-y divide-ink/5 rounded-2xl ring-1 ring-ink/5">
+        {rows.slice(0, 60).map((a) => (
+          <li key={a.area} className="px-3 py-2.5">
+            <p className="text-sm font-semibold">{a.area}</p>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {a.homes.map((h) => {
+                const ok = h.mint <= coins;
+                return (
+                  <button
+                    key={h.kind}
+                    onClick={() => onPick(h)}
+                    className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ring-1 ${ok ? "bg-me/10 ring-me/30" : "bg-ink/[0.03] text-muted ring-ink/10"}`}
+                  >
+                    <House className="size-3.5" />
+                    <span className="font-semibold">{HOME_KIND_LABEL[h.kind]}</span>
+                    <span className="tabular-nums">₥{h.mint.toLocaleString("en-GB")}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </li>
+        ))}
+        {rows.length === 0 && (
+          <li className="px-3 py-6 text-center text-sm text-muted">
+            {all ? "No area by that name." : "Nothing in your budget here. Tap “Only what I can afford” to see every price."}
+          </li>
+        )}
+      </ul>
+      <p className="mt-2 text-[11px] text-muted">Cheapest first. Prices are the cheapest of each kind near the middle of each area.</p>
+    </Sheet>
+  );
+}
