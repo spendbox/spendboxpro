@@ -1,19 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Briefcase, House, MapPin, Wallet, X } from "@/components/icons";
+import { Briefcase, HeartPulse, House, MapPin, Wallet, X } from "@/components/icons";
 import { makePlan, spiralIndex, type CityPlan } from "@/lib/city/layout";
 import { BUILDING_LABEL } from "@/lib/world/buildings";
 import type { RegionMap } from "@/lib/world/compile";
 import { regionMap } from "@/lib/world";
 import { ownedSpot } from "@/lib/world/owned";
 import type { PropertyInfo } from "@/lib/world/property";
-import type { BuildingOwner, Neighbour, PaySettled, PropertyApi, PropertyResult, WorkStatus } from "@/lib/world/property-api";
+import type { BuildingOwner, LifeStatus, Neighbour, PaySettled, PropertyApi, PropertyResult, WorkStatus } from "@/lib/world/property-api";
 import { COMMUTE_LABEL } from "@/lib/world/work";
 import type { Workplace } from "@/lib/world/workplace";
 import { PropertyCard } from "../property-card";
 import { Sheet } from "../sheet";
-import { AssetsSheet } from "./assets-sheet";
+import { LifeSheet } from "./life-sheet";
+import { MoneySheet } from "./money-sheet";
 import { HomeCard } from "./home-card";
 import { JobsHere, type JobsContext } from "./jobs-here";
 import { MapSearch, type SearchHit } from "./map-search";
@@ -56,11 +57,21 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
   const [place, setPlace] = useState<Workplace | null>(null);
   const [homeOpen, setHomeOpen] = useState(false);
   const [neighbours, setNeighbours] = useState<Neighbour[] | null>(null);
+  const [status, setStatus] = useState<LifeStatus | null>(null);
+  const [lifeOpen, setLifeOpen] = useState(false);
 
   useEffect(() => {
     if (!signedIn || !regionId) return;
-    const t = setTimeout(() => void api.workStatus().then(setWork), 0);
-    return () => clearTimeout(t);
+    const t = setTimeout(() => {
+      void api.workStatus().then(setWork);
+      void api.lifeStatus().then(setStatus);
+    }, 0);
+    // Bills, health and school move on with time: look again now and then.
+    const every = setInterval(() => void api.lifeStatus().then(setStatus), 120_000);
+    return () => {
+      clearTimeout(t);
+      clearInterval(every);
+    };
   }, [api, signedIn, regionId]);
 
   useEffect(() => {
@@ -90,7 +101,9 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
       if (text) setMessage({ text, good: true });
     }
     await refresh();
-    setWork(await api.workStatus());
+    const [w, st] = await Promise.all([api.workStatus(), api.lifeStatus()]);
+    setWork(w);
+    setStatus(st);
     if (property) void api.buildingOwners(property.id).then(setOwners);
     onChanged?.();
   }
@@ -147,14 +160,24 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
             <span className="max-sm:hidden">Work</span>
           </button>
         )}
+        {signedIn && life && (
+          <button onClick={() => setLifeOpen(true)} className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold" aria-label="Life">
+            <HeartPulse className={`size-4 ${status && status.health < 30 ? "text-hit" : ""}`} />
+            <span className="max-sm:hidden">Life</span>
+          </button>
+        )}
         {signedIn && (
           <button
-            onClick={() => setAssetsOpen(true)}
-            className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold"
-            aria-label="Your assets"
+            onClick={() => {
+              setAssetsOpen(true);
+              void api.lifeStatus().then(setStatus);
+            }}
+            className="glass pointer-events-auto relative flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold"
+            aria-label="Money"
           >
             <Wallet className="size-4" />
-            <span className="max-sm:hidden">Assets</span>
+            <span className="max-sm:hidden">Money</span>
+            {status?.powerCut && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-hit" />}
           </button>
         )}
       </div>
@@ -245,18 +268,34 @@ export function useWorldLife({ api, regionId, signedIn, budget, onChanged }: { a
         />
       )}
       {assetsOpen && assets && (
-        <AssetsSheet
+        <MoneySheet
+          status={status}
           assets={assets}
           owned={owned}
           region={region}
           busy={busy}
+          loadMoney={api.money}
+          onBudget={(b) => act(() => api.setBudget(b), () => "Budget saved. Everything you earn is shared out by it now.")}
+          onMove={(from, to, amount) => act(() => api.movePot(from, to, amount), () => `Moved ₥${money(amount)}.`)}
           onClose={() => setAssetsOpen(false)}
-          onCollect={() => act(() => api.collectRent(), (r) => `+₥${(r.rent ?? 0).toFixed(2)} rent (after tax).`)}
+          onCollect={() => act(() => api.collectRent(), (r) => `+₥${(r.rent ?? 0).toFixed(2)} rent (after tax), shared into your pots.`)}
           onShow={(u) => {
             const s = ownedSpot(u.building);
             if (s) fly(s.x, s.z);
             setAssetsOpen(false);
           }}
+        />
+      )}
+      {lifeOpen && (
+        <LifeSheet
+          status={status}
+          skills={work?.skills ?? {}}
+          prices={region.region.prices}
+          busy={busy}
+          onCare={(id) => act(() => api.care(id), () => "Feeling better already.")}
+          onEnrol={(id) => act(() => api.enrol(id), () => "Enrolled. It finishes by itself; you can keep working meanwhile.")}
+          onProcedure={(id) => act(() => api.procedure(id), () => "Booked and done. Take it easy while you recover.")}
+          onClose={() => setLifeOpen(false)}
         />
       )}
     </>

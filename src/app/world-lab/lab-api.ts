@@ -1,14 +1,44 @@
 // A pretend wallet for the world lab (no sign-in, nothing saved to the server): the same rules as
-// the real thing (game-db/038_property.sql), kept in this browser, so buying, letting and naming
-// can be tried out on the real map.
+// the real thing (game-db/038_property.sql to 040_living.sql), kept in this browser, so buying,
+// letting, working, bills, health, school and budgeting can all be tried out on the real map.
+// Nobody else plays here, so the state always pays essential workers and neighbours are pretend.
 
 import { makePlan, spiralIndex, tileAt, type CityPlan } from "@/lib/city/layout";
 import { regionMap } from "@/lib/world";
 import type { Building } from "@/lib/world/buildings";
 import { cleanPropertyName, ownedSpot } from "@/lib/world/owned";
-import { BUY_TAX, rentPerDay, type AssetUnit, type Neighbour, type PropertyApi, type PropertyResult, type WorkStatus } from "@/lib/world/property-api";
+import {
+  AUTO_CARE,
+  AUTO_CARE_BELOW,
+  billsFor,
+  careById,
+  cleanBudget,
+  courseById,
+  CUT_OFF_DAYS,
+  DEFAULT_BUDGET,
+  HEALTH_DECAY,
+  HEALTH_START,
+  payFactor,
+  POTS,
+  priceOf,
+  procedureById,
+  splitIncome,
+  type Budget,
+  type Pot,
+} from "@/lib/world/living";
+import {
+  BUY_TAX,
+  rentPerDay,
+  type AssetUnit,
+  type LifeStatus,
+  type MoneyFlow,
+  type Neighbour,
+  type PropertyApi,
+  type PropertyResult,
+  type WorkStatus,
+} from "@/lib/world/property-api";
 import { toMint, valueOf } from "@/lib/world/value";
-import { fareMint, fareOrBus, payDay, settle, skillLevel, tripKmBetween, type Commute } from "@/lib/world/work";
+import { fareMint, fareOrBus, GAME_DAY_HOURS, HOLD_DAYS, INCOME_TAX, payDay, SKILL_BONUS, skillLevel, tripKmBetween, type Commute } from "@/lib/world/work";
 import { workplaceById } from "@/lib/world/workplace";
 import { FIRST_NAMES, SURNAMES } from "@/lib/npc/names";
 import { hash } from "@/lib/city/noise";
@@ -19,9 +49,26 @@ type Saved = {
   home: string | null;
   units: (AssetUnit & { collectedAt: number })[];
   buildings: Record<string, { building: Building; name: string | null }>;
-  job?: (NonNullable<WorkStatus["job"]> & { paid: number }) | null;
+  job?: (NonNullable<WorkStatus["job"]> & { paid: number; state?: boolean }) | null;
   skills?: Record<string, number>;
+  life?: {
+    budget: Budget;
+    pots: Record<Pot, number>;
+    health: number;
+    healthAt: number;
+    billsAt: number;
+    powerOwed: number;
+    wasteOwed: number;
+    powerDay: number;
+    recoveringUntil: number | null;
+    courses: { course: string; title: string; cert: string | null; skill: string; grants: number; startedAt: number; endsAt: number; done: boolean }[];
+    procedures: { procedure: string; title: string; at: number }[];
+    log: { kind: string; amount: number; at: number }[];
+  };
 };
+
+const r2 = (n: number) => Math.round(n * 100) / 100;
+const DAY_MS = GAME_DAY_HOURS * 3_600_000;
 
 /** Pretend neighbours for the lab (nobody else plays here): the same few for the same home. */
 function pretendNeighbours(home: string, building: Building | undefined): Neighbour[] {
@@ -71,22 +118,117 @@ export function makeLabApi(budget: number): PropertyApi {
     return p;
   };
   const fail = (error: string): PropertyResult => ({ ok: false, error });
-  /** Pay the job up to now, as the database would. */
-  const settleNow = () => {
-    const j = s.job;
-    if (!j || !s.home) return { days: 0, gross: 0, tax: 0, fares: 0, net: 0 };
-    const map = regionMap(j.place.split(":")[0])!;
-    const fare = fareOrBus(j.mode as Commute, tripKmBetween(s.home, j.place) ?? 0, map.region.prices);
-    const now = Date.now();
-    const pay = settle({ payDay: j.payDay, paidUntil: j.paid }, now, s.skills?.[j.skill] ?? 0, fare);
-    pay.fares = Math.min(pay.fares, Math.round((s.coins + pay.gross - pay.tax) * 100) / 100);
-    pay.net = Math.round((pay.gross - pay.tax - pay.fares) * 100) / 100;
-    s.coins = Math.round((s.coins + pay.net) * 100) / 100;
-    s.skills = { ...s.skills, [j.skill]: (s.skills?.[j.skill] ?? 0) + pay.days };
-    j.paid = now;
-    return pay;
+  const L = () =>
+    (s.life ??= {
+      budget: { ...DEFAULT_BUDGET },
+      pots: { essentials: 0, travel: 0, savings: 0, fun: 0 },
+      health: HEALTH_START,
+      healthAt: Date.now(),
+      billsAt: Date.now(),
+      powerOwed: 0,
+      wasteOwed: 0,
+      powerDay: 0,
+      recoveringUntil: null,
+      courses: [],
+      procedures: [],
+      log: [],
+    });
+  const prices = () => regionMap(s.region ?? "lagos")!.region.prices;
+  const log = (kind: string, amount: number) => {
+    if (!amount) return;
+    const l = L();
+    l.log.push({ kind, amount: r2(amount), at: Date.now() });
+    const old = Date.now() - 8 * 86_400_000;
+    l.log = l.log.filter((x) => x.at > old);
   };
+  /** Pay from these pots in order, then the wallet; returns what was paid. */
+  const spend = (pots: Pot[], amount: number) => {
+    let left = r2(amount);
+    const l = L();
+    for (const p of pots) {
+      const take = Math.min(l.pots[p], left);
+      l.pots[p] = r2(l.pots[p] - take);
+      left = r2(left - take);
+    }
+    const take = Math.min(Math.max(0, s.coins), left);
+    s.coins = r2(s.coins - take);
+    left = r2(left - take);
+    return r2(amount - left);
+  };
+  const canSpend = (pots: Pot[]) => pots.reduce((t, p) => t + L().pots[p], 0) + Math.max(0, s.coins);
+  const income = (amount: number) => {
+    if (amount <= 0) return;
+    const parts = splitIncome(amount, L().budget);
+    for (const p of POTS) L().pots[p] = r2(L().pots[p] + parts[p]);
+    s.coins = r2(s.coins + parts.wallet);
+  };
+  const bills = () => {
+    const home = s.units.find((u) => u.unit === s.home);
+    if (!home) return null;
+    const b = billsFor(home.area, prices());
+    return { power: b.power, waste: b.waste };
+  };
+  /** Bring life up to now, as the database's life_tick does. */
+  const tick = () => {
+    const l = L();
+    const now = Date.now();
+    let health = Math.max(0, l.health - (HEALTH_DECAY * (now - l.healthAt)) / DAY_MS);
+    const b = bills();
+    if (b) {
+      const days = Math.min(30, Math.max(0, (now - l.billsAt) / DAY_MS));
+      const power = r2(l.powerOwed + b.power * days);
+      const waste = r2(l.wasteOwed + b.waste * days);
+      const pp = spend(["essentials"], power);
+      log("power_bill", -pp);
+      const pw = spend(["essentials"], waste);
+      log("waste_bill", -pw);
+      l.powerOwed = r2(power - pp);
+      l.wasteOwed = r2(waste - pw);
+      l.powerDay = b.power;
+      l.billsAt = now;
+    }
+    const fee = priceOf(AUTO_CARE.fee, prices(), false).total;
+    if (health < AUTO_CARE_BELOW && canSpend(["essentials"]) >= fee) {
+      spend(["essentials"], fee);
+      log("health_care", -fee);
+      health = Math.min(100, health + AUTO_CARE.health);
+    }
+    l.health = r2(health);
+    l.healthAt = now;
+    for (const c of l.courses) {
+      if (c.done || c.endsAt > now) continue;
+      c.done = true;
+      s.skills = { ...s.skills, [c.skill]: (s.skills?.[c.skill] ?? 0) + c.grants };
+    }
+  };
+  /** Pay the job up to now, as the database's life_work_collect does. */
+  const settleNow = () => {
+    tick();
+    const j = s.job;
+    const none = { days: 0, gross: 0, tax: 0, fares: 0, net: 0 };
+    if (!j || !s.home) return none;
+    const l = L();
+    const now = Date.now();
+    const days = Math.max(0, Math.min(HOLD_DAYS, (now - j.paid) / DAY_MS));
+    const start = now - days * DAY_MS;
+    const rec = l.recoveringUntil && l.recoveringUntil > start ? Math.min(days, (Math.min(now, l.recoveringUntil) - start) / DAY_MS) : 0;
+    const factor = payFactor(l.health);
+    const work = factor === 0 ? 0 : Math.max(0, days - rec);
+    const gross = r2(j.payDay * (1 + skillLevel(s.skills?.[j.skill] ?? 0) * SKILL_BONUS) * work * factor);
+    const tax = r2(gross * INCOME_TAX);
+    log(j.state ? "public_pay" : "work_pay", gross);
+    log("income_tax", -tax);
+    income(gross - tax);
+    const fare = fareOrBus(j.mode as Commute, tripKmBetween(s.home, j.place) ?? 0, prices());
+    const fares = spend(["travel"], r2(2 * fare * work));
+    log("commute", -fares);
+    s.skills = { ...s.skills, [j.skill]: (s.skills?.[j.skill] ?? 0) + work };
+    j.paid = now;
+    return { days: r2(days), gross, tax, fares, net: r2(gross - tax - fares) };
+  };
+  /** Rent let units have earned (in full, its 10% tax apart), shared into pots. */
   const accrue = () => {
+    tick();
     const now = Date.now();
     let rent = 0;
     for (const u of s.units) {
@@ -94,7 +236,12 @@ export function makeLabApi(budget: number): PropertyApi {
       rent += (u.rentDay * (now - u.collectedAt)) / 86_400_000;
       u.collectedAt = now;
     }
-    return Math.round(rent * 0.9 * 100) / 100;
+    rent = r2(rent);
+    const tax = r2(rent * 0.1);
+    log("rent", rent);
+    log("rent_tax", -tax);
+    income(rent - tax);
+    return r2(rent - tax);
   };
   return {
     async startLife(region) {
@@ -117,8 +264,16 @@ export function makeLabApi(budget: number): PropertyApi {
       if (!s.home && unit.use !== "home") return fail("Buy a home first: somewhere to live comes before anything else.");
       const price = Math.max(1, toMint(valueOf(building, map.landPriceAt(spot.x, spot.z), map.region.prices).units[Number(k)], map.region.prices));
       const cost = Math.round(price * (1 + BUY_TAX) * 100) / 100;
+      tick();
+      if (s.coins < cost && L().pots.savings > 0) {
+        const move = Math.min(L().pots.savings, r2(cost - s.coins));
+        L().pots.savings = r2(L().pots.savings - move);
+        s.coins = r2(s.coins + move);
+      }
       if (s.coins < cost) return fail(`You need ₥${cost.toLocaleString("en-GB")} for that (with the 3% tax).`);
       s.coins = Math.round((s.coins - cost) * 100) / 100;
+      log("property_buy", -price);
+      log("property_tax", -(cost - price));
       s.buildings[bid] ??= { building, name: null };
       s.units.push({ unit: unitId, building: bid, label: unit.label, use: unit.use, area: unit.area, price, rentDay: rentPerDay(price, unit.use), let: false, boughtAt: new Date().toISOString(), name: null, waiting: 0, collectedAt: Date.now() });
       const home = !s.home;
@@ -140,14 +295,12 @@ export function makeLabApi(budget: number): PropertyApi {
       if (!u) return fail("That isn't yours.");
       if (on && s.home === unitId) return fail("That's your home. Move somewhere else first to let it out.");
       const rent = accrue();
-      s.coins += rent;
       u.let = on;
       save();
       return { ok: true, coins: s.coins, rent };
     },
     async collectRent() {
       const rent = accrue();
-      s.coins = Math.round((s.coins + rent) * 100) / 100;
       save();
       return { ok: true, coins: s.coins, rent };
     },
@@ -174,7 +327,8 @@ export function makeLabApi(budget: number): PropertyApi {
     },
     async workStatus() {
       if (!s.job) return { job: null, skills: s.skills ?? {} };
-      const { paid, ...job } = s.job;
+      const { paid, state, ...job } = s.job;
+      void state;
       return { job: { ...job, paidUntil: new Date(paid).toISOString() }, skills: s.skills ?? {} };
     },
     async takeJob(placeId, jobId, mode) {
@@ -187,10 +341,11 @@ export function makeLabApi(budget: number): PropertyApi {
       if (!map || !place || !job) return fail("That job isn't there any more.");
       if (s.job?.place === placeId && s.job.job === jobId) return fail("That's already your job.");
       if (skillLevel(s.skills?.[job.skill] ?? 0) < job.level) return fail(`This job needs level ${job.level} in its skill. Start lower and work up.`);
+      if (job.cert && !L().courses.some((c) => c.done && c.cert === job.cert)) return fail("This job needs a certificate. Take the course under Life → School.");
       const km = tripKmBetween(s.home, placeId) ?? 0;
       if (fareMint(mode, km, map.region.prices) === null) return fail("It's too far to get there that way.");
       const pay = settleNow();
-      s.job = { place: placeId, placeName: place.name, job: job.job, title: job.title, skill: job.skill, payDay: payDay(job, map.region.prices), mode, hiredAt: new Date().toISOString(), paidUntil: "", paid: Date.now() };
+      s.job = { place: placeId, placeName: place.name, job: job.job, title: job.title, skill: job.skill, payDay: payDay(job, map.region.prices), mode, hiredAt: new Date().toISOString(), paidUntil: "", paid: Date.now(), state: !!job.state };
       save();
       return { ok: true, coins: s.coins, pay };
     },
@@ -217,6 +372,95 @@ export function makeLabApi(budget: number): PropertyApi {
     async neighbours() {
       if (!s.home) return [];
       return pretendNeighbours(s.home, s.buildings[s.home.split("/")[0]]?.building);
+    },
+    async lifeStatus(): Promise<LifeStatus | null> {
+      if (!s.region) return null;
+      tick();
+      save();
+      const l = L();
+      return {
+        health: l.health,
+        powerOwed: l.powerOwed,
+        wasteOwed: l.wasteOwed,
+        powerCut: l.powerDay > 0 && l.powerOwed > l.powerDay * CUT_OFF_DAYS,
+        budget: l.budget,
+        recoveringUntil: l.recoveringUntil ? new Date(l.recoveringUntil).toISOString() : null,
+        wallet: s.coins,
+        pots: { ...l.pots },
+        courses: l.courses.map((c) => ({ course: c.course, title: c.title, cert: c.cert, startedAt: new Date(c.startedAt).toISOString(), endsAt: new Date(c.endsAt).toISOString(), done: c.done })),
+        procedures: l.procedures.map((p) => ({ procedure: p.procedure, title: p.title, at: new Date(p.at).toISOString() })),
+        payOwed: 0,
+        bills: bills(),
+      };
+    },
+    async setBudget(b) {
+      if (!s.region) return fail("Start your life first.");
+      L().budget = cleanBudget(b);
+      save();
+      return { ok: true };
+    },
+    async movePot(from, to, amount) {
+      const v = r2(amount);
+      if (from === to || v <= 0) return fail("You can't move money like that.");
+      const have = from === "wallet" ? s.coins : L().pots[from];
+      if (have < v) return fail(`You need ₥${v} for that.`);
+      if (from === "wallet") s.coins = r2(s.coins - v);
+      else L().pots[from] = r2(L().pots[from] - v);
+      if (to === "wallet") s.coins = r2(s.coins + v);
+      else L().pots[to] = r2(L().pots[to] + v);
+      save();
+      return { ok: true };
+    },
+    async care(id) {
+      const c = careById(id);
+      if (!c || !s.region) return fail("That isn't on offer.");
+      tick();
+      const price = priceOf(c.fee, prices(), !c.public);
+      if (canSpend(["essentials"]) < price.total) return fail(`You need ₥${price.total} for that.`);
+      spend(["essentials"], price.total);
+      log("health_care", -price.base);
+      log("vat", -price.tax);
+      L().health = c.health >= 100 ? 100 : Math.min(100, L().health + c.health);
+      save();
+      return { ok: true, coins: s.coins };
+    },
+    async procedure(id) {
+      const p = procedureById(id);
+      if (!p || !s.region) return fail("That isn't on offer.");
+      if (!s.home) return fail("Buy a home first.");
+      tick();
+      const l = L();
+      if (l.recoveringUntil && l.recoveringUntil > Date.now()) return fail("You're still recovering from the last one.");
+      const price = priceOf(p.fee, prices(), true);
+      if (canSpend(["fun", "savings"]) < price.total) return fail(`You need ₥${price.total.toLocaleString("en-GB")} for that.`);
+      spend(["fun", "savings"], price.total);
+      log("procedure", -price.base);
+      log("vat", -price.tax);
+      l.procedures.unshift({ procedure: p.id, title: p.title, at: Date.now() });
+      if (p.recovery > 0) l.recoveringUntil = Date.now() + p.recovery * DAY_MS;
+      save();
+      return { ok: true, coins: s.coins };
+    },
+    async enrol(id) {
+      const c = courseById(id);
+      if (!c || !s.region) return fail("That isn't on offer.");
+      tick();
+      const l = L();
+      if (l.courses.some((x) => !x.done)) return fail("Finish the course you're on first.");
+      if (l.courses.some((x) => x.course === c.id)) return fail("You've done that course already.");
+      const fee = priceOf(c.fee, prices(), false).total;
+      if (canSpend(["savings"]) < fee) return fail(`You need ₥${fee.toLocaleString("en-GB")} for that.`);
+      spend(["savings"], fee);
+      log("school_fees", -fee);
+      l.courses.push({ course: c.id, title: c.title, cert: c.cert ?? null, skill: c.skill, grants: c.grants, startedAt: Date.now(), endsAt: Date.now() + c.days * DAY_MS, done: false });
+      save();
+      return { ok: true, coins: s.coins };
+    },
+    async money(hours): Promise<MoneyFlow> {
+      const since = Date.now() - hours * 3_600_000;
+      const out: MoneyFlow = {};
+      for (const x of L().log) if (x.at >= since) out[x.kind] = r2((out[x.kind] ?? 0) + x.amount);
+      return out;
     },
     async buildingOwners(buildingId) {
       return s.units.filter((u) => u.building === buildingId).map((u) => ({ unit: u.unit, name: "You", mine: true }));

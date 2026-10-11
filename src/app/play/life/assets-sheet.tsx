@@ -6,7 +6,6 @@ import { BUILDING_LABEL } from "@/lib/world/buildings";
 import { ownedSpot, type OwnedProperty } from "@/lib/world/owned";
 import type { AssetsData, AssetUnit } from "@/lib/world/property-api";
 import { mintLocal, toMint, valueOf } from "@/lib/world/value";
-import { Sheet } from "../sheet";
 
 const fmt = (n: number) => Math.round(n).toLocaleString("en-GB");
 const ICON: Record<AssetUnit["use"], typeof House> = { home: House, shop: Store, office: Building2, industry: Building2, land: Trees };
@@ -20,15 +19,14 @@ export function unitValueNow(u: AssetUnit, owned: OwnedProperty[], region: Regio
   return toMint(valueOf(b, region.landPriceAt(spot.x, spot.z), region.region.prices).units[k] ?? 0, region.region.prices);
 }
 
-/** Your assets: everything you own, what it's worth now against what you paid, what it earns. */
-export function AssetsSheet({
+/** Your property: everything you own, what it's worth now against what you paid, what it earns. */
+export function AssetsBody({
   assets,
   owned,
   region,
   busy,
   onCollect,
   onShow,
-  onClose,
 }: {
   assets: AssetsData;
   owned: OwnedProperty[];
@@ -36,7 +34,6 @@ export function AssetsSheet({
   busy: boolean;
   onCollect: () => void;
   onShow: (u: AssetUnit) => void;
-  onClose: () => void;
 }) {
   const rows = assets.units.map((u) => ({ u, now: unitValueNow(u, owned, region) }));
   const worth = rows.reduce((t, r) => t + r.now, 0);
@@ -46,10 +43,9 @@ export function AssetsSheet({
   const home = assets.life?.home_unit ?? null;
   const prices = region.region.prices;
   return (
-    <Sheet onClose={onClose} wide>
-      <h2 className="font-display text-xl font-extrabold">Your assets</h2>
-      <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-        <Stat label="Cash" value={`₥${fmt(assets.coins)}`} local={mintLocal(assets.coins, prices)} />
+    <div>
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <Stat label="Units" value={String(rows.length)} local={rows.length ? `${rows.filter((r) => r.u.let).length} let out` : "none yet"} />
         <Stat label="Property" value={`₥${fmt(worth)}`} local={mintLocal(worth, prices)} note={paid ? `${worth >= paid ? "+" : ""}${(((worth - paid) / paid) * 100).toFixed(1)}%` : undefined} />
         <Stat label="Rent a day" value={`₥${fmt(daily)}`} local={mintLocal(daily, prices)} />
       </div>
@@ -102,7 +98,7 @@ export function AssetsSheet({
           })}
         </ul>
       )}
-    </Sheet>
+    </div>
   );
 }
 

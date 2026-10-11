@@ -3,6 +3,7 @@
 // the screens don't care which.
 
 import type { Building, UnitUse } from "./buildings.ts";
+import type { Budget, Pot } from "./living.ts";
 import type { Commute } from "./work.ts";
 
 /** What collecting pay came to (mint): game days, pay, income tax, fares, what's left. */
@@ -45,6 +46,27 @@ export type WorkStatus = {
 /** Someone whose home is near yours. Which unit is only shown when it's in your building. */
 export type Neighbour = { name: string; sameBuilding: boolean; unit: string | null; building: string; tiles: number };
 
+/** Your life now (health, bills, budget and pots, school, treats), brought up to now. */
+export type LifeStatus = {
+  health: number;
+  powerOwed: number;
+  wasteOwed: number;
+  powerCut: boolean;
+  budget: Budget;
+  recoveringUntil: string | null;
+  wallet: number;
+  pots: Partial<Record<Pot, number>>;
+  courses: { course: string; title: string; cert: string | null; startedAt: string; endsAt: string; done: boolean }[];
+  procedures: { procedure: string; title: string; at: string }[];
+  /** Pay the state owes you (essential services, when the treasury was short). */
+  payOwed: number;
+  /** Your home's bills a game day (mint). */
+  bills: { power: number; waste: number } | null;
+};
+
+/** Money in (positive) and out (negative) by kind over a time (see groupOf in ./living). */
+export type MoneyFlow = Record<string, number>;
+
 export type PropertyApi = {
   startLife: (region: string) => Promise<PropertyResult>;
   buyUnit: (unitId: string) => Promise<PropertyResult>;
@@ -61,6 +83,13 @@ export type PropertyApi = {
   collectPay: () => Promise<PropertyResult>;
   quitJob: () => Promise<PropertyResult>;
   neighbours: () => Promise<Neighbour[]>;
+  lifeStatus: () => Promise<LifeStatus | null>;
+  setBudget: (budget: Budget) => Promise<PropertyResult>;
+  movePot: (from: Pot | "wallet", to: Pot | "wallet", amount: number) => Promise<PropertyResult>;
+  care: (id: string) => Promise<PropertyResult>;
+  procedure: (id: string) => Promise<PropertyResult>;
+  enrol: (id: string) => Promise<PropertyResult>;
+  money: (hours: number) => Promise<MoneyFlow>;
 };
 
 /** The purchase tax (the database's property_buy_tax), for showing what a unit really costs. */

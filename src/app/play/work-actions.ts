@@ -6,7 +6,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { regionMap } from "@/lib/world";
 import type { Neighbour, PaySettled, PropertyResult, WorkStatus } from "@/lib/world/property-api";
 import { COMMUTES, fareMint, fareOrBus, payDay, tripKmBetween, type Commute } from "@/lib/world/work";
+import { CERT_LABEL } from "@/lib/world/living";
 import { workplaceById } from "@/lib/world/workplace";
+import { tickLife } from "./life-tick";
 
 // Working on the real map (docs/WORK.md; the database part is game-db/039_work.sql). What a job
 // pays and what the trip to it costs are always worked out here, from the map, never taken from
@@ -48,8 +50,9 @@ function settled(d: Record<string, unknown> | null | undefined): PaySettled {
   return { days: n(d?.days), gross: n(d?.gross), tax: n(d?.tax), fares: n(d?.fares), net: n(d?.net) };
 }
 
-/** Your home and job as the database has them, and what one trip between them costs now. */
+/** Your home and job as the database has them, and what one trip between them costs now (your life brought up to now first). */
 async function whereYouAre(userId: string) {
+  await tickLife(userId);
   const db = createAdminClient();
   const [{ data: life }, { data: job }] = await Promise.all([
     db.from("lives").select("region, home_unit").eq("user_id", userId).maybeSingle(),
@@ -84,6 +87,10 @@ export async function takeJob(placeId: string, jobId: string, mode: Commute): Pr
   if (!now.home) return say(now.region ? "home_first" : "no_life");
   const km = tripKmBetween(now.home, placeId);
   if (km === null || fareMint(mode, km, plan.region.region.prices) === null) return { ok: false, error: "It's too far to get there that way." };
+  if (job.cert) {
+    const { data: done } = await createAdminClient().from("life_courses").select("course").eq("user_id", userId).eq("cert", job.cert).not("done_at", "is", null).limit(1);
+    if (!done?.length) return { ok: false, error: `This job needs a ${CERT_LABEL[job.cert]}. Take the course under Life → School.` };
+  }
   const { data, error } = await createAdminClient().rpc("life_work_take", {
     p_user: userId,
     p_region: region,
@@ -98,6 +105,7 @@ export async function takeJob(placeId: string, jobId: string, mode: Commute): Pr
     p_old_fare: now.fare,
   });
   if (error) return say(error.message);
+  if (job.state) await createAdminClient().rpc("life_work_set_state", { p_user: userId, p_state: true });
   const d = (data ?? {}) as Record<string, unknown>;
   return { ok: true, coins: n(d.coins), pay: settled(d.collected as Record<string, unknown>) };
 }
