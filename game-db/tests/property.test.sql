@@ -45,7 +45,7 @@ begin
   perform pg_temp.check(not (v->>'started')::boolean and (v->>'coins')::numeric = 5000, 'only once');
 
   perform pg_temp.fails('a home first', 'home_first', format('select property_buy(%L, %L, %L, %L, 100, %L, 30, %L, 1)', a, 'lagos', 'lagos:9,9/0', shop, 'shop', 'Shop 1'));
-  perform pg_temp.fails('not more than you have (price + tax)', 'not_enough', format('select property_buy(%L, %L, %L, %L, 4900, %L, 90, %L, 10)', a, 'lagos', 'lagos:5,7/0', snap, 'home', 'Flat'));
+  perform pg_temp.fails('not more than you have (price + tax)', 'not_enough', format('select property_buy(%L, %L, %L, %L, 59000, %L, 90, %L, 10)', a, 'lagos', 'lagos:5,7/0', snap, 'home', 'Flat'));
   perform pg_temp.fails('a unit id must say where it is', 'bad_unit', format('select property_buy(%L, %L, %L, %L, 100, %L, 90, %L, 1)', a, 'lagos', 'lagos:5,7', snap, 'home', 'Flat'));
 
   v := property_buy(a, 'lagos', 'lagos:5,7/0', snap, 3000, 'home', 95, 'Flat, ground floor, left', 10);

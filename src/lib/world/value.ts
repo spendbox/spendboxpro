@@ -54,8 +54,14 @@ export function shortMint(mint: number) {
 /** A short local price: "₦148m" / "₦4.5m" / "₦1.2bn". */
 export function shortLocal(amount: number, prices: Prices) {
   const s = prices.symbol;
-  if (amount >= 1e9) return `${s}${(amount / 1e9).toFixed(amount >= 1e10 ? 0 : 1)}bn`;
-  if (amount >= 1e6) return `${s}${(amount / 1e6).toFixed(amount >= 1e8 ? 0 : 1)}m`;
+  const one = (n: number, whole: boolean) => (whole ? n.toFixed(0) : n.toFixed(1).replace(/\.0$/, ""));
+  if (amount >= 1e9) return `${s}${one(amount / 1e9, amount >= 1e10)}bn`;
+  if (amount >= 1e6) return `${s}${one(amount / 1e6, amount >= 1e8)}m`;
   if (amount >= 1e3) return `${s}${Math.round(amount / 1e3)}k`;
   return `${s}${Math.round(amount)}`;
+}
+
+/** Mint in the region's own money, short: ₥60,000 in Lagos is "₦90m". */
+export function mintLocal(mint: number, prices: Prices) {
+  return shortLocal(mint * prices.perMint, prices);
 }

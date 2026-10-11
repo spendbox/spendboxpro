@@ -225,7 +225,8 @@ Still to do in step 1:
 2. Plazas and estates across several joined lots, as one big building.
 
 **Step 2: the start of a life** — done (owner: run `game-db/038_property.sql`):
-- Starting budget ₥5,000 (`start_grant`), once; you must buy a home before anything else, and
+- Starting budget ₥5,000 (about ₦7.5m; `start_grant`), once, with the naira equivalent shown beside
+  your cash and property; you must buy a home before anything else, and
   the first home you buy is your home.
 - Every unit's price is worked out on the server from the map (never trusted from the phone);
   the database checks it's not owned and you can afford it with the 3% tax, records the sale and

@@ -30,6 +30,8 @@ insert into public.game_settings (key, value, note) values
   ('treasury_state_share', 0.7,  'Share of each tax that goes to the state (the rest to the country)'),
   ('property_price_max',   100000000, 'Dearest unit the game will sell (a sanity check)')
 on conflict (key) do update set note = excluded.note;
+-- For a while lives started with 60,000; move that back to 5,000 (a value set by hand stays).
+update public.game_settings set value = 5000 where key = 'start_grant' and value = 60000;
 
 -- ============================================================ lives, buildings, units
 create table if not exists public.lives (
