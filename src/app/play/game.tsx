@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { addressOf, makePlan, tileAt } from "@/lib/city/layout";
 import { houseTileOf } from "@/lib/city/houses";
 import { homeLabel } from "@/lib/houses";
@@ -92,6 +92,8 @@ import { Logo, LogoMark } from "@/components/logo";
 import { playSfx, setSfxEnabled, useCitySound } from "./sound";
 import { StatsCard } from "./stats-card";
 import { avatar3dEnabled } from "./avatar3d-flag";
+import { worldPreview } from "./world-flag";
+import { REGIONS } from "@/lib/world";
 
 // The 3D city only runs in the browser.
 const CityView = dynamic(() => import("./city-view").then((m) => m.CityView), {
@@ -124,6 +126,9 @@ const GhostCardSheet = dynamic(() => import("./ghost-duel/ghost-card").then((m) 
 const DuelScreen = dynamic(() => import("./ghost-duel/duel-screen").then((m) => m.DuelScreen));
 
 const NO_GHOSTS: CityGhost[] = [];
+const NO_EVENTS: CityEvent[] = [];
+const noSubscribe = () => () => {};
+const noWorld = () => null;
 
 /** The map shows no searched spots, sweeps or hiding spots any more: only the ghosts' lights. */
 const NO_MARKERS: CityMarkers = { searchedEmpty: [], searchedHit: [], caught: [], left: [], me: null, decoy: null, sweeps: [], pending: null, recent: [], locked: [] };
@@ -347,6 +352,10 @@ export function Game({
   // The new 3D studio, while it is being tried out (see avatar3d-flag.ts).
   // (Read in the browser only; it matters only once the studio is opened, so the server's false is harmless.)
   const [studio3d] = useState(() => typeof window !== "undefined" && avatar3dEnabled());
+  // A real place (Lagos...) shown instead of the hourly town, while it is being built (see
+  // world-flag.ts). The server never has it, so the browser takes it up after the first paint.
+  const worldId = useSyncExternalStore(noSubscribe, worldPreview, noWorld);
+  const worldRegion = worldId ? REGIONS[worldId] : null;
   // The phone: the camera (a picture of the town, or a selfie) and the phone itself (gallery).
   const [camera, setCamera] = useState<"photo" | "selfie" | null>(null);
   const [phone, setPhone] = useState<"home" | "photos" | null>(null);
@@ -1305,17 +1314,18 @@ export function Game({
 
   return (
     <main className="fixed inset-0 overflow-hidden bg-bg">
-      {round && (
+      {(round || worldId) && (
         <Safe name="City view" fallback={<div className="absolute inset-0 grid place-items-center text-muted">Rebuilding the city…</div>}>
           <CityView
-            seed={round.id}
-            tileCount={round.tileCount}
-            markers={markers}
-            events={cityEvents}
+            seed={round?.id ?? 0}
+            tileCount={round?.tileCount ?? 0}
+            region={worldId}
+            markers={worldId ? NO_MARKERS : markers}
+            events={worldId ? NO_EVENTS : cityEvents}
             onBillboard={onBillboardTap}
             ads={ads}
             onAdViews={onAdViews}
-            ghosts={ghostsShown ? ghostLights : NO_GHOSTS}
+            ghosts={ghostsShown && !worldId ? ghostLights : NO_GHOSTS}
             paused={signInShown}
             onGhost={openGhost}
             flyTo={flyTo}
@@ -1339,8 +1349,8 @@ export function Game({
               setNpcTap({ id, at: Date.now() });
             }}
             onBalloons={setBalloonCount}
-            revealed={phase !== "join"}
-            caughtFaces={state.caughtFaces}
+            revealed={phase !== "join" || !!worldId}
+            caughtFaces={worldId ? undefined : state.caughtFaces}
             worldEvents={state.worldEvents}
             focusEvent={focusEvent}
             onEventTap={onEventTap}
@@ -1352,9 +1362,20 @@ export function Game({
             coinBalloon={state.balloon?.slot ?? null}
             onBalloon={popBalloon}
             progress={huntProgress}
-            nightFirst={round.id % 2 === 1}
+            nightFirst={(round?.id ?? 0) % 2 === 1}
           />
         </Safe>
+      )}
+      {worldRegion && (worldRegion.water || worldRegion.roads.length > 0) && (
+        // The map data's credit (its licence asks for it): small and out of the way.
+        <a
+          href="https://www.openstreetmap.org/copyright"
+          target="_blank"
+          rel="noreferrer"
+          className="pointer-events-auto absolute bottom-1 left-1.5 z-10 text-[9px] leading-none text-black/40 hover:text-black/70"
+        >
+          © OpenStreetMap
+        </a>
       )}
 
       {/* Inside a place: mint spraying, the jukebox, duel invites and room news. */}

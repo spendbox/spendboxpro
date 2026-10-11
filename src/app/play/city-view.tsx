@@ -26,6 +26,9 @@ import {
   type Tile,
 } from "@/lib/city/layout";
 import { ABBREV } from "@/lib/city/places";
+import { regionMap } from "@/lib/world";
+import type { RegionMap } from "@/lib/world/compile";
+import { toTile } from "@/lib/world/geo";
 import { daylight, weatherAt } from "@/lib/city/sky";
 import { npcsFor, type Npc } from "@/lib/npcs";
 import { createBirds } from "./city/birds";
@@ -183,6 +186,11 @@ export type CaughtFace = { tile: number; name: string | null; avatar: unknown };
 type Props = {
   seed: number;
   tileCount: number;
+  /**
+   * A real place to show (src/lib/world, e.g. "lagos") instead of the round's made-up town: its
+   * own seed and size are used, and only the part round the camera is drawn.
+   */
+  region?: string | null;
   markers: CityMarkers;
   events: CityEvent[];
   /** A billboard was tapped: which board, and the ad it was showing (null = "advertise here"). */
@@ -1207,6 +1215,7 @@ const easeOutBack = (t: number) => {
 export function CityView({
   seed,
   tileCount,
+  region = null,
   markers,
   events,
   onBillboard,
@@ -1254,7 +1263,7 @@ export function CityView({
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const api = useRef<{
-    build: (seed: number, count: number) => void;
+    build: (seed: number, count: number, region?: string | null) => void;
     setMarkers: (m: CityMarkers) => void;
     playEvents: (e: CityEvent[]) => void;
     setBalloon: (slot: number | null) => void;
@@ -1383,6 +1392,8 @@ export function CityView({
     let tileIndex = new Map<string, number>();
     let currentPlan: CityPlan | null = null;
     let currentSeed = -1;
+    /** The real place being shown (src/lib/world), or null for a made-up town. */
+    let regionNow: RegionMap | null = null;
     /** How many tiles the town has (the last build). */
     let builtCount = 0;
     /**
@@ -2356,12 +2367,26 @@ export function CityView({
       }
       currentSeed = newSeed;
       builtCount = count;
-      const plan = makePlan(newSeed);
+      // A real place keeps its plan while the camera moves round it (the plan remembers the
+      // blocks it has already worked out, so the next part of town is quicker to draw).
+      const plan = regionNow && sameCity && currentPlan?.region === regionNow ? currentPlan : makePlan(newSeed, regionNow);
       placeHouses(plan, count, homesNow);
       // The spiral ring the last tile is on: the town is (2 × ring + 1) tiles across.
       const ring = Math.ceil((Math.sqrt(count) - 1) / 2);
       const moved = Boolean(centre) && sameCity;
-      if (ring <= WINDOW) {
+      if (regionNow) {
+        // A real place: always only the part round the camera, never past its edges.
+        const b = regionNow.bounds;
+        const fit = (v: number, lo: number, hi: number) => (hi - lo < 2 * WINDOW ? Math.round((lo + hi) / 2) : Math.max(lo + WINDOW, Math.min(hi - WINDOW, v)));
+        const start = toTile(regionNow.frame, regionNow.region.start);
+        const c = centre ?? (sameCity && win ? win : { cx: Math.round(start.x), cz: Math.round(start.z) });
+        win = { cx: fit(c.cx, b.x0, b.x1), cz: fit(c.cz, b.z0, b.z1) };
+        tiles = [];
+        for (let x = win.cx - WINDOW; x <= win.cx + WINDOW; x++) {
+          for (let z = win.cz - WINDOW; z <= win.cz + WINDOW; z++) if (regionNow.inside(x, z)) tiles.push(tileAt(plan, spiralIndex(x, z)));
+        }
+        tiles.sort((a, b2) => a.i - b2.i);
+      } else if (ring <= WINDOW) {
         win = null;
         tiles = Array.from({ length: count }, (_, i) => tileAt(plan, i));
       } else {
@@ -5966,7 +5991,15 @@ export function CityView({
       zoomAnim = requestAnimationFrame(step);
     }
 
-    api.current = { build, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, zoom };
+    /** Build a round's town, or a real place (its own seed and size, whatever the round's are). */
+    function buildFor(seedV: number, count: number, regionId?: string | null) {
+      regionNow = regionMap(regionId);
+      if (!regionNow) return build(seedV, count);
+      const b = regionNow.bounds;
+      const ring = Math.max(-b.x0, b.x1, -b.z0, b.z1);
+      build(regionNow.region.seed, (2 * ring + 1) ** 2);
+    }
+    api.current = { build: buildFor, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, zoom };
 
     return () => {
       alive = false;
@@ -6033,8 +6066,8 @@ export function CityView({
   }, []);
 
   useEffect(() => {
-    api.current?.build(seed, tileCount);
-  }, [seed, tileCount]);
+    api.current?.build(seed, tileCount, region);
+  }, [seed, tileCount, region]);
 
   useEffect(() => {
     api.current?.setHouses(houses);
