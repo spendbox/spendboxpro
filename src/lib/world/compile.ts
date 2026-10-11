@@ -27,6 +27,8 @@ export type RegionMap = {
   spotAt: (x: number, z: number) => Spot | undefined;
   /** Downtowns and quieter districts, for how built-up each spot is (as CityPlan centres). */
   centres: { x: number; z: number; radius: number; weight: number }[];
+  /** What a spot is called: its neighbourhood or town, its district, or the water. */
+  areaAt: (x: number, z: number) => string;
   /** Landmarks left out because they overlapped one placed before them (worth a correction). */
   skipped: { id: string; reason: string }[];
 };
@@ -169,6 +171,46 @@ export function compileRegion(region: Region): RegionMap {
     return { x: Math.round(c.x), z: Math.round(c.z), radius: (d.radiusKm * 10) / 1.5, weight: d.density };
   });
 
+  // ---- names for spots: the map's neighbourhoods and towns (in 20-tile cells for quick search),
+  // the districts when none is near, the water's own name out on the water
+  const REACH: Record<string, number> = { neighbourhood: 12, village: 15, suburb: 25, town: 40 };
+  const AREA_CELL = 20;
+  const areaCells = new Map<number, { name: string; x: number; z: number; reach: number }[]>();
+  for (const a of region.areas) {
+    const c = at({ lat: a.at[0], lon: a.at[1] });
+    const key = tileKey(Math.floor(c.x / AREA_CELL), Math.floor(c.z / AREA_CELL));
+    const list = areaCells.get(key) ?? [];
+    list.push({ name: a.name, x: c.x, z: c.z, reach: REACH[a.kind] ?? 15 });
+    areaCells.set(key, list);
+  }
+  const districtAt = region.districts.map((d) => ({ name: d.name, ...at(d.at), r: d.radiusKm * 10 }));
+  const areaAt = (x: number, z: number) => {
+    const w = waterAt(x, z);
+    if (w === 1 && region.waterNames?.lagoon) return region.waterNames.lagoon;
+    if (w === 2 && region.waterNames?.sea) return region.waterNames.sea;
+    let best: string | null = null;
+    let bestScore = Infinity;
+    const cx = Math.floor(x / AREA_CELL);
+    const cz = Math.floor(z / AREA_CELL);
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dz = -2; dz <= 2; dz++) {
+        for (const a of areaCells.get(tileKey(cx + dx, cz + dz)) ?? []) {
+          // Nearest, counting bigger places as nearer (a town's name reaches further).
+          const score = Math.hypot(x - a.x, z - a.z) / a.reach;
+          if (score < 1 && score < bestScore) [best, bestScore] = [a.name, score];
+        }
+      }
+    }
+    if (best) return best;
+    let near = region.name;
+    let nearScore = Infinity;
+    for (const d of districtAt) {
+      const score = Math.hypot(x - d.x, z - d.z) / d.r;
+      if (score < nearScore) [near, nearScore] = [d.name, score];
+    }
+    return near;
+  };
+
   const map: RegionMap = {
     region,
     frame,
@@ -179,6 +221,7 @@ export function compileRegion(region: Region): RegionMap {
     landmarks,
     spotAt: (x, z) => spots.get(tileKey(x, z)),
     centres,
+    areaAt,
     skipped,
   };
   cache.set(region, map);

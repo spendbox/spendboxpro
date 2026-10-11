@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { CityView, type CityEvent, type CityMarkers } from "@/app/play/city-view";
+import { PlacePill } from "@/app/play/place-pill";
 import { defaultAvatar } from "@/lib/avatar";
 import { REGIONS } from "@/lib/world";
 
@@ -10,6 +12,7 @@ const AVATAR = defaultAvatar("world-lab");
 const noop = () => {};
 
 export function WorldLab({ region }: { region: string }) {
+  const [area, setArea] = useState<string | null>(null);
   const r = REGIONS[region];
   if (!r) return <main className="grid min-h-dvh place-items-center text-muted">No region called “{region}”.</main>;
   const credit = r.water || r.roads.length > 0;
@@ -29,10 +32,10 @@ export function WorldLab({ region }: { region: string }) {
         onBalloon={noop}
         progress={0.25}
         nightFirst={false}
+        onArea={setArea}
       />
-      <div className="pointer-events-none absolute left-3 top-3 rounded-lg bg-white/80 px-2.5 py-1.5 text-xs text-black/70">
-        {r.name}
-        {!r.water && " · map data not baked yet (all land)"}
+      <div className="pointer-events-none absolute left-2.5 top-2.5 sm:left-4 sm:top-4">
+        <PlacePill area={area} state={r.state} />
       </div>
       {credit && (
         <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="absolute bottom-1 left-1.5 text-[9px] leading-none text-black/40">

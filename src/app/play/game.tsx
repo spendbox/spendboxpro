@@ -93,6 +93,7 @@ import { playSfx, setSfxEnabled, useCitySound } from "./sound";
 import { StatsCard } from "./stats-card";
 import { avatar3dEnabled } from "./avatar3d-flag";
 import { worldPreview } from "./world-flag";
+import { PlacePill } from "./place-pill";
 import { REGIONS } from "@/lib/world";
 
 // The 3D city only runs in the browser.
@@ -356,6 +357,8 @@ export function Game({
   // world-flag.ts). The server never has it, so the browser takes it up after the first paint.
   const worldId = useSyncExternalStore(noSubscribe, worldPreview, noWorld);
   const worldRegion = worldId ? REGIONS[worldId] : null;
+  /** On a real place: the area pointed at, or in the middle of the view. */
+  const [worldArea, setWorldArea] = useState<string | null>(null);
   // The phone: the camera (a picture of the town, or a selfie) and the phone itself (gallery).
   const [camera, setCamera] = useState<"photo" | "selfie" | null>(null);
   const [phone, setPhone] = useState<"home" | "photos" | null>(null);
@@ -1320,6 +1323,7 @@ export function Game({
             seed={round?.id ?? 0}
             tileCount={round?.tileCount ?? 0}
             region={worldId}
+            onArea={setWorldArea}
             markers={worldId ? NO_MARKERS : markers}
             events={worldId ? NO_EVENTS : cityEvents}
             onBillboard={onBillboardTap}
@@ -1396,7 +1400,9 @@ export function Game({
 
       {/* Top: round clock and numbers (stacked, so big numbers fit) */}
       <div className={cn("pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-2.5 sm:p-4", camera && "hidden")}>
-        {round ? (
+        {worldRegion ? (
+          <PlacePill area={worldArea} state={worldRegion.state} />
+        ) : round ? (
           <StatsCard
             city={plan.city.name}
             phase={phase}

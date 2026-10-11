@@ -56,6 +56,9 @@ export type Landmark = {
   osm?: string;
 };
 
+/** A named neighbourhood, town or village: its middle, and how big a place it is. */
+export type Area = { name: string; at: [number, number]; kind: "town" | "suburb" | "neighbourhood" | "village" };
+
 /** A part of town with its own character: busy high-rises, quiet leafy streets, crowded markets. */
 export type District = {
   id: string;
@@ -83,6 +86,10 @@ export type Region = {
   id: string;
   /** The name players see ("Lagos"). */
   name: string;
+  /** The state or province it's in, as players see it ("Lagos State"). */
+  state: string;
+  /** What its open water is called, for naming the spot under the pointer. */
+  waterNames?: { lagoon?: string; sea?: string };
   /** The street-name style (see FLAVORS in src/lib/city/places.ts). */
   flavor: string;
   /** Fixed for good, so the same city is built every time. */
@@ -104,6 +111,8 @@ export type Region = {
    * smoothly. Their tiles are roads too.
    */
   roads: Road[];
+  /** Named neighbourhoods and towns from the map (Obalende, Ojuelegba...), for naming spots. */
+  areas: Area[];
   /** Where the map data has each landmark (by id), found by the bake: used for landmarks marked approx. */
   found: Record<string, LatLon>;
   corrections: Correction[];

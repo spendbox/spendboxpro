@@ -390,6 +390,28 @@ for (const l of wantedMarks) {
   else missed.push(l.name);
 }
 
+// ---------------------------------------------------------------- named neighbourhoods and towns
+const KIND = { city: "town", town: "town", suburb: "suburb", quarter: "neighbourhood", neighbourhood: "neighbourhood", city_block: "neighbourhood", village: "village", hamlet: "village" };
+let areas = [];
+if (!fromFiles) {
+  try {
+    const els = overpass(
+      "areas",
+      `[out:json][timeout:120];
+node["place"~"^(${Object.keys(KIND).join("|")})$"]["name"](${bbox});
+out;`,
+    ).elements;
+    const seen = new Set();
+    areas = els
+      .filter((e) => e.tags.name !== region.name && region.box.south <= e.lat && e.lat <= region.box.north && region.box.west <= e.lon && e.lon <= region.box.east)
+      .map((e) => ({ name: e.tags["name:en"] ?? e.tags.name, at: [+e.lat.toFixed(5), +e.lon.toFixed(5)], kind: KIND[e.tags.place] }))
+      .filter((a) => !seen.has(a.name) && seen.add(a.name))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } catch {
+    console.log("  couldn't get the neighbourhood names (the districts are used instead)");
+  }
+}
+
 // ---------------------------------------------------------------- write it out
 function rows(cells, letter, none) {
   const out = [];
@@ -419,7 +441,7 @@ writeFileSync(
 // ${new Date().toISOString().slice(0, 10)}. Don't edit by hand: put fixes in corrections.ts.
 
 import type { LatLon } from "../../geo.ts";
-import type { BakedGrid, Road } from "../../region.ts";
+import type { Area, BakedGrid, Road } from "../../region.ts";
 
 export const WATER: BakedGrid | null = ${grid2(waterRows)};
 
@@ -428,6 +450,10 @@ export const ROAD_GRID: BakedGrid | null = ${grid2(roadRows)};
 export const ROUTES: Road[] = ${JSON.stringify(routes, null, 1)};
 
 export const FOUND: Record<string, LatLon> = ${JSON.stringify(found, null, 1)};
+
+export const AREAS: Area[] = [
+${areas.map((a) => `  ${JSON.stringify(a)},`).join("\n")}
+];
 `,
 );
 
@@ -435,6 +461,7 @@ export const FOUND: Record<string, LatLon> = ${JSON.stringify(found, null, 1)};
 const count = (arr, f) => arr.reduce((n, v) => n + (f(v) ? 1 : 0), 0);
 console.log(`Wrote ${file}`);
 console.log(`${W} × ${H} tiles: ${count(waterTiles, (v) => v === 1)} lagoon, ${count(waterTiles, (v) => v === 2)} sea, ${count(roadTiles, (v) => v > 0)} road (${kept} of ${roads.length} roads kept), ${routes.length} long bridges`);
+console.log(`${areas.length} named neighbourhoods and towns`);
 console.log(`Landmarks found in the map: ${Object.keys(found).length} of ${wantedMarks.length}${missed.length ? `; not found: ${missed.join(", ")}` : ""}`);
 const step = 3;
 for (let z = 0; z < H; z += step * 2) {

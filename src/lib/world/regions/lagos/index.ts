@@ -2,7 +2,7 @@
 // Later more of Lagos State (Badagry, Ikorodu, Epe) joins on by making the box bigger.
 
 import type { Region } from "../../region.ts";
-import { FOUND, ROAD_GRID, ROUTES, WATER } from "./baked.ts";
+import { AREAS, FOUND, ROAD_GRID, ROUTES, WATER } from "./baked.ts";
 import { CORRECTIONS } from "./corrections.ts";
 import { DISTRICTS } from "./districts.ts";
 import { LANDMARKS } from "./landmarks.ts";
@@ -10,6 +10,8 @@ import { LANDMARKS } from "./landmarks.ts";
 export const LAGOS: Region = {
   id: "lagos",
   name: "Lagos",
+  state: "Lagos State",
+  waterNames: { lagoon: "Lagos Lagoon", sea: "Atlantic Ocean" },
   flavor: "ng",
   seed: 6453339,
   palette: "coastal",
@@ -20,6 +22,7 @@ export const LAGOS: Region = {
   water: WATER,
   roadGrid: ROAD_GRID,
   roads: ROUTES,
+  areas: AREAS,
   found: FOUND,
   corrections: CORRECTIONS,
   bake: {

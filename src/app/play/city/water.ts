@@ -41,16 +41,26 @@ function wobble(x: number, z: number, seed: number) {
   return top + (bot - top) * sz - 0.5;
 }
 
-export function buildWater(tiles: readonly Tile[], seed: number): THREE.Group | null {
+/**
+ * `beyond`: for a real place drawn only round the camera, whether the water carries on past the
+ * edge of what's drawn (1 lagoon, 2 sea, 0 land), so that edge isn't drawn as a shore.
+ */
+export function buildWater(tiles: readonly Tile[], seed: number, beyond?: (x: number, z: number) => number): THREE.Group | null {
   const water = new Map<string, Tile>();
-  for (const t of tiles) if (isWaterTile(t)) water.set(key(t.x, t.z), t);
+  const drawn = new Set<string>();
+  for (const t of tiles) {
+    drawn.add(key(t.x, t.z));
+    if (isWaterTile(t)) water.set(key(t.x, t.z), t);
+  }
   if (!water.size) return null;
+  /** Water here, drawn or (past the edge) carrying on. */
+  const wet = (x: number, z: number) => water.has(key(x, z)) || (!!beyond && !drawn.has(key(x, z)) && beyond(x, z) > 0);
 
   // How far each water tile is from the shore (in tiles), for the colour.
   const depth = new Map<string, number>();
   let frontier: Tile[] = [];
   for (const t of water.values()) {
-    const shore = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => !water.has(key(t.x + dx, t.z + dz)));
+    const shore = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => !wet(t.x + dx, t.z + dz));
     if (shore) {
       depth.set(key(t.x, t.z), 1);
       frontier.push(t);
@@ -70,9 +80,9 @@ export function buildWater(tiles: readonly Tile[], seed: number): THREE.Group | 
     }
     frontier = next;
   }
-  const wetAt = (x: number, z: number) => (water.has(key(x, z)) ? 1 : 0);
-  const depthAt = (x: number, z: number) => (water.has(key(x, z)) ? (depth.get(key(x, z)) ?? MAX_DEPTH) : 0);
-  const seaAt = (x: number, z: number) => !!water.get(key(x, z))?.sea;
+  const wetAt = (x: number, z: number) => (wet(x, z) ? 1 : 0);
+  const depthAt = (x: number, z: number) => (water.has(key(x, z)) ? (depth.get(key(x, z)) ?? MAX_DEPTH) : wet(x, z) ? MAX_DEPTH : 0);
+  const seaAt = (x: number, z: number) => (water.has(key(x, z)) ? !!water.get(key(x, z))?.sea : !!beyond && !drawn.has(key(x, z)) && beyond(x, z) === 2);
 
   // The softened field at any point: tile centres blended (bilinear), plus a gentle wobble.
   const bilinear = (f: (x: number, z: number) => number, x: number, z: number) => {
@@ -122,7 +132,7 @@ export function buildWater(tiles: readonly Tile[], seed: number): THREE.Group | 
   for (const t of water.values()) {
     // Deep inside the water (every neighbour wet): one quad, coloured at its corners.
     let inner = true;
-    for (let dx = -1; dx <= 1 && inner; dx++) for (let dz = -1; dz <= 1 && inner; dz++) inner = water.has(key(t.x + dx, t.z + dz));
+    for (let dx = -1; dx <= 1 && inner; dx++) for (let dz = -1; dz <= 1 && inner; dz++) inner = wet(t.x + dx, t.z + dz);
     if (inner) {
       const a: [number, number] = [t.x - 0.5, t.z - 0.5];
       const b: [number, number] = [t.x + 0.5, t.z - 0.5];

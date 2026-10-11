@@ -1725,3 +1725,34 @@ function baseTile(plan: CityPlan, x: number, z: number): Tile {
   const v = Math.floor(r[1] * 3);
   return { i, x, z, kind: "house", top: v === 2 ? 1.1 : 0.95, r, v };
 }
+
+// ---------------------------------------------------------------- far away
+/**
+ * Roughly what stands on a tile, for drawing it far away as one plain block: how tall, what
+ * colour, or null for open ground (streets, water, open squares). Much quicker than lotAt (no
+ * street-shape or big-building checks), and close enough that it matches when you come nearer.
+ */
+export function roughAt(plan: CityPlan, x: number, z: number): { h: number; color: number } | null {
+  const mi = plan.megaAt.get(nkey(x, z));
+  if (mi !== undefined) {
+    const m = plan.megas[mi];
+    return { h: MEGA_TOP[m.type] ?? 1.5, color: m.type === "bigpark" ? 0x8cc97e : 0xe9e4da };
+  }
+  if (plan.region) {
+    if (plan.region.waterAt(x, z) || plan.region.roadAt(x, z)) return null;
+    if (plan.region.spotAt(x, z)) return { h: 1.2, color: 0xe9e4da };
+  } else if (inSea(plan, x, z) || inLake(plan, x, z) || inRiver(plan, x, z)) return null;
+  if (plan.xAt.has(x) || plan.zAt.has(z)) return null;
+  const s = plan.seed;
+  const r0 = hash(x, z, s);
+  const r1 = hash(x, z, s + 1);
+  const pal = plan.palette;
+  const pick = (list: number[], v: number) => list[Math.floor(v * list.length) % list.length];
+  const density = densityAt(plan, x, z);
+  const green = smoothNoise(x / 6 + 31, z / 6 - 17, s + 11) - plan.style.green;
+  if (green > 0.7 && density < 0.6) return { h: 0.35, color: pick(pal.leaves, r1) };
+  if (density > 0.56) return { h: Math.max(1.6, (1.6 + density * 5.5 * (0.5 + r1 * 0.9)) * plan.style.towers), color: pick(pal.towers, r0) };
+  if (density > 0.24) return { h: 0.9 + r1 * 1.8 + density * 1.2, color: pick(pal.offices, r0) };
+  if (r0 < 0.16) return { h: 0.45, color: pick(pal.leaves, r1) };
+  return { h: 0.7, color: pick(pal.roofs, r1) };
+}

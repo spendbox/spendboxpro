@@ -11,8 +11,11 @@ same map so you can zoom out to the whole world and fly anywhere.
 - **A region** (a city now, countries later) has its own flat map centred on the middle of its
   area, so shapes and distances in it are true. Where it sits on the world map comes from its real
   latitude and longitude (`src/lib/world/geo.ts`).
-- **Only the part round the camera is drawn** (81 × 81 tiles, about 8 × 8 km), however big the
-  region is. Nothing is stored tile by tile. Every tile is worked out from the region's data the
+- **Three rings round the camera, on a strict drawing budget** (`src/app/play/city/far-city.ts`):
+  full detail for about 1.8 km each way; one plain block per building out to about 7 km; then one
+  painted map of the whole region and the land and sea round it, out to the horizon. A frame
+  stays around 350,000 triangles however far you zoom out (it was over 2 million). Open
+  `/world-lab?stats` to see the numbers. Nothing is stored tile by tile. Every tile is worked out from the region's data the
   same way every time, so the city never changes unless its data changes.
 
 ## What a region is made of
@@ -62,8 +65,8 @@ If two landmarks overlap, the later one is left out and the tests report it.
 
 ## Still to come
 
-1. Drawing in chunks, so moving round doesn't redraw the whole 81 × 81 view (now it redraws every
-   ~1.8 km).
+1. Drawing in chunks, so moving round doesn't redraw the near ring (now about a tenth of a second
+   every ~800 m).
 2. Long bridges drawn smoothly on piers along their real curves (Third Mainland Bridge, Carter,
    Eko, Lekki–Ikoyi Link) instead of tile by tile. Rail lines (Blue and Red lines). Beaches, stilt
    villages (Makoko), and landmarks built to their real sizes and shapes.

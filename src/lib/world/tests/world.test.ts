@@ -64,6 +64,7 @@ function tiny(extra: Partial<Region> = {}): Region {
   return {
     id: "tiny",
     name: "Tiny",
+    state: "Tiny State",
     flavor: "ng",
     seed: 1,
     box: { south: -d, west: -d, north: d, east: d },
@@ -73,6 +74,7 @@ function tiny(extra: Partial<Region> = {}): Region {
     water: null,
     roadGrid: null,
     roads: [],
+    areas: [],
     found: {},
     corrections: [],
     ...extra,
@@ -141,4 +143,22 @@ test("tile bounds round outwards to whole tiles", () => {
   const b = tileBounds(frame, { south: 6.49, west: 3.39, north: 6.51, east: 3.41 });
   assert.ok(b.x0 < 0 && b.x1 > 0 && b.z0 < 0 && b.z1 > 0);
   assert.equal(b.x0, -b.x1);
+});
+
+test("spots are named by their water, nearest neighbourhood, or district", () => {
+  const map = compileRegion(
+    tiny({
+      waterNames: { lagoon: "Tiny Lagoon" },
+      water: { x0: -5, z0: -5, rows: ["W2"] },
+      areas: [{ name: "Corner", at: [-0.0036, 0.0036], kind: "neighbourhood" }],
+      districts: [{ id: "mid", name: "Middle", at: { lat: 0, lon: 0 }, radiusKm: 1, density: 0.5 }],
+    }),
+  );
+  assert.equal(map.areaAt(-5, -5), "Tiny Lagoon");
+  assert.equal(map.areaAt(4, 4), "Corner");
+  // With no neighbourhood near enough, the district's name.
+  const plain = compileRegion(tiny({ districts: [{ id: "mid", name: "Middle", at: { lat: 0, lon: 0 }, radiusKm: 1, density: 0.5 }] }));
+  assert.equal(plain.areaAt(-3, 0), "Middle");
+  const lagos = compileRegion(LAGOS);
+  assert.equal(lagos.areaAt(0, 0) !== "", true);
 });
