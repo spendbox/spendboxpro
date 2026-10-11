@@ -7,8 +7,9 @@ import { REGIONS, regionMap } from "@/lib/world";
 import type { Building } from "@/lib/world/buildings";
 import { cleanPropertyName, ownedSpot } from "@/lib/world/owned";
 import { BUY_TAX, rentPerDay, type AssetsData, type BuildingOwner, type OwnedBuildingRow, type PropertyResult } from "@/lib/world/property-api";
-import { toMint, valueOf } from "@/lib/world/value";
+import { landNow, toMint, valueOf } from "@/lib/world/value";
 import { cheapestCommute, fareMint, tripKmBetween } from "@/lib/world/work";
+import { ferryKmBetween } from "@/lib/world/trips";
 import { collectPay } from "./work-actions";
 
 // Owning property on the real map (docs/PROPERTY.md; the database part is
@@ -84,7 +85,7 @@ export async function buyUnit(unitId: string): Promise<PropertyResult> {
   if (!found || !unit) return { ok: false, error: "That property isn't there." };
   const map = regionMap(found.region)!;
   const prices = map.region.prices;
-  const value = valueOf(found.building, map.landPriceAt(found.x, found.z), prices);
+  const value = valueOf(found.building, landNow(map, found.x, found.z), prices);
   const price = Math.max(1, toMint(value.units[Number(m[2])], prices));
   const db = createAdminClient();
   // A building a real business leases isn't for sale while the lease runs.
@@ -201,7 +202,9 @@ export async function travelTo(buildingId: string): Promise<PropertyResult> {
   if (!life) return { ok: false, error: "Start your life first." };
   const from = (life.at_place as string | null) ?? (life.home_unit as string | null);
   const km = from ? tripKmBetween(from, buildingId) : null;
-  const fare = km === null ? 0 : (fareMint(cheapestCommute(km), km, regionMap(spot.region)!.region.prices) ?? 0);
+  // Over the water to an island with no bridge: a ferry, and the ride either side.
+  const ferry = from ? ferryKmBetween(from, buildingId) : 0;
+  const fare = km === null ? 0 : (fareMint(cheapestCommute(km, ferry), km, regionMap(spot.region)!.region.prices, ferry) ?? 0);
   const { data, error } = await db.rpc("life_go", { p_user: userId, p_place: buildingId, p_fare: fare });
   if (error) {
     const [code] = error.message.split(":");

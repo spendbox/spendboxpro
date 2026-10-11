@@ -16,6 +16,17 @@ export const REPORT_KINDS: { kind: ReportKind; label: string }[] = [
   { kind: "other", label: "Something else" },
 ];
 
+/** What can be wrong with a person (a player or a character). */
+export type PersonReportKind = "abuse" | "scam" | "profile" | "glitch" | "other";
+
+export const PERSON_REPORT_KINDS: { kind: PersonReportKind; label: string }[] = [
+  { kind: "abuse", label: "Rude, bullying or abusive" },
+  { kind: "scam", label: "A scam, spam or asking for money" },
+  { kind: "profile", label: "A bad name or picture" },
+  { kind: "glitch", label: "Looks or acts wrong (a glitch)" },
+  { kind: "other", label: "Something else" },
+];
+
 /** What the map shows at a tile, in a few words ("Road: Herbert Macaulay Way", "Block of flats, 12 Allen Avenue"). */
 export function whatThere(plan: CityPlan, x: number, z: number): string {
   const t = tileAt(plan, spiralIndex(x, z));

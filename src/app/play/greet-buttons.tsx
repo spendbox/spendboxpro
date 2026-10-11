@@ -5,9 +5,10 @@ import { Check, Handshake, Heart, LoaderCircle } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { questEvent } from "./activities/quest-store";
 import { sendGreeting } from "./hug-actions";
+import { ReportPersonButton } from "./report-person";
 import { playSfx } from "./sound";
 
-// Hug and Shake hands buttons, for anyone you can see (people here with you, friends, a private
+// Hug, Shake hands and Report buttons, for anyone you can see (people here with you, friends, a private
 // chat). Free, with daily limits; the other player is told and can say thank you from My gifts.
 
 export function GreetButtons({
@@ -66,6 +67,7 @@ export function GreetButtons({
     <>
       {button("hug")}
       {button("handshake")}
+      <ReportPersonButton person={person} compact={compact} onDone={onDone} />
     </>
   );
 }

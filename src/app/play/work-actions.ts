@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { regionMap } from "@/lib/world";
 import type { Neighbour, PaySettled, PropertyResult, WorkStatus } from "@/lib/world/property-api";
 import { COMMUTES, fareMint, fareOrBus, needsInterview, payDay, tripKmBetween, type Commute } from "@/lib/world/work";
+import { ferryKmBetween } from "@/lib/world/trips";
 import { CERT_LABEL } from "@/lib/world/living";
 import { workplaceById } from "@/lib/world/workplace";
 import { unseal } from "@/lib/game-seal";
@@ -61,7 +62,8 @@ async function whereYouAre(userId: string) {
   ]);
   const map = life ? regionMap(life.region as string) : null;
   const km = life?.home_unit && job ? tripKmBetween(life.home_unit as string, job.place_id as string) : null;
-  const fare = map && km !== null && job ? fareOrBus(job.mode as Commute, km, map.region.prices) : 0;
+  const ferry = life?.home_unit && job ? ferryKmBetween(life.home_unit as string, job.place_id as string) : 0;
+  const fare = map && km !== null && job ? fareOrBus(job.mode as Commute, km, map.region.prices, ferry) : 0;
   return { region: (life?.region as string) ?? null, home: (life?.home_unit as string) ?? null, job, fare };
 }
 
@@ -87,7 +89,7 @@ export async function takeJob(placeId: string, jobId: string, mode: Commute, tic
   const now = await whereYouAre(userId);
   if (!now.home) return say(now.region ? "home_first" : "no_life");
   const km = tripKmBetween(now.home, placeId);
-  if (km === null || fareMint(mode, km, plan.region.region.prices) === null) return { ok: false, error: "It's too far to get there that way." };
+  if (km === null || fareMint(mode, km, plan.region.region.prices, ferryKmBetween(now.home, placeId)) === null) return { ok: false, error: "It's too far to get there that way." };
   if (job.cert) {
     const { data: done } = await createAdminClient().from("life_courses").select("course").eq("user_id", userId).eq("cert", job.cert).not("done_at", "is", null).limit(1);
     if (!done?.length) return { ok: false, error: `This job needs a ${CERT_LABEL[job.cert]}. Take the course under Life → School.` };
@@ -127,7 +129,7 @@ export async function setCommute(mode: Commute): Promise<PropertyResult> {
   if (!now.job || !now.home || !now.region) return say("no_job");
   const km = tripKmBetween(now.home, now.job.place_id as string);
   const map = regionMap(now.region);
-  if (km === null || !map || fareMint(mode, km, map.region.prices) === null) return { ok: false, error: "It's too far to go that way." };
+  if (km === null || !map || fareMint(mode, km, map.region.prices, ferryKmBetween(now.home, now.job.place_id as string)) === null) return { ok: false, error: "It's too far to go that way." };
   if (!(await dayFits(userId, { commute: { mode, km } })).fits) return { ok: false, error: "That way takes too long to fit in your day." };
   const { data, error } = await createAdminClient().rpc("life_work_mode", { p_user: userId, p_mode: mode, p_old_fare: now.fare });
   if (error) return say(error.message);

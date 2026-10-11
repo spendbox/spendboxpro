@@ -36,7 +36,8 @@ import {
   type PropertyResult,
   type WorkStatus,
 } from "@/lib/world/property-api";
-import { toMint, valueOf } from "@/lib/world/value";
+import { landNow, toMint, valueOf } from "@/lib/world/value";
+import { ferryKmBetween } from "@/lib/world/trips";
 import { cheapestCommute, fareMint, fareOrBus, GAME_DAY_HOURS, HOLD_DAYS, INCOME_TAX, payDay, SKILL_BONUS, skillLevel, tripKmBetween, type Commute } from "@/lib/world/work";
 import { workplaceById } from "@/lib/world/workplace";
 import { FIRST_NAMES, SURNAMES } from "@/lib/npc/names";
@@ -271,7 +272,7 @@ export function makeLabApi(budget: number): PropertyApi {
     log(j.state ? "public_pay" : "work_pay", gross);
     log("income_tax", -tax);
     income(gross - tax);
-    const fare = fareOrBus(j.mode as Commute, tripKmBetween(s.home, j.place) ?? 0, prices());
+    const fare = fareOrBus(j.mode as Commute, tripKmBetween(s.home, j.place) ?? 0, prices(), ferryKmBetween(s.home, j.place));
     const fares = spend(["travel"], r2(2 * fare * work));
     log("commute", -fares);
     s.skills = { ...s.skills, [j.skill]: (s.skills?.[j.skill] ?? 0) + work };
@@ -432,7 +433,7 @@ export function makeLabApi(budget: number): PropertyApi {
       const unit = building?.units[Number(k)];
       if (!building || !unit) return fail("That property isn't there.");
       if (!s.home && unit.use !== "home") return fail("Buy a home first: somewhere to live comes before anything else.");
-      const price = Math.max(1, toMint(valueOf(building, map.landPriceAt(spot.x, spot.z), map.region.prices).units[Number(k)], map.region.prices));
+      const price = Math.max(1, toMint(valueOf(building, landNow(map, spot.x, spot.z), map.region.prices).units[Number(k)], map.region.prices));
       const cost = Math.round(price * (1 + BUY_TAX) * 100) / 100;
       tick();
       if (s.coins < cost && L().pots.savings > 0) {
@@ -527,7 +528,7 @@ export function makeLabApi(budget: number): PropertyApi {
       if (skillLevel(s.skills?.[job.skill] ?? 0) < job.level) return fail(`This job needs level ${job.level} in its skill. Start lower and work up.`);
       if (job.cert && !L().courses.some((c) => c.done && c.cert === job.cert)) return fail("This job needs a certificate. Take the course under Life → School.");
       const km = tripKmBetween(s.home, placeId) ?? 0;
-      if (fareMint(mode, km, map.region.prices) === null) return fail("It's too far to get there that way.");
+      if (fareMint(mode, km, map.region.prices, ferryKmBetween(s.home, placeId)) === null) return fail("It's too far to get there that way.");
       if (needsInterview(job) && !ticket) return fail("This job needs an interview first.");
       if (!plan({ job: true, commute: { mode, km } }).fits) return fail("That won't fit in your day. Drop your side hustle, a course or some exercise first.");
       const pay = settleNow();
@@ -538,7 +539,7 @@ export function makeLabApi(budget: number): PropertyApi {
     async setCommute(mode) {
       if (!s.job || !s.home) return fail("You don't have a job right now.");
       const map = regionMap(s.job.place.split(":")[0])!;
-      if (fareMint(mode, tripKmBetween(s.home, s.job.place) ?? 0, map.region.prices) === null) return fail("It's too far to go that way.");
+      if (fareMint(mode, tripKmBetween(s.home, s.job.place) ?? 0, map.region.prices, ferryKmBetween(s.home, s.job.place)) === null) return fail("It's too far to go that way.");
       const pay = settleNow();
       s.job.mode = mode;
       save();
@@ -875,7 +876,8 @@ export function makeLabApi(budget: number): PropertyApi {
       if (!s.region) return fail("Start your life first.");
       const from = s.at ?? s.home;
       const km = from ? tripKmBetween(from, buildingId) : null;
-      const fare = km === null ? 0 : (fareMint(cheapestCommute(km), km, prices()) ?? 0);
+      const ferry = from ? ferryKmBetween(from, buildingId) : 0;
+      const fare = km === null ? 0 : (fareMint(cheapestCommute(km, ferry), km, prices(), ferry) ?? 0);
       if (fare > 0) {
         tick();
         if (canSpend(["travel"]) < fare) return fail("You don't have enough for the fare there.");

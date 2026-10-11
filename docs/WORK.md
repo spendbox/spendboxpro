@@ -32,15 +32,18 @@ Two trips a game day, there and back, taken off your pay when you collect:
 | Way | Fare a trip | How far it goes |
 | --- | --- | --- |
 | Walk | free | up to 3 km |
-| Keke | ₦150 + ₦100 a km | up to 8 km |
-| Okada | ₦200 + ₦150 a km | up to 15 km |
-| Danfo bus | ₦200 + ₦60 a km | anywhere |
-| Taxi | ₦800 + ₦350 a km | anywhere |
+| Keke | ₦100 + ₦50 a km, at most ₦500 | up to 8 km |
+| Okada | ₦150 + ₦70 a km, at most ₦900 | up to 15 km |
+| Danfo bus | ₦100 + ₦20 a km, at most ₦600 | anywhere |
+| Taxi | ₦500 + ₦200 a km | anywhere |
+| Ferry (added on) | ₦800 + ₦150 a km on the water | to islands no road reaches |
 
 A trip is the straight distance between home and work plus 30% (roads wind). Living near your
 work saves money every day, which is part of why central places are worth more. If you move
 home too far to keep going the way you chose, you're charged the danfo fare until you change it.
-Fares go to the drivers (outside the game), so that mint leaves the game.
+Where no road or bridge joins two places (Ilashe, Ibese and the other islands), the trip adds a ferry
+crossing (`src/lib/world/trips.ts` works out which pieces of land join up). Fares go to the drivers
+(outside the game), so that mint leaves the game.
 
 ## Neighbours
 

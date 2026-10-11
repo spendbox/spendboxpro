@@ -142,17 +142,24 @@ export const COMMUTES: Commute[] = ["walk", "keke", "okada", "danfo", "taxi"];
 
 export const COMMUTE_LABEL: Record<Commute, string> = { walk: "Walk", keke: "Keke", okada: "Okada", danfo: "Danfo bus", taxi: "Taxi" };
 
-/** One trip's fare in local money: a start price, so much a km, and how far it'll go (km). */
-type Fare = { base: number; perKm: number; maxKm: number };
+/** One trip's fare in local money: a start price, so much a km, the most it costs, and how far it'll go (km). */
+type Fare = { base: number; perKm: number; cap?: number; maxKm: number };
 
-/** Lagos fares (naira), roughly what they are now; walking is free but only so far. */
+/**
+ * Lagos fares (naira) a trip, kept low enough that a first job across town still pays: a danfo
+ * never costs more than ₦600 however far it goes (like a long BRT ride). Walking is free but only
+ * so far.
+ */
 const FARES: Record<Commute, Fare> = {
   walk: { base: 0, perKm: 0, maxKm: 3 },
-  keke: { base: 150, perKm: 100, maxKm: 8 },
-  okada: { base: 200, perKm: 150, maxKm: 15 },
-  danfo: { base: 200, perKm: 60, maxKm: Infinity },
-  taxi: { base: 800, perKm: 350, maxKm: Infinity },
+  keke: { base: 100, perKm: 50, cap: 500, maxKm: 8 },
+  okada: { base: 150, perKm: 70, cap: 900, maxKm: 15 },
+  danfo: { base: 100, perKm: 20, cap: 600, maxKm: Infinity },
+  taxi: { base: 500, perKm: 200, maxKm: Infinity },
 };
+
+/** A ferry across the lagoon to where no road goes (an island): a crossing fare plus so much a km on the water. */
+export const FERRY = { base: 800, perKm: 150 };
 
 /** Roads wind: a trip is about this much longer than a straight line. */
 const ROAD_FACTOR = 1.3;
@@ -170,20 +177,33 @@ export function tripKmBetween(homeUnit: string, placeId: string): number | null 
 }
 
 /** What a trip costs the way you go, or by danfo if that way doesn't go so far any more (you moved). */
-export function fareOrBus(mode: Commute, km: number, prices: Prices) {
-  return fareMint(mode, km, prices) ?? fareMint("danfo", km, prices) ?? 0;
+export function fareOrBus(mode: Commute, km: number, prices: Prices, ferryKm = 0) {
+  return fareMint(mode, km, prices, ferryKm) ?? fareMint("danfo", km, prices, ferryKm) ?? 0;
 }
 
-/** One trip's fare in mint, or null when that way doesn't go so far. */
-export function fareMint(mode: Commute, km: number, prices: Prices): number | null {
+/**
+ * One trip's fare in mint, or null when that way doesn't go so far. `ferryKm` is the part of the
+ * trip over water with no road (src/lib/world/trips.ts): a ferry crossing, the rest on land.
+ */
+export function fareMint(mode: Commute, km: number, prices: Prices, ferryKm = 0): number | null {
   const f = FARES[mode];
-  if (km > f.maxKm) return null;
-  if (km < 0.2) return 0;
-  return Math.round(((f.base + f.perKm * km) / prices.perMint) * 100) / 100;
+  const land = Math.max(0, km - ferryKm * ROAD_FACTOR);
+  if (land > f.maxKm) return null;
+  const ferry = ferryKm > 0 ? FERRY.base + FERRY.perKm * ferryKm : 0;
+  if (land < 0.2 && !ferry) return 0;
+  const road = land < 0.2 ? 0 : Math.min(f.cap ?? Infinity, f.base + f.perKm * land);
+  return Math.round(((road + ferry) / prices.perMint) * 100) / 100;
+}
+
+/** "by danfo bus", "by ferry and keke", "on foot and by ferry": how a trip goes, for buttons. */
+export function tripWords(mode: Commute, ferryKm = 0) {
+  if (!ferryKm) return mode === "walk" ? "on foot" : `by ${COMMUTE_LABEL[mode].toLowerCase()}`;
+  return mode === "walk" ? "by ferry" : `by ferry and ${COMMUTE_LABEL[mode].toLowerCase()}`;
 }
 
 /** The cheapest way to work that goes that far (walking when it's close enough). */
-export function cheapestCommute(km: number): Commute {
+export function cheapestCommute(km: number, ferryKm = 0): Commute {
+  km = Math.max(0, km - ferryKm * ROAD_FACTOR);
   if (km <= FARES.walk.maxKm) return "walk";
   if (km <= FARES.keke.maxKm) return "keke";
   return "danfo";

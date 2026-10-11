@@ -25,6 +25,7 @@ import {
   type Commute,
   type WorkSkill,
 } from "@/lib/world/work";
+import { ferryKmBetween } from "@/lib/world/trips";
 import { workplacesNear } from "@/lib/world/workplace";
 import { Sheet } from "../sheet";
 import { tripLine, type JobsContext } from "./jobs-here";
@@ -90,7 +91,8 @@ export function WorkSheet({
   const [open, setOpen] = useState<"jobs" | "hustle" | null>(null);
 
   const km = job && ctx.homeUnit ? tripKmBetween(ctx.homeUnit, job.place) : null;
-  const fare = job && km !== null ? fareOrBus(job.mode, km, prices) : 0;
+  const ferry = job && ctx.homeUnit ? ferryKmBetween(ctx.homeUnit, job.place) : 0;
+  const fare = job && km !== null ? fareOrBus(job.mode, km, prices, ferry) : 0;
   const hustle = life?.hustle ?? null;
   const hustleWaiting = hustle ? hustle.payDay * Math.min(7, Math.max(0, (now - Date.parse(hustle.paidUntil)) / 7_200_000)) * (1 - INCOME_TAX) : 0;
   const waiting = job ? settle({ payDay: job.payDay, paidUntil: Date.parse(job.paidUntil) }, now, skills[job.skill] ?? 0, fare) : null;
@@ -256,7 +258,7 @@ export function WorkSheet({
         <Section title="Travel">
           <div className="flex flex-wrap gap-1.5">
             {COMMUTES.map((mode) => {
-              const f = km === null ? null : fareMint(mode, km, prices);
+              const f = km === null ? null : fareMint(mode, km, prices, ferry);
               const on = job.mode === mode;
               const losing = f !== null && dayNet(job.payDay, skills[job.skill] ?? 0, f) < 0;
               return (

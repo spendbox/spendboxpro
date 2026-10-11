@@ -39,6 +39,67 @@ export function valueOf(b: Building, landPerM2: number, prices: Prices): Valuati
   return { land, building, total, units: weights.map((w) => (total * w) / sum) };
 }
 
+// ---- the land market: what land is worth moves with time, area by area
+//
+// Every neighbourhood (about 3 km across) has its own slow cycle, up and down a few percent over a
+// few game months, on top of gentle growth for the whole city (3% a game year). Worked out from
+// the clock and the spot, the same on every phone and on the server, so the price you see is the
+// price you pay. Buildings don't move with it (they cost what they cost to build).
+
+/** When the market started: every index is 1 here. */
+const MARKET_START = Date.UTC(2026, 9, 1);
+/** A game month in real milliseconds (60 real hours; docs/MARKET.md). */
+export const GAME_MONTH_MS = 60 * 3600_000;
+/** How much land in the whole city grows in a game year. */
+const GROWTH = 0.03;
+/** How wide each area of the market is (tiles). */
+const MARKET_CELL = 30;
+
+function cellRand(cx: number, cz: number, k: number) {
+  const v = Math.sin(cx * 127.1 + cz * 311.7 + k * 74.7) * 43758.5453;
+  return v - Math.floor(v);
+}
+
+/** The cycle of one market area at a time (game months since the start). */
+function cellCycle(cx: number, cz: number, months: number) {
+  const amp = 0.02 + cellRand(cx, cz, 1) * 0.05;
+  const period = 3 + cellRand(cx, cz, 2) * 6;
+  const phase = cellRand(cx, cz, 3) * Math.PI * 2;
+  return amp * (Math.sin((2 * Math.PI * months) / period + phase) - Math.sin(phase));
+}
+
+/** How land at a spot is priced now against when the market started (1 = the same). */
+export function landIndex(x: number, z: number, at = Date.now()) {
+  const months = (at - MARKET_START) / GAME_MONTH_MS;
+  const fx = x / MARKET_CELL;
+  const fz = z / MARKET_CELL;
+  const cx = Math.floor(fx);
+  const cz = Math.floor(fz);
+  const tx = fx - cx;
+  const tz = fz - cz;
+  // Blended between the four nearest areas, so prices never jump at an area's edge.
+  const c = (dx: number, dz: number) => cellCycle(cx + dx, cz + dz, months);
+  const cycle = (c(0, 0) * (1 - tx) + c(1, 0) * tx) * (1 - tz) + (c(0, 1) * (1 - tx) + c(1, 1) * tx) * tz;
+  return Math.max(0.5, (1 + (GROWTH * months) / 12) * (1 + cycle));
+}
+
+/** What land costs at a spot right now (per m²): the map's price moved by the market. */
+export function landNow(region: { landPriceAt: (x: number, z: number) => number }, x: number, z: number, at = Date.now()) {
+  return region.landPriceAt(x, z) * landIndex(x, z, at);
+}
+
+/**
+ * How a property's worth has moved: over the last game month (a fraction, +0.024 = up 2.4%), and
+ * its worth at the end of each of the last `points` game months up to now (oldest first), for a
+ * little chart.
+ */
+export function worthTrend(b: Building, region: { landPriceAt: (x: number, z: number) => number }, x: number, z: number, prices: Prices, points = 6, at = Date.now()) {
+  const worth = (t: number) => valueOf(b, landNow(region, x, z, t), prices).total;
+  const history = Array.from({ length: points }, (_, k) => worth(at - (points - 1 - k) * GAME_MONTH_MS));
+  const before = worth(at - GAME_MONTH_MS);
+  return { month: before > 0 ? history[points - 1] / before - 1 : 0, history };
+}
+
 /** Local currency to mint (rounded to whole mint). */
 export function toMint(amount: number, prices: Prices) {
   return Math.round(amount / prices.perMint);

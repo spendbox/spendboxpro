@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DoorOpen } from "lucide-react";
 import { Briefcase, Flag, HeartPulse, House, MapPin, Search, Sparkles, X } from "@/components/icons";
 import { addressOf, makePlan, spiralIndex, tileAt, type CityPlan } from "@/lib/city/layout";
 import { BUILDING_LABEL } from "@/lib/world/buildings";
@@ -10,7 +11,8 @@ import { ownedSpot } from "@/lib/world/owned";
 import { propertyInfo, type PropertyInfo } from "@/lib/world/property";
 import { homesByArea, type HomeFind } from "@/lib/world/homes";
 import type { BuildingOwner, InterviewStart, LifeStatus, Neighbour, PaySettled, PropertyApi, PropertyResult, WorkStatus } from "@/lib/world/property-api";
-import { cheapestCommute, COMMUTE_LABEL, dayNet, fareMint, needsInterview, payDay, tripKmBetween, type Commute } from "@/lib/world/work";
+import { cheapestCommute, COMMUTE_LABEL, dayNet, fareMint, needsInterview, payDay, tripKmBetween, tripWords, type Commute } from "@/lib/world/work";
+import { ferryKmBetween } from "@/lib/world/trips";
 import { dayOf, EXERCISE } from "@/lib/world/day";
 import type { Workplace } from "@/lib/world/workplace";
 import { PropertyCard } from "../property-card";
@@ -288,13 +290,14 @@ export function useWorldLife({
   const tripTo = (id: string) => {
     const from = assets?.life?.at_place ?? homeUnit;
     const km = from && region ? tripKmBetween(from, id) : null;
-    if (km === null || !region) return null;
-    const mode = cheapestCommute(km);
-    return { mode, fare: fareMint(mode, km, region.region.prices) ?? 0 };
+    if (km === null || !region || !from) return null;
+    const ferry = ferryKmBetween(from, id);
+    const mode = cheapestCommute(km, ferry);
+    return { mode, ferry, fare: fareMint(mode, km, region.region.prices, ferry) ?? 0 };
   };
   const tripLabel = (id: string) => {
     const t = signedIn ? tripTo(id) : null;
-    return t && t.fare > 0 ? `Go inside · ${cash(t.fare)} by ${COMMUTE_LABEL[t.mode].toLowerCase()}` : "Go inside";
+    return t && t.fare > 0 ? `Go there · ${cash(t.fare)} ${tripWords(t.mode, t.ferry)}` : "Go there";
   };
   /** Go into a building: pay the fare there (signed in), then in. */
   const goInside = async (id: string) => {
@@ -410,7 +413,7 @@ export function useWorldLife({
             };
             // Running at a loss: fares there and back cost more than the pay after tax.
             const km = homeUnit ? tripKmBetween(homeUnit, wp.id) : null;
-            const fare = km === null ? 0 : (fareMint(mode, km, region.region.prices) ?? 0);
+            const fare = km === null || !homeUnit ? 0 : (fareMint(mode, km, region.region.prices, ferryKmBetween(homeUnit, wp.id)) ?? 0);
             const net = dayNet(payDay(job, region.region.prices), work?.skills[job.skill] ?? 0, fare);
             const loss = net < 0 ? `Heads up: you'd run at a loss. After income tax, ${job.title} pays less than your fares there and back, so you'd lose about ${cash(-net)} every game day.` : "";
             const now = work?.job;
@@ -570,8 +573,8 @@ export function useWorldLife({
       )}
       {homeOpen && homeSpot && <HomeCard label={homeLabel} area={region.areaAt(homeSpot.x, homeSpot.z)} neighbours={neighbours} onClose={() => setHomeOpen(false)} />}
       {place && (
-        <Sheet onClose={() => setPlace(null)} wide>
-          <div className="sticky -top-5 z-10 -mx-5 -mt-5 flex items-start justify-between gap-3 bg-panel/95 px-5 pb-2 pt-5 backdrop-blur">
+        <Sheet onClose={() => setPlace(null)} wide clear>
+          <div className="sticky -top-5 z-10 -mx-5 -mt-5 flex items-start justify-between gap-3 bg-panel/95 px-5 pb-2 pt-5">
             <div className="min-w-0">
               <h2 className="font-display text-lg font-extrabold leading-tight">{place.name}</h2>
               <p className="mt-1 flex items-center gap-1 text-sm text-muted">
@@ -579,18 +582,35 @@ export function useWorldLife({
                 <span className="truncate">{region.areaAt(place.x, place.z)}</span>
               </p>
             </div>
-            <button onClick={() => setPlace(null)} className="grid size-8 shrink-0 place-items-center rounded-full hover:bg-ink/5" aria-label="Close">
+            <button onClick={() => setPlace(null)} className="grid size-9 shrink-0 place-items-center rounded-full bg-ink/5 hover:bg-ink/10" aria-label="Close">
               <X className="size-4" />
             </button>
           </div>
-          <div className="mt-4">
-            {jobs ? <JobsHere place={place} ctx={jobs} /> : <p className="text-sm text-muted">Sign in to work here.</p>}
+          <div className="mt-3 space-y-2">
+            {onEnter && (
+              <button
+                onClick={() => {
+                  const id = place.id;
+                  setPlace(null);
+                  void goInside(id);
+                }}
+                className="flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-[#f08c00] px-4 py-2 text-center text-sm font-semibold leading-tight text-white"
+              >
+                <DoorOpen className="size-4 shrink-0" /> {tripLabel(place.id).replace(/^Go inside/, "Go there")}
+              </button>
+            )}
+            <div className="grid grid-cols-2 gap-2">
+              <span className="flex min-h-11 items-center justify-center rounded-full bg-ink/[0.03] px-3 text-center text-xs text-muted">Not for sale: a public place</span>
+              <span className="flex min-h-11 items-center justify-center rounded-full bg-ink/[0.03] px-3 text-center text-xs text-muted">No adverts on landmarks</span>
+            </div>
           </div>
-          {signedIn && (
-            <button onClick={() => setReport({ x: place.x, z: place.z, where: place.name })} className="mt-4 flex items-center gap-1.5 text-xs font-medium text-muted hover:text-ink">
-              <Flag className="size-3.5" /> Report a problem with this place
-            </button>
-          )}
+          {place.jobs.length > 0 && <div className="mt-4">{jobs ? <JobsHere place={place} ctx={jobs} /> : <p className="text-sm text-muted">Sign in to work here.</p>}</div>}
+          <button
+            onClick={() => (signedIn ? setReport({ x: place.x, z: place.z, where: place.name }) : setMessage({ text: "Sign in to report a problem.", good: false }))}
+            className="mt-4 flex items-center gap-1.5 text-xs font-medium text-muted hover:text-ink"
+          >
+            <Flag className="size-3.5" /> Report a problem with this place
+          </button>
         </Sheet>
       )}
       {workOpen && jobs && (
@@ -677,14 +697,11 @@ export function useWorldLife({
           }
           enterLabel={tripLabel(property.id)}
           jobs={jobs}
-          onReport={
-            signedIn
-              ? () => {
-                  const sp = ownedSpot(property.id);
-                  if (sp) setReport({ x: sp.x, z: sp.z, where: `${property.title}, ${property.address}` });
-                }
-              : undefined
-          }
+          onReport={() => {
+            if (!signedIn) return setMessage({ text: "Sign in to report a problem.", good: false });
+            const sp = ownedSpot(property.id);
+            if (sp) setReport({ x: sp.x, z: sp.z, where: `${property.title}, ${property.address}` });
+          }}
           info={property}
           onClose={() => setProperty(null)}
           market={
@@ -1021,5 +1038,5 @@ export function useWorldLife({
   /** Something in Finance wants you: the guide's budget step, a power cut, an offer. */
   const financeGlow = step === "budget";
   const financeDot = !!(status?.powerCut || board?.received.some((o) => o.status === "open"));
-  return { centerRef, owned: shown, flyTo, onProperty, onWorkplace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit };
+  return { centerRef, owned: shown, flyTo, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit };
 }

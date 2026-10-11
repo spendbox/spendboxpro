@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AvatarFace } from "@/components/avatar";
 import { Coins, MapPin, MessageCircle, RotateCcw, Sparkles, Target, X } from "@/components/icons";
 import { cn } from "@/lib/cn";
+import { ReportPersonButton } from "./report-person";
 import { areaName, fakeAreaName } from "@/lib/npc/area";
 import type { Rand } from "@/lib/npc/rng";
 import {
@@ -304,6 +305,7 @@ export function NpcCard({ npc, onClose, autoStart = false }: { npc: Npc; onClose
               {npc.quests && <span className="rounded-full bg-[#7048e8]/10 px-1.5 py-px text-[#5f3dc4]">Side quests</span>}
             </p>
           </div>
+          <ReportPersonButton person={{ id: `npc:${npc.id}`, name: npc.name }} compact className="size-9 bg-transparent" />
           {started && (
             <button
               onClick={newChat}

@@ -5,7 +5,7 @@ import { spiralIndex, tileAt, type CityPlan } from "../city/layout.ts";
 import type { BuildingKind } from "./buildings.ts";
 import type { RegionMap } from "./compile.ts";
 import { toTile } from "./geo.ts";
-import { toMint, valueOf } from "./value.ts";
+import { landNow, toMint, valueOf } from "./value.ts";
 
 export type HomeKind = "room" | "flat" | "house";
 
@@ -50,7 +50,7 @@ export function homesByArea(region: RegionMap, plan: CityPlan): AreaHomes[] {
         if (!b || b.state !== "built" || t.home) continue;
         const kind = KIND_OF[b.kind];
         if (!kind) continue;
-        const v = valueOf(b, region.landPriceAt(x, z), prices);
+        const v = valueOf(b, landNow(region, x, z), prices);
         // Houses sell whole; rooms and flats one unit at a time.
         let cost = Infinity;
         b.units.forEach((u, k) => {

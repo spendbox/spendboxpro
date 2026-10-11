@@ -3,7 +3,7 @@
 import { cash } from "@/lib/world/value";
 import { useState } from "react";
 import { DoorOpen } from "lucide-react";
-import { Building2, Flag, House, KeyRound, MapPin, Pencil, Store, Trees, X } from "@/components/icons";
+import { Building2, Flag, House, KeyRound, MapPin, Megaphone, Pencil, Store, Trees, TrendingDown, TrendingUp, X } from "@/components/icons";
 import type { PropertyInfo, PropertyUnit } from "@/lib/world/property";
 import { BUY_TAX, type BuildingOwner } from "@/lib/world/property-api";
 import { JobsHere, type JobsContext } from "./life/jobs-here";
@@ -37,7 +37,7 @@ export type Market = {
   onUnsell: (unit: PropertyUnit) => void;
 };
 
-/** A property on the real map, tapped: what it is, what it's worth, and every unit in it. */
+/** A property on the real map, tapped: Go there, Rent / Buy (its worth and every unit in it), Advertise. */
 export function PropertyCard({
   info,
   market,
@@ -57,12 +57,19 @@ export function PropertyCard({
   onClose: () => void;
 }) {
   const owners = new Map((market?.owners ?? []).map((o) => [o.unit, o]));
+  const mineAny = !!market?.owners && info.units.some((u) => owners.get(u.id)?.mine);
   const mineAll = !!market?.owners && info.units.every((u) => owners.get(u.id)?.mine);
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(info.kind ? info.title : "");
+  // The worth and the units open from Rent / Buy (already open when some of it is yours).
+  const [details, setDetails] = useState(false);
+  const open = details || mineAny;
+  const [jobsOpen, setJobsOpen] = useState(false);
+  // Nobody owns any of it: a business can lease it.
+  const leasable = market ? (market.owners ?? []).length === 0 : true;
   return (
-    <Sheet onClose={onClose} wide>
-      <div className="sticky -top-5 z-10 -mx-5 -mt-5 flex items-start justify-between gap-3 bg-panel/95 px-5 pb-2 pt-5 backdrop-blur">
+    <Sheet onClose={onClose} wide clear>
+      <div className="sticky -top-5 z-10 -mx-5 -mt-5 flex items-start justify-between gap-3 bg-panel/95 px-5 pb-2 pt-5">
         <div className="min-w-0">
           <h2 className="font-display text-lg font-extrabold leading-tight">
             {info.title}
@@ -74,110 +81,174 @@ export function PropertyCard({
               {info.address} · {info.area}
             </span>
           </p>
-          {info.kind && <p className="mt-0.5 text-sm text-muted">{info.kind}</p>}
-          {info.estate && <p className="mt-0.5 text-sm text-muted">In {info.estate} (a gated estate)</p>}
         </div>
         <button onClick={onClose} className="grid size-9 shrink-0 place-items-center rounded-full bg-ink/5 hover:bg-ink/10" aria-label="Close">
           <X className="size-4" />
         </button>
       </div>
 
-      {onEnter && !info.state && (
-        <button onClick={onEnter} className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-full bg-[#f08c00] text-sm font-semibold text-white">
-          <DoorOpen className="size-4" /> {enterLabel ?? "Go inside"}
-        </button>
-      )}
-
-      <div className="mt-4 rounded-2xl bg-ink/[0.04] p-3.5">
-        <div className="flex items-baseline justify-between gap-2">
-          <span className="text-sm text-muted">Worth</span>
-          <span className="font-display text-2xl font-extrabold tabular-nums">{cash(info.mint)}</span>
+      {/* What it's worth and which way that's going. */}
+      <div className="mt-2 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs text-muted">Worth</p>
+          <p className="font-display text-2xl font-extrabold tabular-nums leading-tight">{cash(info.mint)}</p>
         </div>
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          <Pill label="Land" value={`${cash(info.landMint)}`} />
-          <Pill label="Building" value={`${cash(info.buildingMint)}`} />
-          <Pill label="Plot" value={`${fmt(info.plot)} m²`} />
-          {info.storeys > 0 && <Pill label={info.storeys === 1 ? "Storey" : "Storeys"} value={String(info.storeys)} />}
+        <div className="flex flex-col items-end gap-1">
+          <Trend change={info.trend.month} />
+          <Spark values={info.trend.history} up={info.trend.month >= 0} />
         </div>
       </div>
 
-      {mineAll && market && (
-        <div className="mt-3">
-          {renaming ? (
-            <form
-              className="flex gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                market.onRename(name);
-                setRenaming(false);
-              }}
-            >
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                maxLength={40}
-                placeholder="Its name (2 to 40 letters)"
-                className="h-10 min-w-0 flex-1 rounded-full bg-ink/5 px-4 text-sm outline-none ring-ink/20 focus:ring-2"
-                autoFocus
-              />
-              <button disabled={market.busy} className="h-10 rounded-full bg-ink px-4 text-sm font-semibold text-white disabled:opacity-50">
-                Save
-              </button>
-            </form>
+      {/* The three things to do. */}
+      <div className="mt-3 space-y-2">
+        {onEnter && !info.state && (
+          <button onClick={onEnter} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-[#f08c00] px-4 py-2 text-center text-sm font-semibold leading-tight text-white">
+            <DoorOpen className="size-4 shrink-0" /> {(enterLabel ?? "Go there").replace(/^Go inside/, "Go there")}
+          </button>
+        )}
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => setDetails((d) => !d)}
+            aria-expanded={open}
+            className={`flex min-h-11 items-center justify-center gap-1.5 rounded-full px-3 text-sm font-semibold ${open ? "bg-ink text-white" : "bg-ink/5"}`}
+          >
+            <KeyRound className="size-4 shrink-0" /> {mineAll ? "Yours" : "Rent / Buy"}
+          </button>
+          {leasable ? (
+            <a href={`/business?building=${encodeURIComponent(info.id)}`} className="flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-gold/15 px-3 text-sm font-semibold text-gold-dark">
+              <Megaphone className="size-4 shrink-0" /> Advertise
+            </a>
           ) : (
-            <button onClick={() => setRenaming(true)} className="flex items-center gap-1.5 text-sm font-medium text-gold-dark">
-              <Pencil className="size-3.5" /> {info.kind ? "Rename it" : "Give it a name"}
+            <span className="flex min-h-11 items-center justify-center rounded-full bg-ink/[0.03] px-3 text-center text-xs text-muted">Owned, so not for adverts</span>
+          )}
+        </div>
+      </div>
+
+      {open && (
+        <>
+          <div className="mt-4 rounded-2xl bg-ink/[0.04] p-3.5">
+            <p className="text-xs text-muted">
+              {info.kind ?? info.title}
+              {info.estate ? ` in ${info.estate} (a gated estate)` : ""}. Land moves with the area&apos;s market; the building is what it cost to build.
+            </p>
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
+              <Pill label="Land" value={`${cash(info.landMint)}`} />
+              <Pill label="Building" value={`${cash(info.buildingMint)}`} />
+              <Pill label="Plot" value={`${fmt(info.plot)} m²`} />
+              {info.storeys > 0 && <Pill label={info.storeys === 1 ? "Storey" : "Storeys"} value={String(info.storeys)} />}
+            </div>
+          </div>
+
+          {mineAll && market && (
+            <div className="mt-3">
+              {renaming ? (
+                <form
+                  className="flex gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    market.onRename(name);
+                    setRenaming(false);
+                  }}
+                >
+                  <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    maxLength={40}
+                    placeholder="Its name (2 to 40 letters)"
+                    className="h-10 min-w-0 flex-1 rounded-full bg-ink/5 px-4 text-sm outline-none ring-ink/20 focus:ring-2"
+                    autoFocus
+                  />
+                  <button disabled={market.busy} className="h-10 rounded-full bg-ink px-4 text-sm font-semibold text-white disabled:opacity-50">
+                    Save
+                  </button>
+                </form>
+              ) : (
+                <button onClick={() => setRenaming(true)} className="flex items-center gap-1.5 text-sm font-medium text-gold-dark">
+                  <Pencil className="size-3.5" /> {info.kind ? "Rename it" : "Give it a name"}
+                </button>
+              )}
+            </div>
+          )}
+
+          <h3 className="mt-4 text-sm font-semibold">
+            {info.units.length === 1 ? "One unit" : `${info.units.length} units`}
+            {market ? "" : " you could own"}
+          </h3>
+          <p className="text-xs text-muted">Buy one to live in or to let out: tenants pay you rent.</p>
+          <ul className="mt-2 max-h-72 divide-y divide-ink/5 overflow-y-auto rounded-2xl ring-1 ring-ink/5">
+            {info.units.map((u) => {
+              const Icon = ICON[u.use];
+              const owner = owners.get(u.id);
+              return (
+                <li key={u.id} className="flex items-center gap-3 px-3 py-2.5">
+                  <Icon className="size-4 shrink-0 text-muted" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{u.label}</p>
+                    <p className="text-xs text-muted">
+                      {fmt(u.area)} m² · {owner ? (owner.mine ? "Yours" : `Owned by ${owner.name}`) : u.earns}
+                      {owner?.forSale != null ? ` · for sale ${cash(owner.forSale)}` : owner?.home && !owner.mine ? " · their home" : ""}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-sm font-semibold tabular-nums">{cash(u.mint)}</p>
+                  </div>
+                  {market && <UnitAction u={u} owner={owner} market={market} />}
+                </li>
+              );
+            })}
+          </ul>
+          {!market && <p className="mt-3 text-center text-xs text-muted">Sign in to buy property.</p>}
+        </>
+      )}
+
+      {info.workplace && jobs && (
+        <div className="mt-4">
+          {jobsOpen ? (
+            <JobsHere place={info.workplace} ctx={jobs} />
+          ) : (
+            <button onClick={() => setJobsOpen(true)} className="flex w-full items-center justify-between rounded-2xl bg-ink/[0.04] px-4 py-2.5 text-sm">
+              <span className="font-medium">Jobs here</span>
+              <span className="text-muted">{info.workplace.jobs.length} →</span>
             </button>
           )}
         </div>
       )}
-
-      <h3 className="mt-5 text-sm font-semibold">
-        {info.units.length === 1 ? "One unit" : `${info.units.length} units`}
-        {market ? "" : " you could own"}
-      </h3>
-      <ul className="mt-2 max-h-80 divide-y divide-ink/5 overflow-y-auto rounded-2xl ring-1 ring-ink/5">
-        {info.units.map((u) => {
-          const Icon = ICON[u.use];
-          const owner = owners.get(u.id);
-          return (
-            <li key={u.id} className="flex items-center gap-3 px-3 py-2.5">
-              <Icon className="size-4 shrink-0 text-muted" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{u.label}</p>
-                <p className="truncate text-xs text-muted">
-                  {fmt(u.area)} m² · {owner ? (owner.mine ? "Yours" : `Owned by ${owner.name}`) : u.earns}
-                  {owner?.forSale != null ? ` · for sale ${cash(owner.forSale)}` : owner?.home && !owner.mine ? " · their home" : ""}
-                </p>
-              </div>
-              <div className="shrink-0 text-right">
-                <p className="text-sm font-semibold tabular-nums">{cash(u.mint)}</p>
-              </div>
-              {market && <UnitAction u={u} owner={owner} market={market} />}
-            </li>
-          );
-        })}
-      </ul>
-      {info.workplace && jobs && (
-        <div className="mt-5">
-          <JobsHere place={info.workplace} ctx={jobs} />
-        </div>
-      )}
-      {!market && <p className="mt-4 text-center text-xs text-muted">Sign in to buy property.</p>}
       {onReport && (
         <button onClick={onReport} className="mt-4 flex items-center gap-1.5 text-xs font-medium text-muted hover:text-ink">
           <Flag className="size-3.5" /> Report a problem with this building
         </button>
       )}
-      {(market?.owners ?? []).length === 0 && (
-        <a href={`/business?building=${encodeURIComponent(info.id)}`} className="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-gold/10 px-4 py-3 text-sm ring-1 ring-gold/30">
-          <span>
-            <b>Advertise here.</b> Lease this building for a year: your name and logo on it, lit up for every player, and your design on the billboards.
-          </span>
-          <span className="shrink-0 font-semibold text-gold-dark">Lease →</span>
-        </a>
-      )}
     </Sheet>
+  );
+}
+
+/** Which way a worth is going: "▲ 2.4% this month" (green), down in red, or steady. */
+export function Trend({ change }: { change: number }) {
+  const pct = Math.abs(change * 100);
+  if (pct < 0.05) return <span className="rounded-full bg-ink/5 px-2 py-0.5 text-xs font-semibold text-muted">Steady this month</span>;
+  const up = change > 0;
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${up ? "bg-[#2f9e44]/12 text-[#2b8a3e]" : "bg-[#e03131]/10 text-[#c92a2a]"}`}>
+      {up ? <TrendingUp className="size-3.5" /> : <TrendingDown className="size-3.5" />}
+      {up ? "+" : "−"}
+      {pct.toFixed(pct >= 10 ? 0 : 1)}% this month
+    </span>
+  );
+}
+
+/** A tiny line of a worth over the last few game months. */
+export function Spark({ values, up }: { values: number[]; up: boolean }) {
+  if (values.length < 2) return null;
+  const lo = Math.min(...values);
+  const hi = Math.max(...values);
+  const span = hi - lo || 1;
+  const W = 72;
+  const H = 20;
+  const pts = values.map((v, k) => `${((k / (values.length - 1)) * W).toFixed(1)},${(H - 2 - ((v - lo) / span) * (H - 4)).toFixed(1)}`).join(" ");
+  return (
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-label="Worth over the last few game months" role="img">
+      <polyline points={pts} fill="none" stroke={up ? "#2b8a3e" : "#c92a2a"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 

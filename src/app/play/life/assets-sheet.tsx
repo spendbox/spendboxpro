@@ -7,7 +7,7 @@ import { BUILDING_LABEL } from "@/lib/world/buildings";
 import { RENT_LEVEL, type MarketBoard, type Offer, type RentLevel } from "@/lib/world/market";
 import { ownedSpot, type OwnedProperty } from "@/lib/world/owned";
 import type { AssetsData, AssetUnit } from "@/lib/world/property-api";
-import { cash, toMint, valueOf } from "@/lib/world/value";
+import { landNow, cash, toMint, valueOf } from "@/lib/world/value";
 
 const fmt = (n: number) => Math.round(n).toLocaleString("en-GB");
 const ICON: Record<AssetUnit["use"], typeof House> = { home: House, shop: Store, office: Building2, industry: Building2, land: Trees };
@@ -19,7 +19,7 @@ export function unitValueNow(u: AssetUnit, owned: OwnedProperty[], region: Regio
   const spot = ownedSpot(u.building);
   const k = Number(u.unit.split("/")[1]);
   if (!b || !spot) return u.price;
-  return toMint(valueOf(b, region.landPriceAt(spot.x, spot.z), region.region.prices).units[k] ?? 0, region.region.prices);
+  return toMint(valueOf(b, landNow(region, spot.x, spot.z), region.region.prices).units[k] ?? 0, region.region.prices);
 }
 
 /** "in 2h 10m", "in 25m", "now". */

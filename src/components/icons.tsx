@@ -9,6 +9,7 @@ export {
   KeyRound,
   TrainFront,
   TrendingUp,
+  TrendingDown,
   Wallet,
   Briefcase,
   Globe,
