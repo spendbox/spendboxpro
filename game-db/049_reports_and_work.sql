@@ -1,7 +1,8 @@
 -- Newtown, part 49: reports about people, several side hustles, and pay that arrives by itself.
 --
 -- Reports. Reporting a person (a player or a character), not just the map: who it is about, what is
--- wrong, where it happened and a note. The owner reads them with the map ones. See docs/MAP_REPORTS.md.
+-- wrong, where it happened and a note. The owner reads them at /map-reports, under the map ones.
+-- See docs/MAP_REPORTS.md.
 --
 -- Side hustles. Up to hustles_max at once (each with its own start-up cost, gone once spent), as
 -- long as your day still leaves 4 hours of sleep (the game checks that: src/lib/world/day.ts).
@@ -69,6 +70,14 @@ language sql stable security definer set search_path = public as $$
   left join public.profiles p on p.id = r.user_id
 $$;
 
+/** The owner marks a report about a person: actioned, dismissed, or open again. */
+create or replace function public.person_report_set(p_id bigint, p_status text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if p_status not in ('open', 'actioned', 'dismissed') then raise exception 'bad_status'; end if;
+  update public.person_reports set status = p_status, resolved_at = case when p_status = 'open' then null else now() end where id = p_id;
+end $$;
+
 do $$
 begin
   revoke all on table public.person_reports from public, anon, authenticated;
@@ -80,7 +89,7 @@ do $$
 declare f text;
 begin
   foreach f in array array[
-    'public.person_report(uuid, uuid, text, text, text, text, text)', 'public.person_reports_list(text)'
+    'public.person_report(uuid, uuid, text, text, text, text, text)', 'public.person_reports_list(text)', 'public.person_report_set(bigint, text)'
   ] loop
     execute format('revoke all on function %s from public, anon, authenticated', f);
     execute format('grant execute on function %s to service_role', f);

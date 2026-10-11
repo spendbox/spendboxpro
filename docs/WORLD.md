@@ -80,6 +80,16 @@ If two landmarks overlap, the later one is left out and the tests report it.
 - **Traffic** follows how busy each road is (the area's crowd and the kind of road), with more
   cars and longer jams in the Lagos rush hours. Later it will also follow how many players live
   and visit there.
+- **No broken bridges:** a checker (`auditSpans` in `src/lib/world/spans.ts`) looks at both ends of
+  every deck: each must come down to the road or meet another deck at its own height. Two
+  carriageways that end side by side don't hold each other up, ramps between levels meet without a
+  step, and no landmark stands under a deck (it moves aside). The tests run it over all of Lagos, so
+  a fresh bake with a broken bridge fails the tests instead of reaching the game.
+- **Islands and ferries:** which pieces of land join up by road and bridge is worked out once
+  (`src/lib/world/trips.ts`); a trip to an island no road reaches (Ilashe, Ibese...) goes by ferry.
+- **Only one of each famous place:** the city's own made-up campuses, stadiums and markets are named
+  after their street on the real map, never "University of Lagos" or "Balogun Market" (those are
+  the real landmarks).
 - **Footbridges:** the 189 from the map over the roads, plus extras along the expressways.
 - **Wide roads:** where a dual carriageway comes out two tiles wide, it's plain tarmac (no traffic
   lights or crossings in the middle of it).

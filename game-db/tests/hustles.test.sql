@@ -70,4 +70,6 @@ begin
   perform pg_temp.check(person_report(a, null, 'npc:7', 'Mama Nkechi', 'glitch', '', null) > 0, 'a character reported');
   perform pg_temp.fails('not yourself', 'self', format('select person_report(%L, %L, null, %L, %L, %L, null)', a, a, 'Me', 'other', ''));
   perform pg_temp.check(jsonb_array_length(person_reports_list('open')) = 2, 'the owner sees them');
+  perform person_report_set((select max(id) from person_reports), 'dismissed');
+  perform pg_temp.check(jsonb_array_length(person_reports_list('open')) = 1 and jsonb_array_length(person_reports_list('all')) = 2, 'and marks them');
 end $$;

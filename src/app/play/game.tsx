@@ -421,8 +421,8 @@ export function Game({
   const [worldArea, setWorldArea] = useState<string | null>(null);
   // A life on the real map: search, assets, buying a home first (see ./life/world-life).
   usePreloadSheets();
-  /** A building being gone into from its card (its room id), so it opens on the ground floor. */
-  const entering = useRef<string | null>(null);
+  /** When a building was last gone into from its card (Go there), so it opens on the ground floor. */
+  const entering = useRef(0);
   /**
    * Visits inside buildings on the real map, counted in this browser: for the first few, the
    * Floor button glows so people find the other floors.
@@ -457,8 +457,8 @@ export function Game({
       const sp = ownedSpot(id);
       if (!sp) return;
       // Paid the trip from the card: straight in on the ground floor (no floor picker).
-      entering.current = `b:${spiralIndex(sp.x, sp.z)}`;
-      setOpenReq((r) => ({ id: entering.current!, at: (r?.at ?? 0) + 1 }));
+      entering.current = Date.now();
+      setOpenReq((r) => ({ id: `b:${spiralIndex(sp.x, sp.z)}`, at: (r?.at ?? 0) + 1 }));
     },
   });
   // The phone: the camera (a picture of the town, or a selfie) and the phone itself (gallery).
@@ -1196,8 +1196,8 @@ export function Game({
     if (worldId) {
       // The real map: going in is from the place's card (Go there, with the fare), and always
       // starts on the ground floor; the Floor button inside goes up from there.
-      if (entering.current === room.id) {
-        entering.current = null;
+      if (Date.now() - entering.current < 5000) {
+        entering.current = 0;
         const ground = room.levels?.find((l) => l.id === "g") ?? room.levels?.[0] ?? { id: "g", label: "Ground floor", capacity: room.capacity };
         countVisit();
         return goToLevel(room, ground);
