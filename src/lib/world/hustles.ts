@@ -4,7 +4,7 @@
 // Earnings are real Lagos ones, a month, in naira.
 
 import type { Prices } from "./region.ts";
-import { skillLevel, SKILL_BONUS, type WorkSkill } from "./work.ts";
+import { PAY_BOOST, skillLevel, SKILL_BONUS, type WorkSkill } from "./work.ts";
 
 export type Hustle = {
   id: string;
@@ -40,7 +40,7 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 
 /** About what a hustle earns a game day (mint), at your skill. */
 export function hustleDay(h: Pick<Hustle, "month">, prices: Prices, skillDays = 0) {
-  return r2((h.month / 30 / prices.perMint) * (1 + skillLevel(skillDays) * SKILL_BONUS));
+  return r2(((h.month * PAY_BOOST) / 30 / prices.perMint) * (1 + skillLevel(skillDays) * SKILL_BONUS));
 }
 
 export function hustleStart(h: Pick<Hustle, "start">, prices: Prices) {

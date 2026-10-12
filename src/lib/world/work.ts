@@ -118,9 +118,15 @@ export const INCOME_TAX = 0.07;
 /** Extra pay for each level of the job's skill. */
 export const SKILL_BONUS = 0.03;
 
-/** Mint a game day for a job paying `month` local money a game month. */
+/**
+ * How much more than the real wage the game pays, in every city (real wages left players working
+ * at a loss for months: the game should be fun, not harder than real life).
+ */
+export const PAY_BOOST = 4;
+
+/** Mint every 2 hours (a day in your life) for a job paying `month` local money a month, boosted. */
 export function payDay(job: Pick<WorkJob, "month">, prices: Prices) {
-  return Math.round((job.month / 30 / prices.perMint) * 100) / 100;
+  return Math.round(((job.month * PAY_BOOST) / 30 / prices.perMint) * 100) / 100;
 }
 
 /** What a job leaves you a game day, after income tax and two trips at `fareTrip` (negative: a loss). */
@@ -150,20 +156,20 @@ export const COMMUTE_LABEL: Record<Commute, string> = { walk: "Walk", keke: "Kek
 type Fare = { base: number; perKm: number; cap?: number; maxKm: number };
 
 /**
- * Lagos fares (naira) a trip, kept low enough that a first job across town still pays: a danfo
- * never costs more than ₦600 however far it goes (like a long BRT ride). Walking is free but only
+ * Lagos fares (naira) a trip, kept well under real ones so getting about is fun: a danfo
+ * never costs more than ₦250 however far it goes (like a long BRT ride). Walking is free but only
  * so far.
  */
 const FARES: Record<Commute, Fare> = {
   walk: { base: 0, perKm: 0, maxKm: 3 },
-  keke: { base: 100, perKm: 50, cap: 500, maxKm: 8 },
-  okada: { base: 150, perKm: 70, cap: 900, maxKm: 15 },
-  danfo: { base: 100, perKm: 20, cap: 600, maxKm: Infinity },
-  taxi: { base: 500, perKm: 200, maxKm: Infinity },
+  keke: { base: 50, perKm: 25, cap: 250, maxKm: 8 },
+  okada: { base: 80, perKm: 35, cap: 400, maxKm: 15 },
+  danfo: { base: 50, perKm: 8, cap: 250, maxKm: Infinity },
+  taxi: { base: 300, perKm: 90, maxKm: Infinity },
 };
 
 /** A ferry across the lagoon to where no road goes (an island): a crossing fare plus so much a km on the water. */
-export const FERRY = { base: 800, perKm: 150 };
+export const FERRY = { base: 300, perKm: 60 };
 
 /** Roads wind: a trip is about this much longer than a straight line. */
 const ROAD_FACTOR = 1.3;
