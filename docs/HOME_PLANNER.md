@@ -66,6 +66,15 @@ Planning and rearranging are free. **Save** pays for what's new:
 | Loading and saving | `src/app/play/life/home-plan-actions.ts` |
 | The database | `game-db/063_home_plans.sql` (table `home_plans`), `game-db/064_home_upgrades.sql` (paying, home value) |
 
+## Walking round it
+
+- Go in (Home → Enter home, or the building's bubble) and you see the home as planned, built with the game's own furniture, lights, curtains and decorations.
+- You walk round it as your own 3D avatar, seen from behind:
+  - use the joystick (bottom left), or tap the floor;
+  - drag to look round, pinch to come closer;
+  - tap a seat to sit, and tap the stairs to go up or down.
+- Visitors see the same home.
+
 ## Next steps
 
 1. **Walk around inside the plan.** When you go into your own home on the map, draw your plan instead of the made-up room. To do that, `city-view.tsx` would check whether the building is your `home_unit` and use `buildHome` in place of `createInterior`. It would turn the furniture into `blocks`, so you can't walk through it, and add the stairs as the way between floors.

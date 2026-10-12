@@ -1,38 +1,73 @@
-// The city's own characters (NPCs) in the new 3D avatar design (src/lib/avatar3d): inside places,
-// each one standing about is swapped for a full avatar built from their look (the same skin, hair
-// and clothes colours as their face), breathing, looking round and talking with their hands, or
-// dancing in a club. Seated ones keep their old figure for now (the new avatars can't sit yet).
-// The avatars build in the background (a worker), so the place opens straight away and each
-// character changes over when theirs is ready.
+// People in the new 3D avatar design (src/lib/avatar3d): inside places, on rides and on the dance
+// floor, each figure is swapped for a full avatar built from their look (an NPC's colours, or a
+// player's own avatar), doing what the old figure did: standing about, talking, sitting (still,
+// talking, sipping, eating, typing at a desk), leaning, cooking, DJing, working, sipping or eating
+// on their feet, dancing (docs/AVATAR_POSES.md). The avatars build in the background (a worker),
+// so the place opens straight away and each person changes over when theirs is ready; until then
+// (or on a phone that can't build them) the old figure stays.
 
 import * as THREE from "three";
 import type { Npc } from "@/lib/npcs";
 import { getAvatarModel } from "@/lib/avatar3d/client";
 import { LOD } from "@/lib/avatar3d/lod";
 import { makeMaterials, type MaterialSet } from "@/lib/avatar3d/materials";
-import { MOVES, applyMove } from "@/lib/avatar3d/moves";
+import { MOVES, applyMove, type Dims, type Move } from "@/lib/avatar3d/moves";
 import { seededRecipe } from "@/lib/avatar3d/recipe";
 import { recipeOf } from "@/lib/avatar";
 import { mountModel, type AvatarObject } from "@/lib/avatar3d/scene";
 import type { Pose, Act } from "./figures";
 
 /** What createFigures hands back for each person (only what's needed here). */
-type FigLike = { id: string; root: THREE.Group; mesh: THREE.Object3D; pose: Pose; act: Act };
+type FigLike = { id: string; root: THREE.Group; mesh: THREE.Object3D; pose: Pose; act: Act; hipsY: number; baseY: number; prop?: THREE.Object3D | null };
 
-/** At most this many 3D characters in one place (they cost more to draw than the old figures). */
-const MAX = 12;
+/** At most this many 3D people in one place (they cost more to draw than the old figures). */
+const MAX = 16;
 
-export function upgradeNpcs(figs: FigLike[], people: { id: string; avatar?: unknown; npc?: boolean }[]) {
-  const live: { obj: AvatarObject; mats: MaterialSet; move: (typeof MOVES)[number]; t: number; speed: number }[] = [];
+const byIdMove = (id: string): Move => MOVES.find((m) => m.id === id) ?? MOVES[0];
+
+/** The move for what someone's doing, sitting or standing. */
+export function moveFor(pose: Pose, act: Act, k = 0): Move {
+  if (pose === "sit") return byIdMove(act === "talk" ? "sitTalk" : act === "sip" ? "sitSip" : act === "eat" ? "sitEat" : act === "work" ? "sitType" : k % 3 === 1 ? "sitTalk" : "sit");
+  if (pose === "lean") return byIdMove("lean");
+  switch (act) {
+    case "dance":
+    case "wave":
+    case "idle":
+    case "cook":
+    case "dj":
+    case "sip":
+    case "eat":
+    case "work":
+      return byIdMove(act);
+    default:
+      return byIdMove(k % 3 === 0 ? "idle" : "talk");
+  }
+}
+
+/** A cup in the hand, for sipping (in the avatar's own units). */
+function cup(unit: number) {
+  const g = new THREE.Group();
+  const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.035 * unit, 0.028 * unit, 0.11 * unit, 12), new THREE.MeshLambertMaterial({ color: 0xe7f5ff, transparent: true, opacity: 0.85 }));
+  const drink = new THREE.Mesh(new THREE.CylinderGeometry(0.03 * unit, 0.025 * unit, 0.07 * unit, 12), new THREE.MeshLambertMaterial({ color: 0xe8590c }));
+  drink.position.y = -0.015 * unit;
+  g.add(glass, drink);
+  return g;
+}
+
+/**
+ * Swap figures for 3D avatars. people: who they are (NPCs by id "npc:...", or players with their
+ * avatar). players: also swap the players (not only the NPCs).
+ */
+export function upgradeNpcs(figs: FigLike[], people: { id: string; avatar?: unknown; npc?: boolean }[], opts?: { players?: boolean }) {
+  const live: { obj: AvatarObject; mats: MaterialSet; move: Move; t: number; speed: number; extra?: Partial<Dims>; extras: THREE.Object3D[] }[] = [];
   let gone = false;
-  const npcIds = new Set(people.filter((p) => (p as { npc?: boolean }).npc !== false && String(p.id).startsWith("npc:")).map((p) => p.id));
   const byId = new Map(people.map((p) => [p.id, p]));
-  const chosen = figs.filter((f) => npcIds.has(f.id) && f.pose === "stand" && f.act !== "dj" && f.act !== "cook").slice(0, MAX);
+  const chosen = figs.filter((f) => (opts?.players || String(f.id).startsWith("npc:")) && byId.has(f.id)).slice(0, MAX);
   chosen.forEach((f, k) => {
-    const p = byId.get(f.id) as Npc | undefined;
+    const p = byId.get(f.id) as (Npc & { npc?: boolean }) | undefined;
     let recipe;
     try {
-      recipe = p?.avatar ? recipeOf(p.avatar) : seededRecipe(f.id);
+      recipe = p?.avatar ? recipeOf(p.avatar as Npc["avatar"]) : seededRecipe(f.id);
     } catch {
       recipe = seededRecipe(f.id);
     }
@@ -44,18 +79,28 @@ export function upgradeNpcs(figs: FigLike[], people: { id: string; avatar?: unkn
         // Into metres, standing on the floor: about 1.7 m tall (the avatar's own proportions kept).
         const box = new THREE.Box3().setFromObject(obj.root);
         const tall = Math.max(0.01, box.max.y - box.min.y);
-        const k = 1.72 / tall;
-        obj.root.scale.setScalar(k);
-        obj.root.position.y = -box.min.y * k;
+        const scale = 1.72 / tall;
+        obj.root.scale.setScalar(scale);
+        obj.root.position.y = -box.min.y * scale;
         obj.root.traverse((o) => {
           (o as THREE.Mesh).castShadow = true;
           // Skinned parts move every frame: their bounds would hide them at the wrong moment.
           o.frustumCulled = false;
         });
+        const move = moveFor(f.pose, f.act, k);
+        // Sitting: the seat's height, in the avatar's own units (the old figure's hips rest just above it).
+        const extra: Partial<Dims> | undefined = f.pose === "sit" ? { seat: Math.max(0.2, f.hipsY - 0.05) / scale + box.min.y } : undefined;
+        const extras: THREE.Object3D[] = [];
+        if ((move.id === "sip" || move.id === "sitSip") && obj.nodes.hand0) {
+          const c = cup(1 / scale);
+          c.position.set(0, -0.06 / scale, 0.03 / scale);
+          obj.nodes.hand0.add(c);
+          extras.push(c);
+        }
         f.root.add(obj.root);
         f.mesh.visible = false;
-        const id = f.act === "dance" ? "dance" : f.act === "wave" ? "wave" : f.act === "idle" ? "idle" : k % 3 === 0 ? "idle" : "talk";
-        live.push({ obj, mats, move: MOVES.find((m) => m.id === id) ?? MOVES[0], t: k * 1.7, speed: 0.9 + ((k * 37) % 20) / 100 });
+        if (f.prop) f.prop.visible = false;
+        live.push({ obj, mats, move, t: k * 1.7, speed: 0.9 + ((k * 37) % 20) / 100, extra, extras });
       })
       .catch(() => {
         // The old figure stays.
@@ -65,7 +110,7 @@ export function upgradeNpcs(figs: FigLike[], people: { id: string; avatar?: unkn
     update(dt: number) {
       for (const a of live) {
         a.t += dt * a.speed;
-        applyMove(a.obj.nodes, a.obj.rest, a.move, a.t, a.obj.stride);
+        applyMove(a.obj.nodes, a.obj.rest, a.move, a.t, a.obj.stride, a.extra);
       }
     },
     dispose() {
@@ -73,8 +118,67 @@ export function upgradeNpcs(figs: FigLike[], people: { id: string; avatar?: unkn
       for (const a of live) {
         a.obj.root.removeFromParent();
         a.mats.dispose();
+        for (const e of a.extras)
+          e.traverse((o) => {
+            const m = o as THREE.Mesh;
+            if (m.isMesh) {
+              m.geometry.dispose();
+              (m.material as THREE.Material).dispose();
+            }
+          });
       }
       live.length = 0;
+    },
+  };
+}
+
+/**
+ * You, as your own 3D avatar (walking round a home in the third person): it builds in the
+ * background and appears when ready. Each frame, say where you are, which way you face and what
+ * you're doing (walking, standing, sitting on a seat this high).
+ */
+export function createMyAvatar(avatar: unknown) {
+  const root = new THREE.Group();
+  let live: { obj: AvatarObject; mats: MaterialSet; scale: number; floor: number } | null = null;
+  let gone = false;
+  let t = 0;
+  let recipe;
+  try {
+    recipe = recipeOf(avatar as Npc["avatar"]);
+  } catch {
+    recipe = seededRecipe("me");
+  }
+  void getAvatarModel(recipe, LOD.own)
+    .then((model) => {
+      if (gone) return;
+      const mats = makeMaterials(recipe);
+      const obj = mountModel(model, mats);
+      const box = new THREE.Box3().setFromObject(obj.root);
+      const scale = 1.72 / Math.max(0.01, box.max.y - box.min.y);
+      obj.root.scale.setScalar(scale);
+      obj.root.position.y = -box.min.y * scale;
+      obj.root.traverse((o) => {
+        (o as THREE.Mesh).castShadow = true;
+        o.frustumCulled = false;
+      });
+      root.add(obj.root);
+      live = { obj, mats, scale, floor: box.min.y };
+    })
+    .catch(() => {});
+  return {
+    root,
+    /** doing: "walk", "idle" or "sit" (seat: its height in metres). */
+    update(dt: number, doing: "walk" | "idle" | "sit", seat = 0.46) {
+      if (!live) return;
+      t += dt;
+      const move = byIdMove(doing === "sit" ? "sit" : doing);
+      applyMove(live.obj.nodes, live.obj.rest, move, t, live.obj.stride, doing === "sit" ? { seat: seat / live.scale + live.floor } : undefined);
+    },
+    dispose() {
+      gone = true;
+      root.removeFromParent();
+      live?.mats.dispose();
+      live = null;
     },
   };
 }

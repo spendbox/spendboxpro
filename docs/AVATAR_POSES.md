@@ -1,4 +1,20 @@
-# The 3D characters: poses still to build
+# The 3D characters: poses
+
+## Built (src/lib/avatar3d/moves.ts)
+
+- Standing about, walking, running, waving, dancing, jumping, talking.
+- Sitting: still, talking, sipping a drink (with a cup in the hand), eating, typing at a desk. Sitting fits any seat height: a sofa, a chair or a high stool, with the feet dangling.
+- Leaning (hands in pockets, one foot crossed).
+- Sipping and eating standing up.
+- Cooking at the cooker.
+- DJing: one hand on the decks, headphones to the ear.
+- Working at a counter.
+- Clapping, cheering.
+- A handshake, a hug.
+
+Every NPC, every player in a place, the dancers and the passengers on rides now use the new 3D avatars in all these poses (src/app/play/city/npc3d.ts). Up to 16 people per place are switched over; the old figure stays only while an avatar is still loading, or on a phone that can't build them. You can try every move in the avatar lab (/avatar-lab).
+
+## Still to build (the list below, minus what's above)
 
 The new 3D avatars (`src/lib/avatar3d`, moves in `moves.ts`) can so far: stand (idle), walk, run,
 wave, dance, jump and talk. Inside places, characters standing about already use them

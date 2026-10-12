@@ -72,7 +72,7 @@ import { createBoats } from "./city/boats";
 import { createRealTransit, REAL_BASE } from "./city/real-transit";
 import { createHomeInterior } from "./home/home-interior";
 import type { HomePlan } from "@/lib/home-plan";
-import { upgradeNpcs } from "./city/npc3d";
+import { createMyAvatar, upgradeNpcs } from "./city/npc3d";
 import { createAirliner, LIVERIES } from "./city/airliner";
 import { createSlideRide, createWaterpark, waterparkParts, type Slide, type SlideRide, type Waterpark } from "./city/waterpark";
 import { createVenueGame, venueParts, type VenueGame } from "./city/venues";
@@ -349,6 +349,8 @@ type Props = {
    * you (drag to look round). x and y are the joystick (-1..1, y up = forward), read every frame.
    */
   walkStick?: { current: { on: boolean; x: number; y: number } };
+  /** Inside a planned home: the joystick for walking round it as your avatar. */
+  homeStick?: { current: { x: number; y: number } };
   /** On foot: you tried to walk into water or a building ("water" / "building"), at most every few seconds. */
   onWalkBlocked?: (what: "water" | "building") => void;
 };
@@ -1381,6 +1383,7 @@ export function CityView({
   centerRef,
   paused = false,
   walkStick,
+  homeStick,
   onWalkBlocked,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
@@ -1415,10 +1418,10 @@ export function CityView({
     /** Zoom in (dir 1) or out (dir -1) a step: the + and − buttons on a computer. */
     zoom: (dir: number) => void;
   } | null>(null);
-  const cb = useRef({ onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked });
+  const cb = useRef({ onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick });
   const atmos = useRef({ progress, nightFirst, meAvatar, weather });
   useEffect(() => {
-    cb.current = { onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked };
+    cb.current = { onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick };
     atmos.current = { progress, nightFirst, meAvatar, weather };
   });
 
@@ -4660,6 +4663,13 @@ export function CityView({
       /** The regulars standing about, in the new 3D avatar design (./city/npc3d). */
       npc3d?: ReturnType<typeof upgradeNpcs> | null;
       npcT?: number;
+      /** The players here and the dancers, in the 3D design too. */
+      players3d?: ReturnType<typeof upgradeNpcs> | null;
+      dancers3d?: ReturnType<typeof upgradeNpcs> | null;
+      /** A planned home: you walk round it as your own 3D avatar, the camera behind you. */
+      me3d?: ReturnType<typeof createMyAvatar> | null;
+      meFace?: number;
+      mePrev?: { x: number; z: number };
     };
     /** On a ride (not a balloon): the cabin drawn round you, the people in it, where it is. */
     type VehicleView = {
@@ -4668,6 +4678,9 @@ export function CityView({
       scene: THREE.Scene;
       cabin: Cabin | null;
       figures: Figures | null;
+      /** The passengers in the 3D design, and when they last moved. */
+      figures3d?: ReturnType<typeof upgradeNpcs> | null;
+      t3?: number;
       npcs: Npc[];
       /** Where the vehicle is now (its floor, or a slide's start), and its smoothed heading. */
       pose: VehiclePose;
@@ -4822,6 +4835,10 @@ export function CityView({
         });
         st.interior = interior;
         st.figures = figures;
+        if (homePlan) {
+          st.me3d = createMyAvatar(atmos.current.meAvatar);
+          st.holder.add(st.me3d.root);
+        }
         st.npc3d = upgradeNpcs(figures.figs, npcs);
         interior.setNight(carNight);
         st.update = interior.update;
@@ -4871,8 +4888,11 @@ export function CityView({
       st.npc3d?.dispose();
       st.interact?.dispose();
       st.players?.dispose();
+      st.players3d?.dispose();
       st.crowd?.dispose();
       st.dancers?.dispose();
+      st.dancers3d?.dispose();
+      st.me3d?.dispose();
       if (st.meRing) {
         st.meRing.geometry.dispose();
         (st.meRing.material as THREE.Material).dispose();
@@ -4922,6 +4942,8 @@ export function CityView({
       st.playersKey = key;
       st.players?.dispose();
       st.players = null;
+      st.players3d?.dispose();
+      st.players3d = null;
       const people: Person[] = [];
       const spots: Spot[] = [];
       st.seats.forEach((sp, n) => {
@@ -4938,6 +4960,7 @@ export function CityView({
       if (people.length) {
         st.players = createFigures(people, spots, { key: st.place });
         st.holder.add(st.players.group);
+        st.players3d = upgradeNpcs(st.players.figs, people, { players: true });
       }
       if (st.interact) {
         const things = st.interact.items.filter((it) => it.kind !== "seat");
@@ -5046,11 +5069,14 @@ export function CityView({
         st.dancersKey = key;
         st.dancers?.dispose();
         st.dancers = null;
+        st.dancers3d?.dispose();
+        st.dancers3d = null;
         if (list.length) {
           const people: Person[] = list.map((d) => ({ id: d.id, name: d.name, avatar: d.avatar, npc: false, seat: `dancer:${d.id}` }));
           const spots: Spot[] = list.map((d) => ({ ...(at.get(d.id) ?? { x: fl.x, z: fl.z, ry: 0 }), pose: "stand", act: "dance", move: d.move }));
           st.dancers = createFigures(people, spots, { key: st.place });
           st.holder.add(st.dancers.group);
+          st.dancers3d = upgradeNpcs(st.dancers.figs, people, { players: true });
         }
       }
       for (const d of list) {
@@ -5145,6 +5171,28 @@ export function CityView({
       }
       if (w.i >= w.pts.length) st.walk = null;
     }
+    /** A planned home: the joystick walks you the way the camera looks, round furniture and walls. */
+    function stepStick(st: Stage, dt: number) {
+      const s = cb.current.homeStick?.current;
+      if (!s || !st.walker) return;
+      const jx = Math.max(-1, Math.min(1, s.x));
+      const jy = Math.max(-1, Math.min(1, s.y));
+      const mag = Math.min(1, Math.hypot(jx, jy));
+      if (mag < 0.08) return;
+      // Sitting down: stay put until you stand up.
+      if (mySeatNow?.startsWith(`${st.place}:seat:`)) return;
+      st.walk = null;
+      const ly = aim.yaw + look.state.yaw - stageTurn(st);
+      const fx = -Math.sin(ly), fz = -Math.cos(ly), rx = Math.cos(ly), rz = -Math.sin(ly);
+      const mx = (fx * jy + rx * jx) / (mag || 1), mz = (fz * jy + rz * jx) / (mag || 1);
+      const step = 1.6 * mag * dt;
+      const nx = st.local.x + mx * step, nz = st.local.z + mz * step;
+      if (st.walker.isFree(nx, nz)) {
+        st.local.x = nx;
+        st.local.z = nz;
+      } else if (st.walker.isFree(nx, st.local.z)) st.local.x = nx;
+      else if (st.walker.isFree(st.local.x, nz)) st.local.z = nz;
+    }
     /** Room metres → city (the camera), at eye height `eye` metres. */
     function stageToCity(st: Stage, x: number, z: number, eye: number, out: THREE.Vector3) {
       if (st.interior) {
@@ -5203,6 +5251,13 @@ export function CityView({
       const inside = view.stage.level.kind === "interior";
       const roof = view.stage.level.kind === "roof";
       look.setLimits({ pitchMin: (inside ? -1.0 : roof ? -1.3 : -0.95) - aim.pitch, pitchMax: (inside ? 0.75 : 0.65) - aim.pitch, zoomMin: 0.55, zoomMax: 1.15 });
+      if (view.stage.homeKey) {
+        // A planned home: you, from behind, facing the way the view looks.
+        aim.yaw = v.yaw;
+        aim.pitch = 0;
+        view.stage.meFace = v.yaw + Math.PI;
+        look.setLimits({ pitchMin: -0.45, pitchMax: 0.6, zoomMin: 0.6, zoomMax: 1.5 });
+      }
     }
 
     function startFlight(kind: Flight["kind"], dur: number, ctrl: THREE.Vector3 | null) {
@@ -5441,6 +5496,7 @@ export function CityView({
         vv.npcs = npcs;
         vv.figures = createFigures(npcs, spots, { key });
         cabin.group.add(vv.figures.group);
+        vv.figures3d = upgradeNpcs(vv.figures.figs, npcs);
       }
       vehiclePose(vv, 0);
       vv.yaw = vv.pose.yaw;
@@ -5455,6 +5511,7 @@ export function CityView({
     function disposeVehicle(vv: VehicleView) {
       vv.cabin?.dispose();
       vv.figures?.dispose();
+      vv.figures3d?.dispose();
       vv.slide?.ride.dispose();
     }
     /** Where the vehicle is now (into vv.pose). False if it's gone. */
@@ -5568,6 +5625,8 @@ export function CityView({
         vv.cabin.update(time, carNight, steerAmt);
       } else sl?.ride.setNight(carNight);
       vv.figures?.update(time);
+      vv.figures3d?.update(Math.min(0.1, Math.max(0, time - (vv.t3 ?? time))));
+      vv.t3 = time;
     }
     function setPlace(p: CityPlace | null) {
       wantPlace = p;
@@ -5622,6 +5681,38 @@ export function CityView({
         tmpV2.sub(pose.pos);
         pose.quat.setFromEuler(eul.set(Math.atan2(tmpV2.y, Math.hypot(tmpV2.x, tmpV2.z)), Math.atan2(-tmpV2.x, -tmpV2.z), 0, "YXZ"));
         pose.fov = fovFor(78);
+        return;
+      } else if (view?.kind === "place" && view.stage.homeKey && view.stage.interior) {
+        // A planned home, in the third person: you walk round it (tap the floor, or the joystick),
+        // the camera behind you and a little above (drag to look round, pinch to come closer).
+        const st = view.stage;
+        stepWalk(st, dt);
+        stepStick(st, dt);
+        const prev = st.mePrev ?? { x: st.local.x, z: st.local.z };
+        const mdx = st.local.x - prev.x, mdz = st.local.z - prev.z;
+        const moving = Math.hypot(mdx, mdz) > dt * 0.2;
+        st.mePrev = { x: st.local.x, z: st.local.z };
+        const seated = st.eyeTo < 1.4;
+        const seatSp = seated ? st.seats.find((sp) => Math.hypot(sp.x - st.local.x, sp.z - st.local.z) < 0.3) : undefined;
+        if (moving) st.meFace = (st.meFace ?? 0) + turnTo(st.meFace ?? 0, Math.atan2(mdx, mdz)) * Math.min(1, dt * 12);
+        else if (seatSp) st.meFace = seatSp.ry;
+        if (st.me3d) {
+          st.me3d.root.position.set(st.local.x, 0, st.local.z);
+          st.me3d.root.rotation.y = st.meFace ?? 0;
+          st.me3d.update(dt, moving ? "walk" : seated ? "sit" : "idle", seated ? (seatSp?.y ?? st.eyeTo - 0.72) : 0.46);
+        }
+        const W = (st.interior?.w ?? 7) / 2 - 0.3;
+        const D = (st.interior?.d ?? 7) / 2 - 0.3;
+        const ly = aim.yaw + look.state.yaw - stageTurn(st);
+        const dist = 2.4 / Math.max(0.6, look.state.zoom);
+        const cx = Math.max(-W, Math.min(W, st.local.x + Math.sin(ly) * dist));
+        const cz = Math.max(-D, Math.min(D, st.local.z + Math.cos(ly) * dist));
+        st.camAt = { x: cx, z: cz };
+        stageToCity(st, cx, cz, 2.05 + look.state.pitch * 0.9, pose.pos);
+        stageToCity(st, st.local.x, st.local.z, seated ? 0.95 : 1.3, tmpV2);
+        tmpV2.sub(pose.pos);
+        pose.quat.setFromEuler(eul.set(Math.atan2(tmpV2.y, Math.hypot(tmpV2.x, tmpV2.z)), Math.atan2(-tmpV2.x, -tmpV2.z), 0, "YXZ"));
+        pose.fov = fovFor(76);
         return;
       } else if (view?.kind === "place") {
         const st = view.stage;
@@ -5936,9 +6027,13 @@ export function CityView({
         if (!st) continue;
         st.interior?.setNight(carNight);
         st.deck?.setNight(carNight);
-        camLocal.set(st.local.x, 0, st.local.z);
+        if (st.homeKey && st.camAt) camLocal.set(st.camAt.x, 0, st.camAt.z);
+        else camLocal.set(st.local.x, 0, st.local.z);
         st.figures?.update(time, camLocal);
-        st.npc3d?.update(Math.min(0.1, Math.max(0, time - (st.npcT ?? time))));
+        const dt3 = Math.min(0.1, Math.max(0, time - (st.npcT ?? time)));
+        st.npc3d?.update(dt3);
+        st.players3d?.update(dt3);
+        st.dancers3d?.update(dt3);
         st.npcT = time;
         st.players?.update(time, camLocal);
         st.crowd?.update(time);

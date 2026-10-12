@@ -768,6 +768,8 @@ export function Game({
   const [statsOpen, setStatsOpen] = useState(false);
   /** On foot on the streets: the joystick's state (the 3D city reads it every frame), and whether you're walking. */
   const walkStick = useRef({ on: false, x: 0, y: 0 });
+  /** Inside a planned home: the joystick for walking round it as your avatar. */
+  const homeStick = useRef({ on: true, x: 0, y: 0 });
   const [walking, setWalkingNow] = useState(false);
   const setWalking = (on: boolean) => {
     walkStick.current.on = on;
@@ -1563,6 +1565,8 @@ export function Game({
     };
   }, [worldId, myHomeBuilding, fetchHomePlan]);
   const enteredRoom = place ? (rooms.myRoomInfo?.id ?? null) : null;
+  const enteredTile = enteredRoom ? Number(/^b:(\d+)/.exec(enteredRoom)?.[1] ?? NaN) : NaN;
+  const inPlannedHome = !!worldId && Number.isFinite(enteredTile) && enteredTile in homePlans;
   useEffect(() => {
     const m = enteredRoom ? /^b:(\d+)/.exec(enteredRoom) : null;
     if (!worldId || !m) return;
@@ -1766,6 +1770,7 @@ export function Game({
             onWorkplace={worldId ? worldLife.onWorkplace : undefined}
             centerRef={worldId ? worldLife.centerRef : undefined}
             walkStick={walkStick}
+            homeStick={homeStick}
             onWalkBlocked={(what) => setMessage({ text: what === "water" ? "That's water: you can't walk on it. Try a ferry (Explore → Rides)." : "That's a building. Tap it to go in.", tone: "info" })}
             businesses={worldId ? worldLife.businesses : undefined}
             onBusiness={worldId ? worldLife.onBusiness : undefined}
@@ -3226,6 +3231,12 @@ export function Game({
       {worldId && !guest && !camera && (
         <div className="pointer-events-none fixed left-0 top-1/2 z-10 -translate-y-1/2">
           <RecentRail onPerson={setPersonId} onMessage={chatWith} />
+        </div>
+      )}
+      {/* In a planned home: the joystick walks you round it (or tap the floor). */}
+      {inPlannedHome && !camera && (
+        <div className="pointer-events-none fixed bottom-24 left-4 z-30 sm:bottom-8 sm:left-8">
+          <Joystick stick={homeStick} />
         </div>
       )}
       {/* On foot: the joystick, bottom left (drag anywhere else to look round). */}
