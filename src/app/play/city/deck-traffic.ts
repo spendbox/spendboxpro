@@ -82,9 +82,16 @@ export function createDeckTraffic(world: World, parent: THREE.Object3D) {
       const c = cars[k];
       const r = routes[c.route];
       c.s += c.dir * c.speed * dt;
-      // Off the end of the deck (down its ramp, onto the street): another comes on at the start.
-      if (c.s > r.len) c.s -= r.len;
-      if (c.s < 0) c.s += r.len;
+      // At an end of the deck: turn round and come back the other way (jumping to the far end
+      // made cars pop out of thin air where a deck joins another one).
+      if (c.s > r.len) {
+        c.s = 2 * r.len - c.s;
+        c.dir = c.dir === 1 ? -1 : 1;
+      }
+      if (c.s < 0) {
+        c.s = -c.s;
+        c.dir = c.dir === 1 ? -1 : 1;
+      }
       let i = 1;
       while (i < r.at.length - 1 && r.at[i] < c.s) i++;
       const a = r.pts[i - 1];

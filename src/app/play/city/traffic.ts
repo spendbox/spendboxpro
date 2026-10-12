@@ -216,7 +216,7 @@ export function createTraffic(world: World, parent: THREE.Object3D) {
     clearMeshes();
     const same = plan.seed === seedNow;
     seedNow = plan.seed;
-    const roads = world.tiles.filter((t) => (t.kind === "road" || t.kind === "bridge") && !t.works);
+    const roads = world.tiles.filter((t) => (t.kind === "road" || t.kind === "bridge") && !t.works && !world.blocked.has(keyOf(t.x, t.z)));
     if (!same) {
       cars = [];
       ride = -1;
