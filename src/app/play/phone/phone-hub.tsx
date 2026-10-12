@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { BatteryFull, SignalHigh, Wifi } from "lucide-react";
 import { useEscape } from "../menu/escape";
+import { SwipeRow } from "../notifications";
 
 // Your phone (docs/PEOPLE.md): shaped like a phone. The status bar with the time in Lagos, your
 // latest notifications on the screen like a lock screen, the apps in a grid with their own
@@ -19,7 +20,7 @@ export type PhoneApp = {
   dock?: boolean;
 };
 
-export type PhoneNotice = { key: string; text: string; when: string; fresh: boolean; onTap?: () => void };
+export type PhoneNotice = { key: string; text: string; when: string; fresh: boolean; onTap?: () => void; /** Swiped away. */ onDismiss?: () => void };
 
 const lagosTime = () => new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" });
 
@@ -60,19 +61,28 @@ export function PhoneHub({ apps, notices, onClose, onAllNotices }: { apps: Phone
               {notices.length === 0 ? (
                 <p className="rounded-2xl bg-white/15 px-3 py-2.5 text-center text-xs backdrop-blur">No notifications. You&apos;re all caught up.</p>
               ) : (
-                notices.slice(0, 4).map((n) => (
-                  <button
-                    key={n.key}
-                    onClick={() => {
-                      onClose();
-                      (n.onTap ?? onAllNotices)();
-                    }}
-                    className={`block w-full rounded-2xl px-3 py-2 text-left text-xs backdrop-blur ${n.fresh ? "bg-white/90 text-ink" : "bg-white/20"}`}
-                  >
-                    <span className="line-clamp-2 font-semibold leading-snug">{n.text}</span>
-                    <span className={`text-[10px] ${n.fresh ? "text-muted" : "text-white/70"}`}>{n.when}</span>
-                  </button>
-                ))
+                notices.slice(0, 4).map((n) => {
+                  const row = (
+                    <button
+                      onClick={() => {
+                        onClose();
+                        (n.onTap ?? onAllNotices)();
+                      }}
+                      className={`block w-full rounded-2xl px-3 py-2 text-left text-xs backdrop-blur ${n.fresh ? "bg-white/90 text-ink" : "bg-white/20"}`}
+                    >
+                      <span className="line-clamp-2 font-semibold leading-snug">{n.text}</span>
+                      <span className={`text-[10px] ${n.fresh ? "text-muted" : "text-white/70"}`}>{n.when}</span>
+                    </button>
+                  );
+                  // Swipe one sideways to clear it.
+                  return n.onDismiss ? (
+                    <SwipeRow key={n.key} onDismiss={n.onDismiss} tone="dark">
+                      {row}
+                    </SwipeRow>
+                  ) : (
+                    <div key={n.key}>{row}</div>
+                  );
+                })
               )}
               {notices.length > 4 && (
                 <button

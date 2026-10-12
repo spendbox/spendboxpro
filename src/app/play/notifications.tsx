@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, useState } from "react";
 import { Handshake, Heart, Swords } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import {
@@ -62,7 +63,78 @@ export type FeedItem = {
   quiet?: boolean;
   /** The notice's kind ("gift", "doorstep", "market"...), for your own notices. */
   kind?: string;
+  /** Your own notice's id (it can be read and swiped away), and whether you've read it. */
+  noteId?: number;
+  read?: boolean;
 };
+
+/**
+ * A row you can swipe left or right to clear (or tap the little x). It slides off and is gone;
+ * a short swipe springs back.
+ */
+export function SwipeRow({ onDismiss, children, label = "Clear", tone = "light" }: { onDismiss: () => void; children: React.ReactNode; label?: string; tone?: "light" | "dark" }) {
+  const [dx, setDx] = useState(0);
+  const [gone, setGone] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const start = useRef<{ x: number; y: number; id: number } | null>(null);
+  const swiping = useRef(false);
+  const out = (dir: number) => {
+    setGone(true);
+    setDx(dir * 420);
+    setTimeout(onDismiss, 220);
+  };
+  return (
+    <div className={cn("relative overflow-hidden rounded-2xl transition-[max-height,opacity] duration-200", gone ? "max-h-0 opacity-0" : "max-h-40")}>
+      <span className="absolute inset-0 flex items-center justify-between rounded-2xl bg-hit/15 px-4 text-xs font-semibold text-hit" aria-hidden>
+        <span>{label}</span>
+        <span>{label}</span>
+      </span>
+      <div
+        onPointerDown={(e) => {
+          start.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
+          swiping.current = false;
+        }}
+        onPointerMove={(e) => {
+          const s = start.current;
+          if (!s || s.id !== e.pointerId) return;
+          const mx = e.clientX - s.x;
+          if (!swiping.current && Math.abs(mx) > 10 && Math.abs(mx) > Math.abs(e.clientY - s.y)) {
+            swiping.current = true;
+            setDragging(true);
+            e.currentTarget.setPointerCapture(e.pointerId);
+          }
+          if (swiping.current) setDx(mx);
+        }}
+        onPointerUp={() => {
+          const was = swiping.current;
+          start.current = null;
+          swiping.current = false;
+          setDragging(false);
+          if (!was) return;
+          if (Math.abs(dx) > 90) out(Math.sign(dx));
+          else setDx(0);
+        }}
+        onPointerCancel={() => {
+          start.current = null;
+          swiping.current = false;
+          setDragging(false);
+          setDx(0);
+        }}
+        onClickCapture={(e) => {
+          // The end of a swipe isn't a tap.
+          if (Math.abs(dx) > 4) e.stopPropagation();
+        }}
+        style={{ transform: `translateX(${dx}px)`, transition: dragging ? "none" : "transform .2s ease-out" }}
+        className={cn("relative flex touch-pan-y items-center gap-1 rounded-2xl", tone === "light" ? "bg-panel" : "bg-transparent")}
+      >
+        <div className="min-w-0 flex-1">{children}</div>
+        <button onClick={() => out(1)} className={cn("grid size-8 shrink-0 place-items-center rounded-full", tone === "light" ? "text-muted hover:bg-ink/5" : "text-white/80 hover:bg-white/10")} aria-label={label}>
+          <X className="size-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 type IconLike = { size?: number | string; strokeWidth?: number; className?: string };
 

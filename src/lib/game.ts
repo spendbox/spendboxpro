@@ -1,4 +1,5 @@
 import "server-only";
+import { loadNotices } from "@/lib/notices";
 import { mintify } from "@/lib/brand";
 import { after } from "next/server";
 import { settleRecent } from "@/app/api/sports/settle";
@@ -136,7 +137,8 @@ export type GameState = {
   /** How many drone traps are active in the city right now (not where they are). */
   activeTraps: number;
   /** Private notices for this player this round (trap alerts, sweeps, being caught). */
-  notifications: { id: number; kind: string; body: string; tile: number | null; at: string }[];
+  /** read: you've read it (the real map's notices, game-db/062); missing on the old game's. */
+  notifications: { id: number; kind: string; body: string; tile: number | null; at: string; read?: boolean }[];
   /** For a hider still hidden: what surviving would pay right now. */
   outlook: { stakeBack: number; share: number } | null;
   leftTiles: number[];
@@ -479,18 +481,7 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
 
   // Your notices on the real map (a gift, someone at your door, a sale...) belong to no round:
   // read them as well as this round's (they used to be left out, so nothing popped up).
-  const lifeNotesPart = async () => {
-    if (guest) return;
-    const { data } = await db
-      .from("notifications")
-      .select("id, kind, body, tile, created_at")
-      .eq("user_id", userId)
-      .or("round_id.is.null,kind.in.(hug,handshake,gift,spray,thanks)")
-      .gte("created_at", new Date(Date.now() - 7 * 86_400_000).toISOString())
-      .order("id", { ascending: false })
-      .limit(40);
-    return (data ?? []).map((n) => ({ id: Number(n.id), kind: String(n.kind), body: mintify(String(n.body)), tile: (n.tile ?? null) as number | null, at: String(n.created_at) }));
-  };
+  const lifeNotesPart = async () => (guest ? [] : loadNotices(db, userId));
   const [, last, results, , , { data: visits }, { count: playerCount }, houses, friends, streak, duels, lifeNotes] = await Promise.all([
     roundPart(),
     lastPart(),
@@ -505,7 +496,11 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
     duelsPart(),
     lifeNotesPart(),
   ]);
-  if (lifeNotes?.length) notifications = [...notifications, ...lifeNotes].sort((a, b) => b.id - a.id).slice(0, 60);
+  if (lifeNotes?.length) {
+    // The same notice can be in both lists (a hug in the old game's latest round): once, with its read mark.
+    const fromLife = new Map(lifeNotes.map((n) => [n.id, n]));
+    notifications = [...notifications.filter((n) => !fromLife.has(n.id)), ...lifeNotes].sort((a, b) => b.id - a.id).slice(0, 60);
+  }
   const site = { visits: Number(visits?.value ?? 0), players: playerCount ?? 0 };
   const tileCount = round?.tile_count ?? 0;
   const frac = tileCount ? Math.min(1, (round?.searched_count ?? 0) / tileCount) : 0;
