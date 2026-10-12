@@ -1,6 +1,7 @@
 # To do
 
 ## Now (owner)
+- [ ] In the Supabase SQL Editor run `game-db/060_find_people.sql` (search anyone nearest first, man or woman). Until it's run, People still lists those within 50 km and nobody shows as man or woman.
 - [ ] In the Supabase SQL Editor run `game-db/059_bigger_starts.sql` (free start ₥6,500; visits counted by day for the online button's numbers and the dashboard). The bigger packs work without it.
 - [ ] For the owner's dashboard: in Vercel → Settings → Environment Variables add `ADMIN_PATH` (a hard-to-guess address, at least 8 characters, e.g. `hq-7f3k29xq`), and `ADMIN_PASSWORD` (at least 8 characters; `ADMIN_EMAIL` is the sign-in email). Redeploy, then open `https://newtown.world/<ADMIN_PATH>`.
 - [ ] Starter packs: check Paystack → Settings → API Keys & Webhooks → Webhook URL is `https://newtown.world/api/paystack/webhook` (live and test). Payments are now also checked when the player comes back and every time they open the game; a stuck one can be re-checked from the dashboard.
