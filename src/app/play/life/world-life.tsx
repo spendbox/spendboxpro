@@ -708,6 +708,7 @@ export function useWorldLife({
             setWorkOpen(false);
           }}
           onClose={() => setWorkOpen(false)}
+          loadMoney={api.money}
         />
       )}
       {property && (
@@ -789,6 +790,7 @@ export function useWorldLife({
           region={region}
           busy={busy}
           loadMoney={api.money}
+          loadDays={api.moneyDays}
           currency={currency}
           onCurrency={chooseCurrency}
           onBudget={(b) =>

@@ -45,11 +45,11 @@ export function workplaceById(plan: CityPlan, id: string): Workplace | null {
   return w && w.id === id ? w : null;
 }
 
-/** Workplaces within `radius` tiles of a spot, nearest first. */
-export function workplacesNear(plan: CityPlan, x: number, z: number, radius: number): (Workplace & { tiles: number })[] {
+/** Workplaces within `radius` tiles of a spot, nearest first (looking at every `step`th tile, for big searches). */
+export function workplacesNear(plan: CityPlan, x: number, z: number, radius: number, step = 1): (Workplace & { tiles: number })[] {
   const out = new Map<string, Workplace & { tiles: number }>();
-  for (let dz = -radius; dz <= radius; dz++) {
-    for (let dx = -radius; dx <= radius; dx++) {
+  for (let dz = -radius; dz <= radius; dz += step) {
+    for (let dx = -radius; dx <= radius; dx += step) {
       const d = Math.hypot(dx, dz);
       if (d > radius) continue;
       const tx = x + dx;

@@ -38,6 +38,7 @@ import {
 } from "@/lib/world/property-api";
 import { landNow, toMint, valueOf } from "@/lib/world/value";
 import { ferryKmBetween } from "@/lib/world/trips";
+import { moneyDaysOf } from "@/lib/world/money";
 import { cheapestCommute, fareMint, fareOrBus, GAME_DAY_HOURS, HOLD_DAYS, INCOME_TAX, payDay, SKILL_BONUS, skillLevel, tripKmBetween, type Commute } from "@/lib/world/work";
 import { workplaceById } from "@/lib/world/workplace";
 import { FIRST_NAMES, SURNAMES } from "@/lib/npc/names";
@@ -664,6 +665,9 @@ export function makeLabApi(budget: number): PropertyApi {
       const out: MoneyFlow = {};
       for (const x of L().log) if (x.at >= since) out[x.kind] = r2((out[x.kind] ?? 0) + x.amount);
       return out;
+    },
+    async moneyDays(days) {
+      return moneyDaysOf(L().log, Math.min(90, Math.max(1, days)));
     },
     async lifeTime(hours) {
       const since = Date.now() - hours * 3_600_000;
