@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { cachedThings, loadThings } from "./things-cache";
 import { Car, Gem, Hammer, ShoppingBag, Store } from "lucide-react";
-import { Star } from "@/components/icons";
 import {
   BENEFIT_LABEL,
   CATEGORY_LABEL,
@@ -66,11 +65,6 @@ export function ThingsSheet({ tab: start, prices, onClose, onChanged }: { tab: T
       title={
         <span className="flex items-center gap-2">
           <Gem className="size-5" /> Things
-          {me && (
-            <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-xs font-semibold text-gold-dark">
-              <Star className="size-3.5" /> {me.reputation.score}
-            </span>
-          )}
         </span>
       }
     >
@@ -106,7 +100,6 @@ function Mine({ me, busy, run }: { me: MyThings | null; busy: boolean; run: Run 
         <Stat label="Mind / 2h" value={`+${me.effects.mind}`} />
         <Stat label="Body / 2h" value={`+${me.effects.body}`} />
       </div>
-      <Reputation me={me} />
       {me.items.length === 0 ? (
         <p className="mt-4 rounded-2xl bg-ink/[0.04] px-4 py-6 text-center text-sm text-muted">Nothing yet. Buy from the shops, find things as you go about, make your own, or get a gift.</p>
       ) : (
@@ -179,22 +172,6 @@ function ItemActions({ item, busy, price, setPrice, to, setTo, run, done }: { it
       <button disabled={busy} onClick={() => void run(() => items.sellToCity(item.id), (r) => `Sold to a shop for ${cash(Number(r.coins ?? 0))}.`).then((ok) => ok && done())} className="h-9 w-full rounded-full bg-gold/15 text-xs font-semibold text-gold-dark disabled:opacity-40">
         Sell to a shop now for {cash(item.worth * QUICK_SALE)}
       </button>
-    </div>
-  );
-}
-
-/** Reputation: where yours comes from. */
-function Reputation({ me }: { me: MyThings }) {
-  const p = me.reputation.parts;
-  return (
-    <div className="mt-3 rounded-2xl bg-gold/10 px-3 py-2.5 text-xs">
-      <p className="flex items-center gap-1.5 text-sm font-semibold">
-        <Star className="size-4 text-gold-dark" /> Reputation {me.reputation.score}
-      </p>
-      <p className="mt-0.5 text-muted">
-        Property {p.property} · Things {p.things} · Inventions {p.inventions} · Marks {p.marks}
-        {p.penalty ? ` · Caught swiping ${p.penalty}` : ""}
-      </p>
     </div>
   );
 }

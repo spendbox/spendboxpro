@@ -15,7 +15,7 @@
 - [ ] Then run `game-db/048_trips.sql` (going into a building costs the fare from where you last were).
 - [ ] Then run `game-db/052_marks.sql` (writing, reviews, trees, statues, time capsules on the map; see `docs/MARKS.md`). Run it after 051.
 - [ ] Then run `game-db/053_marks_rules.sql` (short writing, graffiti styles, the reputation limits). Run it after 052.
-- [ ] Then run `game-db/054_earnings.sql` (Finance's Overview: what you've earned and each payment in). Run it after 053.
+- [ ] Then run `game-db/054_earnings.sql` (Finance's Overview: what you've earned, the tax on it, and each payment in). Run it after 053; already ran it? Run it again (it now leaves out home sales and adds the tax).
 - [ ] Then run `game-db/055_street.sql` (stealing, jail and bribes, pranks, rivals, gossip; see `docs/STREET.md`) and then `game-db/056_dating.sql` (dating, opt-in with a yes every time; see `docs/DATING.md`).
 - [ ] Then run `game-db/051_people.sql` (faces on the map, cards, doorsteps, while you were away, push; see `docs/PEOPLE.md`).
 - [ ] For notifications: run `node scripts/vapid-keys.mjs` once, put the three lines it prints into Vercel's environment variables (NEXT_PUBLIC_VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT), and redeploy.

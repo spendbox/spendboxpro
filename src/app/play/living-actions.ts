@@ -140,7 +140,7 @@ export async function money(hours: number): Promise<MoneyFlow> {
 }
 
 export type Earning = { id: number; kind: string; amount: number; note: string | null; at: string };
-export type Earnings = { total: number; period: number; entries: Earning[] };
+export type Earnings = { total: number; tax: number; period: number; entries: Earning[] };
 
 /** What you've earned: ever, in the last `days` days, and each payment in (game-db/054_earnings.sql). */
 export async function earnings(days: number): Promise<Earnings | null> {
@@ -151,6 +151,7 @@ export async function earnings(days: number): Promise<Earnings | null> {
   const d = data as Record<string, unknown>;
   return {
     total: n(d.total),
+    tax: n(d.tax),
     period: n(d.period),
     entries: ((d.entries as Record<string, unknown>[]) ?? []).map((e) => ({ id: n(e.id), kind: String(e.kind), amount: n(e.amount), note: e.note == null ? null : String(e.note), at: String(e.at) })),
   };

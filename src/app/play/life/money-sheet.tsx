@@ -61,6 +61,7 @@ export function MoneySheet({
   glowBudget,
   currency,
   onCurrency,
+  payday,
 }: {
   status: LifeStatus | null;
   assets: AssetsData;
@@ -82,6 +83,8 @@ export function MoneySheet({
   /** The currency money is shown in, and choosing it. */
   currency: string;
   onCurrency: (code: string) => void;
+  /** Your next pay: when (null: no job, only hustles), and about how much from the job and hustles. */
+  payday?: { at: number | null; job: number; hustles: number; title: string | null } | null;
 }) {
   const [tab, setTab] = useState<Tab>(startTab ?? "home");
   // Real days (not the 2-hour days of your life): the last week or month.
@@ -105,7 +108,12 @@ export function MoneySheet({
         ))}
       </div>
       <div className="mt-4">
-        {tab === "home" && <Earned />}
+        {tab === "home" && (
+          <>
+            <Payday payday={payday ?? null} />
+            <Earned />
+          </>
+        )}
         {tab === "stats" && (
           <div>
             <div className="rounded-3xl bg-gradient-to-br from-gold/25 to-me/10 p-4 text-center">
@@ -163,6 +171,37 @@ export function MoneySheet({
   );
 }
 
+/** The next pay into your wallet: a live countdown and what's coming. */
+function Payday({ payday }: { payday: { at: number | null; job: number; hustles: number; title: string | null } | null }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  if (!payday) return <p className="mb-3 rounded-2xl bg-ink/[0.04] px-4 py-3 text-sm text-muted">No payday yet: get a job or start a side hustle from Income.</p>;
+  const left = payday.at === null ? null : payday.at - now;
+  const clock = (ms: number) => {
+    const s = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    return `${h}h ${String(m).padStart(2, "0")}m ${String(s % 60).padStart(2, "0")}s`;
+  };
+  return (
+    <div className="mb-3 flex items-center gap-3 rounded-2xl bg-ink px-4 py-3 text-white">
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-gold">Next payday</p>
+        <p className="font-display text-xl font-extrabold tabular-nums">{left === null ? "Every 14 hours" : left > 0 ? clock(left) : "Any moment now"}</p>
+        {payday.title && <p className="truncate text-[11px] text-white/60">{payday.title}</p>}
+      </div>
+      <div className="text-right">
+        <p className="text-[11px] text-white/60">Expecting about</p>
+        <p className="font-display text-lg font-extrabold tabular-nums text-gold">{cash(payday.job + payday.hustles)}</p>
+        <p className="text-[10px] text-white/50">after tax and fares{payday.hustles > 0 && payday.job > 0 ? ", hustles included" : ""}</p>
+      </div>
+    </div>
+  );
+}
+
 /** Earnings seen for each period: shown at once next time while fresh ones load. */
 const earnedSeen = new Map<number, Earnings>();
 const EARN_PERIODS = [
@@ -197,7 +236,12 @@ function Earned() {
       <div className="rounded-3xl bg-gradient-to-br from-me/20 to-gold/20 p-4 text-center">
         <p className="text-sm text-muted">You&apos;ve earned</p>
         <p className="font-display text-3xl font-extrabold tabular-nums text-me sm:text-4xl">{shown ? cash(shown.total, { full: true }) : "…"}</p>
-        <p className="mt-1 text-xs text-muted">in all, since you started{shown && days < 3650 ? ` · ${cash(shown.period)} in the last ${days} days` : ""}</p>
+        <p className="mt-1 text-xs text-muted">in all since you started, before tax{shown && days < 3650 ? ` · ${cash(shown.period)} in the last ${days} days` : ""}</p>
+        {shown && shown.tax > 0 && (
+          <p className="mt-1 text-xs">
+            Tax paid {cash(shown.tax)} · <b>you kept {cash(Math.max(0, shown.total - shown.tax))}</b>
+          </p>
+        )}
       </div>
       <div className="mt-4 flex items-center justify-between gap-2">
         <span className="text-sm font-semibold">Money in</span>
