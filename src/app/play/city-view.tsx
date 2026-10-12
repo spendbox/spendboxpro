@@ -32,7 +32,7 @@ import { regionMap } from "@/lib/world";
 import type { RegionMap } from "@/lib/world/compile";
 import { toTile } from "@/lib/world/geo";
 import { BUILDING_LABEL, type Building } from "@/lib/world/buildings";
-import { shortLocal, valueOf } from "@/lib/world/value";
+import { landNow, shortLocal, valueOf } from "@/lib/world/value";
 import { propertyInfo, type PropertyInfo } from "@/lib/world/property";
 import { workplaceOfTile, type Workplace } from "@/lib/world/workplace";
 import type { MapBusiness } from "@/lib/world/business";
@@ -3875,7 +3875,7 @@ export function CityView({
     function propertyName(b: Building, at: Tile, region: RegionMap) {
       const kind = BUILDING_LABEL[b.kind];
       const what = b.name ?? (b.state === "site" ? "Building site" : b.state === "uncompleted" ? `Unfinished ${kind.toLowerCase()}` : kind);
-      const value = valueOf(b, region.landPriceAt(at.x, at.z), region.region.prices).total;
+      const value = valueOf(b, landNow(region, at.x, at.z), region.region.prices).total;
       return `${what} · ${shortLocal(value, region.region.prices)}`;
     }
     /** A name for signs inside a building (company, hotel, hospital...). */

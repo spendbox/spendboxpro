@@ -5,6 +5,7 @@ import { ArrowLeft } from "@/components/icons";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { regionMap } from "@/lib/world";
 import { isOwner } from "./actions";
+import { PeopleList, type PersonReport } from "./people-list";
 import { ReportList, type Group, type Report } from "./report-list";
 
 export const metadata: Metadata = { title: "Map reports", robots: { index: false } };
@@ -25,7 +26,12 @@ export default async function MapReportsPage({ searchParams }: { searchParams: P
   }
   const sp = await searchParams;
   const all = sp.show === "all";
-  const { data } = await createAdminClient().rpc("map_reports_list", { p_status: all ? "all" : "open" });
+  const [{ data }, { data: peopleData }] = await Promise.all([
+    createAdminClient().rpc("map_reports_list", { p_status: all ? "all" : "open" }),
+    // Reports about people (game-db/049_reports_and_work.sql; empty until it's run).
+    createAdminClient().rpc("person_reports_list", { p_status: all ? "all" : "open" }),
+  ]);
+  const people = (Array.isArray(peopleData) ? peopleData : []) as PersonReport[];
   const reports = (Array.isArray(data) ? data : []) as Report[];
   // Group reports about the same spot (within about 300 m), busiest first.
   const groups = new Map<string, Group>();
@@ -59,6 +65,13 @@ export default async function MapReportsPage({ searchParams }: { searchParams: P
         </p>
       </div>
       {list.length === 0 ? <p className="text-muted">Nothing to look at right now.</p> : <ReportList groups={list} />}
+      <section>
+        <h2 className="font-display text-2xl font-bold">People</h2>
+        <p className="mt-1 text-sm text-muted">
+          Players and characters others reported ({people.length} {all ? "in all" : "open"}). Look into each one, then mark it.
+        </p>
+        <div className="mt-3">{people.length === 0 ? <p className="text-muted">No one reported right now.</p> : <PeopleList reports={people} />}</div>
+      </section>
     </main>
   );
 }

@@ -13,6 +13,7 @@
 - [ ] Then run `game-db/046_market.sql` (the player market: selling, offers, tenants, World Bank loans; see `docs/MARKET.md`). If you ever run 038 or 040 again, run 046 again after them.
 - [ ] Then run `game-db/047_ads_are_property.sql` (advertising is leasing a building: billboards included, a design you can swap, ends after a year or its taps; no mint for tapping ads; see `docs/BUSINESS.md`).
 - [ ] Then run `game-db/048_trips.sql` (going into a building costs the fare from where you last were).
+- [ ] Then run `game-db/049_reports_and_work.sql` (reporting people; up to 3 side hustles; pay that goes into wallets by itself every game week). Until it's run, starting a second side hustle and reporting a person won't work.
 - [ ] In Vercel, set `GAME_SECRET` to a long random string (seals interview answers and passes; without it the service key is used).
 - [ ] Let the cloud sessions reach OpenStreetMap (for the real Lagos map): in the Claude Code environment settings, Network access, add `overpass-api.de` to the allowed domains. Then ask for the real pedestrian crossings (the list is still empty: the download failed) and a fresh Lagos bake (`npm run bake:world -- lagos`).
 - [ ] Try the new 3D avatar studio (see `avatar-reference/docs/AVATAR_SPEC.md`): open the game with `?avatar3d=1` on your phone, tap your look, design and save. Only your browser gets it; `?avatar3d=0` switches it back.
@@ -24,6 +25,13 @@
 - [ ] Test on a real phone: sounds, touch gestures, the water slide, club lights.
 
 ## Done lately
+- [x] Bridges and flyovers never end in mid-air or meet with a step, and the tests check every deck in Lagos. Onikan Stadium no longer has a flyover through it.
+- [x] Unilag at its real Akoka spot on the lagoon, at real size (about 1.1 × 0.9 km), drawn as a campus; no more made-up "University of Lagos" copies.
+- [x] Tapping a building or place: Go there (with the fare; straight in on the ground floor, the Floor button glows for the first 5 visits), Rent / Buy (worth and units), Advertise, and which way its worth is going. Cards no longer blur the map.
+- [x] Report a problem on every building, place, player and character. Advertising leases ₦20,000 to ₦1m. The coin balloon is gone.
+- [x] Cheaper fares (a danfo never over ₦600 a trip); islands with no bridge go by ferry.
+- [x] Income: the job at a glance, pay into the wallet by itself every game week, switching jobs in one step, up to 3 side hustles with their costs shown, long days can cut sleep (it stresses the mind).
+- [x] Pop-ups open at once.
 - [x] Costs are shown on the button that spends them (going into a place for the first time, train tickets...), so nothing is explained afterwards. Jobs pay three times as much (₥15-₥60 an hour) and each skill level adds 10%.
 - [x] all 100 minigames built (Games button in the menu and in every place): 9 categories, the ones that suit the place first, play alone, take turns on one phone, challenge someone here, or (board and card games) play the computer or someone online. Leaderboards; ₥2/₥4/₥6 for bronze/silver/gold. The bank robbery now has a job step of heist games (fail one and the alarm goes off), and jobs have "Work a shift" games that pay a tip.
 - [x] Sounds of what's close by (all subtle): a helicopter's rotor as one flies near, busier street sounds near roads (cars, motorbikes, horns), whispered nonsense near crowds, chatter in foreign-sounding tongues near airports, hotels and markets, dogs among the houses, cockerels on the farms.

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DoorOpen } from "lucide-react";
 import { Briefcase, Flag, HeartPulse, House, MapPin, Search, Sparkles, X } from "@/components/icons";
 import { addressOf, makePlan, spiralIndex, tileAt, type CityPlan } from "@/lib/city/layout";
 import { BUILDING_LABEL } from "@/lib/world/buildings";
@@ -10,8 +11,10 @@ import { ownedSpot } from "@/lib/world/owned";
 import { propertyInfo, type PropertyInfo } from "@/lib/world/property";
 import { homesByArea, type HomeFind } from "@/lib/world/homes";
 import type { BuildingOwner, InterviewStart, LifeStatus, Neighbour, PaySettled, PropertyApi, PropertyResult, WorkStatus } from "@/lib/world/property-api";
-import { cheapestCommute, COMMUTE_LABEL, dayNet, fareMint, needsInterview, payDay, tripKmBetween, type Commute } from "@/lib/world/work";
+import { cheapestCommute, COMMUTE_LABEL, dayNet, fareMint, needsInterview, payDay, tripKmBetween, tripWords, type Commute } from "@/lib/world/work";
+import { ferryKmBetween } from "@/lib/world/trips";
 import { dayOf, EXERCISE } from "@/lib/world/day";
+import { HUSTLES, hustleDay, hustleStart } from "@/lib/world/hustles";
 import type { Workplace } from "@/lib/world/workplace";
 import { PropertyCard } from "../property-card";
 import { Sheet } from "../sheet";
@@ -177,7 +180,19 @@ export function useWorldLife({
   const [place, setPlace] = useState<Workplace | null>(null);
   const [homeOpen, setHomeOpen] = useState(false);
   const [neighbours, setNeighbours] = useState<Neighbour[] | null>(null);
-  const [status, setStatus] = useState<LifeStatus | null>(null);
+  const [status, setStatusNow] = useState<LifeStatus | null>(null);
+  /** When your life was last brought up to now (a heavy call: opening a screen skips it when it's fresh). */
+  const statusAt = useRef(0);
+  const setStatus = useCallback((st: LifeStatus | null) => {
+    statusAt.current = Date.now();
+    setStatusNow(st);
+  }, []);
+  /** Bring your life up to now in the background, unless that happened in the last half minute. */
+  const freshenStatus = () => {
+    if (Date.now() - statusAt.current < 30_000) return;
+    statusAt.current = Date.now();
+    void api.lifeStatus().then(setStatus);
+  };
   const [lifeOpen, setLifeOpen] = useState(false);
   const [interview, setInterview] = useState<{ start: Extract<InterviewStart, { ok: true }>; hire: (ticket: string) => void } | null>(null);
   const [moment, setMoment] = useState(false);
@@ -219,7 +234,21 @@ export function useWorldLife({
       clearTimeout(t);
       clearInterval(every);
     };
-  }, [api, signedIn, regionId]);
+  }, [api, signedIn, regionId, setStatus]);
+
+  // Get the heavy map work done while nothing else is happening, so screens that need it (Income's
+  // jobs near you, the fares to islands) open at once instead of working it out on the tap.
+  useEffect(() => {
+    if (!region) return;
+    const warm = () => {
+      planOf(region);
+      ferryKmBetween(`${region.region.id}:0,0`, `${region.region.id}:1,1`);
+    };
+    // Older Safari has no idle callback: a timer then.
+    const idle = "requestIdleCallback" in window;
+    const t = idle ? window.requestIdleCallback(warm, { timeout: 8000 }) : window.setTimeout(warm, 4000);
+    return () => (idle ? window.cancelIdleCallback(t) : window.clearTimeout(t));
+  }, [region]);
 
   // Real businesses on the map (everyone sees them, signed in or not).
   useEffect(() => {
@@ -288,13 +317,14 @@ export function useWorldLife({
   const tripTo = (id: string) => {
     const from = assets?.life?.at_place ?? homeUnit;
     const km = from && region ? tripKmBetween(from, id) : null;
-    if (km === null || !region) return null;
-    const mode = cheapestCommute(km);
-    return { mode, fare: fareMint(mode, km, region.region.prices) ?? 0 };
+    if (km === null || !region || !from) return null;
+    const ferry = ferryKmBetween(from, id);
+    const mode = cheapestCommute(km, ferry);
+    return { mode, ferry, fare: fareMint(mode, km, region.region.prices, ferry) ?? 0 };
   };
   const tripLabel = (id: string) => {
     const t = signedIn ? tripTo(id) : null;
-    return t && t.fare > 0 ? `Go inside · ${cash(t.fare)} by ${COMMUTE_LABEL[t.mode].toLowerCase()}` : "Go inside";
+    return t && t.fare > 0 ? `Go there · ${cash(t.fare)} ${tripWords(t.mode, t.ferry)}` : "Go there";
   };
   /** Go into a building: pay the fare there (signed in), then in. */
   const goInside = async (id: string) => {
@@ -410,7 +440,7 @@ export function useWorldLife({
             };
             // Running at a loss: fares there and back cost more than the pay after tax.
             const km = homeUnit ? tripKmBetween(homeUnit, wp.id) : null;
-            const fare = km === null ? 0 : (fareMint(mode, km, region.region.prices) ?? 0);
+            const fare = km === null || !homeUnit ? 0 : (fareMint(mode, km, region.region.prices, ferryKmBetween(homeUnit, wp.id)) ?? 0);
             const net = dayNet(payDay(job, region.region.prices), work?.skills[job.skill] ?? 0, fare);
             const loss = net < 0 ? `Heads up: you'd run at a loss. After income tax, ${job.title} pays less than your fares there and back, so you'd lose about ${cash(-net)} every game day.` : "";
             const now = work?.job;
@@ -418,7 +448,7 @@ export function useWorldLife({
             // One main job at a time: say so before swapping.
             setConfirm({
               title: now ? "Switch jobs?" : "Work at a loss?",
-              text: [now ? `You're a ${now.title} at ${now.placeName}. You can have one main job, so becoming a ${job.title} means leaving it. The pay you've earned there is collected first.` : "", loss]
+              text: [now ? `Your job as ${now.title} at ${now.placeName} ends, and the pay you've earned there goes into your wallet now.` : "", loss]
                 .filter(Boolean)
                 .join(" "),
               yes: now ? `Switch to ${job.title}` : "Take it anyway",
@@ -431,7 +461,7 @@ export function useWorldLife({
   const day = dayOf({
     homeUnit,
     job: work?.job ? { place: work.job.place, mode: work.job.mode as Commute } : null,
-    hustleHours: status?.hustle?.hours ?? 0,
+    hustleHours: (status?.hustles ?? (status?.hustle ? [status.hustle] : [])).reduce((t, h) => t + h.hours, 0),
     course: status?.courses.find((c) => !c.done)?.course ?? null,
     exercise: status?.exercise ?? "none",
   });
@@ -570,8 +600,8 @@ export function useWorldLife({
       )}
       {homeOpen && homeSpot && <HomeCard label={homeLabel} area={region.areaAt(homeSpot.x, homeSpot.z)} neighbours={neighbours} onClose={() => setHomeOpen(false)} />}
       {place && (
-        <Sheet onClose={() => setPlace(null)} wide>
-          <div className="sticky -top-5 z-10 -mx-5 -mt-5 flex items-start justify-between gap-3 bg-panel/95 px-5 pb-2 pt-5 backdrop-blur">
+        <Sheet onClose={() => setPlace(null)} wide clear>
+          <div className="sticky -top-5 z-10 -mx-5 -mt-5 flex items-start justify-between gap-3 bg-panel/95 px-5 pb-2 pt-5">
             <div className="min-w-0">
               <h2 className="font-display text-lg font-extrabold leading-tight">{place.name}</h2>
               <p className="mt-1 flex items-center gap-1 text-sm text-muted">
@@ -579,18 +609,35 @@ export function useWorldLife({
                 <span className="truncate">{region.areaAt(place.x, place.z)}</span>
               </p>
             </div>
-            <button onClick={() => setPlace(null)} className="grid size-8 shrink-0 place-items-center rounded-full hover:bg-ink/5" aria-label="Close">
+            <button onClick={() => setPlace(null)} className="grid size-9 shrink-0 place-items-center rounded-full bg-ink/5 hover:bg-ink/10" aria-label="Close">
               <X className="size-4" />
             </button>
           </div>
-          <div className="mt-4">
-            {jobs ? <JobsHere place={place} ctx={jobs} /> : <p className="text-sm text-muted">Sign in to work here.</p>}
+          <div className="mt-3 space-y-2">
+            {onEnter && (
+              <button
+                onClick={() => {
+                  const id = place.id;
+                  setPlace(null);
+                  void goInside(id);
+                }}
+                className="flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-[#f08c00] px-4 py-2 text-center text-sm font-semibold leading-tight text-white"
+              >
+                <DoorOpen className="size-4 shrink-0" /> {tripLabel(place.id).replace(/^Go inside/, "Go there")}
+              </button>
+            )}
+            <div className="grid grid-cols-2 gap-2">
+              <span className="flex min-h-11 items-center justify-center rounded-full bg-ink/[0.03] px-3 text-center text-xs text-muted">Not for sale: a public place</span>
+              <span className="flex min-h-11 items-center justify-center rounded-full bg-ink/[0.03] px-3 text-center text-xs text-muted">No adverts on landmarks</span>
+            </div>
           </div>
-          {signedIn && (
-            <button onClick={() => setReport({ x: place.x, z: place.z, where: place.name })} className="mt-4 flex items-center gap-1.5 text-xs font-medium text-muted hover:text-ink">
-              <Flag className="size-3.5" /> Report a problem with this place
-            </button>
-          )}
+          {place.jobs.length > 0 && <div className="mt-4">{jobs ? <JobsHere place={place} ctx={jobs} /> : <p className="text-sm text-muted">Sign in to work here.</p>}</div>}
+          <button
+            onClick={() => (signedIn ? setReport({ x: place.x, z: place.z, where: place.name }) : setMessage({ text: "Sign in to report a problem.", good: false }))}
+            className="mt-4 flex items-center gap-1.5 text-xs font-medium text-muted hover:text-ink"
+          >
+            <Flag className="size-3.5" /> Report a problem with this place
+          </button>
         </Sheet>
       )}
       {workOpen && jobs && (
@@ -618,23 +665,29 @@ export function useWorldLife({
           life={status}
           day={day}
           onStartHustle={(id) => {
-            const run = () => act(() => api.startHustle(id), () => "Your side hustle has started. It earns by the game day.");
-            if (!status?.hustle) return void run();
-            setConfirm({ title: "Change side hustle?", text: `You can have one side hustle. Starting this one stops ${status.hustle.title} (what it made is collected first).`, yes: "Change", run });
+            // Say what it costs before it's spent.
+            const h = HUSTLES.find((x) => x.id === id);
+            if (!h) return;
+            const cost = hustleStart(h, region.region.prices);
+            setConfirm({
+              title: `Start ${h.title.toLowerCase()}?`,
+              text: `It costs ${cash(cost)} to start (${h.what.toLowerCase()}), paid once from your Savings, and takes ${h.hours} hours a game day. It earns about ${cash(hustleDay(h, region.region.prices, work?.skills[h.skill] ?? 0))} a game day, paid into your wallet every game week. Your other side hustles carry on.`,
+              yes: `Start for ${cash(cost)}`,
+              run: () => act(() => api.startHustle(id), () => `${h.title} has started. It earns by the game day.`),
+            });
           }}
-          onStopHustle={() =>
-            setConfirm({ title: "Stop your side hustle?", text: "What it made so far is collected first. Its start-up cost doesn't come back.", yes: "Stop it", run: () => act(() => api.stopHustle(), () => "Side hustle stopped.") })
-          }
+          onStopHustle={(id) => {
+            const h = (status?.hustles ?? (status?.hustle ? [status.hustle] : [])).find((x) => x.hustle === id);
+            setConfirm({
+              title: `Stop ${h ? h.title.toLowerCase() : "this side hustle"}?`,
+              text: "What it made so far goes into your wallet now. Its start-up cost doesn't come back.",
+              yes: "Stop it",
+              run: () => act(() => api.stopHustle(id), () => `${h?.title ?? "Side hustle"} stopped.`),
+            });
+          }}
           region={region}
           plan={plan}
           ctx={jobs}
-          onCollect={() =>
-            act(
-              () => api.collectPay(),
-              (r) =>
-                `+${cash((r.pay?.net ?? 0) + (r.pay?.hustle?.net ?? 0))} after tax and fares${r.pay?.hustle?.gross ? ` (${cash(r.pay.hustle.net)} from your side hustle)` : ""}.`,
-            )
-          }
           onMode={(mode, perDay) =>
             setConfirm({
               title: mode === "walk" ? "Walk to work from now on?" : `Go by ${COMMUTE_LABEL[mode].toLowerCase()} from now on?`,
@@ -650,7 +703,7 @@ export function useWorldLife({
           onQuit={() =>
             setConfirm({
               title: `Leave your job${work?.job ? ` as ${work.job.title}` : ""}?`,
-              text: "Your pay so far is collected first. You can look for another job any time.",
+              text: "Your pay so far goes into your wallet now. You can look for another job any time.",
               yes: "Leave job",
               run: () => void act(() => api.quitJob(), (r) => `You've left your job.${paid(r.pay)}`),
             })
@@ -677,14 +730,11 @@ export function useWorldLife({
           }
           enterLabel={tripLabel(property.id)}
           jobs={jobs}
-          onReport={
-            signedIn
-              ? () => {
-                  const sp = ownedSpot(property.id);
-                  if (sp) setReport({ x: sp.x, z: sp.z, where: `${property.title}, ${property.address}` });
-                }
-              : undefined
-          }
+          onReport={() => {
+            if (!signedIn) return setMessage({ text: "Sign in to report a problem.", good: false });
+            const sp = ownedSpot(property.id);
+            if (sp) setReport({ x: sp.x, z: sp.z, where: `${property.title}, ${property.address}` });
+          }}
           info={property}
           onClose={() => setProperty(null)}
           market={
@@ -727,6 +777,15 @@ export function useWorldLife({
               : undefined
           }
         />
+      )}
+      {assetsOpen && !assets && (
+        <Sheet onClose={() => setAssetsOpen(false)} wide title="Finance">
+          <div className="animate-pulse space-y-3" aria-label="Loading">
+            <div className="h-8 rounded-full bg-ink/5" />
+            <div className="h-28 rounded-3xl bg-ink/5" />
+            <div className="h-20 rounded-2xl bg-ink/5" />
+          </div>
+        </Sheet>
       )}
       {assetsOpen && assets && (
         <MoneySheet
@@ -895,22 +954,23 @@ export function useWorldLife({
       )}
       {confirm && (
         <div className="fixed inset-0 z-[60] grid place-items-center bg-ink/40 p-4" onClick={() => setConfirm(null)}>
-          <div className="w-full max-w-xs rounded-3xl bg-panel p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-sm rounded-3xl bg-panel p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="font-display text-lg font-extrabold">{confirm.title}</h3>
             <p className="mt-2 text-sm text-muted">{confirm.text}</p>
-            <div className="mt-4 flex gap-2">
-              <button onClick={() => setConfirm(null)} className="h-10 flex-1 rounded-full bg-ink/5 text-sm font-semibold">
-                Not now
-              </button>
+            {/* The main button first and full width (its words can be long), "Not now" under it. */}
+            <div className="mt-4 flex flex-col gap-2">
               <button
                 onClick={() => {
                   const run = confirm.run;
                   setConfirm(null);
                   run();
                 }}
-                className="h-10 flex-1 rounded-full bg-ink px-3 text-sm font-semibold text-white"
+                className="min-h-11 w-full rounded-full bg-ink px-4 py-2.5 text-center text-sm font-semibold leading-snug text-white"
               >
                 {confirm.yes}
+              </button>
+              <button onClick={() => setConfirm(null)} className="min-h-11 w-full rounded-full bg-ink/5 px-4 text-sm font-semibold">
+                Not now
               </button>
             </div>
           </div>
@@ -940,7 +1000,8 @@ export function useWorldLife({
           }}
           onClose={() => {
             setMoment(false);
-            void api.lifeStatus().then(setStatus);
+            statusAt.current = 0;
+            freshenStatus();
           }}
         />
       )}
@@ -1016,10 +1077,12 @@ export function useWorldLife({
   /** Your cash at the top (beside the menu) opens Finance. */
   const openFinance = () => {
     setAssetsOpen(true);
-    void api.lifeStatus().then(setStatus);
+    // Shown at once from what's here; brought up to date behind it (not on every open).
+    freshenStatus();
+    if (!assets) void refresh();
   };
   /** Something in Finance wants you: the guide's budget step, a power cut, an offer. */
   const financeGlow = step === "budget";
   const financeDot = !!(status?.powerCut || board?.received.some((o) => o.status === "open"));
-  return { centerRef, owned: shown, flyTo, onProperty, onWorkplace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit };
+  return { centerRef, owned: shown, flyTo, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit };
 }

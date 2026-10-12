@@ -16,12 +16,14 @@ prices are in `src/lib/world/business.ts`; the server side in `src/lib/business.
 
 | Building | A year (before the area) |
 | --- | --- |
-| Lock-up shops, shop with flats, bungalow, rooming house, land | ₦60,000 |
-| Flats, duplex, terrace, office block, warehouse | ₦250,000 |
-| Shopping plaza, apartment tower | ₦1.5m |
-| Glass tower | ₦10m |
+| Lock-up shops, shop with flats, bungalow, rooming house, land | ₦20,000–₦25,000 |
+| Duplex, terrace | ₦60,000 |
+| Flats, warehouse | ₦80,000 |
+| Office block | ₦120,000 |
+| Shopping plaza, apartment tower | ₦250,000 |
+| Glass tower | ₦600,000 |
 
-The area changes it about 0.6× (cheapest areas) to 2× (Ikoyi, VI), never under ₦60,000 or over ₦10m.
+The area changes it about 0.6× (cheapest areas) to 2× (Ikoyi, VI), never under ₦20,000 or over ₦1m.
 
 ## On the map
 
@@ -33,9 +35,9 @@ and Directions (Google Maps) buttons. Anything arranged with them happens outsid
 
 | Upgrade | Price | What it does |
 | --- | --- | --- |
-| Bright sign | ₦50,000 | Glows brighter; the logo shows bigger and from further away |
-| Refit | a tenth of the lease (at least ₦25,000) | Turn it into shopfronts, a plaza, offices, a glass tower, a warehouse... |
-| Add a storey | a quarter of the lease (at least ₦50,000) | One more floor, from 30 days after the lease starts |
+| Bright sign | ₦15,000 | Glows brighter; the logo shows bigger and from further away |
+| Refit | a tenth of the lease (at least ₦10,000) | Turn it into shopfronts, a plaza, offices, a glass tower, a warehouse... |
+| Add a storey | a quarter of the lease (at least ₦15,000) | One more floor, from 30 days after the lease starts |
 
 **Advertising is leasing a building** (part 47, `game-db/047_ads_are_property.sql`): every lease is on the
 city's billboards from day one, showing its logo until the business uploads a billboard design, which it can

@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
-import { addressOf, makePlan, spiralIndex, tileAt } from "@/lib/city/layout";
+import { addressOf, makePlan, spiralIndex, spiralXY, tileAt } from "@/lib/city/layout";
 import { ownedSpot } from "@/lib/world/owned";
 import { houseTileOf } from "@/lib/city/houses";
 import { homeLabel } from "@/lib/houses";
@@ -142,6 +142,41 @@ const DanceBar = dynamic(() => import("./dance-bar").then((m) => m.DanceBar));
 const FriendsSheet = dynamic(() => import("./friends-sheet").then((m) => m.FriendsSheet));
 const GhostCardSheet = dynamic(() => import("./ghost-duel/ghost-card").then((m) => m.GhostCardSheet));
 const DuelScreen = dynamic(() => import("./ghost-duel/duel-screen").then((m) => m.DuelScreen));
+
+/**
+ * The pop-ups people open most, fetched one after another once the city is up and nothing else is
+ * going on, so the first tap opens them at once instead of waiting for their code to download.
+ * (The 3D studio, games and sport stay on demand: they're big and rarely opened first.)
+ */
+const PRELOAD: (() => Promise<unknown>)[] = [
+  () => import("./menu"),
+  () => import("./phone/phone-sheet"),
+  () => import("./friends-sheet"),
+  () => import("./how-it-works"),
+  () => import("./activities/activity-sheet"),
+  () => import("./activities/gift-sheet"),
+  () => import("./houses/house-sheet"),
+  () => import("./sign-in-overlay"),
+  () => import("./phone/camera"),
+  () => import("./style/style-ui"),
+  () => import("@/components/advertise-explainer"),
+];
+function usePreloadSheets() {
+  useEffect(() => {
+    let alive = true;
+    // Older Safari has no idle callback: a short timer then.
+    const idle = (f: () => void) => ("requestIdleCallback" in window ? window.requestIdleCallback(f, { timeout: 3000 }) : setTimeout(f, 300));
+    const next = (k: number) => {
+      if (!alive || k >= PRELOAD.length) return;
+      idle(() => void PRELOAD[k]().catch(() => {}).finally(() => next(k + 1)));
+    };
+    const start = setTimeout(() => next(0), 2500);
+    return () => {
+      alive = false;
+      clearTimeout(start);
+    };
+  }, []);
+}
 
 const NO_GHOSTS: CityGhost[] = [];
 const NO_EVENTS: CityEvent[] = [];
@@ -385,6 +420,30 @@ export function Game({
   /** On a real place: the area pointed at, or in the middle of the view. */
   const [worldArea, setWorldArea] = useState<string | null>(null);
   // A life on the real map: search, assets, buying a home first (see ./life/world-life).
+  usePreloadSheets();
+  /** When a building was last gone into from its card (Go there), so it opens on the ground floor. */
+  const entering = useRef(0);
+  /**
+   * Visits inside buildings on the real map, counted in this browser: for the first few, the
+   * Floor button glows so people find the other floors.
+   */
+  const [visits, setVisits] = useState(() => {
+    try {
+      return Number(localStorage.getItem("nt:floor-visits") ?? 0) || 0;
+    } catch {
+      return 0;
+    }
+  });
+  const countVisit = () =>
+    setVisits((v) => {
+      try {
+        localStorage.setItem("nt:floor-visits", String(v + 1));
+      } catch {
+        // Not kept: the glow just shows a little longer.
+      }
+      return v + 1;
+    });
+  const floorGlow = visits <= 5;
   const worldLife = useWorldLife({
     api: PROPERTY_API,
     regionId: worldId,
@@ -396,7 +455,10 @@ export function Game({
     // A building's card: Go inside, as if its bubble had been tapped.
     onEnter: (id: string) => {
       const sp = ownedSpot(id);
-      if (sp) setOpenReq((r) => ({ id: `b:${spiralIndex(sp.x, sp.z)}`, at: (r?.at ?? 0) + 1 }));
+      if (!sp) return;
+      // Paid the trip from the card: straight in on the ground floor (no floor picker).
+      entering.current = Date.now();
+      setOpenReq((r) => ({ id: `b:${spiralIndex(sp.x, sp.z)}`, at: (r?.at ?? 0) + 1 }));
     },
   });
   // The phone: the camera (a picture of the town, or a selfie) and the phone itself (gallery).
@@ -1131,6 +1193,21 @@ export function Game({
     if (place) return;
     if (ride !== null && (ride.kind !== "balloon" || room.kind === "balloon")) return;
     if (room.kind === "balloon") return boardRide({ kind: "balloon", index: Number(room.id.split(":")[1]), name: room.name, capacity: room.capacity });
+    if (worldId) {
+      // The real map: going in is from the place's card (Go there, with the fare), and always
+      // starts on the ground floor; the Floor button inside goes up from there.
+      if (Date.now() - entering.current < 5000) {
+        entering.current = 0;
+        const ground = room.levels?.find((l) => l.id === "g") ?? room.levels?.[0] ?? { id: "g", label: "Ground floor", capacity: room.capacity };
+        countVisit();
+        return goToLevel(room, ground);
+      }
+      const m = /^b:(\d+)/.exec(room.id);
+      if (m) {
+        const [x, z] = spiralXY(Number(m[1]));
+        return worldLife.openPlace({ id: `${worldId}:${x},${z}`, name: room.name, x, z, jobs: [] });
+      }
+    }
     setPickPlace(room);
   }
   function goToLevel(room: PlaceRoom, level: { id: string; label: string; capacity: number }) {
@@ -1426,7 +1503,8 @@ export function Game({
             clockOffsetMs={clockOffset}
             onHover={setHover}
             meAvatar={me.avatar}
-            coinBalloon={state.balloon?.slot ?? null}
+            // The coin balloon is gone: nothing in the city hands out mint for a tap.
+            coinBalloon={null}
             onBalloon={popBalloon}
             progress={huntProgress}
             nightFirst={(round?.id ?? 0) % 2 === 1}
@@ -1902,15 +1980,16 @@ export function Game({
         <HouseSheet onClose={() => setHouseOpen(false)} onVisit={() => void visitMyHouse()} standingNow={myHouseTile !== null} />
       )}
       {pickPlace && (
-        <Sheet onClose={() => setPickPlace(null)}>
+        <Sheet onClose={() => setPickPlace(null)} clear={!!worldId}>
           <h2 className="flex items-center gap-2 font-display text-xl font-bold">
             <Building2 className="size-5 text-[#7048e8]" />
             {pickPlace.name}
           </h2>
-          <p className="mt-1 text-sm text-muted">Where would you like to go? Each floor has its own people and its own chat.</p>
+          <p className="mt-1 text-sm text-muted">{worldId ? "Which floor? Each one has its own people and its own chat." : "Where would you like to go? Each floor has its own people and its own chat."}</p>
           <div className="mt-3 space-y-2">
             {(pickPlace.levels?.length ? pickPlace.levels : [{ id: "g", label: "Ground floor", capacity: pickPlace.capacity }]).map((lvl) => {
-              const cost = pickPlace.kind === "building" ? visitCost(pickPlace) : 0;
+              // The real map charges the fare there (on the place's card), not a first-visit fee.
+              const cost = pickPlace.kind === "building" && !worldId ? visitCost(pickPlace) : 0;
               const id = `${pickPlace.id}:${lvl.id}`;
               const here = rooms.counts[id] ?? 0;
               const Icon = lvl.id === "r" ? Sun : lvl.id === "g" ? DoorOpen : Layers;
@@ -2115,7 +2194,11 @@ export function Game({
             <Building2 className="size-4 shrink-0 text-[#7048e8]" />
             <b className="min-w-0 flex-1 truncate">{rooms.myRoomInfo?.name ?? placeRoom?.name ?? "Inside"}</b>
             {placeRoom && placeRoom.id === place.building && (placeRoom.levels?.length ?? 0) > 1 && (
-              <button onClick={() => setPickPlace(placeRoom)} className="flex shrink-0 items-center gap-1 rounded-xl bg-panel-2 px-3 py-2 text-xs font-semibold">
+              <button
+                onClick={() => setPickPlace(placeRoom)}
+                className={cn("relative flex shrink-0 items-center gap-1 rounded-xl bg-panel-2 px-3 py-2 text-xs font-semibold", floorGlow && "outline outline-2 outline-offset-2 outline-gold")}
+              >
+                {floorGlow && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-xl ring-4 ring-gold/60" />}
                 <Layers className="size-4" /> Floor
               </button>
             )}
@@ -2359,7 +2442,11 @@ export function Game({
                       </button>
                     )}
                     {place && placeRoom && placeRoom.id === place.building && (placeRoom.levels?.length ?? 0) > 1 && (
-                      <button onClick={() => setPickPlace(placeRoom)} className="flex items-center gap-1.5 rounded-xl bg-panel-2 px-3 py-2 font-semibold">
+                      <button
+                        onClick={() => setPickPlace(placeRoom)}
+                        className={cn("relative flex items-center gap-1.5 rounded-xl bg-panel-2 px-3 py-2 font-semibold", worldId && floorGlow && "outline outline-2 outline-offset-2 outline-gold")}
+                      >
+                        {worldId && floorGlow && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-xl ring-4 ring-gold/60" />}
                         <Layers className="size-4" />
                         Change floor
                       </button>

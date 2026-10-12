@@ -1300,9 +1300,17 @@ function structureNamed(plan: CityPlan, type: StructureType, ax: number, az: num
 }
 
 function structureName(plan: CityPlan, type: StructureType, ax: number, az: number) {
-  const pick = <T,>(list: T[], k: number) => list[Math.floor(hash(ax, az, plan.seed + k) * list.length) % list.length];
   const city = plan.city.name;
   const street = streetBase(plan, "x", nearestLine(plan.zs, plan.z0, az).k);
+  // On a real place's map, names that sound like the one famous place ("University of Lagos",
+  // "Lagos Stadium", "Freedom Park") belong to its real landmarks only: made-up ones are named
+  // after their street.
+  const real = (n: string) => n.includes(city) || /^(The (Palms|Twins)|Museum of the City|Freedom Park|St\. Peter's|Holy Cross|Christ Church|National Mosque)/.test(n);
+  const pick = (list: string[], k: number) => {
+    const own = plan.region ? list.filter((n) => !real(n)) : list;
+    const from = own.length ? own : [`${street} ${STRUCTURE_LABEL[type] ?? "Centre"}`];
+    return from[Math.floor(hash(ax, az, plan.seed + k) * from.length) % from.length];
+  };
   switch (type) {
     case "mall":
       return pick([`${city} Mall`, `${street} Shopping Centre`, `${city} City Mall`, `The Palms`, `${street} Plaza`], 1);
@@ -1313,7 +1321,7 @@ function structureName(plan: CityPlan, type: StructureType, ax: number, az: numb
     case "funfair":
       return pick([`${street} Funfair`, `${street} Wonderland`, `${street} Fun Park`], 4);
     case "market":
-      return plan.city.flavor.markets ? pick(plan.city.flavor.markets, 5) : `${city} Market`;
+      return plan.city.flavor.markets && !plan.region ? pick(plan.city.flavor.markets, 5) : plan.region ? `${street} Market` : `${city} Market`;
     case "arena":
       return pick([`${city} Stadium`, `${street} Stadium`, `${city} City Stadium`], 6);
     case "court":
@@ -1878,6 +1886,8 @@ export function roughAt(plan: CityPlan, x: number, z: number): { h: number; colo
   const mi = plan.megaAt.get(nkey(x, z));
   if (mi !== undefined) {
     const m = plan.megas[mi];
+    // A big campus is mostly lawns and low blocks: from far off, green, not one huge box.
+    if (m.type === "campus") return { h: 0.45, color: 0x9fcf8c };
     return { h: MEGA_TOP[m.type] ?? 1.5, color: m.type === "bigpark" ? 0x8cc97e : 0xe9e4da };
   }
   if (plan.region) {

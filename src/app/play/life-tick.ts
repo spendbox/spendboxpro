@@ -7,27 +7,29 @@ import { drawEvent, EVENT_HOURS, eventComes, showEvent } from "@/lib/world/break
 import { dayOf, dayPlan, EXERCISE, hoursOf, type DayInput, type Exercise } from "@/lib/world/day";
 import { AUTO_CARE, billsFor, priceOf } from "@/lib/world/living";
 import type { LifeStatus } from "@/lib/world/property-api";
-import { GAME_DAY_HOURS, type Commute } from "@/lib/world/work";
+import { ferryKmBetween } from "@/lib/world/trips";
+import { fareOrBus, GAME_DAY_HOURS, tripKmBetween, type Commute } from "@/lib/world/work";
 
 /** Everything about a player's day as the database has it. */
 export async function lifeRows(userId: string) {
   const db = createAdminClient();
-  const [{ data: life }, { data: job }, { data: hustle }, { data: course }] = await Promise.all([
+  const [{ data: life }, { data: job }, { data: hustleRows }, { data: course }] = await Promise.all([
     db.from("lives").select("region, home_unit, exercise, health_at, power_owed, waste_owed").eq("user_id", userId).maybeSingle(),
-    db.from("life_jobs").select("place_id, mode, skill, pay_day").eq("user_id", userId).maybeSingle(),
-    db.from("life_hustles").select("hustle, hours").eq("user_id", userId).maybeSingle(),
+    db.from("life_jobs").select("place_id, mode, skill, pay_day, paid_until").eq("user_id", userId).maybeSingle(),
+    db.from("life_hustles").select("hustle, hours, paid_until").eq("user_id", userId),
     db.from("life_courses").select("course").eq("user_id", userId).is("done_at", null).maybeSingle(),
   ]);
   if (!life) return null;
+  const hustles = hustleRows ?? [];
   const day: DayInput = dayOf({
     homeUnit: (life.home_unit as string) ?? null,
     job: job ? { place: job.place_id as string, mode: job.mode as Commute } : null,
-    hustleHours: hustle ? Number(hustle.hours) : 0,
+    hustleHours: hustles.reduce((t, h) => t + Number(h.hours), 0),
     course: (course?.course as string) ?? null,
     exercise: ((life.exercise as Exercise) ?? "none") as Exercise,
     owing: Number(life.power_owed) + Number(life.waste_owed) > 0,
   });
-  return { life, job, hustle, course, day };
+  return { life, job, hustles, course, day };
 }
 
 /**
@@ -39,7 +41,7 @@ export async function lifeRows(userId: string) {
 export async function tickLife(userId: string): Promise<LifeStatus | null> {
   const rows = await lifeRows(userId);
   if (!rows) return null;
-  const { life, job, hustle } = rows;
+  const { life, job, hustles } = rows;
   const map = regionMap(life.region as string);
   if (!map) return null;
   const prices = map.region.prices;
@@ -74,7 +76,7 @@ export async function tickLife(userId: string): Promise<LifeStatus | null> {
   if (!event) {
     const sources: { source: "job" | "hustle"; of: string }[] = [];
     if (job) sources.push({ source: "job", of: job.skill as string });
-    if (hustle) sources.push({ source: "hustle", of: hustle.hustle as string });
+    if (hustles.length) sources.push({ source: "hustle", of: hustles[Math.floor(Math.random() * hustles.length)].hustle as string });
     for (const src of sources) {
       if (!eventComes(src.source, days)) continue;
       const b = drawEvent(src.source, src.of);
@@ -86,6 +88,28 @@ export async function tickLife(userId: string): Promise<LifeStatus | null> {
     }
   }
   const shown = event ? showEvent(event.key) : null;
+
+  // Pay day: once a game week of pay has built up, it goes into your wallet by itself (your job
+  // after tax and fares, and your side hustles). Nothing to tap.
+  const week = 7 * GAME_DAY_HOURS * 3_600_000;
+  let paid = false;
+  if (job && Date.now() - Date.parse(String(job.paid_until)) >= week) {
+    const home = (life.home_unit as string | null) ?? null;
+    const km = home ? tripKmBetween(home, job.place_id as string) : null;
+    const fare = home && km !== null ? fareOrBus(job.mode as Commute, km, prices, ferryKmBetween(home, job.place_id as string)) : 0;
+    const { error: payError } = await db.rpc("life_work_collect", { p_user: userId, p_fare_trip: fare });
+    if (payError) console.error("Weekly pay failed", payError.message);
+    else paid = true;
+  }
+  if (hustles.some((h) => Date.now() - Date.parse(String(h.paid_until)) >= week)) {
+    const { error: payError } = await db.rpc("life_hustle_collect", { p_user: userId });
+    if (payError) console.error("Weekly hustle pay failed", payError.message);
+    else paid = true;
+  }
+  if (paid) {
+    const { data: wallet } = await db.from("profiles").select("coins").eq("id", userId).maybeSingle();
+    if (wallet) s.wallet = Number(wallet.coins);
+  }
   return {
     ...s,
     health: Number(s.health),
@@ -99,10 +123,13 @@ export async function tickLife(userId: string): Promise<LifeStatus | null> {
   };
 }
 
-/** Whether a day with this change would still fit in 24 hours (with an hour to yourself). */
-export async function dayFits(userId: string, change: Partial<DayInput>) {
+/**
+ * Whether a day with this change would still fit in 24 hours with at least 4 hours' sleep (short
+ * nights are allowed: they stress the mind). The change can be worked out from the day as it is.
+ */
+export async function dayFits(userId: string, change: Partial<DayInput> | ((day: DayInput) => Partial<DayInput>)) {
   const rows = await lifeRows(userId);
   if (!rows) return { fits: true, plan: null };
-  const plan = dayPlan({ ...rows.day, ...change });
+  const plan = dayPlan({ ...rows.day, ...(typeof change === "function" ? change(rows.day) : change) });
   return { fits: plan.fits, plan };
 }

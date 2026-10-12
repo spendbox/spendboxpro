@@ -28,3 +28,12 @@ export async function markReport(id: number, status: "open" | "fixed" | "wontfix
   revalidatePath("/map-reports");
   return { ok: true };
 }
+
+/** Mark a report about a person: actioned, dismissed, or open again. */
+export async function markPersonReport(id: number, status: "open" | "actioned" | "dismissed") {
+  if (!(await isOwner())) return { ok: false, error: "Only the owner can do that." };
+  const { error } = await createAdminClient().rpc("person_report_set", { p_id: id, p_status: status });
+  if (error) return { ok: false, error: "That didn't save." };
+  revalidatePath("/map-reports");
+  return { ok: true };
+}

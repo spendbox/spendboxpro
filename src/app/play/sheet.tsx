@@ -9,7 +9,26 @@ import { cn } from "@/lib/cn";
  * Only a tap that STARTS on the dark backdrop closes it (a tap on the city that opened it
  * must not also close it).
  */
-export function Sheet({ onClose, children, wide, title }: { onClose: () => void; children: React.ReactNode; wide?: boolean; title?: React.ReactNode }) {
+export function Sheet({
+  onClose,
+  children,
+  wide,
+  title,
+  clear,
+  above,
+}: {
+  onClose: () => void;
+  children: React.ReactNode;
+  wide?: boolean;
+  title?: React.ReactNode;
+  /**
+   * A card about a spot in the city (a building, a place): the city stays in full view round it
+   * (no dimming), and on phones it takes at most the bottom part of the screen.
+   */
+  clear?: boolean;
+  /** Over other full-screen cards (a character's chat). */
+  above?: boolean;
+}) {
   const downOnBackdrop = useRef(false);
   // Escape closes it too.
   const close = useRef(onClose);
@@ -23,7 +42,8 @@ export function Sheet({ onClose, children, wide, title }: { onClose: () => void;
   }, []);
   return (
     <div
-      className="fixed inset-0 z-40 grid place-items-end bg-ink/30 p-2 backdrop-blur-[2px] sm:place-items-center sm:p-4"
+      // Never blurred: the city behind stays sharp (just a little dimmer, or not at all).
+      className={cn("fixed inset-0 grid place-items-end p-2 sm:place-items-center sm:p-4", above ? "z-[70]" : "z-40", clear ? "bg-transparent" : "bg-ink/20")}
       onPointerDown={(e) => (downOnBackdrop.current = e.target === e.currentTarget)}
       onClick={(e) => {
         if (downOnBackdrop.current && e.target === e.currentTarget) onClose();
@@ -32,7 +52,8 @@ export function Sheet({ onClose, children, wide, title }: { onClose: () => void;
     >
       <section
         className={cn(
-          "max-h-[calc(100dvh-1rem)] w-full overflow-y-auto rounded-3xl bg-panel p-5 shadow-2xl",
+          "w-full overflow-y-auto rounded-3xl bg-panel p-5 shadow-2xl",
+          clear ? "max-h-[min(60dvh,calc(100dvh-1rem))] ring-1 ring-ink/10 sm:max-h-[calc(100dvh-2rem)]" : "max-h-[calc(100dvh-1rem)]",
           wide ? "max-w-lg" : "max-w-sm",
         )}
       >

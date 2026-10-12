@@ -4,7 +4,8 @@ import { Briefcase } from "@/components/icons";
 import type { Prices } from "@/lib/world/region";
 import { cash } from "@/lib/world/value";
 import { CERT_LABEL } from "@/lib/world/living";
-import { cheapestCommute, COMMUTE_LABEL, dayNet, fareMint, needsInterview, payDay, skillLevel, tripKmBetween, WORK_SKILLS, type Commute, type WorkJob } from "@/lib/world/work";
+import { cheapestCommute, COMMUTE_LABEL, dayNet, fareMint, needsInterview, payDay, skillLevel, tripKmBetween, tripWords, WORK_SKILLS, type Commute, type WorkJob } from "@/lib/world/work";
+import { ferryKmBetween } from "@/lib/world/trips";
 import type { Workplace } from "@/lib/world/workplace";
 
 /** What the jobs list needs to know about you, and what to do when you take one. */
@@ -25,10 +26,11 @@ export type JobsContext = {
 /** How far a workplace is from your home and the cheapest way there ("2.1 km · walk, free"). */
 export function tripLine(homeUnit: string | null, placeId: string, prices: Prices) {
   const km = homeUnit ? tripKmBetween(homeUnit, placeId) : null;
-  if (km === null) return { km: null, mode: "walk" as Commute, fare: 0, text: "Buy a home to see the trip" };
-  const mode = cheapestCommute(km);
-  const fare = fareMint(mode, km, prices) ?? 0;
-  return { km, mode, fare, text: `${km} km from home · ${COMMUTE_LABEL[mode].toLowerCase()}${fare ? ` ${cash(fare)} a trip` : ", free"}` };
+  if (km === null || !homeUnit) return { km: null, mode: "walk" as Commute, fare: 0, text: "Buy a home to see the trip" };
+  const ferry = ferryKmBetween(homeUnit, placeId);
+  const mode = cheapestCommute(km, ferry);
+  const fare = fareMint(mode, km, prices, ferry) ?? 0;
+  return { km, mode, fare, text: `${km} km from home · ${tripWords(mode, ferry)}${fare ? ` ${cash(fare)} a trip` : ", free"}` };
 }
 
 /** The jobs at a place: pay, the skill they need, the trip from your home, and a button to take one. */

@@ -4,7 +4,7 @@
 
 import { BUILDING_LABEL, type Building, type UnitUse } from "./buildings.ts";
 import type { RegionMap } from "./compile.ts";
-import { shortLocal, toMint, valueOf } from "./value.ts";
+import { landNow, shortLocal, toMint, valueOf, worthTrend } from "./value.ts";
 import type { Workplace } from "./workplace.ts";
 
 export type PropertyUnit = { id: string; label: string; use: UnitUse; floor: number; area: number; mint: number; local: string; earns: string };
@@ -27,6 +27,8 @@ export type PropertyInfo = {
   landMint: number;
   buildingMint: number;
   units: PropertyUnit[];
+  /** How its worth moved over the last game month (+0.024 = up 2.4%), and its worth (mint) at each of the last 6 game months. */
+  trend: { month: number; history: number[] };
   /** Who works here (shops, offices, warehouses, building sites), when anyone does. */
   workplace?: Workplace | null;
 };
@@ -42,7 +44,8 @@ const EARNS: Record<UnitUse, string> = {
 
 export function propertyInfo(b: Building, x: number, z: number, address: string, region: RegionMap): PropertyInfo {
   const prices = region.region.prices;
-  const v = valueOf(b, region.landPriceAt(x, z), prices);
+  const v = valueOf(b, landNow(region, x, z), prices);
+  const trend = worthTrend(b, region, x, z, prices);
   return {
     id: b.id,
     title: b.name ?? BUILDING_LABEL[b.kind],
@@ -57,6 +60,7 @@ export function propertyInfo(b: Building, x: number, z: number, address: string,
     local: shortLocal(v.total, prices),
     landMint: toMint(v.land, prices),
     buildingMint: toMint(v.building, prices),
+    trend: { month: trend.month, history: trend.history.map((h) => toMint(h, prices)) },
     units: b.units.map((u, k) => ({
       id: u.id,
       label: u.label,

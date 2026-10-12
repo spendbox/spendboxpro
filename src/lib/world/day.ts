@@ -1,7 +1,9 @@
 // Your day (docs/DAY.md): every game day has 24 hours, and everything you do takes some of them:
-// sleep, your main job and the trip there and back, a side hustle, study, exercise. What's left is
-// free time, which your mind needs. Nobody can do everything at once: anything that won't fit in
-// the day can't be taken on. Body and Mind move with how you spend your days.
+// your main job and the trip there and back, side hustles, study, exercise, and sleep. Sleep gets
+// what's left, up to a good night's 8 hours; what's left after that is free time, which your mind
+// needs. A long day can eat into your sleep (down to 4 hours a night): it's allowed, but short
+// nights wear your mind and body down, and a stressed mind makes interviews harder. Only a day
+// that would leave less than 4 hours' sleep can't be taken on.
 //
 // Shared by the server (which checks a plan fits before saving a change), the screens and the
 // world lab. The database applies the daily changes the game works out here (game-db/041_your_day.sql).
@@ -10,10 +12,11 @@ import { courseById, type CourseKind } from "./living.ts";
 import { tripKmBetween, type Commute } from "./work.ts";
 
 export const DAY_HOURS = 24;
+/** A good night's sleep. */
 export const SLEEP_HOURS = 8;
+/** The least sleep anyone can live on: a day that leaves less can't be taken on. */
+export const MIN_SLEEP_HOURS = 4;
 export const JOB_HOURS = 8;
-/** Everyone keeps at least this much time for themselves. */
-export const MIN_FREE_HOURS = 1;
 
 /** How fast each way of getting about goes in Lagos traffic (km/h). */
 const SPEED: Record<Commute, number> = { walk: 5, keke: 15, okada: 22, danfo: 12, taxi: 18 };
@@ -54,7 +57,9 @@ export type DayPlan = {
   blocks: { id: "sleep" | "job" | "commute" | "hustle" | "study" | "exercise"; label: string; hours: number }[];
   busy: number;
   free: number;
-  /** It fits in the day with at least MIN_FREE_HOURS to spare. */
+  /** Hours of sleep a night, living like this (8 at most; less when the day is full). */
+  sleep: number;
+  /** It fits in the day with at least MIN_SLEEP_HOURS of sleep. */
   fits: boolean;
   /** Body and Mind a game day, living like this. */
   body: number;
@@ -64,6 +69,7 @@ export type DayPlan = {
 export type DayInput = {
   job: boolean;
   commute: { mode: Commute; km: number } | null;
+  /** All your side hustles' hours together. */
   hustleHours: number;
   studyHours: number;
   exercise: Exercise;
@@ -71,33 +77,40 @@ export type DayInput = {
   owing?: boolean;
 };
 
-/** A day lived this way: the hours it takes, what's left, and what it does to body and mind. */
+/** A day lived this way: the hours it takes, the sleep and free time left, and what it does to body and mind. */
 export function dayPlan(d: DayInput): DayPlan {
-  const blocks: DayPlan["blocks"] = [{ id: "sleep", label: "Sleep", hours: SLEEP_HOURS }];
+  const blocks: DayPlan["blocks"] = [];
   if (d.job) blocks.push({ id: "job", label: "Main job", hours: JOB_HOURS });
   if (d.job && d.commute) {
     const h = commuteHours(d.commute.mode, d.commute.km);
     if (h > 0) blocks.push({ id: "commute", label: "Getting there", hours: h });
   }
-  if (d.hustleHours > 0) blocks.push({ id: "hustle", label: "Side hustle", hours: d.hustleHours });
+  if (d.hustleHours > 0) blocks.push({ id: "hustle", label: "Side hustles", hours: d.hustleHours });
   if (d.studyHours > 0) blocks.push({ id: "study", label: "Study", hours: d.studyHours });
   const ex = EXERCISE[d.exercise];
   if (ex.hours > 0) blocks.push({ id: "exercise", label: ex.label, hours: ex.hours });
-  const busy = blocks.reduce((t, b) => t + b.hours, 0);
+  const awake = blocks.reduce((t, b) => t + b.hours, 0);
+  // Sleep gets what's left, up to a good night's.
+  const sleep = Math.max(0, Math.min(SLEEP_HOURS, DAY_HOURS - awake));
+  blocks.unshift({ id: "sleep", label: sleep < SLEEP_HOURS ? "Sleep (short)" : "Sleep", hours: sleep });
+  const busy = awake + sleep;
   const free = Math.max(0, DAY_HOURS - busy);
-  const effects = dayEffects(d, busy, free);
+  const effects = dayEffects(d, busy, free, sleep);
   const sum = (k: "body" | "mind") => Math.round(effects.reduce((t, e) => t + e[k], 0) * 100) / 100;
-  return { blocks, busy, free, fits: free >= MIN_FREE_HOURS, body: sum("body"), mind: sum("mind") };
+  return { blocks, busy, free, sleep, fits: DAY_HOURS - awake >= MIN_SLEEP_HOURS, body: sum("body"), mind: sum("mind") };
 }
 
 /** What adds to your body and mind each game day, and what wears them down (they add up to dayPlan's). */
 export type DayEffect = { label: string; body: number; mind: number };
 
-function dayEffects(d: DayInput, busy: number, free: number): DayEffect[] {
+function dayEffects(d: DayInput, busy: number, free: number, sleep: number): DayEffect[] {
   const ex = EXERCISE[d.exercise];
-  const working = busy - SLEEP_HOURS - ex.hours;
+  const working = busy - sleep - ex.hours;
   const out: DayEffect[] = [{ label: "Daily wear and tear", body: -BODY_DECAY, mind: 0 }];
   out.push({ label: `Free time (${Math.round(free * 10) / 10}h a day)`, body: 0, mind: free >= 6 ? 2 : free >= 4 ? 1 : free >= 2 ? 0 : -1.5 });
+  // Every hour short of a good night's sleep strains the mind (stress) and tires the body.
+  const short = SLEEP_HOURS - sleep;
+  if (short > 0) out.push({ label: `Short sleep (${Math.round(sleep * 10) / 10}h a night)`, body: -Math.round(short * 0.35 * 100) / 100, mind: -Math.round(short * 0.7 * 100) / 100 });
   if (ex.hours > 0) out.push({ label: ex.label, body: ex.body, mind: ex.mind });
   if (working > LONG_DAY) out.push({ label: "Long working days", body: -0.5, mind: -1 });
   if (d.owing) out.push({ label: "Unpaid bills", body: 0, mind: -1 });
@@ -107,7 +120,7 @@ function dayEffects(d: DayInput, busy: number, free: number): DayEffect[] {
 /** The same, for showing: each thing that adds to or wears down your body or mind. */
 export function dayEffectsOf(d: DayInput): DayEffect[] {
   const p = dayPlan(d);
-  return dayEffects(d, p.busy, p.free);
+  return dayEffects(d, p.busy, p.free, p.sleep);
 }
 
 export function mindWord(mind: number) {

@@ -52,3 +52,14 @@ test("every skill and side hustle has breakthrough moments", () => {
   assert.equal(markEvent(e.id, e.best)!.won, true);
   assert.ok(Object.keys(WORK_SKILLS).length >= 13);
 });
+
+test("a long day eats into sleep: allowed, but short nights stress the mind", () => {
+  const rested = dayPlan({ job: true, commute: { mode: "danfo", km: 6 }, hustleHours: 0, studyHours: 0, exercise: "none" });
+  assert.equal(rested.sleep, 8);
+  // A far job and two hustles: only 5 hours' sleep left, but it fits.
+  const short = dayPlan({ job: true, commute: { mode: "danfo", km: 24 }, hustleHours: 7, studyHours: 0, exercise: "none" });
+  assert.ok(short.fits, "allowed");
+  assert.ok(short.sleep < 8 && short.sleep >= 4, String(short.sleep));
+  assert.ok(short.mind < rested.mind - 2, "a stressed mind");
+  assert.ok(short.body < rested.body, "a tired body");
+});
