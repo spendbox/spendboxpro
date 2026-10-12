@@ -23,6 +23,7 @@ const INCOME: { label: string; kinds: string[]; colour: string }[] = [
   { label: "Side hustle", kinds: ["hustle_pay"], colour: "#d6336c" },
   { label: "Rent", kinds: ["rent"], colour: "#37b24d" },
   { label: "Property sold", kinds: ["property_sale"], colour: "#495057" },
+  { label: "Things and cars sold", kinds: ["item_sale", "car_sale"], colour: "#7048e8" },
 ];
 /** Where it went. */
 const EXPENSES: { label: string; kinds: string[]; colour: string }[] = [
@@ -35,6 +36,8 @@ const EXPENSES: { label: string; kinds: string[]; colour: string }[] = [
   { label: "Loan", kinds: ["loan_repay"], colour: "#0c8599" },
   { label: "Side hustle", kinds: ["hustle_start"], colour: "#868e96" },
   { label: "Property bought", kinds: ["property_buy", "property_tax"], colour: "#495057" },
+  { label: "Things and cars bought", kinds: ["item_buy", "car_buy", "craft_cost"], colour: "#7048e8" },
+  { label: "Market fees and fines", kinds: ["market_fee", "item_tax", "fine"], colour: "#868e96" },
 ];
 
 /** Finance: what you're worth, what came in and went out, your budget, your property, your currency. */

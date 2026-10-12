@@ -9,7 +9,7 @@ export const EARNED_KINDS = ["work_pay", "public_pay", "hustle_pay", "bonus", "r
 /** What living cost: tax, bills, getting about, health, school, fees, loan payments. */
 export const COST_KINDS = [
   "income_tax", "rent_tax", "vat", "sale_tax", "power_bill", "waste_bill", "commute", "health_care", "gym", "school_fees",
-  "procedure", "loan_repay", "market_fee", "item_tax", "car_running",
+  "procedure", "loan_repay", "market_fee", "item_tax", "car_running", "fine",
 ];
 /** Spent on things you keep (they count in what you're worth). */
 export const BOUGHT_KINDS = ["property_buy", "property_tax", "hustle_start", "item_buy", "car_buy", "craft_cost"];

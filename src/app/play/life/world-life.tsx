@@ -17,6 +17,9 @@ import { dayOf, EXERCISE } from "@/lib/world/day";
 import { HUSTLES, hustleDay, hustleStart } from "@/lib/world/hustles";
 import type { Workplace } from "@/lib/world/workplace";
 import { PropertyCard } from "../property-card";
+import { myThings } from "../item-actions";
+import { ThingsSheet, type ThingsTab } from "./things-sheet";
+import { NewsSheet } from "./news-sheet";
 import { Sheet } from "../sheet";
 import { LifeSheet } from "./life-sheet";
 import { MoneySheet } from "./money-sheet";
@@ -215,6 +218,21 @@ export function useWorldLife({
   } | null>(null);
   const [loanOpen, setLoanOpen] = useState(false);
   const [listings, setListings] = useState<Listing[] | null>(null);
+  /** Things (items, shops, cars, market, craft) open on a tab, and the news. */
+  const [things, setThings] = useState<ThingsTab | null>(null);
+  const [newsOpen, setNewsOpen] = useState(false);
+  /** Your reputation (shown at the top) and whether you own a car (to drive to work). */
+  const [rep, setRep] = useState<{ score: number; hasCar: boolean } | null>(null);
+  const loadRep = useCallback(() => void myThings().then((t) => t && setRep({ score: t.reputation.score, hasCar: t.hasCar })).catch(() => {}), []);
+  useEffect(() => {
+    if (!signedIn || !regionId || pretend) return;
+    const first = setTimeout(loadRep, 1500);
+    const every = setInterval(loadRep, 180_000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(every);
+    };
+  }, [signedIn, regionId, pretend, loadRep]);
 
   useEffect(() => {
     if (!signedIn || !regionId) return;
@@ -331,7 +349,8 @@ export function useWorldLife({
       const r = await api.travelTo(id);
       setBusy(false);
       if (!r.ok) return setMessage({ text: r.error, good: false });
-      if (r.fare) setMessage({ text: `${cash(r.fare)} fare there.`, good: true });
+      if (r.found) setMessage({ text: `On the way you found: ${r.found}! It's in your Items.`, good: true });
+      else if (r.fare) setMessage({ text: `${cash(r.fare)} fare there.`, good: true });
       void refresh();
     }
     onEnter?.(id);
@@ -709,6 +728,7 @@ export function useWorldLife({
           }}
           onClose={() => setWorkOpen(false)}
           loadMoney={api.money}
+          hasCar={!!rep?.hasCar}
         />
       )}
       {property && (
@@ -972,6 +992,27 @@ export function useWorldLife({
           </div>
         </div>
       )}
+      {things && (
+        <ThingsSheet
+          tab={things}
+          prices={region.region.prices}
+          onClose={() => {
+            setThings(null);
+            loadRep();
+          }}
+          onChanged={() => void refresh()}
+        />
+      )}
+      {newsOpen && (
+        <NewsSheet
+          region={region}
+          onShow={(x, z) => {
+            setNewsOpen(false);
+            fly(x, z);
+          }}
+          onClose={() => setNewsOpen(false)}
+        />
+      )}
       {lifeOpen && (
         <LifeSheet
           status={status}
@@ -1080,5 +1121,5 @@ export function useWorldLife({
   /** Something in Finance wants you: the guide's budget step, a power cut, an offer. */
   const financeGlow = step === "budget";
   const financeDot = !!(status?.powerCut || board?.received.some((o) => o.status === "open"));
-  return { centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit };
+  return { openThings: (tab: ThingsTab) => setThings(tab), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit };
 }

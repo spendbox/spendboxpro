@@ -13,6 +13,7 @@
 - [ ] Then run `game-db/046_market.sql` (the player market: selling, offers, tenants, World Bank loans; see `docs/MARKET.md`). If you ever run 038 or 040 again, run 046 again after them.
 - [ ] Then run `game-db/047_ads_are_property.sql` (advertising is leasing a building: billboards included, a design you can swap, ends after a year or its taps; no mint for tapping ads; see `docs/BUSINESS.md`).
 - [ ] Then run `game-db/048_trips.sql` (going into a building costs the fare from where you last were).
+- [ ] Then run `game-db/050_economy_items.sql` (pay four times real wages, money by day for the Finance chart, things, the market, crafting, cars, reputation; see `docs/ITEMS.md`). Until it's run, the Things screens and the Finance chart stay empty.
 - [ ] Then run `game-db/049_reports_and_work.sql` (reporting people; up to 3 side hustles; pay that goes into wallets by itself every game week). Until it's run, starting a second side hustle and reporting a person won't work.
 - [ ] In Vercel, set `GAME_SECRET` to a long random string (seals interview answers and passes; without it the service key is used).
 - [ ] Let the cloud sessions reach OpenStreetMap (for the real Lagos map): in the Claude Code environment settings, Network access, add `overpass-api.de` to the allowed domains. Then ask for the real pedestrian crossings (the list is still empty: the download failed) and a fresh Lagos bake (`npm run bake:world -- lagos`).
@@ -25,6 +26,10 @@
 - [ ] Test on a real phone: sounds, touch gestures, the water slide, club lights.
 
 ## Done lately
+- [x] Plain words (every 2 hours, not "game day"), no hourly countdown on the real map, no page zoom on pop-ups, jobs at filling stations, everything on the phone (no old menu, no XP or level), search in the place pill.
+- [x] Land a tenth of real prices, cheaper homes, pay 4x real wages, fares about halved.
+- [x] Income with tabs and totals, Find jobs pop-up; Finance shows whether you're up or down, with a chart.
+- [x] Things, shops, cars, the market, crafting new things, reputation (`docs/ITEMS.md`); Lagos news and weather (`docs/NEWS.md`).
 - [x] Bridges and flyovers never end in mid-air or meet with a step, and the tests check every deck in Lagos. Onikan Stadium no longer has a flyover through it.
 - [x] Unilag at its real Akoka spot on the lagoon, at real size (about 1.1 × 0.9 km), drawn as a campus; no more made-up "University of Lagos" copies.
 - [x] Tapping a building or place: Go there (with the fare; straight in on the ground floor, the Floor button glows for the first 5 visits), Rent / Buy (worth and units), Advertise, and which way its worth is going. Cards no longer blur the map.

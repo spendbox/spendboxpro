@@ -46,7 +46,7 @@ language sql stable security definer set search_path = public as $$
       and r.kind in ('work_pay', 'public_pay', 'hustle_pay', 'bonus', 'rent', 'property_sale', 'item_sale', 'car_sale', 'service_pay')), 0), 2),
     'costs', round(coalesce((select -sum(amount) from rows r where r.day = d.day and r.amount < 0
       and r.kind in ('income_tax', 'rent_tax', 'vat', 'sale_tax', 'power_bill', 'waste_bill', 'commute', 'health_care', 'gym', 'school_fees',
-                     'procedure', 'loan_repay', 'market_fee', 'item_tax', 'car_running')), 0), 2),
+                     'procedure', 'loan_repay', 'market_fee', 'item_tax', 'car_running', 'fine')), 0), 2),
     'bought', round(coalesce((select -sum(amount) from rows r where r.day = d.day and r.amount < 0
       and r.kind in ('property_buy', 'property_tax', 'hustle_start', 'item_buy', 'car_buy', 'craft_cost')), 0), 2)
   ) order by d.day), '[]'::jsonb)
@@ -433,3 +433,24 @@ begin
     execute format('grant execute on function %s to service_role', f);
   end loop;
 end $$;
+
+/** Money in and out by kind (as part 46, with things and cars bought and sold, market fees and fines). */
+create or replace function public.life_money(p_user uuid, p_hours int) returns jsonb
+language sql stable security definer set search_path = public as $$
+  with since as (select now() - make_interval(hours => least(greatest(coalesce(p_hours, 24), 1), 24 * 365)) as t),
+  rows as (
+    select kind, sum(amount) as amount from public.ledger, since
+    where user_id = p_user and created_at >= since.t
+      and kind in ('work_pay', 'public_pay', 'hustle_pay', 'bonus', 'rent', 'income_tax', 'rent_tax', 'vat', 'power_bill', 'waste_bill', 'commute',
+                   'health_care', 'gym', 'school_fees', 'procedure', 'hustle_start', 'property_buy', 'start_grant',
+                   'property_sale', 'sale_tax', 'loan', 'loan_repay',
+                   'item_buy', 'item_sale', 'car_buy', 'car_sale', 'craft_cost', 'market_fee', 'item_tax', 'fine')
+    group by kind
+    union all
+    select 'property_buy', sum(tax) from public.property_sales, since where buyer_id = p_user and created_at >= since.t
+    union all
+    select 'property_tax', -sum(tax) from public.property_sales, since where buyer_id = p_user and created_at >= since.t
+  )
+  select coalesce(jsonb_object_agg(kind, round(total, 2)), '{}'::jsonb)
+  from (select kind, sum(amount) as total from rows where amount is not null group by kind) s
+$$;

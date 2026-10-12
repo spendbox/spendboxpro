@@ -56,6 +56,7 @@ export function WorkSheet({
   onProperty,
   onGoToWork,
   loadMoney,
+  hasCar,
 }: {
   status: WorkStatus | null;
   life: LifeStatus | null;
@@ -83,6 +84,8 @@ export function WorkSheet({
   onGoToWork: (placeId: string) => void;
   /** Money in and out by kind over the last hours (for the totals at the top). */
   loadMoney: (hours: number) => Promise<MoneyFlow>;
+  /** You own a car: driving to work is one of the ways. */
+  hasCar?: boolean;
 }) {
   const prices = region.region.prices;
   const job = status?.job ?? null;
@@ -232,7 +235,7 @@ export function WorkSheet({
                   <p className="mt-1 text-center text-[11px] text-muted">Every 2 hours.</p>
                   <Section title="Getting to work">
                     <div className="flex flex-wrap gap-1.5">
-                      {COMMUTES.map((mode) => {
+                      {COMMUTES.filter((m) => m !== "car" || hasCar || job.mode === "car").map((mode) => {
                         const f = km === null ? null : fareMint(mode, km, prices, ferry);
                         const on = job.mode === mode;
                         const losing = f !== null && dayNet(job.payDay, skills[job.skill] ?? 0, f) < 0;

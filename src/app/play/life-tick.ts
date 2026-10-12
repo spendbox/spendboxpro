@@ -8,6 +8,7 @@ import { dayOf, dayPlan, EXERCISE, hoursOf, type DayInput, type Exercise } from 
 import { AUTO_CARE, billsFor, priceOf } from "@/lib/world/living";
 import type { LifeStatus } from "@/lib/world/property-api";
 import { ferryKmBetween } from "@/lib/world/trips";
+import { effectsOf, type ItemEffect } from "@/lib/world/items";
 import { fareOrBus, GAME_DAY_HOURS, tripKmBetween, type Commute } from "@/lib/world/work";
 
 /** Everything about a player's day as the database has it. */
@@ -53,6 +54,10 @@ export async function tickLife(userId: string): Promise<LifeStatus | null> {
     bills = { power: b.power, waste: b.waste };
   }
   const plan = dayPlan(rows.day);
+  // What your things do for you (a good bed, a TV, a bicycle...): added to how your days move
+  // body and mind (src/lib/world/items.ts, capped).
+  const { data: things } = await db.from("items").select("effect").eq("owner", userId);
+  const fromThings = effectsOf((things ?? []).map((t) => ({ effect: (t.effect ?? {}) as ItemEffect })));
   const ex = EXERCISE[rows.day.exercise];
   const days = Math.max(0, (Date.now() - Date.parse(String(life.health_at))) / (GAME_DAY_HOURS * 3_600_000));
   const { data, error } = await db.rpc("life_tick", {
@@ -60,8 +65,8 @@ export async function tickLife(userId: string): Promise<LifeStatus | null> {
     p_power_day: bills?.power ?? 0,
     p_waste_day: bills?.waste ?? 0,
     p_care_fee: priceOf(AUTO_CARE.fee, prices, false).total,
-    p_body_day: plan.body,
-    p_mind_day: plan.mind,
+    p_body_day: Math.round((plan.body + fromThings.body) * 100) / 100,
+    p_mind_day: Math.round((plan.mind + fromThings.mind) * 100) / 100,
     p_gym_day: ex.fee ? Math.round((ex.fee / 30 / prices.perMint) * 100) / 100 : 0,
     p_hours: hoursOf(plan),
   });

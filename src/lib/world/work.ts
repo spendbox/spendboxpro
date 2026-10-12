@@ -146,11 +146,12 @@ export function daysForLevel(level: number) {
 
 // ---------------------------------------------------------------- getting to work
 
-export type Commute = "walk" | "keke" | "okada" | "danfo" | "taxi";
+/** How you get about; "car" needs a car of your own (src/lib/world/items.ts). */
+export type Commute = "walk" | "keke" | "okada" | "danfo" | "taxi" | "car";
 
-export const COMMUTES: Commute[] = ["walk", "keke", "okada", "danfo", "taxi"];
+export const COMMUTES: Commute[] = ["walk", "keke", "okada", "danfo", "taxi", "car"];
 
-export const COMMUTE_LABEL: Record<Commute, string> = { walk: "Walk", keke: "Keke", okada: "Okada", danfo: "Danfo bus", taxi: "Taxi" };
+export const COMMUTE_LABEL: Record<Commute, string> = { walk: "Walk", keke: "Keke", okada: "Okada", danfo: "Danfo bus", taxi: "Taxi", car: "My car" };
 
 /** One trip's fare in local money: a start price, so much a km, the most it costs, and how far it'll go (km). */
 type Fare = { base: number; perKm: number; cap?: number; maxKm: number };
@@ -166,6 +167,8 @@ const FARES: Record<Commute, Fare> = {
   okada: { base: 80, perKm: 35, cap: 400, maxKm: 15 },
   danfo: { base: 50, perKm: 8, cap: 250, maxKm: Infinity },
   taxi: { base: 300, perKm: 90, maxKm: Infinity },
+  // Your own car: only fuel (and parking now and then).
+  car: { base: 0, perKm: 12, cap: 400, maxKm: Infinity },
 };
 
 /** A ferry across the lagoon to where no road goes (an island): a crossing fare plus so much a km on the water. */

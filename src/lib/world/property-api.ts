@@ -14,7 +14,7 @@ import type { Listing, MarketBoard, RentLevel } from "./market.ts";
 /** What collecting pay came to (mint): game days, pay, income tax, fares, what's left. */
 export type PaySettled = { days: number; gross: number; tax: number; fares: number; net: number; hustle?: { gross: number; tax: number; net: number } };
 
-export type PropertyResult = { ok: true; coins?: number; home?: boolean; rent?: number; pay?: PaySettled; fare?: number } | { ok: false; error: string };
+export type PropertyResult = { ok: true; coins?: number; home?: boolean; rent?: number; pay?: PaySettled; fare?: number; /** Something you found on the way. */ found?: string } | { ok: false; error: string };
 
 export type AssetUnit = {
   unit: string;

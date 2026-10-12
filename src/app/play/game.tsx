@@ -46,6 +46,7 @@ import {
   Menu as MenuIcon,
   MessageCircle,
   Sparkles,
+  Star,
   Timer,
   Users,
   Volume2,
@@ -60,7 +61,7 @@ import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
 import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
-import { Compass, Crown, Eye, EyeOff, Flag, Gift, ImageIcon, Palette, Smartphone, Swords, User } from "lucide-react";
+import { CarFront, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Newspaper, Palette, ShoppingBag, Smartphone, Store, Swords, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
 import { GhostsSheet } from "./ghost-duel/ghosts-sheet";
@@ -76,6 +77,7 @@ import { FriendNudge, PeopleHere, type HerePerson } from "./people-here";
 import { rodeSomething } from "./streak-actions";
 import { GreetButtons } from "./greet-buttons";
 import { useNoPageZoom } from "./no-page-zoom";
+import { weatherNow } from "@/lib/world/news";
 import { MyGiftsSheet } from "./my-gifts-sheet";
 import { StreakPill, StreakSheet } from "./streak-sheet";
 import { useQuestTracker } from "./activities/quest-tracker";
@@ -600,6 +602,12 @@ export function Game({
     ? Math.min(1, Math.max(0, (now - Date.parse(round.joinEndsAt)) / (Date.parse(round.seekEndsAt) - Date.parse(round.joinEndsAt))))
     : phase === "done" ? 1 : 0;
   useCitySound(sound, roundSeed, huntProgress);
+  // The real map's weather comes from its news (src/lib/world/news.ts), changing every 3 hours.
+  const weatherSlot = Math.floor(now / (3 * 3_600_000));
+  const cityWeather = useMemo(() => {
+    const w = weatherNow(weatherSlot * 3 * 3_600_000);
+    return { kind: w.kind, strength: w.strength };
+  }, [weatherSlot]);
 
   // ---- the dance floor: in a club you can dance, and everyone there sees your move and who
   // you're dancing with (shared through the place's activity channel).
@@ -1510,6 +1518,7 @@ export function Game({
             coinBalloon={null}
             onBalloon={popBalloon}
             progress={huntProgress}
+            weather={worldId ? cityWeather : null}
             nightFirst={(round?.id ?? 0) % 2 === 1}
           />
         </Safe>
@@ -1593,6 +1602,17 @@ export function Game({
               </span>
             )}
             {state.streak && !worldId && <StreakPill streak={state.streak} onOpen={() => { setStreakOpen(true); setMenu(false); setFeedOpen(false); }} />}
+            {worldId && worldLife.reputation !== null && (
+              // Your reputation: opens your things (where it comes from).
+              <button
+                onClick={() => { setMenu(false); worldLife.openThings("mine"); }}
+                className="glass flex h-8 items-center gap-1 whitespace-nowrap rounded-full px-2.5 text-xs font-bold sm:h-9 sm:px-3 sm:text-sm"
+                aria-label={`Reputation ${worldLife.reputation}`}
+              >
+                <Star className="size-4 text-gold-dark" />
+                {worldLife.reputation.toLocaleString("en-GB")}
+              </button>
+            )}
             {worldId ? (
               // Your cash at hand: opens Finance.
               <button
@@ -2502,6 +2522,12 @@ export function Game({
           <div className="grid grid-cols-3 gap-2">
             {(
               [
+                ["My things", Gem, () => worldLife.openThings("mine")],
+                ["Shops", ShoppingBag, () => worldLife.openThings("shops")],
+                ["Cars", CarFront, () => worldLife.openThings("cars")],
+                ["Market", Store, () => worldLife.openThings("market")],
+                ["Craft", Hammer, () => worldLife.openThings("craft")],
+                ["News", Newspaper, () => worldLife.openNews()],
                 ["Camera", Camera, () => setCamera("photo")],
                 ["Selfie", User, () => setCamera("selfie")],
                 ["Photos", ImageIcon, () => setPhone("photos")],
