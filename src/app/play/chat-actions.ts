@@ -80,35 +80,34 @@ function friendly(message: string | undefined, fallback: string) {
 }
 
 /** The last 100 messages in one place this round (including the bot's every-room teases). */
-export async function loadRoom(room: string): Promise<Result<{ roundId: number; room: string; messages: ChatMessage[] }>> {
+/** On the real map (`keep`), chat isn't per round: the last week's messages, whatever the round (round 0). */
+const KEEP_MS = 7 * 86_400_000;
+
+export async function loadRoom(room: string, keep?: boolean): Promise<Result<{ roundId: number; room: string; messages: ChatMessage[] }>> {
   const s = await me();
   if (!s) return { ok: false, error: "Sign in to chat." };
   if (typeof room !== "string" || !ROOM_RE.test(room)) return { ok: false, error: FRIENDLY.bad_room };
-  const { data, error } = await s.db
-    .from("chat_messages")
-    .select("*")
-    .eq("round_id", s.roundId)
-    .in("room", [room, "*"])
+  const q = s.db.from("chat_messages").select("*");
+  const { data, error } = await (keep ? q.gte("created_at", new Date(Date.now() - KEEP_MS).toISOString()) : q.eq("round_id", s.roundId))
+    .in("room", keep ? [room] : [room, "*"])
     .order("id", { ascending: false })
     .limit(100);
   if (error) return { ok: false, error: "Couldn't load the chat." };
-  return { ok: true, roundId: s.roundId, room, messages: (data ?? []).reverse() as ChatMessage[] };
+  return { ok: true, roundId: keep ? 0 : s.roundId, room, messages: (data ?? []).reverse() as ChatMessage[] };
 }
 
 /** My private messages this round (sent and received). */
-export async function loadDms(): Promise<Result<{ roundId: number; messages: ChatMessage[] }>> {
+export async function loadDms(keep?: boolean): Promise<Result<{ roundId: number; messages: ChatMessage[] }>> {
   const s = await me();
   if (!s) return { ok: false, error: "Sign in to chat." };
-  const { data, error } = await s.db
-    .from("chat_messages")
-    .select("*")
-    .eq("round_id", s.roundId)
+  const q = s.db.from("chat_messages").select("*");
+  const { data, error } = await (keep ? q.gte("created_at", new Date(Date.now() - KEEP_MS).toISOString()) : q.eq("round_id", s.roundId))
     .not("recipient_id", "is", null)
     .or(`sender_id.eq.${s.userId},recipient_id.eq.${s.userId}`)
     .order("id", { ascending: false })
     .limit(300);
   if (error) return { ok: false, error: "Couldn't load your private messages." };
-  return { ok: true, roundId: s.roundId, messages: (data ?? []).reverse() as ChatMessage[] };
+  return { ok: true, roundId: keep ? 0 : s.roundId, messages: (data ?? []).reverse() as ChatMessage[] };
 }
 
 /** Send a text message to a place ({ room }) or privately to a player ({ to }). */

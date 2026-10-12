@@ -31,6 +31,12 @@
 - [ ] In Vercel, set `SPORTS_SECRET` to a long random string (once; don't change it later).
 - [ ] Test on a real phone: sounds, touch gestures, the water slide, club lights.
 
+## Next (ideas agreed)
+- [ ] **The core thing: "Run your area".** One tap of **Respect** on anyone's home, car, mark, invention or prank (Newtown's "like"). Respect turns into reputation, and each week the most respected player in each neighbourhood becomes its **Don**: their name and a crown on the area for everyone to see. Work, buying, marks, pranks and dating all feed one goal: own your street.
+- [ ] Earning from reputation (coming soon on the Reputation screen): players above a reputation level share 50% of the app's revenue.
+- [ ] Coming soon (shown in the game): posting videos and real-life content, politics, Easter eggs, real jobs, creator payouts, more cities.
+- [ ] Trees that grow the map's land outward; proposals, weddings, divorce and children (dating).
+
 ## Done lately
 - [x] The social city, phase 1 and 2: faces on the map (online, asleep, at work, away), cards, doorsteps with knocks, notes and wrapped gifts, while you were away, web push; writing, reviews, trees, statues, fountains, plaques and time capsules on the map, with reactions and votes to take down.
 - [x] Plain words (every 2 hours, not "game day"), no hourly countdown on the real map, no page zoom on pop-ups, jobs at filling stations, everything on the phone (no old menu, no XP or level), search in the place pill.

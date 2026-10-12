@@ -8,7 +8,7 @@ import { ADOPT_SHARE, dayCost, GRAFFITI, graffitiLook, graffitiWall, INKS, MARK_
 import { cash } from "@/lib/world/value";
 import { mintOf } from "@/lib/world/items";
 import { myThings, type MyItem } from "../item-actions";
-import { chipIn, leaveMark, openCapsule, reactMark, removeMark, voteMark, type MapMark } from "../mark-actions";
+import { chipIn, leaveMark, myMarks, openCapsule, reactMark, removeMark, voteMark, type MapMark } from "../mark-actions";
 import { Sheet } from "../sheet";
 
 // Marks on the map (docs/MARKS.md): one tapped (who left it, react, vote it down, chip in, open a
@@ -111,7 +111,17 @@ export function MarkCard({ mark, me, prices, onPerson, onClose, onChanged, onDon
 }
 
 /** Leave a mark where you're looking: writing, a review, a tree, a statue, a time capsule... */
-export function LeaveMarkSheet({ where, region, x, z, place, prices, reputation, adoptable, onClose, onDone }: { where: string; region: string; x: number; z: number; place?: string; prices: Prices; reputation: number | null; adoptable?: boolean; onClose: () => void; onDone: Done }) {
+export function LeaveMarkSheet({ where, region, x, z, place, prices, reputation, adoptable, onClose, onDone, onFly, onChanged }: { where: string; region: string; x: number; z: number; place?: string; prices: Prices; reputation: number | null; adoptable?: boolean; onClose: () => void; onDone: Done; onFly: (x: number, z: number) => void; onChanged: () => void }) {
+  const [tab, setTab] = useState<"leave" | "mine">("leave");
+  const [mine, setMine] = useState<Awaited<ReturnType<typeof myMarks>> | undefined>(undefined);
+  const loadMine = () => void myMarks().then((m) => setMine(m));
+  useEffect(() => {
+    let alive = true;
+    void myMarks().then((m) => alive && setMine(m));
+    return () => {
+      alive = false;
+    };
+  }, []);
   const [kind, setKind] = useState<MarkKind>("writing");
   const [style, setStyle] = useState<GraffitiStyle>("spray");
   const [body, setBody] = useState("");
@@ -128,22 +138,70 @@ export function LeaveMarkSheet({ where, region, x, z, place, prices, reputation,
   }, [kind, things]);
   const found = personalInfo(body) ?? website(body);
   const cost = mintOf(kind === "tree" && adoptable ? k.price * ADOPT_SHARE : k.price, prices);
-  const allowed = reputation === null ? null : marksAllowed(reputation);
+  const rep = mine?.reputation ?? reputation;
+  const allowed = mine ? mine.allowed : reputation === null ? null : marksAllowed(reputation);
+  const full = !!mine && mine.up >= mine.allowed && mine.allowed > 0;
+  const tabs = (
+    <div className="mb-3 flex gap-1 rounded-full bg-ink/5 p-1">
+      {(
+        [
+          ["leave", "Leave a mark"],
+          ["mine", `My marks${mine ? ` (${mine.up} up)` : ""}`],
+        ] as const
+      ).map(([id, label]) => (
+        <button key={id} onClick={() => setTab(id)} className={`h-9 flex-1 rounded-full text-sm font-semibold ${tab === id ? "bg-panel shadow-sm" : "text-muted"}`}>
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+  if (tab === "mine")
+    return (
+      <Sheet onClose={onClose} title="Your marks" wide>
+        {tabs}
+        <MyMarksList
+          mine={mine}
+          onFly={(mx, mz) => {
+            onClose();
+            onFly(mx, mz);
+          }}
+          onRemoved={(text, ok) => {
+            onDone(text, ok);
+            loadMine();
+            onChanged();
+          }}
+        />
+      </Sheet>
+    );
   if (allowed === 0)
     return (
-      <Sheet onClose={onClose} title="Leave a mark" clear>
+      <Sheet onClose={onClose} title="Leave a mark" wide>
+        {tabs}
         <p className="text-sm">
-          You need <b>{MARK_MIN_REP} reputation</b> to leave anything on the map. You have {reputation}.
+          You need <b>{MARK_MIN_REP} reputation</b> to leave anything on the map. You have {rep ?? 0}.
         </p>
-        <p className="mt-2 text-xs text-muted">Reputation comes from your home and property, things you own and make, and people liking what you do. Tap your star at the top to see yours.</p>
+        <p className="mt-2 text-xs text-muted">Reputation comes from your home and property, things you own and make, and people reacting to what you do. Tap your ★ at the top to see what adds to it and what takes it away.</p>
         <button onClick={onClose} className="mt-3 h-11 w-full rounded-full bg-ink font-semibold text-white">
           OK
         </button>
       </Sheet>
     );
   return (
-    <Sheet onClose={onClose} title="Leave a mark" clear>
-      <p className="text-xs text-muted">At {where}. Your name goes with it; people can react, or vote to take it down.{allowed !== null && ` You can have ${allowed} up at once (one more for every 50 reputation).`}</p>
+    <Sheet onClose={onClose} title="Leave a mark" wide>
+      {tabs}
+      <p className="text-sm text-muted">At {where}. Your name goes with it; people can react, or vote to take it down.</p>
+      {allowed !== null && (
+        <p className={`mt-2 rounded-xl px-3 py-2 text-xs ${full ? "bg-hit/10 font-semibold text-hit" : "bg-ink/[0.04]"}`}>
+          {mine ? `${mine.up} of ${allowed} up. ` : `You can have ${allowed} up at once. `}
+          {full ? (
+            <button onClick={() => setTab("mine")} className="underline">
+              Take one down in My marks to leave another.
+            </button>
+          ) : (
+            "One more for every 50 reputation."
+          )}
+        </p>
+      )}
       <div className="-mx-1 mt-2 flex gap-1.5 overflow-x-auto px-1 pb-1">
         {MARK_KINDS.map((m) => (
           <button key={m.kind} onClick={() => setKind(m.kind)} className={`h-8 shrink-0 rounded-full px-3 text-xs font-semibold ${kind === m.kind ? "bg-ink text-white" : "bg-ink/5"}`}>
@@ -233,18 +291,69 @@ export function LeaveMarkSheet({ where, region, x, z, place, prices, reputation,
         </div>
       )}
       <button
-        disabled={busy || !!found || (k.text === "need" && !body.trim())}
+        disabled={busy || full || !!found || (k.text === "need" && !body.trim())}
         onClick={async () => {
           setBusy(true);
           const r = await leaveMark({ region, x, z, kind, body, colour, style, rating, place, opensInDays: days, itemId: item ?? undefined });
           setBusy(false);
           onDone(r.ok ? (r.text === "adopted" ? `You adopted a tree at ${where}.` : r.text === "moved" ? `${k.label} left just off the road near ${where}.` : `${k.label} left at ${where}.`) : r.error, r.ok);
-          if (r.ok) onClose();
+          if (r.ok) {
+            onChanged();
+            onClose();
+          } else loadMine();
         }}
         className="mt-3 h-11 w-full rounded-full bg-ink font-semibold text-white disabled:opacity-40"
       >
         {cost > 0 ? `Leave it · ${cash(cost)}` : "Leave it"}
       </button>
     </Sheet>
+  );
+}
+
+/** Your marks: where each is (fly there), whether it's up, and taking one down to make room. */
+function MyMarksList({ mine, onFly, onRemoved }: { mine: Awaited<ReturnType<typeof myMarks>> | undefined; onFly: (x: number, z: number) => void; onRemoved: Done }) {
+  const [busy, setBusy] = useState<number | null>(null);
+  if (mine === undefined) return <div className="h-32 animate-pulse rounded-2xl bg-ink/5" />;
+  if (!mine || mine.marks.length === 0) return <p className="py-6 text-center text-sm text-muted">You haven&apos;t left a mark yet.</p>;
+  return (
+    <>
+      <p className="mb-2 text-xs text-muted">
+        {mine.up} of {mine.allowed} up · reputation {mine.reputation}. Taking one down makes room for a new one.
+      </p>
+      <ul className="space-y-2">
+        {mine.marks.map((m) => (
+          <li key={m.id} className={`rounded-2xl p-3 ${m.up ? "bg-ink/[0.04]" : "bg-ink/[0.02] opacity-60"}`}>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+              {markKind(m.kind)?.label ?? m.kind}
+              {m.place ? ` · ${m.place}` : ""}
+            </p>
+            {m.body && <p className="mt-0.5 text-sm">&ldquo;{m.body}&rdquo;</p>}
+            <p className="mt-1 text-[11px] text-muted">
+              {new Date(m.at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+              {m.up ? (m.expiresAt ? ` · up until ${new Date(m.expiresAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}` : " · up") : m.removed ? " · taken down" : " · ended"}
+            </p>
+            <div className="mt-2 flex gap-2">
+              <button onClick={() => onFly(m.x, m.z)} className="h-8 rounded-full bg-ink/10 px-3 text-xs font-semibold">
+                Show on map
+              </button>
+              {m.up && (
+                <button
+                  disabled={busy === m.id}
+                  onClick={async () => {
+                    setBusy(m.id);
+                    const r = await removeMark(m.id);
+                    setBusy(null);
+                    onRemoved(r.ok ? "Taken down. You can leave a new one." : r.error, r.ok);
+                  }}
+                  className="flex h-8 items-center gap-1 rounded-full bg-hit/10 px-3 text-xs font-semibold text-hit disabled:opacity-40"
+                >
+                  <Trash2 className="size-3.5" /> Take down
+                </button>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }

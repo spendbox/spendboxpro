@@ -567,7 +567,7 @@ export function Game({
   const [adExplainer, setAdExplainer] = useState(false);
   const [startCard, setStartCard] = useState<{ title: string; line: string } | null>(null);
   const online = useOnline(state.me.id, state.me.guest);
-  const rooms = useRooms(state.round?.id ?? null, state.me.guest ? null : { id: state.me.id, name: state.me.name ?? "Player", avatar: state.me.avatar }, {
+  const rooms = useRooms(worldId ? 0 : (state.round?.id ?? null), state.me.guest ? null : { id: state.me.id, name: state.me.name ?? "Player", avatar: state.me.avatar }, {
     onRideEnd: () => {
       setRide(null);
     },
@@ -2240,13 +2240,23 @@ export function Game({
           </button>
         )}
 
-        {/* The real map, inside a building: where you are, change floor, leave. */}
-        {worldId && place && (
+        {/* The real map, inside a building or on a ride (a balloon...): where you are, chat, change floor, camera, leave. */}
+        {worldId && (place || ride !== null) && (
           <div className="glass pointer-events-auto flex w-full max-w-md flex-wrap items-center gap-2 rounded-2xl p-2 pl-3 text-sm">
             <Building2 className="size-4 shrink-0 text-[#7048e8]" />
-            <b className="line-clamp-2 min-w-0 flex-1 basis-[calc(100%-2rem)] leading-tight sm:basis-auto">{rooms.myRoomInfo?.name || placeRoom?.name || "Inside a building"}</b>
+            <b className="line-clamp-2 min-w-0 flex-1 basis-[calc(100%-2rem)] leading-tight sm:basis-auto">
+              {rooms.myRoomInfo?.name ||
+                (ride !== null ? (rideList.find((r) => r.kind === ride.kind && r.index === ride.index)?.name ?? RIDE_INFO[ride.kind].label) : placeRoom?.name) ||
+                "Inside a building"}
+            </b>
             <span className="flex-1 sm:hidden" />
-            {placeRoom && placeRoom.id === place.building && (placeRoom.levels?.length ?? 0) > 1 && (
+            {!guest && (
+              <button onClick={() => { setChatOpen(true); setChatUnread(0); }} className="relative flex shrink-0 items-center gap-1 rounded-xl bg-panel-2 px-3 py-2 text-xs font-semibold" aria-label="Chat with everyone here">
+                <MessageCircle className="size-4" /> Chat
+                {chatUnread > 0 && <span className="absolute -right-1.5 -top-1.5 grid min-w-5 place-items-center rounded-full bg-hit px-1 text-[11px] text-white">{chatUnread > 99 ? "99+" : chatUnread}</span>}
+              </button>
+            )}
+            {place && placeRoom && placeRoom.id === place.building && (placeRoom.levels?.length ?? 0) > 1 && (
               <button
                 onClick={() => setPickPlace(placeRoom)}
                 className={cn("relative flex shrink-0 items-center gap-1 rounded-xl bg-panel-2 px-3 py-2 text-xs font-semibold", floorGlow && "outline outline-2 outline-offset-2 outline-gold")}
@@ -2255,13 +2265,12 @@ export function Game({
                 <Layers className="size-4" /> Floor
               </button>
             )}
-            {!guest && (
-              <button onClick={() => setPhoneHub(true)} className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#f08c00] text-white" aria-label="Your phone">
-                <Smartphone className="size-4" />
-              </button>
-            )}
+            {/* Inside, the phone is just the camera: pictures, and selfies (flip it round). */}
+            <button onClick={() => setCamera("photo")} className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#f08c00] text-white" aria-label="Camera: pictures and selfies">
+              <Camera className="size-4" />
+            </button>
             <button onClick={leaveRoom} className="flex shrink-0 items-center gap-1 rounded-xl bg-ink px-3 py-2 text-xs font-semibold text-white">
-              <LogOut className="size-4" /> Leave
+              <LogOut className="size-4" /> {ride !== null ? "Get off" : "Leave"}
             </button>
           </div>
         )}
@@ -2539,8 +2548,8 @@ export function Game({
           aria-label="Your phone"
         >
           <Smartphone className="size-5" />
-          {unread > 0 && (
-            <span className="absolute -right-1.5 -top-1.5 grid min-w-5 place-items-center rounded-full bg-hit px-1 text-[11px] font-semibold text-white">{unread > 9 ? "9+" : unread}</span>
+          {unread + chatUnread > 0 && (
+            <span className="absolute -right-1.5 -top-1.5 grid min-w-5 place-items-center rounded-full bg-hit px-1 text-[11px] font-semibold text-white">{unread + chatUnread > 9 ? "9+" : unread + chatUnread}</span>
           )}
         </button>
       )}
@@ -2549,6 +2558,7 @@ export function Game({
           <div className="grid grid-cols-3 gap-2">
             {(
               [
+                ["Messages", MessageCircle, () => { setChatOpen(true); setChatUnread(0); }],
                 ["Doorstep", DoorClosed, () => setDoorstepOpen(true)],
                 ["Dating", Heart, () => setSocialOpen("dating")],
                 ["Rivals", Swords, () => setSocialOpen("rivals")],
@@ -2608,6 +2618,36 @@ export function Game({
           {sound ? <Volume2 className="size-4" /> : <VolumeX className="size-4 text-muted" />}
         </button>
       )}
+      {/* Chat on the real map: everyone in the place you're in, and private messages (not per round). */}
+      {worldId && !guest && (
+        <Safe name="Chat">
+          <Chat
+            meId={me.id}
+            meRole={null}
+            roundId={0}
+            keep
+            players={state.players}
+            open={chatOpen}
+            onOpenChange={setChatOpen}
+            room={rooms.myRoomInfo}
+            roomMembers={rooms.members}
+            roomCount={rooms.myRoom ? (rooms.counts[rooms.myRoom] ?? 0) : 0}
+            onLeaveRoom={leaveRoom}
+            guest={guest}
+            rideEndsAt={rooms.rideEndsAt}
+            botName={botName}
+            dmRequest={dmRequest}
+            externalNpc={npcTap}
+            enteredAt={rooms.enteredAt}
+            greet={greet}
+            friendStatusOf={friendStatusOf}
+            onAddFriend={befriend}
+            hideButton
+            onUnread={setChatUnread}
+            onSignIn={() => setSignIn({ why: null })}
+          />
+        </Safe>
+      )}
       {personId && (
         <PersonCard
           key={personId}
@@ -2621,6 +2661,10 @@ export function Game({
           greet={(p) => greet(p, false)}
           onDone={(text, ok) => setMessage({ text, tone: ok ? "good" : "bad" })}
           self={personId === me.id}
+          onMessage={me.guest ? undefined : (p) => {
+            setPersonId(null);
+            chatWith(p);
+          }}
           prices={worldRegion?.prices ?? null}
           onOpenDating={() => {
             setPersonId(null);

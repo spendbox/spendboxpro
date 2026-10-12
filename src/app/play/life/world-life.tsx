@@ -1164,6 +1164,11 @@ export function useWorldLife({
           prices={region.region.prices}
           reputation={rep?.score ?? null}
           adoptable={["park", "trees"].includes(tileAt(planOf(region), spiralIndex(leaving.x, leaving.z)).kind)}
+          onFly={fly}
+          onChanged={() => {
+            loadMarks();
+            loadRep();
+          }}
           onClose={() => setLeaving(null)}
           onDone={(text, good) => {
             setMessage({ text, good });
