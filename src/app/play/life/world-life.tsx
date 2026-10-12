@@ -15,9 +15,10 @@ import { cheapestCommute, COMMUTE_LABEL, dayNet, fareMint, fareOrBus, INCOME_TAX
 import { ferryKmBetween } from "@/lib/world/trips";
 import { dayOf, EXERCISE } from "@/lib/world/day";
 import { HUSTLES, hustleDay, hustleStart } from "@/lib/world/hustles";
-import type { Workplace } from "@/lib/world/workplace";
+import { workplaceById, type Workplace } from "@/lib/world/workplace";
 import { PropertyCard } from "../property-card";
 import { AdvertisePanel, type AdPreview } from "./advertise-panel";
+import { explorePlaces, type ExplorePlace } from "@/lib/world/explore";
 import { around, cachedThings, loadThings } from "./things-cache";
 import { ThingsSheet, type ThingsTab } from "./things-sheet";
 import { NewsSheet } from "./news-sheet";
@@ -1475,5 +1476,18 @@ export function useWorldLife({
     setLeaving({ x, z, where: at?.place ?? region.areaAt(x, z), place: at?.place });
   };
   const markTags: CityMarkTag[] = marks.map((m) => ({ id: m.id, x: m.x, z: m.z, kind: m.kind, text: m.body, colour: m.colour, rating: m.rating, author: m.authorName, style: m.style }));
-  return { rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit };
+  /** Explore: the places worth going to, nearest to where you're looking first. */
+  const explore = () => {
+    if (!region) return [];
+    const plan = planOf(region);
+    const c = centerRef.current?.() ?? { x: 0, z: 0 };
+    return explorePlaces(region, (x, z) => tileAt(plan, spiralIndex(x, z)), c.x, c.z);
+  };
+  /** Go to a place from Explore: fly there and open its card (Go there, and its jobs). */
+  const openExplorePlace = (p: ExplorePlace) => {
+    if (!region) return;
+    fly(p.x, p.z);
+    setPlace(workplaceById(planOf(region), p.id) ?? { id: p.id, name: p.name, x: Math.round(p.x), z: Math.round(p.z), jobs: [] });
+  };
+  return { explore, openExplorePlace, rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit };
 }

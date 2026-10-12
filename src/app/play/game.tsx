@@ -109,6 +109,7 @@ import { worldPreview } from "./world-flag";
 import { PlacePill } from "./place-pill";
 import { CityCard } from "./city-card";
 import { useWorldLife } from "./life/world-life";
+import type { ExplorePlace } from "@/lib/world/explore";
 import { PeopleList } from "./people/people-list";
 import { StatsSheet } from "./stats-sheet";
 import { PrankReveal, usePrankReveal } from "./people/prank-reveal";
@@ -577,7 +578,9 @@ export function Game({
   const [jobsAt, setJobsAt] = useState<{ id: string; name: string } | null | undefined>(undefined);
   const [placeRoom, setPlaceRoom] = useState<PlaceRoom | null>(null);
   const [pickRide, setPickRide] = useState(false);
-  const [exploreTab, setExploreTab] = useState<"rides" | "sports">("rides");
+  const [exploreTab, setExploreTab] = useState<"places" | "rides" | "sports">("rides");
+  /** The real map's Explore: the places worth going to (worked out when it opens). */
+  const [explorePlacesNow, setExplorePlaces] = useState<ExplorePlace[] | null>(null);
   const [npcTap, setNpcTap] = useState<{ id: string; at: number } | null>(null);
   const [balloonCount, setBalloonCount] = useState(0);
   const [dmRequest, setDmRequest] = useState<{ id: string; name: string; at: number } | null>(null);
@@ -1638,6 +1641,18 @@ export function Game({
               {onlineNow}
               <span className="max-[440px]:hidden">online</span>
             </button>
+            {/* Explore: places to go (clubs, parks, markets...), rides (train, balloon, boat, helicopter...) and sport. */}
+            <button
+              onClick={() => {
+                setExplorePlaces(worldLife.explore());
+                setExploreTab("places");
+                setPickRide(true);
+              }}
+              className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold"
+            >
+              <Compass className="size-4 text-[#e64980]" />
+              Explore
+            </button>
             {worldLife.rowButtons}
             {!me.guest && (
               // Notifications: what's happened, and switching them on for this phone. Glows until they're on.
@@ -2247,6 +2262,11 @@ export function Game({
         <ExploreSheet
           tab={exploreTab}
           onTab={setExploreTab}
+          places={worldId ? (explorePlacesNow ?? []) : undefined}
+          onPlace={(p) => {
+            setPickRide(false);
+            worldLife.openExplorePlace(p);
+          }}
           rides={rideList}
           counts={rooms.counts}
           liveVenues={liveVenues}

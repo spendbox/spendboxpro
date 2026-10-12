@@ -69,6 +69,7 @@ import { clubParts, eggParts, fireStationParts, restaurantParts } from "./city/s
 import { createCabin, type Cabin } from "./city/rides";
 import { disposeVehicleCaches } from "./city/vehicles";
 import { createBoats } from "./city/boats";
+import { createRealTransit, REAL_BASE } from "./city/real-transit";
 import { createAirliner, LIVERIES } from "./city/airliner";
 import { createSlideRide, createWaterpark, waterparkParts, type Slide, type SlideRide, type Waterpark } from "./city/waterpark";
 import { createVenueGame, venueParts, type VenueGame } from "./city/venues";
@@ -2476,6 +2477,8 @@ export function CityView({
     const traffic = createTraffic(world, life);
     const deckTraffic = createDeckTraffic(world, life);
     const boats = createBoats(world, life);
+    // A real map's trains on its real railways, and ferries across the lagoon (./city/real-transit).
+    const realTransit = createRealTransit(life);
     const plumes = createPlumes(world, life);
     const sites = createSites(world, life);
     const buildingSite = createBuildingSite(scene);
@@ -2670,6 +2673,7 @@ export function CityView({
       traffic.build(plan);
       deckTraffic.build(plan.region, plan.palette.car);
       boats.build();
+      realTransit.build(plan.region);
       buildLandmarks();
       plumes.build();
       sites.build();
@@ -5247,12 +5251,14 @@ export function CityView({
       switch (r.kind) {
         case "train":
           // (One past the railway's trains: the monorail.)
+          if (r.index >= REAL_BASE) return r.index - REAL_BASE < realTransit.trains.length;
           return r.index >= 0 && (r.index < trains.count || (r.index === trains.count && elevatedLife.hasTrain));
         case "bus":
           return rideIdx.buses[r.index] !== undefined;
         case "car":
           return rideIdx.cars[r.index] !== undefined;
         case "boat":
+          if (r.index >= REAL_BASE) return r.index - REAL_BASE < realTransit.ferries.length;
           return r.index >= 0 && r.index < boats.count;
         case "ferris":
           return !!wheels[r.index];
@@ -5280,6 +5286,8 @@ export function CityView({
       rideIdx.cars.forEach((k, j) => out.push({ kind: "car", index: j, name: traffic.isTaxi(k) ? `${city} taxi` : `Car ${++cars}`, capacity: RIDE_CAP.car }));
       const boatNames = [`${city} River Bus`, "Lady of the River", "Sunset Cruiser", "Island Hopper", "Blue Heron"];
       for (let i = 0; i < boats.count; i++) out.push({ kind: "boat", index: i, name: boatNames[i] ?? `River boat ${i + 1}`, capacity: RIDE_CAP.boat });
+      realTransit.trains.forEach((t, i) => out.push({ kind: "train", index: REAL_BASE + i, name: `${t.name} · ${t.km} km, ${t.stops} stations`, capacity: RIDE_CAP.train, fare: TRAIN_FARE }));
+      realTransit.ferries.forEach((f, i) => out.push({ kind: "boat", index: REAL_BASE + i, name: `${f.name} · ${f.km} km across the lagoon`, capacity: RIDE_CAP.boat }));
       wheels.forEach((w, i) => {
         const t = tileById.get(w.tile);
         const name = t?.name ?? (t?.structure ? `${t.structure.name} wheel` : t ? `Ferris wheel, ${shortAddress(addressOf(plan, t))}` : "Ferris wheel");
@@ -5309,7 +5317,7 @@ export function CityView({
       }
       const plan = currentPlan!;
       let color = 0xe03131;
-      if (r.kind === "train") color = r.index === trains.count ? 0x1c7ed6 : [0xe03131, 0x1971c2, 0x2f9e44, 0xf08c00][Math.abs(currentSeed) % 4];
+      if (r.kind === "train") color = r.index >= REAL_BASE ? [0x1c7ed6, 0xe03131, 0x2f9e44, 0xf08c00][(r.index - REAL_BASE) % 4] : r.index === trains.count ? 0x1c7ed6 : [0xe03131, 0x1971c2, 0x2f9e44, 0xf08c00][Math.abs(currentSeed) % 4];
       else if (r.kind === "bus") color = [0xe03131, 0x1971c2, 0x2f9e44][Math.abs(plan.seed) % 3];
       else if (r.kind === "car") {
         const k = rideIdx.cars[r.index];
@@ -5317,7 +5325,7 @@ export function CityView({
         traffic.setRide(k, (opts) => cb.current.onJunction?.(opts));
       } else if (r.kind === "boat") {
         color = [0xff6b6b, 0xffd43b, 0x4dabf7, 0x69db7c, 0xda77f2, 0xff922b][r.index % 6];
-        boats.setRide(r.index);
+        if (r.index < REAL_BASE) boats.setRide(r.index);
       } else if (r.kind === "ferris") {
         // Board the cabin nearest the bottom, facing out over the city.
         const w = wheels[r.index];
@@ -5373,12 +5381,14 @@ export function CityView({
       const out = vv.pose;
       switch (r.kind) {
         case "train":
+          if (r.index >= REAL_BASE) return realTransit.pose("train", r.index - REAL_BASE, Date.now() + cb.current.clockOffsetMs, out);
           return r.index === trains.count ? elevatedLife.pose(out) : trains.pose(r.index, out);
         case "bus":
           return traffic.pose(rideIdx.buses[r.index] ?? -1, out);
         case "car":
           return traffic.pose(rideIdx.cars[r.index] ?? -1, out);
         case "boat":
+          if (r.index >= REAL_BASE) return realTransit.pose("boat", r.index - REAL_BASE, Date.now() + cb.current.clockOffsetMs, out);
           return boats.pose(r.index, time, out);
         case "heli":
           return aircraft.pose(r.index, time, out);
@@ -6281,6 +6291,7 @@ export function CityView({
         for (const g of games) g.update(time, dt);
         updateBoards(dt, time, now);
         boats.update(time, dt);
+        realTransit.update(Date.now() + cb.current.clockOffsetMs);
         people.update(dt, now);
         trains.update(dt, now);
         elevatedLife.update(dt, now);
@@ -6464,6 +6475,7 @@ export function CityView({
       traffic.dispose();
       deckTraffic.dispose();
       boats.dispose();
+      realTransit.dispose();
       plumes.dispose();
       sites.dispose();
       buildingSite.dispose();

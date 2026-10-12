@@ -29,6 +29,8 @@ export type RegionMap = {
   landmarks: PlacedLandmark[];
   /** Single-tile landmarks (a famous club, a hospital...). */
   spotAt: (x: number, z: number) => Spot | undefined;
+  /** Every single-tile landmark with where it stands (for lists: Explore). */
+  spotList: (Spot & { x: number; z: number })[];
   /** Downtowns and quieter districts, for how built-up each spot is (as CityPlan centres). */
   centres: { x: number; z: number; radius: number; weight: number }[];
   /** Is there a footbridge over the road here (from the map)? */
@@ -39,6 +41,8 @@ export type RegionMap = {
   piecesAt: (x: number, z: number) => Piece[] | undefined;
   /** Every road bridge and flyover deck as a path along its top (tiles, y the deck's height), for traffic. */
   decks: { pts: { x: number; y: number; z: number }[]; width: number }[];
+  /** Every railway as a path along the top of its rails (tiles, y its height): for the trains. */
+  rails: { pts: { x: number; y: number; z: number }[]; raised: boolean }[];
   /** Kept clear of buildings: under a deck, along a railway on the ground, or a station's site. */
   clearAt: (x: number, z: number) => "deck" | "track" | "station" | undefined;
   /** A station standing on this tile (its middle). */
@@ -179,6 +183,7 @@ export function compileRegion(region: Region): RegionMap {
     });
   const landmarks: PlacedLandmark[] = [];
   const spots = new Map<number, Spot>();
+  const spotList: RegionMap["spotList"] = [];
   const taken = new Set<number>();
   const skipped: RegionMap["skipped"] = [];
   // Every landmark's own spot, so one moved off a road never lands on another's.
@@ -199,6 +204,7 @@ export function compileRegion(region: Region): RegionMap {
       else if (taken.has(tileKey(x, z))) skipped.push({ id: l.id, reason: "overlaps another landmark" });
       else {
         spots.set(tileKey(x, z), { id: l.id, kind: l.type, name: l.name });
+        spotList.push({ id: l.id, kind: l.type, name: l.name, x, z });
         taken.add(tileKey(x, z));
       }
       continue;
@@ -345,8 +351,10 @@ export function compileRegion(region: Region): RegionMap {
   const pieces = new Map<number, Piece[]>();
   const clear = new Map<number, "deck" | "track" | "station">();
   const decks: RegionMap["decks"] = [];
+  const rails: RegionMap["rails"] = [];
   for (const line of lines) {
     const ps = piecesOf(line);
+    if (line.kind === "rail" && ps.length > 0) rails.push({ pts: [{ x: ps[0].ax, y: ps[0].ay, z: ps[0].az }, ...ps.map((p) => ({ x: p.bx, y: p.by, z: p.bz }))], raised: line.raised });
     if (line.kind === "road" && line.raised && ps.length > 1) {
       decks.push({ pts: [{ x: ps[0].ax, y: ps[0].ay, z: ps[0].az }, ...ps.map((p) => ({ x: p.bx, y: p.by, z: p.bz }))], width: ps[0].width });
     }
@@ -401,6 +409,7 @@ export function compileRegion(region: Region): RegionMap {
     roadAt,
     landmarks,
     spotAt: (x, z) => spots.get(tileKey(x, z)),
+    spotList,
     centres,
     areaAt,
     landPriceAt,
@@ -408,6 +417,7 @@ export function compileRegion(region: Region): RegionMap {
     flyoverAt: (x, z) => inside(x, z) && road[cell(x, z)] > 8 && !water[cell(x, z)],
     piecesAt: (x, z) => pieces.get(tileKey(x, z)),
     decks,
+    rails,
     clearAt: (x, z) => clear.get(tileKey(x, z)),
     stationAt: (x, z) => stationTiles.get(tileKey(x, z)),
     stations,
