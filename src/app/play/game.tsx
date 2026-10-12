@@ -10,6 +10,7 @@ import { homeLabel } from "@/lib/houses";
 import type { WelcomeNeeds } from "@/lib/welcome";
 import { useDiary } from "./style/diary";
 import { cleanAvatar } from "@/lib/avatar";
+import { AvatarFace } from "@/components/avatar";
 import type { GameEvent, GameState } from "@/lib/game";
 import { cn } from "@/lib/cn";
 import {
@@ -60,7 +61,7 @@ import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
 import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
-import { BellRing, Wallet, CarFront, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Newspaper, Palette, ShoppingBag, Smartphone, Store, Swords, User } from "lucide-react";
+import { BellOff, BellRing, Wallet, CarFront, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Newspaper, Palette, ShoppingBag, Smartphone, Store, Swords, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
 import { GhostsSheet } from "./ghost-duel/ghosts-sheet";
@@ -79,7 +80,7 @@ import { useNoPageZoom } from "./no-page-zoom";
 import type { PersonOnMap } from "./people-actions";
 import { peopleAround } from "./life/things-cache";
 import { PersonCard } from "./people/person-card";
-import { AwaySheet, DoorstepSheet, turnOnNotifications, useAwayDigest } from "./people/doorstep";
+import { AwaySheet, DoorstepSheet, notificationsOn, turnOffNotifications, turnOnNotifications, useAwayDigest } from "./people/doorstep";
 import { DatingSheet, RivalsSheet } from "./people/street-dating";
 import { weatherNow } from "@/lib/world/news";
 import { MyGiftsSheet } from "./my-gifts-sheet";
@@ -108,6 +109,7 @@ import { worldPreview } from "./world-flag";
 import { PlacePill } from "./place-pill";
 import { CityCard } from "./city-card";
 import { useWorldLife } from "./life/world-life";
+import { PeopleList } from "./people/people-list";
 import { StatsSheet } from "./stats-sheet";
 import { PrankReveal, usePrankReveal } from "./people/prank-reveal";
 import { openAdvertise } from "./life/advertise-panel";
@@ -435,7 +437,8 @@ export function Game({
       try {
         const can = "Notification" in window && "serviceWorker" in navigator && "PushManager" in window;
         setPushNeedsHome(!can && /iP(hone|ad|od)/.test(navigator.userAgent));
-        setPushOn(can ? Notification.permission === "granted" : !/iP(hone|ad|od)/.test(navigator.userAgent));
+        setPushOn(false);
+        if (can) void notificationsOn().then(setPushOn);
       } catch {}
     }, 0);
     return () => clearTimeout(t);
@@ -722,7 +725,8 @@ export function Game({
       clearTimeout(first);
       clearInterval(every);
     };
-  }, [worldId, me.guest, worldLife.centerRef]);
+    // A new area: look again (the people round here show under the menu).
+  }, [worldId, me.guest, worldLife.centerRef, worldArea]);
   const facesOnMap: CityFriendPin[] = useMemo(() => {
     const live = new Set(friendsAt.map((f) => f.id));
     return [
@@ -733,6 +737,28 @@ export function Game({
   const onlineNear = useMemo(() => facesOnMap.filter((f) => f.status === "online").length, [facesOnMap]);
   const onlineNow = Math.max(1, cityOnline ?? 0, online ?? 0, onlineNear);
   const [statsOpen, setStatsOpen] = useState(false);
+  /** Everyone on the map to talk to: search by name, the nearest first (the online button, Messages → People). */
+  const peopleFinder = (where: "stats" | "chat") =>
+    worldId && !me.guest ? (
+      <PeopleList
+        region={worldId}
+        compact={where === "chat"}
+        centre={() => worldLife.centerRef.current?.() ?? { x: 0, z: 0 }}
+        onMessage={(p) => {
+          setStatsOpen(false);
+          chatWith(p);
+        }}
+        onPerson={(id) => {
+          setStatsOpen(false);
+          setPersonId(id);
+        }}
+        onFly={(x, z) => {
+          setStatsOpen(false);
+          setChatOpen(false);
+          worldLife.fly(x, z);
+        }}
+      />
+    ) : undefined;
   const away = useAwayDigest(!!worldId && !me.guest);
   // Coming home to a prank: it plays out on the screen first.
   const prankShow = usePrankReveal(!!worldId && !me.guest);
@@ -1616,17 +1642,45 @@ export function Game({
             {!me.guest && (
               // Notifications: what's happened, and switching them on for this phone. Glows until they're on.
               <button
-                onClick={() => { setAlertsOpen(true); setFeedSeenAt(new Date(now).toISOString()); }}
+                onClick={() => {
+                  // The bell switches notifications on and off for this phone.
+                  if (pushNeedsHome) return setAlertsOpen(true);
+                  void (pushOn ? turnOffNotifications() : turnOnNotifications()).then((r) => {
+                    setMessage({ text: r.text, tone: r.ok ? "good" : "info" });
+                    if (r.ok) setPushOn(!pushOn);
+                  });
+                }}
                 className={cn("pointer-events-auto relative ml-auto grid size-9 shrink-0 place-items-center rounded-full shadow", pushOn ? "glass" : "bg-gold text-ink")}
-                aria-label="Notifications"
+                aria-label={pushOn ? "Notifications are on: tap to turn them off" : "Notifications are off: tap to turn them on"}
+                aria-pressed={pushOn}
               >
-                <BellRing className="size-4" />
-                {unread > 0 && <span className="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-hit px-1 text-[10px] font-semibold text-white">{unread > 9 ? "9+" : unread}</span>}
-                {!pushOn && unread === 0 && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-2 ring-gold/70" />}
+                {pushOn ? <BellRing className="size-4" /> : <BellOff className="size-4" />}
+                {!pushOn && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-2 ring-gold/70" />}
               </button>
             )}
           </div>
           {worldLife.rowBelow}
+          {/* People around where you're looking: online first. Tap one for their card (message, knock, gift). */}
+          {!me.guest && !place && ride === null && peopleOut.length > 0 && (
+            <div className="pointer-events-auto -mx-1 flex max-w-full items-start gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none]" aria-label="People around here">
+              <button onClick={() => setStatsOpen(true)} className="glass flex h-12 shrink-0 flex-col items-center justify-center rounded-2xl px-2 text-[10px] font-semibold leading-tight">
+                <Users className="size-4" />
+                Around
+              </button>
+              {[...peopleOut]
+                .sort((a, b) => Number(b.status === "online") - Number(a.status === "online"))
+                .slice(0, 12)
+                .map((p) => (
+                  <button key={p.id} onClick={() => setPersonId(p.id)} className="flex w-12 shrink-0 flex-col items-center" title={`${p.name} · ${p.status === "online" ? "online" : p.status === "work" ? "at work" : p.status === "asleep" ? "asleep" : "away"}`}>
+                    <span className="relative">
+                      <AvatarFace avatar={cleanAvatar(p.avatar, p.name)} size={36} className="rounded-full shadow ring-2 ring-white" />
+                      <span className={cn("absolute -bottom-0.5 -right-0.5 size-3 rounded-full ring-2 ring-white", p.status === "online" ? "bg-[#2f9e44]" : p.status === "work" ? "bg-[#f08c00]" : "bg-[#adb5bd]")} />
+                    </span>
+                    <span className="mt-0.5 w-full truncate rounded-full bg-black/35 px-1 text-center text-[10px] font-semibold text-white">{p.name.split(" ")[0]}</span>
+                  </button>
+                ))}
+            </div>
+          )}
         </div>
       )}
       {worldRegion && (worldRegion.water || worldRegion.roads.length > 0) && (
@@ -2535,6 +2589,7 @@ export function Game({
                 rideEndsAt={rooms.rideEndsAt}
                 botName={botName}
                 dmRequest={dmRequest}
+                finder={peopleFinder("chat")}
                 externalNpc={npcTap}
                 enteredAt={rooms.enteredAt}
                 onGiveCoins={guest ? undefined : setGiveTo}
@@ -2704,7 +2759,7 @@ export function Game({
                 ["My look", Palette, () => setEditAvatar(true)],
                 ["Guide", Lightbulb, () => worldLife.restartGuide()],
                 ["Report", Flag, () => worldLife.openReport()],
-                ["Alerts", BellRing, () => void turnOnNotifications().then((r) => setMessage({ text: r.text, tone: r.ok ? "good" : "info" }))],
+                ["Notifications", BellRing, () => { setAlertsOpen(true); setFeedSeenAt(new Date(now).toISOString()); }],
                 ["Sign out", LogOut, () => setConfirmSignOut(true)],
               ] as const
             ).map(([label, Icon, go]) => (
@@ -2764,6 +2819,7 @@ export function Game({
             rideEndsAt={rooms.rideEndsAt}
             botName={botName}
             dmRequest={dmRequest}
+            finder={peopleFinder("chat")}
             externalNpc={npcTap}
             enteredAt={rooms.enteredAt}
             greet={greet}
@@ -2847,7 +2903,7 @@ export function Game({
           onClose={away.close}
         />
       )}
-      {statsOpen && <StatsSheet online={onlineNow} onClose={() => setStatsOpen(false)} />}
+      {statsOpen && <StatsSheet online={onlineNow} onClose={() => setStatsOpen(false)} people={peopleFinder("stats")} />}
       {cityOpen && worldRegion && (
         <CityCard city={worldRegion.name} area={worldArea} onClose={() => setCityOpen(false)} search={worldLife.search} />
       )}

@@ -6,6 +6,8 @@ import { ArrowLeft, Camera, Megaphone, RefreshCw, Share2, SwitchCamera, User, Us
 import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar } from "@/lib/avatar";
 import { makePlan } from "@/lib/city/layout";
+import { REGIONS } from "@/lib/world";
+import { worldPreview } from "../world-flag";
 import { cn } from "@/lib/cn";
 import { captureScene } from "../city/snapshot";
 import { playSfx } from "../sound";
@@ -372,7 +374,12 @@ function compose(c: HTMLCanvasElement, o: Compose, scale = 1) {
 
 export function PhotoSpot({ booth, ...props }: GameProps & { booth?: boolean }) {
   const room = useActivityRoom(props.roundId, props.roomId, props.me);
-  const city = useMemo(() => (props.roundId ? makePlan(props.roundId).city.name : "Newtown"), [props.roundId]);
+  // The real map's city (Lagos); the old hourly towns' made-up names only off the real map.
+  const city = useMemo(() => {
+    const world = worldPreview();
+    if (world && REGIONS[world]) return REGIONS[world].name;
+    return props.roundId ? makePlan(props.roundId).city.name : "Newtown";
+  }, [props.roundId]);
   const [backdrop, setBackdrop] = useState<Backdrop>("live");
   const [live, setLive] = useState<HTMLCanvasElement | null>(null);
   const [liveTried, setLiveTried] = useState(false);

@@ -1,5 +1,7 @@
 "use client";
 
+import { GenderMark } from "./people-list";
+import { setGender } from "../people-actions";
 import { useEffect, useState } from "react";
 import { BellRing, Car, DoorClosed, Gift, House, Lightbulb, MapPin, MessageCircle, StickyNote, UserPlus } from "lucide-react";
 import { Star } from "@/components/icons";
@@ -82,6 +84,7 @@ export function PersonCard({
             <AvatarFace avatar={cleanAvatar(card.avatar, card.name)} size={56} />
             <div className="min-w-0 flex-1">
               <h2 className="truncate font-display text-xl font-extrabold">{card.name}</h2>
+              {card.gender ? <GenderMark gender={card.gender} /> : self && <GenderPick />}
               <p className="flex items-center gap-1.5 text-xs text-muted">
                 <span className={`size-2 rounded-full ${card.online ? "bg-me" : "bg-ink/25"}`} />
                 {card.online ? "Here now" : card.seenAt ? `Last here ${ago(Date.now() - Date.parse(card.seenAt))}` : "Not seen lately"}
@@ -193,4 +196,25 @@ export function ago(ms: number) {
   if (m < 60) return `${m} min ago`;
   const h = Math.round(m / 60);
   return h < 48 ? `${h}h ago` : `${Math.round(h / 24)} days ago`;
+}
+
+/** Your own card, before you've said: man or woman (shown on your card and in the lists). */
+function GenderPick() {
+  const [done, setDone] = useState<string | null>(null);
+  if (done) return <p className="text-[11px] font-semibold text-me">{done}</p>;
+  return (
+    <p className="flex items-center gap-1.5 text-[11px] text-muted">
+      I am a
+      {(
+        [
+          ["male", "man"],
+          ["female", "woman"],
+        ] as const
+      ).map(([g, label]) => (
+        <button key={g} onClick={() => void setGender(g).then((r) => setDone(r.ok ? "Saved" : r.error))} className="rounded-full bg-ink/5 px-2 py-0.5 font-semibold text-ink">
+          {label}
+        </button>
+      ))}
+    </p>
+  );
 }

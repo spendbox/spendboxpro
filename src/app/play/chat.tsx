@@ -179,6 +179,7 @@ export function Chat({
   hideButton = false,
   onUnread,
   onSignIn,
+  finder,
 }: {
   meId: string;
   meRole: "hider" | "seeker" | null;
@@ -225,6 +226,8 @@ export function Chat({
   onUnread?: (n: number) => void;
   /** Watchers: open the sign-in pop-up. */
   onSignIn?: () => void;
+  /** The real map: People finds anyone (by name, the nearest first) instead of this round's players. */
+  finder?: React.ReactNode;
 }) {
   const roomId = room?.id ?? null;
   const roomCap = room?.capacity ?? 30;
@@ -232,6 +235,12 @@ export function Chat({
   const [dms, setDms] = useState<List | null>(null);
   const [thread, setThread] = useState<Thread | null>(null);
   const [tab, setTab] = useState<"here" | "private" | "people">("here");
+  // Out on the real map (not in a place): Messages opens on People, to find anyone near you.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open && !room && finder && tab === "here") setTab("people");
+  }
   const [seen, setSeen] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
   const [findText, setFindText] = useState("");
@@ -593,6 +602,20 @@ export function Chat({
   const MAX_FACES = 40;
   const peopleRow = room && (others.length > 0 || npcs.length > 0) && (
     <div className="flex shrink-0 gap-2 overflow-x-auto border-b border-line px-3 pb-2 pt-2.5 [scrollbar-width:none]" aria-label="People here">
+      {/* First: talk to everyone here at once (this place's chat). */}
+      <button
+        onClick={() => {
+          setThread(null);
+          setTab("here");
+        }}
+        className="flex w-14 shrink-0 flex-col items-center gap-0.5"
+        title="Message everyone here"
+      >
+        <span className="grid size-9 place-items-center rounded-full bg-gold text-ink ring-2 ring-gold/40">
+          <Users className="size-4" aria-hidden />
+        </span>
+        <span className="w-full truncate text-center text-[10px] font-semibold">Everyone</span>
+      </button>
       {others.slice(0, MAX_FACES).map((p) => {
         const role = byId.get(p.id)?.role;
         return (
@@ -615,6 +638,8 @@ export function Chat({
           <span className="text-[10px] text-muted">more</span>
         </button>
       )}
+      {/* Last: the city's own characters (not players). */}
+      {npcs.length > 0 && <span className="w-px shrink-0 self-stretch bg-line" aria-hidden />}
       {npcs.map((n) => (
         <button key={n.id} onClick={() => openNpc(n)} className="flex w-14 shrink-0 flex-col items-center gap-0.5" title={`${n.name}, ${n.role} (NPC) · tap to chat`}>
           <span className="relative">
@@ -756,7 +781,12 @@ export function Chat({
           {!thread && tab === "here" && placeLine}
           {!thread && tab === "here" && !box?.keyboard && peopleRow}
 
-          {!thread && tab === "people" ? (
+          {!thread && tab === "people" && finder ? (
+            <div className="flex min-h-0 flex-1 flex-col">
+              {room && !box?.keyboard && peopleRow}
+              {finder}
+            </div>
+          ) : !thread && tab === "people" ? (
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="p-2">
                 <input

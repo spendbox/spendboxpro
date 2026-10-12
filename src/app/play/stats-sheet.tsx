@@ -11,7 +11,17 @@ import { Sheet } from "./sheet";
 const fmt = (n: number) => Math.round(n).toLocaleString("en-GB");
 const dayLabel = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 
-export function StatsSheet({ online, onClose }: { online: number | null; onClose: () => void }) {
+export function StatsSheet({
+  online,
+  onClose,
+  people,
+}: {
+  online: number | null;
+  onClose: () => void;
+  /** Signed in on a map: a People tab (first) to find anyone and message them. */
+  people?: React.ReactNode;
+}) {
+  const [tab, setTab] = useState<"people" | "numbers">(people ? "people" : "numbers");
   const [s, setS] = useState<SiteStats | null>(null);
   useEffect(() => {
     let alive = true;
@@ -31,7 +41,25 @@ export function StatsSheet({ online, onClose }: { online: number | null; onClose
     return before > 0 ? Math.round(((now - before) / before) * 100) : null;
   };
   return (
-    <Sheet onClose={onClose} title="Newtown in numbers">
+    <Sheet onClose={onClose} title={people ? `${online ?? "…"} online` : "Newtown in numbers"}>
+      {people && (
+        <div className="mb-3 flex gap-1 rounded-full bg-ink/5 p-1">
+          {(
+            [
+              ["people", "People"],
+              ["numbers", "Numbers"],
+            ] as const
+          ).map(([id, label]) => (
+            <button key={id} onClick={() => setTab(id)} className={`h-8 flex-1 rounded-full text-xs font-semibold ${tab === id ? "bg-panel shadow-sm" : "text-muted"}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+      {people && tab === "people" ? (
+        <div className="flex h-[min(60vh,520px)] flex-col">{people}</div>
+      ) : (
+      <>
       <div className="grid grid-cols-3 gap-2 text-center">
         <Tile label="Online now" value={online === null ? "…" : fmt(online)} dot />
         <Tile label="Registered" value={s ? fmt(s.registered) : "…"} icon={<Users className="size-3.5" />} />
@@ -52,6 +80,8 @@ export function StatsSheet({ online, onClose }: { online: number | null; onClose
         <b className="text-ink">How we count.</b> Online now: everyone with the city open this minute. Registered: every player account (no bots). Visits: each time someone opens Newtown, signed in or not,
         counted once per browser session; guests and players are counted apart. Days run on Lagos time. These are the same numbers we see.
       </p>
+      </>
+      )}
     </Sheet>
   );
 }
