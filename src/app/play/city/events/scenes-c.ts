@@ -17,7 +17,7 @@ import {
   ShieldCheck,
   ShoppingBag,
   Skull,
-  Sparkles,
+  Star,
   Store,
   Target,
   Clover,
@@ -536,7 +536,7 @@ export const SCENES_C: Record<string, Scene> = {
   },
 
   meteor: {
-    icon: Sparkles,
+    icon: Star,
     sound: "boom",
     draw(e) {
       const { k, s } = e;
@@ -824,7 +824,7 @@ export const SCENES_C: Record<string, Scene> = {
   },
 
   golden_balloon: {
-    icon: Sparkles,
+    icon: Star,
     sound: "chime",
     draw(e) {
       const { k, s } = e;

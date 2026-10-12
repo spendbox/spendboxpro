@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { AvatarFace } from "@/components/avatar";
-import { Coins, MapPin, MessageCircle, RotateCcw, Sparkles, Target, X } from "@/components/icons";
+import { Coins, MapPin, MessageCircle, RotateCcw, Star, Target, X } from "@/components/icons";
 import { cn } from "@/lib/cn";
 import { ReportPersonButton } from "./report-person";
 import { areaName, fakeAreaName } from "@/lib/npc/area";
@@ -115,8 +115,8 @@ const TAG_STYLE: Partial<Record<LineTag, { box: string; label: string; icon: Rea
   clue: { box: "bg-gold/15 ring-1 ring-gold/60", label: "Clue", icon: <MapPin className="size-3" aria-hidden /> },
   gift: { box: "bg-me/10 ring-1 ring-me/40", label: "Gift", icon: <Coins className="size-3" aria-hidden /> },
   quest: { box: "bg-[#7048e8]/10 ring-1 ring-[#7048e8]/30", label: "Side quest", icon: <Target className="size-3" aria-hidden /> },
-  joke: { box: "bg-panel-2", label: "Joke", icon: <Sparkles className="size-3" aria-hidden /> },
-  riddle: { box: "bg-panel-2", label: "Riddle", icon: <Sparkles className="size-3" aria-hidden /> },
+  joke: { box: "bg-panel-2", label: "Joke", icon: <Star className="size-3" aria-hidden /> },
+  riddle: { box: "bg-panel-2", label: "Riddle", icon: <Star className="size-3" aria-hidden /> },
 };
 
 export function NpcCard({ npc, onClose, autoStart = false }: { npc: Npc; onClose: () => void; autoStart?: boolean }) {

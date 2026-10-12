@@ -5,6 +5,10 @@ import type { LucideProps } from "lucide-react";
 import { createLucideIcon } from "lucide-react";
 
 export {
+  Camera,
+  ChevronLeft,
+  ChevronRight,
+  ImagePlus,
   Ambulance,
   KeyRound,
   TrainFront,
@@ -73,7 +77,6 @@ export {
   Shield,
   ShieldCheck,
   Siren,
-  Sparkles,
   Star,
   Store,
   Sun,

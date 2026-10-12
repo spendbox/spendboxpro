@@ -37,8 +37,35 @@ export async function saveAvatar(avatar: Avatar): Promise<Result> {
 
 /** Counts one visit (the page calls this once per browser session). */
 export async function recordVisit(): Promise<Result<{ visits: number }>> {
-  const { data, error } = await createAdminClient().rpc("count_visit");
+  const db = createAdminClient();
+  const member = !!(await currentUserId().catch(() => null));
+  // By day (guests and players apart) once part 59 is in; the plain count before that.
+  const by = await db.rpc("count_visit_by", { p_member: member });
+  if (!by.error) return { ok: true, visits: Number(by.data) };
+  const { data, error } = await db.rpc("count_visit");
   return error ? { ok: false, error: "" } : { ok: true, visits: Number(data) };
+}
+
+export type SiteStats = { visits: number; registered: number; days: { day: string; visits: number; guests: number; members: number; signups: number }[] };
+
+/** The numbers behind the online button: visits (everyone, signed in or not), players, and the last 30 days. */
+export async function siteStats(): Promise<SiteStats> {
+  const db = createAdminClient();
+  const { data, error } = await db.rpc("site_stats");
+  if (!error && data) {
+    const d = data as { visits?: unknown; registered?: unknown; days?: Record<string, unknown>[] };
+    return {
+      visits: Number(d.visits ?? 0),
+      registered: Number(d.registered ?? 0),
+      days: (d.days ?? []).map((x) => ({ day: String(x.day), visits: Number(x.visits ?? 0), guests: Number(x.guests ?? 0), members: Number(x.members ?? 0), signups: Number(x.signups ?? 0) })),
+    };
+  }
+  // Before part 59: the totals only.
+  const [{ data: v }, { count }] = await Promise.all([
+    db.from("site_counters").select("value").eq("key", "visits").maybeSingle(),
+    db.from("profiles").select("id", { count: "exact", head: true }).eq("is_bot", false),
+  ]);
+  return { visits: Number(v?.value ?? 0), registered: count ?? 0, days: [] };
 }
 
 export type Badge = { id: number; badge: string; detail: string | null; roundId: number | null; at: string };

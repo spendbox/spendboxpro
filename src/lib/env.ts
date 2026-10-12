@@ -23,8 +23,10 @@ export function supabaseSecretKey() {
 
 /** The public address of the app. */
 export function siteUrl() {
-  const explicit = process.env.NEXT_PUBLIC_SITE_URL;
-  if (explicit) return explicit.replace(/\/$/, "");
+  // Typed as "newtown.world" or with a slash on the end, it still makes a full address: payment
+  // pages ignore a return address without https:// and never send people back.
+  const explicit = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (explicit) return (/^https?:\/\//i.test(explicit) ? explicit : `https://${explicit}`).replace(/\/+$/, "");
   const vercel = process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_PROJECT_PRODUCTION_URL;
   if (vercel) return `https://${vercel}`;
   return process.env.NODE_ENV === "production" ? "https://newtown.world" : "http://localhost:3000";

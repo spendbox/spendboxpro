@@ -1,6 +1,6 @@
 "use client";
 
-import { Armchair, ArrowUpFromLine, Sparkles } from "lucide-react";
+import { Armchair, ArrowUpFromLine, Star } from "lucide-react";
 import type { SeatTaker } from "../rooms";
 import { BigButton, Face, GameHeader, useSecondsLeft, type GameProps } from "./ui";
 
@@ -42,7 +42,7 @@ export function SeatCard({ seatId, seating, ...props }: GameProps & { seatId: st
         </p>
       ) : (
         <p className="flex items-start gap-2 rounded-2xl bg-gold/20 p-3 text-sm">
-          <Sparkles className="mt-0.5 size-4 shrink-0 text-gold-dark" />
+          <Star className="mt-0.5 size-4 shrink-0 text-gold-dark" />
           Take a seat for a while. People who sit down are the ones most often handed secret side quests!
         </p>
       )}

@@ -62,7 +62,7 @@ export type RegionMap = {
 /** Every big building type's size in tiles when a landmark doesn't give one. */
 const SIZE: Partial<Record<StructureType, [number, number]>> = {
   bank: [3, 3], arena: [4, 4], capitol: [3, 3], megamall: [3, 3], bigpark: [5, 5], gym: [3, 3], cathedral: [4, 4],
-  grandmosque: [4, 4], spa: [3, 3], intlairport: [7, 5], spaceport: [5, 5],
+  grandmosque: [4, 4], spa: [3, 3], intlairport: [16, 10], spaceport: [5, 5],
 };
 
 const STRUCTURES = new Set<string>([

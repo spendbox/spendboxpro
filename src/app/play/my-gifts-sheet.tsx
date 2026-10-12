@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Ban, Check, Coins, Gift, Handshake, Heart, LoaderCircle, Sparkles, X } from "lucide-react";
+import { Ban, Check, Coins, Gift, Handshake, Heart, LoaderCircle, Star, X } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import { cn } from "@/lib/cn";
 import { short } from "@/lib/format";
@@ -37,7 +37,7 @@ const KIND_ICON = {
   hug: { Icon: Heart, tint: "bg-[#ffe3ec] text-[#d6336c]" },
   handshake: { Icon: Handshake, tint: "bg-[#fff3bf] text-[#e67700]" },
   gift: { Icon: Coins, tint: "bg-gold/25 text-gold-dark" },
-  spray: { Icon: Sparkles, tint: "bg-[#f3d9fa] text-[#ae3ec9]" },
+  spray: { Icon: Star, tint: "bg-[#f3d9fa] text-[#ae3ec9]" },
 } as const;
 
 export function MyGiftsSheet({

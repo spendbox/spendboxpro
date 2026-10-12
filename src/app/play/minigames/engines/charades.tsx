@@ -69,7 +69,6 @@ import {
   Shovel,
   Siren,
   Skull,
-  Sparkles,
   Star,
   Stethoscope,
   Store,
@@ -128,7 +127,7 @@ const WORDS: [string, LucideIcon[]][] = [
   ["Game night", [Dice5, Gamepad2, Users]],
   ["Royal palace", [Crown, Gem, Castle]],
   ["Treasure hunt", [MapIcon, Gem, Shovel]],
-  ["Photo shoot", [Camera, Sparkles, Shirt]],
+  ["Photo shoot", [Camera, Star, Shirt]],
   ["Train journey", [TrainFront, Ticket, MapIcon]],
   ["Ice cream van", [IceCreamCone, Sun, Bell]],
   ["Fire station", [Flame, Siren, Building2]],
@@ -138,7 +137,7 @@ const WORDS: [string, LucideIcon[]][] = [
   ["Halloween", [Ghost, Skull, Candy]],
   ["Radio show", [Radio, Mic, Headphones]],
   ["Zoo", [Turtle, Rabbit, Bird]],
-  ["Haircut", [Scissors, Armchair, Sparkles]],
+  ["Haircut", [Scissors, Armchair, Star]],
   ["Night out", [Moon, Music, Wine]],
 ];
 const SECS = 60;

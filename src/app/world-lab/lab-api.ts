@@ -764,6 +764,9 @@ export function makeLabApi(budget: number): PropertyApi {
     async confirmPack() {
       return { ok: false };
     },
+    async checkMyPacks() {
+      return { ok: false };
+    },
     async mapBusinesses(region) {
       // The lab has no real businesses: one sample shows what a leased building looks like.
       const plan = planFor(region);

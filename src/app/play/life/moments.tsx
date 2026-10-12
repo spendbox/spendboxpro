@@ -2,7 +2,7 @@
 
 import { cash } from "@/lib/world/value";
 import { useState } from "react";
-import { Briefcase, Sparkles } from "@/components/icons";
+import { Briefcase, Star } from "@/components/icons";
 import type { EventResult, InterviewResult, InterviewStart, LifeStatus } from "@/lib/world/property-api";
 import { Sheet } from "../sheet";
 
@@ -90,7 +90,7 @@ export function MomentSheet({ event, onAnswer, onClose }: { event: NonNullable<L
   const [result, setResult] = useState<EventResult | null>(null);
   const [sending, setSending] = useState(false);
   return (
-    <Sheet onClose={onClose} title={<span className="flex items-center gap-2"><Sparkles className="size-5 text-gold-dark" /> Breakthrough</span>}>
+    <Sheet onClose={onClose} title={<span className="flex items-center gap-2"><Star className="size-5 text-gold-dark" /> Breakthrough</span>}>
       <p className="text-xs font-semibold uppercase tracking-wide text-muted">{event.source === "job" ? "At work" : "In your side hustle"}</p>
       <p className="mt-1 font-display text-lg font-extrabold">{event.title}</p>
       <p className="mt-1 text-sm text-muted">{event.text}</p>

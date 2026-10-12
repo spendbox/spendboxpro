@@ -87,11 +87,19 @@ export async function startLeaseCheckout(form: FormData): Promise<Checkout> {
   if (!c.ok) return c;
   const img = await readImage(form.get("logo"));
   if (img && !img.ok) return img;
+  // The picture for the billboards (optional: the logo stands in until there is one).
+  const board = await readImage(form.get("billboard"));
+  if (board && !board.ok) return board;
   const db = createAdminClient();
   const adv = await db.rpc("advertiser_for_email", { p_email: c.contact.email, p_name: c.contact.name, p_phone: c.contact.phone });
   if (adv.error || !adv.data) return { ok: false, error: "Something went wrong. Please try again." };
   const logo = img ? await uploadImage(img, "logos") : null;
   if (img && !logo) return { ok: false, error: "We couldn't save your logo. Please try again." };
+  const boardPath = board ? await uploadImage(board, "billboards") : null;
+  if (board && !boardPath) {
+    if (logo) await db.storage.from(AD_BUCKET).remove([logo]);
+    return { ok: false, error: "We couldn't save your billboard picture. Please try again." };
+  }
   const reference = `bz-${randomBytes(12).toString("hex")}`;
   const kobo = offer.offer.priceNaira * 100;
   const { error } = await db.rpc("business_lease_start", {
@@ -110,7 +118,8 @@ export async function startLeaseCheckout(form: FormData): Promise<Checkout> {
     p_reference: reference,
   });
   if (error) {
-    if (logo) await db.storage.from(AD_BUCKET).remove([logo]);
+    const paths = [logo, boardPath].filter((x): x is string => !!x);
+    if (paths.length) await db.storage.from(AD_BUCKET).remove(paths);
     const code = error.message.split(":")[0];
     const words: Record<string, string> = {
       taken: "Another business has just taken that building.",
@@ -120,11 +129,13 @@ export async function startLeaseCheckout(form: FormData): Promise<Checkout> {
     };
     return { ok: false, error: words[code] ?? "Something went wrong. Please try again." };
   }
+  if (boardPath) await db.from("business_leases").update({ billboard_path: boardPath }).eq("reference", reference);
   return startPayment({
     email: c.contact.email,
     amountKobo: kobo,
     reference,
-    callbackUrl: `${siteUrl()}/business/done?ref=${reference}`,
+    // Back through a page that checks the payment and signs the business in to its ad page.
+    callbackUrl: `${siteUrl()}/business/enter?ref=${reference}`,
     metadata: { kind: "business_lease", building: offer.offer.building },
   });
 }
@@ -293,4 +304,25 @@ export async function leasableAcross(region: string, maxNaira?: number): Promise
     .filter((o) => (seen.has(o.building) ? false : (seen.add(o.building), true)))
     .sort((a, b) => a.priceNaira - b.priceNaira)
     .slice(0, 24);
+}
+
+/**
+ * Buildings free to lease at about a yearly price (naira), closest price first: round where the map
+ * is looking and across the city's districts. The advertiser taps an amount and steps through them.
+ */
+export async function leasableByPrice(region: string, naira: number, x?: number, z?: number): Promise<LeaseOffer[]> {
+  const map = regionMap(region);
+  if (!map || !(naira > 0)) return [];
+  const spots = map.region.districts.slice(0, 16).map((d) => toTile(map.frame, { lat: d.at.lat, lon: d.at.lon }));
+  if (Number.isFinite(x) && Number.isFinite(z)) spots.unshift({ x: x!, z: z! });
+  const lists = await Promise.all(spots.map((p) => leasableNear(region, p.x, p.z, undefined, 40)));
+  const seen = new Set<string>();
+  return lists
+    .flat()
+    .filter((o) => (seen.has(o.building) ? false : (seen.add(o.building), true)))
+    .map((o, i) => ({ o, i, gap: Math.abs(o.priceNaira - naira) }))
+    // Closest price first; equal prices keep "near where you're looking" first.
+    .sort((a, b) => a.gap - b.gap || a.i - b.i)
+    .slice(0, 30)
+    .map(({ o }) => o);
 }

@@ -80,7 +80,6 @@ import {
   Shield,
   ShieldCheck,
   Siren,
-  Sparkles,
   Squirrel,
   Star,
   Sunrise,
@@ -188,7 +187,7 @@ export const BADGE_INFO: Record<string, BadgeInfo> = {
   illusionist: def("Powers", "diamond", WandSparkles, "Illusionist", "Fool hunters with your decoys 10 times in total.", "#c7d2fe", "#1e1b4b"),
   // Levels (won once)
   level_5: def("Levels", "silver", Star, "Level 5", "Reach level 5. Shields unlocked!", "#fef08a", "#a16207"),
-  level_10: def("Levels", "gold", Sparkles, "Level 10", "Reach level 10. Big searches unlocked!", "#fde68a", "#b45309"),
+  level_10: def("Levels", "gold", Star, "Level 10", "Reach level 10. Big searches unlocked!", "#fde68a", "#b45309"),
   level_20: def("Levels", "diamond", ChevronsUp, "Level 20", "Reach level 20. Respawns unlocked!", "#bfdbfe", "#1e3a8a"),
   level_30: def("Levels", "diamond", Rocket, "Level 30", "Reach level 30.", "#fbcfe8", "#831843"),
   // Milestones (won once)

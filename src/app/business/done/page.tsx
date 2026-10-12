@@ -32,10 +32,11 @@ export default async function BusinessDone({ searchParams }: { searchParams: Pro
         </>
       )}
       <div className="flex justify-center gap-3">
-        <Link href="/advertiser" className="rounded-xl bg-gold px-5 py-3 font-semibold text-ink">
-          Your numbers
-        </Link>
-        <Link href="/play" className="rounded-xl border border-line px-5 py-3 font-semibold">
+        {/* A plain link (not prefetched): opening it signs you in. */}
+        <a href={r.state === "live" && !upgrade ? `/business/enter?ref=${encodeURIComponent(ref)}` : "/advertiser"} className="rounded-xl bg-gold px-5 py-3 font-semibold text-ink">
+          {r.state === "live" && !upgrade ? "Open your ad page" : "Your ad page"}
+        </a>
+        <Link href="/" className="rounded-xl border border-line px-5 py-3 font-semibold">
           See the map
         </Link>
       </div>

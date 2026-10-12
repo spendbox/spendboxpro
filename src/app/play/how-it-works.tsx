@@ -10,7 +10,6 @@ import {
   House,
   Medal,
   MessageCircle,
-  Sparkles,
   Star,
   Users,
   X,
@@ -129,7 +128,7 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
     ],
   },
   {
-    icon: Sparkles,
+    icon: Star,
     title: "Town events",
     body: [
       "Every hour something rare happens somewhere in the city: fires, parades, UFOs, a treasure chest, a money truck spill, and dozens more.",

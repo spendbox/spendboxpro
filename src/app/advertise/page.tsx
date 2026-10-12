@@ -78,7 +78,7 @@ export default async function AdvertisePage() {
                 A real spot on the Lagos map for a year, your design on the city&apos;s billboards, and players tapping through to call you. From ₦{fmt(LEASE_MIN)}, paid once.
               </p>
               <div className="mt-5 flex flex-wrap items-center gap-3">
-                <Link href="/advertise/start" className="rounded-full bg-gold px-6 py-3 font-semibold text-ink shadow-lg">
+                <Link href="/?advertise=1" className="rounded-full bg-gold px-6 py-3 font-semibold text-ink shadow-lg">
                   Get started
                 </Link>
                 {s.players > 0 && (
@@ -146,7 +146,7 @@ export default async function AdvertisePage() {
 
         <section className="rounded-3xl bg-gradient-to-br from-gold/30 to-gold/5 p-6 text-center">
           <p className="font-display text-2xl font-bold">Ready to light up Lagos?</p>
-          <Link href="/advertise/start" className="mt-4 inline-block rounded-full bg-ink px-6 py-3 font-semibold text-white">
+          <Link href="/?advertise=1" className="mt-4 inline-block rounded-full bg-ink px-6 py-3 font-semibold text-white">
             Get started
           </Link>
           <p className="mt-3 text-sm text-muted">

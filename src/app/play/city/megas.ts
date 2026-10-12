@@ -6,6 +6,7 @@
 // the spaceport. Drawn from the shared instanced pieces like everything else, so even a few of
 // them cost almost nothing.
 
+import { airportPlan } from "./airport";
 import type { Tile } from "@/lib/city/layout";
 
 type BoxFn = (dx: number, y: number, dz: number, sx: number, sy: number, sz: number, color: number, ry?: number, mesh?: string, tilt?: number) => void;
@@ -650,77 +651,88 @@ function jet(B: BoxFn, x: number, z: number, livery: number, size = 1) {
   for (const side of [-1, 1]) for (const wz of [-0.05, 0.25]) B(x + side * 0.04 * k, 0.09, z + wz * k, 0.02 * k, 0.07 * k, 0.02 * k, 0x343a40);
 }
 
-/** An international airport: a long runway with lights, a taxiway, an apron with parked jets
- * at a curved glass terminal's jet bridges, a control tower, hangars, a helipad and a car park. */
+/** An international airport (its size from the map: Lagos's is about 2.4 × 1.4 km): long runways
+ * with lights (two on a big one), a taxiway, an apron with jets parked at a long glass terminal's
+ * jet bridges, a tall control tower, hangars, helipads and a car park. Where each part goes is in
+ * airport.ts (the jets and helicopters that move there use the same plan). */
 function intlairport(t: Tile, B: BoxFn, tree: TreeFn) {
   const st = t.structure!;
   const w = st.w ?? 7;
   const d = st.d ?? 5;
-  const cx = (w - 1) / 2;
-  const cz = (d - 1) / 2;
+  const a = airportPlan(w, d);
+  const { cx, cz } = a;
   B(cx, 0.02, cz, w - 0.04, 0.07, d - 0.04, 0xb7c4a5, 0, "ground");
-  // The runway: tarmac, centre dashes, white bars at each end, numbers, lights down both sides.
-  const rz = cz - 1.4;
-  B(cx, 0.09, rz, w - 0.3, 0.008, 0.62, 0x495057, 0, "ground");
-  for (let k = 0; k < 18; k++) B(cx - (w - 1.4) / 2 + k * ((w - 1.4) / 17), 0.1, rz, 0.16, 0.003, 0.025, 0xffffff, 0, "paint");
-  for (const side of [-1, 1]) {
-    for (let k = 0; k < 6; k++) B(cx + side * (w / 2 - 0.35), 0.1, rz - 0.22 + k * 0.088, 0.22, 0.003, 0.04, 0xffffff, 0, "paint");
-    B(cx + side * (w / 2 - 0.7), 0.1, rz, 0.1, 0.003, 0.18, 0xffffff, 0, "paint");
-    for (let k = 0; k < 14; k++) B(cx - (w - 0.5) / 2 + k * ((w - 0.5) / 13), 0.1, rz + side * 0.33, 0.025, 0.02, 0.025, 0xfff3bf, 0, "lamp");
+  // The runways: tarmac, centre dashes, white bars at each end, lights down both sides.
+  for (const r of a.runways) {
+    B(cx, 0.09, r.z, r.len, 0.008, r.w, 0x495057, 0, "ground");
+    const dashes = Math.max(18, Math.round(r.len * 2.4));
+    for (let k = 0; k < dashes; k++) B(cx - (r.len - 1.1) / 2 + k * ((r.len - 1.1) / (dashes - 1)), 0.1, r.z, 0.16, 0.003, 0.025, 0xffffff, 0, "paint");
+    const lights = Math.max(14, Math.round(r.len * 2));
+    for (const side of [-1, 1]) {
+      for (let k = 0; k < 6; k++) B(cx + side * (r.len / 2 - 0.08), 0.1, r.z - r.w * 0.35 + k * ((r.w * 0.7) / 5), 0.22, 0.003, 0.04, 0xffffff, 0, "paint");
+      B(cx + side * (r.len / 2 - 0.45), 0.1, r.z, 0.1, 0.003, r.w * 0.3, 0xffffff, 0, "paint");
+      for (let k = 0; k < lights; k++) B(cx - (r.len - 0.2) / 2 + k * ((r.len - 0.2) / (lights - 1)), 0.1, r.z + side * (r.w / 2 + 0.03), 0.025, 0.02, 0.025, 0xfff3bf, 0, "lamp");
+    }
   }
-  // A taxiway with a yellow line, and links to the runway.
-  const tz = cz - 0.7;
-  B(cx, 0.09, tz, w - 0.9, 0.007, 0.24, 0x5b6470, 0, "ground");
-  B(cx, 0.1, tz, w - 0.9, 0.003, 0.015, 0xffd43b, 0, "paint");
-  for (const lx of [-2.4, 0, 2.4]) B(cx + lx, 0.09, (rz + tz) / 2, 0.22, 0.007, 0.5, 0x5b6470, 0, "ground");
-  // The apron (concrete) with three parked jets nosed in at the terminal.
-  B(cx, 0.09, cz - 0.05, w - 1.4, 0.006, 0.7, 0xced4da, 0, "ground");
-  const liveries = [0x1c7ed6, 0xe03131, 0x2f9e44, 0xf08c00, 0x7048e8];
-  for (let k = 0; k < 3; k++) jet(B, cx - 1.3 + k * 1.3, cz - 0.05, liveries[(k + Math.floor(t.r[0] * 5)) % liveries.length], 0.85);
-  // The terminal: a long glass hall under a curved roof, with jet bridges reaching out.
-  const gz = cz + 0.6;
-  B(cx, 0.09, gz, 3.9, 0.42, 0.62, 0xe9ecef);
-  B(cx, 0.12, gz - 0.315, 3.85, 0.34, 0.01, 0x6f9fc8, 0, "glass");
-  B(cx, 0.12, gz + 0.315, 3.85, 0.34, 0.01, 0x6f9fc8, 0, "glass");
-  // A wide roof floating over it, a little overhang all round, with a row of skylights.
-  B(cx, 0.51, gz, 4.1, 0.045, 0.86, 0xf8f9fa);
-  B(cx, 0.555, gz, 3.9, 0.06, 0.5, 0xe9ecef);
-  for (let k = 0; k < 8; k++) B(cx - 1.75 + k * 0.5, 0.615, gz, 0.3, 0.02, 0.3, 0x9ec5fe, 0, "glass");
-  for (let k = 0; k < 9; k++) for (const side of [-1, 1]) B(cx - 2.0 + k * 0.5, 0.09, gz + side * 0.42, 0.025, 0.42, 0.025, 0xdee2e6, 0, "cyl");
-  for (let k = 0; k < 3; k++) {
-    const jx = cx - 1.3 + k * 1.3;
+  // The taxiway with a yellow line, and links to each runway.
+  const tLen = Math.max(w - 0.9, 3);
+  B(cx, 0.09, a.taxiway, tLen, 0.007, 0.24, 0x5b6470, 0, "ground");
+  B(cx, 0.1, a.taxiway, tLen, 0.003, 0.015, 0xffd43b, 0, "paint");
+  const links = Math.max(3, Math.round(w / 3.5));
+  const top = a.runways[0].z;
+  for (let k = 0; k < links; k++) {
+    const lx = cx - (tLen - 1) / 2 + k * ((tLen - 1) / (links - 1));
+    B(lx, 0.09, (top + a.taxiway) / 2, 0.22, 0.007, a.taxiway - top, 0x5b6470, 0, "ground");
+  }
+  // The apron (concrete) with a jet parked nose-in at each gate.
+  B(cx, 0.09, a.apron, Math.max(a.terminal.len + 1.2, w - 1.4), 0.006, Math.max(0.7, a.terminal.z - a.apron + 0.2), 0xced4da, 0, "ground");
+  const liveries = [0x1c7ed6, 0xe03131, 0x2f9e44, 0xf08c00, 0x7048e8, 0x0b7a3e];
+  a.gates.forEach((gx, k) => jet(B, gx, a.apron, liveries[(k + Math.floor(t.r[0] * 6)) % liveries.length], 0.85));
+  // The terminal: a long glass hall under a floating roof with skylights, and jet bridges.
+  const gz = a.terminal.z;
+  const L = a.terminal.len;
+  B(cx, 0.09, gz, L, 0.42, 0.62, 0xe9ecef);
+  B(cx, 0.12, gz - 0.315, L - 0.05, 0.34, 0.01, 0x6f9fc8, 0, "glass");
+  B(cx, 0.12, gz + 0.315, L - 0.05, 0.34, 0.01, 0x6f9fc8, 0, "glass");
+  B(cx, 0.51, gz, L + 0.2, 0.045, 0.86, 0xf8f9fa);
+  B(cx, 0.555, gz, L, 0.06, 0.5, 0xe9ecef);
+  const sky = Math.max(8, Math.round(L * 2));
+  for (let k = 0; k < sky; k++) B(cx - (L - 0.4) / 2 + k * ((L - 0.4) / (sky - 1)), 0.615, gz, 0.3, 0.02, 0.3, 0x9ec5fe, 0, "glass");
+  const posts = Math.max(9, Math.round(L * 2.3));
+  for (let k = 0; k < posts; k++) for (const side of [-1, 1]) B(cx - (L - 0.1) / 2 + k * ((L - 0.1) / (posts - 1)), 0.09, gz + side * 0.42, 0.025, 0.42, 0.025, 0xdee2e6, 0, "cyl");
+  for (const jx of a.gates) {
     B(jx, 0.24, gz - 0.42, 0.08, 0.08, 0.26, 0xdee2e6);
     B(jx, 0.09, gz - 0.5, 0.03, 0.15, 0.03, 0x868e96);
   }
-  // The control tower beside it, with a glass cab.
-  const tx = cx + 2.55;
-  const tw = cz + 0.95;
-  B(tx, 0.09, tw, 0.18, 1.5, 0.18, 0xdee2e6, 0, "cyl");
-  B(tx, 1.55, tw, 0.36, 0.05, 0.36, 0xadb5bd, 0, "cyl");
-  B(tx, 1.6, tw, 0.32, 0.17, 0.32, 0x5d8fb8, 0, "cyl");
-  B(tx, 1.77, tw, 0.38, 0.05, 0.38, 0x495057, 0, "cyl");
-  B(tx, 1.82, tw, 0.02, 0.32, 0.02, 0x868e96);
-  B(tx, 2.12, tw, 0.04, 0.04, 0.04, 0xff3b3b, 0, "lamp");
-  // Hangars with arched roofs, and the helipad by them.
-  for (let k = 0; k < 2; k++) {
-    const hx = cx - 2.7;
-    const hz = cz - 0.25 + k * 0.62;
-    B(hx, 0.09, hz, 0.9, 0.18, 0.52, 0xc9ced4);
-    B(hx, 0.27, hz, 0.92, 0.3, 0.54, 0xadb5bd, Math.PI / 2, "dome");
-    B(hx + 0.455, 0.09, hz, 0.01, 0.26, 0.4, 0x495057);
+  // The control tower, with a glass cab and a beacon.
+  const { x: tx, z: tw, h: th } = a.tower;
+  B(tx, 0.09, tw, 0.2, th, 0.2, 0xdee2e6, 0, "cyl");
+  B(tx, th + 0.05, tw, 0.4, 0.05, 0.4, 0xadb5bd, 0, "cyl");
+  B(tx, th + 0.1, tw, 0.36, 0.19, 0.36, 0x5d8fb8, 0, "cyl");
+  B(tx, th + 0.29, tw, 0.42, 0.05, 0.42, 0x495057, 0, "cyl");
+  B(tx, th + 0.34, tw, 0.02, 0.32, 0.02, 0x868e96);
+  B(tx, th + 0.64, tw, 0.04, 0.04, 0.04, 0xff3b3b, 0, "lamp");
+  // Hangars with arched roofs.
+  for (const h of a.hangars) {
+    B(h.x, 0.09, h.z, 0.9, 0.18, 0.52, 0xc9ced4);
+    B(h.x, 0.27, h.z, 0.92, 0.3, 0.54, 0xadb5bd, Math.PI / 2, "dome");
+    B(h.x + 0.455, 0.09, h.z, 0.01, 0.26, 0.4, 0x495057);
   }
-  const px = cx - 2.4;
-  const pz = cz + 1.45;
-  B(px, 0.09, pz, 0.5, 0.03, 0.5, 0x6c757d, 0, "disc");
-  B(px, 0.12, pz, 0.44, 0.004, 0.44, 0xffd43b, 0, "disc");
-  B(px, 0.124, pz, 0.38, 0.004, 0.38, 0x6c757d, 0, "disc");
-  for (const ox of [-0.07, 0.07]) B(px + ox, 0.128, pz, 0.03, 0.003, 0.2, 0xffffff, 0, "paint");
-  B(px, 0.128, pz, 0.14, 0.003, 0.03, 0xffffff, 0, "paint");
-  // The car park and the road in front.
-  const cz2 = cz + d / 2 - 0.4;
-  B(cx + 0.3, 0.09, cz2, 3.6, 0.007, 0.55, 0x5b6470, 0, "ground");
-  for (let k = 0; k < 15; k++) B(cx + 0.3 - 1.7 + k * (3.4 / 14), 0.1, cz2, 0.012, 0.003, 0.42, 0xffffff, 0, "paint");
-  for (let k = 0; k < 6; k++) tree(cx - 1.6 + k * 0.7, cz2 + 0.35, 0.35, t.r[k % 4] + k);
+  // The helipads.
+  for (const { x: px, z: pz } of a.helipads) {
+    B(px, 0.09, pz, 0.5, 0.03, 0.5, 0x6c757d, 0, "disc");
+    B(px, 0.12, pz, 0.44, 0.004, 0.44, 0xffd43b, 0, "disc");
+    B(px, 0.124, pz, 0.38, 0.004, 0.38, 0x6c757d, 0, "disc");
+    for (const ox of [-0.07, 0.07]) B(px + ox, 0.128, pz, 0.03, 0.003, 0.2, 0xffffff, 0, "paint");
+    B(px, 0.128, pz, 0.14, 0.003, 0.03, 0xffffff, 0, "paint");
+  }
+  // The car park and the road in front, with trees along it.
+  const cp = a.carPark;
+  B(cx + 0.3, 0.09, cp.z, cp.len, 0.007, 0.55, 0x5b6470, 0, "ground");
+  const bays = Math.max(15, Math.round(cp.len * 4));
+  for (let k = 0; k < bays; k++) B(cx + 0.3 - (cp.len - 0.2) / 2 + k * ((cp.len - 0.2) / (bays - 1)), 0.1, cp.z, 0.012, 0.003, 0.42, 0xffffff, 0, "paint");
+  const trees = Math.max(6, Math.round(cp.len / 0.7));
+  for (let k = 0; k < trees; k++) tree(cx + 0.3 - (cp.len - 0.4) / 2 + k * ((cp.len - 0.4) / Math.max(1, trees - 1)), Math.min(d - 0.6, cp.z + 0.35), 0.35, t.r[k % 4] + k);
 }
 
 /** A sphere tank on legs (two domes, one turned upside down). */

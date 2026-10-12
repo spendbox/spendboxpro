@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, House, Search, Sparkles } from "@/components/icons";
+import { Check, House, Search, Star } from "@/components/icons";
 import { PACKS, type Pack } from "@/lib/world/packs";
 import type { Prices } from "@/lib/world/region";
 import { cash } from "@/lib/world/value";
@@ -77,7 +77,7 @@ export function StartLife({
         <CurrencyChips value={currency} onPick={onCurrency} />
       </div>
       <p className="mt-3 flex items-center gap-1.5 rounded-xl bg-gold/15 px-3 py-2 text-xs font-semibold text-gold-dark">
-        <Sparkles className="size-4 shrink-0" /> One-time offer: you choose once, and you won&apos;t see this again.
+        <Star className="size-4 shrink-0" /> One-time offer: you choose once, and you won&apos;t see this again.
       </p>
       <div className="mt-3 space-y-2" role="radiogroup" aria-label="How your life starts">
         {PACKS.map((p) => {

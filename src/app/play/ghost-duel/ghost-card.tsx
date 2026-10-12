@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Crown, Ghost, LoaderCircle, MessageCircle, Sparkles, Swords, Trophy, X } from "lucide-react";
+import { Crown, Ghost, LoaderCircle, MessageCircle, Star, Swords, Trophy, X } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import { cn } from "@/lib/cn";
 import type { Avatar } from "@/lib/avatar";
@@ -148,9 +148,9 @@ export function GhostCardSheet({
             </span>
             <div className="min-w-0">
               <p className="flex items-center gap-1 font-display text-base font-extrabold uppercase tracking-wide text-[#a37500]">
-                <Sparkles className="size-4" />
+                <Star className="size-4" />
                 Golden ghost
-                <Sparkles className="size-4" />
+                <Star className="size-4" />
               </p>
               <p className="text-sm font-semibold text-[#7a5800]">{HYPE[(ghost.id.charCodeAt(0) + ghost.id.charCodeAt(ghost.id.length - 1)) % HYPE.length]}</p>
             </div>

@@ -1,7 +1,7 @@
 // World-event scenes, part one: the first twenty, and emergencies and crime.
 // Each draw(e) runs every frame while the event is on; see common.ts for the building blocks.
 
-import { LightbulbOff, Ambulance, Banknote, Bird, CarFront, Cat, Clapperboard, CloudLightning, Flame, Footprints, Landmark, PartyPopper, Siren, Sparkles, Star, TrafficCone, TrainFront, Construction, Droplets, Waves, Rabbit, Beef, Orbit, Gem, ArrowUpDown, Plane, Bus, ShieldAlert, Skull } from "lucide-react";
+import { LightbulbOff, Ambulance, Banknote, Bird, CarFront, Cat, Clapperboard, CloudLightning, Flame, Footprints, Landmark, PartyPopper, Siren, Star, TrafficCone, TrainFront, Construction, Droplets, Waves, Rabbit, Beef, Orbit, Gem, ArrowUpDown, Plane, Bus, ShieldAlert, Skull } from "lucide-react";
 import {
   bunting,
   CHEER,
@@ -243,7 +243,7 @@ export const SCENES_A: Record<string, Scene> = {
   },
 
   fireworks: {
-    icon: Sparkles,
+    icon: Star,
     sound: "fireworks",
     draw(e) {
       const { k, s } = e;
