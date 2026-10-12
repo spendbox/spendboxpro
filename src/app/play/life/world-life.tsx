@@ -17,12 +17,15 @@ import { dayOf, EXERCISE } from "@/lib/world/day";
 import { HUSTLES, hustleDay, hustleStart } from "@/lib/world/hustles";
 import type { Workplace } from "@/lib/world/workplace";
 import { PropertyCard } from "../property-card";
+import { myThings } from "../item-actions";
+import { ThingsSheet, type ThingsTab } from "./things-sheet";
+import { NewsSheet } from "./news-sheet";
 import { Sheet } from "../sheet";
 import { LifeSheet } from "./life-sheet";
 import { MoneySheet } from "./money-sheet";
 import { HomeCard } from "./home-card";
 import { JobsHere, type JobsContext } from "./jobs-here";
-import { MapSearch, type SearchHit } from "./map-search";
+import type { SearchHit } from "./map-search";
 import { HomeFinder } from "./home-finder";
 import { StartLife } from "./start-life";
 import { useLife } from "./use-life";
@@ -133,8 +136,6 @@ export function useWorldLife({
   const [assetsOpen, setAssetsOpen] = useState(false);
   const [welcomeShut, setWelcomeShut] = useState(false);
   const [finderOpen, setFinderOpen] = useState(false);
-  /** The search box is open (on phones the life buttons make way for it). */
-  const [searching, setSearching] = useState(false);
   // The currency amounts show in beside mint (kept in this browser; change it any time).
   const [currency, setCurrency] = useState(() => {
     try {
@@ -217,6 +218,21 @@ export function useWorldLife({
   } | null>(null);
   const [loanOpen, setLoanOpen] = useState(false);
   const [listings, setListings] = useState<Listing[] | null>(null);
+  /** Things (items, shops, cars, market, craft) open on a tab, and the news. */
+  const [things, setThings] = useState<ThingsTab | null>(null);
+  const [newsOpen, setNewsOpen] = useState(false);
+  /** Your reputation (shown at the top) and whether you own a car (to drive to work). */
+  const [rep, setRep] = useState<{ score: number; hasCar: boolean } | null>(null);
+  const loadRep = useCallback(() => void myThings().then((t) => t && setRep({ score: t.reputation.score, hasCar: t.hasCar })).catch(() => {}), []);
+  useEffect(() => {
+    if (!signedIn || !regionId || pretend) return;
+    const first = setTimeout(loadRep, 1500);
+    const every = setInterval(loadRep, 180_000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(every);
+    };
+  }, [signedIn, regionId, pretend, loadRep]);
 
   useEffect(() => {
     if (!signedIn || !regionId) return;
@@ -333,7 +349,8 @@ export function useWorldLife({
       const r = await api.travelTo(id);
       setBusy(false);
       if (!r.ok) return setMessage({ text: r.error, good: false });
-      if (r.fare) setMessage({ text: `${cash(r.fare)} fare there.`, good: true });
+      if (r.found) setMessage({ text: `On the way you found: ${r.found}! It's in your Items.`, good: true });
+      else if (r.fare) setMessage({ text: `${cash(r.fare)} fare there.`, good: true });
       void refresh();
     }
     onEnter?.(id);
@@ -422,7 +439,7 @@ export function useWorldLife({
             const hire = (ticket?: string) =>
               act(
                 () => api.takeJob(wp.id, job.job, mode, ticket),
-                (r) => `You're a ${job.title} now. Pay builds up every game day (2 hours).${paid(r.pay)}`,
+                (r) => `You're a ${job.title} now. Pay builds up every 2 hours.${paid(r.pay)}`,
               ).then((r) => {
                 if (!r.ok) return;
                 setPlace(null);
@@ -442,7 +459,7 @@ export function useWorldLife({
             const km = homeUnit ? tripKmBetween(homeUnit, wp.id) : null;
             const fare = km === null || !homeUnit ? 0 : (fareMint(mode, km, region.region.prices, ferryKmBetween(homeUnit, wp.id)) ?? 0);
             const net = dayNet(payDay(job, region.region.prices), work?.skills[job.skill] ?? 0, fare);
-            const loss = net < 0 ? `Heads up: you'd run at a loss. After income tax, ${job.title} pays less than your fares there and back, so you'd lose about ${cash(-net)} every game day.` : "";
+            const loss = net < 0 ? `Heads up: you'd run at a loss. After income tax, ${job.title} pays less than your fares there and back, so you'd lose about ${cash(-net)} every 2 hours.` : "";
             const now = work?.job;
             if (!now && !loss) return void take();
             // One main job at a time: say so before swapping.
@@ -483,7 +500,7 @@ export function useWorldLife({
   const overlay = region ? (
     <>
       {/* Your life, under the place's name card: Home, Work, Money, Life, Services (first only Find a home). */}
-      <div className={`pointer-events-none absolute left-2.5 top-14 z-10 flex max-w-[calc(100vw-4.5rem)] flex-col items-start gap-2 sm:left-4 sm:top-16 sm:max-w-md ${searching ? "max-sm:hidden" : ""}`}>
+      <div className={`pointer-events-none absolute left-2.5 top-14 z-10 flex max-w-[calc(100vw-4.5rem)] flex-col items-start gap-2 sm:left-4 sm:top-16 sm:max-w-md`}>
         <div className="flex flex-wrap gap-1.5">
           {signedIn && loaded && !homeUnit && (
             <button
@@ -523,10 +540,6 @@ export function useWorldLife({
             </button>
           </div>
         )}
-      </div>
-      {/* Search the map: top right, under your mint and the menu. */}
-      <div className="pointer-events-none absolute right-2.5 top-14 z-10 flex justify-end sm:right-4 sm:top-16">
-        <MapSearch region={region} mine={assets?.units ?? []} onPick={(h: SearchHit) => fly(h.x, h.z)} compact onOpenChange={setSearching} />
       </div>
       {status?.event && !moment && (
         <div className="pointer-events-none absolute inset-x-0 top-40 z-10 flex justify-center px-3 sm:top-32">
@@ -671,9 +684,9 @@ export function useWorldLife({
             const cost = hustleStart(h, region.region.prices);
             setConfirm({
               title: `Start ${h.title.toLowerCase()}?`,
-              text: `It costs ${cash(cost)} to start (${h.what.toLowerCase()}), paid once from your Savings, and takes ${h.hours} hours a game day. It earns about ${cash(hustleDay(h, region.region.prices, work?.skills[h.skill] ?? 0))} a game day, paid into your wallet every game week. Your other side hustles carry on.`,
+              text: `It costs ${cash(cost)} to start (${h.what.toLowerCase()}), paid once from your Savings, and takes ${h.hours} of every 24 hours in your day. It earns about ${cash(hustleDay(h, region.region.prices, work?.skills[h.skill] ?? 0))} every 2 hours, paid into your wallet every 14 hours. Your other side hustles carry on.`,
               yes: `Start for ${cash(cost)}`,
-              run: () => act(() => api.startHustle(id), () => `${h.title} has started. It earns by the game day.`),
+              run: () => act(() => api.startHustle(id), () => `${h.title} has started. It earns every 2 hours.`),
             });
           }}
           onStopHustle={(id) => {
@@ -691,9 +704,9 @@ export function useWorldLife({
           onMode={(mode, perDay) =>
             setConfirm({
               title: mode === "walk" ? "Walk to work from now on?" : `Go by ${COMMUTE_LABEL[mode].toLowerCase()} from now on?`,
-              text: `${perDay ? `It costs ${cash(perDay)} a game day, there and back.` : "It's free."}${
+              text: `${perDay ? `It costs ${cash(perDay)} every 2 hours, there and back.` : "It's free."}${
                 work?.job && dayNet(work.job.payDay, work.skills[work.job.skill] ?? 0, perDay / 2) < 0
-                  ? ` Heads up: this way you'd run at a loss, about ${cash(-dayNet(work.job.payDay, work.skills[work.job.skill] ?? 0, perDay / 2))} every game day after tax.`
+                  ? ` Heads up: this way you'd run at a loss, about ${cash(-dayNet(work.job.payDay, work.skills[work.job.skill] ?? 0, perDay / 2))} every 2 hours after tax.`
                   : ""
               }`,
               yes: mode === "walk" ? "Walk from now on" : `Go by ${COMMUTE_LABEL[mode].toLowerCase()}`,
@@ -714,6 +727,8 @@ export function useWorldLife({
             setWorkOpen(false);
           }}
           onClose={() => setWorkOpen(false)}
+          loadMoney={api.money}
+          hasCar={!!rep?.hasCar}
         />
       )}
       {property && (
@@ -795,6 +810,7 @@ export function useWorldLife({
           region={region}
           busy={busy}
           loadMoney={api.money}
+          loadDays={api.moneyDays}
           currency={currency}
           onCurrency={chooseCurrency}
           onBudget={(b) =>
@@ -976,6 +992,27 @@ export function useWorldLife({
           </div>
         </div>
       )}
+      {things && (
+        <ThingsSheet
+          tab={things}
+          prices={region.region.prices}
+          onClose={() => {
+            setThings(null);
+            loadRep();
+          }}
+          onChanged={() => void refresh()}
+        />
+      )}
+      {newsOpen && (
+        <NewsSheet
+          region={region}
+          onShow={(x, z) => {
+            setNewsOpen(false);
+            fly(x, z);
+          }}
+          onClose={() => setNewsOpen(false)}
+        />
+      )}
       {lifeOpen && (
         <LifeSheet
           status={status}
@@ -1084,5 +1121,5 @@ export function useWorldLife({
   /** Something in Finance wants you: the guide's budget step, a power cut, an offer. */
   const financeGlow = step === "budget";
   const financeDot = !!(status?.powerCut || board?.received.some((o) => o.status === "open"));
-  return { centerRef, owned: shown, flyTo, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit };
+  return { openThings: (tab: ThingsTab) => setThings(tab), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit };
 }

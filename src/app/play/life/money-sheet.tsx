@@ -4,10 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import type { RegionMap } from "@/lib/world/compile";
 import { BUDGET_PRESETS, POT_INFO, POTS, type Budget, type Pot } from "@/lib/world/living";
 import type { OwnedProperty } from "@/lib/world/owned";
-import type { AssetsData, AssetUnit, LifeStatus, MoneyFlow } from "@/lib/world/property-api";
+import type { AssetsData, AssetUnit, LifeStatus, MoneyDay, MoneyFlow } from "@/lib/world/property-api";
 import { cash, CURRENCIES, shownCurrency } from "@/lib/world/value";
 import { Sheet } from "../sheet";
 import { AssetsBody, unitValueNow, type Owning } from "./assets-sheet";
+import { MoneyChart, UpOrDown, useMoneyDays } from "./money-chart";
 
 export type Tab = "home" | "budget" | "property";
 const TABS: { id: Tab; label: string }[] = [
@@ -22,18 +23,21 @@ const INCOME: { label: string; kinds: string[]; colour: string }[] = [
   { label: "Side hustle", kinds: ["hustle_pay"], colour: "#d6336c" },
   { label: "Rent", kinds: ["rent"], colour: "#37b24d" },
   { label: "Property sold", kinds: ["property_sale"], colour: "#495057" },
+  { label: "Things and cars sold", kinds: ["item_sale", "car_sale"], colour: "#7048e8" },
 ];
 /** Where it went. */
 const EXPENSES: { label: string; kinds: string[]; colour: string }[] = [
   { label: "Tax", kinds: ["income_tax", "rent_tax", "vat", "sale_tax"], colour: "#7048e8" },
   { label: "Bills", kinds: ["power_bill", "waste_bill"], colour: "#f59f00" },
-  { label: "Travel", kinds: ["commute"], colour: "#f08c00" },
+  { label: "Getting to work", kinds: ["commute"], colour: "#f08c00" },
   { label: "Health", kinds: ["health_care", "gym"], colour: "#e03131" },
   { label: "Education", kinds: ["school_fees"], colour: "#1971c2" },
   { label: "Looks", kinds: ["procedure"], colour: "#d6336c" },
   { label: "Loan", kinds: ["loan_repay"], colour: "#0c8599" },
   { label: "Side hustle", kinds: ["hustle_start"], colour: "#868e96" },
   { label: "Property bought", kinds: ["property_buy", "property_tax"], colour: "#495057" },
+  { label: "Things and cars bought", kinds: ["item_buy", "car_buy", "craft_cost"], colour: "#7048e8" },
+  { label: "Market fees and fines", kinds: ["market_fee", "item_tax", "fine"], colour: "#868e96" },
 ];
 
 /** Finance: what you're worth, what came in and went out, your budget, your property, your currency. */
@@ -44,6 +48,7 @@ export function MoneySheet({
   region,
   busy,
   loadMoney,
+  loadDays,
   onBudget,
   onCollect,
   onShow,
@@ -60,6 +65,8 @@ export function MoneySheet({
   region: RegionMap;
   busy: boolean;
   loadMoney: (hours: number) => Promise<MoneyFlow>;
+  /** Your money day by day, for "am I up or down?" and its chart. */
+  loadDays: (days: number) => Promise<MoneyDay[]>;
   onBudget: (b: Budget) => void;
   onCollect: () => void;
   onShow: (u: AssetUnit) => void;
@@ -74,6 +81,9 @@ export function MoneySheet({
   onCurrency: (code: string) => void;
 }) {
   const [tab, setTab] = useState<Tab>(startTab ?? "home");
+  // Real days (not the 2-hour days of your life): the last week or month.
+  const [period, setPeriod] = useState<7 | 30>(7);
+  const days = useMoneyDays(loadDays, period);
   const property = assets.units.reduce((t, u) => t + unitValueNow(u, owned, region), 0);
   const wallet = status?.wallet ?? assets.coins;
   // Money set aside by the budget counts as cash: it's yours to spend on what it's for.
@@ -114,7 +124,21 @@ export function MoneySheet({
                 {owed > 0.004 ? `${cash(owed)} in bills unpaid.` : ""}
               </p>
             )}
-            <Flow loadMoney={loadMoney} />
+            <div className="mt-5 flex items-center justify-between gap-2">
+              <span className="text-sm font-semibold">Are you up or down?</span>
+              <div className="flex gap-1 rounded-full bg-ink/5 p-1">
+                {([7, 30] as const).map((p) => (
+                  <button key={p} onClick={() => setPeriod(p)} className={`h-7 rounded-full px-3 text-xs font-semibold ${period === p ? "bg-panel shadow-sm" : "text-muted"}`}>
+                    {p === 7 ? "7 days" : "30 days"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="mt-2">
+              <UpOrDown days={days} label={period === 7 ? "this week" : "this month"} />
+            </div>
+            <MoneyChart days={days} />
+            <Flow loadMoney={loadMoney} hours={period * 24} />
             <div className="mt-5 flex items-center justify-between gap-2">
               <span className="text-sm font-semibold">Show money in</span>
               <select value={currency} onChange={(e) => onCurrency(e.target.value)} className="h-9 rounded-full bg-ink/5 px-3 text-sm font-semibold" aria-label="Currency">
@@ -135,19 +159,13 @@ export function MoneySheet({
   );
 }
 
-const PERIODS = [
-  { hours: 24, label: "Today" },
-  { hours: 168, label: "This week" },
-];
-
 /** Income and expenses over a period, each in its own tab with its total. */
 /** The last income and expenses seen for each period: shown at once next time while fresh ones load. */
 const flowSeen = new Map<number, MoneyFlow>();
 
-function Flow({ loadMoney }: { loadMoney: (hours: number) => Promise<MoneyFlow> }) {
-  const [hours, setHours] = useState(24);
+function Flow({ loadMoney, hours }: { loadMoney: (hours: number) => Promise<MoneyFlow>; hours: number }) {
   const [side, setSide] = useState<"in" | "out">("in");
-  const [got, setGot] = useState<{ hours: number; money: MoneyFlow } | null>(() => (flowSeen.has(24) ? { hours: 24, money: flowSeen.get(24)! } : null));
+  const [got, setGot] = useState<{ hours: number; money: MoneyFlow } | null>(() => (flowSeen.has(hours) ? { hours, money: flowSeen.get(hours)! } : null));
   useEffect(() => {
     let alive = true;
     void loadMoney(hours).then((money) => {
@@ -158,30 +176,19 @@ function Flow({ loadMoney }: { loadMoney: (hours: number) => Promise<MoneyFlow> 
       alive = false;
     };
   }, [loadMoney, hours]);
-  const pick = (h: number) => {
-    setHours(h);
-    // What we saw last time for that period, straight away.
-    const seen = flowSeen.get(h);
-    if (seen) setGot({ hours: h, money: seen });
-  };
-  const sum = (kinds: string[]) => kinds.reduce((t, k) => t + (got?.money[k] ?? 0), 0);
-  const ins = useMemo(() => INCOME.map((g) => ({ ...g, v: sum(g.kinds) })).filter((g) => g.v > 0.004), [got]); // eslint-disable-line react-hooks/exhaustive-deps
-  const outs = useMemo(() => EXPENSES.map((g) => ({ ...g, v: -sum(g.kinds) })).filter((g) => g.v > 0.004), [got]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shownNow = got && got.hours === hours ? got : flowSeen.has(hours) ? { hours, money: flowSeen.get(hours)! } : null;
+  const loading = !shownNow;
+  const sum = (kinds: string[]) => kinds.reduce((t, k) => t + (shownNow?.money[k] ?? 0), 0);
+  const ins = useMemo(() => INCOME.map((g) => ({ ...g, v: sum(g.kinds) })).filter((g) => g.v > 0.004), [shownNow]); // eslint-disable-line react-hooks/exhaustive-deps
+  const outs = useMemo(() => EXPENSES.map((g) => ({ ...g, v: -sum(g.kinds) })).filter((g) => g.v > 0.004), [shownNow]); // eslint-disable-line react-hooks/exhaustive-deps
   const totalIn = ins.reduce((t, g) => t + g.v, 0);
   const totalOut = outs.reduce((t, g) => t + g.v, 0);
   const rows = side === "in" ? ins : outs;
   const total = side === "in" ? totalIn : totalOut;
-  const loading = !got || got.hours !== hours;
   return (
     <div className="mt-4">
-      <div className="flex gap-1.5">
-        {PERIODS.map((p) => (
-          <button key={p.hours} onClick={() => pick(p.hours)} className={`h-8 flex-1 rounded-full text-xs font-semibold ${hours === p.hours ? "bg-ink text-white" : "bg-ink/5"}`}>
-            {p.label}
-          </button>
-        ))}
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-2">
+      <p className="mb-2 text-sm font-semibold">Where it came from, where it went</p>
+      <div className="grid grid-cols-2 gap-2">
         {(
           [
             ["in", "Income", totalIn, "text-me"],

@@ -100,6 +100,7 @@ const SERVERLESS = {
   procedure: async () => ({ ok: false as const, error: "" }),
   enrol: async () => ({ ok: false as const, error: "" }),
   money: async () => ({}),
+  moneyDays: async () => [],
   lifeTime: async () => ({}),
   startHustle: async () => ({ ok: false as const, error: "" }),
   stopHustle: async () => ({ ok: false as const, error: "" }),

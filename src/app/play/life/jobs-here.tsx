@@ -63,8 +63,8 @@ export function JobsHere({ place, ctx }: { place: Workplace; ctx: JobsContext })
                 </p>
               </div>
               <div className="shrink-0 text-right">
-                <p className="text-sm font-semibold tabular-nums">{cash(day)}/day</p>
-                <p className="text-[11px] text-muted">{cash(day * 30)}/month</p>
+                <p className="text-sm font-semibold tabular-nums">{cash(day)} / 2h</p>
+                <p className="text-[11px] text-muted">≈ {cash(day * 12)} a day</p>
               </div>
               {mine ? (
                 <span className="shrink-0 rounded-full bg-me/15 px-2.5 py-1 text-xs font-semibold text-me">Yours</span>
@@ -81,15 +81,15 @@ export function JobsHere({ place, ctx }: { place: Workplace; ctx: JobsContext })
               </div>
               {ctx.homeUnit &&
                 (net < 0 ? (
-                  <p className="mt-1 text-[11px] font-semibold text-hit">You&apos;d lose {cash(-net)} a day: fares cost more than it pays.</p>
+                  <p className="mt-1 text-[11px] font-semibold text-hit">You&apos;d lose {cash(-net)} every 2 hours: fares cost more than it pays.</p>
                 ) : (
-                  <p className="mt-1 text-[11px] text-muted">You keep {cash(net)} a day after tax and fares.</p>
+                  <p className="mt-1 text-[11px] text-muted">You keep {cash(net)} every 2 hours after tax and fares.</p>
                 ))}
             </li>
           );
         })}
       </ul>
-      <p className="mt-1.5 text-[11px] text-muted">A game day is 2 real hours. Pay waits up to a game week (14 hours); collect it from Income.</p>
+      <p className="mt-1.5 text-[11px] text-muted">Amounts are for every 2 hours of play. Pay goes into your wallet every 14 hours.</p>
     </div>
   );
 }

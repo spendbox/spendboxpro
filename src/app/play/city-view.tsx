@@ -231,6 +231,8 @@ type Props = {
   onBalloon: (slot: number) => void;
   /** How far through the hunt we are (0..1), for day and night, and which way it runs. */
   progress: number;
+  /** A real place's weather now (from its news), instead of the hourly game's. */
+  weather?: { kind: "clear" | "cloudy" | "rain" | "fog"; strength: number } | null;
   nightFirst: boolean;
   /** Adverts to rotate through on the billboards (empty = the house "advertise here" boards). */
   ads: CityAd[];
@@ -1310,6 +1312,7 @@ export function CityView({
   coinBalloon,
   onBalloon,
   progress,
+  weather = null,
   nightFirst,
   ads,
   onAdViews,
@@ -1379,10 +1382,10 @@ export function CityView({
     zoom: (dir: number) => void;
   } | null>(null);
   const cb = useRef({ onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused });
-  const atmos = useRef({ progress, nightFirst, meAvatar });
+  const atmos = useRef({ progress, nightFirst, meAvatar, weather });
   useEffect(() => {
     cb.current = { onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused };
-    atmos.current = { progress, nightFirst, meAvatar };
+    atmos.current = { progress, nightFirst, meAvatar, weather };
   });
 
   // Set up the scene once.
@@ -3518,9 +3521,9 @@ export function CityView({
       atmosT += dt;
       if (atmosT < 0.25) return;
       atmosT = 0;
-      const { progress, nightFirst } = atmos.current;
+      const { progress, nightFirst, weather: real } = atmos.current;
       const dl = daylight(progress, nightFirst);
-      const w = weatherAt(currentSeed, progress);
+      const w = real ?? weatherAt(currentSeed, progress);
       const cloud = w.kind === "clear" ? 0 : w.kind === "cloudy" ? 0.45 * w.strength : w.kind === "rain" ? 0.45 + 0.3 * w.strength : 0.5 * w.strength;
       if (dl > 0.5) skyCol.copy(C.dusk).lerp(C.day, (dl - 0.5) / 0.5);
       else skyCol.copy(C.night).lerp(C.dusk, dl / 0.5);

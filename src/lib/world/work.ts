@@ -76,6 +76,10 @@ const BY_PLACE: Record<string, WorkJob[]> = {
   cathedral: [J("caretaker", "Caretaker", "public", 60_000)],
   grandmosque: [J("caretaker", "Caretaker", "public", 60_000)],
   worship: [J("caretaker", "Caretaker", "public", 60_000)],
+  fuel: [J("pump_attendant", "Pump attendant", "retail", 70_000), J("fuel_cashier", "Cashier", "retail", 90_000, 1), J("station_manager", "Station manager", "retail", 250_000, 3)],
+  restaurant: [J("waiter", "Waiter", "food", 70_000), J("cook", "Cook", "food", 120_000, 1), J("restaurant_manager", "Restaurant manager", "food", 300_000, 3)],
+  police: [J("police_clerk", "Station clerk", "public", 90_000, 0, S), J("police_officer", "Police officer", "public", 180_000, 2, S)],
+  fire: [J("fire_cleaner", "Station hand", "public", 70_000, 0, S), J("firefighter", "Firefighter", "public", 170_000, 2, S)],
 };
 
 /** A building site takes on labourers; an unfinished building takes on nobody. */
@@ -114,9 +118,15 @@ export const INCOME_TAX = 0.07;
 /** Extra pay for each level of the job's skill. */
 export const SKILL_BONUS = 0.03;
 
-/** Mint a game day for a job paying `month` local money a game month. */
+/**
+ * How much more than the real wage the game pays, in every city (real wages left players working
+ * at a loss for months: the game should be fun, not harder than real life).
+ */
+export const PAY_BOOST = 4;
+
+/** Mint every 2 hours (a day in your life) for a job paying `month` local money a month, boosted. */
 export function payDay(job: Pick<WorkJob, "month">, prices: Prices) {
-  return Math.round((job.month / 30 / prices.perMint) * 100) / 100;
+  return Math.round(((job.month * PAY_BOOST) / 30 / prices.perMint) * 100) / 100;
 }
 
 /** What a job leaves you a game day, after income tax and two trips at `fareTrip` (negative: a loss). */
@@ -136,30 +146,33 @@ export function daysForLevel(level: number) {
 
 // ---------------------------------------------------------------- getting to work
 
-export type Commute = "walk" | "keke" | "okada" | "danfo" | "taxi";
+/** How you get about; "car" needs a car of your own (src/lib/world/items.ts). */
+export type Commute = "walk" | "keke" | "okada" | "danfo" | "taxi" | "car";
 
-export const COMMUTES: Commute[] = ["walk", "keke", "okada", "danfo", "taxi"];
+export const COMMUTES: Commute[] = ["walk", "keke", "okada", "danfo", "taxi", "car"];
 
-export const COMMUTE_LABEL: Record<Commute, string> = { walk: "Walk", keke: "Keke", okada: "Okada", danfo: "Danfo bus", taxi: "Taxi" };
+export const COMMUTE_LABEL: Record<Commute, string> = { walk: "Walk", keke: "Keke", okada: "Okada", danfo: "Danfo bus", taxi: "Taxi", car: "My car" };
 
 /** One trip's fare in local money: a start price, so much a km, the most it costs, and how far it'll go (km). */
 type Fare = { base: number; perKm: number; cap?: number; maxKm: number };
 
 /**
- * Lagos fares (naira) a trip, kept low enough that a first job across town still pays: a danfo
- * never costs more than ₦600 however far it goes (like a long BRT ride). Walking is free but only
+ * Lagos fares (naira) a trip, kept well under real ones so getting about is fun: a danfo
+ * never costs more than ₦250 however far it goes (like a long BRT ride). Walking is free but only
  * so far.
  */
 const FARES: Record<Commute, Fare> = {
   walk: { base: 0, perKm: 0, maxKm: 3 },
-  keke: { base: 100, perKm: 50, cap: 500, maxKm: 8 },
-  okada: { base: 150, perKm: 70, cap: 900, maxKm: 15 },
-  danfo: { base: 100, perKm: 20, cap: 600, maxKm: Infinity },
-  taxi: { base: 500, perKm: 200, maxKm: Infinity },
+  keke: { base: 50, perKm: 25, cap: 250, maxKm: 8 },
+  okada: { base: 80, perKm: 35, cap: 400, maxKm: 15 },
+  danfo: { base: 50, perKm: 8, cap: 250, maxKm: Infinity },
+  taxi: { base: 300, perKm: 90, maxKm: Infinity },
+  // Your own car: only fuel (and parking now and then).
+  car: { base: 0, perKm: 12, cap: 400, maxKm: Infinity },
 };
 
 /** A ferry across the lagoon to where no road goes (an island): a crossing fare plus so much a km on the water. */
-export const FERRY = { base: 800, perKm: 150 };
+export const FERRY = { base: 300, perKm: 60 };
 
 /** Roads wind: a trip is about this much longer than a straight line. */
 const ROAD_FACTOR = 1.3;

@@ -90,6 +90,8 @@ export type Prices = {
   perMint: number;
   /** Land per m² where no district says otherwise. */
   land: number;
+  /** What land costs in the game against those real prices (0.1: a tenth). Left out: the same. */
+  landScale?: number;
   /** What it costs to build, per m² of floor, by kind of building. */
   build: Record<BuildingKind, number>;
 };

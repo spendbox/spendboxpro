@@ -263,7 +263,7 @@ export function AssetsBody({
         ) : (
           <>
             <p className="mt-1 text-xs text-muted">
-              {board && board.canBorrow >= 10 ? `Borrow up to ${cash(board.canBorrow)} against your property, at ${Math.round(board.rate * 100)}% a game year.` : "Buy property to borrow against it."}
+              {board && board.canBorrow >= 10 ? `Borrow up to ${cash(board.canBorrow)} against your property, at ${Math.round(board.rate * 100)}% a year (a year is 30 days).` : "Buy property to borrow against it."}
             </p>
             {board && board.canBorrow >= 10 && (
               <button disabled={busy} onClick={owning.onBorrow} className="mt-3 h-9 w-full rounded-full bg-ink text-sm font-semibold text-white disabled:opacity-40">

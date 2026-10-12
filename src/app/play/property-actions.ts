@@ -10,6 +10,7 @@ import { BUY_TAX, rentPerDay, type AssetsData, type BuildingOwner, type OwnedBui
 import { landNow, toMint, valueOf } from "@/lib/world/value";
 import { cheapestCommute, fareMint, tripKmBetween } from "@/lib/world/work";
 import { ferryKmBetween } from "@/lib/world/trips";
+import { FIND_CHANCE, FINDS, mintOf, shopKind } from "@/lib/world/items";
 import { collectPay } from "./work-actions";
 
 // Owning property on the real map (docs/PROPERTY.md; the database part is
@@ -211,5 +212,15 @@ export async function travelTo(buildingId: string): Promise<PropertyResult> {
     if (code === "not_enough") return { ok: false, error: "You don't have enough for the fare there." };
     return say(error.message);
   }
-  return { ok: true, fare: n(data) };
+  // Now and then you find something on the way (src/lib/world/items.ts).
+  let found: string | undefined;
+  if (Math.random() < FIND_CHANCE) {
+    const k = shopKind(FINDS[Math.floor(Math.random() * FINDS.length)]);
+    const prices = regionMap(spot.region)!.region.prices;
+    if (k) {
+      const { error: findError } = await db.rpc("item_get", { p_user: userId, p_kind: k.id, p_name: k.name, p_category: k.category, p_value: mintOf(k.price, prices), p_effect: k.effect, p_how: "found", p_cost: 0 });
+      if (!findError) found = k.name;
+    }
+  }
+  return { ok: true, fare: n(data), ...(found ? { found } : {}) };
 }

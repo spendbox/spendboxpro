@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { PRICES } from "../regions/lagos/prices.ts";
-import { cheapestCommute, dayNet, daysForLevel, fareMint, fareOrBus, jobsAtPlace, jobsInBuilding, payDay, settle, skillLevel, tripKm, tripKmBetween } from "../work.ts";
+import { cheapestCommute, dayNet, PAY_BOOST, daysForLevel, fareMint, fareOrBus, jobsAtPlace, jobsInBuilding, payDay, settle, skillLevel, tripKm, tripKmBetween } from "../work.ts";
 
 test("businesses hire, homes and unfinished buildings don't", () => {
   assert.ok(jobsInBuilding({ kind: "offices", state: "built" }).length >= 3);
@@ -23,9 +23,10 @@ test("every workplace has a job anyone can start with", () => {
   }
 });
 
-test("pay is real Lagos wages, by the game day", () => {
-  // ₦90,000 a month = ₦3,000 a game day = ₥2.
-  assert.equal(payDay({ month: 90_000 }, PRICES), 2);
+test("pay is real Lagos wages times the game's boost, every 2 hours", () => {
+  // ₦90,000 a month = ₦3,000 a day = ₥2, times 4.
+  assert.equal(payDay({ month: 90_000 }, PRICES), 2 * PAY_BOOST);
+  assert.ok(PAY_BOOST >= 3 && PAY_BOOST <= 5);
 });
 
 test("skills grow with no top", () => {
@@ -71,7 +72,7 @@ test("a long danfo ride is capped, so a first job across town still pays", () =>
   const far = fareMint("danfo", 30, PRICES)!;
   const farther = fareMint("danfo", 45, PRICES)!;
   assert.equal(far, farther, "the cap");
-  assert.ok(far * PRICES.perMint <= 600);
+  assert.ok(far * PRICES.perMint <= 260, "about ₦250 (rounded to the mint)");
   // A loader (₦80,000 a month) 30 km away keeps something every day.
   const loader = jobsInBuilding({ kind: "warehouse", state: "built" }).find((j) => j.job === "loader")!;
   assert.ok(dayNet(payDay(loader, PRICES), 0, far) > 0);

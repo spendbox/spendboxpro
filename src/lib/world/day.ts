@@ -19,7 +19,7 @@ export const MIN_SLEEP_HOURS = 4;
 export const JOB_HOURS = 8;
 
 /** How fast each way of getting about goes in Lagos traffic (km/h). */
-const SPEED: Record<Commute, number> = { walk: 5, keke: 15, okada: 22, danfo: 12, taxi: 18 };
+const SPEED: Record<Commute, number> = { walk: 5, keke: 15, okada: 22, danfo: 12, taxi: 18, car: 20 };
 
 /** Hours a game day getting to work and back. */
 export function commuteHours(mode: Commute, km: number) {

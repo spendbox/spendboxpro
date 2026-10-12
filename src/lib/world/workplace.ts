@@ -2,7 +2,7 @@
 // the server to check a job is really there (and what it pays) and by the screens to list work
 // near your home.
 
-import { addressOf, spiralIndex, tileAt, type CityPlan, type Tile } from "../city/layout.ts";
+import { addressOf, KIND_LABEL, spiralIndex, tileAt, type CityPlan, type Tile } from "../city/layout.ts";
 import { BUILDING_LABEL } from "./buildings.ts";
 import { jobsAtPlace, jobsInBuilding, type WorkJob } from "./work.ts";
 
@@ -31,10 +31,9 @@ export function workplaceOfTile(plan: CityPlan, t: Tile): Workplace | null {
     const what = t.building.state === "site" ? "Building site" : (t.building.name ?? BUILDING_LABEL[t.building.kind]);
     return { id: t.building.id, name: `${what}, ${addressOf(plan, t)}`, x: t.x, z: t.z, jobs };
   }
-  if (t.name) {
-    const jobs = jobsAtPlace(t.kind);
-    return jobs.length ? { id: `${region}:${t.x},${t.z}`, name: t.name, x: t.x, z: t.z, jobs } : null;
-  }
+  // Named or not (a famous club, or any filling station or restaurant on the street).
+  const jobs = jobsAtPlace(t.kind);
+  if (jobs.length) return { id: `${region}:${t.x},${t.z}`, name: t.name ?? `${KIND_LABEL[t.kind]}, ${addressOf(plan, t)}`, x: t.x, z: t.z, jobs };
   return null;
 }
 
@@ -46,11 +45,11 @@ export function workplaceById(plan: CityPlan, id: string): Workplace | null {
   return w && w.id === id ? w : null;
 }
 
-/** Workplaces within `radius` tiles of a spot, nearest first. */
-export function workplacesNear(plan: CityPlan, x: number, z: number, radius: number): (Workplace & { tiles: number })[] {
+/** Workplaces within `radius` tiles of a spot, nearest first (looking at every `step`th tile, for big searches). */
+export function workplacesNear(plan: CityPlan, x: number, z: number, radius: number, step = 1): (Workplace & { tiles: number })[] {
   const out = new Map<string, Workplace & { tiles: number }>();
-  for (let dz = -radius; dz <= radius; dz++) {
-    for (let dx = -radius; dx <= radius; dx++) {
+  for (let dz = -radius; dz <= radius; dz += step) {
+    for (let dx = -radius; dx <= radius; dx += step) {
       const d = Math.hypot(dx, dz);
       if (d > radius) continue;
       const tx = x + dx;

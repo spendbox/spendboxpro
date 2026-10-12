@@ -35,10 +35,10 @@ export type PropertyInfo = {
 
 /** How a unit of this use can earn (as real estate does). */
 const EARNS: Record<UnitUse, string> = {
-  home: "Live in it, or let it out for rent each game month",
-  shop: "Let it to a business for rent each game day",
-  office: "Let it to a business for rent each game day",
-  industry: "Let it to a business for rent each game day",
+  home: "Live in it, or let it out for rent every 2½ days",
+  shop: "Let it to a business for rent every 2 hours",
+  office: "Let it to a business for rent every 2 hours",
+  industry: "Let it to a business for rent every 2 hours",
   land: "Earns nothing, grows in value; build on it to make it earn",
 };
 

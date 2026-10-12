@@ -13,7 +13,7 @@ import { jobsAtPlace, jobsInBuilding, needsInterview, WORK_SKILLS, type WorkJob 
 const allJobs = (): WorkJob[] => [
   ...(["shops", "mixed", "plaza", "offices", "glass", "warehouse", "farm"] as const).flatMap((kind) => jobsInBuilding({ kind, state: "built" })),
   ...jobsInBuilding({ kind: "flats", state: "site" }),
-  ...["market", "megamall", "hotel", "hospital", "intlairport", "airport", "port", "campus", "school", "capitol", "museum", "arena", "club", "bigpark", "worship"].flatMap((t) => jobsAtPlace(t)),
+  ...["market", "megamall", "hotel", "hospital", "intlairport", "airport", "port", "campus", "school", "capitol", "museum", "arena", "club", "bigpark", "worship", "fuel", "restaurant", "police", "fire"].flatMap((t) => jobsAtPlace(t)),
 ];
 
 test("a day has 24 hours: sleep, work, travel, a hustle, study and exercise must fit", () => {

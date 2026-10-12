@@ -4,9 +4,27 @@ import { useEffect, useState } from "react";
 import { MapPin, Users } from "@/components/icons";
 import { Sheet } from "./sheet";
 import { cityPlayers } from "./city-actions";
+import { MapSearch, type SearchHit } from "./life/map-search";
+import type { RegionMap } from "@/lib/world/compile";
+import type { AssetUnit } from "@/lib/world/property-api";
 
-/** Tapping the place's name: who's here now, how many play, and the cities by how many live there. */
-export function CityCard({ city, area, online, players, onClose }: { city: string; area: string | null; online: number | null; players: number; onClose: () => void }) {
+/** Tapping the place's name: search the map, who's here now, how many play, and the cities by how many live there. */
+export function CityCard({
+  city,
+  area,
+  online,
+  players,
+  onClose,
+  search,
+}: {
+  city: string;
+  area: string | null;
+  online: number | null;
+  players: number;
+  onClose: () => void;
+  /** Searching the map: pick a place and the camera flies there. */
+  search?: { region: RegionMap; mine: AssetUnit[]; onPick: (h: SearchHit) => void } | null;
+}) {
   const [cities, setCities] = useState<{ id: string; name: string; players: number }[] | null>(null);
   useEffect(() => {
     let alive = true;
@@ -18,7 +36,19 @@ export function CityCard({ city, area, online, players, onClose }: { city: strin
     };
   }, []);
   return (
-    <Sheet onClose={onClose} title={city}>
+    <Sheet onClose={onClose} title={city} clear>
+      {search && (
+        <div className="mb-3">
+          <MapSearch
+            region={search.region}
+            mine={search.mine}
+            onPick={(h) => {
+              search.onPick(h);
+              onClose();
+            }}
+          />
+        </div>
+      )}
       {area && (
         <p className="flex items-center gap-1 text-sm text-muted">
           <MapPin className="size-3.5" /> You&apos;re looking at {area}

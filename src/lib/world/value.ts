@@ -83,9 +83,15 @@ export function landIndex(x: number, z: number, at = Date.now()) {
   return Math.max(0.5, (1 + (GROWTH * months) / 12) * (1 + cycle));
 }
 
-/** What land costs at a spot right now (per m²): the map's price moved by the market. */
-export function landNow(region: { landPriceAt: (x: number, z: number) => number }, x: number, z: number, at = Date.now()) {
-  return region.landPriceAt(x, z) * landIndex(x, z, at);
+/** A region's map, as far as land prices go. */
+type LandMap = { landPriceAt: (x: number, z: number) => number; region: { prices: Prices } };
+
+/**
+ * What land costs in the game at a spot right now (per m²): the real price there, scaled to the
+ * game's (Prices.landScale), moved by the market.
+ */
+export function landNow(region: LandMap, x: number, z: number, at = Date.now()) {
+  return region.landPriceAt(x, z) * (region.region.prices.landScale ?? 1) * landIndex(x, z, at);
 }
 
 /**
@@ -93,7 +99,7 @@ export function landNow(region: { landPriceAt: (x: number, z: number) => number 
  * its worth at the end of each of the last `points` game months up to now (oldest first), for a
  * little chart.
  */
-export function worthTrend(b: Building, region: { landPriceAt: (x: number, z: number) => number }, x: number, z: number, prices: Prices, points = 6, at = Date.now()) {
+export function worthTrend(b: Building, region: LandMap, x: number, z: number, prices: Prices, points = 6, at = Date.now()) {
   const worth = (t: number) => valueOf(b, landNow(region, x, z, t), prices).total;
   const history = Array.from({ length: points }, (_, k) => worth(at - (points - 1 - k) * GAME_MONTH_MS));
   const before = worth(at - GAME_MONTH_MS);

@@ -1115,6 +1115,158 @@ export const JOB_QUESTIONS: Record<string, InterviewQ[]> = {
       answer: 2,
     },
   ],
+  station_manager: [
+    {
+      id: "station_manager-1",
+      q: "A customer says the pump gave short litres. What do you do first?",
+      options: ["Argue, the pump is never wrong", "Check the meter against a calibrated 10-litre measure", "Refund everyone who complains that day", "Close the station"],
+      answer: 1,
+    },
+    {
+      id: "station_manager-2",
+      q: "Fuel is running low and a tanker is delayed. Best move?",
+      options: ["Raise the price quietly", "Tell customers honestly and ration fairly by queue", "Serve only friends", "Mix in kerosene to stretch it"],
+      answer: 1,
+    },
+    {
+      id: "station_manager-3",
+      q: "A pump attendant is seen smoking near the dispensers. You:",
+      options: ["Ignore it if the pump is off", "Stop it at once: no flames within the forecourt", "Give a warning next month", "Move them to the night shift"],
+      answer: 1,
+    },
+    {
+      id: "station_manager-4",
+      q: "End of shift, the cash and the pump totals don't match by ₦12,000. First step?",
+      options: ["Deduct it from everyone", "Reconcile pump readings, POS and cash receipts", "Change the pump reading", "Wait for the auditor"],
+      answer: 1,
+    },
+    {
+      id: "station_manager-5",
+      q: "Which fire extinguisher suits a petrol fire?",
+      options: ["Water", "Foam or dry chemical powder", "Sand only", "Any kind"],
+      answer: 1,
+    },
+    {
+      id: "station_manager-6",
+      q: "A delivery tanker arrives. Before off-loading you:",
+      options: ["Start pumping at once", "Dip the tank, check the seals and the waybill", "Let the driver decide", "Off-load into any tank"],
+      answer: 1,
+    },
+  ],
+  restaurant_manager: [
+    {
+      id: "restaurant_manager-1",
+      q: "A guest finds a hair in their jollof. You:",
+      options: ["Say it's not from your kitchen", "Apologise, replace it, and check kitchen hair nets", "Charge them anyway", "Ignore it"],
+      answer: 1,
+    },
+    {
+      id: "restaurant_manager-2",
+      q: "Your cook is ill on a busy Saturday. Best plan?",
+      options: ["Close for the day", "Cut the menu to what the team can cook well", "Let a waiter cook everything", "Serve yesterday's food"],
+      answer: 1,
+    },
+    {
+      id: "restaurant_manager-3",
+      q: "Cooked rice should be kept hot above about:",
+      options: ["30°C", "63°C", "40°C", "Room temperature"],
+      answer: 1,
+    },
+    {
+      id: "restaurant_manager-4",
+      q: "Food costs went up 20% this month. First step?",
+      options: ["Raise every price 50%", "Check portions, waste and suppliers, then price fairly", "Use cheaper, spoiled stock", "Stop buying meat"],
+      answer: 1,
+    },
+    {
+      id: "restaurant_manager-5",
+      q: "A regular customer wants credit again with unpaid bills. You:",
+      options: ["Give it, they're regular", "Politely settle the old bill first", "Ban them loudly", "Add the debt to others' bills"],
+      answer: 1,
+    },
+    {
+      id: "restaurant_manager-6",
+      q: "The best way to store raw chicken in a fridge is:",
+      options: ["Top shelf above cooked food", "Bottom shelf, covered, below cooked food", "Next to salads", "Out of the fridge"],
+      answer: 1,
+    },
+  ],
+  police_officer: [
+    {
+      id: "police_officer-1",
+      q: "A crowd catches a suspected thief and wants to beat him. You:",
+      options: ["Let them", "Protect the suspect and take him to the station", "Leave the scene", "Join in"],
+      answer: 1,
+    },
+    {
+      id: "police_officer-2",
+      q: "At a checkpoint, a driver's papers are in order. You:",
+      options: ["Ask for 'something for the boys'", "Thank them and let them go", "Search the car for no reason", "Hold them for an hour"],
+      answer: 1,
+    },
+    {
+      id: "police_officer-3",
+      q: "Someone reports a missing child. Waiting 24 hours first is:",
+      options: ["Required by law", "Wrong: act at once", "Fine for teenagers", "Up to the parents"],
+      answer: 1,
+    },
+    {
+      id: "police_officer-4",
+      q: "When arresting someone you must:",
+      options: ["Tell them why they're being arrested", "Keep the reason secret", "Take their phone money", "Detain them for weeks without charge"],
+      answer: 0,
+    },
+    {
+      id: "police_officer-5",
+      q: "A colleague takes a bribe in front of you. Right step?",
+      options: ["Share it", "Report it through the proper channel", "Ignore it", "Ask for a bigger one"],
+      answer: 1,
+    },
+    {
+      id: "police_officer-6",
+      q: "Lagos emergency number for police help is:",
+      options: ["112", "999", "911 only", "There is none"],
+      answer: 0,
+    },
+  ],
+  firefighter: [
+    {
+      id: "firefighter-1",
+      q: "Before entering a smoky building you put on:",
+      options: ["A face mask from a pharmacy", "Breathing apparatus and full kit", "Nothing, speed matters", "A wet handkerchief only"],
+      answer: 1,
+    },
+    {
+      id: "firefighter-2",
+      q: "A cooking gas cylinder is on fire at the valve. First move?",
+      options: ["Pour water straight in the valve", "Cool the cylinder and shut the valve if safe", "Kick it outside", "Run away and leave it"],
+      answer: 1,
+    },
+    {
+      id: "firefighter-3",
+      q: "An electrical fire in a shop: before water you must:",
+      options: ["Cut the power", "Open the windows", "Wait for NEPA", "Call the owner"],
+      answer: 0,
+    },
+    {
+      id: "firefighter-4",
+      q: "What spreads fire fastest in Lagos markets?",
+      options: ["Wet sacks", "Tightly packed goods and illegal wiring", "Concrete walls", "Wide walkways"],
+      answer: 1,
+    },
+    {
+      id: "firefighter-5",
+      q: "Traffic blocks the fire truck. You:",
+      options: ["Wait it out", "Use sirens and guide cars aside safely", "Drive on the walkway over people", "Turn back"],
+      answer: 1,
+    },
+    {
+      id: "firefighter-6",
+      q: "After a fire is out, you:",
+      options: ["Leave at once", "Check for hidden embers and hot spots", "Let people back in straight away", "Take valuables"],
+      answer: 1,
+    },
+  ],
   site_foreman: [
     {
       id: "site_foreman-1",

@@ -4,7 +4,7 @@ import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { regionMap } from "@/lib/world";
 import { careById, cleanBudget, courseById, POTS, priceOf, procedureById, type Budget, type Pot } from "@/lib/world/living";
-import type { LifeStatus, MoneyFlow, PropertyResult } from "@/lib/world/property-api";
+import type { LifeStatus, MoneyDay, MoneyFlow, PropertyResult } from "@/lib/world/property-api";
 import { STUDY_HOURS } from "@/lib/world/day";
 import { dayFits, tickLife } from "./life-tick";
 
@@ -137,4 +137,13 @@ export async function money(hours: number): Promise<MoneyFlow> {
   const { data, error } = await createAdminClient().rpc("life_money", { p_user: userId, p_hours: Math.round(n(hours)) || 24 });
   if (error || !data) return {};
   return Object.fromEntries(Object.entries(data as Record<string, unknown>).map(([k, v]) => [k, n(v)]));
+}
+
+/** Your money day by day (game-db/050_economy_items.sql): earned, living costs, things bought. */
+export async function moneyDays(days: number): Promise<MoneyDay[]> {
+  const userId = await currentUserId();
+  if (!userId) return [];
+  const { data, error } = await createAdminClient().rpc("life_money_days", { p_user: userId, p_days: Math.min(90, Math.max(1, Math.round(n(days)) || 7)) });
+  if (error || !Array.isArray(data)) return [];
+  return (data as Record<string, unknown>[]).map((d) => ({ day: String(d.day), earned: n(d.earned), costs: n(d.costs), bought: n(d.bought) }));
 }

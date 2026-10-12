@@ -14,7 +14,7 @@ import type { Listing, MarketBoard, RentLevel } from "./market.ts";
 /** What collecting pay came to (mint): game days, pay, income tax, fares, what's left. */
 export type PaySettled = { days: number; gross: number; tax: number; fares: number; net: number; hustle?: { gross: number; tax: number; net: number } };
 
-export type PropertyResult = { ok: true; coins?: number; home?: boolean; rent?: number; pay?: PaySettled; fare?: number } | { ok: false; error: string };
+export type PropertyResult = { ok: true; coins?: number; home?: boolean; rent?: number; pay?: PaySettled; fare?: number; /** Something you found on the way. */ found?: string } | { ok: false; error: string };
 
 export type AssetUnit = {
   unit: string;
@@ -90,6 +90,9 @@ export type InterviewStart = { ok: true; token: string; questions: { id: string;
 export type InterviewResult = { ok: true; passed: boolean; score: number; need: number; ticket?: string } | { ok: false; error: string };
 export type EventResult = { ok: true; won: boolean; said: string; bonus: number; stall?: number } | { ok: false; error: string };
 
+/** One day of your money: earned (pay, hustles, rent, sales), living costs (tax, bills, travel...), and things bought to keep. */
+export type MoneyDay = { day: string; earned: number; costs: number; bought: number };
+
 /** Money in (positive) and out (negative) by kind over a time (see groupOf in ./living). */
 export type MoneyFlow = Record<string, number>;
 
@@ -116,6 +119,8 @@ export type PropertyApi = {
   procedure: (id: string) => Promise<PropertyResult>;
   enrol: (id: string) => Promise<PropertyResult>;
   money: (hours: number) => Promise<MoneyFlow>;
+  /** Your money day by day (the last `days` days, oldest first), for the up-or-down chart. */
+  moneyDays: (days: number) => Promise<MoneyDay[]>;
   lifeTime: (hours: number) => Promise<Record<string, number>>;
   startHustle: (id: string) => Promise<PropertyResult>;
   /** Stop one side hustle (by id), or all of them. */
