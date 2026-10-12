@@ -1,5 +1,6 @@
 "use client";
 
+import { cash } from "@/lib/world/value";
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import { Bot, Check, Coins, LoaderCircle, Medal, Minus, Play, Plus, RotateCcw, Smartphone, Swords, Trophy, UserRound, Users, X } from "lucide-react";
@@ -156,7 +157,7 @@ function useReward(def: MiniGameDef, signedIn: boolean) {
     setNote({ text: "Collecting your mint…", coins: 0 });
     const res = await claimMinigameReward(def.id, grade).catch(() => ({ ok: false as const, error: "The connection blinked." }));
     if (!res.ok) return setNote({ text: res.error, coins: 0 });
-    if (res.coins > 0) return setNote({ text: `+₥${short(res.coins)}!${res.leftToday === 0 ? " That's all the game mint for today." : ""}`, coins: res.coins });
+    if (res.coins > 0) return setNote({ text: `+${cash(res.coins)}!${res.leftToday === 0 ? " That's all the game mint for today." : ""}`, coins: res.coins });
     setNote({ text: res.reason === "daily_limit" ? "You've won all the game mint for today. Playing is still fun!" : "Mint pays once a minute per game, so this one's for glory.", coins: 0 });
   }
   return { note, claim, reset: () => setNote(null) };
@@ -483,7 +484,7 @@ function ScorePlay({ def, ctx, gp, invite, task }: { def: MiniGameDef; ctx: Play
         </button>
       </div>
       <p className="flex items-center gap-1.5 text-xs text-muted">
-        <Coins className="size-3.5 text-gold-dark" /> Medal scores win ₥2 / ₥4 / ₥6 (10 rewarded games a day).
+        <Coins className="size-3.5 text-gold-dark" /> Medal scores win {cash(2)} / {cash(4)} / {cash(6)} (10 rewarded games a day).
       </p>
       <Leaderboard entries={board.entries} meId={ctx.me?.id} unit={def.unit} />
     </div>
@@ -668,7 +669,7 @@ function TurnPlay({ def, ctx, invite }: { def: MiniGameDef; ctx: PlayCtx; invite
       </div>
       {count > 2 && <p className="text-xs text-muted">Challenging someone: you, them and {count - 2} bot{count > 3 ? "s" : ""}.</p>}
       <p className="flex items-center gap-1.5 text-xs text-muted">
-        <Check className="size-3.5 text-me" /> Beat the computer for ₥4, a person for ₥6.
+        <Check className="size-3.5 text-me" /> Beat the computer for {cash(4)}, a person for {cash(6)}.
       </p>
     </div>
   );

@@ -70,6 +70,8 @@ import { createCabin, type Cabin } from "./city/rides";
 import { disposeVehicleCaches } from "./city/vehicles";
 import { createBoats } from "./city/boats";
 import { createRealTransit, REAL_BASE } from "./city/real-transit";
+import { createHomeInterior } from "./home/home-interior";
+import type { HomePlan } from "@/lib/home-plan";
 import { upgradeNpcs } from "./city/npc3d";
 import { createAirliner, LIVERIES } from "./city/airliner";
 import { createSlideRide, createWaterpark, waterparkParts, type Slide, type SlideRide, type Waterpark } from "./city/waterpark";
@@ -336,6 +338,8 @@ type Props = {
   onGhost?: (id: string) => void;
   /** Fly the camera over a spot (a new `at` each time), e.g. a ghost picked from a list. */
   flyTo?: { tile: number; at: number } | null;
+  /** Planned homes (docs/HOME_PLANNER.md), by the building's tile: inside, the plan instead of a made-up room. */
+  homePlans?: Record<number, HomePlan>;
   /** Filled in with a way to ask which tile is in the middle of the view (for reporting a problem there). */
   centerRef?: { current: (() => { x: number; z: number }) | null };
   /** Freeze the town (it stops moving and drawing), e.g. behind the sign-in pop-up. */
@@ -1373,6 +1377,7 @@ export function CityView({
   ghosts,
   onGhost,
   flyTo = null,
+  homePlans,
   centerRef,
   paused = false,
   walkStick,
@@ -1406,6 +1411,7 @@ export function CityView({
     focusEvent: (id: number) => void;
     setGhosts: (list: CityGhost[]) => void;
     flyToTile: (tile: number) => void;
+    setHomePlans: (plans: Record<number, HomePlan> | undefined) => void;
     /** Zoom in (dir 1) or out (dir -1) a step: the + and − buttons on a computer. */
     zoom: (dir: number) => void;
   } | null>(null);
@@ -4412,6 +4418,24 @@ export function CityView({
         l.root.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`;
       }
     }
+    // Planned homes: the plans by tile, and which floor of each you're on.
+    const homePlans = new Map<number, HomePlan>();
+    const homeFloor = new Map<number, number>();
+    let restage = false;
+    /** Draw the place you're in again (its plan arrived or changed, or you took the stairs). */
+    function redrawHere() {
+      if (view?.kind !== "place") return;
+      restage = true;
+      syncView();
+    }
+    function setHomePlans(plans: Record<number, HomePlan> | undefined) {
+      homePlans.clear();
+      for (const [k, v] of Object.entries(plans ?? {})) homePlans.set(Number(k), v);
+      if (view?.kind !== "place" || view.stage.level.kind !== "interior") return;
+      const p = homePlans.get(view.stage.tile);
+      const want = p ? `${JSON.stringify(p)}#${homeFloor.get(view.stage.tile) ?? 0}` : undefined;
+      if (want !== view.stage.homeKey) redrawHere();
+    }
     const flyToTile = (tile: number) => {
       if (immersive()) return;
       const p = posOf(tile);
@@ -4584,6 +4608,8 @@ export function CityView({
     type Stage = {
       building: string;
       tile: number;
+      /** A planned home: which plan (as text, to notice changes) and which of its floors. */
+      homeKey?: string;
       level: PlaceLevel;
       /** Interiors: the room's own scene (drawn over the city), and how city space maps onto it. */
       scene: THREE.Scene | null;
@@ -4724,7 +4750,9 @@ export function CityView({
     function buildStage(building: string, anchor: Tile, lvl: PlaceLevel): Stage {
       const plan = currentPlan!;
       const key = `${currentSeed}|${building}|${lvl.id}`;
-      const npcs = npcsFor(`${building}:${lvl.id}`, currentSeed, lvl.capacity, lvl.theme);
+      // Someone's planned home: their plan, and nobody made up living there.
+      const homePlan = lvl.kind === "interior" ? homePlans.get(anchor.i) : undefined;
+      const npcs = homePlan ? [] : npcsFor(`${building}:${lvl.id}`, currentSeed, lvl.capacity, lvl.theme);
       const st: Stage = {
         building,
         tile: anchor.i,
@@ -4766,7 +4794,9 @@ export function CityView({
         free: [],
       };
       if (lvl.kind === "interior") {
-        const interior = createInterior({
+        const homeLevel = homeFloor.get(anchor.i) ?? 0;
+        if (homePlan) st.homeKey = `${JSON.stringify(homePlan)}#${homeLevel}`;
+        const interior = homePlan ? createHomeInterior(homePlan, homeLevel) : createInterior({
           theme: lvl.theme,
           key,
           floor: lvl.floor,
@@ -5193,7 +5223,8 @@ export function CityView({
       }
       if (!next && wantRide?.kind === "balloon" && balloons[wantRide.index]) next = { kind: "ride", k: wantRide.index };
       if (!next && wantRide && wantRide.kind !== "balloon" && rideExists(wantRide)) next = { kind: "vehicle", ride: wantRide };
-      if (next?.kind === "place" && view?.kind === "place" && view.stage.building === next.building && view.stage.level.id === next.level.id) return;
+      if (next?.kind === "place" && view?.kind === "place" && view.stage.building === next.building && view.stage.level.id === next.level.id && !restage) return;
+      restage = false;
       if (next?.kind === "ride" && view?.kind === "ride" && view.k === next.k) return;
       if (next?.kind === "vehicle" && view?.kind === "vehicle" && view.ride.kind === next.ride.kind && view.ride.index === next.ride.index) return;
       if (!next && !view) return;
@@ -5259,6 +5290,8 @@ export function CityView({
         return;
       }
       const sameBuilding = prev?.kind === "place" && prev.stage.building === next.building;
+      // A planned home: you come in on its ground floor.
+      if (!sameBuilding) homeFloor.delete(next.anchor.i);
       const st = buildStage(next.building, next.anchor, next.level);
       view = { kind: "place", stage: st };
       look.lookAt(0, 0, true);
@@ -6215,6 +6248,19 @@ export function CityView({
           return;
         }
         const it = itemUnder(e.clientX, e.clientY);
+        if (it && view?.kind === "place" && it.kind === "stairs" && view.stage.homeKey) {
+          // Up or down a floor of a planned home.
+          const t = view.stage.tile;
+          const plan = homePlans.get(t);
+          const now = homeFloor.get(t) ?? 0;
+          const to = it.label.includes("up") ? now + 1 : now - 1;
+          if (plan && to >= 0 && to < plan.floors.length) {
+            playSfx("whoosh");
+            homeFloor.set(t, to);
+            redrawHere();
+          }
+          return;
+        }
         if (it && view?.kind === "place") {
           playSfx("chime");
           const sport = THEME_SPORT[view.stage.level.theme];
@@ -6668,7 +6714,7 @@ export function CityView({
       if (regionNow && currentSeed >= 0 && builtCount > 0) build(currentSeed, builtCount);
     }
     const center = () => ({ x: Math.round(controls.target.x), z: Math.round(controls.target.z) });
-    api.current = { setMarkTags, center, build: buildFor, setOwned, setBusinesses, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, zoom };
+    api.current = { setMarkTags, center, build: buildFor, setOwned, setBusinesses, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, setHomePlans, zoom };
 
     return () => {
       alive = false;
@@ -6784,6 +6830,10 @@ export function CityView({
   useEffect(() => {
     if (steerKey) api.current?.setSteer(steerKey.split("|")[0] as TurnDir);
   }, [steerKey]);
+
+  useEffect(() => {
+    api.current?.setHomePlans(homePlans);
+  }, [homePlans]);
 
   const placeKey = place ? `${place.building}|${place.level}` : "";
   useEffect(() => {

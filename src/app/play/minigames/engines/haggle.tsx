@@ -1,5 +1,6 @@
 "use client";
 
+import { cash } from "@/lib/world/value";
 import { useState } from "react";
 import { Footprints, Handshake, Minus, Plus } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -56,7 +57,7 @@ export default function Haggle({ cfg, seed, onEnd }: EngineProps) {
       const paid = Math.min(offer, d.counter);
       const s = d.ask - paid;
       setSaved(saved + s);
-      setLog((l) => [...l, `You: ₥${offer}`, `${d.seller}: Deal! ₥${paid}. You saved ₥${s}.`]);
+      setLog((l) => [...l, `You: ${cash(offer)}`, `${d.seller}: Deal! ${cash(paid)}. You saved ${cash(s)}.`]);
       setClosed("deal");
       playSfx("found");
       setDeal(d);
@@ -65,7 +66,7 @@ export default function Haggle({ cfg, seed, onEnd }: EngineProps) {
     // Too low: they lose patience (a lot, for a lowball) and counter.
     d.patience -= offer < d.floor * 0.6 ? 2 : 1;
     if (d.patience <= 0) {
-      setLog((l) => [...l, `You: ₥${offer}`, `${d.seller}: No. Go and buy somewhere else!`]);
+      setLog((l) => [...l, `You: ${cash(offer)}`, `${d.seller}: No. Go and buy somewhere else!`]);
       setClosed("walked");
       playSfx("denied");
       setDeal(d);
@@ -73,7 +74,7 @@ export default function Haggle({ cfg, seed, onEnd }: EngineProps) {
     }
     const gap = d.counter - d.floor;
     d.counter = Math.max(d.floor, Math.round((d.counter - gap * (0.3 + r() * 0.35)) / 5) * 5);
-    setLog((l) => [...l, `You: ₥${offer}`, `${d.seller}: ${pick(r, MOODS)} Last price ₥${d.counter}.`]);
+    setLog((l) => [...l, `You: ${cash(offer)}`, `${d.seller}: ${pick(r, MOODS)} Last price ${cash(d.counter)}.`]);
     playSfx("tick");
     setDeal(d);
   }
@@ -86,13 +87,13 @@ export default function Haggle({ cfg, seed, onEnd }: EngineProps) {
         <span>
           Item {n + 1} of {rounds}
         </span>
-        <span className="text-[#69db7c]">Saved ₥{saved}</span>
+        <span className="text-[#69db7c]">Saved {cash(saved)}</span>
       </div>
       <div className="rounded-2xl bg-[#fff3bf] p-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted">{deal.seller} is selling</p>
         <p className="font-display text-xl font-bold">{deal.item}</p>
         <p className="text-sm">
-          Asking <b>₥{deal.ask}</b> · now <b>₥{deal.counter}</b>
+          Asking <b>{cash(deal.ask)}</b> · now <b>{cash(deal.counter)}</b>
         </p>
         <div className="mt-1 flex items-center gap-1 text-xs text-muted">
           Patience:
@@ -120,7 +121,7 @@ export default function Haggle({ cfg, seed, onEnd }: EngineProps) {
             </button>
           </div>
           <button onClick={make} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-me py-3 font-bold text-white">
-            <Handshake className="size-5" /> Offer ₥{Math.min(offer, deal.counter)}
+            <Handshake className="size-5" /> Offer {cash(Math.min(offer, deal.counter))}
           </button>
         </>
       ) : (

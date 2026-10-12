@@ -1,5 +1,6 @@
 "use client";
 
+import { cash } from "@/lib/world/value";
 import { useEffect, useState } from "react";
 import { BadgeCheck, Briefcase, Check, Coins, DoorOpen, GraduationCap, LoaderCircle, Lock, X } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -129,7 +130,7 @@ export function JobsSheet({
               <p className="font-display text-2xl font-extrabold">You&apos;re hired!</p>
               <p className="text-sm text-muted">
                 {step.skipped ? `Your ${SKILLS[step.job.skill].label.toLowerCase()} skill got you straight in.` : `You scored ${step.score} out of ${step.outOf}.`} You&apos;re now a{/^[aeiou]/i.test(step.job.title) ? "n" : ""}{" "}
-                <b>{step.job.title.toLowerCase()}</b>, earning <b>₥{short(step.job.pay)} an hour</b> while this town lasts. Collect your pay from My job.
+                <b>{step.job.title.toLowerCase()}</b>, earning <b>{cash(step.job.pay)} an hour</b> while this town lasts. Collect your pay from My job.
               </p>
             </>
           ) : (
@@ -173,7 +174,7 @@ export function JobsSheet({
                 let note = "Shift over. Not your best: no tip this time.";
                 if (grade > 0) {
                   const res = await claimMinigameReward(step.game, grade).catch(() => null);
-                  note = res?.ok && res.coins > 0 ? `Great shift! Your boss tipped you ₥${short(res.coins)}.` : "Great shift! (No more tips today.)";
+                  note = res?.ok && res.coins > 0 ? `Great shift! Your boss tipped you ${cash(res.coins)}.` : "Great shift! (No more tips today.)";
                   onChanged();
                 }
                 void showStatus(note);
@@ -197,7 +198,7 @@ function Offer({ offer, busy, onStart, onMine }: { offer: JobOffer; busy: boolea
         <p className="text-xs font-semibold uppercase tracking-wide text-muted">They&apos;re hiring</p>
         <p className="font-display text-2xl font-extrabold">{job.title}</p>
         <p className="mt-1 text-sm">
-          <b className="text-gold-dark">₥{short(payWithSkill(job.pay, level, status.skillBonus))} an hour</b>
+          <b className="text-gold-dark">{cash(payWithSkill(job.pay, level, status.skillBonus))} an hour</b>
           {level > 0 && <span className="text-muted"> (with your level {level} skill)</span>}, {Math.round(status.tax * 100)}% tax.
         </p>
         <p className="mt-1 flex items-center gap-1.5 text-sm text-muted">
@@ -260,7 +261,7 @@ function Status({ step, busy, onCollect, onQuit, onShift }: { step: Extract<Step
       {note && <p className="rounded-2xl bg-panel-2 p-3 text-sm">{note}</p>}
       {paid && paid.gross > 0 && (
         <p className="rounded-2xl bg-[#d3f9d8] p-3 text-sm">
-          Paid <b>₥{short(paid.net)}</b>.
+          Paid <b>{cash(paid.net)}</b>.
           {paid.capped && " That's all the paid hours for today."}
         </p>
       )}
@@ -269,7 +270,7 @@ function Status({ step, busy, onCollect, onQuit, onShift }: { step: Extract<Step
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">You work at {job.placeName}</p>
           <p className="font-display text-2xl font-extrabold">{job.title}</p>
           <p className="text-sm">
-            <b className="text-gold-dark">₥{short(payWithSkill(job.payHour, level(job.skill), status.skillBonus))} an hour</b> until this town ends.
+            <b className="text-gold-dark">{cash(payWithSkill(job.payHour, level(job.skill), status.skillBonus))} an hour</b> until this town ends.
           </p>
         </div>
       ) : (
@@ -280,13 +281,13 @@ function Status({ step, busy, onCollect, onQuit, onShift }: { step: Extract<Step
       <div className="flex items-center gap-3 rounded-2xl border border-line p-3">
         <Coins className="size-5 shrink-0 text-gold-dark" />
         <div className="min-w-0 flex-1 text-sm">
-          <b>₥{short(status.owed)}</b> earned, waiting for you
+          <b>{cash(status.owed)}</b> earned, waiting for you
           <span className="block text-xs text-muted">
             {Math.round(status.tax * 100)}% tax goes into the prize pool · {short(Math.floor(status.hoursLeftToday * 10) / 10)} paid hours left today
           </span>
         </div>
         <button disabled={busy || status.owed < 0.01} onClick={onCollect} className="shrink-0 rounded-xl bg-ink px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">
-          {busy ? <LoaderCircle className="size-4 animate-spin" /> : `Collect ₥${short(Math.floor(status.owed * (1 - status.tax) * 100) / 100)}`}
+          {busy ? <LoaderCircle className="size-4 animate-spin" /> : `Collect ${cash(Math.floor(status.owed * (1 - status.tax) * 100) / 100)}`}
         </button>
       </div>
       <div>

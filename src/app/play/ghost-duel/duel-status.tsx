@@ -1,9 +1,9 @@
 "use client";
 
+import { cash } from "@/lib/world/value";
 import { useEffect, useState } from "react";
 import { Crown, Ghost, Swords, Timer } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { short } from "@/lib/format";
 import type { DuelBoard } from "@/lib/ghost-duels";
 import { Dots } from "./parts";
 
@@ -60,7 +60,7 @@ export function DuelStatus({
         </p>
         <button onClick={onBeGhost} disabled={busy} className="flex shrink-0 items-center gap-1.5 rounded-xl bg-ink px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-50 sm:px-3 sm:py-2 sm:text-sm">
           <Ghost className="size-3.5 sm:size-4" />
-          Ghost · ₥{short(rules.stake)}
+          Ghost · {cash(rules.stake)}
         </button>
       </div>
     );
@@ -84,7 +84,7 @@ export function DuelStatus({
             </span>
           ) : (
             <>
-              <b>You&apos;re a ghost.</b> <span className="text-muted">₥{short(me.stake)} staked.</span>{" "}
+              <b>You&apos;re a ghost.</b> <span className="text-muted">{cash(me.stake)} staked.</span>{" "}
               <span className="hidden text-muted sm:inline">Everyone can see your light.</span>
               <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
                 <Dots n={me.wins} max={rules.goldenWins} tone="win" />
@@ -108,7 +108,7 @@ export function DuelStatus({
           <b className="hidden sm:inline">Tap a ghost&apos;s light to challenge them</b>
         </span>
         <span className="text-[11px] text-muted sm:text-xs">
-          ₥{short(rules.fee)} a duel ·{" "}
+          {cash(rules.fee)} a duel ·{" "}
           {me.inPool ? (
             <b className="text-[#2b8a3e]">You&apos;re in the prize pool!</b>
           ) : (

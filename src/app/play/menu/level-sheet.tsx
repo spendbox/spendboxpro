@@ -1,5 +1,6 @@
 "use client";
 
+import { cash } from "@/lib/world/value";
 import { useEffect, useState } from "react";
 import { ScrollText } from "lucide-react";
 import { Flame, Gamepad2, PartyPopper, Star } from "@/components/icons";
@@ -111,7 +112,7 @@ export function LevelSheet({ me }: { me: { id: string } }) {
                 Not now
               </button>
               <button onClick={upgrade} disabled={busy} className="rounded-lg bg-gold py-2 font-semibold text-ink disabled:opacity-60">
-                {busy ? "Levelling up…" : `Yes, spend ₥${short(info.nextCost)}`}
+                {busy ? "Levelling up…" : `Yes, spend ${cash(info.nextCost)}`}
               </button>
             </div>
           </div>
@@ -125,7 +126,7 @@ export function LevelSheet({ me }: { me: { id: string } }) {
               disabled={!enoughCoins}
               className="w-full rounded-xl bg-gold py-2 text-sm font-semibold text-ink disabled:opacity-50"
             >
-              Upgrade to level {next} for ₥{short(info.nextCost)}
+              Upgrade to level {next} for {cash(info.nextCost)}
             </button>
             {!enoughCoins && (
               <p className="mt-1 text-center text-[11px] text-white/70">
