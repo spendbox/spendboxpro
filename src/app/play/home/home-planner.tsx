@@ -105,6 +105,8 @@ export function HomePlanner({ onClose }: { onClose: () => void }) {
     if (r.ok) {
       setDirty(false);
       setPaid(r.paid);
+      // Your home on the map is drawn from the new plan straight away.
+      window.dispatchEvent(new Event("nt-home-plan-saved"));
     }
     setNote(r.ok ? { text: r.paidMint > 0 ? `Paid ${cash(r.paidMint)} and saved. Your home is worth more now.` : "Saved. This is your home's plan now." } : { text: r.error, bad: true });
   }

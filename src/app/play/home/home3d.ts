@@ -12,7 +12,15 @@ export const STOREY_M = 2.8;
 const WALL_T = 0.1;
 const DOOR_M = 0.9;
 
-export function buildHome(plan: HomePlan, upTo: number, wallH = 1.3): { group: THREE.Group; dispose: () => void } {
+/** An inner wall piece (metres, the home's middle at 0, 0). */
+export type WallPiece = { x: number; z: number; len: number; along: boolean };
+
+/**
+ * Build the home. `only`: just that one floor, standing at ground level, with full-height walls
+ * (for walking round inside it); its inner wall pieces are listed in `walls`.
+ */
+export function buildHome(plan: HomePlan, upTo: number, wallH = 1.3, only = false): { group: THREE.Group; walls: WallPiece[]; dispose: () => void } {
+  const walls: WallPiece[] = [];
   const group = new THREE.Group();
   const geos: THREE.BufferGeometry[] = [];
   const mats = new Map<string, THREE.Material>();
@@ -39,8 +47,9 @@ export function buildHome(plan: HomePlan, upTo: number, wallH = 1.3): { group: T
   const mz = (y: number) => y * CELL_M - D / 2;
 
   plan.floors.slice(0, upTo + 1).forEach((floor, level) => {
+    if (only && level !== upTo) return;
     const storey = new THREE.Group();
-    storey.position.y = level * STOREY_M;
+    storey.position.y = only ? 0 : level * STOREY_M;
     group.add(storey);
     // The slab, then each room's floor on it.
     box(W + WALL_T * 2, 0.12, D + WALL_T * 2, 0, -0.06, 0, level === 0 ? "#bfb6a8" : "#d6cfc4", storey);
@@ -52,11 +61,12 @@ export function buildHome(plan: HomePlan, upTo: number, wallH = 1.3): { group: T
     box(W + WALL_T * 2, h, WALL_T, 0, h / 2, D / 2 + WALL_T / 2, outer, storey);
     box(WALL_T, h, D, -W / 2 - WALL_T / 2, h / 2, 0, outer, storey);
     box(WALL_T, h, D, W / 2 + WALL_T / 2, h / 2, 0, outer, storey);
-    roomWalls(floor, h, (len, along, x, z) => box(along ? len : WALL_T, h, along ? WALL_T : len, x, h / 2, z, "#faf6ee", storey), mx, mz, W, D);
+    roomWalls(floor, h, (len, along, x, z) => (walls.push({ x, z, len, along }), box(along ? len : WALL_T, h, along ? WALL_T : len, x, h / 2, z, "#faf6ee", storey)), mx, mz, W, D);
     for (const it of floor.items) storey.add(piece(it, mx, mz, box));
   });
   return {
     group,
+    walls,
     dispose: () => {
       geos.forEach((g) => g.dispose());
       mats.forEach((m) => m.dispose());

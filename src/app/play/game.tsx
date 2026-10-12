@@ -91,6 +91,8 @@ import { QuestBanner, QuestCelebration, QuestSheet } from "./activities/quest-ui
 import { Chat } from "./chat";
 import { sendPhoto, type ChatTarget } from "./chat-actions";
 import { announceChatSent } from "./chat-photo";
+import { homePlanFor } from "./life/home-plan-actions";
+import type { HomePlan } from "@/lib/home-plan";
 import { setEventSoundsEnabled } from "./city/event-sounds";
 import type { CityDancer, CityEvent, CityFriendPin, CityGhost, CityInteract, CityMarkers, CityRide, RideTarget } from "./city-view";
 import { FeedRow, NotificationsPanel, SwipeRow, type FeedIcon, type FeedItem } from "./notifications";
@@ -1525,6 +1527,50 @@ export function Game({
   const homeAt = worldLife.homeBuilding ? ownedSpot(worldLife.homeBuilding) : null;
   const homeRoom = homeAt ? `b:${spiralIndex(homeAt.x, homeAt.z)}` : null;
   const inMyHome = !!homeRoom && !!rooms.myRoomInfo && (rooms.myRoomInfo.id === homeRoom || rooms.myRoomInfo.id.startsWith(`${homeRoom}:`));
+  // Planned homes (docs/HOME_PLANNER.md): yours as soon as the game opens, and any other home as
+  // you walk into it, so the inside is drawn from its plan for you and for visitors.
+  const [homePlans, setHomePlans] = useState<Record<number, HomePlan>>({});
+  const fetchHomePlan = useCallback(
+    (building: string) => {
+      const at = ownedSpot(building);
+      if (!at) return;
+      const tile = spiralIndex(at.x, at.z);
+      void homePlanFor(building)
+        .then((plan) =>
+          setHomePlans((all) => {
+            if (!plan) {
+              if (!(tile in all)) return all;
+              const { [tile]: _gone, ...rest } = all;
+              void _gone;
+              return rest;
+            }
+            return JSON.stringify(all[tile]) === JSON.stringify(plan) ? all : { ...all, [tile]: plan };
+          }),
+        )
+        .catch(() => {});
+    },
+    [],
+  );
+  const myHomeBuilding = worldLife.homeBuilding;
+  useEffect(() => {
+    if (!worldId || !myHomeBuilding) return;
+    const t = setTimeout(() => fetchHomePlan(myHomeBuilding), 0);
+    const again = () => fetchHomePlan(myHomeBuilding);
+    window.addEventListener("nt-home-plan-saved", again);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("nt-home-plan-saved", again);
+    };
+  }, [worldId, myHomeBuilding, fetchHomePlan]);
+  const enteredRoom = place ? (rooms.myRoomInfo?.id ?? null) : null;
+  useEffect(() => {
+    const m = enteredRoom ? /^b:(\d+)/.exec(enteredRoom) : null;
+    if (!worldId || !m) return;
+    const [x, z] = spiralXY(Number(m[1]));
+    const t = setTimeout(() => fetchHomePlan(`${worldId}:${x},${z}`), 0);
+    return () => clearTimeout(t);
+  }, [worldId, enteredRoom, fetchHomePlan]);
+
   function leaveRoom() {
     rooms.leave();
     setRide(null);
@@ -1736,6 +1782,7 @@ export function Game({
             paused={signInShown}
             onGhost={openGhost}
             flyTo={worldId ? (worldLife.flyTo ?? flyTo) : flyTo}
+            homePlans={worldId ? homePlans : undefined}
             roomCounts={rooms.buildingCounts}
             onRoom={onRoom}
             ride={ride}

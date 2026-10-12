@@ -78,3 +78,22 @@ export async function saveHomePlan(raw: unknown): Promise<{ ok: true; paidMint: 
   console.error("Home plan save", msg);
   return { ok: false, error: "Couldn't save your plan. Try again." };
 }
+
+const BUILDING_RE = /^[a-z0-9-]+:-?[0-9]+,-?[0-9]+$/;
+
+/**
+ * The plan of a home in this building, for anyone walking in (visitors see it too): yours if you
+ * live there, otherwise the plan of whoever does. Null when nobody there has planned their home.
+ */
+export async function homePlanFor(building: string): Promise<HomePlan | null> {
+  if (typeof building !== "string" || !BUILDING_RE.test(building)) return null;
+  const db = createAdminClient();
+  const me = await currentUserId().catch(() => null);
+  const { data: lives } = await db.from("lives").select("user_id, home_unit").like("home_unit", `${building}/%`).limit(20);
+  const residents = (lives ?? []) as { user_id: string; home_unit: string }[];
+  if (!residents.length) return null;
+  const { data: plans } = await db.from("home_plans").select("user_id, unit, plan").in("user_id", residents.map((r) => r.user_id));
+  const rows = ((plans ?? []) as { user_id: string; unit: string; plan: unknown }[]).filter((p) => residents.some((r) => r.user_id === p.user_id && r.home_unit === p.unit));
+  const row = rows.find((r) => r.user_id === me) ?? rows[0];
+  return row ? cleanPlan(row.plan) : null;
+}
