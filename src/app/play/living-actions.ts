@@ -139,6 +139,23 @@ export async function money(hours: number): Promise<MoneyFlow> {
   return Object.fromEntries(Object.entries(data as Record<string, unknown>).map(([k, v]) => [k, n(v)]));
 }
 
+export type Earning = { id: number; kind: string; amount: number; note: string | null; at: string };
+export type Earnings = { total: number; period: number; entries: Earning[] };
+
+/** What you've earned: ever, in the last `days` days, and each payment in (game-db/054_earnings.sql). */
+export async function earnings(days: number): Promise<Earnings | null> {
+  const userId = await currentUserId();
+  if (!userId) return null;
+  const { data, error } = await createAdminClient().rpc("life_earnings", { p_user: userId, p_days: Math.min(3650, Math.max(1, Math.round(n(days)) || 7)), p_limit: 150 });
+  if (error || !data) return null;
+  const d = data as Record<string, unknown>;
+  return {
+    total: n(d.total),
+    period: n(d.period),
+    entries: ((d.entries as Record<string, unknown>[]) ?? []).map((e) => ({ id: n(e.id), kind: String(e.kind), amount: n(e.amount), note: e.note == null ? null : String(e.note), at: String(e.at) })),
+  };
+}
+
 /** Your money day by day (game-db/050_economy_items.sql): earned, living costs, things bought. */
 export async function moneyDays(days: number): Promise<MoneyDay[]> {
   const userId = await currentUserId();

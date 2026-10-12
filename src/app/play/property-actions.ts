@@ -8,7 +8,7 @@ import type { Building } from "@/lib/world/buildings";
 import { cleanPropertyName, ownedSpot } from "@/lib/world/owned";
 import { BUY_TAX, rentPerDay, type AssetsData, type BuildingOwner, type OwnedBuildingRow, type PropertyResult } from "@/lib/world/property-api";
 import { landNow, toMint, valueOf } from "@/lib/world/value";
-import { cheapestCommute, fareMint, tripKmBetween } from "@/lib/world/work";
+import { cheapestCommute, fareMint, tripKmBetween, type Commute } from "@/lib/world/work";
 import { ferryKmBetween } from "@/lib/world/trips";
 import { FIND_CHANCE, FINDS, mintOf, shopKind } from "@/lib/world/items";
 import { collectPay } from "./work-actions";
@@ -193,7 +193,7 @@ export async function buildingOwners(buildingId: string): Promise<BuildingOwner[
 }
 
 /** Go to a building: the fare from where you last were (or home), the cheapest way, and you're there. */
-export async function travelTo(buildingId: string): Promise<PropertyResult> {
+export async function travelTo(buildingId: string, drive?: boolean): Promise<PropertyResult> {
   const spot = ownedSpot(buildingId);
   if (!spot || !REGIONS[spot.region]) return { ok: false, error: "That place isn't on the map." };
   const userId = await currentUserId();
@@ -201,11 +201,21 @@ export async function travelTo(buildingId: string): Promise<PropertyResult> {
   const db = createAdminClient();
   const { data: life } = await db.from("lives").select("home_unit, at_place").eq("user_id", userId).maybeSingle();
   if (!life) return { ok: false, error: "Start your life first." };
+  // In jail (game-db/055): nowhere to go until you're out.
+  const { data: jail } = await db.rpc("jail_until", { p_user: userId });
+  if (jail) return { ok: false, error: `You're in jail until ${new Date(String(jail)).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" })}. Wait it out, or try a bribe.` };
   const from = (life.at_place as string | null) ?? (life.home_unit as string | null);
   const km = from ? tripKmBetween(from, buildingId) : null;
   // Over the water to an island with no bridge: a ferry, and the ride either side.
   const ferry = from ? ferryKmBetween(from, buildingId) : 0;
-  const fare = km === null ? 0 : (fareMint(cheapestCommute(km, ferry), km, regionMap(spot.region)!.region.prices, ferry) ?? 0);
+  // Driving your own car (if you have one): just the fuel, anywhere.
+  let mode: Commute = km === null ? "walk" : cheapestCommute(km, ferry);
+  if (drive && km !== null && mode !== "walk") {
+    const { count } = await db.from("items").select("id", { count: "exact", head: true }).eq("owner", userId).eq("category", "car");
+    if (!count) return { ok: false, error: "You need a car to drive. Get one from Things, Cars." };
+    mode = "car";
+  }
+  const fare = km === null ? 0 : (fareMint(mode, km, regionMap(spot.region)!.region.prices, ferry) ?? 0);
   const { data, error } = await db.rpc("life_go", { p_user: userId, p_place: buildingId, p_fare: fare });
   if (error) {
     const [code] = error.message.split(":");

@@ -21,6 +21,7 @@ import {
   CircleX,
   DoorOpen,
   DoorClosed,
+  Heart,
   Layers,
   LogOut,
   Sun,
@@ -47,15 +48,12 @@ import {
   Menu as MenuIcon,
   MessageCircle,
   Sparkles,
-  Star,
   Timer,
   Users,
   Volume2,
   VolumeX,
-  Wallet,
   X,
 } from "@/components/icons";
-import { cash } from "@/lib/world/value";
 import { short } from "@/lib/format";
 import { createClient } from "@/lib/supabase/client";
 import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
@@ -78,9 +76,11 @@ import { FriendNudge, PeopleHere, type HerePerson } from "./people-here";
 import { rodeSomething } from "./streak-actions";
 import { GreetButtons } from "./greet-buttons";
 import { useNoPageZoom } from "./no-page-zoom";
-import { peopleNear, type PersonOnMap } from "./people-actions";
+import type { PersonOnMap } from "./people-actions";
+import { around } from "./life/things-cache";
 import { PersonCard } from "./people/person-card";
 import { AwaySheet, DoorstepSheet, turnOnNotifications, useAwayDigest } from "./people/doorstep";
+import { DatingSheet, RivalsSheet } from "./people/street-dating";
 import { weatherNow } from "@/lib/world/news";
 import { MyGiftsSheet } from "./my-gifts-sheet";
 import { StreakPill, StreakSheet } from "./streak-sheet";
@@ -420,6 +420,8 @@ export function Game({
   /** Someone's card (a face tapped on the map, or from your doorstep), and your doorstep. */
   const [personId, setPersonId] = useState<string | null>(null);
   const [doorstepOpen, setDoorstepOpen] = useState(false);
+  /** Dating or your rivals, open from your phone. */
+  const [socialOpen, setSocialOpen] = useState<"dating" | "rivals" | null>(null);
   const [editAvatar, setEditAvatar] = useState(false);
   // The new 3D studio, while it is being tried out (see avatar3d-flag.ts).
   // (Read in the browser only; it matters only once the studio is opened, so the server's false is harmless.)
@@ -464,6 +466,7 @@ export function Game({
     // Home from inside a building: out of it first.
     beforeHome: () => leaveInside.current(),
     meId: state.me.guest ? null : state.me.id,
+    wallet: state.me.coins,
     onPerson: (id: string) => setPersonId(id),
     // A building's card: Go inside, as if its bubble had been tapped.
     onEnter: (id: string) => {
@@ -683,8 +686,8 @@ export function Game({
     let alive = true;
     const look = () => {
       const c = worldLife.centerRef.current?.() ?? { x: 0, z: 0 };
-      void peopleNear(worldId, c.x, c.z)
-        .then((list) => alive && setPeopleOut(list))
+      void around<PersonOnMap[]>("people", worldId, c.x, c.z)
+        .then((list) => alive && list && setPeopleOut(list))
         .catch(() => {});
     };
     const first = setTimeout(look, 3000);
@@ -702,6 +705,7 @@ export function Game({
       ...peopleOut.filter((p) => !live.has(p.id)).map((p) => ({ id: p.id, name: p.name, avatar: cleanAvatar(p.avatar, p.name), room: `b:${spiralIndex(p.x, p.z)}`, status: p.status, friend: p.friend })),
     ];
   }, [friendsAt, peopleOut]);
+  const onlineNear = useMemo(() => facesOnMap.filter((f) => f.status === "online").length, [facesOnMap]);
   const away = useAwayDigest(!!worldId && !me.guest);
   // The real players in the place you're in (not you, not NPCs).
   const hereNow: HerePerson[] = useMemo(
@@ -1595,7 +1599,15 @@ export function Game({
       {/* Top: round clock and numbers (stacked, so big numbers fit) */}
       <div className={cn("pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-2.5 sm:p-4", camera && "hidden")}>
         {worldRegion ? (
-          <PlacePill area={worldArea} state={worldRegion.state} onClick={() => setCityOpen(true)} />
+          <div className="flex min-w-0 items-center gap-1.5">
+            <PlacePill area={worldArea} state={worldRegion.state} onClick={() => setCityOpen(true)} />
+            {!me.guest && onlineNear > 0 && (
+              <span className="glass flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold sm:h-9 sm:text-sm" title="People online near where you're looking">
+                <span className="size-2 rounded-full bg-[#2f9e44]" aria-hidden />
+                {onlineNear} <span className="max-[400px]:hidden">online nearby</span>
+              </span>
+            )}
+          </div>
         ) : round ? (
           <StatsCard
             city={plan.city.name}
@@ -1642,33 +1654,7 @@ export function Game({
               </span>
             )}
             {state.streak && !worldId && <StreakPill streak={state.streak} onOpen={() => { setStreakOpen(true); setMenu(false); setFeedOpen(false); }} />}
-            {worldId && worldLife.reputation !== null && (
-              // Your reputation: opens your things (where it comes from).
-              <button
-                onClick={() => { setMenu(false); worldLife.openThings("mine"); }}
-                className="glass flex h-8 items-center gap-1 whitespace-nowrap rounded-full px-2.5 text-xs font-bold sm:h-9 sm:px-3 sm:text-sm"
-                aria-label={`Reputation ${worldLife.reputation}`}
-              >
-                <Star className="size-4 text-gold-dark" />
-                {worldLife.reputation.toLocaleString("en-GB")}
-              </button>
-            )}
-            {worldId ? (
-              // Your cash at hand: opens Finance.
-              <button
-                onClick={() => { setMenu(false); worldLife.openFinance(); }}
-                className={cn(
-                  "glass relative flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-bold sm:h-9 sm:px-3 sm:text-sm",
-                  worldLife.financeGlow && "outline outline-2 outline-offset-2 outline-gold",
-                )}
-                aria-label="Finance"
-              >
-                <Wallet className="size-4 text-gold-dark" />
-                {cash(me.coins)}
-                {worldLife.financeDot && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-hit" />}
-                {worldLife.financeGlow && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/60" />}
-              </button>
-            ) : (
+            {!worldId && (
             <span className="glass inline-block h-8 whitespace-nowrap rounded-full px-2.5 text-xs leading-8 sm:h-9 sm:px-3 sm:text-sm sm:leading-9" title={`₥${me.coins} · level ${me.level}`}>
               <b className="text-gold-dark">₥{short(me.coins)}</b>
               {me.bonusCoins > 0 && <span className="text-muted"> +{short(me.bonusCoins)}</span>}
@@ -2211,7 +2197,7 @@ export function Game({
 
 
       {/* Bottom: messages, controls and chat */}
-      <div className={cn("pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-1.5 p-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:gap-2 sm:p-4", camera && "hidden")}>
+      <div className={cn("pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-1.5 p-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:gap-2 sm:p-4", worldId && "pl-14 sm:pl-16", worldId && !place && "pr-16 sm:pr-20", camera && "hidden")}>
         {!guest && !worldId && (
           <Safe name="Quest banner">
             <QuestBanner quest={quests.quest} onOpen={() => setQuestOpen(true)} />
@@ -2256,9 +2242,10 @@ export function Game({
 
         {/* The real map, inside a building: where you are, change floor, leave. */}
         {worldId && place && (
-          <div className="glass pointer-events-auto flex max-w-xl items-center gap-2 rounded-2xl p-2 pl-3 text-sm">
+          <div className="glass pointer-events-auto flex w-full max-w-md flex-wrap items-center gap-2 rounded-2xl p-2 pl-3 text-sm">
             <Building2 className="size-4 shrink-0 text-[#7048e8]" />
-            <b className="min-w-0 flex-1 truncate">{rooms.myRoomInfo?.name ?? placeRoom?.name ?? "Inside"}</b>
+            <b className="line-clamp-2 min-w-0 flex-1 basis-[calc(100%-2rem)] leading-tight sm:basis-auto">{rooms.myRoomInfo?.name || placeRoom?.name || "Inside a building"}</b>
+            <span className="flex-1 sm:hidden" />
             {placeRoom && placeRoom.id === place.building && (placeRoom.levels?.length ?? 0) > 1 && (
               <button
                 onClick={() => setPickPlace(placeRoom)}
@@ -2563,6 +2550,8 @@ export function Game({
             {(
               [
                 ["Doorstep", DoorClosed, () => setDoorstepOpen(true)],
+                ["Dating", Heart, () => setSocialOpen("dating")],
+                ["Rivals", Swords, () => setSocialOpen("rivals")],
                 ["Leave a mark", PenLine, () => worldLife.openLeaveMark()],
                 ["My things", Gem, () => worldLife.openThings("mine")],
                 ["Shops", ShoppingBag, () => worldLife.openThings("shops")],
@@ -2631,6 +2620,31 @@ export function Game({
           onAddFriend={me.guest ? undefined : (p) => void befriend(p)}
           greet={(p) => greet(p, false)}
           onDone={(text, ok) => setMessage({ text, tone: ok ? "good" : "bad" })}
+          self={personId === me.id}
+          prices={worldRegion?.prices ?? null}
+          onOpenDating={() => {
+            setPersonId(null);
+            setSocialOpen("dating");
+          }}
+        />
+      )}
+      {socialOpen === "dating" && (
+        <DatingSheet
+          onClose={() => setSocialOpen(null)}
+          onPerson={(id) => {
+            setSocialOpen(null);
+            setPersonId(id);
+          }}
+          onDone={(text, ok) => setMessage({ text, tone: ok ? "good" : "bad" })}
+        />
+      )}
+      {socialOpen === "rivals" && (
+        <RivalsSheet
+          onClose={() => setSocialOpen(null)}
+          onPerson={(id) => {
+            setSocialOpen(null);
+            setPersonId(id);
+          }}
         />
       )}
       {doorstepOpen && (

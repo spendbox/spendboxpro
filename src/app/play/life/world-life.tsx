@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DoorOpen } from "lucide-react";
-import { Briefcase, Flag, HeartPulse, House, MapPin, Pencil, Search, Sparkles, X } from "@/components/icons";
+import { Briefcase, Flag, HeartPulse, House, MapPin, Pencil, Search, Sparkles, Star, Wallet, X } from "@/components/icons";
 import { addressOf, makePlan, spiralIndex, tileAt, type CityPlan } from "@/lib/city/layout";
 import { BUILDING_LABEL } from "@/lib/world/buildings";
 import type { RegionMap } from "@/lib/world/compile";
@@ -17,11 +17,14 @@ import { dayOf, EXERCISE } from "@/lib/world/day";
 import { HUSTLES, hustleDay, hustleStart } from "@/lib/world/hustles";
 import type { Workplace } from "@/lib/world/workplace";
 import { PropertyCard } from "../property-card";
-import { myThings } from "../item-actions";
+import { around, cachedThings, loadThings } from "./things-cache";
 import { ThingsSheet, type ThingsTab } from "./things-sheet";
 import { NewsSheet } from "./news-sheet";
+import { JailBanner } from "../people/street-dating";
+import { cityNews, type NewsItem } from "@/lib/world/news";
+import { playSfx } from "../sound";
 import { LeaveMarkSheet, MarkCard } from "./marks-sheet";
-import { marksNear, type MapMark } from "../mark-actions";
+import type { MapMark } from "../mark-actions";
 import type { CityMarkTag } from "../city-view";
 import { Sheet } from "../sheet";
 import { LifeSheet } from "./life-sheet";
@@ -118,6 +121,7 @@ export function useWorldLife({
   beforeHome,
   meId,
   onPerson,
+  wallet,
 }: {
   api: PropertyApi;
   regionId: string | null;
@@ -133,6 +137,8 @@ export function useWorldLife({
   /** Your account (to know your own marks), and opening someone's card. */
   meId?: string | null;
   onPerson?: (id: string) => void;
+  /** Your cash at hand, shown on the row with Home, Income and Life (opens Finance). */
+  wallet?: number;
 }) {
   const region = useMemo(() => regionMap(regionId), [regionId]);
   const { assets, owned, loaded, refresh } = useLife(api, signedIn ? regionId : null);
@@ -229,6 +235,35 @@ export function useWorldLife({
   /** Things (items, shops, cars, market, craft) open on a tab, and the news. */
   const [things, setThings] = useState<ThingsTab | null>(null);
   const [newsOpen, setNewsOpen] = useState(false);
+  /** Breaking news: a story pops up at the top with a little bleep when it comes in (once each). */
+  const [breaking, setBreaking] = useState<NewsItem | null>(null);
+  useEffect(() => {
+    if (!region || pretend) return;
+    const look = () => {
+      if (document.visibilityState !== "visible") return;
+      const latest = cityNews(region, Date.now(), 1)[0];
+      if (!latest || Date.now() - latest.at > 25 * 60_000) return;
+      let seen = "";
+      try {
+        seen = localStorage.getItem("nt-news-seen") ?? "";
+        localStorage.setItem("nt-news-seen", latest.id);
+      } catch {}
+      if (seen === latest.id) return;
+      setBreaking(latest);
+      playSfx("chime");
+    };
+    const first = setTimeout(look, 15_000);
+    const every = setInterval(look, 60_000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(every);
+    };
+  }, [region, pretend]);
+  useEffect(() => {
+    if (!breaking) return;
+    const t = setTimeout(() => setBreaking(null), 9000);
+    return () => clearTimeout(t);
+  }, [breaking]);
   /** Marks on the map round where you're looking, one open, and leaving one (where, in words). */
   const [marks, setMarks] = useState<MapMark[]>([]);
   const [markOpen, setMarkOpen] = useState<number | null>(null);
@@ -236,7 +271,7 @@ export function useWorldLife({
   const loadMarks = useCallback(() => {
     if (!regionId || pretend) return;
     const c = centerRef.current?.() ?? { x: 0, z: 0 };
-    void marksNear(regionId, c.x, c.z).then(setMarks).catch(() => {});
+    void around<MapMark[]>("marks", regionId, c.x, c.z).then((m) => m && setMarks(m)).catch(() => {});
   }, [regionId, pretend]);
   useEffect(() => {
     if (!regionId || pretend) return;
@@ -248,13 +283,32 @@ export function useWorldLife({
     };
   }, [regionId, pretend, loadMarks]);
   /** Your reputation (shown at the top) and whether you own a car (to drive to work). */
-  const [rep, setRep] = useState<{ score: number; hasCar: boolean } | null>(null);
-  const loadRep = useCallback(() => void myThings().then((t) => t && setRep({ score: t.reputation.score, hasCar: t.hasCar })).catch(() => {}), []);
+  const [rep, setRep] = useState<{ score: number; hasCar: boolean; jail: string | null } | null>(null);
+  /** Drive your own car to places (remembered on this phone), when you have one. */
+  const [drive, setDrive] = useState(false);
+  useEffect(() => {
+    let on = false;
+    try {
+      on = localStorage.getItem("nt-drive") === "1";
+    } catch {}
+    const t = setTimeout(() => setDrive(on), 0);
+    return () => clearTimeout(t);
+  }, []);
+  const chooseDrive = (on: boolean) => {
+    setDrive(on);
+    try {
+      localStorage.setItem("nt-drive", on ? "1" : "0");
+    } catch {}
+  };
+  const loadRep = useCallback(() => void loadThings().then((t) => t && setRep({ score: t.reputation.score, hasCar: t.hasCar, jail: t.jailedUntil ?? null })), []);
   useEffect(() => {
     if (!signedIn || !regionId || pretend) return;
-    const first = setTimeout(loadRep, 1500);
+    const seen = cachedThings();
+    const shown = setTimeout(() => seen && setRep({ score: seen.reputation.score, hasCar: seen.hasCar, jail: seen.jailedUntil ?? null }), 0);
+    const first = setTimeout(loadRep, 400);
     const every = setInterval(loadRep, 180_000);
     return () => {
+      clearTimeout(shown);
       clearTimeout(first);
       clearInterval(every);
     };
@@ -356,14 +410,26 @@ export function useWorldLife({
     });
 
   /** The trip to a building from where you last were (or home): the cheapest way, and its fare. */
+  const driving = drive && !!rep?.hasCar;
   const tripTo = (id: string) => {
     const from = assets?.life?.at_place ?? homeUnit;
     const km = from && region ? tripKmBetween(from, id) : null;
     if (km === null || !region || !from) return null;
     const ferry = ferryKmBetween(from, id);
-    const mode = cheapestCommute(km, ferry);
+    const cheapest = cheapestCommute(km, ferry);
+    // Your own car when you'd rather drive (anywhere; only the fuel to pay).
+    const mode: Commute = driving && cheapest !== "walk" ? "car" : cheapest;
     return { mode, ferry, fare: fareMint(mode, km, region.region.prices, ferry) ?? 0 };
   };
+  /** Drive or take the bus: a switch under each Go there, for car owners. */
+  const driveSwitch = signedIn && rep?.hasCar ? (
+    <button onClick={() => chooseDrive(!drive)} className="flex h-9 w-full items-center justify-center gap-2 rounded-full bg-ink/5 text-xs font-semibold" role="switch" aria-checked={drive}>
+      <span className={`relative h-4 w-7 rounded-full transition ${drive ? "bg-me" : "bg-ink/20"}`}>
+        <span className={`absolute top-0.5 size-3 rounded-full bg-white transition-all ${drive ? "left-3.5" : "left-0.5"}`} />
+      </span>
+      Drive my car (just fuel)
+    </button>
+  ) : null;
   const tripLabel = (id: string) => {
     const t = signedIn ? tripTo(id) : null;
     return t && t.fare > 0 ? `Go there · ${cash(t.fare)} ${tripWords(t.mode, t.ferry)}` : "Go there";
@@ -372,7 +438,7 @@ export function useWorldLife({
   const goInside = async (id: string) => {
     if (signedIn) {
       setBusy(true);
-      const r = await api.travelTo(id);
+      const r = await api.travelTo(id, driving);
       setBusy(false);
       if (!r.ok) return setMessage({ text: r.error, good: false });
       if (r.found) setMessage({ text: `On the way you found: ${r.found}! It's in your Items.`, good: true });
@@ -523,6 +589,9 @@ export function useWorldLife({
     void api.neighbours().then(setNeighbours);
   };
 
+  /** Something in Finance wants you: the guide's budget step, a power cut, an offer. */
+  const financeGlow = step === "budget";
+  const financeDot = !!(status?.powerCut || board?.received.some((o) => o.status === "open"));
   const overlay = region ? (
     <>
       {/* Your life, under the place's name card: Home, Work, Money, Life, Services (first only Find a home). */}
@@ -554,7 +623,30 @@ export function useWorldLife({
               />
             </>
           )}
+          {signedIn && life && rep && (
+            // Your reputation: opens your things (where it comes from).
+            <button onClick={() => setThings("mine")} className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1 rounded-full px-3 text-sm font-bold" aria-label={`Reputation ${rep.score}`}>
+              <Star className="size-4 text-gold-dark" />
+              {rep.score.toLocaleString("en-GB")}
+            </button>
+          )}
+          {signedIn && life && wallet !== undefined && (
+            // Your cash at hand: opens Finance.
+            <button
+              onClick={() => openFinance()}
+              className={`glass pointer-events-auto relative flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-bold ${financeGlow ? "outline outline-2 outline-offset-2 outline-gold" : ""}`}
+              aria-label="Finance"
+            >
+              <Wallet className="size-4 text-gold-dark" />
+              {cash(wallet)}
+              {financeDot && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-hit" />}
+              {financeGlow && <Ripple />}
+            </button>
+          )}
         </div>
+        {rep?.jail && Date.parse(rep.jail) > clock && (
+          <JailBanner until={rep.jail} prices={region.region.prices} onDone={(text, good) => setMessage({ text, good })} onFree={() => setRep((r) => (r ? { ...r, jail: null } : r))} />
+        )}
         {step && GUIDE[step] && (
           <div className="pointer-events-auto flex max-w-xs items-start gap-2 rounded-2xl bg-ink px-3 py-2 text-white shadow-lg">
             <p className="min-w-0 flex-1 text-xs leading-snug">
@@ -665,6 +757,7 @@ export function useWorldLife({
                 <DoorOpen className="size-4 shrink-0" /> {tripLabel(place.id).replace(/^Go inside/, "Go there")}
               </button>
             )}
+            {onEnter && driveSwitch}
             <div className="grid grid-cols-2 gap-2">
               <span className="flex min-h-11 items-center justify-center rounded-full bg-ink/[0.03] px-3 text-center text-xs text-muted">Not for sale: a public place</span>
               <span className="flex min-h-11 items-center justify-center rounded-full bg-ink/[0.03] px-3 text-center text-xs text-muted">No adverts on landmarks</span>
@@ -780,6 +873,7 @@ export function useWorldLife({
               : undefined
           }
           enterLabel={tripLabel(property.id)}
+          enterExtra={driveSwitch}
           onMark={() => {
             const sp = ownedSpot(property.id);
             if (!sp) return;
@@ -1068,12 +1162,35 @@ export function useWorldLife({
           z={leaving.z}
           place={leaving.place}
           prices={region.region.prices}
+          reputation={rep?.score ?? null}
+          adoptable={["park", "trees"].includes(tileAt(planOf(region), spiralIndex(leaving.x, leaving.z)).kind)}
           onClose={() => setLeaving(null)}
           onDone={(text, good) => {
             setMessage({ text, good });
             if (good) loadMarks();
           }}
         />
+      )}
+      {breaking && !newsOpen && (
+        <div className="pointer-events-none absolute inset-x-0 top-[6.5rem] z-30 flex justify-center px-3 sm:top-20">
+          <div className="pointer-events-auto flex max-w-sm animate-[newsIn_.35s_ease-out] items-start gap-2.5 rounded-2xl bg-ink px-3.5 py-2.5 text-white shadow-xl">
+            <button
+              onClick={() => {
+                setBreaking(null);
+                if (breaking.x !== undefined && breaking.z !== undefined) fly(breaking.x, breaking.z);
+                else setNewsOpen(true);
+              }}
+              className="min-w-0 flex-1 text-left"
+            >
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-gold">{breaking.kind === "weather" ? "Weather" : "Breaking news"}</span>
+              <span className="block text-sm font-semibold leading-snug">{breaking.title}</span>
+              <span className="mt-0.5 line-clamp-2 block text-xs text-white/70">{breaking.text}</span>
+            </button>
+            <button onClick={() => setBreaking(null)} aria-label="Close" className="shrink-0 text-white/60">
+              <X className="size-4" />
+            </button>
+          </div>
+        </div>
       )}
       {newsOpen && (
         <NewsSheet
@@ -1190,9 +1307,6 @@ export function useWorldLife({
     freshenStatus();
     if (!assets) void refresh();
   };
-  /** Something in Finance wants you: the guide's budget step, a power cut, an offer. */
-  const financeGlow = step === "budget";
-  const financeDot = !!(status?.powerCut || board?.received.some((o) => o.status === "open"));
   /** Leave a mark: at a spot, or (none given) in the middle of the screen. */
   const openLeaveMark = (at?: { x: number; z: number; place?: string }) => {
     if (!region) return;
@@ -1202,6 +1316,6 @@ export function useWorldLife({
     const z = Math.round(c.z);
     setLeaving({ x, z, where: at?.place ?? region.areaAt(x, z), place: at?.place });
   };
-  const markTags: CityMarkTag[] = marks.map((m) => ({ id: m.id, x: m.x, z: m.z, kind: m.kind, text: m.body, colour: m.colour, rating: m.rating, author: m.authorName }));
+  const markTags: CityMarkTag[] = marks.map((m) => ({ id: m.id, x: m.x, z: m.z, kind: m.kind, text: m.body, colour: m.colour, rating: m.rating, author: m.authorName, style: m.style }));
   return { marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit };
 }

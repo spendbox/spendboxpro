@@ -5,7 +5,9 @@ import { pushTo } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { regionMap } from "@/lib/world";
 import { mintOf } from "@/lib/world/items";
-import { cleanMarkText, dayCost, INKS, markKind, personalInfo, REACTIONS, type MarkKind, type Reaction } from "@/lib/world/marks";
+import { makePlan, spiralIndex, tileAt, type CityPlan } from "@/lib/city/layout";
+import { ADOPT_SHARE, cleanMarkText, dayCost, graffiti, INKS, MARK_MIN_REP, markKind, marksAllowed, markSpot, personalInfo, REACTIONS, website, type GraffitiStyle, type MarkKind, type Reaction, type SpotLook } from "@/lib/world/marks";
+import { myThings } from "./item-actions";
 
 // Marks on the map (docs/MARKS.md; the database part is game-db/052_marks.sql): writing, reviews,
 // trees, benches, statues, fountains, plaques and time capsules, with reactions and votes to take
@@ -28,10 +30,35 @@ function say(message: string | undefined): { ok: false; error: string } {
     frozen: "Your account is paused right now.",
     bad_kind: "That can't go on the map.",
     bad_item: "That can't go on the map.",
+    low_rep: `You need ${MARK_MIN_REP} reputation to leave anything on the map.`,
+    mark_limit: `You can have ${arg} mark${arg === "1" ? "" : "s"} up at once. Take one down, or earn 50 more reputation for another.`,
   };
   if (words[code]) return { ok: false, error: words[code] };
   console.error("Mark action failed", message);
   return { ok: false, error: "That didn't work just now. Try again." };
+}
+
+/** Each region's plan (what stands on each tile), worked out once per server. */
+const plans = new Map<string, CityPlan>();
+function lookFor(region: string): ((x: number, z: number) => SpotLook | null) | null {
+  const map = regionMap(region);
+  if (!map) return null;
+  let plan = plans.get(region);
+  if (!plan) {
+    plan = makePlan(map.region.seed, map);
+    plans.set(region, plan);
+  }
+  const p = plan;
+  return (x, z) =>
+    map.inside(x, z)
+      ? {
+          water: map.waterAt(x, z) > 0,
+          road: !!map.roadAt(x, z) || map.flyoverAt(x, z),
+          kept: !!map.clearAt(x, z),
+          landmark: map.landmarks.some((l) => x >= l.ax && x < l.ax + l.w && z >= l.az && z < l.az + l.d),
+          tile: tileAt(p, spiralIndex(x, z)).kind,
+        }
+      : null;
 }
 
 export type MapMark = {
@@ -43,6 +70,8 @@ export type MapMark = {
   authorName: string;
   body: string | null;
   colour: string | null;
+  /** Writing's graffiti style. */
+  style: GraffitiStyle;
   rating: number | null;
   place: string | null;
   expiresAt: string | null;
@@ -78,6 +107,7 @@ export async function marksNear(region: string, x: number, z: number): Promise<M
     authorName: String(m.authorName),
     body: m.body == null ? null : String(m.body),
     colour: m.colour == null ? null : String(m.colour),
+    style: graffiti(m.style == null ? null : String(m.style)),
     rating: m.rating == null ? null : n(m.rating),
     place: m.place == null ? null : String(m.place),
     expiresAt: m.expiresAt == null ? null : String(m.expiresAt),
@@ -93,19 +123,26 @@ export async function marksNear(region: string, x: number, z: number): Promise<M
 }
 
 /** Leave a mark at a spot: what kind, the words, a colour, stars, when a capsule opens, a thing in it. */
-export async function leaveMark(f: { region: string; x: number; z: number; kind: string; body: string; colour?: string; rating?: number; place?: string; opensInDays?: number; itemId?: number }): Promise<Result> {
+export async function leaveMark(f: { region: string; x: number; z: number; kind: string; body: string; colour?: string; style?: string; rating?: number; place?: string; opensInDays?: number; itemId?: number }): Promise<Result> {
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Sign in to leave a mark." };
   const map = regionMap(f.region);
   const k = markKind(f.kind);
   if (!map || !k) return say("bad_kind");
-  const x = Math.round(n(f.x));
-  const z = Math.round(n(f.z));
-  if (!map.inside(x, z)) return { ok: false, error: "That spot isn't on the map." };
+  if (!map.inside(Math.round(n(f.x)), Math.round(n(f.z)))) return { ok: false, error: "That spot isn't on the map." };
+  // Never on water; trees, benches, statues and fountains never on a road, a railway or a landmark
+  // (moved to the nearest spot that will do).
+  const spot = markSpot(k.kind, Math.round(n(f.x)), Math.round(n(f.z)), lookFor(f.region)!);
+  if (!spot) return { ok: false, error: k.kind === "writing" || k.kind === "review" || k.kind === "plaque" || k.kind === "capsule" ? "That's water: pick a spot on land." : `There's no room for a ${k.label.toLowerCase()} here: try a park, a garden or open ground off the road.` };
+  const { x, z } = spot;
   const body = cleanMarkText(f.body);
   if (k.text === "need" && !body) return say("empty");
-  const found = personalInfo(body);
-  if (found) return { ok: false, error: `Take out ${found}: real contact details can't go on the map.` };
+  const found = personalInfo(body) ?? website(body);
+  if (found) return { ok: false, error: `Take out ${found}: ${found.includes("website") || found.includes("handle") ? "links and handles" : "real contact details"} can't go on the map.` };
+  // Reputation decides how many marks you can have up at once.
+  const rep = (await myThings())?.reputation.score ?? 0;
+  const allowed = marksAllowed(rep);
+  if (allowed < 1) return say("low_rep");
   const colour = f.colour && INKS.includes(f.colour) ? f.colour : null;
   const rating = k.kind === "review" ? Math.min(5, Math.max(1, Math.round(n(f.rating) || 5))) : null;
   const opens = k.kind === "capsule" ? new Date(Date.now() + Math.min(365, Math.max(0, Math.round(n(f.opensInDays)))) * 86_400_000).toISOString() : null;
@@ -119,12 +156,15 @@ export async function leaveMark(f: { region: string; x: number; z: number; kind:
     p_colour: colour,
     p_rating: rating,
     p_place: String(f.place ?? map.areaAt(x, z)).slice(0, 120),
-    p_cost: mintOf(k.price, map.region.prices),
+    p_cost: mintOf(spot.adopt ? k.price * ADOPT_SHARE : k.price, map.region.prices),
     p_days: k.days,
     p_opens_at: opens,
     p_item: k.kind === "capsule" && f.itemId ? Math.round(n(f.itemId)) : null,
+    p_style: k.kind === "writing" ? graffiti(f.style) : null,
+    p_allowed: allowed,
   });
-  return error ? say(error.message) : { ok: true };
+  if (error) return say(error.message);
+  return { ok: true, text: spot.adopt ? "adopted" : spot.x !== Math.round(n(f.x)) || spot.z !== Math.round(n(f.z)) ? "moved" : undefined };
 }
 
 /** React to a mark (the same again takes it back). */

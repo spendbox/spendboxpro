@@ -1,5 +1,6 @@
 "use client";
 
+import { graffitiLook, graffitiWall, type GraffitiStyle } from "@/lib/world/marks";
 import { useEffect, useRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import * as THREE from "three";
@@ -154,7 +155,7 @@ export type CityRoom = { id: string; name: string; capacity: number; kind: "buil
 export type CityDancer = { id: string; name: string; avatar: Avatar; move: DanceMove; with: string | null };
 /** A friend in a place in town (their face shows over it): the room id from useRooms ("b:12:f4", "balloon:2"). */
 /** Something a player left on the map (src/lib/world/marks): writing, a review, a tree, a statue... */
-export type CityMarkTag = { id: number; x: number; z: number; kind: string; text: string | null; colour: string | null; rating: number | null; author: string };
+export type CityMarkTag = { id: number; x: number; z: number; kind: string; text: string | null; colour: string | null; rating: number | null; author: string; style?: GraffitiStyle };
 
 /**
  * A person's face over the place they're in: a friend (pink) or anyone else on the real map
@@ -4066,7 +4067,7 @@ export function CityView({
     const MARK_ICON: Record<string, typeof TreePine> = { tree: TreePine, bench: Armchair, statue: Landmark, fountain: Droplets, plaque: Award, capsule: Hourglass };
     const MARK_TINT: Record<string, string> = { tree: "#2f9e44", bench: "#8c6a4f", statue: "#868e96", fountain: "#1c7ed6", plaque: "#b08900", capsule: "#7048e8" };
     function setMarkTags(list: CityMarkTag[]) {
-      const key = `${currentSeed}|${tiles.length}|${list.map((m) => `${m.id}|${m.text}|${m.colour}`).join(";")}`;
+      const key = `${currentSeed}|${tiles.length}|${list.map((m) => `${m.id}|${m.text}|${m.colour}|${m.style}`).join(";")}`;
       if (key === tagKey) return;
       tagKey = key;
       for (const t of tags) t.root.remove();
@@ -4082,7 +4083,15 @@ export function CityView({
           const text = (m.text ?? "").length > 42 ? `${(m.text ?? "").slice(0, 40)}…` : (m.text ?? "");
           const card = document.createElement("div");
           card.textContent = text;
-          card.style.cssText = `max-width:160px;padding:3px 8px;border-radius:6px;background:${ink === "#ffffff" ? "#343a40" : "rgba(255,255,255,.92)"};color:${ink};font:800 12px/15px system-ui,sans-serif;transform:rotate(-3deg);box-shadow:0 1px 4px rgba(0,0,0,.25);text-align:left;`;
+          // On a patch of wall, in the graffiti style the writer picked.
+          const style = m.style ?? "spray";
+          card.style.cssText = `max-width:160px;padding:4px 9px;border-radius:4px;background:${graffitiWall(style)};font-size:13px;line-height:16px;transform:rotate(-3deg);box-shadow:0 1px 4px rgba(0,0,0,.25);text-align:left;`;
+          const inner = document.createElement("span");
+          inner.textContent = text;
+          inner.style.display = "inline-block";
+          Object.assign(inner.style, graffitiLook(style, ink));
+          card.textContent = "";
+          card.appendChild(inner);
           const by = document.createElement("div");
           by.textContent = `— ${m.author}`;
           by.style.cssText = "margin-top:1px;font:600 9px/11px system-ui,sans-serif;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6);text-align:right;";

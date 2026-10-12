@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { cachedThings, loadThings } from "./things-cache";
 import { Car, Gem, Hammer, ShoppingBag, Store } from "lucide-react";
 import { Star } from "@/components/icons";
 import {
@@ -18,6 +19,7 @@ import {
   SALE_TAX,
   SHOP,
   STEAL_MAX,
+  CAUGHT_CHANCE,
   type CraftBenefit,
   type CraftTier,
   type ItemCategory,
@@ -43,10 +45,10 @@ const TABS: { id: ThingsTab; label: string; icon: typeof Gem }[] = [
 
 export function ThingsSheet({ tab: start, prices, onClose, onChanged }: { tab: ThingsTab; prices: Prices; onClose: () => void; onChanged?: () => void }) {
   const [tab, setTab] = useState<ThingsTab>(start);
-  const [me, setMe] = useState<MyThings | null>(null);
+  const [me, setMe] = useState<MyThings | null>(() => cachedThings());
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ text: string; good: boolean } | null>(null);
-  const load = useCallback(() => void items.myThings().then(setMe), []);
+  const load = useCallback(() => void loadThings().then((t) => t && setMe(t)), []);
   useEffect(() => load(), [load]);
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>, done: string | ((r: Record<string, unknown>) => string)) => {
     setBusy(true);
@@ -143,7 +145,7 @@ function Mine({ me, busy, run }: { me: MyThings | null; busy: boolean; run: Run 
   );
 }
 
-const HOW: Record<string, string> = { bought: "bought", found: "found", stolen: "swiped", gift: "a gift", crafted: "made by you", market: "from the market" };
+const HOW: Record<string, string> = { bought: "bought", found: "found", stolen: "stolen", gift: "a gift", crafted: "made by you", market: "from the market" };
 
 function ItemActions({ item, busy, price, setPrice, to, setTo, run, done }: { item: MyItem; busy: boolean; price: string; setPrice: (s: string) => void; to: string; setTo: (s: string) => void; run: Run; done: () => void }) {
   const ask = Number(price) || 0;
@@ -197,9 +199,10 @@ function Reputation({ me }: { me: MyThings }) {
   );
 }
 
-/** The city's shops (or car dealers): buy new, or try to swipe something small. */
+/** The city's shops (or car dealers): buy new, or try to steal something small. */
 function Shops({ cars, prices, busy, run }: { cars: boolean; prices: Prices; busy: boolean; run: Run }) {
   const [cat, setCat] = useState<ItemCategory | "all">("all");
+  const [risky, setRisky] = useState<string | null>(null);
   const list = SHOP.filter((k) => (cars ? k.category === "car" : k.category !== "car" && (cat === "all" || k.category === cat)));
   return (
     <div className="mt-3">
@@ -221,13 +224,21 @@ function Shops({ cars, prices, busy, run }: { cars: boolean; prices: Prices; bus
               <p className="truncate text-xs text-muted">{effectWords(k.effect)}</p>
             </div>
             {k.price <= STEAL_MAX && (
+              // Two taps: the first says the risk, the second steals.
               <button
                 disabled={busy}
-                onClick={() => void run(() => items.swipe(k.id), (r) => (r.caught ? `Caught! A fine of ${cash(Number(r.fare ?? 0))}, and people talk: reputation down.` : `You got away with ${k.name}.`))}
-                className="h-8 shrink-0 rounded-full bg-ink/5 px-2.5 text-[11px] font-semibold text-muted disabled:opacity-40"
-                title="Risky: you might be caught"
+                onClick={() => {
+                  if (risky !== k.id) return setRisky(k.id);
+                  setRisky(null);
+                  void run(
+                    () => items.steal(k.id),
+                    (r) => (r.caught ? `Caught! A fine of ${cash(Number(r.fare ?? 0))}, and people talk: reputation down.${r.jailed ? " And the police took you in: 2 hours in jail." : ""}` : `You got away with ${k.name}.`),
+                  );
+                }}
+                className={`h-8 shrink-0 rounded-full px-2.5 text-[11px] font-semibold disabled:opacity-40 ${risky === k.id ? "bg-hit text-white" : "bg-ink/5 text-muted"}`}
+                title="Risky: you might be caught, fined, or jailed"
               >
-                Swipe
+                {risky === k.id ? `Sure? ${Math.round(CAUGHT_CHANCE * 10)} in 10 get caught` : "Steal"}
               </button>
             )}
             <button disabled={busy} onClick={() => void run(() => items.buyFromShop(k.id), `${k.name} is yours.`)} className="h-8 shrink-0 rounded-full bg-ink px-3 text-xs font-semibold text-white disabled:opacity-40">

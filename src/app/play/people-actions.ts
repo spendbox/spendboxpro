@@ -119,7 +119,7 @@ export async function leaveAtDoor(to: string, kind: "knock" | "note" | "gift", b
   return { ok: true };
 }
 
-export type DoorstepEntry = { id: number; kind: "knock" | "note" | "gift"; body: string | null; item: string | null; at: string; opened: boolean; thanked: boolean; from: string | null; fromName: string; fromAvatar: Avatar | null };
+export type DoorstepEntry = { id: number; kind: "knock" | "note" | "gift" | "prank"; prank?: string | null; cleaned?: boolean; body: string | null; item: string | null; at: string; opened: boolean; thanked: boolean; from: string | null; fromName: string; fromAvatar: Avatar | null };
 
 /** What's at your door, newest first. */
 export async function myDoorstep(): Promise<DoorstepEntry[]> {
@@ -137,6 +137,8 @@ export async function myDoorstep(): Promise<DoorstepEntry[]> {
     from: d.from == null ? null : String(d.from),
     fromName: String(d.fromName),
     fromAvatar: (d.fromAvatar ?? null) as Avatar | null,
+    prank: d.prank == null ? null : String(d.prank),
+    cleaned: !!d.cleaned,
   }));
 }
 

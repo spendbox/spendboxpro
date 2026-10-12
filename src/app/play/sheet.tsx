@@ -44,7 +44,17 @@ export function Sheet({
     <div
       // Never blurred: the city behind stays sharp (just a little dimmer, or not at all).
       className={cn("fixed inset-0 grid place-items-end p-2 sm:place-items-center sm:p-4", above ? "z-[70]" : "z-40", clear ? "bg-transparent" : "bg-ink/20")}
-      onPointerDown={(e) => (downOnBackdrop.current = e.target === e.currentTarget)}
+      onPointerDown={(e) => {
+        downOnBackdrop.current = e.target === e.currentTarget;
+        // Taps and typing in a card are the card's alone: the map's own listeners (dragging,
+        // the sounds' wake-up, bubbles) never see them, so nothing takes the focus off a text box.
+        e.stopPropagation();
+      }}
+      onTouchStart={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") onClose();
+        e.stopPropagation();
+      }}
       onClick={(e) => {
         if (downOnBackdrop.current && e.target === e.currentTarget) onClose();
         downOnBackdrop.current = false;
