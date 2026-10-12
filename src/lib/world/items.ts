@@ -217,15 +217,18 @@ export function effectWords(e: ItemEffect) {
 
 /**
  * Your reputation: homes and property (by what they're worth), cars and fine things, inventions
- * people have bought, minus what being caught stealing cost you. Never below zero.
+ * people have bought, what people liked of what you left on the map, minus what being caught
+ * stealing or voted down cost you. Never below zero.
  */
-export function reputationOf(o: { propertyMint: number; homes: number; itemRep: number; inventionsSold: number; penalty: number }) {
+export function reputationOf(o: { propertyMint: number; homes: number; itemRep: number; inventionsSold: number; penalty: number; marksLiked?: number }) {
   const property = o.propertyMint > 0 ? Math.round(20 * Math.log10(1 + o.propertyMint / 100)) : 0;
   const parts = {
     property: property + o.homes * 5,
     things: Math.round(o.itemRep),
     inventions: Math.round(o.inventionsSold * 2),
+    // Reactions people gave to what you left on the map (up to 50).
+    marks: Math.min(50, Math.round((o.marksLiked ?? 0) / 2)),
     penalty: -Math.round(o.penalty),
   };
-  return { score: Math.max(0, parts.property + parts.things + parts.inventions + parts.penalty), parts };
+  return { score: Math.max(0, parts.property + parts.things + parts.inventions + parts.marks + parts.penalty), parts };
 }

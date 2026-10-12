@@ -1,6 +1,7 @@
 "use server";
 
 import { currentUserId } from "@/lib/game";
+import { pushTo } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { regionMap } from "@/lib/world";
 import {
@@ -89,7 +90,7 @@ export type MyThings = {
   crafted: number;
   /** What your things do for you together, every 2 hours. */
   effects: { mind: number; body: number; rep: number };
-  reputation: { score: number; parts: { property: number; things: number; inventions: number; penalty: number } };
+  reputation: { score: number; parts: { property: number; things: number; inventions: number; marks: number; penalty: number } };
   /** How good you are at making each kind of thing (0..1). */
   craftSkill: Record<string, number>;
   hasCar: boolean;
@@ -100,10 +101,12 @@ export async function myThings(): Promise<MyThings | null> {
   const userId = await currentUserId();
   if (!userId) return null;
   const db = createAdminClient();
-  const [{ data }, { data: skills }, { data: assets }] = await Promise.all([
+  const [{ data }, { data: skills }, { data: assets }, { data: liked }] = await Promise.all([
     db.rpc("my_items", { p_user: userId }),
     db.from("life_skills").select("skill, days").eq("user_id", userId),
     db.rpc("my_assets", { p_user: userId }),
+    // Reactions to what you left on the map (game-db/052; nothing until it's run).
+    db.rpc("marks_liked", { p_user: userId }),
   ]);
   if (!data) return null;
   const d = data as Record<string, unknown>;
@@ -141,6 +144,7 @@ export async function myThings(): Promise<MyThings | null> {
     itemRep: effects.rep,
     inventionsSold: n(d.inventionsSold),
     penalty: n(d.penalty),
+    marksLiked: n(liked),
   });
   return { items, crafts, crafted, effects, reputation, craftSkill: skill, hasCar: items.some((i) => i.category === "car") };
 }
@@ -181,7 +185,10 @@ export async function giftItem(itemId: number, to: string): Promise<PropertyResu
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Sign in first." };
   const { data, error } = await createAdminClient().rpc("item_gift", { p_user: userId, p_item: Math.round(n(itemId)), p_to: String(to ?? "").slice(0, 40) });
-  return error ? say(error.message) : { ok: true, to: String(data) };
+  if (error) return say(error.message);
+  const { data: them } = await createAdminClient().from("profiles").select("id").ilike("username", String(data)).maybeSingle();
+  await pushTo(them?.id as string | undefined);
+  return { ok: true, to: String(data) };
 }
 
 /** Put one of your things up for sale at your price (a 2% listing fee), or change its price. */
@@ -227,8 +234,12 @@ export async function marketItems(category: string): Promise<MarketItem[]> {
 export async function buyItem(itemId: number, price: number): Promise<PropertyResult> {
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Sign in to buy." };
-  const { error } = await createAdminClient().rpc("item_buy", { p_user: userId, p_item: Math.round(n(itemId)), p_price: n(price), p_tax: SALE_TAX });
-  return error ? say(error.message) : { ok: true };
+  const db = createAdminClient();
+  const { data: row } = await db.from("items").select("owner").eq("id", Math.round(n(itemId))).maybeSingle();
+  const { error } = await db.rpc("item_buy", { p_user: userId, p_item: Math.round(n(itemId)), p_price: n(price), p_tax: SALE_TAX });
+  if (error) return say(error.message);
+  await pushTo(row?.owner as string | undefined);
+  return { ok: true };
 }
 
 /** Sell to the city's shops straight away, at 60% of what it's worth. */

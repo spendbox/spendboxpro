@@ -46,6 +46,7 @@ export function PropertyCard({
   onEnter,
   enterLabel,
   onClose,
+  onMark,
 }: {
   info: PropertyInfo;
   market?: Market;
@@ -55,6 +56,8 @@ export function PropertyCard({
   onEnter?: () => void;
   enterLabel?: string;
   onClose: () => void;
+  /** Leave a mark here (write, review, plant a tree...). */
+  onMark?: () => void;
 }) {
   const owners = new Map((market?.owners ?? []).map((o) => [o.unit, o]));
   const mineAny = !!market?.owners && info.units.some((u) => owners.get(u.id)?.mine);
@@ -212,6 +215,11 @@ export function PropertyCard({
             </button>
           )}
         </div>
+      )}
+      {onMark && (
+        <button onClick={onMark} className="mt-4 flex items-center gap-1.5 text-xs font-semibold text-gold-dark">
+          <Pencil className="size-3.5" /> Leave a mark here: write, review, plant a tree…
+        </button>
       )}
       {onReport && (
         <button onClick={onReport} className="mt-4 flex items-center gap-1.5 text-xs font-medium text-muted hover:text-ink">

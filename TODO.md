@@ -13,6 +13,9 @@
 - [ ] Then run `game-db/046_market.sql` (the player market: selling, offers, tenants, World Bank loans; see `docs/MARKET.md`). If you ever run 038 or 040 again, run 046 again after them.
 - [ ] Then run `game-db/047_ads_are_property.sql` (advertising is leasing a building: billboards included, a design you can swap, ends after a year or its taps; no mint for tapping ads; see `docs/BUSINESS.md`).
 - [ ] Then run `game-db/048_trips.sql` (going into a building costs the fare from where you last were).
+- [ ] Then run `game-db/052_marks.sql` (writing, reviews, trees, statues, time capsules on the map; see `docs/MARKS.md`). Run it after 051.
+- [ ] Then run `game-db/051_people.sql` (faces on the map, cards, doorsteps, while you were away, push; see `docs/PEOPLE.md`).
+- [ ] For notifications: run `node scripts/vapid-keys.mjs` once, put the three lines it prints into Vercel's environment variables (NEXT_PUBLIC_VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT), and redeploy.
 - [ ] Then run `game-db/050_economy_items.sql` (pay four times real wages, money by day for the Finance chart, things, the market, crafting, cars, reputation; see `docs/ITEMS.md`). Until it's run, the Things screens and the Finance chart stay empty.
 - [ ] Then run `game-db/049_reports_and_work.sql` (reporting people; up to 3 side hustles; pay that goes into wallets by itself every game week). Until it's run, starting a second side hustle and reporting a person won't work.
 - [ ] In Vercel, set `GAME_SECRET` to a long random string (seals interview answers and passes; without it the service key is used).
@@ -26,6 +29,7 @@
 - [ ] Test on a real phone: sounds, touch gestures, the water slide, club lights.
 
 ## Done lately
+- [x] The social city, phase 1 and 2: faces on the map (online, asleep, at work, away), cards, doorsteps with knocks, notes and wrapped gifts, while you were away, web push; writing, reviews, trees, statues, fountains, plaques and time capsules on the map, with reactions and votes to take down.
 - [x] Plain words (every 2 hours, not "game day"), no hourly countdown on the real map, no page zoom on pop-ups, jobs at filling stations, everything on the phone (no old menu, no XP or level), search in the place pill.
 - [x] Land a tenth of real prices, cheaper homes, pay 4x real wages, fares about halved.
 - [x] Income with tabs and totals, Find jobs pop-up; Finance shows whether you're up or down, with a chart.

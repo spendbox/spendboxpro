@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DoorOpen } from "lucide-react";
-import { Briefcase, Flag, HeartPulse, House, MapPin, Search, Sparkles, X } from "@/components/icons";
+import { Briefcase, Flag, HeartPulse, House, MapPin, Pencil, Search, Sparkles, X } from "@/components/icons";
 import { addressOf, makePlan, spiralIndex, tileAt, type CityPlan } from "@/lib/city/layout";
 import { BUILDING_LABEL } from "@/lib/world/buildings";
 import type { RegionMap } from "@/lib/world/compile";
@@ -20,6 +20,9 @@ import { PropertyCard } from "../property-card";
 import { myThings } from "../item-actions";
 import { ThingsSheet, type ThingsTab } from "./things-sheet";
 import { NewsSheet } from "./news-sheet";
+import { LeaveMarkSheet, MarkCard } from "./marks-sheet";
+import { marksNear, type MapMark } from "../mark-actions";
+import type { CityMarkTag } from "../city-view";
 import { Sheet } from "../sheet";
 import { LifeSheet } from "./life-sheet";
 import { MoneySheet } from "./money-sheet";
@@ -113,6 +116,8 @@ export function useWorldLife({
   onChanged,
   onEnter,
   beforeHome,
+  meId,
+  onPerson,
 }: {
   api: PropertyApi;
   regionId: string | null;
@@ -125,6 +130,9 @@ export function useWorldLife({
   onEnter?: (buildingId: string) => void;
   /** Before flying home: leave the building you're in. */
   beforeHome?: () => void;
+  /** Your account (to know your own marks), and opening someone's card. */
+  meId?: string | null;
+  onPerson?: (id: string) => void;
 }) {
   const region = useMemo(() => regionMap(regionId), [regionId]);
   const { assets, owned, loaded, refresh } = useLife(api, signedIn ? regionId : null);
@@ -221,6 +229,24 @@ export function useWorldLife({
   /** Things (items, shops, cars, market, craft) open on a tab, and the news. */
   const [things, setThings] = useState<ThingsTab | null>(null);
   const [newsOpen, setNewsOpen] = useState(false);
+  /** Marks on the map round where you're looking, one open, and leaving one (where, in words). */
+  const [marks, setMarks] = useState<MapMark[]>([]);
+  const [markOpen, setMarkOpen] = useState<number | null>(null);
+  const [leaving, setLeaving] = useState<{ x: number; z: number; where: string; place?: string } | null>(null);
+  const loadMarks = useCallback(() => {
+    if (!regionId || pretend) return;
+    const c = centerRef.current?.() ?? { x: 0, z: 0 };
+    void marksNear(regionId, c.x, c.z).then(setMarks).catch(() => {});
+  }, [regionId, pretend]);
+  useEffect(() => {
+    if (!regionId || pretend) return;
+    const first = setTimeout(loadMarks, 2500);
+    const every = setInterval(loadMarks, 60_000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(every);
+    };
+  }, [regionId, pretend, loadMarks]);
   /** Your reputation (shown at the top) and whether you own a car (to drive to work). */
   const [rep, setRep] = useState<{ score: number; hasCar: boolean } | null>(null);
   const loadRep = useCallback(() => void myThings().then((t) => t && setRep({ score: t.reputation.score, hasCar: t.hasCar })).catch(() => {}), []);
@@ -646,6 +672,16 @@ export function useWorldLife({
           </div>
           {place.jobs.length > 0 && <div className="mt-4">{jobs ? <JobsHere place={place} ctx={jobs} /> : <p className="text-sm text-muted">Sign in to work here.</p>}</div>}
           <button
+            onClick={() => {
+              const p = place;
+              setPlace(null);
+              openLeaveMark({ x: p.x, z: p.z, place: p.name });
+            }}
+            className="mt-4 flex items-center gap-1.5 text-xs font-semibold text-gold-dark"
+          >
+            <Pencil className="size-3.5" /> Leave a mark here: write, review, plant a tree…
+          </button>
+          <button
             onClick={() => (signedIn ? setReport({ x: place.x, z: place.z, where: place.name }) : setMessage({ text: "Sign in to report a problem.", good: false }))}
             className="mt-4 flex items-center gap-1.5 text-xs font-medium text-muted hover:text-ink"
           >
@@ -744,6 +780,12 @@ export function useWorldLife({
               : undefined
           }
           enterLabel={tripLabel(property.id)}
+          onMark={() => {
+            const sp = ownedSpot(property.id);
+            if (!sp) return;
+            setProperty(null);
+            openLeaveMark({ x: sp.x, z: sp.z, place: `${property.title}, ${property.address}` });
+          }}
           jobs={jobs}
           onReport={() => {
             if (!signedIn) return setMessage({ text: "Sign in to report a problem.", good: false });
@@ -1003,6 +1045,36 @@ export function useWorldLife({
           onChanged={() => void refresh()}
         />
       )}
+      {markOpen !== null && marks.find((m) => m.id === markOpen) && (
+        <MarkCard
+          key={markOpen}
+          mark={marks.find((m) => m.id === markOpen)!}
+          me={meId ?? null}
+          prices={region.region.prices}
+          onPerson={(id) => {
+            setMarkOpen(null);
+            onPerson?.(id);
+          }}
+          onClose={() => setMarkOpen(null)}
+          onChanged={loadMarks}
+          onDone={(text, good) => setMessage({ text, good })}
+        />
+      )}
+      {leaving && (
+        <LeaveMarkSheet
+          where={leaving.where}
+          region={region.region.id}
+          x={leaving.x}
+          z={leaving.z}
+          place={leaving.place}
+          prices={region.region.prices}
+          onClose={() => setLeaving(null)}
+          onDone={(text, good) => {
+            setMessage({ text, good });
+            if (good) loadMarks();
+          }}
+        />
+      )}
       {newsOpen && (
         <NewsSheet
           region={region}
@@ -1121,5 +1193,15 @@ export function useWorldLife({
   /** Something in Finance wants you: the guide's budget step, a power cut, an offer. */
   const financeGlow = step === "budget";
   const financeDot = !!(status?.powerCut || board?.received.some((o) => o.status === "open"));
-  return { openThings: (tab: ThingsTab) => setThings(tab), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit };
+  /** Leave a mark: at a spot, or (none given) in the middle of the screen. */
+  const openLeaveMark = (at?: { x: number; z: number; place?: string }) => {
+    if (!region) return;
+    if (!signedIn) return setMessage({ text: "Sign in to leave a mark.", good: false });
+    const c = at ?? centerRef.current?.() ?? { x: 0, z: 0 };
+    const x = Math.round(c.x);
+    const z = Math.round(c.z);
+    setLeaving({ x, z, where: at?.place ?? region.areaAt(x, z), place: at?.place });
+  };
+  const markTags: CityMarkTag[] = marks.map((m) => ({ id: m.id, x: m.x, z: m.z, kind: m.kind, text: m.body, colour: m.colour, rating: m.rating, author: m.authorName }));
+  return { marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit };
 }

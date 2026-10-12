@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { Minus, Plus } from "lucide-react";
+import { Armchair, Award, Droplets, Hourglass, Landmark, Minus, Plus, Star, TreePine } from "lucide-react";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar, defaultAvatar, type Avatar } from "@/lib/avatar";
@@ -153,7 +153,14 @@ export type CityRoom = { id: string; name: string; capacity: number; kind: "buil
 /** Someone dancing on the dance floor of the club you're in: their move, and who they dance with (a player's or an NPC's id). */
 export type CityDancer = { id: string; name: string; avatar: Avatar; move: DanceMove; with: string | null };
 /** A friend in a place in town (their face shows over it): the room id from useRooms ("b:12:f4", "balloon:2"). */
-export type CityFriendPin = { id: string; name: string; avatar: Avatar; room: string };
+/** Something a player left on the map (src/lib/world/marks): writing, a review, a tree, a statue... */
+export type CityMarkTag = { id: number; x: number; z: number; kind: string; text: string | null; colour: string | null; rating: number | null; author: string };
+
+/**
+ * A person's face over the place they're in: a friend (pink) or anyone else on the real map
+ * (blue), faded with a word under it when they're not online (asleep, at work, away).
+ */
+export type CityFriendPin = { id: string; name: string; avatar: Avatar; room: string; status?: "online" | "asleep" | "work" | "away"; friend?: boolean };
 /** A ghost lit up on the map: free to challenge, in a duel right now, or golden (safe). */
 export type CityGhost = { id: string; name: string; avatar: Avatar; tile: number; status: "free" | "playing" | "golden"; mine?: boolean };
 /** You dancing: your id (so everyone places the dancers the same way), your move, your partner. */
@@ -312,6 +319,11 @@ type Props = {
   dancers?: CityDancer[];
   /** Your friends who are in a place right now: each one's face and name shows over it. */
   friendsAt?: CityFriendPin[];
+  /** A face on the map was tapped (someone's card). */
+  onPerson?: (id: string) => void;
+  /** Marks players left on the map, and one tapped. */
+  marks?: CityMarkTag[];
+  onMark?: (id: number) => void;
   /** Open a building's place (as if it was tapped: onRoom is called with it), e.g. to go to a friend. A new `at` each time. */
   openRoom?: { id: string; at: number } | null;
   /** The other real players in the place you're in: the ones not sitting or dancing are drawn standing about. */
@@ -1343,6 +1355,9 @@ export function CityView({
   dance = null,
   dancers,
   friendsAt,
+  onPerson,
+  marks,
+  onMark,
   openRoom = null,
   roomPeople,
   ghosts,
@@ -1373,6 +1388,7 @@ export function CityView({
     setHouses: (list: TownHouse[] | undefined) => void;
     setDance: (me: CityDance | null, others: CityDancer[]) => void;
     setFriendPins: (list: CityFriendPin[]) => void;
+    setMarkTags: (list: CityMarkTag[]) => void;
     setRoomPeople: (list: CityPerson[]) => void;
     openRoom: (id: string) => void;
     focusEvent: (id: number) => void;
@@ -1381,10 +1397,10 @@ export function CityView({
     /** Zoom in (dir 1) or out (dir -1) a step: the + and − buttons on a computer. */
     zoom: (dir: number) => void;
   } | null>(null);
-  const cb = useRef({ onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused });
+  const cb = useRef({ onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused });
   const atmos = useRef({ progress, nightFirst, meAvatar, weather });
   useEffect(() => {
-    cb.current = { onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused };
+    cb.current = { onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused };
     atmos.current = { progress, nightFirst, meAvatar, weather };
   });
 
@@ -3987,7 +4003,7 @@ export function CityView({
     let pinKey = "";
     const pinAt = new THREE.Vector3();
     function setFriendPins(list: CityFriendPin[]) {
-      const key = `${currentSeed}|${tiles.length}|${list.map((f) => `${f.id}@${f.room}|${f.name}|${JSON.stringify(f.avatar)}`).join(";")}`;
+      const key = `${currentSeed}|${tiles.length}|${list.map((f) => `${f.id}@${f.room}|${f.name}|${f.status}|${f.friend}|${JSON.stringify(f.avatar)}`).join(";")}`;
       if (key === pinKey) return;
       pinKey = key;
       for (const p of pins) p.root.remove();
@@ -4013,19 +4029,111 @@ export function CityView({
         const slot = seen.get(building) ?? 0;
         seen.set(building, slot + 1);
         const root = document.createElement("div");
-        root.style.cssText = "position:absolute;left:0;top:0;display:flex;flex-direction:column;align-items:center;gap:2px;will-change:transform;visibility:hidden;";
+        const pink = f.friend !== false;
+        const away = f.status && f.status !== "online";
+        root.style.cssText = `position:absolute;left:0;top:0;display:flex;flex-direction:column;align-items:center;gap:2px;will-change:transform;visibility:hidden;pointer-events:auto;cursor:pointer;opacity:${away ? 0.72 : 1};`;
+        root.setAttribute("role", "button");
+        root.setAttribute("aria-label", `${f.name}: see their card`);
+        root.addEventListener("click", (e) => {
+          e.stopPropagation();
+          cb.current.onPerson?.(f.id);
+        });
         const face = document.createElement("img");
         const svg = renderToStaticMarkup(<AvatarFace avatar={cleanAvatar(f.avatar, f.name)} size={40} />).replace(/^<svg(?![^>]*xmlns=)/, '<svg xmlns="http://www.w3.org/2000/svg"');
         face.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
         face.alt = "";
-        face.style.cssText = "width:40px;height:40px;border-radius:999px;border:3px solid #d6336c;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.25);";
+        const colour = pink ? "#d6336c" : "#1c7ed6";
+        face.style.cssText = `width:${pink ? 40 : 34}px;height:${pink ? 40 : 34}px;border-radius:999px;border:3px solid ${colour};background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.25);`;
         const name = document.createElement("div");
-        name.textContent = f.name;
+        name.textContent = away ? `${f.name} · ${f.status === "asleep" ? "asleep" : f.status === "work" ? "at work" : "away"}` : f.name;
         name.style.cssText =
-          "max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 8px;border-radius:999px;background:#d6336c;color:#fff;font:700 11px/16px system-ui,sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.2);";
+          `max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 8px;border-radius:999px;background:${colour};color:#fff;font:700 11px/16px system-ui,sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.2);`;
         root.append(face, name);
         pinLayer.appendChild(root);
         pins.push({ root, tile, balloon, building, slot, of: counts.get(building) ?? 1, shown: false });
+      }
+    }
+    // ---- marks players left on the map: writing in its ink, reviews as stars, and a round badge
+    // for trees, benches, statues, fountains, plaques and time capsules. Page elements over the
+    // canvas, tappable; only those on the tiles drawn round the camera.
+    type Tag = { root: HTMLButtonElement; x: number; z: number; tile: number; shown: boolean };
+    let tags: Tag[] = [];
+    const tagLayer = document.createElement("div");
+    tagLayer.style.cssText = "position:absolute;inset:0;z-index:2;pointer-events:none;overflow:hidden;contain:strict;";
+    el.appendChild(tagLayer);
+    let tagKey = "";
+    const tagAt = new THREE.Vector3();
+    const MARK_ICON: Record<string, typeof TreePine> = { tree: TreePine, bench: Armchair, statue: Landmark, fountain: Droplets, plaque: Award, capsule: Hourglass };
+    const MARK_TINT: Record<string, string> = { tree: "#2f9e44", bench: "#8c6a4f", statue: "#868e96", fountain: "#1c7ed6", plaque: "#b08900", capsule: "#7048e8" };
+    function setMarkTags(list: CityMarkTag[]) {
+      const key = `${currentSeed}|${tiles.length}|${list.map((m) => `${m.id}|${m.text}|${m.colour}`).join(";")}`;
+      if (key === tagKey) return;
+      tagKey = key;
+      for (const t of tags) t.root.remove();
+      tags = [];
+      for (const m of list.slice(0, 120)) {
+        const tile = spiralIndex(m.x, m.z);
+        const root = document.createElement("button");
+        root.type = "button";
+        root.setAttribute("aria-label", `${m.kind} by ${m.author}`);
+        root.style.cssText = "position:absolute;left:0;top:0;visibility:hidden;pointer-events:auto;cursor:pointer;will-change:transform;border:0;padding:0;background:none;";
+        if (m.kind === "writing") {
+          const ink = m.colour ?? "#212529";
+          const text = (m.text ?? "").length > 42 ? `${(m.text ?? "").slice(0, 40)}…` : (m.text ?? "");
+          const card = document.createElement("div");
+          card.textContent = text;
+          card.style.cssText = `max-width:160px;padding:3px 8px;border-radius:6px;background:${ink === "#ffffff" ? "#343a40" : "rgba(255,255,255,.92)"};color:${ink};font:800 12px/15px system-ui,sans-serif;transform:rotate(-3deg);box-shadow:0 1px 4px rgba(0,0,0,.25);text-align:left;`;
+          const by = document.createElement("div");
+          by.textContent = `— ${m.author}`;
+          by.style.cssText = "margin-top:1px;font:600 9px/11px system-ui,sans-serif;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6);text-align:right;";
+          root.append(card, by);
+        } else if (m.kind === "review") {
+          const pill = document.createElement("div");
+          pill.innerHTML = renderToStaticMarkup(<Star size={12} fill="#f59f00" color="#f59f00" />);
+          const n = document.createElement("span");
+          n.textContent = ` ${m.rating ?? 5} · ${m.author}`;
+          pill.appendChild(n);
+          pill.style.cssText = "display:flex;align-items:center;gap:2px;padding:2px 8px;border-radius:999px;background:#fff;color:#212529;font:700 11px/16px system-ui,sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.25);";
+          root.appendChild(pill);
+        } else {
+          const Icon = MARK_ICON[m.kind] ?? Award;
+          const badge = document.createElement("div");
+          badge.innerHTML = renderToStaticMarkup(<Icon size={18} color="#fff" />);
+          badge.style.cssText = `display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:${MARK_TINT[m.kind] ?? "#495057"};border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);`;
+          root.appendChild(badge);
+        }
+        root.addEventListener("click", (e) => {
+          e.stopPropagation();
+          cb.current.onMark?.(m.id);
+        });
+        tagLayer.appendChild(root);
+        tags.push({ root, x: m.x, z: m.z, tile, shown: false });
+      }
+    }
+    function updateTags() {
+      const on = isRevealed && tags.length > 0 && !view;
+      tagLayer.style.display = on ? "" : "none";
+      if (!on) return;
+      const w = el.clientWidth || 1;
+      const h = el.clientHeight || 1;
+      for (const t of tags) {
+        const tile = tileById.get(t.tile);
+        if (!tile) {
+          if (t.shown) {
+            t.shown = false;
+            t.root.style.visibility = "hidden";
+          }
+          continue;
+        }
+        tagAt.set(t.x, (tile.kind === "road" ? 0.1 : Math.min(tile.top, 1.2)) + 0.2, t.z);
+        tagAt.project(camera);
+        const show = tagAt.z < 1 && Math.abs(tagAt.x) < 1.05 && Math.abs(tagAt.y) < 1.05;
+        if (show !== t.shown) {
+          t.shown = show;
+          t.root.style.visibility = show ? "visible" : "hidden";
+        }
+        if (!show) continue;
+        t.root.style.transform = `translate(${((tagAt.x + 1) / 2) * w}px, ${((1 - tagAt.y) / 2) * h}px) translate(-50%, -100%)`;
       }
     }
     function updatePins() {
@@ -6208,6 +6316,7 @@ export function CityView({
       updateArea(time * 1000);
       kites.update(time, world.night);
       updatePins();
+      updateTags();
       updateGhosts(time);
       updateBusinesses(time);
       const dist = riding ? 10 : camera.position.distanceTo(controls.target);
@@ -6321,7 +6430,7 @@ export function CityView({
       if (regionNow && currentSeed >= 0 && builtCount > 0) build(currentSeed, builtCount);
     }
     const center = () => ({ x: Math.round(controls.target.x), z: Math.round(controls.target.z) });
-    api.current = { center, build: buildFor, setOwned, setBusinesses, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, zoom };
+    api.current = { setMarkTags, center, build: buildFor, setOwned, setBusinesses, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, zoom };
 
     return () => {
       alive = false;
@@ -6489,6 +6598,15 @@ export function CityView({
   useEffect(() => {
     api.current?.setFriendPins(friendsRef.current ?? []);
   }, [friendsKey, tileCount, seed]);
+
+  const marksKey = (marks ?? []).map((m) => `${m.id}|${m.text}|${m.colour}|${m.rating}`).join(";");
+  const marksRef = useRef(marks);
+  useEffect(() => {
+    marksRef.current = marks;
+  });
+  useEffect(() => {
+    api.current?.setMarkTags(marksRef.current ?? []);
+  }, [marksKey, tileCount, seed]);
 
   const peopleKey = (roomPeople ?? []).map((p) => `${p.id}|${p.name}|${JSON.stringify(p.avatar)}`).join(";");
   const peopleRef = useRef(roomPeople);
