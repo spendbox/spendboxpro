@@ -2553,6 +2553,10 @@ export function CityView({
       kindAt = new Map(tiles.map((t) => [`${t.x},${t.z}`, t.kind]));
       tileIndex = new Map(tiles.map((t) => [`${t.x},${t.z}`, t.i]));
       blocked = new Set(tiles.filter((t) => t.works).map((t) => `${t.x},${t.z}`));
+      // Street cars keep off the low ends of flyover ramps: the concrete comes down to the road
+      // there, and a car driving in at street level vanished into it (under the high middle of a
+      // flyover the road stays open). Cars on the deck itself are deck traffic.
+      for (const d of plan.region?.decks ?? []) for (const p of d.pts) if (p.y < 0.38) blocked.add(`${Math.round(p.x)},${Math.round(p.z)}`);
       currentPlan = plan;
 
       const now = performance.now();

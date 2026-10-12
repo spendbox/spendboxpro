@@ -12,6 +12,7 @@ const TITLE: Record<string, string> = {
   mark: "Your mark",
   street: "On the street",
   dating: "Dating",
+  course: "Congratulations!",
 };
 
 export async function GET() {
