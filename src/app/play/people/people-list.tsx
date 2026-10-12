@@ -127,8 +127,8 @@ export function PeopleList({
               </span>
             </button>
             {onFly && p.x !== null && p.z !== null && (
-              <button onClick={() => onFly(p.x!, p.z!)} className="grid size-9 shrink-0 place-items-center rounded-full bg-ink/5" aria-label={`Show where ${p.name} is`}>
-                <MapPin className="size-4" />
+              <button onClick={() => onFly(p.x!, p.z!)} className="flex h-9 shrink-0 items-center gap-1 rounded-full bg-ink/5 px-2.5 text-xs font-semibold" aria-label={`Meet ${p.name} where they are`} title="Meet them (on foot, the fare there)">
+                <MapPin className="size-3.5" /> Meet
               </button>
             )}
             <button onClick={() => onMessage({ id: p.id, name: p.name })} className="flex h-9 shrink-0 items-center gap-1 rounded-full bg-ink px-3 text-xs font-semibold text-white">

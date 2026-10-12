@@ -128,6 +128,7 @@ export function useWorldLife({
   onChanged,
   onEnter,
   beforeHome,
+  beforeFly,
   meId,
   onPerson,
   rowOutside,
@@ -144,6 +145,8 @@ export function useWorldLife({
   onEnter?: (buildingId: string) => void;
   /** Before flying home: leave the building or ride you're in (asking first), then `go`. */
   beforeHome?: (go: () => void) => void;
+  /** Before going anywhere on the map: true to go (on foot, it pays the fare there first). */
+  beforeFly?: (x: number, z: number) => Promise<boolean>;
   /** Your account (to know your own marks), and opening someone's card. */
   meId?: string | null;
   onPerson?: (id: string) => void;
@@ -564,7 +567,11 @@ export function useWorldLife({
 
   // Each fly is a new request, even to the same spot (a running count, not the clock).
   const flies = useRef(0);
-  const fly = (x: number, z: number) => setFlyTo({ tile: spiralIndex(Math.round(x), Math.round(z)), at: ++flies.current });
+  const fly = (x: number, z: number) => {
+    const go = () => setFlyTo({ tile: spiralIndex(Math.round(x), Math.round(z)), at: ++flies.current });
+    if (!beforeFly) return go();
+    void beforeFly(x, z).then((ok) => ok && go());
+  };
 
   async function act(run: () => Promise<PropertyResult>, done: (r: PropertyResult & { ok: true }) => string | null): Promise<PropertyResult> {
     setBusy(true);

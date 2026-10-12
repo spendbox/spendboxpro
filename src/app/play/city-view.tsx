@@ -1964,6 +1964,115 @@ export function CityView({
     // Games going on outdoors at the sports venues (hoops on the court, a kick-about on the pitch).
     let games: VenueGame[] = [];
 
+    // ---- the names of landmarks at their gates: a sign on two posts by the road, lit at night
+    // (University of Lagos, Yaba College of Technology, LUTH...). Only those in the part drawn.
+    let entranceSigns: { obj: THREE.Object3D; tex: THREE.Texture; mats: THREE.Material[]; geos: THREE.BufferGeometry[] }[] = [];
+    const signPost = new THREE.MeshLambertMaterial({ color: 0x5c636a });
+    const SIGN_COLOURS: Record<string, [string, string]> = {
+      campus: ["#1f5f3f", "#ffffff"],
+      hospital: ["#ffffff", "#c92a2a"],
+      arena: ["#1c3f6e", "#ffffff"],
+      museum: ["#5c3d2e", "#f8f0e3"],
+      worship: ["#f8f0e3", "#3b2f2f"],
+      cathedral: ["#f8f0e3", "#3b2f2f"],
+      grandmosque: ["#1b5e4a", "#ffffff"],
+      hotel: ["#2b2b2b", "#f2c94c"],
+      megamall: ["#7048e8", "#ffffff"],
+      market: ["#e8590c", "#ffffff"],
+      bigpark: ["#2f6d3a", "#ffffff"],
+    };
+    function signTexture(name: string, type: string) {
+      const [bg, fg] = SIGN_COLOURS[type] ?? ["#1c3f6e", "#ffffff"];
+      const c = document.createElement("canvas");
+      c.width = 1024;
+      c.height = 192;
+      const g = c.getContext("2d")!;
+      g.fillStyle = bg;
+      g.fillRect(0, 0, c.width, c.height);
+      g.strokeStyle = fg;
+      g.globalAlpha = 0.5;
+      g.lineWidth = 8;
+      g.strokeRect(14, 14, c.width - 28, c.height - 28);
+      g.globalAlpha = 1;
+      g.fillStyle = fg;
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      let size = 84;
+      do {
+        g.font = `800 ${size}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+        size -= 4;
+      } while (g.measureText(name).width > c.width - 80 && size > 30);
+      g.fillText(name, c.width / 2, c.height / 2 + 4);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 4;
+      return tex;
+    }
+    function buildEntranceSigns() {
+      for (const sg of entranceSigns) {
+        life.remove(sg.obj);
+        sg.tex.dispose();
+        sg.mats.forEach((m) => m.dispose());
+        sg.geos.forEach((g) => g.dispose());
+      }
+      entranceSigns = [];
+      const reg = regionNow;
+      if (!reg || !win) return;
+      const near = (x: number, z: number) => Math.max(Math.abs(x - win!.cx), Math.abs(z - win!.cz)) <= DETAIL;
+      const list: { name: string; type: string; ax: number; az: number; w: number; d: number }[] = [
+        ...reg.landmarks.map((l) => ({ name: l.name, type: l.type, ax: l.ax, az: l.az, w: l.w, d: l.d })),
+        ...reg.spotList.filter((sp) => ["hospital", "campus", "arena", "museum", "hotel", "megamall", "worship", "cathedral", "grandmosque", "market"].includes(String(sp.kind))).map((sp) => ({ name: sp.name, type: String(sp.kind), ax: sp.x, az: sp.z, w: 1, d: 1 })),
+      ];
+      for (const l of list) {
+        const cx = l.ax + (l.w - 1) / 2, cz = l.az + (l.d - 1) / 2;
+        if (!near(cx, cz)) continue;
+        // The gate faces the side with the most road along it (south when there's none).
+        const sides = [
+          { dx: 0, dz: 1, n: 0 },
+          { dx: 0, dz: -1, n: 0 },
+          { dx: 1, dz: 0, n: 0 },
+          { dx: -1, dz: 0, n: 0 },
+        ];
+        for (const sd of sides) {
+          if (sd.dz) for (let x = l.ax; x < l.ax + l.w; x++) if (reg.roadAt(x, sd.dz > 0 ? l.az + l.d : l.az - 1)) sd.n++;
+          if (sd.dx) for (let z = l.az; z < l.az + l.d; z++) if (reg.roadAt(sd.dx > 0 ? l.ax + l.w : l.ax - 1, z)) sd.n++;
+        }
+        const side = sides.reduce((a, b) => (b.n > a.n ? b : a), sides[0]);
+        const big = l.w * l.d > 2;
+        // Sized to the people on the map (drawn bigger than life): taller than a person, readable on foot.
+        const W = big ? 0.5 : 0.32;
+        const H = big ? 0.11 : 0.075;
+        const post = big ? 0.32 : 0.25;
+        const half = side.dz ? l.d / 2 : l.w / 2;
+        const px = cx + side.dx * (half + 0.06);
+        const pz = cz + side.dz * (half + 0.06);
+        const tex = signTexture(l.name, l.type);
+        const face = new THREE.MeshBasicMaterial({ map: tex });
+        const board = new THREE.PlaneGeometry(W, H);
+        const postGeo = new THREE.BoxGeometry(0.018, post, 0.018).translate(0, post / 2, 0);
+        const frameGeo = new THREE.BoxGeometry(W + 0.016, H + 0.016, 0.008);
+        const obj = new THREE.Group();
+        const panel = new THREE.Mesh(board, face);
+        panel.position.set(0, post - H / 2, 0.0045);
+        const panelBack = new THREE.Mesh(board, face);
+        panelBack.position.set(0, post - H / 2, -0.0045);
+        panelBack.rotation.y = Math.PI;
+        const back = new THREE.Mesh(frameGeo, signPost);
+        back.position.set(0, post - H / 2, 0);
+        obj.add(panel, panelBack, back);
+        for (const sx of [-W / 2, W / 2]) {
+          const m = new THREE.Mesh(postGeo, signPost);
+          m.position.x = sx;
+          m.castShadow = true;
+          obj.add(m);
+        }
+        obj.position.set(px, 0, pz);
+        obj.rotation.y = Math.atan2(side.dx, side.dz);
+        life.add(obj);
+        entranceSigns.push({ obj, tex, mats: [face], geos: [board, postGeo, frameGeo] });
+      }
+    }
+
     function buildLandmarks() {
       // Boards keep showing what they showed (no flicker when the city grows).
       const wasShowing = new Map(boards.map((b) => [b.id, b.shown]));
@@ -2694,6 +2803,7 @@ export function CityView({
       boats.build();
       realTransit.build(plan.region);
       buildLandmarks();
+      buildEntranceSigns();
       plumes.build();
       sites.build();
       if (!isRevealed) buildingSite.build(newSeed, count, siteBox());

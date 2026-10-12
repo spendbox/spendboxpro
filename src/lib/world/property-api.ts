@@ -14,7 +14,7 @@ import type { Listing, MarketBoard, RentLevel } from "./market.ts";
 /** What collecting pay came to (mint): game days, pay, income tax, fares, what's left. */
 export type PaySettled = { days: number; gross: number; tax: number; fares: number; net: number; hustle?: { gross: number; tax: number; net: number } };
 
-export type PropertyResult = { ok: true; coins?: number; home?: boolean; rent?: number; pay?: PaySettled; fare?: number; /** Something you found on the way. */ found?: string } | { ok: false; error: string };
+export type PropertyResult = { ok: true; coins?: number; home?: boolean; rent?: number; pay?: PaySettled; fare?: number; /** How you went (a trip). */ mode?: string; /** Something you found on the way. */ found?: string } | { ok: false; error: string };
 
 export type AssetUnit = {
   unit: string;
@@ -146,7 +146,7 @@ export type PropertyApi = {
   reportMap: (r: { region: string; x: number; z: number; kind: ReportKind; note: string }) => Promise<PropertyResult>;
   /** Go to a building: pay the fare from where you last were (the cheapest way), and be there. */
   /** Go to a building, paying the fare (or, `drive`, the fuel for your own car). */
-  travelTo: (buildingId: string, drive?: boolean) => Promise<PropertyResult>;
+  travelTo: (buildingId: string, drive?: boolean, from?: { x: number; z: number }) => Promise<PropertyResult>;
   // The player market (./market).
   setRentLevel: (unitId: string, level: RentLevel) => Promise<PropertyResult>;
   listUnit: (unitId: string, price: number) => Promise<PropertyResult>;

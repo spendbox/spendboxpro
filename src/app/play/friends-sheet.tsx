@@ -147,7 +147,7 @@ export function FriendsSheet({
         </span>
         <div className="min-w-0 flex-1">
           <h2 className="font-display text-xl font-extrabold leading-tight">Friends</h2>
-          <p className="text-xs text-muted">They stay your friends in every new town. See where they are and go to them.</p>
+          <p className="text-xs text-muted">They stay your friends in every new town. See where they are and meet them there (the fare there, as usual).</p>
         </div>
         <button onClick={onClose} className="grid size-9 shrink-0 place-items-center self-start rounded-full text-muted hover:bg-panel-2" aria-label="Close">
           <X className="size-5" />
@@ -228,7 +228,7 @@ export function FriendsSheet({
                     {at && !here && (
                       <button onClick={() => onGo(f, at.room)} className="flex items-center gap-1 rounded-full bg-[#7048e8] px-3 py-1.5 text-xs font-bold text-white">
                         <MapPin className="size-3.5" />
-                        Go
+                        Meet
                       </button>
                     )}
                     <button onClick={() => onMessage(f)} className="grid size-8 place-items-center rounded-full bg-white text-ink ring-1 ring-ink/10" aria-label={`Message ${f.name}`}>
