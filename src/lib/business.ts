@@ -10,6 +10,7 @@ import { regionMap } from "@/lib/world";
 import { BUILDING_LABEL, type Building } from "@/lib/world/buildings";
 import { BUSINESS_KINDS, CATEGORIES, leasePrice, STOREY_AFTER_DAYS, upgradePrice, UPGRADES, type MapBusiness } from "@/lib/world/business";
 import { ownedSpot } from "@/lib/world/owned";
+import { toTile } from "@/lib/world/geo";
 
 // Real businesses on the map (docs/BUSINESS.md; the database part is game-db/043_business.sql). A
 // business picks a building, fills in its details and pays a year's lease through Paystack; prices
@@ -217,4 +218,65 @@ export async function setBillboard(advertiserId: string, leaseId: string, form: 
   // The old design goes (never the logo, which the building still shows).
   if (typeof data === "string" && data.startsWith("billboards/")) await db.storage.from(AD_BUCKET).remove([data]);
   return { ok: true };
+}
+
+// ---------------------------------------------------------------- finding a building
+
+export type AdPlace = { label: string; note: string; x: number; z: number };
+
+/** Places to search near (districts, neighbourhoods, landmarks) for the advertising wizard. */
+export function adPlaces(region: string): AdPlace[] {
+  const map = regionMap(region);
+  if (!map) return [];
+  const at = (lat: number, lon: number) => {
+    const t = toTile(map.frame, { lat, lon });
+    return { x: Math.round(t.x), z: Math.round(t.z) };
+  };
+  const out: AdPlace[] = [];
+  for (const d of map.region.districts) out.push({ label: d.name, note: "District", ...at(d.at.lat, d.at.lon) });
+  for (const a of map.region.areas) out.push({ label: a.name, note: a.kind === "town" ? "Town" : "Neighbourhood", ...at(a.at[0], a.at[1]) });
+  for (const l of map.landmarks) out.push({ label: l.name, note: "Near a landmark", x: Math.round(l.ax + (l.w - 1) / 2), z: Math.round(l.az + (l.d - 1) / 2) });
+  const seen = new Set<string>();
+  return out.filter((p) => (seen.has(p.label) ? false : (seen.add(p.label), true)));
+}
+
+/**
+ * Buildings free to lease round a spot (nearest first): not a landmark, no player owns any of it,
+ * no business has it. At most `limit`, and only those up to `maxNaira` a year when given.
+ */
+export async function leasableNear(region: string, x: number, z: number, maxNaira?: number, limit = 30): Promise<LeaseOffer[]> {
+  const map = regionMap(region);
+  const plan = planFor(region);
+  if (!map || !plan) return [];
+  const R = 10;
+  const found: (LeaseOffer & { d: number })[] = [];
+  for (let dx = -R; dx <= R; dx++)
+    for (let dz = -R; dz <= R; dz++) {
+      const tx = Math.round(x) + dx;
+      const tz = Math.round(z) + dz;
+      if (!map.inside(tx, tz) || map.waterAt(tx, tz)) continue;
+      const t = tileAt(plan, spiralIndex(tx, tz));
+      const b = t.building as Building | undefined;
+      if (!b || b.id !== `${region}:${tx},${tz}`) continue;
+      const price = leasePrice(b.kind, map.landPriceAt(tx, tz));
+      if (maxNaira && price > maxNaira) continue;
+      found.push({ building: b.id, region, what: BUILDING_LABEL[b.kind], area: map.areaAt(tx, tz), address: addressOf(plan, t), priceNaira: price, d: Math.hypot(dx, dz) });
+    }
+  found.sort((a, b) => a.d - b.d);
+  const near = found.slice(0, limit * 3);
+  if (!near.length) return [];
+  const ids = near.map((o) => o.building);
+  const db = createAdminClient();
+  const [{ data: owned }, { data: leased }] = await Promise.all([
+    db.from("property_units").select("building_id").in("building_id", ids),
+    db.from("business_leases").select("building_id").in("building_id", ids).eq("status", "live"),
+  ]);
+  const taken = new Set([...((owned ?? []) as { building_id: string }[]), ...((leased ?? []) as { building_id: string }[])].map((r) => r.building_id));
+  return near
+    .filter((o) => !taken.has(o.building))
+    .slice(0, limit)
+    .map(({ d: _d, ...o }) => {
+      void _d;
+      return o;
+    });
 }

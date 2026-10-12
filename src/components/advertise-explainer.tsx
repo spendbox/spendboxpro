@@ -9,7 +9,7 @@ import { Building2, ChartColumn, CreditCard, Hourglass, ImageUp, MapPin, Megapho
 
 const STEPS: { icon: LucideIcon; title: string; text: string }[] = [
   { icon: MapPin, title: "Choose", text: "Tap a building, choose Lease" },
-  { icon: CreditCard, title: "Pay once", text: "From ₦60,000 a year" },
+  { icon: CreditCard, title: "Pay once", text: "From ₦20,000 a year" },
   { icon: Rocket, title: "Live", text: "Your building and billboards" },
 ];
 
@@ -57,7 +57,7 @@ export function AdvertiseExplainer({ onClose }: { onClose: () => void }) {
         <button type="button" onClick={onClose} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold">
           Not now
         </button>
-        <Link href="/advertise" className="flex-1 rounded-xl bg-gold py-2.5 text-center font-semibold text-ink">
+        <Link href="/advertise/start" className="flex-1 rounded-xl bg-gold py-2.5 text-center font-semibold text-ink">
           See how it works
         </Link>
       </div>

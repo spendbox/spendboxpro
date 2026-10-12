@@ -1,6 +1,6 @@
 "use server";
 
-import { setBillboard, startLeaseCheckout, startUpgradeCheckout, type Checkout } from "@/lib/business";
+import { leasableNear, leaseOffer, setBillboard, startLeaseCheckout, startUpgradeCheckout, type Checkout, type LeaseOffer } from "@/lib/business";
 import { currentAdvertiserId } from "../advertiser/session";
 
 // The business lease form and upgrades (src/lib/business.ts): the browser is sent to Paystack.
@@ -35,4 +35,19 @@ export async function changeBillboard(leaseId: string, form: FormData): Promise<
     console.error("Billboard change failed", error);
     return { ok: false, error: "Something went wrong. Please try again." };
   }
+}
+
+/** The advertising wizard: buildings free to lease near a place, up to a yearly budget. */
+export async function findBuildings(region: string, x: number, z: number, maxNaira?: number): Promise<LeaseOffer[]> {
+  try {
+    return await leasableNear(String(region), Number(x) || 0, Number(z) || 0, maxNaira ? Number(maxNaira) : undefined);
+  } catch (error) {
+    console.error("Finding buildings failed", error);
+    return [];
+  }
+}
+
+/** One building's lease offer (the wizard's chosen building). */
+export async function offerFor(buildingId: string) {
+  return leaseOffer(String(buildingId));
 }

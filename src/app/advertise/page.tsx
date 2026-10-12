@@ -75,8 +75,8 @@ export default async function AdvertisePage() {
           Lease a real-looking building for a year with your name and logo on it, and put your design on the city&apos;s billboards. From ₦{fmt(LEASE_MIN)} a year.
         </p>
         <div className="mt-5 flex flex-wrap items-center gap-3">
-          <Link href="/play" className="rounded-xl bg-gold px-5 py-3 font-semibold text-ink shadow-sm">
-            Choose a building
+          <Link href="/advertise/start" className="rounded-xl bg-gold px-5 py-3 font-semibold text-ink shadow-sm">
+            Start: find a building
           </Link>
           {s.players > 0 && (
             <span className="text-sm text-muted">

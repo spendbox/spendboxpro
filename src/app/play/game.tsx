@@ -2145,7 +2145,7 @@ export function Game({
             <button onClick={() => setAdvertise(null)} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold">
               Not now
             </button>
-            <Link href="/advertise" className="flex-1 rounded-xl bg-gold py-2.5 text-center font-semibold text-ink">
+            <Link href="/advertise/start" className="flex-1 rounded-xl bg-gold py-2.5 text-center font-semibold text-ink">
               Advertise here
             </Link>
           </div>
@@ -2190,7 +2190,7 @@ export function Game({
             )}
           </div>
           <p className="mt-3 text-center text-[11px] text-muted">
-            Want your own billboard? <Link href="/advertise" className="underline">Advertise here</Link>
+            Want your own billboard? <Link href="/advertise/start" className="underline">Advertise here</Link>
           </p>
         </Sheet>
       )}
