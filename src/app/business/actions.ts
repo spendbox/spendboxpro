@@ -1,6 +1,6 @@
 "use server";
 
-import { leasableNear, leaseOffer, setBillboard, startLeaseCheckout, startUpgradeCheckout, type Checkout, type LeaseOffer } from "@/lib/business";
+import { leasableAcross, leasableNear, leaseOffer, setBillboard, startLeaseCheckout, startUpgradeCheckout, type Checkout, type LeaseOffer } from "@/lib/business";
 import { currentAdvertiserId } from "../advertiser/session";
 
 // The business lease form and upgrades (src/lib/business.ts): the browser is sent to Paystack.
@@ -41,6 +41,16 @@ export async function changeBillboard(leaseId: string, form: FormData): Promise<
 export async function findBuildings(region: string, x: number, z: number, maxNaira?: number): Promise<LeaseOffer[]> {
   try {
     return await leasableNear(String(region), Number(x) || 0, Number(z) || 0, maxNaira ? Number(maxNaira) : undefined);
+  } catch (error) {
+    console.error("Finding buildings failed", error);
+    return [];
+  }
+}
+
+/** The wizard with no area chosen: good picks across the city. */
+export async function findBuildingsAnywhere(region: string, maxNaira?: number): Promise<LeaseOffer[]> {
+  try {
+    return await leasableAcross(String(region), maxNaira ? Number(maxNaira) : undefined);
   } catch (error) {
     console.error("Finding buildings failed", error);
     return [];

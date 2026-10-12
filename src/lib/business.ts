@@ -280,3 +280,17 @@ export async function leasableNear(region: string, x: number, z: number, maxNair
       return o;
     });
 }
+
+/** Good picks across the whole city (no area chosen): a few free buildings from each district, cheapest first. */
+export async function leasableAcross(region: string, maxNaira?: number): Promise<LeaseOffer[]> {
+  const map = regionMap(region);
+  if (!map) return [];
+  const places = map.region.districts.slice(0, 12).map((d) => toTile(map.frame, { lat: d.at.lat, lon: d.at.lon }));
+  const lists = await Promise.all(places.map((p) => leasableNear(region, p.x, p.z, maxNaira, 3)));
+  const seen = new Set<string>();
+  return lists
+    .flat()
+    .filter((o) => (seen.has(o.building) ? false : (seen.add(o.building), true)))
+    .sort((a, b) => a.priceNaira - b.priceNaira)
+    .slice(0, 24);
+}
