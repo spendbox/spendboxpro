@@ -211,6 +211,13 @@ export function levelsOf(t: Tile, plan: CityPlan): PlaceLevel[] {
     t.structure.inside?.forEach((name, k) => {
       if (drafts[k] && name) drafts[k].label = name;
     });
+    // Real landmarks (Unilag, the National Stadium...): their main entrance is a place to be too,
+    // the gate with the name over it, first in the list.
+    if (plan.region && t.structure.name && !drafts.some((d) => d.id === "o")) {
+      const c = structureCentre(t.structure);
+      const d = t.structure.d ?? 2;
+      drafts.unshift({ id: "o", label: `${t.structure.name} · Main entrance`, kind: "outdoor", theme: "plaza", x: c.x, y: 0.08, z: c.z + d / 2 - 0.12, hw: 0.08, hd: 0.06, ry: 0, floor: 0, weight: 0.8 });
+    }
     return share(total, drafts);
   }
 

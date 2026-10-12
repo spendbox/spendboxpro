@@ -1409,9 +1409,12 @@ export function CityView({
   useEffect(() => {
     const el = host.current!;
     const statsOn = typeof location !== "undefined" && new URLSearchParams(location.search).has("stats");
-    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    // iPhones and iPads: Safari closes a tab that uses too much memory (it looks like the app won't
+    // open), so no extra smoothing and a lighter screen there.
+    const ios = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const renderer = new THREE.WebGLRenderer({ antialias: !ios, powerPreference: ios ? "default" : "high-performance" });
     // Phones have very dense screens; 1.5× looks just as sharp and draws much faster.
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, window.innerWidth < 700 ? 1.5 : 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, ios ? 1.25 : window.innerWidth < 700 ? 1.5 : 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -1439,7 +1442,7 @@ export function CityView({
     scene.add(hemi);
     const sun = new THREE.DirectionalLight(0xfff1dc, 2.4);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.mapSize.set(ios ? 1024 : 2048, ios ? 1024 : 2048);
     sun.shadow.bias = -0.0005;
     sun.shadow.normalBias = 0.02;
     scene.add(sun, sun.target);

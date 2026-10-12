@@ -1,5 +1,6 @@
 "use server";
 
+import { pushTo } from "@/lib/push";
 import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -36,7 +37,7 @@ const VOICE_TYPES = ["audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "audi
 // 017_world_events.sql): a building level (g, f1…f200, r), a whole building (old), balloon 0…50,
 // or a ride "v:<train|bus|car|boat|ferris|slide|heli>:<n>".
 const ROOM_RE =
-  /^(b:[0-9]{1,7}(:(g|r|f([1-9]|[1-9][0-9]|1[0-9][0-9]|200)))?|balloon:([0-9]|[1-4][0-9]|50)|v:(train|bus|car|boat|ferris|slide|heli):[0-9]{1,7})$/;
+  /^(b:[0-9]{1,7}(:(g|o|r|f([1-9]|[1-9][0-9]|1[0-9][0-9]|200)))?|balloon:([0-9]|[1-4][0-9]|50)|v:(train|bus|car|boat|ferris|slide|heli):[0-9]{1,7})$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const FRIENDLY: Record<string, string> = {
@@ -122,6 +123,8 @@ export async function sendMessage(text: string, target: ChatTarget): Promise<Res
   if (body.length > 500) return { ok: false, error: FRIENDLY.too_long };
   const { data, error } = await s.db.rpc("chat_send", { p_user: s.userId, p_room: t.room, p_to: t.to, p_body: body });
   if (error || !data) return { ok: false, error: friendly(error?.message, "Couldn't send. Try again.") };
+  // A private message: a notification on their phone (if they turned them on).
+  if (t.to) await pushTo(t.to).catch(() => {});
   return { ok: true, message: data as ChatMessage };
 }
 

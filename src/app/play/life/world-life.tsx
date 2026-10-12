@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DoorOpen } from "lucide-react";
-import { Briefcase, Flag, HeartPulse, House, MapPin, Pencil, Search, Sparkles, Star, Wallet, X } from "@/components/icons";
+import { Briefcase, Flag, HeartPulse, House, MapPin, Pencil, Search, Sparkles, X } from "@/components/icons";
 import { addressOf, makePlan, spiralIndex, tileAt, type CityPlan } from "@/lib/city/layout";
 import { BUILDING_LABEL } from "@/lib/world/buildings";
 import type { RegionMap } from "@/lib/world/compile";
@@ -122,7 +122,6 @@ export function useWorldLife({
   beforeHome,
   meId,
   onPerson,
-  wallet,
 }: {
   api: PropertyApi;
   regionId: string | null;
@@ -138,8 +137,6 @@ export function useWorldLife({
   /** Your account (to know your own marks), and opening someone's card. */
   meId?: string | null;
   onPerson?: (id: string) => void;
-  /** Your cash at hand, shown on the row with Home, Income and Life (opens Finance). */
-  wallet?: number;
 }) {
   const region = useMemo(() => regionMap(regionId), [regionId]);
   const { assets, owned, loaded, refresh } = useLife(api, signedIn ? regionId : null);
@@ -628,26 +625,6 @@ export function useWorldLife({
             </>
           )}
           {signedIn && homeUnit && <LifeButton icon={Sparkles} label="Soon" onClick={() => setSoonOpen(true)} />}
-          {signedIn && life && rep && (
-            // Your reputation: what adds to it and what takes it away.
-            <button onClick={() => setRepOpen(true)} className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1 rounded-full px-3 text-sm font-bold" aria-label={`Reputation ${rep.score}`}>
-              <Star className="size-4 text-gold-dark" />
-              {rep.score.toLocaleString("en-GB")}
-            </button>
-          )}
-          {signedIn && life && wallet !== undefined && (
-            // Your cash at hand: opens Finance.
-            <button
-              onClick={() => openFinance()}
-              className={`glass pointer-events-auto relative flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-bold ${financeGlow ? "outline outline-2 outline-offset-2 outline-gold" : ""}`}
-              aria-label="Finance"
-            >
-              <Wallet className="size-4 text-gold-dark" />
-              {cash(wallet)}
-              {financeDot && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-hit" />}
-              {financeGlow && <Ripple />}
-            </button>
-          )}
         </div>
         {rep?.jail && Date.parse(rep.jail) > clock && (
           <JailBanner until={rep.jail} prices={region.region.prices} onDone={(text, good) => setMessage({ text, good })} onFree={() => setRep((r) => (r ? { ...r, jail: null } : r))} />

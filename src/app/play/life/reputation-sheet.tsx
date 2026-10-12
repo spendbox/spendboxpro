@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, Clapperboard, Coins, Egg, Globe, Landmark, Megaphone, Rocket, Briefcase as Work, Wallet } from "lucide-react";
+import { ArrowDown, ArrowUp, Building, Clapperboard, Coins, Egg, Gift, Globe, Landmark, Megaphone, Rocket, Smile, Users, Briefcase as Work, Wallet, Zap } from "lucide-react";
 import { Star } from "@/components/icons";
 import { reputationDetails, type RepDetails } from "../rep-actions";
 import { Sheet } from "../sheet";
@@ -83,12 +83,17 @@ function Line({ line }: { line: { label: string; points: number; how: string } }
 }
 
 const SOON: { icon: typeof Rocket; title: string; text: string }[] = [
+  { icon: Globe, title: "All of Nigeria, then Africa, then the world", text: "Every Nigerian city on its real map first, then Africa's, then the world's. Live in one, visit the others." },
   { icon: Clapperboard, title: "Post videos and moments", text: "Share videos, photos and stories from your real life, pinned to places on the map." },
   { icon: Landmark, title: "Politics", text: "Run for councillor of your area, campaign, vote, and decide what the city's taxes pay for." },
   { icon: Egg, title: "Easter eggs", text: "Secrets hidden around Lagos, with prizes for whoever finds them first." },
   { icon: Work, title: "Real jobs", text: "Real companies hiring through the game: apply, interview, get paid in real life." },
   { icon: Wallet, title: "Creator payouts", text: "Get paid for what you make and post, and for your reputation: half of Newtown's revenue shared." },
-  { icon: Globe, title: "More cities", text: "Abuja, Accra, Nairobi, London... each on its real map. Live in one, visit the others." },
+  { icon: Building, title: "Over a million building designs", text: "Buildings that look like the real ones, with more floors to explore inside, and many more landmarks." },
+  { icon: Zap, title: "More of the city", text: "Transformers, power lines, water tanks, bus stops, kiosks, street lights... the everyday things that make Lagos Lagos." },
+  { icon: Smile, title: "Better avatars", text: "More faces, hair, clothes and moves, so you look like you." },
+  { icon: Users, title: "Group conversations", text: "Group chats with your friends, your street, your rivals or your fans." },
+  { icon: Gift, title: "Rewards from real companies", text: "Real brands giving real rewards for what you do in the game." },
 ];
 
 /** What's coming to Newtown, and a way to help it get there (advertise). */
