@@ -1,5 +1,6 @@
 "use client";
 
+import { rememberPerson } from "./recent-rail";
 import { useEffect, useState } from "react";
 import { Hand, Heart, HeartCrack, Swords, Zap } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
@@ -89,6 +90,7 @@ export function StreetRow({ id, name, hasHome, prices, onDone }: { id: string; n
                 onClick={() =>
                   void go(() => prankDoor(id, p.id, prankNote)).then((ok) => {
                     if (!ok) return;
+                    rememberPerson({ id, name }, "Pranked");
                     setOpen(null);
                     setPrankNote("");
                   })

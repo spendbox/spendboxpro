@@ -114,6 +114,9 @@ import type { ExplorePlace } from "@/lib/world/explore";
 import { Joystick } from "./joystick";
 import { PeopleList } from "./people/people-list";
 import { StatsSheet } from "./stats-sheet";
+import { GiftPop, GiftSent } from "./people/gift-pop";
+import { PhoneHub } from "./phone/phone-hub";
+import { RecentRail, rememberPerson } from "./people/recent-rail";
 import { PrankReveal, usePrankReveal } from "./people/prank-reveal";
 import { openAdvertise } from "./life/advertise-panel";
 import * as propertyActions from "./property-actions";
@@ -402,6 +405,11 @@ export function Game({
   const [chatOpen, setChatOpen] = useState(false);
   const [showResults, setShowResults] = useState<number | null>(null);
   const [toasts, setToasts] = useState<FeedItem[]>([]);
+  /** Your notices on the real map that arrived since the page loaded (asked for every 15 s, and at once when a push comes). */
+  const [liveNotes, setLiveNotes] = useState<GameState["notifications"]>([]);
+  /** Gifts that just arrived: one at a time, a present bouncing on the screen (tap to open it). */
+  const [giftPops, setGiftPops] = useState<FeedItem[]>([]);
+  const nextGift = useCallback(() => setGiftPops((l) => l.slice(1)), []);
   const [feedOpen, setFeedOpen] = useState(false);
   const [feedSeenAt, setFeedSeenAt] = useState<string>(state.serverNow);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
@@ -425,6 +433,9 @@ export function Game({
   /** The real map: the city card (tap the place's name) and the phone's own menu (bottom right). */
   const [cityOpen, setCityOpen] = useState(false);
   const [phoneHub, setPhoneHub] = useState(false);
+  /** What counts as new on the phone's screen (when it was last opened), and a little ring when something arrives. */
+  const [phoneSince, setPhoneSince] = useState(() => new Date(0).toISOString());
+  const [phoneRing, setPhoneRing] = useState(0);
   /** Someone's card (a face tapped on the map, or from your doorstep), and your doorstep. */
   const [personId, setPersonId] = useState<string | null>(null);
   const [doorstepOpen, setDoorstepOpen] = useState(false);
@@ -819,6 +830,7 @@ export function Game({
   }
   function chatWith(p: { id: string; name: string }) {
     if (me.guest) return setSignInWhy("Sign in to chat.");
+    rememberPerson(p, "Messaged");
     setDmRequest({ id: p.id, name: p.name, at: Date.now() });
     setChatOpen(true);
   }
@@ -1193,14 +1205,19 @@ export function Game({
         return n ? ({ key: `e${e.id}`, at: e.at, text: n.text, tone: n.tone, avatar: n.avatar ?? null, icon: n.icon, quiet: mineDuel } as FeedItem) : null;
       })
       .filter((x): x is FeedItem => x !== null);
-    const mine = state.notifications.map((n) => ({
+    const known = new Set(state.notifications.map((n) => n.id));
+    const allNotes = [...state.notifications, ...liveNotes.filter((n) => !known.has(n.id))];
+    const mine = allNotes.map((n) => ({
       key: `n${n.id}`,
       at: n.at,
       text: n.tile !== null && n.kind === "trap" ? `${n.body} (near ${where(n.tile)})` : n.body,
       tone: n.kind === "caught" ? ("alarm" as const) : ("mine" as const),
       avatar: n.kind === "caught" || n.kind === "shield" ? me.avatar : null,
       quiet: n.kind === "duel_won" || n.kind === "duel_lost" || n.kind === "heist",
-      icon: (({ trap: "trap", trapped: "trap", swept: "drone", caught: "catch", shield: "shield", shielded: "shield", decoy: "decoy", streak: "flame", gift: "gift", spray: "gift", hug: "hug", handshake: "handshake", thanks: "hug", duel: "duel", duel_won: "duel", duel_lost: "duel", heist: "coin" }) as Record<string, FeedIcon>)[n.kind] ?? "info",
+      icon: ((
+        { trap: "trap", trapped: "trap", swept: "drone", caught: "catch", shield: "shield", shielded: "shield", decoy: "decoy", streak: "flame", gift: "gift", spray: "gift", hug: "hug", handshake: "handshake", thanks: "hug", duel: "duel", duel_won: "duel", duel_lost: "duel", heist: "coin", market: "coin", dating: "hug" }) as Record<string, FeedIcon>
+      )[n.kind] ?? (n.kind === "doorstep" && /gift/i.test(n.body) ? "gift" : "info"),
+      kind: n.kind,
     }));
     // World events that have started: news you can tap to fly there.
     const news = state.worldEvents
@@ -1216,11 +1233,13 @@ export function Game({
     // The real map: only notices for you (offers, sales, gifts...), none of the old hunt's.
     if (worldId) return mine.filter((n) => !HUNT_NOTICES.has(n.icon)).sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 60);
     return [...pub, ...mine, ...news].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 60);
-  }, [state.events, state.notifications, state.worldEvents, state.me.name, serverNowMs, botName, myLastSpot, where, me.avatar, worldId]);
+  }, [state.events, state.notifications, liveNotes, state.worldEvents, state.me.name, serverNowMs, botName, myLastSpot, where, me.avatar, worldId]);
   const unread = feed.filter((f) => Date.parse(f.at) > Date.parse(feedSeenAt)).length;
 
   // Hugs, handshakes and mint that arrived since you last opened My gifts.
-  const newGifts = state.notifications.filter((n) => ["hug", "handshake", "gift", "spray"].includes(n.kind) && Date.parse(n.at) > giftsSeenAt).length;
+  const newGifts = [...state.notifications, ...liveNotes.filter((l) => !state.notifications.some((n) => n.id === l.id))].filter(
+    (n) => ["hug", "handshake", "gift", "spray"].includes(n.kind) && Date.parse(n.at) > giftsSeenAt,
+  ).length;
   function openGifts() {
     setGiftsOpen(true);
     const t = Date.parse(state.serverNow);
@@ -1246,14 +1265,77 @@ export function Game({
     if (fresh.some((f) => f.key.startsWith("n") && f.tone === "alarm")) playSfx("caught");
     const pop = fresh.filter((f) => !f.quiet);
     if (!pop.length || feedOpen || quietNow) return;
-    const id = setTimeout(() => setToasts((list) => [...pop.slice(0, 2).reverse(), ...list].slice(0, 2)), 0);
+    // Oldest first, one at a time (never a pile of them at once). Gifts get their own pop-up.
+    const ordered = [...pop].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+    const gifts = ordered.filter((f) => f.icon === "gift" || f.icon === "hug" || f.icon === "handshake");
+    const rest = ordered.filter((f) => !gifts.includes(f));
+    const id = setTimeout(() => {
+      setPhoneRing((n) => n + 1);
+      if (rest.length) setToasts((list) => [...list, ...rest].slice(-8));
+      if (gifts.length) setGiftPops((list) => [...list, ...gifts].slice(-6));
+      playSfx("chime");
+    }, 0);
     return () => clearTimeout(id);
   }, [feed, feedOpen, quietNow]);
   useEffect(() => {
     if (!toasts.length) return;
-    const id = setTimeout(() => setToasts((list) => list.slice(0, -1)), 5500);
+    // The one showing goes after a few seconds, then the next comes in.
+    const id = setTimeout(() => setToasts((list) => list.slice(1)), 4800);
     return () => clearTimeout(id);
   }, [toasts]);
+  // The real map: new notices every 15 seconds (and at once when a push arrives).
+  const lastNoteId = useRef(0);
+  useEffect(() => {
+    if (!worldId || me.guest) return;
+    let alive = true;
+    lastNoteId.current = Math.max(lastNoteId.current, ...state.notifications.map((n) => n.id), 0);
+    const look = () => {
+      if (document.visibilityState !== "visible") return;
+      void fetch(`/api/notices?after=${lastNoteId.current}`, { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : { notices: [] }))
+        .then((d: { notices?: GameState["notifications"] }) => {
+          if (!alive || !d.notices?.length) return;
+          lastNoteId.current = Math.max(lastNoteId.current, ...d.notices.map((n) => n.id));
+          setLiveNotes((list) => [...d.notices!, ...list].slice(0, 60));
+        })
+        .catch(() => {});
+    };
+    const every = setInterval(look, 15_000);
+    // A push arrived (the phone's service worker says so): look now. A tapped notification: go there.
+    const onMessage = (e: MessageEvent) => {
+      const t = (e.data as { type?: string; url?: string } | null)?.type;
+      if (t === "newtown-push") look();
+      if (t === "newtown-open") {
+        const u = new URL(String((e.data as { url?: string }).url ?? "/play"), location.origin);
+        const dm = u.searchParams.get("dm");
+        if (dm) chatWith({ id: dm, name: u.searchParams.get("name") || "Message" });
+      }
+    };
+    navigator.serviceWorker?.addEventListener("message", onMessage);
+    return () => {
+      alive = false;
+      clearInterval(every);
+      navigator.serviceWorker?.removeEventListener("message", onMessage);
+    };
+    // chatWith is a plain function (new each render); the listener only needs the latest at the time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [worldId, me.guest, state.notifications]);
+  // Opened from a message notification (?dm=<who>): straight into that conversation.
+  useEffect(() => {
+    if (me.guest) return;
+    const sp = new URLSearchParams(window.location.search);
+    const dm = sp.get("dm");
+    if (!dm) return;
+    const name = sp.get("name") || "Message";
+    const url = new URL(window.location.href);
+    url.searchParams.delete("dm");
+    url.searchParams.delete("name");
+    window.history.replaceState(null, "", url);
+    const t = setTimeout(() => chatWith({ id: dm, name }), 900);
+    return () => clearTimeout(t);
+    // Once, when the game opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // When a round finishes, show its results once (remembered on this device).
   const resultsId = state.results?.roundId ?? null;
@@ -1878,10 +1960,15 @@ export function Game({
       )}
 
       {/* Latest notices pop up under the bell; the bell opens the full list. */}
-      <div className={cn("pointer-events-none absolute right-3 z-10 flex w-[min(19rem,calc(100vw-1.5rem))] flex-col items-end gap-1.5 sm:right-4 sm:top-16", statsMin ? "top-14" : "top-[14.5rem]", worldId && "hidden")}>
+      <div
+        className={cn(
+          "pointer-events-none absolute z-30 flex w-[min(20rem,calc(100vw-1.5rem))] flex-col items-end gap-1.5",
+          worldId ? "left-1/2 top-[7.5rem] -translate-x-1/2 sm:top-28" : cn("right-3 sm:right-4 sm:top-16", statsMin ? "top-14" : "top-[14.5rem]"),
+        )}
+      >
         {!feedOpen &&
           !menu &&
-          toasts.map((n) => (
+          toasts.slice(0, 1).map((n) => (
             <button
               key={n.key}
               onClick={() => {
@@ -1894,9 +1981,10 @@ export function Game({
                 setFeedSeenAt(new Date(now).toISOString());
                 setToasts([]);
               }}
-              className="glass pointer-events-auto w-full rounded-2xl px-3 py-2 text-left shadow-lg"
+              className="glass toast-in pointer-events-auto w-full rounded-2xl px-3 py-2 text-left shadow-lg"
             >
               <FeedRow item={n} now={now} compact />
+              {toasts.length > 1 && <span className="mt-0.5 block text-right text-[10px] text-muted">+{toasts.length - 1} more in your phone</span>}
             </button>
           ))}
       </div>
@@ -2771,6 +2859,7 @@ export function Game({
       {worldId && !camera && !guest && !place && (
         <button
           onClick={() => {
+            setPhoneSince(feedSeenAt);
             setPhoneHub(true);
             setMenu(false);
             setFeedSeenAt(new Date(now).toISOString());
@@ -2778,66 +2867,57 @@ export function Game({
           className="pointer-events-auto absolute bottom-4 right-3 z-20 grid size-12 place-items-center rounded-2xl bg-[#f08c00] text-white shadow-lg sm:bottom-6 sm:right-4"
           aria-label="Your phone"
         >
-          <Smartphone className="size-5" />
+          {/* It rings (a shake) when something new arrives. */}
+          <span key={phoneRing} className={phoneRing ? "phone-ring grid place-items-center" : "grid place-items-center"}>
+            <Smartphone className="size-5" />
+          </span>
           {unread + chatUnread > 0 && (
             <span className="absolute -right-1.5 -top-1.5 grid min-w-5 place-items-center rounded-full bg-hit px-1 text-[11px] font-semibold text-white">{unread + chatUnread > 9 ? "9+" : unread + chatUnread}</span>
           )}
         </button>
       )}
       {phoneHub && (
-        <Sheet onClose={() => setPhoneHub(false)} title="Your phone">
-          <div className="grid grid-cols-3 gap-2">
-            {(
-              [
-                ["Messages", MessageCircle, () => { setChatOpen(true); setChatUnread(0); }],
-                ["Doorstep", DoorClosed, () => setDoorstepOpen(true)],
-                ["Dating", Heart, () => setSocialOpen("dating")],
-                ["Rivals", Swords, () => setSocialOpen("rivals")],
-                ["Leave a mark", PenLine, () => worldLife.openLeaveMark()],
-                ["My things", Gem, () => worldLife.openThings("mine")],
-                ["Shops", ShoppingBag, () => worldLife.openThings("shops")],
-                ["Cars", CarFront, () => worldLife.openThings("cars")],
-                ["Market", Store, () => worldLife.openThings("market")],
-                ["Craft", Hammer, () => worldLife.openThings("craft")],
-                ["News", Newspaper, () => worldLife.openNews()],
-                ["Camera", Camera, () => setCamera("photo")],
-                ["Selfie", User, () => setCamera("selfie")],
-                ["Photos", ImageIcon, () => setPhone("photos")],
-                ["Friends", Users, () => setFriendsOpen(true)],
-                ["Gifts", Gift, () => openGifts()],
-                ["My look", Palette, () => setEditAvatar(true)],
-                ["Guide", Lightbulb, () => worldLife.restartGuide()],
-                ["Report", Flag, () => worldLife.openReport()],
-                ["Notifications", BellRing, () => { setAlertsOpen(true); setFeedSeenAt(new Date(now).toISOString()); }],
-                ["Sign out", LogOut, () => setConfirmSignOut(true)],
-              ] as const
-            ).map(([label, Icon, go]) => (
-              <button
-                key={label}
-                onClick={() => {
-                  setPhoneHub(false);
-                  go();
-                }}
-                className="flex flex-col items-center gap-1.5 rounded-2xl bg-ink/[0.04] py-3 text-xs font-semibold hover:bg-ink/[0.07]"
-              >
-                <Icon className="size-5" />
-                {label}
-              </button>
-            ))}
-          </div>
-          <p className="mt-4 text-sm font-semibold">Notifications</p>
-          {feed.length === 0 ? (
-            <p className="mt-1 text-xs text-muted">Nothing yet.</p>
-          ) : (
-            <ul className="mt-2 space-y-1.5">
-              {feed.slice(0, 12).map((f) => (
-                <li key={f.key}>
-                  <FeedRow item={f} now={now} compact />
-                </li>
-              ))}
-            </ul>
-          )}
-        </Sheet>
+        <PhoneHub
+          onClose={() => setPhoneHub(false)}
+          onAllNotices={() => {
+            setAlertsOpen(true);
+            setFeedSeenAt(new Date(now).toISOString());
+          }}
+          notices={feed.slice(0, 20).map((f) => {
+            const mins = Math.max(0, Math.round((now - Date.parse(f.at)) / 60_000));
+            return {
+              key: f.key,
+              text: f.text,
+              when: mins < 1 ? "now" : mins < 60 ? `${mins} min ago` : mins < 1440 ? `${Math.round(mins / 60)}h ago` : `${Math.round(mins / 1440)}d ago`,
+              fresh: Date.parse(f.at) > Date.parse(phoneSince),
+              onTap: f.icon === "gift" || f.icon === "hug" || f.icon === "handshake" ? () => openGifts() : f.kind === "doorstep" ? () => setDoorstepOpen(true) : undefined,
+            };
+          })}
+          apps={[
+            { label: "Messages", icon: MessageCircle, colour: "#2f9e44", badge: chatUnread, dock: true, go: () => { setChatOpen(true); setChatUnread(0); } },
+            { label: "Camera", icon: Camera, colour: "#495057", dock: true, go: () => setCamera("photo") },
+            { label: "News", icon: Newspaper, colour: "#e03131", dock: true, go: () => worldLife.openNews() },
+            { label: "Alerts", icon: BellRing, colour: "#f08c00", badge: unread, dock: true, go: () => { setAlertsOpen(true); setFeedSeenAt(new Date(now).toISOString()); } },
+            { label: "People", icon: Users, colour: "#1c7ed6", go: () => setStatsOpen(true) },
+            { label: "Doorstep", icon: DoorClosed, colour: "#8d5524", go: () => setDoorstepOpen(true) },
+            { label: "Gifts", icon: Gift, colour: "#d6336c", badge: newGifts, go: () => openGifts() },
+            { label: "Friends", icon: Heart, colour: "#f06595", go: () => setFriendsOpen(true) },
+            { label: "Dating", icon: Heart, colour: "#c2255c", go: () => setSocialOpen("dating") },
+            { label: "Rivals", icon: Swords, colour: "#e8590c", go: () => setSocialOpen("rivals") },
+            { label: "Selfie", icon: User, colour: "#7048e8", go: () => setCamera("selfie") },
+            { label: "Photos", icon: ImageIcon, colour: "#f59f00", go: () => setPhone("photos") },
+            { label: "My things", icon: Gem, colour: "#0c8599", go: () => worldLife.openThings("mine") },
+            { label: "Shops", icon: ShoppingBag, colour: "#5f3dc4", go: () => worldLife.openThings("shops") },
+            { label: "Cars", icon: CarFront, colour: "#343a40", go: () => worldLife.openThings("cars") },
+            { label: "Market", icon: Store, colour: "#2b8a3e", go: () => worldLife.openThings("market") },
+            { label: "Craft", icon: Hammer, colour: "#a61e4d", go: () => worldLife.openThings("craft") },
+            { label: "Leave a mark", icon: PenLine, colour: "#1098ad", go: () => worldLife.openLeaveMark() },
+            { label: "My look", icon: Palette, colour: "#e64980", go: () => setEditAvatar(true) },
+            { label: "Guide", icon: Lightbulb, colour: "#fab005", go: () => worldLife.restartGuide() },
+            { label: "Report", icon: Flag, colour: "#868e96", go: () => worldLife.openReport() },
+            { label: "Sign out", icon: LogOut, colour: "#495057", go: () => setConfirmSignOut(true) },
+          ]}
+        />
       )}
       {/* The city's sounds, on or off: bottom left. */}
       {worldId && !camera && (
@@ -2933,6 +3013,10 @@ export function Game({
           onDone={(text, ok) => setMessage({ text, tone: ok ? "good" : "bad" })}
         />
       )}
+      <GiftSent />
+      {giftPops[0] && !prankShow.prank && (
+        <GiftPop key={giftPops[0].key} gift={giftPops[0]} more={giftPops.length - 1} onDone={nextGift} onDoor={() => setDoorstepOpen(true)} onGifts={() => openGifts()} />
+      )}
       {prankShow.prank && (
         <PrankReveal
           key={prankShow.prank.id}
@@ -2951,6 +3035,12 @@ export function Game({
           }}
           onClose={away.close}
         />
+      )}
+      {/* The people you dealt with lately, down the left side (folds away). */}
+      {worldId && !guest && !camera && (
+        <div className="pointer-events-none fixed left-0 top-1/2 z-10 -translate-y-1/2">
+          <RecentRail onPerson={setPersonId} onMessage={chatWith} />
+        </div>
       )}
       {/* On foot: the joystick, bottom left (drag anywhere else to look round). */}
       {walking && !place && ride === null && (

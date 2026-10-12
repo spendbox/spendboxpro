@@ -22,11 +22,16 @@ export async function GET() {
   const db = createAdminClient();
   const [{ data: n }, { data: dm }] = await Promise.all([
     db.from("notifications").select("kind, body, created_at").eq("user_id", userId).order("id", { ascending: false }).limit(1).maybeSingle(),
-    db.from("chat_messages").select("sender_name, body, created_at").eq("recipient_id", userId).order("id", { ascending: false }).limit(1).maybeSingle(),
+    db.from("chat_messages").select("sender_id, sender_name, body, created_at").eq("recipient_id", userId).order("id", { ascending: false }).limit(1).maybeSingle(),
   ]);
   const dmNewer = dm && (!n || Date.parse(String(dm.created_at)) >= Date.parse(String(n.created_at)));
   const body = dmNewer
-    ? { title: `Message from ${dm.sender_name ?? "someone"}`, body: String(dm.body ?? "Sent you a voice note."), url: "/play" }
+    ? {
+        title: `Message from ${dm.sender_name ?? "someone"}`,
+        body: dm.body ? String(dm.body) : "Sent you a voice note.",
+        // Tapping it opens that conversation.
+        url: `/play?dm=${encodeURIComponent(String(dm.sender_id ?? ""))}&name=${encodeURIComponent(String(dm.sender_name ?? ""))}`,
+      }
     : n
       ? { title: TITLE[String(n.kind)] ?? "Newtown", body: String(n.body), url: "/play" }
       : fallback;

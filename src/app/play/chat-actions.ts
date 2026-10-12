@@ -163,6 +163,8 @@ export async function sendVoice(form: FormData): Promise<Result<{ message: ChatM
     await s.db.storage.from("voice").remove([path]);
     return { ok: false, error: friendly(error?.message, "Couldn't send the voice note.") };
   }
+  // A private voice note: a notification on their phone too.
+  if (t.to) await pushTo(t.to).catch(() => {});
   return { ok: true, message: data as ChatMessage };
 }
 

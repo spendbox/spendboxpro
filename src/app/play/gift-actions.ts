@@ -1,5 +1,6 @@
 "use server";
 
+import { pushTo } from "@/lib/push";
 import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -55,6 +56,7 @@ export async function giveCoins(
   const { data, error } = await createAdminClient().rpc("give_coins", { p_from: userId, p_to: toId, p_amount: amount, p_note: text || null });
   if (error || !data) return { ok: false, error: friendly(error?.message, "Couldn't send the mint. Try again.") };
   const d = data as { amount: number; to: string; balance: number; left_today: number };
+  await pushTo(toId);
   return { ok: true, amount: Number(d.amount), to: String(d.to), balance: Number(d.balance), leftToday: Number(d.left_today) };
 }
 

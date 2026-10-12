@@ -60,6 +60,8 @@ export type FeedItem = {
   eventId?: number;
   /** Listed, but doesn't pop up (e.g. the result of your own duel: the duel screen already says). */
   quiet?: boolean;
+  /** The notice's kind ("gift", "doorstep", "market"...), for your own notices. */
+  kind?: string;
 };
 
 type IconLike = { size?: number | string; strokeWidth?: number; className?: string };

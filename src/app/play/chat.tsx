@@ -1,5 +1,6 @@
 "use client";
 
+import { rememberPerson } from "./people/recent-rail";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
@@ -438,6 +439,7 @@ export function Chat({
     if (id === meId) return;
     setThread({ id, name });
     setTab("private");
+    rememberPerson({ id, name, avatar: avatarOf(id, name) }, "Messaged");
   }
 
   // Someone asked to message a particular player (from the map).
