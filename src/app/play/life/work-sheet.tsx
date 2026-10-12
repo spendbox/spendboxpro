@@ -150,11 +150,11 @@ export function WorkSheet({
             </button>
           </div>
           <p className={`mt-3 text-sm ${keep < 0 ? "font-semibold text-hit" : ""}`}>
-            {keep < 0 ? `Losing ${money(-keep)} a game day: travel cheaper or work nearer home.` : <>You keep <b>{money(keep)}</b> a game day</>}
+            {keep < 0 ? `Losing ${money(-keep)} every 2 hours: go a cheaper way or work nearer home.` : <>You keep <b>{money(keep)}</b> every 2 hours</>}
           </p>
           <p className="mt-0.5 flex items-center gap-1 text-xs text-muted">
             <Coins className="size-3.5 shrink-0" />
-            Paid into your wallet every game week{waiting && waiting.net >= 0.01 ? ` (${money(waiting.net)} so far)` : ""} · next in {hoursLeft(nextPay)}
+            Paid into your wallet every 14 hours{waiting && waiting.net >= 0.01 ? ` (${money(waiting.net)} so far)` : ""} · next in {hoursLeft(nextPay)}
           </p>
           <button onClick={() => setDetails((d) => !d)} className="mt-2 text-xs font-semibold text-gold-dark">
             {details ? "Hide the details" : "Pay, tax and fares"}
@@ -167,7 +167,7 @@ export function WorkSheet({
                 <Tile label="Fares" value={`−${money(2 * fare)}`} />
                 <Tile label="You keep" value={money(keep)} bad={keep < 0} strong />
               </div>
-              <p className="mt-1 text-center text-[11px] text-muted">Each game day (2 real hours). Tax goes to Lagos State.</p>
+              <p className="mt-1 text-center text-[11px] text-muted">Every 2 hours. Tax goes to Lagos State.</p>
             </>
           )}
         </div>
@@ -217,7 +217,7 @@ export function WorkSheet({
               ))}
             </ul>
           )}
-          <p className="mt-1 text-[11px] text-muted">What you keep a game day, after tax and fares.</p>
+          <p className="mt-1 text-[11px] text-muted">What you keep every 2 hours, after tax and fares.</p>
         </>
       )}
 
@@ -228,7 +228,7 @@ export function WorkSheet({
               <div className="min-w-0">
                 <p className="text-sm font-semibold">{h.title}</p>
                 <p className="text-xs text-muted">
-                  about {money(h.payDay)} a day · {fmt(h.hours)}h
+                  about {money(h.payDay)} every 2 hours · {fmt(h.hours)}h of your day
                   {h.boostUntil && Date.parse(h.boostUntil) > now ? " · boosted ×2" : ""}
                   {h.stalledUntil && Date.parse(h.stalledUntil) > now ? " · stalled" : ""}
                 </p>
@@ -254,7 +254,7 @@ export function WorkSheet({
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium">{h.title}</p>
                           <p className="text-xs text-muted">
-                            ~{money(hustleDay(h, prices, skills[h.skill] ?? 0))}/day · {h.hours}h a day
+                            ~{money(hustleDay(h, prices, skills[h.skill] ?? 0))} every 2h · {h.hours}h of your day
                           </p>
                         </div>
                         <button
@@ -280,12 +280,12 @@ export function WorkSheet({
       )}
       {hustles.length > 0 && open !== "hustle" && (
         <p className="mt-2 text-xs text-muted">
-          Side hustles: <b className="text-ink">{hustles.map((h) => h.title).join(", ")}</b>, about {money(hustles.reduce((t, h) => t + h.payDay, 0))} a day, paid in every game week
+          Side hustles: <b className="text-ink">{hustles.map((h) => h.title).join(", ")}</b>, about {money(hustles.reduce((t, h) => t + h.payDay, 0))} every 2 hours, paid in every 14 hours
         </p>
       )}
 
       {job && (
-        <Section title="Travel">
+        <Section title="Getting to work">
           <div className="flex flex-wrap gap-1.5">
             {COMMUTES.map((mode) => {
               const f = km === null ? null : fareMint(mode, km, prices, ferry);

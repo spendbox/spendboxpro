@@ -33,7 +33,7 @@ function say(message: string | undefined): PropertyResult {
     over_limit: `The World Bank lends you up to ₥${arg} right now.`,
     bank_short: "The World Bank can't lend that much today.",
     bad_amount: "That amount doesn't work.",
-    bad_months: "Pick 6, 12 or 24 game months.",
+    bad_months: "Pick 6, 12 or 24 months (a month is 2½ days).",
     no_loan: "You don't have a loan.",
     frozen: "Your account is paused right now.",
     unknown_player: "Please sign in again.",

@@ -105,7 +105,7 @@ export const CARE: Care[] = [
   { id: "full", meter: "body", title: "Full medical (private)", what: "Everything checked and treated: back to full health.", fee: 150_000, health: 100, public: false },
   { id: "counselling", meter: "mind", title: "Counselling at a public centre", what: "Someone to talk things through with. The fee goes to the state.", fee: 10_000, health: 0, mind: 20, public: true },
   { id: "therapist", meter: "mind", title: "A private therapist", what: "An hour with a therapist who listens.", fee: 40_000, health: 0, mind: 40, public: false },
-  { id: "holiday", meter: "mind", title: "A weekend away", what: "Three game days at the beach in Badagry: no work, all rest.", fee: 250_000, health: 10, mind: 60, away: 3, public: false },
+  { id: "holiday", meter: "mind", title: "A weekend away", what: "Six hours at the beach in Badagry: no work, all rest.", fee: 250_000, health: 10, mind: 60, away: 3, public: false },
 ];
 export const AUTO_CARE = CARE[0];
 
@@ -142,7 +142,7 @@ export const PROCEDURES: Procedure[] = [
 export type CourseKind = "short" | "diploma" | "degree" | "licence";
 
 export const COURSE_KINDS: { kind: CourseKind; label: string; what: string }[] = [
-  { kind: "short", label: "Short courses", what: "A few game days: a quick step up in a skill" },
+  { kind: "short", label: "Short courses", what: "A few hours: a quick step up in a skill" },
   { kind: "diploma", label: "Diplomas and certificates", what: "Professional qualifications that open skilled jobs" },
   { kind: "degree", label: "Degrees", what: "Long, and the way into the top jobs" },
   { kind: "licence", label: "Licences", what: "Training for a licensed job" },

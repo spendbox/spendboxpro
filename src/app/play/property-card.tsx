@@ -246,7 +246,7 @@ export function Spark({ values, up }: { values: number[]; up: boolean }) {
   const H = 20;
   const pts = values.map((v, k) => `${((k / (values.length - 1)) * W).toFixed(1)},${(H - 2 - ((v - lo) / span) * (H - 4)).toFixed(1)}`).join(" ");
   return (
-    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-label="Worth over the last few game months" role="img">
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-label="Worth over the last few months" role="img">
       <polyline points={pts} fill="none" stroke={up ? "#2b8a3e" : "#c92a2a"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );

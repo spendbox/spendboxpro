@@ -422,7 +422,7 @@ export function useWorldLife({
             const hire = (ticket?: string) =>
               act(
                 () => api.takeJob(wp.id, job.job, mode, ticket),
-                (r) => `You're a ${job.title} now. Pay builds up every game day (2 hours).${paid(r.pay)}`,
+                (r) => `You're a ${job.title} now. Pay builds up every 2 hours.${paid(r.pay)}`,
               ).then((r) => {
                 if (!r.ok) return;
                 setPlace(null);
@@ -442,7 +442,7 @@ export function useWorldLife({
             const km = homeUnit ? tripKmBetween(homeUnit, wp.id) : null;
             const fare = km === null || !homeUnit ? 0 : (fareMint(mode, km, region.region.prices, ferryKmBetween(homeUnit, wp.id)) ?? 0);
             const net = dayNet(payDay(job, region.region.prices), work?.skills[job.skill] ?? 0, fare);
-            const loss = net < 0 ? `Heads up: you'd run at a loss. After income tax, ${job.title} pays less than your fares there and back, so you'd lose about ${cash(-net)} every game day.` : "";
+            const loss = net < 0 ? `Heads up: you'd run at a loss. After income tax, ${job.title} pays less than your fares there and back, so you'd lose about ${cash(-net)} every 2 hours.` : "";
             const now = work?.job;
             if (!now && !loss) return void take();
             // One main job at a time: say so before swapping.
@@ -671,9 +671,9 @@ export function useWorldLife({
             const cost = hustleStart(h, region.region.prices);
             setConfirm({
               title: `Start ${h.title.toLowerCase()}?`,
-              text: `It costs ${cash(cost)} to start (${h.what.toLowerCase()}), paid once from your Savings, and takes ${h.hours} hours a game day. It earns about ${cash(hustleDay(h, region.region.prices, work?.skills[h.skill] ?? 0))} a game day, paid into your wallet every game week. Your other side hustles carry on.`,
+              text: `It costs ${cash(cost)} to start (${h.what.toLowerCase()}), paid once from your Savings, and takes ${h.hours} of every 24 hours in your day. It earns about ${cash(hustleDay(h, region.region.prices, work?.skills[h.skill] ?? 0))} every 2 hours, paid into your wallet every 14 hours. Your other side hustles carry on.`,
               yes: `Start for ${cash(cost)}`,
-              run: () => act(() => api.startHustle(id), () => `${h.title} has started. It earns by the game day.`),
+              run: () => act(() => api.startHustle(id), () => `${h.title} has started. It earns every 2 hours.`),
             });
           }}
           onStopHustle={(id) => {
@@ -691,9 +691,9 @@ export function useWorldLife({
           onMode={(mode, perDay) =>
             setConfirm({
               title: mode === "walk" ? "Walk to work from now on?" : `Go by ${COMMUTE_LABEL[mode].toLowerCase()} from now on?`,
-              text: `${perDay ? `It costs ${cash(perDay)} a game day, there and back.` : "It's free."}${
+              text: `${perDay ? `It costs ${cash(perDay)} every 2 hours, there and back.` : "It's free."}${
                 work?.job && dayNet(work.job.payDay, work.skills[work.job.skill] ?? 0, perDay / 2) < 0
-                  ? ` Heads up: this way you'd run at a loss, about ${cash(-dayNet(work.job.payDay, work.skills[work.job.skill] ?? 0, perDay / 2))} every game day after tax.`
+                  ? ` Heads up: this way you'd run at a loss, about ${cash(-dayNet(work.job.payDay, work.skills[work.job.skill] ?? 0, perDay / 2))} every 2 hours after tax.`
                   : ""
               }`,
               yes: mode === "walk" ? "Walk from now on" : `Go by ${COMMUTE_LABEL[mode].toLowerCase()}`,

@@ -115,7 +115,7 @@ export function LifeSheet({
       {tab === "day" && plan && (
         <div className="mt-4">
           <div className="flex items-baseline justify-between">
-            <p className="text-sm font-semibold">A game day (2 real hours)</p>
+            <p className="text-sm font-semibold">Every 2 hours (a day in your life)</p>
             <p className="text-xs text-muted">{fmt(plan.free)}h free</p>
           </div>
           <div className="mt-2 flex h-4 overflow-hidden rounded-full">
@@ -158,7 +158,7 @@ export function LifeSheet({
           </div>
           {explain ? (
             <div className="mt-2 rounded-2xl bg-ink/[0.04] p-3">
-              <p className="text-xs font-semibold">Your {explain} each game day</p>
+              <p className="text-xs font-semibold">Your {explain} every 2 hours</p>
               <ul className="mt-1.5 space-y-1">
                 {effects.map((e) => {
                   const v = explain === "body" ? e.body : e.mind;

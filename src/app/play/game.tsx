@@ -60,7 +60,7 @@ import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
 import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
-import { Compass, Crown, Eye, EyeOff, ImageIcon, Smartphone, Swords, User } from "lucide-react";
+import { Compass, Crown, Eye, EyeOff, Flag, Gift, ImageIcon, Palette, Smartphone, Swords, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
 import { GhostsSheet } from "./ghost-duel/ghosts-sheet";
@@ -75,6 +75,7 @@ import { addFriend } from "./friend-actions";
 import { FriendNudge, PeopleHere, type HerePerson } from "./people-here";
 import { rodeSomething } from "./streak-actions";
 import { GreetButtons } from "./greet-buttons";
+import { useNoPageZoom } from "./no-page-zoom";
 import { MyGiftsSheet } from "./my-gifts-sheet";
 import { StreakPill, StreakSheet } from "./streak-sheet";
 import { useQuestTracker } from "./activities/quest-tracker";
@@ -421,6 +422,7 @@ export function Game({
   const [worldArea, setWorldArea] = useState<string | null>(null);
   // A life on the real map: search, assets, buying a home first (see ./life/world-life).
   usePreloadSheets();
+  useNoPageZoom();
   /** When a building was last gone into from its card (Go there), so it opens on the ground floor. */
   const entering = useRef(0);
   /**
@@ -768,8 +770,9 @@ export function Game({
     } else setMessage({ text: res.error, tone: "info" });
   }
 
-  // The world's last 30 seconds: the clock turns red and beeps every second.
-  const worldLeft = round && phase === "seek" ? Date.parse(round.seekEndsAt) - now : Infinity;
+  // The hourly game's last 30 seconds: the clock turns red and beeps every second. (Not on the
+  // real map: the hourly game is off there, so no countdown, beeps or red glow.)
+  const worldLeft = round && phase === "seek" && !worldId ? Date.parse(round.seekEndsAt) - now : Infinity;
   const urgent = worldLeft <= 30_000 && worldLeft > 0;
   const urgentSec = urgent ? Math.ceil(worldLeft / 1000) : null;
   useEffect(() => {
@@ -777,7 +780,7 @@ export function Game({
   }, [urgentSec]);
   // Only a few ghosts still to beat (not golden yet), late enough in the hunt to say so.
   const toBeat = board?.phase === "seek" ? board.ghosts.filter((g) => g.status !== "golden").length : 0;
-  const fewLeft = round && phase === "seek" && toBeat > 0 && toBeat <= 2 ? toBeat : null;
+  const fewLeft = round && !worldId && phase === "seek" && toBeat > 0 && toBeat <= 2 ? toBeat : null;
   useEffect(() => {
     if (fewLeft === null) return;
     const id = setTimeout(
@@ -859,7 +862,7 @@ export function Game({
   }
 
   // The last 30 seconds before the hunt: a soft beep every second.
-  const joinLeft = round && phase === "join" ? Math.ceil((Date.parse(round.joinEndsAt) - now) / 1000) : null;
+  const joinLeft = round && phase === "join" && !worldId ? Math.ceil((Date.parse(round.joinEndsAt) - now) / 1000) : null;
   useEffect(() => {
     if (joinLeft === null || joinLeft <= 0 || joinLeft > 30) return;
     playSfx("tick");
@@ -868,7 +871,7 @@ export function Game({
   // The hunt starts: a pop-up with a different cheer each time, and a fanfare.
   const lastPhase = useRef<{ round: number; phase: string } | null>(null);
   useEffect(() => {
-    if (!round) return;
+    if (!round || worldId) return;
     const before = lastPhase.current;
     lastPhase.current = { round: round.id, phase };
     const startedNow = before && before.round === round.id && before.phase === "join" && phase === "seek";
@@ -1532,7 +1535,7 @@ export function Game({
       )}
 
       {/* The world's last minutes: a red glow around the edges. */}
-      {(urgent || eventOn("final_countdown")) && (
+      {(urgent || (!worldId && eventOn("final_countdown"))) && (
         <div
           aria-hidden
           className={cn("pointer-events-none absolute inset-0 z-[5]", urgent ? "animate-pulse" : "")}
@@ -1632,6 +1635,8 @@ export function Game({
               )}
             </button>
             )}
+            {/* The old menu belongs to the hourly game: on the real map everything is on your phone. */}
+            {!worldId && (
             <button
               onClick={() => { setMenu((v) => !v); setFeedOpen(false); }}
               className="glass grid size-8 shrink-0 place-items-center rounded-full text-base font-semibold sm:size-9"
@@ -1639,6 +1644,7 @@ export function Game({
             >
               {menu ? <X className="size-4" /> : <MenuIcon className="size-4" />}
             </button>
+            )}
           </div>
           )}
         </div>
@@ -2499,6 +2505,12 @@ export function Game({
                 ["Camera", Camera, () => setCamera("photo")],
                 ["Selfie", User, () => setCamera("selfie")],
                 ["Photos", ImageIcon, () => setPhone("photos")],
+                ["Friends", Users, () => setFriendsOpen(true)],
+                ["Gifts", Gift, () => openGifts()],
+                ["My look", Palette, () => setEditAvatar(true)],
+                ["Guide", Lightbulb, () => worldLife.restartGuide()],
+                ["Report", Flag, () => worldLife.openReport()],
+                ["Sign out", LogOut, () => setConfirmSignOut(true)],
               ] as const
             ).map(([label, Icon, go]) => (
               <button

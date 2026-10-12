@@ -106,7 +106,7 @@ export function LoanSheet({ max, rate, misses, busy, onSubmit, onClose }: { max:
       {ok && (
         <div className="mt-4 grid grid-cols-2 gap-2 text-center">
           <div className="rounded-2xl bg-ink/[0.04] p-3">
-            <p className="text-[11px] text-muted">Each game month</p>
+            <p className="text-[11px] text-muted">Each month (2½ days)</p>
             <p className="font-display text-lg font-extrabold tabular-nums">{cash(each)}</p>
           </div>
           <div className="rounded-2xl bg-ink/[0.04] p-3">
@@ -116,7 +116,7 @@ export function LoanSheet({ max, rate, misses, busy, onSubmit, onClose }: { max:
         </div>
       )}
       <p className="mt-3 text-xs text-muted">
-        {Math.round(rate * 100)}% a game year. A game month is {days} real days; each payment comes from Savings, then your wallet. Miss {misses} in a row and the bank takes
+        {Math.round(rate * 100)}% a year (a year is 30 days). A month is {days} days; each payment comes from Savings, then your wallet. Miss {misses} in a row and the bank takes
         the property.
       </p>
       <button disabled={busy || !ok} onClick={() => onSubmit(amount, months)} className="mt-4 h-11 w-full rounded-full bg-ink font-semibold text-white disabled:opacity-40">

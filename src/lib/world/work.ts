@@ -76,6 +76,10 @@ const BY_PLACE: Record<string, WorkJob[]> = {
   cathedral: [J("caretaker", "Caretaker", "public", 60_000)],
   grandmosque: [J("caretaker", "Caretaker", "public", 60_000)],
   worship: [J("caretaker", "Caretaker", "public", 60_000)],
+  fuel: [J("pump_attendant", "Pump attendant", "retail", 70_000), J("fuel_cashier", "Cashier", "retail", 90_000, 1), J("station_manager", "Station manager", "retail", 250_000, 3)],
+  restaurant: [J("waiter", "Waiter", "food", 70_000), J("cook", "Cook", "food", 120_000, 1), J("restaurant_manager", "Restaurant manager", "food", 300_000, 3)],
+  police: [J("police_clerk", "Station clerk", "public", 90_000, 0, S), J("police_officer", "Police officer", "public", 180_000, 2, S)],
+  fire: [J("fire_cleaner", "Station hand", "public", 70_000, 0, S), J("firefighter", "Firefighter", "public", 170_000, 2, S)],
 };
 
 /** A building site takes on labourers; an unfinished building takes on nobody. */

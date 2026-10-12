@@ -48,7 +48,7 @@ export function InterviewSheet({
               {result.score}/{start.questions.length}
             </p>
             <p className={`mt-1 font-semibold ${result.passed ? "text-me" : "text-hit"}`}>{result.passed ? "You got the job offer!" : "Not this time."}</p>
-            <p className="mt-1 text-sm text-muted">{result.passed ? "Take it now, before the offer runs out." : "You can try this job here again in a game week (14 hours). Other jobs are open."}</p>
+            <p className="mt-1 text-sm text-muted">{result.passed ? "Take it now, before the offer runs out." : "You can try this job here again in 14 hours. Other jobs are open."}</p>
             {result.passed ? (
               <button onClick={() => onPassed(result.ticket!)} className="mt-4 h-11 w-full rounded-full bg-ink font-semibold text-white">
                 Take the job
@@ -106,7 +106,7 @@ export function MomentSheet({ event, onAnswer, onClose }: { event: NonNullable<L
             )}
             {result.won && (
               <p className="mt-1 text-sm font-semibold">
-                {event.source === "job" ? `+${cash(result.bonus)} bonus and extra experience.` : "Double earnings for three game days."}
+                {event.source === "job" ? `+${cash(result.bonus)} bonus and extra experience.` : "Double earnings for the next 6 hours."}
               </p>
             )}
             <button onClick={onClose} className="mt-3 h-10 w-full rounded-full bg-ink text-sm font-semibold text-white">

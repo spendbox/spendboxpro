@@ -2,7 +2,7 @@
 // the server to check a job is really there (and what it pays) and by the screens to list work
 // near your home.
 
-import { addressOf, spiralIndex, tileAt, type CityPlan, type Tile } from "../city/layout.ts";
+import { addressOf, KIND_LABEL, spiralIndex, tileAt, type CityPlan, type Tile } from "../city/layout.ts";
 import { BUILDING_LABEL } from "./buildings.ts";
 import { jobsAtPlace, jobsInBuilding, type WorkJob } from "./work.ts";
 
@@ -31,10 +31,9 @@ export function workplaceOfTile(plan: CityPlan, t: Tile): Workplace | null {
     const what = t.building.state === "site" ? "Building site" : (t.building.name ?? BUILDING_LABEL[t.building.kind]);
     return { id: t.building.id, name: `${what}, ${addressOf(plan, t)}`, x: t.x, z: t.z, jobs };
   }
-  if (t.name) {
-    const jobs = jobsAtPlace(t.kind);
-    return jobs.length ? { id: `${region}:${t.x},${t.z}`, name: t.name, x: t.x, z: t.z, jobs } : null;
-  }
+  // Named or not (a famous club, or any filling station or restaurant on the street).
+  const jobs = jobsAtPlace(t.kind);
+  if (jobs.length) return { id: `${region}:${t.x},${t.z}`, name: t.name ?? `${KIND_LABEL[t.kind]}, ${addressOf(plan, t)}`, x: t.x, z: t.z, jobs };
   return null;
 }
 
