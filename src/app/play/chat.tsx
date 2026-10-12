@@ -4,7 +4,7 @@ import { rememberPerson } from "./people/recent-rail";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { ArrowDown, ArrowLeft, LoaderCircle, Mic, Pause, UserCheck, UserPlus } from "lucide-react";
+import { ArrowDown, ArrowLeft, ImagePlus, LoaderCircle, Mic, Pause, UserCheck, UserPlus } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import { Bot, Building2, ChevronDown, ChevronUp, Coins, Fish, HotAirBalloon, Lock, LogOut, MessageCircle, Play, Users, X } from "@/components/icons";
 import type { Avatar } from "@/lib/avatar";
@@ -14,7 +14,8 @@ import { cn } from "@/lib/cn";
 import { npcById, npcChatter, npcsFor, type Npc, type NpcMessage } from "@/lib/npcs";
 import { createClient } from "@/lib/supabase/client";
 import { BotCard } from "./bot-card";
-import { loadDms, loadRoom, sendMessage, sendVoice, voiceUrl, type ChatMessage, type ChatTarget } from "./chat-actions";
+import { loadDms, loadRoom, sendMessage, sendPhoto, sendVoice, voiceUrl, type ChatMessage, type ChatTarget } from "./chat-actions";
+import { ChatPhoto, PhotoPicker, type PhotoPick } from "./chat-photo";
 import { NpcBadge, NpcCard, NpcFace } from "./npc-card";
 import { RideIcon } from "./ride-icon";
 import { formatCountdown, levelLabel, levelOf, useCountdown, type RoomInfo, type RoomMember } from "./rooms";
@@ -181,6 +182,8 @@ export function Chat({
   onUnread,
   onSignIn,
   finder,
+  onPerson,
+  onSelfie,
 }: {
   meId: string;
   meRole: "hider" | "seeker" | null;
@@ -229,6 +232,10 @@ export function Chat({
   onSignIn?: () => void;
   /** The real map: People finds anyone (by name, the nearest first) instead of this round's players. */
   finder?: React.ReactNode;
+  /** Tapping a player's name or face: their profile card. */
+  onPerson?: (id: string) => void;
+  /** "Take a selfie" in the picture menu: the game's camera, sending the picture here. */
+  onSelfie?: (target: ChatTarget, to: string) => void;
 }) {
   const roomId = room?.id ?? null;
   const roomCap = room?.capacity ?? 30;
@@ -314,6 +321,12 @@ export function Chat({
       setRoomMsgs((r) => (r && (keep ? m.room === r.key : r.round === m.round_id && (m.room === r.key || m.room === "*")) ? { ...r, list: append(r.list, m, 200) } : r));
     }
   }, [keep]);
+  // A selfie sent from the camera: show it at once.
+  useEffect(() => {
+    const on = (e: Event) => addMessage((e as CustomEvent<ChatMessage>).detail);
+    window.addEventListener("nt-chat-sent", on);
+    return () => window.removeEventListener("nt-chat-sent", on);
+  }, [addMessage]);
   useEffect(() => {
     if (guest) return;
     const supabase = createClient();
@@ -432,6 +445,30 @@ export function Chat({
     } catch {
       setError("The connection blinked. Try again.");
     }
+  }
+
+  async function sendPicture(p: PhotoPick) {
+    setError(null);
+    const form = new FormData();
+    if ("image" in p) form.set("image", new File([p.image], "photo.jpg", { type: "image/jpeg" }));
+    else form.set("galleryId", String(p.galleryId));
+    if (thread) form.set("to", thread.id);
+    else if (roomId) form.set("room", roomId);
+    else return;
+    try {
+      const res = await sendPhoto(form);
+      if (res.ok) addMessage(res.message);
+      else setError(res.error);
+    } catch {
+      setError("The connection blinked. Try again.");
+    }
+  }
+  const selfieHere = onSelfie && (thread || roomId) ? () => onSelfie(thread ? { to: thread.id } : { room: roomId! }, thread ? thread.name : room ? placeTitle(room) : "everyone here") : undefined;
+
+  /** A player's name or face in a conversation: their profile (or a private chat when there's no profile to show). */
+  function openPerson(id: string, name: string) {
+    if (onPerson && id !== BOT_ID && id !== meId && !id.startsWith("npc:")) return onPerson(id);
+    openThread(id, name);
   }
 
   function openThread(id: string, name: string) {
@@ -702,10 +739,14 @@ export function Chat({
             <button onClick={() => setThread(null)} className="grid size-9 place-items-center rounded-full text-muted hover:bg-panel-2" aria-label="Back">
               <ArrowLeft className="size-5" aria-hidden />
             </button>
-            {faceOf(thread.id, thread.name, 32)}
+            <button onClick={() => openPerson(thread.id, thread.name)} className="shrink-0 rounded-full" aria-label={`See ${thread.name}'s profile`}>
+              {faceOf(thread.id, thread.name, 32)}
+            </button>
             <div className="min-w-0 flex-1">
               <h2 className="flex min-w-0 items-center gap-1.5 font-semibold">
-                <span className="truncate">{thread.name}</span>
+                <button onClick={() => openPerson(thread.id, thread.name)} className="truncate hover:underline" title="See their profile">
+                  {thread.name}
+                </button>
                 {byId.get(thread.id)?.bigFish && <BigFishBadge />}
               </h2>
               <p className="flex items-center gap-1 truncate text-[11px] font-semibold text-[#5f3dc4]">
@@ -931,7 +972,7 @@ export function Chat({
               key={thread ? `dm:${thread.id}` : `room:${roomId}`}
               items={shown}
               meId={meId}
-              onName={openThread}
+              onName={openPerson}
               onNpc={openNpc}
               isPrivate={Boolean(thread)}
               faceOf={faceOf}
@@ -940,7 +981,7 @@ export function Chat({
           )}
 
           {(thread || (tab === "here" && room)) && (
-            <Composer onSend={send} onAudio={sendAudio} placeholder={thread ? `Private message to ${thread.name}` : `Message ${room ? placeTitle(room) : "everyone here"}`} />
+            <Composer onSend={send} onAudio={sendAudio} onPicture={sendPicture} onSelfie={selfieHere} placeholder={thread ? `Private message to ${thread.name}` : `Message ${room ? placeTitle(room) : "everyone here"}`} />
           )}
           {error && <p className="shrink-0 px-4 pb-2 text-xs text-hit">{error}</p>}
         </>
@@ -1088,13 +1129,17 @@ function Messages({
             const role = ROLE_STYLE[bot ? "bot" : m.sender_role];
             return (
               <div key={it.key} className={cn("flex items-end gap-2", mine && "flex-row-reverse")}>
-                {!mine && <span className={cn("shrink-0", sameAsPrev && "invisible")}>{faceOf(m.sender_id, m.sender_name, 28)}</span>}
+                {!mine && (
+                  <button onClick={() => onName(m.sender_id, m.sender_name)} className={cn("shrink-0 rounded-full", sameAsPrev && "invisible")} aria-label={`${m.sender_name}'s profile`}>
+                    {faceOf(m.sender_id, m.sender_name, 28)}
+                  </button>
+                )}
                 <div className={cn("flex max-w-[80%] flex-col", mine ? "items-end" : "items-start")}>
                   {!mine && !sameAsPrev && (
                     <button
                       onClick={() => onName(m.sender_id, m.sender_name)}
                       className="mb-0.5 flex items-center gap-1.5 px-1 text-xs"
-                      title={bot ? "About the bot" : "Message privately"}
+                      title={bot ? "About the bot" : "See their profile"}
                     >
                       <span className="font-semibold">{bot ? botNameOf(m) : m.sender_name}</span>
                       <span className={cn("rounded-full px-1.5 py-px text-[10px] font-semibold", role.pill)}>{role.label}</span>
@@ -1116,7 +1161,12 @@ function Messages({
                       !mine && !bot && m.sender_role === "seeker" && "border-l-4 border-gold",
                     )}
                   >
-                    {m.audio_path ? <VoiceNote id={m.id} seconds={m.audio_seconds ?? 0} mine={mine} /> : <span className="break-words">{bot ? mintify(m.body) : m.body}</span>}
+                    {m.image_path && <ChatPhoto id={m.id} mine={mine} />}
+                    {m.audio_path ? (
+                      <VoiceNote id={m.id} seconds={m.audio_seconds ?? 0} mine={mine} />
+                    ) : m.image_path && m.body === "Sent a photo" ? null : (
+                      <span className="break-words">{bot ? mintify(m.body) : m.body}</span>
+                    )}
                     <span className={cn("ml-2 align-bottom text-[10px]", mine ? "text-white/60" : "text-muted")}>{time(m.created_at)}</span>
                   </div>
                 </div>
@@ -1193,13 +1243,18 @@ function VoiceNote({ id, seconds, mine }: { id: number; seconds: number; mine: b
 function Composer({
   onSend,
   onAudio,
+  onPicture,
+  onSelfie,
   placeholder,
 }: {
   onSend: (text: string) => Promise<boolean>;
   onAudio: (blob: Blob, seconds: number) => Promise<void>;
+  onPicture: (p: PhotoPick) => Promise<void>;
+  onSelfie?: () => void;
   placeholder: string;
 }) {
   const [text, setText] = useState("");
+  const [picking, setPicking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [recording, setRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -1261,6 +1316,24 @@ function Composer({
 
   return (
     <div className="shrink-0 border-t border-line p-2.5">
+      {picking && (
+        <PhotoPicker
+          onClose={() => setPicking(false)}
+          onSelfie={
+            onSelfie &&
+            (() => {
+              setPicking(false);
+              onSelfie();
+            })
+          }
+          onPick={async (p) => {
+            setPicking(false);
+            setBusy(true);
+            await onPicture(p);
+            setBusy(false);
+          }}
+        />
+      )}
       {recording ? (
         <div className="flex items-center gap-2">
           <button onClick={() => stop(true)} className="rounded-full px-3 py-2 text-sm text-muted hover:bg-panel-2">
@@ -1276,6 +1349,9 @@ function Composer({
         </div>
       ) : (
         <form onSubmit={submit} className="flex items-center gap-2">
+          <button type="button" onClick={() => setPicking((v) => !v)} disabled={busy} className="grid size-9 shrink-0 place-items-center rounded-full bg-panel-2" aria-label="Send a picture or a selfie">
+            {busy ? <LoaderCircle className="size-4 animate-spin" aria-hidden /> : <ImagePlus className="size-4" aria-hidden />}
+          </button>
           <input
             value={text}
             onChange={(e) => setText(e.target.value.slice(0, 500))}

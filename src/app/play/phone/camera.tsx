@@ -9,7 +9,7 @@ import { cn } from "@/lib/cn";
 import { useEscape } from "../menu/escape";
 import { playSfx } from "../sound";
 import { addShot, useGallery } from "./gallery";
-import { DEFAULT_STYLE, selfieLayout, shotAspect, takeShot, type ShotBackground, type ShotFrame, type ShotKind, type ShotStyle } from "./lens";
+import { DEFAULT_STYLE, selfieLayout, shotAspect, takeShot, type ShotBackground, type ShotFrame, type Shot, type ShotKind, type ShotStyle } from "./lens";
 
 // The phone camera: a viewfinder over the town. You can still move around and turn the view
 // while it's open, then tap the big button. Photo takes the town; Selfie turns the camera
@@ -53,6 +53,7 @@ export function CameraMode({
   onOpenGallery,
   onSignIn,
   people = [],
+  sendTo,
 }: {
   avatar: Avatar;
   /** People you can add to a selfie: the people here, then your friends. */
@@ -65,6 +66,8 @@ export function CameraMode({
   onClose: () => void;
   onOpenGallery: () => void;
   onSignIn: () => void;
+  /** Opened from a chat: the picture you take is sent there (and kept in your gallery). */
+  sendTo?: { name: string; send: (shot: Shot) => Promise<string | null> };
 }) {
   const [kind, setKind] = useState<ShotKind>(initialKind);
   const [style, setStyle] = useState<ShotStyle>(DEFAULT_STYLE);
@@ -101,6 +104,13 @@ export function CameraMode({
     if (guest) {
       void addShot(shot, { place, city }, true);
       return say("Got it! Sign in to keep your pictures in your gallery.", "info", true);
+    }
+    if (sendTo) {
+      say(`Sending to ${sendTo.name}…`, "info");
+      void addShot(shot, { place, city }, false);
+      const failed = await sendTo.send(shot);
+      if (failed) say(failed, "bad");
+      return;
     }
     say(kind === "selfie" ? (withPeople.length ? `Group selfie with ${withPeople.length === 1 ? withPeople[0].name : `${withPeople.length} people`} saved` : "Selfie saved to your gallery") : "Saved to your gallery", "good");
     const error = await addShot(shot, { place, city }, false);
@@ -187,7 +197,7 @@ export function CameraMode({
         </button>
         <span className="flex min-w-0 items-center gap-1.5 truncate rounded-full bg-black/55 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur">
           <Zap className="size-3.5 shrink-0 text-[#f5c542]" />
-          <span className="truncate">{place ? `${place} · ${city}` : city}</span>
+          <span className="truncate">{sendTo ? `Sending to ${sendTo.name}` : place ? `${place} · ${city}` : city}</span>
         </span>
         <span className="size-10" />
       </div>

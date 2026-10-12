@@ -2716,13 +2716,30 @@ export function CityView({
      * place or riding something).
      */
     let windowCheckAt = 0;
+    const rideTrail = { x: NaN, z: NaN };
     function followWindow(now: number) {
       if (!win || now < windowCheckAt) return;
       windowCheckAt = now + 400;
-      if (view || eventFly) return;
+      if (eventFly) return;
+      const h = regionNow ? DETAIL : WINDOW;
+      if (view) {
+        // On a long train or ferry ride across a real place, the full-detail city goes with you
+        // (otherwise you'd soon be looking out at the far, plain blocks). It's drawn a little
+        // ahead of where you're heading, so it's redrawn as seldom as possible on the way.
+        if (!regionNow || view.kind !== "vehicle" || view.ride.index < REAL_BASE || (view.ride.kind !== "train" && view.ride.kind !== "boat")) return;
+        const { x, z } = view.pose;
+        const dx = x - rideTrail.x;
+        const dz = z - rideTrail.z;
+        rideTrail.x = x;
+        rideTrail.z = z;
+        if (Math.max(Math.abs(x - win.cx), Math.abs(z - win.cz)) < h * 0.45) return;
+        const len = Math.hypot(dx, dz);
+        const lead = len > 0.01 && len < 20 ? (h * 0.4) / len : 0;
+        build(currentSeed, builtCount, { cx: Math.round(x + dx * lead), cz: Math.round(z + dz * lead) });
+        return;
+      }
       const tx = controls.target.x;
       const tz = controls.target.z;
-      const h = regionNow ? DETAIL : WINDOW;
       if (Math.max(Math.abs(tx - win.cx), Math.abs(tz - win.cz)) < h * 0.45) return;
       const step = regionNow ? 4 : 10;
       build(currentSeed, builtCount, { cx: Math.round(tx / step) * step, cz: Math.round(tz / step) * step });
@@ -4399,6 +4416,22 @@ export function CityView({
       if (immersive()) return;
       const p = posOf(tile);
       focus = null;
+      if (walker.on) {
+        // On foot: the walking camera ignores the map's, so you're set down on the street
+        // right by the spot (a friend, a place you searched), and the camera glides over.
+        if (regionNow && win && Math.max(Math.abs(p.x - win.cx), Math.abs(p.z - win.cz)) > DETAIL * 0.45) {
+          build(currentSeed, builtCount, { cx: Math.round(p.x), cz: Math.round(p.z) });
+        }
+        const at = standAt(p.x, p.z);
+        walker.x = at.x;
+        walker.z = at.z;
+        walker.t = 0;
+        walker.from.copy(camera.position);
+        walker.fromQuat.copy(camera.quaternion);
+        controls.target.set(at.x, 0, at.z);
+        showHover(tile);
+        return;
+      }
       eventFly = new THREE.Vector3(p.x, 0, p.z);
       // A long jump across a real place: draw the destination in full straight away, so it's
       // ready when the camera gets there (instead of after the glide).

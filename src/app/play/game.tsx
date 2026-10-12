@@ -89,9 +89,12 @@ import { StreakPill, StreakSheet } from "./streak-sheet";
 import { useQuestTracker } from "./activities/quest-tracker";
 import { QuestBanner, QuestCelebration, QuestSheet } from "./activities/quest-ui";
 import { Chat } from "./chat";
+import { sendPhoto, type ChatTarget } from "./chat-actions";
+import { announceChatSent } from "./chat-photo";
 import { setEventSoundsEnabled } from "./city/event-sounds";
 import type { CityDancer, CityEvent, CityFriendPin, CityGhost, CityInteract, CityMarkers, CityRide, RideTarget } from "./city-view";
-import { FeedRow, NotificationsPanel, type FeedIcon, type FeedItem } from "./notifications";
+import { FeedRow, NotificationsPanel, SwipeRow, type FeedIcon, type FeedItem } from "./notifications";
+import { dismissNotices, readNotices } from "./notice-actions";
 import { signOutNow } from "../login/actions";
 import { claimBalloon, recordVisit } from "./profile-actions";
 import { myVisits, payFare, payRide, payVisit } from "./fee-actions";
@@ -407,6 +410,9 @@ export function Game({
   const [toasts, setToasts] = useState<FeedItem[]>([]);
   /** Your notices on the real map that arrived since the page loaded (asked for every 15 s, and at once when a push comes). */
   const [liveNotes, setLiveNotes] = useState<GameState["notifications"]>([]);
+  /** Read and swiped away here, before the server has caught up (game-db/062 keeps them for good). */
+  const [readIds, setReadIds] = useState<Set<number>>(() => new Set());
+  const [goneIds, setGoneIds] = useState<Set<number>>(() => new Set());
   /** Gifts that just arrived: one at a time, a present bouncing on the screen (tap to open it). */
   const [giftPops, setGiftPops] = useState<FeedItem[]>([]);
   const nextGift = useCallback(() => setGiftPops((l) => l.slice(1)), []);
@@ -438,6 +444,8 @@ export function Game({
   const [phoneRing, setPhoneRing] = useState(0);
   /** Someone's card (a face tapped on the map, or from your doorstep), and your doorstep. */
   const [personId, setPersonId] = useState<string | null>(null);
+  /** The camera was opened from a chat: the selfie goes to them. */
+  const [selfieTo, setSelfieTo] = useState<{ target: ChatTarget; to: string } | null>(null);
   const [doorstepOpen, setDoorstepOpen] = useState(false);
   /** Dating or your rivals, open from your phone. */
   const [socialOpen, setSocialOpen] = useState<"dating" | "rivals" | null>(null);
@@ -499,7 +507,7 @@ export function Game({
     budget: 5000,
     onChanged: () => startTransition(() => router.refresh()),
     // Home from inside a building: out of it first.
-    beforeHome: () => leaveInside.current(),
+    beforeHome: (go: () => void) => leaveThen.current("go home", go),
     meId: state.me.guest ? null : state.me.id,
     rowOutside: true,
     meName: state.me.name ?? undefined,
@@ -524,6 +532,9 @@ export function Game({
   const [sound, setSound] = useState(true);
   /** Leave the building you're in, if any (set once leaveRoom exists, below). */
   const leaveInside = useRef<() => void>(() => {});
+  /** Go somewhere that means leaving the building or ride you're in: ask first (set below, once leaveRoom exists). */
+  const leaveThen = useRef<(what: string, go: () => void) => void>((_what, go) => go());
+  const [leaveAsk, setLeaveAsk] = useState<{ what: string; go: () => void } | null>(null);
   const [busy, setBusy] = useState(false);
   // Ghost duels: a ghost's card (tapped on the map), the list of ghosts, the duel on screen,
   // and flying the camera over to a ghost's light.
@@ -786,7 +797,7 @@ export function Game({
         onFly={(x, z) => {
           setStatsOpen(false);
           setChatOpen(false);
-          worldLife.fly(x, z);
+          leaveThen.current("go to them", () => worldLife.fly(x, z));
         }}
       />
     ) : undefined;
@@ -886,8 +897,7 @@ export function Game({
   // Fly the camera to an event (stepping out of any building or ride first).
   function flyToEvent(id: number) {
     setToasts([]);
-    if (place || ride !== null) leaveRoom();
-    setFocusEvent((f) => ({ id, at: (f?.at ?? 0) + 1 }));
+    leaveThen.current("go and see it", () => setFocusEvent((f) => ({ id, at: (f?.at ?? 0) + 1 })));
   }
   // What's happening, where, for how long, and any coins to grab.
   const [eventInfo, setEventInfo] = useState<number | null>(null);
@@ -1212,8 +1222,10 @@ export function Game({
         return n ? ({ key: `e${e.id}`, at: e.at, text: n.text, tone: n.tone, avatar: n.avatar ?? null, icon: n.icon, quiet: mineDuel } as FeedItem) : null;
       })
       .filter((x): x is FeedItem => x !== null);
-    const known = new Set(state.notifications.map((n) => n.id));
-    const allNotes = [...state.notifications, ...liveNotes.filter((n) => !known.has(n.id))];
+    // The latest list from the server wins (it knows what you read on other devices too).
+    const byId = new Map(state.notifications.map((n) => [n.id, n]));
+    for (const n of liveNotes) byId.set(n.id, n);
+    const allNotes = [...byId.values()].filter((n) => !goneIds.has(n.id)).sort((a, b) => b.id - a.id);
     const mine = allNotes.map((n) => ({
       key: `n${n.id}`,
       at: n.at,
@@ -1225,6 +1237,8 @@ export function Game({
         { trap: "trap", trapped: "trap", swept: "drone", caught: "catch", shield: "shield", shielded: "shield", decoy: "decoy", streak: "flame", gift: "gift", spray: "gift", hug: "hug", handshake: "handshake", thanks: "hug", duel: "duel", duel_won: "duel", duel_lost: "duel", heist: "coin", market: "coin", dating: "hug" }) as Record<string, FeedIcon>
       )[n.kind] ?? (n.kind === "doorstep" && /gift/i.test(n.body) ? "gift" : "info"),
       kind: n.kind,
+      // The real map's notices can be read and cleared; the old game's are counted by time.
+      ...(worldId ? { noteId: n.id, read: !!n.read || readIds.has(n.id) } : {}),
     }));
     // World events that have started: news you can tap to fly there.
     const news = state.worldEvents
@@ -1240,8 +1254,31 @@ export function Game({
     // The real map: only notices for you (offers, sales, gifts...), none of the old hunt's.
     if (worldId) return mine.filter((n) => !HUNT_NOTICES.has(n.icon)).sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 60);
     return [...pub, ...mine, ...news].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 60);
-  }, [state.events, state.notifications, liveNotes, state.worldEvents, state.me.name, serverNowMs, botName, myLastSpot, where, me.avatar, worldId]);
-  const unread = feed.filter((f) => Date.parse(f.at) > Date.parse(feedSeenAt)).length;
+  }, [state.events, state.notifications, liveNotes, readIds, goneIds, state.worldEvents, state.me.name, serverNowMs, botName, myLastSpot, where, me.avatar, worldId]);
+  // Unread: on the real map, notices you haven't read (exact, on every device); in the old game, the ones since you last looked.
+  const unread = feed.filter((f) => (f.noteId ? !f.read : Date.parse(f.at) > Date.parse(feedSeenAt))).length;
+  /** You've seen these notices: they stop counting at once (and on the server). */
+  const markRead = useCallback((ids: number[]) => {
+    const fresh = ids.filter((id) => id > 0);
+    if (!fresh.length) return;
+    setReadIds((s) => new Set([...s, ...fresh]));
+    void readNotices(fresh).catch(() => {});
+  }, []);
+  /** Swiped away (or Clear all). */
+  const dismissNote = useCallback((ids: number[]) => {
+    if (!ids.length) return;
+    setGoneIds((s) => new Set([...s, ...ids]));
+    void dismissNotices(ids).catch(() => {});
+  }, []);
+
+  // Opening the notifications list reads what's in it (the counter drops at once).
+  useEffect(() => {
+    if (!alertsOpen) return;
+    const ids = feed.flatMap((f) => (f.noteId && !f.read ? [f.noteId] : []));
+    if (!ids.length) return;
+    const t = setTimeout(() => markRead(ids), 600);
+    return () => clearTimeout(t);
+  }, [alertsOpen, feed, markRead]);
 
   // Hugs, handshakes and mint that arrived since you last opened My gifts.
   const newGifts = [...state.notifications, ...liveNotes.filter((l) => !state.notifications.some((n) => n.id === l.id))].filter(
@@ -1270,7 +1307,7 @@ export function Game({
     const fresh = feed.filter((f) => !seenKeys.current!.has(f.key));
     fresh.forEach((f) => seenKeys.current!.add(f.key));
     if (fresh.some((f) => f.key.startsWith("n") && f.tone === "alarm")) playSfx("caught");
-    const pop = fresh.filter((f) => !f.quiet);
+    const pop = fresh.filter((f) => !f.quiet && !f.read);
     if (!pop.length || feedOpen || quietNow) return;
     // Oldest first, one at a time (never a pile of them at once). Gifts get their own pop-up.
     const ordered = [...pop].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
@@ -1291,23 +1328,22 @@ export function Game({
     return () => clearTimeout(id);
   }, [toasts]);
   // The real map: new notices every 15 seconds (and at once when a push arrives).
-  const lastNoteId = useRef(0);
   useEffect(() => {
     if (!worldId || me.guest) return;
     let alive = true;
-    lastNoteId.current = Math.max(lastNoteId.current, ...state.notifications.map((n) => n.id), 0);
     const look = () => {
       if (document.visibilityState !== "visible") return;
-      void fetch(`/api/notices?after=${lastNoteId.current}`, { cache: "no-store" })
-        .then((r) => (r.ok ? r.json() : { notices: [] }))
-        .then((d: { notices?: GameState["notifications"] }) => {
-          if (!alive || !d.notices?.length) return;
-          lastNoteId.current = Math.max(lastNoteId.current, ...d.notices.map((n) => n.id));
-          setLiveNotes((list) => [...d.notices!, ...list].slice(0, 60));
+      void fetch("/api/notices", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d: { notices?: GameState["notifications"] } | null) => {
+          if (!alive || !d?.notices) return;
+          setLiveNotes(d.notices);
         })
         .catch(() => {});
     };
-    const every = setInterval(look, 15_000);
+    const every = setInterval(look, 8_000);
+    const onVisible = () => document.visibilityState === "visible" && look();
+    document.addEventListener("visibilitychange", onVisible);
     // A push arrived (the phone's service worker says so): look now. A tapped notification: go there.
     const onMessage = (e: MessageEvent) => {
       const t = (e.data as { type?: string; url?: string } | null)?.type;
@@ -1323,10 +1359,11 @@ export function Game({
       alive = false;
       clearInterval(every);
       navigator.serviceWorker?.removeEventListener("message", onMessage);
+      document.removeEventListener("visibilitychange", onVisible);
     };
     // chatWith is a plain function (new each render); the listener only needs the latest at the time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [worldId, me.guest, state.notifications]);
+  }, [worldId, me.guest]);
   // Opened from a message notification (?dm=<who>): straight into that conversation.
   useEffect(() => {
     if (me.guest) return;
@@ -1494,6 +1531,10 @@ export function Game({
     leaveInside.current = () => {
       if (place) leaveRoom();
     };
+    leaveThen.current = (what, go) => {
+      if (!place && ride === null) return go();
+      setLeaveAsk({ what, go });
+    };
   });
   // The house button: fly over to your house (or build one, if it isn't in this town).
   function showMyHouse() {
@@ -1501,11 +1542,8 @@ export function Game({
     if (phase === "join") return setMessage({ icon: House, text: `Your house goes up with the rest of the town, in ${countdown}.`, tone: "info" });
     const tile = myHouseTile;
     const fly = () => setFlyTo((f) => ({ tile, at: (f?.at ?? 0) + 1 }));
-    // Inside somewhere or on a ride: step out first, then fly over once the camera's back.
-    if (place || ride !== null) {
-      leaveRoom();
-      setTimeout(fly, 1700);
-    } else fly();
+    // Inside somewhere or on a ride: ask, step out, then fly over once the camera's back.
+    leaveThen.current("go to your house", fly);
     const home = tileAt(plan, tile).home;
     setMessage({ icon: House, text: `There's your house${home?.name ? `, ${home.name}` : ""}. Tap it to go inside. Change it from My house in the menu.`, tone: "info" });
   }
@@ -1982,12 +2020,14 @@ export function Game({
             <button
               key={n.key}
               onClick={() => {
+                if (n.noteId) markRead([n.noteId]);
                 if (n.eventId) return openEvent(n.eventId);
                 if (!guest && (n.icon === "hug" || n.icon === "handshake" || n.icon === "gift")) {
                   setToasts([]);
                   return openGifts();
                 }
-                setFeedOpen(true);
+                if (worldId) setAlertsOpen(true);
+                else setFeedOpen(true);
                 setFeedSeenAt(new Date(now).toISOString());
                 setToasts([]);
               }}
@@ -1998,6 +2038,32 @@ export function Game({
             </button>
           ))}
       </div>
+      {leaveAsk && (
+        <div className="fixed inset-0 z-[70] grid place-items-center bg-black/40 p-4" onPointerDown={(e) => e.target === e.currentTarget && setLeaveAsk(null)} role="dialog" aria-label="Leave here?">
+          <div className="w-full max-w-xs rounded-3xl bg-panel p-5 text-center shadow-2xl">
+            <DoorOpen className="mx-auto size-8 text-gold-dark" aria-hidden />
+            <h2 className="mt-2 font-display text-lg font-bold">Leave {ride !== null ? "this ride" : (rooms.myRoomInfo?.name ?? "this place")}?</h2>
+            <p className="mt-1 text-sm text-muted">To {leaveAsk.what} you&apos;ll step out of {ride !== null ? "the ride" : "here"} first.</p>
+            <div className="mt-4 flex gap-2">
+              <button onClick={() => setLeaveAsk(null)} className="h-11 flex-1 rounded-full bg-panel-2 font-semibold">
+                Stay
+              </button>
+              <button
+                onClick={() => {
+                  const go = leaveAsk.go;
+                  setLeaveAsk(null);
+                  leaveRoom();
+                  // Once the camera is back out over the town.
+                  setTimeout(go, 1700);
+                }}
+                className="h-11 flex-1 rounded-full bg-ink font-semibold text-white"
+              >
+                Leave and go
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {alertsOpen && (
         <Sheet onClose={() => setAlertsOpen(false)} title="Notifications">
           {!pushOn && (
@@ -2026,13 +2092,31 @@ export function Game({
           {feed.length === 0 ? (
             <p className="py-4 text-center text-sm text-muted">Nothing yet.</p>
           ) : (
-            <ul className="space-y-1.5">
-              {feed.slice(0, 40).map((f) => (
-                <li key={f.key}>
-                  <FeedRow item={f} now={now} compact />
-                </li>
-              ))}
-            </ul>
+            <>
+              <div className="mb-1.5 flex items-center justify-between text-[11px] text-muted">
+                <span>Swipe one sideways to clear it.</span>
+                {feed.some((f) => f.noteId) && (
+                  <button onClick={() => dismissNote(feed.flatMap((f) => (f.noteId ? [f.noteId] : [])))} className="font-semibold text-hit">
+                    Clear all
+                  </button>
+                )}
+              </div>
+              <ul className="space-y-1.5">
+                {feed.slice(0, 40).map((f) => (
+                  <li key={f.key}>
+                    {f.noteId ? (
+                      <SwipeRow onDismiss={() => dismissNote([f.noteId!])}>
+                        <div className={cn("rounded-2xl", !f.read && "bg-gold/10")}>
+                          <FeedRow item={f} now={now} compact />
+                        </div>
+                      </SwipeRow>
+                    ) : (
+                      <FeedRow item={f} now={now} compact />
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </Sheet>
       )}
@@ -2095,8 +2179,29 @@ export function Game({
           city={worldRegion?.name ?? plan.city.name}
           place={ride !== null ? (rooms.myRoomInfo?.name ?? RIDE_INFO[ride.kind].label) : place ? (rooms.myRoomInfo?.name ?? placeRoom?.name ?? null) : null}
           guest={guest}
-          onClose={() => setCamera(null)}
-          onOpenGallery={() => { setCamera(null); setPhone("photos"); }}
+          onClose={() => { setCamera(null); if (selfieTo) { setSelfieTo(null); setChatOpen(true); } }}
+          onOpenGallery={() => { setCamera(null); setSelfieTo(null); setPhone("photos"); }}
+          sendTo={
+            selfieTo
+              ? {
+                  name: selfieTo.to,
+                  send: async (shot) => {
+                    const form = new FormData();
+                    form.set("image", new File([shot.blob], "photo.jpg", { type: "image/jpeg" }));
+                    if ("to" in selfieTo.target) form.set("to", selfieTo.target.to);
+                    else form.set("room", selfieTo.target.room);
+                    const res = await sendPhoto(form).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
+                    if (!res.ok) return res.error;
+                    announceChatSent(res.message);
+                    setCamera(null);
+                    setSelfieTo(null);
+                    setChatOpen(true);
+                    setMessage({ text: `Selfie sent to ${selfieTo.to}`, tone: "good" });
+                    return null;
+                  },
+                }
+              : undefined
+          }
           onSignIn={() => { setCamera(null); setSignIn({ why: "Sign in to keep your pictures. Your gallery goes with you to every town." }); }}
           people={selfiePeople}
         />
@@ -2882,7 +2987,7 @@ export function Game({
             <Smartphone className="size-5" />
           </span>
           {unread + chatUnread > 0 && (
-            <span className="absolute -right-1.5 -top-1.5 grid min-w-5 place-items-center rounded-full bg-hit px-1 text-[11px] font-semibold text-white">{unread + chatUnread > 9 ? "9+" : unread + chatUnread}</span>
+            <span className="absolute -right-1.5 -top-1.5 grid min-w-5 place-items-center rounded-full bg-hit px-1 text-[11px] font-semibold text-white">{unread + chatUnread > 99 ? "99+" : unread + chatUnread}</span>
           )}
         </button>
       )}
@@ -2899,8 +3004,15 @@ export function Game({
               key: f.key,
               text: f.text,
               when: mins < 1 ? "now" : mins < 60 ? `${mins} min ago` : mins < 1440 ? `${Math.round(mins / 60)}h ago` : `${Math.round(mins / 1440)}d ago`,
-              fresh: Date.parse(f.at) > Date.parse(phoneSince),
-              onTap: f.icon === "gift" || f.icon === "hug" || f.icon === "handshake" ? () => openGifts() : f.kind === "doorstep" ? () => setDoorstepOpen(true) : undefined,
+              fresh: f.noteId ? !f.read : Date.parse(f.at) > Date.parse(phoneSince),
+              onTap: (() => {
+                const go = f.icon === "gift" || f.icon === "hug" || f.icon === "handshake" ? () => openGifts() : f.kind === "doorstep" ? () => setDoorstepOpen(true) : () => setAlertsOpen(true);
+                return () => {
+                  if (f.noteId) markRead([f.noteId]);
+                  go();
+                };
+              })(),
+              onDismiss: f.noteId ? () => dismissNote([f.noteId!]) : undefined,
             };
           })}
           apps={[
@@ -2967,6 +3079,12 @@ export function Game({
             hideButton
             onUnread={setChatUnread}
             onSignIn={() => setSignIn({ why: null })}
+            onPerson={setPersonId}
+            onSelfie={(target, to) => {
+              setSelfieTo({ target, to });
+              setChatOpen(false);
+              setCamera("selfie");
+            }}
           />
         </Safe>
       )}
@@ -2977,7 +3095,7 @@ export function Game({
           onClose={() => setPersonId(null)}
           onFly={(x, z) => {
             setPersonId(null);
-            worldLife.fly(x, z);
+            leaveThen.current("go to them", () => worldLife.fly(x, z));
           }}
           onAddFriend={me.guest ? undefined : (p) => void befriend(p)}
           greet={(p) => greet(p, false)}

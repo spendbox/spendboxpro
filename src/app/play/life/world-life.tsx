@@ -8,6 +8,7 @@ import { BUILDING_LABEL } from "@/lib/world/buildings";
 import type { RegionMap } from "@/lib/world/compile";
 import { regionMap } from "@/lib/world";
 import { ownedSpot } from "@/lib/world/owned";
+import { HomePlanner } from "../home/home-planner";
 import { propertyInfo, type PropertyInfo } from "@/lib/world/property";
 import { homesByArea, type HomeFind } from "@/lib/world/homes";
 import type { BuildingOwner, InterviewStart, LifeStatus, Neighbour, PaySettled, PropertyApi, PropertyResult, WorkStatus } from "@/lib/world/property-api";
@@ -141,8 +142,8 @@ export function useWorldLife({
   onChanged?: () => void;
   /** Go inside a building (the game's insides); left out where there are none (the test page). */
   onEnter?: (buildingId: string) => void;
-  /** Before flying home: leave the building you're in. */
-  beforeHome?: () => void;
+  /** Before flying home: leave the building or ride you're in (asking first), then `go`. */
+  beforeHome?: (go: () => void) => void;
   /** Your account (to know your own marks), and opening someone's card. */
   meId?: string | null;
   onPerson?: (id: string) => void;
@@ -693,13 +694,17 @@ export function useWorldLife({
   const homeBuilding = home ? owned.find((o) => o.id === home.building) : undefined;
   const homeLabel = home ? [home.label, home.name ?? (homeBuilding ? BUILDING_LABEL[homeBuilding.building.kind] : null)].filter(Boolean).join(", ") : "";
 
+  const [planning, setPlanning] = useState(false);
   const goHome = () => {
     if (!homeSpot) return;
-    beforeHome?.();
-    fly(homeSpot.x, homeSpot.z);
-    setHomeOpen(true);
-    setNeighbours(null);
-    void api.neighbours().then(setNeighbours);
+    const go = () => {
+      fly(homeSpot.x, homeSpot.z);
+      setHomeOpen(true);
+      setNeighbours(null);
+      void api.neighbours().then(setNeighbours);
+    };
+    if (beforeHome) beforeHome(go);
+    else go();
   };
 
   /** Something in Finance wants you: the guide's budget step, a power cut, an offer. */
@@ -833,7 +838,19 @@ export function useWorldLife({
           onClose={() => setFinderOpen(false)}
         />
       )}
-      {homeOpen && homeSpot && <HomeCard label={homeLabel} area={region.areaAt(homeSpot.x, homeSpot.z)} neighbours={neighbours} onClose={() => setHomeOpen(false)} />}
+      {homeOpen && homeSpot && (
+        <HomeCard
+          label={homeLabel}
+          area={region.areaAt(homeSpot.x, homeSpot.z)}
+          neighbours={neighbours}
+          onClose={() => setHomeOpen(false)}
+          onPlan={() => {
+            setHomeOpen(false);
+            setPlanning(true);
+          }}
+        />
+      )}
+      {planning && <HomePlanner onClose={() => setPlanning(false)} />}
       {place && (
         <Sheet onClose={() => setPlace(null)} wide clear>
           <div className="sticky -top-5 z-10 -mx-5 -mt-5 flex items-start justify-between gap-3 bg-panel/95 px-5 pb-2 pt-5">

@@ -24,6 +24,8 @@ export type ChatMessage = {
   body: string | null;
   audio_path: string | null;
   audio_seconds: number | null;
+  /** A picture sent in the message (game-db/062): its path in the photos bucket. */
+  image_path?: string | null;
   created_at: string;
 };
 
@@ -166,6 +168,67 @@ export async function sendVoice(form: FormData): Promise<Result<{ message: ChatM
   // A private voice note: a notification on their phone too.
   if (t.to) await pushTo(t.to).catch(() => {});
   return { ok: true, message: data as ChatMessage };
+}
+
+const PHOTO_BUCKET = "photos";
+const MAX_PHOTO_BYTES = 1_500_000;
+
+/**
+ * Send a picture (a selfie, a photo from your gallery or your phone). FormData: either image (a
+ * JPEG) or galleryId (one of your gallery's pictures), an optional caption, and either room or to.
+ */
+export async function sendPhoto(form: FormData): Promise<Result<{ message: ChatMessage }>> {
+  const s = await me();
+  if (!s) return { ok: false, error: "Sign in to chat." };
+  if (s.frozen) return { ok: false, error: FRIENDLY.frozen };
+  const room = form.get("room");
+  const to = form.get("to");
+  const t = cleanTarget({ room: typeof room === "string" && room ? room : undefined, to: typeof to === "string" && to ? to : undefined });
+  if (!t) return { ok: false, error: FRIENDLY.bad_target };
+  const caption = typeof form.get("caption") === "string" ? String(form.get("caption")).replace(/\s+/g, " ").trim().slice(0, 200) : "";
+  const path = `chat/${s.userId}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.jpg`;
+
+  const galleryId = Number(form.get("galleryId"));
+  if (galleryId > 0) {
+    // One of your own gallery pictures: a copy goes with the message (deleting it from your gallery later doesn't take it back).
+    const { data: own } = await s.db.from("phone_photos").select("path").eq("id", galleryId).eq("user_id", s.userId).maybeSingle();
+    if (!own?.path) return { ok: false, error: "That picture isn't in your gallery any more." };
+    const copy = await s.db.storage.from(PHOTO_BUCKET).copy(own.path as string, path);
+    if (copy.error) {
+      console.error("Chat photo copy failed", copy.error.message);
+      return { ok: false, error: "Couldn't send the picture. Try again." };
+    }
+  } else {
+    const file = form.get("image");
+    if (!(file instanceof Blob) || file.size === 0) return { ok: false, error: "The picture came out empty. Try again." };
+    if (file.type !== "image/jpeg") return { ok: false, error: "That isn't a picture." };
+    if (file.size > MAX_PHOTO_BYTES) return { ok: false, error: "That picture is too big to send." };
+    const upload = await s.db.storage.from(PHOTO_BUCKET).upload(path, file, { contentType: "image/jpeg" });
+    if (upload.error) {
+      console.error("Chat photo upload failed", upload.error.message);
+      return { ok: false, error: "Couldn't send the picture. Try again." };
+    }
+  }
+  const { data, error } = await s.db.rpc("chat_send_photo", { p_user: s.userId, p_room: t.room, p_to: t.to, p_path: path, p_caption: caption || null });
+  if (error || !data) {
+    await s.db.storage.from(PHOTO_BUCKET).remove([path]);
+    if (error?.message?.includes("chat_send_photo")) return { ok: false, error: "Sending pictures is switched on soon (the game's owner has one update to run)." };
+    return { ok: false, error: friendly(error?.message, "Couldn't send the picture.") };
+  }
+  if (t.to) await pushTo(t.to).catch(() => {});
+  return { ok: true, message: data as ChatMessage };
+}
+
+/** A short-lived link to see a picture in a message, only for people who can see the message. */
+export async function photoUrl(messageId: number): Promise<Result<{ url: string }>> {
+  const userId = await currentUserId();
+  if (!userId) return { ok: false, error: "Sign in to see it." };
+  const db = createAdminClient();
+  const { data: m } = await db.from("chat_messages").select("image_path, sender_id, recipient_id").eq("id", messageId).maybeSingle();
+  if (!m?.image_path || (m.recipient_id && m.recipient_id !== userId && m.sender_id !== userId)) return { ok: false, error: "Not available." };
+  const { data, error } = await db.storage.from(PHOTO_BUCKET).createSignedUrl(m.image_path as string, 3600);
+  if (error || !data) return { ok: false, error: "Not available." };
+  return { ok: true, url: data.signedUrl };
 }
 
 /** A short-lived link to play a voice note, only for people who can see the message. */
