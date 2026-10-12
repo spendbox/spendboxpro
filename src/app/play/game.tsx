@@ -94,8 +94,8 @@ import type { CityDancer, CityEvent, CityFriendPin, CityGhost, CityInteract, Cit
 import { FeedRow, NotificationsPanel, type FeedIcon, type FeedItem } from "./notifications";
 import { signOutNow } from "../login/actions";
 import { claimBalloon, recordVisit } from "./profile-actions";
-import { myVisits, payFare, payVisit } from "./fee-actions";
-import { TRAIN_FARE, visitFee } from "@/lib/fees";
+import { myVisits, payFare, payRide, payVisit } from "./fee-actions";
+import { rideFare, TRAIN_FARE, visitFee } from "@/lib/fees";
 import { jobAt } from "@/lib/jobs";
 import type { Invite, PlayCtx } from "./minigames/shell";
 import { rideRoom, useRooms, type RoomInfo } from "./rooms";
@@ -975,16 +975,23 @@ export function Game({
    * background (and puts you back out if that fails). The cost is on the button you tapped, so
    * nothing more is said about it. Returns false if you can't go.
    */
-  function payToGo(what: { kind: "visit"; place: string; type?: string; name: string } | { kind: "fare"; index: number; fare: number; name: string }): boolean {
+  function payToGo(what: { kind: "visit"; place: string; type?: string; name: string } | { kind: "fare"; index: number; fare: number; name: string; ride?: RideKindName }): boolean {
     if (guest) return true;
     const fee = what.kind === "visit" ? visitCost({ id: what.place, type: what.type }) : what.fare;
     if (fee <= 0) return true;
     if (me.coins < fee) {
-      setMessage({ icon: Coins, text: `${what.kind === "visit" ? `Your first visit to ${what.name}` : `A ticket for the ${what.name}`} costs ₥${short(fee)}, and you have ₥${short(me.coins)}.`, tone: "bad" });
+      const money = (m: number) => (worldId ? cash(m) : `₥${short(m)}`);
+      setMessage({ icon: Coins, text: `${what.kind === "visit" ? `Your first visit to ${what.name}` : `A ticket for the ${what.name}`} costs ${money(fee)}, and you have ${money(me.coins)}.`, tone: "bad" });
       return false;
     }
     if (what.kind === "visit") markVisited(what.place, true);
-    const pay = what.kind === "visit" ? payVisit(what.place, what.type) : payFare(what.index, what.fare > TRAIN_FARE);
+    const pay =
+      what.kind === "visit"
+        ? payVisit(what.place, what.type)
+        : // The real map: every ride has its fare (src/lib/fees.ts), from your Travel money.
+          worldId && what.ride
+          ? payRide(what.ride, what.index)
+          : payFare(what.index, what.fare > TRAIN_FARE);
     void pay.then((res) => {
       // Only put you back out if you really can't go (not if the payment just didn't go through).
       if (!res.ok && res.kick) {
@@ -1448,7 +1455,8 @@ export function Game({
   }
   // Hop on a ride: a balloon, train, bus, car, boat, Ferris wheel cabin or water slide.
   function boardRide(r: { kind: RideKindName; index: number; name: string; capacity: number; fare?: number }) {
-    if (r.fare && !payToGo({ kind: "fare", index: r.index, fare: r.fare, name: r.name })) return;
+    const fare = worldId ? rideFare(r.kind) : r.fare;
+    if (fare && !payToGo({ kind: "fare", index: r.index, fare, name: r.name, ride: r.kind })) return;
     setPickRide(false);
     setPlace(null);
     setActivity(null);
@@ -1555,7 +1563,9 @@ export function Game({
 
   // What you can ride: the city's list, or just the balloons until it arrives.
   const rideList: CityRide[] = rides.length
-    ? rides
+    ? worldId
+      ? rides.map((r) => ({ ...r, fare: rideFare(r.kind) }))
+      : rides
     : Array.from({ length: Math.max(balloonCount, 1) }, (_, k) => ({ kind: "balloon" as const, index: k, name: `${BALLOON_NAMES[k % BALLOON_NAMES.length]} balloon`, capacity: 1000 }));
 
   /** Go to where a friend is: their floor of a building, their balloon or their ride. */

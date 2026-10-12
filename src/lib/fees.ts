@@ -26,3 +26,25 @@ export function visitFee(type: string | undefined) {
 /** The fare for a train (each time you board): a bullet train, or the monorail. */
 export const TRAIN_FARE = 1;
 export const MONORAIL_FARE = 1.5;
+
+/**
+ * Riding something on a real map (Explore → Rides), at real Lagos prices (naira, each time you
+ * board): the train on the real railway, a lagoon ferry, a BRT bus, a taxi, a Ferris wheel, a
+ * water slide, a hot-air balloon flight, a helicopter tour over the city.
+ */
+export const RIDE_FARE_NAIRA: Record<string, number> = {
+  train: 2_000,
+  boat: 2_500,
+  bus: 500,
+  car: 3_500,
+  ferris: 1_000,
+  slide: 500,
+  balloon: 25_000,
+  heli: 150_000,
+};
+
+/** A ride's fare in mint (Lagos: ₦1,500 a mint). */
+export function rideFare(kind: string, nairaPerMint = 1_500) {
+  const naira = RIDE_FARE_NAIRA[kind] ?? 0;
+  return Math.round((naira / nairaPerMint) * 100) / 100;
+}

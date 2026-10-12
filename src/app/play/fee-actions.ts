@@ -1,7 +1,7 @@
 "use server";
 
 import { currentUserId } from "@/lib/game";
-import { MONORAIL_FARE, TRAIN_FARE, visitFee } from "@/lib/fees";
+import { MONORAIL_FARE, RIDE_FARE_NAIRA, rideFare, TRAIN_FARE, visitFee } from "@/lib/fees";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Paying to go places: the first visit to a place in each town, and train fares (every time).
@@ -42,6 +42,27 @@ export async function payFare(index: number, monorail: boolean): Promise<FeePaid
   if (error) return say(error.message);
   const d = (data ?? {}) as Record<string, unknown>;
   return { ok: true, paid: n(d.paid), coins: n(d.coins) };
+}
+
+/**
+ * Pay to board a ride on a real map (a train, a ferry, a balloon, a helicopter...), from your
+ * Travel money then your wallet. The fare is the game's own (rideFare), never the browser's.
+ */
+export async function payRide(kind: string, index: number): Promise<FeePaid | Fail> {
+  if (!(kind in RIDE_FARE_NAIRA) || !Number.isInteger(index) || index < 0 || index > 999) return { ok: false, error: "Unknown ride." };
+  const userId = await currentUserId();
+  if (!userId) return { ok: true, paid: 0, coins: 0 };
+  const db = createAdminClient();
+  const { data, error } = await db.rpc("life_ride", { p_user: userId, p_key: `v:${kind}:${index}`, p_fare: rideFare(kind) });
+  if (error) {
+    // Before part 61 is run: the old fare (only charged during an hourly game).
+    if (/life_ride/.test(error.message)) return payFare(Math.min(index, 99), false);
+    // No life on the map yet (just watching the city): the ride's on the house.
+    if (error.message.startsWith("no_life")) return { ok: true, paid: 0, coins: 0 };
+    return say(error.message);
+  }
+  const { data: me } = await db.from("profiles").select("coins").eq("id", userId).maybeSingle();
+  return { ok: true, paid: n(data), coins: n(me?.coins) };
 }
 
 /** The places you've been to in this town (their first visit is paid). */

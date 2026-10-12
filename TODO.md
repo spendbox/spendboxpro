@@ -1,6 +1,7 @@
 # To do
 
 ## Now (owner)
+- [ ] In the Supabase SQL Editor run `game-db/061_ride_fares.sql` (rides on the map cost their fare: train, ferry, bus, taxi, balloon, helicopter...; until it's run they stay free on the real map).
 - [ ] In the Supabase SQL Editor run `game-db/060_find_people.sql` (search anyone nearest first, man or woman). Until it's run, People still lists those within 50 km and nobody shows as man or woman.
 - [ ] In the Supabase SQL Editor run `game-db/059_bigger_starts.sql` (free start ₥6,500; visits counted by day for the online button's numbers and the dashboard). The bigger packs work without it.
 - [ ] For the owner's dashboard: in Vercel → Settings → Environment Variables add `ADMIN_PATH` (a hard-to-guess address, at least 8 characters, e.g. `hq-7f3k29xq`), and `ADMIN_PASSWORD` (at least 8 characters; `ADMIN_EMAIL` is the sign-in email). Redeploy, then open `https://newtown.world/<ADMIN_PATH>`.
@@ -38,6 +39,7 @@
 - [ ] Test on a real phone: sounds, touch gestures, the water slide, club lights.
 
 ## Next (ideas agreed)
+- [ ] **The 3D characters' poses** (`docs/AVATAR_POSES.md`): sit, sip, eat, type, hug and handshake first, so seated characters and greetings switch to the new design; then work, games, street life, rides and feelings; then your own 3D avatar on the street and inside.
 - [ ] **The core thing: "Run your area".** One tap of **Respect** on anyone's home, car, mark, invention or prank (Newtown's "like"). Respect turns into reputation, and each week the most respected player in each neighbourhood becomes its **Don**: their name and a crown on the area for everyone to see. Work, buying, marks, pranks and dating all feed one goal: own your street.
 - [ ] Earning from reputation (coming soon on the Reputation screen): players above a reputation level share 50% of the app's revenue.
 - [ ] Coming soon (shown in the game): the whole of Nigeria on the map, then Africa, then the world; over a million building designs with more floors and landmarks; transformers and other everyday structures; better avatars; group conversations; rewards from real companies; posting videos and real-life content, politics, Easter eggs, real jobs, creator payouts.

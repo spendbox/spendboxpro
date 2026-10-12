@@ -157,22 +157,22 @@ export const COMMUTE_LABEL: Record<Commute, string> = { walk: "Walk", keke: "Kek
 type Fare = { base: number; perKm: number; cap?: number; maxKm: number };
 
 /**
- * Lagos fares (naira) a trip, kept well under real ones so getting about is fun: a danfo
- * never costs more than ₦250 however far it goes (like a long BRT ride). Walking is free but only
- * so far.
+ * Lagos fares (naira) a trip, at real 2026 prices (after the fuel subsidy went): a keke from ₦200
+ * plus about ₦80 a km, a danfo from ₦300 (a long ride changing buses tops out at ₦1,500), an
+ * okada dearer, a taxi (Bolt / Uber) from ₦1,000 plus ₦300 a km. Your own car is the petrol (about
+ * ₦1,050 a litre, 10 km to the litre) and a little for parking. Walking is free but only so far.
  */
 const FARES: Record<Commute, Fare> = {
   walk: { base: 0, perKm: 0, maxKm: 3 },
-  keke: { base: 50, perKm: 25, cap: 250, maxKm: 8 },
-  okada: { base: 80, perKm: 35, cap: 400, maxKm: 15 },
-  danfo: { base: 50, perKm: 8, cap: 250, maxKm: Infinity },
-  taxi: { base: 300, perKm: 90, maxKm: Infinity },
-  // Your own car: only fuel, cheaper than any fare once you're past a keke ride.
-  car: { base: 0, perKm: 6, cap: 200, maxKm: Infinity },
+  keke: { base: 200, perKm: 80, cap: 1_500, maxKm: 8 },
+  okada: { base: 300, perKm: 120, cap: 3_000, maxKm: 15 },
+  danfo: { base: 300, perKm: 40, cap: 1_500, maxKm: Infinity },
+  taxi: { base: 1_000, perKm: 300, maxKm: Infinity },
+  car: { base: 200, perKm: 110, maxKm: Infinity },
 };
 
-/** A ferry across the lagoon to where no road goes (an island): a crossing fare plus so much a km on the water. */
-export const FERRY = { base: 300, perKm: 60 };
+/** A ferry across the lagoon to where no road goes (LAGFERRY): ₦1,000 to cross plus ₦150 a km on the water. */
+export const FERRY = { base: 1_000, perKm: 150 };
 
 /** Roads wind: a trip is about this much longer than a straight line. */
 const ROAD_FACTOR = 1.3;

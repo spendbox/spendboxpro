@@ -32,11 +32,12 @@ Two trips a game day, there and back, taken off your pay when you collect:
 | Way | Fare a trip | How far it goes |
 | --- | --- | --- |
 | Walk | free | up to 3 km |
-| Keke | ₦100 + ₦50 a km, at most ₦500 | up to 8 km |
-| Okada | ₦150 + ₦70 a km, at most ₦900 | up to 15 km |
-| Danfo bus | ₦100 + ₦20 a km, at most ₦600 | anywhere |
-| Taxi | ₦500 + ₦200 a km | anywhere |
-| Ferry (added on) | ₦800 + ₦150 a km on the water | to islands no road reaches |
+| Keke | ₦200 + ₦80 a km, at most ₦1,500 | up to 8 km |
+| Okada | ₦300 + ₦120 a km, at most ₦3,000 | up to 15 km |
+| Danfo bus | ₦300 + ₦40 a km, at most ₦1,500 | anywhere |
+| Taxi | ₦1,000 + ₦300 a km | anywhere |
+| My car | ₦200 + ₦110 a km (petrol and parking) | anywhere |
+| Ferry (added on) | ₦1,000 + ₦150 a km on the water | to islands no road reaches |
 
 A trip is the straight distance between home and work plus 30% (roads wind). Living near your
 work saves money every day, which is part of why central places are worth more. If you move
@@ -55,3 +56,8 @@ crossing (`src/lib/world/trips.ts` works out which pieces of land join up). Fare
 - Wages: the tables in `src/lib/world/work.ts`.
 - Fares: `FARES` in the same file.
 - Tax, the most a job can pay, the dearest trip, how long pay waits: `game_settings` (`work_*`).
+
+## Rides (Explore → Rides, game-db/061_ride_fares.sql)
+Every ride costs its fare each time you board, from your Travel money (src/lib/fees.ts): the train
+₦2,000, a lagoon ferry ₦2,500, a BRT bus ₦500, a taxi ₦3,500, the Ferris wheel ₦1,000, a water slide
+₦500, a hot-air balloon flight ₦25,000, a helicopter tour ₦150,000. Fares are 2026 Lagos prices.
