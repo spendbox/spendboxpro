@@ -75,12 +75,15 @@ export type PlayerCardData = {
 export async function playerCard(id: string): Promise<PlayerCardData | null> {
   const userId = await currentUserId();
   if (!userId || !/^[0-9a-f-]{36}$/i.test(String(id))) return null;
-  const { data } = await createAdminClient().rpc("player_card", { p_viewer: userId, p_target: id });
+  const [{ data }, { data: liked }] = await Promise.all([
+    createAdminClient().rpc("player_card", { p_viewer: userId, p_target: id }),
+    createAdminClient().rpc("marks_liked", { p_user: id }),
+  ]);
   if (!data) return null;
   const d = data as Record<string, unknown>;
   const spot = d.home ? ownedSpot(String(d.home).split("/")[0]) : null;
   const map = spot ? regionMap(spot.region) : null;
-  const rep = reputationOf({ propertyMint: n(d.property), homes: d.home ? 1 : 0, itemRep: n(d.thingsRep), inventionsSold: n(d.inventionsSold), penalty: n(d.penalty) });
+  const rep = reputationOf({ propertyMint: n(d.property), homes: d.home ? 1 : 0, itemRep: n(d.thingsRep), inventionsSold: n(d.inventionsSold), penalty: n(d.penalty), marksLiked: n(liked) });
   return {
     id: String(d.id),
     name: String(d.name),

@@ -190,7 +190,7 @@ function Reputation({ me }: { me: MyThings }) {
         <Star className="size-4 text-gold-dark" /> Reputation {me.reputation.score}
       </p>
       <p className="mt-0.5 text-muted">
-        Property {p.property} · Things {p.things} · Inventions {p.inventions}
+        Property {p.property} · Things {p.things} · Inventions {p.inventions} · Marks {p.marks}
         {p.penalty ? ` · Caught swiping ${p.penalty}` : ""}
       </p>
     </div>

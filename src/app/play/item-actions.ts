@@ -90,7 +90,7 @@ export type MyThings = {
   crafted: number;
   /** What your things do for you together, every 2 hours. */
   effects: { mind: number; body: number; rep: number };
-  reputation: { score: number; parts: { property: number; things: number; inventions: number; penalty: number } };
+  reputation: { score: number; parts: { property: number; things: number; inventions: number; marks: number; penalty: number } };
   /** How good you are at making each kind of thing (0..1). */
   craftSkill: Record<string, number>;
   hasCar: boolean;
@@ -101,10 +101,12 @@ export async function myThings(): Promise<MyThings | null> {
   const userId = await currentUserId();
   if (!userId) return null;
   const db = createAdminClient();
-  const [{ data }, { data: skills }, { data: assets }] = await Promise.all([
+  const [{ data }, { data: skills }, { data: assets }, { data: liked }] = await Promise.all([
     db.rpc("my_items", { p_user: userId }),
     db.from("life_skills").select("skill, days").eq("user_id", userId),
     db.rpc("my_assets", { p_user: userId }),
+    // Reactions to what you left on the map (game-db/052; nothing until it's run).
+    db.rpc("marks_liked", { p_user: userId }),
   ]);
   if (!data) return null;
   const d = data as Record<string, unknown>;
@@ -142,6 +144,7 @@ export async function myThings(): Promise<MyThings | null> {
     itemRep: effects.rep,
     inventionsSold: n(d.inventionsSold),
     penalty: n(d.penalty),
+    marksLiked: n(liked),
   });
   return { items, crafts, crafted, effects, reputation, craftSkill: skill, hasCar: items.some((i) => i.category === "car") };
 }

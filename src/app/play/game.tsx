@@ -62,7 +62,7 @@ import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
 import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
-import { BellRing, CarFront, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Newspaper, Palette, ShoppingBag, Smartphone, Store, Swords, User } from "lucide-react";
+import { BellRing, CarFront, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Newspaper, Palette, ShoppingBag, Smartphone, Store, Swords, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
 import { GhostsSheet } from "./ghost-duel/ghosts-sheet";
@@ -463,6 +463,8 @@ export function Game({
     onChanged: () => startTransition(() => router.refresh()),
     // Home from inside a building: out of it first.
     beforeHome: () => leaveInside.current(),
+    meId: state.me.guest ? null : state.me.id,
+    onPerson: (id: string) => setPersonId(id),
     // A building's card: Go inside, as if its bubble had been tapped.
     onEnter: (id: string) => {
       const sp = ownedSpot(id);
@@ -1527,6 +1529,8 @@ export function Game({
             dance={isDancing && dancing ? { id: me.id, move: dancing.move, with: dancing.with } : null}
             friendsAt={worldId ? facesOnMap : friendsAt}
             onPerson={worldId ? setPersonId : undefined}
+            marks={worldId ? worldLife.marks : undefined}
+            onMark={worldId ? worldLife.onMark : undefined}
             openRoom={openReq}
             roomPeople={place ? hereNow : undefined}
             dancers={inClub ? dancers : undefined}
@@ -2559,6 +2563,7 @@ export function Game({
             {(
               [
                 ["Doorstep", DoorClosed, () => setDoorstepOpen(true)],
+                ["Leave a mark", PenLine, () => worldLife.openLeaveMark()],
                 ["My things", Gem, () => worldLife.openThings("mine")],
                 ["Shops", ShoppingBag, () => worldLife.openThings("shops")],
                 ["Cars", CarFront, () => worldLife.openThings("cars")],
