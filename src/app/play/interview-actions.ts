@@ -42,10 +42,21 @@ async function who() {
 
 /** Start an interview for a job at a place: five questions, and how many must be right. */
 export async function interviewStart(placeId: string, jobId: string): Promise<InterviewStart> {
+  try {
+    return await startInterview(placeId, jobId);
+  } catch (e) {
+    // Say what went wrong in the server's logs, and something useful on the phone (never a blank failure).
+    console.error("Interview start failed", placeId, jobId, e);
+    return { ok: false, error: "The interview room isn't ready just now. Try again in a minute." };
+  }
+}
+
+async function startInterview(placeId: string, jobId: string): Promise<InterviewStart> {
   const region = /^([a-z0-9-]+):/.exec(placeId ?? "")?.[1];
   const plan = region ? planFor(region) : null;
   const job = plan ? workplaceById(plan, placeId)?.jobs.find((j) => j.job === jobId) : undefined;
-  if (!job || !needsInterview(job)) return { ok: false, error: "That job doesn't need an interview." };
+  if (!job) return { ok: false, error: "That job isn't on offer there any more. Close the place and open it again." };
+  if (!needsInterview(job)) return { ok: false, error: "That job doesn't need an interview." };
   const userId = await who();
   let stressed = false;
   if (userId) {

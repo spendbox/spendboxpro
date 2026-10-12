@@ -1,7 +1,7 @@
 "use client";
 
 import { House, Users, X } from "@/components/icons";
-import { PencilRuler } from "lucide-react";
+import { DoorOpen, PencilRuler } from "lucide-react";
 import type { Neighbour } from "@/lib/world/property-api";
 
 /** Two letters for someone's round badge. */
@@ -23,7 +23,7 @@ function tint(name: string) {
 const far = (tiles: number) => (tiles < 1 ? "next door" : `${Math.round(tiles * 100)} m away`);
 
 /** Your home, at the bottom of the map: where it is and who lives around you. */
-export function HomeCard({ label, area, neighbours, onClose, onPlan }: { label: string; area: string; neighbours: Neighbour[] | null; onClose: () => void; onPlan?: () => void }) {
+export function HomeCard({ label, area, neighbours, onClose, onPlan, onEnter }: { label: string; area: string; neighbours: Neighbour[] | null; onClose: () => void; onPlan?: () => void; onEnter?: () => void }) {
   const inside = (neighbours ?? []).filter((n) => n.sameBuilding);
   const around = (neighbours ?? []).filter((n) => !n.sameBuilding);
   return (
@@ -46,6 +46,11 @@ export function HomeCard({ label, area, neighbours, onClose, onPlan }: { label: 
         {onPlan && (
           <button onClick={onPlan} className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-full bg-ink text-sm font-semibold text-white">
             <PencilRuler className="size-4" /> Plan my home: rooms, floors, furniture
+          </button>
+        )}
+        {onEnter && (
+          <button onClick={onEnter} className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-full bg-gold text-sm font-semibold text-ink">
+            <DoorOpen className="size-4" /> Enter home
           </button>
         )}
 

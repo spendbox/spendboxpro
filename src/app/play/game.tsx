@@ -62,7 +62,7 @@ import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
 import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
-import { BellOff, BellRing, Wallet, CarFront, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Newspaper, Palette, ShoppingBag, Smartphone, Store, Swords, User } from "lucide-react";
+import { BellOff, BellRing, PencilRuler, Wallet, CarFront, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Newspaper, Palette, ShoppingBag, Smartphone, Store, Swords, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
 import { GhostsSheet } from "./ghost-duel/ghosts-sheet";
@@ -1521,6 +1521,10 @@ export function Game({
     setRide({ kind: r.kind, index: r.index });
     setMessage({ icon: RIDE_ICONS[r.kind], text: guest && r.kind !== "slide" ? "Enjoy the ride! Sign in to chat with the people on board." : RIDE_HELLO[r.kind], tone: "info" });
   }
+  // Inside your own home (any floor of it).
+  const homeAt = worldLife.homeBuilding ? ownedSpot(worldLife.homeBuilding) : null;
+  const homeRoom = homeAt ? `b:${spiralIndex(homeAt.x, homeAt.z)}` : null;
+  const inMyHome = !!homeRoom && !!rooms.myRoomInfo && (rooms.myRoomInfo.id === homeRoom || rooms.myRoomInfo.id.startsWith(`${homeRoom}:`));
   function leaveRoom() {
     rooms.leave();
     setRide(null);
@@ -2925,6 +2929,13 @@ export function Game({
                       <MessageCircle className="size-4" />
                       Chat
                     </button>
+                    {/* Your own home: plan it from inside, too. */}
+                    {place && inMyHome && (
+                      <button onClick={worldLife.openPlanner} className="flex items-center gap-1.5 rounded-xl bg-gold px-3 py-2 font-semibold text-ink">
+                        <PencilRuler className="size-4" />
+                        Plan my home
+                      </button>
+                    )}
                     {placeLevel?.kind === "club" && (
                       <button onClick={startDancing} className="flex items-center gap-1.5 rounded-xl bg-[#e64980] px-3 py-2 font-semibold text-white">
                         <Music className="size-4" />
