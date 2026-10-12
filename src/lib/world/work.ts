@@ -167,8 +167,8 @@ const FARES: Record<Commute, Fare> = {
   okada: { base: 80, perKm: 35, cap: 400, maxKm: 15 },
   danfo: { base: 50, perKm: 8, cap: 250, maxKm: Infinity },
   taxi: { base: 300, perKm: 90, maxKm: Infinity },
-  // Your own car: only fuel (and parking now and then).
-  car: { base: 0, perKm: 12, cap: 400, maxKm: Infinity },
+  // Your own car: only fuel, cheaper than any fare once you're past a keke ride.
+  car: { base: 0, perKm: 6, cap: 200, maxKm: Infinity },
 };
 
 /** A ferry across the lagoon to where no road goes (an island): a crossing fare plus so much a km on the water. */

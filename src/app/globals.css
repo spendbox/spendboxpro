@@ -115,3 +115,9 @@ a[href]:active,
 @media (prefers-reduced-motion: reduce) {
   .golden-shine, .golden-bob { animation: none; }
 }
+
+/* Breaking news dropping in at the top of the map. */
+@keyframes newsIn {
+  from { opacity: 0; transform: translateY(-12px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}

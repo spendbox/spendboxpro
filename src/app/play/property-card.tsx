@@ -45,6 +45,7 @@ export function PropertyCard({
   onReport,
   onEnter,
   enterLabel,
+  enterExtra,
   onClose,
   onMark,
 }: {
@@ -55,6 +56,8 @@ export function PropertyCard({
   /** Go inside, and what the button says (with the fare there). */
   onEnter?: () => void;
   enterLabel?: string;
+  /** Under Go there: the switch to drive your own car (when you have one). */
+  enterExtra?: React.ReactNode;
   onClose: () => void;
   /** Leave a mark here (write, review, plant a tree...). */
   onMark?: () => void;
@@ -109,6 +112,7 @@ export function PropertyCard({
             <DoorOpen className="size-4 shrink-0" /> {(enterLabel ?? "Go there").replace(/^Go inside/, "Go there")}
           </button>
         )}
+        {onEnter && !info.state && enterExtra}
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={() => setDetails((d) => !d)}

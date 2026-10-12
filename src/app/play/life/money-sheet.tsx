@@ -9,10 +9,12 @@ import { cash, CURRENCIES, shownCurrency } from "@/lib/world/value";
 import { Sheet } from "../sheet";
 import { AssetsBody, unitValueNow, type Owning } from "./assets-sheet";
 import { MoneyChart, UpOrDown, useMoneyDays } from "./money-chart";
+import { earnings as loadEarnings, type Earnings } from "../living-actions";
 
-export type Tab = "home" | "budget" | "property";
+export type Tab = "home" | "stats" | "budget" | "property";
 const TABS: { id: Tab; label: string }[] = [
   { id: "home", label: "Overview" },
+  { id: "stats", label: "Stats" },
   { id: "budget", label: "Budget" },
   { id: "property", label: "Property" },
 ];
@@ -24,6 +26,7 @@ const INCOME: { label: string; kinds: string[]; colour: string }[] = [
   { label: "Rent", kinds: ["rent"], colour: "#37b24d" },
   { label: "Property sold", kinds: ["property_sale"], colour: "#495057" },
   { label: "Things and cars sold", kinds: ["item_sale", "car_sale"], colour: "#7048e8" },
+  { label: "Services", kinds: ["service_pay"], colour: "#1971c2" },
 ];
 /** Where it went. */
 const EXPENSES: { label: string; kinds: string[]; colour: string }[] = [
@@ -102,7 +105,8 @@ export function MoneySheet({
         ))}
       </div>
       <div className="mt-4">
-        {tab === "home" && (
+        {tab === "home" && <Earned />}
+        {tab === "stats" && (
           <div>
             <div className="rounded-3xl bg-gradient-to-br from-gold/25 to-me/10 p-4 text-center">
               <p className="text-sm text-muted">Net worth</p>
@@ -156,6 +160,92 @@ export function MoneySheet({
         {tab === "property" && <AssetsBody assets={assets} owned={owned} region={region} busy={busy} owning={owning} onCollect={onCollect} onShow={onShow} />}
       </div>
     </Sheet>
+  );
+}
+
+/** Earnings seen for each period: shown at once next time while fresh ones load. */
+const earnedSeen = new Map<number, Earnings>();
+const EARN_PERIODS = [
+  { days: 7, label: "7 days" },
+  { days: 30, label: "30 days" },
+  { days: 3650, label: "All" },
+] as const;
+const kindLabel = (kind: string) => INCOME.find((g) => g.kinds.includes(kind));
+
+/** What you've earned: the total, and each payment in like a pay slip, filtered by where it came from. */
+function Earned() {
+  const [days, setDays] = useState<number>(30);
+  const [filter, setFilter] = useState<string>("all");
+  const [got, setGot] = useState<{ days: number; e: Earnings } | null>(() => (earnedSeen.has(30) ? { days: 30, e: earnedSeen.get(30)! } : null));
+  useEffect(() => {
+    let alive = true;
+    void loadEarnings(days).then((e) => {
+      if (!e) return;
+      earnedSeen.set(days, e);
+      if (alive) setGot({ days, e });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [days]);
+  const shown = got && got.days === days ? got.e : (earnedSeen.get(days) ?? null);
+  const entries = (shown?.entries ?? []).filter((x) => filter === "all" || kindLabel(x.kind)?.label === filter);
+  const kinds = INCOME.filter((g) => (shown?.entries ?? []).some((x) => g.kinds.includes(x.kind)));
+  const filtered = entries.reduce((t, x) => t + x.amount, 0);
+  return (
+    <div>
+      <div className="rounded-3xl bg-gradient-to-br from-me/20 to-gold/20 p-4 text-center">
+        <p className="text-sm text-muted">You&apos;ve earned</p>
+        <p className="font-display text-3xl font-extrabold tabular-nums text-me sm:text-4xl">{shown ? cash(shown.total, { full: true }) : "…"}</p>
+        <p className="mt-1 text-xs text-muted">in all, since you started{shown && days < 3650 ? ` · ${cash(shown.period)} in the last ${days} days` : ""}</p>
+      </div>
+      <div className="mt-4 flex items-center justify-between gap-2">
+        <span className="text-sm font-semibold">Money in</span>
+        <div className="flex gap-1 rounded-full bg-ink/5 p-1">
+          {EARN_PERIODS.map((p) => (
+            <button key={p.days} onClick={() => setDays(p.days)} className={`h-7 rounded-full px-3 text-xs font-semibold ${days === p.days ? "bg-panel shadow-sm" : "text-muted"}`}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {kinds.length > 1 && (
+        <div className="-mx-1 mt-2 flex gap-1.5 overflow-x-auto px-1 pb-1">
+          {[{ label: "all", colour: "#212529" }, ...kinds].map((g) => (
+            <button key={g.label} onClick={() => setFilter(g.label)} className={`flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-semibold ${filter === g.label ? "bg-ink text-white" : "bg-ink/5"}`}>
+              {g.label !== "all" && <span className="size-2 rounded-full" style={{ background: g.colour }} />}
+              {g.label === "all" ? "All" : g.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {!shown ? (
+        <p className="mt-3 text-xs text-muted">Loading…</p>
+      ) : entries.length === 0 ? (
+        <p className="mt-3 rounded-2xl bg-ink/[0.04] px-4 py-3 text-sm text-muted">Nothing came in {days < 3650 ? `in the last ${days} days` : "yet"}. Get a job or a side hustle from Income, or let a flat.</p>
+      ) : (
+        <>
+          {filter !== "all" && <p className="mt-2 text-xs text-muted">{entries.length} payment{entries.length === 1 ? "" : "s"} · {cash(filtered)}</p>}
+          <ul className="mt-2 divide-y divide-ink/5 rounded-2xl bg-ink/[0.03]">
+            {entries.map((x) => {
+              const g = kindLabel(x.kind);
+              return (
+                <li key={x.id} className="flex items-center gap-3 px-3 py-2.5">
+                  <span className="size-2.5 shrink-0 rounded-full" style={{ background: g?.colour ?? "#868e96" }} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold">{x.note || g?.label || "Money in"}</span>
+                    <span className="block text-[11px] text-muted">
+                      {g?.label ?? "Other"} · {new Date(x.at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  </span>
+                  <span className="shrink-0 font-semibold tabular-nums text-me">+{cash(x.amount)}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
+    </div>
   );
 }
 

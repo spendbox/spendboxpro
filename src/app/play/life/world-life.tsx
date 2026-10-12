@@ -20,6 +20,8 @@ import { PropertyCard } from "../property-card";
 import { around, cachedThings, loadThings } from "./things-cache";
 import { ThingsSheet, type ThingsTab } from "./things-sheet";
 import { NewsSheet } from "./news-sheet";
+import { cityNews, type NewsItem } from "@/lib/world/news";
+import { playSfx } from "../sound";
 import { LeaveMarkSheet, MarkCard } from "./marks-sheet";
 import type { MapMark } from "../mark-actions";
 import type { CityMarkTag } from "../city-view";
@@ -232,6 +234,35 @@ export function useWorldLife({
   /** Things (items, shops, cars, market, craft) open on a tab, and the news. */
   const [things, setThings] = useState<ThingsTab | null>(null);
   const [newsOpen, setNewsOpen] = useState(false);
+  /** Breaking news: a story pops up at the top with a little bleep when it comes in (once each). */
+  const [breaking, setBreaking] = useState<NewsItem | null>(null);
+  useEffect(() => {
+    if (!region || pretend) return;
+    const look = () => {
+      if (document.visibilityState !== "visible") return;
+      const latest = cityNews(region, Date.now(), 1)[0];
+      if (!latest || Date.now() - latest.at > 25 * 60_000) return;
+      let seen = "";
+      try {
+        seen = localStorage.getItem("nt-news-seen") ?? "";
+        localStorage.setItem("nt-news-seen", latest.id);
+      } catch {}
+      if (seen === latest.id) return;
+      setBreaking(latest);
+      playSfx("chime");
+    };
+    const first = setTimeout(look, 15_000);
+    const every = setInterval(look, 60_000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(every);
+    };
+  }, [region, pretend]);
+  useEffect(() => {
+    if (!breaking) return;
+    const t = setTimeout(() => setBreaking(null), 9000);
+    return () => clearTimeout(t);
+  }, [breaking]);
   /** Marks on the map round where you're looking, one open, and leaving one (where, in words). */
   const [marks, setMarks] = useState<MapMark[]>([]);
   const [markOpen, setMarkOpen] = useState<number | null>(null);
@@ -252,6 +283,22 @@ export function useWorldLife({
   }, [regionId, pretend, loadMarks]);
   /** Your reputation (shown at the top) and whether you own a car (to drive to work). */
   const [rep, setRep] = useState<{ score: number; hasCar: boolean } | null>(null);
+  /** Drive your own car to places (remembered on this phone), when you have one. */
+  const [drive, setDrive] = useState(false);
+  useEffect(() => {
+    let on = false;
+    try {
+      on = localStorage.getItem("nt-drive") === "1";
+    } catch {}
+    const t = setTimeout(() => setDrive(on), 0);
+    return () => clearTimeout(t);
+  }, []);
+  const chooseDrive = (on: boolean) => {
+    setDrive(on);
+    try {
+      localStorage.setItem("nt-drive", on ? "1" : "0");
+    } catch {}
+  };
   const loadRep = useCallback(() => void loadThings().then((t) => t && setRep({ score: t.reputation.score, hasCar: t.hasCar })), []);
   useEffect(() => {
     if (!signedIn || !regionId || pretend) return;
@@ -362,14 +409,26 @@ export function useWorldLife({
     });
 
   /** The trip to a building from where you last were (or home): the cheapest way, and its fare. */
+  const driving = drive && !!rep?.hasCar;
   const tripTo = (id: string) => {
     const from = assets?.life?.at_place ?? homeUnit;
     const km = from && region ? tripKmBetween(from, id) : null;
     if (km === null || !region || !from) return null;
     const ferry = ferryKmBetween(from, id);
-    const mode = cheapestCommute(km, ferry);
+    const cheapest = cheapestCommute(km, ferry);
+    // Your own car when you'd rather drive (anywhere; only the fuel to pay).
+    const mode: Commute = driving && cheapest !== "walk" ? "car" : cheapest;
     return { mode, ferry, fare: fareMint(mode, km, region.region.prices, ferry) ?? 0 };
   };
+  /** Drive or take the bus: a switch under each Go there, for car owners. */
+  const driveSwitch = signedIn && rep?.hasCar ? (
+    <button onClick={() => chooseDrive(!drive)} className="flex h-9 w-full items-center justify-center gap-2 rounded-full bg-ink/5 text-xs font-semibold" role="switch" aria-checked={drive}>
+      <span className={`relative h-4 w-7 rounded-full transition ${drive ? "bg-me" : "bg-ink/20"}`}>
+        <span className={`absolute top-0.5 size-3 rounded-full bg-white transition-all ${drive ? "left-3.5" : "left-0.5"}`} />
+      </span>
+      Drive my car (just fuel)
+    </button>
+  ) : null;
   const tripLabel = (id: string) => {
     const t = signedIn ? tripTo(id) : null;
     return t && t.fare > 0 ? `Go there · ${cash(t.fare)} ${tripWords(t.mode, t.ferry)}` : "Go there";
@@ -378,7 +437,7 @@ export function useWorldLife({
   const goInside = async (id: string) => {
     if (signedIn) {
       setBusy(true);
-      const r = await api.travelTo(id);
+      const r = await api.travelTo(id, driving);
       setBusy(false);
       if (!r.ok) return setMessage({ text: r.error, good: false });
       if (r.found) setMessage({ text: `On the way you found: ${r.found}! It's in your Items.`, good: true });
@@ -694,6 +753,7 @@ export function useWorldLife({
                 <DoorOpen className="size-4 shrink-0" /> {tripLabel(place.id).replace(/^Go inside/, "Go there")}
               </button>
             )}
+            {onEnter && driveSwitch}
             <div className="grid grid-cols-2 gap-2">
               <span className="flex min-h-11 items-center justify-center rounded-full bg-ink/[0.03] px-3 text-center text-xs text-muted">Not for sale: a public place</span>
               <span className="flex min-h-11 items-center justify-center rounded-full bg-ink/[0.03] px-3 text-center text-xs text-muted">No adverts on landmarks</span>
@@ -809,6 +869,7 @@ export function useWorldLife({
               : undefined
           }
           enterLabel={tripLabel(property.id)}
+          enterExtra={driveSwitch}
           onMark={() => {
             const sp = ownedSpot(property.id);
             if (!sp) return;
@@ -1105,6 +1166,27 @@ export function useWorldLife({
             if (good) loadMarks();
           }}
         />
+      )}
+      {breaking && !newsOpen && (
+        <div className="pointer-events-none absolute inset-x-0 top-[6.5rem] z-30 flex justify-center px-3 sm:top-20">
+          <div className="pointer-events-auto flex max-w-sm animate-[newsIn_.35s_ease-out] items-start gap-2.5 rounded-2xl bg-ink px-3.5 py-2.5 text-white shadow-xl">
+            <button
+              onClick={() => {
+                setBreaking(null);
+                if (breaking.x !== undefined && breaking.z !== undefined) fly(breaking.x, breaking.z);
+                else setNewsOpen(true);
+              }}
+              className="min-w-0 flex-1 text-left"
+            >
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-gold">{breaking.kind === "weather" ? "Weather" : "Breaking news"}</span>
+              <span className="block text-sm font-semibold leading-snug">{breaking.title}</span>
+              <span className="mt-0.5 line-clamp-2 block text-xs text-white/70">{breaking.text}</span>
+            </button>
+            <button onClick={() => setBreaking(null)} aria-label="Close" className="shrink-0 text-white/60">
+              <X className="size-4" />
+            </button>
+          </div>
+        </div>
       )}
       {newsOpen && (
         <NewsSheet

@@ -143,7 +143,8 @@ export type PropertyApi = {
   serviceJob: (jobId: string, action: "done" | "confirm" | "decline" | "cancel") => Promise<PropertyResult>;
   reportMap: (r: { region: string; x: number; z: number; kind: ReportKind; note: string }) => Promise<PropertyResult>;
   /** Go to a building: pay the fare from where you last were (the cheapest way), and be there. */
-  travelTo: (buildingId: string) => Promise<PropertyResult>;
+  /** Go to a building, paying the fare (or, `drive`, the fuel for your own car). */
+  travelTo: (buildingId: string, drive?: boolean) => Promise<PropertyResult>;
   // The player market (./market).
   setRentLevel: (unitId: string, level: RentLevel) => Promise<PropertyResult>;
   listUnit: (unitId: string, price: number) => Promise<PropertyResult>;
