@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Box, Copy, LoaderCircle, Minus, Plus, RotateCw, Shuffle, Armchair, LayoutDashboard, Trash2, Undo2 } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Box, ChevronDown, ChevronUp, Copy, LoaderCircle, Minus, Plus, RotateCw, Shuffle, Armchair, LayoutDashboard, Trash2, Undo2 } from "lucide-react";
 import { X } from "@/components/icons";
 import { cn } from "@/lib/cn";
 import {
   FURNITURE,
+  FURNITURE_GROUPS,
   MAX_FLOORS,
   ROOM_FLOOR,
   ROOM_KINDS,
@@ -60,6 +61,8 @@ export function HomePlanner({ onClose }: { onClose: () => void }) {
   const [perMint, setPerMint] = useState(1500);
   const [owner, setOwner] = useState(true);
   const [designs, setDesigns] = useState(0);
+  const [listOpen, setListOpen] = useState(true);
+  const [group, setGroup] = useState(FURNITURE_GROUPS[0].label);
 
   useEffect(() => {
     let alive = true;
@@ -144,7 +147,7 @@ export function HomePlanner({ onClose }: { onClose: () => void }) {
         const s = itemSize(i);
         return !(i.x >= room.x && i.y >= room.y && i.x + s.w <= room.x + room.w && i.y + s.d <= room.y + room.d) || i.kind === "stairs";
       });
-      furnishRoom(f, room, Math.floor(Math.random() * 1e6));
+      furnishRoom(f, room, Math.floor(Math.random() * 1e6), plan!.size);
     });
   }
 
@@ -288,9 +291,53 @@ export function HomePlanner({ onClose }: { onClose: () => void }) {
               Rooms
             </button>
           </div>
+          <button onClick={() => setListOpen((v) => !v)} className="grid size-8 shrink-0 place-items-center rounded-full bg-panel-2" aria-label={listOpen ? "Hide the list" : "Show the list"}>
+            {listOpen ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+          </button>
           <button onClick={designForMe} className="flex shrink-0 items-center gap-1 rounded-full bg-gold px-3 py-1.5 text-ink">
             {designs ? <Shuffle className="size-3.5" /> : <LayoutDashboard className="size-3.5" />} {designs ? "Another design" : "Design it for me"}
           </button>
+        </div>
+      )}
+
+      {/* What to add: furniture by room, or the kind of room to draw (a grid, under the tabs). */}
+      {!view3d && !room && !item && listOpen && (
+        <div className="shrink-0 border-b border-line px-2 pb-2">
+          {tool === "furniture" ? (
+            <>
+              <div className="mb-1.5 flex flex-wrap gap-1">
+                {FURNITURE_GROUPS.map((g) => (
+                  <button key={g.label} onClick={() => setGroup(g.label)} className={cn("rounded-full px-2.5 py-1 text-[11px] font-semibold", group === g.label ? "bg-ink text-white" : "bg-panel-2 text-muted")}>
+                    {g.label}
+                  </button>
+                ))}
+              </div>
+              <div className="grid max-h-[26dvh] grid-cols-3 gap-1.5 overflow-y-auto overscroll-contain min-[420px]:grid-cols-4 sm:grid-cols-6">
+                {(FURNITURE_GROUPS.find((g) => g.label === group)?.kinds ?? []).map((k) => (
+                  <button key={k} onClick={() => addItem(k)} className="flex flex-col items-center gap-1 rounded-xl bg-panel-2 px-1.5 py-2 text-center active:scale-95">
+                    <span className="grid size-8 place-items-center rounded-lg" style={{ background: FURNITURE[k].colour }}>
+                      <span className="size-3 rounded-sm bg-white/60" />
+                    </span>
+                    <span className="text-[11px] font-semibold leading-tight">{FURNITURE[k].label}</span>
+                    <span className="text-[10px] leading-tight text-muted">{owned(k) ? "One spare" : money(FURNITURE[k].naira)}</span>
+                  </button>
+                ))}
+                <span className="flex flex-col items-center justify-center rounded-xl border border-dashed border-line px-1.5 py-2 text-center text-[11px] font-semibold text-muted">
+                  More styles
+                  <span className="text-[10px] font-normal">Coming soon</span>
+                </span>
+              </div>
+            </>
+          ) : (
+            <div className="grid grid-cols-3 gap-1.5 min-[420px]:grid-cols-4">
+              {ROOM_KINDS.map((k) => (
+                <button key={k} onClick={() => setRoomKind(k)} className={cn("flex items-center gap-1.5 rounded-xl px-2 py-2 text-left text-[11px] font-semibold", roomKind === k ? "bg-ink text-white" : "bg-panel-2")}>
+                  <span className="size-3.5 shrink-0 rounded-sm ring-1 ring-black/10" style={{ background: ROOM_FLOOR[k] }} />
+                  {ROOM_LABEL[k]}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -403,42 +450,9 @@ export function HomePlanner({ onClose }: { onClose: () => void }) {
             )}
           </div>
         ) : (
-          <div className="px-2 pt-2">
-            {tool === "furniture" ? (
-              <>
-                <p className="mb-1.5 text-[11px] text-muted">
-                  Tap to put one in, then drag it where you want it. Tap a piece to turn or move it a square at a time. You pay for new pieces when you save.
-                </p>
-                <div className="flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none]">
-                  {(Object.keys(FURNITURE) as FurnitureKind[]).map((k) => (
-                    <button key={k} onClick={() => addItem(k)} className="flex shrink-0 flex-col items-start rounded-xl bg-panel-2 px-2.5 py-1.5 text-left text-xs font-semibold">
-                      <span className="flex items-center gap-1.5">
-                        <span className="size-3 rounded-sm" style={{ background: FURNITURE[k].colour }} />
-                        {FURNITURE[k].label}
-                      </span>
-                      <span className="text-[10px] font-normal text-muted">{owned(k) ? "You have one spare" : money(FURNITURE[k].naira)}</span>
-                    </button>
-                  ))}
-                  <span className="flex shrink-0 flex-col justify-center rounded-xl border border-dashed border-line px-3 py-1.5 text-[11px] font-semibold text-muted">
-                    More styles
-                    <span className="text-[10px] font-normal">Coming soon</span>
-                  </span>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="mb-1.5 text-[11px] text-muted">Pick a room, then drag across the grid to draw it. Tap a room to move, resize or change it.</p>
-                <div className="flex gap-1 overflow-x-auto pb-1 [scrollbar-width:none]">
-                  {ROOM_KINDS.map((k) => (
-                    <button key={k} onClick={() => setRoomKind(k)} className={cn("flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-semibold", roomKind === k ? "bg-ink text-white" : "bg-panel-2")}>
-                      <span className="size-3 rounded-sm ring-1 ring-black/10" style={{ background: ROOM_FLOOR[k] }} />
-                      {ROOM_LABEL[k]}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
+          <p className="px-3 py-2.5 text-center text-[11px] text-muted">
+            {tool === "furniture" ? "Drag a piece to move it. Tap it to turn it, nudge it a square at a time, or take it out." : "Drag across the grid to draw a room. Tap a room to move, resize or change it."}
+          </p>
         )}
       </div>
     </div>

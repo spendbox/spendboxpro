@@ -177,7 +177,7 @@ export function Menu({
       disabled: !hasResults,
       hint: hasResults ? undefined : "Shows up after your first round",
     },
-    onFriends && { key: "friends", label: "Friends", icon: Users, tint: "bg-[#ffe3f1] text-[#c2255c]", onClick: onFriends, badge: friendRequests },
+    onFriends && { key: "friends", label: "Meet friends", icon: Users, tint: "bg-[#ffe3f1] text-[#c2255c]", onClick: onFriends, badge: friendRequests },
     onMyGifts && { key: "gifts", label: "My gifts", icon: Gift, tint: "bg-[#ffe3ec] text-[#d6336c]", onClick: onMyGifts, badge: newGifts },
     onMyStyle && { key: "style", label: "My style", icon: Gamepad2, tint: "bg-[#fbe3f6] text-[#b8268f]", onClick: onMyStyle },
     onMyHouse && { key: "house", label: "My house", icon: House, tint: "bg-[#d7f6ea] text-[#0f8f6a]", onClick: onMyHouse },

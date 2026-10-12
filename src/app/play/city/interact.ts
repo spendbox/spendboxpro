@@ -297,5 +297,11 @@ export function createWalker(w: number, d: number, blocks: Block[], margin = 0.4
     if (!pts.length) pts.push({ x: x0 + goal[0] * C, z: z0 + goal[1] * C });
     return pts;
   }
-  return { path };
+  /** Can you stand here? (Inside the room, not in furniture or a wall.) */
+  function isFree(x: number, z: number) {
+    if (Math.abs(x) > w / 2 - margin || Math.abs(z) > d / 2 - margin) return false;
+    const [i, j] = cellOf(x, z);
+    return free(i, j);
+  }
+  return { path, isFree };
 }

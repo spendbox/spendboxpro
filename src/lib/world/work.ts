@@ -214,6 +214,12 @@ export function tripWords(mode: Commute, ferryKm = 0) {
   return mode === "walk" ? "by ferry" : `by ferry and ${COMMUTE_LABEL[mode].toLowerCase()}`;
 }
 
+/** The cheapest ride that goes that far (never on foot: for skipping straight there). */
+export function cheapestRide(km: number, ferryKm = 0): Commute {
+  km = Math.max(0, km - ferryKm * ROAD_FACTOR);
+  return km <= FARES.keke.maxKm ? "keke" : "danfo";
+}
+
 /** The cheapest way to work that goes that far (walking when it's close enough). */
 export function cheapestCommute(km: number, ferryKm = 0): Commute {
   km = Math.max(0, km - ferryKm * ROAD_FACTOR);

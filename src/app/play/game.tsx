@@ -57,6 +57,7 @@ import {
 } from "@/components/icons";
 import { short } from "@/lib/format";
 import { cash } from "@/lib/world/value";
+import { tripWords, type Commute } from "@/lib/world/work";
 import { createClient } from "@/lib/supabase/client";
 import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
 import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
@@ -510,6 +511,8 @@ export function Game({
     onChanged: () => startTransition(() => router.refresh()),
     // Home from inside a building: out of it first.
     beforeHome: (go: () => void) => leaveThen.current("go home", go),
+    // On foot, jumping anywhere on the map pays the fare there (looking round the map is free).
+    beforeFly: (x: number, z: number) => (walkStick.current.on ? payTrip.current(x, z) : Promise.resolve(true)),
     meId: state.me.guest ? null : state.me.id,
     rowOutside: true,
     meName: state.me.name ?? undefined,
@@ -537,6 +540,8 @@ export function Game({
   /** Go somewhere that means leaving the building or ride you're in: ask first (set below, once leaveRoom exists). */
   const leaveThen = useRef<(what: string, go: () => void) => void>((_what, go) => go());
   const [leaveAsk, setLeaveAsk] = useState<{ what: string; go: () => void } | null>(null);
+  /** Pay the fare to a spot on the map (set below, once the life API is there). True when paid and going. */
+  const payTrip = useRef<(x: number, z: number) => Promise<boolean>>(() => Promise.resolve(true));
   const [busy, setBusy] = useState(false);
   // Ghost duels: a ghost's card (tapped on the map), the list of ghosts, the duel on screen,
   // and flying the camera over to a ghost's light.
@@ -768,6 +773,8 @@ export function Game({
   const [statsOpen, setStatsOpen] = useState(false);
   /** On foot on the streets: the joystick's state (the 3D city reads it every frame), and whether you're walking. */
   const walkStick = useRef({ on: false, x: 0, y: 0 });
+  /** Inside a planned home: the joystick for walking round it as your avatar. */
+  const homeStick = useRef({ on: true, x: 0, y: 0 });
   const [walking, setWalkingNow] = useState(false);
   const setWalking = (on: boolean) => {
     walkStick.current.on = on;
@@ -799,7 +806,7 @@ export function Game({
         onFly={(x, z) => {
           setStatsOpen(false);
           setChatOpen(false);
-          leaveThen.current("go to them", () => worldLife.fly(x, z));
+          leaveThen.current("meet them", () => worldLife.fly(x, z));
         }}
       />
     ) : undefined;
@@ -1563,6 +1570,8 @@ export function Game({
     };
   }, [worldId, myHomeBuilding, fetchHomePlan]);
   const enteredRoom = place ? (rooms.myRoomInfo?.id ?? null) : null;
+  const enteredTile = enteredRoom ? Number(/^b:(\d+)/.exec(enteredRoom)?.[1] ?? NaN) : NaN;
+  const inPlannedHome = !!worldId && Number.isFinite(enteredTile) && enteredTile in homePlans;
   useEffect(() => {
     const m = enteredRoom ? /^b:(\d+)/.exec(enteredRoom) : null;
     if (!worldId || !m) return;
@@ -1656,13 +1665,32 @@ export function Game({
       : rides
     : Array.from({ length: Math.max(balloonCount, 1) }, (_, k) => ({ kind: "balloon" as const, index: k, name: `${BALLOON_NAMES[k % BALLOON_NAMES.length]} balloon`, capacity: 1000 }));
 
-  /** Go to where a friend is: their floor of a building, their balloon or their ride. */
-  function goToFriend(room: string, name: string) {
+  // Paying the fare to a spot on the map: from where you're standing on foot, or where you last were.
+  useEffect(() => {
+    payTrip.current = async (x: number, z: number) => {
+      if (me.guest || !worldId) return true;
+      const from = walkStick.current.on ? (worldLife.centerRef.current?.() ?? undefined) : undefined;
+      const r = await PROPERTY_API.travelTo(`${worldId}:${Math.round(x)},${Math.round(z)}`, false, from).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
+      if (!r.ok) {
+        setMessage({ text: r.error, tone: "bad" });
+        return false;
+      }
+      if (r.fare) setMessage({ text: `${cash(r.fare)} ${r.mode ? tripWords(r.mode as Commute) : ""} to get there.`, tone: "good" });
+      return true;
+    };
+  });
+
+  /** Meet a friend where they are: their floor of a building (the fare there on the real map), their balloon or their ride. */
+  async function goToFriend(room: string, name: string) {
     setFriendsOpen(false);
     setNudge(null);
     if (me.guest || rooms.myRoom === room) return;
     const b = /^(b:\d+):(g|o|r|f\d+)$/.exec(room);
     if (b) {
+      if (worldId) {
+        const [x, z] = spiralXY(Number(b[1].slice(2)));
+        if (!(await payTrip.current(x, z))) return;
+      }
       if (place || ride !== null) leaveRoom();
       setGoTo({ building: b[1], level: b[2] });
       setOpenReq((r) => ({ id: b[1], at: (r?.at ?? 0) + 1 }));
@@ -1766,6 +1794,7 @@ export function Game({
             onWorkplace={worldId ? worldLife.onWorkplace : undefined}
             centerRef={worldId ? worldLife.centerRef : undefined}
             walkStick={walkStick}
+            homeStick={homeStick}
             onWalkBlocked={(what) => setMessage({ text: what === "water" ? "That's water: you can't walk on it. Try a ferry (Explore → Rides)." : "That's a building. Tap it to go in.", tone: "info" })}
             businesses={worldId ? worldLife.businesses : undefined}
             onBusiness={worldId ? worldLife.onBusiness : undefined}
@@ -2337,7 +2366,7 @@ export function Game({
           playing={Object.fromEntries(state.players.map((p) => [p.id, p.role]))}
           suggestions={[...hereNow, ...state.players.filter((p) => p.id !== me.id && !hereNow.some((h) => h.id === p.id))]}
           myRoom={rooms.myRoom}
-          onGo={(f, room) => goToFriend(room, f.name)}
+          onGo={(f, room) => void goToFriend(room, f.name)}
           onMessage={(f) => {
             setFriendsOpen(false);
             chatWith(f);
@@ -2688,7 +2717,7 @@ export function Game({
             <QuestCelebration />
           </Safe>
         )}
-        {!guest && !worldId && nudge && <FriendNudge friend={nudge} place={nudge.place} onJoin={() => goToFriend(nudge.room, nudge.name)} onClose={closeNudge} />}
+        {!guest && !worldId && nudge && <FriendNudge friend={nudge} place={nudge.place} onJoin={() => void goToFriend(nudge.room, nudge.name)} onClose={closeNudge} />}
         {!guest && rooms.myRoom && !isDancing && (
           <PeopleHere room={rooms.myRoom} people={hereNow} statusOf={friendStatusOf} busy={friendBusy} onChat={chatWith} onAddFriend={befriend} greet={greet} />
         )}
@@ -3081,7 +3110,7 @@ export function Game({
             { label: "People", icon: Users, colour: "#1c7ed6", go: () => setStatsOpen(true) },
             { label: "Doorstep", icon: DoorClosed, colour: "#8d5524", go: () => setDoorstepOpen(true) },
             { label: "Gifts", icon: Gift, colour: "#d6336c", badge: newGifts, go: () => openGifts() },
-            { label: "Friends", icon: Heart, colour: "#f06595", go: () => setFriendsOpen(true) },
+            { label: "Meet friends", icon: Heart, colour: "#f06595", go: () => setFriendsOpen(true) },
             { label: "Dating", icon: Heart, colour: "#c2255c", go: () => setSocialOpen("dating") },
             { label: "Rivals", icon: Swords, colour: "#e8590c", go: () => setSocialOpen("rivals") },
             { label: "Selfie", icon: User, colour: "#7048e8", go: () => setCamera("selfie") },
@@ -3226,6 +3255,12 @@ export function Game({
       {worldId && !guest && !camera && (
         <div className="pointer-events-none fixed left-0 top-1/2 z-10 -translate-y-1/2">
           <RecentRail onPerson={setPersonId} onMessage={chatWith} />
+        </div>
+      )}
+      {/* In a planned home: the joystick walks you round it (or tap the floor). */}
+      {inPlannedHome && !camera && (
+        <div className="pointer-events-none fixed bottom-24 left-4 z-30 sm:bottom-8 sm:left-8">
+          <Joystick stick={homeStick} />
         </div>
       )}
       {/* On foot: the joystick, bottom left (drag anywhere else to look round). */}

@@ -1,4 +1,6 @@
-// Moves (animations) for the skinned avatar: idle, walk, run, wave, dance, jump, talk.
+// Moves (animations) for the skinned avatar: idle, walk, run, wave, dance, jump, talk, and the
+// everyday ones: sitting (still, talking, sipping, eating, typing), leaning, sipping and eating
+// standing, cooking, DJing, working at a counter, clapping, cheering, a handshake and a hug.
 //
 // Each move gives, at time t, rotations for some bones (radians, about the avatar's own axes: x to
 // its left, y up, z forward, since bones rest unrotated), how the hips shift, and where each foot
@@ -20,7 +22,13 @@ export type Pose = { rot: Record<string, V3>; twist?: Record<string, number>; hi
 
 /** What a move needs to know about this body. */
 /** stride: 1 normally; less in narrow long garments (a fitted wrapper allows only short steps). */
-export type Dims = { height: number; leg: number; ankle: number; ball: number; stride: number };
+export type Dims = {
+  height: number; leg: number; ankle: number; ball: number; stride: number;
+  /** Hip joint height standing, thigh and shin lengths (model units). */
+  hip: number; thigh: number; shin: number;
+  /** Sitting: the seat's height above the floor (model units); unset, a chair at knee height. */
+  seat?: number;
+};
 
 export type Move = {
   id: string;
@@ -221,6 +229,253 @@ export const MOVES: Move[] = [
   },
 ];
 
+
+// ---- sitting, and the everyday things people do (docs/AVATAR_POSES.md) ----
+
+/**
+ * Sitting on a seat (D.seat high, or a chair at knee height): the hips lowered onto it, thighs
+ * along the seat, feet on the floor in front (dangling from a high stool). Arms and head come from
+ * `top`, so every seated move shares the same legs.
+ */
+function seated(D: Dims, top: Record<string, V3>, hipsX = 0): Pose {
+  const seat = D.seat ?? D.shin + D.ankle;
+  // The hip joints sit a little above the seat's top (the flesh of the thighs).
+  const hipAt = seat + D.height * 0.06;
+  const drop = D.hip - hipAt;
+  // Feet in front, under the knees; on the floor, or hanging when the seat is high.
+  const reach = D.thigh * 0.92;
+  const ankleY = Math.max(0, hipAt - D.shin * 0.98 - D.ankle);
+  const foot: FootTarget = { x: 0, y: ankleY, z: reach, pitch: ankleY > 0 ? 0.35 : 0 };
+  return {
+    hips: [0, -drop, -D.height * 0.015],
+    feet: [{ ...foot, x: D.height * 0.01 }, { ...foot, x: -D.height * 0.01 }],
+    rot: { hips: [hipsX, 0, 0], ...top },
+  };
+}
+/** Hands resting on the thighs. */
+const lap = (b = 0): Record<string, V3> => ({
+  upperArm0: [-0.42 + 0.02 * b, 0, -0.08],
+  upperArm1: [-0.42 + 0.02 * b, 0, 0.08],
+  forearm0: [-0.95, 0, 0.15],
+  forearm1: [-0.95, 0, -0.15],
+});
+/** A cup or a fork coming up to the mouth now and then (0 down .. 1 at the mouth). */
+const toMouth = (t: number, every: number, hold = 1.2) => {
+  const p = t % every;
+  return p < 0.5 ? s01(p / 0.5) : p < 0.5 + hold ? 1 : p < 1 + hold ? 1 - s01((p - 0.5 - hold) / 0.5) : 0;
+};
+/** The right arm bringing something to the mouth, by how far (0..1). */
+const mouthArm = (k: number, base: [V3, V3]): Record<string, V3> => ({
+  upperArm0: [base[0][0] + (-0.55 - base[0][0]) * k, 0, base[0][2] + (-0.3 - base[0][2]) * k],
+  forearm0: [base[1][0] + (-2.35 - base[1][0]) * k, 0.2 * k, base[1][2] * (1 - k)],
+});
+
+MOVES.push(
+  {
+    id: "sit", n: "Sit", period: 8, speed: 0,
+    pose: (t, D) => {
+      const br = Math.sin((TAU * t) / 4), look = Math.sin((TAU * t) / 9 + 0.7);
+      return seated(D, { spine: [-0.04 + 0.01 * br, 0, 0], chest: [-0.03 - 0.012 * br, 0, 0], neck: [0.04, 0.12 * look, 0], skull: [0.03, 0.15 * look, 0], ...lap(br) });
+    },
+  },
+  {
+    id: "sitTalk", n: "Sit and talk", period: 6, speed: 0,
+    pose: (t, D) => {
+      const g1 = Math.sin(TAU * t / 3), g2 = Math.sin(TAU * t / 2.2 + 1), nod = Math.sin(TAU * t / 1.4);
+      return seated(D, {
+        spine: [0.04, 0.04 * g1, 0], chest: [0.02 + 0.01 * nod, 0.05 * g1, 0], skull: [0.06 * nod, 0.12 * g1, 0.03 * g2],
+        upperArm0: [-0.5 - 0.1 * g1, 0, -0.05], upperArm1: [-0.45 - 0.1 * g2, 0, 0.05],
+        forearm0: [-1.25 - 0.25 * g2, 0.3 * g1, 0], forearm1: [-1.0 - 0.2 * g1, -0.3 * g2, 0],
+        hand0: [0.2 * g1, 0, -0.2], hand1: [0.2 * g2, 0, 0.2],
+      });
+    },
+  },
+  {
+    id: "sitSip", n: "Sit and sip", period: 7, speed: 0,
+    pose: (t, D) => {
+      const k = toMouth(t, 7), look = Math.sin((TAU * t) / 7 + 0.3);
+      const base: [V3, V3] = [[-0.5, 0, -0.1], [-1.35, 0, 0]];
+      return seated(D, {
+        spine: [-0.02, 0, 0], chest: [-0.02, 0, 0], neck: [-0.05 * k, 0.1 * look * (1 - k), 0], skull: [-0.12 * k, 0.12 * look * (1 - k), 0],
+        ...lap(), ...mouthArm(k, base), hand0: [0.3 * k, 0, 0],
+      });
+    },
+  },
+  {
+    id: "sitEat", n: "Sit and eat", period: 4, speed: 0,
+    pose: (t, D) => {
+      const k = toMouth(t, 4, 0.5), chew = Math.sin(TAU * t * 2.5) * (1 - k);
+      const base: [V3, V3] = [[-0.55, 0, -0.12], [-1.3, 0, 0.1]];
+      return seated(D, {
+        spine: [0.12, 0, 0], chest: [0.08, 0, 0], neck: [0.1 - 0.08 * k, 0, 0], skull: [0.12 + 0.03 * chew - 0.1 * k, 0, 0],
+        upperArm1: [-0.55, 0, 0.12], forearm1: [-1.3, 0, -0.1],
+        ...mouthArm(k, base),
+      });
+    },
+  },
+  {
+    id: "sitType", n: "Sit and type", period: 2, speed: 0,
+    pose: (t, D) => {
+      const a = Math.sin(TAU * t * 2.3), b = Math.sin(TAU * t * 3.1 + 1), look = Math.sin(TAU * t / 6);
+      return seated(D, {
+        spine: [0.08, 0, 0], chest: [0.06, 0, 0], neck: [0.12, 0.05 * look, 0], skull: [0.14, 0.06 * look, 0],
+        upperArm0: [-0.5, 0, -0.18], upperArm1: [-0.5, 0, 0.18],
+        forearm0: [-1.4 + 0.04 * a, 0, 0.35], forearm1: [-1.4 + 0.04 * b, 0, -0.35],
+        hand0: [0.15 + 0.08 * Math.max(0, a), 0, 0], hand1: [0.15 + 0.08 * Math.max(0, b), 0, 0],
+      });
+    },
+  },
+  {
+    id: "lean", n: "Lean", period: 8, speed: 0,
+    pose: (t, D) => {
+      // Weight on one leg, the other crossed over in front, shoulders back against the wall.
+      const br = Math.sin((TAU * t) / 4), look = Math.sin((TAU * t) / 8 + 1.2);
+      return {
+        hips: [D.height * 0.02, -D.height * 0.006, -D.height * 0.02],
+        feet: [{ x: 0, y: 0, z: 0, pitch: 0 }, { x: -D.height * 0.09, y: 0, z: D.height * 0.06, pitch: 0.2, toe: -0.2 }],
+        rot: {
+          hips: [0, 0.05, -0.06], spine: [-0.06, 0, 0.03], chest: [-0.06 - 0.01 * br, 0, 0.02],
+          neck: [0.02, 0.1 * look, 0], skull: [0.02, 0.12 * look, -0.04],
+          // Hands in the pockets.
+          upperArm0: [0.12, 0, -0.14], upperArm1: [0.12, 0, 0.14],
+          forearm0: [-0.55, 0, 0.1], forearm1: [-0.55, 0, -0.1], hand0: [0.3, 0, 0], hand1: [0.3, 0, 0],
+        },
+      };
+    },
+  },
+  {
+    id: "sip", n: "Sip a drink", period: 7, speed: 0,
+    pose: (t, D) => {
+      const k = toMouth(t, 7), w = Math.sin((TAU * t) / 8), look = Math.sin((TAU * t) / 8 + 1.2);
+      return {
+        hips: [D.height * 0.01 * w, 0, 0], feet: standing(),
+        rot: {
+          hips: [0, 0.02 * w, -0.02 * w], chest: [-0.02 * k, 0, 0], neck: [-0.05 * k, 0.06 * look * (1 - k), 0], skull: [-0.12 * k, 0.08 * look, 0],
+          upperArm1: [0.03, 0, -0.03], forearm1: [-0.15, 0, 0],
+          ...mouthArm(k, [[-0.45, 0, -0.08], [-1.4, 0, 0]]), hand0: [0.3 * k, 0, 0],
+        },
+      };
+    },
+  },
+  {
+    id: "eat", n: "Eat standing", period: 4, speed: 0,
+    pose: (t) => {
+      const k = toMouth(t, 4, 0.5);
+      return {
+        feet: standing(), hips: [0, 0, 0],
+        rot: {
+          chest: [0.04, 0, 0], neck: [0.1 - 0.1 * k, 0, 0], skull: [0.1 - 0.1 * k, 0, 0],
+          // A plate in the left hand, the right hand bringing food up.
+          upperArm1: [-0.4, 0, 0.15], forearm1: [-1.45, 0, -0.2],
+          ...mouthArm(k, [[-0.5, 0, -0.1], [-1.35, 0, 0.1]]),
+        },
+      };
+    },
+  },
+  {
+    id: "cook", n: "Cook", period: 2.4, speed: 0,
+    pose: (t, D) => {
+      // At the cooker: leaning in, stirring the pot, the other hand on the counter.
+      const a = TAU * t / 1.2, look = Math.sin(TAU * t / 6);
+      return {
+        hips: [0, -D.height * 0.005, 0], feet: standing(),
+        rot: {
+          hips: [0.08, 0, 0], spine: [0.08, 0, 0], chest: [0.06, 0.05 * Math.sin(a), 0], neck: [0.15, 0.08 * look, 0], skull: [0.15, 0.1 * look, 0],
+          upperArm0: [-0.75 + 0.1 * Math.sin(a), 0.15 * Math.cos(a), -0.1], forearm0: [-1.2 + 0.15 * Math.cos(a), 0, 0.1],
+          upperArm1: [-0.55, 0, 0.12], forearm1: [-0.85, 0, 0],
+        },
+      };
+    },
+  },
+  {
+    id: "dj", n: "DJ", period: 0.5, speed: 0,
+    pose: (t, D) => {
+      // One hand on the decks, the other holding the headphones to an ear, nodding on the beat.
+      const b = Math.abs(Math.sin(TAU * t)), sc = Math.sin(TAU * t * 0.5);
+      return {
+        hips: [0, -D.height * 0.015 * b, 0], feet: standing(),
+        rot: {
+          hips: [0.05, 0, 0], spine: [0.06, 0, 0], chest: [0.05 + 0.03 * b, 0, 0], neck: [0.1 + 0.12 * b, 0, 0.1], skull: [0.1 + 0.15 * b, 0, 0.12],
+          upperArm0: [-0.8, 0, -0.15], forearm0: [-1.1 + 0.15 * sc, 0.2 * sc, 0.1], hand0: [0.3, 0, 0],
+          clavicle1: [0, 0, 0.12], upperArm1: [-0.35, 0, 1.25], forearm1: [0, 0, 1.9], hand1: [0, 0, 0.3],
+        },
+      };
+    },
+  },
+  {
+    id: "work", n: "Work at a counter", period: 2, speed: 0,
+    pose: (t, D) => {
+      // Wiping, sorting, serving: both hands busy in front, leaning in a little.
+      const a = TAU * t / 2, look = Math.sin(TAU * t / 5);
+      return {
+        hips: [0, -D.height * 0.004, 0], feet: standing(),
+        rot: {
+          hips: [0.06, 0, 0], spine: [0.08, 0, 0], chest: [0.05, 0.06 * Math.sin(a), 0], neck: [0.15, 0.1 * look, 0], skull: [0.12, 0.12 * look, 0],
+          upperArm0: [-0.7 + 0.15 * Math.sin(a), 0.2 * Math.cos(a), -0.1], forearm0: [-1.0, 0, 0.1],
+          upperArm1: [-0.6, 0, 0.15], forearm1: [-1.1 + 0.1 * Math.sin(a * 2), 0, -0.1],
+        },
+      };
+    },
+  },
+  {
+    id: "clap", n: "Clap", period: 0.5, speed: 0,
+    pose: (t) => {
+      const c = Math.max(0, Math.sin(TAU * t));
+      return {
+        feet: standing(),
+        rot: {
+          chest: [-0.02, 0, 0], skull: [-0.05, 0, 0],
+          upperArm0: [-0.75, 0, -0.1 + 0.32 * c], upperArm1: [-0.75, 0, 0.1 - 0.32 * c],
+          forearm0: [-1.0, 0, 0.5 + 0.2 * c], forearm1: [-1.0, 0, -0.5 - 0.2 * c],
+        },
+      };
+    },
+  },
+  {
+    id: "cheer", n: "Cheer", period: 1, speed: 0,
+    pose: (t, D) => {
+      const b = Math.abs(Math.sin(Math.PI * t)), w = Math.sin(TAU * t);
+      return {
+        hips: [0, -D.height * 0.02 * (1 - b), 0], feet: standing(),
+        rot: {
+          chest: [-0.1, 0, 0], neck: [-0.15, 0, 0], skull: [-0.15, 0, 0],
+          upperArm0: [-0.4, 0, -2.4 + 0.15 * w], upperArm1: [-0.4, 0, 2.4 - 0.15 * w],
+          forearm0: [-0.3, 0, 0], forearm1: [-0.3, 0, 0],
+        },
+      };
+    },
+  },
+  {
+    id: "handshake", n: "Handshake", period: 1.2, speed: 0,
+    pose: (t) => {
+      const sh = Math.sin(TAU * t * 2.5) * (t % 1.2 < 0.8 ? 1 : 0);
+      return {
+        feet: standing(),
+        rot: {
+          chest: [0.04, -0.05, 0], skull: [0.05, 0, 0],
+          upperArm0: [-0.6, 0, 0.12], forearm0: [-0.7 + 0.12 * sh, 0, 0.15], hand0: [0, 0, 0],
+          upperArm1: [0.03, 0, -0.03], forearm1: [-0.15, 0, 0],
+        },
+        twist: { forearm0: -1.2 },
+      };
+    },
+  },
+  {
+    id: "hug", n: "Hug", period: 4, speed: 0,
+    pose: (t) => {
+      const sq = 0.08 * Math.sin(TAU * t / 2);
+      return {
+        feet: standing(),
+        rot: {
+          spine: [0.06, 0, 0], chest: [0.06, 0, 0], neck: [0.05, 0.4, 0.1], skull: [0.05, 0.3, 0.1],
+          upperArm0: [-1.25, 0, -0.35 + sq], upperArm1: [-1.25, 0, 0.35 - sq],
+          forearm0: [-0.2, -1.2, 0], forearm1: [-0.2, 1.2, 0],
+        },
+      };
+    },
+  },
+);
+
 // ---- applying a pose to the skeleton ----
 
 export type Rest = Map<string, { p: Vector3; q: Quaternion }>;
@@ -233,15 +488,19 @@ export function dims(rest: Rest, stride = 1): Dims {
   const v = (id: string) => rest.get(id)!.p;
   const leg = v("shin1").length() + v("foot1").length();
   const ankle = v("hips").y + v("thigh1").y + v("shin1").y + v("foot1").y;
-  return { height: 1 - (ankle - 0.55), leg, ankle, ball: Math.hypot(v("toe1").y, v("toe1").z), stride };
+  return {
+    height: 1 - (ankle - 0.55), leg, ankle, ball: Math.hypot(v("toe1").y, v("toe1").z), stride,
+    hip: v("hips").y + v("thigh1").y, thigh: v("shin1").length(), shin: v("foot1").length(),
+  };
 }
 
 const e = new Euler(), q = new Quaternion(), down = new Vector3(0, -1, 0), Y = new Vector3(0, 1, 0);
 
 /** Poses the skeleton (bones by name, with their rest transforms) for a move at time t. */
 /** stride: the model's meta.stride (short steps in narrow long garments). */
-export function applyMove(bones: Record<string, Object3D>, rest: Rest, move: Move, t: number, stride = 1) {
-  const D = dims(rest, stride), P = move.pose(t, D);
+/** extra: things about where it's done (a seat's height, for sitting). */
+export function applyMove(bones: Record<string, Object3D>, rest: Rest, move: Move, t: number, stride = 1, extra?: Partial<Dims>) {
+  const D = { ...dims(rest, stride), ...extra }, P = move.pose(t, D);
   for (const id of BODY) {
     const b = bones[id], r = rest.get(id);
     if (!b || !r) continue;
