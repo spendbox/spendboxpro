@@ -1,5 +1,6 @@
 "use server";
 
+import { pushTo } from "@/lib/push";
 import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -122,6 +123,8 @@ export async function sendMessage(text: string, target: ChatTarget): Promise<Res
   if (body.length > 500) return { ok: false, error: FRIENDLY.too_long };
   const { data, error } = await s.db.rpc("chat_send", { p_user: s.userId, p_room: t.room, p_to: t.to, p_body: body });
   if (error || !data) return { ok: false, error: friendly(error?.message, "Couldn't send. Try again.") };
+  // A private message: a notification on their phone (if they turned them on).
+  if (t.to) await pushTo(t.to).catch(() => {});
   return { ok: true, message: data as ChatMessage };
 }
 

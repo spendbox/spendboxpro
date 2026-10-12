@@ -48,6 +48,7 @@ import {
   Menu as MenuIcon,
   MessageCircle,
   Sparkles,
+  Star,
   Timer,
   Users,
   Volume2,
@@ -55,12 +56,13 @@ import {
   X,
 } from "@/components/icons";
 import { short } from "@/lib/format";
+import { cash } from "@/lib/world/value";
 import { createClient } from "@/lib/supabase/client";
 import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
 import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
-import { BellRing, CarFront, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Newspaper, Palette, ShoppingBag, Smartphone, Store, Swords, User } from "lucide-react";
+import { BellRing, Wallet, CarFront, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Newspaper, Palette, ShoppingBag, Smartphone, Store, Swords, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
 import { GhostsSheet } from "./ghost-duel/ghosts-sheet";
@@ -77,7 +79,7 @@ import { rodeSomething } from "./streak-actions";
 import { GreetButtons } from "./greet-buttons";
 import { useNoPageZoom } from "./no-page-zoom";
 import type { PersonOnMap } from "./people-actions";
-import { around } from "./life/things-cache";
+import { peopleAround } from "./life/things-cache";
 import { PersonCard } from "./people/person-card";
 import { AwaySheet, DoorstepSheet, turnOnNotifications, useAwayDigest } from "./people/doorstep";
 import { DatingSheet, RivalsSheet } from "./people/street-dating";
@@ -422,6 +424,21 @@ export function Game({
   const [doorstepOpen, setDoorstepOpen] = useState(false);
   /** Dating or your rivals, open from your phone. */
   const [socialOpen, setSocialOpen] = useState<"dating" | "rivals" | null>(null);
+  /** Notifications (the bell, top right), and whether they're switched on for this phone. */
+  const [alertsOpen, setAlertsOpen] = useState(false);
+  const [pushOn, setPushOn] = useState(true);
+  /** iPhones only get notifications once the game is added to the home screen. */
+  const [pushNeedsHome, setPushNeedsHome] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        const can = "Notification" in window && "serviceWorker" in navigator && "PushManager" in window;
+        setPushNeedsHome(!can && /iP(hone|ad|od)/.test(navigator.userAgent));
+        setPushOn(can ? Notification.permission === "granted" : !/iP(hone|ad|od)/.test(navigator.userAgent));
+      } catch {}
+    }, 0);
+    return () => clearTimeout(t);
+  }, []);
   const [editAvatar, setEditAvatar] = useState(false);
   // The new 3D studio, while it is being tried out (see avatar3d-flag.ts).
   // (Read in the browser only; it matters only once the studio is opened, so the server's false is harmless.)
@@ -466,7 +483,6 @@ export function Game({
     // Home from inside a building: out of it first.
     beforeHome: () => leaveInside.current(),
     meId: state.me.guest ? null : state.me.id,
-    wallet: state.me.coins,
     onPerson: (id: string) => setPersonId(id),
     // A building's card: Go inside, as if its bubble had been tapped.
     onEnter: (id: string) => {
@@ -681,16 +697,22 @@ export function Game({
   // Everyone about on the real map near where you're looking (docs/PEOPLE.md): online, asleep,
   // at work or away. Looked up every 45 seconds; friends' live places (above) win.
   const [peopleOut, setPeopleOut] = useState<PersonOnMap[]>([]);
+  /** Everyone online in the city now (you included), shown top left. */
+  const [cityOnline, setCityOnline] = useState<number | null>(null);
   useEffect(() => {
     if (!worldId || me.guest) return;
     let alive = true;
     const look = () => {
       const c = worldLife.centerRef.current?.() ?? { x: 0, z: 0 };
-      void around<PersonOnMap[]>("people", worldId, c.x, c.z)
-        .then((list) => alive && list && setPeopleOut(list))
+      void peopleAround<PersonOnMap>(worldId, c.x, c.z)
+        .then((r) => {
+          if (!alive || !r) return;
+          setPeopleOut(r.people);
+          setCityOnline(r.online);
+        })
         .catch(() => {});
     };
-    const first = setTimeout(look, 3000);
+    const first = setTimeout(look, 800);
     const every = setInterval(look, 45_000);
     return () => {
       alive = false;
@@ -1601,10 +1623,10 @@ export function Game({
         {worldRegion ? (
           <div className="flex min-w-0 items-center gap-1.5">
             <PlacePill area={worldArea} state={worldRegion.state} onClick={() => setCityOpen(true)} />
-            {!me.guest && onlineNear > 0 && (
-              <span className="glass flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold sm:h-9 sm:text-sm" title="People online near where you're looking">
-                <span className="size-2 rounded-full bg-[#2f9e44]" aria-hidden />
-                {onlineNear} <span className="max-[400px]:hidden">online nearby</span>
+            {!me.guest && (
+              <span className="glass flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold sm:h-9 sm:text-sm" title={`${Math.max(1, cityOnline ?? 1)} online in the city, ${onlineNear} near where you're looking`}>
+                <span className="size-2 animate-pulse rounded-full bg-[#2f9e44]" aria-hidden />
+                {Math.max(1, cityOnline ?? 1, onlineNear)} <span className="max-[400px]:hidden">online{onlineNear > 0 ? ` · ${onlineNear} near` : ""}</span>
               </span>
             )}
           </div>
@@ -1654,6 +1676,37 @@ export function Game({
               </span>
             )}
             {state.streak && !worldId && <StreakPill streak={state.streak} onOpen={() => { setStreakOpen(true); setMenu(false); setFeedOpen(false); }} />}
+            {worldId && (
+              // Notifications: what's happened, and switching them on for this phone. Glows until they're on.
+              <button
+                onClick={() => { setAlertsOpen(true); setFeedSeenAt(new Date(now).toISOString()); }}
+                className={cn("relative grid size-8 shrink-0 place-items-center rounded-full shadow sm:size-9", pushOn ? "glass" : "bg-gold text-ink")}
+                aria-label="Notifications"
+              >
+                <BellRing className="size-4" />
+                {unread > 0 && <span className="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-hit px-1 text-[10px] font-semibold text-white">{unread > 9 ? "9+" : unread}</span>}
+                {!pushOn && unread === 0 && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-2 ring-gold/70" />}
+              </button>
+            )}
+            {worldId && worldLife.reputation !== null && (
+              // Your reputation: what adds to it and what takes it away.
+              <button onClick={() => worldLife.openReputation()} className="glass flex h-8 items-center gap-1 whitespace-nowrap rounded-full px-2.5 text-xs font-bold sm:h-9 sm:px-3 sm:text-sm" aria-label={`Reputation ${worldLife.reputation}`}>
+                <Star className="size-4 text-gold-dark" />
+                {worldLife.reputation.toLocaleString("en-GB")}
+              </button>
+            )}
+            {worldId && (
+              // Your cash at hand: opens Finance.
+              <button
+                onClick={() => worldLife.openFinance()}
+                className={cn("glass relative flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-bold sm:h-9 sm:px-3 sm:text-sm", worldLife.financeGlow && "outline outline-2 outline-offset-2 outline-gold")}
+                aria-label="Finance"
+              >
+                <Wallet className="size-4 text-gold-dark" />
+                {cash(me.coins)}
+                {worldLife.financeDot && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-hit" />}
+              </button>
+            )}
             {!worldId && (
             <span className="glass inline-block h-8 whitespace-nowrap rounded-full px-2.5 text-xs leading-8 sm:h-9 sm:px-3 sm:text-sm sm:leading-9" title={`₥${me.coins} · level ${me.level}`}>
               <b className="text-gold-dark">₥{short(me.coins)}</b>
@@ -1728,6 +1781,44 @@ export function Game({
             </button>
           ))}
       </div>
+      {alertsOpen && (
+        <Sheet onClose={() => setAlertsOpen(false)} title="Notifications">
+          {!pushOn && (
+            <div className="mb-3 rounded-2xl bg-gold/15 p-3">
+              <p className="text-sm font-semibold">Get told even when the game is closed</p>
+              <p className="mt-0.5 text-xs text-muted">Someone at your door, a gift, a sale, a message, a date, a prank, someone picking your pocket.</p>
+              {pushNeedsHome ? (
+                <p className="mt-2 rounded-xl bg-panel px-3 py-2 text-xs">
+                  On iPhone: tap <b>Share</b> (the square with an arrow) in Safari, then <b>Add to Home Screen</b>. Open Newtown from your home screen and tap the bell again.
+                </p>
+              ) : (
+              <button
+                onClick={() =>
+                  void turnOnNotifications().then((r) => {
+                    setMessage({ text: r.text, tone: r.ok ? "good" : "info" });
+                    if (r.ok) setPushOn(true);
+                  })
+                }
+                className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-full bg-ink text-sm font-semibold text-white"
+              >
+                <BellRing className="size-4" /> Turn on notifications
+              </button>
+              )}
+            </div>
+          )}
+          {feed.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted">Nothing yet.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {feed.slice(0, 40).map((f) => (
+                <li key={f.key}>
+                  <FeedRow item={f} now={now} compact />
+                </li>
+              ))}
+            </ul>
+          )}
+        </Sheet>
+      )}
       {feedOpen && (
         <NotificationsPanel
           feed={feed}

@@ -42,3 +42,11 @@ export async function around<T>(what: "people" | "marks", region: string, x: num
   const body = (await r.json()) as Record<string, T>;
   return body[what] ?? null;
 }
+
+/** People about round a spot, and how many are online in the whole city. */
+export async function peopleAround<T>(region: string, x: number, z: number): Promise<{ people: T[]; online: number } | null> {
+  const r = await fetch(`/api/around?what=people&region=${encodeURIComponent(region)}&x=${Math.round(x)}&z=${Math.round(z)}`, { cache: "no-store" });
+  if (!r.ok) return null;
+  const body = (await r.json()) as { people?: T[]; online?: number };
+  return { people: body.people ?? [], online: Number(body.online) || 0 };
+}
