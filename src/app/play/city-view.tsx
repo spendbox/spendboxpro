@@ -2716,13 +2716,30 @@ export function CityView({
      * place or riding something).
      */
     let windowCheckAt = 0;
+    const rideTrail = { x: NaN, z: NaN };
     function followWindow(now: number) {
       if (!win || now < windowCheckAt) return;
       windowCheckAt = now + 400;
-      if (view || eventFly) return;
+      if (eventFly) return;
+      const h = regionNow ? DETAIL : WINDOW;
+      if (view) {
+        // On a long train or ferry ride across a real place, the full-detail city goes with you
+        // (otherwise you'd soon be looking out at the far, plain blocks). It's drawn a little
+        // ahead of where you're heading, so it's redrawn as seldom as possible on the way.
+        if (!regionNow || view.kind !== "vehicle" || view.ride.index < REAL_BASE || (view.ride.kind !== "train" && view.ride.kind !== "boat")) return;
+        const { x, z } = view.pose;
+        const dx = x - rideTrail.x;
+        const dz = z - rideTrail.z;
+        rideTrail.x = x;
+        rideTrail.z = z;
+        if (Math.max(Math.abs(x - win.cx), Math.abs(z - win.cz)) < h * 0.45) return;
+        const len = Math.hypot(dx, dz);
+        const lead = len > 0.01 && len < 20 ? (h * 0.4) / len : 0;
+        build(currentSeed, builtCount, { cx: Math.round(x + dx * lead), cz: Math.round(z + dz * lead) });
+        return;
+      }
       const tx = controls.target.x;
       const tz = controls.target.z;
-      const h = regionNow ? DETAIL : WINDOW;
       if (Math.max(Math.abs(tx - win.cx), Math.abs(tz - win.cz)) < h * 0.45) return;
       const step = regionNow ? 4 : 10;
       build(currentSeed, builtCount, { cx: Math.round(tx / step) * step, cz: Math.round(tz / step) * step });
