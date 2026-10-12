@@ -4796,7 +4796,7 @@ export function CityView({
       if (lvl.kind === "interior") {
         const homeLevel = homeFloor.get(anchor.i) ?? 0;
         if (homePlan) st.homeKey = `${JSON.stringify(homePlan)}#${homeLevel}`;
-        const interior = homePlan ? createHomeInterior(homePlan, homeLevel) : createInterior({
+        const interior = homePlan ? createHomeInterior(homePlan, homeLevel, building) : createInterior({
           theme: lvl.theme,
           key,
           floor: lvl.floor,

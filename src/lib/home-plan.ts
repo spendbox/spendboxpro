@@ -66,8 +66,29 @@ export const FURNITURE = {
   lamp: { label: "Lamp", w: 1, d: 1, h: 1.6, colour: "#ffd43b", naira: 40_000 },
   fan: { label: "Standing fan", w: 1, d: 1, h: 1.3, colour: "#868e96", naira: 45_000 },
   stairs: { label: "Stairs", w: 2, d: 5, h: 2.8, colour: "#b08968", naira: 1_500_000 },
+  coffee: { label: "Coffee table", w: 2, d: 2, h: 0.42, colour: "#8d6e63", naira: 95_000 },
+  sideboard: { label: "Sideboard", w: 3, d: 1, h: 0.75, colour: "#a1887f", naira: 210_000 },
+  nightstand: { label: "Bedside table", w: 1, d: 1, h: 0.55, colour: "#8d6e63", naira: 60_000 },
+  art: { label: "Wall art", w: 2, d: 1, h: 1.6, colour: "#e8590c", naira: 85_000 },
+  mirror: { label: "Mirror", w: 2, d: 1, h: 1.6, colour: "#a5d8ff", naira: 70_000 },
+  clock: { label: "Wall clock", w: 1, d: 1, h: 1.9, colour: "#495057", naira: 30_000 },
 } as const;
 export type FurnitureKind = keyof typeof FURNITURE;
+
+/** Hung on a wall (above the floor): they don't get in the way of what stands below. */
+export const ON_WALL = new Set<FurnitureKind>(["art", "mirror", "clock"]);
+/** Lying flat or hung up: nothing bumps into them. */
+export const NOT_SOLID = new Set<FurnitureKind>(["rug", "art", "mirror", "clock"]);
+
+/** The furniture list, by room (a piece can be in more than one). */
+export const FURNITURE_GROUPS: { label: string; kinds: FurnitureKind[] }[] = [
+  { label: "Living", kinds: ["sofa", "armchair", "coffee", "tv", "sideboard", "shelf", "rug", "lamp", "fan"] },
+  { label: "Bedroom", kinds: ["bed", "single", "nightstand", "wardrobe", "desk", "chair", "lamp", "mirror"] },
+  { label: "Kitchen", kinds: ["counter", "cooker", "fridge", "sink", "table", "chair"] },
+  { label: "Bathroom", kinds: ["toilet", "shower", "bath", "sink", "mirror"] },
+  { label: "Decor", kinds: ["plant", "art", "mirror", "clock", "rug", "lamp"] },
+  { label: "Building", kinds: ["stairs"] },
+];
 
 export type PlanRoom = { id: number; kind: RoomKind; x: number; y: number; w: number; d: number };
 /** rot: quarter turns clockwise (0–3). x, y: the top-left square it covers. */
@@ -161,7 +182,7 @@ export function roomAt(floor: PlanFloor, x: number, y: number): PlanRoom | null 
 /** Items on a floor that overlap another one (shown in red, so you can tidy them). Rugs lie under things. */
 export function clashes(floor: PlanFloor): Set<number> {
   const out = new Set<number>();
-  const solid = floor.items.filter((i) => i.kind !== "rug");
+  const solid = floor.items.filter((i) => !NOT_SOLID.has(i.kind));
   for (let a = 0; a < solid.length; a++)
     for (let b = a + 1; b < solid.length; b++) {
       const A = solid[a];
@@ -266,81 +287,314 @@ function rng(seed: number) {
   };
 }
 
-/** What goes in each kind of room, in the order it's placed (the important things first). */
-const ROOM_SET: Record<RoomKind, FurnitureKind[]> = {
-  living: ["sofa", "tv", "armchair", "rug", "shelf", "plant", "lamp", "fan"],
-  bedroom: ["bed", "wardrobe", "lamp", "desk", "chair", "plant", "fan"],
-  kitchen: ["counter", "cooker", "fridge", "sink", "table", "chair", "chair"],
-  bathroom: ["toilet", "shower", "sink", "bath", "plant"],
-  dining: ["table", "chair", "chair", "chair", "chair", "shelf", "plant"],
-  study: ["desk", "chair", "shelf", "armchair", "lamp", "plant"],
-  hall: ["shelf", "plant"],
-  balcony: ["chair", "chair", "plant", "plant"],
-};
+// ---------------------------------------------------------------- walls and doorways
+
+/** A wall between two squares' edges (in squares: from x0,y0 to x1,y1, straight). */
+export type PlanWall = { x0: number; y0: number; x1: number; y1: number };
+/** A doorway: where it starts, along x or y, and how many squares wide. */
+export type PlanDoor = { x: number; y: number; along: "x" | "y"; len: number };
+
+/**
+ * The inside walls of a floor: wherever two rooms meet (or a room meets the open floor), with
+ * one doorway (a metre wide) in the middle of where each pair meets, so every room can be walked
+ * into. The outside walls are the home's own, not listed here.
+ */
+export function planWalls(floor: PlanFloor, size: HomeSize): { walls: PlanWall[]; doors: PlanDoor[] } {
+  const { w, d } = SIZES[size];
+  const own = new Int32Array(w * d);
+  for (let y = 0; y < d; y++) for (let x = 0; x < w; x++) own[y * w + x] = roomAt(floor, x, y)?.id ?? 0;
+  // Each boundary edge, by the pair of rooms it divides. Vertical edges: x is the line; horizontal: y.
+  type Edge = { line: number; at: number; along: "x" | "y" };
+  const pairs = new Map<string, Edge[]>();
+  const add = (a: number, b: number, e: Edge) => {
+    const key = `${Math.min(a, b)}|${Math.max(a, b)}|${e.along}|${e.line}`;
+    (pairs.get(key) ?? pairs.set(key, []).get(key)!).push(e);
+  };
+  for (let y = 0; y < d; y++) for (let x = 1; x < w; x++) { const a = own[y * w + x - 1], b = own[y * w + x]; if (a !== b) add(a, b, { line: x, at: y, along: "y" }); }
+  for (let y = 1; y < d; y++) for (let x = 0; x < w; x++) { const a = own[(y - 1) * w + x], b = own[y * w + x]; if (a !== b) add(a, b, { line: y, at: x, along: "x" }); }
+  // The longest straight run for each pair of rooms gets the doorway.
+  const best = new Map<string, { key: string; start: number; len: number }>();
+  const runs: { key: string; along: "x" | "y"; line: number; start: number; len: number }[] = [];
+  for (const [key, edges] of pairs) {
+    const along = edges[0].along, line = edges[0].line;
+    const ats = edges.map((e) => e.at).sort((a, b) => a - b);
+    let i = 0;
+    while (i < ats.length) {
+      let j = i;
+      while (j + 1 < ats.length && ats[j + 1] === ats[j] + 1) j++;
+      const run = { key, along, line, start: ats[i], len: j - i + 1 };
+      runs.push(run);
+      const pair = key.split("|").slice(0, 2).join("|");
+      const b = best.get(pair);
+      if (!b || run.len > b.len) best.set(pair, { key: `${key}@${run.start}`, start: run.start, len: run.len });
+      i = j + 1;
+    }
+  }
+  const walls: PlanWall[] = [];
+  const doors: PlanDoor[] = [];
+  for (const r of runs) {
+    const pair = r.key.split("|").slice(0, 2).join("|");
+    const hasDoor = best.get(pair)?.key === `${r.key}@${r.start}` && r.len >= 2;
+    const piece = (a: number, b: number) => {
+      if (b <= a) return;
+      walls.push(r.along === "y" ? { x0: r.line, y0: a, x1: r.line, y1: b } : { x0: a, y0: r.line, x1: b, y1: r.line });
+    };
+    if (!hasDoor) piece(r.start, r.start + r.len);
+    else {
+      const dl = Math.min(2, r.len);
+      const ds = r.start + Math.floor((r.len - dl) / 2);
+      piece(r.start, ds);
+      piece(ds + dl, r.start + r.len);
+      doors.push(r.along === "y" ? { x: r.line, y: ds, along: "y", len: dl } : { x: ds, y: r.line, along: "x", len: dl });
+    }
+  }
+  return { walls, doors };
+}
+
+// ---------------------------------------------------------------- furnishing a room
 
 const overlaps = (a: { x: number; y: number; w: number; d: number }, b: { x: number; y: number; w: number; d: number }) =>
   a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.d && b.y < a.y + a.d;
 
+type Box = { x: number; y: number; w: number; d: number };
+
 /**
- * Furnish one room: each piece against a wall (its back to the wall), rugs in the middle,
- * nothing on top of anything else, and a clear way in at the doorways (the middle of each side).
- * Adds to `floor.items` and returns how many went in.
+ * Furnish one room the way people arrange them: the TV facing the sofa across a rug and coffee
+ * table, the bed in the middle of a wall with a bedside table each side, chairs round the dining
+ * table, the kitchen in a run along one wall, a basin with a mirror over it; then plants, lamps
+ * and art on the walls. Doorways stay clear. Adds to `floor.items`; returns how many went in.
  */
-export function furnishRoom(floor: PlanFloor, room: PlanRoom, seed = 1): number {
+export function furnishRoom(floor: PlanFloor, room: PlanRoom, seed = 1, size: HomeSize = "medium"): number {
   const rand = rng(seed * 7919 + room.id * 104729);
-  let placed = 0;
-  const big = room.w * room.d;
-  // Doorways: keep the middle square of each side free.
-  const doors = [
-    { x: room.x + Math.floor(room.w / 2) - 1, y: room.y, w: 2, d: 2 },
-    { x: room.x + Math.floor(room.w / 2) - 1, y: room.y + room.d - 2, w: 2, d: 2 },
-    { x: room.x, y: room.y + Math.floor(room.d / 2) - 1, w: 2, d: 2 },
-    { x: room.x + room.w - 2, y: room.y + Math.floor(room.d / 2) - 1, w: 2, d: 2 },
-  ];
-  for (let kind of ROOM_SET[room.kind]) {
-    if (kind === "bed" && room.w < 7 && room.d < 7) kind = "single";
-    if (kind === "bath" && big < 50) continue;
-    const id = nextId(floor.items);
-    const solid = floor.items.filter((i) => i.kind !== "rug");
-    const free = (c: { x: number; y: number; w: number; d: number }, rug: boolean) =>
-      c.x >= room.x && c.y >= room.y && c.x + c.w <= room.x + room.w && c.y + c.d <= room.y + room.d &&
-      (rug ? !floor.items.some((i) => i.kind === "rug" && overlaps(c, { ...itemSize(i), x: i.x, y: i.y })) : !solid.some((i) => overlaps(c, { ...itemSize(i), x: i.x, y: i.y })) && !doors.some((dr) => overlaps(c, dr)));
-    let spot: PlanItem | null = null;
-    if (kind === "rug" || kind === "table") {
-      // The middle of the room.
-      const s = itemSize({ kind, rot: room.w >= room.d ? 0 : 1 });
-      const c = { x: room.x + Math.floor((room.w - s.w) / 2), y: room.y + Math.floor((room.d - s.d) / 2), ...s };
-      if (free(c, kind === "rug")) spot = { id, kind, rot: room.w >= room.d ? 0 : 1, x: c.x, y: c.y };
+  const { doors } = planWalls(floor, size);
+  // Keep a square and a half clear on both sides of every doorway into this room.
+  const clear: Box[] = doors.map((dr) => (dr.along === "y" ? { x: dr.x - 2, y: dr.y, w: 4, d: dr.len } : { x: dr.x, y: dr.y - 2, w: dr.len, d: 4 }));
+  // Nothing hung on the wall right beside a doorway.
+  const doorBands: Box[] = doors.map((dr) => (dr.along === "y" ? { x: dr.x - 1, y: dr.y - 1, w: 2, d: dr.len + 2 } : { x: dr.x - 1, y: dr.y - 1, w: dr.len + 2, d: 2 }));
+  const before = floor.items.length;
+  const inRoom = (c: Box) => c.x >= room.x && c.y >= room.y && c.x + c.w <= room.x + room.w && c.y + c.d <= room.y + room.d;
+  const boxOf = (i: PlanItem): Box => ({ ...itemSize(i), x: i.x, y: i.y });
+  /** Put one in if it fits there (and return it), or null. */
+  const put = (kind: FurnitureKind, x: number, y: number, rot: number): PlanItem | null => {
+    const it: PlanItem = { id: nextId(floor.items), kind, x, y, rot: ((rot % 4) + 4) % 4 };
+    const c = boxOf(it);
+    if (!inRoom(c)) return null;
+    if (ON_WALL.has(kind)) {
+      if (floor.items.some((o) => ON_WALL.has(o.kind) && overlaps(c, boxOf(o)))) return null;
+      if (doorBands.some((b) => overlaps(c, b))) return null;
+    } else if (kind === "rug") {
+      if (floor.items.some((o) => o.kind === "rug" && overlaps(c, boxOf(o)))) return null;
+    } else {
+      if (floor.items.some((o) => !NOT_SOLID.has(o.kind) && overlaps(c, boxOf(o)))) return null;
+      if (clear.some((b) => overlaps(c, b))) return null;
     }
-    if (!spot) {
-      // Along the walls: top (back to the top wall), right, bottom, left, starting somewhere random.
-      const start = Math.floor(rand() * 4);
-      for (let k = 0; k < 4 && !spot; k++) {
-        const wall = (start + k) % 4;
-        const rot = wall;
-        const s = itemSize({ kind, rot });
-        const along = wall % 2 === 0 ? room.w - s.w : room.d - s.d;
-        const offs = Array.from({ length: Math.max(0, along + 1) }, (_, i) => i);
-        if (rand() < 0.5) offs.reverse();
-        for (const o of offs) {
-          const c =
-            wall === 0 ? { x: room.x + o, y: room.y, ...s }
-            : wall === 1 ? { x: room.x + room.w - s.w, y: room.y + o, ...s }
-            : wall === 2 ? { x: room.x + o, y: room.y + room.d - s.d, ...s }
-            : { x: room.x, y: room.y + o, ...s };
-          if (free(c, false)) {
-            spot = { id, kind, rot, x: c.x, y: c.y };
-            break;
-          }
-        }
+    floor.items.push(it);
+    return it;
+  };
+  /**
+   * Against a wall of the room (side 0 top, 1 right, 2 bottom, 3 left), its back to the wall, at
+   * `u` (0..1) along it, nudged along until it fits. rot follows the wall.
+   */
+  const onWallSide = (kind: FurnitureKind, side: number, u = 0.5, inset = 0): PlanItem | null => {
+    const rot = side;
+    const s = itemSize({ kind, rot });
+    const span = side % 2 === 0 ? room.w - s.w : room.d - s.d;
+    if (span < 0) return null;
+    const want = Math.round(span * u);
+    for (let k = 0; k <= span; k++) {
+      for (const o of k === 0 ? [0] : [k, -k]) {
+        const t = want + o;
+        if (t < 0 || t > span) continue;
+        const x = side === 0 || side === 2 ? room.x + t : side === 1 ? room.x + room.w - s.w - inset : room.x + inset;
+        const y = side === 1 || side === 3 ? room.y + t : side === 0 ? room.y + inset : room.y + room.d - s.d - inset;
+        const got = put(kind, x, y, rot);
+        if (got) return got;
       }
     }
-    if (spot) {
-      floor.items.push(spot);
-      placed++;
+    return null;
+  };
+  /** The sides, longest first (ties shuffled), so the big pieces get the best walls. */
+  const sides = [0, 1, 2, 3].sort((a, b) => (b % 2 === 0 ? room.w : room.d) - (a % 2 === 0 ? room.w : room.d) || rand() - 0.5);
+  const opp = (side: number) => (side + 2) % 4;
+  /** Something against the first wall that takes it. */
+  const anyWall = (kind: FurnitureKind, list = sides, u = 0.5) => {
+    for (const sd of list) {
+      const got = onWallSide(kind, sd, u);
+      if (got) return { got, side: sd };
     }
+    return null;
+  };
+  /** A wall piece (art, a mirror, a clock) on the wall behind something. */
+  const above = (kind: FurnitureKind, it: PlanItem | null) => {
+    if (!it) return;
+    const s = itemSize(it);
+    const a = itemSize({ kind, rot: it.rot });
+    const cx = it.x + Math.floor((s.w - a.w) / 2), cy = it.y + Math.floor((s.d - a.d) / 2);
+    const x = it.rot === 1 ? room.x + room.w - a.w : it.rot === 3 ? room.x : cx;
+    const y = it.rot === 0 ? room.y : it.rot === 2 ? room.y + room.d - a.d : cy;
+    put(kind, x, y, it.rot);
+  };
+  const corners = () => [
+    [room.x, room.y],
+    [room.x + room.w - 1, room.y],
+    [room.x, room.y + room.d - 1],
+    [room.x + room.w - 1, room.y + room.d - 1],
+  ].sort(() => rand() - 0.5);
+  const inCorner = (kind: FurnitureKind, n = 1) => {
+    let got = 0;
+    for (const [x, y] of corners()) if (got < n && put(kind, x, y, 0)) got++;
+    return got;
+  };
+
+  switch (room.kind) {
+    case "living": {
+      // The TV on one long wall, the sofa facing it across the room, a rug and a coffee table between.
+      const tv = anyWall("tv");
+      if (tv) {
+        const across = opp(tv.side);
+        // Not too far from the screen: about three metres at most.
+        const L = tv.side % 2 === 0 ? room.d : room.w;
+        const inset = Math.max(0, L - 1 - 2 - 6);
+        const sofa = onWallSide("sofa", across, 0.5, inset) ?? onWallSide("sofa", across, 0.5, 0);
+        if (sofa) {
+          above("art", sofa);
+          // The rug and the coffee table in the middle, between them.
+          const midX = Math.round((tv.got.x + sofa.x) / 2), midY = Math.round((tv.got.y + sofa.y) / 2);
+          const rr = tv.side % 2 === 0 ? 0 : 1;
+          const rs = itemSize({ kind: "rug", rot: rr });
+          put("rug", midX - Math.floor(rs.w / 2) + 1, midY - Math.floor(rs.d / 2) + 1, rr);
+          const cs = itemSize({ kind: "coffee", rot: 0 });
+          put("coffee", midX - Math.floor(cs.w / 2) + 1, midY - Math.floor(cs.d / 2) + 1, 0) ?? put("coffee", midX, midY, 0);
+          // An armchair beside the rug, a lamp by the sofa.
+          for (const sd of [(tv.side + 1) % 4, (tv.side + 3) % 4]) if (onWallSide("armchair", sd, 0.5)) break;
+          const ls = sofa.rot % 2 === 0 ? [sofa.x - 1, sofa.y] : [sofa.x, sofa.y - 1];
+          put("lamp", ls[0], ls[1], 0) ?? put("lamp", sofa.x + itemSize(sofa).w, sofa.y, 0);
+        }
+        // Something beside the TV.
+        put("plant", tv.got.x - 1, tv.got.y, 0) ?? put("plant", tv.got.x + itemSize(tv.got).w, tv.got.y, 0);
+      }
+      anyWall("shelf", sides.slice().reverse()) ?? anyWall("sideboard");
+      inCorner("plant", 2);
+      anyWall("clock", sides.slice().reverse(), 0.2);
+      break;
+    }
+    case "bedroom": {
+      // The bed in the middle of a wall (a single in a small room), a bedside table each side.
+      const kind = room.w < 7 && room.d < 7 ? "single" : "bed";
+      const bed = anyWall(kind, sides.slice().sort((a, b) => (a % 2 === 0 ? room.w : room.d) - (b % 2 === 0 ? room.w : room.d)));
+      if (bed) {
+        above("art", bed.got);
+        const bs = itemSize(bed.got);
+        const hor = bed.side % 2 === 0;
+        put("nightstand", hor ? bed.got.x - 1 : bed.got.x, hor ? bed.got.y : bed.got.y - 1, bed.side);
+        put("nightstand", hor ? bed.got.x + bs.w : bed.got.x, hor ? bed.got.y : bed.got.y + bs.d, bed.side);
+        const foot = opp(bed.side);
+        put("rug", hor ? bed.got.x : bed.side === 1 ? bed.got.x - 3 : bed.got.x + bs.w, hor ? (bed.side === 0 ? bed.got.y + bs.d : bed.got.y - 3) : bed.got.y, hor ? 0 : 1);
+        anyWall("wardrobe", [foot, (bed.side + 1) % 4, (bed.side + 3) % 4]);
+      }
+      const desk = anyWall("desk", sides.slice().reverse(), 0.3);
+      if (desk) {
+        const s = itemSize(desk.got);
+        const front = [[0, s.d], [-1, 0], [0, -1], [s.w, 0]][desk.side];
+        put("chair", desk.got.x + (desk.side % 2 === 0 ? 1 : front[0]), desk.got.y + (desk.side % 2 === 0 ? front[1] : 1), desk.side + 2);
+      }
+      anyWall("mirror", sides.slice().reverse(), 0.8);
+      inCorner("plant");
+      inCorner("lamp");
+      break;
+    }
+    case "kitchen": {
+      // A run along the longest wall: fridge, counter, cooker, sink side by side.
+      for (const sd of sides) {
+        const hor = sd % 2 === 0;
+        const len = hor ? room.w : room.d;
+        if (len < 7) continue;
+        const run: FurnitureKind[] = ["fridge", "counter", "cooker", "sink"];
+        let at = hor ? room.x : room.y;
+        const placed: PlanItem[] = [];
+        for (const kind of run) {
+          const s = itemSize({ kind, rot: sd });
+          const x = hor ? at : sd === 1 ? room.x + room.w - s.w : room.x;
+          const y = hor ? (sd === 0 ? room.y : room.y + room.d - s.d) : at;
+          const got = put(kind, x, y, sd);
+          if (got) {
+            placed.push(got);
+            at += hor ? s.w : s.d;
+          } else at += 1;
+        }
+        if (placed.length >= 3) break;
+        // Not a proper run along this wall: take them back out and try the next.
+        floor.items = floor.items.filter((i) => !placed.includes(i));
+      }
+      // A small table and two chairs, if there's room.
+      const cx = room.x + Math.floor(room.w / 2) - 1, cy = room.y + Math.floor(room.d / 2) - 1;
+      if (room.w >= 8 && room.d >= 8 && put("table", cx - 1, cy, 0)) {
+        put("chair", cx, cy - 1, 2);
+        put("chair", cx, cy + 2, 0);
+      }
+      anyWall("clock", sides.slice().reverse(), 0.5);
+      inCorner("plant");
+      break;
+    }
+    case "bathroom": {
+      const tl = anyWall("toilet", sides, 0.2);
+      void tl;
+      const sink = anyWall("sink", sides, 0.6);
+      above("mirror", sink?.got ?? null);
+      if (room.w * room.d >= 40) anyWall("bath", sides.slice().reverse()) ?? inCorner("shower");
+      else inCorner("shower") || anyWall("shower");
+      inCorner("plant");
+      break;
+    }
+    case "dining": {
+      // The table in the middle, chairs all round it, facing in.
+      const t = itemSize({ kind: "table", rot: room.w >= room.d ? 0 : 1 });
+      const rot = room.w >= room.d ? 0 : 1;
+      const tx = room.x + Math.floor((room.w - t.w) / 2), ty = room.y + Math.floor((room.d - t.d) / 2);
+      if (put("table", tx, ty, rot)) {
+        put("rug", tx - 1, ty - 1, rot);
+        for (let i = 0; i < t.w; i++) {
+          if (i % 2 === 0 || t.w <= 3) {
+            put("chair", tx + i, ty - 1, 2);
+            put("chair", tx + i, ty + t.d, 0);
+          }
+        }
+        if (t.w > 2) {
+          put("chair", tx - 1, ty + Math.floor(t.d / 2), 1);
+          put("chair", tx + t.w, ty + Math.floor(t.d / 2), 3);
+        }
+      }
+      anyWall("sideboard");
+      const sb = floor.items.at(-1);
+      if (sb?.kind === "sideboard") above("art", sb);
+      inCorner("plant", 2);
+      break;
+    }
+    case "study": {
+      const desk = anyWall("desk", sides, 0.5);
+      if (desk) {
+        const s = itemSize(desk.got);
+        const off = [[1, s.d], [-1, 1], [1, -1], [s.w, 1]][desk.side];
+        put("chair", desk.got.x + off[0], desk.got.y + off[1], desk.side + 2);
+        above("art", desk.got);
+      }
+      anyWall("shelf", sides.slice().reverse());
+      anyWall("armchair", sides.slice().reverse(), 0.8);
+      inCorner("lamp");
+      inCorner("plant");
+      break;
+    }
+    case "hall":
+      anyWall("sideboard", sides.slice().reverse(), 0.5);
+      anyWall("mirror", sides, 0.5);
+      inCorner("plant");
+      break;
+    case "balcony":
+      for (let i = 0; i < 2; i++) anyWall("chair", sides, 0.4 + i * 0.2);
+      inCorner("plant", 3);
+      break;
   }
-  return placed;
+  return floor.items.length - before;
 }
 
 /** Cut a strip of `len` squares into pieces by weight (each at least `min`). */
@@ -361,40 +615,41 @@ export function autoDesign(size: HomeSize, floors: number, seed: number): HomePl
   const rand = rng(seed);
   const n = Math.max(1, Math.min(MAX_FLOORS, floors));
   const shuffle = <T,>(a: T[]) => (rand() < 0.5 ? a : [...a].reverse());
+  // The same lines on every floor: the front and back halves, and the hall (with the stairs) at
+  // one end of the back half, so the stairs land in the hall upstairs.
+  const back = Math.max(6, Math.round(d * (0.42 + rand() * 0.08)));
+  const hallW = 5;
+  const hallLeft = rand() < 0.5;
   const out: HomePlan = { v: 1, size, floors: [] };
   for (let level = 0; level < n; level++) {
-    const front = Math.round(d * (0.5 + rand() * 0.12));
-    const top: { kind: RoomKind; w: number }[] = [];
-    const bottom: { kind: RoomKind; w: number }[] = [];
-    const stairsHere = level < n - 1;
+    const front: { kind: RoomKind; w: number }[] = [];
+    const rear: { kind: RoomKind; w: number }[] = [];
     if (level === 0) {
-      bottom.push(...shuffle([{ kind: "living" as RoomKind, w: 3 }, { kind: "kitchen" as RoomKind, w: 2 }]));
-      top.push(...shuffle([{ kind: "dining" as RoomKind, w: 2 }, { kind: "bathroom" as RoomKind, w: 1.2 }]));
-      if (stairsHere || size !== "small") top.push({ kind: "hall", w: 1.2 });
+      front.push(...shuffle([{ kind: "living" as RoomKind, w: 3 }, { kind: "kitchen" as RoomKind, w: 2 }]));
+      rear.push(...shuffle([{ kind: "dining" as RoomKind, w: 2 }, { kind: "bathroom" as RoomKind, w: 1.1 }]));
     } else {
-      bottom.push(...shuffle([{ kind: "bedroom" as RoomKind, w: 2 }, { kind: "bedroom" as RoomKind, w: 2 }]));
-      if (size === "large") bottom.push({ kind: rand() < 0.5 ? "study" : "bedroom", w: 1.6 });
-      top.push(...shuffle([{ kind: "bathroom" as RoomKind, w: 1.2 }, { kind: (rand() < 0.5 ? "study" : "balcony") as RoomKind, w: 1.5 }]));
-      top.push({ kind: "hall", w: 1.2 });
+      front.push(...shuffle([{ kind: "bedroom" as RoomKind, w: 2 }, { kind: "bedroom" as RoomKind, w: 2 }]));
+      if (size === "large") front.push({ kind: rand() < 0.5 ? "study" : "bedroom", w: 1.6 });
+      rear.push(...shuffle([{ kind: "bathroom" as RoomKind, w: 1.1 }, { kind: (rand() < 0.6 ? "study" : "balcony") as RoomKind, w: 1.5 }]));
     }
     const rooms: PlanRoom[] = [];
-    const lay = (row: typeof top, y: number, depth: number) => {
-      let x = 0;
-      cut(w, row.map((r) => r.w)).forEach((rw, i) => {
+    const lay = (row: { kind: RoomKind; w: number }[], x0: number, width: number, y: number, depth: number) => {
+      let x = x0;
+      cut(width, row.map((r) => r.w)).forEach((rw, i) => {
         rooms.push({ id: rooms.length + 1, kind: row[i].kind, x, y, w: rw, d: depth });
         x += rw;
       });
     };
-    lay(top, 0, d - front);
-    lay(bottom, d - front, front);
+    lay(rear, hallLeft ? hallW : 0, w - hallW, 0, back);
+    rooms.push({ id: rooms.length + 1, kind: "hall", x: hallLeft ? 0 : w - hallW, y: 0, w: hallW, d: back });
+    lay(front, 0, w, back, d - back);
     const floor: PlanFloor = { rooms, items: [] };
-    // The stairs go up from the hall (in the same spot on every floor, so they line up).
-    const hall = rooms.find((r) => r.kind === "hall");
-    if (stairsHere && hall) {
-      const s = itemSize({ kind: "stairs", rot: 0 });
-      floor.items.push({ id: 1, kind: "stairs", rot: 0, x: Math.min(w - s.w, hall.x + hall.w - s.w), y: Math.max(0, Math.min(d - s.d, hall.y)) });
+    // The stairs, against the hall's back wall (the same spot on every floor).
+    if (level < n - 1) {
+      const s = itemSize({ kind: "stairs", rot: 1 });
+      floor.items.push({ id: 1, kind: "stairs", rot: 1, x: hallLeft ? 0 : w - s.w, y: 0 });
     }
-    for (const r of rooms) furnishRoom(floor, r, seed + level);
+    for (const r of rooms) furnishRoom(floor, r, seed + level * 31, size);
     out.floors.push(floor);
   }
   return out;

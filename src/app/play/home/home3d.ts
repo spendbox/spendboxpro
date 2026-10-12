@@ -5,12 +5,11 @@
 // Plain shapes and one material per colour, so it's quick to build on any phone.
 
 import * as THREE from "three";
-import { CELL_M, FURNITURE, ROOM_FLOOR, SIZES, itemSize, type HomePlan, type PlanFloor, type PlanItem } from "@/lib/home-plan";
+import { CELL_M, FURNITURE, ROOM_FLOOR, SIZES, itemSize, planWalls, type HomePlan, type PlanItem } from "@/lib/home-plan";
 
 /** One storey, in metres. */
 export const STOREY_M = 2.8;
 const WALL_T = 0.1;
-const DOOR_M = 0.9;
 
 /** An inner wall piece (metres, the home's middle at 0, 0). */
 export type WallPiece = { x: number; z: number; len: number; along: boolean };
@@ -61,7 +60,14 @@ export function buildHome(plan: HomePlan, upTo: number, wallH = 1.3, only = fals
     box(W + WALL_T * 2, h, WALL_T, 0, h / 2, D / 2 + WALL_T / 2, outer, storey);
     box(WALL_T, h, D, -W / 2 - WALL_T / 2, h / 2, 0, outer, storey);
     box(WALL_T, h, D, W / 2 + WALL_T / 2, h / 2, 0, outer, storey);
-    roomWalls(floor, h, (len, along, x, z) => (walls.push({ x, z, len, along }), box(along ? len : WALL_T, h, along ? WALL_T : len, x, h / 2, z, "#faf6ee", storey)), mx, mz, W, D);
+    // Inside walls, with a doorway wherever two rooms meet (the same as walking round it).
+    for (const wl of planWalls(floor, plan.size).walls) {
+      const along = wl.y0 === wl.y1;
+      const len = (along ? wl.x1 - wl.x0 : wl.y1 - wl.y0) * CELL_M;
+      const x = mx((wl.x0 + wl.x1) / 2), z = mz((wl.y0 + wl.y1) / 2);
+      walls.push({ x, z, len, along });
+      box(along ? len + WALL_T : WALL_T, h, along ? WALL_T : len + WALL_T, x, h / 2, z, "#faf6ee", storey);
+    }
     for (const it of floor.items) storey.add(piece(it, mx, mz, box));
   });
   return {
@@ -72,50 +78,6 @@ export function buildHome(plan: HomePlan, upTo: number, wallH = 1.3, only = fals
       mats.forEach((m) => m.dispose());
     },
   };
-}
-
-/** Inner walls along each room's edges (not along the outside walls), with a doorway in the middle of each. */
-function roomWalls(
-  floor: PlanFloor,
-  h: number,
-  wall: (len: number, along: boolean, x: number, z: number) => void,
-  mx: (x: number) => number,
-  mz: (y: number) => number,
-  W: number,
-  D: number,
-) {
-  void h;
-  const seen = new Set<string>();
-  const run = (x0: number, z0: number, x1: number, z1: number) => {
-    const key = [x0, z0, x1, z1].map((v) => v.toFixed(2)).join(",");
-    if (seen.has(key)) return;
-    seen.add(key);
-    const along = z0 === z1;
-    const len = along ? x1 - x0 : z1 - z0;
-    if (len <= 0.01) return;
-    // On the outside wall already: nothing to add.
-    if (along ? Math.abs(Math.abs(z0) - D / 2) < 0.01 : Math.abs(Math.abs(x0) - W / 2) < 0.01) return;
-    // Two pieces with a doorway between them (or one wall if the side is too short for a door).
-    if (len < DOOR_M + 0.4) return wall(len, along, along ? (x0 + x1) / 2 : x0, along ? z0 : (z0 + z1) / 2);
-    const piece = (len - DOOR_M) / 2;
-    if (along) {
-      wall(piece, true, x0 + piece / 2, z0);
-      wall(piece, true, x1 - piece / 2, z0);
-    } else {
-      wall(piece, false, x0, z0 + piece / 2);
-      wall(piece, false, x0, z1 - piece / 2);
-    }
-  };
-  for (const r of floor.rooms) {
-    const x0 = mx(r.x);
-    const x1 = mx(r.x + r.w);
-    const z0 = mz(r.y);
-    const z1 = mz(r.y + r.d);
-    run(x0, z0, x1, z0);
-    run(x0, z1, x1, z1);
-    run(x0, z0, x0, z1);
-    run(x1, z0, x1, z1);
-  }
 }
 
 type Box = (w: number, h: number, d: number, x: number, y: number, z: number, colour: string, parent: THREE.Object3D) => THREE.Mesh;
@@ -142,7 +104,7 @@ function piece(it: PlanItem, mx: (x: number) => number, mz: (y: number) => numbe
     case "sofa":
     case "armchair":
       box(w, 0.4, d, 0, 0.2, 0, c, g);
-      box(w, 0.45, 0.2, 0, 0.6, d / 2 - 0.1, c, g);
+      box(w, 0.45, 0.2, 0, 0.6, -d / 2 + 0.1, c, g);
       box(0.15, 0.25, d, -w / 2 + 0.075, 0.52, 0, c, g);
       box(0.15, 0.25, d, w / 2 - 0.075, 0.52, 0, c, g);
       break;
@@ -153,7 +115,7 @@ function piece(it: PlanItem, mx: (x: number) => number, mz: (y: number) => numbe
       break;
     case "chair":
       box(w * 0.8, 0.05, d * 0.8, 0, 0.45, 0, c, g);
-      box(w * 0.8, 0.45, 0.05, 0, 0.7, d * 0.4, c, g);
+      box(w * 0.8, 0.45, 0.05, 0, 0.7, -d * 0.4, c, g);
       box(0.05, 0.45, 0.05, 0, 0.225, 0, c, g);
       break;
     case "tv":
@@ -179,6 +141,18 @@ function piece(it: PlanItem, mx: (x: number) => number, mz: (y: number) => numbe
       break;
     case "stairs":
       for (let i = 0; i < 8; i++) box(w, (f.h / 8) * (i + 1), d / 8, 0, ((f.h / 8) * (i + 1)) / 2, d / 2 - (d / 8) * (i + 0.5), c, g);
+      break;
+    case "art":
+    case "mirror":
+      // Hung on the wall behind.
+      box(w * 0.75, 0.7, 0.04, 0, 1.5, -d / 2 + 0.03, c, g);
+      break;
+    case "clock":
+      box(0.32, 0.32, 0.04, 0, 1.9, -d / 2 + 0.03, c, g);
+      break;
+    case "coffee":
+      box(w - 0.2, 0.05, d - 0.3, 0, f.h, 0, c, g);
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) box(0.05, f.h, 0.05, sx * (w / 2 - 0.15), f.h / 2, sz * (d / 2 - 0.2), c, g);
       break;
     default:
       box(w, f.h, d, 0, f.h / 2, 0, c, g);

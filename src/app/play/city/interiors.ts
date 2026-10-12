@@ -16,6 +16,7 @@ import type { Act, Spot } from "./figures";
 import type { Block, InteractKind } from "./interact";
 import type { Theme } from "./levels";
 import { fireEngineKit } from "./vehicles";
+import { CELL_M, FURNITURE, SIZES, itemSize, planWalls, roomAt, type HomePlan } from "@/lib/home-plan";
 
 /** Something to use in a room (its id is made by the city view). */
 export type RoomItem = { kind: InteractKind; label: string; x: number; y: number; z: number; r: number };
@@ -35,6 +36,8 @@ export type InteriorInfo = {
   variant?: "small" | "station";
   /** The city's flavour ("ng", "uk"...), for local food on menus. */
   flavor?: string;
+  /** A player's planned home: which plan, and which of its floors (docs/HOME_PLANNER.md). */
+  home?: { plan: HomePlan; level: number };
 };
 
 export type Interior = {
@@ -167,6 +170,8 @@ type Ctx = {
   blocks: Block[];
   /** A club's dance floor. */
   dance?: { x: number; z: number; w: number; d: number };
+  /** Textures made for extras (disposed with the room). */
+  textures: THREE.Texture[];
 };
 
 /** Something to use, at a point in the current drawing frame. */
@@ -3084,8 +3089,17 @@ function mosqueHall(x: Ctx) {
   x.views.push({ x: 0, z: D / 2 - 1.2, yaw: 0, pitch: 0.04 }, { x: W / 2 - 1.5, z: D / 2 - 1.5, yaw: yawTo(W / 2 - 1.5, D / 2 - 1.5, 0, -D / 2), pitch: 0.02 });
 }
 
-function plan(theme: Theme, rnd: Rng, variant?: InteriorInfo["variant"]): { room: Room; pal: Pal; build: (x: Ctx) => void } {
+function plan(theme: Theme, rnd: Rng, variant?: InteriorInfo["variant"], info?: InteriorInfo): { room: Room; pal: Pal; build: (x: Ctx) => void } {
   const home = pickOf(rnd, HOME);
+  if (info?.home) {
+    const { w, d } = SIZES[info.home.plan.size];
+    const kinds: WallKind[] = ["windows", "windows", "windows", "windows"];
+    return {
+      room: { w: w * CELL_M, d: d * CELL_M, h: 2.8, walls: kinds as Room["walls"], curtains: rnd() < 0.8 ? mixHex(home.fabric2, 0xfaf6ef, 0.5) : undefined, frame: rnd() < 0.5 ? 0xffffff : 0x2b2b2b },
+      pal: home,
+      build: (x) => plannedHome(x, info.home!),
+    };
+  }
   if (theme === "lobby" && variant === "small") {
     return { room: { w: 6, d: 6, h: 4.2, walls: ["tall", "solid", "solid", "solid"] }, pal: { ...LIBRARY, floor: ["stone", 0xd8d2c4, 0xc4bca9] }, build: (x) => lobby(x, "small") };
   }
@@ -3175,14 +3189,336 @@ function plan(theme: Theme, rnd: Rng, variant?: InteriorInfo["variant"]): { room
   }
 }
 
+// ---------------------------------------------------------------- a planned home (docs/HOME_PLANNER.md)
+
+/**
+ * A player's home as they planned it, one floor: the outside walls with windows and curtains,
+ * the inside walls with doorways, each piece of furniture where it was put (drawn with the same
+ * pieces as every other room in the game), a light in every room, tiles in the kitchen and
+ * bathroom, and stairs up and down.
+ */
+function plannedHome(x: Ctx, home: NonNullable<InteriorInfo["home"]>) {
+  const { k, pal, rnd, room } = x;
+  const { plan, level } = home;
+  const floor = plan.floors[level];
+  const { w: GW, d: GD } = SIZES[plan.size];
+  const W = GW * CELL_M, D = GD * CELL_M;
+  const mx = (c: number) => c * CELL_M - W / 2;
+  const mz = (c: number) => c * CELL_M - D / 2;
+  const T = 0.12;
+  const doorH = 2.1;
+  // Inside walls and doorways.
+  const { walls, doors } = planWalls(floor, plan.size);
+  for (const wl of walls) {
+    const x0 = mx(wl.x0), z0 = mz(wl.y0), x1 = mx(wl.x1), z1 = mz(wl.y1);
+    const along = z0 === z1;
+    const len = along ? x1 - x0 : z1 - z0;
+    const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+    k.box(cx, 0, cz, along ? len + T : T, room.h, along ? T : len + T, pal.wall, { noAo: true, grad: [0.84, 1.04, room.h] });
+    // Skirting both sides.
+    k.box(cx, 0, cz, along ? len + T : T + 0.03, 0.09, along ? T + 0.03 : len + T, pal.trim, { noAo: true });
+    x.blocks.push({ x: cx, z: cz, w: along ? len : 0.3, d: along ? 0.3 : len, ry: 0 });
+  }
+  for (const dr of doors) {
+    const along = dr.along === "x";
+    const a = along ? mx(dr.x) : mz(dr.y);
+    const L = dr.len * CELL_M;
+    const cx = along ? a + L / 2 : mx(dr.x), cz = along ? mz(dr.y) : a + L / 2;
+    // The wall over the doorway, and a frame round it.
+    k.box(cx, doorH, cz, along ? L : T, room.h - doorH, along ? T : L, pal.wall, { noAo: true });
+    k.box(cx, doorH - 0.06, cz, along ? L + 0.1 : T + 0.04, 0.08, along ? T + 0.04 : L + 0.1, pal.trim, { noAo: true });
+    for (const s of [-1, 1]) k.box(along ? cx + s * (L / 2 - 0.03) : cx, 0, along ? cz : cz + s * (L / 2 - 0.03), along ? 0.06 : T + 0.04, doorH, along ? T + 0.04 : 0.06, pal.trim, { noAo: true });
+  }
+  // Tiled floors in the kitchen and bathroom, a light in every room, art where there's none.
+  const tiles: Record<string, [FloorStyle, number, number]> = { kitchen: ["checker", 0xeeeeea, 0xcfd4d6], bathroom: ["hex", 0xf3f5f6, 0xbcc8cf], balcony: ["stone", 0xd9d4ca, 0xc4bdb0] };
+  for (const r of floor.rooms) {
+    const cx = mx(r.x + r.w / 2), cz = mz(r.y + r.d / 2);
+    const rw = r.w * CELL_M, rd = r.d * CELL_M;
+    const tile = tiles[r.kind];
+    if (tile) {
+      const { tex, metres } = floorTexture(tile[0], tile[1], tile[2], rnd);
+      tex.repeat.set(rw / metres, rd / metres);
+      const mat = new THREE.MeshLambertMaterial({ map: tex });
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(rw, rd).rotateX(-Math.PI / 2), mat);
+      m.position.set(cx, 0.003, cz);
+      x.extras.push(m);
+      x.textures.push(tex);
+    }
+    if (r.kind === "hall" || r.kind === "bathroom") k.cyl(cx, room.h - 0.012, cz, 0.12, 0.12, 0.012, 0xfff6e0, 14, { layer: "glow" });
+    else pendant(x, cx, cz, r.kind === "dining" ? 1.05 : 0.6, r.kind === "dining" ? "drum" : pickOf(rnd, ["globe", "cone", "drum"] as const), pal.metal);
+    x.lamps.push({ x: cx, y: room.h - 0.8, z: cz });
+    x.spots.push({ x: cx + 0.3, z: cz + 0.4, ry: rnd() * 6, pose: "stand", y: 0 });
+    x.views.push({ x: cx, z: cz + Math.min(1.2, rd / 3), yaw: 0, pitch: -0.12 });
+  }
+  // The furniture.
+  const wood = pal.wood;
+  for (const it of floor.items) {
+    const f = FURNITURE[it.kind];
+    const s = itemSize(it);
+    const cx = mx(it.x + s.w / 2), cz = mz(it.y + s.d / 2);
+    const ry = (-it.rot * Math.PI) / 2;
+    const fw = f.w * CELL_M, fd = f.d * CELL_M;
+    const inRoom = roomAt(floor, it.x, it.y)?.kind;
+    /** Draw against a pretend wall at the piece's back (for the pieces drawn on a wall). */
+    const backed = (fn: () => void) =>
+      k.at(cx, 0, cz, ry, () => {
+        const was = x.room;
+        x.room = { ...was, w: 60, d: fd };
+        try {
+          fn();
+        } finally {
+          x.room = was;
+        }
+      });
+    switch (it.kind) {
+      case "sofa":
+        sofa(x, cx, cz - Math.cos(ry) * 0.02, ry, fw - 0.1, pal.fabric);
+        break;
+      case "armchair":
+        armchair(x, cx, cz, ry, pal.fabric2);
+        break;
+      case "chair":
+        chair(x, cx, cz, ry, pal.fabric2, wood);
+        break;
+      case "table":
+        table(x, cx, cz, ry, fw - 0.12, fd - 0.12, wood, wood);
+        k.at(cx, 0, cz, ry, () => {
+          k.cyl(0, 0.75, 0, 0.09, 0.07, 0.07, 0xffffff, 16);
+          for (let b = 0; b < 3; b++) k.ball((b - 1) * 0.05, 0.84, 0, 0.04, [0xe5484d, 0xf5a524, 0x69db7c][b], { w: 6, h: 5 });
+        });
+        break;
+      case "coffee":
+        table(x, cx, cz, ry, fw - 0.3, fd - 0.45, pickOf(rnd, [wood, 0x2b2b2b, 0xf1efea]), wood, { h: 0.42 });
+        k.at(cx, 0, cz, ry, () => {
+          k.box(-0.2, 0.42, 0, 0.3, 0.04, 0.22, pal.accent);
+          k.cyl(0.22, 0.42, 0.05, 0.06, 0.05, 0.18, pickOf(rnd, pal.art), 12);
+        });
+        break;
+      case "desk":
+        k.at(cx, 0, cz, ry, () => {
+          k.box(0, 0.72, 0, fw - 0.1, 0.035, fd - 0.2, wood);
+          for (const sx of [-(fw / 2 - 0.1), fw / 2 - 0.1]) k.box(sx, 0, 0, 0.04, 0.72, fd - 0.3, pal.metal);
+          // A laptop and a mug.
+          k.box(0, 0.755, -0.05, 0.36, 0.015, 0.24, 0xadb5bd);
+          k.box(0, 0.77, -0.17, 0.36, 0.22, 0.012, 0x2b2b2b, { rx: -0.25 });
+          k.cyl(fw / 2 - 0.3, 0.755, -0.1, 0.04, 0.035, 0.1, pal.accent, 10);
+          k.shadow(0, 0, fw + 0.2, fd + 0.1, 0.25);
+        });
+        break;
+      case "tv": {
+        const uv = x.sheet.paint(256, 144, (c, w, h) => tvPicture(c, w, h, rnd));
+        k.at(cx, 0, cz, ry, () => {
+          k.box(0, 0, 0, fw, 0.45, fd - 0.08, wood);
+          for (let d = 0; d < 3; d++) k.box(-fw / 2 + (fw / 3) * (d + 0.5), 0.05, fd / 2 - 0.03, fw / 3 - 0.03, 0.36, 0.01, shadeHex(wood, 0.06), { noAo: true });
+          k.box(0, 0.45, -0.05, 0.3, 0.03, 0.18, 0x2b2b2b);
+          k.box(0, 0.5, -0.06, 0.05, 0.12, 0.04, 0x2b2b2b);
+          k.box(0, 0.6, -0.08, Math.min(1.4, fw - 0.1), 0.78, 0.05, 0x111316, { noAo: true });
+          k.quad(0, 0.99, -0.052, Math.min(1.34, fw - 0.16), 0.72, 0xffffff, { layer: "texGlow" }, uv);
+          k.shadow(0, 0, fw + 0.2, fd + 0.2, 0.3);
+        });
+        break;
+      }
+      case "shelf":
+        backed(() => bookshelf(x, 0, 0, fw - 0.06, 1.8));
+        break;
+      case "sideboard":
+        backed(() => sideboard(x, 0, 0, fw - 0.1, wood));
+        break;
+      case "art":
+        backed(() => art(x, 0, 0, 1.55, fw * 0.75, 0.62));
+        break;
+      case "mirror":
+        k.at(cx, 0, cz, ry, () => {
+          const z = -fd / 2;
+          k.box(0, inRoom === "bathroom" ? 1.15 : 0.9, z + 0.02, fw * 0.6 + 0.06, inRoom === "bathroom" ? 0.7 : 1.1, 0.03, pal.frame, { noAo: true });
+          k.quad(0, inRoom === "bathroom" ? 1.5 : 1.45, z + 0.037, fw * 0.6, inRoom === "bathroom" ? 0.62 : 1.02, 0xdfeef7, { layer: "glow" });
+        });
+        break;
+      case "clock":
+        k.at(cx, 0, cz, ry, () => {
+          const z = -fd / 2 + 0.03;
+          k.cyl(0, 1.9, z, 0.17, 0.17, 0.04, pal.metal, 24, { rx: Math.PI / 2 });
+          k.cyl(0, 1.9, z + 0.025, 0.15, 0.15, 0.01, 0xfdfbf6, 24, { rx: Math.PI / 2, noAo: true });
+          k.box(-0.004, 1.9, z + 0.04, 0.008, 0.11, 0.006, 0x222222, { noAo: true });
+          k.box(0, 1.9, z + 0.042, 0.08, 0.008, 0.006, 0x222222, { noAo: true });
+        });
+        break;
+      case "rug":
+        rugAt(x, cx, cz, fw - 0.1, fd - 0.1, ry);
+        break;
+      case "plant":
+        plant(x, cx, cz, 0.95 + rnd() * 0.25);
+        break;
+      case "lamp":
+        floorLamp(x, cx, cz, pal.metal);
+        break;
+      case "fan":
+        k.at(cx, 0, cz, ry, () => {
+          k.cyl(0, 0, 0, 0.16, 0.18, 0.04, 0x2b2b2b, 16);
+          k.cyl(0, 0.04, 0, 0.018, 0.018, 1.1, 0xadb5bd, 8);
+          k.cyl(0, 1.15, 0.05, 0.2, 0.2, 0.08, 0xdee2e6, 20, { rx: Math.PI / 2 });
+          k.ring(0, 1.15, 0.1, 0.2, 0.012, 0x868e96, { rx: 0 });
+        });
+        break;
+      case "nightstand":
+        k.at(cx, 0, cz, ry, () => {
+          k.box(0, 0, 0, 0.44, 0.52, 0.4, wood);
+          k.box(0, 0.3, 0.205, 0.38, 0.16, 0.01, shadeHex(wood, 0.06), { noAo: true });
+          k.box(0, 0.37, 0.215, 0.1, 0.02, 0.02, pal.metal, { noAo: true });
+          tableLamp(x, 0.05, 0.52, -0.05, pal.metal);
+          k.shadow(0, 0, 0.6, 0.55, 0.25);
+        });
+        break;
+      case "bed":
+      case "single":
+        k.at(cx, 0, cz, ry, () => {
+          const bw = fw - 0.12, bl = fd - 0.12;
+          const z0 = -fd / 2 + 0.06;
+          k.soft(0, 0, 0, bw, 0.3, bl, wood, 0.03);
+          k.soft(0, 0.3, 0.02, bw - 0.08, 0.22, bl - 0.08, 0xfbfaf7, 0.08);
+          k.soft(0, 0.48, 0.25, bw - 0.04, 0.08, bl * 0.62, pal.fabric, 0.05);
+          k.soft(0, 0.5, bl / 2 - 0.25, bw, 0.06, 0.35, pal.fabric2, 0.03);
+          const pillows = it.kind === "bed" ? [-bw / 4, bw / 4] : [0];
+          for (const sx of pillows) k.soft(sx, 0.52, z0 + 0.3, Math.min(0.62, bw / pillows.length - 0.12), 0.15, 0.34, 0xffffff, 0.08);
+          if (it.kind === "bed") k.soft(0, 0.52, z0 + 0.45, 0.45, 0.13, 0.16, pal.accent, 0.06);
+          // Headboard.
+          k.soft(0, 0, z0 - 0.02, bw + 0.08, 1.15, 0.1, pal.fabric, 0.05);
+          k.shadow(0, 0, bw + 0.2, bl + 0.2, 0.35);
+          spot(x, bw / 2 - 0.25, 0.25, Math.PI / 2, "sit", 0.52);
+        });
+        break;
+      case "wardrobe":
+        k.at(cx, 0, cz, ry, () => {
+          const ww = fw - 0.08, wd = fd - 0.12;
+          k.box(0, 0, 0, ww, 2.05, wd, wood);
+          for (const sx of [-ww / 4, ww / 4]) {
+            k.box(sx, 0.08, wd / 2, ww / 2 - 0.03, 1.9, 0.012, shadeHex(wood, 0.05), { noAo: true });
+            k.box(sx + (sx < 0 ? ww / 4 - 0.07 : -ww / 4 + 0.07), 0.95, wd / 2 + 0.012, 0.02, 0.25, 0.02, pal.metal, { noAo: true });
+          }
+          k.shadow(0, 0, ww + 0.2, wd + 0.2, 0.3);
+        });
+        break;
+      case "fridge":
+        k.at(cx, 0, cz, ry, () => {
+          k.box(0, 0, 0, fw - 0.15, 1.85, fd - 0.2, 0xe9ecef);
+          k.box(0, 1.15, fd / 2 - 0.1, fw - 0.17, 0.01, 0.01, 0xadb5bd, { noAo: true });
+          k.box(fw / 2 - 0.2, 0.75, fd / 2 - 0.09, 0.02, 0.3, 0.02, 0x868e96, { noAo: true });
+          k.box(fw / 2 - 0.2, 1.3, fd / 2 - 0.09, 0.02, 0.3, 0.02, 0x868e96, { noAo: true });
+          k.shadow(0, 0, fw, fd, 0.3);
+        });
+        break;
+      case "cooker":
+      case "counter":
+      case "sink": {
+        const bath = it.kind === "sink" && inRoom === "bathroom";
+        k.at(cx, 0, cz, ry, () => {
+          const cw = fw - 0.02, cd = Math.min(0.62, fd - 0.04);
+          const z = -fd / 2 + cd / 2;
+          if (bath) {
+            // A basin on a small cabinet.
+            k.box(0, 0, z, cw * 0.8, 0.78, cd * 0.8, 0xffffff);
+            k.box(0, 0.78, z, cw * 0.82, 0.06, cd * 0.85, 0xf1f3f5);
+            k.box(0, 0.8, z + 0.02, cw * 0.5, 0.045, cd * 0.45, 0xdde3e7, { noAo: true });
+            k.cyl(0, 0.84, z - cd * 0.3, 0.015, 0.015, 0.18, 0xadb5bd, 8);
+            return;
+          }
+          k.box(0, 0, z, cw, 0.1, cd - 0.04, 0x3a3a3a);
+          k.box(0, 0.1, z, cw, 0.78, cd, it.kind === "cooker" ? 0x2b2b2b : pal.trim);
+          k.box(0, 0.88, z, cw + 0.02, 0.04, cd + 0.03, 0x2b2b2b);
+          for (let dd = 0; dd < Math.max(1, Math.floor(cw / 0.5)); dd++) {
+            const dx = -cw / 2 + 0.25 + dd * 0.5;
+            if (it.kind !== "cooker") k.box(dx, 0.14, z + cd / 2, 0.46, 0.7, 0.01, shadeHex(pal.trim, 0.06), { noAo: true });
+            k.box(dx, 0.76, z + cd / 2 + 0.01, 0.25, 0.02, 0.02, pal.metal, { noAo: true });
+          }
+          if (it.kind === "cooker") {
+            k.box(0, 0.18, z + cd / 2, cw - 0.1, 0.45, 0.01, 0x495057, { noAo: true });
+            for (const [bx, bz] of [[-0.12, -0.1], [0.12, -0.1], [-0.12, 0.12], [0.12, 0.12]]) k.ring(bx, 0.925, z + bz, 0.07, 0.012, 0x868e96, { rx: Math.PI / 2 });
+            k.cyl(0.12, 0.93, z - 0.1, 0.1, 0.1, 0.1, 0xadb5bd, 16);
+          } else if (it.kind === "sink") {
+            k.box(0, 0.905, z + 0.02, cw * 0.6, 0.01, cd * 0.6, 0xadb5bd, { noAo: true });
+            k.cyl(0, 0.92, z - cd * 0.35, 0.015, 0.015, 0.26, pal.metal, 8);
+          } else {
+            k.cyl(-cw / 4, 0.92, z, 0.1, 0.08, 0.08, 0xffffff, 16);
+            k.box(cw / 4, 0.92, z - 0.1, 0.3, 0.25, 0.18, 0x343a40);
+          }
+          // Wall cupboards above.
+          k.box(0, 1.5, -fd / 2 + 0.18, cw, 0.7, 0.34, pal.trim, { noAo: true });
+          k.shadow(0, z, cw + 0.1, cd + 0.2, 0.3);
+        });
+        if (it.kind === "cooker") {
+          k.at(cx, 0, cz, ry, () => {
+            x.act = "cook";
+            spot(x, 0, 0.8, Math.PI, "stand");
+            x.act = undefined;
+          });
+        }
+        break;
+      }
+      case "toilet":
+        k.at(cx, 0, cz, ry, () => {
+          const z = -fd / 2;
+          k.box(0, 0.4, z + 0.04, 0.4, 0.38, 0.18, 0xffffff);
+          k.cyl(0, 0, z + 0.4, 0.17, 0.13, 0.4, 0xffffff, 18);
+          k.cyl(0, 0.4, z + 0.4, 0.2, 0.2, 0.04, 0xf1f3f5, 18);
+          k.shadow(0, z + 0.3, 0.55, 0.75, 0.25);
+        });
+        break;
+      case "shower":
+        k.at(cx, 0, cz, ry, () => {
+          k.box(0, 0, 0, fw - 0.05, 0.06, fd - 0.05, 0xf1f3f5);
+          k.quad(0, 1.05, fd / 2 - 0.04, fw - 0.06, 2.0, 0xffffff, { layer: "glass" });
+          k.box(fw / 2 - 0.05, 0.06, fd / 2 - 0.04, 0.03, 2.0, 0.03, 0xadb5bd, { noAo: true });
+          k.cyl(0, 2.0, -fd / 2 + 0.25, 0.1, 0.1, 0.02, 0xadb5bd, 14);
+          k.box(0, 1.2, -fd / 2 + 0.02, 0.03, 0.85, 0.03, 0xadb5bd, { noAo: true });
+        });
+        break;
+      case "bath":
+        k.at(cx, 0, cz, ry, () => {
+          const bw = fw - 0.08, bd = fd - 0.12;
+          k.soft(0, 0, 0, bw, 0.55, bd, 0xffffff, 0.06);
+          k.box(0, 0.5, 0, bw - 0.14, 0.06, bd - 0.14, 0xd8e4ea, { noAo: true });
+          k.cyl(-bw / 2 + 0.12, 0.55, 0, 0.02, 0.02, 0.2, 0xadb5bd, 8);
+          k.shadow(0, 0, bw + 0.2, bd + 0.2, 0.3);
+        });
+        break;
+      case "stairs":
+        k.at(cx, 0, cz, ry, () => {
+          // Steps rising towards the wall behind, with a handrail.
+          const n = 12;
+          const sw = fw - 0.1, run = fd - 0.2;
+          for (let st = 0; st < n; st++) {
+            const zz = run / 2 - (st + 0.5) * (run / n);
+            k.box(0, 0, zz, sw, ((st + 1) * room.h) / n, run / n + 0.01, st % 2 ? wood : shadeHex(wood, 0.05));
+          }
+          k.box(sw / 2 + 0.02, 0.9, 0, 0.04, 0.04, run, pal.metal, { rx: -Math.atan2(room.h, run) });
+          x.blocks.push({ x: cx, z: cz, w: s.w * CELL_M - 0.1, d: s.d * CELL_M - 0.1, ry: 0 });
+        });
+        if (level < plan.floors.length - 1) x.items.push({ kind: "stairs", label: "Go upstairs", x: cx, y: 0.6, z: cz, r: 0.8 });
+        break;
+    }
+  }
+  // The way down: where the stairs from the floor below come up.
+  if (level > 0) {
+    const below = plan.floors[level - 1].items.find((i) => i.kind === "stairs");
+    if (below) {
+      const s = itemSize(below);
+      const cx = mx(below.x + s.w / 2), cz = mz(below.y + s.d / 2);
+      k.box(cx, 0.001, cz, s.w * CELL_M - 0.1, 0.01, s.d * CELL_M - 0.1, 0x2b2b2b, { noAo: true });
+      x.items.push({ kind: "stairs", label: "Go downstairs", x: cx, y: 0.3, z: cz, r: 0.8 });
+    }
+  }
+  // Coming in: the front door is in the middle of the front wall.
+  x.views.unshift({ x: 0, z: D / 2 - 0.7, yaw: 0, pitch: -0.12 });
+}
+
 // ---------------------------------------------------------------- putting it together
 
 export function createInterior(info: InteriorInfo): Interior {
   const rnd = rngFrom(info.key);
-  const { room, pal, build } = plan(info.theme, rnd, info.variant);
+  const { room, pal, build } = plan(info.theme, rnd, info.variant, info);
   const sheet = new Sheet(1024);
   const k = new Kit();
-  const x: Ctx = { k, sheet, rnd, pal, room, spots: [], views: [], lamps: [], info, items: [], extras: [], anim: [], nightHooks: [], blocks: [] };
+  const x: Ctx = { k, sheet, rnd, pal, room, spots: [], views: [], lamps: [], info, items: [], extras: [], anim: [], nightHooks: [], blocks: [], textures: [] };
   // The clock tower's dials make their own walls (and the stadium is open to the sky).
   if (room.noShell) {
     // Nothing: no walls, no ceiling.
@@ -3318,6 +3654,7 @@ export function createInterior(info: InteriorInfo): Interior {
     for (const m of allMats) m.dispose();
     tex.dispose();
     ftex.dispose();
+    for (const t of x.textures) t.dispose();
     poolGeo.dispose();
   }
 
