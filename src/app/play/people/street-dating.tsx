@@ -20,6 +20,8 @@ type Done = (text: string, ok: boolean) => void;
 /** On someone's card: prank their door, pick their pocket (two taps: the risk first), make them your rival. */
 export function StreetRow({ id, name, hasHome, prices, onDone }: { id: string; name: string; hasHome: boolean; prices: Prices | null; onDone: Done }) {
   const [open, setOpen] = useState<"prank" | null>(null);
+  /** A note left with the prank (optional): they read it when they come home to it. */
+  const [prankNote, setPrankNote] = useState("");
   const [sure, setSure] = useState(false);
   const [busy, setBusy] = useState(false);
   const [rival, setRivalState] = useState<boolean | null>(null);
@@ -70,12 +72,27 @@ export function StreetRow({ id, name, hasHome, prices, onDone }: { id: string; n
         </p>
       )}
       {open === "prank" && (
+        <input
+          value={prankNote}
+          onChange={(e) => setPrankNote(e.target.value)}
+          maxLength={140}
+          placeholder={`Leave ${name} a note with it (optional)`}
+          className="mt-2 h-10 w-full rounded-xl bg-ink/[0.05] px-3 text-base outline-none ring-gold focus:ring-2 sm:text-sm"
+        />
+      )}
+      {open === "prank" && (
         <ul className="mt-2 grid grid-cols-2 gap-1.5">
           {PRANKS.map((p) => (
             <li key={p.id}>
               <button
                 disabled={busy}
-                onClick={() => void go(() => prankDoor(id, p.id)).then((ok) => ok && setOpen(null))}
+                onClick={() =>
+                  void go(() => prankDoor(id, p.id, prankNote)).then((ok) => {
+                    if (!ok) return;
+                    setOpen(null);
+                    setPrankNote("");
+                  })
+                }
                 className="flex w-full items-center gap-2 rounded-xl bg-ink/[0.05] px-2.5 py-2 text-left text-xs disabled:opacity-40"
               >
                 <span className="text-lg">{p.emoji}</span>

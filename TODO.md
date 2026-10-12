@@ -1,6 +1,9 @@
 # To do
 
 ## Now (owner)
+- [ ] In the Supabase SQL Editor run `game-db/059_bigger_starts.sql` (free start ₥6,500; visits counted by day for the online button's numbers and the dashboard). The bigger packs work without it.
+- [ ] For the owner's dashboard: in Vercel → Settings → Environment Variables add `ADMIN_PATH` (a hard-to-guess address, at least 8 characters, e.g. `hq-7f3k29xq`), and `ADMIN_PASSWORD` (at least 8 characters; `ADMIN_EMAIL` is the sign-in email). Redeploy, then open `https://newtown.world/<ADMIN_PATH>`.
+- [ ] Starter packs: check Paystack → Settings → API Keys & Webhooks → Webhook URL is `https://newtown.world/api/paystack/webhook` (live and test). Payments are now also checked when the player comes back and every time they open the game; a stuck one can be re-checked from the dashboard.
 - [ ] Follow `docs/LIVE_CHECK.md`: switch the real-map game on (database, Vercel settings, Paystack) and try it on your phone, step by step.
 - [ ] In the Supabase SQL Editor run `game-db/038_property.sql` (owning property on the real map: starting budget of ₥5,000, buying, homes, rent, treasuries). Until it's run, `/play?world=lagos` shows the map but buying won't work. Already ran it? Run it again: it is safe and sets the starting budget back to ₥5,000.
 - [ ] Then run `game-db/039_work.sql` (jobs on the real map, fares to work, neighbours; see `docs/WORK.md`). Until it's run, Work and neighbours won't load.

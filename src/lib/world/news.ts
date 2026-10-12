@@ -7,7 +7,7 @@
 import type { RegionMap } from "./compile.ts";
 import { toTile } from "./geo.ts";
 
-export type NewsKind = "weather" | "fire" | "traffic" | "power" | "market" | "star" | "sport" | "flood" | "roads" | "festival" | "city";
+export type NewsKind = "weather" | "fire" | "traffic" | "power" | "market" | "star" | "sport" | "flood" | "roads" | "festival" | "city" | "fun" | "money";
 
 export type NewsItem = { id: string; at: number; kind: NewsKind; title: string; text: string; area?: string; x?: number; z?: number };
 
@@ -57,11 +57,45 @@ const FOODS = ["tomatoes", "pepper", "rice", "garri", "onions", "yam", "beans", 
 const STARS = ["An Afrobeats star", "A Nollywood actress", "A Super Eagles striker", "A famous comedian", "A gospel singer", "A tech billionaire"];
 const FESTIVALS = ["Eyo festival", "a street carnival", "an owambe that took over the street", "a food festival", "a fashion week show", "a free concert"];
 
+/** Street life: the stories Lagos actually talks about (an area, a landmark; title and text). */
+const FUN: ((a: string, l: string) => [string, string])[] = [
+  (a) => [`Goat chases danfo conductor down ${a} street`, `Witnesses say the goat "had a point". The conductor has agreed to give correct change from now on.`],
+  (a) => [`Owambe in ${a} runs three days, nobody knows whose party it is`, `Guests say the jollof was too good to ask questions. Aso-ebi sellers report record sales.`],
+  (a) => [`${a} man returns borrowed generator after 11 years`, `"I was going to bring it back," he told reporters. The owner says it now works better than before.`],
+  (_a, l) => [`Pastor prophesies traffic will clear at ${l}; it does not`, `Drivers stuck for two hours say they are "still believing".`],
+  (a) => [`NEPA brings light to ${a} for 4 hours straight; residents suspicious`, `Some households switched everything on at once, just in case. Freezers are full again.`],
+  (a) => [`Okada rider in ${a} wins "politest rider" award, immediately overcharges judge`, `He says the award covers "goodwill, not fuel".`],
+  (_a, l) => [`Crowd gathers at ${l} to watch a man parallel park perfectly`, `Onlookers clapped. Some cried. One person asked him to teach a class.`],
+  (a) => [`Mama Put in ${a} raises meat price, adds "small" extra rice to calm customers`, `Customers say the peace deal is holding, for now.`],
+  (a) => [`Landlord in ${a} asks for two years' rent upfront "because of the economy"`, `Tenants responded by asking for two years of light upfront. Talks continue.`],
+  (_a, l) => [`Mystery DJ sets up speakers at ${l}, whole street starts dancing`, `Police arrived to break it up and were seen doing the shaku shaku within minutes.`],
+  (a) => [`Area boys in ${a} demand "settlement" from a new billboard`, `The billboard did not pay. The area boys are reportedly "reviewing their strategy".`],
+  (a) => [`${a} wedding: groom arrives late on okada, still makes a grand entrance`, `The bride says she has "seen worse". The okada man stayed for the reception.`],
+  (_a, l) => [`Tourist asks for directions at ${l}, gets 5 different answers, all confident`, `All five routes reportedly end at a suya spot. Locals call it "the Lagos way".`],
+  (a) => [`Power bank charging business booms in ${a} after blackout`, `One entrepreneur now charges ₦500 a bar. Analysts call it "the real economy".`],
+  (a) => [`Agbero in ${a} gives back change without being asked; area in shock`, `Commuters say they will remember this day. The agbero says it was "a mistake".`],
+  (_a, l) => [`Cow spotted taking selfies near ${l}`, `Okay, it was standing next to someone taking selfies. Still a great photo.`],
+  (a) => [`Street football final in ${a} ends 9-8 after 4 hours and one broken window`, `The window's owner has asked for a rematch. On a different street.`],
+  (a) => [`Estate in ${a} installs new gate; gateman now more powerful than the estate chairman`, `Residents need a password, a smile and sometimes a bottle of Malt to get home.`],
+  (_a, l) => [`Buskers near ${l} play Fela for 6 hours, crowd refuses to leave`, `Some fans have started a petition to make it every Saturday.`],
+  (a) => [`Jollof war breaks out between two caterers in ${a}`, `The judges declared a draw "for their own safety".`],
+  (a) => [`${a} landlord paints house gold; neighbours squint`, `"It reflects my personality," he says. It also reflects the sun into three windows.`],
+  (_a, l) => [`Rumour: a famous billionaire may buy ${l}`, `Nobody can confirm it. Everybody is repeating it.`],
+  (a) => [`Thugs block road in ${a}, ask for "toll"; residents pay in jokes instead`, `The thugs laughed, let everyone pass, and asked for the jokes to be written down.`],
+  (a) => [`Phone repairer in ${a} fixes cracked screen in 4 minutes, customers line up round the block`, `He says the secret is "experience and small prayer".`],
+];
+
 /** One story for a 20-minute slot. */
 function storyOf(slot: number, p: ReturnType<typeof placesOf>): NewsItem {
   const at = slot * STORY_MS;
   const area = pickOf(p.areas, rand(slot, 2));
   const id = `news-${slot}`;
+  // About a third of the time, street life: the funny, everyday stories.
+  if (rand(slot, 20) < 0.35) {
+    const l = pickOf(p.landmarks, rand(slot, 21));
+    const [title, text] = pickOf(FUN, rand(slot, 22))(area.name, l.name);
+    return { id, at, kind: "fun", title, text, area: area.name, x: area.x, z: area.z };
+  }
   const r = rand(slot, 3);
   if (r < 0.12) {
     const what = pickOf(["shopping plaza", "market stall row", "warehouse", "filling station", "block of flats"], rand(slot, 4));
@@ -91,6 +125,35 @@ function storyOf(slot: number, p: ReturnType<typeof placesOf>): NewsItem {
   if (r < 0.86) return { id, at, kind: "roads", title: `New road works in ${area.name}`, text: `The state has started fixing potholes. Expect diversions for a few days, and smoother rides after.`, area: area.name, x: area.x, z: area.z };
   if (r < 0.95) return { id, at, kind: "festival", title: `${pickOf(FESTIVALS, rand(slot, 14)).replace(/^./, (c) => c.toUpperCase())} in ${area.name}`, text: `Music, food and colour all afternoon. Everyone is invited.`, area: area.name, x: area.x, z: area.z };
   return { id, at, kind: "city", title: `New footbridge opens in ${area.name}`, text: `Pedestrians can finally cross the busy road safely.`, area: area.name, x: area.x, z: area.z };
+}
+
+/** Something a player did that made the news: bought a dear home, put a business on a building, arrived rich. */
+export type PlayerEvent = { id: string; at: number; kind: "buy" | "business" | "rich"; who: string; what: string; price: number; building?: string };
+
+/** A player's big moment as a headline, said with some fun (the same words each time for the same event). */
+export function playerStory(e: PlayerEvent, area: string, price: string): Pick<NewsItem, "title" | "text"> {
+  let h = 0;
+  for (const c of e.id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const pick = <T,>(xs: T[]) => xs[h % xs.length];
+  const where = area || "Lagos";
+  if (e.kind === "business")
+    return pick([
+      { title: `${e.who} lights up ${where}`, text: `A new name glows over ${where}: ${e.who} has taken a whole building. Neighbours say the sign is so bright they've stopped buying candles.` },
+      { title: `Big business lands in ${where}: ${e.who}`, text: `${e.who} has put its name on a building in ${where}. Area boys have already asked who the "chairman" is.` },
+      { title: `${where} gets a new landmark: ${e.who}`, text: `Tap the glowing building to find out what ${e.who} does. Early visitors say the receptionist is very friendly.` },
+    ]);
+  if (e.kind === "rich")
+    return pick([
+      { title: `Big money arrives: ${e.who} lands in Lagos`, text: `Born into a rich family, ${e.who} has just arrived with ${price} to spend. Estate agents across Lekki are ironing their best shirts.` },
+      { title: `${e.who} touches down with ${price}`, text: `Sources say ${e.who}'s family "sent small money". Small for who? Watch this space.` },
+    ]);
+  return pick([
+    { title: `${e.who} just bought ${e.what} in ${where} for ${price}`, text: `Neighbours say they saw three cars of "family members" arrive within the hour. Congratulations are pouring in.` },
+    { title: `Odogwu alert: ${e.who} drops ${price} in ${where}`, text: `${e.who} is the proud new owner of ${e.what}. The gateman has already asked for a raise.` },
+    { title: `"Na my house be this": ${e.who} buys in ${where}`, text: `${e.what} for ${price}. Witnesses report the agent did a small dance after the papers were signed.` },
+    { title: `${where} has a new big man (or big woman): ${e.who}`, text: `${e.who} paid ${price} for ${e.what}. Neighbours are already planning the housewarming they weren't invited to.` },
+    { title: `Bank alert heard across ${where}`, text: `${e.who} just spent ${price} on ${e.what}. Somewhere, a landlord is wiping a tear of joy.` },
+  ]);
 }
 
 /** The latest news (newest first): a story every 20 minutes, and the weather when it changes. */

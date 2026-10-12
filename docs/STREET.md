@@ -24,7 +24,7 @@ Database: `game-db/055_street.sql` (tests: `game-db/tests/street.test.sql`).
 ## Pranks
 From someone's card (they need a home): egg their door (₦2,000), toilet-paper the house (₦3,000),
 glitter bomb (₦5,000), fake parcel (₦2,000), sticker the gate (₦1,000), air horn at dawn (₦1,500).
-They see who did it, at their door, with Clean it up and Prank them back. 6 pranks a day, the
+You can leave a note with it. When they come back to the game, the prank plays out on their screen (eggs splat on the door, toilet paper rains down, glitter bursts, the parcel pops, stickers slap on, the air horn shakes it all), then who did it, the note, and Clean it up or Prank them back (`src/app/play/people/prank-reveal.tsx`). 6 pranks a day, the
 same door once a day.
 
 ## Rivals

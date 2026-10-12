@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowBigDown, ArrowBigLeft, ArrowBigRight, ArrowBigUp, Banknote, Coins, Music, PartyPopper, Play, RotateCcw, Sparkles } from "lucide-react";
+import { ArrowBigDown, ArrowBigLeft, ArrowBigRight, ArrowBigUp, Banknote, Coins, Music, PartyPopper, Play, RotateCcw, Star } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { sprayCoins } from "../gift-actions";
 import { playSfx } from "../sound";
@@ -220,7 +220,7 @@ function DanceOff(props: GameProps) {
             {score !== null ? (
               <div className="act-pop space-y-1">
                 {score >= 700 && <Confetti />}
-                <Sparkles className="mx-auto size-8 text-gold" />
+                <Star className="mx-auto size-8 text-gold" />
                 <p className="font-display text-3xl font-bold">{score}</p>
                 <p className="text-sm text-white/70">{score >= 900 ? "Legendary moves!" : score >= 600 ? "The floor is yours!" : "Keep dancing!"}</p>
               </div>

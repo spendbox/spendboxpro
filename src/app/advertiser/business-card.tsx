@@ -47,7 +47,7 @@ export function BusinessCard({ b }: { b: MyBusiness }) {
         <div className="min-w-0 flex-1">
           <p className="font-display text-lg font-bold">{b.name}</p>
           <p className="text-sm text-muted">
-            {b.category} · {live ? `Live until ${day(b.endsAt)}` : b.status === "ended" ? "Lease ended" : "Taken down"}
+            {b.category} · {live ? `Live until ${day(b.endsAt)}` : b.status === "ended" ? "Lease ended" : b.status === "pending_payment" ? "Waiting for your payment" : "Taken down"}
           </p>
         </div>
       </div>

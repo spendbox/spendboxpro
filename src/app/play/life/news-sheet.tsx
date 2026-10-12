@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { CloudRain, Flame, Lightbulb, MapPin, Megaphone, Music, ShoppingBasket, Star, TrafficCone, Trophy, Waves, Wrench, Zap } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Banknote, CloudRain, Flame, Laugh, Lightbulb, MapPin, Megaphone, Music, ShoppingBasket, Star, TrafficCone, Trophy, Waves, Wrench, Zap } from "lucide-react";
 import type { RegionMap } from "@/lib/world/compile";
-import { cityNews, weatherNow, type NewsItem, type NewsKind } from "@/lib/world/news";
+import { cityNews, playerStory, weatherNow, type NewsItem, type NewsKind } from "@/lib/world/news";
+import { ownedSpot } from "@/lib/world/owned";
+import { cash } from "@/lib/world/value";
 import { inventions } from "../item-actions";
+import { playerNews } from "../news-actions";
 import { gossip, type Gossip } from "../street-actions";
 import { Sheet } from "../sheet";
 
@@ -20,12 +23,14 @@ const ICON: Record<NewsKind | "invention", typeof Flame> = {
   roads: Wrench,
   festival: Music,
   city: Megaphone,
+  fun: Laugh,
+  money: Banknote,
   invention: Lightbulb,
 };
 /** A story: the city's news, or a player's new invention. */
 type Story = Omit<NewsItem, "kind"> & { kind: NewsKind | "invention" };
 
-const TONE: Partial<Record<NewsKind | "invention", string>> = { fire: "#e03131", flood: "#1971c2", weather: "#1c7ed6", power: "#f08c00", sport: "#2f9e44", invention: "#7048e8", star: "#d6336c" };
+const TONE: Partial<Record<NewsKind | "invention", string>> = { fire: "#e03131", flood: "#1971c2", weather: "#1c7ed6", power: "#f08c00", sport: "#2f9e44", invention: "#7048e8", star: "#d6336c", fun: "#e8590c", money: "#2b8a3e" };
 
 /** What's happening in the city: news every 20 minutes, the weather, and players' new inventions. Share any story. */
 export function NewsSheet({ region, onShow, onClose }: { region: RegionMap; onShow: (x: number, z: number) => void; onClose: () => void }) {
@@ -45,7 +50,40 @@ export function NewsSheet({ region, onShow, onClose }: { region: RegionMap; onSh
       )
       .catch(() => setMade([]));
   }, []);
-  const list = useMemo<Story[]>(() => [...cityNews(region, now), ...(made ?? [])].sort((a, b) => b.at - a.at).slice(0, 30), [region, now, made]);
+  // Players' big moments: dear homes bought, businesses lighting up buildings, rich arrivals.
+  const [people, setPeople] = useState<Story[]>([]);
+  useEffect(() => {
+    let alive = true;
+    void playerNews(region.region.id)
+      .then((events) => {
+        if (!alive) return;
+        setPeople(
+          events.map((e) => {
+            const sp = e.building ? ownedSpot(e.building) : null;
+            const area = sp ? region.areaAt(sp.x, sp.z) : "";
+            return { id: e.id, at: e.at, kind: "money" as const, ...playerStory(e, area, cash(e.price)), area, ...(sp ? { x: sp.x, z: sp.z } : {}) };
+          }),
+        );
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [region]);
+  // Almost endless: more stories load as you scroll (a story every 20 minutes, going back weeks).
+  const [count, setCount] = useState(30);
+  const end = useRef<HTMLLIElement | null>(null);
+  useEffect(() => {
+    const el = end.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver((seen) => seen.some((e) => e.isIntersecting) && setCount((c) => Math.min(3000, c + 25)), { rootMargin: "400px" });
+    io.observe(el);
+    return () => io.disconnect();
+  });
+  const list = useMemo<Story[]>(
+    () => [...cityNews(region, now, count), ...(made ?? []), ...people].sort((a, b) => b.at - a.at).slice(0, count + people.length + (made?.length ?? 0)),
+    [region, now, made, people, count],
+  );
   const w = weatherNow(now);
   const [shared, setShared] = useState<string | null>(null);
   const share = async (n: Story) => {
@@ -109,6 +147,9 @@ export function NewsSheet({ region, onShow, onClose }: { region: RegionMap; onSh
             </li>
           );
         })}
+        <li ref={end} className="py-3 text-center text-[11px] text-muted">
+          {count < 3000 ? "Loading older stories…" : "That's everything from the last few weeks."}
+        </li>
       </ul>
         </>
       )}

@@ -44,7 +44,7 @@ export const LANDMARKS: Landmark[] = [
   { id: "apapa-port", name: "Apapa Port", type: "port", w: 4, d: 3, at: { lat: 6.4430, lon: 3.3620 }, approx: true },
   { id: "tin-can-port", name: "Tin Can Island Port", type: "port", w: 4, d: 3, at: { lat: 6.4380, lon: 3.3430 }, approx: true },
   { id: "oshodi-market", name: "Oshodi Market", type: "market", at: { lat: 6.5550, lon: 3.3430 }, approx: true },
-  { id: "airport", name: "Murtala Muhammed International Airport", type: "intlairport", at: { lat: 6.5775, lon: 3.3210 }, approx: true },
+  { id: "airport", name: "Murtala Muhammed International Airport", type: "intlairport", w: 24, d: 14, at: { lat: 6.5775, lon: 3.3210 }, approx: true },
   { id: "computer-village", name: "Computer Village", type: "market", w: 3, d: 2, at: { lat: 6.5965, lon: 3.3425 }, approx: true },
   { id: "new-afrika-shrine", name: "New Afrika Shrine", type: "club", at: { lat: 6.6030, lon: 3.3510 }, approx: true },
   { id: "kalakuta-museum", name: "Kalakuta Republic Museum", type: "museum", at: { lat: 6.5985, lon: 3.3525 }, approx: true },

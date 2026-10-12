@@ -132,5 +132,10 @@ export function createAirliner(livery: (typeof LIVERIES)[number]) {
     trailTex.dispose();
   }
 
-  return { group, update, dispose };
+  /** Vapour trails only show high up (a jet on the runway or just lifting off has none). */
+  function showTrails(on: boolean) {
+    for (const t of trails) t.visible = on;
+  }
+
+  return { group, update, dispose, showTrails };
 }

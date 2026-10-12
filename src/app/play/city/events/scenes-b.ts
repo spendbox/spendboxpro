@@ -20,7 +20,7 @@ import {
   Rainbow,
   Shirt,
   Ship,
-  Sparkles,
+  Star,
   Sun,
   Tornado,
   TrainFront,
@@ -250,7 +250,7 @@ export const SCENES_B: Record<string, Scene> = {
   },
 
   shooting_stars: {
-    icon: Sparkles,
+    icon: Star,
     sound: "chime",
     draw(e) {
       const { k } = e;
@@ -778,7 +778,7 @@ export const SCENES_B: Record<string, Scene> = {
   },
 
   tower_light_show: {
-    icon: Sparkles,
+    icon: Star,
     sound: "chime",
     draw(e) {
       const { k, s } = e;

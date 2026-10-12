@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DoorOpen } from "lucide-react";
-import { Briefcase, Flag, HeartPulse, House, MapPin, Pencil, Search, Sparkles, X } from "@/components/icons";
+import { Briefcase, Flag, HeartPulse, House, MapPin, Pencil, Search, Star, X } from "@/components/icons";
 import { addressOf, makePlan, spiralIndex, tileAt, type CityPlan } from "@/lib/city/layout";
 import { BUILDING_LABEL } from "@/lib/world/buildings";
 import type { RegionMap } from "@/lib/world/compile";
@@ -17,13 +17,15 @@ import { dayOf, EXERCISE } from "@/lib/world/day";
 import { HUSTLES, hustleDay, hustleStart } from "@/lib/world/hustles";
 import type { Workplace } from "@/lib/world/workplace";
 import { PropertyCard } from "../property-card";
+import { AdvertisePanel, type AdPreview } from "./advertise-panel";
 import { around, cachedThings, loadThings } from "./things-cache";
 import { ThingsSheet, type ThingsTab } from "./things-sheet";
 import { NewsSheet } from "./news-sheet";
 import { ComingSoonSheet, ReputationSheet } from "./reputation-sheet";
 import { CertificateSheet } from "./certificate";
 import { JailBanner } from "../people/street-dating";
-import { cityNews, type NewsItem } from "@/lib/world/news";
+import { cityNews, playerStory, type NewsItem } from "@/lib/world/news";
+import { playerNews } from "../news-actions";
 import { playSfx } from "../sound";
 import { LeaveMarkSheet, MarkCard } from "./marks-sheet";
 import type { MapMark } from "../mark-actions";
@@ -223,7 +225,55 @@ export function useWorldLife({
   const [report, setReport] = useState<{ x: number; z: number; where: string } | null>(null);
   const centerRef = useRef<(() => { x: number; z: number }) | null>(null);
   const loadServices = useCallback(() => api.serviceBoard(), [api]);
-  const [businesses, setBusinesses] = useState<MapBusiness[]>([]);
+  const [leased, setBusinesses] = useState<MapBusiness[]>([]);
+  /** Advertising on the map: the panel open, a building tapped meanwhile, and the preview it lights up. */
+  const [adOpen, setAdOpen] = useState(false);
+  const [adPick, setAdPick] = useState<{ id: string; at: number } | null>(null);
+  const [adPreview, setAdPreview] = useState<AdPreview | null>(null);
+  const businesses = useMemo<MapBusiness[]>(() => {
+    if (!adPreview) return leased;
+    const p: MapBusiness = {
+      id: "preview",
+      building: adPreview.building,
+      name: adPreview.name,
+      category: "Your ad",
+      about: adPreview.line || "Your business, as people on the map will see it.",
+      address: "",
+      phone: null,
+      whatsapp: null,
+      website: null,
+      logo: adPreview.logo,
+      billboardImage: adPreview.billboard,
+      glow: 2,
+      kind: null,
+      storeys: null,
+      billboard: !!adPreview.billboard,
+    };
+    return [...leased.filter((b) => b.building !== adPreview.building), p];
+  }, [leased, adPreview]);
+  // Advertising opens from a billboard, a building's card or a link (?advertise=1&building=...).
+  useEffect(() => {
+    const open = (building: string | null) => {
+      setAdOpen(true);
+      setProperty(null);
+      if (building) setAdPick({ id: building, at: Date.now() });
+    };
+    const onEvent = (e: Event) => open((e as CustomEvent<{ building: string | null }>).detail?.building ?? null);
+    window.addEventListener("nt-advertise", onEvent);
+    const sp = new URLSearchParams(window.location.search);
+    let t: ReturnType<typeof setTimeout> | undefined;
+    if (sp.get("advertise") === "1") {
+      t = setTimeout(() => open(sp.get("building")), 600);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("advertise");
+      url.searchParams.delete("building");
+      window.history.replaceState(null, "", url);
+    }
+    return () => {
+      window.removeEventListener("nt-advertise", onEvent);
+      if (t) clearTimeout(t);
+    };
+  }, []);
   const [business, setBusiness] = useState<MapBusiness | null>(null);
   const [confirm, setConfirm] = useState<{ title: string; text: string; yes: string; run: () => void } | null>(null);
   const [board, setBoard] = useState<MarketBoard | null>(null);
@@ -277,11 +327,35 @@ export function useWorldLife({
       setBreaking(latest);
       playSfx("chime");
     };
+    // A player's big buy that just happened breaks into the news too (checked every few minutes).
+    const lookPlayers = () => {
+      if (document.visibilityState !== "visible") return;
+      void playerNews(region.region.id)
+        .then((events) => {
+          const e = events[0];
+          if (!e || Date.now() - e.at > 15 * 60_000) return;
+          let seen = "";
+          try {
+            seen = localStorage.getItem("nt-news-player") ?? "";
+            localStorage.setItem("nt-news-player", e.id);
+          } catch {}
+          if (seen === e.id) return;
+          const sp = e.building ? ownedSpot(e.building) : null;
+          const area = sp ? region.areaAt(sp.x, sp.z) : "";
+          setBreaking({ id: e.id, at: e.at, kind: "money", ...playerStory(e, area, cash(e.price)), area, ...(sp ? { x: sp.x, z: sp.z } : {}) });
+          playSfx("chime");
+        })
+        .catch(() => {});
+    };
     const first = setTimeout(look, 15_000);
     const every = setInterval(look, 60_000);
+    const firstP = setTimeout(lookPlayers, 40_000);
+    const everyP = setInterval(lookPlayers, 3 * 60_000);
     return () => {
       clearTimeout(first);
       clearInterval(every);
+      clearTimeout(firstP);
+      clearInterval(everyP);
     };
   }, [region, pretend]);
   useEffect(() => {
@@ -394,11 +468,22 @@ export function useWorldLife({
     return () => clearTimeout(t);
   }, [regionId]);
 
-  // Back from paying for a pack: check it with Paystack, then tidy the address.
+  // Back from paying for a pack: check it with Paystack, then tidy the address. Without one in the
+  // address, any pack paid for earlier that never arrived is checked again.
   useEffect(() => {
     if (!signedIn) return;
     const ref = new URLSearchParams(window.location.search).get("pack");
-    if (!ref) return;
+    if (!ref) {
+      void api
+        .checkMyPacks()
+        .then(async (r) => {
+          if (!r.ok) return;
+          setMessage({ text: `Your pack is in: ${cash(r.mint ?? 0)} to start with.`, good: true });
+          await refresh();
+        })
+        .catch(() => {});
+      return;
+    }
     void api.confirmPack(ref).then(async (r) => {
       setMessage(r.ok ? { text: `Your pack is in: ${cash((r.mint ?? 0))} to start with.`, good: true } : { text: r.error ?? "That payment hasn't gone through.", good: false });
       const url = new URL(window.location.href);
@@ -416,11 +501,13 @@ export function useWorldLife({
 
   const onProperty = useCallback(
     (info: PropertyInfo) => {
+      // Choosing a building to advertise on: a tap picks it instead of opening its card.
+      if (adOpen) return setAdPick({ id: info.id, at: Date.now() });
       setProperty(info);
       setOwners(null);
       if (signedIn) void api.buildingOwners(info.id).then(setOwners);
     },
-    [api, signedIn],
+    [api, signedIn, adOpen],
   );
 
   const askSell = (unitId: string, label: string, worth: number, now?: number | null) =>
@@ -645,7 +732,7 @@ export function useWorldLife({
               />
             </>
           )}
-          {signedIn && homeUnit && <LifeButton icon={Sparkles} label="Soon" short onClick={() => setSoonOpen(true)} />}
+          {signedIn && homeUnit && <LifeButton icon={Star} label="Soon" short onClick={() => setSoonOpen(true)} />}
     </>
   ) : null;
   const rowBelow = region ? (
@@ -678,7 +765,7 @@ export function useWorldLife({
       {status?.event && !moment && (
         <div className="pointer-events-none absolute inset-x-0 top-40 z-10 flex justify-center px-3 sm:top-32">
           <button onClick={() => setMoment(true)} className="pointer-events-auto flex items-center gap-2 rounded-full bg-gold px-4 py-2 text-sm font-semibold text-ink shadow-lg ring-4 ring-gold/30">
-            <Sparkles className="size-4" /> Breakthrough {status.event.source === "job" ? "at work" : "in your hustle"}: {status.event.title}
+            <Star className="size-4" /> Breakthrough {status.event.source === "job" ? "at work" : "in your hustle"}: {status.event.title}
           </button>
         </div>
       )}
@@ -1286,6 +1373,21 @@ export function useWorldLife({
           }}
         />
       )}
+      {adOpen && regionId && (
+        <AdvertisePanel
+          regionId={regionId}
+          region={region}
+          centre={() => centerRef.current?.() ?? { x: 0, z: 0 }}
+          fly={fly}
+          picked={adPick}
+          onPreview={setAdPreview}
+          onClose={() => {
+            setAdOpen(false);
+            setAdPick(null);
+            setAdPreview(null);
+          }}
+        />
+      )}
       {interview && (
         <InterviewSheet
           start={interview.start}
@@ -1327,14 +1429,15 @@ export function useWorldLife({
     (b: MapBusiness | string) => {
       const found = typeof b === "string" ? businesses.find((x) => x.id === b) : b;
       if (!found) return;
+      if (adOpen) return setAdPick({ id: found.building, at: Date.now() });
       setBusiness(found);
       void api.hitBusiness(found.id, "view");
     },
-    [api, businesses],
+    [api, businesses, adOpen],
   );
   const businessViews = useCallback(
     (views: Record<string, number>) => {
-      for (const id of Object.keys(views)) if (id.startsWith("bz:")) void api.hitBusiness(id.slice(3), "billboard");
+      for (const id of Object.keys(views)) if (id.startsWith("bz:") && id !== "bz:preview") void api.hitBusiness(id.slice(3), "billboard");
     },
     [api],
   );

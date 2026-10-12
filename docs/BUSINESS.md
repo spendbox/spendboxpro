@@ -54,10 +54,20 @@ views, calls, WhatsApp taps, website visits and directions.
 
 - Taking a business down: set its `status` to `removed` in `business_leases` (Supabase).
 
-## Advertising, step by step (`/advertise/start`)
-Every Advertise button (a building's card, the empty billboard, the guest explainer, `/advertise`)
-opens a three-step wizard (`src/app/advertise/start/`): 1) how it works, with pictures (you own a
-building for a year, players tap it and find you, your design on the billboards, your numbers);
-2) find a building: search a neighbourhood, district or landmark, set a budget, and see the
-buildings nobody owns there, nearest first (`leasableNear` in `src/lib/business.ts`); 3) your
-business and pay (the lease form, then Paystack). From a building's card it starts at step 3.
+## Advertising, on the map (`src/app/play/life/advertise-panel.tsx`)
+Every Advertise button (a building's card, an empty billboard, the explainer, `/advertise`, and
+`/advertise/start` or `/business`, which now just open the map) opens a panel over the live 3D map,
+never a new page:
+1. **Where.** The state the ad shows in (every Nigerian state is listed; the ones on the map can be
+   picked, the rest say "soon"). Your building and billboards show to the people living in that
+   state. Then search an area or landmark (the camera flies there and steps through free buildings
+   nearest first), or tap an amount (₦20k to ₦1m, or type one): the map flies to a free building at
+   about that yearly price, and ‹ › cycle through the others (`leasableByPrice`). Or tap any building.
+   Each one shows as a small 3D block, bigger the dearer it is.
+2. **Your pictures.** Upload the logo and the billboard picture (big photos are shrunk in the
+   browser). The building on the map lights up with your name and your picture goes on the
+   billboards near you, live; "Take a preview picture" grabs the 3D view as it'll look.
+3. **Details & pay.** The lease form; both pictures upload with it (the billboard one is set on the
+   lease), then Paystack. Paystack sends the business back to `/business/enter`, which checks the
+   payment and signs it in to `/advertiser` on that device (for 3 days after the lease is taken;
+   after that, the email code), where it sees its numbers.

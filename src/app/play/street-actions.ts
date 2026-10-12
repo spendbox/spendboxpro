@@ -74,15 +74,19 @@ export async function bribeOut(): Promise<Result> {
 }
 
 /** Prank someone's door (they see it was you). */
-export async function prankDoor(to: string, prank: string): Promise<Result> {
+export async function prankDoor(to: string, prank: string, note?: string): Promise<Result> {
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Sign in first." };
   const p = prankOf(prank);
   const prices = await pricesOf(userId);
   if (!p) return say("bad_kind");
   if (!prices) return say("no_life");
-  const { error } = await createAdminClient().rpc("street_prank", { p_from: userId, p_to: String(to), p_prank: p.id, p_cost: mintOf(p.price, prices) });
+  const words = String(note ?? "").replace(/\s+/g, " ").trim().slice(0, 140);
+  const db = createAdminClient();
+  const { data, error } = await db.rpc("street_prank", { p_from: userId, p_to: String(to), p_prank: p.id, p_cost: mintOf(p.price, prices) });
   if (error) return say(error.message);
+  // The note left with it (they read it when they come home to the prank).
+  if (words && data) await db.from("doorstep").update({ body: words }).eq("id", Number(data)).eq("from_user", userId);
   await pushTo(String(to));
   return { ok: true, text: `${p.emoji} Done. They'll know it was you.` };
 }

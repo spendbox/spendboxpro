@@ -57,9 +57,16 @@ export function AdvertiseExplainer({ onClose }: { onClose: () => void }) {
         <button type="button" onClick={onClose} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold">
           Not now
         </button>
-        <Link href="/advertise/start" className="flex-1 rounded-xl bg-gold py-2.5 text-center font-semibold text-ink">
-          See how it works
-        </Link>
+        <button
+          type="button"
+          onClick={() => {
+            onClose();
+            window.dispatchEvent(new CustomEvent("nt-advertise", { detail: { building: null } }));
+          }}
+          className="flex-1 rounded-xl bg-gold py-2.5 text-center font-semibold text-ink"
+        >
+          Choose a building
+        </button>
       </div>
       <p className="-mt-1 text-center text-[11px] text-muted">
         Already leasing?{" "}

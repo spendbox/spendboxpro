@@ -1,7 +1,6 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { addressOf, makePlan, spiralIndex, spiralXY, tileAt } from "@/lib/city/layout";
@@ -47,7 +46,6 @@ import {
   Megaphone,
   Menu as MenuIcon,
   MessageCircle,
-  Sparkles,
   Star,
   Timer,
   Users,
@@ -110,6 +108,9 @@ import { worldPreview } from "./world-flag";
 import { PlacePill } from "./place-pill";
 import { CityCard } from "./city-card";
 import { useWorldLife } from "./life/world-life";
+import { StatsSheet } from "./stats-sheet";
+import { PrankReveal, usePrankReveal } from "./people/prank-reveal";
+import { openAdvertise } from "./life/advertise-panel";
 import * as propertyActions from "./property-actions";
 import * as workActions from "./work-actions";
 import * as livingActions from "./living-actions";
@@ -730,7 +731,11 @@ export function Game({
     ];
   }, [friendsAt, peopleOut]);
   const onlineNear = useMemo(() => facesOnMap.filter((f) => f.status === "online").length, [facesOnMap]);
+  const onlineNow = Math.max(1, cityOnline ?? 0, online ?? 0, onlineNear);
+  const [statsOpen, setStatsOpen] = useState(false);
   const away = useAwayDigest(!!worldId && !me.guest);
+  // Coming home to a prank: it plays out on the screen first.
+  const prankShow = usePrankReveal(!!worldId && !me.guest);
   // The real players in the place you're in (not you, not NPCs).
   const hereNow: HerePerson[] = useMemo(
     () => rooms.members.filter((m) => m.id !== me.id).map((m) => ({ id: m.id, name: m.name, avatar: cleanAvatar(m.avatar, m.name) })),
@@ -1597,13 +1602,16 @@ export function Game({
       {worldId && !camera && (
         <div className="pointer-events-none absolute inset-x-2.5 top-14 z-10 flex flex-col items-start gap-2 sm:inset-x-4 sm:top-16">
           <div className="flex w-full flex-wrap items-center gap-1.5">
-            {!me.guest && (
-              <span className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold" title={`${Math.max(1, cityOnline ?? 1)} online in the city, ${onlineNear} near where you're looking`}>
-                <span className="size-2 animate-pulse rounded-full bg-[#2f9e44]" aria-hidden />
-                {Math.max(1, cityOnline ?? 1, onlineNear)}
-                <span className="max-[440px]:hidden">online</span>
-              </span>
-            )}
+            {/* Who's online; tap for the numbers: registered players and visits, and how they're growing. */}
+            <button
+              onClick={() => setStatsOpen(true)}
+              className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold"
+              title={`${onlineNow} online in the city, ${onlineNear} near where you're looking. Tap for the numbers.`}
+            >
+              <span className="size-2 animate-pulse rounded-full bg-[#2f9e44]" aria-hidden />
+              {onlineNow}
+              <span className="max-[440px]:hidden">online</span>
+            </button>
             {worldLife.rowButtons}
             {!me.guest && (
               // Notifications: what's happened, and switching them on for this phone. Glows until they're on.
@@ -2031,7 +2039,7 @@ export function Game({
             <p className="text-xs text-muted">You have {short(me.coins)}. After this: {short(Math.max(0, me.coins - state.prices.stake))}.</p>
           </div>
           <ul className="mt-3 space-y-1.5 text-sm text-ink/80">
-            <Li icon={Sparkles}>When the hunt starts, your light shows on the map for everyone. You don&apos;t hide or move: hunters come to you.</Li>
+            <Li icon={Star}>When the hunt starts, your light shows on the map for everyone. You don&apos;t hide or move: hunters come to you.</Li>
             <Li icon={Swords}>Hunters challenge you to a quick game (Rock-Paper-Scissors for now, first to {rules.firstTo}). A challenge pops up wherever you are: answer within {rules.answerSeconds} seconds or you lose that duel.</Li>
             <Li icon={Crown}>Win {rules.goldenWins} duels and you turn golden: safe for the rest of the game, your stake back, and a share of the prize pool.</Li>
             <Li icon={CircleX}>Lose {rules.outLosses} and you&apos;re out. Each loss costs you a {rules.outLosses === 3 ? "third" : "slice"} of your stake: {Math.round(state.prices.winShare * 100)}% of it to the hunter, the rest to the pool.</Li>
@@ -2249,9 +2257,15 @@ export function Game({
             <button onClick={() => setAdvertise(null)} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold">
               Not now
             </button>
-            <Link href="/advertise/start" className="flex-1 rounded-xl bg-gold py-2.5 text-center font-semibold text-ink">
+            <button
+              onClick={() => {
+                setAdvertise(null);
+                openAdvertise();
+              }}
+              className="flex-1 rounded-xl bg-gold py-2.5 text-center font-semibold text-ink"
+            >
               Advertise here
-            </Link>
+            </button>
           </div>
         </Sheet>
       )}
@@ -2294,7 +2308,16 @@ export function Game({
             )}
           </div>
           <p className="mt-3 text-center text-[11px] text-muted">
-            Want your own billboard? <Link href="/advertise/start" className="underline">Advertise here</Link>
+            Want your own billboard?{" "}
+            <button
+              onClick={() => {
+                setOpenAd(null);
+                openAdvertise();
+              }}
+              className="underline"
+            >
+              Advertise here
+            </button>
           </p>
         </Sheet>
       )}
@@ -2805,7 +2828,16 @@ export function Game({
           onDone={(text, ok) => setMessage({ text, tone: ok ? "good" : "bad" })}
         />
       )}
-      {away.digest && !doorstepOpen && (
+      {prankShow.prank && (
+        <PrankReveal
+          key={prankShow.prank.id}
+          prank={prankShow.prank}
+          onDone={() => prankShow.prank && prankShow.done(prankShow.prank.id)}
+          onPerson={setPersonId}
+          onMessage={(text, ok) => setMessage({ text, tone: ok ? "good" : "bad" })}
+        />
+      )}
+      {away.digest && !doorstepOpen && !prankShow.prank && (
         <AwaySheet
           digest={away.digest}
           onDoorstep={() => {
@@ -2815,8 +2847,9 @@ export function Game({
           onClose={away.close}
         />
       )}
+      {statsOpen && <StatsSheet online={onlineNow} onClose={() => setStatsOpen(false)} />}
       {cityOpen && worldRegion && (
-        <CityCard city={worldRegion.name} area={worldArea} online={online} players={state.site.players} onClose={() => setCityOpen(false)} search={worldLife.search} />
+        <CityCard city={worldRegion.name} area={worldArea} onClose={() => setCityOpen(false)} search={worldLife.search} />
       )}
     </main>
   );

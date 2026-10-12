@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Clock, GraduationCap, HeartPulse, Sparkles, Stethoscope } from "@/components/icons";
+import { Clock, GraduationCap, HeartPulse, Star, Stethoscope } from "@/components/icons";
 import type { Prices } from "@/lib/world/region";
 import {
   AUTO_CARE_BELOW,
@@ -29,7 +29,7 @@ const TABS: { id: Tab; label: string; icon: typeof HeartPulse }[] = [
   { id: "day", label: "Your day", icon: Clock },
   { id: "health", label: "Body & Mind", icon: HeartPulse },
   { id: "school", label: "Education", icon: GraduationCap },
-  { id: "looks", label: "Looks", icon: Sparkles },
+  { id: "looks", label: "Looks", icon: Star },
 ];
 const DAY_COLOUR: Record<string, string> = { sleep: "#adb5bd", job: "#2f9e44", commute: "#f08c00", hustle: "#d6336c", study: "#1971c2", exercise: "#12b886", free: "#ffd43b" };
 
@@ -270,7 +270,7 @@ export function LifeSheet({
               const had = status?.procedures.some((x) => x.procedure === p.id);
               return (
                 <li key={p.id} className="flex items-center gap-3 px-3 py-2.5">
-                  <Sparkles className="size-4 shrink-0 text-muted" />
+                  <Star className="size-4 shrink-0 text-muted" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">
                       {p.title}

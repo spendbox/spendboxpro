@@ -1,6 +1,7 @@
 "use server";
 
 import { randomBytes } from "node:crypto";
+import { headers } from "next/headers";
 import { siteUrl } from "@/lib/env";
 import { currentUserId } from "@/lib/game";
 import { checkPayment, paystackEnabled, startPayment } from "@/lib/paystack";
@@ -37,10 +38,52 @@ export async function startPack(packId: string, region: string): Promise<PackSta
     email,
     amountKobo: kobo,
     reference,
-    callbackUrl: `${siteUrl()}/play?world=${encodeURIComponent(region)}&pack=${reference}`,
+    // Back to the very address the player paid from (so their sign-in is still there), through a
+    // page that checks the payment with Paystack before anything else, signed in or not.
+    callbackUrl: `${await returnOrigin()}/api/paystack/return?ref=${reference}`,
     metadata: { kind: "starter_pack", pack: pack.id },
   });
   return started.ok ? { ok: true, url: started.url } : started;
+}
+
+/** The address this request came in on ("https://newtown.world"), or the site's own address. */
+async function returnOrigin() {
+  const h = await headers();
+  const host = (h.get("x-forwarded-host") ?? h.get("host") ?? "").split(",")[0].trim();
+  if (!/^[a-z0-9.-]+(:\d+)?$/i.test(host)) return siteUrl();
+  const proto = (h.get("x-forwarded-proto") ?? "").split(",")[0].trim() || (host.startsWith("localhost") ? "http" : "https");
+  return `${proto === "http" ? "http" : "https"}://${host}`;
+}
+
+/**
+ * Packs this player paid for that never arrived (they closed Paystack before it sent them back,
+ * and the webhook didn't reach us): checked again with Paystack, and given when they went through.
+ * Called each time the game opens.
+ */
+export async function checkMyPacks(): Promise<{ ok: boolean; mint?: number }> {
+  const userId = await currentUserId();
+  if (!userId || !paystackEnabled()) return { ok: false };
+  const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  const { data } = await createAdminClient()
+    .from("starter_payments")
+    .select("reference")
+    .eq("user_id", userId)
+    .eq("status", "pending")
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(5);
+  for (const row of data ?? []) {
+    const r = await confirmPack(String(row.reference));
+    if (r.ok) return r;
+  }
+  return { ok: false };
+}
+
+/** Where a pack was bought for (the map to go back to). */
+export async function packRegion(reference: string): Promise<string | null> {
+  if (!/^pk-[a-f0-9]{20}$/.test(reference ?? "")) return null;
+  const { data } = await createAdminClient().from("starter_payments").select("region").eq("reference", reference).maybeSingle();
+  return data?.region ? String(data.region) : null;
 }
 
 /** Check a pack payment with Paystack and, when it went through, give the pack (once). */
@@ -49,7 +92,10 @@ export async function confirmPack(reference: string): Promise<{ ok: boolean; min
   const payment = await checkPayment(reference);
   if (!payment?.paid) return { ok: false, error: "That payment hasn't gone through." };
   const { data, error } = await createAdminClient().rpc("life_pack_paid", { p_reference: reference, p_kobo: payment.amountKobo });
-  if (error) return { ok: false, error: "That didn't work. Try again." };
+  if (error) {
+    console.error("life_pack_paid failed", reference, error.message);
+    return { ok: false, error: "That didn't work. Try again." };
+  }
   const d = (data ?? {}) as { found?: boolean; mint?: number };
   return d.found ? { ok: true, mint: Number(d.mint ?? 0) } : { ok: false, error: "Unknown payment." };
 }

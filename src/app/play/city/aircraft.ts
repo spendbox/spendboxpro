@@ -7,12 +7,18 @@
 //   everyone) it lights up, lifts off in a pillar of fire and smoke and climbs out of sight; a
 //   new one is back on the pad a few minutes later.
 //
+// - At the international airport: jets taking off down the runway and climbing away, others
+//   gliding in to land and rolling to a stop, and a helicopter lifting off its helipad, flying out
+//   and coming back down (all on the server clock, so everyone sees the same).
+//
 // A handful of small meshes, built once per town.
 
 import * as THREE from "three";
 import type { CityPlan, Mega } from "@/lib/city/layout";
 import type { VehiclePose } from "./traffic";
 import { keyOf, type World } from "./world";
+import { airportPlan } from "./airport";
+import { createAirliner, LIVERIES } from "./airliner";
 
 /** The landmark's middle (city units). */
 const middle = (m: Mega) => ({ x: m.ax + (m.w - 1) / 2, z: m.az + (m.d - 1) / 2 });
@@ -25,6 +31,15 @@ const CLIMB = 34;
 const BACK_AFTER = 300;
 
 type Heli = { group: THREE.Group; rotor: THREE.Object3D; tail: THREE.Object3D; offset: number };
+
+/** Seconds: one jet's turn at the airport (takeoff or landing, then a pause), and a helicopter's trip. */
+const JET_CYCLE = 110;
+const PAD_CYCLE = 150;
+const GROUND = 0.12;
+const smooth = (a: number, b: number, t: number) => {
+  const u = Math.min(1, Math.max(0, (t - a) / (b - a)));
+  return u * u * (3 - 2 * u);
+};
 
 export function createAircraft(world: World, parent: THREE.Object3D) {
   const mats: THREE.Material[] = [];
@@ -51,6 +66,11 @@ export function createAircraft(world: World, parent: THREE.Object3D) {
   let rocket: { group: THREE.Group; flame: THREE.Mesh; smoke: THREE.Mesh[]; x: number; z: number; pad: number } | null = null;
   const tmp = new THREE.Vector3();
   const tan = new THREE.Vector3();
+  /** The airport's moving parts: jets (each taking off or landing in turn) and pad helicopters. */
+  let airport: {
+    jets: { jet: ReturnType<typeof createAirliner>; offset: number; landing: boolean; runway: { x0: number; x1: number; z: number } }[];
+    pads: { heli: Heli; x: number; z: number; heading: number; offset: number }[];
+  } | null = null;
 
   function mesh(g: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number, sx: number, sy: number, sz: number) {
     const o = new THREE.Mesh(g, m);
@@ -129,6 +149,14 @@ export function createAircraft(world: World, parent: THREE.Object3D) {
   }
 
   function clear() {
+    if (airport) {
+      for (const j of airport.jets) {
+        parent.remove(j.jet.group);
+        j.jet.dispose();
+      }
+      for (const p of airport.pads) parent.remove(p.heli.group);
+      airport = null;
+    }
     for (const h of helis) parent.remove(h.group);
     helis = [];
     curve = null;
@@ -156,7 +184,8 @@ export function createAircraft(world: World, parent: THREE.Object3D) {
     sights.sort((a, b) => Math.atan2(a.z, a.x) - Math.atan2(b.z, b.x));
     // Start from the airport's helipad (it's one of the sights).
     if (air) {
-      const pad = { x: air.ax + (air.w - 1) / 2 - 2.4, z: air.az + (air.d - 1) / 2 + 1.45 };
+      const hp = airportPlan(air.w, air.d).helipads[0];
+      const pad = { x: air.ax + hp.x, z: air.az + hp.z };
       const i = sights.findIndex((s) => Math.abs(s.x - middle(air).x) < 0.01 && Math.abs(s.z - middle(air).z) < 0.01);
       if (i >= 0) sights[i] = pad;
     }
@@ -176,6 +205,32 @@ export function createAircraft(world: World, parent: THREE.Object3D) {
       const h = makeHeli(liveries[(k + plan.seed) % liveries.length]);
       h.offset = k * 0.5;
       helis.push(h);
+    }
+    const air = plan.megas.find((m) => m.type === "intlairport");
+    if (air && world.tileIndex.has(keyOf(air.ax, air.az)) && world.tileIndex.has(keyOf(air.ax + air.w - 1, air.az + air.d - 1))) {
+      const a = airportPlan(air.w, air.d);
+      const runway = (k: number) => {
+        const r = a.runways[Math.min(k, a.runways.length - 1)];
+        return { x0: air.ax + a.cx - r.len / 2 + 0.4, x1: air.ax + a.cx + r.len / 2 - 0.4, z: air.az + r.z };
+      };
+      // Two jets on a big airport's runways (one taking off while the other lands), one on a small one.
+      const n = a.runways.length > 1 ? 3 : 2;
+      const jets = Array.from({ length: n }, (_, k) => {
+        const jet = createAirliner(LIVERIES[(k * 2 + plan.seed) % LIVERIES.length]);
+        jet.group.scale.setScalar(a.runways.length > 1 ? 1.6 : 1.1);
+        jet.group.visible = false;
+        parent.add(jet.group);
+        return { jet, offset: (k * JET_CYCLE) / n, landing: k % 2 === 1, runway: runway(k % 2) };
+      });
+      const heliColours = [0xf8f9fa, 0x1c7ed6, 0xe03131];
+      const pads = a.helipads.map((p, k) => ({
+        heli: makeHeli(heliColours[k % heliColours.length]),
+        x: air.ax + p.x,
+        z: air.az + p.z,
+        heading: Math.PI * 0.75 + k * 1.3,
+        offset: k * (PAD_CYCLE / 2),
+      }));
+      airport = { jets, pads };
     }
     const sp = plan.megas.find((m) => m.type === "spaceport");
     if (sp && world.tileIndex.has(keyOf(sp.ax, sp.az)) && world.tileIndex.has(keyOf(sp.ax + sp.w - 1, sp.az + sp.d - 1))) {
@@ -208,6 +263,7 @@ export function createAircraft(world: World, parent: THREE.Object3D) {
       h.rotor.rotation.y = time * 28;
       h.tail.rotation.z = time * 40;
     });
+    if (airport) updateAirport(time, serverMs / 1000);
     if (rocket) {
       // Seconds since the latest launch time (server clock), or a big number.
       const d = new Date(serverMs);
@@ -252,6 +308,78 @@ export function createAircraft(world: World, parent: THREE.Object3D) {
         r.flame.visible = false;
         for (const s of r.smoke) s.visible = false;
       }
+    }
+  }
+
+  /** The airport: each jet takes off (or lands) in its turn; each pad helicopter does a round trip. */
+  function updateAirport(time: number, sec: number) {
+    for (const j of airport!.jets) {
+      const t = (((sec + j.offset) % JET_CYCLE) + JET_CYCLE) % JET_CYCLE;
+      const g = j.jet.group;
+      const { x0, x1, z } = j.runway;
+      const len = x1 - x0;
+      let x: number;
+      let y = GROUND;
+      let pitch = 0;
+      let dir = 1;
+      if (!j.landing) {
+        // Lined up, a roll down the runway getting faster, lift off, then climb away.
+        if (t > 62) {
+          g.visible = false;
+          continue;
+        }
+        const roll = Math.max(0, t - 6);
+        const along = Math.min(roll, 16);
+        x = x0 + len * 0.35 * (along / 16) ** 2;
+        if (roll > 16) {
+          const v = (len * 0.7) / 16;
+          const up = roll - 16;
+          x = x0 + len * 0.35 + v * up;
+          y = GROUND + 0.04 * up * up;
+          pitch = Math.min(0.28, up * 0.08);
+        } else pitch = roll > 13 ? (roll - 13) * 0.05 : 0;
+      } else {
+        // Gliding in from far away, touching down at the near end, then braking to a stop.
+        dir = -1;
+        if (t > 58) {
+          g.visible = false;
+          continue;
+        }
+        const touch = 30;
+        if (t < touch) {
+          const left = touch - t;
+          x = x1 + left * 1.2;
+          y = GROUND + left * 0.32;
+          pitch = 0.06;
+        } else {
+          const roll = Math.min(t - touch, 14);
+          x = x1 - (1.2 * roll - (1.2 / 28) * roll * roll);
+        }
+      }
+      g.visible = true;
+      g.position.set(x, y, z);
+      g.rotation.set(0, dir > 0 ? 0 : Math.PI, 0);
+      g.rotateZ(pitch);
+      j.jet.showTrails(y > 6);
+      j.jet.update(time);
+    }
+    for (const p of airport!.pads) {
+      const t = (((sec + p.offset) % PAD_CYCLE) + PAD_CYCLE) % PAD_CYCLE;
+      const h = p.heli;
+      const ux = Math.cos(p.heading);
+      const uz = Math.sin(p.heading);
+      // Out 18 tiles and back, a little to one side on the way home.
+      const out = 18 * smooth(32, 70, t) - 18 * smooth(80, 118, t);
+      const side = 3 * smooth(68, 82, t) * (1 - smooth(100, 118, t));
+      const y = GROUND + 4 * smooth(20, 32, t) + 3 * smooth(32, 55, t) - 3 * smooth(95, 118, t) - 4 * smooth(118, 132, t);
+      h.group.position.set(p.x + ux * out - uz * side, y, p.z + uz * out + ux * side);
+      const back = t > 75 && t < 118;
+      h.group.rotation.set(0, -(p.heading + (back ? Math.PI : 0)), 0);
+      if (t > 32 && t < 118) h.group.rotateZ(-0.12);
+      // The rotor spins up before lifting off and down after landing.
+      const spin = smooth(8, 20, t) * (1 - smooth(132, 145, t));
+      h.rotor.rotation.y += spin * 0.45;
+      h.tail.rotation.z += spin * 0.6;
     }
   }
 

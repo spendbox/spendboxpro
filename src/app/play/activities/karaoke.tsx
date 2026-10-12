@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Flame, Heart, Mic, MicVocal, Sparkles } from "lucide-react";
+import { Flame, Heart, Mic, MicVocal, Star } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { playSfx } from "../sound";
 import { randomId, useActivityRoom, type ActivityMsg, type ActivityPlayer } from "./hub";
@@ -197,7 +197,7 @@ export function Karaoke(props: GameProps) {
               {[
                 { icon: Flame, label: "Fire" },
                 { icon: Heart, label: "Love it" },
-                { icon: Sparkles, label: "Encore" },
+                { icon: Star, label: "Encore" },
               ].map((h, i) => (
                 <button key={i} onClick={() => hype(i)} className="flex flex-col items-center gap-1 rounded-2xl bg-white/10 py-3 text-sm font-semibold active:scale-95">
                   <h.icon className="size-6 text-gold" /> {h.label}

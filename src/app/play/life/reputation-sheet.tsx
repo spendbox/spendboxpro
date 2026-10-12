@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, Building, Clapperboard, Coins, Egg, Gift, Globe, Landmark, Megaphone, Rocket, Smile, Users, Briefcase as Work, Wallet, Zap } from "lucide-react";
+import { ArrowDown, ArrowUp, Building, Clapperboard, Coins, Egg, Gift, Globe, Landmark, Megaphone, Plane, Rocket, Skull, Smile, Users, Briefcase as Work, Wallet, Zap } from "lucide-react";
 import { Star } from "@/components/icons";
 import { reputationDetails, type RepDetails } from "../rep-actions";
 import { Sheet } from "../sheet";
+import { openAdvertise } from "./advertise-panel";
 
 // Your reputation (what adds to it, what takes it away), and what's coming to Newtown.
 
@@ -84,6 +85,8 @@ function Line({ line }: { line: { label: string; points: number; how: string } }
 
 const SOON: { icon: typeof Rocket; title: string; text: string }[] = [
   { icon: Globe, title: "All of Nigeria, then Africa, then the world", text: "Every Nigerian city on its real map first, then Africa's, then the world's. Live in one, visit the others." },
+  { icon: Skull, title: "Thugs, touts and characters with a mind of their own", text: "Area boys who block your road and ask for 'settlement', agberos at the bus park, thugs a rival can hire to scare you, and people who remember how you treated them. Pay, run, call the police or stand your ground." },
+  { icon: Plane, title: "Fly out of Lagos", text: "Book a seat at the airport and fly to other states and countries: a weekend in Abuja, business in Accra, a holiday abroad." },
   { icon: Clapperboard, title: "Post videos and moments", text: "Share videos, photos and stories from your real life, pinned to places on the map." },
   { icon: Landmark, title: "Politics", text: "Run for councillor of your area, campaign, vote, and decide what the city's taxes pay for." },
   { icon: Egg, title: "Easter eggs", text: "Secrets hidden around Lagos, with prizes for whoever finds them first." },
@@ -119,9 +122,15 @@ export function ComingSoonSheet({ onClose }: { onClose: () => void }) {
           <Rocket className="size-5 text-gold-dark" /> Help us get there faster
         </p>
         <p className="mt-1 text-xs text-muted">Every advert keeps Newtown free and builds what&apos;s next. Put your business on a building in the city.</p>
-        <a href="/advertise/start" className="mt-3 flex h-11 items-center justify-center gap-2 rounded-full bg-ink text-sm font-semibold text-white">
+        <button
+          onClick={() => {
+            onClose();
+            openAdvertise();
+          }}
+          className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-full bg-ink text-sm font-semibold text-white"
+        >
           <Megaphone className="size-4" /> Advertise to support us
-        </a>
+        </button>
       </div>
     </Sheet>
   );

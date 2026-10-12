@@ -6,6 +6,7 @@ import { DoorOpen } from "lucide-react";
 import { Building2, Flag, House, KeyRound, MapPin, Megaphone, Pencil, Store, Trees, TrendingDown, TrendingUp, X } from "@/components/icons";
 import type { PropertyInfo, PropertyUnit } from "@/lib/world/property";
 import { BUY_TAX, type BuildingOwner } from "@/lib/world/property-api";
+import { openAdvertise } from "./life/advertise-panel";
 import { JobsHere, type JobsContext } from "./life/jobs-here";
 import { Sheet } from "./sheet";
 
@@ -122,9 +123,9 @@ export function PropertyCard({
             <KeyRound className="size-4 shrink-0" /> {mineAll ? "Yours" : "Rent / Buy"}
           </button>
           {leasable ? (
-            <a href={`/advertise/start?building=${encodeURIComponent(info.id)}`} className="flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-gold/15 px-3 text-sm font-semibold text-gold-dark">
+            <button onClick={() => openAdvertise(info.id)} className="flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-gold/15 px-3 text-sm font-semibold text-gold-dark">
               <Megaphone className="size-4 shrink-0" /> Advertise
-            </a>
+            </button>
           ) : (
             <span className="flex min-h-11 items-center justify-center rounded-full bg-ink/[0.03] px-3 text-center text-xs text-muted">Owned, so not for adverts</span>
           )}

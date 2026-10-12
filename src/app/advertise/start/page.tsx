@@ -1,17 +1,11 @@
-import type { Metadata } from "next";
-import { adPlaces, leaseOffer } from "@/lib/business";
-import { paystackEnabled } from "@/lib/paystack";
-import { AdWizard } from "./wizard";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "Advertise, step by step",
-  description: "Own a building on Newtown's Lagos map for a year: find one, add your business, pay once. From ₦20,000 a year.",
-};
-
-/** The advertising wizard: how it works (with pictures), find a building, your business, pay. */
+/**
+ * Advertising is set up on the map itself now (src/app/play/life/advertise-panel.tsx): the city
+ * opens with the advertising panel, on the building asked for if there is one.
+ */
 export default async function AdStartPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams;
   const building = (Array.isArray(sp.building) ? sp.building[0] : sp.building) ?? "";
-  const offer = building ? await leaseOffer(building) : null;
-  return <AdWizard places={adPlaces("lagos")} start={offer && offer.ok ? offer.offer : null} startError={offer && !offer.ok ? offer.error : null} canPay={paystackEnabled()} />;
+  redirect(`/?advertise=1${/^[a-z0-9-]+:-?\d+,-?\d+$/.test(building) ? `&building=${encodeURIComponent(building)}` : ""}`);
 }
