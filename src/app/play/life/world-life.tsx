@@ -22,7 +22,7 @@ import { LifeSheet } from "./life-sheet";
 import { MoneySheet } from "./money-sheet";
 import { HomeCard } from "./home-card";
 import { JobsHere, type JobsContext } from "./jobs-here";
-import { MapSearch, type SearchHit } from "./map-search";
+import type { SearchHit } from "./map-search";
 import { HomeFinder } from "./home-finder";
 import { StartLife } from "./start-life";
 import { useLife } from "./use-life";
@@ -133,8 +133,6 @@ export function useWorldLife({
   const [assetsOpen, setAssetsOpen] = useState(false);
   const [welcomeShut, setWelcomeShut] = useState(false);
   const [finderOpen, setFinderOpen] = useState(false);
-  /** The search box is open (on phones the life buttons make way for it). */
-  const [searching, setSearching] = useState(false);
   // The currency amounts show in beside mint (kept in this browser; change it any time).
   const [currency, setCurrency] = useState(() => {
     try {
@@ -483,7 +481,7 @@ export function useWorldLife({
   const overlay = region ? (
     <>
       {/* Your life, under the place's name card: Home, Work, Money, Life, Services (first only Find a home). */}
-      <div className={`pointer-events-none absolute left-2.5 top-14 z-10 flex max-w-[calc(100vw-4.5rem)] flex-col items-start gap-2 sm:left-4 sm:top-16 sm:max-w-md ${searching ? "max-sm:hidden" : ""}`}>
+      <div className={`pointer-events-none absolute left-2.5 top-14 z-10 flex max-w-[calc(100vw-4.5rem)] flex-col items-start gap-2 sm:left-4 sm:top-16 sm:max-w-md`}>
         <div className="flex flex-wrap gap-1.5">
           {signedIn && loaded && !homeUnit && (
             <button
@@ -523,10 +521,6 @@ export function useWorldLife({
             </button>
           </div>
         )}
-      </div>
-      {/* Search the map: top right, under your mint and the menu. */}
-      <div className="pointer-events-none absolute right-2.5 top-14 z-10 flex justify-end sm:right-4 sm:top-16">
-        <MapSearch region={region} mine={assets?.units ?? []} onPick={(h: SearchHit) => fly(h.x, h.z)} compact onOpenChange={setSearching} />
       </div>
       {status?.event && !moment && (
         <div className="pointer-events-none absolute inset-x-0 top-40 z-10 flex justify-center px-3 sm:top-32">
@@ -1084,5 +1078,5 @@ export function useWorldLife({
   /** Something in Finance wants you: the guide's budget step, a power cut, an offer. */
   const financeGlow = step === "budget";
   const financeDot = !!(status?.powerCut || board?.received.some((o) => o.status === "open"));
-  return { centerRef, owned: shown, flyTo, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit };
+  return { centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit };
 }

@@ -2551,7 +2551,7 @@ export function Game({
         </button>
       )}
       {cityOpen && worldRegion && (
-        <CityCard city={worldRegion.name} area={worldArea} online={online} players={state.site.players} onClose={() => setCityOpen(false)} />
+        <CityCard city={worldRegion.name} area={worldArea} online={online} players={state.site.players} onClose={() => setCityOpen(false)} search={worldLife.search} />
       )}
     </main>
   );
