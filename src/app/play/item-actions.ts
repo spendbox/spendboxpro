@@ -94,6 +94,8 @@ export type MyThings = {
   /** How good you are at making each kind of thing (0..1). */
   craftSkill: Record<string, number>;
   hasCar: boolean;
+  /** In jail until then (null when free). */
+  jailedUntil: string | null;
 };
 
 /** Your things, crafts under way, your reputation and how good you are at crafting. */
@@ -101,12 +103,14 @@ export async function myThings(): Promise<MyThings | null> {
   const userId = await currentUserId();
   if (!userId) return null;
   const db = createAdminClient();
-  const [{ data }, { data: skills }, { data: assets }, { data: liked }] = await Promise.all([
+  const [{ data }, { data: skills }, { data: assets }, { data: liked }, { data: jail }] = await Promise.all([
     db.rpc("my_items", { p_user: userId }),
     db.from("life_skills").select("skill, days").eq("user_id", userId),
     db.rpc("my_assets", { p_user: userId }),
     // Reactions to what you left on the map (game-db/052; nothing until it's run).
     db.rpc("marks_liked", { p_user: userId }),
+    // In jail? (game-db/055; nothing until it's run).
+    db.rpc("jail_until", { p_user: userId }),
   ]);
   if (!data) return null;
   const d = data as Record<string, unknown>;
@@ -146,7 +150,7 @@ export async function myThings(): Promise<MyThings | null> {
     penalty: n(d.penalty),
     marksLiked: n(liked),
   });
-  return { items, crafts, crafted, effects, reputation, craftSkill: skill, hasCar: items.some((i) => i.category === "car") };
+  return { items, crafts, crafted, effects, reputation, craftSkill: skill, hasCar: items.some((i) => i.category === "car"), jailedUntil: jail ? String(jail) : null };
 }
 
 /** Buy a new one from the city's shops or a car dealer. */
@@ -162,8 +166,8 @@ export async function buyFromShop(kindId: string): Promise<PropertyResult> {
   return error ? say(error.message) : { ok: true };
 }
 
-/** Try to swipe something cheap from a stall: it might work, or you're caught (a fine, reputation and peace of mind lost). */
-export async function swipe(kindId: string): Promise<PropertyResult & { caught?: boolean }> {
+/** Try to steal something cheap from a stall: it might work, or you're caught (a fine, reputation, peace of mind, maybe jail). */
+export async function steal(kindId: string): Promise<PropertyResult & { caught?: boolean; jailed?: boolean }> {
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Sign in first." };
   const k = shopKind(kindId);
@@ -172,6 +176,13 @@ export async function swipe(kindId: string): Promise<PropertyResult & { caught?:
   if (!life) return say("no_life");
   const db = createAdminClient();
   if (Math.random() < CAUGHT_CHANCE) {
+    // game-db/055_street.sql: the fine and reputation, then maybe jail (item_caught before it's run).
+    const caught = await db.rpc("street_shop_caught", { p_user: userId, p_fine: mintOf(k.price * CAUGHT_FINE, life.prices), p_rep: CAUGHT_REP });
+    if (caught.error?.message.startsWith("in_jail")) return { ok: false, error: "You're in jail. No stealing from a cell." };
+    if (!caught.error) {
+      const d = caught.data as Record<string, unknown>;
+      return { ok: true, caught: true, jailed: !!d.jailed, fare: n(d.fine) };
+    }
     const { data, error } = await db.rpc("item_caught", { p_user: userId, p_fine: mintOf(k.price * CAUGHT_FINE, life.prices), p_rep: CAUGHT_REP });
     if (error) return say(error.message);
     return { ok: true, caught: true, fare: n(data) };

@@ -8,6 +8,8 @@ import { cleanAvatar } from "@/lib/avatar";
 import { myThings, type MyItem } from "../item-actions";
 import { leaveAtDoor, playerCard, type PlayerCardData } from "../people-actions";
 import { Sheet } from "../sheet";
+import type { Prices } from "@/lib/world/region";
+import { DatingRow, StreetRow } from "./street-dating";
 
 // Anyone's card on the real map (docs/PEOPLE.md): who they are, where they live, their job, car,
 // inventions, friends and reputation; knock on their door, leave a note or a wrapped gift, add
@@ -20,6 +22,9 @@ export function PersonCard({
   onAddFriend,
   greet,
   onDone,
+  self,
+  prices,
+  onOpenDating,
 }: {
   id: string;
   onClose: () => void;
@@ -29,6 +34,12 @@ export function PersonCard({
   /** Hug, Shake and Report for them. */
   greet: (p: { id: string; name: string }) => React.ReactNode;
   onDone: (text: string, ok: boolean) => void;
+  /** Your own card: no stealing from or dating yourself. */
+  self?: boolean;
+  /** The city's prices (what pranks and fines cost). */
+  prices?: Prices | null;
+  /** Open Dating on your phone (to switch it on). */
+  onOpenDating?: () => void;
 }) {
   const [card, setCard] = useState<PlayerCardData | null | undefined>(undefined);
   const [mode, setMode] = useState<"note" | "gift" | null>(null);
@@ -149,6 +160,9 @@ export function PersonCard({
               )}
             </div>
           )}
+
+          {!self && !card.blocked && <DatingRow id={card.id} name={card.name} onDone={onDone} onOpenDating={() => onOpenDating?.()} />}
+          {!self && !card.blocked && <StreetRow id={card.id} name={card.name} hasHome={!!card.home} prices={prices ?? null} onDone={onDone} />}
 
           <div className="mt-4 flex flex-wrap items-center gap-2">
             {greet({ id: card.id, name: card.name })}

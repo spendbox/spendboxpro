@@ -1,18 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DoorClosed, Gift, Heart, StickyNote } from "lucide-react";
+import { DoorClosed, Gift, Heart, StickyNote, Zap } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar } from "@/lib/avatar";
 import { cash } from "@/lib/world/value";
 import { awayDigest, myDoorstep, openDoorstep, savePush, thankDoorstep, type AwayDigest, type DoorstepEntry } from "../people-actions";
 import { Sheet } from "../sheet";
+import { cleanPrank } from "../street-actions";
+import { prankOf } from "@/lib/world/street";
 import { ago } from "./person-card";
 
 // Your doorstep (who knocked, notes, wrapped gifts to open, thank-yous), "while you were away"
 // when you come back, and turning notifications on. docs/PEOPLE.md.
 
-const ICON = { knock: DoorClosed, note: StickyNote, gift: Gift };
+const ICON = { knock: DoorClosed, note: StickyNote, gift: Gift, prank: Zap };
 
 /** Everything left at your door: open the gifts, say thanks, see who it was from. */
 export function DoorstepSheet({ onClose, onPerson, onDone }: { onClose: () => void; onPerson: (id: string) => void; onDone: (text: string, ok: boolean) => void }) {
@@ -43,7 +45,7 @@ export function DoorstepSheet({ onClose, onPerson, onDone }: { onClose: () => vo
                   <div className="min-w-0 flex-1">
                     <p className="flex items-center gap-1.5 text-sm font-semibold">
                       <Icon className="size-4 shrink-0" />
-                      {d.kind === "knock" ? `${d.fromName} knocked` : d.kind === "note" ? `A note from ${d.fromName}` : wrapped ? `A wrapped gift from ${d.fromName}` : `${d.fromName} gave you ${d.item ?? "a gift"}`}
+                      {d.kind === "prank" ? `${prankOf(d.prank)?.emoji ?? ""} ${d.fromName} ${prankOf(d.prank)?.did ?? "pranked your door"}!` : d.kind === "knock" ? `${d.fromName} knocked` : d.kind === "note" ? `A note from ${d.fromName}` : wrapped ? `A wrapped gift from ${d.fromName}` : `${d.fromName} gave you ${d.item ?? "a gift"}`}
                     </p>
                     {d.body && (!wrapped || d.kind !== "gift") && <p className="mt-0.5 text-sm">&ldquo;{d.body}&rdquo;</p>}
                     <p className="mt-0.5 text-[11px] text-muted">{ago(Date.now() - Date.parse(d.at))}</p>
@@ -53,7 +55,26 @@ export function DoorstepSheet({ onClose, onPerson, onDone }: { onClose: () => vo
                           Open it
                         </button>
                       )}
-                      {!wrapped && d.from && !d.thanked && (
+                      {d.kind === "prank" && !d.cleaned && (
+                        <button
+                          onClick={() =>
+                            void cleanPrank(d.id).then((r) => {
+                              if (r.ok) setList((l) => l?.map((x) => (x.id === d.id ? { ...x, cleaned: true, opened: true } : x)) ?? null);
+                              onDone(r.ok ? r.text : r.error, r.ok);
+                            })
+                          }
+                          className="h-8 rounded-full bg-ink/10 px-3 text-xs font-semibold"
+                        >
+                          Clean it up
+                        </button>
+                      )}
+                      {d.kind === "prank" && d.from && (
+                        <button onClick={() => onPerson(d.from!)} className="h-8 rounded-full bg-[#e8590c]/10 px-3 text-xs font-semibold text-[#e8590c]">
+                          Prank them back
+                        </button>
+                      )}
+                      {d.kind === "prank" && d.cleaned && <span className="self-center text-[11px] text-muted">Cleaned</span>}
+                      {d.kind !== "prank" && !wrapped && d.from && !d.thanked && (
                         <button
                           onClick={() =>
                             void thankDoorstep(d.id).then((r) => {

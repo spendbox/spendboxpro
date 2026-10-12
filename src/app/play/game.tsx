@@ -21,6 +21,7 @@ import {
   CircleX,
   DoorOpen,
   DoorClosed,
+  Heart,
   Layers,
   LogOut,
   Sun,
@@ -79,6 +80,7 @@ import type { PersonOnMap } from "./people-actions";
 import { around } from "./life/things-cache";
 import { PersonCard } from "./people/person-card";
 import { AwaySheet, DoorstepSheet, turnOnNotifications, useAwayDigest } from "./people/doorstep";
+import { DatingSheet, RivalsSheet } from "./people/street-dating";
 import { weatherNow } from "@/lib/world/news";
 import { MyGiftsSheet } from "./my-gifts-sheet";
 import { StreakPill, StreakSheet } from "./streak-sheet";
@@ -418,6 +420,8 @@ export function Game({
   /** Someone's card (a face tapped on the map, or from your doorstep), and your doorstep. */
   const [personId, setPersonId] = useState<string | null>(null);
   const [doorstepOpen, setDoorstepOpen] = useState(false);
+  /** Dating or your rivals, open from your phone. */
+  const [socialOpen, setSocialOpen] = useState<"dating" | "rivals" | null>(null);
   const [editAvatar, setEditAvatar] = useState(false);
   // The new 3D studio, while it is being tried out (see avatar3d-flag.ts).
   // (Read in the browser only; it matters only once the studio is opened, so the server's false is harmless.)
@@ -2546,6 +2550,8 @@ export function Game({
             {(
               [
                 ["Doorstep", DoorClosed, () => setDoorstepOpen(true)],
+                ["Dating", Heart, () => setSocialOpen("dating")],
+                ["Rivals", Swords, () => setSocialOpen("rivals")],
                 ["Leave a mark", PenLine, () => worldLife.openLeaveMark()],
                 ["My things", Gem, () => worldLife.openThings("mine")],
                 ["Shops", ShoppingBag, () => worldLife.openThings("shops")],
@@ -2614,6 +2620,31 @@ export function Game({
           onAddFriend={me.guest ? undefined : (p) => void befriend(p)}
           greet={(p) => greet(p, false)}
           onDone={(text, ok) => setMessage({ text, tone: ok ? "good" : "bad" })}
+          self={personId === me.id}
+          prices={worldRegion?.prices ?? null}
+          onOpenDating={() => {
+            setPersonId(null);
+            setSocialOpen("dating");
+          }}
+        />
+      )}
+      {socialOpen === "dating" && (
+        <DatingSheet
+          onClose={() => setSocialOpen(null)}
+          onPerson={(id) => {
+            setSocialOpen(null);
+            setPersonId(id);
+          }}
+          onDone={(text, ok) => setMessage({ text, tone: ok ? "good" : "bad" })}
+        />
+      )}
+      {socialOpen === "rivals" && (
+        <RivalsSheet
+          onClose={() => setSocialOpen(null)}
+          onPerson={(id) => {
+            setSocialOpen(null);
+            setPersonId(id);
+          }}
         />
       )}
       {doorstepOpen && (

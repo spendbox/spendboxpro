@@ -20,6 +20,7 @@ import { PropertyCard } from "../property-card";
 import { around, cachedThings, loadThings } from "./things-cache";
 import { ThingsSheet, type ThingsTab } from "./things-sheet";
 import { NewsSheet } from "./news-sheet";
+import { JailBanner } from "../people/street-dating";
 import { cityNews, type NewsItem } from "@/lib/world/news";
 import { playSfx } from "../sound";
 import { LeaveMarkSheet, MarkCard } from "./marks-sheet";
@@ -282,7 +283,7 @@ export function useWorldLife({
     };
   }, [regionId, pretend, loadMarks]);
   /** Your reputation (shown at the top) and whether you own a car (to drive to work). */
-  const [rep, setRep] = useState<{ score: number; hasCar: boolean } | null>(null);
+  const [rep, setRep] = useState<{ score: number; hasCar: boolean; jail: string | null } | null>(null);
   /** Drive your own car to places (remembered on this phone), when you have one. */
   const [drive, setDrive] = useState(false);
   useEffect(() => {
@@ -299,11 +300,11 @@ export function useWorldLife({
       localStorage.setItem("nt-drive", on ? "1" : "0");
     } catch {}
   };
-  const loadRep = useCallback(() => void loadThings().then((t) => t && setRep({ score: t.reputation.score, hasCar: t.hasCar })), []);
+  const loadRep = useCallback(() => void loadThings().then((t) => t && setRep({ score: t.reputation.score, hasCar: t.hasCar, jail: t.jailedUntil ?? null })), []);
   useEffect(() => {
     if (!signedIn || !regionId || pretend) return;
     const seen = cachedThings();
-    const shown = setTimeout(() => seen && setRep({ score: seen.reputation.score, hasCar: seen.hasCar }), 0);
+    const shown = setTimeout(() => seen && setRep({ score: seen.reputation.score, hasCar: seen.hasCar, jail: seen.jailedUntil ?? null }), 0);
     const first = setTimeout(loadRep, 400);
     const every = setInterval(loadRep, 180_000);
     return () => {
@@ -643,6 +644,9 @@ export function useWorldLife({
             </button>
           )}
         </div>
+        {rep?.jail && Date.parse(rep.jail) > clock && (
+          <JailBanner until={rep.jail} prices={region.region.prices} onDone={(text, good) => setMessage({ text, good })} onFree={() => setRep((r) => (r ? { ...r, jail: null } : r))} />
+        )}
         {step && GUIDE[step] && (
           <div className="pointer-events-auto flex max-w-xs items-start gap-2 rounded-2xl bg-ink px-3 py-2 text-white shadow-lg">
             <p className="min-w-0 flex-1 text-xs leading-snug">

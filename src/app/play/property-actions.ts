@@ -201,6 +201,9 @@ export async function travelTo(buildingId: string, drive?: boolean): Promise<Pro
   const db = createAdminClient();
   const { data: life } = await db.from("lives").select("home_unit, at_place").eq("user_id", userId).maybeSingle();
   if (!life) return { ok: false, error: "Start your life first." };
+  // In jail (game-db/055): nowhere to go until you're out.
+  const { data: jail } = await db.rpc("jail_until", { p_user: userId });
+  if (jail) return { ok: false, error: `You're in jail until ${new Date(String(jail)).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" })}. Wait it out, or try a bribe.` };
   const from = (life.at_place as string | null) ?? (life.home_unit as string | null);
   const km = from ? tripKmBetween(from, buildingId) : null;
   // Over the water to an island with no bridge: a ferry, and the ride either side.
