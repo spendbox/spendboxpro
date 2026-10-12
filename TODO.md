@@ -18,6 +18,7 @@
 - [ ] Then run `game-db/054_earnings.sql` (Finance's Overview: what you've earned, the tax on it, and each payment in). Run it after 053; already ran it? Run it again (it now leaves out home sales and adds the tax).
 - [ ] Then run `game-db/055_street.sql` (stealing, jail and bribes, pranks, rivals, gossip; see `docs/STREET.md`) and then `game-db/056_dating.sql` (dating, opt-in with a yes every time; see `docs/DATING.md`).
 - [ ] Then run `game-db/057_outdoor_chat.sql` (chat works in parks, plazas and at a landmark's main entrance).
+- [ ] Then run `game-db/058_course_done.sql` (a notification with congratulations when a course ends).
 - [ ] Then run `game-db/051_people.sql` (faces on the map, cards, doorsteps, while you were away, push; see `docs/PEOPLE.md`).
 - [ ] For notifications: run `node scripts/vapid-keys.mjs` once, put the three lines it prints into Vercel's environment variables (NEXT_PUBLIC_VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT), and redeploy.
 - [ ] Then run `game-db/050_economy_items.sql` (pay four times real wages, money by day for the Finance chart, things, the market, crafting, cars, reputation; see `docs/ITEMS.md`). Until it's run, the Things screens and the Finance chart stay empty.

@@ -157,6 +157,25 @@ export async function earnings(days: number): Promise<Earnings | null> {
   };
 }
 
+/** What went out in the last `days` days, each payment (holds that come back aren't counted). */
+export async function spending(days: number): Promise<{ total: number; entries: Earning[] } | null> {
+  const userId = await currentUserId();
+  if (!userId) return null;
+  const since = new Date(Date.now() - Math.min(3650, Math.max(1, Math.round(n(days)) || 7)) * 86_400_000).toISOString();
+  const { data, error } = await createAdminClient()
+    .from("ledger")
+    .select("id, kind, amount, note, created_at")
+    .eq("user_id", userId)
+    .lt("amount", 0)
+    .not("kind", "in", "(offer_hold,service_hold,burn)")
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(300);
+  if (error || !data) return null;
+  const entries = (data as Record<string, unknown>[]).map((e) => ({ id: n(e.id), kind: String(e.kind), amount: -n(e.amount), note: e.note == null ? null : String(e.note), at: String(e.created_at) }));
+  return { total: Math.round(entries.reduce((t, e) => t + e.amount, 0) * 100) / 100, entries };
+}
+
 /** Your money day by day (game-db/050_economy_items.sql): earned, living costs, things bought. */
 export async function moneyDays(days: number): Promise<MoneyDay[]> {
   const userId = await currentUserId();

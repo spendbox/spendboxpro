@@ -9,7 +9,7 @@ import { cash, CURRENCIES, shownCurrency } from "@/lib/world/value";
 import { Sheet } from "../sheet";
 import { AssetsBody, unitValueNow, type Owning } from "./assets-sheet";
 import { MoneyChart, UpOrDown, useMoneyDays } from "./money-chart";
-import { earnings as loadEarnings, type Earnings } from "../living-actions";
+import { earnings as loadEarnings, spending as loadSpending, type Earnings, type Earning } from "../living-actions";
 
 export type Tab = "home" | "stats" | "budget" | "property";
 const TABS: { id: Tab; label: string }[] = [
@@ -87,6 +87,7 @@ export function MoneySheet({
   payday?: { at: number | null; job: number; hustles: number; title: string | null } | null;
 }) {
   const [tab, setTab] = useState<Tab>(startTab ?? "home");
+  const [side, setSide] = useState<"in" | "out">("in");
   // Real days (not the 2-hour days of your life): the last week or month.
   const [period, setPeriod] = useState<7 | 30>(7);
   const days = useMoneyDays(loadDays, period);
@@ -111,7 +112,19 @@ export function MoneySheet({
         {tab === "home" && (
           <>
             <Payday payday={payday ?? null} />
-            <Earned />
+            <div className="mb-3 flex gap-1 rounded-full bg-ink/5 p-1">
+              {(
+                [
+                  ["in", "Money in"],
+                  ["out", "Money out"],
+                ] as const
+              ).map(([id, label]) => (
+                <button key={id} onClick={() => setSide(id)} className={`h-8 flex-1 rounded-full text-xs font-semibold ${side === id ? "bg-panel shadow-sm" : "text-muted"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            {side === "in" ? <Earned /> : <Spent onStats={() => setTab("stats")} />}
           </>
         )}
         {tab === "stats" && (
@@ -288,6 +301,81 @@ function Earned() {
             })}
           </ul>
         </>
+      )}
+    </div>
+  );
+}
+
+/** What went out: the total, and each payment, filtered by what it was for. Stats one tap away. */
+const spentSeen = new Map<number, { total: number; entries: Earning[] }>();
+const spentKind = (kind: string) => EXPENSES.find((g) => g.kinds.includes(kind));
+function Spent({ onStats }: { onStats: () => void }) {
+  const [days, setDays] = useState<number>(30);
+  const [filter, setFilter] = useState<string>("all");
+  const [got, setGot] = useState<{ days: number; s: { total: number; entries: Earning[] } } | null>(() => (spentSeen.has(30) ? { days: 30, s: spentSeen.get(30)! } : null));
+  useEffect(() => {
+    let alive = true;
+    void loadSpending(days).then((s) => {
+      if (!s) return;
+      spentSeen.set(days, s);
+      if (alive) setGot({ days, s });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [days]);
+  const shown = got && got.days === days ? got.s : (spentSeen.get(days) ?? null);
+  const label = (kind: string) => spentKind(kind)?.label ?? (kind === "fine" ? "Fines" : kind === "mark" ? "Marks on the map" : kind === "prank" ? "Pranks" : kind === "stolen" ? "Stolen from you" : "Other");
+  const entries = (shown?.entries ?? []).filter((x) => filter === "all" || label(x.kind) === filter);
+  const groups = [...new Set((shown?.entries ?? []).map((x) => label(x.kind)))];
+  return (
+    <div>
+      <div className="rounded-3xl bg-gradient-to-br from-hit/15 to-gold/10 p-4 text-center">
+        <p className="text-sm text-muted">Money out</p>
+        <p className="font-display text-3xl font-extrabold tabular-nums text-hit sm:text-4xl">{shown ? cash(shown.total, { full: true }) : "…"}</p>
+        <p className="mt-1 text-xs text-muted">{days < 3650 ? `in the last ${days} days` : "since you started"} · tax, bills, fares, things you bought</p>
+        <button onClick={onStats} className="mt-2 text-xs font-semibold text-gold-dark underline">
+          See your stats: are you up or down?
+        </button>
+      </div>
+      <div className="mt-4 flex items-center justify-between gap-2">
+        <span className="text-sm font-semibold">Each payment</span>
+        <div className="flex gap-1 rounded-full bg-ink/5 p-1">
+          {EARN_PERIODS.map((p) => (
+            <button key={p.days} onClick={() => setDays(p.days)} className={`h-7 rounded-full px-3 text-xs font-semibold ${days === p.days ? "bg-panel shadow-sm" : "text-muted"}`}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {groups.length > 1 && (
+        <div className="-mx-1 mt-2 flex gap-1.5 overflow-x-auto px-1 pb-1">
+          {["all", ...groups].map((g) => (
+            <button key={g} onClick={() => setFilter(g)} className={`h-8 shrink-0 rounded-full px-3 text-xs font-semibold ${filter === g ? "bg-ink text-white" : "bg-ink/5"}`}>
+              {g === "all" ? "All" : g}
+            </button>
+          ))}
+        </div>
+      )}
+      {!shown ? (
+        <p className="mt-3 text-xs text-muted">Loading…</p>
+      ) : entries.length === 0 ? (
+        <p className="mt-3 rounded-2xl bg-ink/[0.04] px-4 py-3 text-sm text-muted">Nothing went out {days < 3650 ? `in the last ${days} days` : "yet"}.</p>
+      ) : (
+        <ul className="mt-2 divide-y divide-ink/5 rounded-2xl bg-ink/[0.03]">
+          {entries.map((x) => (
+            <li key={x.id} className="flex items-center gap-3 px-3 py-2.5">
+              <span className="size-2.5 shrink-0 rounded-full" style={{ background: spentKind(x.kind)?.colour ?? "#868e96" }} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold">{x.note || label(x.kind)}</span>
+                <span className="block text-[11px] text-muted">
+                  {label(x.kind)} · {new Date(x.at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                </span>
+              </span>
+              <span className="shrink-0 font-semibold tabular-nums text-hit">−{cash(x.amount)}</span>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

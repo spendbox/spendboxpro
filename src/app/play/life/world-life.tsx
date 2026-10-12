@@ -21,6 +21,7 @@ import { around, cachedThings, loadThings } from "./things-cache";
 import { ThingsSheet, type ThingsTab } from "./things-sheet";
 import { NewsSheet } from "./news-sheet";
 import { ComingSoonSheet, ReputationSheet } from "./reputation-sheet";
+import { CertificateSheet } from "./certificate";
 import { JailBanner } from "../people/street-dating";
 import { cityNews, type NewsItem } from "@/lib/world/news";
 import { playSfx } from "../sound";
@@ -85,6 +86,7 @@ function LifeButton({
   glow,
   dot,
   warn,
+  short,
 }: {
   icon: typeof House;
   label: string;
@@ -92,11 +94,13 @@ function LifeButton({
   glow?: boolean;
   dot?: boolean;
   warn?: boolean;
+  /** Just the icon on narrow phones. */
+  short?: boolean;
 }) {
   return (
-    <button onClick={onClick} className={`glass pointer-events-auto relative flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold ${glow ? GLOW : ""}`}>
+    <button onClick={onClick} aria-label={label} className={`glass pointer-events-auto relative flex h-9 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-semibold sm:px-3 sm:text-sm ${glow ? GLOW : ""}`}>
       <Icon className={`size-4 ${warn ? "text-hit" : ""}`} />
-      {label}
+      <span className={short ? "max-[420px]:hidden" : undefined}>{label}</span>
       {dot && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-hit" />}
       {glow && <Ripple />}
     </button>
@@ -122,6 +126,8 @@ export function useWorldLife({
   beforeHome,
   meId,
   onPerson,
+  rowOutside,
+  meName,
 }: {
   api: PropertyApi;
   regionId: string | null;
@@ -137,6 +143,10 @@ export function useWorldLife({
   /** Your account (to know your own marks), and opening someone's card. */
   meId?: string | null;
   onPerson?: (id: string) => void;
+  /** The game draws the row of life buttons itself (with its own things on it): leave it out of the overlay. */
+  rowOutside?: boolean;
+  /** Your name (on certificates). */
+  meName?: string;
 }) {
   const region = useMemo(() => regionMap(regionId), [regionId]);
   const { assets, owned, loaded, refresh } = useLife(api, signedIn ? regionId : null);
@@ -235,6 +245,20 @@ export function useWorldLife({
   const [newsOpen, setNewsOpen] = useState(false);
   /** Your reputation explained, and what's coming soon. */
   const [repOpen, setRepOpen] = useState(false);
+  /** A course just finished: the certificate, shown once. */
+  const [cert, setCert] = useState<{ course: string; title: string; cert: string | null; at: string } | null>(null);
+  useEffect(() => {
+    if (!status || cert) return;
+    let seen: string[] = [];
+    try {
+      seen = JSON.parse(localStorage.getItem("nt-certs") ?? "[]") as string[];
+    } catch {}
+    // Finished in the last 3 days and not shown yet.
+    const fresh = status.courses.find((c) => c.done && !seen.includes(c.course) && Date.now() - Date.parse(c.endsAt) < 3 * 86_400_000);
+    if (!fresh) return;
+    const t = setTimeout(() => setCert({ course: fresh.course, title: fresh.title, cert: fresh.cert, at: fresh.endsAt }), 0);
+    return () => clearTimeout(t);
+  }, [status, cert]);
   const [soonOpen, setSoonOpen] = useState(false);
   /** Breaking news: a story pops up at the top with a little bleep when it comes in (once each). */
   const [breaking, setBreaking] = useState<NewsItem | null>(null);
@@ -593,11 +617,8 @@ export function useWorldLife({
   /** Something in Finance wants you: the guide's budget step, a power cut, an offer. */
   const financeGlow = step === "budget";
   const financeDot = !!(status?.powerCut || board?.received.some((o) => o.status === "open"));
-  const overlay = region ? (
+  const rowButtons = region ? (
     <>
-      {/* Your life, under the place's name card: Home, Work, Money, Life, Services (first only Find a home). */}
-      <div className={`pointer-events-none absolute left-2.5 top-14 z-10 flex max-w-[calc(100vw-4.5rem)] flex-col items-start gap-2 sm:left-4 sm:top-16 sm:max-w-md`}>
-        <div className="flex flex-wrap gap-1.5">
           {signedIn && loaded && !homeUnit && (
             <button
               onClick={() => (life ? openFinder() : setWelcomeShut(false))}
@@ -624,8 +645,11 @@ export function useWorldLife({
               />
             </>
           )}
-          {signedIn && homeUnit && <LifeButton icon={Sparkles} label="Soon" onClick={() => setSoonOpen(true)} />}
-        </div>
+          {signedIn && homeUnit && <LifeButton icon={Sparkles} label="Soon" short onClick={() => setSoonOpen(true)} />}
+    </>
+  ) : null;
+  const rowBelow = region ? (
+    <>
         {rep?.jail && Date.parse(rep.jail) > clock && (
           <JailBanner until={rep.jail} prices={region.region.prices} onDone={(text, good) => setMessage({ text, good })} onFree={() => setRep((r) => (r ? { ...r, jail: null } : r))} />
         )}
@@ -640,7 +664,17 @@ export function useWorldLife({
             </button>
           </div>
         )}
-      </div>
+    </>
+  ) : null;
+  const overlay = region ? (
+    <>
+      {/* Your life, under the place's name card: Home, Work, Money, Life, Services (first only Find a home). */}
+      {!rowOutside && (
+        <div className={`pointer-events-none absolute left-2.5 top-14 z-10 flex max-w-[calc(100vw-4.5rem)] flex-col items-start gap-2 sm:left-4 sm:top-16 sm:max-w-md`}>
+          <div className="flex flex-wrap gap-1.5">{rowButtons}</div>
+          {rowBelow}
+        </div>
+      )}
       {status?.event && !moment && (
         <div className="pointer-events-none absolute inset-x-0 top-40 z-10 flex justify-center px-3 sm:top-32">
           <button onClick={() => setMoment(true)} className="pointer-events-auto flex items-center gap-2 rounded-full bg-gold px-4 py-2 text-sm font-semibold text-ink shadow-lg ring-4 ring-gold/30">
@@ -1189,6 +1223,21 @@ export function useWorldLife({
           </div>
         </div>
       )}
+      {cert && (
+        <CertificateSheet
+          name={meName ?? "You"}
+          title={cert.title}
+          cert={cert.cert}
+          at={cert.at}
+          onClose={() => {
+            try {
+              const seen = JSON.parse(localStorage.getItem("nt-certs") ?? "[]") as string[];
+              localStorage.setItem("nt-certs", JSON.stringify([...seen, cert.course]));
+            } catch {}
+            setCert(null);
+          }}
+        />
+      )}
       {repOpen && (
         <ReputationSheet
           onClose={() => {
@@ -1323,5 +1372,5 @@ export function useWorldLife({
     setLeaving({ x, z, where: at?.place ?? region.areaAt(x, z), place: at?.place });
   };
   const markTags: CityMarkTag[] = marks.map((m) => ({ id: m.id, x: m.x, z: m.z, kind: m.kind, text: m.body, colour: m.colour, rating: m.rating, author: m.authorName, style: m.style }));
-  return { marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit };
+  return { rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit };
 }

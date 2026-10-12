@@ -483,6 +483,8 @@ export function Game({
     // Home from inside a building: out of it first.
     beforeHome: () => leaveInside.current(),
     meId: state.me.guest ? null : state.me.id,
+    rowOutside: true,
+    meName: state.me.name ?? undefined,
     onPerson: (id: string) => setPersonId(id),
     // A building's card: Go inside, as if its bubble had been tapped.
     onEnter: (id: string) => {
@@ -1590,6 +1592,35 @@ export function Game({
         </Safe>
       )}
       {worldId && worldLife.overlay}
+      {/* The real map's second row: who's online, your life (Home, Income, Life, Soon), and the
+          notifications bell on the far right. */}
+      {worldId && !camera && (
+        <div className="pointer-events-none absolute inset-x-2.5 top-14 z-10 flex flex-col items-start gap-2 sm:inset-x-4 sm:top-16">
+          <div className="flex w-full flex-wrap items-center gap-1.5">
+            {!me.guest && (
+              <span className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold" title={`${Math.max(1, cityOnline ?? 1)} online in the city, ${onlineNear} near where you're looking`}>
+                <span className="size-2 animate-pulse rounded-full bg-[#2f9e44]" aria-hidden />
+                {Math.max(1, cityOnline ?? 1, onlineNear)}
+                <span className="max-[440px]:hidden">online</span>
+              </span>
+            )}
+            {worldLife.rowButtons}
+            {!me.guest && (
+              // Notifications: what's happened, and switching them on for this phone. Glows until they're on.
+              <button
+                onClick={() => { setAlertsOpen(true); setFeedSeenAt(new Date(now).toISOString()); }}
+                className={cn("pointer-events-auto relative ml-auto grid size-9 shrink-0 place-items-center rounded-full shadow", pushOn ? "glass" : "bg-gold text-ink")}
+                aria-label="Notifications"
+              >
+                <BellRing className="size-4" />
+                {unread > 0 && <span className="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-hit px-1 text-[10px] font-semibold text-white">{unread > 9 ? "9+" : unread}</span>}
+                {!pushOn && unread === 0 && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-2 ring-gold/70" />}
+              </button>
+            )}
+          </div>
+          {worldLife.rowBelow}
+        </div>
+      )}
       {worldRegion && (worldRegion.water || worldRegion.roads.length > 0) && (
         // The map data's credit (its licence asks for it): small and out of the way.
         <a
@@ -1623,12 +1654,6 @@ export function Game({
         {worldRegion ? (
           <div className="flex min-w-0 items-center gap-1.5">
             <PlacePill area={worldArea} state={worldRegion.state} onClick={() => setCityOpen(true)} />
-            {!me.guest && (
-              <span className="glass flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold sm:h-9 sm:text-sm" title={`${Math.max(1, cityOnline ?? 1)} online in the city, ${onlineNear} near where you're looking`}>
-                <span className="size-2 animate-pulse rounded-full bg-[#2f9e44]" aria-hidden />
-                {Math.max(1, cityOnline ?? 1, onlineNear)} <span className="max-[400px]:hidden">online{onlineNear > 0 ? ` · ${onlineNear} near` : ""}</span>
-              </span>
-            )}
           </div>
         ) : round ? (
           <StatsCard
@@ -1676,18 +1701,6 @@ export function Game({
               </span>
             )}
             {state.streak && !worldId && <StreakPill streak={state.streak} onOpen={() => { setStreakOpen(true); setMenu(false); setFeedOpen(false); }} />}
-            {worldId && (
-              // Notifications: what's happened, and switching them on for this phone. Glows until they're on.
-              <button
-                onClick={() => { setAlertsOpen(true); setFeedSeenAt(new Date(now).toISOString()); }}
-                className={cn("relative grid size-8 shrink-0 place-items-center rounded-full shadow sm:size-9", pushOn ? "glass" : "bg-gold text-ink")}
-                aria-label="Notifications"
-              >
-                <BellRing className="size-4" />
-                {unread > 0 && <span className="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-hit px-1 text-[10px] font-semibold text-white">{unread > 9 ? "9+" : unread}</span>}
-                {!pushOn && unread === 0 && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-2 ring-gold/70" />}
-              </button>
-            )}
             {worldId && worldLife.reputation !== null && (
               // Your reputation: what adds to it and what takes it away.
               <button onClick={() => worldLife.openReputation()} className="glass flex h-8 items-center gap-1 whitespace-nowrap rounded-full px-2.5 text-xs font-bold sm:h-9 sm:px-3 sm:text-sm" aria-label={`Reputation ${worldLife.reputation}`}>
