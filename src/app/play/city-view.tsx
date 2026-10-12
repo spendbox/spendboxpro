@@ -153,7 +153,11 @@ export type CityRoom = { id: string; name: string; capacity: number; kind: "buil
 /** Someone dancing on the dance floor of the club you're in: their move, and who they dance with (a player's or an NPC's id). */
 export type CityDancer = { id: string; name: string; avatar: Avatar; move: DanceMove; with: string | null };
 /** A friend in a place in town (their face shows over it): the room id from useRooms ("b:12:f4", "balloon:2"). */
-export type CityFriendPin = { id: string; name: string; avatar: Avatar; room: string };
+/**
+ * A person's face over the place they're in: a friend (pink) or anyone else on the real map
+ * (blue), faded with a word under it when they're not online (asleep, at work, away).
+ */
+export type CityFriendPin = { id: string; name: string; avatar: Avatar; room: string; status?: "online" | "asleep" | "work" | "away"; friend?: boolean };
 /** A ghost lit up on the map: free to challenge, in a duel right now, or golden (safe). */
 export type CityGhost = { id: string; name: string; avatar: Avatar; tile: number; status: "free" | "playing" | "golden"; mine?: boolean };
 /** You dancing: your id (so everyone places the dancers the same way), your move, your partner. */
@@ -312,6 +316,8 @@ type Props = {
   dancers?: CityDancer[];
   /** Your friends who are in a place right now: each one's face and name shows over it. */
   friendsAt?: CityFriendPin[];
+  /** A face on the map was tapped (someone's card). */
+  onPerson?: (id: string) => void;
   /** Open a building's place (as if it was tapped: onRoom is called with it), e.g. to go to a friend. A new `at` each time. */
   openRoom?: { id: string; at: number } | null;
   /** The other real players in the place you're in: the ones not sitting or dancing are drawn standing about. */
@@ -1343,6 +1349,7 @@ export function CityView({
   dance = null,
   dancers,
   friendsAt,
+  onPerson,
   openRoom = null,
   roomPeople,
   ghosts,
@@ -1381,10 +1388,10 @@ export function CityView({
     /** Zoom in (dir 1) or out (dir -1) a step: the + and − buttons on a computer. */
     zoom: (dir: number) => void;
   } | null>(null);
-  const cb = useRef({ onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused });
+  const cb = useRef({ onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused });
   const atmos = useRef({ progress, nightFirst, meAvatar, weather });
   useEffect(() => {
-    cb.current = { onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused };
+    cb.current = { onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused };
     atmos.current = { progress, nightFirst, meAvatar, weather };
   });
 
@@ -3987,7 +3994,7 @@ export function CityView({
     let pinKey = "";
     const pinAt = new THREE.Vector3();
     function setFriendPins(list: CityFriendPin[]) {
-      const key = `${currentSeed}|${tiles.length}|${list.map((f) => `${f.id}@${f.room}|${f.name}|${JSON.stringify(f.avatar)}`).join(";")}`;
+      const key = `${currentSeed}|${tiles.length}|${list.map((f) => `${f.id}@${f.room}|${f.name}|${f.status}|${f.friend}|${JSON.stringify(f.avatar)}`).join(";")}`;
       if (key === pinKey) return;
       pinKey = key;
       for (const p of pins) p.root.remove();
@@ -4013,16 +4020,25 @@ export function CityView({
         const slot = seen.get(building) ?? 0;
         seen.set(building, slot + 1);
         const root = document.createElement("div");
-        root.style.cssText = "position:absolute;left:0;top:0;display:flex;flex-direction:column;align-items:center;gap:2px;will-change:transform;visibility:hidden;";
+        const pink = f.friend !== false;
+        const away = f.status && f.status !== "online";
+        root.style.cssText = `position:absolute;left:0;top:0;display:flex;flex-direction:column;align-items:center;gap:2px;will-change:transform;visibility:hidden;pointer-events:auto;cursor:pointer;opacity:${away ? 0.72 : 1};`;
+        root.setAttribute("role", "button");
+        root.setAttribute("aria-label", `${f.name}: see their card`);
+        root.addEventListener("click", (e) => {
+          e.stopPropagation();
+          cb.current.onPerson?.(f.id);
+        });
         const face = document.createElement("img");
         const svg = renderToStaticMarkup(<AvatarFace avatar={cleanAvatar(f.avatar, f.name)} size={40} />).replace(/^<svg(?![^>]*xmlns=)/, '<svg xmlns="http://www.w3.org/2000/svg"');
         face.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
         face.alt = "";
-        face.style.cssText = "width:40px;height:40px;border-radius:999px;border:3px solid #d6336c;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.25);";
+        const colour = pink ? "#d6336c" : "#1c7ed6";
+        face.style.cssText = `width:${pink ? 40 : 34}px;height:${pink ? 40 : 34}px;border-radius:999px;border:3px solid ${colour};background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.25);`;
         const name = document.createElement("div");
-        name.textContent = f.name;
+        name.textContent = away ? `${f.name} · ${f.status === "asleep" ? "asleep" : f.status === "work" ? "at work" : "away"}` : f.name;
         name.style.cssText =
-          "max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 8px;border-radius:999px;background:#d6336c;color:#fff;font:700 11px/16px system-ui,sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.2);";
+          `max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 8px;border-radius:999px;background:${colour};color:#fff;font:700 11px/16px system-ui,sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.2);`;
         root.append(face, name);
         pinLayer.appendChild(root);
         pins.push({ root, tile, balloon, building, slot, of: counts.get(building) ?? 1, shown: false });

@@ -1,6 +1,7 @@
 "use server";
 
 import { currentUserId } from "@/lib/game";
+import { pushTo } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { regionMap } from "@/lib/world";
 import {
@@ -181,7 +182,10 @@ export async function giftItem(itemId: number, to: string): Promise<PropertyResu
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Sign in first." };
   const { data, error } = await createAdminClient().rpc("item_gift", { p_user: userId, p_item: Math.round(n(itemId)), p_to: String(to ?? "").slice(0, 40) });
-  return error ? say(error.message) : { ok: true, to: String(data) };
+  if (error) return say(error.message);
+  const { data: them } = await createAdminClient().from("profiles").select("id").ilike("username", String(data)).maybeSingle();
+  await pushTo(them?.id as string | undefined);
+  return { ok: true, to: String(data) };
 }
 
 /** Put one of your things up for sale at your price (a 2% listing fee), or change its price. */
@@ -227,8 +231,12 @@ export async function marketItems(category: string): Promise<MarketItem[]> {
 export async function buyItem(itemId: number, price: number): Promise<PropertyResult> {
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Sign in to buy." };
-  const { error } = await createAdminClient().rpc("item_buy", { p_user: userId, p_item: Math.round(n(itemId)), p_price: n(price), p_tax: SALE_TAX });
-  return error ? say(error.message) : { ok: true };
+  const db = createAdminClient();
+  const { data: row } = await db.from("items").select("owner").eq("id", Math.round(n(itemId))).maybeSingle();
+  const { error } = await db.rpc("item_buy", { p_user: userId, p_item: Math.round(n(itemId)), p_price: n(price), p_tax: SALE_TAX });
+  if (error) return say(error.message);
+  await pushTo(row?.owner as string | undefined);
+  return { ok: true };
 }
 
 /** Sell to the city's shops straight away, at 60% of what it's worth. */

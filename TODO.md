@@ -13,6 +13,8 @@
 - [ ] Then run `game-db/046_market.sql` (the player market: selling, offers, tenants, World Bank loans; see `docs/MARKET.md`). If you ever run 038 or 040 again, run 046 again after them.
 - [ ] Then run `game-db/047_ads_are_property.sql` (advertising is leasing a building: billboards included, a design you can swap, ends after a year or its taps; no mint for tapping ads; see `docs/BUSINESS.md`).
 - [ ] Then run `game-db/048_trips.sql` (going into a building costs the fare from where you last were).
+- [ ] Then run `game-db/051_people.sql` (faces on the map, cards, doorsteps, while you were away, push; see `docs/PEOPLE.md`).
+- [ ] For notifications: run `node scripts/vapid-keys.mjs` once, put the three lines it prints into Vercel's environment variables (NEXT_PUBLIC_VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT), and redeploy.
 - [ ] Then run `game-db/050_economy_items.sql` (pay four times real wages, money by day for the Finance chart, things, the market, crafting, cars, reputation; see `docs/ITEMS.md`). Until it's run, the Things screens and the Finance chart stay empty.
 - [ ] Then run `game-db/049_reports_and_work.sql` (reporting people; up to 3 side hustles; pay that goes into wallets by itself every game week). Until it's run, starting a second side hustle and reporting a person won't work.
 - [ ] In Vercel, set `GAME_SECRET` to a long random string (seals interview answers and passes; without it the service key is used).

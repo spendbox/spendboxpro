@@ -1121,5 +1121,5 @@ export function useWorldLife({
   /** Something in Finance wants you: the guide's budget step, a power cut, an offer. */
   const financeGlow = step === "budget";
   const financeDot = !!(status?.powerCut || board?.received.some((o) => o.status === "open"));
-  return { openThings: (tab: ThingsTab) => setThings(tab), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit };
+  return { fly, openThings: (tab: ThingsTab) => setThings(tab), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit };
 }

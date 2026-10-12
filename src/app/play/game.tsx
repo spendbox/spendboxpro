@@ -20,6 +20,7 @@ import {
   Building2,
   CircleX,
   DoorOpen,
+  DoorClosed,
   Layers,
   LogOut,
   Sun,
@@ -61,7 +62,7 @@ import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
 import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
-import { CarFront, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Newspaper, Palette, ShoppingBag, Smartphone, Store, Swords, User } from "lucide-react";
+import { BellRing, CarFront, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Newspaper, Palette, ShoppingBag, Smartphone, Store, Swords, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
 import { GhostsSheet } from "./ghost-duel/ghosts-sheet";
@@ -77,6 +78,9 @@ import { FriendNudge, PeopleHere, type HerePerson } from "./people-here";
 import { rodeSomething } from "./streak-actions";
 import { GreetButtons } from "./greet-buttons";
 import { useNoPageZoom } from "./no-page-zoom";
+import { peopleNear, type PersonOnMap } from "./people-actions";
+import { PersonCard } from "./people/person-card";
+import { AwaySheet, DoorstepSheet, turnOnNotifications, useAwayDigest } from "./people/doorstep";
 import { weatherNow } from "@/lib/world/news";
 import { MyGiftsSheet } from "./my-gifts-sheet";
 import { StreakPill, StreakSheet } from "./streak-sheet";
@@ -413,6 +417,9 @@ export function Game({
   /** The real map: the city card (tap the place's name) and the phone's own menu (bottom right). */
   const [cityOpen, setCityOpen] = useState(false);
   const [phoneHub, setPhoneHub] = useState(false);
+  /** Someone's card (a face tapped on the map, or from your doorstep), and your doorstep. */
+  const [personId, setPersonId] = useState<string | null>(null);
+  const [doorstepOpen, setDoorstepOpen] = useState(false);
   const [editAvatar, setEditAvatar] = useState(false);
   // The new 3D studio, while it is being tried out (see avatar3d-flag.ts).
   // (Read in the browser only; it matters only once the studio is opened, so the server's false is harmless.)
@@ -666,6 +673,34 @@ export function Game({
       }),
     [state.friends.friends, rooms.placeOf],
   );
+  // Everyone about on the real map near where you're looking (docs/PEOPLE.md): online, asleep,
+  // at work or away. Looked up every 45 seconds; friends' live places (above) win.
+  const [peopleOut, setPeopleOut] = useState<PersonOnMap[]>([]);
+  useEffect(() => {
+    if (!worldId || me.guest) return;
+    let alive = true;
+    const look = () => {
+      const c = worldLife.centerRef.current?.() ?? { x: 0, z: 0 };
+      void peopleNear(worldId, c.x, c.z)
+        .then((list) => alive && setPeopleOut(list))
+        .catch(() => {});
+    };
+    const first = setTimeout(look, 3000);
+    const every = setInterval(look, 45_000);
+    return () => {
+      alive = false;
+      clearTimeout(first);
+      clearInterval(every);
+    };
+  }, [worldId, me.guest, worldLife.centerRef]);
+  const facesOnMap: CityFriendPin[] = useMemo(() => {
+    const live = new Set(friendsAt.map((f) => f.id));
+    return [
+      ...friendsAt.map((f) => ({ ...f, friend: true, status: "online" as const })),
+      ...peopleOut.filter((p) => !live.has(p.id)).map((p) => ({ id: p.id, name: p.name, avatar: cleanAvatar(p.avatar, p.name), room: `b:${spiralIndex(p.x, p.z)}`, status: p.status, friend: p.friend })),
+    ];
+  }, [friendsAt, peopleOut]);
+  const away = useAwayDigest(!!worldId && !me.guest);
   // The real players in the place you're in (not you, not NPCs).
   const hereNow: HerePerson[] = useMemo(
     () => rooms.members.filter((m) => m.id !== me.id).map((m) => ({ id: m.id, name: m.name, avatar: cleanAvatar(m.avatar, m.name) })),
@@ -1490,7 +1525,8 @@ export function Game({
             onRides={setRides}
             houses={worldId ? NO_HOUSES : state.houses}
             dance={isDancing && dancing ? { id: me.id, move: dancing.move, with: dancing.with } : null}
-            friendsAt={friendsAt}
+            friendsAt={worldId ? facesOnMap : friendsAt}
+            onPerson={worldId ? setPersonId : undefined}
             openRoom={openReq}
             roomPeople={place ? hereNow : undefined}
             dancers={inClub ? dancers : undefined}
@@ -2522,6 +2558,7 @@ export function Game({
           <div className="grid grid-cols-3 gap-2">
             {(
               [
+                ["Doorstep", DoorClosed, () => setDoorstepOpen(true)],
                 ["My things", Gem, () => worldLife.openThings("mine")],
                 ["Shops", ShoppingBag, () => worldLife.openThings("shops")],
                 ["Cars", CarFront, () => worldLife.openThings("cars")],
@@ -2536,6 +2573,7 @@ export function Game({
                 ["My look", Palette, () => setEditAvatar(true)],
                 ["Guide", Lightbulb, () => worldLife.restartGuide()],
                 ["Report", Flag, () => worldLife.openReport()],
+                ["Alerts", BellRing, () => void turnOnNotifications().then((r) => setMessage({ text: r.text, tone: r.ok ? "good" : "info" }))],
                 ["Sign out", LogOut, () => setConfirmSignOut(true)],
               ] as const
             ).map(([label, Icon, go]) => (
@@ -2575,6 +2613,40 @@ export function Game({
         >
           {sound ? <Volume2 className="size-4" /> : <VolumeX className="size-4 text-muted" />}
         </button>
+      )}
+      {personId && (
+        <PersonCard
+          key={personId}
+          id={personId}
+          onClose={() => setPersonId(null)}
+          onFly={(x, z) => {
+            setPersonId(null);
+            worldLife.fly(x, z);
+          }}
+          onAddFriend={me.guest ? undefined : (p) => void befriend(p)}
+          greet={(p) => greet(p, false)}
+          onDone={(text, ok) => setMessage({ text, tone: ok ? "good" : "bad" })}
+        />
+      )}
+      {doorstepOpen && (
+        <DoorstepSheet
+          onClose={() => setDoorstepOpen(false)}
+          onPerson={(id) => {
+            setDoorstepOpen(false);
+            setPersonId(id);
+          }}
+          onDone={(text, ok) => setMessage({ text, tone: ok ? "good" : "bad" })}
+        />
+      )}
+      {away.digest && !doorstepOpen && (
+        <AwaySheet
+          digest={away.digest}
+          onDoorstep={() => {
+            away.close();
+            setDoorstepOpen(true);
+          }}
+          onClose={away.close}
+        />
       )}
       {cityOpen && worldRegion && (
         <CityCard city={worldRegion.name} area={worldArea} online={online} players={state.site.players} onClose={() => setCityOpen(false)} search={worldLife.search} />
