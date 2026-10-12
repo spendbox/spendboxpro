@@ -14,6 +14,7 @@
 - [ ] Then run `game-db/047_ads_are_property.sql` (advertising is leasing a building: billboards included, a design you can swap, ends after a year or its taps; no mint for tapping ads; see `docs/BUSINESS.md`).
 - [ ] Then run `game-db/048_trips.sql` (going into a building costs the fare from where you last were).
 - [ ] Then run `game-db/052_marks.sql` (writing, reviews, trees, statues, time capsules on the map; see `docs/MARKS.md`). Run it after 051.
+- [ ] Then run `game-db/053_marks_rules.sql` (short writing, graffiti styles, the reputation limits). Run it after 052.
 - [ ] Then run `game-db/051_people.sql` (faces on the map, cards, doorsteps, while you were away, push; see `docs/PEOPLE.md`).
 - [ ] For notifications: run `node scripts/vapid-keys.mjs` once, put the three lines it prints into Vercel's environment variables (NEXT_PUBLIC_VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT), and redeploy.
 - [ ] Then run `game-db/050_economy_items.sql` (pay four times real wages, money by day for the Finance chart, things, the market, crafting, cars, reputation; see `docs/ITEMS.md`). Until it's run, the Things screens and the Finance chart stay empty.

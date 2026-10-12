@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { cachedThings, loadThings } from "./things-cache";
 import { Car, Gem, Hammer, ShoppingBag, Store } from "lucide-react";
 import { Star } from "@/components/icons";
 import {
@@ -43,10 +44,10 @@ const TABS: { id: ThingsTab; label: string; icon: typeof Gem }[] = [
 
 export function ThingsSheet({ tab: start, prices, onClose, onChanged }: { tab: ThingsTab; prices: Prices; onClose: () => void; onChanged?: () => void }) {
   const [tab, setTab] = useState<ThingsTab>(start);
-  const [me, setMe] = useState<MyThings | null>(null);
+  const [me, setMe] = useState<MyThings | null>(() => cachedThings());
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ text: string; good: boolean } | null>(null);
-  const load = useCallback(() => void items.myThings().then(setMe), []);
+  const load = useCallback(() => void loadThings().then((t) => t && setMe(t)), []);
   useEffect(() => load(), [load]);
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>, done: string | ((r: Record<string, unknown>) => string)) => {
     setBusy(true);

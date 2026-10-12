@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DoorOpen } from "lucide-react";
-import { Briefcase, Flag, HeartPulse, House, MapPin, Pencil, Search, Sparkles, X } from "@/components/icons";
+import { Briefcase, Flag, HeartPulse, House, MapPin, Pencil, Search, Sparkles, Star, Wallet, X } from "@/components/icons";
 import { addressOf, makePlan, spiralIndex, tileAt, type CityPlan } from "@/lib/city/layout";
 import { BUILDING_LABEL } from "@/lib/world/buildings";
 import type { RegionMap } from "@/lib/world/compile";
@@ -17,11 +17,11 @@ import { dayOf, EXERCISE } from "@/lib/world/day";
 import { HUSTLES, hustleDay, hustleStart } from "@/lib/world/hustles";
 import type { Workplace } from "@/lib/world/workplace";
 import { PropertyCard } from "../property-card";
-import { myThings } from "../item-actions";
+import { around, cachedThings, loadThings } from "./things-cache";
 import { ThingsSheet, type ThingsTab } from "./things-sheet";
 import { NewsSheet } from "./news-sheet";
 import { LeaveMarkSheet, MarkCard } from "./marks-sheet";
-import { marksNear, type MapMark } from "../mark-actions";
+import type { MapMark } from "../mark-actions";
 import type { CityMarkTag } from "../city-view";
 import { Sheet } from "../sheet";
 import { LifeSheet } from "./life-sheet";
@@ -118,6 +118,7 @@ export function useWorldLife({
   beforeHome,
   meId,
   onPerson,
+  wallet,
 }: {
   api: PropertyApi;
   regionId: string | null;
@@ -133,6 +134,8 @@ export function useWorldLife({
   /** Your account (to know your own marks), and opening someone's card. */
   meId?: string | null;
   onPerson?: (id: string) => void;
+  /** Your cash at hand, shown on the row with Home, Income and Life (opens Finance). */
+  wallet?: number;
 }) {
   const region = useMemo(() => regionMap(regionId), [regionId]);
   const { assets, owned, loaded, refresh } = useLife(api, signedIn ? regionId : null);
@@ -236,7 +239,7 @@ export function useWorldLife({
   const loadMarks = useCallback(() => {
     if (!regionId || pretend) return;
     const c = centerRef.current?.() ?? { x: 0, z: 0 };
-    void marksNear(regionId, c.x, c.z).then(setMarks).catch(() => {});
+    void around<MapMark[]>("marks", regionId, c.x, c.z).then((m) => m && setMarks(m)).catch(() => {});
   }, [regionId, pretend]);
   useEffect(() => {
     if (!regionId || pretend) return;
@@ -249,12 +252,15 @@ export function useWorldLife({
   }, [regionId, pretend, loadMarks]);
   /** Your reputation (shown at the top) and whether you own a car (to drive to work). */
   const [rep, setRep] = useState<{ score: number; hasCar: boolean } | null>(null);
-  const loadRep = useCallback(() => void myThings().then((t) => t && setRep({ score: t.reputation.score, hasCar: t.hasCar })).catch(() => {}), []);
+  const loadRep = useCallback(() => void loadThings().then((t) => t && setRep({ score: t.reputation.score, hasCar: t.hasCar })), []);
   useEffect(() => {
     if (!signedIn || !regionId || pretend) return;
-    const first = setTimeout(loadRep, 1500);
+    const seen = cachedThings();
+    const shown = setTimeout(() => seen && setRep({ score: seen.reputation.score, hasCar: seen.hasCar }), 0);
+    const first = setTimeout(loadRep, 400);
     const every = setInterval(loadRep, 180_000);
     return () => {
+      clearTimeout(shown);
       clearTimeout(first);
       clearInterval(every);
     };
@@ -523,6 +529,9 @@ export function useWorldLife({
     void api.neighbours().then(setNeighbours);
   };
 
+  /** Something in Finance wants you: the guide's budget step, a power cut, an offer. */
+  const financeGlow = step === "budget";
+  const financeDot = !!(status?.powerCut || board?.received.some((o) => o.status === "open"));
   const overlay = region ? (
     <>
       {/* Your life, under the place's name card: Home, Work, Money, Life, Services (first only Find a home). */}
@@ -553,6 +562,26 @@ export function useWorldLife({
                 }}
               />
             </>
+          )}
+          {signedIn && life && rep && (
+            // Your reputation: opens your things (where it comes from).
+            <button onClick={() => setThings("mine")} className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1 rounded-full px-3 text-sm font-bold" aria-label={`Reputation ${rep.score}`}>
+              <Star className="size-4 text-gold-dark" />
+              {rep.score.toLocaleString("en-GB")}
+            </button>
+          )}
+          {signedIn && life && wallet !== undefined && (
+            // Your cash at hand: opens Finance.
+            <button
+              onClick={() => openFinance()}
+              className={`glass pointer-events-auto relative flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-bold ${financeGlow ? "outline outline-2 outline-offset-2 outline-gold" : ""}`}
+              aria-label="Finance"
+            >
+              <Wallet className="size-4 text-gold-dark" />
+              {cash(wallet)}
+              {financeDot && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-hit" />}
+              {financeGlow && <Ripple />}
+            </button>
           )}
         </div>
         {step && GUIDE[step] && (
@@ -1068,6 +1097,8 @@ export function useWorldLife({
           z={leaving.z}
           place={leaving.place}
           prices={region.region.prices}
+          reputation={rep?.score ?? null}
+          adoptable={["park", "trees"].includes(tileAt(planOf(region), spiralIndex(leaving.x, leaving.z)).kind)}
           onClose={() => setLeaving(null)}
           onDone={(text, good) => {
             setMessage({ text, good });
@@ -1190,9 +1221,6 @@ export function useWorldLife({
     freshenStatus();
     if (!assets) void refresh();
   };
-  /** Something in Finance wants you: the guide's budget step, a power cut, an offer. */
-  const financeGlow = step === "budget";
-  const financeDot = !!(status?.powerCut || board?.received.some((o) => o.status === "open"));
   /** Leave a mark: at a spot, or (none given) in the middle of the screen. */
   const openLeaveMark = (at?: { x: number; z: number; place?: string }) => {
     if (!region) return;
@@ -1202,6 +1230,6 @@ export function useWorldLife({
     const z = Math.round(c.z);
     setLeaving({ x, z, where: at?.place ?? region.areaAt(x, z), place: at?.place });
   };
-  const markTags: CityMarkTag[] = marks.map((m) => ({ id: m.id, x: m.x, z: m.z, kind: m.kind, text: m.body, colour: m.colour, rating: m.rating, author: m.authorName }));
+  const markTags: CityMarkTag[] = marks.map((m) => ({ id: m.id, x: m.x, z: m.z, kind: m.kind, text: m.body, colour: m.colour, rating: m.rating, author: m.authorName, style: m.style }));
   return { marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit };
 }

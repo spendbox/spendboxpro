@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Flag, Trash2 } from "lucide-react";
 import { Star } from "@/components/icons";
 import type { Prices } from "@/lib/world/region";
-import { dayCost, INKS, MARK_KINDS, markKind, personalInfo, REACTIONS, type MarkKind } from "@/lib/world/marks";
+import { ADOPT_SHARE, dayCost, GRAFFITI, graffitiLook, graffitiWall, INKS, MARK_KINDS, MARK_MAX, MARK_MIN_REP, markKind, marksAllowed, personalInfo, REACTIONS, website, type GraffitiStyle, type MarkKind } from "@/lib/world/marks";
 import { cash } from "@/lib/world/value";
 import { mintOf } from "@/lib/world/items";
 import { myThings, type MyItem } from "../item-actions";
@@ -40,10 +40,14 @@ export function MarkCard({ mark, me, prices, onPerson, onClose, onChanged, onDon
           ))}
         </p>
       )}
-      {mark.body ? (
-        <p className="mt-2 font-display text-xl font-extrabold leading-snug" style={mark.kind === "writing" && mark.colour && mark.colour !== "#ffffff" ? { color: mark.colour } : undefined}>
-          &ldquo;{mark.body}&rdquo;
+      {mark.body && mark.kind === "writing" ? (
+        <p className="mt-2 rounded-lg px-3 py-3 text-xl leading-snug" style={{ background: graffitiWall(mark.style) }}>
+          <span className="inline-block" style={graffitiLook(mark.style, mark.colour ?? "#212529")}>
+            {mark.body}
+          </span>
         </p>
+      ) : mark.body ? (
+        <p className="mt-2 font-display text-xl font-extrabold leading-snug">&ldquo;{mark.body}&rdquo;</p>
       ) : mark.kind === "capsule" ? (
         <p className="mt-2 text-sm">Sealed until {new Date(mark.opensAt ?? Date.now()).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}.{mark.item ? " Something is inside." : ""}</p>
       ) : null}
@@ -107,8 +111,9 @@ export function MarkCard({ mark, me, prices, onPerson, onClose, onChanged, onDon
 }
 
 /** Leave a mark where you're looking: writing, a review, a tree, a statue, a time capsule... */
-export function LeaveMarkSheet({ where, region, x, z, place, prices, onClose, onDone }: { where: string; region: string; x: number; z: number; place?: string; prices: Prices; onClose: () => void; onDone: Done }) {
+export function LeaveMarkSheet({ where, region, x, z, place, prices, reputation, adoptable, onClose, onDone }: { where: string; region: string; x: number; z: number; place?: string; prices: Prices; reputation: number | null; adoptable?: boolean; onClose: () => void; onDone: Done }) {
   const [kind, setKind] = useState<MarkKind>("writing");
+  const [style, setStyle] = useState<GraffitiStyle>("spray");
   const [body, setBody] = useState("");
   const [colour, setColour] = useState(INKS[0]);
   const [rating, setRating] = useState(5);
@@ -121,11 +126,24 @@ export function LeaveMarkSheet({ where, region, x, z, place, prices, onClose, on
     if (kind !== "capsule" || things) return;
     void myThings().then((t) => setThings((t?.items ?? []).filter((i) => i.listPrice == null)));
   }, [kind, things]);
-  const found = personalInfo(body);
-  const cost = mintOf(k.price, prices);
+  const found = personalInfo(body) ?? website(body);
+  const cost = mintOf(kind === "tree" && adoptable ? k.price * ADOPT_SHARE : k.price, prices);
+  const allowed = reputation === null ? null : marksAllowed(reputation);
+  if (allowed === 0)
+    return (
+      <Sheet onClose={onClose} title="Leave a mark" clear>
+        <p className="text-sm">
+          You need <b>{MARK_MIN_REP} reputation</b> to leave anything on the map. You have {reputation}.
+        </p>
+        <p className="mt-2 text-xs text-muted">Reputation comes from your home and property, things you own and make, and people liking what you do. Tap your star at the top to see yours.</p>
+        <button onClick={onClose} className="mt-3 h-11 w-full rounded-full bg-ink font-semibold text-white">
+          OK
+        </button>
+      </Sheet>
+    );
   return (
     <Sheet onClose={onClose} title="Leave a mark" clear>
-      <p className="text-xs text-muted">At {where}. Your name goes with it; people can react, or vote to take it down.</p>
+      <p className="text-xs text-muted">At {where}. Your name goes with it; people can react, or vote to take it down.{allowed !== null && ` You can have ${allowed} up at once (one more for every 50 reputation).`}</p>
       <div className="-mx-1 mt-2 flex gap-1.5 overflow-x-auto px-1 pb-1">
         {MARK_KINDS.map((m) => (
           <button key={m.kind} onClick={() => setKind(m.kind)} className={`h-8 shrink-0 rounded-full px-3 text-xs font-semibold ${kind === m.kind ? "bg-ink text-white" : "bg-ink/5"}`}>
@@ -133,19 +151,49 @@ export function LeaveMarkSheet({ where, region, x, z, place, prices, onClose, on
           </button>
         ))}
       </div>
-      <p className="mt-2 text-xs text-muted">{k.what}</p>
+      <p className="mt-2 text-xs text-muted">{kind === "tree" && adoptable ? "There are trees here already: adopt one with your name and words on it, for half the price of planting one. Yours for good." : k.what}</p>
+      {kind === "writing" && (
+        // The graffiti style: each button shows how it looks.
+        <div className="-mx-1 mt-2 flex gap-1.5 overflow-x-auto px-1 pb-1" role="radiogroup" aria-label="Graffiti style">
+          {GRAFFITI.map((g) => (
+            <button
+              key={g.id}
+              role="radio"
+              aria-checked={style === g.id}
+              title={g.hint}
+              onClick={() => setStyle(g.id)}
+              className={`h-10 shrink-0 rounded-lg px-3 text-sm ring-2 ${style === g.id ? "ring-ink" : "ring-transparent"}`}
+              style={{ background: graffitiWall(g.id) }}
+            >
+              <span className="inline-block" style={graffitiLook(g.id, colour)}>
+                {g.label}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
       {k.text !== "none" && (
         <textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}
-          maxLength={280}
-          rows={3}
-          placeholder={kind === "writing" ? "Write anything…" : kind === "review" ? "What's it like here?" : kind === "capsule" ? "A message for whoever opens it…" : "A dedication (optional)"}
-          className="mt-2 w-full rounded-2xl bg-ink/5 px-4 py-2.5 text-sm outline-none ring-ink/20 focus:ring-2"
-          style={kind === "writing" && colour !== "#ffffff" ? { color: colour, fontWeight: 700 } : undefined}
+          maxLength={MARK_MAX}
+          rows={2}
+          enterKeyHint="done"
+          placeholder={kind === "writing" ? "A short line…" : kind === "review" ? "What's it like here?" : kind === "capsule" ? "A message for whoever opens it…" : "A dedication (optional)"}
+          // 16px text so phones don't zoom in, and a tap always brings the keyboard up.
+          onPointerUp={(e) => e.currentTarget.focus()}
+          className="mt-2 w-full rounded-2xl bg-ink/5 px-4 py-2.5 text-base outline-none ring-ink/20 focus:ring-2"
         />
       )}
-      {found && <p className="text-xs font-semibold text-hit">Take out {found}: real contact details can&apos;t go on the map.</p>}
+      {k.text !== "none" && <p className="text-right text-[11px] text-muted">{body.length}/{MARK_MAX}</p>}
+      {kind === "writing" && body.trim() && (
+        <p className="mt-1 rounded-lg px-3 py-2 text-lg leading-snug" style={{ background: graffitiWall(style) }} aria-label="How it will look">
+          <span className="inline-block" style={graffitiLook(style, colour)}>
+            {body}
+          </span>
+        </p>
+      )}
+      {found && <p className="text-xs font-semibold text-hit">Take out {found}: {found.includes("website") || found.includes("handle") ? "links and handles" : "real contact details"} can&apos;t go on the map.</p>}
       {kind === "writing" && (
         <div className="mt-1 flex gap-1.5">
           {INKS.map((c) => (
@@ -188,9 +236,9 @@ export function LeaveMarkSheet({ where, region, x, z, place, prices, onClose, on
         disabled={busy || !!found || (k.text === "need" && !body.trim())}
         onClick={async () => {
           setBusy(true);
-          const r = await leaveMark({ region, x, z, kind, body, colour, rating, place, opensInDays: days, itemId: item ?? undefined });
+          const r = await leaveMark({ region, x, z, kind, body, colour, style, rating, place, opensInDays: days, itemId: item ?? undefined });
           setBusy(false);
-          onDone(r.ok ? `${k.label} left at ${where}.` : r.error, r.ok);
+          onDone(r.ok ? (r.text === "adopted" ? `You adopted a tree at ${where}.` : r.text === "moved" ? `${k.label} left just off the road near ${where}.` : `${k.label} left at ${where}.`) : r.error, r.ok);
           if (r.ok) onClose();
         }}
         className="mt-3 h-11 w-full rounded-full bg-ink font-semibold text-white disabled:opacity-40"
