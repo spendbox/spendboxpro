@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Box, Copy, LoaderCircle, Minus, Plus, RotateCw, Trash2, Undo2 } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Box, Copy, LoaderCircle, Minus, Plus, RotateCw, Shuffle, Armchair, LayoutDashboard, Trash2, Undo2 } from "lucide-react";
 import { X } from "@/components/icons";
 import { cn } from "@/lib/cn";
 import {
@@ -13,10 +13,16 @@ import {
   ROOM_KINDS,
   ROOM_LABEL,
   SIZES,
+  autoDesign,
   clashes,
+  floorNaira,
+  furnishRoom,
   itemSize,
   nextId,
+  planBill,
+  startPaid,
   starterPlan,
+  type PlanPaid,
   type FurnitureKind,
   type HomePlan,
   type HomeSize,
@@ -25,6 +31,7 @@ import {
 } from "@/lib/home-plan";
 import { loadHomePlan, saveHomePlan } from "../life/home-plan-actions";
 import { useEscape } from "../menu/escape";
+import { cash } from "@/lib/world/value";
 import { STOREY_M, buildHome } from "./home3d";
 
 // Plan your home (docs/HOME_PLANNER.md): a floor plan on half-metre squares. Draw rooms by
@@ -49,14 +56,22 @@ export function HomePlanner({ onClose }: { onClose: () => void }) {
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ text: string; bad?: boolean } | null>(null);
+  const [paid, setPaid] = useState<PlanPaid>(startPaid);
+  const [perMint, setPerMint] = useState(1500);
+  const [owner, setOwner] = useState(true);
+  const [designs, setDesigns] = useState(0);
 
   useEffect(() => {
     let alive = true;
     void loadHomePlan()
       .then((r) => {
         if (!alive) return;
-        if (r.ok) setPlanNow(r.plan);
-        else {
+        if (r.ok) {
+          setPlanNow(r.plan);
+          setPaid(r.paid);
+          setPerMint(r.perMint);
+          setOwner(r.owner);
+        } else {
           setPlanNow(starterPlan());
           setNote({ text: r.error, bad: true });
         }
@@ -87,8 +102,11 @@ export function HomePlanner({ onClose }: { onClose: () => void }) {
     setBusy(true);
     const r = await saveHomePlan(plan).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
     setBusy(false);
-    if (r.ok) setDirty(false);
-    setNote(r.ok ? { text: "Saved. This is your home's plan now." } : { text: r.error, bad: true });
+    if (r.ok) {
+      setDirty(false);
+      setPaid(r.paid);
+    }
+    setNote(r.ok ? { text: r.paidMint > 0 ? `Paid ${cash(r.paidMint)} and saved. Your home is worth more now.` : "Saved. This is your home's plan now." } : { text: r.error, bad: true });
   }
 
   if (!plan)
@@ -104,6 +122,29 @@ export function HomePlanner({ onClose }: { onClose: () => void }) {
   const room = sel?.type === "room" ? fl.rooms.find((r) => r.id === sel.id) : undefined;
   const item = sel?.type === "item" ? fl.items.find((i) => i.id === sel.id) : undefined;
   const onFloor = (fn: (f: PlanFloor) => void) => change((p) => (fn(p.floors[floor]), p));
+  /** Naira (the game's prices) shown in your money. */
+  const money = (naira: number) => cash(naira / perMint);
+  const bill = planBill(plan, paid);
+  /** Something you've already paid for (on the plan or taken out): putting it in costs nothing. */
+  const owned = (k: FurnitureKind) => (paid.items[k] ?? 0) > plan.floors.reduce((n, f) => n + f.items.filter((i) => i.kind === k).length, 0);
+  function designForMe() {
+    if (dirty && !confirm("Design your whole home for you? What you've drawn is replaced (Undo brings it back).")) return;
+    const seed = designs + 1 + Math.floor(Math.random() * 1000);
+    setDesigns((n) => n + 1);
+    change(() => autoDesign(plan!.size, plan!.floors.length, seed));
+    setSel(null);
+    setNote({ text: "Designed for you. Tap it again for another layout, or change anything you like." });
+  }
+  function furnishThis() {
+    if (!room) return;
+    onFloor((f) => {
+      f.items = f.items.filter((i) => {
+        const s = itemSize(i);
+        return !(i.x >= room.x && i.y >= room.y && i.x + s.w <= room.x + room.w && i.y + s.d <= room.y + room.d) || i.kind === "stairs";
+      });
+      furnishRoom(f, room, Math.floor(Math.random() * 1e6));
+    });
+  }
 
   /** Move or resize what's selected, kept inside the home. */
   const nudge = (dx: number, dy: number, grow = false) =>
@@ -168,7 +209,7 @@ export function HomePlanner({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         <button onClick={() => void save()} disabled={busy || !dirty} className="h-9 rounded-full bg-gold px-3.5 text-sm font-semibold text-ink disabled:opacity-50">
-          {busy ? "Saving…" : dirty ? "Save" : "Saved"}
+          {busy ? "Saving…" : !dirty ? "Saved" : bill.naira > 0 ? `Pay ${money(bill.naira)} & save` : "Save"}
         </button>
       </header>
 
@@ -192,12 +233,13 @@ export function HomePlanner({ onClose }: { onClose: () => void }) {
               change((p) => (p.floors.push({ rooms: [], items: [] }), p));
               setFloor(plan.floors.length);
               setSel(null);
-              setTool("rooms");
-              setNote({ text: "A new floor. Put Stairs on the floor below to reach it, then draw its rooms." });
+              setNote({
+                text: `A new floor (${paid.floors > plan.floors.length ? "already paid for" : `${money(floorNaira(plan.size))} to build, paid when you save; it adds to your home's value`}). Tap Design it for me, or draw its rooms under Rooms.`,
+              });
             }}
             className="flex shrink-0 items-center gap-1 rounded-full border border-dashed border-line px-3 py-1 text-xs font-semibold text-muted"
           >
-            <Plus className="size-3.5" /> Add a floor
+            <Plus className="size-3.5" /> Add a floor{paid.floors > plan.floors.length ? "" : ` · ${money(floorNaira(plan.size))}`}
           </button>
         )}
         {floor > 0 && floor === plan.floors.length - 1 && (
@@ -232,6 +274,23 @@ export function HomePlanner({ onClose }: { onClose: () => void }) {
           ))}
         </select>
       </div>
+
+      {/* What you're working on: furniture or rooms, and "Design it for me" */}
+      {!view3d && (
+        <div className="flex shrink-0 items-center gap-1.5 px-2 pb-1.5 text-xs font-semibold">
+          <div className="flex flex-1 rounded-full bg-panel-2 p-0.5">
+            <button onClick={() => { setTool("furniture"); setSel(null); }} className={cn("flex-1 rounded-full py-1.5", tool === "furniture" ? "bg-ink text-white" : "")}>
+              Furniture
+            </button>
+            <button onClick={() => { setTool("rooms"); setSel(null); }} className={cn("flex-1 rounded-full py-1.5", tool === "rooms" ? "bg-ink text-white" : "")}>
+              Rooms
+            </button>
+          </div>
+          <button onClick={designForMe} className="flex shrink-0 items-center gap-1 rounded-full bg-gold px-3 py-1.5 text-ink">
+            {designs ? <Shuffle className="size-3.5" /> : <LayoutDashboard className="size-3.5" />} {designs ? "Another design" : "Design it for me"}
+          </button>
+        </div>
+      )}
 
       {/* The plan */}
       <div className="relative min-h-0 flex-1 bg-[#f4f1ea]">
@@ -278,6 +337,12 @@ export function HomePlanner({ onClose }: { onClose: () => void }) {
 
       {/* Tools: what's selected, or what to add */}
       <div className="shrink-0 border-t border-line pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+        {bill.naira > 0 && (
+          <p className="truncate bg-gold/15 px-3 py-1 text-[11px]">
+            <b>To pay when you save: {money(bill.naira)}</b> · {bill.lines.map((l) => `${l.count > 1 ? `${l.count} × ` : ""}${l.label}`).join(", ")} · adds about {money(bill.valueNaira)} to your home&apos;s value
+            {!owner && " · you rent this home, so only rearranging can be saved"}
+          </p>
+        )}
         {view3d ? (
           <p className="px-3 py-3 text-center text-xs text-muted">Drag to look round, pinch to zoom. Floors above {FLOOR_NAME[floor].toLowerCase()} are left off so you can see in.</p>
         ) : room || item ? (
@@ -321,6 +386,11 @@ export function HomePlanner({ onClose }: { onClose: () => void }) {
               {room && <Pad label="Bigger / smaller" onMove={(dx, dy) => nudge(dx, dy, true)} grow />}
             </div>
             {room && (
+              <button onClick={furnishThis} className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-full bg-gold py-2 text-xs font-semibold text-ink">
+                <Armchair className="size-3.5" /> Furnish this {ROOM_LABEL[room.kind].toLowerCase()} for me
+              </button>
+            )}
+            {room && (
               <div className="mt-2 flex gap-1 overflow-x-auto [scrollbar-width:none]">
                 {ROOM_KINDS.map((k) => (
                   <button key={k} onClick={() => onFloor((f) => (f.rooms.find((r) => r.id === room.id)!.kind = k))} className={cn("shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold", room.kind === k ? "bg-ink text-white" : "bg-panel-2")}>
@@ -332,24 +402,25 @@ export function HomePlanner({ onClose }: { onClose: () => void }) {
           </div>
         ) : (
           <div className="px-2 pt-2">
-            <div className="mb-2 flex gap-1 text-xs font-semibold">
-              <button onClick={() => setTool("furniture")} className={cn("flex-1 rounded-full py-1.5", tool === "furniture" ? "bg-ink text-white" : "bg-panel-2")}>
-                Furniture
-              </button>
-              <button onClick={() => setTool("rooms")} className={cn("flex-1 rounded-full py-1.5", tool === "rooms" ? "bg-ink text-white" : "bg-panel-2")}>
-                Rooms
-              </button>
-            </div>
             {tool === "furniture" ? (
               <>
-                <p className="mb-1.5 text-[11px] text-muted">Tap to put one in, then drag it where you want it. Tap a piece to turn or move it a square at a time.</p>
+                <p className="mb-1.5 text-[11px] text-muted">
+                  Tap to put one in, then drag it where you want it. Tap a piece to turn or move it a square at a time. You pay for new pieces when you save.
+                </p>
                 <div className="flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none]">
                   {(Object.keys(FURNITURE) as FurnitureKind[]).map((k) => (
-                    <button key={k} onClick={() => addItem(k)} className="flex shrink-0 items-center gap-1.5 rounded-xl bg-panel-2 px-2.5 py-2 text-xs font-semibold">
-                      <span className="size-3 rounded-sm" style={{ background: FURNITURE[k].colour }} />
-                      {FURNITURE[k].label}
+                    <button key={k} onClick={() => addItem(k)} className="flex shrink-0 flex-col items-start rounded-xl bg-panel-2 px-2.5 py-1.5 text-left text-xs font-semibold">
+                      <span className="flex items-center gap-1.5">
+                        <span className="size-3 rounded-sm" style={{ background: FURNITURE[k].colour }} />
+                        {FURNITURE[k].label}
+                      </span>
+                      <span className="text-[10px] font-normal text-muted">{owned(k) ? "You have one spare" : money(FURNITURE[k].naira)}</span>
                     </button>
                   ))}
+                  <span className="flex shrink-0 flex-col justify-center rounded-xl border border-dashed border-line px-3 py-1.5 text-[11px] font-semibold text-muted">
+                    More styles
+                    <span className="text-[10px] font-normal">Coming soon</span>
+                  </span>
                 </div>
               </>
             ) : (

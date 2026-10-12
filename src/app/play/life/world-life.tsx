@@ -656,7 +656,11 @@ export function useWorldLife({
             const take = async () => {
               if (!needsInterview(job)) return void hire();
               setBusy(true);
-              const start = await api.interviewStart(wp.id, job.job).catch(() => ({ ok: false as const, error: "Couldn't start the interview. Try again." }));
+              // A slow server (just woken up) gets a second go before giving up.
+              const ask = () => api.interviewStart(wp.id, job.job);
+              const start = await ask()
+                .catch(() => new Promise((ok) => setTimeout(ok, 1500)).then(ask))
+                .catch(() => ({ ok: false as const, error: "Couldn't reach the interview. Check your connection and try again." }));
               setBusy(false);
               if (!start.ok) return setMessage({ text: start.error, good: false });
               setInterview({ start, hire });
@@ -848,6 +852,14 @@ export function useWorldLife({
             setHomeOpen(false);
             setPlanning(true);
           }}
+          onEnter={
+            onEnter && homeUnit
+              ? () => {
+                  setHomeOpen(false);
+                  onEnter(homeUnit.split("/")[0]);
+                }
+              : undefined
+          }
         />
       )}
       {planning && <HomePlanner onClose={() => setPlanning(false)} />}
@@ -1506,5 +1518,5 @@ export function useWorldLife({
     fly(p.x, p.z);
     setPlace(workplaceById(planOf(region), p.id) ?? { id: p.id, name: p.name, x: Math.round(p.x), z: Math.round(p.z), jobs: [] });
   };
-  return { explore, openExplorePlace, rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit };
+  return { explore, openExplorePlace, rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit, homeBuilding: homeUnit ? homeUnit.split("/")[0] : null, openPlanner: () => setPlanning(true) };
 }

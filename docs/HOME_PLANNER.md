@@ -1,6 +1,6 @@
 # Planning your home
 
-Open it from **Home → Plan my home**. You draw your home flat, as a floor plan, and see it built in 3D.
+Open it from **Home → Plan my home**, or from the **Plan my home** button while you're inside your home. **Enter home** (on the Home card) takes you straight in. You draw your home flat, as a floor plan, and see it built in 3D.
 
 ## How it works
 
@@ -28,6 +28,34 @@ Open it from **Home → Plan my home**. You draw your home flat, as a floor plan
   - Save keeps the plan on your account, for the home you live in. If you move house, you start a fresh plan.
   - The server checks every plan before saving it, with the same rules as the editor: everything stays inside the home, at most 12 rooms and 80 pieces per floor.
 
+## Designed for you
+
+- **Design it for me** (at the top) lays out every floor and furnishes every room:
+  - living room and kitchen downstairs;
+  - bedrooms upstairs;
+  - stairs in the hall, lined up between floors.
+
+  Tap it again (**Another design**) for a different layout. Undo brings back what you had.
+- With a room selected, **Furnish this room for me** fills it with what that kind of room needs.
+  - Each piece goes against a wall, facing into the room.
+  - The doorways are left clear.
+
+## What it costs
+
+Planning and rearranging are free. **Save** pays for what's new:
+
+| What | Price (Lagos 2026) | Adds to your home's value |
+| --- | --- | --- |
+| A new floor | ₦180,000 per m²: Small ₦7.6M, Medium ₦14.4M, Large ₦27.7M | 90% of what you paid |
+| Stairs | ₦1.5M | 90% |
+| Furniture | ₦25k (plant) up to ₦650k (sofa); each piece's price shows under it | 50% |
+
+- Your home comes with its ground floor and the starter furniture.
+- What you've paid for stays yours. If you take a floor off or a sofa out, putting it back is free; the list says "You have one spare".
+- The server works out the bill from the plan itself, not from what the phone says, and takes it from your savings, then your wallet.
+- Only the owner can build onto a home. If you rent, you can only rearrange.
+- More furniture styles are **coming soon** (marked at the end of the furniture list).
+
 ## Where the code is
 
 | What | File |
@@ -36,7 +64,7 @@ Open it from **Home → Plan my home**. You draw your home flat, as a floor plan
 | Building a plan in 3D | `src/app/play/home/home3d.ts` |
 | The editor | `src/app/play/home/home-planner.tsx` |
 | Loading and saving | `src/app/play/life/home-plan-actions.ts` |
-| The database table | `game-db/063_home_plans.sql` (table `home_plans`) |
+| The database | `game-db/063_home_plans.sql` (table `home_plans`), `game-db/064_home_upgrades.sql` (paying, home value) |
 
 ## Next steps
 
