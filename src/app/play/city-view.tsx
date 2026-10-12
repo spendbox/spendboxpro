@@ -70,6 +70,7 @@ import { createCabin, type Cabin } from "./city/rides";
 import { disposeVehicleCaches } from "./city/vehicles";
 import { createBoats } from "./city/boats";
 import { createRealTransit, REAL_BASE } from "./city/real-transit";
+import { upgradeNpcs } from "./city/npc3d";
 import { createAirliner, LIVERIES } from "./city/airliner";
 import { createSlideRide, createWaterpark, waterparkParts, type Slide, type SlideRide, type Waterpark } from "./city/waterpark";
 import { createVenueGame, venueParts, type VenueGame } from "./city/venues";
@@ -339,6 +340,13 @@ type Props = {
   centerRef?: { current: (() => { x: number; z: number }) | null };
   /** Freeze the town (it stops moving and drawing), e.g. behind the sign-in pop-up. */
   paused?: boolean;
+  /**
+   * On foot (a real map): while `on`, you walk the streets as a little figure, the camera behind
+   * you (drag to look round). x and y are the joystick (-1..1, y up = forward), read every frame.
+   */
+  walkStick?: { current: { on: boolean; x: number; y: number } };
+  /** On foot: you tried to walk into water or a building ("water" / "building"), at most every few seconds. */
+  onWalkBlocked?: (what: "water" | "building") => void;
 };
 
 type Part = { tile: number; x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number; color: number; tilt?: number };
@@ -1367,6 +1375,8 @@ export function CityView({
   flyTo = null,
   centerRef,
   paused = false,
+  walkStick,
+  onWalkBlocked,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const api = useRef<{
@@ -1399,10 +1409,10 @@ export function CityView({
     /** Zoom in (dir 1) or out (dir -1) a step: the + and − buttons on a computer. */
     zoom: (dir: number) => void;
   } | null>(null);
-  const cb = useRef({ onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused });
+  const cb = useRef({ onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked });
   const atmos = useRef({ progress, nightFirst, meAvatar, weather });
   useEffect(() => {
-    cb.current = { onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused };
+    cb.current = { onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked };
     atmos.current = { progress, nightFirst, meAvatar, weather };
   });
 
@@ -4588,6 +4598,9 @@ export function CityView({
       camAt: { x: number; z: number } | null;
       /** Standing spots the regulars aren't using (for other players standing about). */
       free: Spot[];
+      /** The regulars standing about, in the new 3D avatar design (./city/npc3d). */
+      npc3d?: ReturnType<typeof upgradeNpcs> | null;
+      npcT?: number;
     };
     /** On a ride (not a balloon): the cabin drawn round you, the people in it, where it is. */
     type VehicleView = {
@@ -4746,6 +4759,7 @@ export function CityView({
         });
         st.interior = interior;
         st.figures = figures;
+        st.npc3d = upgradeNpcs(figures.figs, npcs);
         interior.setNight(carNight);
         st.update = interior.update;
         setupUse(st, interior.seats, interior.items, interior.spots, npcs.length);
@@ -4776,6 +4790,7 @@ export function CityView({
         st.views = [...views.slice(best), ...views.slice(0, best)];
         st.deck = deck;
         st.figures = figures;
+        st.npc3d = upgradeNpcs(figures.figs, npcs);
         deck.setNight(carNight);
         hideRoof(st, true);
         setupUse(st, deck.seats, deck.items, deck.spots, npcs.length);
@@ -4790,6 +4805,7 @@ export function CityView({
       st.interior?.dispose();
       st.deck?.dispose();
       st.figures?.dispose();
+      st.npc3d?.dispose();
       st.interact?.dispose();
       st.players?.dispose();
       st.crowd?.dispose();
@@ -5564,6 +5580,166 @@ export function CityView({
       pose.fov = fovFor(hfov) * look.state.zoom;
     }
 
+    // ---- on foot: walk the streets as a little figure, the camera behind you (a real map).
+    // Anywhere but water and into buildings: roads, parks, squares, pitches, open ground.
+    const WALK_SPEED = 0.45;
+    const WALK_OK = new Set<string>(["road", "bridge", "park", "trees", "plaza", "playground", "pitch", "monument", "ferris", "billboard", "clock"]);
+    const walker = {
+      on: false,
+      x: 0,
+      z: 0,
+      /** Which way you face (radians, a camera's yaw: 0 looks down -z), and the camera's own yaw. */
+      face: 0,
+      cam: 0,
+      step: 0,
+      /** 0 → 1 as the camera comes down to you (and back up when you stop). */
+      t: 0,
+      from: new THREE.Vector3(),
+      fromQuat: new THREE.Quaternion(),
+      blockedAt: 0,
+    };
+    const meFig = new THREE.Group();
+    {
+      const m = (c: number) => new THREE.MeshLambertMaterial({ color: c });
+      const shirt = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.036, 0.085, 8).translate(0, 0.105, 0), m(0xf08c00));
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.026, 10, 8).translate(0, 0.172, 0), m(0x8d5524));
+      const legs = [-1, 1].map((side) => {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.019, 0.064, 0.019).translate(0, -0.032, 0), m(0x1c3f6e));
+        leg.position.set(side * 0.012, 0.066, 0);
+        return leg;
+      });
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.05, 0.065, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffd43b, transparent: true, opacity: 0.8 }));
+      ring.position.y = 0.004;
+      meFig.add(shirt, head, ...legs, ring);
+      meFig.userData.legs = legs;
+      meFig.visible = false;
+      meFig.traverse((o) => ((o as THREE.Mesh).castShadow = true));
+      scene.add(meFig);
+    }
+    /** Can you stand here? (Not in water, not inside a building.) */
+    function walkable(x: number, z: number): "ok" | "water" | "building" {
+      const plan = currentPlan;
+      if (!plan) return "ok";
+      const tx = Math.round(x);
+      const tz = Math.round(z);
+      if (plan.region && (!plan.region.inside(tx, tz) || plan.region.waterAt(tx, tz))) return "water";
+      const t = tileAt(plan, spiralIndex(tx, tz));
+      if (t.kind === "river" || t.kind === "lake" || t.kind === "pond") return "water";
+      if (WALK_OK.has(t.kind)) return "ok";
+      if (t.kind === "structure" && t.structure && ["bigpark", "funfair", "waterpark", "arena"].includes(t.structure.type)) return "ok";
+      // The pavement round a building's lot: the outer edge of the tile.
+      const fx = Math.abs(x - tx);
+      const fz = Math.abs(z - tz);
+      return fx > 0.38 || fz > 0.38 ? "ok" : "building";
+    }
+    /** The nearest spot you can stand on, round (x, z). */
+    function standAt(x: number, z: number) {
+      for (let r = 0; r <= 6; r++)
+        for (let dz = -r; dz <= r; dz++)
+          for (let dx = -r; dx <= r; dx++) if (Math.max(Math.abs(dx), Math.abs(dz)) === r && walkable(Math.round(x) + dx, Math.round(z) + dz) === "ok") return { x: Math.round(x) + dx, z: Math.round(z) + dz };
+      return { x, z };
+    }
+    /** On foot this frame: moves you and the camera. False when not walking (the other views carry on). */
+    function updateWalk(dt: number) {
+      const stick = cb.current.walkStick?.current;
+      const want = !!stick?.on && !view && !!currentPlan;
+      if (want && !walker.on) {
+        // Down onto the street where the map is looking.
+        const at = standAt(controls.target.x, controls.target.z);
+        walker.on = true;
+        walker.x = at.x;
+        walker.z = at.z;
+        walker.cam = walker.face = cameraYaw();
+        walker.t = 0;
+        walker.from.copy(camera.position);
+        walker.fromQuat.copy(camera.quaternion);
+        saved.pos.copy(camera.position);
+        saved.target.copy(controls.target);
+        saved.quat.copy(camera.quaternion);
+        saved.fov = camera.fov;
+        controls.enabled = false;
+        look.setEnabled(true);
+        look.lookAt(0, 0, true);
+        look.resetZoom(true);
+        look.setLimits({ pitchMin: -0.5, pitchMax: 0.35, zoomMin: 0.6, zoomMax: 1.6 });
+        meFig.visible = true;
+      }
+      if (!walker.on) return false;
+      if (!want) {
+        walker.on = false;
+        meFig.visible = false;
+        camera.near = 0.1;
+        camera.updateProjectionMatrix();
+        // Gone into a place or onto a ride from the street: that view takes over from here.
+        if (view) return false;
+        // Back up to the map, over where you are now.
+        look.setEnabled(false);
+        controls.target.set(walker.x, 0, walker.z);
+        camera.position.set(walker.x - Math.sin(walker.cam) * -2.2, 3.2, walker.z - Math.cos(walker.cam) * -2.2);
+        camera.lookAt(controls.target);
+        controls.enabled = true;
+        controls.update();
+        return false;
+      }
+      look.update(dt, THREE.MathUtils.degToRad(camera.fov), el.clientHeight || 600);
+      const yaw = walker.cam + look.state.yaw;
+      // The joystick: up walks the way the camera looks, sideways steps sideways.
+      const jx = Math.max(-1, Math.min(1, stick!.x));
+      const jy = Math.max(-1, Math.min(1, stick!.y));
+      const mag = Math.min(1, Math.hypot(jx, jy));
+      const legs = meFig.userData.legs as THREE.Mesh[];
+      if (mag > 0.08) {
+        const fx = -Math.sin(yaw);
+        const fz = -Math.cos(yaw);
+        const rx = Math.cos(yaw);
+        const rz = -Math.sin(yaw);
+        const mx = (fx * jy + rx * jx) / (mag || 1);
+        const mz = (fz * jy + rz * jx) / (mag || 1);
+        const step = WALK_SPEED * mag * dt;
+        const nx = walker.x + mx * step;
+        const nz = walker.z + mz * step;
+        const okBoth = walkable(nx, nz);
+        if (okBoth === "ok") {
+          walker.x = nx;
+          walker.z = nz;
+        } else if (walkable(nx, walker.z) === "ok") walker.x = nx;
+        else if (walkable(walker.x, nz) === "ok") walker.z = nz;
+        else if (performance.now() - walker.blockedAt > 4000) {
+          walker.blockedAt = performance.now();
+          cb.current.onWalkBlocked?.(okBoth === "water" ? "water" : "building");
+        }
+        walker.face += turnTo(walker.face, Math.atan2(-mx, -mz)) * Math.min(1, dt * 10);
+        walker.step += dt * 9 * mag;
+        legs[0].rotation.x = Math.sin(walker.step) * 0.6;
+        legs[1].rotation.x = -Math.sin(walker.step) * 0.6;
+        // The camera drifts round behind you as you walk forward.
+        if (jy > 0.3) walker.cam += turnTo(walker.cam, walker.face - look.state.yaw) * Math.min(1, dt * 1.2);
+      } else {
+        legs[0].rotation.x *= 0.8;
+        legs[1].rotation.x *= 0.8;
+      }
+      const gy = 0.07;
+      meFig.position.set(walker.x, gy + Math.abs(Math.sin(walker.step)) * 0.006 * (mag > 0.08 ? 1 : 0), walker.z);
+      meFig.rotation.y = walker.face;
+      // The camera: behind you and a little above, looking at you.
+      const dist = 0.55 * look.state.zoom;
+      const pitch = look.state.pitch;
+      pose.pos.set(walker.x + Math.sin(yaw) * dist, gy + 0.22 + pitch * -0.35 + dist * 0.2, walker.z + Math.cos(yaw) * dist);
+      tmpV2.set(walker.x, gy + 0.14, walker.z).sub(pose.pos);
+      pose.quat.setFromEuler(eul.set(Math.atan2(tmpV2.y, Math.hypot(tmpV2.x, tmpV2.z)), Math.atan2(-tmpV2.x, -tmpV2.z), 0, "YXZ"));
+      pose.fov = fovFor(76);
+      walker.t = Math.min(1, walker.t + dt / 1.4);
+      const e = easeInOut(walker.t);
+      camera.position.lerpVectors(walker.from, pose.pos, e);
+      camera.quaternion.slerpQuaternions(walker.fromQuat, pose.quat, e);
+      camera.fov += (pose.fov - camera.fov) * Math.min(1, dt * 4);
+      camera.near = 0.02;
+      camera.updateProjectionMatrix();
+      // The city keeps drawing round you.
+      controls.target.set(walker.x, 0, walker.z);
+      return true;
+    }
+
     /** Moves the camera when riding or in a place (or flying to / from one). False when the map controls are in charge. */
     function updateView(dt: number) {
       if (!view && !flight) return false;
@@ -5696,6 +5872,8 @@ export function CityView({
         st.deck?.setNight(carNight);
         camLocal.set(st.local.x, 0, st.local.z);
         st.figures?.update(time, camLocal);
+        st.npc3d?.update(Math.min(0.1, Math.max(0, time - (st.npcT ?? time))));
+        st.npcT = time;
         st.players?.update(time, camLocal);
         st.crowd?.update(time);
         st.dancers?.update(time);
@@ -6316,7 +6494,7 @@ export function CityView({
       const exposure = immersive() ? 1.0 : 0.8;
       renderer.toneMappingExposure += (exposure - renderer.toneMappingExposure) * Math.min(1, dt * 3);
       updateStages(time);
-      const riding = updateView(dt);
+      const riding = updateWalk(dt) || updateView(dt);
       countryside.update(camera.position, view?.kind === "ride" || view?.kind === "vehicle", currentSeed);
       listenT -= dt;
       if (listenT <= 0) {

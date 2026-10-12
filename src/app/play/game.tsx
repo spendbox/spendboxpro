@@ -38,6 +38,7 @@ import {
   CircleHelp,
   Fish,
   Flashlight,
+  Footprints,
   Ghost,
   Hammer,
   House,
@@ -110,6 +111,7 @@ import { PlacePill } from "./place-pill";
 import { CityCard } from "./city-card";
 import { useWorldLife } from "./life/world-life";
 import type { ExplorePlace } from "@/lib/world/explore";
+import { Joystick } from "./joystick";
 import { PeopleList } from "./people/people-list";
 import { StatsSheet } from "./stats-sheet";
 import { PrankReveal, usePrankReveal } from "./people/prank-reveal";
@@ -740,6 +742,21 @@ export function Game({
   const onlineNear = useMemo(() => facesOnMap.filter((f) => f.status === "online").length, [facesOnMap]);
   const onlineNow = Math.max(1, cityOnline ?? 0, online ?? 0, onlineNear);
   const [statsOpen, setStatsOpen] = useState(false);
+  /** On foot on the streets: the joystick's state (the 3D city reads it every frame), and whether you're walking. */
+  const walkStick = useRef({ on: false, x: 0, y: 0 });
+  const [walking, setWalkingNow] = useState(false);
+  const setWalking = (on: boolean) => {
+    walkStick.current.on = on;
+    walkStick.current.x = walkStick.current.y = 0;
+    setWalkingNow(on);
+  };
+  // Going into a place or onto a ride stops walking (you're back on the street when you come out).
+  useEffect(() => {
+    if (!place && ride === null) return;
+    walkStick.current.on = false;
+    const t = setTimeout(() => setWalkingNow(false), 0);
+    return () => clearTimeout(t);
+  }, [place, ride]);
   /** Everyone on the map to talk to: search by name, the nearest first (the online button, Messages → People). */
   const peopleFinder = (where: "stats" | "chat") =>
     worldId && !me.guest ? (
@@ -1568,6 +1585,8 @@ export function Game({
             onProperty={worldId ? worldLife.onProperty : undefined}
             onWorkplace={worldId ? worldLife.onWorkplace : undefined}
             centerRef={worldId ? worldLife.centerRef : undefined}
+            walkStick={walkStick}
+            onWalkBlocked={(what) => setMessage({ text: what === "water" ? "That's water: you can't walk on it. Try a ferry (Explore → Rides)." : "That's a building. Tap it to go in.", tone: "info" })}
             businesses={worldId ? worldLife.businesses : undefined}
             onBusiness={worldId ? worldLife.onBusiness : undefined}
             owned={worldId ? worldLife.owned : undefined}
@@ -1653,6 +1672,16 @@ export function Game({
               <Compass className="size-4 text-[#e64980]" />
               Explore
             </button>
+            {!place && ride === null && (
+              <button
+                onClick={() => setWalking(!walking)}
+                className={cn("pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold", walking ? "bg-ink text-white" : "glass")}
+                aria-pressed={walking}
+              >
+                <Footprints className="size-4" />
+                {walking ? "Stop walking" : "Walk"}
+              </button>
+            )}
             {worldLife.rowButtons}
             {!me.guest && (
               // Notifications: what's happened, and switching them on for this phone. Glows until they're on.
@@ -2922,6 +2951,12 @@ export function Game({
           }}
           onClose={away.close}
         />
+      )}
+      {/* On foot: the joystick, bottom left (drag anywhere else to look round). */}
+      {walking && !place && ride === null && (
+        <div className="pointer-events-none fixed bottom-6 left-4 z-30 sm:bottom-8 sm:left-8">
+          <Joystick stick={walkStick} />
+        </div>
       )}
       {statsOpen && <StatsSheet online={onlineNow} onClose={() => setStatsOpen(false)} people={peopleFinder("stats")} />}
       {cityOpen && worldRegion && (
