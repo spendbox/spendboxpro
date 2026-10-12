@@ -4399,6 +4399,22 @@ export function CityView({
       if (immersive()) return;
       const p = posOf(tile);
       focus = null;
+      if (walker.on) {
+        // On foot: the walking camera ignores the map's, so you're set down on the street
+        // right by the spot (a friend, a place you searched), and the camera glides over.
+        if (regionNow && win && Math.max(Math.abs(p.x - win.cx), Math.abs(p.z - win.cz)) > DETAIL * 0.45) {
+          build(currentSeed, builtCount, { cx: Math.round(p.x), cz: Math.round(p.z) });
+        }
+        const at = standAt(p.x, p.z);
+        walker.x = at.x;
+        walker.z = at.z;
+        walker.t = 0;
+        walker.from.copy(camera.position);
+        walker.fromQuat.copy(camera.quaternion);
+        controls.target.set(at.x, 0, at.z);
+        showHover(tile);
+        return;
+      }
       eventFly = new THREE.Vector3(p.x, 0, p.z);
       // A long jump across a real place: draw the destination in full straight away, so it's
       // ready when the camera gets there (instead of after the glide).

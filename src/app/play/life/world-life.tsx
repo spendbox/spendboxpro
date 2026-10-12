@@ -141,8 +141,8 @@ export function useWorldLife({
   onChanged?: () => void;
   /** Go inside a building (the game's insides); left out where there are none (the test page). */
   onEnter?: (buildingId: string) => void;
-  /** Before flying home: leave the building you're in. */
-  beforeHome?: () => void;
+  /** Before flying home: leave the building or ride you're in (asking first), then `go`. */
+  beforeHome?: (go: () => void) => void;
   /** Your account (to know your own marks), and opening someone's card. */
   meId?: string | null;
   onPerson?: (id: string) => void;
@@ -695,11 +695,14 @@ export function useWorldLife({
 
   const goHome = () => {
     if (!homeSpot) return;
-    beforeHome?.();
-    fly(homeSpot.x, homeSpot.z);
-    setHomeOpen(true);
-    setNeighbours(null);
-    void api.neighbours().then(setNeighbours);
+    const go = () => {
+      fly(homeSpot.x, homeSpot.z);
+      setHomeOpen(true);
+      setNeighbours(null);
+      void api.neighbours().then(setNeighbours);
+    };
+    if (beforeHome) beforeHome(go);
+    else go();
   };
 
   /** Something in Finance wants you: the guide's budget step, a power cut, an offer. */

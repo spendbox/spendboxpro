@@ -507,7 +507,7 @@ export function Game({
     budget: 5000,
     onChanged: () => startTransition(() => router.refresh()),
     // Home from inside a building: out of it first.
-    beforeHome: () => leaveInside.current(),
+    beforeHome: (go: () => void) => leaveThen.current("go home", go),
     meId: state.me.guest ? null : state.me.id,
     rowOutside: true,
     meName: state.me.name ?? undefined,
@@ -532,6 +532,9 @@ export function Game({
   const [sound, setSound] = useState(true);
   /** Leave the building you're in, if any (set once leaveRoom exists, below). */
   const leaveInside = useRef<() => void>(() => {});
+  /** Go somewhere that means leaving the building or ride you're in: ask first (set below, once leaveRoom exists). */
+  const leaveThen = useRef<(what: string, go: () => void) => void>((_what, go) => go());
+  const [leaveAsk, setLeaveAsk] = useState<{ what: string; go: () => void } | null>(null);
   const [busy, setBusy] = useState(false);
   // Ghost duels: a ghost's card (tapped on the map), the list of ghosts, the duel on screen,
   // and flying the camera over to a ghost's light.
@@ -794,7 +797,7 @@ export function Game({
         onFly={(x, z) => {
           setStatsOpen(false);
           setChatOpen(false);
-          worldLife.fly(x, z);
+          leaveThen.current("go to them", () => worldLife.fly(x, z));
         }}
       />
     ) : undefined;
@@ -894,8 +897,7 @@ export function Game({
   // Fly the camera to an event (stepping out of any building or ride first).
   function flyToEvent(id: number) {
     setToasts([]);
-    if (place || ride !== null) leaveRoom();
-    setFocusEvent((f) => ({ id, at: (f?.at ?? 0) + 1 }));
+    leaveThen.current("go and see it", () => setFocusEvent((f) => ({ id, at: (f?.at ?? 0) + 1 })));
   }
   // What's happening, where, for how long, and any coins to grab.
   const [eventInfo, setEventInfo] = useState<number | null>(null);
@@ -1529,6 +1531,10 @@ export function Game({
     leaveInside.current = () => {
       if (place) leaveRoom();
     };
+    leaveThen.current = (what, go) => {
+      if (!place && ride === null) return go();
+      setLeaveAsk({ what, go });
+    };
   });
   // The house button: fly over to your house (or build one, if it isn't in this town).
   function showMyHouse() {
@@ -1536,11 +1542,8 @@ export function Game({
     if (phase === "join") return setMessage({ icon: House, text: `Your house goes up with the rest of the town, in ${countdown}.`, tone: "info" });
     const tile = myHouseTile;
     const fly = () => setFlyTo((f) => ({ tile, at: (f?.at ?? 0) + 1 }));
-    // Inside somewhere or on a ride: step out first, then fly over once the camera's back.
-    if (place || ride !== null) {
-      leaveRoom();
-      setTimeout(fly, 1700);
-    } else fly();
+    // Inside somewhere or on a ride: ask, step out, then fly over once the camera's back.
+    leaveThen.current("go to your house", fly);
     const home = tileAt(plan, tile).home;
     setMessage({ icon: House, text: `There's your house${home?.name ? `, ${home.name}` : ""}. Tap it to go inside. Change it from My house in the menu.`, tone: "info" });
   }
@@ -2035,6 +2038,32 @@ export function Game({
             </button>
           ))}
       </div>
+      {leaveAsk && (
+        <div className="fixed inset-0 z-[70] grid place-items-center bg-black/40 p-4" onPointerDown={(e) => e.target === e.currentTarget && setLeaveAsk(null)} role="dialog" aria-label="Leave here?">
+          <div className="w-full max-w-xs rounded-3xl bg-panel p-5 text-center shadow-2xl">
+            <DoorOpen className="mx-auto size-8 text-gold-dark" aria-hidden />
+            <h2 className="mt-2 font-display text-lg font-bold">Leave {ride !== null ? "this ride" : (rooms.myRoomInfo?.name ?? "this place")}?</h2>
+            <p className="mt-1 text-sm text-muted">To {leaveAsk.what} you&apos;ll step out of {ride !== null ? "the ride" : "here"} first.</p>
+            <div className="mt-4 flex gap-2">
+              <button onClick={() => setLeaveAsk(null)} className="h-11 flex-1 rounded-full bg-panel-2 font-semibold">
+                Stay
+              </button>
+              <button
+                onClick={() => {
+                  const go = leaveAsk.go;
+                  setLeaveAsk(null);
+                  leaveRoom();
+                  // Once the camera is back out over the town.
+                  setTimeout(go, 1700);
+                }}
+                className="h-11 flex-1 rounded-full bg-ink font-semibold text-white"
+              >
+                Leave and go
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {alertsOpen && (
         <Sheet onClose={() => setAlertsOpen(false)} title="Notifications">
           {!pushOn && (
@@ -3066,7 +3095,7 @@ export function Game({
           onClose={() => setPersonId(null)}
           onFly={(x, z) => {
             setPersonId(null);
-            worldLife.fly(x, z);
+            leaveThen.current("go to them", () => worldLife.fly(x, z));
           }}
           onAddFriend={me.guest ? undefined : (p) => void befriend(p)}
           greet={(p) => greet(p, false)}
