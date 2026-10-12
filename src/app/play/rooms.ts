@@ -61,7 +61,7 @@ export function buildingOf(roomId: string) {
 
 /** The level part of a building room ("b:12:f4" → "f4"), or null. */
 export function levelOf(roomId: string) {
-  const m = /^b:\d+:(g|r|f\d+)$/.exec(roomId);
+  const m = /^b:\d+:(g|o|r|f\d+)$/.exec(roomId);
   return m ? m[1] : null;
 }
 

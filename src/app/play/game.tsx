@@ -1428,7 +1428,7 @@ export function Game({
     setFriendsOpen(false);
     setNudge(null);
     if (me.guest || rooms.myRoom === room) return;
-    const b = /^(b:\d+):(g|r|f\d+)$/.exec(room);
+    const b = /^(b:\d+):(g|o|r|f\d+)$/.exec(room);
     if (b) {
       if (place || ride !== null) leaveRoom();
       setGoTo({ building: b[1], level: b[2] });
