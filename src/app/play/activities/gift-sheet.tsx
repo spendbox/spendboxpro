@@ -1,5 +1,7 @@
 "use client";
 
+import { announceGiftSent } from "../people/gift-pop";
+import { rememberPerson } from "../people/recent-rail";
 import { useEffect, useState } from "react";
 import { Check, Gift, Send } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -47,6 +49,8 @@ export function GiveCoinsSheet({ to, onClose }: { to: { id: string; name: string
     }
     setBalance(res.balance);
     setSent({ amount: res.amount, leftToday: res.leftToday });
+    announceGiftSent(res.to, `₥${res.amount.toLocaleString("en-GB")}`);
+    rememberPerson({ id: to.id, name: res.to }, "Gave mint");
     questEvent({ type: "gift", amount: res.amount });
     playSfx("found");
   }

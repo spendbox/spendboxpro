@@ -1,5 +1,6 @@
 "use client";
 
+import { rememberPerson } from "./people/recent-rail";
 import { useState } from "react";
 import { Check, Handshake, Heart, LoaderCircle } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -35,6 +36,7 @@ export function GreetButtons({
       return onDone(res.error, false);
     }
     setSent(kind);
+    rememberPerson(person, kind === "hug" ? "Hugged" : "Shook hands");
     setTimeout(() => setSent((s) => (s === kind ? null : s)), 2500);
     questEvent({ type: "greet" });
     playSfx("found");

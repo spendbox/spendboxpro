@@ -1,5 +1,7 @@
 "use client";
 
+import { announceGiftSent } from "./gift-pop";
+import { rememberPerson } from "./recent-rail";
 import { GenderMark } from "./people-list";
 import { setGender } from "../people-actions";
 import { useEffect, useState } from "react";
@@ -53,11 +55,15 @@ export function PersonCard({
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     let alive = true;
-    void playerCard(id).then((c) => alive && setCard(c));
+    void playerCard(id).then((c) => {
+      if (!alive) return;
+      setCard(c);
+      if (c && !self) rememberPerson(c, "Looked them up");
+    });
     return () => {
       alive = false;
     };
-  }, [id]);
+  }, [id, self]);
   useEffect(() => {
     if (mode !== "gift" || things) return;
     void myThings().then((t) => setThings((t?.items ?? []).filter((i) => i.listPrice == null)));
@@ -70,6 +76,8 @@ export function PersonCard({
     if (!r.ok) return onDone(r.error, false);
     setMode(null);
     setNote("");
+    rememberPerson(card, kind === "knock" ? "Knocked" : kind === "note" ? "Left a note" : "Gave a gift");
+    if (kind === "gift") announceGiftSent(card.name, itemName ?? "Your gift");
     onDone(kind === "knock" ? `You knocked on ${card.name}'s door.` : kind === "note" ? `Note left for ${card.name}.` : `${itemName ?? "Your gift"} is wrapped and waiting at ${card.name}'s door.`, true);
   };
   return (

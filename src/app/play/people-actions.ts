@@ -222,8 +222,20 @@ export async function myDoorstep(): Promise<DoorstepEntry[]> {
 export async function openDoorstep(id?: number): Promise<Result> {
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Sign in first." };
-  const { error } = await createAdminClient().rpc("doorstep_open", { p_user: userId, p_id: id == null ? null : Math.round(n(id)) });
-  return error ? say(error.message) : { ok: true };
+  const db = createAdminClient();
+  // Opening a wrapped gift: whoever left it hears about it (once).
+  const gift =
+    id == null
+      ? null
+      : (await db.from("doorstep").select("from_user, kind, item_name, opened_at").eq("id", Math.round(n(id))).eq("to_user", userId).maybeSingle()).data;
+  const { error } = await db.rpc("doorstep_open", { p_user: userId, p_id: id == null ? null : Math.round(n(id)) });
+  if (error) return say(error.message);
+  if (gift && gift.kind === "gift" && !gift.opened_at && gift.from_user) {
+    const { data: me } = await db.from("profiles").select("username").eq("id", userId).maybeSingle();
+    await db.from("notifications").insert({ user_id: gift.from_user, round_id: null, kind: "thanks", body: `${me?.username ?? "Someone"} opened your gift${gift.item_name ? `: ${gift.item_name}` : ""}!` });
+    await pushTo(String(gift.from_user));
+  }
+  return { ok: true };
 }
 
 /** Say thank you for something left at your door. */

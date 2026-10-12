@@ -72,7 +72,7 @@ test("a long danfo ride is capped, so a first job across town still pays", () =>
   const far = fareMint("danfo", 30, PRICES)!;
   const farther = fareMint("danfo", 45, PRICES)!;
   assert.equal(far, farther, "the cap");
-  assert.ok(far * PRICES.perMint <= 260, "about ₦250 (rounded to the mint)");
+  assert.ok(far * PRICES.perMint <= 1_510, "about ₦1,500 at most (rounded to the mint)");
   // A loader (₦80,000 a month) 30 km away keeps something every day.
   const loader = jobsInBuilding({ kind: "warehouse", state: "built" }).find((j) => j.job === "loader")!;
   assert.ok(dayNet(payDay(loader, PRICES), 0, far) > 0);

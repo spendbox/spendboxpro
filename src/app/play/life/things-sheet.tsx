@@ -1,5 +1,6 @@
 "use client";
 
+import { announceGiftSent } from "../people/gift-pop";
 import { useCallback, useEffect, useState } from "react";
 import { cachedThings, loadThings } from "./things-cache";
 import { Car, Gem, Hammer, ShoppingBag, Store } from "lucide-react";
@@ -165,7 +166,12 @@ function ItemActions({ item, busy, price, setPrice, to, setTo, run, done }: { it
       {item.listPrice == null && ask > 0 && <p className="text-[11px] text-muted">Listing costs {cash(Math.max(0.1, ask * LIST_FEE))}; when it sells you get {cash(ask * (1 - SALE_TAX))} after {Math.round(SALE_TAX * 100)}% tax.</p>}
       <div className="flex gap-1.5">
         <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="Give to (player's name)" className="h-9 min-w-0 flex-1 rounded-full bg-panel px-3 text-xs outline-none ring-1 ring-ink/10" />
-        <button disabled={busy || to.trim().length < 2} onClick={() => void run(() => items.giftItem(item.id, to), (r) => `You gave ${item.name} to ${String(r.to ?? to)}.`).then((ok) => ok && done())} className="h-9 shrink-0 rounded-full bg-ink/5 px-3 text-xs font-semibold disabled:opacity-40">
+        <button disabled={busy || to.trim().length < 2} onClick={() =>
+            void run(() => items.giftItem(item.id, to), (r) => {
+              announceGiftSent(String(r.to ?? to), item.name);
+              return `You gave ${item.name} to ${String(r.to ?? to)}.`;
+            }).then((ok) => ok && done())
+          } className="h-9 shrink-0 rounded-full bg-ink/5 px-3 text-xs font-semibold disabled:opacity-40">
           Give
         </button>
       </div>

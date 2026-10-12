@@ -477,7 +477,21 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
     return error ? null : cleanBoard(data);
   };
 
-  const [, last, results, , , { data: visits }, { count: playerCount }, houses, friends, streak, duels] = await Promise.all([
+  // Your notices on the real map (a gift, someone at your door, a sale...) belong to no round:
+  // read them as well as this round's (they used to be left out, so nothing popped up).
+  const lifeNotesPart = async () => {
+    if (guest) return;
+    const { data } = await db
+      .from("notifications")
+      .select("id, kind, body, tile, created_at")
+      .eq("user_id", userId)
+      .or("round_id.is.null,kind.in.(hug,handshake,gift,spray,thanks)")
+      .gte("created_at", new Date(Date.now() - 7 * 86_400_000).toISOString())
+      .order("id", { ascending: false })
+      .limit(40);
+    return (data ?? []).map((n) => ({ id: Number(n.id), kind: String(n.kind), body: mintify(String(n.body)), tile: (n.tile ?? null) as number | null, at: String(n.created_at) }));
+  };
+  const [, last, results, , , { data: visits }, { count: playerCount }, houses, friends, streak, duels, lifeNotes] = await Promise.all([
     roundPart(),
     lastPart(),
     loadResults(db, userId),
@@ -489,7 +503,9 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
     friendsPart(),
     streakPart(),
     duelsPart(),
+    lifeNotesPart(),
   ]);
+  if (lifeNotes?.length) notifications = [...notifications, ...lifeNotes].sort((a, b) => b.id - a.id).slice(0, 60);
   const site = { visits: Number(visits?.value ?? 0), players: playerCount ?? 0 };
   const tileCount = round?.tile_count ?? 0;
   const frac = tileCount ? Math.min(1, (round?.searched_count ?? 0) / tileCount) : 0;

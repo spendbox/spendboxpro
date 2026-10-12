@@ -1,5 +1,6 @@
 "use server";
 
+import { pushTo } from "@/lib/push";
 import { cleanAvatar, type Avatar } from "@/lib/avatar";
 import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -46,6 +47,7 @@ export async function sendGreeting(
   const { data, error } = await createAdminClient().rpc("send_greeting", { p_from: userId, p_to: toId, p_kind: kind });
   if (error || !data) return { ok: false, error: say(error?.message, "Couldn't send that. Try again.") };
   const d = data as { kind: "hug" | "handshake"; to: string; left_today: number };
+  await pushTo(toId);
   return { ok: true, kind: d.kind, to: String(d.to), leftToday: Number(d.left_today) };
 }
 
