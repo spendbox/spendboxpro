@@ -5,7 +5,7 @@ import { DoorClosed, Gift, Heart, StickyNote, Zap } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar } from "@/lib/avatar";
 import { cash } from "@/lib/world/value";
-import { awayDigest, myDoorstep, openDoorstep, savePush, thankDoorstep, type AwayDigest, type DoorstepEntry } from "../people-actions";
+import { awayDigest, dropPush, myDoorstep, openDoorstep, savePush, thankDoorstep, type AwayDigest, type DoorstepEntry } from "../people-actions";
 import { Sheet } from "../sheet";
 import { cleanPrank } from "../street-actions";
 import { prankOf } from "@/lib/world/street";
@@ -180,4 +180,31 @@ export async function turnOnNotifications(): Promise<{ ok: boolean; text: string
   const sub = (await reg.pushManager.getSubscription()) ?? (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: raw }));
   const r = await savePush(JSON.parse(JSON.stringify(sub)));
   return r.ok ? { ok: true, text: "Notifications on: we'll tell you when someone's at your door." } : { ok: false, text: r.error };
+}
+
+/** Is this phone or browser getting notifications right now (allowed, and subscribed)? */
+export async function notificationsOn(): Promise<boolean> {
+  try {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return false;
+    if (Notification.permission !== "granted") return false;
+    const reg = await navigator.serviceWorker.getRegistration("/sw.js");
+    return !!(await reg?.pushManager.getSubscription());
+  } catch {
+    return false;
+  }
+}
+
+/** Turn notifications off for this phone or browser (the bell, tapped again). */
+export async function turnOffNotifications(): Promise<{ ok: boolean; text: string }> {
+  try {
+    const reg = await navigator.serviceWorker.getRegistration("/sw.js");
+    const sub = await reg?.pushManager.getSubscription();
+    if (sub) {
+      await dropPush(sub.endpoint);
+      await sub.unsubscribe();
+    }
+    return { ok: true, text: "Notifications off. Tap the bell to turn them back on." };
+  } catch {
+    return { ok: false, text: "Couldn't turn notifications off just now. Try again." };
+  }
 }

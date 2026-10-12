@@ -1,6 +1,7 @@
 "use client";
 
-import { Compass, Users, X } from "lucide-react";
+import { Building2, ChevronRight, Compass, Landmark, Music, Plane, ShoppingBag, Trees, Users, UtensilsCrossed, X } from "lucide-react";
+import { GROUPS, type ExploreGroup, type ExplorePlace } from "@/lib/world/explore";
 import { HotAirBalloon, Trophy } from "@/components/icons";
 import { cn } from "@/lib/cn";
 import { short } from "@/lib/format";
@@ -15,11 +16,18 @@ import { Sheet } from "./sheet";
 // Explore: everything to ride (balloons, trains, buses, cars, boats, the Ferris wheel, water
 // slides), and sport to watch (football, basketball, boxing, wrestling), in two tabs.
 
-const RIDE_ORDER: RideKindName[] = ["balloon", "heli", "train", "bus", "car", "boat", "ferris", "slide"];
+const RIDE_ORDER: RideKindName[] = ["train", "balloon", "boat", "heli", "bus", "car", "ferris", "slide"];
+
+const GROUP_ICON: Record<ExploreGroup, typeof Trees> = { nightlife: Music, parks: Trees, shopping: ShoppingBag, food: UtensilsCrossed, culture: Landmark, sport: Trophy, travel: Plane };
+const GROUP_COLOUR: Record<ExploreGroup, string> = { nightlife: "#ae3ec9", parks: "#2f9e44", shopping: "#e8590c", food: "#f08c00", culture: "#5f3dc4", sport: "#12a37a", travel: "#1c7ed6" };
+/** "300 m", "4.5 km" (a tile is 100 m). */
+const far = (tiles: number) => (tiles < 10 ? `${Math.max(1, Math.round(tiles)) * 100} m` : `${(tiles / 10).toFixed(tiles < 100 ? 1 : 0)} km`);
 
 export function ExploreSheet({
   tab,
   onTab,
+  places,
+  onPlace,
   rides,
   counts,
   liveVenues,
@@ -27,8 +35,11 @@ export function ExploreSheet({
   onSport,
   onClose,
 }: {
-  tab: "rides" | "sports";
-  onTab: (t: "rides" | "sports") => void;
+  tab: "places" | "rides" | "sports";
+  onTab: (t: "places" | "rides" | "sports") => void;
+  /** The real map: places worth going to (clubs, parks, markets...), nearest first. */
+  places?: ExplorePlace[];
+  onPlace?: (p: ExplorePlace) => void;
   rides: CityRide[];
   /** People on each ride (by room id). */
   counts: Record<string, number>;
@@ -46,14 +57,14 @@ export function ExploreSheet({
         </span>
         <div className="min-w-0 flex-1">
           <h2 className="font-display text-xl font-extrabold leading-tight">Explore</h2>
-          <p className="text-xs text-muted">Hop on a ride, or watch a match.</p>
+          <p className="text-xs text-muted">{places ? "Go out, hop on a ride, or watch a match." : "Hop on a ride, or watch a match."}</p>
         </div>
         <button onClick={onClose} className="grid size-9 shrink-0 place-items-center self-start rounded-full text-muted hover:bg-panel-2" aria-label="Close">
           <X className="size-5" />
         </button>
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-1 rounded-xl bg-panel-2 p-1 text-sm font-semibold" role="tablist">
-        {(["rides", "sports"] as const).map((t) => (
+      <div className={cn("mt-3 grid gap-1 rounded-xl bg-panel-2 p-1 text-sm font-semibold", places ? "grid-cols-3" : "grid-cols-2")} role="tablist">
+        {(places ? (["places", "rides", "sports"] as const) : (["rides", "sports"] as const)).map((t) => (
           <button
             key={t}
             role="tab"
@@ -61,13 +72,49 @@ export function ExploreSheet({
             onClick={() => onTab(t)}
             className={cn("flex items-center justify-center gap-1.5 rounded-lg py-2", tab === t ? "bg-panel shadow-sm" : "text-muted")}
           >
-            {t === "rides" ? <HotAirBalloon className="size-4 text-[#e64980]" /> : <Trophy className="size-4 text-[#12a37a]" />}
-            {t === "rides" ? "Rides" : "Sports"}
+            {t === "places" ? <Building2 className="size-4 text-[#5f3dc4]" /> : t === "rides" ? <HotAirBalloon className="size-4 text-[#e64980]" /> : <Trophy className="size-4 text-[#12a37a]" />}
+            {t === "places" ? "Places" : t === "rides" ? "Rides" : "Sports"}
           </button>
         ))}
       </div>
 
-      {tab === "sports" ? (
+      {tab === "places" && places ? (
+        <div className="mt-3 max-h-[58dvh] space-y-4 overflow-y-auto overscroll-contain">
+          <p className="text-sm text-muted">Where to go, nearest to where you&apos;re looking first. Tap one to fly there and go in.</p>
+          {GROUPS.map((g) => {
+            const list = places.filter((p) => p.group === g.id);
+            if (!list.length) return null;
+            const Icon = GROUP_ICON[g.id];
+            return (
+              <section key={g.id}>
+                <h3 className="flex items-center gap-2 text-sm font-bold">
+                  <Icon className="size-4 shrink-0" style={{ color: GROUP_COLOUR[g.id] }} />
+                  {g.label}
+                </h3>
+                <p className="text-xs text-muted">{g.blurb}</p>
+                <div className="-mx-1 mt-1.5 flex gap-2 overflow-x-auto px-1 pb-1">
+                  {list.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => onPlace?.(p)}
+                      className="flex w-40 shrink-0 flex-col rounded-2xl bg-panel-2 p-3 text-left hover:bg-gold/20"
+                    >
+                      <span className="grid size-8 place-items-center rounded-xl text-white" style={{ background: GROUP_COLOUR[g.id] }}>
+                        <Icon className="size-4" />
+                      </span>
+                      <b className="mt-2 line-clamp-2 text-sm leading-tight">{p.name}</b>
+                      <span className="mt-auto flex items-center justify-between pt-1 text-[11px] text-muted">
+                        {p.what} · {far(p.dist)}
+                        <ChevronRight className="size-3.5" />
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      ) : tab === "sports" ? (
         <div className="mt-3 space-y-2">
           <p className="text-sm text-muted">Every match is a brand-new game, shown live from above. Tickets cost a few mint, and you can bet mint on who wins.</p>
           {SPORTS.map((sp) => {

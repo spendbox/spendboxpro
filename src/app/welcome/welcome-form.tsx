@@ -5,6 +5,7 @@ import { useState } from "react";
 import { PinInput } from "@/components/pin-input";
 import { saveBirthDateOnly, saveNameAndPin, signOutNow } from "../login/actions";
 import { BirthDateInput, birthComplete, emptyBirth } from "./birth-date-input";
+import { setGender, type Gender } from "../play/people-actions";
 
 const input = "w-full rounded-xl border border-line bg-panel px-4 py-3 text-ink outline-none focus:border-gold";
 const button = "w-full rounded-xl bg-gold px-4 py-3 font-semibold text-ink disabled:opacity-50";
@@ -30,6 +31,8 @@ export function WelcomeForm({
   const [pin, setPin] = useState("");
   const [pin2, setPin2] = useState("");
   const [birth, setBirth] = useState(emptyBirth);
+  /** Man or woman (asked with the name; shown on your card). */
+  const [gender, setGenderNow] = useState<Gender | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,6 +40,7 @@ export function WelcomeForm({
     e.preventDefault();
     if (askPin && pin !== pin2) return setError("The two PINs don't match.");
     if (askBirth && !birthComplete(birth)) return setError("Please choose your date of birth.");
+    if (askPin && !gender) return setError("Please choose man or woman.");
     setBusy(true);
     setError(null);
     const birthInput = askBirth && birthComplete(birth) ? birth : null;
@@ -48,12 +52,13 @@ export function WelcomeForm({
       if (res.underage) router.refresh();
       return;
     }
+    if (gender) await setGender(gender).catch(() => null);
     if (onDone) return onDone();
     router.push("/play");
     router.refresh();
   }
 
-  const pinReady = !askPin || (pin.length === 6 && pin === pin2 && name.length >= 3);
+  const pinReady = !askPin || (pin.length === 6 && pin === pin2 && name.length >= 3 && !!gender);
   const birthReady = !askBirth || birthComplete(birth);
 
   return (
@@ -72,6 +77,28 @@ export function WelcomeForm({
             />
             <span className="mt-1 block text-xs font-normal text-muted">3 to 16 letters, numbers or _</span>
           </label>
+          <div className="text-sm font-medium">
+            I am a
+            <div className="mt-1 grid grid-cols-2 gap-2" role="radiogroup" aria-label="Man or woman">
+              {(
+                [
+                  ["male", "Man"],
+                  ["female", "Woman"],
+                ] as const
+              ).map(([g, label]) => (
+                <button
+                  key={g}
+                  type="button"
+                  role="radio"
+                  aria-checked={gender === g}
+                  onClick={() => setGenderNow(g)}
+                  className={`h-11 rounded-xl border font-semibold ${gender === g ? "border-gold bg-gold/20" : "border-line bg-panel"}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
           <PinInput label="Choose a 6-digit PIN" value={pin} onChange={setPin} autoComplete="new-password" />
           <PinInput label="Type it again" value={pin2} onChange={setPin2} autoComplete="new-password" />
           {pin2.length === 6 && pin !== pin2 && <p className="text-sm text-hit">The two PINs don&apos;t match yet.</p>}

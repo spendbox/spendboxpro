@@ -1,5 +1,6 @@
 "use client";
 
+import { avatar3dCutout } from "./selfie3d";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AvatarFace } from "@/components/avatar";
 import type { Avatar } from "@/lib/avatar";
@@ -150,6 +151,8 @@ export async function takeShot(
   style: ShotStyle = DEFAULT_STYLE,
   /** Other people in the selfie with you. */
   friends: Avatar[] = [],
+  /** Selfies: everyone as their 3D avatar (not the flat drawing). */
+  use3d = false,
 ): Promise<Shot | null> {
   const scene = await captureScene();
   if (!scene) return null;
@@ -179,7 +182,7 @@ export async function takeShot(
     } else cover(ctx, scene, w, h);
     grade(ctx, w, h, true, style.background === "mono");
 
-    const faces = await Promise.all([avatar, ...friends].map((a) => avatarCutout(a)));
+    const faces = await Promise.all([avatar, ...friends].map(async (a) => (use3d ? ((await avatar3dCutout(a)) ?? (await avatarCutout(a))) : avatarCutout(a))));
     for (const { k, x, y, size } of selfieLayout(faces.length, w, h)) {
       const face = faces[k];
       if (!face) continue;

@@ -69,15 +69,20 @@ export type PlayerCardData = {
   friend: boolean;
   blocked: boolean;
   reputation: number;
+  /** "male" or "female", if they've said. */
+  gender: Gender | null;
 };
+
+export type Gender = "male" | "female";
 
 /** Anyone's card: where they live, their job, car, inventions, friends and reputation. */
 export async function playerCard(id: string): Promise<PlayerCardData | null> {
   const userId = await currentUserId();
   if (!userId || !/^[0-9a-f-]{36}$/i.test(String(id))) return null;
-  const [{ data }, { data: liked }] = await Promise.all([
+  const [{ data }, { data: liked }, { data: who }] = await Promise.all([
     createAdminClient().rpc("player_card", { p_viewer: userId, p_target: id }),
     createAdminClient().rpc("marks_liked", { p_user: id }),
+    createAdminClient().from("profiles").select("gender").eq("id", id).maybeSingle(),
   ]);
   if (!data) return null;
   const d = data as Record<string, unknown>;
@@ -99,7 +104,78 @@ export async function playerCard(id: string): Promise<PlayerCardData | null> {
     friend: !!d.friend,
     blocked: !!d.blocked,
     reputation: rep.score,
+    gender: genderOf(who?.gender),
   };
+}
+
+const genderOf = (v: unknown): Gender | null => (v === "male" || v === "female" ? v : null);
+
+export type FoundPerson = { id: string; name: string; avatar: Avatar | null; gender: Gender | null; online: boolean; seenAt: string | null; x: number | null; z: number | null; dist: number | null; friend: boolean };
+
+/**
+ * Everyone on the map you could message: by name (any part of it), the nearest to (x, z) first.
+ * (Before part 60 is run: the people within 50 km, from the map's own list.)
+ */
+export async function findPeople(region: string, x: number, z: number, q = ""): Promise<FoundPerson[]> {
+  const userId = await currentUserId();
+  if (!userId || !regionMap(region)) return [];
+  const db = createAdminClient();
+  const text = String(q ?? "").replace(/\s+/g, " ").trim().slice(0, 40);
+  const cx = Math.round(n(x));
+  const cz = Math.round(n(z));
+  const { data, error } = await db.rpc("people_find", { p_viewer: userId, p_region: region, p_x: cx, p_z: cz, p_q: text, p_limit: 120 });
+  if (!error)
+    return ((data ?? []) as Record<string, unknown>[]).map((p) => ({
+      id: String(p.id),
+      name: String(p.name ?? "Someone"),
+      avatar: (p.avatar ?? null) as Avatar | null,
+      gender: genderOf(p.gender),
+      online: !!p.online,
+      seenAt: p.seenAt == null ? null : String(p.seenAt),
+      x: p.x == null ? null : n(p.x),
+      z: p.z == null ? null : n(p.z),
+      dist: p.dist == null ? null : n(p.dist),
+      friend: !!p.friend,
+    }));
+  const R = 500;
+  const { data: near } = await db.rpc("people_on_map", { p_viewer: userId, p_region: region, p_x0: cx - R, p_x1: cx + R, p_z0: cz - R, p_z1: cz + R, p_limit: 150 });
+  const lower = text.toLowerCase();
+  return ((near ?? []) as Record<string, unknown>[])
+    .filter((p) => !lower || String(p.name ?? "").toLowerCase().includes(lower))
+    .map((p) => {
+      const px = p.x == null ? null : n(p.x);
+      const pz = p.z == null ? null : n(p.z);
+      return {
+        id: String(p.id),
+        name: String(p.name ?? "Someone"),
+        avatar: (p.avatar ?? null) as Avatar | null,
+        gender: null,
+        online: p.status === "online",
+        seenAt: p.seenAt == null ? null : String(p.seenAt),
+        x: px,
+        z: pz,
+        dist: px == null || pz == null ? null : Math.round(Math.hypot(px - cx, pz - cz) * 10) / 10,
+        friend: !!p.friend,
+      };
+    })
+    .sort((a, b) => (a.dist ?? 1e9) - (b.dist ?? 1e9));
+}
+
+/** Say whether you're a man or a woman (shown on your card and in the lists). */
+export async function setGender(g: Gender): Promise<Result> {
+  const userId = await currentUserId();
+  if (!userId) return { ok: false, error: "Sign in first." };
+  if (g !== "male" && g !== "female") return { ok: false, error: "Pick one." };
+  const { error } = await createAdminClient().from("profiles").update({ gender: g }).eq("id", userId);
+  return error ? { ok: false, error: "That didn't save. Try again (run game-db/060_find_people.sql first)." } : { ok: true };
+}
+
+/** Your own choice (null: not said yet). */
+export async function myGender(): Promise<Gender | null> {
+  const userId = await currentUserId();
+  if (!userId) return null;
+  const { data } = await createAdminClient().from("profiles").select("gender").eq("id", userId).maybeSingle();
+  return genderOf(data?.gender);
 }
 
 /** Knock on someone's door, leave a note, or leave one of your things as a wrapped gift. They get a push. */
@@ -192,4 +268,12 @@ export async function savePush(sub: { endpoint: string; keys?: { p256dh?: string
   if (!/^https:\/\//.test(endpoint) || endpoint.length > 1000) return { ok: false, error: "That browser can't take notifications." };
   const { error } = await createAdminClient().rpc("push_subscribe", { p_user: userId, p_endpoint: endpoint, p_p256dh: sub.keys?.p256dh ?? null, p_auth: sub.keys?.auth ?? null });
   return error ? say(error.message) : { ok: true };
+}
+
+/** Forget this phone or browser's push subscription (notifications off). */
+export async function dropPush(endpoint: string): Promise<Result> {
+  const userId = await currentUserId();
+  if (!userId) return { ok: false, error: "Sign in first." };
+  await createAdminClient().from("push_subscriptions").delete().eq("endpoint", String(endpoint ?? "")).eq("user_id", userId);
+  return { ok: true };
 }

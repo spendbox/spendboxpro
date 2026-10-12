@@ -1,5 +1,6 @@
 "use client";
 
+import { avatar3dCutout } from "./selfie3d";
 import { useEffect, useRef, useState } from "react";
 import { Check, Image as ImageIcon, LoaderCircle, SwitchCamera, UserPlus, X, Zap } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
@@ -67,6 +68,9 @@ export function CameraMode({
 }) {
   const [kind, setKind] = useState<ShotKind>(initialKind);
   const [style, setStyle] = useState<ShotStyle>(DEFAULT_STYLE);
+  /** Selfies: you (and friends) as your 3D avatars, or the flat drawings. */
+  const [use3d, setUse3d] = useState(false);
+  const [faces3d, setFaces3d] = useState<Record<string, string>>({});
   const [withIds, setWithIds] = useState<string[]>([]);
   const [picking, setPicking] = useState(false);
   const withPeople = withIds.map((id) => people.find((p) => p.id === id)).filter((p): p is Person => !!p);
@@ -91,7 +95,7 @@ export function CameraMode({
     setBusy(true);
     playSfx("shutter");
     setFlash((f) => f + 1);
-    const shot = await takeShot(kind, avatar, view, style, kind === "selfie" ? withPeople.map((p) => p.avatar) : []).catch(() => null);
+    const shot = await takeShot(kind, avatar, view, style, kind === "selfie" ? withPeople.map((p) => p.avatar) : [], kind === "selfie" && use3d).catch(() => null);
     setBusy(false);
     if (!shot) return say("The camera couldn't see the town just now. Try again.", "bad");
     if (guest) {
@@ -109,6 +113,25 @@ export function CameraMode({
   const fw = view.w && view.h ? Math.min(view.w, view.h * aspect) : 0;
   const fh = fw / aspect;
   const everyone = [avatar, ...withPeople.map((p) => p.avatar)];
+  // The 3D look in the viewfinder: drawn once per person, then shown like the flat ones.
+  const keyOf = (a: Avatar) => JSON.stringify(a);
+  useEffect(() => {
+    if (!use3d || kind !== "selfie") return;
+    let alive = true;
+    for (const a of everyone) {
+      const k = keyOf(a);
+      if (faces3d[k]) continue;
+      void avatar3dCutout(a, 480).then((c) => {
+        if (!alive || !c) return;
+        setFaces3d((f) => ({ ...f, [k]: c.toDataURL("image/png") }));
+      });
+    }
+    return () => {
+      alive = false;
+    };
+    // everyone is rebuilt each render; its looks are what matter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [use3d, kind, everyone.map(keyOf).join("|")]);
 
   return (
     <div className="pointer-events-none fixed inset-0 z-40 select-none" role="dialog" aria-label="Camera">
@@ -139,7 +162,12 @@ export function CameraMode({
                   className="absolute"
                   style={{ width: size, height: size, left: x, top: y, filter: `drop-shadow(0 6px 14px rgba(0,0,0,0.35))${style.background === "mono" ? " grayscale(1)" : ""}` }}
                 >
-                  <AvatarFace avatar={everyone[k]} size={size} cutout className="h-full w-full" />
+                  {use3d && faces3d[keyOf(everyone[k])] ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- drawn here from the 3D avatar
+                    <img src={faces3d[keyOf(everyone[k])]} alt="" className="h-full w-full object-contain" />
+                  ) : (
+                    <AvatarFace avatar={everyone[k]} size={size} cutout className="h-full w-full" />
+                  )}
                 </div>
               ))}
               <span className="absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-[#f5c542] px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-black">
@@ -232,6 +260,20 @@ export function CameraMode({
               {BACKGROUNDS.map((b) => (
                 <button key={b.key} onClick={() => setStyle((s) => ({ ...s, background: b.key }))} className={cn("rounded-full px-2 py-0.5", style.background === b.key ? "bg-white/90 text-black" : "text-white/80")} aria-pressed={style.background === b.key}>
                   {b.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {kind === "selfie" && (
+            <div className="flex gap-0.5 rounded-full bg-black/40 p-0.5" role="radiogroup" aria-label="How you look in it">
+              {(
+                [
+                  [false, "2D"],
+                  [true, "3D avatar"],
+                ] as const
+              ).map(([on, label]) => (
+                <button key={label} role="radio" aria-checked={use3d === on} onClick={() => setUse3d(on)} className={cn("rounded-full px-2 py-0.5", use3d === on ? "bg-white/90 text-black" : "text-white/80")}>
+                  {label}
                 </button>
               ))}
             </div>
