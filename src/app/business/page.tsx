@@ -31,7 +31,10 @@ export default async function BusinessPage({ searchParams }: { searchParams: Pro
       </div>
       {!offer ? (
         <section className="rounded-2xl border border-line bg-panel p-5 text-sm text-muted">
-          Open the map, tap the building you want, and choose <b className="text-ink">Lease for your business</b>. Landmarks and buildings players own can&apos;t be leased.
+          <Link href="/advertise/start" className="font-semibold text-ink underline">
+            Find a building step by step
+          </Link>
+          , or open the map, tap the building you want and choose <b className="text-ink">Advertise</b>. Landmarks and buildings players own can&apos;t be leased.
         </section>
       ) : !offer.ok ? (
         <section className="rounded-2xl bg-hit/10 p-5 text-sm text-hit">{offer.error}</section>

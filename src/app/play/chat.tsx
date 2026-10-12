@@ -157,6 +157,7 @@ export function Chat({
   meId,
   meRole,
   roundId,
+  keep,
   players,
   open,
   onOpenChange,
@@ -182,6 +183,8 @@ export function Chat({
   meId: string;
   meRole: "hider" | "seeker" | null;
   roundId: number;
+  /** The real map: chat isn't per round (roundId 0, the last week's messages). */
+  keep?: boolean;
   /** Everyone in this round (not the bot). */
   players: ChatPlayer[];
   /** The chat only opens when this turns true (the Chat button calls onOpenChange(true)). */
@@ -269,7 +272,7 @@ export function Chat({
   useEffect(() => {
     if (guest) return;
     let cancelled = false;
-    loadDms()
+    loadDms(keep)
       .then((res) => {
         if (!cancelled && res.ok) setDms({ key: "dm", round: res.roundId, list: res.messages });
       })
@@ -277,13 +280,13 @@ export function Chat({
     return () => {
       cancelled = true;
     };
-  }, [roundId, guest]);
+  }, [roundId, guest, keep]);
 
   // Load the place you're in (each time you enter a new one).
   useEffect(() => {
     if (guest || !roomId) return;
     let cancelled = false;
-    loadRoom(roomId)
+    loadRoom(roomId, keep)
       .then((res) => {
         if (!cancelled && res.ok) setRoomMsgs({ key: res.room, round: res.roundId, list: res.messages });
       })
@@ -291,31 +294,31 @@ export function Chat({
     return () => {
       cancelled = true;
     };
-  }, [roomId, roundId, guest]);
+  }, [roomId, roundId, guest, keep]);
 
   // Live: one listener for the whole round; keep what belongs to your place or your private chats.
   const addMessage = useCallback((m: ChatMessage) => {
     if (m.recipient_id) {
-      setDms((d) => (d && d.round === m.round_id ? { ...d, list: append(d.list, m, 400) } : d));
+      setDms((d) => (d && (keep || d.round === m.round_id) ? { ...d, list: append(d.list, m, 400) } : d));
     } else {
-      setRoomMsgs((r) => (r && r.round === m.round_id && (m.room === r.key || m.room === "*") ? { ...r, list: append(r.list, m, 200) } : r));
+      setRoomMsgs((r) => (r && (keep ? m.room === r.key : r.round === m.round_id && (m.room === r.key || m.room === "*")) ? { ...r, list: append(r.list, m, 200) } : r));
     }
-  }, []);
+  }, [keep]);
   useEffect(() => {
     if (guest) return;
     const supabase = createClient();
     const channel = supabase
-      .channel(`chat:${roundId}`)
+      .channel(keep ? "chat:world" : `chat:${roundId}`)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "chat_messages", filter: `round_id=eq.${roundId}` },
+        keep ? { event: "INSERT", schema: "public", table: "chat_messages" } : { event: "INSERT", schema: "public", table: "chat_messages", filter: `round_id=eq.${roundId}` },
         (payload) => addMessage(payload.new as ChatMessage),
       )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [roundId, guest, addMessage]);
+  }, [roundId, guest, addMessage, keep]);
 
   // ---- the place's NPCs: who they are, and what they've been saying
   const hint = roomHint(room);

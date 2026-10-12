@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BellRing, Car, DoorClosed, Gift, House, Lightbulb, MapPin, StickyNote, UserPlus } from "lucide-react";
+import { BellRing, Car, DoorClosed, Gift, House, Lightbulb, MapPin, MessageCircle, StickyNote, UserPlus } from "lucide-react";
 import { Star } from "@/components/icons";
 import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar } from "@/lib/avatar";
@@ -25,6 +25,7 @@ export function PersonCard({
   self,
   prices,
   onOpenDating,
+  onMessage,
 }: {
   id: string;
   onClose: () => void;
@@ -40,6 +41,8 @@ export function PersonCard({
   prices?: Prices | null;
   /** Open Dating on your phone (to switch it on). */
   onOpenDating?: () => void;
+  /** Send them a private message (the chat). */
+  onMessage?: (p: { id: string; name: string }) => void;
 }) {
   const [card, setCard] = useState<PlayerCardData | null | undefined>(undefined);
   const [mode, setMode] = useState<"note" | "gift" | null>(null);
@@ -165,6 +168,11 @@ export function PersonCard({
           {!self && !card.blocked && <StreetRow id={card.id} name={card.name} hasHome={!!card.home} prices={prices ?? null} onDone={onDone} />}
 
           <div className="mt-4 flex flex-wrap items-center gap-2">
+            {!self && !card.blocked && onMessage && (
+              <button onClick={() => onMessage({ id: card.id, name: card.name })} className="flex items-center gap-1 rounded-full bg-ink px-3 py-1.5 text-xs font-semibold text-white">
+                <MessageCircle className="size-3.5" /> Message
+              </button>
+            )}
             {greet({ id: card.id, name: card.name })}
             {!card.friend && onAddFriend && (
               <button onClick={() => onAddFriend({ id: card.id, name: card.name })} className="flex items-center gap-1 rounded-full bg-[#d6336c]/10 px-2.5 py-1.5 text-xs font-semibold text-[#d6336c]">

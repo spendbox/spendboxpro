@@ -53,3 +53,11 @@ views, calls, WhatsApp taps, website visits and directions.
 ## To do
 
 - Taking a business down: set its `status` to `removed` in `business_leases` (Supabase).
+
+## Advertising, step by step (`/advertise/start`)
+Every Advertise button (a building's card, the empty billboard, the guest explainer, `/advertise`)
+opens a three-step wizard (`src/app/advertise/start/`): 1) how it works, with pictures (you own a
+building for a year, players tap it and find you, your design on the billboards, your numbers);
+2) find a building: search a neighbourhood, district or landmark, set a budget, and see the
+buildings nobody owns there, nearest first (`leasableNear` in `src/lib/business.ts`); 3) your
+business and pay (the lease form, then Paystack). From a building's card it starts at step 3.

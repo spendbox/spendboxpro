@@ -11,7 +11,7 @@ import { ownedSpot } from "@/lib/world/owned";
 import { propertyInfo, type PropertyInfo } from "@/lib/world/property";
 import { homesByArea, type HomeFind } from "@/lib/world/homes";
 import type { BuildingOwner, InterviewStart, LifeStatus, Neighbour, PaySettled, PropertyApi, PropertyResult, WorkStatus } from "@/lib/world/property-api";
-import { cheapestCommute, COMMUTE_LABEL, dayNet, fareMint, needsInterview, payDay, tripKmBetween, tripWords, type Commute } from "@/lib/world/work";
+import { cheapestCommute, COMMUTE_LABEL, dayNet, fareMint, fareOrBus, INCOME_TAX, needsInterview, payDay, tripKmBetween, tripWords, type Commute } from "@/lib/world/work";
 import { ferryKmBetween } from "@/lib/world/trips";
 import { dayOf, EXERCISE } from "@/lib/world/day";
 import { HUSTLES, hustleDay, hustleStart } from "@/lib/world/hustles";
@@ -20,6 +20,7 @@ import { PropertyCard } from "../property-card";
 import { around, cachedThings, loadThings } from "./things-cache";
 import { ThingsSheet, type ThingsTab } from "./things-sheet";
 import { NewsSheet } from "./news-sheet";
+import { ComingSoonSheet, ReputationSheet } from "./reputation-sheet";
 import { JailBanner } from "../people/street-dating";
 import { cityNews, type NewsItem } from "@/lib/world/news";
 import { playSfx } from "../sound";
@@ -235,6 +236,9 @@ export function useWorldLife({
   /** Things (items, shops, cars, market, craft) open on a tab, and the news. */
   const [things, setThings] = useState<ThingsTab | null>(null);
   const [newsOpen, setNewsOpen] = useState(false);
+  /** Your reputation explained, and what's coming soon. */
+  const [repOpen, setRepOpen] = useState(false);
+  const [soonOpen, setSoonOpen] = useState(false);
   /** Breaking news: a story pops up at the top with a little bleep when it comes in (once each). */
   const [breaking, setBreaking] = useState<NewsItem | null>(null);
   useEffect(() => {
@@ -623,9 +627,10 @@ export function useWorldLife({
               />
             </>
           )}
+          {signedIn && homeUnit && <LifeButton icon={Sparkles} label="Soon" onClick={() => setSoonOpen(true)} />}
           {signedIn && life && rep && (
-            // Your reputation: opens your things (where it comes from).
-            <button onClick={() => setThings("mine")} className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1 rounded-full px-3 text-sm font-bold" aria-label={`Reputation ${rep.score}`}>
+            // Your reputation: what adds to it and what takes it away.
+            <button onClick={() => setRepOpen(true)} className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1 rounded-full px-3 text-sm font-bold" aria-label={`Reputation ${rep.score}`}>
               <Star className="size-4 text-gold-dark" />
               {rep.score.toLocaleString("en-GB")}
             </button>
@@ -947,6 +952,16 @@ export function useWorldLife({
           busy={busy}
           loadMoney={api.money}
           loadDays={api.moneyDays}
+          payday={(() => {
+            // The next pay into your wallet: a game week (14 hours) after you were last paid, and
+            // what a full week brings after tax and fares. Side hustles pay on the same cycle.
+            const job = work?.job;
+            const hustles = (status?.hustles ?? (status?.hustle ? [status.hustle] : [])).reduce((t, h) => t + h.payDay, 0) * (1 - INCOME_TAX) * 7;
+            if (!job) return hustles > 0 ? { at: null, job: 0, hustles, title: null } : null;
+            const km = homeUnit ? tripKmBetween(homeUnit, job.place) : null;
+            const fare = homeUnit && km !== null ? fareOrBus(job.mode, km, region.region.prices, ferryKmBetween(homeUnit, job.place)) : 0;
+            return { at: Date.parse(job.paidUntil) + 7 * 7_200_000, job: Math.max(0, dayNet(job.payDay, work.skills[job.skill] ?? 0, fare) * 7), hustles, title: `${job.title}, ${job.placeName}` };
+          })()}
           currency={currency}
           onCurrency={chooseCurrency}
           onBudget={(b) =>
@@ -1164,6 +1179,11 @@ export function useWorldLife({
           prices={region.region.prices}
           reputation={rep?.score ?? null}
           adoptable={["park", "trees"].includes(tileAt(planOf(region), spiralIndex(leaving.x, leaving.z)).kind)}
+          onFly={fly}
+          onChanged={() => {
+            loadMarks();
+            loadRep();
+          }}
           onClose={() => setLeaving(null)}
           onDone={(text, good) => {
             setMessage({ text, good });
@@ -1192,6 +1212,15 @@ export function useWorldLife({
           </div>
         </div>
       )}
+      {repOpen && (
+        <ReputationSheet
+          onClose={() => {
+            setRepOpen(false);
+            loadRep();
+          }}
+        />
+      )}
+      {soonOpen && <ComingSoonSheet onClose={() => setSoonOpen(false)} />}
       {newsOpen && (
         <NewsSheet
           region={region}
@@ -1317,5 +1346,5 @@ export function useWorldLife({
     setLeaving({ x, z, where: at?.place ?? region.areaAt(x, z), place: at?.place });
   };
   const markTags: CityMarkTag[] = marks.map((m) => ({ id: m.id, x: m.x, z: m.z, kind: m.kind, text: m.body, colour: m.colour, rating: m.rating, author: m.authorName, style: m.style }));
-  return { marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit };
+  return { marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit };
 }

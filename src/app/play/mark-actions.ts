@@ -30,8 +30,8 @@ function say(message: string | undefined): { ok: false; error: string } {
     frozen: "Your account is paused right now.",
     bad_kind: "That can't go on the map.",
     bad_item: "That can't go on the map.",
-    low_rep: `You need ${MARK_MIN_REP} reputation to leave anything on the map.`,
-    mark_limit: `You can have ${arg} mark${arg === "1" ? "" : "s"} up at once. Take one down, or earn 50 more reputation for another.`,
+    low_rep: `You need ${MARK_MIN_REP} reputation to leave anything on the map${arg ? ` (you have ${arg})` : ""}. Tap your ★ to see how to raise it.`,
+    mark_limit: `You have ${arg} mark${arg === "1" ? "" : "s"} up, the most your reputation allows. Take one down in My marks, or earn 50 more reputation for another.`,
   };
   if (words[code]) return { ok: false, error: words[code] };
   console.error("Mark action failed", message);
@@ -59,6 +59,49 @@ function lookFor(region: string): ((x: number, z: number) => SpotLook | null) | 
           tile: tileAt(p, spiralIndex(x, z)).kind,
         }
       : null;
+}
+
+/** How many of your marks are up now (not taken down, not run out, not an opened capsule). */
+async function marksUp(userId: string) {
+  const { data } = await createAdminClient()
+    .from("marks")
+    .select("kind, expires_at, taken_by")
+    .eq("author", userId)
+    .is("removed_at", null)
+    .limit(500);
+  const now = Date.now();
+  return ((data ?? []) as { kind: string; expires_at: string | null; taken_by: string | null }[]).filter((m) => (!m.expires_at || Date.parse(m.expires_at) > now) && !(m.kind === "capsule" && m.taken_by)).length;
+}
+
+export type MyMark = { id: number; kind: MarkKind; body: string | null; place: string | null; x: number; z: number; at: string; expiresAt: string | null; up: boolean; removed: boolean };
+/** Your marks (newest first), whether each is up, and how many you can have up with your reputation. */
+export async function myMarks(): Promise<{ marks: MyMark[]; up: number; allowed: number; reputation: number } | null> {
+  const userId = await currentUserId();
+  if (!userId) return null;
+  const [{ data }, things] = await Promise.all([
+    createAdminClient().from("marks").select("id, kind, body, place, x, z, created_at, expires_at, removed_at, taken_by").eq("author", userId).order("created_at", { ascending: false }).limit(60),
+    myThings(),
+  ]);
+  const now = Date.now();
+  const marks = ((data ?? []) as Record<string, unknown>[]).map((m) => {
+    const removed = m.removed_at != null;
+    const expired = m.expires_at != null && Date.parse(String(m.expires_at)) <= now;
+    const opened = m.kind === "capsule" && m.taken_by != null;
+    return {
+      id: n(m.id),
+      kind: m.kind as MarkKind,
+      body: m.body == null ? null : String(m.body),
+      place: m.place == null ? null : String(m.place),
+      x: n(m.x),
+      z: n(m.z),
+      at: String(m.created_at),
+      expiresAt: m.expires_at == null ? null : String(m.expires_at),
+      up: !removed && !expired && !opened,
+      removed,
+    };
+  });
+  const reputation = things?.reputation.score ?? 0;
+  return { marks, up: marks.filter((m) => m.up).length, allowed: marksAllowed(reputation), reputation };
 }
 
 export type MapMark = {
@@ -142,11 +185,14 @@ export async function leaveMark(f: { region: string; x: number; z: number; kind:
   // Reputation decides how many marks you can have up at once.
   const rep = (await myThings())?.reputation.score ?? 0;
   const allowed = marksAllowed(rep);
-  if (allowed < 1) return say("low_rep");
+  if (allowed < 1) return say(`low_rep:${rep}`);
   const colour = f.colour && INKS.includes(f.colour) ? f.colour : null;
   const rating = k.kind === "review" ? Math.min(5, Math.max(1, Math.round(n(f.rating) || 5))) : null;
   const opens = k.kind === "capsule" ? new Date(Date.now() + Math.min(365, Math.max(0, Math.round(n(f.opensInDays)))) * 86_400_000).toISOString() : null;
-  const { error } = await createAdminClient().rpc("mark_place", {
+  const db = createAdminClient();
+  const up = await marksUp(userId);
+  if (up >= allowed) return say(`mark_limit:${allowed}`);
+  const args = {
     p_user: userId,
     p_region: f.region,
     p_x: x,
@@ -162,7 +208,16 @@ export async function leaveMark(f: { region: string; x: number; z: number; kind:
     p_item: k.kind === "capsule" && f.itemId ? Math.round(n(f.itemId)) : null,
     p_style: k.kind === "writing" ? graffiti(f.style) : null,
     p_allowed: allowed,
-  });
+  };
+  let { error } = await db.rpc("mark_place", args);
+  // Before game-db/053 is run there are no styles or limits in the database: leave it the old way
+  // (the limit was checked above).
+  if (error && /could not find the function|PGRST202/i.test(`${error.message} ${error.code ?? ""}`)) {
+    const { p_style: _style, p_allowed: _allowed, ...old } = args;
+    void _style;
+    void _allowed;
+    ({ error } = await db.rpc("mark_place", old));
+  }
   if (error) return say(error.message);
   return { ok: true, text: spot.adopt ? "adopted" : spot.x !== Math.round(n(f.x)) || spot.z !== Math.round(n(f.z)) ? "moved" : undefined };
 }

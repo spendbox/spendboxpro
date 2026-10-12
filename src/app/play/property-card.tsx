@@ -122,7 +122,7 @@ export function PropertyCard({
             <KeyRound className="size-4 shrink-0" /> {mineAll ? "Yours" : "Rent / Buy"}
           </button>
           {leasable ? (
-            <a href={`/business?building=${encodeURIComponent(info.id)}`} className="flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-gold/15 px-3 text-sm font-semibold text-gold-dark">
+            <a href={`/advertise/start?building=${encodeURIComponent(info.id)}`} className="flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-gold/15 px-3 text-sm font-semibold text-gold-dark">
               <Megaphone className="size-4 shrink-0" /> Advertise
             </a>
           ) : (
