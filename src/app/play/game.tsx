@@ -80,6 +80,7 @@ import { GreetButtons } from "./greet-buttons";
 import { useNoPageZoom } from "./no-page-zoom";
 import type { PersonOnMap } from "./people-actions";
 import { peopleAround } from "./life/things-cache";
+import { useOnlineCount } from "./online";
 import { PersonCard } from "./people/person-card";
 import { AwaySheet, DoorstepSheet, turnOnNotifications, useAwayDigest } from "./people/doorstep";
 import { DatingSheet, RivalsSheet } from "./people/street-dating";
@@ -729,6 +730,10 @@ export function Game({
       ...peopleOut.filter((p) => !live.has(p.id)).map((p) => ({ id: p.id, name: p.name, avatar: cleanAvatar(p.avatar, p.name), room: `b:${spiralIndex(p.x, p.z)}`, status: p.status, friend: p.friend })),
     ];
   }, [friendsAt, peopleOut]);
+  // Everyone with the map open now (live), and the database's count of signed-in players seen in
+  // the last few minutes: whichever is more.
+  const liveOnline = useOnlineCount(worldId, me.guest ? null : me.id);
+  const onlineNow = Math.max(1, liveOnline ?? 0, cityOnline ?? 0);
   const onlineNear = useMemo(() => facesOnMap.filter((f) => f.status === "online").length, [facesOnMap]);
   const away = useAwayDigest(!!worldId && !me.guest);
   // The real players in the place you're in (not you, not NPCs).
@@ -1597,10 +1602,10 @@ export function Game({
       {worldId && !camera && (
         <div className="pointer-events-none absolute inset-x-2.5 top-14 z-10 flex flex-col items-start gap-2 sm:inset-x-4 sm:top-16">
           <div className="flex w-full flex-wrap items-center gap-1.5">
-            {!me.guest && (
-              <span className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold" title={`${Math.max(1, cityOnline ?? 1)} online in the city, ${onlineNear} near where you're looking`}>
+            {(
+              <span className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold" title={`${onlineNow} online in the city, ${onlineNear} near where you're looking`}>
                 <span className="size-2 animate-pulse rounded-full bg-[#2f9e44]" aria-hidden />
-                {Math.max(1, cityOnline ?? 1, onlineNear)}
+                {Math.max(onlineNow, onlineNear)}
                 <span className="max-[440px]:hidden">online</span>
               </span>
             )}
