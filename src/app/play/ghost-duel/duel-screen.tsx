@@ -1,11 +1,11 @@
 "use client";
 
+import { cash } from "@/lib/world/value";
 import { useEffect, useRef, useState } from "react";
 import { Crown, Flag, LoaderCircle, Swords, Timer, X } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import type { Avatar } from "@/lib/avatar";
 import { cn } from "@/lib/cn";
-import { short } from "@/lib/format";
 import { RPS_MOVES, type DuelView, type RpsMove } from "@/lib/ghost-duels";
 import { answerDuel, duelNow, giveUpDuel, throwMove } from "../ghost-duel-actions";
 import { playSfx } from "../sound";
@@ -175,7 +175,7 @@ export function DuelScreen({ initial, me, onClose }: { initial: DuelView; me: { 
               </p>
               <p className="mt-1 text-xs text-muted">If they don&apos;t answer in {left} seconds, you win.</p>
               <button onClick={() => void act("quit")} disabled={sending !== null} className="mt-3 rounded-xl bg-panel-2 px-4 py-2 text-sm font-semibold">
-                Call it off (get your ₥{duel.fee} back)
+                Call it off (get your {cash(duel.fee)} back)
               </button>
             </div>
           ) : (
@@ -240,16 +240,16 @@ export function DuelScreen({ initial, me, onClose }: { initial: DuelView; me: { 
               {duel.status === "void"
                 ? duel.reason === "game_over"
                   ? "The game ended first. Your mint came back."
-                  : `Called off. ${duel.role === "hunter" ? `Your ₥${duel.fee} came back.` : ""}`
+                  : `Called off. ${duel.role === "hunter" ? `Your ${cash(duel.fee)} came back.` : ""}`
                 : (REASON[duel.reason ?? "score"]?.[result === "won" ? "me" : "them"] ?? "").replace(/.$/, "$& ")}
               {duel.status === "done" &&
                 (duel.role === "hunter"
                   ? result === "won"
-                    ? `+₥${short(duel.reward)}, and your ${duel.fee} back.`
-                    : `You lost ₥${duel.fee}.`
+                    ? `+${cash(duel.reward)}, and your ${cash(duel.fee)} back.`
+                    : `You lost ${cash(duel.fee)}.`
                   : result === "won"
                     ? "One step closer to golden."
-                    : `You lost ₥${short(duel.portion)} of your stake.`)}
+                    : `You lost ${cash(duel.portion)} of your stake.`)}
             </p>
             {result === "won" && duel.role === "ghost" && (
               <p className="mt-2 flex items-center justify-center gap-1 text-xs font-semibold text-[#a37500]">

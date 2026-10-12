@@ -1,5 +1,6 @@
 "use client";
 
+import { cash } from "@/lib/world/value";
 import { useEffect, useMemo, useState } from "react";
 import {
   BicepsFlexed,
@@ -84,8 +85,6 @@ function sideOf(match: MatchInfo, key: string): Side | null {
 
 const optionColour = (match: MatchInfo, key: string) => sideOf(match, key)?.colour ?? NEUTRAL;
 
-/** 2000 → "2,000" (for limits and totals people read closely). */
-const whole = (n: number) => Math.floor(n).toLocaleString("en");
 
 const sum = (pool: Record<string, number> | undefined) => Object.values(pool ?? {}).reduce((a, b) => a + b, 0);
 
@@ -389,7 +388,7 @@ export function SportsSheet({
             <h2 className="truncate font-display text-xl font-bold leading-tight">{SPORT_INFO[tab].place}</h2>
             <p className="truncate text-sm text-muted">
               {signedIn && board?.coins !== null && board?.coins !== undefined
-                ? `You have ₥${whole(board.coins)}`
+                ? `You have ${cash(board.coins)}`
                 : "Watch live matches and bet mint"}
             </p>
           </div>
@@ -521,7 +520,7 @@ export function SportsSheet({
         <div className="space-y-1 rounded-2xl bg-panel-2 px-3 py-2.5 text-xs text-muted">
           <p className="font-semibold text-ink">Mint only, just for fun. Mint has no cash value.</p>
           <p>
-            Bets: ₥{whole(limits.min)}–{whole(limits.max)} a match, up to {whole(limits.dailyMax)} a day, until kick-off. Winners share
+            Bets: {cash(limits.min)}–{cash(limits.max)} a match, up to {cash(limits.dailyMax)} a day, until kick-off. Winners share
             the pool by stake (the house keeps {Math.round(limits.burnShare * 100)}%, never from winners&apos; own mint). If nobody picks
             the winner, everyone gets their mint back.
           </p>
@@ -643,7 +642,7 @@ function MatchCard({
             </>
           ) : (
             <>
-              <Ticket className="hidden size-4 shrink-0 min-[400px]:block" /> Watch · ₥{short(price)}
+              <Ticket className="hidden size-4 shrink-0 min-[400px]:block" /> Watch · {cash(price)}
             </>
           )}
         </button>
@@ -702,7 +701,7 @@ function PoolBar({ match: m, pool }: { match: MatchInfo; pool: Record<string, nu
     <div className="space-y-1.5">
       <div className="flex items-baseline justify-between gap-2 text-xs">
         <span className="font-semibold text-muted">Betting pool</span>
-        <span className="font-bold tabular-nums">{total > 0 ? `₥${whole(total)}` : "No bets yet"}</span>
+        <span className="font-bold tabular-nums">{total > 0 ? `${cash(total)}` : "No bets yet"}</span>
       </div>
       <div className="flex h-2 overflow-hidden rounded-full bg-panel-2" aria-hidden>
         {total > 0 &&
@@ -834,15 +833,15 @@ function BetSlip({
   if (closed) problem = "Bets are closed: it's kicked off";
   else if (!chosen) problem = "Pick who you think will win.";
   else if (!Number.isInteger(n) || n <= 0) problem = "How much mint?";
-  else if (n < limits.min) problem = `Bets start at ₥${short(limits.min)}.`;
+  else if (n < limits.min) problem = `Bets start at ${cash(limits.min)}.`;
   else if (n > leftMatch)
     problem =
       leftMatch < limits.min
-        ? `You've bet the most allowed on this match (₥${short(limits.max)}).`
+        ? `You've bet the most allowed on this match (${cash(limits.max)}).`
         : `You can bet ${short(leftMatch)} more mint on this match.`;
   else if (n > leftToday)
     problem = leftToday < limits.min ? "That's today's betting limit. Come back tomorrow!" : `You can bet ${short(leftToday)} more mint today.`;
-  else if (coins !== null && n > coins) problem = `You only have ₥${short(Math.floor(coins))}.`;
+  else if (coins !== null && n > coins) problem = `You only have ${cash(Math.floor(coins))}.`;
 
   const est = chosen && !problem ? estimate(pool, chosen.key, n, limits.burnShare) : null;
   const side = chosen ? sideOf(m, chosen.key) : null;
@@ -893,7 +892,7 @@ function BetSlip({
             disabled={closed || busy}
             className={cn("min-h-10 rounded-xl text-sm font-bold disabled:opacity-50", n === c ? "bg-ink text-white" : "bg-panel text-muted")}
           >
-            {short(c)}
+            {cash(c)}
           </button>
         ))}
         <input
@@ -902,7 +901,7 @@ function BetSlip({
           onChange={(e) => onAmount(e.target.value.replace(/[^\d]/g, "").slice(0, 5))}
           disabled={closed || busy}
           placeholder="Other"
-          aria-label="Mint to bet"
+          aria-label="How much to bet"
           className="min-h-10 w-full min-w-0 rounded-xl border border-line bg-panel px-0.5 text-center text-sm font-bold outline-none placeholder:text-[13px] placeholder:font-semibold focus:border-ink"
         />
       </div>
@@ -912,11 +911,11 @@ function BetSlip({
         <p className="rounded-xl bg-panel px-3 py-2 text-sm">
           {est.refund ? (
             <>
-              Nobody has backed anyone else yet, so for now you&apos;d just get your <b>₥{short(n)}</b> back.
+              Nobody has backed anyone else yet, so for now you&apos;d just get your <b>{cash(n)}</b> back.
             </>
           ) : (
             <>
-              About <b className="text-me">₥{short(est.payout)}</b> {side ? "if they win" : "if it's a draw"}.
+              About <b className="text-me">{cash(est.payout)}</b> {side ? "if they win" : "if it's a draw"}.
               <span className="block text-xs text-muted">The pool can still change until kick-off.</span>
             </>
           )}
@@ -941,13 +940,13 @@ function BetSlip({
             </>
           ) : (
             <>
-              {chosen && !problem ? `Bet ₥${whole(n)} on ${side?.short ?? chosen.label}` : "Place bet"}
+              {chosen && !problem ? `Bet ${cash(n)} on ${side?.short ?? chosen.label}` : "Place bet"}
             </>
           )}
         </button>
       </div>
       <p className="text-center text-[11px] text-muted">
-        Today: ₥{whole(today)} of {whole(limits.dailyMax)} bet · This match: {whole(mine)} of {whole(limits.max)}
+        Today: {cash(today)} of {cash(limits.dailyMax)} bet · This match: {cash(mine)} of {cash(limits.max)}
       </p>
     </div>
   );
@@ -1126,7 +1125,7 @@ function LockedPanel({
           </>
         ) : signedIn ? (
           <>
-            <Ticket className="size-4" /> Buy ticket · ₥{short(price)}
+            <Ticket className="size-4" /> Buy ticket · {cash(price)}
           </>
         ) : (
           "Sign in to watch"

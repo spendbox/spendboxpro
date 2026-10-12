@@ -1,5 +1,6 @@
 "use client";
 
+import { cash } from "@/lib/world/value";
 import { useEffect, useState } from "react";
 import { BookOpen, Car, Coins, Dumbbell, Gem, Gift, Handshake, Heart, Palette, Shirt, Smartphone, Sofa, X } from "lucide-react";
 import { SHOP, CATEGORY_LABEL, type ItemCategory } from "@/lib/world/items";
@@ -21,7 +22,7 @@ function read(n: FeedItem): Reading {
   if (n.icon === "handshake" || /shook your hand/i.test(t)) return { from: t.split(" shook")[0], kind: "handshake", what: "A warm handshake" };
   if (/left a gift at your door/i.test(t)) return { from: t.split(" left")[0], kind: "door", what: "A wrapped gift" };
   const coins = /^(.+?) gave you (₥?[\d,.]+) (?:coins|mint)/i.exec(t) ?? /^(.+?) gave you (₥[\d,.]+)/i.exec(t);
-  if (coins) return { from: coins[1], kind: "mint", what: coins[2].startsWith("₥") ? coins[2] : `₥${coins[2]}` };
+  if (coins) return { from: coins[1], kind: "mint", what: cash(Number(coins[2].replace(/[^\d.]/g, ""))) };
   const item = /^(.+?) gave you (.+?)!?$/i.exec(t);
   if (item) {
     const kind = SHOP.find((k) => k.name.toLowerCase() === item[2].toLowerCase());

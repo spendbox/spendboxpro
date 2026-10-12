@@ -1,5 +1,6 @@
 "use client";
 
+import { cash } from "@/lib/world/value";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Briefcase, ChevronRight, Flag, KeyRound, Smartphone } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
@@ -24,7 +25,6 @@ import { LogoMark } from "@/components/logo";
 import type { Avatar } from "@/lib/avatar";
 import { CONTACT_EMAIL, SITE_DOMAIN } from "@/lib/brand";
 import { cn } from "@/lib/cn";
-import { short } from "@/lib/format";
 import { leadersStore, levelStore, recordStore, useStore } from "./menu/data";
 import { useEscape } from "./menu/escape";
 import { MenuSheet } from "./menu/menu-sheet";
@@ -219,9 +219,9 @@ export function Menu({
                   </span>
                 )}
                 {coins !== undefined && (
-                  <span className="flex min-w-0 items-center gap-1 rounded-full bg-gold/25 px-2 py-0.5 text-[11px] font-bold text-ink" title={`₥${coins}`}>
+                  <span className="flex min-w-0 items-center gap-1 rounded-full bg-gold/25 px-2 py-0.5 text-[11px] font-bold text-ink" title={`${cash(coins)}`}>
                     <Coins className="size-3 shrink-0 text-gold-dark" strokeWidth={2.5} />
-                    <span className="truncate">₥{short(coins)}</span>
+                    <span className="truncate">{cash(coins)}</span>
                   </span>
                 )}
                 {lvl === null && coins === undefined && (
@@ -261,7 +261,7 @@ export function Menu({
                             : `${left} more round${left === 1 ? "" : "s"} to level ${next}`
                           : canUpgrade
                             ? `Level ${next} is ready!`
-                            : `Level ${next}: ₥${short(info.nextCost)}`}
+                            : `Level ${next}: ${cash(info.nextCost)}`}
                     </span>
                     {!ready && !info.max && (
                       <span className="shrink-0 tabular-nums text-white/60">

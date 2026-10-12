@@ -1,5 +1,6 @@
 "use client";
 
+import { cash } from "@/lib/world/value";
 import { useEffect, useState } from "react";
 import { Crown, Ghost, LoaderCircle, MessageCircle, Star, Swords, Trophy, X } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
@@ -207,14 +208,14 @@ export function GhostCardSheet({
           className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-ink px-4 py-3 font-semibold text-white disabled:opacity-40"
         >
           {busy ? <LoaderCircle className="size-4 animate-spin" /> : <Swords className="size-4" />}
-          Challenge · ₥{card?.fee ?? rules.fee}
+          Challenge · {cash(card?.fee ?? rules.fee)}
         </button>
       </div>
       <p className="mt-2 text-center text-xs text-muted">
         {why ?? (
           <>
             <Trophy className="mr-1 inline size-3.5 align-[-0.15em] text-gold-dark" />
-            One quick game, first to {rules.firstTo}, a minute at most. Win: your {rules.fee} back plus a slice of their stake. Lose: the{" "}
+            One quick game, first to {rules.firstTo}, a minute at most. Win: your {cash(rules.fee)} back plus a slice of their stake. Lose: the{" "}
             {rules.fee} goes into the prize pool. A draw when time runs out goes to the ghost.
           </>
         )}

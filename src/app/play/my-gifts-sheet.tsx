@@ -1,5 +1,6 @@
 "use client";
 
+import { cash } from "@/lib/world/value";
 import { useCallback, useEffect, useState } from "react";
 import { Ban, Check, Coins, Gift, Handshake, Heart, LoaderCircle, Star, X } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
@@ -27,9 +28,9 @@ function what(g: GiftItem) {
     case "handshake":
       return "shook your hand";
     case "spray":
-      return `sprayed you ₥${short(g.amount ?? 0)}`;
+      return `sprayed you ${cash(g.amount ?? 0)}`;
     default:
-      return `gave you ₥${short(g.amount ?? 0)}`;
+      return `gave you ${cash(g.amount ?? 0)}`;
   }
 }
 

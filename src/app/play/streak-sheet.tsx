@@ -1,5 +1,6 @@
 "use client";
 
+import { cash } from "@/lib/world/value";
 import { useEffect, useRef, useState } from "react";
 import { Check, Flame, Gamepad2, Gift, Handshake, ScrollText, Snowflake, TramFront, X } from "lucide-react";
 import { BadgeMedal } from "@/components/badges";
@@ -174,7 +175,7 @@ export function StreakSheet({ streak, now, onClose }: { streak: Streak; now: num
               <BadgeMedal badge={`streak_${m}`} size={44} dim={!reached} />
               <b className="mt-1 text-sm">{m} days</b>
               <span className="flex items-center gap-1 text-[11px] text-muted">
-                {reached && <Check className="size-3 text-[#2b8a3e]" strokeWidth={3} />}+₥{streak.rewards[m] ?? 0}
+                {reached && <Check className="size-3 text-[#2b8a3e]" strokeWidth={3} />}+{cash(streak.rewards[m] ?? 0)}
               </span>
             </li>
           );
@@ -182,7 +183,7 @@ export function StreakSheet({ streak, now, onClose }: { streak: Streak; now: num
       </ul>
       <p className="mt-2 text-center text-[11px] text-muted">
         Each milestone pays every time you reach it; the badge is yours the first time. After 100 days, every 100 more pays{" "}
-        ₥{streak.rewards[100] ?? 0}. Every streak day also earns XP for your next level.
+        {cash(streak.rewards[100] ?? 0)}. Every streak day also earns XP for your next level.
       </p>
     </Sheet>
   );

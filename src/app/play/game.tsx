@@ -344,8 +344,8 @@ function describe(e: GameEvent, botName: string, myTile: number | null, where: (
     const d = e.detail ?? {};
     const who = d.name ?? "Someone";
     const avatar = d.avatar ? cleanAvatar(d.avatar, who) : null;
-    if (d.success) return { id: e.id, tone: "alarm", icon: "coin", avatar, text: `${who} robbed the bank and got away with ₥${short(d.loot ?? 0)} from the prize pool!` };
-    return { id: e.id, tone: "alarm", icon: "catch", avatar, text: `${who} tried to rob the bank and got caught! ₥${short(d.lost ?? 0)} went into the prize pool.` };
+    if (d.success) return { id: e.id, tone: "alarm", icon: "coin", avatar, text: `${who} robbed the bank and got away with ${cash(d.loot ?? 0)} from the prize pool!` };
+    return { id: e.id, tone: "alarm", icon: "catch", avatar, text: `${who} tried to rob the bank and got caught! ${cash(d.lost ?? 0)} went into the prize pool.` };
   }
   if (e.kind === "moved") {
     if (myTile !== null && e.tile === myTile) return null;
@@ -913,7 +913,7 @@ export function Game({
     if (res.ok) {
       playSfx("pop");
       quests.track({ type: "event" });
-      setMessage({ icon: Coins, text: `You grabbed ₥${short(Number(res.data.coins))}!`, tone: "good" });
+      setMessage({ icon: Coins, text: `You grabbed ${cash(Number(res.data.coins))}!`, tone: "good" });
       startTransition(() => router.refresh());
     } else setMessage({ text: res.error, tone: "info" });
   }
@@ -992,7 +992,7 @@ export function Game({
     const fee = what.kind === "visit" ? visitCost({ id: what.place, type: what.type }) : what.fare;
     if (fee <= 0) return true;
     if (me.coins < fee) {
-      const money = (m: number) => (worldId ? cash(m) : `₥${short(m)}`);
+      const money = (m: number) => (worldId ? cash(m) : `${cash(m)}`);
       setMessage({ icon: Coins, text: `${what.kind === "visit" ? `Your first visit to ${what.name}` : `A ticket for the ${what.name}`} costs ${money(fee)}, and you have ${money(me.coins)}.`, tone: "bad" });
       return false;
     }
@@ -1061,7 +1061,7 @@ export function Game({
   useEffect(() => {
     if (passiveGained <= 0) return;
     const id = setTimeout(
-      () => setMessage({ icon: Coins, text: `Passive income: +₥${short(passiveGained)}. You earn up to ${short(state.prices.passivePerDay)} a day while you have under ${short(state.prices.passiveTarget)}.`, tone: "good" }),
+      () => setMessage({ icon: Coins, text: `Passive income: +${cash(passiveGained)}. You earn up to ${short(state.prices.passivePerDay)} a day while you have under ${short(state.prices.passiveTarget)}.`, tone: "good" }),
       0,
     );
     return () => clearTimeout(id);
@@ -1113,7 +1113,7 @@ export function Game({
       const d = (await res.json()) as { coins?: number; leftToday?: number; reason?: string };
       const note =
         d.coins && d.coins > 0
-          ? `+₥${d.coins} from ${o.ad.brand}!${d.leftToday ? ` (${d.leftToday} more ad rewards today)` : " That's all your ad rewards for today."}`
+          ? `+${cash(d.coins)} from ${o.ad.brand}!${d.leftToday ? ` (${d.leftToday} more ad rewards today)` : " That's all your ad rewards for today."}`
           : (d.reason && AD_WHY[d.reason]) || null;
       if (d.coins && d.coins > 0) {
         playSfx("pop");
@@ -1685,7 +1685,7 @@ export function Game({
       if (res.ok) playSfx("pop");
       setMessage(
         res.ok
-          ? { icon: Coins, text: `Pop! +₥${res.coins}.${res.leftToday > 0 ? ` ${res.leftToday} more balloon${res.leftToday === 1 ? "" : "s"} today.` : " That's all for today."}`, tone: "good" }
+          ? { icon: Coins, text: `Pop! +${cash(res.coins)}.${res.leftToday > 0 ? ` ${res.leftToday} more balloon${res.leftToday === 1 ? "" : "s"} today.` : " That's all for today."}`, tone: "good" }
           : { text: res.error, tone: "info" },
       );
       router.refresh();
@@ -2008,8 +2008,8 @@ export function Game({
               </button>
             )}
             {!worldId && (
-            <span className="glass inline-block h-8 whitespace-nowrap rounded-full px-2.5 text-xs leading-8 sm:h-9 sm:px-3 sm:text-sm sm:leading-9" title={`₥${me.coins} · level ${me.level}`}>
-              <b className="text-gold-dark">₥{short(me.coins)}</b>
+            <span className="glass inline-block h-8 whitespace-nowrap rounded-full px-2.5 text-xs leading-8 sm:h-9 sm:px-3 sm:text-sm sm:leading-9" title={`${cash(me.coins)} · level ${me.level}`}>
+              <b className="text-gold-dark">{cash(me.coins)}</b>
               {me.bonusCoins > 0 && <span className="text-muted"> +{short(me.bonusCoins)}</span>}
             </span>
             )}
@@ -2296,7 +2296,7 @@ export function Game({
           }}
           onSignIn={() => {
             setGhostFor(null);
-            setSignInWhy("Sign in to challenge ghosts: ₥10 a duel, and you win a slice of their stake if you beat them.");
+            setSignInWhy(`Sign in to challenge ghosts: ${cash(10)} a duel, and you win a slice of their stake if you beat them.`);
           }}
           onClose={() => setGhostFor(null)}
         />
@@ -2387,7 +2387,7 @@ export function Game({
           </p>
           <div className="mt-3 rounded-2xl bg-panel-2 p-4 text-center">
             <p className="text-sm text-muted">You&apos;re putting down</p>
-            <p className="font-display text-4xl font-extrabold">₥{short(state.prices.stake)}</p>
+            <p className="font-display text-4xl font-extrabold">{cash(state.prices.stake)}</p>
             <p className="text-xs text-muted">You have {short(me.coins)}. After this: {short(Math.max(0, me.coins - state.prices.stake))}.</p>
           </div>
           <ul className="mt-3 space-y-1.5 text-sm text-ink/80">
@@ -2530,7 +2530,7 @@ export function Game({
                       </span>
                     )}
                   </span>
-                  {cost > 0 && !hereNow && <span className="shrink-0 rounded-full bg-gold/25 px-2 py-0.5 text-[11px] font-bold text-gold-dark">₥{short(cost)}</span>}
+                  {cost > 0 && !hereNow && <span className="shrink-0 rounded-full bg-gold/25 px-2 py-0.5 text-[11px] font-bold text-gold-dark">{cash(cost)}</span>}
                   <span className="flex items-center gap-1 text-xs text-muted">
                     <Users className="size-3.5" />
                     {here}/{short(lvl.capacity)}
@@ -2637,7 +2637,7 @@ export function Game({
           ) : openAd.reward > 0 && !openAd.tapped ? (
             <p className="mt-2 rounded-xl bg-gold/15 px-3 py-2 text-sm font-semibold text-gold-dark">
               <Coins className="mr-1 inline size-4 align-[-0.15em]" />
-              Tap {openAd.ad.link ? `Visit ${openAd.ad.brand}` : "the button"} below to earn ₥{openAd.reward}.
+              Tap {openAd.ad.link ? `Visit ${openAd.ad.brand}` : "the button"} below to earn {cash(openAd.reward)}.
             </p>
           ) : null}
           <div className="mt-4 flex gap-2">
@@ -2920,7 +2920,7 @@ export function Game({
                 <b className="text-ink">Watching live.</b> <span className="rounded bg-ink px-1 text-[10px] font-bold text-white">18+</span>{" "}
                 {phase === "join"
                   ? `Ghosts are getting ready. The hunt starts in ${countdown}.`
-                  : `The hunt is on: ${short(board?.ghosts.length ?? round.hidersRemaining)} ghosts lit up, ₥${short(round.pool)} in the pool. Tap a light to see a ghost.`}
+                  : `The hunt is on: ${short(board?.ghosts.length ?? round.hidersRemaining)} ghosts lit up, ${cash(round.pool)} in the pool. Tap a light to see a ghost.`}
               </p>
               <div className="grid grid-cols-3 gap-2 text-sm sm:flex">
                 <button onClick={() => setHowOpen(true)} className="whitespace-nowrap rounded-xl bg-panel-2 px-3 py-2.5 font-semibold">
@@ -3307,7 +3307,7 @@ function EventInfoSheet({
           {event.claimed
             ? "You grabbed this one."
             : slots > 0
-              ? `₥${kind.reward.coins} for the first ${kind.reward.slots === 1 ? "person" : `${kind.reward.slots} people`} to tap it. ${slots} left.`
+              ? `${cash(kind.reward.coins)} for the first ${kind.reward.slots === 1 ? "person" : `${kind.reward.slots} people`} to tap it. ${slots} left.`
               : "All grabbed. Be quicker next time!"}
         </p>
       )}
@@ -3319,7 +3319,7 @@ function EventInfoSheet({
         {canGrab && (
           <button onClick={onGrab} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gold py-2.5 font-semibold text-ink">
             <Coins className="size-4" />
-            Grab ₥{kind.reward!.coins}
+            Grab {cash(kind.reward!.coins)}
           </button>
         )}
       </div>

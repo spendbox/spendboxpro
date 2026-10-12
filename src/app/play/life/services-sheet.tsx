@@ -1,5 +1,6 @@
 "use client";
 
+import { cash } from "@/lib/world/value";
 import { useEffect, useState } from "react";
 import { MapPin, MessageCircle, Phone } from "@/components/icons";
 import type { PropertyResult } from "@/lib/world/property-api";
@@ -7,7 +8,7 @@ import { GAME_SERVICES, gameService, REAL_SERVICES, SERVICE_VAT, type ServiceBoa
 import { Sheet } from "../sheet";
 
 const fmt = (n: number) => n.toLocaleString("en-GB", { maximumFractionDigits: 2 });
-const price = (kind: ServiceKind, n: number) => (kind === "game" ? `₥${fmt(n)}` : `₦${fmt(n)}`);
+const price = (kind: ServiceKind, n: number) => (kind === "game" ? cash(n) : `₦${fmt(n)}`);
 const digits = (p: string) => p.replace(/[^\d+]/g, "");
 const wa = (p: string) => {
   const d = p.replace(/\D/g, "");

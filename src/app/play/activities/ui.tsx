@@ -1,5 +1,6 @@
 "use client";
 
+import { cash } from "@/lib/world/value";
 import { useEffect, useRef, useState } from "react";
 import { AvatarFace } from "@/components/avatar";
 import { Coins, Crown, Medal, Trophy, X } from "@/components/icons";
@@ -249,7 +250,7 @@ export function useGameReward(game: RewardGame | "piano" | "jukebox" | "slots" |
       return setClaim({
         state: "done",
         coins: res.coins,
-        text: `+₥${res.coins}!${res.leftToday === 0 ? " That's all the game mint for today." : ""}`,
+        text: `+${cash(res.coins)}!${res.leftToday === 0 ? " That's all the game mint for today." : ""}`,
       });
     }
     setClaim({
@@ -288,8 +289,8 @@ export function RewardHint({ game }: { game: RewardGame }) {
     <p className="flex items-center gap-1.5 text-xs text-muted">
       <Coins className="size-3.5 text-gold-dark" />
       {r.unit === "win"
-        ? `Win to earn ₥${r.coinsMax} (5 rewarded games a day).`
-        : `Score ${r.min}+ ${r.unit} to win ₥${r.coinsMin}–${r.coinsMax} (5 rewarded games a day).`}
+        ? `Win to earn ${cash(r.coinsMax)} (5 rewarded games a day).`
+        : `Score ${r.min}+ ${r.unit} to win ${cash(r.coinsMin)}–${cash(r.coinsMax)} (5 rewarded games a day).`}
     </p>
   );
 }
