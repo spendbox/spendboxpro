@@ -126,6 +126,7 @@ import { PhoneHub } from "./phone/phone-hub";
 import { RecentRail, rememberPerson } from "./people/recent-rail";
 import { PrankReveal, usePrankReveal } from "./people/prank-reveal";
 import { openAdvertise } from "./life/advertise-panel";
+import { Fight, type ChallengeLight } from "./fight/fight";
 import * as propertyActions from "./property-actions";
 import * as workActions from "./work-actions";
 import * as livingActions from "./living-actions";
@@ -1653,6 +1654,9 @@ export function Game({
   // What each kind of place is for: one main thing to do there, a tap away (the doctor at a
   // hospital, a course at a campus, food at a restaurant, a boat ride at the port...).
   const [flightsOpen, setFlightsOpen] = useState(false);
+  // Fight (docs/CHALLENGES.md): the picker, and the challenges lit up on the map.
+  const [fightOpen, setFightOpen] = useState(false);
+  const [challengeLights, setChallengeLights] = useState<ChallengeLight[]>([]);
   const [prayer, setPrayer] = useState(0);
   function getMainAction(): { label: string; icon: React.ComponentType<{ className?: string }>; run: () => void } | null {
     if (!worldId || !place || guest) return null;
@@ -1978,6 +1982,7 @@ export function Game({
             houses={worldId ? NO_HOUSES : state.houses}
             dance={isDancing && dancing ? { id: me.id, move: dancing.move, with: dancing.with } : null}
             friendsAt={worldId ? facesOnMap : friendsAt}
+            challengeLights={worldId ? challengeLights : undefined}
             onPerson={worldId ? setPersonId : undefined}
             marks={worldId ? worldLife.marks : undefined}
             onMark={worldId ? worldLife.onMark : undefined}
@@ -2164,6 +2169,16 @@ export function Game({
                 {worldLife.financeDot && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-hit" />}
               </button>
             )}
+            {worldId && (
+              // The city's sounds, on or off (top right).
+              <button
+                onClick={() => { setSound(!sound); saveView({ sound: !sound }); }}
+                className="glass grid size-8 shrink-0 place-items-center rounded-full sm:size-9"
+                aria-label={sound ? "Turn the city's sound off" : "Turn the city's sound on"}
+              >
+                {sound ? <Volume2 className="size-4" /> : <VolumeX className="size-4 text-muted" />}
+              </button>
+            )}
             {!worldId && (
             <span className="glass inline-block h-8 whitespace-nowrap rounded-full px-2.5 text-xs leading-8 sm:h-9 sm:px-3 sm:text-sm sm:leading-9" title={`${cash(me.coins)} · level ${me.level}`}>
               <b className="text-gold-dark">{cash(me.coins)}</b>
@@ -2246,6 +2261,18 @@ export function Game({
             </button>
           ))}
       </div>
+      {worldId && !guest && (
+        <Fight
+          region={worldId}
+          me={{ id: me.id, name: me.name ?? "Player", avatar: me.avatar }}
+          open={fightOpen}
+          onClose={() => setFightOpen(false)}
+          where={() => worldLife.centerRef.current?.() ?? null}
+          onLights={setChallengeLights}
+          onMessage={(text, good) => setMessage({ text, tone: good ? "good" : "bad" })}
+          onFly={(x, z) => worldLife.lookAt(x, z)}
+        />
+      )}
       {clubDoor && (
         <Sheet onClose={() => setClubDoor(null)} title={`${clubDoor.room.name}: at the door`}>
           <div className="flex flex-col items-center gap-2 py-2 text-center">
@@ -2895,7 +2922,7 @@ export function Game({
 
 
       {/* Bottom: messages, controls and chat */}
-      <div className={cn("pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-1.5 p-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:gap-2 sm:p-4", worldId && "pl-14 sm:pl-16", worldId && !place && "pr-16 sm:pr-20", camera && "hidden")}>
+      <div className={cn("pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-1.5 p-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:gap-2 sm:p-4", worldId && !place && "pr-16 sm:pr-20", camera && "hidden")}>
         {!guest && !worldId && (
           <Safe name="Quest banner">
             <QuestBanner quest={quests.quest} onOpen={() => setQuestOpen(true)} />
@@ -2971,6 +2998,7 @@ export function Game({
                 }}
               />
             )}
+            {!walking && <DockButton icon={Swords} tint="text-[#e03131]" label="Fight" onClick={() => setFightOpen(true)} />}
             {!walking && worldLife.hasHome && <DockButton icon={Star} label="Soon" onClick={worldLife.openSoon} />}
           </div>
         )}
@@ -3380,16 +3408,6 @@ export function Game({
             { label: "Sign out", icon: LogOut, colour: "#495057", go: () => setConfirmSignOut(true) },
           ]}
         />
-      )}
-      {/* The city's sounds, on or off: bottom left (signed out, top right). */}
-      {worldId && !camera && !guest && (
-        <button
-          onClick={() => { setSound(!sound); saveView({ sound: !sound }); }}
-          className="glass pointer-events-auto absolute bottom-6 left-2.5 z-10 grid size-9 place-items-center rounded-full sm:left-4"
-          aria-label={sound ? "Turn the city's sound off" : "Turn the city's sound on"}
-        >
-          {sound ? <Volume2 className="size-4" /> : <VolumeX className="size-4 text-muted" />}
-        </button>
       )}
       {/* Chat on the real map: everyone in the place you're in, and private messages (not per round). */}
       {worldId && !guest && (

@@ -154,3 +154,11 @@ a[href]:active,
   -webkit-text-stroke: 1px rgba(255, 255, 255, 0.6);
 }
 @media (prefers-reduced-motion: reduce) { .title-float { animation: none; } }
+
+/* A challenge's stage floating over the map: tilted a little, bobbing gently. */
+@keyframes arena-float {
+  0%, 100% { transform: perspective(1200px) rotateX(4deg) translateY(0); }
+  50% { transform: perspective(1200px) rotateX(2deg) translateY(-6px); }
+}
+.arena-float { animation: arena-float 5s ease-in-out infinite; transform-origin: 50% 100%; }
+@media (prefers-reduced-motion: reduce) { .arena-float { animation: none; } }

@@ -31,8 +31,8 @@ export function TurnTable({
   seed: number;
   /** Playing across phones: send my moves, and listen for theirs (null: all on this phone). */
   online: { send: (m: { k: number; m: unknown }) => void; listen: (fn: (msg: ActivityMsg) => void) => () => void } | null;
-  /** The game is over: did "me" (or anyone on this phone) win, and the winners' names. */
-  onEnd: (result: { won: boolean; draw: boolean; winners: string[] }) => void;
+  /** The game is over: did "me" (or anyone on this phone) win, and the winners' names (and seats). */
+  onEnd: (result: { won: boolean; draw: boolean; winners: string[]; seats?: number[] }) => void;
 }) {
   const [mod, setMod] = useState<TurnModule | null>(null);
   useEffect(() => {
@@ -107,7 +107,7 @@ function Table({ mod, def, seats, seed, online, onEnd }: { mod: TurnModule } & P
     const draw = w.length !== 1;
     const ours = w.some((i) => seats[i]?.kind === "me" || seats[i]?.kind === "local");
     playSfx(ours ? "found" : "miss");
-    onEnd({ won: ours && (!draw || w.length < seats.length), draw, winners: w.map((i) => names[i]) });
+    onEnd({ won: ours && (!draw || w.length < seats.length), draw, winners: w.map((i) => names[i]), seats: w });
   }, [over, state, rules, seats, names, onEnd]);
 
   // Who's watching this screen: me, or (pass and play) whoever's turn it is.
