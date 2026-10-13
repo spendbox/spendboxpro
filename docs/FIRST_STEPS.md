@@ -29,4 +29,4 @@ walkthrough again (missions already paid stay paid).
 While the opening tips show, the daily gift waits, and a newly given home's card (ready to name it)
 opens once they're done.
 
-(The old first-five-minutes guide, `game-db/072` and `POST /api/first-steps`, is no longer shown.)
+(The old first-five-minutes guide is gone, and its reward route `POST /api/first-steps` with it.)

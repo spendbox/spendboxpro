@@ -45,7 +45,6 @@ import { StartLife } from "./start-life";
 import { useLife } from "./use-life";
 import { confirmTopUp } from "../topup-actions";
 import { moveOut, myRental, renameHome, type Rental } from "../property-actions";
-import { settleIncome } from "../income";
 import { discounted } from "@/lib/world/rep-levels";
 import { StarterRoomBox } from "./starter-room";
 import { restartTutorial, useTutorialPhase } from "../tutorial";
@@ -1129,8 +1128,6 @@ export function useWorldLife({
                     act(
                       () => api.buyUnit(u.id),
                       (r) => {
-                        // It earns from now on: count it in the cash going up on screen.
-                        void settleIncome();
                         const day = cash(discounted(u.mint, rep?.score ?? 0) * INCOME_DAY);
                         return r.home ? `${u.label} is yours, and your home! It earns you ${day} a day.` : `${u.label} is yours! It earns you ${day} a day, by itself.`;
                       },
@@ -1141,16 +1138,16 @@ export function useWorldLife({
                   onBuyListed: (u, price) =>
                     setConfirm({
                       title: `Buy ${u.label}?`,
-                      text: `${cash(price)} to its owner, plus ${Math.round(BUY_TAX * 100)}% tax: ${cash(buyerPays(price, BUY_TAX))} in all. A tenant living there stays.`,
+                      text: `${cash(buyerPays(price, BUY_TAX))} to its owner. It earns you money every day, by itself.`,
                       yes: `Buy for ${cash(buyerPays(price, BUY_TAX))}`,
                       run: () => void act(() => api.buyListed(u.id, price), (r) => (r.home ? `${u.label} is yours, and your home. Welcome!` : `${u.label} is yours.`)),
                     }),
                   onOffer: (u) =>
                     setAsk({
                       title: `Offer for ${u.label}`,
-                      text: `It's worth about ${cash(u.mint)}. What you offer (and the ${Math.round(BUY_TAX * 100)}% tax) is held from your wallet until the owner answers, for up to ${OFFER_HOURS} hours.`,
+                      text: `It's worth about ${cash(u.mint)}. What you offer is held from your wallet until the owner answers, for up to ${OFFER_HOURS} hours.`,
                       initial: Math.round(u.mint),
-                      note: (n) => `${cash(buyerPays(n, BUY_TAX))} held with the tax. You get it back if they say no.`,
+                      note: (n) => `${cash(buyerPays(n, BUY_TAX))} held. You get it back if they say no.`,
                       cta: (n) => `Offer ${cash(n)}`,
                       run: (n) => api.makeOffer(u.id, n),
                       done: () => "Offer sent. You'll see the answer in Finance → Property.",

@@ -20,8 +20,21 @@ create table if not exists public.tutorial_steps (
 );
 alter table public.tutorial_steps enable row level security;
 
--- Naming your home (part 78, home_rename) stamps lives.home_named_at.
-
+-- Naming your home (part 78) stamps lives.home_named_at; the same function again here, so it
+-- works whichever of the two is run last.
+/** Name a home you hold (an empty name puts back what it was called: "Room", "Flat"...). */
+create or replace function public.home_rename(p_user uuid, p_unit text, p_name text) returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  v_name text := nullif(btrim(regexp_replace(coalesce(p_name, ''), '\s+', ' ', 'g')), '');
+begin
+  if v_name is not null and (char_length(v_name) not between 2 and 40 or v_name !~ '^[[:alnum:] ''&.,()-]+$') then raise exception 'bad_name'; end if;
+  update public.property_units set label = coalesce(v_name, case when starter then 'Room' else 'Home' end)
+  where unit_id = p_unit and owner_id = p_user and use = 'home';
+  if not found then raise exception 'not_yours'; end if;
+  -- The walkthrough's first step (part 80).
+  if v_name is not null then update public.lives set home_named_at = now() where user_id = p_user; end if;
+end $$;
 /**
  * Which steps are done, paying each newly done one once. p_rewards: { name, hi, win } in mint.
  * Starts the walkthrough's clock the first time it's asked. Returns
@@ -71,5 +84,5 @@ begin
   );
 end $$;
 
-revoke all on function public.tutorial_check(uuid, jsonb) from public, anon, authenticated;
-grant execute on function public.tutorial_check(uuid, jsonb) to service_role;
+revoke all on function public.home_rename(uuid, text, text), public.tutorial_check(uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.home_rename(uuid, text, text), public.tutorial_check(uuid, jsonb) to service_role;

@@ -9,9 +9,9 @@ begin
   if ok is not true then raise exception 'FAILED: %', what; end if;
   raise notice 'ok %', what;
 end $$;
-insert into auth.users (email) values ('p@pi.test');
+insert into auth.users (email) values ('p@pi.test'), ('q@pi.test');
 update profiles set username = 'Pelu', coins = 10000 where email_key = 'p@pi.test';
-insert into lives (user_id, region, granted) select id, 'lagos', 0 from profiles where email_key = 'p@pi.test';
+insert into lives (user_id, region, granted) select id, 'lagos', 0 from profiles where email_key like '%@pi.test';
 do $$
 declare
   p uuid := (select id from profiles where email_key = 'p@pi.test');
@@ -35,6 +35,10 @@ begin
   v := property_income_settle(p);
   perform pg_temp.check((v->>'paid')::numeric = 100 and (v->>'total')::numeric = 112.5, 'a week away pays two days');
   perform pg_temp.check((select income_at from lives where user_id = p) > now() - interval '1 minute', 'and counts from now again');
+  -- Sold on to a friend at a silly price: it still earns on what it cost from the city.
+  update property_units set price = 999999, owner_id = (select id from profiles where email_key = 'q@pi.test') where unit_id = 'lagos:17,17/0';
+  perform pg_temp.check(property_income_day((select id from profiles where email_key = 'q@pi.test')) = 50, 'a sale between players doesn''t change what it earns on');
+  perform pg_temp.check(property_income_day(p) = 0, 'the seller earns no more on it');
 end $$;
 \o
 \echo 'property income: all ok'

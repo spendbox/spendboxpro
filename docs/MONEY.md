@@ -77,8 +77,10 @@ move out and get a free room again. Buying a home ends your lease; Move out on y
 it any time.
 
 ## What your property earns (game-db/079_property_income.sql)
-Every home, shop, office or plot you own (not a free room) earns 1% of what you paid for it a day
-(`property_income_day`), by itself. It's counted to the second and paid when the game opens, every
+Every home, shop, office or plot you own (not a free room) earns 1% of what it cost from the city a day
+(`property_income_day`), by itself. A sale between players, at whatever price, doesn't change
+what it earns on (`income_base`), and when property changes hands both owners are paid what
+they'd earned first (a trigger), so nobody is paid for time before they owned it. It's counted to the second and paid when the game opens, every
 5 minutes while you play, when you open Your money, and before you buy property
 (`POST /api/income`, `property_income_settle`). While you're away it keeps earning, up to 2 days'
 worth. Your cash at the top goes up every 5 seconds as it earns (`src/app/play/income.ts`), and

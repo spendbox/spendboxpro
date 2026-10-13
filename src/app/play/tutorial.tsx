@@ -206,7 +206,9 @@ export function Tutorial({ place, perMint, actions }: { place: string; perMint: 
     setGlow(card?.glow ?? null);
   }, [card?.glow]);
   useEffect(() => () => setGlow(null), []);
-  if (!card) return null;
+  // The last mission's cheer shows even though there's no mission card after it.
+  if (!card && !cheer) return null;
+  const shown: Card = card ?? { emoji: "🎉", title: "", text: "" };
 
   const next = () => {
     if (s.phase === "intro") return save(s.i + 1 < intro.length ? { ...s, i: s.i + 1 } : { ...s, phase: "missions", i: 0 });
@@ -229,15 +231,15 @@ export function Tutorial({ place, perMint, actions }: { place: string; perMint: 
         ) : (
           <>
             <div className="flex items-start gap-3">
-              <span className="text-3xl leading-none">{card.emoji}</span>
+              <span className="text-3xl leading-none">{shown.emoji}</span>
               <div className="min-w-0 flex-1">
-                <p className="font-display text-[15px] font-extrabold leading-snug text-gold">{card.title}</p>
+                <p className="font-display text-[15px] font-extrabold leading-snug text-gold">{shown.title}</p>
                 {mission && (
                   <span className="mt-0.5 inline-block rounded-full bg-[#2b8a3e] px-2 py-px text-[11px] font-bold text-white">
                     {done === "off" ? "Rewards switch on soon" : `+${naira(MISSION_NAIRA[mission])}`}
                   </span>
                 )}
-                <p className="mt-1 text-sm leading-snug text-white/85">{card.text}</p>
+                <p className="mt-1 text-sm leading-snug text-white/85">{shown.text}</p>
               </div>
               <button
                 onClick={() => save({ ...s, phase: "done", i: 0 })}
@@ -261,9 +263,9 @@ export function Tutorial({ place, perMint, actions }: { place: string; perMint: 
                 </button>
               )}
               <div className="flex gap-1.5">
-                {card.action && (
-                  <button onClick={card.action.run} className="h-8 rounded-full bg-white/15 px-3 text-sm font-semibold">
-                    {card.action.label}
+                {shown.action && (
+                  <button onClick={shown.action.run} className="h-8 rounded-full bg-white/15 px-3 text-sm font-semibold">
+                    {shown.action.label}
                   </button>
                 )}
                 {mission ? (

@@ -6,7 +6,8 @@ const n = (v: unknown) => Number(v ?? 0) || 0;
 
 /**
  * POST /api/income: pay what your property has earned since last time (game-db/079; docs/MONEY.md).
- * Answers { paid, perDay, at, coins, total } in mint (at: what it's counted up to), or null before
+ * Answers { paid, perDay, at, coins, total, now } in mint (at: what it's counted up to; now: the
+ * server's clock, so the screen counts from the same time), or null before
  * part 79 is run or when signed out.
  */
 export async function POST() {
@@ -15,5 +16,5 @@ export async function POST() {
   const { data, error } = await createAdminClient().rpc("property_income_settle", { p_user: userId });
   if (error || !data) return NextResponse.json(null);
   const d = data as Record<string, unknown>;
-  return NextResponse.json({ paid: n(d.paid), perDay: n(d.per_day), at: d.at ? String(d.at) : null, coins: n(d.coins), total: n(d.total) });
+  return NextResponse.json({ paid: n(d.paid), perDay: n(d.per_day), at: d.at ? String(d.at) : null, coins: n(d.coins), total: n(d.total), now: Date.now() });
 }

@@ -10,7 +10,7 @@ import type { Prices } from "@/lib/world/region";
 import { cash } from "@/lib/world/value";
 import * as items from "../item-actions";
 import type { MyItem, MyThings } from "../item-actions";
-import { useIncome, useLiveCoins } from "../income";
+import { useIncome, useLiveEarned } from "../income";
 import { Sheet } from "../sheet";
 
 // Your things (docs/ITEMS.md): what you own and the reputation it brings, the city's shop (cars
@@ -225,7 +225,7 @@ function Shops({ startCars, prices, coins, busy, run }: { startCars: boolean; pr
 /** Your assets: the property you own and what it earns you, by itself, going up as you watch. */
 function Assets({ units }: { units: AssetUnit[] }) {
   const income = useIncome();
-  const earned = useLiveCoins(income.total, 2_000);
+  const earned = useLiveEarned();
   const owned = units.filter((u) => u.price > 0.01);
   const rooms = units.length - owned.length;
   const perDay = income.perDay;

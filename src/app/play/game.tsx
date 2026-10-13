@@ -56,7 +56,7 @@ import {
   X,
 } from "@/components/icons";
 import { short } from "@/lib/format";
-import { cash } from "@/lib/world/value";
+import { cash, toShown } from "@/lib/world/value";
 import { tripWords, type Commute } from "@/lib/world/work";
 import { createClient } from "@/lib/supabase/client";
 import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
@@ -120,7 +120,7 @@ import { CityCard } from "./city-card";
 import { useWorldLife } from "./life/world-life";
 import type { ExplorePlace } from "@/lib/world/explore";
 import { Joystick } from "./joystick";
-import { settleIncome, useLiveCoins } from "./income";
+import { settleIncome, syncIncome, useLiveCoins } from "./income";
 import { Tutorial, useTutorialGlow, useTutorialPhase } from "./tutorial";
 import { PeopleList, prefetchPeople } from "./people/people-list";
 import { StatsSheet } from "./stats-sheet";
@@ -1762,14 +1762,24 @@ export function Game({
   // The walkthrough (./tutorial): which button it points at, and where it's got to.
   const tutorialGlow = useTutorialGlow();
   const tutorialPhase = useTutorialPhase();
+  // New coins on screen (the game opening, a refresh after anything): count from the latest payment
+  // and ask again (buying or selling property pays what's been earned, on the server).
   useEffect(() => {
     if (!worldId || me.guest) return;
-    const pay = () =>
-      void settleIncome().then((paid) => {
-        if (paid > 0) startTransition(() => router.refresh());
-      });
-    pay();
-    const t = setInterval(() => document.visibilityState === "visible" && pay(), 5 * 60_000);
+    void syncIncome().then((paid) => {
+      if (paid > 0) startTransition(() => router.refresh());
+    });
+  }, [worldId, me.guest, me.coins, router]);
+  useEffect(() => {
+    if (!worldId || me.guest) return;
+    const t = setInterval(
+      () =>
+        document.visibilityState === "visible" &&
+        void settleIncome().then((paid) => {
+          if (paid > 0) startTransition(() => router.refresh());
+        }),
+      5 * 60_000,
+    );
     return () => clearInterval(t);
   }, [worldId, me.guest, router]);
   useEffect(() => {
@@ -2358,7 +2368,7 @@ export function Game({
                 aria-label="Finance"
               >
                 <Wallet className="size-4 text-gold-dark" />
-                <span className="tabular-nums">{cash(liveCoins, { exact: true })}</span>
+                <span className="tabular-nums">{cash(liveCoins, { exact: true, full: toShown(liveCoins) < 100_000_000 })}</span>
                 {worldLife.financeDot && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-hit" />}
               </button>
             )}
@@ -3602,7 +3612,7 @@ export function Game({
           onProperty={() => worldLife.openThings("assets")}
         />
       )}
-      {giftPop && worldId && !guest && !moneyOpen && tutorialPhase !== "intro" && (
+      {giftPop && worldId && !guest && !moneyOpen && !(tutorialPhase === "intro" && worldLife.hasHome) && (
         <DailyGiftPop
           perMint={worldRegion?.prices.perMint ?? 1_500}
           onClose={closeGiftPop}

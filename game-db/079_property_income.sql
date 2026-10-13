@@ -17,10 +17,15 @@ update public.game_settings set value = 0 where key = 'property_buy_tax';
 
 alter table public.lives add column if not exists income_at timestamptz;
 
+-- What a unit earns on: what it cost from the city (a sale between players, at whatever price
+-- they agree, doesn't change it, so nobody can sell a flat to a friend for ₦1bn and earn on that).
+alter table public.property_units add column if not exists income_base numeric(14,2);
+update public.property_units set income_base = price where income_base is null;
+
 /** What your property earns a day (mint): the share of what you paid for each unit you own (free rooms earn nothing). */
 create or replace function public.property_income_day(p_user uuid) returns numeric
 language sql stable security definer set search_path = public as $$
-  select round(coalesce(sum(u.price), 0) * coalesce(public.setting('property_income_day'), 0), 4)
+  select round(coalesce(sum(coalesce(u.income_base, u.price)), 0) * coalesce(public.setting('property_income_day'), 0), 4)
   from public.property_units u
   where u.owner_id = p_user and not coalesce(u.starter, false)
 $$;
@@ -66,7 +71,31 @@ begin
   );
 end $$;
 
-revoke all on function public.property_income_day(uuid), public.property_income_settle(uuid) from public, anon, authenticated;
+/**
+ * A unit bought or changing hands: what both owners have earned so far is paid first (at their old
+ * rates), so nobody is paid for time before they owned it; and a new unit earns on its city price.
+ */
+create or replace function public.property_income_guard() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' then
+    new.income_base := coalesce(new.income_base, new.price);
+    if new.owner_id is not null then perform public.property_income_settle(new.owner_id); end if;
+  elsif new.owner_id is distinct from old.owner_id then
+    new.income_base := coalesce(old.income_base, old.price);
+    if old.owner_id is not null then perform public.property_income_settle(old.owner_id); end if;
+    if new.owner_id is not null then perform public.property_income_settle(new.owner_id); end if;
+  else
+    -- A new price agreed between players doesn't change what it earns on.
+    new.income_base := coalesce(old.income_base, old.price);
+  end if;
+  return new;
+end $$;
+drop trigger if exists property_income_guard on public.property_units;
+create trigger property_income_guard before insert or update of owner_id, price, income_base on public.property_units
+  for each row execute function public.property_income_guard();
+
+revoke all on function public.property_income_day(uuid), public.property_income_settle(uuid), public.property_income_guard() from public, anon, authenticated;
 grant execute on function public.property_income_day(uuid), public.property_income_settle(uuid) to service_role;
 
 -- The daily new-mint report counts property income too.

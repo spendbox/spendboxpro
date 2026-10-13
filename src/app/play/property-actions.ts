@@ -94,11 +94,7 @@ export async function buyUnit(unitId: string): Promise<PropertyResult> {
   // Your reputation level takes something off (src/lib/world/rep-levels.ts).
   const things = await myThings().catch(() => null);
   const price = Math.max(1, discounted(worth, things?.reputation.score ?? 0));
-  // What your property has earned so far is paid first (at the old rate), part 79.
-  await db.rpc("property_income_settle", { p_user: userId }).then(
-    () => null,
-    () => null,
-  );
+  // What your property has earned so far is paid first, by the database (game-db/079).
   // A building a real business leases isn't for sale while the lease runs.
   const { count: leased } = await db.from("business_leases").select("id", { count: "exact", head: true }).eq("building_id", m[1]).eq("status", "live");
   if (leased) return { ok: false, error: "A business leases that building, so it isn't for sale." };
