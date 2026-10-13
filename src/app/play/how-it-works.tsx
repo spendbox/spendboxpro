@@ -182,7 +182,77 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
   },
 ];
 
-export function HowItWorks({ onClose }: { onClose: () => void }) {
+/** The real map (what everyone plays now): one section for each part of life in the city. */
+const WORLD_SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] = [
+  {
+    icon: Building2,
+    title: "A real city, alive",
+    body: [
+      "Newtown is a living 3D copy of a real city (Lagos first, more cities and countries on the way), with its real streets, neighbourhoods and landmarks.",
+      "It's part social network, part game: the people you meet are real players, the places are real places, and what you do here is yours.",
+      "Newtown is for adults 18+.",
+    ],
+  },
+  {
+    icon: House,
+    title: "Start a life",
+    body: [
+      "Sign in, pick how your life starts (free, or with a starter pack), and find a home: a room, a flat or a house anywhere on the map.",
+      "Make it yours: plan your rooms and floors, furnish it, add a dance hall or a cinema. Friends can visit; anyone else knocks first.",
+    ],
+  },
+  {
+    icon: Briefcase,
+    title: "Work and money",
+    body: [
+      "Get a job (some need an interview) or start a side hustle, and get paid as the days go by.",
+      "Money goes on rent, food, bills, fares and fun. Buy property, rent it out, sell it on. Everything costs what it would in the real city.",
+    ],
+  },
+  {
+    icon: Compass,
+    title: "Get around",
+    body: [
+      "Explore: rides (the train, a ferry, a hot-air balloon, a helicopter), parks, clubs, markets and landmarks.",
+      "Walk the streets yourself, or jump across the map (on foot, the fare is paid like a real trip). Every place has something to do inside.",
+    ],
+  },
+  {
+    icon: Users,
+    title: "People",
+    body: [
+      "See who's online and who's nearby, chat privately or with everyone in a place, and talk out loud in a voice call (never recorded).",
+      "Add friends, send gifts and money, sign a guest book, leave notes on the map.",
+    ],
+  },
+  {
+    icon: Swords,
+    title: "Fight: challenges",
+    body: [
+      "Challenge everyone nearby to a game (Whot! and Ludo now, more coming): everyone puts the same stake in the pool and the winner takes it.",
+      "Your first challenge is free; challenging again soon after costs a fee. Hosting and winning challenges raise your reputation.",
+    ],
+  },
+  {
+    icon: Star,
+    title: "Reputation",
+    body: [
+      "Your reputation grows with your home and property, fine things, the challenges you win and what people like about you. It drops when you're caught doing wrong.",
+    ],
+  },
+  {
+    icon: Coins,
+    title: "Fair and safe",
+    body: [
+      "Game money is for the game: it can't be turned back into cash. Report anyone who's out of order and we'll look into it.",
+      "Businesses can advertise on the map's billboards and buildings: tap Advertise on the map.",
+    ],
+  },
+];
+
+/** How it works: the real map (legacy: the old hourly ghost-hunt towns). */
+export function HowItWorks({ onClose, legacy }: { onClose: () => void; legacy?: boolean }) {
+  const sections = legacy ? SECTIONS : WORLD_SECTIONS;
   return (
     <Sheet onClose={onClose} wide>
       <div className="mb-4 flex items-start justify-between">
@@ -195,7 +265,7 @@ export function HowItWorks({ onClose }: { onClose: () => void }) {
         </button>
       </div>
       <div className="space-y-4">
-        {SECTIONS.map((s) => (
+        {sections.map((s) => (
           <section key={s.title} className="rounded-2xl bg-panel-2 p-4">
             <h3 className="mb-1.5 flex items-center gap-2 font-display text-lg font-bold">
               <SectionIcon icon={s.icon} />
@@ -211,7 +281,7 @@ export function HowItWorks({ onClose }: { onClose: () => void }) {
         <section className="rounded-2xl bg-panel-2 p-4 text-sm text-ink/80">
           <h3 className="mb-1.5 flex items-center gap-2 font-display text-lg font-bold text-ink">
             <SectionIcon icon={Compass} />
-            Getting around
+            Moving the view
           </h3>
           <p>On a phone: drag to look around, pinch to zoom, and use two fingers to turn the city. On a computer: drag to look around, scroll to zoom, and hold Ctrl (or right-click) and drag to turn. Tap a billboard to see its ad.</p>
           <p className="mt-2 text-muted">You might spot: {CITY_ASSETS.big.join(", ")}, and plenty more.</p>

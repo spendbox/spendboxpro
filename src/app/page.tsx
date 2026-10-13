@@ -1,4 +1,4 @@
-import { currentUserId, loadGame } from "@/lib/game";
+import { currentUserId, hasLoginCookie, loadGame } from "@/lib/game";
 import { welcomeNeeds } from "@/lib/welcome";
 import { Game } from "./play/game";
 import { Reconnecting } from "./play/reconnecting";
@@ -8,8 +8,9 @@ import { Reconnecting } from "./play/reconnecting";
 // over the town (?signin=1 opens it straight away).
 export default async function Home({ searchParams }: { searchParams: Promise<{ signin?: string }> }) {
   const userId = await currentUserId().catch(() => null);
-  // (If checking the login hiccups, they simply watch for a moment: the board refreshes every
-  // few seconds and picks their account back up.)
+  // Signed in (the login cookie is there) but checking it failed: try again, rather than showing
+  // the signed-out city (with its sign-in box) to someone who is signed in.
+  if (!userId && (await hasLoginCookie())) return <Reconnecting />;
   let state;
   try {
     state = await loadGame(userId);

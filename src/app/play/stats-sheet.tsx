@@ -80,7 +80,7 @@ export function StatsSheet({
         </>
       )}
       <p className="mt-4 rounded-2xl bg-ink/[0.04] p-3 text-[11px] leading-relaxed text-muted">
-        <b className="text-ink">How we count.</b> Online now: everyone with the city open this minute. Registered: every player account (no bots). Visits: each time someone opens Newtown, signed in or not,
+        <b className="text-ink">How we count.</b> Online now: everyone with the city open this minute. Registered: every player account. Visits: each time someone opens Newtown, signed in or not,
         counted once per browser session; guests and players are counted apart. Days run on Lagos time. These are the same numbers we see.
       </p>
       </>

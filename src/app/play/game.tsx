@@ -127,6 +127,7 @@ import { RecentRail, rememberPerson } from "./people/recent-rail";
 import { PrankReveal, usePrankReveal } from "./people/prank-reveal";
 import { openAdvertise } from "./life/advertise-panel";
 import { Fight, type ChallengeLight } from "./fight/fight";
+import { WelcomeFeatures } from "./welcome-features";
 import { CallBar } from "./call/call-bar";
 import * as propertyActions from "./property-actions";
 import * as workActions from "./work-actions";
@@ -1495,6 +1496,8 @@ export function Game({
   // Tapping a building or balloon takes you inside to meet the people there. A building with
   // several levels (ground, floors, rooftop) asks which one; nothing opens the chat by itself.
   function onRoom(room: PlaceRoom) {
+    // Signed out on the real map: buildings aren't tappable.
+    if (worldId && guest) return;
     // Going to a friend: straight onto their floor.
     if (goTo && room.id === goTo.building) {
       const level = room.levels?.find((l) => l.id === goTo.level);
@@ -1968,14 +1971,15 @@ export function Game({
             tileCount={round?.tileCount ?? 0}
             region={worldId}
             onArea={setWorldArea}
-            onProperty={worldId ? worldLife.onProperty : undefined}
-            onWorkplace={worldId ? worldLife.onWorkplace : undefined}
+            // Signed out, buildings can't be tapped (sign in to go anywhere).
+            onProperty={worldId && !guest ? worldLife.onProperty : undefined}
+            onWorkplace={worldId && !guest ? worldLife.onWorkplace : undefined}
             centerRef={worldId ? worldLife.centerRef : undefined}
             walkStick={walkStick}
             homeStick={homeStick}
             onWalkBlocked={(what) => setMessage({ text: what === "water" ? "That's water: you can't walk on it. Try a ferry (Explore → Rides)." : "That's a building. Tap it to go in.", tone: "info" })}
             businesses={worldId ? worldLife.businesses : undefined}
-            onBusiness={worldId ? worldLife.onBusiness : undefined}
+            onBusiness={worldId && !guest ? worldLife.onBusiness : undefined}
             owned={worldId ? worldLife.owned : undefined}
             markers={worldId ? NO_MARKERS : markers}
             events={worldId ? NO_EVENTS : cityEvents}
@@ -2039,7 +2043,28 @@ export function Game({
       {worldId && !camera && (
         <div className="pointer-events-none absolute inset-x-2.5 top-14 z-10 flex flex-col items-start gap-2 sm:inset-x-4 sm:top-16">
           <div className="flex w-full flex-wrap items-center gap-1.5">
+            {/* Signed out: the numbers straight away (online, registered, visits); tap for more. */}
+            {guest && (
+              <button onClick={() => setStatsOpen(true)} className="glass pointer-events-auto flex shrink-0 items-stretch divide-x divide-ink/10 rounded-2xl text-center" aria-label="Newtown in numbers">
+                <span className="px-3 py-1.5">
+                  <b className="flex items-center justify-center gap-1 text-sm tabular-nums">
+                    <span className="size-2 animate-pulse rounded-full bg-[#2f9e44]" aria-hidden />
+                    {onlineNow.toLocaleString("en-GB")}
+                  </b>
+                  <span className="block text-[10px] font-semibold text-muted">Online</span>
+                </span>
+                <span className="px-3 py-1.5">
+                  <b className="block text-sm tabular-nums">{state.site.players.toLocaleString("en-GB")}</b>
+                  <span className="block text-[10px] font-semibold text-muted">Registered</span>
+                </span>
+                <span className="px-3 py-1.5">
+                  <b className="block text-sm tabular-nums">{state.site.visits.toLocaleString("en-GB")}</b>
+                  <span className="block text-[10px] font-semibold text-muted">Visits</span>
+                </span>
+              </button>
+            )}
             {/* Who's online; tap for the numbers: registered players and visits, and how they're growing. */}
+            {!guest && (
             <button
               onClick={() => setStatsOpen(true)}
               className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold"
@@ -2049,6 +2074,7 @@ export function Game({
               {onlineNow}
               <span className="max-[440px]:hidden">online</span>
             </button>
+            )}
             {worldLife.rowButtons}
           </div>
           {worldLife.rowBelow}
@@ -2147,9 +2173,12 @@ export function Game({
               <button onClick={() => setHowOpen(true)} className="glass grid size-8 shrink-0 place-items-center rounded-full font-display font-bold sm:size-9" aria-label="How it works">
                 ?
               </button>
-              <button onClick={() => setSignIn({ why: null })} className="flex h-8 items-center whitespace-nowrap rounded-full bg-gold px-3.5 text-sm font-semibold text-ink shadow sm:h-9 sm:px-4">
-                Sign in to play
-              </button>
+              {/* On the real map it's under the description instead. */}
+              {!worldId && (
+                <button onClick={() => setSignIn({ why: null })} className="flex h-8 items-center whitespace-nowrap rounded-full bg-gold px-3.5 text-sm font-semibold text-ink shadow sm:h-9 sm:px-4">
+                  Sign in to play
+                </button>
+              )}
             </div>
           ) : (
           <div className="pointer-events-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
@@ -2466,7 +2495,7 @@ export function Game({
           onSignOut={() => { setMenu(false); setConfirmSignOut(true); }}
         />
       )}
-      {howOpen && <HowItWorks onClose={() => setHowOpen(false)} />}
+      {howOpen && <HowItWorks onClose={() => setHowOpen(false)} legacy={!worldId} />}
       {jobsAt !== undefined && <JobsSheet place={jobsAt} ctx={playCtx} onClose={() => setJobsAt(undefined)} onChanged={() => startTransition(() => router.refresh())} />}
       {gamesOpen && (
         <GamesSheet
@@ -2938,7 +2967,7 @@ export function Game({
 
 
       {/* Bottom: messages, controls and chat */}
-      <div className={cn("pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-1.5 p-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:gap-2 sm:p-4", worldId && !place && "pr-16 sm:pr-20", camera && "hidden")}>
+      <div className={cn("pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-1.5 p-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:gap-2 sm:p-4", worldId && !place && !guest && "pr-16 sm:pr-20", camera && "hidden")}>
         {!guest && !worldId && (
           <Safe name="Quest banner">
             <QuestBanner quest={quests.quest} onOpen={() => setQuestOpen(true)} />
@@ -3337,11 +3366,19 @@ export function Game({
 
       {/* Signed out: the game's name, big and floating over the city. */}
       {worldId && guest && !place && ride === null && !camera && (
-        <div className="pointer-events-none absolute inset-x-0 top-[18%] z-[5] flex justify-center" aria-hidden>
+        <div className="pointer-events-none absolute inset-x-0 top-[11%] z-[5] flex justify-center sm:top-[14%]">
           <div className="title-float flex flex-col items-center">
-            <LogoMark size={72} className="mb-2 rounded-[18px] shadow-[0_12px_30px_rgba(0,0,0,0.35)]" />
+            <LogoMark size={60} className="mb-2 rounded-[16px] shadow-[0_12px_30px_rgba(0,0,0,0.35)]" />
             <h1 className="title-3d font-display text-[clamp(3rem,15vw,8rem)] font-black italic leading-none tracking-tight text-white">Newtown</h1>
-            <p className="mt-3 rounded-full bg-black/35 px-4 py-1.5 text-sm font-semibold tracking-wide text-white backdrop-blur-sm sm:text-base">Your city. Your story.</p>
+            <p className="mt-3 rounded-full bg-black/35 px-4 py-1.5 text-sm font-semibold tracking-wide text-white backdrop-blur-sm sm:text-base">Your world. Your story.</p>
+            {/* What Newtown is, for someone seeing it for the first time. */}
+            <p className="mt-3 max-w-[22rem] rounded-2xl bg-black/40 px-4 py-2.5 text-center text-[13px] leading-snug text-white backdrop-blur-sm sm:max-w-md sm:text-sm">
+              A living world where social media meets play. Explore real cities, meet new people, team up, and discover cultures from around the globe, alongside real people and real brands, in a space that&apos;s fun and safe.
+            </p>
+            <WelcomeFeatures />
+            <button onClick={() => setSignIn({ why: null })} className="pointer-events-auto mt-3 h-12 rounded-full bg-gold px-8 text-base font-bold text-ink shadow-lg">
+              Sign in to play
+            </button>
           </div>
         </div>
       )}
