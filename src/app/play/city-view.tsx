@@ -181,7 +181,17 @@ export type CityMarkTag = { id: number; x: number; z: number; kind: string; text
  * A person's face over the place they're in: a friend (pink) or anyone else on the real map
  * (blue), faded with a word under it when they're not online (asleep, at work, away).
  */
-export type CityFriendPin = { id: string; name: string; avatar: Avatar; room: string; status?: "online" | "asleep" | "work" | "away"; friend?: boolean; /** You yourself (gold, a little bigger, "You"). */ mine?: boolean };
+/** Your home's bubble on the map: a white house on purple. */
+function HomeBadge() {
+  return (
+    <svg viewBox="0 0 40 40" width="40" height="40">
+      <rect width="40" height="40" fill="#7048e8" />
+      <path d="M10 19 20 10l10 9v11H23v-7h-6v7h-7Z" fill="#fff" />
+    </svg>
+  );
+}
+
+export type CityFriendPin = { id: string; name: string; avatar: Avatar; room: string; status?: "online" | "asleep" | "work" | "away"; friend?: boolean; /** You yourself (gold, a little bigger, "You"). */ mine?: boolean; /** Your home (a house, "Home"). */ home?: boolean };
 /** A ghost lit up on the map: free to challenge, in a duel right now, or golden (safe). */
 export type CityGhost = { id: string; name: string; avatar: Avatar; tile: number; status: "free" | "playing" | "golden"; mine?: boolean };
 /** You dancing: your id (so everyone places the dancers the same way), your move, your partner. */
@@ -366,7 +376,8 @@ type Props = {
    * On foot (a real map): while `on`, you walk the streets as a little figure, the camera behind
    * you (drag to look round). x and y are the joystick (-1..1, y up = forward), read every frame.
    */
-  walkStick?: { current: { on: boolean; x: number; y: number } };
+  /** On foot: the joystick's state, and where you start walking from (where you are; else where the map looks). */
+  walkStick?: { current: { on: boolean; x: number; y: number; from?: { x: number; z: number } | null } };
   /** Inside a planned home: the joystick for walking round it as your avatar. */
   homeStick?: { current: { x: number; y: number } };
   /** On foot: you tried to walk into water or a building ("water" / "building"), at most every few seconds. */
@@ -4469,7 +4480,7 @@ export function CityView({
       }
     }
     function setFriendPins(list: CityFriendPin[]) {
-      const key = `${currentSeed}|${tiles.length}|${list.map((f) => `${f.id}@${f.room}|${f.name}|${f.status}|${f.friend}|${f.mine}|${JSON.stringify(f.avatar)}`).join(";")}`;
+      const key = `${currentSeed}|${tiles.length}|${list.map((f) => `${f.id}@${f.room}|${f.name}|${f.status}|${f.friend}|${f.mine}|${f.home}|${JSON.stringify(f.avatar)}`).join(";")}`;
       if (key === pinKey) return;
       pinKey = key;
       for (const p of pins) p.root.remove();
@@ -4496,23 +4507,23 @@ export function CityView({
         seen.set(building, slot + 1);
         const root = document.createElement("div");
         const pink = f.friend !== false;
-        const away = !f.mine && f.status && f.status !== "online";
+        const away = !f.mine && !f.home && f.status && f.status !== "online";
         root.style.cssText = `position:absolute;left:0;top:0;display:flex;flex-direction:column;align-items:center;gap:2px;will-change:transform;visibility:hidden;pointer-events:auto;cursor:pointer;opacity:${away ? 0.72 : 1};${f.mine ? "z-index:2;" : ""}`;
         root.setAttribute("role", "button");
-        root.setAttribute("aria-label", f.mine ? "You: your card" : `${f.name}: see their card`);
+        root.setAttribute("aria-label", f.home ? "Your home" : f.mine ? "You: your card" : `${f.name}: see their card`);
         root.addEventListener("click", (e) => {
           e.stopPropagation();
           cb.current.onPerson?.(f.id);
         });
         const face = document.createElement("img");
-        const svg = renderToStaticMarkup(<AvatarFace avatar={cleanAvatar(f.avatar, f.name)} size={40} />).replace(/^<svg(?![^>]*xmlns=)/, '<svg xmlns="http://www.w3.org/2000/svg"');
+        const svg = (f.home ? renderToStaticMarkup(<HomeBadge />) : renderToStaticMarkup(<AvatarFace avatar={cleanAvatar(f.avatar, f.name)} size={40} />)).replace(/^<svg(?![^>]*xmlns=)/, '<svg xmlns="http://www.w3.org/2000/svg"');
         face.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
         face.alt = "";
-        const colour = f.mine ? "#f59f00" : pink ? "#d6336c" : "#1c7ed6";
+        const colour = f.home ? "#7048e8" : f.mine ? "#f59f00" : pink ? "#d6336c" : "#1c7ed6";
         const size = f.mine ? 46 : pink ? 40 : 34;
         face.style.cssText = `width:${size}px;height:${size}px;border-radius:999px;border:3px solid ${colour};background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.25)${f.mine ? ",0 0 0 4px rgba(245,159,0,.35)" : ""};`;
         const name = document.createElement("div");
-        name.textContent = f.mine ? "You" : away ? `${f.name} · ${f.status === "asleep" ? "asleep" : f.status === "work" ? "at work" : "away"}` : f.name;
+        name.textContent = f.home ? "Home" : f.mine ? f.name : away ? `${f.name} · ${f.status === "asleep" ? "asleep" : f.status === "work" ? "at work" : "away"}` : f.name;
         name.style.cssText =
           `max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 8px;border-radius:999px;background:${colour};color:#fff;font:700 11px/16px system-ui,sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.2);`;
         root.append(face, name);
@@ -6270,8 +6281,9 @@ export function CityView({
       const stick = cb.current.walkStick?.current;
       const want = !!stick?.on && !view && !!currentPlan;
       if (want && !walker.on) {
-        // Down onto the street where the map is looking.
-        const at = standAt(controls.target.x, controls.target.z);
+        // Down onto the street where you are (your home, or the place you're at), else where the map is looking.
+        const from = stick?.from;
+        const at = standAt(from?.x ?? controls.target.x, from?.z ?? controls.target.z);
         walker.on = true;
         walker.x = at.x;
         walker.z = at.z;

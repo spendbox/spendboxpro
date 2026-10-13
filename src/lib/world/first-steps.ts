@@ -11,6 +11,6 @@ export type FirstSteps = { hi: boolean; challenge: boolean; home: boolean; paid:
 
 export const FIRST_STEPS: { id: FirstStep; title: string; text: string }[] = [
   { id: "hi", title: "Say hi to someone", text: "Tap the green online count at the top, pick someone and send them a message." },
-  { id: "challenge", title: "Play a challenge", text: "Tap Challenge (bottom left) to start a game of Whot! or Ludo, or join one that lights up near you." },
+  { id: "challenge", title: "Play a challenge", text: "Tap the trophy (top right) to start a game of Whot! or Ludo, or join one that lights up near you." },
   { id: "home", title: "Pick your home", text: "Tap Find a home. It comes ready to live in: designing it is optional, for later." },
 ];

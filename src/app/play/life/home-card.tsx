@@ -1,7 +1,7 @@
 "use client";
 
 import { House, Users, X } from "@/components/icons";
-import { DoorOpen, PencilRuler } from "lucide-react";
+import { DoorOpen } from "lucide-react";
 import type { Neighbour } from "@/lib/world/property-api";
 
 /** Two letters for someone's round badge. */
@@ -23,7 +23,7 @@ function tint(name: string) {
 const far = (tiles: number) => (tiles < 1 ? "next door" : `${Math.round(tiles * 100)} m away`);
 
 /** Your home, at the bottom of the map: where it is and who lives around you. */
-export function HomeCard({ label, area, neighbours, onClose, onPlan, onEnter, children }: { label: string; area: string; neighbours: Neighbour[] | null; onClose: () => void; onPlan?: () => void; onEnter?: () => void; children?: React.ReactNode }) {
+export function HomeCard({ label, area, neighbours, onClose, onEnter, children }: { label: string; area: string; neighbours: Neighbour[] | null; onClose: () => void; onEnter?: () => void; children?: React.ReactNode }) {
   const inside = (neighbours ?? []).filter((n) => n.sameBuilding);
   const around = (neighbours ?? []).filter((n) => !n.sameBuilding);
   return (
@@ -43,14 +43,7 @@ export function HomeCard({ label, area, neighbours, onClose, onPlan, onEnter, ch
           </button>
         </div>
 
-        <p className="mt-3 rounded-2xl bg-me/10 px-3 py-2 text-xs">
-          Your home is ready to live in: nothing to build. Designing it (rooms, floors, furniture) is optional, whenever you like.
-        </p>
-        {onPlan && (
-          <button onClick={onPlan} className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-full bg-ink text-sm font-semibold text-white">
-            <PencilRuler className="size-4" /> Design my home (optional)
-          </button>
-        )}
+        <p className="mt-3 rounded-2xl bg-me/10 px-3 py-2 text-xs">Your home is ready to live in: nothing to build.</p>
         {onEnter && (
           <button onClick={onEnter} className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-full bg-gold text-sm font-semibold text-ink">
             <DoorOpen className="size-4" /> Enter home

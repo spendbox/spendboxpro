@@ -64,7 +64,7 @@ import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
 import { BookOpen, Church, Dumbbell, FerrisWheel, GraduationCap, Landmark as LandmarkIcon, Plane, Ship, Stethoscope, TrainFront, Trophy, UtensilsCrossed } from "lucide-react";
-import { BellOff, BellRing, LocateFixed, Rocket, PencilRuler, Wallet, CarFront, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Newspaper, Palette, ShoppingBag, Smartphone, Store, Swords, User } from "lucide-react";
+import { BellOff, BellRing, LocateFixed, Rocket, Wallet, CarFront, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Newspaper, Palette, ShoppingBag, Smartphone, Store, Swords, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
 import { GhostsSheet } from "./ghost-duel/ghosts-sheet";
@@ -775,27 +775,37 @@ export function Game({
   // You, on the map where you are (your home, or the place you're at), as everyone else sees you.
   const mySpotX = worldLife.mySpot?.x ?? null;
   const mySpotZ = worldLife.mySpot?.z ?? null;
+  const homeX = worldLife.homeSpot?.x ?? null;
+  const homeZ = worldLife.homeSpot?.z ?? null;
   const facesOnMap: CityFriendPin[] = useMemo(() => {
     const live = new Set(friendsAt.map((f) => f.id));
-    const mine: CityFriendPin[] =
-      mySpotX !== null && mySpotZ !== null && !me.guest
-        ? [{ id: me.id, name: me.name ?? "You", avatar: me.avatar, room: `b:${spiralIndex(Math.round(mySpotX), Math.round(mySpotZ))}`, status: "online", mine: true }]
-        : [];
+    const myRoom = mySpotX !== null && mySpotZ !== null ? `b:${spiralIndex(Math.round(mySpotX), Math.round(mySpotZ))}` : null;
+    const homeRoom = homeX !== null && homeZ !== null ? `b:${spiralIndex(Math.round(homeX), Math.round(homeZ))}` : null;
+    const mine: CityFriendPin[] = me.guest
+      ? []
+      : [
+          // Your home: a house bubble (tap it for your home's card).
+          ...(homeRoom ? [{ id: `home:${me.id}`, name: "Home", avatar: me.avatar, room: homeRoom, home: true }] : []),
+          // You, where you are: your own name in gold.
+          ...(myRoom ? [{ id: me.id, name: "You", avatar: me.avatar, room: myRoom, status: "online" as const, mine: true }] : []),
+        ];
     return [
       ...mine,
       ...friendsAt.filter((f) => f.id !== me.id).map((f) => ({ ...f, friend: true, status: "online" as const })),
       ...peopleOut.filter((p) => !live.has(p.id) && p.id !== me.id).map((p) => ({ id: p.id, name: p.name, avatar: cleanAvatar(p.avatar, p.name), room: `b:${spiralIndex(p.x, p.z)}`, status: p.status, friend: p.friend })),
     ];
-  }, [friendsAt, peopleOut, mySpotX, mySpotZ, me.id, me.name, me.avatar, me.guest]);
-  const onlineNear = useMemo(() => facesOnMap.filter((f) => f.status === "online" && !f.mine).length, [facesOnMap]);
+  }, [friendsAt, peopleOut, mySpotX, mySpotZ, homeX, homeZ, me.id, me.avatar, me.guest]);
+  const onlineNear = useMemo(() => facesOnMap.filter((f) => f.status === "online" && !f.mine && !f.home).length, [facesOnMap]);
   const onlineNow = Math.max(1, cityOnline ?? 0, online ?? 0, onlineNear);
   const [statsOpen, setStatsOpen] = useState(false);
   /** On foot on the streets: the joystick's state (the 3D city reads it every frame), and whether you're walking. */
-  const walkStick = useRef({ on: false, x: 0, y: 0 });
+  const walkStick = useRef<{ on: boolean; x: number; y: number; from?: { x: number; z: number } | null }>({ on: false, x: 0, y: 0 });
   /** Inside a planned home: the joystick for walking round it as your avatar. */
   const homeStick = useRef({ on: true, x: 0, y: 0 });
   const [walking, setWalkingNow] = useState(false);
   const setWalking = (on: boolean) => {
+    // You start walking from where you are on the map (your home, or the place you're at).
+    if (on) walkStick.current.from = worldLife.mySpot ?? null;
     walkStick.current.on = on;
     walkStick.current.x = walkStick.current.y = 0;
     setWalkingNow(on);
@@ -1624,10 +1634,6 @@ export function Game({
     setRide({ kind: r.kind, index: r.index });
     setMessage({ icon: RIDE_ICONS[r.kind], text: guest && r.kind !== "slide" ? "Enjoy the ride! Sign in to chat with the people on board." : RIDE_HELLO[r.kind], tone: "info" });
   }
-  // Inside your own home (any floor of it).
-  const homeAt = worldLife.homeBuilding ? ownedSpot(worldLife.homeBuilding) : null;
-  const homeRoom = homeAt ? `b:${spiralIndex(homeAt.x, homeAt.z)}` : null;
-  const inMyHome = !!homeRoom && !!rooms.myRoomInfo && (rooms.myRoomInfo.id === homeRoom || rooms.myRoomInfo.id.startsWith(`${homeRoom}:`));
   // Planned homes (docs/HOME_PLANNER.md): yours as soon as the game opens, and any other home as
   // you walk into it, so the inside is drawn from its plan for you and for visitors.
   const [homePlans, setHomePlans] = useState<Record<number, HomePlan>>({});
@@ -1728,7 +1734,6 @@ export function Game({
     };
     const sport = THEME_SPORT_GAME[theme];
     if (sport) return { label: "Watch the match", icon: Trophy, run: () => setSportsOpen(sport) };
-    if (inMyHome) return { label: "Design my home", icon: PencilRuler, run: worldLife.openPlanner };
     if (inPlannedHome) {
       const [hx, hz] = spiralXY(enteredTile);
       return { label: "Sign the guest book", icon: BookOpen, run: () => worldLife.openGuestBook(`${worldId}:${hx},${hz}`) };
@@ -2037,7 +2042,7 @@ export function Game({
             dance={isDancing && dancing ? { id: me.id, move: dancing.move, with: dancing.with } : null}
             friendsAt={worldId ? (walking ? facesOnMap.filter((f) => !f.mine) : facesOnMap) : friendsAt}
             challengeLights={worldId ? challengeLights : undefined}
-            onPerson={worldId ? setPersonId : undefined}
+            onPerson={worldId ? (id) => (id.startsWith("home:") ? worldLife.goHome() : setPersonId(id)) : undefined}
             marks={worldId ? worldLife.marks : undefined}
             onMark={worldId ? worldLife.onMark : undefined}
             openRoom={openReq}
@@ -3063,7 +3068,7 @@ export function Game({
           </div>
         )}
         {/* Down the left, out of the way of the city: the notifications bell (while they're off), Soon,
-            Locate me and Walk see-through and small; Challenge, the fun one, big and bright at the bottom. */}
+            Locate me and Walk, see-through and small. (Challenge is top right.) */}
         {worldId && !guest && !place && ride === null && !walking && (
           <div className="pointer-events-auto absolute bottom-[max(0.625rem,env(safe-area-inset-bottom))] left-2.5 flex flex-col items-center gap-2 sm:bottom-4 sm:left-4">
             {!pushOn && (
@@ -3090,15 +3095,6 @@ export function Game({
             <button onClick={() => setWalking(true)} className="flex h-11 w-12 flex-col items-center justify-center gap-0.5 rounded-2xl bg-white/55 text-[10px] font-semibold shadow-sm backdrop-blur-sm transition hover:bg-white/90" aria-label="Walk">
               <Footprints className="size-4" />
               Walk
-            </button>
-            <button
-              onClick={() => setFightOpen(true)}
-              className="challenge-pop relative flex h-14 w-14 flex-col items-center justify-center gap-0.5 rounded-2xl bg-gradient-to-br from-[#ff6b6b] via-[#f76707] to-[#f59f00] text-[10px] font-extrabold text-white shadow-lg ring-2 ring-white/80"
-              aria-label="Challenge people nearby"
-            >
-              <Trophy className="size-5 drop-shadow" />
-              Challenge
-              {worldLife.guideStep === "challenge" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-2xl ring-4 ring-gold/70" />}
             </button>
           </div>
         )}
@@ -3367,13 +3363,6 @@ export function Game({
                       <MessageCircle className="size-4" />
                       Chat
                     </button>
-                    {/* Your own home: plan it from inside, too. */}
-                    {place && inMyHome && (
-                      <button onClick={worldLife.openPlanner} className="flex items-center gap-1.5 rounded-xl bg-gold px-3 py-2 font-semibold text-ink">
-                        <PencilRuler className="size-4" />
-                        Design my home
-                      </button>
-                    )}
                     {placeLevel?.kind === "club" && (
                       <button onClick={startDancing} className="flex items-center gap-1.5 rounded-xl bg-[#e64980] px-3 py-2 font-semibold text-white">
                         <Music className="size-4" />
@@ -3436,6 +3425,18 @@ export function Game({
             </button>
           </div>
         </div>
+      )}
+      {/* Challenge: a white trophy button in the top right corner, under your cash (gently bouncing). */}
+      {worldId && !guest && !camera && !place && ride === null && !walking && (
+        <button
+          onClick={() => setFightOpen(true)}
+          className="challenge-pop pointer-events-auto fixed right-3 top-14 z-20 grid size-12 place-items-center rounded-full bg-white text-[#f08c00] ring-1 ring-black/5 sm:right-4 sm:top-16"
+          aria-label="Challenge people nearby"
+          title="Challenge people nearby"
+        >
+          <Trophy className="size-6" />
+          {worldLife.guideStep === "challenge" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
+        </button>
       )}
       {/* Notifications off on this phone: a bell on the right, halfway down, to switch them on (gone
           once they're on). On the real map it's in the column down the left instead. */}

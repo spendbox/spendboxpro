@@ -4,7 +4,7 @@ New players get three things to do, one at a time, in the dark card under the bu
 (`src/app/play/life/world-life.tsx`, steps in `src/lib/world/first-steps.ts`):
 
 1. **Say hi to someone**: the green online count glows; send anyone a private message.
-2. **Play a challenge**: the Challenge button glows; start one or join one.
+2. **Play a challenge**: the trophy (top right) glows; start one or join one.
 3. **Pick your home**: Find a home glows. The home comes ready to live in; designing it is optional.
 
 Each pays a small reward once (₦5,000 in your currency, `FIRST_STEP_NAIRA`). The server checks it

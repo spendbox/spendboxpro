@@ -229,7 +229,7 @@ const WORLD_SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[]
     icon: Trophy,
     title: "Challenge people",
     body: [
-      "Tap Challenge at the bottom and challenge everyone nearby to a game (Whot! and Ludo now, more coming): everyone puts the same stake in the pool and the winner takes it.",
+      "Tap the trophy (top right) and challenge everyone nearby to a game (Whot! and Ludo now, more coming): everyone puts the same stake in the pool and the winner takes it.",
       "Your first challenge is free; challenging again soon after costs a fee. Hosting and winning challenges raise your reputation.",
     ],
   },

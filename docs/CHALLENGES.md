@@ -6,7 +6,7 @@ down a challenge, a minute to gather players, a game floating over the city, a p
 
 ## How it goes
 
-1. **Challenge** (in the bar along the bottom, next to Walk). The first time, a pop-up explains
+1. **Challenge** (the white trophy, top right). The first time, a pop-up explains
    the rules.
 2. **Pick a game**: Whot! and Ludo now; Jenga and Police and Thief are shown as coming soon.
 3. **Pick a stake** (₦5,000, ₦20,000, ₦50,000 or ₦100,000): what each player puts into the pool.
