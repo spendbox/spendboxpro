@@ -63,7 +63,7 @@ import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
 import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
-import { Church, Dumbbell, FerrisWheel, GraduationCap, Landmark as LandmarkIcon, Plane, Ship, Stethoscope, TrainFront, Trophy, UtensilsCrossed } from "lucide-react";
+import { BookOpen, Church, Dumbbell, FerrisWheel, GraduationCap, Landmark as LandmarkIcon, Plane, Ship, Stethoscope, TrainFront, Trophy, UtensilsCrossed } from "lucide-react";
 import { BellOff, BellRing, PencilRuler, Wallet, CarFront, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Newspaper, Palette, ShoppingBag, Smartphone, Store, Swords, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
@@ -1603,6 +1603,10 @@ export function Game({
     const sport = THEME_SPORT_GAME[theme];
     if (sport) return { label: "Watch the match", icon: Trophy, run: () => setSportsOpen(sport) };
     if (inMyHome) return { label: "Plan my home", icon: PencilRuler, run: worldLife.openPlanner };
+    if (inPlannedHome) {
+      const [hx, hz] = spiralXY(enteredTile);
+      return { label: "Sign the guest book", icon: BookOpen, run: () => worldLife.openGuestBook(`${worldId}:${hx},${hz}`) };
+    }
     switch (theme) {
       case "reception":
       case "ward":

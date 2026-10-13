@@ -83,3 +83,13 @@ Planning and rearranging are free. **Save** pays for what's new:
 4. **More looks:**
    - Wall colours, floor types and windows.
    - Furniture in the same style as the rest of the game, in place of plain shapes.
+
+## Visiting
+
+Going into someone else's home (game-db/066_home_visits.sql, src/app/play/life/visit-actions.ts):
+
+- **Who walks straight in:** you (your own home), the friends of anyone who lives there, anyone while a party is on, and anyone let in during the last 45 minutes.
+- **Everyone else knocks or rings.** The people who live there get a notice and a push, and a card pops up for them: Let in, or Not now. A knock waits 5 minutes.
+- **Nobody answering?** The visitor can leave a note at the door. It goes into the home's guest book.
+- **Inside someone's home,** the main button is "Sign the guest book".
+- **Parties:** on your home card, Throw a party. Your door's open to everyone for 2 hours and your friends are told. The guest book is on the home card too.

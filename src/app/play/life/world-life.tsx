@@ -36,6 +36,8 @@ import { Sheet } from "../sheet";
 import { LifeSheet } from "./life-sheet";
 import { MoneySheet } from "./money-sheet";
 import { HomeCard } from "./home-card";
+import { DoorBell, DoorSheet, HomeParty, SignGuestBook } from "./door-sheet";
+import { homeDoor, type Door } from "./visit-actions";
 import { JobsHere, type JobsContext } from "./jobs-here";
 import type { SearchHit } from "./map-search";
 import { HomeFinder } from "./home-finder";
@@ -552,7 +554,15 @@ export function useWorldLife({
     return t && t.fare > 0 ? `Go there · ${cash(t.fare)} ${tripWords(t.mode, t.ferry)}` : "Go there";
   };
   /** Go into a building: pay the fare there (signed in), then in. */
-  const goInside = async (id: string) => {
+  // Someone else's home: knock first (docs/HOME_PLANNER.md, "Visiting").
+  const [door, setDoor] = useState<{ id: string; owner: string; signedIn: boolean } | null>(null);
+  const [guestBook, setGuestBook] = useState<string | null>(null);
+  const goInside = async (id: string, knocked = false) => {
+    if (!knocked) {
+      const d = await homeDoor(id).catch(() => ({ open: true }) as Door);
+      if (!d.open) return setDoor({ id, owner: d.owner, signedIn: d.signedIn });
+      if (d.party) setMessage({ text: `${d.party}: the door's open, come on in!`, good: true });
+    }
     if (signedIn) {
       setBusy(true);
       const r = await api.travelTo(id, driving);
@@ -867,9 +877,27 @@ export function useWorldLife({
                 }
               : undefined
           }
-        />
+        >
+          {signedIn && <HomeParty />}
+        </HomeCard>
       )}
       {planning && <HomePlanner onClose={() => setPlanning(false)} />}
+      {door && (
+        <DoorSheet
+          building={door.id}
+          owner={door.owner}
+          signedIn={door.signedIn}
+          onClose={() => setDoor(null)}
+          onIn={() => {
+            const id = door.id;
+            setDoor(null);
+            setMessage({ text: `${door.owner} let you in!`, good: true });
+            void goInside(id, true);
+          }}
+        />
+      )}
+      {guestBook && <SignGuestBook building={guestBook} onClose={() => setGuestBook(null)} />}
+      <DoorBell signedIn={signedIn} />
       {place && (
         <Sheet onClose={() => setPlace(null)} wide clear>
           <div className="sticky -top-5 z-10 -mx-5 -mt-5 flex items-start justify-between gap-3 bg-panel/95 px-5 pb-2 pt-5">
@@ -1525,7 +1553,7 @@ export function useWorldLife({
     fly(p.x, p.z);
     setPlace(workplaceById(planOf(region), p.id) ?? { id: p.id, name: p.name, x: Math.round(p.x), z: Math.round(p.z), jobs: [] });
   };
-  return { explore, openExplorePlace, rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit, homeBuilding: homeUnit ? homeUnit.split("/")[0] : null, openPlanner: () => setPlanning(true),
+  return { explore, openExplorePlace, rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit, homeBuilding: homeUnit ? homeUnit.split("/")[0] : null, openPlanner: () => setPlanning(true), openGuestBook: (building: string) => setGuestBook(building),
     openLife: () => setLifeOpen(true),
     /** A place's card (its jobs, and what it does), from where it stands. */
     openWorkplace: (x: number, z: number, name: string) => {
