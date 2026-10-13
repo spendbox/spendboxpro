@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { signOutNow } from "../login/actions";
 
 /** Test versions (previews, the test site) say why the city didn't load; the live game never does. */
 const SHOW_WHY = process.env.NEXT_PUBLIC_APP_ENV === "test" || process.env.NEXT_PUBLIC_VERCEL_ENV === "preview";
@@ -35,9 +36,16 @@ export function Reconnecting({ why }: { why?: string }) {
             <button onClick={() => setTries(0)} className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white">
               Try again
             </button>
-            <a href="/?signin=1" className="rounded-full bg-panel-2 px-4 py-2 text-sm font-semibold">
+            <button
+              onClick={async () => {
+                // Out first (an old login that can't be checked any more), then the sign-in box.
+                await signOutNow().catch(() => {});
+                window.location.href = "/?signin=1";
+              }}
+              className="rounded-full bg-panel-2 px-4 py-2 text-sm font-semibold"
+            >
               Sign in again
-            </a>
+            </button>
           </div>
         )}
         {SHOW_WHY && why && <p className="mt-4 break-words rounded-xl bg-hit/10 px-3 py-2 text-left font-mono text-[11px] text-hit">Why (test versions only): {why}</p>}

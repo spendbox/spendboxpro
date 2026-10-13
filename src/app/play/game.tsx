@@ -1496,6 +1496,8 @@ export function Game({
   // Tapping a building or balloon takes you inside to meet the people there. A building with
   // several levels (ground, floors, rooftop) asks which one; nothing opens the chat by itself.
   function onRoom(room: PlaceRoom) {
+    // Signed out on the real map: buildings aren't tappable.
+    if (worldId && guest) return;
     // Going to a friend: straight onto their floor.
     if (goTo && room.id === goTo.building) {
       const level = room.levels?.find((l) => l.id === goTo.level);
@@ -1969,14 +1971,15 @@ export function Game({
             tileCount={round?.tileCount ?? 0}
             region={worldId}
             onArea={setWorldArea}
-            onProperty={worldId ? worldLife.onProperty : undefined}
-            onWorkplace={worldId ? worldLife.onWorkplace : undefined}
+            // Signed out, buildings can't be tapped (sign in to go anywhere).
+            onProperty={worldId && !guest ? worldLife.onProperty : undefined}
+            onWorkplace={worldId && !guest ? worldLife.onWorkplace : undefined}
             centerRef={worldId ? worldLife.centerRef : undefined}
             walkStick={walkStick}
             homeStick={homeStick}
             onWalkBlocked={(what) => setMessage({ text: what === "water" ? "That's water: you can't walk on it. Try a ferry (Explore → Rides)." : "That's a building. Tap it to go in.", tone: "info" })}
             businesses={worldId ? worldLife.businesses : undefined}
-            onBusiness={worldId ? worldLife.onBusiness : undefined}
+            onBusiness={worldId && !guest ? worldLife.onBusiness : undefined}
             owned={worldId ? worldLife.owned : undefined}
             markers={worldId ? NO_MARKERS : markers}
             events={worldId ? NO_EVENTS : cityEvents}
@@ -3367,7 +3370,7 @@ export function Game({
           <div className="title-float flex flex-col items-center">
             <LogoMark size={60} className="mb-2 rounded-[16px] shadow-[0_12px_30px_rgba(0,0,0,0.35)]" />
             <h1 className="title-3d font-display text-[clamp(3rem,15vw,8rem)] font-black italic leading-none tracking-tight text-white">Newtown</h1>
-            <p className="mt-3 rounded-full bg-black/35 px-4 py-1.5 text-sm font-semibold tracking-wide text-white backdrop-blur-sm sm:text-base">Your city. Your story.</p>
+            <p className="mt-3 rounded-full bg-black/35 px-4 py-1.5 text-sm font-semibold tracking-wide text-white backdrop-blur-sm sm:text-base">Your world. Your story.</p>
             {/* What Newtown is, for someone seeing it for the first time. */}
             <p className="mt-3 max-w-[22rem] rounded-2xl bg-black/40 px-4 py-2.5 text-center text-[13px] leading-snug text-white backdrop-blur-sm sm:max-w-md sm:text-sm">
               A living world where social media meets play. Explore real cities, meet new people, team up, and discover cultures from around the globe, alongside real people and real brands, in a space that&apos;s fun and safe.

@@ -1,6 +1,6 @@
 "use client";
 
-import { Banknote, House, MessageCircle, Music, Phone, Plane, Swords, Users } from "lucide-react";
+import { Handshake, House, MessageCircle, Music, Phone, Plane, Swords, Users } from "lucide-react";
 
 // Signed out, under what Newtown is: what you can do here, at a glance (small cards, an icon each).
 
@@ -9,7 +9,7 @@ const FEATURES = [
   { icon: MessageCircle, label: "Chat", colour: "#1c7ed6" },
   { icon: Phone, label: "Voice calls", colour: "#12a37a" },
   { icon: Swords, label: "Fight & win", colour: "#e03131" },
-  { icon: Banknote, label: "Earn money", colour: "#2f9e44" },
+  { icon: Handshake, label: "Form bonds", colour: "#2f9e44" },
   { icon: House, label: "Own a home", colour: "#f08c00" },
   { icon: Plane, label: "Travel", colour: "#7048e8" },
   { icon: Music, label: "Party", colour: "#d6336c" },

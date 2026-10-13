@@ -326,7 +326,8 @@ export function useWorldLife({
   /** Breaking news: a story pops up at the top with a little bleep when it comes in (once each). */
   const [breaking, setBreaking] = useState<NewsItem | null>(null);
   useEffect(() => {
-    if (!region || pretend) return;
+    // Signed out: no breaking news popping up.
+    if (!region || pretend || !signedIn) return;
     const look = () => {
       if (document.visibilityState !== "visible") return;
       const latest = cityNews(region, Date.now(), 1)[0];
@@ -370,7 +371,7 @@ export function useWorldLife({
       clearTimeout(firstP);
       clearInterval(everyP);
     };
-  }, [region, pretend]);
+  }, [region, pretend, signedIn]);
   useEffect(() => {
     if (!breaking) return;
     const t = setTimeout(() => setBreaking(null), 9000);
