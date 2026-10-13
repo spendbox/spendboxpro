@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { BellRing, BookOpen, DoorClosed, PartyPopper } from "lucide-react";
 import { Sheet } from "../sheet";
-import { answerKnock, knock, knockStatus, myDoor, myGuestBook, myParty, signGuestBook, startParty, stopParty, type GuestLine, type Knock } from "./visit-actions";
+import { answerKnock, knock, knockStatus, myDoor, myGuestBook, signGuestBook, type GuestLine, type Knock } from "./visit-actions";
 
 /**
  * At someone else's door (docs/HOME_PLANNER.md, "Visiting"): knock or ring, and wait for them to
@@ -145,50 +145,23 @@ export function DoorBell({ signedIn }: { signedIn: boolean }) {
   );
 }
 
-/** On your home card: throw a party (open house for two hours), and your guest book. */
+/** On your home card: parties (coming soon), and your guest book. */
 export function HomeParty() {
-  const [until, setUntil] = useState<string | null | undefined>(undefined);
   const [book, setBook] = useState<GuestLine[] | null>(null);
-  const [title, setTitle] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [showBook, setShowBook] = useState(false);
   useEffect(() => {
-    void myParty().then(setUntil).catch(() => setUntil(null));
     void myGuestBook().then(setBook).catch(() => setBook([]));
   }, []);
-  const on = !!until && Date.parse(until) > Date.now();
-  const start = async () => {
-    setError(null);
-    const r = await startParty(title);
-    if (!r.ok) return setError(r.error);
-    setUntil(r.until);
-  };
-  const stop = async () => {
-    await stopParty().catch(() => {});
-    setUntil(null);
-  };
   return (
     <div className="mt-3 border-t border-ink/5 pt-3">
-      {on ? (
-        <div className="flex items-center gap-2">
-          <PartyPopper className="size-5 shrink-0 text-[#f08c00]" />
-          <p className="min-w-0 flex-1 text-sm">
-            Party on till {new Date(until!).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}. Anyone can walk in.
-          </p>
-          <button onClick={() => void stop()} className="h-9 shrink-0 rounded-full bg-ink/5 px-3 text-xs font-semibold">
-            End party
-          </button>
-        </div>
-      ) : (
-        <div className="flex gap-2">
-          <input value={title} onChange={(e) => setTitle(e.target.value.slice(0, 60))} placeholder="Party name (optional)" className="h-10 min-w-0 flex-1 rounded-full bg-ink/5 px-4 text-sm outline-none" />
-          <button onClick={() => void start()} disabled={until === undefined} className="flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-[#f08c00] px-4 text-sm font-semibold text-white disabled:opacity-40">
-            <PartyPopper className="size-4" /> Throw a party
-          </button>
-        </div>
-      )}
-      {!on && <p className="mt-1 text-xs text-muted">Your door's open to everyone for 2 hours, and your friends are invited.</p>}
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      <div className="flex items-center gap-2">
+        <PartyPopper className="size-5 shrink-0 text-[#f08c00]" />
+        <p className="min-w-0 flex-1 text-sm">
+          <b>Throw a party</b>
+          <span className="block text-xs text-muted">Open your door to everyone for 2 hours and invite your friends.</span>
+        </p>
+        <span className="shrink-0 rounded-full bg-ink/5 px-3 py-1.5 text-xs font-semibold text-muted">Coming soon</span>
+      </div>
       <button onClick={() => setShowBook((s) => !s)} className="mt-3 flex items-center gap-1.5 text-sm font-semibold">
         <BookOpen className="size-4 text-muted" /> Guest book{book ? ` (${book.length})` : ""}
       </button>
