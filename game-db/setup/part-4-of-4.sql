@@ -1369,13 +1369,13 @@ create table if not exists public.club_entries (
 );
 
 /**
- * Into a club: free if you paid in the last 24 hours, otherwise pays the fee (mint, at most 100).
+ * Into a club: free if you paid in the last 24 hours, otherwise pays the fee (mint, at most 1,000).
  * Returns what was paid now and until when you're in.
  */
 create or replace function public.life_club_entry(p_user uuid, p_place text, p_fee numeric) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
-  v_fee numeric := round(least(100, greatest(0, coalesce(p_fee, 0))), 2);
+  v_fee numeric := round(least(1000, greatest(0, coalesce(p_fee, 0))), 2);
   v_paid numeric := 0;
   v_at timestamptz;
   p public.profiles;
@@ -1934,4 +1934,22 @@ group by 1
 order by 1 desc;
 revoke all on public.coin_supply_daily from public, anon, authenticated;
 grant select on public.coin_supply_daily to service_role;
+
+-- ======================================================== 074_price_level.sql
+-- Newtown, part 74: prices follow the money (docs/MONEY.md, "Prices"). Money in the game comes big
+-- now (a daily gift of ₦400k–6.4m, challenge stakes up to ₦5m), so everyday things cost ten times
+-- their real Lagos price (rides, trip fares, club entry, pranks, fines, bribes) and things you own
+-- three times (shop items, cars, homes). The prices themselves are worked out in the game's code
+-- (src/lib/world/price-level.ts); this raises the database's sanity limits to let them through,
+-- and starts new lives with three times the money, so a first home is still within reach.
+-- Also run part 67 again (club entry's own limit).
+--
+-- Safe to run more than once.
+
+update public.game_settings set value = 19500, note = 'Mint to start a life on the real map with (once): ₦29.25m in Lagos'
+  where key = 'start_grant';
+update public.game_settings set value = greatest(value, 1500) where key = 'ride_fare_max';
+update public.game_settings set value = greatest(value, 1000) where key = 'trip_fare_max';
+update public.game_settings set value = greatest(value, 300) where key = 'work_fare_max';
+update public.game_settings set value = greatest(value, 1000000) where key = 'item_price_max';
 

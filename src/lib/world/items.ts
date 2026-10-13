@@ -7,6 +7,7 @@
 // Shared by the server (which works out every price and effect here, never trusting the phone),
 // the screens, and the world lab. The database part is game-db/050_economy_items.sql.
 
+import { OWNED_PRICES } from "./price-level.ts";
 import type { Prices } from "./region.ts";
 
 export type ItemCategory = "jewellery" | "clothing" | "book" | "gadget" | "home" | "art" | "fitness" | "car";
@@ -50,7 +51,8 @@ export const DRIFT: Record<ItemCategory, number> = {
   car: -0.012,
 };
 
-const K = (id: string, name: string, category: ItemCategory, price: number, effect: ItemEffect, car?: ItemKind["car"]): ItemKind => ({ id, name, category, price, effect, ...(car ? { car } : {}) });
+// Prices are real Lagos prices, times Newtown's level for things you own (src/lib/world/price-level.ts).
+const K = (id: string, name: string, category: ItemCategory, price: number, effect: ItemEffect, car?: ItemKind["car"]): ItemKind => ({ id, name, category, price: price * OWNED_PRICES, effect, ...(car ? { car } : {}) });
 
 /** What the city's shops and car dealers sell (naira). */
 export const SHOP: ItemKind[] = [

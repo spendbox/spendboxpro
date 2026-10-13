@@ -1,6 +1,7 @@
 // What it costs to go places: the first visit to a place in each town (each hourly town is a
 // new world), and a fare every time you board a train. A share goes into the prize pool (see
 // game-db/035_fees_and_jobs.sql, which also keeps every fee between ₥0.10 and ₥5).
+import { everyday } from "./world/price-level.ts";
 
 /** First-visit fee by what the place is (CityRoom.type). Anything not listed: ₥0.50. */
 const VISIT_FEE: Record<string, number> = {
@@ -32,7 +33,7 @@ export const MONORAIL_FARE = 1.5;
  * board): the train on the real railway, a lagoon ferry, a BRT bus, a taxi, a Ferris wheel, a
  * water slide, a hot-air balloon flight, a helicopter tour over the city.
  */
-export const RIDE_FARE_NAIRA: Record<string, number> = {
+const REAL_RIDE_FARE_NAIRA: Record<string, number> = {
   train: 2_000,
   boat: 2_500,
   bus: 500,
@@ -42,6 +43,8 @@ export const RIDE_FARE_NAIRA: Record<string, number> = {
   balloon: 25_000,
   heli: 150_000,
 };
+/** Each ride's fare (naira) at Newtown's price level (src/lib/world/price-level.ts). */
+export const RIDE_FARE_NAIRA: Record<string, number> = Object.fromEntries(Object.entries(REAL_RIDE_FARE_NAIRA).map(([k, v]) => [k, everyday(v)]));
 
 /** A ride's fare in mint (Lagos: ₦1,500 a mint). */
 export function rideFare(kind: string, nairaPerMint = 1_500) {
@@ -54,7 +57,7 @@ export function rideFare(kind: string, nairaPerMint = 1_500) {
  * free to walk into; the rest charge at the door, from a cover charge up to a VIP night. Which
  * club charges what is fixed by where it is (the same for everyone). Never for a home's party room.
  */
-const CLUB_ENTRY_NAIRA = [0, 3_000, 5_000, 0, 10_000, 5_000, 20_000, 0, 3_000];
+const CLUB_ENTRY_NAIRA = [0, 3_000, 5_000, 0, 10_000, 5_000, 20_000, 0, 3_000].map(everyday);
 export function clubEntryNaira(place: string, type?: string) {
   if (type === "home" || type === "house") return 0;
   let h = 7;

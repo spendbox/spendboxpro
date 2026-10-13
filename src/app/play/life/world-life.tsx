@@ -12,7 +12,7 @@ import { HomePlanner } from "../home/home-planner";
 import { propertyInfo, type PropertyInfo } from "@/lib/world/property";
 import { homesByArea, type HomeFind } from "@/lib/world/homes";
 import type { BuildingOwner, InterviewStart, LifeStatus, Neighbour, PaySettled, PropertyApi, PropertyResult, WorkStatus } from "@/lib/world/property-api";
-import { cheapestCommute, COMMUTE_LABEL, dayNet, fareMint, fareOrBus, INCOME_TAX, needsInterview, payDay, tripKmBetween, tripWords, type Commute } from "@/lib/world/work";
+import { cheapestCommute, COMMUTE_LABEL, dayNet, fareMint, fareOrBus, tripFareMint, INCOME_TAX, needsInterview, payDay, tripKmBetween, tripWords, type Commute } from "@/lib/world/work";
 import { ferryKmBetween } from "@/lib/world/trips";
 import { dayOf, EXERCISE } from "@/lib/world/day";
 import { HUSTLES, hustleDay, hustleStart } from "@/lib/world/hustles";
@@ -540,7 +540,7 @@ export function useWorldLife({
     const cheapest = cheapestCommute(km, ferry);
     // Your own car when you'd rather drive (anywhere; only the fuel to pay).
     const mode: Commute = driving && cheapest !== "walk" ? "car" : cheapest;
-    return { mode, ferry, fare: fareMint(mode, km, region.region.prices, ferry) ?? 0 };
+    return { mode, ferry, fare: tripFareMint(mode, km, region.region.prices, ferry) ?? 0 };
   };
   /** Drive or take the bus: a switch under each Go there, for car owners. */
   const driveSwitch = signedIn && rep?.hasCar ? (

@@ -12,13 +12,13 @@ create table if not exists public.club_entries (
 );
 
 /**
- * Into a club: free if you paid in the last 24 hours, otherwise pays the fee (mint, at most 100).
+ * Into a club: free if you paid in the last 24 hours, otherwise pays the fee (mint, at most 1,000).
  * Returns what was paid now and until when you're in.
  */
 create or replace function public.life_club_entry(p_user uuid, p_place text, p_fee numeric) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
-  v_fee numeric := round(least(100, greatest(0, coalesce(p_fee, 0))), 2);
+  v_fee numeric := round(least(1000, greatest(0, coalesce(p_fee, 0))), 2);
   v_paid numeric := 0;
   v_at timestamptz;
   p public.profiles;

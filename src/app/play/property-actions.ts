@@ -8,7 +8,7 @@ import type { Building } from "@/lib/world/buildings";
 import { cleanPropertyName, ownedSpot } from "@/lib/world/owned";
 import { BUY_TAX, rentPerDay, type AssetsData, type BuildingOwner, type OwnedBuildingRow, type PropertyResult } from "@/lib/world/property-api";
 import { landNow, toMint, valueOf } from "@/lib/world/value";
-import { cheapestCommute, cheapestRide, fareMint, tripKmBetween, type Commute } from "@/lib/world/work";
+import { cheapestCommute, cheapestRide, tripFareMint, tripKmBetween, type Commute } from "@/lib/world/work";
 import { ferryKmBetween } from "@/lib/world/trips";
 import { FIND_CHANCE, FINDS, mintOf, shopKind } from "@/lib/world/items";
 import { collectPay } from "./work-actions";
@@ -223,7 +223,7 @@ export async function travelTo(buildingId: string, drive?: boolean, from?: { x: 
     if (!count) return { ok: false, error: "You need a car to drive. Get one from Things, Cars." };
     mode = "car";
   }
-  const fare = km === null ? 0 : (fareMint(mode, km, regionMap(spot.region)!.region.prices, ferry) ?? 0);
+  const fare = km === null ? 0 : (tripFareMint(mode, km, regionMap(spot.region)!.region.prices, ferry) ?? 0);
   const { data, error } = await db.rpc("life_go", { p_user: userId, p_place: buildingId, p_fare: fare });
   if (error) {
     const [code] = error.message.split(":");

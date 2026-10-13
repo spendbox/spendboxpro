@@ -28,3 +28,16 @@ database counts one a minute at most (`active_ping`, up to 10 hours a day).
 Every challenge won (at least two people put a stake in) also pays the winner `challenge_bonus`
 mint (₦150,000 in Lagos), up to `challenge_bonus_daily` (5) wins a day. A trigger on `challenges`
 pays it, however the game was settled.
+
+## Prices
+Prices follow the money (`src/lib/world/price-level.ts`, `game-db/074_price_level.sql`). Real Lagos
+prices, times:
+
+| What | Times | Examples |
+|---|---|---|
+| Everyday things: rides, trips across the map, club entry, pranks, fines, bribes, the most a pickpocket takes | 10 | bus ₦5,000, taxi ride ₦35,000, balloon ₦250,000, helicopter ₦1.5m, clubs up to ₦200,000, a prank ₦10,000–50,000, a pickpocket fine ₦400,000 |
+| Things you own: shop items, cars, homes | 3 | phone ₦1.05m, Corolla ₦27m, Camry ₦66m, a flat in Mushin about ₦16m, in Ikoyi about ₦32m |
+
+New lives start with three times the money (₥19,500, ₦29.25m), and the starter packs give three
+times the mint for the same real price, so a first home is still within reach. The commute to
+work stays at real prices while jobs last. Things already owned keep what they were bought for.
