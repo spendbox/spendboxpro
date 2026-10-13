@@ -12,7 +12,7 @@ import { TurnTable, type Seat } from "../minigames/turn-table";
 import { Confetti } from "../activities/ui";
 import { playSfx } from "../sound";
 import { Sheet } from "../sheet";
-import { challengeQuote, joinChallenge, openChallenge, reportWinner, type ChallengeView } from "./challenge-actions";
+import { challengeQuote, joinChallenge, leaveChallenge, openChallenge, reportWinner, type ChallengeView } from "./challenge-actions";
 import { useChallengeChannel } from "./channel";
 import { CallBar } from "../call/call-bar";
 
@@ -162,14 +162,21 @@ export function Fight({
           onClose={onClose}
           onGo={async (game, stake) => {
             const at = where();
-            if (!at) return onMessage("Find a home or walk somewhere on the map first.", false);
-            const r = await openChallenge(game, stake, at.x, at.z, region).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
-            if (!r.ok) return onMessage(r.error, false);
+            if (!at) return { error: "Find a home or walk somewhere on the map first." };
+            const r = await openChallenge(game, stake, at.x, at.z, region).catch(() => ({ ok: false as const, error: "The connection blinked. Try again.", busyId: undefined }));
+            // Errors show in the Fight card itself (not behind it).
+            if (!r.ok) return { error: r.error, busyId: "busyId" in r ? r.busyId : undefined };
             playSfx("start");
             onClose();
             setMine(r.id);
             onMessage(r.fee > 0 ? `Challenge on! ${cash(r.fee)} fee paid. Everyone nearby has a minute to join.` : "Challenge on! Everyone nearby has a minute to join.", true);
             void look();
+            return null;
+          }}
+          onOpenMine={(id) => {
+            onClose();
+            closedRef.current = closedRef.current.filter((x) => x !== id);
+            setMine(id);
           }}
         />
       )}
@@ -222,7 +229,20 @@ export function Fight({
 }
 
 /** Fight: what it is (the first time), the games, the stake, and go. */
-function FightSheet({ region, onClose, onGo }: { region: string; onClose: () => void; onGo: (game: string, stakeNaira: number) => Promise<void> }) {
+function FightSheet({
+  region,
+  onClose,
+  onGo,
+  onOpenMine,
+}: {
+  region: string;
+  onClose: () => void;
+  onGo: (game: string, stakeNaira: number) => Promise<{ error: string; busyId?: number } | null>;
+  /** Go back to the challenge you're still in. */
+  onOpenMine: (id: number) => void;
+}) {
+  const [problem, setProblem] = useState<{ error: string; busyId?: number } | null>(null);
+  const [leavingOld, setLeavingOld] = useState(false);
   const [intro, setIntro] = useState(() => {
     try {
       return !localStorage.getItem(INTRO_KEY);
@@ -317,14 +337,42 @@ function FightSheet({ region, onClose, onGo }: { region: string; onClose: () => 
         disabled={going || !g?.engine}
         onClick={async () => {
           setGoing(true);
-          await onGo(game, stake);
+          setProblem(null);
+          const p = await onGo(game, stake);
           setGoing(false);
+          if (p) setProblem(p);
         }}
         className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#e03131] font-bold text-white shadow-lg disabled:opacity-50"
       >
         {going ? <LoaderCircle className="size-5 animate-spin" /> : <Swords className="size-5" />}
         Challenge everyone nearby
       </button>
+      {problem && (
+        <div className="mt-3 rounded-2xl bg-hit/10 p-3 text-sm">
+          <p className="font-semibold text-hit">{problem.error}</p>
+          {problem.busyId !== undefined && (
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button onClick={() => onOpenMine(problem.busyId!)} className="h-10 rounded-full bg-ink/5 text-xs font-semibold">
+                Open it
+              </button>
+              <button
+                disabled={leavingOld}
+                onClick={async () => {
+                  setLeavingOld(true);
+                  const r = await leaveChallenge(problem.busyId!).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
+                  setLeavingOld(false);
+                  if (!r.ok) return setProblem({ error: r.error, busyId: problem.busyId });
+                  setProblem(null);
+                }}
+                className="h-10 rounded-full bg-hit text-xs font-semibold text-white disabled:opacity-50"
+              >
+                {leavingOld ? "Leaving…" : "Leave it"}
+              </button>
+            </div>
+          )}
+          {problem.busyId !== undefined && <p className="mt-2 text-[11px] text-muted">Leaving before it starts gives your stake back; leaving a game being played gives it up.</p>}
+        </div>
+      )}
     </Sheet>
   );
 }
@@ -351,6 +399,7 @@ function Arena({ view, me, now, onClose, onMessage }: { view: ChallengeView; me:
   const [claim, setClaim] = useState<{ winner: string | null; draw: boolean } | null>(null);
   const [leaving, setLeaving] = useState(false);
   const left = (Date.parse(view.startsAt) - now) / 1000;
+  const isHost = view.host === me.id;
   const def = useMemo(() => MINIGAMES.find((m) => m.engine === g?.engine && m.kind === "turns") ?? null, [g?.engine]);
   // Who's still here. Someone gone for 40 seconds (closed the game, lost their connection) is
   // played by the computer from then on, on every phone the same way, so the game never freezes.
@@ -402,9 +451,10 @@ function Arena({ view, me, now, onClose, onMessage }: { view: ChallengeView; me:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [claim, view.status, view.id]);
   /** Giving up: with one other player, they win now; with more, the computer plays your seat. */
-  const leaveGame = () => {
-    const others = view.players.filter((p) => p.id !== me.id);
-    if (others.length === 1) void reportWinner(view.id, others[0].id, false);
+  const leaveGame = async () => {
+    const r = await leaveChallenge(view.id).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
+    if (!r.ok) return onMessage(r.error, false);
+    onMessage(view.status === "open" ? (isHost ? "Challenge called off. Stakes are back." : "You left. Your stake is back.") : "You left the game.", true);
     onClose();
   };
   const lastSeen = useRef(0);
@@ -418,7 +468,6 @@ function Arena({ view, me, now, onClose, onMessage }: { view: ChallengeView; me:
     if (view.status !== "open" || secsLeft < 0 || secsLeft > JOIN_SECS) return;
     playSfx(secsLeft <= 5 ? "chime" : "tick");
   }, [secsLeft, view.status]);
-  const isHost = view.host === me.id;
   // It changed: started (a big "Game on!"), or called off.
   const [gameOn, setGameOn] = useState(false);
   const was = useRef(view.status);
@@ -548,10 +597,10 @@ function Arena({ view, me, now, onClose, onMessage }: { view: ChallengeView; me:
               Back to the map
             </button>
           )}
-          {/* Mid-game: leave (asks first). */}
-          {view.status === "playing" && !claim && (
+          {/* Waiting, or mid-game: leave (asks first). */}
+          {(view.status === "open" || (view.status === "playing" && !claim)) && (
             <button onClick={() => setLeaving(true)} className="mt-2 w-full text-center text-xs font-semibold text-muted underline">
-              Leave the game
+              {view.status === "open" ? (isHost ? "Call it off" : "Leave (stake back)") : "Leave the game"}
             </button>
           )}
           {view.status === "playing" && claim && (
@@ -562,15 +611,21 @@ function Arena({ view, me, now, onClose, onMessage }: { view: ChallengeView; me:
           {leaving && (
             <div className="absolute inset-0 z-20 grid place-items-center bg-panel/95 p-5 text-center">
               <div>
-                <p className="font-display text-xl font-extrabold">Leave the game?</p>
+                <p className="font-display text-xl font-extrabold">{view.status === "open" ? (isHost ? "Call off the challenge?" : "Leave the challenge?") : "Leave the game?"}</p>
                 <p className="mt-1 text-sm text-muted">
-                  {view.players.length === 2 ? "The other player wins the pool." : "You lose your stake, and the computer plays your seat for the others."}
+                  {view.status === "open"
+                    ? isHost
+                      ? "Everyone gets their stake back."
+                      : "Your stake comes back."
+                    : view.players.length === 2
+                      ? "The other player wins the pool."
+                      : "You lose your stake, and the computer plays your seat for the others."}
                 </p>
                 <div className="mt-4 grid grid-cols-2 gap-2">
                   <button onClick={() => setLeaving(false)} className="h-11 rounded-full bg-ink/5 text-sm font-semibold">
-                    Keep playing
+                    {view.status === "open" ? "Stay" : "Keep playing"}
                   </button>
-                  <button onClick={leaveGame} className="h-11 rounded-full bg-hit text-sm font-semibold text-white">
+                  <button onClick={() => void leaveGame()} className="h-11 rounded-full bg-hit text-sm font-semibold text-white">
                     Leave
                   </button>
                 </div>

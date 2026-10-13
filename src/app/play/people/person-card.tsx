@@ -5,7 +5,7 @@ import { rememberPerson } from "./recent-rail";
 import { GenderMark } from "./people-list";
 import { setGender } from "../people-actions";
 import { useEffect, useState } from "react";
-import { BellRing, Car, DoorClosed, Gift, House, Lightbulb, MapPin, MessageCircle, StickyNote, UserPlus } from "lucide-react";
+import { Banknote, BellRing, Car, DoorClosed, Gift, House, Lightbulb, MapPin, MessageCircle, StickyNote, UserPlus } from "lucide-react";
 import { Star } from "@/components/icons";
 import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar } from "@/lib/avatar";
@@ -30,6 +30,7 @@ export function PersonCard({
   prices,
   onOpenDating,
   onMessage,
+  onGive,
 }: {
   id: string;
   onClose: () => void;
@@ -47,6 +48,8 @@ export function PersonCard({
   onOpenDating?: () => void;
   /** Send them a private message (the chat). */
   onMessage?: (p: { id: string; name: string }) => void;
+  /** Give them money. */
+  onGive?: (p: { id: string; name: string; avatar: unknown }) => void;
 }) {
   const [card, setCard] = useState<PlayerCardData | null | undefined>(undefined);
   const [mode, setMode] = useState<"note" | "gift" | null>(null);
@@ -182,6 +185,11 @@ export function PersonCard({
             {!self && !card.blocked && onMessage && (
               <button onClick={() => onMessage({ id: card.id, name: card.name })} className="flex items-center gap-1 rounded-full bg-ink px-3 py-1.5 text-xs font-semibold text-white">
                 <MessageCircle className="size-3.5" /> Message
+              </button>
+            )}
+            {!self && !card.blocked && onGive && (
+              <button onClick={() => onGive({ id: card.id, name: card.name, avatar: card.avatar })} className="flex items-center gap-1 rounded-full bg-[#12a37a] px-3 py-1.5 text-xs font-semibold text-white">
+                <Banknote className="size-3.5" /> Give money
               </button>
             )}
             {greet({ id: card.id, name: card.name })}

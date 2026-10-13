@@ -1,6 +1,6 @@
 "use client";
 
-import { cash } from "@/lib/world/value";
+import { cash, cashSymbol, fromShown, toShown } from "@/lib/world/value";
 import { announceGiftSent } from "../people/gift-pop";
 import { rememberPerson } from "../people/recent-rail";
 import { useEffect, useState } from "react";
@@ -18,8 +18,12 @@ import { ActivityStyles, BigButton, Confetti, Face, GameHeader } from "./ui";
 
 const PRESETS = [10, 50, 100, 500, 1000];
 
-export function GiveCoinsSheet({ to, onClose }: { to: { id: string; name: string; avatar: unknown }; onClose: () => void }) {
-  const [amount, setAmount] = useState("50");
+/**
+ * local: on the real map, amounts are typed in the player's own currency (naira in Lagos) and sent
+ * as whole mint; elsewhere they're typed in mint.
+ */
+export function GiveCoinsSheet({ to, onClose, local }: { to: { id: string; name: string; avatar: unknown }; onClose: () => void; local?: boolean }) {
+  const [amount, setAmount] = useState(() => (local ? String(Math.round(toShown(50))) : "50"));
   const [note, setNote] = useState("");
   const [balance, setBalance] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -34,7 +38,9 @@ export function GiveCoinsSheet({ to, onClose }: { to: { id: string; name: string
     };
   }, []);
 
-  const n = Math.floor(Number(amount));
+  // What's sent: whole mint (typed in your currency on the real map).
+  const typed = Number(amount);
+  const n = local ? Math.round(fromShown(typed)) : Math.floor(typed);
   const valid = Number.isInteger(n) && n >= 1 && n <= 10_000 && (balance === null || n <= balance);
 
   async function give() {
@@ -86,7 +92,7 @@ export function GiveCoinsSheet({ to, onClose }: { to: { id: string; name: string
               {PRESETS.map((p) => (
                 <button
                   key={p}
-                  onClick={() => setAmount(String(p))}
+                  onClick={() => setAmount(String(local ? Math.round(toShown(p)) : p))}
                   className={cn("rounded-xl py-2 text-sm font-bold", n === p ? "bg-gold text-ink" : "bg-panel-2 text-muted")}
                 >
                   {cash(p)}
@@ -94,11 +100,11 @@ export function GiveCoinsSheet({ to, onClose }: { to: { id: string; name: string
               ))}
             </div>
             <label className="block">
-              <span className="text-sm font-semibold">How much? {valid ? <span className="font-normal text-muted">({cash(n)})</span> : null}</span>
+              <span className="text-sm font-semibold">How much{local ? ` (${cashSymbol()})` : ""}? {valid ? <span className="font-normal text-muted">({cash(n)})</span> : null}</span>
               <input
                 inputMode="numeric"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, "").slice(0, 5))}
+                onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, "").slice(0, local ? 9 : 5))}
                 className="mt-1 w-full rounded-2xl border border-line bg-panel px-4 py-3 text-lg font-bold outline-none focus:border-ink"
                 aria-label="How much to give"
               />
@@ -117,7 +123,9 @@ export function GiveCoinsSheet({ to, onClose }: { to: { id: string; name: string
             <BigButton tone="green" onClick={() => void give()} disabled={!valid || busy}>
               <Send className="size-4" /> {busy ? "Sending…" : `Give ${valid ? cash(n) : ""}`}
             </BigButton>
-            <p className="text-center text-xs text-muted">Up to 10,000 at a time and 20,000 a day. Mint you give can&apos;t be taken back.</p>
+            <p className="text-center text-xs text-muted">
+              Up to {cash(10_000)} at a time (less for new players). Money you give can&apos;t be taken back.
+            </p>
           </>
         )}
       </div>

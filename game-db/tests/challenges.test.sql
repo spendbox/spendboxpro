@@ -129,6 +129,39 @@ begin
   perform pg_temp.check((select coins from profiles where id = a) = 1012 - 33.33, 'called off: the stake is back, not the fee');
 
 
+  -- Leaving before it starts: a player gets their stake back; the host calls it off for everyone.
+  update profiles set coins = 1000 where email_key like '%@ch.test';
+  v := challenge_open(b, 'lagos', 'whot', 10, 3, 3, 4, 33.33, 1);
+  id3 := (v->>'id')::bigint;
+  v := challenge_join(c, id3);
+  v := challenge_join(d, id3);
+  perform pg_temp.check(challenge_leave(c, id3) = 'left', 'a player leaves before it starts');
+  perform pg_temp.check((select coins from profiles where id = c) = 1000 and (select pool from challenges where id = id3) = 20, 'their stake is back, out of the pool');
+  perform pg_temp.check(challenge_busy(c) is null, 'and they can challenge again');
+  perform pg_temp.check(challenge_leave(b, id3) = 'cancelled', 'the host leaves: called off');
+  perform pg_temp.check((select coins from profiles where id = b) = 1000 - (select fee from challenges where id = id3) and (select coins from profiles where id = d) = 1000, 'everyone''s stake is back');
+  perform pg_temp.check(challenge_busy(b) is null and challenge_busy(d) is null, 'nobody is stuck in it');
+
+  -- Leaving mid-game with two: the other wins at once.
+  v := challenge_open(c, 'lagos', 'ludo', 10, 3, 3, 4, 33.33, 1);
+  id3 := (v->>'id')::bigint;
+  v := challenge_join(d, id3);
+  perform pg_temp.time_up(id3);
+  perform challenge_begin(id3);
+  perform pg_temp.check(challenge_leave(d, id3) = 'won_by_other', 'leaving a game of two: the other wins');
+  perform pg_temp.check((select winner_id from challenges where id = id3) = c and (select coins from profiles where id = c) = 1000 - 10 + 18, 'and is paid');
+  perform pg_temp.check(challenge_busy(d) is null, 'the one who left is free');
+
+  -- Leaving mid-game with three: the game goes on, the leaver is free.
+  v := challenge_open(c, 'lagos', 'whot', 10, 3, 3, 4, 33.33, 1);
+  id3 := (v->>'id')::bigint;
+  v := challenge_join(d, id3);
+  v := challenge_join(b, id3);
+  perform pg_temp.time_up(id3);
+  perform challenge_begin(id3);
+  perform pg_temp.check(challenge_leave(d, id3) = 'left' and (select status from challenges where id = id3) = 'playing', 'leaving a game of three: it goes on');
+  perform pg_temp.check(challenge_busy(d) is null and challenge_busy(c) = id3, 'the leaver is free, the others still in it');
+
   -- Reputation: hosted and played, won.
   v := challenge_rep(a);
   perform pg_temp.check((v->>'hosted')::int = 1 and (v->>'won')::int = 1, 'reputation counts: hosted 1, won 1');

@@ -47,7 +47,7 @@ export async function challengeQuote(region: string): Promise<{ free: boolean; f
 }
 
 /** Challenge everyone nearby. */
-export async function openChallenge(game: string, stakeNaira: number, x: number, z: number, region: string): Promise<{ ok: true; id: number; fee: number } | Fail> {
+export async function openChallenge(game: string, stakeNaira: number, x: number, z: number, region: string): Promise<{ ok: true; id: number; fee: number } | (Fail & { busyId?: number })> {
   const g = challengeGame(game);
   if (!g?.engine) return { ok: false, error: "That game is coming soon." };
   if (!STAKES_NAIRA.includes(stakeNaira)) return { ok: false, error: "Pick a stake." };
@@ -67,7 +67,14 @@ export async function openChallenge(game: string, stakeNaira: number, x: number,
     p_fee: Math.round((CHALLENGE_FEE_NAIRA / perMint) * 100) / 100,
     p_cooldown: CHALLENGE_COOLDOWN_SECS,
   });
-  if (error) return say(error.message);
+  if (error) {
+    // Still in another one: say which, so it can be opened or left from here.
+    if (error.message.startsWith("busy")) {
+      const { data: busy } = await db.rpc("challenge_busy", { p_user: userId });
+      return { ok: false, error: "You're still in another challenge.", busyId: busy == null ? undefined : n(busy) };
+    }
+    return say(error.message);
+  }
   const d = (data ?? {}) as { id?: number; fee?: number };
   // Everyone nearby hears about it (a notice, and a push).
   const { data: me } = await db.from("profiles").select("username").eq("id", userId).maybeSingle();
@@ -189,4 +196,16 @@ export async function reportWinner(id: number, winner: string | null, draw = fal
   }
   const d = (data ?? {}) as { winner?: string | null; prize?: number; draw?: boolean; waiting?: boolean };
   return { ok: true, winner: d.winner ?? null, prize: n(d.prize), draw: !!d.draw, settled: !!d.winner || !!d.draw };
+}
+
+/**
+ * Leave a challenge: before it starts, your stake back (the host calls it off for everyone);
+ * during the game, you give up (with one other player left, they win).
+ */
+export async function leaveChallenge(id: number): Promise<{ ok: true; result: string } | Fail> {
+  const userId = await currentUserId();
+  if (!userId) return { ok: false, error: "Please sign in again." };
+  const { data, error } = await createAdminClient().rpc("challenge_leave", { p_user: userId, p_id: Math.round(n(id)) });
+  if (error) return say(error.message);
+  return { ok: true, result: String(data ?? "left") };
 }
