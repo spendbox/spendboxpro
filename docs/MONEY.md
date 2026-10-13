@@ -36,7 +36,7 @@ prices, times:
 | What | Times | Examples |
 |---|---|---|
 | Everyday things: rides, trips across the map, club entry, pranks, fines, bribes, the most a pickpocket takes | 10 | bus ₦5,000, taxi ride ₦35,000, balloon ₦250,000, helicopter ₦1.5m, clubs up to ₦200,000, a prank ₦10,000–50,000, a pickpocket fine ₦400,000 |
-| Things you own: shop items, cars, homes | 3 | phone ₦1.05m, Corolla ₦27m, Camry ₦66m, a flat in Mushin about ₦16m, in Ikoyi about ₦32m |
+| Things you own: shop items, cars, homes | 3 | phone ₦1.05m, Corolla ₦27m, Camry ₦66m, a flat in Mushin about ₦16m, in Ikoyi about ₦48m |
 
 New lives start with three times the money (₥19,500, ₦29.25m), and the starter packs give three
 times the mint for the same real price, so a first home is still within reach. The commute to
