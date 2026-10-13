@@ -92,11 +92,24 @@ import { homeLabel, type TownHouse } from "@/lib/houses";
 /** The country's famous landmarks out in the farmland round each town (hidden for now). */
 const SHOW_COUNTRY_LANDMARKS = false;
 
+/** Where you were last on the real map (saved every few seconds), so a reload puts you back there. */
+const LAST_SPOT = "nt-last-spot";
+function lastSpot(region: string): { x: number; z: number; ox: number; oy: number; oz: number } | null {
+  try {
+    const s = JSON.parse(localStorage.getItem(LAST_SPOT) ?? "null");
+    if (!s || s.r !== region || ![s.x, s.z, s.ox, s.oy, s.oz].every((v: unknown) => typeof v === "number" && Number.isFinite(v))) return null;
+    // A long time away: start from the usual spot.
+    if (Date.now() - Number(s.at ?? 0) > 14 * 86_400_000) return null;
+    return s;
+  } catch {
+    return null;
+  }
+}
+
 // The game board, drawn as a small living 3D city with three.js.
 // Every tile is a lot: a road, a building, a park... New tiles rise out of the ground
 // as the city grows. Cars drive the roads, birds and clouds drift overhead.
 // Lightweight on purpose: a handful of shared shapes drawn many times (instancing).
-
 export type CityMarkers = {
   searchedEmpty: number[];
   searchedHit: number[];
@@ -1566,6 +1579,8 @@ export function CityView({
     /** The tallest thing in the city (balloon rides float above it). */
     let tallest = 0;
     let framed = false;
+    /** A place asked for before the city was drawn (just after a reload): opened once it is. */
+    let openLater: string | null = null;
     let focus: THREE.Vector3 | null = null;
     let lastMe: number | null = null;
 
@@ -2694,7 +2709,9 @@ export function CityView({
         const b = regionNow.bounds;
         const fit = (v: number, lo: number, hi: number) => (hi - lo < 2 * DETAIL ? Math.round((lo + hi) / 2) : Math.max(lo + DETAIL, Math.min(hi - DETAIL, v)));
         const start = toTile(regionNow.frame, regionNow.region.start);
-        const c = centre ?? (sameCity && win ? win : { cx: Math.round(start.x), cz: Math.round(start.z) });
+        // Opening the game (or after it updates and the page reloads): back where you were last.
+        const last = !framed ? lastSpot(regionNow.region.id) : null;
+        const c = centre ?? (sameCity && win ? win : last ? { cx: Math.round(last.x), cz: Math.round(last.z) } : { cx: Math.round(start.x), cz: Math.round(start.z) });
         win = { cx: fit(c.cx, b.x0, b.x1), cz: fit(c.cz, b.z0, b.z1) };
         tiles = [];
         for (let x = win.cx - DETAIL; x <= win.cx + DETAIL; x++) {
@@ -2822,9 +2839,16 @@ export function CityView({
       controls.maxDistance = regionNow ? 170 : Math.max(30, radius * (win ? 3 : 4.5));
       if (!framed) {
         framed = true;
-        const d = (radius * 2.3 + 8) * Math.max(1, 0.95 / camera.aspect);
-        camera.position.set(ox + d * 0.62, d * 0.72, oz + d * 0.62);
-        controls.target.set(ox, 0, oz);
+        const last = regionNow ? lastSpot(regionNow.region.id) : null;
+        if (last) {
+          // Just as you were looking: the same spot, from the same angle and height.
+          controls.target.set(last.x, 0, last.z);
+          camera.position.set(last.x + last.ox, Math.max(0.6, last.oy), last.z + last.oz);
+        } else {
+          const d = (radius * 2.3 + 8) * Math.max(1, 0.95 / camera.aspect);
+          camera.position.set(ox + d * 0.62, d * 0.72, oz + d * 0.62);
+          controls.target.set(ox, 0, oz);
+        }
         controls.update();
       }
       buildPools();
@@ -2842,6 +2866,11 @@ export function CityView({
       world.busy = plan.region ? (bx, bz) => busyAt(plan, bx, bz) : null;
       birds.build(newSeed);
       people.build();
+      if (openLater) {
+        const id = openLater;
+        openLater = null;
+        setTimeout(() => alive && openRoomById(id), 300);
+      }
       // The railway runs on out into the farmland (not in a huge town drawn only round the camera).
       trains.build(win ? 0 : Math.max(0, Math.min(26, Math.floor(land.flat - 3))));
       elevatedLife.build();
@@ -4629,6 +4658,10 @@ export function CityView({
 
     /** Open a building's place as if it had been tapped (onRoom), e.g. to go to a friend. */
     function openRoomById(id: string) {
+      if (!currentPlan) {
+        openLater = id;
+        return;
+      }
       const m = /^b:(\d+)/.exec(id);
       const r = m ? roomFor(Number(m[1])) : null;
       if (r) cb.current.onRoom?.(r.room);
@@ -6826,6 +6859,7 @@ export function CityView({
         updateBoards(dt, time, now);
         boats.update(time, dt);
         realTransit.update(Date.now() + cb.current.clockOffsetMs);
+        saveSpot(now);
         // Close up (on foot, or zoomed right in), the people nearest you walk as 3D avatars.
         people.update(dt, now, walker.on ? walker : camera.position.distanceTo(controls.target) < 4.5 && view?.kind !== "place" ? controls.target : null);
         trains.update(dt, now);
@@ -6973,6 +7007,21 @@ export function CityView({
         if (t < 1) zoomAnim = requestAnimationFrame(step);
       };
       zoomAnim = requestAnimationFrame(step);
+    }
+
+    /** Every few seconds, where you are on the real map (on foot, or where the camera's looking), for next time. */
+    let savedAt = 0;
+    function saveSpot(now: number) {
+      if (!regionNow || now - savedAt < 3000 || !framed) return;
+      savedAt = now;
+      // Inside a place or on a ride, the spot outside it stays as it was.
+      if (view && !walker.on) return;
+      const at = walker.on ? { x: walker.x, z: walker.z } : { x: controls.target.x, z: controls.target.z };
+      const off = walker.on ? { x: 1.2, y: 1.4, z: 1.2 } : { x: camera.position.x - controls.target.x, y: camera.position.y, z: camera.position.z - controls.target.z };
+      if (![at.x, at.z, off.x, off.y, off.z].every(Number.isFinite)) return;
+      try {
+        localStorage.setItem(LAST_SPOT, JSON.stringify({ r: regionNow.region.id, x: at.x, z: at.z, ox: off.x, oy: off.y, oz: off.z, at: Date.now() }));
+      } catch {}
     }
 
     /** Build a round's town, or a real place (its own seed and size, whatever the round's are). */

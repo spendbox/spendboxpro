@@ -1573,6 +1573,36 @@ export function Game({
   const enteredRoom = place ? (rooms.myRoomInfo?.id ?? null) : null;
   const enteredTile = enteredRoom ? Number(/^b:(\d+)/.exec(enteredRoom)?.[1] ?? NaN) : NaN;
   const inPlannedHome = !!worldId && Number.isFinite(enteredTile) && enteredTile in homePlans;
+  // Inside a place when the page reloads (the game updated, or the phone dropped the tab): back
+  // inside it. Remembered while you're in; forgotten once you leave.
+  const lastRoom = useRef<{ pending: boolean } | null>(null);
+  useEffect(() => {
+    if (!worldId || guest) return;
+    const KEY = "nt-last-room";
+    if (!lastRoom.current) {
+      lastRoom.current = { pending: false };
+      let saved: string | null = null;
+      try {
+        const s = JSON.parse(localStorage.getItem(KEY) ?? "null");
+        if (s && s.w === worldId && Date.now() - Number(s.at ?? 0) < 6 * 3_600_000) saved = /^b:\d+/.exec(String(s.id ?? ""))?.[0] ?? null;
+      } catch {}
+      if (saved && !enteredRoom) {
+        const id = saved;
+        lastRoom.current.pending = true;
+        setTimeout(() => {
+          if (lastRoom.current) lastRoom.current.pending = false;
+          entering.current = Date.now();
+          setOpenReq((r) => ({ id, at: (r?.at ?? 0) + 1 }));
+        }, 1800);
+        return;
+      }
+    }
+    if (lastRoom.current.pending) return;
+    try {
+      if (enteredRoom) localStorage.setItem(KEY, JSON.stringify({ w: worldId, id: enteredRoom, at: Date.now() }));
+      else localStorage.removeItem(KEY);
+    } catch {}
+  }, [worldId, guest, enteredRoom]);
   useEffect(() => {
     const m = enteredRoom ? /^b:(\d+)/.exec(enteredRoom) : null;
     if (!worldId || !m) return;
