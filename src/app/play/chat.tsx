@@ -4,7 +4,7 @@ import { rememberPerson } from "./people/recent-rail";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { ArrowDown, ArrowLeft, Camera, ImagePlus, LoaderCircle, Mic, Pause, Search, SendHorizontal, UserCheck, UserPlus } from "lucide-react";
+import { ArrowDown, ArrowLeft, Camera, ImagePlus, LoaderCircle, Mic, Newspaper, Pause, Search, SendHorizontal, UserCheck, UserPlus } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import { Bot, Building2, ChevronDown, ChevronUp, Coins, Fish, HotAirBalloon, Lock, LogOut, MessageCircle, Play, Users, X } from "@/components/icons";
 import type { Avatar } from "@/lib/avatar";
@@ -187,6 +187,10 @@ export function Chat({
   finder,
   onPerson,
   onSelfie,
+  newtown,
+  news,
+  onlineNow,
+  onCamera,
 }: {
   meId: string;
   meRole: "hider" | "seeker" | null;
@@ -239,18 +243,36 @@ export function Chat({
   onPerson?: (id: string) => void;
   /** "Take a selfie" in the picture menu: the game's camera, sending the picture here. */
   onSelfie?: (target: ChatTarget, to: string) => void;
+  /**
+   * The real map: Newtown's own chat (pinned on top): your notices as messages. `request`
+   * changing opens it; onSeen when it's open (they're read).
+   */
+  newtown?: { lines: NewtownLine[]; unread: number; onSeen: () => void; onSettings: () => void; request: number };
+  /** Newtown News (pinned under Newtown): the latest headline, and opening the news. */
+  news?: { latest: string | null; onOpen: () => void };
+  /** Who's online now, faces along the top of your chats (tap one to message them). */
+  onlineNow?: { id: string; name: string; avatar: Avatar }[];
+  /** Take a picture or a selfie (the game's camera). */
+  onCamera?: () => void;
 }) {
   const roomId = room?.id ?? null;
   const roomCap = room?.capacity ?? 30;
   const [roomMsgs, setRoomMsgs] = useState<List | null>(null);
   const [dms, setDms] = useState<List | null>(null);
-  const [thread, setThread] = useState<Thread | null>(null);
+  const [thread, setThreadNow] = useState<Thread | null>(null);
+  // Newtown's own chat is open (the real map).
+  const [newtownOpen, setNewtownOpen] = useState(false);
+  const setThread = (t: Thread | null) => {
+    setThreadNow(t);
+    if (t) setNewtownOpen(false);
+  };
   // The real map has no group chat in places (voice is enough there): your chats come first.
   const [tab, setTab] = useState<"here" | "private" | "people">(keep ? "private" : "here");
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open && keep && !thread) setTab("private");
+    if (!open) setNewtownOpen(false);
     else if (open && !room && finder && tab === "here") setTab("people");
   }
   // What you've read in each conversation (the newest message id), kept on this phone too, so
@@ -531,6 +553,28 @@ export function Chat({
     rememberPerson({ id, name, avatar: avatarOf(id, name) }, "Messaged");
   }
 
+  // Asked to open Newtown's chat (a notice tapped, the bell...).
+  const lastNewtown = useRef(newtown?.request ?? 0);
+  const newtownAsk = newtown?.request ?? 0;
+  useEffect(() => {
+    if (!newtownAsk || newtownAsk === lastNewtown.current) return;
+    lastNewtown.current = newtownAsk;
+    const id = setTimeout(() => {
+      setThreadNow(null);
+      setTab("private");
+      setNewtownOpen(true);
+    }, 0);
+    return () => clearTimeout(id);
+  }, [newtownAsk]);
+  // Newtown's chat open: what's in it is read.
+  const newtownSeen = newtown?.onSeen;
+  const newtownUnread = newtown?.unread ?? 0;
+  useEffect(() => {
+    if (!open || !newtownOpen || !newtownSeen || !newtownUnread) return;
+    const id = setTimeout(newtownSeen, 600);
+    return () => clearTimeout(id);
+  }, [open, newtownOpen, newtownSeen, newtownUnread]);
+
   // Someone asked to message a particular player (from the map).
   const lastDm = useRef(0);
   useEffect(() => {
@@ -788,7 +832,18 @@ export function Chat({
       </button>
 
       <header className="flex shrink-0 items-center gap-1.5 border-b border-line px-3 pb-2 sm:pt-2.5">
-        {thread ? (
+        {newtownOpen && !thread && keep ? (
+          <>
+            <button onClick={() => setNewtownOpen(false)} className="grid size-9 place-items-center rounded-full text-muted hover:bg-panel-2" aria-label="Back to your chats">
+              <ArrowLeft className="size-5" aria-hidden />
+            </button>
+            <NewtownFace size={32} />
+            <div className="min-w-0 flex-1">
+              <h2 className="truncate font-semibold">Newtown</h2>
+              <p className="truncate text-[11px] text-muted">Gifts, knocks at your door, results and news for you</p>
+            </div>
+          </>
+        ) : thread ? (
           <>
             <button onClick={() => setThread(null)} className="grid size-9 place-items-center rounded-full text-muted hover:bg-panel-2" aria-label="Back">
               <ArrowLeft className="size-5" aria-hidden />
@@ -999,8 +1054,71 @@ export function Chat({
                 ))}
               </ul>
             </div>
+          ) : !thread && tab === "private" && keep && newtownOpen && newtown ? (
+            <NewtownThread lines={newtown.lines} onSettings={newtown.onSettings} />
           ) : !thread && tab === "private" && keep ? (
-            <SnapList conversations={conversations} meId={meId} faceOf={faceOf} unreadOf={(id) => dmMsgs.filter((m) => m.sender_id === id && isUnread(m)).length} onOpen={(c) => openThread(c.id, c.name)} onFind={() => setTab("people")} />
+            <SnapList
+              conversations={conversations}
+              meId={meId}
+              faceOf={faceOf}
+              unreadOf={(id) => dmMsgs.filter((m) => m.sender_id === id && isUnread(m)).length}
+              onOpen={(c) => openThread(c.id, c.name)}
+              onFind={() => setTab("people")}
+              top={
+                <>
+                  {onlineNow && onlineNow.length > 0 && (
+                    <div className="shrink-0 px-3 pb-2 pt-2.5">
+                      <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted">Online now</p>
+                      <div className="flex gap-3 overflow-x-auto [scrollbar-width:none]">
+                        {onlineNow.slice(0, 20).map((p) => (
+                          <button key={p.id} onClick={() => openThread(p.id, p.name)} className="flex w-14 shrink-0 flex-col items-center gap-1" title={`Message ${p.name}`}>
+                            <span className="relative">
+                              <AvatarFace avatar={p.avatar} size={46} className="rounded-full" />
+                              <span className="absolute bottom-0 right-0 size-3 rounded-full bg-[#2f9e44] ring-2 ring-panel" aria-hidden />
+                            </span>
+                            <span className="w-full truncate text-center text-[11px] font-semibold">{firstName(p.name)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {newtown && (
+                    <button onClick={() => setNewtownOpen(true)} className={cn("flex w-full shrink-0 items-center gap-3 border-t border-line/60 px-3 py-2.5 text-left", newtown.unread > 0 ? "bg-[#fff9db]" : "active:bg-panel-2 sm:hover:bg-panel-2")}>
+                      <NewtownFace size={46} />
+                      <span className="min-w-0 flex-1">
+                        <span className={cn("block text-[15px]", newtown.unread ? "font-bold" : "font-semibold")}>Newtown</span>
+                        <span className={cn("mt-0.5 block truncate text-xs", newtown.unread ? "font-bold text-[#e8590c]" : "text-muted")}>
+                          {newtown.lines[0]?.text ?? "Gifts, knocks at your door and results come here"}
+                        </span>
+                      </span>
+                      {newtown.unread > 0 && (
+                        <span className="grid min-w-6 place-items-center rounded-full bg-[#e8590c] px-1.5 py-0.5 text-[11px] font-bold text-white">{newtown.unread > 9 ? "9+" : newtown.unread}</span>
+                      )}
+                    </button>
+                  )}
+                  {news && (
+                    <button onClick={news.onOpen} className="flex w-full shrink-0 items-center gap-3 border-y border-line/60 px-3 py-2.5 text-left active:bg-panel-2 sm:hover:bg-panel-2">
+                      <span className="grid size-[46px] shrink-0 place-items-center rounded-2xl bg-[#e03131] text-white">
+                        <Newspaper className="size-6" aria-hidden />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[15px] font-semibold">Newtown News</span>
+                        <span className="mt-0.5 block truncate text-xs text-muted">{news.latest ?? "What's happening in the city"}</span>
+                      </span>
+                    </button>
+                  )}
+                </>
+              }
+              bottom={
+                onCamera && (
+                  <div className="mt-auto flex shrink-0 justify-center p-3">
+                    <button onClick={onCamera} className="flex h-11 items-center gap-2 rounded-full bg-ink px-5 text-sm font-semibold text-white">
+                      <Camera className="size-4" aria-hidden /> Take a picture or a selfie
+                    </button>
+                  </div>
+                )
+              }
+            />
           ) : !thread && tab === "private" ? (
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
               <p className="flex items-center gap-1 px-2 pb-2 text-[11px] text-muted">
@@ -1132,6 +1250,8 @@ function SnapList({
   unreadOf,
   onOpen,
   onFind,
+  top,
+  bottom,
 }: {
   conversations: { id: string; name: string; last: ChatMessage }[];
   meId: string;
@@ -1139,22 +1259,45 @@ function SnapList({
   unreadOf: (id: string) => number;
   onOpen: (c: { id: string; name: string }) => void;
   onFind: () => void;
+  /** Above the chats: who's online, and Newtown's own chats (pinned). */
+  top?: React.ReactNode;
+  /** Under them: the camera. */
+  bottom?: React.ReactNode;
 }) {
-  if (!conversations.length)
-    return (
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
-        <span className="grid size-16 place-items-center rounded-full bg-[#0eadff]/12 text-[#0eadff]">
-          <MessageCircle className="size-8" aria-hidden />
-        </span>
-        <p className="font-semibold">No chats yet</p>
-        <p className="text-sm text-muted">Find someone online and say hi. Only the two of you see your chats.</p>
-        <button onClick={onFind} className="rounded-full bg-[#0eadff] px-5 py-2.5 text-sm font-bold text-white shadow">
-          Start a chat
-        </button>
-      </div>
-    );
   return (
-    <ul className="min-h-0 flex-1 divide-y divide-line/60 overflow-y-auto overscroll-contain">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+      {top}
+      {conversations.length ? (
+        <SnapRows conversations={conversations} meId={meId} faceOf={faceOf} unreadOf={unreadOf} onOpen={onOpen} />
+      ) : (
+        <div className="flex flex-col items-center justify-center gap-2 p-6 text-center">
+          <p className="font-semibold">No chats yet</p>
+          <p className="text-sm text-muted">Find someone online and say hi. Only the two of you see your chats.</p>
+          <button onClick={onFind} className="mt-1 rounded-full bg-[#0eadff] px-5 py-2.5 text-sm font-bold text-white shadow">
+            Start a chat
+          </button>
+        </div>
+      )}
+      {bottom}
+    </div>
+  );
+}
+
+function SnapRows({
+  conversations,
+  meId,
+  faceOf,
+  unreadOf,
+  onOpen,
+}: {
+  conversations: { id: string; name: string; last: ChatMessage }[];
+  meId: string;
+  faceOf: (id: string, name: string, size: number) => React.ReactNode;
+  unreadOf: (id: string) => number;
+  onOpen: (c: { id: string; name: string }) => void;
+}) {
+  return (
+    <ul className="divide-y divide-line/60">
       {conversations.map((c) => {
         const unread = unreadOf(c.id);
         const st = snapStatus(c.last, meId, unread);
@@ -1184,6 +1327,59 @@ function SnapList({
         );
       })}
     </ul>
+  );
+}
+
+/** Newtown's own face in your chats: a dark tile with a gold N. */
+function NewtownFace({ size }: { size: number }) {
+  return (
+    <span className="grid shrink-0 place-items-center rounded-2xl bg-ink font-display font-black text-gold" style={{ width: size, height: size, fontSize: size * 0.45 }} aria-hidden>
+      N
+    </span>
+  );
+}
+
+/** One of Newtown's own messages to you (a notice: a gift, a knock, a challenge result...). */
+export type NewtownLine = { key: string; text: string; at: string; unread: boolean; icon?: React.ReactNode; onTap?: () => void };
+
+/** The Newtown chat: everything the game tells you, as messages, newest at the bottom. */
+function NewtownThread({ lines, onSettings }: { lines: NewtownLine[]; onSettings: () => void }) {
+  const end = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    end.current?.scrollIntoView({ block: "end" });
+  }, [lines.length]);
+  const list = [...lines].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">
+      <button onClick={onSettings} className="mx-auto mb-3 block rounded-full bg-panel-2 px-3 py-1 text-[11px] font-semibold text-muted">
+        Phone notifications and clearing
+      </button>
+      {!list.length && <p className="p-6 text-center text-sm text-muted">Nothing yet. Gifts, knocks at your door and challenge results will show up here.</p>}
+      <div className="space-y-2">
+        {list.map((l) => {
+          const body = (
+            <span className="flex items-start gap-2">
+              {l.icon}
+              <span className="min-w-0 flex-1">
+                <span className="block break-words text-sm">{l.text}</span>
+                <span className="mt-0.5 block text-[10px] text-muted">{agoShort(l.at)}</span>
+              </span>
+            </span>
+          );
+          const cls = cn("block w-full max-w-[88%] rounded-2xl rounded-bl-md px-3 py-2 text-left", l.unread ? "bg-[#fff3bf]" : "bg-panel-2");
+          return l.onTap ? (
+            <button key={l.key} onClick={l.onTap} className={cls}>
+              {body}
+            </button>
+          ) : (
+            <div key={l.key} className={cls}>
+              {body}
+            </div>
+          );
+        })}
+      </div>
+      <div ref={end} />
+    </div>
   );
 }
 

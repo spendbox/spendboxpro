@@ -213,7 +213,7 @@ export function PersonCard({
               ) : things === null ? (
                 <div className="h-16 animate-pulse rounded-2xl bg-ink/5" />
               ) : things.length === 0 ? (
-                <p className="text-xs text-muted">You have nothing to give yet. Buy something from the Shops on your phone.</p>
+                <p className="text-xs text-muted">You have nothing to give yet. Buy something from Shops (tap your face, top left).</p>
               ) : (
                 <ul className="max-h-48 divide-y divide-ink/5 overflow-y-auto rounded-2xl ring-1 ring-ink/5">
                   {things.map((i) => (

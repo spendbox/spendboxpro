@@ -64,7 +64,7 @@ import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
 import { BookOpen, Church, Dumbbell, FerrisWheel, GraduationCap, Landmark as LandmarkIcon, Plane, Ship, Stethoscope, TrainFront, Trophy, UtensilsCrossed } from "lucide-react";
-import { BellOff, BellRing, LocateFixed, Rocket, Wallet, CarFront, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Newspaper, Palette, ShoppingBag, Smartphone, Store, Swords, User } from "lucide-react";
+import { BellOff, BellRing, LocateFixed, Rocket, Wallet, CarFront, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Palette, ShoppingBag, Store, Swords, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
 import { GhostsSheet } from "./ghost-duel/ghosts-sheet";
@@ -90,14 +90,14 @@ import { MyGiftsSheet } from "./my-gifts-sheet";
 import { StreakPill, StreakSheet } from "./streak-sheet";
 import { useQuestTracker } from "./activities/quest-tracker";
 import { QuestBanner, QuestCelebration, QuestSheet } from "./activities/quest-ui";
-import { Chat } from "./chat";
+import { Chat, type NewtownLine } from "./chat";
 import { sendPhoto, type ChatTarget } from "./chat-actions";
 import { announceChatSent } from "./chat-photo";
 import { homePlanFor } from "./life/home-plan-actions";
 import type { HomePlan } from "@/lib/home-plan";
 import { setEventSoundsEnabled } from "./city/event-sounds";
 import type { CityDancer, CityEvent, CityFriendPin, CityGhost, CityInteract, CityMarkers, CityRide, RideTarget } from "./city-view";
-import { FeedRow, NotificationsPanel, SwipeRow, type FeedIcon, type FeedItem } from "./notifications";
+import { FeedIconView, FeedRow, NotificationsPanel, SwipeRow, type FeedIcon, type FeedItem } from "./notifications";
 import { dismissNotices, readNotices } from "./notice-actions";
 import { closePhoneNotices, setPhoneBadge } from "./phone/phone-notices";
 import { signOutNow } from "../login/actions";
@@ -123,7 +123,7 @@ import { Joystick } from "./joystick";
 import { PeopleList, prefetchPeople } from "./people/people-list";
 import { StatsSheet } from "./stats-sheet";
 import { GiftPop, GiftSent } from "./people/gift-pop";
-import { PhoneHub } from "./phone/phone-hub";
+import { MeSheet } from "./me-sheet";
 import { RecentRail, rememberPerson } from "./people/recent-rail";
 import { PrankReveal, usePrankReveal } from "./people/prank-reveal";
 import { openAdvertise } from "./life/advertise-panel";
@@ -446,9 +446,11 @@ export function Game({
   const [howOpen, setHowOpen] = useState(false);
   /** The real map: the city card (tap the place's name) and the phone's own menu (bottom right). */
   const [cityOpen, setCityOpen] = useState(false);
-  const [phoneHub, setPhoneHub] = useState(false);
+  /** You (your face, top left): everything that isn't chat. */
+  const [meOpen, setMeOpen] = useState(false);
+  /** Open Newtown's own chat (a notice tapped...): changes to ask. */
+  const [newtownAsk, setNewtownAsk] = useState(0);
   /** What counts as new on the phone's screen (when it was last opened), and a little ring when something arrives. */
-  const [phoneSince, setPhoneSince] = useState(() => new Date(0).toISOString());
   const [phoneRing, setPhoneRing] = useState(0);
   /** Someone's card (a face tapped on the map, or from your doorstep), and your doorstep. */
   const [personId, setPersonId] = useState<string | null>(null);
@@ -1325,6 +1327,18 @@ export function Game({
     setReadIds((s) => new Set([...s, ...fresh]));
     void readNotices(fresh).catch(() => {});
   }, []);
+  /** Newtown's own chat opened: everything in it is read (here, on the server and on the phone). */
+  const readAllNotices = useCallback(() => {
+    const ids = feed.flatMap((f) => (f.noteId && !f.read ? [f.noteId] : []));
+    if (ids.length) markRead(ids);
+    setFeedSeenAt(new Date().toISOString());
+    closePhoneNotices("notice");
+  }, [feed, markRead]);
+  /** Open Newtown's own chat (your notices), in the chat. */
+  const openNewtown = () => {
+    setChatOpen(true);
+    setNewtownAsk(Date.now());
+  };
   /** Swiped away (or Clear all). */
   const dismissNote = useCallback((ids: number[]) => {
     if (!ids.length) return;
@@ -1355,6 +1369,30 @@ export function Game({
       localStorage.setItem("hs-gifts-seen", String(t));
     } catch {}
   }
+  // Newtown's own chat: your notices as messages (tap one to go where it's about).
+  const newtownLines: NewtownLine[] = feed.slice(0, 60).map((f) => {
+    const go =
+      f.eventId ? () => openEvent(f.eventId!)
+      : f.icon === "gift" || f.icon === "hug" || f.icon === "handshake" ? () => openGifts()
+      : f.kind === "doorstep" ? () => setDoorstepOpen(true)
+      : null;
+    return {
+      key: f.key,
+      text: f.text,
+      at: f.at,
+      unread: f.noteId ? !f.read : Date.parse(f.at) > Date.parse(feedSeenAt),
+      icon: <FeedIconView icon={f.icon} tone={f.tone} className="size-7" />,
+      onTap: go
+        ? () => {
+            if (f.noteId) markRead([f.noteId]);
+            setChatOpen(false);
+            go();
+          }
+        : undefined,
+    };
+  });
+  // The people online round where you're looking: faces along the top of your chats.
+  const onlineFaces = peopleOut.filter((p) => p.status === "online" && p.id !== me.id).map((p) => ({ id: p.id, name: p.name, avatar: cleanAvatar(p.avatar, p.name) }));
   // Hug and Shake hands buttons for someone (they say how it went on the message line).
   const greet = (p: { id: string; name: string }, compact = true) => (
     <GreetButtons person={p} compact={compact} onDone={(text, ok) => setMessage({ text, tone: ok ? "good" : "bad" })} />
@@ -1415,7 +1453,7 @@ export function Game({
         const u = new URL(String((e.data as { url?: string }).url ?? "/play"), location.origin);
         const dm = u.searchParams.get("dm");
         if (dm) chatWith({ id: dm, name: u.searchParams.get("name") || "Message" });
-        else if (u.searchParams.get("alerts")) setAlertsOpen(true);
+        else if (u.searchParams.get("alerts")) openNewtown();
       }
     };
     navigator.serviceWorker?.addEventListener("message", onMessage);
@@ -1438,7 +1476,7 @@ export function Game({
       const url = new URL(window.location.href);
       url.searchParams.delete("alerts");
       window.history.replaceState(null, "", url);
-      const t = setTimeout(() => setAlertsOpen(true), 900);
+      const t = setTimeout(() => openNewtown(), 900);
       return () => clearTimeout(t);
     }
     if (!dm) return;
@@ -2103,6 +2141,12 @@ export function Game({
                 </span>
               </button>
             )}
+            {/* You: your face opens everything that isn't chat (your look, money, friends, settings). */}
+            {worldId && !guest && (
+              <button onClick={() => setMeOpen(true)} className="pointer-events-auto relative shrink-0 rounded-full ring-[3px] ring-[#f59f00] shadow" aria-label="You: your look, money, friends and settings">
+                <AvatarFace avatar={me.avatar} size={36} className="rounded-full bg-white" />
+              </button>
+            )}
             {/* Who's online; tap for the numbers: registered players and visits, and how they're growing. */}
             {!guest && (
             <button
@@ -2334,7 +2378,7 @@ export function Game({
                   setToasts([]);
                   return openGifts();
                 }
-                if (worldId) setAlertsOpen(true);
+                if (worldId) openNewtown();
                 else setFeedOpen(true);
                 setFeedSeenAt(new Date(now).toISOString());
                 setToasts([]);
@@ -2342,7 +2386,7 @@ export function Game({
               className="glass toast-in pointer-events-auto w-full rounded-2xl px-3 py-2 text-left shadow-lg"
             >
               <FeedRow item={n} now={now} compact />
-              {toasts.length > 1 && <span className="mt-0.5 block text-right text-[10px] text-muted">+{toasts.length - 1} more in your phone</span>}
+              {toasts.length > 1 && <span className="mt-0.5 block text-right text-[10px] text-muted">+{toasts.length - 1} more in your chat</span>}
             </button>
           ))}
       </div>
@@ -3450,74 +3494,76 @@ export function Game({
           <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-2 ring-gold/70" />
         </button>
       )}
-      {/* The real map: your phone, bottom right (camera, photos, notifications). */}
+      {/* The real map: one chat bubble, bottom right (your chats, Newtown's own messages, the news,
+          the camera). It shakes when something new arrives. */}
       {worldId && !camera && !guest && !place && (
         <button
           onClick={() => {
-            setPhoneSince(feedSeenAt);
-            setPhoneHub(true);
+            setChatOpen(true);
             setMenu(false);
-            setFeedSeenAt(new Date(now).toISOString());
           }}
-          className="pointer-events-auto absolute bottom-4 right-3 z-20 grid size-12 place-items-center rounded-2xl bg-[#f08c00] text-white shadow-lg sm:bottom-6 sm:right-4"
-          aria-label="Your phone"
+          className="pointer-events-auto absolute bottom-4 right-3 z-20 grid size-14 place-items-center rounded-full bg-[#0eadff] text-white shadow-[0_8px_20px_-6px_rgba(14,173,255,0.8)] sm:bottom-6 sm:right-4"
+          aria-label={unread + chatUnread > 0 ? `Chat: ${unread + chatUnread} new` : "Chat"}
         >
-          {/* It rings (a shake) when something new arrives. */}
           <span key={phoneRing} className={phoneRing ? "phone-ring grid place-items-center" : "grid place-items-center"}>
-            <Smartphone className="size-5" />
+            <MessageCircle className="size-7 fill-white" />
           </span>
           {unread + chatUnread > 0 && (
-            <span className="absolute -right-1.5 -top-1.5 grid min-w-5 place-items-center rounded-full bg-hit px-1 text-[11px] font-semibold text-white">{unread + chatUnread > 99 ? "99+" : unread + chatUnread}</span>
+            <span className="absolute -right-1 -top-1 grid min-w-6 place-items-center rounded-full bg-hit px-1.5 text-xs font-bold text-white ring-2 ring-white">{unread + chatUnread > 99 ? "99+" : unread + chatUnread}</span>
           )}
         </button>
       )}
-      {phoneHub && (
-        <PhoneHub
-          onClose={() => setPhoneHub(false)}
-          onAllNotices={() => {
-            setAlertsOpen(true);
-            setFeedSeenAt(new Date(now).toISOString());
-          }}
-          notices={feed.slice(0, 20).map((f) => {
-            const mins = Math.max(0, Math.round((now - Date.parse(f.at)) / 60_000));
-            return {
-              key: f.key,
-              text: f.text,
-              when: mins < 1 ? "now" : mins < 60 ? `${mins} min ago` : mins < 1440 ? `${Math.round(mins / 60)}h ago` : `${Math.round(mins / 1440)}d ago`,
-              fresh: f.noteId ? !f.read : Date.parse(f.at) > Date.parse(phoneSince),
-              onTap: (() => {
-                const go = f.icon === "gift" || f.icon === "hug" || f.icon === "handshake" ? () => openGifts() : f.kind === "doorstep" ? () => setDoorstepOpen(true) : () => setAlertsOpen(true);
-                return () => {
-                  if (f.noteId) markRead([f.noteId]);
-                  go();
-                };
-              })(),
-              onDismiss: f.noteId ? () => dismissNote([f.noteId!]) : undefined,
-            };
-          })}
-          apps={[
-            { label: "Messages", icon: MessageCircle, colour: "#2f9e44", badge: chatUnread, dock: true, go: () => setChatOpen(true) },
-            { label: "Camera", icon: Camera, colour: "#495057", dock: true, go: () => setCamera("photo") },
-            { label: "News", icon: Newspaper, colour: "#e03131", dock: true, go: () => worldLife.openNews() },
-            { label: "Alerts", icon: BellRing, colour: "#f08c00", badge: unread, dock: true, go: () => { setAlertsOpen(true); setFeedSeenAt(new Date(now).toISOString()); } },
-            { label: "People", icon: Users, colour: "#1c7ed6", go: () => setStatsOpen(true) },
-            { label: "Doorstep", icon: DoorClosed, colour: "#8d5524", go: () => setDoorstepOpen(true) },
-            { label: "Gifts", icon: Gift, colour: "#d6336c", badge: newGifts, go: () => openGifts() },
-            { label: "Meet friends", icon: Heart, colour: "#f06595", go: () => setFriendsOpen(true) },
-            { label: "Dating", icon: Heart, colour: "#c2255c", go: () => setSocialOpen("dating") },
-            { label: "Rivals", icon: Swords, colour: "#e8590c", go: () => setSocialOpen("rivals") },
-            { label: "Selfie", icon: User, colour: "#7048e8", go: () => setCamera("selfie") },
-            { label: "Photos", icon: ImageIcon, colour: "#f59f00", go: () => setPhone("photos") },
-            { label: "My things", icon: Gem, colour: "#0c8599", go: () => worldLife.openThings("mine") },
-            { label: "Shops", icon: ShoppingBag, colour: "#5f3dc4", go: () => worldLife.openThings("shops") },
-            { label: "Cars", icon: CarFront, colour: "#343a40", go: () => worldLife.openThings("cars") },
-            { label: "Market", icon: Store, colour: "#2b8a3e", go: () => worldLife.openThings("market") },
-            { label: "Craft", icon: Hammer, colour: "#a61e4d", go: () => worldLife.openThings("craft") },
-            { label: "Leave a mark", icon: PenLine, colour: "#1098ad", go: () => worldLife.openLeaveMark() },
-            { label: "My look", icon: Palette, colour: "#e64980", go: () => setEditAvatar(true) },
-            { label: "Guide", icon: Lightbulb, colour: "#fab005", go: () => worldLife.restartGuide() },
-            { label: "Report", icon: Flag, colour: "#868e96", go: () => worldLife.openReport() },
-            { label: "Sign out", icon: LogOut, colour: "#495057", go: () => setConfirmSignOut(true) },
+      {meOpen && worldId && !guest && (
+        <MeSheet
+          name={me.name ?? "You"}
+          avatar={me.avatar}
+          reputation={worldLife.reputation}
+          onClose={() => setMeOpen(false)}
+          groups={[
+            {
+              title: "You",
+              items: [
+                { label: "My look", icon: Palette, colour: "#e64980", go: () => setEditAvatar(true) },
+                { label: "My card", icon: User, colour: "#7048e8", go: () => setPersonId(me.id) },
+                ...(worldLife.hasHome ? [{ label: "Home", icon: House, colour: "#7048e8", go: () => worldLife.goHome() }] : []),
+                { label: "Money", icon: Wallet, colour: "#2b8a3e", go: () => worldLife.openFinance() },
+                { label: "Photos", icon: ImageIcon, colour: "#f59f00", go: () => setPhone("photos") },
+                { label: "My things", icon: Gem, colour: "#0c8599", go: () => worldLife.openThings("mine") },
+                { label: "Gifts", icon: Gift, colour: "#d6336c", badge: newGifts, go: () => openGifts() },
+                { label: "Doorstep", icon: DoorClosed, colour: "#8d5524", go: () => setDoorstepOpen(true) },
+              ],
+            },
+            {
+              title: "People",
+              items: [
+                { label: "Friends", icon: Users, colour: "#1c7ed6", go: () => setFriendsOpen(true) },
+                { label: "Dating", icon: Heart, colour: "#c2255c", go: () => setSocialOpen("dating") },
+                { label: "Rivals", icon: Swords, colour: "#e8590c", go: () => setSocialOpen("rivals") },
+                { label: "Who's online", icon: Users, colour: "#2f9e44", go: () => setStatsOpen(true) },
+              ],
+            },
+            {
+              title: "The city",
+              items: [
+                { label: "Shops", icon: ShoppingBag, colour: "#5f3dc4", go: () => worldLife.openThings("shops") },
+                { label: "Cars", icon: CarFront, colour: "#343a40", go: () => worldLife.openThings("cars") },
+                { label: "Market", icon: Store, colour: "#2b8a3e", go: () => worldLife.openThings("market") },
+                { label: "Craft", icon: Hammer, colour: "#a61e4d", go: () => worldLife.openThings("craft") },
+                { label: "Leave a mark", icon: PenLine, colour: "#1098ad", go: () => worldLife.openLeaveMark() },
+                ...(worldLife.hasHome ? [{ label: "Coming soon", icon: Rocket, colour: "#7048e8", go: worldLife.openSoon }] : []),
+              ],
+            },
+            {
+              title: "Help and settings",
+              items: [
+                { label: "How it works", icon: Lightbulb, colour: "#fab005", go: () => setHowOpen(true) },
+                { label: "Start the guide", icon: Lightbulb, colour: "#f08c00", go: () => worldLife.restartGuide() },
+                { label: "Notifications", icon: BellRing, colour: "#f08c00", go: () => setAlertsOpen(true) },
+                { label: sound ? "Sound off" : "Sound on", icon: sound ? VolumeX : Volume2, colour: "#495057", go: () => { setSound(!sound); saveView({ sound: !sound }); } },
+                { label: "Report", icon: Flag, colour: "#868e96", go: () => worldLife.openReport() },
+                { label: "Sign out", icon: LogOut, colour: "#495057", go: () => setConfirmSignOut(true) },
+              ],
+            },
           ]}
         />
       )}
@@ -3550,6 +3596,19 @@ export function Game({
             onUnread={setChatUnread}
             onSignIn={() => setSignIn({ why: null })}
             onPerson={setPersonId}
+            newtown={{
+              lines: newtownLines,
+              unread,
+              request: newtownAsk,
+              onSeen: readAllNotices,
+              onSettings: () => setAlertsOpen(true),
+            }}
+            news={{ latest: null, onOpen: () => worldLife.openNews() }}
+            onlineNow={onlineFaces}
+            onCamera={() => {
+              setChatOpen(false);
+              setCamera("photo");
+            }}
             onSelfie={(target, to) => {
               setSelfieTo({ target, to });
               setChatOpen(false);
