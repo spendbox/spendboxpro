@@ -1,6 +1,7 @@
 # To do
 
 ## Now (owner)
+- [ ] Set up the test version with its own database (docs/TESTING.md, about 20 minutes). Until then, previews use the live database.
 - [ ] In the Supabase SQL Editor run `game-db/065_economy_balance.sql` (a fairer economy: jobs pay 18 times real wages, food as a daily cost, the daily refill counts your pots, dearer levels, gift limits for new accounts, rent follows value, no wash-trading up shop prices, pickpocketing doesn't pay). Run it soon after this update goes live: until then the game still works, but food isn't charged and the old rules apply. Run 064 first.
 - [ ] In the Supabase SQL Editor run `game-db/064_home_upgrades.sql` (paying for new floors and furniture in Plan my home, which raises the home's value). Run 062 and 063 first if they aren't yet.
 - [ ] In the Supabase SQL Editor run `game-db/066_home_visits.sql` (knocking at homes, parties and the guest book). Until then doors stay open and those buttons say "switched on soon".

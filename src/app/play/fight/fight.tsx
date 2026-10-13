@@ -346,6 +346,25 @@ function Arena({ view, me, now, onClose, onMessage }: { view: ChallengeView; me:
     if (view.status !== "open" || secsLeft < 0 || secsLeft > JOIN_SECS) return;
     playSfx(secsLeft <= 5 ? "chime" : "tick");
   }, [secsLeft, view.status]);
+  const isHost = view.host === me.id;
+  // It changed: started (a big "Game on!"), or called off.
+  const [gameOn, setGameOn] = useState(false);
+  const was = useRef(view.status);
+  useEffect(() => {
+    const before = was.current;
+    was.current = view.status;
+    if (before === "open" && view.status === "playing") {
+      playSfx("start");
+      setGameOn(true);
+      const t = setTimeout(() => setGameOn(false), 1800);
+      return () => clearTimeout(t);
+    }
+    if (before === "open" && view.status === "cancelled") {
+      playSfx("miss");
+      onMessage("The game didn't start: not enough players joined. Your stake is back.", false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view.status]);
   const iWon = view.status === "done" && view.winner === me.id;
   const winnerName = view.players.find((p) => p.id === view.winner)?.name;
 
@@ -396,8 +415,21 @@ function Arena({ view, me, now, onClose, onMessage }: { view: ChallengeView; me:
               <Radar colour={g?.colour ?? "#f08c00"}>
                 <Countdown secs={left} total={JOIN_SECS} colour={g?.colour ?? "#f08c00"} />
               </Radar>
-              <p className="mt-3 font-semibold">{view.players.length < 2 ? "Waiting for challengers…" : `${view.players.length} players in. Starting soon…`}</p>
-              <p className="mt-1 text-xs text-muted">Everyone nearby can see your light on the map. If nobody joins, your stake comes back.</p>
+              {/* Always clear: is it going to start, and when. */}
+              <p className={cn("mt-3 rounded-full px-3 py-1 text-sm font-bold", left <= 0 ? "bg-gold text-ink" : view.players.length >= 2 ? "bg-[#2f9e44] text-white" : "bg-ink/5")}>
+                {left <= 0
+                  ? view.players.length >= 2
+                    ? "Starting now…"
+                    : "Checking for players…"
+                  : view.players.length >= 2
+                    ? `Game ON: starts in ${Math.ceil(left)}s with ${view.players.length} players`
+                    : `Not started yet: needs 1 more player in ${Math.ceil(left)}s`}
+              </p>
+              <p className="mt-1.5 text-xs text-muted">
+                {isHost
+                  ? "Everyone nearby can see your light on the map. If nobody joins, the game doesn't start and your stake comes back."
+                  : `You're in! It starts when the countdown ends${view.players.length < 2 ? ", as long as someone else joins too" : ""}. If it doesn't start, your stake comes back.`}
+              </p>
             </div>
           )}
 
@@ -437,8 +469,18 @@ function Arena({ view, me, now, onClose, onMessage }: { view: ChallengeView; me:
           )}
           {view.status === "cancelled" && (
             <div className="py-6 text-center">
-              <p className="font-semibold">Nobody joined this time.</p>
+              <p className="font-semibold">The game didn&apos;t start: not enough players joined.</p>
               <p className="mt-1 text-sm text-muted">Your stake is back. Try again, or join someone else&apos;s.</p>
+            </div>
+          )}
+          {/* The moment it starts: a big "Game on!" for everyone. */}
+          {gameOn && (
+            <div className="start-pop pointer-events-none absolute inset-0 z-10 grid place-items-center bg-ink/85 text-center text-white">
+              <div>
+                <p className="text-5xl">{g?.icon}</p>
+                <p className="mt-2 font-display text-4xl font-black">Game on!</p>
+                <p className="mt-1 text-sm text-white/70">{view.players.length} players · winner takes {cash(view.pool * WINNER_SHARE)}</p>
+              </div>
             </div>
           )}
         </div>
