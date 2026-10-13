@@ -224,7 +224,7 @@ type PlaceRoom = {
   kind: "building" | "balloon";
   /** What the place is ("office", "bank", "home"...; see CityRoom). */
   type?: string;
-  levels?: { id: string; label: string; capacity: number; kind?: string }[];
+  levels?: { id: string; label: string; capacity: number; kind?: string; theme?: string }[];
 };
 // Same order as the balloons in the 3D city (used until the city lists its rides).
 const BALLOON_NAMES = ["Red", "Yellow", "Blue", "Purple", "Mint"];
