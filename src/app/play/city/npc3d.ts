@@ -152,7 +152,8 @@ export function upgradeNpcs(figs: FigLike[], people: { id: string; avatar?: unkn
  * background and appears when ready. Each frame, say where you are, which way you face and what
  * you're doing (walking, standing, sitting on a seat this high).
  */
-export function createMyAvatar(avatar: unknown) {
+/** level: how detailed (LOD.own close up in a home; a light one on the street, where you're small on screen). */
+export function createMyAvatar(avatar: unknown, level: number = LOD.own) {
   const root = new THREE.Group();
   let live: { obj: AvatarObject; mats: MaterialSet; scale: number; floor: number } | null = null;
   let gone = false;
@@ -163,7 +164,7 @@ export function createMyAvatar(avatar: unknown) {
   } catch {
     recipe = seededRecipe("me");
   }
-  void getAvatarModel(recipe, LOD.own)
+  void getAvatarModel(recipe, level)
     .then((model) => {
       if (gone) return;
       const mats = makeMaterials(recipe);

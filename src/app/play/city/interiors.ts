@@ -36,6 +36,8 @@ export type InteriorInfo = {
   variant?: "small" | "station";
   /** The city's flavour ("ng", "uk"...), for local food on menus. */
   flavor?: string;
+  /** Built bigger than usual (a famous landmark's floors): the room's width and depth times this. */
+  scale?: number;
   /** A player's planned home: which plan, and which of its floors (docs/HOME_PLANNER.md). */
   home?: { plan: HomePlan; level: number };
 };
@@ -3515,7 +3517,10 @@ function plannedHome(x: Ctx, home: NonNullable<InteriorInfo["home"]>) {
 
 export function createInterior(info: InteriorInfo): Interior {
   const rnd = rngFrom(info.key);
-  const { room, pal, build } = plan(info.theme, rnd, info.variant, info);
+  const { room: baseRoom, pal, build } = plan(info.theme, rnd, info.variant, info);
+  // A landmark's floor: the same room, built bigger (the furniture spreads out to fill it).
+  const sc = info.scale && info.scale > 1 && !info.home ? info.scale : 1;
+  const room = sc > 1 ? { ...baseRoom, w: baseRoom.w * sc, d: baseRoom.d * sc, h: Math.max(baseRoom.h, Math.min(baseRoom.h * 1.25, 4.5)) } : baseRoom;
   const sheet = new Sheet(1024);
   const k = new Kit();
   const x: Ctx = { k, sheet, rnd, pal, room, spots: [], views: [], lamps: [], info, items: [], extras: [], anim: [], nightHooks: [], blocks: [], textures: [] };

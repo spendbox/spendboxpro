@@ -63,6 +63,7 @@ import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
 import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
+import { Church, Dumbbell, FerrisWheel, GraduationCap, Landmark as LandmarkIcon, Plane, Ship, Stethoscope, TrainFront, Trophy, UtensilsCrossed } from "lucide-react";
 import { BellOff, BellRing, PencilRuler, Wallet, CarFront, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Newspaper, Palette, ShoppingBag, Smartphone, Store, Swords, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
@@ -1580,6 +1581,91 @@ export function Game({
     return () => clearTimeout(t);
   }, [worldId, enteredRoom, fetchHomePlan]);
 
+  // What each kind of place is for: one main thing to do there, a tap away (the doctor at a
+  // hospital, a course at a campus, food at a restaurant, a boat ride at the port...).
+  const [flightsOpen, setFlightsOpen] = useState(false);
+  const [prayer, setPrayer] = useState(0);
+  function getMainAction(): { label: string; icon: React.ComponentType<{ className?: string }>; run: () => void } | null {
+    if (!worldId || !place || guest) return null;
+    const theme = placeLevel?.theme ?? "";
+    const type = placeRoom?.type ?? "";
+    const room = rooms.myRoom;
+    const act = (kind: ActivityItem["kind"], label: string) => () => room && setActivity({ id: `${room}:${kind}:0`, kind, label, place: room });
+    const board = (kind: RideKindName, label: string) => {
+      const r = rideList.find((x) => x.kind === kind);
+      return r ? { label, run: () => boardRide(r) } : null;
+    };
+    const work = () => {
+      if (!Number.isFinite(enteredTile)) return;
+      const [x, z] = spiralXY(enteredTile);
+      worldLife.openWorkplace(x, z, placeRoom?.name ?? "Here");
+    };
+    const sport = THEME_SPORT_GAME[theme];
+    if (sport) return { label: "Watch the match", icon: Trophy, run: () => setSportsOpen(sport) };
+    if (inMyHome) return { label: "Plan my home", icon: PencilRuler, run: worldLife.openPlanner };
+    switch (theme) {
+      case "reception":
+      case "ward":
+        return { label: "See a doctor", icon: Stethoscope, run: worldLife.openLife };
+      case "library":
+      case "lecture":
+        return { label: "Take a course", icon: GraduationCap, run: worldLife.openLife };
+      case "gym":
+      case "spa":
+        return { label: theme === "gym" ? "Work out" : "Treatments", icon: Dumbbell, run: worldLife.openLife };
+      case "restaurant":
+      case "foodcourt":
+      case "lounge":
+      case "suite":
+        return { label: theme === "lounge" ? "Order a drink" : theme === "suite" ? "Room service" : "Order food", icon: UtensilsCrossed, run: act("menu", "Order") };
+      case "club":
+        return { label: "Dance", icon: Music, run: startDancing };
+      case "shop":
+      case "mall":
+        return { label: "Shop", icon: ShoppingBag, run: () => worldLife.openThings("shops") };
+      case "bank":
+        return { label: "Banking", icon: LandmarkIcon, run: worldLife.openFinance };
+      case "vault":
+        return { label: "Crack the vault", icon: LandmarkIcon, run: act("vault", "The vault") };
+      case "church":
+      case "mosque":
+        return { label: "Pray", icon: Church, run: () => setPrayer(Date.now()) };
+      case "terminal":
+      case "tower":
+        return { label: "Fly out of Lagos", icon: Plane, run: () => setFlightsOpen(true) };
+      case "helipad": {
+        const h = board("heli", "Helicopter tour");
+        return h && { ...h, icon: Plane };
+      }
+      case "quay":
+      case "concourse": {
+        const b = type === "port" || theme === "quay" ? board("boat", "Take a boat ride") : board("train", "Board a train");
+        if (b) return { ...b, icon: type === "port" || theme === "quay" ? Ship : TrainFront };
+        break;
+      }
+      case "funfair": {
+        const f = board("ferris", "Ride the Ferris wheel");
+        return f && { ...f, icon: FerrisWheel };
+      }
+      case "waterpark": {
+        const w = board("slide", "Down the water slide");
+        return w && { ...w, icon: FerrisWheel };
+      }
+      case "gallery":
+      case "rotunda":
+      case "skybridge":
+      case "clockroom":
+      case "park":
+      case "plaza":
+      case "roofTerrace":
+      case "poolDeck":
+        return { label: "Take a photo", icon: Camera, run: () => setCamera("photo") };
+      case "market":
+        return { label: "Shop at the market", icon: ShoppingBag, run: () => worldLife.openThings("shops") };
+    }
+    return { label: "Work here", icon: Briefcase, run: work };
+  }
+
   function leaveRoom() {
     rooms.leave();
     setRide(null);
@@ -2118,6 +2204,31 @@ export function Game({
             </button>
           ))}
       </div>
+      {flightsOpen && (
+        <Sheet onClose={() => setFlightsOpen(false)} title="Fly out of Lagos">
+          <p className="text-sm text-muted">Flights to other cities are coming soon: each one a whole new map to live in, with your money and things going with you.</p>
+          <ul className="mt-3 space-y-2">
+            {[
+              ["Abuja", "Nigeria's capital"],
+              ["Port Harcourt", "The Garden City"],
+              ["Kano", "The ancient city of the north"],
+              ["Accra", "Ghana"],
+              ["Nairobi", "Kenya"],
+              ["London", "United Kingdom"],
+            ].map(([city, what]) => (
+              <li key={city} className="flex items-center gap-3 rounded-2xl bg-panel-2 px-3 py-2.5">
+                <Plane className="size-4 shrink-0 text-muted" />
+                <span className="min-w-0 flex-1">
+                  <b className="block text-sm">{city}</b>
+                  <span className="text-xs text-muted">{what}</span>
+                </span>
+                <span className="rounded-full bg-gold/25 px-2 py-0.5 text-[11px] font-semibold text-gold-dark">Coming soon</span>
+              </li>
+            ))}
+          </ul>
+        </Sheet>
+      )}
+      {prayer > 0 && <PrayerMoment key={prayer} onDone={() => setPrayer(0)} />}
       {leaveAsk && (
         <div className="fixed inset-0 z-[70] grid place-items-center bg-black/40 p-4" onPointerDown={(e) => e.target === e.currentTarget && setLeaveAsk(null)} role="dialog" aria-label="Leave here?">
           <div className="w-full max-w-xs rounded-3xl bg-panel p-5 text-center shadow-2xl">
@@ -2763,6 +2874,14 @@ export function Game({
                 "Inside a building"}
             </b>
             <span className="flex-1 sm:hidden" />
+            {(() => {
+              const mainAction = getMainAction();
+              return mainAction && place && (
+              <button onClick={mainAction.run} className="flex shrink-0 items-center gap-1 rounded-xl bg-gold px-3 py-2 text-xs font-bold text-ink shadow" aria-label={mainAction.label}>
+                <mainAction.icon className="size-4" /> {mainAction.label}
+              </button>
+              );
+            })()}
             {!guest && (
               <button onClick={() => { setChatOpen(true); setChatUnread(0); }} className="relative flex shrink-0 items-center gap-1 rounded-xl bg-panel-2 px-3 py-2 text-xs font-semibold" aria-label="Chat with everyone here">
                 <MessageCircle className="size-4" /> Chat
@@ -3368,5 +3487,24 @@ function Li({ icon: Icon, children }: { icon: LucideIcon; children: React.ReactN
       <Icon className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden />
       <span>{children}</span>
     </li>
+  );
+}
+
+/** Which sport a venue's floor shows (its match to watch). */
+const THEME_SPORT_GAME: Record<string, Sport> = { stands: "football", court: "basketball", boxing: "boxing", wrestling: "wrestling" };
+
+/** A quiet moment of prayer: the screen dims and settles for a few seconds. */
+function PrayerMoment({ onDone }: { onDone: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onDone, 4200);
+    return () => clearTimeout(t);
+  }, [onDone]);
+  return (
+    <div className="pointer-events-none fixed inset-0 z-[65] grid place-items-center bg-black/55 text-center text-white" style={{ animation: "toast-in .6s ease-out" }}>
+      <div>
+        <p className="font-display text-2xl font-bold">A quiet moment</p>
+        <p className="mt-1 text-sm text-white/80">You bow your head and pray. You feel calmer.</p>
+      </div>
+    </div>
   );
 }

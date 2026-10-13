@@ -106,6 +106,8 @@ export type PlaceLevel = {
   floor: number;
   /** Roofs: hide the building's own bits on the roof (things starting at/above this height). */
   hide?: { above: number; rect?: [number, number, number, number]; maxH?: number };
+  /** Inside a famous landmark: the room is built this much bigger than usual (1 = as usual). */
+  big?: number;
 };
 
 /** One city unit is about this many metres (people are ~0.17 units tall). */
@@ -211,6 +213,24 @@ export function levelsOf(t: Tile, plan: CityPlan): PlaceLevel[] {
     t.structure.inside?.forEach((name, k) => {
       if (drafts[k] && name) drafts[k].label = name;
     });
+    if (plan.region && t.structure.name) {
+      // Real landmarks are big places: more to them, and every floor much roomier.
+      const c = structureCentre(t.structure);
+      const top = drafts.reduce((m, d) => Math.max(m, d.floor < 99 ? d.floor : 0), 0);
+      const more = (label: string, theme: Theme, kind: LevelKind = "interior") => {
+        const n = top + 1 + drafts.filter((d) => d.weight === 0.9).length;
+        drafts.push({ id: `f${n}`, label: `Floor ${n} · ${label}`, kind, theme, x: c.x, y: 0.09 + n * 0.3, z: c.z, hw: 0.6, hd: 0.4, ry: 0, floor: n, weight: 0.9 });
+      };
+      if (t.structure.type === "campus") {
+        more("Cafeteria", "restaurant");
+        more("Sports hall", "court");
+        more("Students' lounge", "lounge");
+      }
+      // A port: a ferry terminal to wait in, by the quay (boat rides go from here).
+      if (t.structure.type === "port" && !drafts.some((d) => d.id === "g")) drafts.push({ id: "g", label: "Ferry terminal", kind: "interior", theme: "concourse", x: c.x, y: 0.09, z: c.z, hw: 0.6, hd: 0.3, ry: 0, floor: 0 });
+      if (t.structure.type === "museum" || t.structure.type === "capitol") more("Café", "restaurant");
+      for (const d of drafts) if (d.kind === "interior") d.big = 1.7;
+    }
     // Real landmarks (Unilag, the National Stadium...): their main entrance is a place to be too,
     // the gate with the name over it, first in the list.
     if (plan.region && t.structure.name && !drafts.some((d) => d.id === "o")) {

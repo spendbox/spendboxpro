@@ -73,6 +73,7 @@ import { createRealTransit, REAL_BASE } from "./city/real-transit";
 import { createHomeInterior } from "./home/home-interior";
 import type { HomePlan } from "@/lib/home-plan";
 import { createMyAvatar, upgradeNpcs } from "./city/npc3d";
+import { LOD } from "@/lib/avatar3d/lod";
 import { createAirliner, LIVERIES } from "./city/airliner";
 import { createSlideRide, createWaterpark, waterparkParts, type Slide, type SlideRide, type Waterpark } from "./city/waterpark";
 import { createVenueGame, venueParts, type VenueGame } from "./city/venues";
@@ -145,6 +146,8 @@ export type CityLevel = {
    * wrestling arena; it has a "match" thing to tap).
    */
   kind?: "room" | "club" | "restaurant" | "roof" | "outdoor" | "arena";
+  /** What the floor is (a library, a hospital ward, a terminal...), for what you can do there. */
+  theme?: string;
 };
 
 /**
@@ -4070,7 +4073,7 @@ export function CityView({
               : `${shortAddress(addressOf(currentPlan, anchor))} · ${ROOM_LABEL[anchor.kind]}`;
       const capacity = levels.reduce((n, l) => n + l.capacity, 0);
       const type = anchor.home ? "home" : anchor.station ? "station" : anchor.kind === "structure" && anchor.structure ? anchor.structure.type : anchor.kind;
-      const room: CityRoom = { id: `b:${anchor.i}`, name, capacity, kind: "building", type, levels: levels.map((l) => ({ id: l.id, label: l.label, capacity: l.capacity, kind: levelUse(l) })) };
+      const room: CityRoom = { id: `b:${anchor.i}`, name, capacity, kind: "building", type, levels: levels.map((l) => ({ id: l.id, label: l.label, capacity: l.capacity, kind: levelUse(l), theme: l.theme })) };
       return { room, anchor, big, levels };
     }
     /** A real place's property was tapped: show what it is (when someone's listening). */
@@ -4973,6 +4976,7 @@ export function CityView({
           places: plan.city.flavor.cities.filter((c) => c !== plan.city.name),
           variant: anchor.kind === "clock" && lvl.id === "g" ? "small" : anchor.station ? "station" : undefined,
           flavor: plan.city.flavor.id,
+          scale: lvl.big,
         });
         const figures = createFigures(npcs, interior.spots, { key, act: lvl.theme === "club" ? "dance" : undefined });
         st.holder.add(interior.group, figures.group);
@@ -5932,7 +5936,8 @@ export function CityView({
     let meStreet: ReturnType<typeof createMyAvatar> | null = null;
     function streetAvatar(dt: number, moving: number) {
       if (!meStreet) {
-        meStreet = createMyAvatar(atmos.current.meAvatar);
+        // A light, low-detail avatar on the street (you're small on screen, and it keeps phones smooth).
+        meStreet = createMyAvatar(atmos.current.meAvatar, LOD.far);
         // About as tall as the people on the map (drawn bigger than life), facing the way you walk.
         meStreet.root.scale.setScalar(0.2 / 1.72);
         meStreet.root.rotation.y = Math.PI;
