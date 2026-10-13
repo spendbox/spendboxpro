@@ -127,6 +127,7 @@ import { RecentRail, rememberPerson } from "./people/recent-rail";
 import { PrankReveal, usePrankReveal } from "./people/prank-reveal";
 import { openAdvertise } from "./life/advertise-panel";
 import { Fight, type ChallengeLight } from "./fight/fight";
+import { WelcomeFeatures } from "./welcome-features";
 import { CallBar } from "./call/call-bar";
 import * as propertyActions from "./property-actions";
 import * as workActions from "./work-actions";
@@ -2169,9 +2170,12 @@ export function Game({
               <button onClick={() => setHowOpen(true)} className="glass grid size-8 shrink-0 place-items-center rounded-full font-display font-bold sm:size-9" aria-label="How it works">
                 ?
               </button>
-              <button onClick={() => setSignIn({ why: null })} className="flex h-8 items-center whitespace-nowrap rounded-full bg-gold px-3.5 text-sm font-semibold text-ink shadow sm:h-9 sm:px-4">
-                Sign in to play
-              </button>
+              {/* On the real map it's under the description instead. */}
+              {!worldId && (
+                <button onClick={() => setSignIn({ why: null })} className="flex h-8 items-center whitespace-nowrap rounded-full bg-gold px-3.5 text-sm font-semibold text-ink shadow sm:h-9 sm:px-4">
+                  Sign in to play
+                </button>
+              )}
             </div>
           ) : (
           <div className="pointer-events-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
@@ -3359,15 +3363,19 @@ export function Game({
 
       {/* Signed out: the game's name, big and floating over the city. */}
       {worldId && guest && !place && ride === null && !camera && (
-        <div className="pointer-events-none absolute inset-x-0 top-[18%] z-[5] flex justify-center" aria-hidden>
+        <div className="pointer-events-none absolute inset-x-0 top-[11%] z-[5] flex justify-center sm:top-[14%]">
           <div className="title-float flex flex-col items-center">
-            <LogoMark size={72} className="mb-2 rounded-[18px] shadow-[0_12px_30px_rgba(0,0,0,0.35)]" />
+            <LogoMark size={60} className="mb-2 rounded-[16px] shadow-[0_12px_30px_rgba(0,0,0,0.35)]" />
             <h1 className="title-3d font-display text-[clamp(3rem,15vw,8rem)] font-black italic leading-none tracking-tight text-white">Newtown</h1>
             <p className="mt-3 rounded-full bg-black/35 px-4 py-1.5 text-sm font-semibold tracking-wide text-white backdrop-blur-sm sm:text-base">Your city. Your story.</p>
             {/* What Newtown is, for someone seeing it for the first time. */}
             <p className="mt-3 max-w-[22rem] rounded-2xl bg-black/40 px-4 py-2.5 text-center text-[13px] leading-snug text-white backdrop-blur-sm sm:max-w-md sm:text-sm">
               A living world where social media meets play. Explore real cities, meet new people, team up, and discover cultures from around the globe, alongside real people and real brands, in a space that&apos;s fun and safe.
             </p>
+            <WelcomeFeatures />
+            <button onClick={() => setSignIn({ why: null })} className="pointer-events-auto mt-3 h-12 rounded-full bg-gold px-8 text-base font-bold text-ink shadow-lg">
+              Sign in to play
+            </button>
           </div>
         </div>
       )}
