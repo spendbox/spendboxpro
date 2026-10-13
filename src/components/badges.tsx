@@ -128,7 +128,7 @@ const def = (group: BadgeGroup, rim: BadgeRim, icon: LucideIcon, title: string, 
   group,
 });
 
-// All 102 badges. The keys match the database (game-db/008_badge_collection.sql,
+// All 103 badges. The keys match the database (game-db/008_badge_collection.sql,
 // game-db/011_badges_hard.sql, and game-db/027_streaks_levels.sql for the streaks). Bronze is
 // the easiest, then silver, gold, diamond, and legendary.
 export const BADGE_INFO: Record<string, BadgeInfo> = {
@@ -242,6 +242,8 @@ export const BADGE_INFO: Record<string, BadgeInfo> = {
   streak_60: def("Legendary", "legendary", Flame, "Eternal Flame", "Keep a daily streak for 60 days.", "#fdba74", "#7c2d12"),
   streak_100: def("Legendary", "legendary", Medal, "Hundred Days", "Keep a daily streak for 100 days.", "#fde68a", "#713f12"),
   catches_500: def("Legendary", "legendary", Crown, "King of the Hunt", "Find 500 ghosts in total.", "#fdba74", "#7c2d12"),
+  // Starting a life (docs/PACKS.md)
+  rich_family: def("Rare", "gold", Crown, "Rich Family", "Born into money: started life in Lagos with the Rich Family pack.", "#fde68a", "#7c5a00"),
   collector_80: def("Legendary", "legendary", Award, "Hall of Fame", "Collect 80 different badges.", "#93c5fd", "#172554"),
 };
 
@@ -251,7 +253,7 @@ const ONCE = new Set([
   "catches_10", "catches_50", "catches_100", "catches_500", "survive_5", "survive_25", "survive_50", "survive_100",
   "coins_1k", "coins_5k", "coins_10k", "coins_25k", "coins_100k", "streak_3", "streak_7", "streak_14", "streak_30", "streak_60", "streak_100",
   "bot_buster", "bot_terminator", "shield_master", "welcome", "balloon_popper", "bounty_hunter", "illusionist", "immortal",
-  "level_5", "level_10", "level_20", "level_30", "level_50", "collector_80",
+  "level_5", "level_10", "level_20", "level_30", "level_50", "collector_80", "rich_family",
 ]);
 
 const RIMS: Record<BadgeRim, string[]> = {

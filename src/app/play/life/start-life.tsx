@@ -99,6 +99,16 @@ export function StartLife({
                 <span className="block text-sm font-semibold">{p.label}</span>
                 <span className="block text-xs text-muted">{p.story}</span>
                 <span className="block text-[11px] text-muted">{p.what}</span>
+                {p.perks.length > 0 && (
+                  <span className="mt-1 block space-y-0.5">
+                    {p.perks.map((perk) => (
+                      <span key={perk} className="flex items-start gap-1 text-[11px] font-medium text-ink">
+                        <Check className="mt-px size-3 shrink-0 text-me" />
+                        {perk}
+                      </span>
+                    ))}
+                  </span>
+                )}
               </span>
               <span className="shrink-0 text-right">
                 <span className="block font-display text-base font-extrabold tabular-nums">{cash(p.mint)}</span>

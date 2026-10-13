@@ -170,3 +170,19 @@ test("the bill: a special room costs its fit-out once, and adds to the home's va
   assert.equal(planBill(p, again).naira, ROOM_NAIRA.dancehall);
   assert.deepEqual(cleanPaid({ rooms: { dancehall: "x", dungeon: 3, cinema: -2, gym: 2 } }).rooms, { gym: 2 });
 });
+
+test("a pack's furnished home costs nothing to save, and is the same every time", async () => {
+  const { packHomePlan, paidFor, planBill, cleanPaid, mergePaid } = await import("../../home-plan.ts");
+  for (const gift of ["home", "dancehall"] as const) {
+    const plan = packHomePlan(gift, 12345);
+    assert.deepEqual(plan, packHomePlan(gift, 12345));
+    const bill = planBill(plan, mergePaid(cleanPaid(null, plan.size), paidFor(plan)));
+    assert.equal(bill.naira, 0);
+    if (gift === "dancehall") {
+      assert.equal(plan.floors.length, 2);
+      assert.ok(plan.floors.some((f) => f.rooms.some((r) => r.kind === "dancehall")));
+    }
+    // Something in every room.
+    assert.ok(plan.floors.every((f) => f.items.length > 0));
+  }
+});

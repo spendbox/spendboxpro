@@ -1,15 +1,35 @@
 "use server";
 
 import { currentUserId } from "@/lib/game";
-import { cleanPaid, cleanPlan, planBill, starterPlan, type HomePlan, type PlanPaid } from "@/lib/home-plan";
+import { cleanPaid, cleanPlan, mergePaid, packHomePlan, paidFor, planBill, starterPlan, type HomePlan, type PlanPaid } from "@/lib/home-plan";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { regionMap } from "@/lib/world";
+import { packById } from "@/lib/world/packs";
 
 // Your home's plan (game-db/063_home_plans.sql, 064_home_upgrades.sql): one per player, for the
 // home you live in. Planning is free; saving pays for new floors and furniture (the game works
 // out the bill here, from the plan itself, never from what the phone says it costs).
 
 type Fail = { ok: false; error: string };
+
+/** A number from a player's id (the same every time), so their gift home is always the same design. */
+const seedOf = (id: string) => {
+  let h = 2166136261;
+  for (const c of id) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
+  return h % 1_000_000;
+};
+
+/**
+ * The home a paid starter pack furnishes (docs/PACKS.md), for players who haven't saved a plan of
+ * their own yet: what it looks like, and everything in it as already paid for. Null for the rest.
+ */
+async function giftHome(db: ReturnType<typeof createAdminClient>, userId: string): Promise<{ plan: HomePlan; paid: PlanPaid } | null> {
+  const { data } = await db.from("starter_payments").select("pack").eq("user_id", userId).eq("status", "paid").limit(1);
+  const furnished = packById(String(data?.[0]?.pack ?? ""))?.furnished;
+  if (!furnished) return null;
+  const plan = packHomePlan(furnished, seedOf(userId));
+  return { plan, paid: paidFor(plan) };
+}
 
 async function myHome() {
   const userId = await currentUserId();
@@ -40,8 +60,11 @@ export async function loadHomePlan(): Promise<HomePlanLoad | Fail> {
   const row = await savedRow(me.db, me.userId).catch(() => null);
   const mine = row && row.unit === me.unit ? row : null;
   const plan = mine ? cleanPlan(mine.plan) : null;
-  const shown = plan ?? starterPlan();
-  return { ok: true, plan: shown, saved: !!plan, paid: cleanPaid(mine?.paid, shown.size), perMint: me.perMint, owner: me.owner };
+  // A paid pack's furnished home, until the player saves a plan of their own.
+  const gift = plan ? null : await giftHome(me.db, me.userId).catch(() => null);
+  const shown = plan ?? gift?.plan ?? starterPlan();
+  const paid = cleanPaid(mine?.paid, shown.size);
+  return { ok: true, plan: shown, saved: !!plan, paid: gift ? mergePaid(paid, gift.paid) : paid, perMint: me.perMint, owner: me.owner };
 }
 
 export async function saveHomePlan(raw: unknown): Promise<{ ok: true; paidMint: number; paid: PlanPaid } | Fail> {
@@ -51,7 +74,13 @@ export async function saveHomePlan(raw: unknown): Promise<{ ok: true; paidMint: 
   const plan = cleanPlan(raw);
   if (!plan) return { ok: false, error: "That plan couldn't be saved." };
   const row = await savedRow(me.db, me.userId).catch(() => null);
-  const paidBefore = cleanPaid(row && row.unit === me.unit ? row.paid : null, plan.size);
+  const saved = row && row.unit === me.unit ? row : null;
+  let paidBefore = cleanPaid(saved ? saved.paid : null, plan.size);
+  // The first save of a pack's furnished home: what came with it isn't charged for.
+  if (!saved) {
+    const gift = await giftHome(me.db, me.userId).catch(() => null);
+    if (gift) paidBefore = mergePaid(paidBefore, gift.paid);
+  }
   const bill = planBill(plan, paidBefore);
   const mint = Math.round((bill.naira / me.perMint) * 100) / 100;
   if (mint > 0 && !me.owner) return { ok: false, error: "You rent this home, so you can't build onto it or buy furniture for it here. Rearranging is free." };
@@ -96,5 +125,11 @@ export async function homePlanFor(building: string): Promise<HomePlan | null> {
   const { data: plans } = await db.from("home_plans").select("user_id, unit, plan").in("user_id", residents.map((r) => r.user_id));
   const rows = ((plans ?? []) as { user_id: string; unit: string; plan: unknown }[]).filter((p) => residents.some((r) => r.user_id === p.user_id && r.home_unit === p.unit));
   const row = rows.find((r) => r.user_id === me) ?? rows[0];
-  return row ? cleanPlan(row.plan) : null;
+  if (row) return cleanPlan(row.plan);
+  // Nobody's planned theirs yet: a paid pack's furnished home, if one of them has it.
+  for (const r of residents.slice(0, 4)) {
+    const gift = await giftHome(db, r.user_id).catch(() => null);
+    if (gift) return gift.plan;
+  }
+  return null;
 }
