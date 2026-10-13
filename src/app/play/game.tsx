@@ -2039,7 +2039,28 @@ export function Game({
       {worldId && !camera && (
         <div className="pointer-events-none absolute inset-x-2.5 top-14 z-10 flex flex-col items-start gap-2 sm:inset-x-4 sm:top-16">
           <div className="flex w-full flex-wrap items-center gap-1.5">
+            {/* Signed out: the numbers straight away (online, registered, visits); tap for more. */}
+            {guest && (
+              <button onClick={() => setStatsOpen(true)} className="glass pointer-events-auto flex shrink-0 items-stretch divide-x divide-ink/10 rounded-2xl text-center" aria-label="Newtown in numbers">
+                <span className="px-3 py-1.5">
+                  <b className="flex items-center justify-center gap-1 text-sm tabular-nums">
+                    <span className="size-2 animate-pulse rounded-full bg-[#2f9e44]" aria-hidden />
+                    {onlineNow.toLocaleString("en-GB")}
+                  </b>
+                  <span className="block text-[10px] font-semibold text-muted">Online</span>
+                </span>
+                <span className="px-3 py-1.5">
+                  <b className="block text-sm tabular-nums">{state.site.players.toLocaleString("en-GB")}</b>
+                  <span className="block text-[10px] font-semibold text-muted">Registered</span>
+                </span>
+                <span className="px-3 py-1.5">
+                  <b className="block text-sm tabular-nums">{state.site.visits.toLocaleString("en-GB")}</b>
+                  <span className="block text-[10px] font-semibold text-muted">Visits</span>
+                </span>
+              </button>
+            )}
             {/* Who's online; tap for the numbers: registered players and visits, and how they're growing. */}
+            {!guest && (
             <button
               onClick={() => setStatsOpen(true)}
               className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold"
@@ -2049,6 +2070,7 @@ export function Game({
               {onlineNow}
               <span className="max-[440px]:hidden">online</span>
             </button>
+            )}
             {worldLife.rowButtons}
           </div>
           {worldLife.rowBelow}
@@ -2466,7 +2488,7 @@ export function Game({
           onSignOut={() => { setMenu(false); setConfirmSignOut(true); }}
         />
       )}
-      {howOpen && <HowItWorks onClose={() => setHowOpen(false)} />}
+      {howOpen && <HowItWorks onClose={() => setHowOpen(false)} legacy={!worldId} />}
       {jobsAt !== undefined && <JobsSheet place={jobsAt} ctx={playCtx} onClose={() => setJobsAt(undefined)} onChanged={() => startTransition(() => router.refresh())} />}
       {gamesOpen && (
         <GamesSheet
@@ -2938,7 +2960,7 @@ export function Game({
 
 
       {/* Bottom: messages, controls and chat */}
-      <div className={cn("pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-1.5 p-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:gap-2 sm:p-4", worldId && !place && "pr-16 sm:pr-20", camera && "hidden")}>
+      <div className={cn("pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-1.5 p-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:gap-2 sm:p-4", worldId && !place && !guest && "pr-16 sm:pr-20", camera && "hidden")}>
         {!guest && !worldId && (
           <Safe name="Quest banner">
             <QuestBanner quest={quests.quest} onOpen={() => setQuestOpen(true)} />
@@ -3342,6 +3364,10 @@ export function Game({
             <LogoMark size={72} className="mb-2 rounded-[18px] shadow-[0_12px_30px_rgba(0,0,0,0.35)]" />
             <h1 className="title-3d font-display text-[clamp(3rem,15vw,8rem)] font-black italic leading-none tracking-tight text-white">Newtown</h1>
             <p className="mt-3 rounded-full bg-black/35 px-4 py-1.5 text-sm font-semibold tracking-wide text-white backdrop-blur-sm sm:text-base">Your city. Your story.</p>
+            {/* What Newtown is, for someone seeing it for the first time. */}
+            <p className="mt-3 max-w-[22rem] rounded-2xl bg-black/40 px-4 py-2.5 text-center text-[13px] leading-snug text-white backdrop-blur-sm sm:max-w-md sm:text-sm">
+              A living world where social media meets play. Explore real cities, meet new people, team up, and discover cultures from around the globe, alongside real people and real brands, in a space that&apos;s fun and safe.
+            </p>
           </div>
         </div>
       )}
