@@ -4820,6 +4820,8 @@ export function CityView({
       free: Spot[];
       /** The regulars standing about, in the new 3D avatar design (./city/npc3d). */
       npc3d?: ReturnType<typeof upgradeNpcs> | null;
+      /** The dance floor's crowd, in 3D too. */
+      crowd3d?: ReturnType<typeof upgradeNpcs> | null;
       npcT?: number;
       /** The players here and the dancers, in the 3D design too. */
       players3d?: ReturnType<typeof upgradeNpcs> | null;
@@ -4998,7 +5000,8 @@ export function CityView({
           st.me3d = createMyAvatar(atmos.current.meAvatar);
           st.holder.add(st.me3d.root);
         }
-        st.npc3d = upgradeNpcs(figures.figs, npcs);
+        // A club: everyone on the dance floor in 3D, so more of them (a lighter version past the first 16).
+        st.npc3d = upgradeNpcs(figures.figs, npcs, interior.danceFloor ? { max: 30 } : undefined);
         interior.setNight(carNight);
         st.update = interior.update;
         setupUse(st, interior.seats, interior.items, interior.spots, npcs.length);
@@ -5049,6 +5052,7 @@ export function CityView({
       st.players?.dispose();
       st.players3d?.dispose();
       st.crowd?.dispose();
+      st.crowd3d?.dispose();
       st.dancers?.dispose();
       st.dancers3d?.dispose();
       st.me3d?.dispose();
@@ -5163,6 +5167,8 @@ export function CityView({
       if (people.length) {
         st.crowd = createFigures(people, spots, { key, inert: true, tags: false });
         st.holder.add(st.crowd.group);
+        // The crowd dances in the new 3D avatars too (a lighter version: they're further from you).
+        st.crowd3d = upgradeNpcs(st.crowd.figs, people, { players: true, level: LOD.far });
       }
       syncDancers(st);
     }
@@ -6209,6 +6215,7 @@ export function CityView({
         st.npc3d?.update(dt3);
         st.players3d?.update(dt3);
         st.dancers3d?.update(dt3);
+        st.crowd3d?.update(dt3);
         st.npcT = time;
         st.players?.update(time, camLocal);
         st.crowd?.update(time);
