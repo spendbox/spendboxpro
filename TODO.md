@@ -10,6 +10,7 @@
 - [ ] In the Supabase SQL Editor run `game-db/070_challenges.sql` (Challenge: challenges on the map, pools and prizes). Until then Challenge says it is switched on soon.
 - [ ] In the Supabase SQL Editor run `game-db/071_chat_read.sql` (private messages show "Opened" once read, and read ones stop counting on every phone). Until then each phone remembers what it has read.
 - [ ] In the Supabase SQL Editor run `game-db/072_first_steps.sql` (the first five minutes: the small rewards for saying hi, playing a challenge and picking a home). Until then the guide shows but pays nothing.
+- [ ] In the Supabase SQL Editor run `game-db/073_daily_money.sql` (the daily gift, counting active time, and Newtown's prize for a challenge won). Until then Your money says the gift is switched on soon.
 - [ ] Optional, for voice calls on every network: add a TURN relay (docs/VOICE_CALLS.md) with NEXT_PUBLIC_TURN_URL, NEXT_PUBLIC_TURN_USERNAME and NEXT_PUBLIC_TURN_CREDENTIAL in Vercel.
 - [ ] In the Supabase SQL Editor run `game-db/062_notices_read.sql` (exact unread counts, swiping notices away, photos and selfies in messages) and then `game-db/063_home_plans.sql` (saving home plans).
 - [ ] In the Supabase SQL Editor run `game-db/061_ride_fares.sql` (rides on the map cost their fare: train, ferry, bus, taxi, balloon, helicopter...; until it's run they stay free on the real map).

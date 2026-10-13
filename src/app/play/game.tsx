@@ -124,6 +124,7 @@ import { PeopleList, prefetchPeople } from "./people/people-list";
 import { StatsSheet } from "./stats-sheet";
 import { GiftPop, GiftSent } from "./people/gift-pop";
 import { MeSheet } from "./me-sheet";
+import { DailyGiftPop, MoneyHome } from "./money-home";
 import { RecentRail, rememberPerson } from "./people/recent-rail";
 import { PrankReveal, usePrankReveal } from "./people/prank-reveal";
 import { openAdvertise } from "./life/advertise-panel";
@@ -446,6 +447,10 @@ export function Game({
   const [howOpen, setHowOpen] = useState(false);
   /** The real map: the city card (tap the place's name) and the phone's own menu (bottom right). */
   const [cityOpen, setCityOpen] = useState(false);
+  /** Your money (tap your cash), and the daily gift popping up once a day. */
+  const [moneyOpen, setMoneyOpen] = useState(false);
+  const [giftPop, setGiftPop] = useState(false);
+  const closeGiftPop = useCallback(() => setGiftPop(false), []);
   /** You (your face, top left): everything that isn't chat. */
   const [meOpen, setMeOpen] = useState(false);
   /** Open Newtown's own chat (a notice tapped...): changes to ask. */
@@ -842,6 +847,46 @@ export function Game({
         }}
       />
     ) : undefined;
+  // Time in the city (docs/MONEY.md): a ping a minute while the game is in front of you and you've
+  // touched it in the last 2 minutes. It makes tomorrow's daily gift bigger.
+  useEffect(() => {
+    if (!worldId || me.guest) return;
+    let touched = Date.now();
+    const touch = () => {
+      touched = Date.now();
+    };
+    const opts = { passive: true, capture: true } as const;
+    window.addEventListener("pointerdown", touch, opts);
+    window.addEventListener("keydown", touch, opts);
+    window.addEventListener("wheel", touch, opts);
+    const t = setInterval(() => {
+      if (document.visibilityState !== "visible" || Date.now() - touched > 120_000) return;
+      void fetch("/api/active", { method: "POST", cache: "no-store" }).catch(() => {});
+    }, 60_000);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener("pointerdown", touch, opts);
+      window.removeEventListener("keydown", touch, opts);
+      window.removeEventListener("wheel", touch, opts);
+    };
+  }, [worldId, me.guest]);
+  // The daily gift pops up once a day, a few seconds after the game opens (if it's not opened yet).
+  useEffect(() => {
+    if (!worldId || me.guest) return;
+    const day = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
+    let shown = "";
+    try {
+      shown = localStorage.getItem("nt-gift-pop") ?? "";
+    } catch {}
+    if (shown === day) return;
+    const t = setTimeout(() => {
+      try {
+        localStorage.setItem("nt-gift-pop", day);
+      } catch {}
+      setGiftPop(true);
+    }, 6000);
+    return () => clearTimeout(t);
+  }, [worldId, me.guest]);
   // The people list, looked up shortly after the game opens, so "online" opens at once.
   useEffect(() => {
     if (!worldId || me.guest) return;
@@ -2289,7 +2334,7 @@ export function Game({
             {worldId && (
               // Your cash at hand: opens Finance.
               <button
-                onClick={() => worldLife.openFinance()}
+                onClick={() => setMoneyOpen(true)}
                 className={cn("glass relative flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-bold sm:h-9 sm:px-3 sm:text-sm", worldLife.financeGlow && "outline outline-2 outline-offset-2 outline-gold")}
                 aria-label="Finance"
               >
@@ -3513,6 +3558,29 @@ export function Game({
           )}
         </button>
       )}
+      {moneyOpen && worldId && !guest && (
+        <MoneyHome
+          coins={me.coins}
+          perMint={worldRegion?.prices.perMint ?? 1_500}
+          onClose={() => setMoneyOpen(false)}
+          onTaken={() => {
+            playSfx("chime");
+            startTransition(() => router.refresh());
+          }}
+          onProperty={() => worldLife.openFinance()}
+          onShops={() => worldLife.openThings("shops")}
+        />
+      )}
+      {giftPop && worldId && !guest && !moneyOpen && (
+        <DailyGiftPop
+          perMint={worldRegion?.prices.perMint ?? 1_500}
+          onClose={closeGiftPop}
+          onTaken={() => {
+            playSfx("chime");
+            startTransition(() => router.refresh());
+          }}
+        />
+      )}
       {meOpen && worldId && !guest && (
         <MeSheet
           name={me.name ?? "You"}
@@ -3526,7 +3594,7 @@ export function Game({
                 { label: "My look", icon: Palette, colour: "#e64980", go: () => setEditAvatar(true) },
                 { label: "My card", icon: User, colour: "#7048e8", go: () => setPersonId(me.id) },
                 ...(worldLife.hasHome ? [{ label: "Home", icon: House, colour: "#7048e8", go: () => worldLife.goHome() }] : []),
-                { label: "Money", icon: Wallet, colour: "#2b8a3e", go: () => worldLife.openFinance() },
+                { label: "Money", icon: Wallet, colour: "#2b8a3e", go: () => setMoneyOpen(true) },
                 { label: "Photos", icon: ImageIcon, colour: "#f59f00", go: () => setPhone("photos") },
                 { label: "My things", icon: Gem, colour: "#0c8599", go: () => worldLife.openThings("mine") },
                 { label: "Gifts", icon: Gift, colour: "#d6336c", badge: newGifts, go: () => openGifts() },

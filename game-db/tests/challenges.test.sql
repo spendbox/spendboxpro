@@ -5,6 +5,8 @@
 \ir ../070_challenges.sql
 \ir ../070_challenges.sql
 \o /dev/null
+-- The pot alone here (Newtown's prize for a win, part 73, has its own test).
+update game_settings set value = 0 where key = 'challenge_bonus';
 
 create function pg_temp.uid(e text) returns uuid language sql as $$ select id from profiles where email_key = e $$;
 create function pg_temp.check(ok boolean, what text) returns void language plpgsql as $$
