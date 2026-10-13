@@ -15,7 +15,7 @@ import {
   X,
   type LucideIcon,
 } from "@/components/icons";
-import { Briefcase, Swords, Trophy } from "lucide-react";
+import { Briefcase, Swords, Trophy, Wallet } from "lucide-react";
 import { CITY_ASSETS } from "@/lib/city/layout";
 import { Sheet } from "./sheet";
 import { Logo } from "@/components/logo";
@@ -197,39 +197,39 @@ const WORLD_SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[]
     icon: House,
     title: "Start a life",
     body: [
-      "Sign in, pick how your life starts (free, or with a starter pack), and find a home: a room, a flat or a house anywhere on the map.",
-      "Make it yours: plan your rooms and floors, furnish it, add a dance hall or a cinema. Friends can visit; anyone else knocks first.",
+      "Sign in and you get ₦250,000 and a free room to live in straight away (you can move once, free). Your Home bubble shows it on the map.",
+      "Save up for a home of your own (a flat, a house, a duplex) anywhere on the map. Friends can visit; anyone else knocks first.",
     ],
   },
   {
-    icon: Briefcase,
-    title: "Work and money",
+    icon: Wallet,
+    title: "Money",
     body: [
-      "Get a job (some need an interview) or start a side hustle, and get paid as the days go by.",
-      "Money goes on rent, food, bills, fares and fun. Buy property, rent it out, sell it on. Everything costs what it would in the real city.",
+      "Prices are real Lagos prices. Money comes from your daily gift (bigger the more you play, the more days in a row, and the better your reputation), from winning challenges, from events, and from places you own and let out.",
+      "Spend it on rides, clubs, gifts, cars and homes. Tap your cash to see where your money comes from. No bills, no food to buy, no job: just play.",
     ],
   },
   {
     icon: Compass,
     title: "Get around",
     body: [
-      "Explore: rides (the train, a ferry, a hot-air balloon, a helicopter), parks, clubs, markets and landmarks.",
-      "Walk the streets yourself, or jump across the map (on foot, the fare is paid like a real trip). Every place has something to do inside.",
+      "Tap any building or landmark on the map to go there (the fare is paid like a real trip). Every place has something to do inside.",
+      "Or tap Walk at the bottom and walk the streets yourself. The round button in the lower left brings you back to where you are.",
     ],
   },
   {
     icon: Users,
     title: "People",
     body: [
-      "See who's online and who's nearby, chat privately or with everyone in a place, and talk out loud in a voice call (never recorded).",
+      "See who's online and who's nearby, chat privately, and talk out loud in a voice call with the people in the same place (never recorded).",
       "Add friends, send gifts and money, sign a guest book, leave notes on the map.",
     ],
   },
   {
-    icon: Swords,
-    title: "Fight: challenges",
+    icon: Trophy,
+    title: "Challenge people",
     body: [
-      "Challenge everyone nearby to a game (Whot! and Ludo now, more coming): everyone puts the same stake in the pool and the winner takes it.",
+      "Tap the trophy (top right) and challenge everyone nearby to a game (Whot! and Ludo now, more coming): everyone puts the same stake in the pool and the winner takes it.",
       "Your first challenge is free; challenging again soon after costs a fee. Hosting and winning challenges raise your reputation.",
     ],
   },

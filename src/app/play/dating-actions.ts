@@ -16,7 +16,7 @@ function say(message: string | undefined): { ok: false; error: string } {
   const code = (message ?? "").split(":")[0];
   const words: Record<string, string> = {
     self: "That's you!",
-    you_closed: "Switch on Open to dating first (Dating, on your phone).",
+    you_closed: "Switch on Open to dating first (tap your face, top left, then Dating).",
     they_closed: "They're not open to dating.",
     you_taken: "You're already with someone.",
     they_taken: "They're with someone.",

@@ -1,4 +1,4 @@
-// How a life on the real map can start (docs/PACKS.md): free with ₥6,500, or with a starter pack
+// How a life on the real map can start (docs/PACKS.md): free with ₦250,000 and a room, or with a starter pack
 // bought once, before your first home, through Paystack (with things to own and, for the bigger
 // ones, a furnished home). Mint is never turned back into cash.
 
@@ -22,7 +22,7 @@ export type Pack = {
 // keep meaning something for everyone).
 export const PACKS: Pack[] = [
   // The ids are stored with payments: rename the labels freely, never the ids.
-  { id: "free", label: "The Hustler", story: "Start from scratch", mint: 6_500, naira: 0, what: "A flat almost anywhere in Lagos", perks: [], gifts: [] },
+  { id: "free", label: "The Hustler", story: "Start from scratch", mint: 166.67, naira: 0, what: "A free room to live in, and ₦250,000 to start", perks: [], gifts: [] },
   {
     id: "starter",
     label: "Uncle Abroad",

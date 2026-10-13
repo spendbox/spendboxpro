@@ -5,8 +5,8 @@ import { rememberPerson } from "./recent-rail";
 import { GenderMark } from "./people-list";
 import { setGender } from "../people-actions";
 import { useEffect, useState } from "react";
-import { Banknote, BellRing, Car, DoorClosed, Gift, House, Lightbulb, MapPin, MessageCircle, StickyNote, UserPlus } from "lucide-react";
-import { Star } from "@/components/icons";
+import { Banknote, BellRing, Car, Dices, Gift, House, MapPin, MessageCircle, StickyNote, UserPlus } from "lucide-react";
+import { Star, X } from "@/components/icons";
 import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar } from "@/lib/avatar";
 import { myThings, type MyItem } from "../item-actions";
@@ -15,9 +15,10 @@ import { Sheet } from "../sheet";
 import type { Prices } from "@/lib/world/region";
 import { DatingRow, StreetRow } from "./street-dating";
 
-// Anyone's card on the real map (docs/PEOPLE.md): who they are, where they live, their job, car,
-// inventions, friends and reputation; knock on their door, leave a note or a wrapped gift, add
-// them as a friend, and the Hug / Shake / Report buttons.
+// Anyone's card on the real map (docs/PEOPLE.md): who they are (with Add friend by their name),
+// Message and Give money up top, Hug / Shake / Report, a game against them (coming soon), where
+// they live, their job, car, inventions and friends; a note or a wrapped gift at their door,
+// dating, and the Rival box (prank, steal).
 
 export function PersonCard({
   id,
@@ -71,40 +72,92 @@ export function PersonCard({
     if (mode !== "gift" || things) return;
     void myThings().then((t) => setThings((t?.items ?? []).filter((i) => i.listPrice == null)));
   }, [mode, things]);
-  const leave = async (kind: "knock" | "note" | "gift", itemId?: number, itemName?: string) => {
+  const leave = async (kind: "note" | "gift", itemId?: number, itemName?: string) => {
     if (!card) return;
     setBusy(true);
-    const r = await leaveAtDoor(card.id, kind, kind === "gift" ? note : kind === "note" ? note : undefined, itemId);
+    const r = await leaveAtDoor(card.id, kind, note, itemId);
     setBusy(false);
     if (!r.ok) return onDone(r.error, false);
     setMode(null);
     setNote("");
-    rememberPerson(card, kind === "knock" ? "Knocked" : kind === "note" ? "Left a note" : "Gave a gift");
+    rememberPerson(card, kind === "note" ? "Left a note" : "Gave a gift");
     if (kind === "gift") announceGiftSent(card.name, itemName ?? "Your gift");
-    onDone(kind === "knock" ? `You knocked on ${card.name}'s door.` : kind === "note" ? `Note left for ${card.name}.` : `${itemName ?? "Your gift"} is wrapped and waiting at ${card.name}'s door.`, true);
+    onDone(kind === "note" ? `Note left for ${card.name}.` : `${itemName ?? "Your gift"} is wrapped and waiting at ${card.name}'s door.`, true);
   };
+  const canAct = !!card && !self && !card.blocked;
   return (
-    <Sheet onClose={onClose} clear>
+    <Sheet onClose={onClose} above centred>
       {card === undefined ? (
         <div className="h-40 animate-pulse rounded-2xl bg-ink/5" />
       ) : card === null ? (
         <p className="py-6 text-center text-sm text-muted">We couldn&apos;t find them.</p>
       ) : (
         <>
-          <div className="flex items-center gap-3">
-            <AvatarFace avatar={cleanAvatar(card.avatar, card.name)} size={56} />
+          {/* Who: face, name (Add friend right beside it), online, reputation. */}
+          <div className="flex items-start gap-3 pr-8">
+            <span className="relative shrink-0">
+              <AvatarFace avatar={cleanAvatar(card.avatar, card.name)} size={64} />
+              {card.online && <span className="absolute bottom-0.5 right-0.5 size-3.5 rounded-full bg-[#2f9e44] ring-2 ring-panel" aria-label="Online" />}
+            </span>
             <div className="min-w-0 flex-1">
-              <h2 className="truncate font-display text-xl font-extrabold">{card.name}</h2>
-              {card.gender ? <GenderMark gender={card.gender} /> : self && <GenderPick />}
-              <p className="flex items-center gap-1.5 text-xs text-muted">
-                <span className={`size-2 rounded-full ${card.online ? "bg-me" : "bg-ink/25"}`} />
-                {card.online ? "Here now" : card.seenAt ? `Last here ${ago(Date.now() - Date.parse(card.seenAt))}` : "Not seen lately"}
-                <span className="ml-1 inline-flex items-center gap-0.5 font-semibold text-gold-dark">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                <h2 className="min-w-0 truncate font-display text-xl font-extrabold">{card.name}</h2>
+                {!self && !card.friend && onAddFriend && (
+                  <button onClick={() => onAddFriend({ id: card.id, name: card.name })} className="flex h-7 shrink-0 items-center gap-1 rounded-full bg-[#d6336c] px-2.5 text-[11px] font-bold text-white shadow-sm">
+                    <UserPlus className="size-3.5" /> Add friend
+                  </button>
+                )}
+                {!self && card.friend && <span className="flex h-7 shrink-0 items-center rounded-full bg-[#d6336c]/10 px-2.5 text-[11px] font-bold text-[#d6336c]">Friends ✓</span>}
+              </div>
+              <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted">
+                {card.gender ? <GenderMark gender={card.gender} /> : self && <GenderPick />}
+                {card.online ? (
+                  <span className="font-semibold text-[#2f9e44]">Online</span>
+                ) : (
+                  <span>{card.seenAt ? `Last seen ${ago(Date.now() - Date.parse(card.seenAt))}` : "Not seen lately"}</span>
+                )}
+                <span className="inline-flex items-center gap-0.5 font-semibold text-gold-dark">
                   <Star className="size-3" /> {card.reputation}
                 </span>
               </p>
             </div>
           </div>
+          <button onClick={onClose} className="absolute right-4 top-4 grid size-8 place-items-center rounded-full bg-ink/5 hover:bg-ink/10" aria-label="Close">
+            <X className="size-4" />
+          </button>
+
+          {/* The main things to do: big and obvious. */}
+          {canAct && (onMessage || onGive) && (
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              {onMessage && (
+                <button onClick={() => onMessage({ id: card.id, name: card.name })} className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-[#7048e8] text-sm font-bold text-white shadow">
+                  <MessageCircle className="size-5" /> Message
+                </button>
+              )}
+              {onGive && (
+                <button onClick={() => onGive({ id: card.id, name: card.name, avatar: card.avatar })} className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-[#12a37a] text-sm font-bold text-white shadow">
+                  <Banknote className="size-5" /> Give money
+                </button>
+              )}
+            </div>
+          )}
+          {!self && <div className="mt-2 flex flex-wrap items-center gap-2">{greet({ id: card.id, name: card.name })}</div>}
+
+          {/* Play a game against them: coming soon. */}
+          {canAct && (
+            <div className="mt-3 flex items-center gap-3 rounded-2xl bg-[#7048e8]/[0.07] p-3">
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#7048e8] text-white">
+                <Dices className="size-5" />
+              </span>
+              <p className="min-w-0 flex-1 text-sm">
+                <b>Play a game with {card.name}</b>
+                <span className="block text-xs text-muted">Whot!, Ludo and more, just the two of you.</span>
+              </p>
+              <span className="shrink-0 rounded-full bg-ink/5 px-2.5 py-1 text-[11px] font-semibold text-muted">Coming soon</span>
+            </div>
+          )}
+
+          {/* About them. */}
           <ul className="mt-3 space-y-1.5 text-sm">
             {card.home && (
               <li className="flex items-center gap-2">
@@ -124,24 +177,17 @@ export function PersonCard({
                 <Car className="size-4 shrink-0 text-muted" /> Drives a {card.car}
               </li>
             )}
-            {card.inventions.length > 0 && (
-              <li className="flex items-start gap-2">
-                <Lightbulb className="mt-0.5 size-4 shrink-0 text-muted" /> Invented {card.inventions.map((k) => `${k.name}${k.sold ? ` (${k.sold} sold)` : ""}`).join(", ")}
-              </li>
-            )}
             {card.friends.length > 0 && <li className="text-xs text-muted">Friends with {card.friends.map((f) => f.name).join(", ")}</li>}
           </ul>
 
-          {card.home && !card.blocked && (
-            <div className="mt-4 grid grid-cols-3 gap-2">
-              <button disabled={busy} onClick={() => void leave("knock")} className="flex flex-col items-center gap-1 rounded-2xl bg-ink/[0.05] py-2.5 text-xs font-semibold disabled:opacity-40">
-                <DoorClosed className="size-5" /> Knock
+          {/* Leave something at their door. */}
+          {card.home && canAct && (
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button onClick={() => setMode(mode === "note" ? null : "note")} className={`flex h-10 items-center justify-center gap-1.5 rounded-xl text-xs font-semibold ${mode === "note" ? "bg-ink text-white" : "bg-ink/[0.05]"}`}>
+                <StickyNote className="size-4" /> Leave a note
               </button>
-              <button onClick={() => setMode(mode === "note" ? null : "note")} className={`flex flex-col items-center gap-1 rounded-2xl py-2.5 text-xs font-semibold ${mode === "note" ? "bg-ink text-white" : "bg-ink/[0.05]"}`}>
-                <StickyNote className="size-5" /> Note
-              </button>
-              <button onClick={() => setMode(mode === "gift" ? null : "gift")} className={`flex flex-col items-center gap-1 rounded-2xl py-2.5 text-xs font-semibold ${mode === "gift" ? "bg-ink text-white" : "bg-ink/[0.05]"}`}>
-                <Gift className="size-5" /> Gift
+              <button onClick={() => setMode(mode === "gift" ? null : "gift")} className={`flex h-10 items-center justify-center gap-1.5 rounded-xl text-xs font-semibold ${mode === "gift" ? "bg-ink text-white" : "bg-ink/[0.05]"}`}>
+                <Gift className="size-4" /> Send a gift
               </button>
             </div>
           )}
@@ -162,7 +208,7 @@ export function PersonCard({
               ) : things === null ? (
                 <div className="h-16 animate-pulse rounded-2xl bg-ink/5" />
               ) : things.length === 0 ? (
-                <p className="text-xs text-muted">You have nothing to give yet. Buy something from the Shops on your phone.</p>
+                <p className="text-xs text-muted">You have nothing to give yet. Buy something from Shops (tap your face, top left).</p>
               ) : (
                 <ul className="max-h-48 divide-y divide-ink/5 overflow-y-auto rounded-2xl ring-1 ring-ink/5">
                   {things.map((i) => (
@@ -178,28 +224,8 @@ export function PersonCard({
             </div>
           )}
 
-          {!self && !card.blocked && <DatingRow id={card.id} name={card.name} onDone={onDone} onOpenDating={() => onOpenDating?.()} />}
-          {!self && !card.blocked && <StreetRow id={card.id} name={card.name} hasHome={!!card.home} prices={prices ?? null} onDone={onDone} />}
-
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            {!self && !card.blocked && onMessage && (
-              <button onClick={() => onMessage({ id: card.id, name: card.name })} className="flex items-center gap-1 rounded-full bg-ink px-3 py-1.5 text-xs font-semibold text-white">
-                <MessageCircle className="size-3.5" /> Message
-              </button>
-            )}
-            {!self && !card.blocked && onGive && (
-              <button onClick={() => onGive({ id: card.id, name: card.name, avatar: card.avatar })} className="flex items-center gap-1 rounded-full bg-[#12a37a] px-3 py-1.5 text-xs font-semibold text-white">
-                <Banknote className="size-3.5" /> Give money
-              </button>
-            )}
-            {greet({ id: card.id, name: card.name })}
-            {!card.friend && onAddFriend && (
-              <button onClick={() => onAddFriend({ id: card.id, name: card.name })} className="flex items-center gap-1 rounded-full bg-[#d6336c]/10 px-2.5 py-1.5 text-xs font-semibold text-[#d6336c]">
-                <UserPlus className="size-3.5" /> Add friend
-              </button>
-            )}
-            {card.friend && <span className="rounded-full bg-[#d6336c]/10 px-2.5 py-1.5 text-xs font-semibold text-[#d6336c]">Friends</span>}
-          </div>
+          {canAct && <DatingRow id={card.id} name={card.name} onDone={onDone} onOpenDating={() => onOpenDating?.()} />}
+          {canAct && <StreetRow id={card.id} name={card.name} hasHome={!!card.home} prices={prices ?? null} onDone={onDone} />}
         </>
       )}
     </Sheet>
@@ -214,17 +240,17 @@ export function ago(ms: number) {
   return h < 48 ? `${h}h ago` : `${Math.round(h / 24)} days ago`;
 }
 
-/** Your own card, before you've said: man or woman (shown on your card and in the lists). */
+/** Your own card, before you've said: male or female (shown on your card and in the lists). */
 function GenderPick() {
   const [done, setDone] = useState<string | null>(null);
   if (done) return <p className="text-[11px] font-semibold text-me">{done}</p>;
   return (
     <p className="flex items-center gap-1.5 text-[11px] text-muted">
-      I am a
+      I am
       {(
         [
-          ["male", "man"],
-          ["female", "woman"],
+          ["male", "Male"],
+          ["female", "Female"],
         ] as const
       ).map(([g, label]) => (
         <button key={g} onClick={() => void setGender(g).then((r) => setDone(r.ok ? "Saved" : r.error))} className="rounded-full bg-ink/5 px-2 py-0.5 font-semibold text-ink">

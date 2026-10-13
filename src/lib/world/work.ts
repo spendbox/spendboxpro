@@ -7,6 +7,7 @@
 // day (a game month is 30 game days; a game day is 2 real hours, see docs/LIFE.md). Other places
 // will get their own list when they open.
 
+import { everyday } from "./price-level.ts";
 import type { Building } from "./buildings.ts";
 import type { Prices } from "./region.ts";
 
@@ -209,6 +210,15 @@ export function fareMint(mode: Commute, km: number, prices: Prices, ferryKm = 0)
   if (land < 0.2 && !ferry) return 0;
   const road = land < 0.2 ? 0 : Math.min(f.cap ?? Infinity, f.base + f.perKm * land);
   return Math.round(((road + ferry) / prices.perMint) * 100) / 100;
+}
+
+/**
+ * A trip across the map to a place (not the commute to work, which stays at real prices while
+ * jobs last): the fare at Newtown's everyday price level (src/lib/world/price-level.ts).
+ */
+export function tripFareMint(mode: Commute, km: number, prices: Prices, ferryKm = 0): number | null {
+  const f = fareMint(mode, km, prices, ferryKm);
+  return f === null ? null : Math.round(everyday(f) * 100) / 100;
 }
 
 /** "by danfo bus", "by ferry and keke", "on foot and by ferry": how a trip goes, for buttons. */

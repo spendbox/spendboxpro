@@ -10,6 +10,7 @@ import type { LifeStatus } from "@/lib/world/property-api";
 import { ferryKmBetween } from "@/lib/world/trips";
 import { effectsOf, type ItemEffect } from "@/lib/world/items";
 import { fareOrBus, GAME_DAY_HOURS, tripKmBetween, type Commute } from "@/lib/world/work";
+import { SIMPLE_LIFE } from "@/lib/world/simple-life";
 
 /** Everything about a player's day as the database has it. */
 export async function lifeRows(userId: string) {
@@ -40,6 +41,8 @@ export async function lifeRows(userId: string) {
  * (src/lib/world/breakthroughs.ts). Every life action calls this first.
  */
 export async function tickLife(userId: string): Promise<LifeStatus | null> {
+  // The simple life: no bills, food, body and mind, or pay (src/lib/world/simple-life.ts).
+  if (SIMPLE_LIFE) return null;
   const rows = await lifeRows(userId);
   if (!rows) return null;
   const { life, job, hustles } = rows;

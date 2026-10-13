@@ -63,8 +63,8 @@ import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
 import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
-import { BookOpen, Church, Dumbbell, FerrisWheel, GraduationCap, Landmark as LandmarkIcon, Plane, Ship, Stethoscope, TrainFront, Trophy, UtensilsCrossed } from "lucide-react";
-import { BellOff, BellRing, LocateFixed, PencilRuler, Wallet, CarFront, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Newspaper, Palette, ShoppingBag, Smartphone, Store, Swords, User } from "lucide-react";
+import { BookOpen, Church, FerrisWheel, Landmark as LandmarkIcon, Plane, Ship, TrainFront, Trophy, UtensilsCrossed } from "lucide-react";
+import { BellOff, BellRing, LocateFixed, Rocket, Wallet, CarFront, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Palette, ShoppingBag, Store, Swords, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
 import { GhostsSheet } from "./ghost-duel/ghosts-sheet";
@@ -90,15 +90,16 @@ import { MyGiftsSheet } from "./my-gifts-sheet";
 import { StreakPill, StreakSheet } from "./streak-sheet";
 import { useQuestTracker } from "./activities/quest-tracker";
 import { QuestBanner, QuestCelebration, QuestSheet } from "./activities/quest-ui";
-import { Chat } from "./chat";
+import { Chat, type NewtownLine } from "./chat";
 import { sendPhoto, type ChatTarget } from "./chat-actions";
 import { announceChatSent } from "./chat-photo";
 import { homePlanFor } from "./life/home-plan-actions";
 import type { HomePlan } from "@/lib/home-plan";
 import { setEventSoundsEnabled } from "./city/event-sounds";
 import type { CityDancer, CityEvent, CityFriendPin, CityGhost, CityInteract, CityMarkers, CityRide, RideTarget } from "./city-view";
-import { FeedRow, NotificationsPanel, SwipeRow, type FeedIcon, type FeedItem } from "./notifications";
+import { FeedIconView, FeedRow, NotificationsPanel, SwipeRow, type FeedIcon, type FeedItem } from "./notifications";
 import { dismissNotices, readNotices } from "./notice-actions";
+import { closePhoneNotices, setPhoneBadge } from "./phone/phone-notices";
 import { signOutNow } from "../login/actions";
 import { claimBalloon, recordVisit } from "./profile-actions";
 import { myVisits, payClubEntry, payFare, payRide, payVisit } from "./fee-actions";
@@ -116,18 +117,18 @@ import { avatar3dEnabled } from "./avatar3d-flag";
 import { worldPreview } from "./world-flag";
 import { PlacePill } from "./place-pill";
 import { CityCard } from "./city-card";
-import { useWorldLife } from "./life/world-life";
+import { Ripple, useWorldLife } from "./life/world-life";
 import type { ExplorePlace } from "@/lib/world/explore";
 import { Joystick } from "./joystick";
 import { PeopleList, prefetchPeople } from "./people/people-list";
 import { StatsSheet } from "./stats-sheet";
 import { GiftPop, GiftSent } from "./people/gift-pop";
-import { PhoneHub } from "./phone/phone-hub";
+import { MeSheet } from "./me-sheet";
+import { DailyGiftPop, MoneyHome } from "./money-home";
 import { RecentRail, rememberPerson } from "./people/recent-rail";
 import { PrankReveal, usePrankReveal } from "./people/prank-reveal";
 import { openAdvertise } from "./life/advertise-panel";
 import { Fight, type ChallengeLight } from "./fight/fight";
-import { WelcomeFeatures } from "./welcome-features";
 import { CallBar } from "./call/call-bar";
 import * as propertyActions from "./property-actions";
 import * as workActions from "./work-actions";
@@ -445,9 +446,15 @@ export function Game({
   const [howOpen, setHowOpen] = useState(false);
   /** The real map: the city card (tap the place's name) and the phone's own menu (bottom right). */
   const [cityOpen, setCityOpen] = useState(false);
-  const [phoneHub, setPhoneHub] = useState(false);
+  /** Your money (tap your cash), and the daily gift popping up once a day. */
+  const [moneyOpen, setMoneyOpen] = useState(false);
+  const [giftPop, setGiftPop] = useState(false);
+  const closeGiftPop = useCallback(() => setGiftPop(false), []);
+  /** You (your face, top left): everything that isn't chat. */
+  const [meOpen, setMeOpen] = useState(false);
+  /** Open Newtown's own chat (a notice tapped...): changes to ask. */
+  const [newtownAsk, setNewtownAsk] = useState(0);
   /** What counts as new on the phone's screen (when it was last opened), and a little ring when something arrives. */
-  const [phoneSince, setPhoneSince] = useState(() => new Date(0).toISOString());
   const [phoneRing, setPhoneRing] = useState(0);
   /** Someone's card (a face tapped on the map, or from your doorstep), and your doorstep. */
   const [personId, setPersonId] = useState<string | null>(null);
@@ -620,7 +627,8 @@ export function Game({
   const [pickRide, setPickRide] = useState(false);
   const [exploreTab, setExploreTab] = useState<"places" | "rides" | "sports">("rides");
   /** The real map's Explore: the places worth going to (worked out when it opens). */
-  const [explorePlacesNow, setExplorePlaces] = useState<ExplorePlace[] | null>(null);
+  // Explore is hidden on the real map for now (its places list comes back with it: worldLife.explore()).
+  const [explorePlacesNow] = useState<ExplorePlace[] | null>(null);
   const [npcTap, setNpcTap] = useState<{ id: string; at: number } | null>(null);
   const [balloonCount, setBalloonCount] = useState(0);
   const [dmRequest, setDmRequest] = useState<{ id: string; name: string; at: number } | null>(null);
@@ -770,22 +778,40 @@ export function Game({
     };
     // A new area: look again (the people round here show under the menu).
   }, [worldId, me.guest, worldLife.centerRef, worldArea]);
+  // You, on the map where you are (your home, or the place you're at), as everyone else sees you.
+  const mySpotX = worldLife.mySpot?.x ?? null;
+  const mySpotZ = worldLife.mySpot?.z ?? null;
+  const homeX = worldLife.homeSpot?.x ?? null;
+  const homeZ = worldLife.homeSpot?.z ?? null;
   const facesOnMap: CityFriendPin[] = useMemo(() => {
     const live = new Set(friendsAt.map((f) => f.id));
+    const myRoom = mySpotX !== null && mySpotZ !== null ? `b:${spiralIndex(Math.round(mySpotX), Math.round(mySpotZ))}` : null;
+    const homeRoom = homeX !== null && homeZ !== null ? `b:${spiralIndex(Math.round(homeX), Math.round(homeZ))}` : null;
+    const mine: CityFriendPin[] = me.guest
+      ? []
+      : [
+          // Your home: a house bubble (tap it for your home's card).
+          ...(homeRoom ? [{ id: `home:${me.id}`, name: "Home", avatar: me.avatar, room: homeRoom, home: true }] : []),
+          // You, where you are: your own name in gold.
+          ...(myRoom ? [{ id: me.id, name: "You", avatar: me.avatar, room: myRoom, status: "online" as const, mine: true }] : []),
+        ];
     return [
-      ...friendsAt.map((f) => ({ ...f, friend: true, status: "online" as const })),
-      ...peopleOut.filter((p) => !live.has(p.id)).map((p) => ({ id: p.id, name: p.name, avatar: cleanAvatar(p.avatar, p.name), room: `b:${spiralIndex(p.x, p.z)}`, status: p.status, friend: p.friend })),
+      ...mine,
+      ...friendsAt.filter((f) => f.id !== me.id).map((f) => ({ ...f, friend: true, status: "online" as const })),
+      ...peopleOut.filter((p) => !live.has(p.id) && p.id !== me.id).map((p) => ({ id: p.id, name: p.name, avatar: cleanAvatar(p.avatar, p.name), room: `b:${spiralIndex(p.x, p.z)}`, status: p.status, friend: p.friend })),
     ];
-  }, [friendsAt, peopleOut]);
-  const onlineNear = useMemo(() => facesOnMap.filter((f) => f.status === "online").length, [facesOnMap]);
+  }, [friendsAt, peopleOut, mySpotX, mySpotZ, homeX, homeZ, me.id, me.avatar, me.guest]);
+  const onlineNear = useMemo(() => facesOnMap.filter((f) => f.status === "online" && !f.mine && !f.home).length, [facesOnMap]);
   const onlineNow = Math.max(1, cityOnline ?? 0, online ?? 0, onlineNear);
   const [statsOpen, setStatsOpen] = useState(false);
   /** On foot on the streets: the joystick's state (the 3D city reads it every frame), and whether you're walking. */
-  const walkStick = useRef({ on: false, x: 0, y: 0 });
+  const walkStick = useRef<{ on: boolean; x: number; y: number; from?: { x: number; z: number } | null }>({ on: false, x: 0, y: 0 });
   /** Inside a planned home: the joystick for walking round it as your avatar. */
   const homeStick = useRef({ on: true, x: 0, y: 0 });
   const [walking, setWalkingNow] = useState(false);
   const setWalking = (on: boolean) => {
+    // You start walking from where you are on the map (your home, or the place you're at).
+    if (on) walkStick.current.from = worldLife.mySpot ?? null;
     walkStick.current.on = on;
     walkStick.current.x = walkStick.current.y = 0;
     setWalkingNow(on);
@@ -803,6 +829,7 @@ export function Game({
       <PeopleList
         region={worldId}
         compact={where === "chat"}
+        onlineOnly={where === "stats"}
         centre={() => worldLife.centerRef.current?.() ?? { x: 0, z: 0 }}
         onMessage={(p) => {
           setStatsOpen(false);
@@ -819,6 +846,46 @@ export function Game({
         }}
       />
     ) : undefined;
+  // Time in the city (docs/MONEY.md): a ping a minute while the game is in front of you and you've
+  // touched it in the last 2 minutes. It makes tomorrow's daily gift bigger.
+  useEffect(() => {
+    if (!worldId || me.guest) return;
+    let touched = Date.now();
+    const touch = () => {
+      touched = Date.now();
+    };
+    const opts = { passive: true, capture: true } as const;
+    window.addEventListener("pointerdown", touch, opts);
+    window.addEventListener("keydown", touch, opts);
+    window.addEventListener("wheel", touch, opts);
+    const t = setInterval(() => {
+      if (document.visibilityState !== "visible" || Date.now() - touched > 120_000) return;
+      void fetch("/api/active", { method: "POST", cache: "no-store" }).catch(() => {});
+    }, 60_000);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener("pointerdown", touch, opts);
+      window.removeEventListener("keydown", touch, opts);
+      window.removeEventListener("wheel", touch, opts);
+    };
+  }, [worldId, me.guest]);
+  // The daily gift pops up once a day, a few seconds after the game opens (if it's not opened yet).
+  useEffect(() => {
+    if (!worldId || me.guest) return;
+    const day = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
+    let shown = "";
+    try {
+      shown = localStorage.getItem("nt-gift-pop") ?? "";
+    } catch {}
+    if (shown === day) return;
+    const t = setTimeout(() => {
+      try {
+        localStorage.setItem("nt-gift-pop", day);
+      } catch {}
+      setGiftPop(true);
+    }, 6000);
+    return () => clearTimeout(t);
+  }, [worldId, me.guest]);
   // The people list, looked up shortly after the game opens, so "online" opens at once.
   useEffect(() => {
     if (!worldId || me.guest) return;
@@ -1284,6 +1351,19 @@ export function Game({
   }, [state.events, state.notifications, liveNotes, readIds, goneIds, state.worldEvents, state.me.name, serverNowMs, botName, myLastSpot, where, me.avatar, worldId]);
   // Unread: on the real map, notices you haven't read (exact, on every device); in the old game, the ones since you last looked.
   const unread = feed.filter((f) => (f.noteId ? !f.read : Date.parse(f.at) > Date.parse(feedSeenAt))).length;
+  // The number on the app's icon (on phones that show one): what's still unread here.
+  useEffect(() => {
+    if (!worldId || me.guest) return;
+    setPhoneBadge(unread + chatUnread);
+  }, [worldId, me.guest, unread, chatUnread]);
+  /** The bell for turning notifications on (shown while they're off on this phone). */
+  const turnOnBell = () => {
+    if (pushNeedsHome) return setAlertsOpen(true);
+    void turnOnNotifications().then((r) => {
+      setMessage({ text: r.text, tone: r.ok ? "good" : "info" });
+      if (r.ok) setPushOn(true);
+    });
+  };
   /** You've seen these notices: they stop counting at once (and on the server). */
   const markRead = useCallback((ids: number[]) => {
     const fresh = ids.filter((id) => id > 0);
@@ -1291,6 +1371,18 @@ export function Game({
     setReadIds((s) => new Set([...s, ...fresh]));
     void readNotices(fresh).catch(() => {});
   }, []);
+  /** Newtown's own chat opened: everything in it is read (here, on the server and on the phone). */
+  const readAllNotices = useCallback(() => {
+    const ids = feed.flatMap((f) => (f.noteId && !f.read ? [f.noteId] : []));
+    if (ids.length) markRead(ids);
+    setFeedSeenAt(new Date().toISOString());
+    closePhoneNotices("notice");
+  }, [feed, markRead]);
+  /** Open Newtown's own chat (your notices), in the chat. */
+  const openNewtown = () => {
+    setChatOpen(true);
+    setNewtownAsk(Date.now());
+  };
   /** Swiped away (or Clear all). */
   const dismissNote = useCallback((ids: number[]) => {
     if (!ids.length) return;
@@ -1298,9 +1390,11 @@ export function Game({
     void dismissNotices(ids).catch(() => {});
   }, []);
 
-  // Opening the notifications list reads what's in it (the counter drops at once).
+  // Opening the notifications list reads what's in it (the counter drops at once), and they go
+  // from the phone's own notifications too.
   useEffect(() => {
     if (!alertsOpen) return;
+    closePhoneNotices("notice");
     const ids = feed.flatMap((f) => (f.noteId && !f.read ? [f.noteId] : []));
     if (!ids.length) return;
     const t = setTimeout(() => markRead(ids), 600);
@@ -1319,6 +1413,30 @@ export function Game({
       localStorage.setItem("hs-gifts-seen", String(t));
     } catch {}
   }
+  // Newtown's own chat: your notices as messages (tap one to go where it's about).
+  const newtownLines: NewtownLine[] = feed.slice(0, 60).map((f) => {
+    const go =
+      f.eventId ? () => openEvent(f.eventId!)
+      : f.icon === "gift" || f.icon === "hug" || f.icon === "handshake" ? () => openGifts()
+      : f.kind === "doorstep" ? () => setDoorstepOpen(true)
+      : null;
+    return {
+      key: f.key,
+      text: f.text,
+      at: f.at,
+      unread: f.noteId ? !f.read : Date.parse(f.at) > Date.parse(feedSeenAt),
+      icon: <FeedIconView icon={f.icon} tone={f.tone} className="size-7" />,
+      onTap: go
+        ? () => {
+            if (f.noteId) markRead([f.noteId]);
+            setChatOpen(false);
+            go();
+          }
+        : undefined,
+    };
+  });
+  // The people online round where you're looking: faces along the top of your chats.
+  const onlineFaces = peopleOut.filter((p) => p.status === "online" && p.id !== me.id).map((p) => ({ id: p.id, name: p.name, avatar: cleanAvatar(p.avatar, p.name) }));
   // Hug and Shake hands buttons for someone (they say how it went on the message line).
   const greet = (p: { id: string; name: string }, compact = true) => (
     <GreetButtons person={p} compact={compact} onDone={(text, ok) => setMessage({ text, tone: ok ? "good" : "bad" })} />
@@ -1379,6 +1497,7 @@ export function Game({
         const u = new URL(String((e.data as { url?: string }).url ?? "/play"), location.origin);
         const dm = u.searchParams.get("dm");
         if (dm) chatWith({ id: dm, name: u.searchParams.get("name") || "Message" });
+        else if (u.searchParams.get("alerts")) openNewtown();
       }
     };
     navigator.serviceWorker?.addEventListener("message", onMessage);
@@ -1396,6 +1515,14 @@ export function Game({
     if (me.guest) return;
     const sp = new URLSearchParams(window.location.search);
     const dm = sp.get("dm");
+    // Opened from a notice's notification: the notifications list.
+    if (!dm && sp.get("alerts")) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("alerts");
+      window.history.replaceState(null, "", url);
+      const t = setTimeout(() => openNewtown(), 900);
+      return () => clearTimeout(t);
+    }
     if (!dm) return;
     const name = sp.get("name") || "Message";
     const url = new URL(window.location.href);
@@ -1589,10 +1716,6 @@ export function Game({
     setRide({ kind: r.kind, index: r.index });
     setMessage({ icon: RIDE_ICONS[r.kind], text: guest && r.kind !== "slide" ? "Enjoy the ride! Sign in to chat with the people on board." : RIDE_HELLO[r.kind], tone: "info" });
   }
-  // Inside your own home (any floor of it).
-  const homeAt = worldLife.homeBuilding ? ownedSpot(worldLife.homeBuilding) : null;
-  const homeRoom = homeAt ? `b:${spiralIndex(homeAt.x, homeAt.z)}` : null;
-  const inMyHome = !!homeRoom && !!rooms.myRoomInfo && (rooms.myRoomInfo.id === homeRoom || rooms.myRoomInfo.id.startsWith(`${homeRoom}:`));
   // Planned homes (docs/HOME_PLANNER.md): yours as soon as the game opens, and any other home as
   // you walk into it, so the inside is drawn from its plan for you and for visitors.
   const [homePlans, setHomePlans] = useState<Record<number, HomePlan>>({});
@@ -1631,6 +1754,16 @@ export function Game({
   const enteredRoom = place ? (rooms.myRoomInfo?.id ?? null) : null;
   const enteredTile = enteredRoom ? Number(/^b:(\d+)/.exec(enteredRoom)?.[1] ?? NaN) : NaN;
   const inPlannedHome = !!worldId && Number.isFinite(enteredTile) && enteredTile in homePlans;
+  // How tall the panel along the bottom is (who's here, Leave...), so the home joystick sits above it.
+  const bottomDock = useRef<HTMLDivElement>(null);
+  const [bottomDockH, setBottomDockH] = useState(96);
+  useEffect(() => {
+    const el = bottomDock.current;
+    if (!el || !inPlannedHome) return;
+    const ro = new ResizeObserver(() => setBottomDockH(Math.round(el.getBoundingClientRect().height)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [inPlannedHome]);
   // Inside a place when the page reloads (the game updated, or the phone dropped the tab): back
   // inside it. Remembered while you're in; forgotten once you leave.
   const lastRoom = useRef<{ pending: boolean } | null>(null);
@@ -1672,7 +1805,7 @@ export function Game({
   // What each kind of place is for: one main thing to do there, a tap away (the doctor at a
   // hospital, a course at a campus, food at a restaurant, a boat ride at the port...).
   const [flightsOpen, setFlightsOpen] = useState(false);
-  // Fight (docs/CHALLENGES.md): the picker, and the challenges lit up on the map.
+  // Challenge (docs/CHALLENGES.md): the picker, and the challenges lit up on the map.
   const [fightOpen, setFightOpen] = useState(false);
   const [challengeLights, setChallengeLights] = useState<ChallengeLight[]>([]);
   const [prayer, setPrayer] = useState(0);
@@ -1686,28 +1819,13 @@ export function Game({
       const r = rideList.find((x) => x.kind === kind);
       return r ? { label, run: () => boardRide(r) } : null;
     };
-    const work = () => {
-      if (!Number.isFinite(enteredTile)) return;
-      const [x, z] = spiralXY(enteredTile);
-      worldLife.openWorkplace(x, z, placeRoom?.name ?? "Here");
-    };
     const sport = THEME_SPORT_GAME[theme];
     if (sport) return { label: "Watch the match", icon: Trophy, run: () => setSportsOpen(sport) };
-    if (inMyHome) return { label: "Plan my home", icon: PencilRuler, run: worldLife.openPlanner };
     if (inPlannedHome) {
       const [hx, hz] = spiralXY(enteredTile);
       return { label: "Sign the guest book", icon: BookOpen, run: () => worldLife.openGuestBook(`${worldId}:${hx},${hz}`) };
     }
     switch (theme) {
-      case "reception":
-      case "ward":
-        return { label: "See a doctor", icon: Stethoscope, run: worldLife.openLife };
-      case "library":
-      case "lecture":
-        return { label: "Take a course", icon: GraduationCap, run: worldLife.openLife };
-      case "gym":
-      case "spa":
-        return { label: theme === "gym" ? "Work out" : "Treatments", icon: Dumbbell, run: worldLife.openLife };
       case "restaurant":
       case "foodcourt":
       case "lounge":
@@ -1758,7 +1876,7 @@ export function Game({
       case "market":
         return { label: "Shop at the market", icon: ShoppingBag, run: () => worldLife.openThings("shops") };
     }
-    return { label: "Work here", icon: Briefcase, run: work };
+    return null;
   }
 
   function leaveRoom() {
@@ -2000,9 +2118,9 @@ export function Game({
             onRides={setRides}
             houses={worldId ? NO_HOUSES : state.houses}
             dance={isDancing && dancing ? { id: me.id, move: dancing.move, with: dancing.with } : null}
-            friendsAt={worldId ? facesOnMap : friendsAt}
+            friendsAt={worldId ? (walking ? facesOnMap.filter((f) => !f.mine) : facesOnMap) : friendsAt}
             challengeLights={worldId ? challengeLights : undefined}
-            onPerson={worldId ? setPersonId : undefined}
+            onPerson={worldId ? (id) => (id.startsWith("home:") ? worldLife.goHome() : setPersonId(id)) : undefined}
             marks={worldId ? worldLife.marks : undefined}
             onMark={worldId ? worldLife.onMark : undefined}
             openRoom={openReq}
@@ -2063,13 +2181,20 @@ export function Game({
                 </span>
               </button>
             )}
+            {/* You: your face opens everything that isn't chat (your look, money, friends, settings). */}
+            {worldId && !guest && (
+              <button onClick={() => setMeOpen(true)} className="pointer-events-auto relative shrink-0 rounded-full ring-[3px] ring-[#f59f00] shadow" aria-label="You: your look, money, friends and settings">
+                <AvatarFace avatar={me.avatar} size={36} className="rounded-full bg-white" />
+              </button>
+            )}
             {/* Who's online; tap for the numbers: registered players and visits, and how they're growing. */}
             {!guest && (
             <button
               onClick={() => setStatsOpen(true)}
-              className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold"
+              className={cn("glass pointer-events-auto relative flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold", worldLife.guideStep === "hi" && "outline outline-2 outline-offset-2 outline-gold")}
               title={`${onlineNow} online in the city, ${onlineNear} near where you're looking. Tap for the numbers.`}
             >
+              {worldLife.guideStep === "hi" && <Ripple />}
               <span className="size-2 animate-pulse rounded-full bg-[#2f9e44]" aria-hidden />
               {onlineNow}
               <span className="max-[440px]:hidden">online</span>
@@ -2204,7 +2329,7 @@ export function Game({
             {worldId && (
               // Your cash at hand: opens Finance.
               <button
-                onClick={() => worldLife.openFinance()}
+                onClick={() => setMoneyOpen(true)}
                 className={cn("glass relative flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-bold sm:h-9 sm:px-3 sm:text-sm", worldLife.financeGlow && "outline outline-2 outline-offset-2 outline-gold")}
                 aria-label="Finance"
               >
@@ -2293,7 +2418,7 @@ export function Game({
                   setToasts([]);
                   return openGifts();
                 }
-                if (worldId) setAlertsOpen(true);
+                if (worldId) openNewtown();
                 else setFeedOpen(true);
                 setFeedSeenAt(new Date(now).toISOString());
                 setToasts([]);
@@ -2301,7 +2426,7 @@ export function Game({
               className="glass toast-in pointer-events-auto w-full rounded-2xl px-3 py-2 text-left shadow-lg"
             >
               <FeedRow item={n} now={now} compact />
-              {toasts.length > 1 && <span className="mt-0.5 block text-right text-[10px] text-muted">+{toasts.length - 1} more in your phone</span>}
+              {toasts.length > 1 && <span className="mt-0.5 block text-right text-[10px] text-muted">+{toasts.length - 1} more in your chat</span>}
             </button>
           ))}
       </div>
@@ -2967,7 +3092,7 @@ export function Game({
 
 
       {/* Bottom: messages, controls and chat */}
-      <div className={cn("pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-1.5 p-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:gap-2 sm:p-4", worldId && !place && !guest && "pr-16 sm:pr-20", camera && "hidden")}>
+      <div ref={bottomDock} className={cn("pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-1.5 p-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:gap-2 sm:p-4", worldId && !place && !guest && "pr-16 sm:pr-20", camera && "hidden")}>
         {!guest && !worldId && (
           <Safe name="Quest banner">
             <QuestBanner quest={quests.quest} onOpen={() => setQuestOpen(true)} />
@@ -3010,8 +3135,9 @@ export function Game({
           </button>
         )}
 
-        {/* The real map, out on the streets: Explore, Walk, Locate me and Soon, down here so the top stays
-            clear. Inside a place or on a ride the place's own bar takes over; walking, only Stop walking. */}
+        {/* The real map, out on the streets: the buttons are in a column down the left (below). Inside a
+            place or on a ride the place's own bar takes over; walking, only Stop walking. Explore is
+            hidden for now. */}
         {/* Signed out: one white button to advertise on the map, and the game's name floating over the city. */}
         {worldId && guest && !place && ride === null && (
           <button onClick={() => openAdvertise()} className="pointer-events-auto flex h-12 items-center gap-2 rounded-full bg-white px-6 text-sm font-bold text-ink shadow-lg ring-1 ring-black/5">
@@ -3019,32 +3145,46 @@ export function Game({
             Advertise on the map
           </button>
         )}
-        {worldId && !guest && !place && ride === null && (
-          <div className="pointer-events-auto flex items-stretch gap-1 sm:gap-1.5">
-            {!walking && (
-              <DockButton
-                icon={Compass}
-                tint="text-[#e64980]"
-                label="Explore"
-                onClick={() => {
-                  setExplorePlaces(worldLife.explore());
-                  setExploreTab("places");
-                  setPickRide(true);
-                }}
-              />
+        {/* On foot: just Stop walking, in the middle (the joystick is bottom left). */}
+        {worldId && !guest && !place && ride === null && walking && (
+          <div className="pointer-events-auto flex items-stretch">
+            <DockButton icon={Footprints} label="Stop walking" dark onClick={() => setWalking(false)} />
+          </div>
+        )}
+        {/* Down the left, out of the way of the city: the notifications bell (while they're off), Soon,
+            Locate me and Walk, see-through and small. (Challenge is top right.) */}
+        {worldId && !guest && !place && ride === null && !walking && (
+          <div className="pointer-events-auto absolute bottom-[max(0.625rem,env(safe-area-inset-bottom))] left-2.5 flex flex-col items-center gap-2 sm:bottom-4 sm:left-4">
+            {!pushOn && (
+              <button onClick={turnOnBell} className="relative grid size-10 place-items-center rounded-full bg-gold/80 text-ink shadow transition-opacity hover:bg-gold" aria-label="Notifications are off: tap to turn them on" title="Turn notifications on">
+                <BellOff className="size-4" />
+                <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-2 ring-gold/60" />
+              </button>
             )}
-            <DockButton icon={Footprints} label={walking ? "Stop walking" : "Walk"} dark={walking} onClick={() => setWalking(!walking)} />
-            {!walking && (
-              <DockButton
-                icon={LocateFixed}
-                label="Locate me"
-                onClick={() => {
-                  if (!worldLife.locateMe()) setMessage({ text: "You're not anywhere on the map yet. Find a home first.", tone: "info" });
-                }}
-              />
+            {worldLife.hasHome && (
+              <button onClick={() => worldLife.goHome()} className="grid size-10 place-items-center rounded-full bg-white/55 shadow-sm backdrop-blur-sm transition hover:bg-white/90" aria-label="Home" title="Home">
+                <House className="size-[18px] text-[#7048e8]" />
+              </button>
             )}
-            {!walking && <DockButton icon={Swords} tint="text-[#e03131]" label="Fight" onClick={() => setFightOpen(true)} />}
-            {!walking && worldLife.hasHome && <DockButton icon={Star} label="Soon" onClick={worldLife.openSoon} />}
+            {worldLife.hasHome && (
+              <button onClick={worldLife.openSoon} className="grid size-10 place-items-center rounded-full bg-white/55 shadow-sm backdrop-blur-sm transition hover:bg-white/90" aria-label="Coming soon" title="Coming soon">
+                <Rocket className="size-[18px] text-[#7048e8]" />
+              </button>
+            )}
+            <button
+              onClick={() => {
+                if (!worldLife.locateMe()) setMessage({ text: "You're not anywhere on the map yet. Find a home first.", tone: "info" });
+              }}
+              className="grid size-10 place-items-center rounded-full bg-white/55 shadow-sm backdrop-blur-sm transition hover:bg-white/90"
+              aria-label="Locate me"
+              title="Locate me"
+            >
+              <LocateFixed className="size-[18px] text-[#1c7ed6]" />
+            </button>
+            <button onClick={() => setWalking(true)} className="flex h-11 w-12 flex-col items-center justify-center gap-0.5 rounded-2xl bg-white/55 text-[10px] font-semibold shadow-sm backdrop-blur-sm transition hover:bg-white/90" aria-label="Walk">
+              <Footprints className="size-4" />
+              Walk
+            </button>
           </div>
         )}
 
@@ -3312,13 +3452,6 @@ export function Game({
                       <MessageCircle className="size-4" />
                       Chat
                     </button>
-                    {/* Your own home: plan it from inside, too. */}
-                    {place && inMyHome && (
-                      <button onClick={worldLife.openPlanner} className="flex items-center gap-1.5 rounded-xl bg-gold px-3 py-2 font-semibold text-ink">
-                        <PencilRuler className="size-4" />
-                        Plan my home
-                      </button>
-                    )}
                     {placeLevel?.kind === "club" && (
                       <button onClick={startDancing} className="flex items-center gap-1.5 rounded-xl bg-[#e64980] px-3 py-2 font-semibold text-white">
                         <Music className="size-4" />
@@ -3370,28 +3503,30 @@ export function Game({
           <div className="title-float flex flex-col items-center">
             <LogoMark size={60} className="mb-2 rounded-[16px] shadow-[0_12px_30px_rgba(0,0,0,0.35)]" />
             <h1 className="title-3d font-display text-[clamp(3rem,15vw,8rem)] font-black italic leading-none tracking-tight text-white">Newtown</h1>
-            <p className="mt-3 rounded-full bg-black/35 px-4 py-1.5 text-sm font-semibold tracking-wide text-white backdrop-blur-sm sm:text-base">Your world. Your story.</p>
-            {/* What Newtown is, for someone seeing it for the first time. */}
-            <p className="mt-3 max-w-[22rem] rounded-2xl bg-black/40 px-4 py-2.5 text-center text-[13px] leading-snug text-white backdrop-blur-sm sm:max-w-md sm:text-sm">
-              A living world where social media meets play. Explore real cities, meet new people, team up, and discover cultures from around the globe, alongside real people and real brands, in a space that&apos;s fun and safe.
-            </p>
-            <WelcomeFeatures />
-            <button onClick={() => setSignIn({ why: null })} className="pointer-events-auto mt-3 h-12 rounded-full bg-gold px-8 text-base font-bold text-ink shadow-lg">
+            <p className="mt-3 rounded-full bg-black/35 px-5 py-2 text-base font-bold tracking-wide text-white backdrop-blur-sm sm:text-lg">Your world. Your story. Your tribe.</p>
+            <button onClick={() => setSignIn({ why: null })} className="pointer-events-auto mt-5 h-12 rounded-full bg-gold px-8 text-base font-bold text-ink shadow-lg">
               Sign in to play
             </button>
           </div>
         </div>
       )}
-      {/* Notifications off on this phone: a bell on the right, halfway down, to switch them on (gone once they're on). */}
-      {!me.guest && !pushOn && !camera && (
+      {/* Challenge: a white trophy button in the top right corner, under your cash (gently bouncing). */}
+      {worldId && !guest && !camera && !place && ride === null && !walking && (
         <button
-          onClick={() => {
-            if (pushNeedsHome) return setAlertsOpen(true);
-            void turnOnNotifications().then((r) => {
-              setMessage({ text: r.text, tone: r.ok ? "good" : "info" });
-              if (r.ok) setPushOn(true);
-            });
-          }}
+          onClick={() => setFightOpen(true)}
+          className="challenge-pop pointer-events-auto fixed right-3 top-14 z-20 grid size-12 place-items-center rounded-full bg-white text-[#f08c00] ring-1 ring-black/5 sm:right-4 sm:top-16"
+          aria-label="Challenge people nearby"
+          title="Challenge people nearby"
+        >
+          <Trophy className="size-6" />
+          {worldLife.guideStep === "challenge" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
+        </button>
+      )}
+      {/* Notifications off on this phone: a bell on the right, halfway down, to switch them on (gone
+          once they're on). On the real map it's in the column down the left instead. */}
+      {!me.guest && !pushOn && !camera && !worldId && (
+        <button
+          onClick={turnOnBell}
           className="pointer-events-auto fixed right-3 top-1/2 z-20 grid size-10 -translate-y-1/2 place-items-center rounded-full bg-gold text-ink shadow-lg"
           aria-label="Notifications are off: tap to turn them on"
         >
@@ -3399,74 +3534,103 @@ export function Game({
           <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-2 ring-gold/70" />
         </button>
       )}
-      {/* The real map: your phone, bottom right (camera, photos, notifications). */}
+      {/* The real map: one chat bubble, bottom right (your chats, Newtown's own messages, the news,
+          the camera). It shakes when something new arrives. */}
       {worldId && !camera && !guest && !place && (
         <button
           onClick={() => {
-            setPhoneSince(feedSeenAt);
-            setPhoneHub(true);
+            setChatOpen(true);
             setMenu(false);
-            setFeedSeenAt(new Date(now).toISOString());
           }}
-          className="pointer-events-auto absolute bottom-4 right-3 z-20 grid size-12 place-items-center rounded-2xl bg-[#f08c00] text-white shadow-lg sm:bottom-6 sm:right-4"
-          aria-label="Your phone"
+          className="pointer-events-auto absolute bottom-4 right-3 z-20 grid size-14 place-items-center rounded-full bg-[#7048e8] text-white shadow-[0_8px_20px_-6px_rgba(112,72,232,0.8)] sm:bottom-6 sm:right-4"
+          aria-label={unread + chatUnread > 0 ? `Chat: ${unread + chatUnread} new` : "Chat"}
         >
-          {/* It rings (a shake) when something new arrives. */}
           <span key={phoneRing} className={phoneRing ? "phone-ring grid place-items-center" : "grid place-items-center"}>
-            <Smartphone className="size-5" />
+            <MessageCircle className="size-7 fill-white" />
           </span>
           {unread + chatUnread > 0 && (
-            <span className="absolute -right-1.5 -top-1.5 grid min-w-5 place-items-center rounded-full bg-hit px-1 text-[11px] font-semibold text-white">{unread + chatUnread > 99 ? "99+" : unread + chatUnread}</span>
+            <span className="absolute -right-1 -top-1 grid min-w-6 place-items-center rounded-full bg-hit px-1.5 text-xs font-bold text-white ring-2 ring-white">{unread + chatUnread > 99 ? "99+" : unread + chatUnread}</span>
           )}
         </button>
       )}
-      {phoneHub && (
-        <PhoneHub
-          onClose={() => setPhoneHub(false)}
-          onAllNotices={() => {
-            setAlertsOpen(true);
-            setFeedSeenAt(new Date(now).toISOString());
+      {moneyOpen && worldId && !guest && (
+        <MoneyHome
+          coins={me.coins}
+          perMint={worldRegion?.prices.perMint ?? 1_500}
+          region={worldId}
+          onClose={() => setMoneyOpen(false)}
+          onTaken={() => {
+            playSfx("chime");
+            startTransition(() => router.refresh());
           }}
-          notices={feed.slice(0, 20).map((f) => {
-            const mins = Math.max(0, Math.round((now - Date.parse(f.at)) / 60_000));
-            return {
-              key: f.key,
-              text: f.text,
-              when: mins < 1 ? "now" : mins < 60 ? `${mins} min ago` : mins < 1440 ? `${Math.round(mins / 60)}h ago` : `${Math.round(mins / 1440)}d ago`,
-              fresh: f.noteId ? !f.read : Date.parse(f.at) > Date.parse(phoneSince),
-              onTap: (() => {
-                const go = f.icon === "gift" || f.icon === "hug" || f.icon === "handshake" ? () => openGifts() : f.kind === "doorstep" ? () => setDoorstepOpen(true) : () => setAlertsOpen(true);
-                return () => {
-                  if (f.noteId) markRead([f.noteId]);
-                  go();
-                };
-              })(),
-              onDismiss: f.noteId ? () => dismissNote([f.noteId!]) : undefined,
-            };
-          })}
-          apps={[
-            { label: "Messages", icon: MessageCircle, colour: "#2f9e44", badge: chatUnread, dock: true, go: () => { setChatOpen(true); setChatUnread(0); } },
-            { label: "Camera", icon: Camera, colour: "#495057", dock: true, go: () => setCamera("photo") },
-            { label: "News", icon: Newspaper, colour: "#e03131", dock: true, go: () => worldLife.openNews() },
-            { label: "Alerts", icon: BellRing, colour: "#f08c00", badge: unread, dock: true, go: () => { setAlertsOpen(true); setFeedSeenAt(new Date(now).toISOString()); } },
-            { label: "People", icon: Users, colour: "#1c7ed6", go: () => setStatsOpen(true) },
-            { label: "Doorstep", icon: DoorClosed, colour: "#8d5524", go: () => setDoorstepOpen(true) },
-            { label: "Gifts", icon: Gift, colour: "#d6336c", badge: newGifts, go: () => openGifts() },
-            { label: "Meet friends", icon: Heart, colour: "#f06595", go: () => setFriendsOpen(true) },
-            { label: "Dating", icon: Heart, colour: "#c2255c", go: () => setSocialOpen("dating") },
-            { label: "Rivals", icon: Swords, colour: "#e8590c", go: () => setSocialOpen("rivals") },
-            { label: "Selfie", icon: User, colour: "#7048e8", go: () => setCamera("selfie") },
-            { label: "Photos", icon: ImageIcon, colour: "#f59f00", go: () => setPhone("photos") },
-            { label: "My things", icon: Gem, colour: "#0c8599", go: () => worldLife.openThings("mine") },
-            { label: "Shops", icon: ShoppingBag, colour: "#5f3dc4", go: () => worldLife.openThings("shops") },
-            { label: "Cars", icon: CarFront, colour: "#343a40", go: () => worldLife.openThings("cars") },
-            { label: "Market", icon: Store, colour: "#2b8a3e", go: () => worldLife.openThings("market") },
-            { label: "Craft", icon: Hammer, colour: "#a61e4d", go: () => worldLife.openThings("craft") },
-            { label: "Leave a mark", icon: PenLine, colour: "#1098ad", go: () => worldLife.openLeaveMark() },
-            { label: "My look", icon: Palette, colour: "#e64980", go: () => setEditAvatar(true) },
-            { label: "Guide", icon: Lightbulb, colour: "#fab005", go: () => worldLife.restartGuide() },
-            { label: "Report", icon: Flag, colour: "#868e96", go: () => worldLife.openReport() },
-            { label: "Sign out", icon: LogOut, colour: "#495057", go: () => setConfirmSignOut(true) },
+          onToppedUp={(mint, doubled) => {
+            playSfx("chime");
+            setMessage({ text: `Your top-up is in: +${cash(mint)}${doubled ? " (your first one, doubled!)" : ""}`, tone: "good" });
+            startTransition(() => router.refresh());
+          }}
+          onProperty={() => worldLife.openFinance()}
+        />
+      )}
+      {giftPop && worldId && !guest && !moneyOpen && (
+        <DailyGiftPop
+          perMint={worldRegion?.prices.perMint ?? 1_500}
+          onClose={closeGiftPop}
+          onTaken={() => {
+            playSfx("chime");
+            startTransition(() => router.refresh());
+          }}
+        />
+      )}
+      {meOpen && worldId && !guest && (
+        <MeSheet
+          name={me.name ?? "You"}
+          avatar={me.avatar}
+          reputation={worldLife.reputation}
+          onClose={() => setMeOpen(false)}
+          groups={[
+            {
+              title: "You",
+              items: [
+                { label: "My look", icon: Palette, colour: "#e64980", go: () => setEditAvatar(true) },
+                { label: "My card", icon: User, colour: "#7048e8", go: () => setPersonId(me.id) },
+                ...(worldLife.hasHome ? [{ label: "Home", icon: House, colour: "#7048e8", go: () => worldLife.goHome() }] : []),
+                { label: "Money", icon: Wallet, colour: "#2b8a3e", go: () => setMoneyOpen(true) },
+                { label: "Photos", icon: ImageIcon, colour: "#f59f00", go: () => setPhone("photos") },
+                { label: "My things", icon: Gem, colour: "#0c8599", go: () => worldLife.openThings("mine") },
+                { label: "Gifts", icon: Gift, colour: "#d6336c", badge: newGifts, go: () => openGifts() },
+                { label: "Doorstep", icon: DoorClosed, colour: "#8d5524", go: () => setDoorstepOpen(true) },
+              ],
+            },
+            {
+              title: "People",
+              items: [
+                { label: "Friends", icon: Users, colour: "#1c7ed6", go: () => setFriendsOpen(true) },
+                { label: "Dating", icon: Heart, colour: "#c2255c", go: () => setSocialOpen("dating") },
+                { label: "Rivals", icon: Swords, colour: "#e8590c", go: () => setSocialOpen("rivals") },
+                { label: "Who's online", icon: Users, colour: "#2f9e44", go: () => setStatsOpen(true) },
+              ],
+            },
+            {
+              title: "The city",
+              items: [
+                { label: "Shops", icon: ShoppingBag, colour: "#5f3dc4", go: () => worldLife.openThings("shops") },
+                { label: "Cars", icon: CarFront, colour: "#343a40", go: () => worldLife.openThings("cars") },
+                { label: "Market", icon: Store, colour: "#2b8a3e", go: () => worldLife.openThings("market") },
+                { label: "Leave a mark", icon: PenLine, colour: "#1098ad", go: () => worldLife.openLeaveMark() },
+                ...(worldLife.hasHome ? [{ label: "Coming soon", icon: Rocket, colour: "#7048e8", go: worldLife.openSoon }] : []),
+              ],
+            },
+            {
+              title: "Help and settings",
+              items: [
+                { label: "How it works", icon: Lightbulb, colour: "#fab005", go: () => setHowOpen(true) },
+                { label: "Start the guide", icon: Lightbulb, colour: "#f08c00", go: () => worldLife.restartGuide() },
+                { label: "Notifications", icon: BellRing, colour: "#f08c00", go: () => setAlertsOpen(true) },
+                { label: sound ? "Sound off" : "Sound on", icon: sound ? VolumeX : Volume2, colour: "#495057", go: () => { setSound(!sound); saveView({ sound: !sound }); } },
+                { label: "Report", icon: Flag, colour: "#868e96", go: () => worldLife.openReport() },
+                { label: "Sign out", icon: LogOut, colour: "#495057", go: () => setConfirmSignOut(true) },
+              ],
+            },
           ]}
         />
       )}
@@ -3499,6 +3663,19 @@ export function Game({
             onUnread={setChatUnread}
             onSignIn={() => setSignIn({ why: null })}
             onPerson={setPersonId}
+            newtown={{
+              lines: newtownLines,
+              unread,
+              request: newtownAsk,
+              onSeen: readAllNotices,
+              onSettings: () => setAlertsOpen(true),
+            }}
+            news={{ latest: null, onOpen: () => worldLife.openNews() }}
+            onlineNow={onlineFaces}
+            onCamera={() => {
+              setChatOpen(false);
+              setCamera("photo");
+            }}
             onSelfie={(target, to) => {
               setSelfieTo({ target, to });
               setChatOpen(false);
@@ -3595,7 +3772,7 @@ export function Game({
       )}
       {/* In a planned home: the joystick walks you round it (or tap the floor). */}
       {inPlannedHome && !camera && (
-        <div className="pointer-events-none fixed bottom-24 left-4 z-30 sm:bottom-8 sm:left-8">
+        <div className="pointer-events-none fixed left-4 z-30 sm:left-8" style={{ bottom: bottomDockH + 12 }}>
           <Joystick stick={homeStick} />
         </div>
       )}

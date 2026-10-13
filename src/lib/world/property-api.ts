@@ -47,7 +47,7 @@ export type AssetsData = {
 };
 
 export type OwnedBuildingRow = { id: string; building: Building; name: string | null };
-export type BuildingOwner = { unit: string; name: string; mine: boolean; forSale?: number | null; home?: boolean };
+export type BuildingOwner = { unit: string; name: string; mine: boolean; forSale?: number | null; home?: boolean; /** Rented from the city (game-db/077), not owned. */ rented?: boolean };
 
 /** Your job on the real map (if any) and your skills (game days worked in each). */
 export type WorkStatus = {

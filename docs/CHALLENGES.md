@@ -1,4 +1,4 @@
-# Fight: challenges on the map
+# Challenges on the map
 
 Group games played right on the map (src/app/play/fight, src/lib/world/challenges.ts,
 game-db/070_challenges.sql). Built to be quick, social and a little addictive: one tap to throw
@@ -6,10 +6,10 @@ down a challenge, a minute to gather players, a game floating over the city, a p
 
 ## How it goes
 
-1. **Fight** (in the bar along the bottom, next to Locate me). The first time, a pop-up explains
+1. **Challenge** (the white trophy, top right). The first time, a pop-up explains
    the rules.
 2. **Pick a game**: Whot! and Ludo now; Jenga and Police and Thief are shown as coming soon.
-3. **Pick a stake** (₦5,000, ₦20,000, ₦50,000 or ₦100,000): what each player puts into the pool.
+3. **Pick a stake** (₦1,000, ₦5,000, ₦20,000 or ₦50,000): what each player puts into the pool.
 4. **Challenge everyone nearby.**
    - Everyone within about 4 km gets a notice and a push.
    - Everyone playing nearby sees a pop-up card with a Join button and the time left.

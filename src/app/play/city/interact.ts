@@ -303,5 +303,24 @@ export function createWalker(w: number, d: number, blocks: Block[], margin = 0.4
     const [i, j] = cellOf(x, z);
     return free(i, j);
   }
-  return { path, isFree };
+  /**
+   * The nearest place to stand to (x, z) with room round it (not on furniture or squeezed against
+   * it): where you appear coming into a room.
+   */
+  function openSpot(x: number, z: number) {
+    const [ci, cj] = cellOf(x, z);
+    const roomy = (i: number, j: number) => {
+      for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) if (!free(i + di, j + dj)) return false;
+      return true;
+    };
+    for (let r = 0; r < Math.max(nx, nz); r++)
+      for (let di = -r; di <= r; di++)
+        for (let dj = -r; dj <= r; dj++) {
+          if (Math.max(Math.abs(di), Math.abs(dj)) !== r) continue;
+          if (roomy(ci + di, cj + dj)) return { x: x0 + (ci + di) * C, z: z0 + (cj + dj) * C };
+        }
+    const f = nearestFree(ci, cj);
+    return f ? { x: x0 + f[0] * C, z: z0 + f[1] * C } : { x, z };
+  }
+  return { path, isFree, openSpot };
 }

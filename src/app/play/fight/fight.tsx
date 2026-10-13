@@ -6,7 +6,7 @@ import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar } from "@/lib/avatar";
 import { cn } from "@/lib/cn";
 import { cash } from "@/lib/world/value";
-import { CHALLENGE_GAMES, CHALLENGE_COOLDOWN_SECS, JOIN_SECS, STAKES_NAIRA, WINNER_SHARE, challengeGame } from "@/lib/world/challenges";
+import { CHALLENGE_GAMES, CHALLENGE_COOLDOWN_SECS, CHALLENGE_FEE_NAIRA, JOIN_SECS, STAKES_NAIRA, WINNER_SHARE, challengeGame } from "@/lib/world/challenges";
 import { MINIGAMES } from "../minigames/registry";
 import { TurnTable, type Seat } from "../minigames/turn-table";
 import { Confetti } from "../activities/ui";
@@ -16,7 +16,7 @@ import { challengeQuote, joinChallenge, leaveChallenge, openChallenge, reportWin
 import { useChallengeChannel } from "./channel";
 import { CallBar } from "../call/call-bar";
 
-// Challenges on the map (docs/CHALLENGES.md). Fight: pick a game and a stake, and everyone nearby
+// Challenges on the map (docs/CHALLENGES.md). Challenge: pick a game and a stake, and everyone nearby
 // is told; your light shines on the map. They have a minute to join, then the game floats over
 // the map, the players' faces round it, with a chat (and a voice call). The winner takes the pool.
 
@@ -27,7 +27,7 @@ const INTRO_KEY = "nt-fight-intro";
 const mmss = (s: number) => `${Math.floor(Math.max(0, s) / 60)}:${String(Math.max(0, Math.floor(s) % 60)).padStart(2, "0")}`;
 
 /**
- * Everything about challenges: the Fight picker (open), alerts for challenges nearby, and the one
+ * Everything about challenges: the Challenge picker (open), alerts for challenges nearby, and the one
  * you're in (the lobby, the game, the result). onLights: the challenges to light up on the map.
  */
 export function Fight({
@@ -164,7 +164,7 @@ export function Fight({
             const at = where();
             if (!at) return { error: "Find a home or walk somewhere on the map first." };
             const r = await openChallenge(game, stake, at.x, at.z, region).catch(() => ({ ok: false as const, error: "The connection blinked. Try again.", busyId: undefined }));
-            // Errors show in the Fight card itself (not behind it).
+            // Errors show in the Challenge card itself (not behind it).
             if (!r.ok) return { error: r.error, busyId: "busyId" in r ? r.busyId : undefined };
             playSfx("start");
             onClose();
@@ -228,7 +228,7 @@ export function Fight({
   );
 }
 
-/** Fight: what it is (the first time), the games, the stake, and go. */
+/** Challenge: what it is (the first time), the games, the stake, and go. */
 function FightSheet({
   region,
   onClose,
@@ -268,12 +268,12 @@ function FightSheet({
 
   if (intro)
     return (
-      <Sheet onClose={onClose} title="Fight: challenge people nearby">
+      <Sheet onClose={onClose} title="Challenge people nearby">
         <div className="space-y-2.5 text-sm">
-          <Point icon="⚔️" text="Pick a game and a stake. Everyone nearby gets told, and your light shines on the map." />
+          <Point icon="🎲" text="Pick a game and a stake. Everyone nearby gets told, and your light shines on the map." />
           <Point icon="⏱️" text="They have one minute to join. Everyone puts the stake into the pool." />
           <Point icon="🏆" text={`The winner takes the pool (${Math.round(WINNER_SHARE * 100)}% of it). Challenging and winning raise your reputation.`} />
-          <Point icon="🎟️" text={`Your first challenge is free. Another one within ${CHALLENGE_COOLDOWN_SECS / 60} minutes costs ₦50,000, so in between, join other people's challenges.`} />
+          <Point icon="🎟️" text={`Your first challenge is free. Another one within ${CHALLENGE_COOLDOWN_SECS / 60} minutes costs ₦${CHALLENGE_FEE_NAIRA.toLocaleString("en-GB")}, so in between, join other people's challenges.`} />
         </div>
         <button
           onClick={() => {
@@ -284,14 +284,14 @@ function FightSheet({
           }}
           className="mt-4 h-11 w-full rounded-full bg-ink font-semibold text-white"
         >
-          Got it, let&apos;s fight
+          Got it, let&apos;s play
         </button>
       </Sheet>
     );
 
   const g = challengeGame(game);
   return (
-    <Sheet onClose={onClose} title="Fight">
+    <Sheet onClose={onClose} title="Challenge">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted">Pick a game</p>
       <div className="mt-2 grid grid-cols-2 gap-2">
         {CHALLENGE_GAMES.map((c) => {
@@ -329,7 +329,7 @@ function FightSheet({
           </>
         ) : (
           <>
-            <b>₦50,000 fee</b> for challenging again so soon. Free again in <b className="tabular-nums">{mmss(left)}</b>: join someone else&apos;s meanwhile.
+            <b>₦{CHALLENGE_FEE_NAIRA.toLocaleString("en-GB")} fee</b> for challenging again so soon. Free again in <b className="tabular-nums">{mmss(left)}</b>: join someone else&apos;s meanwhile.
           </>
         )}
       </p>

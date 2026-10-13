@@ -11,6 +11,7 @@ import { CERT_LABEL } from "@/lib/world/living";
 import { workplaceById } from "@/lib/world/workplace";
 import { unseal } from "@/lib/game-seal";
 import { dayFits, tickLife } from "./life-tick";
+import { NO_JOBS, SIMPLE_LIFE } from "@/lib/world/simple-life";
 
 // Working on the real map (docs/WORK.md; the database part is game-db/039_work.sql). What a job
 // pays and what the trip to it costs are always worked out here, from the map, never taken from
@@ -78,6 +79,7 @@ export async function workStatus(): Promise<WorkStatus | null> {
 
 /** Take a job at a workplace on the map, getting there by `mode`. */
 export async function takeJob(placeId: string, jobId: string, mode: Commute, ticket?: string): Promise<PropertyResult> {
+  if (SIMPLE_LIFE) return { ok: false, error: NO_JOBS };
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Sign in to work." };
   if (!COMMUTES.includes(mode)) return say("bad_mode");
@@ -139,6 +141,7 @@ export async function setCommute(mode: Commute): Promise<PropertyResult> {
 
 /** Collect your pay and what your side hustle made (less income tax and fares). */
 export async function collectPay(): Promise<PropertyResult> {
+  if (SIMPLE_LIFE) return { ok: true };
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Please sign in again." };
   const now = await whereYouAre(userId);

@@ -1,5 +1,5 @@
 // Challenges on the map (docs/CHALLENGES.md; the database part is game-db/070_challenges.sql):
-// tap Fight, pick a game and a stake, and everyone nearby has a minute to join. The game is played
+// tap Challenge, pick a game and a stake, and everyone nearby has a minute to join. The game is played
 // right there on the map; the winner takes the pool.
 
 export type ChallengeGame = {
@@ -25,7 +25,7 @@ export const CHALLENGE_GAMES: ChallengeGame[] = [
 export const challengeGame = (id: string) => CHALLENGE_GAMES.find((g) => g.id === id);
 
 /** What each player puts into the pool (naira): the host picks. */
-export const STAKES_NAIRA = [5_000, 20_000, 50_000, 100_000];
+export const STAKES_NAIRA = [1_000, 5_000, 20_000, 50_000];
 /** Another challenge before the cooldown is over costs this (naira); the first one is free. */
 export const CHALLENGE_FEE_NAIRA = 50_000;
 /** How long before your next challenge is free again (between 5 and 10 minutes: time to join other people's). */

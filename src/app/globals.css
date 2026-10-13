@@ -169,6 +169,15 @@ a[href]:active,
   to { transform: scale(1.25); opacity: 0; }
 }
 .radar-ring { animation: radar-ring 2s ease-out infinite; }
+
+/* The Challenge button: a gentle bounce and a warm glow every few seconds, so it's the one you notice. */
+@keyframes challenge-pop {
+  0%, 82%, 100% { transform: scale(1); box-shadow: 0 6px 16px -4px rgb(247 103 7 / 0.55), 0 0 0 0 rgb(247 103 7 / 0.45); }
+  88% { transform: scale(1.08); box-shadow: 0 8px 20px -4px rgb(247 103 7 / 0.65), 0 0 0 8px rgb(247 103 7 / 0); }
+  94% { transform: scale(0.98); }
+}
+.challenge-pop { animation: challenge-pop 3.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .challenge-pop { animation: none; } }
 @keyframes radar-sweep { to { transform: rotate(360deg); } }
 .radar-sweep { animation: radar-sweep 2.4s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .radar-ring, .radar-sweep { animation: none; } }

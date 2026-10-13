@@ -9,6 +9,7 @@ import { BUY_TAX, type BuildingOwner } from "@/lib/world/property-api";
 import { openAdvertise } from "./life/advertise-panel";
 import { JobsHere, type JobsContext } from "./life/jobs-here";
 import { Sheet } from "./sheet";
+import { SIMPLE_LIFE } from "@/lib/world/simple-life";
 
 const fmt = (n: number) => n.toLocaleString("en-GB");
 
@@ -26,6 +27,8 @@ export type Market = {
   letting: Set<string>;
   busy: boolean;
   onBuy: (unit: PropertyUnit) => void;
+  /** Rent a home nobody owns, a month at a time (absent: renting isn't offered). */
+  onRent?: (unit: PropertyUnit) => void;
   onHome: (unit: PropertyUnit) => void;
   onLet: (unit: PropertyUnit, on: boolean) => void;
   onRename: (name: string) => void;
@@ -182,7 +185,7 @@ export function PropertyCard({
             {info.units.length === 1 ? "One unit" : `${info.units.length} units`}
             {market ? "" : " you could own"}
           </h3>
-          <p className="text-xs text-muted">Buy one to live in or to let out: tenants pay you rent.</p>
+          <p className="text-xs text-muted">Rent a home a month at a time, or buy one to keep (and let it out: tenants pay you rent).</p>
           <ul className="mt-2 max-h-72 divide-y divide-ink/5 overflow-y-auto rounded-2xl ring-1 ring-ink/5">
             {info.units.map((u) => {
               const Icon = ICON[u.use];
@@ -193,7 +196,7 @@ export function PropertyCard({
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{u.label}</p>
                     <p className="text-xs text-muted">
-                      {fmt(u.area)} m² · {owner ? (owner.mine ? "Yours" : `Owned by ${owner.name}`) : u.earns}
+                      {fmt(u.area)} m² · {owner ? (owner.rented ? (owner.mine ? "Your rented home" : `Rented by ${owner.name}`) : owner.mine ? "Yours" : `Owned by ${owner.name}`) : u.earns}
                       {owner?.forSale != null ? ` · for sale ${cash(owner.forSale)}` : owner?.home && !owner.mine ? " · their home" : ""}
                     </p>
                   </div>
@@ -209,7 +212,7 @@ export function PropertyCard({
         </>
       )}
 
-      {info.workplace && jobs && (
+      {!SIMPLE_LIFE && info.workplace && jobs && (
         <div className="mt-4">
           {jobsOpen ? (
             <JobsHere place={info.workplace} ctx={jobs} />
@@ -275,9 +278,13 @@ function Pill({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** A month's rent for a home from the city (mint): 6% of its worth, as landlords earn (game-db/077). */
+export const rentMonth = (mint: number) => Math.max(0.01, Math.round(mint * 0.06 * 100) / 100);
+
 function UnitAction({ u, owner, market }: { u: PropertyUnit; owner: BuildingOwner | undefined; market: Market }) {
   const btn = "h-8 shrink-0 rounded-full px-3 text-xs font-semibold disabled:opacity-40";
   if (market.owners === null) return <span className="w-14" />;
+  if (owner?.rented) return owner.mine ? <span className="shrink-0 rounded-full bg-me/15 px-2.5 py-1 text-xs font-semibold text-me">Home</span> : null;
   if (owner && !owner.mine) {
     if (owner.forSale != null) {
       const cost = Math.round(owner.forSale * (1 + BUY_TAX));
@@ -331,14 +338,27 @@ function UnitAction({ u, owner, market }: { u: PropertyUnit; owner: BuildingOwne
   const cost = Math.round(u.mint * (1 + BUY_TAX));
   const needHome = !market.homeUnit && u.use !== "home";
   const short = market.coins < cost;
+  const rent = rentMonth(u.mint);
   return (
-    <button
-      disabled={market.busy || !market.started || needHome || short}
-      onClick={() => market.onBuy(u)}
-      title={needHome ? "Buy a home first" : short ? `You need ${cash(cost)} with tax` : `${cash(cost)} with the ${Math.round(BUY_TAX * 100)}% tax`}
-      className={`${btn} bg-ink text-white`}
-    >
-      Buy
-    </button>
+    <div className="flex shrink-0 flex-col gap-1">
+      {u.use === "home" && market.onRent && (
+        <button
+          disabled={market.busy || !market.started || market.coins < rent}
+          onClick={() => market.onRent?.(u)}
+          title={`${cash(rent)} a month`}
+          className={`${btn} bg-gold text-ink`}
+        >
+          Rent {cash(rent)}/mo
+        </button>
+      )}
+      <button
+        disabled={market.busy || !market.started || needHome || short}
+        onClick={() => market.onBuy(u)}
+        title={needHome ? "Buy a home first" : short ? `You need ${cash(cost)} with tax` : `${cash(cost)} with the ${Math.round(BUY_TAX * 100)}% tax`}
+        className={`${btn} bg-ink text-white`}
+      >
+        Buy
+      </button>
+    </div>
   );
 }

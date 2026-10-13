@@ -1369,13 +1369,13 @@ create table if not exists public.club_entries (
 );
 
 /**
- * Into a club: free if you paid in the last 24 hours, otherwise pays the fee (mint, at most 100).
+ * Into a club: free if you paid in the last 24 hours, otherwise pays the fee (mint, at most 1,000).
  * Returns what was paid now and until when you're in.
  */
 create or replace function public.life_club_entry(p_user uuid, p_place text, p_fee numeric) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
-  v_fee numeric := round(least(100, greatest(0, coalesce(p_fee, 0))), 2);
+  v_fee numeric := round(least(1000, greatest(0, coalesce(p_fee, 0))), 2);
   v_paid numeric := 0;
   v_at timestamptz;
   p public.profiles;
@@ -1485,7 +1485,7 @@ declare
   p public.profiles;
   v_last timestamptz;
   v_fee numeric := 0;
-  v_stake numeric := round(least(1000, greatest(0, coalesce(p_stake, 0))), 2);
+  v_stake numeric := round(least(10000, greatest(0, coalesce(p_stake, 0))), 2);
   v_id bigint;
   v_seed bigint := floor(random() * 2000000000)::bigint;
   v_starts timestamptz := now() + interval '60 seconds';
@@ -1498,7 +1498,7 @@ begin
   if public.challenge_busy(p_user) is not null then raise exception 'busy'; end if;
   select max(created_at) into v_last from public.challenges where host_id = p_user and status <> 'cancelled';
   if v_last is not null and v_last > now() - make_interval(secs => greatest(60, least(1800, coalesce(p_cooldown, 480)))) then
-    v_fee := round(least(500, greatest(0, coalesce(p_fee, 0))), 2);
+    v_fee := round(least(2000, greatest(0, coalesce(p_fee, 0))), 2);
   end if;
   if public.life_can_spend(p_user, array['fun']) < v_fee + v_stake then raise exception 'not_enough:%', trim_scale(v_fee + v_stake); end if;
   if v_fee > 0 then
@@ -1728,4 +1728,588 @@ begin
     public.challenge_join(uuid, bigint), public.challenge_refund(bigint), public.challenge_begin(bigint),
     public.challenge_report(uuid, bigint, uuid, boolean), public.challenge_rep(uuid), public.challenge_sweep(text), public.challenge_leave(uuid, bigint) to service_role;
 end $$;
+
+-- ======================================================== 071_chat_read.sql
+-- Newtown, part 71: private messages remember when they were read (docs/PEOPLE.md). The sender
+-- sees "Opened" (like Snapchat), and a message you've read stops counting on every device and on
+-- the phone's badge. Before this is run, the game remembers what you read on each phone instead.
+--
+-- Safe to run more than once.
+
+alter table public.chat_messages add column if not exists read_at timestamptz;
+create index if not exists chat_unread_idx on public.chat_messages (recipient_id, sender_id) where recipient_id is not null and read_at is null;
+
+-- ======================================================== 072_first_steps.sql
+-- Newtown, part 72: the first five minutes (docs/FIRST_STEPS.md). Three things to do on day one,
+-- each with a small reward, paid once per player: say hi to someone (a private message), play a
+-- challenge (start or join one), and go out (into any place that isn't your home). The game checks each really happened before
+-- paying, and only new players (a life started in the last 3 days) are paid. Before this is run
+-- the guide still shows; the rewards wait until it is.
+--
+-- Safe to run more than once.
+
+create table if not exists public.first_steps (
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  step text not null,
+  reward numeric(14,2) not null default 0,
+  done_at timestamptz not null default now(),
+  primary key (user_id, step)
+);
+alter table public.first_steps enable row level security;
+alter table public.first_steps drop constraint if exists first_steps_step_check;
+alter table public.first_steps add constraint first_steps_step_check check (step in ('hi', 'challenge', 'home', 'out'));
+
+/**
+ * Which first steps are done (each checked against what really happened), paying the reward for any
+ * newly done. p_reward is mint per step (the server works it out from the city's prices).
+ * Returns { hi, challenge, out: done?, paid: [steps paid just now], reward }.
+ */
+create or replace function public.first_steps_check(p_user uuid, p_reward numeric)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_hi boolean;
+  v_ch boolean;
+  v_out boolean;
+  v_paid text[] := '{}';
+  v_step text;
+  v_reward numeric := round(least(greatest(coalesce(p_reward, 0), 0), 20), 2);
+  v_new boolean;
+begin
+  -- Only new lives (started in the last 3 days) are paid: players who were here before don't get
+  -- paid for what they did long ago.
+  v_new := exists (select 1 from public.lives where user_id = p_user and started_at > now() - interval '3 days');
+  if not v_new then v_reward := 0; end if;
+  v_hi := exists (select 1 from public.chat_messages where sender_id = p_user and recipient_id is not null);
+  v_ch := to_regclass('public.challenge_players') is not null
+    and exists (select 1 from public.challenge_players where user_id = p_user);
+  v_out := exists (select 1 from public.lives where user_id = p_user and at_place is not null and at_place <> split_part(coalesce(home_unit, ''), '/', 1));
+  foreach v_step in array array['hi', 'challenge', 'out'] loop
+    if (v_step = 'hi' and v_hi) or (v_step = 'challenge' and v_ch) or (v_step = 'out' and v_out) then
+      insert into public.first_steps (user_id, step, reward) values (p_user, v_step, v_reward) on conflict do nothing;
+      if found then
+        v_paid := v_paid || v_step;
+        if v_reward > 0 then
+          update public.profiles set coins = coins + v_reward where id = p_user;
+          perform public.log_coins(p_user, null, 'first_step', v_reward, false, 'First steps reward');
+        end if;
+      end if;
+    end if;
+  end loop;
+  return jsonb_build_object('hi', v_hi, 'challenge', v_ch, 'out', v_out, 'paid', to_jsonb(v_paid), 'reward', v_reward);
+end $$;
+revoke all on function public.first_steps_check(uuid, numeric) from public, anon, authenticated;
+
+-- ======================================================== 073_daily_money.sql
+-- Newtown, part 73: money that comes to you (docs/MONEY.md). Three things:
+--   1. Active time: the game counts the minutes you're actually doing something (a ping a minute
+--      at most, while the game is open and you've touched it lately), per day, in Lagos time.
+--   2. The daily gift, once a day: the server works out how much (yesterday's active time, your
+--      streak of days, how long you've played, your reputation) and this pays it, capped.
+--   3. A prize from Newtown for every challenge won (on top of the pot), up to 5 a day.
+--
+-- Safe to run more than once.
+
+insert into public.game_settings (key, value, note) values
+  ('daily_gift_max',        40,   'Most mint one daily gift can be (the server works it out, at most ₦50,000; this is the ceiling)'),
+  ('challenge_bonus',       1.33, 'Mint Newtown adds for each challenge won (on top of the pot): ₦2,000 in Lagos'),
+  ('challenge_bonus_daily', 5,    'How many challenge wins a day get the Newtown prize')
+-- Running this again sets these back to the numbers here.
+on conflict (key) do update set value = excluded.value, note = excluded.note;
+
+-- The day in Lagos (days start at midnight there).
+create or replace function public.lagos_day(p_at timestamptz default now()) returns date
+language sql stable as $$ select (p_at at time zone 'Africa/Lagos')::date $$;
+
+-- ============================================================ active time
+create table if not exists public.activity_days (
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  day date not null,
+  minutes int not null default 0,
+  last_ping timestamptz not null default now(),
+  primary key (user_id, day)
+);
+alter table public.activity_days enable row level security;
+
+/** A minute of you being active (counted at most once every 50 seconds, 10 hours a day at most). Returns today's minutes. */
+create or replace function public.active_ping(p_user uuid) returns int
+language plpgsql security definer set search_path = public as $$
+declare
+  v_day date := public.lagos_day();
+  v_min int;
+begin
+  insert into public.activity_days (user_id, day, minutes, last_ping) values (p_user, v_day, 1, now())
+  on conflict (user_id, day) do update
+    set minutes = least(public.activity_days.minutes + 1, 600), last_ping = now()
+    where public.activity_days.last_ping < now() - interval '50 seconds';
+  select minutes into v_min from public.activity_days where user_id = p_user and day = v_day;
+  return coalesce(v_min, 0);
+end $$;
+
+-- ============================================================ the daily gift
+create table if not exists public.daily_gifts (
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  day date not null,
+  amount numeric(14,2) not null,
+  streak int not null default 1,
+  created_at timestamptz not null default now(),
+  primary key (user_id, day)
+);
+alter table public.daily_gifts enable row level security;
+
+/** What the gift would be made of today: claimed already?, the streak it would be, yesterday's active minutes, days playing. */
+create or replace function public.daily_gift_status(p_user uuid) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'claimed', exists (select 1 from public.daily_gifts where user_id = p_user and day = public.lagos_day()),
+    'streak', coalesce((select streak from public.daily_gifts where user_id = p_user and day = public.lagos_day() - 1), 0) + 1,
+    'today_streak', (select streak from public.daily_gifts where user_id = p_user and day = public.lagos_day()),
+    'today_amount', (select amount from public.daily_gifts where user_id = p_user and day = public.lagos_day()),
+    'active_yesterday', coalesce((select minutes from public.activity_days where user_id = p_user and day = public.lagos_day() - 1), 0),
+    'active_today', coalesce((select minutes from public.activity_days where user_id = p_user and day = public.lagos_day()), 0),
+    'days_playing', coalesce((select greatest(0, public.lagos_day() - public.lagos_day(started_at)) from public.lives where user_id = p_user), 0)
+  )
+$$;
+
+/** Take today's gift (p_amount in mint, worked out by the server; capped). Once a day. */
+create or replace function public.daily_gift_claim(p_user uuid, p_amount numeric, p_note text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_day date := public.lagos_day();
+  v_streak int;
+  v_amount numeric := round(least(greatest(coalesce(p_amount, 0), 0), coalesce(public.setting('daily_gift_max'), 40)), 2);
+begin
+  if not exists (select 1 from public.lives where user_id = p_user) then raise exception 'no_life'; end if;
+  v_streak := coalesce((select streak from public.daily_gifts where user_id = p_user and day = v_day - 1), 0) + 1;
+  insert into public.daily_gifts (user_id, day, amount, streak) values (p_user, v_day, v_amount, v_streak)
+  on conflict (user_id, day) do nothing;
+  if not found then
+    return jsonb_build_object('already', true);
+  end if;
+  update public.profiles set coins = coins + v_amount where id = p_user;
+  perform public.log_coins(p_user, null, 'daily_gift', v_amount, false, 'Daily gift');
+  if coalesce(p_note, '') <> '' then perform public.notify(p_user, null, 'daily_gift', left(p_note, 200)); end if;
+  return jsonb_build_object('amount', v_amount, 'streak', v_streak);
+end $$;
+
+-- ============================================================ Newtown's prize for a challenge won
+create or replace function public.challenge_bonus_pay() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  v_bonus numeric := coalesce(public.setting('challenge_bonus'), 0);
+  v_today int;
+begin
+  if new.status <> 'done' or old.status = 'done' or new.winner_id is null or v_bonus <= 0 then return new; end if;
+  -- Only a real game: at least two people put a stake in.
+  if (select count(*) from public.challenge_players where challenge_id = new.id and paid > 0) < 2 then return new; end if;
+  select count(*) into v_today from public.ledger
+    where user_id = new.winner_id and kind = 'challenge_bonus' and created_at >= (public.lagos_day()::timestamp at time zone 'Africa/Lagos');
+  if v_today >= coalesce(public.setting('challenge_bonus_daily'), 5) then return new; end if;
+  update public.profiles set coins = coins + v_bonus where id = new.winner_id;
+  perform public.log_coins(new.winner_id, null, 'challenge_bonus', v_bonus, false, 'Newtown prize for a challenge won');
+  perform public.notify(new.winner_id, null, 'challenge', 'Newtown added a prize for your win. Well played!');
+  return new;
+end $$;
+
+do $$
+begin
+  if to_regclass('public.challenges') is not null then
+    drop trigger if exists challenge_bonus on public.challenges;
+    create trigger challenge_bonus after update of status on public.challenges
+      for each row execute function public.challenge_bonus_pay();
+  end if;
+end $$;
+
+revoke all on function public.active_ping(uuid), public.daily_gift_status(uuid), public.daily_gift_claim(uuid, numeric, text), public.challenge_bonus_pay() from public, anon, authenticated;
+
+-- The daily new-mint report counts the new kinds too: the daily gift, Newtown's challenge prize and
+-- the first steps' rewards (part 72).
+create or replace view public.coin_supply_daily as
+select created_at::date as day,
+       coalesce(sum(amount) filter (where kind in ('signup', 'seeker_bonus', 'topup', 'sponsor', 'bot_bounty', 'bot_funding',
+                                                   'balloon', 'passive', 'ad_reward', 'level_bonus', 'event_reward', 'event_bonus',
+                                                   'npc_gift', 'quest_reward', 'activity_reward', 'streak_reward', 'job_pay',
+                                                   'start_grant', 'rent', 'work_pay', 'treasury_opening', 'hustle_pay', 'bonus',
+                                                   'daily_gift', 'challenge_bonus', 'first_step')), 0) as created,
+       coalesce(sum(amount) filter (where kind = 'burn'), 0) as burned
+from public.ledger
+group by 1
+order by 1 desc;
+revoke all on public.coin_supply_daily from public, anon, authenticated;
+grant select on public.coin_supply_daily to service_role;
+
+-- ======================================================== 074_simple_life.sql
+-- Newtown, part 74: the simple life (docs/MONEY.md, docs/STARTER_ROOMS.md). Real Lagos prices and
+-- modest money: a new life starts with ₦250,000 and a free room to live in (one free move, given
+-- back when you buy a home of your own or stop playing for 60 days). Jobs, side hustles, bills,
+-- food and the body-and-mind meters are switched off: money comes from the daily gift, games,
+-- events and top-ups.
+--
+-- Safe to run more than once.
+
+-- ============================================================ starting money
+update public.game_settings set value = 166.67, note = 'Mint to start a life on the real map with (once): ₦250,000 in Lagos'
+  where key = 'start_grant';
+
+-- ============================================================ free starter rooms
+-- A free room is an ordinary home unit marked `starter`: it can't be bought by anyone else (it's
+-- taken), and it can't be sold, let, listed or borrowed against. Buying a home of your own gives it
+-- back (and makes the new one your home). Not playing for 60 days gives it back too; you get a
+-- fresh one the moment you come back.
+alter table public.property_units add column if not exists starter boolean not null default false;
+alter table public.lives add column if not exists starter_moves int not null default 0;
+create index if not exists property_units_starter_idx on public.property_units (owner_id) where starter;
+
+/** A free room can't change hands, be let, or carry a loan. */
+create or replace function public.starter_guard() returns trigger
+language plpgsql as $$
+begin
+  if old.starter and (new.owner_id is distinct from old.owner_id or new.let or new.loan_id is not null) then
+    raise exception 'starter_room';
+  end if;
+  return new;
+end $$;
+drop trigger if exists starter_guard on public.property_units;
+create trigger starter_guard before update on public.property_units for each row execute function public.starter_guard();
+
+/** Nor can it be put up for sale. */
+create or replace function public.starter_no_listing() returns trigger
+language plpgsql as $$
+begin
+  if exists (select 1 from public.property_units where unit_id = new.unit_id and starter) then raise exception 'starter_room'; end if;
+  return new;
+end $$;
+drop trigger if exists starter_no_listing on public.property_listings;
+create trigger starter_no_listing before insert on public.property_listings for each row execute function public.starter_no_listing();
+
+/** A home of your own (bought from the city or a player): your free room goes back, and the new one is home. */
+create or replace function public.starter_give_back() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  v_room text;
+begin
+  if new.starter or new.use <> 'home' then return new; end if;
+  select unit_id into v_room from public.property_units where owner_id = new.owner_id and starter limit 1;
+  if v_room is null then return new; end if;
+  update public.lives set home_unit = new.unit_id where user_id = new.owner_id and (home_unit = v_room or home_unit is null);
+  delete from public.property_units where unit_id = v_room;
+  return new;
+end $$;
+drop trigger if exists starter_give_back on public.property_units;
+create trigger starter_give_back after insert or update of owner_id on public.property_units
+  for each row execute function public.starter_give_back();
+
+/**
+ * Give a player a free room (p_unit, chosen by the server from the city's rooming houses), or move
+ * them to another one (once). p_snapshot: the building as the map has it (saved on first use).
+ * Returns { unit, moved }.
+ */
+create or replace function public.starter_room_give(p_user uuid, p_region text, p_unit text, p_snapshot jsonb, p_label text, p_area numeric, p_move boolean)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  l public.lives;
+  v_building text := split_part(p_unit, '/', 1);
+  v_old text;
+begin
+  if p_unit is null or p_unit !~ '^[a-z0-9-]+:-?[0-9]+,-?[0-9]+/[0-9]+$' or split_part(v_building, ':', 1) <> p_region then raise exception 'bad_unit'; end if;
+  select * into l from public.lives where user_id = p_user for update;
+  if not found then raise exception 'no_life'; end if;
+  select unit_id into v_old from public.property_units where owner_id = p_user and starter limit 1;
+  if p_move then
+    if v_old is null then raise exception 'no_room'; end if;
+    if l.starter_moves >= 1 then raise exception 'moved'; end if;
+  else
+    if v_old is not null then return jsonb_build_object('unit', v_old, 'moved', false, 'already', true); end if;
+    if l.home_unit is not null and exists (select 1 from public.property_units where unit_id = l.home_unit and owner_id = p_user) then raise exception 'has_home'; end if;
+  end if;
+  if exists (select 1 from public.property_units where unit_id = p_unit) then raise exception 'taken'; end if;
+  insert into public.property_buildings (building_id, region, snapshot) values (v_building, p_region, p_snapshot)
+  on conflict (building_id) do nothing;
+  if v_old is not null then delete from public.property_units where unit_id = v_old; end if;
+  insert into public.property_units (unit_id, building_id, owner_id, label, use, area, price, rent_day, starter)
+  values (p_unit, v_building, p_user, left(coalesce(p_label, 'Room'), 60), 'home', greatest(coalesce(p_area, 12), 1), 0.01, 0, true);
+  update public.lives set home_unit = p_unit, at_place = case when v_old is not null and at_place = split_part(v_old, '/', 1) then v_building else at_place end,
+    starter_moves = starter_moves + case when p_move then 1 else 0 end
+  where user_id = p_user;
+  return jsonb_build_object('unit', p_unit, 'moved', p_move);
+end $$;
+
+/** Free rooms of players away 60 days or more go back to the city (they get a fresh one when they're back). */
+create or replace function public.starter_rooms_sweep() returns int
+language plpgsql security definer set search_path = public as $$
+declare
+  v_n int;
+begin
+  with gone as (
+    delete from public.property_units u
+    using public.lives l
+    where u.starter and l.user_id = u.owner_id and coalesce(l.seen_at, l.started_at) < now() - interval '60 days'
+    returning u.unit_id, u.owner_id
+  )
+  update public.lives l set home_unit = null, starter_moves = 0
+  from gone where l.user_id = gone.owner_id and l.home_unit = gone.unit_id;
+  get diagnostics v_n = row_count;
+  return v_n;
+end $$;
+
+revoke all on function public.starter_room_give(uuid, text, text, jsonb, text, numeric, boolean), public.starter_rooms_sweep() from public, anon, authenticated;
+
+-- ============================================================ no free refill
+-- The old daily refill (topping wallets up towards ₥100, ₦150,000, every day) is off: the daily
+-- gift replaces it, and money that tops itself up has no value.
+update public.game_settings set value = 0 where key in ('passive_target', 'passive_per_day', 'passive_per_level');
+
+-- ======================================================== 075_fresh_start.sql
+-- Newtown, part 75: the fresh start (docs/MONEY.md, "The fresh start"). Run ONCE, after part 74, on
+-- the day the simple life goes live. Running it again does nothing (it remembers it ran).
+--
+-- Everyone's money goes to ₦250,000 plus a ₦100,000 founder bonus (₦350,000), their savings pots
+-- are emptied, they get the Founder badge and a message saying what happened. Homes, places, cars
+-- and things they own stay theirs. Players with no home get a free room the next time they open
+-- the game.
+--
+-- Everyone's old money is saved first in public.fresh_start_backup. To undo, run the block at the
+-- bottom of this file (it's commented out).
+
+create table if not exists public.fresh_start_backup (
+  user_id uuid primary key references public.profiles (id) on delete cascade,
+  coins numeric(14,2) not null,
+  pots jsonb not null default '{}'::jsonb,
+  backed_up_at timestamptz not null default now()
+);
+alter table public.fresh_start_backup enable row level security;
+
+insert into public.game_settings (key, value, note) values
+  ('fresh_start_coins', 233.34, 'Mint everyone has after the fresh start: ₦250,000 plus a ₦100,000 founder bonus (₦350,000)')
+on conflict (key) do nothing;
+
+do $$
+declare
+  v_to numeric := coalesce(public.setting('fresh_start_coins'), 233.34);
+  x record;
+  v_pots jsonb;
+begin
+  if exists (select 1 from public.game_settings where key = 'fresh_start_done') then
+    raise notice 'The fresh start has run already: nothing changed.';
+    return;
+  end if;
+  for x in select id, coins from public.profiles where not is_bot loop
+    v_pots := coalesce((select jsonb_object_agg(pot, balance) from public.life_pots where user_id = x.id), '{}'::jsonb);
+    insert into public.fresh_start_backup (user_id, coins, pots) values (x.id, x.coins, v_pots) on conflict (user_id) do nothing;
+    update public.life_pots set balance = 0 where user_id = x.id;
+    update public.profiles set coins = v_to where id = x.id;
+    perform public.log_coins(x.id, null, 'fresh_start', v_to - x.coins, false, 'The fresh start');
+    if not exists (select 1 from public.badges where user_id = x.id and badge = 'founder') then
+      insert into public.badges (user_id, badge, detail) values (x.id, 'founder', 'Here before the fresh start');
+    end if;
+    perform public.notify(x.id, null, 'fresh_start',
+      'Newtown has a fresh start: real Lagos prices, a daily gift, and a free room for everyone. Your money is now ₦350,000 (₦250,000 plus a ₦100,000 founder bonus), your homes and things are still yours, and you''re a Founder.');
+  end loop;
+  insert into public.game_settings (key, value, note) values ('fresh_start_done', 1, 'The fresh start (part 75) has run');
+end $$;
+
+-- ============================================================ to undo (only if you must)
+-- Puts everyone's money and pots back as they were before the fresh start (money earned or spent
+-- since is lost), and lets part 75 run again.
+--
+-- update public.profiles p set coins = b.coins from public.fresh_start_backup b where b.user_id = p.id;
+-- update public.life_pots lp set balance = coalesce((b.pots ->> lp.pot)::numeric, 0) from public.fresh_start_backup b where b.user_id = lp.user_id;
+-- delete from public.game_settings where key = 'fresh_start_done';
+
+-- ======================================================== 076_topups.sql
+-- Newtown, part 76: top-ups (docs/MONEY.md, "Top-ups"). Buy game money any time through Paystack:
+-- ₦1,000 of real money is ₦1,000,000 in the game, bigger top-ups carry a bonus, and your first
+-- top-up is doubled. The money only arrives once Paystack itself says the payment went through
+-- (when the player comes back, or from the webhook, whichever is first), and only once. Game money
+-- is never turned back into real money.
+--
+-- Safe to run more than once.
+
+create table if not exists public.topups (
+  reference text primary key check (reference ~ '^tu-[a-f0-9]{20}$'),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  region text not null check (region ~ '^[a-z0-9-]{2,30}$'),
+  option text not null check (option ~ '^[a-z0-9_]{1,20}$'),
+  mint numeric(14,2) not null check (mint > 0),
+  amount_kobo bigint not null check (amount_kobo > 0),
+  status text not null default 'pending' check (status in ('pending', 'paid')),
+  doubled boolean not null default false,
+  created_at timestamptz not null default now(),
+  paid_at timestamptz
+);
+create index if not exists topups_user_idx on public.topups (user_id, created_at desc);
+alter table public.topups enable row level security;
+
+/** A top-up payment started (p_mint: what it buys, worked out by the server). */
+create or replace function public.topup_start(p_user uuid, p_reference text, p_region text, p_option text, p_mint numeric, p_kobo bigint) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not exists (select 1 from public.profiles where id = p_user and not is_bot and not frozen) then raise exception 'unknown_player'; end if;
+  if coalesce(p_mint, 0) <= 0 or p_mint > 1000000 then raise exception 'bad_amount'; end if;
+  insert into public.topups (reference, user_id, region, option, mint, amount_kobo) values (p_reference, p_user, p_region, p_option, p_mint, p_kobo);
+end $$;
+
+/**
+ * Paystack confirmed a top-up (p_kobo: what was actually paid). Once only: the money arrives, doubled
+ * if it's the player's first top-up. Returns { found, new, mint, doubled }.
+ */
+create or replace function public.topup_paid(p_reference text, p_kobo bigint) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  t public.topups;
+  v_first boolean;
+  v_add numeric;
+begin
+  select * into t from public.topups where reference = p_reference for update;
+  if not found then return jsonb_build_object('found', false); end if;
+  if t.status = 'paid' then return jsonb_build_object('found', true, 'new', false, 'mint', t.mint * case when t.doubled then 2 else 1 end, 'doubled', t.doubled); end if;
+  if coalesce(p_kobo, 0) < t.amount_kobo then return jsonb_build_object('found', true, 'new', false, 'short', true); end if;
+  perform 1 from public.profiles where id = t.user_id for update;
+  v_first := not exists (select 1 from public.topups where user_id = t.user_id and status = 'paid');
+  v_add := t.mint * case when v_first then 2 else 1 end;
+  update public.topups set status = 'paid', paid_at = now(), doubled = v_first where reference = p_reference;
+  update public.profiles set coins = coins + v_add where id = t.user_id;
+  perform public.log_coins(t.user_id, null, 'topup', v_add, false, 'Top-up' || case when v_first then ' (first one, doubled)' else '' end);
+  return jsonb_build_object('found', true, 'new', true, 'mint', v_add, 'doubled', v_first);
+end $$;
+
+do $$
+declare f text;
+begin
+  revoke all on table public.topups from public, anon, authenticated;
+  grant all on table public.topups to service_role;
+  foreach f in array array['public.topup_start(uuid, text, text, text, numeric, bigint)', 'public.topup_paid(text, bigint)'] loop
+    execute format('revoke all on function %s from public, anon, authenticated', f);
+    execute format('grant execute on function %s to service_role', f);
+  end loop;
+end $$;
+
+-- ======================================================== 077_renting.sql
+-- Newtown, part 77: renting a home (docs/MONEY.md, "Renting"). Instead of buying, rent a home nobody
+-- owns from the city, a month (30 days) at a time: 6% of what it's worth a month, the same as
+-- landlords in the game earn for letting. It's paid up front and again each month from your wallet;
+-- when you can't pay, the lease ends and you're back in a free room. Buying a home of your own ends
+-- the lease. Nobody else can buy or rent a home while it's rented.
+--
+-- Safe to run more than once.
+
+create table if not exists public.home_rentals (
+  user_id uuid primary key references public.profiles (id) on delete cascade,
+  unit_id text not null unique check (unit_id ~ '^[a-z0-9-]+:-?[0-9]+,-?[0-9]+/[0-9]+$'),
+  label text not null default 'Home',
+  rent numeric(14,2) not null check (rent > 0),
+  started_at timestamptz not null default now(),
+  paid_until timestamptz not null
+);
+alter table public.home_rentals enable row level security;
+
+/** Rent a home from the city for a month (p_rent: a month's rent in mint, worked out by the server). */
+create or replace function public.rent_home(p_user uuid, p_unit text, p_label text, p_rent numeric) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  p public.profiles;
+  v_rent numeric := round(coalesce(p_rent, 0), 2);
+begin
+  if p_unit is null or p_unit !~ '^[a-z0-9-]+:-?[0-9]+,-?[0-9]+/[0-9]+$' then raise exception 'bad_unit'; end if;
+  if v_rent <= 0 or v_rent > public.setting('property_price_max') then raise exception 'bad_price'; end if;
+  select * into p from public.profiles where id = p_user for update;
+  if not found or p.is_bot then raise exception 'unknown_player'; end if;
+  if p.frozen or p.age_blocked_at is not null then raise exception 'frozen'; end if;
+  perform 1 from public.lives where user_id = p_user for update;
+  if not found then raise exception 'no_life'; end if;
+  if exists (select 1 from public.property_units where unit_id = p_unit) then raise exception 'taken'; end if;
+  if exists (select 1 from public.home_rentals where unit_id = p_unit and user_id <> p_user) then raise exception 'taken'; end if;
+  if p.coins < v_rent then raise exception 'not_enough:%', trim_scale(v_rent); end if;
+  -- A home already rented elsewhere ends (no refund); your free room goes back.
+  delete from public.home_rentals where user_id = p_user;
+  delete from public.property_units where owner_id = p_user and starter;
+  insert into public.home_rentals (user_id, unit_id, label, rent, paid_until)
+  values (p_user, p_unit, left(coalesce(p_label, 'Home'), 60), v_rent, now() + interval '30 days');
+  update public.profiles set coins = coins - v_rent where id = p_user;
+  perform public.log_coins(p_user, null, 'home_rent', -v_rent, false, 'Rent: ' || p_unit);
+  perform public.burn(null, v_rent, 'Rent to the city');
+  update public.lives set home_unit = p_unit where user_id = p_user;
+  return jsonb_build_object('unit', p_unit, 'paid_until', now() + interval '30 days', 'coins', p.coins - v_rent);
+end $$;
+
+/**
+ * Bring your lease up to date: each month that's come due is paid from your wallet; when it can't
+ * be, the lease ends (you're back in a free room). Returns { renting, ended, paid }.
+ */
+create or replace function public.rent_settle(p_user uuid) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  r public.home_rentals;
+  v_coins numeric;
+  v_paid int := 0;
+begin
+  select * into r from public.home_rentals where user_id = p_user for update;
+  if not found then return jsonb_build_object('renting', false); end if;
+  while r.paid_until <= now() loop
+    select coins into v_coins from public.profiles where id = p_user for update;
+    if v_coins < r.rent then
+      delete from public.home_rentals where user_id = p_user;
+      update public.lives set home_unit = null where user_id = p_user and home_unit = r.unit_id;
+      perform public.notify(p_user, null, 'rent', 'Your rent was due and your wallet was short, so you moved out. You''re back in a free room.');
+      return jsonb_build_object('renting', false, 'ended', true, 'paid', v_paid);
+    end if;
+    update public.profiles set coins = coins - r.rent where id = p_user;
+    perform public.log_coins(p_user, null, 'home_rent', -r.rent, false, 'Rent: ' || r.unit_id);
+    perform public.burn(null, r.rent, 'Rent to the city');
+    r.paid_until := r.paid_until + interval '30 days';
+    v_paid := v_paid + 1;
+  end loop;
+  update public.home_rentals set paid_until = r.paid_until where user_id = p_user;
+  if v_paid > 0 then perform public.notify(p_user, null, 'rent', 'Rent paid for another month.'); end if;
+  return jsonb_build_object('renting', true, 'paid', v_paid, 'unit', r.unit_id, 'rent', r.rent, 'paid_until', r.paid_until, 'label', r.label);
+end $$;
+
+/** Move out of a rented home (no refund): back to a free room. */
+create or replace function public.rent_end(p_user uuid) returns void
+language plpgsql security definer set search_path = public as $$
+declare v_unit text;
+begin
+  delete from public.home_rentals where user_id = p_user returning unit_id into v_unit;
+  if v_unit is not null then update public.lives set home_unit = null where user_id = p_user and home_unit = v_unit; end if;
+end $$;
+
+/** Nobody can buy a home someone's renting; buying your own home ends your lease. */
+create or replace function public.rental_guard() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare v_rented text;
+begin
+  if exists (select 1 from public.home_rentals where unit_id = new.unit_id and user_id <> new.owner_id) then raise exception 'taken'; end if;
+  if tg_op = 'INSERT' and new.use = 'home' and not new.starter then
+    delete from public.home_rentals where user_id = new.owner_id returning unit_id into v_rented;
+    if v_rented is not null then
+      update public.lives set home_unit = new.unit_id where user_id = new.owner_id and (home_unit = v_rented or home_unit is null);
+    end if;
+  end if;
+  return new;
+end $$;
+drop trigger if exists rental_guard on public.property_units;
+create trigger rental_guard before insert or update of owner_id on public.property_units for each row execute function public.rental_guard();
+
+revoke all on function public.rent_home(uuid, text, text, numeric), public.rent_settle(uuid), public.rent_end(uuid) from public, anon, authenticated;
+
+-- ======================================================== 078_home_name.sql
+-- Newtown, part 78: name your home. Any home you hold (bought, or your free room) can have its own
+-- name ("Tolu's Pad"), shown on your home card. A free room's name goes with it when it goes back
+-- to the city (the row is removed then).
+--
+-- Safe to run more than once.
+
+/** Name a home you hold (an empty name puts back what it was called: "Room", "Flat"...). */
+create or replace function public.home_rename(p_user uuid, p_unit text, p_name text) returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  v_name text := nullif(btrim(regexp_replace(coalesce(p_name, ''), '\s+', ' ', 'g')), '');
+begin
+  if v_name is not null and (char_length(v_name) not between 2 and 40 or v_name !~ '^[[:alnum:] ''&.,()-]+$') then raise exception 'bad_name'; end if;
+  update public.property_units set label = coalesce(v_name, case when starter then 'Room' else 'Home' end)
+  where unit_id = p_unit and owner_id = p_user and use = 'home';
+  if not found then raise exception 'not_yours'; end if;
+end $$;
+revoke all on function public.home_rename(uuid, text, text) from public, anon, authenticated;
+grant execute on function public.home_rename(uuid, text, text) to service_role;
 

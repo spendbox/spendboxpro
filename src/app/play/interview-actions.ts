@@ -12,6 +12,7 @@ import type { EventResult, InterviewResult, InterviewStart } from "@/lib/world/p
 import { interviewPass, needsInterview } from "@/lib/world/work";
 import { workplaceById } from "@/lib/world/workplace";
 import { tickLife } from "./life-tick";
+import { NO_JOBS, SIMPLE_LIFE } from "@/lib/world/simple-life";
 
 // Interviews and breakthrough moments (docs/DAY.md). Questions and answers stay on the server: the
 // phone gets the questions in a sealed note (src/lib/game-seal.ts) and sends its answers back; a pass
@@ -42,6 +43,7 @@ async function who() {
 
 /** Start an interview for a job at a place: five questions, and how many must be right. */
 export async function interviewStart(placeId: string, jobId: string): Promise<InterviewStart> {
+  if (SIMPLE_LIFE) return { ok: false, error: NO_JOBS };
   try {
     return await startInterview(placeId, jobId);
   } catch (e) {

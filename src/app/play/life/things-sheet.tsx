@@ -3,7 +3,7 @@
 import { announceGiftSent } from "../people/gift-pop";
 import { useCallback, useEffect, useState } from "react";
 import { cachedThings, loadThings } from "./things-cache";
-import { Car, Gem, Hammer, ShoppingBag, Store } from "lucide-react";
+import { Car, Gem, ShoppingBag, Store } from "lucide-react";
 import {
   BENEFIT_LABEL,
   CATEGORY_LABEL,
@@ -41,7 +41,7 @@ const TABS: { id: ThingsTab; label: string; icon: typeof Gem }[] = [
   { id: "shops", label: "Shops", icon: ShoppingBag },
   { id: "cars", label: "Cars", icon: Car },
   { id: "market", label: "Market", icon: Store },
-  { id: "craft", label: "Craft", icon: Hammer },
+  // Craft (inventions) is off in the simple life.
 ];
 
 export function ThingsSheet({ tab: start, prices, onClose, onChanged }: { tab: ThingsTab; prices: Prices; onClose: () => void; onChanged?: () => void }) {

@@ -7,6 +7,7 @@
 // Shared by the server (which works out every price and effect here, never trusting the phone),
 // the screens, and the world lab. The database part is game-db/050_economy_items.sql.
 
+import { OWNED_PRICES } from "./price-level.ts";
 import type { Prices } from "./region.ts";
 
 export type ItemCategory = "jewellery" | "clothing" | "book" | "gadget" | "home" | "art" | "fitness" | "car";
@@ -50,7 +51,8 @@ export const DRIFT: Record<ItemCategory, number> = {
   car: -0.012,
 };
 
-const K = (id: string, name: string, category: ItemCategory, price: number, effect: ItemEffect, car?: ItemKind["car"]): ItemKind => ({ id, name, category, price, effect, ...(car ? { car } : {}) });
+// Prices are real Lagos prices, times Newtown's level for things you own (src/lib/world/price-level.ts).
+const K = (id: string, name: string, category: ItemCategory, price: number, effect: ItemEffect, car?: ItemKind["car"]): ItemKind => ({ id, name, category, price: price * OWNED_PRICES, effect, ...(car ? { car } : {}) });
 
 /** What the city's shops and car dealers sell (naira). */
 export const SHOP: ItemKind[] = [
@@ -241,8 +243,7 @@ export function effectWords(e: ItemEffect) {
 // ---------------------------------------------------------------- reputation
 
 /**
- * Your reputation: homes and property (by what they're worth), cars and fine things, inventions
- * people have bought, what people liked of what you left on the map, minus what being caught
+ * Your reputation: homes and property (by what they're worth), cars and fine things, what people liked of what you left on the map, minus what being caught
  * stealing or voted down cost you. Never below zero.
  */
 export function reputationOf(o: { propertyMint: number; homes: number; itemRep: number; inventionsSold: number; penalty: number; marksLiked?: number; challenges?: number }) {
@@ -250,7 +251,8 @@ export function reputationOf(o: { propertyMint: number; homes: number; itemRep: 
   const parts = {
     property: property + o.homes * 5,
     things: Math.round(o.itemRep),
-    inventions: Math.round(o.inventionsSold * 2),
+    // Inventions no longer count (crafting is off in the simple life).
+    inventions: 0,
     // Reactions people gave to what you left on the map (up to 50).
     marks: Math.min(50, Math.round((o.marksLiked ?? 0) / 2)),
     // Challenges hosted and won on the map (./challenges challengeRep).

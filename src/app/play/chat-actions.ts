@@ -24,6 +24,8 @@ export type ChatMessage = {
   body: string | null;
   audio_path: string | null;
   audio_seconds: number | null;
+  /** When the person it was sent to read it (game-db/071; missing before that is run). */
+  read_at?: string | null;
   /** A picture sent in the message (game-db/062): its path in the photos bucket. */
   image_path?: string | null;
   created_at: string;

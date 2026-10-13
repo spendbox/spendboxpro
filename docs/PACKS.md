@@ -1,12 +1,12 @@
 # Starting out: free or a starter pack
 
-A life on the real map starts free with ₥6,500, or with a starter pack bought once, before your first
+A life on the real map starts free with ₦250,000 and a room, or with a starter pack bought once, before your first
 home, through Paystack (`src/lib/world/packs.ts`, `src/app/play/pack-actions.ts`,
 `game-db/042_starter_packs.sql`).
 
 | Pack | Mint | Price |
 | --- | --- | --- |
-| Free | ₥6,500 | free |
+| Free | ₥166.67 (₦250,000) and a free room | free |
 | Starter | ₥26,000 | ₦1,000 |
 | Big Boy | ₥65,000 | ₦2,500 |
 | Odogwu (Rich Family, ₦300m) | ₥200,000 | ₦7,500 |
@@ -29,7 +29,7 @@ Paid packs bring things, not only more money, so prices keep meaning something f
 
 | Pack | Also comes with |
 |---|---|
-| The Hustler (free) | Nothing extra. ₥6,500 buys a flat almost anywhere in Lagos. |
+| The Hustler (free) | Nothing extra: a free room to live in, and ₦250,000. |
 | Uncle Abroad | A smartphone and designer sneakers, sent from abroad. |
 | Comfortable Home | The first home comes fully furnished, plus a laptop, a wristwatch and a generator. |
 | Rich Family | A Toyota Camry, a gold chain and a luxury watch; the first home furnished on two floors with its own dance hall; the Rich Family badge. |

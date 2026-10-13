@@ -16,6 +16,7 @@ export function Sheet({
   title,
   clear,
   above,
+  centred,
 }: {
   onClose: () => void;
   children: React.ReactNode;
@@ -28,6 +29,8 @@ export function Sheet({
   clear?: boolean;
   /** Over other full-screen cards (a character's chat). */
   above?: boolean;
+  /** In the middle of the screen on phones too (higher up, not at the bottom). */
+  centred?: boolean;
 }) {
   const downOnBackdrop = useRef(false);
   // Escape closes it too.
@@ -43,7 +46,7 @@ export function Sheet({
   return (
     <div
       // Never blurred: the city behind stays sharp (just a little dimmer, or not at all).
-      className={cn("fixed inset-0 grid place-items-end p-2 sm:place-items-center sm:p-4", above ? "z-[70]" : "z-40", clear ? "bg-transparent" : "bg-ink/20")}
+      className={cn("fixed inset-0 grid p-2 sm:place-items-center sm:p-4", centred ? "place-items-center pb-16" : "place-items-end", above ? "z-[70]" : "z-40", clear ? "bg-transparent" : "bg-ink/20")}
       onPointerDown={(e) => {
         downOnBackdrop.current = e.target === e.currentTarget;
         // Taps and typing in a card are the card's alone: the map's own listeners (dragging,
@@ -62,7 +65,7 @@ export function Sheet({
     >
       <section
         className={cn(
-          "w-full overflow-y-auto rounded-3xl bg-panel p-5 shadow-2xl",
+          "relative w-full overflow-y-auto rounded-3xl bg-panel p-5 shadow-2xl",
           clear ? "max-h-[min(60dvh,calc(100dvh-1rem))] ring-1 ring-ink/10 sm:max-h-[calc(100dvh-2rem)]" : "max-h-[calc(100dvh-1rem)]",
           wide ? "max-w-lg" : "max-w-sm",
         )}

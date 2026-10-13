@@ -23,7 +23,7 @@ export async function startPayment(input: {
   reference: string;
   callbackUrl: string;
   metadata: Record<string, string | number>;
-}): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+}): Promise<{ ok: true; url: string; accessCode?: string } | { ok: false; error: string }> {
   try {
     const res = await fetch(`${API}/transaction/initialize`, {
       method: "POST",
@@ -39,10 +39,11 @@ export async function startPayment(input: {
       cache: "no-store",
     });
     const body = (await res.json().catch(() => null)) as
-      | { status?: boolean; message?: string; data?: { authorization_url?: string } }
+      | { status?: boolean; message?: string; data?: { authorization_url?: string; access_code?: string } }
       | null;
     const url = body?.data?.authorization_url;
-    if (res.ok && body?.status && url) return { ok: true, url };
+    // The access code lets the game open Paystack's pop-up right inside the page (no leaving the site).
+    if (res.ok && body?.status && url) return { ok: true, url, accessCode: body.data?.access_code };
     console.error("Paystack initialize failed", res.status, body);
     return { ok: false, error: body?.message || "The payment page didn't open. Please try again." };
   } catch (error) {

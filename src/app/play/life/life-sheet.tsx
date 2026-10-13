@@ -180,6 +180,9 @@ export function LifeSheet({
           ) : (
             <p className="mt-1.5 text-center text-[11px] text-muted">Tap Body or Mind to see what adds to it and what uses it up.</p>
           )}
+          <p className="mt-2 rounded-2xl bg-ink/5 px-3 py-2 text-[11px]">
+            <b>Food:</b> no cooking needed. Your meals are paid from your money by themselves every day. If you run out of money, your body gets weaker.
+          </p>
           {health < SICK_BELOW && <p className="mt-2 text-xs font-semibold text-hit">{health < BEDRIDDEN_BELOW ? "Too ill to work. See a doctor." : "Unwell: half pay until you're better."}</p>}
           {mind < STRESSED_BELOW && <p className="mt-2 text-xs font-semibold text-hit">Stressed: interviews are harder. Rest or talk to someone.</p>}
           {recovering && (

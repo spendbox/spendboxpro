@@ -64,7 +64,7 @@ declare
   p public.profiles;
   v_last timestamptz;
   v_fee numeric := 0;
-  v_stake numeric := round(least(1000, greatest(0, coalesce(p_stake, 0))), 2);
+  v_stake numeric := round(least(10000, greatest(0, coalesce(p_stake, 0))), 2);
   v_id bigint;
   v_seed bigint := floor(random() * 2000000000)::bigint;
   v_starts timestamptz := now() + interval '60 seconds';
@@ -77,7 +77,7 @@ begin
   if public.challenge_busy(p_user) is not null then raise exception 'busy'; end if;
   select max(created_at) into v_last from public.challenges where host_id = p_user and status <> 'cancelled';
   if v_last is not null and v_last > now() - make_interval(secs => greatest(60, least(1800, coalesce(p_cooldown, 480)))) then
-    v_fee := round(least(500, greatest(0, coalesce(p_fee, 0))), 2);
+    v_fee := round(least(2000, greatest(0, coalesce(p_fee, 0))), 2);
   end if;
   if public.life_can_spend(p_user, array['fun']) < v_fee + v_stake then raise exception 'not_enough:%', trim_scale(v_fee + v_stake); end if;
   if v_fee > 0 then

@@ -1,7 +1,8 @@
 "use client";
 
-import { House, Users, X } from "@/components/icons";
-import { DoorOpen, PencilRuler } from "lucide-react";
+import { useState } from "react";
+import { House, Pencil, TrendingUp, Users, X } from "@/components/icons";
+import { DoorOpen } from "lucide-react";
 import type { Neighbour } from "@/lib/world/property-api";
 
 /** Two letters for someone's round badge. */
@@ -23,7 +24,43 @@ function tint(name: string) {
 const far = (tiles: number) => (tiles < 1 ? "next door" : `${Math.round(tiles * 100)} m away`);
 
 /** Your home, at the bottom of the map: where it is and who lives around you. */
-export function HomeCard({ label, area, neighbours, onClose, onPlan, onEnter, children }: { label: string; area: string; neighbours: Neighbour[] | null; onClose: () => void; onPlan?: () => void; onEnter?: () => void; children?: React.ReactNode }) {
+export function HomeCard({
+  label,
+  name,
+  area,
+  neighbours,
+  onClose,
+  onEnter,
+  onRename,
+  naming: startNaming = false,
+  children,
+}: {
+  label: string;
+  /** What the home is called now (the part you can change). */
+  name?: string;
+  area: string;
+  neighbours: Neighbour[] | null;
+  onClose: () => void;
+  onEnter?: () => void;
+  /** Give the home a name; resolves to an error to show, or null when done. */
+  onRename?: (name: string) => Promise<string | null>;
+  /** Open with the name box ready (a home just given). */
+  naming?: boolean;
+  children?: React.ReactNode;
+}) {
+  const [naming, setNaming] = useState(startNaming && !!onRename);
+  const [draft, setDraft] = useState(name ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const save = async () => {
+    if (!onRename) return;
+    setBusy(true);
+    setError(null);
+    const e = await onRename(draft);
+    setBusy(false);
+    if (e) return setError(e);
+    setNaming(false);
+  };
   const inside = (neighbours ?? []).filter((n) => n.sameBuilding);
   const around = (neighbours ?? []).filter((n) => !n.sameBuilding);
   return (
@@ -35,7 +72,38 @@ export function HomeCard({ label, area, neighbours, onClose, onPlan, onEnter, ch
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted">Home</p>
-            <p className="truncate font-semibold">{label}</p>
+            {naming ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void save();
+                }}
+                className="mt-0.5 flex gap-1.5"
+              >
+                <input
+                  autoFocus
+                  value={draft}
+                  maxLength={40}
+                  onChange={(e) => setDraft(e.target.value)}
+                  placeholder="Name your home"
+                  className="h-9 min-w-0 flex-1 rounded-full bg-white px-3 text-sm outline-none ring-1 ring-ink/15 focus:ring-me"
+                />
+                <button disabled={busy} className="h-9 shrink-0 rounded-full bg-ink px-3 text-xs font-semibold text-white disabled:opacity-50">
+                  {busy ? "…" : "Save"}
+                </button>
+              </form>
+            ) : (
+              <p className="flex items-center gap-1.5 font-semibold">
+                <span className="truncate">{label}</span>
+                {onRename && (
+                  <button onClick={() => setNaming(true)} className="grid size-6 shrink-0 place-items-center rounded-full text-muted hover:bg-ink/5" aria-label="Rename your home" title="Rename">
+                    <Pencil className="size-3.5" />
+                  </button>
+                )}
+              </p>
+            )}
+            {naming && <p className="mt-1 text-[11px] text-muted">Give it a name, like &quot;Tolu&apos;s Pad&quot;.</p>}
+            {error && <p className="mt-1 text-xs text-hit">{error}</p>}
             <p className="truncate text-sm text-muted">{area}</p>
           </div>
           <button onClick={onClose} className="grid size-8 shrink-0 place-items-center rounded-full hover:bg-ink/5" aria-label="Close">
@@ -43,16 +111,16 @@ export function HomeCard({ label, area, neighbours, onClose, onPlan, onEnter, ch
           </button>
         </div>
 
-        {onPlan && (
-          <button onClick={onPlan} className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-full bg-ink text-sm font-semibold text-white">
-            <PencilRuler className="size-4" /> Plan my home: rooms, floors, furniture
+        <div className="mt-3 flex gap-2">
+          {onEnter && (
+            <button onClick={onEnter} className="flex h-10 flex-1 items-center justify-center gap-2 rounded-full bg-gold text-sm font-semibold text-ink">
+              <DoorOpen className="size-4" /> Enter home
+            </button>
+          )}
+          <button disabled className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full bg-ink/5 text-sm font-semibold text-muted" title="Coming soon">
+            <TrendingUp className="size-4" /> Upgrade <span className="rounded-full bg-gold/30 px-1.5 text-[10px] text-ink">Soon</span>
           </button>
-        )}
-        {onEnter && (
-          <button onClick={onEnter} className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-full bg-gold text-sm font-semibold text-ink">
-            <DoorOpen className="size-4" /> Enter home
-          </button>
-        )}
+        </div>
 
         {children}
 

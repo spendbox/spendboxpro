@@ -4,7 +4,7 @@ import { rememberPerson } from "./people/recent-rail";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { ArrowDown, ArrowLeft, ImagePlus, LoaderCircle, Mic, Pause, UserCheck, UserPlus } from "lucide-react";
+import { ArrowDown, ArrowLeft, Camera, ImagePlus, LoaderCircle, Mic, Newspaper, Pause, Search, SendHorizontal, UserCheck, UserPlus } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import { Bot, Building2, ChevronDown, ChevronUp, Coins, Fish, HotAirBalloon, Lock, LogOut, MessageCircle, Play, Users, X } from "@/components/icons";
 import type { Avatar } from "@/lib/avatar";
@@ -17,6 +17,7 @@ import { BotCard } from "./bot-card";
 import { loadDms, loadRoom, sendMessage, sendPhoto, sendVoice, voiceUrl, type ChatMessage, type ChatTarget } from "./chat-actions";
 import { ChatPhoto, PhotoPicker, type PhotoPick } from "./chat-photo";
 import { NpcBadge, NpcCard, NpcFace } from "./npc-card";
+import { closePhoneNotices } from "./phone/phone-notices";
 import { RideIcon } from "./ride-icon";
 import { formatCountdown, levelLabel, levelOf, useCountdown, type RoomInfo, type RoomMember } from "./rooms";
 
@@ -30,6 +31,8 @@ import { formatCountdown, levelLabel, levelOf, useCountdown, type RoomInfo, type
 // half of the screen (drag or tap the handle to make it bigger); on computers a side panel.
 
 const BOT_ID = "00000000-0000-0000-0000-00000000b07a";
+/** What you've read in each private conversation, on this phone. */
+const SEEN_KEY = "nt-chat-seen";
 /** The NPCs' chat shown when you walk in starts this long before you arrived. */
 const NPC_BACKLOG_MS = 10 * 60 * 1000;
 
@@ -184,6 +187,10 @@ export function Chat({
   finder,
   onPerson,
   onSelfie,
+  newtown,
+  news,
+  onlineNow,
+  onCamera,
 }: {
   meId: string;
   meRole: "hider" | "seeker" | null;
@@ -236,20 +243,64 @@ export function Chat({
   onPerson?: (id: string) => void;
   /** "Take a selfie" in the picture menu: the game's camera, sending the picture here. */
   onSelfie?: (target: ChatTarget, to: string) => void;
+  /**
+   * The real map: Newtown's own chat (pinned on top): your notices as messages. `request`
+   * changing opens it; onSeen when it's open (they're read).
+   */
+  newtown?: { lines: NewtownLine[]; unread: number; onSeen: () => void; onSettings: () => void; request: number };
+  /** Newtown News (pinned under Newtown): the latest headline, and opening the news. */
+  news?: { latest: string | null; onOpen: () => void };
+  /** Who's online now, faces along the top of your chats (tap one to message them). */
+  onlineNow?: { id: string; name: string; avatar: Avatar }[];
+  /** Take a picture or a selfie (the game's camera). */
+  onCamera?: () => void;
 }) {
   const roomId = room?.id ?? null;
   const roomCap = room?.capacity ?? 30;
   const [roomMsgs, setRoomMsgs] = useState<List | null>(null);
   const [dms, setDms] = useState<List | null>(null);
-  const [thread, setThread] = useState<Thread | null>(null);
-  const [tab, setTab] = useState<"here" | "private" | "people">("here");
-  // Out on the real map (not in a place): Messages opens on People, to find anyone near you.
+  const [thread, setThreadNow] = useState<Thread | null>(null);
+  // Newtown's own chat is open (the real map).
+  const [newtownOpen, setNewtownOpen] = useState(false);
+  const setThread = (t: Thread | null) => {
+    setThreadNow(t);
+    if (t) setNewtownOpen(false);
+  };
+  // The real map has no group chat in places (voice is enough there): your chats come first.
+  const [tab, setTab] = useState<"here" | "private" | "people">(keep ? "private" : "here");
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
-    if (open && !room && finder && tab === "here") setTab("people");
+    if (open && keep && !thread) setTab("private");
+    if (!open) setNewtownOpen(false);
+    else if (open && !room && finder && tab === "here") setTab("people");
   }
-  const [seen, setSeen] = useState<Record<string, number>>({});
+  // What you've read in each conversation (the newest message id), kept on this phone too, so
+  // read messages never count again after the game reloads.
+  const [seen, setSeenNow] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (!keep) return;
+    const t = setTimeout(() => {
+      try {
+        const v = JSON.parse(localStorage.getItem(SEEN_KEY) ?? "{}") as Record<string, number>;
+        if (v && typeof v === "object") setSeenNow((s) => ({ ...v, ...s }));
+      } catch {}
+    }, 0);
+    return () => clearTimeout(t);
+  }, [keep]);
+  const setSeen = useCallback(
+    (f: (s: Record<string, number>) => Record<string, number>) =>
+      setSeenNow((s) => {
+        const next = f(s);
+        if (keep)
+          try {
+            const dmOnly = Object.fromEntries(Object.entries(next).filter(([k]) => k.startsWith("dm:")));
+            localStorage.setItem(SEEN_KEY, JSON.stringify(dmOnly));
+          } catch {}
+        return next;
+      }),
+    [keep],
+  );
   const [error, setError] = useState<string | null>(null);
   const [findText, setFindText] = useState("");
   const [botCard, setBotCard] = useState<string | null>(null);
@@ -313,6 +364,11 @@ export function Chat({
     };
   }, [roomId, roundId, guest, keep]);
 
+  // A private message was read (game-db/071): "Opened".
+  const readMessage = useCallback((m: ChatMessage) => {
+    if (!m.recipient_id) return;
+    setDms((d) => (d ? { ...d, list: d.list.map((x) => (x.id === m.id ? { ...x, read_at: m.read_at } : x)) } : d));
+  }, []);
   // Live: one listener for the whole round; keep what belongs to your place or your private chats.
   const addMessage = useCallback((m: ChatMessage) => {
     if (m.recipient_id) {
@@ -336,12 +392,14 @@ export function Chat({
         "postgres_changes",
         keep ? { event: "INSERT", schema: "public", table: "chat_messages" } : { event: "INSERT", schema: "public", table: "chat_messages", filter: `round_id=eq.${roundId}` },
         (payload) => addMessage(payload.new as ChatMessage),
-      )
-      .subscribe();
+      );
+    // Your messages being opened (the real map).
+    if (keep) channel.on("postgres_changes", { event: "UPDATE", schema: "public", table: "chat_messages" }, (payload) => readMessage(payload.new as ChatMessage));
+    channel.subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [roundId, guest, addMessage, keep]);
+  }, [roundId, guest, addMessage, readMessage, keep]);
 
   // ---- the place's NPCs: who they are, and what they've been saying
   const hint = roomHint(room);
@@ -405,11 +463,27 @@ export function Chat({
   const newest = (thread ? dmMsgs.filter((m) => m.sender_id === thread.id || m.recipient_id === thread.id) : hereMsgs).at(-1)?.id ?? 0;
   useEffect(() => {
     if (!visibleKey) return;
-    const id = requestAnimationFrame(() => setSeen((s) => ({ ...s, [visibleKey]: newest })));
+    const id = requestAnimationFrame(() => setSeen((s) => (s[visibleKey] === newest ? s : { ...s, [visibleKey]: newest })));
     return () => cancelAnimationFrame(id);
-  }, [visibleKey, newest]);
-  const unreadHere = hereMsgs.filter((m) => m.id > (seen[`room:${roomId}`] ?? 0) && m.sender_id !== meId).length;
-  const unreadDm = dmMsgs.filter((m) => m.recipient_id === meId && m.id > (seen[`dm:${m.sender_id}`] ?? 0)).length;
+  }, [visibleKey, newest, setSeen]);
+  // Reading a conversation: they see "Opened", it stops counting on your other phones, and its
+  // notification goes from this phone.
+  const readFrom = thread && open ? thread.id : null;
+  const unreadFromThem = readFrom ? dmMsgs.filter((m) => m.sender_id === readFrom && m.recipient_id === meId && !m.read_at).length : 0;
+  useEffect(() => {
+    if (!readFrom || !keep) return;
+    closePhoneNotices(`dm:${readFrom}`);
+    if (!unreadFromThem) return;
+    const at = new Date().toISOString();
+    const id = requestAnimationFrame(() =>
+      setDms((d) => (d ? { ...d, list: d.list.map((m) => (m.sender_id === readFrom && m.recipient_id === meId && !m.read_at ? { ...m, read_at: at } : m)) } : d)),
+    );
+    void fetch("/api/chat-read", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ from: readFrom }) }).catch(() => {});
+    return () => cancelAnimationFrame(id);
+  }, [readFrom, unreadFromThem, keep, meId]);
+  const unreadHere = keep ? 0 : hereMsgs.filter((m) => m.id > (seen[`room:${roomId}`] ?? 0) && m.sender_id !== meId).length;
+  const isUnread = useCallback((m: ChatMessage) => m.recipient_id === meId && !m.read_at && m.id > (seen[`dm:${m.sender_id}`] ?? 0), [meId, seen]);
+  const unreadDm = dmMsgs.filter(isUnread).length;
   const unread = unreadHere + unreadDm;
   useEffect(() => {
     onUnread?.(unread);
@@ -478,6 +552,28 @@ export function Chat({
     setTab("private");
     rememberPerson({ id, name, avatar: avatarOf(id, name) }, "Messaged");
   }
+
+  // Asked to open Newtown's chat (a notice tapped, the bell...).
+  const lastNewtown = useRef(newtown?.request ?? 0);
+  const newtownAsk = newtown?.request ?? 0;
+  useEffect(() => {
+    if (!newtownAsk || newtownAsk === lastNewtown.current) return;
+    lastNewtown.current = newtownAsk;
+    const id = setTimeout(() => {
+      setThreadNow(null);
+      setTab("private");
+      setNewtownOpen(true);
+    }, 0);
+    return () => clearTimeout(id);
+  }, [newtownAsk]);
+  // Newtown's chat open: what's in it is read.
+  const newtownSeen = newtown?.onSeen;
+  const newtownUnread = newtown?.unread ?? 0;
+  useEffect(() => {
+    if (!open || !newtownOpen || !newtownSeen || !newtownUnread) return;
+    const id = setTimeout(newtownSeen, 600);
+    return () => clearTimeout(id);
+  }, [open, newtownOpen, newtownSeen, newtownUnread]);
 
   // Someone asked to message a particular player (from the map).
   const lastDm = useRef(0);
@@ -641,7 +737,8 @@ export function Chat({
   const MAX_FACES = 40;
   const peopleRow = room && (others.length > 0 || npcs.length > 0) && (
     <div className="flex shrink-0 gap-2 overflow-x-auto border-b border-line px-3 pb-2 pt-2.5 [scrollbar-width:none]" aria-label="People here">
-      {/* First: talk to everyone here at once (this place's chat). */}
+      {/* First: talk to everyone here at once (this place's chat; not on the real map). */}
+      {!keep && (
       <button
         onClick={() => {
           setThread(null);
@@ -655,6 +752,7 @@ export function Chat({
         </span>
         <span className="w-full truncate text-center text-[10px] font-semibold">Everyone</span>
       </button>
+      )}
       {others.slice(0, MAX_FACES).map((p) => {
         const role = byId.get(p.id)?.role;
         return (
@@ -734,7 +832,18 @@ export function Chat({
       </button>
 
       <header className="flex shrink-0 items-center gap-1.5 border-b border-line px-3 pb-2 sm:pt-2.5">
-        {thread ? (
+        {newtownOpen && !thread && keep ? (
+          <>
+            <button onClick={() => setNewtownOpen(false)} className="grid size-9 place-items-center rounded-full text-muted hover:bg-panel-2" aria-label="Back to your chats">
+              <ArrowLeft className="size-5" aria-hidden />
+            </button>
+            <NewtownFace size={32} />
+            <div className="min-w-0 flex-1">
+              <h2 className="truncate font-semibold">Newtown</h2>
+              <p className="truncate text-[11px] text-muted">Gifts, knocks at your door, results and news for you</p>
+            </div>
+          </>
+        ) : thread ? (
           <>
             <button onClick={() => setThread(null)} className="grid size-9 place-items-center rounded-full text-muted hover:bg-panel-2" aria-label="Back">
               <ArrowLeft className="size-5" aria-hidden />
@@ -749,21 +858,46 @@ export function Chat({
                 </button>
                 {byId.get(thread.id)?.bigFish && <BigFishBadge />}
               </h2>
-              <p className="flex items-center gap-1 truncate text-[11px] font-semibold text-[#5f3dc4]">
-                <Lock className="size-3 shrink-0" aria-hidden />
-                Private
-                <span className="truncate font-normal text-muted">
-                  {" · "}
-                  {byId.get(thread.id) ? ROLE_STYLE[byId.get(thread.id)!.role].label : "Player"}
-                  {byId.get(thread.id)?.caught ? " (caught)" : ""}
-                </span>
-              </p>
+              {keep ? (
+                <p className="flex items-center gap-1 truncate text-[11px] text-muted">
+                  <Lock className="size-3 shrink-0" aria-hidden />
+                  Only you two can see this
+                </p>
+              ) : (
+                <p className="flex items-center gap-1 truncate text-[11px] font-semibold text-[#5f3dc4]">
+                  <Lock className="size-3 shrink-0" aria-hidden />
+                  Private
+                  <span className="truncate font-normal text-muted">
+                    {" · "}
+                    {byId.get(thread.id) ? ROLE_STYLE[byId.get(thread.id)!.role].label : "Player"}
+                    {byId.get(thread.id)?.caught ? " (caught)" : ""}
+                  </span>
+                </p>
+              )}
             </div>
             {thread.id !== meId && thread.id !== BOT_ID && greet?.({ id: thread.id, name: thread.name })}
             {giveButton({ id: thread.id, name: thread.name, avatar: byId.get(thread.id)?.avatar ?? avatarOf(thread.id, thread.name) })}
           </>
         ) : guest ? (
           <h2 className="flex-1 px-1 font-semibold">Chat</h2>
+        ) : keep ? (
+          <>
+            {tab === "people" ? (
+              <button onClick={() => setTab("private")} className="grid size-9 place-items-center rounded-full text-muted hover:bg-panel-2" aria-label="Back to your chats">
+                <ArrowLeft className="size-5" aria-hidden />
+              </button>
+            ) : (
+              <span className="grid size-9 place-items-center rounded-full bg-[#7048e8]/12 text-[#7048e8]">
+                <MessageCircle className="size-5" aria-hidden />
+              </span>
+            )}
+            <h2 className="min-w-0 flex-1 truncate px-1 font-display text-lg font-bold">{tab === "people" ? "New chat" : "Chat"}</h2>
+            {tab !== "people" && (
+              <button onClick={() => setTab("people")} className="flex h-9 shrink-0 items-center gap-1 rounded-full bg-[#7048e8] px-3 text-xs font-bold text-white shadow-sm" aria-label="Start a new chat">
+                <Search className="size-3.5" aria-hidden /> New chat
+              </button>
+            )}
+          </>
         ) : (
           <div className="flex min-w-0 flex-1 gap-1 rounded-xl bg-panel-2 p-1 text-sm font-semibold" role="tablist">
             {(["here", "private", "people"] as const).map((t) => (
@@ -821,8 +955,8 @@ export function Chat({
         </div>
       ) : (
         <>
-          {!thread && tab === "here" && placeLine}
-          {!thread && tab === "here" && !box?.keyboard && peopleRow}
+          {!thread && tab === "here" && !keep && placeLine}
+          {!thread && tab === "here" && !keep && !box?.keyboard && peopleRow}
 
           {!thread && tab === "people" && finder ? (
             <div className="flex min-h-0 flex-1 flex-col">
@@ -920,6 +1054,71 @@ export function Chat({
                 ))}
               </ul>
             </div>
+          ) : !thread && tab === "private" && keep && newtownOpen && newtown ? (
+            <NewtownThread lines={newtown.lines} onSettings={newtown.onSettings} />
+          ) : !thread && tab === "private" && keep ? (
+            <ChatList
+              conversations={conversations}
+              meId={meId}
+              faceOf={faceOf}
+              unreadOf={(id) => dmMsgs.filter((m) => m.sender_id === id && isUnread(m)).length}
+              onOpen={(c) => openThread(c.id, c.name)}
+              onFind={() => setTab("people")}
+              top={
+                <>
+                  {onlineNow && onlineNow.length > 0 && (
+                    <div className="shrink-0 px-3 pb-2 pt-2.5">
+                      <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted">Online now</p>
+                      <div className="flex gap-3 overflow-x-auto [scrollbar-width:none]">
+                        {onlineNow.slice(0, 20).map((p) => (
+                          <button key={p.id} onClick={() => openThread(p.id, p.name)} className="flex w-14 shrink-0 flex-col items-center gap-1" title={`Message ${p.name}`}>
+                            <span className="relative">
+                              <AvatarFace avatar={p.avatar} size={46} className="rounded-full" />
+                              <span className="absolute bottom-0 right-0 size-3 rounded-full bg-[#2f9e44] ring-2 ring-panel" aria-hidden />
+                            </span>
+                            <span className="w-full truncate text-center text-[11px] font-semibold">{firstName(p.name)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {newtown && (
+                    <button onClick={() => setNewtownOpen(true)} className={cn("flex w-full shrink-0 items-center gap-3 border-t border-line/60 px-3 py-2.5 text-left", newtown.unread > 0 ? "bg-[#fff9db]" : "active:bg-panel-2 sm:hover:bg-panel-2")}>
+                      <NewtownFace size={46} />
+                      <span className="min-w-0 flex-1">
+                        <span className={cn("block text-[15px]", newtown.unread ? "font-bold" : "font-semibold")}>Newtown</span>
+                        <span className={cn("mt-0.5 block truncate text-xs", newtown.unread ? "font-bold text-[#e8590c]" : "text-muted")}>
+                          {newtown.lines[0]?.text ?? "Gifts, knocks at your door and results come here"}
+                        </span>
+                      </span>
+                      {newtown.unread > 0 && (
+                        <span className="grid min-w-6 place-items-center rounded-full bg-[#e8590c] px-1.5 py-0.5 text-[11px] font-bold text-white">{newtown.unread > 9 ? "9+" : newtown.unread}</span>
+                      )}
+                    </button>
+                  )}
+                  {news && (
+                    <button onClick={news.onOpen} className="flex w-full shrink-0 items-center gap-3 border-y border-line/60 px-3 py-2.5 text-left active:bg-panel-2 sm:hover:bg-panel-2">
+                      <span className="grid size-[46px] shrink-0 place-items-center rounded-2xl bg-[#e03131] text-white">
+                        <Newspaper className="size-6" aria-hidden />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[15px] font-semibold">Newtown News</span>
+                        <span className="mt-0.5 block truncate text-xs text-muted">{news.latest ?? "What's happening in the city"}</span>
+                      </span>
+                    </button>
+                  )}
+                </>
+              }
+              bottom={
+                onCamera && (
+                  <div className="mt-auto flex shrink-0 justify-center p-3">
+                    <button onClick={onCamera} className="flex h-11 items-center gap-2 rounded-full bg-ink px-5 text-sm font-semibold text-white">
+                      <Camera className="size-4" aria-hidden /> Take a picture or a selfie
+                    </button>
+                  </div>
+                )
+              }
+            />
           ) : !thread && tab === "private" ? (
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
               <p className="flex items-center gap-1 px-2 pb-2 text-[11px] text-muted">
@@ -977,11 +1176,20 @@ export function Chat({
               isPrivate={Boolean(thread)}
               faceOf={faceOf}
               bigFish={bigFishIds}
+              snap={keep && Boolean(thread)}
+              theirName={thread?.name}
             />
           )}
 
-          {(thread || (tab === "here" && room)) && (
-            <Composer onSend={send} onAudio={sendAudio} onPicture={sendPicture} onSelfie={selfieHere} placeholder={thread ? `Private message to ${thread.name}` : `Message ${room ? placeTitle(room) : "everyone here"}`} />
+          {(thread || (tab === "here" && room && !keep)) && (
+            <Composer
+              snap={keep}
+              onSend={send}
+              onAudio={sendAudio}
+              onPicture={sendPicture}
+              onSelfie={selfieHere}
+              placeholder={keep ? "Send a chat" : thread ? `Private message to ${thread.name}` : `Message ${room ? placeTitle(room) : "everyone here"}`}
+            />
           )}
           {error && <p className="shrink-0 px-4 pb-2 text-xs text-hit">{error}</p>}
         </>
@@ -989,6 +1197,171 @@ export function Chat({
       {cards}
     </section>,
     document.body,
+  );
+}
+
+
+// ---- Chat on the real map: Newtown's own look. Your chats with the last thing said and a dot
+// while there's something new; conversations in rounded bubbles (yours in Newtown purple), with
+// Sent / Seen under your last one.
+
+const BRAND = "#7048e8";
+
+/** Short "how long ago": now, 5m, 3h, 2d. */
+function agoShort(iso: string) {
+  const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60_000));
+  return m < 1 ? "now" : m < 60 ? `${m}m` : m < 1440 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`;
+}
+
+/** Sent (one tick) or seen (two ticks, in purple). */
+function Ticks({ seen }: { seen: boolean }) {
+  return (
+    <svg viewBox="0 0 16 10" className="h-2.5 w-4 shrink-0" aria-hidden>
+      <path d="M1 5.5 3.8 8.3 9.5 1.7" fill="none" stroke={seen ? BRAND : "currentColor"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      {seen && <path d="M6.5 7.6 7.2 8.3 12.9 1.7" fill="none" stroke={BRAND} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />}
+    </svg>
+  );
+}
+
+/** What the last message was, in a few words ("You: on my way", "Photo", "Voice note"). */
+function preview(last: ChatMessage, meId: string) {
+  const what = last.audio_path ? "🎤 Voice note" : last.image_path && (!last.body || last.body === "Sent a photo") ? "📷 Photo" : last.body;
+  return last.sender_id === meId ? `You: ${what}` : what;
+}
+
+function ChatList({
+  conversations,
+  meId,
+  faceOf,
+  unreadOf,
+  onOpen,
+  onFind,
+  top,
+  bottom,
+}: {
+  conversations: { id: string; name: string; last: ChatMessage }[];
+  meId: string;
+  faceOf: (id: string, name: string, size: number) => React.ReactNode;
+  unreadOf: (id: string) => number;
+  onOpen: (c: { id: string; name: string }) => void;
+  onFind: () => void;
+  /** Above the chats: who's online, and Newtown's own chats (pinned). */
+  top?: React.ReactNode;
+  /** Under them: the camera. */
+  bottom?: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+      {top}
+      {conversations.length ? (
+        <ChatRows conversations={conversations} meId={meId} faceOf={faceOf} unreadOf={unreadOf} onOpen={onOpen} />
+      ) : (
+        <div className="flex flex-col items-center justify-center gap-2 p-6 text-center">
+          <p className="font-semibold">No chats yet</p>
+          <p className="text-sm text-muted">Find someone online and say hi. Only the two of you see your chats.</p>
+          <button onClick={onFind} className="mt-1 rounded-full bg-[#7048e8] px-5 py-2.5 text-sm font-bold text-white shadow">
+            Start a chat
+          </button>
+        </div>
+      )}
+      {bottom}
+    </div>
+  );
+}
+
+function ChatRows({
+  conversations,
+  meId,
+  faceOf,
+  unreadOf,
+  onOpen,
+}: {
+  conversations: { id: string; name: string; last: ChatMessage }[];
+  meId: string;
+  faceOf: (id: string, name: string, size: number) => React.ReactNode;
+  unreadOf: (id: string) => number;
+  onOpen: (c: { id: string; name: string }) => void;
+}) {
+  return (
+    <ul className="divide-y divide-line/60">
+      {conversations.map((c) => {
+        const unread = unreadOf(c.id);
+        const mineLast = c.last.sender_id === meId;
+        return (
+          <li key={c.id}>
+            <button onClick={() => onOpen(c)} className="flex w-full items-center gap-3 px-3 py-2.5 text-left active:bg-panel-2 sm:hover:bg-panel-2">
+              <span className="relative shrink-0">{faceOf(c.id, c.name, 46)}</span>
+              <span className="min-w-0 flex-1">
+                <span className={cn("block truncate text-[15px]", unread ? "font-bold" : "font-semibold")}>{c.name}</span>
+                <span className="mt-0.5 flex items-center gap-1.5 text-xs">
+                  {mineLast && <span className="text-muted"><Ticks seen={!!c.last.read_at} /></span>}
+                  <span className={cn("min-w-0 truncate", unread ? "font-semibold text-ink" : "text-muted")}>{preview(c.last, meId)}</span>
+                  <span className="shrink-0 text-muted">· {agoShort(c.last.created_at)}</span>
+                </span>
+              </span>
+              {unread > 0 ? (
+                <span className="grid min-w-6 place-items-center rounded-full px-1.5 py-0.5 text-[11px] font-bold text-white" style={{ background: BRAND }}>
+                  {unread > 9 ? "9+" : unread}
+                </span>
+              ) : null}
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** Newtown's own face in your chats: a dark tile with a gold N. */
+function NewtownFace({ size }: { size: number }) {
+  return (
+    <span className="grid shrink-0 place-items-center rounded-2xl bg-ink font-display font-black text-gold" style={{ width: size, height: size, fontSize: size * 0.45 }} aria-hidden>
+      N
+    </span>
+  );
+}
+
+/** One of Newtown's own messages to you (a notice: a gift, a knock, a challenge result...). */
+export type NewtownLine = { key: string; text: string; at: string; unread: boolean; icon?: React.ReactNode; onTap?: () => void };
+
+/** The Newtown chat: everything the game tells you, as messages, newest at the bottom. */
+function NewtownThread({ lines, onSettings }: { lines: NewtownLine[]; onSettings: () => void }) {
+  const end = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    end.current?.scrollIntoView({ block: "end" });
+  }, [lines.length]);
+  const list = [...lines].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">
+      <button onClick={onSettings} className="mx-auto mb-3 block rounded-full bg-panel-2 px-3 py-1 text-[11px] font-semibold text-muted">
+        Phone notifications and clearing
+      </button>
+      {!list.length && <p className="p-6 text-center text-sm text-muted">Nothing yet. Gifts, knocks at your door and challenge results will show up here.</p>}
+      <div className="space-y-2">
+        {list.map((l) => {
+          const body = (
+            <span className="flex items-start gap-2">
+              {l.icon}
+              <span className="min-w-0 flex-1">
+                <span className="block break-words text-sm">{l.text}</span>
+                <span className="mt-0.5 block text-[10px] text-muted">{agoShort(l.at)}</span>
+              </span>
+            </span>
+          );
+          const cls = cn("block w-full max-w-[88%] rounded-2xl rounded-bl-md px-3 py-2 text-left", l.unread ? "bg-[#fff3bf]" : "bg-panel-2");
+          return l.onTap ? (
+            <button key={l.key} onClick={l.onTap} className={cls}>
+              {body}
+            </button>
+          ) : (
+            <div key={l.key} className={cls}>
+              {body}
+            </div>
+          );
+        })}
+      </div>
+      <div ref={end} />
+    </div>
   );
 }
 
@@ -1000,6 +1373,8 @@ function Messages({
   isPrivate,
   faceOf,
   bigFish,
+  snap = false,
+  theirName,
 }: {
   items: Item[];
   meId: string;
@@ -1009,6 +1384,10 @@ function Messages({
   faceOf: (id: string, name: string, size: number) => React.ReactNode;
   /** Players holding lots of coins (shown with a "Big fish" badge). */
   bigFish: Set<string>;
+  /** The real map's private chats: Newtown's own look (purple bubbles, Sent / Seen). */
+  snap?: boolean;
+  /** Who you're chatting with (for the names over their lines). */
+  theirName?: string;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
@@ -1064,12 +1443,12 @@ function Messages({
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       <div ref={scroller} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">
-        <div ref={inner} className="space-y-2">
+        <div ref={inner} className={snap ? "" : "space-y-2"}>
           {items.length === 0 && (
             <p className="flex items-center justify-center gap-1.5 p-6 text-center text-sm text-muted">
               {isPrivate ? (
                 <>
-                  <Lock className="size-3.5 shrink-0" aria-hidden /> Say hello. Only the two of you can see this.
+                  <Lock className="size-3.5 shrink-0" aria-hidden /> {snap ? `Say hi to ${theirName ?? "them"}! Only the two of you see this chat.` : "Say hello. Only the two of you can see this."}
                 </>
               ) : (
                 "Nobody has said anything here yet. Say hi!"
@@ -1123,6 +1502,52 @@ function Messages({
                     <p className="break-words">{mintify(m.body)}</p>
                   </div>
                   <span className="ml-auto shrink-0 self-end text-[10px] text-muted">{time(m.created_at)}</span>
+                </div>
+              );
+            }
+            if (snap) {
+              const lastMine = mine && !items.slice(i + 1).some((x) => x.m?.sender_id === meId);
+              const day = new Date(m.created_at).toDateString();
+              const newDay = i === 0 || new Date(items[i - 1].at).toDateString() !== day;
+              const onlyPhoto = m.image_path && m.body === "Sent a photo";
+              return (
+                <div key={it.key}>
+                  {newDay && (
+                    <p className="py-2 text-center">
+                      <span className="rounded-full bg-panel-2 px-2.5 py-0.5 text-[10px] font-semibold text-muted">
+                        {day === new Date().toDateString() ? "Today" : new Date(m.created_at).toLocaleDateString([], { weekday: "long", day: "numeric", month: "short" })}
+                      </span>
+                    </p>
+                  )}
+                  <div className={cn("flex items-end gap-1.5", mine ? "justify-end" : "justify-start", !sameAsPrev || newDay ? "mt-2" : "mt-0.5")}>
+                    {!mine && (
+                      <button onClick={() => onName(m.sender_id, m.sender_name)} className={cn("shrink-0 rounded-full", sameAsPrev && !newDay && "invisible")} aria-label={`${theirName || m.sender_name}'s profile`}>
+                        {faceOf(m.sender_id, m.sender_name, 26)}
+                      </button>
+                    )}
+                    <div
+                      className={cn(
+                        "max-w-[78%] text-[15px] leading-snug",
+                        onlyPhoto ? "overflow-hidden rounded-2xl" : "rounded-[20px] px-3.5 py-2",
+                        !onlyPhoto && (mine ? "rounded-br-md text-white" : "rounded-bl-md bg-panel-2 text-ink"),
+                      )}
+                      style={mine && !onlyPhoto ? { background: BRAND } : undefined}
+                      title={time(m.created_at)}
+                    >
+                      {m.image_path && <ChatPhoto id={m.id} mine={mine} />}
+                      {m.audio_path ? (
+                        <VoiceNote id={m.id} seconds={m.audio_seconds ?? 0} mine={mine} />
+                      ) : onlyPhoto ? null : (
+                        <span className="break-words">{m.body}</span>
+                      )}
+                    </div>
+                  </div>
+                  {lastMine && (
+                    <p className="mt-0.5 flex items-center justify-end gap-1 px-1 text-[10px] font-semibold text-muted">
+                      <Ticks seen={!!m.read_at} />
+                      {m.read_at ? `Seen ${agoShort(m.read_at)}` : `Sent ${time(m.created_at)}`}
+                    </p>
+                  )}
                 </div>
               );
             }
@@ -1246,7 +1671,9 @@ function Composer({
   onPicture,
   onSelfie,
   placeholder,
+  snap = false,
 }: {
+  snap?: boolean;
   onSend: (text: string) => Promise<boolean>;
   onAudio: (blob: Blob, seconds: number) => Promise<void>;
   onPicture: (p: PhotoPick) => Promise<void>;
@@ -1348,6 +1775,42 @@ function Composer({
           </button>
         </div>
       ) : (
+        snap ? (
+          <form onSubmit={submit} className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => (onSelfie ? onSelfie() : setPicking((v) => !v))}
+              disabled={busy}
+              className="grid size-10 shrink-0 place-items-center rounded-full bg-panel-2 text-ink"
+              aria-label="Take a selfie and send it"
+            >
+              {busy ? <LoaderCircle className="size-5 animate-spin" aria-hidden /> : <Camera className="size-5" aria-hidden />}
+            </button>
+            <div className="flex min-w-0 flex-1 items-center rounded-full bg-panel-2 pl-4 pr-1">
+              <input
+                value={text}
+                onChange={(e) => setText(e.target.value.slice(0, 500))}
+                placeholder={placeholder}
+                className="h-10 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted sm:text-sm"
+              />
+              {!text.trim() && (
+                <>
+                  <button type="button" onClick={startRecording} disabled={busy} className="grid size-8 shrink-0 place-items-center rounded-full text-muted" aria-label="Record a voice note">
+                    <Mic className="size-[18px]" aria-hidden />
+                  </button>
+                  <button type="button" onClick={() => setPicking((v) => !v)} disabled={busy} className="grid size-8 shrink-0 place-items-center rounded-full text-muted" aria-label="Send a photo">
+                    <ImagePlus className="size-[18px]" aria-hidden />
+                  </button>
+                </>
+              )}
+            </div>
+            {text.trim() && (
+              <button disabled={busy} className="grid size-10 shrink-0 place-items-center rounded-full text-white shadow disabled:opacity-50" style={{ background: BRAND }} aria-label="Send">
+                <SendHorizontal className="size-5" aria-hidden />
+              </button>
+            )}
+          </form>
+        ) : (
         <form onSubmit={submit} className="flex items-center gap-2">
           <button type="button" onClick={() => setPicking((v) => !v)} disabled={busy} className="grid size-9 shrink-0 place-items-center rounded-full bg-panel-2" aria-label="Send a picture or a selfie">
             {busy ? <LoaderCircle className="size-4 animate-spin" aria-hidden /> : <ImagePlus className="size-4" aria-hidden />}
@@ -1368,6 +1831,7 @@ function Composer({
             </button>
           )}
         </form>
+        )
       )}
       {micError && <p className="mt-1 text-xs text-hit">{micError}</p>}
     </div>

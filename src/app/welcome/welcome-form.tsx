@@ -82,8 +82,8 @@ export function WelcomeForm({
             <div className="mt-1 grid grid-cols-2 gap-2" role="radiogroup" aria-label="Man or woman">
               {(
                 [
-                  ["male", "Man"],
-                  ["female", "Woman"],
+                  ["male", "Male"],
+                  ["female", "Female"],
                 ] as const
               ).map(([g, label]) => (
                 <button

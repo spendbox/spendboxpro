@@ -8,6 +8,7 @@ import { hustleById, hustleDay, hustleStart } from "@/lib/world/hustles";
 import type { PropertyResult } from "@/lib/world/property-api";
 import { skillLevel } from "@/lib/world/work";
 import { dayFits, tickLife } from "./life-tick";
+import { NO_JOBS, SIMPLE_LIFE } from "@/lib/world/simple-life";
 
 // Your day (docs/DAY.md; the database part is game-db/041_your_day.sql): a side hustle, exercise,
 // and where your time went. What a hustle earns and costs is worked out here, and every change must
@@ -38,6 +39,7 @@ async function region(userId: string) {
 
 /** Start a side hustle beside the ones you run (up to 3; game-db/049_reports_and_work.sql). */
 export async function startHustle(id: string): Promise<PropertyResult> {
+  if (SIMPLE_LIFE) return { ok: false, error: NO_JOBS };
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Please sign in again." };
   const h = hustleById(id);
