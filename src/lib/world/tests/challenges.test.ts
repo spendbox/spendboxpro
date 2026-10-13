@@ -14,8 +14,7 @@ test("Whot and Ludo can be played now; Jenga and Police and Thief are coming soo
 });
 
 test("the rules the owner asked for", () => {
-  // ₦50,000 at first; raised with the rest of the economy (stakes, gifts and prizes) to ₦250,000.
-  assert.equal(CHALLENGE_FEE_NAIRA, 250_000);
+  assert.equal(CHALLENGE_FEE_NAIRA, 50_000);
   assert.ok(CHALLENGE_COOLDOWN_SECS >= 5 * 60 && CHALLENGE_COOLDOWN_SECS <= 10 * 60);
   assert.equal(JOIN_SECS, 60);
   assert.ok(WINNER_SHARE > 0.5 && WINNER_SHARE <= 1);

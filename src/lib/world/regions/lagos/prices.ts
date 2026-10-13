@@ -15,8 +15,8 @@ export const PRICES: Prices = {
   // The edges of the city.
   land: 40_000,
   // What land costs in the game against real Lagos prices (districts.ts has the real ones, which
-  // also say how grand an area's buildings are): a tenth, then Newtown's level for things you own
-  // (three times: src/lib/world/price-level.ts), so homes keep pace with the money in the game.
+  // also say how grand an area's buildings are): a tenth, so a home is within reach (times
+  // Newtown's level for things you own, src/lib/world/price-level.ts: real prices today).
   landScale: 0.1 * OWNED_PRICES,
   // Homes and small shops cost far less to build than real life (a first home is within reach);
   // offices and plazas about half; glass towers and high-rise apartments at real prices.

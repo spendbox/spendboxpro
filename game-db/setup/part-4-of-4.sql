@@ -1770,7 +1770,7 @@ declare
   v_home boolean;
   v_paid text[] := '{}';
   v_step text;
-  v_reward numeric := round(least(greatest(coalesce(p_reward, 0), 0), 500), 2);
+  v_reward numeric := round(least(greatest(coalesce(p_reward, 0), 0), 20), 2);
   v_new boolean;
 begin
   -- Only new lives (started in the last 3 days) are paid: players who were here before don't get
@@ -1808,8 +1808,8 @@ revoke all on function public.first_steps_check(uuid, numeric) from public, anon
 -- Safe to run more than once.
 
 insert into public.game_settings (key, value, note) values
-  ('daily_gift_max',        5000, 'Most mint one daily gift can be (the server works the amount out; this is the ceiling)'),
-  ('challenge_bonus',       100,  'Mint Newtown adds for each challenge won (on top of the pot): ₦150,000 in Lagos'),
+  ('daily_gift_max',        40,   'Most mint one daily gift can be (the server works it out, at most ₦50,000; this is the ceiling)'),
+  ('challenge_bonus',       1.33, 'Mint Newtown adds for each challenge won (on top of the pot): ₦2,000 in Lagos'),
   ('challenge_bonus_daily', 5,    'How many challenge wins a day get the Newtown prize')
 -- Running this again sets these back to the numbers here.
 on conflict (key) do update set value = excluded.value, note = excluded.note;
@@ -1874,7 +1874,7 @@ language plpgsql security definer set search_path = public as $$
 declare
   v_day date := public.lagos_day();
   v_streak int;
-  v_amount numeric := round(least(greatest(coalesce(p_amount, 0), 0), coalesce(public.setting('daily_gift_max'), 5000)), 2);
+  v_amount numeric := round(least(greatest(coalesce(p_amount, 0), 0), coalesce(public.setting('daily_gift_max'), 40)), 2);
 begin
   if not exists (select 1 from public.lives where user_id = p_user) then raise exception 'no_life'; end if;
   v_streak := coalesce((select streak from public.daily_gifts where user_id = p_user and day = v_day - 1), 0) + 1;
@@ -1935,21 +1935,16 @@ order by 1 desc;
 revoke all on public.coin_supply_daily from public, anon, authenticated;
 grant select on public.coin_supply_daily to service_role;
 
--- ======================================================== 074_price_level.sql
--- Newtown, part 74: prices follow the money (docs/MONEY.md, "Prices"). Money in the game comes big
--- now (a daily gift of ₦400k–6.4m, challenge stakes up to ₦5m), so everyday things cost ten times
--- their real Lagos price (rides, trip fares, club entry, pranks, fines, bribes) and things you own
--- three times (shop items, cars, homes). The prices themselves are worked out in the game's code
--- (src/lib/world/price-level.ts); this raises the database's sanity limits to let them through,
--- and starts new lives with three times the money, so a first home is still within reach.
--- Also run part 67 again (club entry's own limit).
+-- ======================================================== 074_simple_life.sql
+-- Newtown, part 74: the simple life (docs/MONEY.md, docs/STARTER_ROOMS.md). Real Lagos prices and
+-- modest money: a new life starts with ₦250,000 and a free room to live in (one free move, given
+-- back when you buy a home of your own or stop playing for 60 days). Jobs, side hustles, bills,
+-- food and the body-and-mind meters are switched off: money comes from the daily gift, games,
+-- events and top-ups.
 --
 -- Safe to run more than once.
 
-update public.game_settings set value = 19500, note = 'Mint to start a life on the real map with (once): ₦29.25m in Lagos'
+-- ============================================================ starting money
+update public.game_settings set value = 166.67, note = 'Mint to start a life on the real map with (once): ₦250,000 in Lagos'
   where key = 'start_grant';
-update public.game_settings set value = greatest(value, 1500) where key = 'ride_fare_max';
-update public.game_settings set value = greatest(value, 1000) where key = 'trip_fare_max';
-update public.game_settings set value = greatest(value, 300) where key = 'work_fare_max';
-update public.game_settings set value = greatest(value, 1000000) where key = 'item_price_max';
 

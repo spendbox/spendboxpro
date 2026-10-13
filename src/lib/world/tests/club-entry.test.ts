@@ -10,8 +10,7 @@ test("a club's entry is the same every time, and some clubs are free", () => {
   assert.deepEqual(fees, Array.from({ length: 200 }, (_, i) => clubEntryNaira(`b:${i * 37}`)));
   assert.ok(fees.some((f) => f === 0));
   assert.ok(fees.some((f) => f > 0));
-  // Real prices up to ₦20,000, times Newtown's everyday level (src/lib/world/price-level.ts).
-  assert.ok(fees.every((f) => f >= 0 && f <= 200_000));
+  assert.ok(fees.every((f) => f >= 0 && f <= 20_000));
 });
 
 test("a home's party room never charges", () => {

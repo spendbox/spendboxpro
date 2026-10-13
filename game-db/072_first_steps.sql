@@ -28,7 +28,7 @@ declare
   v_home boolean;
   v_paid text[] := '{}';
   v_step text;
-  v_reward numeric := round(least(greatest(coalesce(p_reward, 0), 0), 500), 2);
+  v_reward numeric := round(least(greatest(coalesce(p_reward, 0), 0), 20), 2);
   v_new boolean;
 begin
   -- Only new lives (started in the last 3 days) are paid: players who were here before don't get

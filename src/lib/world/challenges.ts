@@ -25,9 +25,9 @@ export const CHALLENGE_GAMES: ChallengeGame[] = [
 export const challengeGame = (id: string) => CHALLENGE_GAMES.find((g) => g.id === id);
 
 /** What each player puts into the pool (naira): the host picks. */
-export const STAKES_NAIRA = [100_000, 500_000, 1_000_000, 5_000_000];
+export const STAKES_NAIRA = [1_000, 5_000, 20_000, 50_000];
 /** Another challenge before the cooldown is over costs this (naira); the first one is free. */
-export const CHALLENGE_FEE_NAIRA = 250_000;
+export const CHALLENGE_FEE_NAIRA = 50_000;
 /** How long before your next challenge is free again (between 5 and 10 minutes: time to join other people's). */
 export const CHALLENGE_COOLDOWN_SECS = 8 * 60;
 /** How long people have to join. */

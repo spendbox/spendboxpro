@@ -8,8 +8,8 @@
 -- Safe to run more than once.
 
 insert into public.game_settings (key, value, note) values
-  ('daily_gift_max',        5000, 'Most mint one daily gift can be (the server works the amount out; this is the ceiling)'),
-  ('challenge_bonus',       100,  'Mint Newtown adds for each challenge won (on top of the pot): ₦150,000 in Lagos'),
+  ('daily_gift_max',        40,   'Most mint one daily gift can be (the server works it out, at most ₦50,000; this is the ceiling)'),
+  ('challenge_bonus',       1.33, 'Mint Newtown adds for each challenge won (on top of the pot): ₦2,000 in Lagos'),
   ('challenge_bonus_daily', 5,    'How many challenge wins a day get the Newtown prize')
 -- Running this again sets these back to the numbers here.
 on conflict (key) do update set value = excluded.value, note = excluded.note;
@@ -74,7 +74,7 @@ language plpgsql security definer set search_path = public as $$
 declare
   v_day date := public.lagos_day();
   v_streak int;
-  v_amount numeric := round(least(greatest(coalesce(p_amount, 0), 0), coalesce(public.setting('daily_gift_max'), 5000)), 2);
+  v_amount numeric := round(least(greatest(coalesce(p_amount, 0), 0), coalesce(public.setting('daily_gift_max'), 40)), 2);
 begin
   if not exists (select 1 from public.lives where user_id = p_user) then raise exception 'no_life'; end if;
   v_streak := coalesce((select streak from public.daily_gifts where user_id = p_user and day = v_day - 1), 0) + 1;

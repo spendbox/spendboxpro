@@ -4,14 +4,14 @@
 
 import { everyday, OWNED_PRICES } from "./price-level.ts";
 
-// Amounts below are real Lagos prices times Newtown's level (src/lib/world/price-level.ts).
+// Amounts below are real Lagos prices (times Newtown's level, src/lib/world/price-level.ts: 1 today).
 
 /** Picking a pocket: at most this much cash, or failing that a small thing worth at most this. */
 export const PICK_CASH_MAX = everyday(20_000);
 export const PICK_ITEM_MAX = 50_000 * OWNED_PRICES;
 /**
  * Caught picking a pocket: the fine. With a 4 in 10 chance of being caught (PICK_CATCH), even the
- * best haul (₦200,000) loses about ₦40,000 on average (0.6 × 200,000 − 0.4 × 400,000), and most
+ * best haul (₦20,000) loses about ₦4,000 on average (0.6 × 20,000 − 0.4 × 40,000), and most
  * pockets hold less: crime doesn't pay, though now and then it's a thrill.
  */
 export const PICK_FINE = everyday(40_000);
