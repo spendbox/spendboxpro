@@ -223,6 +223,16 @@ export function cheapestRide(km: number, ferryKm = 0): Commute {
   return km <= FARES.keke.maxKm ? "keke" : "danfo";
 }
 
+/** The rides you can hail on foot for a trip this long, with each one's fare (mint): keke, okada, danfo. */
+export function rideChoices(km: number, prices: Prices, ferryKm = 0): { mode: Commute; mint: number }[] {
+  const out: { mode: Commute; mint: number }[] = [];
+  for (const mode of ["keke", "okada", "danfo"] as Commute[]) {
+    const mint = fareMint(mode, km, prices, ferryKm);
+    if (mint !== null) out.push({ mode, mint });
+  }
+  return out;
+}
+
 /** The cheapest way to work that goes that far (walking when it's close enough). */
 export function cheapestCommute(km: number, ferryKm = 0): Commute {
   km = Math.max(0, km - ferryKm * ROAD_FACTOR);

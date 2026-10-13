@@ -197,7 +197,7 @@ export async function buildingOwners(buildingId: string): Promise<BuildingOwner[
  * there. from: where you're standing (on foot on the map), and then always a ride (keke, danfo,
  * a ferry): skipping straight there is never free.
  */
-export async function travelTo(buildingId: string, drive?: boolean, from?: { x: number; z: number }): Promise<PropertyResult> {
+export async function travelTo(buildingId: string, drive?: boolean, from?: { x: number; z: number }, ride?: Commute): Promise<PropertyResult> {
   const spot = ownedSpot(buildingId);
   if (!spot || !REGIONS[spot.region]) return { ok: false, error: "That place isn't on the map." };
   const userId = await currentUserId();
@@ -215,6 +215,8 @@ export async function travelTo(buildingId: string, drive?: boolean, from?: { x: 
   const ferry = start ? ferryKmBetween(start, buildingId) : 0;
   // Driving your own car (if you have one): just the fuel, anywhere.
   let mode: Commute = km === null ? "walk" : onFoot ? cheapestRide(km, ferry) : cheapestCommute(km, ferry);
+  // On foot you can pick the ride (a keke, an okada or a danfo), if it goes that far.
+  if (onFoot && km !== null && ride && ["keke", "okada", "danfo"].includes(ride) && fareMint(ride, km, regionMap(spot.region)!.region.prices, ferry) !== null) mode = ride;
   if (drive && km !== null && mode !== "walk") {
     const { count } = await db.from("items").select("id", { count: "exact", head: true }).eq("owner", userId).eq("category", "car");
     if (!count) return { ok: false, error: "You need a car to drive. Get one from Things, Cars." };

@@ -57,7 +57,10 @@ import {
 } from "@/components/icons";
 import { short } from "@/lib/format";
 import { cash } from "@/lib/world/value";
-import { tripWords, type Commute } from "@/lib/world/work";
+import { rideChoices, tripKm, tripWords, type Commute } from "@/lib/world/work";
+import { ferryKmBetween } from "@/lib/world/trips";
+import { pickEncounter, type Encounter } from "@/lib/world/encounters";
+import { EncounterCard, RidePicker, RideScene, recentEncounters } from "./street/ride-scene";
 import { createClient } from "@/lib/supabase/client";
 import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
 import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
@@ -541,6 +544,10 @@ export function Game({
   /** Go somewhere that means leaving the building or ride you're in: ask first (set below, once leaveRoom exists). */
   const leaveThen = useRef<(what: string, go: () => void) => void>((_what, go) => go());
   const [leaveAsk, setLeaveAsk] = useState<{ what: string; go: () => void } | null>(null);
+  // On foot (docs/ENCOUNTERS.md): picking a ride, the ride itself, and things happening on the street.
+  const [ridePick, setRidePick] = useState<{ choices: { mode: Commute; mint: number }[]; where: string; resolve: (m: Commute | null) => void } | null>(null);
+  const [rideGo, setRideGo] = useState<{ mode: Commute; to: string; resolve: () => void } | null>(null);
+  const [footEncounter, setFootEncounter] = useState<Encounter | null>(null);
   /** Pay the fare to a spot on the map (set below, once the life API is there). True when paid and going. */
   const payTrip = useRef<(x: number, z: number) => Promise<boolean>>(() => Promise.resolve(true));
   const [busy, setBusy] = useState(false);
@@ -789,6 +796,24 @@ export function Game({
     const t = setTimeout(() => setWalkingNow(false), 0);
     return () => clearTimeout(t);
   }, [place, ride]);
+  // Out walking (really moving, not standing still), every minute or two something happens on the
+  // street: a hawker, an agbero, money on the ground... (docs/ENCOUNTERS.md).
+  const walkedFor = useRef({ secs: 0, next: 70 + Math.random() * 70 });
+  useEffect(() => {
+    if (!walking || !worldId || me.guest) return;
+    const t = setInterval(() => {
+      const w = walkStick.current;
+      if (!w.on || (w.x === 0 && w.y === 0) || document.hidden) return;
+      const m = walkedFor.current;
+      m.secs += 2;
+      if (m.secs < m.next) return;
+      m.secs = 0;
+      m.next = 70 + Math.random() * 80;
+      const e = pickEncounter("foot", null, recentEncounters());
+      if (e) setFootEncounter((now) => now ?? e);
+    }, 2000);
+    return () => clearInterval(t);
+  }, [walking, worldId, me.guest]);
   /** Everyone on the map to talk to: search by name, the nearest first (the online button, Messages → People). */
   const peopleFinder = (where: "stats" | "chat") =>
     worldId && !me.guest ? (
@@ -1829,11 +1854,29 @@ export function Game({
     payTrip.current = async (x: number, z: number) => {
       if (me.guest || !worldId) return true;
       const from = walkStick.current.on ? (worldLife.centerRef.current?.() ?? undefined) : undefined;
-      const r = await PROPERTY_API.travelTo(`${worldId}:${Math.round(x)},${Math.round(z)}`, false, from).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
+      const to = `${worldId}:${Math.round(x)},${Math.round(z)}`;
+      const where = worldLife.search?.region.areaAt(Math.round(x), Math.round(z)) || "there";
+      // On foot: hail a keke, an okada or a danfo (each one that goes that far, with its fare).
+      let ride: Commute | undefined;
+      if (from && worldRegion) {
+        const km = tripKm(from, { x, z });
+        const choices = km >= 0.3 ? rideChoices(km, worldRegion.prices, ferryKmBetween(`${worldId}:${Math.round(from.x)},${Math.round(from.z)}`, to)) : [];
+        if (choices.length > 1) {
+          const picked = await new Promise<Commute | null>((resolve) => setRidePick({ choices, where, resolve }));
+          setRidePick(null);
+          if (!picked) return false;
+          ride = picked;
+        } else ride = choices[0]?.mode;
+      }
+      const r = await PROPERTY_API.travelTo(to, false, from, ride).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
       if (!r.ok) {
         setMessage({ text: r.error, tone: "bad" });
         return false;
       }
+      // The ride there, and whatever happens on the way.
+      const mode = r.mode as Commute | undefined;
+      if (from && mode && ["keke", "okada", "danfo"].includes(mode)) await new Promise<void>((resolve) => setRideGo({ mode, to: where, resolve }));
+      setRideGo(null);
       if (r.fare) setMessage({ text: `${cash(r.fare)} ${r.mode ? tripWords(r.mode as Commute) : ""} to get there.`, tone: "good" });
       return true;
     };
@@ -2236,6 +2279,9 @@ export function Game({
             </button>
           ))}
       </div>
+      {ridePick && <RidePicker choices={ridePick.choices} where={ridePick.where} onPick={(m) => ridePick.resolve(m)} onClose={() => ridePick.resolve(null)} />}
+      {rideGo && worldId && <RideScene mode={rideGo.mode} to={rideGo.to} region={worldId} onDone={rideGo.resolve} />}
+      {footEncounter && worldId && <EncounterCard encounter={footEncounter} region={worldId} onDone={() => setFootEncounter(null)} />}
       {clubDoor && (
         <Sheet onClose={() => setClubDoor(null)} title={`${clubDoor.room.name}: at the door`}>
           <div className="flex flex-col items-center gap-2 py-2 text-center">
