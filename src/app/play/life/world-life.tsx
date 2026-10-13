@@ -44,7 +44,7 @@ import { HomeFinder } from "./home-finder";
 import { StartLife } from "./start-life";
 import { useLife } from "./use-life";
 import { confirmTopUp } from "../topup-actions";
-import { moveOut, myRental, rentUnit, type Rental } from "../property-actions";
+import { moveOut, myRental, renameHome, rentUnit, type Rental } from "../property-actions";
 import { StarterRoomBox } from "./starter-room";
 import { TOUR_KEY, WelcomeTour } from "./welcome-tour";
 import { WorkSheet } from "./work-sheet";
@@ -626,6 +626,8 @@ export function useWorldLife({
   // A free room straight away (docs/STARTER_ROOMS.md): a new life, a pack bought, back after a long
   // time away, anyone with no home gets one, and is taken there.
   const [roomFailed, setRoomFailed] = useState<string | null>(null);
+  /** A home was just given: its card opens (after the walkthrough) with the name box ready. */
+  const [nameNew, setNameNew] = useState(false);
   const asking = useRef(false);
   useEffect(() => {
     if (!signedIn || !loaded || !life || homeUnit || asking.current || pretend) return;
@@ -638,7 +640,10 @@ export function useWorldLife({
           return;
         }
         await refresh();
-        if (!r.already) setMessage({ text: `Welcome home! Your free room is in ${r.area ?? "Lagos"}. Tap your Home bubble any time.`, good: true });
+        if (!r.already) {
+          setMessage({ text: `Welcome home! Your free room is in ${r.area ?? "Lagos"}. Tap the house icon any time.`, good: true });
+          setNameNew(true);
+        }
         if (r.x !== undefined && r.z !== undefined) setFlyTo({ tile: spiralIndex(Math.round(r.x), Math.round(r.z)), at: ++flies.current });
       })
       .catch(() => setRoomFailed("The connection blinked."))
@@ -819,6 +824,17 @@ export function useWorldLife({
     setFlyTo({ tile: spiralIndex(Math.round(s.x), Math.round(s.z)), at: ++flies.current });
     return true;
   };
+  // A home just given: open its card, ready to name it (once the walkthrough is out of the way).
+  useEffect(() => {
+    if (!nameNew || tourOn || !homeSpot || homeOpen) return;
+    const t = setTimeout(() => {
+      setHomeOpen(true);
+      setNeighbours(null);
+      void api.neighbours().then(setNeighbours);
+    }, 1500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nameNew, tourOn, !!homeSpot, homeOpen]);
   const goHome = () => {
     if (!homeSpot) return;
     const go = () => {
@@ -969,9 +985,25 @@ export function useWorldLife({
       {homeOpen && homeSpot && (
         <HomeCard
           label={homeLabel}
+          name={home?.label}
+          naming={nameNew}
+          onRename={
+            signedIn && home && homeUnit
+              ? async (name) => {
+                  const r = await renameHome(homeUnit, name);
+                  if (!r.ok) return r.error ?? "That didn't work.";
+                  setNameNew(false);
+                  await refresh();
+                  return null;
+                }
+              : undefined
+          }
           area={region.areaAt(homeSpot.x, homeSpot.z)}
           neighbours={neighbours}
-          onClose={() => setHomeOpen(false)}
+          onClose={() => {
+            setHomeOpen(false);
+            setNameNew(false);
+          }}
           onEnter={
             onEnter && homeUnit
               ? () => {

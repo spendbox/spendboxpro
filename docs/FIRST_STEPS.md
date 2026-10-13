@@ -1,11 +1,11 @@
 # The first five minutes
 
 ## The welcome tour
-Before anything else, everyone signed in sees a few fun full-screen slides once
-(`src/app/play/life/welcome-tour.tsx`, kept in the browser as `newtown.tour.v2`): welcome to the
+Before anything else, everyone signed in sees a few fun tips once, in a small card over the map
+(`src/app/play/life/welcome-tour.tsx`, kept in the browser as `newtown.tour.v3`): welcome to the
 city; no work, no bills, no brushing your teeth; your virtual cash is for playing games, meeting
 people, visiting real places and sending gifts; free money every day; and the three steps below.
-Swipe or tap Next; Skip any time. Bump `TOUR_KEY` to show a new tour to everyone again.
+Tap Next; Skip any time. Bump `TOUR_KEY` to show a new tour to everyone again.
 
 ## The three steps
 Everyone gets three things to do (the guide is kept as `newtown.guide.v2`, so old players see it once too), one at a time, in the dark card under the buttons at the top

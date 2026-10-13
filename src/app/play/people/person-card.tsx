@@ -130,7 +130,7 @@ export function PersonCard({
           {canAct && (onMessage || onGive) && (
             <div className="mt-4 grid grid-cols-2 gap-2">
               {onMessage && (
-                <button onClick={() => onMessage({ id: card.id, name: card.name })} className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-[#0eadff] text-sm font-bold text-white shadow">
+                <button onClick={() => onMessage({ id: card.id, name: card.name })} className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-[#7048e8] text-sm font-bold text-white shadow">
                   <MessageCircle className="size-5" /> Message
                 </button>
               )}

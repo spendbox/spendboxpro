@@ -129,7 +129,6 @@ import { RecentRail, rememberPerson } from "./people/recent-rail";
 import { PrankReveal, usePrankReveal } from "./people/prank-reveal";
 import { openAdvertise } from "./life/advertise-panel";
 import { Fight, type ChallengeLight } from "./fight/fight";
-import { WelcomeFeatures } from "./welcome-features";
 import { CallBar } from "./call/call-bar";
 import * as propertyActions from "./property-actions";
 import * as workActions from "./work-actions";
@@ -1755,6 +1754,16 @@ export function Game({
   const enteredRoom = place ? (rooms.myRoomInfo?.id ?? null) : null;
   const enteredTile = enteredRoom ? Number(/^b:(\d+)/.exec(enteredRoom)?.[1] ?? NaN) : NaN;
   const inPlannedHome = !!worldId && Number.isFinite(enteredTile) && enteredTile in homePlans;
+  // How tall the panel along the bottom is (who's here, Leave...), so the home joystick sits above it.
+  const bottomDock = useRef<HTMLDivElement>(null);
+  const [bottomDockH, setBottomDockH] = useState(96);
+  useEffect(() => {
+    const el = bottomDock.current;
+    if (!el || !inPlannedHome) return;
+    const ro = new ResizeObserver(() => setBottomDockH(Math.round(el.getBoundingClientRect().height)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [inPlannedHome]);
   // Inside a place when the page reloads (the game updated, or the phone dropped the tab): back
   // inside it. Remembered while you're in; forgotten once you leave.
   const lastRoom = useRef<{ pending: boolean } | null>(null);
@@ -3083,7 +3092,7 @@ export function Game({
 
 
       {/* Bottom: messages, controls and chat */}
-      <div className={cn("pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-1.5 p-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:gap-2 sm:p-4", worldId && !place && !guest && "pr-16 sm:pr-20", camera && "hidden")}>
+      <div ref={bottomDock} className={cn("pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-1.5 p-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:gap-2 sm:p-4", worldId && !place && !guest && "pr-16 sm:pr-20", camera && "hidden")}>
         {!guest && !worldId && (
           <Safe name="Quest banner">
             <QuestBanner quest={quests.quest} onOpen={() => setQuestOpen(true)} />
@@ -3494,13 +3503,8 @@ export function Game({
           <div className="title-float flex flex-col items-center">
             <LogoMark size={60} className="mb-2 rounded-[16px] shadow-[0_12px_30px_rgba(0,0,0,0.35)]" />
             <h1 className="title-3d font-display text-[clamp(3rem,15vw,8rem)] font-black italic leading-none tracking-tight text-white">Newtown</h1>
-            <p className="mt-3 rounded-full bg-black/35 px-4 py-1.5 text-sm font-semibold tracking-wide text-white backdrop-blur-sm sm:text-base">Your world. Your story.</p>
-            {/* What Newtown is, for someone seeing it for the first time. */}
-            <p className="mt-3 max-w-[22rem] rounded-2xl bg-black/40 px-4 py-2.5 text-center text-[13px] leading-snug text-white backdrop-blur-sm sm:max-w-md sm:text-sm">
-              A living world where social media meets play. Explore real cities, meet new people, team up, and discover cultures from around the globe, alongside real people and real brands, in a space that&apos;s fun and safe.
-            </p>
-            <WelcomeFeatures />
-            <button onClick={() => setSignIn({ why: null })} className="pointer-events-auto mt-3 h-12 rounded-full bg-gold px-8 text-base font-bold text-ink shadow-lg">
+            <p className="mt-3 rounded-full bg-black/35 px-5 py-2 text-base font-bold tracking-wide text-white backdrop-blur-sm sm:text-lg">Your world. Your story. Your tribe.</p>
+            <button onClick={() => setSignIn({ why: null })} className="pointer-events-auto mt-5 h-12 rounded-full bg-gold px-8 text-base font-bold text-ink shadow-lg">
               Sign in to play
             </button>
           </div>
@@ -3538,7 +3542,7 @@ export function Game({
             setChatOpen(true);
             setMenu(false);
           }}
-          className="pointer-events-auto absolute bottom-4 right-3 z-20 grid size-14 place-items-center rounded-full bg-[#0eadff] text-white shadow-[0_8px_20px_-6px_rgba(14,173,255,0.8)] sm:bottom-6 sm:right-4"
+          className="pointer-events-auto absolute bottom-4 right-3 z-20 grid size-14 place-items-center rounded-full bg-[#7048e8] text-white shadow-[0_8px_20px_-6px_rgba(112,72,232,0.8)] sm:bottom-6 sm:right-4"
           aria-label={unread + chatUnread > 0 ? `Chat: ${unread + chatUnread} new` : "Chat"}
         >
           <span key={phoneRing} className={phoneRing ? "phone-ring grid place-items-center" : "grid place-items-center"}>
@@ -3768,7 +3772,7 @@ export function Game({
       )}
       {/* In a planned home: the joystick walks you round it (or tap the floor). */}
       {inPlannedHome && !camera && (
-        <div className="pointer-events-none fixed bottom-24 left-4 z-30 sm:bottom-8 sm:left-8">
+        <div className="pointer-events-none fixed left-4 z-30 sm:left-8" style={{ bottom: bottomDockH + 12 }}>
           <Joystick stick={homeStick} />
         </div>
       )}

@@ -16,3 +16,8 @@ Every player gets a free room to live in, straight away, so nobody starts by hun
 
 Database: `game-db/074_simple_life.sql` (`property_units.starter`, `starter_room_give`,
 `starter_rooms_sweep`, and the triggers that guard a free room and give it back).
+
+## Naming your home
+Any home you hold, a free room too, can be named from its card (the pencil by its name;
+`game-db/078_home_name.sql`, `home_rename`). When a free room is first given, its card opens with
+the name box ready. Upgrade on the card is coming soon.

@@ -158,6 +158,17 @@ export async function renameBuilding(buildingId: string, name: string): Promise<
   return error ? say(error.message) : { ok: true };
 }
 
+/** Name your home (an empty name puts back the plain one). Needs game-db/078. */
+export async function renameHome(unitId: string, name: string): Promise<PropertyResult> {
+  const userId = await currentUserId();
+  if (!userId) return { ok: false, error: "Please sign in again." };
+  const clean = name.trim() ? cleanPropertyName(name) : null;
+  if (name.trim() && !clean) return say("bad_name");
+  const { error } = await createAdminClient().rpc("home_rename", { p_user: userId, p_unit: String(unitId).slice(0, 80), p_name: clean });
+  if (error && /does not exist|home_rename/.test(error.message)) return { ok: false, error: "Naming your home is switched on soon." };
+  return error ? say(error.message) : { ok: true };
+}
+
 /** Your life: your home, your mint, everything you own. */
 export async function myAssets(): Promise<AssetsData | null> {
   const userId = await currentUserId();

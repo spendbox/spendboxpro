@@ -887,13 +887,13 @@ export function Chat({
                 <ArrowLeft className="size-5" aria-hidden />
               </button>
             ) : (
-              <span className="grid size-9 place-items-center rounded-full bg-[#0eadff]/12 text-[#0eadff]">
+              <span className="grid size-9 place-items-center rounded-full bg-[#7048e8]/12 text-[#7048e8]">
                 <MessageCircle className="size-5" aria-hidden />
               </span>
             )}
             <h2 className="min-w-0 flex-1 truncate px-1 font-display text-lg font-bold">{tab === "people" ? "New chat" : "Chat"}</h2>
             {tab !== "people" && (
-              <button onClick={() => setTab("people")} className="flex h-9 shrink-0 items-center gap-1 rounded-full bg-[#0eadff] px-3 text-xs font-bold text-white shadow-sm" aria-label="Start a new chat">
+              <button onClick={() => setTab("people")} className="flex h-9 shrink-0 items-center gap-1 rounded-full bg-[#7048e8] px-3 text-xs font-bold text-white shadow-sm" aria-label="Start a new chat">
                 <Search className="size-3.5" aria-hidden /> New chat
               </button>
             )}
@@ -1057,7 +1057,7 @@ export function Chat({
           ) : !thread && tab === "private" && keep && newtownOpen && newtown ? (
             <NewtownThread lines={newtown.lines} onSettings={newtown.onSettings} />
           ) : !thread && tab === "private" && keep ? (
-            <SnapList
+            <ChatList
               conversations={conversations}
               meId={meId}
               faceOf={faceOf}
@@ -1201,13 +1201,11 @@ export function Chat({
 }
 
 
-// ---- Chat on the real map, laid out like Snapchat: your chats with a little coloured square or
-// arrow saying what happened last (a new chat, received, delivered, opened), and conversations
-// with names over coloured lines instead of bubbles.
+// ---- Chat on the real map: Newtown's own look. Your chats with the last thing said and a dot
+// while there's something new; conversations in rounded bubbles (yours in Newtown purple), with
+// Sent / Seen under your last one.
 
-const SNAP_BLUE = "#0eadff";
-const SNAP_RED = "#f23c57";
-const SNAP_PURPLE = "#9b55a0";
+const BRAND = "#7048e8";
 
 /** Short "how long ago": now, 5m, 3h, 2d. */
 function agoShort(iso: string) {
@@ -1215,35 +1213,23 @@ function agoShort(iso: string) {
   return m < 1 ? "now" : m < 60 ? `${m}m` : m < 1440 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`;
 }
 
-/** The colour of a message's kind: text blue, photo red, voice purple. */
-const snapColour = (m: ChatMessage) => (m.image_path ? SNAP_RED : m.audio_path ? SNAP_PURPLE : SNAP_BLUE);
-
-/** Snapchat's little status marks: a square for what you got, an arrow for what you sent; filled while new. */
-function SnapMark({ sent, filled, colour }: { sent: boolean; filled: boolean; colour: string }) {
+/** Sent (one tick) or seen (two ticks, in purple). */
+function Ticks({ seen }: { seen: boolean }) {
   return (
-    <svg viewBox="0 0 12 12" className="size-3 shrink-0" aria-hidden>
-      {sent ? (
-        <path d="M2 1.5 10.5 6 2 10.5 3.6 6Z" fill={filled ? colour : "none"} stroke={colour} strokeWidth="1.4" strokeLinejoin="round" />
-      ) : (
-        <rect x="1.5" y="1.5" width="9" height="9" rx="1.6" fill={filled ? colour : "none"} stroke={colour} strokeWidth="1.4" />
-      )}
+    <svg viewBox="0 0 16 10" className="h-2.5 w-4 shrink-0" aria-hidden>
+      <path d="M1 5.5 3.8 8.3 9.5 1.7" fill="none" stroke={seen ? BRAND : "currentColor"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      {seen && <path d="M6.5 7.6 7.2 8.3 12.9 1.7" fill="none" stroke={BRAND} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />}
     </svg>
   );
 }
 
-/** What the last message in a conversation says about it ("New Chat", "Delivered", "Opened"...). */
-function snapStatus(last: ChatMessage, meId: string, unread: number) {
-  const colour = snapColour(last);
-  const what = last.image_path ? "Photo" : last.audio_path ? "Voice note" : "Chat";
-  if (last.sender_id !== meId) {
-    if (unread > 0) return { sent: false, filled: true, colour, text: unread > 1 ? `${unread} new ${what === "Chat" ? "chats" : `${what.toLowerCase()}s`}` : `New ${what}`, bold: true };
-    return { sent: false, filled: false, colour, text: "Received", bold: false };
-  }
-  if (last.read_at) return { sent: true, filled: false, colour, text: "Opened", bold: false };
-  return { sent: true, filled: true, colour, text: "Delivered", bold: false };
+/** What the last message was, in a few words ("You: on my way", "Photo", "Voice note"). */
+function preview(last: ChatMessage, meId: string) {
+  const what = last.audio_path ? "🎤 Voice note" : last.image_path && (!last.body || last.body === "Sent a photo") ? "📷 Photo" : last.body;
+  return last.sender_id === meId ? `You: ${what}` : what;
 }
 
-function SnapList({
+function ChatList({
   conversations,
   meId,
   faceOf,
@@ -1268,12 +1254,12 @@ function SnapList({
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
       {top}
       {conversations.length ? (
-        <SnapRows conversations={conversations} meId={meId} faceOf={faceOf} unreadOf={unreadOf} onOpen={onOpen} />
+        <ChatRows conversations={conversations} meId={meId} faceOf={faceOf} unreadOf={unreadOf} onOpen={onOpen} />
       ) : (
         <div className="flex flex-col items-center justify-center gap-2 p-6 text-center">
           <p className="font-semibold">No chats yet</p>
           <p className="text-sm text-muted">Find someone online and say hi. Only the two of you see your chats.</p>
-          <button onClick={onFind} className="mt-1 rounded-full bg-[#0eadff] px-5 py-2.5 text-sm font-bold text-white shadow">
+          <button onClick={onFind} className="mt-1 rounded-full bg-[#7048e8] px-5 py-2.5 text-sm font-bold text-white shadow">
             Start a chat
           </button>
         </div>
@@ -1283,7 +1269,7 @@ function SnapList({
   );
 }
 
-function SnapRows({
+function ChatRows({
   conversations,
   meId,
   faceOf,
@@ -1300,7 +1286,7 @@ function SnapRows({
     <ul className="divide-y divide-line/60">
       {conversations.map((c) => {
         const unread = unreadOf(c.id);
-        const st = snapStatus(c.last, meId, unread);
+        const mineLast = c.last.sender_id === meId;
         return (
           <li key={c.id}>
             <button onClick={() => onOpen(c)} className="flex w-full items-center gap-3 px-3 py-2.5 text-left active:bg-panel-2 sm:hover:bg-panel-2">
@@ -1308,20 +1294,16 @@ function SnapRows({
               <span className="min-w-0 flex-1">
                 <span className={cn("block truncate text-[15px]", unread ? "font-bold" : "font-semibold")}>{c.name}</span>
                 <span className="mt-0.5 flex items-center gap-1.5 text-xs">
-                  <SnapMark sent={st.sent} filled={st.filled} colour={st.colour} />
-                  <span className={cn(st.bold ? "font-bold" : "text-muted")} style={st.bold ? { color: st.colour } : undefined}>
-                    {st.text}
-                  </span>
-                  <span className="text-muted">· {agoShort(c.last.created_at)}</span>
+                  {mineLast && <span className="text-muted"><Ticks seen={!!c.last.read_at} /></span>}
+                  <span className={cn("min-w-0 truncate", unread ? "font-semibold text-ink" : "text-muted")}>{preview(c.last, meId)}</span>
+                  <span className="shrink-0 text-muted">· {agoShort(c.last.created_at)}</span>
                 </span>
               </span>
               {unread > 0 ? (
-                <span className="grid min-w-6 place-items-center rounded-full px-1.5 py-0.5 text-[11px] font-bold text-white" style={{ background: st.colour }}>
+                <span className="grid min-w-6 place-items-center rounded-full px-1.5 py-0.5 text-[11px] font-bold text-white" style={{ background: BRAND }}>
                   {unread > 9 ? "9+" : unread}
                 </span>
-              ) : (
-                <MessageCircle className="size-5 shrink-0 text-muted/60" aria-hidden />
-              )}
+              ) : null}
             </button>
           </li>
         );
@@ -1402,7 +1384,7 @@ function Messages({
   faceOf: (id: string, name: string, size: number) => React.ReactNode;
   /** Players holding lots of coins (shown with a "Big fish" badge). */
   bigFish: Set<string>;
-  /** The real map's private chats: Snapchat's look (names over coloured lines, no bubbles). */
+  /** The real map's private chats: Newtown's own look (purple bubbles, Sent / Seen). */
   snap?: boolean;
   /** Who you're chatting with (for the names over their lines). */
   theirName?: string;
@@ -1461,7 +1443,7 @@ function Messages({
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       <div ref={scroller} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">
-        <div ref={inner} className={snap ? "space-y-0.5" : "space-y-2"}>
+        <div ref={inner} className={snap ? "" : "space-y-2"}>
           {items.length === 0 && (
             <p className="flex items-center justify-center gap-1.5 p-6 text-center text-sm text-muted">
               {isPrivate ? (
@@ -1524,42 +1506,46 @@ function Messages({
               );
             }
             if (snap) {
-              const colour = mine ? SNAP_RED : SNAP_BLUE;
               const lastMine = mine && !items.slice(i + 1).some((x) => x.m?.sender_id === meId);
               const day = new Date(m.created_at).toDateString();
               const newDay = i === 0 || new Date(items[i - 1].at).toDateString() !== day;
+              const onlyPhoto = m.image_path && m.body === "Sent a photo";
               return (
                 <div key={it.key}>
                   {newDay && (
-                    <p className="py-2 text-center text-[10px] font-bold uppercase tracking-wider text-muted">
-                      {day === new Date().toDateString() ? "Today" : new Date(m.created_at).toLocaleDateString([], { weekday: "long", day: "numeric", month: "short" })}
+                    <p className="py-2 text-center">
+                      <span className="rounded-full bg-panel-2 px-2.5 py-0.5 text-[10px] font-semibold text-muted">
+                        {day === new Date().toDateString() ? "Today" : new Date(m.created_at).toLocaleDateString([], { weekday: "long", day: "numeric", month: "short" })}
+                      </span>
                     </p>
                   )}
-                  {(!sameAsPrev || newDay) && (
-                    <button
-                      onClick={() => !mine && onName(m.sender_id, m.sender_name)}
-                      className="mt-1 block px-1 text-[11px] font-extrabold uppercase tracking-wide"
-                      style={{ color: colour }}
-                      title={mine ? undefined : "See their profile"}
+                  <div className={cn("flex items-end gap-1.5", mine ? "justify-end" : "justify-start", !sameAsPrev || newDay ? "mt-2" : "mt-0.5")}>
+                    {!mine && (
+                      <button onClick={() => onName(m.sender_id, m.sender_name)} className={cn("shrink-0 rounded-full", sameAsPrev && !newDay && "invisible")} aria-label={`${theirName || m.sender_name}'s profile`}>
+                        {faceOf(m.sender_id, m.sender_name, 26)}
+                      </button>
+                    )}
+                    <div
+                      className={cn(
+                        "max-w-[78%] text-[15px] leading-snug",
+                        onlyPhoto ? "overflow-hidden rounded-2xl" : "rounded-[20px] px-3.5 py-2",
+                        !onlyPhoto && (mine ? "rounded-br-md text-white" : "rounded-bl-md bg-panel-2 text-ink"),
+                      )}
+                      style={mine && !onlyPhoto ? { background: BRAND } : undefined}
+                      title={time(m.created_at)}
                     >
-                      {mine ? "Me" : theirName || m.sender_name}
-                    </button>
-                  )}
-                  <div className="group flex items-start gap-2 border-l-[3px] py-0.5 pl-2.5 text-[15px] leading-snug" style={{ borderColor: colour }}>
-                    <div className="min-w-0 flex-1">
-                      {m.image_path && <ChatPhoto id={m.id} mine={false} />}
+                      {m.image_path && <ChatPhoto id={m.id} mine={mine} />}
                       {m.audio_path ? (
-                        <VoiceNote id={m.id} seconds={m.audio_seconds ?? 0} mine={false} />
-                      ) : m.image_path && m.body === "Sent a photo" ? null : (
+                        <VoiceNote id={m.id} seconds={m.audio_seconds ?? 0} mine={mine} />
+                      ) : onlyPhoto ? null : (
                         <span className="break-words">{m.body}</span>
                       )}
                     </div>
-                    <span className="shrink-0 pt-0.5 text-[10px] text-muted opacity-0 transition-opacity group-hover:opacity-100 group-active:opacity-100">{time(m.created_at)}</span>
                   </div>
                   {lastMine && (
-                    <p className="mt-1 flex items-center gap-1 px-1 text-[10px] font-semibold text-muted">
-                      <SnapMark sent filled={!m.read_at} colour={snapColour(m)} />
-                      {m.read_at ? `Opened ${agoShort(m.read_at)}` : "Delivered"}
+                    <p className="mt-0.5 flex items-center justify-end gap-1 px-1 text-[10px] font-semibold text-muted">
+                      <Ticks seen={!!m.read_at} />
+                      {m.read_at ? `Seen ${agoShort(m.read_at)}` : `Sent ${time(m.created_at)}`}
                     </p>
                   )}
                 </div>
@@ -1819,7 +1805,7 @@ function Composer({
               )}
             </div>
             {text.trim() && (
-              <button disabled={busy} className="grid size-10 shrink-0 place-items-center rounded-full text-white shadow disabled:opacity-50" style={{ background: SNAP_BLUE }} aria-label="Send">
+              <button disabled={busy} className="grid size-10 shrink-0 place-items-center rounded-full text-white shadow disabled:opacity-50" style={{ background: BRAND }} aria-label="Send">
                 <SendHorizontal className="size-5" aria-hidden />
               </button>
             )}
