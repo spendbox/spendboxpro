@@ -17,7 +17,7 @@ import { ferryKmBetween } from "@/lib/world/trips";
 import { dayOf, EXERCISE } from "@/lib/world/day";
 import { HUSTLES, hustleDay, hustleStart } from "@/lib/world/hustles";
 import { workplaceById, type Workplace } from "@/lib/world/workplace";
-import { PropertyCard, rentMonth } from "../property-card";
+import { PropertyCard } from "../property-card";
 import { AdvertisePanel, type AdPreview } from "./advertise-panel";
 import { explorePlaces, type ExplorePlace } from "@/lib/world/explore";
 import { around, cachedThings, loadThings } from "./things-cache";
@@ -44,9 +44,10 @@ import { HomeFinder } from "./home-finder";
 import { StartLife } from "./start-life";
 import { useLife } from "./use-life";
 import { confirmTopUp } from "../topup-actions";
-import { moveOut, myRental, renameHome, rentUnit, type Rental } from "../property-actions";
+import { moveOut, myRental, renameHome, type Rental } from "../property-actions";
+import { discounted } from "@/lib/world/rep-levels";
 import { StarterRoomBox } from "./starter-room";
-import { TOUR_KEY, WelcomeTour } from "./welcome-tour";
+import { restartTutorial, useTutorialPhase } from "../tutorial";
 import { WorkSheet } from "./work-sheet";
 import { BusinessSheet } from "./business-sheet";
 import { ServicesSheet } from "./services-sheet";
@@ -57,9 +58,8 @@ import { InterviewSheet, MomentSheet } from "./moments";
 import { AmountSheet, LoanSheet } from "./amount-sheet";
 import { CurrencySheet } from "./currency-pick";
 import { cash, setShownCurrency } from "@/lib/world/value";
-import { FIRST_STEP_NAIRA, FIRST_STEPS, type FirstStep, type FirstSteps } from "@/lib/world/first-steps";
 import { buyerPays, sellerGets, OFFER_HOURS, RENT_LEVEL, type Listing, type MarketBoard } from "@/lib/world/market";
-import { BUY_TAX } from "@/lib/world/property-api";
+import { BUY_TAX, INCOME_DAY } from "@/lib/world/property-api";
 import { SIMPLE_LIFE } from "@/lib/world/simple-life";
 
 /** Each region's plan for finding jobs near home, worked out once (only when Work is opened). */
@@ -76,16 +76,7 @@ function planOf(region: RegionMap) {
   return p;
 }
 
-// v2: the simple life changed so much that everyone gets the guide again.
-const GUIDE_KEY = "newtown.guide.v2";
 const CURRENCY_KEY = "newtown.currency";
-type GuideStep = FirstStep;
-
-/** A gold ripple round a button the guide points at (the button must be relative). */
-export function Ripple() {
-  return <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/60" />;
-}
-
 
 const paid = (p: PaySettled | undefined) =>
   p && p.gross > 0 ? ` Collected ${cash(p.net)} pay (after ${cash(p.tax)} tax and ${cash(p.fares)} fares).` : "";
@@ -166,40 +157,6 @@ export function useWorldLife({
   /** When this screen opened (tenants who've moved in by then count towards rent a day). */
   const [clock] = useState(() => Date.now());
   const [financeTab, setFinanceTab] = useState<"home" | "budget" | "property" | null>(null);
-  /** The first-day guide: which steps are done (kept in this browser). */
-  const [guide, setGuide] = useState<Record<string, boolean>>(() => {
-    try {
-      return JSON.parse(localStorage.getItem(GUIDE_KEY) ?? "{}") as Record<string, boolean>;
-    } catch {
-      return {};
-    }
-  });
-  const markGuide = (k: string) =>
-    setGuide((g) => {
-      const next = { ...g, [k]: true };
-      try {
-        localStorage.setItem(GUIDE_KEY, JSON.stringify(next));
-      } catch {
-        // Not kept: the guide just shows again next time.
-      }
-      return next;
-    });
-  // The welcome tour: once for everyone, before anything else (./welcome-tour).
-  const [tourSeen, setTourSeen] = useState(() => {
-    try {
-      return localStorage.getItem(TOUR_KEY) === "1";
-    } catch {
-      return false;
-    }
-  });
-  const endTour = () => {
-    try {
-      localStorage.setItem(TOUR_KEY, "1");
-    } catch {
-      // Not kept: it shows again next time.
-    }
-    setTourSeen(true);
-  };
   const [work, setWork] = useState<WorkStatus | null>(null);
   const [workOpen, setWorkOpen] = useState(false);
   const [place, setPlace] = useState<Workplace | null>(null);
@@ -670,52 +627,9 @@ export function useWorldLife({
     };
   }, [signedIn, lifeStarted, pretend, refresh, homeUnit]);
   // The start screen: before your life starts (or, if no free room could be given, to find one).
-  const tourOn = signedIn && loaded && !tourSeen && !pretend;
-  const showWelcome = !tourOn && signedIn && loaded && !homeUnit && !welcomeShut && !property && !place && !finderOpen && (!life || !!roomFailed);
-  // First only a home search; once you have a home, all of Home, Work, Money, Life and Services.
-  // The guide's next step: a home, a job, a budget, body and mind, then where to chat.
-  // It never pops up out of nowhere: not before your job and life have loaded (it would flash "get
-  // a job" for a moment), never back to a step you've passed (losing a job later doesn't restart
-  // it). Everyone gets it once (GUIDE_KEY v2), old players too; only new lives are paid (game-db/072).
-  // The first five minutes (docs/FIRST_STEPS.md): say hi, play a challenge, pick your home, each
-  // with a small reward. The server says what's done (and pays), checked now and every 12 seconds
-  // until all three are.
-  const guideOn = signedIn && loaded && !!life && !guide.done && !tourOn;
-  const [first, setFirst] = useState<FirstSteps | null>(null);
-  const allFirst = !!first && first.hi && first.challenge && first.out;
-  useEffect(() => {
-    if (!guideOn || allFirst) return;
-    let alive = true;
-    let looked = false;
-    const look = () => {
-      if (document.visibilityState !== "visible") return;
-      void fetch("/api/first-steps", { method: "POST", cache: "no-store" })
-        .then((r) => (r.ok ? (r.json() as Promise<FirstSteps | null>) : null))
-        .then((f) => {
-          if (!alive || !f) return;
-          setFirst(f);
-          // An old player's first look ticks off what they did long ago: no fanfare for that.
-          const firstLook = !looked;
-          looked = true;
-          if (!f.paid.length || (firstLook && !f.rewardNaira)) return;
-          const titles = f.paid.map((id) => FIRST_STEPS.find((x) => x.id === id)?.title ?? id).join(", ");
-          const reward = f.rewardNaira > 0 && region ? ` +${cash((f.rewardNaira * f.paid.length) / region.region.prices.perMint)}` : "";
-          setMessage({ text: `Done: ${titles}!${reward}`, good: true });
-          playSfx("chime");
-        })
-        .catch(() => {});
-    };
-    look();
-    const t = setInterval(look, 12_000);
-    return () => {
-      alive = false;
-      clearInterval(t);
-    };
-    // region only turns the reward into your currency.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [guideOn, allFirst]);
-  const step: GuideStep | null = guideOn && first ? (FIRST_STEPS.find((x) => !first[x.id])?.id ?? null) : null;
-  const stepN = step ? FIRST_STEPS.findIndex((x) => x.id === step) + 1 : 0;
+  // The walkthrough's opening tips (../tutorial): a just-given home's card waits for them.
+  const tourOn = useTutorialPhase() === "intro";
+  const showWelcome = signedIn && loaded && !homeUnit && !welcomeShut && !property && !place && !finderOpen && (!life || !!roomFailed);
   const finds = useMemo(() => (finderOpen && region ? homesByArea(region, planOf(region)) : []), [finderOpen, region]);
   const openFinder = () => {
     setWelcomeShut(true);
@@ -876,33 +790,6 @@ export function useWorldLife({
         {rep?.jail && Date.parse(rep.jail) > clock && (
           <JailBanner until={rep.jail} prices={region.region.prices} onDone={(text, good) => setMessage({ text, good })} onFree={() => setRep((r) => (r ? { ...r, jail: null } : r))} />
         )}
-        {step && (
-          <div className="pointer-events-auto flex max-w-xs items-start gap-2 rounded-2xl bg-ink px-3 py-2 text-white shadow-lg">
-            <p className="min-w-0 flex-1 text-xs leading-snug">
-              <b className="text-gold">{`Step ${stepN} of 3 · ${FIRST_STEPS[stepN - 1].title}`}</b>
-              <span className="block">{FIRST_STEPS[stepN - 1].text}</span>
-              {first && first.rewardNaira > 0 && (
-                <span className="mt-0.5 block text-[11px] font-semibold text-[#8ce99a]">
-                  Reward: {cash(FIRST_STEP_NAIRA / region.region.prices.perMint)}
-                </span>
-              )}
-            </p>
-            <button onClick={() => markGuide("done")} className="shrink-0 text-[11px] font-semibold text-white/70 hover:text-white">
-              Skip
-            </button>
-          </div>
-        )}
-        {guideOn && allFirst && (
-          <div className="pointer-events-auto flex max-w-xs items-start gap-2 rounded-2xl bg-ink px-3 py-2 text-white shadow-lg">
-            <p className="min-w-0 flex-1 text-xs leading-snug">
-              <b className="text-gold">You&apos;re all set!</b>
-              <span className="block">No work, no chores: open your daily gift every day, play games, meet people, go places and send gifts. Have fun!</span>
-            </p>
-            <button onClick={() => markGuide("done")} className="shrink-0 text-[11px] font-semibold text-white/70 hover:text-white">
-              Got it
-            </button>
-          </div>
-        )}
     </>
   ) : null;
   const overlay = region ? (
@@ -922,7 +809,7 @@ export function useWorldLife({
         </div>
       )}
       {message && (
-        <div className="pointer-events-auto absolute inset-x-0 bottom-24 z-50 flex justify-center px-3">
+        <div className="pointer-events-auto absolute inset-x-0 bottom-24 z-[65] flex justify-center px-3">
           <p className={`flex max-w-sm items-center gap-2 rounded-2xl px-4 py-2.5 text-sm shadow-lg ${message.good ? "bg-ink text-white" : "bg-hit text-white"}`}>
             {message.text}
             <button onClick={() => setMessage(null)} aria-label="Close">
@@ -931,7 +818,6 @@ export function useWorldLife({
           </p>
         </div>
       )}
-      {tourOn && <WelcomeTour place={region.region.name} perMint={region.region.prices.perMint} onDone={endTour} />}
       {showWelcome && (
         <StartLife
           currency={currency}
@@ -1237,36 +1123,31 @@ export function useWorldLife({
                   homeUnit,
                   letting,
                   busy,
+                  repScore: rep?.score ?? 0,
                   onBuy: (u) =>
                     act(
                       () => api.buyUnit(u.id),
-                      (r) => (r.home ? `${u.label} is yours, and your home. Welcome!` : `${u.label} is yours.`),
+                      (r) => {
+                        const day = cash(discounted(u.mint, rep?.score ?? 0) * INCOME_DAY);
+                        return r.home ? `${u.label} is yours, and your home! It earns you ${day} a day.` : `${u.label} is yours! It earns you ${day} a day, by itself.`;
+                      },
                     ),
-                  onRent: pretend
-                    ? undefined
-                    : (u) =>
-                        setConfirm({
-                          title: `Rent ${u.label}?`,
-                          text: `${cash(rentMonth(u.mint))} a month: the first month now, then each month from your wallet. Your free room goes back. Move out any time.`,
-                          yes: `Rent for ${cash(rentMonth(u.mint))} a month`,
-                          run: () => void act(() => rentUnit(u.id), () => `${u.label} is your home now. Welcome!`),
-                        }),
                   onHome: (u) => act(() => api.setHome(u.id), () => `You live at ${u.label} now.`),
                   onLet: (u, on) => act(() => api.letUnit(u.id, on), () => (on ? `${u.label} is up for rent.` : `${u.label} isn't let any more.`)),
                   onRename: (name) => act(() => api.renameBuilding(property.id, name), () => (name.trim() ? `Renamed ${name.trim()}.` : "Name cleared.")),
                   onBuyListed: (u, price) =>
                     setConfirm({
                       title: `Buy ${u.label}?`,
-                      text: `${cash(price)} to its owner, plus ${Math.round(BUY_TAX * 100)}% tax: ${cash(buyerPays(price, BUY_TAX))} in all. A tenant living there stays.`,
+                      text: `${cash(buyerPays(price, BUY_TAX))} to its owner. It earns you money every day, by itself.`,
                       yes: `Buy for ${cash(buyerPays(price, BUY_TAX))}`,
                       run: () => void act(() => api.buyListed(u.id, price), (r) => (r.home ? `${u.label} is yours, and your home. Welcome!` : `${u.label} is yours.`)),
                     }),
                   onOffer: (u) =>
                     setAsk({
                       title: `Offer for ${u.label}`,
-                      text: `It's worth about ${cash(u.mint)}. What you offer (and the ${Math.round(BUY_TAX * 100)}% tax) is held from your wallet until the owner answers, for up to ${OFFER_HOURS} hours.`,
+                      text: `It's worth about ${cash(u.mint)}. What you offer is held from your wallet until the owner answers, for up to ${OFFER_HOURS} hours.`,
                       initial: Math.round(u.mint),
-                      note: (n) => `${cash(buyerPays(n, BUY_TAX))} held with the tax. You get it back if they say no.`,
+                      note: (n) => `${cash(buyerPays(n, BUY_TAX))} held. You get it back if they say no.`,
                       cta: (n) => `Offer ${cash(n)}`,
                       run: (n) => api.makeOffer(u.id, n),
                       done: () => "Offer sent. You'll see the answer in Finance → Property.",
@@ -1311,10 +1192,7 @@ export function useWorldLife({
           onBudget={(b) =>
             act(
               () => api.setBudget(b),
-              () => {
-                markGuide("budget");
-                return "Budget saved. Your next pay is shared out by it.";
-              },
+              () => "Budget saved. Your next pay is shared out by it.",
             )
           }
           onClose={() => {
@@ -1490,6 +1368,8 @@ export function useWorldLife({
         <ThingsSheet
           tab={things}
           prices={region.region.prices}
+          coins={coins}
+          units={assets?.units ?? []}
           onClose={() => {
             setThings(null);
             loadRep();
@@ -1689,15 +1569,13 @@ export function useWorldLife({
 
   /** From the menu: How to play starts the guide again; Currency opens the picker. */
   const restartGuide = () => {
-    try {
-      localStorage.removeItem(GUIDE_KEY);
-      localStorage.removeItem(TOUR_KEY);
-    } catch {
-      // Fine: it starts again in this visit anyway.
-    }
-    setGuide({});
-    setTourSeen(false);
+    restartTutorial();
     setWelcomeShut(false);
+  };
+  /** The walkthrough's first mission: your home's card, with the name box ready. */
+  const nameHome = () => {
+    setNameNew(true);
+    goHome();
   };
   const openCurrency = () => setCurrencyOpen(true);
   /** From the menu: report a problem with the map where you're looking. */
@@ -1735,7 +1613,7 @@ export function useWorldLife({
     fly(p.x, p.z);
     setPlace(workplaceById(planOf(region), p.id) ?? { id: p.id, name: p.name, x: Math.round(p.x), z: Math.round(p.z), jobs: [] });
   };
-  return { explore, openExplorePlace, rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit, mySpot: whereAmI(), homeSpot, goHome, guideStep: step, homeBuilding: homeUnit ? homeUnit.split("/")[0] : null, openPlanner: () => setPlanning(true), locateMe, lookAt: (x: number, z: number) => setFlyTo({ tile: spiralIndex(Math.round(x), Math.round(z)), at: ++flies.current }), makeRow, openSoon: () => setSoonOpen(true), openGuestBook: (building: string) => setGuestBook(building),
+  return { explore, openExplorePlace, rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit, mySpot: whereAmI(), homeSpot, goHome, nameHome, homeBuilding: homeUnit ? homeUnit.split("/")[0] : null, openPlanner: () => setPlanning(true), locateMe, lookAt: (x: number, z: number) => setFlyTo({ tile: spiralIndex(Math.round(x), Math.round(z)), at: ++flies.current }), makeRow, openSoon: () => setSoonOpen(true), openGuestBook: (building: string) => setGuestBook(building),
     openLife: () => setLifeOpen(true),
     /** A place's card (its jobs, and what it does), from where it stands. */
     openWorkplace: (x: number, z: number, name: string) => {

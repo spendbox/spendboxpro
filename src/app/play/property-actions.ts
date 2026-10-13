@@ -8,6 +8,8 @@ import type { Building } from "@/lib/world/buildings";
 import { cleanPropertyName, ownedSpot } from "@/lib/world/owned";
 import { BUY_TAX, rentPerDay, type AssetsData, type BuildingOwner, type OwnedBuildingRow, type PropertyResult } from "@/lib/world/property-api";
 import { landNow, toMint, valueOf } from "@/lib/world/value";
+import { discounted } from "@/lib/world/rep-levels";
+import { myThings } from "./item-actions";
 import { cheapestCommute, cheapestRide, tripFareMint, tripKmBetween, type Commute } from "@/lib/world/work";
 import { ferryKmBetween } from "@/lib/world/trips";
 import { FIND_CHANCE, FINDS, mintOf, shopKind } from "@/lib/world/items";
@@ -87,8 +89,12 @@ export async function buyUnit(unitId: string): Promise<PropertyResult> {
   const map = regionMap(found.region)!;
   const prices = map.region.prices;
   const value = valueOf(found.building, landNow(map, found.x, found.z), prices);
-  const price = Math.max(1, toMint(value.units[Number(m[2])], prices));
+  const worth = Math.max(1, toMint(value.units[Number(m[2])], prices));
   const db = createAdminClient();
+  // Your reputation level takes something off (src/lib/world/rep-levels.ts).
+  const things = await myThings().catch(() => null);
+  const price = Math.max(1, discounted(worth, things?.reputation.score ?? 0));
+  // What your property has earned so far is paid first, by the database (game-db/079).
   // A building a real business leases isn't for sale while the lease runs.
   const { count: leased } = await db.from("business_leases").select("id", { count: "exact", head: true }).eq("building_id", m[1]).eq("status", "live");
   if (leased) return { ok: false, error: "A business leases that building, so it isn't for sale." };

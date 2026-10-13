@@ -5,7 +5,8 @@ import { useState } from "react";
 import { DoorOpen } from "lucide-react";
 import { Building2, Flag, House, KeyRound, MapPin, Megaphone, Pencil, Store, Trees, TrendingDown, TrendingUp, X } from "@/components/icons";
 import type { PropertyInfo, PropertyUnit } from "@/lib/world/property";
-import { BUY_TAX, type BuildingOwner } from "@/lib/world/property-api";
+import { BUY_TAX, INCOME_DAY, type BuildingOwner } from "@/lib/world/property-api";
+import { discounted, repLevel } from "@/lib/world/rep-levels";
 import { openAdvertise } from "./life/advertise-panel";
 import { JobsHere, type JobsContext } from "./life/jobs-here";
 import { Sheet } from "./sheet";
@@ -26,9 +27,9 @@ export type Market = {
   /** Your units that are let out. */
   letting: Set<string>;
   busy: boolean;
+  /** Your reputation (its level takes something off what you buy from the city). */
+  repScore: number;
   onBuy: (unit: PropertyUnit) => void;
-  /** Rent a home nobody owns, a month at a time (absent: renting isn't offered). */
-  onRent?: (unit: PropertyUnit) => void;
   onHome: (unit: PropertyUnit) => void;
   onLet: (unit: PropertyUnit, on: boolean) => void;
   onRename: (name: string) => void;
@@ -41,7 +42,7 @@ export type Market = {
   onUnsell: (unit: PropertyUnit) => void;
 };
 
-/** A property on the real map, tapped: Go there, Rent / Buy (its worth and every unit in it), Advertise. */
+/** A property on the real map, tapped: Go there, Buy (every unit in it, at today's price), Advertise. */
 export function PropertyCard({
   info,
   market,
@@ -71,7 +72,7 @@ export function PropertyCard({
   const mineAll = !!market?.owners && info.units.every((u) => owners.get(u.id)?.mine);
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(info.kind ? info.title : "");
-  // The worth and the units open from Rent / Buy (already open when some of it is yours).
+  // The units open from Buy (already open when some of it is yours).
   const [details, setDetails] = useState(false);
   const open = details || mineAny;
   const [jobsOpen, setJobsOpen] = useState(false);
@@ -123,7 +124,7 @@ export function PropertyCard({
             aria-expanded={open}
             className={`flex min-h-11 items-center justify-center gap-1.5 rounded-full px-3 text-sm font-semibold ${open ? "bg-ink text-white" : "bg-ink/5"}`}
           >
-            <KeyRound className="size-4 shrink-0" /> {mineAll ? "Yours" : "Rent / Buy"}
+            <KeyRound className="size-4 shrink-0" /> {mineAll ? "Yours" : "Buy"}
           </button>
           {leasable ? (
             <button onClick={() => openAdvertise(info.id)} className="flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-gold/15 px-3 text-sm font-semibold text-gold-dark">
@@ -137,19 +138,6 @@ export function PropertyCard({
 
       {open && (
         <>
-          <div className="mt-4 rounded-2xl bg-ink/[0.04] p-3.5">
-            <p className="text-xs text-muted">
-              {info.kind ?? info.title}
-              {info.estate ? ` in ${info.estate} (a gated estate)` : ""}. Land moves with the area&apos;s market; the building is what it cost to build.
-            </p>
-            <div className="mt-2.5 flex flex-wrap gap-1.5">
-              <Pill label="Land" value={`${cash(info.landMint)}`} />
-              <Pill label="Building" value={`${cash(info.buildingMint)}`} />
-              <Pill label="Plot" value={`${fmt(info.plot)} m²`} />
-              {info.storeys > 0 && <Pill label={info.storeys === 1 ? "Storey" : "Storeys"} value={String(info.storeys)} />}
-            </div>
-          </div>
-
           {mineAll && market && (
             <div className="mt-3">
               {renaming ? (
@@ -185,7 +173,12 @@ export function PropertyCard({
             {info.units.length === 1 ? "One unit" : `${info.units.length} units`}
             {market ? "" : " you could own"}
           </h3>
-          <p className="text-xs text-muted">Rent a home a month at a time, or buy one to keep (and let it out: tenants pay you rent).</p>
+          <p className="text-xs text-muted">Buy at today&apos;s price. Property pays you every day, by itself: about {Math.round(INCOME_DAY * 100)}% of what you paid.</p>
+          {market && repLevel(market.repScore).level.discount > 0 && (
+            <p className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-[#ebfbee] px-2.5 py-1 text-xs font-semibold text-[#2b8a3e]">
+              {repLevel(market.repScore).level.emoji} {repLevel(market.repScore).level.name}: {Math.round(repLevel(market.repScore).level.discount * 100)}% off everything you buy here
+            </p>
+          )}
           <ul className="mt-2 max-h-72 divide-y divide-ink/5 overflow-y-auto rounded-2xl ring-1 ring-ink/5">
             {info.units.map((u) => {
               const Icon = ICON[u.use];
@@ -196,13 +189,11 @@ export function PropertyCard({
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{u.label}</p>
                     <p className="text-xs text-muted">
-                      {fmt(u.area)} m² · {owner ? (owner.rented ? (owner.mine ? "Your rented home" : `Rented by ${owner.name}`) : owner.mine ? "Yours" : `Owned by ${owner.name}`) : u.earns}
+                      {fmt(u.area)} m² · {owner ? (owner.rented ? (owner.mine ? "Your rented home" : `Rented by ${owner.name}`) : owner.mine ? "Yours" : `Owned by ${owner.name}`) : "From the city"}
                       {owner?.forSale != null ? ` · for sale ${cash(owner.forSale)}` : owner?.home && !owner.mine ? " · their home" : ""}
                     </p>
                   </div>
-                  <div className="shrink-0 text-right">
-                    <p className="text-sm font-semibold tabular-nums">{cash(u.mint)}</p>
-                  </div>
+                  <UnitPrice u={u} owner={owner} market={market} />
                   {market && <UnitAction u={u} owner={owner} market={market} />}
                 </li>
               );
@@ -268,18 +259,20 @@ export function Spark({ values, up }: { values: number[]; up: boolean }) {
   );
 }
 
-/** A small labelled chip: "Land ₥24,058". */
-function Pill({ label, value }: { label: string; value: string }) {
+
+/** What a unit costs you, in green when you can afford it and red when you can't, and what it'd earn a day. */
+function UnitPrice({ u, owner, market }: { u: PropertyUnit; owner: BuildingOwner | undefined; market?: Market }) {
+  if (!market || owner?.mine || (owner && owner.forSale == null)) return <p className="shrink-0 text-right text-sm font-semibold tabular-nums">{cash(u.mint)}</p>;
+  const price = owner ? Math.round(owner.forSale! * (1 + BUY_TAX) * 100) / 100 : discounted(u.mint, market.repScore);
+  const can = market.coins >= price;
   return (
-    <span className="inline-flex items-baseline gap-1.5 rounded-full bg-panel px-3 py-1 text-xs shadow-sm ring-1 ring-ink/5">
-      <span className="text-muted">{label}</span>
-      <span className="font-semibold tabular-nums">{value}</span>
-    </span>
+    <div className="shrink-0 text-right">
+      <p className={`text-sm font-bold tabular-nums ${can ? "text-[#2b8a3e]" : "text-[#e03131]"}`}>{cash(price)}</p>
+      {!owner && price < u.mint && <p className="text-[10px] text-muted line-through tabular-nums">{cash(u.mint)}</p>}
+      <p className="text-[10px] font-semibold text-[#2b8a3e]">+{cash(price * INCOME_DAY)}/day</p>
+    </div>
   );
 }
-
-/** A month's rent for a home from the city (mint): 6% of its worth, as landlords earn (game-db/077). */
-export const rentMonth = (mint: number) => Math.max(0.01, Math.round(mint * 0.06 * 100) / 100);
 
 function UnitAction({ u, owner, market }: { u: PropertyUnit; owner: BuildingOwner | undefined; market: Market }) {
   const btn = "h-8 shrink-0 rounded-full px-3 text-xs font-semibold disabled:opacity-40";
@@ -293,7 +286,7 @@ function UnitAction({ u, owner, market }: { u: PropertyUnit; owner: BuildingOwne
         <button
           disabled={market.busy || !market.started || needHome || market.coins < cost}
           onClick={() => market.onBuyListed(u, owner.forSale!)}
-          title={needHome ? "Buy a home first" : `${cash(cost)} with the ${Math.round(BUY_TAX * 100)}% tax`}
+          title={needHome ? "Buy a home first" : `Buy for ${cash(cost)}`}
           className={`${btn} bg-ink text-white`}
         >
           Buy
@@ -309,18 +302,11 @@ function UnitAction({ u, owner, market }: { u: PropertyUnit; owner: BuildingOwne
   }
   if (owner?.mine) {
     if (market.homeUnit === u.id) return <span className="shrink-0 rounded-full bg-me/15 px-2.5 py-1 text-xs font-semibold text-me">Home</span>;
-    const letting = market.letting.has(u.id);
     return (
       <div className="flex shrink-0 flex-col gap-1">
         {u.use === "home" && (
           <button disabled={market.busy} onClick={() => market.onHome(u)} className={`${btn} bg-ink/5`}>
             Live here
-          </button>
-        )}
-        {u.use !== "land" && (
-          <button disabled={market.busy} onClick={() => market.onLet(u, !letting)} className={`${btn} ${letting ? "bg-gold/20 text-gold-dark" : "bg-ink/5"}`}>
-            <KeyRound className="mr-1 inline size-3" />
-            {letting ? "Let · stop" : "Let out"}
           </button>
         )}
         {owner.forSale != null ? (
@@ -335,30 +321,17 @@ function UnitAction({ u, owner, market }: { u: PropertyUnit; owner: BuildingOwne
       </div>
     );
   }
-  const cost = Math.round(u.mint * (1 + BUY_TAX));
+  const cost = discounted(u.mint, market.repScore);
   const needHome = !market.homeUnit && u.use !== "home";
   const short = market.coins < cost;
-  const rent = rentMonth(u.mint);
   return (
-    <div className="flex shrink-0 flex-col gap-1">
-      {u.use === "home" && market.onRent && (
-        <button
-          disabled={market.busy || !market.started || market.coins < rent}
-          onClick={() => market.onRent?.(u)}
-          title={`${cash(rent)} a month`}
-          className={`${btn} bg-gold text-ink`}
-        >
-          Rent {cash(rent)}/mo
-        </button>
-      )}
-      <button
-        disabled={market.busy || !market.started || needHome || short}
-        onClick={() => market.onBuy(u)}
-        title={needHome ? "Buy a home first" : short ? `You need ${cash(cost)} with tax` : `${cash(cost)} with the ${Math.round(BUY_TAX * 100)}% tax`}
-        className={`${btn} bg-ink text-white`}
-      >
-        Buy
-      </button>
-    </div>
+    <button
+      disabled={market.busy || !market.started || needHome || short}
+      onClick={() => market.onBuy(u)}
+      title={needHome ? "Buy a home first" : short ? `You need ${cash(cost)}` : `Buy for ${cash(cost)}`}
+      className={`${btn} ${short ? "bg-ink/10 text-muted" : "bg-[#2b8a3e] text-white"}`}
+    >
+      Buy
+    </button>
   );
 }

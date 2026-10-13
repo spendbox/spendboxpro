@@ -1,18 +1,41 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Crown, LoaderCircle, MessageCircle, Send, Swords, Trophy, Users, X } from "lucide-react";
+import { Crown, LoaderCircle, MessageCircle, Search, Send, Star, Swords, Trophy, Users, Wallet, X } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar } from "@/lib/avatar";
 import { cn } from "@/lib/cn";
-import { cash } from "@/lib/world/value";
-import { CHALLENGE_GAMES, CHALLENGE_COOLDOWN_SECS, CHALLENGE_FEE_NAIRA, JOIN_SECS, STAKES_NAIRA, WINNER_SHARE, challengeGame } from "@/lib/world/challenges";
+import { cash, cashSymbol, fromShown, toShown } from "@/lib/world/value";
+import {
+  CHALLENGE_CATEGORIES,
+  CHALLENGE_COOLDOWN_SECS,
+  CHALLENGE_FEE_NAIRA,
+  CHALLENGE_GAMES,
+  JOIN_SECS,
+  REP_MAX,
+  REP_PER_HOSTED,
+  REP_PER_WIN,
+  STAKES_NAIRA,
+  STAKE_MAX_NAIRA,
+  STAKE_MIN_NAIRA,
+  WINNER_SHARE,
+  WIN_BONUS_A_DAY,
+  WIN_BONUS_MINT,
+  challengeGame,
+  challengeRep,
+  challengeRepGained,
+  cleanStake,
+  findGames,
+  playersText,
+  stakeBounds,
+  type ChallengeCategory,
+} from "@/lib/world/challenges";
 import { MINIGAMES } from "../minigames/registry";
 import { TurnTable, type Seat } from "../minigames/turn-table";
 import { Confetti } from "../activities/ui";
 import { playSfx } from "../sound";
 import { Sheet } from "../sheet";
-import { challengeQuote, joinChallenge, leaveChallenge, openChallenge, reportWinner, type ChallengeView } from "./challenge-actions";
+import { challengeQuote, joinChallenge, leaveChallenge, myChallengeRep, openChallenge, reportWinner, type ChallengeQuote, type ChallengeView } from "./challenge-actions";
 import { useChallengeChannel } from "./channel";
 import { CallBar } from "../call/call-bar";
 
@@ -228,6 +251,21 @@ export function Fight({
   );
 }
 
+/** Mint shown in the player's currency, as the number to type (whole for big amounts). */
+const typedOf = (mint: number) => {
+  const v = toShown(mint);
+  return String(v >= 100 ? Math.round(v) : Math.round(v * 100) / 100);
+};
+/** What was typed (in the player's currency), in mint to the cent; null when it isn't a number. */
+const asMint = (raw: string) => {
+  const t = raw.replace(/[,\s]/g, "");
+  if (!t) return null;
+  const v = Number(t);
+  return Number.isFinite(v) ? Math.round(fromShown(v) * 100) / 100 : null;
+};
+
+type Shelf = ChallengeCategory | "all" | "soon";
+
 /** Challenge: what it is (the first time), the games, the stake, and go. */
 function FightSheet({
   region,
@@ -237,7 +275,7 @@ function FightSheet({
 }: {
   region: string;
   onClose: () => void;
-  onGo: (game: string, stakeNaira: number) => Promise<{ error: string; busyId?: number } | null>;
+  onGo: (game: string, stakeMint: number) => Promise<{ error: string; busyId?: number } | null>;
   /** Go back to the challenge you're still in. */
   onOpenMine: (id: number) => void;
 }) {
@@ -251,8 +289,12 @@ function FightSheet({
     }
   });
   const [game, setGame] = useState("whot");
-  const [stake, setStake] = useState(STAKES_NAIRA[0]);
-  const [quote, setQuote] = useState<{ free: boolean; feeMint: number; secsLeft: number; first: boolean } | null>(null);
+  const [query, setQuery] = useState("");
+  const [shelf, setShelf] = useState<Shelf>("all");
+  // The stake: a quick pick (naira), or what was typed (in the player's currency).
+  const [chip, setChip] = useState<number | null>(STAKES_NAIRA[0]);
+  const [raw, setRaw] = useState("");
+  const [quote, setQuote] = useState<ChallengeQuote | null>(null);
   const [going, setGoing] = useState(false);
   useEffect(() => {
     void challengeQuote(region).then(setQuote).catch(() => setQuote(null));
@@ -265,15 +307,22 @@ function FightSheet({
   }, []);
   const left = quote ? Math.max(0, quote.secsLeft - (Date.now() - opened.current) / 1000) : 0;
   const free = !quote || quote.free || left <= 0;
+  const shown = useMemo(() => findGames(query, shelf), [query, shelf]);
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: CHALLENGE_GAMES.length, soon: CHALLENGE_GAMES.filter((g) => !g.engine).length };
+    for (const g of CHALLENGE_GAMES) c[g.category] = (c[g.category] ?? 0) + 1;
+    return c;
+  }, []);
 
   if (intro)
     return (
       <Sheet onClose={onClose} title="Challenge people nearby">
         <div className="space-y-2.5 text-sm">
           <Point icon="🎲" text="Pick a game and a stake. Everyone nearby gets told, and your light shines on the map." />
-          <Point icon="⏱️" text="They have one minute to join. Everyone puts the stake into the pool." />
-          <Point icon="🏆" text={`The winner takes the pool (${Math.round(WINNER_SHARE * 100)}% of it). Challenging and winning raise your reputation.`} />
-          <Point icon="🎟️" text={`Your first challenge is free. Another one within ${CHALLENGE_COOLDOWN_SECS / 60} minutes costs ₦${CHALLENGE_FEE_NAIRA.toLocaleString("en-GB")}, so in between, join other people's challenges.`} />
+          <Point icon="⏱️" text="They have one minute to join. Everyone puts the same stake into the pool." />
+          <Point icon="🏆" text={`The winner takes the pool (${Math.round(WINNER_SHARE * 100)}% of it), plus a ${cash(WIN_BONUS_MINT)} prize from Newtown on your first ${WIN_BONUS_A_DAY} wins a day.`} />
+          <Point icon="⭐" text={`Reputation: +${REP_PER_WIN} for every win, +${REP_PER_HOSTED} for every challenge you host that's played to a winner (up to ${REP_MAX} from challenges).`} />
+          <Point icon="🎟️" text={`Your first challenge is free. Another one within ${CHALLENGE_COOLDOWN_SECS / 60} minutes costs ${cash(CHALLENGE_FEE_NAIRA / (quote?.perMint ?? 1_500))}, so in between, join other people's challenges.`} />
         </div>
         <button
           onClick={() => {
@@ -282,7 +331,7 @@ function FightSheet({
             } catch {}
             setIntro(false);
           }}
-          className="mt-4 h-11 w-full rounded-full bg-ink font-semibold text-white"
+          className="mt-4 h-12 w-full rounded-full bg-gradient-to-r from-[#e03131] to-[#f08c00] font-bold text-white shadow-lg"
         >
           Got it, let&apos;s play
         </button>
@@ -290,38 +339,181 @@ function FightSheet({
     );
 
   const g = challengeGame(game);
+  const perMint = quote?.perMint ?? 1_500;
+  const stake = chip !== null ? Math.round((chip / perMint) * 100) / 100 : asMint(raw);
+  const fee = free ? 0 : (quote?.feeMint ?? 0);
+  const need = (stake ?? 0) + fee;
+  const canSpend = quote?.canSpend ?? null;
+  const tooSmall = stake !== null && stake < stakeBounds(perMint).min;
+  const tooBig = stake !== null && stake > stakeBounds(perMint).max;
+  const stakeOk = stake !== null && cleanStake(stake, perMint) !== null;
+  const short = stakeOk && canSpend !== null && need > canSpend + 0.001;
+  const stakeNote =
+    stake === null
+      ? "Type how much each player puts in, or pick one above."
+      : tooSmall
+        ? `The smallest stake is ${cash(STAKE_MIN_NAIRA / perMint)}.`
+        : tooBig
+          ? `The biggest stake is ${cash(STAKE_MAX_NAIRA / perMint, { full: true })}.`
+          : short
+            ? `Not enough: you need ${cash(need)}${fee ? " with the fee" : ""}.`
+            : null;
+  const rep = quote?.rep ? challengeRep(quote.rep.hosted, quote.rep.won) : null;
+
   return (
-    <Sheet onClose={onClose} title="Challenge">
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted">Pick a game</p>
-      <div className="mt-2 grid grid-cols-2 gap-2">
-        {CHALLENGE_GAMES.map((c) => {
-          const soon = !c.engine;
-          const on = c.id === game;
+    <Sheet onClose={onClose} title="Challenge" wide>
+      {/* What's in it for you: money and reputation, up front. */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#e03131] via-[#f08c00] to-[#fab005] p-3.5 text-white shadow-lg">
+        <span className="pointer-events-none absolute -right-3 -top-4 text-7xl opacity-25">🏆</span>
+        <p className="font-display text-lg font-extrabold leading-tight">Throw down a challenge</p>
+        <p className="mt-0.5 text-xs text-white/85">Everyone nearby has a minute to join. Winner takes {Math.round(WINNER_SHARE * 100)}% of the pool.</p>
+        <div className="mt-2.5 flex flex-wrap gap-1.5 text-[11px] font-bold">
+          <span className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-1">
+            <Trophy className="size-3.5" /> +{REP_PER_WIN} reputation a win
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-1">
+            <Star className="size-3.5" /> +{REP_PER_HOSTED} for hosting a game that&apos;s played
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-1">+{cash(WIN_BONUS_MINT)} Newtown prize a win</span>
+        </div>
+        {rep !== null && (
+          <div className="mt-2.5">
+            <div className="flex justify-between text-[10px] font-semibold text-white/85">
+              <span>Your reputation from challenges</span>
+              <span className="tabular-nums">
+                {rep} / {REP_MAX}
+              </span>
+            </div>
+            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/25">
+              <div className="h-full rounded-full bg-white" style={{ width: `${Math.min(100, (rep / REP_MAX) * 100)}%` }} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* The games: search and shelves, so it works with hundreds of them. */}
+      <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-muted">Pick a game</p>
+      <label className="mt-2 flex h-11 items-center gap-2 rounded-full bg-ink/5 px-3.5 focus-within:ring-2 focus-within:ring-ink/20">
+        <Search className="size-4 shrink-0 text-muted" />
+        <input value={query} onChange={(e) => setQuery(e.target.value.slice(0, 40))} placeholder="Search games" className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none" enterKeyHint="search" />
+        {query && (
+          <button onClick={() => setQuery("")} className="grid size-6 shrink-0 place-items-center rounded-full bg-ink/10" aria-label="Clear the search">
+            <X className="size-3.5" />
+          </button>
+        )}
+      </label>
+      <div className="-mx-5 mt-2 flex gap-1.5 overflow-x-auto px-5 pb-1 [scrollbar-width:none]">
+        {([{ id: "all", label: "All", icon: "🎮" }, ...CHALLENGE_CATEGORIES, { id: "soon", label: "Coming soon", icon: "⏳" }] as { id: Shelf; label: string; icon: string }[]).map((s) => (
+          <button
+            key={s.id}
+            onClick={() => setShelf(s.id)}
+            className={cn("flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-bold transition", shelf === s.id ? "bg-ink text-white shadow" : "bg-ink/5 text-ink")}
+          >
+            <span>{s.icon}</span>
+            {s.label}
+            <span className={cn("rounded-full px-1.5 text-[10px] tabular-nums", shelf === s.id ? "bg-white/20" : "bg-ink/10")}>{counts[s.id] ?? 0}</span>
+          </button>
+        ))}
+      </div>
+      <div className="-mx-1 mt-1.5 max-h-[18.5rem] overflow-y-auto px-1 py-1">
+        {shown.length === 0 ? (
+          <p className="rounded-2xl bg-ink/5 px-3 py-6 text-center text-sm text-muted">No game matches &ldquo;{query}&rdquo;. Try another word.</p>
+        ) : (
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            {shown.map((c) => {
+              const soon = !c.engine;
+              const on = c.id === game;
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => setGame(c.id)}
+                  aria-pressed={on}
+                  className={cn("relative flex min-h-[6.5rem] flex-col items-start overflow-hidden rounded-2xl p-2 text-left text-white transition active:scale-95", on ? "ring-4 ring-gold" : "ring-1 ring-black/10", soon && !on && "opacity-70 saturate-50")}
+                  style={{ background: `linear-gradient(150deg, ${c.colour} 0%, ${c.colour} 35%, #101418 120%)` }}
+                >
+                  <span className="pointer-events-none absolute -bottom-3 -right-2 text-5xl opacity-20">{c.icon}</span>
+                  <span className="text-[1.7rem] leading-none drop-shadow">{c.icon}</span>
+                  <b className="mt-auto line-clamp-2 pt-1 text-[12px] leading-tight">{c.title}</b>
+                  <span className="flex items-center gap-0.5 text-[10px] text-white/75">
+                    <Users className="size-3" /> {c.seats > 2 ? `2-${c.seats}` : "2"}
+                  </span>
+                  {soon && <span className="absolute right-1.5 top-1.5 rounded-full bg-black/35 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide">Soon</span>}
+                  {on && !soon && <span className="absolute right-1.5 top-1.5 grid size-5 place-items-center rounded-full bg-gold text-[11px] font-black text-ink">✓</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      {g && (
+        <div className="mt-2 flex items-start gap-2.5 rounded-2xl bg-ink/5 p-2.5">
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl text-xl" style={{ background: `${g.colour}22` }}>
+            {g.icon}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold">
+              {g.title} <span className="font-normal text-muted">· {playersText(g)}</span>
+            </p>
+            <p className="text-xs text-muted">{g.blurb}</p>
+            {!g.engine && <p className="mt-1 text-xs font-semibold text-[#e8590c]">Coming soon. Pick one without the Soon badge to play now.</p>}
+          </div>
+        </div>
+      )}
+
+      {/* The stake: a quick pick or any amount. */}
+      <div className="mt-4 flex items-baseline justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted">Stake (each player)</p>
+        {canSpend !== null && (
+          <p className="flex items-center gap-1 text-xs text-muted">
+            <Wallet className="size-3.5" /> You have <b className="text-ink">{cash(canSpend)}</b>
+          </p>
+        )}
+      </div>
+      <div className="mt-2 grid grid-cols-4 gap-1.5">
+        {STAKES_NAIRA.map((s) => {
+          const mint = s / perMint;
+          const cant = canSpend !== null && Math.round(mint * 100) / 100 + fee > canSpend + 0.001;
           return (
             <button
-              key={c.id}
-              disabled={soon}
-              onClick={() => setGame(c.id)}
-              className={cn("relative overflow-hidden rounded-2xl p-3 text-left text-white transition", on ? "scale-[1.02] ring-4 ring-gold" : "ring-1 ring-black/10", soon && "opacity-60")}
-              style={{ background: `linear-gradient(135deg, ${c.colour}, #111)` }}
+              key={s}
+              onClick={() => setChip(s)}
+              className={cn("h-10 min-w-0 truncate rounded-full px-1 text-[13px] font-bold transition", chip === s ? "bg-ink text-white shadow" : "bg-ink/5", cant && chip !== s && "text-muted line-through decoration-1")}
             >
-              <span className="text-3xl">{c.icon}</span>
-              <b className="mt-1 block text-sm">{c.title}</b>
-              <span className="block text-[11px] text-white/70">{soon ? "Coming soon" : `2 to ${c.seats} players`}</span>
-              {soon && <span className="absolute right-2 top-2 rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold">Soon</span>}
+              {cash(mint)}
             </button>
           );
         })}
       </div>
-      {g && <p className="mt-2 text-xs text-muted">{g.blurb}</p>}
-      <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-muted">Stake (each player)</p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {STAKES_NAIRA.map((s) => (
-          <button key={s} onClick={() => setStake(s)} className={cn("h-10 rounded-full px-4 text-sm font-bold", s === stake ? "bg-ink text-white" : "bg-ink/5")}>
-            ₦{s.toLocaleString("en-GB")}
-          </button>
-        ))}
-      </div>
+      <label className={cn("mt-2 flex h-12 items-center gap-2 rounded-2xl px-4 transition", chip === null ? "bg-panel ring-2 ring-ink" : "bg-ink/5")}>
+        <span className="font-display text-xl font-extrabold text-muted">{cashSymbol()}</span>
+        <input
+          value={chip !== null ? Number(typedOf(chip / perMint)).toLocaleString("en-GB") : raw}
+          onFocus={(e) => {
+            if (chip !== null) {
+              setRaw(typedOf(chip / perMint));
+              setChip(null);
+            }
+            const el = e.currentTarget;
+            requestAnimationFrame(() => el.select());
+          }}
+          onChange={(e) => {
+            setChip(null);
+            setRaw(e.target.value.replace(/[^\d.,\s]/g, "").slice(0, 14));
+          }}
+          inputMode="decimal"
+          placeholder="Any amount"
+          aria-label="Stake for each player"
+          className="h-full min-w-0 flex-1 bg-transparent font-display text-xl font-extrabold tabular-nums outline-none"
+        />
+        {chip !== null && <span className="shrink-0 text-[11px] font-semibold text-muted">or type any amount</span>}
+      </label>
+      <p className={cn("mt-1.5 text-xs", stakeNote ? "font-semibold text-hit" : "text-muted")}>
+        {stakeNote ??
+          (g?.engine
+            ? `Winner takes up to ${cash((stake ?? 0) * g.seats * WINNER_SHARE)} with ${g.seats} players. From ${cash(STAKE_MIN_NAIRA / perMint)} to ${cash(STAKE_MAX_NAIRA / perMint)}.`
+            : `From ${cash(STAKE_MIN_NAIRA / perMint)} to ${cash(STAKE_MAX_NAIRA / perMint)} each.`)}
+      </p>
+
       <p className="mt-3 rounded-2xl bg-gold/15 px-3 py-2 text-xs">
         {free ? (
           <>
@@ -329,50 +521,55 @@ function FightSheet({
           </>
         ) : (
           <>
-            <b>₦{CHALLENGE_FEE_NAIRA.toLocaleString("en-GB")} fee</b> for challenging again so soon. Free again in <b className="tabular-nums">{mmss(left)}</b>: join someone else&apos;s meanwhile.
+            <b>{cash(fee)} fee</b> for challenging again so soon. Free again in <b className="tabular-nums">{mmss(left)}</b>: join someone else&apos;s meanwhile.
           </>
         )}
       </p>
-      <button
-        disabled={going || !g?.engine}
-        onClick={async () => {
-          setGoing(true);
-          setProblem(null);
-          const p = await onGo(game, stake);
-          setGoing(false);
-          if (p) setProblem(p);
-        }}
-        className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#e03131] font-bold text-white shadow-lg disabled:opacity-50"
-      >
-        {going ? <LoaderCircle className="size-5 animate-spin" /> : <Swords className="size-5" />}
-        Challenge everyone nearby
-      </button>
-      {problem && (
-        <div className="mt-3 rounded-2xl bg-hit/10 p-3 text-sm">
-          <p className="font-semibold text-hit">{problem.error}</p>
-          {problem.busyId !== undefined && (
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <button onClick={() => onOpenMine(problem.busyId!)} className="h-10 rounded-full bg-ink/5 text-xs font-semibold">
-                Open it
-              </button>
-              <button
-                disabled={leavingOld}
-                onClick={async () => {
-                  setLeavingOld(true);
-                  const r = await leaveChallenge(problem.busyId!).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
-                  setLeavingOld(false);
-                  if (!r.ok) return setProblem({ error: r.error, busyId: problem.busyId });
-                  setProblem(null);
-                }}
-                className="h-10 rounded-full bg-hit text-xs font-semibold text-white disabled:opacity-50"
-              >
-                {leavingOld ? "Leaving…" : "Leave it"}
-              </button>
-            </div>
-          )}
-          {problem.busyId !== undefined && <p className="mt-2 text-[11px] text-muted">Leaving before it starts gives your stake back; leaving a game being played gives it up.</p>}
-        </div>
-      )}
+
+      {/* Always in reach, however long the list. */}
+      <div className="sticky -bottom-5 z-10 -mx-5 -mb-5 mt-3 bg-panel/95 px-5 pb-5 pt-2 backdrop-blur">
+        <button
+          disabled={going || !g?.engine || !stakeOk || short}
+          onClick={async () => {
+            if (stake === null) return;
+            setGoing(true);
+            setProblem(null);
+            const p = await onGo(game, stake);
+            setGoing(false);
+            if (p) setProblem(p);
+          }}
+          className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#e03131] to-[#f08c00] px-4 font-bold text-white shadow-lg transition active:scale-[0.98] disabled:from-ink/30 disabled:to-ink/30 disabled:shadow-none"
+        >
+          {going ? <LoaderCircle className="size-5 animate-spin" /> : <Swords className="size-5" />}
+          <span className="truncate">{!g?.engine ? `${g?.title ?? "That game"} is coming soon` : stakeOk ? `Challenge everyone · ${cash(stake!)}` : "Challenge everyone nearby"}</span>
+        </button>
+        {problem && (
+          <div className="mt-3 rounded-2xl bg-hit/10 p-3 text-sm">
+            <p className="font-semibold text-hit">{problem.error}</p>
+            {problem.busyId !== undefined && (
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <button onClick={() => onOpenMine(problem.busyId!)} className="h-10 rounded-full bg-ink/5 text-xs font-semibold">
+                  Open it
+                </button>
+                <button
+                  disabled={leavingOld}
+                  onClick={async () => {
+                    setLeavingOld(true);
+                    const r = await leaveChallenge(problem.busyId!).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
+                    setLeavingOld(false);
+                    if (!r.ok) return setProblem({ error: r.error, busyId: problem.busyId });
+                    setProblem(null);
+                  }}
+                  className="h-10 rounded-full bg-hit text-xs font-semibold text-white disabled:opacity-50"
+                >
+                  {leavingOld ? "Leaving…" : "Leave it"}
+                </button>
+              </div>
+            )}
+            {problem.busyId !== undefined && <p className="mt-2 text-[11px] text-muted">Leaving before it starts gives your stake back; leaving a game being played gives it up.</p>}
+          </div>
+        )}
+      </div>
     </Sheet>
   );
 }
@@ -488,6 +685,22 @@ function Arena({ view, me, now, onClose, onMessage }: { view: ChallengeView; me:
   }, [view.status]);
   const iWon = view.status === "done" && view.winner === me.id;
   const winnerName = view.players.find((p) => p.id === view.winner)?.name;
+  // What this game added to your reputation (asked once it's settled; less near the cap).
+  const nominalRep = (iWon ? REP_PER_WIN : 0) + (isHost ? REP_PER_HOSTED : 0);
+  const [repNow, setRepNow] = useState<{ hosted: number; won: number } | null>(null);
+  const done = view.status === "done";
+  useEffect(() => {
+    if (!done) return;
+    let live = true;
+    void myChallengeRep()
+      .then((r) => live && setRepNow(r))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [done]);
+  const repGained = repNow ? challengeRepGained(repNow.hosted, repNow.won, isHost, iWon) : nominalRep;
+  const repFull = !!repNow && challengeRep(repNow.hosted, repNow.won) >= REP_MAX;
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[60] flex flex-col items-center justify-center p-3">
@@ -546,6 +759,16 @@ function Arena({ view, me, now, onClose, onMessage }: { view: ChallengeView; me:
                     ? `Game ON: starts in ${Math.ceil(left)}s with ${view.players.length} players`
                     : `Not started yet: needs 1 more player in ${Math.ceil(left)}s`}
               </p>
+              <p className="mt-2 inline-flex flex-wrap items-center justify-center gap-1 text-[11px] font-semibold">
+                <span className="inline-flex items-center gap-1 rounded-full bg-gold/20 px-2 py-0.5">
+                  <Trophy className="size-3" /> Win: +{REP_PER_WIN} reputation
+                </span>
+                {isHost && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-ink/5 px-2 py-0.5">
+                    <Star className="size-3" /> +{REP_PER_HOSTED} for hosting once it&apos;s played
+                  </span>
+                )}
+              </p>
               <p className="mt-1.5 text-xs text-muted">
                 {isHost
                   ? "Everyone nearby can see your light on the map. If nobody joins, the game doesn't start and your stake comes back."
@@ -577,7 +800,19 @@ function Arena({ view, me, now, onClose, onMessage }: { view: ChallengeView; me:
               {iWon && <Confetti />}
               <Trophy className={cn("size-12", iWon ? "text-gold" : "text-muted")} />
               <p className="mt-2 font-display text-2xl font-extrabold">{iWon ? "You won!" : `${winnerName ?? "Someone"} won`}</p>
-              <p className="mt-1 text-sm text-muted">{iWon ? `${cash(view.prize ?? 0)} is yours, and your reputation goes up.` : "Better luck next time. Your reputation still goes up for taking part."}</p>
+              <p className="mt-1 text-sm text-muted">{iWon ? `${cash(view.prize ?? 0)} is yours.` : "Better luck next time."}</p>
+              {repGained > 0 ? (
+                <div className="start-pop mt-3 inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#f08c00] to-[#fab005] px-4 py-1.5 text-sm font-extrabold text-ink shadow">
+                  <Star className="size-4 fill-current" /> +{repGained} reputation
+                </div>
+              ) : null}
+              <p className="mt-1.5 text-xs text-muted">
+                {repGained > 0
+                  ? [iWon && `+${REP_PER_WIN} for the win`, isHost && `+${REP_PER_HOSTED} for hosting`].filter(Boolean).join(", ") + (repGained < nominalRep ? ` (challenges give up to ${REP_MAX} in all)` : "") + "."
+                  : repFull && nominalRep > 0
+                    ? `Your reputation from challenges is already full (${REP_MAX}).`
+                    : `Win one for +${REP_PER_WIN} reputation, or host one for +${REP_PER_HOSTED}.`}
+              </p>
             </div>
           )}
           {view.status === "playing" && claim && (

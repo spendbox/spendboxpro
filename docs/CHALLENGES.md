@@ -8,8 +8,16 @@ down a challenge, a minute to gather players, a game floating over the city, a p
 
 1. **Challenge** (the white trophy, top right). The first time, a pop-up explains
    the rules.
-2. **Pick a game**: Whot! and Ludo now; Jenga and Police and Thief are shown as coming soon.
-3. **Pick a stake** (₦1,000, ₦5,000, ₦20,000 or ₦50,000): what each player puts into the pool.
+2. **Pick a game.** The picker is built for hundreds of games: a search box (names, blurbs and
+   tags; accents don't matter, so "ayo" finds Ayò), shelves (All, Cards, Board, Party, Sports,
+   Coming soon, each with a count) and a scrolling grid of tiles (icon, name, players). Games
+   you can play now come first; the rest carry a "Soon" badge and can't be started yet.
+   Whot! and Ludo play now.
+3. **Pick a stake**: what each player puts into the pool. Tap a quick pick (₦1,000, ₦5,000,
+   ₦20,000, ₦50,000) or type any amount from ₦1,000 to ₦1,000,000, in the player's own
+   currency (converted to mint). The card shows "You have X" (Fun money and wallet) and the
+   button stays off when the stake (plus any fee) is more than you have. Everyone who joins
+   pays the same stake.
 4. **Challenge everyone nearby.**
    - Everyone within about 4 km gets a notice and a push.
    - Everyone playing nearby sees a pop-up card with a Join button and the time left.
@@ -33,9 +41,21 @@ down a challenge, a minute to gather players, a game floating over the city, a p
 
 ## Reputation
 
-- 1 point for every challenge you hosted that was played.
-- 3 points for every challenge you won.
-- Up to 120 points in all (src/lib/world/items.ts reputationOf).
+- 3 points for every challenge you win.
+- 1 point for every challenge you hosted that was played to a winner (draws and called-off
+  games don't count).
+- Up to 120 points in all (src/lib/world/challenges.ts challengeRep, added in
+  src/lib/world/items.ts reputationOf).
+- The Challenge card shows this at the top, with your own challenge reputation out of 120; the
+  waiting screen shows "Win: +3 reputation"; the result shows what that game added (e.g.
+  "+4 reputation: +3 for the win, +1 for hosting"), less near the cap.
+
+## Adding a game
+
+One line in `CHALLENGE_GAMES` (src/lib/world/challenges.ts): id (kept in the database, 2 to 20
+small letters or _), title, category, engine (null while it's coming soon), most players,
+colour, icon, blurb, and optional search tags. Set the engine once its turn game
+(src/app/play/minigames/turns) plays online for 2 or more players.
 
 ## How a game ends (and never gets stuck)
 
@@ -60,12 +80,16 @@ down a challenge, a minute to gather players, a game floating over the city, a p
   - joining, starting, and calling off with stakes back;
   - three players agreeing, a loser owning up, a draw;
   - a lone answer settled after 2 minutes, and reputation.
+- `src/lib/world/tests/challenges.test.ts` checks the game list, the picker's search and
+  shelves, the stake limits, and the reputation each game adds.
 - 6,000 simulated games of Whot! and Ludo (computer against computer, 2 to 4 players) all
   finished, never stuck.
 
 ## Safety rails
 
 - One challenge at a time per player.
+- Stakes are checked on the server (src/app/play/fight/challenge-actions.ts openChallenge:
+  ₦1,000 to ₦1,000,000); the database also caps a stake at ₥10,000.
 - Games nobody finishes in 45 minutes are called off and the stakes go back.
 - Money only moves in the database (challenge_open, challenge_join, challenge_begin,
   challenge_report).

@@ -232,12 +232,9 @@ export function cleanItemName(raw: string): string | null {
 }
 
 /** "Mind +0.3 · Rep +2": what an item does, in a few words. */
+/** What a thing does for you, in words: only reputation counts now (mind and body are gone). */
 export function effectWords(e: ItemEffect) {
-  const out: string[] = [];
-  if (e.mind) out.push(`Mind +${e.mind}`);
-  if (e.body) out.push(`Body +${e.body}`);
-  if (e.rep) out.push(`Reputation +${e.rep}`);
-  return out.join(" · ") || "Just nice to have";
+  return e.rep ? `+${e.rep} reputation` : "Just nice to have";
 }
 
 // ---------------------------------------------------------------- reputation

@@ -161,8 +161,11 @@ export type PropertyApi = {
   repayLoan: (amount: number) => Promise<PropertyResult>;
 };
 
-/** The purchase tax (the database's property_buy_tax), for showing what a unit really costs. */
-export const BUY_TAX = 0.03;
+/** The purchase tax (the database's property_buy_tax): none since game-db/079, a simple buy at the price. */
+export const BUY_TAX = 0;
+
+/** What property earns you a day, as a share of what you paid (the database's property_income_day, game-db/079). */
+export const INCOME_DAY = 0.01;
 
 /**
  * What a unit earns a day while let (mint): homes about 6% of their value a game year, business
