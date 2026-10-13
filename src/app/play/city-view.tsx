@@ -5311,7 +5311,8 @@ export function CityView({
       free.sort((a, b) => Math.hypot(a.x - floor.x, a.z - floor.z) - Math.hypot(b.x - floor.x, b.z - floor.z));
       // The middle is kept for players; a crowd dances round it (facing the DJ, more or less).
       st.slots = free.slice(0, 10);
-      const around = free.slice(10).filter(() => rnd() < 0.6).slice(0, 12);
+      // A home's dance hall: just you and your guests (no crowd of strangers).
+      const around = st.homeKey ? [] : free.slice(10).filter(() => rnd() < 0.6).slice(0, 12);
       const people: Person[] = around.map((_, i) => ({ id: `crowd:${i}`, name: "", avatar: defaultAvatar(`${key}|crowd|${i}`), npc: false }));
       const spots: Spot[] = around.map((p) => ({ x: p.x, z: p.z, ry: (rnd() - 0.5) * 1.4, pose: "stand", act: "dance" }));
       if (people.length) {
