@@ -117,3 +117,19 @@ begin
 end $$;
 
 revoke all on function public.active_ping(uuid), public.daily_gift_status(uuid), public.daily_gift_claim(uuid, numeric, text), public.challenge_bonus_pay() from public, anon, authenticated;
+
+-- The daily new-mint report counts the new kinds too: the daily gift, Newtown's challenge prize and
+-- the first steps' rewards (part 72).
+create or replace view public.coin_supply_daily as
+select created_at::date as day,
+       coalesce(sum(amount) filter (where kind in ('signup', 'seeker_bonus', 'topup', 'sponsor', 'bot_bounty', 'bot_funding',
+                                                   'balloon', 'passive', 'ad_reward', 'level_bonus', 'event_reward', 'event_bonus',
+                                                   'npc_gift', 'quest_reward', 'activity_reward', 'streak_reward', 'job_pay',
+                                                   'start_grant', 'rent', 'work_pay', 'treasury_opening', 'hustle_pay', 'bonus',
+                                                   'daily_gift', 'challenge_bonus', 'first_step')), 0) as created,
+       coalesce(sum(amount) filter (where kind = 'burn'), 0) as burned
+from public.ledger
+group by 1
+order by 1 desc;
+revoke all on public.coin_supply_daily from public, anon, authenticated;
+grant select on public.coin_supply_daily to service_role;
