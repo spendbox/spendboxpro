@@ -2029,63 +2029,7 @@ export function Game({
               {onlineNow}
               <span className="max-[440px]:hidden">online</span>
             </button>
-            {/* Explore: places to go (clubs, parks, markets...), rides (train, balloon, boat, helicopter...) and sport. */}
-            <button
-              onClick={() => {
-                setExplorePlaces(worldLife.explore());
-                setExploreTab("places");
-                setPickRide(true);
-              }}
-              className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold"
-            >
-              <Compass className="size-4 text-[#e64980]" />
-              Explore
-            </button>
-            {!place && ride === null && (
-              <button
-                onClick={() => setWalking(!walking)}
-                className={cn("pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold", walking ? "bg-ink text-white" : "glass")}
-                aria-pressed={walking}
-              >
-                <Footprints className="size-4" />
-                {walking ? "Stop walking" : "Walk"}
-              </button>
-            )}
-            {(() => {
-              const bell = !me.guest && (
-              // Notifications: what's happened, and switching them on for this phone. Glows until they're on.
-              <button
-                onClick={() => {
-                  // The bell switches notifications on and off for this phone.
-                  if (pushNeedsHome) return setAlertsOpen(true);
-                  void (pushOn ? turnOffNotifications() : turnOnNotifications()).then((r) => {
-                    setMessage({ text: r.text, tone: r.ok ? "good" : "info" });
-                    if (r.ok) setPushOn(!pushOn);
-                  });
-                }}
-                className={cn("pointer-events-auto relative grid size-9 shrink-0 place-items-center rounded-full shadow", pushOn ? "glass" : "bg-gold text-ink")}
-                aria-label={pushOn ? "Notifications are on: tap to turn them off" : "Notifications are off: tap to turn them on"}
-                aria-pressed={pushOn}
-              >
-                {pushOn ? <BellRing className="size-4" /> : <BellOff className="size-4" />}
-                {!pushOn && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-2 ring-gold/70" />}
-              </button>
-              );
-              return worldLife.makeRow(bell) ?? bell;
-            })()}
-            {!place && ride === null && !walking && worldId && (
-              // Locate me: back to where you are on the map (just looking: free).
-              <button
-                onClick={() => {
-                  if (!worldLife.locateMe()) setMessage({ text: "You're not anywhere on the map yet. Find a home first.", tone: "info" });
-                }}
-                className="glass pointer-events-auto ml-auto grid size-9 shrink-0 place-items-center rounded-full shadow"
-                aria-label="Locate me"
-                title="Locate me"
-              >
-                <LocateFixed className="size-4" />
-              </button>
-            )}
+            {worldLife.rowButtons}
           </div>
           {worldLife.rowBelow}
           {/* People around where you're looking: online first. Tap one for their card (message, knock, gift). */}
@@ -2364,6 +2308,19 @@ export function Game({
       )}
       {alertsOpen && (
         <Sheet onClose={() => setAlertsOpen(false)} title="Notifications">
+          {pushOn && (
+            <button
+              onClick={() =>
+                void turnOffNotifications().then((r) => {
+                  setMessage({ text: r.text, tone: r.ok ? "good" : "info" });
+                  if (r.ok) setPushOn(false);
+                })
+              }
+              className="mb-3 flex items-center gap-1.5 text-xs font-semibold text-muted underline"
+            >
+              <BellOff className="size-3.5" /> Turn notifications off on this phone
+            </button>
+          )}
           {!pushOn && (
             <div className="mb-3 rounded-2xl bg-gold/15 p-3">
               <p className="text-sm font-semibold">Get told even when the game is closed</p>
@@ -2971,6 +2928,36 @@ export function Game({
           </button>
         )}
 
+        {/* The real map, out on the streets: Explore, Walk, Locate me and Soon, down here so the top stays
+            clear. Inside a place or on a ride the place's own bar takes over; walking, only Stop walking. */}
+        {worldId && !place && ride === null && (
+          <div className="pointer-events-auto flex items-stretch gap-1 sm:gap-1.5">
+            {!walking && (
+              <DockButton
+                icon={Compass}
+                tint="text-[#e64980]"
+                label="Explore"
+                onClick={() => {
+                  setExplorePlaces(worldLife.explore());
+                  setExploreTab("places");
+                  setPickRide(true);
+                }}
+              />
+            )}
+            <DockButton icon={Footprints} label={walking ? "Stop walking" : "Walk"} dark={walking} onClick={() => setWalking(!walking)} />
+            {!walking && (
+              <DockButton
+                icon={LocateFixed}
+                label="Locate me"
+                onClick={() => {
+                  if (!worldLife.locateMe()) setMessage({ text: "You're not anywhere on the map yet. Find a home first.", tone: "info" });
+                }}
+              />
+            )}
+            {!walking && worldLife.hasHome && <DockButton icon={Star} label="Soon" onClick={worldLife.openSoon} />}
+          </div>
+        )}
+
         {/* The real map, inside a building or on a ride (a balloon...): where you are, chat, change floor, camera, leave. */}
         {worldId && (place || ride !== null) && (
           <div className="glass pointer-events-auto flex w-full max-w-md flex-wrap items-center gap-2 rounded-2xl p-2 pl-3 text-sm">
@@ -3283,6 +3270,23 @@ export function Game({
         )}
       </div>
 
+      {/* Notifications off on this phone: a bell on the right, halfway down, to switch them on (gone once they're on). */}
+      {!me.guest && !pushOn && !camera && (
+        <button
+          onClick={() => {
+            if (pushNeedsHome) return setAlertsOpen(true);
+            void turnOnNotifications().then((r) => {
+              setMessage({ text: r.text, tone: r.ok ? "good" : "info" });
+              if (r.ok) setPushOn(true);
+            });
+          }}
+          className="pointer-events-auto fixed right-3 top-1/2 z-20 grid size-10 -translate-y-1/2 place-items-center rounded-full bg-gold text-ink shadow-lg"
+          aria-label="Notifications are off: tap to turn them on"
+        >
+          <BellOff className="size-4" />
+          <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-2 ring-gold/70" />
+        </button>
+      )}
       {/* The real map: your phone, bottom right (camera, photos, notifications). */}
       {worldId && !camera && !guest && !place && (
         <button
@@ -3613,5 +3617,15 @@ function PrayerMoment({ onDone }: { onDone: () => void }) {
         <p className="mt-1 text-sm text-white/80">You bow your head and pray. You feel calmer.</p>
       </div>
     </div>
+  );
+}
+
+/** A button in the bar along the bottom of the map: an icon over a short label. */
+function DockButton({ icon: Icon, label, onClick, tint, dark }: { icon: React.ComponentType<{ className?: string }>; label: string; onClick: () => void; tint?: string; dark?: boolean }) {
+  return (
+    <button onClick={onClick} className={cn("flex h-12 min-w-11 flex-col items-center justify-center gap-1 whitespace-nowrap rounded-2xl px-2 text-[10px] font-semibold leading-none shadow sm:min-w-14 sm:text-[11px]", dark ? "bg-ink text-white" : "glass")} aria-pressed={dark}>
+      <Icon className={cn("size-4", !dark && tint)} />
+      {label}
+    </button>
   );
 }
