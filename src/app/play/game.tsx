@@ -64,7 +64,7 @@ import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
 import { BookOpen, Church, Dumbbell, FerrisWheel, GraduationCap, Landmark as LandmarkIcon, Plane, Ship, Stethoscope, TrainFront, Trophy, UtensilsCrossed } from "lucide-react";
-import { BellOff, BellRing, PencilRuler, Wallet, CarFront, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Newspaper, Palette, ShoppingBag, Smartphone, Store, Swords, User } from "lucide-react";
+import { BellOff, BellRing, LocateFixed, PencilRuler, Wallet, CarFront, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Newspaper, Palette, ShoppingBag, Smartphone, Store, Swords, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
 import { GhostsSheet } from "./ghost-duel/ghosts-sheet";
@@ -2012,8 +2012,8 @@ export function Game({
                 {walking ? "Stop walking" : "Walk"}
               </button>
             )}
-            {worldLife.rowButtons}
-            {!me.guest && (
+            {(() => {
+              const bell = !me.guest && (
               // Notifications: what's happened, and switching them on for this phone. Glows until they're on.
               <button
                 onClick={() => {
@@ -2024,12 +2024,27 @@ export function Game({
                     if (r.ok) setPushOn(!pushOn);
                   });
                 }}
-                className={cn("pointer-events-auto relative ml-auto grid size-9 shrink-0 place-items-center rounded-full shadow", pushOn ? "glass" : "bg-gold text-ink")}
+                className={cn("pointer-events-auto relative grid size-9 shrink-0 place-items-center rounded-full shadow", pushOn ? "glass" : "bg-gold text-ink")}
                 aria-label={pushOn ? "Notifications are on: tap to turn them off" : "Notifications are off: tap to turn them on"}
                 aria-pressed={pushOn}
               >
                 {pushOn ? <BellRing className="size-4" /> : <BellOff className="size-4" />}
                 {!pushOn && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-2 ring-gold/70" />}
+              </button>
+              );
+              return worldLife.makeRow(bell) ?? bell;
+            })()}
+            {!place && ride === null && !walking && worldId && (
+              // Locate me: back to where you are on the map (just looking: free).
+              <button
+                onClick={() => {
+                  if (!worldLife.locateMe()) setMessage({ text: "You're not anywhere on the map yet. Find a home first.", tone: "info" });
+                }}
+                className="glass pointer-events-auto ml-auto grid size-9 shrink-0 place-items-center rounded-full shadow"
+                aria-label="Locate me"
+                title="Locate me"
+              >
+                <LocateFixed className="size-4" />
               </button>
             )}
           </div>
