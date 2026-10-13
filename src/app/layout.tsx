@@ -1,3 +1,4 @@
+import { EnvBadge } from "@/components/env-badge";
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { TapFeedback } from "@/components/tap-feedback";
@@ -51,6 +52,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full font-sans">
         {children}
         <TapFeedback />
+        <EnvBadge />
       </body>
     </html>
   );

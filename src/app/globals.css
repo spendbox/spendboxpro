@@ -146,8 +146,8 @@ a[href]:active,
   0%, 100% { transform: perspective(700px) rotateX(14deg) rotateY(-6deg) translateY(0); }
   50% { transform: perspective(700px) rotateX(10deg) rotateY(6deg) translateY(-12px); }
 }
-.title-float {
-  animation: title-float 6s ease-in-out infinite;
+.title-float { animation: title-float 6s ease-in-out infinite; }
+.title-3d {
   text-shadow:
     0 1px 0 #f4c542, 0 2px 0 #eab308, 0 3px 0 #d9a406, 0 4px 0 #c99506, 0 5px 0 #b98605,
     0 6px 0 #a87705, 0 7px 0 #966804, 0 8px 0 #845a03, 0 10px 14px rgba(0, 0, 0, 0.35), 0 18px 40px rgba(0, 0, 0, 0.25);
@@ -162,3 +162,13 @@ a[href]:active,
 }
 .arena-float { animation: arena-float 5s ease-in-out infinite; transform-origin: 50% 100%; }
 @media (prefers-reduced-motion: reduce) { .arena-float { animation: none; } }
+
+/* A challenge looking for players: sonar rings going out and a sweep going round. */
+@keyframes radar-ring {
+  from { transform: scale(0.55); opacity: 0.9; }
+  to { transform: scale(1.25); opacity: 0; }
+}
+.radar-ring { animation: radar-ring 2s ease-out infinite; }
+@keyframes radar-sweep { to { transform: rotate(360deg); } }
+.radar-sweep { animation: radar-sweep 2.4s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .radar-ring, .radar-sweep { animation: none; } }

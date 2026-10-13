@@ -119,7 +119,7 @@ import { CityCard } from "./city-card";
 import { useWorldLife } from "./life/world-life";
 import type { ExplorePlace } from "@/lib/world/explore";
 import { Joystick } from "./joystick";
-import { PeopleList } from "./people/people-list";
+import { PeopleList, prefetchPeople } from "./people/people-list";
 import { StatsSheet } from "./stats-sheet";
 import { GiftPop, GiftSent } from "./people/gift-pop";
 import { PhoneHub } from "./phone/phone-hub";
@@ -127,6 +127,7 @@ import { RecentRail, rememberPerson } from "./people/recent-rail";
 import { PrankReveal, usePrankReveal } from "./people/prank-reveal";
 import { openAdvertise } from "./life/advertise-panel";
 import { Fight, type ChallengeLight } from "./fight/fight";
+import { CallBar } from "./call/call-bar";
 import * as propertyActions from "./property-actions";
 import * as workActions from "./work-actions";
 import * as livingActions from "./living-actions";
@@ -519,6 +520,11 @@ export function Game({
     rowOutside: true,
     meName: state.me.name ?? undefined,
     onPerson: (id: string) => setPersonId(id),
+    // Gone in straight away, but the fare couldn't be paid: back out.
+    onTripFailed: () => {
+      entering.current = 0;
+      leaveInside.current();
+    },
     // A building's card: Go inside, as if its bubble had been tapped.
     onEnter: (id: string) => {
       const sp = ownedSpot(id);
@@ -812,6 +818,15 @@ export function Game({
         }}
       />
     ) : undefined;
+  // The people list, looked up shortly after the game opens, so "online" opens at once.
+  useEffect(() => {
+    if (!worldId || me.guest) return;
+    const t = setTimeout(() => {
+      const c = worldLife.centerRef.current?.() ?? { x: 0, z: 0 };
+      prefetchPeople(worldId, c.x, c.z);
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [worldId, me.guest, worldLife.centerRef]);
   const away = useAwayDigest(!!worldId && !me.guest);
   // Coming home to a prank: it plays out on the screen first.
   const prankShow = usePrankReveal(!!worldId && !me.guest);
@@ -2035,6 +2050,20 @@ export function Game({
               <span className="max-[440px]:hidden">online</span>
             </button>
             {worldLife.rowButtons}
+            {worldId && !guest && !place && ride === null && !walking && (
+              // Explore: places to go, rides and sport (top right, in the row with Life).
+              <button
+                onClick={() => {
+                  setExplorePlaces(worldLife.explore());
+                  setExploreTab("places");
+                  setPickRide(true);
+                }}
+                className="glass pointer-events-auto ml-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold"
+              >
+                <Compass className="size-4 text-[#e64980]" />
+                Explore
+              </button>
+            )}
           </div>
           {worldLife.rowBelow}
           {/* People around where you're looking: online first. Tap one for their card (message, knock, gift). */}
@@ -2976,18 +3005,6 @@ export function Game({
         )}
         {worldId && !guest && !place && ride === null && (
           <div className="pointer-events-auto flex items-stretch gap-1 sm:gap-1.5">
-            {!walking && (
-              <DockButton
-                icon={Compass}
-                tint="text-[#e64980]"
-                label="Explore"
-                onClick={() => {
-                  setExplorePlaces(worldLife.explore());
-                  setExploreTab("places");
-                  setPickRide(true);
-                }}
-              />
-            )}
             <DockButton icon={Footprints} label={walking ? "Stop walking" : "Walk"} dark={walking} onClick={() => setWalking(!walking)} />
             {!walking && (
               <DockButton
@@ -3003,6 +3020,10 @@ export function Game({
           </div>
         )}
 
+        {/* Inside a place on the real map: a voice call with the few people on this floor (docs/VOICE_CALLS.md). */}
+        {worldId && place && !guest && rooms.myRoom && (
+          <CallBar room={`place-${rooms.myRoom}`} me={{ id: me.id, name: me.name ?? "Player", avatar: me.avatar }} title="Voice chat here" max={6} className="pointer-events-auto w-full max-w-md" />
+        )}
         {/* The real map, inside a building or on a ride (a balloon...): where you are, chat, change floor, camera, leave. */}
         {worldId && (place || ride !== null) && (
           <div className="glass pointer-events-auto flex w-full max-w-md flex-wrap items-center gap-2 rounded-2xl p-2 pl-3 text-sm">
@@ -3317,8 +3338,12 @@ export function Game({
 
       {/* Signed out: the game's name, big and floating over the city. */}
       {worldId && guest && !place && ride === null && !camera && (
-        <div className="pointer-events-none absolute inset-x-0 top-[22%] z-[5] flex justify-center" aria-hidden>
-          <h1 className="title-float font-display text-[clamp(3rem,15vw,8rem)] font-black italic leading-none tracking-tight text-white">Newtown</h1>
+        <div className="pointer-events-none absolute inset-x-0 top-[18%] z-[5] flex justify-center" aria-hidden>
+          <div className="title-float flex flex-col items-center">
+            <LogoMark size={72} className="mb-2 rounded-[18px] shadow-[0_12px_30px_rgba(0,0,0,0.35)]" />
+            <h1 className="title-3d font-display text-[clamp(3rem,15vw,8rem)] font-black italic leading-none tracking-tight text-white">Newtown</h1>
+            <p className="mt-3 rounded-full bg-black/35 px-4 py-1.5 text-sm font-semibold tracking-wide text-white backdrop-blur-sm sm:text-base">Your city. Your story.</p>
+          </div>
         </div>
       )}
       {/* Notifications off on this phone: a bell on the right, halfway down, to switch them on (gone once they're on). */}

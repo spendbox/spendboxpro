@@ -341,7 +341,7 @@ type Props = {
   /** Your friends who are in a place right now: each one's face and name shows over it. */
   friendsAt?: CityFriendPin[];
   /** Challenges on the map (src/app/play/fight): a beam of light shining up from each one. */
-  challengeLights?: { id: number; x: number; z: number; colour: string; playing: boolean }[];
+  challengeLights?: { id: number; x: number; z: number; colour: string; playing: boolean; endsAt?: number | null }[];
   /** A face on the map was tapped (someone's card). */
   onPerson?: (id: string) => void;
   /** Marks players left on the map, and one tapped. */
@@ -1427,7 +1427,7 @@ export function CityView({
     setHouses: (list: TownHouse[] | undefined) => void;
     setDance: (me: CityDance | null, others: CityDancer[]) => void;
     setFriendPins: (list: CityFriendPin[]) => void;
-    setChallengeLights: (list: { id: number; x: number; z: number; colour: string; playing: boolean }[]) => void;
+    setChallengeLights: (list: { id: number; x: number; z: number; colour: string; playing: boolean; endsAt?: number | null }[]) => void;
     setMarkTags: (list: CityMarkTag[]) => void;
     setRoomPeople: (list: CityPerson[]) => void;
     openRoom: (id: string) => void;
@@ -4361,14 +4361,51 @@ export function CityView({
     // ---- challenges (src/app/play/fight): a tall beam of light in the game's colour shining up
     // from where someone challenged everyone nearby, a ring pulsing on the ground round it (fast
     // while people can still join, slow once the game is being played).
-    const challengeBeams = new Map<number, { obj: THREE.Group; beam: THREE.MeshBasicMaterial; ring: THREE.Mesh; ringMat: THREE.MeshBasicMaterial; playing: boolean; geos: THREE.BufferGeometry[] }>();
-    function setChallengeLights(list: { id: number; x: number; z: number; colour: string; playing: boolean }[]) {
+    const challengeBeams = new Map<
+      number,
+      {
+        obj: THREE.Group;
+        beam: THREE.MeshBasicMaterial;
+        rings: { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial }[];
+        playing: boolean;
+        endsAt: number | null;
+        geos: THREE.BufferGeometry[];
+        /** The seconds left to join, floating over the beam (a canvas on a sprite). */
+        label: { sprite: THREE.Sprite; tex: THREE.CanvasTexture; canvas: HTMLCanvasElement; shown: string };
+        colour: string;
+      }
+    >();
+    /** Draw the countdown (or "LIVE" once it's being played) on a challenge's floating label. */
+    function drawChallengeLabel(b: { label: { tex: THREE.CanvasTexture; canvas: HTMLCanvasElement; shown: string }; colour: string }, text: string) {
+      if (b.label.shown === text) return;
+      b.label.shown = text;
+      const g = b.label.canvas.getContext("2d")!;
+      const W = b.label.canvas.width;
+      const H = b.label.canvas.height;
+      g.clearRect(0, 0, W, H);
+      g.fillStyle = "rgba(17,17,17,0.82)";
+      g.beginPath();
+      g.arc(W / 2, H / 2, H / 2 - 8, 0, Math.PI * 2);
+      g.fill();
+      g.lineWidth = 10;
+      g.strokeStyle = b.colour;
+      g.stroke();
+      g.fillStyle = "#fff";
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.font = `900 ${text.length > 2 ? 64 : 104}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+      g.fillText(text, W / 2, H / 2 + 4);
+      b.label.tex.needsUpdate = true;
+    }
+    function setChallengeLights(list: { id: number; x: number; z: number; colour: string; playing: boolean; endsAt?: number | null }[]) {
       const keep = new Set(list.map((c) => c.id));
       for (const [id, b] of challengeBeams) {
         if (keep.has(id)) continue;
         life.remove(b.obj);
         b.beam.dispose();
-        b.ringMat.dispose();
+        for (const r of b.rings) r.mat.dispose();
+        b.label.tex.dispose();
+        (b.label.sprite.material as THREE.SpriteMaterial).dispose();
         b.geos.forEach((g) => g.dispose());
         challengeBeams.delete(id);
       }
@@ -4376,6 +4413,7 @@ export function CityView({
         const had = challengeBeams.get(c.id);
         if (had) {
           had.playing = c.playing;
+          had.endsAt = c.endsAt ?? null;
           continue;
         }
         const obj = new THREE.Group();
@@ -4384,24 +4422,50 @@ export function CityView({
         const beamGeo = new THREE.CylinderGeometry(0.5, 0.16, 9, 24, 1, true).translate(0, 4.5, 0);
         const core = new THREE.CylinderGeometry(0.07, 0.07, 9, 10, 1, true).translate(0, 4.5, 0);
         obj.add(new THREE.Mesh(beamGeo, beam), new THREE.Mesh(core, beam));
-        const ringMat = new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+        // Radar rings going out from it, one after another, while it looks for players.
         const ringGeo = new THREE.RingGeometry(0.32, 0.42, 40).rotateX(-Math.PI / 2);
-        const ring = new THREE.Mesh(ringGeo, ringMat);
-        ring.position.y = 0.03;
-        obj.add(ring);
-        for (const m of obj.children) m.renderOrder = 4;
+        const rings = [0, 1, 2].map(() => {
+          const mat = new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+          const mesh = new THREE.Mesh(ringGeo, mat);
+          mesh.position.y = 0.03;
+          obj.add(mesh);
+          return { mesh, mat };
+        });
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = 192;
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false }));
+        sprite.scale.set(1.1, 1.1, 1);
+        sprite.position.y = 2.6;
+        sprite.renderOrder = 6;
+        obj.add(sprite);
+        for (const m of obj.children) if (m !== sprite) m.renderOrder = 4;
         obj.position.set(c.x, 0, c.z);
         life.add(obj);
-        challengeBeams.set(c.id, { obj, beam, ring, ringMat, playing: c.playing, geos: [beamGeo, core, ringGeo] });
+        const b = { obj, beam, rings, playing: c.playing, endsAt: c.endsAt ?? null, geos: [beamGeo, core, ringGeo], label: { sprite, tex, canvas, shown: "" }, colour: c.colour };
+        challengeBeams.set(c.id, b);
       }
     }
     function updateChallengeLights(time: number) {
+      const t = Date.now();
       for (const b of challengeBeams.values()) {
-        const speed = b.playing ? 0.8 : 2.2;
-        const k = (time * speed) % 1;
-        b.ring.scale.setScalar(1 + k * 2.4);
-        b.ringMat.opacity = 0.85 * (1 - k);
-        b.beam.opacity = 0.32 + 0.14 * Math.sin(time * (b.playing ? 2 : 5));
+        const searching = !b.playing && b.endsAt !== null;
+        const speed = searching ? 0.9 : 0.35;
+        b.rings.forEach((r, i) => {
+          const k = (time * speed + i / 3) % 1;
+          r.mesh.scale.setScalar(1 + k * (searching ? 5 : 2.4));
+          r.mat.opacity = (searching ? 0.9 : 0.5) * (1 - k);
+        });
+        const secs = b.endsAt === null ? 0 : Math.max(0, Math.ceil((b.endsAt - t) / 1000));
+        // Each second while it searches: the beam flashes (a beep you can see).
+        const frac = searching && b.endsAt! > t ? ((b.endsAt! - t) / 1000) % 1 : 0;
+        const flash = frac > 0.75 ? (frac - 0.75) * 4 : 0;
+        b.beam.opacity = 0.3 + 0.14 * Math.sin(time * (b.playing ? 2 : 5)) + flash * 0.35;
+        b.label.sprite.scale.setScalar(1.1 + flash * 0.25);
+        b.label.sprite.position.y = 2.6 + Math.sin(time * 2) * 0.12;
+        drawChallengeLabel(b, b.playing ? "LIVE" : searching ? String(secs) : "");
+        b.label.sprite.visible = b.playing || searching;
       }
     }
     function setFriendPins(list: CityFriendPin[]) {
@@ -7088,12 +7152,12 @@ export function CityView({
         // At a landmark's gate: glide down in front of it, look a moment, then go in.
         const gt = gateTour;
         gt.t += dt;
-        const k = Math.min(1, gt.t / 1.6);
+        const k = Math.min(1, gt.t / 0.9);
         const e = k * k * (3 - 2 * k);
         camera.position.lerpVectors(gt.fromPos, gt.toPos, e);
         controls.target.lerpVectors(gt.fromTarget, gt.toTarget, e);
         camera.lookAt(controls.target);
-        if (gt.t > 3.4) {
+        if (gt.t > 1.6) {
           gateTour = null;
           syncView();
         }

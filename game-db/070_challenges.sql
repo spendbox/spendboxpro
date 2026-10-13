@@ -141,7 +141,9 @@ end $$;
  */
 create or replace function public.challenge_begin(p_id bigint) returns text
 language plpgsql security definer set search_path = public as $$
-declare c public.challenges;
+declare
+  c public.challenges;
+  r record;
 begin
   select * into c from public.challenges where id = p_id for update;
   if not found then return 'gone'; end if;
@@ -149,9 +151,15 @@ begin
   if now() < c.starts_at then return 'open'; end if;
   if (select count(*) from public.challenge_players where challenge_id = p_id) < 2 then
     perform public.challenge_refund(p_id);
+    for r in select user_id from public.challenge_players where challenge_id = p_id loop
+      perform public.notify(r.user_id, null, 'challenge', 'Your challenge didn''t start: not enough players joined. Your stake is back.');
+    end loop;
     return 'cancelled';
   end if;
   update public.challenges set status = 'playing', started_at = now() where id = p_id;
+  for r in select user_id from public.challenge_players where challenge_id = p_id loop
+    perform public.notify(r.user_id, null, 'challenge', 'Game on! Your challenge has started. Open the game to play.');
+  end loop;
   return 'playing';
 end $$;
 
