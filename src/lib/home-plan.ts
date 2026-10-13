@@ -217,17 +217,17 @@ const countItems = (plan: HomePlan) => {
   return out;
 };
 
-/** A new home comes with its ground floor and the starter furniture. */
-export function startPaid(): PlanPaid {
-  const items: Partial<Record<FurnitureKind, number>> = {};
-  for (const size of Object.keys(SIZES) as HomeSize[])
-    for (const [k, n] of Object.entries(countItems(starterPlan(size))) as [FurnitureKind, number][]) items[k] = Math.max(items[k] ?? 0, n);
-  return { floors: 1, items };
+/**
+ * A new home comes with its ground floor and the starter furniture of its own size (a small home
+ * isn't credited with what a large one starts with).
+ */
+export function startPaid(size: HomeSize = "medium"): PlanPaid {
+  return { floors: 1, items: countItems(starterPlan(size)) };
 }
 
-/** Paid-for record from the database, made safe. */
-export function cleanPaid(raw: unknown): PlanPaid {
-  const base = startPaid();
+/** Paid-for record from the database, made safe, with the starter furniture for a home of this size. */
+export function cleanPaid(raw: unknown, size: HomeSize = "medium"): PlanPaid {
+  const base = startPaid(size);
   const r = (raw ?? {}) as { floors?: unknown; items?: Record<string, unknown> };
   const floors = Math.max(1, Math.min(MAX_FLOORS, Math.round(Number(r.floors) || 1)));
   const items = { ...base.items };
@@ -248,7 +248,9 @@ export type PlanBill = {
 };
 
 /** What saving this plan costs: the floors and furniture beyond what you've already paid for. */
-export function planBill(plan: HomePlan, paid: PlanPaid): PlanBill {
+export function planBill(plan: HomePlan, given: PlanPaid): PlanBill {
+  // The plan's own size decides the starter furniture that comes free.
+  const paid = cleanPaid(given, plan.size);
   const lines: PlanBill["lines"] = [];
   let naira = 0;
   let valueNaira = 0;

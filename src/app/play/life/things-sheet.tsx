@@ -13,6 +13,7 @@ import {
   effectWords,
   KNOW_HOW,
   LIST_FEE,
+  craftValue,
   MATERIALS,
   mintOf,
   QUICK_SALE,
@@ -360,7 +361,7 @@ function Craft({ me, prices, busy, run }: { me: MyThings | null; prices: Prices;
           ))}
         </div>
         <p className="mt-2 text-xs text-muted">
-          Your skill at this: <b className="text-ink">{Math.round(skill * 100)}%</b> (from your education, your know-how in {KNOW_HOW[category].join(" and ")}, and {me.crafted} thing{me.crafted === 1 ? "" : "s"} made). Takes about {hours}h; materials {cash(cost)}; {t.copies} cop{t.copies === 1 ? "y" : "ies"}, each worth about {cash(mintOf(t.value * (0.5 + skill), prices))}.
+          Your skill at this: <b className="text-ink">{Math.round(skill * 100)}%</b> (from your education, your know-how in {KNOW_HOW[category].join(" and ")}, and {me.crafted} thing{me.crafted === 1 ? "" : "s"} made). Takes about {hours}h; materials {cash(cost)}; {t.copies} cop{t.copies === 1 ? "y" : "ies"}, each worth about {cash(mintOf(craftValue(t.value, skill), prices))}.
         </p>
         <button
           disabled={busy || name.trim().length < 3 || me.crafts.length >= 2}

@@ -84,3 +84,15 @@ test("the bill: new floors and new furniture only, and what's paid for stays pai
   p.floors.push({ rooms: [], items: [] });
   assert.equal(planBill(p, bill.paid).naira, 0);
 });
+
+test("starter furniture is credited for the plan's own size", async () => {
+  const { planBill, startPaid } = await import("../../home-plan.ts");
+  for (const size of ["small", "medium", "large"] as const) {
+    const p = starterPlan(size);
+    const counts: Record<string, number> = {};
+    for (const i of p.floors[0].items) counts[i.kind] = (counts[i.kind] ?? 0) + 1;
+    assert.deepEqual(startPaid(size).items, counts, size);
+    // Nothing paid for yet: the starter home of that size is still free.
+    assert.equal(planBill(p, { floors: 1, items: {} }).naira, 0, size);
+  }
+});

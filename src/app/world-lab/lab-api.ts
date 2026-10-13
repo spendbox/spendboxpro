@@ -11,6 +11,8 @@ import {
   AUTO_CARE,
   AUTO_CARE_BELOW,
   billsFor,
+  foodDay,
+  HUNGRY_HEALTH,
   careById,
   cleanBudget,
   courseById,
@@ -192,7 +194,7 @@ export function makeLabApi(budget: number): PropertyApi {
     const home = s.units.find((u) => u.unit === s.home);
     if (!home) return null;
     const b = billsFor(home.area, prices());
-    return { power: b.power, waste: b.waste };
+    return { power: b.power, waste: b.waste, food: b.food };
   };
   /** Bring life up to now, as the database's life_tick does. */
   /** The day as you live it now. */
@@ -227,6 +229,11 @@ export function makeLabApi(budget: number): PropertyApi {
     l.hours = (l.hours ?? []).filter((x) => x.at > now - 8 * 86_400_000);
     if (l.event && l.event.expiresAt <= now) l.event = null;
     void HEALTH_DECAY;
+    // Food, home or not: from Essentials, then the wallet; what can't be paid costs health.
+    const food = r2(foodDay(prices()) * days);
+    const fed = spend(["essentials"], food);
+    log("food", -fed);
+    if (food > 0 && fed < food) health = Math.max(0, health - HUNGRY_HEALTH * days * (1 - fed / food));
     const b = bills();
     if (b) {
       const days = Math.min(30, Math.max(0, (now - l.billsAt) / DAY_MS));

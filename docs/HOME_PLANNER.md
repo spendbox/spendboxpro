@@ -50,10 +50,12 @@ Planning and rearranging are free. **Save** pays for what's new:
 | Stairs | ₦1.5M | 90% |
 | Furniture | ₦25k (plant) up to ₦650k (sofa); each piece's price shows under it | 50% |
 
-- Your home comes with its ground floor and the starter furniture.
+- Your home comes with its ground floor and the starter furniture for its size (a small home is
+  credited with a small home's starter pieces, not a large one's).
 - What you've paid for stays yours. If you take a floor off or a sofa out, putting it back is free; the list says "You have one spare".
 - The server works out the bill from the plan itself, not from what the phone says, and takes it from your savings, then your wallet.
 - Only the owner can build onto a home. If you rent, you can only rearrange.
+- A home worth more also earns more rent if you ever let it out (6% of its value a game year).
 - More furniture styles are **coming soon** (marked at the end of the furniture list).
 
 ## Where the code is

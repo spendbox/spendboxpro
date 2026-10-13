@@ -16,6 +16,7 @@ import {
   SIZES,
   autoDesign,
   clashes,
+  cleanPaid,
   floorNaira,
   furnishRoom,
   itemSize,
@@ -57,7 +58,7 @@ export function HomePlanner({ onClose }: { onClose: () => void }) {
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ text: string; bad?: boolean } | null>(null);
-  const [paid, setPaid] = useState<PlanPaid>(startPaid);
+  const [paid, setPaid] = useState<PlanPaid>(() => startPaid());
   const [perMint, setPerMint] = useState(1500);
   const [owner, setOwner] = useState(true);
   const [designs, setDesigns] = useState(0);
@@ -130,8 +131,10 @@ export function HomePlanner({ onClose }: { onClose: () => void }) {
   /** Naira (the game's prices) shown in your money. */
   const money = (naira: number) => cash(naira / perMint);
   const bill = planBill(plan, paid);
+  /** What's paid for, with the starter furniture for this plan's size. */
+  const paidHere = cleanPaid(paid, plan.size);
   /** Something you've already paid for (on the plan or taken out): putting it in costs nothing. */
-  const owned = (k: FurnitureKind) => (paid.items[k] ?? 0) > plan.floors.reduce((n, f) => n + f.items.filter((i) => i.kind === k).length, 0);
+  const owned = (k: FurnitureKind) => (paidHere.items[k] ?? 0) > plan.floors.reduce((n, f) => n + f.items.filter((i) => i.kind === k).length, 0);
   function designForMe() {
     if (dirty && !confirm("Design your whole home for you? What you've drawn is replaced (Undo brings it back).")) return;
     const seed = designs + 1 + Math.floor(Math.random() * 1000);

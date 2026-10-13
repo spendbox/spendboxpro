@@ -69,11 +69,22 @@ const POWER_MIN = 4_000;
 const WASTE_PER_M2 = 30;
 const WASTE_MIN = 1_500;
 
-/** A home's bills a game day (mint), from its floor area. */
+/**
+ * Food: about ₦3,000 a real day in Lagos (simple meals from the market and a buka), so ₦7,500 a
+ * game month (30 game days, 2½ real days). Everyone eats, home or not; it's paid with the bills.
+ */
+export const FOOD_MONTH = 7_500;
+
+/** Food a game day (mint). */
+export const foodDay = (prices: Prices) => mint(FOOD_MONTH / 30, prices);
+/** Health lost for each game day of food you couldn't pay for (the database's living_hungry_health). */
+export const HUNGRY_HEALTH = 1;
+
+/** A home's bills a game day (mint), from its floor area, and food. */
 export function billsFor(area: number, prices: Prices) {
   const power = Math.max(POWER_MIN, area * POWER_PER_M2);
   const waste = Math.max(WASTE_MIN, area * WASTE_PER_M2);
-  return { power: mint(power / 30, prices), waste: mint(waste / 30, prices), powerMonth: power, wasteMonth: waste };
+  return { power: mint(power / 30, prices), waste: mint(waste / 30, prices), food: foodDay(prices), powerMonth: power, wasteMonth: waste, foodMonth: FOOD_MONTH };
 }
 
 /** Owing more than this many game days of electricity: the power is cut until you pay. */
@@ -229,6 +240,7 @@ const KIND_GROUP: Record<string, MoneyGroup> = {
   vat: "tax",
   power_bill: "bills",
   waste_bill: "bills",
+  food: "bills",
   commute: "travel",
   health_care: "health",
   school_fees: "school",

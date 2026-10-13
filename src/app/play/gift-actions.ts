@@ -5,7 +5,7 @@ import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Giving coins to other players, and spraying coins on dancers in clubs. The database
-// (give_coins / spray_coins in game-db/019_activities.sql) checks every rule: whole coins,
+// (give_coins / spray_coins in game-db/019_activities.sql, new givers in 065) checks every rule: whole coins,
 // enough coins, daily limits, no gifts to yourself or the bot, frozen accounts blocked.
 
 type Fail = { ok: false; error: string };
@@ -17,6 +17,12 @@ function friendly(message: string | undefined, fallback: string) {
   const left = Number(/:(\d+(\.\d+)?)/.exec(m)?.[1] ?? 0);
   if (m.startsWith("daily_cap")) {
     return left > 0 ? `You can give ${Math.floor(left).toLocaleString("en")} more mint today.` : "You've given all you can for today. Come back tomorrow!";
+  }
+  // New accounts (under 3 days old) and players under level 5 can give ₥500 a day (part 65).
+  if (m.startsWith("new_giver_cap")) {
+    return left > 0
+      ? `You can give ${Math.floor(left).toLocaleString("en")} more mint today. New players can give up to ₥500 a day until their account is 3 days old and level 5.`
+      : "New players can give up to ₥500 a day until their account is 3 days old and level 5. Come back tomorrow!";
   }
   if (m.startsWith("pair_cap")) {
     return left > 0

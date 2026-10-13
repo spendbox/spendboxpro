@@ -31,7 +31,7 @@ const INCOME: { label: string; kinds: string[]; colour: string }[] = [
 /** Where it went. */
 const EXPENSES: { label: string; kinds: string[]; colour: string }[] = [
   { label: "Tax", kinds: ["income_tax", "rent_tax", "vat", "sale_tax"], colour: "#7048e8" },
-  { label: "Bills", kinds: ["power_bill", "waste_bill"], colour: "#f59f00" },
+  { label: "Bills and food", kinds: ["power_bill", "waste_bill", "food"], colour: "#f59f00" },
   { label: "Getting to work", kinds: ["commute"], colour: "#f08c00" },
   { label: "Health", kinds: ["health_care", "gym"], colour: "#e03131" },
   { label: "Education", kinds: ["school_fees"], colour: "#1971c2" },

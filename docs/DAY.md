@@ -32,7 +32,8 @@ in one step. Side hustles: home tutoring, hair braiding, small chops, online res
 repairs, POS agent, content creation, dispatch rider. Run up to three at once. Each shows its
 start-up cost on its button and asks before spending it (from Savings, then your wallet); each has
 its hours a day, and earnings that swing from day to day (content creation the most). Stop any one
-and the others carry on.
+and the others carry on. Hustles pay 4 times real Lagos earnings (`HUSTLE_BOOST` in
+`src/lib/world/hustles.ts`); jobs pay more (18 times, `docs/WORK.md`).
 
 ## Pay arrives by itself
 

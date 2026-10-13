@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { billsFor, cleanBudget, COURSES, DEFAULT_BUDGET, groupOf, payFactor, priceOf, splitIncome } from "../living.ts";
+import { billsFor, cleanBudget, foodDay, FOOD_MONTH, COURSES, DEFAULT_BUDGET, groupOf, payFactor, priceOf, splitIncome } from "../living.ts";
 import { PRICES } from "../regions/lagos/prices.ts";
 import { daysForLevel, jobsAtPlace, skillLevel } from "../work.ts";
 
@@ -24,6 +24,15 @@ test("bills follow the size of your home", () => {
   assert.equal(room.wasteMonth, 1_500);
   assert.equal(flat.powerMonth, 36_000);
   assert.ok(flat.power > room.power && flat.waste > room.waste);
+});
+
+test("food costs about ₦3,000 a real day (₥2 in Lagos), paid with the bills", () => {
+  // A game month is 2½ real days; a real day is 12 game days.
+  assert.equal(FOOD_MONTH / 2.5, 3_000);
+  assert.equal(foodDay(PRICES), 0.17);
+  assert.ok(Math.abs(foodDay(PRICES) * 12 - 2) < 0.1);
+  assert.equal(billsFor(14, PRICES).food, foodDay(PRICES));
+  assert.equal(groupOf("food"), "bills");
 });
 
 test("health: unwell is half pay, bedridden none", () => {
