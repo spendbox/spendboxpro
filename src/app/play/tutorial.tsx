@@ -16,7 +16,7 @@ import { playSfx } from "./sound";
 const KEY = "newtown.tutorial.v1";
 
 /** What the walkthrough points at: that button glows. */
-export type TutorialGlow = "home" | "chat" | "challenge" | "camera" | "profile" | null;
+export type TutorialGlow = "home" | "chat" | "challenge" | "camera" | "profile" | "wallet" | null;
 
 type Saved = { phase: Phase; i: number; skipped: Mission[] };
 const FRESH: Saved = { phase: "intro", i: 0, skipped: [] };
@@ -79,17 +79,43 @@ export type TutorialActions = {
   challenge: () => void;
   camera: () => void;
   profile: () => void;
+  wallet: () => void;
   /** A mission's reward was paid (refresh the cash on screen). */
   paid: () => void;
 };
 
-export function Tutorial({ place, perMint, actions }: { place: string; perMint: number; actions: TutorialActions }) {
+/** Where the card's been dragged to (kept while the game's open, so it stays out of your way). */
+let dragged = { x: 0, y: 0 };
+
+export function Tutorial({ place, perMint, name, actions }: { place: string; perMint: number; /** Your name. */ name?: string; actions: TutorialActions }) {
+  const first = (name ?? "").trim().split(/\s+/)[0];
+  const palace = first ? `${first}'s Palace` : "The Palace";
   const s = useSyncExternalStore(subscribe, current, () => FRESH);
   const naira = (n: number) => cash(n / perMint);
   // The missions: what the server says is done (null: not asked yet; "off": rewards not switched on).
   const [done, setDone] = useState<MissionState | "off" | null>(null);
   const [cheer, setCheer] = useState<string | null>(null);
   const asking = useRef(false);
+  const [pos, setPos] = useState(dragged);
+  const startDrag = (e: React.PointerEvent) => {
+    if ((e.target as HTMLElement).closest("button")) return;
+    const from = { x: e.clientX - pos.x, y: e.clientY - pos.y };
+    const move = (ev: PointerEvent) => {
+      // Kept on the screen: at least part of the card stays in reach.
+      const x = Math.max(-window.innerWidth / 2 + 60, Math.min(window.innerWidth / 2 - 60, ev.clientX - from.x));
+      const y = Math.max(-100, Math.min(window.innerHeight - 220, ev.clientY - from.y));
+      dragged = { x, y };
+      setPos(dragged);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+  };
 
   useEffect(() => {
     if (s.phase !== "missions") return;
@@ -148,21 +174,21 @@ export function Tutorial({ place, perMint, actions }: { place: string; perMint: 
     name: {
       emoji: "🏠",
       title: "Mission 1 of 3 · Name your home",
-      text: "Every legend needs a base. Tap the glowing house (bottom left), then the pencil, and give your place a name. “Tolu's Palace”? Bold. We like it.",
+      text: `Every legend needs a base. Tap the glowing house (bottom left), then the pencil, and give your place a name. “${palace}”? Bold. We like it.`,
       glow: "home",
       action: { label: "Show me", run: actions.nameHome },
     },
     hi: {
       emoji: "💬",
       title: "Mission 2 of 3 · Say hi to someone",
-      text: "Tap the purple chat bubble (bottom right), then New chat. Pick anyone online and send a hi. Worst case, you make a friend.",
+      text: "Tap the glowing chat bubble (bottom right), then New chat (it glows too). Tap anyone with a green dot, they're online now, and send a hi. Worst case, you make a friend.",
       glow: "chat",
       action: { label: "Show me", run: actions.chat },
     },
     win: {
       emoji: "🏆",
       title: "Mission 3 of 3 · Create and win a challenge",
-      text: "Tap the trophy (top right), pick Whot! or Ludo, set your stake and challenge everyone nearby. Win it and the prize is yours, plus +3 reputation. No pressure. (Some pressure.)",
+      text: "Tap the trophy (top right), pick any game you fancy, set your stake and challenge everyone nearby. Win and the pot is yours, plus +3 reputation. No pressure. (Some pressure.)",
       glow: "challenge",
       action: { label: "Show me", run: actions.challenge },
     },
@@ -179,14 +205,21 @@ export function Tutorial({ place, perMint, actions }: { place: string; perMint: 
     { emoji: "🧭", title: "Go explore", text: "Tap any building to peek inside, hop on a danfo, find the hidden spots. Nobody's watching the clock." },
     { emoji: "🏠", title: "Lost? Tap the house", text: "The house button at the bottom left always takes you home. Like a very fast okada.", glow: "home" },
     {
+      emoji: "👛",
+      title: "Your Wallet",
+      text: "Tap your cash (top right) for your Wallet: today's daily gift, what you've earned, and top-ups if you ever want more. You never have to pay to play.",
+      glow: "wallet",
+      action: { label: "Open it", run: actions.wallet },
+    },
+    {
       emoji: "💰",
-      title: "Property pays you",
-      text: "Buy a home, shop or office and it earns you money every day, by itself. Watch your cash tick up! The higher your reputation, the more you get off property.",
+      title: "Money comes to you",
+      text: "Just playing pays: a daily gift (bigger the more you play), challenge wins and missions. And property earns you money every day, by itself, so watch your cash tick up! See it all in Things › Assets.",
     },
     {
       emoji: "👤",
       title: "Your profile",
-      text: "Tap your face (top left) for Things, Assets, Money, Photos, Friends and settings. Missed something? “Start the guide” in there plays all this again.",
+      text: "Tap your face (top left) for Things, Assets, Wallet, Photos, Friends and settings. Missed something? “Start the guide” in there plays all this again.",
       glow: "profile",
       action: { label: "Open it", run: actions.profile },
     },
@@ -215,17 +248,29 @@ export function Tutorial({ place, perMint, actions }: { place: string; perMint: 
     if (s.phase === "tips") return save(s.i + 1 < tips.length ? { ...s, i: s.i + 1 } : { ...s, phase: "done", i: 0 });
   };
   const skipMission = () => mission && save({ ...s, skipped: [...s.skipped, mission] });
+  // Back: the card before (from the missions, the last opening tip; a skipped mission comes back).
+  const back =
+    s.phase === "intro" && s.i > 0
+      ? () => save({ ...s, i: s.i - 1 })
+      : s.phase === "missions"
+        ? () => (s.skipped.length ? save({ ...s, skipped: s.skipped.slice(0, -1) }) : save({ ...s, phase: "intro", i: intro.length - 1 }))
+        : s.phase === "tips" && s.i > 0
+          ? () => save({ ...s, i: s.i - 1 })
+          : null;
   const count = s.phase === "intro" ? intro.length : s.phase === "tips" ? tips.length : 0;
   const last = (s.phase === "intro" || s.phase === "tips") && s.i >= count - 1;
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-28 z-[90] flex justify-center px-3 sm:top-24">
+    <div className="pointer-events-none fixed inset-x-0 top-28 z-[90] flex justify-center px-3 sm:top-24" style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }}>
       <div
         key={`${s.phase}-${s.i}-${mission ?? ""}`}
         role="dialog"
         aria-label="Walkthrough"
-        className="pointer-events-auto w-full max-w-sm rounded-2xl bg-ink p-3.5 text-white shadow-2xl ring-2 ring-gold/40 motion-safe:animate-[tipIn_.25s_ease-out]"
+        // Drag it anywhere (by any part that isn't a button) to see what's under it.
+        onPointerDown={startDrag}
+        className="pointer-events-auto w-full max-w-sm touch-none select-none rounded-2xl bg-ink p-3.5 text-white shadow-2xl ring-2 ring-gold/40 motion-safe:animate-[tipIn_.25s_ease-out]"
       >
+        <span aria-hidden className="mx-auto -mt-1.5 mb-2 block h-1 w-8 rounded-full bg-white/25" />
         {cheer ? (
           <p className="py-3 text-center font-display text-lg font-extrabold text-gold">🎉 {cheer}</p>
         ) : (
@@ -263,6 +308,11 @@ export function Tutorial({ place, perMint, actions }: { place: string; perMint: 
                 </button>
               )}
               <div className="flex gap-1.5">
+                {back && (
+                  <button onClick={back} className="h-8 rounded-full px-2 text-sm font-semibold text-white/70 hover:text-white" aria-label="Back">
+                    ‹ Back
+                  </button>
+                )}
                 {shown.action && (
                   <button onClick={shown.action.run} className="h-8 rounded-full bg-white/15 px-3 text-sm font-semibold">
                     {shown.action.label}

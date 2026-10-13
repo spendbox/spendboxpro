@@ -4,7 +4,7 @@ Real Lagos prices, modest money. A bus is ₦500, a phone ₦350k, a Camry ₦22
 means in Lagos; you get it from a small daily gift, games, events and top-ups, so the big things
 (a flat, a car, a duplex) are worth working or paying for.
 
-Tap your cash (top right) for **Your money** (`src/app/play/money-home.tsx`): what you have, today's
+Tap your cash (top right) for the **Wallet** (`src/app/play/money-home.tsx`): what you have, today's
 daily gift, where today's money came from, and what to spend it on.
 
 ## Starting
@@ -24,17 +24,17 @@ capped by the database (`game-db/073_daily_money.sql`, `daily_gift_claim`, at mo
 
 A new player gets ₦6,000; a keen one (an hour a day, a week in a row, a month in) about ₦20,000;
 never more than ₦50,000. It pops up once a day a few seconds after the game opens, and it's always
-in Your money. Opening it also leaves a message in the Newtown chat.
+in the Wallet. Opening it also leaves a message in the Newtown chat.
 
 **Time in the city** counts only active minutes: the game pings `POST /api/active` at most once a
 minute, only while it's in front of you and you've touched it in the last 2 minutes, and the
 database counts one a minute at most (`active_ping`, up to 10 hours a day).
 
 ## Games
-- Challenge stakes: ₦1,000, ₦5,000, ₦20,000 or ₦50,000 each; the winner takes 90% of the pot.
+- Challenge stakes: the winner takes 90% of the pot.
   Challenging again within 8 minutes costs ₦50,000.
-- Newtown's prize for a challenge won: `challenge_bonus` mint (₦2,000), up to 5 wins a day (only
-  real games: at least two people put a stake in). A trigger on `challenges` pays it.
+- Newtown no longer adds a prize for a win (`challenge_bonus` is 0, game-db/081): you win the pot.
+- Challenge stakes can be any amount from ₦1,000 to ₦1,000,000 (docs/CHALLENGES.md).
 - The first steps: ₦20,000 each (docs/FIRST_STEPS.md).
 
 ## Prices
@@ -77,11 +77,11 @@ move out and get a free room again. Buying a home ends your lease; Move out on y
 it any time.
 
 ## What your property earns (game-db/079_property_income.sql)
-Every home, shop, office or plot you own (not a free room) earns 1% of what it cost from the city a day
+Every home, shop, office or plot you own (not a free room) earns 10% of what it cost from the city a day
 (`property_income_day`), by itself. A sale between players, at whatever price, doesn't change
 what it earns on (`income_base`), and when property changes hands both owners are paid what
 they'd earned first (a trigger), so nobody is paid for time before they owned it. It's counted to the second and paid when the game opens, every
-5 minutes while you play, when you open Your money, and before you buy property
+5 minutes while you play, when you open the Wallet, and before you buy property
 (`POST /api/income`, `property_income_settle`). While you're away it keeps earning, up to 2 days'
 worth. Your cash at the top goes up every 5 seconds as it earns (`src/app/play/income.ts`), and
 Things → Assets shows each property, what it earns every 10 minutes and a day, and all it has

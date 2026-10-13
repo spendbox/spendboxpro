@@ -165,7 +165,7 @@ export type PropertyApi = {
 export const BUY_TAX = 0;
 
 /** What property earns you a day, as a share of what you paid (the database's property_income_day, game-db/079). */
-export const INCOME_DAY = 0.01;
+export const INCOME_DAY = 0.1;
 
 /**
  * What a unit earns a day while let (mint): homes about 6% of their value a game year, business

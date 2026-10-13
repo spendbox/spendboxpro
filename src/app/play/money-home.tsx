@@ -11,7 +11,7 @@ import { Sheet } from "./sheet";
 import { useIncome } from "./income";
 import { confirmTopUp, startTopUp, toppedUpBefore } from "./topup-actions";
 
-// Your money (docs/MONEY.md): tap your cash. Kept short: what you have, today's gift, top up.
+// Your wallet (docs/MONEY.md): tap your cash. Kept short: what you have, today's gift, top up.
 // Amounts come in naira and show in your currency. Paying happens in Paystack's pop-up, over the game.
 
 async function loadMoney(): Promise<MoneyView | null> {
@@ -145,7 +145,7 @@ function TopUps({ region, perMint, onToppedUp }: { region: string; perMint: numb
   );
 }
 
-/** Your money: tap your cash. */
+/** Your wallet: tap your cash. */
 export function MoneyHome({
   coins,
   perMint,
@@ -178,7 +178,7 @@ export function MoneyHome({
   const today = view ? view.inToday.reduce((t, r) => t + r.naira, 0) : 0;
   const income = useIncome();
   return (
-    <Sheet onClose={onClose} title="Your money" above>
+    <Sheet onClose={onClose} title="Wallet" above>
       <div className="flex items-end justify-between rounded-2xl bg-ink px-4 py-3 text-white">
         <p className="font-display text-3xl font-extrabold tabular-nums">{cash(coins, { exact: true, full: true })}</p>
         {today > 0 && <p className="text-xs font-semibold text-[#8ce99a]">+{cash(today / perMint)} today</p>}

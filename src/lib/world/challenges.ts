@@ -103,10 +103,6 @@ export const WINNER_SHARE = 0.9;
 /** Challenges near enough to hear about (tiles, 100 m each). */
 export const NEAR_TILES = 40;
 
-/** What Newtown adds for a win, on top of the pool (mint: ₦2,000 in Lagos), on your first few wins a day (game-db/073 settings challenge_bonus, challenge_bonus_daily). */
-export const WIN_BONUS_MINT = 1.33;
-export const WIN_BONUS_A_DAY = 5;
-
 /** Reputation for each challenge you hosted that was played to a winner (game-db/070 challenge_rep). */
 export const REP_PER_HOSTED = 1;
 /** Reputation for each challenge you won. */

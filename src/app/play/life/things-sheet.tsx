@@ -11,6 +11,7 @@ import { cash } from "@/lib/world/value";
 import * as items from "../item-actions";
 import type { MyItem, MyThings } from "../item-actions";
 import { useIncome, useLiveEarned } from "../income";
+import type { Earnings } from "@/app/api/earnings/route";
 import { Sheet } from "../sheet";
 
 // Your things (docs/ITEMS.md): what you own and the reputation it brings, the city's shop (cars
@@ -227,12 +228,23 @@ function Assets({ units }: { units: AssetUnit[] }) {
   const income = useIncome();
   const earned = useLiveEarned();
   const owned = units.filter((u) => u.price > 0.01);
+  const [play, setPlay] = useState<Earnings | null | undefined>(undefined);
+  useEffect(() => {
+    let alive = true;
+    void fetch("/api/earnings", { cache: "no-store" })
+      .then((r) => (r.ok ? (r.json() as Promise<Earnings | null>) : null))
+      .then((e) => alive && setPlay(e))
+      .catch(() => alive && setPlay(null));
+    return () => {
+      alive = false;
+    };
+  }, []);
   const rooms = units.length - owned.length;
   const perDay = income.perDay;
   return (
     <div className="mt-3">
       <div className="rounded-3xl bg-gradient-to-br from-[#2b8a3e] to-[#37b24d] p-4 text-white shadow">
-        <p className="text-xs font-semibold uppercase tracking-wide text-white/80">Earned so far</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-white/80">Your property has earned</p>
         <p className="font-display text-3xl font-extrabold tabular-nums">{cash(earned, { exact: true, full: true })}</p>
         <div className="mt-3 grid grid-cols-2 gap-2 text-center">
           <div className="rounded-2xl bg-white/15 px-2 py-2">
@@ -245,6 +257,33 @@ function Assets({ units }: { units: AssetUnit[] }) {
           </div>
         </div>
         <p className="mt-2 text-[11px] text-white/85">Paid straight into your cash, by itself. It keeps earning while you&apos;re away (up to 2 days).</p>
+      </div>
+      {/* Just playing pays too: nobody has to top up to play. */}
+      <div className="mt-3 rounded-3xl bg-gold/15 p-4">
+        <p className="text-sm font-bold">🎮 Earned just by playing</p>
+        <p className="text-[11px] text-muted">Free money for showing up and having fun. You never have to pay to play.</p>
+        {play === undefined ? (
+          <div className="mt-2 h-16 animate-pulse rounded-2xl bg-ink/5" />
+        ) : (
+          <ul className="mt-2 space-y-1.5 text-sm">
+            {(
+              [
+                ["🎁", "Daily gifts", "gift"],
+                ["🏆", "Challenge wins", "wins"],
+                ["🎯", "Missions and rewards", "missions"],
+              ] as const
+            ).map(([emoji, label, k]) => (
+              <li key={k} className="flex items-center gap-2 rounded-2xl bg-white/70 px-3 py-2">
+                <span className="text-lg">{emoji}</span>
+                <span className="min-w-0 flex-1 font-medium">{label}</span>
+                <span className="text-right">
+                  <b className="block tabular-nums">{cash(play?.[k].total ?? 0)}</b>
+                  {(play?.[k].today ?? 0) > 0 && <span className="block text-[10px] font-semibold text-[#2b8a3e]">+{cash(play![k].today)} today</span>}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
       {owned.length === 0 ? (
         <p className="mt-3 rounded-2xl bg-ink/[0.04] px-4 py-6 text-center text-sm text-muted">

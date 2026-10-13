@@ -19,8 +19,6 @@ import {
   STAKE_MAX_NAIRA,
   STAKE_MIN_NAIRA,
   WINNER_SHARE,
-  WIN_BONUS_A_DAY,
-  WIN_BONUS_MINT,
   challengeGame,
   challengeRep,
   challengeRepGained,
@@ -320,7 +318,7 @@ function FightSheet({
         <div className="space-y-2.5 text-sm">
           <Point icon="🎲" text="Pick a game and a stake. Everyone nearby gets told, and your light shines on the map." />
           <Point icon="⏱️" text="They have one minute to join. Everyone puts the same stake into the pool." />
-          <Point icon="🏆" text={`The winner takes the pool (${Math.round(WINNER_SHARE * 100)}% of it), plus a ${cash(WIN_BONUS_MINT)} prize from Newtown on your first ${WIN_BONUS_A_DAY} wins a day.`} />
+          <Point icon="🏆" text={`The winner takes the pool (${Math.round(WINNER_SHARE * 100)}% of it).`} />
           <Point icon="⭐" text={`Reputation: +${REP_PER_WIN} for every win, +${REP_PER_HOSTED} for every challenge you host that's played to a winner (up to ${REP_MAX} from challenges).`} />
           <Point icon="🎟️" text={`Your first challenge is free. Another one within ${CHALLENGE_COOLDOWN_SECS / 60} minutes costs ${cash(CHALLENGE_FEE_NAIRA / (quote?.perMint ?? 1_500))}, so in between, join other people's challenges.`} />
         </div>
@@ -374,7 +372,6 @@ function FightSheet({
           <span className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-1">
             <Star className="size-3.5" /> +{REP_PER_HOSTED} for hosting a game that&apos;s played
           </span>
-          <span className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-1">+{cash(WIN_BONUS_MINT)} Newtown prize a win</span>
         </div>
         {rep !== null && (
           <div className="mt-2.5">

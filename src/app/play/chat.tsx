@@ -18,6 +18,7 @@ import { loadDms, loadRoom, sendMessage, sendPhoto, sendVoice, voiceUrl, type Ch
 import { ChatPhoto, PhotoPicker, type PhotoPick } from "./chat-photo";
 import { NpcBadge, NpcCard, NpcFace } from "./npc-card";
 import { closePhoneNotices } from "./phone/phone-notices";
+import { useTutorialGlow } from "./tutorial";
 import { RideIcon } from "./ride-icon";
 import { formatCountdown, levelLabel, levelOf, useCountdown, type RoomInfo, type RoomMember } from "./rooms";
 
@@ -255,6 +256,8 @@ export function Chat({
   /** Take a picture or a selfie (the game's camera). */
   onCamera?: () => void;
 }) {
+  // The walkthrough points at New chat while its "say hi" mission is on.
+  const tutorialGlow = useTutorialGlow();
   const roomId = room?.id ?? null;
   const roomCap = room?.capacity ?? 30;
   const [roomMsgs, setRoomMsgs] = useState<List | null>(null);
@@ -893,8 +896,9 @@ export function Chat({
             )}
             <h2 className="min-w-0 flex-1 truncate px-1 font-display text-lg font-bold">{tab === "people" ? "New chat" : "Chat"}</h2>
             {tab !== "people" && (
-              <button onClick={() => setTab("people")} className="flex h-9 shrink-0 items-center gap-1 rounded-full bg-[#7048e8] px-3 text-xs font-bold text-white shadow-sm" aria-label="Start a new chat">
+              <button onClick={() => setTab("people")} className="relative flex h-9 shrink-0 items-center gap-1 rounded-full bg-[#7048e8] px-3 text-xs font-bold text-white shadow-sm" aria-label="Start a new chat">
                 <Search className="size-3.5" aria-hidden /> New chat
+                {tutorialGlow === "chat" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
               </button>
             )}
           </>

@@ -66,7 +66,7 @@ export function StartLife({
       </Sheet>
     );
   // The simple life (docs/STARTER_ROOMS.md, docs/MONEY.md): everyone starts the same, with
-  // ₦250,000 and a free room; top-ups are in Your money, any time.
+  // ₦250,000 and a free room; top-ups are in the Wallet, any time.
   const free = PACKS.find((p) => p.naira === 0);
   return (
     <Sheet onClose={onClose}>
@@ -87,7 +87,7 @@ export function StartLife({
         </li>
         <li className="flex items-start gap-2">
           <Star className="mt-0.5 size-4 shrink-0 text-me" />
-          <span>A gift every day, bigger the more you play. Top up any time from Your money (tap your cash).</span>
+          <span>A gift every day, bigger the more you play. Top up any time from your Wallet (tap your cash).</span>
         </li>
       </ul>
       <p className="mt-4 text-xs font-semibold">Your currency (change it any time)</p>

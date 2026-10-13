@@ -873,6 +873,7 @@ export function useWorldLife({
           label={homeLabel}
           name={home?.label}
           naming={nameNew}
+          ownerName={meName}
           onRename={
             signedIn && home && homeUnit
               ? async (name) => {
