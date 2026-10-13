@@ -7,6 +7,7 @@ import { currentUserId } from "@/lib/game";
 import { checkPayment, paystackEnabled, startPayment } from "@/lib/paystack";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { REGIONS } from "@/lib/world";
+import { shopKind } from "@/lib/world/items";
 import { packById } from "@/lib/world/packs";
 
 // Starter packs (docs/PACKS.md; the database part is game-db/042_starter_packs.sql): pay once through
@@ -62,7 +63,10 @@ async function returnOrigin() {
  */
 export async function checkMyPacks(): Promise<{ ok: boolean; mint?: number }> {
   const userId = await currentUserId();
-  if (!userId || !paystackEnabled()) return { ok: false };
+  if (!userId) return { ok: false };
+  // A pack already in whose gifts haven't been given yet (bought before there were any): now.
+  await givePackPerks(userId).catch((e) => console.error("Pack perks failed", e));
+  if (!paystackEnabled()) return { ok: false };
   const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
   const { data } = await createAdminClient()
     .from("starter_payments")
@@ -96,6 +100,46 @@ export async function confirmPack(reference: string): Promise<{ ok: boolean; min
     console.error("life_pack_paid failed", reference, error.message);
     return { ok: false, error: "That didn't work. Try again." };
   }
-  const d = (data ?? {}) as { found?: boolean; mint?: number };
+  const d = (data ?? {}) as { found?: boolean; mint?: number; user?: string };
+  if (d.found) {
+    const userId = await currentUserId().catch(() => null);
+    if (userId) await givePackPerks(userId).catch((e) => console.error("Pack perks failed", e));
+  }
   return d.found ? { ok: true, mint: Number(d.mint ?? 0) } : { ok: false, error: "Unknown payment." };
+}
+
+/**
+ * A paid pack's gifts (docs/PACKS.md): the things it comes with (a phone, a car...) put in your
+ * Items, and the Rich Family badge. Once only (starter_payments.perks_at, game-db/069). The
+ * furnished home needs nothing here: the home planner gives it when there's no plan yet.
+ */
+async function givePackPerks(userId: string) {
+  const db = createAdminClient();
+  const { data, error } = await db.from("starter_payments").select("reference, pack, region").eq("user_id", userId).eq("status", "paid").is("perks_at", null).limit(1);
+  // Before part 69 is run (no perks_at): nothing yet.
+  if (error || !data?.length) return;
+  const row = data[0] as { reference: string; pack: string; region: string };
+  const pack = packById(row.pack);
+  if (!pack) return;
+  // Claim it first, so two tabs opening at once can't both give the gifts.
+  const { data: claimed } = await db.from("starter_payments").update({ perks_at: new Date().toISOString() }).eq("reference", row.reference).is("perks_at", null).select("reference");
+  if (!claimed?.length) return;
+  const perMint = REGIONS[row.region]?.prices.perMint ?? 1_500;
+  const items = pack.gifts
+    .map((id) => shopKind(id))
+    .filter((k): k is NonNullable<ReturnType<typeof shopKind>> => !!k)
+    .map((k) => ({ owner: userId, kind: k.id, name: k.name, category: k.category, base_value: Math.round((k.price / perMint) * 100) / 100, effect: k.effect, how: "gift" }));
+  if (items.length) {
+    const { error: e } = await db.from("items").insert(items);
+    if (e) console.error("Pack gifts failed", row.reference, e.message);
+  }
+  if (pack.id === "odogwu") await db.from("badges").insert({ user_id: userId, badge: "rich_family", detail: "Rich Family pack" });
+  const names = items.map((i) => i.name);
+  if (names.length)
+    await db.rpc("notify", {
+      p_user: userId,
+      p_round: null,
+      p_kind: "gift",
+      p_body: `Your ${pack.label} pack came with: ${names.join(", ")}. They're in your Items.${pack.furnished ? " Your first home comes furnished too." : ""}`,
+    });
 }

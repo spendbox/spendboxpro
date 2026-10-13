@@ -306,6 +306,28 @@ export function cleanPaid(raw: unknown, size: HomeSize = "medium"): PlanPaid {
   return { floors, items, rooms };
 }
 
+/** Everything in a plan, as paid for (a home given furnished: nothing in it is charged for later). */
+export function paidFor(plan: HomePlan): PlanPaid {
+  return { floors: plan.floors.length, items: countItems(plan), rooms: countRooms(plan) };
+}
+
+/** Two paid-for records together: the most of each. */
+export function mergePaid(a: PlanPaid, b: PlanPaid): PlanPaid {
+  const items = { ...a.items };
+  for (const [k, v] of Object.entries(b.items)) items[k as FurnitureKind] = Math.max(items[k as FurnitureKind] ?? 0, v ?? 0);
+  const rooms = { ...(a.rooms ?? {}) };
+  for (const [k, v] of Object.entries(b.rooms ?? {})) rooms[k as RoomKind] = Math.max(rooms[k as RoomKind] ?? 0, v ?? 0);
+  return { floors: Math.max(a.floors, b.floors), items, rooms };
+}
+
+/**
+ * The home a starter pack gives (docs/PACKS.md): "home", fully furnished on one floor; "dancehall",
+ * two floors, fully furnished, with a dance hall upstairs. The same every time for the same player.
+ */
+export function packHomePlan(gift: "home" | "dancehall", seed: number): HomePlan {
+  return gift === "dancehall" ? autoDesign("large", 2, seed, ["dancehall"]) : autoDesign("medium", 1, seed);
+}
+
 export const floorNaira = (size: HomeSize) => SIZES[size].w * SIZES[size].d * CELL_M * CELL_M * FLOOR_NAIRA_M2;
 
 export type PlanBill = {

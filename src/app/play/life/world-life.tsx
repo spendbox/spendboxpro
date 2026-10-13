@@ -609,18 +609,36 @@ export function useWorldLife({
   const showWelcome = signedIn && loaded && !homeUnit && !welcomeShut && !property && !place && !finderOpen;
   // First only a home search; once you have a home, all of Home, Work, Money, Life and Services.
   // The guide's next step: a home, a job, a budget, body and mind, then where to chat.
+  // It never pops up out of nowhere: not before your job and life have loaded (it would flash "get
+  // a job" for a moment), never back to a step you've passed (losing a job later doesn't restart
+  // it), and not for a life more than two days old (a new phone or browser doesn't start it over).
+  const oldLife = !!life?.started_at && Date.now() - Date.parse(life.started_at) > 2 * 86_400_000;
   const step: GuideStep | null =
-    !signedIn || !loaded || !life || guide.done
+    !signedIn || !loaded || !life || guide.done || oldLife
       ? null
-      : !homeUnit
+      : !homeUnit && !guide.home
         ? "home"
-        : !work?.job && !status?.hustle
-          ? "job"
-          : !guide.budget
-            ? "budget"
-            : !guide.life
-              ? "life"
-              : null;
+        : work === null || status === null
+          ? null
+          : !guide.job && !work.job && !status.hustle
+            ? "job"
+            : !guide.budget
+              ? "budget"
+              : !guide.life
+                ? "life"
+                : null;
+  // Steps passed stay passed.
+  const passedHome = !!homeUnit && !guide.home;
+  const passedJob = !!(work?.job || status?.hustle) && !guide.job;
+  useEffect(() => {
+    if (!passedHome && !passedJob) return;
+    const t = setTimeout(() => {
+      if (passedHome) markGuide("home");
+      if (passedJob) markGuide("job");
+    }, 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [passedHome, passedJob]);
   const finds = useMemo(() => (finderOpen && region ? homesByArea(region, planOf(region)) : []), [finderOpen, region]);
   const openFinder = () => {
     setWelcomeShut(true);
