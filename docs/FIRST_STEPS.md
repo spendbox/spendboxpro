@@ -5,7 +5,7 @@ New players get three things to do, one at a time, in the dark card under the bu
 
 1. **Say hi to someone**: the green online count glows; send anyone a private message.
 2. **Play a challenge**: the trophy (top right) glows; start one or join one.
-3. **Pick your home**: Find a home glows. The home comes ready to live in; designing it is optional.
+3. **Go out**: go into a club, a restaurant or a landmark (any place that isn't your home).
 
 Each pays a reward once (₦20,000 in your currency, `FIRST_STEP_NAIRA`). The server checks it
 really happened before paying (`game-db/072_first_steps.sql`, `POST /api/first-steps`), and only

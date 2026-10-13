@@ -1,6 +1,6 @@
 -- Newtown, part 72: the first five minutes (docs/FIRST_STEPS.md). Three things to do on day one,
 -- each with a small reward, paid once per player: say hi to someone (a private message), play a
--- challenge (start or join one), and pick your home. The game checks each really happened before
+-- challenge (start or join one), and go out (into any place that isn't your home). The game checks each really happened before
 -- paying, and only new players (a life started in the last 3 days) are paid. Before this is run
 -- the guide still shows; the rewards wait until it is.
 --
@@ -8,24 +8,26 @@
 
 create table if not exists public.first_steps (
   user_id uuid not null references public.profiles (id) on delete cascade,
-  step text not null check (step in ('hi', 'challenge', 'home')),
+  step text not null,
   reward numeric(14,2) not null default 0,
   done_at timestamptz not null default now(),
   primary key (user_id, step)
 );
 alter table public.first_steps enable row level security;
+alter table public.first_steps drop constraint if exists first_steps_step_check;
+alter table public.first_steps add constraint first_steps_step_check check (step in ('hi', 'challenge', 'home', 'out'));
 
 /**
  * Which first steps are done (each checked against what really happened), paying the reward for any
  * newly done. p_reward is mint per step (the server works it out from the city's prices).
- * Returns { hi, challenge, home: done?, paid: [steps paid just now], reward }.
+ * Returns { hi, challenge, out: done?, paid: [steps paid just now], reward }.
  */
 create or replace function public.first_steps_check(p_user uuid, p_reward numeric)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_hi boolean;
   v_ch boolean;
-  v_home boolean;
+  v_out boolean;
   v_paid text[] := '{}';
   v_step text;
   v_reward numeric := round(least(greatest(coalesce(p_reward, 0), 0), 20), 2);
@@ -38,9 +40,9 @@ begin
   v_hi := exists (select 1 from public.chat_messages where sender_id = p_user and recipient_id is not null);
   v_ch := to_regclass('public.challenge_players') is not null
     and exists (select 1 from public.challenge_players where user_id = p_user);
-  v_home := exists (select 1 from public.lives where user_id = p_user and home_unit is not null);
-  foreach v_step in array array['hi', 'challenge', 'home'] loop
-    if (v_step = 'hi' and v_hi) or (v_step = 'challenge' and v_ch) or (v_step = 'home' and v_home) then
+  v_out := exists (select 1 from public.lives where user_id = p_user and at_place is not null and at_place <> split_part(coalesce(home_unit, ''), '/', 1));
+  foreach v_step in array array['hi', 'challenge', 'out'] loop
+    if (v_step = 'hi' and v_hi) or (v_step = 'challenge' and v_ch) or (v_step = 'out' and v_out) then
       insert into public.first_steps (user_id, step, reward) values (p_user, v_step, v_reward) on conflict do nothing;
       if found then
         v_paid := v_paid || v_step;
@@ -51,6 +53,6 @@ begin
       end if;
     end if;
   end loop;
-  return jsonb_build_object('hi', v_hi, 'challenge', v_ch, 'home', v_home, 'paid', to_jsonb(v_paid), 'reward', v_reward);
+  return jsonb_build_object('hi', v_hi, 'challenge', v_ch, 'out', v_out, 'paid', to_jsonb(v_paid), 'reward', v_reward);
 end $$;
 revoke all on function public.first_steps_check(uuid, numeric) from public, anon, authenticated;

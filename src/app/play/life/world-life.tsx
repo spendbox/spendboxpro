@@ -43,6 +43,7 @@ import type { SearchHit } from "./map-search";
 import { HomeFinder } from "./home-finder";
 import { StartLife } from "./start-life";
 import { useLife } from "./use-life";
+import { StarterRoomBox } from "./starter-room";
 import { WorkSheet } from "./work-sheet";
 import { BusinessSheet } from "./business-sheet";
 import { ServicesSheet } from "./services-sheet";
@@ -618,7 +619,31 @@ export function useWorldLife({
   const homeUnit = life?.home_unit ?? null;
   const letting = useMemo(() => new Set((assets?.units ?? []).filter((u) => u.let).map((u) => u.unit)), [assets]);
   const coins = assets?.coins ?? 0;
-  const showWelcome = signedIn && loaded && !homeUnit && !welcomeShut && !property && !place && !finderOpen;
+  // A free room straight away (docs/STARTER_ROOMS.md): a new life, a pack bought, back after a long
+  // time away, anyone with no home gets one, and is taken there.
+  const [roomFailed, setRoomFailed] = useState<string | null>(null);
+  const asking = useRef(false);
+  useEffect(() => {
+    if (!signedIn || !loaded || !life || homeUnit || asking.current || pretend) return;
+    asking.current = true;
+    void fetch("/api/starter-room", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })
+      .then((r) => r.json() as Promise<{ unit?: string; area?: string; x?: number; z?: number; already?: boolean; error?: string }>)
+      .then(async (r) => {
+        if (r.error || !r.unit) {
+          setRoomFailed(r.error ?? "No free room just now.");
+          return;
+        }
+        await refresh();
+        if (!r.already) setMessage({ text: `Welcome home! Your free room is in ${r.area ?? "Lagos"}. Tap your Home bubble any time.`, good: true });
+        if (r.x !== undefined && r.z !== undefined) setFlyTo({ tile: spiralIndex(Math.round(r.x), Math.round(r.z)), at: ++flies.current });
+      })
+      .catch(() => setRoomFailed("The connection blinked."))
+      .finally(() => {
+        asking.current = false;
+      });
+  }, [signedIn, loaded, life, homeUnit, pretend, refresh]);
+  // The start screen: before your life starts (or, if no free room could be given, to find one).
+  const showWelcome = signedIn && loaded && !homeUnit && !welcomeShut && !property && !place && !finderOpen && (!life || !!roomFailed);
   // First only a home search; once you have a home, all of Home, Work, Money, Life and Services.
   // The guide's next step: a home, a job, a budget, body and mind, then where to chat.
   // It never pops up out of nowhere: not before your job and life have loaded (it would flash "get
@@ -789,11 +814,10 @@ export function useWorldLife({
           {signedIn && loaded && !homeUnit && (
             <button
               onClick={() => (life ? openFinder() : setWelcomeShut(false))}
-              className={`pointer-events-auto relative flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-gold px-3.5 text-sm font-semibold text-ink shadow-lg ${step === "home" ? GLOW : ""}`}
+              className={`pointer-events-auto relative flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-gold px-3.5 text-sm font-semibold text-ink shadow-lg`}
             >
               <Search className="size-4" />
               Find a home
-              {step === "home" && <Ripple />}
             </button>
           )}
           {!(signedIn && homeUnit) && afterIncome}
@@ -885,12 +909,10 @@ export function useWorldLife({
           granted={life?.granted ?? 0}
           pretend={pretend}
           onStart={() =>
+            // Your free room follows straight away (above).
             act(
               () => api.startLife(region.region.id),
-              () => {
-                openFinder();
-                return null;
-              },
+              () => null,
             )
           }
           onPack={async (id) => {
@@ -899,9 +921,8 @@ export function useWorldLife({
             setBusy(false);
             if (!r.ok) return setMessage({ text: r.error, good: false });
             if (r.url) return void window.location.assign(r.url);
-            setMessage({ text: "Your pack is in. Now find your first home!", good: true });
+            setMessage({ text: "Your pack is in!", good: true });
             await refresh();
-            openFinder();
           }}
           onClose={() => setWelcomeShut(true)}
           onFind={openFinder}
@@ -941,6 +962,16 @@ export function useWorldLife({
               : undefined
           }
         >
+          {signedIn && (
+            <StarterRoomBox
+              onMoved={async (r) => {
+                setHomeOpen(false);
+                await refresh();
+                setMessage({ text: `Moved! Your free room is in ${r.area} now.`, good: true });
+                setFlyTo({ tile: spiralIndex(Math.round(r.x), Math.round(r.z)), at: ++flies.current });
+              }}
+            />
+          )}
           {signedIn && <HomeParty />}
         </HomeCard>
       )}

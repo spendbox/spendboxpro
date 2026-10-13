@@ -36,7 +36,7 @@ begin
   perform pg_temp.check((select coins from profiles where id = n) = 103.33, 'the reward is in');
   v := first_steps_check(n, 3.33);
   perform pg_temp.check(jsonb_array_length(v->'paid') = 0 and (select coins from profiles where id = n) = 103.33, 'paid once only');
-  perform pg_temp.check(not (v->>'challenge')::boolean and not (v->>'home')::boolean, 'the others not done yet');
+  perform pg_temp.check(not (v->>'challenge')::boolean and not (v->>'out')::boolean, 'the others not done yet');
   v := first_steps_check(n, 9999);
   perform pg_temp.check((v->>'reward')::numeric = 20, 'the reward is capped');
   -- An old life: marked done, never paid.
