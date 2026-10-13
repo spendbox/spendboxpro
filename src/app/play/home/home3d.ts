@@ -154,6 +154,104 @@ function piece(it: PlanItem, mx: (x: number) => number, mz: (y: number) => numbe
       box(w - 0.2, 0.05, d - 0.3, 0, f.h, 0, c, g);
       for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) box(0.05, f.h, 0.05, sx * (w / 2 - 0.15), f.h / 2, sz * (d / 2 - 0.2), c, g);
       break;
+    // The special rooms.
+    case "dancefloor": {
+      // Coloured tiles, half a metre each.
+      const cols = ["#ff4fd8", "#22d3ee", "#a3e635", "#ffd43b", "#7c3aed", "#ff6b6b"];
+      const n = Math.round(f.w * CELL_M / 0.5);
+      const t = (w + 0.06) / n;
+      box(w, 0.03, d, 0, 0.015, 0, "#1b1b1b", g);
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) box(t - 0.04, 0.02, t - 0.04, -w / 2 + t * (i + 0.5) - 0.03, 0.04, -d / 2 + t * (j + 0.5) - 0.03, cols[(i + j) % cols.length], g);
+      break;
+    }
+    case "djbooth":
+      box(w, 0.9, d * 0.7, 0, 0.45, d * 0.15, c, g);
+      box(w * 0.9, 0.04, d * 0.6, 0, 0.92, d * 0.15, "#111111", g);
+      for (const sx of [-1, 1]) box(0.36, 0.03, 0.36, sx * w * 0.22, 0.95, d * 0.15, "#495057", g);
+      box(w * 0.9, 0.12, 0.03, 0, 0.6, d / 2, "#ff4fd8", g);
+      break;
+    case "speaker":
+      box(w, f.h, d, 0, f.h / 2, 0, c, g);
+      for (const y of [0.45, 1.05]) box(w * 0.6, w * 0.6, 0.02, 0, y, d / 2, "#495057", g);
+      break;
+    case "discoball":
+      box(0.02, 0.4, 0.02, 0, f.h + 0.2, 0, "#495057", g);
+      box(0.32, 0.32, 0.32, 0, f.h, 0, c, g).rotation.set(Math.PI / 4, Math.PI / 4, 0);
+      break;
+    case "partylight":
+      box(0.05, f.h, 0.05, 0, f.h / 2, 0, "#343a40", g);
+      box(0.4, 0.06, 0.06, 0, f.h, 0, "#343a40", g);
+      ["#ff4fd8", "#22d3ee", "#ffd43b"].forEach((col, i) => box(0.1, 0.1, 0.12, (i - 1) * 0.14, f.h - 0.08, 0.04, col, g));
+      break;
+    case "screen":
+      box(w, 1.3, 0.04, 0, 1.5, -d / 2 + 0.03, "#111316", g);
+      box(w - 0.12, 1.18, 0.02, 0, 1.5, -d / 2 + 0.06, "#4dabf7", g);
+      break;
+    case "recliner":
+      box(w, 0.45, d, 0, 0.225, 0, c, g);
+      box(w, 0.6, 0.2, 0, 0.75, -d / 2 + 0.1, c, g);
+      box(0.12, 0.2, d, -w / 2 + 0.06, 0.55, 0, "#7a1d1d", g);
+      box(0.12, 0.2, d, w / 2 - 0.06, 0.55, 0, "#7a1d1d", g);
+      break;
+    case "popcorn":
+      box(0.35, 0.8, 0.35, 0, 0.4, 0, "#c92a2a", g);
+      box(0.4, 0.45, 0.4, 0, 1.05, 0, "#fff3bf", g);
+      box(0.42, 0.06, 0.42, 0, 1.3, 0, c, g);
+      break;
+    case "treadmill":
+      box(w * 0.8, 0.15, d, 0, 0.075, 0, "#212529", g);
+      box(w * 0.65, 0.02, d * 0.85, 0, 0.16, 0.05, c, g);
+      for (const sx of [-1, 1]) box(0.05, 1.2, 0.05, sx * w * 0.36, 0.6, -d / 2 + 0.15, "#adb5bd", g);
+      box(w * 0.8, 0.25, 0.08, 0, 1.25, -d / 2 + 0.15, "#212529", g);
+      break;
+    case "bike":
+      box(0.12, 0.08, d * 0.8, 0, 0.04, 0, "#343a40", g);
+      box(0.06, 0.8, 0.06, 0, 0.4, d * 0.15, c, g);
+      box(0.25, 0.06, 0.3, 0, 0.82, d * 0.15, "#212529", g);
+      box(0.06, 1.0, 0.06, 0, 0.5, -d * 0.3, c, g);
+      box(0.4, 0.04, 0.04, 0, 1.0, -d * 0.3, "#212529", g);
+      box(0.06, 0.3, 0.3, 0, 0.3, 0, "#495057", g);
+      break;
+    case "weights":
+      box(0.35, 0.45, d * 0.8, 0, 0.225, 0.1, c, g);
+      for (const sx of [-1, 1]) box(0.05, 1.0, 0.05, sx * 0.45, 0.5, -d / 2 + 0.2, "#adb5bd", g);
+      box(w, 0.03, 0.03, 0, 1.0, -d / 2 + 0.2, "#adb5bd", g);
+      for (const sx of [-1, 1]) box(0.06, 0.4, 0.4, sx * (w / 2 - 0.15), 1.0, -d / 2 + 0.2, "#212529", g);
+      break;
+    case "dumbbells":
+      box(w, 0.6, d * 0.8, 0, 0.3, 0, c, g);
+      for (let i = 0; i < 5; i++) box(0.2, 0.1, 0.12, -w / 2 + 0.15 + i * (w - 0.3) / 4, 0.68, 0, i % 2 ? "#495057" : "#e8590c", g);
+      break;
+    case "gymmat":
+      box(w, 0.02, d, 0, 0.01, 0, c, g);
+      break;
+    case "pooltable":
+      box(w, 0.7, d, 0, 0.35, 0, "#6d4c41", g);
+      box(w - 0.2, 0.03, d - 0.2, 0, 0.72, 0, c, g);
+      break;
+    case "arcade":
+      box(w * 0.7, f.h, d * 0.7, 0, f.h / 2, 0, c, g);
+      box(w * 0.55, 0.4, 0.02, 0, 1.35, d * 0.35, "#22d3ee", g);
+      break;
+    case "dartboard":
+      box(0.45, 0.45, 0.04, 0, 1.7, -d / 2 + 0.03, "#212529", g);
+      box(0.3, 0.3, 0.02, 0, 1.7, -d / 2 + 0.06, "#2f9e44", g);
+      box(0.1, 0.1, 0.02, 0, 1.7, -d / 2 + 0.075, c, g);
+      break;
+    case "homebar":
+      box(w, 1.05, d * 0.45, 0, 0.525, d * 0.25, c, g);
+      box(w + 0.05, 0.05, d * 0.5, 0, 1.08, d * 0.25, "#212529", g);
+      box(w, 1.6, 0.25, 0, 0.8, -d / 2 + 0.13, "#3b2a20", g);
+      for (let b = 0; b < 6; b++) box(0.08, 0.25, 0.08, -w / 2 + 0.25 + b * ((w - 0.5) / 5), 1.73, -d / 2 + 0.13, ["#2f9e44", "#e8c07d", "#7a2e3a"][b % 3], g);
+      break;
+    case "barstool":
+      box(0.05, 0.7, 0.05, 0, 0.35, 0, "#495057", g);
+      box(0.35, 0.06, 0.35, 0, 0.72, 0, c, g);
+      break;
+    case "jukebox":
+      box(w * 0.85, f.h, d * 0.9, 0, f.h / 2, 0, c, g);
+      box(w * 0.55, 0.35, 0.02, 0, 0.9, d * 0.46, "#ffd43b", g);
+      break;
     default:
       box(w, f.h, d, 0, f.h / 2, 0, c, g);
   }

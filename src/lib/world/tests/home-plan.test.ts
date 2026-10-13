@@ -96,3 +96,77 @@ test("starter furniture is credited for the plan's own size", async () => {
     assert.equal(planBill(p, { floors: 1, items: {} }).naira, 0, size);
   }
 });
+
+test("special rooms: a dance hall gets its dance floor, DJ booth, speakers and disco ball", async () => {
+  const { furnishRoom, homeHasDanceHall, danceFloorOf, SPECIAL_ROOMS, ROOM_MIN } = await import("../../home-plan.ts");
+  type Floor = Parameters<typeof furnishRoom>[0];
+  for (const size of ["small", "medium", "large"] as const) {
+    const { w, d } = SIZES[size];
+    const f: Floor = { rooms: [{ id: 1, kind: "dancehall", x: 0, y: 0, w, d }], items: [] };
+    furnishRoom(f, f.rooms[0], 3, size);
+    const kinds = f.items.map((i) => i.kind);
+    for (const k of ["djbooth", "dancefloor", "speaker", "discoball"] as const) assert.ok(kinds.includes(k), `${size}: has a ${k}`);
+    assert.equal(clashes(f).size, 0, `${size}: no clashes`);
+    // Nothing stands on the dance floor.
+    const df = danceFloorOf(f)!;
+    for (const i of f.items) {
+      if (["dancefloor", "discoball", "rug"].includes(i.kind)) continue;
+      const s = itemSize(i);
+      assert.ok(!(i.x < df.x + df.w && df.x < i.x + s.w && i.y < df.y + df.d && df.y < i.y + s.d), `${size}: ${i.kind} off the dance floor`);
+    }
+    assert.ok(homeHasDanceHall({ v: 1, size, floors: [f] }));
+  }
+  assert.equal(homeHasDanceHall(starterPlan("medium")), false);
+  assert.equal(homeHasDanceHall(null), false);
+  // Every special room, drawn at its smallest and at full size, gets furnished without clashes.
+  for (const kind of SPECIAL_ROOMS)
+    for (const big of [false, true]) {
+      const m = ROOM_MIN[kind]!;
+      const f: Floor = { rooms: [{ id: 1, kind, x: 0, y: 0, w: big ? SIZES.large.w : m, d: big ? SIZES.large.d : m }], items: [] };
+      const n = furnishRoom(f, f.rooms[0], 7, "large");
+      assert.ok(n >= 3, `${kind} ${big ? "large" : "smallest"}: furnished (${n})`);
+      assert.equal(clashes(f).size, 0, `${kind}: no clashes`);
+    }
+});
+
+test("special rooms: old plans still load, and new ones survive cleaning", async () => {
+  const { autoDesign, SPECIAL_ROOMS, ROOM_KINDS } = await import("../../home-plan.ts");
+  for (const k of SPECIAL_ROOMS) assert.ok(ROOM_KINDS.includes(k));
+  // A plan saved before special rooms existed is unchanged.
+  const old = { v: 1, size: "medium", floors: [{ rooms: [{ id: 1, kind: "living", x: 0, y: 0, w: 10, d: 8 }], items: [{ id: 1, kind: "sofa", x: 1, y: 1, rot: 0 }] }] };
+  assert.deepEqual(cleanPlan(old), old);
+  for (const size of ["medium", "large"] as const)
+    for (let seed = 1; seed <= 6; seed++) {
+      const p = autoDesign(size, 2, seed, ["dancehall", "cinema"]);
+      const top = p.floors[1];
+      assert.ok(top.rooms.some((r) => r.kind === "dancehall"), `${size} ${seed}: dance hall on top`);
+      for (const r of top.rooms.filter((r) => r.kind === "dancehall")) assert.ok(r.w >= 8 && r.d >= 8, "big enough");
+      assert.ok(top.items.some((i) => i.kind === "dancefloor"), `${size} ${seed}: a dance floor`);
+      p.floors.forEach((f, l) => assert.equal(clashes(f).size, 0, `${size} ${seed} L${l}: no clashes`));
+      assert.deepEqual(cleanPlan(p), p);
+    }
+});
+
+test("the bill: a special room costs its fit-out once, and adds to the home's value", async () => {
+  const { planBill, startPaid, cleanPaid, ROOM_NAIRA, FURNITURE } = await import("../../home-plan.ts");
+  const p = starterPlan("medium");
+  p.floors[0].rooms.push({ id: 9, kind: "dancehall", x: 0, y: 0, w: 8, d: 8 });
+  p.floors[0].items.push({ id: 99, kind: "djbooth", x: 0, y: 0, rot: 0 });
+  // Records saved before special rooms existed have no "rooms".
+  const paid = cleanPaid({ floors: 1, items: startPaid().items });
+  const bill = planBill(p, paid);
+  assert.equal(bill.naira, ROOM_NAIRA.dancehall! + FURNITURE.djbooth.naira);
+  assert.ok(bill.lines.some((l) => l.label === "Dance hall fit-out"));
+  assert.ok(bill.valueNaira > FURNITURE.djbooth.naira * 0.5);
+  // Paid for: it stays paid (also after a trip through the database), even taken out and put back.
+  const again = cleanPaid(JSON.parse(JSON.stringify(bill.paid)));
+  assert.equal(again.rooms?.dancehall, 1);
+  p.floors[0].rooms.pop();
+  assert.equal(planBill(p, again).naira, 0);
+  p.floors[0].rooms.push({ id: 9, kind: "dancehall", x: 0, y: 0, w: 8, d: 8 });
+  assert.equal(planBill(p, again).naira, 0);
+  // A second one costs again.
+  p.floors[0].rooms.push({ id: 10, kind: "dancehall", x: 10, y: 0, w: 8, d: 8 });
+  assert.equal(planBill(p, again).naira, ROOM_NAIRA.dancehall);
+  assert.deepEqual(cleanPaid({ rooms: { dancehall: "x", dungeon: 3, cinema: -2, gym: 2 } }).rooms, { gym: 2 });
+});
