@@ -154,7 +154,7 @@ export function HomePlanner({ onClose }: { onClose: () => void }) {
     setSel(null);
     setNote({
       text: lost.length
-        ? `Designed for you, but there wasn't room for your ${lost.map((k) => ROOM_LABEL[k].toLowerCase()).join(" or ")}${plan.floors.length < 2 ? " (special rooms go upstairs: add a floor)" : ""}. Draw it under Rooms, or tap again.`
+        ? `Designed for you, but there wasn't room for your ${lost.map((k) => ROOM_LABEL[k].toLowerCase()).join(" or ")}${plan!.floors.length < 2 ? " (special rooms go upstairs: add a floor)" : ""}. Draw it under Rooms, or tap again.`
         : "Designed for you. Tap it again for another layout, or change anything you like.",
     });
   }
