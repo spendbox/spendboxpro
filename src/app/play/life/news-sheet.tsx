@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Banknote, CloudRain, Flame, Laugh, Lightbulb, MapPin, Megaphone, Music, ShoppingBasket, Star, TrafficCone, Trophy, Waves, Wrench, Zap } from "lucide-react";
+import { Banknote, CloudRain, Flame, Laugh, Dices, Lightbulb, MapPin, Megaphone, Music, ShoppingBasket, Star, TrafficCone, Trophy, Waves, Wrench, Zap } from "lucide-react";
 import type { RegionMap } from "@/lib/world/compile";
 import { cityNews, playerStory, weatherNow, type NewsItem, type NewsKind } from "@/lib/world/news";
 import { ownedSpot } from "@/lib/world/owned";
@@ -25,12 +25,13 @@ const ICON: Record<NewsKind | "invention", typeof Flame> = {
   city: Megaphone,
   fun: Laugh,
   money: Banknote,
+  game: Dices,
   invention: Lightbulb,
 };
 /** A story: the city's news, or a player's new invention. */
 type Story = Omit<NewsItem, "kind"> & { kind: NewsKind | "invention" };
 
-const TONE: Partial<Record<NewsKind | "invention", string>> = { fire: "#e03131", flood: "#1971c2", weather: "#1c7ed6", power: "#f08c00", sport: "#2f9e44", invention: "#7048e8", star: "#d6336c", fun: "#e8590c", money: "#2b8a3e" };
+const TONE: Partial<Record<NewsKind | "invention", string>> = { fire: "#e03131", flood: "#1971c2", weather: "#1c7ed6", power: "#f08c00", sport: "#2f9e44", invention: "#7048e8", star: "#d6336c", fun: "#e8590c", money: "#2b8a3e", game: "#e8590c" };
 
 /** What's happening in the city: news every 20 minutes, the weather, and players' new inventions. Share any story. */
 export function NewsSheet({ region, onShow, onClose }: { region: RegionMap; onShow: (x: number, z: number) => void; onClose: () => void }) {
@@ -59,9 +60,9 @@ export function NewsSheet({ region, onShow, onClose }: { region: RegionMap; onSh
         if (!alive) return;
         setPeople(
           events.map((e) => {
-            const sp = e.building ? ownedSpot(e.building) : null;
+            const sp = e.building ? ownedSpot(e.building) : e.x != null && e.z != null ? { x: e.x, z: e.z } : null;
             const area = sp ? region.areaAt(sp.x, sp.z) : "";
-            return { id: e.id, at: e.at, kind: "money" as const, ...playerStory(e, area, cash(e.price)), area, ...(sp ? { x: sp.x, z: sp.z } : {}) };
+            return { id: e.id, at: e.at, kind: e.kind === "challenge" ? ("game" as const) : ("money" as const), ...playerStory(e, area, cash(e.price)), area, ...(sp ? { x: sp.x, z: sp.z } : {}) };
           }),
         );
       })

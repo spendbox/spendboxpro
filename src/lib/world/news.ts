@@ -7,7 +7,7 @@
 import type { RegionMap } from "./compile.ts";
 import { toTile } from "./geo.ts";
 
-export type NewsKind = "weather" | "fire" | "traffic" | "power" | "market" | "star" | "sport" | "flood" | "roads" | "festival" | "city" | "fun" | "money";
+export type NewsKind = "weather" | "fire" | "traffic" | "power" | "market" | "star" | "sport" | "flood" | "roads" | "festival" | "city" | "fun" | "money" | "game";
 
 export type NewsItem = { id: string; at: number; kind: NewsKind; title: string; text: string; area?: string; x?: number; z?: number };
 
@@ -128,7 +128,20 @@ function storyOf(slot: number, p: ReturnType<typeof placesOf>): NewsItem {
 }
 
 /** Something a player did that made the news: bought a dear home, put a business on a building, arrived rich. */
-export type PlayerEvent = { id: string; at: number; kind: "buy" | "business" | "rich"; who: string; what: string; price: number; building?: string };
+export type PlayerEvent = {
+  id: string;
+  at: number;
+  kind: "buy" | "business" | "rich" | "challenge";
+  who: string;
+  what: string;
+  price: number;
+  building?: string;
+  /** Where it happened (tiles), when it isn't a building (a challenge on the map). */
+  x?: number;
+  z?: number;
+  /** A challenge: who else played (their names) and how many. */
+  beat?: string[];
+};
 
 /** A player's big moment as a headline, said with some fun (the same words each time for the same event). */
 export function playerStory(e: PlayerEvent, area: string, price: string): Pick<NewsItem, "title" | "text"> {
@@ -142,6 +155,18 @@ export function playerStory(e: PlayerEvent, area: string, price: string): Pick<N
       { title: `Big business lands in ${where}: ${e.who}`, text: `${e.who} has put its name on a building in ${where}. Area boys have already asked who the "chairman" is.` },
       { title: `${where} gets a new landmark: ${e.who}`, text: `Tap the glowing building to find out what ${e.who} does. Early visitors say the receptionist is very friendly.` },
     ]);
+  if (e.kind === "challenge") {
+    const n = (e.beat?.length ?? 0) + 1;
+    const others = e.beat?.length ? (e.beat.length === 1 ? e.beat[0] : `${e.beat.slice(0, -1).join(", ")} and ${e.beat.at(-1)}`) : "the challengers";
+    const prize = e.price > 0 ? price : "bragging rights";
+    return pick([
+      { title: `${e.who} wins ${e.what} showdown in ${where}`, text: `${n} players sat down, one stood up smiling. ${e.who} beat ${others} and walked away with ${prize}. Rematch? The streets are talking.` },
+      { title: `"Game over!": ${e.who} takes the pot in ${where}`, text: `${e.who} cleaned out ${others} at ${e.what} and pocketed ${prize}. Someone is already saying the game was "not fair at all".` },
+      { title: `${where}: ${others} vs ${e.who}. Guess who won.`, text: `It was ${e.who}. ${e.what}, ${prize}, and a victory dance that witnesses describe as "unnecessary but effective".` },
+      { title: `Champion alert: ${e.who} rules ${e.what} in ${where}`, text: `${e.who} beat ${others} for ${prize}. Think you can do better? Tap Challenge and find out.` },
+      { title: `${e.who} sends ${others} home empty-handed`, text: `A ${e.what} challenge in ${where} ended with ${e.who} collecting ${prize}. The losers have asked for "small time to recover".` },
+    ]);
+  }
   if (e.kind === "rich")
     return pick([
       { title: `Big money arrives: ${e.who} lands in Lagos`, text: `Born into a rich family, ${e.who} has just arrived with ${price} to spend. Estate agents across Lekki are ironing their best shirts.` },

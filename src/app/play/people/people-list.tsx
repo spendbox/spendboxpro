@@ -19,12 +19,12 @@ export function farIn(tiles: number | null) {
   return m < 1000 ? `${Math.round(m / 10) * 10} m away` : `${(m / 1000).toFixed(m < 10_000 ? 1 : 0)} km away`;
 }
 
-/** A small man / woman sign (drawn here, so it looks the same on every phone). */
+/** A small male / female sign (drawn here, so it looks the same on every phone). */
 export function GenderMark({ gender, className }: { gender: Gender | null; className?: string }) {
   if (!gender) return null;
   const male = gender === "male";
   return (
-    <span className={cn("inline-flex items-center gap-0.5 text-[11px] font-semibold", male ? "text-[#1c7ed6]" : "text-[#d6336c]", className)} title={male ? "Man" : "Woman"}>
+    <span className={cn("inline-flex items-center gap-0.5 text-[11px] font-semibold", male ? "text-[#1c7ed6]" : "text-[#d6336c]", className)} title={male ? "Male" : "Female"}>
       <svg viewBox="0 0 16 16" className="size-3" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
         {male ? (
           <>
@@ -38,7 +38,7 @@ export function GenderMark({ gender, className }: { gender: Gender | null; class
           </>
         )}
       </svg>
-      {male ? "Man" : "Woman"}
+      {male ? "Male" : "Female"}
     </span>
   );
 }
@@ -68,6 +68,7 @@ export function PeopleList({
   onPerson,
   onFly,
   compact,
+  onlineOnly,
 }: {
   region: string;
   /** Where the map is looking (tiles): the nearest people to here come first. */
@@ -77,6 +78,8 @@ export function PeopleList({
   onFly?: (x: number, z: number) => void;
   /** Inside the chat: a little tighter. */
   compact?: boolean;
+  /** Only the people online right now (searching a name still finds anyone). */
+  onlineOnly?: boolean;
 }) {
   const [q, setQ] = useState("");
   // The last list (kept for the visit): shown at once when it opens again, then brought up to date.
@@ -105,6 +108,7 @@ export function PeopleList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [region, q]);
   const online = list?.filter((p) => p.online).length ?? 0;
+  const shown = onlineOnly && !q ? (list?.filter((p) => p.online) ?? null) : list;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className={cn("relative", compact ? "p-2" : "pb-2")}>
@@ -121,18 +125,20 @@ export function PeopleList({
           </button>
         )}
       </div>
-      {list && list.length > 0 && (
+      {shown && shown.length > 0 && (
         <p className={cn("text-[11px] text-muted", compact ? "px-4 pb-1" : "pb-1")}>
-          {q ? `${list.length} found` : "Nearest to where you're looking first"} · {online} online
+          {q ? `${shown.length} found` : onlineOnly ? `${online} online now · nearest first` : `Nearest to where you're looking first · ${online} online`}
         </p>
       )}
       <ul className={cn("min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain", compact && "px-2 pb-2")}>
-        {list === null &&
+        {shown === null &&
           [0, 1, 2, 3].map((i) => (
             <li key={i} className="h-14 animate-pulse rounded-2xl bg-ink/5" />
           ))}
-        {list?.length === 0 && <li className="p-6 text-center text-sm text-muted">{q ? `Nobody called "${q}".` : "Nobody else lives here yet. Invite a friend!"}</li>}
-        {list?.map((p) => (
+        {shown?.length === 0 && (
+          <li className="p-6 text-center text-sm text-muted">{q ? `Nobody called "${q}".` : onlineOnly && list?.length ? "Nobody else is online right now. Search a name to message anyone." : "Nobody else lives here yet. Invite a friend!"}</li>
+        )}
+        {shown?.map((p) => (
           <li key={p.id} className="flex items-center gap-2 rounded-2xl px-1.5 py-1.5 hover:bg-ink/[0.03]">
             <button onClick={() => onPerson(p.id)} className="relative shrink-0" aria-label={`${p.name}'s card`}>
               <AvatarFace avatar={cleanAvatar(p.avatar, p.name)} size={40} className="rounded-full" />
@@ -145,7 +151,7 @@ export function PeopleList({
               </span>
               <span className="flex flex-wrap items-center gap-x-2 text-[11px] text-muted">
                 <GenderMark gender={p.gender} />
-                <span>{p.online ? "Online" : "Offline"}</span>
+                {p.online ? <span className="font-semibold text-[#2f9e44]">Online</span> : <span>Offline</span>}
                 {farIn(p.dist) && <span>{farIn(p.dist)}</span>}
               </span>
             </button>
@@ -160,10 +166,10 @@ export function PeopleList({
           </li>
         ))}
       </ul>
-      {!compact && list && list.length > 0 && (
+      {!compact && shown && shown.length > 0 && (
         <p className="pt-2 text-center text-[11px] text-muted">
           <User className="mr-1 inline size-3 align-[-0.1em]" />
-          Tap a face for their card: knock on their door, send a gift, make friends.
+          Tap a face for their card: message them, give money, make friends.
         </p>
       )}
     </div>

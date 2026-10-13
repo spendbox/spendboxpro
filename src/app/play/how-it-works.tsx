@@ -213,23 +213,23 @@ const WORLD_SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[]
     icon: Compass,
     title: "Get around",
     body: [
-      "Explore: rides (the train, a ferry, a hot-air balloon, a helicopter), parks, clubs, markets and landmarks.",
-      "Walk the streets yourself, or jump across the map (on foot, the fare is paid like a real trip). Every place has something to do inside.",
+      "Tap any building or landmark on the map to go there (the fare is paid like a real trip). Every place has something to do inside.",
+      "Or tap Walk at the bottom and walk the streets yourself. The round button in the lower left brings you back to where you are.",
     ],
   },
   {
     icon: Users,
     title: "People",
     body: [
-      "See who's online and who's nearby, chat privately or with everyone in a place, and talk out loud in a voice call (never recorded).",
+      "See who's online and who's nearby, chat privately, and talk out loud in a voice call with the people in the same place (never recorded).",
       "Add friends, send gifts and money, sign a guest book, leave notes on the map.",
     ],
   },
   {
-    icon: Swords,
-    title: "Fight: challenges",
+    icon: Trophy,
+    title: "Challenge people",
     body: [
-      "Challenge everyone nearby to a game (Whot! and Ludo now, more coming): everyone puts the same stake in the pool and the winner takes it.",
+      "Tap Challenge at the bottom and challenge everyone nearby to a game (Whot! and Ludo now, more coming): everyone puts the same stake in the pool and the winner takes it.",
       "Your first challenge is free; challenging again soon after costs a fee. Hosting and winning challenges raise your reputation.",
     ],
   },

@@ -27,14 +27,24 @@ Database: `game-db/051_people.sql`. Game: `src/app/play/people-actions.ts`, scre
   sale. On iPhone the game must be added to the home screen first (Safari's rule).
 - Setup (once): run `node scripts/vapid-keys.mjs`, put the three lines it prints into Vercel's
   environment variables, and redeploy. Without them nothing is sent.
+- One notification per conversation (a new message replaces the last one from the same person),
+  private messages, challenges starting or called off, and notices. The number on the app's icon
+  is what's still unread. Reading a chat or opening Alerts in the game closes those notifications
+  on the phone (`public/sw.js`, `src/app/play/phone/phone-notices.ts`). While the game is open in
+  front of you a notification makes no sound and goes away by itself.
+
+## Chat (the real map)
+- Messages opens on your chats, laid out like Snapchat: a filled square for a new chat, "Received",
+  "Delivered" and "Opened" (game-db/071_chat_read.sql; before it's run each phone remembers what it
+  has read). New chat finds anyone. There's no group chat in places: the voice call is there instead.
+- Down the left side: the people you dealt with lately who are online right now.
 
 ## Finding people (game-db/060_find_people.sql)
-- The online count opens People: search anyone living on the map by name, the nearest to where
-  you're looking first, online ones marked, with Message, their card and where they are
+- The online count opens People: the people online right now (search finds anyone living on the
+  map by name), the nearest to where you're looking first, with Message, their card and where they are
   (`src/app/play/people/people-list.tsx`). Messages → People is the same list.
 - A row of the people around where you're looking sits under the menu, online first, and
   refreshes as you move into a new area.
-- Players say whether they're a man or a woman when they pick their name (or later, on their own
+- Players say whether they're male or female when they pick their name (or later, on their own
   card); it shows on their card and in the lists.
-- In a place, the chat's faces start with Everyone (that floor's chat), then the people there,
-  then the city's own characters.
+- In a place, New chat starts with the faces of the people there, then the city's own characters.

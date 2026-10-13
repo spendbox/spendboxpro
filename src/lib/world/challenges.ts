@@ -1,5 +1,5 @@
 // Challenges on the map (docs/CHALLENGES.md; the database part is game-db/070_challenges.sql):
-// tap Fight, pick a game and a stake, and everyone nearby has a minute to join. The game is played
+// tap Challenge, pick a game and a stake, and everyone nearby has a minute to join. The game is played
 // right there on the map; the winner takes the pool.
 
 export type ChallengeGame = {

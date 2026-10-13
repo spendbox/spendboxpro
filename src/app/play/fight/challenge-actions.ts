@@ -158,7 +158,14 @@ export async function challengeView(id: number): Promise<ChallengeView | null> {
   const db = createAdminClient();
   const cid = Math.round(n(id));
   const first = await db.from("challenges").select("status, starts_at").eq("id", cid).maybeSingle();
-  if (first.data?.status === "open" && Date.parse(String(first.data.starts_at)) <= Date.now()) await db.rpc("challenge_begin", { p_id: cid });
+  if (first.data?.status === "open" && Date.parse(String(first.data.starts_at)) <= Date.now()) {
+    const begun = await db.rpc("challenge_begin", { p_id: cid });
+    // Started (or called off): every player is told, on their phone too.
+    if (!begun.error && begun.data !== "open") {
+      const { data: players } = await db.from("challenge_players").select("user_id").eq("challenge_id", cid).is("left_at", null);
+      await Promise.all(((players ?? []) as { user_id: string }[]).map((p) => pushTo(String(p.user_id)).catch(() => {})));
+    }
+  }
   const { data } = await db.from("challenges").select("*").eq("id", cid).maybeSingle();
   return data ? ((await views(db, [data as Record<string, unknown>]))[0] ?? null) : null;
 }

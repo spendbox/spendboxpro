@@ -18,7 +18,7 @@ import { Sheet } from "../sheet";
 
 type Done = (text: string, ok: boolean) => void;
 
-/** On someone's card: prank their door, pick their pocket (two taps: the risk first), make them your rival. */
+/** On someone's card, the Rival box: prank their door, pick their pocket (two taps: the risk first), make them your rival. */
 export function StreetRow({ id, name, hasHome, prices, onDone }: { id: string; name: string; hasHome: boolean; prices: Prices | null; onDone: Done }) {
   const [open, setOpen] = useState<"prank" | null>(null);
   /** A note left with the prank (optional): they read it when they come home to it. */
@@ -41,13 +41,27 @@ export function StreetRow({ id, name, hasHome, prices, onDone }: { id: string; n
     return r.ok;
   };
   return (
-    <div className="mt-3">
-      <div className="grid grid-cols-3 gap-2">
-        {hasHome && (
-          <button onClick={() => setOpen(open === "prank" ? null : "prank")} className={`flex flex-col items-center gap-1 rounded-2xl py-2.5 text-xs font-semibold ${open === "prank" ? "bg-ink text-white" : "bg-ink/[0.05]"}`}>
-            <Zap className="size-5" /> Prank
-          </button>
-        )}
+    <div className="mt-3 rounded-2xl bg-[#e8590c]/[0.07] p-3">
+      <div className="flex items-center gap-2">
+        <Swords className="size-4 shrink-0 text-[#e8590c]" />
+        <p className="min-w-0 flex-1 text-sm font-bold text-[#e8590c]">Rival</p>
+        <button
+          disabled={busy || rival === null}
+          onClick={() => void go(() => setRival(id, !rival)).then((ok) => ok && setRivalState(!rival))}
+          className={`h-7 shrink-0 rounded-full px-3 text-[11px] font-semibold disabled:opacity-40 ${rival ? "bg-[#e8590c] text-white" : "bg-white text-[#e8590c] ring-1 ring-[#e8590c]/30"}`}
+        >
+          {rival ? "Your rival ✓" : "Make them your rival"}
+        </button>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <button
+          disabled={!hasHome}
+          onClick={() => setOpen(open === "prank" ? null : "prank")}
+          className={`flex h-11 items-center justify-center gap-1.5 rounded-xl text-sm font-semibold disabled:opacity-40 ${open === "prank" ? "bg-ink text-white" : "bg-white shadow-sm"}`}
+          title={hasHome ? `Prank ${name}'s door` : `${name} has no home to prank yet`}
+        >
+          <Zap className="size-4" /> Prank
+        </button>
         <button
           disabled={busy}
           onClick={() => {
@@ -55,16 +69,9 @@ export function StreetRow({ id, name, hasHome, prices, onDone }: { id: string; n
             setSure(false);
             void go(() => stealFrom(id));
           }}
-          className={`flex flex-col items-center gap-1 rounded-2xl py-2.5 text-xs font-semibold disabled:opacity-40 ${sure ? "bg-hit text-white" : "bg-ink/[0.05]"}`}
+          className={`flex h-11 items-center justify-center gap-1.5 rounded-xl text-sm font-semibold disabled:opacity-40 ${sure ? "bg-hit text-white" : "bg-white shadow-sm"}`}
         >
-          <Hand className="size-5" /> {sure ? "Sure? Tap again" : "Steal"}
-        </button>
-        <button
-          disabled={busy || rival === null}
-          onClick={() => void go(() => setRival(id, !rival)).then((ok) => ok && setRivalState(!rival))}
-          className={`flex flex-col items-center gap-1 rounded-2xl py-2.5 text-xs font-semibold disabled:opacity-40 ${rival ? "bg-[#e8590c] text-white" : "bg-ink/[0.05]"}`}
-        >
-          <Swords className="size-5" /> {rival ? "Rivals" : "Rival"}
+          <Hand className="size-4" /> {sure ? "Sure? Tap again" : "Steal"}
         </button>
       </div>
       {sure && (

@@ -341,7 +341,7 @@ export function useWorldLife({
       setBreaking(latest);
       playSfx("chime");
     };
-    // A player's big buy that just happened breaks into the news too (checked every few minutes).
+    // A player's big buy (or a challenge just won) that just happened breaks into the news too (checked every few minutes).
     const lookPlayers = () => {
       if (document.visibilityState !== "visible") return;
       void playerNews(region.region.id)
@@ -354,9 +354,9 @@ export function useWorldLife({
             localStorage.setItem("nt-news-player", e.id);
           } catch {}
           if (seen === e.id) return;
-          const sp = e.building ? ownedSpot(e.building) : null;
+          const sp = e.building ? ownedSpot(e.building) : e.x != null && e.z != null ? { x: e.x, z: e.z } : null;
           const area = sp ? region.areaAt(sp.x, sp.z) : "";
-          setBreaking({ id: e.id, at: e.at, kind: "money", ...playerStory(e, area, cash(e.price)), area, ...(sp ? { x: sp.x, z: sp.z } : {}) });
+          setBreaking({ id: e.id, at: e.at, kind: e.kind === "challenge" ? "game" : "money", ...playerStory(e, area, cash(e.price)), area, ...(sp ? { x: sp.x, z: sp.z } : {}) });
           playSfx("chime");
         })
         .catch(() => {});

@@ -7,7 +7,8 @@ import { cleanAvatar, type Avatar } from "@/lib/avatar";
 
 // The people you've been dealing with lately, down the left side of the screen (docs/PEOPLE.md):
 // who you messaged, whose card you opened, who you gave something to or pranked. Tap a face for
-// their card, the bubble to message them. Folds away into a little tab. Kept on this phone.
+// their card, the bubble to message them. Only the ones online right now show. Folds away into a
+// little tab. Kept on this phone.
 
 export type Recent = { id: string; name: string; avatar: Avatar | null; what: string; at: number };
 
@@ -36,14 +37,29 @@ export function rememberPerson(p: { id: string; name: string; avatar?: unknown }
   window.dispatchEvent(new Event("nt-recent"));
 }
 
-const ago = (ms: number) => {
-  const m = Math.max(0, Math.round(ms / 60_000));
-  return m < 1 ? "now" : m < 60 ? `${m}m` : m < 1440 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`;
-};
-
 export function RecentRail({ onPerson, onMessage }: { onPerson: (id: string) => void; onMessage: (p: { id: string; name: string }) => void }) {
   const [list, setList] = useState<Recent[]>([]);
   const [open, setOpenNow] = useState(false);
+  // Who of them is online (asked now and every minute): only they show.
+  const [online, setOnline] = useState<Set<string> | null>(null);
+  const idsKey = list.map((r) => r.id).join(",");
+  useEffect(() => {
+    if (!idsKey) return;
+    let live = true;
+    const ask = async () => {
+      if (document.hidden) return;
+      const r = await fetch(`/api/online?ids=${idsKey}`, { cache: "no-store" }).catch(() => null);
+      if (!r?.ok || !live) return;
+      const { online: ids } = (await r.json()) as { online: string[] };
+      if (live) setOnline(new Set(ids));
+    };
+    void ask();
+    const t = setInterval(ask, 60_000);
+    return () => {
+      live = false;
+      clearInterval(t);
+    };
+  }, [idsKey]);
   useEffect(() => {
     const read = () => setList(load());
     const t = setTimeout(() => {
@@ -66,19 +82,22 @@ export function RecentRail({ onPerson, onMessage }: { onPerson: (id: string) => 
       localStorage.setItem(OPEN_KEY, v ? "1" : "0");
     } catch {}
   };
-  if (!list.length) return null;
-  const now = Date.now();
+  const shown = online ? list.filter((r) => online.has(r.id)) : [];
+  if (!shown.length) return null;
 
   if (!open)
     return (
       <button
         onClick={() => setOpen(true)}
         className="glass pointer-events-auto flex flex-col items-center gap-1 rounded-r-2xl py-2 pl-1 pr-1.5 shadow"
-        aria-label={`Recent people (${list.length}): show them`}
+        aria-label={`Recent people online (${shown.length}): show them`}
       >
         <span className="flex flex-col -space-y-2">
-          {list.slice(0, 3).map((r) => (
-            <AvatarFace key={r.id} avatar={cleanAvatar(r.avatar, r.name)} size={26} className="rounded-full ring-2 ring-white" />
+          {shown.slice(0, 3).map((r) => (
+            <span key={r.id} className="relative">
+              <AvatarFace avatar={cleanAvatar(r.avatar, r.name)} size={26} className="rounded-full ring-2 ring-white" />
+              <span className="absolute bottom-0 right-0 size-2 rounded-full bg-[#2f9e44] ring-1 ring-white" />
+            </span>
           ))}
         </span>
         <ChevronRight className="size-4 text-muted" />
@@ -88,21 +107,22 @@ export function RecentRail({ onPerson, onMessage }: { onPerson: (id: string) => 
   return (
     <div className="glass pointer-events-auto w-40 rounded-r-2xl py-2 pl-1.5 pr-1 shadow-lg" aria-label="Recent people">
       <div className="flex items-center justify-between px-1 pb-1">
-        <span className="text-[10px] font-bold uppercase tracking-wide text-muted">Recent</span>
+        <span className="text-[10px] font-bold uppercase tracking-wide text-muted">Online</span>
         <button onClick={() => setOpen(false)} className="grid size-6 place-items-center rounded-full hover:bg-ink/5" aria-label="Fold the recent people away">
           <ChevronLeft className="size-4" />
         </button>
       </div>
       <ul className="max-h-[46vh] space-y-0.5 overflow-y-auto overscroll-contain [scrollbar-width:none]">
-        {list.map((r) => (
+        {shown.map((r) => (
           <li key={r.id} className="flex items-center gap-1">
             <button onClick={() => onPerson(r.id)} className="flex min-w-0 flex-1 items-center gap-1.5 rounded-xl p-1 text-left hover:bg-ink/5">
-              <AvatarFace avatar={cleanAvatar(r.avatar, r.name)} size={30} className="shrink-0 rounded-full" />
+              <span className="relative shrink-0">
+                <AvatarFace avatar={cleanAvatar(r.avatar, r.name)} size={30} className="rounded-full" />
+                <span className="absolute bottom-0 right-0 size-2.5 rounded-full bg-[#2f9e44] ring-2 ring-white" />
+              </span>
               <span className="min-w-0">
                 <b className="block truncate text-xs">{r.name}</b>
-                <span className="block truncate text-[10px] text-muted">
-                  {r.what} · {ago(now - r.at)}
-                </span>
+                <span className="block truncate text-[10px] font-semibold text-[#2f9e44]">Online</span>
               </span>
             </button>
             <button onClick={() => onMessage({ id: r.id, name: r.name })} className="grid size-7 shrink-0 place-items-center rounded-full bg-ink/5" aria-label={`Message ${r.name}`}>

@@ -64,7 +64,7 @@ import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
 import { BookOpen, Church, Dumbbell, FerrisWheel, GraduationCap, Landmark as LandmarkIcon, Plane, Ship, Stethoscope, TrainFront, Trophy, UtensilsCrossed } from "lucide-react";
-import { BellOff, BellRing, LocateFixed, PencilRuler, Wallet, CarFront, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Newspaper, Palette, ShoppingBag, Smartphone, Store, Swords, User } from "lucide-react";
+import { BellOff, BellRing, LocateFixed, Rocket, PencilRuler, Wallet, CarFront, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Newspaper, Palette, ShoppingBag, Smartphone, Store, Swords, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
 import { GhostsSheet } from "./ghost-duel/ghosts-sheet";
@@ -99,6 +99,7 @@ import { setEventSoundsEnabled } from "./city/event-sounds";
 import type { CityDancer, CityEvent, CityFriendPin, CityGhost, CityInteract, CityMarkers, CityRide, RideTarget } from "./city-view";
 import { FeedRow, NotificationsPanel, SwipeRow, type FeedIcon, type FeedItem } from "./notifications";
 import { dismissNotices, readNotices } from "./notice-actions";
+import { closePhoneNotices, setPhoneBadge } from "./phone/phone-notices";
 import { signOutNow } from "../login/actions";
 import { claimBalloon, recordVisit } from "./profile-actions";
 import { myVisits, payClubEntry, payFare, payRide, payVisit } from "./fee-actions";
@@ -620,7 +621,8 @@ export function Game({
   const [pickRide, setPickRide] = useState(false);
   const [exploreTab, setExploreTab] = useState<"places" | "rides" | "sports">("rides");
   /** The real map's Explore: the places worth going to (worked out when it opens). */
-  const [explorePlacesNow, setExplorePlaces] = useState<ExplorePlace[] | null>(null);
+  // Explore is hidden on the real map for now (its places list comes back with it: worldLife.explore()).
+  const [explorePlacesNow] = useState<ExplorePlace[] | null>(null);
   const [npcTap, setNpcTap] = useState<{ id: string; at: number } | null>(null);
   const [balloonCount, setBalloonCount] = useState(0);
   const [dmRequest, setDmRequest] = useState<{ id: string; name: string; at: number } | null>(null);
@@ -803,6 +805,7 @@ export function Game({
       <PeopleList
         region={worldId}
         compact={where === "chat"}
+        onlineOnly={where === "stats"}
         centre={() => worldLife.centerRef.current?.() ?? { x: 0, z: 0 }}
         onMessage={(p) => {
           setStatsOpen(false);
@@ -1284,6 +1287,11 @@ export function Game({
   }, [state.events, state.notifications, liveNotes, readIds, goneIds, state.worldEvents, state.me.name, serverNowMs, botName, myLastSpot, where, me.avatar, worldId]);
   // Unread: on the real map, notices you haven't read (exact, on every device); in the old game, the ones since you last looked.
   const unread = feed.filter((f) => (f.noteId ? !f.read : Date.parse(f.at) > Date.parse(feedSeenAt))).length;
+  // The number on the app's icon (on phones that show one): what's still unread here.
+  useEffect(() => {
+    if (!worldId || me.guest) return;
+    setPhoneBadge(unread + chatUnread);
+  }, [worldId, me.guest, unread, chatUnread]);
   /** You've seen these notices: they stop counting at once (and on the server). */
   const markRead = useCallback((ids: number[]) => {
     const fresh = ids.filter((id) => id > 0);
@@ -1298,9 +1306,11 @@ export function Game({
     void dismissNotices(ids).catch(() => {});
   }, []);
 
-  // Opening the notifications list reads what's in it (the counter drops at once).
+  // Opening the notifications list reads what's in it (the counter drops at once), and they go
+  // from the phone's own notifications too.
   useEffect(() => {
     if (!alertsOpen) return;
+    closePhoneNotices("notice");
     const ids = feed.flatMap((f) => (f.noteId && !f.read ? [f.noteId] : []));
     if (!ids.length) return;
     const t = setTimeout(() => markRead(ids), 600);
@@ -1379,6 +1389,7 @@ export function Game({
         const u = new URL(String((e.data as { url?: string }).url ?? "/play"), location.origin);
         const dm = u.searchParams.get("dm");
         if (dm) chatWith({ id: dm, name: u.searchParams.get("name") || "Message" });
+        else if (u.searchParams.get("alerts")) setAlertsOpen(true);
       }
     };
     navigator.serviceWorker?.addEventListener("message", onMessage);
@@ -1396,6 +1407,14 @@ export function Game({
     if (me.guest) return;
     const sp = new URLSearchParams(window.location.search);
     const dm = sp.get("dm");
+    // Opened from a notice's notification: the notifications list.
+    if (!dm && sp.get("alerts")) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("alerts");
+      window.history.replaceState(null, "", url);
+      const t = setTimeout(() => setAlertsOpen(true), 900);
+      return () => clearTimeout(t);
+    }
     if (!dm) return;
     const name = sp.get("name") || "Message";
     const url = new URL(window.location.href);
@@ -1672,7 +1691,7 @@ export function Game({
   // What each kind of place is for: one main thing to do there, a tap away (the doctor at a
   // hospital, a course at a campus, food at a restaurant, a boat ride at the port...).
   const [flightsOpen, setFlightsOpen] = useState(false);
-  // Fight (docs/CHALLENGES.md): the picker, and the challenges lit up on the map.
+  // Challenge (docs/CHALLENGES.md): the picker, and the challenges lit up on the map.
   const [fightOpen, setFightOpen] = useState(false);
   const [challengeLights, setChallengeLights] = useState<ChallengeLight[]>([]);
   const [prayer, setPrayer] = useState(0);
@@ -3010,8 +3029,9 @@ export function Game({
           </button>
         )}
 
-        {/* The real map, out on the streets: Explore, Walk, Locate me and Soon, down here so the top stays
-            clear. Inside a place or on a ride the place's own bar takes over; walking, only Stop walking. */}
+        {/* The real map, out on the streets: just Walk and Challenge down here (Locate me and Soon are
+            little icons in the lower left corner). Inside a place or on a ride the place's own bar takes
+            over; walking, only Stop walking. Explore is hidden for now. */}
         {/* Signed out: one white button to advertise on the map, and the game's name floating over the city. */}
         {worldId && guest && !place && ride === null && (
           <button onClick={() => openAdvertise()} className="pointer-events-auto flex h-12 items-center gap-2 rounded-full bg-white px-6 text-sm font-bold text-ink shadow-lg ring-1 ring-black/5">
@@ -3020,31 +3040,28 @@ export function Game({
           </button>
         )}
         {worldId && !guest && !place && ride === null && (
-          <div className="pointer-events-auto flex items-stretch gap-1 sm:gap-1.5">
-            {!walking && (
-              <DockButton
-                icon={Compass}
-                tint="text-[#e64980]"
-                label="Explore"
-                onClick={() => {
-                  setExplorePlaces(worldLife.explore());
-                  setExploreTab("places");
-                  setPickRide(true);
-                }}
-              />
-            )}
+          <div className="pointer-events-auto flex items-stretch gap-1.5 sm:gap-2">
             <DockButton icon={Footprints} label={walking ? "Stop walking" : "Walk"} dark={walking} onClick={() => setWalking(!walking)} />
-            {!walking && (
-              <DockButton
-                icon={LocateFixed}
-                label="Locate me"
-                onClick={() => {
-                  if (!worldLife.locateMe()) setMessage({ text: "You're not anywhere on the map yet. Find a home first.", tone: "info" });
-                }}
-              />
+            {!walking && <DockButton icon={Trophy} tint="text-gold-dark" label="Challenge" onClick={() => setFightOpen(true)} />}
+          </div>
+        )}
+        {worldId && !guest && !place && ride === null && !walking && (
+          <div className="pointer-events-auto absolute bottom-[max(0.625rem,env(safe-area-inset-bottom))] left-2.5 flex flex-col gap-2 sm:bottom-4 sm:left-4">
+            {worldLife.hasHome && (
+              <button onClick={worldLife.openSoon} className="glass grid size-11 place-items-center rounded-full shadow" aria-label="Coming soon" title="Coming soon">
+                <Rocket className="size-5 text-[#7048e8]" />
+              </button>
             )}
-            {!walking && <DockButton icon={Swords} tint="text-[#e03131]" label="Fight" onClick={() => setFightOpen(true)} />}
-            {!walking && worldLife.hasHome && <DockButton icon={Star} label="Soon" onClick={worldLife.openSoon} />}
+            <button
+              onClick={() => {
+                if (!worldLife.locateMe()) setMessage({ text: "You're not anywhere on the map yet. Find a home first.", tone: "info" });
+              }}
+              className="glass grid size-11 place-items-center rounded-full shadow"
+              aria-label="Locate me"
+              title="Locate me"
+            >
+              <LocateFixed className="size-5 text-[#1c7ed6]" />
+            </button>
           </div>
         )}
 
@@ -3445,7 +3462,7 @@ export function Game({
             };
           })}
           apps={[
-            { label: "Messages", icon: MessageCircle, colour: "#2f9e44", badge: chatUnread, dock: true, go: () => { setChatOpen(true); setChatUnread(0); } },
+            { label: "Messages", icon: MessageCircle, colour: "#2f9e44", badge: chatUnread, dock: true, go: () => setChatOpen(true) },
             { label: "Camera", icon: Camera, colour: "#495057", dock: true, go: () => setCamera("photo") },
             { label: "News", icon: Newspaper, colour: "#e03131", dock: true, go: () => worldLife.openNews() },
             { label: "Alerts", icon: BellRing, colour: "#f08c00", badge: unread, dock: true, go: () => { setAlertsOpen(true); setFeedSeenAt(new Date(now).toISOString()); } },

@@ -4,7 +4,7 @@ import { rememberPerson } from "./people/recent-rail";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { ArrowDown, ArrowLeft, ImagePlus, LoaderCircle, Mic, Pause, UserCheck, UserPlus } from "lucide-react";
+import { ArrowDown, ArrowLeft, Camera, ImagePlus, LoaderCircle, Mic, Pause, Search, SendHorizontal, UserCheck, UserPlus } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import { Bot, Building2, ChevronDown, ChevronUp, Coins, Fish, HotAirBalloon, Lock, LogOut, MessageCircle, Play, Users, X } from "@/components/icons";
 import type { Avatar } from "@/lib/avatar";
@@ -17,6 +17,7 @@ import { BotCard } from "./bot-card";
 import { loadDms, loadRoom, sendMessage, sendPhoto, sendVoice, voiceUrl, type ChatMessage, type ChatTarget } from "./chat-actions";
 import { ChatPhoto, PhotoPicker, type PhotoPick } from "./chat-photo";
 import { NpcBadge, NpcCard, NpcFace } from "./npc-card";
+import { closePhoneNotices } from "./phone/phone-notices";
 import { RideIcon } from "./ride-icon";
 import { formatCountdown, levelLabel, levelOf, useCountdown, type RoomInfo, type RoomMember } from "./rooms";
 
@@ -30,6 +31,8 @@ import { formatCountdown, levelLabel, levelOf, useCountdown, type RoomInfo, type
 // half of the screen (drag or tap the handle to make it bigger); on computers a side panel.
 
 const BOT_ID = "00000000-0000-0000-0000-00000000b07a";
+/** What you've read in each private conversation, on this phone. */
+const SEEN_KEY = "nt-chat-seen";
 /** The NPCs' chat shown when you walk in starts this long before you arrived. */
 const NPC_BACKLOG_MS = 10 * 60 * 1000;
 
@@ -242,14 +245,40 @@ export function Chat({
   const [roomMsgs, setRoomMsgs] = useState<List | null>(null);
   const [dms, setDms] = useState<List | null>(null);
   const [thread, setThread] = useState<Thread | null>(null);
-  const [tab, setTab] = useState<"here" | "private" | "people">("here");
-  // Out on the real map (not in a place): Messages opens on People, to find anyone near you.
+  // The real map has no group chat in places (voice is enough there): your chats come first.
+  const [tab, setTab] = useState<"here" | "private" | "people">(keep ? "private" : "here");
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
-    if (open && !room && finder && tab === "here") setTab("people");
+    if (open && keep && !thread) setTab("private");
+    else if (open && !room && finder && tab === "here") setTab("people");
   }
-  const [seen, setSeen] = useState<Record<string, number>>({});
+  // What you've read in each conversation (the newest message id), kept on this phone too, so
+  // read messages never count again after the game reloads.
+  const [seen, setSeenNow] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (!keep) return;
+    const t = setTimeout(() => {
+      try {
+        const v = JSON.parse(localStorage.getItem(SEEN_KEY) ?? "{}") as Record<string, number>;
+        if (v && typeof v === "object") setSeenNow((s) => ({ ...v, ...s }));
+      } catch {}
+    }, 0);
+    return () => clearTimeout(t);
+  }, [keep]);
+  const setSeen = useCallback(
+    (f: (s: Record<string, number>) => Record<string, number>) =>
+      setSeenNow((s) => {
+        const next = f(s);
+        if (keep)
+          try {
+            const dmOnly = Object.fromEntries(Object.entries(next).filter(([k]) => k.startsWith("dm:")));
+            localStorage.setItem(SEEN_KEY, JSON.stringify(dmOnly));
+          } catch {}
+        return next;
+      }),
+    [keep],
+  );
   const [error, setError] = useState<string | null>(null);
   const [findText, setFindText] = useState("");
   const [botCard, setBotCard] = useState<string | null>(null);
@@ -313,6 +342,11 @@ export function Chat({
     };
   }, [roomId, roundId, guest, keep]);
 
+  // A private message was read (game-db/071): "Opened".
+  const readMessage = useCallback((m: ChatMessage) => {
+    if (!m.recipient_id) return;
+    setDms((d) => (d ? { ...d, list: d.list.map((x) => (x.id === m.id ? { ...x, read_at: m.read_at } : x)) } : d));
+  }, []);
   // Live: one listener for the whole round; keep what belongs to your place or your private chats.
   const addMessage = useCallback((m: ChatMessage) => {
     if (m.recipient_id) {
@@ -336,12 +370,14 @@ export function Chat({
         "postgres_changes",
         keep ? { event: "INSERT", schema: "public", table: "chat_messages" } : { event: "INSERT", schema: "public", table: "chat_messages", filter: `round_id=eq.${roundId}` },
         (payload) => addMessage(payload.new as ChatMessage),
-      )
-      .subscribe();
+      );
+    // Your messages being opened (the real map).
+    if (keep) channel.on("postgres_changes", { event: "UPDATE", schema: "public", table: "chat_messages" }, (payload) => readMessage(payload.new as ChatMessage));
+    channel.subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [roundId, guest, addMessage, keep]);
+  }, [roundId, guest, addMessage, readMessage, keep]);
 
   // ---- the place's NPCs: who they are, and what they've been saying
   const hint = roomHint(room);
@@ -405,11 +441,27 @@ export function Chat({
   const newest = (thread ? dmMsgs.filter((m) => m.sender_id === thread.id || m.recipient_id === thread.id) : hereMsgs).at(-1)?.id ?? 0;
   useEffect(() => {
     if (!visibleKey) return;
-    const id = requestAnimationFrame(() => setSeen((s) => ({ ...s, [visibleKey]: newest })));
+    const id = requestAnimationFrame(() => setSeen((s) => (s[visibleKey] === newest ? s : { ...s, [visibleKey]: newest })));
     return () => cancelAnimationFrame(id);
-  }, [visibleKey, newest]);
-  const unreadHere = hereMsgs.filter((m) => m.id > (seen[`room:${roomId}`] ?? 0) && m.sender_id !== meId).length;
-  const unreadDm = dmMsgs.filter((m) => m.recipient_id === meId && m.id > (seen[`dm:${m.sender_id}`] ?? 0)).length;
+  }, [visibleKey, newest, setSeen]);
+  // Reading a conversation: they see "Opened", it stops counting on your other phones, and its
+  // notification goes from this phone.
+  const readFrom = thread && open ? thread.id : null;
+  const unreadFromThem = readFrom ? dmMsgs.filter((m) => m.sender_id === readFrom && m.recipient_id === meId && !m.read_at).length : 0;
+  useEffect(() => {
+    if (!readFrom || !keep) return;
+    closePhoneNotices(`dm:${readFrom}`);
+    if (!unreadFromThem) return;
+    const at = new Date().toISOString();
+    const id = requestAnimationFrame(() =>
+      setDms((d) => (d ? { ...d, list: d.list.map((m) => (m.sender_id === readFrom && m.recipient_id === meId && !m.read_at ? { ...m, read_at: at } : m)) } : d)),
+    );
+    void fetch("/api/chat-read", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ from: readFrom }) }).catch(() => {});
+    return () => cancelAnimationFrame(id);
+  }, [readFrom, unreadFromThem, keep, meId]);
+  const unreadHere = keep ? 0 : hereMsgs.filter((m) => m.id > (seen[`room:${roomId}`] ?? 0) && m.sender_id !== meId).length;
+  const isUnread = useCallback((m: ChatMessage) => m.recipient_id === meId && !m.read_at && m.id > (seen[`dm:${m.sender_id}`] ?? 0), [meId, seen]);
+  const unreadDm = dmMsgs.filter(isUnread).length;
   const unread = unreadHere + unreadDm;
   useEffect(() => {
     onUnread?.(unread);
@@ -641,7 +693,8 @@ export function Chat({
   const MAX_FACES = 40;
   const peopleRow = room && (others.length > 0 || npcs.length > 0) && (
     <div className="flex shrink-0 gap-2 overflow-x-auto border-b border-line px-3 pb-2 pt-2.5 [scrollbar-width:none]" aria-label="People here">
-      {/* First: talk to everyone here at once (this place's chat). */}
+      {/* First: talk to everyone here at once (this place's chat; not on the real map). */}
+      {!keep && (
       <button
         onClick={() => {
           setThread(null);
@@ -655,6 +708,7 @@ export function Chat({
         </span>
         <span className="w-full truncate text-center text-[10px] font-semibold">Everyone</span>
       </button>
+      )}
       {others.slice(0, MAX_FACES).map((p) => {
         const role = byId.get(p.id)?.role;
         return (
@@ -749,21 +803,46 @@ export function Chat({
                 </button>
                 {byId.get(thread.id)?.bigFish && <BigFishBadge />}
               </h2>
-              <p className="flex items-center gap-1 truncate text-[11px] font-semibold text-[#5f3dc4]">
-                <Lock className="size-3 shrink-0" aria-hidden />
-                Private
-                <span className="truncate font-normal text-muted">
-                  {" · "}
-                  {byId.get(thread.id) ? ROLE_STYLE[byId.get(thread.id)!.role].label : "Player"}
-                  {byId.get(thread.id)?.caught ? " (caught)" : ""}
-                </span>
-              </p>
+              {keep ? (
+                <p className="flex items-center gap-1 truncate text-[11px] text-muted">
+                  <Lock className="size-3 shrink-0" aria-hidden />
+                  Only you two can see this
+                </p>
+              ) : (
+                <p className="flex items-center gap-1 truncate text-[11px] font-semibold text-[#5f3dc4]">
+                  <Lock className="size-3 shrink-0" aria-hidden />
+                  Private
+                  <span className="truncate font-normal text-muted">
+                    {" · "}
+                    {byId.get(thread.id) ? ROLE_STYLE[byId.get(thread.id)!.role].label : "Player"}
+                    {byId.get(thread.id)?.caught ? " (caught)" : ""}
+                  </span>
+                </p>
+              )}
             </div>
             {thread.id !== meId && thread.id !== BOT_ID && greet?.({ id: thread.id, name: thread.name })}
             {giveButton({ id: thread.id, name: thread.name, avatar: byId.get(thread.id)?.avatar ?? avatarOf(thread.id, thread.name) })}
           </>
         ) : guest ? (
           <h2 className="flex-1 px-1 font-semibold">Chat</h2>
+        ) : keep ? (
+          <>
+            {tab === "people" ? (
+              <button onClick={() => setTab("private")} className="grid size-9 place-items-center rounded-full text-muted hover:bg-panel-2" aria-label="Back to your chats">
+                <ArrowLeft className="size-5" aria-hidden />
+              </button>
+            ) : (
+              <span className="grid size-9 place-items-center rounded-full bg-[#0eadff]/12 text-[#0eadff]">
+                <MessageCircle className="size-5" aria-hidden />
+              </span>
+            )}
+            <h2 className="min-w-0 flex-1 truncate px-1 font-display text-lg font-bold">{tab === "people" ? "New chat" : "Chat"}</h2>
+            {tab !== "people" && (
+              <button onClick={() => setTab("people")} className="flex h-9 shrink-0 items-center gap-1 rounded-full bg-[#0eadff] px-3 text-xs font-bold text-white shadow-sm" aria-label="Start a new chat">
+                <Search className="size-3.5" aria-hidden /> New chat
+              </button>
+            )}
+          </>
         ) : (
           <div className="flex min-w-0 flex-1 gap-1 rounded-xl bg-panel-2 p-1 text-sm font-semibold" role="tablist">
             {(["here", "private", "people"] as const).map((t) => (
@@ -821,8 +900,8 @@ export function Chat({
         </div>
       ) : (
         <>
-          {!thread && tab === "here" && placeLine}
-          {!thread && tab === "here" && !box?.keyboard && peopleRow}
+          {!thread && tab === "here" && !keep && placeLine}
+          {!thread && tab === "here" && !keep && !box?.keyboard && peopleRow}
 
           {!thread && tab === "people" && finder ? (
             <div className="flex min-h-0 flex-1 flex-col">
@@ -920,6 +999,8 @@ export function Chat({
                 ))}
               </ul>
             </div>
+          ) : !thread && tab === "private" && keep ? (
+            <SnapList conversations={conversations} meId={meId} faceOf={faceOf} unreadOf={(id) => dmMsgs.filter((m) => m.sender_id === id && isUnread(m)).length} onOpen={(c) => openThread(c.id, c.name)} onFind={() => setTab("people")} />
           ) : !thread && tab === "private" ? (
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
               <p className="flex items-center gap-1 px-2 pb-2 text-[11px] text-muted">
@@ -977,11 +1058,20 @@ export function Chat({
               isPrivate={Boolean(thread)}
               faceOf={faceOf}
               bigFish={bigFishIds}
+              snap={keep && Boolean(thread)}
+              theirName={thread?.name}
             />
           )}
 
-          {(thread || (tab === "here" && room)) && (
-            <Composer onSend={send} onAudio={sendAudio} onPicture={sendPicture} onSelfie={selfieHere} placeholder={thread ? `Private message to ${thread.name}` : `Message ${room ? placeTitle(room) : "everyone here"}`} />
+          {(thread || (tab === "here" && room && !keep)) && (
+            <Composer
+              snap={keep}
+              onSend={send}
+              onAudio={sendAudio}
+              onPicture={sendPicture}
+              onSelfie={selfieHere}
+              placeholder={keep ? "Send a chat" : thread ? `Private message to ${thread.name}` : `Message ${room ? placeTitle(room) : "everyone here"}`}
+            />
           )}
           {error && <p className="shrink-0 px-4 pb-2 text-xs text-hit">{error}</p>}
         </>
@@ -989,6 +1079,111 @@ export function Chat({
       {cards}
     </section>,
     document.body,
+  );
+}
+
+
+// ---- Chat on the real map, laid out like Snapchat: your chats with a little coloured square or
+// arrow saying what happened last (a new chat, received, delivered, opened), and conversations
+// with names over coloured lines instead of bubbles.
+
+const SNAP_BLUE = "#0eadff";
+const SNAP_RED = "#f23c57";
+const SNAP_PURPLE = "#9b55a0";
+
+/** Short "how long ago": now, 5m, 3h, 2d. */
+function agoShort(iso: string) {
+  const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60_000));
+  return m < 1 ? "now" : m < 60 ? `${m}m` : m < 1440 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`;
+}
+
+/** The colour of a message's kind: text blue, photo red, voice purple. */
+const snapColour = (m: ChatMessage) => (m.image_path ? SNAP_RED : m.audio_path ? SNAP_PURPLE : SNAP_BLUE);
+
+/** Snapchat's little status marks: a square for what you got, an arrow for what you sent; filled while new. */
+function SnapMark({ sent, filled, colour }: { sent: boolean; filled: boolean; colour: string }) {
+  return (
+    <svg viewBox="0 0 12 12" className="size-3 shrink-0" aria-hidden>
+      {sent ? (
+        <path d="M2 1.5 10.5 6 2 10.5 3.6 6Z" fill={filled ? colour : "none"} stroke={colour} strokeWidth="1.4" strokeLinejoin="round" />
+      ) : (
+        <rect x="1.5" y="1.5" width="9" height="9" rx="1.6" fill={filled ? colour : "none"} stroke={colour} strokeWidth="1.4" />
+      )}
+    </svg>
+  );
+}
+
+/** What the last message in a conversation says about it ("New Chat", "Delivered", "Opened"...). */
+function snapStatus(last: ChatMessage, meId: string, unread: number) {
+  const colour = snapColour(last);
+  const what = last.image_path ? "Photo" : last.audio_path ? "Voice note" : "Chat";
+  if (last.sender_id !== meId) {
+    if (unread > 0) return { sent: false, filled: true, colour, text: unread > 1 ? `${unread} new ${what === "Chat" ? "chats" : `${what.toLowerCase()}s`}` : `New ${what}`, bold: true };
+    return { sent: false, filled: false, colour, text: "Received", bold: false };
+  }
+  if (last.read_at) return { sent: true, filled: false, colour, text: "Opened", bold: false };
+  return { sent: true, filled: true, colour, text: "Delivered", bold: false };
+}
+
+function SnapList({
+  conversations,
+  meId,
+  faceOf,
+  unreadOf,
+  onOpen,
+  onFind,
+}: {
+  conversations: { id: string; name: string; last: ChatMessage }[];
+  meId: string;
+  faceOf: (id: string, name: string, size: number) => React.ReactNode;
+  unreadOf: (id: string) => number;
+  onOpen: (c: { id: string; name: string }) => void;
+  onFind: () => void;
+}) {
+  if (!conversations.length)
+    return (
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+        <span className="grid size-16 place-items-center rounded-full bg-[#0eadff]/12 text-[#0eadff]">
+          <MessageCircle className="size-8" aria-hidden />
+        </span>
+        <p className="font-semibold">No chats yet</p>
+        <p className="text-sm text-muted">Find someone online and say hi. Only the two of you see your chats.</p>
+        <button onClick={onFind} className="rounded-full bg-[#0eadff] px-5 py-2.5 text-sm font-bold text-white shadow">
+          Start a chat
+        </button>
+      </div>
+    );
+  return (
+    <ul className="min-h-0 flex-1 divide-y divide-line/60 overflow-y-auto overscroll-contain">
+      {conversations.map((c) => {
+        const unread = unreadOf(c.id);
+        const st = snapStatus(c.last, meId, unread);
+        return (
+          <li key={c.id}>
+            <button onClick={() => onOpen(c)} className="flex w-full items-center gap-3 px-3 py-2.5 text-left active:bg-panel-2 sm:hover:bg-panel-2">
+              <span className="relative shrink-0">{faceOf(c.id, c.name, 46)}</span>
+              <span className="min-w-0 flex-1">
+                <span className={cn("block truncate text-[15px]", unread ? "font-bold" : "font-semibold")}>{c.name}</span>
+                <span className="mt-0.5 flex items-center gap-1.5 text-xs">
+                  <SnapMark sent={st.sent} filled={st.filled} colour={st.colour} />
+                  <span className={cn(st.bold ? "font-bold" : "text-muted")} style={st.bold ? { color: st.colour } : undefined}>
+                    {st.text}
+                  </span>
+                  <span className="text-muted">· {agoShort(c.last.created_at)}</span>
+                </span>
+              </span>
+              {unread > 0 ? (
+                <span className="grid min-w-6 place-items-center rounded-full px-1.5 py-0.5 text-[11px] font-bold text-white" style={{ background: st.colour }}>
+                  {unread > 9 ? "9+" : unread}
+                </span>
+              ) : (
+                <MessageCircle className="size-5 shrink-0 text-muted/60" aria-hidden />
+              )}
+            </button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -1000,6 +1195,8 @@ function Messages({
   isPrivate,
   faceOf,
   bigFish,
+  snap = false,
+  theirName,
 }: {
   items: Item[];
   meId: string;
@@ -1009,6 +1206,10 @@ function Messages({
   faceOf: (id: string, name: string, size: number) => React.ReactNode;
   /** Players holding lots of coins (shown with a "Big fish" badge). */
   bigFish: Set<string>;
+  /** The real map's private chats: Snapchat's look (names over coloured lines, no bubbles). */
+  snap?: boolean;
+  /** Who you're chatting with (for the names over their lines). */
+  theirName?: string;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
@@ -1064,12 +1265,12 @@ function Messages({
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       <div ref={scroller} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">
-        <div ref={inner} className="space-y-2">
+        <div ref={inner} className={snap ? "space-y-0.5" : "space-y-2"}>
           {items.length === 0 && (
             <p className="flex items-center justify-center gap-1.5 p-6 text-center text-sm text-muted">
               {isPrivate ? (
                 <>
-                  <Lock className="size-3.5 shrink-0" aria-hidden /> Say hello. Only the two of you can see this.
+                  <Lock className="size-3.5 shrink-0" aria-hidden /> {snap ? `Say hi to ${theirName ?? "them"}! Only the two of you see this chat.` : "Say hello. Only the two of you can see this."}
                 </>
               ) : (
                 "Nobody has said anything here yet. Say hi!"
@@ -1123,6 +1324,48 @@ function Messages({
                     <p className="break-words">{mintify(m.body)}</p>
                   </div>
                   <span className="ml-auto shrink-0 self-end text-[10px] text-muted">{time(m.created_at)}</span>
+                </div>
+              );
+            }
+            if (snap) {
+              const colour = mine ? SNAP_RED : SNAP_BLUE;
+              const lastMine = mine && !items.slice(i + 1).some((x) => x.m?.sender_id === meId);
+              const day = new Date(m.created_at).toDateString();
+              const newDay = i === 0 || new Date(items[i - 1].at).toDateString() !== day;
+              return (
+                <div key={it.key}>
+                  {newDay && (
+                    <p className="py-2 text-center text-[10px] font-bold uppercase tracking-wider text-muted">
+                      {day === new Date().toDateString() ? "Today" : new Date(m.created_at).toLocaleDateString([], { weekday: "long", day: "numeric", month: "short" })}
+                    </p>
+                  )}
+                  {(!sameAsPrev || newDay) && (
+                    <button
+                      onClick={() => !mine && onName(m.sender_id, m.sender_name)}
+                      className="mt-1 block px-1 text-[11px] font-extrabold uppercase tracking-wide"
+                      style={{ color: colour }}
+                      title={mine ? undefined : "See their profile"}
+                    >
+                      {mine ? "Me" : theirName || m.sender_name}
+                    </button>
+                  )}
+                  <div className="group flex items-start gap-2 border-l-[3px] py-0.5 pl-2.5 text-[15px] leading-snug" style={{ borderColor: colour }}>
+                    <div className="min-w-0 flex-1">
+                      {m.image_path && <ChatPhoto id={m.id} mine={false} />}
+                      {m.audio_path ? (
+                        <VoiceNote id={m.id} seconds={m.audio_seconds ?? 0} mine={false} />
+                      ) : m.image_path && m.body === "Sent a photo" ? null : (
+                        <span className="break-words">{m.body}</span>
+                      )}
+                    </div>
+                    <span className="shrink-0 pt-0.5 text-[10px] text-muted opacity-0 transition-opacity group-hover:opacity-100 group-active:opacity-100">{time(m.created_at)}</span>
+                  </div>
+                  {lastMine && (
+                    <p className="mt-1 flex items-center gap-1 px-1 text-[10px] font-semibold text-muted">
+                      <SnapMark sent filled={!m.read_at} colour={snapColour(m)} />
+                      {m.read_at ? `Opened ${agoShort(m.read_at)}` : "Delivered"}
+                    </p>
+                  )}
                 </div>
               );
             }
@@ -1246,7 +1489,9 @@ function Composer({
   onPicture,
   onSelfie,
   placeholder,
+  snap = false,
 }: {
+  snap?: boolean;
   onSend: (text: string) => Promise<boolean>;
   onAudio: (blob: Blob, seconds: number) => Promise<void>;
   onPicture: (p: PhotoPick) => Promise<void>;
@@ -1348,6 +1593,42 @@ function Composer({
           </button>
         </div>
       ) : (
+        snap ? (
+          <form onSubmit={submit} className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => (onSelfie ? onSelfie() : setPicking((v) => !v))}
+              disabled={busy}
+              className="grid size-10 shrink-0 place-items-center rounded-full bg-panel-2 text-ink"
+              aria-label="Take a selfie and send it"
+            >
+              {busy ? <LoaderCircle className="size-5 animate-spin" aria-hidden /> : <Camera className="size-5" aria-hidden />}
+            </button>
+            <div className="flex min-w-0 flex-1 items-center rounded-full bg-panel-2 pl-4 pr-1">
+              <input
+                value={text}
+                onChange={(e) => setText(e.target.value.slice(0, 500))}
+                placeholder={placeholder}
+                className="h-10 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted sm:text-sm"
+              />
+              {!text.trim() && (
+                <>
+                  <button type="button" onClick={startRecording} disabled={busy} className="grid size-8 shrink-0 place-items-center rounded-full text-muted" aria-label="Record a voice note">
+                    <Mic className="size-[18px]" aria-hidden />
+                  </button>
+                  <button type="button" onClick={() => setPicking((v) => !v)} disabled={busy} className="grid size-8 shrink-0 place-items-center rounded-full text-muted" aria-label="Send a photo">
+                    <ImagePlus className="size-[18px]" aria-hidden />
+                  </button>
+                </>
+              )}
+            </div>
+            {text.trim() && (
+              <button disabled={busy} className="grid size-10 shrink-0 place-items-center rounded-full text-white shadow disabled:opacity-50" style={{ background: SNAP_BLUE }} aria-label="Send">
+                <SendHorizontal className="size-5" aria-hidden />
+              </button>
+            )}
+          </form>
+        ) : (
         <form onSubmit={submit} className="flex items-center gap-2">
           <button type="button" onClick={() => setPicking((v) => !v)} disabled={busy} className="grid size-9 shrink-0 place-items-center rounded-full bg-panel-2" aria-label="Send a picture or a selfie">
             {busy ? <LoaderCircle className="size-4 animate-spin" aria-hidden /> : <ImagePlus className="size-4" aria-hidden />}
@@ -1368,6 +1649,7 @@ function Composer({
             </button>
           )}
         </form>
+        )
       )}
       {micError && <p className="mt-1 text-xs text-hit">{micError}</p>}
     </div>
