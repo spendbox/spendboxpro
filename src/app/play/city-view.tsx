@@ -6819,7 +6819,8 @@ export function CityView({
         updateBoards(dt, time, now);
         boats.update(time, dt);
         realTransit.update(Date.now() + cb.current.clockOffsetMs);
-        people.update(dt, now);
+        // Close up (on foot, or zoomed right in), the people nearest you walk as 3D avatars.
+        people.update(dt, now, walker.on ? walker : camera.position.distanceTo(controls.target) < 4.5 && view?.kind !== "place" ? controls.target : null);
         trains.update(dt, now);
         elevatedLife.update(dt, now);
         aircraft.update(time, Date.now() + cb.current.clockOffsetMs);

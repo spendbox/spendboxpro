@@ -153,16 +153,17 @@ export function upgradeNpcs(figs: FigLike[], people: { id: string; avatar?: unkn
  * you're doing (walking, standing, sitting on a seat this high).
  */
 /** level: how detailed (LOD.own close up in a home; a light one on the street, where you're small on screen). */
-export function createMyAvatar(avatar: unknown, level: number = LOD.own) {
+/** seed: someone with no avatar of their own (a passer-by in the street) gets a look made from it. */
+export function createMyAvatar(avatar: unknown, level: number = LOD.own, seed = "me") {
   const root = new THREE.Group();
   let live: { obj: AvatarObject; mats: MaterialSet; scale: number; floor: number } | null = null;
   let gone = false;
   let t = 0;
   let recipe;
   try {
-    recipe = recipeOf(avatar as Npc["avatar"]);
+    recipe = avatar ? recipeOf(avatar as Npc["avatar"]) : seededRecipe(seed);
   } catch {
-    recipe = seededRecipe("me");
+    recipe = seededRecipe(seed);
   }
   void getAvatarModel(recipe, level)
     .then((model) => {
