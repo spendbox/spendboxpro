@@ -7,10 +7,11 @@ Open it from **Home → Plan my home**, or from the **Plan my home** button whil
 - **The grid.** The plan is laid out on half-metre squares, with a stronger line every metre. A home is Small (7 × 6 m), Medium (10 × 8 m) or Large (14 × 11 m). Changing the size starts the plan again.
 - **Rooms.**
   - Pick a kind of room: living room, bedroom, kitchen, bathroom, dining room, study, hall or balcony.
+  - Or pick a **special room** (see below): a dance hall, home cinema, home gym, games room or bar lounge.
   - Drag across the grid to draw it. Each room shows its size in metres.
   - Tap a room to move it or make it bigger or smaller, a square at a time, or to change what kind of room it is.
 - **Furniture.**
-  - There are 22 pieces, from beds and sofas to the kitchen, the bathroom and stairs.
+  - There are 47 pieces, from beds and sofas to the kitchen, the bathroom and stairs, plus the special rooms' own pieces.
   - Tap one to put it in. It goes in the room you picked, on free squares if there are any.
   - Drag a piece to move it.
   - Tap a piece to nudge it one square at a time, turn it (a quarter turn each time), copy it or delete it.
@@ -27,6 +28,34 @@ Open it from **Home → Plan my home**, or from the **Plan my home** button whil
 - **Saving.**
   - Save keeps the plan on your account, for the home you live in. If you move house, you start a fresh plan.
   - The server checks every plan before saving it, with the same rules as the editor: everything stays inside the home, at most 12 rooms and 80 pieces per floor.
+
+## Special rooms
+
+Under **Rooms**, below the everyday rooms, are the special rooms. Each one has a smallest size, costs a fit-out when you save (sound-proofing, wiring, lights, the floor), and has its own furniture group in the furniture list.
+
+| Room | Smallest | Fit-out | Its furniture |
+| --- | --- | --- | --- |
+| Dance hall | 4 × 4 m | ₦5M | Light-up dance floor (2 × 2 m tiles, ₦1.8M each), DJ booth, big speakers, disco ball, party lights, jukebox |
+| Home cinema | 3.5 × 3.5 m | ₦4M | Cinema screen (with a projector), cinema seats, popcorn machine, speakers |
+| Home gym | 3 × 3 m | ₦2M | Treadmill, exercise bike, weights bench, dumbbell rack, exercise mat, mirrors |
+| Games room | 3.5 × 3.5 m | ₦1.5M | Pool table, arcade machines, dartboard, jukebox |
+| Bar lounge | 3 × 3 m | ₦2.5M | Bar counter, bar stools, jukebox, a sofa and coffee table |
+
+- If you draw a special room too small, or change a small room into one, it's made its smallest size. It can't be made smaller than that.
+- **Furnish this room for me** sets each one out properly:
+  - **dance hall:** the DJ booth in the middle of a long wall with a speaker each side, the dance floor filling the middle, the disco ball over it, party lights in the corners;
+  - **cinema:** the screen on a short wall, speakers each side, rows of seats facing it with a gap behind each row;
+  - **gym:** treadmills along one wall, mirrors and dumbbells across from them, the weights bench in the middle;
+  - **games room:** the pool table in the middle, arcade machines and a dartboard round the walls;
+  - **bar lounge:** the counter along a wall with stools in front, a sofa and coffee table across the room.
+- Nothing is put on the dance floor, and the disco ball hangs over it, so neither gets in the way of anything.
+- **Design it for me** keeps your special rooms: they go across the front of the top floor (so you need two floors or more), as many as fit, with a bedroom beside them if there's room. If one doesn't fit, it says so.
+- **Inside**, walking round:
+  - the dance hall's tiles light up and change colour on the beat (the same beat as the clubs), the disco ball turns with beams of light under it, and there are glowing strips round the walls;
+  - the dance floor is a real dance floor, the same as a club's: you can dance on it, and a crowd dances round you;
+  - the DJ booth, pool table, dartboard, arcade, bar and jukebox can be used like the ones in town;
+  - the cinema's seats, the bar stools and the weights bench can be sat on.
+- Other code can tell whether a home has a dance hall with `homeHasDanceHall(plan)`. `danceFloorOf(floor)` says where a floor's dance floor is.
 
 ## Designed for you
 
@@ -48,12 +77,15 @@ Planning and rearranging are free. **Save** pays for what's new:
 | --- | --- | --- |
 | A new floor | ₦180,000 per m²: Small ₦7.6M, Medium ₦14.4M, Large ₦27.7M | 90% of what you paid |
 | Stairs | ₦1.5M | 90% |
-| Furniture | ₦25k (plant) up to ₦650k (sofa); each piece's price shows under it | 50% |
+| Furniture | ₦25k (plant) up to ₦3.5M (pool table); each piece's price shows under it | 50% |
+| Fitting out a special room | ₦1.5M (games room) up to ₦5M (dance hall); the price shows under it in the room list | 80% |
 
-- Your home comes with its ground floor and the starter furniture.
-- What you've paid for stays yours. If you take a floor off or a sofa out, putting it back is free; the list says "You have one spare".
+- Your home comes with its ground floor and the starter furniture for its size (a small home is
+  credited with a small home's starter pieces, not a large one's).
+- What you've paid for stays yours. If you take a floor off, a sofa out, or change your dance hall back into a bedroom, putting it back is free; the list says "One spare".
 - The server works out the bill from the plan itself, not from what the phone says, and takes it from your savings, then your wallet.
 - Only the owner can build onto a home. If you rent, you can only rearrange.
+- A home worth more also earns more rent if you ever let it out (6% of its value a game year).
 - More furniture styles are **coming soon** (marked at the end of the furniture list).
 
 ## Where the code is
@@ -83,3 +115,13 @@ Planning and rearranging are free. **Save** pays for what's new:
 4. **More looks:**
    - Wall colours, floor types and windows.
    - Furniture in the same style as the rest of the game, in place of plain shapes.
+
+## Visiting
+
+Going into someone else's home (game-db/066_home_visits.sql, src/app/play/life/visit-actions.ts):
+
+- **Who walks straight in:** you (your own home), the friends of anyone who lives there, anyone while a party is on, and anyone let in during the last 45 minutes.
+- **Everyone else knocks or rings.** The people who live there get a notice and a push, and a card pops up for them: Let in, or Not now. A knock waits 5 minutes.
+- **Nobody answering?** The visitor can leave a note at the door. It goes into the home's guest book.
+- **Inside someone's home,** the main button is "Sign the guest book".
+- **Parties:** on your home card, Throw a party. Your door's open to everyone for 2 hours and your friends are told. The guest book is on the home card too.

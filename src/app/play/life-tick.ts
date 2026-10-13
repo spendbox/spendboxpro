@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { regionMap } from "@/lib/world";
 import { drawEvent, EVENT_HOURS, eventComes, showEvent } from "@/lib/world/breakthroughs";
 import { dayOf, dayPlan, EXERCISE, hoursOf, type DayInput, type Exercise } from "@/lib/world/day";
-import { AUTO_CARE, billsFor, priceOf } from "@/lib/world/living";
+import { AUTO_CARE, billsFor, foodDay, priceOf } from "@/lib/world/living";
 import type { LifeStatus } from "@/lib/world/property-api";
 import { ferryKmBetween } from "@/lib/world/trips";
 import { effectsOf, type ItemEffect } from "@/lib/world/items";
@@ -51,8 +51,10 @@ export async function tickLife(userId: string): Promise<LifeStatus | null> {
   if (life.home_unit) {
     const { data: unit } = await db.from("property_units").select("area").eq("unit_id", life.home_unit).maybeSingle();
     const b = billsFor(Number(unit?.area ?? 30), prices);
-    bills = { power: b.power, waste: b.waste };
+    bills = { power: b.power, waste: b.waste, food: b.food };
   }
+  // Food is paid with the bills, home or not (src/lib/world/living.ts FOOD_MONTH).
+  const food = foodDay(prices);
   const plan = dayPlan(rows.day);
   // What your things do for you (a good bed, a TV, a bicycle...): added to how your days move
   // body and mind (src/lib/world/items.ts, capped).
@@ -60,7 +62,7 @@ export async function tickLife(userId: string): Promise<LifeStatus | null> {
   const fromThings = effectsOf((things ?? []).map((t) => ({ effect: (t.effect ?? {}) as ItemEffect })));
   const ex = EXERCISE[rows.day.exercise];
   const days = Math.max(0, (Date.now() - Date.parse(String(life.health_at))) / (GAME_DAY_HOURS * 3_600_000));
-  const { data, error } = await db.rpc("life_tick", {
+  const args = {
     p_user: userId,
     p_power_day: bills?.power ?? 0,
     p_waste_day: bills?.waste ?? 0,
@@ -69,7 +71,12 @@ export async function tickLife(userId: string): Promise<LifeStatus | null> {
     p_mind_day: Math.round((plan.mind + fromThings.mind) * 100) / 100,
     p_gym_day: ex.fee ? Math.round((ex.fee / 30 / prices.perMint) * 100) / 100 : 0,
     p_hours: hoursOf(plan),
-  });
+  };
+  let { data, error } = await db.rpc("life_tick", { ...args, p_food_day: food });
+  // Part 65 (food) not run yet: the old life_tick, without food.
+  if (error && /p_food_day|life_tick/.test(error.message ?? "") && /function|schema cache/i.test(error.message ?? "")) {
+    ({ data, error } = await db.rpc("life_tick", args));
+  }
   if (error || !data) {
     if (error) console.error("life_tick failed", error.message);
     return null;

@@ -48,3 +48,22 @@ export function rideFare(kind: string, nairaPerMint = 1_500) {
   const naira = RIDE_FARE_NAIRA[kind] ?? 0;
   return Math.round((naira / nairaPerMint) * 100) / 100;
 }
+
+/**
+ * Club entry on a real map (naira, paid once and good for 24 hours): about a third of clubs are
+ * free to walk into; the rest charge at the door, from a cover charge up to a VIP night. Which
+ * club charges what is fixed by where it is (the same for everyone). Never for a home's party room.
+ */
+const CLUB_ENTRY_NAIRA = [0, 3_000, 5_000, 0, 10_000, 5_000, 20_000, 0, 3_000];
+export function clubEntryNaira(place: string, type?: string) {
+  if (type === "home" || type === "house") return 0;
+  let h = 7;
+  for (const c of place) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return CLUB_ENTRY_NAIRA[h % CLUB_ENTRY_NAIRA.length];
+}
+/** The same in mint. */
+export function clubEntryMint(place: string, type?: string, nairaPerMint = 1_500) {
+  return Math.round((clubEntryNaira(place, type) / nairaPerMint) * 100) / 100;
+}
+/** How long a club's entry lasts once paid. */
+export const CLUB_ENTRY_MS = 24 * 3_600_000;

@@ -73,6 +73,7 @@ import { createRealTransit, REAL_BASE } from "./city/real-transit";
 import { createHomeInterior } from "./home/home-interior";
 import type { HomePlan } from "@/lib/home-plan";
 import { createMyAvatar, upgradeNpcs } from "./city/npc3d";
+import { LOD } from "@/lib/avatar3d/lod";
 import { createAirliner, LIVERIES } from "./city/airliner";
 import { createSlideRide, createWaterpark, waterparkParts, type Slide, type SlideRide, type Waterpark } from "./city/waterpark";
 import { createVenueGame, venueParts, type VenueGame } from "./city/venues";
@@ -91,11 +92,24 @@ import { homeLabel, type TownHouse } from "@/lib/houses";
 /** The country's famous landmarks out in the farmland round each town (hidden for now). */
 const SHOW_COUNTRY_LANDMARKS = false;
 
+/** Where you were last on the real map (saved every few seconds), so a reload puts you back there. */
+const LAST_SPOT = "nt-last-spot";
+function lastSpot(region: string): { x: number; z: number; ox: number; oy: number; oz: number } | null {
+  try {
+    const s = JSON.parse(localStorage.getItem(LAST_SPOT) ?? "null");
+    if (!s || s.r !== region || ![s.x, s.z, s.ox, s.oy, s.oz].every((v: unknown) => typeof v === "number" && Number.isFinite(v))) return null;
+    // A long time away: start from the usual spot.
+    if (Date.now() - Number(s.at ?? 0) > 14 * 86_400_000) return null;
+    return s;
+  } catch {
+    return null;
+  }
+}
+
 // The game board, drawn as a small living 3D city with three.js.
 // Every tile is a lot: a road, a building, a park... New tiles rise out of the ground
 // as the city grows. Cars drive the roads, birds and clouds drift overhead.
 // Lightweight on purpose: a handful of shared shapes drawn many times (instancing).
-
 export type CityMarkers = {
   searchedEmpty: number[];
   searchedHit: number[];
@@ -145,6 +159,8 @@ export type CityLevel = {
    * wrestling arena; it has a "match" thing to tap).
    */
   kind?: "room" | "club" | "restaurant" | "roof" | "outdoor" | "arena";
+  /** What the floor is (a library, a hospital ward, a terminal...), for what you can do there. */
+  theme?: string;
 };
 
 /**
@@ -1563,6 +1579,11 @@ export function CityView({
     /** The tallest thing in the city (balloon rides float above it). */
     let tallest = 0;
     let framed = false;
+    /** Stopping at a landmark's gate on the way in (see syncView), and the place it was for. */
+    let gateTour: { t: number; fromPos: THREE.Vector3; fromTarget: THREE.Vector3; toPos: THREE.Vector3; toTarget: THREE.Vector3 } | null = null;
+    let gateSeen: string | null = null;
+    /** A place asked for before the city was drawn (just after a reload): opened once it is. */
+    let openLater: string | null = null;
     let focus: THREE.Vector3 | null = null;
     let lastMe: number | null = null;
 
@@ -1964,14 +1985,19 @@ export function CityView({
     // Games going on outdoors at the sports venues (hoops on the court, a kick-about on the pitch).
     let games: VenueGame[] = [];
 
-    // ---- a gateway at each landmark's entrance: two pillars with lamps, an arch with "WELCOME TO"
-    // and the name (University of Lagos, Yaba College of Technology, LUTH...), flags and a low wall
-    // either side, on the side facing the road. Big enough to read from the air, and you walk
-    // through it on foot. Only those in the part of the city drawn.
-    let entranceSigns: { obj: THREE.Object3D; tex: THREE.Texture; mats: THREE.Material[]; geos: THREE.BufferGeometry[] }[] = [];
+    // ---- a gateway at each landmark's main entrance, after the University of Lagos main gate: a
+    // monument on an island in the middle (two tall cream pylons leaning apart, coloured wings at
+    // their feet, a round crest high between them, the name on a plaque below), and steel lattice
+    // canopies out over the road either side on posts. On the side facing the road; big enough to
+    // read from the air. Only those in the part of the city drawn.
+    let entranceSigns: { obj: THREE.Object3D; tex: THREE.Texture; crest?: THREE.Texture; mats: THREE.Material[]; geos: THREE.BufferGeometry[] }[] = [];
     const gateStone = new THREE.MeshLambertMaterial({ color: 0xf1e6d0 });
     const gateDark = new THREE.MeshLambertMaterial({ color: 0x6b5a48 });
     const gateLamp = new THREE.MeshBasicMaterial({ color: 0xfff1c2 });
+    const gateSteel = new THREE.MeshLambertMaterial({ color: 0x34383d });
+    /** The gateways drawn, with which landmark each is for (going to a landmark stops at its gate first). */
+    let gates: { ax: number; az: number; w: number; d: number; x: number; z: number; dx: number; dz: number; S: number }[] = [];
+    const gateFor = (x: number, z: number) => gates.find((g) => x >= g.ax && x < g.ax + g.w && z >= g.az && z < g.az + g.d) ?? null;
     const flagGreen = new THREE.MeshLambertMaterial({ color: 0x008751, side: THREE.DoubleSide });
     const flagWhite = new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide });
     const SIGN_COLOURS: Record<string, [string, string]> = {
@@ -2025,10 +2051,12 @@ export function CityView({
       for (const sg of entranceSigns) {
         life.remove(sg.obj);
         sg.tex.dispose();
+        sg.crest?.dispose();
         sg.mats.forEach((m) => m.dispose());
         sg.geos.forEach((g) => g.dispose());
       }
       entranceSigns = [];
+      gates = [];
       const reg = regionNow;
       if (!reg || !win) return;
       const near = (x: number, z: number) => Math.max(Math.abs(x - win!.cx), Math.abs(z - win!.cz)) <= DETAIL;
@@ -2053,16 +2081,21 @@ export function CityView({
         const side = sides.reduce((a, b) => (b.n > a.n ? b : a), sides[0]);
         const along = side.dz ? l.w : l.d;
         const big = l.w * l.d > 2;
-        // Sized to the people on the map (drawn bigger than life): well over their heads.
-        const W = big ? Math.min(1.6, Math.max(0.9, along * 0.35)) : 0.7;
-        const H = big ? 0.75 : 0.55;
-        const P = big ? 0.1 : 0.075;
-        const boardH = W * 0.28;
+        // Sized to the people on the map (drawn bigger than life): the pylons tower over them.
+        const S = big ? 1 : 0.62;
+        // How far the steel canopies reach out over the road either side of the monument.
+        const span = big ? Math.min(0.85, Math.max(0.5, along * 0.22)) : 0.38;
         const half = side.dz ? l.d / 2 : l.w / 2;
-        const px = cx + side.dx * (half + 0.05);
-        const pz = cz + side.dz * (half + 0.05);
+        const px = cx + side.dx * (half + 0.12 * S);
+        const pz = cz + side.dz * (half + 0.12 * S);
         const tex = signTexture(l.name, l.type);
+        const crestTex = crestTexture(l.name, l.type);
         const face = new THREE.MeshBasicMaterial({ map: tex });
+        const crestFace = new THREE.MeshBasicMaterial({ map: crestTex });
+        const [bg, fg] = SIGN_COLOURS[l.type] ?? ["#7a2a20", "#ffffff"];
+        // The lower wings in the place's own colour (maroon-red for a campus, like Unilag's).
+        const wingCol = l.type === "campus" ? "#8b2c22" : /^#[ef]/i.test(bg) ? fg : bg;
+        const wingMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(wingCol) });
         const geos: THREE.BufferGeometry[] = [];
         const geo = <T extends THREE.BufferGeometry>(g: T) => (geos.push(g), g);
         const obj = new THREE.Group();
@@ -2074,48 +2107,150 @@ export function CityView({
           obj.add(mesh);
           return mesh;
         };
-        // Pillars on plinths, with a lamp on each.
-        const pillar = geo(new THREE.BoxGeometry(P, H, P).translate(0, H / 2, 0));
-        const plinth = geo(new THREE.BoxGeometry(P * 1.5, P * 0.6, P * 1.5).translate(0, P * 0.3, 0));
-        const cap = geo(new THREE.BoxGeometry(P * 1.35, P * 0.3, P * 1.35));
-        const lamp = geo(new THREE.SphereGeometry(P * 0.42, 12, 8));
-        for (const sx of [-W / 2, W / 2]) {
-          add(plinth, gateDark, sx, 0, 0);
-          add(pillar, gateStone, sx, 0, 0);
-          add(cap, gateDark, sx, H + P * 0.15, 0);
-          add(lamp, gateLamp, sx, H + P * 0.55, 0, false);
-        }
-        // The arch: a beam across the top, the sign hanging from it (both faces), a crest above.
-        const beam = geo(new THREE.BoxGeometry(W + P * 1.4, P * 0.55, P * 0.9));
-        add(beam, gateDark, 0, H - P * 0.1, 0);
-        const boardGeo = geo(new THREE.PlaneGeometry(W - P * 1.1, boardH));
-        const backing = geo(new THREE.BoxGeometry(W - P * 0.9, boardH + P * 0.25, P * 0.35));
-        const by = H - P * 0.4 - boardH / 2;
-        add(backing, gateDark, 0, by, 0);
-        add(boardGeo, face, 0, by, P * 0.18, false);
-        add(boardGeo, face, 0, by, -P * 0.18, false).rotation.y = Math.PI;
-        const crest = geo(new THREE.CylinderGeometry(boardH * 0.55, boardH * 0.55, P * 0.3, 20, 1, false, 0, Math.PI).rotateX(Math.PI / 2).rotateZ(Math.PI / 2));
-        add(crest, gateStone, 0, H + P * 0.2, 0);
-        // A low wall running off either side along the boundary.
-        const wallLen = big ? Math.min(1.2, along * 0.3) : 0.25;
-        const wall = geo(new THREE.BoxGeometry(wallLen, P * 0.9, P * 0.5).translate(0, P * 0.45, 0));
-        for (const sx of [-1, 1]) add(wall, gateStone, sx * (W / 2 + wallLen / 2 + P * 0.2), 0, 0);
-        // Flags (green, white, green) on poles beside the pillars.
-        const pole = geo(new THREE.CylinderGeometry(0.006, 0.006, H * 1.25, 6).translate(0, (H * 1.25) / 2, 0));
-        const stripe = geo(new THREE.PlaneGeometry(P * 0.8, P * 1.4));
+        /** A flat shape (x across, y up), given thickness and stood up facing the road. */
+        const slab = (pts: [number, number][], depth: number) => {
+          const sh = new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y)));
+          return geo(new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: false }).translate(0, 0, -depth / 2));
+        };
+        // The monument on the island in the middle: two tall cream pylons leaning apart, cut off
+        // at a slant at the top (higher on the outside), like the University of Lagos main gate.
+        const PH = 1.15 * S;
+        const PW = 0.15 * S;
+        const PD = 0.12 * S;
         for (const sx of [-1, 1]) {
-          const fx = sx * (W / 2 + P * 1.6);
-          add(pole, gateDark, fx, 0, 0);
-          [flagGreen, flagWhite, flagGreen].forEach((m, k) => {
-            const f = add(stripe, m, fx + sx * (P * 0.4 + 0.004), H * 1.25 - P * 0.75, (k - 1) * P * 0.8, false);
-            f.rotation.y = Math.PI / 2;
-          });
+          const x0 = sx * 0.04 * S;
+          const lean = 0.2 * S;
+          // Inner edge, outer edge (leaning out as it rises), the top slanting down to the middle.
+          const pts: [number, number][] = [
+            [x0, 0],
+            [x0 + sx * PW, 0],
+            [x0 + sx * (PW + lean), PH],
+            [x0 + sx * lean, PH * 0.78],
+          ];
+          if (sx < 0) pts.reverse();
+          add(slab(pts, PD), gateStone, 0, 0, 0);
+          // The coloured wing at its foot, leaning the other way.
+          const wing: [number, number][] = [
+            [x0 + sx * PW * 0.3, 0],
+            [x0 + sx * (PW + 0.16 * S), 0],
+            [x0 + sx * (PW + 0.07 * S), 0.38 * S],
+            [x0 + sx * PW * 0.3, 0.3 * S],
+          ];
+          if (sx < 0) wing.reverse();
+          add(slab(wing, PD * 1.25), wingMat, 0, 0, 0);
         }
+        // Between the pylons, low down: the wall with the name plaque (both faces).
+        const plaqueW = 0.62 * S;
+        const plaqueH = plaqueW * 0.28;
+        add(geo(new THREE.BoxGeometry(0.34 * S, 0.3 * S, PD * 0.9).translate(0, 0.15 * S, 0)), wingMat, 0, 0, 0);
+        const plaque = geo(new THREE.PlaneGeometry(plaqueW, plaqueH));
+        const py = 0.36 * S + plaqueH / 2;
+        add(geo(new THREE.BoxGeometry(plaqueW + 0.02 * S, plaqueH + 0.02 * S, PD * 0.4)), gateDark, 0, py, 0);
+        add(plaque, face, 0, py, PD * 0.21, false);
+        add(plaque, face, 0, py, -PD * 0.21, false).rotation.y = Math.PI;
+        // The crest: a round medallion in a gold ring, high between the pylons.
+        const cr = 0.11 * S;
+        const cy = 0.72 * S;
+        add(geo(new THREE.CylinderGeometry(cr * 1.12, cr * 1.12, PD * 0.5, 28).rotateX(Math.PI / 2)), gateDark, 0, cy, 0);
+        const disc = geo(new THREE.CircleGeometry(cr, 28));
+        add(disc, crestFace, 0, cy, PD * 0.26, false);
+        add(disc, crestFace, 0, cy, -PD * 0.26, false).rotation.y = Math.PI;
+        // The steel canopies: lattice trusses from the monument out over the road either side,
+        // rising towards the middle, each held up at its far end by a post.
+        const trussMat = gateSteel;
+        const bar = (x1: number, y1: number, z1: number, x2: number, y2: number, z2: number, t: number) => {
+          const len = Math.hypot(x2 - x1, y2 - y1, z2 - z1);
+          const m = add(geo(new THREE.BoxGeometry(len, t, t)), trussMat, (x1 + x2) / 2, (y1 + y2) / 2, (z1 + z2) / 2);
+          m.rotation.order = "YZX";
+          m.rotation.y = -Math.atan2(z2 - z1, x2 - x1);
+          m.rotation.z = Math.atan2(y2 - y1, Math.hypot(x2 - x1, z2 - z1));
+          return m;
+        };
+        const tw = 0.012 * S;
+        const depth = 0.09 * S;
+        for (const sx of [-1, 1]) {
+          const xIn = sx * (0.12 * S);
+          const xOut = sx * (0.12 * S + span);
+          const yIn = 0.66 * S;
+          const yOut = 0.52 * S;
+          const th = 0.08 * S;
+          // Top chords (front and back), bottom chord (middle), and the zigzag between them.
+          for (const zz of [-depth / 2, depth / 2]) bar(xIn, yIn + th, zz, xOut, yOut + th, zz, tw);
+          bar(xIn, yIn, 0, xOut, yOut, 0, tw * 1.2);
+          const n = Math.max(4, Math.round(span / (0.07 * S)));
+          for (let k = 0; k < n; k++) {
+            const f0 = k / n;
+            const f1 = (k + 1) / n;
+            const xa = xIn + (xOut - xIn) * f0, ya = yIn + (yOut - yIn) * f0;
+            const xb = xIn + (xOut - xIn) * f1, yb = yIn + (yOut - yIn) * f1;
+            const zz = (k % 2 ? 1 : -1) * (depth / 2);
+            bar(xa, ya, 0, xb, yb + th, zz, tw * 0.7);
+            bar(xb, yb + th, zz, xb, yb, 0, tw * 0.7);
+          }
+          // The post at the far end, and a street lamp beside the monument.
+          add(geo(new THREE.CylinderGeometry(0.014 * S, 0.018 * S, yOut + th, 8).translate(0, (yOut + th) / 2, 0)), trussMat, xOut, 0, 0);
+          const lampX = sx * (0.3 * S);
+          add(geo(new THREE.CylinderGeometry(0.006 * S, 0.008 * S, 0.62 * S, 6).translate(0, 0.31 * S, 0)), gateDark, lampX, 0, depth * 1.4);
+          add(geo(new THREE.SphereGeometry(0.022 * S, 10, 8)), gateLamp, lampX - sx * 0.03 * S, 0.62 * S, depth * 1.4, false);
+        }
+        // The island under the monument: black-and-white kerbs round it, and bushes.
+        const islandW = 0.58 * S;
+        const islandD = 0.32 * S;
+        const kerbN = 8;
+        const kerbBlack = gateDark;
+        for (const zz of [-islandD / 2, islandD / 2])
+          for (let k = 0; k < kerbN; k++) {
+            const kx = -islandW / 2 + (k + 0.5) * (islandW / kerbN);
+            add(geo(new THREE.BoxGeometry(islandW / kerbN, 0.02 * S, 0.02 * S)), k % 2 ? kerbBlack : flagWhite, kx, 0.01 * S, zz, false);
+          }
+        const bush = geo(new THREE.SphereGeometry(0.05 * S, 10, 8));
+        for (const [bx, bz] of [
+          [-0.22, 0.1],
+          [0.22, -0.1],
+          [0.24, 0.1],
+          [-0.24, -0.1],
+        ])
+          add(bush, flagGreen, bx * S, 0.035 * S, bz * S).scale.set(1.2, 0.8, 1);
         obj.position.set(px, 0, pz);
         obj.rotation.y = Math.atan2(side.dx, side.dz);
         life.add(obj);
-        entranceSigns.push({ obj, tex, mats: [face], geos });
+        entranceSigns.push({ obj, tex, mats: [face, crestFace, wingMat], geos, crest: crestTex });
+        // Where to stand to see it: out on the road in front, a little back.
+        gates.push({ ax: l.ax, az: l.az, w: l.w, d: l.d, x: px, z: pz, dx: side.dx, dz: side.dz, S });
       }
+    }
+    /** A round crest for the medallion: the place's colours, a gold ring, and its initials. */
+    function crestTexture(name: string, type: string) {
+      const [bg, fg] = SIGN_COLOURS[type] ?? ["#1c3f6e", "#ffffff"];
+      const c = document.createElement("canvas");
+      c.width = c.height = 256;
+      const g = c.getContext("2d")!;
+      g.fillStyle = "#e0b84c";
+      g.fillRect(0, 0, 256, 256);
+      g.beginPath();
+      g.arc(128, 128, 110, 0, Math.PI * 2);
+      g.fillStyle = type === "campus" ? "#1c4fa0" : /^#[ef]/i.test(bg) ? fg : bg;
+      g.fill();
+      g.lineWidth = 8;
+      g.strokeStyle = "#ffffff";
+      g.beginPath();
+      g.arc(128, 128, 84, 0, Math.PI * 2);
+      g.stroke();
+      const initials =
+        name
+          .split(/[\s-]+/)
+          .filter((w) => w.length > 2 && !/^(of|the|and)$/i.test(w))
+          .slice(0, 3)
+          .map((w) => w[0]!.toUpperCase())
+          .join("") || name.slice(0, 2).toUpperCase();
+      g.fillStyle = "#ffffff";
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.font = `900 ${initials.length > 2 ? 64 : 80}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+      g.fillText(initials, 128, 132);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
     }
 
     function buildLandmarks() {
@@ -2691,7 +2826,9 @@ export function CityView({
         const b = regionNow.bounds;
         const fit = (v: number, lo: number, hi: number) => (hi - lo < 2 * DETAIL ? Math.round((lo + hi) / 2) : Math.max(lo + DETAIL, Math.min(hi - DETAIL, v)));
         const start = toTile(regionNow.frame, regionNow.region.start);
-        const c = centre ?? (sameCity && win ? win : { cx: Math.round(start.x), cz: Math.round(start.z) });
+        // Opening the game (or after it updates and the page reloads): back where you were last.
+        const last = !framed ? lastSpot(regionNow.region.id) : null;
+        const c = centre ?? (sameCity && win ? win : last ? { cx: Math.round(last.x), cz: Math.round(last.z) } : { cx: Math.round(start.x), cz: Math.round(start.z) });
         win = { cx: fit(c.cx, b.x0, b.x1), cz: fit(c.cz, b.z0, b.z1) };
         tiles = [];
         for (let x = win.cx - DETAIL; x <= win.cx + DETAIL; x++) {
@@ -2819,9 +2956,16 @@ export function CityView({
       controls.maxDistance = regionNow ? 170 : Math.max(30, radius * (win ? 3 : 4.5));
       if (!framed) {
         framed = true;
-        const d = (radius * 2.3 + 8) * Math.max(1, 0.95 / camera.aspect);
-        camera.position.set(ox + d * 0.62, d * 0.72, oz + d * 0.62);
-        controls.target.set(ox, 0, oz);
+        const last = regionNow ? lastSpot(regionNow.region.id) : null;
+        if (last) {
+          // Just as you were looking: the same spot, from the same angle and height.
+          controls.target.set(last.x, 0, last.z);
+          camera.position.set(last.x + last.ox, Math.max(0.6, last.oy), last.z + last.oz);
+        } else {
+          const d = (radius * 2.3 + 8) * Math.max(1, 0.95 / camera.aspect);
+          camera.position.set(ox + d * 0.62, d * 0.72, oz + d * 0.62);
+          controls.target.set(ox, 0, oz);
+        }
         controls.update();
       }
       buildPools();
@@ -2839,6 +2983,11 @@ export function CityView({
       world.busy = plan.region ? (bx, bz) => busyAt(plan, bx, bz) : null;
       birds.build(newSeed);
       people.build();
+      if (openLater) {
+        const id = openLater;
+        openLater = null;
+        setTimeout(() => alive && openRoomById(id), 300);
+      }
       // The railway runs on out into the farmland (not in a huge town drawn only round the camera).
       trains.build(win ? 0 : Math.max(0, Math.min(26, Math.floor(land.flat - 3))));
       elevatedLife.build();
@@ -4070,7 +4219,7 @@ export function CityView({
               : `${shortAddress(addressOf(currentPlan, anchor))} · ${ROOM_LABEL[anchor.kind]}`;
       const capacity = levels.reduce((n, l) => n + l.capacity, 0);
       const type = anchor.home ? "home" : anchor.station ? "station" : anchor.kind === "structure" && anchor.structure ? anchor.structure.type : anchor.kind;
-      const room: CityRoom = { id: `b:${anchor.i}`, name, capacity, kind: "building", type, levels: levels.map((l) => ({ id: l.id, label: l.label, capacity: l.capacity, kind: levelUse(l) })) };
+      const room: CityRoom = { id: `b:${anchor.i}`, name, capacity, kind: "building", type, levels: levels.map((l) => ({ id: l.id, label: l.label, capacity: l.capacity, kind: levelUse(l), theme: l.theme })) };
       return { room, anchor, big, levels };
     }
     /** A real place's property was tapped: show what it is (when someone's listening). */
@@ -4626,6 +4775,10 @@ export function CityView({
 
     /** Open a building's place as if it had been tapped (onRoom), e.g. to go to a friend. */
     function openRoomById(id: string) {
+      if (!currentPlan) {
+        openLater = id;
+        return;
+      }
       const m = /^b:(\d+)/.exec(id);
       const r = m ? roomFor(Number(m[1])) : null;
       if (r) cb.current.onRoom?.(r.room);
@@ -4817,6 +4970,8 @@ export function CityView({
       free: Spot[];
       /** The regulars standing about, in the new 3D avatar design (./city/npc3d). */
       npc3d?: ReturnType<typeof upgradeNpcs> | null;
+      /** The dance floor's crowd, in 3D too. */
+      crowd3d?: ReturnType<typeof upgradeNpcs> | null;
       npcT?: number;
       /** The players here and the dancers, in the 3D design too. */
       players3d?: ReturnType<typeof upgradeNpcs> | null;
@@ -4973,6 +5128,7 @@ export function CityView({
           places: plan.city.flavor.cities.filter((c) => c !== plan.city.name),
           variant: anchor.kind === "clock" && lvl.id === "g" ? "small" : anchor.station ? "station" : undefined,
           flavor: plan.city.flavor.id,
+          scale: lvl.big,
         });
         const figures = createFigures(npcs, interior.spots, { key, act: lvl.theme === "club" ? "dance" : undefined });
         st.holder.add(interior.group, figures.group);
@@ -4994,7 +5150,8 @@ export function CityView({
           st.me3d = createMyAvatar(atmos.current.meAvatar);
           st.holder.add(st.me3d.root);
         }
-        st.npc3d = upgradeNpcs(figures.figs, npcs);
+        // A club: everyone on the dance floor in 3D, so more of them (a lighter version past the first 16).
+        st.npc3d = upgradeNpcs(figures.figs, npcs, interior.danceFloor ? { max: 30 } : undefined);
         interior.setNight(carNight);
         st.update = interior.update;
         setupUse(st, interior.seats, interior.items, interior.spots, npcs.length);
@@ -5045,6 +5202,7 @@ export function CityView({
       st.players?.dispose();
       st.players3d?.dispose();
       st.crowd?.dispose();
+      st.crowd3d?.dispose();
       st.dancers?.dispose();
       st.dancers3d?.dispose();
       st.me3d?.dispose();
@@ -5153,12 +5311,15 @@ export function CityView({
       free.sort((a, b) => Math.hypot(a.x - floor.x, a.z - floor.z) - Math.hypot(b.x - floor.x, b.z - floor.z));
       // The middle is kept for players; a crowd dances round it (facing the DJ, more or less).
       st.slots = free.slice(0, 10);
-      const around = free.slice(10).filter(() => rnd() < 0.6).slice(0, 12);
+      // A home's dance hall: just you and your guests (no crowd of strangers).
+      const around = st.homeKey ? [] : free.slice(10).filter(() => rnd() < 0.6).slice(0, 12);
       const people: Person[] = around.map((_, i) => ({ id: `crowd:${i}`, name: "", avatar: defaultAvatar(`${key}|crowd|${i}`), npc: false }));
       const spots: Spot[] = around.map((p) => ({ x: p.x, z: p.z, ry: (rnd() - 0.5) * 1.4, pose: "stand", act: "dance" }));
       if (people.length) {
         st.crowd = createFigures(people, spots, { key, inert: true, tags: false });
         st.holder.add(st.crowd.group);
+        // The crowd dances in the new 3D avatars too (a lighter version: they're further from you).
+        st.crowd3d = upgradeNpcs(st.crowd.figs, people, { players: true, level: LOD.far });
       }
       syncDancers(st);
     }
@@ -5438,6 +5599,29 @@ export function CityView({
       if (next?.kind === "ride" && view?.kind === "ride" && view.k === next.k) return;
       if (next?.kind === "vehicle" && view?.kind === "vehicle" && view.ride.kind === next.ride.kind && view.ride.index === next.ride.index) return;
       if (!next && !view) return;
+      // Going into a landmark from the map: first the camera stops at its main gate, out on the
+      // road (the welcome), then carries on inside.
+      if (!next) gateSeen = null;
+      if (gateTour) return;
+      if (next?.kind === "place" && !view && !flight && !walker.on && gateSeen !== next.building) {
+        const g = gateFor(next.anchor.x, next.anchor.z);
+        gateSeen = next.building;
+        if (g) {
+          const S = g.S;
+          const back = 1.5 * S + 0.35;
+          controls.enabled = false;
+          focus = null;
+          eventFly = null;
+          gateTour = {
+            t: 0,
+            fromPos: camera.position.clone(),
+            fromTarget: controls.target.clone(),
+            toPos: new THREE.Vector3(g.x + g.dx * back + g.dz * 0.25 * S, 0.42 * S, g.z + g.dz * back - g.dx * 0.25 * S),
+            toTarget: new THREE.Vector3(g.x, 0.55 * S, g.z),
+          };
+          return;
+        }
+      }
       if (!view && !flight) {
         // Leaving the normal map view: remember it, to fly back later.
         saved.pos.copy(camera.position);
@@ -5932,7 +6116,8 @@ export function CityView({
     let meStreet: ReturnType<typeof createMyAvatar> | null = null;
     function streetAvatar(dt: number, moving: number) {
       if (!meStreet) {
-        meStreet = createMyAvatar(atmos.current.meAvatar);
+        // A light, low-detail avatar on the street (you're small on screen, and it keeps phones smooth).
+        meStreet = createMyAvatar(atmos.current.meAvatar, LOD.far);
         // About as tall as the people on the map (drawn bigger than life), facing the way you walk.
         meStreet.root.scale.setScalar(0.2 / 1.72);
         meStreet.root.rotation.y = Math.PI;
@@ -6204,6 +6389,7 @@ export function CityView({
         st.npc3d?.update(dt3);
         st.players3d?.update(dt3);
         st.dancers3d?.update(dt3);
+        st.crowd3d?.update(dt3);
         st.npcT = time;
         st.players?.update(time, camLocal);
         st.crowd?.update(time);
@@ -6814,7 +7000,9 @@ export function CityView({
         updateBoards(dt, time, now);
         boats.update(time, dt);
         realTransit.update(Date.now() + cb.current.clockOffsetMs);
-        people.update(dt, now);
+        saveSpot(now);
+        // Close up (on foot, or zoomed right in), the people nearest you walk as 3D avatars.
+        people.update(dt, now, walker.on ? walker : camera.position.distanceTo(controls.target) < 4.5 && view?.kind !== "place" ? controls.target : null);
         trains.update(dt, now);
         elevatedLife.update(dt, now);
         aircraft.update(time, Date.now() + cb.current.clockOffsetMs);
@@ -6845,7 +7033,20 @@ export function CityView({
         listenT = 0.3;
         listen(time);
       }
-      if (!riding) {
+      if (!riding && gateTour) {
+        // At a landmark's gate: glide down in front of it, look a moment, then go in.
+        const gt = gateTour;
+        gt.t += dt;
+        const k = Math.min(1, gt.t / 1.6);
+        const e = k * k * (3 - 2 * k);
+        camera.position.lerpVectors(gt.fromPos, gt.toPos, e);
+        controls.target.lerpVectors(gt.fromTarget, gt.toTarget, e);
+        camera.lookAt(controls.target);
+        if (gt.t > 3.4) {
+          gateTour = null;
+          syncView();
+        }
+      } else if (!riding) {
         if (focus) {
           controls.target.lerp(focus, 0.06);
           if (controls.target.distanceTo(focus) < 0.05) focus = null;
@@ -6960,6 +7161,21 @@ export function CityView({
         if (t < 1) zoomAnim = requestAnimationFrame(step);
       };
       zoomAnim = requestAnimationFrame(step);
+    }
+
+    /** Every few seconds, where you are on the real map (on foot, or where the camera's looking), for next time. */
+    let savedAt = 0;
+    function saveSpot(now: number) {
+      if (!regionNow || now - savedAt < 3000 || !framed) return;
+      savedAt = now;
+      // Inside a place or on a ride, the spot outside it stays as it was.
+      if (view && !walker.on) return;
+      const at = walker.on ? { x: walker.x, z: walker.z } : { x: controls.target.x, z: controls.target.z };
+      const off = walker.on ? { x: 1.2, y: 1.4, z: 1.2 } : { x: camera.position.x - controls.target.x, y: camera.position.y, z: camera.position.z - controls.target.z };
+      if (![at.x, at.z, off.x, off.y, off.z].every(Number.isFinite)) return;
+      try {
+        localStorage.setItem(LAST_SPOT, JSON.stringify({ r: regionNow.region.id, x: at.x, z: at.z, ox: off.x, oy: off.y, oz: off.z, at: Date.now() }));
+      } catch {}
     }
 
     /** Build a round's town, or a real place (its own seed and size, whatever the round's are). */

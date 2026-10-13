@@ -63,11 +63,15 @@ function cup(unit: number) {
  * Swap figures for 3D avatars. people: who they are (NPCs by id "npc:...", or players with their
  * avatar). players: also swap the players (not only the NPCs).
  */
-export function upgradeNpcs(figs: FigLike[], people: { id: string; avatar?: unknown; npc?: boolean }[], opts?: { players?: boolean }) {
+export function upgradeNpcs(figs: FigLike[], people: { id: string; avatar?: unknown; npc?: boolean }[], opts?: { players?: boolean; max?: number; level?: number }) {
   const live: { obj: AvatarObject; mats: MaterialSet; move: Move; t: number; speed: number; extra?: Partial<Dims>; extras: THREE.Object3D[]; fig: FigLike }[] = [];
   let gone = false;
   const byId = new Map(people.map((p) => [p.id, p]));
-  const chosen = figs.filter((f) => (opts?.players || String(f.id).startsWith("npc:")) && byId.has(f.id)).slice(0, MAX);
+  // Dancers first (a dance floor full of the old figures stands out most), then everyone else.
+  const chosen = figs
+    .filter((f) => (opts?.players || String(f.id).startsWith("npc:")) && byId.has(f.id))
+    .sort((a, b) => Number(b.act === "dance") - Number(a.act === "dance"))
+    .slice(0, opts?.max ?? MAX);
   chosen.forEach((f, k) => {
     const p = byId.get(f.id) as (Npc & { npc?: boolean }) | undefined;
     let recipe;
@@ -76,7 +80,8 @@ export function upgradeNpcs(figs: FigLike[], people: { id: string; avatar?: unkn
     } catch {
       recipe = seededRecipe(f.id);
     }
-    void getAvatarModel(recipe, LOD.near)
+    // Past the first 16, a lighter version (a big crowd stays smooth on a phone).
+    void getAvatarModel(recipe, opts?.level ?? (k < MAX ? LOD.near : LOD.far))
       .then((model) => {
         if (gone) return;
         const mats = makeMaterials(recipe);
@@ -152,18 +157,20 @@ export function upgradeNpcs(figs: FigLike[], people: { id: string; avatar?: unkn
  * background and appears when ready. Each frame, say where you are, which way you face and what
  * you're doing (walking, standing, sitting on a seat this high).
  */
-export function createMyAvatar(avatar: unknown) {
+/** level: how detailed (LOD.own close up in a home; a light one on the street, where you're small on screen). */
+/** seed: someone with no avatar of their own (a passer-by in the street) gets a look made from it. */
+export function createMyAvatar(avatar: unknown, level: number = LOD.own, seed = "me") {
   const root = new THREE.Group();
   let live: { obj: AvatarObject; mats: MaterialSet; scale: number; floor: number } | null = null;
   let gone = false;
   let t = 0;
   let recipe;
   try {
-    recipe = recipeOf(avatar as Npc["avatar"]);
+    recipe = avatar ? recipeOf(avatar as Npc["avatar"]) : seededRecipe(seed);
   } catch {
-    recipe = seededRecipe("me");
+    recipe = seededRecipe(seed);
   }
-  void getAvatarModel(recipe, LOD.own)
+  void getAvatarModel(recipe, level)
     .then((model) => {
       if (gone) return;
       const mats = makeMaterials(recipe);

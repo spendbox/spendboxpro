@@ -63,7 +63,8 @@ import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
 import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
-import { BellOff, BellRing, PencilRuler, Wallet, CarFront, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Newspaper, Palette, ShoppingBag, Smartphone, Store, Swords, User } from "lucide-react";
+import { BookOpen, Church, Dumbbell, FerrisWheel, GraduationCap, Landmark as LandmarkIcon, Plane, Ship, Stethoscope, TrainFront, Trophy, UtensilsCrossed } from "lucide-react";
+import { BellOff, BellRing, LocateFixed, PencilRuler, Wallet, CarFront, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Newspaper, Palette, ShoppingBag, Smartphone, Store, Swords, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
 import { GhostsSheet } from "./ghost-duel/ghosts-sheet";
@@ -100,8 +101,8 @@ import { FeedRow, NotificationsPanel, SwipeRow, type FeedIcon, type FeedItem } f
 import { dismissNotices, readNotices } from "./notice-actions";
 import { signOutNow } from "../login/actions";
 import { claimBalloon, recordVisit } from "./profile-actions";
-import { myVisits, payFare, payRide, payVisit } from "./fee-actions";
-import { rideFare, TRAIN_FARE, visitFee } from "@/lib/fees";
+import { myVisits, payClubEntry, payFare, payRide, payVisit } from "./fee-actions";
+import { CLUB_ENTRY_MS, clubEntryMint, rideFare, TRAIN_FARE, visitFee } from "@/lib/fees";
 import { jobAt } from "@/lib/jobs";
 import type { Invite, PlayCtx } from "./minigames/shell";
 import { rideRoom, useRooms, type RoomInfo } from "./rooms";
@@ -223,7 +224,7 @@ type PlaceRoom = {
   kind: "building" | "balloon";
   /** What the place is ("office", "bank", "home"...; see CityRoom). */
   type?: string;
-  levels?: { id: string; label: string; capacity: number; kind?: string }[];
+  levels?: { id: string; label: string; capacity: number; kind?: string; theme?: string }[];
 };
 // Same order as the balloons in the 3D city (used until the city lists its rides).
 const BALLOON_NAMES = ["Red", "Yellow", "Blue", "Purple", "Mint"];
@@ -1441,6 +1442,40 @@ export function Game({
     startTransition(() => router.refresh());
   }
 
+  // Club entry (game-db/067): paid once, good for 24 hours. Remembered on this phone too, so
+  // going back in (or up to the club floor again) doesn't ask twice.
+  const [clubDoor, setClubDoor] = useState<{ room: PlaceRoom; level: { id: string; label: string; capacity: number; kind?: string }; fee: number } | null>(null);
+  const [clubBusy, setClubBusy] = useState(false);
+  function clubPaid(place: string) {
+    try {
+      const all = JSON.parse(localStorage.getItem("nt-club-entry") ?? "{}") as Record<string, string>;
+      return Date.parse(all[place] ?? "") > Date.now();
+    } catch {
+      return false;
+    }
+  }
+  function rememberClub(place: string, until: string) {
+    try {
+      const all = JSON.parse(localStorage.getItem("nt-club-entry") ?? "{}") as Record<string, string>;
+      for (const k of Object.keys(all)) if (!(Date.parse(all[k]) > Date.now())) delete all[k];
+      all[place] = until;
+      localStorage.setItem("nt-club-entry", JSON.stringify(all));
+    } catch {}
+  }
+  async function payClubDoor() {
+    const d = clubDoor;
+    if (!d) return;
+    setClubBusy(true);
+    const r = await payClubEntry(d.room.id, d.room.type).catch(() => ({ ok: false as const, error: "Couldn't pay just now. Try again." }));
+    setClubBusy(false);
+    if (!r.ok) return setMessage({ icon: Coins, text: r.error, tone: "bad" });
+    setClubDoor(null);
+    rememberClub(d.room.id, r.until ?? new Date(Date.now() + CLUB_ENTRY_MS).toISOString());
+    if (r.paid > 0) setMessage({ icon: Music, text: `In! ${cash(r.paid)} at the door, and you can come and go for 24 hours.`, tone: "good" });
+    startTransition(() => router.refresh());
+    goToLevel(d.room, d.level, true);
+  }
+
   // Tapping a building or balloon takes you inside to meet the people there. A building with
   // several levels (ground, floors, rooftop) asks which one; nothing opens the chat by itself.
   function onRoom(room: PlaceRoom) {
@@ -1472,8 +1507,13 @@ export function Game({
     }
     setPickPlace(room);
   }
-  function goToLevel(room: PlaceRoom, level: { id: string; label: string; capacity: number }) {
+  function goToLevel(room: PlaceRoom, level: { id: string; label: string; capacity: number; kind?: string }, paidDoor = false) {
     setPickPlace(null);
+    // Some clubs charge at the door (once every 24 hours): ask first.
+    if (worldId && !guest && !paidDoor && level.kind === "club") {
+      const fee = clubEntryMint(room.id, room.type, worldRegion?.prices.perMint);
+      if (fee > 0 && !clubPaid(room.id)) return setClubDoor({ room, level, fee });
+    }
     // The real map charges the fare there instead of a first-visit fee (see useWorldLife's goInside).
     if (room.kind === "building" && !worldId && !payToGo({ kind: "visit", place: room.id, type: room.type, name: room.name })) return;
     const info: RoomInfo = {
@@ -1572,6 +1612,36 @@ export function Game({
   const enteredRoom = place ? (rooms.myRoomInfo?.id ?? null) : null;
   const enteredTile = enteredRoom ? Number(/^b:(\d+)/.exec(enteredRoom)?.[1] ?? NaN) : NaN;
   const inPlannedHome = !!worldId && Number.isFinite(enteredTile) && enteredTile in homePlans;
+  // Inside a place when the page reloads (the game updated, or the phone dropped the tab): back
+  // inside it. Remembered while you're in; forgotten once you leave.
+  const lastRoom = useRef<{ pending: boolean } | null>(null);
+  useEffect(() => {
+    if (!worldId || guest) return;
+    const KEY = "nt-last-room";
+    if (!lastRoom.current) {
+      lastRoom.current = { pending: false };
+      let saved: string | null = null;
+      try {
+        const s = JSON.parse(localStorage.getItem(KEY) ?? "null");
+        if (s && s.w === worldId && Date.now() - Number(s.at ?? 0) < 6 * 3_600_000) saved = /^b:\d+/.exec(String(s.id ?? ""))?.[0] ?? null;
+      } catch {}
+      if (saved && !enteredRoom) {
+        const id = saved;
+        lastRoom.current.pending = true;
+        setTimeout(() => {
+          if (lastRoom.current) lastRoom.current.pending = false;
+          entering.current = Date.now();
+          setOpenReq((r) => ({ id, at: (r?.at ?? 0) + 1 }));
+        }, 1800);
+        return;
+      }
+    }
+    if (lastRoom.current.pending) return;
+    try {
+      if (enteredRoom) localStorage.setItem(KEY, JSON.stringify({ w: worldId, id: enteredRoom, at: Date.now() }));
+      else localStorage.removeItem(KEY);
+    } catch {}
+  }, [worldId, guest, enteredRoom]);
   useEffect(() => {
     const m = enteredRoom ? /^b:(\d+)/.exec(enteredRoom) : null;
     if (!worldId || !m) return;
@@ -1579,6 +1649,95 @@ export function Game({
     const t = setTimeout(() => fetchHomePlan(`${worldId}:${x},${z}`), 0);
     return () => clearTimeout(t);
   }, [worldId, enteredRoom, fetchHomePlan]);
+
+  // What each kind of place is for: one main thing to do there, a tap away (the doctor at a
+  // hospital, a course at a campus, food at a restaurant, a boat ride at the port...).
+  const [flightsOpen, setFlightsOpen] = useState(false);
+  const [prayer, setPrayer] = useState(0);
+  function getMainAction(): { label: string; icon: React.ComponentType<{ className?: string }>; run: () => void } | null {
+    if (!worldId || !place || guest) return null;
+    const theme = placeLevel?.theme ?? "";
+    const type = placeRoom?.type ?? "";
+    const room = rooms.myRoom;
+    const act = (kind: ActivityItem["kind"], label: string) => () => room && setActivity({ id: `${room}:${kind}:0`, kind, label, place: room });
+    const board = (kind: RideKindName, label: string) => {
+      const r = rideList.find((x) => x.kind === kind);
+      return r ? { label, run: () => boardRide(r) } : null;
+    };
+    const work = () => {
+      if (!Number.isFinite(enteredTile)) return;
+      const [x, z] = spiralXY(enteredTile);
+      worldLife.openWorkplace(x, z, placeRoom?.name ?? "Here");
+    };
+    const sport = THEME_SPORT_GAME[theme];
+    if (sport) return { label: "Watch the match", icon: Trophy, run: () => setSportsOpen(sport) };
+    if (inMyHome) return { label: "Plan my home", icon: PencilRuler, run: worldLife.openPlanner };
+    if (inPlannedHome) {
+      const [hx, hz] = spiralXY(enteredTile);
+      return { label: "Sign the guest book", icon: BookOpen, run: () => worldLife.openGuestBook(`${worldId}:${hx},${hz}`) };
+    }
+    switch (theme) {
+      case "reception":
+      case "ward":
+        return { label: "See a doctor", icon: Stethoscope, run: worldLife.openLife };
+      case "library":
+      case "lecture":
+        return { label: "Take a course", icon: GraduationCap, run: worldLife.openLife };
+      case "gym":
+      case "spa":
+        return { label: theme === "gym" ? "Work out" : "Treatments", icon: Dumbbell, run: worldLife.openLife };
+      case "restaurant":
+      case "foodcourt":
+      case "lounge":
+      case "suite":
+        return { label: theme === "lounge" ? "Order a drink" : theme === "suite" ? "Room service" : "Order food", icon: UtensilsCrossed, run: act("menu", "Order") };
+      case "club":
+        return { label: "Dance", icon: Music, run: startDancing };
+      case "shop":
+      case "mall":
+        return { label: "Shop", icon: ShoppingBag, run: () => worldLife.openThings("shops") };
+      case "bank":
+        return { label: "Banking", icon: LandmarkIcon, run: worldLife.openFinance };
+      case "vault":
+        return { label: "Crack the vault", icon: LandmarkIcon, run: act("vault", "The vault") };
+      case "church":
+      case "mosque":
+        return { label: "Pray", icon: Church, run: () => setPrayer(Date.now()) };
+      case "terminal":
+      case "tower":
+        return { label: "Fly out of Lagos", icon: Plane, run: () => setFlightsOpen(true) };
+      case "helipad": {
+        const h = board("heli", "Helicopter tour");
+        return h && { ...h, icon: Plane };
+      }
+      case "quay":
+      case "concourse": {
+        const b = type === "port" || theme === "quay" ? board("boat", "Take a boat ride") : board("train", "Board a train");
+        if (b) return { ...b, icon: type === "port" || theme === "quay" ? Ship : TrainFront };
+        break;
+      }
+      case "funfair": {
+        const f = board("ferris", "Ride the Ferris wheel");
+        return f && { ...f, icon: FerrisWheel };
+      }
+      case "waterpark": {
+        const w = board("slide", "Down the water slide");
+        return w && { ...w, icon: FerrisWheel };
+      }
+      case "gallery":
+      case "rotunda":
+      case "skybridge":
+      case "clockroom":
+      case "park":
+      case "plaza":
+      case "roofTerrace":
+      case "poolDeck":
+        return { label: "Take a photo", icon: Camera, run: () => setCamera("photo") };
+      case "market":
+        return { label: "Shop at the market", icon: ShoppingBag, run: () => worldLife.openThings("shops") };
+    }
+    return { label: "Work here", icon: Briefcase, run: work };
+  }
 
   function leaveRoom() {
     rooms.leave();
@@ -1892,8 +2051,8 @@ export function Game({
                 {walking ? "Stop walking" : "Walk"}
               </button>
             )}
-            {worldLife.rowButtons}
-            {!me.guest && (
+            {(() => {
+              const bell = !me.guest && (
               // Notifications: what's happened, and switching them on for this phone. Glows until they're on.
               <button
                 onClick={() => {
@@ -1904,12 +2063,27 @@ export function Game({
                     if (r.ok) setPushOn(!pushOn);
                   });
                 }}
-                className={cn("pointer-events-auto relative ml-auto grid size-9 shrink-0 place-items-center rounded-full shadow", pushOn ? "glass" : "bg-gold text-ink")}
+                className={cn("pointer-events-auto relative grid size-9 shrink-0 place-items-center rounded-full shadow", pushOn ? "glass" : "bg-gold text-ink")}
                 aria-label={pushOn ? "Notifications are on: tap to turn them off" : "Notifications are off: tap to turn them on"}
                 aria-pressed={pushOn}
               >
                 {pushOn ? <BellRing className="size-4" /> : <BellOff className="size-4" />}
                 {!pushOn && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-2 ring-gold/70" />}
+              </button>
+              );
+              return worldLife.makeRow(bell) ?? bell;
+            })()}
+            {!place && ride === null && !walking && worldId && (
+              // Locate me: back to where you are on the map (just looking: free).
+              <button
+                onClick={() => {
+                  if (!worldLife.locateMe()) setMessage({ text: "You're not anywhere on the map yet. Find a home first.", tone: "info" });
+                }}
+                className="glass pointer-events-auto ml-auto grid size-9 shrink-0 place-items-center rounded-full shadow"
+                aria-label="Locate me"
+                title="Locate me"
+              >
+                <LocateFixed className="size-4" />
               </button>
             )}
           </div>
@@ -2118,6 +2292,50 @@ export function Game({
             </button>
           ))}
       </div>
+      {clubDoor && (
+        <Sheet onClose={() => setClubDoor(null)} title={`${clubDoor.room.name}: at the door`}>
+          <div className="flex flex-col items-center gap-2 py-2 text-center">
+            <div className="grid size-16 place-items-center rounded-3xl bg-[#7048e8] text-white">
+              <Music className="size-8" />
+            </div>
+            <p className="text-2xl font-bold">{cash(clubDoor.fee)}</p>
+            <p className="text-sm text-muted">Entry to {clubDoor.level.label}. Pay once and come and go as you like for 24 hours.</p>
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <button onClick={() => setClubDoor(null)} className="h-11 rounded-full bg-ink/5 text-sm font-semibold">
+              Not now
+            </button>
+            <button onClick={() => void payClubDoor()} disabled={clubBusy} className="h-11 rounded-full bg-ink text-sm font-semibold text-white disabled:opacity-50">
+              {clubBusy ? "Paying…" : "Pay and go in"}
+            </button>
+          </div>
+        </Sheet>
+      )}
+      {flightsOpen && (
+        <Sheet onClose={() => setFlightsOpen(false)} title="Fly out of Lagos">
+          <p className="text-sm text-muted">Flights to other cities are coming soon: each one a whole new map to live in, with your money and things going with you.</p>
+          <ul className="mt-3 space-y-2">
+            {[
+              ["Abuja", "Nigeria's capital"],
+              ["Port Harcourt", "The Garden City"],
+              ["Kano", "The ancient city of the north"],
+              ["Accra", "Ghana"],
+              ["Nairobi", "Kenya"],
+              ["London", "United Kingdom"],
+            ].map(([city, what]) => (
+              <li key={city} className="flex items-center gap-3 rounded-2xl bg-panel-2 px-3 py-2.5">
+                <Plane className="size-4 shrink-0 text-muted" />
+                <span className="min-w-0 flex-1">
+                  <b className="block text-sm">{city}</b>
+                  <span className="text-xs text-muted">{what}</span>
+                </span>
+                <span className="rounded-full bg-gold/25 px-2 py-0.5 text-[11px] font-semibold text-gold-dark">Coming soon</span>
+              </li>
+            ))}
+          </ul>
+        </Sheet>
+      )}
+      {prayer > 0 && <PrayerMoment key={prayer} onDone={() => setPrayer(0)} />}
       {leaveAsk && (
         <div className="fixed inset-0 z-[70] grid place-items-center bg-black/40 p-4" onPointerDown={(e) => e.target === e.currentTarget && setLeaveAsk(null)} role="dialog" aria-label="Leave here?">
           <div className="w-full max-w-xs rounded-3xl bg-panel p-5 text-center shadow-2xl">
@@ -2763,6 +2981,14 @@ export function Game({
                 "Inside a building"}
             </b>
             <span className="flex-1 sm:hidden" />
+            {(() => {
+              const mainAction = getMainAction();
+              return mainAction && place && (
+              <button onClick={mainAction.run} className="flex shrink-0 items-center gap-1 rounded-xl bg-gold px-3 py-2 text-xs font-bold text-ink shadow" aria-label={mainAction.label}>
+                <mainAction.icon className="size-4" /> {mainAction.label}
+              </button>
+              );
+            })()}
             {!guest && (
               <button onClick={() => { setChatOpen(true); setChatUnread(0); }} className="relative flex shrink-0 items-center gap-1 rounded-xl bg-panel-2 px-3 py-2 text-xs font-semibold" aria-label="Chat with everyone here">
                 <MessageCircle className="size-4" /> Chat
@@ -3368,5 +3594,24 @@ function Li({ icon: Icon, children }: { icon: LucideIcon; children: React.ReactN
       <Icon className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden />
       <span>{children}</span>
     </li>
+  );
+}
+
+/** Which sport a venue's floor shows (its match to watch). */
+const THEME_SPORT_GAME: Record<string, Sport> = { stands: "football", court: "basketball", boxing: "boxing", wrestling: "wrestling" };
+
+/** A quiet moment of prayer: the screen dims and settles for a few seconds. */
+function PrayerMoment({ onDone }: { onDone: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onDone, 4200);
+    return () => clearTimeout(t);
+  }, [onDone]);
+  return (
+    <div className="pointer-events-none fixed inset-0 z-[65] grid place-items-center bg-black/55 text-center text-white" style={{ animation: "toast-in .6s ease-out" }}>
+      <div>
+        <p className="font-display text-2xl font-bold">A quiet moment</p>
+        <p className="mt-1 text-sm text-white/80">You bow your head and pray. You feel calmer.</p>
+      </div>
+    </div>
   );
 }

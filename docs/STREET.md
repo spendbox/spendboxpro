@@ -8,12 +8,15 @@ Database: `game-db/055_street.sql` (tests: `game-db/tests/street.test.sql`).
 ## Stealing
 - **From a shop** (Things, Shops: Steal on anything up to ₦50,000). Two taps: the first says the
   risk. About 4 in 10 are caught: a fine of three times the price, 10 reputation, peace of mind.
-- **From a player** (Steal on their card). Two taps again. About 1 in 3 are caught; more if
+- **From a player** (Steal on their card). Two taps again. About 4 in 10 are caught; more if
   they're online right now (they notice), less if it's the middle of the night.
   - Got away: 5% of the cash in their wallet (at most ₦20,000), or if their wallet is empty, one
     of their small things (not a car, not something up for sale or in a time capsule). You still
     lose 1 reputation (people talk). They're told someone picked their pocket, not who.
-  - Caught: a ₦30,000 fine, 5 reputation, they're told it was you, and it's in the gossip column.
+  - Caught: a ₦40,000 fine, 5 reputation, they're told it was you, and it's in the gossip column.
+  - On average it doesn't pay: even at the best haul (₦20,000) you lose about ₦4,000 a try
+    (0.6 × 20,000 − 0.4 × 40,000), before reputation and jail. (Until part 65: 35% and ₦30,000,
+    which paid a little.)
   - Money kept in your budget pots (the bank) can't be stolen: only your wallet.
   - Players are safe for their first 3 days. 5 tries a day, and the same person once a day.
     Nobody who has blocked you (or whom you blocked).
@@ -38,5 +41,5 @@ bribed their way out, rivals' pranks, new rivalries, new couples and break-ups (
 people allow it, in Dating). People you've blocked are left out.
 
 ## Settings (game_settings)
-steal_per_day 5, steal_catch_pct 35, steal_cash_pct 5, steal_new_days 3, jail_pct 25,
+steal_per_day 5, steal_catch_pct 40, steal_cash_pct 5, steal_new_days 3, jail_pct 25,
 jail_hours 2, bribe_ok_pct 70, prank_per_day 6, steal_rep 1, steal_caught_rep 5.

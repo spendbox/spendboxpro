@@ -40,7 +40,8 @@ export async function loadHomePlan(): Promise<HomePlanLoad | Fail> {
   const row = await savedRow(me.db, me.userId).catch(() => null);
   const mine = row && row.unit === me.unit ? row : null;
   const plan = mine ? cleanPlan(mine.plan) : null;
-  return { ok: true, plan: plan ?? starterPlan(), saved: !!plan, paid: cleanPaid(mine?.paid), perMint: me.perMint, owner: me.owner };
+  const shown = plan ?? starterPlan();
+  return { ok: true, plan: shown, saved: !!plan, paid: cleanPaid(mine?.paid, shown.size), perMint: me.perMint, owner: me.owner };
 }
 
 export async function saveHomePlan(raw: unknown): Promise<{ ok: true; paidMint: number; paid: PlanPaid } | Fail> {
@@ -50,7 +51,7 @@ export async function saveHomePlan(raw: unknown): Promise<{ ok: true; paidMint: 
   const plan = cleanPlan(raw);
   if (!plan) return { ok: false, error: "That plan couldn't be saved." };
   const row = await savedRow(me.db, me.userId).catch(() => null);
-  const paidBefore = cleanPaid(row && row.unit === me.unit ? row.paid : null);
+  const paidBefore = cleanPaid(row && row.unit === me.unit ? row.paid : null, plan.size);
   const bill = planBill(plan, paidBefore);
   const mint = Math.round((bill.naira / me.perMint) * 100) / 100;
   if (mint > 0 && !me.owner) return { ok: false, error: "You rent this home, so you can't build onto it or buy furniture for it here. Rearranging is free." };

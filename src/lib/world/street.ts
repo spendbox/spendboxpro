@@ -5,10 +5,14 @@
 /** Picking a pocket: at most this much cash, or failing that a small thing worth at most this. */
 export const PICK_CASH_MAX = 20_000;
 export const PICK_ITEM_MAX = 50_000;
-/** Caught picking a pocket: the fine. */
-export const PICK_FINE = 30_000;
-/** Caught shoplifting or pickpocketing: about how likely, before who you're robbing changes it. */
-export const PICK_CATCH = 0.35;
+/**
+ * Caught picking a pocket: the fine. With a 4 in 10 chance of being caught (PICK_CATCH), even the
+ * best haul (₦20,000) loses about ₦4,000 on average (0.6 × 20,000 − 0.4 × 40,000), and most
+ * pockets hold less: crime doesn't pay, though now and then it's a thrill.
+ */
+export const PICK_FINE = 40_000;
+/** Caught pickpocketing: about how likely, before who you're robbing changes it (the database's steal_catch_pct). */
+export const PICK_CATCH = 0.4;
 /** A bribe to get out of jail (it works about 7 times in 10; the money's gone either way). */
 export const BRIBE = 25_000;
 

@@ -16,7 +16,7 @@ import type { Act, Spot } from "./figures";
 import type { Block, InteractKind } from "./interact";
 import type { Theme } from "./levels";
 import { fireEngineKit } from "./vehicles";
-import { CELL_M, FURNITURE, SIZES, itemSize, planWalls, roomAt, type HomePlan } from "@/lib/home-plan";
+import { CELL_M, FURNITURE, SIZES, danceFloorOf, itemSize, planWalls, roomAt, type HomePlan } from "@/lib/home-plan";
 
 /** Something to use in a room (its id is made by the city view). */
 export type RoomItem = { kind: InteractKind; label: string; x: number; y: number; z: number; r: number };
@@ -36,6 +36,8 @@ export type InteriorInfo = {
   variant?: "small" | "station";
   /** The city's flavour ("ng", "uk"...), for local food on menus. */
   flavor?: string;
+  /** Built bigger than usual (a famous landmark's floors): the room's width and depth times this. */
+  scale?: number;
   /** A player's planned home: which plan, and which of its floors (docs/HOME_PLANNER.md). */
   home?: { plan: HomePlan; level: number };
 };
@@ -3230,7 +3232,30 @@ function plannedHome(x: Ctx, home: NonNullable<InteriorInfo["home"]>) {
     for (const s of [-1, 1]) k.box(along ? cx + s * (L / 2 - 0.03) : cx, 0, along ? cz : cz + s * (L / 2 - 0.03), along ? 0.06 : T + 0.04, doorH, along ? T + 0.04 : 0.06, pal.trim, { noAo: true });
   }
   // Tiled floors in the kitchen and bathroom, a light in every room, art where there's none.
-  const tiles: Record<string, [FloorStyle, number, number]> = { kitchen: ["checker", 0xeeeeea, 0xcfd4d6], bathroom: ["hex", 0xf3f5f6, 0xbcc8cf], balcony: ["stone", 0xd9d4ca, 0xc4bdb0] };
+  const tiles: Record<string, [FloorStyle, number, number]> = {
+    kitchen: ["checker", 0xeeeeea, 0xcfd4d6],
+    bathroom: ["hex", 0xf3f5f6, 0xbcc8cf],
+    balcony: ["stone", 0xd9d4ca, 0xc4bdb0],
+    // The special rooms: a dark shiny dance hall, cinema carpet, rubber in the gym, baize green in the games room.
+    dancehall: ["marble", 0x2b2a33, 0x1c1b22],
+    cinema: ["carpet", 0x5a1f28, 0x4a1820],
+    gym: ["concrete", 0x50565e, 0x454b52],
+    games: ["carpet", 0x2f5d50, 0x26503f],
+    bar: ["parquet", 0x6b4a33, 0x553826],
+  };
+  // (Not from rnd, so homes without special rooms look just as they did.)
+  const neon = [0xff4fd8, 0x22d3ee, 0xa3e635, 0xffd43b][level % 4];
+  for (const r of floor.rooms) {
+    if (r.kind === "dancehall" || r.kind === "bar") {
+      // Glowing strips round the top of the walls (and along the bottom in the dance hall).
+      const x0 = mx(r.x) + 0.1, x1 = mx(r.x + r.w) - 0.1, z0 = mz(r.y) + 0.1, z1 = mz(r.y + r.d) - 0.1;
+      const strips: [number, number, number, number][] = [[(x0 + x1) / 2, z0, x1 - x0, 0.04], [(x0 + x1) / 2, z1, x1 - x0, 0.04], [x0, (z0 + z1) / 2, 0.04, z1 - z0], [x1, (z0 + z1) / 2, 0.04, z1 - z0]];
+      for (const [sx, sz, sw, sd] of strips) {
+        k.box(sx, room.h - 0.14, sz, sw, 0.04, sd, neon, { layer: "glow" });
+        if (r.kind === "dancehall") k.box(sx, 0.1, sz, sw, 0.03, sd, 0x7c3aed, { layer: "glow" });
+      }
+    }
+  }
   for (const r of floor.rooms) {
     const cx = mx(r.x + r.w / 2), cz = mz(r.y + r.d / 2);
     const rw = r.w * CELL_M, rd = r.d * CELL_M;
@@ -3244,7 +3269,7 @@ function plannedHome(x: Ctx, home: NonNullable<InteriorInfo["home"]>) {
       x.extras.push(m);
       x.textures.push(tex);
     }
-    if (r.kind === "hall" || r.kind === "bathroom") k.cyl(cx, room.h - 0.012, cz, 0.12, 0.12, 0.012, 0xfff6e0, 14, { layer: "glow" });
+    if (r.kind === "hall" || r.kind === "bathroom" || r.kind === "dancehall" || r.kind === "cinema") k.cyl(cx, room.h - 0.012, cz, 0.12, 0.12, 0.012, 0xfff6e0, 14, { layer: "glow" });
     else pendant(x, cx, cz, r.kind === "dining" ? 1.05 : 0.6, r.kind === "dining" ? "drum" : pickOf(rnd, ["globe", "cone", "drum"] as const), pal.metal);
     x.lamps.push({ x: cx, y: room.h - 0.8, z: cz });
     x.spots.push({ x: cx + 0.3, z: cz + 0.4, ry: rnd() * 6, pose: "stand", y: 0 });
@@ -3481,6 +3506,196 @@ function plannedHome(x: Ctx, home: NonNullable<InteriorInfo["home"]>) {
           k.shadow(0, 0, bw + 0.2, bd + 0.2, 0.3);
         });
         break;
+      // ---- the special rooms (the dance floor tiles themselves are laid after this, all together)
+      case "dancefloor":
+        k.box(cx, 0, cz, fw, 0.06, fd, 0x1b1b1b, { noAo: true });
+        break;
+      case "djbooth":
+        // Like the club's: the decks on a desk, a glowing front, the DJ behind it.
+        k.at(cx, 0, cz, ry, () => {
+          const bw = fw - 0.08;
+          k.box(0, 0, 0.1, bw, 1.0, fd * 0.55, 0x2b2b2b);
+          k.box(0, 1.0, 0.1, bw + 0.06, 0.04, fd * 0.6, 0x111111);
+          for (const dx of [-bw * 0.25, bw * 0.25]) {
+            k.cyl(dx, 1.04, 0.1, 0.2, 0.2, 0.03, 0x343a40, 20);
+            k.cyl(dx, 1.07, 0.1, 0.07, 0.07, 0.01, neon, 12, { layer: "glow" });
+          }
+          k.box(0, 1.04, 0.1, 0.36, 0.05, 0.28, 0x495057);
+          k.box(0, 0.2, 0.1 + fd * 0.275 + 0.01, bw - 0.1, 0.55, 0.02, 0x7c3aed, { layer: "glow" });
+          k.shadow(0, 0, fw + 0.2, fd + 0.1, 0.3);
+          x.act = "dj";
+          spot(x, 0, -fd / 2 + 0.2, 0, "stand");
+          x.act = undefined;
+          item(x, "dj", "DJ booth", 0, 0.5, fd / 2 + 0.3, 1.0);
+        });
+        break;
+      case "speaker":
+        k.at(cx, 0, cz, ry, () => {
+          k.box(0, 0, 0, 0.44, 1.35, 0.4, 0x1b1b1b);
+          for (const sy of [0.35, 0.95]) k.cyl(0, sy, 0.2, 0.15, 0.15, 0.02, 0x343a40, 18, { rx: Math.PI / 2 });
+          k.cyl(0, 1.2, 0.2, 0.05, 0.05, 0.02, neon, 10, { rx: Math.PI / 2, layer: "glow" });
+          k.shadow(0, 0, 0.6, 0.55, 0.3);
+        });
+        break;
+      case "discoball": {
+        // A mirror ball hung from the ceiling, turning, with coloured beams swinging under it.
+        const top = room.h - 0.6;
+        k.box(cx, top + 0.3, cz, 0.015, room.h - top - 0.3, 0.015, 0x495057, { noAo: true });
+        const ballMat = new THREE.MeshBasicMaterial({ color: 0xdfe6ff });
+        const ball = new THREE.Mesh(new THREE.IcosahedronGeometry(0.28, 1), ballMat);
+        ball.position.set(cx, top, cz);
+        x.extras.push(ball);
+        const coneMat = new THREE.MeshBasicMaterial({ color: neon, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+        const coneGeo = new THREE.ConeGeometry(0.8, top, 18, 1, true).translate(0, -top / 2, 0);
+        const cones = [0, 1].map((c) => {
+          const cone = new THREE.Mesh(coneGeo, coneMat);
+          cone.position.set(cx + (c - 0.5) * 0.4, top, cz);
+          x.extras.push(cone);
+          return cone;
+        });
+        x.anim.push((t) => {
+          ball.rotation.y = t * 0.8;
+          ballMat.color.setHSL((t * 0.1) % 1, 0.4, 0.85);
+          cones.forEach((c, i) => {
+            c.rotation.z = Math.sin(t * 0.9 + i * 2) * 0.4;
+            c.rotation.x = Math.cos(t * 0.7 + i) * 0.3;
+          });
+        });
+        break;
+      }
+      case "partylight":
+        k.at(cx, 0, cz, ry, () => {
+          k.cyl(0, 0, 0, 0.16, 0.18, 0.04, 0x2b2b2b, 14);
+          k.cyl(0, 0.04, 0, 0.02, 0.02, 1.9, 0x343a40, 8);
+          k.box(0, 1.94, 0, 0.5, 0.05, 0.06, 0x343a40, { noAo: true });
+          [0xff4fd8, 0x22d3ee, 0xffd43b].forEach((c, i) => k.box((i - 1) * 0.17, 1.82, 0.04, 0.12, 0.12, 0.12, c, { layer: "glow" }));
+          k.shadow(0, 0, 0.4, 0.4, 0.25);
+        });
+        break;
+      case "screen": {
+        // A big screen on the wall with a film on it, the projector up on the ceiling across from it.
+        const uv = x.sheet.paint(320, 160, (c, w, h) => tvPicture(c, w, h, rnd));
+        k.at(cx, 0, cz, ry, () => {
+          const z = -fd / 2 + 0.02;
+          const sw = fw - 0.2;
+          k.box(0, 0.7, z, sw + 0.1, sw * 0.42 + 0.1, 0.04, 0x111316, { noAo: true });
+          k.quad(0, 0.75 + sw * 0.21, z + 0.025, sw, sw * 0.42, 0xffffff, { layer: "texGlow" }, uv);
+          k.box(0, room.h - 0.3, 2.2, 0.4, 0.18, 0.35, 0xdee2e6, { noAo: true });
+          k.box(0, room.h - 0.12, 2.2, 0.03, 0.12, 0.03, 0x495057, { noAo: true });
+        });
+        break;
+      }
+      case "recliner":
+        k.at(cx, 0, cz, ry, () => {
+          const c = 0x7a1d2a;
+          k.soft(0, 0, 0.05, 0.8, 0.42, 0.8, c, 0.06);
+          k.soft(0, 0.3, -0.3, 0.78, 0.7, 0.2, c, 0.08, { rx: -0.15 });
+          for (const side of [-1, 1]) k.soft(side * 0.38, 0.3, 0.05, 0.12, 0.3, 0.75, shadeHex(c, 0.08), 0.05);
+          k.cyl(0.38, 0.6, 0.25, 0.05, 0.04, 0.08, 0xadb5bd, 10);
+          k.shadow(0, 0, 1, 1, 0.3);
+          spot(x, 0, 0.05, 0, "sit", 0.46);
+        });
+        break;
+      case "popcorn":
+        k.at(cx, 0, cz, ry, () => {
+          k.box(0, 0, 0, 0.42, 0.8, 0.4, 0xc92a2a);
+          k.box(0, 0.8, 0, 0.46, 0.5, 0.44, 0xffffff, { layer: "glass" });
+          k.box(0, 0.8, 0, 0.42, 0.28, 0.4, 0xffe8a3);
+          k.box(0, 1.3, 0, 0.48, 0.12, 0.46, 0xc92a2a);
+          k.shadow(0, 0, 0.6, 0.6, 0.3);
+        });
+        break;
+      case "treadmill":
+        k.at(cx, 0, cz, ry, () => {
+          k.box(0, 0, 0, fw - 0.25, 0.2, fd - 0.2, 0x1f2226);
+          k.box(0, 0.2, 0.05, fw - 0.45, 0.02, fd - 0.5, 0x343a40);
+          for (const sx of [-(fw / 2 - 0.15), fw / 2 - 0.15]) k.box(sx, 0.2, -fd / 2 + 0.2, 0.05, 1.15, 0.05, pal.metal);
+          k.box(0, 1.3, -fd / 2 + 0.18, fw - 0.25, 0.3, 0.08, 0x212529);
+          k.box(0, 1.35, -fd / 2 + 0.23, fw * 0.5, 0.2, 0.01, 0x4dabf7, { layer: "glow" });
+          k.shadow(0, 0, fw, fd, 0.3);
+          spot(x, 0, 0.1, Math.PI, "stand");
+        });
+        break;
+      case "bike":
+        k.at(cx, 0, cz, ry, () => {
+          k.box(0, 0, 0, 0.12, 0.06, fd - 0.2, 0x343a40);
+          k.cyl(0, 0.18, -0.2, 0.2, 0.2, 0.08, 0x495057, 16, { rz: Math.PI / 2 });
+          k.box(0, 0.06, 0.2, 0.06, 0.75, 0.06, 0x868e96);
+          k.soft(0, 0.8, 0.2, 0.24, 0.07, 0.3, 0x212529, 0.03);
+          k.box(0, 0.06, -0.3, 0.06, 1.0, 0.06, 0x868e96);
+          k.box(0, 1.05, -0.3, 0.42, 0.04, 0.04, 0x212529);
+          k.shadow(0, 0, 0.5, fd, 0.25);
+        });
+        break;
+      case "weights":
+        k.at(cx, 0, cz, ry, () => {
+          k.box(0, 0, 0.15, 0.35, 0.42, fd - 0.5, 0x212529);
+          k.soft(0, 0.42, 0.15, 0.32, 0.08, fd - 0.5, 0xc92a2a, 0.03);
+          for (const sx of [-0.42, 0.42]) k.box(sx, 0, -fd / 2 + 0.3, 0.05, 1.0, 0.05, pal.metal, { noAo: true });
+          k.box(0, 1.0, -fd / 2 + 0.3, fw - 0.3, 0.03, 0.03, pal.metal, { noAo: true });
+          for (const sx of [-(fw / 2 - 0.3), fw / 2 - 0.3]) k.cyl(sx, 1.0, -fd / 2 + 0.3, 0.22, 0.22, 0.05, 0x212529, 16, { rz: Math.PI / 2, noAo: true });
+          k.shadow(0, 0, fw - 0.2, fd, 0.3);
+          spot(x, 0, 0.15, Math.PI, "sit", 0.5);
+        });
+        break;
+      case "dumbbells":
+        k.at(cx, 0, cz, ry, () => {
+          k.box(0, 0, -0.02, fw - 0.1, 0.65, 0.35, 0x343a40);
+          for (let d = 0; d < 6; d++) {
+            const dx = -fw / 2 + 0.25 + d * ((fw - 0.5) / 5);
+            for (const sx of [-0.07, 0.07]) k.cyl(dx + sx, 0.72, -0.02, 0.05 + d * 0.006, 0.05 + d * 0.006, 0.05, d % 2 ? 0x212529 : 0xe8590c, 12, { rz: Math.PI / 2, noAo: true });
+          }
+          k.shadow(0, 0, fw, 0.5, 0.25);
+        });
+        break;
+      case "gymmat":
+        k.mat(cx, 0.012, cz, s.w * CELL_M - 0.1, s.d * CELL_M - 0.1, pickOf(rnd, [0x4dabf7, 0xda77f2, 0x40c057, 0xff922b]));
+        break;
+      case "pooltable":
+        // (Drawn 2.3 × 1.3 m, along the piece's width.)
+        poolTable(x, cx, cz, ry);
+        break;
+      case "arcade":
+        // The cabinet's screen faces its -z, so turn it round to face the room.
+        arcadeCabinet(x, cx, cz, ry + Math.PI, pickOf(rnd, [0x7048e8, 0xe03131, 0x1c7ed6, 0x2f9e44]));
+        item(x, "arcade", "Arcade game", cx, 0, cz, 0.9);
+        break;
+      case "dartboard":
+        k.at(cx, 0, cz, ry, () => {
+          const z = -fd / 2 + 0.02;
+          k.box(0, 1.4, z, 0.6, 0.6, 0.03, 0x2b2b2b, { noAo: true });
+          k.cyl(0, 1.7, z + 0.03, 0.22, 0.22, 0.04, 0x1b1b1b, 24, { rx: Math.PI / 2 });
+          k.cyl(0, 1.7, z + 0.07, 0.19, 0.19, 0.01, 0xe9dcc3, 20, { rx: Math.PI / 2, noAo: true });
+          k.cyl(0, 1.7, z + 0.08, 0.12, 0.12, 0.01, 0x2f9e44, 20, { rx: Math.PI / 2, noAo: true });
+          k.cyl(0, 1.7, z + 0.09, 0.025, 0.025, 0.01, 0xe03131, 12, { rx: Math.PI / 2, noAo: true });
+          item(x, "darts", "Darts", 0, 0, 1.2, 0.9);
+        });
+        break;
+      case "homebar":
+        k.at(cx, 0, cz, ry, () => {
+          const bw = fw - 0.06;
+          // Shelves of bottles against the wall, the counter in front.
+          k.box(0, 0, -fd / 2 + 0.15, bw, 0.9, 0.3, shadeHex(wood, -0.1));
+          k.box(0, 1.2, -fd / 2 + 0.06, bw, 0.9, 0.12, 0x2b2b2b, { noAo: true });
+          for (let b = 0; b < 16; b++) k.cyl(-bw / 2 + 0.2 + (b % 8) * ((bw - 0.4) / 7), 0.9 + Math.floor(b / 8) * 0.45, -fd / 2 + 0.14, 0.035, 0.035, 0.26, pickOf(rnd, [0x2f9e44, 0xe8c07d, 0xb6d7e6, 0x7a2e3a, 0xff922b]), 8, { layer: "glow" });
+          k.box(0, 0, fd / 2 - 0.3, bw, 1.05, 0.5, 0x3b2a20);
+          k.box(0, 1.05, fd / 2 - 0.3, bw + 0.05, 0.05, 0.6, 0x212529);
+          k.box(0, 0.08, fd / 2 - 0.04, bw, 0.03, 0.02, neon, { layer: "glow" });
+          k.shadow(0, 0, fw + 0.1, fd + 0.1, 0.3);
+          x.act = "sip";
+          spot(x, 0, -0.1, 0, "stand");
+          x.act = undefined;
+          item(x, "bar", "Bar", 0, 0, fd / 2 + 0.4, 1.0);
+        });
+        break;
+      case "barstool":
+        x.act = "sip";
+        chair(x, cx, cz, ry, pal.accent, 0x343a40, { stool: true });
+        x.act = undefined;
+        break;
+      case "jukebox":
+        jukebox(x, cx, cz, ry);
+        break;
       case "stairs":
         k.at(cx, 0, cz, ry, () => {
           // Steps rising towards the wall behind, with a handrail.
@@ -3496,6 +3711,50 @@ function plannedHome(x: Ctx, home: NonNullable<InteriorInfo["home"]>) {
         if (level < plan.floors.length - 1) x.items.push({ kind: "stairs", label: "Go upstairs", x: cx, y: 0.6, z: cz, r: 0.8 });
         break;
     }
+  }
+  // The dance floor: every light-up tile on this floor in one go, changing colour on the beat
+  // (the same beat as the clubs); the first dance hall's floor is where people dance.
+  const dance = floor.items.filter((i) => i.kind === "dancefloor");
+  if (dance.length) {
+    const per = Math.round((FURNITURE.dancefloor.w * CELL_M) / 0.5);
+    const tiles = new THREE.InstancedMesh(new THREE.BoxGeometry(0.46, 0.02, 0.46).translate(0, 0.07, 0), new THREE.MeshBasicMaterial({ color: 0xffffff }), dance.length * per * per);
+    const cols = [0xff4fd8, 0x22d3ee, 0xa3e635, 0xffd43b, 0x7c3aed, 0xff6b6b].map((c) => new THREE.Color(c));
+    // Each tile's place on the grid of half-metre tiles (for the waves of colour).
+    const grid: [number, number][] = [];
+    const m4 = new THREE.Matrix4();
+    for (const it of dance)
+      for (let i = 0; i < per; i++)
+        for (let j = 0; j < per; j++) {
+          const gx = it.x + i, gy = it.y + j;
+          m4.makeTranslation(mx(it.x) + 0.25 + i * 0.5, 0, mz(it.y) + 0.25 + j * 0.5);
+          tiles.setMatrixAt(grid.length, m4);
+          tiles.setColorAt(grid.length, cols[(gx + gy) % cols.length]);
+          grid.push([gx, gy]);
+        }
+    x.extras.push(tiles);
+    let lastBeat = -1;
+    const dim = new THREE.Color();
+    x.anim.push(() => {
+      const beat = Math.floor(clubBeat());
+      if (beat === lastBeat) return;
+      lastBeat = beat;
+      grid.forEach(([i, j], n) => {
+        const wave = Math.sin(i * 0.9 + j * 0.7 + beat * 1.3);
+        tiles.setColorAt(n, dim.copy(cols[(i + j + beat) % cols.length]).multiplyScalar(wave > 0.2 ? 1 : 0.18));
+      });
+      if (tiles.instanceColor) tiles.instanceColor.needsUpdate = true;
+    });
+  }
+  const df = danceFloorOf(floor);
+  if (df) {
+    const w = df.w * CELL_M, d = df.d * CELL_M;
+    const fx = mx(df.x) + w / 2, fz = mz(df.y) + d / 2;
+    x.dance = { x: fx, z: fz, w, d };
+    item(x, "dance", "Dance floor", fx, 0.07, fz, Math.min(1.6, Math.min(w, d) / 2));
+    // A few people dancing (the rest of the room is left to the party-goers).
+    x.act = "dance";
+    for (let n = 0; n < 4; n++) spot(x, fx + (rnd() - 0.5) * (w - 0.8), fz + (rnd() - 0.5) * (d - 0.8), rnd() * 6, "stand");
+    x.act = undefined;
   }
   // The way down: where the stairs from the floor below come up.
   if (level > 0) {
@@ -3515,7 +3774,10 @@ function plannedHome(x: Ctx, home: NonNullable<InteriorInfo["home"]>) {
 
 export function createInterior(info: InteriorInfo): Interior {
   const rnd = rngFrom(info.key);
-  const { room, pal, build } = plan(info.theme, rnd, info.variant, info);
+  const { room: baseRoom, pal, build } = plan(info.theme, rnd, info.variant, info);
+  // A landmark's floor: the same room, built bigger (the furniture spreads out to fill it).
+  const sc = info.scale && info.scale > 1 && !info.home ? info.scale : 1;
+  const room = sc > 1 ? { ...baseRoom, w: baseRoom.w * sc, d: baseRoom.d * sc, h: Math.max(baseRoom.h, Math.min(baseRoom.h * 1.25, 4.5)) } : baseRoom;
   const sheet = new Sheet(1024);
   const k = new Kit();
   const x: Ctx = { k, sheet, rnd, pal, room, spots: [], views: [], lamps: [], info, items: [], extras: [], anim: [], nightHooks: [], blocks: [], textures: [] };

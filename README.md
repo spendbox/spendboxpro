@@ -40,13 +40,14 @@ sport, plus private messages. Explore stays locked while the town is still a bui
    remaining stake back; duels still going are called off (fee back).
    Levels: players earn XP (10 for playing a game, 10 for finishing a side quest, 5 for each
    streak day) and spend mint (burned) to level up, up to level 100. Below level 20 each level
-   takes 15 XP and 10 × level mint; from 20 on, 30 XP plus 5 more each level (425 at 99) and
-   50 × (level − 15) mint (`game-db/027_streaks_levels.sql`). The old power-ups (decoy, shield, big
+   takes 15 XP and 40 × level mint; from 20 on, 30 XP plus 5 more each level (425 at 99) and
+   160 × (level − 15) mint (`game-db/027_streaks_levels.sql`, prices from `065_economy_balance.sql`). The old power-ups (decoy, shield, big
    search, respawn) belonged to hide-and-seek and are no longer offered.
-5. **Passive income.** Players under 100 mint earn mint back over time, up to 100 in 24
+5. **Passive income.** Players under 100 mint (wallet and budget pots together) earn mint back over time, up to 100 in 24
    hours; each level adds 25 to both numbers, up to level 40 (1,075). Opening a billboard ad pays 5 mint (5 a day).
    Anyone holding 10,000+ mint is a "big fish". Players can give mint to each other and
-   spray it on dancers in clubs (capped per day; transfers, never new mint).
+   spray it on dancers in clubs (capped per day, ₥500 a day until the account is 3 days old and
+   level 5; transfers, never new mint).
 6. **World events.** Every hunt gets 2–4 of 100 events (`src/lib/world-events.ts`, mirrored in
    `world_event_kinds`): emergencies, weather, parties, transport trouble and mysteries to watch,
    some with mint to grab (first come, first served), the golden balloon, quiet spells and the

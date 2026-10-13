@@ -120,9 +120,12 @@ export const SKILL_BONUS = 0.03;
 
 /**
  * How much more than the real wage the game pays, in every city (real wages left players working
- * at a loss for months: the game should be fun, not harder than real life).
+ * at a loss for months: the game should be fun, not harder than real life). At 18 times, the
+ * lowest jobs (₦60,000 a month) pay ₥24 a game day, about ₥288 a real day before tax and fares:
+ * clearly more than the free taps around the city, so a job is worth having. Every job gets the
+ * same raise, so a pilot still earns 50 times a farm hand. Was 4 (part 50); part 65 raised it.
  */
-export const PAY_BOOST = 4;
+export const PAY_BOOST = 18;
 
 /** Mint every 2 hours (a day in your life) for a job paying `month` local money a month, boosted. */
 export function payDay(job: Pick<WorkJob, "month">, prices: Prices) {

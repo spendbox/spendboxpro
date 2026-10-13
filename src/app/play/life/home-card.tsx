@@ -23,7 +23,7 @@ function tint(name: string) {
 const far = (tiles: number) => (tiles < 1 ? "next door" : `${Math.round(tiles * 100)} m away`);
 
 /** Your home, at the bottom of the map: where it is and who lives around you. */
-export function HomeCard({ label, area, neighbours, onClose, onPlan, onEnter }: { label: string; area: string; neighbours: Neighbour[] | null; onClose: () => void; onPlan?: () => void; onEnter?: () => void }) {
+export function HomeCard({ label, area, neighbours, onClose, onPlan, onEnter, children }: { label: string; area: string; neighbours: Neighbour[] | null; onClose: () => void; onPlan?: () => void; onEnter?: () => void; children?: React.ReactNode }) {
   const inside = (neighbours ?? []).filter((n) => n.sameBuilding);
   const around = (neighbours ?? []).filter((n) => !n.sameBuilding);
   return (
@@ -53,6 +53,8 @@ export function HomeCard({ label, area, neighbours, onClose, onPlan, onEnter }: 
             <DoorOpen className="size-4" /> Enter home
           </button>
         )}
+
+        {children}
 
         <div className="mt-3 border-t border-ink/5 pt-3">
           <p className="flex items-center gap-1.5 text-sm font-semibold">

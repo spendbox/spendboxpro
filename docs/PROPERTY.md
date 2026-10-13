@@ -234,7 +234,9 @@ Still to do in step 1:
 - Treasuries: Lagos State (70% of each tax) and Nigeria (30%), open to read (`treasury_report`).
 - Your homes: live in any of them. Your other units: let them out; they earn rent by the second
   (homes about 6% of their value a game year, business units 9%), collected when you ask, less
-  10% rent tax. Your home never earns rent.
+  10% rent tax. Your home never earns rent. Rent follows value: when a unit's price changes
+  (building onto a home in Plan my home, or a sale on the market), its rent is worked out again
+  by the same rule (`unit_rent_day` in `game-db/065_economy_balance.sql`).
 - Name a building you own all of.
 - Search on the map (districts, neighbourhoods, landmarks, stations, your own property) flies
   you there; Assets shows cash, property worth now against what you paid, rent a day, rent

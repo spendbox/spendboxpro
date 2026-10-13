@@ -24,9 +24,22 @@ test("every workplace has a job anyone can start with", () => {
 });
 
 test("pay is real Lagos wages times the game's boost, every 2 hours", () => {
-  // ₦90,000 a month = ₦3,000 a day = ₥2, times 4.
+  // ₦90,000 a month = ₦3,000 a day = ₥2, times the boost (18).
   assert.equal(payDay({ month: 90_000 }, PRICES), 2 * PAY_BOOST);
-  assert.ok(PAY_BOOST >= 3 && PAY_BOOST <= 5);
+  assert.equal(PAY_BOOST, 18);
+});
+
+test("even the lowest job beats the free taps: about ₥250 or more a real day", () => {
+  const lowest = Math.min(...["market", "bigpark", "farm"].flatMap((t) => (t === "farm" ? jobsInBuilding({ kind: "farm", state: "built" }) : jobsAtPlace(t)).map((j) => j.month)));
+  assert.equal(lowest, 60_000);
+  // 12 game days a real day, after income tax and a short danfo ride each way.
+  const realDay = 12 * dayNet(payDay({ month: lowest }, PRICES), 0, fareMint("danfo", 3, PRICES)!);
+  assert.ok(realDay >= 250, `lowest job: ₥${realDay} a real day`);
+  // Every job gets the same raise: a pilot still earns 50 times a farm hand.
+  const pilot = jobsAtPlace("intlairport").find((j) => j.job === "pilot")!;
+  assert.equal(payDay(pilot, PRICES) / payDay({ month: lowest }, PRICES), 50);
+  // The database's cap (work_pay_max, part 65: ₥1,500 a game day) still fits the best-paid job.
+  assert.ok(payDay(pilot, PRICES) <= 1_500);
 });
 
 test("skills grow with no top", () => {

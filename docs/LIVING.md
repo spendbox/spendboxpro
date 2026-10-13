@@ -30,11 +30,17 @@ paid and where it goes. **Property** is what you own.
 | --- | --- | --- |
 | Electricity | ₦400 a m² a month (about 2 kWh a m² at ₦200), at least ₦4,000 | The power company (leaves the game) |
 | Waste collection | ₦30 a m² a month, at least ₦1,500 | Lagos State |
+| Food | ₦7,500 a game month, about ₦3,000 a real day (₥2 in Lagos) | The market sellers (leaves the game) |
 
 A room of 14 m² is about ₦5,600 + ₦1,500 a month; a 90 m² flat ₦36,000 + ₦2,700. Bills build up by
 the game day and are paid by themselves from Essentials, then the wallet. What can't be paid is
 owed, and paid as soon as money comes in. Owing more than a game week of electricity cuts the power
 (a red dot on Money) until it's paid.
+
+Food (`FOOD_MONTH` in `src/lib/world/living.ts`) is paid the same way, by the game day from
+Essentials then the wallet, whether you have a home or not: everyone eats. Food you can't pay for
+isn't owed: you go hungry instead, and lose 1 health a game day. Money → Spending shows it with
+the bills ("Bills and food").
 
 ## Health
 

@@ -13,9 +13,15 @@ import {
   ROOM_FLOOR,
   ROOM_KINDS,
   ROOM_LABEL,
+  ROOM_NAIRA,
   SIZES,
+  SPECIAL_ROOMS,
+  UNDERFOOT,
   autoDesign,
+  isSpecialRoom,
+  roomMin,
   clashes,
+  cleanPaid,
   floorNaira,
   furnishRoom,
   itemSize,
@@ -57,7 +63,7 @@ export function HomePlanner({ onClose }: { onClose: () => void }) {
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ text: string; bad?: boolean } | null>(null);
-  const [paid, setPaid] = useState<PlanPaid>(startPaid);
+  const [paid, setPaid] = useState<PlanPaid>(() => startPaid());
   const [perMint, setPerMint] = useState(1500);
   const [owner, setOwner] = useState(true);
   const [designs, setDesigns] = useState(0);
@@ -130,16 +136,38 @@ export function HomePlanner({ onClose }: { onClose: () => void }) {
   /** Naira (the game's prices) shown in your money. */
   const money = (naira: number) => cash(naira / perMint);
   const bill = planBill(plan, paid);
+  /** What's paid for, with the starter furniture for this plan's size. */
+  const paidHere = cleanPaid(paid, plan.size);
   /** Something you've already paid for (on the plan or taken out): putting it in costs nothing. */
-  const owned = (k: FurnitureKind) => (paid.items[k] ?? 0) > plan.floors.reduce((n, f) => n + f.items.filter((i) => i.kind === k).length, 0);
+  const owned = (k: FurnitureKind) => (paidHere.items[k] ?? 0) > plan.floors.reduce((n, f) => n + f.items.filter((i) => i.kind === k).length, 0);
+  /** A special room you've paid to fit out (on the plan or taken out): putting one in costs nothing more. */
+  const roomOwned = (k: RoomKind) => (paidHere.rooms?.[k] ?? 0) > plan.floors.reduce((n, f) => n + f.rooms.filter((r) => r.kind === k).length, 0);
   function designForMe() {
     if (dirty && !confirm("Design your whole home for you? What you've drawn is replaced (Undo brings it back).")) return;
     const seed = designs + 1 + Math.floor(Math.random() * 1000);
     setDesigns((n) => n + 1);
-    change(() => autoDesign(plan!.size, plan!.floors.length, seed));
+    // Your special rooms (a dance hall...) are kept, on the top floor.
+    const special = SPECIAL_ROOMS.filter((k) => plan!.floors.some((f) => f.rooms.some((r) => r.kind === k)));
+    const next = autoDesign(plan!.size, plan!.floors.length, seed, special);
+    const lost = special.filter((k) => !next.floors.some((f) => f.rooms.some((r) => r.kind === k)));
+    change(() => next);
     setSel(null);
-    setNote({ text: "Designed for you. Tap it again for another layout, or change anything you like." });
+    setNote({
+      text: lost.length
+        ? `Designed for you, but there wasn't room for your ${lost.map((k) => ROOM_LABEL[k].toLowerCase()).join(" or ")}${plan!.floors.length < 2 ? " (special rooms go upstairs: add a floor)" : ""}. Draw it under Rooms, or tap again.`
+        : "Designed for you. Tap it again for another layout, or change anything you like.",
+    });
   }
+  /** Make a special room at least its smallest size (kept inside the home); says so if it can't be. */
+  const bigEnough = (r: { kind: RoomKind; x: number; y: number; w: number; d: number }) => {
+    const m = roomMin(r.kind);
+    if (r.w >= m && r.d >= m) return;
+    r.w = Math.max(r.w, Math.min(m, w));
+    r.d = Math.max(r.d, Math.min(m, d));
+    r.x = Math.max(0, Math.min(r.x, w - r.w));
+    r.y = Math.max(0, Math.min(r.y, d - r.d));
+    setNote({ text: `A ${ROOM_LABEL[r.kind].toLowerCase()} needs at least ${m / 2} × ${m / 2} m, so it's been made that big.` });
+  };
   function furnishThis() {
     if (!room) return;
     onFloor((f) => {
@@ -164,8 +192,10 @@ export function HomePlanner({ onClose }: { onClose: () => void }) {
         const r = f.rooms.find((x) => x.id === sel.id);
         if (!r) return;
         if (grow) {
-          r.w = Math.max(2, Math.min(w - r.x, r.w + dx));
-          r.d = Math.max(2, Math.min(d - r.y, r.d + dy));
+          // A special room can't be made smaller than it needs to be.
+          const m = Math.min(roomMin(r.kind), w - r.x, d - r.y);
+          r.w = Math.max(Math.max(2, Math.min(m, r.w)), Math.min(w - r.x, r.w + dx));
+          r.d = Math.max(Math.max(2, Math.min(m, r.d)), Math.min(d - r.y, r.d + dy));
         } else {
           r.x = Math.max(0, Math.min(w - r.w, r.x + dx));
           r.y = Math.max(0, Math.min(d - r.d, r.y + dy));
@@ -329,13 +359,30 @@ export function HomePlanner({ onClose }: { onClose: () => void }) {
               </div>
             </>
           ) : (
-            <div className="grid grid-cols-3 gap-1.5 min-[420px]:grid-cols-4">
-              {ROOM_KINDS.map((k) => (
-                <button key={k} onClick={() => setRoomKind(k)} className={cn("flex items-center gap-1.5 rounded-xl px-2 py-2 text-left text-[11px] font-semibold", roomKind === k ? "bg-ink text-white" : "bg-panel-2")}>
-                  <span className="size-3.5 shrink-0 rounded-sm ring-1 ring-black/10" style={{ background: ROOM_FLOOR[k] }} />
-                  {ROOM_LABEL[k]}
-                </button>
-              ))}
+            <div className="max-h-[30dvh] overflow-y-auto overscroll-contain">
+              <div className="grid grid-cols-3 gap-1.5 min-[420px]:grid-cols-4">
+                {ROOM_KINDS.filter((k) => !isSpecialRoom(k)).map((k) => (
+                  <button key={k} onClick={() => setRoomKind(k)} className={cn("flex items-center gap-1.5 rounded-xl px-2 py-2 text-left text-[11px] font-semibold", roomKind === k ? "bg-ink text-white" : "bg-panel-2")}>
+                    <span className="size-3.5 shrink-0 rounded-sm ring-1 ring-black/10" style={{ background: ROOM_FLOOR[k] }} />
+                    {ROOM_LABEL[k]}
+                  </button>
+                ))}
+              </div>
+              {/* The special rooms: fitted out at a price, each with its own furniture. */}
+              <p className="mb-1 mt-2 text-[10px] font-semibold uppercase tracking-wide text-muted">Special rooms · fitted out when you save, adds to your home&apos;s value</p>
+              <div className="grid grid-cols-3 gap-1.5 min-[420px]:grid-cols-4">
+                {SPECIAL_ROOMS.map((k) => (
+                  <button key={k} onClick={() => setRoomKind(k)} className={cn("flex items-start gap-1.5 rounded-xl px-2 py-2 text-left text-[11px] font-semibold", roomKind === k ? "bg-ink text-white" : "bg-panel-2")}>
+                    <span className="mt-0.5 size-3.5 shrink-0 rounded-sm ring-1 ring-black/10" style={{ background: ROOM_FLOOR[k] }} />
+                    <span className="min-w-0">
+                      {ROOM_LABEL[k]}
+                      <span className={cn("block text-[10px] font-normal leading-tight", roomKind === k ? "text-white/70" : "text-muted")}>
+                        {roomOwned(k) ? "One spare" : money(ROOM_NAIRA[k] ?? 0)} · {roomMin(k) / 2} × {roomMin(k) / 2} m+
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -356,7 +403,11 @@ export function HomePlanner({ onClose }: { onClose: () => void }) {
             onSelect={setSel}
             onDrawRoom={(r) => {
               const id = nextId(fl.rooms);
-              onFloor((f) => f.rooms.push({ id, kind: roomKind, ...r }));
+              onFloor((f) => {
+                const nr = { id, kind: roomKind, ...r };
+                bigEnough(nr);
+                f.rooms.push(nr);
+              });
               setSel({ type: "room", id });
             }}
             onMoveItem={(id, x, y, first) => {
@@ -442,7 +493,16 @@ export function HomePlanner({ onClose }: { onClose: () => void }) {
             {room && (
               <div className="mt-2 flex gap-1 overflow-x-auto [scrollbar-width:none]">
                 {ROOM_KINDS.map((k) => (
-                  <button key={k} onClick={() => onFloor((f) => (f.rooms.find((r) => r.id === room.id)!.kind = k))} className={cn("shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold", room.kind === k ? "bg-ink text-white" : "bg-panel-2")}>
+                  <button
+                    key={k}
+                    onClick={() =>
+                      onFloor((f) => {
+                        const r = f.rooms.find((x) => x.id === room.id)!;
+                        r.kind = k;
+                        bigEnough(r);
+                      })
+                    }
+                    className={cn("shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold", room.kind === k ? "bg-ink text-white" : "bg-panel-2")}>
                     {ROOM_LABEL[k]}
                   </button>
                 ))}
@@ -646,16 +706,16 @@ function PlanGrid({
               y={i.y + 0.06}
               width={s.w - 0.12}
               height={s.d - 0.12}
-              rx={i.kind === "rug" ? 0.1 : 0.18}
+              rx={UNDERFOOT.has(i.kind) ? 0.1 : i.kind === "discoball" ? 0.5 : 0.18}
               fill={f.colour}
-              fillOpacity={i.kind === "rug" ? 0.35 : 0.85}
+              fillOpacity={UNDERFOOT.has(i.kind) ? 0.35 : 0.85}
               stroke={bad.has(i.id) ? "#e03131" : on ? "#f08c00" : "#212529"}
               strokeWidth={on || bad.has(i.id) ? 0.16 : 0.05}
             />
             {/* Which way it faces (a small bar on its back edge). */}
-            {i.kind !== "rug" && i.kind !== "plant" && i.kind !== "lamp" && <FrontMark x={i.x} y={i.y} w={s.w} d={s.d} rot={i.rot} />}
+            {!UNDERFOOT.has(i.kind) && i.kind !== "plant" && i.kind !== "lamp" && i.kind !== "discoball" && <FrontMark x={i.x} y={i.y} w={s.w} d={s.d} rot={i.rot} />}
             {s.w * s.d >= 4 && (
-              <text x={i.x + s.w / 2} y={i.y + s.d / 2} textAnchor="middle" dominantBaseline="middle" fontSize={0.42} fill={i.kind === "tv" ? "#fff" : "#212529"} pointerEvents="none">
+              <text x={i.x + s.w / 2} y={i.y + s.d / 2} textAnchor="middle" dominantBaseline="middle" fontSize={0.42} fill={!UNDERFOOT.has(i.kind) && isDark(f.colour) ? "#fff" : "#212529"} pointerEvents="none">
                 {f.label}
               </text>
             )}
@@ -672,6 +732,12 @@ function PlanGrid({
       </text>
     </svg>
   );
+}
+
+/** A dark colour (white writing on it reads better). */
+function isDark(hex: string) {
+  const n = parseInt(hex.slice(1), 16);
+  return ((n >> 16) & 255) * 0.299 + ((n >> 8) & 255) * 0.587 + (n & 255) * 0.114 < 110;
 }
 
 /** A dark bar along an item's back (its unturned "top" edge, turned with it). */

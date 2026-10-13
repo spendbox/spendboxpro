@@ -1,7 +1,10 @@
 # To do
 
 ## Now (owner)
+- [ ] In the Supabase SQL Editor run `game-db/065_economy_balance.sql` (a fairer economy: jobs pay 18 times real wages, food as a daily cost, the daily refill counts your pots, dearer levels, gift limits for new accounts, rent follows value, no wash-trading up shop prices, pickpocketing doesn't pay). Run it soon after this update goes live: until then the game still works, but food isn't charged and the old rules apply. Run 064 first.
 - [ ] In the Supabase SQL Editor run `game-db/064_home_upgrades.sql` (paying for new floors and furniture in Plan my home, which raises the home's value). Run 062 and 063 first if they aren't yet.
+- [ ] In the Supabase SQL Editor run `game-db/066_home_visits.sql` (knocking at homes, parties and the guest book). Until then doors stay open and those buttons say "switched on soon".
+- [ ] In the Supabase SQL Editor run `game-db/067_club_entry.sql` (entry fees at some clubs, good for 24 hours). Until then every club is free to walk into.
 - [ ] In the Supabase SQL Editor run `game-db/062_notices_read.sql` (exact unread counts, swiping notices away, photos and selfies in messages) and then `game-db/063_home_plans.sql` (saving home plans).
 - [ ] In the Supabase SQL Editor run `game-db/061_ride_fares.sql` (rides on the map cost their fare: train, ferry, bus, taxi, balloon, helicopter...; until it's run they stay free on the real map).
 - [ ] In the Supabase SQL Editor run `game-db/060_find_people.sql` (search anyone nearest first, man or woman). Until it's run, People still lists those within 50 km and nobody shows as man or woman.

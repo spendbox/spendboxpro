@@ -112,13 +112,27 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 export const mintOf = (naira: number, prices: Prices) => r2(naira / prices.perMint);
 
 /**
+ * What the market says a kind is worth only counts between half and one and a half times what the
+ * thing was worth when it was made: selling it back and forth between friends (or your own second
+ * account) at silly prices can't push up what the city's shops pay for it.
+ */
+export const MARKET_PULL_MIN = 0.5;
+export const MARKET_PULL_MAX = 1.5;
+
+/** A market price kept between MARKET_PULL_MIN and MARKET_PULL_MAX times the base worth. */
+export function marketPull(base: number, recentPrice: number) {
+  return Math.min(base * MARKET_PULL_MAX, Math.max(base * MARKET_PULL_MIN, recentPrice));
+}
+
+/**
  * What one is worth now (mint): its base worth moved by its category's drift since it was made,
- * pulled halfway towards what the market has paid lately (when anyone has), never under a tenth.
+ * pulled halfway towards what the market has paid lately (when anyone has, and only within half
+ * to one and a half times its base worth), never under a tenth.
  */
 export function itemWorth(base: number, category: ItemCategory, madeAt: number, recentPrice: number | null = null, now = Date.now()) {
   const months = Math.max(0, (now - madeAt) / MONTH_MS);
   const drifted = base * Math.pow(1 + DRIFT[category], months);
-  const v = recentPrice && recentPrice > 0 ? drifted * 0.5 + recentPrice * 0.5 : drifted;
+  const v = recentPrice && recentPrice > 0 ? drifted * 0.5 + marketPull(base, recentPrice) * 0.5 : drifted;
   return r2(Math.max(base * 0.1, v));
 }
 
@@ -144,8 +158,19 @@ export const CRAFT_TIERS = [
 ] as const;
 export type CraftTier = (typeof CRAFT_TIERS)[number]["id"];
 
-/** Materials cost this share of what the finished things are worth. */
-export const MATERIALS = 0.3;
+/**
+ * Materials cost this share of the tier's worth, for every copy. With the city's shops paying 60%
+ * (QUICK_SALE) and a copy worth 0.82 to 1.17 times the tier's worth (craftValue), making things and
+ * selling them straight to a shop loses about a tenth at the lowest quality, breaks even at about
+ * half quality and makes up to about 1.28 times the materials at the best. The real money is in
+ * selling to people on the market, and in the reputation and the effects.
+ */
+export const MATERIALS = 0.55;
+
+/** What each copy is worth (naira) at this quality (0.2 to 1.2): the tier's worth, more for better work. */
+export function craftValue(tierValue: number, quality: number) {
+  return Math.round(tierValue * (0.75 + 0.35 * quality));
+}
 
 /** The stages every craft goes through, and each one's share of the time. */
 export const CRAFT_STAGES = [
@@ -193,7 +218,7 @@ export function craftResult(tier: CraftTier, benefit: CraftBenefit, skill: numbe
   const quality = r2(Math.max(0.2, Math.min(1.2, skill * (0.85 + 0.3 * luck))));
   const strength = r2(t.effect * quality * (benefit === "rep" ? 8 : 1));
   const effect: ItemEffect = { [benefit]: strength };
-  return { quality, value: Math.round(t.value * (0.5 + quality)), copies: t.copies, effect };
+  return { quality, value: craftValue(t.value, quality), copies: t.copies, effect };
 }
 
 /** A name players can give an invention: 3 to 40 letters and numbers. */

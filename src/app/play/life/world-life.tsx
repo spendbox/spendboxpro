@@ -36,6 +36,8 @@ import { Sheet } from "../sheet";
 import { LifeSheet } from "./life-sheet";
 import { MoneySheet } from "./money-sheet";
 import { HomeCard } from "./home-card";
+import { DoorBell, DoorSheet, HomeParty, SignGuestBook } from "./door-sheet";
+import { homeDoor, type Door } from "./visit-actions";
 import { JobsHere, type JobsContext } from "./jobs-here";
 import type { SearchHit } from "./map-search";
 import { HomeFinder } from "./home-finder";
@@ -552,7 +554,15 @@ export function useWorldLife({
     return t && t.fare > 0 ? `Go there · ${cash(t.fare)} ${tripWords(t.mode, t.ferry)}` : "Go there";
   };
   /** Go into a building: pay the fare there (signed in), then in. */
-  const goInside = async (id: string) => {
+  // Someone else's home: knock first (docs/HOME_PLANNER.md, "Visiting").
+  const [door, setDoor] = useState<{ id: string; owner: string; signedIn: boolean } | null>(null);
+  const [guestBook, setGuestBook] = useState<string | null>(null);
+  const goInside = async (id: string, knocked = false) => {
+    if (!knocked) {
+      const d = await homeDoor(id).catch(() => ({ open: true }) as Door);
+      if (!d.open) return setDoor({ id, owner: d.owner, signedIn: d.signedIn });
+      if (d.party) setMessage({ text: `${d.party}: the door's open, come on in!`, good: true });
+    }
     if (signedIn) {
       setBusy(true);
       const r = await api.travelTo(id, driving);
@@ -706,6 +716,19 @@ export function useWorldLife({
   const homeLabel = home ? [home.label, home.name ?? (homeBuilding ? BUILDING_LABEL[homeBuilding.building.kind] : null)].filter(Boolean).join(", ") : "";
 
   const [planning, setPlanning] = useState(false);
+  /** Where you are on the map: the place you went to last, or home (null: nowhere yet). */
+  const whereAmI = () => {
+    const at = assets?.life?.at_place ?? homeUnit;
+    const id = at ? at.split("/")[0] : null;
+    return id ? ownedSpot(id) : null;
+  };
+  /** Take the camera to where you are (just looking: free). */
+  const locateMe = () => {
+    const s = whereAmI();
+    if (!s) return false;
+    setFlyTo({ tile: spiralIndex(Math.round(s.x), Math.round(s.z)), at: ++flies.current });
+    return true;
+  };
   const goHome = () => {
     if (!homeSpot) return;
     const go = () => {
@@ -721,7 +744,8 @@ export function useWorldLife({
   /** Something in Finance wants you: the guide's budget step, a power cut, an offer. */
   const financeGlow = step === "budget";
   const financeDot = !!(status?.powerCut || board?.received.some((o) => o.status === "open"));
-  const rowButtons = region ? (
+  /** The row of life buttons; afterIncome: something the game puts right after Income (the notifications bell). */
+  const makeRow = (afterIncome?: React.ReactNode) => region ? (
     <>
           {signedIn && loaded && !homeUnit && (
             <button
@@ -733,10 +757,12 @@ export function useWorldLife({
               {step === "home" && <Ripple />}
             </button>
           )}
+          {!(signedIn && homeUnit) && afterIncome}
           {signedIn && homeUnit && (
             <>
               <LifeButton icon={House} label="Home" onClick={goHome} />
               <LifeButton icon={Briefcase} label="Income" glow={step === "job"} onClick={() => setWorkOpen(true)} />
+              {afterIncome}
               <LifeButton
                 icon={HeartPulse}
                 label="Life"
@@ -752,6 +778,7 @@ export function useWorldLife({
           {signedIn && homeUnit && <LifeButton icon={Star} label="Soon" short onClick={() => setSoonOpen(true)} />}
     </>
   ) : null;
+  const rowButtons = makeRow();
   const rowBelow = region ? (
     <>
         {rep?.jail && Date.parse(rep.jail) > clock && (
@@ -867,9 +894,27 @@ export function useWorldLife({
                 }
               : undefined
           }
-        />
+        >
+          {signedIn && <HomeParty />}
+        </HomeCard>
       )}
       {planning && <HomePlanner onClose={() => setPlanning(false)} />}
+      {door && (
+        <DoorSheet
+          building={door.id}
+          owner={door.owner}
+          signedIn={door.signedIn}
+          onClose={() => setDoor(null)}
+          onIn={() => {
+            const id = door.id;
+            setDoor(null);
+            setMessage({ text: `${door.owner} let you in!`, good: true });
+            void goInside(id, true);
+          }}
+        />
+      )}
+      {guestBook && <SignGuestBook building={guestBook} onClose={() => setGuestBook(null)} />}
+      <DoorBell signedIn={signedIn} />
       {place && (
         <Sheet onClose={() => setPlace(null)} wide clear>
           <div className="sticky -top-5 z-10 -mx-5 -mt-5 flex items-start justify-between gap-3 bg-panel/95 px-5 pb-2 pt-5">
@@ -1525,5 +1570,13 @@ export function useWorldLife({
     fly(p.x, p.z);
     setPlace(workplaceById(planOf(region), p.id) ?? { id: p.id, name: p.name, x: Math.round(p.x), z: Math.round(p.z), jobs: [] });
   };
-  return { explore, openExplorePlace, rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit, homeBuilding: homeUnit ? homeUnit.split("/")[0] : null, openPlanner: () => setPlanning(true) };
+  return { explore, openExplorePlace, rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit, homeBuilding: homeUnit ? homeUnit.split("/")[0] : null, openPlanner: () => setPlanning(true), locateMe, makeRow, openGuestBook: (building: string) => setGuestBook(building),
+    openLife: () => setLifeOpen(true),
+    /** A place's card (its jobs, and what it does), from where it stands. */
+    openWorkplace: (x: number, z: number, name: string) => {
+      if (!region) return;
+      const id = `${region.region.id}:${x},${z}`;
+      setPlace(workplaceById(planOf(region), id) ?? { id, name, x, z, jobs: [] });
+    },
+  };
 }

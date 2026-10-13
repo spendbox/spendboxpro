@@ -88,7 +88,7 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
     title: "Levels",
     body: [
       "Earn XP, then spend mint to level up from the menu. Playing a game gives 10 XP, finishing a side quest 10, and every day of your streak 5.",
-      "Levels up to 20 are quick and cheap (15 XP and ₥10 per level). After that each level takes more XP and more mint, all the way to level 100.",
+      "Levels up to 20 are quick: 15 XP each, and ₥40 times the level you're on (₥40 from level 1 to 2, ₥400 from 10 to 11). After that each level takes more XP and more mint, all the way to level 100.",
       "Perks for the new duel game are on the way.",
     ],
   },
@@ -99,7 +99,7 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
       "Mint is just for playing: it can't be bought or cashed out.",
       "Mint spent during a game goes into its prize pool (see above). Sometimes a brand sponsors the pool and adds extra mint.",
       "Tap a billboard to see the ad on it, then tap the ad's button to earn ₥5, paid by the brand (up to 5 ads a day).",
-      "Running low? While you're under your refill line you earn passive income every hour: up to ₥100 a day at level 1, and 25 more for every level after that, up to level 40 (1,075 a day).",
+      "Running low? While your wallet and budget pots together are under your refill line you earn passive income every hour: up to ₥100 a day at level 1, and 25 more for every level after that, up to level 40 (1,075 a day).",
       "Anyone holding ₥10,000 or more is a big fish, and everyone can see it.",
       "You can give mint to other players, and spray mint on the dance floor in clubs.",
       "Going places costs a little: the first time you go into a place in each town costs ₥0.10 (a house) up to ₥5 (an international airport). Going back is free until the next town. Trains cost a fare every time you board (₥1, the monorail ₥1.50). Half of every fee goes into the prize pool.",

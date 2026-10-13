@@ -72,8 +72,8 @@ export type LifeStatus = {
   procedures: { procedure: string; title: string; at: string }[];
   /** Pay the state owes you (essential services, when the treasury was short). */
   payOwed: number;
-  /** Your home's bills a game day (mint). */
-  bills: { power: number; waste: number } | null;
+  /** Your home's bills a game day (mint), and food. */
+  bills: { power: number; waste: number; food?: number } | null;
   mind: number;
   exercise: Exercise;
   /** Your first side hustle (as before), and all of them (game-db/049: several at once). */

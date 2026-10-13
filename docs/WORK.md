@@ -11,9 +11,13 @@ rules are in `src/lib/world/work.ts` (jobs, pay, skills, fares) and `src/lib/wor
   port, universities, government buildings, museums, stadiums, clubs, parks and places of worship.
   Homes, empty land and unfinished buildings don't hire.
 - **You need a home first.** One job at a time.
-- **Pay is real Lagos wages** (what the job pays a month in naira), paid by the game day: a game
-  month is 30 game days, a game day is 2 real hours. A shop assistant on ₦80,000 a month gets
-  about ₥1.78 a game day; a pilot on ₦3m about ₥67.
+- **Pay is 18 times real Lagos wages** (what the job pays a month in naira, times
+  `PAY_BOOST` in `src/lib/world/work.ts`), paid by the game day: a game month is 30 game days, a
+  game day is 2 real hours (12 game days a real day). The lowest jobs (a farm hand, a market
+  porter, a gardener: ₦60,000 a month) get ₥24 a game day, about ₥288 a real day before tax and
+  fares; a shop assistant on ₦80,000 gets ₥32 (₥384 a real day); a pilot on ₦3m ₥1,200. That's
+  well above what tapping about the city for free brings in, so a job is always worth having.
+  (It was 4 times real wages until part 65, which raised the jobs people already had once.)
 - **Pay waits up to a game week** (7 game days, 14 real hours). Come back at least that often to
   collect it from **Work**; anything older is lost.
 - **Income tax** of 7% goes to the treasuries (70% Lagos State, 30% Nigeria).
