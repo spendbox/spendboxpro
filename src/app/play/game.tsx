@@ -3340,7 +3340,7 @@ export function Game({
           <div className="title-float flex flex-col items-center">
             <LogoMark size={72} className="mb-2 rounded-[18px] shadow-[0_12px_30px_rgba(0,0,0,0.35)]" />
             <h1 className="title-3d font-display text-[clamp(3rem,15vw,8rem)] font-black italic leading-none tracking-tight text-white">Newtown</h1>
-            <p className="mt-3 rounded-full bg-black/35 px-4 py-1.5 text-sm font-semibold tracking-wide text-white backdrop-blur-sm sm:text-base">Live your Lagos life.</p>
+            <p className="mt-3 rounded-full bg-black/35 px-4 py-1.5 text-sm font-semibold tracking-wide text-white backdrop-blur-sm sm:text-base">Your city. Your story.</p>
           </div>
         </div>
       )}
