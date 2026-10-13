@@ -340,6 +340,8 @@ type Props = {
   dancers?: CityDancer[];
   /** Your friends who are in a place right now: each one's face and name shows over it. */
   friendsAt?: CityFriendPin[];
+  /** Challenges on the map (src/app/play/fight): a beam of light shining up from each one. */
+  challengeLights?: { id: number; x: number; z: number; colour: string; playing: boolean }[];
   /** A face on the map was tapped (someone's card). */
   onPerson?: (id: string) => void;
   /** Marks players left on the map, and one tapped. */
@@ -1387,6 +1389,7 @@ export function CityView({
   dance = null,
   dancers,
   friendsAt,
+  challengeLights,
   onPerson,
   marks,
   onMark,
@@ -1424,6 +1427,7 @@ export function CityView({
     setHouses: (list: TownHouse[] | undefined) => void;
     setDance: (me: CityDance | null, others: CityDancer[]) => void;
     setFriendPins: (list: CityFriendPin[]) => void;
+    setChallengeLights: (list: { id: number; x: number; z: number; colour: string; playing: boolean }[]) => void;
     setMarkTags: (list: CityMarkTag[]) => void;
     setRoomPeople: (list: CityPerson[]) => void;
     openRoom: (id: string) => void;
@@ -4354,6 +4358,52 @@ export function CityView({
     el.appendChild(pinLayer);
     let pinKey = "";
     const pinAt = new THREE.Vector3();
+    // ---- challenges (src/app/play/fight): a tall beam of light in the game's colour shining up
+    // from where someone challenged everyone nearby, a ring pulsing on the ground round it (fast
+    // while people can still join, slow once the game is being played).
+    const challengeBeams = new Map<number, { obj: THREE.Group; beam: THREE.MeshBasicMaterial; ring: THREE.Mesh; ringMat: THREE.MeshBasicMaterial; playing: boolean; geos: THREE.BufferGeometry[] }>();
+    function setChallengeLights(list: { id: number; x: number; z: number; colour: string; playing: boolean }[]) {
+      const keep = new Set(list.map((c) => c.id));
+      for (const [id, b] of challengeBeams) {
+        if (keep.has(id)) continue;
+        life.remove(b.obj);
+        b.beam.dispose();
+        b.ringMat.dispose();
+        b.geos.forEach((g) => g.dispose());
+        challengeBeams.delete(id);
+      }
+      for (const c of list) {
+        const had = challengeBeams.get(c.id);
+        if (had) {
+          had.playing = c.playing;
+          continue;
+        }
+        const obj = new THREE.Group();
+        const colour = new THREE.Color(c.colour).lerp(new THREE.Color(0xffffff), 0.25);
+        const beam = new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+        const beamGeo = new THREE.CylinderGeometry(0.5, 0.16, 9, 24, 1, true).translate(0, 4.5, 0);
+        const core = new THREE.CylinderGeometry(0.07, 0.07, 9, 10, 1, true).translate(0, 4.5, 0);
+        obj.add(new THREE.Mesh(beamGeo, beam), new THREE.Mesh(core, beam));
+        const ringMat = new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+        const ringGeo = new THREE.RingGeometry(0.32, 0.42, 40).rotateX(-Math.PI / 2);
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.position.y = 0.03;
+        obj.add(ring);
+        for (const m of obj.children) m.renderOrder = 4;
+        obj.position.set(c.x, 0, c.z);
+        life.add(obj);
+        challengeBeams.set(c.id, { obj, beam, ring, ringMat, playing: c.playing, geos: [beamGeo, core, ringGeo] });
+      }
+    }
+    function updateChallengeLights(time: number) {
+      for (const b of challengeBeams.values()) {
+        const speed = b.playing ? 0.8 : 2.2;
+        const k = (time * speed) % 1;
+        b.ring.scale.setScalar(1 + k * 2.4);
+        b.ringMat.opacity = 0.85 * (1 - k);
+        b.beam.opacity = 0.32 + 0.14 * Math.sin(time * (b.playing ? 2 : 5));
+      }
+    }
     function setFriendPins(list: CityFriendPin[]) {
       const key = `${currentSeed}|${tiles.length}|${list.map((f) => `${f.id}@${f.room}|${f.name}|${f.status}|${f.friend}|${JSON.stringify(f.avatar)}`).join(";")}`;
       if (key === pinKey) return;
@@ -7002,6 +7052,7 @@ export function CityView({
         realTransit.update(Date.now() + cb.current.clockOffsetMs);
         saveSpot(now);
         // Close up (on foot, or zoomed right in), the people nearest you walk as 3D avatars.
+        updateChallengeLights(time);
         people.update(dt, now, walker.on ? walker : camera.position.distanceTo(controls.target) < 4.5 && view?.kind !== "place" ? controls.target : null);
         trains.update(dt, now);
         elevatedLife.update(dt, now);
@@ -7195,7 +7246,7 @@ export function CityView({
       if (regionNow && currentSeed >= 0 && builtCount > 0) build(currentSeed, builtCount);
     }
     const center = () => ({ x: Math.round(controls.target.x), z: Math.round(controls.target.z) });
-    api.current = { setMarkTags, center, build: buildFor, setOwned, setBusinesses, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, setHomePlans, zoom };
+    api.current = { setMarkTags, center, build: buildFor, setOwned, setBusinesses, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setChallengeLights, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, setHomePlans, zoom };
 
     return () => {
       alive = false;
@@ -7368,6 +7419,15 @@ export function CityView({
   useEffect(() => {
     api.current?.setFriendPins(friendsRef.current ?? []);
   }, [friendsKey, tileCount, seed]);
+
+  const lightsKey = (challengeLights ?? []).map((c) => `${c.id}@${c.x},${c.z}|${c.colour}|${c.playing}`).join(";");
+  const lightsRef = useRef(challengeLights);
+  useEffect(() => {
+    lightsRef.current = challengeLights;
+  });
+  useEffect(() => {
+    api.current?.setChallengeLights(lightsRef.current ?? []);
+  }, [lightsKey, tileCount, seed]);
 
   const marksKey = (marks ?? []).map((m) => `${m.id}|${m.text}|${m.colour}|${m.rating}`).join(";");
   const marksRef = useRef(marks);

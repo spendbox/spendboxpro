@@ -33,6 +33,7 @@ export async function reputationDetails(): Promise<RepDetails | null> {
     { label: "Things and cars", points: p.things, how: rich.length ? `From ${rich.slice(0, 3).map((i) => i.name).join(", ")}${rich.length > 3 ? ` and ${rich.length - 3} more` : ""}.` : "Fine things (jewellery, art, a good car) add to it while you own them." },
     { label: "Inventions sold", points: p.inventions, how: "2 for every copy of your inventions people buy." },
     { label: "People liked your marks", points: p.marks, how: "1 for every 2 reactions on what you left on the map (up to 50)." },
+    { label: "Challenges", points: p.challenges ?? 0, how: "1 for every challenge you hosted that was played, 3 for every one you won (up to 120)." },
   ];
 
   // What took it away: the database keeps one total; this works out where it came from.

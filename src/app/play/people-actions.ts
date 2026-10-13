@@ -1,5 +1,6 @@
 "use server";
 
+import { challengeRep } from "@/lib/world/challenges";
 import type { Avatar } from "@/lib/avatar";
 import { currentUserId } from "@/lib/game";
 import { pushTo } from "@/lib/push";
@@ -79,16 +80,18 @@ export type Gender = "male" | "female";
 export async function playerCard(id: string): Promise<PlayerCardData | null> {
   const userId = await currentUserId();
   if (!userId || !/^[0-9a-f-]{36}$/i.test(String(id))) return null;
-  const [{ data }, { data: liked }, { data: who }] = await Promise.all([
+  const [{ data }, { data: liked }, { data: who }, { data: ch }] = await Promise.all([
     createAdminClient().rpc("player_card", { p_viewer: userId, p_target: id }),
     createAdminClient().rpc("marks_liked", { p_user: id }),
     createAdminClient().from("profiles").select("gender").eq("id", id).maybeSingle(),
+    // Challenges hosted and won (game-db/070; nothing until it's run).
+    createAdminClient().rpc("challenge_rep", { p_user: id }),
   ]);
   if (!data) return null;
   const d = data as Record<string, unknown>;
   const spot = d.home ? ownedSpot(String(d.home).split("/")[0]) : null;
   const map = spot ? regionMap(spot.region) : null;
-  const rep = reputationOf({ propertyMint: n(d.property), homes: d.home ? 1 : 0, itemRep: n(d.thingsRep), inventionsSold: n(d.inventionsSold), penalty: n(d.penalty), marksLiked: n(liked) });
+  const rep = reputationOf({ propertyMint: n(d.property), homes: d.home ? 1 : 0, itemRep: n(d.thingsRep), inventionsSold: n(d.inventionsSold), penalty: n(d.penalty), marksLiked: n(liked), challenges: challengeRep(n((ch as { hosted?: number } | null)?.hosted), n((ch as { won?: number } | null)?.won)) });
   return {
     id: String(d.id),
     name: String(d.name),
