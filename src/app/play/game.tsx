@@ -2050,6 +2050,20 @@ export function Game({
               <span className="max-[440px]:hidden">online</span>
             </button>
             {worldLife.rowButtons}
+            {worldId && !guest && !place && ride === null && !walking && (
+              // Explore: places to go, rides and sport (top right, in the row with Life).
+              <button
+                onClick={() => {
+                  setExplorePlaces(worldLife.explore());
+                  setExploreTab("places");
+                  setPickRide(true);
+                }}
+                className="glass pointer-events-auto ml-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold"
+              >
+                <Compass className="size-4 text-[#e64980]" />
+                Explore
+              </button>
+            )}
           </div>
           {worldLife.rowBelow}
           {/* People around where you're looking: online first. Tap one for their card (message, knock, gift). */}
@@ -2991,18 +3005,6 @@ export function Game({
         )}
         {worldId && !guest && !place && ride === null && (
           <div className="pointer-events-auto flex items-stretch gap-1 sm:gap-1.5">
-            {!walking && (
-              <DockButton
-                icon={Compass}
-                tint="text-[#e64980]"
-                label="Explore"
-                onClick={() => {
-                  setExplorePlaces(worldLife.explore());
-                  setExploreTab("places");
-                  setPickRide(true);
-                }}
-              />
-            )}
             <DockButton icon={Footprints} label={walking ? "Stop walking" : "Walk"} dark={walking} onClick={() => setWalking(!walking)} />
             {!walking && (
               <DockButton
