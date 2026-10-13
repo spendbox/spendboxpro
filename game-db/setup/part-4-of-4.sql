@@ -1460,6 +1460,8 @@ create table if not exists public.challenge_players (
   said_at timestamptz,
   primary key (challenge_id, user_id)
 );
+-- Says it was a draw (added after the first version).
+alter table public.challenge_players add column if not exists says_draw boolean not null default false;
 create index if not exists challenge_players_user_idx on public.challenge_players (user_id, joined_at desc);
 
 /** In a challenge that isn't over (open or playing)? Its id, or null. */
@@ -1585,17 +1587,21 @@ begin
 end $$;
 
 /**
- * A player says who won. The pool is paid (less a tenth) when the players agree: more than half
- * of them say the same winner, or someone says another player won (a loser owning up), or two
- * minutes go by with only one name said and nobody disagreeing. Returns the winner once paid.
+ * A player says how it ended: who won, or a draw (p_draw). The pool is paid (less a tenth) when the
+ * players agree: more than half of them say the same, or someone says another player won (a loser
+ * owning up, or giving up), or two minutes go by with only one answer said and nobody saying
+ * otherwise (the phones ask again until it's settled). A draw gives everyone their stake back.
+ * p_winner null and p_draw false: just checking. Returns the winner once paid ({draw: true} for a draw).
  */
-create or replace function public.challenge_report(p_user uuid, p_id bigint, p_winner uuid) returns jsonb
+drop function if exists public.challenge_report(uuid, bigint, uuid);
+create or replace function public.challenge_report(p_user uuid, p_id bigint, p_winner uuid, p_draw boolean default false) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
   c public.challenges;
   v_n int;
   v_w uuid;
   v_votes int;
+  v_draws int;
   v_names int;
   v_first timestamptz;
   v_owned boolean;
@@ -1604,16 +1610,26 @@ begin
   select * into c from public.challenges where id = p_id for update;
   if not found then raise exception 'gone'; end if;
   if c.status = 'done' then return jsonb_build_object('winner', c.winner_id, 'prize', c.prize); end if;
+  if c.status = 'cancelled' then return jsonb_build_object('winner', null, 'draw', true); end if;
   if c.status <> 'playing' then raise exception 'not_playing'; end if;
   if not exists (select 1 from public.challenge_players where challenge_id = p_id and user_id = p_user) then raise exception 'not_in'; end if;
   if p_winner is not null and not exists (select 1 from public.challenge_players where challenge_id = p_id and user_id = p_winner) then raise exception 'bad_winner'; end if;
-  if p_winner is not null then
-    update public.challenge_players set says = p_winner, said_at = now() where challenge_id = p_id and user_id = p_user;
+  if coalesce(p_draw, false) then
+    update public.challenge_players set says = null, says_draw = true, said_at = coalesce(said_at, now()) where challenge_id = p_id and user_id = p_user;
+  elsif p_winner is not null then
+    update public.challenge_players set says = p_winner, says_draw = false, said_at = coalesce(said_at, now()) where challenge_id = p_id and user_id = p_user;
   end if;
   select count(*) into v_n from public.challenge_players where challenge_id = p_id;
+  select count(*) into v_draws from public.challenge_players where challenge_id = p_id and says_draw;
   select says, count(*) into v_w, v_votes from public.challenge_players where challenge_id = p_id and says is not null group by says order by count(*) desc limit 1;
-  if v_w is null then return jsonb_build_object('winner', null); end if;
-  select count(distinct says), min(said_at) into v_names, v_first from public.challenge_players where challenge_id = p_id and says is not null;
+  select count(distinct coalesce(says::text, 'draw')), min(said_at) into v_names, v_first
+    from public.challenge_players where challenge_id = p_id and (says is not null or says_draw);
+  -- A draw: everyone agrees enough (or it's the only answer for two minutes). Stakes back.
+  if v_draws > 0 and (v_draws * 2 > v_n or (v_names = 1 and v_first < now() - interval '2 minutes')) then
+    perform public.challenge_refund(p_id);
+    return jsonb_build_object('winner', null, 'draw', true);
+  end if;
+  if v_w is null then return jsonb_build_object('winner', null, 'waiting', true); end if;
   v_owned := exists (select 1 from public.challenge_players where challenge_id = p_id and says = v_w and user_id <> v_w);
   if not (v_votes * 2 > v_n or v_owned or (v_names = 1 and v_first < now() - interval '2 minutes')) then
     return jsonb_build_object('winner', null, 'waiting', true);
@@ -1636,6 +1652,11 @@ begin
   for r in select id from public.challenges where region = p_region and status = 'open' and starts_at < now() - interval '20 seconds' limit 20 loop
     perform public.challenge_begin(r.id);
   end loop;
+  -- Finished games whose players all closed the game before it was settled: settle them now.
+  for r in select distinct c.id, cp.user_id from public.challenges c join public.challenge_players cp on cp.challenge_id = c.id
+           where c.region = p_region and c.status = 'playing' and (cp.says is not null or cp.says_draw) and cp.said_at < now() - interval '2 minutes' limit 20 loop
+    perform public.challenge_report(r.user_id, r.id, null, false);
+  end loop;
   for r in select id from public.challenges where region = p_region and status = 'playing' and started_at < now() - interval '45 minutes' limit 20 loop
     perform public.challenge_refund(r.id);
   end loop;
@@ -1657,9 +1678,9 @@ begin
   grant all on sequence public.challenges_id_seq to service_role;
   revoke all on function public.challenge_busy(uuid), public.challenge_open(uuid, text, text, numeric, int, int, int, numeric, int),
     public.challenge_join(uuid, bigint), public.challenge_refund(bigint), public.challenge_begin(bigint),
-    public.challenge_report(uuid, bigint, uuid), public.challenge_rep(uuid), public.challenge_sweep(text) from public, anon, authenticated;
+    public.challenge_report(uuid, bigint, uuid, boolean), public.challenge_rep(uuid), public.challenge_sweep(text) from public, anon, authenticated;
   grant execute on function public.challenge_busy(uuid), public.challenge_open(uuid, text, text, numeric, int, int, int, numeric, int),
     public.challenge_join(uuid, bigint), public.challenge_refund(bigint), public.challenge_begin(bigint),
-    public.challenge_report(uuid, bigint, uuid), public.challenge_rep(uuid), public.challenge_sweep(text) to service_role;
+    public.challenge_report(uuid, bigint, uuid, boolean), public.challenge_rep(uuid), public.challenge_sweep(text) to service_role;
 end $$;
 
