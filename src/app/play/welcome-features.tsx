@@ -26,7 +26,7 @@ export function WelcomeFeatures() {
           <span className="text-center text-[10.5px] font-bold leading-tight text-ink">{f.label}</span>
         </li>
       ))}
-      <li className="col-span-4 text-center text-[11px] font-semibold text-white/90 [text-shadow:0_1px_4px_rgba(0,0,0,0.6)]">…and a whole city more</li>
+      <li className="col-span-4 text-center text-[11px] font-semibold text-white/90 [text-shadow:0_1px_4px_rgba(0,0,0,0.6)]">…and a whole world more</li>
     </ul>
   );
 }
