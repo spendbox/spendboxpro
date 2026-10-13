@@ -3554,8 +3554,12 @@ export function Game({
             playSfx("chime");
             startTransition(() => router.refresh());
           }}
+          onToppedUp={(mint, doubled) => {
+            playSfx("chime");
+            setMessage({ text: `Your top-up is in: +${cash(mint)}${doubled ? " (your first one, doubled!)" : ""}`, tone: "good" });
+            startTransition(() => router.refresh());
+          }}
           onProperty={() => worldLife.openFinance()}
-          onShops={() => worldLife.openThings("shops")}
         />
       )}
       {giftPop && worldId && !guest && !moneyOpen && (

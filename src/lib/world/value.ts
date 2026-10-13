@@ -158,6 +158,18 @@ export function fromShown(amount: number) {
   const c = current();
   return c.code === "MINT" ? amount : (amount * c.naira) / perMint;
 }
+/**
+ * Money is kept in mint to the cent, and a mint is ₦1,500, so a cent is ₦15: ₦5,000 is ₥3.33, which
+ * is ₦4,995 exactly. Shown amounts are rounded the way people say them (to the nearest ₦10 from
+ * ₦100, the nearest ₦100 from ₦10,000), so it reads ₦5,000 and ₦250,000, not ₦4,995 and ₦250,005.
+ */
+export function tidy(amount: number, isMint = false) {
+  if (isMint || !Number.isFinite(amount)) return amount;
+  const a = Math.abs(amount);
+  const step = a >= 10_000 ? 100 : a >= 100 ? 10 : 0;
+  return step ? Math.round(amount / step) * step : amount;
+}
+
 /** The chosen currency's sign: "₦", "$", "₥"... */
 export const cashSymbol = () => current().symbol;
 
@@ -167,7 +179,7 @@ export const cashSymbol = () => current().symbol;
  */
 export function cash(mint: number, opts: { full?: boolean } = {}) {
   const s = cashSymbol();
-  const v = toShown(mint);
+  const v = tidy(toShown(mint), current().code === "MINT");
   const sign = v < 0 ? "−" : "";
   const a = Math.abs(v);
   const one = (n: number) => n.toFixed(n >= 100 ? 0 : 1).replace(/\.0$/, "");

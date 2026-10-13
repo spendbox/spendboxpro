@@ -79,6 +79,11 @@ export async function POST(req: NextRequest) {
   if (!life) return NextResponse.json({ error: words.no_life });
   const p = planFor(String(life.region));
   if (!p) return NextResponse.json({ error: "Unknown place." });
+  // Renting a home (game-db/077): no free room as well.
+  if (!area) {
+    const { data: rented } = await db.from("home_rentals").select("unit_id").eq("user_id", userId).maybeSingle();
+    if (rented) return NextResponse.json({ error: words.has_home });
+  }
   // Rooms of players away for 60 days go back first.
   await db.rpc("starter_rooms_sweep");
   let list = starterBuildings(p.map, p.plan);

@@ -17,7 +17,7 @@ import { ferryKmBetween } from "@/lib/world/trips";
 import { dayOf, EXERCISE } from "@/lib/world/day";
 import { HUSTLES, hustleDay, hustleStart } from "@/lib/world/hustles";
 import { workplaceById, type Workplace } from "@/lib/world/workplace";
-import { PropertyCard } from "../property-card";
+import { PropertyCard, rentMonth } from "../property-card";
 import { AdvertisePanel, type AdPreview } from "./advertise-panel";
 import { explorePlaces, type ExplorePlace } from "@/lib/world/explore";
 import { around, cachedThings, loadThings } from "./things-cache";
@@ -44,6 +44,7 @@ import { HomeFinder } from "./home-finder";
 import { StartLife } from "./start-life";
 import { useLife } from "./use-life";
 import { confirmTopUp } from "../topup-actions";
+import { moveOut, myRental, rentUnit, type Rental } from "../property-actions";
 import { StarterRoomBox } from "./starter-room";
 import { WorkSheet } from "./work-sheet";
 import { BusinessSheet } from "./business-sheet";
@@ -657,6 +658,24 @@ export function useWorldLife({
         asking.current = false;
       });
   }, [signedIn, loaded, life, homeUnit, pretend, refresh]);
+  // A rented home (game-db/077): each month that's come due is paid when the game opens (or you
+  // move out when you can't, and get a free room again).
+  const [rental, setRental] = useState<Rental>(null);
+  const lifeStarted = !!life;
+  useEffect(() => {
+    if (!signedIn || !lifeStarted || pretend) return;
+    let alive = true;
+    void myRental()
+      .then(async (r) => {
+        if (!alive) return;
+        setRental(r.rental);
+        if (r.ended) await refresh();
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [signedIn, lifeStarted, pretend, refresh, homeUnit]);
   // The start screen: before your life starts (or, if no free room could be given, to find one).
   const showWelcome = signedIn && loaded && !homeUnit && !welcomeShut && !property && !place && !finderOpen && (!life || !!roomFailed);
   // First only a home search; once you have a home, all of Home, Work, Money, Life and Services.
@@ -970,6 +989,34 @@ export function useWorldLife({
               : undefined
           }
         >
+          {signedIn && rental && rental.unit === homeUnit && (
+            <div className="mt-3 rounded-2xl bg-ink/5 p-3 text-sm">
+              <p>
+                <b>Rented: {cash(rental.rent)} a month.</b> Next month is paid from your wallet on {new Date(rental.paidUntil).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}.
+              </p>
+              <button
+                onClick={() =>
+                  setConfirm({
+                    title: "Move out?",
+                    text: "You go back to a free room. What you've paid this month isn't given back.",
+                    yes: "Move out",
+                    run: () =>
+                      void act(
+                        () => moveOut(),
+                        () => {
+                          setHomeOpen(false);
+                          setRental(null);
+                          return "You've moved out. A free room is on its way.";
+                        },
+                      ),
+                  })
+                }
+                className="mt-2 h-9 rounded-full bg-white px-3 text-xs font-semibold shadow-sm"
+              >
+                Move out
+              </button>
+            </div>
+          )}
           {signedIn && (
             <StarterRoomBox
               onMoved={async (r) => {
@@ -1171,6 +1218,15 @@ export function useWorldLife({
                       () => api.buyUnit(u.id),
                       (r) => (r.home ? `${u.label} is yours, and your home. Welcome!` : `${u.label} is yours.`),
                     ),
+                  onRent: pretend
+                    ? undefined
+                    : (u) =>
+                        setConfirm({
+                          title: `Rent ${u.label}?`,
+                          text: `${cash(rentMonth(u.mint))} a month: the first month now, then each month from your wallet. Your free room goes back. Move out any time.`,
+                          yes: `Rent for ${cash(rentMonth(u.mint))} a month`,
+                          run: () => void act(() => rentUnit(u.id), () => `${u.label} is your home now. Welcome!`),
+                        }),
                   onHome: (u) => act(() => api.setHome(u.id), () => `You live at ${u.label} now.`),
                   onLet: (u, on) => act(() => api.letUnit(u.id, on), () => (on ? `${u.label} is up for rent.` : `${u.label} isn't let any more.`)),
                   onRename: (name) => act(() => api.renameBuilding(property.id, name), () => (name.trim() ? `Renamed ${name.trim()}.` : "Name cleared.")),

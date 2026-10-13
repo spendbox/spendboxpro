@@ -181,15 +181,25 @@ export async function ownedBuildings(region: string): Promise<OwnedBuildingRow[]
 export async function buildingOwners(buildingId: string): Promise<BuildingOwner[]> {
   if (!ownedSpot(buildingId)) return [];
   const userId = await currentUserId();
-  const { data, error } = await createAdminClient().rpc("building_owners", { p_building: buildingId });
+  const db = createAdminClient();
+  const [{ data, error }, { data: rented }] = await Promise.all([
+    db.rpc("building_owners", { p_building: buildingId }),
+    // Homes rented from the city (game-db/077; nothing until it's run).
+    db.from("home_rentals").select("unit_id, user_id").like("unit_id", `${buildingId}/%`),
+  ]);
   if (error || !Array.isArray(data)) return [];
-  return (data as { unit: string; owner: string; name: string; forSale?: number | null; home?: boolean }[]).map((o) => ({
+  const owned = (data as { unit: string; owner: string; name: string; forSale?: number | null; home?: boolean }[]).map((o) => ({
     unit: o.unit,
     name: o.name,
     mine: o.owner === userId,
     forSale: o.forSale == null ? null : Number(o.forSale),
     home: !!o.home,
   }));
+  const tenants = (rented ?? []) as { unit_id: string; user_id: string }[];
+  if (!tenants.length) return owned;
+  const { data: people } = await db.from("profiles").select("id, username").in("id", tenants.map((t) => t.user_id));
+  const nameOf = new Map(((people ?? []) as { id: string; username: string | null }[]).map((p) => [p.id, p.username ?? "Someone"]));
+  return [...owned, ...tenants.map((t) => ({ unit: t.unit_id, name: nameOf.get(t.user_id) ?? "Someone", mine: t.user_id === userId, forSale: null, home: true, rented: true }))];
 }
 
 /**
@@ -241,4 +251,48 @@ export async function travelTo(buildingId: string, drive?: boolean, from?: { x: 
     }
   }
   return { ok: true, fare: n(data), mode, ...(found ? { found } : {}) };
+}
+
+/** A month's rent for a home from the city: 6% of what it's worth, as landlords earn (docs/MONEY.md). */
+const RENT_MONTH = 0.06;
+
+/** Rent a home nobody owns, a month at a time (game-db/077). */
+export async function rentUnit(unitId: string): Promise<PropertyResult> {
+  const m = /^([a-z0-9-]+:-?\d+,-?\d+)\/(\d+)$/.exec(unitId ?? "");
+  if (!m) return { ok: false, error: "Unknown property." };
+  const userId = await currentUserId();
+  if (!userId) return { ok: false, error: "Sign in to rent a home." };
+  const found = await buildingAt(m[1]);
+  const unit = found?.building.units[Number(m[2])];
+  if (!found || !unit) return { ok: false, error: "That home isn't there." };
+  if (unit.use !== "home") return { ok: false, error: "Only homes can be rented." };
+  const map = regionMap(found.region)!;
+  const value = valueOf(found.building, landNow(map, found.x, found.z), map.region.prices);
+  const rent = Math.max(0.01, Math.round(toMint(value.units[Number(m[2])], map.region.prices) * RENT_MONTH * 100) / 100);
+  const { error } = await createAdminClient().rpc("rent_home", { p_user: userId, p_unit: unitId, p_label: unit.label, p_rent: rent });
+  if (error) {
+    if (/does not exist|rent_home/.test(error.message)) return { ok: false, error: "Renting is switched on soon." };
+    return say(error.message);
+  }
+  return { ok: true };
+}
+
+export type Rental = { unit: string; label: string; rent: number; paidUntil: string } | null;
+
+/** Your rented home (each month that's come due is paid, or you move out when you can't). */
+export async function myRental(): Promise<{ rental: Rental; ended: boolean }> {
+  const userId = await currentUserId();
+  if (!userId) return { rental: null, ended: false };
+  const { data, error } = await createAdminClient().rpc("rent_settle", { p_user: userId });
+  if (error || !data) return { rental: null, ended: false };
+  const d = data as { renting?: boolean; ended?: boolean; unit?: string; label?: string; rent?: number; paid_until?: string };
+  return { rental: d.renting && d.unit ? { unit: d.unit, label: String(d.label ?? "Home"), rent: n(d.rent), paidUntil: String(d.paid_until) } : null, ended: !!d.ended };
+}
+
+/** Move out of your rented home (back to a free room). */
+export async function moveOut(): Promise<PropertyResult> {
+  const userId = await currentUserId();
+  if (!userId) return { ok: false, error: "Please sign in again." };
+  const { error } = await createAdminClient().rpc("rent_end", { p_user: userId });
+  return error ? say(error.message) : { ok: true };
 }
