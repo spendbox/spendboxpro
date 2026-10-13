@@ -1964,10 +1964,16 @@ export function CityView({
     // Games going on outdoors at the sports venues (hoops on the court, a kick-about on the pitch).
     let games: VenueGame[] = [];
 
-    // ---- the names of landmarks at their gates: a sign on two posts by the road, lit at night
-    // (University of Lagos, Yaba College of Technology, LUTH...). Only those in the part drawn.
+    // ---- a gateway at each landmark's entrance: two pillars with lamps, an arch with "WELCOME TO"
+    // and the name (University of Lagos, Yaba College of Technology, LUTH...), flags and a low wall
+    // either side, on the side facing the road. Big enough to read from the air, and you walk
+    // through it on foot. Only those in the part of the city drawn.
     let entranceSigns: { obj: THREE.Object3D; tex: THREE.Texture; mats: THREE.Material[]; geos: THREE.BufferGeometry[] }[] = [];
-    const signPost = new THREE.MeshLambertMaterial({ color: 0x5c636a });
+    const gateStone = new THREE.MeshLambertMaterial({ color: 0xf1e6d0 });
+    const gateDark = new THREE.MeshLambertMaterial({ color: 0x6b5a48 });
+    const gateLamp = new THREE.MeshBasicMaterial({ color: 0xfff1c2 });
+    const flagGreen = new THREE.MeshLambertMaterial({ color: 0x008751, side: THREE.DoubleSide });
+    const flagWhite = new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide });
     const SIGN_COLOURS: Record<string, [string, string]> = {
       campus: ["#1f5f3f", "#ffffff"],
       hospital: ["#ffffff", "#c92a2a"],
@@ -1980,29 +1986,36 @@ export function CityView({
       megamall: ["#7048e8", "#ffffff"],
       market: ["#e8590c", "#ffffff"],
       bigpark: ["#2f6d3a", "#ffffff"],
+      capitol: ["#1c3f6e", "#f2c94c"],
     };
     function signTexture(name: string, type: string) {
       const [bg, fg] = SIGN_COLOURS[type] ?? ["#1c3f6e", "#ffffff"];
       const c = document.createElement("canvas");
       c.width = 1024;
-      c.height = 192;
+      c.height = 288;
       const g = c.getContext("2d")!;
       g.fillStyle = bg;
       g.fillRect(0, 0, c.width, c.height);
-      g.strokeStyle = fg;
-      g.globalAlpha = 0.5;
-      g.lineWidth = 8;
-      g.strokeRect(14, 14, c.width - 28, c.height - 28);
-      g.globalAlpha = 1;
+      // A gold frame.
+      g.strokeStyle = "#e0b84c";
+      g.lineWidth = 14;
+      g.strokeRect(10, 10, c.width - 20, c.height - 20);
       g.fillStyle = fg;
       g.textAlign = "center";
       g.textBaseline = "middle";
-      let size = 84;
+      g.font = `700 54px system-ui, -apple-system, "Segoe UI", sans-serif`;
+      g.globalAlpha = 0.85;
+      (g as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = "10px";
+      g.fillText("WELCOME TO", c.width / 2, 78);
+      (g as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = "0px";
+      g.globalAlpha = 1;
+      let size = 104;
+      const text = name.toUpperCase();
       do {
-        g.font = `800 ${size}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+        g.font = `900 ${size}px system-ui, -apple-system, "Segoe UI", sans-serif`;
         size -= 4;
-      } while (g.measureText(name).width > c.width - 80 && size > 30);
-      g.fillText(name, c.width / 2, c.height / 2 + 4);
+      } while (g.measureText(text).width > c.width - 70 && size > 34);
+      g.fillText(text, c.width / 2, 186);
       const tex = new THREE.CanvasTexture(c);
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.anisotropy = 4;
@@ -2021,7 +2034,7 @@ export function CityView({
       const near = (x: number, z: number) => Math.max(Math.abs(x - win!.cx), Math.abs(z - win!.cz)) <= DETAIL;
       const list: { name: string; type: string; ax: number; az: number; w: number; d: number }[] = [
         ...reg.landmarks.map((l) => ({ name: l.name, type: l.type, ax: l.ax, az: l.az, w: l.w, d: l.d })),
-        ...reg.spotList.filter((sp) => ["hospital", "campus", "arena", "museum", "hotel", "megamall", "worship", "cathedral", "grandmosque", "market"].includes(String(sp.kind))).map((sp) => ({ name: sp.name, type: String(sp.kind), ax: sp.x, az: sp.z, w: 1, d: 1 })),
+        ...reg.spotList.filter((sp) => ["hospital", "campus", "arena", "museum", "hotel", "megamall", "worship", "cathedral", "grandmosque", "market", "capitol"].includes(String(sp.kind))).map((sp) => ({ name: sp.name, type: String(sp.kind), ax: sp.x, az: sp.z, w: 1, d: 1 })),
       ];
       for (const l of list) {
         const cx = l.ax + (l.w - 1) / 2, cz = l.az + (l.d - 1) / 2;
@@ -2038,38 +2051,70 @@ export function CityView({
           if (sd.dx) for (let z = l.az; z < l.az + l.d; z++) if (reg.roadAt(sd.dx > 0 ? l.ax + l.w : l.ax - 1, z)) sd.n++;
         }
         const side = sides.reduce((a, b) => (b.n > a.n ? b : a), sides[0]);
+        const along = side.dz ? l.w : l.d;
         const big = l.w * l.d > 2;
-        // Sized to the people on the map (drawn bigger than life): taller than a person, readable on foot.
-        const W = big ? 0.5 : 0.32;
-        const H = big ? 0.11 : 0.075;
-        const post = big ? 0.32 : 0.25;
+        // Sized to the people on the map (drawn bigger than life): well over their heads.
+        const W = big ? Math.min(1.6, Math.max(0.9, along * 0.35)) : 0.7;
+        const H = big ? 0.75 : 0.55;
+        const P = big ? 0.1 : 0.075;
+        const boardH = W * 0.28;
         const half = side.dz ? l.d / 2 : l.w / 2;
-        const px = cx + side.dx * (half + 0.06);
-        const pz = cz + side.dz * (half + 0.06);
+        const px = cx + side.dx * (half + 0.05);
+        const pz = cz + side.dz * (half + 0.05);
         const tex = signTexture(l.name, l.type);
         const face = new THREE.MeshBasicMaterial({ map: tex });
-        const board = new THREE.PlaneGeometry(W, H);
-        const postGeo = new THREE.BoxGeometry(0.018, post, 0.018).translate(0, post / 2, 0);
-        const frameGeo = new THREE.BoxGeometry(W + 0.016, H + 0.016, 0.008);
+        const geos: THREE.BufferGeometry[] = [];
+        const geo = <T extends THREE.BufferGeometry>(g: T) => (geos.push(g), g);
         const obj = new THREE.Group();
-        const panel = new THREE.Mesh(board, face);
-        panel.position.set(0, post - H / 2, 0.0045);
-        const panelBack = new THREE.Mesh(board, face);
-        panelBack.position.set(0, post - H / 2, -0.0045);
-        panelBack.rotation.y = Math.PI;
-        const back = new THREE.Mesh(frameGeo, signPost);
-        back.position.set(0, post - H / 2, 0);
-        obj.add(panel, panelBack, back);
+        const add = (g: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number, cast = true) => {
+          const mesh = new THREE.Mesh(g, m);
+          mesh.position.set(x, y, z);
+          mesh.castShadow = cast;
+          mesh.receiveShadow = true;
+          obj.add(mesh);
+          return mesh;
+        };
+        // Pillars on plinths, with a lamp on each.
+        const pillar = geo(new THREE.BoxGeometry(P, H, P).translate(0, H / 2, 0));
+        const plinth = geo(new THREE.BoxGeometry(P * 1.5, P * 0.6, P * 1.5).translate(0, P * 0.3, 0));
+        const cap = geo(new THREE.BoxGeometry(P * 1.35, P * 0.3, P * 1.35));
+        const lamp = geo(new THREE.SphereGeometry(P * 0.42, 12, 8));
         for (const sx of [-W / 2, W / 2]) {
-          const m = new THREE.Mesh(postGeo, signPost);
-          m.position.x = sx;
-          m.castShadow = true;
-          obj.add(m);
+          add(plinth, gateDark, sx, 0, 0);
+          add(pillar, gateStone, sx, 0, 0);
+          add(cap, gateDark, sx, H + P * 0.15, 0);
+          add(lamp, gateLamp, sx, H + P * 0.55, 0, false);
+        }
+        // The arch: a beam across the top, the sign hanging from it (both faces), a crest above.
+        const beam = geo(new THREE.BoxGeometry(W + P * 1.4, P * 0.55, P * 0.9));
+        add(beam, gateDark, 0, H - P * 0.1, 0);
+        const boardGeo = geo(new THREE.PlaneGeometry(W - P * 1.1, boardH));
+        const backing = geo(new THREE.BoxGeometry(W - P * 0.9, boardH + P * 0.25, P * 0.35));
+        const by = H - P * 0.4 - boardH / 2;
+        add(backing, gateDark, 0, by, 0);
+        add(boardGeo, face, 0, by, P * 0.18, false);
+        add(boardGeo, face, 0, by, -P * 0.18, false).rotation.y = Math.PI;
+        const crest = geo(new THREE.CylinderGeometry(boardH * 0.55, boardH * 0.55, P * 0.3, 20, 1, false, 0, Math.PI).rotateX(Math.PI / 2).rotateZ(Math.PI / 2));
+        add(crest, gateStone, 0, H + P * 0.2, 0);
+        // A low wall running off either side along the boundary.
+        const wallLen = big ? Math.min(1.2, along * 0.3) : 0.25;
+        const wall = geo(new THREE.BoxGeometry(wallLen, P * 0.9, P * 0.5).translate(0, P * 0.45, 0));
+        for (const sx of [-1, 1]) add(wall, gateStone, sx * (W / 2 + wallLen / 2 + P * 0.2), 0, 0);
+        // Flags (green, white, green) on poles beside the pillars.
+        const pole = geo(new THREE.CylinderGeometry(0.006, 0.006, H * 1.25, 6).translate(0, (H * 1.25) / 2, 0));
+        const stripe = geo(new THREE.PlaneGeometry(P * 0.8, P * 1.4));
+        for (const sx of [-1, 1]) {
+          const fx = sx * (W / 2 + P * 1.6);
+          add(pole, gateDark, fx, 0, 0);
+          [flagGreen, flagWhite, flagGreen].forEach((m, k) => {
+            const f = add(stripe, m, fx + sx * (P * 0.4 + 0.004), H * 1.25 - P * 0.75, (k - 1) * P * 0.8, false);
+            f.rotation.y = Math.PI / 2;
+          });
         }
         obj.position.set(px, 0, pz);
         obj.rotation.y = Math.atan2(side.dx, side.dz);
         life.add(obj);
-        entranceSigns.push({ obj, tex, mats: [face], geos: [board, postGeo, frameGeo] });
+        entranceSigns.push({ obj, tex, mats: [face], geos });
       }
     }
 
@@ -5883,6 +5928,20 @@ export function CityView({
       meFig.traverse((o) => ((o as THREE.Mesh).castShadow = true));
       scene.add(meFig);
     }
+    /** On foot: you as your own 3D avatar (the little figure shows until it's built). */
+    let meStreet: ReturnType<typeof createMyAvatar> | null = null;
+    function streetAvatar(dt: number, moving: number) {
+      if (!meStreet) {
+        meStreet = createMyAvatar(atmos.current.meAvatar);
+        // About as tall as the people on the map (drawn bigger than life), facing the way you walk.
+        meStreet.root.scale.setScalar(0.2 / 1.72);
+        meStreet.root.rotation.y = Math.PI;
+        meFig.add(meStreet.root);
+      }
+      const ready = meStreet.ready();
+      for (const c of meFig.children) if (c !== meStreet.root && !(c as THREE.Mesh).geometry?.type?.startsWith("Ring")) c.visible = !ready;
+      meStreet.update(dt, moving > 0.85 ? "run" : moving > 0.08 ? "walk" : "idle");
+    }
     /** Can you stand here? (Not in water, not inside a building.) */
     function walkable(x: number, z: number): "ok" | "water" | "building" {
       const plan = currentPlan;
@@ -5986,7 +6045,8 @@ export function CityView({
         legs[1].rotation.x *= 0.8;
       }
       const gy = 0.07;
-      meFig.position.set(walker.x, gy + Math.abs(Math.sin(walker.step)) * 0.006 * (mag > 0.08 ? 1 : 0), walker.z);
+      streetAvatar(dt, mag);
+      meFig.position.set(walker.x, gy + (meStreet?.ready() ? 0 : Math.abs(Math.sin(walker.step)) * 0.006 * (mag > 0.08 ? 1 : 0)), walker.z);
       meFig.rotation.y = walker.face;
       // The camera: behind you and a little above, looking at you.
       const dist = 0.55 * look.state.zoom;

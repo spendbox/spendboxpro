@@ -11,6 +11,8 @@
 - Working at a counter.
 - Clapping, cheering.
 - A handshake, a hug.
+- The club's eight dances (Groove, Hands up, Shaku shaku, Disco point, Body wave, Gwara gwara, Legwork, Spin), on the club's beat, the move each player picks.
+- You on the street (walk mode) and inside homes: your own 3D avatar, walking, running, standing.
 
 Every NPC, every player in a place, the dancers and the passengers on rides now use the new 3D avatars in all these poses (src/app/play/city/npc3d.ts). Up to 16 people per place are switched over; the old figure stays only while an avatar is still loading, or on a phone that can't build them. You can try every move in the avatar lab (/avatar-lab).
 

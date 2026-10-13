@@ -16,9 +16,14 @@ import { seededRecipe } from "@/lib/avatar3d/recipe";
 import { recipeOf } from "@/lib/avatar";
 import { mountModel, type AvatarObject } from "@/lib/avatar3d/scene";
 import type { Pose, Act } from "./figures";
+import { clubBeat, type DanceMove } from "./dance-moves";
 
 /** What createFigures hands back for each person (only what's needed here). */
-type FigLike = { id: string; root: THREE.Group; mesh: THREE.Object3D; pose: Pose; act: Act; hipsY: number; baseY: number; prop?: THREE.Object3D | null };
+type FigLike = {
+  id: string; root: THREE.Group; mesh: THREE.Object3D; pose: Pose; act: Act; hipsY: number; baseY: number; prop?: THREE.Object3D | null;
+  /** Dancing: the move picked (players), or the three a regular mixes up, and when they start. */
+  move?: DanceMove | null; moves?: DanceMove[]; phase?: number;
+};
 
 /** At most this many 3D people in one place (they cost more to draw than the old figures). */
 const MAX = 16;
@@ -59,7 +64,7 @@ function cup(unit: number) {
  * avatar). players: also swap the players (not only the NPCs).
  */
 export function upgradeNpcs(figs: FigLike[], people: { id: string; avatar?: unknown; npc?: boolean }[], opts?: { players?: boolean }) {
-  const live: { obj: AvatarObject; mats: MaterialSet; move: Move; t: number; speed: number; extra?: Partial<Dims>; extras: THREE.Object3D[] }[] = [];
+  const live: { obj: AvatarObject; mats: MaterialSet; move: Move; t: number; speed: number; extra?: Partial<Dims>; extras: THREE.Object3D[]; fig: FigLike }[] = [];
   let gone = false;
   const byId = new Map(people.map((p) => [p.id, p]));
   const chosen = figs.filter((f) => (opts?.players || String(f.id).startsWith("npc:")) && byId.has(f.id)).slice(0, MAX);
@@ -100,7 +105,7 @@ export function upgradeNpcs(figs: FigLike[], people: { id: string; avatar?: unkn
         f.root.add(obj.root);
         f.mesh.visible = false;
         if (f.prop) f.prop.visible = false;
-        live.push({ obj, mats, move, t: k * 1.7, speed: 0.9 + ((k * 37) % 20) / 100, extra, extras });
+        live.push({ obj, mats, move, t: k * 1.7, speed: 0.9 + ((k * 37) % 20) / 100, extra, extras, fig: f });
       })
       .catch(() => {
         // The old figure stays.
@@ -108,7 +113,17 @@ export function upgradeNpcs(figs: FigLike[], people: { id: string; avatar?: unkn
   });
   return {
     update(dt: number) {
+      const beat = clubBeat();
       for (const a of live) {
+        const f = a.fig;
+        if (f.act === "dance") {
+          // The club's dances, on the club's beat: the move they picked, or every 16 beats the next of their three.
+          const list = f.moves?.length ? f.moves : (["groove"] as DanceMove[]);
+          const id = f.move ?? list[Math.floor((beat + (f.phase ?? 0) * 3) / 16) % list.length];
+          const P = applyMove(a.obj.nodes, a.obj.rest, byIdMove(`dance_${id}`), (beat + (f.phase ?? 0) * 0.02) / 2, a.obj.stride);
+          a.obj.root.rotation.y = P.spin ?? 0;
+          continue;
+        }
         a.t += dt * a.speed;
         applyMove(a.obj.nodes, a.obj.rest, a.move, a.t, a.obj.stride, a.extra);
       }
@@ -167,8 +182,10 @@ export function createMyAvatar(avatar: unknown) {
     .catch(() => {});
   return {
     root,
-    /** doing: "walk", "idle" or "sit" (seat: its height in metres). */
-    update(dt: number, doing: "walk" | "idle" | "sit", seat = 0.46) {
+    /** Built and showing yet? */
+    ready: () => !!live,
+    /** doing: "walk", "run", "idle" or "sit" (seat: its height in metres). */
+    update(dt: number, doing: "walk" | "run" | "idle" | "sit", seat = 0.46) {
       if (!live) return;
       t += dt;
       const move = byIdMove(doing === "sit" ? "sit" : doing);
