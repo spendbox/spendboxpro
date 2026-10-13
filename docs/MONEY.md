@@ -41,3 +41,10 @@ database counts one a minute at most (`active_ping`, up to 10 hours a day).
 `src/lib/world/price-level.ts` holds two levers (everyday things; things you own) that can lift a
 whole group of prices at once. Both are 1: real prices. Homes cost a tenth of real Lagos land plus
 the real cost of building, so a home of your own is within reach.
+
+## The fresh start (game-db/075_fresh_start.sql)
+Run once, on the day the simple life goes live. Everyone's money becomes ₦350,000 (₦250,000 plus a
+₦100,000 founder bonus), savings pots are emptied, everyone gets the Founder badge and a message.
+Homes, places, cars and things stay theirs; players with no home get a free room next time they
+open the game. Everyone's old money is saved in `fresh_start_backup` first, and the file ends with
+the (commented-out) lines that undo it. Running it again does nothing.
