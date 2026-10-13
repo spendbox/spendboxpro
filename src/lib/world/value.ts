@@ -175,11 +175,13 @@ export const cashSymbol = () => current().symbol;
 
 /**
  * An amount of mint in the player's currency: "₦4,500", "₦1.2m", "$3.10", "₥1,240". Big amounts
- * are shortened unless `full` (net worth) asks for every digit.
+ * are shortened unless `full` (net worth) asks for every digit; `exact` skips the rounding.
  */
-export function cash(mint: number, opts: { full?: boolean } = {}) {
+export function cash(mint: number, opts: { full?: boolean; exact?: boolean } = {}) {
   const s = cashSymbol();
-  const v = tidy(toShown(mint), current().code === "MINT");
+  // `exact`: every naira (a balance going up live), not rounded the way people say prices.
+  const raw = toShown(mint);
+  const v = opts.exact ? (current().code === "MINT" ? raw : Math.floor(raw)) : tidy(raw, current().code === "MINT");
   const sign = v < 0 ? "−" : "";
   const a = Math.abs(v);
   const one = (n: number) => n.toFixed(n >= 100 ? 0 : 1).replace(/\.0$/, "");

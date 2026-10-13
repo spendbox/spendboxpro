@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, Building, Clapperboard, Coins, Egg, Gift, Globe, Landmark, Megaphone, Plane, Rocket, Skull, Smile, Users, Briefcase as Work, Wallet, Zap } from "lucide-react";
 import { Star } from "@/components/icons";
+import { REP_LEVELS, repLevel } from "@/lib/world/rep-levels";
 import { reputationDetails, type RepDetails } from "../rep-actions";
 import { Sheet } from "../sheet";
 import { openAdvertise } from "./advertise-panel";
@@ -32,8 +33,9 @@ export function ReputationSheet({ onClose }: { onClose: () => void }) {
           <div className="rounded-3xl bg-gradient-to-br from-gold/30 to-gold/5 p-4 text-center">
             <Star className="mx-auto size-7 fill-gold text-gold-dark" />
             <p className="font-display text-4xl font-extrabold tabular-nums">{d.score.toLocaleString("en-GB")}</p>
-            <p className="text-xs text-muted">How the city sees you. It decides how many marks you can leave, and soon, what you earn.</p>
+            <p className="text-xs text-muted">How the city sees you. Climb the levels for money off property, a bigger daily gift and more marks.</p>
           </div>
+          <Levels score={d.score} />
           <p className="mt-4 flex items-center gap-1.5 text-sm font-semibold text-me">
             <ArrowUp className="size-4" /> Bringing it up
           </p>
@@ -133,5 +135,43 @@ export function ComingSoonSheet({ onClose }: { onClose: () => void }) {
         </button>
       </div>
     </Sheet>
+  );
+}
+
+/** Your level, the next one and how close you are, and what every level gives you. */
+function Levels({ score }: { score: number }) {
+  const { level, next, index, progress } = repLevel(score);
+  return (
+    <div className="mt-3 rounded-3xl bg-ink/[0.04] p-4">
+      <p className="flex items-center justify-between text-sm">
+        <b>
+          {level.emoji} {level.name}
+        </b>
+        {level.discount > 0 && <span className="rounded-full bg-[#ebfbee] px-2 py-0.5 text-xs font-bold text-[#2b8a3e]">{Math.round(level.discount * 100)}% off property</span>}
+      </p>
+      {next ? (
+        <>
+          <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-ink/10">
+            <div className="h-full rounded-full bg-gradient-to-r from-gold to-[#f08c00] transition-all" style={{ width: `${Math.round(progress * 100)}%` }} />
+          </div>
+          <p className="mt-1.5 text-xs text-muted">
+            {next.at - score} more to <b className="text-ink">{next.emoji} {next.name}</b>: {Math.round(next.discount * 100)}% off every property you buy from the city.
+          </p>
+        </>
+      ) : (
+        <p className="mt-1 text-xs text-muted">The top of Newtown. Everyone knows your name!</p>
+      )}
+      <ul className="mt-3 grid grid-cols-2 gap-1.5 text-xs">
+        {REP_LEVELS.map((l, i) => (
+          <li key={l.name} className={`rounded-xl px-2.5 py-1.5 ${i === index ? "bg-gold/25 font-bold" : i < index ? "bg-white/70 text-muted" : "bg-white"}`}>
+            {l.emoji} {l.name}
+            <span className="block text-[10px] text-muted">
+              {l.at}+ · {l.discount ? `${Math.round(l.discount * 100)}% off property` : "Just arrived"}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-[11px] text-muted">Win challenges (+3 each), host games people play (+1), own property and fine things, and leave marks people love.</p>
+    </div>
   );
 }

@@ -8,6 +8,7 @@ import type { MoneyView } from "@/lib/world/money-view";
 import { TOPUPS } from "@/lib/world/topups";
 import { payInPopup } from "./paystack-popup";
 import { Sheet } from "./sheet";
+import { useIncome } from "./income";
 import { confirmTopUp, startTopUp, toppedUpBefore } from "./topup-actions";
 
 // Your money (docs/MONEY.md): tap your cash. Kept short: what you have, today's gift, top up.
@@ -163,7 +164,7 @@ export function MoneyHome({
   onTaken: () => void;
   /** A top-up arrived. */
   onToppedUp: (mint: number, doubled: boolean) => void;
-  /** Your places and the rent they earn. */
+  /** Your assets: your property and what it earns. */
   onProperty: () => void;
 }) {
   const [view, setView] = useState<MoneyView | null | undefined>(undefined);
@@ -175,12 +176,30 @@ export function MoneyHome({
     };
   }, []);
   const today = view ? view.inToday.reduce((t, r) => t + r.naira, 0) : 0;
+  const income = useIncome();
   return (
     <Sheet onClose={onClose} title="Your money" above>
       <div className="flex items-end justify-between rounded-2xl bg-ink px-4 py-3 text-white">
-        <p className="font-display text-3xl font-extrabold tabular-nums">{cash(coins)}</p>
+        <p className="font-display text-3xl font-extrabold tabular-nums">{cash(coins, { exact: true, full: true })}</p>
         {today > 0 && <p className="text-xs font-semibold text-[#8ce99a]">+{cash(today / perMint)} today</p>}
       </div>
+      <button
+        onClick={() => {
+          onClose();
+          onProperty();
+        }}
+        className="mt-2 flex w-full items-center gap-2 rounded-2xl bg-[#ebfbee] px-3 py-2 text-left text-sm"
+      >
+        <House className="size-4 shrink-0 text-[#2b8a3e]" />
+        {income.perDay > 0 ? (
+          <span className="min-w-0 flex-1">
+            Your property earns <b className="text-[#2b8a3e]">{cash(income.perDay)} a day</b>, paid by itself.
+          </span>
+        ) : (
+          <span className="min-w-0 flex-1">Buy property and it pays you every day, by itself.</span>
+        )}
+        <span className="shrink-0 text-xs font-semibold text-[#2b8a3e]">Assets →</span>
+      </button>
       <div className="mt-3">
         {view === undefined ? (
           <div className="h-16 animate-pulse rounded-2xl bg-ink/5" />
@@ -191,15 +210,6 @@ export function MoneyHome({
       <div className="mt-3">
         <TopUps region={region} perMint={perMint} onToppedUp={onToppedUp} />
       </div>
-      <button
-        onClick={() => {
-          onClose();
-          onProperty();
-        }}
-        className="mt-3 flex w-full items-center justify-center gap-1.5 text-xs font-semibold text-muted"
-      >
-        <House className="size-3.5" /> Your places and rent
-      </button>
     </Sheet>
   );
 }

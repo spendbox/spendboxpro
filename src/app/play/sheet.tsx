@@ -46,7 +46,7 @@ export function Sheet({
   return (
     <div
       // Never blurred: the city behind stays sharp (just a little dimmer, or not at all).
-      className={cn("fixed inset-0 grid p-2 sm:place-items-center sm:p-4", centred ? "place-items-center pb-16" : "place-items-end", above ? "z-[70]" : "z-40", clear ? "bg-transparent" : "bg-ink/20")}
+      className={cn("fixed inset-0 grid p-2 sm:place-items-center sm:p-4", centred ? "place-items-center pb-16" : "place-items-end", above ? "z-[70]" : "z-[60]", clear ? "bg-transparent" : "bg-ink/20")}
       onPointerDown={(e) => {
         downOnBackdrop.current = e.target === e.currentTarget;
         // Taps and typing in a card are the card's alone: the map's own listeners (dragging,

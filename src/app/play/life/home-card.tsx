@@ -64,7 +64,7 @@ export function HomeCard({
   const inside = (neighbours ?? []).filter((n) => n.sameBuilding);
   const around = (neighbours ?? []).filter((n) => !n.sameBuilding);
   return (
-    <div className="pointer-events-auto absolute inset-x-0 bottom-20 z-30 flex justify-center px-3">
+    <div className="pointer-events-auto absolute inset-x-0 bottom-20 z-[60] flex justify-center px-3">
       <section className="glass w-full max-w-sm rounded-3xl p-4 shadow-lg">
         <div className="flex items-start gap-3">
           <div className="grid size-10 shrink-0 place-items-center rounded-2xl bg-me/15 text-me">

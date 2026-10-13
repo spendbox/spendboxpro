@@ -5,7 +5,8 @@ import { currentUserId } from "@/lib/game";
 import { pushTo } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { REGIONS } from "@/lib/world";
-import { CHALLENGE_COOLDOWN_SECS, CHALLENGE_FEE_NAIRA, NEAR_TILES, STAKES_NAIRA, challengeGame } from "@/lib/world/challenges";
+import { CHALLENGE_COOLDOWN_SECS, CHALLENGE_FEE_NAIRA, NEAR_TILES, STAKE_MAX_NAIRA, STAKE_MIN_NAIRA, challengeGame, cleanStake, stakeBounds } from "@/lib/world/challenges";
+import { tidy } from "@/lib/world/value";
 
 // Challenges on the map (docs/CHALLENGES.md; the database part is game-db/070_challenges.sql).
 // Money only moves in the database: the stakes, the fee, the pool and the winner's prize.
@@ -35,32 +36,72 @@ const spotOf = (id: string | null) => {
   return m ? { x: Number(m[1]), z: Number(m[2]) } : null;
 };
 
-/** Before you challenge: free now, or the fee and how long until it's free again. */
-export async function challengeQuote(region: string): Promise<{ free: boolean; feeMint: number; secsLeft: number; first: boolean }> {
-  const feeMint = Math.round((CHALLENGE_FEE_NAIRA / perMintOf(region)) * 100) / 100;
-  const userId = await currentUserId();
-  if (!userId) return { free: true, feeMint, secsLeft: 0, first: true };
-  const { data } = await createAdminClient().from("challenges").select("created_at").eq("host_id", userId).neq("status", "cancelled").order("created_at", { ascending: false }).limit(1);
-  const last = data?.[0]?.created_at ? Date.parse(String(data[0].created_at)) : null;
-  const secsLeft = last ? Math.max(0, Math.ceil((last + CHALLENGE_COOLDOWN_SECS * 1000 - Date.now()) / 1000)) : 0;
-  return { free: secsLeft === 0, feeMint, secsLeft, first: last === null };
+export type ChallengeQuote = {
+  free: boolean;
+  feeMint: number;
+  secsLeft: number;
+  first: boolean;
+  /** Naira in a mint here. */
+  perMint: number;
+  /** The smallest and biggest stake (mint). */
+  minStake: number;
+  maxStake: number;
+  /** What you can spend on it: your Fun money and wallet (mint), or null if it couldn't be read. */
+  canSpend: number | null;
+  /** Your challenges so far, for reputation: hosted (played to a winner) and won. */
+  rep: { hosted: number; won: number } | null;
+};
+
+/** Your challenges hosted (played to a winner) and won, for reputation (null if it couldn't be read). */
+async function repOf(db: ReturnType<typeof createAdminClient>, userId: string) {
+  const { data, error } = await db.rpc("challenge_rep", { p_user: userId });
+  if (error || !data) return null;
+  const d = data as { hosted?: number; won?: number };
+  return { hosted: n(d.hosted), won: n(d.won) };
 }
 
-/** Challenge everyone nearby. */
-export async function openChallenge(game: string, stakeNaira: number, x: number, z: number, region: string): Promise<{ ok: true; id: number; fee: number } | (Fail & { busyId?: number })> {
+/** Before you challenge: free now, or the fee and how long until it's free again; the stakes allowed and what you have. */
+export async function challengeQuote(region: string): Promise<ChallengeQuote> {
+  const perMint = perMintOf(region);
+  const feeMint = Math.round((CHALLENGE_FEE_NAIRA / perMint) * 100) / 100;
+  const { min: minStake, max: maxStake } = stakeBounds(perMint);
+  const base = { perMint, feeMint, minStake, maxStake };
+  const userId = await currentUserId();
+  if (!userId) return { ...base, free: true, secsLeft: 0, first: true, canSpend: null, rep: null };
+  const db = createAdminClient();
+  const [{ data }, spend, rep] = await Promise.all([
+    db.from("challenges").select("created_at").eq("host_id", userId).neq("status", "cancelled").order("created_at", { ascending: false }).limit(1),
+    db.rpc("life_can_spend", { p_user: userId, p_pots: ["fun"] }),
+    repOf(db, userId),
+  ]);
+  const last = data?.[0]?.created_at ? Date.parse(String(data[0].created_at)) : null;
+  const secsLeft = last ? Math.max(0, Math.ceil((last + CHALLENGE_COOLDOWN_SECS * 1000 - Date.now()) / 1000)) : 0;
+  return { ...base, free: secsLeft === 0, secsLeft, first: last === null, canSpend: spend.error || spend.data == null ? null : n(spend.data), rep };
+}
+
+/** Your challenges hosted and won so far (to show what a result added to your reputation). */
+export async function myChallengeRep(): Promise<{ hosted: number; won: number } | null> {
+  const userId = await currentUserId();
+  if (!userId) return null;
+  return repOf(createAdminClient(), userId);
+}
+
+/** Challenge everyone nearby. stakeMint: what each player puts into the pool (any amount from ₦1,000 to ₦1m, in mint). */
+export async function openChallenge(game: string, stakeMint: number, x: number, z: number, region: string): Promise<{ ok: true; id: number; fee: number } | (Fail & { busyId?: number })> {
   const g = challengeGame(game);
   if (!g?.engine) return { ok: false, error: "That game is coming soon." };
-  if (!STAKES_NAIRA.includes(stakeNaira)) return { ok: false, error: "Pick a stake." };
   if (!REGIONS[region] || !Number.isFinite(x) || !Number.isFinite(z)) return { ok: false, error: "Unknown place." };
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Sign in to challenge people." };
   const perMint = perMintOf(region);
+  const stake = cleanStake(Number(stakeMint), perMint);
+  if (stake === null) return { ok: false, error: `Pick a stake from ₦${STAKE_MIN_NAIRA.toLocaleString("en-GB")} to ₦${STAKE_MAX_NAIRA.toLocaleString("en-GB")}.` };
   const db = createAdminClient();
   const { data, error } = await db.rpc("challenge_open", {
     p_user: userId,
     p_region: region,
     p_game: g.id,
-    p_stake: Math.round((stakeNaira / perMint) * 100) / 100,
+    p_stake: stake,
     p_x: Math.round(x),
     p_z: Math.round(z),
     p_seats: g.seats,
@@ -85,7 +126,7 @@ export async function openChallenge(game: string, stakeNaira: number, x: number,
     return s && Math.hypot(s.x - x, s.z - z) <= NEAR_TILES;
   });
   for (const l of near.slice(0, 60)) {
-    await db.rpc("notify", { p_user: l.user_id, p_round: null, p_kind: "challenge", p_body: `${name} challenged everyone nearby to ${g.title}! ₦${stakeNaira.toLocaleString("en-GB")} each into the pool. Join within a minute.` });
+    await db.rpc("notify", { p_user: l.user_id, p_round: null, p_kind: "challenge", p_body: `${name} challenged everyone nearby to ${g.title}! ₦${tidy(stake * perMint).toLocaleString("en-GB")} each into the pool. Join within a minute.` });
     await pushTo(l.user_id).catch(() => {});
   }
   return { ok: true, id: n(d.id), fee: n(d.fee) };

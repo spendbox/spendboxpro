@@ -52,7 +52,7 @@ Homes, places, cars and things stay theirs; players with no home get a free room
 open the game. Everyone's old money is saved in `fresh_start_backup` first, and the file ends with
 the (commented-out) lines that undo it. Running it again does nothing.
 
-## Top-ups (game-db/076_topups.sql)
+## Top-ups (game-db/076_topups.sql; amounts in src/lib/world/topups.ts: ₦1,000 is ₦5,000,000)
 Tap your cash, then pick an amount. Paystack's pay box opens over the game (`src/app/play/paystack-popup.ts`),
 so nobody leaves the site; if it can't open, Paystack's own page opens instead. Paid through Paystack
 (`src/app/play/topup-actions.ts`); the money only
@@ -61,11 +61,11 @@ into real money.
 
 | Pay | Game money | Bonus |
 |---|---|---|
-| ₦1,000 | ₦1,000,000 | |
-| ₦2,500 | ₦2,750,000 | +10% |
-| ₦5,000 | ₦6,000,000 | +20% |
-| ₦10,000 | ₦13,000,000 | +30% |
-| ₦25,000 | ₦35,000,000 | +40% |
+| ₦1,000 | ₦5,000,000 | |
+| ₦2,500 | ₦13,750,000 | +10% |
+| ₦5,000 | ₦30,000,000 | +20% |
+| ₦10,000 | ₦65,000,000 | +30% |
+| ₦25,000 | ₦175,000,000 | +40% |
 
 Your first top-up is doubled. The old starter packs are no longer offered (everyone starts the
 same way, with ₦250,000 and a free room); packs already paid for still arrive.
@@ -75,3 +75,15 @@ Any home for sale can be rented instead of bought: 6% of its value a month, the 
 when you move in. Each month that comes due is paid when you open the game; if you can't pay, you
 move out and get a free room again. Buying a home ends your lease; Move out on your home card ends
 it any time.
+
+## What your property earns (game-db/079_property_income.sql)
+Every home, shop, office or plot you own (not a free room) earns 1% of what you paid for it a day
+(`property_income_day`), by itself. It's counted to the second and paid when the game opens, every
+5 minutes while you play, when you open Your money, and before you buy property
+(`POST /api/income`, `property_income_settle`). While you're away it keeps earning, up to 2 days'
+worth. Your cash at the top goes up every 5 seconds as it earns (`src/app/play/income.ts`), and
+Things → Assets shows each property, what it earns every 10 minutes and a day, and all it has
+earned you, going up as you watch.
+
+Buying property from the city is simply its price now (no buying tax), less your reputation
+level's discount (docs/REPUTATION.md). Renting is no longer offered (leases already running carry on).

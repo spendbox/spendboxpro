@@ -2299,6 +2299,8 @@ revoke all on function public.rent_home(uuid, text, text, numeric), public.rent_
 --
 -- Safe to run more than once.
 
+alter table public.lives add column if not exists home_named_at timestamptz;
+
 /** Name a home you hold (an empty name puts back what it was called: "Room", "Flat"...). */
 create or replace function public.home_rename(p_user uuid, p_unit text, p_name text) returns void
 language plpgsql security definer set search_path = public as $$
@@ -2309,7 +2311,173 @@ begin
   update public.property_units set label = coalesce(v_name, case when starter then 'Room' else 'Home' end)
   where unit_id = p_unit and owner_id = p_user and use = 'home';
   if not found then raise exception 'not_yours'; end if;
+  -- The walkthrough's first step (part 80).
+  if v_name is not null then update public.lives set home_named_at = now() where user_id = p_user; end if;
 end $$;
 revoke all on function public.home_rename(uuid, text, text) from public, anon, authenticated;
 grant execute on function public.home_rename(uuid, text, text) to service_role;
+
+-- ======================================================== 079_property_income.sql
+-- Newtown, part 79: property pays you, by itself (docs/MONEY.md, "What your property earns").
+--   1. Every home, shop, office or plot you own (not a free room) earns a share of what you paid
+--      for it every day (property_income_day, 1% a day to start), counted to the second and paid
+--      whenever the game asks (opening the game, every minute while you play, opening your
+--      wallet). While you're away it keeps earning, up to 2 days' worth.
+--   2. Buying from the city is simply its price: no buying tax any more.
+--
+-- Safe to run more than once.
+
+insert into public.game_settings (key, value, note) values
+  ('property_income_day', 0.01, 'Share of what you paid for a property that it earns you every day (paid automatically)'),
+  ('property_income_cap_hours', 48, 'Most hours of property income paid at once (earning while away)')
+on conflict (key) do update set value = excluded.value, note = excluded.note;
+
+-- A simple buy at the price shown.
+update public.game_settings set value = 0 where key = 'property_buy_tax';
+
+alter table public.lives add column if not exists income_at timestamptz;
+
+/** What your property earns a day (mint): the share of what you paid for each unit you own (free rooms earn nothing). */
+create or replace function public.property_income_day(p_user uuid) returns numeric
+language sql stable security definer set search_path = public as $$
+  select round(coalesce(sum(u.price), 0) * coalesce(public.setting('property_income_day'), 0), 4)
+  from public.property_units u
+  where u.owner_id = p_user and not coalesce(u.starter, false)
+$$;
+
+/**
+ * Pay what your property has earned since last time (up to the cap). Returns
+ * { paid, per_day, at, coins, total }: paid now, earning a day, when it was counted up to, your
+ * coins after, and all it has ever paid you.
+ */
+create or replace function public.property_income_settle(p_user uuid) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  l public.lives;
+  v_day numeric := public.property_income_day(p_user);
+  v_secs numeric;
+  v_pay numeric := 0;
+  v_coins numeric;
+begin
+  select * into l from public.lives where user_id = p_user for update;
+  if not found then return jsonb_build_object('paid', 0, 'per_day', 0); end if;
+  if l.income_at is not null and v_day > 0 then
+    v_secs := least(extract(epoch from now() - l.income_at), coalesce(public.setting('property_income_cap_hours'), 48) * 3600);
+    v_pay := floor(v_day * greatest(v_secs, 0) / 86400 * 100) / 100;
+  end if;
+  if v_pay > 0 then
+    update public.profiles set coins = coins + v_pay where id = p_user;
+    perform public.log_coins(p_user, null, 'property_income', v_pay, false, 'What your property earned');
+    -- Counted up to the second that's been paid for (the pennies not yet paid carry on).
+    update public.lives set income_at = least(now(), l.income_at + make_interval(secs => v_pay / v_day * 86400)) where user_id = p_user;
+    if extract(epoch from now() - l.income_at) > coalesce(public.setting('property_income_cap_hours'), 48) * 3600 then
+      update public.lives set income_at = now() where user_id = p_user;
+    end if;
+  elsif l.income_at is null or v_day <= 0 then
+    update public.lives set income_at = now() where user_id = p_user;
+  end if;
+  select coins into v_coins from public.profiles where id = p_user;
+  return jsonb_build_object(
+    'paid', v_pay,
+    'per_day', v_day,
+    'at', (select income_at from public.lives where user_id = p_user),
+    'coins', v_coins,
+    'total', coalesce((select sum(amount) from public.ledger where user_id = p_user and kind = 'property_income'), 0)
+  );
+end $$;
+
+revoke all on function public.property_income_day(uuid), public.property_income_settle(uuid) from public, anon, authenticated;
+grant execute on function public.property_income_day(uuid), public.property_income_settle(uuid) to service_role;
+
+-- The daily new-mint report counts property income too.
+create or replace view public.coin_supply_daily as
+select created_at::date as day,
+       coalesce(sum(amount) filter (where kind in ('signup', 'seeker_bonus', 'topup', 'sponsor', 'bot_bounty', 'bot_funding',
+                                                   'balloon', 'passive', 'ad_reward', 'level_bonus', 'event_reward', 'event_bonus',
+                                                   'npc_gift', 'quest_reward', 'activity_reward', 'streak_reward', 'job_pay',
+                                                   'start_grant', 'rent', 'work_pay', 'treasury_opening', 'hustle_pay', 'bonus',
+                                                   'daily_gift', 'challenge_bonus', 'first_step', 'property_income', 'tutorial')), 0) as created,
+       coalesce(sum(amount) filter (where kind = 'burn'), 0) as burned
+from public.ledger
+group by 1
+order by 1 desc;
+revoke all on public.coin_supply_daily from public, anon, authenticated;
+grant select on public.coin_supply_daily to service_role;
+
+-- ======================================================== 080_tutorial.sql
+-- Newtown, part 80: the walkthrough's steps and rewards (docs/FIRST_STEPS.md), for everyone, old
+-- players too, once each:
+--   name : give your home a name            (₦20,000)
+--   hi   : say hi to someone in a private chat (₦50,000)
+--   win  : win a challenge against someone    (₦50,000)
+-- Each counts only if done after the player's walkthrough started (so everyone is shown how,
+-- even if they did it long ago). The server works out the rewards in mint; each is capped here.
+--
+-- Safe to run more than once.
+
+alter table public.lives add column if not exists tutorial_at timestamptz;
+alter table public.lives add column if not exists home_named_at timestamptz;
+
+create table if not exists public.tutorial_steps (
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  step text not null check (step in ('name', 'hi', 'win')),
+  reward numeric(14,2) not null default 0,
+  created_at timestamptz not null default now(),
+  primary key (user_id, step)
+);
+alter table public.tutorial_steps enable row level security;
+
+-- Naming your home (part 78, home_rename) stamps lives.home_named_at.
+
+/**
+ * Which steps are done, paying each newly done one once. p_rewards: { name, hi, win } in mint.
+ * Starts the walkthrough's clock the first time it's asked. Returns
+ * { name, hi, win, paid: [...], rewards: { name, hi, win } }.
+ */
+create or replace function public.tutorial_check(p_user uuid, p_rewards jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  l public.lives;
+  v_since timestamptz;
+  v_done jsonb;
+  v_paid text[] := '{}';
+  v_step text;
+  v_reward numeric;
+begin
+  select * into l from public.lives where user_id = p_user for update;
+  if not found then return null; end if;
+  v_since := coalesce(l.tutorial_at, now());
+  if l.tutorial_at is null then update public.lives set tutorial_at = v_since where user_id = p_user; end if;
+  v_done := jsonb_build_object(
+    'name', l.home_named_at is not null and l.home_named_at >= v_since,
+    'hi', exists (select 1 from public.chat_messages where sender_id = p_user and recipient_id is not null and created_at >= v_since),
+    'win', to_regclass('public.challenges') is not null and exists (
+      select 1 from public.challenges c
+      where c.winner_id = p_user and c.status = 'done' and coalesce(c.finished_at, c.created_at) >= v_since
+        and (select count(*) from public.challenge_players cp where cp.challenge_id = c.id) >= 2)
+  );
+  foreach v_step in array array['name', 'hi', 'win'] loop
+    if (v_done ->> v_step)::boolean then
+      v_reward := round(least(greatest(coalesce((p_rewards ->> v_step)::numeric, 0), 0), 40), 2);
+      insert into public.tutorial_steps (user_id, step, reward) values (p_user, v_step, v_reward) on conflict do nothing;
+      if found then
+        v_paid := v_paid || v_step;
+        if v_reward > 0 then
+          update public.profiles set coins = coins + v_reward where id = p_user;
+          perform public.log_coins(p_user, null, 'tutorial', v_reward, false, 'Walkthrough reward: ' || v_step);
+        end if;
+      end if;
+    end if;
+  end loop;
+  -- Done once counts for good (even if, say, the home is renamed back later).
+  return jsonb_build_object(
+    'name', exists (select 1 from public.tutorial_steps where user_id = p_user and step = 'name'),
+    'hi', exists (select 1 from public.tutorial_steps where user_id = p_user and step = 'hi'),
+    'win', exists (select 1 from public.tutorial_steps where user_id = p_user and step = 'win'),
+    'paid', to_jsonb(v_paid)
+  );
+end $$;
+
+revoke all on function public.tutorial_check(uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.tutorial_check(uuid, jsonb) to service_role;
 

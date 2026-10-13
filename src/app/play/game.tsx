@@ -64,7 +64,7 @@ import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
 import { BookOpen, Church, FerrisWheel, Landmark as LandmarkIcon, Plane, Ship, TrainFront, Trophy, UtensilsCrossed } from "lucide-react";
-import { BellOff, BellRing, LocateFixed, Rocket, Wallet, CarFront, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Palette, ShoppingBag, Store, Swords, User } from "lucide-react";
+import { BellOff, BellRing, LocateFixed, Rocket, Wallet, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Palette, ShoppingBag, Swords, TrendingUp, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
 import { GhostsSheet } from "./ghost-duel/ghosts-sheet";
@@ -117,9 +117,11 @@ import { avatar3dEnabled } from "./avatar3d-flag";
 import { worldPreview } from "./world-flag";
 import { PlacePill } from "./place-pill";
 import { CityCard } from "./city-card";
-import { Ripple, useWorldLife } from "./life/world-life";
+import { useWorldLife } from "./life/world-life";
 import type { ExplorePlace } from "@/lib/world/explore";
 import { Joystick } from "./joystick";
+import { settleIncome, useLiveCoins } from "./income";
+import { Tutorial, useTutorialGlow, useTutorialPhase } from "./tutorial";
 import { PeopleList, prefetchPeople } from "./people/people-list";
 import { StatsSheet } from "./stats-sheet";
 import { GiftPop, GiftSent } from "./people/gift-pop";
@@ -1754,6 +1756,28 @@ export function Game({
   const enteredRoom = place ? (rooms.myRoomInfo?.id ?? null) : null;
   const enteredTile = enteredRoom ? Number(/^b:(\d+)/.exec(enteredRoom)?.[1] ?? NaN) : NaN;
   const inPlannedHome = !!worldId && Number.isFinite(enteredTile) && enteredTile in homePlans;
+  // Your cash on screen, with what your property earns going up every 5 seconds (./income). The
+  // server pays what's been earned when the game opens, every 5 minutes, and when you open Money.
+  const liveCoins = useLiveCoins(me.coins);
+  // The walkthrough (./tutorial): which button it points at, and where it's got to.
+  const tutorialGlow = useTutorialGlow();
+  const tutorialPhase = useTutorialPhase();
+  useEffect(() => {
+    if (!worldId || me.guest) return;
+    const pay = () =>
+      void settleIncome().then((paid) => {
+        if (paid > 0) startTransition(() => router.refresh());
+      });
+    pay();
+    const t = setInterval(() => document.visibilityState === "visible" && pay(), 5 * 60_000);
+    return () => clearInterval(t);
+  }, [worldId, me.guest, router]);
+  useEffect(() => {
+    if (moneyOpen && worldId && !me.guest)
+      void settleIncome().then((paid) => {
+        if (paid > 0) startTransition(() => router.refresh());
+      });
+  }, [moneyOpen, worldId, me.guest, router]);
   // How tall the panel along the bottom is (who's here, Leave...), so the home joystick sits above it.
   const bottomDock = useRef<HTMLDivElement>(null);
   const [bottomDockH, setBottomDockH] = useState(96);
@@ -2185,16 +2209,16 @@ export function Game({
             {worldId && !guest && (
               <button onClick={() => setMeOpen(true)} className="pointer-events-auto relative shrink-0 rounded-full ring-[3px] ring-[#f59f00] shadow" aria-label="You: your look, money, friends and settings">
                 <AvatarFace avatar={me.avatar} size={36} className="rounded-full bg-white" />
+                {tutorialGlow === "profile" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
               </button>
             )}
             {/* Who's online; tap for the numbers: registered players and visits, and how they're growing. */}
             {!guest && (
             <button
               onClick={() => setStatsOpen(true)}
-              className={cn("glass pointer-events-auto relative flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold", worldLife.guideStep === "hi" && "outline outline-2 outline-offset-2 outline-gold")}
+              className="glass pointer-events-auto relative flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold"
               title={`${onlineNow} online in the city, ${onlineNear} near where you're looking. Tap for the numbers.`}
             >
-              {worldLife.guideStep === "hi" && <Ripple />}
               <span className="size-2 animate-pulse rounded-full bg-[#2f9e44]" aria-hidden />
               {onlineNow}
               <span className="max-[440px]:hidden">online</span>
@@ -2334,7 +2358,7 @@ export function Game({
                 aria-label="Finance"
               >
                 <Wallet className="size-4 text-gold-dark" />
-                {cash(me.coins)}
+                <span className="tabular-nums">{cash(liveCoins, { exact: true })}</span>
                 {worldLife.financeDot && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-hit" />}
               </button>
             )}
@@ -3162,10 +3186,16 @@ export function Game({
               </button>
             )}
             {worldLife.hasHome && (
-              <button onClick={() => worldLife.goHome()} className="grid size-10 place-items-center rounded-full bg-white/55 shadow-sm backdrop-blur-sm transition hover:bg-white/90" aria-label="Home" title="Home">
+              <button onClick={() => worldLife.goHome()} className={cn("relative grid size-10 place-items-center rounded-full shadow-sm backdrop-blur-sm transition hover:bg-white/90", tutorialGlow === "home" ? "bg-white" : "bg-white/55")} aria-label="Home" title="Home">
                 <House className="size-[18px] text-[#7048e8]" />
+                {tutorialGlow === "home" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
               </button>
             )}
+            {/* The camera: snap a place or a thing you like (it goes to your Photos). */}
+            <button onClick={() => setCamera("photo")} className={cn("relative grid size-10 place-items-center rounded-full shadow-sm backdrop-blur-sm transition hover:bg-white/90", tutorialGlow === "camera" ? "bg-white" : "bg-white/55")} aria-label="Camera: take a picture" title="Take a picture">
+              <Camera className="size-[18px] text-[#f08c00]" />
+              {tutorialGlow === "camera" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
+            </button>
             {worldLife.hasHome && (
               <button onClick={worldLife.openSoon} className="grid size-10 place-items-center rounded-full bg-white/55 shadow-sm backdrop-blur-sm transition hover:bg-white/90" aria-label="Coming soon" title="Coming soon">
                 <Rocket className="size-[18px] text-[#7048e8]" />
@@ -3519,7 +3549,7 @@ export function Game({
           title="Challenge people nearby"
         >
           <Trophy className="size-6" />
-          {worldLife.guideStep === "challenge" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
+          {tutorialGlow === "challenge" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
         </button>
       )}
       {/* Notifications off on this phone: a bell on the right, halfway down, to switch them on (gone
@@ -3548,6 +3578,7 @@ export function Game({
           <span key={phoneRing} className={phoneRing ? "phone-ring grid place-items-center" : "grid place-items-center"}>
             <MessageCircle className="size-7 fill-white" />
           </span>
+          {tutorialGlow === "chat" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
           {unread + chatUnread > 0 && (
             <span className="absolute -right-1 -top-1 grid min-w-6 place-items-center rounded-full bg-hit px-1.5 text-xs font-bold text-white ring-2 ring-white">{unread + chatUnread > 99 ? "99+" : unread + chatUnread}</span>
           )}
@@ -3555,7 +3586,7 @@ export function Game({
       )}
       {moneyOpen && worldId && !guest && (
         <MoneyHome
-          coins={me.coins}
+          coins={liveCoins}
           perMint={worldRegion?.prices.perMint ?? 1_500}
           region={worldId}
           onClose={() => setMoneyOpen(false)}
@@ -3568,10 +3599,10 @@ export function Game({
             setMessage({ text: `Your top-up is in: +${cash(mint)}${doubled ? " (your first one, doubled!)" : ""}`, tone: "good" });
             startTransition(() => router.refresh());
           }}
-          onProperty={() => worldLife.openFinance()}
+          onProperty={() => worldLife.openThings("assets")}
         />
       )}
-      {giftPop && worldId && !guest && !moneyOpen && (
+      {giftPop && worldId && !guest && !moneyOpen && tutorialPhase !== "intro" && (
         <DailyGiftPop
           perMint={worldRegion?.prices.perMint ?? 1_500}
           onClose={closeGiftPop}
@@ -3613,9 +3644,8 @@ export function Game({
             {
               title: "The city",
               items: [
-                { label: "Shops", icon: ShoppingBag, colour: "#5f3dc4", go: () => worldLife.openThings("shops") },
-                { label: "Cars", icon: CarFront, colour: "#343a40", go: () => worldLife.openThings("cars") },
-                { label: "Market", icon: Store, colour: "#2b8a3e", go: () => worldLife.openThings("market") },
+                { label: "Shop", icon: ShoppingBag, colour: "#5f3dc4", go: () => worldLife.openThings("shops") },
+                { label: "Assets", icon: TrendingUp, colour: "#2b8a3e", go: () => worldLife.openThings("assets") },
                 { label: "Leave a mark", icon: PenLine, colour: "#1098ad", go: () => worldLife.openLeaveMark() },
                 ...(worldLife.hasHome ? [{ label: "Coming soon", icon: Rocket, colour: "#7048e8", go: worldLife.openSoon }] : []),
               ],
@@ -3781,6 +3811,30 @@ export function Game({
         <div className="pointer-events-none fixed bottom-6 left-4 z-30 sm:bottom-8 sm:left-8">
           <Joystick stick={walkStick} />
         </div>
+      )}
+      {/* The walkthrough: everyone, once they have a home (in front of everything, chat included). */}
+      {worldId && !guest && worldLife.hasHome && !camera && worldRegion && (
+        <Tutorial
+          place={worldRegion.name}
+          perMint={worldRegion.prices.perMint}
+          actions={{
+            nameHome: () => worldLife.nameHome(),
+            chat: () => {
+              setMeOpen(false);
+              setChatOpen(true);
+            },
+            challenge: () => {
+              setChatOpen(false);
+              setFightOpen(true);
+            },
+            camera: () => setCamera("photo"),
+            profile: () => {
+              setChatOpen(false);
+              setMeOpen(true);
+            },
+            paid: () => startTransition(() => router.refresh()),
+          }}
+        />
       )}
       {statsOpen && <StatsSheet online={onlineNow} onClose={() => setStatsOpen(false)} people={peopleFinder("stats")} />}
       {cityOpen && worldRegion && (
