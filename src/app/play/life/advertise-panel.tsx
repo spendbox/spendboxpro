@@ -98,6 +98,8 @@ export function AdvertisePanel({
   onClose: () => void;
 }) {
   const [step, setStep] = useState(0);
+  /** First, what advertising here is (then the steps). */
+  const [intro, setIntro] = useState(true);
   const [small, setSmall] = useState(false);
   const [state, setState] = useState(region.region.name);
   const [q, setQ] = useState("");
@@ -218,6 +220,56 @@ export function AdvertisePanel({
     setSmall(false);
     if (n === 1 && !shot) setTimeout(() => void takeShot(), 300);
   };
+
+  if (intro)
+    return (
+      <div className="pointer-events-auto fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-3 sm:items-center" role="dialog" aria-label="How advertising works">
+        <div className="max-h-[88dvh] w-full max-w-md overflow-y-auto rounded-3xl bg-panel p-5 shadow-2xl">
+          <div className="flex items-start gap-3">
+            <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-gold/20 text-gold-dark">
+              <Megaphone className="size-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="font-display text-xl font-extrabold leading-tight">Put your business on the map</h2>
+              <p className="mt-0.5 text-sm text-muted">Your brand on a real building in {region.region.name}, seen by everyone who plays there.</p>
+            </div>
+            <button onClick={onClose} className="grid size-9 shrink-0 place-items-center rounded-full bg-ink/5" aria-label="Close">
+              <X className="size-4" />
+            </button>
+          </div>
+          <ul className="mt-4 space-y-3 text-sm">
+            <li className="flex gap-3">
+              <MapPin className="mt-0.5 size-4 shrink-0 text-gold-dark" />
+              <span>
+                <b>A building of your own for a year.</b> Pick the state your customers are in, then a building: the bigger it is and the dearer the area, the more it costs ({naira(LEASE_MIN)} to {naira(LEASE_MAX)} a year). You see it in 3D first.
+              </span>
+            </li>
+            <li className="flex gap-3">
+              <ImagePlus className="mt-0.5 size-4 shrink-0 text-gold-dark" />
+              <span>
+                <b>Your pictures on it.</b> Your logo and a billboard picture go on the building, lit up at night, and come round on the city&apos;s billboards in that state (each board shows a new ad every few seconds).
+              </span>
+            </li>
+            <li className="flex gap-3">
+              <Camera className="mt-0.5 size-4 shrink-0 text-gold-dark" />
+              <span>
+                <b>See it before you pay.</b> A preview shows exactly how it will look lit up on the map.
+              </span>
+            </li>
+            <li className="flex gap-3">
+              <Check className="mt-0.5 size-4 shrink-0 text-gold-dark" />
+              <span>
+                <b>Pay once, then manage it.</b> Pay in naira by card or transfer (Paystack). Afterwards, sign in to your ad page to see how many people saw it, change pictures and add upgrades.
+              </span>
+            </li>
+          </ul>
+          <p className="mt-4 rounded-2xl bg-panel-2 px-3 py-2 text-xs text-muted">Three steps: where, your pictures, then details and pay. You can go back at any time.</p>
+          <button onClick={() => setIntro(false)} className="mt-4 h-12 w-full rounded-full bg-gold font-semibold text-ink">
+            Start
+          </button>
+        </div>
+      </div>
+    );
 
   return (
     <div className="pointer-events-auto absolute inset-x-0 bottom-0 z-40 flex justify-center px-2 pb-2 sm:bottom-3 sm:px-3">

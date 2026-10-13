@@ -18,7 +18,11 @@ export type FootTarget = { x?: number; y: number; z: number; pitch: number; toe?
  * rot: rotations (radians, about the avatar's axes); twist: turns about a bone's own length after
  * that (the forearm and wrist turning the palm); hips: how the hips shift; feet: where each foot goes.
  */
-export type Pose = { rot: Record<string, V3>; twist?: Record<string, number>; hips?: V3; feet?: [FootTarget, FootTarget] };
+export type Pose = {
+  rot: Record<string, V3>; twist?: Record<string, number>; hips?: V3; feet?: [FootTarget, FootTarget];
+  /** A turn of the whole body about its feet (a dance spin), for whoever moves the avatar to apply. */
+  spin?: number;
+};
 
 /** What a move needs to know about this body. */
 /** stride: 1 normally; less in narrow long garments (a fitted wrapper allows only short steps). */
@@ -476,6 +480,150 @@ MOVES.push(
   },
 );
 
+
+// ---- the club's dances (src/app/play/city/dance-moves.ts), on the beat: two beats a second ----
+// t is seconds; the beat is t × 2 (CLUB_BPS), so pass the club's beat ÷ 2 to dance in time.
+
+const onBeat = (b: number) => 0.5 + 0.5 * Math.cos(TAU * b);
+/** Knees bent (by about c radians): the hips drop and the feet stay on the floor. */
+const crouchY = (D: Dims, c: number) => -D.leg * 0.5 * (1 - Math.cos(c));
+const flat = (x = 0): FootTarget => ({ x, y: 0, z: 0, pitch: 0 });
+/** A foot lifted with the knee up (side: +1 the left foot, -1 the right), out to the side by `out`. */
+const lifted = (D: Dims, k: number, side: number, out = 0, fwd = 0.05): FootTarget => ({ x: side * D.height * out * k, y: D.height * 0.13 * k, z: D.height * fwd * k, pitch: 0.4 * k });
+
+MOVES.push(
+  {
+    id: "dance_groove", n: "Groove", period: 1, speed: 0,
+    pose: (t, D) => {
+      const b = t * 2, sw = Math.sin(Math.PI * b), ob = onBeat(b), c = 0.16 + 0.16 * ob;
+      return {
+        hips: [D.height * 0.03 * sw, crouchY(D, c), 0],
+        feet: [flat(-D.height * 0.02 * Math.max(0, -sw)), flat(D.height * 0.02 * Math.max(0, sw))],
+        rot: {
+          hips: [0.04, 0, -0.07 * sw], spine: [0.04, 0, 0.08 * sw], chest: [0, 0.2 * Math.sin(Math.PI * b + 0.6), 0], skull: [0.12 * ob, 0, -0.06 * sw],
+          upperArm0: [-0.35 - 0.45 * sw, 0, -0.22], upperArm1: [-0.35 + 0.45 * sw, 0, 0.22],
+          forearm0: [-1.25 - 0.2 * ob, 0, 0], forearm1: [-1.25 - 0.2 * ob, 0, 0],
+        },
+      };
+    },
+  },
+  {
+    id: "dance_armsup", n: "Hands up", period: 1, speed: 0,
+    pose: (t, D) => {
+      const b = t * 2, ob = onBeat(b), w = Math.sin(TAU * b), w2 = Math.sin(TAU * b + 1);
+      return {
+        hips: [0, crouchY(D, 0.24 * ob) + D.height * 0.02 * (1 - ob), 0],
+        feet: [flat(), flat()],
+        rot: {
+          chest: [-0.08, 0, 0], skull: [-0.2 + 0.12 * ob, 0, 0],
+          upperArm0: [-2.85 + 0.2 * w, 0, -0.34 - 0.14 * w], upperArm1: [-2.85 + 0.2 * w2, 0, 0.34 + 0.14 * w2],
+          forearm0: [-0.25 - 0.5 * ob, 0, 0], forearm1: [-0.25 - 0.5 * ob, 0, 0],
+        },
+      };
+    },
+  },
+  {
+    id: "dance_shaku", n: "Shaku shaku", period: 1, speed: 0,
+    pose: (t, D) => {
+      // A knee lifted out to the side on each beat (right, then left), arms swinging across.
+      const b = t * 2, side = Math.floor(b) % 2 === 0 ? -1 : 1, lift = Math.sin(Math.PI * (b - Math.floor(b))), sw = Math.sin(Math.PI * b);
+      const up = lifted(D, lift, side, 0.07);
+      return {
+        hips: [-side * D.height * 0.015 * lift, crouchY(D, 0.2), 0],
+        feet: side < 0 ? [up, flat()] : [flat(), up],
+        rot: {
+          spine: [0.05, 0, side * 0.12 * lift], chest: [0, 0.35 * sw, 0], skull: [0.1, 0.22 * sw, 0],
+          upperArm0: [-0.95 - 0.25 * sw, 0, 0.12], upperArm1: [-0.95 + 0.25 * sw, 0, -0.12],
+          forearm0: [-1.6, 0, 0], forearm1: [-1.6, 0, 0],
+        },
+      };
+    },
+  },
+  {
+    id: "dance_point", n: "Disco point", period: 1, speed: 0,
+    pose: (t, D) => {
+      const b = t * 2, sw = Math.sin(Math.PI * b), snap = Math.min(1, (b - Math.floor(b)) * 4), k = Math.floor(b) % 2 === 0 ? snap : 1 - snap;
+      return {
+        hips: [D.height * 0.025 * sw, crouchY(D, 0.12 + 0.1 * onBeat(b)), 0],
+        feet: [flat(), flat()],
+        rot: {
+          hips: [0, 0, -0.1 * sw], skull: [-0.25 * k + 0.1 * (1 - k), 0.3 * k - 0.1, 0],
+          upperArm0: [-0.4 - 0.2 * (1 - k), 0, 0.5 - 3.0 * k], forearm0: [-0.3 * (1 - k), 0, 0],
+          upperArm1: [0.15, 0, 0.75], forearm1: [-1.7, 0, 0],
+        },
+      };
+    },
+  },
+  {
+    id: "dance_wave", n: "Body wave", period: 2, speed: 0,
+    pose: (t, D) => {
+      const ph = Math.PI * t * 2;
+      return {
+        hips: [0, crouchY(D, 0.22 + 0.12 * Math.sin(ph + 1.5)), D.height * 0.025 * Math.sin(ph + 1)],
+        feet: [flat(), flat()],
+        rot: {
+          spine: [0.2 * Math.sin(ph), 0, 0], chest: [0.22 * Math.sin(ph - 1), 0, 0], neck: [0.1 * Math.sin(ph - 1.5), 0, 0], skull: [0.2 * Math.sin(ph - 2), 0, 0],
+          upperArm0: [-0.45, 0, -0.7 - 0.45 * Math.sin(ph)], upperArm1: [-0.45, 0, 0.7 + 0.45 * Math.sin(ph + 1.2)],
+          forearm0: [-0.7 - 0.5 * Math.sin(ph + 1), 0, 0], forearm1: [-0.7 - 0.5 * Math.sin(ph + 2.2), 0, 0],
+        },
+      };
+    },
+  },
+  {
+    id: "dance_gwara", n: "Gwara gwara", period: 4, speed: 0,
+    pose: (t, D) => {
+      // One arm swings in a big circle over the head, the other knee lifts (sides swap every 4 beats).
+      const b = t * 2, side = Math.floor(b / 4) % 2 === 0 ? 1 : -1, a = Math.PI * b, lift = Math.max(0, Math.sin(TAU * b));
+      const big: V3 = [-1.9 + 0.75 * Math.sin(a), 0, -(0.95 + 0.6 * Math.cos(a))];
+      const small: V3 = [-0.5, 0, 0.3];
+      const knee = lifted(D, lift, side > 0 ? 1 : -1, 0.02, 0.08);
+      return {
+        hips: [0, crouchY(D, 0.2), 0],
+        feet: side > 0 ? [flat(), knee] : [knee, flat()],
+        rot: {
+          hips: [0, 0, side * 0.06], chest: [0, 0.2 * Math.sin(TAU * b * 2), 0], skull: [0.08 * onBeat(b), -side * 0.15, 0],
+          upperArm0: side > 0 ? big : [small[0], 0, -small[2]], upperArm1: side > 0 ? small : [big[0], 0, -big[2]],
+          forearm0: [side > 0 ? -0.4 : -1.5, 0, 0], forearm1: [side > 0 ? -1.5 : -0.4, 0, 0],
+        },
+      };
+    },
+  },
+  {
+    id: "dance_legwork", n: "Legwork", period: 0.5, speed: 0,
+    pose: (t, D) => {
+      // Quick little kicks forward, one after the other, leaning in, arms pumping.
+      const b = t * 2, kr = Math.max(0, Math.sin(TAU * b)), kl = Math.max(0, Math.sin(TAU * b + Math.PI));
+      const kick = (k: number): FootTarget => ({ x: 0, y: D.height * 0.05 * k, z: D.height * 0.14 * k, pitch: -0.2 * k });
+      return {
+        hips: [0, crouchY(D, 0.3), -D.height * 0.01],
+        feet: [kick(kr), kick(kl)],
+        rot: {
+          spine: [0.22, 0, 0], skull: [-0.05 + 0.15 * onBeat(b), 0, 0],
+          upperArm0: [-0.6 + 0.4 * Math.sin(TAU * b + Math.PI), 0, -0.15], upperArm1: [-0.6 + 0.4 * Math.sin(TAU * b), 0, 0.15],
+          forearm0: [-1.4, 0, 0], forearm1: [-1.4, 0, 0],
+        },
+      };
+    },
+  },
+  {
+    id: "dance_spin", n: "Spin", period: 2, speed: 0,
+    pose: (t, D) => {
+      // A slow turn (once round every four beats), arms out wide.
+      const b = t * 2, w = Math.sin(TAU * b);
+      return {
+        spin: TAU * ((b / 4) % 1),
+        hips: [0, crouchY(D, 0.15 * onBeat(b)), 0],
+        feet: [flat(), flat()],
+        rot: {
+          skull: [-0.1, 0, 0],
+          upperArm0: [-0.1, 0, -1.35 - 0.1 * w], upperArm1: [-0.1, 0, 1.35 + 0.1 * w],
+          forearm0: [-0.2, 0, 0], forearm1: [-0.2, 0, 0],
+        },
+      };
+    },
+  },
+);
+
 // ---- applying a pose to the skeleton ----
 
 export type Rest = Map<string, { p: Vector3; q: Quaternion }>;
@@ -499,7 +647,7 @@ const e = new Euler(), q = new Quaternion(), down = new Vector3(0, -1, 0), Y = n
 /** Poses the skeleton (bones by name, with their rest transforms) for a move at time t. */
 /** stride: the model's meta.stride (short steps in narrow long garments). */
 /** extra: things about where it's done (a seat's height, for sitting). */
-export function applyMove(bones: Record<string, Object3D>, rest: Rest, move: Move, t: number, stride = 1, extra?: Partial<Dims>) {
+export function applyMove(bones: Record<string, Object3D>, rest: Rest, move: Move, t: number, stride = 1, extra?: Partial<Dims>): Pose {
   const D = { ...dims(rest, stride), ...extra }, P = move.pose(t, D);
   for (const id of BODY) {
     const b = bones[id], r = rest.get(id);
@@ -515,6 +663,7 @@ export function applyMove(bones: Record<string, Object3D>, rest: Rest, move: Mov
   // Knees never quite lock: the hips sit a touch lower, which also leaves the legs room to reach.
   if (P.feet) bones.hips.position.y -= D.height * 0.01;
   if (P.feet) [0, 1].forEach((i) => solveLeg(bones, rest, i, P.feet![i]));
+  return P;
 }
 
 /** Two-bone leg IK: bends hip and knee so the ankle reaches its target, knee pointing forward. */
