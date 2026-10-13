@@ -1,7 +1,7 @@
 "use server";
 
 import { currentUserId } from "@/lib/game";
-import { MONORAIL_FARE, RIDE_FARE_NAIRA, rideFare, TRAIN_FARE, visitFee } from "@/lib/fees";
+import { clubEntryMint, MONORAIL_FARE, RIDE_FARE_NAIRA, rideFare, TRAIN_FARE, visitFee } from "@/lib/fees";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Paying to go places: the first visit to a place in each town, and train fares (every time).
@@ -63,6 +63,27 @@ export async function payRide(kind: string, index: number): Promise<FeePaid | Fa
   }
   const { data: me } = await db.from("profiles").select("coins").eq("id", userId).maybeSingle();
   return { ok: true, paid: n(data), coins: n(me?.coins) };
+}
+
+/**
+ * Into a club on a real map: some charge at the door (the game's own price, never the browser's),
+ * once every 24 hours. until: when your entry runs out.
+ */
+export async function payClubEntry(place: string, type: string | undefined): Promise<(FeePaid & { until: string | null }) | Fail> {
+  if (!/^b:\d{1,7}$/.test(place)) return { ok: false, error: "Unknown place." };
+  const userId = await currentUserId();
+  if (!userId) return { ok: true, paid: 0, coins: 0, until: null };
+  const fee = clubEntryMint(place, type);
+  const db = createAdminClient();
+  const { data, error } = await db.rpc("life_club_entry", { p_user: userId, p_place: place, p_fee: fee });
+  if (error) {
+    // Before part 67 is run, or no life on the map yet (just looking round): in for free.
+    if (/life_club_entry|club_entries/.test(error.message) || error.message.startsWith("no_life")) return { ok: true, paid: 0, coins: 0, until: null };
+    return say(error.message);
+  }
+  const d = (data ?? {}) as Record<string, unknown>;
+  const { data: me } = await db.from("profiles").select("coins").eq("id", userId).maybeSingle();
+  return { ok: true, paid: n(d.paid), coins: n(me?.coins), until: d.until ? String(d.until) : null };
 }
 
 /** The places you've been to in this town (their first visit is paid). */

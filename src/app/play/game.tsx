@@ -101,8 +101,8 @@ import { FeedRow, NotificationsPanel, SwipeRow, type FeedIcon, type FeedItem } f
 import { dismissNotices, readNotices } from "./notice-actions";
 import { signOutNow } from "../login/actions";
 import { claimBalloon, recordVisit } from "./profile-actions";
-import { myVisits, payFare, payRide, payVisit } from "./fee-actions";
-import { rideFare, TRAIN_FARE, visitFee } from "@/lib/fees";
+import { myVisits, payClubEntry, payFare, payRide, payVisit } from "./fee-actions";
+import { CLUB_ENTRY_MS, clubEntryMint, rideFare, TRAIN_FARE, visitFee } from "@/lib/fees";
 import { jobAt } from "@/lib/jobs";
 import type { Invite, PlayCtx } from "./minigames/shell";
 import { rideRoom, useRooms, type RoomInfo } from "./rooms";
@@ -1442,6 +1442,40 @@ export function Game({
     startTransition(() => router.refresh());
   }
 
+  // Club entry (game-db/067): paid once, good for 24 hours. Remembered on this phone too, so
+  // going back in (or up to the club floor again) doesn't ask twice.
+  const [clubDoor, setClubDoor] = useState<{ room: PlaceRoom; level: { id: string; label: string; capacity: number; kind?: string }; fee: number } | null>(null);
+  const [clubBusy, setClubBusy] = useState(false);
+  function clubPaid(place: string) {
+    try {
+      const all = JSON.parse(localStorage.getItem("nt-club-entry") ?? "{}") as Record<string, string>;
+      return Date.parse(all[place] ?? "") > Date.now();
+    } catch {
+      return false;
+    }
+  }
+  function rememberClub(place: string, until: string) {
+    try {
+      const all = JSON.parse(localStorage.getItem("nt-club-entry") ?? "{}") as Record<string, string>;
+      for (const k of Object.keys(all)) if (!(Date.parse(all[k]) > Date.now())) delete all[k];
+      all[place] = until;
+      localStorage.setItem("nt-club-entry", JSON.stringify(all));
+    } catch {}
+  }
+  async function payClubDoor() {
+    const d = clubDoor;
+    if (!d) return;
+    setClubBusy(true);
+    const r = await payClubEntry(d.room.id, d.room.type).catch(() => ({ ok: false as const, error: "Couldn't pay just now. Try again." }));
+    setClubBusy(false);
+    if (!r.ok) return setMessage({ icon: Coins, text: r.error, tone: "bad" });
+    setClubDoor(null);
+    rememberClub(d.room.id, r.until ?? new Date(Date.now() + CLUB_ENTRY_MS).toISOString());
+    if (r.paid > 0) setMessage({ icon: Music, text: `In! ${cash(r.paid)} at the door, and you can come and go for 24 hours.`, tone: "good" });
+    startTransition(() => router.refresh());
+    goToLevel(d.room, d.level, true);
+  }
+
   // Tapping a building or balloon takes you inside to meet the people there. A building with
   // several levels (ground, floors, rooftop) asks which one; nothing opens the chat by itself.
   function onRoom(room: PlaceRoom) {
@@ -1473,8 +1507,13 @@ export function Game({
     }
     setPickPlace(room);
   }
-  function goToLevel(room: PlaceRoom, level: { id: string; label: string; capacity: number }) {
+  function goToLevel(room: PlaceRoom, level: { id: string; label: string; capacity: number; kind?: string }, paidDoor = false) {
     setPickPlace(null);
+    // Some clubs charge at the door (once every 24 hours): ask first.
+    if (worldId && !guest && !paidDoor && level.kind === "club") {
+      const fee = clubEntryMint(room.id, room.type, worldRegion?.prices.perMint);
+      if (fee > 0 && !clubPaid(room.id)) return setClubDoor({ room, level, fee });
+    }
     // The real map charges the fare there instead of a first-visit fee (see useWorldLife's goInside).
     if (room.kind === "building" && !worldId && !payToGo({ kind: "visit", place: room.id, type: room.type, name: room.name })) return;
     const info: RoomInfo = {
@@ -2253,6 +2292,25 @@ export function Game({
             </button>
           ))}
       </div>
+      {clubDoor && (
+        <Sheet onClose={() => setClubDoor(null)} title={`${clubDoor.room.name}: at the door`}>
+          <div className="flex flex-col items-center gap-2 py-2 text-center">
+            <div className="grid size-16 place-items-center rounded-3xl bg-[#7048e8] text-white">
+              <Music className="size-8" />
+            </div>
+            <p className="text-2xl font-bold">{cash(clubDoor.fee)}</p>
+            <p className="text-sm text-muted">Entry to {clubDoor.level.label}. Pay once and come and go as you like for 24 hours.</p>
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <button onClick={() => setClubDoor(null)} className="h-11 rounded-full bg-ink/5 text-sm font-semibold">
+              Not now
+            </button>
+            <button onClick={() => void payClubDoor()} disabled={clubBusy} className="h-11 rounded-full bg-ink text-sm font-semibold text-white disabled:opacity-50">
+              {clubBusy ? "Paying…" : "Pay and go in"}
+            </button>
+          </div>
+        </Sheet>
+      )}
       {flightsOpen && (
         <Sheet onClose={() => setFlightsOpen(false)} title="Fly out of Lagos">
           <p className="text-sm text-muted">Flights to other cities are coming soon: each one a whole new map to live in, with your money and things going with you.</p>
