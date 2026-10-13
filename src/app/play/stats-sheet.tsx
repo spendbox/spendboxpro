@@ -23,7 +23,10 @@ export function StatsSheet({
 }) {
   const [tab, setTab] = useState<"people" | "numbers">(people ? "people" : "numbers");
   const [s, setS] = useState<SiteStats | null>(null);
+  // The numbers only when they're looked at (the People tab opens first, and fast).
+  const wantNumbers = tab === "numbers";
   useEffect(() => {
+    if (!wantNumbers || s) return;
     let alive = true;
     void siteStats()
       .then((x) => alive && setS(x))
@@ -31,7 +34,7 @@ export function StatsSheet({
     return () => {
       alive = false;
     };
-  }, []);
+  }, [wantNumbers, s]);
   const days = s?.days ?? [];
   const today = days[days.length - 1];
   const week = (k: "visits" | "signups", from: number, to: number) => days.slice(Math.max(0, days.length - to), days.length - from).reduce((n, d) => n + d[k], 0);

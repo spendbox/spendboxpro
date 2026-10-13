@@ -203,10 +203,13 @@ export async function travelTo(buildingId: string, drive?: boolean, from?: { x: 
   const userId = await currentUserId();
   if (!userId) return { ok: true, fare: 0 };
   const db = createAdminClient();
-  const { data: life } = await db.from("lives").select("home_unit, at_place").eq("user_id", userId).maybeSingle();
+  // Both at once (each is a trip to the database).
+  const [{ data: life }, { data: jail }] = await Promise.all([
+    db.from("lives").select("home_unit, at_place").eq("user_id", userId).maybeSingle(),
+    // In jail (game-db/055): nowhere to go until you're out.
+    db.rpc("jail_until", { p_user: userId }),
+  ]);
   if (!life) return { ok: false, error: "Start your life first." };
-  // In jail (game-db/055): nowhere to go until you're out.
-  const { data: jail } = await db.rpc("jail_until", { p_user: userId });
   if (jail) return { ok: false, error: `You're in jail until ${new Date(String(jail)).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" })}. Wait it out, or try a bribe.` };
   const onFoot = !!from && Number.isFinite(from.x) && Number.isFinite(from.z);
   const start = onFoot ? `${spot.region}:${Math.round(from!.x)},${Math.round(from!.z)}` : ((life.at_place as string | null) ?? (life.home_unit as string | null));

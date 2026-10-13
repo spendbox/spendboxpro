@@ -5,7 +5,7 @@ import { MapPin, MessageCircle, Search, User, X } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar } from "@/lib/avatar";
 import { cn } from "@/lib/cn";
-import { findPeople, type FoundPerson, type Gender } from "../people-actions";
+import { type FoundPerson, type Gender } from "../people-actions";
 
 // Everyone on the map you could talk to (docs/PEOPLE.md): search anyone by name, the nearest to
 // where you're looking first, online ones marked green. Tap Message to chat privately, the face
@@ -43,6 +43,24 @@ export function GenderMark({ gender, className }: { gender: Gender | null; class
   );
 }
 
+/** The last list of people per map (for this visit), so the list opens at once. */
+const lastList = new Map<string, FoundPerson[]>();
+
+/** Everyone on the map near a spot (a plain request: it doesn't wait behind the game's other calls). */
+async function peopleNear(region: string, x: number, z: number, q: string): Promise<FoundPerson[]> {
+  const r = await fetch(`/api/people?region=${encodeURIComponent(region)}&x=${Math.round(x)}&z=${Math.round(z)}&q=${encodeURIComponent(q)}`, { cache: "no-store" });
+  if (!r.ok) throw new Error("people");
+  return ((await r.json()) as { people: FoundPerson[] }).people;
+}
+
+/** Look everyone up ahead of time (the game opening), so the list is ready the first time too. */
+export function prefetchPeople(region: string, x: number, z: number) {
+  if (lastList.has(region)) return;
+  void peopleNear(region, x, z, "")
+    .then((l) => lastList.set(region, l))
+    .catch(() => {});
+}
+
 export function PeopleList({
   region,
   centre,
@@ -61,16 +79,21 @@ export function PeopleList({
   compact?: boolean;
 }) {
   const [q, setQ] = useState("");
-  const [list, setList] = useState<FoundPerson[] | null>(null);
+  // The last list (kept for the visit): shown at once when it opens again, then brought up to date.
+  const [list, setList] = useState<FoundPerson[] | null>(() => lastList.get(region) ?? null);
   // Search as you type (a moment after the last key), nearest first.
   useEffect(() => {
     let alive = true;
     const t = setTimeout(
       () => {
         const c = centre();
-        void findPeople(region, c.x, c.z, q)
-          .then((l) => alive && setList(l))
-          .catch(() => alive && setList([]));
+        void peopleNear(region, c.x, c.z, q)
+          .then((l) => {
+            if (!alive) return;
+            if (!q) lastList.set(region, l);
+            setList(l);
+          })
+          .catch(() => alive && setList((cur) => cur ?? []));
       },
       q ? 300 : 0,
     );

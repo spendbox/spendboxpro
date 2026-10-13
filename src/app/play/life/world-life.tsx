@@ -58,6 +58,9 @@ import { BUY_TAX } from "@/lib/world/property-api";
 
 /** Each region's plan for finding jobs near home, worked out once (only when Work is opened). */
 const plans = new Map<string, CityPlan>();
+/** The kinds of building people live in (going in means knocking, unless it's yours). */
+const HOME_KINDS = new Set(["rooming", "flats", "apartments", "mixed", "bungalow", "duplex", "terrace", "house", "mansion", "villa"]);
+
 function planOf(region: RegionMap) {
   let p = plans.get(region.region.id);
   if (!p) {
@@ -135,6 +138,7 @@ export function useWorldLife({
   onPerson,
   rowOutside,
   meName,
+  onTripFailed,
 }: {
   api: PropertyApi;
   regionId: string | null;
@@ -156,6 +160,8 @@ export function useWorldLife({
   rowOutside?: boolean;
   /** Your name (on certificates). */
   meName?: string;
+  /** Going in straight away, the fare there couldn't be paid: back out. */
+  onTripFailed?: () => void;
 }) {
   const region = useMemo(() => regionMap(regionId), [regionId]);
   const { assets, owned, loaded, refresh } = useLife(api, signedIn ? regionId : null);
@@ -557,22 +563,32 @@ export function useWorldLife({
   // Someone else's home: knock first (docs/HOME_PLANNER.md, "Visiting").
   const [door, setDoor] = useState<{ id: string; owner: string; signedIn: boolean } | null>(null);
   const [guestBook, setGuestBook] = useState<string | null>(null);
+  /** Someone's home (a door to knock at), or a place anyone can walk into? Worked out from the map, no waiting. */
+  const mightBeHome = (id: string) => {
+    const m = /:(-?\d+),(-?\d+)$/.exec(id);
+    if (!region || !m) return true;
+    const t = tileAt(planOf(region), spiralIndex(Number(m[1]), Number(m[2])));
+    return !!t.home || (!!t.building && HOME_KINDS.has(t.building.kind));
+  };
   const goInside = async (id: string, knocked = false) => {
-    if (!knocked) {
+    // Only homes have a door to knock at: everywhere else, straight in.
+    if (!knocked && mightBeHome(id)) {
       const d = await homeDoor(id).catch(() => ({ open: true }) as Door);
       if (!d.open) return setDoor({ id, owner: d.owner, signedIn: d.signedIn });
       if (d.party) setMessage({ text: `${d.party}: the door's open, come on in!`, good: true });
     }
-    if (signedIn) {
-      setBusy(true);
-      const r = await api.travelTo(id, driving);
-      setBusy(false);
-      if (!r.ok) return setMessage({ text: r.error, good: false });
-      if (r.found) setMessage({ text: `On the way you found: ${r.found}! It's in your Items.`, good: true });
-      else if (r.fare) setMessage({ text: `${cash(r.fare)} fare there.`, good: true });
-      void refresh();
-    }
+    // In at once; the fare is paid on the way (and if it can't be, you're back out).
     onEnter?.(id);
+    if (!signedIn) return;
+    const r = await api.travelTo(id, driving).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
+    if (!r.ok) {
+      setMessage({ text: r.error, good: false });
+      onTripFailed?.();
+      return;
+    }
+    if (r.found) setMessage({ text: `On the way you found: ${r.found}! It's in your Items.`, good: true });
+    else if (r.fare) setMessage({ text: `${cash(r.fare)} fare there.`, good: true });
+    void refresh();
   };
 
   // Each fly is a new request, even to the same spot (a running count, not the clock).

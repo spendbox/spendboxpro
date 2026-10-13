@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Crown, LoaderCircle, MessageCircle, Send, Swords, Trophy, Users, X } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar } from "@/lib/avatar";
@@ -12,7 +12,7 @@ import { TurnTable, type Seat } from "../minigames/turn-table";
 import { Confetti } from "../activities/ui";
 import { playSfx } from "../sound";
 import { Sheet } from "../sheet";
-import { challengeQuote, challengeView, joinChallenge, nearbyChallenges, openChallenge, reportWinner, type ChallengeView } from "./challenge-actions";
+import { challengeQuote, joinChallenge, openChallenge, reportWinner, type ChallengeView } from "./challenge-actions";
 import { useChallengeChannel } from "./channel";
 import { CallBar } from "../call/call-bar";
 
@@ -20,7 +20,7 @@ import { CallBar } from "../call/call-bar";
 // is told; your light shines on the map. They have a minute to join, then the game floats over
 // the map, the players' faces round it, with a chat (and a voice call). The winner takes the pool.
 
-export type ChallengeLight = { id: number; x: number; z: number; colour: string; playing: boolean };
+export type ChallengeLight = { id: number; x: number; z: number; colour: string; playing: boolean; endsAt: number | null };
 type Me = { id: string; name: string; avatar: unknown };
 
 const INTRO_KEY = "nt-fight-intro";
@@ -62,35 +62,68 @@ export function Fight({
     lightsRef.current = onLights;
   });
 
-  // Challenges nearby (and the one you're in), every few seconds.
+  // Challenges nearby (and the one you're in), every few seconds. (Where you are and who you
+  // are come in fresh on every render: kept in refs, so the timers below aren't restarted by them.)
+  const whereRef = useRef(where);
+  const meRef = useRef(me);
+  useEffect(() => {
+    whereRef.current = where;
+    meRef.current = me;
+  });
+  const signedIn = !!me;
   const look = useCallback(async () => {
-    const at = where();
-    if (!at || !me) return;
-    const r = await nearbyChallenges(region, at.x, at.z).catch(() => null);
+    const at = whereRef.current();
+    if (!at || !meRef.current) return;
+    const r = await fetch(`/api/challenges?region=${encodeURIComponent(region)}&x=${Math.round(at.x)}&z=${Math.round(at.z)}`, { cache: "no-store" })
+      .then((res) => (res.ok ? (res.json() as Promise<{ list: ChallengeView[]; mine: number | null }>) : null))
+      .catch(() => null);
     if (!r) return;
     setList(r.list);
     setMine((m) => (r.mine ?? (m && r.list.some((c) => c.id === m) ? m : null)));
-    lightsRef.current(r.list.map((c) => ({ id: c.id, x: c.x, z: c.z, colour: challengeGame(c.game)?.colour ?? "#f08c00", playing: c.status === "playing" })));
-  }, [region, me, where]);
+  }, [region]);
   useEffect(() => {
-    if (!me) return;
-    const first = setTimeout(() => void look(), 1500);
-    const t = setInterval(() => !document.hidden && void look(), 8000);
+    if (!signedIn) return;
+    const first = setTimeout(() => void look(), 1200);
+    const t = setInterval(() => !document.hidden && void look(), 6000);
     return () => {
       clearTimeout(first);
       clearInterval(t);
     };
-  }, [me, look]);
+  }, [signedIn, look]);
+  // The lights on the map: open ones only while their minute lasts (with the seconds left), and
+  // games being played.
+  const lightsKey = list.map((c) => `${c.id}:${c.status}:${c.startsAt}`).join("|");
+  useEffect(() => {
+    const show = () => {
+      const t = Date.now();
+      lightsRef.current(
+        list
+          .filter((c) => c.status === "playing" || (c.status === "open" && Date.parse(c.startsAt) > t - 3000))
+          .map((c) => ({ id: c.id, x: c.x, z: c.z, colour: challengeGame(c.game)?.colour ?? "#f08c00", playing: c.status === "playing", endsAt: c.status === "open" ? Date.parse(c.startsAt) : null })),
+      );
+    };
+    show();
+    const t = setInterval(show, 1000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lightsKey]);
 
   // The one you're in, closely (starting it once its minute is up).
   useEffect(() => {
     if (mine === null) return setView(null);
     let live = true;
     const get = async () => {
-      const v = await challengeView(mine).catch(() => null);
+      const v = await fetch(`/api/challenges?id=${mine}`, { cache: "no-store" })
+        .then((res) => (res.ok ? (res.json() as Promise<{ view: ChallengeView | null }>) : null))
+        .then((d) => d?.view ?? null)
+        .catch(() => null);
       if (!live) return;
       setView(v);
-      if (v && (v.status === "cancelled" || v.status === "done")) void look();
+      if (v && (v.status === "cancelled" || v.status === "done")) {
+        // Over: no need to keep asking.
+        clearInterval(t);
+        void look();
+      }
     };
     void get();
     const t = setInterval(get, 2500);
@@ -307,6 +340,12 @@ function Arena({ view, me, now, onClose, onMessage }: { view: ChallengeView; me:
     if (ch.chat.length > lastSeen.current && !chatOpen) playSfx("tick");
     lastSeen.current = ch.chat.length;
   }, [ch.chat.length, chatOpen]);
+  // A beep each second while it looks for players (higher in the last five).
+  const secsLeft = Math.ceil(left);
+  useEffect(() => {
+    if (view.status !== "open" || secsLeft < 0 || secsLeft > JOIN_SECS) return;
+    playSfx(secsLeft <= 5 ? "chime" : "tick");
+  }, [secsLeft, view.status]);
   const iWon = view.status === "done" && view.winner === me.id;
   const winnerName = view.players.find((p) => p.id === view.winner)?.name;
 
@@ -354,7 +393,9 @@ function Arena({ view, me, now, onClose, onMessage }: { view: ChallengeView; me:
 
           {view.status === "open" && (
             <div className="flex flex-col items-center py-6 text-center">
-              <Countdown secs={left} total={JOIN_SECS} colour={g?.colour ?? "#f08c00"} />
+              <Radar colour={g?.colour ?? "#f08c00"}>
+                <Countdown secs={left} total={JOIN_SECS} colour={g?.colour ?? "#f08c00"} />
+              </Radar>
               <p className="mt-3 font-semibold">{view.players.length < 2 ? "Waiting for challengers…" : `${view.players.length} players in. Starting soon…`}</p>
               <p className="mt-1 text-xs text-muted">Everyone nearby can see your light on the map. If nobody joins, your stake comes back.</p>
             </div>
@@ -448,6 +489,19 @@ function Countdown({ secs, total, colour }: { secs: number; total: number; colou
         <circle cx="50" cy="50" r={r} fill="none" stroke={colour} strokeWidth="8" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - f)} style={{ transition: "stroke-dashoffset 0.5s linear" }} />
       </svg>
       <span className="absolute inset-0 grid place-items-center font-display text-3xl font-extrabold tabular-nums">{Math.max(0, Math.ceil(secs))}</span>
+    </div>
+  );
+}
+
+/** Searching for players: sonar rings going out, a sweep going round. */
+function Radar({ colour, children }: { colour: string; children: ReactNode }) {
+  return (
+    <div className="relative grid size-48 place-items-center">
+      {[0, 1, 2].map((i) => (
+        <span key={i} className="radar-ring absolute inset-6 rounded-full border-4" style={{ borderColor: colour, animationDelay: `${i * 0.66}s` }} />
+      ))}
+      <span className="radar-sweep absolute inset-4 rounded-full" style={{ background: `conic-gradient(from 0deg, transparent 0deg, ${colour}55 50deg, transparent 60deg)` }} />
+      <span className="relative">{children}</span>
     </div>
   );
 }
