@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Clock, Flame, Gift, House, Star, Trophy, Wallet } from "lucide-react";
+import { Clock, CreditCard, Flame, Gift, House, Star, Trophy, Wallet } from "lucide-react";
 import { cash } from "@/lib/world/value";
 import type { GiftParts } from "@/lib/world/daily-gift";
 import type { MoneyView } from "@/lib/world/money-view";
+import { TOPUPS } from "@/lib/world/topups";
 import { Sheet } from "./sheet";
+import { startTopUp, toppedUpBefore } from "./topup-actions";
 
 // Your money (docs/MONEY.md): tap your cash. What you have, today's daily gift, where today's
 // money came from, and what to spend it on. Amounts come in naira and show in your currency.
@@ -96,10 +98,61 @@ function GiftBox({ view, perMint, onTaken }: { view: NonNullable<MoneyView["gift
   );
 }
 
+/** Top up: game money for real money, through Paystack (the first one doubled). */
+function TopUps({ region, perMint }: { region: string; perMint: number }) {
+  const [before, setBefore] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void toppedUpBefore()
+      .then((b) => alive && setBefore(b))
+      .catch(() => alive && setBefore(true));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const go = async (id: string) => {
+    setBusy(id);
+    setError(null);
+    const r = await startTopUp(id, region).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
+    if (!r.ok) {
+      setBusy(null);
+      return setError(r.error);
+    }
+    window.location.assign(r.url);
+  };
+  return (
+    <div>
+      {before === false && (
+        <p className="mb-2 rounded-2xl bg-[#d3f9d8] px-3 py-2 text-xs font-semibold text-[#2b8a3e]">Your first top-up is doubled!</p>
+      )}
+      <div className="grid grid-cols-2 gap-2">
+        {TOPUPS.map((t) => (
+          <button
+            key={t.id}
+            disabled={!!busy}
+            onClick={() => void go(t.id)}
+            className="relative flex flex-col items-start rounded-2xl bg-white p-3 text-left shadow-sm ring-1 ring-ink/10 disabled:opacity-50"
+          >
+            {t.bonus > 0 && <span className="absolute right-2 top-2 rounded-full bg-gold/30 px-1.5 text-[10px] font-bold text-gold-dark">+{t.bonus}%</span>}
+            <span className="font-display text-base font-extrabold tabular-nums">{cash(t.game / perMint)}</span>
+            {before === false && <span className="text-[11px] font-semibold text-[#2b8a3e]">× 2 = {cash((t.game * 2) / perMint)}</span>}
+            <span className="mt-1 text-xs font-semibold text-muted">{busy === t.id ? "Opening Paystack…" : `Pay ₦${t.naira.toLocaleString("en-GB")}`}</span>
+          </button>
+        ))}
+      </div>
+      <p className="mt-2 text-[11px] text-muted">Paid through Paystack. Game money can&apos;t be turned back into real money.</p>
+      {error && <p className="mt-1 text-xs text-hit">{error}</p>}
+    </div>
+  );
+}
+
 /** Your money: tap your cash. */
 export function MoneyHome({
   coins,
   perMint,
+  region,
   onClose,
   onTaken,
   onProperty,
@@ -107,6 +160,8 @@ export function MoneyHome({
 }: {
   coins: number;
   perMint: number;
+  /** The map you're on (top-ups are bought for it). */
+  region: string;
   onClose: () => void;
   /** The gift was taken (the cash at the top goes up). */
   onTaken: () => void;
@@ -139,6 +194,10 @@ export function MoneyHome({
           <p className="rounded-3xl bg-ink/5 p-4 text-center text-sm text-muted">The daily gift is switched on soon.</p>
         )}
       </div>
+      <h3 className="mb-1.5 mt-4 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted">
+        <CreditCard className="size-3.5" /> Top up
+      </h3>
+      <TopUps region={region} perMint={perMint} />
       <h3 className="mb-1.5 mt-4 text-[11px] font-bold uppercase tracking-wide text-muted">Where today&apos;s money came from</h3>
       {view && view.inToday.length > 0 ? (
         <ul className="divide-y divide-ink/5 rounded-2xl ring-1 ring-ink/5">
@@ -167,7 +226,7 @@ export function MoneyHome({
           <Trophy className="size-4 shrink-0 text-[#e8590c]" /> Win challenges: the pot, plus a prize from Newtown.
         </li>
         <li className="flex items-center gap-2">
-          <House className="size-4 shrink-0 text-[#7048e8]" /> Own places: what they earn is coming soon.
+          <House className="size-4 shrink-0 text-[#7048e8]" /> Own places and let them out: they pay you rent.
         </li>
       </ul>
       <div className="mt-4 grid grid-cols-2 gap-2">

@@ -43,6 +43,7 @@ import type { SearchHit } from "./map-search";
 import { HomeFinder } from "./home-finder";
 import { StartLife } from "./start-life";
 import { useLife } from "./use-life";
+import { confirmTopUp } from "../topup-actions";
 import { StarterRoomBox } from "./starter-room";
 import { WorkSheet } from "./work-sheet";
 import { BusinessSheet } from "./business-sheet";
@@ -479,6 +480,19 @@ export function useWorldLife({
     return () => clearTimeout(t);
   }, [regionId]);
 
+  // Back from paying for a top-up (docs/MONEY.md): check it with Paystack (once), say it's in, tidy the address.
+  useEffect(() => {
+    if (!signedIn) return;
+    const ref = new URLSearchParams(window.location.search).get("topup");
+    if (!ref) return;
+    void confirmTopUp(ref).then(async (r) => {
+      setMessage(r.ok ? { text: `Your top-up is in: +${cash(r.mint ?? 0)}${r.doubled ? " (your first one, doubled!)" : ""}`, good: true } : { text: r.error ?? "That payment hasn't gone through.", good: false });
+      const url = new URL(window.location.href);
+      url.searchParams.delete("topup");
+      window.history.replaceState(null, "", url);
+      await refresh();
+    });
+  }, [signedIn, refresh]);
   // Back from paying for a pack: check it with Paystack, then tidy the address. Without one in the
   // address, any pack paid for earlier that never arrived is checked again.
   useEffect(() => {
@@ -656,7 +670,7 @@ export function useWorldLife({
   // until all three are.
   const guideOn = signedIn && loaded && !!life && !guide.done && !oldLife;
   const [first, setFirst] = useState<FirstSteps | null>(null);
-  const allFirst = !!first && first.hi && first.challenge && first.home;
+  const allFirst = !!first && first.hi && first.challenge && first.out;
   useEffect(() => {
     if (!guideOn || allFirst) return;
     let alive = true;

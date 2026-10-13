@@ -48,3 +48,19 @@ Run once, on the day the simple life goes live. Everyone's money becomes ₦350,
 Homes, places, cars and things stay theirs; players with no home get a free room next time they
 open the game. Everyone's old money is saved in `fresh_start_backup` first, and the file ends with
 the (commented-out) lines that undo it. Running it again does nothing.
+
+## Top-ups (game-db/076_topups.sql)
+Tap your cash, then Top up. Paid through Paystack (`src/app/play/topup-actions.ts`); the money only
+arrives once Paystack says the full amount was paid, and only once. Game money never turns back
+into real money.
+
+| Pay | Game money | Bonus |
+|---|---|---|
+| ₦1,000 | ₦1,000,000 | |
+| ₦2,500 | ₦2,750,000 | +10% |
+| ₦5,000 | ₦6,000,000 | +20% |
+| ₦10,000 | ₦13,000,000 | +30% |
+| ₦25,000 | ₦35,000,000 | +40% |
+
+Your first top-up is doubled. The old starter packs are no longer offered (everyone starts the
+same way, with ₦250,000 and a free room); packs already paid for still arrive.

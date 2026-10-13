@@ -1,5 +1,6 @@
 import { after, NextResponse } from "next/server";
 import { confirmPack } from "@/app/play/pack-actions";
+import { confirmTopUp } from "@/app/play/topup-actions";
 import { confirmPayment } from "@/lib/ads";
 import { confirmBusinessPayment } from "@/lib/business";
 import { webhookIsGenuine } from "@/lib/paystack";
@@ -51,6 +52,16 @@ export async function POST(request: Request) {
         await confirmPack(reference);
       } catch (error) {
         console.error("Webhook pack confirmation failed", reference, error);
+      }
+    });
+  }
+  // Top-ups (src/app/play/topup-actions.ts).
+  if (event.event === "charge.success" && typeof reference === "string" && /^tu-/.test(reference)) {
+    after(async () => {
+      try {
+        await confirmTopUp(reference);
+      } catch (error) {
+        console.error("Webhook top-up confirmation failed", reference, error);
       }
     });
   }

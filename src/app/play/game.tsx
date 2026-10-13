@@ -3548,6 +3548,7 @@ export function Game({
         <MoneyHome
           coins={me.coins}
           perMint={worldRegion?.prices.perMint ?? 1_500}
+          region={worldId}
           onClose={() => setMoneyOpen(false)}
           onTaken={() => {
             playSfx("chime");
