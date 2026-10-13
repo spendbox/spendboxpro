@@ -53,6 +53,7 @@ import { InterviewSheet, MomentSheet } from "./moments";
 import { AmountSheet, LoanSheet } from "./amount-sheet";
 import { CurrencySheet } from "./currency-pick";
 import { cash, setShownCurrency } from "@/lib/world/value";
+import { FIRST_STEP_NAIRA, FIRST_STEPS, type FirstStep, type FirstSteps } from "@/lib/world/first-steps";
 import { buyerPays, sellerGets, OFFER_HOURS, RENT_LEVEL, type Listing, type MarketBoard } from "@/lib/world/market";
 import { BUY_TAX } from "@/lib/world/property-api";
 
@@ -72,13 +73,7 @@ function planOf(region: RegionMap) {
 
 const GUIDE_KEY = "newtown.guide";
 const CURRENCY_KEY = "newtown.currency";
-type GuideStep = "home" | "job" | "budget" | "life";
-const GUIDE: Record<GuideStep, { n: number; text: string }> = {
-  home: { n: 1, text: "Find a home you can afford. Tap Find a home." },
-  job: { n: 2, text: "Get a job near home. Tap Income, then Jobs near me." },
-  budget: { n: 3, text: "Set your budget: how your pay is shared out. Tap your cash at the top." },
-  life: { n: 4, text: "Look after your body and mind. Tap Life." },
-};
+type GuideStep = FirstStep;
 /** The glow on the button for the guide's next step: a gold ring, and a ripple round it (see Ripple). */
 const GLOW = "outline outline-2 outline-offset-2 outline-gold";
 
@@ -630,32 +625,41 @@ export function useWorldLife({
   // a job" for a moment), never back to a step you've passed (losing a job later doesn't restart
   // it), and not for a life more than two days old (a new phone or browser doesn't start it over).
   const oldLife = !!life?.started_at && Date.now() - Date.parse(life.started_at) > 2 * 86_400_000;
-  const step: GuideStep | null =
-    !signedIn || !loaded || !life || guide.done || oldLife
-      ? null
-      : !homeUnit && !guide.home
-        ? "home"
-        : work === null || status === null
-          ? null
-          : !guide.job && !work.job && !status.hustle
-            ? "job"
-            : !guide.budget
-              ? "budget"
-              : !guide.life
-                ? "life"
-                : null;
-  // Steps passed stay passed.
-  const passedHome = !!homeUnit && !guide.home;
-  const passedJob = !!(work?.job || status?.hustle) && !guide.job;
+  // The first five minutes (docs/FIRST_STEPS.md): say hi, play a challenge, pick your home, each
+  // with a small reward. The server says what's done (and pays), checked now and every 12 seconds
+  // until all three are.
+  const guideOn = signedIn && loaded && !!life && !guide.done && !oldLife;
+  const [first, setFirst] = useState<FirstSteps | null>(null);
+  const allFirst = !!first && first.hi && first.challenge && first.home;
   useEffect(() => {
-    if (!passedHome && !passedJob) return;
-    const t = setTimeout(() => {
-      if (passedHome) markGuide("home");
-      if (passedJob) markGuide("job");
-    }, 0);
-    return () => clearTimeout(t);
+    if (!guideOn || allFirst) return;
+    let alive = true;
+    const look = () => {
+      if (document.visibilityState !== "visible") return;
+      void fetch("/api/first-steps", { method: "POST", cache: "no-store" })
+        .then((r) => (r.ok ? (r.json() as Promise<FirstSteps | null>) : null))
+        .then((f) => {
+          if (!alive || !f) return;
+          setFirst(f);
+          if (!f.paid.length) return;
+          const titles = f.paid.map((id) => FIRST_STEPS.find((x) => x.id === id)?.title ?? id).join(", ");
+          const reward = f.rewardNaira > 0 && region ? ` +${cash((f.rewardNaira * f.paid.length) / region.region.prices.perMint)}` : "";
+          setMessage({ text: `Done: ${titles}!${reward}`, good: true });
+          playSfx("chime");
+        })
+        .catch(() => {});
+    };
+    look();
+    const t = setInterval(look, 12_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+    // region only turns the reward into your currency.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [passedHome, passedJob]);
+  }, [guideOn, allFirst]);
+  const step: GuideStep | null = guideOn && first ? (FIRST_STEPS.find((x) => !first[x.id])?.id ?? null) : null;
+  const stepN = step ? FIRST_STEPS.findIndex((x) => x.id === step) + 1 : 0;
   const finds = useMemo(() => (finderOpen && region ? homesByArea(region, planOf(region)) : []), [finderOpen, region]);
   const openFinder = () => {
     setWelcomeShut(true);
@@ -777,7 +781,7 @@ export function useWorldLife({
   };
 
   /** Something in Finance wants you: the guide's budget step, a power cut, an offer. */
-  const financeGlow = step === "budget";
+  const financeGlow = false;
   const financeDot = !!(status?.powerCut || board?.received.some((o) => o.status === "open"));
   /** The row of life buttons; afterIncome: something the game puts right after Income (the notifications bell). */
   const makeRow = (afterIncome?: React.ReactNode) => region ? (
@@ -796,17 +800,13 @@ export function useWorldLife({
           {signedIn && homeUnit && (
             <>
               <LifeButton icon={House} label="Home" onClick={goHome} />
-              <LifeButton icon={Briefcase} label="Income" glow={step === "job"} onClick={() => setWorkOpen(true)} />
+              <LifeButton icon={Briefcase} label="Income" onClick={() => setWorkOpen(true)} />
               {afterIncome}
               <LifeButton
                 icon={HeartPulse}
                 label="Life"
-                glow={step === "life"}
                 warn={!!status && status.health < 30}
-                onClick={() => {
-                  setLifeOpen(true);
-                  if (step === "life") markGuide("life");
-                }}
+                onClick={() => setLifeOpen(true)}
               />
             </>
           )}
@@ -818,14 +818,30 @@ export function useWorldLife({
         {rep?.jail && Date.parse(rep.jail) > clock && (
           <JailBanner until={rep.jail} prices={region.region.prices} onDone={(text, good) => setMessage({ text, good })} onFree={() => setRep((r) => (r ? { ...r, jail: null } : r))} />
         )}
-        {step && GUIDE[step] && (
+        {step && (
           <div className="pointer-events-auto flex max-w-xs items-start gap-2 rounded-2xl bg-ink px-3 py-2 text-white shadow-lg">
             <p className="min-w-0 flex-1 text-xs leading-snug">
-              <b className="text-gold">{`Step ${GUIDE[step].n} of 4 · `}</b>
-              {GUIDE[step].text}
+              <b className="text-gold">{`Step ${stepN} of 3 · ${FIRST_STEPS[stepN - 1].title}`}</b>
+              <span className="block">{FIRST_STEPS[stepN - 1].text}</span>
+              {first && (
+                <span className="mt-0.5 block text-[11px] font-semibold text-[#8ce99a]">
+                  Reward: {cash(FIRST_STEP_NAIRA / region.region.prices.perMint)}
+                </span>
+              )}
             </p>
             <button onClick={() => markGuide("done")} className="shrink-0 text-[11px] font-semibold text-white/70 hover:text-white">
               Skip
+            </button>
+          </div>
+        )}
+        {guideOn && allFirst && (
+          <div className="pointer-events-auto flex max-w-xs items-start gap-2 rounded-2xl bg-ink px-3 py-2 text-white shadow-lg">
+            <p className="min-w-0 flex-1 text-xs leading-snug">
+              <b className="text-gold">You&apos;re all set!</b>
+              <span className="block">Next, to earn every day: tap Income and get a job near home. Your food and bills are paid from your money by themselves.</span>
+            </p>
+            <button onClick={() => markGuide("done")} className="shrink-0 text-[11px] font-semibold text-white/70 hover:text-white">
+              Got it
             </button>
           </div>
         )}
@@ -1003,7 +1019,6 @@ export function useWorldLife({
       )}
       {workOpen && jobs && (
         <WorkSheet
-          glow={step === "job"}
           rent={{
             daily: (assets?.units ?? []).reduce((t, u) => t + (u.let && u.tenantFrom && Date.parse(u.tenantFrom) <= clock ? u.rentDay * RENT_LEVEL[u.rentLevel ?? "fair"].factor : 0), 0),
             waiting: (assets?.units ?? []).reduce((t, u) => t + u.waiting, 0),
@@ -1197,8 +1212,7 @@ export function useWorldLife({
             if (s) fly(s.x, s.z);
             setAssetsOpen(false);
           }}
-          startTab={financeTab ?? (step === "budget" ? "budget" : board?.received.some((o) => o.status === "open") ? "property" : undefined)}
-          glowBudget={step === "budget"}
+          startTab={financeTab ?? (board?.received.some((o) => o.status === "open") ? "property" : undefined)}
           owning={{
             board,
             onLet: (u, on) => act(() => api.letUnit(u.unit, on), () => (on ? `${u.label} is up for rent. Rent starts when a tenant moves in.` : `${u.label} isn't let any more.`)),
@@ -1604,7 +1618,7 @@ export function useWorldLife({
     fly(p.x, p.z);
     setPlace(workplaceById(planOf(region), p.id) ?? { id: p.id, name: p.name, x: Math.round(p.x), z: Math.round(p.z), jobs: [] });
   };
-  return { explore, openExplorePlace, rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit, homeBuilding: homeUnit ? homeUnit.split("/")[0] : null, openPlanner: () => setPlanning(true), locateMe, lookAt: (x: number, z: number) => setFlyTo({ tile: spiralIndex(Math.round(x), Math.round(z)), at: ++flies.current }), makeRow, openSoon: () => setSoonOpen(true), openGuestBook: (building: string) => setGuestBook(building),
+  return { explore, openExplorePlace, rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit, mySpot: whereAmI(), guideStep: step, homeBuilding: homeUnit ? homeUnit.split("/")[0] : null, openPlanner: () => setPlanning(true), locateMe, lookAt: (x: number, z: number) => setFlyTo({ tile: spiralIndex(Math.round(x), Math.round(z)), at: ++flies.current }), makeRow, openSoon: () => setSoonOpen(true), openGuestBook: (building: string) => setGuestBook(building),
     openLife: () => setLifeOpen(true),
     /** A place's card (its jobs, and what it does), from where it stands. */
     openWorkplace: (x: number, z: number, name: string) => {

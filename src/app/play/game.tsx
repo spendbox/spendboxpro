@@ -117,7 +117,7 @@ import { avatar3dEnabled } from "./avatar3d-flag";
 import { worldPreview } from "./world-flag";
 import { PlacePill } from "./place-pill";
 import { CityCard } from "./city-card";
-import { useWorldLife } from "./life/world-life";
+import { Ripple, useWorldLife } from "./life/world-life";
 import type { ExplorePlace } from "@/lib/world/explore";
 import { Joystick } from "./joystick";
 import { PeopleList, prefetchPeople } from "./people/people-list";
@@ -772,14 +772,22 @@ export function Game({
     };
     // A new area: look again (the people round here show under the menu).
   }, [worldId, me.guest, worldLife.centerRef, worldArea]);
+  // You, on the map where you are (your home, or the place you're at), as everyone else sees you.
+  const mySpotX = worldLife.mySpot?.x ?? null;
+  const mySpotZ = worldLife.mySpot?.z ?? null;
   const facesOnMap: CityFriendPin[] = useMemo(() => {
     const live = new Set(friendsAt.map((f) => f.id));
+    const mine: CityFriendPin[] =
+      mySpotX !== null && mySpotZ !== null && !me.guest
+        ? [{ id: me.id, name: me.name ?? "You", avatar: me.avatar, room: `b:${spiralIndex(Math.round(mySpotX), Math.round(mySpotZ))}`, status: "online", mine: true }]
+        : [];
     return [
-      ...friendsAt.map((f) => ({ ...f, friend: true, status: "online" as const })),
-      ...peopleOut.filter((p) => !live.has(p.id)).map((p) => ({ id: p.id, name: p.name, avatar: cleanAvatar(p.avatar, p.name), room: `b:${spiralIndex(p.x, p.z)}`, status: p.status, friend: p.friend })),
+      ...mine,
+      ...friendsAt.filter((f) => f.id !== me.id).map((f) => ({ ...f, friend: true, status: "online" as const })),
+      ...peopleOut.filter((p) => !live.has(p.id) && p.id !== me.id).map((p) => ({ id: p.id, name: p.name, avatar: cleanAvatar(p.avatar, p.name), room: `b:${spiralIndex(p.x, p.z)}`, status: p.status, friend: p.friend })),
     ];
-  }, [friendsAt, peopleOut]);
-  const onlineNear = useMemo(() => facesOnMap.filter((f) => f.status === "online").length, [facesOnMap]);
+  }, [friendsAt, peopleOut, mySpotX, mySpotZ, me.id, me.name, me.avatar, me.guest]);
+  const onlineNear = useMemo(() => facesOnMap.filter((f) => f.status === "online" && !f.mine).length, [facesOnMap]);
   const onlineNow = Math.max(1, cityOnline ?? 0, online ?? 0, onlineNear);
   const [statsOpen, setStatsOpen] = useState(false);
   /** On foot on the streets: the joystick's state (the 3D city reads it every frame), and whether you're walking. */
@@ -1292,6 +1300,14 @@ export function Game({
     if (!worldId || me.guest) return;
     setPhoneBadge(unread + chatUnread);
   }, [worldId, me.guest, unread, chatUnread]);
+  /** The bell for turning notifications on (shown while they're off on this phone). */
+  const turnOnBell = () => {
+    if (pushNeedsHome) return setAlertsOpen(true);
+    void turnOnNotifications().then((r) => {
+      setMessage({ text: r.text, tone: r.ok ? "good" : "info" });
+      if (r.ok) setPushOn(true);
+    });
+  };
   /** You've seen these notices: they stop counting at once (and on the server). */
   const markRead = useCallback((ids: number[]) => {
     const fresh = ids.filter((id) => id > 0);
@@ -1712,7 +1728,7 @@ export function Game({
     };
     const sport = THEME_SPORT_GAME[theme];
     if (sport) return { label: "Watch the match", icon: Trophy, run: () => setSportsOpen(sport) };
-    if (inMyHome) return { label: "Plan my home", icon: PencilRuler, run: worldLife.openPlanner };
+    if (inMyHome) return { label: "Design my home", icon: PencilRuler, run: worldLife.openPlanner };
     if (inPlannedHome) {
       const [hx, hz] = spiralXY(enteredTile);
       return { label: "Sign the guest book", icon: BookOpen, run: () => worldLife.openGuestBook(`${worldId}:${hx},${hz}`) };
@@ -2019,7 +2035,7 @@ export function Game({
             onRides={setRides}
             houses={worldId ? NO_HOUSES : state.houses}
             dance={isDancing && dancing ? { id: me.id, move: dancing.move, with: dancing.with } : null}
-            friendsAt={worldId ? facesOnMap : friendsAt}
+            friendsAt={worldId ? (walking ? facesOnMap.filter((f) => !f.mine) : facesOnMap) : friendsAt}
             challengeLights={worldId ? challengeLights : undefined}
             onPerson={worldId ? setPersonId : undefined}
             marks={worldId ? worldLife.marks : undefined}
@@ -2086,9 +2102,10 @@ export function Game({
             {!guest && (
             <button
               onClick={() => setStatsOpen(true)}
-              className="glass pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold"
+              className={cn("glass pointer-events-auto relative flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold", worldLife.guideStep === "hi" && "outline outline-2 outline-offset-2 outline-gold")}
               title={`${onlineNow} online in the city, ${onlineNear} near where you're looking. Tap for the numbers.`}
             >
+              {worldLife.guideStep === "hi" && <Ripple />}
               <span className="size-2 animate-pulse rounded-full bg-[#2f9e44]" aria-hidden />
               {onlineNow}
               <span className="max-[440px]:hidden">online</span>
@@ -3029,9 +3046,9 @@ export function Game({
           </button>
         )}
 
-        {/* The real map, out on the streets: just Walk and Challenge down here (Locate me and Soon are
-            little icons in the lower left corner). Inside a place or on a ride the place's own bar takes
-            over; walking, only Stop walking. Explore is hidden for now. */}
+        {/* The real map, out on the streets: the buttons are in a column down the left (below). Inside a
+            place or on a ride the place's own bar takes over; walking, only Stop walking. Explore is
+            hidden for now. */}
         {/* Signed out: one white button to advertise on the map, and the game's name floating over the city. */}
         {worldId && guest && !place && ride === null && (
           <button onClick={() => openAdvertise()} className="pointer-events-auto flex h-12 items-center gap-2 rounded-full bg-white px-6 text-sm font-bold text-ink shadow-lg ring-1 ring-black/5">
@@ -3039,28 +3056,49 @@ export function Game({
             Advertise on the map
           </button>
         )}
-        {worldId && !guest && !place && ride === null && (
-          <div className="pointer-events-auto flex items-stretch gap-1.5 sm:gap-2">
-            <DockButton icon={Footprints} label={walking ? "Stop walking" : "Walk"} dark={walking} onClick={() => setWalking(!walking)} />
-            {!walking && <DockButton icon={Trophy} tint="text-gold-dark" label="Challenge" onClick={() => setFightOpen(true)} />}
+        {/* On foot: just Stop walking, in the middle (the joystick is bottom left). */}
+        {worldId && !guest && !place && ride === null && walking && (
+          <div className="pointer-events-auto flex items-stretch">
+            <DockButton icon={Footprints} label="Stop walking" dark onClick={() => setWalking(false)} />
           </div>
         )}
+        {/* Down the left, out of the way of the city: the notifications bell (while they're off), Soon,
+            Locate me and Walk see-through and small; Challenge, the fun one, big and bright at the bottom. */}
         {worldId && !guest && !place && ride === null && !walking && (
-          <div className="pointer-events-auto absolute bottom-[max(0.625rem,env(safe-area-inset-bottom))] left-2.5 flex flex-col gap-2 sm:bottom-4 sm:left-4">
+          <div className="pointer-events-auto absolute bottom-[max(0.625rem,env(safe-area-inset-bottom))] left-2.5 flex flex-col items-center gap-2 sm:bottom-4 sm:left-4">
+            {!pushOn && (
+              <button onClick={turnOnBell} className="relative grid size-10 place-items-center rounded-full bg-gold/80 text-ink shadow transition-opacity hover:bg-gold" aria-label="Notifications are off: tap to turn them on" title="Turn notifications on">
+                <BellOff className="size-4" />
+                <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-2 ring-gold/60" />
+              </button>
+            )}
             {worldLife.hasHome && (
-              <button onClick={worldLife.openSoon} className="glass grid size-11 place-items-center rounded-full shadow" aria-label="Coming soon" title="Coming soon">
-                <Rocket className="size-5 text-[#7048e8]" />
+              <button onClick={worldLife.openSoon} className="grid size-10 place-items-center rounded-full bg-white/55 shadow-sm backdrop-blur-sm transition hover:bg-white/90" aria-label="Coming soon" title="Coming soon">
+                <Rocket className="size-[18px] text-[#7048e8]" />
               </button>
             )}
             <button
               onClick={() => {
                 if (!worldLife.locateMe()) setMessage({ text: "You're not anywhere on the map yet. Find a home first.", tone: "info" });
               }}
-              className="glass grid size-11 place-items-center rounded-full shadow"
+              className="grid size-10 place-items-center rounded-full bg-white/55 shadow-sm backdrop-blur-sm transition hover:bg-white/90"
               aria-label="Locate me"
               title="Locate me"
             >
-              <LocateFixed className="size-5 text-[#1c7ed6]" />
+              <LocateFixed className="size-[18px] text-[#1c7ed6]" />
+            </button>
+            <button onClick={() => setWalking(true)} className="flex h-11 w-12 flex-col items-center justify-center gap-0.5 rounded-2xl bg-white/55 text-[10px] font-semibold shadow-sm backdrop-blur-sm transition hover:bg-white/90" aria-label="Walk">
+              <Footprints className="size-4" />
+              Walk
+            </button>
+            <button
+              onClick={() => setFightOpen(true)}
+              className="challenge-pop relative flex h-14 w-14 flex-col items-center justify-center gap-0.5 rounded-2xl bg-gradient-to-br from-[#ff6b6b] via-[#f76707] to-[#f59f00] text-[10px] font-extrabold text-white shadow-lg ring-2 ring-white/80"
+              aria-label="Challenge people nearby"
+            >
+              <Trophy className="size-5 drop-shadow" />
+              Challenge
+              {worldLife.guideStep === "challenge" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-2xl ring-4 ring-gold/70" />}
             </button>
           </div>
         )}
@@ -3333,7 +3371,7 @@ export function Game({
                     {place && inMyHome && (
                       <button onClick={worldLife.openPlanner} className="flex items-center gap-1.5 rounded-xl bg-gold px-3 py-2 font-semibold text-ink">
                         <PencilRuler className="size-4" />
-                        Plan my home
+                        Design my home
                       </button>
                     )}
                     {placeLevel?.kind === "club" && (
@@ -3399,16 +3437,11 @@ export function Game({
           </div>
         </div>
       )}
-      {/* Notifications off on this phone: a bell on the right, halfway down, to switch them on (gone once they're on). */}
-      {!me.guest && !pushOn && !camera && (
+      {/* Notifications off on this phone: a bell on the right, halfway down, to switch them on (gone
+          once they're on). On the real map it's in the column down the left instead. */}
+      {!me.guest && !pushOn && !camera && !worldId && (
         <button
-          onClick={() => {
-            if (pushNeedsHome) return setAlertsOpen(true);
-            void turnOnNotifications().then((r) => {
-              setMessage({ text: r.text, tone: r.ok ? "good" : "info" });
-              if (r.ok) setPushOn(true);
-            });
-          }}
+          onClick={turnOnBell}
           className="pointer-events-auto fixed right-3 top-1/2 z-20 grid size-10 -translate-y-1/2 place-items-center rounded-full bg-gold text-ink shadow-lg"
           aria-label="Notifications are off: tap to turn them on"
         >

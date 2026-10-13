@@ -181,7 +181,7 @@ export type CityMarkTag = { id: number; x: number; z: number; kind: string; text
  * A person's face over the place they're in: a friend (pink) or anyone else on the real map
  * (blue), faded with a word under it when they're not online (asleep, at work, away).
  */
-export type CityFriendPin = { id: string; name: string; avatar: Avatar; room: string; status?: "online" | "asleep" | "work" | "away"; friend?: boolean };
+export type CityFriendPin = { id: string; name: string; avatar: Avatar; room: string; status?: "online" | "asleep" | "work" | "away"; friend?: boolean; /** You yourself (gold, a little bigger, "You"). */ mine?: boolean };
 /** A ghost lit up on the map: free to challenge, in a duel right now, or golden (safe). */
 export type CityGhost = { id: string; name: string; avatar: Avatar; tile: number; status: "free" | "playing" | "golden"; mine?: boolean };
 /** You dancing: your id (so everyone places the dancers the same way), your move, your partner. */
@@ -4469,7 +4469,7 @@ export function CityView({
       }
     }
     function setFriendPins(list: CityFriendPin[]) {
-      const key = `${currentSeed}|${tiles.length}|${list.map((f) => `${f.id}@${f.room}|${f.name}|${f.status}|${f.friend}|${JSON.stringify(f.avatar)}`).join(";")}`;
+      const key = `${currentSeed}|${tiles.length}|${list.map((f) => `${f.id}@${f.room}|${f.name}|${f.status}|${f.friend}|${f.mine}|${JSON.stringify(f.avatar)}`).join(";")}`;
       if (key === pinKey) return;
       pinKey = key;
       for (const p of pins) p.root.remove();
@@ -4496,10 +4496,10 @@ export function CityView({
         seen.set(building, slot + 1);
         const root = document.createElement("div");
         const pink = f.friend !== false;
-        const away = f.status && f.status !== "online";
-        root.style.cssText = `position:absolute;left:0;top:0;display:flex;flex-direction:column;align-items:center;gap:2px;will-change:transform;visibility:hidden;pointer-events:auto;cursor:pointer;opacity:${away ? 0.72 : 1};`;
+        const away = !f.mine && f.status && f.status !== "online";
+        root.style.cssText = `position:absolute;left:0;top:0;display:flex;flex-direction:column;align-items:center;gap:2px;will-change:transform;visibility:hidden;pointer-events:auto;cursor:pointer;opacity:${away ? 0.72 : 1};${f.mine ? "z-index:2;" : ""}`;
         root.setAttribute("role", "button");
-        root.setAttribute("aria-label", `${f.name}: see their card`);
+        root.setAttribute("aria-label", f.mine ? "You: your card" : `${f.name}: see their card`);
         root.addEventListener("click", (e) => {
           e.stopPropagation();
           cb.current.onPerson?.(f.id);
@@ -4508,10 +4508,11 @@ export function CityView({
         const svg = renderToStaticMarkup(<AvatarFace avatar={cleanAvatar(f.avatar, f.name)} size={40} />).replace(/^<svg(?![^>]*xmlns=)/, '<svg xmlns="http://www.w3.org/2000/svg"');
         face.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
         face.alt = "";
-        const colour = pink ? "#d6336c" : "#1c7ed6";
-        face.style.cssText = `width:${pink ? 40 : 34}px;height:${pink ? 40 : 34}px;border-radius:999px;border:3px solid ${colour};background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.25);`;
+        const colour = f.mine ? "#f59f00" : pink ? "#d6336c" : "#1c7ed6";
+        const size = f.mine ? 46 : pink ? 40 : 34;
+        face.style.cssText = `width:${size}px;height:${size}px;border-radius:999px;border:3px solid ${colour};background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.25)${f.mine ? ",0 0 0 4px rgba(245,159,0,.35)" : ""};`;
         const name = document.createElement("div");
-        name.textContent = away ? `${f.name} · ${f.status === "asleep" ? "asleep" : f.status === "work" ? "at work" : "away"}` : f.name;
+        name.textContent = f.mine ? "You" : away ? `${f.name} · ${f.status === "asleep" ? "asleep" : f.status === "work" ? "at work" : "away"}` : f.name;
         name.style.cssText =
           `max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 8px;border-radius:999px;background:${colour};color:#fff;font:700 11px/16px system-ui,sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.2);`;
         root.append(face, name);

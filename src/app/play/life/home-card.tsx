@@ -43,9 +43,12 @@ export function HomeCard({ label, area, neighbours, onClose, onPlan, onEnter, ch
           </button>
         </div>
 
+        <p className="mt-3 rounded-2xl bg-me/10 px-3 py-2 text-xs">
+          Your home is ready to live in: nothing to build. Designing it (rooms, floors, furniture) is optional, whenever you like.
+        </p>
         {onPlan && (
-          <button onClick={onPlan} className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-full bg-ink text-sm font-semibold text-white">
-            <PencilRuler className="size-4" /> Plan my home: rooms, floors, furniture
+          <button onClick={onPlan} className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-full bg-ink text-sm font-semibold text-white">
+            <PencilRuler className="size-4" /> Design my home (optional)
           </button>
         )}
         {onEnter && (
