@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DoorOpen } from "lucide-react";
-import { Flag, House, MapPin, Pencil, Search, Star, X } from "@/components/icons";
+import { Flag, MapPin, Pencil, Search, Star, X } from "@/components/icons";
 import { addressOf, makePlan, spiralIndex, tileAt, type CityPlan } from "@/lib/city/layout";
 import { BUILDING_LABEL } from "@/lib/world/buildings";
 import type { RegionMap } from "@/lib/world/compile";
@@ -46,6 +46,7 @@ import { useLife } from "./use-life";
 import { confirmTopUp } from "../topup-actions";
 import { moveOut, myRental, rentUnit, type Rental } from "../property-actions";
 import { StarterRoomBox } from "./starter-room";
+import { TOUR_KEY, WelcomeTour } from "./welcome-tour";
 import { WorkSheet } from "./work-sheet";
 import { BusinessSheet } from "./business-sheet";
 import { ServicesSheet } from "./services-sheet";
@@ -75,45 +76,16 @@ function planOf(region: RegionMap) {
   return p;
 }
 
-const GUIDE_KEY = "newtown.guide";
+// v2: the simple life changed so much that everyone gets the guide again.
+const GUIDE_KEY = "newtown.guide.v2";
 const CURRENCY_KEY = "newtown.currency";
 type GuideStep = FirstStep;
-/** The glow on the button for the guide's next step: a gold ring, and a ripple round it (see Ripple). */
-const GLOW = "outline outline-2 outline-offset-2 outline-gold";
 
 /** A gold ripple round a button the guide points at (the button must be relative). */
 export function Ripple() {
   return <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/60" />;
 }
 
-/** One of your life's buttons under the place's name: an icon and its name. */
-function LifeButton({
-  icon: Icon,
-  label,
-  onClick,
-  glow,
-  dot,
-  warn,
-  short,
-}: {
-  icon: typeof House;
-  label: string;
-  onClick: () => void;
-  glow?: boolean;
-  dot?: boolean;
-  warn?: boolean;
-  /** Just the icon on narrow phones. */
-  short?: boolean;
-}) {
-  return (
-    <button onClick={onClick} aria-label={label} className={`glass pointer-events-auto relative flex h-9 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-semibold sm:px-3 sm:text-sm ${glow ? GLOW : ""}`}>
-      <Icon className={`size-4 ${warn ? "text-hit" : ""}`} />
-      <span className={short ? "max-[420px]:hidden" : undefined}>{label}</span>
-      {dot && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-hit" />}
-      {glow && <Ripple />}
-    </button>
-  );
-}
 
 const paid = (p: PaySettled | undefined) =>
   p && p.gross > 0 ? ` Collected ${cash(p.net)} pay (after ${cash(p.tax)} tax and ${cash(p.fares)} fares).` : "";
@@ -212,6 +184,22 @@ export function useWorldLife({
       }
       return next;
     });
+  // The welcome tour: once for everyone, before anything else (./welcome-tour).
+  const [tourSeen, setTourSeen] = useState(() => {
+    try {
+      return localStorage.getItem(TOUR_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const endTour = () => {
+    try {
+      localStorage.setItem(TOUR_KEY, "1");
+    } catch {
+      // Not kept: it shows again next time.
+    }
+    setTourSeen(true);
+  };
   const [work, setWork] = useState<WorkStatus | null>(null);
   const [workOpen, setWorkOpen] = useState(false);
   const [place, setPlace] = useState<Workplace | null>(null);
@@ -677,22 +665,23 @@ export function useWorldLife({
     };
   }, [signedIn, lifeStarted, pretend, refresh, homeUnit]);
   // The start screen: before your life starts (or, if no free room could be given, to find one).
-  const showWelcome = signedIn && loaded && !homeUnit && !welcomeShut && !property && !place && !finderOpen && (!life || !!roomFailed);
+  const tourOn = signedIn && loaded && !tourSeen && !pretend;
+  const showWelcome = !tourOn && signedIn && loaded && !homeUnit && !welcomeShut && !property && !place && !finderOpen && (!life || !!roomFailed);
   // First only a home search; once you have a home, all of Home, Work, Money, Life and Services.
   // The guide's next step: a home, a job, a budget, body and mind, then where to chat.
   // It never pops up out of nowhere: not before your job and life have loaded (it would flash "get
   // a job" for a moment), never back to a step you've passed (losing a job later doesn't restart
-  // it), and not for a life more than two days old (a new phone or browser doesn't start it over).
-  const oldLife = !!life?.started_at && Date.now() - Date.parse(life.started_at) > 2 * 86_400_000;
+  // it). Everyone gets it once (GUIDE_KEY v2), old players too; only new lives are paid (game-db/072).
   // The first five minutes (docs/FIRST_STEPS.md): say hi, play a challenge, pick your home, each
   // with a small reward. The server says what's done (and pays), checked now and every 12 seconds
   // until all three are.
-  const guideOn = signedIn && loaded && !!life && !guide.done && !oldLife;
+  const guideOn = signedIn && loaded && !!life && !guide.done && !tourOn;
   const [first, setFirst] = useState<FirstSteps | null>(null);
   const allFirst = !!first && first.hi && first.challenge && first.out;
   useEffect(() => {
     if (!guideOn || allFirst) return;
     let alive = true;
+    let looked = false;
     const look = () => {
       if (document.visibilityState !== "visible") return;
       void fetch("/api/first-steps", { method: "POST", cache: "no-store" })
@@ -700,7 +689,10 @@ export function useWorldLife({
         .then((f) => {
           if (!alive || !f) return;
           setFirst(f);
-          if (!f.paid.length) return;
+          // An old player's first look ticks off what they did long ago: no fanfare for that.
+          const firstLook = !looked;
+          looked = true;
+          if (!f.paid.length || (firstLook && !f.rewardNaira)) return;
           const titles = f.paid.map((id) => FIRST_STEPS.find((x) => x.id === id)?.title ?? id).join(", ");
           const reward = f.rewardNaira > 0 && region ? ` +${cash((f.rewardNaira * f.paid.length) / region.region.prices.perMint)}` : "";
           setMessage({ text: `Done: ${titles}!${reward}`, good: true });
@@ -857,7 +849,6 @@ export function useWorldLife({
           {!(signedIn && homeUnit) && afterIncome}
           {signedIn && homeUnit && (
             <>
-              <LifeButton icon={House} label="Home" onClick={goHome} />
               {afterIncome}
             </>
           )}
@@ -874,7 +865,7 @@ export function useWorldLife({
             <p className="min-w-0 flex-1 text-xs leading-snug">
               <b className="text-gold">{`Step ${stepN} of 3 · ${FIRST_STEPS[stepN - 1].title}`}</b>
               <span className="block">{FIRST_STEPS[stepN - 1].text}</span>
-              {first && (
+              {first && first.rewardNaira > 0 && (
                 <span className="mt-0.5 block text-[11px] font-semibold text-[#8ce99a]">
                   Reward: {cash(FIRST_STEP_NAIRA / region.region.prices.perMint)}
                 </span>
@@ -889,7 +880,7 @@ export function useWorldLife({
           <div className="pointer-events-auto flex max-w-xs items-start gap-2 rounded-2xl bg-ink px-3 py-2 text-white shadow-lg">
             <p className="min-w-0 flex-1 text-xs leading-snug">
               <b className="text-gold">You&apos;re all set!</b>
-              <span className="block">Open your daily gift every day, win challenges, and save up for a home of your own. Tap your cash to see how.</span>
+              <span className="block">No work, no chores: open your daily gift every day, play games, meet people, go places and send gifts. Have fun!</span>
             </p>
             <button onClick={() => markGuide("done")} className="shrink-0 text-[11px] font-semibold text-white/70 hover:text-white">
               Got it
@@ -924,6 +915,7 @@ export function useWorldLife({
           </p>
         </div>
       )}
+      {tourOn && <WelcomeTour place={region.region.name} perMint={region.region.prices.perMint} onDone={endTour} />}
       {showWelcome && (
         <StartLife
           currency={currency}
@@ -1667,10 +1659,12 @@ export function useWorldLife({
   const restartGuide = () => {
     try {
       localStorage.removeItem(GUIDE_KEY);
+      localStorage.removeItem(TOUR_KEY);
     } catch {
       // Fine: it starts again in this visit anyway.
     }
     setGuide({});
+    setTourSeen(false);
     setWelcomeShut(false);
   };
   const openCurrency = () => setCurrencyOpen(true);

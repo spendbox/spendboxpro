@@ -5,7 +5,7 @@ import { rememberPerson } from "./recent-rail";
 import { GenderMark } from "./people-list";
 import { setGender } from "../people-actions";
 import { useEffect, useState } from "react";
-import { Banknote, BellRing, Car, Dices, Gift, House, Lightbulb, MapPin, MessageCircle, StickyNote, UserPlus } from "lucide-react";
+import { Banknote, BellRing, Car, Dices, Gift, House, MapPin, MessageCircle, StickyNote, UserPlus } from "lucide-react";
 import { Star, X } from "@/components/icons";
 import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar } from "@/lib/avatar";
@@ -175,11 +175,6 @@ export function PersonCard({
             {card.car && (
               <li className="flex items-center gap-2">
                 <Car className="size-4 shrink-0 text-muted" /> Drives a {card.car}
-              </li>
-            )}
-            {card.inventions.length > 0 && (
-              <li className="flex items-start gap-2">
-                <Lightbulb className="mt-0.5 size-4 shrink-0 text-muted" /> Invented {card.inventions.map((k) => `${k.name}${k.sold ? ` (${k.sold} sold)` : ""}`).join(", ")}
               </li>
             )}
             {card.friends.length > 0 && <li className="text-xs text-muted">Friends with {card.friends.map((f) => f.name).join(", ")}</li>}

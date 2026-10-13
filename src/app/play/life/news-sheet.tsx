@@ -6,7 +6,6 @@ import type { RegionMap } from "@/lib/world/compile";
 import { cityNews, playerStory, weatherNow, type NewsItem, type NewsKind } from "@/lib/world/news";
 import { ownedSpot } from "@/lib/world/owned";
 import { cash } from "@/lib/world/value";
-import { inventions } from "../item-actions";
 import { playerNews } from "../news-actions";
 import { gossip, type Gossip } from "../street-actions";
 import { Sheet } from "../sheet";
@@ -33,23 +32,13 @@ type Story = Omit<NewsItem, "kind"> & { kind: NewsKind | "invention" };
 
 const TONE: Partial<Record<NewsKind | "invention", string>> = { fire: "#e03131", flood: "#1971c2", weather: "#1c7ed6", power: "#f08c00", sport: "#2f9e44", invention: "#7048e8", star: "#d6336c", fun: "#e8590c", money: "#2b8a3e", game: "#e8590c" };
 
-/** What's happening in the city: news every 20 minutes, the weather, and players' new inventions. Share any story. */
+/** What's happening in the city: news every 20 minutes, the weather, and players' big moments. Share any story. */
 export function NewsSheet({ region, onShow, onClose }: { region: RegionMap; onShow: (x: number, z: number) => void; onClose: () => void }) {
   const [tab, setTab] = useState<"news" | "gossip">("news");
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(t);
-  }, []);
-  const [made, setMade] = useState<Story[] | null>(null);
-  useEffect(() => {
-    void inventions()
-      .then((list) =>
-        setMade(
-          list.map((k) => ({ id: `inv-${k.id}`, at: Date.parse(k.at), kind: "invention" as const, title: `New invention: ${k.name}`, text: `${k.maker} made it${k.sold ? `, and ${k.sold} sold so far` : ""}. Find it on the Market.` })),
-        ),
-      )
-      .catch(() => setMade([]));
   }, []);
   // Players' big moments: dear homes bought, businesses lighting up buildings, rich arrivals.
   const [people, setPeople] = useState<Story[]>([]);
@@ -82,8 +71,8 @@ export function NewsSheet({ region, onShow, onClose }: { region: RegionMap; onSh
     return () => io.disconnect();
   });
   const list = useMemo<Story[]>(
-    () => [...cityNews(region, now, count), ...(made ?? []), ...people].sort((a, b) => b.at - a.at).slice(0, count + people.length + (made?.length ?? 0)),
-    [region, now, made, people, count],
+    () => [...cityNews(region, now, count), ...people].sort((a, b) => b.at - a.at).slice(0, count + people.length),
+    [region, now, people, count],
   );
   const w = weatherNow(now);
   const [shared, setShared] = useState<string | null>(null);

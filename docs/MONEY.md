@@ -38,6 +38,9 @@ database counts one a minute at most (`active_ping`, up to 10 hours a day).
 - The first steps: ₦20,000 each (docs/FIRST_STEPS.md).
 
 ## Prices
+Amounts show rounded (`tidy` in `src/lib/world/value.ts`): to the nearest ₦10 from ₦100 and the
+nearest ₦100 from ₦10,000, so money stored in mint (₦15 a cent) doesn't show as ₦4,995.
+
 `src/lib/world/price-level.ts` holds two levers (everyday things; things you own) that can lift a
 whole group of prices at once. Both are 1: real prices. Homes cost a tenth of real Lagos land plus
 the real cost of building, so a home of your own is within reach.
@@ -50,7 +53,9 @@ open the game. Everyone's old money is saved in `fresh_start_backup` first, and 
 the (commented-out) lines that undo it. Running it again does nothing.
 
 ## Top-ups (game-db/076_topups.sql)
-Tap your cash, then Top up. Paid through Paystack (`src/app/play/topup-actions.ts`); the money only
+Tap your cash, then pick an amount. Paystack's pay box opens over the game (`src/app/play/paystack-popup.ts`),
+so nobody leaves the site; if it can't open, Paystack's own page opens instead. Paid through Paystack
+(`src/app/play/topup-actions.ts`); the money only
 arrives once Paystack says the full amount was paid, and only once. Game money never turns back
 into real money.
 
@@ -64,3 +69,9 @@ into real money.
 
 Your first top-up is doubled. The old starter packs are no longer offered (everyone starts the
 same way, with ₦250,000 and a free room); packs already paid for still arrive.
+
+## Renting (game-db/077_renting.sql)
+Any home for sale can be rented instead of bought: 6% of its value a month, the first month paid
+when you move in. Each month that comes due is paid when you open the game; if you can't pay, you
+move out and get a free room again. Buying a home ends your lease; Move out on your home card ends
+it any time.

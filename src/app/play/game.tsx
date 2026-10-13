@@ -3153,6 +3153,11 @@ export function Game({
               </button>
             )}
             {worldLife.hasHome && (
+              <button onClick={() => worldLife.goHome()} className="grid size-10 place-items-center rounded-full bg-white/55 shadow-sm backdrop-blur-sm transition hover:bg-white/90" aria-label="Home" title="Home">
+                <House className="size-[18px] text-[#7048e8]" />
+              </button>
+            )}
+            {worldLife.hasHome && (
               <button onClick={worldLife.openSoon} className="grid size-10 place-items-center rounded-full bg-white/55 shadow-sm backdrop-blur-sm transition hover:bg-white/90" aria-label="Coming soon" title="Coming soon">
                 <Rocket className="size-[18px] text-[#7048e8]" />
               </button>
@@ -3607,7 +3612,6 @@ export function Game({
                 { label: "Shops", icon: ShoppingBag, colour: "#5f3dc4", go: () => worldLife.openThings("shops") },
                 { label: "Cars", icon: CarFront, colour: "#343a40", go: () => worldLife.openThings("cars") },
                 { label: "Market", icon: Store, colour: "#2b8a3e", go: () => worldLife.openThings("market") },
-                { label: "Craft", icon: Hammer, colour: "#a61e4d", go: () => worldLife.openThings("craft") },
                 { label: "Leave a mark", icon: PenLine, colour: "#1098ad", go: () => worldLife.openLeaveMark() },
                 ...(worldLife.hasHome ? [{ label: "Coming soon", icon: Rocket, colour: "#7048e8", go: worldLife.openSoon }] : []),
               ],
