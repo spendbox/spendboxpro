@@ -2114,6 +2114,16 @@ export function Game({
         <div className="flex flex-col items-end gap-2">
           {guest ? (
             <div className="pointer-events-auto flex items-center gap-2">
+              {worldId && (
+                // The city's sounds, on or off (signed out, up here: the bottom is the Advertise button's).
+                <button
+                  onClick={() => { setSound(!sound); saveView({ sound: !sound }); }}
+                  className="glass grid size-8 shrink-0 place-items-center rounded-full sm:size-9"
+                  aria-label={sound ? "Turn the city's sound off" : "Turn the city's sound on"}
+                >
+                  {sound ? <Volume2 className="size-4" /> : <VolumeX className="size-4 text-muted" />}
+                </button>
+              )}
               <button onClick={() => setHowOpen(true)} className="glass grid size-8 shrink-0 place-items-center rounded-full font-display font-bold sm:size-9" aria-label="How it works">
                 ?
               </button>
@@ -2930,7 +2940,14 @@ export function Game({
 
         {/* The real map, out on the streets: Explore, Walk, Locate me and Soon, down here so the top stays
             clear. Inside a place or on a ride the place's own bar takes over; walking, only Stop walking. */}
-        {worldId && !place && ride === null && (
+        {/* Signed out: one white button to advertise on the map, and the game's name floating over the city. */}
+        {worldId && guest && !place && ride === null && (
+          <button onClick={() => openAdvertise()} className="pointer-events-auto flex h-12 items-center gap-2 rounded-full bg-white px-6 text-sm font-bold text-ink shadow-lg ring-1 ring-black/5">
+            <Megaphone className="size-4 text-[#e8590c]" />
+            Advertise on the map
+          </button>
+        )}
+        {worldId && !guest && !place && ride === null && (
           <div className="pointer-events-auto flex items-stretch gap-1 sm:gap-1.5">
             {!walking && (
               <DockButton
@@ -3270,6 +3287,12 @@ export function Game({
         )}
       </div>
 
+      {/* Signed out: the game's name, big and floating over the city. */}
+      {worldId && guest && !place && ride === null && !camera && (
+        <div className="pointer-events-none absolute inset-x-0 top-[22%] z-[5] flex justify-center" aria-hidden>
+          <h1 className="title-float font-display text-[clamp(3rem,15vw,8rem)] font-black italic leading-none tracking-tight text-white">Newtown</h1>
+        </div>
+      )}
       {/* Notifications off on this phone: a bell on the right, halfway down, to switch them on (gone once they're on). */}
       {!me.guest && !pushOn && !camera && (
         <button
@@ -3358,8 +3381,8 @@ export function Game({
           ]}
         />
       )}
-      {/* The city's sounds, on or off: bottom left. */}
-      {worldId && !camera && (
+      {/* The city's sounds, on or off: bottom left (signed out, top right). */}
+      {worldId && !camera && !guest && (
         <button
           onClick={() => { setSound(!sound); saveView({ sound: !sound }); }}
           className="glass pointer-events-auto absolute bottom-6 left-2.5 z-10 grid size-9 place-items-center rounded-full sm:left-4"
