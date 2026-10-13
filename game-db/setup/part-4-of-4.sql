@@ -1485,7 +1485,7 @@ declare
   p public.profiles;
   v_last timestamptz;
   v_fee numeric := 0;
-  v_stake numeric := round(least(1000, greatest(0, coalesce(p_stake, 0))), 2);
+  v_stake numeric := round(least(10000, greatest(0, coalesce(p_stake, 0))), 2);
   v_id bigint;
   v_seed bigint := floor(random() * 2000000000)::bigint;
   v_starts timestamptz := now() + interval '60 seconds';
@@ -1498,7 +1498,7 @@ begin
   if public.challenge_busy(p_user) is not null then raise exception 'busy'; end if;
   select max(created_at) into v_last from public.challenges where host_id = p_user and status <> 'cancelled';
   if v_last is not null and v_last > now() - make_interval(secs => greatest(60, least(1800, coalesce(p_cooldown, 480)))) then
-    v_fee := round(least(500, greatest(0, coalesce(p_fee, 0))), 2);
+    v_fee := round(least(2000, greatest(0, coalesce(p_fee, 0))), 2);
   end if;
   if public.life_can_spend(p_user, array['fun']) < v_fee + v_stake then raise exception 'not_enough:%', trim_scale(v_fee + v_stake); end if;
   if v_fee > 0 then
@@ -1770,7 +1770,7 @@ declare
   v_home boolean;
   v_paid text[] := '{}';
   v_step text;
-  v_reward numeric := round(least(greatest(coalesce(p_reward, 0), 0), 20), 2);
+  v_reward numeric := round(least(greatest(coalesce(p_reward, 0), 0), 500), 2);
   v_new boolean;
 begin
   -- Only new lives (started in the last 3 days) are paid: players who were here before don't get
@@ -1808,10 +1808,11 @@ revoke all on function public.first_steps_check(uuid, numeric) from public, anon
 -- Safe to run more than once.
 
 insert into public.game_settings (key, value, note) values
-  ('daily_gift_max',        40,   'Most mint one daily gift can be (the server works the amount out; this is the ceiling)'),
-  ('challenge_bonus',       3.33, 'Mint Newtown adds for each challenge won (on top of the pot)'),
+  ('daily_gift_max',        5000, 'Most mint one daily gift can be (the server works the amount out; this is the ceiling)'),
+  ('challenge_bonus',       100,  'Mint Newtown adds for each challenge won (on top of the pot): ₦150,000 in Lagos'),
   ('challenge_bonus_daily', 5,    'How many challenge wins a day get the Newtown prize')
-on conflict (key) do update set note = excluded.note;
+-- Running this again sets these back to the numbers here.
+on conflict (key) do update set value = excluded.value, note = excluded.note;
 
 -- The day in Lagos (days start at midnight there).
 create or replace function public.lagos_day(p_at timestamptz default now()) returns date
@@ -1873,7 +1874,7 @@ language plpgsql security definer set search_path = public as $$
 declare
   v_day date := public.lagos_day();
   v_streak int;
-  v_amount numeric := round(least(greatest(coalesce(p_amount, 0), 0), coalesce(public.setting('daily_gift_max'), 40)), 2);
+  v_amount numeric := round(least(greatest(coalesce(p_amount, 0), 0), coalesce(public.setting('daily_gift_max'), 5000)), 2);
 begin
   if not exists (select 1 from public.lives where user_id = p_user) then raise exception 'no_life'; end if;
   v_streak := coalesce((select streak from public.daily_gifts where user_id = p_user and day = v_day - 1), 0) + 1;

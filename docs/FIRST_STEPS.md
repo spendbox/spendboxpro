@@ -7,7 +7,7 @@ New players get three things to do, one at a time, in the dark card under the bu
 2. **Play a challenge**: the trophy (top right) glows; start one or join one.
 3. **Pick your home**: Find a home glows. The home comes ready to live in; designing it is optional.
 
-Each pays a small reward once (₦5,000 in your currency, `FIRST_STEP_NAIRA`). The server checks it
+Each pays a reward once (₦250,000 in your currency, `FIRST_STEP_NAIRA`). The server checks it
 really happened before paying (`game-db/072_first_steps.sql`, `POST /api/first-steps`), and only
 new lives (started in the last 3 days) are paid. Before part 72 is run the steps still show and
 move on; nothing is paid. When all three are done, one last card points at Income (a job) and says

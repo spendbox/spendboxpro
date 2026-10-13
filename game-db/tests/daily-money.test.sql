@@ -4,7 +4,7 @@
 \ir ../073_daily_money.sql
 \ir ../073_daily_money.sql
 \o /dev/null
-update game_settings set value = 3.33 where key = 'challenge_bonus';
+update game_settings set value = 100 where key = 'challenge_bonus';
 create function pg_temp.uid(e text) returns uuid language sql as $$ select id from profiles where email_key = e $$;
 create function pg_temp.check(ok boolean, what text) returns void language plpgsql as $$
 begin
@@ -43,8 +43,8 @@ begin
   perform pg_temp.check(exists (select 1 from notifications where user_id = a and kind = 'daily_gift'), 'told about it');
   v := daily_gift_claim(a, 5, 'again');
   perform pg_temp.check((v->>'already')::boolean and (select coins from profiles where id = a) = 1005, 'once a day');
-  v := daily_gift_claim(b, 999, '');
-  perform pg_temp.check((v->>'amount')::numeric = 40, 'the gift is capped');
+  v := daily_gift_claim(b, 99999, '');
+  perform pg_temp.check((v->>'amount')::numeric = 5000, 'the gift is capped');
 end $$;
 
 do $$
@@ -77,7 +77,7 @@ begin
   update challenges set starts_at = now() - interval '1 second' where id = id1;
   perform challenge_begin(id1);
   v := challenge_report(b, id1, a, false);
-  perform pg_temp.check((select coins from profiles where id = a) = 1000 - 10 + 18 + 3.33, 'won: the pot and Newtown''s prize');
+  perform pg_temp.check((select coins from profiles where id = a) = 1000 - 10 + 18 + 100, 'won: the pot and Newtown''s prize');
   perform pg_temp.check((select coins from profiles where id = b) = 990, 'the loser gets no prize');
 end $$;
 \o

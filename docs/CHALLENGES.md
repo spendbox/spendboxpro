@@ -9,7 +9,7 @@ down a challenge, a minute to gather players, a game floating over the city, a p
 1. **Challenge** (the white trophy, top right). The first time, a pop-up explains
    the rules.
 2. **Pick a game**: Whot! and Ludo now; Jenga and Police and Thief are shown as coming soon.
-3. **Pick a stake** (₦5,000, ₦20,000, ₦50,000 or ₦100,000): what each player puts into the pool.
+3. **Pick a stake** (₦100,000, ₦500,000, ₦1m or ₦5m): what each player puts into the pool.
 4. **Challenge everyone nearby.**
    - Everyone within about 4 km gets a notice and a push.
    - Everyone playing nearby sees a pop-up card with a Join button and the time left.
@@ -27,7 +27,7 @@ down a challenge, a minute to gather players, a game floating over the city, a p
 ## The fee and the cooldown
 
 - Your first challenge is free, and so is one after the cooldown (8 minutes).
-- Challenging again sooner costs ₦50,000. The idea is that in between, you join other people's
+- Challenging again sooner costs ₦250,000. The idea is that in between, you join other people's
   challenges.
 - Fees, stakes and prizes come from your Fun money, then your wallet.
 

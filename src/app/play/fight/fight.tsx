@@ -6,7 +6,7 @@ import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar } from "@/lib/avatar";
 import { cn } from "@/lib/cn";
 import { cash } from "@/lib/world/value";
-import { CHALLENGE_GAMES, CHALLENGE_COOLDOWN_SECS, JOIN_SECS, STAKES_NAIRA, WINNER_SHARE, challengeGame } from "@/lib/world/challenges";
+import { CHALLENGE_GAMES, CHALLENGE_COOLDOWN_SECS, CHALLENGE_FEE_NAIRA, JOIN_SECS, STAKES_NAIRA, WINNER_SHARE, challengeGame } from "@/lib/world/challenges";
 import { MINIGAMES } from "../minigames/registry";
 import { TurnTable, type Seat } from "../minigames/turn-table";
 import { Confetti } from "../activities/ui";
@@ -273,7 +273,7 @@ function FightSheet({
           <Point icon="🎲" text="Pick a game and a stake. Everyone nearby gets told, and your light shines on the map." />
           <Point icon="⏱️" text="They have one minute to join. Everyone puts the stake into the pool." />
           <Point icon="🏆" text={`The winner takes the pool (${Math.round(WINNER_SHARE * 100)}% of it). Challenging and winning raise your reputation.`} />
-          <Point icon="🎟️" text={`Your first challenge is free. Another one within ${CHALLENGE_COOLDOWN_SECS / 60} minutes costs ₦50,000, so in between, join other people's challenges.`} />
+          <Point icon="🎟️" text={`Your first challenge is free. Another one within ${CHALLENGE_COOLDOWN_SECS / 60} minutes costs ₦${CHALLENGE_FEE_NAIRA.toLocaleString("en-GB")}, so in between, join other people's challenges.`} />
         </div>
         <button
           onClick={() => {
@@ -329,7 +329,7 @@ function FightSheet({
           </>
         ) : (
           <>
-            <b>₦50,000 fee</b> for challenging again so soon. Free again in <b className="tabular-nums">{mmss(left)}</b>: join someone else&apos;s meanwhile.
+            <b>₦{CHALLENGE_FEE_NAIRA.toLocaleString("en-GB")} fee</b> for challenging again so soon. Free again in <b className="tabular-nums">{mmss(left)}</b>: join someone else&apos;s meanwhile.
           </>
         )}
       </p>

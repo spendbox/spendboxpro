@@ -2,7 +2,7 @@
 // reward, shown one at a time by the guide on the map.
 
 /** The reward for each step (naira; paid in mint at the city's rate, once per player). */
-export const FIRST_STEP_NAIRA = 5_000;
+export const FIRST_STEP_NAIRA = 250_000;
 
 export type FirstStep = "hi" | "challenge" | "home";
 

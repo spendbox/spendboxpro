@@ -14,11 +14,13 @@ test("Whot and Ludo can be played now; Jenga and Police and Thief are coming soo
 });
 
 test("the rules the owner asked for", () => {
-  assert.equal(CHALLENGE_FEE_NAIRA, 50_000);
+  // ₦50,000 at first; raised with the rest of the economy (stakes, gifts and prizes) to ₦250,000.
+  assert.equal(CHALLENGE_FEE_NAIRA, 250_000);
   assert.ok(CHALLENGE_COOLDOWN_SECS >= 5 * 60 && CHALLENGE_COOLDOWN_SECS <= 10 * 60);
   assert.equal(JOIN_SECS, 60);
   assert.ok(WINNER_SHARE > 0.5 && WINNER_SHARE <= 1);
-  assert.ok(STAKES_NAIRA.every((s) => s > 0 && s / 1_500 <= 1_000));
+  // The database takes stakes up to ₥10,000 (game-db/070).
+  assert.ok(STAKES_NAIRA.every((s) => s > 0 && s / 1_500 <= 10_000));
 });
 
 test("reputation from challenges: 1 a hosted game, 3 a win, at most 120", () => {
