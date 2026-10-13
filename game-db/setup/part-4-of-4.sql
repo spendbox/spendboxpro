@@ -1460,15 +1460,16 @@ create table if not exists public.challenge_players (
   said_at timestamptz,
   primary key (challenge_id, user_id)
 );
--- Says it was a draw (added after the first version).
+-- Says it was a draw, and left the game (added after the first version).
 alter table public.challenge_players add column if not exists says_draw boolean not null default false;
+alter table public.challenge_players add column if not exists left_at timestamptz;
 create index if not exists challenge_players_user_idx on public.challenge_players (user_id, joined_at desc);
 
 /** In a challenge that isn't over (open or playing)? Its id, or null. */
 create or replace function public.challenge_busy(p_user uuid) returns bigint
 language sql stable security definer set search_path = public as $$
   select c.id from public.challenge_players cp join public.challenges c on c.id = cp.challenge_id
-  where cp.user_id = p_user and (c.status = 'open' or (c.status = 'playing' and c.started_at > now() - interval '45 minutes'))
+  where cp.user_id = p_user and cp.left_at is null and (c.status = 'open' or (c.status = 'playing' and c.started_at > now() - interval '45 minutes'))
   order by c.id desc limit 1
 $$;
 
@@ -1662,6 +1663,50 @@ begin
   end loop;
 end $$;
 
+/**
+ * Leave a challenge. Before it starts: your stake back (the host leaving calls it off, and everyone
+ * gets theirs back). While it's played: you give up (your stake stays in the pool); if that leaves
+ * one player, they win. Returns what happened: 'left', 'cancelled', 'won_by_other', or the status.
+ */
+create or replace function public.challenge_leave(p_user uuid, p_id bigint) returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  c public.challenges;
+  me public.challenge_players;
+  v_left uuid;
+  r record;
+begin
+  select * into c from public.challenges where id = p_id for update;
+  if not found then return 'gone'; end if;
+  select * into me from public.challenge_players where challenge_id = p_id and user_id = p_user for update;
+  if not found then return 'not_in'; end if;
+  if c.status = 'open' then
+    if c.host_id = p_user then
+      perform public.challenge_refund(p_id);
+      for r in select user_id from public.challenge_players where challenge_id = p_id and user_id <> p_user loop
+        perform public.notify(r.user_id, null, 'challenge', 'The host called off the challenge. Your stake is back.');
+      end loop;
+      return 'cancelled';
+    end if;
+    if me.paid > 0 then
+      update public.profiles set coins = coins + me.paid where id = p_user;
+      perform public.log_coins(p_user, null, 'challenge_refund', me.paid, false, 'Left a challenge');
+      update public.challenges set pool = greatest(0, pool - me.paid) where id = p_id;
+    end if;
+    delete from public.challenge_players where challenge_id = p_id and user_id = p_user;
+    return 'left';
+  end if;
+  if c.status <> 'playing' then return c.status; end if;
+  update public.challenge_players set left_at = coalesce(left_at, now()) where challenge_id = p_id and user_id = p_user;
+  -- Only one player still in: they win (you owning up that they did).
+  if (select count(*) from public.challenge_players where challenge_id = p_id and left_at is null) = 1 then
+    select user_id into v_left from public.challenge_players where challenge_id = p_id and left_at is null;
+    perform public.challenge_report(p_user, p_id, v_left, false);
+    return 'won_by_other';
+  end if;
+  return 'left';
+end $$;
+
 /** For reputation: challenges you hosted that were played, and challenges you won. */
 create or replace function public.challenge_rep(p_user uuid) returns jsonb
 language sql stable security definer set search_path = public as $$
@@ -1678,9 +1723,9 @@ begin
   grant all on sequence public.challenges_id_seq to service_role;
   revoke all on function public.challenge_busy(uuid), public.challenge_open(uuid, text, text, numeric, int, int, int, numeric, int),
     public.challenge_join(uuid, bigint), public.challenge_refund(bigint), public.challenge_begin(bigint),
-    public.challenge_report(uuid, bigint, uuid, boolean), public.challenge_rep(uuid), public.challenge_sweep(text) from public, anon, authenticated;
+    public.challenge_report(uuid, bigint, uuid, boolean), public.challenge_rep(uuid), public.challenge_sweep(text), public.challenge_leave(uuid, bigint) from public, anon, authenticated;
   grant execute on function public.challenge_busy(uuid), public.challenge_open(uuid, text, text, numeric, int, int, int, numeric, int),
     public.challenge_join(uuid, bigint), public.challenge_refund(bigint), public.challenge_begin(bigint),
-    public.challenge_report(uuid, bigint, uuid, boolean), public.challenge_rep(uuid), public.challenge_sweep(text) to service_role;
+    public.challenge_report(uuid, bigint, uuid, boolean), public.challenge_rep(uuid), public.challenge_sweep(text), public.challenge_leave(uuid, bigint) to service_role;
 end $$;
 

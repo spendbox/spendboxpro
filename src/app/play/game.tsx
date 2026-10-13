@@ -2842,6 +2842,7 @@ export function Game({
         <Safe name="Give coins">
           <GiveCoinsSheet
             to={giveTo}
+            local={!!worldId}
             onClose={() => {
               setGiveTo(null);
               startTransition(() => router.refresh());
@@ -3487,6 +3488,10 @@ export function Game({
             chatWith(p);
           }}
           prices={worldRegion?.prices ?? null}
+          onGive={me.guest ? undefined : (p) => {
+            setPersonId(null);
+            setGiveTo(p);
+          }}
           onOpenDating={() => {
             setPersonId(null);
             setSocialOpen("dating");
