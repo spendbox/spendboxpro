@@ -37,6 +37,32 @@ down a challenge, a minute to gather players, a game floating over the city, a p
 - 3 points for every challenge you won.
 - Up to 120 points in all (src/lib/world/items.ts reputationOf).
 
+## How a game ends (and never gets stuck)
+
+- **Normal finish.** Every player's game works out the result, and each phone tells the server
+  and keeps telling it every few seconds until it's settled.
+  - **Paid at once** when more than half agree, or when a loser's phone names the winner.
+  - **If the others have closed the game**, a lone answer is settled after 2 minutes, by the
+    phones still open or the next look at the map.
+- **A draw** (Whot! can end in a tie): everyone's stake comes back.
+- **Leaving mid-game** asks first.
+  - With one other player, they win the pool.
+  - With more, you lose your stake and the computer plays your seat.
+- **Someone who disappears for 40 seconds** (closed the app, lost signal) is played by the
+  computer from then on, so the game never freezes waiting for them.
+- **When it's over**, the result stays on screen (confetti, the prize) with a big "Back to the
+  map" button. It doesn't vanish by itself.
+
+## Tested
+
+- `game-db/tests/challenges.test.sql` checks the money and the rules against a real database:
+  - free first, then the fee;
+  - joining, starting, and calling off with stakes back;
+  - three players agreeing, a loser owning up, a draw;
+  - a lone answer settled after 2 minutes, and reputation.
+- 6,000 simulated games of Whot! and Ludo (computer against computer, 2 to 4 players) all
+  finished, never stuck.
+
 ## Safety rails
 
 - One challenge at a time per player.

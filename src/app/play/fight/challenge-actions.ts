@@ -105,6 +105,8 @@ export type ChallengeView = {
   z: number;
   status: "open" | "playing" | "done" | "cancelled";
   startsAt: string;
+  /** It got as far as being played (a game called off after it started was a draw or never finished). */
+  started: boolean;
   players: ChallengePlayer[];
   winner: string | null;
   prize: number | null;
@@ -132,6 +134,7 @@ async function views(db: ReturnType<typeof createAdminClient>, rows: Record<stri
       z: n(r.z),
       status: r.status as ChallengeView["status"],
       startsAt: String(r.starts_at),
+      started: !!r.started_at,
       players: mine.map((p) => {
         const pr = byId.get(p.user_id);
         const name = pr?.username ?? "Player";
@@ -171,12 +174,19 @@ export async function nearbyChallenges(region: string, x: number, z: number): Pr
   return { list: await views(db, rows), mine };
 }
 
-/** Who won (each player says; the pool is paid when they agree). */
-export async function reportWinner(id: number, winner: string): Promise<{ ok: true; winner: string | null; prize: number } | Fail> {
+/**
+ * How it ended, as this player saw it: who won, or a draw (draw true, winner null), or just asking
+ * whether it's settled yet (both null). The pool is paid once the players agree (see
+ * challenge_report): the phones keep asking until it's settled.
+ */
+export async function reportWinner(id: number, winner: string | null, draw = false): Promise<{ ok: true; winner: string | null; prize: number; draw: boolean; settled: boolean } | Fail> {
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Please sign in again." };
-  const { data, error } = await createAdminClient().rpc("challenge_report", { p_user: userId, p_id: Math.round(n(id)), p_winner: winner });
-  if (error) return say(error.message);
-  const d = (data ?? {}) as { winner?: string | null; prize?: number };
-  return { ok: true, winner: d.winner ?? null, prize: n(d.prize) };
+  const { data, error } = await createAdminClient().rpc("challenge_report", { p_user: userId, p_id: Math.round(n(id)), p_winner: winner, p_draw: !!draw });
+  if (error) {
+    if (error.message.startsWith("not_playing")) return { ok: true, winner: null, prize: 0, draw: false, settled: true };
+    return say(error.message);
+  }
+  const d = (data ?? {}) as { winner?: string | null; prize?: number; draw?: boolean; waiting?: boolean };
+  return { ok: true, winner: d.winner ?? null, prize: n(d.prize), draw: !!d.draw, settled: !!d.winner || !!d.draw };
 }

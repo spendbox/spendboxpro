@@ -55,6 +55,8 @@ export function Fight({
   const [mine, setMine] = useState<number | null>(null);
   const [view, setView] = useState<ChallengeView | null>(null);
   const [dismissed, setDismissed] = useState<number[]>([]);
+  /** Challenges you closed (they don't open again by themselves). */
+  const closedRef = useRef<number[]>([]);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const lightsRef = useRef(onLights);
@@ -79,7 +81,9 @@ export function Fight({
       .catch(() => null);
     if (!r) return;
     setList(r.list);
-    setMine((m) => (r.mine ?? (m && r.list.some((c) => c.id === m) ? m : null)));
+    // The one you're in stays open until you close it (its result included); one you're in that
+    // you haven't opened (after a reload) opens by itself, unless you closed it.
+    setMine((m) => m ?? (r.mine !== null && !closedRef.current.includes(r.mine) ? r.mine : null));
   }, [region]);
   useEffect(() => {
     if (!signedIn) return;
@@ -200,7 +204,19 @@ export function Fight({
           })}
         </div>
       )}
-      {view && me && <Arena view={view} me={me} now={now} onClose={() => setMine(null)} onMessage={onMessage} />}
+      {view && me && <Arena
+          key={view.id}
+          view={view}
+          me={me}
+          now={now}
+          onClose={() => {
+            closedRef.current = [...closedRef.current, view.id];
+            setMine(null);
+            setView(null);
+            void look();
+          }}
+          onMessage={onMessage}
+        />}
     </>
   );
 }
@@ -331,10 +347,66 @@ function Arena({ view, me, now, onClose, onMessage }: { view: ChallengeView; me:
   const ch = useChallengeChannel(view.id, me);
   const [chatOpen, setChatOpen] = useState(false);
   const [draft, setDraft] = useState("");
-  const [reported, setReported] = useState(false);
+  /** How the game ended as this phone saw it (who won, or a draw), sent until the server settles it. */
+  const [claim, setClaim] = useState<{ winner: string | null; draw: boolean } | null>(null);
+  const [leaving, setLeaving] = useState(false);
   const left = (Date.parse(view.startsAt) - now) / 1000;
   const def = useMemo(() => MINIGAMES.find((m) => m.engine === g?.engine && m.kind === "turns") ?? null, [g?.engine]);
-  const seats: Seat[] = useMemo(() => view.players.map((p) => ({ kind: p.id === me.id ? "me" : "remote", name: p.id === me.id ? "You" : p.name })), [view.players, me.id]);
+  // Who's still here. Someone gone for 40 seconds (closed the game, lost their connection) is
+  // played by the computer from then on, on every phone the same way, so the game never freezes.
+  const lastHere = useRef(new Map<string, number>());
+  const hereNow = useRef<string[]>([]);
+  useEffect(() => {
+    hereNow.current = ch.here;
+  });
+  const [gone, setGone] = useState<string[]>([]);
+  const playing = view.status === "playing";
+  const playerIds = view.players.map((p) => p.id).join(",");
+  useEffect(() => {
+    if (!playing) return;
+    const ids = playerIds.split(",");
+    const start = Date.now();
+    for (const id of ids) if (!lastHere.current.has(id)) lastHere.current.set(id, start);
+    const check = setInterval(() => {
+      const t = Date.now();
+      // Everyone still on the channel counts as seen just now.
+      for (const id of hereNow.current) lastHere.current.set(id, t);
+      const away = ids.filter((id) => id !== me.id && t - (lastHere.current.get(id) ?? t) > 40_000);
+      if (away.length) setGone((g) => (away.every((id) => g.includes(id)) ? g : [...new Set([...g, ...away])]));
+    }, 5000);
+    return () => clearInterval(check);
+  }, [playing, playerIds, me.id]);
+  const seats: Seat[] = useMemo(
+    () =>
+      view.players.map((p) => ({
+        kind: p.id === me.id ? "me" : gone.includes(p.id) ? "bot" : "remote",
+        name: p.id === me.id ? "You" : gone.includes(p.id) ? `${p.name} (left)` : p.name,
+      })),
+    [view.players, me.id, gone],
+  );
+  // The result, sent now and again every few seconds until it's settled (the other phones may be
+  // a move behind, or gone).
+  useEffect(() => {
+    if (!claim || view.status !== "playing") return;
+    let live = true;
+    const send = () =>
+      void reportWinner(view.id, claim.winner, claim.draw).then((res) => {
+        if (live && !res.ok) onMessage(res.error, false);
+      });
+    send();
+    const t = setInterval(send, 6000);
+    return () => {
+      live = false;
+      clearInterval(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [claim, view.status, view.id]);
+  /** Giving up: with one other player, they win now; with more, the computer plays your seat. */
+  const leaveGame = () => {
+    const others = view.players.filter((p) => p.id !== me.id);
+    if (others.length === 1) void reportWinner(view.id, others[0].id, false);
+    onClose();
+  };
   const lastSeen = useRef(0);
   useEffect(() => {
     if (ch.chat.length > lastSeen.current && !chatOpen) playSfx("tick");
@@ -403,7 +475,7 @@ function Arena({ view, me, now, onClose, onMessage }: { view: ChallengeView; me:
                 Pool <b className="text-ink">{cash(view.pool)}</b> · winner takes {cash(view.pool * WINNER_SHARE)}
               </p>
             </div>
-            {(view.status === "cancelled" || view.status === "done") && (
+            {(view.status === "cancelled" || view.status === "done" || (view.status === "playing" && claim)) && (
               <button onClick={onClose} className="grid size-9 place-items-center rounded-full bg-ink/5" aria-label="Close">
                 <X className="size-4" />
               </button>
@@ -441,14 +513,11 @@ function Arena({ view, me, now, onClose, onMessage }: { view: ChallengeView; me:
                 seed={view.seed}
                 online={ch.online}
                 onEnd={(r) => {
-                  if (reported) return;
-                  setReported(true);
-                  const seat = r.seats?.[0];
-                  const winner = seat === undefined ? null : view.players[seat]?.id;
-                  if (!winner) return;
-                  void reportWinner(view.id, winner).then((res) => {
-                    if (!res.ok) onMessage(res.error, false);
-                  });
+                  if (claim) return;
+                  const seats = r.seats ?? [];
+                  // One winner: them. Several (a tie) or none: a draw, stakes back.
+                  const winner = seats.length === 1 ? (view.players[seats[0]]?.id ?? null) : null;
+                  setClaim(winner ? { winner, draw: false } : { winner: null, draw: true });
                 }}
               />
             </div>
@@ -462,15 +531,50 @@ function Arena({ view, me, now, onClose, onMessage }: { view: ChallengeView; me:
               <p className="mt-1 text-sm text-muted">{iWon ? `${cash(view.prize ?? 0)} is yours, and your reputation goes up.` : "Better luck next time. Your reputation still goes up for taking part."}</p>
             </div>
           )}
-          {view.status === "playing" && reported && (
+          {view.status === "playing" && claim && (
             <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-muted">
-              <LoaderCircle className="size-3.5 animate-spin" /> Paying the winner once everyone agrees…
+              <LoaderCircle className="size-3.5 animate-spin" /> Game over. Settling the pool…
             </p>
           )}
           {view.status === "cancelled" && (
             <div className="py-6 text-center">
-              <p className="font-semibold">The game didn&apos;t start: not enough players joined.</p>
-              <p className="mt-1 text-sm text-muted">Your stake is back. Try again, or join someone else&apos;s.</p>
+              <p className="font-semibold">{view.started ? "It's a draw (or the game wasn't finished)." : "The game didn't start: not enough players joined."}</p>
+              <p className="mt-1 text-sm text-muted">Everyone&apos;s stake is back. Try again, or join someone else&apos;s.</p>
+            </div>
+          )}
+          {/* Over: one clear way back to the map. */}
+          {(view.status === "done" || view.status === "cancelled") && (
+            <button onClick={onClose} className="mt-1 h-12 w-full rounded-full bg-ink font-bold text-white">
+              Back to the map
+            </button>
+          )}
+          {/* Mid-game: leave (asks first). */}
+          {view.status === "playing" && !claim && (
+            <button onClick={() => setLeaving(true)} className="mt-2 w-full text-center text-xs font-semibold text-muted underline">
+              Leave the game
+            </button>
+          )}
+          {view.status === "playing" && claim && (
+            <button onClick={onClose} className="mt-2 h-11 w-full rounded-full bg-ink/5 text-sm font-semibold">
+              Back to the map (the result still counts)
+            </button>
+          )}
+          {leaving && (
+            <div className="absolute inset-0 z-20 grid place-items-center bg-panel/95 p-5 text-center">
+              <div>
+                <p className="font-display text-xl font-extrabold">Leave the game?</p>
+                <p className="mt-1 text-sm text-muted">
+                  {view.players.length === 2 ? "The other player wins the pool." : "You lose your stake, and the computer plays your seat for the others."}
+                </p>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <button onClick={() => setLeaving(false)} className="h-11 rounded-full bg-ink/5 text-sm font-semibold">
+                    Keep playing
+                  </button>
+                  <button onClick={leaveGame} className="h-11 rounded-full bg-hit text-sm font-semibold text-white">
+                    Leave
+                  </button>
+                </div>
+              </div>
             </div>
           )}
           {/* The moment it starts: a big "Game on!" for everyone. */}
