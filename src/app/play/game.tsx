@@ -63,7 +63,7 @@ import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
 import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
-import { BookOpen, Church, Dumbbell, FerrisWheel, GraduationCap, Landmark as LandmarkIcon, Plane, Ship, Stethoscope, TrainFront, Trophy, UtensilsCrossed } from "lucide-react";
+import { BookOpen, Church, FerrisWheel, Landmark as LandmarkIcon, Plane, Ship, TrainFront, Trophy, UtensilsCrossed } from "lucide-react";
 import { BellOff, BellRing, LocateFixed, Rocket, Wallet, CarFront, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Palette, ShoppingBag, Store, Swords, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
@@ -1810,11 +1810,6 @@ export function Game({
       const r = rideList.find((x) => x.kind === kind);
       return r ? { label, run: () => boardRide(r) } : null;
     };
-    const work = () => {
-      if (!Number.isFinite(enteredTile)) return;
-      const [x, z] = spiralXY(enteredTile);
-      worldLife.openWorkplace(x, z, placeRoom?.name ?? "Here");
-    };
     const sport = THEME_SPORT_GAME[theme];
     if (sport) return { label: "Watch the match", icon: Trophy, run: () => setSportsOpen(sport) };
     if (inPlannedHome) {
@@ -1822,15 +1817,6 @@ export function Game({
       return { label: "Sign the guest book", icon: BookOpen, run: () => worldLife.openGuestBook(`${worldId}:${hx},${hz}`) };
     }
     switch (theme) {
-      case "reception":
-      case "ward":
-        return { label: "See a doctor", icon: Stethoscope, run: worldLife.openLife };
-      case "library":
-      case "lecture":
-        return { label: "Take a course", icon: GraduationCap, run: worldLife.openLife };
-      case "gym":
-      case "spa":
-        return { label: theme === "gym" ? "Work out" : "Treatments", icon: Dumbbell, run: worldLife.openLife };
       case "restaurant":
       case "foodcourt":
       case "lounge":
@@ -1881,7 +1867,7 @@ export function Game({
       case "market":
         return { label: "Shop at the market", icon: ShoppingBag, run: () => worldLife.openThings("shops") };
     }
-    return { label: "Work here", icon: Briefcase, run: work };
+    return null;
   }
 
   function leaveRoom() {

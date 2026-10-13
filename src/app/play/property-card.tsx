@@ -9,6 +9,7 @@ import { BUY_TAX, type BuildingOwner } from "@/lib/world/property-api";
 import { openAdvertise } from "./life/advertise-panel";
 import { JobsHere, type JobsContext } from "./life/jobs-here";
 import { Sheet } from "./sheet";
+import { SIMPLE_LIFE } from "@/lib/world/simple-life";
 
 const fmt = (n: number) => n.toLocaleString("en-GB");
 
@@ -209,7 +210,7 @@ export function PropertyCard({
         </>
       )}
 
-      {info.workplace && jobs && (
+      {!SIMPLE_LIFE && info.workplace && jobs && (
         <div className="mt-4">
           {jobsOpen ? (
             <JobsHere place={info.workplace} ctx={jobs} />

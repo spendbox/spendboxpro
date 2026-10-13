@@ -2054,3 +2054,8 @@ end $$;
 
 revoke all on function public.starter_room_give(uuid, text, text, jsonb, text, numeric, boolean), public.starter_rooms_sweep() from public, anon, authenticated;
 
+-- ============================================================ no free refill
+-- The old daily refill (topping wallets up towards ₥100, ₦150,000, every day) is off: the daily
+-- gift replaces it, and money that tops itself up has no value.
+update public.game_settings set value = 0 where key in ('passive_target', 'passive_per_day', 'passive_per_level');
+

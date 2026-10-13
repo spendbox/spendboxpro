@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DoorOpen } from "lucide-react";
-import { Briefcase, Flag, HeartPulse, House, MapPin, Pencil, Search, Star, X } from "@/components/icons";
+import { Flag, House, MapPin, Pencil, Search, Star, X } from "@/components/icons";
 import { addressOf, makePlan, spiralIndex, tileAt, type CityPlan } from "@/lib/city/layout";
 import { BUILDING_LABEL } from "@/lib/world/buildings";
 import type { RegionMap } from "@/lib/world/compile";
@@ -57,6 +57,7 @@ import { cash, setShownCurrency } from "@/lib/world/value";
 import { FIRST_STEP_NAIRA, FIRST_STEPS, type FirstStep, type FirstSteps } from "@/lib/world/first-steps";
 import { buyerPays, sellerGets, OFFER_HOURS, RENT_LEVEL, type Listing, type MarketBoard } from "@/lib/world/market";
 import { BUY_TAX } from "@/lib/world/property-api";
+import { SIMPLE_LIFE } from "@/lib/world/simple-life";
 
 /** Each region's plan for finding jobs near home, worked out once (only when Work is opened). */
 const plans = new Map<string, CityPlan>();
@@ -824,14 +825,7 @@ export function useWorldLife({
           {signedIn && homeUnit && (
             <>
               <LifeButton icon={House} label="Home" onClick={goHome} />
-              <LifeButton icon={Briefcase} label="Income" onClick={() => setWorkOpen(true)} />
               {afterIncome}
-              <LifeButton
-                icon={HeartPulse}
-                label="Life"
-                warn={!!status && status.health < 30}
-                onClick={() => setLifeOpen(true)}
-              />
             </>
           )}
     </>
@@ -862,7 +856,7 @@ export function useWorldLife({
           <div className="pointer-events-auto flex max-w-xs items-start gap-2 rounded-2xl bg-ink px-3 py-2 text-white shadow-lg">
             <p className="min-w-0 flex-1 text-xs leading-snug">
               <b className="text-gold">You&apos;re all set!</b>
-              <span className="block">Next, to earn every day: tap Income and get a job near home. Your food and bills are paid from your money by themselves.</span>
+              <span className="block">Open your daily gift every day, win challenges, and save up for a home of your own. Tap your cash to see how.</span>
             </p>
             <button onClick={() => markGuide("done")} className="shrink-0 text-[11px] font-semibold text-white/70 hover:text-white">
               Got it
@@ -1025,7 +1019,7 @@ export function useWorldLife({
               <span className="flex min-h-11 items-center justify-center rounded-full bg-ink/[0.03] px-3 text-center text-xs text-muted">No adverts on landmarks</span>
             </div>
           </div>
-          {place.jobs.length > 0 && <div className="mt-4">{jobs ? <JobsHere place={place} ctx={jobs} /> : <p className="text-sm text-muted">Sign in to work here.</p>}</div>}
+          {!SIMPLE_LIFE && place.jobs.length > 0 && <div className="mt-4">{jobs ? <JobsHere place={place} ctx={jobs} /> : <p className="text-sm text-muted">Sign in to work here.</p>}</div>}
           <button
             onClick={() => {
               const p = place;

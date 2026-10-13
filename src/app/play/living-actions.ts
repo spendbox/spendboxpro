@@ -7,6 +7,7 @@ import { careById, cleanBudget, courseById, POTS, priceOf, procedureById, type B
 import type { LifeStatus, MoneyDay, MoneyFlow, PropertyResult } from "@/lib/world/property-api";
 import { STUDY_HOURS } from "@/lib/world/day";
 import { dayFits, tickLife } from "./life-tick";
+import { SIMPLE_LIFE } from "@/lib/world/simple-life";
 
 // Living on the real map (docs/LIVING.md; the database part is game-db/040_living.sql): your
 // budget and pots, health care, treats and school. Every price is worked out here.
@@ -67,6 +68,7 @@ export async function movePot(from: Pot | "wallet", to: Pot | "wallet", amount: 
 
 /** Health care. */
 export async function care(id: string): Promise<PropertyResult> {
+  if (SIMPLE_LIFE) return { ok: false, error: "That's gone from Newtown: no more care, treatments or courses to pay for." };
   const c = careById(id);
   const m = await me();
   if (!m) return { ok: false, error: "Please sign in again." };
@@ -91,6 +93,7 @@ export async function care(id: string): Promise<PropertyResult> {
 
 /** A cosmetic procedure. */
 export async function procedure(id: string): Promise<PropertyResult> {
+  if (SIMPLE_LIFE) return { ok: false, error: "That's gone from Newtown: no more care, treatments or courses to pay for." };
   const p = procedureById(id);
   const m = await me();
   if (!m) return { ok: false, error: "Please sign in again." };
@@ -110,6 +113,7 @@ export async function procedure(id: string): Promise<PropertyResult> {
 
 /** Start a course. */
 export async function enrol(id: string): Promise<PropertyResult> {
+  if (SIMPLE_LIFE) return { ok: false, error: "That's gone from Newtown: no more care, treatments or courses to pay for." };
   const c = courseById(id);
   const m = await me();
   if (!m) return { ok: false, error: "Please sign in again." };
