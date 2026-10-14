@@ -15,6 +15,9 @@ on conflict (key) do update set value = excluded.value, note = excluded.note;
 -- A simple buy at the price shown.
 update public.game_settings set value = 0 where key = 'property_buy_tax';
 
+-- Free rooms (part 74): the column this reads, in case 74 hasn't been run.
+alter table public.property_units add column if not exists starter boolean not null default false;
+
 alter table public.lives add column if not exists income_at timestamptz;
 
 -- What a unit earns on: what it cost from the city (a sale between players, at whatever price

@@ -2299,6 +2299,9 @@ revoke all on function public.rent_home(uuid, text, text, numeric), public.rent_
 --
 -- Safe to run more than once.
 
+-- Free rooms (part 74): the column this reads, in case 74 hasn't been run.
+alter table public.property_units add column if not exists starter boolean not null default false;
+
 alter table public.lives add column if not exists home_named_at timestamptz;
 
 /** Name a home you hold (an empty name puts back what it was called: "Room", "Flat"...). */
@@ -2334,6 +2337,9 @@ on conflict (key) do update set value = excluded.value, note = excluded.note;
 
 -- A simple buy at the price shown.
 update public.game_settings set value = 0 where key = 'property_buy_tax';
+
+-- Free rooms (part 74): the column this reads, in case 74 hasn't been run.
+alter table public.property_units add column if not exists starter boolean not null default false;
 
 alter table public.lives add column if not exists income_at timestamptz;
 
@@ -2444,6 +2450,9 @@ grant select on public.coin_supply_daily to service_role;
 --
 -- Safe to run more than once.
 
+-- Free rooms (part 74): the column this reads, in case 74 hasn't been run.
+alter table public.property_units add column if not exists starter boolean not null default false;
+
 alter table public.lives add column if not exists tutorial_at timestamptz;
 alter table public.lives add column if not exists home_named_at timestamptz;
 
@@ -2550,6 +2559,9 @@ insert into public.game_settings (key, value, note) values
   ('landmark_price_max', 5000000000, 'Dearest landmark the game will sell, in mint (a sanity check)')
 on conflict (key) do update set note = excluded.note;
 
+-- Free rooms (part 74): the column this reads, in case 74 hasn't been run.
+alter table public.property_units add column if not exists starter boolean not null default false;
+
 create table if not exists public.landmark_owners (
   landmark_id text primary key check (landmark_id ~ '^[a-z0-9-]+:[a-z0-9-]+$'),
   region text not null check (region ~ '^[a-z0-9-]{2,30}$'),
@@ -2655,6 +2667,36 @@ insert into public.game_settings (key, value, note) values
   ('online_pay_minute', 0.33, 'Mint paid for each active minute online (₦500 in Lagos)'),
   ('online_pay_daily_minutes', 240, 'How many active minutes a day are paid for')
 on conflict (key) do update set value = excluded.value, note = excluded.note;
+
+-- What this needs from part 73 (the same definitions, so it works even if 73 hasn't been run).
+-- The day in Lagos (days start at midnight there).
+create or replace function public.lagos_day(p_at timestamptz default now()) returns date
+language sql stable as $$ select (p_at at time zone 'Africa/Lagos')::date $$;
+
+-- ============================================================ active time
+create table if not exists public.activity_days (
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  day date not null,
+  minutes int not null default 0,
+  last_ping timestamptz not null default now(),
+  primary key (user_id, day)
+);
+alter table public.activity_days enable row level security;
+
+/** A minute of you being active (counted at most once every 50 seconds, 10 hours a day at most). Returns today's minutes. */
+create or replace function public.active_ping(p_user uuid) returns int
+language plpgsql security definer set search_path = public as $$
+declare
+  v_day date := public.lagos_day();
+  v_min int;
+begin
+  insert into public.activity_days (user_id, day, minutes, last_ping) values (p_user, v_day, 1, now())
+  on conflict (user_id, day) do update
+    set minutes = least(public.activity_days.minutes + 1, 600), last_ping = now()
+    where public.activity_days.last_ping < now() - interval '50 seconds';
+  select minutes into v_min from public.activity_days where user_id = p_user and day = v_day;
+  return coalesce(v_min, 0);
+end $$;
 
 -- ============================================================ pay for being online
 /**
