@@ -13,7 +13,10 @@ const n = (v: unknown) => Number(v ?? 0) || 0;
 export async function POST() {
   const userId = await currentUserId().catch(() => null);
   if (!userId) return NextResponse.json(null);
-  const { data, error } = await createAdminClient().rpc("property_income_settle", { p_user: userId });
+  const db = createAdminClient();
+  // At most once a minute (game-db/079 property_income_settle_soft); the plain one before that's run.
+  let { data, error } = await db.rpc("property_income_settle_soft", { p_user: userId });
+  if (error) ({ data, error } = await db.rpc("property_income_settle", { p_user: userId }));
   if (error || !data) return NextResponse.json(null);
   const d = data as Record<string, unknown>;
   return NextResponse.json({ paid: n(d.paid), perDay: n(d.per_day), at: d.at ? String(d.at) : null, coins: n(d.coins), total: n(d.total), now: Date.now() });

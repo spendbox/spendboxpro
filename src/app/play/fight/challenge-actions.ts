@@ -18,7 +18,7 @@ const OFF = "Challenges are switched on soon (the game's owner has one update to
 
 function say(message: string): Fail {
   const [code, arg] = message.split(":");
-  if (code === "not_enough") return { ok: false, error: `You need ${arg ? `₥${arg}` : "more"} in your Fun money and wallet for that.` };
+  if (code === "not_enough") return { ok: false, error: `You need ${arg ? `₥${arg}` : "more"} for that.` };
   if (code === "busy") return { ok: false, error: "You're already in a challenge. Finish that one first." };
   if (code === "started") return { ok: false, error: "Too late: that one has started." };
   if (code === "full") return { ok: false, error: "That one is full." };
@@ -125,10 +125,14 @@ export async function openChallenge(game: string, stakeMint: number, x: number, 
     const s = spotOf(l.at_place ?? l.home_unit);
     return s && Math.hypot(s.x - x, s.z - z) <= NEAR_TILES;
   });
-  for (const l of near.slice(0, 60)) {
-    await db.rpc("notify", { p_user: l.user_id, p_round: null, p_kind: "challenge", p_body: `${name} challenged everyone nearby to ${g.title}! ₦${tidy(stake * perMint).toLocaleString("en-GB")} each into the pool. Join within a minute.` });
-    await pushTo(l.user_id).catch(() => {});
-  }
+  // All at once (not one after another), so the host isn't kept waiting while the minute runs.
+  const body = `${name} challenged everyone nearby to ${g.title}! ₦${tidy(stake * perMint).toLocaleString("en-GB")} each into the pool. Join within a minute.`;
+  await Promise.all(
+    near.slice(0, 60).map(async (l) => {
+      await db.rpc("notify", { p_user: l.user_id, p_round: null, p_kind: "challenge", p_body: body });
+      await pushTo(l.user_id).catch(() => {});
+    }),
+  );
   return { ok: true, id: n(d.id), fee: n(d.fee) };
 }
 

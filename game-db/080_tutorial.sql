@@ -8,6 +8,9 @@
 --
 -- Safe to run more than once.
 
+-- Free rooms (part 74): the column this reads, in case 74 hasn't been run.
+alter table public.property_units add column if not exists starter boolean not null default false;
+
 alter table public.lives add column if not exists tutorial_at timestamptz;
 alter table public.lives add column if not exists home_named_at timestamptz;
 

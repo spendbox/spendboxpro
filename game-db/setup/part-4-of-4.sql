@@ -2299,6 +2299,9 @@ revoke all on function public.rent_home(uuid, text, text, numeric), public.rent_
 --
 -- Safe to run more than once.
 
+-- Free rooms (part 74): the column this reads, in case 74 hasn't been run.
+alter table public.property_units add column if not exists starter boolean not null default false;
+
 alter table public.lives add column if not exists home_named_at timestamptz;
 
 /** Name a home you hold (an empty name puts back what it was called: "Room", "Flat"...). */
@@ -2334,6 +2337,9 @@ on conflict (key) do update set value = excluded.value, note = excluded.note;
 
 -- A simple buy at the price shown.
 update public.game_settings set value = 0 where key = 'property_buy_tax';
+
+-- Free rooms (part 74): the column this reads, in case 74 hasn't been run.
+alter table public.property_units add column if not exists starter boolean not null default false;
 
 alter table public.lives add column if not exists income_at timestamptz;
 
@@ -2415,6 +2421,29 @@ drop trigger if exists property_income_guard on public.property_units;
 create trigger property_income_guard before insert or update of owner_id, price, income_base on public.property_units
   for each row execute function public.property_income_guard();
 
+/**
+ * The game asking (POST /api/income): paid at most once a minute (the screen counts it up in
+ * between), so asking often never piles up payments; otherwise the same as property_income_settle.
+ */
+create or replace function public.property_income_settle_soft(p_user uuid) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_at timestamptz := (select income_at from public.lives where user_id = p_user);
+begin
+  if v_at is not null and v_at > now() - interval '60 seconds' then
+    return jsonb_build_object(
+      'paid', 0,
+      'per_day', public.property_income_day(p_user),
+      'at', v_at,
+      'coins', (select coins from public.profiles where id = p_user),
+      'total', coalesce((select sum(amount) from public.ledger where user_id = p_user and kind = 'property_income'), 0)
+    );
+  end if;
+  return public.property_income_settle(p_user);
+end $$;
+
+revoke all on function public.property_income_settle_soft(uuid) from public, anon, authenticated;
+grant execute on function public.property_income_settle_soft(uuid) to service_role;
 revoke all on function public.property_income_day(uuid), public.property_income_settle(uuid), public.property_income_guard() from public, anon, authenticated;
 grant execute on function public.property_income_day(uuid), public.property_income_settle(uuid) to service_role;
 
@@ -2443,6 +2472,9 @@ grant select on public.coin_supply_daily to service_role;
 -- even if they did it long ago). The server works out the rewards in mint; each is capped here.
 --
 -- Safe to run more than once.
+
+-- Free rooms (part 74): the column this reads, in case 74 hasn't been run.
+alter table public.property_units add column if not exists starter boolean not null default false;
 
 alter table public.lives add column if not exists tutorial_at timestamptz;
 alter table public.lives add column if not exists home_named_at timestamptz;
@@ -2550,6 +2582,9 @@ insert into public.game_settings (key, value, note) values
   ('landmark_price_max', 5000000000, 'Dearest landmark the game will sell, in mint (a sanity check)')
 on conflict (key) do update set note = excluded.note;
 
+-- Free rooms (part 74): the column this reads, in case 74 hasn't been run.
+alter table public.property_units add column if not exists starter boolean not null default false;
+
 create table if not exists public.landmark_owners (
   landmark_id text primary key check (landmark_id ~ '^[a-z0-9-]+:[a-z0-9-]+$'),
   region text not null check (region ~ '^[a-z0-9-]{2,30}$'),
@@ -2656,6 +2691,36 @@ insert into public.game_settings (key, value, note) values
   ('online_pay_daily_minutes', 240, 'How many active minutes a day are paid for')
 on conflict (key) do update set value = excluded.value, note = excluded.note;
 
+-- What this needs from part 73 (the same definitions, so it works even if 73 hasn't been run).
+-- The day in Lagos (days start at midnight there).
+create or replace function public.lagos_day(p_at timestamptz default now()) returns date
+language sql stable as $$ select (p_at at time zone 'Africa/Lagos')::date $$;
+
+-- ============================================================ active time
+create table if not exists public.activity_days (
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  day date not null,
+  minutes int not null default 0,
+  last_ping timestamptz not null default now(),
+  primary key (user_id, day)
+);
+alter table public.activity_days enable row level security;
+
+/** A minute of you being active (counted at most once every 50 seconds, 10 hours a day at most). Returns today's minutes. */
+create or replace function public.active_ping(p_user uuid) returns int
+language plpgsql security definer set search_path = public as $$
+declare
+  v_day date := public.lagos_day();
+  v_min int;
+begin
+  insert into public.activity_days (user_id, day, minutes, last_ping) values (p_user, v_day, 1, now())
+  on conflict (user_id, day) do update
+    set minutes = least(public.activity_days.minutes + 1, 600), last_ping = now()
+    where public.activity_days.last_ping < now() - interval '50 seconds';
+  select minutes into v_min from public.activity_days where user_id = p_user and day = v_day;
+  return coalesce(v_min, 0);
+end $$;
+
 -- ============================================================ pay for being online
 /**
  * A minute of you being active (part 73), paid for: { minutes (today), paid (mint, this ping),
@@ -2664,14 +2729,17 @@ on conflict (key) do update set value = excluded.value, note = excluded.note;
 create or replace function public.online_ping(p_user uuid) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
-  v_before int := coalesce((select minutes from public.activity_days where user_id = p_user and day = public.lagos_day()), 0);
   v_after int;
+  v_counted boolean;
   v_rate numeric := coalesce(public.setting('online_pay_minute'), 0);
   v_cap int := coalesce(public.setting('online_pay_daily_minutes'), 0)::int;
   v_paid numeric := 0;
 begin
   v_after := public.active_ping(p_user);
-  if v_after > v_before and v_after <= v_cap and v_rate > 0 and exists (select 1 from public.lives where user_id = p_user) then
+  -- Paid only if this very call counted the minute (active_ping stamps last_ping with this
+  -- transaction's now(); a ping that came too soon, or lost a race to another, leaves it older).
+  v_counted := exists (select 1 from public.activity_days where user_id = p_user and day = public.lagos_day() and last_ping = now());
+  if v_counted and v_after <= v_cap and v_rate > 0 and exists (select 1 from public.lives where user_id = p_user) then
     v_paid := v_rate;
     update public.profiles set coins = coins + v_paid where id = p_user;
     perform public.log_coins(p_user, null, 'online_pay', v_paid, false, 'Paid for being online');
@@ -2729,12 +2797,26 @@ language sql stable security definer set search_path = public as $$
   )
 $$;
 
+-- ============================================================ what you've earned, by kind
+/** Your earnings by ledger kind, in all and today (Lagos day): for Things › Assets. */
+create or replace function public.earnings_summary(p_user uuid, p_kinds text[]) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_object_agg(kind, jsonb_build_object('total', total, 'today', today)), '{}'::jsonb)
+  from (
+    select kind, sum(amount) as total,
+           coalesce(sum(amount) filter (where created_at >= (public.lagos_day()::timestamp at time zone 'Africa/Lagos')), 0) as today
+    from public.ledger
+    where user_id = p_user and kind = any(p_kinds) and amount > 0
+    group by kind
+  ) k
+$$;
+
 do $$
 declare f text;
 begin
   revoke all on table public.world_bank, public.world_bank_ledger from public, anon, authenticated;
   grant all on table public.world_bank, public.world_bank_ledger to service_role;
-  foreach f in array array['public.online_ping(uuid)', 'public.world_bank_take()', 'public.world_bank_view()'] loop
+  foreach f in array array['public.online_ping(uuid)', 'public.world_bank_take()', 'public.world_bank_view()', 'public.earnings_summary(uuid, text[])'] loop
     execute format('revoke all on function %s from public, anon, authenticated', f);
     execute format('grant execute on function %s to service_role', f);
   end loop;

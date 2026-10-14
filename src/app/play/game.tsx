@@ -56,7 +56,7 @@ import {
   X,
 } from "@/components/icons";
 import { short } from "@/lib/format";
-import { cash, toShown } from "@/lib/world/value";
+import { cash, cashText, toShown } from "@/lib/world/value";
 import { tripWords, type Commute } from "@/lib/world/work";
 import { createClient } from "@/lib/supabase/client";
 import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
@@ -121,7 +121,6 @@ import { useWorldLife } from "./life/world-life";
 import type { ExplorePlace } from "@/lib/world/explore";
 import { Joystick } from "./joystick";
 import { onlineIdle, onlinePinged, settleIncome, syncIncome, useLiveCoins } from "./income";
-import { myTopUps } from "./topup-actions";
 import { Tutorial, useTutorialGlow, useTutorialPhase } from "./tutorial";
 import { PeopleList, prefetchPeople } from "./people/people-list";
 import { StatsSheet } from "./stats-sheet";
@@ -1106,15 +1105,21 @@ export function Game({
           worldId && what.ride
           ? payRide(what.ride, what.index)
           : payFare(what.index, what.fare > TRAIN_FARE);
-    void pay.then((res) => {
-      // Only put you back out if you really can't go (not if the payment just didn't go through).
-      if (!res.ok && res.kick) {
-        if (what.kind === "visit") markVisited(what.place, false);
-        leaveRoom();
-        setMessage({ icon: Coins, text: res.error, tone: "bad" });
-      }
-      startTransition(() => router.refresh());
-    });
+    const offRide = (text: string) => {
+      if (what.kind === "visit") markVisited(what.place, false);
+      leaveRoom();
+      setMessage({ icon: Coins, text, tone: "bad" });
+    };
+    void pay
+      .then((res) => {
+        // On the real map a ride is never free: no payment, no ride.
+        if (!res.ok && (res.kick || (worldId && what.kind === "fare"))) offRide(res.error);
+        else if (res.ok && res.paid > 0 && worldId) setMessage({ icon: Coins, text: `${what.name}: ${cash(res.paid)} fare paid. Enjoy the ride!`, tone: "info" });
+        startTransition(() => router.refresh());
+      })
+      .catch(() => {
+        if (worldId && what.kind === "fare") offRide("The payment didn't go through, so the ride didn't start. Try again.");
+      });
     return true;
   }
 
@@ -1333,7 +1338,7 @@ export function Game({
     const mine = allNotes.map((n) => ({
       key: `n${n.id}`,
       at: n.at,
-      text: n.tile !== null && n.kind === "trap" ? `${n.body} (near ${where(n.tile)})` : n.body,
+      text: cashText(n.tile !== null && n.kind === "trap" ? `${n.body} (near ${where(n.tile)})` : n.body),
       tone: n.kind === "caught" ? ("alarm" as const) : ("mine" as const),
       avatar: n.kind === "caught" || n.kind === "shield" ? me.avatar : null,
       quiet: n.kind === "duel_won" || n.kind === "duel_lost" || n.kind === "heist",
@@ -1785,35 +1790,26 @@ export function Game({
   }, [quickOpen]);
   // New coins on screen (the game opening, a refresh after anything): count from the latest payment
   // and ask again (buying or selling property pays what's been earned, on the server).
+  // (Never a page refresh for this: the cash on screen is counted from the server's own answer, so
+  // nothing loops and nothing waits behind it.)
   useEffect(() => {
     if (!worldId || me.guest) return;
-    void syncIncome().then((paid) => {
-      if (paid > 0) startTransition(() => router.refresh());
-    });
-  }, [worldId, me.guest, me.coins, router]);
+    void syncIncome(me.coins);
+  }, [worldId, me.guest, me.coins]);
   useEffect(() => {
     if (!worldId || me.guest) return;
-    const t = setInterval(
-      () =>
-        document.visibilityState === "visible" &&
-        void settleIncome().then((paid) => {
-          if (paid > 0) startTransition(() => router.refresh());
-        }),
-      5 * 60_000,
-    );
+    const t = setInterval(() => document.visibilityState === "visible" && void settleIncome(), 5 * 60_000);
     return () => clearInterval(t);
-  }, [worldId, me.guest, router]);
+  }, [worldId, me.guest]);
   useEffect(() => {
-    if (moneyOpen && worldId && !me.guest)
-      void settleIncome().then((paid) => {
-        if (paid > 0) startTransition(() => router.refresh());
-      });
-  }, [moneyOpen, worldId, me.guest, router]);
+    if (moneyOpen && worldId && !me.guest) void settleIncome();
+  }, [moneyOpen, worldId, me.guest]);
   // A top-up paid but never given (the pay box closed early, Paystack's message lost): checked with
   // Paystack again when the game opens, and given if it went through (./topup-actions myTopUps).
   useEffect(() => {
     if (!worldId || me.guest) return;
-    void myTopUps()
+    void fetch("/api/topups", { cache: "no-store" })
+      .then((r) => (r.ok ? (r.json() as Promise<{ credited: number } | null>) : null))
       .then((r) => {
         if (!r || r.credited <= 0) return;
         playSfx("chime");
@@ -1905,7 +1901,7 @@ export function Game({
       case "mall":
         return { label: "Shop", icon: ShoppingBag, run: () => worldLife.openThings("shops") };
       case "bank":
-        return { label: "Banking", icon: LandmarkIcon, run: worldLife.openFinance };
+        return { label: "Banking", icon: LandmarkIcon, run: () => setMoneyOpen(true) };
       case "vault":
         return { label: "Crack the vault", icon: LandmarkIcon, run: act("vault", "The vault") };
       case "church":
@@ -2672,6 +2668,7 @@ export function Game({
           onHowItWorks={() => { setMenu(false); if (worldId) worldLife.restartGuide(); else setHowOpen(true); }}
           life={!!worldId}
           onReport={worldId ? () => { setMenu(false); worldLife.openReport(); } : undefined}
+          onCurrency={worldId ? () => { setMenu(false); worldLife.openCurrency(); } : undefined}
           onEditAvatar={() => { setMenu(false); setEditAvatar(true); }}
           onResults={() => { setMenu(false); if (state.results) setShowResults(state.results.roundId); }}
           onMyStyle={guest || worldId ? undefined : () => { setMenu(false); setStyleOpen(true); }}
@@ -3188,7 +3185,7 @@ export function Game({
             )}
           >
             {message.icon && <message.icon className="mr-1.5 inline size-4 align-[-0.15em]" aria-hidden />}
-            {message.text}
+            {cashText(message.text)}
           </p>
         )}
         {hover && (
@@ -3717,6 +3714,7 @@ export function Game({
                 { label: "How it works", icon: Lightbulb, colour: "#fab005", go: () => setHowOpen(true) },
                 { label: "Start the guide", icon: Lightbulb, colour: "#f08c00", go: () => worldLife.restartGuide() },
                 { label: "Notifications", icon: BellRing, colour: "#f08c00", go: () => setAlertsOpen(true) },
+                { label: "Currency", icon: Coins, colour: "#f59f00", go: () => worldLife.openCurrency() },
                 { label: sound ? "Sound off" : "Sound on", icon: sound ? VolumeX : Volume2, colour: "#495057", go: () => { setSound(!sound); saveView({ sound: !sound }); } },
                 { label: "Report", icon: Flag, colour: "#868e96", go: () => worldLife.openReport() },
                 { label: "Sign out", icon: LogOut, colour: "#495057", go: () => setConfirmSignOut(true) },

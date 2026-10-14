@@ -21,6 +21,7 @@ import { clamp, easeOutBack, smooth, type Ev, type Scene } from "./events/common
 import { Kit } from "./events/kit";
 import { sceneFor } from "./events/scenes";
 import { findSpot, indexCity, type CityIndex } from "./events/spots";
+import { cash } from "@/lib/world/value";
 
 export type WorldEventsHost = {
   scene: THREE.Scene;
@@ -353,7 +354,7 @@ export function createWorldEvents(host: WorldEventsHost) {
     if (id === null) return null;
     const inst = list.get(id);
     const kind = inst ? WORLD_EVENT_BY_KEY[inst.ev.key] : null;
-    return kind?.reward ? `${kind.title} · tap to grab ₥${kind.reward.coins}` : null;
+    return kind?.reward ? `${kind.title} · tap to grab ${cash(kind.reward.coins)}` : null;
   }
 
   function dispose() {

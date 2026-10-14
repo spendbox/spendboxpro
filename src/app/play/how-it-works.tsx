@@ -1,5 +1,6 @@
 "use client";
 
+import { cashText } from "@/lib/world/value";
 import {
   Building2,
   Coins,
@@ -273,7 +274,7 @@ export function HowItWorks({ onClose, legacy }: { onClose: () => void; legacy?: 
             </h3>
             <ul className="space-y-1.5 text-sm text-ink/80">
               {s.body.map((line, i) => (
-                <li key={i}>{line}</li>
+                <li key={i}>{moneyWords(line)}</li>
               ))}
             </ul>
           </section>
@@ -308,4 +309,10 @@ function SectionIcon({ icon: Icon }: { icon: LucideIcon }) {
       <Icon className="size-[18px]" strokeWidth={2.25} />
     </span>
   );
+}
+
+/** Amounts in the player's currency ("₥100" → "₦150,000"), and "mint" said as "money". */
+function moneyWords(line: React.ReactNode): React.ReactNode {
+  if (typeof line !== "string") return line;
+  return cashText(line).replace(/\bmint\b/g, "money").replace(/\bMint\b/g, "Money");
 }

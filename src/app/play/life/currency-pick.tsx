@@ -3,7 +3,7 @@
 import { CURRENCIES } from "@/lib/world/value";
 import { Sheet } from "../sheet";
 
-/** The currencies as chips: tap one to show every amount in it beside mint. */
+/** The currencies as chips: tap one to show every amount in it. */
 export function CurrencyChips({ value, onPick }: { value: string; onPick: (code: string) => void }) {
   return (
     <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Currency">
@@ -27,7 +27,7 @@ export function CurrencyChips({ value, onPick }: { value: string; onPick: (code:
 export function CurrencySheet({ value, onPick, onClose }: { value: string; onPick: (code: string) => void; onClose: () => void }) {
   return (
     <Sheet onClose={onClose} title="Your currency">
-      <p className="text-sm text-muted">Prices show in mint (₥) and in your currency beside it. Change it any time.</p>
+      <p className="text-sm text-muted">Every amount shows in the currency you pick. Change it any time.</p>
       <div className="mt-3">
         <CurrencyChips value={value} onPick={onPick} />
       </div>

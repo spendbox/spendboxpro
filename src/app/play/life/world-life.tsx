@@ -58,7 +58,7 @@ import type { OwnedProperty } from "@/lib/world/owned";
 import { InterviewSheet, MomentSheet } from "./moments";
 import { AmountSheet, LoanSheet } from "./amount-sheet";
 import { CurrencySheet } from "./currency-pick";
-import { cash, setShownCurrency } from "@/lib/world/value";
+import { cash, cashText, setShownCurrency } from "@/lib/world/value";
 import { buyerPays, sellerGets, OFFER_HOURS, RENT_LEVEL, type Listing, type MarketBoard } from "@/lib/world/market";
 import { BUY_TAX, INCOME_DAY } from "@/lib/world/property-api";
 import { SIMPLE_LIFE } from "@/lib/world/simple-life";
@@ -812,7 +812,7 @@ export function useWorldLife({
       {message && (
         <div className="pointer-events-auto absolute inset-x-0 bottom-24 z-[65] flex justify-center px-3">
           <p className={`flex max-w-sm items-center gap-2 rounded-2xl px-4 py-2.5 text-sm shadow-lg ${message.good ? "bg-ink text-white" : "bg-hit text-white"}`}>
-            {message.text}
+            {cashText(message.text)}
             <button onClick={() => setMessage(null)} aria-label="Close">
               <X className="size-4" />
             </button>
@@ -1002,6 +1002,7 @@ export function useWorldLife({
               onBought={(_c, name) => {
                 setMessage({ text: `${name} is yours! Big money moves.`, good: true });
                 void refresh();
+                onChanged?.();
               }}
             />
           </div>
@@ -1389,7 +1390,10 @@ export function useWorldLife({
             setThings(null);
             loadRep();
           }}
-          onChanged={() => void refresh()}
+          onChanged={() => {
+            void refresh();
+            onChanged?.();
+          }}
         />
       )}
       {markOpen !== null && marks.find((m) => m.id === markOpen) && (
@@ -1589,6 +1593,11 @@ export function useWorldLife({
   };
   /** The walkthrough's first mission: your home's card, with the name box ready. */
   const nameHome = () => {
+    // A rented home isn't yours to name (game-db/078): say so, rather than nothing happening.
+    if (homeUnit && !home) {
+      setMessage({ text: "Only a home you own can be named. Buy one (tap any building), or skip this mission.", good: false });
+      return;
+    }
     setNameNew(true);
     goHome();
   };

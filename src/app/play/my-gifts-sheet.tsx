@@ -101,7 +101,7 @@ export function MyGiftsSheet({
         </span>
         <div className="min-w-0 flex-1">
           <h2 className="font-display text-xl font-extrabold leading-tight">My gifts</h2>
-          <p className="text-xs text-muted">Hugs, handshakes and mint other players sent you. Say thank you!</p>
+          <p className="text-xs text-muted">Hugs, handshakes and money other players sent you. Say thank you!</p>
         </div>
         <button onClick={onClose} className="grid size-9 shrink-0 place-items-center self-start rounded-full text-muted hover:bg-panel-2" aria-label="Close">
           <X className="size-5" />
@@ -123,11 +123,11 @@ export function MyGiftsSheet({
             {[
               { Icon: Heart, n: gifts.totals.hugs, label: gifts.totals.hugs === 1 ? "hug" : "hugs", tint: "text-[#d6336c]" },
               { Icon: Handshake, n: gifts.totals.handshakes, label: gifts.totals.handshakes === 1 ? "handshake" : "handshakes", tint: "text-[#e67700]" },
-              { Icon: Coins, n: gifts.totals.mint, label: "mint", tint: "text-gold-dark" },
-            ].map(({ Icon, n, label, tint }) => (
+              { Icon: Coins, n: gifts.totals.mint, label: "money", tint: "text-gold-dark", money: true },
+            ].map(({ Icon, n, label, tint, money }: { Icon: typeof Coins; n: number; label: string; tint: string; money?: boolean }) => (
               <div key={label} className="rounded-xl bg-panel-2 px-1 py-2">
                 <Icon className={cn("mx-auto size-4", tint)} />
-                <b className="block font-display text-lg leading-tight">{short(n)}</b>
+                <b className="block font-display text-lg leading-tight">{money ? cash(n) : short(n)}</b>
                 <span className="text-[11px] text-muted">{label}</span>
               </div>
             ))}
@@ -138,7 +138,7 @@ export function MyGiftsSheet({
 
           {gifts.items.length === 0 ? (
             <p className="mt-4 rounded-2xl bg-panel-2 px-4 py-6 text-center text-sm text-muted">
-              Nothing yet. When someone hugs you, shakes your hand or gives you mint, it shows up here.
+              Nothing yet. When someone hugs you, shakes your hand or gives you money, it shows up here.
             </p>
           ) : (
             <ul className="mt-3 max-h-[46dvh] space-y-1 overflow-y-auto overscroll-contain">
@@ -191,7 +191,7 @@ export function MyGiftsSheet({
                     {askBlock && (
                       <div className="mt-1.5 rounded-xl bg-hit/10 p-2.5 text-xs">
                         <p>
-                          Block <b>{g.name}</b>? Their hugs, handshakes, mint gifts, private messages and friend requests won&apos;t reach you, and if
+                          Block <b>{g.name}</b>? Their hugs, handshakes, money gifts, private messages and friend requests won&apos;t reach you, and if
                           you&apos;re friends, that ends. You can unblock them here later.
                         </p>
                         <div className="mt-2 grid grid-cols-2 gap-2">

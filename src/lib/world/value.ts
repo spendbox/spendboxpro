@@ -191,6 +191,18 @@ export function cash(mint: number, opts: { full?: boolean; exact?: boolean } = {
   return `${sign}${s}${a.toLocaleString("en-GB", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
 }
 
+/**
+ * Text from the server with amounts in mint ("+10 mint", "₥50", "300 coins") rewritten in the
+ * player's currency ("+₦15,000"). For notices and messages the database writes.
+ */
+export function cashText(s: string) {
+  if (!s) return s;
+  const num = (x: string) => Number(x.replace(/,/g, ""));
+  return s
+    .replace(/₥\s?(\d[\d,]*(?:\.\d+)?)/g, (_, n: string) => cash(num(n)))
+    .replace(/\b(\d[\d,]*(?:\.\d+)?) (?:mint|coins?)\b/g, (_, n: string) => cash(num(n)));
+}
+
 /** A short local price, in the player's chosen currency: "₦148m" / "$95k" / "£1.2". */
 export function shortLocal(amount: number, prices: Prices) {
   const c = current();

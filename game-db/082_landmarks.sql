@@ -15,6 +15,9 @@ insert into public.game_settings (key, value, note) values
   ('landmark_price_max', 5000000000, 'Dearest landmark the game will sell, in mint (a sanity check)')
 on conflict (key) do update set note = excluded.note;
 
+-- Free rooms (part 74): the column this reads, in case 74 hasn't been run.
+alter table public.property_units add column if not exists starter boolean not null default false;
+
 create table if not exists public.landmark_owners (
   landmark_id text primary key check (landmark_id ~ '^[a-z0-9-]+:[a-z0-9-]+$'),
   region text not null check (region ~ '^[a-z0-9-]{2,30}$'),

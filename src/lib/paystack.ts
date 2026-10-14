@@ -116,6 +116,8 @@ export async function checkPayment(reference: string): Promise<VerifiedPayment |
     const res = await fetch(`${API}/transaction/verify/${encodeURIComponent(reference)}`, {
       headers: { Authorization: `Bearer ${key()}` },
       cache: "no-store",
+      // Never let a slow Paystack hold the game up.
+      signal: AbortSignal.timeout(6000),
     });
     const body = (await res.json().catch(() => null)) as
       | { status?: boolean; data?: { status?: string; amount?: number; currency?: string; reference?: string } }

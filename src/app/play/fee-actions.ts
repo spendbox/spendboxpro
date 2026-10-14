@@ -55,10 +55,9 @@ export async function payRide(kind: string, index: number): Promise<FeePaid | Fa
   const db = createAdminClient();
   const { data, error } = await db.rpc("life_ride", { p_user: userId, p_key: `v:${kind}:${index}`, p_fare: rideFare(kind) });
   if (error) {
-    // Before part 61 is run: the old fare (only charged during an hourly game).
-    if (/life_ride/.test(error.message)) return payFare(Math.min(index, 99), false);
-    // No life on the map yet (just watching the city): the ride's on the house.
-    if (error.message.startsWith("no_life")) return { ok: true, paid: 0, coins: 0 };
+    // Rides are never free: before part 61 is run they're switched off, and you need a life first.
+    if (/life_ride/.test(error.message)) return { ok: false, error: "Rides are switched on soon.", kick: true };
+    if (error.message.startsWith("no_life")) return { ok: false, error: "Start your life in the city first.", kick: true };
     return say(error.message);
   }
   const { data: me } = await db.from("profiles").select("coins").eq("id", userId).maybeSingle();
@@ -77,8 +76,9 @@ export async function payClubEntry(place: string, type: string | undefined): Pro
   const db = createAdminClient();
   const { data, error } = await db.rpc("life_club_entry", { p_user: userId, p_place: place, p_fee: fee });
   if (error) {
-    // Before part 67 is run, or no life on the map yet (just looking round): in for free.
-    if (/life_club_entry|club_entries/.test(error.message) || error.message.startsWith("no_life")) return { ok: true, paid: 0, coins: 0, until: null };
+    // Never free at the door: before part 67 is run, entry is switched off; you need a life first.
+    if (/life_club_entry|club_entries/.test(error.message)) return { ok: false, error: "Club entry is switched on soon.", kick: true };
+    if (error.message.startsWith("no_life")) return { ok: false, error: "Start your life in the city first.", kick: true };
     return say(error.message);
   }
   const d = (data ?? {}) as Record<string, unknown>;

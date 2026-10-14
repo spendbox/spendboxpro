@@ -61,6 +61,15 @@
 - [ ] In Vercel, set `SPORTS_SECRET` to a long random string (once; don't change it later).
 - [ ] Test on a real phone: sounds, touch gestures, the water slide, club lights.
 
+## Known bugs (found in the full review, not fixed yet)
+- [ ] Escape on a computer closes every open window at once, not just the top one (`src/app/play/sheet.tsx`: each sheet listens for Escape).
+- [ ] A business with no logo or picture gets no billboard at all: show a text-only billboard (name and "about") instead (`world-life.tsx` billboardAds, `city-view.tsx` setAds/adTexture).
+- [ ] Billboards look washed out by day and dim at night (`city-view.tsx`: Lambert material + emissive; use a basic material, not tone-mapped).
+- [ ] Paid ads from the advertise page show in every region: they can't be targeted to a state like business leases can (no region on `ads`).
+- [ ] Going to a friend less than 3 km away is a free trip, and doesn't update where you are (`game.tsx` goToFriend calls travelTo without `from`).
+- [ ] Billboard views for businesses are under-counted (one per ad per 15 s batch, `world-life.tsx` businessViews).
+- [ ] During the walkthrough, the ✕ on the quick buttons can't close them while it's pointing at the house or the camera (`game.tsx` quickShown).
+
 ## Next (ideas agreed)
 - [ ] **Walk inside your planned home** (`docs/HOME_PLANNER.md`, next steps): your own home on the map drawn from your plan, then your shop things placed in it, then visitors.
 - [ ] **2D characters for activities** (`docs/2D_CHARACTERS.md`): a 2D character drawn from your avatar with expressions (chat first), then the dance hall, boxing, basketball, football.
