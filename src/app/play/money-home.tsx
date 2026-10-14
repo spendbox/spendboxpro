@@ -410,7 +410,7 @@ export function MoneyHome({
         <House className="size-4 shrink-0 text-[#2b8a3e]" />
         {income.perDay > 0 ? (
           <span className="min-w-0 flex-1">
-            Your property earns <b className="text-[#2b8a3e]">{cash(income.perDay)} a day</b>, paid by itself.
+            Your property earns <b className="text-[#2b8a3e]">{cash(income.perDay)} a day</b>, even if you&apos;re offline.
           </span>
         ) : (
           <span className="min-w-0 flex-1">Buy property and it pays you every day, by itself.</span>

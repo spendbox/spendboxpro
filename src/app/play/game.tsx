@@ -2228,6 +2228,7 @@ export function Game({
             onProperty={worldId && !guest ? worldLife.onProperty : undefined}
             onWorkplace={worldId && !guest ? worldLife.onWorkplace : undefined}
             onAtGate={setAtGate}
+            onBubbleSignIn={guest ? () => setSignInWhy("Sign in to go into places, meet people and play.") : undefined}
             gateIn={gateIn}
             centerRef={worldId ? worldLife.centerRef : undefined}
             walkStick={walkStick}
@@ -2526,6 +2527,15 @@ export function Game({
         </div>
       </div>
 
+      {/* Watchers on a phone: the logo and the name, small, in 3D letters, floating under the top bar. */}
+      {guest && worldId && !place && ride === null && !camera && (
+        <div className="pointer-events-none absolute inset-x-0 top-[6.75rem] z-[5] flex justify-center sm:hidden" title="Newtown">
+          <span className="title-float-sm flex items-center gap-1.5">
+            <LogoMark size={26} className="rounded-[7px] shadow-[0_6px_14px_rgba(0,0,0,0.35)]" />
+            <span className="title-3d-sm font-display text-[26px] font-black italic leading-none tracking-tight text-white">Newtown</span>
+          </span>
+        </div>
+      )}
       {/* Watchers on a computer: the Newtown logo, top centre. */}
       {guest && (
         <div className="pointer-events-none absolute inset-x-0 top-0 hidden justify-center p-4 sm:flex" title="Newtown">
