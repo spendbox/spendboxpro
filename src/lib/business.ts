@@ -8,8 +8,9 @@ import { checkPayment, paystackEnabled, startPayment } from "@/lib/paystack";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { regionMap } from "@/lib/world";
 import { BUILDING_LABEL, type Building } from "@/lib/world/buildings";
-import { BUSINESS_KINDS, CATEGORIES, leasePrice, STOREY_AFTER_DAYS, upgradePrice, UPGRADES, type MapBusiness } from "@/lib/world/business";
+import { BUSINESS_KINDS, CATEGORIES, LEASE_MONTHS, leasePrice, monthlyOf, STOREY_AFTER_DAYS, upgradePrice, UPGRADES, type MapBusiness } from "@/lib/world/business";
 import { ownedSpot } from "@/lib/world/owned";
+import { syncGrowth } from "@/lib/world/growth-server";
 import { toTile } from "@/lib/world/geo";
 
 // Real businesses on the map (docs/BUSINESS.md; the database part is game-db/043_business.sql). A
@@ -32,6 +33,9 @@ export type LeaseOffer = { building: string; region: string; what: string; area:
 
 /** What a building would cost to lease, or why it can't be (a landmark, a player's, already leased). */
 export async function leaseOffer(buildingId: string): Promise<{ ok: true; offer: LeaseOffer } | { ok: false; error: string }> {
+  // The city as big as it has grown (docs/GROWTH.md).
+  const growIn = ownedSpot(buildingId ?? "")?.region;
+  if (growIn) await syncGrowth(growIn);
   const spot = ownedSpot(buildingId ?? "");
   const plan = spot ? planFor(spot.region) : null;
   const map = spot ? regionMap(spot.region) : null;
@@ -101,7 +105,10 @@ export async function startLeaseCheckout(form: FormData): Promise<Checkout> {
     return { ok: false, error: "We couldn't save your billboard picture. Please try again." };
   }
   const reference = `bz-${randomBytes(12).toString("hex")}`;
-  const kobo = offer.offer.priceNaira * 100;
+  // Paid by the month: 1, 3, 6 or 12 months up front (another month any time after).
+  const months = Number(form.get("months"));
+  if (!(LEASE_MONTHS as readonly number[]).includes(months)) return { ok: false, error: "Pick how many months." };
+  const kobo = offer.offer.priceNaira * months * 100;
   const { error } = await db.rpc("business_lease_start", {
     p_advertiser: adv.data as string,
     p_building: offer.offer.building,
@@ -130,13 +137,19 @@ export async function startLeaseCheckout(form: FormData): Promise<Checkout> {
     return { ok: false, error: words[code] ?? "Something went wrong. Please try again." };
   }
   if (boardPath) await db.from("business_leases").update({ billboard_path: boardPath }).eq("reference", reference);
+  // How long it runs (game-db/092): without it a lease would run a year, so don't take the money.
+  const { error: monthsError } = await db.from("business_leases").update({ months }).eq("reference", reference);
+  if (monthsError) {
+    await db.from("business_leases").delete().eq("reference", reference).eq("status", "pending_payment");
+    return { ok: false, error: "Monthly leases are switched on soon. Please try again later." };
+  }
   return startPayment({
     email: c.contact.email,
     amountKobo: kobo,
     reference,
     // Back through a page that checks the payment and signs the business in to its ad page.
     callbackUrl: `${siteUrl()}/business/enter?ref=${reference}`,
-    metadata: { kind: "business_lease", building: offer.offer.building },
+    metadata: { kind: "business_lease", building: offer.offer.building, months },
   });
 }
 
@@ -147,11 +160,13 @@ export async function startUpgradeCheckout(advertiserId: string, leaseId: string
   if (!u) return { ok: false, error: "That upgrade isn't on offer." };
   if (u.id === "rebuild" && !BUSINESS_KINDS.some((k) => k.kind === kind)) return { ok: false, error: "Pick what to turn it into." };
   const db = createAdminClient();
-  const { data: lease } = await db.from("business_leases").select("price_kobo, status").eq("id", leaseId).eq("advertiser_id", advertiserId).maybeSingle();
+  let { data: lease } = await db.from("business_leases").select("price_kobo, status, months").eq("id", leaseId).eq("advertiser_id", advertiserId).maybeSingle();
+  // Before game-db/092 there's no months column.
+  if (!lease) ({ data: lease } = await db.from("business_leases").select("price_kobo, status").eq("id", leaseId).eq("advertiser_id", advertiserId).maybeSingle());
   if (!lease || lease.status !== "live") return { ok: false, error: "That isn't one of your live buildings." };
   const { data: adv } = await db.from("advertisers").select("email").eq("id", advertiserId).maybeSingle();
   const reference = `bz-up-${randomBytes(10).toString("hex")}`;
-  const kobo = upgradePrice(u.id, Number(lease.price_kobo) / 100) * 100;
+  const kobo = upgradePrice(u.id, monthlyOf(Number(lease.price_kobo) / 100, (lease as { months?: number | null }).months ?? null)) * 100;
   const { error } = await db.rpc("business_upgrade_start", { p_advertiser: advertiserId, p_lease: leaseId, p_upgrade: u.id, p_kind: u.id === "rebuild" ? kind : null, p_kobo: kobo, p_reference: reference });
   if (error) {
     const code = error.message.split(":")[0];
@@ -197,6 +212,8 @@ export type MyBusiness = MapBusiness & {
   /** Taps (on the building or a billboard) the lease covers, and used so far. */
   clickCap: number | null;
   clicks: number;
+  /** Months paid for when it started (null: a lease from before monthly ones, a year). */
+  months?: number | null;
 };
 
 /** An account's buildings with their numbers. */
@@ -210,6 +227,7 @@ export async function myBusinesses(advertiserId: string): Promise<MyBusiness[]> 
     priceKobo: Number(b.priceKobo),
     clickCap: b.clickCap == null ? null : Number(b.clickCap),
     clicks: Number(b.clicks ?? 0),
+    months: b.months == null ? null : Number(b.months),
   }));
 }
 
@@ -256,6 +274,7 @@ export function adPlaces(region: string): AdPlace[] {
  * no business has it. At most `limit`, and only those up to `maxNaira` a year when given.
  */
 export async function leasableNear(region: string, x: number, z: number, maxNaira?: number, limit = 30): Promise<LeaseOffer[]> {
+  await syncGrowth(region);
   const map = regionMap(region);
   const plan = planFor(region);
   if (!map || !plan) return [];
@@ -294,6 +313,7 @@ export async function leasableNear(region: string, x: number, z: number, maxNair
 
 /** Good picks across the whole city (no area chosen): a few free buildings from each district, cheapest first. */
 export async function leasableAcross(region: string, maxNaira?: number): Promise<LeaseOffer[]> {
+  await syncGrowth(region);
   const map = regionMap(region);
   if (!map) return [];
   const places = map.region.districts.slice(0, 12).map((d) => toTile(map.frame, { lat: d.at.lat, lon: d.at.lon }));
@@ -311,6 +331,7 @@ export async function leasableAcross(region: string, maxNaira?: number): Promise
  * is looking and across the city's districts. The advertiser taps an amount and steps through them.
  */
 export async function leasableByPrice(region: string, naira: number, x?: number, z?: number): Promise<LeaseOffer[]> {
+  await syncGrowth(region);
   const map = regionMap(region);
   if (!map || !(naira > 0)) return [];
   const spots = map.region.districts.slice(0, 16).map((d) => toTile(map.frame, { lat: d.at.lat, lon: d.at.lon }));

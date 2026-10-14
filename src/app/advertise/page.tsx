@@ -9,7 +9,7 @@ import { CONTACT_EMAIL, SITE_DOMAIN } from "@/lib/brand";
 
 export const metadata: Metadata = {
   title: "Advertise",
-  description: "Lease a building in Newtown's Lagos for a year, with your design on the city's billboards. From ₦20,000 a year.",
+  description: "Billboard ads in Newtown's Lagos from ₦5,000 a week, or a building of your own by the month with your design on the city's billboards.",
 };
 
 async function stats() {
@@ -38,15 +38,17 @@ export default async function AdvertisePage() {
     [
       "What am I paying for?",
       <>
-        A building in Newtown&apos;s Lagos for a year: your name and logo on it, lit up for every player, a card with what you do and how to reach you, and your
-        own design on the city&apos;s billboards. Prices start at ₦{fmt(LEASE_MIN)} a year, by the building&apos;s size and where it is.
+        Either billboard ads on their own (your picture on the city&apos;s billboards, from ₦5,000 a week, for 1 to 8 weeks), or a building in Newtown&apos;s Lagos
+        by the month: your name and logo on it, lit up for every player, a card with what you do and how to reach you, and your own design on the city&apos;s
+        billboards. Buildings start at ₦{fmt(LEASE_MIN)} a month, by size and where they are.
       </>,
     ],
     [
       "How long does it run?",
       <>
-        A year, or until people have tapped your building or your billboard (opening your card) as many times as your lease covers, whichever comes first.
-        Each ₦{NAIRA_PER_TAP} of your lease covers one tap: a ₦{fmt(LEASE_MIN)} lease covers {fmt(LEASE_MIN / NAIRA_PER_TAP)} taps.
+        Billboard ads: the weeks you choose. A building: the months you pay for (1, 3, 6 or 12; add another month any time), or until people have tapped your
+        building or billboard as many times as your lease covers, whichever comes first. Each ₦{NAIRA_PER_TAP} covers one tap: a ₦{fmt(LEASE_MIN)} month covers{" "}
+        {fmt(LEASE_MIN / NAIRA_PER_TAP)} taps.
       </>,
     ],
     ["Can I change my billboard?", "Yes, any time and free: upload a new design from your business page and it's on the billboards in minutes."],
@@ -75,7 +77,7 @@ export default async function AdvertisePage() {
               <p className="text-sm font-semibold uppercase tracking-wide text-gold">Advertise on Newtown</p>
               <h1 className="mt-1 font-display text-4xl font-extrabold leading-tight">Own a building in Lagos. Light it up with your name.</h1>
               <p className="mt-3 text-white/75">
-                A real spot on the Lagos map for a year, your design on the city&apos;s billboards, and players tapping through to call you. From ₦{fmt(LEASE_MIN)}, paid once.
+                Your picture on the city&apos;s billboards from ₦5,000 a week, or a real building on the Lagos map from ₦{fmt(LEASE_MIN)} a month, with your billboards included.
               </p>
               <div className="mt-5 flex flex-wrap items-center gap-3">
                 <Link href="/?advertise=1" className="rounded-full bg-gold px-6 py-3 font-semibold text-ink shadow-lg">

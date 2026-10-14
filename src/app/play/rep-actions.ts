@@ -32,6 +32,7 @@ export async function reputationDetails(): Promise<RepDetails | null> {
     { label: "Home and property", points: p.property, how: "5 for having a home, and more the more your property is worth." },
     { label: "Things and cars", points: p.things, how: rich.length ? `From ${rich.slice(0, 3).map((i) => i.name).join(", ")}${rich.length > 3 ? ` and ${rich.length - 3} more` : ""}.` : "Fine things (jewellery, art, a good car) add to it while you own them." },
     { label: "People liked your marks", points: p.marks, how: "1 for every 2 reactions on what you left on the map (up to 50)." },
+    { label: "Taking part", points: p.engagement ?? 0, how: "Time you spend in the game, real conversations, gifts and greetings, friends and visitors. What you do lately counts most." },
     { label: "Challenges", points: p.challenges ?? 0, how: "1 for every challenge you hosted that was played, 3 for every one you won (up to 120)." },
   ];
 

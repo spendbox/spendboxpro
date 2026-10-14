@@ -4,7 +4,7 @@ import { rememberPerson } from "./people/recent-rail";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { ArrowDown, ArrowLeft, Camera, ImagePlus, LoaderCircle, Mic, Newspaper, Pause, Search, SendHorizontal, UserCheck, UserPlus } from "lucide-react";
+import { ArrowDown, ArrowLeft, Camera, CircleHelp, ImagePlus, LoaderCircle, MapPin, Mic, Navigation, Newspaper, Pause, Search, SendHorizontal, UserCheck, UserPlus } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import { Bot, Building2, ChevronDown, ChevronUp, Coins, Fish, HotAirBalloon, Lock, LogOut, MessageCircle, Play, Users, X } from "@/components/icons";
 import type { Avatar } from "@/lib/avatar";
@@ -14,7 +14,8 @@ import { cn } from "@/lib/cn";
 import { npcById, npcChatter, npcsFor, type Npc, type NpcMessage } from "@/lib/npcs";
 import { createClient } from "@/lib/supabase/client";
 import { BotCard } from "./bot-card";
-import { loadDms, loadRoom, sendMessage, sendPhoto, sendVoice, voiceUrl, type ChatMessage, type ChatTarget } from "./chat-actions";
+import { loadDms, loadRoom, sendLocation, sendMessage, sendPhoto, sendVoice, voiceUrl, type ChatMessage, type ChatTarget } from "./chat-actions";
+import { locationIn, withoutTag, type ChatLocation } from "@/lib/chat-location";
 import { ChatPhoto, PhotoPicker, type PhotoPick } from "./chat-photo";
 import { NpcBadge, NpcCard, NpcFace } from "./npc-card";
 import { closePhoneNotices } from "./phone/phone-notices";
@@ -192,6 +193,9 @@ export function Chat({
   news,
   onlineNow,
   onCamera,
+  onGoTo,
+  onLocation,
+  myLocation,
 }: {
   meId: string;
   meRole: "hider" | "seeker" | null;
@@ -242,6 +246,12 @@ export function Chat({
   finder?: React.ReactNode;
   /** Tapping a player's name or face: their profile card. */
   onPerson?: (id: string) => void;
+  /** Go to a location someone sent (the usual fare; the game does the trip). */
+  onGoTo?: (loc: ChatLocation, from: string) => void;
+  /** A location just arrived from someone (shown over the game unless you're reading their chat). */
+  onLocation?: (p: { id: string; name: string; loc: ChatLocation }) => void;
+  /** Where you are when you're out walking (the street); otherwise the server knows the building you're at. */
+  myLocation?: () => { region: string; x: number; z: number } | null;
   /** "Take a selfie" in the picture menu: the game's camera, sending the picture here. */
   onSelfie?: (target: ChatTarget, to: string) => void;
   /**
@@ -372,10 +382,23 @@ export function Chat({
     if (!m.recipient_id) return;
     setDms((d) => (d ? { ...d, list: d.list.map((x) => (x.id === m.id ? { ...x, read_at: m.read_at } : x)) } : d));
   }, []);
+  // What the live listener needs to know without starting again (who you are, what's open).
+  const meIdRef = useRef(meId);
+  const openRef = useRef(open);
+  const threadRef = useRef<string | null>(null);
+  const onLocationRef = useRef(onLocation);
+  useEffect(() => {
+    meIdRef.current = meId;
+    openRef.current = open;
+    onLocationRef.current = onLocation;
+  });
   // Live: one listener for the whole round; keep what belongs to your place or your private chats.
   const addMessage = useCallback((m: ChatMessage) => {
     if (m.recipient_id) {
       setDms((d) => (d && (keep || d.round === m.round_id) ? { ...d, list: append(d.list, m, 400) } : d));
+      // Someone sent you where they are: say so over the game (unless you're reading their chat now).
+      const loc = m.recipient_id === meIdRef.current && m.sender_id !== meIdRef.current ? locationIn(m.body) : null;
+      if (loc && !(openRef.current && threadRef.current === m.sender_id)) onLocationRef.current?.({ id: m.sender_id, name: m.sender_name, loc });
     } else {
       setRoomMsgs((r) => (r && (keep ? m.room === r.key : r.round === m.round_id && (m.room === r.key || m.room === "*")) ? { ...r, list: append(r.list, m, 200) } : r));
     }
@@ -454,6 +477,29 @@ export function Chat({
   }, [dmMsgs, meId]);
 
   const threadId = thread?.id ?? null;
+  useEffect(() => {
+    threadRef.current = threadId;
+  }, [threadId]);
+  // The first time you start a chat (New chat, or a private chat opened): how chat works, step by
+  // step. Once; the ? at the top shows it again.
+  const [guide, setGuide] = useState<number | null>(null);
+  const starting = open && keep && !guest && (tab === "people" || !!threadId);
+  useEffect(() => {
+    if (!starting) return;
+    let seen = true;
+    try {
+      seen = localStorage.getItem(GUIDE_KEY) === "1";
+    } catch {}
+    if (seen) return;
+    const t = setTimeout(() => setGuide((g) => g ?? 0), 250);
+    return () => clearTimeout(t);
+  }, [starting]);
+  const doneGuide = () => {
+    setGuide(null);
+    try {
+      localStorage.setItem(GUIDE_KEY, "1");
+    } catch {}
+  };
   const threadItems = useMemo(
     () => (threadId ? dmMsgs.filter((m) => m.sender_id === threadId || m.recipient_id === threadId).map(toItem) : []),
     [dmMsgs, threadId],
@@ -534,6 +580,18 @@ export function Chat({
     else return;
     try {
       const res = await sendPhoto(form);
+      if (res.ok) addMessage(res.message);
+      else setError(res.error);
+    } catch {
+      setError("The connection blinked. Try again.");
+    }
+  }
+  /** Send this person where you are (a private chat only). */
+  async function sendWhereIAm() {
+    if (!thread) return;
+    setError(null);
+    try {
+      const res = await sendLocation(thread.id, myLocation?.() ?? null);
       if (res.ok) addMessage(res.message);
       else setError(res.error);
     } catch {
@@ -895,6 +953,9 @@ export function Chat({
               </span>
             )}
             <h2 className="min-w-0 flex-1 truncate px-1 font-display text-lg font-bold">{tab === "people" ? "New chat" : "Chat"}</h2>
+            <button onClick={() => setGuide(0)} className="grid size-9 shrink-0 place-items-center rounded-full text-muted hover:bg-panel-2" aria-label="How chat works">
+              <CircleHelp className="size-5" aria-hidden />
+            </button>
             {tab !== "people" && (
               <button onClick={() => setTab("people")} className="relative flex h-9 shrink-0 items-center gap-1 rounded-full bg-[#7048e8] px-3 text-xs font-bold text-white shadow-sm" aria-label="Start a new chat">
                 <Search className="size-3.5" aria-hidden /> New chat
@@ -1150,7 +1211,7 @@ export function Chat({
                       </span>
                       <span className="flex items-center gap-1 truncate text-sm text-muted">
                         {c.last.sender_id === meId ? "You: " : ""}
-                        {c.last.body ?? (
+                        {(c.last.body && (locationIn(c.last.body) ? "📍 Location" : withoutTag(c.last.body))) ?? (
                           <>
                             <Mic className="size-3.5 shrink-0" aria-hidden /> Voice note
                           </>
@@ -1182,6 +1243,7 @@ export function Chat({
               bigFish={bigFishIds}
               snap={keep && Boolean(thread)}
               theirName={thread?.name}
+              onGo={onGoTo}
             />
           )}
 
@@ -1192,12 +1254,14 @@ export function Chat({
               onAudio={sendAudio}
               onPicture={sendPicture}
               onSelfie={selfieHere}
+              onLocation={thread && keep ? sendWhereIAm : undefined}
               placeholder={keep ? "Send a chat" : thread ? `Private message to ${thread.name}` : `Message ${room ? placeTitle(room) : "everyone here"}`}
             />
           )}
           {error && <p className="shrink-0 px-4 pb-2 text-xs text-hit">{error}</p>}
         </>
       )}
+      {guide !== null && <ChatGuide step={guide} onStep={setGuide} onDone={doneGuide} />}
       {cards}
     </section>,
     document.body,
@@ -1229,7 +1293,7 @@ function Ticks({ seen }: { seen: boolean }) {
 
 /** What the last message was, in a few words ("You: on my way", "Photo", "Voice note"). */
 function preview(last: ChatMessage, meId: string) {
-  const what = last.audio_path ? "🎤 Voice note" : last.image_path && (!last.body || last.body === "Sent a photo") ? "📷 Photo" : last.body;
+  const what = last.audio_path ? "🎤 Voice note" : last.image_path && (!last.body || last.body === "Sent a photo") ? "📷 Photo" : locationIn(last.body) ? "📍 Location" : last.body;
   return last.sender_id === meId ? `You: ${what}` : what;
 }
 
@@ -1379,6 +1443,7 @@ function Messages({
   bigFish,
   snap = false,
   theirName,
+  onGo,
 }: {
   items: Item[];
   meId: string;
@@ -1392,6 +1457,8 @@ function Messages({
   snap?: boolean;
   /** Who you're chatting with (for the names over their lines). */
   theirName?: string;
+  /** Go to a location someone sent. */
+  onGo?: (loc: ChatLocation, from: string) => void;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
@@ -1541,7 +1608,9 @@ function Messages({
                       {m.image_path && <ChatPhoto id={m.id} mine={mine} />}
                       {m.audio_path ? (
                         <VoiceNote id={m.id} seconds={m.audio_seconds ?? 0} mine={mine} />
-                      ) : onlyPhoto ? null : (
+                      ) : onlyPhoto ? null : locationIn(m.body) ? (
+                        <LocationCard loc={locationIn(m.body)!} mine={mine} from={m.sender_name} onGo={onGo} />
+                      ) : (
                         <span className="break-words">{m.body}</span>
                       )}
                     </div>
@@ -1593,7 +1662,9 @@ function Messages({
                     {m.image_path && <ChatPhoto id={m.id} mine={mine} />}
                     {m.audio_path ? (
                       <VoiceNote id={m.id} seconds={m.audio_seconds ?? 0} mine={mine} />
-                    ) : m.image_path && m.body === "Sent a photo" ? null : (
+                    ) : m.image_path && m.body === "Sent a photo" ? null : locationIn(m.body) ? (
+                      <LocationCard loc={locationIn(m.body)!} mine={mine} from={m.sender_name} onGo={onGo} />
+                    ) : (
                       <span className="break-words">{bot ? mintify(m.body) : m.body}</span>
                     )}
                     <span className={cn("ml-2 align-bottom text-[10px]", mine ? "text-white/60" : "text-muted")}>{time(m.created_at)}</span>
@@ -1617,6 +1688,84 @@ function Messages({
         </button>
       )}
     </div>
+  );
+}
+
+const GUIDE_KEY = "nt-chat-guide";
+
+const GUIDE: { emoji: string; title: string; text: string }[] = [
+  { emoji: "💬", title: "Chat with anyone", text: "Tap New chat to find anyone by name, or tap someone's face on the map and choose Message. Only the two of you see a private chat." },
+  { emoji: "📷", title: "Pictures, selfies and voice notes", text: "Use the buttons beside the message box: the picture to send a photo or a selfie, the microphone to hold and talk." },
+  { emoji: "📍", title: "Send your location", text: "In a private chat, tap the red pin to send where you are. They get a notice with a Go there button. Going there costs the usual fare, like any trip." },
+  { emoji: "🛡️", title: "Stay safe", text: "Never share passwords, bank details or your real address. Tap someone's name to see their profile, and Report them if they bother you." },
+];
+
+/** How chat works, one card at a time (the first time you start a chat). */
+function ChatGuide({ step, onStep, onDone }: { step: number; onStep: (n: number) => void; onDone: () => void }) {
+  const g = GUIDE[Math.min(step, GUIDE.length - 1)];
+  const last = step >= GUIDE.length - 1;
+  return (
+    <div className="absolute inset-0 z-20 flex items-end justify-center bg-black/35 p-3 sm:items-center" role="dialog" aria-label="How chat works">
+      <div className="w-full max-w-sm rounded-3xl bg-panel p-5 shadow-2xl">
+        <div className="flex items-start gap-3">
+          <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[#7048e8]/12 text-2xl" aria-hidden>
+            {g.emoji}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+              How chat works · {step + 1} of {GUIDE.length}
+            </p>
+            <h3 className="font-display text-lg font-bold leading-tight">{g.title}</h3>
+          </div>
+        </div>
+        <p className="mt-3 text-sm text-muted">{g.text}</p>
+        <div className="mt-4 flex gap-1">
+          {GUIDE.map((x, i) => (
+            <span key={x.title} className={cn("h-1 flex-1 rounded-full", i <= step ? "bg-[#7048e8]" : "bg-ink/10")} />
+          ))}
+        </div>
+        <div className="mt-4 flex gap-2">
+          {step > 0 ? (
+            <button onClick={() => onStep(step - 1)} className="h-11 rounded-full bg-ink/5 px-4 text-sm font-semibold">
+              Back
+            </button>
+          ) : (
+            <button onClick={onDone} className="h-11 rounded-full bg-ink/5 px-4 text-sm font-semibold">
+              Skip
+            </button>
+          )}
+          <button onClick={() => (last ? onDone() : onStep(step + 1))} className="h-11 flex-1 rounded-full text-sm font-bold text-white" style={{ background: BRAND }}>
+            {last ? "Start chatting" : "Next"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** A location in a message: where, and Go there (the usual fare) for the person it was sent to. */
+function LocationCard({ loc, mine, from, onGo }: { loc: ChatLocation; mine: boolean; from: string; onGo?: (loc: ChatLocation, from: string) => void }) {
+  return (
+    <span className="block min-w-44">
+      <span className="flex items-start gap-2">
+        <span className={cn("mt-0.5 grid size-8 shrink-0 place-items-center rounded-full", mine ? "bg-white/20" : "bg-[#ffe3e3] text-[#e03131]")}>
+          <MapPin className="size-4" aria-hidden />
+        </span>
+        <span className="min-w-0">
+          <b className="block text-[13px] leading-tight">{mine ? "You sent your location" : `${from}'s location`}</b>
+          <span className={cn("block break-words text-xs", mine ? "text-white/80" : "text-muted")}>{loc.label}</span>
+        </span>
+      </span>
+      {!mine && onGo && (
+        <button
+          onClick={() => onGo(loc, from)}
+          className="mt-2 flex h-9 w-full items-center justify-center gap-1.5 rounded-full bg-ink text-xs font-bold text-white"
+        >
+          <Navigation className="size-3.5" aria-hidden /> Go there
+        </button>
+      )}
+      {!mine && <span className="mt-1 block text-[10px] text-muted">Going there costs the usual fare.</span>}
+    </span>
   );
 }
 
@@ -1674,10 +1823,13 @@ function Composer({
   onAudio,
   onPicture,
   onSelfie,
+  onLocation,
   placeholder,
   snap = false,
 }: {
   snap?: boolean;
+  /** Send where you are (private chats). */
+  onLocation?: () => Promise<void>;
   onSend: (text: string) => Promise<boolean>;
   onAudio: (blob: Blob, seconds: number) => Promise<void>;
   onPicture: (p: PhotoPick) => Promise<void>;
@@ -1805,6 +1957,22 @@ function Composer({
                   <button type="button" onClick={() => setPicking((v) => !v)} disabled={busy} className="grid size-8 shrink-0 place-items-center rounded-full text-muted" aria-label="Send a photo">
                     <ImagePlus className="size-[18px]" aria-hidden />
                   </button>
+                  {onLocation && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setBusy(true);
+                        await onLocation();
+                        setBusy(false);
+                      }}
+                      disabled={busy}
+                      className="grid size-8 shrink-0 place-items-center rounded-full text-[#e03131]"
+                      aria-label="Send my location"
+                      title="Send my location"
+                    >
+                      <MapPin className="size-[18px]" aria-hidden />
+                    </button>
+                  )}
                 </>
               )}
             </div>

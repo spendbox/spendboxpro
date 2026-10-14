@@ -10,6 +10,7 @@ import type { HouseInterior, HouseStyle, TownHouse } from "@/lib/houses";
 import type { RegionMap } from "@/lib/world/compile";
 import type { OwnedProperty } from "@/lib/world/owned";
 import { buildingFor, buildingTop, ESTATE_KINDS, wealthOf, type Building, type EstatePlan } from "@/lib/world/buildings";
+import { estateRule, growthOf } from "@/lib/world/growth";
 import { ABBREV, CLUB_NAMES, eggChoices, FLAVORS, landmarkChoices, nameOf, RESTAURANT_NAMES, type EasterEgg, type Flavor, type LandmarkKey, type Named } from "./places";
 
 export type TileKind =
@@ -1620,10 +1621,13 @@ function faceOf(plan: CityPlan, x: number, z: number): 0 | 1 | 2 | 3 {
  * the same kind of house, one wall round the outside, a gate. Null for most blocks.
  */
 function estateOf(plan: CityPlan, x: number, z: number, wealth: number): EstatePlan | null {
-  if (wealth < 0.35 || plan.xAt.has(x) || plan.zAt.has(z)) return null;
-  const kx = below(plan.xs, x);
-  const kz = below(plan.zs, z);
-  if (hash(kx, kz, plan.seed + 7800) > 0.16) return null;
+  // As the city grows (src/lib/world/growth.ts) estates are more common, reach less wealthy areas,
+  // and span several blocks: one name, one estate, block after block.
+  const rule = estateRule(growthOf(plan.region!.region.id));
+  if (wealth < rule.wealth || plan.xAt.has(x) || plan.zAt.has(z)) return null;
+  const kx = Math.floor(below(plan.xs, x) / rule.blocks);
+  const kz = Math.floor(below(plan.zs, z) / rule.blocks);
+  if (hash(kx, kz, plan.seed + 7800) > rule.chance) return null;
   const r = (k: number) => hash(kx, kz, plan.seed + 7801 + k);
   const sides: [number, number][] = [[0, 1], [1, 0], [0, -1], [-1, 0]];
   const walls = sides.map(([dx, dz]) => isRoad(plan, x + dx, z + dz)) as [boolean, boolean, boolean, boolean];
@@ -1644,7 +1648,7 @@ function withBuilding(plan: CityPlan, t: Tile) {
   if (!plan.region) return;
   const wealth = wealthOf(plan.region.landPriceAt(t.x, t.z));
   const estate = t.kind === "house" ? estateOf(plan, t.x, t.z, wealth) : null;
-  const b = buildingFor(plan.region.region.id, t, densityAt(plan, t.x, t.z), plan.seed, wealth, { face: faceOf(plan, t.x, t.z), estate });
+  const b = buildingFor(plan.region.region.id, t, densityAt(plan, t.x, t.z), plan.seed, wealth, { face: faceOf(plan, t.x, t.z), estate, growth: growthOf(plan.region.region.id) });
   if (b) {
     t.building = b;
     t.top = buildingTop(b);

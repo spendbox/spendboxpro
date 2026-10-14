@@ -34,6 +34,9 @@ const ACCENTS = [0x8d6e63, 0x1c7ed6, 0x2b8a3e, 0xc92a2a, 0x495057, 0xe8590c];
 const pick = (list: number[], v: number) => list[Math.floor(v * list.length) % list.length];
 const pickOf = <T,>(list: readonly T[], v: number) => list[Math.floor(v * list.length) % list.length];
 
+/** Draw a storey band every this many storeys (1 up to 24 storeys; fewer, so about 24 bands, above). */
+const bandEvery = (storeys: number) => Math.max(1, Math.ceil(storeys / 24));
+
 export function buildingParts(t: Tile, b: Building, pal: Palette, B0: BoxFn, add0: AddFn, tree0: TreeFn) {
   const { x, z } = t;
   const [l0, l1, l2, l3, l4] = b.look;
@@ -70,9 +73,13 @@ export function buildingParts(t: Tile, b: Building, pal: Palette, B0: BoxFn, add
       tanks(dx + w * 0.2, y + 0.05, dz - d * 0.15, 1);
     }
   };
-  /** A band of windows round a block, one per storey. */
+  /**
+   * A band of windows round a block, one per storey. Very tall blocks (the city grows, docs/GROWTH.md)
+   * get one every few storeys instead, so a 60-storey tower costs a phone no more than a 24-storey one.
+   */
   const windows = (dx: number, dz: number, w: number, d: number, from: number, storeys: number, color = WINDOW) => {
-    for (let k = 0; k < storeys; k++) B(dx, from + k * STOREY + STOREY * 0.35, dz, w + 0.012, STOREY * 0.32, d + 0.012, color, 0, "glass");
+    const every = bandEvery(storeys);
+    for (let k = 0; k < storeys; k += every) B(dx, from + k * STOREY + STOREY * 0.35, dz, w + 0.012, STOREY * 0.32 * Math.min(every, 2), d + 0.012, color, 0, "glass");
   };
   /** A block: walls, windows on each storey, a coloured band round its foot. */
   const block = (dx: number, dz: number, w: number, d: number, storeys: number, color = wall, glass = WINDOW) => {
@@ -218,7 +225,7 @@ export function buildingParts(t: Tile, b: Building, pal: Palette, B0: BoxFn, add
       const shape = l3;
       if (shape < 0.45) {
         block(0, -0.04, 0.66, 0.5, b.storeys);
-        for (let k = 1; k < b.storeys; k++) B(0, BASE + k * STOREY, 0.23, 0.53, 0.025, 0.1, 0xe9ecef);
+        for (let k = 1; k < b.storeys; k += bandEvery(b.storeys)) B(0, BASE + k * STOREY, 0.23, 0.53, 0.025, 0.1, 0xe9ecef);
         roof(0, BASE + h, -0.04, 0.66, 0.5, l2 > 0.6 ? 0.9 : l2);
         tanks(0.12, BASE + h + 0.05, -0.12, 2);
       } else if (shape < 0.7) {
@@ -261,7 +268,7 @@ export function buildingParts(t: Tile, b: Building, pal: Palette, B0: BoxFn, add
       const color = pick(pal.towers, l1);
       if (l3 < 0.5) {
         B(0, BASE, 0, w, h, w, color);
-        for (let k = 1; k < b.storeys; k++) B(0, BASE + k * STOREY, 0, w + 0.06, 0.03, w + 0.06, 0xf1f3f5);
+        for (let k = 1; k < b.storeys; k += bandEvery(b.storeys)) B(0, BASE + k * STOREY, 0, w + 0.06, 0.03, w + 0.06, 0xf1f3f5);
         windows(0, 0, w, w, BASE, b.storeys, 0x4c6e91);
         B(0, BASE + h, 0, w * 0.6, STOREY, w * 0.6, color);
       } else {
@@ -309,7 +316,7 @@ export function buildingParts(t: Tile, b: Building, pal: Palette, B0: BoxFn, add
       for (let k = 0; k < 3; k++) B(-0.22 + k * 0.22, BASE, 0.195, 0.18, STOREY * 0.7, 0.012, pick(SHUTTERS, l1 + k * 0.29));
       windows(0, -0.06, 0.7, 0.5, BASE + STOREY, b.storeys - 1);
       B(0, BASE + STOREY, 0.2, 0.7, 0.03, 0.08, 0xe9ecef);
-      if (l3 > 0.5) for (let k = 2; k < b.storeys; k++) B(0, BASE + k * STOREY, 0.2, 0.5, 0.025, 0.08, 0xe9ecef);
+      if (l3 > 0.5) for (let k = 2; k < b.storeys; k += bandEvery(b.storeys)) B(0, BASE + k * STOREY, 0.2, 0.5, 0.025, 0.08, 0xe9ecef);
       roof(0, BASE + h, -0.06, 0.7, 0.5, l2 > 0.5 ? 0.9 : l2);
       tanks(-0.15, BASE + h + 0.05, -0.1, 2);
       break;

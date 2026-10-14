@@ -13,10 +13,15 @@ import { Billboard } from "../../advertise/billboard";
 import { usePicture } from "../../advertise/use-picture";
 import { blank, snapshotScene } from "../city/snapshot";
 import { searchable, type SearchHit } from "./map-search";
+import { BILLBOARD_STEPS, BillboardWizard } from "./billboard-wizard";
 
-// Advertising, right on the map (docs/BUSINESS.md): choose the state your ad shows in, find a
-// building (search an area, or tap an amount and step through buildings at that price, or tap one
-// on the map), add your pictures and see it lit up on the real 3D city, then your details and pay.
+// Advertising, right on the map (docs/BUSINESS.md, docs/ADS.md). First a choice:
+//   - Billboard ads: your picture on the city's billboards, a weekly budget for 1 to 8 weeks
+//     (./billboard-wizard.tsx). It goes up on the billboards round you as you make it.
+//   - A building of your own, by the month: choose the state, find a building (search an area, tap
+//     a monthly amount and step through buildings at that price, or tap one on the map), add your
+//     pictures and see it lit up on the real 3D city, then your details, how many months, and pay.
+//     It comes with your design on the billboards too.
 // The map behind stays live the whole time: the camera flies to each building.
 
 /** Opens the advertising panel from anywhere in the game (a billboard, a building, a menu). */
@@ -35,12 +40,14 @@ const STATES = [
 ];
 const stateRegion = (name: string) => Object.keys(REGIONS).find((id) => REGIONS[id].name.toLowerCase() === name.toLowerCase()) ?? null;
 
-/** Amounts to tap: the map takes you to a free building at that yearly price. */
-const AMOUNTS = [20_000, 35_000, 50_000, 80_000, 120_000, 250_000, 500_000, 1_000_000];
+/** Amounts to tap: the map takes you to a free building at that price a month. */
+const AMOUNTS = [5_000, 10_000, 20_000, 40_000, 60_000, 100_000, 150_000, 250_000];
 const naira = (n: number) => `₦${Math.round(n).toLocaleString("en-NG")}`;
 const shortNaira = (n: number) => (n >= 1_000_000 ? `₦${n / 1_000_000}m` : `₦${Math.round(n / 1000)}k`);
 
-const STEPS = ["Where", "Your pictures", "Details & pay"];
+type Mode = "choose" | "billboard" | "building";
+
+const BUILDING_STEPS = ["Pick a building", "Your pictures", "Details & pay"];
 
 /**
  * A building drawn in 3D (a little isometric block), bigger the dearer it is: a ₦20k shopfront is
@@ -98,8 +105,13 @@ export function AdvertisePanel({
   onClose: () => void;
 }) {
   const [step, setStep] = useState(0);
-  /** First, what advertising here is (then the steps). */
-  const [intro, setIntro] = useState(true);
+  /** First, what kind of advertising (then its steps). */
+  const [mode, setMode] = useState<Mode>("choose");
+  const STEPS = mode === "billboard" ? BILLBOARD_STEPS : BUILDING_STEPS;
+  const modeRef = useRef<Mode>(mode);
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
   const [small, setSmall] = useState(false);
   const [state, setState] = useState(region.region.name);
   const [q, setQ] = useState("");
@@ -110,6 +122,11 @@ export function AdvertisePanel({
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Each step (and any problem) starts at the top of the panel.
+  const scroller = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    scroller.current?.scrollTo({ top: 0 });
+  }, [mode, step, error]);
   const [chosen, setChosen] = useState<LeaseOffer | null>(null);
   const logo = usePicture();
   const board = usePicture();
@@ -134,8 +151,9 @@ export function AdvertisePanel({
 
   // The map shows the building you're looking at lit up with your name, and your design on the billboards.
   useEffect(() => {
+    if (mode !== "building") return;
     onPreview(current ? { building: current.building, name: name.trim() || "YOUR NAME", line: line.trim(), logo: logo.url, billboard: board.url ?? logo.url } : null);
-  }, [current, name, line, logo.url, board.url, onPreview]);
+  }, [mode, current, name, line, logo.url, board.url, onPreview]);
   useEffect(() => () => onPreview(null), [onPreview]);
 
   // A building tapped on the map: that one, if it's free to lease.
@@ -143,6 +161,8 @@ export function AdvertisePanel({
   useEffect(() => {
     if (!picked || picked.at === lastPick.current) return;
     lastPick.current = picked.at;
+    // Making a billboard ad: a tap on the map is just looking round.
+    if (modeRef.current === "billboard") return;
     let alive = true;
     void offerFor(picked.id).then((r) => {
       if (!alive) return;
@@ -150,7 +170,11 @@ export function AdvertisePanel({
       setError(null);
       setChosen(r.offer);
       setSmall(false);
-      setStep((s) => (s === 2 ? 1 : s));
+      // A building tapped (or the panel opened from one): that's the building way.
+      if (modeRef.current !== "building") {
+        setMode("building");
+        setStep(0);
+      } else setStep((s) => (s === 2 ? 1 : s));
     });
     return () => {
       alive = false;
@@ -168,7 +192,7 @@ export function AdvertisePanel({
     setBusy(false);
     setList(found);
     setIndex(0);
-    setListNote(found.length ? `Free buildings at about ${naira(v)} a year` : "");
+    setListNote(found.length ? `Free buildings at about ${naira(v)} a month` : "");
     if (!found.length) setError(`No free building at about ${naira(v)} right now. Try another amount.`);
     flyToOffer(found[0] ?? null);
   }
@@ -218,66 +242,24 @@ export function AdvertisePanel({
     setStep(n);
     setError(null);
     setSmall(false);
-    if (n === 1 && !shot) setTimeout(() => void takeShot(), 300);
+    if (mode === "building" && n === 1 && !shot) setTimeout(() => void takeShot(), 300);
   };
-
-  if (intro)
-    return (
-      <div className="pointer-events-auto fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-3 sm:items-center" role="dialog" aria-label="How advertising works">
-        <div className="max-h-[88dvh] w-full max-w-md overflow-y-auto rounded-3xl bg-panel p-5 shadow-2xl">
-          <div className="flex items-start gap-3">
-            <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-gold/20 text-gold-dark">
-              <Megaphone className="size-5" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <h2 className="font-display text-xl font-extrabold leading-tight">Put your business on the map</h2>
-              <p className="mt-0.5 text-sm text-muted">Your brand on a real building in {region.region.name}, seen by everyone who plays there.</p>
-            </div>
-            <button onClick={onClose} className="grid size-9 shrink-0 place-items-center rounded-full bg-ink/5" aria-label="Close">
-              <X className="size-4" />
-            </button>
-          </div>
-          <ul className="mt-4 space-y-3 text-sm">
-            <li className="flex gap-3">
-              <MapPin className="mt-0.5 size-4 shrink-0 text-gold-dark" />
-              <span>
-                <b>A building of your own for a year.</b> Pick the state your customers are in, then a building: the bigger it is and the dearer the area, the more it costs ({naira(LEASE_MIN)} to {naira(LEASE_MAX)} a year). You see it in 3D first.
-              </span>
-            </li>
-            <li className="flex gap-3">
-              <ImagePlus className="mt-0.5 size-4 shrink-0 text-gold-dark" />
-              <span>
-                <b>Your pictures on it.</b> Your logo and a billboard picture go on the building, lit up at night, and come round on the city&apos;s billboards in that state (each board shows a new ad every few seconds).
-              </span>
-            </li>
-            <li className="flex gap-3">
-              <Camera className="mt-0.5 size-4 shrink-0 text-gold-dark" />
-              <span>
-                <b>See it before you pay.</b> A preview shows exactly how it will look lit up on the map.
-              </span>
-            </li>
-            <li className="flex gap-3">
-              <Check className="mt-0.5 size-4 shrink-0 text-gold-dark" />
-              <span>
-                <b>Pay once, then manage it.</b> Pay in naira by card or transfer (Paystack). Afterwards, sign in to your ad page to see how many people saw it, change pictures and add upgrades.
-              </span>
-            </li>
-          </ul>
-          <p className="mt-4 rounded-2xl bg-panel-2 px-3 py-2 text-xs text-muted">Three steps: where, your pictures, then details and pay. You can go back at any time.</p>
-          <button onClick={() => setIntro(false)} className="mt-4 h-12 w-full rounded-full bg-gold font-semibold text-ink">
-            Start
-          </button>
-        </div>
-      </div>
-    );
+  /** Back: a step back, or (from the first step) to the choice. */
+  const back = () => {
+    if (step > 0) return go(step - 1);
+    setMode("choose");
+    setChosen(null);
+    setError(null);
+    onPreview(null);
+  };
 
   return (
     <div className="pointer-events-auto absolute inset-x-0 bottom-0 z-40 flex justify-center px-2 pb-2 sm:bottom-3 sm:px-3">
       <div className="flex max-h-[min(62vh,640px)] w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-panel shadow-2xl ring-1 ring-line">
         {/* The top: where you are in the steps; tap the arrow to see more of the map. */}
         <div className="flex items-center gap-2 border-b border-line px-3 py-2">
-          {step > 0 ? (
-            <button onClick={() => go(step - 1)} className="grid size-9 shrink-0 place-items-center rounded-full bg-ink/5" aria-label="Back">
+          {mode !== "choose" ? (
+            <button onClick={back} className="grid size-9 shrink-0 place-items-center rounded-full bg-ink/5" aria-label="Back">
               <ArrowLeft className="size-4" />
             </button>
           ) : (
@@ -286,12 +268,16 @@ export function AdvertisePanel({
             </span>
           )}
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-bold">Advertise · {STEPS[step]}</p>
-            <div className="mt-1 flex gap-1">
-              {STEPS.map((s, i) => (
-                <span key={s} className={`h-1 flex-1 rounded-full ${i <= step ? "bg-gold" : "bg-ink/10"}`} />
-              ))}
-            </div>
+            <p className="truncate text-sm font-bold">
+              {mode === "choose" ? "Advertise on the map" : `${mode === "billboard" ? "Billboard ad" : "Your building"} · ${STEPS[step]}`}
+            </p>
+            {mode !== "choose" && (
+              <div className="mt-1 flex gap-1">
+                {STEPS.map((s, i) => (
+                  <span key={s} className={`h-1 flex-1 rounded-full ${i <= step ? "bg-gold" : "bg-ink/10"}`} />
+                ))}
+              </div>
+            )}
           </div>
           <button onClick={() => setSmall((v) => !v)} className="grid size-9 shrink-0 place-items-center rounded-full bg-ink/5" aria-label={small ? "Show the panel" : "See the map"}>
             {small ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
@@ -302,20 +288,60 @@ export function AdvertisePanel({
         </div>
 
         {small ? (
+          mode === "building" &&
           current && (
             <button onClick={() => setSmall(false)} className="flex items-center gap-2 px-3 py-2 text-left text-sm">
               <MapPin className="size-4 shrink-0 text-gold-dark" />
               <span className="min-w-0 flex-1 truncate">
                 {current.what}, {current.area}
               </span>
-              <b className="shrink-0">{naira(current.priceNaira)}</b>
+              <b className="shrink-0">{naira(current.priceNaira)}/month</b>
             </button>
           )
         ) : (
-          <div className="overflow-y-auto overscroll-contain px-3 pb-4 pt-3">
-            {error && <p className="mb-3 rounded-xl bg-hit/10 px-3 py-2 text-sm text-hit">{error}</p>}
+          <div ref={scroller} className="overflow-y-auto overscroll-contain px-3 pb-4 pt-3">
+            {error && mode !== "billboard" && <p className="mb-3 rounded-xl bg-hit/10 px-3 py-2 text-sm text-hit">{error}</p>}
 
-            {step === 0 && (
+            {mode === "choose" && (
+              <div className="space-y-2.5">
+                <p className="text-sm text-muted">Everyone playing in {region.region.name} sees it. What would you like?</p>
+                <button
+                  onClick={() => {
+                    setMode("billboard");
+                    setStep(0);
+                    setError(null);
+                  }}
+                  className="flex w-full items-start gap-3 rounded-2xl bg-ink/[0.04] p-3 text-left ring-1 ring-line hover:bg-ink/[0.07]"
+                >
+                  <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#e7f5ff] text-2xl">📺</span>
+                  <span className="min-w-0 flex-1">
+                    <b className="block">Billboard ads</b>
+                    <span className="block text-xs text-muted">Your picture on the city&apos;s billboards. You choose how much a week and for how many weeks (from ₦5,000 a week).</span>
+                  </span>
+                </button>
+                <button
+                  onClick={() => {
+                    setMode("building");
+                    setStep(0);
+                    setError(null);
+                  }}
+                  className="flex w-full items-start gap-3 rounded-2xl bg-gold/15 p-3 text-left ring-1 ring-gold/40 hover:bg-gold/25"
+                >
+                  <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-gold/30 text-2xl">🏢</span>
+                  <span className="min-w-0 flex-1">
+                    <b className="block">A building of your own</b>
+                    <span className="block text-xs text-muted">
+                      Your name lit up on a real building, and your picture on the billboards too. Paid by the month ({naira(LEASE_MIN)} to {naira(LEASE_MAX)} a month, by size and area).
+                    </span>
+                  </span>
+                </button>
+                <p className="text-[11px] text-muted">You see it on the map before you pay. You can go back at any time.</p>
+              </div>
+            )}
+
+            {mode === "billboard" && <BillboardWizard step={step} go={go} regionId={regionId} onPreview={onPreview} />}
+
+            {mode === "building" && step === 0 && (
               <div className="space-y-4">
                 <div>
                   <p className="text-xs font-semibold text-muted">Which state should your ad show in?</p>
@@ -373,7 +399,7 @@ export function AdvertisePanel({
                     </div>
 
                     <div>
-                      <p className="text-xs font-semibold text-muted">Or tap an amount (a year): the map takes you to a building at that price</p>
+                      <p className="text-xs font-semibold text-muted">Or tap an amount a month: the map takes you to a building at that price</p>
                       <div className="-mx-1 mt-1.5 flex gap-1.5 overflow-x-auto px-1 pb-1">
                         {AMOUNTS.map((a) => (
                           <button
@@ -397,7 +423,7 @@ export function AdvertisePanel({
                           value={typed}
                           onChange={(e) => setTyped(e.target.value)}
                           inputMode="numeric"
-                          placeholder="Your own amount, e.g. 150000"
+                          placeholder="Your own amount a month, e.g. 30000"
                           className="h-10 min-w-0 flex-1 rounded-full bg-ink/[0.05] px-4 text-base outline-none ring-gold focus:ring-2"
                         />
                         <button className="h-10 shrink-0 rounded-full bg-ink px-4 text-sm font-semibold text-white">Go</button>
@@ -423,7 +449,7 @@ export function AdvertisePanel({
                               </p>
                               <p className="mt-1">
                                 <b className="font-display text-lg font-extrabold">{naira(current.priceNaira)}</b>
-                                <span className="text-xs text-muted"> a year</span>
+                                <span className="text-xs text-muted"> a month</span>
                               </p>
                             </div>
                           </div>
@@ -453,7 +479,7 @@ export function AdvertisePanel({
               </div>
             )}
 
-            {step === 1 && current && (
+            {mode === "building" && step === 1 && current && (
               <div className="space-y-3">
                 <p className="text-sm text-muted">
                   Upload the pictures for your ad. Your logo goes on <b className="text-ink">{current.what.toLowerCase()}</b> in {current.area}; your billboard picture goes round the city&apos;s billboards.
@@ -487,7 +513,7 @@ export function AdvertisePanel({
               </div>
             )}
 
-            {step === 2 && current && (
+            {mode === "building" && step === 2 && current && (
               <div className="space-y-3">
                 <div className="flex items-center gap-3 rounded-2xl bg-ink/[0.04] p-3">
                   <div className="size-14 shrink-0">
@@ -501,7 +527,7 @@ export function AdvertisePanel({
                       {logo.file ? "Logo" : "No logo"} · {board.file ? "billboard picture" : "no billboard picture"} ready to upload
                     </p>
                   </div>
-                  <b className="shrink-0">{naira(current.priceNaira)}</b>
+                  <b className="shrink-0">{naira(current.priceNaira)}/month</b>
                 </div>
                 <p className="flex items-start gap-2 rounded-xl bg-gold/15 px-3 py-2 text-xs">
                   <Check className="mt-0.5 size-3.5 shrink-0 text-gold-dark" />

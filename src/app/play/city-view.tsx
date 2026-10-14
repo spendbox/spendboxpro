@@ -29,6 +29,7 @@ import {
   type Tile,
 } from "@/lib/city/layout";
 import { ABBREV } from "@/lib/city/places";
+import { growthOf } from "@/lib/world/growth";
 import { regionMap } from "@/lib/world";
 import { GATED_SPOTS, type RegionMap } from "@/lib/world/compile";
 import { toTile } from "@/lib/world/geo";
@@ -7717,7 +7718,8 @@ export function CityView({
     }
     function setOwned(list: OwnedProperty[] | undefined) {
       const next = list ?? [];
-      const key = next.map((o) => `${o.id}:${o.name ?? ""}`).join("|");
+      // A grown building (more storeys) and a grown city (docs/GROWTH.md) are built again too.
+      const key = `${regionNow ? growthOf(regionNow.region.id) : 0}#` + next.map((o) => `${o.id}:${o.name ?? ""}:${o.building?.storeys ?? ""}:${o.building?.units?.length ?? ""}`).join("|");
       if (key === ownedKey) return;
       ownedKey = key;
       ownedNow = next;

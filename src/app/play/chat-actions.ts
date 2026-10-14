@@ -3,6 +3,10 @@
 import { pushTo } from "@/lib/push";
 import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { regionMap } from "@/lib/world";
+import { ownedSpot } from "@/lib/world/owned";
+import { locationBody } from "@/lib/chat-location";
+import { spiralIndex } from "@/lib/city/layout";
 
 // Chat for the current round, in places: each level of a building (ground "b:<tile>:g",
 // floor n "b:<tile>:f<n>", rooftop "b:<tile>:r") and each hot-air balloon ("balloon:<k>") is
@@ -129,6 +133,41 @@ export async function sendMessage(text: string, target: ChatTarget): Promise<Res
   if (error || !data) return { ok: false, error: friendly(error?.message, "Couldn't send. Try again.") };
   // A private message: a notification on their phone (if they turned them on).
   if (t.to) await pushTo(t.to).catch(() => {});
+  return { ok: true, message: data as ChatMessage };
+}
+
+/**
+ * Send someone where you are (docs/CHAT.md): a private message with a location card and Go there.
+ * Where: the street you're walking on (near), or the building the game has you at (or your home).
+ */
+export async function sendLocation(to: string, near?: { region: string; x: number; z: number } | null): Promise<Result<{ message: ChatMessage }>> {
+  const s = await me();
+  if (!s) return { ok: false, error: "Sign in to chat." };
+  if (s.frozen) return { ok: false, error: FRIENDLY.frozen };
+  const t = cleanTarget({ to });
+  if (!t?.to) return { ok: false, error: FRIENDLY.bad_target };
+  let spot: { region: string; x: number; z: number } | null = null;
+  let building: string | null = null;
+  const map = near ? regionMap(near.region) : null;
+  if (near && map && Number.isFinite(near.x) && Number.isFinite(near.z) && map.inside(Math.round(near.x), Math.round(near.z))) {
+    spot = { region: near.region, x: Math.round(near.x), z: Math.round(near.z) };
+  } else {
+    const { data: life } = await s.db.from("lives").select("at_place, home_unit").eq("user_id", s.userId).maybeSingle();
+    building = String(life?.at_place ?? life?.home_unit ?? "").split("/")[0] || null;
+    const o = building ? ownedSpot(building) : null;
+    if (o) spot = { region: o.region, x: o.x, z: o.z };
+  }
+  const where = spot ? regionMap(spot.region) : null;
+  if (!spot || !where) return { ok: false, error: "We don't know where you are yet. Go somewhere on the map first." };
+  const { data: named } = building ? await s.db.from("property_buildings").select("name").eq("building_id", building).maybeSingle() : { data: null };
+  const area = where.areaAt(spot.x, spot.z) || where.region.name;
+  const label = named?.name ? `${String(named.name)}, ${area}` : area;
+  const { data, error } = await s.db.rpc("chat_send", { p_user: s.userId, p_room: null, p_to: t.to, p_body: locationBody(label, spot.region, spot.x, spot.z) });
+  if (error || !data) return { ok: false, error: friendly(error?.message, "Couldn't send. Try again.") };
+  // A notice too (it's what their phone shows, and it stays in their notices with Go there).
+  const from = (data as ChatMessage).sender_name || "Someone";
+  await s.db.rpc("notify", { p_user: t.to, p_round: null, p_kind: "location", p_body: `📍 ${from} sent you their location: ${label}. Tap to go there (the usual fare).`, p_tile: spiralIndex(spot.x, spot.z) });
+  await pushTo(t.to).catch(() => {});
   return { ok: true, message: data as ChatMessage };
 }
 

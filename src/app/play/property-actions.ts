@@ -4,7 +4,7 @@ import { makePlan, spiralIndex, tileAt, type CityPlan } from "@/lib/city/layout"
 import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { REGIONS, regionMap } from "@/lib/world";
-import type { Building } from "@/lib/world/buildings";
+import { grownBuilding, type Building } from "@/lib/world/buildings";
 import { cleanPropertyName, ownedSpot } from "@/lib/world/owned";
 import { BUY_TAX, rentPerDay, type AssetsData, type BuildingOwner, type OwnedBuildingRow, type PropertyResult } from "@/lib/world/property-api";
 import { landNow, toMint, valueOf } from "@/lib/world/value";
@@ -14,6 +14,7 @@ import { cheapestCommute, cheapestRide, tripFareMint, tripKmBetween, type Commut
 import { ferryKmBetween } from "@/lib/world/trips";
 import { FIND_CHANCE, FINDS, mintOf, shopKind } from "@/lib/world/items";
 import { collectPay } from "./work-actions";
+import { syncGrowth } from "@/lib/world/growth-server";
 
 // Owning property on the real map (docs/PROPERTY.md; the database part is
 // game-db/038_property.sql). The price of a unit is always worked out here, from the map, never
@@ -57,6 +58,8 @@ function say(message: string | undefined): PropertyResult {
 async function buildingAt(buildingId: string): Promise<{ building: Building; x: number; z: number; region: string } | null> {
   const spot = ownedSpot(buildingId);
   if (!spot || !REGIONS[spot.region]) return null;
+  // The city as big as it has grown (docs/GROWTH.md), the same as players see it.
+  await syncGrowth(spot.region);
   const { data } = await createAdminClient().from("property_buildings").select("snapshot").eq("building_id", buildingId).maybeSingle();
   if (data?.snapshot) return { building: data.snapshot as Building, ...spot };
   const plan = planFor(spot.region);
@@ -121,7 +124,34 @@ export async function buyUnit(unitId: string): Promise<PropertyResult> {
   });
   if (error) return say(error.message);
   const d = (data ?? {}) as Record<string, unknown>;
+  // That may have sold the block out: if so, it grows (more storeys, new units for sale).
+  await growIfSoldOut(m[1], found.region).catch((e) => console.error("Growing a building failed", m[1], e));
   return { ok: true, coins: n(d.coins), home: d.home === true };
+}
+
+/**
+ * A block whose units are all owned (by two players or more) grows a few storeys, and the new units go
+ * on sale (docs/GROWTH.md; game-db/091 checks it's sold out and nobody grew it meanwhile).
+ */
+async function growIfSoldOut(buildingId: string, region: string) {
+  const db = createAdminClient();
+  const [{ data: row }, { count }] = await Promise.all([
+    db.from("property_buildings").select("snapshot").eq("building_id", buildingId).maybeSingle(),
+    db.from("property_units").select("unit_id", { count: "exact", head: true }).eq("building_id", buildingId).not("owner_id", "is", null),
+  ]);
+  const b = row?.snapshot as Building | undefined;
+  if (!b || (count ?? 0) < b.units.length) return;
+  const map = regionMap(region);
+  const grown = map ? grownBuilding(b, map.region.seed) : null;
+  if (!grown) return;
+  const { data: grew } = await db.rpc("building_grow", { p_building: buildingId, p_snapshot: grown, p_before: b.units.length });
+  if (grew !== true) return;
+  // Everyone who owns part of it hears about it.
+  const { data: owners } = await db.from("property_units").select("owner_id").eq("building_id", buildingId);
+  const fresh = grown.units.length - b.units.length;
+  for (const id of new Set((owners ?? []).map((o) => String(o.owner_id)))) {
+    await db.rpc("notify", { p_user: id, p_round: null, p_kind: "gift", p_body: `Your building sold out, so it's growing: ${grown.storeys - b.storeys} more storeys, ${fresh} new units for sale.` });
+  }
 }
 
 /** Make one of your homes your home. */

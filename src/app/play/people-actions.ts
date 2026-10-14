@@ -79,22 +79,30 @@ export type PlayerCardData = {
 
 export type Gender = "male" | "female";
 
+/** Points from taking part (game-db/093's four parts, added up). */
+const engagementOf = (v: unknown) => {
+  const e = (v ?? {}) as Record<string, unknown>;
+  return n(e.time) + n(e.talk) + n(e.kind) + n(e.people);
+};
+
 /** Anyone's card: where they live, their job, car, inventions, friends and reputation. */
 export async function playerCard(id: string): Promise<PlayerCardData | null> {
   const userId = await currentUserId();
   if (!userId || !/^[0-9a-f-]{36}$/i.test(String(id))) return null;
-  const [{ data }, { data: liked }, { data: who }, { data: ch }] = await Promise.all([
+  const [{ data }, { data: liked }, { data: who }, { data: ch }, { data: eng }] = await Promise.all([
     createAdminClient().rpc("player_card", { p_viewer: userId, p_target: id }),
     createAdminClient().rpc("marks_liked", { p_user: id }),
     createAdminClient().from("profiles").select("gender").eq("id", id).maybeSingle(),
     // Challenges hosted and won (game-db/070; nothing until it's run).
     createAdminClient().rpc("challenge_rep", { p_user: id }),
+    // Taking part (game-db/093; kept an hour, so a card opens fast).
+    createAdminClient().rpc("engagement_rep", { p_user: id }),
   ]);
   if (!data) return null;
   const d = data as Record<string, unknown>;
   const spot = d.home ? ownedSpot(String(d.home).split("/")[0]) : null;
   const map = spot ? regionMap(spot.region) : null;
-  const rep = reputationOf({ propertyMint: n(d.property), homes: d.home ? 1 : 0, itemRep: n(d.thingsRep), inventionsSold: n(d.inventionsSold), penalty: n(d.penalty), marksLiked: n(liked), challenges: challengeRep(n((ch as { hosted?: number } | null)?.hosted), n((ch as { won?: number } | null)?.won)) });
+  const rep = reputationOf({ propertyMint: n(d.property), homes: d.home ? 1 : 0, itemRep: n(d.thingsRep), inventionsSold: n(d.inventionsSold), penalty: n(d.penalty), marksLiked: n(liked), challenges: challengeRep(n((ch as { hosted?: number } | null)?.hosted), n((ch as { won?: number } | null)?.won)), engagement: engagementOf(eng) });
   return {
     id: String(d.id),
     name: String(d.name),

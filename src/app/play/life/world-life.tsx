@@ -43,6 +43,7 @@ import { JobsHere, type JobsContext } from "./jobs-here";
 import type { SearchHit } from "./map-search";
 import { HomeFinder } from "./home-finder";
 import { StartLife } from "./start-life";
+import { growthOf, setGrowth } from "@/lib/world/growth";
 import { useLife } from "./use-life";
 import { confirmTopUp } from "../topup-actions";
 import { moveOut, myRental, renameHome, type Rental } from "../property-actions";
@@ -142,6 +143,28 @@ export function useWorldLife({
   onWallet?: () => void;
 }) {
   const region = useMemo(() => regionMap(regionId), [regionId]);
+  // How far the city has grown with its players (docs/GROWTH.md): buildings nobody owns are drawn
+  // as tall as the server prices them. Asked when the city opens, and every ten minutes.
+  const [growth, setGrowthNow] = useState(0);
+  useEffect(() => {
+    if (!regionId || pretend) return;
+    let alive = true;
+    const ask = () =>
+      void fetch(`/api/city-growth?region=${regionId}`)
+        .then((r) => (r.ok ? (r.json() as Promise<{ level: number }>) : null))
+        .then((g) => {
+          if (!alive || !g) return;
+          setGrowth(regionId, g.level);
+          setGrowthNow(growthOf(regionId));
+        })
+        .catch(() => {});
+    ask();
+    const t = setInterval(ask, 10 * 60_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [regionId, pretend]);
   const { assets, owned, loaded, refresh } = useLife(api, signedIn ? regionId : null);
   const [property, setProperty] = useState<PropertyInfo | null>(null);
   const [owners, setOwners] = useState<BuildingOwner[] | null>(null);
@@ -204,7 +227,8 @@ export function useWorldLife({
   const [adPick, setAdPick] = useState<{ id: string; at: number } | null>(null);
   const [adPreview, setAdPreview] = useState<AdPreview | null>(null);
   const businesses = useMemo<MapBusiness[]>(() => {
-    if (!adPreview) return leased;
+    // Billboards only (no building): the preview goes on the billboards, nothing lights up.
+    if (!adPreview || !adPreview.building) return leased;
     const p: MapBusiness = {
       id: "preview",
       building: adPreview.building,
@@ -1606,7 +1630,9 @@ export function useWorldLife({
 
   // Leased buildings stand as their business made them (a refit, more storeys), with its name.
   const shown = useMemo<OwnedProperty[]>(() => {
-    if (!region || !businesses.length) return owned;
+    // A new list when the city grows, so the 3D city is built again, taller (growthOf is read there).
+    void growth;
+    if (!region || !businesses.length) return [...owned];
     const plan = planOf(region);
     const extra: OwnedProperty[] = [];
     for (const b of businesses) {
@@ -1615,8 +1641,8 @@ export function useWorldLife({
       if (!base || owned.some((o) => o.id === b.building)) continue;
       extra.push({ id: b.building, building: { ...base, kind: b.kind ?? base.kind, storeys: b.storeys ?? base.storeys, state: "built" } as typeof base, name: b.name });
     }
-    return extra.length ? [...owned, ...extra] : owned;
-  }, [owned, businesses, region]);
+    return [...owned, ...extra];
+  }, [owned, businesses, region, growth]);
 
   // Every leased building's design goes on the billboards (its logo until it uploads one; with
   // neither, a billboard of its name and what it's about).
@@ -1624,8 +1650,14 @@ export function useWorldLife({
     () =>
       businesses
         .filter((b) => b.billboard && (b.billboardImage || b.logo || b.name))
-        .map((b) => ({ id: `bz:${b.id}`, image: b.billboardImage || b.logo || "", headline: b.about.slice(0, 60), brand: b.name, link: b.website })),
-    [businesses],
+        .map((b) => ({ id: `bz:${b.id}`, image: b.billboardImage || b.logo || "", headline: b.about.slice(0, 60), brand: b.name, link: b.website }))
+        .concat(
+          // Choosing a billboard ad: yours, on the boards round you, while you make it.
+          adPreview && !adPreview.building && (adPreview.billboard || adPreview.name)
+            ? [{ id: "bz:preview", image: adPreview.billboard ?? "", headline: adPreview.line.slice(0, 60), brand: adPreview.name, link: null }]
+            : [],
+        ),
+    [businesses, adPreview],
   );
   const openBusiness = useCallback(
     (b: MapBusiness | string) => {
@@ -1696,7 +1728,7 @@ export function useWorldLife({
     fly(p.x, p.z);
     setPlace(workplaceById(planOf(region), p.id) ?? { id: p.id, name: p.name, x: Math.round(p.x), z: Math.round(p.z), jobs: [] });
   };
-  return { explore, openExplorePlace, rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, newsScene, search: region ? { region, mine: assets?.units ?? [], owned: shown, businesses, coins, homes: () => homesFor(region), onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit, mySpot: whereAmI(), homeSpot, goHome, nameHome, homeBuilding: homeUnit ? homeUnit.split("/")[0] : null, openPlanner: () => setPlanning(true), locateMe, lookAt: (x: number, z: number) => setFlyTo({ tile: spiralIndex(Math.round(x), Math.round(z)), at: ++flies.current }), makeRow, openSoon: () => setSoonOpen(true), openGuestBook: (building: string) => setGuestBook(building),
+  return { explore, openExplorePlace, rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, newsScene, adOpen, search: region ? { region, mine: assets?.units ?? [], owned: shown, businesses, coins, homes: () => homesFor(region), onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit, mySpot: whereAmI(), homeSpot, goHome, nameHome, homeBuilding: homeUnit ? homeUnit.split("/")[0] : null, openPlanner: () => setPlanning(true), locateMe, lookAt: (x: number, z: number) => setFlyTo({ tile: spiralIndex(Math.round(x), Math.round(z)), at: ++flies.current }), makeRow, openSoon: () => setSoonOpen(true), openGuestBook: (building: string) => setGuestBook(building),
     /** Where you are changed outside (a trip to a friend): read it again. */
     refreshLife: () => void refresh(),
     openLife: () => setLifeOpen(true),

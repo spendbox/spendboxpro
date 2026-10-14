@@ -37,7 +37,7 @@ export async function changeBillboard(leaseId: string, form: FormData): Promise<
   }
 }
 
-/** The advertising wizard: buildings free to lease near a place, up to a yearly budget. */
+/** The advertising wizard: buildings free to lease near a place, up to a monthly budget. */
 export async function findBuildings(region: string, x: number, z: number, maxNaira?: number): Promise<LeaseOffer[]> {
   try {
     return await leasableNear(String(region), Number(x) || 0, Number(z) || 0, maxNaira ? Number(maxNaira) : undefined);
@@ -62,7 +62,7 @@ export async function offerFor(buildingId: string) {
   return leaseOffer(String(buildingId));
 }
 
-/** Advertising on the map: free buildings at about this yearly price (closest first), to step through. */
+/** Advertising on the map: free buildings at about this monthly price (closest first), to step through. */
 export async function findBuildingsByPrice(region: string, naira: number, x?: number, z?: number): Promise<LeaseOffer[]> {
   try {
     return await leasableByPrice(String(region), Number(naira) || 0, x === undefined ? undefined : Number(x), z === undefined ? undefined : Number(z));
