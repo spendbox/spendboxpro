@@ -3,7 +3,8 @@
 import { announceGiftSent } from "../people/gift-pop";
 import { useCallback, useEffect, useState } from "react";
 import { cachedThings, loadThings } from "./things-cache";
-import { Building2, Gem, House, MapPin, ShoppingBag, Store, TrendingUp } from "lucide-react";
+import { Building2, Check, Gem, House, MapPin, Pencil, ShoppingBag, Store, TrendingUp, X } from "lucide-react";
+import { renameUnit } from "../property-actions";
 import { CATEGORY_LABEL, effectWords, mintOf, QUICK_SALE, SHOP, STEAL_MAX, CAUGHT_CHANCE, type ItemCategory } from "@/lib/world/items";
 import { INCOME_DAY, type AssetUnit } from "@/lib/world/property-api";
 import type { Prices } from "@/lib/world/region";
@@ -83,7 +84,19 @@ export function ThingsSheet({
       {note && <p className={`mt-3 rounded-xl px-3 py-2 text-xs font-semibold ${note.good ? "bg-me/10 text-me" : "bg-hit/10 text-hit"}`}>{note.text}</p>}
       {tab === "mine" && <Mine me={me} busy={busy} run={run} />}
       {tab === "shops" && <Shops startCars={start === "cars"} prices={prices} coins={coins} busy={busy} run={run} />}
-      {tab === "assets" && <Assets units={units} whereIs={whereIs} onShow={onShow} />}
+      {tab === "assets" && (
+        <Assets
+          units={units}
+          whereIs={whereIs}
+          onShow={onShow}
+          onRename={async (u, name) => {
+            const r = await renameUnit(u.unit, name);
+            if (!r.ok) return r.error;
+            onChanged?.();
+            return null;
+          }}
+        />
+      )}
     </Sheet>
   );
 }
@@ -230,7 +243,18 @@ function Shops({ startCars, prices, coins, busy, run }: { startCars: boolean; pr
 }
 
 /** Your assets: the property you own and what it earns you, by itself, going up as you watch. */
-function Assets({ units, whereIs, onShow }: { units: AssetUnit[]; whereIs?: (building: string) => string | null; onShow?: (u: AssetUnit) => void }) {
+function Assets({
+  units,
+  whereIs,
+  onShow,
+  onRename,
+}: {
+  units: AssetUnit[];
+  whereIs?: (building: string) => string | null;
+  onShow?: (u: AssetUnit) => void;
+  /** Name one of them (null when it worked, or what went wrong). */
+  onRename?: (u: AssetUnit, name: string) => Promise<string | null>;
+}) {
   const income = useIncome();
   const earned = useLiveEarned();
   const owned = units.filter((u) => u.price > 0.01);
@@ -301,14 +325,14 @@ function Assets({ units, whereIs, onShow }: { units: AssetUnit[]; whereIs?: (bui
       ) : (
         <ul className="mt-3 divide-y divide-ink/5 rounded-2xl ring-1 ring-ink/5">
           {owned.map((u) => (
-            <AssetRow key={u.unit} u={u} where={whereIs?.(u.building) ?? null} onShow={onShow} right={<span className="shrink-0 text-sm font-bold text-[#2b8a3e] tabular-nums">+{cash(u.price * INCOME_DAY)}/day</span>} note={`Worth ${cash(u.price)}`} />
+            <AssetRow key={u.unit} u={u} where={whereIs?.(u.building) ?? null} onShow={onShow} onRename={onRename} right={<span className="shrink-0 text-sm font-bold text-[#2b8a3e] tabular-nums">+{cash(u.price * INCOME_DAY)}/day</span>} note={`Worth ${cash(u.price)}`} />
           ))}
         </ul>
       )}
       {freeRooms.length > 0 && (
         <ul className="mt-2 divide-y divide-ink/5 rounded-2xl ring-1 ring-ink/5">
           {freeRooms.map((u) => (
-            <AssetRow key={u.unit} u={u} where={whereIs?.(u.building) ?? null} onShow={onShow} note="Your free room" />
+            <AssetRow key={u.unit} u={u} where={whereIs?.(u.building) ?? null} onShow={onShow} onRename={onRename} note="Your free room" />
           ))}
         </ul>
       )}
@@ -328,9 +352,62 @@ function Assets({ units, whereIs, onShow }: { units: AssetUnit[]; whereIs?: (bui
   );
 }
 
-/** One of your properties: what it is, where it stands (tap to see it on the map), what it earns. */
-function AssetRow({ u, where, note, right, onShow }: { u: AssetUnit; where: string | null; note: string; right?: React.ReactNode; onShow?: (u: AssetUnit) => void }) {
+/** One of your properties: what it is, where it stands (tap to see it on the map), what it earns, and a pencil to name it. */
+function AssetRow({
+  u,
+  where,
+  note,
+  right,
+  onShow,
+  onRename,
+}: {
+  u: AssetUnit;
+  where: string | null;
+  note: string;
+  right?: React.ReactNode;
+  onShow?: (u: AssetUnit) => void;
+  onRename?: (u: AssetUnit, name: string) => Promise<string | null>;
+}) {
   const Icon = u.use === "home" ? House : u.use === "shop" ? Store : Building2;
+  const [naming, setNaming] = useState(false);
+  const [draft, setDraft] = useState(u.label);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (naming && onRename)
+    return (
+      <li className="px-3 py-2.5">
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setBusy(true);
+            setError(null);
+            const err = await onRename(u, draft);
+            setBusy(false);
+            if (err) return setError(err);
+            setNaming(false);
+          }}
+          className="flex items-center gap-1.5"
+        >
+          <Icon className="size-4 shrink-0 text-muted" />
+          <input
+            autoFocus
+            value={draft}
+            maxLength={40}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Give it a name"
+            className="h-9 min-w-0 flex-1 rounded-full bg-ink/5 px-3 text-base outline-none focus:ring-2 focus:ring-me"
+            aria-label={`A name for ${u.label}`}
+          />
+          <button disabled={busy} className="grid size-9 shrink-0 place-items-center rounded-full bg-ink text-white disabled:opacity-50" aria-label="Save the name">
+            <Check className="size-4" />
+          </button>
+          <button type="button" onClick={() => setNaming(false)} className="grid size-9 shrink-0 place-items-center rounded-full bg-ink/5" aria-label="Don't rename">
+            <X className="size-4" />
+          </button>
+        </form>
+        <p className="mt-1 text-[11px] text-muted">{error ?? "Leave it empty to put back its plain name."}</p>
+      </li>
+    );
   const body = (
     <>
       <Icon className="size-4 shrink-0 text-muted" />
@@ -348,13 +425,26 @@ function AssetRow({ u, where, note, right, onShow }: { u: AssetUnit; where: stri
     </>
   );
   return (
-    <li>
+    <li className="flex items-center">
       {onShow ? (
-        <button onClick={() => onShow(u)} className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-ink/[0.03]" aria-label={`Show ${u.label} on the map`}>
+        <button onClick={() => onShow(u)} className="flex min-w-0 flex-1 items-center gap-3 py-2.5 pl-3 pr-1 text-left hover:bg-ink/[0.03]" aria-label={`Show ${u.label} on the map`}>
           {body}
         </button>
       ) : (
-        <div className="flex items-center gap-3 px-3 py-2.5">{body}</div>
+        <div className="flex min-w-0 flex-1 items-center gap-3 py-2.5 pl-3 pr-1">{body}</div>
+      )}
+      {onRename && (
+        <button
+          onClick={() => {
+            setDraft(u.label);
+            setNaming(true);
+          }}
+          className="mr-2 grid size-8 shrink-0 place-items-center rounded-full text-muted hover:bg-ink/5"
+          aria-label={`Rename ${u.label}`}
+          title="Rename"
+        >
+          <Pencil className="size-3.5" />
+        </button>
       )}
     </li>
   );

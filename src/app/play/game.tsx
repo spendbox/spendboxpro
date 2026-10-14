@@ -3401,14 +3401,34 @@ export function Game({
                 "Inside a building"}
             </b>
             <span className="flex-1 sm:hidden" />
-            {(() => {
-              const mainAction = getMainAction();
-              return mainAction && place && (
-              <button onClick={mainAction.run} className="flex shrink-0 items-center gap-1 rounded-xl bg-gold px-3 py-2 text-xs font-bold text-ink shadow" aria-label={mainAction.label}>
-                <mainAction.icon className="size-4" /> {mainAction.label}
+            {/* Dancing: the floor's main button stops it (back to walking round the club). */}
+            {isDancing ? (
+              <button
+                onClick={() => {
+                  setDancing(null);
+                  playSfx("pop");
+                }}
+                className="flex shrink-0 items-center gap-1 rounded-xl bg-[#e64980] px-3 py-2 text-xs font-bold text-white shadow"
+                aria-label="Stop dancing"
+              >
+                <Music className="size-4" /> Stop dancing
               </button>
-              );
-            })()}
+            ) : (
+              (() => {
+                const mainAction = getMainAction();
+                return mainAction && place && (
+                <button onClick={mainAction.run} className="flex shrink-0 items-center gap-1 rounded-xl bg-gold px-3 py-2 text-xs font-bold text-ink shadow" aria-label={mainAction.label}>
+                  <mainAction.icon className="size-4" /> {mainAction.label}
+                </button>
+                );
+              })()
+            )}
+            {/* Sitting down (a chair, a sofa, a stool...): get up again. */}
+            {rooms.mySeat && !isDancing && (
+              <button onClick={() => rooms.stand()} className="flex shrink-0 items-center gap-1 rounded-xl bg-ink px-3 py-2 text-xs font-bold text-white shadow" aria-label="Stand up">
+                <Armchair className="size-4" /> Stand up
+              </button>
+            )}
             {!guest && (
               <button onClick={() => { setChatOpen(true); setChatUnread(0); }} className="relative flex shrink-0 items-center gap-1 rounded-xl bg-panel-2 px-3 py-2 text-xs font-semibold" aria-label="Chat with everyone here">
                 <MessageCircle className="size-4" /> Chat

@@ -674,7 +674,12 @@ export function createBubbles(host: BubblesHost) {
   let active = 0;
   function update(dt: number, now: number, places: boolean, events: boolean) {
     const want = places || events;
-    if (!want && !active) return;
+    // Inside somewhere (or riding): the fun places' icons go too, straight away.
+    if (!places) for (const d of dots) d.on = false;
+    if (!want && !active) {
+      updateFun(dt);
+      return;
+    }
     if (want && now - lastPick >= PICK_MS) {
       lastPick = now;
       pick(places, events);

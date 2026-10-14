@@ -2192,7 +2192,7 @@ export function CityView({
     const gateLamp = new THREE.MeshBasicMaterial({ color: 0xfff1c2 });
     const gateSteel = new THREE.MeshLambertMaterial({ color: 0x34383d });
     /** The gateways drawn, with which landmark each is for (going to a landmark stops at its gate first). */
-    let gates: { ax: number; az: number; w: number; d: number; x: number; z: number; dx: number; dz: number; S: number; name: string }[] = [];
+    let gates: { ax: number; az: number; w: number; d: number; x: number; z: number; dx: number; dz: number; S: number; name: string; span: number }[] = [];
     const gateFor = (x: number, z: number) => gates.find((g) => x >= g.ax && x < g.ax + g.w && z >= g.az && z < g.az + g.d) ?? null;
     const flagGreen = new THREE.MeshLambertMaterial({ color: 0x008751, side: THREE.DoubleSide });
     const flagWhite = new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide });
@@ -2594,7 +2594,9 @@ export function CityView({
         life.add(obj);
         entranceSigns.push({ obj, tex, mats: [face, crestFace, wingMat, ...gateMats], geos, crest: crestTex });
         // Where to stand to see it: out on the road in front, a little back.
-        gates.push({ ax: l.ax, az: l.az, w: l.w, d: l.d, x: px, z: pz, dx: side.dx, dz: side.dz, S, name: l.name });
+        // How wide the gate and its sign are together (to frame them on arrival).
+        const gateSpan = l.type === "campus" ? 2.3 * S : big ? 1.45 * S : 0.9;
+        gates.push({ ax: l.ax, az: l.az, w: l.w, d: l.d, x: px, z: pz, dx: side.dx, dz: side.dz, S, name: l.name, span: gateSpan });
       }
     }
     /** A round crest for the medallion: the place's colours, a gold ring, and its initials. */
@@ -6109,7 +6111,12 @@ export function CityView({
         gateSeen = next.building;
         if (g) {
           const S = g.S;
-          const back = 1.5 * S + 0.35;
+          // Far enough back that the whole name sign and the gate behind it fit across the screen
+          // (a tall, narrow phone needs to stand much further back than a wide computer screen).
+          const span = g.span;
+          const halfW = Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * Math.max(0.3, camera.aspect));
+          const back = Math.min(10, Math.max(2.2 * S, span / 0.85 / (2 * Math.tan(halfW))));
+          const mid = 0.25 * S;
           controls.enabled = false;
           focus = null;
           eventFly = null;
@@ -6117,9 +6124,10 @@ export function CityView({
             t: 0,
             fromPos: camera.position.clone(),
             fromTarget: controls.target.clone(),
-            toPos: new THREE.Vector3(g.x + g.dx * back + g.dz * 0.25 * S, 0.42 * S, g.z + g.dz * back - g.dx * 0.25 * S),
+            // From above the street (looking down a little), so nothing across the road gets in the way.
+            toPos: new THREE.Vector3(g.x + g.dx * (mid + back) + g.dz * 0.12 * back, 0.3 * S + back * 0.5, g.z + g.dz * (mid + back) - g.dx * 0.12 * back),
             // Looking at the name sign, with the gate behind it.
-            toTarget: new THREE.Vector3(g.x + g.dx * 0.3 * S, 0.32 * S, g.z + g.dz * 0.3 * S),
+            toTarget: new THREE.Vector3(g.x + g.dx * mid, 0.38 * S, g.z + g.dz * mid),
             building: next.building,
             name: g.name,
             arrived: false,
