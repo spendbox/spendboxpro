@@ -1,6 +1,10 @@
 // The walkthrough (docs/FIRST_STEPS.md): a few fun tips, three missions with rewards (paid once
 // each by the server, game-db/080), then a tour of the rest. Everyone gets it, old players too.
 
+/**
+ * The missions. "win" is the third one's id, kept from when it was "win a challenge" (the database
+ * and the rewards already paid know it by that name); it is now "go to an event, or host one".
+ */
 export type Mission = "name" | "hi" | "win";
 
 /** What each mission pays (naira, paid in mint at the city's rate). */
@@ -15,7 +19,7 @@ export type MissionState = { name: boolean; hi: boolean; win: boolean; paid: Mis
 export type Phase = "intro" | "missions" | "tips" | "done";
 
 /** What the walkthrough points at, so that button glows. */
-export type Glow = "home" | "hi" | "challenge" | "camera" | "profile" | null;
+export type Glow = "home" | "hi" | "events" | "camera" | "profile" | null;
 
 /** The next mission to do (null: all done or skipped). */
 export function nextMission(done: Partial<Record<Mission, boolean>>, skipped: Mission[]): Mission | null {

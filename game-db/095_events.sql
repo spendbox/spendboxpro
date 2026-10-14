@@ -8,7 +8,9 @@
 -- Parties cost money to host (worked out by the server from the hours, the crowd size, the kind of
 -- place and how dear the area is; it comes back if called off before it starts), and two street
 -- parties can't be on the same stretch of road at the same time.
--- Hosting events people come to, and going to them, add to your reputation.
+-- Hosting events people come to, and going to them, add to your reputation. The walkthrough's
+-- third mission becomes "go to an event" (tutorial_check below replaces part 80's: if you ever run
+-- part 80 again, run this part again after it).
 --
 -- Safe to run more than once. Run after part 94.
 
@@ -328,6 +330,57 @@ language sql stable security definer set search_path = public as $$
     'attended', (select count(*) from public.hosted_event_guests g join public.hosted_events e on e.id = g.event_id
                  where g.user_id = p_user and g.entered_at is not null and e.host_id <> p_user and e.status <> 'cancelled'))
 $$;
+
+-- ============================================================ the walkthrough's third mission
+/**
+ * Which steps are done, paying each newly done one once. p_rewards: { name, hi, win } in mint. Since part 95,
+ * "win" (the third mission) is going to an event (or hosting one), no longer winning a challenge.
+ * Starts the walkthrough's clock the first time it's asked. Returns
+ * { name, hi, win, paid: [...], rewards: { name, hi, win } }.
+ */
+create or replace function public.tutorial_check(p_user uuid, p_rewards jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  l public.lives;
+  v_since timestamptz;
+  v_done jsonb;
+  v_paid text[] := '{}';
+  v_step text;
+  v_reward numeric;
+begin
+  select * into l from public.lives where user_id = p_user for update;
+  if not found then return null; end if;
+  v_since := coalesce(l.tutorial_at, now());
+  if l.tutorial_at is null then update public.lives set tutorial_at = v_since where user_id = p_user; end if;
+  v_done := jsonb_build_object(
+    'name', l.home_named_at is not null and l.home_named_at >= v_since,
+    'hi', exists (select 1 from public.chat_messages where sender_id = p_user and recipient_id is not null and created_at >= v_since),
+    -- Mission 3 (still called 'win'): go into an event, or host one and go into your own.
+    'win', exists (
+      select 1 from public.hosted_event_guests g join public.hosted_events e on e.id = g.event_id
+      where g.user_id = p_user and g.entered_at is not null and g.entered_at >= v_since and e.status <> 'cancelled')
+  );
+  foreach v_step in array array['name', 'hi', 'win'] loop
+    if (v_done ->> v_step)::boolean then
+      v_reward := round(least(greatest(coalesce((p_rewards ->> v_step)::numeric, 0), 0), 40), 2);
+      insert into public.tutorial_steps (user_id, step, reward) values (p_user, v_step, v_reward) on conflict do nothing;
+      if found then
+        v_paid := v_paid || v_step;
+        if v_reward > 0 then
+          update public.profiles set coins = coins + v_reward where id = p_user;
+          perform public.log_coins(p_user, null, 'tutorial', v_reward, false, 'Walkthrough reward: ' || v_step);
+        end if;
+      end if;
+    end if;
+  end loop;
+  -- Done once counts for good (even if, say, the home is renamed back later).
+  return jsonb_build_object(
+    'name', exists (select 1 from public.tutorial_steps where user_id = p_user and step = 'name'),
+    'hi', exists (select 1 from public.tutorial_steps where user_id = p_user and step = 'hi'),
+    'win', exists (select 1 from public.tutorial_steps where user_id = p_user and step = 'win'),
+    'paid', to_jsonb(v_paid)
+  );
+end $$;
 
 do $$
 declare f text;

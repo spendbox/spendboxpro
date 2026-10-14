@@ -9,7 +9,7 @@ import { playSfx } from "./sound";
 
 // The walkthrough (docs/FIRST_STEPS.md): a small card over the map (always in front, chat
 // included) that takes everyone, old players too, through a few fun tips, three missions with
-// rewards (name your home, say hi, win a challenge; paid by the server, game-db/080), and a tour of
+// rewards (name your home, say hi, go to an event; paid by the server, game-db/080 and 095), and a tour of
 // the rest (photos, exploring, getting home, property, your profile). The button it talks about
 // glows. Kept in this browser; "Start the guide" in your profile starts it again.
 
@@ -17,7 +17,7 @@ import { playSfx } from "./sound";
 const KEY = "newtown.tutorial.v1";
 
 /** What the walkthrough points at: that button glows. */
-export type TutorialGlow = "home" | "chat" | "challenge" | "camera" | "profile" | "wallet" | "dock" | "leave" | "townhall" | null;
+export type TutorialGlow = "home" | "chat" | "events" | "camera" | "profile" | "wallet" | "dock" | "leave" | "townhall" | null;
 
 /** `closed`: shut with the ✕ before the end: a small help icon brings it back where it was. */
 type Saved = { phase: Phase; i: number; skipped: Mission[]; closed?: boolean };
@@ -73,7 +73,7 @@ function setGlow(g: TutorialGlow) {
  * isn't faced with all of them at once). Before the walkthrough starts (no home yet) and during
  * its opening cards, none of them; when it's done or closed, all of them.
  */
-export type TourButton = "home" | "dock" | "extras" | "camera" | "chat" | "townhall" | "challenge" | "reputation" | "wallet" | "profile" | "people" | "online" | "sound";
+export type TourButton = "home" | "dock" | "extras" | "camera" | "chat" | "townhall" | "events" | "reputation" | "wallet" | "profile" | "people" | "online" | "sound";
 /** The tips (by number, see `tips` below) that introduce each button. */
 const TIP_SHOWS: [number, TourButton[]][] = [
   [1, ["townhall"]],
@@ -83,7 +83,7 @@ const TIP_SHOWS: [number, TourButton[]][] = [
   [6, ["wallet"]],
   [8, ["profile", "sound"]],
 ];
-const MISSION_SHOWS: Record<Mission, TourButton[]> = { name: ["home", "dock"], hi: ["chat"], win: ["challenge", "reputation"] };
+const MISSION_SHOWS: Record<Mission, TourButton[]> = { name: ["home", "dock"], hi: ["chat"], win: ["events", "reputation"] };
 function shownNow(): string {
   const s = current();
   if (s.phase === "done" || s.closed) return "all";
@@ -120,8 +120,8 @@ export type TutorialActions = {
   nameHome: () => void;
   /** Open chat on "New chat". */
   chat: () => void;
-  /** Open the challenge card. */
-  challenge: () => void;
+  /** Open Events (what's on, and hosting). */
+  events: () => void;
   camera: () => void;
   profile: () => void;
   wallet: () => void;
@@ -262,11 +262,11 @@ export function Tutorial({
       action: { label: "Show me", run: actions.chat },
     },
     win: {
-      emoji: "🏆",
-      title: "Mission 3 of 3 · Create and win a challenge",
-      text: "Tap Show me and Challenge opens. Pick any game you fancy, set your stake and challenge everyone nearby. Win and the pot is yours, plus +3 reputation. No pressure. (Some pressure.)",
-      glow: "challenge",
-      action: { label: "Show me", run: actions.challenge },
+      emoji: "🎉",
+      title: "Mission 3 of 3 · Go to an event",
+      text: "Tap the party button (top right, it glows). What's on shows the parties and talks happening now: tap one and Go in. Nothing on? Host your own in Host an event: a party on your street or a free talk. The moment you're in, the reward is yours. Dance like nobody's watching. (Everybody's watching.)",
+      glow: "events",
+      action: { label: "Show me", run: actions.events },
     },
   };
   const tips: Card[] = [
@@ -303,7 +303,7 @@ export function Tutorial({
     {
       emoji: "💰",
       title: "Money comes to you",
-      text: "Rewards for showing up: you're paid for every minute you're online, plus a daily gift, challenge wins and missions. Property earns you money every day too, by itself. Watch your cash tick up! See it all in Things › Assets.",
+      text: "Rewards for showing up: you're paid for every minute you're online, plus a daily gift, missions, and ticket sales from events you host. Property earns you money every day too, by itself. Watch your cash tick up! See it all in Things › Assets.",
     },
     {
       emoji: "👤",

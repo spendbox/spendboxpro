@@ -31,6 +31,12 @@ Challenge directly).
 Adding a format is one line in `EVENT_FORMATS` (src/lib/world/events.ts). Adding a category that
 the database keeps needs its id added to the `category` check in game-db/095 too.
 
+## In the walkthrough
+
+The walkthrough's third mission is **Go to an event** (₦50,000): the party button glows, and
+"Show me" opens Events. Going into any event (or hosting one and going in) counts
+(docs/FIRST_STEPS.md). It replaced "Create and win a challenge".
+
 ## Hosting
 
 1. **What kind**, then the format (each has its usual length and size).

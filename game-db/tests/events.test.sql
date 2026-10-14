@@ -146,6 +146,19 @@ begin
   perform pg_temp.check(event_end(c, id4) = 'closed', 'ended');
   perform pg_temp.check((select coins from profiles where id = c) = coins0 - 70, 'ended: the fee is spent');
 
+  -- The walkthrough's third mission is going to an event now (not winning a challenge).
+  update hosted_event_guests set entered_at = entered_at - interval '1 hour' where user_id = b;
+  v := tutorial_check(b, '{"name": 1, "hi": 1, "win": 5}');
+  perform pg_temp.check(not (v->>'win')::boolean, 'mission 3 not done yet (earlier events don''t count)');
+  v := event_open(c, 'lagos', 'stage', 'talk', 'Money talk', '', 60, 60, 'Terra Kulture', false, now(), 60, 0, 400, 50, 3, 0, 16);
+  perform event_enter(b, (v->>'id')::bigint, 5);
+  coins0 := (select coins from profiles where id = b);
+  v := tutorial_check(b, '{"name": 1, "hi": 1, "win": 5}');
+  perform pg_temp.check((v->>'win')::boolean and v->'paid' ? 'win', 'going into an event does mission 3');
+  perform pg_temp.check((select coins from profiles where id = b) = coins0 + 5, 'and pays its reward');
+  v := tutorial_check(b, '{"name": 1, "hi": 1, "win": 5}');
+  perform pg_temp.check(not (v->'paid' ? 'win') and (select coins from profiles where id = b) = coins0 + 5, 'paid once');
+
 end $$;
 
 \o

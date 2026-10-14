@@ -3795,7 +3795,7 @@ export function Game({
 
       {/* Events (docs/EVENTS.md): a party button in the top right corner, under your cash (gently
           bouncing): what's on nearby, and hosting your own (Game challenge is one of the kinds). */}
-      {worldId && !guest && !camera && !place && ride === null && !walking && tour("challenge") && (
+      {worldId && !guest && !camera && !place && ride === null && !walking && tour("events") && (
         <button
           onClick={() => setEventsOpen(true)}
           className="events-pop pointer-events-auto fixed right-3 top-14 z-20 grid size-12 place-items-center rounded-full bg-white text-[#d6336c] ring-1 ring-black/5 sm:right-4 sm:top-16"
@@ -3804,7 +3804,7 @@ export function Game({
         >
           <PartyPopper className="size-6" />
           {eventLights.some((l) => l.playing) && <span className="absolute -right-0.5 -top-0.5 size-3 rounded-full bg-hit ring-2 ring-white" />}
-          {tutorialGlow === "challenge" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
+          {tutorialGlow === "events" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
         </button>
       )}
       {/* Notifications off on this phone: a bell on the right, halfway down, to switch them on (gone
@@ -4166,9 +4166,9 @@ export function Game({
               setMeOpen(false);
               setChatOpen(true);
             },
-            challenge: () => {
+            events: () => {
               setChatOpen(false);
-              setFightOpen(true);
+              setEventsOpen(true);
             },
             camera: () => setCamera("photo"),
             profile: () => {
