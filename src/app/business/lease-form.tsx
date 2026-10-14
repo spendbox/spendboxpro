@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import { CATEGORIES, LEASE_MONTHS } from "@/lib/world/business";
 import type { LeaseOffer } from "@/lib/business";
-import { checkoutLease } from "./actions";
+import { sendAdCheckout } from "../advertise/send-with-progress";
+import { UploadBar } from "../advertise/upload-progress";
 
 const input = "w-full rounded-xl border border-line bg-panel px-4 py-3 text-ink outline-none focus:border-gold";
 const label = "flex flex-col gap-1 text-sm font-medium";
@@ -37,6 +38,8 @@ export function LeaseForm({
   const [months, setMonths] = useState<number>(1);
   const total = offer.priceNaira * months;
   const [busy, setBusy] = useState(false);
+  /** How much of the upload has gone up (0..1), while paying. */
+  const [sent, setSent] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   return (
     <form
@@ -46,17 +49,17 @@ export function LeaseForm({
         const form = new FormData(e.currentTarget);
         form.set("building", offer.building);
         form.set("months", String(months));
+        form.set("kind", "lease");
         if (logo.file) form.set("logo", logo.file);
         if (billboard?.file) form.set("billboard", billboard.file);
         setBusy(true);
         setError(null);
-        try {
-          const res = await checkoutLease(form);
-          if (res.ok) return window.location.assign(res.url);
-          setError(res.error);
-        } catch {
-          setError("Something went wrong. Please check your connection and try again.");
-        }
+        // The pictures go up with the form: show them going, live.
+        setSent(0);
+        const res = await sendAdCheckout(form, setSent);
+        if (res.ok) return window.location.assign(res.url);
+        setSent(null);
+        setError(res.error);
         setBusy(false);
       }}
     >
@@ -161,8 +164,9 @@ export function LeaseForm({
       </label>
 
       {error && <p className="rounded-xl bg-hit/10 px-4 py-3 text-sm text-hit">{error}</p>}
+      <UploadBar share={sent} bytes={(logo.file?.size ?? 0) + (billboard?.file?.size ?? 0) + 4096} />
       <button disabled={busy} className="h-12 rounded-xl bg-gold font-semibold text-ink disabled:opacity-50">
-        {busy ? "Opening the payment page…" : `Pay ₦${total.toLocaleString("en-NG")} for ${months} month${months === 1 ? "" : "s"}`}
+        {busy ? "Sending…" : `Pay ₦${total.toLocaleString("en-NG")} for ${months} month${months === 1 ? "" : "s"}`}
       </button>
     </form>
   );

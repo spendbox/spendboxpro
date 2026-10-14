@@ -25,11 +25,16 @@ async function shrink(f: File): Promise<File> {
   }
 }
 
-/** Picks a picture, checks it, shrinks a big one, and gives a local preview address. */
+/**
+ * Picks a picture, checks it, shrinks a big one, and gives a local preview address. While it's being
+ * got ready, `preparing` says how far along it is (0..100) and the picture already shows, so nobody
+ * thinks nothing is happening.
+ */
 export function usePicture() {
   const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [preparing, setPreparing] = useState<number | null>(null);
   async function pick(f: File | null | undefined) {
     setError(null);
     if (url) URL.revokeObjectURL(url);
@@ -37,12 +42,26 @@ export function usePicture() {
     setUrl(null);
     if (!f) return;
     if (!TYPES.includes(f.type)) return setError("Please choose a JPG, PNG or WebP picture.");
+    // Show it straight away, then get it ready (a big photo is made smaller first).
+    const early = URL.createObjectURL(f);
+    setUrl(early);
+    setPreparing(f.size > SHRINK_OVER ? 15 : 60);
+    const tick = f.size > SHRINK_OVER ? setInterval(() => setPreparing((p) => (p === null ? p : Math.min(90, p + 7))), 180) : null;
     const small = await shrink(f);
-    if (small.size > MAX_BYTES) return setError("That picture is over 2 MB. Please use a smaller one.");
+    if (tick) clearInterval(tick);
+    setPreparing(null);
+    if (small.size > MAX_BYTES) {
+      URL.revokeObjectURL(early);
+      setUrl(null);
+      return setError("That picture is over 2 MB. Please use a smaller one.");
+    }
     setFile(small);
-    setUrl(URL.createObjectURL(small));
+    if (small !== f) {
+      URL.revokeObjectURL(early);
+      setUrl(URL.createObjectURL(small));
+    }
   }
-  return { file, url, error, pick };
+  return { file, url, error, pick, preparing };
 }
 
 export const fileInputClass =

@@ -11,6 +11,7 @@ import { findBuildings, findBuildingsByPrice, offerFor } from "../../business/ac
 import { LeaseForm } from "../../business/lease-form";
 import { Billboard } from "../../advertise/billboard";
 import { usePicture } from "../../advertise/use-picture";
+import { PreparingOverlay } from "../../advertise/upload-progress";
 import { blank, snapshotScene } from "../city/snapshot";
 import { searchable, type SearchHit } from "./map-search";
 import { BILLBOARD_STEPS, BillboardWizard } from "./billboard-wizard";
@@ -510,8 +511,12 @@ export function AdvertisePanel({
                 <p className="text-[11px] text-muted">
                   The map behind shows it live: your building glows with your name, and your picture is on the billboards near you. Tap the arrow at the top to see more of the map.
                 </p>
-                <button onClick={() => go(2)} className="h-11 w-full rounded-full bg-ink font-semibold text-white">
-                  Next: your details
+                <button
+                  onClick={() => go(2)}
+                  disabled={logo.preparing !== null || board.preparing !== null}
+                  className="h-11 w-full rounded-full bg-ink font-semibold text-white disabled:opacity-60"
+                >
+                  {logo.preparing !== null || board.preparing !== null ? "Preparing your pictures…" : "Next: your details"}
                 </button>
               </div>
             )}
@@ -549,15 +554,16 @@ export function AdvertisePanel({
 function PicturePick({ label, hint, pic, square }: { label: string; hint: string; pic: ReturnType<typeof usePicture>; square?: boolean }) {
   return (
     <label className="flex cursor-pointer flex-col items-center gap-1 rounded-2xl bg-ink/[0.04] p-2 text-center ring-1 ring-line">
-      <span className={`grid w-full place-items-center overflow-hidden rounded-xl bg-panel ${square ? "aspect-square max-h-24" : "aspect-[2/1]"}`}>
+      <span className={`relative grid w-full place-items-center overflow-hidden rounded-xl bg-panel ${square ? "aspect-square max-h-24" : "aspect-[2/1]"}`}>
         {pic.url ? (
           // eslint-disable-next-line @next/next/no-img-element -- a local preview
           <img src={pic.url} alt="" className="size-full object-cover" />
         ) : (
           <ImagePlus className="size-6 text-muted" />
         )}
+        <PreparingOverlay value={pic.preparing} />
       </span>
-      <span className="text-xs font-semibold">{pic.url ? `Change ${label.toLowerCase()}` : `Upload ${label.toLowerCase()}`}</span>
+      <span className="text-xs font-semibold">{pic.preparing !== null ? "Preparing…" : pic.url ? `Change ${label.toLowerCase()}` : `Upload ${label.toLowerCase()}`}</span>
       <span className="text-[10px] text-muted">{pic.error ?? hint}</span>
       <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(e) => void pic.pick(e.target.files?.[0])} />
     </label>

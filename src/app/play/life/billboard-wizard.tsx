@@ -5,7 +5,9 @@ import { useEffect, useRef, useState } from "react";
 import { Check, ImagePlus } from "@/components/icons";
 import type { AdPricing } from "@/lib/ads";
 import { REGIONS } from "@/lib/world";
-import { billboardPricing, checkoutAd } from "../../advertise/actions";
+import { billboardPricing } from "../../advertise/actions";
+import { sendAdCheckout } from "../../advertise/send-with-progress";
+import { PreparingOverlay, UploadBar } from "../../advertise/upload-progress";
 import { Billboard } from "../../advertise/billboard";
 import { usePicture } from "../../advertise/use-picture";
 import type { AdPreview } from "./advertise-panel";
@@ -31,6 +33,8 @@ export function BillboardWizard({ step, go, regionId, onPreview }: { step: numbe
   const [weeks, setWeeks] = useState(2);
   const [pricing, setPricing] = useState<AdPricing | null>(null);
   const [busy, setBusy] = useState(false);
+  /** How much of the upload has gone up (0..1), while paying. */
+  const [sent, setSent] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   // A problem shows where you'll see it.
   const said = useRef<HTMLParagraphElement | null>(null);
@@ -60,6 +64,7 @@ export function BillboardWizard({ step, go, regionId, onPreview }: { step: numbe
   const placeName = where ? (REGIONS[where]?.name ?? where) : "all of Nigeria";
 
   const next0 = () => {
+    if (pic.preparing !== null) return setError("Your picture is still being prepared. One moment…");
     if (!pic.file) return setError("Add a picture for your billboard first.");
     if (brand.trim().length < 2) return setError("Add your brand name.");
     if (headline.trim().length < 2) return setError("Add a short line for your ad.");
@@ -81,15 +86,16 @@ export function BillboardWizard({ step, go, regionId, onPreview }: { step: numbe
         <>
           <p className="text-sm text-muted">Make your billboard. It&apos;s already up on the billboards round you on the map behind: tap the arrow at the top to look.</p>
           <label className="flex cursor-pointer flex-col items-center gap-1 rounded-2xl bg-ink/[0.04] p-2 text-center ring-1 ring-line">
-            <span className="grid aspect-[2/1] w-full place-items-center overflow-hidden rounded-xl bg-panel">
+            <span className="relative grid aspect-[2/1] w-full place-items-center overflow-hidden rounded-xl bg-panel">
               {pic.url ? (
                 // eslint-disable-next-line @next/next/no-img-element -- a local preview
                 <img src={pic.url} alt="" className="size-full object-cover" />
               ) : (
                 <ImagePlus className="size-7 text-muted" />
               )}
+              <PreparingOverlay value={pic.preparing} />
             </span>
-            <span className="text-sm font-semibold">{pic.url ? "Change the picture" : "Upload your billboard picture"}</span>
+            <span className="text-sm font-semibold">{pic.preparing !== null ? "Preparing your picture…" : pic.url ? "Change the picture" : "Upload your billboard picture"}</span>
             <span className="text-[11px] text-muted">{pic.error ?? "Wide (2:1) works best. JPG, PNG or WebP."}</span>
             <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(e) => void pic.pick(e.target.files?.[0])} />
           </label>
@@ -173,6 +179,7 @@ export function BillboardWizard({ step, go, regionId, onPreview }: { step: numbe
             e.preventDefault();
             if (!pic.file) return go(0);
             const form = new FormData(e.currentTarget);
+            form.set("kind", "billboard");
             form.set("image", pic.file);
             form.set("brand", brand);
             form.set("headline", headline);
@@ -182,13 +189,12 @@ export function BillboardWizard({ step, go, regionId, onPreview }: { step: numbe
             form.set("weeks", String(weeks));
             setBusy(true);
             setError(null);
-            try {
-              const res = await checkoutAd(form);
-              if (res.ok) return window.location.assign(res.url);
-              setError(res.error);
-            } catch {
-              setError("Something went wrong. Please check your connection and try again.");
-            }
+            // The picture goes up with the form: show it going, live (src/app/advertise/send-with-progress.ts).
+            setSent(0);
+            const res = await sendAdCheckout(form, setSent);
+            if (res.ok) return window.location.assign(res.url);
+            setSent(null);
+            setError(res.error);
             setBusy(false);
           }}
         >
@@ -224,8 +230,9 @@ export function BillboardWizard({ step, go, regionId, onPreview }: { step: numbe
             Pay by card or transfer (Paystack). Afterwards you can see how many people saw it, pause it, or add weeks from your ad page.
           </p>
           {error && <p ref={said} className="rounded-xl bg-hit/10 px-3 py-2 text-sm text-hit">{error}</p>}
+          <UploadBar share={sent} bytes={pic.file?.size ?? 0} />
           <button disabled={busy} className="h-12 w-full rounded-full bg-gold font-semibold text-ink disabled:opacity-50">
-            {busy ? "Opening the payment page…" : `Pay ${naira(total)}`}
+            {busy ? "Sending…" : `Pay ${naira(total)}`}
           </button>
         </form>
       )}
