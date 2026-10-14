@@ -10,7 +10,7 @@ import { regionMap } from "@/lib/world";
 import { ownedSpot } from "@/lib/world/owned";
 import { HomePlanner } from "../home/home-planner";
 import { propertyInfo, type PropertyInfo } from "@/lib/world/property";
-import { homesByArea, type HomeFind } from "@/lib/world/homes";
+import { homesByArea, type AreaHomes, type HomeFind } from "@/lib/world/homes";
 import type { BuildingOwner, InterviewStart, LifeStatus, Neighbour, PaySettled, PropertyApi, PropertyResult, WorkStatus } from "@/lib/world/property-api";
 import { cheapestCommute, COMMUTE_LABEL, dayNet, fareMint, fareOrBus, tripFareMint, INCOME_TAX, needsInterview, payDay, tripKmBetween, tripWords, type Commute } from "@/lib/world/work";
 import { ferryKmBetween } from "@/lib/world/trips";
@@ -67,6 +67,17 @@ import { SIMPLE_LIFE } from "@/lib/world/simple-life";
 const plans = new Map<string, CityPlan>();
 /** The kinds of building people live in (going in means knocking, unless it's yours). */
 const HOME_KINDS = new Set(["rooming", "flats", "apartments", "mixed", "bungalow", "duplex", "terrace", "house", "mansion", "villa"]);
+
+/** Each region's homes for sale by area, worked out once (the first time the budget filter is used). */
+const homesCache = new Map<string, AreaHomes[]>();
+function homesFor(region: RegionMap) {
+  let h = homesCache.get(region.region.id);
+  if (!h) {
+    h = homesByArea(region, planOf(region));
+    homesCache.set(region.region.id, h);
+  }
+  return h;
+}
 
 function planOf(region: RegionMap) {
   let p = plans.get(region.region.id);
@@ -1648,7 +1659,7 @@ export function useWorldLife({
     fly(p.x, p.z);
     setPlace(workplaceById(planOf(region), p.id) ?? { id: p.id, name: p.name, x: Math.round(p.x), z: Math.round(p.z), jobs: [] });
   };
-  return { explore, openExplorePlace, rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit, mySpot: whereAmI(), homeSpot, goHome, nameHome, homeBuilding: homeUnit ? homeUnit.split("/")[0] : null, openPlanner: () => setPlanning(true), locateMe, lookAt: (x: number, z: number) => setFlyTo({ tile: spiralIndex(Math.round(x), Math.round(z)), at: ++flies.current }), makeRow, openSoon: () => setSoonOpen(true), openGuestBook: (building: string) => setGuestBook(building),
+  return { explore, openExplorePlace, rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], owned: shown, businesses, coins, homes: () => homesFor(region), onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit, mySpot: whereAmI(), homeSpot, goHome, nameHome, homeBuilding: homeUnit ? homeUnit.split("/")[0] : null, openPlanner: () => setPlanning(true), locateMe, lookAt: (x: number, z: number) => setFlyTo({ tile: spiralIndex(Math.round(x), Math.round(z)), at: ++flies.current }), makeRow, openSoon: () => setSoonOpen(true), openGuestBook: (building: string) => setGuestBook(building),
     /** Where you are changed outside (a trip to a friend): read it again. */
     refreshLife: () => void refresh(),
     openLife: () => setLifeOpen(true),

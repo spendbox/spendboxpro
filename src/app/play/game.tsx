@@ -2527,9 +2527,9 @@ export function Game({
         </div>
       </div>
 
-      {/* Watchers on a phone: the logo and the name, small, in 3D letters, floating under the top bar. */}
+      {/* Watchers on a phone: the logo and the name, small, in 3D letters, floating at the upper right, just under the numbers row (clear of the Sign in button). */}
       {guest && worldId && !place && ride === null && !camera && (
-        <div className="pointer-events-none absolute inset-x-0 top-[6.75rem] z-[5] flex justify-center sm:hidden" title="Newtown">
+        <div className="pointer-events-none absolute right-3 top-[6.6rem] z-[5] flex justify-end sm:hidden" title="Newtown">
           <span className="title-float-sm flex items-center gap-1.5">
             <LogoMark size={26} className="rounded-[7px] shadow-[0_6px_14px_rgba(0,0,0,0.35)]" />
             <span className="title-3d-sm font-display text-[26px] font-black italic leading-none tracking-tight text-white">Newtown</span>
