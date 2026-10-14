@@ -22,6 +22,7 @@
 - [ ] In the Supabase SQL Editor run `game-db/083_online_pay_world_bank.sql` (₦500 for every minute online, up to 4 hours a day; the World Bank).
 - [ ] In the Supabase SQL Editor run `game-db/084_bank_ads_admin.sql` (the World Bank opens with ₦1 billion and grows from there; every billboard view counted; paid ads for one state or everywhere; the money made today on the dashboard). Run it after 083. If you ever run 083 again, run 084 again after it.
 - [ ] In the Supabase SQL Editor run `game-db/085_town_hall_faces.sql` (the Town Hall, one chat for everyone online in the state; and the "faces" storage for profile photos). Until then Town Hall says it opens soon and photos say they're switched on soon.
+- [ ] Then run `game-db/086_town_hall_more.sql` (Town Hall replies, reactions, photos, deleting, messages gone after 24 hours; nobody shows "at work" on the map any more).
 - [ ] Paystack dashboard: turn on "Pay with Transfer" (for bank transfer in the game), and set the Webhook URL to `https://<your site>/api/paystack/webhook` (Settings → API Keys & Webhooks).
 - [ ] On the day the simple life goes live (after merging), run `game-db/075_fresh_start.sql` ONCE: everyone's money becomes ₦350,000 (₦250,000 + ₦100,000 founder bonus), pots emptied, Founder badge, homes and things kept. Old balances are backed up; the undo lines are at the bottom of the file.
 - [ ] Optional, for voice calls on every network: add a TURN relay (docs/VOICE_CALLS.md) with NEXT_PUBLIC_TURN_URL, NEXT_PUBLIC_TURN_USERNAME and NEXT_PUBLIC_TURN_CREDENTIAL in Vercel.
@@ -83,6 +84,7 @@ None known right now. Fixed lately:
 - [ ] Trees that grow the map's land outward; proposals, weddings, divorce and children (dating).
 
 ## Done lately
+- [x] Town Hall: replies, emoji reactions, an emoji picker, photos; delete your own for everyone, or someone else's for you (gone for everyone when 3 people delete it); everything gone after 24 hours. The button is just the icon. No jobs on the map or on people's cards. Marks on the city only for signed-in players. Landmarks: "Too expensive for you (for now)". Private messages are no longer deleted every day (the daily clean-up only takes what's over a week old).
 - [x] Town Hall: one chat for everyone online in the state, from the orange button above the chat bubble (the walkthrough shows it). Profile photos instead of the drawn face (You › Profile photo). People's cards open at once (face and name straight away, the rest a moment later; cards opened before show in full). The dashboard can delete Town Hall messages and remove profile photos.
 - [x] The walkthrough covers your look (Change my look). Around shows only people online now. Things › Assets shows where each property is (tap one to fly there), your free room included.
 - [x] First visit: the map starts with just the place's name and Find a home; each button (house, chat, challenge, camera, wallet, profile...) appears when the walkthrough introduces it, and all of them once it's done or closed. The walkthrough says its card can be dragged anywhere, and inside a building it says to step out first (the Leave button glows, or "Take me out").

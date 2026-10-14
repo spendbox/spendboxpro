@@ -131,7 +131,8 @@ export type MapMark = {
 /** Marks round a spot (tiles) that are up now. */
 export async function marksNear(region: string, x: number, z: number): Promise<MapMark[]> {
   const userId = await currentUserId();
-  if (!regionMap(region)) return [];
+  // Marks are for signed-in players only.
+  if (!userId || !regionMap(region)) return [];
   const R = 50;
   const { data } = await createAdminClient().rpc("marks_near", {
     p_viewer: userId ?? "00000000-0000-0000-0000-000000000000",

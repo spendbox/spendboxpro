@@ -327,19 +327,20 @@ export function useWorldLife({
   const [markOpen, setMarkOpen] = useState<number | null>(null);
   const [leaving, setLeaving] = useState<{ x: number; z: number; where: string; place?: string } | null>(null);
   const loadMarks = useCallback(() => {
-    if (!regionId || pretend) return;
+    // Signed out: no marks on the city (and nothing to fetch).
+    if (!regionId || pretend || !signedIn) return;
     const c = centerRef.current?.() ?? { x: 0, z: 0 };
     void around<MapMark[]>("marks", regionId, c.x, c.z).then((m) => m && setMarks(m)).catch(() => {});
-  }, [regionId, pretend]);
+  }, [regionId, pretend, signedIn]);
   useEffect(() => {
-    if (!regionId || pretend) return;
+    if (!regionId || pretend || !signedIn) return;
     const first = setTimeout(loadMarks, 2500);
     const every = setInterval(loadMarks, 60_000);
     return () => {
       clearTimeout(first);
       clearInterval(every);
     };
-  }, [regionId, pretend, loadMarks]);
+  }, [regionId, pretend, signedIn, loadMarks]);
   /** Your reputation (shown at the top) and whether you own a car (to drive to work). */
   const [rep, setRep] = useState<{ score: number; hasCar: boolean; jail: string | null } | null>(null);
   /** Drive your own car to places (remembered on this phone), when you have one. */

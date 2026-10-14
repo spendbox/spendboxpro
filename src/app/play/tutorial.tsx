@@ -271,7 +271,7 @@ export function Tutorial({
     {
       emoji: "🏛️",
       title: "The Town Hall",
-      text: `One big chat for everyone online in ${place}. Ask for directions, brag about your new crib, find people to play with. Tap the orange button just above your chat bubble (bottom right). Tap anyone's name there to see their card.`,
+      text: `One big chat for everyone online in ${place}. Ask for directions, brag about your new crib, find people to play with. Tap the orange button just above your chat bubble (bottom right). Send emojis and photos, tap a message to reply, react or delete it, and tap a name to see who it is. Everything said there is gone after 24 hours.`,
       glow: "townhall",
       action: { label: "Open it", run: actions.townHall },
     },

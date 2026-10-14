@@ -124,7 +124,7 @@ export function LandmarkBuy({
               disabled={!afford}
               className="mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-ink px-4 text-sm font-semibold text-white disabled:bg-ink/10 disabled:text-muted"
             >
-              {afford ? `Buy it for ${cash(price)}` : "Too rich for you (for now)"}
+              {afford ? `Buy it for ${cash(price)}` : "Too expensive for you (for now)"}
             </button>
           )}
         </>
