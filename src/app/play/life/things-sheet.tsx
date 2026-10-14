@@ -258,10 +258,10 @@ function Assets({ units }: { units: AssetUnit[] }) {
         </div>
         <p className="mt-2 text-[11px] text-white/85">Paid straight into your cash, by itself. It keeps earning while you&apos;re away (up to 2 days).</p>
       </div>
-      {/* Just playing pays too: nobody has to top up to play. */}
+      {/* Rewards for showing up: just being here pays. */}
       <div className="mt-3 rounded-3xl bg-gold/15 p-4">
-        <p className="text-sm font-bold">🎮 Earned just by playing</p>
-        <p className="text-[11px] text-muted">Free money for showing up and having fun. You never have to pay to play.</p>
+        <p className="text-sm font-bold">🎉 Rewards for showing up</p>
+        <p className="text-[11px] text-muted">Free money for being here and having fun: a daily gift, pay for every minute you&apos;re online, wins and missions.</p>
         {play === undefined ? (
           <div className="mt-2 h-16 animate-pulse rounded-2xl bg-ink/5" />
         ) : (
@@ -269,6 +269,7 @@ function Assets({ units }: { units: AssetUnit[] }) {
             {(
               [
                 ["🎁", "Daily gifts", "gift"],
+                ["🟢", "Being online", "online"],
                 ["🏆", "Challenge wins", "wins"],
                 ["🎯", "Missions and rewards", "missions"],
               ] as const

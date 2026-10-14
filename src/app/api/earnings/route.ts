@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 /** What playing has paid you, by where it came from (ledger kinds). */
 const FROM: Record<string, string[]> = {
   gift: ["daily_gift"],
+  online: ["online_pay"],
   wins: ["challenge_win", "challenge_bonus", "duel_reward"],
   missions: ["tutorial", "first_step", "quest_reward", "activity_reward", "streak_reward", "event_reward", "event_bonus"],
   property: ["property_income"],
@@ -13,7 +14,7 @@ const FROM: Record<string, string[]> = {
 export type Earnings = Record<keyof typeof FROM, { total: number; today: number }>;
 
 /**
- * GET /api/earnings: what you've earned just by playing (daily gifts, challenge wins, missions) and
+ * GET /api/earnings: your rewards for showing up (daily gifts, being online, challenge wins, missions) and
  * from your property, in all and today (Lagos day), in mint. For Things › Assets.
  */
 export async function GET() {

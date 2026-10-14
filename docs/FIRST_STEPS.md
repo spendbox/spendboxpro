@@ -12,7 +12,7 @@ and gifts; three missions coming up.
 ## 2. Three missions, with rewards
 | Mission | How | Reward |
 |---|---|---|
-| Name your home | the house button (bottom left), then the pencil | ₦20,000 |
+| Name your home | the house in the quick buttons (bottom left), then the pencil | ₦20,000 |
 | Say hi to someone | the chat bubble (bottom right), New chat (both glow), anyone online | ₦50,000 |
 | Create and win a challenge | the trophy (top right), any game | ₦50,000 |
 
@@ -22,7 +22,9 @@ amounts in `src/lib/world/tutorial.ts`). A mission can be skipped (no reward). B
 the missions still show, with "Done it" to move on and nothing paid.
 
 ## 3. The rest of the tour
-The camera (bottom left, or the orange one inside places), exploring, the house button to get home,
+The quick buttons (one round button at the bottom left that opens Home, Camera, Coming soon,
+Locate me and Walk, and folds away when you tap anywhere else; the walkthrough opens it when it
+points at one of them), the camera (in the quick buttons, or the orange one inside places), exploring, the house button to get home,
 the Wallet (tap your cash), money that comes just from playing (daily gift, wins, missions; shown in
 Things › Assets, so nobody thinks they must pay to play), property paying you every day (and reputation giving money off property), and your profile (tap your
 face): Things, Assets, Money, Photos, Friends, settings, and "Start the guide", which plays the whole
