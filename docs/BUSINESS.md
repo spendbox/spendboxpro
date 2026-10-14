@@ -1,29 +1,42 @@
 # Real businesses on the map
 
-Real businesses lease a building in Newtown's Lagos for a year, through Paystack. The rules and
-prices are in `src/lib/world/business.ts`; the server side in `src/lib/business.ts`; the database in
-`game-db/043_business.sql`; the pages are `/business` (lease) and `/advertiser` (numbers and upgrades).
+Advertisers choose, in one wizard over the live map (`src/app/play/life/advertise-panel.tsx`):
+
+1. **Billboard ads on their own** (`src/app/play/life/billboard-wizard.tsx`, `src/lib/ads.ts`): a picture,
+   brand and line on the city's billboards, in one state or all of Nigeria, from ₦5,000 a week for 1 to
+   8 weeks. Their ad goes up on the billboards round them while they make it.
+2. **A building of their own, by the month**, which comes with their design on the billboards too.
+
+Buildings are leased through Paystack, 1, 3, 6 or 12 months up front, with **Another month** any time
+from the ad page. The rules and prices are in `src/lib/world/business.ts`; the server side in
+`src/lib/business.ts`; the database in `game-db/043_business.sql`, 047 and `092_monthly_leases.sql`;
+the numbers and upgrades at `/advertiser`.
 
 ## Leasing
 
-- On the map, tap a building → **Lease this building** (on its card) → `/business?building=…`.
+- In the wizard: pick a state, then search an area, tap a monthly amount and step through buildings
+  at that price, or tap a building on the map. Add a logo and billboard picture and see it lit up, then
+  the details, how many months, and pay.
 - Landmarks can't be leased, nor any building players own part of; players can't buy units in a
   leased building while the lease runs.
 - The business gives its name, what kind of business, what it does, its **real address**, phone,
-  WhatsApp, website and logo, then pays a year's lease. It signs in later with that email at
-  `/advertiser` (the same sign-in as advertisers).
+  WhatsApp, website and logo. It signs in later with that email at `/advertiser`.
 - **One live lease per account for now, and at most one new lease a week.**
 
-| Building | A year (before the area) |
+| Building | A month (before the area) |
 | --- | --- |
-| Lock-up shops, shop with flats, bungalow, rooming house, land | ₦20,000–₦25,000 |
-| Duplex, terrace | ₦60,000 |
-| Flats, warehouse | ₦80,000 |
-| Office block | ₦120,000 |
-| Shopping plaza, apartment tower | ₦250,000 |
-| Glass tower | ₦600,000 |
+| Lock-up shops, shop with flats, bungalow, rooming house, land | ₦5,000–₦6,000 |
+| Duplex, terrace | ₦15,000 |
+| Flats, warehouse | ₦20,000 |
+| Office block | ₦30,000 |
+| Shopping plaza, apartment tower | ₦60,000 |
+| Glass tower | ₦150,000 |
 
-The area changes it about 0.6× (cheapest areas) to 2× (Ikoyi, VI), never under ₦20,000 or over ₦1m.
+The area changes it about 0.6× (cheapest areas) to 2× (Ikoyi, VI), never under ₦5,000 or over ₦250,000
+a month. A lease runs 30 days for each month paid (leases from before monthly ones keep their year),
+or until it has been tapped as many times as it covers (₦20 a tap). Upgrades are priced from the
+monthly price: another month is a month's price, a refit 40% of it, a storey a month's price, a bright
+sign ₦15,000.
 
 ## On the map
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { CATEGORIES } from "@/lib/world/business";
+import { CATEGORIES, LEASE_MONTHS } from "@/lib/world/business";
 import type { LeaseOffer } from "@/lib/business";
 import { checkoutLease } from "./actions";
 
@@ -34,6 +34,8 @@ export function LeaseForm({
     onName?.(v);
   };
   const [about, setAbout] = useState("");
+  const [months, setMonths] = useState<number>(1);
+  const total = offer.priceNaira * months;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return (
@@ -43,6 +45,7 @@ export function LeaseForm({
         e.preventDefault();
         const form = new FormData(e.currentTarget);
         form.set("building", offer.building);
+        form.set("months", String(months));
         if (logo.file) form.set("logo", logo.file);
         if (billboard?.file) form.set("billboard", billboard.file);
         setBusy(true);
@@ -57,6 +60,26 @@ export function LeaseForm({
         setBusy(false);
       }}
     >
+      <div>
+        <p className="text-sm font-semibold">How long?</p>
+        <p className={hint}>₦{offer.priceNaira.toLocaleString("en-NG")} a month. Add more months any time from your ad page.</p>
+        <div className="mt-2 grid grid-cols-4 gap-1.5">
+          {LEASE_MONTHS.map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMonths(m)}
+              className={`rounded-xl px-1 py-2 text-center ${months === m ? "bg-ink text-white" : "bg-ink/[0.05]"}`}
+            >
+              <span className="block text-sm font-bold">
+                {m} month{m === 1 ? "" : "s"}
+              </span>
+              <span className={`block text-[11px] tabular-nums ${months === m ? "text-white/75" : "text-muted"}`}>₦{(offer.priceNaira * m).toLocaleString("en-NG")}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       <h2 className="font-display text-xl font-bold">Your business</h2>
 
       <div className="flex items-center gap-3 rounded-2xl bg-ink/[0.04] p-3">
@@ -139,7 +162,7 @@ export function LeaseForm({
 
       {error && <p className="rounded-xl bg-hit/10 px-4 py-3 text-sm text-hit">{error}</p>}
       <button disabled={busy} className="h-12 rounded-xl bg-gold font-semibold text-ink disabled:opacity-50">
-        {busy ? "Opening the payment page…" : `Pay ₦${offer.priceNaira.toLocaleString("en-NG")} for a year`}
+        {busy ? "Opening the payment page…" : `Pay ₦${total.toLocaleString("en-NG")} for ${months} month${months === 1 ? "" : "s"}`}
       </button>
     </form>
   );

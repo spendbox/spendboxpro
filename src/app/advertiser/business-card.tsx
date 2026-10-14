@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { MyBusiness } from "@/lib/business";
-import { BUSINESS_KINDS, STOREY_AFTER_DAYS, upgradePrice, UPGRADES } from "@/lib/world/business";
+import { BUSINESS_KINDS, monthlyOf, STOREY_AFTER_DAYS, upgradePrice, UPGRADES } from "@/lib/world/business";
 import { changeBillboard, checkoutUpgrade } from "../business/actions";
 
 const fmt = (n: number) => Math.round(n).toLocaleString("en-NG");
@@ -24,7 +24,8 @@ export function BusinessCard({ b }: { b: MyBusiness }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const live = b.status === "live";
-  const lease = b.priceKobo / 100;
+  // A month's price (leases from before monthly ones were a year).
+  const lease = monthlyOf(b.priceKobo / 100, b.months ?? null);
   const [now] = useState(() => Date.now());
   const monthIn = !!b.startsAt && now - Date.parse(b.startsAt) > STOREY_AFTER_DAYS * 86_400_000;
 
@@ -73,7 +74,7 @@ export function BusinessCard({ b }: { b: MyBusiness }) {
           <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-panel-2">
             <div className="h-full rounded-full bg-gold" style={{ width: `${Math.min(100, (b.clicks / Math.max(1, b.clickCap)) * 100)}%` }} />
           </div>
-          <p className="mt-1 text-xs text-muted">Your lease runs until {day(b.endsAt)}, or until these taps are used up, whichever comes first.</p>
+          <p className="mt-1 text-xs text-muted">Your lease runs until {day(b.endsAt)}, or until these taps are used up, whichever comes first. Another month adds 30 days and more taps.</p>
         </div>
       )}
 
@@ -81,7 +82,7 @@ export function BusinessCard({ b }: { b: MyBusiness }) {
 
       {live && (
         <div className="flex flex-col gap-2">
-          <p className="text-sm font-semibold">Upgrades</p>
+          <p className="text-sm font-semibold">Keep it going, and upgrades</p>
           {UPGRADES.map((u) => {
             const done = u.id === "bright" && b.glow >= 2;
             const wait = u.id === "storey" && !monthIn;

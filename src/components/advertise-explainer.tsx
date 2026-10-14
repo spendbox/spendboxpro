@@ -8,15 +8,16 @@ import { Building2, ChartColumn, CreditCard, Hourglass, ImageUp, MapPin, Megapho
 // (The numbers are the defaults in game_settings; /advertise always shows the live ones.)
 
 const STEPS: { icon: LucideIcon; title: string; text: string }[] = [
-  { icon: MapPin, title: "Choose", text: "Tap a building, choose Lease" },
-  { icon: CreditCard, title: "Pay once", text: "From ₦20,000 a year" },
+  { icon: MapPin, title: "Choose", text: "Billboards, or a building" },
+  { icon: CreditCard, title: "Pay", text: "From ₦5,000 a week or month" },
   { icon: Rocket, title: "Live", text: "Your building and billboards" },
 ];
 
 const POINTS: { icon: LucideIcon; text: React.ReactNode }[] = [
-  { icon: Building2, text: "Your name and logo on a building in Lagos, lit up for every player, with a card saying what you do and how to reach you." },
-  { icon: ImageUp, text: "Your design on the city's billboards. Swap it any time, free." },
-  { icon: Hourglass, text: "Runs a year, or until your building and billboards have been tapped as many times as your lease covers (one tap for every ₦20)." },
+  { icon: ImageUp, text: "Billboard ads on their own: your picture on the city's billboards, from ₦5,000 a week, for 1 to 8 weeks." },
+  { icon: Building2, text: "Or a building of your own, by the month: your name and logo on it, lit up for every player, a card saying what you do and how to reach you, and your design on the billboards too." },
+  { icon: ImageUp, text: "Swap your billboard design any time, free." },
+  { icon: Hourglass, text: "A building runs for the months you pay for (add more any time), or until it has been tapped as many times as your lease covers (one tap for every ₦20)." },
   { icon: ChartColumn, text: "No game account needed. See taps, calls, WhatsApp messages and directions from your business page." },
 ];
 
@@ -25,8 +26,8 @@ export function AdvertiseExplainer({ onClose }: { onClose: () => void }) {
     <div className="flex flex-col gap-4">
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-gold via-[#ffd76e] to-[#ffb020] p-4 text-ink">
         <p className="text-xs font-bold uppercase tracking-wide opacity-70">Advertise on Newtown</p>
-        <h2 className="mt-1 font-display text-2xl font-bold leading-tight">Own a building in Lagos, and the billboards with it</h2>
-        <p className="mt-1 text-sm opacity-80">Lease a building for a year: your name on it and your design on the billboards.</p>
+        <h2 className="mt-1 font-display text-2xl font-bold leading-tight">Billboards across Lagos, or a building of your own</h2>
+        <p className="mt-1 text-sm opacity-80">Billboard ads by the week, or a building by the month with the billboards included.</p>
         <Megaphone aria-hidden className="pointer-events-none absolute -bottom-3 -right-2 size-20 -rotate-12 opacity-20" strokeWidth={1.75} />
       </div>
 

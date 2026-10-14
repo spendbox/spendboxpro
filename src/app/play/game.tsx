@@ -2232,7 +2232,7 @@ export function Game({
             region={worldId}
             onArea={setWorldArea}
             // Signed out, buildings can't be tapped (sign in to go anywhere).
-            onProperty={worldId && !guest ? worldLife.onProperty : undefined}
+            onProperty={worldId && (!guest || worldLife.adOpen) ? worldLife.onProperty : undefined}
             onWorkplace={worldId && !guest ? worldLife.onWorkplace : undefined}
             onAtGate={setAtGate}
             onBubbleSignIn={guest ? () => setSignInWhy("Sign in to go into places, meet people and play.") : undefined}
@@ -2242,7 +2242,7 @@ export function Game({
             homeStick={homeStick}
             onWalkBlocked={(what) => setMessage({ text: what === "water" ? "That's water: you can't walk on it. Try a ferry (Explore → Rides)." : "That's a building. Tap it to go in.", tone: "info" })}
             businesses={worldId ? worldLife.businesses : undefined}
-            onBusiness={worldId && !guest ? worldLife.onBusiness : undefined}
+            onBusiness={worldId && (!guest || worldLife.adOpen) ? worldLife.onBusiness : undefined}
             owned={worldId ? worldLife.owned : undefined}
             markers={worldId ? NO_MARKERS : markers}
             events={worldId ? NO_EVENTS : cityEvents}
@@ -3173,7 +3173,7 @@ export function Game({
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">Billboard{worldId ? "" : ` · ${where(advertise.tile)}`}</p>
           <h2 className="font-display text-xl font-bold">Your brand could be here</h2>
           <p className="mt-2 text-sm text-muted">
-            Lease a building in Lagos for a year and your design goes on the city&apos;s billboards too. Swap it any time.
+            Put your picture on the city&apos;s billboards (by the week), or take a building of your own by the month, with the billboards included.
           </p>
           <div className="mt-4 flex gap-2">
             <button onClick={() => setAdvertise(null)} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold">

@@ -16,7 +16,7 @@ export default async function BusinessDone({ searchParams }: { searchParams: Pro
         <>
           <h1 className="font-display text-3xl font-bold">{upgrade ? "Upgrade done!" : "You're on the map!"}</h1>
           <p className="text-muted">
-            {upgrade ? "Your building has been upgraded and your business is on the billboards." : "Your building lights up with your name within 24 hours, for every player in Lagos, for a year."} We&apos;ve
+            {upgrade ? "Your building has been upgraded and your business is on the billboards." : "Your building lights up with your name within 24 hours, for every player in Lagos, for the months you paid for."} We&apos;ve
             emailed your receipt.
           </p>
         </>
