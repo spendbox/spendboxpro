@@ -91,7 +91,7 @@ export type MyThings = {
   crafted: number;
   /** What your things do for you together, every 2 hours. */
   effects: { mind: number; body: number; rep: number };
-  reputation: { score: number; parts: { property: number; things: number; inventions: number; marks: number; challenges: number; penalty: number } };
+  reputation: { score: number; parts: { property: number; things: number; inventions: number; marks: number; challenges: number; engagement: number; penalty: number } };
   /** How good you are at making each kind of thing (0..1). */
   craftSkill: Record<string, number>;
   hasCar: boolean;
@@ -113,8 +113,9 @@ export async function myThings(): Promise<MyThings | null> {
     // In jail? (game-db/055; nothing until it's run).
     db.rpc("jail_until", { p_user: userId }),
   ]);
-  // Challenges hosted and won (game-db/070; nothing until it's run).
-  const { data: ch } = await db.rpc("challenge_rep", { p_user: userId });
+  // Challenges hosted and won (game-db/070), and taking part (game-db/093): nothing until they're run.
+  const [{ data: ch }, { data: eng }] = await Promise.all([db.rpc("challenge_rep", { p_user: userId }), db.rpc("engagement_rep", { p_user: userId })]);
+  const e = (eng ?? {}) as Record<string, unknown>;
   if (!data) return null;
   const d = data as Record<string, unknown>;
   const now = Date.now();
@@ -153,6 +154,7 @@ export async function myThings(): Promise<MyThings | null> {
     penalty: n(d.penalty),
     marksLiked: n(liked),
     challenges: challengeRep(n((ch as { hosted?: number } | null)?.hosted), n((ch as { won?: number } | null)?.won)),
+    engagement: n(e.time) + n(e.talk) + n(e.kind) + n(e.people),
   });
   return { items, crafts, crafted, effects, reputation, craftSkill: skill, hasCar: items.some((i) => i.category === "car"), jailedUntil: jail ? String(jail) : null };
 }
