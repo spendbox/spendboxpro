@@ -24,6 +24,7 @@
 - [ ] In the Supabase SQL Editor run `game-db/085_town_hall_faces.sql` (the Town Hall, one chat for everyone online in the state; and the "faces" storage for profile photos). Until then Town Hall says it opens soon and photos say they're switched on soon.
 - [ ] Then run `game-db/086_town_hall_more.sql` (Town Hall replies, reactions, photos, deleting, messages gone after 24 hours; nobody shows "at work" on the map any more; no top price for landmarks).
 - [ ] Then run `game-db/087_rename_property.sql` (name any property you own from Things › Assets, not just your home).
+- [ ] Then run `game-db/088_world_bank_sports.sql` (the World Bank also counts sports money: the house cut on bets and match tickets, not only challenges). Run it after 083 and 084.
 - [ ] Paystack dashboard: turn on "Pay with Transfer" (for bank transfer in the game), and set the Webhook URL to `https://<your site>/api/paystack/webhook` (Settings → API Keys & Webhooks).
 - [ ] On the day the simple life goes live (after merging), run `game-db/075_fresh_start.sql` ONCE: everyone's money becomes ₦350,000 (₦250,000 + ₦100,000 founder bonus), pots emptied, Founder badge, homes and things kept. Old balances are backed up; the undo lines are at the bottom of the file.
 - [ ] Optional, for voice calls on every network: add a TURN relay (docs/VOICE_CALLS.md) with NEXT_PUBLIC_TURN_URL, NEXT_PUBLIC_TURN_USERNAME and NEXT_PUBLIC_TURN_CREDENTIAL in Vercel.
