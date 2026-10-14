@@ -55,6 +55,8 @@ export type StructureType =
   | "market"
   | "arena"
   | "campus"
+  // A teaching hospital's grounds (LUTH): laid out like a campus, in white with red crosses.
+  | "medcentre"
   | "hotel"
   | "solar"
   | "airport"
@@ -119,6 +121,8 @@ export type Tile = {
     /** Size in tiles along x and z (2 when missing). */
     w?: number;
     d?: number;
+    /** On a real map: which way its main entrance faces (one step out: dx, dz), see compile.ts. */
+    entrance?: { dx: number; dz: number };
   };
   /** A single-tile landmark's own name ("Teslim Balogun Stadium", "Club Gbedu"...). */
   name?: string;
@@ -202,6 +206,7 @@ export const STRUCTURE_LABEL: Record<StructureType, string> = {
   market: "Market",
   arena: "Football stadium",
   campus: "University",
+  medcentre: "Teaching hospital",
   hotel: "Hotel",
   solar: "Solar farm",
   airport: "Airport",
@@ -1332,6 +1337,8 @@ function structureName(plan: CityPlan, type: StructureType, ax: number, az: numb
       return pick([`${city} Wrestling Arena`, `${street} Wrestling Hall`, `${city} Grapple Dome`], 18);
     case "campus":
       return pick([`University of ${city}`, `${city} Polytechnic`, `${street} College`], 7);
+    case "medcentre":
+      return pick([`${city} University Teaching Hospital`, `${street} General Hospital`], 19);
     case "hotel":
       return pick([`Grand ${city} Hotel`, `The ${street}`, `${city} Continental`], 8);
     case "solar":
@@ -1568,7 +1575,7 @@ export function lotAt(plan: CityPlan, i: number): Tile {
   const st = t.rail ? null : structureAt(plan, x, z);
   if (st) {
     const heights: Record<StructureType, number> = {
-      mall: 1.2, twin: 7, museum: 1.8, funfair: 2.8, market: 0.7, arena: 1.1, campus: 1.6, hotel: 4.4, solar: 0.5, airport: 1.6, port: 1.8, military: 1.2,
+      mall: 1.2, twin: 7, museum: 1.8, funfair: 2.8, market: 0.7, arena: 1.1, campus: 1.6, medcentre: 1.6, hotel: 4.4, solar: 0.5, airport: 1.6, port: 1.8, military: 1.2,
       power: 3.4, dam: 0.9, oilrig: 2.8, waterpark: 1.3, court: 0.9, boxing: 1.35, wrestling: 1.35, capitol: 2.3, megamall: 1.2,
       bank: 1.6, bigpark: 0.6, gym: 1.3, spa: 0.8, cathedral: 3.4, grandmosque: 3.6, intlairport: 2.2, spaceport: 3.6,
     };
@@ -1781,6 +1788,8 @@ function baseTile(plan: CityPlan, x: number, z: number): Tile {
     const m = plan.megas[mi];
     const structure: NonNullable<Tile["structure"]> = { type: m.type, name: m.name, ax: m.ax, az: m.az, anchor: x === m.ax && z === m.az, w: m.w, d: m.d };
     if (m.inside) structure.inside = m.inside;
+    const entrance = plan.region?.entranceAt(m.ax, m.az);
+    if (entrance) structure.entrance = entrance;
     return { i, x, z, kind: "structure", top: MEGA_TOP[m.type] ?? 1.5, r, structure };
   }
   // A real place's water: the map's bridges cross it as roads over the water.

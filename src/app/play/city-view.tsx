@@ -382,6 +382,15 @@ type Props = {
   homeStick?: { current: { x: number; y: number } };
   /** On foot: you tried to walk into water or a building ("water" / "building"), at most every few seconds. */
   onWalkBlocked?: (what: "water" | "building") => void;
+  /**
+   * Going into a landmark: you arrive at its main entrance, in front of the name sign (a photo
+   * spot), and stay there until `gateIn` changes (Go inside). Says which landmark, or null once gone.
+   */
+  onAtGate?: (gate: { name: string } | null) => void;
+  /** Change it to go on inside from a landmark's entrance. */
+  gateIn?: number;
+  /** Signed out: a tap on a place's bubble (or its fun-place icon) asks you to sign in instead. */
+  onBubbleSignIn?: () => void;
 };
 
 type Part = { tile: number; x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number; color: number; tilt?: number };
@@ -641,7 +650,10 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
       add("ground", { x, y: 0, z, sx: 0.5, sy: 0.062, sz: 0.5, ry: 0, color: 0x6a7380 });
       // Traffic lights on two opposite corners, one for each direction of traffic. The bulbs
       // are coloured live (see updateSignals); their colour here only says which is which.
+      // None on a corner by a landmark's entrance: nothing stands between its name sign and the street.
+      const byGate = (sx: number, sz: number) => !!plan.region && [[sx, 0], [0, sz], [sx, sz]].some(([dx, dz]) => plan.region!.clearAt(x + dx, z + dz) === "entrance");
       for (const [cx, cz, axis] of [[0.43, -0.43, 0], [-0.43, 0.43, 1]] as const) {
+        if (byGate(Math.sign(cx), Math.sign(cz))) continue;
         add("trunk", { x: x + cx, y: 0.06, z: z + cz, sx: 0.28, sy: 0.5, sz: 0.28, ry: 0, color: 0x343a40 });
         add("building", { x: x + cx, y: 0.42, z: z + cz, sx: 0.07, sy: 0.19, sz: 0.07, ry: 0, color: 0x212529 });
         for (let k = 0; k < 3; k++) {
@@ -1030,10 +1042,35 @@ type BoxFn = (dx: number, y: number, dz: number, sx: number, sy: number, sz: num
 type TreeFn = (dx: number, dz: number, size: number, v: number) => void;
 
 /** The big 2×2 buildings, drawn from their corner tile (the block's centre is at +0.5, +0.5). */
-function structureParts(t: Tile, plan: CityPlan, B: BoxFn, tree: TreeFn) {
+function structureParts(t: Tile, plan: CityPlan, B0: BoxFn, tree0: TreeFn) {
   // The big ones (the stadium, the capitol, mega malls) have their own drawings.
-  if (megaParts(t, B, tree)) return;
+  if (megaParts(t, B0, tree0)) return;
   const st = t.structure!;
+  // A real landmark bigger than the usual 2 × 2 (a market, a museum, a hotel, a port at their
+  // true size): its grounds fill the whole site (paving, lawns, trees along a low fence), and its
+  // building stands in the middle, drawn bigger to match.
+  const W = st.w ?? 2;
+  const D = st.d ?? 2;
+  let B = B0;
+  let tree = tree0;
+  if (W > 2 || D > 2) {
+    const k = Math.min(W, D) / 2;
+    const kh = Math.min(2.2, 0.6 + k * 0.45);
+    const Cx = (W - 1) / 2;
+    const Cz = (D - 1) / 2;
+    B0(Cx, 0.02, Cz, W - 0.04, 0.07, D - 0.04, 0x9fcf8c, 0, "ground");
+    B0(Cx, 0.085, Cz, W - 0.5, 0.006, D - 0.5, 0xe2dccd, 0, "ground");
+    for (const side of [-1, 1]) {
+      B0(Cx, 0.09, Cz + side * (D / 2 - 0.06), W - 0.12, 0.07, 0.025, 0xdee2e6);
+      B0(Cx + side * (W / 2 - 0.06), 0.09, Cz, 0.025, 0.07, D - 0.12, 0xdee2e6);
+    }
+    for (let x = 0; x < W; x++)
+      for (const z of [-0.28, D - 0.72]) tree0(x, z, 0.4, t.r[(x + Math.round(z)) & 3] + x * 0.13);
+    for (let z = 1; z < D - 1; z++) for (const x of [-0.28, W - 0.72]) tree0(x, z, 0.4, t.r[(z + Math.round(x)) & 3] + z * 0.17);
+    B = (x, y, z, sx, sy, sz, color, ry, mesh, tilt) =>
+      B0(Cx + (x - 0.5) * k, y <= 0.09 ? y : 0.09 + (y - 0.09) * kh, Cz + (z - 0.5) * k, sx * k, y <= 0.02 && sy <= 0.07 ? sy : sy * kh, sz * k, color, ry, mesh, tilt);
+    tree = (x, z, size, v) => tree0(Cx + (x - 0.5) * k, Cz + (z - 0.5) * k, size * Math.min(1.6, k * 0.8), v);
+  }
   const pal = plan.palette;
   const r = t.r;
   const pick = (list: number[], v: number) => list[Math.floor(v * list.length) % list.length];
@@ -1527,6 +1564,9 @@ export function CityView({
   walkStick,
   homeStick,
   onWalkBlocked,
+  onAtGate,
+  gateIn = 0,
+  onBubbleSignIn,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const api = useRef<{
@@ -1557,14 +1597,16 @@ export function CityView({
     focusEvent: (id: number) => void;
     setGhosts: (list: CityGhost[]) => void;
     flyToTile: (tile: number) => void;
+    /** From a landmark's entrance, on inside. */
+    goInside: () => void;
     setHomePlans: (plans: Record<number, HomePlan> | undefined) => void;
     /** Zoom in (dir 1) or out (dir -1) a step: the + and − buttons on a computer. */
     zoom: (dir: number) => void;
   } | null>(null);
-  const cb = useRef({ onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick });
+  const cb = useRef({ onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick, onAtGate, onBubbleSignIn });
   const atmos = useRef({ progress, nightFirst, meAvatar, weather });
   useEffect(() => {
-    cb.current = { onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick };
+    cb.current = { onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick, onAtGate, onBubbleSignIn };
     atmos.current = { progress, nightFirst, meAvatar, weather };
   });
 
@@ -1711,7 +1753,7 @@ export function CityView({
     let tallest = 0;
     let framed = false;
     /** Stopping at a landmark's gate on the way in (see syncView), and the place it was for. */
-    let gateTour: { t: number; fromPos: THREE.Vector3; fromTarget: THREE.Vector3; toPos: THREE.Vector3; toTarget: THREE.Vector3 } | null = null;
+    let gateTour: { t: number; fromPos: THREE.Vector3; fromTarget: THREE.Vector3; toPos: THREE.Vector3; toTarget: THREE.Vector3; building: string; name: string; arrived: boolean } | null = null;
     let gateSeen: string | null = null;
     /** A place asked for before the city was drawn (just after a reload): opened once it is. */
     let openLater: string | null = null;
@@ -2150,13 +2192,14 @@ export function CityView({
     const gateLamp = new THREE.MeshBasicMaterial({ color: 0xfff1c2 });
     const gateSteel = new THREE.MeshLambertMaterial({ color: 0x34383d });
     /** The gateways drawn, with which landmark each is for (going to a landmark stops at its gate first). */
-    let gates: { ax: number; az: number; w: number; d: number; x: number; z: number; dx: number; dz: number; S: number }[] = [];
+    let gates: { ax: number; az: number; w: number; d: number; x: number; z: number; dx: number; dz: number; S: number; name: string }[] = [];
     const gateFor = (x: number, z: number) => gates.find((g) => x >= g.ax && x < g.ax + g.w && z >= g.az && z < g.az + g.d) ?? null;
     const flagGreen = new THREE.MeshLambertMaterial({ color: 0x008751, side: THREE.DoubleSide });
     const flagWhite = new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide });
     const SIGN_COLOURS: Record<string, [string, string]> = {
       campus: ["#1f5f3f", "#ffffff"],
       hospital: ["#ffffff", "#c92a2a"],
+      medcentre: ["#ffffff", "#c92a2a"],
       arena: ["#1c3f6e", "#ffffff"],
       museum: ["#5c3d2e", "#f8f0e3"],
       worship: ["#f8f0e3", "#3b2f2f"],
@@ -2226,13 +2269,22 @@ export function CityView({
         const side = reg.entranceAt(l.ax, l.az) ?? { dx: 0, dz: 1 };
         const along = side.dz ? l.w : l.d;
         const big = l.w * l.d > 2;
+        // Straight out from the middle of the entrance side: a street (the gate steps back inside
+        // the fence so its name sign can stand at the kerb) or open ground (the sign stands out on it).
+        const fx = Math.round(l.ax + (l.w - 1) / 2 + side.dx * ((side.dx ? l.w : l.d) / 2 + 0.5));
+        const fz = Math.round(l.az + (l.d - 1) / 2 + side.dz * ((side.dx ? l.w : l.d) / 2 + 0.5));
+        const ft = currentPlan ? tileAt(currentPlan, spiralIndex(fx, fz)) : null;
+        const streetInFront = !!ft && (ft.kind === "road" || ft.kind === "bridge" || !!reg.roadAt(fx, fz));
         // Sized to the people on the map (drawn bigger than life): the pylons tower over them.
         const S = big ? 1 : 0.62;
         // How far the steel canopies reach out over the road either side of the monument.
         const span = big ? Math.min(0.85, Math.max(0.5, along * 0.22)) : 0.38;
         const half = side.dz ? l.d / 2 : l.w / 2;
-        const px = cx + side.dx * (half + 0.12 * S);
-        const pz = cz + side.dz * (half + 0.12 * S);
+        // Where the gate stands: just outside the site, or (a big one with the street right in
+        // front) just inside its fence, so the name sign can stand in front of it at the kerb.
+        const step = streetInFront && big ? -0.42 * S : 0.12 * S;
+        const px = cx + side.dx * (half + step);
+        const pz = cz + side.dz * (half + step);
         const tex = signTexture(l.name, l.type);
         const crestTex = crestTexture(l.name, l.type);
         const face = new THREE.MeshBasicMaterial({ map: tex });
@@ -2286,15 +2338,8 @@ export function CityView({
             if (sx < 0) wing.reverse();
             add(slab(wing, PD * 1.25), wingMat, 0, 0, 0);
           }
-          // Between the pylons, low down: the wall with the name plaque (both faces).
-          const plaqueW = 0.62 * S;
-          const plaqueH = plaqueW * 0.28;
-          add(geo(new THREE.BoxGeometry(0.34 * S, 0.3 * S, PD * 0.9).translate(0, 0.15 * S, 0)), wingMat, 0, 0, 0);
-          const plaque = geo(new THREE.PlaneGeometry(plaqueW, plaqueH));
-          const py = 0.36 * S + plaqueH / 2;
-          add(geo(new THREE.BoxGeometry(plaqueW + 0.02 * S, plaqueH + 0.02 * S, PD * 0.4)), gateDark, 0, py, 0);
-          add(plaque, face, 0, py, PD * 0.21, false);
-          add(plaque, face, 0, py, -PD * 0.21, false).rotation.y = Math.PI;
+          // The name isn't on the monument any more: it has its own sign out in front (below),
+          // where nothing stands between it and the street (and people can pose by it).
           // The crest: a round medallion in a gold ring, high between the pylons.
           const cr = 0.11 * S;
           const cy = 0.72 * S;
@@ -2336,9 +2381,10 @@ export function CityView({
             }
             // The post at the far end, and a street lamp beside the monument.
             add(geo(new THREE.CylinderGeometry(0.014 * S, 0.018 * S, yOut + th, 8).translate(0, (yOut + th) / 2, 0)), trussMat, xOut, 0, 0);
+            // Lamps behind the monument (inside), never between the name and the street.
             const lampX = sx * (0.3 * S);
-            add(geo(new THREE.CylinderGeometry(0.006 * S, 0.008 * S, 0.62 * S, 6).translate(0, 0.31 * S, 0)), gateDark, lampX, 0, depth * 1.4);
-            add(geo(new THREE.SphereGeometry(0.022 * S, 10, 8)), gateLamp, lampX - sx * 0.03 * S, 0.62 * S, depth * 1.4, false);
+            add(geo(new THREE.CylinderGeometry(0.006 * S, 0.008 * S, 0.62 * S, 6).translate(0, 0.31 * S, 0)), gateDark, lampX, 0, -depth * 1.6);
+            add(geo(new THREE.SphereGeometry(0.022 * S, 10, 8)), gateLamp, lampX - sx * 0.03 * S, 0.62 * S, -depth * 1.6, false);
           }
           // The island under the monument: black-and-white kerbs round it, and bushes.
           const islandW = 0.58 * S;
@@ -2380,7 +2426,8 @@ export function CityView({
           };
           /** A flat outline (in S units) stood up, `d` thick, its base at y. */
           const shape = (pts: [number, number][], d: number, mt: THREE.Material, y = 0) => add(slab(pts.map(([x, yy]) => [x * S, yy * S] as [number, number]), d), mt, 0, y, 0);
-          const t = l.type;
+          // A teaching hospital's grounds (LUTH) get the hospital's gate.
+          const t = l.type === "medcentre" ? "hospital" : l.type;
           if (t === "hospital" || t === "hotel") {
             // A drive-up canopy: a flat roof on posts, the name on top. A hospital's is white with a
             // red cross; a hotel's dark on gold posts, with lamps and a red carpet.
@@ -2524,12 +2571,30 @@ export function CityView({
             plaque(0.5 * S, 0.48 * S, 0.05 * S);
           }
         }
+        // The name sign: low and wide, in front of the gate (towards the street), facing out, with
+        // nothing in front of it. Big letters on a plinth, the photo spot. At a small place with the
+        // street right in front, it stands beside the gate instead (never out in the road).
+        {
+          const SW = (big ? 1.25 : 0.62) * S;
+          const SH = SW * 0.28;
+          const lift = 0.07 * S;
+          const beside = streetInFront && !big;
+          const sx0 = beside ? (0.45 + SW / 2 / S) * S : 0;
+          const sz0 = beside ? -0.02 * S : streetInFront ? 0.36 * S : 0.4 * S;
+          add(geo(new THREE.BoxGeometry(SW + 0.08 * S, lift, 0.12 * S).translate(0, lift / 2, 0)), gateStone, sx0, 0, sz0);
+          add(geo(new THREE.BoxGeometry(SW + 0.03 * S, SH + 0.03 * S, 0.05 * S).translate(0, lift + SH / 2, 0)), gateDark, sx0, 0, sz0);
+          const board = geo(new THREE.PlaneGeometry(SW, SH));
+          add(board, face, sx0, lift + 0.015 * S + SH / 2 - 0.015 * S, sz0 + 0.026 * S, false);
+          add(board, face, sx0, lift + 0.015 * S + SH / 2 - 0.015 * S, sz0 - 0.026 * S, false).rotation.y = Math.PI;
+          // Little lights in the grass shining up at it.
+          for (const lx of [-SW * 0.35, SW * 0.35]) add(geo(new THREE.SphereGeometry(0.02 * S, 8, 6)), gateLamp, sx0 + lx, 0.015 * S, sz0 + 0.14 * S, false);
+        }
         obj.position.set(px, 0, pz);
         obj.rotation.y = Math.atan2(side.dx, side.dz);
         life.add(obj);
         entranceSigns.push({ obj, tex, mats: [face, crestFace, wingMat, ...gateMats], geos, crest: crestTex });
         // Where to stand to see it: out on the road in front, a little back.
-        gates.push({ ax: l.ax, az: l.az, w: l.w, d: l.d, x: px, z: pz, dx: side.dx, dz: side.dz, S });
+        gates.push({ ax: l.ax, az: l.az, w: l.w, d: l.d, x: px, z: pz, dx: side.dx, dz: side.dz, S, name: l.name });
       }
     }
     /** A round crest for the medallion: the place's colours, a gold ring, and its initials. */
@@ -5251,6 +5316,8 @@ export function CityView({
           if (!a || seen.has(a.anchor.i)) continue;
           seen.add(a.anchor.i);
           const at = a.anchor;
+          // The open ground in front of a landmark's gate is the gate's: no bubble of its own on it.
+          if (at.clear === "entrance") continue;
           const c = at.structure ? structureCentre(at.structure) : at;
           spotList.push({ i: at.i, x: c.x, y: at.top + 0.12, z: c.z });
         }
@@ -5318,6 +5385,7 @@ export function CityView({
       },
       onBuilding: (i) => {
         if (!isRevealed || (immersive() && !aloft())) return;
+        if (cb.current.onBubbleSignIn) return cb.current.onBubbleSignIn();
         const r = roomFor(i);
         if (!r) return;
         showHover(i);
@@ -6025,10 +6093,17 @@ export function CityView({
       if (next?.kind === "ride" && view?.kind === "ride" && view.k === next.k) return;
       if (next?.kind === "vehicle" && view?.kind === "vehicle" && view.ride.kind === next.ride.kind && view.ride.index === next.ride.index) return;
       if (!next && !view) return;
-      // Going into a landmark from the map: first the camera stops at its main gate, out on the
-      // road (the welcome), then carries on inside.
+      // Going into a landmark from the map: you arrive at its main gate, out on the street in
+      // front of the name sign (a photo spot), and go on inside when you choose (goInside).
       if (!next) gateSeen = null;
-      if (gateTour) return;
+      if (gateTour) {
+        if (next?.kind === "place" && next.building === gateTour.building) return;
+        // Left (or went somewhere else) from the entrance: the map again, from where you stand.
+        gateTour = null;
+        cb.current.onAtGate?.(null);
+        controls.enabled = true;
+        if (!next && !view) return;
+      }
       if (next?.kind === "place" && !view && !flight && !walker.on && gateSeen !== next.building) {
         const g = gateFor(next.anchor.x, next.anchor.z);
         gateSeen = next.building;
@@ -6043,7 +6118,11 @@ export function CityView({
             fromPos: camera.position.clone(),
             fromTarget: controls.target.clone(),
             toPos: new THREE.Vector3(g.x + g.dx * back + g.dz * 0.25 * S, 0.42 * S, g.z + g.dz * back - g.dx * 0.25 * S),
-            toTarget: new THREE.Vector3(g.x, 0.55 * S, g.z),
+            // Looking at the name sign, with the gate behind it.
+            toTarget: new THREE.Vector3(g.x + g.dx * 0.3 * S, 0.32 * S, g.z + g.dz * 0.3 * S),
+            building: next.building,
+            name: g.name,
+            arrived: false,
           };
           return;
         }
@@ -7477,9 +7556,9 @@ export function CityView({
         camera.position.lerpVectors(gt.fromPos, gt.toPos, e);
         controls.target.lerpVectors(gt.fromTarget, gt.toTarget, e);
         camera.lookAt(controls.target);
-        if (gt.t > 1.6) {
-          gateTour = null;
-          syncView();
+        if (gt.t > 0.9 && !gt.arrived) {
+          gt.arrived = true;
+          cb.current.onAtGate?.({ name: gt.name });
         }
       } else if (!riding) {
         if (focus) {
@@ -7580,6 +7659,13 @@ export function CityView({
     // or on a ride they narrow the view like pinching; over the town they glide the camera in
     // or out, as far as scrolling could.
     let zoomAnim = 0;
+    /** From a landmark's entrance, on inside (the place the game has already gone into). */
+    function goInside() {
+      if (!gateTour) return;
+      gateTour = null;
+      cb.current.onAtGate?.(null);
+      syncView();
+    }
     function zoom(dir: number) {
       if (look.enabled) return look.zoomBy(dir > 0 ? 0.8 : 1.25);
       if (!controls.enabled) return;
@@ -7630,7 +7716,7 @@ export function CityView({
       if (regionNow && currentSeed >= 0 && builtCount > 0) build(currentSeed, builtCount);
     }
     const center = () => ({ x: Math.round(controls.target.x), z: Math.round(controls.target.z) });
-    api.current = { setMarkTags, center, build: buildFor, setOwned, setBusinesses, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setChallengeLights, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, setHomePlans, zoom };
+    api.current = { setMarkTags, center, build: buildFor, setOwned, setBusinesses, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setChallengeLights, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, setHomePlans, zoom, goInside };
 
     return () => {
       alive = false;
@@ -7727,6 +7813,13 @@ export function CityView({
   useEffect(() => {
     api.current?.setAds(ads ?? []);
   }, [ads]);
+  // Go inside from a landmark's entrance (the game's "Go inside" button).
+  const gateInSeen = useRef(gateIn);
+  useEffect(() => {
+    if (gateIn === gateInSeen.current) return;
+    gateInSeen.current = gateIn;
+    api.current?.goInside();
+  }, [gateIn]);
 
   useEffect(() => {
     api.current?.setRevealed(revealed);

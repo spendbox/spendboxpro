@@ -11,11 +11,11 @@ Worked out by the game from the map, never from the phone (`src/lib/world/landma
   stadium ₦400bn, a hotel ₦300bn, a market ₦200bn, a museum ₦120bn, a club ₦60bn...);
 - bigger costs more: twice the ground costs about 1.4 times as much;
 - a small, fixed difference between landmarks of the same kind (up to 8% either way), from the name;
-- always between ₦50bn and ₦2tn, rounded to the nearest ₦1bn (₦10bn from ₦100bn up);
+- never under ₦50bn, with no top (the biggest cost the most), rounded to the nearest ₦1bn (₦10bn from ₦100bn up);
 - your reputation level takes its usual discount off (`src/lib/world/rep-levels.ts`).
 
-Some Lagos prices: Murtala Muhammed Airport ₦2tn, Unilag ₦2tn, Apapa Port ₦1.58tn, Lagos City Hall
-₦440bn, National Stadium ₦400bn, Eko Hotel ₦290bn, Balogun Market ₦240bn, National Museum ₦110bn.
+Some Lagos prices (at their real sizes): Apapa Port ₦3.81tn, Tin Can Island Port ₦3.51tn, Unilag
+₦2.4tn, Murtala Muhammed Airport ₦2.1tn, Yabatech ₦1.61tn, LUTH ₦800bn, Eko Hotel ₦790bn.
 
 ## Owning one
 
