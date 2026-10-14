@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DoorOpen } from "lucide-react";
 import { Flag, MapPin, Pencil, Search, Star, X } from "@/components/icons";
 import { addressOf, makePlan, spiralIndex, tileAt, type CityPlan } from "@/lib/city/layout";
+import { WORLD_EVENT_BY_KEY, type WorldEvent } from "@/lib/world-events";
 import { BUILDING_LABEL } from "@/lib/world/buildings";
 import type { RegionMap } from "@/lib/world/compile";
 import { regionMap } from "@/lib/world";
@@ -569,6 +570,29 @@ export function useWorldLife({
     if (!beforeFly) return go();
     void beforeFly(x, z).then((ok) => ok && go());
   };
+
+  /** A news story you tapped through to: fly there, and the story plays out on the spot (on this phone only) for a few minutes. */
+  const [newsScene, setNewsScene] = useState<WorldEvent[]>([]);
+  const showStory = ({ x, z, scene }: { x: number; z: number; scene?: string }) => {
+    const go = () => {
+      const tile = spiralIndex(Math.round(x), Math.round(z));
+      setFlyTo({ tile, at: ++flies.current });
+      const kind = scene ? WORLD_EVENT_BY_KEY[scene] : undefined;
+      if (!kind) return setNewsScene([]);
+      // It starts as the camera lands, with its arrival (fire engines racing in, the crowd gathering).
+      const start = Date.now() + 1200;
+      setNewsScene([{ id: -flies.current, key: kind.key, tile, startsAt: new Date(start).toISOString(), endsAt: new Date(start + kind.minutes * 60_000).toISOString(), near: true }]);
+    };
+    if (!beforeFly) return go();
+    void beforeFly(x, z).then((ok) => ok && go());
+  };
+  useEffect(() => {
+    const ev = newsScene[0];
+    if (!ev) return;
+    // Gone once it's over (its outro has played).
+    const t = setTimeout(() => setNewsScene([]), Date.parse(ev.endsAt) - Date.now() + 5000);
+    return () => clearTimeout(t);
+  }, [newsScene]);
 
   async function act(run: () => Promise<PropertyResult>, done: (r: PropertyResult & { ok: true }) => string | null): Promise<PropertyResult> {
     setBusy(true);
@@ -1459,7 +1483,7 @@ export function useWorldLife({
             <button
               onClick={() => {
                 setBreaking(null);
-                if (breaking.x !== undefined && breaking.z !== undefined) fly(breaking.x, breaking.z);
+                if (breaking.x !== undefined && breaking.z !== undefined) showStory({ x: breaking.x, z: breaking.z, scene: breaking.scene });
                 else setNewsOpen(true);
               }}
               className="min-w-0 flex-1 text-left"
@@ -1501,9 +1525,9 @@ export function useWorldLife({
       {newsOpen && (
         <NewsSheet
           region={region}
-          onShow={(x, z) => {
+          onShow={(story) => {
             setNewsOpen(false);
-            fly(x, z);
+            showStory(story);
           }}
           onClose={() => setNewsOpen(false)}
         />
@@ -1659,7 +1683,7 @@ export function useWorldLife({
     fly(p.x, p.z);
     setPlace(workplaceById(planOf(region), p.id) ?? { id: p.id, name: p.name, x: Math.round(p.x), z: Math.round(p.z), jobs: [] });
   };
-  return { explore, openExplorePlace, rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, search: region ? { region, mine: assets?.units ?? [], owned: shown, businesses, coins, homes: () => homesFor(region), onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit, mySpot: whereAmI(), homeSpot, goHome, nameHome, homeBuilding: homeUnit ? homeUnit.split("/")[0] : null, openPlanner: () => setPlanning(true), locateMe, lookAt: (x: number, z: number) => setFlyTo({ tile: spiralIndex(Math.round(x), Math.round(z)), at: ++flies.current }), makeRow, openSoon: () => setSoonOpen(true), openGuestBook: (building: string) => setGuestBook(building),
+  return { explore, openExplorePlace, rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, newsScene, search: region ? { region, mine: assets?.units ?? [], owned: shown, businesses, coins, homes: () => homesFor(region), onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit, mySpot: whereAmI(), homeSpot, goHome, nameHome, homeBuilding: homeUnit ? homeUnit.split("/")[0] : null, openPlanner: () => setPlanning(true), locateMe, lookAt: (x: number, z: number) => setFlyTo({ tile: spiralIndex(Math.round(x), Math.round(z)), at: ++flies.current }), makeRow, openSoon: () => setSoonOpen(true), openGuestBook: (building: string) => setGuestBook(building),
     /** Where you are changed outside (a trip to a friend): read it again. */
     refreshLife: () => void refresh(),
     openLife: () => setLifeOpen(true),

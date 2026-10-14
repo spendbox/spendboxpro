@@ -13,7 +13,7 @@
 // only add a fixed handful of draw calls.
 
 import * as THREE from "three";
-import type { CityPlan, Tile } from "@/lib/city/layout";
+import { spiralXY, type CityPlan, type Tile } from "@/lib/city/layout";
 import { WORLD_EVENT_BY_KEY, type WorldEvent } from "@/lib/world-events";
 import { playEventSound } from "./event-sounds";
 import { CATEGORY_COLOR, createArtSheet, createUiSheet } from "./events/art";
@@ -63,6 +63,8 @@ type Inst = {
 };
 
 const INTRO = 2.5;
+/** How far (tiles) a news story's scene may move to find a fitting place, before it just happens on the spot. */
+const NEAR = 5;
 
 export function createWorldEvents(host: WorldEventsHost) {
   const art = createArtSheet();
@@ -133,7 +135,11 @@ export function createWorldEvents(host: WorldEventsHost) {
     const c = cityNow();
     if (!c) return null;
     const kind = WORLD_EVENT_BY_KEY[inst.ev.key];
-    const s = findSpot(c, kind.needs, inst.ev.tile, inst.ev.id, host.ground);
+    let s = findSpot(c, kind.needs, inst.ev.tile, inst.ev.id, host.ground);
+    if (s && inst.ev.near) {
+      const [sx, sz] = spiralXY(Math.max(0, inst.ev.tile));
+      if (Math.hypot(s.x - sx, s.z - sz) > NEAR) s = findSpot(c, "any", inst.ev.tile, inst.ev.id, host.ground);
+    }
     if (!s) return null;
     const id = inst.ev.id;
     const e: Ev = {

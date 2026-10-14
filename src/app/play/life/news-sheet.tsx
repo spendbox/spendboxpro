@@ -33,7 +33,7 @@ type Story = Omit<NewsItem, "kind"> & { kind: NewsKind | "invention" };
 const TONE: Partial<Record<NewsKind | "invention", string>> = { fire: "#e03131", flood: "#1971c2", weather: "#1c7ed6", power: "#f08c00", sport: "#2f9e44", invention: "#7048e8", star: "#d6336c", fun: "#e8590c", money: "#2b8a3e", game: "#e8590c" };
 
 /** What's happening in the city: news every 20 minutes, the weather, and players' big moments. Share any story. */
-export function NewsSheet({ region, onShow, onClose }: { region: RegionMap; onShow: (x: number, z: number) => void; onClose: () => void }) {
+export function NewsSheet({ region, onShow, onClose }: { region: RegionMap; onShow: (story: { x: number; z: number; scene?: string }) => void; onClose: () => void }) {
   const [tab, setTab] = useState<"news" | "gossip">("news");
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -124,7 +124,7 @@ export function NewsSheet({ region, onShow, onClose }: { region: RegionMap; onSh
                   <p className="mt-1 flex flex-wrap items-center gap-3 text-[11px] text-muted">
                     <span>{ago(now - n.at)}</span>
                     {n.x !== undefined && n.z !== undefined && (
-                      <button onClick={() => onShow(n.x!, n.z!)} className="flex items-center gap-1 font-semibold text-gold-dark">
+                      <button onClick={() => onShow({ x: n.x!, z: n.z!, scene: n.scene })} className="flex items-center gap-1 font-semibold text-gold-dark">
                         <MapPin className="size-3" /> Show me
                       </button>
                     )}

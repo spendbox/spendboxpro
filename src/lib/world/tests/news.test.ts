@@ -3,7 +3,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { regionMap } from "../index.ts";
-import { cityNews, weatherNow } from "../news.ts";
+import { cityNews, playerStory, weatherNow } from "../news.ts";
+import { WORLD_EVENT_BY_KEY } from "../../world-events.ts";
 
 const map = regionMap("lagos")!;
 
@@ -22,4 +23,20 @@ test("a new story comes every 20 minutes, and the weather changes by the slot", 
   assert.notEqual(cityNews(map, now)[0].id, cityNews(map, now + 20 * 60_000)[0].id);
   const kinds = new Set(Array.from({ length: 40 }, (_, k) => weatherNow(now + k * 3 * 3_600_000).kind));
   assert.ok(kinds.has("rain") && kinds.has("clear"));
+});
+
+test("every story you can go and see has a scene that plays out there, fitting the story", () => {
+  const stories = cityNews(map, Date.UTC(2026, 9, 12, 10, 5), 600);
+  for (const n of stories) {
+    if (n.x === undefined) continue;
+    assert.ok(n.scene && WORLD_EVENT_BY_KEY[n.scene], `${n.kind}: "${n.title}" has no scene`);
+  }
+  const fire = stories.find((n) => n.kind === "fire");
+  assert.equal(fire?.scene, "building_fire");
+  const goat = stories.find((n) => /goat/i.test(n.title));
+  if (goat) assert.equal(goat.scene, "runaway_cows");
+  for (const kind of ["buy", "business", "rich", "challenge"] as const) {
+    const s = playerStory({ id: "x", at: 0, kind, who: "Ada", what: "a flat", price: 20_000 }, "Yaba", "₦30m").scene;
+    assert.ok(s && WORLD_EVENT_BY_KEY[s], kind);
+  }
 });
