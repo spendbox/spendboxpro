@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { X } from "@/components/icons";
-import { MISSION_NAIRA, MISSIONS_TOTAL, nextMission, type Mission, type MissionState, type Phase } from "@/lib/world/tutorial";
+import { MISSION_NAIRA, MISSIONS, MISSIONS_TOTAL, nextMission, type Mission, type MissionState, type Phase } from "@/lib/world/tutorial";
 import { cash } from "@/lib/world/value";
 import { playSfx } from "./sound";
 
@@ -16,7 +16,7 @@ import { playSfx } from "./sound";
 const KEY = "newtown.tutorial.v1";
 
 /** What the walkthrough points at: that button glows. */
-export type TutorialGlow = "home" | "chat" | "challenge" | "camera" | "profile" | "wallet" | "dock" | null;
+export type TutorialGlow = "home" | "chat" | "challenge" | "camera" | "profile" | "wallet" | "dock" | "leave" | null;
 
 type Saved = { phase: Phase; i: number; skipped: Mission[] };
 const FRESH: Saved = { phase: "intro", i: 0, skipped: [] };
@@ -33,6 +33,8 @@ function read(): Saved {
 
 let saved: Saved | null = null;
 let glow: TutorialGlow = null;
+/** The mission on screen now (null: none, or not known yet). */
+let missionNow: Mission | null = null;
 const subs = new Set<() => void>();
 const emit = () => subs.forEach((f) => f());
 const subscribe = (f: () => void) => (subs.add(f), () => void subs.delete(f));
@@ -63,6 +65,46 @@ function setGlow(g: TutorialGlow) {
   emit();
 }
 
+/**
+ * The buttons on the map, each shown only once the walkthrough has introduced it (so a new player
+ * isn't faced with all of them at once). Before the walkthrough starts (no home yet) and during
+ * its opening cards, none of them; when it's done or closed, all of them.
+ */
+export type TourButton = "home" | "dock" | "extras" | "camera" | "chat" | "challenge" | "reputation" | "wallet" | "profile" | "people" | "online" | "sound";
+/** The tips (by number, see `tips` below) that introduce each button. */
+const TIP_SHOWS: [number, TourButton[]][] = [
+  // The rest of the quick buttons (Coming soon, Locate me, Walk, the notifications bell).
+  [1, ["extras", "camera"]],
+  [2, ["camera"]],
+  [3, ["people", "online"]],
+  [5, ["wallet"]],
+  [7, ["profile", "sound"]],
+];
+const MISSION_SHOWS: Record<Mission, TourButton[]> = { name: ["home", "dock"], hi: ["chat"], win: ["challenge", "reputation"] };
+function shownNow(): string {
+  const s = current();
+  if (s.phase === "done") return "all";
+  if (s.phase === "intro") return "";
+  const out = new Set<TourButton>();
+  // On the missions: every mission up to the one on screen; on the tips, all of them.
+  const upTo = s.phase === "missions" ? MISSIONS.indexOf(missionNow ?? "name") : MISSIONS.length - 1;
+  MISSIONS.forEach((m, k) => k <= upTo && MISSION_SHOWS[m].forEach((b) => out.add(b)));
+  if (s.phase === "tips") for (const [i, list] of TIP_SHOWS) if (s.i >= i) list.forEach((b) => out.add(b));
+  return [...out].sort().join(",");
+}
+/**
+ * Whether a button is shown yet: everything for players who've been through the walkthrough (or
+ * closed it); for a new one, only what it has introduced so far. `ready`: the walkthrough is on
+ * screen (you have a home); before that, nothing is shown.
+ */
+export function useTourShows(ready: boolean): (b: TourButton) => boolean {
+  const list = useSyncExternalStore(subscribe, shownNow, () => "all");
+  if (list === "all") return () => true;
+  if (!ready) return () => false;
+  const set = new Set(list.split(","));
+  return (b) => set.has(b);
+}
+
 /** "Start the guide": from the very beginning (missions already paid stay paid). */
 export function restartTutorial() {
   save({ ...FRESH });
@@ -82,12 +124,28 @@ export type TutorialActions = {
   wallet: () => void;
   /** A mission's reward was paid (refresh the cash on screen). */
   paid: () => void;
+  /** Step out of the building (or off the ride) you're in. */
+  leave: () => void;
 };
 
 /** Where the card's been dragged to (kept while the game's open, so it stays out of your way). */
 let dragged = { x: 0, y: 0 };
 
-export function Tutorial({ place, perMint, name, actions }: { place: string; perMint: number; /** Your name. */ name?: string; actions: TutorialActions }) {
+export function Tutorial({
+  place,
+  perMint,
+  name,
+  inside = null,
+  actions,
+}: {
+  place: string;
+  perMint: number;
+  /** Your name. */
+  name?: string;
+  /** Where you are: inside a building ("place", its name), on a ride, or out on the map (null). */
+  inside?: { kind: "place" | "ride"; name: string } | null;
+  actions: TutorialActions;
+}) {
   const first = (name ?? "").trim().split(/\s+/)[0];
   const palace = first ? `${first}'s Palace` : "The Palace";
   const s = useSyncExternalStore(subscribe, current, () => FRESH);
@@ -164,6 +222,11 @@ export function Tutorial({ place, perMint, name, actions }: { place: string; per
 
   const intro: Card[] = [
     { emoji: "👋", title: `Welcome to ${place}!`, text: "A real city, real streets, real people. Grab a seat, this takes a minute." },
+    {
+      emoji: "✋",
+      title: "Psst: you can move me",
+      text: "This card is in the way? Hold it anywhere (not on a button) and drag it wherever you like. It stays where you leave it, so you can always see what it's talking about.",
+    },
     { emoji: "🏖️", title: "No work. No bills. No brushing your teeth.", text: "Seriously. In Newtown you skip the boring bits and keep the fun ones." },
     { emoji: "🎲", title: "Your cash is for fun", text: "Play games, meet new people, visit real places and send gifts. That's the whole job description." },
     {
@@ -245,8 +308,29 @@ export function Tutorial({ place, perMint, name, actions }: { place: string; per
     if (s.phase === "missions" && !mission && !cheer && (done !== null || s.skipped.length > 0)) save({ ...s, phase: "tips", i: 0 });
   }, [s, done, mission, cheer]);
 
-  const card: Card | null =
+  const planned: Card | null =
     s.phase === "intro" ? intro[Math.min(s.i, intro.length - 1)] : s.phase === "missions" ? (mission ? missionCards[mission] : null) : s.phase === "tips" ? tips[Math.min(s.i, tips.length - 1)] : null;
+  // The house (and the quick buttons) are out on the map: inside a building or on a ride, first
+  // step out, with the Leave button glowing (the card comes back to the house once you're out).
+  const card: Card | null =
+    planned && inside && (planned.glow === "home" || planned.glow === "dock")
+      ? {
+          emoji: "🚪",
+          title: planned.title || "First, step outside",
+          text:
+            inside.kind === "ride"
+              ? `You're on ${inside.name} right now, and this button is out on the map. Tap the dark “Get off” button at the bottom of the screen (it's glowing), and we'll carry on from there.`
+              : `You're inside ${inside.name} right now, and this button is out on the map. To step out, tap the dark “Leave” button at the bottom of the screen (it's glowing), or tap “Take me out” here. Then we'll carry on.`,
+          glow: "leave",
+          action: { label: "Take me out", run: actions.leave },
+        }
+      : planned;
+  // The buttons shown so far follow the mission on screen (see useTourShows).
+  useEffect(() => {
+    if (missionNow === mission) return;
+    missionNow = mission;
+    emit();
+  }, [mission]);
   useEffect(() => {
     setGlow(card?.glow ?? null);
   }, [card?.glow]);
@@ -282,7 +366,11 @@ export function Tutorial({ place, perMint, name, actions }: { place: string; per
         onPointerDown={startDrag}
         className="pointer-events-auto w-full max-w-sm touch-none select-none rounded-2xl bg-ink p-3.5 text-white shadow-2xl ring-2 ring-gold/40 motion-safe:animate-[tipIn_.25s_ease-out]"
       >
-        <span aria-hidden className="mx-auto -mt-1.5 mb-2 block h-1 w-8 rounded-full bg-white/25" />
+        {/* The handle: it can be dragged anywhere. */}
+        <span aria-hidden className="mx-auto -mt-1.5 mb-2 flex w-fit items-center gap-1.5 text-[10px] font-semibold text-white/40">
+          <span className="block h-1 w-8 rounded-full bg-white/25" />
+          drag to move
+        </span>
         {cheer ? (
           <p className="py-3 text-center font-display text-lg font-extrabold text-gold">🎉 {cheer}</p>
         ) : (

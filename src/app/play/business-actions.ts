@@ -20,11 +20,20 @@ export async function mapBusinesses(region: string): Promise<MapBusiness[]> {
   }
 }
 
-/** Count something someone did with a business. */
-export async function hitBusiness(id: string, kind: BusinessHit): Promise<void> {
+/** Count something someone did with a business (`times`: billboard views come in batches). */
+export async function hitBusiness(id: string, kind: BusinessHit, times = 1): Promise<void> {
   if (!UUID.test(id ?? "") || !BUSINESS_HITS.includes(kind)) return;
+  const n = Math.min(50, Math.max(1, Math.floor(Number(times) || 1)));
   try {
-    await createAdminClient().rpc("business_hit", { p_lease: id, p_kind: kind });
+    const db = createAdminClient();
+    if (n > 1) {
+      // Many at once (game-db/084); before it's run, one at a time (a few at most).
+      const { error } = await db.rpc("business_hits_add", { p_lease: id, p_kind: kind, p_n: n });
+      if (!error) return;
+      for (let k = 0; k < Math.min(n, 5); k++) await db.rpc("business_hit", { p_lease: id, p_kind: kind });
+      return;
+    }
+    await db.rpc("business_hit", { p_lease: id, p_kind: kind });
   } catch {
     // Counting is best-effort.
   }

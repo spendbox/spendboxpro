@@ -1,42 +1,79 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { House, Landmark, MapPin, Search, TrainFront, X } from "@/components/icons";
+import { useEffect, useMemo, useState } from "react";
+import { Building2, House, Landmark, MapPin, Route, Search, Store, TrainFront, X } from "@/components/icons";
+import type { MapBusiness } from "@/lib/world/business";
 import type { RegionMap } from "@/lib/world/compile";
 import { toTile } from "@/lib/world/geo";
-import { ownedSpot } from "@/lib/world/owned";
+import { ownedSpot, type OwnedProperty } from "@/lib/world/owned";
 import type { AssetUnit } from "@/lib/world/property-api";
 
-export type SearchHit = { label: string; note: string; x: number; z: number; kind: "area" | "landmark" | "station" | "mine" };
+export type SearchHit = { label: string; note: string; x: number; z: number; kind: "area" | "landmark" | "station" | "mine" | "named" | "business" | "road" };
 
-const ICON = { area: MapPin, landmark: Landmark, station: TrainFront, mine: House };
+const ICON = { area: MapPin, landmark: Landmark, station: TrainFront, mine: House, named: Building2, business: Store, road: Route };
 
-/** Everything on a real map you can search for: areas, districts, landmarks, stations, your own property. */
-export function searchable(region: RegionMap, mine: AssetUnit[]): SearchHit[] {
+/**
+ * Everything on a real map you can search for: your own property, the names players have given
+ * buildings, businesses, areas, districts, landmarks, famous places, stations and main roads.
+ */
+export function searchable(region: RegionMap, mine: AssetUnit[], owned: OwnedProperty[] = [], businesses: MapBusiness[] = []): SearchHit[] {
   const at = (lat: number, lon: number) => toTile(region.frame, { lat, lon });
   const out: SearchHit[] = [];
   for (const u of mine) {
     const s = ownedSpot(u.building);
     if (s) out.push({ label: u.name ?? u.label, note: "Yours", x: s.x, z: s.z, kind: "mine" });
   }
+  // Names players chose: a building's new name is found by it, as well as by what it was.
+  for (const o of owned) {
+    const s = ownedSpot(o.id);
+    if (s && o.name) out.push({ label: o.name, note: "Named building", x: s.x, z: s.z, kind: "named" });
+  }
+  for (const b of businesses) {
+    const s = ownedSpot(b.building);
+    if (s && b.name) out.push({ label: b.name, note: b.category || "Business", x: s.x, z: s.z, kind: "business" });
+  }
   for (const d of region.region.districts) out.push({ label: d.name, note: "District", ...at(d.at.lat, d.at.lon), kind: "area" });
   for (const a of region.region.areas) out.push({ label: a.name, note: a.kind === "town" ? "Town" : "Neighbourhood", ...at(a.at[0], a.at[1]), kind: "area" });
   for (const c of region.region.corrections) if (c.kind === "area") out.push({ label: c.area.name, note: "Neighbourhood", ...at(c.area.at[0], c.area.at[1]), kind: "area" });
   for (const l of region.landmarks) out.push({ label: l.name, note: "Landmark", x: l.ax + (l.w - 1) / 2, z: l.az + (l.d - 1) / 2, kind: "landmark" });
-  for (const s of region.stations) out.push({ label: `${s.name} station`, note: "Railway station", x: s.x, z: s.z, kind: "station" });
+  for (const sp of region.spotList) out.push({ label: sp.name, note: "Place", x: sp.x, z: sp.z, kind: "landmark" });
+  for (const s of region.stations) out.push({ label: /station$/i.test(s.name) ? s.name : `${s.name} station`, note: "Railway station", x: s.x, z: s.z, kind: "station" });
+  // Main roads, once each (at the middle of the first stretch with that name).
+  const roads = new Set<string>();
+  for (const r of region.region.roads ?? []) {
+    if (!r.name || roads.has(r.name) || !r.path.length) continue;
+    roads.add(r.name);
+    const mid = r.path[Math.floor(r.path.length / 2)];
+    out.push({ label: r.name, note: r.bridge ? "Bridge" : "Road", ...at(mid[0], mid[1]), kind: "road" });
+  }
   return out;
 }
+
+/** Lower case, no accents or punctuation, single spaces: "St. Mary's" and "st marys" match. */
+const fold = (t: string) =>
+  t
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/['’.,()&-]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 
 /** The search box on a real map: type a place, pick it, and the camera flies there. */
 export function MapSearch({
   region,
   mine,
+  owned,
+  businesses,
   onPick,
   compact,
   onOpenChange,
 }: {
   region: RegionMap;
   mine: AssetUnit[];
+  /** Buildings players own (with the names they gave them). */
+  owned?: OwnedProperty[];
+  businesses?: MapBusiness[];
   onPick: (hit: SearchHit) => void;
   compact?: boolean;
   /** Compact: tells when the box opens and closes (the life buttons make way on phones). */
@@ -50,15 +87,52 @@ export function MapSearch({
     setShownState(v);
     onOpenChange?.(v);
   };
-  const all = useMemo(() => searchable(region, mine), [region, mine]);
+  const all = useMemo(() => searchable(region, mine, owned, businesses).map((h) => ({ ...h, key: fold(h.label) })), [region, mine, owned, businesses]);
+  // Names players gave their homes and buildings anywhere on the map: asked of the server as you type.
+  const [named, setNamed] = useState<{ q: string; hits: SearchHit[] }>({ q: "", hits: [] });
+  const typed = q.trim();
+  useEffect(() => {
+    if (typed.length < 2) return;
+    let alive = true;
+    // Typing on: the last question is dropped (on a slow network only the newest one matters).
+    const stop = new AbortController();
+    const t = setTimeout(() => {
+      void fetch(`/api/places?region=${encodeURIComponent(region.region.id)}&q=${encodeURIComponent(typed)}`, { signal: stop.signal })
+        .then((r) => (r.ok ? (r.json() as Promise<{ places?: { label: string; note: string; building: string }[] }>) : { places: [] }))
+        .then(({ places: list = [] }) => {
+          if (!alive) return;
+          const hits: SearchHit[] = [];
+          for (const p of list) {
+            const s = ownedSpot(p.building);
+            if (s) hits.push({ label: p.label, note: p.note, x: s.x, z: s.z, kind: p.note === "Home" ? "mine" : "named" });
+          }
+          setNamed({ q: typed, hits });
+        })
+        .catch(() => {});
+    }, 250);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+      stop.abort();
+    };
+  }, [typed, region]);
   const hits = useMemo(() => {
-    const t = q.trim().toLowerCase();
+    const t = fold(q);
     if (!t) return [];
-    const starts = all.filter((h) => h.label.toLowerCase().startsWith(t));
-    const has = all.filter((h) => !h.label.toLowerCase().startsWith(t) && h.label.toLowerCase().includes(t));
+    const words = t.split(" ");
+    const local = all.filter((h) => words.every((w) => h.key.includes(w)));
+    // Whole name first, then names starting with it, then words starting with it, then the rest.
+    const rank = (h: { key: string }) => (h.key === t ? 0 : h.key.startsWith(t) ? 1 : ` ${h.key}`.includes(` ${t}`) ? 2 : 3);
+    local.sort((a, b) => rank(a) - rank(b) || a.label.length - b.label.length);
+    const server = named.q && fold(named.q) === t ? named.hits : [];
     const seen = new Set<string>();
-    return [...starts, ...has].filter((h) => !seen.has(h.label + h.note) && seen.add(h.label + h.note)).slice(0, 8);
-  }, [all, q]);
+    return [...local.slice(0, 4), ...server, ...local.slice(4)]
+      .filter((h) => {
+        const k = `${fold(h.label)}|${Math.round(h.x)},${Math.round(h.z)}`;
+        return !seen.has(k) && seen.add(k);
+      })
+      .slice(0, 10);
+  }, [all, q, named]);
   if (compact && !shown)
     return (
       <>
@@ -90,7 +164,7 @@ export function MapSearch({
               }
               if (e.key === "Escape") setOpen(false);
             }}
-            placeholder="Search Lagos: Yaba, National Theatre…"
+            placeholder={`Search ${region.region.name}: places, roads, names…`}
             className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted"
             aria-label="Search the map"
           />
@@ -109,11 +183,11 @@ export function MapSearch({
           )}
         </label>
         {open && hits.length > 0 && (
-          <ul className="absolute inset-x-0 top-11 z-20 overflow-hidden rounded-2xl bg-panel shadow-xl ring-1 ring-ink/10">
+          <ul className="absolute inset-x-0 top-11 z-20 max-h-[min(22rem,55dvh)] overflow-y-auto rounded-2xl bg-panel shadow-xl ring-1 ring-ink/10">
             {hits.map((h) => {
               const Icon = ICON[h.kind];
               return (
-                <li key={h.label + h.note + h.x}>
+                <li key={`${h.label}|${h.note}|${h.x},${h.z}`}>
                   <button
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => {

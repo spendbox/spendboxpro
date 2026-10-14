@@ -6,6 +6,8 @@ import { Sheet } from "./sheet";
 import { cityPlayers } from "./city-actions";
 import { MapSearch, type SearchHit } from "./life/map-search";
 import type { RegionMap } from "@/lib/world/compile";
+import type { MapBusiness } from "@/lib/world/business";
+import type { OwnedProperty } from "@/lib/world/owned";
 import type { AssetUnit } from "@/lib/world/property-api";
 
 /** Tapping the place's name: search the map, and the cities by how many live there (the numbers are on the online button). */
@@ -19,7 +21,7 @@ export function CityCard({
   area: string | null;
   onClose: () => void;
   /** Searching the map: pick a place and the camera flies there. */
-  search?: { region: RegionMap; mine: AssetUnit[]; onPick: (h: SearchHit) => void } | null;
+  search?: { region: RegionMap; mine: AssetUnit[]; owned?: OwnedProperty[]; businesses?: MapBusiness[]; onPick: (h: SearchHit) => void } | null;
 }) {
   const [cities, setCities] = useState<{ id: string; name: string; players: number }[] | null>(null);
   useEffect(() => {

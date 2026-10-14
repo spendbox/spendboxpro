@@ -13,6 +13,7 @@ import { cleanAvatar, type Avatar } from "@/lib/avatar";
 import type { WorldEvent } from "@/lib/world-events";
 import type { TownHouse } from "@/lib/houses";
 import { loadRoundHouses } from "@/lib/houses.server";
+import { worldPreview } from "@/app/play/world-flag";
 
 export type Phase = "join" | "seek" | "done";
 
@@ -223,31 +224,29 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
   const db = createAdminClient();
   const guest = !userIdOrGuest;
   const userId = userIdOrGuest ?? GUEST;
+  // Everyone lives on the real map now: the old hourly hunt's searches, sweeps and full event
+  // history are never shown, so they aren't read (a much smaller, faster page).
+  const realMap = !!worldPreview();
   // The round clock (and the Seed Bot's thinking): a scheduled job moves it every minute.
-  // Page loads only nudge it when it's due (a deadline has passed) or when this server hasn't
-  // for a while: every screen refreshes every few seconds, and nudging it on every refresh made
-  // everyone queue behind each other (pages timing out).
-  // Passive income for players running low runs alongside (best effort).
-  const { data: head } = await db.from("rounds").select("status, join_ends_at, seek_ends_at").order("id", { ascending: false }).limit(1).maybeSingle();
+  // Page loads only nudge it now and then, and always after the page has gone back, so opening
+  // the game never waits on it (it used to hold every first load for up to 5 seconds).
   const nowMs = Date.now();
-  const due =
-    !head ||
-    head.status === "done" ||
-    (head.status === "join" && Date.parse(head.join_ends_at) <= nowMs) ||
-    (head.status === "seek" && Date.parse(head.seek_ends_at) <= nowMs);
-  const nudge = due || nowMs - lastTickAt > 20_000;
-  if (nudge) {
+  if (nowMs - lastTickAt > 20_000 && process.env.NEXT_PHASE !== "phase-production-build") {
     lastTickAt = nowMs;
-    // Pay out finished sports matches, after the page has gone back (never slows it down;
-    // not while the app is being built).
-    if (process.env.NEXT_PHASE !== "phase-production-build") {
-      after(() => settleRecent(nowMs).catch((e) => console.error("settling matches failed", e)));
-    }
+    after(async () => {
+      const { data: head } = await db.from("rounds").select("status, join_ends_at, seek_ends_at").order("id", { ascending: false }).limit(1).maybeSingle();
+      const due =
+        !head ||
+        head.status === "done" ||
+        (head.status === "join" && Date.parse(head.join_ends_at) <= nowMs) ||
+        (head.status === "seek" && Date.parse(head.seek_ends_at) <= nowMs);
+      if (due || !realMap) await tickSoon(db).catch((e) => console.error("tick failed", e));
+      // Pay out finished sports matches.
+      await settleRecent(nowMs).catch((e) => console.error("settling matches failed", e));
+    });
   }
-  const [, passive] = await Promise.all([
-    nudge ? tickSoon(db).catch((e) => console.error("tick failed", e)) : null,
-    guest ? Promise.resolve({ data: 0 }) : db.rpc("accrue_passive", { p_user: userId }).abortSignal(AbortSignal.timeout(5000)),
-  ]);
+  // Passive income for players running low (best effort).
+  const passive = guest ? { data: 0 } : await db.rpc("accrue_passive", { p_user: userId }).abortSignal(AbortSignal.timeout(5000));
   const passiveGained = Number(passive.data ?? 0);
 
   const [{ data: profile, error: profileError }, { data: round }, { data: settings }] = await Promise.all([
@@ -291,10 +290,14 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
         .eq("round_id", round.id)
         .eq("user_id", userId)
         .maybeSingle(),
-      db.from("searches").select("tile, caught").eq("round_id", round.id).eq("seeker_id", userId),
-      db.from("events").select("id, kind, tile, detail, created_at").eq("round_id", round.id).order("id", { ascending: true }),
-      db.from("searches").select("tile, created_at").eq("round_id", round.id).order("created_at", { ascending: true }),
-      db.from("sweeps").select("id, seeker_id, tile, radius, found, created_at").eq("round_id", round.id).order("id", { ascending: false }).limit(2000),
+      realMap ? Promise.resolve({ data: [] as { tile: number; caught: boolean }[] }) : db.from("searches").select("tile, caught").eq("round_id", round.id).eq("seeker_id", userId),
+      realMap
+        ? db.from("events").select("id, kind, tile, detail, created_at").eq("round_id", round.id).order("id", { ascending: false }).limit(40).then((r) => ({ ...r, data: (r.data ?? []).reverse() }))
+        : db.from("events").select("id, kind, tile, detail, created_at").eq("round_id", round.id).order("id", { ascending: true }),
+      realMap ? Promise.resolve({ data: [] as { tile: number; created_at: string }[] }) : db.from("searches").select("tile, created_at").eq("round_id", round.id).order("created_at", { ascending: true }),
+      realMap
+        ? Promise.resolve({ data: [] as { id: number; seeker_id: string; tile: number; radius: number; found: boolean; created_at: string }[] })
+        : db.from("sweeps").select("id, seeker_id, tile, radius, found, created_at").eq("round_id", round.id).order("id", { ascending: false }).limit(2000),
       guest
         ? Promise.resolve({ data: [] as { id: number; kind: string; body: string; tile: number | null; created_at: string }[] })
         : db.from("notifications").select("id, kind, body, tile, created_at").eq("user_id", userId).eq("round_id", round.id).order("id", { ascending: false }).limit(40),

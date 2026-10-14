@@ -20,6 +20,7 @@
 - [ ] In the Supabase SQL Editor run `game-db/081_no_challenge_prize.sql` (no more ₦2,000 Newtown prize on a win).
 - [ ] In the Supabase SQL Editor run `game-db/082_landmarks.sql` (buying landmarks, ₦50bn to ₦2tn, earning 10% a day). Run it after 079.
 - [ ] In the Supabase SQL Editor run `game-db/083_online_pay_world_bank.sql` (₦500 for every minute online, up to 4 hours a day; the World Bank).
+- [ ] In the Supabase SQL Editor run `game-db/084_bank_ads_admin.sql` (the World Bank opens with ₦1 billion and grows from there; every billboard view counted; paid ads for one state or everywhere; the money made today on the dashboard). Run it after 083. If you ever run 083 again, run 084 again after it.
 - [ ] Paystack dashboard: turn on "Pay with Transfer" (for bank transfer in the game), and set the Webhook URL to `https://<your site>/api/paystack/webhook` (Settings → API Keys & Webhooks).
 - [ ] On the day the simple life goes live (after merging), run `game-db/075_fresh_start.sql` ONCE: everyone's money becomes ₦350,000 (₦250,000 + ₦100,000 founder bonus), pots emptied, Founder badge, homes and things kept. Old balances are backed up; the undo lines are at the bottom of the file.
 - [ ] Optional, for voice calls on every network: add a TURN relay (docs/VOICE_CALLS.md) with NEXT_PUBLIC_TURN_URL, NEXT_PUBLIC_TURN_USERNAME and NEXT_PUBLIC_TURN_CREDENTIAL in Vercel.
@@ -61,14 +62,15 @@
 - [ ] In Vercel, set `SPORTS_SECRET` to a long random string (once; don't change it later).
 - [ ] Test on a real phone: sounds, touch gestures, the water slide, club lights.
 
-## Known bugs (found in the full review, not fixed yet)
-- [ ] Escape on a computer closes every open window at once, not just the top one (`src/app/play/sheet.tsx`: each sheet listens for Escape).
-- [ ] A business with no logo or picture gets no billboard at all: show a text-only billboard (name and "about") instead (`world-life.tsx` billboardAds, `city-view.tsx` setAds/adTexture).
-- [ ] Billboards look washed out by day and dim at night (`city-view.tsx`: Lambert material + emissive; use a basic material, not tone-mapped).
-- [ ] Paid ads from the advertise page show in every region: they can't be targeted to a state like business leases can (no region on `ads`).
-- [ ] Going to a friend less than 3 km away is a free trip, and doesn't update where you are (`game.tsx` goToFriend calls travelTo without `from`).
-- [ ] Billboard views for businesses are under-counted (one per ad per 15 s batch, `world-life.tsx` businessViews).
-- [ ] During the walkthrough, the ✕ on the quick buttons can't close them while it's pointing at the house or the camera (`game.tsx` quickShown).
+## Known bugs
+None known right now. Fixed lately:
+- [x] Escape on a computer closed every open window at once: now only the top one (`src/app/play/sheet.tsx`).
+- [x] A business with no logo or picture got no billboard: it gets one with its name and what it's about.
+- [x] Billboards looked washed out by day and dim at night: they show in their own colours all day.
+- [x] Paid ads from the advertise page showed in every region: they can be for one state or everywhere (084).
+- [x] Going to a friend less than 3 km away was a free walk and didn't move you: it's a ride from where you are, and you're there after.
+- [x] Billboard views for businesses were under-counted: every view counts (084).
+- [x] During the walkthrough, the ✕ on the quick buttons couldn't close them: it does now.
 
 ## Next (ideas agreed)
 - [ ] **Walk inside your planned home** (`docs/HOME_PLANNER.md`, next steps): your own home on the map drawn from your plan, then your shop things placed in it, then visitors.
@@ -80,6 +82,13 @@
 - [ ] Trees that grow the map's land outward; proposals, weddings, divorce and children (dating).
 
 ## Done lately
+- [x] First visit: the map starts with just the place's name and Find a home; each button (house, chat, challenge, camera, wallet, profile...) appears when the walkthrough introduces it, and all of them once it's done or closed. The walkthrough says its card can be dragged anywhere, and inside a building it says to step out first (the Leave button glows, or "Take me out").
+- [x] Find a home shows every home, the ones you can afford in green and first (no button to tap). Naming your home: the box sits at the top of the screen, above the keyboard and the walkthrough.
+- [x] Signing in goes straight into the town (the town was loaded twice; now once, and if a slow network loses it, it asks again by itself). Opening the game no longer waits for the old hunt's clock or its searches.
+- [x] Small phones: lighter 3D (no extra smoothing, sharpness 1×, 30 frames a second), the screen redraws every 15 s instead of every second, the whole page is fetched every 3 minutes instead of every minute.
+- [x] Search finds everything: areas, landmarks, famous places, stations, main roads, businesses, and the names players give their buildings and homes.
+- [x] Landmarks: the ground in front of every landmark's gate and name sign is kept open, so no building ever hides it (and a test checks every one in Lagos).
+- [x] Dashboard: World Bank, top-ups, money made today, landmark owners, paid ads by region (with Stop), and the names players gave places (with Clear, for rude ones).
 - [x] The social city, phase 1 and 2: faces on the map (online, asleep, at work, away), cards, doorsteps with knocks, notes and wrapped gifts, while you were away, web push; writing, reviews, trees, statues, fountains, plaques and time capsules on the map, with reactions and votes to take down.
 - [x] Plain words (every 2 hours, not "game day"), no hourly countdown on the real map, no page zoom on pop-ups, jobs at filling stations, everything on the phone (no old menu, no XP or level), search in the place pill.
 - [x] Land a tenth of real prices, cheaper homes, pay 4x real wages, fares about halved.

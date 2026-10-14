@@ -34,3 +34,29 @@ export async function hqTakeDown(leaseId: string): Promise<string> {
   revalidatePath("/", "layout");
   return error ? "That didn't work." : "Taken down.";
 }
+
+/** Clear a name a player gave a building (rude or misleading): it goes back to having none. */
+export async function hqClearBuildingName(buildingId: string): Promise<string> {
+  if (!(await isAdmin())) return "Sign in again.";
+  const { error } = await createAdminClient().from("property_buildings").update({ name: null }).eq("building_id", buildingId);
+  revalidatePath("/", "layout");
+  return error ? "That didn't work." : "Cleared.";
+}
+
+/** Clear a name a player gave their home: back to "Home" (or "Room" for a free starter room). */
+export async function hqClearHomeName(unitId: string): Promise<string> {
+  if (!(await isAdmin())) return "Sign in again.";
+  const db = createAdminClient();
+  const { data } = await db.from("property_units").select("starter").eq("unit_id", unitId).maybeSingle();
+  const { error } = await db.from("property_units").update({ label: data?.starter ? "Room" : "Home" }).eq("unit_id", unitId).eq("use", "home");
+  revalidatePath("/", "layout");
+  return error ? "That didn't work." : "Cleared.";
+}
+
+/** Stop a paid billboard ad (it breaks the policy). */
+export async function hqStopAd(adId: string): Promise<string> {
+  if (!(await isAdmin())) return "Sign in again.";
+  const { error } = await createAdminClient().from("ads").update({ status: "held" }).eq("id", adId).eq("status", "live");
+  revalidatePath("/", "layout");
+  return error ? "That didn't work." : "Stopped.";
+}

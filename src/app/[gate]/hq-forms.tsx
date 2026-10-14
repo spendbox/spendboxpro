@@ -1,7 +1,22 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { hqRecheckPack, hqSignIn, hqSignOut, hqTakeDown } from "./actions";
+import { hqClearBuildingName, hqClearHomeName, hqRecheckPack, hqSignIn, hqSignOut, hqStopAd, hqTakeDown } from "./actions";
+
+type HqKind = "pack" | "takedown" | "clearbuilding" | "clearhome" | "stopad";
+const RUN: Record<HqKind, (id: string) => Promise<string>> = {
+  pack: hqRecheckPack,
+  takedown: hqTakeDown,
+  clearbuilding: hqClearBuildingName,
+  clearhome: hqClearHomeName,
+  stopad: hqStopAd,
+};
+const ASK: Partial<Record<HqKind, string>> = {
+  takedown: "Take this business off the map?",
+  clearbuilding: "Clear this building's name?",
+  clearhome: "Clear this home's name?",
+  stopad: "Stop this ad?",
+};
 
 const input = "h-11 w-full rounded-xl border border-line bg-panel px-4 text-base outline-none focus:border-gold";
 
@@ -27,7 +42,7 @@ export function HqSignOut() {
   );
 }
 
-export function HqButton({ kind, id, label, danger }: { kind: "pack" | "takedown"; id: string; label: string; danger?: boolean }) {
+export function HqButton({ kind, id, label, danger }: { kind: HqKind; id: string; label: string; danger?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   if (note) return <span className="text-xs text-muted">{note}</span>;
@@ -35,9 +50,10 @@ export function HqButton({ kind, id, label, danger }: { kind: "pack" | "takedown
     <button
       disabled={busy}
       onClick={async () => {
-        if (kind === "takedown" && !window.confirm("Take this business off the map?")) return;
+        const ask = ASK[kind];
+        if (ask && !window.confirm(ask)) return;
         setBusy(true);
-        setNote(await (kind === "pack" ? hqRecheckPack(id) : hqTakeDown(id)));
+        setNote(await RUN[kind](id));
       }}
       className={`rounded-full px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${danger ? "bg-hit/10 text-hit" : "bg-gold text-ink"}`}
     >

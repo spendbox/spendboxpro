@@ -149,7 +149,7 @@ export type Tile = {
   /** A real place's expressway (no pavements: nobody walks along it). */
   express?: boolean;
   /** A real place's tile kept clear of buildings: under a deck, beside a railway, a station's site. */
-  clear?: "deck" | "track" | "station";
+  clear?: "deck" | "track" | "station" | "entrance";
   /** A pedestrian crossing on this stretch: 0 zebra, 1 with lights, 2 ladder, 3 refuge island, 4 school, 5 raised. */
   crossing?: number;
   /** A real place's property here: its kind, storeys, state and units (src/lib/world/buildings). */
@@ -1557,6 +1557,8 @@ export function lotAt(plan: CityPlan, i: number): Tile {
     // Either side of the station: an open square under the glass hall's roof.
     return { i, x, z, kind: "plaza", top: 1.9, r: t.r, forecourt: true };
   }
+  // In front of a landmark's main gate: open paving, nothing built (no billboard or structure either).
+  if (t.clear === "entrance") return t;
   if (!LOTS.includes(t.kind)) {
     const named = t.rail || t.name ? undefined : tileName(plan, t);
     if (named) t.name = named;
@@ -1800,7 +1802,7 @@ function baseTile(plan: CityPlan, x: number, z: number): Tile {
     if (w) return { i, x, z, kind: "lake", top: 0.1, r, sea: w === 2 || undefined, jetty: onWater ? undefined : jettyAt(plan, x, z) };
     // Under a deck, along a railway on the ground, a station's site: never a building.
     const clear = plan.region.clearAt(x, z);
-    if (clear && !isRoad(plan, x, z)) return { i, x, z, kind: "plaza", top: clear === "station" ? 1.2 : 0.1, r, clear };
+    if (clear && !isRoad(plan, x, z)) return { i, x, z, kind: "plaza", top: clear === "station" ? 1.2 : clear === "entrance" ? 0.3 : 0.1, r, clear };
   }
   // The sea (only very big towns get this far out).
   if (inSea(plan, x, z)) return { i, x, z, kind: "lake", top: 0.1, r, sea: true, jetty: jettyAt(plan, x, z) };

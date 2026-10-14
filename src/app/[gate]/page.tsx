@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { isAdmin, isAdminGate } from "@/lib/admin";
@@ -13,13 +14,30 @@ export const metadata: Metadata = { title: "Dashboard", robots: { index: false, 
 
 const fmt = (n: number) => Math.round(n).toLocaleString("en-GB");
 const naira = (kobo: number) => `₦${Math.round(kobo / 100).toLocaleString("en-NG")}`;
+/** Mint as naira (₦1,500 a mint in Lagos), shortened: "₦1.2bn", "₦45m", "₦12,000". */
+const PER_MINT = 1500;
+const mintNaira = (mint: number) => {
+  const v = mint * PER_MINT;
+  const a = Math.abs(v);
+  if (a >= 1e9) return `₦${(v / 1e9).toFixed(a >= 1e10 ? 0 : 2).replace(/\.?0+$/, "")}bn`;
+  if (a >= 1e6) return `₦${(v / 1e6).toFixed(a >= 1e8 ? 0 : 1).replace(/\.0$/, "")}m`;
+  return `₦${Math.round(v).toLocaleString("en-NG")}`;
+};
+/** Lagos midnight today, as an ISO time. */
+const lagosMidnight = () => {
+  const day = new Date().toLocaleDateString("en-CA", { timeZone: "Africa/Lagos" });
+  return new Date(`${day}T00:00:00+01:00`).toISOString();
+};
+/** The names a unit has until its owner gives it one (src/app/play/search-actions.ts). */
+const PLAIN_UNIT = /^(room|home|flat|house|apartment|office|office floor|office suite|shop|lobby shop|ground floor shops|the whole [a-z]+)( [0-9]+[a-z]?)?( .*)?$/i;
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" }) : "");
 
 async function load() {
   const db = createAdminClient();
   const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
   const head = { count: "exact" as const, head: true };
-  const [stats, active, lives, homes, new1, new7, packs, leases, ads, mapOpen, peopleOpen, signups] = await Promise.all([
+  const since = lagosMidnight();
+  const [stats, active, lives, homes, new1, new7, packs, leases, ads, mapOpen, peopleOpen, signups, bank, topups, landmarks, money, named, namedUnits, adList] = await Promise.all([
     siteStats(),
     db.from("lives").select("user_id", head).gte("seen_at", ago(5 * 60_000)),
     db.from("lives").select("user_id", head),
@@ -32,8 +50,18 @@ async function load() {
     db.from("map_reports").select("id", head).eq("status", "open"),
     db.from("person_reports").select("id", head).eq("status", "open"),
     db.from("profiles").select("id, username, created_at").eq("is_bot", false).order("created_at", { ascending: false }).limit(15),
+    // The newer parts (each empty until its SQL is run): the World Bank (083/084), top-ups (076),
+    // landmarks (082), the money made today (084), names players gave places, paid ads by region (084).
+    db.rpc("world_bank_view"),
+    db.from("topups").select("amount_kobo, status, created_at").eq("status", "paid").order("created_at", { ascending: false }).limit(1000),
+    db.from("landmark_owners").select("landmark_id, name, price, bought_at, owner_id").order("bought_at", { ascending: false }).limit(40),
+    db.rpc("money_since", { p_since: since }),
+    db.from("property_buildings").select("building_id, name, created_at").not("name", "is", null).order("created_at", { ascending: false }).limit(30),
+    db.from("property_units").select("unit_id, building_id, label, owner_id, use").eq("use", "home").order("bought_at", { ascending: false }).limit(300),
+    db.from("ads").select("id, brand, headline, status, region, amount_kobo, ends_at").neq("status", "pending_payment").order("created_at", { ascending: false }).limit(20),
   ]);
-  const ids = [...new Set((packs.data ?? []).map((p) => String(p.user_id)))];
+  const ownerIds = [...(landmarks.data ?? []).map((l) => l.owner_id), ...(namedUnits.data ?? []).map((u) => u.owner_id)].filter(Boolean).map(String);
+  const ids = [...new Set([...(packs.data ?? []).map((p) => String(p.user_id)), ...ownerIds])];
   const { data: names } = ids.length ? await db.from("profiles").select("id, username").in("id", ids) : { data: [] };
   const nameOf = new Map<string, string>((names ?? []).map((n): [string, string] => [String(n.id), String(n.username ?? "(no name yet)")]));
   const packRows = packs.data ?? [];
@@ -58,6 +86,18 @@ async function load() {
     mapOpen: mapOpen.count ?? 0,
     peopleOpen: peopleOpen.count ?? 0,
     signups: signups.data ?? [],
+    bank: bank.error ? null : (bank.data as { balance?: number; today?: number } | null),
+    topups: { kobo: (topups.data ?? []).reduce((n, t) => n + Number(t.amount_kobo ?? 0), 0), today: (topups.data ?? []).filter((t) => String(t.created_at) >= since).length, count: (topups.data ?? []).length },
+    landmarks: (landmarks.data ?? []).map((l) => ({ ...l, who: l.owner_id ? (nameOf.get(String(l.owner_id)) ?? "?") : "(account gone)" })),
+    money: money.error ? null : (money.data as { created?: number; burned?: number; online?: number } | null),
+    named: [
+      ...(named.data ?? []).map((b) => ({ kind: "building" as const, id: String(b.building_id), name: String(b.name), who: "" })),
+      ...(namedUnits.data ?? [])
+        .filter((u) => !PLAIN_UNIT.test(String(u.label)))
+        .slice(0, 30)
+        .map((u) => ({ kind: "home" as const, id: String(u.unit_id), name: String(u.label), who: nameOf.get(String(u.owner_id)) ?? "?" })),
+    ],
+    ads: adList.data ?? [],
   };
 }
 
@@ -84,6 +124,10 @@ export default async function Gate({ params }: { params: Promise<{ gate: string 
     ["Business leases", naira(d.revenue.leases), `${d.leases.filter((l) => l.status === "live").length} live`],
     ["Billboard ads", naira(d.revenue.ads), "all time"],
     ["Open reports", fmt(d.mapOpen + d.peopleOpen), `${d.mapOpen} map · ${d.peopleOpen} people`],
+    ["World Bank", d.bank ? mintNaira(Number(d.bank.balance ?? 0)) : "Run 083", d.bank ? `+${mintNaira(Number(d.bank.today ?? 0))} today from games` : "and 084 (opens with ₦1bn)"],
+    ["Top-ups", naira(d.topups.kobo), `${d.topups.count} paid · ${d.topups.today} today`],
+    ["Money made today", d.money ? mintNaira(Number(d.money.created ?? 0)) : "Run 084", d.money ? `${mintNaira(Number(d.money.online ?? 0))} online pay · ${mintNaira(Number(d.money.burned ?? 0))} burned` : undefined],
+    ["Landmarks owned", fmt(d.landmarks.length), d.landmarks[0] ? `latest: ${d.landmarks[0].name ?? d.landmarks[0].landmark_id}` : "none yet"],
   ];
   return (
     <main className="mx-auto flex min-h-screen max-w-5xl flex-col gap-6 px-4 py-6">
@@ -188,6 +232,63 @@ export default async function Gate({ params }: { params: Promise<{ gate: string 
         </div>
       </section>
 
+      <section className="rounded-2xl bg-panel p-4 ring-1 ring-line">
+        <p className="text-sm font-semibold">Names players gave places</p>
+        <p className="text-xs text-muted">Anyone can find these in the map search. A rude or misleading one: Clear puts back the plain name.</p>
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full min-w-[480px] text-left text-sm">
+            <tbody>
+              {d.named.map((n) => (
+                <tr key={`${n.kind}:${n.id}`} className="border-t border-line align-middle">
+                  <td className="py-1.5 font-medium">{n.name}</td>
+                  <td className="py-1.5 text-xs text-muted">{n.kind === "home" ? `Home · ${n.who}` : "Building"}</td>
+                  <td className="py-1.5 text-xs text-muted">{n.id.split("/")[0]}</td>
+                  <td className="py-1.5 text-right">
+                    <HqButton kind={n.kind === "home" ? "clearhome" : "clearbuilding"} id={n.id} label="Clear" danger />
+                  </td>
+                </tr>
+              ))}
+              {d.named.length === 0 && (
+                <tr>
+                  <td className="py-2 text-muted">No named places yet.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="grid gap-4 sm:grid-cols-2">
+        <div className="rounded-2xl bg-panel p-4 ring-1 ring-line">
+          <p className="text-sm font-semibold">Landmark owners</p>
+          <ul className="mt-2 space-y-1 text-sm">
+            {d.landmarks.map((l) => (
+              <li key={String(l.landmark_id)} className="flex justify-between gap-2">
+                <span className="min-w-0 truncate">
+                  {String(l.name ?? l.landmark_id)} <span className="text-xs text-muted">· {l.who}</span>
+                </span>
+                <span className="shrink-0 text-xs tabular-nums text-muted">{mintNaira(Number(l.price))}</span>
+              </li>
+            ))}
+            {d.landmarks.length === 0 && <li className="text-muted">Nobody owns a landmark yet.</li>}
+          </ul>
+        </div>
+        <div className="rounded-2xl bg-panel p-4 ring-1 ring-line">
+          <p className="text-sm font-semibold">Paid billboard ads</p>
+          <ul className="mt-2 space-y-1 text-sm">
+            {d.ads.map((a) => (
+              <li key={String(a.id)} className="flex items-center justify-between gap-2">
+                <span className="min-w-0 truncate">
+                  {String(a.brand)} <span className="text-xs text-muted">· {a.region ? String(a.region) : "everywhere"} · {String(a.status)}</span>
+                </span>
+                {a.status === "live" ? <HqButton kind="stopad" id={String(a.id)} label="Stop" danger /> : <span className="shrink-0 text-xs text-muted">{naira(Number(a.amount_kobo ?? 0))}</span>}
+              </li>
+            ))}
+            {d.ads.length === 0 && <li className="text-muted">No paid ads.</li>}
+          </ul>
+        </div>
+      </section>
+
       <section className="grid gap-4 sm:grid-cols-2">
         <div className="rounded-2xl bg-panel p-4 ring-1 ring-line">
           <p className="text-sm font-semibold">Newest players</p>
@@ -204,15 +305,15 @@ export default async function Gate({ params }: { params: Promise<{ gate: string 
           <p className="text-sm font-semibold">Elsewhere</p>
           <ul className="mt-2 space-y-1.5 text-sm">
             <li>
-              <a className="underline" href="/map-reports">
+              <Link className="underline" href="/map-reports">
                 Map and people reports
-              </a>{" "}
+              </Link>{" "}
               <span className="text-xs text-muted">(sign in to the game with ADMIN_EMAIL)</span>
             </li>
             <li>
-              <a className="underline" href="/advertise">
+              <Link className="underline" href="/advertise">
                 The advertising page
-              </a>
+              </Link>
             </li>
             <li>
               <a className="underline" href="https://dashboard.paystack.com" target="_blank" rel="noreferrer">

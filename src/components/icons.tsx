@@ -79,6 +79,7 @@ export {
   Siren,
   Star,
   Store,
+  Route,
   Sun,
   Target,
   Timer,

@@ -15,8 +15,8 @@ const fmt = (n: number) => Math.round(n).toLocaleString("en-NG");
 
 const PRESETS = [5000, 10000, 25000, 50000];
 
-/** The ad booking form: picture + words, budget calculator, contact, policy, pay. */
-export function AdForm({ pricing }: { pricing: AdPricing }) {
+/** The ad booking form: picture + words, where it shows, budget calculator, contact, policy, pay. */
+export function AdForm({ pricing, regions = [{ id: "lagos", name: "Lagos State" }] }: { pricing: AdPricing; regions?: { id: string; name: string }[] }) {
   const pic = usePicture();
   const [brand, setBrand] = useState("");
   const [headline, setHeadline] = useState("");
@@ -85,6 +85,19 @@ export function AdForm({ pricing }: { pricing: AdPricing }) {
         Link (optional)
         <span className={hint}>Where people go if they tap &ldquo;Visit&rdquo;. Must be a secure (https) website.</span>
         <input name="link" className={input} inputMode="url" maxLength={500} placeholder="https://yourwebsite.com" />
+      </label>
+
+      <label className={label}>
+        Where it shows
+        <span className={hint}>Billboards in one state only, or everywhere on the map.</span>
+        <select name="region" className={input} defaultValue={regions[0]?.id ?? ""}>
+          {regions.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.name}
+            </option>
+          ))}
+          <option value="">Everywhere</option>
+        </select>
       </label>
 
       <div className="flex flex-col gap-3 rounded-2xl bg-panel-2 p-4">

@@ -43,8 +43,16 @@ export type RegionMap = {
   decks: { pts: { x: number; y: number; z: number }[]; width: number }[];
   /** Every railway as a path along the top of its rails (tiles, y its height): for the trains. */
   rails: { pts: { x: number; y: number; z: number }[]; raised: boolean }[];
-  /** Kept clear of buildings: under a deck, along a railway on the ground, or a station's site. */
-  clearAt: (x: number, z: number) => "deck" | "track" | "station" | undefined;
+  /**
+   * Kept clear of buildings: under a deck, along a railway on the ground, a station's site, or the
+   * open ground in front of a landmark's main entrance (its gate and name sign are never hidden).
+   */
+  clearAt: (x: number, z: number) => "deck" | "track" | "station" | "entrance" | undefined;
+  /**
+   * Which way a landmark's main entrance faces (its gate and name sign stand just outside that
+   * side), by its corner tile: one step out of it (dx, dz), or undefined for one without a gate.
+   */
+  entranceAt: (ax: number, az: number) => { dx: number; dz: number } | undefined;
   /** A station standing on this tile (its middle). */
   stationAt: (x: number, z: number) => StationPlan | undefined;
   stations: StationPlan[];
@@ -78,6 +86,48 @@ const STRUCTURES = new Set<string>([
 export const isStructureType = (t: string): t is StructureType => STRUCTURES.has(t);
 
 const tileKey = (x: number, z: number) => (x + 32768) * 65536 + (z + 32768);
+
+/** Single-tile famous places that get a main gate with their name (as the big landmarks do). */
+export const GATED_SPOTS = new Set(["hospital", "campus", "arena", "museum", "hotel", "megamall", "worship", "cathedral", "grandmosque", "market", "capitol"]);
+
+/**
+ * The side a landmark's main entrance faces: the one with the most road along it (south first on a
+ * tie, then north, east, west), never one where the ground right in front of its middle is water,
+ * the edge of the map or another landmark.
+ */
+export function entranceSide(
+  l: { ax: number; az: number; w: number; d: number },
+  roadAt: (x: number, z: number) => boolean,
+  blocked: (x: number, z: number) => boolean,
+): { dx: number; dz: number } {
+  const sides = [
+    { dx: 0, dz: 1, n: 0 },
+    { dx: 0, dz: -1, n: 0 },
+    { dx: 1, dz: 0, n: 0 },
+    { dx: -1, dz: 0, n: 0 },
+  ];
+  for (const sd of sides) {
+    if (sd.dz) for (let x = l.ax; x < l.ax + l.w; x++) if (roadAt(x, sd.dz > 0 ? l.az + l.d : l.az - 1)) sd.n++;
+    if (sd.dx) for (let z = l.az; z < l.az + l.d; z++) if (roadAt(sd.dx > 0 ? l.ax + l.w : l.ax - 1, z)) sd.n++;
+    const [mx, mz] = entranceFront(l, sd)[Math.floor(entranceFront(l, sd).length / 2)];
+    if (blocked(mx, mz)) sd.n -= 1000;
+  }
+  const best = sides.reduce((a, b) => (b.n > a.n ? b : a), sides[0]);
+  return { dx: best.dx, dz: best.dz };
+}
+
+/** The tiles just outside a landmark's entrance side: its middle three (all of a narrow side). */
+export function entranceFront(l: { ax: number; az: number; w: number; d: number }, side: { dx: number; dz: number }): [number, number][] {
+  const along = side.dz ? l.w : l.d;
+  const keep = Math.min(along, 3);
+  const from = Math.floor((along - keep) / 2);
+  const out: [number, number][] = [];
+  for (let k = from; k < from + keep; k++) {
+    if (side.dz) out.push([l.ax + k, side.dz > 0 ? l.az + l.d : l.az - 1]);
+    else out.push([side.dx > 0 ? l.ax + l.w : l.ax - 1, l.az + k]);
+  }
+  return out;
+}
 
 const cache = new WeakMap<Region, RegionMap>();
 
@@ -349,7 +399,7 @@ export function compileRegion(region: Region): RegionMap {
   }
 
   const pieces = new Map<number, Piece[]>();
-  const clear = new Map<number, "deck" | "track" | "station">();
+  const clear = new Map<number, "deck" | "track" | "station" | "entrance">();
   const decks: RegionMap["decks"] = [];
   const rails: RegionMap["rails"] = [];
   for (const line of lines) {
@@ -390,6 +440,30 @@ export function compileRegion(region: Region): RegionMap {
     }
   }
 
+  // ---- landmark entrances: each big landmark (and each famous hospital, campus, hotel...) has a
+  // main gate with its name, on the side with the most road along it. The ground in front of it is
+  // kept open (no building, billboard or structure ever stands there), and if there's no road right
+  // in front, the next tile out too, so the gate can always be seen from the street.
+  const entrances = new Map<number, { dx: number; dz: number }>();
+  const blocked = (x: number, z: number) => !inside(x, z) || !!water[cell(x, z)] || taken.has(tileKey(x, z));
+  const gated = [
+    ...landmarks.map((l) => ({ ax: l.ax, az: l.az, w: l.w, d: l.d })),
+    ...spotList.filter((sp) => GATED_SPOTS.has(String(sp.kind))).map((sp) => ({ ax: sp.x, az: sp.z, w: 1, d: 1 })),
+  ];
+  for (const l of gated) {
+    const side = entranceSide(l, (x, z) => !!road[cell(x, z)] && inside(x, z), blocked);
+    entrances.set(tileKey(l.ax, l.az), side);
+    for (const [fx, fz] of entranceFront(l, side)) {
+      for (let out = 0; out < 2; out++) {
+        const x = fx + side.dx * out;
+        const z = fz + side.dz * out;
+        if (blocked(x, z)) break;
+        if (road[cell(x, z)]) break; // the street itself: open already
+        if (!clear.has(tileKey(x, z))) clear.set(tileKey(x, z), "entrance");
+      }
+    }
+  }
+
   // ---- pedestrian crossings from the map, on the road tile under each (or right next to it)
   const crossings = new Map<number, number>();
   for (const [lat, lon, type] of region.crossings) {
@@ -419,6 +493,7 @@ export function compileRegion(region: Region): RegionMap {
     decks,
     rails,
     clearAt: (x, z) => clear.get(tileKey(x, z)),
+    entranceAt: (ax, az) => entrances.get(tileKey(ax, az)),
     stationAt: (x, z) => stationTiles.get(tileKey(x, z)),
     stations,
     crossingAt: (x, z) => crossings.get(tileKey(x, z)),

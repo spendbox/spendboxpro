@@ -121,7 +121,7 @@ import { useWorldLife } from "./life/world-life";
 import type { ExplorePlace } from "@/lib/world/explore";
 import { Joystick } from "./joystick";
 import { onlineIdle, onlinePinged, settleIncome, syncIncome, useLiveCoins } from "./income";
-import { Tutorial, useTutorialGlow, useTutorialPhase } from "./tutorial";
+import { Tutorial, useTourShows, useTutorialGlow, useTutorialPhase } from "./tutorial";
 import { PeopleList, prefetchPeople } from "./people/people-list";
 import { StatsSheet } from "./stats-sheet";
 import { GiftPop, GiftSent } from "./people/gift-pop";
@@ -247,14 +247,30 @@ const RIDE_HELLO: Record<RideKindName, string> = {
 type Ad = { id: string; image: string; headline: string; brand: string; link: string | null };
 type Notice = { id: number; text: string; tone: "alarm" | "move" | "info" | "mine"; avatar?: ReturnType<typeof cleanAvatar> | null; icon?: FeedIcon };
 
-/** The server's clock, ticking every second on this device. */
-function useNow(serverNow: string) {
+/** Your cash at hand, going up live (property income, online pay) without redrawing the screen. */
+function LiveCash({ coins }: { coins: number }) {
+  const live = useLiveCoins(coins);
+  return <span className="tabular-nums">{cash(live, { exact: true, full: toShown(live) < 100_000_000 })}</span>;
+}
+
+/** The wallet, with the live cash. */
+function LiveMoneyHome(props: React.ComponentProps<typeof MoneyHome>) {
+  const live = useLiveCoins(props.coins);
+  return <MoneyHome {...props} coins={live} />;
+}
+
+/**
+ * The server's clock, ticking on this device: every second for the old hunt's countdowns, every
+ * 15 seconds on the real map (nothing there counts down by the second, and each tick redraws the
+ * whole screen, which small phones feel).
+ */
+function useNow(serverNow: string, everyMs = 1000) {
   const [now, setNow] = useState(() => Date.parse(serverNow));
   useEffect(() => {
     const offset = Date.parse(serverNow) - Date.now();
-    const id = setInterval(() => setNow(Date.now() + offset), 1000);
+    const id = setInterval(() => setNow(Date.now() + offset), everyMs);
     return () => clearInterval(id);
-  }, [serverNow]);
+  }, [serverNow, everyMs]);
   return now;
 }
 
@@ -559,7 +575,7 @@ export function Game({
   const leaveThen = useRef<(what: string, go: () => void) => void>((_what, go) => go());
   const [leaveAsk, setLeaveAsk] = useState<{ what: string; go: () => void } | null>(null);
   /** Pay the fare to a spot on the map (set below, once the life API is there). True when paid and going. */
-  const payTrip = useRef<(x: number, z: number) => Promise<boolean>>(() => Promise.resolve(true));
+  const payTrip = useRef<(x: number, z: number, ride?: boolean) => Promise<boolean>>(() => Promise.resolve(true));
   const [busy, setBusy] = useState(false);
   // Ghost duels: a ghost's card (tapped on the map), the list of ghosts, the duel on screen,
   // and flying the camera over to a ghost's light.
@@ -654,7 +670,7 @@ export function Game({
   // list between renders, so the billboards aren't set up again every second).
   const lifeAds = worldLife.billboardAds;
   const allAds = useMemo(() => (worldId && lifeAds.length ? [...ads, ...lifeAds] : ads), [worldId, lifeAds, ads]);
-  const now = useNow(state.serverNow);
+  const now = useNow(state.serverNow, worldId ? 15_000 : 1000);
   const phase = round?.status ?? "done";
   const countdown = clock(Date.parse((phase === "join" ? round?.joinEndsAt : round?.seekEndsAt) ?? "") - now);
   const isHider = entry?.role === "hider";
@@ -1179,7 +1195,7 @@ export function Game({
   useEffect(() => {
     let stop = false;
     const load = () =>
-      fetch("/api/ads/serve?n=24", { cache: "no-store" })
+      fetch(`/api/ads/serve?n=24${worldId ? `&region=${worldId}` : ""}`, { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : { ads: [] }))
         .then((d: { ads?: Ad[] }) => !stop && setAds(Array.isArray(d.ads) ? d.ads : []))
         .catch(() => {});
@@ -1189,7 +1205,7 @@ export function Game({
       stop = true;
       clearInterval(id);
     };
-  }, []);
+  }, [worldId]);
   const onAdViews = useCallback((views: Record<string, number>) => {
     if (!Object.keys(views).length) return;
     fetch("/api/ads/track", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ views }), keepalive: true }).catch(() => {});
@@ -1301,14 +1317,21 @@ export function Game({
     if (!refreshing) refreshingSince.current = 0;
   }, [refreshing]);
   useEffect(() => {
+    let last = Date.now();
     const refresh = () => {
       if (document.visibilityState !== "visible") return;
       if (refreshingSince.current && Date.now() - refreshingSince.current < 20_000) return;
+      // Coming back to the tab: only if it's been a while (switching apps for a moment shouldn't
+      // download the whole town again on a slow network).
+      if (worldId && Date.now() - last < 30_000) return;
+      last = Date.now();
       refreshingSince.current = Date.now();
       startRefresh(() => router.refresh());
     };
-    // The real map's life keeps itself up to date; the old hourly game needed this every 4 s.
-    const id = setInterval(refresh, worldId ? 60_000 : 4000);
+    // The real map's life keeps itself up to date (cash, notices, people each have their own
+    // small checks), so the whole page is only fetched again every few minutes; the old hourly
+    // game needed this every 4 s.
+    const id = setInterval(refresh, worldId ? 180_000 : 4000);
     const onVisible = () => refresh();
     document.addEventListener("visibilitychange", onVisible);
     return () => {
@@ -1501,7 +1524,8 @@ export function Game({
         })
         .catch(() => {});
     };
-    const every = setInterval(look, 8_000);
+    // A push makes it look at once (below), so every 15 s is plenty in between.
+    const every = setInterval(() => document.visibilityState === "visible" && look(), 15_000);
     const onVisible = () => document.visibilityState === "visible" && look();
     document.addEventListener("visibilitychange", onVisible);
     // A push arrived (the phone's service worker says so): look now. A tapped notification: go there.
@@ -1771,14 +1795,20 @@ export function Game({
   const inPlannedHome = !!worldId && Number.isFinite(enteredTile) && enteredTile in homePlans;
   // Your cash on screen, with what your property earns going up every 5 seconds (./income). The
   // server pays what's been earned when the game opens, every 5 minutes, and when you open Money.
-  const liveCoins = useLiveCoins(me.coins);
+  // The cash going up live ticks in its own little label (LiveCash), not the whole screen; the
+  // wallet reads it when it opens.
   // The walkthrough (./tutorial): which button it points at, and where it's got to.
   const tutorialGlow = useTutorialGlow();
   const tutorialPhase = useTutorialPhase();
+  // New players: each button on the map shows once the walkthrough introduces it (none before
+  // you have a home); everyone else sees them all.
+  const tour = useTourShows(worldLife.hasHome);
   // The quick buttons down the left: folded into one; open while the walkthrough points at one of them.
   const [quickOpen, setQuickOpen] = useState(false);
   const quickRef = useRef<HTMLDivElement>(null);
-  const quickShown = quickOpen || tutorialGlow === "home" || tutorialGlow === "camera";
+  // The ✕ closes them even while the walkthrough points at one (until it points somewhere new).
+  const [quickShutFor, setQuickShutFor] = useState<string | null>(null);
+  const quickShown = quickOpen || ((tutorialGlow === "home" || tutorialGlow === "camera") && quickShutFor !== tutorialGlow);
   useEffect(() => {
     if (!quickOpen) return;
     // A tap anywhere else folds them away.
@@ -2030,15 +2060,18 @@ export function Game({
 
   // Paying the fare to a spot on the map: from where you're standing on foot, or where you last were.
   useEffect(() => {
-    payTrip.current = async (x: number, z: number) => {
+    payTrip.current = async (x: number, z: number, ride = false) => {
       if (me.guest || !worldId) return true;
-      const from = walkStick.current.on ? (worldLife.centerRef.current?.() ?? undefined) : undefined;
+      // A ride (meeting a friend): from where you are, never a free walk straight there.
+      const from = walkStick.current.on ? (worldLife.centerRef.current?.() ?? undefined) : ride ? (worldLife.mySpot ?? worldLife.centerRef.current?.() ?? undefined) : undefined;
       const r = await PROPERTY_API.travelTo(`${worldId}:${Math.round(x)},${Math.round(z)}`, false, from).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
       if (!r.ok) {
         setMessage({ text: r.error, tone: "bad" });
         return false;
       }
       if (r.fare) setMessage({ text: `${cash(r.fare)} ${r.mode ? tripWords(r.mode as Commute) : ""} to get there.`, tone: "good" });
+      // You're there now: where you are (and the next fare) starts from here.
+      worldLife.refreshLife();
       return true;
     };
   });
@@ -2052,7 +2085,7 @@ export function Game({
     if (b) {
       if (worldId) {
         const [x, z] = spiralXY(Number(b[1].slice(2)));
-        if (!(await payTrip.current(x, z))) return;
+        if (!(await payTrip.current(x, z, true))) return;
       }
       if (place || ride !== null) leaveRoom();
       setGoTo({ building: b[1], level: b[2] });
@@ -2246,14 +2279,14 @@ export function Game({
               </button>
             )}
             {/* You: your face opens everything that isn't chat (your look, money, friends, settings). */}
-            {worldId && !guest && (
+            {worldId && !guest && tour("profile") && (
               <button onClick={() => setMeOpen(true)} className="pointer-events-auto relative shrink-0 rounded-full ring-[3px] ring-[#f59f00] shadow" aria-label="You: your look, money, friends and settings">
                 <AvatarFace avatar={me.avatar} size={36} className="rounded-full bg-white" />
                 {tutorialGlow === "profile" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
               </button>
             )}
             {/* Who's online; tap for the numbers: registered players and visits, and how they're growing. */}
-            {!guest && (
+            {!guest && tour("online") && (
             <button
               onClick={() => setStatsOpen(true)}
               className="glass pointer-events-auto relative flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold"
@@ -2268,7 +2301,7 @@ export function Game({
           </div>
           {worldLife.rowBelow}
           {/* People around where you're looking: online first. Tap one for their card (message, knock, gift). */}
-          {!me.guest && !place && ride === null && peopleOut.length > 0 && (
+          {!me.guest && !place && ride === null && peopleOut.length > 0 && tour("people") && (
             <div className="pointer-events-auto -mx-1 flex max-w-full items-start gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none]" aria-label="People around here">
               <button onClick={() => setStatsOpen(true)} className="glass flex h-12 shrink-0 flex-col items-center justify-center rounded-2xl px-2 text-[10px] font-semibold leading-tight">
                 <Users className="size-4" />
@@ -2383,14 +2416,14 @@ export function Game({
               </span>
             )}
             {state.streak && !worldId && <StreakPill streak={state.streak} onOpen={() => { setStreakOpen(true); setMenu(false); setFeedOpen(false); }} />}
-            {worldId && worldLife.reputation !== null && (
+            {worldId && worldLife.reputation !== null && tour("reputation") && (
               // Your reputation: what adds to it and what takes it away.
               <button onClick={() => worldLife.openReputation()} className="glass flex h-8 items-center gap-1 whitespace-nowrap rounded-full px-2.5 text-xs font-bold sm:h-9 sm:px-3 sm:text-sm" aria-label={`Reputation ${worldLife.reputation}`}>
                 <Star className="size-4 text-gold-dark" />
                 {worldLife.reputation.toLocaleString("en-GB")}
               </button>
             )}
-            {worldId && (
+            {worldId && tour("wallet") && (
               // Your cash at hand: opens Finance.
               <button
                 onClick={() => setMoneyOpen(true)}
@@ -2398,12 +2431,12 @@ export function Game({
                 aria-label="Finance"
               >
                 <Wallet className="size-4 text-gold-dark" />
-                <span className="tabular-nums">{cash(liveCoins, { exact: true, full: toShown(liveCoins) < 100_000_000 })}</span>
+                <LiveCash coins={me.coins} />
                 {tutorialGlow === "wallet" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
                 {worldLife.financeDot && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-hit" />}
               </button>
             )}
-            {worldId && (
+            {worldId && tour("sound") && (
               // The city's sounds, on or off (top right).
               <button
                 onClick={() => { setSound(!sound); saveView({ sound: !sound }); }}
@@ -3220,9 +3253,9 @@ export function Game({
         {/* Down the left, out of the way of the city: the notifications bell (while they're off), then one
             round button that opens the quick buttons (Home, Camera, Coming soon, Locate me, Walk); tap
             anywhere else and they fold away again. The walkthrough opens them when it points at one. */}
-        {worldId && !guest && !place && ride === null && !walking && (
+        {worldId && !guest && !place && ride === null && !walking && tour("dock") && (
           <div ref={quickRef} className="pointer-events-auto absolute bottom-[max(0.625rem,env(safe-area-inset-bottom))] left-2.5 flex flex-col items-center gap-2 sm:bottom-4 sm:left-4">
-            {!pushOn && (
+            {!pushOn && tour("extras") && (
               <button onClick={turnOnBell} className="relative grid size-10 place-items-center rounded-full bg-gold/80 text-ink shadow transition-opacity hover:bg-gold" aria-label="Notifications are off: tap to turn them on" title="Turn notifications on">
                 <BellOff className="size-4" />
                 <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-2 ring-gold/60" />
@@ -3237,15 +3270,19 @@ export function Game({
                   </button>
                 )}
                 {/* The camera: snap a place or a thing you like (it goes to your Photos). */}
+                {tour("camera") && (
                 <button onClick={() => setCamera("photo")} className={cn("relative grid size-10 place-items-center rounded-full shadow-sm backdrop-blur-sm transition hover:bg-white/90", tutorialGlow === "camera" ? "bg-white" : "bg-white/55")} aria-label="Camera: take a picture" title="Take a picture">
                   <Camera className="size-[18px] text-[#f08c00]" />
                   {tutorialGlow === "camera" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
                 </button>
-                {worldLife.hasHome && (
+                )}
+                {worldLife.hasHome && tour("extras") && (
                   <button onClick={worldLife.openSoon} className="grid size-10 place-items-center rounded-full bg-white/55 shadow-sm backdrop-blur-sm transition hover:bg-white/90" aria-label="Coming soon" title="Coming soon">
                     <Rocket className="size-[18px] text-[#7048e8]" />
                   </button>
                 )}
+                {tour("extras") && (
+                <>
                 <button
                   onClick={() => {
                     if (!worldLife.locateMe()) setMessage({ text: "You're not anywhere on the map yet. Find a home first.", tone: "info" });
@@ -3260,10 +3297,20 @@ export function Game({
                   <Footprints className="size-4" />
                   Walk
                 </button>
+                </>
+                )}
               </div>
             )}
             <button
-              onClick={() => setQuickOpen((v) => !v)}
+              onClick={() => {
+                if (quickShown) {
+                  setQuickOpen(false);
+                  setQuickShutFor(tutorialGlow ?? null);
+                } else {
+                  setQuickOpen(true);
+                  setQuickShutFor(null);
+                }
+              }}
               className={cn("relative grid size-11 place-items-center rounded-full shadow-md transition", quickShown ? "bg-ink text-white" : "bg-white/80 text-ink backdrop-blur-sm hover:bg-white")}
               aria-label={quickShown ? "Close the quick buttons" : "Open the quick buttons: home, camera, locate me, walk"}
               aria-expanded={quickShown}
@@ -3317,8 +3364,9 @@ export function Game({
             <button onClick={() => setCamera("photo")} className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#f08c00] text-white" aria-label="Camera: pictures and selfies">
               <Camera className="size-4" />
             </button>
-            <button onClick={leaveRoom} className="flex shrink-0 items-center gap-1 rounded-xl bg-ink px-3 py-2 text-xs font-semibold text-white">
+            <button onClick={leaveRoom} className="relative flex shrink-0 items-center gap-1 rounded-xl bg-ink px-3 py-2 text-xs font-semibold text-white">
               <LogOut className="size-4" /> {ride !== null ? "Get off" : "Leave"}
+              {tutorialGlow === "leave" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-xl ring-4 ring-gold/70" />}
             </button>
           </div>
         )}
@@ -3599,7 +3647,7 @@ export function Game({
         </div>
       )}
       {/* Challenge: a white trophy button in the top right corner, under your cash (gently bouncing). */}
-      {worldId && !guest && !camera && !place && ride === null && !walking && (
+      {worldId && !guest && !camera && !place && ride === null && !walking && tour("challenge") && (
         <button
           onClick={() => setFightOpen(true)}
           className="challenge-pop pointer-events-auto fixed right-3 top-14 z-20 grid size-12 place-items-center rounded-full bg-white text-[#f08c00] ring-1 ring-black/5 sm:right-4 sm:top-16"
@@ -3624,7 +3672,7 @@ export function Game({
       )}
       {/* The real map: one chat bubble, bottom right (your chats, Newtown's own messages, the news,
           the camera). It shakes when something new arrives. */}
-      {worldId && !camera && !guest && !place && (
+      {worldId && !camera && !guest && !place && tour("chat") && (
         <button
           onClick={() => {
             setChatOpen(true);
@@ -3643,8 +3691,8 @@ export function Game({
         </button>
       )}
       {moneyOpen && worldId && !guest && (
-        <MoneyHome
-          coins={liveCoins}
+        <LiveMoneyHome
+          coins={me.coins}
           perMint={worldRegion?.prices.perMint ?? 1_500}
           region={worldId}
           onClose={() => setMoneyOpen(false)}
@@ -3877,6 +3925,13 @@ export function Game({
           place={worldRegion.name}
           perMint={worldRegion.prices.perMint}
           name={me.name ?? undefined}
+          inside={
+            ride !== null
+              ? { kind: "ride", name: rideList.find((r) => r.kind === ride.kind && r.index === ride.index)?.name ?? "a ride" }
+              : place
+                ? { kind: "place", name: rooms.myRoomInfo?.name || placeRoom?.name || "a building" }
+                : null
+          }
           actions={{
             nameHome: () => worldLife.nameHome(),
             chat: () => {
@@ -3897,6 +3952,7 @@ export function Game({
               setMoneyOpen(true);
             },
             paid: () => startTransition(() => router.refresh()),
+            leave: () => leaveRoom(),
           }}
         />
       )}

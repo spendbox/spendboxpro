@@ -113,4 +113,5 @@ showing up", with the daily gift, challenge wins and missions.
 ## The World Bank (game-db/083)
 One pot of everything the city takes from games: Newtown's 10% of every challenge pool and the
 challenge fees (a trigger on the ledger, `world_bank_take`). It's in the Wallet, growing as games
-are played. Stealing from it is coming soon.
+are played. Stealing from it is coming soon. It opened with ₦1 billion (`world_bank_start`, game-db/084: put in once, as
+an "opening" line in its ledger, never counted as a day's takings) and grows from there.
