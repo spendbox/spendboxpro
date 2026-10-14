@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { X } from "@/components/icons";
+import { CircleHelp } from "lucide-react";
 import { MISSION_NAIRA, MISSIONS, MISSIONS_TOTAL, nextMission, type Mission, type MissionState, type Phase } from "@/lib/world/tutorial";
 import { cash } from "@/lib/world/value";
 import { playSfx } from "./sound";
@@ -18,13 +19,14 @@ const KEY = "newtown.tutorial.v1";
 /** What the walkthrough points at: that button glows. */
 export type TutorialGlow = "home" | "chat" | "challenge" | "camera" | "profile" | "wallet" | "dock" | "leave" | "townhall" | null;
 
-type Saved = { phase: Phase; i: number; skipped: Mission[] };
+/** `closed`: shut with the ✕ before the end: a small help icon brings it back where it was. */
+type Saved = { phase: Phase; i: number; skipped: Mission[]; closed?: boolean };
 const FRESH: Saved = { phase: "intro", i: 0, skipped: [] };
 
 function read(): Saved {
   try {
     const s = JSON.parse(localStorage.getItem(KEY) ?? "null") as Saved | null;
-    if (s && ["intro", "missions", "tips", "done"].includes(s.phase)) return { phase: s.phase, i: Math.max(0, Number(s.i) || 0), skipped: Array.isArray(s.skipped) ? s.skipped : [] };
+    if (s && ["intro", "missions", "tips", "done"].includes(s.phase)) return { phase: s.phase, i: Math.max(0, Number(s.i) || 0), skipped: Array.isArray(s.skipped) ? s.skipped : [], closed: s.closed === true && s.phase !== "done" };
   } catch {
     // Not readable: start from the top.
   }
@@ -52,7 +54,8 @@ const current = () => (saved ??= typeof window === "undefined" ? FRESH : read())
 
 /** Where the walkthrough is (for the rest of the game: e.g. no daily-gift pop-up during the intro). */
 export function useTutorialPhase(): Phase {
-  return useSyncExternalStore(subscribe, () => current().phase, () => "done" as Phase);
+  // Closed halfway counts as done for the rest of the game (no waiting on it).
+  return useSyncExternalStore(subscribe, () => (current().closed ? "done" : current().phase), () => "done" as Phase);
 }
 
 /** Which button the walkthrough is pointing at right now. */
@@ -83,7 +86,7 @@ const TIP_SHOWS: [number, TourButton[]][] = [
 const MISSION_SHOWS: Record<Mission, TourButton[]> = { name: ["home", "dock"], hi: ["chat"], win: ["challenge", "reputation"] };
 function shownNow(): string {
   const s = current();
-  if (s.phase === "done") return "all";
+  if (s.phase === "done" || s.closed) return "all";
   if (s.phase === "intro") return "";
   const out = new Set<TourButton>();
   // On the missions: every mission up to the one on screen; on the tips, all of them.
@@ -180,7 +183,7 @@ export function Tutorial({
   };
 
   useEffect(() => {
-    if (s.phase !== "missions") return;
+    if (s.phase !== "missions" || s.closed) return;
     let alive = true;
     const look = () => {
       if (asking.current || document.visibilityState !== "visible") return;
@@ -217,7 +220,7 @@ export function Tutorial({
     };
     // naira only formats the cheer; actions.paid only refreshes the cash.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s.phase]);
+  }, [s.phase, s.closed]);
   useEffect(() => {
     if (!cheer) return;
     const t = setTimeout(() => setCheer(null), 3_500);
@@ -326,8 +329,9 @@ export function Tutorial({
     if (s.phase === "missions" && !mission && !cheer && (done !== null || s.skipped.length > 0)) save({ ...s, phase: "tips", i: 0 });
   }, [s, done, mission, cheer]);
 
-  const planned: Card | null =
-    s.phase === "intro" ? intro[Math.min(s.i, intro.length - 1)] : s.phase === "missions" ? (mission ? missionCards[mission] : null) : s.phase === "tips" ? tips[Math.min(s.i, tips.length - 1)] : null;
+  const planned: Card | null = s.closed
+    ? null
+    : s.phase === "intro" ? intro[Math.min(s.i, intro.length - 1)] : s.phase === "missions" ? (mission ? missionCards[mission] : null) : s.phase === "tips" ? tips[Math.min(s.i, tips.length - 1)] : null;
   // The house (and the quick buttons) are out on the map: inside a building or on a ride, first
   // step out, with the Leave button glowing (the card comes back to the house once you're out).
   const card: Card | null =
@@ -353,6 +357,19 @@ export function Tutorial({
     setGlow(card?.glow ?? null);
   }, [card?.glow]);
   useEffect(() => () => setGlow(null), []);
+  // Shut halfway with the ✕: just a small help icon, to carry on from where it was.
+  if (s.closed) {
+    return (
+      <button
+        onClick={() => save({ ...s, closed: false })}
+        className="pointer-events-auto fixed right-3 top-[7.6rem] z-[90] grid size-9 place-items-center rounded-full bg-gold text-ink shadow-lg ring-2 ring-white sm:right-4 sm:top-[7.25rem]"
+        aria-label="Continue the guide"
+        title="Continue the guide"
+      >
+        <CircleHelp className="size-5" />
+      </button>
+    );
+  }
   // The last mission's cheer shows even though there's no mission card after it.
   if (!card && !cheer) return null;
   const shown: Card = card ?? { emoji: "🎉", title: "", text: "" };
@@ -405,9 +422,9 @@ export function Tutorial({
                 <p className="mt-1 text-sm leading-snug text-white/85">{shown.text}</p>
               </div>
               <button
-                onClick={() => save({ ...s, phase: "done", i: 0 })}
+                onClick={() => save({ ...s, closed: true })}
                 aria-label="Close the walkthrough"
-                title="Close the walkthrough (Start the guide in your profile brings it back)"
+                title="Close the walkthrough (the ? button brings it back)"
                 className="-mr-1 -mt-1 grid size-7 shrink-0 place-items-center rounded-full text-white/60 hover:text-white"
               >
                 <X className="size-4" />

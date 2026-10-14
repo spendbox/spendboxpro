@@ -123,7 +123,7 @@ export function TownHall({
   }, [region]);
   useEffect(() => {
     const first = setTimeout(() => void load(), 0);
-    const t = setInterval(() => document.visibilityState === "visible" && void load(), 3_000);
+    const t = setInterval(() => document.visibilityState === "visible" && void load(), 6_000);
     return () => {
       clearTimeout(first);
       clearInterval(t);

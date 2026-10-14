@@ -5,12 +5,19 @@ import { Building2, House, Landmark, MapPin, Route, Search, Store, TrainFront, X
 import type { MapBusiness } from "@/lib/world/business";
 import type { RegionMap } from "@/lib/world/compile";
 import { toTile } from "@/lib/world/geo";
+import { HOME_KIND_LABEL, type AreaHomes } from "@/lib/world/homes";
+import { landmarkPriceMint } from "@/lib/world/landmark-price";
+import { cash } from "@/lib/world/value";
 import { ownedSpot, type OwnedProperty } from "@/lib/world/owned";
 import type { AssetUnit } from "@/lib/world/property-api";
 
-export type SearchHit = { label: string; note: string; x: number; z: number; kind: "area" | "landmark" | "station" | "mine" | "named" | "business" | "road" };
+export type SearchHit = { label: string; note: string; x: number; z: number; kind: "area" | "landmark" | "station" | "mine" | "named" | "business" | "road" | "home"; /** What it costs to buy (mint), when it's for sale. */ price?: number };
 
-const ICON = { area: MapPin, landmark: Landmark, station: TrainFront, mine: House, named: Building2, business: Store, road: Route };
+const ICON = { area: MapPin, landmark: Landmark, station: TrainFront, mine: House, named: Building2, business: Store, road: Route, home: House };
+
+/** The budget steps (naira): what a player can say they want to spend. */
+const BUDGETS = [5e6, 20e6, 50e6, 250e6, 1e9];
+type Budget = "afford" | number | null;
 
 /**
  * Everything on a real map you can search for: your own property, the names players have given
@@ -35,8 +42,15 @@ export function searchable(region: RegionMap, mine: AssetUnit[], owned: OwnedPro
   for (const d of region.region.districts) out.push({ label: d.name, note: "District", ...at(d.at.lat, d.at.lon), kind: "area" });
   for (const a of region.region.areas) out.push({ label: a.name, note: a.kind === "town" ? "Town" : "Neighbourhood", ...at(a.at[0], a.at[1]), kind: "area" });
   for (const c of region.region.corrections) if (c.kind === "area") out.push({ label: c.area.name, note: "Neighbourhood", ...at(c.area.at[0], c.area.at[1]), kind: "area" });
-  for (const l of region.landmarks) out.push({ label: l.name, note: "Landmark", x: l.ax + (l.w - 1) / 2, z: l.az + (l.d - 1) / 2, kind: "landmark" });
-  for (const sp of region.spotList) out.push({ label: sp.name, note: "Place", x: sp.x, z: sp.z, kind: "landmark" });
+  const perMint = region.region.prices.perMint;
+  for (const l of region.landmarks) {
+    const price = landmarkPriceMint({ type: l.type, w: l.w, d: l.d, name: l.name }, perMint);
+    out.push({ label: l.name, note: `Landmark · ${cash(price)}`, x: l.ax + (l.w - 1) / 2, z: l.az + (l.d - 1) / 2, kind: "landmark", price });
+  }
+  for (const sp of region.spotList) {
+    const price = landmarkPriceMint({ type: String(sp.kind), name: sp.name }, perMint);
+    out.push({ label: sp.name, note: `Place · ${cash(price)}`, x: sp.x, z: sp.z, kind: "landmark", price });
+  }
   for (const s of region.stations) out.push({ label: /station$/i.test(s.name) ? s.name : `${s.name} station`, note: "Railway station", x: s.x, z: s.z, kind: "station" });
   // Main roads, once each (at the middle of the first stretch with that name).
   const roads = new Set<string>();
@@ -65,6 +79,8 @@ export function MapSearch({
   mine,
   owned,
   businesses,
+  coins,
+  homes,
   onPick,
   compact,
   onOpenChange,
@@ -74,6 +90,10 @@ export function MapSearch({
   /** Buildings players own (with the names they gave them). */
   owned?: OwnedProperty[];
   businesses?: MapBusiness[];
+  /** Your cash (mint): "I can afford" in the budget filter. */
+  coins?: number;
+  /** The homes for sale, area by area (worked out when first needed). */
+  homes?: () => AreaHomes[];
   onPick: (hit: SearchHit) => void;
   compact?: boolean;
   /** Compact: tells when the box opens and closes (the life buttons make way on phones). */
@@ -116,6 +136,23 @@ export function MapSearch({
       stop.abort();
     };
   }, [typed, region]);
+  // The budget filter: pick one and the list is what you could buy for that, cheapest first.
+  const [budget, setBudget] = useState<Budget>(null);
+  const perMint = region.region.prices.perMint;
+  const cap = budget === "afford" ? (coins ?? 0) : budget === null ? null : budget / perMint;
+  const budgetHits = useMemo(() => {
+    if (cap === null) return null;
+    const t = fold(q);
+    const words = t ? t.split(" ") : [];
+    const match = (label: string) => !words.length || words.every((w) => fold(label).includes(w));
+    const list: SearchHit[] = [];
+    for (const a of homes?.() ?? []) {
+      if (!match(a.area)) continue;
+      for (const h of a.homes) if (h.mint <= cap) list.push({ label: a.area, note: `${HOME_KIND_LABEL[h.kind]} · ${cash(h.mint)}`, x: h.x, z: h.z, kind: "home", price: h.mint });
+    }
+    for (const h of all) if (h.kind === "landmark" && h.price !== undefined && h.price <= cap && match(h.label)) list.push(h);
+    return list.sort((x, y) => (x.price ?? 0) - (y.price ?? 0));
+  }, [cap, q, homes, all]);
   const hits = useMemo(() => {
     const t = fold(q);
     if (!t) return [];
@@ -133,6 +170,7 @@ export function MapSearch({
       })
       .slice(0, 10);
   }, [all, q, named]);
+  const shownHits = budgetHits ? budgetHits.slice(0, 30) : hits;
   if (compact && !shown)
     return (
       <>
@@ -158,8 +196,8 @@ export function MapSearch({
             onFocus={() => setOpen(true)}
             autoFocus={shown}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && hits[0]) {
-                onPick(hits[0]);
+              if (e.key === "Enter" && shownHits[0]) {
+                onPick(shownHits[0]);
                 setOpen(false);
               }
               if (e.key === "Escape") setOpen(false);
@@ -182,12 +220,33 @@ export function MapSearch({
             </button>
           )}
         </label>
-        {open && hits.length > 0 && (
-          <ul className="absolute inset-x-0 top-11 z-20 max-h-[min(22rem,55dvh)] overflow-y-auto rounded-2xl bg-panel shadow-xl ring-1 ring-ink/10">
-            {hits.map((h) => {
+        {open && (
+          <div className="absolute inset-x-0 top-11 z-20 overflow-hidden rounded-2xl bg-panel shadow-xl ring-1 ring-ink/10">
+            {/* The budget: what you want to spend (a row you can swipe along). */}
+            <div className="flex items-center gap-1.5 overflow-x-auto border-b border-ink/5 px-2.5 py-2 [scrollbar-width:none]" onMouseDown={(e) => e.preventDefault()}>
+              <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted">Budget</span>
+              {([null, ...(coins !== undefined ? (["afford"] as const) : []), ...BUDGETS] as Budget[]).map((b) => (
+                <button
+                  key={String(b)}
+                  onClick={() => setBudget(b === budget ? null : b)}
+                  className={`h-7 shrink-0 rounded-full px-2.5 text-xs font-semibold ${b === budget ? "bg-ink text-white" : "bg-ink/5"}`}
+                >
+                  {b === null ? "Any" : b === "afford" ? `I can afford ${cash(coins ?? 0)}` : `Under ${cash(b / perMint)}`}
+                </button>
+              ))}
+            </div>
+            {budgetHits && (
+              <p className="px-3 pt-2 text-[11px] text-muted">
+                {budgetHits.length === 0
+                  ? "Nothing for sale in that budget here. Try a bigger one."
+                  : `${budgetHits.length > 30 ? "30 of " : ""}${budgetHits.length} places you could buy, cheapest first.`}
+              </p>
+            )}
+          <ul className="max-h-[min(20rem,50dvh)] overflow-y-auto">
+            {shownHits.map((h) => {
               const Icon = ICON[h.kind];
               return (
-                <li key={`${h.label}|${h.note}|${h.x},${h.z}`}>
+                <li key={`${h.label}|${h.note}|${h.x},${h.z}|${h.price ?? ""}`}>
                   <button
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => {
@@ -206,6 +265,7 @@ export function MapSearch({
               );
             })}
           </ul>
+          </div>
         )}
       </div>
     );
