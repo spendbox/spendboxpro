@@ -128,6 +128,7 @@ import { StatsSheet } from "./stats-sheet";
 import { GiftPop, GiftSent } from "./people/gift-pop";
 import { MeSheet } from "./me-sheet";
 import { DailyGiftPop, MoneyHome } from "./money-home";
+import type { ChatLocation } from "@/lib/chat-location";
 import { RecentRail, rememberPerson } from "./people/recent-rail";
 import { PrankReveal, usePrankReveal } from "./people/prank-reveal";
 import { openAdvertise } from "./life/advertise-panel";
@@ -668,6 +669,13 @@ export function Game({
   const [npcTap, setNpcTap] = useState<{ id: string; at: number } | null>(null);
   const [balloonCount, setBalloonCount] = useState(0);
   const [dmRequest, setDmRequest] = useState<{ id: string; name: string; at: number } | null>(null);
+  /** A location someone just sent you in chat: shown over the game with Go there (for half a minute). */
+  const [locPop, setLocPop] = useState<{ id: string; name: string; loc: ChatLocation; at: number } | null>(null);
+  useEffect(() => {
+    if (!locPop) return;
+    const t = setTimeout(() => setLocPop(null), 30_000);
+    return () => clearTimeout(t);
+  }, [locPop]);
   const [ads, setAds] = useState<Ad[]>([]);
   // An ad someone opened: what its button would pay them (0 = nothing), a note, and whether they've tapped it.
   const [openAd, setOpenAd] = useState<{ ad: Ad; tile: number; reward: number; note: string | null; tapped: boolean } | null>(null);
@@ -1382,11 +1390,13 @@ export function Game({
       text: cashText(n.tile !== null && n.kind === "trap" ? `${n.body} (near ${where(n.tile)})` : n.body),
       tone: n.kind === "caught" ? ("alarm" as const) : ("mine" as const),
       avatar: n.kind === "caught" || n.kind === "shield" ? me.avatar : null,
-      quiet: n.kind === "duel_won" || n.kind === "duel_lost" || n.kind === "heist",
+      // A location sent in chat pops up as its own card (with Go there), not as a notice too.
+      quiet: n.kind === "duel_won" || n.kind === "duel_lost" || n.kind === "heist" || n.kind === "location",
       icon: ((
         { trap: "trap", trapped: "trap", swept: "drone", caught: "catch", shield: "shield", shielded: "shield", decoy: "decoy", streak: "flame", gift: "gift", spray: "gift", hug: "hug", handshake: "handshake", thanks: "hug", duel: "duel", duel_won: "duel", duel_lost: "duel", heist: "coin", market: "coin", dating: "hug" }) as Record<string, FeedIcon>
       )[n.kind] ?? (n.kind === "doorstep" && /gift/i.test(n.body) ? "gift" : "info"),
       kind: n.kind,
+      tile: n.tile,
       // The real map's notices can be read and cleared; the old game's are counted by time.
       ...(worldId ? { noteId: n.id, read: !!n.read || readIds.has(n.id) } : {}),
     }));
@@ -1475,6 +1485,10 @@ export function Game({
       f.eventId ? () => openEvent(f.eventId!)
       : f.icon === "gift" || f.icon === "hug" || f.icon === "handshake" ? () => openGifts()
       : f.kind === "doorstep" ? () => setDoorstepOpen(true)
+      : f.kind === "location" && f.tile != null && worldId ? () => {
+          const [x, z] = spiralXY(f.tile!);
+          void goToLocation({ region: worldId, x, z, label: "" });
+        }
       : null;
     return {
       key: f.key,
@@ -2120,6 +2134,18 @@ export function Game({
       return true;
     };
   });
+
+  /** Go to a location someone sent in chat (docs/CHAT.md): the usual fare from where you are, then you're there. */
+  async function goToLocation(loc: ChatLocation) {
+    setLocPop(null);
+    if (me.guest) return setSignInWhy("Sign in to go there.");
+    if (!worldId) return;
+    if (loc.region !== worldId) return setMessage({ text: "That's in another city. Go to that city first.", tone: "bad" });
+    if (!(await payTrip.current(loc.x, loc.z, true))) return;
+    setChatOpen(false);
+    if (place || ride !== null) leaveRoom();
+    worldLife.lookAt(loc.x, loc.z);
+  }
 
   /** Meet a friend where they are: their floor of a building (the fare there on the real map), their balloon or their ride. */
   async function goToFriend(room: string, name: string) {
@@ -3895,6 +3921,39 @@ export function Game({
           ]}
         />
       )}
+      {/* A location someone just sent you in chat: Go there (the usual fare), or open their chat. */}
+      {locPop && worldId && !camera && (
+        <div className="pointer-events-none fixed inset-x-0 top-[5.5rem] z-[60] flex justify-center px-3 sm:top-20">
+          <div className="pointer-events-auto flex w-full max-w-sm animate-[newsIn_.35s_ease-out] items-start gap-3 rounded-2xl bg-ink p-3 text-white shadow-xl">
+            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#e03131] text-lg" aria-hidden>
+              📍
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold leading-snug">{locPop.name} sent you their location</p>
+              <p className="truncate text-xs text-white/70">{locPop.loc.label}</p>
+              <div className="mt-2 flex gap-2">
+                <button onClick={() => void goToLocation(locPop.loc)} className="h-9 flex-1 rounded-full bg-gold px-3 text-xs font-bold text-ink">
+                  Go there
+                </button>
+                <button
+                  onClick={() => {
+                    const p = locPop;
+                    setLocPop(null);
+                    chatWith({ id: p.id, name: p.name });
+                  }}
+                  className="h-9 rounded-full bg-white/15 px-3 text-xs font-semibold"
+                >
+                  Open chat
+                </button>
+              </div>
+              <p className="mt-1 text-[10px] text-white/60">Going there costs the usual fare.</p>
+            </div>
+            <button onClick={() => setLocPop(null)} aria-label="Close" className="shrink-0 text-white/60">
+              <X className="size-4" />
+            </button>
+          </div>
+        </div>
+      )}
       {/* Chat on the real map: everyone in the place you're in, and private messages (not per round). */}
       {worldId && !guest && (
         <Safe name="Chat">
@@ -3933,6 +3992,12 @@ export function Game({
             }}
             news={{ latest: null, onOpen: () => worldLife.openNews() }}
             onlineNow={onlineFaces}
+            onGoTo={(loc) => void goToLocation(loc)}
+            onLocation={(p) => {
+              playSfx("chime");
+              setLocPop({ ...p, at: Date.now() });
+            }}
+            myLocation={() => (walking && worldId ? { region: worldId, ...(worldLife.centerRef.current?.() ?? { x: NaN, z: NaN }) } : null)}
             onCamera={() => {
               setChatOpen(false);
               setCamera("photo");

@@ -66,6 +66,8 @@ export type FeedItem = {
   /** Your own notice's id (it can be read and swiped away), and whether you've read it. */
   noteId?: number;
   read?: boolean;
+  /** Where on the map it's about (a location sent in chat: tap to go there). */
+  tile?: number | null;
 };
 
 /**
