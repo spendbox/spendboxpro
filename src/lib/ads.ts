@@ -5,6 +5,7 @@ import { sendEmail } from "@/lib/email";
 import { siteUrl } from "@/lib/env";
 import { checkPayment, paystackEnabled, startPayment } from "@/lib/paystack";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { REGIONS } from "@/lib/world";
 
 // Billboard ads: prices, checkout, payment confirmation, and what advertisers can change.
 // The rules (coin pools, rewards, daily limits, pacing) live in the database
@@ -221,6 +222,9 @@ export async function startAdCheckout(form: FormData): Promise<CheckoutResult> {
   if (form.get("policy") !== "yes") return { ok: false, error: "Please confirm you've read the advertising policy." };
   const c = readContact(form);
   if (!c.ok) return c;
+  // Where it shows: one region (state), or everywhere.
+  const region = clean(form.get("region"), 40);
+  if (region && !REGIONS[region]) return { ok: false, error: "Please pick where your ad should show." };
   const img = await readImage(form.get("image"));
   if (!img) return { ok: false, error: "Please add a picture for your billboard." };
   if (!img.ok) return img;
@@ -240,7 +244,7 @@ export async function startAdCheckout(form: FormData): Promise<CheckoutResult> {
   const id = randomUUID();
   const reference = `ad-${id}`;
   const { coins } = poolFor(total, pricing);
-  const { error } = await db.from("ads").insert({
+  const row: Record<string, unknown> = {
     id,
     brand,
     headline,
@@ -255,7 +259,10 @@ export async function startAdCheckout(form: FormData): Promise<CheckoutResult> {
     amount_kobo: total * 100,
     paystack_reference: reference,
     policy_accepted_at: new Date().toISOString(),
-  });
+  };
+  let { error } = await db.from("ads").insert(region ? { ...row, region } : row);
+  // Before game-db/084 there's no region column: the ad shows everywhere, as all ads did.
+  if (error && region && /region/.test(error.message)) ({ error } = await db.from("ads").insert(row));
   if (error) {
     console.error("Saving ad failed", error);
     await db.storage.from(AD_BUCKET).remove([path]);

@@ -4,6 +4,15 @@ import { useEffect, useRef } from "react";
 import { X } from "@/components/icons";
 import { cn } from "@/lib/cn";
 
+/** The cards open right now, oldest first: Escape closes only the top one. */
+const openSheets: { current: () => void }[] = [];
+let escapeHooked = false;
+function onEscape(e: KeyboardEvent) {
+  if (e.key !== "Escape" || !openSheets.length) return;
+  e.preventDefault();
+  openSheets[openSheets.length - 1].current();
+}
+
 /**
  * A pop-up card: slides up from the bottom on phones, centred on bigger screens.
  * Only a tap that STARTS on the dark backdrop closes it (a tap on the city that opened it
@@ -33,15 +42,22 @@ export function Sheet({
   centred?: boolean;
 }) {
   const downOnBackdrop = useRef(false);
-  // Escape closes it too.
+  // Escape closes it too, but only the top card (one listener for them all).
   const close = useRef(onClose);
   useEffect(() => {
     close.current = onClose;
   });
   useEffect(() => {
-    const key = (e: KeyboardEvent) => e.key === "Escape" && close.current();
-    window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
+    const me = close;
+    openSheets.push(me);
+    if (!escapeHooked) {
+      escapeHooked = true;
+      window.addEventListener("keydown", onEscape);
+    }
+    return () => {
+      const at = openSheets.indexOf(me);
+      if (at >= 0) openSheets.splice(at, 1);
+    };
   }, []);
   return (
     <div
@@ -54,10 +70,7 @@ export function Sheet({
         e.stopPropagation();
       }}
       onTouchStart={(e) => e.stopPropagation()}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") onClose();
-        e.stopPropagation();
-      }}
+      onKeyDown={(e) => e.stopPropagation()}
       onClick={(e) => {
         if (downOnBackdrop.current && e.target === e.currentTarget) onClose();
         downOnBackdrop.current = false;

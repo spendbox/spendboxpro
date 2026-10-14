@@ -30,7 +30,7 @@ import {
 } from "@/lib/city/layout";
 import { ABBREV } from "@/lib/city/places";
 import { regionMap } from "@/lib/world";
-import type { RegionMap } from "@/lib/world/compile";
+import { GATED_SPOTS, type RegionMap } from "@/lib/world/compile";
 import { toTile } from "@/lib/world/geo";
 import { BUILDING_LABEL, type Building } from "@/lib/world/buildings";
 import { landNow, shortLocal, valueOf } from "@/lib/world/value";
@@ -1303,6 +1303,56 @@ function adTexture(img: CanvasImageSource & { width: number; height: number }, a
   return tex;
 }
 
+/** A billboard for a business with no picture: its name big, and what it's about underneath. */
+function textAdTexture(ad: { headline?: string; brand?: string }) {
+  const W = 1024;
+  const H = 512;
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const c = canvas.getContext("2d")!;
+  const g = c.createLinearGradient(0, 0, W, H);
+  g.addColorStop(0, "#16181d");
+  g.addColorStop(1, "#2b2f38");
+  c.fillStyle = g;
+  c.fillRect(0, 0, W, H);
+  c.fillStyle = "#e0b84c";
+  c.fillRect(0, H - 18, W, 18);
+  c.textAlign = "center";
+  c.textBaseline = "middle";
+  const brand = (ad.brand ?? "").trim();
+  const about = (ad.headline ?? "").trim();
+  // The name: as big as fits on one line.
+  let size = 150;
+  c.font = `800 ${size}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+  while (size > 48 && c.measureText(brand).width > W * 0.9) {
+    size -= 6;
+    c.font = `800 ${size}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+  }
+  c.fillStyle = "#ffffff";
+  c.fillText(brand, W / 2, about ? H * 0.38 : H / 2, W * 0.92);
+  if (about) {
+    // What it's about: up to two lines under the name.
+    c.font = `600 44px system-ui, -apple-system, "Segoe UI", sans-serif`;
+    c.fillStyle = "#e0b84c";
+    const lines: string[] = [];
+    let line = "";
+    for (const word of about.split(/\s+/)) {
+      const next = line ? `${line} ${word}` : word;
+      if (c.measureText(next).width > W * 0.86 && line) {
+        lines.push(line);
+        line = word;
+      } else line = next;
+    }
+    if (line) lines.push(line);
+    lines.slice(0, 2).forEach((l, k) => c.fillText(l, W / 2, H * 0.66 + k * 56, W * 0.9));
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
 /** A player's face as a round sprite texture (drawn from the same SVG as the rest of the app). */
 const faceCache = new Map<string, THREE.CanvasTexture>();
 function faceTexture(avatar: Avatar, ring: string) {
@@ -1500,11 +1550,15 @@ export function CityView({
     // iPhones and iPads: Safari closes a tab that uses too much memory (it looks like the app won't
     // open), so no extra smoothing and a lighter screen there.
     const ios = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-    const renderer = new THREE.WebGLRenderer({ antialias: !ios, powerPreference: ios ? "default" : "high-performance" });
+    // Small, cheap phones (little memory, few cores, or data saver on): the lightest settings, so
+    // the city stays smooth and the phone stays cool.
+    const nav = navigator as Navigator & { deviceMemory?: number; connection?: { saveData?: boolean } };
+    const small = !ios && ((nav.deviceMemory ?? 8) <= 3 || (nav.hardwareConcurrency ?? 8) <= 4 || nav.connection?.saveData === true);
+    const renderer = new THREE.WebGLRenderer({ antialias: !ios && !small, powerPreference: ios ? "default" : "high-performance" });
     // Phones have very dense screens; 1.5× looks just as sharp and draws much faster.
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, ios ? 1.25 : window.innerWidth < 700 ? 1.5 : 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, small ? 1 : ios ? 1.25 : window.innerWidth < 700 ? 1.5 : 2));
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = small ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
     el.appendChild(renderer.domElement);
@@ -1530,7 +1584,7 @@ export function CityView({
     scene.add(hemi);
     const sun = new THREE.DirectionalLight(0xfff1dc, 2.4);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(ios ? 1024 : 2048, ios ? 1024 : 2048);
+    sun.shadow.mapSize.set(ios || small ? 1024 : 2048, ios || small ? 1024 : 2048);
     sun.shadow.bias = -0.0005;
     sun.shadow.normalBias = 0.02;
     scene.add(sun, sun.target);
@@ -1734,7 +1788,7 @@ export function CityView({
       id: string;
       design: number;
       panel: THREE.Mesh;
-      mat: THREE.MeshLambertMaterial;
+      mat: THREE.MeshBasicMaterial;
       beams: THREE.Mesh;
       /** Middle of the panel (world), and its width: for "is it on screen?". */
       centre: THREE.Vector3;
@@ -1796,7 +1850,8 @@ export function CityView({
       const front = new THREE.PlaneGeometry(w, h).translate(0, 0, 0.027);
       const back = new THREE.PlaneGeometry(w, h).rotateY(Math.PI).translate(0, 0, -0.027);
       const house = boardTextures[b.design] ?? boardTextures[0];
-      const mat = new THREE.MeshLambertMaterial({ map: house, emissive: 0xffffff, emissiveMap: house, emissiveIntensity: 0.28 });
+      // Unlit and not tone-mapped: the ad shows in its own colours, as bright by day as by night.
+      const mat = new THREE.MeshBasicMaterial({ map: house, toneMapped: false });
       const panel = new THREE.Mesh(mergeGeometries([front, back]), mat);
       front.dispose();
       back.dispose();
@@ -1875,7 +1930,8 @@ export function CityView({
       return cycle;
     }
     function setAds(list: CityAd[]) {
-      adsList = (list ?? []).filter((a) => a && a.id && a.image);
+      // An ad with no picture (a business with no logo yet) is drawn from its name and words.
+      adsList = (list ?? []).filter((a) => a && a.id && (a.image || a.brand));
       adCycle = makeAdCycle(adsList);
       const wanted = new Map(adsList.map((a) => [a.id, a.image]));
       for (const [id, entry] of adCache) {
@@ -1887,6 +1943,14 @@ export function CityView({
         if (adCache.has(ad.id)) continue;
         const entry: { url: string; tex: THREE.CanvasTexture | null; failed: boolean } = { url: ad.image, tex: null, failed: false };
         adCache.set(ad.id, entry);
+        if (!ad.image) {
+          try {
+            entry.tex = textAdTexture(ad);
+          } catch {
+            entry.failed = true;
+          }
+          continue;
+        }
         adLoader.load(
           ad.image,
           (loaded) => {
@@ -1978,7 +2042,6 @@ export function CityView({
             b.swapped = true;
             const tex = (b.shown && adCache.get(b.shown)?.tex) || boardTextures[b.design] || boardTextures[0];
             b.mat.map = tex;
-            b.mat.emissiveMap = tex;
           }
           b.panel.scale.y = Math.max(0.04, Math.abs(Math.cos(f * Math.PI)));
         }
@@ -2128,23 +2191,14 @@ export function CityView({
       const near = (x: number, z: number) => Math.max(Math.abs(x - win!.cx), Math.abs(z - win!.cz)) <= DETAIL;
       const list: { name: string; type: string; ax: number; az: number; w: number; d: number }[] = [
         ...reg.landmarks.map((l) => ({ name: l.name, type: l.type, ax: l.ax, az: l.az, w: l.w, d: l.d })),
-        ...reg.spotList.filter((sp) => ["hospital", "campus", "arena", "museum", "hotel", "megamall", "worship", "cathedral", "grandmosque", "market", "capitol"].includes(String(sp.kind))).map((sp) => ({ name: sp.name, type: String(sp.kind), ax: sp.x, az: sp.z, w: 1, d: 1 })),
+        ...reg.spotList.filter((sp) => GATED_SPOTS.has(String(sp.kind))).map((sp) => ({ name: sp.name, type: String(sp.kind), ax: sp.x, az: sp.z, w: 1, d: 1 })),
       ];
       for (const l of list) {
         const cx = l.ax + (l.w - 1) / 2, cz = l.az + (l.d - 1) / 2;
         if (!near(cx, cz)) continue;
-        // The gate faces the side with the most road along it (south when there's none).
-        const sides = [
-          { dx: 0, dz: 1, n: 0 },
-          { dx: 0, dz: -1, n: 0 },
-          { dx: 1, dz: 0, n: 0 },
-          { dx: -1, dz: 0, n: 0 },
-        ];
-        for (const sd of sides) {
-          if (sd.dz) for (let x = l.ax; x < l.ax + l.w; x++) if (reg.roadAt(x, sd.dz > 0 ? l.az + l.d : l.az - 1)) sd.n++;
-          if (sd.dx) for (let z = l.az; z < l.az + l.d; z++) if (reg.roadAt(sd.dx > 0 ? l.ax + l.w : l.ax - 1, z)) sd.n++;
-        }
-        const side = sides.reduce((a, b) => (b.n > a.n ? b : a), sides[0]);
+        // The gate faces the side the map keeps open in front of it (src/lib/world/compile.ts:
+        // the side with the most road along it; no building ever stands in front of it).
+        const side = reg.entranceAt(l.ax, l.az) ?? { dx: 0, dz: 1 };
         const along = side.dz ? l.w : l.d;
         const big = l.w * l.d > 2;
         // Sized to the people on the map (drawn bigger than life): the pylons tower over them.
@@ -2514,7 +2568,6 @@ export function CityView({
           if (shown && tex) {
             board.shown = shown;
             board.mat.map = tex;
-            board.mat.emissiveMap = tex;
           }
           boards.push(board);
           boardHits.push(board.panel);
@@ -4153,10 +4206,7 @@ export function CityView({
       sites.setNight(night, C.windowDay, C.windowNight);
       boardGlowMat.color.copy(C.frameDay).lerp(C.frameNight, night);
       boardBeamMat.opacity = 0.2 * night;
-      for (const b of boards) {
-        b.mat.emissiveIntensity = 0.28 + 0.62 * night;
-        b.beams.visible = night > 0.02;
-      }
+      for (const b of boards) b.beams.visible = night > 0.02;
       carNight = night;
       // The see-through plots round the edge dim with the light (instead of glowing at night).
       plotMat.color.copy(C.plotDay).lerp(C.plotNight, night);
@@ -7284,8 +7334,15 @@ export function CityView({
       sc.heliPan = pan;
     }
 
+    // Small phones draw at most 30 frames a second: smooth enough, half the work.
+    let lastDraw = 0;
     const loop = () => {
       frame = requestAnimationFrame(loop);
+      if (small) {
+        const t = performance.now();
+        if (t - lastDraw < 30) return;
+        lastDraw = t;
+      }
       // Frozen (behind the sign-in pop-up): the last picture stays, nothing moves. (Not in the
       // first few seconds, so there's a town to see behind it when the page opens with it up.)
       if (cb.current.paused && clock.elapsedTime > 3) {

@@ -43,6 +43,19 @@ export function SignInOverlay({
   }, [stage, signedIn, welcome, onClose]);
 
   const waiting = stage !== "email" && !signedIn;
+  // Signing in sets the login cookie, and that same answer from the server already brings the
+  // signed-in town (no second load). If it hasn't arrived after a few seconds (a slow network),
+  // ask again; if it still hasn't, load the page afresh, so nobody is left waiting on a spinner.
+  useEffect(() => {
+    if (!waiting) return;
+    const again = setTimeout(refresh, 4_000);
+    const reload = setTimeout(() => window.location.reload(), 20_000);
+    return () => {
+      clearTimeout(again);
+      clearTimeout(reload);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waiting]);
   const blocked = Boolean(welcome?.blocked);
   const details = !waiting && !blocked && (welcome !== null || (stage === "new-pin" && signedIn));
   const askPin = stage === "new-pin" || Boolean(welcome?.askPin);
@@ -117,12 +130,7 @@ export function SignInOverlay({
               }}
             />
           ) : (
-            <LoginForm
-              onDone={(next) => {
-                setStage(next === "play" ? "signed-in" : "new-pin");
-                refresh();
-              }}
-            />
+            <LoginForm onDone={(next) => setStage(next === "play" ? "signed-in" : "new-pin")} />
           )}
         </div>
       </section>

@@ -135,7 +135,7 @@ export type PropertyApi = {
   /** Packs paid for that never arrived: checked again with Paystack (each time the game opens). */
   checkMyPacks: () => Promise<{ ok: boolean; mint?: number }>;
   mapBusinesses: (region: string) => Promise<MapBusiness[]>;
-  hitBusiness: (id: string, kind: BusinessHit) => Promise<void>;
+  hitBusiness: (id: string, kind: BusinessHit, times?: number) => Promise<void>;
   serviceBoard: () => Promise<ServiceBoard | null>;
   serviceOffer: (f: ServiceForm) => Promise<PropertyResult>;
   serviceRequest: (f: ServiceForm) => Promise<PropertyResult>;

@@ -50,7 +50,6 @@ export function LoginForm({ onDone }: { onDone?: (next: "play" | "welcome") => v
             setBusy(true);
             if (onDone) return onDone("play");
             router.push("/play");
-            router.refresh();
           });
         }}
         className="flex flex-col gap-3"
@@ -87,7 +86,6 @@ export function LoginForm({ onDone }: { onDone?: (next: "play" | "welcome") => v
             setBusy(true);
             if (onDone) return onDone("welcome");
             router.push("/welcome?pin=1");
-            router.refresh();
           });
         }}
         className="flex flex-col gap-3"

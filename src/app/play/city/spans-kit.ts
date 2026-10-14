@@ -150,4 +150,4 @@ export function crossingParts(t: Tile, type: number, alongX: boolean, add: AddFn
 }
 
 /** Ground kept clear: dark paving under a deck, gravel along a railway, light paving round a station. */
-export const CLEAR_GROUND: Record<NonNullable<Tile["clear"]>, number> = { deck: 0x8f949b, track: 0xb3aa98, station: 0xe9ecef };
+export const CLEAR_GROUND: Record<NonNullable<Tile["clear"]>, number> = { deck: 0x8f949b, track: 0xb3aa98, station: 0xe9ecef, entrance: 0xdcd6c8 };

@@ -187,7 +187,8 @@ export async function loginWithPin(rawEmail: string, rawPin: string): Promise<Lo
       error: failures >= PIN_TRIES ? "Too many wrong PINs. Wait 15 minutes, or use Forgot PIN." : "That PIN isn't right.",
     };
   }
-  await db.from("profiles").update({ pin_failures: 0, pin_locked_until: null }).eq("id", profile.id);
+  // Only when there's something to reset (one less trip to the database on the way in).
+  if (profile.pin_failures || profile.pin_locked_until) await db.from("profiles").update({ pin_failures: 0, pin_locked_until: null }).eq("id", profile.id);
   return { ok: true };
 }
 

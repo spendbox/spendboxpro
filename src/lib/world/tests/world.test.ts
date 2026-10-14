@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { compileRegion, fillArea, line4 } from "../compile.ts";
+import { GATED_SPOTS, compileRegion, entranceFront, fillArea, line4 } from "../compile.ts";
 import { toLatLon, toTile, tileBounds, worldOffset } from "../geo.ts";
 import type { Region } from "../region.ts";
 import { LAGOS } from "../regions/lagos/index.ts";
@@ -185,4 +185,27 @@ test("no Lagos landmark stands under a raised deck", () => {
       assert.equal(over, undefined, `${lm.name} has a deck over it`);
     }
   }
+});
+
+test("the ground in front of every Lagos landmark's main gate is kept open", () => {
+  const map = compileRegion(LAGOS);
+  const gated = [
+    ...map.landmarks.map((l) => ({ name: l.name, ax: l.ax, az: l.az, w: l.w, d: l.d })),
+    ...map.spotList.filter((s) => GATED_SPOTS.has(String(s.kind))).map((s) => ({ name: s.name, ax: s.x, az: s.z, w: 1, d: 1 })),
+  ];
+  assert.ok(gated.length > 10, `only ${gated.length} gated places`);
+  const bad: string[] = [];
+  for (const l of gated) {
+    const side = map.entranceAt(l.ax, l.az);
+    if (!side) {
+      bad.push(`${l.name}: no entrance`);
+      continue;
+    }
+    // Right in front of the gate's middle: the street, or ground the map keeps clear (a building
+    // is only ever drawn on ground that is neither).
+    const front = entranceFront(l, side);
+    const [x, z] = front[Math.floor(front.length / 2)];
+    if (!map.roadAt(x, z) && !map.clearAt(x, z)) bad.push(`${l.name}: open ground missing at ${x},${z}`);
+  }
+  assert.deepEqual(bad, []);
 });
