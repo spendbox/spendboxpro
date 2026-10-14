@@ -1386,6 +1386,14 @@ export function useWorldLife({
           prices={region.region.prices}
           coins={coins}
           units={assets?.units ?? []}
+          whereIs={(building) => {
+            const sp = ownedSpot(building);
+            return sp ? region.areaAt(sp.x, sp.z) : null;
+          }}
+          onShow={(u) => {
+            setThings(null);
+            showBuilding(u.building);
+          }}
           onClose={() => {
             setThings(null);
             loadRep();

@@ -126,6 +126,8 @@ export type TutorialActions = {
   paid: () => void;
   /** Step out of the building (or off the ride) you're in. */
   leave: () => void;
+  /** Open your look (the avatar editor). */
+  look: () => void;
 };
 
 /** Where the card's been dragged to (kept while the game's open, so it stays out of your way). */
@@ -297,6 +299,13 @@ export function Tutorial({
       text: "Tap your face (top left) for Things, Assets, Wallet, Photos, Friends and settings. Missed something? “Start the guide” in there plays all this again.",
       glow: "profile",
       action: { label: "Open it", run: actions.profile },
+    },
+    {
+      emoji: "💅",
+      title: "Make it you",
+      text: "Everyone on the map sees your face, so make it yours: skin, hair, eyes, outfit, accessories. Tap your face (top left), then My look. Change it as often as you like, it's free.",
+      glow: "profile",
+      action: { label: "Change my look", run: actions.look },
     },
     { emoji: "🚀", title: "That's it. Go have fun!", text: "The city's yours. Say hi, win big, buy the block. See you around!" },
   ];

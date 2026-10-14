@@ -82,6 +82,7 @@ None known right now. Fixed lately:
 - [ ] Trees that grow the map's land outward; proposals, weddings, divorce and children (dating).
 
 ## Done lately
+- [x] The walkthrough covers your look (Change my look). Around shows only people online now. Things › Assets shows where each property is (tap one to fly there), your free room included.
 - [x] First visit: the map starts with just the place's name and Find a home; each button (house, chat, challenge, camera, wallet, profile...) appears when the walkthrough introduces it, and all of them once it's done or closed. The walkthrough says its card can be dragged anywhere, and inside a building it says to step out first (the Leave button glows, or "Take me out").
 - [x] Find a home shows every home, the ones you can afford in green and first (no button to tap). Naming your home: the box sits at the top of the screen, above the keyboard and the walkthrough.
 - [x] Signing in goes straight into the town (the town was loaded twice; now once, and if a slow network loses it, it asks again by itself). Opening the game no longer waits for the old hunt's clock or its searches.
