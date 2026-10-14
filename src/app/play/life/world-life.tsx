@@ -47,6 +47,7 @@ import { confirmTopUp } from "../topup-actions";
 import { moveOut, myRental, renameHome, type Rental } from "../property-actions";
 import { discounted } from "@/lib/world/rep-levels";
 import { StarterRoomBox } from "./starter-room";
+import { LandmarkBuy } from "./landmark-buy";
 import { restartTutorial, useTutorialPhase } from "../tutorial";
 import { WorkSheet } from "./work-sheet";
 import { BusinessSheet } from "./business-sheet";
@@ -873,6 +874,7 @@ export function useWorldLife({
           label={homeLabel}
           name={home?.label}
           naming={nameNew}
+          ownerName={meName}
           onRename={
             signedIn && home && homeUnit
               ? async (name) => {
@@ -986,9 +988,22 @@ export function useWorldLife({
             )}
             {onEnter && driveSwitch}
             <div className="grid grid-cols-2 gap-2">
-              <span className="flex min-h-11 items-center justify-center rounded-full bg-ink/[0.03] px-3 text-center text-xs text-muted">Not for sale: a public place</span>
+              <span className="flex min-h-11 items-center justify-center rounded-full bg-ink/[0.03] px-3 text-center text-xs text-muted">No business leases here</span>
               <span className="flex min-h-11 items-center justify-center rounded-full bg-ink/[0.03] px-3 text-center text-xs text-muted">No adverts on landmarks</span>
             </div>
+          </div>
+          {/* A landmark can be yours, for a crazy price (game-db/082, docs/LANDMARKS.md). */}
+          <div className="mt-3">
+            <LandmarkBuy
+              placeId={place.id}
+              coins={coins}
+              repScore={rep?.score ?? null}
+              signedIn={signedIn}
+              onBought={(_c, name) => {
+                setMessage({ text: `${name} is yours! Big money moves.`, good: true });
+                void refresh();
+              }}
+            />
           </div>
           {!SIMPLE_LIFE && place.jobs.length > 0 && <div className="mt-4">{jobs ? <JobsHere place={place} ctx={jobs} /> : <p className="text-sm text-muted">Sign in to work here.</p>}</div>}
           <button

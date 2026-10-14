@@ -9,7 +9,7 @@
 
 insert into public.game_settings (key, value, note) values
   ('daily_gift_max',        40,   'Most mint one daily gift can be (the server works it out, at most ₦50,000; this is the ceiling)'),
-  ('challenge_bonus',       1.33, 'Mint Newtown adds for each challenge won (on top of the pot): ₦2,000 in Lagos'),
+  ('challenge_bonus',       0,    'Mint Newtown adds for each challenge won (on top of the pot): none since part 81'),
   ('challenge_bonus_daily', 5,    'How many challenge wins a day get the Newtown prize')
 -- Running this again sets these back to the numbers here.
 on conflict (key) do update set value = excluded.value, note = excluded.note;

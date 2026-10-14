@@ -2369,6 +2369,7 @@ export function Game({
               >
                 <Wallet className="size-4 text-gold-dark" />
                 <span className="tabular-nums">{cash(liveCoins, { exact: true, full: toShown(liveCoins) < 100_000_000 })}</span>
+                {tutorialGlow === "wallet" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
                 {worldLife.financeDot && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-hit" />}
               </button>
             )}
@@ -3635,7 +3636,7 @@ export function Game({
                 { label: "My look", icon: Palette, colour: "#e64980", go: () => setEditAvatar(true) },
                 { label: "My card", icon: User, colour: "#7048e8", go: () => setPersonId(me.id) },
                 ...(worldLife.hasHome ? [{ label: "Home", icon: House, colour: "#7048e8", go: () => worldLife.goHome() }] : []),
-                { label: "Money", icon: Wallet, colour: "#2b8a3e", go: () => setMoneyOpen(true) },
+                { label: "Wallet", icon: Wallet, colour: "#2b8a3e", go: () => setMoneyOpen(true) },
                 { label: "Photos", icon: ImageIcon, colour: "#f59f00", go: () => setPhone("photos") },
                 { label: "My things", icon: Gem, colour: "#0c8599", go: () => worldLife.openThings("mine") },
                 { label: "Gifts", icon: Gift, colour: "#d6336c", badge: newGifts, go: () => openGifts() },
@@ -3827,6 +3828,7 @@ export function Game({
         <Tutorial
           place={worldRegion.name}
           perMint={worldRegion.prices.perMint}
+          name={me.name ?? undefined}
           actions={{
             nameHome: () => worldLife.nameHome(),
             chat: () => {
@@ -3841,6 +3843,10 @@ export function Game({
             profile: () => {
               setChatOpen(false);
               setMeOpen(true);
+            },
+            wallet: () => {
+              setChatOpen(false);
+              setMoneyOpen(true);
             },
             paid: () => startTransition(() => router.refresh()),
           }}

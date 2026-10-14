@@ -16,7 +16,7 @@ const TITLE: Record<string, string> = {
   course: "Congratulations!",
   challenge: "Challenge",
   visit: "At your door",
-  money: "Money",
+  money: "Wallet",
 };
 
 export async function GET() {

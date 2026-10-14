@@ -1,6 +1,6 @@
 -- Newtown, part 79: property pays you, by itself (docs/MONEY.md, "What your property earns").
 --   1. Every home, shop, office or plot you own (not a free room) earns a share of what you paid
---      for it every day (property_income_day, 1% a day to start), counted to the second and paid
+--      for it every day (property_income_day, 10% a day), counted to the second and paid
 --      whenever the game asks (opening the game, every minute while you play, opening your
 --      wallet). While you're away it keeps earning, up to 2 days' worth.
 --   2. Buying from the city is simply its price: no buying tax any more.
@@ -8,7 +8,7 @@
 -- Safe to run more than once.
 
 insert into public.game_settings (key, value, note) values
-  ('property_income_day', 0.01, 'Share of what you paid for a property that it earns you every day (paid automatically)'),
+  ('property_income_day', 0.10, 'Share of what you paid for a property that it earns you every day (paid automatically)'),
   ('property_income_cap_hours', 48, 'Most hours of property income paid at once (earning while away)')
 on conflict (key) do update set value = excluded.value, note = excluded.note;
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { House, Pencil, TrendingUp, Users, X } from "@/components/icons";
 import { DoorOpen } from "lucide-react";
 import type { Neighbour } from "@/lib/world/property-api";
@@ -33,6 +33,7 @@ export function HomeCard({
   onEnter,
   onRename,
   naming: startNaming = false,
+  ownerName,
   children,
 }: {
   label: string;
@@ -46,6 +47,8 @@ export function HomeCard({
   onRename?: (name: string) => Promise<string | null>;
   /** Open with the name box ready (a home just given). */
   naming?: boolean;
+  /** Your first name, for the example name ("Ada's Palace"). */
+  ownerName?: string;
   children?: React.ReactNode;
 }) {
   const [naming, setNaming] = useState(startNaming && !!onRename);
@@ -61,10 +64,30 @@ export function HomeCard({
     if (e) return setError(e);
     setNaming(false);
   };
+  // Typing the name on a phone: the keyboard covers the bottom of the screen, so the card rides up
+  // above it (the visible part of the screen, `visualViewport`, shrinks when a keyboard opens).
+  const [lift, setLift] = useState(0);
+  useEffect(() => {
+    const vv = typeof window !== "undefined" ? window.visualViewport : null;
+    if (!naming || !vv) return setLift(0);
+    const on = () => setLift(Math.max(0, window.innerHeight - vv.height - vv.offsetTop));
+    on();
+    vv.addEventListener("resize", on);
+    vv.addEventListener("scroll", on);
+    return () => {
+      vv.removeEventListener("resize", on);
+      vv.removeEventListener("scroll", on);
+    };
+  }, [naming]);
+  const first = (ownerName ?? "").trim().split(/\s+/)[0] || "Your";
+  const example = first === "Your" ? "Your Palace" : `${first}'s Palace`;
   const inside = (neighbours ?? []).filter((n) => n.sameBuilding);
   const around = (neighbours ?? []).filter((n) => !n.sameBuilding);
   return (
-    <div className="pointer-events-auto absolute inset-x-0 bottom-20 z-[60] flex justify-center px-3">
+    <div
+      className={`pointer-events-auto inset-x-0 z-[60] flex justify-center px-3 ${naming ? "fixed" : "absolute bottom-20"}`}
+      style={naming ? { bottom: lift > 0 ? lift + 8 : 80 } : undefined}
+    >
       <section className="glass w-full max-w-sm rounded-3xl p-4 shadow-lg">
         <div className="flex items-start gap-3">
           <div className="grid size-10 shrink-0 place-items-center rounded-2xl bg-me/15 text-me">
@@ -85,7 +108,7 @@ export function HomeCard({
                   value={draft}
                   maxLength={40}
                   onChange={(e) => setDraft(e.target.value)}
-                  placeholder="Name your home"
+                  placeholder={`Name your home, like ${example}`}
                   className="h-9 min-w-0 flex-1 rounded-full bg-white px-3 text-sm outline-none ring-1 ring-ink/15 focus:ring-me"
                 />
                 <button disabled={busy} className="h-9 shrink-0 rounded-full bg-ink px-3 text-xs font-semibold text-white disabled:opacity-50">
@@ -102,7 +125,7 @@ export function HomeCard({
                 )}
               </p>
             )}
-            {naming && <p className="mt-1 text-[11px] text-muted">Give it a name, like &quot;Tolu&apos;s Pad&quot;.</p>}
+            {naming && <p className="mt-1 text-[11px] text-muted">Give it a name, like &ldquo;{example}&rdquo;.</p>}
             {error && <p className="mt-1 text-xs text-hit">{error}</p>}
             <p className="truncate text-sm text-muted">{area}</p>
           </div>
