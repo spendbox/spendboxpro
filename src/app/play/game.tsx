@@ -3283,7 +3283,7 @@ export function Game({
         )}
 
         {/* The real map, out on the streets: the buttons are in a column down the left (below). Inside a
-            place or on a ride the place's own bar takes over; walking, only Stop walking. Explore is
+            place or on a ride the place's own bar takes over; walking, only the camera and Stop walking. Explore is
             hidden for now. */}
         {/* Signed out: a bigger gold Sign in button, then a small white button to advertise on the map. */}
         {worldId && guest && !place && ride === null && (
@@ -3297,9 +3297,10 @@ export function Game({
             Advertise on the map
           </button>
         )}
-        {/* On foot: just Stop walking, in the middle (the joystick is bottom left). */}
+        {/* On foot: Stop walking and the camera, in the middle (the joystick is bottom left). */}
         {worldId && !guest && !place && ride === null && walking && (
-          <div className="pointer-events-auto flex items-stretch">
+          <div className="pointer-events-auto flex items-stretch gap-1.5">
+            <DockButton icon={Camera} label="Photo" tint="text-[#f08c00]" onClick={() => setCamera("photo")} />
             <DockButton icon={Footprints} label="Stop walking" dark onClick={() => setWalking(false)} />
           </div>
         )}
@@ -4026,7 +4027,7 @@ export function Game({
         </div>
       )}
       {/* On foot: the joystick, bottom left (drag anywhere else to look round). */}
-      {walking && !place && ride === null && (
+      {walking && !place && ride === null && !camera && (
         <div className="pointer-events-none fixed bottom-6 left-4 z-30 sm:bottom-8 sm:left-8">
           <Joystick stick={walkStick} />
         </div>
