@@ -18,6 +18,7 @@
 - [ ] In the Supabase SQL Editor run `game-db/079_property_income.sql` (property pays you every day by itself; no buying tax). Until then property earns nothing and the 3% tax still applies.
 - [ ] In the Supabase SQL Editor run `game-db/080_tutorial.sql` (the walkthrough's missions and rewards: ₦20,000 for naming your home, ₦50,000 for saying hi, ₦50,000 for winning a challenge). Until then the missions show with no reward.
 - [ ] In the Supabase SQL Editor run `game-db/081_no_challenge_prize.sql` (no more ₦2,000 Newtown prize on a win).
+- [ ] In the Supabase SQL Editor run `game-db/082_landmarks.sql` (buying landmarks, ₦50bn to ₦2tn, earning 10% a day). Run it after 079.
 - [ ] On the day the simple life goes live (after merging), run `game-db/075_fresh_start.sql` ONCE: everyone's money becomes ₦350,000 (₦250,000 + ₦100,000 founder bonus), pots emptied, Founder badge, homes and things kept. Old balances are backed up; the undo lines are at the bottom of the file.
 - [ ] Optional, for voice calls on every network: add a TURN relay (docs/VOICE_CALLS.md) with NEXT_PUBLIC_TURN_URL, NEXT_PUBLIC_TURN_USERNAME and NEXT_PUBLIC_TURN_CREDENTIAL in Vercel.
 - [ ] In the Supabase SQL Editor run `game-db/062_notices_read.sql` (exact unread counts, swiping notices away, photos and selfies in messages) and then `game-db/063_home_plans.sql` (saving home plans).
