@@ -2429,12 +2429,10 @@ export function Game({
               <button onClick={() => setHowOpen(true)} className="glass grid size-8 shrink-0 place-items-center rounded-full font-display font-bold sm:size-9" aria-label="How it works">
                 ?
               </button>
-              {/* On the real map it's under the description instead. */}
-              {!worldId && (
-                <button onClick={() => setSignIn({ why: null })} className="flex h-8 items-center whitespace-nowrap rounded-full bg-gold px-3.5 text-sm font-semibold text-ink shadow sm:h-9 sm:px-4">
-                  Sign in to play
-                </button>
-              )}
+              {/* Signing in: one small button up here (no big title over the city, so the page is quick). */}
+              <button onClick={() => setSignIn({ why: null })} className="flex h-8 items-center whitespace-nowrap rounded-full bg-gold px-3.5 text-sm font-semibold text-ink shadow sm:h-9 sm:px-4">
+                Sign in
+              </button>
             </div>
           ) : (
           <div className="pointer-events-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
@@ -3271,10 +3269,10 @@ export function Game({
         {/* The real map, out on the streets: the buttons are in a column down the left (below). Inside a
             place or on a ride the place's own bar takes over; walking, only Stop walking. Explore is
             hidden for now. */}
-        {/* Signed out: one white button to advertise on the map, and the game's name floating over the city. */}
+        {/* Signed out: a small white button to advertise on the map. */}
         {worldId && guest && !place && ride === null && (
-          <button onClick={() => openAdvertise()} className="pointer-events-auto flex h-12 items-center gap-2 rounded-full bg-white px-6 text-sm font-bold text-ink shadow-lg ring-1 ring-black/5">
-            <Megaphone className="size-4 text-[#e8590c]" />
+          <button onClick={() => openAdvertise()} className="pointer-events-auto flex h-8 items-center gap-1.5 rounded-full bg-white/90 px-3 text-xs font-semibold text-ink shadow ring-1 ring-black/5">
+            <Megaphone className="size-3.5 text-[#e8590c]" />
             Advertise on the map
           </button>
         )}
@@ -3667,19 +3665,6 @@ export function Game({
         )}
       </div>
 
-      {/* Signed out: the game's name, big and floating over the city. */}
-      {worldId && guest && !place && ride === null && !camera && (
-        <div className="pointer-events-none absolute inset-x-0 top-[11%] z-[5] flex justify-center sm:top-[14%]">
-          <div className="title-float flex flex-col items-center">
-            <LogoMark size={60} className="mb-2 rounded-[16px] shadow-[0_12px_30px_rgba(0,0,0,0.35)]" />
-            <h1 className="title-3d font-display text-[clamp(3rem,15vw,8rem)] font-black italic leading-none tracking-tight text-white">Newtown</h1>
-            <p className="mt-3 rounded-full bg-black/35 px-5 py-2 text-base font-bold tracking-wide text-white backdrop-blur-sm sm:text-lg">Your world. Your story. Your tribe.</p>
-            <button onClick={() => setSignIn({ why: null })} className="pointer-events-auto mt-5 h-12 rounded-full bg-gold px-8 text-base font-bold text-ink shadow-lg">
-              Sign in to play
-            </button>
-          </div>
-        </div>
-      )}
       {/* Challenge: a white trophy button in the top right corner, under your cash (gently bouncing). */}
       {worldId && !guest && !camera && !place && ride === null && !walking && tour("challenge") && (
         <button
