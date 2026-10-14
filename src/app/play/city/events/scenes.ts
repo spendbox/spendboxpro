@@ -8,8 +8,9 @@ import { confetti, crowd, DANCE, fire, flashers, smoke, sparkles, type Ev, type 
 import { SCENES_A } from "./scenes-a";
 import { SCENES_B } from "./scenes-b";
 import { SCENES_C } from "./scenes-c";
+import { SCENES_D } from "./scenes-d";
 
-const SCENES: Record<string, Scene> = { ...SCENES_A, ...SCENES_B, ...SCENES_C };
+const SCENES: Record<string, Scene> = { ...SCENES_A, ...SCENES_B, ...SCENES_C, ...SCENES_D };
 
 const generic: Record<string, Scene> = {
   emergency: {

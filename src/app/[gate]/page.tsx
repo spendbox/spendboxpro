@@ -129,7 +129,7 @@ export default async function Gate({ params }: { params: Promise<{ gate: string 
     ["Business leases", naira(d.revenue.leases), `${d.leases.filter((l) => l.status === "live").length} live`],
     ["Billboard ads", naira(d.revenue.ads), "all time"],
     ["Open reports", fmt(d.mapOpen + d.peopleOpen), `${d.mapOpen} map · ${d.peopleOpen} people`],
-    ["World Bank", d.bank ? mintNaira(Number(d.bank.balance ?? 0)) : "Run 083", d.bank ? `+${mintNaira(Number(d.bank.today ?? 0))} today from games` : "and 084 (opens with ₦1bn)"],
+    ["World Bank", d.bank ? mintNaira(Number(d.bank.balance ?? 0)) : "Run 083", d.bank ? `+${mintNaira(Number(d.bank.today ?? 0))} today, all spending and taxes` : "and 084 (opens with ₦1bn)"],
     ["Top-ups", naira(d.topups.kobo), `${d.topups.count} paid · ${d.topups.today} today`],
     ["Money made today", d.money ? mintNaira(Number(d.money.created ?? 0)) : "Run 084", d.money ? `${mintNaira(Number(d.money.online ?? 0))} online pay · ${mintNaira(Number(d.money.burned ?? 0))} burned` : undefined],
     ["Landmarks owned", fmt(d.landmarks.length), d.landmarks[0] ? `latest: ${d.landmarks[0].name ?? d.landmarks[0].landmark_id}` : "none yet"],
