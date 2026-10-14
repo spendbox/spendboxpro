@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { sendAdReports } from "@/lib/ad-emails";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { tickLife } from "@/app/play/life-tick";
+import { clearOldTownHall } from "@/lib/town-hall";
 
 // Vercel runs this once a day (see vercel.json): tops broke players up to the floor,
 // deletes chats (and voice notes) from finished maps, and nudges the round clock in
@@ -28,11 +29,22 @@ export async function GET(request: Request) {
   let removed = 0;
   for (let i = 0; i < roundIds.length; i += 50) {
     const batch = roundIds.slice(i, i + 50);
-    const { data: voice } = await db.from("chat_messages").select("audio_path").in("round_id", batch).not("audio_path", "is", null);
+    // Only what's over a week old: on the real map chats (private ones included) and the Town Hall
+    // aren't per round, and the chat screens keep a week of them.
+    const week = new Date(Date.now() - 7 * 86_400_000).toISOString();
+    const { data: voice } = await db.from("chat_messages").select("audio_path").in("round_id", batch).lt("created_at", week).not("audio_path", "is", null);
     const paths = (voice ?? []).map((v) => v.audio_path as string);
     for (let j = 0; j < paths.length; j += 500) await db.storage.from("voice").remove(paths.slice(j, j + 500));
-    const { count } = await db.from("chat_messages").delete({ count: "exact" }).in("round_id", batch);
-    removed += count ?? 0;
+    // Private messages (no room), then places' chats (the Town Hall clears itself, below).
+    const dms = await db.from("chat_messages").delete({ count: "exact" }).in("round_id", batch).lt("created_at", week).is("room", null);
+    const rooms = await db.from("chat_messages").delete({ count: "exact" }).in("round_id", batch).lt("created_at", week).not("room", "like", "town:%");
+    removed += (dms.count ?? 0) + (rooms.count ?? 0);
+  }
+  // The Town Hall: everything over a day old (and its photos).
+  try {
+    for (let k = 0; k < 20 && (await clearOldTownHall(1000)) > 0; k++);
+  } catch (e) {
+    console.error("Clearing the Town Hall failed", e);
   }
   // Pay day for players who haven't been in: a game week or more of pay from their job and side
   // hustles goes into their wallets (tickLife pays it; game-db/049_reports_and_work.sql).

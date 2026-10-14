@@ -1,5 +1,7 @@
 "use server";
 
+import { SIMPLE_LIFE } from "@/lib/world/simple-life";
+
 import { challengeRep } from "@/lib/world/challenges";
 import type { Avatar } from "@/lib/avatar";
 import { currentUserId } from "@/lib/game";
@@ -51,7 +53,8 @@ export async function peopleNear(region: string, x: number, z: number): Promise<
   ]);
   return ((data ?? []) as Record<string, unknown>[])
     .filter((p) => p.x != null && p.z != null)
-    .map((p) => ({ id: String(p.id), name: String(p.name), avatar: (p.avatar ?? null) as Avatar | null, status: p.status as PersonOnMap["status"], x: n(p.x), z: n(p.z), job: p.job == null ? null : String(p.job), friend: !!p.friend }));
+    // Jobs are gone (the simple life): nobody is "at work" (before game-db/086, the old jobs still came through).
+    .map((p) => ({ id: String(p.id), name: String(p.name), avatar: (p.avatar ?? null) as Avatar | null, status: (SIMPLE_LIFE && p.status === "work" ? "away" : p.status) as PersonOnMap["status"], x: n(p.x), z: n(p.z), job: SIMPLE_LIFE || p.job == null ? null : String(p.job), friend: !!p.friend }));
 }
 
 export type PlayerCardData = {
@@ -99,7 +102,7 @@ export async function playerCard(id: string): Promise<PlayerCardData | null> {
     online: !!d.online,
     seenAt: d.seenAt == null ? null : String(d.seenAt),
     home: spot && map ? { area: map.areaAt(spot.x, spot.z), x: spot.x, z: spot.z } : null,
-    job: (d.job ?? null) as PlayerCardData["job"],
+    job: SIMPLE_LIFE ? null : ((d.job ?? null) as PlayerCardData["job"]),
     car: d.car == null ? null : String(d.car),
     things: n(d.things),
     inventions: ((d.inventions ?? []) as { name: string; sold: number }[]).map((k) => ({ name: String(k.name), sold: n(k.sold) })),

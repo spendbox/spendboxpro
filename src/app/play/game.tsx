@@ -2253,7 +2253,8 @@ export function Game({
             friendsAt={worldId ? (walking ? facesOnMap.filter((f) => !f.mine) : facesOnMap) : friendsAt}
             challengeLights={worldId ? challengeLights : undefined}
             onPerson={worldId ? (id) => (id.startsWith("home:") ? worldLife.goHome() : setPersonId(id)) : undefined}
-            marks={worldId ? worldLife.marks : undefined}
+            // Marks left on the city (writing, statues, trees...) are for signed-in players only.
+            marks={worldId && !guest ? worldLife.marks : undefined}
             onMark={worldId ? worldLife.onMark : undefined}
             openRoom={openReq}
             roomPeople={place ? hereNow : undefined}
@@ -3698,12 +3699,11 @@ export function Game({
             setTownOpen(true);
             setTownNew(false);
           }}
-          className="pointer-events-auto absolute bottom-[5.5rem] right-3.5 z-20 flex size-12 flex-col items-center justify-center rounded-full bg-[#e8590c] text-white shadow-[0_8px_20px_-6px_rgba(232,89,12,0.8)] sm:bottom-[6.5rem] sm:right-5"
+          className="pointer-events-auto absolute bottom-[5.5rem] right-3.5 z-20 grid size-12 place-items-center rounded-full bg-[#e8590c] text-white shadow-[0_8px_20px_-6px_rgba(232,89,12,0.8)] sm:bottom-[6.5rem] sm:right-5"
           aria-label={townNew ? "Town Hall: new messages" : "Town Hall"}
           title="Town Hall: everyone online"
         >
-          <Landmark className="size-5" />
-          <span className="text-[8px] font-bold leading-none">TOWN</span>
+          <Landmark className="size-6" />
           {tutorialGlow === "townhall" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
           {townNew && <span className="absolute -right-0.5 -top-0.5 size-3 rounded-full bg-hit ring-2 ring-white" />}
         </button>
