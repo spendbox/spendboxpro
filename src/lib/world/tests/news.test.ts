@@ -40,3 +40,14 @@ test("every story you can go and see has a scene that plays out there, fitting t
     assert.ok(s && WORLD_EVENT_BY_KEY[s], kind);
   }
 });
+
+test("big street events make the news, and each takes over the street when you go and look", () => {
+  const stories = cityNews(map, Date.UTC(2026, 9, 12, 10, 5), 600);
+  for (const [re, scene] of [[/rave/i, "street_rave"], [/street concert/i, "street_concert"]] as const) {
+    const n = stories.find((s) => re.test(s.title));
+    assert.ok(n, `no ${scene} story`);
+    assert.equal(n.scene, scene);
+  }
+  const march = stories.find((s) => s.kind === "protest");
+  assert.ok(march && march.scene === "protest_march" && march.x !== undefined);
+});

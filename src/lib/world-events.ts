@@ -182,7 +182,17 @@ export const WORLD_EVENTS: WorldEventKind[] = [
   E(100, "final_countdown", "Final countdown", "Final countdown! 2 minutes left in this town.", "twist", "any", 2, { twist: true }),
 ];
 
-export const WORLD_EVENT_BY_KEY: Record<string, WorldEventKind> = Object.fromEntries(WORLD_EVENTS.map((e) => [e.key, e]));
+/**
+ * Big street events that only the news plays out (src/lib/world/news.ts): tap through to the story
+ * and the street is taken over. Not scheduled by the database (not in WORLD_EVENTS).
+ */
+export const NEWS_EVENTS: WorldEventKind[] = [
+  E(101, "street_rave", "Street rave", "A street rave has taken over {place}!", "party", "road", 6),
+  E(102, "street_concert", "Street concert", "A free concert has filled {place}!", "party", "road", 6),
+  E(103, "protest_march", "Protest march", "Protesters are marching down {place}.", "city", "road", 6),
+];
+
+export const WORLD_EVENT_BY_KEY: Record<string, WorldEventKind> = Object.fromEntries([...WORLD_EVENTS, ...NEWS_EVENTS].map((e) => [e.key, e]));
 
 /** A scheduled event as the game state carries it. */
 export type WorldEvent = {

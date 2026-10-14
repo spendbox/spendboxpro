@@ -26,3 +26,18 @@ home buy, a ribbon cutting for a new business, a victory dance for a challenge w
 stories pick theirs by what they're about (a goat chase brings animals into traffic, a jollof war a
 food festival). `scene` on each story (src/lib/world/news.ts) names it; it's drawn on your phone only,
 near the story's spot, and has no reward to grab.
+
+## Big street events
+
+About one story in six is something that takes over a whole street, and tapping through shows it
+filling the road end to end (src/app/play/city/events/scenes-d.ts):
+
+- **Street rave**: a DJ in the middle of the road, speaker stacks and string lights all the way
+  down, lasers over a packed dancing crowd, a "drop" every 20 seconds when everyone dances together.
+- **Street concert**: a stage across the road with a big screen and a band, light towers, fireworks,
+  and fans packed from the stage to the far end (phone lights at night).
+- **Protest march**: a long column with placards and a banner, a leader with a megaphone, police cars
+  in front and behind, people watching from the roadside.
+
+These three are only played by the news (NEWS_EVENTS in src/lib/world-events.ts), never scheduled
+by the database. The crowd gathers over the first seconds and drifts away at the end.

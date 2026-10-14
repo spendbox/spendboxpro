@@ -7,7 +7,7 @@
 import type { RegionMap } from "./compile.ts";
 import { toTile } from "./geo.ts";
 
-export type NewsKind = "weather" | "fire" | "traffic" | "power" | "market" | "star" | "sport" | "flood" | "roads" | "festival" | "city" | "fun" | "money" | "game";
+export type NewsKind = "weather" | "fire" | "traffic" | "power" | "market" | "star" | "sport" | "flood" | "roads" | "festival" | "city" | "fun" | "money" | "game" | "protest";
 
 export type NewsItem = {
   id: string;
@@ -68,6 +68,20 @@ const FOODS = ["tomatoes", "pepper", "rice", "garri", "onions", "yam", "beans", 
 const STARS = ["An Afrobeats star", "A Nollywood actress", "A Super Eagles striker", "A famous comedian", "A gospel singer", "A tech billionaire"];
 const FESTIVALS = ["Eyo festival", "a street carnival", "an owambe that took over the street", "a food festival", "a fashion week show", "a free concert"];
 
+/** Big street events: the whole road taken over (each plays out on the map when you tap through: a rave, a concert, a march). */
+const BIG: ((a: string, star: string) => [NewsKind, string, string])[] = [
+  (a) => ["festival", `Street rave shuts down ${a} till morning`, `Speakers taller than danfos, lasers over the road and a crowd that won't go home. Neighbours gave up on sleep and joined in.`],
+  (a) => ["festival", `"Who get this party?": all-night rave takes over ${a}`, `Nobody knows who booked the DJ. Everybody knows the words. Okadas are going the long way round.`],
+  (a) => ["festival", `Block party rave in ${a}: the street is one big dance floor`, `Residents dragged speakers out of every gate. Mama Puts are serving till they run out.`],
+  (_a, star) => ["festival", `${star} throws a free street concert in ${_a}`, `The stage went up in an hour and the road filled up in ten minutes. Traffic is diverted until the encore.`],
+  (a) => ["festival", `Surprise street concert stops traffic in ${a}`, `A stage across the road, light towers down the street and fans packed end to end. Bus drivers have switched off their engines to listen.`],
+  (a) => ["protest", `Traders march through ${a} over new market levy`, `Placards up, whistles blowing. Police are walking alongside to keep the road clear; expect delays.`],
+  (a) => ["protest", `Okada riders march in ${a}: "Let us work!"`, `Hundreds walked the road with banners, chanting all the way. Police kept the march moving.`],
+  (a) => ["protest", `Students march in ${a} against school fees hike`, `They say the new fees cost more than a year's jollof. The march is peaceful and very loud.`],
+  (a) => ["protest", `"No light, no bill!": residents march in ${a}`, `Months of darkness and full electricity bills brought the whole street out. The power company says it is "looking into it".`],
+  (a) => ["protest", `Tenants march in ${a} against two-years-upfront rent`, `Their placards say "One year is enough". Some landlords were seen watching from their balconies.`],
+];
+
 /** Street life: the stories Lagos actually talks about (an area, a landmark; title and text). */
 const FUN: ((a: string, l: string) => [string, string])[] = [
   (a) => [`Goat chases danfo conductor down ${a} street`, `Witnesses say the goat "had a point". The conductor has agreed to give correct change from now on.`],
@@ -108,8 +122,11 @@ const KIND_SCENE: Partial<Record<NewsKind, string>> = {
   city: "ribbon_cutting",
   fun: "street_party",
   festival: "carnival",
+  protest: "protest_march",
 };
 const WORD_SCENE: [RegExp, string][] = [
+  [/rave/i, "street_rave"],
+  [/street concert/i, "street_concert"],
   [/goat|cow/i, "runaway_cows"],
   [/owambe/i, "owambe"],
   [/generator|power bank/i, "blackout_party"],
@@ -150,6 +167,11 @@ function storyOf(slot: number, p: ReturnType<typeof placesOf>): NewsItem {
     const l = pickOf(p.landmarks, rand(slot, 21));
     const [title, text] = pickOf(FUN, rand(slot, 22))(area.name, l.name);
     return { id, at, kind: "fun", title, text, area: area.name, x: area.x, z: area.z };
+  }
+  // About one in six: something big that takes over a whole street (a rave, a concert, a march).
+  if (rand(slot, 30) < 0.17) {
+    const [kind, title, text] = pickOf(BIG, rand(slot, 31))(area.name, pickOf(STARS, rand(slot, 32)));
+    return { id, at, kind, title, text, area: area.name, x: area.x, z: area.z };
   }
   const r = rand(slot, 3);
   if (r < 0.12) {
