@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { adminSignIn, adminSignOut, isAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { REGIONS } from "@/lib/world";
 import { confirmPack } from "../play/pack-actions";
+import { confirmTopUp } from "../play/topup-actions";
 
 // The owner's dashboard (src/lib/admin.ts): signing in and out, and the few things it can do.
 
@@ -82,4 +84,40 @@ export async function hqClearPhoto(userId: string): Promise<string> {
   if (!error && path) await db.storage.from("faces").remove([path]).catch(() => {});
   revalidatePath("/", "layout");
   return error ? "That didn't work." : "Removed.";
+}
+
+/** Ask Paystack again about a top-up or starter pack still waiting (gives the money if it was paid). */
+export async function hqRecheckTopUp(reference: string): Promise<string> {
+  if (!(await isAdmin())) return "Sign in again.";
+  const r = await confirmTopUp(reference);
+  revalidatePath("/", "layout");
+  return r.ok ? `Paid: credited${r.fresh ? " now" : " already"} (${Math.round(r.mint ?? 0).toLocaleString("en-GB")} mint).` : (r.error ?? "Not paid.");
+}
+
+export type CreditState = { ok: boolean; text: string } | null;
+
+/**
+ * Give a player Newtown money by hand: who (their name in the game, or their email), how much in
+ * naira (game money), and why (they're told). Recorded in admin_credits (game-db/090).
+ */
+export async function hqCredit(_: CreditState, form: FormData): Promise<CreditState> {
+  if (!(await isAdmin())) return { ok: false, text: "Sign in again." };
+  const who = String(form.get("who") ?? "").trim();
+  const naira = Number(String(form.get("naira") ?? "").replace(/[₦,\s]/g, ""));
+  const note = String(form.get("note") ?? "").trim();
+  if (!who) return { ok: false, text: "Who? Their name in the game, or their email." };
+  if (!Number.isFinite(naira) || naira <= 0) return { ok: false, text: "How much? A number of naira, more than 0." };
+  if (!note) return { ok: false, text: "Say why (the player sees it)." };
+  const perMint = REGIONS.lagos?.prices.perMint ?? 1_500;
+  const mint = Math.round((naira / perMint) * 100) / 100;
+  const db = createAdminClient();
+  const { data: found, error: findError } = await db.rpc("admin_find_player", { p_who: who });
+  if (findError) return { ok: false, text: /does not exist/.test(findError.message) ? "Run game-db/090 in Supabase first." : "That didn't work." };
+  const player = ((found ?? []) as { id: string; username: string | null }[])[0];
+  if (!player) return { ok: false, text: `No player called "${who}".` };
+  const { data, error } = await db.rpc("admin_credit", { p_user: player.id, p_mint: mint, p_note: note, p_by: (process.env.ADMIN_EMAIL ?? "").split(",")[0].trim() || null });
+  if (error) return { ok: false, text: error.message.includes("bad_amount") ? "That amount is too big." : "That didn't work." };
+  revalidatePath("/", "layout");
+  const balance = Math.round(Number(data ?? 0) * perMint);
+  return { ok: true, text: `Credited ₦${Math.round(naira).toLocaleString("en-GB")} to ${player.username ?? who}. They now have ₦${balance.toLocaleString("en-GB")}.` };
 }

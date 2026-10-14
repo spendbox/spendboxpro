@@ -5,7 +5,7 @@ import { connection } from "next/server";
 import { isAdmin, isAdminGate } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { siteStats } from "../play/profile-actions";
-import { HqButton, HqSignIn, HqSignOut } from "./hq-forms";
+import { HqButton, HqCredit, HqSignIn, HqSignOut } from "./hq-forms";
 
 // The owner's dashboard, at the secret address ADMIN_PATH (src/lib/admin.ts). Every other address
 // that isn't a page is "not found", as before.
@@ -37,7 +37,7 @@ async function load() {
   const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
   const head = { count: "exact" as const, head: true };
   const since = lagosMidnight();
-  const [stats, active, lives, homes, new1, new7, packs, leases, ads, mapOpen, peopleOpen, signups, bank, topups, landmarks, money, named, namedUnits, adList, town, photos] = await Promise.all([
+  const [stats, active, lives, homes, new1, new7, packs, leases, ads, mapOpen, peopleOpen, signups, bank, topups, landmarks, money, named, namedUnits, adList, town, photos, payments, credits] = await Promise.all([
     siteStats(),
     db.from("lives").select("user_id", head).gte("seen_at", ago(5 * 60_000)),
     db.from("lives").select("user_id", head),
@@ -53,7 +53,7 @@ async function load() {
     // The newer parts (each empty until its SQL is run): the World Bank (083/084), top-ups (076),
     // landmarks (082), the money made today (084), names players gave places, paid ads by region (084).
     db.rpc("world_bank_view"),
-    db.from("topups").select("amount_kobo, status, created_at").eq("status", "paid").order("created_at", { ascending: false }).limit(1000),
+    db.from("topups").select("*").eq("status", "paid").order("created_at", { ascending: false }).limit(1000),
     db.from("landmark_owners").select("landmark_id, name, price, bought_at, owner_id").order("bought_at", { ascending: false }).limit(40),
     db.rpc("money_since", { p_since: since }),
     db.from("property_buildings").select("building_id, name, created_at").not("name", "is", null).order("created_at", { ascending: false }).limit(30),
@@ -62,9 +62,13 @@ async function load() {
     // Town Hall (085) and profile photos: public, so they can be removed from here.
     db.from("chat_messages").select("id, sender_name, room, body, created_at").like("room", "town:%").order("id", { ascending: false }).limit(30),
     db.from("profiles").select("id, username, avatar").not("avatar->>photo", "is", null).limit(30),
+    // Every top-up and starter pack payment (packs are paid like top-ups since part 90), and the
+    // money the owner credited by hand (090).
+    db.from("topups").select("*").order("created_at", { ascending: false }).limit(40),
+    db.from("admin_credits").select("user_id, mint, note, created_at").order("created_at", { ascending: false }).limit(20),
   ]);
   const ownerIds = [...(landmarks.data ?? []).map((l) => l.owner_id), ...(namedUnits.data ?? []).map((u) => u.owner_id)].filter(Boolean).map(String);
-  const ids = [...new Set([...(packs.data ?? []).map((p) => String(p.user_id)), ...ownerIds])];
+  const ids = [...new Set([...(packs.data ?? []).map((p) => String(p.user_id)), ...ownerIds, ...(payments.data ?? []).map((p) => String(p.user_id)), ...(credits.data ?? []).map((c) => String(c.user_id))])];
   const { data: names } = ids.length ? await db.from("profiles").select("id, username").in("id", ids) : { data: [] };
   const nameOf = new Map<string, string>((names ?? []).map((n): [string, string] => [String(n.id), String(n.username ?? "(no name yet)")]));
   const packRows = packs.data ?? [];
@@ -90,7 +94,11 @@ async function load() {
     peopleOpen: peopleOpen.count ?? 0,
     signups: signups.data ?? [],
     bank: bank.error ? null : (bank.data as { balance?: number; today?: number } | null),
-    topups: { kobo: (topups.data ?? []).reduce((n, t) => n + Number(t.amount_kobo ?? 0), 0), today: (topups.data ?? []).filter((t) => String(t.created_at) >= since).length, count: (topups.data ?? []).length },
+    // Starter packs paid like top-ups (090) count under Starter packs, not here.
+    topups: (() => {
+      const rows = ((topups.data ?? []) as { amount_kobo: number; created_at: string; pack?: string | null }[]).filter((t) => !t.pack);
+      return { kobo: rows.reduce((n, t) => n + Number(t.amount_kobo ?? 0), 0), today: rows.filter((t) => String(t.created_at) >= since).length, count: rows.length };
+    })(),
     landmarks: (landmarks.data ?? []).map((l) => ({ ...l, who: l.owner_id ? (nameOf.get(String(l.owner_id)) ?? "?") : "(account gone)" })),
     money: money.error ? null : (money.data as { created?: number; burned?: number; online?: number } | null),
     named: [
@@ -102,6 +110,8 @@ async function load() {
     ],
     ads: adList.data ?? [],
     town: town.data ?? [],
+    payments: ((payments.data ?? []) as { reference: string; user_id: string; amount_kobo: number; mint: number; status: string; pack?: string | null; doubled?: boolean; created_at: string }[]).map((p) => ({ ...p, who: nameOf.get(String(p.user_id)) ?? "?" })),
+    credits: ((credits.data ?? []) as { user_id: string; mint: number; note: string; created_at: string }[]).map((c) => ({ ...c, who: nameOf.get(String(c.user_id)) ?? "?" })),
     photos: ((photos.data ?? []) as { id: string; username: string | null; avatar: { photo?: string } | null }[]).filter((p) => p.avatar?.photo),
   };
 }
@@ -182,7 +192,54 @@ export default async function Gate({ params }: { params: Promise<{ gate: string 
       )}
 
       <section className="rounded-2xl bg-panel p-4 ring-1 ring-line">
-        <p className="text-sm font-semibold">Starter pack payments</p>
+        <p className="text-sm font-semibold">Credit a player</p>
+        <p className="text-xs text-muted">Give someone Newtown money by hand (a refund, a prize, a payment that went wrong). They get a notice with your reason. Amounts are game naira.</p>
+        <HqCredit />
+        {d.credits.length > 0 && (
+          <ul className="mt-3 divide-y divide-line text-sm">
+            {d.credits.map((c, i) => (
+              <li key={i} className="flex items-center gap-3 py-1.5">
+                <span className="min-w-0 flex-1 truncate">
+                  <b>{c.who}</b> · {c.note}
+                </span>
+                <span className="shrink-0 tabular-nums">{mintNaira(Number(c.mint))}</span>
+                <span className="shrink-0 text-xs text-muted">{when(String(c.created_at))}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="rounded-2xl bg-panel p-4 ring-1 ring-line">
+        <p className="text-sm font-semibold">Top-ups and starter packs</p>
+        <p className="text-xs text-muted">
+          Each one is checked with Paystack when the player comes back, by Paystack&apos;s own message, when the game or the Wallet opens, and once a day. One still &ldquo;waiting&rdquo; after someone paid: Check with Paystack credits it if the money arrived.
+        </p>
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full min-w-[560px] text-left text-sm">
+            <tbody>
+              {d.payments.map((p) => (
+                <tr key={p.reference} className="border-t border-line align-middle">
+                  <td className="py-1.5">{p.who}</td>
+                  <td className="py-1.5">{p.pack ? `Pack: ${p.pack}` : "Top-up"}</td>
+                  <td className="py-1.5 tabular-nums">{naira(Number(p.amount_kobo))}</td>
+                  <td className="py-1.5 tabular-nums">{mintNaira(Number(p.mint) * (p.doubled ? 2 : 1))}</td>
+                  <td className="py-1.5 text-xs text-muted">{when(String(p.created_at))}</td>
+                  <td className="py-1.5 text-right">{p.status === "paid" ? <span className="text-xs font-semibold text-me">Paid</span> : <HqButton kind="topup" id={String(p.reference)} label="Check with Paystack" />}</td>
+                </tr>
+              ))}
+              {d.payments.length === 0 && (
+                <tr>
+                  <td className="py-2 text-muted">No payments yet.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="rounded-2xl bg-panel p-4 ring-1 ring-line">
+        <p className="text-sm font-semibold">Older starter pack payments</p>
         <p className="text-xs text-muted">A pack still &ldquo;pending&rdquo; after someone paid: Check with Paystack gives them the mint if the money arrived.</p>
         <div className="mt-2 overflow-x-auto">
           <table className="w-full min-w-[560px] text-left text-sm">

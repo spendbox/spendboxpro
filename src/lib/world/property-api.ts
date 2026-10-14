@@ -133,7 +133,7 @@ export type PropertyApi = {
   startPack: (pack: string, region: string) => Promise<{ ok: true; url?: string; coins?: number } | { ok: false; error: string }>;
   confirmPack: (reference: string) => Promise<{ ok: boolean; mint?: number; error?: string }>;
   /** Packs paid for that never arrived: checked again with Paystack (each time the game opens). */
-  checkMyPacks: () => Promise<{ ok: boolean; mint?: number }>;
+  checkMyPacks: () => Promise<{ ok: boolean; mint?: number; topup?: boolean }>;
   mapBusinesses: (region: string) => Promise<MapBusiness[]>;
   hitBusiness: (id: string, kind: BusinessHit, times?: number) => Promise<void>;
   serviceBoard: () => Promise<ServiceBoard | null>;

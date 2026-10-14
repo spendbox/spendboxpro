@@ -469,6 +469,8 @@ export function Game({
   const [cityOpen, setCityOpen] = useState(false);
   /** Your money (tap your cash), and the daily gift popping up once a day. */
   const [moneyOpen, setMoneyOpen] = useState(false);
+  /** The Wallet was opened to buy a starter pack (from the welcome): the packs show unfolded. */
+  const [packsOpen, setPacksOpen] = useState(false);
   const [giftPop, setGiftPop] = useState(false);
   const closeGiftPop = useCallback(() => setGiftPop(false), []);
   /** You (your face, top left): everything that isn't chat. */
@@ -557,6 +559,11 @@ export function Game({
     rowOutside: true,
     meName: state.me.name ?? undefined,
     onPerson: (id: string) => setPersonId(id),
+    // A starter pack picked on the welcome: the Wallet, with the packs open.
+    onWallet: () => {
+      setPacksOpen(true);
+      setMoneyOpen(true);
+    },
     // Gone in straight away, but the fare couldn't be paid: back out.
     onTripFailed: () => {
       entering.current = 0;
@@ -3807,14 +3814,18 @@ export function Game({
           coins={me.coins}
           perMint={worldRegion?.prices.perMint ?? 1_500}
           region={worldId}
-          onClose={() => setMoneyOpen(false)}
+          onClose={() => {
+            setMoneyOpen(false);
+            setPacksOpen(false);
+          }}
           onTaken={() => {
             playSfx("chime");
             startTransition(() => router.refresh());
           }}
-          onToppedUp={(mint, doubled) => {
+          packsOpen={packsOpen}
+          onToppedUp={(mint, doubled, pack) => {
             playSfx("chime");
-            setMessage({ text: `Your top-up is in: +${cash(mint)}${doubled ? " (your first one, doubled!)" : ""}`, tone: "good" });
+            setMessage({ text: pack ? `Your starter pack is in: +${cash(mint)}` : `Your top-up is in: +${cash(mint)}${doubled ? " (your first one, doubled!)" : ""}`, tone: "good" });
             startTransition(() => router.refresh());
           }}
           onProperty={() => worldLife.openThings("assets")}

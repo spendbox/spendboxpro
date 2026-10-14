@@ -5,11 +5,12 @@ import { Check, ChevronDown, Copy, Gift, House } from "lucide-react";
 import { cash } from "@/lib/world/value";
 import type { GiftParts } from "@/lib/world/daily-gift";
 import type { MoneyView } from "@/lib/world/money-view";
+import { PAID_PACKS } from "@/lib/world/packs";
 import { TOPUPS } from "@/lib/world/topups";
 import { payInPopup } from "./paystack-popup";
 import { Sheet } from "./sheet";
 import { useIncome } from "./income";
-import { confirmTopUp, startTopUp, startTransferTopUp, toppedUpBefore, type TopUpRow } from "./topup-actions";
+import { confirmTopUp, myPackStatus, startTopUp, startTransferTopUp, toppedUpBefore, type TopUpRow } from "./topup-actions";
 import type { TransferAccount } from "@/lib/paystack";
 
 // Your wallet (docs/MONEY.md): tap your cash. Kept short: what you have, today's gift, top up.
@@ -119,7 +120,7 @@ function CopyRow({ label, value, copyValue }: { label: string; value: string; co
 }
 
 /** Paying by bank transfer, in the game: the account to pay into, and a check every few seconds until it's in. */
-function TransferBox({ reference, account, onPaid, onCancel }: { reference: string; account: TransferAccount; onPaid: (mint: number, doubled: boolean) => void; onCancel: () => void }) {
+function TransferBox({ reference, account, onPaid, onCancel }: { reference: string; account: TransferAccount; onPaid: (mint: number, doubled: boolean, pack?: string) => void; onCancel: () => void }) {
   const [now, setNow] = useState(() => Date.now());
   const [checking, setChecking] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -129,7 +130,7 @@ function TransferBox({ reference, account, onPaid, onCancel }: { reference: stri
     if (byHand) setChecking(true);
     const r = await confirmTopUp(reference).catch(() => null);
     if (byHand) setChecking(false);
-    if (r?.ok) return onPaid(r.mint ?? 0, !!r.doubled);
+    if (r?.ok) return onPaid(r.mint ?? 0, !!r.doubled, r.pack);
     if (byHand) setNote("Not in yet. Transfers can take a minute or two: we keep checking, and it lands by itself.");
   };
   useEffect(() => {
@@ -171,34 +172,21 @@ function TransferBox({ reference, account, onPaid, onCancel }: { reference: stri
   );
 }
 
-/** Top up: pick an amount, then pay by bank transfer (right here) or by card and more (Paystack's box). */
-function TopUps({ region, perMint, onToppedUp }: { region: string; perMint: number; onToppedUp: (mint: number, doubled: boolean) => void }) {
-  const [before, setBefore] = useState<boolean | null>(null);
-  const [picked, setPicked] = useState<string | null>(null);
+/** Paying for a top-up or a starter pack ("pack_<id>"): by bank transfer (right here) or by card and more (Paystack's box). */
+function usePay(region: string, onPaid: (mint: number, doubled: boolean, pack?: string) => void) {
   const [busy, setBusy] = useState<"transfer" | "card" | null>(null);
   const [transfer, setTransfer] = useState<{ reference: string; account: TransferAccount } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    let alive = true;
-    void toppedUpBefore()
-      .then((b) => alive && setBefore(b))
-      .catch(() => alive && setBefore(true));
-    return () => {
-      alive = false;
-    };
-  }, []);
-  const paid = (mint: number, doubled: boolean) => {
+  const paid = (mint: number, doubled: boolean, pack?: string) => {
     setTransfer(null);
-    setPicked(null);
-    setBefore(true);
-    onToppedUp(mint, doubled);
+    onPaid(mint, doubled, pack);
   };
   const byTransfer = async (id: string) => {
     setBusy("transfer");
     setError(null);
     const r = await startTransferTopUp(id, region).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
     setBusy(null);
-    if (!r.ok) return setError(`${r.error} You can pay by card instead.`);
+    if (!r.ok) return setError(/switched on soon|had a starter|starting out/.test(r.error) ? r.error : `${r.error} You can pay by card instead.`);
     setTransfer({ reference: r.reference, account: r.account });
   };
   const byCard = async (id: string) => {
@@ -219,9 +207,48 @@ function TopUps({ region, perMint, onToppedUp }: { region: string; perMint: numb
     const done = await confirmTopUp(r.reference).catch(() => ({ ok: false as const, error: "The connection blinked." }));
     setBusy(null);
     if (!done.ok) return setError("Paystack is still confirming it. It arrives by itself: see Your payments below.");
-    paid(done.mint ?? 0, !!done.doubled);
+    paid(done.mint ?? 0, !!done.doubled, "pack" in done ? done.pack : undefined);
   };
-  const option = TOPUPS.find((t) => t.id === picked);
+  /** The two ways to pay for the picked option, or the transfer under way. */
+  const ways = (id: string | null) => (
+    <>
+      {id && !transfer && (
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <button disabled={!!busy} onClick={() => void byTransfer(id)} className="flex h-12 flex-col items-center justify-center rounded-2xl bg-[#1c7ed6] text-white shadow disabled:opacity-50">
+            <span className="text-sm font-bold">{busy === "transfer" ? "Getting account…" : "🏦 Bank transfer"}</span>
+            <span className="text-[10px] text-white/80">Right here in the game</span>
+          </button>
+          <button disabled={!!busy} onClick={() => void byCard(id)} className="flex h-12 flex-col items-center justify-center rounded-2xl bg-ink text-white shadow disabled:opacity-50">
+            <span className="text-sm font-bold">{busy === "card" ? "Opening…" : "💳 Card & more"}</span>
+            <span className="text-[10px] text-white/70">Card, USSD, bank app</span>
+          </button>
+        </div>
+      )}
+      {transfer && <TransferBox reference={transfer.reference} account={transfer.account} onPaid={(mint, doubled, pack) => paid(mint, doubled, pack)} onCancel={() => setTransfer(null)} />}
+      {error && <p className="mt-1 text-xs text-hit">{error}</p>}
+    </>
+  );
+  return { busy, transfer, setError, ways };
+}
+
+/** Top up: pick an amount, then pay by bank transfer (right here) or by card and more (Paystack's box). */
+function TopUps({ region, perMint, onToppedUp }: { region: string; perMint: number; onToppedUp: (mint: number, doubled: boolean, pack?: string) => void }) {
+  const [before, setBefore] = useState<boolean | null>(null);
+  const [picked, setPicked] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void toppedUpBefore()
+      .then((b) => alive && setBefore(b))
+      .catch(() => alive && setBefore(true));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const pay = usePay(region, (mint, doubled, pack) => {
+    setPicked(null);
+    if (!pack) setBefore(true);
+    onToppedUp(mint, doubled, pack);
+  });
   return (
     <div>
       <p className="mb-1.5 flex items-baseline justify-between text-xs">
@@ -232,10 +259,10 @@ function TopUps({ region, perMint, onToppedUp }: { region: string; perMint: numb
         {TOPUPS.map((t) => (
           <button
             key={t.id}
-            disabled={!!busy || !!transfer}
+            disabled={!!pay.busy || !!pay.transfer}
             onClick={() => {
               setPicked(picked === t.id ? null : t.id);
-              setError(null);
+              pay.setError(null);
             }}
             className={`relative rounded-xl px-1.5 py-2 text-center shadow-sm ring-1 disabled:opacity-50 ${picked === t.id ? "bg-ink text-white ring-ink" : "bg-white ring-ink/10"}`}
           >
@@ -245,20 +272,70 @@ function TopUps({ region, perMint, onToppedUp }: { region: string; perMint: numb
           </button>
         ))}
       </div>
-      {option && !transfer && (
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          <button disabled={!!busy} onClick={() => void byTransfer(option.id)} className="flex h-12 flex-col items-center justify-center rounded-2xl bg-[#1c7ed6] text-white shadow disabled:opacity-50">
-            <span className="text-sm font-bold">{busy === "transfer" ? "Getting account…" : "🏦 Bank transfer"}</span>
-            <span className="text-[10px] text-white/80">Right here in the game</span>
-          </button>
-          <button disabled={!!busy} onClick={() => void byCard(option.id)} className="flex h-12 flex-col items-center justify-center rounded-2xl bg-ink text-white shadow disabled:opacity-50">
-            <span className="text-sm font-bold">{busy === "card" ? "Opening…" : "💳 Card & more"}</span>
-            <span className="text-[10px] text-white/70">Card, USSD, bank app</span>
-          </button>
-        </div>
+      {pay.ways(picked)}
+    </div>
+  );
+}
+
+/**
+ * Starter packs (docs/PACKS.md): once, until you buy a home of your own, start with ₦20m, ₦80m or
+ * ₦300m instead of ₦2m (and the pack's gifts). Paid like a top-up, so it can't get lost.
+ */
+function StarterPacks({ region, perMint, open, onPaid }: { region: string; perMint: number; open?: boolean; onPaid: (mint: number, doubled: boolean, pack?: string) => void }) {
+  const [status, setStatus] = useState<"open" | "had" | "too_late" | null | undefined>(undefined);
+  const [picked, setPicked] = useState<string | null>(null);
+  const [shown, setShown] = useState(!!open);
+  useEffect(() => {
+    let alive = true;
+    void myPackStatus()
+      .then((s) => alive && setStatus(s))
+      .catch(() => alive && setStatus(null));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const pay = usePay(region, (mint, doubled, pack) => {
+    setPicked(null);
+    setStatus("had");
+    onPaid(mint, doubled, pack);
+  });
+  if (status !== "open") return null;
+  return (
+    <div className="rounded-2xl bg-gradient-to-br from-[#fff9db] to-[#ffe8cc] p-3 ring-1 ring-[#f59f00]/30">
+      <button onClick={() => setShown((v) => !v)} className="flex w-full items-center justify-between text-left">
+        <span>
+          <b className="block text-sm">🎁 Starter packs</b>
+          <span className="block text-xs text-[#5c4400]">Start richer, once, until you buy a home of your own.</span>
+        </span>
+        <ChevronDown className={`size-4 shrink-0 transition ${shown ? "rotate-180" : ""}`} />
+      </button>
+      {shown && (
+        <>
+          <div className="mt-2 space-y-1.5">
+            {PAID_PACKS.map((p) => (
+              <button
+                key={p.id}
+                disabled={!!pay.busy || !!pay.transfer}
+                onClick={() => {
+                  setPicked(picked === p.id ? null : p.id);
+                  pay.setError(null);
+                }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left shadow-sm ring-1 disabled:opacity-50 ${picked === p.id ? "bg-ink text-white ring-ink" : "bg-white ring-ink/10"}`}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[11px] font-semibold opacity-70">
+                    {p.label} · {p.story}
+                  </span>
+                  <span className="block font-display text-lg font-extrabold leading-tight tabular-nums">Start with {cash(p.game / perMint)}</span>
+                  {p.perks.length > 0 && <span className="block truncate text-[11px] opacity-70">+ {p.perks.join(" · ")}</span>}
+                </span>
+                <span className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-bold ${picked === p.id ? "bg-gold text-ink" : "bg-ink/5"}`}>₦{p.naira.toLocaleString("en-GB")}</span>
+              </button>
+            ))}
+          </div>
+          {pay.ways(picked ? `pack_${picked}` : null)}
+        </>
       )}
-      {transfer && <TransferBox reference={transfer.reference} account={transfer.account} onPaid={paid} onCancel={() => setTransfer(null)} />}
-      {error && <p className="mt-1 text-xs text-hit">{error}</p>}
     </div>
   );
 }
@@ -293,6 +370,7 @@ function Payments({ list, onCheck, checking }: { list: TopUpRow[] | null; onChec
                   <span className="block truncate text-[11px] text-muted">
                     {new Date(p.at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · {p.reference}
                     {p.doubled ? " · doubled" : ""}
+                    {p.pack ? " · starter pack" : ""}
                   </span>
                 </span>
                 <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${STATUS[p.status].cls}`}>{STATUS[p.status].label}</span>
@@ -353,6 +431,7 @@ export function MoneyHome({
   onTaken,
   onToppedUp,
   onProperty,
+  packsOpen,
 }: {
   coins: number;
   perMint: number;
@@ -361,10 +440,12 @@ export function MoneyHome({
   onClose: () => void;
   /** The gift was taken (the cash at the top goes up). */
   onTaken: () => void;
-  /** A top-up arrived. */
-  onToppedUp: (mint: number, doubled: boolean) => void;
+  /** A top-up (or a starter pack) arrived. */
+  onToppedUp: (mint: number, doubled: boolean, pack?: string) => void;
   /** Your assets: your property and what it earns. */
   onProperty: () => void;
+  /** Opened to buy a starter pack: show the packs unfolded. */
+  packsOpen?: boolean;
 }) {
   const [view, setView] = useState<MoneyView | null | undefined>(undefined);
   useEffect(() => {
@@ -425,11 +506,22 @@ export function MoneyHome({
         ) : null}
       </div>
       <div className="mt-3">
+        <StarterPacks
+          region={region}
+          perMint={perMint}
+          open={packsOpen}
+          onPaid={(mint, doubled, pack) => {
+            onToppedUp(mint, doubled, pack);
+            void checkPayments();
+          }}
+        />
+      </div>
+      <div className="mt-3">
         <TopUps
           region={region}
           perMint={perMint}
-          onToppedUp={(mint, doubled) => {
-            onToppedUp(mint, doubled);
+          onToppedUp={(mint, doubled, pack) => {
+            onToppedUp(mint, doubled, pack);
             void checkPayments();
           }}
         />

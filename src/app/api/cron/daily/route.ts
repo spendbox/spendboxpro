@@ -3,6 +3,8 @@ import { sendAdReports } from "@/lib/ad-emails";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { tickLife } from "@/app/play/life-tick";
 import { clearOldTownHall } from "@/lib/town-hall";
+import { confirmPack } from "@/app/play/pack-actions";
+import { confirmTopUp } from "@/app/play/topup-actions";
 
 // Vercel runs this once a day (see vercel.json): tops broke players up to the floor,
 // deletes chats (and voice notes) from finished maps, and nudges the round clock in
@@ -58,6 +60,20 @@ export async function GET(request: Request) {
   } catch (e) {
     console.error("Weekly pay run failed", e);
   }
+  // Payments still waiting (top-ups and starter packs) from the last three days: asked again, and
+  // credited if Paystack says they went through (in case the webhook and the player both missed it).
+  let credited = 0;
+  try {
+    const since = new Date(Date.now() - 3 * 86_400_000).toISOString();
+    const [tu, pk] = await Promise.all([
+      db.from("topups").select("reference").eq("status", "pending").gte("created_at", since).limit(300),
+      db.from("starter_payments").select("reference").eq("status", "pending").gte("created_at", since).limit(100),
+    ]);
+    for (const r of tu.data ?? []) if ((await confirmTopUp(String(r.reference)).catch(() => null))?.fresh) credited++;
+    for (const r of pk.data ?? []) if ((await confirmPack(String(r.reference)).catch(() => null))?.ok) credited++;
+  } catch (e) {
+    console.error("Payment re-check failed", e);
+  }
   // Advertisers' and sponsors' daily report emails (never allowed to break this job).
   let ads: unknown = null;
   try {
@@ -65,5 +81,5 @@ export async function GET(request: Request) {
   } catch (e) {
     console.error("Ad reports failed", e);
   }
-  return NextResponse.json({ ok: true, tick: tick.data, upkeep: upkeep.data, chatRemoved: removed, ads, paid });
+  return NextResponse.json({ ok: true, tick: tick.data, upkeep: upkeep.data, chatRemoved: removed, ads, paid, credited });
 }

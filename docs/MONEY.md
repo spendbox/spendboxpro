@@ -8,7 +8,7 @@ Tap your cash (top right) for the **Wallet** (`src/app/play/money-home.tsx`): wh
 daily gift, where today's money came from, and what to spend it on.
 
 ## Starting
-A new life starts with ₦250,000 and a free room to live in (docs/STARTER_ROOMS.md).
+A new life starts with ₦2,000,000 and a free home to live in (docs/STARTER_ROOMS.md), or richer with a starter pack (docs/PACKS.md).
 
 ## The daily gift (once a day, Lagos time)
 Worked out by the server (`src/lib/world/daily-gift.ts`, `POST /api/daily-gift`), paid once a day and
