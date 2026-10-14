@@ -14,10 +14,12 @@ and gifts; three missions coming up.
 |---|---|---|
 | Name your home | the house in the quick buttons (bottom left), then the pencil | ₦20,000 |
 | Say hi to someone | the chat bubble (bottom right), New chat (both glow), anyone online | ₦50,000 |
-| Create and win a challenge | the trophy (top right), any game | ₦50,000 |
+| Go to an event | the party button (top right, it glows): go into any party or talk on now, or host your own | ₦50,000 |
 
 "Show me" opens the right thing. The server checks each really happened after the player's
-walkthrough started, and pays each once ever (`game-db/080_tutorial.sql`, `POST /api/tutorial`,
+walkthrough started, and pays each once ever (`game-db/080_tutorial.sql`, with the third mission's
+check from `game-db/095_events.sql`: coming into an event, as a guest or the host; it was "win a
+challenge" before and keeps its id, `win`, so nobody is paid for it twice; `POST /api/tutorial`,
 amounts in `src/lib/world/tutorial.ts`). A mission can be skipped (no reward). Before part 80 is run
 the missions still show, with "Done it" to move on and nothing paid.
 

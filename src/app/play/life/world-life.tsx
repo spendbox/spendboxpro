@@ -21,6 +21,8 @@ import { workplaceById, type Workplace } from "@/lib/world/workplace";
 import { PropertyCard } from "../property-card";
 import { AdvertisePanel, type AdPreview } from "./advertise-panel";
 import { explorePlaces, type ExplorePlace } from "@/lib/world/explore";
+import type { NearRoad, SpotWords } from "../events/events";
+import { areaK } from "@/lib/world/events";
 import { around, cachedThings, loadThings } from "./things-cache";
 import { ThingsSheet, type ThingsTab } from "./things-sheet";
 import { NewsSheet } from "./news-sheet";
@@ -1746,13 +1748,46 @@ export function useWorldLife({
     const c = centerRef.current?.() ?? { x: 0, z: 0 };
     return explorePlaces(region, (x, z) => tileAt(plan, spiralIndex(x, z)), c.x, c.z);
   };
+  /** A spot in words, for hosting an event there: the named street nearest it (within 3 tiles) and its area. */
+  const describeSpot = (x: number, z: number): SpotWords => {
+    if (!region) return { street: null, area: "", areaK: 1 };
+    const area = region.areaAt(x, z);
+    const k = areaK(region.centres, x, z);
+    for (let r = 0; r <= 3; r++)
+      for (let dz = -r; dz <= r; dz++)
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+          const road = region.roadAt(x + dx, z + dz);
+          if (road?.name && !road.bridge) return { street: { name: road.name, x: x + dx, z: z + dz }, area, areaK: k };
+        }
+    return { street: null, area, areaK: k };
+  };
+  /** The named roads round a spot (within about 2 km), nearest first: the nearest stretch of each. */
+  const roadsNear = (x: number, z: number): NearRoad[] => {
+    if (!region) return [];
+    const R = 20;
+    const best = new Map<string, { x: number; z: number; dist: number }>();
+    for (let dz = -R; dz <= R; dz++)
+      for (let dx = -R; dx <= R; dx++) {
+        const d = Math.hypot(dx, dz);
+        if (d > R) continue;
+        const road = region.roadAt(x + dx, z + dz);
+        if (!road?.name || road.bridge) continue;
+        const had = best.get(road.name);
+        if (!had || d < had.dist) best.set(road.name, { x: x + dx, z: z + dz, dist: d });
+      }
+    return [...best]
+      .sort((a, b) => a[1].dist - b[1].dist)
+      .slice(0, 25)
+      .map(([name, p]) => ({ name, x: p.x, z: p.z, dist: p.dist, area: region.areaAt(p.x, p.z), areaK: areaK(region.centres, p.x, p.z) }));
+  };
   /** Go to a place from Explore: fly there and open its card (Go there, and its jobs). */
   const openExplorePlace = (p: ExplorePlace) => {
     if (!region) return;
     fly(p.x, p.z);
     setPlace(workplaceById(planOf(region), p.id) ?? { id: p.id, name: p.name, x: Math.round(p.x), z: Math.round(p.z), jobs: [] });
   };
-  return { explore, openExplorePlace, rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, newsScene, adOpen, search: region ? { region, mine: assets?.units ?? [], owned: shown, businesses, coins, homes: () => homesFor(region), onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit, mySpot: whereAmI(), homeSpot, goHome, nameHome, homeBuilding: homeUnit ? homeUnit.split("/")[0] : null, openPlanner: () => setPlanning(true), locateMe, lookAt: (x: number, z: number) => setFlyTo({ tile: spiralIndex(Math.round(x), Math.round(z)), at: ++flies.current }), makeRow, openSoon: () => setSoonOpen(true), openGuestBook: (building: string) => setGuestBook(building),
+  return { explore, describeSpot, roadsNear, openExplorePlace, rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, newsScene, adOpen, search: region ? { region, mine: assets?.units ?? [], owned: shown, businesses, coins, homes: () => homesFor(region), onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit, mySpot: whereAmI(), homeSpot, goHome, nameHome, homeBuilding: homeUnit ? homeUnit.split("/")[0] : null, openPlanner: () => setPlanning(true), locateMe, lookAt: (x: number, z: number) => setFlyTo({ tile: spiralIndex(Math.round(x), Math.round(z)), at: ++flies.current }), makeRow, openSoon: () => setSoonOpen(true), openGuestBook: (building: string) => setGuestBook(building),
     /** Where you are changed outside (a trip to a friend): read it again. */
     refreshLife: () => void refresh(),
     openLife: () => setLifeOpen(true),

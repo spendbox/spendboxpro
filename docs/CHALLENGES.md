@@ -6,8 +6,8 @@ down a challenge, a minute to gather players, a game floating over the city, a p
 
 ## How it goes
 
-1. **Challenge** (the white trophy, top right). The first time, a pop-up explains
-   the rules.
+1. **Events** (the party button, top right) › Host an event › **Game challenge**
+   (docs/EVENTS.md). The first time, a pop-up explains the rules.
 2. **Pick a game.** The picker is built for hundreds of games: a search box (names, blurbs and
    tags; accents don't matter, so "ayo" finds Ayò), shelves (All, Cards, Board, Party, Sports,
    Coming soon, each with a count) and a scrolling grid of tiles (icon, name, players). Games

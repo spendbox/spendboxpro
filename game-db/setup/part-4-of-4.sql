@@ -2838,3 +2838,1521 @@ order by 1 desc;
 revoke all on public.coin_supply_daily from public, anon, authenticated;
 grant select on public.coin_supply_daily to service_role;
 
+-- ======================================================== 084_bank_ads_admin.sql
+-- Newtown, part 84:
+--   1. The World Bank opens with ₦1 billion (666,666.67 mint at ₦1,500 a mint) and grows from
+--      there with what games pay the city (part 83). Added once: running this again adds nothing.
+--   2. Billboard views counted in full: a batch of views of the same business's billboard counts
+--      every one (business_hits_add), not one per batch.
+--   3. Paid billboard ads can be for one region (a state) or everywhere: ads.region, and
+--      ad_serve_in picks only the ads for the map being looked at.
+--   4. The owner's dashboard: the money made and burned since a time (money_since).
+--
+-- Run it after 083 (and 043 for businesses). Safe to run more than once.
+
+-- ============================================================ 1. the World Bank's opening ₦1 billion
+insert into public.game_settings (key, value, note) values
+  ('world_bank_start', 666666.67, 'What the World Bank opened with, in mint (₦1 billion in Lagos)')
+on conflict (key) do update set value = excluded.value, note = excluded.note;
+
+insert into public.world_bank (id, balance) values (1, 0) on conflict (id) do nothing;
+
+do $$
+declare
+  v_start numeric := coalesce(public.setting('world_bank_start'), 666666.67);
+begin
+  if not exists (select 1 from public.world_bank_ledger where kind = 'opening') then
+    update public.world_bank set balance = balance + v_start, updated_at = now() where id = 1;
+    insert into public.world_bank_ledger (amount, kind, note) values (v_start, 'opening', 'The World Bank opens with ₦1 billion');
+  end if;
+end $$;
+
+/** What's in the World Bank, and what games paid into it today (the opening sum isn't "today"). */
+create or replace function public.world_bank_view() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'balance', coalesce((select balance from public.world_bank where id = 1), 0),
+    'today', coalesce((select sum(amount) from public.world_bank_ledger
+                       where kind <> 'opening' and created_at >= (public.lagos_day()::timestamp at time zone 'Africa/Lagos')), 0)
+  )
+$$;
+
+-- ============================================================ 2. billboard views, every one
+/** Count p_n of the same thing someone did with a business (billboard views come in batches). */
+create or replace function public.business_hits_add(p_lease uuid, p_kind text, p_n int) returns void
+language sql security definer set search_path = public as $$
+  insert into public.business_hits (lease_id, kind, n)
+  select p_lease, p_kind, greatest(1, least(coalesce(p_n, 1), 50))
+  where exists (select 1 from public.business_leases where id = p_lease and status = 'live')
+  on conflict (lease_id, day, kind) do update set n = business_hits.n + excluded.n
+$$;
+
+-- ============================================================ 3. ads for one region
+-- Null: everywhere (every ad bought before this).
+alter table public.ads add column if not exists region text check (region is null or region ~ '^[a-z0-9-]{2,30}$');
+
+/** Like ad_serve, for one region's map: its own ads and the ones for everywhere. */
+create or replace function public.ad_serve_in(p_n int, p_region text)
+returns table (id uuid, image_path text, headline text, brand text, link_url text)
+language sql volatile security definer set search_path = public as $$
+  select a.id, a.image_path, a.headline, a.brand, a.link_url
+  from public.ads a
+  where public.ad_is_paying(a) and (a.region is null or a.region = p_region)
+  order by -ln(greatest(random(), 1e-12))
+           / (a.coins_left::float8
+              / greatest(extract(epoch from (coalesce(a.ends_at, now()) - now())) / 3600.0, 1.0))
+  limit greatest(0, least(coalesce(p_n, 24), 40))
+$$;
+
+-- ============================================================ 4. the dashboard's money
+/** New money made and money burned since a time (the same kinds as coin_supply_daily), in mint. */
+create or replace function public.money_since(p_since timestamptz) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'created', coalesce(sum(amount) filter (where kind in ('signup', 'seeker_bonus', 'topup', 'sponsor', 'bot_bounty', 'bot_funding',
+                                                         'balloon', 'passive', 'ad_reward', 'level_bonus', 'event_reward', 'event_bonus',
+                                                         'npc_gift', 'quest_reward', 'activity_reward', 'streak_reward', 'job_pay',
+                                                         'start_grant', 'rent', 'work_pay', 'treasury_opening', 'hustle_pay', 'bonus',
+                                                         'daily_gift', 'challenge_bonus', 'first_step', 'property_income', 'tutorial',
+                                                         'online_pay')), 0),
+    'online', coalesce(sum(amount) filter (where kind = 'online_pay'), 0),
+    'burned', coalesce(sum(amount) filter (where kind = 'burn'), 0)
+  )
+  from public.ledger
+  where created_at >= p_since
+$$;
+
+do $$
+declare f text;
+begin
+  foreach f in array array['public.business_hits_add(uuid, text, int)', 'public.ad_serve_in(int, text)', 'public.money_since(timestamptz)', 'public.world_bank_view()'] loop
+    execute format('revoke all on function %s from public, anon, authenticated', f);
+    execute format('grant execute on function %s to service_role', f);
+  end loop;
+end $$;
+
+-- ======================================================== 085_town_hall_faces.sql
+-- Newtown, part 85:
+--   1. Town Hall: one chat for each state (room 'town:<region>', e.g. 'town:lagos') where everyone
+--      online can talk. At most one message every 5 seconds each, 300 letters.
+--   2. Profile photos: a public storage bucket, 'faces', for the small square photos players can
+--      use instead of their drawn face (src/app/api/profile-photo).
+--
+-- Run it after 057 (and 062). Safe to run more than once.
+
+-- ============================================================ 1. Town Hall
+create or replace function public.chat_room_ok(p_room text) returns boolean
+language sql immutable set search_path = public as $$
+  select coalesce(
+    p_room ~ '^b:[0-9]{1,7}(:(g|o|r|f([1-9]|[1-9][0-9]|1[0-9][0-9]|200)))?$'
+    or p_room ~ '^balloon:([0-9]|[1-4][0-9]|50)$'
+    or p_room ~ '^v:(train|bus|car|boat|ferris|slide|heli):[0-9]{1,7}$'
+    or p_room ~ '^town:[a-z0-9-]{2,30}$',
+    false)
+$$;
+
+-- The latest messages of one room, quickly (Town Hall reads its last 50 often).
+create index if not exists chat_room_latest_idx on public.chat_messages (room, id desc) where room like 'town:%';
+
+/** Say something in a state's Town Hall: one message every 5 seconds at most, 300 letters. */
+create or replace function public.town_hall_send(p_user uuid, p_region text, p_body text) returns public.chat_messages
+language plpgsql security definer set search_path = public as $$
+declare
+  v_room text := 'town:' || p_region;
+  v_body text := nullif(trim(regexp_replace(coalesce(p_body, ''), '\s+', ' ', 'g')), '');
+begin
+  if p_region !~ '^[a-z0-9-]{2,30}$' then raise exception 'bad_room'; end if;
+  if v_body is null then raise exception 'empty'; end if;
+  if char_length(v_body) > 300 then raise exception 'too_long'; end if;
+  perform pg_advisory_xact_lock(hashtext('town:' || p_user::text));
+  if exists (select 1 from public.chat_messages where sender_id = p_user and room = v_room and created_at > now() - interval '5 seconds') then
+    raise exception 'too_fast';
+  end if;
+  return public.chat_send(p_user, v_room, null, v_body);
+end $$;
+revoke all on function public.town_hall_send(uuid, text, text) from public, anon, authenticated;
+grant execute on function public.town_hall_send(uuid, text, text) to service_role;
+
+-- ============================================================ 2. profile photos
+do $$
+begin
+  if exists (select 1 from information_schema.tables where table_schema = 'storage' and table_name = 'buckets') then
+    insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+    values ('faces', 'faces', true, 400000, array['image/jpeg', 'image/webp'])
+    on conflict (id) do update set public = true, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+  end if;
+end $$;
+
+-- ======================================================== 086_town_hall_more.sql
+-- Newtown, part 86:
+--   1. No jobs on the map: jobs are gone from Newtown (the simple life), so nobody shows "at work"
+--      at an old workplace any more (people_on_map without the job part).
+--   2. Town Hall, more (part 85 first): replies, emoji reactions, photos, deleting, and every
+--      message gone after 24 hours.
+--      - Your own message: Delete takes it away for everyone.
+--      - Someone else's: Delete hides it for you; when 3 different people have deleted it, it's
+--        gone for everyone (the town keeps itself tidy).
+--      - Photos: small JPEGs in the public "town" bucket (they go with their message).
+--
+--   3. Landmarks have no top price any more (the biggest cost the most): the database's sanity
+--      check on a landmark's price goes up out of the way (₦1.5 quadrillion).
+--
+-- Safe to run more than once.
+
+insert into public.game_settings (key, value, note) values
+  ('landmark_price_max', 1000000000000, 'Sanity check only (no top price): the most a landmark can be sold for, in mint')
+on conflict (key) do update set value = excluded.value, note = excluded.note;
+
+-- ============================================================ 1. no jobs on the map
+create or replace function public.people_on_map(p_viewer uuid, p_region text, p_x0 int, p_x1 int, p_z0 int, p_z1 int, p_limit int) returns jsonb
+language sql stable security definer set search_path = public as $$
+  with hour as (select extract(hour from now() at time zone 'Africa/Lagos')::int as h),
+  everyone as (
+    select l.user_id, p.username, p.avatar, l.home_unit, l.at_place, l.seen_at,
+      (l.seen_at > now() - interval '4 minutes') as online
+    from public.lives l
+    join public.profiles p on p.id = l.user_id and not p.is_bot
+    where l.region = p_region and l.home_unit is not null and l.user_id <> p_viewer
+      and not exists (select 1 from public.blocks b where (b.blocker = p_viewer and b.blocked = l.user_id) or (b.blocker = l.user_id and b.blocked = p_viewer))
+  ),
+  placed as (
+    select e.*,
+      case when e.online then 'online'
+           when (select h from hour) >= 23 or (select h from hour) < 6 then 'asleep'
+           else 'away' end as status
+    from everyone e
+  ),
+  spots as (
+    select pl.*, case when pl.status = 'online' then coalesce(pl.at_place, pl.home_unit) else pl.home_unit end as spot
+    from placed pl
+  )
+  select coalesce(jsonb_agg(jsonb_build_object('id', s.user_id, 'name', coalesce(s.username, 'Someone'), 'avatar', s.avatar, 'status', s.status,
+      'x', (public.spot_xz(s.spot))[1], 'z', (public.spot_xz(s.spot))[2], 'job', null, 'seenAt', s.seen_at,
+      'friend', exists (select 1 from public.friendships f where f.accepted_at is not null
+                         and ((f.requester = p_viewer and f.addressee = s.user_id) or (f.addressee = p_viewer and f.requester = s.user_id))))
+    order by s.online desc, s.seen_at desc nulls last), '[]'::jsonb)
+  from (select * from spots
+        where (public.spot_xz(spot))[1] between p_x0 and p_x1 and (public.spot_xz(spot))[2] between p_z0 and p_z1
+        order by online desc, seen_at desc nulls last
+        limit least(greatest(coalesce(p_limit, 60), 1), 150)) s
+$$;
+
+-- ============================================================ 2. Town Hall, more
+alter table public.chat_messages add column if not exists reply_to bigint;
+
+create table if not exists public.town_reactions (
+  message_id bigint not null references public.chat_messages (id) on delete cascade,
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  emoji text not null check (char_length(emoji) between 1 and 16),
+  created_at timestamptz not null default now(),
+  primary key (message_id, user_id)
+);
+create table if not exists public.town_hides (
+  message_id bigint not null references public.chat_messages (id) on delete cascade,
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (message_id, user_id)
+);
+alter table public.town_reactions enable row level security;
+alter table public.town_hides enable row level security;
+
+/**
+ * Say something in a state's Town Hall: text, a photo (p_image: 'town/<you>/<name>.jpg' in the
+ * "town" bucket), or both, maybe as a reply (p_reply). One message every 5 seconds, 300 letters.
+ * Messages over 24 hours old in that Town Hall go as it's written.
+ */
+create or replace function public.town_hall_post(p_user uuid, p_region text, p_body text, p_reply bigint default null, p_image text default null)
+returns public.chat_messages
+language plpgsql security definer set search_path = public as $$
+declare
+  v_room text := 'town:' || p_region;
+  v_body text := nullif(trim(regexp_replace(coalesce(p_body, ''), '\s+', ' ', 'g')), '');
+  m public.chat_messages;
+begin
+  if p_region !~ '^[a-z0-9-]{2,30}$' then raise exception 'bad_room'; end if;
+  if v_body is null and p_image is null then raise exception 'empty'; end if;
+  if char_length(v_body) > 300 then raise exception 'too_long'; end if;
+  if p_image is not null and p_image !~ ('^town/' || p_user::text || '/[A-Za-z0-9_-]{8,40}\.jpg$') then raise exception 'bad_target'; end if;
+  if p_reply is not null and not exists (select 1 from public.chat_messages where id = p_reply and room = v_room and created_at > now() - interval '24 hours') then
+    p_reply := null;
+  end if;
+  perform pg_advisory_xact_lock(hashtext('town:' || p_user::text));
+  if exists (select 1 from public.chat_messages where sender_id = p_user and room = v_room and created_at > now() - interval '5 seconds') then
+    raise exception 'too_fast';
+  end if;
+  perform set_config('newtown.chat_image', coalesce(p_image, ''), true);
+  m := public.chat_send(p_user, v_room, null, coalesce(v_body, '📷'));
+  perform set_config('newtown.chat_image', '', true);
+  if p_reply is not null then
+    update public.chat_messages set reply_to = p_reply where id = m.id returning * into m;
+  end if;
+  delete from public.chat_messages where room = v_room and created_at < now() - interval '24 hours';
+  return m;
+end $$;
+
+-- Part 85's plain send, kept for older copies of the app.
+create or replace function public.town_hall_send(p_user uuid, p_region text, p_body text) returns public.chat_messages
+language sql security definer set search_path = public as $$
+  select public.town_hall_post(p_user, p_region, p_body, null, null)
+$$;
+
+/** React to a Town Hall message with an emoji (null takes your reaction back). One each. */
+create or replace function public.town_hall_react(p_user uuid, p_message bigint, p_emoji text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not exists (select 1 from public.chat_messages where id = p_message and room like 'town:%' and created_at > now() - interval '24 hours') then
+    raise exception 'gone';
+  end if;
+  if p_emoji is null or btrim(p_emoji) = '' then
+    delete from public.town_reactions where message_id = p_message and user_id = p_user;
+  else
+    insert into public.town_reactions (message_id, user_id, emoji) values (p_message, p_user, left(btrim(p_emoji), 16))
+    on conflict (message_id, user_id) do update set emoji = excluded.emoji, created_at = now();
+  end if;
+end $$;
+
+/**
+ * Delete a Town Hall message: your own goes for everyone; someone else's is hidden for you, and
+ * gone for everyone once 3 people have deleted it. { result: 'deleted' | 'removed' | 'hidden', image }.
+ */
+create or replace function public.town_hall_delete(p_user uuid, p_message bigint) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  m public.chat_messages;
+begin
+  select * into m from public.chat_messages where id = p_message and room like 'town:%';
+  if not found then return jsonb_build_object('result', 'deleted', 'image', null); end if;
+  if m.sender_id = p_user then
+    delete from public.chat_messages where id = p_message;
+    return jsonb_build_object('result', 'deleted', 'image', m.image_path);
+  end if;
+  insert into public.town_hides (message_id, user_id) values (p_message, p_user) on conflict do nothing;
+  if (select count(*) from public.town_hides where message_id = p_message) >= 3 then
+    delete from public.chat_messages where id = p_message;
+    return jsonb_build_object('result', 'removed', 'image', m.image_path);
+  end if;
+  return jsonb_build_object('result', 'hidden', 'image', null);
+end $$;
+
+/** A Town Hall's last 24 hours (the newest 80): who said what, replies, photos and reactions. */
+create or replace function public.town_hall_feed(p_region text) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(t order by t.id), '[]'::jsonb) from (
+    select m.id, m.sender_id as from, m.sender_name as name, p.avatar, m.body as text, m.image_path as image, m.created_at as at,
+      (select jsonb_build_object('id', r.id, 'name', r.sender_name, 'text', left(coalesce(r.body, ''), 90)) from public.chat_messages r where r.id = m.reply_to) as reply,
+      coalesce((select jsonb_object_agg(x.emoji, x.n) from (select emoji, count(*) as n from public.town_reactions tr where tr.message_id = m.id group by emoji) x), '{}'::jsonb) as reactions
+    from public.chat_messages m
+    left join public.profiles p on p.id = m.sender_id
+    where m.room = 'town:' || p_region and m.created_at > now() - interval '24 hours'
+    order by m.id desc
+    limit 80
+  ) t
+$$;
+
+/** Photos of Town Hall messages over a day old (the server removes the files, then the rows go). */
+create or replace function public.town_hall_expired(p_limit int default 200) returns table (id bigint, image text)
+language sql stable security definer set search_path = public as $$
+  select id, image_path from public.chat_messages
+  where room like 'town:%' and created_at < now() - interval '24 hours'
+  order by id limit greatest(1, least(coalesce(p_limit, 200), 1000))
+$$;
+
+do $$
+declare f text;
+begin
+  revoke all on table public.town_reactions, public.town_hides from public, anon, authenticated;
+  grant all on table public.town_reactions, public.town_hides to service_role;
+  foreach f in array array['public.town_hall_post(uuid, text, text, bigint, text)', 'public.town_hall_send(uuid, text, text)',
+    'public.town_hall_react(uuid, bigint, text)', 'public.town_hall_delete(uuid, bigint)', 'public.town_hall_feed(text)', 'public.town_hall_expired(int)'] loop
+    execute format('revoke all on function %s from public, anon, authenticated', f);
+    execute format('grant execute on function %s to service_role', f);
+  end loop;
+  if exists (select 1 from information_schema.tables where table_schema = 'storage' and table_name = 'buckets') then
+    insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+    values ('town', 'town', true, 600000, array['image/jpeg'])
+    on conflict (id) do update set public = true, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+  end if;
+end $$;
+
+-- ======================================================== 087_rename_property.sql
+-- Newtown, part 87: name any property you own (a flat, a shop, an office, a plot...), not just
+-- your home, from Assets. An empty name puts back what the map calls it ("Flat 2", "Shop 1").
+-- The names show on your Assets and in the map's search, like a home's (part 78).
+--
+-- Run it after 078. Safe to run more than once.
+
+/** Name a unit you own (null or '' puts back its plain name from the building). */
+create or replace function public.unit_rename(p_user uuid, p_unit text, p_name text) returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  v_name text := nullif(btrim(regexp_replace(coalesce(p_name, ''), '\s+', ' ', 'g')), '');
+  v_plain text;
+  v_label text;
+  u public.property_units;
+begin
+  if v_name is not null and (char_length(v_name) not between 2 and 40 or v_name !~ '^[[:alnum:] ''&.,()-]+$') then raise exception 'bad_name'; end if;
+  select * into u from public.property_units where unit_id = p_unit and owner_id = p_user;
+  if not found then raise exception 'not_yours'; end if;
+  -- Its plain name: what the building's snapshot calls it (a free room is a "Room").
+  select b.snapshot -> 'units' -> (split_part(p_unit, '/', 2)::int) ->> 'label' into v_plain
+  from public.property_buildings b where b.building_id = u.building_id;
+  v_label := coalesce(v_name, case when u.starter then 'Room' end, v_plain, case when u.use = 'home' then 'Home' else 'Unit' end);
+  update public.property_units set label = left(v_label, 60) where unit_id = p_unit;
+  -- Naming your home still counts for the walkthrough's first mission (part 80).
+  if v_name is not null and u.use = 'home' then update public.lives set home_named_at = now() where user_id = p_user; end if;
+  return v_label;
+end $$;
+revoke all on function public.unit_rename(uuid, text, text) from public, anon, authenticated;
+grant execute on function public.unit_rename(uuid, text, text) to service_role;
+
+-- ======================================================== 088_world_bank_sports.sql
+-- Newtown, part 88: the World Bank counts every game's cut, not only challenges.
+--   Before this, only challenges paid in (the 10% of each pot, and the fee for hosting too often).
+--   The sports house cut (what bets don't pay back) and match tickets were burned without reaching
+--   the World Bank, or, while an old hide-and-seek round was open, went into that round's prize pool.
+--   Now sports money always goes to the city, and the World Bank counts it, from now on.
+--
+-- Run it after 083 and 084. Safe to run more than once.
+
+/** Mint a player has already paid goes into this game's prize pool, or is burned. Sports money always goes to the city (the World Bank). */
+create or replace function public.pool_or_burn(p_round bigint, p_amount numeric, p_note text) returns bigint
+language plpgsql security definer set search_path = public as $$
+declare v_round bigint;
+begin
+  if coalesce(p_amount, 0) <= 0 then return null; end if;
+  if p_round is not null and coalesce(p_note, '') not like 'Sports %' then
+    update public.rounds set pool = pool + p_amount where id = p_round and status in ('join', 'seek')
+      returning id into v_round;
+  end if;
+  if v_round is null then
+    perform public.burn(p_round, p_amount, p_note);
+    return null;
+  end if;
+  perform public.log_coins(null, v_round, 'pool_fee', p_amount, false, p_note);
+  return v_round;
+end $$;
+
+/** Money a game pays the city goes into the World Bank: challenges (pot cut and hosting fee) and sports (house cut and tickets). */
+create or replace function public.world_bank_take() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  v_amount numeric := 0;
+begin
+  if new.kind = 'burn' and (new.note = 'Challenge pools' or new.note like 'Sports house cut: %' or new.note like 'Sports ticket: %') then v_amount := new.amount;
+  elsif new.kind = 'challenge_fee' and new.amount < 0 then v_amount := -new.amount;
+  end if;
+  if v_amount > 0 then
+    update public.world_bank set balance = balance + v_amount, updated_at = now() where id = 1;
+    insert into public.world_bank_ledger (amount, kind, note) values (v_amount, new.kind, new.note);
+  end if;
+  return new;
+end $$;
+
+do $$
+begin
+  revoke all on function public.pool_or_burn(bigint, numeric, text), public.world_bank_take() from public, anon, authenticated;
+  grant execute on function public.pool_or_burn(bigint, numeric, text), public.world_bank_take() to service_role;
+end $$;
+
+-- ======================================================== 089_world_bank_everything.sql
+-- Newtown, part 89: the World Bank counts everything players pay the city, not only games.
+--   - Everything spent in the city and burned: fares (rides, trains, work, about town), food,
+--     electricity, gym, rent to the city, property and landmarks bought from the city, home
+--     improvements, shops, market fees, club entry, pranks, marks, jail bribes, private care and
+--     school, side-hustle costs, and game cuts (challenges, sports). Bookkeeping burns that aren't
+--     anyone spending (retired bot coins, money of deleted accounts...) are left out.
+--   - Every tax and public bill (they went to the state treasuries until now): income tax, VAT,
+--     rent, property and sales taxes, waste bills, public clinic and school fees, fines.
+--   - Loans: repayments come in, new loans go out (one bank, not two).
+--   - Once: what was spent since the World Bank opened (part 84) and not yet counted is added
+--     (not counted as "today").
+--
+-- Run it after 083, 084 and 088. If you ever run one of those again, run this again after it.
+-- Safe to run more than once.
+
+/** A burn that is bookkeeping, not someone spending: not counted. */
+create or replace function public.world_bank_skips(p_note text) returns boolean
+language sql immutable as $$
+  select coalesce(p_note, '') in ('linked accounts: no payout', 'seeker share with no seekers', 'bot leftover', 'carry-over retired', 'bot coins retired')
+      or coalesce(p_note, '') like 'Sports bet refund (account gone): %'
+      or coalesce(p_note, '') like 'Sports winnings (account gone): %'
+$$;
+
+/** Money spent in the city (burned) goes into the World Bank. */
+create or replace function public.world_bank_take() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.kind = 'burn' and new.amount > 0 and not public.world_bank_skips(new.note) then
+    update public.world_bank set balance = balance + new.amount, updated_at = now() where id = 1;
+    insert into public.world_bank_ledger (amount, kind, note) values (new.amount, 'spent', left(coalesce(new.note, 'Spent in the city'), 500));
+  end if;
+  return new;
+end $$;
+drop trigger if exists world_bank_take on public.ledger;
+create trigger world_bank_take after insert on public.ledger
+  for each row when (new.kind = 'burn') execute function public.world_bank_take();
+
+/** Taxes and public bills (into the treasuries), loan repayments and new loans: the World Bank too. */
+create or replace function public.world_bank_treasury() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare v numeric := new.amount;
+begin
+  if new.kind = 'opening' or v = 0 then return new; end if;
+  -- Only the bank's own loans go out of it; nothing else takes from the treasuries.
+  if v < 0 and not (new.treasury = 'wb' and new.kind = 'loan_out') then return new; end if;
+  update public.world_bank set balance = balance + v, updated_at = now() where id = 1;
+  insert into public.world_bank_ledger (amount, kind, note) values (v, left(new.kind, 30), left(coalesce(new.note, new.kind), 500));
+  return new;
+end $$;
+drop trigger if exists world_bank_treasury on public.treasury_ledger;
+create trigger world_bank_treasury after insert on public.treasury_ledger
+  for each row execute function public.world_bank_treasury();
+
+/** What's in the World Bank, and what came in today (not the opening sum, the catch-up or loans going out). */
+create or replace function public.world_bank_view() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'balance', coalesce((select balance from public.world_bank where id = 1), 0),
+    'today', coalesce((select sum(amount) from public.world_bank_ledger
+                       where amount > 0 and kind not in ('opening', 'catch_up')
+                         and created_at >= (public.lagos_day()::timestamp at time zone 'Africa/Lagos')), 0)
+  )
+$$;
+
+-- ============================================================ once: catch up since the opening
+do $$
+declare
+  v_since timestamptz := (select min(created_at) from public.world_bank_ledger where kind = 'opening');
+  v_should numeric;
+  v_got numeric;
+begin
+  if v_since is null or exists (select 1 from public.world_bank_ledger where kind = 'catch_up') then return; end if;
+  v_should := coalesce((select sum(amount) from public.ledger where kind = 'burn' and amount > 0 and created_at >= v_since and not public.world_bank_skips(note)), 0)
+            + coalesce((select sum(amount) from public.treasury_ledger where created_at >= v_since and kind <> 'opening'
+                          and (amount > 0 or (treasury = 'wb' and kind = 'loan_out'))), 0);
+  v_got := coalesce((select sum(amount) from public.world_bank_ledger where created_at >= v_since and kind not in ('opening', 'catch_up')), 0);
+  if v_should - v_got <> 0 then
+    update public.world_bank set balance = balance + (v_should - v_got), updated_at = now() where id = 1;
+    insert into public.world_bank_ledger (amount, kind, note) values (v_should - v_got, 'catch_up', 'Spending since the World Bank opened, counted at last');
+  end if;
+end $$;
+
+do $$
+declare f text;
+begin
+  foreach f in array array['public.world_bank_skips(text)', 'public.world_bank_take()', 'public.world_bank_treasury()', 'public.world_bank_view()'] loop
+    execute format('revoke all on function %s from public, anon, authenticated', f);
+    execute format('grant execute on function %s to service_role', f);
+  end loop;
+end $$;
+
+-- ======================================================== 090_packs_and_credits.sql
+-- Newtown, part 90: starting money, starter packs paid like top-ups, and the owner crediting players.
+--   1. A new life starts with ₦2,000,000 (1,333.33 mint at ₦1,500 a mint) and a free home.
+--   2. Starter packs raise your starting money to ₦20m, ₦80m or ₦300m (₦1,000, ₦2,500, ₦5,000),
+--      once, until you buy a home of your own. They're paid through the top-up machinery (part 76):
+--      the pop-up, bank transfer, the webhook, the page Paystack sends you back to, the Wallet's
+--      "Your payments" and the daily check all confirm them, and whichever is first credits it,
+--      once. Anyone who paid is always credited, even for a second pack bought in another tab.
+--   3. The owner's dashboard can credit Newtown money to a player by hand (every credit recorded).
+--
+-- Run it after 076 (top-ups) and 042 (starter packs). Safe to run more than once.
+
+-- ============================================================ 1. ₦2,000,000 to start
+update public.game_settings set value = 1333.33, note = 'Mint to start a life on the real map with (once): ₦2,000,000 in Lagos, with a free home'
+  where key = 'start_grant';
+
+-- ============================================================ 2. starter packs, paid like top-ups
+-- A pack's top-up row remembers the pack and the starting money it brings (in mint).
+alter table public.topups add column if not exists pack text check (pack is null or pack ~ '^[a-z_]{2,20}$');
+alter table public.topups add column if not exists pack_total numeric(14,2);
+
+/** Has this player had a starter pack (old way or new)? */
+create or replace function public.pack_had(p_user uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.starter_payments where user_id = p_user and status = 'paid')
+      or exists (select 1 from public.topups where user_id = p_user and pack is not null and status = 'paid')
+$$;
+
+/** Can this player still buy a pack? 'open', 'had' (one already) or 'too_late' (bought a home of their own). */
+create or replace function public.pack_status(p_user uuid) returns text
+language sql stable security definer set search_path = public as $$
+  select case
+    when public.pack_had(p_user) then 'had'
+    when exists (select 1 from public.property_units where owner_id = p_user and not starter) then 'too_late'
+    else 'open' end
+$$;
+
+/** What a pack adds for this player: its total less what their life started with (all of it before a life). */
+create or replace function public.pack_adds(p_user uuid, p_total numeric) returns numeric
+language sql stable security definer set search_path = public as $$
+  select round(greatest(0, p_total - coalesce(
+           (select least(granted, public.setting('start_grant')) from public.lives where user_id = p_user), 0)), 2)
+$$;
+
+/** A starter pack payment started (p_total: the starting money it brings, mint, worked out by the server). */
+create or replace function public.pack_topup_start(p_user uuid, p_reference text, p_region text, p_pack text, p_total numeric, p_kobo bigint) returns void
+language plpgsql security definer set search_path = public as $$
+declare v_status text;
+begin
+  if not exists (select 1 from public.profiles where id = p_user and not is_bot and not frozen) then raise exception 'unknown_player'; end if;
+  if coalesce(p_total, 0) <= 0 or p_total > 1000000 then raise exception 'bad_amount'; end if;
+  v_status := public.pack_status(p_user);
+  if v_status <> 'open' then raise exception '%', v_status; end if;
+  insert into public.topups (reference, user_id, region, option, mint, amount_kobo, pack, pack_total)
+    values (p_reference, p_user, p_region, 'pack_' || p_pack, greatest(0.01, public.pack_adds(p_user, p_total)), p_kobo, p_pack, p_total);
+end $$;
+
+/**
+ * Paystack confirmed a top-up or a pack (p_kobo: what was actually paid). Once only. A top-up: its
+ * money, doubled if it's the player's first top-up (packs don't count). A pack: the starting money
+ * goes up to the pack's total (a second pack, paid in another tab, is added in full: paid is paid),
+ * and its gifts follow (starter_payments, as before).
+ */
+create or replace function public.topup_paid(p_reference text, p_kobo bigint) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  t public.topups;
+  v_first boolean;
+  v_add numeric;
+  v_had boolean;
+begin
+  select * into t from public.topups where reference = p_reference for update;
+  if not found then return jsonb_build_object('found', false); end if;
+  if t.status = 'paid' then return jsonb_build_object('found', true, 'new', false, 'mint', t.mint * case when t.doubled then 2 else 1 end, 'doubled', t.doubled, 'pack', t.pack); end if;
+  if coalesce(p_kobo, 0) < t.amount_kobo then return jsonb_build_object('found', true, 'new', false, 'short', true); end if;
+  perform 1 from public.profiles where id = t.user_id for update;
+  if t.pack is not null then
+    v_had := public.pack_had(t.user_id);
+    v_add := case when v_had then round(greatest(0.01, t.pack_total - public.setting('start_grant')), 2) else greatest(0.01, public.pack_adds(t.user_id, t.pack_total)) end;
+    update public.topups set status = 'paid', paid_at = now(), mint = v_add where reference = p_reference;
+    -- No life yet (paid before pressing Start): it starts now, with the pack's money.
+    insert into public.lives (user_id, region, granted) values (t.user_id, t.region, t.pack_total)
+      on conflict (user_id) do update set granted = greatest(public.lives.granted, excluded.granted);
+    update public.profiles set coins = coins + v_add where id = t.user_id;
+    perform public.log_coins(t.user_id, null, 'start_grant', v_add, false, 'Starter pack: ' || t.pack);
+    -- The pack's gifts, badge and furnished home (src/app/play/pack-actions.ts) and the news read this.
+    insert into public.starter_payments (reference, user_id, region, pack, mint, amount_kobo, status, paid_at)
+      values ('pk-' || substr(t.reference, 4), t.user_id, t.region, t.pack, t.pack_total, t.amount_kobo, 'paid', now())
+      on conflict (reference) do nothing;
+    return jsonb_build_object('found', true, 'new', true, 'mint', v_add, 'doubled', false, 'pack', t.pack);
+  end if;
+  v_first := not exists (select 1 from public.topups where user_id = t.user_id and status = 'paid' and pack is null);
+  v_add := t.mint * case when v_first then 2 else 1 end;
+  update public.topups set status = 'paid', paid_at = now(), doubled = v_first where reference = p_reference;
+  update public.profiles set coins = coins + v_add where id = t.user_id;
+  perform public.log_coins(t.user_id, null, 'topup', v_add, false, 'Top-up' || case when v_first then ' (first one, doubled)' else '' end);
+  return jsonb_build_object('found', true, 'new', true, 'mint', v_add, 'doubled', v_first);
+end $$;
+
+-- ============================================================ 3. the owner credits a player
+create table if not exists public.admin_credits (
+  id bigserial primary key,
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  mint numeric(14,2) not null check (mint > 0),
+  note text not null check (char_length(note) between 1 and 200),
+  by_email text,
+  created_at timestamptz not null default now()
+);
+create index if not exists admin_credits_at_idx on public.admin_credits (created_at desc);
+alter table public.admin_credits enable row level security;
+
+/** Give a player Newtown money by hand (the owner's dashboard). Returns their new balance. */
+create or replace function public.admin_credit(p_user uuid, p_mint numeric, p_note text, p_by text) returns numeric
+language plpgsql security definer set search_path = public as $$
+declare v_coins numeric;
+begin
+  if coalesce(p_mint, 0) <= 0 or p_mint > 10000000 then raise exception 'bad_amount'; end if;
+  if coalesce(trim(p_note), '') = '' then raise exception 'no_note'; end if;
+  update public.profiles set coins = coins + round(p_mint, 2) where id = p_user and not is_bot returning coins into v_coins;
+  if not found then raise exception 'unknown_player'; end if;
+  insert into public.admin_credits (user_id, mint, note, by_email) values (p_user, round(p_mint, 2), left(trim(p_note), 200), p_by);
+  perform public.log_coins(p_user, null, 'admin_credit', round(p_mint, 2), false, left('From Newtown: ' || trim(p_note), 200));
+  perform public.notify(p_user, null, 'gift', left('Newtown sent you money: ' || trim(p_note), 300));
+  return v_coins;
+end $$;
+
+/** A player by their name in the game or their email (the dashboard's credit form): id and name. */
+create or replace function public.admin_find_player(p_who text) returns table (id uuid, username text, coins numeric)
+language sql stable security definer set search_path = public, auth as $$
+  select p.id, p.username, p.coins from public.profiles p
+  where not p.is_bot and (lower(p.username) = lower(trim(p_who))
+     or p.id = (select u.id from auth.users u where lower(u.email) = lower(trim(p_who)) limit 1))
+  limit 1
+$$;
+
+-- The dashboard's money made counts credits too.
+create or replace function public.money_since(p_since timestamptz) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'created', coalesce(sum(amount) filter (where kind in ('signup', 'seeker_bonus', 'topup', 'sponsor', 'bot_bounty', 'bot_funding',
+                                                         'balloon', 'passive', 'ad_reward', 'level_bonus', 'event_reward', 'event_bonus',
+                                                         'npc_gift', 'quest_reward', 'activity_reward', 'streak_reward', 'job_pay',
+                                                         'start_grant', 'rent', 'work_pay', 'treasury_opening', 'hustle_pay', 'bonus',
+                                                         'daily_gift', 'challenge_bonus', 'first_step', 'property_income', 'tutorial',
+                                                         'online_pay', 'admin_credit')), 0),
+    'online', coalesce(sum(amount) filter (where kind = 'online_pay'), 0),
+    'burned', coalesce(sum(amount) filter (where kind = 'burn'), 0)
+  )
+  from public.ledger
+  where created_at >= p_since
+$$;
+
+do $$
+declare f text;
+begin
+  revoke all on table public.admin_credits from public, anon, authenticated;
+  grant all on table public.admin_credits to service_role;
+  grant usage, select on sequence public.admin_credits_id_seq to service_role;
+  foreach f in array array['public.pack_had(uuid)', 'public.pack_status(uuid)', 'public.pack_adds(uuid, numeric)',
+                           'public.pack_topup_start(uuid, text, text, text, numeric, bigint)', 'public.topup_paid(text, bigint)',
+                           'public.admin_credit(uuid, numeric, text, text)', 'public.admin_find_player(text)', 'public.money_since(timestamptz)'] loop
+    execute format('revoke all on function %s from public, anon, authenticated', f);
+    execute format('grant execute on function %s to service_role', f);
+  end loop;
+end $$;
+
+-- ======================================================== 091_city_growth.sql
+-- Newtown, part 91: the city grows with its players (docs/GROWTH.md).
+--   1. Each city has a growth level from how many people live there (the steps are in
+--      src/lib/world/growth.ts, GROWTH_STEPS). It only ever goes up. As it rises, buildings nobody
+--      owns yet are rebuilt taller, and gated estates spread.
+--   2. A sold-out block (every flat, office or shop in it owned, by more than one player) grows:
+--      more storeys, and the new units go on sale. Units already owned keep their number and name.
+--
+-- Run it after 038 (property). Safe to run more than once.
+
+-- ============================================================ 1. growth levels
+create table if not exists public.city_growth (
+  region text primary key check (region ~ '^[a-z0-9-]{2,30}$'),
+  level int not null default 0 check (level between 0 and 20),
+  lives int not null default 0,
+  updated_at timestamptz not null default now()
+);
+alter table public.city_growth enable row level security;
+
+/** A city's growth level now (counting who lives there), kept if higher than before; never lower. */
+create or replace function public.city_growth_level(p_region text) returns int
+language plpgsql security definer set search_path = public as $$
+declare
+  v_lives int;
+  v_level int := 0;
+  v_step int;
+begin
+  if p_region is null or p_region !~ '^[a-z0-9-]{2,30}$' then return 0; end if;
+  select count(*) into v_lives from public.lives where region = p_region;
+  -- The same steps as GROWTH_STEPS in src/lib/world/growth.ts.
+  foreach v_step in array array[1000, 3000, 7500, 15000, 30000, 60000, 120000, 250000, 500000] loop
+    if v_lives >= v_step then v_level := v_level + 1; end if;
+  end loop;
+  insert into public.city_growth (region, level, lives) values (p_region, v_level, v_lives)
+    on conflict (region) do update set level = greatest(public.city_growth.level, excluded.level), lives = excluded.lives, updated_at = now();
+  return (select level from public.city_growth where region = p_region);
+end $$;
+
+-- ============================================================ 2. sold-out blocks grow
+/**
+ * Grow a sold-out block: its snapshot becomes p_snapshot (worked out by the server: the same units,
+ * then the new ones). Only when every unit it had (p_before of them) is owned, by two players or
+ * more (one owner of a whole block keeps it as it is), and only once per step (nobody grew it meanwhile).
+ */
+create or replace function public.building_grow(p_building text, p_snapshot jsonb, p_before int) returns boolean
+language plpgsql security definer set search_path = public as $$
+declare
+  v_snap jsonb;
+  v_owned int;
+  v_owners int;
+begin
+  select snapshot into v_snap from public.property_buildings where building_id = p_building for update;
+  if not found or jsonb_array_length(v_snap->'units') <> p_before then return false; end if;
+  if jsonb_array_length(p_snapshot->'units') <= p_before then return false; end if;
+  select count(*), count(distinct owner_id) into v_owned, v_owners from public.property_units where building_id = p_building and owner_id is not null;
+  if v_owned < p_before or v_owners < 2 then return false; end if;
+  -- The units already there must stay exactly as they were (same order, same names).
+  if exists (select 1 from generate_series(0, p_before - 1) k where (v_snap->'units'->k->>'label') is distinct from (p_snapshot->'units'->k->>'label')) then
+    return false;
+  end if;
+  update public.property_buildings set snapshot = p_snapshot where building_id = p_building;
+  return true;
+end $$;
+
+do $$
+declare f text;
+begin
+  revoke all on table public.city_growth from public, anon, authenticated;
+  grant all on table public.city_growth to service_role;
+  foreach f in array array['public.city_growth_level(text)', 'public.building_grow(text, jsonb, int)'] loop
+    execute format('revoke all on function %s from public, anon, authenticated', f);
+    execute format('grant execute on function %s to service_role', f);
+  end loop;
+end $$;
+
+-- ======================================================== 092_monthly_leases.sql
+-- Newtown, part 92: buildings are leased by the month (docs/BUSINESS.md).
+--   - A lease is paid for 1, 3, 6 or 12 months up front (business_leases.months) and runs 30 days a
+--     month; leases from before this part keep their year.
+--   - "Another month" (an upgrade, business_upgrades.upgrade = 'month') adds 30 days and the taps
+--     that month's money buys, any time while the lease is live.
+--   - Billboard ads on their own are unchanged (weekly budget, 1 to 8 weeks: part 13).
+--
+-- Run it after 043 and 047. If you ever run 043 or 047 again, run this again after it.
+-- Safe to run more than once.
+
+alter table public.business_leases add column if not exists months int check (months is null or months between 1 and 12);
+
+alter table public.business_upgrades drop constraint if exists business_upgrades_upgrade_check;
+alter table public.business_upgrades add constraint business_upgrades_upgrade_check check (upgrade in ('bright', 'rebuild', 'storey', 'month'));
+
+/** Start paying for an upgrade to a live lease (a storey only from a month in; another month any time). */
+create or replace function public.business_upgrade_start(p_advertiser uuid, p_lease uuid, p_upgrade text, p_kind text, p_kobo bigint, p_reference text) returns void
+language plpgsql security definer set search_path = public as $$
+declare l public.business_leases;
+begin
+  select * into l from public.business_leases where id = p_lease and advertiser_id = p_advertiser;
+  if not found or l.status <> 'live' then raise exception 'not_yours'; end if;
+  if p_upgrade = 'storey' and l.starts_at > now() - interval '30 days' then raise exception 'too_soon'; end if;
+  if p_upgrade = 'bright' and l.glow >= 2 then raise exception 'already'; end if;
+  insert into public.business_upgrades (reference, lease_id, upgrade, kind, price_kobo) values (p_reference, p_lease, p_upgrade, p_kind, p_kobo);
+end $$;
+
+/** Paystack confirmed a payment: a lease goes live for its months (with the billboards and its taps), or an upgrade is applied. */
+create or replace function public.business_paid(p_reference text, p_kobo bigint) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  l public.business_leases;
+  u public.business_upgrades;
+begin
+  select * into l from public.business_leases where reference = p_reference for update;
+  if found then
+    if l.status <> 'pending_payment' then return jsonb_build_object('found', true, 'new', false, 'id', l.id); end if;
+    if coalesce(p_kobo, 0) < l.price_kobo then return jsonb_build_object('found', true, 'new', false, 'short', true); end if;
+    if exists (select 1 from public.business_leases where building_id = l.building_id and status = 'live')
+       or exists (select 1 from public.property_units where building_id = l.building_id) then
+      return jsonb_build_object('found', true, 'new', false, 'clash', true, 'id', l.id);
+    end if;
+    update public.business_leases set status = 'live', starts_at = now(),
+      ends_at = now() + case when l.months is null then interval '365 days' else make_interval(days => 30 * l.months) end,
+      billboard = true, click_cap = public.lease_clicks(l.price_kobo) where id = l.id;
+    return jsonb_build_object('found', true, 'new', true, 'id', l.id);
+  end if;
+  select * into u from public.business_upgrades where reference = p_reference for update;
+  if not found then return jsonb_build_object('found', false); end if;
+  if u.status = 'paid' then return jsonb_build_object('found', true, 'new', false, 'id', u.lease_id); end if;
+  if coalesce(p_kobo, 0) < u.price_kobo then return jsonb_build_object('found', true, 'new', false, 'short', true); end if;
+  update public.business_upgrades set status = 'paid', paid_at = now() where reference = p_reference;
+  update public.business_leases set
+    glow = case when u.upgrade = 'bright' then 2 else glow end,
+    kind = case when u.upgrade = 'rebuild' then u.kind else kind end,
+    storeys = case when u.upgrade = 'storey' then coalesce(storeys, 1) + 1 else storeys end,
+    -- Another month: 30 more days and that month's taps.
+    ends_at = case when u.upgrade = 'month' then greatest(coalesce(ends_at, now()), now()) + interval '30 days' else ends_at end,
+    click_cap = case when u.upgrade = 'month' then coalesce(click_cap, 0) + public.lease_clicks(u.price_kobo) else click_cap end,
+    billboard = true
+  where id = u.lease_id;
+  return jsonb_build_object('found', true, 'new', true, 'id', u.lease_id, 'upgrade', u.upgrade);
+end $$;
+
+/** An account's leases with their numbers (and the months they were paid for). */
+create or replace function public.business_mine(p_advertiser uuid) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'id', l.id, 'building', l.building_id, 'name', l.name, 'category', l.category, 'about', l.about, 'address', l.address,
+    'phone', l.phone, 'whatsapp', l.whatsapp, 'website', l.website, 'logo', l.logo_path, 'billboardImage', coalesce(l.billboard_path, l.logo_path),
+    'status', l.status, 'glow', l.glow, 'kind', l.kind, 'storeys', l.storeys, 'billboard', l.billboard, 'startsAt', l.starts_at, 'endsAt', l.ends_at,
+    'priceKobo', l.price_kobo, 'months', l.months, 'clickCap', l.click_cap, 'clicks', public.lease_taps(l.id),
+    'hits', coalesce((select jsonb_object_agg(kind, total) from (select kind, sum(n) as total from public.business_hits h where h.lease_id = l.id group by kind) s), '{}'::jsonb),
+    'week', coalesce((select jsonb_object_agg(kind, total) from (select kind, sum(n) as total from public.business_hits h where h.lease_id = l.id and h.day > (now() at time zone 'Africa/Lagos')::date - 7 group by kind) s), '{}'::jsonb)
+  ) order by l.created_at desc), '[]'::jsonb)
+  from public.business_leases l where l.advertiser_id = p_advertiser and l.status <> 'pending_payment'
+$$;
+
+do $$
+declare f text;
+begin
+  foreach f in array array['public.business_upgrade_start(uuid, uuid, text, text, bigint, text)', 'public.business_paid(text, bigint)', 'public.business_mine(uuid)'] loop
+    execute format('revoke all on function %s from public, anon, authenticated', f);
+    execute format('grant execute on function %s to service_role', f);
+  end loop;
+end $$;
+
+-- ======================================================== 093_engagement_rep.sql
+-- Newtown, part 93: reputation from taking part (docs/REPUTATION.md). Quietly, on top of property,
+-- things, map marks and challenges, reputation now grows with:
+--   time   time actively spent in the game (the minutes part 73 already counts), up to 50
+--   talk   real conversations: days you and someone messaged each other (both ways), up to 40
+--   kind   gifts, hugs and handshakes given, and thanks for them, up to 30
+--   people friends, reactions to what you say in the Town Hall, visitors signing your guestbook, up to 30
+-- The rules keep it fair and hard to game:
+--   - only the last 60 days count, and the older the less (worth half after about three weeks), so
+--     reputation follows what you do now;
+--   - every part has diminishing returns (square roots and logs): the hundredth hour adds far less
+--     than the first, and talking to many people counts more than spamming one;
+--   - a conversation only counts when the other person writes back; at most a few gifts and
+--     greetings a day count;
+--   - nothing is announced: it just shows in your reputation.
+-- Worked out at most once an hour per player (kept in rep_engagement).
+--
+-- Run it after 073 (active time). Safe to run more than once.
+
+create table if not exists public.rep_engagement (
+  user_id uuid primary key references public.profiles (id) on delete cascade,
+  parts jsonb not null,
+  computed_at timestamptz not null default now()
+);
+alter table public.rep_engagement enable row level security;
+
+-- Looking up someone's recent private messages quickly.
+create index if not exists chat_dm_sender_idx on public.chat_messages (sender_id, created_at desc) where recipient_id is not null;
+create index if not exists chat_dm_recipient_idx on public.chat_messages (recipient_id, created_at desc) where recipient_id is not null;
+
+/** How much a day `p_day` ago is worth now: 1 today, half after about three weeks. */
+create or replace function public.rep_weight(p_at timestamptz) returns float8
+language sql immutable as $$ select exp(-greatest(0, extract(epoch from (now() - p_at)) / 86400.0) / 30.0) $$;
+
+/** The four parts of reputation from taking part, worked out now. */
+create or replace function public.engagement_parts(p_user uuid) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare
+  v_since timestamptz := now() - interval '60 days';
+  v_time float8;
+  v_talk float8;
+  v_kind float8;
+  v_friends int;
+  v_reacts int;
+  v_guests int;
+begin
+  -- Time: each active day counts by the square root of its minutes (up to 4 hours), weighted by how recent.
+  select coalesce(sum(public.rep_weight(day::timestamptz) * sqrt(least(minutes, 240) / 15.0)), 0) into v_time
+  from public.activity_days where user_id = p_user and day >= v_since::date;
+
+  -- Talk: a day you and someone both wrote to each other is one exchange; per person, the square
+  -- root of their (weighted) exchanges, so many real conversations beat one long one.
+  with mine as (
+    select recipient_id as other, created_at::date as d, max(created_at) as at from public.chat_messages
+    where sender_id = p_user and recipient_id is not null and created_at >= v_since group by 1, 2
+  ), theirs as (
+    select sender_id as other, created_at::date as d from public.chat_messages
+    where recipient_id = p_user and created_at >= v_since group by 1, 2
+  ), per as (
+    select m.other, sum(public.rep_weight(m.at)) as w from mine m join theirs t on t.other = m.other and t.d = m.d group by 1
+  )
+  select coalesce(sum(sqrt(w)), 0) into v_talk from per;
+
+  -- Kindness: gifts given (at most 3 a day), hugs and handshakes given (at most 5 a day), and each one thanked.
+  with gifts as (
+    select created_at::date as d, least(count(*), 3) as n, max(created_at) as at from public.ledger
+    where user_id = p_user and kind = 'gift_sent' and created_at >= v_since group by 1
+  ), greets as (
+    select created_at::date as d, least(count(*), 5) as n, least(count(thanked_at), 5) as thanked, max(created_at) as at from public.greetings
+    where from_id = p_user and created_at >= v_since group by 1
+  )
+  select coalesce((select sum(public.rep_weight(at) * n * 1.0) from gifts), 0)
+       + coalesce((select sum(public.rep_weight(at) * (n * 0.5 + thanked * 0.5)) from greets), 0)
+    into v_kind;
+
+  -- People: friends, people reacting to what you say in the Town Hall, and visitors signing your guestbook.
+  select count(*) into v_friends from public.friendships where accepted_at is not null and (requester = p_user or addressee = p_user);
+  select count(distinct r.user_id) into v_reacts from public.town_reactions r join public.chat_messages m on m.id = r.message_id
+    where m.sender_id = p_user and r.user_id <> p_user and r.created_at >= v_since;
+  select count(distinct author_id) into v_guests from public.home_guestbook where owner_id = p_user and author_id <> p_user and created_at >= v_since;
+
+  return jsonb_build_object(
+    'time', least(50, round(v_time * 0.8)),
+    'talk', least(40, round(v_talk * 3)),
+    'kind', least(30, round(sqrt(v_kind) * 4)),
+    'people', least(30, least(v_friends, 10) * 2 + round(5 * ln(1 + v_reacts)) + round(3 * ln(1 + v_guests)))
+  );
+exception when undefined_table or undefined_column then
+  -- A part of the game not set up yet: what can be counted is.
+  return jsonb_build_object('time', least(50, round(coalesce(v_time, 0) * 0.8)), 'talk', least(40, round(coalesce(v_talk, 0) * 3)), 'kind', 0, 'people', 0);
+end $$;
+
+/** Your reputation from taking part: kept for an hour, then worked out again. */
+create or replace function public.engagement_rep(p_user uuid) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  r public.rep_engagement;
+  v jsonb;
+begin
+  select * into r from public.rep_engagement where user_id = p_user;
+  if found and r.computed_at > now() - interval '1 hour' then return r.parts; end if;
+  v := public.engagement_parts(p_user);
+  insert into public.rep_engagement (user_id, parts, computed_at) values (p_user, v, now())
+    on conflict (user_id) do update set parts = excluded.parts, computed_at = excluded.computed_at;
+  return v;
+end $$;
+
+do $$
+declare f text;
+begin
+  revoke all on table public.rep_engagement from public, anon, authenticated;
+  grant all on table public.rep_engagement to service_role;
+  foreach f in array array['public.engagement_parts(uuid)', 'public.engagement_rep(uuid)'] loop
+    execute format('revoke all on function %s from public, anon, authenticated', f);
+    execute format('grant execute on function %s to service_role', f);
+  end loop;
+end $$;
+
+-- ======================================================== 094_lived_in_leases.sql
+-- Newtown, part 94: a business can take a building people live in, without taking the homes away
+-- (docs/BUSINESS.md).
+--   - A residential building (one with homes: rooming houses, bungalows, duplexes, terraces, flats,
+--     apartments, shops with flats) can be leased even when players own homes in it, and players can
+--     still buy and live in its homes while the lease runs. So advertising never takes places to live
+--     off the map.
+--   - While a business leases it, nobody can rename the building (it carries the business's name).
+--   - A building people live in can't be refitted into another kind, or have storeys added by the business.
+--   Other buildings (offices, plazas, shops, towers, warehouses, land) stay as before: only ones nobody owns.
+--
+-- Run it after 043, 047 and 092. If you ever run 043, 047 or 092 again, run this again after it.
+-- Safe to run more than once.
+
+alter table public.business_leases add column if not exists residential boolean not null default false;
+
+-- The lease start, with "is it residential" (worked out by the server from the building's homes).
+drop function if exists public.business_lease_start(uuid, text, text, text, text, text, text, text, text, text, text, bigint, text);
+create or replace function public.business_lease_start(
+  p_advertiser uuid, p_building text, p_region text, p_name text, p_category text, p_about text, p_address text,
+  p_phone text, p_whatsapp text, p_website text, p_logo text, p_kobo bigint, p_reference text, p_residential boolean default false
+) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare v_id uuid;
+begin
+  perform public.business_tidy();
+  if split_part(p_building, ':', 1) <> p_region then raise exception 'bad_building'; end if;
+  if exists (select 1 from public.business_leases where building_id = p_building and status = 'live') then raise exception 'taken'; end if;
+  if not coalesce(p_residential, false) and exists (select 1 from public.property_units where building_id = p_building) then raise exception 'owned'; end if;
+  if exists (select 1 from public.business_leases where advertiser_id = p_advertiser and status = 'live') then raise exception 'one_only'; end if;
+  if exists (select 1 from public.business_leases where advertiser_id = p_advertiser and status <> 'pending_payment' and created_at > now() - interval '7 days') then
+    raise exception 'one_a_week';
+  end if;
+  insert into public.business_leases (advertiser_id, building_id, region, name, category, about, address, phone, whatsapp, website, logo_path, price_kobo, reference, residential)
+    values (p_advertiser, p_building, p_region, p_name, p_category, p_about, p_address, nullif(p_phone, ''), nullif(p_whatsapp, ''), nullif(p_website, ''), p_logo, p_kobo, p_reference, coalesce(p_residential, false))
+    returning id into v_id;
+  return v_id;
+end $$;
+
+/** Paystack confirmed a payment: a lease goes live for its months (people's homes in a residential one stay theirs), or an upgrade is applied. */
+create or replace function public.business_paid(p_reference text, p_kobo bigint) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  l public.business_leases;
+  u public.business_upgrades;
+begin
+  select * into l from public.business_leases where reference = p_reference for update;
+  if found then
+    if l.status <> 'pending_payment' then return jsonb_build_object('found', true, 'new', false, 'id', l.id); end if;
+    if coalesce(p_kobo, 0) < l.price_kobo then return jsonb_build_object('found', true, 'new', false, 'short', true); end if;
+    if exists (select 1 from public.business_leases where building_id = l.building_id and status = 'live')
+       or (not l.residential and exists (select 1 from public.property_units where building_id = l.building_id)) then
+      return jsonb_build_object('found', true, 'new', false, 'clash', true, 'id', l.id);
+    end if;
+    update public.business_leases set status = 'live', starts_at = now(),
+      ends_at = now() + case when l.months is null then interval '365 days' else make_interval(days => 30 * l.months) end,
+      billboard = true, click_cap = public.lease_clicks(l.price_kobo) where id = l.id;
+    return jsonb_build_object('found', true, 'new', true, 'id', l.id);
+  end if;
+  select * into u from public.business_upgrades where reference = p_reference for update;
+  if not found then return jsonb_build_object('found', false); end if;
+  if u.status = 'paid' then return jsonb_build_object('found', true, 'new', false, 'id', u.lease_id); end if;
+  if coalesce(p_kobo, 0) < u.price_kobo then return jsonb_build_object('found', true, 'new', false, 'short', true); end if;
+  update public.business_upgrades set status = 'paid', paid_at = now() where reference = p_reference;
+  update public.business_leases set
+    glow = case when u.upgrade = 'bright' then 2 else glow end,
+    kind = case when u.upgrade = 'rebuild' then u.kind else kind end,
+    storeys = case when u.upgrade = 'storey' then coalesce(storeys, 1) + 1 else storeys end,
+    -- Another month: 30 more days and that month's taps.
+    ends_at = case when u.upgrade = 'month' then greatest(coalesce(ends_at, now()), now()) + interval '30 days' else ends_at end,
+    click_cap = case when u.upgrade = 'month' then coalesce(click_cap, 0) + public.lease_clicks(u.price_kobo) else click_cap end,
+    billboard = true
+  where id = u.lease_id;
+  return jsonb_build_object('found', true, 'new', true, 'id', u.lease_id, 'upgrade', u.upgrade);
+end $$;
+
+/** Start paying for an upgrade to a live lease (no refit or storey on a building people live in). */
+create or replace function public.business_upgrade_start(p_advertiser uuid, p_lease uuid, p_upgrade text, p_kind text, p_kobo bigint, p_reference text) returns void
+language plpgsql security definer set search_path = public as $$
+declare l public.business_leases;
+begin
+  select * into l from public.business_leases where id = p_lease and advertiser_id = p_advertiser;
+  if not found or l.status <> 'live' then raise exception 'not_yours'; end if;
+  if l.residential and p_upgrade in ('rebuild', 'storey') then raise exception 'lived_in'; end if;
+  if p_upgrade = 'storey' and l.starts_at > now() - interval '30 days' then raise exception 'too_soon'; end if;
+  if p_upgrade = 'bright' and l.glow >= 2 then raise exception 'already'; end if;
+  insert into public.business_upgrades (reference, lease_id, upgrade, kind, price_kobo) values (p_reference, p_lease, p_upgrade, p_kind, p_kobo);
+end $$;
+
+/** Name a building you own all of: not while a business leases it (it carries the business's name). */
+create or replace function public.property_rename(p_user uuid, p_building text, p_name text) returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  v_units int;
+  v_mine int;
+  v_name text := nullif(btrim(regexp_replace(coalesce(p_name, ''), '\s+', ' ', 'g')), '');
+begin
+  if v_name is not null and (char_length(v_name) not between 2 and 40 or v_name !~ '^[[:alnum:] ''&.,()-]+$') then raise exception 'bad_name'; end if;
+  if exists (select 1 from public.business_leases where building_id = p_building and status = 'live') then raise exception 'leased'; end if;
+  select jsonb_array_length(snapshot -> 'units') into v_units from public.property_buildings where building_id = p_building;
+  if v_units is null then raise exception 'not_yours'; end if;
+  select count(*) into v_mine from public.property_units where building_id = p_building and owner_id = p_user;
+  if v_mine < v_units then raise exception 'not_all_yours'; end if;
+  update public.property_buildings set name = v_name where building_id = p_building;
+end $$;
+
+do $$
+declare f text;
+begin
+  foreach f in array array[
+    'public.business_lease_start(uuid, text, text, text, text, text, text, text, text, text, text, bigint, text, boolean)',
+    'public.business_paid(text, bigint)', 'public.business_upgrade_start(uuid, uuid, text, text, bigint, text)', 'public.property_rename(uuid, text, text)'
+  ] loop
+    execute format('revoke all on function %s from public, anon, authenticated', f);
+    execute format('grant execute on function %s to service_role', f);
+  end loop;
+end $$;
+
+-- ======================================================== 095_events.sql
+-- Newtown, part 95: events on the map (docs/EVENTS.md). Anyone can host an event that others come
+-- to: a party (street party, owambe, concert, rave, house party, drum circle) or a stage (a talk, a
+-- class, a watch party, an open mic). The host picks where (the street they're on, or a landmark,
+-- a restaurant, a park...), when (now, or up to a week ahead), how long, how many can come and a
+-- ticket price (free, or any amount). People say they're going, get told when it starts, and come
+-- in from a few minutes before. Ticket money is held until the event is over, then taxed like
+-- everything else in the city: tickets include VAT (service_vat, 7.5%), and what's left is the
+-- host's income, less income tax (work_income_tax, 7%); both go to the state treasuries. If the
+-- host calls it off, everyone gets their ticket back (no tax).
+-- Parties cost money to host: a permit (worked out by the server from the hours, the crowd size, the
+-- kind of place and how dear the area is), paid to the state once the party has started; it comes
+-- back if called off before it starts. Two street
+-- parties can't be on the same stretch of road at the same time.
+-- Hosting events people come to, and going to them, add to your reputation. The walkthrough's
+-- third mission becomes "go to an event" (tutorial_check below replaces part 80's: if you ever run
+-- part 80 again, run this part again after it).
+--
+-- Safe to run more than once. Run after part 94.
+
+create table if not exists public.hosted_events (
+  id bigserial primary key,
+  host_id uuid not null references public.profiles (id) on delete cascade,
+  region text not null check (region ~ '^[a-z0-9-]{2,30}$'),
+  category text not null check (category in ('party', 'stage')),
+  format text not null check (format ~ '^[a-z_]{2,20}$'),
+  title text not null check (char_length(title) between 3 and 60),
+  about text not null default '' check (char_length(about) <= 280),
+  x int not null,
+  z int not null,
+  -- Where it is, in words ("Awolowo Road, Ikoyi", "Terra Kulture"), and whether it's on the street.
+  place text not null default '' check (char_length(place) <= 80),
+  on_street boolean not null default false,
+  starts_at timestamptz not null,
+  ends_at timestamptz not null,
+  -- The ticket (mint; 0 is free) and the most people who can come in (the host included).
+  price numeric(14,2) not null default 0 check (price >= 0),
+  capacity int not null default 300 check (capacity between 2 and 1000),
+  -- Ticket money held until it's over.
+  pool numeric(14,2) not null default 0,
+  -- What hosting it cost (mint; parties).
+  host_fee numeric(14,2) not null default 0,
+  status text not null default 'on' check (status in ('on', 'cancelled', 'closed')),
+  -- The people going were told it started; the host was paid (status 'closed').
+  started_told boolean not null default false,
+  paid_out numeric(14,2),
+  -- What's on the stage now (slides or a video, src/lib/world/events.ts StageState).
+  stage jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  constraint hosted_events_times check (ends_at >= starts_at)
+);
+-- Ending the moment it starts (the host ends it at once) is allowed (added after the first version).
+alter table public.hosted_events drop constraint if exists hosted_events_check;
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'hosted_events_times') then
+    alter table public.hosted_events add constraint hosted_events_times check (ends_at >= starts_at);
+  end if;
+end $$;
+alter table public.hosted_events add column if not exists host_fee numeric(14,2) not null default 0;
+create index if not exists hosted_events_region_idx on public.hosted_events (region, status, ends_at);
+create index if not exists hosted_events_host_idx on public.hosted_events (host_id, created_at desc);
+
+create table if not exists public.hosted_event_guests (
+  event_id bigint not null references public.hosted_events (id) on delete cascade,
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  going boolean not null default true,
+  going_at timestamptz not null default now(),
+  -- Came in (the first time), and what their ticket cost.
+  entered_at timestamptz,
+  paid numeric(14,2) not null default 0,
+  primary key (event_id, user_id)
+);
+create index if not exists hosted_event_guests_user_idx on public.hosted_event_guests (user_id, going_at desc);
+
+/** A player who can take part: signed up, not a bot, not paused, with a life in the city. */
+create or replace function public.event_player(p_user uuid) returns void
+language plpgsql security definer set search_path = public as $$
+declare p public.profiles;
+begin
+  select * into p from public.profiles where id = p_user;
+  if not found or p.is_bot then raise exception 'unknown_player'; end if;
+  if p.frozen or p.age_blocked_at is not null then raise exception 'frozen'; end if;
+  perform 1 from public.lives where user_id = p_user for update;
+  if not found then raise exception 'no_life'; end if;
+end $$;
+
+/** Your event that isn't over yet (coming up or on now), or null: one at a time. */
+create or replace function public.event_hosting(p_user uuid) returns bigint
+language sql stable security definer set search_path = public as $$
+  select id from public.hosted_events where host_id = p_user and status = 'on' and ends_at > now() order by starts_at limit 1
+$$;
+
+/**
+ * Host an event. p_starts: when (now if it's in the past; at most 7 days ahead), p_minutes: how
+ * long (15 to 240), p_price: the ticket in mint (0 free, at most p_price_max), p_capacity: the most
+ * people (2 to 1000), p_fee: what hosting it costs (mint, paid now from Fun money then the wallet).
+ * One event at a time, at most p_per_day a day. A party on the street can't be within p_gap tiles
+ * of another street party on at the same time. Returns {id, starts_at, ends_at, fee}.
+ */
+drop function if exists public.event_open(uuid, text, text, text, text, text, int, int, text, boolean, timestamptz, int, numeric, numeric, int, int);
+create or replace function public.event_open(p_user uuid, p_region text, p_category text, p_format text, p_title text, p_about text,
+  p_x int, p_z int, p_place text, p_on_street boolean, p_starts timestamptz, p_minutes int, p_price numeric, p_price_max numeric,
+  p_capacity int, p_per_day int default 3, p_fee numeric default 0, p_gap int default 16)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_title text := btrim(regexp_replace(coalesce(p_title, ''), '\s+', ' ', 'g'));
+  v_starts timestamptz := greatest(now(), coalesce(p_starts, now()));
+  v_minutes int := coalesce(p_minutes, 0);
+  v_price numeric := round(coalesce(p_price, 0), 2);
+  v_fee numeric := round(greatest(0, coalesce(p_fee, 0)), 2);
+  v_id bigint;
+  v_ends timestamptz;
+begin
+  perform public.event_player(p_user);
+  if p_category not in ('party', 'stage') or coalesce(p_format, '') !~ '^[a-z_]{2,20}$' then raise exception 'bad_kind'; end if;
+  if char_length(v_title) < 3 or char_length(v_title) > 60 then raise exception 'bad_title'; end if;
+  if v_starts > now() + interval '7 days 5 minutes' then raise exception 'too_far'; end if;
+  if v_minutes < 15 or v_minutes > 240 then raise exception 'bad_length'; end if;
+  if v_price < 0 or v_price > greatest(0, coalesce(p_price_max, 0)) then raise exception 'bad_price'; end if;
+  if coalesce(p_capacity, 0) < 2 or p_capacity > 1000 then raise exception 'bad_capacity'; end if;
+  if public.event_hosting(p_user) is not null then raise exception 'busy'; end if;
+  if (select count(*) from public.hosted_events where host_id = p_user and created_at > now() - interval '24 hours') >= greatest(1, coalesce(p_per_day, 3)) then
+    raise exception 'too_many';
+  end if;
+  v_ends := v_starts + make_interval(mins => v_minutes);
+  -- Street parties take the road: none on the same stretch at the same time.
+  if p_category = 'party' and coalesce(p_on_street, false) and exists (
+    select 1 from public.hosted_events e
+    where e.region = p_region and e.category = 'party' and e.on_street and e.status = 'on'
+      and e.starts_at < v_ends and v_starts < e.ends_at
+      and sqrt(power(e.x - p_x, 2) + power(e.z - p_z, 2)) < greatest(1, coalesce(p_gap, 16))) then
+    raise exception 'street_taken';
+  end if;
+  if v_fee > 0 then
+    if public.life_can_spend(p_user, array['fun']) < v_fee then raise exception 'not_enough:%', trim_scale(v_fee); end if;
+    perform public.life_spend(p_user, array['fun'], v_fee);
+  end if;
+  insert into public.hosted_events (host_id, region, category, format, title, about, x, z, place, on_street, starts_at, ends_at, price, capacity, host_fee)
+    values (p_user, p_region, p_category, p_format, v_title, left(coalesce(p_about, ''), 280), p_x, p_z, left(coalesce(p_place, ''), 80),
+            coalesce(p_on_street, false), v_starts, v_ends, v_price, p_capacity, v_fee)
+    returning id into v_id;
+  if v_fee > 0 then
+    -- Held until it's over (or called off before it starts, when it comes back).
+    perform public.log_coins(p_user, null, 'event_hosting', -v_fee, false, 'Hosting: ' || v_title);
+  end if;
+  insert into public.hosted_event_guests (event_id, user_id, going) values (v_id, p_user, true);
+  return jsonb_build_object('id', v_id, 'starts_at', v_starts, 'ends_at', v_ends, 'fee', v_fee);
+end $$;
+
+/** Say you're going (or not any more). Returns {going, count}: how many are going now. */
+create or replace function public.event_rsvp(p_user uuid, p_id bigint, p_going boolean) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  e public.hosted_events;
+  v_count int;
+begin
+  select * into e from public.hosted_events where id = p_id for update;
+  if not found then raise exception 'gone'; end if;
+  if e.status <> 'on' or e.ends_at <= now() then raise exception 'over'; end if;
+  if e.host_id = p_user then raise exception 'host'; end if;
+  if coalesce(p_going, true) then
+    perform public.event_player(p_user);
+    if not exists (select 1 from public.hosted_event_guests where event_id = p_id and user_id = p_user and going)
+       and (select count(*) from public.hosted_event_guests where event_id = p_id and going) >= e.capacity then
+      raise exception 'full';
+    end if;
+    insert into public.hosted_event_guests (event_id, user_id, going) values (p_id, p_user, true)
+      on conflict (event_id, user_id) do update set going = true, going_at = case when hosted_event_guests.going then hosted_event_guests.going_at else now() end;
+  else
+    update public.hosted_event_guests set going = false where event_id = p_id and user_id = p_user;
+  end if;
+  select count(*) into v_count from public.hosted_event_guests where event_id = p_id and going;
+  return jsonb_build_object('going', coalesce(p_going, true), 'count', v_count);
+end $$;
+
+/**
+ * Come in: from p_early minutes before it starts (the host any time) until it ends. The ticket is
+ * paid the first time (it's yours for the whole event: come and go as you like). Returns {paid, already}.
+ */
+create or replace function public.event_enter(p_user uuid, p_id bigint, p_early int default 5) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  e public.hosted_events;
+  g public.hosted_event_guests;
+begin
+  perform public.event_player(p_user);
+  select * into e from public.hosted_events where id = p_id for update;
+  if not found then raise exception 'gone'; end if;
+  if e.status = 'cancelled' then raise exception 'cancelled'; end if;
+  if e.status <> 'on' or e.ends_at <= now() then raise exception 'over'; end if;
+  select * into g from public.hosted_event_guests where event_id = p_id and user_id = p_user for update;
+  if found and g.entered_at is not null then
+    update public.hosted_event_guests set going = true where event_id = p_id and user_id = p_user;
+    return jsonb_build_object('paid', 0, 'already', true);
+  end if;
+  if e.host_id <> p_user and now() < e.starts_at - make_interval(mins => greatest(0, least(60, coalesce(p_early, 5)))) then
+    raise exception 'not_yet';
+  end if;
+  if e.host_id <> p_user and (select count(*) from public.hosted_event_guests where event_id = p_id and entered_at is not null) >= e.capacity then
+    raise exception 'full';
+  end if;
+  if e.host_id <> p_user and e.price > 0 then
+    if public.life_can_spend(p_user, array['fun']) < e.price then raise exception 'not_enough:%', trim_scale(e.price); end if;
+    perform public.life_spend(p_user, array['fun'], e.price);
+    perform public.log_coins(p_user, null, 'event_ticket', -e.price, false, 'Event ticket: ' || e.title);
+    update public.hosted_events set pool = pool + e.price where id = p_id;
+  end if;
+  insert into public.hosted_event_guests (event_id, user_id, going, entered_at, paid)
+    values (p_id, p_user, true, now(), case when e.host_id = p_user then 0 else e.price end)
+    on conflict (event_id, user_id) do update set going = true, entered_at = now(), paid = excluded.paid;
+  return jsonb_build_object('paid', case when e.host_id = p_user then 0 else e.price end, 'already', false);
+end $$;
+
+/**
+ * Over: pay the host their share of the ticket money (the rest is the city's) and tell them how it
+ * went. Safe to call by anyone, any number of times; nothing happens before it ends.
+ */
+create or replace function public.event_settle(p_id bigint) returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  e public.hosted_events;
+  v_vat numeric;
+  v_gross numeric;
+  v_tax numeric;
+  v_share numeric;
+  v_came int;
+begin
+  select * into e from public.hosted_events where id = p_id for update;
+  if not found then return 'gone'; end if;
+  if e.status <> 'on' then return e.status; end if;
+  if e.ends_at > now() then return 'on'; end if;
+  -- Tickets include VAT; the rest is the host's income, taxed at source like pay.
+  v_vat := round(e.pool * public.setting('service_vat') / (1 + public.setting('service_vat')), 2);
+  v_gross := e.pool - v_vat;
+  v_tax := round(v_gross * public.setting('work_income_tax'), 2);
+  v_share := v_gross - v_tax;
+  if v_vat > 0 then perform public.pay_tax(e.region, v_vat, 'vat', 'VAT on event tickets: ' || left(e.title, 40)); end if;
+  if v_gross > 0 then
+    update public.profiles set coins = coins + v_share where id = e.host_id;
+    perform public.log_coins(e.host_id, null, 'event_tickets', v_gross, false, 'Tickets: ' || e.title);
+    if v_tax > 0 then
+      perform public.log_coins(e.host_id, null, 'income_tax', -v_tax, false, 'Income tax on tickets');
+      perform public.pay_tax(e.region, v_tax, 'income_tax', 'Income tax on event tickets');
+    end if;
+  end if;
+  -- The permit to host it (parties): the state's now.
+  if e.host_fee > 0 then perform public.pay_tax(e.region, e.host_fee, 'event_permit', 'Event permit: ' || left(e.title, 40)); end if;
+  select count(*) into v_came from public.hosted_event_guests where event_id = p_id and entered_at is not null and user_id <> e.host_id;
+  update public.hosted_events set status = 'closed', paid_out = v_share where id = p_id;
+  perform public.notify(e.host_id, null, 'event',
+    format('"%s" is over. %s came%s. Thanks for hosting!', e.title, case when v_came = 1 then '1 person' else v_came || ' people' end,
+           case when v_share > 0 then format(' and ₥%s of tickets is yours (after VAT and income tax)', trim_scale(v_share)) else '' end));
+  return 'closed';
+end $$;
+
+/** The host calls it off (before or while it's on): everyone's ticket back, and the people going are told. */
+create or replace function public.event_cancel(p_user uuid, p_id bigint) returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  e public.hosted_events;
+  r record;
+begin
+  select * into e from public.hosted_events where id = p_id for update;
+  if not found then raise exception 'gone'; end if;
+  if e.host_id <> p_user then raise exception 'not_host'; end if;
+  if e.status <> 'on' or e.ends_at <= now() then raise exception 'over'; end if;
+  for r in select user_id, paid from public.hosted_event_guests where event_id = p_id and paid > 0 loop
+    update public.profiles set coins = coins + r.paid where id = r.user_id;
+    perform public.log_coins(r.user_id, null, 'event_refund', r.paid, false, 'Event called off: ' || e.title);
+  end loop;
+  update public.hosted_event_guests set paid = 0 where event_id = p_id;
+  -- The hosting fee: back if it's called off before it starts; spent once it has started.
+  if e.host_fee > 0 and now() < e.starts_at then
+    update public.profiles set coins = coins + e.host_fee where id = e.host_id;
+    perform public.log_coins(e.host_id, null, 'event_hosting_back', e.host_fee, false, 'Hosting fee back: ' || e.title);
+  elsif e.host_fee > 0 then
+    perform public.pay_tax(e.region, e.host_fee, 'event_permit', 'Event permit: ' || left(e.title, 40));
+  end if;
+  update public.hosted_events set status = 'cancelled', pool = 0, ends_at = least(ends_at, greatest(now(), starts_at + interval '1 second')) where id = p_id;
+  for r in select user_id from public.hosted_event_guests where event_id = p_id and going and user_id <> p_user loop
+    perform public.notify(r.user_id, null, 'event', format('"%s" was called off by the host.%s', e.title, case when e.price > 0 then ' Any ticket you bought is back.' else '' end));
+  end loop;
+  return 'cancelled';
+end $$;
+
+/** The host ends it now (it's settled at once). */
+create or replace function public.event_end(p_user uuid, p_id bigint) returns text
+language plpgsql security definer set search_path = public as $$
+declare e public.hosted_events;
+begin
+  select * into e from public.hosted_events where id = p_id for update;
+  if not found then raise exception 'gone'; end if;
+  if e.host_id <> p_user then raise exception 'not_host'; end if;
+  if e.status <> 'on' then return e.status; end if;
+  if e.starts_at > now() then raise exception 'not_started'; end if;
+  update public.hosted_events set ends_at = now() where id = p_id and ends_at > now();
+  return public.event_settle(p_id);
+end $$;
+
+/**
+ * Keep a region's events moving: tell the people going when one starts (returns who was told, for
+ * a push), and settle the ones that are over.
+ */
+create or replace function public.event_sweep(p_region text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  r record;
+  g record;
+  v_told uuid[] := '{}';
+begin
+  for r in select id, title, host_id, place from public.hosted_events
+           where region = p_region and status = 'on' and not started_told and starts_at <= now() and ends_at > now()
+           order by starts_at limit 20 for update skip locked loop
+    update public.hosted_events set started_told = true where id = r.id;
+    for g in select user_id from public.hosted_event_guests where event_id = r.id and going and user_id <> r.host_id limit 300 loop
+      perform public.notify(g.user_id, null, 'event', format('"%s" has started%s! Tap Events to go in.', r.title, case when r.place <> '' then ' at ' || r.place else '' end));
+      v_told := v_told || g.user_id;
+    end loop;
+  end loop;
+  for r in select id from public.hosted_events where region = p_region and status = 'on' and ends_at <= now() order by ends_at limit 20 loop
+    perform public.event_settle(r.id);
+  end loop;
+  return to_jsonb(v_told);
+end $$;
+
+/** The host sets what's on the stage (slides or a video; kept small). */
+create or replace function public.event_stage(p_user uuid, p_id bigint, p_stage jsonb) returns void
+language plpgsql security definer set search_path = public as $$
+declare e public.hosted_events;
+begin
+  select * into e from public.hosted_events where id = p_id for update;
+  if not found then raise exception 'gone'; end if;
+  if e.host_id <> p_user then raise exception 'not_host'; end if;
+  if e.status <> 'on' or e.ends_at <= now() then raise exception 'over'; end if;
+  if jsonb_typeof(coalesce(p_stage, 'null'::jsonb)) <> 'object' or octet_length(p_stage::text) > 8000 then raise exception 'bad_stage'; end if;
+  update public.hosted_events set stage = p_stage where id = p_id;
+end $$;
+
+/** For reputation: events you hosted that 3+ people came to, and events of others you went to. */
+create or replace function public.event_rep(p_user uuid) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'hosted', (select count(*) from public.hosted_events e where e.host_id = p_user and e.status = 'closed'
+               and (select count(*) from public.hosted_event_guests g where g.event_id = e.id and g.entered_at is not null and g.user_id <> p_user) >= 3),
+    'attended', (select count(*) from public.hosted_event_guests g join public.hosted_events e on e.id = g.event_id
+                 where g.user_id = p_user and g.entered_at is not null and e.host_id <> p_user and e.status <> 'cancelled'))
+$$;
+
+-- ============================================================ Finance: ticket sales are earnings
+/** (Part 95: ticket sales from events you hosted count as earnings too.) Everything you've earned (ever, and in the last p_days days), and the latest payments in. */
+create or replace function public.life_earnings(p_user uuid, p_days int, p_limit int default 100) returns jsonb
+language sql stable security definer set search_path = public as $$
+  with earned as (
+    select id, kind, amount, note, created_at from public.ledger
+    where user_id = p_user and amount > 0
+      and kind in ('work_pay', 'public_pay', 'hustle_pay', 'bonus', 'rent', 'item_sale', 'car_sale', 'service_pay', 'event_tickets')
+  ),
+  taxed as (
+    select amount, created_at from public.ledger where user_id = p_user and kind in ('income_tax', 'rent_tax') and amount < 0
+  )
+  select jsonb_build_object(
+    'total', coalesce((select round(sum(amount), 2) from earned), 0),
+    'tax', coalesce((select round(-sum(amount), 2) from taxed), 0),
+    'period', coalesce((select round(sum(amount), 2) from earned where created_at >= now() - make_interval(days => least(greatest(coalesce(p_days, 7), 1), 3650))), 0),
+    'entries', coalesce((select jsonb_agg(jsonb_build_object('id', e.id, 'kind', e.kind, 'amount', round(e.amount, 2), 'note', e.note, 'at', e.created_at) order by e.created_at desc, e.id desc)
+      from (select * from earned where created_at >= now() - make_interval(days => least(greatest(coalesce(p_days, 7), 1), 3650))
+            order by created_at desc, id desc limit least(greatest(coalesce(p_limit, 100), 1), 300)) e), '[]'::jsonb)
+  )
+$$;
+
+-- ============================================================ the walkthrough's third mission
+/**
+ * Which steps are done, paying each newly done one once. p_rewards: { name, hi, win } in mint. Since part 95,
+ * "win" (the third mission) is going to an event (or hosting one), no longer winning a challenge.
+ * Starts the walkthrough's clock the first time it's asked. Returns
+ * { name, hi, win, paid: [...], rewards: { name, hi, win } }.
+ */
+create or replace function public.tutorial_check(p_user uuid, p_rewards jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  l public.lives;
+  v_since timestamptz;
+  v_done jsonb;
+  v_paid text[] := '{}';
+  v_step text;
+  v_reward numeric;
+begin
+  select * into l from public.lives where user_id = p_user for update;
+  if not found then return null; end if;
+  v_since := coalesce(l.tutorial_at, now());
+  if l.tutorial_at is null then update public.lives set tutorial_at = v_since where user_id = p_user; end if;
+  v_done := jsonb_build_object(
+    'name', l.home_named_at is not null and l.home_named_at >= v_since,
+    'hi', exists (select 1 from public.chat_messages where sender_id = p_user and recipient_id is not null and created_at >= v_since),
+    -- Mission 3 (still called 'win'): go into an event, or host one and go into your own.
+    'win', exists (
+      select 1 from public.hosted_event_guests g join public.hosted_events e on e.id = g.event_id
+      where g.user_id = p_user and g.entered_at is not null and g.entered_at >= v_since and e.status <> 'cancelled')
+  );
+  foreach v_step in array array['name', 'hi', 'win'] loop
+    if (v_done ->> v_step)::boolean then
+      v_reward := round(least(greatest(coalesce((p_rewards ->> v_step)::numeric, 0), 0), 40), 2);
+      insert into public.tutorial_steps (user_id, step, reward) values (p_user, v_step, v_reward) on conflict do nothing;
+      if found then
+        v_paid := v_paid || v_step;
+        if v_reward > 0 then
+          update public.profiles set coins = coins + v_reward where id = p_user;
+          perform public.log_coins(p_user, null, 'tutorial', v_reward, false, 'Walkthrough reward: ' || v_step);
+        end if;
+      end if;
+    end if;
+  end loop;
+  -- Done once counts for good (even if, say, the home is renamed back later).
+  return jsonb_build_object(
+    'name', exists (select 1 from public.tutorial_steps where user_id = p_user and step = 'name'),
+    'hi', exists (select 1 from public.tutorial_steps where user_id = p_user and step = 'hi'),
+    'win', exists (select 1 from public.tutorial_steps where user_id = p_user and step = 'win'),
+    'paid', to_jsonb(v_paid)
+  );
+end $$;
+
+do $$
+declare f text;
+begin
+  revoke all on table public.hosted_events, public.hosted_event_guests from public, anon, authenticated;
+  grant all on table public.hosted_events, public.hosted_event_guests to service_role;
+  revoke all on sequence public.hosted_events_id_seq from public, anon, authenticated;
+  grant all on sequence public.hosted_events_id_seq to service_role;
+  foreach f in array array['public.event_player(uuid)', 'public.event_hosting(uuid)',
+    'public.event_open(uuid, text, text, text, text, text, int, int, text, boolean, timestamptz, int, numeric, numeric, int, int, numeric, int)',
+    'public.event_rsvp(uuid, bigint, boolean)', 'public.event_enter(uuid, bigint, int)', 'public.event_settle(bigint)',
+    'public.event_cancel(uuid, bigint)', 'public.event_end(uuid, bigint)', 'public.event_sweep(text)',
+    'public.event_stage(uuid, bigint, jsonb)', 'public.event_rep(uuid)'] loop
+    execute format('revoke all on function %s from public, anon, authenticated', f);
+    execute format('grant execute on function %s to service_role', f);
+  end loop;
+  -- Slides for talks (public pictures, uploaded by the server only).
+  if exists (select 1 from information_schema.tables where table_schema = 'storage' and table_name = 'buckets') then
+    insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+    values ('events', 'events', true, 600000, array['image/jpeg'])
+    on conflict (id) do update set public = true, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+  end if;
+end $$;
+

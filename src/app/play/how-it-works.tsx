@@ -16,7 +16,7 @@ import {
   X,
   type LucideIcon,
 } from "@/components/icons";
-import { Briefcase, Swords, Trophy, Wallet } from "lucide-react";
+import { Briefcase, PartyPopper, Swords, Trophy, Wallet } from "lucide-react";
 import { CITY_ASSETS } from "@/lib/city/layout";
 import { Sheet } from "./sheet";
 import { Logo } from "@/components/logo";
@@ -228,10 +228,19 @@ const WORLD_SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[]
     ],
   },
   {
+    icon: PartyPopper,
+    title: "Events",
+    body: [
+      "Tap the party button (top right) to see what's on nearby, or host your own: a party (street party, owambe, concert, rave...) or a stage (a talk with slides, a class, a watch party, an open mic), on the street you're on or at a landmark, a restaurant or a park.",
+      "Parties fill the street on the map. Inside: a DJ booth (songs everyone hears together) or a beat, the hot seat, meeting someone new, dance moves, shout-outs, toasts, spraying the host, a hype meter and a chat with photos. On a stage everyone watches the same slides or video together, reacts and asks questions.",
+      "Parties cost money to host: from ₦100,000 an hour, more for a bigger crowd, a fancier place or a pricier area (all back if you call it off before it starts). Two street parties can't share a stretch of road at the same time. Sell tickets if you like: they include 7.5% VAT, and your takings pay 7% income tax like pay (you keep about 86%). The hosting permit and the taxes go to the state. Hosting events people come to, and going to them, raise your reputation.",
+    ],
+  },
+  {
     icon: Trophy,
     title: "Challenge people",
     body: [
-      "Tap the trophy (top right) and challenge everyone nearby to a game (Whot! and Ludo now, more coming): everyone puts the same stake in the pool and the winner takes it.",
+      "Challenge everyone nearby to a game (Whot! and Ludo now, more coming): everyone puts the same stake in the pool and the winner takes it. The guide opens it for you; it joins Events as Game challenge soon.",
       "Your first challenge is free; challenging again soon after costs a fee. Hosting and winning challenges raise your reputation.",
     ],
   },

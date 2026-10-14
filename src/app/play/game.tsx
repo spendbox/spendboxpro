@@ -64,7 +64,7 @@ import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
 import { BookOpen, Church, FerrisWheel, Landmark as LandmarkIcon, Plane, Ship, TrainFront, Trophy, UtensilsCrossed } from "lucide-react";
-import { BellOff, BellRing, Landmark, LayoutGrid, LocateFixed, Rocket, Wallet, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Palette, ShoppingBag, Swords, TrendingUp, User } from "lucide-react";
+import { BellOff, BellRing, Landmark, LayoutGrid, PartyPopper, LocateFixed, Rocket, Wallet, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Palette, ShoppingBag, Swords, TrendingUp, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
 import { GhostsSheet } from "./ghost-duel/ghosts-sheet";
@@ -133,6 +133,7 @@ import { RecentRail, rememberPerson } from "./people/recent-rail";
 import { PrankReveal, usePrankReveal } from "./people/prank-reveal";
 import { openAdvertise } from "./life/advertise-panel";
 import { Fight, type ChallengeLight } from "./fight/fight";
+import { Events, type EventLight } from "./events/events";
 import { CallBar } from "./call/call-bar";
 import * as propertyActions from "./property-actions";
 import * as workActions from "./work-actions";
@@ -1961,6 +1962,15 @@ export function Game({
   // Challenge (docs/CHALLENGES.md): the picker, and the challenges lit up on the map.
   const [fightOpen, setFightOpen] = useState(false);
   const [challengeLights, setChallengeLights] = useState<ChallengeLight[]>([]);
+  // Events (docs/EVENTS.md): what's on and hosting, their beams on the map, and parties' crowds.
+  const [eventsOpen, setEventsOpen] = useState(false);
+  const [eventLights, setEventLights] = useState<EventLight[]>([]);
+  // An event's beam (or its bubble) tapped on the map: open that event.
+  const [eventTapped, setEventTapped] = useState<{ id: number; at: number } | null>(null);
+  const [eventScenes, setEventScenes] = useState<GameState["worldEvents"]>(NO_WORLD_EVENTS);
+  const mapLights = useMemo(() => [...challengeLights, ...eventLights], [challengeLights, eventLights]);
+  const newsScene = worldLife.newsScene;
+  const worldScenes = useMemo(() => (eventScenes.length ? [...(newsScene ?? []), ...eventScenes] : (newsScene ?? NO_WORLD_EVENTS)), [newsScene, eventScenes]);
   const [prayer, setPrayer] = useState(0);
   function getMainAction(): { label: string; icon: React.ComponentType<{ className?: string }>; run: () => void } | null {
     if (!worldId || !place || guest) return null;
@@ -2290,7 +2300,16 @@ export function Game({
             houses={worldId ? NO_HOUSES : state.houses}
             dance={isDancing && dancing ? { id: me.id, move: dancing.move, with: dancing.with } : null}
             friendsAt={worldId ? (walking ? facesOnMap.filter((f) => !f.mine) : facesOnMap) : friendsAt}
-            challengeLights={worldId ? challengeLights : undefined}
+            challengeLights={worldId ? mapLights : undefined}
+            onLightTap={
+              worldId
+                ? (id) => {
+                    if (id >= 0) return false;
+                    setEventTapped({ id: -id, at: Date.now() });
+                    return true;
+                  }
+                : undefined
+            }
             onPerson={worldId ? (id) => (id.startsWith("home:") ? worldLife.goHome() : setPersonId(id)) : undefined}
             // Marks left on the city (writing, statues, trees...) are for signed-in players only.
             marks={worldId && !guest ? worldLife.marks : undefined}
@@ -2310,7 +2329,7 @@ export function Game({
             onBalloons={setBalloonCount}
             revealed={phase !== "join" || !!worldId}
             caughtFaces={worldId ? undefined : state.caughtFaces}
-            worldEvents={worldId ? (worldLife.newsScene ?? NO_WORLD_EVENTS) : state.worldEvents}
+            worldEvents={worldId ? worldScenes : state.worldEvents}
             focusEvent={focusEvent}
             onEventTap={onEventTap}
           onEventInfo={worldId ? undefined : setEventInfo}
@@ -2619,6 +2638,24 @@ export function Game({
           onLights={setChallengeLights}
           onMessage={(text, good) => setMessage({ text, tone: good ? "good" : "bad" })}
           onFly={(x, z) => worldLife.lookAt(x, z)}
+        />
+      )}
+      {worldId && !guest && (
+        <Events
+          region={worldId}
+          me={{ id: me.id, name: me.name ?? "Player", avatar: me.avatar }}
+          open={eventsOpen}
+          onClose={() => setEventsOpen(false)}
+          where={() => worldLife.centerRef.current?.() ?? null}
+          places={worldLife.explore}
+          describe={worldLife.describeSpot}
+          roads={worldLife.roadsNear}
+          openId={eventTapped}
+          onLights={setEventLights}
+          onScenes={setEventScenes}
+          onMessage={(text, good) => setMessage({ text, tone: good ? "good" : "bad" })}
+          onFly={(x, z) => worldLife.lookAt(x, z)}
+          onPerson={(id) => setPersonId(id)}
         />
       )}
       {clubDoor && (
@@ -3756,16 +3793,18 @@ export function Game({
         )}
       </div>
 
-      {/* Challenge: a white trophy button in the top right corner, under your cash (gently bouncing). */}
-      {worldId && !guest && !camera && !place && ride === null && !walking && tour("challenge") && (
+      {/* Events (docs/EVENTS.md): a party button in the top right corner, under your cash (gently
+          bouncing): what's on nearby, and hosting your own (Game challenge is one of the kinds). */}
+      {worldId && !guest && !camera && !place && ride === null && !walking && tour("events") && (
         <button
-          onClick={() => setFightOpen(true)}
-          className="challenge-pop pointer-events-auto fixed right-3 top-14 z-20 grid size-12 place-items-center rounded-full bg-white text-[#f08c00] ring-1 ring-black/5 sm:right-4 sm:top-16"
-          aria-label="Challenge people nearby"
-          title="Challenge people nearby"
+          onClick={() => setEventsOpen(true)}
+          className="events-pop pointer-events-auto fixed right-3 top-14 z-20 grid size-12 place-items-center rounded-full bg-white text-[#d6336c] ring-1 ring-black/5 sm:right-4 sm:top-16"
+          aria-label="Events: what's on, and host your own"
+          title="Events"
         >
-          <Trophy className="size-6" />
-          {tutorialGlow === "challenge" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
+          <PartyPopper className="size-6" />
+          {eventLights.some((l) => l.playing) && <span className="absolute -right-0.5 -top-0.5 size-3 rounded-full bg-hit ring-2 ring-white" />}
+          {tutorialGlow === "events" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
         </button>
       )}
       {/* Notifications off on this phone: a bell on the right, halfway down, to switch them on (gone
@@ -4127,9 +4166,9 @@ export function Game({
               setMeOpen(false);
               setChatOpen(true);
             },
-            challenge: () => {
+            events: () => {
               setChatOpen(false);
-              setFightOpen(true);
+              setEventsOpen(true);
             },
             camera: () => setCamera("photo"),
             profile: () => {

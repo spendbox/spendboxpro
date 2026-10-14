@@ -102,7 +102,9 @@ treasuries can't pay, the pay is owed and paid when they can. The Lagos treasury
 | Income tax | 7% | Pay |
 | Rent tax | 10% | Rent |
 | Property tax | 3% | Buying property |
-| VAT | 7.5% | Private health care and treats |
+| VAT | 7.5% | Private health care and treats; event tickets (inside the price) |
+| Income tax on ticket sales | 7% | When an event you hosted is over (docs/EVENTS.md) |
+| Event permit | ₦100,000 an hour and up | Hosting a party (docs/EVENTS.md) |
 
 All of it goes 70% to Lagos State and 30% to Nigeria.
 

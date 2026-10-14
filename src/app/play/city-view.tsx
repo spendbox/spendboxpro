@@ -34,7 +34,6 @@ import { regionMap } from "@/lib/world";
 import { GATED_SPOTS, type RegionMap } from "@/lib/world/compile";
 import { toTile } from "@/lib/world/geo";
 import { BUILDING_LABEL, type Building } from "@/lib/world/buildings";
-import { landNow, shortLocal, valueOf } from "@/lib/world/value";
 import { propertyInfo, type PropertyInfo } from "@/lib/world/property";
 import { workplaceOfTile, type Workplace } from "@/lib/world/workplace";
 import type { MapBusiness } from "@/lib/world/business";
@@ -352,7 +351,9 @@ type Props = {
   /** Your friends who are in a place right now: each one's face and name shows over it. */
   friendsAt?: CityFriendPin[];
   /** Challenges on the map (src/app/play/fight): a beam of light shining up from each one. */
-  challengeLights?: { id: number; x: number; z: number; colour: string; playing: boolean; endsAt?: number | null }[];
+  challengeLights?: { id: number; x: number; z: number; colour: string; playing: boolean; endsAt?: number | null; label?: string | null }[];
+  /** A beam (or the bubble over it) was tapped: which one (events use their own ids, below zero). True: handled (the tap stops there). */
+  onLightTap?: (id: number) => boolean | void;
   /** A face on the map was tapped (someone's card). */
   onPerson?: (id: string) => void;
   /** Marks players left on the map, and one tapped. */
@@ -1543,6 +1544,7 @@ export function CityView({
   worldEvents,
   focusEvent = null,
   onEventTap,
+  onLightTap,
   onEventInfo,
   liveVenues,
   clockOffsetMs = 0,
@@ -1591,7 +1593,7 @@ export function CityView({
     setHouses: (list: TownHouse[] | undefined) => void;
     setDance: (me: CityDance | null, others: CityDancer[]) => void;
     setFriendPins: (list: CityFriendPin[]) => void;
-    setChallengeLights: (list: { id: number; x: number; z: number; colour: string; playing: boolean; endsAt?: number | null }[]) => void;
+    setChallengeLights: (list: { id: number; x: number; z: number; colour: string; playing: boolean; endsAt?: number | null; label?: string | null }[]) => void;
     setMarkTags: (list: CityMarkTag[]) => void;
     setRoomPeople: (list: CityPerson[]) => void;
     openRoom: (id: string) => void;
@@ -1604,10 +1606,10 @@ export function CityView({
     /** Zoom in (dir 1) or out (dir -1) a step: the + and − buttons on a computer. */
     zoom: (dir: number) => void;
   } | null>(null);
-  const cb = useRef({ onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick, onAtGate, onBubbleSignIn });
+  const cb = useRef({ onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onLightTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick, onAtGate, onBubbleSignIn });
   const atmos = useRef({ progress, nightFirst, meAvatar, weather });
   useEffect(() => {
-    cb.current = { onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick, onAtGate, onBubbleSignIn };
+    cb.current = { onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onLightTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick, onAtGate, onBubbleSignIn };
     atmos.current = { progress, nightFirst, meAvatar, weather };
   });
 
@@ -4592,7 +4594,7 @@ export function CityView({
           : anchor.name
             ? anchor.name
             : anchor.building && currentPlan.region
-              ? propertyName(anchor.building, anchor, currentPlan.region)
+              ? propertyName(anchor.building)
               : `${shortAddress(addressOf(currentPlan, anchor))} · ${ROOM_LABEL[anchor.kind]}`;
       const capacity = levels.reduce((n, l) => n + l.capacity, 0);
       const type = anchor.home ? "home" : anchor.station ? "station" : anchor.kind === "structure" && anchor.structure ? anchor.structure.type : anchor.kind;
@@ -4619,12 +4621,14 @@ export function CityView({
       cb.current.onProperty({ ...info, workplace: workplaceOfTile(currentPlan, anchor) });
       return true;
     }
-    /** A property on the real map: what it is and what it's worth ("Block of flats · ₥31,240"). */
-    function propertyName(b: Building, at: Tile, region: RegionMap) {
+    /**
+     * A property on the real map, by what it is ("Block of flats"), its name if it has one. No
+     * price over buildings: the city is for people and places first, and what a building is worth
+     * shows on its card when it's tapped.
+     */
+    function propertyName(b: Building) {
       const kind = BUILDING_LABEL[b.kind];
-      const what = b.name ?? (b.state === "site" ? "Building site" : b.state === "uncompleted" ? `Unfinished ${kind.toLowerCase()}` : kind);
-      const value = valueOf(b, landNow(region, at.x, at.z), region.region.prices).total;
-      return `${what} · ${shortLocal(value, region.region.prices)}`;
+      return b.name ?? (b.state === "site" ? "Building site" : b.state === "uncompleted" ? `Unfinished ${kind.toLowerCase()}` : kind);
     }
     /** A name for signs inside a building (company, hotel, hospital...). */
     function signName(anchor: Tile) {
@@ -4746,8 +4750,36 @@ export function CityView({
         /** The seconds left to join, floating over the beam (a canvas on a sprite). */
         label: { sprite: THREE.Sprite; tex: THREE.CanvasTexture; canvas: HTMLCanvasElement; shown: string };
         colour: string;
+        /** Text that always shows in the bubble (events: "LIVE", "SOON"), instead of the countdown. */
+        text: string | null;
       }
     >();
+    /** The beam whose bubble (or the beam itself) is under a tap, if any. */
+    const lightTmp = new THREE.Vector3();
+    function lightAt(clientX: number, clientY: number): number | null {
+      const rect = renderer.domElement.getBoundingClientRect();
+      const px = (v: THREE.Vector3) => ({ x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((1 - v.y) / 2) * rect.height, ok: v.z < 1 });
+      let best: number | null = null;
+      let bestD = 30;
+      for (const [id, b] of challengeBeams) {
+        b.label.sprite.getWorldPosition(lightTmp);
+        const top = px(lightTmp.project(camera));
+        b.obj.getWorldPosition(lightTmp);
+        const base = px(lightTmp.project(camera));
+        if (!top.ok || !base.ok) continue;
+        // Distance from the tap to the line from the beam's foot up to its bubble (the bubble counts a little wider).
+        const dx = top.x - base.x;
+        const dy = top.y - base.y;
+        const len2 = dx * dx + dy * dy || 1;
+        const t = Math.max(0, Math.min(1, ((clientX - base.x) * dx + (clientY - base.y) * dy) / len2));
+        const d = Math.hypot(clientX - (base.x + dx * t), clientY - (base.y + dy * t)) - (t > 0.85 ? 14 : 0);
+        if (d < bestD) {
+          bestD = d;
+          best = id;
+        }
+      }
+      return best;
+    }
     /** Draw the countdown (or "LIVE" once it's being played) on a challenge's floating label. */
     function drawChallengeLabel(b: { label: { tex: THREE.CanvasTexture; canvas: HTMLCanvasElement; shown: string }; colour: string }, text: string) {
       if (b.label.shown === text) return;
@@ -4770,7 +4802,7 @@ export function CityView({
       g.fillText(text, W / 2, H / 2 + 4);
       b.label.tex.needsUpdate = true;
     }
-    function setChallengeLights(list: { id: number; x: number; z: number; colour: string; playing: boolean; endsAt?: number | null }[]) {
+    function setChallengeLights(list: { id: number; x: number; z: number; colour: string; playing: boolean; endsAt?: number | null; label?: string | null }[]) {
       const keep = new Set(list.map((c) => c.id));
       for (const [id, b] of challengeBeams) {
         if (keep.has(id)) continue;
@@ -4787,6 +4819,7 @@ export function CityView({
         if (had) {
           had.playing = c.playing;
           had.endsAt = c.endsAt ?? null;
+          had.text = c.label ?? null;
           continue;
         }
         const obj = new THREE.Group();
@@ -4816,7 +4849,7 @@ export function CityView({
         for (const m of obj.children) if (m !== sprite) m.renderOrder = 4;
         obj.position.set(c.x, 0, c.z);
         life.add(obj);
-        const b = { obj, beam, rings, playing: c.playing, endsAt: c.endsAt ?? null, geos: [beamGeo, core, ringGeo], label: { sprite, tex, canvas, shown: "" }, colour: c.colour };
+        const b = { obj, beam, rings, playing: c.playing, endsAt: c.endsAt ?? null, geos: [beamGeo, core, ringGeo], label: { sprite, tex, canvas, shown: "" }, colour: c.colour, text: c.label ?? null };
         challengeBeams.set(c.id, b);
       }
     }
@@ -4837,8 +4870,8 @@ export function CityView({
         b.beam.opacity = 0.3 + 0.14 * Math.sin(time * (b.playing ? 2 : 5)) + flash * 0.35;
         b.label.sprite.scale.setScalar(1.1 + flash * 0.25);
         b.label.sprite.position.y = 2.6 + Math.sin(time * 2) * 0.12;
-        drawChallengeLabel(b, b.playing ? "LIVE" : searching ? String(secs) : "");
-        b.label.sprite.visible = b.playing || searching;
+        drawChallengeLabel(b, b.text ?? (b.playing ? "LIVE" : searching ? String(secs) : ""));
+        b.label.sprite.visible = b.text !== null || b.playing || searching;
       }
     }
     function setFriendPins(list: CityFriendPin[]) {
@@ -7237,6 +7270,9 @@ export function CityView({
         return;
       }
       if (moved > 8 || !quick) return;
+      // A beam of light (a challenge, or an event someone is hosting), or the bubble over it.
+      const lightTap = cb.current.onLightTap ? lightAt(e.clientX, e.clientY) : null;
+      if (lightTap !== null && cb.current.onLightTap?.(lightTap) === true) return;
       // An event's pin (drawn over everything): what's happening there.
       const pinTap = isRevealed && cb.current.onEventInfo ? worldEventsLayer.pinAt(e.clientX, e.clientY) : null;
       if (pinTap !== null) {
@@ -7907,7 +7943,7 @@ export function CityView({
     api.current?.setFriendPins(friendsRef.current ?? []);
   }, [friendsKey, tileCount, seed]);
 
-  const lightsKey = (challengeLights ?? []).map((c) => `${c.id}@${c.x},${c.z}|${c.colour}|${c.playing}`).join(";");
+  const lightsKey = (challengeLights ?? []).map((c) => `${c.id}@${c.x},${c.z}|${c.colour}|${c.playing}|${c.label ?? ""}`).join(";");
   const lightsRef = useRef(challengeLights);
   useEffect(() => {
     lightsRef.current = challengeLights;
