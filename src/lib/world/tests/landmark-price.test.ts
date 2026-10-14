@@ -2,17 +2,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { landmarkPriceMint, landmarkPriceNaira, LANDMARK_MAX_NAIRA, LANDMARK_MIN_NAIRA } from "../landmark-price.ts";
+import { landmarkPriceMint, landmarkPriceNaira, LANDMARK_MIN_NAIRA } from "../landmark-price.ts";
 import { regionMap } from "../index.ts";
 
 const map = regionMap("lagos")!;
 
-test("every Lagos landmark costs crazy money: ₦50bn to ₦2tn, in round billions", () => {
+test("every Lagos landmark costs crazy money: ₦50bn and up (no top), in round billions", () => {
   const all = [...map.landmarks, ...map.spotList.map((s) => ({ ...s, type: s.kind }))];
   assert.ok(all.length > 20);
   for (const l of all) {
     const p = landmarkPriceNaira(l);
-    assert.ok(p >= LANDMARK_MIN_NAIRA && p <= LANDMARK_MAX_NAIRA, `${l.name}: ${p}`);
+    assert.ok(p >= LANDMARK_MIN_NAIRA, `${l.name}: ${p}`);
     assert.equal(p % 1e9, 0, `${l.name} is a round number`);
   }
 });
@@ -22,12 +22,14 @@ test("the same landmark always costs the same", () => {
   assert.equal(landmarkPriceNaira(l), landmarkPriceNaira({ ...l }));
 });
 
-test("bigger costs more, and the airport is the dearest", () => {
+test("bigger costs more, with no top", () => {
   const small = landmarkPriceNaira({ type: "market", w: 2, d: 2, name: "A Market" });
   const big = landmarkPriceNaira({ type: "market", w: 4, d: 4, name: "A Market" });
   assert.ok(big > small * 1.8);
   const airport = map.landmarks.find((l) => l.id === "airport")!;
-  assert.equal(landmarkPriceNaira(airport), LANDMARK_MAX_NAIRA);
+  // No top: the biggest landmarks cost more than the old ₦2tn ceiling.
+  assert.ok(landmarkPriceNaira(airport) > 2_000e9);
+  assert.ok(landmarkPriceNaira({ ...airport, w: airport.w * 2, d: airport.d * 2 }) > landmarkPriceNaira(airport) * 1.8);
   const club = landmarkPriceNaira({ type: "club", name: "Some Club" });
   assert.ok(club >= LANDMARK_MIN_NAIRA && club < 100e9);
 });

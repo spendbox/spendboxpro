@@ -8,7 +8,14 @@
 --        gone for everyone (the town keeps itself tidy).
 --      - Photos: small JPEGs in the public "town" bucket (they go with their message).
 --
+--   3. Landmarks have no top price any more (the biggest cost the most): the database's sanity
+--      check on a landmark's price goes up out of the way (₦1.5 quadrillion).
+--
 -- Safe to run more than once.
+
+insert into public.game_settings (key, value, note) values
+  ('landmark_price_max', 1000000000000, 'Sanity check only (no top price): the most a landmark can be sold for, in mint')
+on conflict (key) do update set value = excluded.value, note = excluded.note;
 
 -- ============================================================ 1. no jobs on the map
 create or replace function public.people_on_map(p_viewer uuid, p_region text, p_x0 int, p_x1 int, p_z0 int, p_z1 int, p_limit int) returns jsonb

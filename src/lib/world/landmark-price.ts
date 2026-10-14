@@ -44,9 +44,8 @@ const BASE: Record<string, { naira: number; w: number; d: number }> = {
 };
 const OTHER = { naira: 100e9, w: 2, d: 2 };
 
-/** The cheapest and dearest a landmark can be (naira). */
+/** The cheapest a landmark can be (naira). There's no top: the biggest cost the most. */
 export const LANDMARK_MIN_NAIRA = 50e9;
-export const LANDMARK_MAX_NAIRA = 2_000e9;
 
 /** A small, steady difference between landmarks of the same kind (−8%..+8%), from the name. */
 function wobble(name: string) {
@@ -63,7 +62,7 @@ function nice(naira: number) {
 
 /**
  * A landmark's price in naira: its kind's price, bigger or smaller with the ground it covers
- * (twice the ground costs about 1.4 times as much), always ₦50bn to ₦2tn, rounded.
+ * (twice the ground costs about 1.4 times as much), never under ₦50bn and with no top, rounded.
  */
 export function landmarkPriceNaira(l: { type: string; w?: number; d?: number; name: string }): number {
   const b = BASE[l.type] ?? OTHER;
@@ -71,7 +70,7 @@ export function landmarkPriceNaira(l: { type: string; w?: number; d?: number; na
   const d = Math.max(1, l.d ?? b.d);
   const size = Math.sqrt((w * d) / (b.w * b.d));
   const raw = b.naira * size * wobble(l.name);
-  return nice(Math.min(LANDMARK_MAX_NAIRA, Math.max(LANDMARK_MIN_NAIRA, raw)));
+  return nice(Math.max(LANDMARK_MIN_NAIRA, raw));
 }
 
 /** The same in mint (a region's perMint naira to the mint), to the cent. */
