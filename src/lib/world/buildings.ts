@@ -9,6 +9,7 @@
 
 import type { Tile } from "../city/layout.ts";
 import { hash } from "../city/noise.ts";
+import { grownStoreys, rebuiltKind, STOREY_CAP } from "./growth.ts";
 
 export type BuildingKind =
   // Homes
@@ -273,7 +274,7 @@ export function buildingFor(
   density: number,
   seed: number,
   wealth = 0.5,
-  where: { face?: 0 | 1 | 2 | 3; estate?: EstatePlan | null } = {},
+  where: { face?: 0 | 1 | 2 | 3; estate?: EstatePlan | null; growth?: number } = {},
 ): Building | null {
   if (!LOTS.has(t.kind) || t.home) return null;
   const id = `${regionId}:${t.x},${t.z}`;
@@ -281,12 +282,14 @@ export function buildingFor(
   const zone = t.kind === "tower" ? "central" : t.kind === "office" ? "busy" : density < 0.04 ? "edge" : "quiet";
   const mix = zone === "central" ? CENTRAL : zone === "busy" ? BUSY : zone === "edge" ? EDGE : QUIET;
   const estate = zone === "quiet" ? where.estate : null;
-  const kind = estate ? estate.kind : pickFrom(shifted(mix, wealth), h(1));
+  const level = where.growth ?? 0;
+  // As the city grows (./growth.ts), low buildings nobody owns are rebuilt as blocks, and blocks go taller.
+  const kind = estate ? estate.kind : rebuiltKind(pickFrom(shifted(mix, wealth), h(1)), zone, h(21), level);
   const open = kind === "land" || kind === "farm";
   const roll = h(2);
   const r3 = h(3);
   const state: BuildingState = open ? "built" : r3 < SITE ? "site" : r3 < SITE + UNFINISHED[zone] ? "uncompleted" : "built";
-  const storeys = storeysFor(kind, roll, density);
+  const storeys = grownStoreys(kind, storeysFor(kind, roll, density), level);
   const plot = plotFor(kind, h(4));
   const look: Building["look"] = estate ? estate.look : [h(5), h(6), h(7), h(8), h(9)];
   const b: Building = { id, kind, state: estate ? "built" : state, storeys, plot, units: unitsFor(id, kind, storeys, plot, roll), look, face: where.face ?? 0 };
@@ -303,4 +306,27 @@ export function buildingTop(b: Building) {
   if (b.kind === "land" || b.kind === "farm") return 0.25;
   const built = b.state === "built" ? b.storeys : b.state === "uncompleted" ? Math.max(1, Math.ceil(b.storeys * 0.6)) : 1;
   return 0.08 + built * STOREY + (b.kind === "bungalow" || b.kind === "duplex" || b.kind === "terrace" || b.kind === "rooming" ? 0.25 : 0.1);
+}
+
+/** Storeys a sold-out block gains each time it grows. */
+const GROW_BY: Partial<Record<BuildingKind, number>> = { flats: 2, mixed: 2, plaza: 1, offices: 3, apartments: 4, glass: 4 };
+
+/**
+ * A sold-out block, grown (docs/GROWTH.md): more storeys, and the new flats, offices or shops on
+ * them added at the end of its units, so every unit already owned keeps its number, name and size.
+ * Null when it can't grow (a house, a shop row, a plot, or as tall as its kind goes).
+ */
+export function grownBuilding(b: Building, seed: number): Building | null {
+  const by = GROW_BY[b.kind];
+  const cap = STOREY_CAP[b.kind];
+  if (!by || !cap || b.state !== "built" || b.storeys >= cap) return null;
+  const storeys = Math.min(cap, b.storeys + by);
+  const m = /:(-?\d+),(-?\d+)$/.exec(b.id);
+  if (!m) return null;
+  const roll = hash(Number(m[1]), Number(m[2]), seed + 7702);
+  const have = new Set(b.units.map((u) => u.label));
+  const fresh = unitsFor(b.id, b.kind, storeys, b.plot, roll).filter((u) => !have.has(u.label));
+  if (!fresh.length) return null;
+  const units = [...b.units, ...fresh.map((u, k) => ({ ...u, id: `${b.id}/${b.units.length + k}` }))];
+  return { ...b, storeys, units };
 }

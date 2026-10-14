@@ -10,6 +10,7 @@ import { regionMap } from "@/lib/world";
 import { BUILDING_LABEL, type Building } from "@/lib/world/buildings";
 import { BUSINESS_KINDS, CATEGORIES, leasePrice, STOREY_AFTER_DAYS, upgradePrice, UPGRADES, type MapBusiness } from "@/lib/world/business";
 import { ownedSpot } from "@/lib/world/owned";
+import { syncGrowth } from "@/lib/world/growth-server";
 import { toTile } from "@/lib/world/geo";
 
 // Real businesses on the map (docs/BUSINESS.md; the database part is game-db/043_business.sql). A
@@ -32,6 +33,9 @@ export type LeaseOffer = { building: string; region: string; what: string; area:
 
 /** What a building would cost to lease, or why it can't be (a landmark, a player's, already leased). */
 export async function leaseOffer(buildingId: string): Promise<{ ok: true; offer: LeaseOffer } | { ok: false; error: string }> {
+  // The city as big as it has grown (docs/GROWTH.md).
+  const growIn = ownedSpot(buildingId ?? "")?.region;
+  if (growIn) await syncGrowth(growIn);
   const spot = ownedSpot(buildingId ?? "");
   const plan = spot ? planFor(spot.region) : null;
   const map = spot ? regionMap(spot.region) : null;
@@ -256,6 +260,7 @@ export function adPlaces(region: string): AdPlace[] {
  * no business has it. At most `limit`, and only those up to `maxNaira` a year when given.
  */
 export async function leasableNear(region: string, x: number, z: number, maxNaira?: number, limit = 30): Promise<LeaseOffer[]> {
+  await syncGrowth(region);
   const map = regionMap(region);
   const plan = planFor(region);
   if (!map || !plan) return [];
@@ -294,6 +299,7 @@ export async function leasableNear(region: string, x: number, z: number, maxNair
 
 /** Good picks across the whole city (no area chosen): a few free buildings from each district, cheapest first. */
 export async function leasableAcross(region: string, maxNaira?: number): Promise<LeaseOffer[]> {
+  await syncGrowth(region);
   const map = regionMap(region);
   if (!map) return [];
   const places = map.region.districts.slice(0, 12).map((d) => toTile(map.frame, { lat: d.at.lat, lon: d.at.lon }));
@@ -311,6 +317,7 @@ export async function leasableAcross(region: string, maxNaira?: number): Promise
  * is looking and across the city's districts. The advertiser taps an amount and steps through them.
  */
 export async function leasableByPrice(region: string, naira: number, x?: number, z?: number): Promise<LeaseOffer[]> {
+  await syncGrowth(region);
   const map = regionMap(region);
   if (!map || !(naira > 0)) return [];
   const spots = map.region.districts.slice(0, 16).map((d) => toTile(map.frame, { lat: d.at.lat, lon: d.at.lon }));

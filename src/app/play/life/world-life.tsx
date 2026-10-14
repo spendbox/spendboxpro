@@ -43,6 +43,7 @@ import { JobsHere, type JobsContext } from "./jobs-here";
 import type { SearchHit } from "./map-search";
 import { HomeFinder } from "./home-finder";
 import { StartLife } from "./start-life";
+import { growthOf, setGrowth } from "@/lib/world/growth";
 import { useLife } from "./use-life";
 import { confirmTopUp } from "../topup-actions";
 import { moveOut, myRental, renameHome, type Rental } from "../property-actions";
@@ -142,6 +143,28 @@ export function useWorldLife({
   onWallet?: () => void;
 }) {
   const region = useMemo(() => regionMap(regionId), [regionId]);
+  // How far the city has grown with its players (docs/GROWTH.md): buildings nobody owns are drawn
+  // as tall as the server prices them. Asked when the city opens, and every ten minutes.
+  const [growth, setGrowthNow] = useState(0);
+  useEffect(() => {
+    if (!regionId || pretend) return;
+    let alive = true;
+    const ask = () =>
+      void fetch(`/api/city-growth?region=${regionId}`)
+        .then((r) => (r.ok ? (r.json() as Promise<{ level: number }>) : null))
+        .then((g) => {
+          if (!alive || !g) return;
+          setGrowth(regionId, g.level);
+          setGrowthNow(growthOf(regionId));
+        })
+        .catch(() => {});
+    ask();
+    const t = setInterval(ask, 10 * 60_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [regionId, pretend]);
   const { assets, owned, loaded, refresh } = useLife(api, signedIn ? regionId : null);
   const [property, setProperty] = useState<PropertyInfo | null>(null);
   const [owners, setOwners] = useState<BuildingOwner[] | null>(null);
@@ -1606,7 +1629,9 @@ export function useWorldLife({
 
   // Leased buildings stand as their business made them (a refit, more storeys), with its name.
   const shown = useMemo<OwnedProperty[]>(() => {
-    if (!region || !businesses.length) return owned;
+    // A new list when the city grows, so the 3D city is built again, taller (growthOf is read there).
+    void growth;
+    if (!region || !businesses.length) return [...owned];
     const plan = planOf(region);
     const extra: OwnedProperty[] = [];
     for (const b of businesses) {
@@ -1615,8 +1640,8 @@ export function useWorldLife({
       if (!base || owned.some((o) => o.id === b.building)) continue;
       extra.push({ id: b.building, building: { ...base, kind: b.kind ?? base.kind, storeys: b.storeys ?? base.storeys, state: "built" } as typeof base, name: b.name });
     }
-    return extra.length ? [...owned, ...extra] : owned;
-  }, [owned, businesses, region]);
+    return [...owned, ...extra];
+  }, [owned, businesses, region, growth]);
 
   // Every leased building's design goes on the billboards (its logo until it uploads one; with
   // neither, a billboard of its name and what it's about).
