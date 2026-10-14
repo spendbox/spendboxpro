@@ -17,23 +17,32 @@ the numbers and upgrades at `/advertiser`.
 - In the wizard: pick a state, then search an area, tap a monthly amount and step through buildings
   at that price, or tap a building on the map. Add a logo and billboard picture and see it lit up, then
   the details, how many months, and pay.
-- Landmarks can't be leased, nor any building players own part of; players can't buy units in a
-  leased building while the lease runs.
+- Landmarks can't be leased.
+- **Buildings people live in** (anything with homes: rooming houses, bungalows, duplexes, terraces,
+  flats, apartments, shops with flats) can be leased even when players own homes there. They keep
+  their homes, and anyone can still buy and live in its homes while the lease runs, so advertising
+  never takes places to live off the map (game-db/094). Nobody can rename the building while it's
+  leased, and the business can't refit it or add storeys. Its card has **Homes in this building**.
+- Other buildings (offices, plazas, shops, towers, warehouses, land) can only be leased when no player
+  owns any of it, and players can't buy units in them while the lease runs.
 - The business gives its name, what kind of business, what it does, its **real address**, phone,
   WhatsApp, website and logo. It signs in later with that email at `/advertiser`.
 - **One live lease per account for now, and at most one new lease a week.**
 
+A building costs at least **3 times** billboard ads alone (the smallest billboard ad is ₦5,000 a week,
+₦20,000 for 4 weeks), because it comes with the billboards and a building with your name besides.
+
 | Building | A month (before the area) |
 | --- | --- |
-| Lock-up shops, shop with flats, bungalow, rooming house, land | ₦5,000–₦6,000 |
-| Duplex, terrace | ₦15,000 |
-| Flats, warehouse | ₦20,000 |
-| Office block | ₦30,000 |
-| Shopping plaza, apartment tower | ₦60,000 |
-| Glass tower | ₦150,000 |
+| Lock-up shops, shop with flats, bungalow, rooming house, land | ₦60,000–₦72,000 |
+| Duplex, terrace | ₦180,000 |
+| Flats, warehouse | ₦240,000 |
+| Office block | ₦360,000 |
+| Shopping plaza, apartment tower | ₦720,000 |
+| Glass tower | ₦1,500,000 |
 
-The area changes it about 0.6× (cheapest areas) to 2× (Ikoyi, VI), never under ₦5,000 or over ₦250,000
-a month. A lease runs 30 days for each month paid (leases from before monthly ones keep their year),
+The area changes it about 0.6× (cheapest areas) to 2× (Ikoyi, VI), never under ₦60,000 or over ₦3m a
+month. A lease runs 30 days for each month paid (leases from before monthly ones keep their year),
 or until it has been tapped as many times as it covers (₦20 a tap). Upgrades are priced from the
 monthly price: another month is a month's price, a refit 40% of it, a storey a month's price, a bright
 sign ₦15,000.

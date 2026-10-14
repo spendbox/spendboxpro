@@ -1,6 +1,6 @@
 "use client";
 
-import { Globe, MapPin, MessageCircle, Phone } from "@/components/icons";
+import { Globe, House, MapPin, MessageCircle, Phone } from "@/components/icons";
 import type { BusinessHit, MapBusiness } from "@/lib/world/business";
 import { Sheet } from "../sheet";
 
@@ -12,7 +12,7 @@ const waNumber = (p: string) => {
 };
 
 /** A real business on the map: what they do, where they really are, and how to reach them. */
-export function BusinessSheet({ b, onHit, onClose }: { b: MapBusiness; onHit: (kind: BusinessHit) => void; onClose: () => void }) {
+export function BusinessSheet({ b, onHit, onClose, onHomes }: { b: MapBusiness; onHit: (kind: BusinessHit) => void; onClose: () => void; onHomes?: () => void }) {
   const btn = "flex h-11 flex-1 items-center justify-center gap-2 rounded-full text-sm font-semibold";
   return (
     <Sheet onClose={onClose} title={<span className="truncate">{b.name}</span>}>
@@ -59,6 +59,15 @@ export function BusinessSheet({ b, onHit, onClose }: { b: MapBusiness; onHit: (k
           <MapPin className="size-4" /> Directions
         </a>
       </div>
+      {onHomes && (
+        <button onClick={onHomes} className="mt-3 flex w-full items-center gap-3 rounded-2xl bg-[#ebfbee] px-3 py-2.5 text-left text-sm">
+          <House className="size-5 shrink-0 text-[#2b8a3e]" />
+          <span className="min-w-0 flex-1">
+            <b className="block">Homes in this building</b>
+            <span className="block text-xs text-muted">People still live here. See the homes, buy one or move in.</span>
+          </span>
+        </button>
+      )}
       <p className="mt-4 text-center text-[11px] text-muted">A real business with a building in Newtown. Anything you arrange with them happens outside the game.</p>
     </Sheet>
   );

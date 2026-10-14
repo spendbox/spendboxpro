@@ -11,6 +11,7 @@ import { findBuildings, findBuildingsByPrice, offerFor } from "../../business/ac
 import { LeaseForm } from "../../business/lease-form";
 import { Billboard } from "../../advertise/billboard";
 import { usePicture } from "../../advertise/use-picture";
+import { PreparingOverlay } from "../../advertise/upload-progress";
 import { blank, snapshotScene } from "../city/snapshot";
 import { searchable, type SearchHit } from "./map-search";
 import { BILLBOARD_STEPS, BillboardWizard } from "./billboard-wizard";
@@ -41,7 +42,7 @@ const STATES = [
 const stateRegion = (name: string) => Object.keys(REGIONS).find((id) => REGIONS[id].name.toLowerCase() === name.toLowerCase()) ?? null;
 
 /** Amounts to tap: the map takes you to a free building at that price a month. */
-const AMOUNTS = [5_000, 10_000, 20_000, 40_000, 60_000, 100_000, 150_000, 250_000];
+const AMOUNTS = [60_000, 100_000, 150_000, 250_000, 400_000, 750_000, 1_500_000, 3_000_000];
 const naira = (n: number) => `₦${Math.round(n).toLocaleString("en-NG")}`;
 const shortNaira = (n: number) => (n >= 1_000_000 ? `₦${n / 1_000_000}m` : `₦${Math.round(n / 1000)}k`);
 
@@ -170,11 +171,9 @@ export function AdvertisePanel({
       setError(null);
       setChosen(r.offer);
       setSmall(false);
-      // A building tapped (or the panel opened from one): that's the building way.
-      if (modeRef.current !== "building") {
-        setMode("building");
-        setStep(0);
-      } else setStep((s) => (s === 2 ? 1 : s));
+      // A building tapped (or the panel opened from one): remembered. On the first screen you still
+      // choose what kind of ad (it's waiting if you choose a building); already choosing a building, it's this one.
+      if (modeRef.current === "building") setStep((s) => (s === 2 ? 1 : s));
     });
     return () => {
       alive = false;
@@ -333,6 +332,11 @@ export function AdvertisePanel({
                     <span className="block text-xs text-muted">
                       Your name lit up on a real building, and your picture on the billboards too. Paid by the month ({naira(LEASE_MIN)} to {naira(LEASE_MAX)} a month, by size and area).
                     </span>
+                    {chosen && (
+                      <span className="mt-1.5 block rounded-lg bg-white/70 px-2 py-1 text-xs">
+                        <b>The one you tapped:</b> {chosen.what}, {chosen.area} · {naira(chosen.priceNaira)} a month
+                      </span>
+                    )}
                   </span>
                 </button>
                 <p className="text-[11px] text-muted">You see it on the map before you pay. You can go back at any time.</p>
@@ -423,7 +427,7 @@ export function AdvertisePanel({
                           value={typed}
                           onChange={(e) => setTyped(e.target.value)}
                           inputMode="numeric"
-                          placeholder="Your own amount a month, e.g. 30000"
+                          placeholder="Your own amount a month, e.g. 200000"
                           className="h-10 min-w-0 flex-1 rounded-full bg-ink/[0.05] px-4 text-base outline-none ring-gold focus:ring-2"
                         />
                         <button className="h-10 shrink-0 rounded-full bg-ink px-4 text-sm font-semibold text-white">Go</button>
@@ -507,8 +511,12 @@ export function AdvertisePanel({
                 <p className="text-[11px] text-muted">
                   The map behind shows it live: your building glows with your name, and your picture is on the billboards near you. Tap the arrow at the top to see more of the map.
                 </p>
-                <button onClick={() => go(2)} className="h-11 w-full rounded-full bg-ink font-semibold text-white">
-                  Next: your details
+                <button
+                  onClick={() => go(2)}
+                  disabled={logo.preparing !== null || board.preparing !== null}
+                  className="h-11 w-full rounded-full bg-ink font-semibold text-white disabled:opacity-60"
+                >
+                  {logo.preparing !== null || board.preparing !== null ? "Preparing your pictures…" : "Next: your details"}
                 </button>
               </div>
             )}
@@ -546,15 +554,16 @@ export function AdvertisePanel({
 function PicturePick({ label, hint, pic, square }: { label: string; hint: string; pic: ReturnType<typeof usePicture>; square?: boolean }) {
   return (
     <label className="flex cursor-pointer flex-col items-center gap-1 rounded-2xl bg-ink/[0.04] p-2 text-center ring-1 ring-line">
-      <span className={`grid w-full place-items-center overflow-hidden rounded-xl bg-panel ${square ? "aspect-square max-h-24" : "aspect-[2/1]"}`}>
+      <span className={`relative grid w-full place-items-center overflow-hidden rounded-xl bg-panel ${square ? "aspect-square max-h-24" : "aspect-[2/1]"}`}>
         {pic.url ? (
           // eslint-disable-next-line @next/next/no-img-element -- a local preview
           <img src={pic.url} alt="" className="size-full object-cover" />
         ) : (
           <ImagePlus className="size-6 text-muted" />
         )}
+        <PreparingOverlay value={pic.preparing} />
       </span>
-      <span className="text-xs font-semibold">{pic.url ? `Change ${label.toLowerCase()}` : `Upload ${label.toLowerCase()}`}</span>
+      <span className="text-xs font-semibold">{pic.preparing !== null ? "Preparing…" : pic.url ? `Change ${label.toLowerCase()}` : `Upload ${label.toLowerCase()}`}</span>
       <span className="text-[10px] text-muted">{pic.error ?? hint}</span>
       <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(e) => void pic.pick(e.target.files?.[0])} />
     </label>

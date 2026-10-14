@@ -9,7 +9,7 @@ import { Building2, ChartColumn, CreditCard, Hourglass, ImageUp, MapPin, Megapho
 
 const STEPS: { icon: LucideIcon; title: string; text: string }[] = [
   { icon: MapPin, title: "Choose", text: "Billboards, or a building" },
-  { icon: CreditCard, title: "Pay", text: "From ₦5,000 a week or month" },
+  { icon: CreditCard, title: "Pay", text: "Billboards from ₦5,000 a week" },
   { icon: Rocket, title: "Live", text: "Your building and billboards" },
 ];
 

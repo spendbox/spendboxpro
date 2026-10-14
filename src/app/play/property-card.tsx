@@ -76,8 +76,8 @@ export function PropertyCard({
   const [details, setDetails] = useState(false);
   const open = details || mineAny;
   const [jobsOpen, setJobsOpen] = useState(false);
-  // Nobody owns any of it: a business can lease it.
-  const leasable = market ? (market.owners ?? []).length === 0 : true;
+  // A business can lease it when nobody owns any of it, or when it has homes (people keep living there, game-db/094).
+  const leasable = market ? (market.owners ?? []).length === 0 || info.units.some((u) => u.use === "home") : true;
   return (
     <Sheet onClose={onClose} wide clear>
       <div className="sticky -top-5 z-10 -mx-5 -mt-5 flex items-start justify-between gap-3 bg-panel/95 px-5 pb-2 pt-5">

@@ -29,7 +29,8 @@ function planFor(region: string) {
   return p;
 }
 
-export type LeaseOffer = { building: string; region: string; what: string; area: string; address: string; priceNaira: number };
+/** residential: it has homes (people can still buy and live in them while a business leases it, game-db/094). */
+export type LeaseOffer = { building: string; region: string; what: string; area: string; address: string; priceNaira: number; residential?: boolean };
 
 /** What a building would cost to lease, or why it can't be (a landmark, a player's, already leased). */
 export async function leaseOffer(buildingId: string): Promise<{ ok: true; offer: LeaseOffer } | { ok: false; error: string }> {
@@ -48,7 +49,9 @@ export async function leaseOffer(buildingId: string): Promise<{ ok: true; offer:
     db.from("property_units").select("unit_id", { count: "exact", head: true }).eq("building_id", buildingId),
     db.from("business_leases").select("id", { count: "exact", head: true }).eq("building_id", buildingId).eq("status", "live"),
   ]);
-  if (owned) return { ok: false, error: "Players own part of that building, so it can't be leased." };
+  // A building with homes can be leased with people living in it (they keep their homes); others only when nobody owns any of it.
+  const residential = b.units.some((u) => u.use === "home");
+  if (owned && !residential) return { ok: false, error: "Players own part of that building, so it can't be leased." };
   if (leased) return { ok: false, error: "Another business has that building." };
   return {
     ok: true,
@@ -59,6 +62,7 @@ export async function leaseOffer(buildingId: string): Promise<{ ok: true; offer:
       area: map.areaAt(spot.x, spot.z),
       address: addressOf(plan, t),
       priceNaira: leasePrice(b.kind, map.landPriceAt(spot.x, spot.z)),
+      residential,
     },
   };
 }
@@ -123,6 +127,7 @@ export async function startLeaseCheckout(form: FormData): Promise<Checkout> {
     p_logo: logo,
     p_kobo: kobo,
     p_reference: reference,
+    p_residential: !!offer.offer.residential,
   });
   if (error) {
     const paths = [logo, boardPath].filter((x): x is string => !!x);
@@ -170,7 +175,14 @@ export async function startUpgradeCheckout(advertiserId: string, leaseId: string
   const { error } = await db.rpc("business_upgrade_start", { p_advertiser: advertiserId, p_lease: leaseId, p_upgrade: u.id, p_kind: u.id === "rebuild" ? kind : null, p_kobo: kobo, p_reference: reference });
   if (error) {
     const code = error.message.split(":")[0];
-    return { ok: false, error: code === "too_soon" ? `A storey can be added from ${STOREY_AFTER_DAYS} days after your lease starts.` : code === "already" ? "You have that already." : "That didn't work. Try again." };
+    return {
+      ok: false,
+      error:
+        code === "too_soon" ? `A storey can be added from ${STOREY_AFTER_DAYS} days after your lease starts.`
+        : code === "already" ? "You have that already."
+        : code === "lived_in" ? "People live in this building, so it can't be refitted or given more storeys."
+        : "That didn't work. Try again.",
+    };
   }
   return startPayment({
     email: String(adv?.email ?? ""),
@@ -290,7 +302,7 @@ export async function leasableNear(region: string, x: number, z: number, maxNair
       if (!b || b.id !== `${region}:${tx},${tz}`) continue;
       const price = leasePrice(b.kind, map.landPriceAt(tx, tz));
       if (maxNaira && price > maxNaira) continue;
-      found.push({ building: b.id, region, what: BUILDING_LABEL[b.kind], area: map.areaAt(tx, tz), address: addressOf(plan, t), priceNaira: price, d: Math.hypot(dx, dz) });
+      found.push({ building: b.id, region, what: BUILDING_LABEL[b.kind], area: map.areaAt(tx, tz), address: addressOf(plan, t), priceNaira: price, residential: b.units.some((u) => u.use === "home"), d: Math.hypot(dx, dz) });
     }
   found.sort((a, b) => a.d - b.d);
   const near = found.slice(0, limit * 3);
@@ -301,9 +313,11 @@ export async function leasableNear(region: string, x: number, z: number, maxNair
     db.from("property_units").select("building_id").in("building_id", ids),
     db.from("business_leases").select("building_id").in("building_id", ids).eq("status", "live"),
   ]);
-  const taken = new Set([...((owned ?? []) as { building_id: string }[]), ...((leased ?? []) as { building_id: string }[])].map((r) => r.building_id));
+  // Leased already: taken. Owned by players: taken, unless people live there (a building with homes can still be leased, game-db/094).
+  const owners = new Set(((owned ?? []) as { building_id: string }[]).map((r) => r.building_id));
+  const leasedNow = new Set(((leased ?? []) as { building_id: string }[]).map((r) => r.building_id));
   return near
-    .filter((o) => !taken.has(o.building))
+    .filter((o) => !leasedNow.has(o.building) && (o.residential || !owners.has(o.building)))
     .slice(0, limit)
     .map(({ d: _d, ...o }) => {
       void _d;
