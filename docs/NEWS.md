@@ -15,3 +15,14 @@ the host of, area boys asking a billboard for "settlement"). Players make the ne
 (`src/app/play/news-actions.ts`): a home bought for ₥15,000 or more, a business lighting up a
 building and a Rich Family arrival each become a headline, said with some fun, and a fresh one
 breaks in at the top of the screen. The list goes on as you scroll, back weeks.
+
+## Tap through and see it happen
+
+Tapping **Show me** on a story (or tapping a breaking-news pop-up) flies you there and the story plays
+out on the spot for a few minutes, using the world-event scenes (src/app/play/city/events): fire
+engines at a fire, water on the roads in a flood, barriers and a works truck for road works, a
+carnival or masquerade for a festival, a motorcade for a star or a rich arrival, an owambe for a big
+home buy, a ribbon cutting for a new business, a victory dance for a challenge won. Street-life
+stories pick theirs by what they're about (a goat chase brings animals into traffic, a jollof war a
+food festival). `scene` on each story (src/lib/world/news.ts) names it; it's drawn on your phone only,
+near the story's spot, and has no reward to grab.

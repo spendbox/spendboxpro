@@ -2277,10 +2277,10 @@ export function Game({
             onBalloons={setBalloonCount}
             revealed={phase !== "join" || !!worldId}
             caughtFaces={worldId ? undefined : state.caughtFaces}
-            worldEvents={worldId ? NO_WORLD_EVENTS : state.worldEvents}
+            worldEvents={worldId ? (worldLife.newsScene ?? NO_WORLD_EVENTS) : state.worldEvents}
             focusEvent={focusEvent}
             onEventTap={onEventTap}
-          onEventInfo={setEventInfo}
+          onEventInfo={worldId ? undefined : setEventInfo}
           liveVenues={liveVenues}
             clockOffsetMs={clockOffset}
             onHover={setHover}

@@ -9,7 +9,18 @@ import { toTile } from "./geo.ts";
 
 export type NewsKind = "weather" | "fire" | "traffic" | "power" | "market" | "star" | "sport" | "flood" | "roads" | "festival" | "city" | "fun" | "money" | "game";
 
-export type NewsItem = { id: string; at: number; kind: NewsKind; title: string; text: string; area?: string; x?: number; z?: number };
+export type NewsItem = {
+  id: string;
+  at: number;
+  kind: NewsKind;
+  title: string;
+  text: string;
+  area?: string;
+  x?: number;
+  z?: number;
+  /** What plays out on the map when you tap through to it: a world event's key (src/lib/world-events.ts). */
+  scene?: string;
+};
 
 export type WeatherKind = "clear" | "cloudy" | "rain" | "fog";
 
@@ -85,6 +96,50 @@ const FUN: ((a: string, l: string) => [string, string])[] = [
   (a) => [`Phone repairer in ${a} fixes cracked screen in 4 minutes, customers line up round the block`, `He says the secret is "experience and small prayer".`],
 ];
 
+/** What's happening at the spot when you go and look: each kind of story, and the street-life ones by what they're about. */
+const KIND_SCENE: Partial<Record<NewsKind, string>> = {
+  fire: "building_fire",
+  traffic: "tyre_pileup",
+  power: "power_outage",
+  market: "market_day",
+  star: "celebrity_visit",
+  flood: "flash_flood",
+  roads: "bridge_inspection",
+  city: "ribbon_cutting",
+  fun: "street_party",
+  festival: "carnival",
+};
+const WORD_SCENE: [RegExp, string][] = [
+  [/goat|cow/i, "runaway_cows"],
+  [/owambe/i, "owambe"],
+  [/generator|power bank/i, "blackout_party"],
+  [/pastor/i, "tyre_pileup"],
+  [/NEPA|paints house gold/i, "tower_light_show"],
+  [/okada rider/i, "bike_race"],
+  [/parallel park/i, "film_shoot"],
+  [/mama put|jollof|food/i, "food_festival"],
+  [/landlord/i, "water_tanker"],
+  [/DJ/, "flash_mob"],
+  [/billboard/i, "street_mural"],
+  [/wedding/i, "wedding_convoy"],
+  [/tourist|agbero/i, "free_bus"],
+  [/football/i, "street_football"],
+  [/gate/i, "royal_motorcade"],
+  [/busker/i, "drumming_circle"],
+  [/billionaire/i, "celebrity_visit"],
+  [/thugs/i, "street_party"],
+  [/repairer/i, "black_friday"],
+  [/eyo/i, "masquerade"],
+  [/carnival/i, "carnival"],
+  [/fashion/i, "rooftop_fashion"],
+  [/concert/i, "stadium_concert"],
+];
+function sceneOf(n: NewsItem): string | undefined {
+  if (n.kind === "sport") return n.title.startsWith("Big win") ? "fireworks" : "street_football";
+  if (n.kind === "fun" || n.kind === "festival") for (const [re, key] of WORD_SCENE) if (re.test(n.title)) return key;
+  return KIND_SCENE[n.kind];
+}
+
 /** One story for a 20-minute slot. */
 function storyOf(slot: number, p: ReturnType<typeof placesOf>): NewsItem {
   const at = slot * STORY_MS;
@@ -144,7 +199,14 @@ export type PlayerEvent = {
 };
 
 /** A player's big moment as a headline, said with some fun (the same words each time for the same event). */
-export function playerStory(e: PlayerEvent, area: string, price: string): Pick<NewsItem, "title" | "text"> {
+export function playerStory(e: PlayerEvent, area: string, price: string): Pick<NewsItem, "title" | "text" | "scene"> {
+  return { ...playerWords(e, area, price), scene: PLAYER_SCENE[e.kind] };
+}
+
+/** What's happening at the spot when you go and look: a housewarming owambe, a ribbon cut, a motorcade, a victory dance. */
+const PLAYER_SCENE: Record<PlayerEvent["kind"], string> = { buy: "owambe", business: "ribbon_cutting", rich: "celebrity_visit", challenge: "lottery_winner" };
+
+function playerWords(e: PlayerEvent, area: string, price: string): Pick<NewsItem, "title" | "text"> {
   let h = 0;
   for (const c of e.id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   const pick = <T,>(xs: T[]) => xs[h % xs.length];
@@ -186,7 +248,10 @@ export function cityNews(region: RegionMap, now = Date.now(), count = 15): NewsI
   const p = placesOf(region);
   const out: NewsItem[] = [];
   const slot = Math.floor(now / STORY_MS);
-  for (let k = 0; k < count; k++) out.push(storyOf(slot - k, p));
+  for (let k = 0; k < count; k++) {
+    const n = storyOf(slot - k, p);
+    out.push({ ...n, scene: sceneOf(n) });
+  }
   // The weather's turns in the last few slots.
   const ws = Math.floor(now / WEATHER_MS);
   for (let k = 0; k < 3; k++) {

@@ -197,4 +197,6 @@ export type WorldEvent = {
   /** Coins still up for grabs, and whether you already took yours. */
   slotsLeft?: number;
   claimed?: boolean;
+  /** A news story's scene, on this phone only: keep it at the story's spot (a fitting place only if one is close). */
+  near?: boolean;
 };
