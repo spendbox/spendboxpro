@@ -312,6 +312,7 @@ function SectionIcon({ icon: Icon }: { icon: LucideIcon }) {
 }
 
 /** Amounts in the player's currency ("₥100" → "₦150,000"), and "mint" said as "money". */
-function moneyWords(line: string) {
+function moneyWords(line: React.ReactNode): React.ReactNode {
+  if (typeof line !== "string") return line;
   return cashText(line).replace(/\bmint\b/g, "money").replace(/\bMint\b/g, "Money");
 }
