@@ -2527,9 +2527,9 @@ export function Game({
         </div>
       </div>
 
-      {/* Watchers on a phone: the logo and the name, small, in 3D letters, floating at the upper right, just under the numbers row (clear of the Sign in button). */}
+      {/* Watchers on a phone: the logo and the name, small, in 3D letters, floating in the middle of the screen (taps go through to the map). */}
       {guest && worldId && !place && ride === null && !camera && (
-        <div className="pointer-events-none absolute right-3 top-[6.6rem] z-[5] flex justify-end sm:hidden" title="Newtown">
+        <div className="pointer-events-none absolute inset-0 z-[5] grid place-items-center sm:hidden" title="Newtown">
           <span className="title-float-sm flex items-center gap-1.5">
             <LogoMark size={26} className="rounded-[7px] shadow-[0_6px_14px_rgba(0,0,0,0.35)]" />
             <span className="title-3d-sm font-display text-[26px] font-black italic leading-none tracking-tight text-white">Newtown</span>
@@ -3285,7 +3285,12 @@ export function Game({
         {/* The real map, out on the streets: the buttons are in a column down the left (below). Inside a
             place or on a ride the place's own bar takes over; walking, only Stop walking. Explore is
             hidden for now. */}
-        {/* Signed out: a small white button to advertise on the map. */}
+        {/* Signed out: a bigger gold Sign in button, then a small white button to advertise on the map. */}
+        {worldId && guest && !place && ride === null && (
+          <button onClick={() => setSignIn({ why: null })} className="pointer-events-auto flex h-11 items-center rounded-full bg-gold px-7 text-sm font-bold text-ink shadow-lg">
+            Sign in to play
+          </button>
+        )}
         {worldId && guest && !place && ride === null && (
           <button onClick={() => openAdvertise()} className="pointer-events-auto flex h-8 items-center gap-1.5 rounded-full bg-white/90 px-3 text-xs font-semibold text-ink shadow ring-1 ring-black/5">
             <Megaphone className="size-3.5 text-[#e8590c]" />
@@ -4011,7 +4016,7 @@ export function Game({
       {/* The people you dealt with lately, down the left side (folds away). */}
       {worldId && !guest && !camera && (
         <div className="pointer-events-none fixed left-0 top-1/2 z-10 -translate-y-1/2">
-          <RecentRail onPerson={setPersonId} onMessage={chatWith} />
+          <RecentRail meId={state.me.guest ? undefined : state.me.id} onPerson={setPersonId} onMessage={chatWith} />
         </div>
       )}
       {/* In a planned home: the joystick walks you round it (or tap the floor). */}

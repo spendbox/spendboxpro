@@ -37,8 +37,10 @@ export function rememberPerson(p: { id: string; name: string; avatar?: unknown }
   window.dispatchEvent(new Event("nt-recent"));
 }
 
-export function RecentRail({ onPerson, onMessage }: { onPerson: (id: string) => void; onMessage: (p: { id: string; name: string }) => void }) {
-  const [list, setList] = useState<Recent[]>([]);
+export function RecentRail({ meId, onPerson, onMessage }: { meId?: string; onPerson: (id: string) => void; onMessage: (p: { id: string; name: string }) => void }) {
+  const [all, setList] = useState<Recent[]>([]);
+  // Never you yourself.
+  const list = meId ? all.filter((r) => r.id !== meId) : all;
   const [open, setOpenNow] = useState(false);
   // Who of them is online (asked now and every minute): only they show.
   const [online, setOnline] = useState<Set<string> | null>(null);
