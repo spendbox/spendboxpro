@@ -114,6 +114,7 @@ export function useWorldLife({
   rowOutside,
   meName,
   onTripFailed,
+  onWallet,
 }: {
   api: PropertyApi;
   regionId: string | null;
@@ -137,6 +138,8 @@ export function useWorldLife({
   meName?: string;
   /** Going in straight away, the fare there couldn't be paid: back out. */
   onTripFailed?: () => void;
+  /** Open the Wallet at the starter packs (to pay for one there: card or bank transfer). */
+  onWallet?: () => void;
 }) {
   const region = useMemo(() => regionMap(regionId), [regionId]);
   const { assets, owned, loaded, refresh } = useLife(api, signedIn ? regionId : null);
@@ -446,7 +449,11 @@ export function useWorldLife({
     const ref = new URLSearchParams(window.location.search).get("topup");
     if (!ref) return;
     void confirmTopUp(ref).then(async (r) => {
-      setMessage(r.ok ? { text: `Your top-up is in: +${cash(r.mint ?? 0)}${r.doubled ? " (your first one, doubled!)" : ""}`, good: true } : { text: r.error ?? "That payment hasn't gone through.", good: false });
+      setMessage(
+        r.ok
+          ? { text: r.pack ? `Your starter pack is in: +${cash(r.mint ?? 0)}` : `Your top-up is in: +${cash(r.mint ?? 0)}${r.doubled ? " (your first one, doubled!)" : ""}`, good: true }
+          : { text: r.error ?? "That payment hasn't gone through.", good: false },
+      );
       const url = new URL(window.location.href);
       url.searchParams.delete("topup");
       window.history.replaceState(null, "", url);
@@ -463,7 +470,7 @@ export function useWorldLife({
         .checkMyPacks()
         .then(async (r) => {
           if (!r.ok) return;
-          setMessage({ text: `Your pack is in: ${cash(r.mint ?? 0)} to start with.`, good: true });
+          setMessage({ text: r.topup ? `Your payment is in: +${cash(r.mint ?? 0)}` : `Your pack is in: ${cash(r.mint ?? 0)} to start with.`, good: true });
           await refresh();
         })
         .catch(() => {});
@@ -874,6 +881,12 @@ export function useWorldLife({
             )
           }
           onPack={async (id) => {
+            // In the game: start (free home, ₦2m), then pay for the pack in the Wallet.
+            if (onWallet) {
+              if (!life) await act(() => api.startLife(region.region.id), () => null);
+              setWelcomeShut(true);
+              return onWallet();
+            }
             setBusy(true);
             const r = await api.startPack(id, region.region.id);
             setBusy(false);

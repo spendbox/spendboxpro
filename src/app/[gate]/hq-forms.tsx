@@ -1,11 +1,12 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { hqClearBuildingName, hqClearHomeName, hqClearPhoto, hqDeleteMessage, hqRecheckPack, hqSignIn, hqSignOut, hqStopAd, hqTakeDown } from "./actions";
+import { hqClearBuildingName, hqClearHomeName, hqClearPhoto, hqCredit, hqDeleteMessage, hqRecheckPack, hqRecheckTopUp, hqSignIn, hqSignOut, hqStopAd, hqTakeDown, type CreditState } from "./actions";
 
-type HqKind = "pack" | "takedown" | "clearbuilding" | "clearhome" | "stopad" | "deletemsg" | "clearphoto";
+type HqKind = "pack" | "topup" | "takedown" | "clearbuilding" | "clearhome" | "stopad" | "deletemsg" | "clearphoto";
 const RUN: Record<HqKind, (id: string) => Promise<string>> = {
   pack: hqRecheckPack,
+  topup: hqRecheckTopUp,
   takedown: hqTakeDown,
   clearbuilding: hqClearBuildingName,
   clearhome: hqClearHomeName,
@@ -63,5 +64,28 @@ export function HqButton({ kind, id, label, danger }: { kind: HqKind; id: string
     >
       {busy ? "…" : label}
     </button>
+  );
+}
+
+/** Credit a player Newtown money by hand (asks first). */
+export function HqCredit() {
+  const [state, action, busy] = useActionState(hqCredit, null as CreditState);
+  return (
+    <form
+      action={action}
+      onSubmit={(e) => {
+        const f = new FormData(e.currentTarget);
+        if (!window.confirm(`Give ₦${String(f.get("naira") ?? "")} of game money to ${String(f.get("who") ?? "")}?`)) e.preventDefault();
+      }}
+      className="mt-2 grid gap-2 sm:grid-cols-[1fr_10rem_1.4fr_auto]"
+    >
+      <input name="who" required placeholder="Player's name or email" className={input} />
+      <input name="naira" required inputMode="numeric" placeholder="₦ amount" className={input} />
+      <input name="note" required maxLength={200} placeholder="Why (they see this)" className={input} />
+      <button disabled={busy} className="h-11 rounded-xl bg-gold px-5 font-semibold text-ink disabled:opacity-50">
+        {busy ? "…" : "Credit"}
+      </button>
+      {state && <p className={`text-sm sm:col-span-4 ${state.ok ? "text-me" : "text-hit"}`}>{state.text}</p>}
+    </form>
   );
 }
