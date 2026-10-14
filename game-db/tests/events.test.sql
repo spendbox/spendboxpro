@@ -46,6 +46,8 @@ declare
   id1 bigint;
   id2 bigint;
   id3 bigint;
+  id4 bigint;
+  coins0 numeric;
 begin
   -- The rules for hosting.
   perform pg_temp.fails('a title is needed', 'bad_title', format($q$select event_open(%L, 'lagos', 'party', 'rave', ' x ', '', 0, 0, '', false, now(), 60, 0, 400, 100, 3)$q$, a));
@@ -121,6 +123,29 @@ begin
   perform pg_temp.shift(id3, now(), now() + interval '1 hour');
   perform pg_temp.check(event_end(a, id3) = 'closed', 'ended early and settled');
   perform pg_temp.fails('three a day', 'too_many', format('select pg_temp.host(%L, now(), 60, 0)', a));
+
+  -- Hosting a party costs: paid at once, back if it's called off before it starts.
+  coins0 := (select coins from profiles where id = c);
+  v := event_open(c, 'lagos', 'party', 'street_party', 'Chi''s street party', '', 50, 50, 'Allen Avenue', true, now() + interval '1 day', 60, 0, 400, 50, 3, 70, 16);
+  id4 := (v->>'id')::bigint;
+  perform pg_temp.check((v->>'fee')::numeric = 70 and (select coins from profiles where id = c) = coins0 - 70, 'the hosting fee is paid');
+  perform pg_temp.fails('not enough for the fee', 'not_enough', format($q$select event_open(%L, 'lagos', 'party', 'rave', 'Rave', '', 200, 200, '', true, now(), 60, 0, 400, 50, 3, 99999, 16)$q$, d));
+  -- Another street party on the same stretch at the same time: no. Further along, or later: yes.
+  perform pg_temp.fails('street parties don''t overlap', 'street_taken', format($q$select event_open(%L, 'lagos', 'party', 'rave', 'Rave', '', 55, 52, 'Allen Avenue', true, now() + interval '1 day 30 minutes', 60, 0, 400, 50, 3, 0, 16)$q$, d));
+  v := event_open(d, 'lagos', 'party', 'rave', 'Rave', '', 55, 52, 'Allen Avenue', true, now() + interval '1 day 2 hours', 60, 0, 400, 50, 3, 0, 16);
+  perform pg_temp.check((v->>'id') is not null, 'the same street later is fine');
+  perform event_cancel(d, (v->>'id')::bigint);
+  v := event_open(d, 'lagos', 'party', 'rave', 'Rave', '', 80, 50, 'Allen Avenue', true, now() + interval '1 day', 60, 0, 400, 50, 3, 0, 16);
+  perform pg_temp.check((v->>'id') is not null, 'further along the road is fine');
+  perform event_cancel(d, (v->>'id')::bigint);
+  perform pg_temp.check(event_cancel(c, id4) = 'cancelled', 'called off');
+  perform pg_temp.check((select coins from profiles where id = c) = coins0, 'called off before it starts: the fee is back');
+  -- Once it has started, the fee is spent (the city's when it ends).
+  v := event_open(c, 'lagos', 'party', 'owambe', 'Owambe', '', 50, 50, 'Allen Avenue', true, now(), 60, 0, 400, 50, 3, 70, 16);
+  id4 := (v->>'id')::bigint;
+  perform pg_temp.check(event_end(c, id4) = 'closed', 'ended');
+  perform pg_temp.check((select coins from profiles where id = c) = coins0 - 70, 'ended: the fee is spent');
+
 end $$;
 
 \o

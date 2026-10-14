@@ -32,7 +32,7 @@ export type RegionMap = {
   /** Every single-tile landmark with where it stands (for lists: Explore). */
   spotList: (Spot & { x: number; z: number })[];
   /** Downtowns and quieter districts, for how built-up each spot is (as CityPlan centres). */
-  centres: { x: number; z: number; radius: number; weight: number }[];
+  centres: { x: number; z: number; radius: number; weight: number; landPrice?: number }[];
   /** Is there a footbridge over the road here (from the map)? */
   footbridgeAt: (x: number, z: number) => boolean;
   /** A road raised over land here (a flyover, an interchange, a bridge's approach)? */
@@ -327,7 +327,7 @@ export function compileRegion(region: Region): RegionMap {
   // ---- districts: a district's character fades out over about its radius
   const centres = region.districts.map((d) => {
     const c = at(d.at);
-    return { x: Math.round(c.x), z: Math.round(c.z), radius: (d.radiusKm * 10) / 1.5, weight: d.density };
+    return { x: Math.round(c.x), z: Math.round(c.z), radius: (d.radiusKm * 10) / 1.5, weight: d.density, landPrice: d.landPrice };
   });
 
   // ---- names for spots: the map's neighbourhoods and towns (in 20-tile cells for quick search),

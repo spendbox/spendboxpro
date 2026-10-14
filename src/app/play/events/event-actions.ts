@@ -1,10 +1,11 @@
 "use server";
 
+import { after } from "next/server";
 import { cleanAvatar } from "@/lib/avatar";
 import { currentUserId } from "@/lib/game";
 import { pushTo } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { REGIONS } from "@/lib/world";
+import { REGIONS, regionMap } from "@/lib/world";
 import {
   DAYS_AHEAD,
   EARLY_DOORS_MINS,
@@ -12,13 +13,18 @@ import {
   MINUTES_MAX,
   MINUTES_MIN,
   NEAR_TILES,
+  STREET_GAP_TILES,
   TICKET_MAX_NAIRA,
+  VENUE_COST,
+  areaK,
   cleanAbout,
   cleanStage,
   cleanTitle,
   eventFormat,
   eventStatus,
+  partyCost,
   type EventStatus,
+  type VenueKind,
   type StageState,
 } from "@/lib/world/events";
 import { tidy } from "@/lib/world/value";
@@ -52,12 +58,14 @@ function say(message: string): Fail {
     not_host: "Only the host can do that.",
     not_yet: `The doors open ${EARLY_DOORS_MINS} minutes before it starts. Say you're going and you'll be told.`,
     not_started: "It hasn't started yet. Call it off instead?",
+    street_taken: "Another street party is on that stretch of road then. Pick another road, further along, or another time.",
+    not_road: "That spot isn't on a road. Pick a street from the list.",
     bad_stage: "That's too much for the stage. Try fewer slides.",
     no_life: "Start your life in the city first.",
     frozen: "Your account is paused right now.",
     unknown_player: "Please sign in again.",
   };
-  if (code === "not_enough") return { ok: false, error: `You need ${arg ? `₥${arg}` : "more"} for the ticket.` };
+  if (code === "not_enough") return { ok: false, error: `You need ${arg ? `₥${arg}` : "more"} for that.` };
   if (words[code]) return { ok: false, error: words[code] };
   if (missing(message)) return { ok: false, error: OFF };
   console.error("Event failed", message);
@@ -229,6 +237,59 @@ export async function myEventRep(): Promise<{ hosted: number; attended: number }
   return { hosted: n(d.hosted), attended: n(d.attended) };
 }
 
+/**
+ * What kind of place a spot is, as the map says (the server's word, not the phone's): a road, a
+ * landmark, a famous spot; for an everyday place the map can't name here, what the phone says, but
+ * never cheaper than a park. null: "on the street" but no road there.
+ */
+function venueAt(region: string, x: number, z: number, onStreet: boolean, said: VenueKind): VenueKind | null {
+  const map = regionMap(region);
+  if (!map) return said;
+  const near = (f: (dx: number, dz: number) => boolean) => {
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (f(dx, dz)) return true;
+    return false;
+  };
+  if (onStreet) return near((dx, dz) => !!map.roadAt(x + dx, z + dz)) ? "street" : null;
+  const l = map.landmarks.find((m) => x >= m.ax - 1 && x <= m.ax + m.w && z >= m.az - 1 && z <= m.az + m.d);
+  if (l) return l.type === "hotel" || l.type === "spa" ? "food" : l.type === "bigpark" || l.type === "waterpark" || l.type === "funfair" ? "outdoors" : "landmark";
+  let spot: string | null = null;
+  for (let dz = -1; dz <= 1 && !spot; dz++) for (let dx = -1; dx <= 1 && !spot; dx++) spot = map.spotAt(x + dx, z + dz)?.kind ?? null;
+  if (spot === "club") return "nightlife";
+  if (spot === "restaurant") return "food";
+  if (spot === "park" || spot === "plaza" || spot === "playground") return "outdoors";
+  if (spot) return "landmark";
+  return VENUE_COST[said] && VENUE_COST[said].k >= VENUE_COST.outdoors.k ? said : "outdoors";
+}
+
+/** What hosting a party costs (naira), worked out here from the map. null: not on a road. */
+function hostingNaira(region: string, x: number, z: number, onStreet: boolean, said: VenueKind, minutes: number, capacity: number) {
+  const venue = venueAt(region, x, z, onStreet, said);
+  if (!venue) return null;
+  const map = regionMap(region);
+  return partyCost({ minutes, capacity, venue, area: map ? areaK(map.centres, x, z) : 1 }).naira;
+}
+
+/** What a party would cost to host (naira), for the host's form (the same sum as when it's hosted). */
+export async function partyPrice(input: { region: string; x: number; z: number; onStreet: boolean; venue: VenueKind; minutes: number; capacity: number }): Promise<number | null> {
+  if (!REGIONS[input.region]) return null;
+  return hostingNaira(input.region, Math.round(input.x), Math.round(input.z), !!input.onStreet, input.venue, Math.round(n(input.minutes)), Math.round(n(input.capacity)));
+}
+
+/** Street parties on now or coming up (for the host's road list: which stretches are taken, and when). */
+export async function streetParties(region: string): Promise<{ x: number; z: number; start: number; end: number; title: string }[]> {
+  if (!REGIONS[region]) return [];
+  const { data } = await createAdminClient()
+    .from("hosted_events")
+    .select("x, z, starts_at, ends_at, title")
+    .eq("region", region)
+    .eq("category", "party")
+    .eq("on_street", true)
+    .eq("status", "on")
+    .gt("ends_at", new Date().toISOString())
+    .limit(300);
+  return ((data ?? []) as { x: number; z: number; starts_at: string; ends_at: string; title: string }[]).map((r) => ({ x: n(r.x), z: n(r.z), start: Date.parse(r.starts_at), end: Date.parse(r.ends_at), title: String(r.title) }));
+}
+
 export type NewEvent = {
   region: string;
   format: string;
@@ -238,6 +299,8 @@ export type NewEvent = {
   z: number;
   place: string;
   onStreet: boolean;
+  /** What kind of place the phone says it is (checked against the map). */
+  venue: VenueKind;
   /** When it starts (ms). */
   startsAt: number;
   minutes: number;
@@ -247,7 +310,7 @@ export type NewEvent = {
 };
 
 /** Host an event. Everyone near the spot is told if it's starting soon; your friends are told either way. */
-export async function hostEvent(input: NewEvent): Promise<{ ok: true; id: number; startsAt: string } | Fail> {
+export async function hostEvent(input: NewEvent): Promise<{ ok: true; id: number; startsAt: string; fee: number; view: EventView | null } | Fail> {
   const f = eventFormat(String(input.format));
   if (!f) return { ok: false, error: "Pick what kind of event it is." };
   const region = String(input.region);
@@ -259,6 +322,15 @@ export async function hostEvent(input: NewEvent): Promise<{ ok: true; id: number
   const perMint = perMintOf(region);
   const db = createAdminClient();
   const starts = Number.isFinite(input.startsAt) ? new Date(Math.max(Date.now(), input.startsAt)) : new Date();
+  const x = Math.round(input.x);
+  const z = Math.round(input.z);
+  // Parties cost money to host (stages are free for now).
+  let feeMint = 0;
+  if (f.category === "party") {
+    const naira = hostingNaira(region, x, z, !!input.onStreet, input.venue, Math.round(n(input.minutes)), Math.round(n(input.capacity)));
+    if (naira === null) return say("not_road");
+    feeMint = Math.round((naira / perMint) * 100) / 100;
+  }
   const { data, error } = await db.rpc("event_open", {
     p_user: userId,
     p_region: region,
@@ -266,8 +338,8 @@ export async function hostEvent(input: NewEvent): Promise<{ ok: true; id: number
     p_format: f.id,
     p_title: title,
     p_about: cleanAbout(String(input.about ?? "")),
-    p_x: Math.round(input.x),
-    p_z: Math.round(input.z),
+    p_x: x,
+    p_z: z,
     p_place: String(input.place ?? "").replace(/\s+/g, " ").trim().slice(0, 80),
     p_on_street: !!input.onStreet,
     p_starts: starts.toISOString(),
@@ -276,12 +348,25 @@ export async function hostEvent(input: NewEvent): Promise<{ ok: true; id: number
     p_price_max: Math.round((TICKET_MAX_NAIRA / perMint) * 100) / 100,
     p_capacity: Math.round(n(input.capacity)),
     p_per_day: HOSTS_A_DAY,
+    p_fee: feeMint,
+    p_gap: STREET_GAP_TILES,
   });
   if (error) return say(error.message);
-  const d = (data ?? {}) as { id?: number; starts_at?: string };
+  const d = (data ?? {}) as { id?: number; starts_at?: string; fee?: number };
   const id = n(d.id);
   const startsAt = String(d.starts_at ?? starts.toISOString());
+  // The new event, so the phone can open it at once (no second trip).
+  const { data: row } = await db.from("hosted_events").select("*").eq("id", id).maybeSingle();
+  const view = row ? ((await views(db, [row as Record<string, unknown>], userId))[0] ?? null) : null;
+  // Telling people happens after the answer goes back, so the host isn't kept waiting.
+  after(() => tellPeople(db, { userId, region, title, f, input, startsAt, perMint }).catch((e) => console.error("Event notices failed", e)));
+  return { ok: true, id, startsAt, fee: n(d.fee), view };
+}
 
+async function tellPeople(
+  db: Db,
+  { userId, region, title, f, input, startsAt, perMint }: { userId: string; region: string; title: string; f: { title: string }; input: NewEvent; startsAt: string; perMint: number },
+) {
   // Who hears about it: friends always; everyone near the spot if it starts within 15 minutes.
   const { data: me } = await db.from("profiles").select("username").eq("id", userId).maybeSingle();
   const name = (me?.username as string | null) ?? "Someone";
@@ -311,7 +396,6 @@ export async function hostEvent(input: NewEvent): Promise<{ ok: true; id: number
       await pushTo(u).catch(() => {});
     }),
   );
-  return { ok: true, id, startsAt };
 }
 
 /** Going (or not any more). */

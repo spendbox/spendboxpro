@@ -1965,6 +1965,8 @@ export function Game({
   // Events (docs/EVENTS.md): what's on and hosting, their beams on the map, and parties' crowds.
   const [eventsOpen, setEventsOpen] = useState(false);
   const [eventLights, setEventLights] = useState<EventLight[]>([]);
+  // An event's beam (or its bubble) tapped on the map: open that event.
+  const [eventTapped, setEventTapped] = useState<{ id: number; at: number } | null>(null);
   const [eventScenes, setEventScenes] = useState<GameState["worldEvents"]>(NO_WORLD_EVENTS);
   const mapLights = useMemo(() => [...challengeLights, ...eventLights], [challengeLights, eventLights]);
   const newsScene = worldLife.newsScene;
@@ -2299,6 +2301,15 @@ export function Game({
             dance={isDancing && dancing ? { id: me.id, move: dancing.move, with: dancing.with } : null}
             friendsAt={worldId ? (walking ? facesOnMap.filter((f) => !f.mine) : facesOnMap) : friendsAt}
             challengeLights={worldId ? mapLights : undefined}
+            onLightTap={
+              worldId
+                ? (id) => {
+                    if (id >= 0) return false;
+                    setEventTapped({ id: -id, at: Date.now() });
+                    return true;
+                  }
+                : undefined
+            }
             onPerson={worldId ? (id) => (id.startsWith("home:") ? worldLife.goHome() : setPersonId(id)) : undefined}
             // Marks left on the city (writing, statues, trees...) are for signed-in players only.
             marks={worldId && !guest ? worldLife.marks : undefined}
@@ -2638,11 +2649,12 @@ export function Game({
           where={() => worldLife.centerRef.current?.() ?? null}
           places={worldLife.explore}
           describe={worldLife.describeSpot}
+          roads={worldLife.roadsNear}
+          openId={eventTapped}
           onLights={setEventLights}
           onScenes={setEventScenes}
           onMessage={(text, good) => setMessage({ text, tone: good ? "good" : "bad" })}
           onFly={(x, z) => worldLife.lookAt(x, z)}
-          onChallenge={() => setFightOpen(true)}
           onPerson={(id) => setPersonId(id)}
         />
       )}

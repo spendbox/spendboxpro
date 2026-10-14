@@ -197,7 +197,38 @@ a[href]:active,
   to { opacity: 0.2; transform: translateY(80vh) rotate(540deg); }
 }
 .event-rain { animation: event-rain 2.4s ease-in forwards; }
-@media (prefers-reduced-motion: reduce) { .events-pop, .event-float, .event-rain { animation: none; } }
+/* A message popping out of the chat and floating up the room, then fading. */
+@keyframes event-chat-rise {
+  0% { opacity: 0; transform: translateY(30px) scale(0.6) rotate(0); }
+  12% { opacity: 1; transform: translateY(0) scale(1.08) rotate(var(--tilt, 0deg)); }
+  20% { transform: translateY(-10px) scale(1) rotate(calc(var(--tilt, 0deg) * -1)); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-42vh) scale(0.95) rotate(var(--tilt, 0deg)); }
+}
+.event-chat-rise { animation: event-chat-rise 4.2s cubic-bezier(0.2, 0.8, 0.3, 1) forwards; }
+@keyframes event-pop-in {
+  from { opacity: 0; transform: scale(0.85) translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.event-pop-in { animation: event-pop-in 0.35s cubic-bezier(0.2, 1.5, 0.4, 1) both; }
+/* Dance moves on a face at a party. */
+@keyframes event-move-spin { to { transform: rotate(720deg); } }
+.event-move-spin { animation: event-move-spin 1.2s ease-in-out 2; }
+@keyframes event-move-jump { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-26px) scale(1.1); } 60% { transform: translateY(-22px); } }
+.event-move-jump { animation: event-move-jump 0.6s ease-out 4; }
+@keyframes event-move-wave { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-22deg); } 75% { transform: rotate(22deg); } }
+.event-move-wave { animation: event-move-wave 0.5s ease-in-out 5; }
+@keyframes event-move-shaku { 0%, 100% { transform: translateX(0) skewX(0); } 25% { transform: translateX(-10px) skewX(10deg); } 75% { transform: translateX(10px) skewX(-10deg); } }
+.event-move-shaku { animation: event-move-shaku 0.45s ease-in-out 5; }
+@keyframes event-move-zanku { 0%, 100% { transform: scale(1, 1); } 30% { transform: scale(1.25, 0.75) translateY(6px); } 60% { transform: scale(0.85, 1.2) translateY(-10px); } }
+.event-move-zanku { animation: event-move-zanku 0.55s ease-in-out 4; }
+/* The party is lit: everyone jumps at once. */
+@keyframes event-lit { 0%, 100% { transform: translateY(0); } 30% { transform: translateY(-18px) rotate(-6deg); } 60% { transform: translateY(-8px) rotate(6deg); } }
+.event-lit > * { animation: event-lit 0.5s ease-in-out 4; }
+@media (prefers-reduced-motion: reduce) {
+  .events-pop, .event-float, .event-rain, .event-chat-rise, .event-pop-in, .event-lit > *,
+  .event-move-spin, .event-move-jump, .event-move-wave, .event-move-shaku, .event-move-zanku { animation: none; }
+}
 @keyframes radar-sweep { to { transform: rotate(360deg); } }
 .radar-sweep { animation: radar-sweep 2.4s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .radar-ring, .radar-sweep { animation: none; } }

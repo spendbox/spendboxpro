@@ -5,11 +5,11 @@
 // a party (music, icebreakers, meeting someone new, shout-outs, toasts, spraying the host) or a
 // stage (slides or a video everyone watches together, reactions, questions for the speaker).
 
-/** The kinds of event. Parties and the stage are built; Game challenge opens the Challenge picker; the rest are coming. */
+/** The kinds of event. Parties and the stage are built; the rest (Game challenge included) are coming. */
 export const EVENT_CATEGORIES = [
   { id: "party", label: "Parties", icon: "🎉", colour: "#d6336c", blurb: "Street parties, owambes, concerts and raves. Music, dancing and meeting people.", ready: true },
   { id: "stage", label: "Talks & screenings", icon: "🎤", colour: "#7048e8", blurb: "Talks with slides, classes, open mics and watch parties: everyone sits and watches together.", ready: true },
-  { id: "games", label: "Game challenge", icon: "🏆", colour: "#f08c00", blurb: "Whot!, Ludo and more for a stake. Everyone nearby has a minute to join.", ready: true },
+  { id: "games", label: "Game challenge", icon: "🏆", colour: "#f08c00", blurb: "Whot!, Ludo and more for a stake. Everyone nearby has a minute to join.", ready: false },
   { id: "sport", label: "Sport & fitness", icon: "⚽", colour: "#2b8a3e", blurb: "Match viewings, street football, morning runs and workouts.", ready: false },
   { id: "market", label: "Pop-up market", icon: "🛍️", colour: "#e8590c", blurb: "A row of stalls for a day: sell your things and services.", ready: false },
   { id: "community", label: "Faith & community", icon: "🙏", colour: "#1c7ed6", blurb: "Prayer meetings, town meetings, clean-ups and drives.", ready: false },
@@ -202,8 +202,12 @@ export type StageState = {
   /** Where the video was (seconds) at `at` (ms, the host's clock). */
   pos: number;
   at: number;
+  /** A party's DJ: the songs (YouTube ids) still to play after this one. */
+  queue: string[];
 };
-export const EMPTY_STAGE: StageState = { mode: "none", slides: [], slide: 0, video: null, playing: false, pos: 0, at: 0 };
+export const EMPTY_STAGE: StageState = { mode: "none", slides: [], slide: 0, video: null, playing: false, pos: 0, at: 0, queue: [] };
+/** The most songs waiting in a party's queue. */
+export const QUEUE_MAX = 20;
 
 /** A stage state from anything (the database, a message): only what's allowed, the slides only from our own storage. */
 export function cleanStage(raw: unknown, slideBase?: string): StageState {
@@ -222,6 +226,7 @@ export function cleanStage(raw: unknown, slideBase?: string): StageState {
     playing: o.playing === true && mode === "video",
     pos: Math.max(0, num(o.pos)),
     at: Math.max(0, num(o.at)),
+    queue: (Array.isArray(o.queue) ? o.queue : []).filter((q): q is string => typeof q === "string" && /^[A-Za-z0-9_-]{11}$/.test(q)).slice(0, QUEUE_MAX),
   };
 }
 /** Where a stage's video should be now (seconds). */
@@ -282,6 +287,88 @@ export const TOASTS = ["To good friends! 🥂", "To the host! 👑", "To new beg
 
 /** Reactions for the stage and the party. */
 export const REACTIONS = ["👏", "🔥", "😂", "❤️", "😮", "🙌"];
+
+/** A hot seat question someone types (their own), tidied; null when too short. */
+export const HOT_MAX = 140;
+export function cleanQuestion(raw: string): string | null {
+  const t = raw.replace(/\s+/g, " ").trim().slice(0, HOT_MAX);
+  if (t.length < 5) return null;
+  return /[?？]$/.test(t) ? t : `${t}?`;
+}
+
+/** Dance moves everyone sees your face do at a party. */
+export const MOVES = [
+  { id: "spin", label: "Spin", icon: "🌀" },
+  { id: "jump", label: "Jump", icon: "🦘" },
+  { id: "wave", label: "Wave", icon: "👋" },
+  { id: "shaku", label: "Shaku", icon: "🕺" },
+  { id: "zanku", label: "Zanku", icon: "💃" },
+] as const;
+export type MoveId = (typeof MOVES)[number]["id"];
+
+/** The party's hype: every reaction, clink, shout-out and spray fills it; full, the party goes off. */
+export const HYPE_FULL = 100;
+export const HYPE_POINTS: Record<string, number> = { react: 1, clink: 2, shout: 5, toast: 4, spray: 10, move: 1, ans: 2, chat: 1 };
+
+// ---------------------------------------------------------------- what a party costs to host
+
+/** A party costs this much (naira) an hour to host, for the smallest crowd on a quiet street. */
+export const PARTY_NAIRA_PER_HOUR = 100_000;
+/** How many people can come, and how that multiplies the price. */
+export const CAPACITY_COST = [
+  { max: 20, k: 1 },
+  { max: 50, k: 1.25 },
+  { max: 100, k: 1.6 },
+  { max: 300, k: 2.4 },
+  { max: 1000, k: 4.5 },
+] as const;
+export const capacityK = (capacity: number) => (CAPACITY_COST.find((c) => capacity <= c.max) ?? CAPACITY_COST[CAPACITY_COST.length - 1]).k;
+/** What kind of place it's at, and how that multiplies the price. */
+export const VENUE_COST = {
+  street: { k: 1, label: "A street" },
+  outdoors: { k: 1.2, label: "A park or square" },
+  food: { k: 1.5, label: "A restaurant or hotel" },
+  nightlife: { k: 1.6, label: "A club" },
+  landmark: { k: 2, label: "A landmark" },
+} as const;
+export type VenueKind = keyof typeof VENUE_COST;
+/** Explore's groups (src/lib/world/explore.ts) as venue kinds. */
+export const VENUE_OF_GROUP: Record<string, VenueKind> = { parks: "outdoors", food: "food", nightlife: "nightlife", shopping: "landmark", culture: "landmark", sport: "landmark", travel: "landmark" };
+
+/**
+ * How pricey the area is (0.8 to 1.8): from the land price of the district round the spot (the
+ * dearest parts of town, Ikoyi, Victoria Island, Eko Atlantic, cost most), 1 out of any district.
+ */
+export function areaK(centres: { x: number; z: number; radius: number; landPrice?: number }[], x: number, z: number) {
+  let best = 0;
+  let k = 1;
+  for (const c of centres) {
+    if (!c.landPrice) continue;
+    const near = 1 - Math.hypot(c.x - x, c.z - z) / (c.radius * 1.5);
+    if (near <= best) continue;
+    best = near;
+    const own = Math.max(0.8, Math.min(1.8, 0.6 + c.landPrice / 1_000_000));
+    k = 1 + (own - 1) * Math.min(1, near * 1.5);
+  }
+  return Math.round(k * 100) / 100;
+}
+
+/** What a party costs to host (naira, to the nearest ₦1,000), and how it adds up. */
+export function partyCost(o: { minutes: number; capacity: number; venue: VenueKind; area: number }) {
+  const hours = Math.max(0.25, o.minutes / 60);
+  const parts = { hours, capacity: capacityK(o.capacity), venue: VENUE_COST[o.venue]?.k ?? 1, area: Math.max(0.8, Math.min(1.8, o.area || 1)) };
+  const naira = Math.round((PARTY_NAIRA_PER_HOUR * parts.hours * parts.capacity * parts.venue * parts.area) / 1000) * 1000;
+  return { naira, parts };
+}
+/** Called off before it starts: the hosting fee comes back. After that, it's spent. */
+export const FEE_BACK_BEFORE_START = true;
+
+/** Street parties can't overlap: none within this many tiles (100 m each) of another one on at the same time. */
+export const STREET_GAP_TILES = 16;
+/** Do two street parties clash (close enough, at the same time)? */
+export function streetClash(a: { x: number; z: number; start: number; end: number }, b: { x: number; z: number; start: number; end: number }) {
+  return Math.hypot(a.x - b.x, a.z - b.z) < STREET_GAP_TILES && a.start < b.end && b.start < a.end;
+}
 
 /** A deterministic pick from a list for a seed (so every phone shows the same card). */
 export const pick = <T,>(list: readonly T[], seed: number) => list[((Math.floor(seed) % list.length) + list.length) % list.length];

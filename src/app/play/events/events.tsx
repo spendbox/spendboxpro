@@ -15,6 +15,12 @@ import {
   HOSTS_A_DAY,
   HOST_SHARE,
   NEAR_TILES,
+  PARTY_NAIRA_PER_HOUR,
+  VENUE_COST,
+  VENUE_OF_GROUP,
+  partyCost,
+  streetClash,
+  type VenueKind,
   REP_MAX,
   REP_PER_HOSTED,
   TICKETS_NAIRA,
@@ -37,8 +43,9 @@ import { spiralIndex } from "@/lib/city/layout";
 import { cash, cashSymbol, fromShown, toShown } from "@/lib/world/value";
 import { playSfx } from "../sound";
 import { Sheet } from "../sheet";
-import { cancelEvent, endEvent, enterEvent, eventQuote, hostEvent, rsvpEvent, type EventQuote, type EventView } from "./event-actions";
+import { cancelEvent, endEvent, enterEvent, eventQuote, hostEvent, rsvpEvent, streetParties, type EventQuote, type EventView } from "./event-actions";
 import { PartyRoom } from "./party-room";
+import { RoomGuard } from "./room-kit";
 import { StageRoom } from "./stage-room";
 
 // Events on the map (docs/EVENTS.md). The Events button (top right) opens what's on (on now and
@@ -46,10 +53,12 @@ import { StageRoom } from "./stage-room";
 // nearby), when, tickets. Events shine on the map; a party on now fills its street with a dancing
 // crowd for everyone who looks. Going in opens the event's room over the map.
 
-export type EventLight = { id: number; x: number; z: number; colour: string; playing: boolean; endsAt: number | null };
+export type EventLight = { id: number; x: number; z: number; colour: string; playing: boolean; endsAt: number | null; label: string | null };
 type Me = { id: string; name: string; avatar: unknown };
-/** Where a spot is, in words: the named street nearest it (if any, with where it is) and its area. */
-export type SpotWords = { street: { name: string; x: number; z: number } | null; area: string };
+/** Where a spot is, in words: the named street nearest it (if any, with where it is), its area, and how dear the area is (src/lib/world/events.ts areaK). */
+export type SpotWords = { street: { name: string; x: number; z: number } | null; area: string; areaK: number };
+/** A named road near a spot (the nearest stretch of it), for a street party. */
+export type NearRoad = { name: string; x: number; z: number; dist: number; area: string; areaK: number };
 
 const INTRO_KEY = "nt-events-intro";
 const colourOf = (e: Pick<EventView, "category">) => eventCategory(e.category)?.colour ?? "#d6336c";
@@ -64,12 +73,13 @@ export function Events({
   where,
   places,
   describe,
+  roads,
   onLights,
   onScenes,
   onMessage,
   onFly,
-  onChallenge,
   onPerson,
+  openId,
 }: {
   region: string;
   me: Me | null;
@@ -80,14 +90,16 @@ export function Events({
   /** Places nearby to hold an event at (landmarks, restaurants, parks...). */
   places: () => ExplorePlace[];
   describe: (x: number, z: number) => SpotWords;
+  /** Named roads round a spot, nearest first. */
+  roads: (x: number, z: number) => NearRoad[];
   onLights: (lights: EventLight[]) => void;
   /** The party scenes to play on the map (a crowd dancing in the street...). */
   onScenes: (scenes: WorldEvent[]) => void;
   onMessage: (text: string, good: boolean) => void;
   onFly: (x: number, z: number) => void;
-  /** Game challenge: the Challenge picker. */
-  onChallenge: () => void;
   onPerson: (id: string) => void;
+  /** An event's beam (or the bubble over it) was tapped on the map: open it. */
+  openId?: { id: number; at: number } | null;
 }) {
   const [list, setList] = useState<EventView[]>([]);
   const [off, setOff] = useState(false);
@@ -132,6 +144,11 @@ export function Events({
     return () => clearInterval(t);
   }, []);
 
+  // Its beam tapped on the map: open it.
+  useEffect(() => {
+    if (openId) setDetail(openId.id);
+  }, [openId]);
+
   // A link to an event (?event=12): open it.
   useEffect(() => {
     if (!signedIn) return;
@@ -145,7 +162,7 @@ export function Events({
   useEffect(() => {
     const t = Date.now();
     const showing = list.filter((e) => e.status === "live" || (e.status === "upcoming" && Date.parse(e.startsAt) - t < 60 * 60_000));
-    cbs.current.onLights(showing.map((e) => ({ id: -e.id, x: e.x, z: e.z, colour: colourOf(e), playing: e.status === "live", endsAt: null })));
+    cbs.current.onLights(showing.map((e) => ({ id: -e.id, x: e.x, z: e.z, colour: colourOf(e), playing: e.status === "live", endsAt: null, label: e.status === "live" ? "LIVE" : "SOON" })));
     cbs.current.onScenes(
       list
         .filter((e) => e.status === "live" && eventFormat(e.format)?.scene)
@@ -181,16 +198,22 @@ export function Events({
     return () => clearInterval(t);
   }, [insideId, look, onMessage]);
 
+  // Going in: the room opens at once, and the server lets you in (and takes the ticket) meanwhile.
+  // If it says no (not enough money, full...), the room closes again with why.
   const goIn = async (e: EventView) => {
-    const r = await enterEvent(e.id).catch(() => fail());
-    if (!r.ok) return onMessage(r.error, false);
-    if (r.paid > 0) onMessage(`Ticket paid: ${cash(r.paid)}. Enjoy!`, true);
     playSfx("start");
     setDetail(null);
     onClose();
     onFly(e.x, e.z);
     setInside(e);
     setTucked(false);
+    if (e.me.in && !e.me.host) return;
+    const r = await enterEvent(e.id).catch(() => fail());
+    if (!r.ok) {
+      setInside((cur) => (cur?.id === e.id ? null : cur));
+      return onMessage(r.error, false);
+    }
+    if (r.paid > 0) onMessage(`Ticket paid: ${cash(r.paid)}. Enjoy!`, true);
     void look();
   };
 
@@ -220,21 +243,12 @@ export function Events({
           where={where}
           places={places}
           describe={describe}
+          roads={roads}
           onClose={onClose}
           onOpen={(id) => setDetail(id)}
-          onChallenge={() => {
-            onClose();
-            onChallenge();
-          }}
-          onHosted={async (id, startsNow) => {
-            await look();
-            if (startsNow) {
-              const v = await fetch(`/api/events?id=${id}`, { cache: "no-store" })
-                .then((r) => r.json() as Promise<{ view: EventView | null }>)
-                .then((d) => d.view)
-                .catch(() => null);
-              if (v) return void goIn(v);
-            }
+          onHosted={(id, startsNow, v) => {
+            void look();
+            if (startsNow && v) return void goIn(v);
             setDetail(id);
           }}
         />
@@ -293,17 +307,21 @@ export function Events({
           <span className="rounded-full bg-hit px-1.5 text-[10px]">LIVE</span>
         </button>
       )}
-      {inside && me && !tucked && (inside.category === "stage" ? (
-        <StageRoom key={inside.id} view={inside} me={me} onMin={() => setTucked(true)} onPerson={onPerson} onMessage={onMessage} onEnd={() => setConfirm({ kind: "end", e: inside })} />
-      ) : (
-        <PartyRoom key={inside.id} view={inside} me={me} onMin={() => setTucked(true)} onPerson={onPerson} onMessage={onMessage} onEnd={() => setConfirm({ kind: "end", e: inside })} />
-      ))}
+      {inside && me && !tucked && (
+        <RoomGuard key={inside.id} onClose={() => setTucked(true)}>
+          {inside.category === "stage" ? (
+            <StageRoom view={inside} me={me} onMin={() => setTucked(true)} onPerson={onPerson} onMessage={onMessage} onEnd={() => setConfirm({ kind: "end", e: inside })} />
+          ) : (
+            <PartyRoom view={inside} me={me} onMin={() => setTucked(true)} onPerson={onPerson} onMessage={onMessage} onEnd={() => setConfirm({ kind: "end", e: inside })} />
+          )}
+        </RoomGuard>
+      )}
       {confirm && (
         <Sheet onClose={() => setConfirm(null)} title={confirm.kind === "end" ? "End it now?" : "Call it off?"} centred>
           <p className="text-sm text-muted">
             {confirm.kind === "end"
               ? `Everyone leaves the room${confirm.e.price > 0 ? `, and your share of the tickets (${Math.round(HOST_SHARE * 100)}%) is paid to you` : ""}.`
-              : `Everyone going is told${confirm.e.price > 0 ? ", and every ticket bought is paid back" : ""}.`}
+              : `Everyone going is told${confirm.e.price > 0 ? ", and every ticket bought is paid back" : ""}.${confirm.e.category === "party" ? (confirm.e.status === "upcoming" ? " Your hosting fee comes back too." : " It has started, so the hosting fee is spent.") : ""}`}
           </p>
           <div className="mt-4 grid grid-cols-2 gap-2">
             <button onClick={() => setConfirm(null)} className="h-11 rounded-full bg-ink/5 text-sm font-semibold">
@@ -344,9 +362,9 @@ function EventsSheet({
   where,
   places,
   describe,
+  roads,
   onClose,
   onOpen,
-  onChallenge,
   onHosted,
 }: {
   region: string;
@@ -356,10 +374,10 @@ function EventsSheet({
   where: () => { x: number; z: number } | null;
   places: () => ExplorePlace[];
   describe: (x: number, z: number) => SpotWords;
+  roads: (x: number, z: number) => NearRoad[];
   onClose: () => void;
   onOpen: (id: number) => void;
-  onChallenge: () => void;
-  onHosted: (id: number, startsNow: boolean) => void;
+  onHosted: (id: number, startsNow: boolean, view: EventView | null) => void;
 }) {
   const [intro, setIntro] = useState(() => {
     try {
@@ -449,7 +467,7 @@ function EventsSheet({
           )}
         </>
       ) : (
-        <HostForm region={region} where={where} places={places} describe={describe} onChallenge={onChallenge} onOpen={onOpen} onHosted={onHosted} />
+        <HostForm region={region} where={where} places={places} describe={describe} roads={roads} onOpen={onOpen} onHosted={onHosted} />
       )}
     </Sheet>
   );
@@ -515,7 +533,7 @@ const typedOf = (mint: number) => {
   return String(v >= 100 ? Math.round(v) : Math.round(v * 100) / 100);
 };
 
-type Venue = { key: string; name: string; what: string; x: number; z: number; street: boolean; dist: number; suits: boolean };
+type Venue = { key: string; name: string; what: string; x: number; z: number; street: boolean; dist: number; suits: boolean; kind: VenueKind; areaK: number };
 
 /** Host an event: what kind, the name, where, when, tickets, and go. */
 function HostForm({
@@ -523,7 +541,7 @@ function HostForm({
   where,
   places,
   describe,
-  onChallenge,
+  roads,
   onOpen,
   onHosted,
 }: {
@@ -531,9 +549,9 @@ function HostForm({
   where: () => { x: number; z: number } | null;
   places: () => ExplorePlace[];
   describe: (x: number, z: number) => SpotWords;
-  onChallenge: () => void;
+  roads: (x: number, z: number) => NearRoad[];
   onOpen: (id: number) => void;
-  onHosted: (id: number, startsNow: boolean) => void;
+  onHosted: (id: number, startsNow: boolean, view: EventView | null) => void;
 }) {
   const [quote, setQuote] = useState<EventQuote | null>(null);
   useEffect(() => {
@@ -556,25 +574,43 @@ function HostForm({
   const [problem, setProblem] = useState<string | null>(null);
   const opened = useRef(Date.now());
 
-  // Where it can be: the street you're on, and the places round you (those that suit it first).
-  const [here] = useState(() => where());
-  const [nearby] = useState(() => places());
+  // Where it can be: any named road round the middle of your screen (move the map and look again
+  // to pick another), and the places round you (those that suit it first).
+  const [here, setHere] = useState(() => where());
+  const [nearby, setNearby] = useState(() => places());
+  const [nearRoads, setNearRoads] = useState<NearRoad[]>(() => (here ? roads(Math.round(here.x), Math.round(here.z)) : []));
+  const lookAgain = () => {
+    const at = where();
+    setHere(at);
+    setNearby(places());
+    setNearRoads(at ? roads(Math.round(at.x), Math.round(at.z)) : []);
+    setVenueKey(null);
+  };
+  // Street parties already on the roads (two can't share a stretch at the same time).
+  const [taken, setTaken] = useState<{ x: number; z: number; start: number; end: number; title: string }[]>([]);
+  useEffect(() => {
+    void streetParties(region).then(setTaken).catch(() => setTaken([]));
+  }, [region]);
   const venues = useMemo<Venue[]>(() => {
     const out: Venue[] = [];
-    if (here) {
+    for (const r of nearRoads) out.push({ key: `road:${r.name}`, name: `${r.name}, ${r.area}`, what: "On the street", x: r.x, z: r.z, street: true, dist: r.dist, suits: f.suits.includes("street"), kind: "street", areaK: r.areaK });
+    if (here && !nearRoads.length) {
       const w = describe(Math.round(here.x), Math.round(here.z));
-      const s = w.street;
-      out.push({ key: "street", name: s ? `${s.name}, ${w.area}` : `The street here, ${w.area}`, what: "On the street", x: s?.x ?? Math.round(here.x), z: s?.z ?? Math.round(here.z), street: true, dist: 0, suits: f.suits.includes("street") });
+      if (w.street) out.push({ key: "street", name: `${w.street.name}, ${w.area}`, what: "On the street", x: w.street.x, z: w.street.z, street: true, dist: 0, suits: f.suits.includes("street"), kind: "street", areaK: w.areaK });
     }
-    for (const p of nearby) out.push({ key: p.id, name: p.name, what: p.what, x: Math.round(p.x), z: Math.round(p.z), street: false, dist: p.dist, suits: (f.suits as string[]).includes(p.group) });
+    for (const p of nearby) {
+      const x = Math.round(p.x);
+      const z = Math.round(p.z);
+      out.push({ key: p.id, name: p.name, what: p.what, x, z, street: false, dist: p.dist, suits: (f.suits as string[]).includes(p.group), kind: VENUE_OF_GROUP[p.group] ?? "outdoors", areaK: describe(x, z).areaK });
+    }
     return out;
-  }, [here, nearby, describe, f]);
+  }, [here, nearby, nearRoads, describe, f]);
   const words = q.trim().toLowerCase();
   const shownVenues = venues
     .filter((v) => !words || `${v.name} ${v.what}`.toLowerCase().includes(words))
     .sort((a, b) => Number(b.street) - Number(a.street) || Number(b.suits) - Number(a.suits) || a.dist - b.dist)
     .slice(0, words ? 30 : 12);
-  const venue = venues.find((v) => v.key === venueKey) ?? (venueKey === null ? (venues.find((v) => v.street) ?? null) : null);
+  const venue = venues.find((v) => v.key === venueKey) ?? (venueKey === null ? (venues.find((v) => v.street) ?? venues[0] ?? null) : null);
 
   const choices = useMemo(() => startChoices(opened.current), []);
   const startAt = startId === "custom" ? (custom ? new Date(custom).getTime() : NaN) : (choices.find((c) => c.id === startId)?.at ?? opened.current);
@@ -586,7 +622,13 @@ function HostForm({
   const priceBad = price === null || price < 0 || (quote !== null && price > quote.priceMax);
   const name = cleanTitle(title);
   const timeBad = !Number.isFinite(startAt) || startAt > opened.current + DAYS_AHEAD * 86_400_000;
-  const ready = !!name && !!venue && !priceBad && !timeBad && !going;
+  // A street party on a stretch of road another one already has at that time.
+  const span = { start: startId === "now" ? Date.now() : startAt, end: (startId === "now" ? Date.now() : startAt) + minutes * 60_000 };
+  const clashOf = (v: Venue) => (cat === "party" && v.street && Number.isFinite(span.start) ? (taken.find((t) => streetClash({ x: v.x, z: v.z, ...span }, t)) ?? null) : null);
+  const clash = venue ? clashOf(venue) : null;
+  // What hosting costs (parties): the hours, how many can come, the kind of place and the area.
+  const cost = cat === "party" && venue ? partyCost({ minutes, capacity, venue: venue.kind, area: venue.areaK }) : null;
+  const ready = !!name && !!venue && !priceBad && !timeBad && !going && !clash;
 
   const pickFormat = (id: string) => {
     const nf = eventFormat(id);
@@ -633,7 +675,6 @@ function HostForm({
             <button
               key={c.id}
               onClick={() => {
-                if (c.id === "games") return onChallenge();
                 if (!c.ready) return;
                 setCat(c.id);
                 pickFormat(formatsIn(c.id)[0].id);
@@ -683,25 +724,34 @@ function HostForm({
           </span>
         </div>
       )}
-      <label className="flex h-10 items-center gap-2 rounded-full bg-ink/5 px-3.5">
-        <Search className="size-4 shrink-0 text-muted" />
-        <input value={q} onChange={(e) => setQ(e.target.value.slice(0, 40))} placeholder="Search places near you" className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none" />
-      </label>
+      <div className="flex gap-2">
+        <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-full bg-ink/5 px-3.5">
+          <Search className="size-4 shrink-0 text-muted" />
+          <input value={q} onChange={(e) => setQ(e.target.value.slice(0, 40))} placeholder="Search roads and places" className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none" />
+        </label>
+        <button onClick={lookAgain} className="flex h-10 shrink-0 items-center gap-1 rounded-full bg-ink/5 px-3 text-xs font-bold" title="Use where the map is now">
+          <Navigation className="size-3.5" /> Here
+        </button>
+      </div>
+      <p className="mt-1 text-[11px] text-muted">Want another road? Close this, move the map there, come back and tap Here.</p>
       <div className="mt-2 max-h-52 space-y-1 overflow-y-auto">
         {shownVenues.length === 0 && <p className="rounded-2xl bg-ink/5 p-3 text-center text-sm text-muted">{venues.length ? "No place by that name near you." : "Walk somewhere on the map (or go home) first."}</p>}
-        {shownVenues.map((v) => (
-          <button key={v.key} onClick={() => setVenueKey(v.key)} className={cn("flex w-full items-center gap-2.5 rounded-2xl px-3 py-2 text-left", venue?.key === v.key ? "bg-ink text-white" : "bg-ink/5")}>
-            <span className="text-lg">{v.street ? "🛣️" : "📍"}</span>
-            <span className="min-w-0 flex-1">
-              <b className="block truncate text-sm">{v.name}</b>
-              <span className={cn("text-[11px]", venue?.key === v.key ? "text-white/70" : "text-muted")}>
-                {v.what}
-                {v.dist > 0 ? ` · ${v.dist < 10 ? `${Math.round(v.dist * 100)} m` : `${(v.dist / 10).toFixed(1)} km`}` : ""}
-                {v.suits ? " · good for this" : ""}
+        {shownVenues.map((v) => {
+          const c = clashOf(v);
+          return (
+            <button key={v.key} onClick={() => setVenueKey(v.key)} className={cn("flex w-full items-center gap-2.5 rounded-2xl px-3 py-2 text-left", venue?.key === v.key ? "bg-ink text-white" : "bg-ink/5", c && venue?.key !== v.key && "opacity-55")}>
+              <span className="text-lg">{v.street ? "🛣️" : "📍"}</span>
+              <span className="min-w-0 flex-1">
+                <b className="block truncate text-sm">{v.name}</b>
+                <span className={cn("text-[11px]", venue?.key === v.key ? "text-white/70" : "text-muted")}>
+                  {c ? `Taken then: "${c.title}"` : v.what}
+                  {v.dist > 0 ? ` · ${v.dist < 10 ? `${Math.round(v.dist * 100)} m` : `${(v.dist / 10).toFixed(1)} km`}` : ""}
+                  {!c && v.suits ? " · good for this" : ""}
+                </span>
               </span>
-            </span>
-          </button>
-        ))}
+            </button>
+          );
+        })}
       </div>
 
       <Label>When?</Label>
@@ -782,6 +832,25 @@ function HostForm({
         ))}
       </div>
 
+      <Label>Hosting</Label>
+      {cost ? (
+        <div className="rounded-2xl bg-ink/5 p-3">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-sm font-semibold">Hosting this party costs</span>
+            <b className="font-display text-xl font-extrabold tabular-nums">{cash(cost.naira / perMint)}</b>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1 text-[11px] font-semibold text-muted">
+            <span className="rounded-full bg-panel px-2 py-0.5">{cash(PARTY_NAIRA_PER_HOUR / perMint)} an hour × {cost.parts.hours % 1 ? cost.parts.hours.toFixed(1) : cost.parts.hours}</span>
+            <span className="rounded-full bg-panel px-2 py-0.5">{capacity.toLocaleString("en-GB")} people ×{cost.parts.capacity}</span>
+            <span className="rounded-full bg-panel px-2 py-0.5">{VENUE_COST[venue!.kind].label} ×{cost.parts.venue}</span>
+            {cost.parts.area !== 1 && <span className="rounded-full bg-panel px-2 py-0.5">{cost.parts.area > 1 ? "Pricey area" : "Cheaper area"} ×{cost.parts.area}</span>}
+          </div>
+          <p className="mt-2 text-[11px] text-muted">Paid when you put it on the map, from your Fun money then your wallet. Call it off before it starts and it all comes back.</p>
+        </div>
+      ) : (
+        <p className="rounded-2xl bg-ink/5 p-3 text-sm text-muted">{cat === "party" ? "Pick where it is to see the price." : "Free to host."}</p>
+      )}
+      {clash && <p className="mt-3 rounded-2xl bg-hit/10 px-3 py-2 text-sm font-semibold text-hit">&ldquo;{clash.title}&rdquo; has that stretch of road then. Pick another road, one further along, or another time.</p>}
       {problem && <p className="mt-3 rounded-2xl bg-hit/10 px-3 py-2 text-sm font-semibold text-hit">{problem}</p>}
       <button
         disabled={!ready}
@@ -790,16 +859,16 @@ function HostForm({
           setGoing(true);
           setProblem(null);
           const at = startId === "now" ? Date.now() : startAt;
-          const r = await hostEvent({ region, format: f.id, title: name, about, x: venue.x, z: venue.z, place: venue.name, onStreet: venue.street, startsAt: at, minutes, price, capacity }).catch(() => fail());
+          const r = await hostEvent({ region, format: f.id, title: name, about, x: venue.x, z: venue.z, place: venue.name, onStreet: venue.street, venue: venue.kind, startsAt: at, minutes, price, capacity }).catch(() => fail());
           setGoing(false);
           if (!r.ok) return setProblem(r.error);
           playSfx("levelup");
-          onHosted(r.id, Date.parse(r.startsAt) - Date.now() < EARLY_DOORS_MINS * 60_000);
+          onHosted(r.id, Date.parse(r.startsAt) - Date.now() < EARLY_DOORS_MINS * 60_000, r.view);
         }}
         className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#d6336c] to-[#7048e8] font-bold text-white shadow-lg disabled:opacity-40"
       >
         {going ? <LoaderCircle className="size-5 animate-spin" /> : <PartyPopper className="size-5" />}
-        {going ? "Setting it up…" : startId === "now" ? "Start it now" : "Put it on the map"}
+        {going ? "Setting it up…" : `${startId === "now" ? "Start it now" : "Put it on the map"}${cost ? ` · ${cash(cost.naira / perMint)}` : ""}`}
       </button>
       <p className="mt-2 text-center text-[11px] text-muted">
         {!name ? "Give it a name first. " : !venue ? "Pick where it is. " : ""}

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
-import type { StageState } from "@/lib/world/events";
+import { HOT_MAX, MOVES, type StageState } from "@/lib/world/events";
 
 // One live channel per event ("event:<id>"): who's in the room (presence), and everything said and
 // done there (broadcast): chat, reactions, shout-outs, toasts, the hot seat, meeting someone new,
@@ -12,13 +12,21 @@ import type { StageState } from "@/lib/world/events";
 
 export type RoomPerson = { id: string; name: string; avatar: unknown; host: boolean; looking: boolean; vibe: string | null };
 
+/** A message quoted in a reply. */
+export type Quote = { id: string; name: string; text: string };
+/** Photos said in a room come only from our own storage. */
+export const CHAT_PHOTO_BASE = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}/storage/v1/object/public/events/chat/`;
+
 export type RoomMsg =
-  | { t: "chat"; from: string; name: string; text: string; at: number }
+  | { t: "chat"; id: string; from: string; name: string; text: string; image: string | null; reply: Quote | null; at: number }
+  | { t: "del"; id: string; from: string }
+  | { t: "mreact"; id: string; e: string; from: string }
+  | { t: "move"; from: string; m: string }
   | { t: "react"; from: string; e: string }
   | { t: "shout"; from: string; name: string; to: string | null; toName: string | null; text: string; at: number }
   | { t: "toast"; id: string; from: string; name: string; text: string }
   | { t: "clink"; id: string; from: string }
-  | { t: "hot"; id: string; q: number; by: string }
+  | { t: "hot"; id: string; q: number; text: string | null; by: string }
   | { t: "ans"; id: string; from: string; name: string; text: string }
   | { t: "love"; id: string; to: string; from: string }
   | { t: "pair"; a: string; b: string; prompt: number }
@@ -36,11 +44,24 @@ function clean(p: unknown): RoomMsg | null {
   if (!isObj(p) || typeof p.t !== "string") return null;
   const from = str(p.from, 64);
   switch (p.t) {
-    case "chat":
+    case "chat": {
+      const text = str(p.text, 300).trim();
+      const image = typeof p.image === "string" && p.image.startsWith(CHAT_PHOTO_BASE) && /^[^\s"'<>]+\.jpg$/.test(p.image) ? p.image : null;
+      if (!text && !image) return null;
+      const r = isObj(p.reply) ? { id: str(p.reply.id, 40), name: str(p.reply.name, 40), text: str(p.reply.text, 120) } : null;
+      return { t: "chat", id: str(p.id, 40) || randomKey(), from, name: str(p.name, 40), text, image, reply: r, at: Number(p.at) || Date.now() };
+    }
+    case "del":
+      return { t: "del", id: str(p.id, 40), from };
+    case "mreact":
+      return { t: "mreact", id: str(p.id, 40), e: str(p.e, 8), from };
+    case "move": {
+      const m = str(p.m, 12);
+      return MOVES.some((x) => x.id === m) ? { t: "move", from, m } : null;
+    }
     case "shout": {
       const text = str(p.text, 200).trim();
       if (!text) return null;
-      if (p.t === "chat") return { t: "chat", from, name: str(p.name, 40), text, at: Number(p.at) || Date.now() };
       return { t: "shout", from, name: str(p.name, 40), to: p.to ? str(p.to, 64) : null, toName: p.toName ? str(p.toName, 40) : null, text, at: Number(p.at) || Date.now() };
     }
     case "react":
@@ -50,7 +71,7 @@ function clean(p: unknown): RoomMsg | null {
     case "clink":
       return { t: "clink", id: str(p.id, 40), from };
     case "hot":
-      return { t: "hot", id: str(p.id, 40), q: Math.floor(Number(p.q) || 0), by: str(p.by, 40) };
+      return { t: "hot", id: str(p.id, 40), q: Math.floor(Number(p.q) || 0), text: typeof p.text === "string" && p.text.trim() ? str(p.text, HOT_MAX).trim() : null, by: str(p.by, 40) };
     case "ans": {
       const text = str(p.text, 140).trim();
       return text ? { t: "ans", id: str(p.id, 40), from, name: str(p.name, 40), text } : null;
@@ -179,4 +200,38 @@ export function useRoomList<K extends RoomMsg["t"]>(on: (fn: (m: RoomMsg) => voi
     [on, kind, keep],
   );
   return list;
+}
+
+export type ChatLine = Extract<RoomMsg, { t: "chat" }> & { deleted: boolean; reactions: Record<string, string[]> };
+
+/**
+ * The room's chat: the last messages, with deletions (your own, or anything if you're the host)
+ * and reactions on each message.
+ */
+export function useRoomChat(on: (fn: (m: RoomMsg) => void) => () => void, hostId: string, keep = 60) {
+  const [lines, setLines] = useState<ChatLine[]>([]);
+  useEffect(
+    () =>
+      on((m) => {
+        if (m.t === "chat") setLines((l) => (l.some((x) => x.id === m.id) ? l : [...l.slice(-(keep - 1)), { ...m, deleted: false, reactions: {} }]));
+        else if (m.t === "del") setLines((l) => l.map((x) => (x.id === m.id && (m.from === x.from || m.from === hostId) ? { ...x, deleted: true, text: "", image: null } : x)));
+        else if (m.t === "mreact")
+          setLines((l) =>
+            l.map((x) => {
+              if (x.id !== m.id) return x;
+              const reactions: Record<string, string[]> = {};
+              // One reaction per person: a new one replaces theirs; the same one again takes it off.
+              const had = Object.entries(x.reactions).find(([, who]) => who.includes(m.from))?.[0];
+              for (const [e, who] of Object.entries(x.reactions)) {
+                const rest = who.filter((w) => w !== m.from);
+                if (rest.length) reactions[e] = rest;
+              }
+              if (had !== m.e) reactions[m.e] = [...(reactions[m.e] ?? []), m.from];
+              return { ...x, reactions };
+            }),
+          );
+      }),
+    [on, hostId, keep],
+  );
+  return lines;
 }

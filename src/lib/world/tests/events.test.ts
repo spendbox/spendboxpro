@@ -10,8 +10,13 @@ import {
   ICEBREAKERS,
   MEET_PROMPTS,
   REP_MAX,
+  PARTY_NAIRA_PER_HOUR,
+  areaK,
   cleanAbout,
+  cleanQuestion,
   cleanStage,
+  partyCost,
+  streetClash,
   cleanTitle,
   doorsOpen,
   eventRep,
@@ -104,4 +109,42 @@ test("party cards: plenty of them, and every phone picks the same", () => {
   assert.ok(ICEBREAKERS.length >= 20 && MEET_PROMPTS.length >= 8);
   assert.equal(pick(ICEBREAKERS, 12345), pick(ICEBREAKERS, 12345));
   assert.equal(pick([1, 2, 3], -1), 3);
+});
+
+test("a party costs ₦100,000 an hour at the smallest, more for more people, a fancier place and a dearer area", () => {
+  const base = partyCost({ minutes: 60, capacity: 20, venue: "street", area: 1 });
+  assert.equal(base.naira, PARTY_NAIRA_PER_HOUR);
+  assert.equal(partyCost({ minutes: 120, capacity: 20, venue: "street", area: 1 }).naira, 200_000, "by the hour");
+  assert.ok(partyCost({ minutes: 60, capacity: 300, venue: "street", area: 1 }).naira > partyCost({ minutes: 60, capacity: 50, venue: "street", area: 1 }).naira, "more people, more money");
+  assert.ok(partyCost({ minutes: 60, capacity: 20, venue: "landmark", area: 1 }).naira > partyCost({ minutes: 60, capacity: 20, venue: "food", area: 1 }).naira);
+  assert.ok(partyCost({ minutes: 60, capacity: 20, venue: "street", area: 1.5 }).naira > base.naira, "a dear area costs more");
+  assert.equal(partyCost({ minutes: 90, capacity: 100, venue: "food", area: 1.2 }).naira % 1000, 0, "rounded to ₦1,000");
+});
+
+test("the area's price follows the district's land price, and is 1 away from any district", () => {
+  const centres = [{ x: 0, z: 0, radius: 10, landPrice: 1_200_000 }, { x: 100, z: 0, radius: 10, landPrice: 100_000 }];
+  assert.ok(areaK(centres, 0, 0) > 1.5, "the dear district's middle");
+  assert.ok(areaK(centres, 100, 0) < 1, "the cheap district's middle");
+  assert.equal(areaK(centres, 50, 50), 1, "nowhere near");
+});
+
+test("street parties can't overlap: too close at the same time clashes, apart or at another time is fine", () => {
+  const a = { x: 0, z: 0, start: 0, end: 100 };
+  assert.ok(streetClash(a, { x: 5, z: 5, start: 50, end: 150 }));
+  assert.ok(!streetClash(a, { x: 30, z: 0, start: 50, end: 150 }), "far enough apart");
+  assert.ok(!streetClash(a, { x: 0, z: 0, start: 100, end: 200 }), "one after the other");
+});
+
+test("your own hot seat question is tidied and ends with a question mark", () => {
+  assert.equal(cleanQuestion("  best   party song  "), "best party song?");
+  assert.equal(cleanQuestion("Who's here?"), "Who's here?");
+  assert.equal(cleanQuestion("hi"), null);
+});
+
+test("Game challenge is coming soon, not hostable from Events", () => {
+  assert.equal(EVENT_CATEGORIES.find((c) => c.id === "games")?.ready, false);
+});
+
+test("a party's song queue keeps only YouTube ids", () => {
+  assert.deepEqual(cleanStage({ queue: ["dQw4w9WgXcQ", "bad", 4] }).queue, ["dQw4w9WgXcQ"]);
 });

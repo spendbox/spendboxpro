@@ -264,7 +264,7 @@ export function Tutorial({
     win: {
       emoji: "🏆",
       title: "Mission 3 of 3 · Create and win a challenge",
-      text: "Tap the party button (top right), then Host an event › Game challenge. Pick any game you fancy, set your stake and challenge everyone nearby. Win and the pot is yours, plus +3 reputation. No pressure. (Some pressure.)",
+      text: "Tap Show me and Challenge opens. Pick any game you fancy, set your stake and challenge everyone nearby. Win and the pot is yours, plus +3 reputation. No pressure. (Some pressure.)",
       glow: "challenge",
       action: { label: "Show me", run: actions.challenge },
     },

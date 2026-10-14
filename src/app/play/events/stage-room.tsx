@@ -5,9 +5,9 @@ import { ArrowBigUp, Check, ChevronLeft, ChevronRight, Film, ImagePlus, LoaderCi
 import { cn } from "@/lib/cn";
 import { SLIDES_MAX, cleanStage, eventFormat, videoPosNow, youtubeId, type StageState } from "@/lib/world/events";
 import { CallBar } from "../call/call-bar";
-import { randomKey, useEventRoom, useRoomList, type RoomMsg } from "./channel";
+import { randomKey, useEventRoom, useRoomChat, type RoomMsg } from "./channel";
 import { setStage, type EventView } from "./event-actions";
-import { Face, FloatingReactions, ReactBar, RoomChat, RoomPanel, RoomTop, type RoomMe } from "./room-kit";
+import { Face, FloatingChat, FloatingReactions, ReactBar, RoomChat, RoomPanel, RoomTop, WhoPanel, shrinkPhoto, type RoomMe } from "./room-kit";
 
 // A stage (docs/EVENTS.md): a talk, a class, a watch party or an open mic. Everyone sits in rows
 // facing the screen. The host puts slides or a video on it and everyone sees the same thing at the
@@ -16,35 +16,6 @@ import { Face, FloatingReactions, ReactBar, RoomChat, RoomPanel, RoomTop, type R
 
 /** Slides come only from our own storage (so nobody can put another picture on everyone's screen). */
 const SLIDE_BASE = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}/storage/v1/object/public/events/`;
-
-/** A picture, shrunk on the phone (longest side 1600, JPEG) so it's quick to send and to show. */
-async function shrink(file: File): Promise<Blob> {
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise<HTMLImageElement>((ok, fail) => {
-      const i = new Image();
-      i.onload = () => ok(i);
-      i.onerror = () => fail(new Error("not a picture"));
-      i.src = url;
-    });
-    let k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
-    for (let tries = 0; tries < 4; tries++) {
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.round(img.naturalWidth * k);
-      canvas.height = Math.round(img.naturalHeight * k);
-      const c = canvas.getContext("2d")!;
-      c.fillStyle = "#ffffff";
-      c.fillRect(0, 0, canvas.width, canvas.height);
-      c.drawImage(img, 0, 0, canvas.width, canvas.height);
-      const blob = await new Promise<Blob>((ok, fail) => canvas.toBlob((b) => (b ? ok(b) : fail(new Error("no picture"))), "image/jpeg", 0.8));
-      if (blob.size <= 580_000) return blob;
-      k *= 0.75;
-    }
-    throw new Error("too big");
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
 
 type Question = { id: string; from: string; name: string; text: string; ups: Set<string>; answered: boolean };
 
@@ -66,10 +37,10 @@ export function StageRoom({
   const host = view.me.host;
   const room = useEventRoom(view.id, { ...me, host }, null);
   const { here, send, on } = room;
-  const chat = useRoomList(on, "chat");
+  const chat = useRoomChat(on, view.host.id);
   const f = eventFormat(view.format);
   const [stage, setStageNow] = useState<StageState>(() => cleanStage(view.stage, SLIDE_BASE));
-  const [panel, setPanel] = useState<null | "questions" | "video">(null);
+  const [panel, setPanel] = useState<null | "questions" | "video" | "who">(null);
   const [questions, setQuestions] = useState<Question[]>([]);
 
   // What's on the stage: from the host (as it changes), checked like everything else.
@@ -118,7 +89,7 @@ export function StageRoom({
       try {
         const body = new FormData();
         body.set("id", String(view.id));
-        body.set("photo", await shrink(list[i]), "slide.jpg");
+        body.set("photo", await shrinkPhoto(list[i], 1600), "slide.jpg");
         const r = (await fetch("/api/events/slide", { method: "POST", body }).then((res) => res.json())) as { ok: boolean; url?: string; error?: string };
         if (!r.ok || !r.url) {
           onMessage(r.error ?? "Couldn't add that slide.", false);
@@ -144,7 +115,7 @@ export function StageRoom({
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-[#0d0b14] text-white">
-      <RoomTop title={view.title} icon={f?.icon ?? "🎤"} endsAt={Date.parse(view.endsAt)} here={here.length || 1} onMin={onMin} />
+      <RoomTop title={view.title} icon={f?.icon ?? "🎤"} endsAt={Date.parse(view.endsAt)} here={here.length || 1} onMin={onMin} onHere={() => setPanel("who")} />
 
       <div className="relative min-h-0 flex-1 overflow-y-auto px-3 pt-2">
         {/* The screen. */}
@@ -217,6 +188,7 @@ export function StageRoom({
         </div>
       </div>
       <FloatingReactions on={on} />
+      <FloatingChat on={on} me={me} people={here} />
 
       <div className="relative z-10 space-y-2 bg-gradient-to-t from-black/80 to-transparent px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-4">
         <div className="flex items-center justify-between gap-2">
@@ -226,10 +198,11 @@ export function StageRoom({
             {open.length > 0 && <span className="grid min-w-5 place-items-center rounded-full bg-hit px-1 text-[10px] text-white">{open.length}</span>}
           </button>
         </div>
-        <RoomChat me={me} lines={chat} send={send} onPerson={onPerson} compact />
+        <RoomChat eventId={view.id} me={me} hostId={view.host.id} lines={chat} send={send} onPerson={onPerson} onMessage={onMessage} compact />
         <CallBar room={`event-${view.id}`} me={{ id: me.id, name: me.name, avatar: me.avatar }} title={host ? "Your mic (and up to 5 guests)" : "Stage mic (6 people)"} max={6} />
       </div>
 
+      {panel === "who" && <WhoPanel people={here} me={me} hostId={view.host.id} onPerson={onPerson} onClose={() => setPanel(null)} />}
       {panel === "questions" && <Questions me={me} host={host} list={questions} send={send} onPerson={onPerson} onClose={() => setPanel(null)} />}
       {panel === "video" && (
         <VideoPanel
@@ -362,16 +335,18 @@ function loadYouTube(): Promise<YTNamespace> {
  * everyone. Everyone else's player follows (a jump when it drifts more than 2 seconds), and asks for
  * a tap when the phone won't start sound by itself.
  */
-function YouTubeScreen({ stage, host, onHostChange }: { stage: StageState; host: boolean; onHostChange: (s: StageState) => void }) {
+export function YouTubeScreen({ stage, host, onHostChange, onEnded }: { stage: StageState; host: boolean; onHostChange: (s: StageState) => void; onEnded?: () => void }) {
   const box = useRef<HTMLDivElement>(null);
   const player = useRef<YTPlayer | null>(null);
   const [ready, setReady] = useState(false);
   const [needTap, setNeedTap] = useState(false);
   const stageRef = useRef(stage);
   const changeRef = useRef(onHostChange);
+  const endedRef = useRef(onEnded);
   useEffect(() => {
     stageRef.current = stage;
     changeRef.current = onHostChange;
+    endedRef.current = onEnded;
   });
   const video = stage.video;
 
@@ -386,7 +361,7 @@ function YouTubeScreen({ stage, host, onHostChange }: { stage: StageState; host:
         videoId: video,
         width: "100%",
         height: "100%",
-        playerVars: { playsinline: 1, rel: 0, modestbranding: 1, controls: host ? 1 : 0, disablekb: host ? 0 : 1, start: Math.floor(videoPosNow(stageRef.current)) },
+        playerVars: { playsinline: 1, rel: 0, modestbranding: 1, controls: host ? 1 : 0, disablekb: host ? 0 : 1, start: Math.floor(videoPosNow(stageRef.current)), autoplay: host && stageRef.current.playing ? 1 : 0 },
         events: {
           onReady: () => setReady(true),
           onStateChange: (e: { data: number }) => {
@@ -396,6 +371,8 @@ function YouTubeScreen({ stage, host, onHostChange }: { stage: StageState; host:
             }
             const p = player.current;
             if (!p) return;
+            // Finished, with something to play next (a party's queue): the next song.
+            if (e.data === 0 && endedRef.current) return endedRef.current();
             // Playing (1), paused (2) or finished (0): everyone follows.
             if (e.data === 1 || e.data === 2 || e.data === 0) {
               const s = stageRef.current;
