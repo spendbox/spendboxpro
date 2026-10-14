@@ -2421,6 +2421,29 @@ drop trigger if exists property_income_guard on public.property_units;
 create trigger property_income_guard before insert or update of owner_id, price, income_base on public.property_units
   for each row execute function public.property_income_guard();
 
+/**
+ * The game asking (POST /api/income): paid at most once a minute (the screen counts it up in
+ * between), so asking often never piles up payments; otherwise the same as property_income_settle.
+ */
+create or replace function public.property_income_settle_soft(p_user uuid) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_at timestamptz := (select income_at from public.lives where user_id = p_user);
+begin
+  if v_at is not null and v_at > now() - interval '60 seconds' then
+    return jsonb_build_object(
+      'paid', 0,
+      'per_day', public.property_income_day(p_user),
+      'at', v_at,
+      'coins', (select coins from public.profiles where id = p_user),
+      'total', coalesce((select sum(amount) from public.ledger where user_id = p_user and kind = 'property_income'), 0)
+    );
+  end if;
+  return public.property_income_settle(p_user);
+end $$;
+
+revoke all on function public.property_income_settle_soft(uuid) from public, anon, authenticated;
+grant execute on function public.property_income_settle_soft(uuid) to service_role;
 revoke all on function public.property_income_day(uuid), public.property_income_settle(uuid), public.property_income_guard() from public, anon, authenticated;
 grant execute on function public.property_income_day(uuid), public.property_income_settle(uuid) to service_role;
 

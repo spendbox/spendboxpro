@@ -1235,10 +1235,12 @@ function structureParts(t: Tile, plan: CityPlan, B: BoxFn, tree: TreeFn) {
 }
 
 /**
- * An ad's picture, letterboxed onto a 2:1 canvas (the billboard's shape): the whole picture
- * shows, and any space round it is filled with a soft blur of the picture itself.
+ * An ad's picture on a 2:1 canvas (the billboard's shape). A picture close to that shape fills the
+ * board (a little cropped); any other is shown whole on a soft blur of itself. Always on a white
+ * ground (a logo with a see-through background would otherwise go black), with the brand and
+ * headline in a strip along the bottom.
  */
-function adTexture(img: CanvasImageSource & { width: number; height: number }) {
+function adTexture(img: CanvasImageSource & { width: number; height: number }, ad?: { headline?: string; brand?: string }) {
   const W = 1024;
   const H = 512;
   const canvas = document.createElement("canvas");
@@ -1247,19 +1249,54 @@ function adTexture(img: CanvasImageSource & { width: number; height: number }) {
   const c = canvas.getContext("2d")!;
   const iw = img.width || W;
   const ih = img.height || H;
-  // The blur: shrink the picture to a few pixels, then stretch it back up.
-  const tiny = document.createElement("canvas");
-  tiny.width = 16;
-  tiny.height = 8;
-  tiny.getContext("2d")!.drawImage(img, 0, 0, 16, 8);
-  c.imageSmoothingEnabled = true;
-  c.drawImage(tiny, 0, 0, W, H);
-  c.fillStyle = "rgba(0,0,0,0.3)";
+  c.fillStyle = "#ffffff";
   c.fillRect(0, 0, W, H);
-  const k = Math.min(W / iw, H / ih);
-  const dw = iw * k;
-  const dh = ih * k;
-  c.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  const words = [ad?.brand, ad?.headline].map((t) => (t ?? "").trim()).filter(Boolean);
+  const strip = words.length ? 92 : 0;
+  const area = H - strip;
+  const ratio = iw / ih;
+  if (Math.abs(ratio / (W / area) - 1) < 0.25) {
+    // Near the board's shape: fill it, cropping the little that's over.
+    const k = Math.max(W / iw, area / ih);
+    c.drawImage(img, (W - iw * k) / 2, (area - ih * k) / 2, iw * k, ih * k);
+  } else {
+    // The blur behind: shrink the picture to a few pixels (on white), then stretch it back up.
+    const tiny = document.createElement("canvas");
+    tiny.width = 16;
+    tiny.height = 8;
+    const t = tiny.getContext("2d")!;
+    t.fillStyle = "#ffffff";
+    t.fillRect(0, 0, 16, 8);
+    t.drawImage(img, 0, 0, 16, 8);
+    c.imageSmoothingEnabled = true;
+    c.drawImage(tiny, 0, 0, W, area);
+    c.fillStyle = "rgba(255,255,255,0.35)";
+    c.fillRect(0, 0, W, area);
+    const k = Math.min((W * 0.92) / iw, (area * 0.9) / ih);
+    const dw = iw * k;
+    const dh = ih * k;
+    c.fillStyle = "#ffffff";
+    c.fillRect((W - dw) / 2, (area - dh) / 2, dw, dh);
+    c.drawImage(img, (W - dw) / 2, (area - dh) / 2, dw, dh);
+  }
+  if (strip) {
+    c.fillStyle = "#16181d";
+    c.fillRect(0, area, W, strip);
+    c.fillStyle = "#ffffff";
+    c.textBaseline = "middle";
+    c.textAlign = "left";
+    const [brand, headline] = words.length > 1 ? words : [words[0], ""];
+    let size = 44;
+    c.font = `800 ${size}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+    const brandW = Math.min(c.measureText(brand).width, W * 0.45);
+    c.fillText(brand, 28, area + strip / 2, W * 0.45);
+    if (headline) {
+      size = 34;
+      c.fillStyle = "#e0b84c";
+      c.font = `600 ${size}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+      c.fillText(headline, 28 + brandW + 26, area + strip / 2, W - brandW - 80);
+    }
+  }
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
@@ -1814,8 +1851,11 @@ export function CityView({
       }
     })();
     function makeAdCycle(list: CityAd[]) {
-      const rich = Math.ceil(list.length / 3);
-      const cycle = list.flatMap((a, i) => (i < rich && list.length > 1 ? [a, a] : [a]));
+      // The server ranks paid ads (most money left first): the top third of those get twice the
+      // airtime. Businesses' boards (bz:) aren't ranked, so they're shown once each.
+      const paid = list.filter((a) => !a.id.startsWith("bz:"));
+      const rich = new Set(paid.slice(0, Math.ceil(paid.length / 3)).map((a) => a.id));
+      const cycle = list.flatMap((a) => (rich.has(a.id) && list.length > 1 ? [a, a] : [a]));
       let seedV = viewerSeed;
       const rand = () => {
         seedV = (seedV + 0x6d2b79f5) | 0;
@@ -1852,7 +1892,9 @@ export function CityView({
           (loaded) => {
             if (alive && adCache.get(ad.id) === entry) {
               try {
-                entry.tex = adTexture(loaded.image as CanvasImageSource & { width: number; height: number });
+                entry.tex = adTexture(loaded.image as CanvasImageSource & { width: number; height: number }, ad);
+                // Boards that were waiting on it (showing "Your ad here") pick again.
+                for (const b of boards) if (b.shown === null) b.slot = -1;
               } catch {
                 entry.failed = true;
               }
@@ -1872,12 +1914,21 @@ export function CityView({
     /** What board k shows in time slot `slot`: neighbouring boards show different ads. */
     function pickAd(slot: number, k: number): CityAd | null {
       const n = adCycle.length;
-      const step = Math.max(1, boards.length);
+      if (!n) return null;
+      // A business owner's own preview goes on every board, so they see it straight away.
+      const preview = adsList.find((a) => a.id === "bz:preview");
+      if (preview && !adCache.get(preview.id)?.failed) return preview;
+      // Each board walks the whole cycle (one step every slot); neighbours are one apart. One
+      // that's ready first; one still loading only if none is.
+      let loading: CityAd | null = null;
       for (let j = 0; j < n; j++) {
-        const ad = adCycle[(((slot * step + k + j) % n) + n) % n];
-        if (!adCache.get(ad.id)?.failed) return ad;
+        const ad = adCycle[(Math.max(0, slot) + k + j) % n];
+        const e = adCache.get(ad.id);
+        if (e?.failed) continue;
+        if (e?.tex) return ad;
+        loading ??= ad;
       }
-      return null;
+      return loading;
     }
 
     // Counting views: an ad counts once per turn on a board, if the board was on screen (and

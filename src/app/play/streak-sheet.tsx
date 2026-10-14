@@ -88,7 +88,7 @@ function DayDot({ state, label }: { state: StreakDay; label: string }) {
 const COUNTS = [
   { icon: Gamepad2, text: "Play a game" },
   { icon: ScrollText, text: "Finish a side quest" },
-  { icon: Gift, text: "Give or spray mint" },
+  { icon: Gift, text: "Give or spray money" },
   { icon: Handshake, text: "Hug or shake hands" },
   { icon: TramFront, text: "Ride something" },
 ];

@@ -389,7 +389,7 @@ export function SportsSheet({
             <p className="truncate text-sm text-muted">
               {signedIn && board?.coins !== null && board?.coins !== undefined
                 ? `You have ${cash(board.coins)}`
-                : "Watch live matches and bet mint"}
+                : "Watch live matches and bet for fun"}
             </p>
           </div>
           <button onClick={onClose} className="grid size-9 shrink-0 place-items-center rounded-full text-muted hover:bg-panel-2" aria-label="Close">

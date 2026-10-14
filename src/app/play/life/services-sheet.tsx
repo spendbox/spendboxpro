@@ -87,7 +87,7 @@ export function ServicesSheet({
       )}
       {tab !== "yours" && (
         <p className="mt-2 text-[11px] text-muted" title={kind === "game" ? `The price is held when you book and paid when it's done, less ${SERVICE_VAT * 100}% VAT.` : undefined}>
-          {kind === "game" ? "Paid in mint, only once it's done." : "Paid in person, outside the game. Meet safely."}
+          {kind === "game" ? "Paid in game money, only once it's done." : "Paid in person, outside the game. Meet safely."}
         </p>
       )}
 
@@ -238,7 +238,7 @@ function JobRow({ j, busy, onJob }: { j: ServiceJob; busy: boolean; onJob: (id: 
             {j.buying ? `From ${j.other}` : `For ${j.other}`} · {state[j.status]}
           </p>
         </div>
-        <p className="shrink-0 text-sm font-semibold tabular-nums">₥{fmt(j.price)}</p>
+        <p className="shrink-0 text-sm font-semibold tabular-nums">{cash(j.price)}</p>
       </div>
       <div className="mt-2 flex justify-end gap-2">
         {j.buying && (j.status === "held" || j.status === "done") && (

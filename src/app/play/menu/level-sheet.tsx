@@ -105,7 +105,7 @@ export function LevelSheet({ me }: { me: { id: string } }) {
         ) : confirm ? (
           <div className="rounded-xl bg-white/10 p-2 text-xs">
             <p>
-              Reach level {next}? The mint is used up.
+              Reach level {next}? The money is used up.
             </p>
             <div className="mt-2 grid grid-cols-2 gap-2">
               <button onClick={() => setConfirm(false)} disabled={busy} className="rounded-lg bg-white/15 py-2 font-semibold">
@@ -130,7 +130,7 @@ export function LevelSheet({ me }: { me: { id: string } }) {
             </button>
             {!enoughCoins && (
               <p className="mt-1 text-center text-[11px] text-white/70">
-                You need {short(info.nextCost - info.coins)} more mint (you have {short(info.coins)}).
+                You need {cash(info.nextCost - info.coins)} more (you have {cash(info.coins)}).
               </p>
             )}
           </>

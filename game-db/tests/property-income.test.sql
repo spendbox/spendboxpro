@@ -30,6 +30,9 @@ begin
   perform pg_temp.check((v->>'paid')::numeric = 125 and (select coins from profiles where id = p) = 5125, 'six hours pays a quarter of a day');
   v := property_income_settle(p);
   perform pg_temp.check((v->>'paid')::numeric = 0, 'nothing twice');
+  -- Asked again straight away by the game: nothing (at most once a minute).
+  v := property_income_settle_soft(p);
+  perform pg_temp.check((v->>'paid')::numeric = 0 and (v->>'per_day')::numeric = 500, 'the game asking often pays nothing extra');
   -- A week away: two days at most.
   update lives set income_at = now() - interval '7 days' where user_id = p;
   v := property_income_settle(p);

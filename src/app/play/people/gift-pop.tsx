@@ -21,8 +21,11 @@ function read(n: FeedItem): Reading {
   if (n.icon === "hug" || /gave you a hug/i.test(t)) return { from: t.split(" gave you")[0], kind: "hug", what: "A big hug" };
   if (n.icon === "handshake" || /shook your hand/i.test(t)) return { from: t.split(" shook")[0], kind: "handshake", what: "A warm handshake" };
   if (/left a gift at your door/i.test(t)) return { from: t.split(" left")[0], kind: "door", what: "A wrapped gift" };
+  // Amounts arrive already in your currency (cashText); older text may still say "₥50" or "50 mint".
   const coins = /^(.+?) gave you (₥?[\d,.]+) (?:coins|mint)/i.exec(t) ?? /^(.+?) gave you (₥[\d,.]+)/i.exec(t);
   if (coins) return { from: coins[1], kind: "mint", what: cash(Number(coins[2].replace(/[^\d.]/g, ""))) };
+  const shown = /^(.+?) gave you (\D{0,4}\d[\d,.]*(?:k|m|bn)?)!?$/i.exec(t);
+  if (shown) return { from: shown[1], kind: "mint", what: shown[2] };
   const item = /^(.+?) gave you (.+?)!?$/i.exec(t);
   if (item) {
     const kind = SHOP.find((k) => k.name.toLowerCase() === item[2].toLowerCase());

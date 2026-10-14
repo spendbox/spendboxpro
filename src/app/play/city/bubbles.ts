@@ -58,6 +58,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import * as THREE from "three";
 import type { StructureType, Tile } from "@/lib/city/layout";
 import { PIN_HEAD, type WorldEventsLayer } from "./world-events";
+import { cash } from "@/lib/world/value";
 
 /** A place that can have a bubble: its anchor tile index and the point over its roof. */
 export type BubbleSpot = { i: number; x: number; y: number; z: number };
@@ -348,7 +349,7 @@ export function createBubbles(host: BubblesHost) {
   }
   function fillEvent(s: Slot, pinK: number) {
     const p = host.events.pin(pinK);
-    const meta = p.claimable && p.coins > 0 ? `+₥${p.coins}` : "";
+    const meta = p.claimable && p.coins > 0 ? `+${cash(p.coins)}` : "";
     const content = `e|${p.id}|${p.title}|${meta}|${p.color}`;
     s.w = 6 + 10 + 6 + Math.min(NAME_MAX, textW(p.title, 600, 12.5)) + 6 + (meta ? textW(meta, 700, 11.5) : 12) + 10 + 2;
     if (content === s.content) return;
@@ -527,7 +528,7 @@ export function createBubbles(host: BubblesHost) {
         const d = dx * dx + dy * dy;
         if (d > 1 || pt.depth > dist * 1.7 + 8) continue;
         const s = slotFor(2, p.id);
-        const w = s && s.content ? s.w : 6 + 10 + 6 + Math.min(NAME_MAX, textW(p.title, 600, 12.5)) + 6 + (p.claimable && p.coins ? textW(`+₥${p.coins}`, 700, 11.5) : 12) + 12;
+        const w = s && s.content ? s.w : 6 + 10 + 6 + Math.min(NAME_MAX, textW(p.title, 600, 12.5)) + 6 + (p.claimable && p.coins ? textW(`+${cash(p.coins)}`, 700, 11.5) : 12) + 12;
         addCand(p.id, Math.sqrt(d) - (was ? 0.2 : 0), pt.x, pt.y, w, was);
       }
       for (let k = 0; k < candN && pickedN < MAX_EVENTS; k++) {

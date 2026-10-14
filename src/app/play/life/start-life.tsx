@@ -36,7 +36,7 @@ export function StartLife({
   onClose: () => void;
   /** Open the home search. */
   onFind: () => void;
-  /** The currency amounts show in beside mint, and choosing it. */
+  /** The currency amounts show in, and choosing it. */
   currency: string;
   onCurrency: (code: string) => void;
 }) {

@@ -58,7 +58,7 @@ import type { OwnedProperty } from "@/lib/world/owned";
 import { InterviewSheet, MomentSheet } from "./moments";
 import { AmountSheet, LoanSheet } from "./amount-sheet";
 import { CurrencySheet } from "./currency-pick";
-import { cash, setShownCurrency } from "@/lib/world/value";
+import { cash, cashText, setShownCurrency } from "@/lib/world/value";
 import { buyerPays, sellerGets, OFFER_HOURS, RENT_LEVEL, type Listing, type MarketBoard } from "@/lib/world/market";
 import { BUY_TAX, INCOME_DAY } from "@/lib/world/property-api";
 import { SIMPLE_LIFE } from "@/lib/world/simple-life";
@@ -812,7 +812,7 @@ export function useWorldLife({
       {message && (
         <div className="pointer-events-auto absolute inset-x-0 bottom-24 z-[65] flex justify-center px-3">
           <p className={`flex max-w-sm items-center gap-2 rounded-2xl px-4 py-2.5 text-sm shadow-lg ${message.good ? "bg-ink text-white" : "bg-hit text-white"}`}>
-            {message.text}
+            {cashText(message.text)}
             <button onClick={() => setMessage(null)} aria-label="Close">
               <X className="size-4" />
             </button>

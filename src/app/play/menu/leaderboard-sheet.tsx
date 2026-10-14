@@ -8,6 +8,7 @@ import { short } from "@/lib/format";
 import type { Leader } from "../profile-actions";
 import { leadersStore, useStore } from "./data";
 import { LeadersSkeleton, LoadFailed } from "./skeletons";
+import { cash } from "@/lib/world/value";
 
 /** Gold, silver and bronze for the top three. */
 const PODIUM = ["#e0a100", "#8a94a6", "#b0662f"];
@@ -39,7 +40,7 @@ export function LeaderboardSheet({ me }: { me: { id: string } }) {
   return (
     <div className="min-h-[22rem]">
       <p className="flex items-center justify-between gap-2 text-xs text-muted">
-        <span>Most mint won in the last 7 days</span>
+        <span>Most money won in the last 7 days</span>
         {myRank && <span className="shrink-0 rounded-full bg-gold/25 px-2 py-0.5 font-bold text-ink">You&apos;re #{myRank}</span>}
       </p>
 
@@ -77,7 +78,7 @@ export function LeaderboardSheet({ me }: { me: { id: string } }) {
 
       {myRank === null ? (
         <p className="mt-4 rounded-xl border border-dashed border-line px-3 py-2 text-center text-xs text-muted">
-          You&apos;re not on the board yet this week. Win some mint to climb it!
+          You&apos;re not on the board yet this week. Win some money to climb it!
         </p>
       ) : myRank > leaders.length ? (
         <p className="mt-4 rounded-xl bg-panel-2 px-3 py-2 text-center text-xs">
@@ -104,7 +105,7 @@ function PodiumStep({ leader: l, place, isMe }: { leader: Leader; place: number;
         {isMe && <span className="text-muted"> (you)</span>}
       </p>
       <p className="font-display text-sm font-bold tabular-nums">
-        {short(l.won)} <span className="text-[10px] font-semibold text-muted">mint</span>
+        {cash(l.won)}
       </p>
       <div
         className="mt-1.5 grid w-full place-items-center rounded-t-xl font-display text-lg font-extrabold text-white"

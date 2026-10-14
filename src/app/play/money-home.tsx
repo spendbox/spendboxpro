@@ -9,7 +9,7 @@ import { TOPUPS } from "@/lib/world/topups";
 import { payInPopup } from "./paystack-popup";
 import { Sheet } from "./sheet";
 import { useIncome } from "./income";
-import { confirmTopUp, myTopUps, startTopUp, startTransferTopUp, toppedUpBefore, type TopUpRow } from "./topup-actions";
+import { confirmTopUp, startTopUp, startTransferTopUp, toppedUpBefore, type TopUpRow } from "./topup-actions";
 import type { TransferAccount } from "@/lib/paystack";
 
 // Your wallet (docs/MONEY.md): tap your cash. Kept short: what you have, today's gift, top up.
@@ -381,7 +381,9 @@ export function MoneyHome({
   const [checking, setChecking] = useState(false);
   const checkPayments = async () => {
     setChecking(true);
-    const r = await myTopUps().catch(() => null);
+    const r = await fetch("/api/topups", { cache: "no-store" })
+      .then((x) => (x.ok ? (x.json() as Promise<{ list: TopUpRow[]; credited: number } | null>) : null))
+      .catch(() => null);
     setChecking(false);
     if (!r) return;
     setPayments(r.list);

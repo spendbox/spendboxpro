@@ -28,7 +28,7 @@ export async function POST() {
   const perMint = REGIONS[String(life.region ?? "lagos")]?.prices.perMint ?? 1_500;
   const g = dailyGift({ activeYesterday: n(s.active_yesterday), streak: n(s.streak), daysPlaying: n(s.days_playing), reputation: things?.reputation.score ?? 0 });
   const mint = Math.round((g.total / perMint) * 100) / 100;
-  const note = `Your daily gift: ₦${g.total.toLocaleString("en-GB")}${n(s.streak) > 1 ? ` (${n(s.streak)} days in a row)` : ""}. Come back tomorrow for another.`;
+  const note = `Your daily gift: ₥${mint}${n(s.streak) > 1 ? ` (${n(s.streak)} days in a row)` : ""}. Come back tomorrow for another.`;
   const { data, error } = await db.rpc("daily_gift_claim", { p_user: userId, p_amount: mint, p_note: note });
   if (error) return NextResponse.json({ error: "That didn't work just now. Try again." });
   const r = data as { already?: boolean; amount?: number; streak?: number };
