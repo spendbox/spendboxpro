@@ -31,7 +31,10 @@ export async function saveAvatar(avatar: Avatar): Promise<Result> {
   if (!userId) return { ok: false, error: "Please sign in again." };
   const db = createAdminClient();
   const { data: me } = await db.from("profiles").select("username").eq("id", userId).single();
-  const { error } = await db.from("profiles").update({ avatar: cleanAvatar(avatar, me?.username ?? userId) }).eq("id", userId);
+  const clean = cleanAvatar(avatar, me?.username ?? userId);
+  // Saving a drawn look uses it (a profile photo is only ever set by /api/profile-photo).
+  delete clean.photo;
+  const { error } = await db.from("profiles").update({ avatar: clean }).eq("id", userId);
   return error ? { ok: false, error: "Couldn't save your look. Try again." } : { ok: true };
 }
 

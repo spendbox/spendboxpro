@@ -1363,6 +1363,31 @@ function faceTexture(avatar: Avatar, ring: string) {
   canvas.width = canvas.height = 128;
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
+  // A profile photo: round, with the ring (an SVG drawn as a picture can't load it itself).
+  if (avatar.photo) {
+    const photo = new Image();
+    photo.crossOrigin = "anonymous";
+    photo.onload = () => {
+      const c = canvas.getContext("2d")!;
+      c.save();
+      c.beginPath();
+      c.arc(64, 64, 64, 0, Math.PI * 2);
+      c.clip();
+      c.drawImage(photo, 0, 0, 128, 128);
+      c.restore();
+      if (ring) {
+        c.lineWidth = 5.5;
+        c.strokeStyle = ring;
+        c.beginPath();
+        c.arc(64, 64, 61.3, 0, Math.PI * 2);
+        c.stroke();
+      }
+      tex.needsUpdate = true;
+    };
+    photo.src = avatar.photo;
+    faceCache.set(key, tex);
+    return tex;
+  }
   // As a picture on its own, an SVG needs its namespace (React leaves it out).
   const svg = renderToStaticMarkup(<AvatarFace avatar={avatar} size={128} ring={ring} />).replace(/^<svg(?![^>]*xmlns=)/, '<svg xmlns="http://www.w3.org/2000/svg"');
   const img = new Image();

@@ -10,7 +10,8 @@ import { Star, X } from "@/components/icons";
 import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar } from "@/lib/avatar";
 import { myThings, type MyItem } from "../item-actions";
-import { leaveAtDoor, playerCard, type PlayerCardData } from "../people-actions";
+import { leaveAtDoor, type PlayerCardData } from "../people-actions";
+import { cachedCard, cardPreview, forgetCard, loadCard } from "./card-cache";
 import { Sheet } from "../sheet";
 import type { Prices } from "@/lib/world/region";
 import { DatingRow, StreetRow } from "./street-dating";
@@ -52,16 +53,20 @@ export function PersonCard({
   /** Give them money. */
   onGive?: (p: { id: string; name: string; avatar: unknown }) => void;
 }) {
-  const [card, setCard] = useState<PlayerCardData | null | undefined>(undefined);
+  // Shown at once: the card from last time (brought up to date behind it), or else their face and
+  // name from what's already known while the rest loads (./card-cache).
+  const [card, setCard] = useState<PlayerCardData | null | undefined>(() => cachedCard(id)?.card);
+  const [preview] = useState(() => cardPreview(id));
   const [mode, setMode] = useState<"note" | "gift" | null>(null);
   const [note, setNote] = useState("");
   const [things, setThings] = useState<MyItem[] | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     let alive = true;
-    void playerCard(id).then((c) => {
+    void loadCard(id).then((c) => {
       if (!alive) return;
-      setCard(c);
+      // A failed refresh keeps what's showing.
+      setCard((was) => c ?? (was === undefined ? null : was));
       if (c && !self) rememberPerson(c, "Looked them up");
     });
     return () => {
@@ -78,6 +83,7 @@ export function PersonCard({
     const r = await leaveAtDoor(card.id, kind, note, itemId);
     setBusy(false);
     if (!r.ok) return onDone(r.error, false);
+    forgetCard(card.id);
     setMode(null);
     setNote("");
     rememberPerson(card, kind === "note" ? "Left a note" : "Gave a gift");
@@ -88,7 +94,30 @@ export function PersonCard({
   return (
     <Sheet onClose={onClose} above centred>
       {card === undefined ? (
-        <div className="h-40 animate-pulse rounded-2xl bg-ink/5" />
+        preview ? (
+          <>
+            <div className="flex items-start gap-3 pr-8">
+              <span className="relative shrink-0">
+                <AvatarFace avatar={cleanAvatar(preview.avatar, preview.name)} size={64} />
+                {preview.online && <span className="absolute bottom-0.5 right-0.5 size-3.5 rounded-full bg-[#2f9e44] ring-2 ring-panel" aria-label="Online" />}
+              </span>
+              <div className="min-w-0 flex-1">
+                <h2 className="min-w-0 truncate font-display text-xl font-extrabold">{preview.name}</h2>
+                <p className="mt-0.5 text-xs text-muted">{preview.online ? <span className="font-semibold text-[#2f9e44]">Online</span> : "\u00a0"}</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="absolute right-4 top-4 grid size-8 place-items-center rounded-full bg-ink/5 hover:bg-ink/10" aria-label="Close">
+              <X className="size-4" />
+            </button>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <div className="h-12 animate-pulse rounded-2xl bg-ink/5" />
+              <div className="h-12 animate-pulse rounded-2xl bg-ink/5" />
+            </div>
+            <div className="mt-3 h-20 animate-pulse rounded-2xl bg-ink/5" />
+          </>
+        ) : (
+          <div className="h-40 animate-pulse rounded-2xl bg-ink/5" />
+        )
       ) : card === null ? (
         <p className="py-6 text-center text-sm text-muted">We couldn&apos;t find them.</p>
       ) : (
@@ -103,7 +132,7 @@ export function PersonCard({
               <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                 <h2 className="min-w-0 truncate font-display text-xl font-extrabold">{card.name}</h2>
                 {!self && !card.friend && onAddFriend && (
-                  <button onClick={() => onAddFriend({ id: card.id, name: card.name })} className="flex h-7 shrink-0 items-center gap-1 rounded-full bg-[#d6336c] px-2.5 text-[11px] font-bold text-white shadow-sm">
+                  <button onClick={() => { forgetCard(card.id); onAddFriend({ id: card.id, name: card.name }); }} className="flex h-7 shrink-0 items-center gap-1 rounded-full bg-[#d6336c] px-2.5 text-[11px] font-bold text-white shadow-sm">
                     <UserPlus className="size-3.5" /> Add friend
                   </button>
                 )}

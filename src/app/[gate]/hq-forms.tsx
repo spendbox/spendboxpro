@@ -1,21 +1,25 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { hqClearBuildingName, hqClearHomeName, hqRecheckPack, hqSignIn, hqSignOut, hqStopAd, hqTakeDown } from "./actions";
+import { hqClearBuildingName, hqClearHomeName, hqClearPhoto, hqDeleteMessage, hqRecheckPack, hqSignIn, hqSignOut, hqStopAd, hqTakeDown } from "./actions";
 
-type HqKind = "pack" | "takedown" | "clearbuilding" | "clearhome" | "stopad";
+type HqKind = "pack" | "takedown" | "clearbuilding" | "clearhome" | "stopad" | "deletemsg" | "clearphoto";
 const RUN: Record<HqKind, (id: string) => Promise<string>> = {
   pack: hqRecheckPack,
   takedown: hqTakeDown,
   clearbuilding: hqClearBuildingName,
   clearhome: hqClearHomeName,
   stopad: hqStopAd,
+  deletemsg: hqDeleteMessage,
+  clearphoto: hqClearPhoto,
 };
 const ASK: Partial<Record<HqKind, string>> = {
   takedown: "Take this business off the map?",
   clearbuilding: "Clear this building's name?",
   clearhome: "Clear this home's name?",
   stopad: "Stop this ad?",
+  deletemsg: "Delete this Town Hall message?",
+  clearphoto: "Remove this profile photo?",
 };
 
 const input = "h-11 w-full rounded-xl border border-line bg-panel px-4 text-base outline-none focus:border-gold";

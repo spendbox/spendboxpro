@@ -64,7 +64,7 @@ import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
 import { BookOpen, Church, FerrisWheel, Landmark as LandmarkIcon, Plane, Ship, TrainFront, Trophy, UtensilsCrossed } from "lucide-react";
-import { BellOff, BellRing, LayoutGrid, LocateFixed, Rocket, Wallet, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Palette, ShoppingBag, Swords, TrendingUp, User } from "lucide-react";
+import { BellOff, BellRing, Landmark, LayoutGrid, LocateFixed, Rocket, Wallet, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Palette, ShoppingBag, Swords, TrendingUp, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
 import { GhostsSheet } from "./ghost-duel/ghosts-sheet";
@@ -83,6 +83,7 @@ import { useNoPageZoom } from "./no-page-zoom";
 import type { PersonOnMap } from "./people-actions";
 import { peopleAround } from "./life/things-cache";
 import { PersonCard } from "./people/person-card";
+import { prefetchCard, rememberPreview, rememberPreviews } from "./people/card-cache";
 import { AwaySheet, DoorstepSheet, notificationsOn, turnOffNotifications, turnOnNotifications, useAwayDigest } from "./people/doorstep";
 import { DatingSheet, RivalsSheet } from "./people/street-dating";
 import { weatherNow } from "@/lib/world/news";
@@ -159,6 +160,8 @@ const CameraMode = dynamic(() => import("./phone/camera").then((m) => m.CameraMo
 const PhoneSheet = dynamic(() => import("./phone/phone-sheet").then((m) => m.PhoneSheet));
 const HowItWorks = dynamic(() => import("./how-it-works").then((m) => m.HowItWorks));
 const Results = dynamic(() => import("./results").then((m) => m.Results));
+const ProfilePhoto = dynamic(() => import("./profile-photo").then((m) => m.ProfilePhoto));
+const TownHall = dynamic(() => import("./town-hall").then((m) => m.TownHall));
 const AvatarEditor = dynamic(() => import("./avatar-editor").then((m) => m.AvatarEditor));
 const AvatarStudio = dynamic(() => import("./avatar-studio").then((m) => m.AvatarStudio), { ssr: false });
 const SportsSheet = dynamic(() => import("./sports/sportsbook").then((m) => m.SportsSheet));
@@ -498,6 +501,11 @@ export function Game({
     return () => clearTimeout(t);
   }, []);
   const [editAvatar, setEditAvatar] = useState(false);
+  /** The Town Hall (the state's chat, game-db/085), and a dot on its button when there's something new. */
+  const [townOpen, setTownOpen] = useState(false);
+  /** Your profile photo (instead of the drawn face). */
+  const [photoOpen, setPhotoOpen] = useState(false);
+  const [townNew, setTownNew] = useState(false);
   // The new 3D studio, while it is being tried out (see avatar3d-flag.ts).
   // (Read in the browser only; it matters only once the studio is opened, so the server's false is harmless.)
   const [studio3d] = useState(() => typeof window !== "undefined" && avatar3dEnabled());
@@ -1797,6 +1805,31 @@ export function Game({
   // server pays what's been earned when the game opens, every 5 minutes, and when you open Money.
   // Around (the row of faces under the top bar): only people online right now.
   const onlineOut = useMemo(() => peopleOut.filter((p) => p.status === "online"), [peopleOut]);
+  // The Town Hall's dot: something said since you last looked (checked every minute while closed).
+  useEffect(() => {
+    if (!worldId || me.guest || townOpen) return;
+    let alive = true;
+    const look = () =>
+      document.visibilityState === "visible" &&
+      void import("./town-hall").then(async ({ townMessages, townSeen }) => {
+        const list = await townMessages(worldId);
+        if (alive && list?.length) setTownNew(list[list.length - 1].id > townSeen() && list[list.length - 1].from !== me.id);
+      });
+    const first = setTimeout(look, 5_000);
+    const t = setInterval(look, 60_000);
+    return () => {
+      alive = false;
+      clearTimeout(first);
+      clearInterval(t);
+    };
+  }, [worldId, me.guest, me.id, townOpen]);
+  // Everyone's card opens at once: their face and name are known from here (people/card-cache).
+  useEffect(() => {
+    rememberPreviews(peopleOut.map((p) => ({ id: p.id, name: p.name, avatar: p.avatar, online: p.status === "online" })));
+  }, [peopleOut]);
+  useEffect(() => {
+    if (!me.guest && me.name) rememberPreview({ id: me.id, name: me.name, avatar: me.avatar, online: true });
+  }, [me.guest, me.id, me.name, me.avatar]);
   // The cash going up live ticks in its own little label (LiveCash), not the whole screen; the
   // wallet reads it when it opens.
   // The walkthrough (./tutorial): which button it points at, and where it's got to.
@@ -2312,7 +2345,7 @@ export function Game({
               {onlineOut
                 .slice(0, 12)
                 .map((p) => (
-                  <button key={p.id} onClick={() => setPersonId(p.id)} className="flex w-12 shrink-0 flex-col items-center" title={`${p.name} · ${p.status === "online" ? "online" : p.status === "work" ? "at work" : p.status === "asleep" ? "asleep" : "away"}`}>
+                  <button key={p.id} onPointerDown={() => prefetchCard(p.id)} onClick={() => setPersonId(p.id)} className="flex w-12 shrink-0 flex-col items-center" title={`${p.name} · ${p.status === "online" ? "online" : p.status === "work" ? "at work" : p.status === "asleep" ? "asleep" : "away"}`}>
                     <span className="relative">
                       <AvatarFace avatar={cleanAvatar(p.avatar, p.name)} size={36} className="rounded-full shadow ring-2 ring-white" />
                       <span className={cn("absolute -bottom-0.5 -right-0.5 size-3 rounded-full ring-2 ring-white", p.status === "online" ? "bg-[#2f9e44]" : p.status === "work" ? "bg-[#f08c00]" : "bg-[#adb5bd]")} />
@@ -3673,6 +3706,42 @@ export function Game({
       )}
       {/* The real map: one chat bubble, bottom right (your chats, Newtown's own messages, the news,
           the camera). It shakes when something new arrives. */}
+      {/* The Town Hall: everyone online in the state, one chat. Just above the chat bubble. */}
+      {worldId && !camera && !guest && !place && tour("townhall") && (
+        <button
+          onClick={() => {
+            setTownOpen(true);
+            setTownNew(false);
+          }}
+          className="pointer-events-auto absolute bottom-[5.5rem] right-3.5 z-20 flex size-12 flex-col items-center justify-center rounded-full bg-[#e8590c] text-white shadow-[0_8px_20px_-6px_rgba(232,89,12,0.8)] sm:bottom-[6.5rem] sm:right-5"
+          aria-label={townNew ? "Town Hall: new messages" : "Town Hall"}
+          title="Town Hall: everyone online"
+        >
+          <Landmark className="size-5" />
+          <span className="text-[8px] font-bold leading-none">TOWN</span>
+          {tutorialGlow === "townhall" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
+          {townNew && <span className="absolute -right-0.5 -top-0.5 size-3 rounded-full bg-hit ring-2 ring-white" />}
+        </button>
+      )}
+      {photoOpen && !guest && (
+        <ProfilePhoto
+          avatar={me.avatar}
+          onClose={() => setPhotoOpen(false)}
+          onSaved={(text) => {
+            setMessage({ text, tone: "good" });
+            startTransition(() => router.refresh());
+          }}
+        />
+      )}
+      {townOpen && worldId && !guest && worldRegion && (
+        <TownHall
+          region={worldId}
+          state={worldRegion.state}
+          me={{ id: me.id, name: me.name ?? "Me", avatar: me.avatar }}
+          onPerson={(id) => setPersonId(id)}
+          onClose={() => setTownOpen(false)}
+        />
+      )}
       {worldId && !camera && !guest && !place && tour("chat") && (
         <button
           onClick={() => {
@@ -3730,6 +3799,7 @@ export function Game({
               title: "You",
               items: [
                 { label: "My look", icon: Palette, colour: "#e64980", go: () => setEditAvatar(true) },
+                { label: "Profile photo", icon: ImageIcon, colour: "#0c8599", go: () => setPhotoOpen(true) },
                 { label: "My card", icon: User, colour: "#7048e8", go: () => setPersonId(me.id) },
                 ...(worldLife.hasHome ? [{ label: "Home", icon: House, colour: "#7048e8", go: () => worldLife.goHome() }] : []),
                 { label: "Wallet", icon: Wallet, colour: "#2b8a3e", go: () => setMoneyOpen(true) },
@@ -3954,6 +4024,10 @@ export function Game({
             },
             paid: () => startTransition(() => router.refresh()),
             leave: () => leaveRoom(),
+            townHall: () => {
+              setChatOpen(false);
+              setTownOpen(true);
+            },
             look: () => {
               setChatOpen(false);
               setMeOpen(false);

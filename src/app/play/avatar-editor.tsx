@@ -37,7 +37,8 @@ const NAMES: Partial<Record<Key, string[]>> = {
 
 /** Design your face: pick a part, then a style or colour. Saves to your profile. */
 export function AvatarEditor({ initial, onClose, onSaved }: { initial: Avatar; onClose: () => void; onSaved: () => void }) {
-  const [a, setA] = useState<Avatar>(initial);
+  // The drawing itself (a profile photo would hide every change; saving goes back to the drawing).
+  const [a, setA] = useState<Avatar>(() => ({ ...initial, photo: undefined }));
   const [tab, setTab] = useState<Key>("skin");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

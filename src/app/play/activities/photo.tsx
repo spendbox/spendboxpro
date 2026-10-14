@@ -247,7 +247,7 @@ function paintBackdrop(ctx: CanvasRenderingContext2D, kind: Exclude<Backdrop, "l
 
 /** A face as an image (from a saved avatar). */
 function avatarImage(p: Person): Promise<HTMLImageElement | null> {
-  const svg = renderToStaticMarkup(<AvatarFace avatar={cleanAvatar(p.avatar, p.id)} size={400} />).replace(/^<svg(?![^>]*xmlns=)/, '<svg xmlns="http://www.w3.org/2000/svg"');
+  const svg = renderToStaticMarkup(<AvatarFace avatar={{ ...cleanAvatar(p.avatar, p.id), photo: undefined }} size={400} />).replace(/^<svg(?![^>]*xmlns=)/, '<svg xmlns="http://www.w3.org/2000/svg"');
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => resolve(img);

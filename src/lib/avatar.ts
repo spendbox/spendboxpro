@@ -21,7 +21,15 @@ export type Avatar = {
    * haven't opened the new avatar studio yet: their 3D look is worked out from the fields above.
    */
   r3?: string;
+  /**
+   * A photo used instead of the drawn face (a small square in the public "faces" bucket,
+   * game-db/085): its address. The drawing above is still kept, for the 3D figure and for going back.
+   */
+  photo?: string;
 };
+
+/** A profile photo's address: only pictures from the game's own "faces" bucket, in the owner's folder. */
+export const FACE_PHOTO = /^https:\/\/[A-Za-z0-9.-]+(:[0-9]+)?\/storage\/v1\/object\/public\/faces\/([0-9a-f-]{36})\/[A-Za-z0-9_-]{8,40}\.jpg$/;
 
 export const SKIN = ["#f6d7c3", "#eec3a0", "#d9a37a", "#c08458", "#9c6440", "#7a4a2c", "#5c3620", "#3f2416"];
 export const HAIR_COLOR = ["#1b1b1b", "#3b2417", "#6a3d1f", "#a5652a", "#d9a441", "#e8d3a1", "#9aa0a6", "#b5332e", "#5b3fa0", "#2f6fd1"];
@@ -94,7 +102,7 @@ export function cleanAvatar(input: unknown, fallbackSeed: string): Avatar {
   const base = defaultAvatar(fallbackSeed);
   if (!input || typeof input !== "object") return base;
   const src = input as Record<string, unknown>;
-  const limits: Record<Exclude<keyof Avatar, "r3">, number> = {
+  const limits: Record<Exclude<keyof Avatar, "r3" | "photo">, number> = {
     skin: SKIN.length,
     hair: AVATAR_PARTS.hair.length,
     hairColor: HAIR_COLOR.length,
@@ -115,6 +123,7 @@ export function cleanAvatar(input: unknown, fallbackSeed: string): Avatar {
   }
   // Keep a 3D recipe only if it reads as one.
   if (typeof src.r3 === "string" && src.r3.length <= 80 && decodeRecipe(src.r3)) out.r3 = src.r3;
+  if (typeof src.photo === "string" && src.photo.length <= 300 && FACE_PHOTO.test(src.photo)) out.photo = src.photo;
   return out;
 }
 

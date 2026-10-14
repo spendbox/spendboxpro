@@ -25,6 +25,22 @@ export function AvatarFace({
   /** Just the person (no round backdrop), e.g. to stand them in front of a photo. */
   cutout?: boolean;
 }) {
+  // A photo instead of the drawing (src/app/api/profile-photo): round, with the same ring.
+  if (a.photo) {
+    const cid = `avp-${a.photo.slice(-16).replace(/[^A-Za-z0-9]/g, "")}`;
+    return (
+      <svg viewBox="0 0 120 120" width={size} height={size} className={className} role="img" aria-label="Player photo">
+        <defs>
+          <clipPath id={cid}>
+            <circle cx="60" cy="60" r="60" />
+          </clipPath>
+        </defs>
+        <circle cx="60" cy="60" r="60" fill="#dee2e6" />
+        <image href={a.photo} x="0" y="0" width="120" height="120" preserveAspectRatio="xMidYMid slice" clipPath={`url(#${cid})`} />
+        {ring && <circle cx="60" cy="60" r="57.5" fill="none" stroke={ring} strokeWidth="5" />}
+      </svg>
+    );
+  }
   const skin = SKIN[a.skin];
   const skinShade = shade(skin, 0.12);
   const hair = HAIR_COLOR[a.hairColor];
