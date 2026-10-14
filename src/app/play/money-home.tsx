@@ -311,7 +311,7 @@ function Payments({ list, onCheck, checking }: { list: TopUpRow[] | null; onChec
   );
 }
 
-/** The World Bank: what the city has collected from games. Stealing from it is coming soon. */
+/** The World Bank: everything players pay the city (fares, bills, taxes, shopping, games…). Stealing from it is coming soon. */
 function WorldBank() {
   const [bank, setBank] = useState<{ balance: number; today: number } | null>(null);
   useEffect(() => {
@@ -335,7 +335,7 @@ function WorldBank() {
       <span className="min-w-0 flex-1">
         <span className="block text-[11px] font-semibold uppercase tracking-wide text-white/70">World Bank</span>
         <b className="block font-display text-xl tabular-nums">{cash(bank.balance)}</b>
-        <span className="block text-[11px] text-white/70">From taxes on games{bank.today > 0 ? ` · +${cash(bank.today)} today` : ""}</span>
+        <span className="block text-[11px] text-white/70">From everything spent in town{bank.today > 0 ? ` · +${cash(bank.today)} today` : ""}</span>
       </span>
       <button disabled className="shrink-0 rounded-full bg-hit/90 px-3 py-2 text-xs font-bold" title="Coming soon">
         🦹 Steal <span className="block text-[9px] font-semibold opacity-80">Coming soon</span>
