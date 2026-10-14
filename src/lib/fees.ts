@@ -8,7 +8,7 @@ const VISIT_FEE: Record<string, number> = {
   // The big sights.
   intlairport: 5, spaceport: 5, capitol: 5, megamall: 4, arena: 4, waterpark: 4, funfair: 4, museum: 3.5,
   // Grand places.
-  mall: 3, hotel: 3, bank: 3, cathedral: 2.5, grandmosque: 2.5, twin: 3, spa: 3, airport: 3, campus: 2, market: 1.5, port: 2,
+  mall: 3, hotel: 3, bank: 3, cathedral: 2.5, grandmosque: 2.5, twin: 3, spa: 3, airport: 3, campus: 2, medcentre: 1, market: 1.5, port: 2,
   stadium: 3, court: 2, boxing: 2, wrestling: 2, gym: 2, bigpark: 1.5, military: 2, power: 1, dam: 1.5, solar: 1, oilrig: 2,
   // Going out.
   club: 2, restaurant: 1.5, tower: 1.5, ferris: 1,

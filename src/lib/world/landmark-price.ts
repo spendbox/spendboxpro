@@ -16,6 +16,7 @@ const BASE: Record<string, { naira: number; w: number; d: number }> = {
   capitol: { naira: 700e9, w: 3, d: 3 },
   twin: { naira: 500e9, w: 2, d: 2 },
   campus: { naira: 500e9, w: 2, d: 2 },
+  medcentre: { naira: 400e9, w: 4, d: 4 },
   megamall: { naira: 450e9, w: 3, d: 3 },
   arena: { naira: 400e9, w: 4, d: 4 },
   stadium: { naira: 400e9, w: 1, d: 1 },

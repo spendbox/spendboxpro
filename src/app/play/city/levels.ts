@@ -475,6 +475,10 @@ function structureLevels(t: Tile, type: StructureType, plan: CityPlan): Draft[] 
     case "wrestling":
       R("g", "Ringside", "interior", "wrestling", X, 0.09, Z, 0.8, 0.8, { weight: 2 });
       break;
+    case "medcentre":
+      R("g", "Reception", "interior", "reception", X, 0.09, Z - 0.6, 0.66, 0.17);
+      R("f1", "Floor 1 · Ward", "interior", "ward", X, 0.09 + 0.3, Z - 0.6, 0.66, 0.17);
+      break;
     case "campus":
       R("g", "Library", "interior", "library", X, 0.09, Z - 0.6, 0.66, 0.17);
       R("f1", "Floor 1 · Lecture hall", "interior", "lecture", X, 0.09 + 0.3, Z - 0.6, 0.66, 0.17);

@@ -505,6 +505,9 @@ export function Game({
   const [townOpen, setTownOpen] = useState(false);
   /** Your profile photo (instead of the drawn face). */
   const [photoOpen, setPhotoOpen] = useState(false);
+  /** At a landmark's main entrance (going in): its name, and the count that sends you on inside. */
+  const [atGate, setAtGate] = useState<{ name: string } | null>(null);
+  const [gateIn, setGateIn] = useState(0);
   const [townNew, setTownNew] = useState(false);
   // The new 3D studio, while it is being tried out (see avatar3d-flag.ts).
   // (Read in the browser only; it matters only once the studio is opened, so the server's false is harmless.)
@@ -2224,6 +2227,8 @@ export function Game({
             // Signed out, buildings can't be tapped (sign in to go anywhere).
             onProperty={worldId && !guest ? worldLife.onProperty : undefined}
             onWorkplace={worldId && !guest ? worldLife.onWorkplace : undefined}
+            onAtGate={setAtGate}
+            gateIn={gateIn}
             centerRef={worldId ? worldLife.centerRef : undefined}
             walkStick={walkStick}
             homeStick={homeStick}
@@ -3359,6 +3364,22 @@ export function Game({
         {/* Inside a place on the real map: a voice call with the few people on this floor (docs/VOICE_CALLS.md). */}
         {worldId && place && !guest && rooms.myRoom && (
           <CallBar room={`place-${rooms.myRoom}`} me={{ id: me.id, name: me.name ?? "Player", avatar: me.avatar }} title="Voice chat here" max={6} className="pointer-events-auto w-full max-w-md" />
+        )}
+        {/* At a landmark's main entrance (going in): a photo by the name sign, then in. */}
+        {atGate && place && !camera && (
+          <div className="glass pointer-events-auto flex w-full max-w-md flex-wrap items-center gap-2 rounded-2xl p-2 pl-3 text-sm">
+            <MapPin className="size-4 shrink-0 text-[#e8590c]" />
+            <span className="min-w-0 flex-1 leading-tight">
+              <b className="block truncate">{atGate.name}</b>
+              <span className="text-xs text-muted">The main entrance. Snap a photo by the sign!</span>
+            </span>
+            <button onClick={() => setCamera("photo")} className="flex shrink-0 items-center gap-1 rounded-xl bg-[#f08c00] px-3 py-2 text-xs font-bold text-white">
+              <Camera className="size-4" /> Photo
+            </button>
+            <button onClick={() => setGateIn((n) => n + 1)} className="flex shrink-0 items-center gap-1 rounded-xl bg-ink px-3 py-2 text-xs font-bold text-white">
+              <DoorOpen className="size-4" /> Go inside
+            </button>
+          </div>
         )}
         {/* The real map, inside a building or on a ride (a balloon...): where you are, chat, change floor, camera, leave. */}
         {worldId && (place || ride !== null) && (

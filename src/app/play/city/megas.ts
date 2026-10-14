@@ -815,18 +815,56 @@ function spaceport(t: Tile, B: BoxFn, tree: TreeFn) {
  * promenade of trees and benches along the far side (the lagoon front). Laid out from the
  * campus's own size, so any big campus works.
  */
-function campus(t: Tile, B: BoxFn, tree: TreeFn) {
+/**
+ * Drawing a big landmark the way round its entrance faces: the drawing is laid out with its
+ * gate on the west (local x small, the boulevard along x), and this turns (or mirrors) it so the
+ * gate is on the side the map gave its main entrance (compile.ts), right behind the name sign.
+ * Returns the drawing functions and the local size (w along the boulevard, d across it).
+ */
+function facingEntrance(t: Tile, B: BoxFn, tree: TreeFn) {
   const st = t.structure!;
-  const w = st.w ?? 4;
-  const d = st.d ?? 4;
+  const W = st.w ?? 4;
+  const D = st.d ?? 4;
+  const e = st.entrance ?? { dx: -1, dz: 0 };
+  const across = e.dz !== 0;
+  const w = across ? D : W;
+  const d = across ? W : D;
+  const Cx = (W - 1) / 2;
+  const Cz = (D - 1) / 2;
+  const lcx = (w - 1) / 2;
+  const lcz = (d - 1) / 2;
+  const at = (lx: number, lz: number): [number, number] => {
+    const u = lx - lcx;
+    const v = lz - lcz;
+    if (e.dx < 0) return [Cx + u, Cz + v];
+    if (e.dx > 0) return [Cx - u, Cz + v];
+    if (e.dz < 0) return [Cx + v, Cz + u];
+    return [Cx + v, Cz - u];
+  };
+  const B2: BoxFn = (x, y, z, sx, sy, sz, color, ry = 0, mesh, tilt) => {
+    const [wx, wz] = at(x, z);
+    B(wx, y, wz, across ? sz : sx, sy, across ? sx : sz, color, ry, mesh, tilt);
+  };
+  const tree2: TreeFn = (x, z, size, v) => {
+    const [wx, wz] = at(x, z);
+    tree(wx, wz, size, v);
+  };
+  return { B: B2, tree: tree2, w, d };
+}
+
+function campus(t: Tile, B0: BoxFn, tree0: TreeFn, hospital = false) {
+  // Laid out with the gate on the (local) west; turned to face the real entrance.
+  const { B, tree, w, d } = facingEntrance(t, B0, tree0);
   const cx = (w - 1) / 2;
   const cz = (d - 1) / 2;
   const x0 = -0.5;
   const z0 = -0.5;
   const ROAD = 0x5c636b;
   const PATH = 0xe9dfc8;
-  const BRICK = 0xb5523b;
-  const CREAM = 0xefe3c8;
+  // A teaching hospital: white and pale blue blocks (red crosses on the roofs) instead of brick.
+  const BRICK = hospital ? 0xdbe4ee : 0xb5523b;
+  const CREAM = hospital ? 0xf8f9fa : 0xefe3c8;
+  const RED = 0xe03131;
   const r = (k: number) => {
     const v = Math.sin((t.x * 12.9898 + t.z * 78.233 + k * 37.719) * 0.5) * 43758.5453;
     return v - Math.floor(v);
@@ -844,10 +882,8 @@ function campus(t: Tile, B: BoxFn, tree: TreeFn) {
     B(cx, 0.09, cz + side * (d / 2 - 0.04), w - 0.06, 0.08, 0.02, 0xdee2e6);
     B(cx + side * (w / 2 - 0.04), 0.09, cz, 0.02, 0.08, d - 0.06, 0xdee2e6);
   }
-  // The main gate: two pillars and a beam with the university's colours.
-  for (const side of [-1, 1]) B(x0 + 0.05, 0.09, cz + side * 0.24, 0.12, 0.42, 0.1, CREAM);
-  B(x0 + 0.05, 0.5, cz, 0.14, 0.1, 0.6, 0x1c3f94);
-  B(x0 + 0.06, 0.52, cz, 0.15, 0.04, 0.4, 0xf1c40f, 0, "paint");
+  // The main gate itself (and its name sign) stand just outside, on the street: see the city
+  // view's entrance signs. Here, only the opening in the fence for the boulevard.
   // Trees along the boulevard.
   for (let k = 1; k < 7; k++) for (const side of [-1, 1]) tree(x0 + 0.4 + (k * w * 0.5) / 7, cz + side * 0.32, 0.4, r(k + side));
 
@@ -862,7 +898,17 @@ function campus(t: Tile, B: BoxFn, tree: TreeFn) {
   B(tx, 0.09, tz, 0.9, 0.3, 0.55, CREAM);
   B(tx, 0.39, tz, 0.55, 2.7, 0.4, 0xd8cbb0);
   for (let y = 0.55; y < 3; y += 0.22) B(tx, y, tz, 0.562, 0.07, 0.412, 0x3b5068, 0, "glass");
-  B(tx, 3.09, tz, 0.4, 0.12, 0.3, 0x8a6a4a);
+  B(tx, 3.09, tz, 0.4, 0.12, 0.3, hospital ? 0xf8f9fa : 0x8a6a4a);
+  if (hospital) {
+    // The main block's red cross on the roof, and its emergency entrance with ambulances.
+    B(tx, 3.22, tz, 0.26, 0.02, 0.07, RED, 0, "paint");
+    B(tx, 3.22, tz, 0.07, 0.02, 0.26, RED, 0, "paint");
+    B(tx - 0.62, 0.09, tz, 0.36, 0.02, 0.5, 0xadb5bd, 0, "ground");
+    for (const k of [-1, 1]) {
+      B(tx - 0.62, 0.11, tz + k * 0.12, 0.2, 0.09, 0.09, 0xffffff);
+      B(tx - 0.62, 0.205, tz + k * 0.12, 0.2, 0.012, 0.03, RED, 0, "paint");
+    }
+  }
   const lx = sx + 0.1;
   const lz = cz + 1.0;
   B(lx, 0.09, lz, 1.2, 0.62, 0.6, CREAM);
@@ -891,7 +937,11 @@ function campus(t: Tile, B: BoxFn, tree: TreeFn) {
       const long = r(n + 90) < 0.5;
       B(fx, 0.09, fz, long ? 0.75 : 0.45, h, long ? 0.4 : 0.6, color);
       B(fx, 0.09 + h * 0.55, fz, (long ? 0.75 : 0.45) + 0.01, 0.06, (long ? 0.4 : 0.6) + 0.01, 0x4c6e91, 0, "glass");
-      B(fx, 0.09 + h, fz, (long ? 0.75 : 0.45) + 0.04, 0.04, (long ? 0.4 : 0.6) + 0.04, 0x6b5440);
+      B(fx, 0.09 + h, fz, (long ? 0.75 : 0.45) + 0.04, 0.04, (long ? 0.4 : 0.6) + 0.04, hospital ? 0xced4da : 0x6b5440);
+      if (hospital && n % 2 === 0) {
+        B(fx, 0.14 + h, fz, 0.16, 0.012, 0.045, RED, 0, "paint");
+        B(fx, 0.14 + h, fz, 0.045, 0.012, 0.16, RED, 0, "paint");
+      }
       B(fx, 0.092, fz + 0.42, 0.08, 0.004, 0.3, PATH, 0, "ground");
       tree(fx + 0.38, fz + 0.3, 0.35, r(n + 7));
     }
@@ -905,9 +955,20 @@ function campus(t: Tile, B: BoxFn, tree: TreeFn) {
     for (let y = 0.25; y < 1; y += 0.18) B(hx, 0.09 + y, hz - 0.205, 0.5, 0.03, 0.03, 0x495057);
   }
 
-  // The sports centre: a running track round a football pitch, a small stand.
   const px = x0 + w * 0.86;
   const pz = z0 + d * 0.22;
+  if (hospital) {
+    // A helipad and a car park where a university has its sports centre.
+    B(px, 0.09, pz, 0.9, 0.02, 0.9, 0x868e96, 0, "disc");
+    B(px, 0.11, pz, 0.7, 0.004, 0.7, 0xf8f9fa, 0, "disc");
+    B(px, 0.115, pz, 0.62, 0.004, 0.62, 0x868e96, 0, "disc");
+    B(px - 0.12, 0.12, pz, 0.05, 0.004, 0.36, 0xffffff, 0, "paint");
+    B(px + 0.12, 0.12, pz, 0.05, 0.004, 0.36, 0xffffff, 0, "paint");
+    B(px, 0.12, pz, 0.2, 0.004, 0.05, 0xffffff, 0, "paint");
+    B(px, 0.09, pz + 1.05, 1.6, 0.008, 0.7, 0x5b6470, 0, "ground");
+    for (let k = 0; k < 9; k++) B(px - 0.75 + k * 0.19, 0.1, pz + 1.05, 0.012, 0.003, 0.5, 0xffffff, 0, "paint");
+  } else {
+  // The sports centre: a running track round a football pitch, a small stand.
   const ta = Math.min(1.2, w * 0.12);
   const tb = Math.min(0.8, d * 0.14);
   B(px, 0.09, pz, ta * 2, 0.012, tb * 2, 0xc0573e, 0, "disc");
@@ -916,6 +977,7 @@ function campus(t: Tile, B: BoxFn, tree: TreeFn) {
   B(px, 0.115, pz, 0.01, 0.002, tb * 0.9, 0xffffff, 0, "paint");
   B(px, 0.09, pz + tb + 0.2, ta * 1.2, 0.18, 0.2, 0xdee2e6);
   B(px, 0.27, pz + tb + 0.26, ta * 1.2, 0.02, 0.32, 0x1c3f94);
+  }
 
   // The lagoon front (the far east side): a promenade under palms, benches looking out.
   B(x0 + w - 0.62, 0.093, cz, 0.16, 0.004, d - 1.4, PATH, 0, "ground");
@@ -940,6 +1002,7 @@ export function megaParts(t: Tile, B: BoxFn, tree: TreeFn): boolean {
   else if (st.type === "intlairport") intlairport(t, B, tree);
   else if (st.type === "spaceport") spaceport(t, B, tree);
   else if (st.type === "campus" && (st.w > 2 || (st.d ?? 2) > 2)) campus(t, B, tree);
+  else if (st.type === "medcentre") campus(t, B, tree, true);
   else return false;
   return true;
 }

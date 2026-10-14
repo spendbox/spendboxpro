@@ -120,6 +120,7 @@ const STRUCTURE_LOOK: Record<StructureType, Look> = {
   market: { icon: Store, color: C.food, outdoor: true },
   arena: { icon: Goal, color: C.green, outdoor: false },
   campus: { icon: GraduationCap, color: C.law, outdoor: false },
+  medcentre: { icon: Hospital, color: C.civic, outdoor: false },
   hotel: { icon: BedDouble, color: C.stay, outdoor: false },
   solar: { icon: Sun, color: C.power, outdoor: true },
   airport: { icon: Plane, color: C.stay, outdoor: false },
@@ -167,6 +168,21 @@ const KIND_LOOK: Partial<Record<Tile["kind"], Look>> = {
   monument: { icon: Landmark, color: C.grey, outdoor: true },
 };
 const DEFAULT_LOOK: Look = { icon: Building2, color: GOLD, outdoor: false };
+
+/**
+ * Fun places (where there's something to do: clubs, restaurants, stadiums, funfairs, big parks,
+ * malls, gyms...): a little round icon over each, seen from further out than the name bubbles,
+ * so you spot them while scrolling the map. Tap one to open it.
+ */
+const FUN_KINDS = new Set<string>(["club", "restaurant", "stadium", "ferris", "pitch", "playground"]);
+const FUN_STRUCTURES = new Set<string>(["funfair", "arena", "waterpark", "bigpark", "megamall", "mall", "court", "boxing", "wrestling", "gym", "spa", "museum", "market", "hotel"]);
+export function isFunPlace(t: Tile) {
+  return t.kind === "structure" ? !!t.structure && FUN_STRUCTURES.has(t.structure.type) : FUN_KINDS.has(t.kind);
+}
+/** The little fun-place icons: how many at most, their size (px), and how far out they show. */
+const FUN_MAX = 18;
+const FUN_PX = 26;
+const FUN_ZOOM = 95;
 
 export function placeLook(t: Tile): Look {
   if (t.station) return { icon: TrainFront, color: C.stay, outdoor: false };
@@ -635,6 +651,9 @@ export function createBubbles(host: BubblesHost) {
         s.card.style.pointerEvents = "auto";
       }
     }
+    // The fun places' little icons, round the name bubbles (and further out than them).
+    if (places) pickFun(zoom);
+    else for (const d of dots) d.on = false;
   }
   function spotOf(i: number) {
     const spots = host.spots();
@@ -664,7 +683,11 @@ export function createBubbles(host: BubblesHost) {
       for (const s of slots) if (s.kind !== 0 && s.on) hideSlot(s);
       lastPick = -Infinity;
     }
-    if (!places) for (const s of slots) if (s.kind === 1 && s.on) hideSlot(s);
+    if (!places) {
+      for (const s of slots) if (s.kind === 1 && s.on) hideSlot(s);
+      for (const d of dots) d.on = false;
+    }
+    updateFun(dt);
     if (!events) for (const s of slots) if (s.kind === 2 && s.on) hideSlot(s);
     active = 0;
     for (const s of slots) {
@@ -722,8 +745,138 @@ export function createBubbles(host: BubblesHost) {
     }
   }
 
+  // ---- the fun places' little icons
+  type Dot = { el: HTMLDivElement; key: number; wx: number; wy: number; wz: number; on: boolean; a: number; lx: number; ly: number; lo: number; look: string };
+  const dots: Dot[] = [];
+  const funGrid = new Set<number>();
+  function makeDot(): Dot {
+    const el = document.createElement("div");
+    el.style.cssText = [
+      "position:absolute",
+      "left:0",
+      "top:0",
+      `width:${FUN_PX}px`,
+      `height:${FUN_PX}px`,
+      "display:grid",
+      "place-items:center",
+      "border-radius:999px",
+      "color:#fff",
+      "border:2px solid #fff",
+      "box-shadow:0 4px 10px -3px rgba(24,32,43,0.55)",
+      "opacity:0",
+      "visibility:hidden",
+      "pointer-events:none",
+      "cursor:pointer",
+      "touch-action:none",
+      "-webkit-tap-highlight-color:transparent",
+      "will-change:transform,opacity",
+    ].join(";");
+    layer.appendChild(el);
+    const d: Dot = { el, key: -1, wx: 0, wy: 0, wz: 0, on: false, a: 0, lx: NaN, ly: NaN, lo: 0, look: "" };
+    el.addEventListener("pointerdown", (e) => {
+      if (!d.on || (e.pointerType === "mouse" && e.button !== 0)) return forward(e);
+      if (!press) {
+        press = { slot: null, kind: 1, key: d.key, x: e.clientX, y: e.clientY, t: performance.now(), id: e.pointerId, live: true };
+        window.addEventListener("pointermove", onPressMove, { passive: true });
+        window.addEventListener("pointercancel", onPressCancel);
+      }
+      e.preventDefault();
+      forward(e);
+    });
+    el.addEventListener("pointerup", (e) => release(e));
+    el.addEventListener("wheel", onCardWheel, { passive: false });
+    return d;
+  }
+  /** Which fun places get an icon: anywhere on screen, not where a name bubble shows already. */
+  function pickFun(zoom: number) {
+    for (const d of dots) d.on = false;
+    if (zoom > FUN_ZOOM) return;
+    funGrid.clear();
+    // The name bubbles' spots are taken.
+    for (let k = pinRects; k < rectN; k++) {
+      const o = k * 4;
+      for (let gx = Math.floor(rects[o] / FUN_PX); gx <= Math.floor(rects[o + 2] / FUN_PX); gx++)
+        for (let gy = Math.floor(rects[o + 1] / FUN_PX); gy <= Math.floor(rects[o + 3] / FUN_PX); gy++) funGrid.add(gx * 4096 + gy);
+    }
+    const spots = host.spots();
+    const reach = host.camera.position.distanceTo(host.target) * 1.3 + 8;
+    const tx = host.target.x;
+    const tz = host.target.z;
+    let n = 0;
+    for (let k = 0; k < spots.length && n < FUN_MAX; k++) {
+      const sp = spots[k];
+      if (Math.abs(sp.x - tx) > reach || Math.abs(sp.z - tz) > reach) continue;
+      if (showsPlace(sp.i)) continue;
+      const info = host.label(sp.i);
+      if (!info || !isFunPlace(info.tile)) continue;
+      if (!project(sp.x, sp.y, sp.z)) continue;
+      const x = pt.x;
+      const y = pt.y - 4;
+      if (x < safe.l + FUN_PX || x > safe.r - FUN_PX || y < safe.t + FUN_PX * 2 || y > safe.b - FUN_PX) continue;
+      if (host.hidden?.(sp)) continue;
+      const cell = Math.floor(x / FUN_PX) * 4096 + Math.floor((y - FUN_PX / 2) / FUN_PX);
+      if (funGrid.has(cell) || funGrid.has(cell + 4096) || funGrid.has(cell - 4096) || funGrid.has(cell + 1) || funGrid.has(cell - 1)) continue;
+      funGrid.add(cell);
+      let d = dots.find((x) => x.key === sp.i) ?? null;
+      if (!d) d = dots.find((x) => !x.on && x.a <= 0) ?? null;
+      if (!d && dots.length < FUN_MAX) {
+        d = makeDot();
+        dots.push(d);
+      }
+      if (!d) break;
+      if (d.key !== sp.i) {
+        d.key = sp.i;
+        d.a = 0;
+      }
+      d.on = true;
+      d.wx = sp.x;
+      d.wy = sp.y;
+      d.wz = sp.z;
+      const look = placeLook(info.tile);
+      const id = `${look.color}|${info.name}`;
+      if (d.look !== id) {
+        d.look = id;
+        d.el.style.background = look.color;
+        d.el.innerHTML = svgOf(look.icon, 14, 2.4);
+        d.el.setAttribute("aria-label", info.name);
+        d.el.title = info.name;
+      }
+      n++;
+    }
+  }
+  function updateFun(dt: number) {
+    for (const d of dots) {
+      if (d.key < 0) continue;
+      const ok = project(d.wx, d.wy, d.wz);
+      if (!ok) d.on = false;
+      d.a = d.on ? Math.min(1, d.a + dt / 0.25) : Math.max(0, d.a - dt / 0.15);
+      d.el.style.pointerEvents = d.on ? "auto" : "none";
+      if (d.a <= 0) {
+        if (d.lo !== 0) {
+          d.el.style.visibility = "hidden";
+          d.el.style.opacity = "0";
+          d.lo = 0;
+        }
+        if (!d.on) d.key = -1;
+        continue;
+      }
+      const x = Math.round(pt.x);
+      const y = Math.round(pt.y - 4);
+      if (x !== d.lx || y !== d.ly) {
+        d.el.style.transform = `translate3d(${x}px,${y}px,0) translate(-50%,-100%) scale(${(0.7 + 0.3 * d.a).toFixed(3)})`;
+        d.lx = x;
+        d.ly = y;
+      }
+      if (Math.abs(d.a - d.lo) > 0.02 || (d.a === 1 && d.lo !== 1)) {
+        d.el.style.visibility = "visible";
+        d.el.style.opacity = d.a >= 0.99 ? "1" : d.a.toFixed(2);
+        d.lo = d.a >= 0.99 ? 1 : d.a;
+      }
+    }
+  }
+
   // ---- taps
-  type Press = { slot: Slot; kind: 1 | 2; key: number; x: number; y: number; t: number; id: number; live: boolean };
+  type Press = { slot: Slot | null; kind: 1 | 2; key: number; x: number; y: number; t: number; id: number; live: boolean };
   let press: Press | null = null;
   function setPressed(s: Slot, on: boolean) {
     s.card.style.transform = on ? "scale(0.92)" : "";
@@ -766,12 +919,12 @@ export function createBubbles(host: BubblesHost) {
     if (!press || e.pointerId !== press.id || !press.live) return;
     if (Math.hypot(e.clientX - press.x, e.clientY - press.y) > TAP_MOVE) {
       press.live = false;
-      setPressed(press.slot, false);
+      if (press.slot) setPressed(press.slot, false);
     }
   }
   function endPress() {
     if (!press) return;
-    setPressed(press.slot, false);
+    if (press.slot) setPressed(press.slot, false);
     press = null;
     window.removeEventListener("pointermove", onPressMove);
     window.removeEventListener("pointercancel", onPressCancel);

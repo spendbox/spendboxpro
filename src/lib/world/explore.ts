@@ -22,14 +22,14 @@ export const GROUPS: { id: ExploreGroup; label: string; blurb: string }[] = [
 const STRUCTURE_GROUP: Partial<Record<StructureType, ExploreGroup>> = {
   bigpark: "parks", waterpark: "parks", funfair: "parks",
   megamall: "shopping", mall: "shopping", market: "shopping",
-  museum: "culture", cathedral: "culture", grandmosque: "culture", capitol: "culture", campus: "culture",
+  museum: "culture", cathedral: "culture", grandmosque: "culture", capitol: "culture", campus: "culture", medcentre: "culture",
   arena: "sport", court: "sport", boxing: "sport", wrestling: "sport", gym: "sport",
   intlairport: "travel", airport: "travel", port: "travel",
   hotel: "food", spa: "food",
 };
 const STRUCTURE_WHAT: Partial<Record<StructureType, string>> = {
   bigpark: "Park", waterpark: "Water park", funfair: "Funfair", megamall: "Shopping mall", mall: "Mall", market: "Market", museum: "Museum",
-  cathedral: "Cathedral", grandmosque: "Mosque", capitol: "Government", campus: "University", arena: "Stadium", court: "Basketball court",
+  cathedral: "Cathedral", grandmosque: "Mosque", capitol: "Government", campus: "University", medcentre: "Teaching hospital", arena: "Stadium", court: "Basketball court",
   boxing: "Boxing arena", wrestling: "Wrestling arena", gym: "Gym", intlairport: "International airport", airport: "Airport", port: "Port", hotel: "Hotel", spa: "Spa",
 };
 const TILE_GROUP: Partial<Record<TileKind, ExploreGroup>> = {

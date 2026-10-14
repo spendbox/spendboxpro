@@ -78,7 +78,7 @@ const SIZE: Partial<Record<StructureType, [number, number]>> = {
 };
 
 const STRUCTURES = new Set<string>([
-  "mall", "twin", "museum", "funfair", "market", "arena", "campus", "hotel", "solar", "airport", "port", "military", "power", "dam",
+  "mall", "twin", "museum", "funfair", "market", "arena", "campus", "medcentre", "hotel", "solar", "airport", "port", "military", "power", "dam",
   "oilrig", "waterpark", "court", "boxing", "wrestling", "capitol", "megamall", "bank", "bigpark", "gym", "spa", "cathedral",
   "grandmosque", "intlairport", "spaceport",
 ]);
