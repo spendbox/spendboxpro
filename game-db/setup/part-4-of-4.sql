@@ -3917,10 +3917,13 @@ end $$;
 -- class, a watch party, an open mic). The host picks where (the street they're on, or a landmark,
 -- a restaurant, a park...), when (now, or up to a week ahead), how long, how many can come and a
 -- ticket price (free, or any amount). People say they're going, get told when it starts, and come
--- in from a few minutes before. Ticket money is held until the event is over, then 90% goes to the
--- host (the rest is the city's); if the host calls it off, everyone gets their ticket back.
--- Parties cost money to host (worked out by the server from the hours, the crowd size, the kind of
--- place and how dear the area is; it comes back if called off before it starts), and two street
+-- in from a few minutes before. Ticket money is held until the event is over, then taxed like
+-- everything else in the city: tickets include VAT (service_vat, 7.5%), and what's left is the
+-- host's income, less income tax (work_income_tax, 7%); both go to the state treasuries. If the
+-- host calls it off, everyone gets their ticket back (no tax).
+-- Parties cost money to host: a permit (worked out by the server from the hours, the crowd size, the
+-- kind of place and how dear the area is), paid to the state once the party has started; it comes
+-- back if called off before it starts. Two street
 -- parties can't be on the same stretch of road at the same time.
 -- Hosting events people come to, and going to them, add to your reputation. The walkthrough's
 -- third mission becomes "go to an event" (tutorial_check below replaces part 80's: if you ever run
@@ -4130,6 +4133,9 @@ create or replace function public.event_settle(p_id bigint) returns text
 language plpgsql security definer set search_path = public as $$
 declare
   e public.hosted_events;
+  v_vat numeric;
+  v_gross numeric;
+  v_tax numeric;
   v_share numeric;
   v_came int;
 begin
@@ -4137,18 +4143,27 @@ begin
   if not found then return 'gone'; end if;
   if e.status <> 'on' then return e.status; end if;
   if e.ends_at > now() then return 'on'; end if;
-  v_share := round(e.pool * 0.9, 2);
-  if v_share > 0 then
+  -- Tickets include VAT; the rest is the host's income, taxed at source like pay.
+  v_vat := round(e.pool * public.setting('service_vat') / (1 + public.setting('service_vat')), 2);
+  v_gross := e.pool - v_vat;
+  v_tax := round(v_gross * public.setting('work_income_tax'), 2);
+  v_share := v_gross - v_tax;
+  if v_vat > 0 then perform public.pay_tax(e.region, v_vat, 'vat', 'VAT on event tickets: ' || left(e.title, 40)); end if;
+  if v_gross > 0 then
     update public.profiles set coins = coins + v_share where id = e.host_id;
-    perform public.log_coins(e.host_id, null, 'event_tickets', v_share, false, 'Tickets: ' || e.title);
+    perform public.log_coins(e.host_id, null, 'event_tickets', v_gross, false, 'Tickets: ' || e.title);
+    if v_tax > 0 then
+      perform public.log_coins(e.host_id, null, 'income_tax', -v_tax, false, 'Income tax on tickets');
+      perform public.pay_tax(e.region, v_tax, 'income_tax', 'Income tax on event tickets');
+    end if;
   end if;
-  if e.pool - v_share > 0 then perform public.burn(null, e.pool - v_share, 'Event tickets'); end if;
-  if e.host_fee > 0 then perform public.burn(null, e.host_fee, 'Event hosting'); end if;
+  -- The permit to host it (parties): the state's now.
+  if e.host_fee > 0 then perform public.pay_tax(e.region, e.host_fee, 'event_permit', 'Event permit: ' || left(e.title, 40)); end if;
   select count(*) into v_came from public.hosted_event_guests where event_id = p_id and entered_at is not null and user_id <> e.host_id;
   update public.hosted_events set status = 'closed', paid_out = v_share where id = p_id;
   perform public.notify(e.host_id, null, 'event',
     format('"%s" is over. %s came%s. Thanks for hosting!', e.title, case when v_came = 1 then '1 person' else v_came || ' people' end,
-           case when v_share > 0 then format(' and ₥%s of tickets is yours', trim_scale(v_share)) else '' end));
+           case when v_share > 0 then format(' and ₥%s of tickets is yours (after VAT and income tax)', trim_scale(v_share)) else '' end));
   return 'closed';
 end $$;
 
@@ -4173,7 +4188,7 @@ begin
     update public.profiles set coins = coins + e.host_fee where id = e.host_id;
     perform public.log_coins(e.host_id, null, 'event_hosting_back', e.host_fee, false, 'Hosting fee back: ' || e.title);
   elsif e.host_fee > 0 then
-    perform public.burn(null, e.host_fee, 'Event hosting');
+    perform public.pay_tax(e.region, e.host_fee, 'event_permit', 'Event permit: ' || left(e.title, 40));
   end if;
   update public.hosted_events set status = 'cancelled', pool = 0, ends_at = least(ends_at, greatest(now(), starts_at + interval '1 second')) where id = p_id;
   for r in select user_id from public.hosted_event_guests where event_id = p_id and going and user_id <> p_user loop
@@ -4243,6 +4258,28 @@ language sql stable security definer set search_path = public as $$
                and (select count(*) from public.hosted_event_guests g where g.event_id = e.id and g.entered_at is not null and g.user_id <> p_user) >= 3),
     'attended', (select count(*) from public.hosted_event_guests g join public.hosted_events e on e.id = g.event_id
                  where g.user_id = p_user and g.entered_at is not null and e.host_id <> p_user and e.status <> 'cancelled'))
+$$;
+
+-- ============================================================ Finance: ticket sales are earnings
+/** (Part 95: ticket sales from events you hosted count as earnings too.) Everything you've earned (ever, and in the last p_days days), and the latest payments in. */
+create or replace function public.life_earnings(p_user uuid, p_days int, p_limit int default 100) returns jsonb
+language sql stable security definer set search_path = public as $$
+  with earned as (
+    select id, kind, amount, note, created_at from public.ledger
+    where user_id = p_user and amount > 0
+      and kind in ('work_pay', 'public_pay', 'hustle_pay', 'bonus', 'rent', 'item_sale', 'car_sale', 'service_pay', 'event_tickets')
+  ),
+  taxed as (
+    select amount, created_at from public.ledger where user_id = p_user and kind in ('income_tax', 'rent_tax') and amount < 0
+  )
+  select jsonb_build_object(
+    'total', coalesce((select round(sum(amount), 2) from earned), 0),
+    'tax', coalesce((select round(-sum(amount), 2) from taxed), 0),
+    'period', coalesce((select round(sum(amount), 2) from earned where created_at >= now() - make_interval(days => least(greatest(coalesce(p_days, 7), 1), 3650))), 0),
+    'entries', coalesce((select jsonb_agg(jsonb_build_object('id', e.id, 'kind', e.kind, 'amount', round(e.amount, 2), 'note', e.note, 'at', e.created_at) order by e.created_at desc, e.id desc)
+      from (select * from earned where created_at >= now() - make_interval(days => least(greatest(coalesce(p_days, 7), 1), 3650))
+            order by created_at desc, id desc limit least(greatest(coalesce(p_limit, 100), 1), 300)) e), '[]'::jsonb)
+  )
 $$;
 
 -- ============================================================ the walkthrough's third mission

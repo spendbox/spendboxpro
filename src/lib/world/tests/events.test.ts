@@ -17,6 +17,7 @@ import {
   cleanStage,
   partyCost,
   streetClash,
+  ticketSplit,
   cleanTitle,
   doorsOpen,
   eventRep,
@@ -147,4 +148,10 @@ test("Game challenge is coming soon, not hostable from Events", () => {
 
 test("a party's song queue keeps only YouTube ids", () => {
   assert.deepEqual(cleanStage({ queue: ["dQw4w9WgXcQ", "bad", 4] }).queue, ["dQw4w9WgXcQ"]);
+});
+
+test("tickets are taxed like pay: VAT inside the price, then income tax (the same numbers as the database)", () => {
+  assert.deepEqual(ticketSplit(300), { vat: 20.93, tax: 19.53, host: 259.54 });
+  const t = ticketSplit(1000);
+  assert.ok(Math.abs(t.vat + t.tax + t.host - 1000) < 0.011, "it all adds up");
 });

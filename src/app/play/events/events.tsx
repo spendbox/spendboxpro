@@ -14,6 +14,9 @@ import {
   EVENT_CATEGORIES,
   HOSTS_A_DAY,
   HOST_SHARE,
+  INCOME_TAX,
+  TICKET_VAT,
+  ticketSplit,
   NEAR_TILES,
   PARTY_NAIRA_PER_HOUR,
   VENUE_COST,
@@ -320,7 +323,7 @@ export function Events({
         <Sheet onClose={() => setConfirm(null)} title={confirm.kind === "end" ? "End it now?" : "Call it off?"} centred>
           <p className="text-sm text-muted">
             {confirm.kind === "end"
-              ? `Everyone leaves the room${confirm.e.price > 0 ? `, and your share of the tickets (${Math.round(HOST_SHARE * 100)}%) is paid to you` : ""}.`
+              ? `Everyone leaves the room${confirm.e.price > 0 ? `, and the ticket money is paid to you (less VAT and income tax)` : ""}.`
               : `Everyone going is told${confirm.e.price > 0 ? ", and every ticket bought is paid back" : ""}.${confirm.e.category === "party" ? (confirm.e.status === "upcoming" ? " Your hosting fee comes back too." : " It has started, so the hosting fee is spent.") : ""}`}
           </p>
           <div className="mt-4 grid grid-cols-2 gap-2">
@@ -401,7 +404,7 @@ function EventsSheet({
           <Point icon="📍" text="Host anywhere: the street you're on, a landmark, a restaurant, a park." />
           <Point icon="🎊" text="Parties fill the street on the map. Inside: music, the hot seat, meeting someone new, shout-outs, toasts and spraying the host." />
           <Point icon="🎤" text="Talks and screenings: slides or a video everyone watches together, with reactions and questions." />
-          <Point icon="🎟️" text={`Free, or sell tickets: you keep ${Math.round(HOST_SHARE * 100)}% once it's over.`} />
+          <Point icon="🎟️" text={`Free, or sell tickets: once it's over you keep about ${Math.round(HOST_SHARE * 100)}% (tickets include ${TICKET_VAT * 100}% VAT, and your takings pay ${INCOME_TAX * 100}% income tax, like pay).`} />
           <Point icon="⭐" text={`+${REP_PER_HOSTED} reputation for every event you host that 3 or more people come to.`} />
         </div>
         <button
@@ -818,7 +821,7 @@ function HostForm({
         {priceBad && raw
           ? `Up to ${cash(quote?.priceMax ?? 0)} a ticket.`
           : price
-            ? `Guests pay ${cash(price)} to come in. You get ${Math.round(HOST_SHARE * 100)}% of it once the event is over; if you call it off, everyone gets theirs back.`
+            ? `Guests pay ${cash(price)} to come in (VAT included). Once it's over you get ${cash(ticketSplit(price).host)} of each: ${cash(ticketSplit(price).vat)} is VAT and ${cash(ticketSplit(price).tax)} income tax, paid to the state. If you call it off, everyone gets theirs back.`
             : "Free to come. People can still spray you at a party."}
       </p>
       <p className="mt-2 flex items-center gap-1 text-xs font-semibold text-muted">
@@ -845,7 +848,7 @@ function HostForm({
             <span className="rounded-full bg-panel px-2 py-0.5">{VENUE_COST[venue!.kind].label} ×{cost.parts.venue}</span>
             {cost.parts.area !== 1 && <span className="rounded-full bg-panel px-2 py-0.5">{cost.parts.area > 1 ? "Pricey area" : "Cheaper area"} ×{cost.parts.area}</span>}
           </div>
-          <p className="mt-2 text-[11px] text-muted">Paid when you put it on the map, from your Fun money then your wallet. Call it off before it starts and it all comes back.</p>
+          <p className="mt-2 text-[11px] text-muted">A permit paid to the state, when you put it on the map (from your Fun money, then your wallet). Call it off before it starts and it all comes back.</p>
         </div>
       ) : (
         <p className="rounded-2xl bg-ink/5 p-3 text-sm text-muted">{cat === "party" ? "Pick where it is to see the price." : "Free to host."}</p>

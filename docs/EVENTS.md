@@ -149,8 +149,14 @@ Looked into, not used:
 ## Money
 
 - Tickets come from your Fun money, then your wallet, and are held until the event is over.
-- Then the host gets 90% (logged as "Tickets: ..."); the rest is the city's (burned, counted by
-  the World Bank).
+- Then they're **taxed like everything else in the city** (docs/LIVING.md, "Taxes"):
+  - the ticket price includes **VAT** (7.5%, `service_vat`);
+  - what's left is the host's income (a pay slip in Finance, "Tickets: ...", counted in what
+    you've earned) less **income tax** (7%, `work_income_tax`, kept back at source);
+  - the host keeps about 86.5%: ₥300 of tickets is ₥20.93 VAT, ₥19.53 income tax, ₥259.54 to the host.
+  - VAT and income tax go to the treasuries (70% Lagos State, 30% Nigeria), and so into the World Bank.
+- The **hosting fee is a permit**, paid to the state (`event_permit`) once the party has started.
+- Spraying is a gift (the usual gift limits for new accounts), like spraying in clubs: not taxed.
 - Called off by the host: every ticket comes back and everyone going is told.
 - The host can end it early (and is paid at once).
 - Money history shows these as "Events".
@@ -176,6 +182,6 @@ Looked into, not used:
 - `src/lib/world/tests/events.test.ts` (npm test): the formats and their map scenes, titles,
   times, YouTube links, what the stage keeps, reputation.
 - `game-db/tests/events.test.sql`: hosting and its limits, going, early doors, a full room,
-  tickets paid once, the start notice, the host's 90% (once), calling off with tickets back,
+  tickets paid once, the start notice, VAT and income tax on tickets (to the treasuries, on the host's pay slips, in Finance), the permit to the state, paid once, calling off with tickets back,
   ending early, the stage, reputation, and running the part twice. Run it against a throwaway
   database that already has parts 1 to 94.

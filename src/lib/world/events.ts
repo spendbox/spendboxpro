@@ -72,8 +72,21 @@ export const CAPACITY_MAX = 1000;
 /** Ticket prices to pick from (naira; 0 is free). The host can type any amount up to the most. */
 export const TICKETS_NAIRA = [0, 1_000, 5_000, 20_000];
 export const TICKET_MAX_NAIRA = 500_000;
-/** The host gets this share of ticket money once the event is over (the rest is the city's). */
-export const HOST_SHARE = 0.9;
+/**
+ * Tickets are taxed like everything else in the city (game-db/095 event_settle, the same rates as
+ * game_settings service_vat and work_income_tax): the price includes VAT, and what's left is the
+ * host's income, less income tax.
+ */
+export const TICKET_VAT = 0.075;
+export const INCOME_TAX = 0.07;
+/** What the host keeps of each ticket once it's over (about 86.5%). */
+export const HOST_SHARE = (1 / (1 + TICKET_VAT)) * (1 - INCOME_TAX);
+/** A ticket's money, split: VAT, income tax, and what the host keeps (to the kobo, as the database does). */
+export function ticketSplit(price: number) {
+  const vat = Math.round(((price * TICKET_VAT) / (1 + TICKET_VAT)) * 100) / 100;
+  const tax = Math.round((price - vat) * INCOME_TAX * 100) / 100;
+  return { vat, tax, host: Math.round((price - vat - tax) * 100) / 100 };
+}
 /** Events you can host a day. */
 export const HOSTS_A_DAY = 3;
 /** Events near enough to hear about the moment they start (tiles, 100 m each). */

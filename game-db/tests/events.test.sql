@@ -48,6 +48,7 @@ declare
   id3 bigint;
   id4 bigint;
   coins0 numeric;
+  tax0 numeric;
 begin
   -- The rules for hosting.
   perform pg_temp.fails('a title is needed', 'bad_title', format($q$select event_open(%L, 'lagos', 'party', 'rave', ' x ', '', 0, 0, '', false, now(), 60, 0, 400, 100, 3)$q$, a));
@@ -91,13 +92,18 @@ begin
   perform event_stage(a, id1, '{"mode": "video", "video": "dQw4w9WgXcQ", "playing": true}');
   perform pg_temp.check((select stage->>'video' from hosted_events where id = id1) = 'dQw4w9WgXcQ', 'the host sets the stage');
   perform pg_temp.fails('the stage is kept small', 'bad_stage', format('select event_stage(%L, %s, %L)', a, id1, jsonb_build_object('x', repeat('y', 9000))));
-  -- It's over: the host gets 90%, the rest burns, and is told how it went.
+  -- It's over: tickets are taxed like pay. ₥300 of tickets: ₥20.93 VAT (7.5% inside the price),
+  -- ₥279.07 earned, ₥19.53 income tax (7%), ₥259.54 to the host. Taxes go to the treasuries.
+  tax0 := (select coalesce(sum(amount), 0) from treasury_ledger where kind in ('vat', 'income_tax'));
   perform pg_temp.check(event_settle(id1) = 'on', 'nothing to settle while it''s on');
   perform pg_temp.shift(id1, now() - interval '3 hours', now() - interval '1 minute');
   perform event_sweep('lagos');
   perform pg_temp.check((select status from hosted_events where id = id1) = 'closed', 'settled by the sweep');
-  perform pg_temp.check((select coins from profiles where id = a) = 1270, 'the host has 90% of the tickets');
-  perform pg_temp.check(event_settle(id1) = 'closed' and (select coins from profiles where id = a) = 1270, 'paid only once');
+  perform pg_temp.check((select coins from profiles where id = a) = 1259.54, 'the host has the tickets less VAT and income tax');
+  perform pg_temp.check((select coalesce(sum(amount), 0) from treasury_ledger where kind in ('vat', 'income_tax')) - tax0 = 40.46, 'VAT and income tax went to the treasuries');
+  perform pg_temp.check(exists (select 1 from ledger where user_id = a and kind = 'income_tax' and amount = -19.53), 'the income tax shows on the host''s pay slips');
+  perform pg_temp.check((life_earnings(a, 7)->>'total')::numeric >= 279.07, 'ticket sales count as earnings in Finance');
+  perform pg_temp.check(event_settle(id1) = 'closed' and (select coins from profiles where id = a) = 1259.54, 'paid only once');
   perform pg_temp.check(exists (select 1 from notifications where user_id = a and body like '%3 people came%'), 'the host is told how it went');
   perform pg_temp.check(event_hosting(a) is null, 'free to host another');
   perform pg_temp.fails('too late to come in', 'over', format('select event_enter(%L, %s, 5)', b, id1));
@@ -145,6 +151,7 @@ begin
   id4 := (v->>'id')::bigint;
   perform pg_temp.check(event_end(c, id4) = 'closed', 'ended');
   perform pg_temp.check((select coins from profiles where id = c) = coins0 - 70, 'ended: the fee is spent');
+  perform pg_temp.check(exists (select 1 from treasury_ledger where kind = 'event_permit' and note like 'Event permit: Owambe%'), 'the permit went to the state');
 
   -- The walkthrough's third mission is going to an event now (not winning a challenge).
   update hosted_event_guests set entered_at = entered_at - interval '1 hour' where user_id = b;
