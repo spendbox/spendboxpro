@@ -706,6 +706,21 @@ export function useWorldLife({
     if (region) void api.marketListings(region.region.id).then(setListings);
   };
   /** Open a building's card by its id: as bought if someone owns it, else as the map has it. */
+  /** A building as it stands (as bought, if anyone owns part of it): for its card. */
+  const buildingNow = (id: string) => {
+    const sp = ownedSpot(id);
+    if (!region || !sp) return null;
+    const plan = planOf(region);
+    const t = tileAt(plan, spiralIndex(sp.x, sp.z));
+    const b = owned.find((o) => o.id === id)?.building ?? t.building;
+    return b ? { b, sp, plan, t } : null;
+  };
+  const buildingHas = (id: string, use: string) => !!buildingNow(id)?.b.units.some((u) => u.use === use);
+  /** Open a building's card where you're looking (no trip). */
+  const openBuildingCard = (id: string) => {
+    const n = buildingNow(id);
+    if (n && region) onProperty(propertyInfo(n.b, n.sp.x, n.sp.z, addressOf(n.plan, n.t), region));
+  };
   const showBuilding = (id: string) => {
     const sp = ownedSpot(id);
     if (!region || !sp) return;
@@ -1396,7 +1411,16 @@ export function useWorldLife({
         />
       )}
       {business && (
-        <BusinessSheet b={business} onHit={(kind) => void api.hitBusiness(business.id, kind)} onClose={() => setBusiness(null)} />
+        <BusinessSheet
+          b={business}
+          onHit={(kind) => void api.hitBusiness(business.id, kind)}
+          onClose={() => setBusiness(null)}
+          // A building with homes stays open to live in while a business leases it (game-db/094).
+          onHomes={signedIn && buildingHas(business.building, "home") ? () => {
+            setBusiness(null);
+            openBuildingCard(business.building);
+          } : undefined}
+        />
       )}
       {currencyOpen && <CurrencySheet value={currency} onPick={chooseCurrency} onClose={() => setCurrencyOpen(false)} />}
       {ask && (

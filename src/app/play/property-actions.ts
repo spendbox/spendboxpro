@@ -44,6 +44,7 @@ function say(message: string | undefined): PropertyResult {
     no_life: "Start your life first.",
     not_yours: "That isn't yours.",
     not_all_yours: "You can name a building once you own all of it.",
+    leased: "A business has its name on this building for now, so it can't be renamed until that ends.",
     is_home: "That's your home. Move somewhere else first to let it out.",
     bad_name: "Names are 2 to 40 letters and numbers.",
     frozen: "Your account is paused right now.",
@@ -99,8 +100,10 @@ export async function buyUnit(unitId: string): Promise<PropertyResult> {
   const price = Math.max(1, discounted(worth, things?.reputation.score ?? 0));
   // What your property has earned so far is paid first, by the database (game-db/079).
   // A building a real business leases isn't for sale while the lease runs.
-  const { count: leased } = await db.from("business_leases").select("id", { count: "exact", head: true }).eq("building_id", m[1]).eq("status", "live");
-  if (leased) return { ok: false, error: "A business leases that building, so it isn't for sale." };
+  // A building people live in stays open for homes while a business leases it (game-db/094); others don't.
+  let { data: lease, error: leaseError } = await db.from("business_leases").select("residential").eq("building_id", m[1]).eq("status", "live").maybeSingle();
+  if (leaseError) ({ data: lease } = await db.from("business_leases").select("id").eq("building_id", m[1]).eq("status", "live").maybeSingle());
+  if (lease && !(lease as { residential?: boolean }).residential) return { ok: false, error: "A business leases that building, so it isn't for sale." };
   // Short in your wallet? What's in Savings tops it up (that's what Savings is for).
   const cost = Math.round(price * (1 + BUY_TAX) * 100) / 100;
   const [{ data: prof }, { data: pot }] = await Promise.all([

@@ -5,39 +5,45 @@
 
 import type { BuildingKind } from "./buildings.ts";
 
-/** A month's lease by the size of the building, in naira, before the area's own price. */
+/**
+ * A month's lease by the size of the building, in naira, before the area's own price. A building
+ * costs at least 3 times what billboard ads alone do (₦5,000 a week, so ₦20,000 for 4 weeks): it
+ * comes with the billboards, and a building with your name on it besides.
+ */
 const BASE: Record<BuildingKind, number> = {
-  shops: 5_000,
-  mixed: 6_000,
-  rooming: 5_000,
-  bungalow: 5_000,
-  land: 5_000,
-  farm: 5_000,
-  duplex: 15_000,
-  terrace: 15_000,
-  flats: 20_000,
-  warehouse: 20_000,
-  offices: 30_000,
-  plaza: 60_000,
-  apartments: 60_000,
-  glass: 150_000,
+  shops: 60_000,
+  mixed: 72_000,
+  rooming: 60_000,
+  bungalow: 60_000,
+  land: 60_000,
+  farm: 60_000,
+  duplex: 180_000,
+  terrace: 180_000,
+  flats: 240_000,
+  warehouse: 240_000,
+  offices: 360_000,
+  plaza: 720_000,
+  apartments: 720_000,
+  glass: 1_500_000,
 };
 
-/** Every lease is between these (naira a month): ₦5,000 for a shopfront in a quiet area, up to ₦250,000 for a glass tower in Ikoyi. */
-export const LEASE_MIN = 5_000;
-export const LEASE_MAX = 250_000;
+/** Billboard ads alone: the smallest a month (4 weeks at the smallest weekly budget). */
+export const BILLBOARD_MONTH_MIN = 20_000;
+/** Every lease is between these (naira a month): 3 times billboards alone at the least, up to ₦3m for a glass tower in Ikoyi. */
+export const LEASE_MIN = BILLBOARD_MONTH_MIN * 3;
+export const LEASE_MAX = 3_000_000;
 
 /** How many months a building can be taken for at once (more any time after, a month at a time). */
 export const LEASE_MONTHS = [1, 3, 6, 12] as const;
 
 /**
  * What a building costs to lease for a month (naira): its size, and how dear its area is (land in
- * Ikoyi costs about 30 times land in Ajegunle; a lease about 3 times). Rounded to ₦1,000.
+ * Ikoyi costs about 30 times land in Ajegunle; a lease about 3 times). Rounded to ₦5,000.
  */
 export function leasePrice(kind: BuildingKind, landPerM2: number) {
   const area = Math.min(2, Math.max(0.6, Math.pow(Math.max(1, landPerM2) / 150_000, 0.3)));
   const naira = Math.min(LEASE_MAX, Math.max(LEASE_MIN, BASE[kind] * area));
-  return Math.round(naira / 1_000) * 1_000;
+  return Math.round(naira / 5_000) * 5_000;
 }
 
 /** A lease's price a month (naira) from what was paid: leases from before monthly ones were a year at four times a month's price. */

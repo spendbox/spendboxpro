@@ -41,7 +41,7 @@ const STATES = [
 const stateRegion = (name: string) => Object.keys(REGIONS).find((id) => REGIONS[id].name.toLowerCase() === name.toLowerCase()) ?? null;
 
 /** Amounts to tap: the map takes you to a free building at that price a month. */
-const AMOUNTS = [5_000, 10_000, 20_000, 40_000, 60_000, 100_000, 150_000, 250_000];
+const AMOUNTS = [60_000, 100_000, 150_000, 250_000, 400_000, 750_000, 1_500_000, 3_000_000];
 const naira = (n: number) => `₦${Math.round(n).toLocaleString("en-NG")}`;
 const shortNaira = (n: number) => (n >= 1_000_000 ? `₦${n / 1_000_000}m` : `₦${Math.round(n / 1000)}k`);
 
@@ -170,11 +170,9 @@ export function AdvertisePanel({
       setError(null);
       setChosen(r.offer);
       setSmall(false);
-      // A building tapped (or the panel opened from one): that's the building way.
-      if (modeRef.current !== "building") {
-        setMode("building");
-        setStep(0);
-      } else setStep((s) => (s === 2 ? 1 : s));
+      // A building tapped (or the panel opened from one): remembered. On the first screen you still
+      // choose what kind of ad (it's waiting if you choose a building); already choosing a building, it's this one.
+      if (modeRef.current === "building") setStep((s) => (s === 2 ? 1 : s));
     });
     return () => {
       alive = false;
@@ -333,6 +331,11 @@ export function AdvertisePanel({
                     <span className="block text-xs text-muted">
                       Your name lit up on a real building, and your picture on the billboards too. Paid by the month ({naira(LEASE_MIN)} to {naira(LEASE_MAX)} a month, by size and area).
                     </span>
+                    {chosen && (
+                      <span className="mt-1.5 block rounded-lg bg-white/70 px-2 py-1 text-xs">
+                        <b>The one you tapped:</b> {chosen.what}, {chosen.area} · {naira(chosen.priceNaira)} a month
+                      </span>
+                    )}
                   </span>
                 </button>
                 <p className="text-[11px] text-muted">You see it on the map before you pay. You can go back at any time.</p>
@@ -423,7 +426,7 @@ export function AdvertisePanel({
                           value={typed}
                           onChange={(e) => setTyped(e.target.value)}
                           inputMode="numeric"
-                          placeholder="Your own amount a month, e.g. 30000"
+                          placeholder="Your own amount a month, e.g. 200000"
                           className="h-10 min-w-0 flex-1 rounded-full bg-ink/[0.05] px-4 text-base outline-none ring-gold focus:ring-2"
                         />
                         <button className="h-10 shrink-0 rounded-full bg-ink px-4 text-sm font-semibold text-white">Go</button>
