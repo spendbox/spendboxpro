@@ -1901,7 +1901,7 @@ export function Game({
       case "mall":
         return { label: "Shop", icon: ShoppingBag, run: () => worldLife.openThings("shops") };
       case "bank":
-        return { label: "Banking", icon: LandmarkIcon, run: worldLife.openFinance };
+        return { label: "Banking", icon: LandmarkIcon, run: () => setMoneyOpen(true) };
       case "vault":
         return { label: "Crack the vault", icon: LandmarkIcon, run: act("vault", "The vault") };
       case "church":

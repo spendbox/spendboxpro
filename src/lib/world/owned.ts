@@ -27,7 +27,8 @@ export function ownedSpot(id: string): { region: string; x: number; z: number } 
 
 /** A name owners can give: 2 to 40 letters, numbers, spaces and simple punctuation, tidied. */
 export function cleanPropertyName(raw: string): string | null {
-  const name = raw.replace(/\s+/g, " ").trim();
+  // Phones type curly quotes ("Ada’s Palace"): the same as a straight one.
+  const name = raw.replace(/[‘’ʼ]/g, "'").replace(/\s+/g, " ").trim();
   if (name.length < 2 || name.length > 40) return null;
   if (!/^[\p{L}\p{N} '&.,()-]+$/u.test(name)) return null;
   return name;

@@ -127,7 +127,12 @@ export function Tutorial({ place, perMint, name, actions }: { place: string; per
         .then((r) => (r.ok ? (r.json() as Promise<MissionState | { off: true } | null>) : null))
         .then((d) => {
           if (!alive || !d) return;
-          if ("off" in d) return setDone("off");
+          if ("off" in d) {
+            // Rewards aren't switched on: no point asking again.
+            setDone("off");
+            clearInterval(t);
+            return;
+          }
           setDone(d);
           if (d.paid.length) {
             const got = d.paid.reduce((t, m) => t + MISSION_NAIRA[m], 0);
@@ -141,8 +146,9 @@ export function Tutorial({ place, perMint, name, actions }: { place: string; per
           asking.current = false;
         });
     };
+    // Every 15 seconds while a mission's on (and straight away).
+    const t = setInterval(look, 15_000);
     look();
-    const t = setInterval(look, 5_000);
     return () => {
       alive = false;
       clearInterval(t);

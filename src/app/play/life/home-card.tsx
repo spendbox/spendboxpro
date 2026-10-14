@@ -52,6 +52,12 @@ export function HomeCard({
   children?: React.ReactNode;
 }) {
   const [naming, setNaming] = useState(startNaming && !!onRename);
+  // Asked to name it while the card's already open (the walkthrough's "Show me"): open the box.
+  useEffect(() => {
+    if (startNaming && onRename) setNaming(true);
+    // onRename changes every render; only whether there is one matters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startNaming, !!onRename]);
   const [draft, setDraft] = useState(name ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

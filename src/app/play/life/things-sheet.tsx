@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { cachedThings, loadThings } from "./things-cache";
 import { Building2, Gem, House, ShoppingBag, Store, TrendingUp } from "lucide-react";
 import { CATEGORY_LABEL, effectWords, mintOf, QUICK_SALE, SHOP, STEAL_MAX, CAUGHT_CHANCE, type ItemCategory } from "@/lib/world/items";
-import type { AssetUnit } from "@/lib/world/property-api";
+import { INCOME_DAY, type AssetUnit } from "@/lib/world/property-api";
 import type { Prices } from "@/lib/world/region";
 import { cash } from "@/lib/world/value";
 import * as items from "../item-actions";
@@ -294,7 +294,7 @@ function Assets({ units }: { units: AssetUnit[] }) {
         <ul className="mt-3 divide-y divide-ink/5 rounded-2xl ring-1 ring-ink/5">
           {owned.map((u) => {
             const Icon = u.use === "home" ? House : u.use === "shop" ? Store : Building2;
-            const share = income.perDay > 0 && owned.length ? u.price / owned.reduce((t, x) => t + x.price, 0) : 0;
+
             return (
               <li key={u.unit} className="flex items-center gap-3 px-3 py-2.5">
                 <Icon className="size-4 shrink-0 text-muted" />
@@ -302,12 +302,23 @@ function Assets({ units }: { units: AssetUnit[] }) {
                   <p className="truncate text-sm font-medium">{[u.label, u.name].filter(Boolean).join(", ")}</p>
                   <p className="text-xs text-muted">Worth {cash(u.price)}</p>
                 </div>
-                <span className="shrink-0 text-sm font-bold text-[#2b8a3e] tabular-nums">+{cash(perDay * share)}/day</span>
+                <span className="shrink-0 text-sm font-bold text-[#2b8a3e] tabular-nums">+{cash(u.price * INCOME_DAY)}/day</span>
               </li>
             );
           })}
         </ul>
       )}
+      {(() => {
+        // Landmarks you own earn too (they're not in this list): the rest of the day's earnings.
+        const fromUnits = owned.reduce((t, u) => t + u.price * INCOME_DAY, 0);
+        const fromLandmarks = perDay - fromUnits;
+        return fromLandmarks > 1 ? (
+          <p className="mt-2 flex items-center justify-between rounded-2xl bg-gold/15 px-3 py-2 text-sm">
+            <span>🏛️ Your landmarks</span>
+            <b className="text-[#2b8a3e]">+{cash(fromLandmarks)}/day</b>
+          </p>
+        ) : null;
+      })()}
     </div>
   );
 }

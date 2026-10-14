@@ -97,7 +97,7 @@ export async function myTopUps(): Promise<{ list: TopUpRow[]; credited: number }
         if (p?.paid) {
           const c = await confirmTopUp(r.reference);
           if (c.ok) {
-            credited += c.mint ?? 0;
+            if (c.fresh) credited += c.mint ?? 0;
             r.status = "paid";
             r.doubled = !!c.doubled;
             r.paid_at = new Date().toISOString();
@@ -120,7 +120,7 @@ export async function myTopUps(): Promise<{ list: TopUpRow[]; credited: number }
 }
 
 /** Check a top-up with Paystack and, when it went through, give the money (once). */
-export async function confirmTopUp(reference: string): Promise<{ ok: boolean; mint?: number; doubled?: boolean; region?: string; error?: string }> {
+export async function confirmTopUp(reference: string): Promise<{ ok: boolean; mint?: number; doubled?: boolean; region?: string; error?: string; fresh?: boolean }> {
   if (!/^tu-[a-f0-9]{20}$/.test(reference ?? "")) return { ok: false, error: "Unknown payment." };
   const payment = await checkPayment(reference);
   if (!payment?.paid) return { ok: false, error: "That payment hasn't gone through." };
@@ -134,7 +134,8 @@ export async function confirmTopUp(reference: string): Promise<{ ok: boolean; mi
   if (!d.found) return { ok: false, error: "Unknown payment." };
   if (d.short) return { ok: false, error: "That payment was less than the top-up." };
   const { data: row } = await db.from("topups").select("region").eq("reference", reference).maybeSingle();
-  return { ok: true, mint: Number(d.mint ?? 0), doubled: !!d.doubled, region: row?.region ? String(row.region) : undefined };
+  // fresh: given just now (not already given by the webhook or another check).
+  return { ok: true, mint: Number(d.mint ?? 0), doubled: !!d.doubled, region: row?.region ? String(row.region) : undefined, fresh: (d as { new?: boolean }).new === true };
 }
 
 /** Has this player topped up before (the first is doubled)? */

@@ -1002,6 +1002,7 @@ export function useWorldLife({
               onBought={(_c, name) => {
                 setMessage({ text: `${name} is yours! Big money moves.`, good: true });
                 void refresh();
+                onChanged?.();
               }}
             />
           </div>
@@ -1389,7 +1390,10 @@ export function useWorldLife({
             setThings(null);
             loadRep();
           }}
-          onChanged={() => void refresh()}
+          onChanged={() => {
+            void refresh();
+            onChanged?.();
+          }}
         />
       )}
       {markOpen !== null && marks.find((m) => m.id === markOpen) && (
@@ -1589,6 +1593,11 @@ export function useWorldLife({
   };
   /** The walkthrough's first mission: your home's card, with the name box ready. */
   const nameHome = () => {
+    // A rented home isn't yours to name (game-db/078): say so, rather than nothing happening.
+    if (homeUnit && !home) {
+      setMessage({ text: "Only a home you own can be named. Buy one (tap any building), or skip this mission.", good: false });
+      return;
+    }
     setNameNew(true);
     goHome();
   };

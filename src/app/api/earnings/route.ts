@@ -21,6 +21,19 @@ export async function GET() {
   const userId = await currentUserId().catch(() => null);
   if (!userId) return NextResponse.json(null);
   const kinds = Object.values(FROM).flat();
+  const groupOf = (kind: string) => (Object.keys(FROM) as (keyof typeof FROM)[]).find((k) => FROM[k].includes(kind));
+  // Added up by the database (game-db/083 earnings_summary), so nothing is left out however long you play.
+  const { data: sums, error: sumError } = await createAdminClient().rpc("earnings_summary", { p_user: userId, p_kinds: kinds });
+  if (!sumError && sums) {
+    const out = Object.fromEntries(Object.keys(FROM).map((k) => [k, { total: 0, today: 0 }])) as Earnings;
+    for (const [kind, v] of Object.entries(sums as Record<string, { total: number; today: number }>)) {
+      const g = groupOf(kind);
+      if (!g) continue;
+      out[g].total += Number(v.total) || 0;
+      out[g].today += Number(v.today) || 0;
+    }
+    return NextResponse.json(out);
+  }
   const { data, error } = await createAdminClient()
     .from("ledger")
     .select("kind, amount, created_at")

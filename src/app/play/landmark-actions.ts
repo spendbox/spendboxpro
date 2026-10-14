@@ -64,7 +64,9 @@ export async function landmarkOwner(landmarkId: string): Promise<LandmarkInfo | 
   const l = landmarkFor(landmarkId);
   if (!l) return null;
   const userId = await currentUserId();
-  const { data } = await createAdminClient().from("landmark_owners").select("owner_id, price, profiles(username)").eq("landmark_id", l.id).maybeSingle();
+  const { data, error } = await createAdminClient().from("landmark_owners").select("owner_id, price, profiles(username)").eq("landmark_id", l.id).maybeSingle();
+  // Before game-db/082 is run: no buying yet (rather than a Buy button that fails).
+  if (error) return null;
   const ownerId = (data?.owner_id as string | null) ?? null;
   const prof = data?.profiles as { username?: string | null } | { username?: string | null }[] | null | undefined;
   const username = (Array.isArray(prof) ? prof[0]?.username : prof?.username) || "Someone";
