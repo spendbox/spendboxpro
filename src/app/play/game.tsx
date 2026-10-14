@@ -1795,6 +1795,8 @@ export function Game({
   const inPlannedHome = !!worldId && Number.isFinite(enteredTile) && enteredTile in homePlans;
   // Your cash on screen, with what your property earns going up every 5 seconds (./income). The
   // server pays what's been earned when the game opens, every 5 minutes, and when you open Money.
+  // Around (the row of faces under the top bar): only people online right now.
+  const onlineOut = useMemo(() => peopleOut.filter((p) => p.status === "online"), [peopleOut]);
   // The cash going up live ticks in its own little label (LiveCash), not the whole screen; the
   // wallet reads it when it opens.
   // The walkthrough (./tutorial): which button it points at, and where it's got to.
@@ -2301,14 +2303,13 @@ export function Game({
           </div>
           {worldLife.rowBelow}
           {/* People around where you're looking: online first. Tap one for their card (message, knock, gift). */}
-          {!me.guest && !place && ride === null && peopleOut.length > 0 && tour("people") && (
+          {!me.guest && !place && ride === null && onlineOut.length > 0 && tour("people") && (
             <div className="pointer-events-auto -mx-1 flex max-w-full items-start gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none]" aria-label="People around here">
               <button onClick={() => setStatsOpen(true)} className="glass flex h-12 shrink-0 flex-col items-center justify-center rounded-2xl px-2 text-[10px] font-semibold leading-tight">
                 <Users className="size-4" />
                 Around
               </button>
-              {[...peopleOut]
-                .sort((a, b) => Number(b.status === "online") - Number(a.status === "online"))
+              {onlineOut
                 .slice(0, 12)
                 .map((p) => (
                   <button key={p.id} onClick={() => setPersonId(p.id)} className="flex w-12 shrink-0 flex-col items-center" title={`${p.name} · ${p.status === "online" ? "online" : p.status === "work" ? "at work" : p.status === "asleep" ? "asleep" : "away"}`}>
@@ -3953,6 +3954,11 @@ export function Game({
             },
             paid: () => startTransition(() => router.refresh()),
             leave: () => leaveRoom(),
+            look: () => {
+              setChatOpen(false);
+              setMeOpen(false);
+              setEditAvatar(true);
+            },
           }}
         />
       )}

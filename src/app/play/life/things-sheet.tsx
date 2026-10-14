@@ -3,7 +3,7 @@
 import { announceGiftSent } from "../people/gift-pop";
 import { useCallback, useEffect, useState } from "react";
 import { cachedThings, loadThings } from "./things-cache";
-import { Building2, Gem, House, ShoppingBag, Store, TrendingUp } from "lucide-react";
+import { Building2, Gem, House, MapPin, ShoppingBag, Store, TrendingUp } from "lucide-react";
 import { CATEGORY_LABEL, effectWords, mintOf, QUICK_SALE, SHOP, STEAL_MAX, CAUGHT_CHANCE, type ItemCategory } from "@/lib/world/items";
 import { INCOME_DAY, type AssetUnit } from "@/lib/world/property-api";
 import type { Prices } from "@/lib/world/region";
@@ -30,6 +30,8 @@ export function ThingsSheet({
   prices,
   coins,
   units,
+  whereIs,
+  onShow,
   onClose,
   onChanged,
 }: {
@@ -39,6 +41,10 @@ export function ThingsSheet({
   coins: number;
   /** The property you own (Assets). */
   units: AssetUnit[];
+  /** Where a building stands ("Akoka · Yaba"), for Assets. */
+  whereIs?: (building: string) => string | null;
+  /** Show one of your properties on the map (the sheet closes and the camera flies there). */
+  onShow?: (u: AssetUnit) => void;
   onClose: () => void;
   onChanged?: () => void;
 }) {
@@ -77,7 +83,7 @@ export function ThingsSheet({
       {note && <p className={`mt-3 rounded-xl px-3 py-2 text-xs font-semibold ${note.good ? "bg-me/10 text-me" : "bg-hit/10 text-hit"}`}>{note.text}</p>}
       {tab === "mine" && <Mine me={me} busy={busy} run={run} />}
       {tab === "shops" && <Shops startCars={start === "cars"} prices={prices} coins={coins} busy={busy} run={run} />}
-      {tab === "assets" && <Assets units={units} />}
+      {tab === "assets" && <Assets units={units} whereIs={whereIs} onShow={onShow} />}
     </Sheet>
   );
 }
@@ -224,10 +230,12 @@ function Shops({ startCars, prices, coins, busy, run }: { startCars: boolean; pr
 }
 
 /** Your assets: the property you own and what it earns you, by itself, going up as you watch. */
-function Assets({ units }: { units: AssetUnit[] }) {
+function Assets({ units, whereIs, onShow }: { units: AssetUnit[]; whereIs?: (building: string) => string | null; onShow?: (u: AssetUnit) => void }) {
   const income = useIncome();
   const earned = useLiveEarned();
   const owned = units.filter((u) => u.price > 0.01);
+  // Your free room earns nothing, but it's yours to find on the map too.
+  const freeRooms = units.filter((u) => u.price <= 0.01);
   const [play, setPlay] = useState<Earnings | null | undefined>(undefined);
   useEffect(() => {
     let alive = true;
@@ -292,22 +300,19 @@ function Assets({ units }: { units: AssetUnit[] }) {
         </p>
       ) : (
         <ul className="mt-3 divide-y divide-ink/5 rounded-2xl ring-1 ring-ink/5">
-          {owned.map((u) => {
-            const Icon = u.use === "home" ? House : u.use === "shop" ? Store : Building2;
-
-            return (
-              <li key={u.unit} className="flex items-center gap-3 px-3 py-2.5">
-                <Icon className="size-4 shrink-0 text-muted" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{[u.label, u.name].filter(Boolean).join(", ")}</p>
-                  <p className="text-xs text-muted">Worth {cash(u.price)}</p>
-                </div>
-                <span className="shrink-0 text-sm font-bold text-[#2b8a3e] tabular-nums">+{cash(u.price * INCOME_DAY)}/day</span>
-              </li>
-            );
-          })}
+          {owned.map((u) => (
+            <AssetRow key={u.unit} u={u} where={whereIs?.(u.building) ?? null} onShow={onShow} right={<span className="shrink-0 text-sm font-bold text-[#2b8a3e] tabular-nums">+{cash(u.price * INCOME_DAY)}/day</span>} note={`Worth ${cash(u.price)}`} />
+          ))}
         </ul>
       )}
+      {freeRooms.length > 0 && (
+        <ul className="mt-2 divide-y divide-ink/5 rounded-2xl ring-1 ring-ink/5">
+          {freeRooms.map((u) => (
+            <AssetRow key={u.unit} u={u} where={whereIs?.(u.building) ?? null} onShow={onShow} note="Your free room" />
+          ))}
+        </ul>
+      )}
+      {onShow && (owned.length > 0 || freeRooms.length > 0) && <p className="mt-1.5 text-[11px] text-muted">Tap one to see where it is on the map.</p>}
       {(() => {
         // Landmarks you own earn too (they're not in this list): the rest of the day's earnings.
         const fromUnits = owned.reduce((t, u) => t + u.price * INCOME_DAY, 0);
@@ -320,6 +325,38 @@ function Assets({ units }: { units: AssetUnit[] }) {
         ) : null;
       })()}
     </div>
+  );
+}
+
+/** One of your properties: what it is, where it stands (tap to see it on the map), what it earns. */
+function AssetRow({ u, where, note, right, onShow }: { u: AssetUnit; where: string | null; note: string; right?: React.ReactNode; onShow?: (u: AssetUnit) => void }) {
+  const Icon = u.use === "home" ? House : u.use === "shop" ? Store : Building2;
+  const body = (
+    <>
+      <Icon className="size-4 shrink-0 text-muted" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{[u.label, u.name].filter(Boolean).join(", ")}</p>
+        {where && (
+          <p className="flex items-center gap-1 truncate text-xs font-semibold text-gold-dark">
+            <MapPin className="size-3 shrink-0" />
+            <span className="truncate">{where}</span>
+          </p>
+        )}
+        <p className="text-xs text-muted">{note}</p>
+      </div>
+      {right}
+    </>
+  );
+  return (
+    <li>
+      {onShow ? (
+        <button onClick={() => onShow(u)} className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-ink/[0.03]" aria-label={`Show ${u.label} on the map`}>
+          {body}
+        </button>
+      ) : (
+        <div className="flex items-center gap-3 px-3 py-2.5">{body}</div>
+      )}
+    </li>
   );
 }
 
