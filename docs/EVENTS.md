@@ -154,8 +154,10 @@ Looked into, not used:
   - what's left is the host's income (a pay slip in Finance, "Tickets: ...", counted in what
     you've earned) less **income tax** (7%, `work_income_tax`, kept back at source);
   - the host keeps about 86.5%: ₥300 of tickets is ₥20.93 VAT, ₥19.53 income tax, ₥259.54 to the host.
-  - VAT and income tax go to the treasuries (70% Lagos State, 30% Nigeria), and so into the World Bank.
-- The **hosting fee is a permit**, paid to the state (`event_permit`) once the party has started.
+  - VAT and income tax go to the treasuries (70% Lagos State, 30% Nigeria). Every treasury
+    payment also counts in the **World Bank** (game-db/089), so they show in its total and in
+    "today" (on the Wallet and the owner's dashboard) the moment the event is settled.
+- The **hosting fee is a permit**, paid to the state (`event_permit`, so the World Bank counts it too) once the party has started; called off before, it comes back and is never counted.
 - Spraying is a gift (the usual gift limits for new accounts), like spraying in clubs: not taxed.
 - Called off by the host: every ticket comes back and everyone going is told.
 - The host can end it early (and is paid at once).

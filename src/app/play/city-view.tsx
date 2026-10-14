@@ -34,7 +34,6 @@ import { regionMap } from "@/lib/world";
 import { GATED_SPOTS, type RegionMap } from "@/lib/world/compile";
 import { toTile } from "@/lib/world/geo";
 import { BUILDING_LABEL, type Building } from "@/lib/world/buildings";
-import { landNow, shortLocal, valueOf } from "@/lib/world/value";
 import { propertyInfo, type PropertyInfo } from "@/lib/world/property";
 import { workplaceOfTile, type Workplace } from "@/lib/world/workplace";
 import type { MapBusiness } from "@/lib/world/business";
@@ -4595,7 +4594,7 @@ export function CityView({
           : anchor.name
             ? anchor.name
             : anchor.building && currentPlan.region
-              ? propertyName(anchor.building, anchor, currentPlan.region)
+              ? propertyName(anchor.building)
               : `${shortAddress(addressOf(currentPlan, anchor))} · ${ROOM_LABEL[anchor.kind]}`;
       const capacity = levels.reduce((n, l) => n + l.capacity, 0);
       const type = anchor.home ? "home" : anchor.station ? "station" : anchor.kind === "structure" && anchor.structure ? anchor.structure.type : anchor.kind;
@@ -4622,12 +4621,14 @@ export function CityView({
       cb.current.onProperty({ ...info, workplace: workplaceOfTile(currentPlan, anchor) });
       return true;
     }
-    /** A property on the real map: what it is and what it's worth ("Block of flats · ₥31,240"). */
-    function propertyName(b: Building, at: Tile, region: RegionMap) {
+    /**
+     * A property on the real map, by what it is ("Block of flats"), its name if it has one. No
+     * price over buildings: the city is for people and places first, and what a building is worth
+     * shows on its card when it's tapped.
+     */
+    function propertyName(b: Building) {
       const kind = BUILDING_LABEL[b.kind];
-      const what = b.name ?? (b.state === "site" ? "Building site" : b.state === "uncompleted" ? `Unfinished ${kind.toLowerCase()}` : kind);
-      const value = valueOf(b, landNow(region, at.x, at.z), region.region.prices).total;
-      return `${what} · ${shortLocal(value, region.region.prices)}`;
+      return b.name ?? (b.state === "site" ? "Building site" : b.state === "uncompleted" ? `Unfinished ${kind.toLowerCase()}` : kind);
     }
     /** A name for signs inside a building (company, hotel, hospital...). */
     function signName(anchor: Tile) {
