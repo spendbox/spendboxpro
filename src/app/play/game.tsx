@@ -1771,18 +1771,18 @@ export function Game({
   const tutorialGlow = useTutorialGlow();
   const tutorialPhase = useTutorialPhase();
   // The quick buttons down the left: folded into one; open while the walkthrough points at one of them.
-  const [dockOpen, setDockOpen] = useState(false);
-  const dockRef = useRef<HTMLDivElement>(null);
-  const dockShown = dockOpen || tutorialGlow === "home" || tutorialGlow === "camera";
+  const [quickOpen, setQuickOpen] = useState(false);
+  const quickRef = useRef<HTMLDivElement>(null);
+  const quickShown = quickOpen || tutorialGlow === "home" || tutorialGlow === "camera";
   useEffect(() => {
-    if (!dockOpen) return;
+    if (!quickOpen) return;
     // A tap anywhere else folds them away.
     const away = (e: PointerEvent) => {
-      if (!dockRef.current?.contains(e.target as Node)) setDockOpen(false);
+      if (!quickRef.current?.contains(e.target as Node)) setQuickOpen(false);
     };
     document.addEventListener("pointerdown", away, true);
     return () => document.removeEventListener("pointerdown", away, true);
-  }, [dockOpen]);
+  }, [quickOpen]);
   // New coins on screen (the game opening, a refresh after anything): count from the latest payment
   // and ask again (buying or selling property pays what's been earned, on the server).
   useEffect(() => {
@@ -3224,15 +3224,15 @@ export function Game({
             round button that opens the quick buttons (Home, Camera, Coming soon, Locate me, Walk); tap
             anywhere else and they fold away again. The walkthrough opens them when it points at one. */}
         {worldId && !guest && !place && ride === null && !walking && (
-          <div ref={dockRef} className="pointer-events-auto absolute bottom-[max(0.625rem,env(safe-area-inset-bottom))] left-2.5 flex flex-col items-center gap-2 sm:bottom-4 sm:left-4">
+          <div ref={quickRef} className="pointer-events-auto absolute bottom-[max(0.625rem,env(safe-area-inset-bottom))] left-2.5 flex flex-col items-center gap-2 sm:bottom-4 sm:left-4">
             {!pushOn && (
               <button onClick={turnOnBell} className="relative grid size-10 place-items-center rounded-full bg-gold/80 text-ink shadow transition-opacity hover:bg-gold" aria-label="Notifications are off: tap to turn them on" title="Turn notifications on">
                 <BellOff className="size-4" />
                 <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-2 ring-gold/60" />
               </button>
             )}
-            {dockShown && (
-              <div className="flex flex-col items-center gap-2 motion-safe:animate-[dockIn_.18s_ease-out]" onClick={() => setDockOpen(false)}>
+            {quickShown && (
+              <div className="flex flex-col items-center gap-2 motion-safe:animate-[dockIn_.18s_ease-out]" onClick={() => setQuickOpen(false)}>
                 {worldLife.hasHome && (
                   <button onClick={() => worldLife.goHome()} className={cn("relative grid size-10 place-items-center rounded-full shadow-sm backdrop-blur-sm transition hover:bg-white/90", tutorialGlow === "home" ? "bg-white" : "bg-white/55")} aria-label="Home" title="Home">
                     <House className="size-[18px] text-[#7048e8]" />
@@ -3266,13 +3266,13 @@ export function Game({
               </div>
             )}
             <button
-              onClick={() => setDockOpen((v) => !v)}
-              className={cn("relative grid size-11 place-items-center rounded-full shadow-md transition", dockShown ? "bg-ink text-white" : "bg-white/80 text-ink backdrop-blur-sm hover:bg-white")}
-              aria-label={dockShown ? "Close the quick buttons" : "Open the quick buttons: home, camera, locate me, walk"}
-              aria-expanded={dockShown}
+              onClick={() => setQuickOpen((v) => !v)}
+              className={cn("relative grid size-11 place-items-center rounded-full shadow-md transition", quickShown ? "bg-ink text-white" : "bg-white/80 text-ink backdrop-blur-sm hover:bg-white")}
+              aria-label={quickShown ? "Close the quick buttons" : "Open the quick buttons: home, camera, locate me, walk"}
+              aria-expanded={quickShown}
               title="Quick buttons"
             >
-              {dockShown ? <X className="size-5" /> : <LayoutGrid className="size-5" />}
+              {quickShown ? <X className="size-5" /> : <LayoutGrid className="size-5" />}
               {tutorialGlow === "dock" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
             </button>
             <style>{`@keyframes dockIn { from { opacity: 0; transform: translateY(8px) scale(.96) } to { opacity: 1; transform: none } }`}</style>
