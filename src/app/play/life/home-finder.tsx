@@ -10,7 +10,10 @@ import { Sheet } from "../sheet";
 
 const KINDS: (HomeKind | "all")[] = ["all", "room", "flat", "house"];
 
-/** Quick search for a home: what your money buys, area by area. Tap one to fly there and see it. */
+/**
+ * Quick search for a home, area by area: every price shows, the ones your money buys in green and
+ * first (nothing to switch on). Tap one to fly there and see it.
+ */
 export function HomeFinder({
   areas,
   listings,
@@ -30,22 +33,25 @@ export function HomeFinder({
 }) {
   const [kind, setKind] = useState<HomeKind | "all">("all");
   const [q, setQ] = useState("");
-  const [all, setAll] = useState(false);
   const rows = useMemo(() => {
     const t = q.trim().toLowerCase();
-    return areas
+    const list = areas
       .filter((a) => !t || a.area.toLowerCase().includes(t))
-      .map((a) => ({ ...a, homes: a.homes.filter((h) => (kind === "all" || h.kind === kind) && (all || h.mint <= coins)) }))
+      .map((a) => ({ ...a, homes: a.homes.filter((h) => kind === "all" || h.kind === kind) }))
       .filter((a) => a.homes.length > 0);
-  }, [areas, q, kind, all, coins]);
+    // Areas with a home you can buy now come first (in their own order: cheapest first).
+    return [...list.filter((a) => a.homes.some((h) => h.mint <= coins)), ...list.filter((a) => !a.homes.some((h) => h.mint <= coins))];
+  }, [areas, q, kind, coins]);
   const sales = useMemo(() => {
     const t = q.trim().toLowerCase();
-    return (listings ?? []).filter((l) => l.use === "home" && (!t || l.area.toLowerCase().includes(t)) && (all || l.price <= coins));
-  }, [listings, q, all, coins]);
+    const list = (listings ?? []).filter((l) => l.use === "home" && (!t || l.area.toLowerCase().includes(t)));
+    return [...list.filter((l) => l.price <= coins), ...list.filter((l) => l.price > coins)];
+  }, [listings, q, coins]);
+  const affordable = rows.reduce((n, a) => n + a.homes.filter((h) => h.mint <= coins).length, 0);
   return (
     <Sheet onClose={onClose} title="Find a home">
       <p className="text-sm text-muted">
-        You have <b className="text-ink">{cash(coins)}</b>. Tap a home to see it.
+        You have <b className="text-ink">{cash(coins)}</b>. <span className="font-semibold text-me">Green</span> ones you can buy now. Tap a home to see it.
       </p>
       <label className="mt-3 flex h-10 items-center gap-2 rounded-full bg-ink/5 px-3 text-sm">
         <Search className="size-4 shrink-0 text-muted" />
@@ -61,9 +67,6 @@ export function HomeFinder({
             {k === "all" ? "All" : `${HOME_KIND_LABEL[k]}s`}
           </button>
         ))}
-        <button onClick={() => setAll(!all)} className={`h-8 rounded-full px-3 text-xs font-semibold ${all ? "bg-ink/5" : "bg-me/15 text-me"}`}>
-          {all ? "Showing all prices" : "Only what I can afford"}
-        </button>
       </div>
       {sales.length > 0 && (
         <>
@@ -111,11 +114,14 @@ export function HomeFinder({
         ))}
         {rows.length === 0 && (
           <li className="px-3 py-6 text-center text-sm text-muted">
-            {all ? "No area by that name." : "Nothing in your budget here. Tap “Only what I can afford” to see every price."}
+            No area by that name.
           </li>
         )}
       </ul>
-      <p className="mt-2 text-[11px] text-muted">Cheapest first. Prices are the cheapest of each kind near the middle of each area.</p>
+      <p className="mt-2 text-[11px] text-muted">
+        {affordable === 0 && rows.length > 0 ? "None in your budget yet: renting is cheaper, or keep stacking. " : ""}
+        What you can afford first, then cheapest first. Prices are the cheapest of each kind near the middle of each area.
+      </p>
     </Sheet>
   );
 }

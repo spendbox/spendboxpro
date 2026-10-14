@@ -121,7 +121,7 @@ import { useWorldLife } from "./life/world-life";
 import type { ExplorePlace } from "@/lib/world/explore";
 import { Joystick } from "./joystick";
 import { onlineIdle, onlinePinged, settleIncome, syncIncome, useLiveCoins } from "./income";
-import { Tutorial, useTutorialGlow, useTutorialPhase } from "./tutorial";
+import { Tutorial, useTourShows, useTutorialGlow, useTutorialPhase } from "./tutorial";
 import { PeopleList, prefetchPeople } from "./people/people-list";
 import { StatsSheet } from "./stats-sheet";
 import { GiftPop, GiftSent } from "./people/gift-pop";
@@ -1800,6 +1800,9 @@ export function Game({
   // The walkthrough (./tutorial): which button it points at, and where it's got to.
   const tutorialGlow = useTutorialGlow();
   const tutorialPhase = useTutorialPhase();
+  // New players: each button on the map shows once the walkthrough introduces it (none before
+  // you have a home); everyone else sees them all.
+  const tour = useTourShows(worldLife.hasHome);
   // The quick buttons down the left: folded into one; open while the walkthrough points at one of them.
   const [quickOpen, setQuickOpen] = useState(false);
   const quickRef = useRef<HTMLDivElement>(null);
@@ -2276,14 +2279,14 @@ export function Game({
               </button>
             )}
             {/* You: your face opens everything that isn't chat (your look, money, friends, settings). */}
-            {worldId && !guest && (
+            {worldId && !guest && tour("profile") && (
               <button onClick={() => setMeOpen(true)} className="pointer-events-auto relative shrink-0 rounded-full ring-[3px] ring-[#f59f00] shadow" aria-label="You: your look, money, friends and settings">
                 <AvatarFace avatar={me.avatar} size={36} className="rounded-full bg-white" />
                 {tutorialGlow === "profile" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
               </button>
             )}
             {/* Who's online; tap for the numbers: registered players and visits, and how they're growing. */}
-            {!guest && (
+            {!guest && tour("online") && (
             <button
               onClick={() => setStatsOpen(true)}
               className="glass pointer-events-auto relative flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold"
@@ -2298,7 +2301,7 @@ export function Game({
           </div>
           {worldLife.rowBelow}
           {/* People around where you're looking: online first. Tap one for their card (message, knock, gift). */}
-          {!me.guest && !place && ride === null && peopleOut.length > 0 && (
+          {!me.guest && !place && ride === null && peopleOut.length > 0 && tour("people") && (
             <div className="pointer-events-auto -mx-1 flex max-w-full items-start gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none]" aria-label="People around here">
               <button onClick={() => setStatsOpen(true)} className="glass flex h-12 shrink-0 flex-col items-center justify-center rounded-2xl px-2 text-[10px] font-semibold leading-tight">
                 <Users className="size-4" />
@@ -2413,14 +2416,14 @@ export function Game({
               </span>
             )}
             {state.streak && !worldId && <StreakPill streak={state.streak} onOpen={() => { setStreakOpen(true); setMenu(false); setFeedOpen(false); }} />}
-            {worldId && worldLife.reputation !== null && (
+            {worldId && worldLife.reputation !== null && tour("reputation") && (
               // Your reputation: what adds to it and what takes it away.
               <button onClick={() => worldLife.openReputation()} className="glass flex h-8 items-center gap-1 whitespace-nowrap rounded-full px-2.5 text-xs font-bold sm:h-9 sm:px-3 sm:text-sm" aria-label={`Reputation ${worldLife.reputation}`}>
                 <Star className="size-4 text-gold-dark" />
                 {worldLife.reputation.toLocaleString("en-GB")}
               </button>
             )}
-            {worldId && (
+            {worldId && tour("wallet") && (
               // Your cash at hand: opens Finance.
               <button
                 onClick={() => setMoneyOpen(true)}
@@ -2433,7 +2436,7 @@ export function Game({
                 {worldLife.financeDot && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-hit" />}
               </button>
             )}
-            {worldId && (
+            {worldId && tour("sound") && (
               // The city's sounds, on or off (top right).
               <button
                 onClick={() => { setSound(!sound); saveView({ sound: !sound }); }}
@@ -3250,9 +3253,9 @@ export function Game({
         {/* Down the left, out of the way of the city: the notifications bell (while they're off), then one
             round button that opens the quick buttons (Home, Camera, Coming soon, Locate me, Walk); tap
             anywhere else and they fold away again. The walkthrough opens them when it points at one. */}
-        {worldId && !guest && !place && ride === null && !walking && (
+        {worldId && !guest && !place && ride === null && !walking && tour("dock") && (
           <div ref={quickRef} className="pointer-events-auto absolute bottom-[max(0.625rem,env(safe-area-inset-bottom))] left-2.5 flex flex-col items-center gap-2 sm:bottom-4 sm:left-4">
-            {!pushOn && (
+            {!pushOn && tour("extras") && (
               <button onClick={turnOnBell} className="relative grid size-10 place-items-center rounded-full bg-gold/80 text-ink shadow transition-opacity hover:bg-gold" aria-label="Notifications are off: tap to turn them on" title="Turn notifications on">
                 <BellOff className="size-4" />
                 <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-2 ring-gold/60" />
@@ -3267,15 +3270,19 @@ export function Game({
                   </button>
                 )}
                 {/* The camera: snap a place or a thing you like (it goes to your Photos). */}
+                {tour("camera") && (
                 <button onClick={() => setCamera("photo")} className={cn("relative grid size-10 place-items-center rounded-full shadow-sm backdrop-blur-sm transition hover:bg-white/90", tutorialGlow === "camera" ? "bg-white" : "bg-white/55")} aria-label="Camera: take a picture" title="Take a picture">
                   <Camera className="size-[18px] text-[#f08c00]" />
                   {tutorialGlow === "camera" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
                 </button>
-                {worldLife.hasHome && (
+                )}
+                {worldLife.hasHome && tour("extras") && (
                   <button onClick={worldLife.openSoon} className="grid size-10 place-items-center rounded-full bg-white/55 shadow-sm backdrop-blur-sm transition hover:bg-white/90" aria-label="Coming soon" title="Coming soon">
                     <Rocket className="size-[18px] text-[#7048e8]" />
                   </button>
                 )}
+                {tour("extras") && (
+                <>
                 <button
                   onClick={() => {
                     if (!worldLife.locateMe()) setMessage({ text: "You're not anywhere on the map yet. Find a home first.", tone: "info" });
@@ -3290,6 +3297,8 @@ export function Game({
                   <Footprints className="size-4" />
                   Walk
                 </button>
+                </>
+                )}
               </div>
             )}
             <button
@@ -3355,8 +3364,9 @@ export function Game({
             <button onClick={() => setCamera("photo")} className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#f08c00] text-white" aria-label="Camera: pictures and selfies">
               <Camera className="size-4" />
             </button>
-            <button onClick={leaveRoom} className="flex shrink-0 items-center gap-1 rounded-xl bg-ink px-3 py-2 text-xs font-semibold text-white">
+            <button onClick={leaveRoom} className="relative flex shrink-0 items-center gap-1 rounded-xl bg-ink px-3 py-2 text-xs font-semibold text-white">
               <LogOut className="size-4" /> {ride !== null ? "Get off" : "Leave"}
+              {tutorialGlow === "leave" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-xl ring-4 ring-gold/70" />}
             </button>
           </div>
         )}
@@ -3637,7 +3647,7 @@ export function Game({
         </div>
       )}
       {/* Challenge: a white trophy button in the top right corner, under your cash (gently bouncing). */}
-      {worldId && !guest && !camera && !place && ride === null && !walking && (
+      {worldId && !guest && !camera && !place && ride === null && !walking && tour("challenge") && (
         <button
           onClick={() => setFightOpen(true)}
           className="challenge-pop pointer-events-auto fixed right-3 top-14 z-20 grid size-12 place-items-center rounded-full bg-white text-[#f08c00] ring-1 ring-black/5 sm:right-4 sm:top-16"
@@ -3662,7 +3672,7 @@ export function Game({
       )}
       {/* The real map: one chat bubble, bottom right (your chats, Newtown's own messages, the news,
           the camera). It shakes when something new arrives. */}
-      {worldId && !camera && !guest && !place && (
+      {worldId && !camera && !guest && !place && tour("chat") && (
         <button
           onClick={() => {
             setChatOpen(true);
@@ -3915,6 +3925,13 @@ export function Game({
           place={worldRegion.name}
           perMint={worldRegion.prices.perMint}
           name={me.name ?? undefined}
+          inside={
+            ride !== null
+              ? { kind: "ride", name: rideList.find((r) => r.kind === ride.kind && r.index === ride.index)?.name ?? "a ride" }
+              : place
+                ? { kind: "place", name: rooms.myRoomInfo?.name || placeRoom?.name || "a building" }
+                : null
+          }
           actions={{
             nameHome: () => worldLife.nameHome(),
             chat: () => {
@@ -3935,6 +3952,7 @@ export function Game({
               setMoneyOpen(true);
             },
             paid: () => startTransition(() => router.refresh()),
+            leave: () => leaveRoom(),
           }}
         />
       )}

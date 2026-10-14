@@ -70,13 +70,14 @@ export function HomeCard({
     if (e) return setError(e);
     setNaming(false);
   };
-  // Typing the name on a phone: the keyboard covers the bottom of the screen, so the card rides up
-  // above it (the visible part of the screen, `visualViewport`, shrinks when a keyboard opens).
-  const [lift, setLift] = useState(0);
+  // Typing the name on a phone: the keyboard covers the bottom of the screen, so while naming the
+  // card is just the name box, pinned to the top of what's visible (`visualViewport` moves when a
+  // keyboard opens), in front of everything, the walkthrough's card included.
+  const [top, setTop] = useState(0);
   useEffect(() => {
     const vv = typeof window !== "undefined" ? window.visualViewport : null;
-    if (!naming || !vv) return setLift(0);
-    const on = () => setLift(Math.max(0, window.innerHeight - vv.height - vv.offsetTop));
+    if (!naming || !vv) return;
+    const on = () => setTop(Math.max(0, vv.offsetTop));
     on();
     vv.addEventListener("resize", on);
     vv.addEventListener("scroll", on);
@@ -91,10 +92,10 @@ export function HomeCard({
   const around = (neighbours ?? []).filter((n) => !n.sameBuilding);
   return (
     <div
-      className={`pointer-events-auto inset-x-0 z-[60] flex justify-center px-3 ${naming ? "fixed" : "absolute bottom-20"}`}
-      style={naming ? { bottom: lift > 0 ? lift + 8 : 80 } : undefined}
+      className={`pointer-events-auto inset-x-0 flex justify-center px-3 ${naming ? "fixed z-[100]" : "absolute bottom-20 z-[60]"}`}
+      style={naming ? { top: top + 12 } : undefined}
     >
-      <section className="glass w-full max-w-sm rounded-3xl p-4 shadow-lg">
+      <section className={`w-full max-w-sm rounded-3xl p-4 shadow-lg ${naming ? "bg-panel ring-2 ring-me/40" : "glass"}`}>
         <div className="flex items-start gap-3">
           <div className="grid size-10 shrink-0 place-items-center rounded-2xl bg-me/15 text-me">
             <House className="size-5" />
@@ -140,35 +141,40 @@ export function HomeCard({
           </button>
         </div>
 
-        <div className="mt-3 flex gap-2">
-          {onEnter && (
-            <button onClick={onEnter} className="flex h-10 flex-1 items-center justify-center gap-2 rounded-full bg-gold text-sm font-semibold text-ink">
-              <DoorOpen className="size-4" /> Enter home
-            </button>
-          )}
-          <button disabled className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full bg-ink/5 text-sm font-semibold text-muted" title="Coming soon">
-            <TrendingUp className="size-4" /> Upgrade <span className="rounded-full bg-gold/30 px-1.5 text-[10px] text-ink">Soon</span>
-          </button>
-        </div>
-
-        {children}
-
-        <div className="mt-3 border-t border-ink/5 pt-3">
-          <p className="flex items-center gap-1.5 text-sm font-semibold">
-            <Users className="size-4 text-muted" />
-            {neighbours === null ? "Neighbours" : neighbours.length === 0 ? "No neighbours yet" : `${neighbours.length} ${neighbours.length === 1 ? "neighbour" : "neighbours"}`}
-          </p>
-          {neighbours === null ? (
-            <p className="mt-1 text-xs text-muted">Looking…</p>
-          ) : neighbours.length === 0 ? (
-            <p className="mt-1 text-xs text-muted">When other players move in near you, they&apos;ll show here.</p>
-          ) : (
-            <div className="mt-2 max-h-40 space-y-2 overflow-y-auto">
-              {inside.length > 0 && <Group title="In your building" people={inside} />}
-              {around.length > 0 && <Group title="Around you" people={around} />}
+        {/* While naming: only the name box (the rest comes back once it's saved). */}
+        {!naming && (
+          <>
+            <div className="mt-3 flex gap-2">
+              {onEnter && (
+                <button onClick={onEnter} className="flex h-10 flex-1 items-center justify-center gap-2 rounded-full bg-gold text-sm font-semibold text-ink">
+                  <DoorOpen className="size-4" /> Enter home
+                </button>
+              )}
+              <button disabled className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full bg-ink/5 text-sm font-semibold text-muted" title="Coming soon">
+                <TrendingUp className="size-4" /> Upgrade <span className="rounded-full bg-gold/30 px-1.5 text-[10px] text-ink">Soon</span>
+              </button>
             </div>
-          )}
-        </div>
+
+            {children}
+
+            <div className="mt-3 border-t border-ink/5 pt-3">
+              <p className="flex items-center gap-1.5 text-sm font-semibold">
+                <Users className="size-4 text-muted" />
+                {neighbours === null ? "Neighbours" : neighbours.length === 0 ? "No neighbours yet" : `${neighbours.length} ${neighbours.length === 1 ? "neighbour" : "neighbours"}`}
+              </p>
+              {neighbours === null ? (
+                <p className="mt-1 text-xs text-muted">Looking…</p>
+              ) : neighbours.length === 0 ? (
+                <p className="mt-1 text-xs text-muted">When other players move in near you, they&apos;ll show here.</p>
+              ) : (
+                <div className="mt-2 max-h-40 space-y-2 overflow-y-auto">
+                  {inside.length > 0 && <Group title="In your building" people={inside} />}
+                  {around.length > 0 && <Group title="Around you" people={around} />}
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </section>
     </div>
   );
