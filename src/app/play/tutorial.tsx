@@ -213,14 +213,14 @@ export function Tutorial({ place, perMint, name, actions }: { place: string; per
     {
       emoji: "👛",
       title: "Your Wallet",
-      text: "Tap your cash (top right) for your Wallet: today's daily gift, what you've earned, and top-ups if you ever want more. You never have to pay to play.",
+      text: "Tap your cash (top right) for your Wallet: today's daily gift, your payments, top-ups (pay by bank transfer right in the game) and the World Bank. 🏦",
       glow: "wallet",
       action: { label: "Open it", run: actions.wallet },
     },
     {
       emoji: "💰",
       title: "Money comes to you",
-      text: "Just playing pays: a daily gift (bigger the more you play), challenge wins and missions. And property earns you money every day, by itself, so watch your cash tick up! See it all in Things › Assets.",
+      text: "Rewards for showing up: you're paid for every minute you're online, plus a daily gift, challenge wins and missions. Property earns you money every day too, by itself. Watch your cash tick up! See it all in Things › Assets.",
     },
     {
       emoji: "👤",

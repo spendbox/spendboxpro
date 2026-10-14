@@ -52,6 +52,56 @@ export async function startPayment(input: {
   }
 }
 
+/** A bank account to transfer into, made for one payment (Paystack "Pay with Transfer"). */
+export type TransferAccount = { bank: string; accountNumber: string; accountName: string; amountKobo: number; expiresAt: string | null };
+
+/**
+ * Starts a payment by bank transfer: Paystack makes an account for this one payment, and the game
+ * shows it (nobody leaves the site). The money arrives once Paystack says the transfer came in
+ * (checked like any other payment). Needs "Pay with Transfer" on in the Paystack dashboard.
+ */
+export async function startTransfer(input: { email: string; amountKobo: number; reference: string; metadata: Record<string, string | number> }): Promise<
+  { ok: true; account: TransferAccount } | { ok: false; error: string }
+> {
+  try {
+    const res = await fetch(`${API}/charge`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key()}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: input.email,
+        amount: input.amountKobo,
+        reference: input.reference,
+        metadata: input.metadata,
+        bank_transfer: { account_expires_at: new Date(Date.now() + 30 * 60_000).toISOString() },
+      }),
+      cache: "no-store",
+    });
+    const body = (await res.json().catch(() => null)) as {
+      status?: boolean;
+      message?: string;
+      data?: { reference?: string; account_number?: string; account_name?: string; bank?: { name?: string }; amount?: number; account_expires_at?: string };
+    } | null;
+    const d = body?.data;
+    if (res.ok && body?.status && d?.account_number && (!d.reference || d.reference === input.reference)) {
+      return {
+        ok: true,
+        account: {
+          bank: d.bank?.name ?? "Bank",
+          accountNumber: String(d.account_number),
+          accountName: d.account_name ?? "Paystack Checkout",
+          amountKobo: Number(d.amount ?? input.amountKobo),
+          expiresAt: d.account_expires_at ?? null,
+        },
+      };
+    }
+    console.error("Paystack transfer charge failed", res.status, body);
+    return { ok: false, error: body?.message || "Paying by transfer isn't available just now." };
+  } catch (error) {
+    console.error("Paystack transfer charge failed", error);
+    return { ok: false, error: "We couldn't reach the payment service. Please try again." };
+  }
+}
+
 export type VerifiedPayment = {
   /** True only when Paystack says the charge succeeded, in naira. */
   paid: boolean;

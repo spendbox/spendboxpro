@@ -120,7 +120,8 @@ import { CityCard } from "./city-card";
 import { useWorldLife } from "./life/world-life";
 import type { ExplorePlace } from "@/lib/world/explore";
 import { Joystick } from "./joystick";
-import { settleIncome, syncIncome, useLiveCoins } from "./income";
+import { onlineIdle, onlinePinged, settleIncome, syncIncome, useLiveCoins } from "./income";
+import { myTopUps } from "./topup-actions";
 import { Tutorial, useTutorialGlow, useTutorialPhase } from "./tutorial";
 import { PeopleList, prefetchPeople } from "./people/people-list";
 import { StatsSheet } from "./stats-sheet";
@@ -849,7 +850,8 @@ export function Game({
       />
     ) : undefined;
   // Time in the city (docs/MONEY.md): a ping a minute while the game is in front of you and you've
-  // touched it in the last 2 minutes. It makes tomorrow's daily gift bigger.
+  // touched it in the last 2 minutes. It makes tomorrow's daily gift bigger, and pays you for being
+  // online (counted up on screen every 5 seconds, ./income).
   useEffect(() => {
     if (!worldId || me.guest) return;
     let touched = Date.now();
@@ -860,10 +862,16 @@ export function Game({
     window.addEventListener("pointerdown", touch, opts);
     window.addEventListener("keydown", touch, opts);
     window.addEventListener("wheel", touch, opts);
-    const t = setInterval(() => {
-      if (document.visibilityState !== "visible" || Date.now() - touched > 120_000) return;
-      void fetch("/api/active", { method: "POST", cache: "no-store" }).catch(() => {});
-    }, 60_000);
+    const ping = () => {
+      if (document.visibilityState !== "visible" || Date.now() - touched > 120_000) return onlineIdle();
+      void fetch("/api/active", { method: "POST", cache: "no-store" })
+        .then((r) => (r.ok ? (r.json() as Promise<{ ok: boolean; paid?: number; rate?: number; left?: number }>) : null))
+        .then((d) => d?.ok && onlinePinged(d.paid ?? 0, d.rate ?? 0, d.left ?? 0))
+        .catch(() => {});
+    };
+    // One straight away (being online pays from the first minute), then once a minute.
+    ping();
+    const t = setInterval(ping, 60_000);
     return () => {
       clearInterval(t);
       window.removeEventListener("pointerdown", touch, opts);
@@ -1801,6 +1809,19 @@ export function Game({
         if (paid > 0) startTransition(() => router.refresh());
       });
   }, [moneyOpen, worldId, me.guest, router]);
+  // A top-up paid but never given (the pay box closed early, Paystack's message lost): checked with
+  // Paystack again when the game opens, and given if it went through (./topup-actions myTopUps).
+  useEffect(() => {
+    if (!worldId || me.guest) return;
+    void myTopUps()
+      .then((r) => {
+        if (!r || r.credited <= 0) return;
+        playSfx("chime");
+        setMessage({ text: `Your top-up is in: +${cash(r.credited)}`, tone: "good" });
+        startTransition(() => router.refresh());
+      })
+      .catch(() => {});
+  }, [worldId, me.guest, router]);
   // How tall the panel along the bottom is (who's here, Leave...), so the home joystick sits above it.
   const bottomDock = useRef<HTMLDivElement>(null);
   const [bottomDockH, setBottomDockH] = useState(96);

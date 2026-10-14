@@ -89,3 +89,28 @@ earned you, going up as you watch.
 
 Buying property from the city is simply its price now (no buying tax), less your reputation
 level's discount (docs/REPUTATION.md). Renting is no longer offered (leases already running carry on).
+
+## Paying, and tracking payments
+Pick an amount in the Wallet, then:
+- **Bank transfer, right in the game**: Paystack makes an account for this one payment
+  (`startTransferTopUp`, Paystack's Charge API with `bank_transfer`; "Pay with Transfer" must be on
+  in the Paystack dashboard). The Wallet shows the bank, account number and amount (each with a
+  copy button) and checks every few seconds until the money lands.
+- **Card & more**: Paystack's pay box over the game (card, USSD, bank app).
+
+**Your payments** in the Wallet lists every top-up: paid, waiting for Paystack, or not paid. Any
+not yet paid from the last week is checked with Paystack again whenever the Wallet or the game opens,
+and given if it went through (`myTopUps`), so a payment is never lost even if the pay box was closed
+early or Paystack's webhook didn't reach us. (Set the webhook in Paystack → Settings → API Keys &
+Webhooks to `https://<your site>/api/paystack/webhook` too.)
+
+## Paid for being online (game-db/083)
+Every active minute in the game pays ₦500 (`online_pay_minute`), up to 4 hours a day
+(`online_pay_daily_minutes`), through the once-a-minute ping (`POST /api/active`, `online_ping`).
+Your cash on screen counts it up every 5 seconds. Things › Assets shows it under "Rewards for
+showing up", with the daily gift, challenge wins and missions.
+
+## The World Bank (game-db/083)
+One pot of everything the city takes from games: Newtown's 10% of every challenge pool and the
+challenge fees (a trigger on the ledger, `world_bank_take`). It's in the Wallet, growing as games
+are played. Stealing from it is coming soon.

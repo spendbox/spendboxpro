@@ -18,6 +18,25 @@ let income: Income = { perDay: 0, at: 0, total: 0 };
 let pendingAt: number | null = null;
 /** The server's clock minus this one (ms). */
 let offset = 0;
+// Pay for being online (game-db/083): each active minute pays `rate`; between the game's pings the
+// screen counts it up (at most one minute ahead), and what's been paid but isn't in the coins on
+// screen yet is kept in `onlinePaid` until they're refreshed.
+let online = { rate: 0, at: 0, on: false };
+let onlinePaid = 0;
+
+/** You've wandered off (the game hidden, or untouched for 2 minutes): online pay stops counting. */
+export function onlineIdle() {
+  if (!online.on) return;
+  online = { ...online, on: false };
+  emit();
+}
+
+/** The game's once-a-minute "I'm here" ping came back (paid, rate in mint; left: paid minutes left today). */
+export function onlinePinged(paid: number, rate: number, left: number) {
+  onlinePaid += paid;
+  online = { rate, at: Date.now(), on: rate > 0 && left > 0 };
+  emit();
+}
 const subs = new Set<() => void>();
 const emit = () => subs.forEach((f) => f());
 
@@ -42,6 +61,8 @@ export async function settleIncome(): Promise<number> {
 
 /** The coins on screen have changed (new data from the server): count from the latest payment, and check again. */
 export async function syncIncome(): Promise<number> {
+  // The new coins include the online pay so far.
+  onlinePaid = 0;
   if (pendingAt !== null) {
     income = { ...income, at: pendingAt };
     pendingAt = null;
@@ -65,6 +86,12 @@ function accrued(inc: Income) {
   return Math.max(0, Math.min(2, days)) * inc.perDay;
 }
 
+/** Online pay earned since the last ping (up to a minute's worth, while you're still about). */
+function onlineAccrued() {
+  if (!online.on || online.rate <= 0) return 0;
+  return (Math.min(60_000, Date.now() - online.at) / 60_000) * online.rate;
+}
+
 /** Re-render every `everyMs` while something's earning. */
 function useTick(on: boolean, everyMs: number) {
   const [, setTick] = useState(0);
@@ -78,8 +105,8 @@ function useTick(on: boolean, everyMs: number) {
 /** Your cash, with what your property's earned since it was last paid, going up every few seconds. */
 export function useLiveCoins(coins: number, everyMs = 5_000): number {
   const inc = useIncome();
-  useTick(inc.perDay > 0, everyMs);
-  return Math.floor((coins + accrued(inc)) * 100) / 100;
+  useTick(inc.perDay > 0 || online.on, everyMs);
+  return Math.floor((coins + accrued(inc) + onlinePaid + onlineAccrued()) * 100) / 100;
 }
 
 /** All your property has ever earned you, going up as you watch. */

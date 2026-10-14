@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, Gift, House } from "lucide-react";
+import { Check, ChevronDown, Copy, Gift, House } from "lucide-react";
 import { cash } from "@/lib/world/value";
 import type { GiftParts } from "@/lib/world/daily-gift";
 import type { MoneyView } from "@/lib/world/money-view";
@@ -9,7 +9,8 @@ import { TOPUPS } from "@/lib/world/topups";
 import { payInPopup } from "./paystack-popup";
 import { Sheet } from "./sheet";
 import { useIncome } from "./income";
-import { confirmTopUp, startTopUp, toppedUpBefore } from "./topup-actions";
+import { confirmTopUp, myTopUps, startTopUp, startTransferTopUp, toppedUpBefore, type TopUpRow } from "./topup-actions";
+import type { TransferAccount } from "@/lib/paystack";
 
 // Your wallet (docs/MONEY.md): tap your cash. Kept short: what you have, today's gift, top up.
 // Amounts come in naira and show in your currency. Paying happens in Paystack's pop-up, over the game.
@@ -93,10 +94,89 @@ function GiftBox({ view, perMint, onTaken }: { view: NonNullable<MoneyView["gift
   );
 }
 
-/** Top up: game money for real money, paid in Paystack's pop-up (the first one doubled). */
+/** Copy something (an account number, an amount) with one tap. */
+function CopyRow({ label, value, copyValue }: { label: string; value: string; copyValue?: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-xl bg-white px-3 py-2">
+      <span className="min-w-0">
+        <span className="block text-[11px] text-muted">{label}</span>
+        <b className="block truncate text-base tabular-nums">{value}</b>
+      </span>
+      <button
+        onClick={() => {
+          void navigator.clipboard?.writeText(copyValue ?? value).then(() => {
+            setDone(true);
+            setTimeout(() => setDone(false), 1500);
+          });
+        }}
+        className="flex h-8 shrink-0 items-center gap-1 rounded-full bg-ink/5 px-3 text-xs font-semibold"
+      >
+        {done ? <Check className="size-3.5" /> : <Copy className="size-3.5" />} {done ? "Copied" : "Copy"}
+      </button>
+    </div>
+  );
+}
+
+/** Paying by bank transfer, in the game: the account to pay into, and a check every few seconds until it's in. */
+function TransferBox({ reference, account, onPaid, onCancel }: { reference: string; account: TransferAccount; onPaid: (mint: number, doubled: boolean) => void; onCancel: () => void }) {
+  const [now, setNow] = useState(() => Date.now());
+  const [checking, setChecking] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const ends = account.expiresAt ? Date.parse(account.expiresAt) : Date.now() + 30 * 60_000;
+  const left = Math.max(0, Math.round((ends - now) / 1000));
+  const check = async (byHand: boolean) => {
+    if (byHand) setChecking(true);
+    const r = await confirmTopUp(reference).catch(() => null);
+    if (byHand) setChecking(false);
+    if (r?.ok) return onPaid(r.mint ?? 0, !!r.doubled);
+    if (byHand) setNote("Not in yet. Transfers can take a minute or two: we keep checking, and it lands by itself.");
+  };
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    const c = setInterval(() => document.visibilityState === "visible" && void check(false), 8000);
+    return () => {
+      clearInterval(t);
+      clearInterval(c);
+    };
+    // check only reads the reference.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reference]);
+  const naira = `₦${Math.round(account.amountKobo / 100).toLocaleString("en-GB")}`;
+  return (
+    <div className="mt-2 rounded-2xl bg-[#e7f5ff] p-3">
+      <p className="text-sm font-bold">🏦 Transfer exactly {naira} to:</p>
+      <div className="mt-2 space-y-1.5">
+        <CopyRow label="Account number" value={account.accountNumber} />
+        <CopyRow label="Amount" value={naira} copyValue={String(Math.round(account.amountKobo / 100))} />
+        <div className="rounded-xl bg-white px-3 py-2 text-sm">
+          <span className="block text-[11px] text-muted">Bank · account name</span>
+          <b>{account.bank}</b> · {account.accountName}
+        </div>
+      </div>
+      <p className="mt-2 text-xs text-muted">
+        {left > 0 ? `This account works for ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")} more. ` : "This account has run out of time: start again. "}
+        Your game money arrives by itself once the transfer lands.
+      </p>
+      {note && <p className="mt-1 text-xs font-semibold text-[#1864ab]">{note}</p>}
+      <div className="mt-2 flex gap-2">
+        <button disabled={checking} onClick={() => void check(true)} className="h-10 flex-1 rounded-full bg-ink text-sm font-bold text-white disabled:opacity-50">
+          {checking ? "Checking…" : "I've sent it"}
+        </button>
+        <button onClick={onCancel} className="h-10 rounded-full bg-white px-4 text-sm font-semibold">
+          Close
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Top up: pick an amount, then pay by bank transfer (right here) or by card and more (Paystack's box). */
 function TopUps({ region, perMint, onToppedUp }: { region: string; perMint: number; onToppedUp: (mint: number, doubled: boolean) => void }) {
   const [before, setBefore] = useState<boolean | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string | null>(null);
+  const [busy, setBusy] = useState<"transfer" | "card" | null>(null);
+  const [transfer, setTransfer] = useState<{ reference: string; account: TransferAccount } | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
@@ -107,8 +187,22 @@ function TopUps({ region, perMint, onToppedUp }: { region: string; perMint: numb
       alive = false;
     };
   }, []);
-  const go = async (id: string) => {
-    setBusy(id);
+  const paid = (mint: number, doubled: boolean) => {
+    setTransfer(null);
+    setPicked(null);
+    setBefore(true);
+    onToppedUp(mint, doubled);
+  };
+  const byTransfer = async (id: string) => {
+    setBusy("transfer");
+    setError(null);
+    const r = await startTransferTopUp(id, region).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
+    setBusy(null);
+    if (!r.ok) return setError(`${r.error} You can pay by card instead.`);
+    setTransfer({ reference: r.reference, account: r.account });
+  };
+  const byCard = async (id: string) => {
+    setBusy("card");
     setError(null);
     const r = await startTopUp(id, region).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
     if (!r.ok) {
@@ -118,13 +212,16 @@ function TopUps({ region, perMint, onToppedUp }: { region: string; perMint: numb
     const how = r.accessCode ? await payInPopup(r.accessCode) : "unavailable";
     // The pop-up couldn't open (an old browser...): Paystack's own page, then back to the game.
     if (how === "unavailable") return window.location.assign(r.url);
-    if (how === "closed") return setBusy(null);
+    if (how === "closed") {
+      setBusy(null);
+      return setError("Closed before paying. If you did pay, it shows under Your payments and arrives by itself.");
+    }
     const done = await confirmTopUp(r.reference).catch(() => ({ ok: false as const, error: "The connection blinked." }));
     setBusy(null);
-    if (!done.ok) return setError(done.error ?? "That payment hasn't gone through yet. It'll arrive as soon as it does.");
-    setBefore(true);
-    onToppedUp(done.mint ?? 0, !!done.doubled);
+    if (!done.ok) return setError("Paystack is still confirming it. It arrives by itself: see Your payments below.");
+    paid(done.mint ?? 0, !!done.doubled);
   };
+  const option = TOPUPS.find((t) => t.id === picked);
   return (
     <div>
       <p className="mb-1.5 flex items-baseline justify-between text-xs">
@@ -133,14 +230,116 @@ function TopUps({ region, perMint, onToppedUp }: { region: string; perMint: numb
       </p>
       <div className="grid grid-cols-3 gap-1.5">
         {TOPUPS.map((t) => (
-          <button key={t.id} disabled={!!busy} onClick={() => void go(t.id)} className="relative rounded-xl bg-white px-1.5 py-2 text-center shadow-sm ring-1 ring-ink/10 disabled:opacity-50">
+          <button
+            key={t.id}
+            disabled={!!busy || !!transfer}
+            onClick={() => {
+              setPicked(picked === t.id ? null : t.id);
+              setError(null);
+            }}
+            className={`relative rounded-xl px-1.5 py-2 text-center shadow-sm ring-1 disabled:opacity-50 ${picked === t.id ? "bg-ink text-white ring-ink" : "bg-white ring-ink/10"}`}
+          >
             {t.bonus > 0 && <span className="absolute -top-1.5 right-1 rounded-full bg-gold px-1 text-[9px] font-bold text-ink">+{t.bonus}%</span>}
             <span className="block text-sm font-extrabold tabular-nums">{cash(t.game / perMint)}</span>
-            <span className="block text-[11px] text-muted">{busy === t.id ? "Opening…" : `₦${t.naira.toLocaleString("en-GB")}`}</span>
+            <span className={`block text-[11px] ${picked === t.id ? "text-white/75" : "text-muted"}`}>₦{t.naira.toLocaleString("en-GB")}</span>
           </button>
         ))}
       </div>
+      {option && !transfer && (
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <button disabled={!!busy} onClick={() => void byTransfer(option.id)} className="flex h-12 flex-col items-center justify-center rounded-2xl bg-[#1c7ed6] text-white shadow disabled:opacity-50">
+            <span className="text-sm font-bold">{busy === "transfer" ? "Getting account…" : "🏦 Bank transfer"}</span>
+            <span className="text-[10px] text-white/80">Right here in the game</span>
+          </button>
+          <button disabled={!!busy} onClick={() => void byCard(option.id)} className="flex h-12 flex-col items-center justify-center rounded-2xl bg-ink text-white shadow disabled:opacity-50">
+            <span className="text-sm font-bold">{busy === "card" ? "Opening…" : "💳 Card & more"}</span>
+            <span className="text-[10px] text-white/70">Card, USSD, bank app</span>
+          </button>
+        </div>
+      )}
+      {transfer && <TransferBox reference={transfer.reference} account={transfer.account} onPaid={paid} onCancel={() => setTransfer(null)} />}
       {error && <p className="mt-1 text-xs text-hit">{error}</p>}
+    </div>
+  );
+}
+
+const STATUS: Record<TopUpRow["status"], { label: string; cls: string }> = {
+  paid: { label: "Paid ✓", cls: "bg-[#ebfbee] text-[#2b8a3e]" },
+  waiting: { label: "Waiting for Paystack", cls: "bg-gold/20 text-gold-dark" },
+  failed: { label: "Not paid", cls: "bg-ink/5 text-muted" },
+};
+
+/** Your payments: every top-up and where it's got to (any stuck one is checked again and given when it went through). */
+function Payments({ list, onCheck, checking }: { list: TopUpRow[] | null; onCheck: () => void; checking: boolean }) {
+  const [open, setOpen] = useState(false);
+  if (!list || list.length === 0) return null;
+  const waiting = list.filter((p) => p.status === "waiting").length;
+  return (
+    <div className="mt-3 rounded-2xl ring-1 ring-ink/10">
+      <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center justify-between px-3 py-2.5 text-sm">
+        <b>🧾 Your payments</b>
+        <span className="flex items-center gap-1 text-xs text-muted">
+          {waiting > 0 && <span className="rounded-full bg-gold/20 px-1.5 font-semibold text-gold-dark">{waiting} waiting</span>}
+          <ChevronDown className={`size-4 transition ${open ? "rotate-180" : ""}`} />
+        </span>
+      </button>
+      {open && (
+        <div className="border-t border-ink/5 px-3 pb-3">
+          <ul className="divide-y divide-ink/5">
+            {list.map((p) => (
+              <li key={p.reference} className="flex items-center gap-2 py-2 text-sm">
+                <span className="min-w-0 flex-1">
+                  <b className="block">₦{p.naira.toLocaleString("en-GB")} → {cash(p.mint)}</b>
+                  <span className="block truncate text-[11px] text-muted">
+                    {new Date(p.at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · {p.reference}
+                    {p.doubled ? " · doubled" : ""}
+                  </span>
+                </span>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${STATUS[p.status].cls}`}>{STATUS[p.status].label}</span>
+              </li>
+            ))}
+          </ul>
+          {waiting > 0 && (
+            <button disabled={checking} onClick={onCheck} className="mt-2 h-9 w-full rounded-full bg-ink text-xs font-bold text-white disabled:opacity-50">
+              {checking ? "Checking with Paystack…" : "Check again"}
+            </button>
+          )}
+          <p className="mt-2 text-[11px] text-muted">Paid but not showing? It&apos;s checked with Paystack every time you open your Wallet. Still stuck after an hour? Send us the reference.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The World Bank: what the city has collected from games. Stealing from it is coming soon. */
+function WorldBank() {
+  const [bank, setBank] = useState<{ balance: number; today: number } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      void fetch("/api/world-bank", { cache: "no-store" })
+        .then((r) => (r.ok ? (r.json() as Promise<{ balance: number; today: number } | null>) : null))
+        .then((b) => alive && b && setBank(b))
+        .catch(() => {});
+    load();
+    const t = setInterval(load, 15_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
+  if (!bank) return null;
+  return (
+    <div className="mt-3 flex items-center gap-3 rounded-2xl bg-gradient-to-br from-[#343a40] to-[#212529] p-3 text-white">
+      <span className="text-3xl">🏦</span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[11px] font-semibold uppercase tracking-wide text-white/70">World Bank</span>
+        <b className="block font-display text-xl tabular-nums">{cash(bank.balance)}</b>
+        <span className="block text-[11px] text-white/70">From taxes on games{bank.today > 0 ? ` · +${cash(bank.today)} today` : ""}</span>
+      </span>
+      <button disabled className="shrink-0 rounded-full bg-hit/90 px-3 py-2 text-xs font-bold" title="Coming soon">
+        🦹 Steal <span className="block text-[9px] font-semibold opacity-80">Coming soon</span>
+      </button>
     </div>
   );
 }
@@ -177,6 +376,22 @@ export function MoneyHome({
   }, []);
   const today = view ? view.inToday.reduce((t, r) => t + r.naira, 0) : 0;
   const income = useIncome();
+  // Your payments: any stuck one is checked with Paystack again (and given) each time the Wallet opens.
+  const [payments, setPayments] = useState<TopUpRow[] | null>(null);
+  const [checking, setChecking] = useState(false);
+  const checkPayments = async () => {
+    setChecking(true);
+    const r = await myTopUps().catch(() => null);
+    setChecking(false);
+    if (!r) return;
+    setPayments(r.list);
+    if (r.credited > 0) onToppedUp(r.credited, false);
+  };
+  useEffect(() => {
+    void checkPayments();
+    // Once, when the Wallet opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
     <Sheet onClose={onClose} title="Wallet" above>
       <div className="flex items-end justify-between rounded-2xl bg-ink px-4 py-3 text-white">
@@ -208,8 +423,17 @@ export function MoneyHome({
         ) : null}
       </div>
       <div className="mt-3">
-        <TopUps region={region} perMint={perMint} onToppedUp={onToppedUp} />
+        <TopUps
+          region={region}
+          perMint={perMint}
+          onToppedUp={(mint, doubled) => {
+            onToppedUp(mint, doubled);
+            void checkPayments();
+          }}
+        />
       </div>
+      <Payments list={payments} onCheck={() => void checkPayments()} checking={checking} />
+      <WorldBank />
     </Sheet>
   );
 }
