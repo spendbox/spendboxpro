@@ -64,7 +64,7 @@ import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
 import { BookOpen, Church, FerrisWheel, Landmark as LandmarkIcon, Plane, Ship, TrainFront, Trophy, UtensilsCrossed } from "lucide-react";
-import { BellOff, BellRing, LocateFixed, Rocket, Wallet, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Palette, ShoppingBag, Swords, TrendingUp, User } from "lucide-react";
+import { BellOff, BellRing, LayoutGrid, LocateFixed, Rocket, Wallet, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Palette, ShoppingBag, Swords, TrendingUp, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
 import { GhostsSheet } from "./ghost-duel/ghosts-sheet";
@@ -1762,6 +1762,19 @@ export function Game({
   // The walkthrough (./tutorial): which button it points at, and where it's got to.
   const tutorialGlow = useTutorialGlow();
   const tutorialPhase = useTutorialPhase();
+  // The quick buttons down the left: folded into one; open while the walkthrough points at one of them.
+  const [dockOpen, setDockOpen] = useState(false);
+  const dockRef = useRef<HTMLDivElement>(null);
+  const dockShown = dockOpen || tutorialGlow === "home" || tutorialGlow === "camera";
+  useEffect(() => {
+    if (!dockOpen) return;
+    // A tap anywhere else folds them away.
+    const away = (e: PointerEvent) => {
+      if (!dockRef.current?.contains(e.target as Node)) setDockOpen(false);
+    };
+    document.addEventListener("pointerdown", away, true);
+    return () => document.removeEventListener("pointerdown", away, true);
+  }, [dockOpen]);
   // New coins on screen (the game opening, a refresh after anything): count from the latest payment
   // and ask again (buying or selling property pays what's been earned, on the server).
   useEffect(() => {
@@ -3186,46 +3199,62 @@ export function Game({
             <DockButton icon={Footprints} label="Stop walking" dark onClick={() => setWalking(false)} />
           </div>
         )}
-        {/* Down the left, out of the way of the city: the notifications bell (while they're off), Soon,
-            Locate me and Walk, see-through and small. (Challenge is top right.) */}
+        {/* Down the left, out of the way of the city: the notifications bell (while they're off), then one
+            round button that opens the quick buttons (Home, Camera, Coming soon, Locate me, Walk); tap
+            anywhere else and they fold away again. The walkthrough opens them when it points at one. */}
         {worldId && !guest && !place && ride === null && !walking && (
-          <div className="pointer-events-auto absolute bottom-[max(0.625rem,env(safe-area-inset-bottom))] left-2.5 flex flex-col items-center gap-2 sm:bottom-4 sm:left-4">
+          <div ref={dockRef} className="pointer-events-auto absolute bottom-[max(0.625rem,env(safe-area-inset-bottom))] left-2.5 flex flex-col items-center gap-2 sm:bottom-4 sm:left-4">
             {!pushOn && (
               <button onClick={turnOnBell} className="relative grid size-10 place-items-center rounded-full bg-gold/80 text-ink shadow transition-opacity hover:bg-gold" aria-label="Notifications are off: tap to turn them on" title="Turn notifications on">
                 <BellOff className="size-4" />
                 <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-2 ring-gold/60" />
               </button>
             )}
-            {worldLife.hasHome && (
-              <button onClick={() => worldLife.goHome()} className={cn("relative grid size-10 place-items-center rounded-full shadow-sm backdrop-blur-sm transition hover:bg-white/90", tutorialGlow === "home" ? "bg-white" : "bg-white/55")} aria-label="Home" title="Home">
-                <House className="size-[18px] text-[#7048e8]" />
-                {tutorialGlow === "home" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
-              </button>
-            )}
-            {/* The camera: snap a place or a thing you like (it goes to your Photos). */}
-            <button onClick={() => setCamera("photo")} className={cn("relative grid size-10 place-items-center rounded-full shadow-sm backdrop-blur-sm transition hover:bg-white/90", tutorialGlow === "camera" ? "bg-white" : "bg-white/55")} aria-label="Camera: take a picture" title="Take a picture">
-              <Camera className="size-[18px] text-[#f08c00]" />
-              {tutorialGlow === "camera" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
-            </button>
-            {worldLife.hasHome && (
-              <button onClick={worldLife.openSoon} className="grid size-10 place-items-center rounded-full bg-white/55 shadow-sm backdrop-blur-sm transition hover:bg-white/90" aria-label="Coming soon" title="Coming soon">
-                <Rocket className="size-[18px] text-[#7048e8]" />
-              </button>
+            {dockShown && (
+              <div className="flex flex-col items-center gap-2 motion-safe:animate-[dockIn_.18s_ease-out]" onClick={() => setDockOpen(false)}>
+                {worldLife.hasHome && (
+                  <button onClick={() => worldLife.goHome()} className={cn("relative grid size-10 place-items-center rounded-full shadow-sm backdrop-blur-sm transition hover:bg-white/90", tutorialGlow === "home" ? "bg-white" : "bg-white/55")} aria-label="Home" title="Home">
+                    <House className="size-[18px] text-[#7048e8]" />
+                    {tutorialGlow === "home" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
+                  </button>
+                )}
+                {/* The camera: snap a place or a thing you like (it goes to your Photos). */}
+                <button onClick={() => setCamera("photo")} className={cn("relative grid size-10 place-items-center rounded-full shadow-sm backdrop-blur-sm transition hover:bg-white/90", tutorialGlow === "camera" ? "bg-white" : "bg-white/55")} aria-label="Camera: take a picture" title="Take a picture">
+                  <Camera className="size-[18px] text-[#f08c00]" />
+                  {tutorialGlow === "camera" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
+                </button>
+                {worldLife.hasHome && (
+                  <button onClick={worldLife.openSoon} className="grid size-10 place-items-center rounded-full bg-white/55 shadow-sm backdrop-blur-sm transition hover:bg-white/90" aria-label="Coming soon" title="Coming soon">
+                    <Rocket className="size-[18px] text-[#7048e8]" />
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    if (!worldLife.locateMe()) setMessage({ text: "You're not anywhere on the map yet. Find a home first.", tone: "info" });
+                  }}
+                  className="grid size-10 place-items-center rounded-full bg-white/55 shadow-sm backdrop-blur-sm transition hover:bg-white/90"
+                  aria-label="Locate me"
+                  title="Locate me"
+                >
+                  <LocateFixed className="size-[18px] text-[#1c7ed6]" />
+                </button>
+                <button onClick={() => setWalking(true)} className="flex h-11 w-12 flex-col items-center justify-center gap-0.5 rounded-2xl bg-white/55 text-[10px] font-semibold shadow-sm backdrop-blur-sm transition hover:bg-white/90" aria-label="Walk">
+                  <Footprints className="size-4" />
+                  Walk
+                </button>
+              </div>
             )}
             <button
-              onClick={() => {
-                if (!worldLife.locateMe()) setMessage({ text: "You're not anywhere on the map yet. Find a home first.", tone: "info" });
-              }}
-              className="grid size-10 place-items-center rounded-full bg-white/55 shadow-sm backdrop-blur-sm transition hover:bg-white/90"
-              aria-label="Locate me"
-              title="Locate me"
+              onClick={() => setDockOpen((v) => !v)}
+              className={cn("relative grid size-11 place-items-center rounded-full shadow-md transition", dockShown ? "bg-ink text-white" : "bg-white/80 text-ink backdrop-blur-sm hover:bg-white")}
+              aria-label={dockShown ? "Close the quick buttons" : "Open the quick buttons: home, camera, locate me, walk"}
+              aria-expanded={dockShown}
+              title="Quick buttons"
             >
-              <LocateFixed className="size-[18px] text-[#1c7ed6]" />
+              {dockShown ? <X className="size-5" /> : <LayoutGrid className="size-5" />}
+              {tutorialGlow === "dock" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
             </button>
-            <button onClick={() => setWalking(true)} className="flex h-11 w-12 flex-col items-center justify-center gap-0.5 rounded-2xl bg-white/55 text-[10px] font-semibold shadow-sm backdrop-blur-sm transition hover:bg-white/90" aria-label="Walk">
-              <Footprints className="size-4" />
-              Walk
-            </button>
+            <style>{`@keyframes dockIn { from { opacity: 0; transform: translateY(8px) scale(.96) } to { opacity: 1; transform: none } }`}</style>
           </div>
         )}
 

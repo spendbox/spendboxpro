@@ -16,7 +16,7 @@ import { playSfx } from "./sound";
 const KEY = "newtown.tutorial.v1";
 
 /** What the walkthrough points at: that button glows. */
-export type TutorialGlow = "home" | "chat" | "challenge" | "camera" | "profile" | "wallet" | null;
+export type TutorialGlow = "home" | "chat" | "challenge" | "camera" | "profile" | "wallet" | "dock" | null;
 
 type Saved = { phase: Phase; i: number; skipped: Mission[] };
 const FRESH: Saved = { phase: "intro", i: 0, skipped: [] };
@@ -174,7 +174,7 @@ export function Tutorial({ place, perMint, name, actions }: { place: string; per
     name: {
       emoji: "🏠",
       title: "Mission 1 of 3 · Name your home",
-      text: `Every legend needs a base. Tap the glowing house (bottom left), then the pencil, and give your place a name. “${palace}”? Bold. We like it.`,
+      text: `Every legend needs a base. Tap the glowing house (in the quick buttons, bottom left), then the pencil, and give your place a name. “${palace}”? Bold. We like it.`,
       glow: "home",
       action: { label: "Show me", run: actions.nameHome },
     },
@@ -196,14 +196,20 @@ export function Tutorial({ place, perMint, name, actions }: { place: string; per
   const tips: Card[] = [
     { emoji: "🎉", title: "Missions complete!", text: "You're officially a Newtowner. A few quick tips and you're free to roam." },
     {
+      emoji: "🧰",
+      title: "Your quick buttons",
+      text: "The round button at the bottom left opens your quick buttons: Home, Camera, Coming soon, Locate me and Walk. Tap anywhere else and they tuck themselves away. Neat, right?",
+      glow: "dock",
+    },
+    {
       emoji: "📸",
       title: "Snap anything you like",
-      text: "Love a place or a thing? Tap the camera (bottom left, or the orange one inside places). Your pictures live in your Photos.",
+      text: "Love a place or a thing? Tap the camera in your quick buttons (or the orange one inside places). Your pictures live in your Photos.",
       glow: "camera",
       action: { label: "Try it", run: actions.camera },
     },
     { emoji: "🧭", title: "Go explore", text: "Tap any building to peek inside, hop on a danfo, find the hidden spots. Nobody's watching the clock." },
-    { emoji: "🏠", title: "Lost? Tap the house", text: "The house button at the bottom left always takes you home. Like a very fast okada.", glow: "home" },
+    { emoji: "🏠", title: "Lost? Tap the house", text: "The house in your quick buttons (bottom left) always takes you home. Like a very fast okada.", glow: "home" },
     {
       emoji: "👛",
       title: "Your Wallet",
