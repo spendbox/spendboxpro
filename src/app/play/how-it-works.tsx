@@ -16,7 +16,7 @@ import {
   X,
   type LucideIcon,
 } from "@/components/icons";
-import { Briefcase, Swords, Trophy, Wallet } from "lucide-react";
+import { Briefcase, PartyPopper, Swords, Trophy, Wallet } from "lucide-react";
 import { CITY_ASSETS } from "@/lib/city/layout";
 import { Sheet } from "./sheet";
 import { Logo } from "@/components/logo";
@@ -228,10 +228,19 @@ const WORLD_SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[]
     ],
   },
   {
+    icon: PartyPopper,
+    title: "Events",
+    body: [
+      "Tap the party button (top right) to see what's on nearby, or host your own: a party (street party, owambe, concert, rave...) or a stage (a talk with slides, a class, a watch party, an open mic), on the street you're on or at a landmark, a restaurant or a park.",
+      "Parties fill the street on the map. Inside: music, the hot seat, meeting someone new, shout-outs, toasts and spraying the host. On a stage everyone watches the same slides or video together, reacts and asks questions.",
+      "Free, or sell tickets (you keep 90% once it's over). Hosting events people come to, and going to them, raise your reputation.",
+    ],
+  },
+  {
     icon: Trophy,
     title: "Challenge people",
     body: [
-      "Tap the trophy (top right) and challenge everyone nearby to a game (Whot! and Ludo now, more coming): everyone puts the same stake in the pool and the winner takes it.",
+      "Tap the party button (top right), then Host an event › Game challenge, and challenge everyone nearby to a game (Whot! and Ludo now, more coming): everyone puts the same stake in the pool and the winner takes it.",
       "Your first challenge is free; challenging again soon after costs a fee. Hosting and winning challenges raise your reputation.",
     ],
   },

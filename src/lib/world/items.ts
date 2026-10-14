@@ -244,7 +244,7 @@ export function effectWords(e: ItemEffect) {
  * conversations, kindness, friends), minus what being caught
  * stealing or voted down cost you. Never below zero.
  */
-export function reputationOf(o: { propertyMint: number; homes: number; itemRep: number; inventionsSold: number; penalty: number; marksLiked?: number; challenges?: number; engagement?: number }) {
+export function reputationOf(o: { propertyMint: number; homes: number; itemRep: number; inventionsSold: number; penalty: number; marksLiked?: number; challenges?: number; events?: number; engagement?: number }) {
   const property = o.propertyMint > 0 ? Math.round(20 * Math.log10(1 + o.propertyMint / 100)) : 0;
   const parts = {
     property: property + o.homes * 5,
@@ -255,9 +255,11 @@ export function reputationOf(o: { propertyMint: number; homes: number; itemRep: 
     marks: Math.min(50, Math.round((o.marksLiked ?? 0) / 2)),
     // Challenges hosted and won on the map (./challenges challengeRep).
     challenges: Math.max(0, Math.round(o.challenges ?? 0)),
+    // Events hosted that people came to, and events gone to (./events eventRep, up to 100).
+    events: Math.max(0, Math.round(o.events ?? 0)),
     // Taking part: time in the game, real conversations, gifts and greetings, friends (game-db/093, up to 150).
     engagement: Math.max(0, Math.min(150, Math.round(o.engagement ?? 0))),
     penalty: -Math.round(o.penalty),
   };
-  return { score: Math.max(0, parts.property + parts.things + parts.inventions + parts.marks + parts.challenges + parts.engagement + parts.penalty), parts };
+  return { score: Math.max(0, parts.property + parts.things + parts.inventions + parts.marks + parts.challenges + parts.events + parts.engagement + parts.penalty), parts };
 }

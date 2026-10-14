@@ -14,6 +14,7 @@ export type MoneyView = {
 export function sourceOf(kind: string) {
   if (kind === "daily_gift") return "Daily gift";
   if (kind.startsWith("challenge")) return "Challenges";
+  if (kind.startsWith("event")) return "Events";
   if (kind === "first_step") return "First steps";
   if (["work_pay", "public_pay", "hustle_pay", "bonus"].includes(kind)) return "Work";
   if (kind === "rent") return "Rent from your places";

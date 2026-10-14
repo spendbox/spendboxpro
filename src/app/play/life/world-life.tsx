@@ -21,6 +21,7 @@ import { workplaceById, type Workplace } from "@/lib/world/workplace";
 import { PropertyCard } from "../property-card";
 import { AdvertisePanel, type AdPreview } from "./advertise-panel";
 import { explorePlaces, type ExplorePlace } from "@/lib/world/explore";
+import type { SpotWords } from "../events/events";
 import { around, cachedThings, loadThings } from "./things-cache";
 import { ThingsSheet, type ThingsTab } from "./things-sheet";
 import { NewsSheet } from "./news-sheet";
@@ -1746,13 +1747,26 @@ export function useWorldLife({
     const c = centerRef.current?.() ?? { x: 0, z: 0 };
     return explorePlaces(region, (x, z) => tileAt(plan, spiralIndex(x, z)), c.x, c.z);
   };
+  /** A spot in words, for hosting an event there: the named street nearest it (within 3 tiles) and its area. */
+  const describeSpot = (x: number, z: number): SpotWords => {
+    if (!region) return { street: null, area: "" };
+    const area = region.areaAt(x, z);
+    for (let r = 0; r <= 3; r++)
+      for (let dz = -r; dz <= r; dz++)
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+          const road = region.roadAt(x + dx, z + dz);
+          if (road?.name && !road.bridge) return { street: { name: road.name, x: x + dx, z: z + dz }, area };
+        }
+    return { street: null, area };
+  };
   /** Go to a place from Explore: fly there and open its card (Go there, and its jobs). */
   const openExplorePlace = (p: ExplorePlace) => {
     if (!region) return;
     fly(p.x, p.z);
     setPlace(workplaceById(planOf(region), p.id) ?? { id: p.id, name: p.name, x: Math.round(p.x), z: Math.round(p.z), jobs: [] });
   };
-  return { explore, openExplorePlace, rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, newsScene, adOpen, search: region ? { region, mine: assets?.units ?? [], owned: shown, businesses, coins, homes: () => homesFor(region), onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit, mySpot: whereAmI(), homeSpot, goHome, nameHome, homeBuilding: homeUnit ? homeUnit.split("/")[0] : null, openPlanner: () => setPlanning(true), locateMe, lookAt: (x: number, z: number) => setFlyTo({ tile: spiralIndex(Math.round(x), Math.round(z)), at: ++flies.current }), makeRow, openSoon: () => setSoonOpen(true), openGuestBook: (building: string) => setGuestBook(building),
+  return { explore, describeSpot, openExplorePlace, rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, newsScene, adOpen, search: region ? { region, mine: assets?.units ?? [], owned: shown, businesses, coins, homes: () => homesFor(region), onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit, mySpot: whereAmI(), homeSpot, goHome, nameHome, homeBuilding: homeUnit ? homeUnit.split("/")[0] : null, openPlanner: () => setPlanning(true), locateMe, lookAt: (x: number, z: number) => setFlyTo({ tile: spiralIndex(Math.round(x), Math.round(z)), at: ++flies.current }), makeRow, openSoon: () => setSoonOpen(true), openGuestBook: (building: string) => setGuestBook(building),
     /** Where you are changed outside (a trip to a friend): read it again. */
     refreshLife: () => void refresh(),
     openLife: () => setLifeOpen(true),

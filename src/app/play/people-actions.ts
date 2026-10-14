@@ -3,6 +3,7 @@
 import { SIMPLE_LIFE } from "@/lib/world/simple-life";
 
 import { challengeRep } from "@/lib/world/challenges";
+import { eventRep } from "@/lib/world/events";
 import type { Avatar } from "@/lib/avatar";
 import { currentUserId } from "@/lib/game";
 import { pushTo } from "@/lib/push";
@@ -89,7 +90,7 @@ const engagementOf = (v: unknown) => {
 export async function playerCard(id: string): Promise<PlayerCardData | null> {
   const userId = await currentUserId();
   if (!userId || !/^[0-9a-f-]{36}$/i.test(String(id))) return null;
-  const [{ data }, { data: liked }, { data: who }, { data: ch }, { data: eng }] = await Promise.all([
+  const [{ data }, { data: liked }, { data: who }, { data: ch }, { data: eng }, { data: ev }] = await Promise.all([
     createAdminClient().rpc("player_card", { p_viewer: userId, p_target: id }),
     createAdminClient().rpc("marks_liked", { p_user: id }),
     createAdminClient().from("profiles").select("gender").eq("id", id).maybeSingle(),
@@ -97,12 +98,14 @@ export async function playerCard(id: string): Promise<PlayerCardData | null> {
     createAdminClient().rpc("challenge_rep", { p_user: id }),
     // Taking part (game-db/093; kept an hour, so a card opens fast).
     createAdminClient().rpc("engagement_rep", { p_user: id }),
+    // Events hosted and gone to (game-db/095; nothing until it's run).
+    createAdminClient().rpc("event_rep", { p_user: id }),
   ]);
   if (!data) return null;
   const d = data as Record<string, unknown>;
   const spot = d.home ? ownedSpot(String(d.home).split("/")[0]) : null;
   const map = spot ? regionMap(spot.region) : null;
-  const rep = reputationOf({ propertyMint: n(d.property), homes: d.home ? 1 : 0, itemRep: n(d.thingsRep), inventionsSold: n(d.inventionsSold), penalty: n(d.penalty), marksLiked: n(liked), challenges: challengeRep(n((ch as { hosted?: number } | null)?.hosted), n((ch as { won?: number } | null)?.won)), engagement: engagementOf(eng) });
+  const rep = reputationOf({ propertyMint: n(d.property), homes: d.home ? 1 : 0, itemRep: n(d.thingsRep), inventionsSold: n(d.inventionsSold), penalty: n(d.penalty), marksLiked: n(liked), challenges: challengeRep(n((ch as { hosted?: number } | null)?.hosted), n((ch as { won?: number } | null)?.won)), events: eventRep(n((ev as { hosted?: number } | null)?.hosted), n((ev as { attended?: number } | null)?.attended)), engagement: engagementOf(eng) });
   return {
     id: String(d.id),
     name: String(d.name),
