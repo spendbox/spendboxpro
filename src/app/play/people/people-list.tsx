@@ -1,5 +1,7 @@
 "use client";
 
+import { rememberPreviews } from "./card-cache";
+
 import { useEffect, useState } from "react";
 import { MapPin, MessageCircle, Search, User, X } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
@@ -50,7 +52,10 @@ const lastList = new Map<string, FoundPerson[]>();
 async function peopleNear(region: string, x: number, z: number, q: string): Promise<FoundPerson[]> {
   const r = await fetch(`/api/people?region=${encodeURIComponent(region)}&x=${Math.round(x)}&z=${Math.round(z)}&q=${encodeURIComponent(q)}`, { cache: "no-store" });
   if (!r.ok) throw new Error("people");
-  return ((await r.json()) as { people: FoundPerson[] }).people;
+  const people = ((await r.json()) as { people: FoundPerson[] }).people;
+  // Their cards open at once from here (./card-cache).
+  rememberPreviews(people);
+  return people;
 }
 
 /** Look everyone up ahead of time (the game opening), so the list is ready the first time too. */

@@ -16,7 +16,7 @@ import { playSfx } from "./sound";
 const KEY = "newtown.tutorial.v1";
 
 /** What the walkthrough points at: that button glows. */
-export type TutorialGlow = "home" | "chat" | "challenge" | "camera" | "profile" | "wallet" | "dock" | "leave" | null;
+export type TutorialGlow = "home" | "chat" | "challenge" | "camera" | "profile" | "wallet" | "dock" | "leave" | "townhall" | null;
 
 type Saved = { phase: Phase; i: number; skipped: Mission[] };
 const FRESH: Saved = { phase: "intro", i: 0, skipped: [] };
@@ -70,15 +70,15 @@ function setGlow(g: TutorialGlow) {
  * isn't faced with all of them at once). Before the walkthrough starts (no home yet) and during
  * its opening cards, none of them; when it's done or closed, all of them.
  */
-export type TourButton = "home" | "dock" | "extras" | "camera" | "chat" | "challenge" | "reputation" | "wallet" | "profile" | "people" | "online" | "sound";
+export type TourButton = "home" | "dock" | "extras" | "camera" | "chat" | "townhall" | "challenge" | "reputation" | "wallet" | "profile" | "people" | "online" | "sound";
 /** The tips (by number, see `tips` below) that introduce each button. */
 const TIP_SHOWS: [number, TourButton[]][] = [
+  [1, ["townhall"]],
   // The rest of the quick buttons (Coming soon, Locate me, Walk, the notifications bell).
-  [1, ["extras", "camera"]],
-  [2, ["camera"]],
-  [3, ["people", "online"]],
-  [5, ["wallet"]],
-  [7, ["profile", "sound"]],
+  [2, ["extras", "camera"]],
+  [4, ["people", "online"]],
+  [6, ["wallet"]],
+  [8, ["profile", "sound"]],
 ];
 const MISSION_SHOWS: Record<Mission, TourButton[]> = { name: ["home", "dock"], hi: ["chat"], win: ["challenge", "reputation"] };
 function shownNow(): string {
@@ -128,6 +128,8 @@ export type TutorialActions = {
   leave: () => void;
   /** Open your look (the avatar editor). */
   look: () => void;
+  /** Open the Town Hall (the state's chat). */
+  townHall: () => void;
 };
 
 /** Where the card's been dragged to (kept while the game's open, so it stays out of your way). */
@@ -267,6 +269,13 @@ export function Tutorial({
   const tips: Card[] = [
     { emoji: "🎉", title: "Missions complete!", text: "You're officially a Newtowner. A few quick tips and you're free to roam." },
     {
+      emoji: "🏛️",
+      title: "The Town Hall",
+      text: `One big chat for everyone online in ${place}. Ask for directions, brag about your new crib, find people to play with. Tap the orange button just above your chat bubble (bottom right). Tap anyone's name there to see their card.`,
+      glow: "townhall",
+      action: { label: "Open it", run: actions.townHall },
+    },
+    {
       emoji: "🧰",
       title: "Your quick buttons",
       text: "The round button at the bottom left opens your quick buttons: Home, Camera, Coming soon, Locate me and Walk. Tap anywhere else and they tuck themselves away. Neat, right?",
@@ -303,7 +312,7 @@ export function Tutorial({
     {
       emoji: "💅",
       title: "Make it you",
-      text: "Everyone on the map sees your face, so make it yours: skin, hair, eyes, outfit, accessories. Tap your face (top left), then My look. Change it as often as you like, it's free.",
+      text: "Everyone on the map sees your face, so make it yours: skin, hair, eyes, outfit, accessories, or use a photo of yourself. Tap your face (top left), then My look or Profile photo. Change it as often as you like, it's free.",
       glow: "profile",
       action: { label: "Change my look", run: actions.look },
     },

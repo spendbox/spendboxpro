@@ -60,3 +60,26 @@ export async function hqStopAd(adId: string): Promise<string> {
   revalidatePath("/", "layout");
   return error ? "That didn't work." : "Stopped.";
 }
+
+/** Delete a Town Hall message (rude, spam). */
+export async function hqDeleteMessage(id: string): Promise<string> {
+  if (!(await isAdmin())) return "Sign in again.";
+  const { error } = await createAdminClient().from("chat_messages").delete().eq("id", Number(id)).like("room", "town:%");
+  revalidatePath("/", "layout");
+  return error ? "That didn't work." : "Deleted.";
+}
+
+/** Remove someone's profile photo (they're back to their drawn face). */
+export async function hqClearPhoto(userId: string): Promise<string> {
+  if (!(await isAdmin())) return "Sign in again.";
+  const db = createAdminClient();
+  const { data } = await db.from("profiles").select("avatar").eq("id", userId).maybeSingle();
+  const avatar = { ...((data?.avatar as Record<string, unknown> | null) ?? {}) };
+  const photo = typeof avatar.photo === "string" ? avatar.photo : "";
+  delete avatar.photo;
+  const { error } = await db.from("profiles").update({ avatar }).eq("id", userId);
+  const path = /\/faces\/([0-9a-f-]{36}\/[A-Za-z0-9_-]+\.jpg)$/.exec(photo)?.[1];
+  if (!error && path) await db.storage.from("faces").remove([path]).catch(() => {});
+  revalidatePath("/", "layout");
+  return error ? "That didn't work." : "Removed.";
+}

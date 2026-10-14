@@ -37,7 +37,7 @@ async function load() {
   const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
   const head = { count: "exact" as const, head: true };
   const since = lagosMidnight();
-  const [stats, active, lives, homes, new1, new7, packs, leases, ads, mapOpen, peopleOpen, signups, bank, topups, landmarks, money, named, namedUnits, adList] = await Promise.all([
+  const [stats, active, lives, homes, new1, new7, packs, leases, ads, mapOpen, peopleOpen, signups, bank, topups, landmarks, money, named, namedUnits, adList, town, photos] = await Promise.all([
     siteStats(),
     db.from("lives").select("user_id", head).gte("seen_at", ago(5 * 60_000)),
     db.from("lives").select("user_id", head),
@@ -59,6 +59,9 @@ async function load() {
     db.from("property_buildings").select("building_id, name, created_at").not("name", "is", null).order("created_at", { ascending: false }).limit(30),
     db.from("property_units").select("unit_id, building_id, label, owner_id, use").eq("use", "home").order("bought_at", { ascending: false }).limit(300),
     db.from("ads").select("id, brand, headline, status, region, amount_kobo, ends_at").neq("status", "pending_payment").order("created_at", { ascending: false }).limit(20),
+    // Town Hall (085) and profile photos: public, so they can be removed from here.
+    db.from("chat_messages").select("id, sender_name, room, body, created_at").like("room", "town:%").order("id", { ascending: false }).limit(30),
+    db.from("profiles").select("id, username, avatar").not("avatar->>photo", "is", null).limit(30),
   ]);
   const ownerIds = [...(landmarks.data ?? []).map((l) => l.owner_id), ...(namedUnits.data ?? []).map((u) => u.owner_id)].filter(Boolean).map(String);
   const ids = [...new Set([...(packs.data ?? []).map((p) => String(p.user_id)), ...ownerIds])];
@@ -98,6 +101,8 @@ async function load() {
         .map((u) => ({ kind: "home" as const, id: String(u.unit_id), name: String(u.label), who: nameOf.get(String(u.owner_id)) ?? "?" })),
     ],
     ads: adList.data ?? [],
+    town: town.data ?? [],
+    photos: ((photos.data ?? []) as { id: string; username: string | null; avatar: { photo?: string } | null }[]).filter((p) => p.avatar?.photo),
   };
 }
 
@@ -255,6 +260,38 @@ export default async function Gate({ params }: { params: Promise<{ gate: string 
               )}
             </tbody>
           </table>
+        </div>
+      </section>
+
+      <section className="grid gap-4 sm:grid-cols-2">
+        <div className="rounded-2xl bg-panel p-4 ring-1 ring-line">
+          <p className="text-sm font-semibold">Town Hall, latest</p>
+          <ul className="mt-2 max-h-80 space-y-1.5 overflow-y-auto text-sm">
+            {d.town.map((m) => (
+              <li key={String(m.id)} className="flex items-start justify-between gap-2">
+                <span className="min-w-0">
+                  <b>{String(m.sender_name)}</b> <span className="text-xs text-muted">{when(String(m.created_at))}</span>
+                  <span className="block break-words">{String(m.body ?? "")}</span>
+                </span>
+                <HqButton kind="deletemsg" id={String(m.id)} label="Delete" danger />
+              </li>
+            ))}
+            {d.town.length === 0 && <li className="text-muted">Nothing said yet (or run 085).</li>}
+          </ul>
+        </div>
+        <div className="rounded-2xl bg-panel p-4 ring-1 ring-line">
+          <p className="text-sm font-semibold">Profile photos</p>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            {d.photos.map((p) => (
+              <div key={p.id} className="flex flex-col items-center gap-1 text-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={p.avatar!.photo} alt="" className="size-16 rounded-full object-cover" loading="lazy" />
+                <span className="w-full truncate text-xs">{p.username ?? "?"}</span>
+                <HqButton kind="clearphoto" id={p.id} label="Remove" danger />
+              </div>
+            ))}
+          </div>
+          {d.photos.length === 0 && <p className="mt-2 text-sm text-muted">No profile photos yet.</p>}
         </div>
       </section>
 

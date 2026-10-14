@@ -61,7 +61,7 @@ const MAX_BYTES = 1_400_000;
 
 /** The avatar as a picture (just the person, no round backdrop). */
 export function avatarCutout(avatar: Avatar, size = 720): Promise<HTMLImageElement | null> {
-  const svg = renderToStaticMarkup(<AvatarFace avatar={avatar} size={size} cutout />).replace(/^<svg(?![^>]*xmlns=)/, '<svg xmlns="http://www.w3.org/2000/svg"');
+  const svg = renderToStaticMarkup(<AvatarFace avatar={{ ...avatar, photo: undefined }} size={size} cutout />).replace(/^<svg(?![^>]*xmlns=)/, '<svg xmlns="http://www.w3.org/2000/svg"');
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => resolve(img);
