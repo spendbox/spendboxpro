@@ -34,6 +34,8 @@ const DECEL = 7.5;
 const WALK_SPEED = 2.2;
 const T_BOARD = { walk: 1.6, getIn: 0.55 };
 const T_ARRIVE = 3.0;
+/** After the choice, the ride goes on this long, then the film ends (seconds). */
+const AFTER = 2.2;
 const TRAFFIC: VehicleKind[] = ["car", "danfo", "taxi", "keke", "car", "okada", "bus", "truck", "danfo", "suv", "car"];
 
 export type TripScene = {
@@ -92,7 +94,7 @@ export function createTripScene(
   const B = route.lines[Math.min(1, route.lines.length - 1)];
   const C = route.lines[route.lines.length - 1];
   const boardS = walking ? 76 : 40;
-  const eventS = walking ? 84 : B.s0 + 34;
+  const eventS = walking ? 84 : B.s0 + 22;
   const stopS = walking ? 98 : C.s0 + 30;
   const atlas = buildAtlas({ night, toName: o.toName, area: o.area || "Lagos" });
   disposers.push(() => atlas.texture.dispose());
@@ -247,6 +249,8 @@ export function createTripScene(
           }
         }
         if (walking) doing = v > 0.2 ? "walk" : "idle";
+        // The film is the ride up to what happens: a little after it's played out, it ends.
+        if (stageDone && tPhase > AFTER) finish();
       }
     }
     if (stage && phase === "event" && !eventShown && stage.ready(tPhase)) {
@@ -417,9 +421,16 @@ export function createTripScene(
     renderer.render(scene, cam);
     if (!began) began = last = performance.now();
 
-    // How far along (the bar): getting in, the ride, getting out.
-    const span = Math.max(1, stopS - boardS);
-    const u = walking ? (phase === "arrive" ? 0.9 + 0.1 * Math.min(1, tPhase / T_ARRIVE) : 0.9 * ((s - boardS) / span)) : phase === "board" ? 0.1 * Math.min(1, tPhase / (T_BOARD.walk + T_BOARD.getIn)) : phase === "arrive" ? 0.9 + 0.1 * Math.min(1, tPhase / T_ARRIVE) : 0.1 + 0.8 * ((s - boardS) / span);
+    // How far along (the bar): getting in, the ride up to what happens, then on a little.
+    const span = Math.max(1, (stage ? eventS : stopS) - boardS);
+    const start = walking ? 0 : 0.12;
+    const u = stageDone
+      ? 0.85 + 0.15 * (phase === "go" ? Math.min(1, tPhase / AFTER) : 0)
+      : phase === "board"
+        ? start * Math.min(1, tPhase / (T_BOARD.walk + T_BOARD.getIn))
+        : phase === "arrive"
+          ? 0.9 + 0.1 * Math.min(1, tPhase / T_ARRIVE)
+          : start + (0.85 - start) * Math.min(1, (s - boardS) / span);
     if (Math.abs(u - lastProgress.u) > 0.01) {
       lastProgress.u = u;
       o.onProgress?.(Math.min(1, Math.max(0, u)));

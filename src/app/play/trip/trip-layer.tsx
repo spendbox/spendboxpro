@@ -2,19 +2,20 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, FastForward } from "lucide-react";
-import { MOMENT_BY_ID, ROAD_RULES } from "@/lib/world/moments";
+import { MOMENT_BY_ID } from "@/lib/world/moments";
 import { COMMUTE_LABEL } from "@/lib/world/work";
 import { cash } from "@/lib/world/value";
 import { momentNext, type MomentShown } from "../moment-actions";
 import { MomentCard, type MomentMood } from "../moments/moment-card";
-import { TRIP_OFF_KEY, tripLayerMounted, type TripShow } from "./play";
+import { tripLayerMounted, type TripShow } from "./play";
 import { lagosHour } from "./sky";
 import type { TripScene } from "./trip-scene";
 
-// The trip there, as a short film over the map (docs/TRIPS.md): the 3D scene (./trip-scene, loaded
-// when a trip plays), where you're going, the fare, a line from the conductor or the driver, a
-// progress bar, Skip and Always skip. Often something happens on the way (a road moment): it's
-// asked for as the film loads, acted out on the road, and its card asks what you do.
+// The trip there, as a short film over the map (docs/TRIPS.md), only when something happens on the
+// way (a road moment): the moment is asked for first, and with none there's no film. Then the 3D
+// scene (./trip-scene) rides up to it, it's acted out, its card asks what you do, and the film ends
+// soon after. On top: where you're going, the fare, a line from the conductor or the driver, a
+// progress bar and Skip.
 
 const SAY: Record<string, string[]> = {
   danfo: ["\"Obalende! CMS! Enter with your change o!\"", "\"Wole! Wole! One chance remain!\"", "\"Owa o! Driver, owa!\""],
@@ -41,6 +42,10 @@ export function TripLayer({ avatar }: { avatar: unknown }) {
 
   useEffect(() => {
     tripLayerMounted(true);
+    // "Always skip" is gone (the film only plays when something happens): forget it.
+    try {
+      localStorage.removeItem("nt-trip-off");
+    } catch {}
     const on = (e: Event) => {
       const d = (e as CustomEvent<TripShow & { id: number }>).detail;
       if (!d) return;
@@ -62,53 +67,48 @@ export function TripLayer({ avatar }: { avatar: unknown }) {
     setCardUp(false);
   };
 
-  // The film: loaded, played, freed; and maybe something on the way.
+  // First the moment on the way (the film plays only for one), then the film, staged with it.
+  const [ready, setReady] = useState<number | null>(null);
   useEffect(() => {
     if (!trip || !host.current) return;
     let live = true;
     const el = host.current;
-    let shown: MomentShown | null = null;
-    const tryStage = () => {
-      const def = shown && MOMENT_BY_ID.get(shown.moment);
-      if (!live || !scene.current || !shown || !def?.stage) return;
-      if (scene.current.stage(def.stage, shown.moment)) setEvent(shown);
-      shown = null;
-    };
-    if (trip.km >= ROAD_RULES.minKm && Math.random() < ROAD_RULES.chance)
-      void momentNext({ spot: "road", ride: trip.mode, place: trip.to })
-        .then((m) => {
-          shown = m;
-          tryStage();
-        })
-        .catch(() => {});
-    void import("./trip-scene").then(({ createTripScene }) => {
-      if (!live) return;
-      // The bar follows the film's own clock (a few updates a second is plenty).
-      scene.current = createTripScene(el, {
-        mode: trip.mode,
-        avatar: avatarRef.current,
-        toName: trip.to,
-        area: trip.area ?? trip.to,
-        hour: lagosHour(),
-        onProgress: (u) => live && setProgress(u),
-        onEvent: () => live && setCardUp(true),
-        onDone: () => {
-          // A breath at the end, then in.
-          setTimeout(() => live && end(trip.id), 250);
-        },
-      });
-      tryStage();
-    }).catch(() => live && end(trip.id));
+    void Promise.all([momentNext({ spot: "road", ride: trip.mode, place: trip.to }).catch(() => null), import("./trip-scene")])
+      .then(([m, { createTripScene }]) => {
+        const def = m && MOMENT_BY_ID.get(m.moment);
+        if (!live) return;
+        // Nothing on the way this time: no film, straight there.
+        if (!m || !def?.stage) return end(trip.id);
+        setEvent(m);
+        setReady(trip.id);
+        scene.current = createTripScene(el, {
+          mode: trip.mode,
+          avatar: avatarRef.current,
+          toName: trip.to,
+          area: trip.area ?? trip.to,
+          hour: lagosHour(),
+          onProgress: (u) => live && setProgress(u),
+          onEvent: () => live && setCardUp(true),
+          onDone: () => {
+            // A breath at the end, then on.
+            setTimeout(() => live && end(trip.id), 250);
+          },
+        });
+        if (!scene.current.stage(def.stage, m.moment)) end(trip.id);
+      })
+      .catch(() => live && end(trip.id));
     return () => {
       live = false;
       scene.current?.dispose();
       scene.current = null;
       setProgress(0);
+      setReady(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trip?.id]);
 
   if (!trip) return null;
+  const showing = ready === trip.id;
   const lines = SAY[trip.mode] ?? SAY.walk;
   const line = lines[trip.id % lines.length];
   const how = trip.mode === "walk" ? "On foot" : COMMUTE_LABEL[trip.mode];
@@ -118,7 +118,8 @@ export function TripLayer({ avatar }: { avatar: unknown }) {
     scene.current?.resolve(mood.current);
   };
   return (
-    <div className="trip-in fixed inset-0 z-[75] bg-black" role="dialog" aria-label={`On the way to ${trip.to}`}>
+    // Until the moment's in, nothing shows (no film without one).
+    <div className={showing ? "trip-in fixed inset-0 z-[75] bg-black" : "pointer-events-none fixed inset-0 -z-10 opacity-0"} role={showing ? "dialog" : undefined} aria-label={`On the way to ${trip.to}`}>
       <div ref={host} className="absolute inset-0" />
       {/* Where you're going. */}
       <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/60 to-transparent px-4 pb-10 pt-[max(0.9rem,env(safe-area-inset-top))] text-white">
@@ -153,25 +154,12 @@ export function TripLayer({ avatar }: { avatar: unknown }) {
       ) : (
         <>
           {/* What they say on the way. */}
-          {!event && (
-            <div className="pointer-events-none absolute inset-x-0 bottom-24 flex justify-center px-4">
-              <p className="start-pop max-w-sm rounded-2xl bg-white/95 px-4 py-2 text-center text-sm font-semibold text-ink shadow-xl">{line}</p>
-            </div>
-          )}
+          <div className="pointer-events-none absolute inset-x-0 bottom-24 flex justify-center px-4">
+            <p className="start-pop max-w-sm rounded-2xl bg-white/95 px-4 py-2 text-center text-sm font-semibold text-ink shadow-xl">{line}</p>
+          </div>
           <div className="absolute inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))] flex items-center justify-center gap-3 px-4">
             <button onClick={() => (scene.current ? scene.current.finish() : end(trip.id))} className="flex h-11 items-center gap-1.5 rounded-full bg-white/90 px-5 text-sm font-bold text-ink shadow-lg">
               <FastForward className="size-4" /> Skip
-            </button>
-            <button
-              onClick={() => {
-                try {
-                  localStorage.setItem(TRIP_OFF_KEY, "1");
-                } catch {}
-                end(trip.id);
-              }}
-              className="h-11 rounded-full bg-black/40 px-4 text-xs font-semibold text-white/80"
-            >
-              Always skip
             </button>
           </div>
         </>

@@ -1,9 +1,13 @@
-// Asking for the trip film (./trip-layer.tsx, docs/TRIPS.md): playTrip(...) shows it and resolves
-// when it's over or skipped. Straight away instead when the layer isn't there, the player turned
-// it off ("Always skip"), or their phone asks for less motion. Kept tiny: the film itself loads
-// only when it plays.
+// Asking for the trip film (./trip-layer.tsx, docs/TRIPS.md): it plays only when something will
+// happen on the way (a road moment). tripWanted(km) rolls whether to try for one; playTrip(...)
+// asks the server for the moment and, if there is one, shows the ride up to it, and resolves when
+// it's over or skipped. Straight away instead when the layer isn't there, no moment comes, or the
+// phone asks for less motion. Kept tiny: the film itself loads only when it plays.
 
 import type { Commute } from "@/lib/world/work";
+
+/** How likely a trip of at least minKm tries for a road moment (src/lib/world/moments.ts ROAD_RULES). */
+const ROAD = { chance: 0.6, minKm: 0.3 };
 
 export type TripShow = {
   mode: Commute;
@@ -18,7 +22,6 @@ export type TripShow = {
   area?: string;
 };
 
-export const TRIP_OFF_KEY = "nt-trip-off";
 let listening = 0;
 let seq = 0;
 
@@ -27,18 +30,15 @@ export function tripLayerMounted(on: boolean) {
   listening += on ? 1 : -1;
 }
 
-export function tripsOff() {
-  try {
-    return localStorage.getItem(TRIP_OFF_KEY) === "1";
-  } catch {
-    return false;
-  }
+/** Whether a trip could play now. */
+export function tripsWillPlay() {
+  if (typeof window === "undefined" || !listening) return false;
+  return !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 }
 
-/** Whether a trip would play now (otherwise going somewhere stays instant, as before). */
-export function tripsWillPlay() {
-  if (typeof window === "undefined" || !listening || tripsOff()) return false;
-  return !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+/** Try for a film on this trip? Long enough, and the dice say so (it plays only if a moment comes). */
+export function tripWanted(km: number) {
+  return km >= ROAD.minKm && tripsWillPlay() && Math.random() < ROAD.chance;
 }
 
 export function playTrip(show: TripShow): Promise<void> {

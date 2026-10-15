@@ -921,7 +921,7 @@ export const MOMENT_RULES = {
  * On the road (the trip film): how likely a trip of at least `minKm` brings a moment, and how close
  * together they can come (the day's count is shared with the rest, with a higher cap).
  */
-export const ROAD_RULES = { chance: 0.7, minKm: 0.3, gapSeconds: 45, perDay: 40 };
+export const ROAD_RULES = { chance: 0.6, minKm: 0.3, gapSeconds: 45, perDay: 40 };
 
 /** The places in the game (an inside's theme) as where a moment can happen. */
 export function spotOfTheme(theme: string | null | undefined, home: boolean): MomentSpot {

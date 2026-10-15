@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DoorOpen } from "lucide-react";
 import type { HomePlan } from "@/lib/home-plan";
-import { playTrip, tripsWillPlay } from "../trip/play";
+import { playTrip, tripWanted } from "../trip/play";
 import { Flag, MapPin, Pencil, Search, Star, X } from "@/components/icons";
 import { addressOf, makePlan, spiralIndex, tileAt, type CityPlan } from "@/lib/city/layout";
 import { WORLD_EVENT_BY_KEY, type WorldEvent } from "@/lib/world-events";
@@ -672,7 +672,7 @@ export function useWorldLife({
     // and riding there while the fare is paid, then in. With the film off, in at once as before
     // (the fare paid on the way, and if it can't be, you're back out).
     const trip = signedIn ? tripTo(id) : null;
-    const film = !!trip && trip.km >= 0.05 && tripsWillPlay();
+    const film = !!trip && trip.km >= 0.05 && tripWanted(trip.km);
     if (!film) onEnter?.(id);
     if (!signedIn) return;
     const paying = api.travelTo(id, driving).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));

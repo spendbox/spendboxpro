@@ -59,7 +59,7 @@ import {
 import { short } from "@/lib/format";
 import { cash, cashText, toShown } from "@/lib/world/value";
 import { COMMUTES as COMMUTE_MODES, tripWords, type Commute } from "@/lib/world/work";
-import { playTrip } from "./trip/play";
+import { playTrip, tripWanted } from "./trip/play";
 import { createClient } from "@/lib/supabase/client";
 import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
 import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
@@ -2209,7 +2209,7 @@ export function Game({
       if (ride && from && r.mode && COMMUTE_MODES.includes(r.mode as Commute) && r.mode !== "walk") {
         const map = regionMap(worldId);
         const km = Math.hypot(x - from.x, z - from.z) / 10;
-        if (km >= 0.05) await playTrip({ mode: r.mode as Commute, from: map?.areaAt(from.x, from.z) ?? "", to: map?.areaAt(Math.round(x), Math.round(z)) ?? "There", km, fare: r.fare ?? 0 });
+        if (tripWanted(km)) await playTrip({ mode: r.mode as Commute, from: map?.areaAt(from.x, from.z) ?? "", to: map?.areaAt(Math.round(x), Math.round(z)) ?? "There", km, fare: r.fare ?? 0 });
       }
       // You're there now: where you are (and the next fare) starts from here.
       worldLife.refreshLife();

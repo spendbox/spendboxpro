@@ -1,48 +1,50 @@
 # The trip there
 
-When you go somewhere a ride takes you (danfo, keke, okada, taxi or your own car), a short film plays
-while the fare is paid. You walk out from the bus stop to the vehicle, get in and sit down, and it
-pulls off. The camera swings round from the side to behind it as it picks up speed.
+The trip film plays only when something is going to happen on the way: a road moment (below).
+Any other trip is instant, as before. On 6 in 10 trips of 300 m or more the game asks the server
+for a road moment. If one comes, the film plays; if not (say, one came less than 45 seconds ago),
+there's no film.
+
+The film is the ride up to the moment. You walk out from the bus stop and get into the danfo (or
+your car, a taxi, a keke, an okada), and it pulls off. The camera swings round from the side to
+behind it as it picks up speed.
 
 It drives through a Lagos street:
 
-- it turns left at a junction with traffic lights, passing a mosque, a filling station, a market
-  and a little park on the corners;
-- it goes under a "Welcome to (the area)" arch;
-- it passes shops with painted signs and awnings, storey blocks with burglar-proof windows and
-  black water tanks, bungalows behind their compound walls, and glass offices;
-- along the way there are electric poles with their wires, palms, hawkers' umbrellas, parked
-  cars, billboards and towers on the skyline;
-- traffic comes the other way (danfos, BRT buses, lorries, kekes, okadas) and people walk on the
-  pavements;
-- it turns right past a church and a building site, goes under a pedestrian bridge, and stops at
-  the place you're going, its name across the front. You get out and walk to the door.
+- shops with painted signs and awnings, storey blocks with burglar-proof windows and black water
+  tanks, bungalows behind their compound walls, and glass offices;
+- electric poles with their wires, palms, hawkers' umbrellas, parked cars, billboards and towers
+  on the skyline;
+- traffic coming the other way, and people walking on the pavements;
+- a left turn at a junction with traffic lights (a mosque, a filling station, a market and a park on
+  the corners), then under a "Welcome to (the area)" arch.
 
-Going on foot, you walk along the pavement to it instead.
+Then the ride stops and the moment plays out. A couple of seconds after you choose, the film ends
+and you're there. On foot, you walk along the pavement until it happens.
 
 The sky is the time in Lagos: dawn pinks, a hard blue noon, a golden late afternoon, dusk, and
 night with stars, the moon, lit windows, street lamps and headlights.
 
-- About twelve seconds (a few on foot), longer if something happens on the way. Very short hops
-  (under 50 m) don't play.
-- The card on top shows from → to, how you went, how far and the fare, with a progress bar.
-- Skip ends it at once; "Always skip" turns it off for good on that phone (localStorage
-  `nt-trip-off`). Phones set to reduce motion never see it.
+- The card on top shows from → to, how you went, how far and the fare, with a progress bar up to
+  the moment.
+- Skip ends it at once (hidden while the moment's card asks what you do). There's no "Always
+  skip": the film is only for trips where something happens.
+- Phones set to reduce motion never see it.
 - The film's clock starts on the first frame drawn, so a slow phone still sees the whole ride.
 - If paying fails, the film still ends and you stay where you were, with the usual message.
 
 ## Something on the way
 
-On most trips of 300 m or more (7 in 10), something happens on the road. It is a road moment: a
-moment (docs/MOMENTS.md) that only happens on the road, on certain rides, and that the film acts out.
+A road moment is a moment (docs/MOMENTS.md) that only happens on the road, on certain rides, and
+that the film acts out.
 
-1. The game asks for one as the film loads.
+1. The game asks for one before the film starts.
 2. The ride stops at the spot and the people in it come up and play their part (below).
 3. The card asks what you do. Skip is hidden until you've chosen. The cross ("Ignore it") changes
    nothing.
 4. What you chose plays out. They cheer, clap, wave, argue or walk off; the rope drops, the smoke
    stops, the convoy drives away.
-5. The ride goes on.
+5. The ride goes on for a couple of seconds, and the film ends.
 
 The 55 road moments are in `src/lib/world/road-moments.ts`. They include:
 
