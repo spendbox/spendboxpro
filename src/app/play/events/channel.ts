@@ -102,6 +102,12 @@ function clean(p: unknown): RoomMsg | null {
  * hear and say everything, and the room's count comes from the database instead.
  */
 export const PRESENCE_MAX = 200;
+/**
+ * Slow mode in a full room (PRESENCE_MAX people sharing): each line said reaches everyone, so in a
+ * carnival of thousands one person sends at most a chat line every 10 s and a reaction every 2 s
+ * (yours still shows on your own screen at once). The fewest milliseconds between each kind.
+ */
+const SLOW_MS: Partial<Record<RoomMsg["t"], number>> = { chat: 10_000, react: 2_000 };
 
 export const randomKey = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
@@ -179,9 +185,19 @@ export function useEventRoom(id: number | null, me: { id: string; name: string; 
     track();
   }, [vibe, track]);
 
+  const lastSent = useRef<Record<string, number>>({});
+  const big = useRef(false);
+  useEffect(() => {
+    big.current = here.length >= PRESENCE_MAX;
+  });
   const send = useCallback((m: RoomMsg) => {
     const ch = channelRef.current;
-    if (ch && joined.current) void ch.send({ type: "broadcast", event: "m", payload: m });
+    const gap = big.current && !meRef.current?.host ? SLOW_MS[m.t] : undefined;
+    const quiet = gap !== undefined && Date.now() - (lastSent.current[m.t] ?? 0) < gap;
+    if (!quiet) lastSent.current[m.t] = Date.now();
+    if (quiet) {
+      // Slow mode: only on your screen this time.
+    } else if (ch && joined.current) void ch.send({ type: "broadcast", event: "m", payload: m });
     else outbox.current.push(m);
     // Your own messages reach you too (the channel doesn't echo them).
     for (const l of listeners.current) l(m);
