@@ -1,5 +1,6 @@
 "use client";
 
+import { PASSPORT_ON } from "@/lib/features";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
@@ -2890,7 +2891,7 @@ export function Game({
           onResults={() => { setMenu(false); if (state.results) setShowResults(state.results.roundId); }}
           onMyStyle={guest || worldId ? undefined : () => { setMenu(false); setStyleOpen(true); }}
           onMyHouse={guest || worldId ? undefined : () => { setMenu(false); setHouseOpen(true); }}
-          onPassport={guest || !worldId ? undefined : () => { setMenu(false); worldLife.openPassport(); }}
+          onPassport={!PASSPORT_ON || guest || !worldId ? undefined : () => { setMenu(false); worldLife.openPassport(); }}
           onFriends={guest ? undefined : () => { setMenu(false); setFriendsOpen(true); }}
           friendRequests={state.friends.incoming.length}
           onMyGifts={guest ? undefined : () => { setMenu(false); openGifts(); }}

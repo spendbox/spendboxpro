@@ -1,5 +1,7 @@
 # The passport
 
+**Switched off for now** (`PASSPORT_ON` in `src/lib/features.ts`): no menu entry and no stamps. Flip it to `true` to bring it back.
+
 Every real place on the map you go into gets a stamp in your passport: the city's landmarks (the
 National Theatre, Balogun Market, Tafawa Balewa Square...), its named places and its railway
 stations. They're gathered on area pages: Lagos Island, Ikoyi & VI, Lekki & Ajah, the Mainland,

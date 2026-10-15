@@ -8,6 +8,7 @@ import { REGIONS, regionMap } from "@/lib/world";
 import { grownBuilding, type Building } from "@/lib/world/buildings";
 import { cleanPropertyName, ownedSpot } from "@/lib/world/owned";
 import { BUY_TAX, rentPerDay, type AssetsData, type BuildingOwner, type OwnedBuildingRow, type PassportStampNews, type PropertyResult } from "@/lib/world/property-api";
+import { PASSPORT_ON } from "@/lib/features";
 import { AREA_REWARD, passportOf, STAMP_REWARD } from "@/lib/world/passport";
 import { landNow, toMint, valueOf } from "@/lib/world/value";
 import { discounted } from "@/lib/world/rep-levels";
@@ -322,7 +323,7 @@ export async function travelTo(buildingId: string, drive?: boolean, from?: { x: 
     }
   }
   // A passport stamp, if it's one of the city's real places (game-db/106; nothing before it's run).
-  const stamp = await stampPassport(db, userId, spot.region, spot.x, spot.z).catch(() => null);
+  const stamp = !PASSPORT_ON ? null : await stampPassport(db, userId, spot.region, spot.x, spot.z).catch(() => null);
   return { ok: true, fare: n(data), mode, ...(found ? { found } : {}), ...(stamp ? { stamp } : {}) };
 }
 
