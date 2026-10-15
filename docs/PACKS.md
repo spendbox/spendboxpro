@@ -1,7 +1,7 @@
 # Starting out: free or a starter pack
 
 A life on the real map starts free with **₦2,000,000 and a free home**, or richer with a starter pack
-bought once, until you buy a home of your own (`src/lib/world/packs.ts`, game-db/090).
+bought once, in the first 72 hours after joining (`src/lib/world/packs.ts`, game-db/090 and 105). After that the offer is gone, whether or not you have bought a home.
 
 | Pack | Starting money | Price |
 | --- | --- | --- |

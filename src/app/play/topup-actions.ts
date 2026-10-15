@@ -62,7 +62,7 @@ async function newTopUp(userId: string, t: NonNullable<ReturnType<typeof offerOf
       ok: false,
       error:
         code === "had" ? "You've had a starter pack already. Top-ups are below."
-        : code === "too_late" ? "Starter packs are for starting out, before you buy a home of your own. Top-ups are below."
+        : code === "too_late" ? "Starter packs are only on offer for your first 72 hours. Top-ups are below."
         : /does not exist|pack_topup_start/.test(error.message) ? "Starter packs are switched on soon."
         : "That didn't work. Try again.",
     };
@@ -178,10 +178,15 @@ export async function toppedUpBefore(): Promise<boolean> {
   return !error && (count ?? 0) > 0;
 }
 
-/** Can you still buy a starter pack? "open", "had" (one already), "too_late" (you bought a home), or null (not switched on). */
-export async function myPackStatus(): Promise<"open" | "had" | "too_late" | null> {
+/**
+ * Can you still buy a starter pack? "open" (with when the offer ends: 72 hours after you joined,
+ * game-db/105), "had" (one already), "too_late" (the 72 hours are up), or null (not switched on).
+ */
+export async function myPackStatus(): Promise<{ status: "open" | "had" | "too_late"; endsAt: string | null } | null> {
   const userId = await currentUserId();
   if (!userId) return null;
-  const { data, error } = await createAdminClient().rpc("pack_status", { p_user: userId });
-  return error ? null : ((data as "open" | "had" | "too_late") ?? null);
+  const db = createAdminClient();
+  const [{ data, error }, ends] = await Promise.all([db.rpc("pack_status", { p_user: userId }), db.rpc("pack_ends_at", { p_user: userId })]);
+  if (error || !data) return null;
+  return { status: data as "open" | "had" | "too_late", endsAt: ends.error || !ends.data ? null : String(ends.data) };
 }

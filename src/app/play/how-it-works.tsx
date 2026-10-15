@@ -200,7 +200,7 @@ const WORLD_SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[]
     title: "Start a life",
     body: [
       "Sign in and you get ₦2,000,000 and a free home to live in straight away (you can move once, free). Your Home bubble shows it on the map.",
-      "Want to start richer? Once, until you buy a home of your own, a starter pack in your Wallet starts you with ₦20m, ₦80m or ₦300m (₦1,000, ₦2,500 or ₦5,000), paid by bank transfer or card.",
+      "Want to start richer? Once, in your first 72 hours, a starter pack in your Wallet starts you with ₦20m, ₦80m or ₦300m (₦1,000, ₦2,500 or ₦5,000), paid by bank transfer or card.",
       "Save up for a home of your own (a flat, a house, a duplex) anywhere on the map. Friends can visit; anyone else knocks first.",
     ],
   },

@@ -1,5 +1,5 @@
 // How a life on the real map can start (docs/PACKS.md): free with ₦2,000,000 and a free home, or with a
-// starter pack bought once, until you buy a home of your own, through Paystack: it raises your starting
+// starter pack bought once, in your first 72 hours (game-db/105), through Paystack: it raises your starting
 // money to ₦20m, ₦80m or ₦300m (with things to own and, for the bigger ones, a furnished home). Packs are
 // paid like top-ups (src/app/play/topup-actions.ts, game-db/090). Mint is never turned back into cash.
 
