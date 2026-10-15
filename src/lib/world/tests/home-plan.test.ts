@@ -28,11 +28,11 @@ test("a plan from outside is made safe", () => {
     size: "huge",
     floors: [
       { rooms: [{ kind: "bedroom", x: 99, y: -5, w: 50, d: 1 }, { kind: "dungeon", x: 0, y: 0, w: 2, d: 2 }], items: [{ kind: "sofa", x: 100, y: 100, rot: 7 }, { kind: "rocket" }] },
-      {}, {}, {}, {}, {},
+      {}, {}, {}, {}, {}, {}, {},
     ],
   })!;
   assert.equal(p.size, "medium");
-  assert.equal(p.floors.length, 4);
+  assert.equal(p.floors.length, 6);
   const [room] = p.floors[0].rooms;
   assert.equal(p.floors[0].rooms.length, 1);
   assert.ok(room.x + room.w <= SIZES.medium.w && room.d >= 2);
@@ -185,4 +185,82 @@ test("a pack's furnished home costs nothing to save, and is the same every time"
     // Something in every room.
     assert.ok(plan.floors.every((f) => f.items.length > 0));
   }
+});
+
+test("the house builder: every kind of house at every size fits, furnished, with no clashes", async () => {
+  const { BUILDER_SIZES, STRUCTURES, STRUCTURE_ORDER, buildHouse, cleanPlan: clean, clashes: clash, shapeOf, footprintMask } = await import("../../home-plan.ts");
+  for (const id of STRUCTURE_ORDER)
+    for (const size of BUILDER_SIZES) {
+      const p = buildHouse(id, size, STRUCTURES[id].floors, 7);
+      assert.equal(p.structure, id);
+      assert.equal(p.floors.length, STRUCTURES[id].floors);
+      // Nothing is lost when the server cleans it: every room and piece is inside the house.
+      const c = clean(JSON.parse(JSON.stringify(p)))!;
+      assert.deepEqual(c, p, `${id} ${size}`);
+      const mask = footprintMask(shapeOf(p), p.size);
+      assert.ok(mask.some((m) => m === 0) === (shapeOf(p) !== "box"));
+      p.floors.forEach((f, level) => {
+        assert.equal(clash(f).size, 0, `${id} ${size} floor ${level}: clashes`);
+        assert.ok(f.rooms.every((r) => f.items.some((i) => roomAt(f, i.x, i.y)?.id === r.id) || r.kind === "hall"), `${id} ${size}: an empty room`);
+        // Stairs on every floor but the top.
+        assert.equal(f.items.filter((i) => i.kind === "stairs").length, level < p.floors.length - 1 ? 1 : 0);
+      });
+    }
+  // Pools: the bigger pool houses have an indoor pool with a pool in it.
+  const villa = buildHouse("villa", "grand", 2, 3);
+  const pool = villa.floors[0].rooms.find((r) => r.kind === "pool");
+  assert.ok(pool);
+  assert.ok(villa.floors[0].items.some((i) => i.kind.startsWith("pool") && roomAt(villa.floors[0], i.x, i.y)?.id === pool.id));
+});
+
+test("the house builder: floors, layouts, room kinds and styles, split and join", async () => {
+  const H = await import("../../home-plan.ts");
+  let p = H.buildHouse("duplex", "large", 2, 1);
+  p = H.setFloorCount(p, 3, 1);
+  assert.equal(p.floors.length, 3);
+  assert.deepEqual(p.floors.map((f) => f.items.filter((i) => i.kind === "stairs").length), [1, 1, 0]);
+  assert.equal(H.setFloorCount(p, 9).floors.length, H.STRUCTURES.duplex.maxFloors);
+  // Another layout, more rooms.
+  const more = H.relayoutFloor(p, 1, 5, 42);
+  assert.equal(more.floors[1].rooms.filter((r) => r.kind !== "hall").length, 5);
+  assert.deepEqual(more.floors[0], p.floors[0]);
+  // A room's kind and style.
+  const bed = p.floors[1].rooms.find((r) => r.kind === "bedroom")!;
+  const lux = H.setRoomStyle(p, 1, bed.id, 2, 5);
+  const luxBed = lux.floors[1].rooms.find((r) => r.id === bed.id)!;
+  assert.equal(H.roomStyle(luxBed), 2);
+  assert.ok(lux.floors[1].items.some((i) => i.kind === "chandelier" && roomAt(lux.floors[1], i.x, i.y)?.id === bed.id));
+  const tiny = { ...bed, w: 6, d: 6 };
+  assert.equal(H.roomFits(tiny, "pool"), false);
+  // Split, then join back into one room (in a home big enough to split a room).
+  p = H.buildHouse("duplex", "estate", 2, 1);
+  const big = p.floors[0].rooms.find((r) => H.canSplit(r))!;
+  const split = H.splitRoom(p, 0, big.id, 3);
+  assert.equal(split.floors[0].rooms.length, p.floors[0].rooms.length + 1);
+  const joined = H.joinRoom(split, 0, big.id, 4);
+  assert.equal(joined.floors[0].rooms.length, p.floors[0].rooms.length);
+  const back = joined.floors[0].rooms.find((r) => r.id === big.id)!;
+  assert.deepEqual([back.x, back.y, back.w, back.d], [big.x, big.y, big.w, big.d]);
+});
+
+test("the house builder's bill: the design once, then the space, pools and furniture", async () => {
+  const H = await import("../../home-plan.ts");
+  const start = H.cleanPaid(null, "medium");
+  const p = H.buildHouse("villa", "grand", 2, 1);
+  const bill = H.planBill(p, start);
+  assert.ok(bill.lines.some((l) => l.label === "L-shaped villa design and build" && l.naira === H.STRUCTURES.villa.naira));
+  const space = (H.planM2(p) - H.storeyM2("box", "medium")) * H.FLOOR_NAIRA_M2;
+  assert.ok(bill.lines.some((l) => Math.abs(l.naira - space) < 2));
+  assert.ok(bill.lines.some((l) => l.label === "Indoor pool fit-out"));
+  // Paid once: saving it again is free, and so is going back to it later.
+  const paid = H.cleanPaid(JSON.parse(JSON.stringify(bill.paid)), p.size);
+  assert.equal(H.planBill(p, paid).naira, 0);
+  assert.deepEqual(paid.builds, ["villa"]);
+  // A bigger home costs the extra space only.
+  const bigger = H.buildHouse("villa", "estate", 2, 1);
+  const more = H.planBill(bigger, paid);
+  assert.ok(!more.lines.some((l) => l.label.includes("design")));
+  assert.ok(more.lines.some((l) => l.label === "More space inside"));
+  // Older records (no area) count every floor at the size of the home they were for.
+  assert.equal(H.cleanPaid({ floors: 2 }, "large").area, 2 * H.storeyM2("box", "large"));
 });

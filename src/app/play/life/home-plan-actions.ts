@@ -75,7 +75,10 @@ export async function saveHomePlan(raw: unknown): Promise<{ ok: true; paidMint: 
   if (!plan) return { ok: false, error: "That plan couldn't be saved." };
   const row = await savedRow(me.db, me.userId).catch(() => null);
   const saved = row && row.unit === me.unit ? row : null;
-  let paidBefore = cleanPaid(saved ? saved.paid : null, plan.size);
+  // What's been built so far is measured at the size of the home that was built (the saved plan,
+  // or the starter home), never at the size of the new plan.
+  const builtSize = (saved && cleanPlan(saved.plan)?.size) || starterPlan().size;
+  let paidBefore = cleanPaid(saved ? saved.paid : null, builtSize);
   // The first save of a pack's furnished home: what came with it isn't charged for.
   if (!saved) {
     const gift = await giftHome(me.db, me.userId).catch(() => null);

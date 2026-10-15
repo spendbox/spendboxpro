@@ -49,9 +49,10 @@ import { STOREY_M, buildHome } from "./home3d";
 type Tool = "rooms" | "furniture";
 type Sel = { type: "room" | "item"; id: number } | null;
 
-const FLOOR_NAME = ["Ground floor", "First floor", "Second floor", "Third floor"];
+const FLOOR_NAME = ["Ground floor", "First floor", "Second floor", "Third floor", "Fourth floor", "Fifth floor"];
 
-export function HomePlanner({ onClose }: { onClose: () => void }) {
+/** start: a plan to begin from (the house builder's design, not saved yet) in place of the saved one. */
+export function HomePlanner({ onClose, start }: { onClose: () => void; start?: HomePlan }) {
   useEscape(onClose);
   const [plan, setPlanNow] = useState<HomePlan | null>(null);
   const [history, setHistory] = useState<HomePlan[]>([]);
@@ -76,7 +77,8 @@ export function HomePlanner({ onClose }: { onClose: () => void }) {
       .then((r) => {
         if (!alive) return;
         if (r.ok) {
-          setPlanNow(r.plan);
+          setPlanNow(start ?? r.plan);
+          if (start) setDirty(true);
           setPaid(r.paid);
           setPerMint(r.perMint);
           setOwner(r.owner);
@@ -89,6 +91,8 @@ export function HomePlanner({ onClose }: { onClose: () => void }) {
     return () => {
       alive = false;
     };
+    // The starting plan is only read when the planner opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /** Change the plan (undo remembers the one before). */

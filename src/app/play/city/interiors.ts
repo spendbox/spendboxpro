@@ -16,7 +16,7 @@ import type { Act, Spot } from "./figures";
 import type { Block, InteractKind } from "./interact";
 import type { Theme } from "./levels";
 import { fireEngineKit } from "./vehicles";
-import { CELL_M, FURNITURE, SIZES, danceFloorOf, itemSize, planWalls, roomAt, type HomePlan } from "@/lib/home-plan";
+import { CELL_M, FURNITURE, SIZES, danceFloorOf, gardenParts, gardenWalls, itemSize, planWalls, roomAt, roomStyle, shapeOf, type HomePlan, type PlanRoom } from "@/lib/home-plan";
 
 /** Something to use in a room (its id is made by the city view). */
 export type RoomItem = { kind: InteractKind; label: string; x: number; y: number; z: number; r: number };
@@ -3193,6 +3193,40 @@ function plan(theme: Theme, rnd: Rng, variant?: InteriorInfo["variant"], info?: 
 
 // ---------------------------------------------------------------- a planned home (docs/HOME_PLANNER.md)
 
+/** A room style's colours (src/lib/home-plan.ts ROOM_STYLES): Modern greys and black, Luxury cream and gold, Cosy terracotta and warm wood. */
+const STYLE_PALS: (Partial<Pal> | null)[] = [
+  null,
+  { fabric: 0x4a4f55, fabric2: 0xe9ecef, wood: 0x2b2b2b, accent: 0x12b886, metal: 0x1b1b1b, frame: 0x1b1b1b },
+  { fabric: 0xefe6d8, fabric2: 0x8a6d3b, wood: 0x3b2618, accent: 0xc9a227, metal: 0xc9a227, frame: 0xc9a227 },
+  { fabric: 0xb5653d, fabric2: 0xf1e3cf, wood: 0xa0724a, accent: 0x6b8f71, metal: 0x5a4636, frame: 0xa0724a },
+];
+const styledPal = (base: Pal, r: PlanRoom | null): Pal => {
+  const sp = r ? STYLE_PALS[roomStyle(r)] : null;
+  return sp ? { ...base, ...sp } : base;
+};
+
+/**
+ * A pool: stone edging round clear blue water that shimmers, a step in at one end. Nobody walks
+ * through it (they walk round).
+ */
+function water(x: Ctx, cx: number, cz: number, w: number, d: number) {
+  const { k } = x;
+  k.box(cx, 0, cz, w + 0.1, 0.06, d + 0.1, 0xece6da, { noAo: true });
+  k.box(cx, 0.06, cz, w - 0.3, 0.005, d - 0.3, 0x0b7285, { noAo: true });
+  const mat = new THREE.MeshBasicMaterial({ color: 0x3bc9db, transparent: true, opacity: 0.85 });
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w - 0.3, d - 0.3).rotateX(-Math.PI / 2), mat);
+  m.position.set(cx, 0.07, cz);
+  x.extras.push(m);
+  const a = new THREE.Color(0x3bc9db), b = new THREE.Color(0x66d9e8);
+  x.anim.push((time) => {
+    mat.color.copy(a).lerp(b, 0.5 + 0.5 * Math.sin(time * 1.2 + cx));
+  });
+  // Lane lines and a ladder.
+  k.box(cx, 0.072, cz, w - 0.8, 0.002, 0.05, 0x1864ab, { noAo: true });
+  for (const sx of [-0.18, 0.18]) k.cyl(cx - w / 2 + 0.35 + sx, 0.07, cz - d / 2 + 0.1, 0.02, 0.02, 0.6, 0xced4da, 8);
+  x.blocks.push({ x: cx, z: cz, w, d, ry: 0 });
+}
+
 /**
  * A player's home as they planned it, one floor: the outside walls with windows and curtains,
  * the inside walls with doorways, each piece of furniture where it was put (drawn with the same
@@ -3209,8 +3243,9 @@ function plannedHome(x: Ctx, home: NonNullable<InteriorInfo["home"]>) {
   const mz = (c: number) => c * CELL_M - D / 2;
   const T = 0.12;
   const doorH = 2.1;
+  const shape = shapeOf(plan);
   // Inside walls and doorways.
-  const { walls, doors } = planWalls(floor, plan.size);
+  const { walls, doors } = planWalls(floor, plan.size, shape);
   for (const wl of walls) {
     const x0 = mx(wl.x0), z0 = mz(wl.y0), x1 = mx(wl.x1), z1 = mz(wl.y1);
     const along = z0 === z1;
@@ -3231,6 +3266,32 @@ function plannedHome(x: Ctx, home: NonNullable<InteriorInfo["home"]>) {
     k.box(cx, doorH - 0.06, cz, along ? L + 0.1 : T + 0.04, 0.08, along ? T + 0.04 : L + 0.1, pal.trim, { noAo: true });
     for (const s of [-1, 1]) k.box(along ? cx + s * (L / 2 - 0.03) : cx, 0, along ? cz : cz + s * (L / 2 - 0.03), along ? 0.06 : T + 0.04, doorH, along ? T + 0.04 : 0.06, pal.trim, { noAo: true });
   }
+  // Where the house meets its own garden: a low wall with tall windows looking out on it.
+  for (const wl of gardenWalls(shape, plan.size)) {
+    const along = wl.y0 === wl.y1;
+    const x0 = mx(wl.x0), z0 = mz(wl.y0), x1 = mx(wl.x1), z1 = mz(wl.y1);
+    const len = along ? x1 - x0 : z1 - z0;
+    const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+    const bw = along ? len + T : T, bd = along ? T : len + T;
+    k.box(cx, 0, cz, bw, 0.6, bd, pal.wall, { noAo: true });
+    k.box(cx, 2.4, cz, bw, room.h - 2.4, bd, pal.wall, { noAo: true });
+    const posts = Math.max(1, Math.round(len / 1.6));
+    for (let i = 0; i <= posts; i++) {
+      const t = -len / 2 + (i * len) / posts;
+      k.box(along ? cx + t : cx, 0.6, along ? cz : cz + t, along ? 0.06 : T + 0.02, 1.8, along ? T + 0.02 : 0.06, pal.frame, { noAo: true });
+    }
+    k.quad(cx, 1.5, cz, len, 1.8, 0xffffff, { layer: "glass", ry: along ? 0 : Math.PI / 2 });
+    x.blocks.push({ x: cx, z: cz, w: along ? len : 0.3, d: along ? 0.3 : len, ry: 0 });
+  }
+  // The garden itself (a terrace upstairs), with palms, and in a courtyard house its pool.
+  for (const g of gardenParts(shape, plan.size)) {
+    const gw = g.w * CELL_M, gd = g.d * CELL_M;
+    const gx = mx(g.x) + gw / 2, gz = mz(g.y) + gd / 2;
+    k.box(gx, 0, gz, gw, 0.02, gd, level === 0 ? 0x7fb36a : 0xcfc6b8, { noAo: true });
+    if (level === 0 && shape === "ushape" && g.w >= 14 && g.d >= 10) water(x, gx, gz, Math.min(16, g.w - 6) * CELL_M, Math.min(8, g.d - 6) * CELL_M);
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) plant(x, gx + sx * (gw / 2 - 0.7), gz + sz * (gd / 2 - 0.7), 1.3, level === 0 ? "palm" : "bush");
+    x.blocks.push({ x: gx, z: gz, w: gw, d: gd, ry: 0 });
+  }
   // Tiled floors in the kitchen and bathroom, a light in every room, art where there's none.
   const tiles: Record<string, [FloorStyle, number, number]> = {
     kitchen: ["checker", 0xeeeeea, 0xcfd4d6],
@@ -3242,7 +3303,10 @@ function plannedHome(x: Ctx, home: NonNullable<InteriorInfo["home"]>) {
     gym: ["concrete", 0x50565e, 0x454b52],
     games: ["carpet", 0x2f5d50, 0x26503f],
     bar: ["parquet", 0x6b4a33, 0x553826],
+    pool: ["hex", 0xe6f4f5, 0xc9e3e6],
   };
+  // The other rooms, by their style: Modern polished concrete, Luxury marble, Cosy carpet.
+  const styleFloor: ([FloorStyle, number, number] | null)[] = [null, ["concrete", 0xd9d9d6, 0xcfcfcb], ["marble", 0xf3efe8, 0xd9d2c5], ["carpet", 0xcdb59a, 0xbfa58a]];
   // (Not from rnd, so homes without special rooms look just as they did.)
   const neon = [0xff4fd8, 0x22d3ee, 0xa3e635, 0xffd43b][level % 4];
   for (const r of floor.rooms) {
@@ -3259,7 +3323,7 @@ function plannedHome(x: Ctx, home: NonNullable<InteriorInfo["home"]>) {
   for (const r of floor.rooms) {
     const cx = mx(r.x + r.w / 2), cz = mz(r.y + r.d / 2);
     const rw = r.w * CELL_M, rd = r.d * CELL_M;
-    const tile = tiles[r.kind];
+    const tile = tiles[r.kind] ?? styleFloor[roomStyle(r)];
     if (tile) {
       const { tex, metres } = floorTexture(tile[0], tile[1], tile[2], rnd);
       tex.repeat.set(rw / metres, rd / metres);
@@ -3270,14 +3334,17 @@ function plannedHome(x: Ctx, home: NonNullable<InteriorInfo["home"]>) {
       x.textures.push(tex);
     }
     if (r.kind === "hall" || r.kind === "bathroom" || r.kind === "dancehall" || r.kind === "cinema") k.cyl(cx, room.h - 0.012, cz, 0.12, 0.12, 0.012, 0xfff6e0, 14, { layer: "glow" });
-    else pendant(x, cx, cz, r.kind === "dining" ? 1.05 : 0.6, r.kind === "dining" ? "drum" : pickOf(rnd, ["globe", "cone", "drum"] as const), pal.metal);
+    // (A room with a chandelier needs no other light.)
+    else if (!floor.items.some((i) => i.kind === "chandelier" && roomAt(floor, i.x, i.y)?.id === r.id)) pendant(x, cx, cz, r.kind === "dining" ? 1.05 : 0.6, r.kind === "dining" ? "drum" : pickOf(rnd, ["globe", "cone", "drum"] as const), pal.metal);
     x.lamps.push({ x: cx, y: room.h - 0.8, z: cz });
     x.spots.push({ x: cx + 0.3, z: cz + 0.4, ry: rnd() * 6, pose: "stand", y: 0 });
     x.views.push({ x: cx, z: cz + Math.min(1.2, rd / 3), yaw: 0, pitch: -0.12 });
   }
-  // The furniture.
-  const wood = pal.wood;
+  // The furniture, in the colours of each room's style.
   for (const it of floor.items) {
+    const centre = itemSize(it);
+    const pal = styledPal(x.pal, roomAt(floor, Math.floor(it.x + centre.w / 2), Math.floor(it.y + centre.d / 2)));
+    const wood = pal.wood;
     const f = FURNITURE[it.kind];
     const s = itemSize(it);
     const cx = mx(it.x + s.w / 2), cz = mz(it.y + s.d / 2);
@@ -3695,6 +3762,47 @@ function plannedHome(x: Ctx, home: NonNullable<InteriorInfo["home"]>) {
         break;
       case "jukebox":
         jukebox(x, cx, cz, ry);
+        break;
+      case "poolS":
+      case "poolM":
+      case "poolL":
+        water(x, cx, cz, s.w * CELL_M, s.d * CELL_M);
+        break;
+      case "lounger":
+        k.at(cx, 0, cz, ry, () => {
+          const lw = fw - 0.3, ll = fd - 0.2;
+          k.box(0, 0, 0, lw, 0.28, ll, 0xd0bfa6);
+          k.soft(0, 0.28, 0.2, lw - 0.06, 0.08, ll * 0.62, pal.fabric2, 0.03);
+          k.soft(0, 0.3, -ll / 2 + 0.35, lw - 0.06, 0.08, 0.7, pal.fabric2, 0.03, { rx: -0.7 });
+          k.shadow(0, 0, lw + 0.2, ll + 0.2, 0.25);
+          spot(x, 0, 0.1, 0, "sit", 0.36);
+        });
+        break;
+      case "piano":
+        k.at(cx, 0, cz, ry, () => {
+          const pw = fw - 0.2, pl = fd - 0.3;
+          for (const [lx, lz] of [[-pw / 2 + 0.12, -pl / 2 + 0.25], [pw / 2 - 0.12, -pl / 2 + 0.25], [0, pl / 2 - 0.25]]) k.cyl(lx, 0, lz, 0.05, 0.04, 0.68, 0x111111, 10);
+          k.box(0, 0.68, 0.05, pw, 0.3, pl - 0.1, 0x111111);
+          k.box(0, 0.98, 0.15, pw - 0.1, 0.02, pl - 0.4, 0x111111, { rx: -0.45 });
+          k.box(0, 0.72, -pl / 2 + 0.12, pw - 0.1, 0.06, 0.18, 0xfdfdfb, { noAo: true });
+          k.box(0, 0.45, -pl / 2 - 0.35, pw * 0.6, 0.06, 0.35, 0x111111);
+          k.shadow(0, 0, pw + 0.3, pl + 0.3, 0.35);
+          spot(x, 0, -pl / 2 - 0.35, 0, "sit", 0.5);
+        });
+        break;
+      case "chandelier":
+        k.at(cx, 0, cz, ry, () => {
+          k.cyl(0, room.h - 0.5, 0, 0.012, 0.012, 0.5, 0xc9a227, 6, { noAo: true });
+          k.ring(0, room.h - 0.75, 0, 0.42, 0.02, 0xc9a227, { rx: Math.PI / 2 });
+          k.ring(0, room.h - 0.6, 0, 0.26, 0.018, 0xc9a227, { rx: Math.PI / 2 });
+          for (let i = 0; i < 10; i++) {
+            const a = (i / 10) * Math.PI * 2;
+            k.ball(Math.cos(a) * 0.42, room.h - 0.86, Math.sin(a) * 0.42, 0.05, 0xfff6dc, { layer: "glow", w: 8, h: 6 });
+            k.cyl(Math.cos(a) * 0.42, room.h - 1.0, Math.sin(a) * 0.42, 0.012, 0.03, 0.12, 0xeaf6ff, 6, { layer: "glow" });
+          }
+          k.ball(0, room.h - 0.95, 0, 0.09, 0xfff6dc, { layer: "glow", w: 10, h: 8 });
+        });
+        x.lamps.push({ x: cx, y: room.h - 0.9, z: cz });
         break;
       case "stairs":
         k.at(cx, 0, cz, ry, () => {

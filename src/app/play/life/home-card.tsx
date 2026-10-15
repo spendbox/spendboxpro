@@ -31,6 +31,7 @@ export function HomeCard({
   neighbours,
   onClose,
   onEnter,
+  onUpgrade,
   onRename,
   naming: startNaming = false,
   ownerName,
@@ -43,6 +44,8 @@ export function HomeCard({
   neighbours: Neighbour[] | null;
   onClose: () => void;
   onEnter?: () => void;
+  /** The house builder (src/app/play/home/home-builder.tsx). */
+  onUpgrade?: () => void;
   /** Give the home a name; resolves to an error to show, or null when done. */
   onRename?: (name: string) => Promise<string | null>;
   /** Open with the name box ready (a home just given). */
@@ -150,9 +153,15 @@ export function HomeCard({
                   <DoorOpen className="size-4" /> Enter home
                 </button>
               )}
-              <button disabled className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full bg-ink/5 text-sm font-semibold text-muted" title="Coming soon">
-                <TrendingUp className="size-4" /> Upgrade <span className="rounded-full bg-gold/30 px-1.5 text-[10px] text-ink">Soon</span>
-              </button>
+              {onUpgrade ? (
+                <button onClick={onUpgrade} className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full bg-ink text-sm font-semibold text-white">
+                  <TrendingUp className="size-4" /> Upgrade
+                </button>
+              ) : (
+                <button disabled className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full bg-ink/5 text-sm font-semibold text-muted" title="Coming soon">
+                  <TrendingUp className="size-4" /> Upgrade <span className="rounded-full bg-gold/30 px-1.5 text-[10px] text-ink">Soon</span>
+                </button>
+              )}
             </div>
 
             {children}

@@ -5,7 +5,10 @@
 // Plain shapes and one material per colour, so it's quick to build on any phone.
 
 import * as THREE from "three";
-import { CELL_M, FURNITURE, ROOM_FLOOR, SIZES, itemSize, planWalls, type HomePlan, type PlanItem } from "@/lib/home-plan";
+import { CELL_M, FURNITURE, ROOM_FLOOR, SIZES, gardenParts, gardenWalls, itemSize, planWalls, roomStyle, shapeOf, wingsOf, type HomePlan, type PlanItem } from "@/lib/home-plan";
+
+/** Each room style's floor: Classic as the room's own colour, Modern pale grey, Luxury marble, Cosy warm wood. */
+const STYLE_FLOOR = [null, "#dcdcd8", "#f3eee6", "#c9a27a"];
 
 /** One storey, in metres. */
 export const STOREY_M = 2.8;
@@ -16,9 +19,12 @@ export type WallPiece = { x: number; z: number; len: number; along: boolean };
 
 /**
  * Build the home. `only`: just that one floor, standing at ground level, with full-height walls
- * (for walking round inside it); its inner wall pieces are listed in `walls`.
+ * (for walking round inside it); its inner wall pieces are listed in `walls`. `pick`: the room
+ * picked on the floor you're on (shown lit up). Each room's floor carries its id
+ * (userData.roomId), so a tap can find it.
  */
-export function buildHome(plan: HomePlan, upTo: number, wallH = 1.3, only = false): { group: THREE.Group; walls: WallPiece[]; dispose: () => void } {
+export function buildHome(plan: HomePlan, upTo: number, wallH = 1.3, only = false, pick: number | null = null): { group: THREE.Group; walls: WallPiece[]; floors: THREE.Object3D[]; dispose: () => void } {
+  const roomFloors: THREE.Object3D[] = [];
   const walls: WallPiece[] = [];
   const group = new THREE.Group();
   const geos: THREE.BufferGeometry[] = [];
@@ -45,23 +51,46 @@ export function buildHome(plan: HomePlan, upTo: number, wallH = 1.3, only = fals
   const mx = (x: number) => x * CELL_M - W / 2;
   const mz = (y: number) => y * CELL_M - D / 2;
 
+  const shape = shapeOf(plan);
+  const wings = wingsOf(shape, plan.size);
+  // The garden round a shaped house (on the ground), with the courtyard's own pool.
+  if (!only) {
+    for (const g of gardenParts(shape, plan.size)) {
+      box(g.w * CELL_M, 0.06, g.d * CELL_M, mx(g.x + g.w / 2), -0.1, mz(g.y + g.d / 2), "#8fc27a", group);
+      if (shape === "ushape" && g.w >= 14 && g.d >= 10) {
+        const pw = Math.min(16, g.w - 6) * CELL_M, pd = Math.min(8, g.d - 6) * CELL_M;
+        box(pw + 0.5, 0.08, pd + 0.5, mx(g.x + g.w / 2), -0.06, mz(g.y + g.d / 2), "#e9e4da", group);
+        box(pw, 0.09, pd, mx(g.x + g.w / 2), -0.05, mz(g.y + g.d / 2), "#3bc9db", group);
+      }
+    }
+  }
   plan.floors.slice(0, upTo + 1).forEach((floor, level) => {
     if (only && level !== upTo) return;
     const storey = new THREE.Group();
     storey.position.y = only ? 0 : level * STOREY_M;
     group.add(storey);
-    // The slab, then each room's floor on it.
-    box(W + WALL_T * 2, 0.12, D + WALL_T * 2, 0, -0.06, 0, level === 0 ? "#bfb6a8" : "#d6cfc4", storey);
-    for (const r of floor.rooms) box(r.w * CELL_M - 0.02, 0.02, r.d * CELL_M - 0.02, mx(r.x + r.w / 2), 0.01, mz(r.y + r.d / 2), ROOM_FLOOR[r.kind], storey);
-    // The outside walls (full height on the floors below the one you're on).
+    // The slab (the house's own shape), then each room's floor on it.
+    for (const g of wings) box(g.w * CELL_M + WALL_T * 2, 0.12, g.d * CELL_M + WALL_T * 2, mx(g.x + g.w / 2), -0.06, mz(g.y + g.d / 2), level === 0 ? "#bfb6a8" : "#d6cfc4", storey);
+    for (const r of floor.rooms) {
+      const lit = level === upTo && pick === r.id;
+      const colour = lit ? "#ffd43b" : (STYLE_FLOOR[roomStyle(r)] ?? ROOM_FLOOR[r.kind]);
+      const m = box(r.w * CELL_M - 0.02, lit ? 0.04 : 0.02, r.d * CELL_M - 0.02, mx(r.x + r.w / 2), 0.01, mz(r.y + r.d / 2), colour, storey);
+      if (level === upTo) {
+        m.userData.roomId = r.id;
+        roomFloors.push(m);
+      }
+    }
+    // The outside walls, round the house's own shape (full height on the floors below the one you're on).
     const h = level < upTo ? STOREY_M - 0.12 : wallH;
     const outer = "#f1e6d3";
-    box(W + WALL_T * 2, h, WALL_T, 0, h / 2, -D / 2 - WALL_T / 2, outer, storey);
-    box(W + WALL_T * 2, h, WALL_T, 0, h / 2, D / 2 + WALL_T / 2, outer, storey);
-    box(WALL_T, h, D, -W / 2 - WALL_T / 2, h / 2, 0, outer, storey);
-    box(WALL_T, h, D, W / 2 + WALL_T / 2, h / 2, 0, outer, storey);
+    for (const wl of gardenWalls(shape, plan.size, true)) {
+      const along = wl.y0 === wl.y1;
+      const len = (along ? wl.x1 - wl.x0 : wl.y1 - wl.y0) * CELL_M;
+      const off = (WALL_T / 2) * wl.out;
+      box(along ? len + WALL_T * 2 : WALL_T, h, along ? WALL_T : len + WALL_T * 2, mx((wl.x0 + wl.x1) / 2) + (along ? 0 : off), h / 2, mz((wl.y0 + wl.y1) / 2) + (along ? off : 0), outer, storey);
+    }
     // Inside walls, with a doorway wherever two rooms meet (the same as walking round it).
-    for (const wl of planWalls(floor, plan.size).walls) {
+    for (const wl of planWalls(floor, plan.size, shape).walls) {
       const along = wl.y0 === wl.y1;
       const len = (along ? wl.x1 - wl.x0 : wl.y1 - wl.y0) * CELL_M;
       const x = mx((wl.x0 + wl.x1) / 2), z = mz((wl.y0 + wl.y1) / 2);
@@ -73,6 +102,7 @@ export function buildHome(plan: HomePlan, upTo: number, wallH = 1.3, only = fals
   return {
     group,
     walls,
+    floors: roomFloors,
     dispose: () => {
       geos.forEach((g) => g.dispose());
       mats.forEach((m) => m.dispose());
@@ -251,6 +281,30 @@ function piece(it: PlanItem, mx: (x: number) => number, mz: (y: number) => numbe
     case "jukebox":
       box(w * 0.85, f.h, d * 0.9, 0, f.h / 2, 0, c, g);
       box(w * 0.55, 0.35, 0.02, 0, 0.9, d * 0.46, "#ffd43b", g);
+      break;
+    // Pools: stone edging, the water a little below it.
+    case "poolS":
+    case "poolM":
+    case "poolL":
+      box(w + 0.05, 0.05, d + 0.05, 0, 0.025, 0, "#ece6da", g);
+      box(w - 0.3, 0.03, d - 0.3, 0, 0.055, 0, c, g);
+      box(w - 0.5, 0.01, 0.06, 0, 0.075, 0, "#e3fafc", g);
+      break;
+    case "lounger":
+      box(w * 0.8, 0.25, d * 0.95, 0, 0.125, 0, "#d0bfa6", g);
+      box(w * 0.8, 0.06, d * 0.65, 0, 0.28, d * 0.15, c, g);
+      box(w * 0.8, 0.45, 0.06, 0, 0.45, -d * 0.3, c, g).rotation.x = -0.6;
+      break;
+    case "piano":
+      box(w, 0.25, d * 0.85, 0, 0.75, 0.05, c, g);
+      box(w * 0.95, 0.05, 0.25, 0, 0.78, -d / 2 + 0.2, "#f8f9fa", g);
+      for (const [sx, sz] of [[-1, -1], [1, -1], [0, 1]]) box(0.08, 0.7, 0.08, sx * (w / 2 - 0.15), 0.35, sz * (d / 2 - 0.25), c, g);
+      box(w * 0.9, 0.04, d * 0.7, 0, 1.15, 0.1, c, g).rotation.x = -0.5;
+      break;
+    case "chandelier":
+      box(0.03, 0.5, 0.03, 0, 2.45, 0, "#c9a227", g);
+      box(0.7, 0.08, 0.7, 0, 2.2, 0, "#c9a227", g);
+      for (let i = 0; i < 6; i++) box(0.08, 0.2, 0.08, Math.cos(i) * 0.3, 2.08, Math.sin(i) * 0.3, c, g);
       break;
     default:
       box(w, f.h, d, 0, f.h / 2, 0, c, g);

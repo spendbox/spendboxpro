@@ -1,5 +1,8 @@
 # Planning your home
 
+> Most players now start with the **house builder** (docs/HOME_BUILDER.md): Home → Upgrade. This
+> hand-drawn planner opens from the builder's "Move furniture yourself", for moving pieces one by one.
+
 Open it from **Home → Plan my home**, or from the **Plan my home** button while you're inside your home. **Enter home** (on the Home card) takes you straight in. You draw your home flat, as a floor plan, and see it built in 3D.
 
 ## How it works
@@ -17,7 +20,7 @@ Open it from **Home → Plan my home**, or from the **Plan my home** button whil
   - Tap a piece to nudge it one square at a time, turn it (a quarter turn each time), copy it or delete it.
   - Pieces that overlap are outlined in red. Rugs can go under other things.
 - **Floors.**
-  - A home can have up to four floors.
+  - A home can have up to six floors (as many as its kind of house allows).
   - The floor below shows faintly on the plan, with its stairs, so you can line things up.
   - You can remove the top floor.
 - **3D view.**

@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DoorOpen } from "lucide-react";
+import type { HomePlan } from "@/lib/home-plan";
 import { Flag, MapPin, Pencil, Search, Star, X } from "@/components/icons";
 import { addressOf, makePlan, spiralIndex, tileAt, type CityPlan } from "@/lib/city/layout";
 import { WORLD_EVENT_BY_KEY, type WorldEvent } from "@/lib/world-events";
@@ -54,6 +55,7 @@ import dynamic from "next/dynamic";
 
 // Sheets and panels load when first opened, not with the map (docs/COSTS.md).
 const HomePlanner = dynamic(() => import("../home/home-planner").then((m) => m.HomePlanner));
+const HomeBuilder = dynamic(() => import("../home/home-builder").then((m) => m.HomeBuilder));
 const AdvertisePanel = dynamic(() => import("./advertise-panel").then((m) => m.AdvertisePanel));
 const ThingsSheet = dynamic(() => import("./things-sheet").then((m) => m.ThingsSheet));
 const NewsSheet = dynamic(() => import("./news-sheet").then((m) => m.NewsSheet));
@@ -868,7 +870,9 @@ export function useWorldLife({
   const homeBuilding = home ? owned.find((o) => o.id === home.building) : undefined;
   const homeLabel = home ? [home.label, home.name ?? (homeBuilding ? BUILDING_LABEL[homeBuilding.building.kind] : null)].filter(Boolean).join(", ") : "";
 
-  const [planning, setPlanning] = useState(false);
+  // The hand-drawn planner (optionally starting from the builder's design), and the house builder.
+  const [planning, setPlanning] = useState<boolean | HomePlan>(false);
+  const [building, setBuilding] = useState(false);
   /** Where you are on the map: the place you went to last, or home (null: nowhere yet). */
   const whereAmI = () => {
     const at = assets?.life?.at_place ?? homeUnit;
@@ -1049,6 +1053,14 @@ export function useWorldLife({
                 }
               : undefined
           }
+          onUpgrade={
+            signedIn && homeUnit
+              ? () => {
+                  setHomeOpen(false);
+                  setBuilding(true);
+                }
+              : undefined
+          }
         >
           {signedIn && rental && rental.unit === homeUnit && (
             <div className="mt-3 rounded-2xl bg-ink/5 p-3 text-sm">
@@ -1089,7 +1101,16 @@ export function useWorldLife({
           {signedIn && <HomeParty />}
         </HomeCard>
       )}
-      {planning && <HomePlanner onClose={() => setPlanning(false)} />}
+      {planning && <HomePlanner start={typeof planning === "object" ? planning : undefined} onClose={() => setPlanning(false)} />}
+      {building && (
+        <HomeBuilder
+          onClose={() => setBuilding(false)}
+          onFineTune={(plan) => {
+            setBuilding(false);
+            setPlanning(plan);
+          }}
+        />
+      )}
       {door && (
         <DoorSheet
           building={door.id}
@@ -1855,7 +1876,7 @@ export function useWorldLife({
     fly(p.x, p.z);
     setPlace(workplaceById(planOf(region), p.id) ?? { id: p.id, name: p.name, x: Math.round(p.x), z: Math.round(p.z), jobs: [] });
   };
-  return { explore, describeSpot, roadsNear, openExplorePlace, rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, newsScene, adOpen, search: region ? { region, mine: assets?.units ?? [], owned: shown, businesses, coins, homes: () => homesFor(region), onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openPassport: () => setPassportOpen(true), openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit, mySpot: whereAmI(), homeSpot, goHome, nameHome, homeBuilding: homeUnit ? homeUnit.split("/")[0] : null, openPlanner: () => setPlanning(true), locateMe, lookAt: (x: number, z: number) => setFlyTo({ tile: spiralIndex(Math.round(x), Math.round(z)), at: ++flies.current }), makeRow, openSoon: () => setSoonOpen(true), openGuestBook: (building: string) => setGuestBook(building),
+  return { explore, describeSpot, roadsNear, openExplorePlace, rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, newsScene, adOpen, search: region ? { region, mine: assets?.units ?? [], owned: shown, businesses, coins, homes: () => homesFor(region), onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openPassport: () => setPassportOpen(true), openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit, mySpot: whereAmI(), homeSpot, goHome, nameHome, homeBuilding: homeUnit ? homeUnit.split("/")[0] : null, openPlanner: () => setPlanning(true), openBuilder: () => setBuilding(true), locateMe, lookAt: (x: number, z: number) => setFlyTo({ tile: spiralIndex(Math.round(x), Math.round(z)), at: ++flies.current }), makeRow, openSoon: () => setSoonOpen(true), openGuestBook: (building: string) => setGuestBook(building),
     /** Where you are changed outside (a trip to a friend): read it again. */
     refreshLife: () => void refresh(),
     openLife: () => setLifeOpen(true),
