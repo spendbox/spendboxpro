@@ -69,6 +69,21 @@ there moving, so nobody's property is touched:
 - New landmarks go outside the kept part. New districts can reach into it: that changes what
   stands on lots nobody owns near the old edge (as the city's growth does), never owned property.
 
+## Baking: the method
+
+What worked for baking all of Lagos State from a cloud session (step by step in
+`.claude/skills/bake-world/SKILL.md`, which Claude follows by itself here):
+
+1. **Snapshot first**: `npm run world:snapshot -- lagos before.txt` writes every tile of the part
+   that must not move (`bake.keep`): what stands there, its address, name and land price.
+2. **The coastline** from osmdata.openstreetmap.de (downloaded in the background while working),
+   cut to the box with `clip-water.py`.
+3. **The bake** with `OVERPASS_URL=https://overpass-api.de/api/interpreter` and `--grow`: big
+   pieces, quick retries on dropped connections, a named User-Agent (Overpass turns away others),
+   everything cached by area so a re-run picks up where it stopped. About 40 minutes.
+4. **Check**: the printed preview (sea leaking into a lagoon shows as `~`), `npm test`, then
+   `npm run world:snapshot -- lagos after.txt` and `node scripts/world/compare.mjs before.txt after.txt`.
+
 ## Fixing things
 
 Put fixes in the region's `corrections.ts`. Never edit `baked.ts` by hand, because the next bake
