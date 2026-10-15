@@ -381,9 +381,9 @@ export function Events({
         <div className={tucked ? "hidden" : undefined}>
           <RoomGuard key={inside.id} onClose={() => setTucked(true)}>
             {inside.category === "stage" ? (
-              <StageRoom view={inside} me={me} onMin={() => setTucked(true)} onLeave={leave} onPerson={onPerson} onMessage={onMessage} onEnd={() => setConfirm({ kind: "end", e: inside })} />
+              <StageRoom view={inside} me={me} onMin={() => setTucked(true)} onLeave={leave} onPerson={onPerson} onMessage={onMessage} onEnd={() => setConfirm({ kind: "end", e: inside })} onCancel={() => setConfirm({ kind: "cancel", e: inside })} />
             ) : (
-              <PartyRoom view={inside} me={me} onMin={() => setTucked(true)} onLeave={leave} onPerson={onPerson} onMessage={onMessage} onEnd={() => setConfirm({ kind: "end", e: inside })} />
+              <PartyRoom view={inside} me={me} onMin={() => setTucked(true)} onLeave={leave} onPerson={onPerson} onMessage={onMessage} onEnd={() => setConfirm({ kind: "end", e: inside })} onCancel={() => setConfirm({ kind: "cancel", e: inside })} />
             )}
           </RoomGuard>
         </div>
@@ -393,7 +393,7 @@ export function Events({
           <p className="text-sm text-muted">
             {confirm.kind === "end"
               ? `Everyone leaves the room${confirm.e.price > 0 ? `, and the ticket money is paid to you (less VAT and income tax)` : ""}.`
-              : `Everyone going is told${confirm.e.price > 0 ? ", and every ticket bought is paid back" : ""}.${confirm.e.category === "party" ? (confirm.e.status === "upcoming" ? " Your hosting fee comes back too." : " It has started: the hosting fee is spent unless fewer than 10 people have come.") : ""}`}
+              : `${confirm.e.price > 0 ? `Everyone who bought a ticket gets their money back, including people who have already come in, so you won't be paid for any of them. ` : ""}Everyone going or inside is told it's off.${confirm.e.category === "party" ? (confirm.e.status === "upcoming" ? " Your hosting fee comes back too." : " As it has already started, your hosting fee is only returned if fewer than 10 people have come.") : ""}`}
           </p>
           <div className="mt-4 grid grid-cols-2 gap-2">
             <button onClick={() => setConfirm(null)} className="h-11 rounded-full bg-ink/5 text-sm font-semibold">
@@ -407,7 +407,7 @@ export function Events({
                 if (!r.ok) return onMessage(r.error, false);
                 if (inside?.id === c.e.id) setInside(null);
                 setDetail(null);
-                onMessage(c.kind === "end" ? "It's over. Thanks for hosting!" : "Called off. Everyone going has been told.", true);
+                onMessage(c.kind === "end" ? "It's over. Thanks for hosting!" : c.e.price > 0 ? "Called off. Every ticket has been paid back, and everyone has been told." : "Called off. Everyone has been told.", true);
                 void look();
               }}
               className="h-11 rounded-full bg-hit text-sm font-bold text-white"

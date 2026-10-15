@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Flame, Heart, Megaphone, Music, PartyPopper, Shuffle, SkipForward, Square, Volume2, VolumeX, Wine } from "lucide-react";
+import { Flame, Heart, Megaphone, Music, PartyPopper, Shuffle, SkipForward, Square, Volume2, VolumeX, Wine, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { HOT_MAX, HYPE_FULL, HYPE_POINTS, ICEBREAKERS, MEET_PROMPTS, MOVES, QUEUE_MAX, TOASTS, cleanQuestion, cleanStage, eventFormat, pick, youtubeId, type StageState } from "@/lib/world/events";
 import { cash } from "@/lib/world/value";
@@ -43,6 +43,7 @@ export function PartyRoom({
   onPerson,
   onMessage,
   onEnd,
+  onCancel,
 }: {
   view: EventView;
   me: RoomMe;
@@ -54,6 +55,8 @@ export function PartyRoom({
   onMessage: (text: string, good: boolean) => void;
   /** The host ends it. */
   onEnd: () => void;
+  /** The host calls it off (every ticket back). */
+  onCancel: () => void;
 }) {
   const host = view.me.host;
   const hostId = view.host.id;
@@ -431,6 +434,7 @@ export function PartyRoom({
           {!host && <Act icon={<span className="text-sm">💸</span>} label={`Spray ${view.host.name}`} onClick={() => setPanel("spray")} />}
           {host && <Act icon={<Music className="size-4" />} label="DJ & music" onClick={() => setPanel("music")} />}
           {host && <Act icon={<PartyPopper className="size-4" />} label="End party" onClick={onEnd} />}
+          {host && <Act icon={<X className="size-4" />} label="Call it off" onClick={onCancel} />}
         </div>
         <ReactBar me={me} send={send} />
         <RoomChat eventId={view.id} me={me} hostId={hostId} lines={chat} send={send} onPerson={onPerson} onMessage={onMessage} compact />

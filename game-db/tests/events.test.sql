@@ -9,6 +9,7 @@
 \ir ../095_events.sql
 \ir ../096_event_refund.sql
 \ir ../097_party_sizes.sql
+\ir ../103_call_off_refunds.sql
 \o /dev/null
 
 create function pg_temp.uid(e text) returns uuid language sql as $$ select id from profiles where email_key = e $$;
@@ -180,6 +181,17 @@ begin
   perform pg_temp.check((select coins from profiles where id = b) + (select coalesce(sum(balance), 0) from life_pots where user_id = b) = coins0, 'with nobody in: the fee is back');
   perform pg_temp.check(exists (select 1 from treasury_ledger where kind = 'event_permit' and note like 'Event permit: Owambe%'), 'the permit went to the state');
   perform pg_temp.check((select balance from world_bank where id = 1) - bank0 = 70, 'the World Bank counts the permit (and not before the party started)');
+
+  -- A paid event called off while it's on: whoever came in gets their ticket back, and is told
+  -- (part 103), even if they never said they were going.
+  v := event_open(c, 'lagos', 'party', 'rave', 'Paid rave', '', 90, 90, 'Club Quilox', false, now(), 60, 5, 400, 50, 50, 0, 16);
+  coins0 := (select coins from profiles where id = d) + (select coalesce(sum(balance), 0) from life_pots where user_id = d);
+  perform event_enter(d, (v->>'id')::bigint, 5);
+  perform pg_temp.check((select coins from profiles where id = d) + (select coalesce(sum(balance), 0) from life_pots where user_id = d) = coins0 - 5, 'the ticket is paid going in');
+  update hosted_event_guests set going = false where user_id = d and event_id = (v->>'id')::bigint;
+  perform pg_temp.check(event_cancel(c, (v->>'id')::bigint) = 'cancelled', 'a paid party called off while it''s on');
+  perform pg_temp.check((select coins from profiles where id = d) + (select coalesce(sum(balance), 0) from life_pots where user_id = d) = coins0, 'whoever came in gets their ticket back');
+  perform pg_temp.check(exists (select 1 from notifications where user_id = d and body like '"Paid rave" was called off%paid back%'), 'and is told, going or not');
 
   -- Parties of any size (part 97): a carnival 1 km round for 10,000 people; another one whose area
   -- would meet it can't be on at the same time, one far enough away can.

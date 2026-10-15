@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowBigUp, Check, ChevronLeft, ChevronRight, Film, ImagePlus, LoaderCircle, Images, MessageCircleQuestion, Square, Trash2 } from "lucide-react";
+import { ArrowBigUp, Check, ChevronLeft, ChevronRight, Film, ImagePlus, LoaderCircle, Images, MessageCircleQuestion, Square, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { SLIDES_MAX, cleanStage, eventFormat, videoPosNow, youtubeId, type StageState } from "@/lib/world/events";
 import { CallBar } from "../call/call-bar";
@@ -27,6 +27,7 @@ export function StageRoom({
   onPerson,
   onMessage,
   onEnd,
+  onCancel,
 }: {
   view: EventView;
   me: RoomMe;
@@ -35,6 +36,8 @@ export function StageRoom({
   onPerson: (id: string) => void;
   onMessage: (text: string, good: boolean) => void;
   onEnd: () => void;
+  /** The host calls it off (every ticket back). */
+  onCancel: () => void;
 }) {
   const host = view.me.host;
   const room = useEventRoom(view.id, { ...me, host }, null);
@@ -168,6 +171,7 @@ export function StageRoom({
             {stage.mode !== "none" && <Ctl onClick={() => change({ ...stage, mode: "none", playing: false })} label="Clear screen" icon={<Square className="size-4" />} />}
             {stage.slides.length > 0 && <Ctl onClick={() => change({ ...stage, slides: [], slide: 0, mode: stage.mode === "slides" ? "none" : stage.mode })} label="Remove slides" icon={<Trash2 className="size-4" />} />}
             <Ctl onClick={onEnd} label="End" icon={<Square className="size-4 fill-current" />} />
+            <Ctl onClick={onCancel} label="Call it off" icon={<X className="size-4" />} />
           </div>
         )}
 
