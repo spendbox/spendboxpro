@@ -4,7 +4,7 @@ import { SIMPLE_LIFE } from "@/lib/world/simple-life";
 
 import { challengeRep } from "@/lib/world/challenges";
 import { eventRep } from "@/lib/world/events";
-import type { Avatar } from "@/lib/avatar";
+import { isStartingLook, startingLook, type Avatar } from "@/lib/avatar";
 import { currentUserId } from "@/lib/game";
 import { pushTo } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -183,8 +183,13 @@ export async function setGender(g: Gender): Promise<Result> {
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Sign in first." };
   if (g !== "male" && g !== "female") return { ok: false, error: "Pick one." };
-  const { error } = await createAdminClient().from("profiles").update({ gender: g }).eq("id", userId);
-  return error ? { ok: false, error: "That didn't save. Try again (run game-db/060_find_people.sql first)." } : { ok: true };
+  const db = createAdminClient();
+  const { error } = await db.from("profiles").update({ gender: g }).eq("id", userId);
+  if (error) return { ok: false, error: "That didn't save. Try again (run game-db/060_find_people.sql first)." };
+  // No look of their own yet: a man's or a woman's starting look to match, the same everywhere.
+  const { data: p } = await db.from("profiles").select("username, avatar").eq("id", userId).maybeSingle();
+  if (p && isStartingLook(p.avatar)) await db.from("profiles").update({ avatar: startingLook(p.username ?? userId, g) }).eq("id", userId);
+  return { ok: true };
 }
 
 /** Your own choice (null: not said yet). */

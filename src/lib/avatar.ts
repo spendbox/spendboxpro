@@ -1,7 +1,7 @@
 // A player's face: a handful of choices that the avatar drawing (components/avatar.tsx) turns
 // into a portrait. Kept small so it travels with chat messages and notifications.
 
-import { decodeRecipe, parseRecipe } from "./avatar3d/recipe.ts";
+import { decodeRecipe, encodeRecipe, fromLegacyAvatar, parseRecipe } from "./avatar3d/recipe.ts";
 
 export type Avatar = {
   skin: number;
@@ -76,12 +76,27 @@ export const AVATAR_PARTS = {
 
 const pickN = (h: number, n: number) => Math.abs(h) % n;
 
-/** A starting face for someone who hasn't designed one yet (based on their name). */
-export function defaultAvatar(seed: string): Avatar {
+export type AvatarGender = "male" | "female";
+
+/** Hair (AVATAR_PARTS.hair) and outfits (AVATAR_PARTS.top) a starting look picks from, by gender. */
+const HAIR_FOR: Record<AvatarGender, number[]> = {
+  male: [0, 1, 2, 3, 8, 9, 10], // Buzz, Short, Curly, Afro, Side part, Bald, Locs
+  female: [4, 5, 6, 10, 11, 2, 3], // Long, Bun, Braids, Locs, Bob, Curly, Afro
+};
+const TOPS_FOR: Record<AvatarGender, number[]> = {
+  male: AVATAR_PARTS.top.map((_, i) => i).filter((i) => i !== 21), // all but the kimono
+  female: [0, 1, 2, 3, 5, 6, 7, 8, 9, 11, 12, 13, 16, 17, 20, 21], // no agbada, tie or bow tie, overalls...
+};
+
+/**
+ * A starting face for someone who hasn't designed one yet (based on their name). With a gender, it's
+ * a man's or a woman's look (hair, beard, earrings, clothes), with the 3D body to match.
+ */
+export function defaultAvatar(seed: string, gender?: AvatarGender | null): Avatar {
   let h = 7;
   for (const c of seed) h = (h * 31 + c.charCodeAt(0)) | 0;
   const next = () => (h = (Math.imul(h, 1103515245) + 12345) | 0) >>> 8;
-  return {
+  const a: Avatar = {
     skin: pickN(next(), SKIN.length),
     hair: pickN(next(), AVATAR_PARTS.hair.length),
     hairColor: pickN(next(), 6),
@@ -95,6 +110,33 @@ export function defaultAvatar(seed: string): Avatar {
     bg: pickN(next(), BG.length),
     earrings: next() % 4 === 0 ? 1 + pickN(next(), 2) : 0,
   };
+  if (gender !== "male" && gender !== "female") return a;
+  const pick = (list: number[]) => list[pickN(next(), list.length)];
+  a.hair = pick(HAIR_FOR[gender]);
+  a.top = pick(TOPS_FOR[gender]);
+  if (gender === "female") {
+    a.beard = 0;
+    a.earrings = 1 + pickN(next(), 2);
+  } else {
+    a.earrings = 0;
+  }
+  const recipe = fromLegacyAvatar({ ...a }).recipe;
+  recipe.frame = gender === "female" ? 1 : 0;
+  a.r3 = encodeRecipe(recipe);
+  return a;
+}
+
+/**
+ * True for a look the player never chose: none saved yet, or a starting one the game saved for them
+ * (marked auto). The game may replace these; a look the player designed is never touched.
+ */
+export function isStartingLook(raw: unknown): boolean {
+  return !raw || (typeof raw === "object" && (raw as { auto?: unknown }).auto === 1);
+}
+
+/** The starting look to save for a player, by their name and gender (marked auto, see isStartingLook). */
+export function startingLook(name: string, gender: AvatarGender): Avatar & { auto: 1 } {
+  return { ...defaultAvatar(name, gender), auto: 1 };
 }
 
 /** Makes sure a stored or submitted avatar only has known values. */

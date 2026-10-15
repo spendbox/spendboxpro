@@ -9,7 +9,7 @@ import { botNameFor } from "@/lib/bot-names";
 import { friendLists, NO_FRIENDS, type FriendLists } from "@/lib/friends";
 import { cleanStreak, type Streak } from "@/lib/streaks";
 import { cleanBoard, type DuelBoard } from "@/lib/ghost-duels";
-import { cleanAvatar, type Avatar } from "@/lib/avatar";
+import { cleanAvatar, startingLook, type Avatar } from "@/lib/avatar";
 import type { WorldEvent } from "@/lib/world-events";
 import type { TownHouse } from "@/lib/houses";
 import { loadRoundHouses } from "@/lib/houses.server";
@@ -540,6 +540,15 @@ async function loadGameFresh(userIdOrGuest: string | null): Promise<GameState> {
     notifications = [...notifications.filter((n) => !fromLife.has(n.id)), ...lifeNotes].sort((a, b) => b.id - a.id).slice(0, 60);
   }
   const site = { visits: Number(visits?.value ?? 0), players: playerCount ?? 0 };
+  // Said whether they're a man or a woman but never made a look: save a matching starting look, so
+  // everyone sees the same face and body (people-actions setGender does this for new players).
+  const myGender = profile?.gender === "male" || profile?.gender === "female" ? profile.gender : null;
+  const myStartingLook = !profile?.avatar && myGender && profile?.username ? startingLook(profile.username, myGender) : null;
+  if (myStartingLook && !guest) {
+    after(async () => {
+      await db.from("profiles").update({ avatar: myStartingLook }).eq("id", userId).is("avatar", null);
+    });
+  }
   const tileCount = round?.tile_count ?? 0;
   const frac = tileCount ? Math.min(1, (round?.searched_count ?? 0) / tileCount) : 0;
   const searchPrice = money(s.search_price_start + (s.search_price_max - s.search_price_start) * frac);
@@ -564,7 +573,7 @@ async function loadGameFresh(userIdOrGuest: string | null): Promise<GameState> {
           ).toISOString()
         : null,
       name: profile?.username ?? null,
-      avatar: cleanAvatar(profile?.avatar, profile?.username ?? userId),
+      avatar: cleanAvatar(profile?.avatar ?? myStartingLook, profile?.username ?? userId),
       pinSet: Boolean(profile?.pin_set),
       coins: num(profile?.coins),
       bonusCoins: num(profile?.bonus_coins),

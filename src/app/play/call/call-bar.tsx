@@ -20,7 +20,7 @@ function Face({ p, size }: { p: CallPerson; size: number }) {
           !p.connected && "opacity-45",
         )}
       >
-        <AvatarFace avatar={cleanAvatar(p.avatar, p.id)} size={size} className="block rounded-full" />
+        <AvatarFace avatar={cleanAvatar(p.avatar, p.name ?? p.id)} size={size} className="block rounded-full" />
       </span>
       {p.muted && (
         <span className="absolute -bottom-0.5 -right-0.5 grid size-3.5 place-items-center rounded-full bg-hit text-white ring-2 ring-white">
@@ -78,7 +78,7 @@ export function CallBar({
           {inCall.length > 0 && (
             <span className="flex shrink-0 -space-x-2">
               {inCall.slice(0, 3).map((p) => (
-                <AvatarFace key={p.id} avatar={cleanAvatar(p.avatar, p.id)} size={24} className="rounded-full ring-2 ring-white" />
+                <AvatarFace key={p.id} avatar={cleanAvatar(p.avatar, p.name ?? p.id)} size={24} className="rounded-full ring-2 ring-white" />
               ))}
             </span>
           )}
