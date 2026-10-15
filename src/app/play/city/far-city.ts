@@ -17,8 +17,10 @@ export const MAP_MARGIN = 150;
 const FINE_BLOCKS = 40;
 /** The most blocks ever drawn (a hard cap: about 60,000 triangles). */
 const MAX_BLOCKS = 6000;
-/** Pixels per tile on the painted map. */
-const PX = 2;
+/** Pixels per tile on the painted map, at most (fewer for a big region: see MAP_PX_MAX). */
+const PX_MOST = 2;
+/** The widest picture every phone can draw (WebGL's smallest maximum texture size). */
+const MAP_PX_MAX = 4096;
 
 const COLORS = {
   // The same blues as the near water (./water): shallows by the shore, deep further out.
@@ -73,8 +75,16 @@ export function createFarCity(parent: THREE.Object3D) {
   const scale = new THREE.Vector3();
   const color = new THREE.Color();
 
-  /** Paint the whole region (and the land and sea round it) onto one picture, once per region. */
+  /** Which painting is the latest (a new region stops an older one part way). */
+  let painting = 0;
+
+  /**
+   * Paint the whole region (and the land and sea round it) onto one picture, once per region. A
+   * few rows at a time between frames (all of Lagos State is about 1,800 × 380 tiles: painted at
+   * once, a slow phone froze for a second or two), shown once it's done.
+   */
   function paintMap(plan: CityPlan) {
+    const token = ++painting;
     const region = plan.region!;
     const b = region.bounds;
     const x0 = b.x0 - MAP_MARGIN;
@@ -82,12 +92,22 @@ export function createFarCity(parent: THREE.Object3D) {
     const W = b.x1 - b.x0 + 1 + 2 * MAP_MARGIN;
     const H = b.z1 - b.z0 + 1 + 2 * MAP_MARGIN;
     const canvas = document.createElement("canvas");
+    // All of Lagos State is about 1,800 tiles across: one pixel a tile, so phones can draw it.
+    const PX = Math.max(1, Math.min(PX_MOST, Math.floor(MAP_PX_MAX / Math.max(W, H))));
     canvas.width = W * PX;
     canvas.height = H * PX;
     const ctx = canvas.getContext("2d")!;
     const img = ctx.createImageData(canvas.width, canvas.height);
     const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
-    for (let tz = 0; tz < H; tz++) {
+    let tz = 0;
+    const slice = () => {
+      if (token !== painting) return;
+      const until = performance.now() + 8;
+      for (; tz < H && performance.now() < until; tz++) paintRow(tz);
+      if (tz < H) setTimeout(slice, 0);
+      else done();
+    };
+    const paintRow = (tz: number) => {
       for (let tx = 0; tx < W; tx++) {
         const x = x0 + tx;
         const z = z0 + tz;
@@ -123,19 +143,22 @@ export function createFarCity(parent: THREE.Object3D) {
           }
         }
       }
-    }
-    ctx.putImageData(img, 0, 0);
-    mapMat.map?.dispose();
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 4;
-    mapMat.map = tex;
-    mapMat.needsUpdate = true;
-    // Tile (x, z) covers x-0.5..x+0.5: the picture's corner is half a tile out.
-    map.scale.set(W, 1, H);
-    // Just above the city's plain ground disc (y -0.01), just below every tile's own ground.
-    map.position.set(x0 - 0.5 + W / 2, -0.005, z0 - 0.5 + H / 2);
-    map.visible = true;
+    };
+    const done = () => {
+      ctx.putImageData(img, 0, 0);
+      mapMat.map?.dispose();
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 4;
+      mapMat.map = tex;
+      mapMat.needsUpdate = true;
+      // Tile (x, z) covers x-0.5..x+0.5: the picture's corner is half a tile out.
+      map.scale.set(W, 1, H);
+      // Just above the city's plain ground disc (y -0.01), just below every tile's own ground.
+      map.position.set(x0 - 0.5 + W / 2, -0.005, z0 - 0.5 + H / 2);
+      map.visible = true;
+    };
+    slice();
   }
 
   return {

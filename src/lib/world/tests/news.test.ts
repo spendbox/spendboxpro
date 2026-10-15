@@ -51,3 +51,10 @@ test("big street events make the news, and each takes over the street when you g
   const march = stories.find((s) => s.kind === "protest");
   assert.ok(march && march.scene === "protest_march" && march.x !== undefined);
 });
+
+test("a big party makes the news, with how far it reaches and how many can come", () => {
+  const story = playerStory({ id: "party-7", at: 0, kind: "party", who: "Ada", what: "Lekki Carnival", price: 10_000, x: 0, z: 0, radiusM: 1000, startsAt: 0, scene: "street_rave" }, "Lekki", "");
+  assert.ok(/Ada|Lekki Carnival/.test(story.title + story.text));
+  assert.ok(story.text.includes("2 km") && story.text.includes("10,000"), story.text);
+  assert.equal(story.scene, "street_rave");
+});

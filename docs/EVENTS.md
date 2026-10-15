@@ -34,20 +34,31 @@ the database keeps needs its id added to the `category` check in game-db/095 too
 ## In the walkthrough
 
 The walkthrough's third mission is **Go to an event** (₦50,000): the party button glows, and
-"Show me" opens Events. Going into any event (or hosting one and going in) counts
+"Show me" opens Events, and says a party fewer than 10 people come to costs nothing to host.
+Going into any event (or hosting one and going in) counts
 (docs/FIRST_STEPS.md). It replaced "Create and win a challenge".
 
 ## Hosting
 
 1. **What kind**, then the format (each has its usual length and size).
 2. **A name** (3 to 60 letters) and, if you like, what to expect.
-3. **Where**: any named road within about 2 km of the middle of the map (its real name; move the
-   map and tap **Here** for roads elsewhere), or a place near you: landmarks, restaurants, clubs,
-   parks, stadiums, markets (the same list as Explore). Places that suit the format come first.
-   A party on the street plays its crowd along that road.
+3. **Where**: any named road within about 2 km of the middle of the map (its real name), or a
+   place near you: landmarks, restaurants, clubs, parks, stadiums, markets (the same list as
+   Explore). Places that suit the format come first. A party on the street plays its crowd along
+   that road. **Choose on the map** tucks the card away (everything filled in is kept): a pin
+   stands in the middle of the screen with the party's area round it, the road under it is named
+   as you move, and **Use this spot** brings the card back with that road picked.
+   - **How big** (parties; game-db/097, `radius_m`): how far it reaches from the spot. One spot
+     (50 m, up to 300 people), the block (150 m, 1,000), the street (300 m, 1,000), the area
+     (600 m, 3,000), a carnival (1 km round, 10,000) or a mega carnival (2.5 km round, 5 km across,
+     10,000). On the map every road inside it is strung with coloured bulbs that chase and twinkle
+     (brightest at night), the area is tinted and ringed in the party's colour (the ring shows from
+     far away), and bigger parties get more dancing crowds round their streets (one for every
+     300 m, up to 4 more; src/app/play/city/party-lights.ts). Parties of 600 m or more, or 1,000+
+     people, are announced in the Lagos news in a fun way (and break into it when they're new).
    - **Street parties don't overlap**: no two within 1.6 km (16 tiles) of each other at the same
      time. Roads already taken then are greyed with the party that has them, and the database
-     refuses a clash (`street_taken`).
+     refuses a clash (`street_taken`). Nor can two be so close that their areas (their sizes) would meet.
 4. **When**: now, in 30 minutes, in an hour, tonight, tomorrow, Saturday, or any time in the next
    7 days; and for how long (30 minutes to 4 hours).
 5. **Tickets**: free, a quick pick, or any price up to ₦500,000; and how many can come.
@@ -61,16 +72,31 @@ Worked out by the server from the map (the phone's number is only a preview; src
 `partyCost`):
 
 - **₦100,000 an hour** for up to 20 people on a street in an ordinary area.
-- **How many can come**: 20 ×1, 50 ×1.25, 100 ×1.6, 300 ×2.4, 1,000 ×4.5.
+- **How many can come**: 20 ×1, 50 ×1.25, 100 ×1.6, 300 ×2.4, 1,000 ×4.5, 3,000 ×8, 10,000 ×14.
+- **How big**: one spot ×1, the block ×1.5, the street ×2.5, the area ×4.5, a carnival ×7, a mega
+  carnival ×14 (a 3-hour carnival for 10,000 on an ordinary street is about ₦29m).
 - **The kind of place**: a street ×1, a park or square ×1.2, a restaurant or hotel ×1.5, a club ×1.6,
   a landmark ×2. A "street" must really be a road on the map; a place the map can't name is
   never charged below a park.
 - **The area**: from the land price of the district round it (0.8 to 1.8; Ikoyi, Victoria Island
   and Eko Atlantic cost most).
 - Rounded to ₦1,000 and paid when it's put on the map (Fun money, then the wallet). Called off
-  before it starts: it all comes back. Once it has started it's spent (the city's when it ends).
+  before it starts: it all comes back. Once it has started it's spent (the city's when it ends),
+  **unless fewer than 10 people came in** (the host doesn't count; setting `event_min_guests`,
+  game-db/096): then it all comes back when it ends or is called off, and the host's notice says
+  so. The walkthrough's third mission and the host's form both say this.
 - Talks and screenings are free to host for now. Your friends are always told (a notice and a push); everyone
 within about 4 km is told too when it starts within 15 minutes.
+
+## How to host a great party
+
+Host an event opens with **How to host a great party** (src/app/play/events/host-guide.tsx): eight
+quick steps, Next and Back. Pick your party; choose where (Choose on the map); choose how big;
+when, tickets and how many (the fee back if fewer than 10 come); add music in the DJ booth (in
+YouTube: Share, Copy link, then paste and Play; queue up to 20; or a beat); get it going (the hype
+meter, hot seat, toasts, shout-outs, Meet someone, spraying); bring people in (Invite friends);
+leaving and ending. The walkthrough's third mission points to it, and the DJ panel says how to copy
+a song's link on a phone.
 
 ## Going
 
@@ -88,8 +114,10 @@ within about 4 km is told too when it starts within 15 minutes.
 - **The room opens at once**: going in is checked (and the ticket taken) while it opens; if the
   server says no (full, not enough money), it closes again with why. Hosting "now" opens the room
   straight from the answer.
-- The arrow at the top tucks it away (you stay in, with a "Back to" button). If anything in a room
-  goes wrong, only the room closes ("The room hiccupped", with Open it again), never the game.
+- The arrow at the top tucks it away (you stay in, with a "Back to" button). **Leave** (next to it,
+  or the ✕ on the "Back to" button) takes you out; your ticket stays paid, so you can Go in again
+  while it's on. If anything in a room goes wrong, only the room closes ("The room hiccupped",
+  with Open it again), never the game.
 
 ## In a party
 
@@ -185,5 +213,6 @@ Looked into, not used:
   times, YouTube links, what the stage keeps, reputation.
 - `game-db/tests/events.test.sql`: hosting and its limits, going, early doors, a full room,
   tickets paid once, the start notice, VAT and income tax on tickets (to the treasuries, on the host's pay slips, in Finance), the permit to the state, paid once, calling off with tickets back,
-  ending early, the stage, reputation, and running the part twice. Run it against a throwaway
-  database that already has parts 1 to 94.
+  ending early, the stage, reputation, the hosting fee back when fewer than 10 came (at the end
+  or called off), and running parts 95 and 96 twice. Run it against a throwaway database that
+  already has parts 1 to 94.

@@ -66,9 +66,9 @@ export const DURATIONS = [30, 60, 120, 180, 240];
 export const DAYS_AHEAD = 7;
 /** Guests can come in this long before it starts (the host any time). */
 export const EARLY_DOORS_MINS = 5;
-/** How many people can come (the most the host can pick). */
+/** How many people can come (the most the host can pick: the biggest parties, a carnival kilometres wide). */
 export const CAPACITY_MIN = 2;
-export const CAPACITY_MAX = 1000;
+export const CAPACITY_MAX = 10_000;
 /** Ticket prices to pick from (naira; 0 is free). The host can type any amount up to the most. */
 export const TICKETS_NAIRA = [0, 1_000, 5_000, 20_000];
 export const TICKET_MAX_NAIRA = 500_000;
@@ -334,7 +334,31 @@ export const CAPACITY_COST = [
   { max: 100, k: 1.6 },
   { max: 300, k: 2.4 },
   { max: 1000, k: 4.5 },
+  { max: 3000, k: 8 },
+  { max: 10_000, k: 14 },
 ] as const;
+
+/**
+ * How big a party is on the map: how far (metres) it reaches from where it is. A house party is one
+ * spot; a carnival takes over kilometres of road, every street in it strung with lights and full
+ * of dancing. Bigger parties cost more, can take more people, and the biggest make the news.
+ */
+export const PARTY_SIZES = [
+  { m: 50, label: "One spot", blurb: "A few houses' worth", k: 1, most: 300 },
+  { m: 150, label: "The block", blurb: "A whole block", k: 1.5, most: 1000 },
+  { m: 300, label: "The street", blurb: "The road and the ones off it", k: 2.5, most: 1000 },
+  { m: 600, label: "The area", blurb: "A neighbourhood's streets", k: 4.5, most: 3000 },
+  { m: 1000, label: "Carnival", blurb: "A kilometre round: every road lit", k: 7, most: 10_000 },
+  { m: 2500, label: "Mega carnival", blurb: "Five kilometres across", k: 14, most: 10_000 },
+] as const;
+export const PARTY_SIZE_DEFAULT = 50;
+export const partySize = (m: number) => PARTY_SIZES.find((s) => s.m === m) ?? PARTY_SIZES[0];
+/** The crowd sizes to pick from at a party size (up to what it can hold). */
+export const capacityChoices = (m: number) => [20, 50, 100, 300, 1000, 3000, 10_000].filter((c) => c <= partySize(m).most);
+/** A party this far across (metres) or this crowded or more is big news. */
+export const BIG_PARTY_M = 600;
+export const BIG_PARTY_PEOPLE = 1000;
+export const isBigParty = (radiusM: number, capacity: number) => radiusM >= BIG_PARTY_M || capacity >= BIG_PARTY_PEOPLE;
 export const capacityK = (capacity: number) => (CAPACITY_COST.find((c) => capacity <= c.max) ?? CAPACITY_COST[CAPACITY_COST.length - 1]).k;
 /** What kind of place it's at, and how that multiplies the price. */
 export const VENUE_COST = {
@@ -367,20 +391,30 @@ export function areaK(centres: { x: number; z: number; radius: number; landPrice
 }
 
 /** What a party costs to host (naira, to the nearest ₦1,000), and how it adds up. */
-export function partyCost(o: { minutes: number; capacity: number; venue: VenueKind; area: number }) {
+export function partyCost(o: { minutes: number; capacity: number; venue: VenueKind; area: number; radiusM?: number }) {
   const hours = Math.max(0.25, o.minutes / 60);
-  const parts = { hours, capacity: capacityK(o.capacity), venue: VENUE_COST[o.venue]?.k ?? 1, area: Math.max(0.8, Math.min(1.8, o.area || 1)) };
-  const naira = Math.round((PARTY_NAIRA_PER_HOUR * parts.hours * parts.capacity * parts.venue * parts.area) / 1000) * 1000;
+  const parts = {
+    hours,
+    capacity: capacityK(o.capacity),
+    venue: VENUE_COST[o.venue]?.k ?? 1,
+    area: Math.max(0.8, Math.min(1.8, o.area || 1)),
+    size: partySize(o.radiusM ?? PARTY_SIZE_DEFAULT).k,
+  };
+  const naira = Math.round((PARTY_NAIRA_PER_HOUR * parts.hours * parts.capacity * parts.venue * parts.area * parts.size) / 1000) * 1000;
   return { naira, parts };
 }
 /** Called off before it starts: the hosting fee comes back. After that, it's spent. */
 export const FEE_BACK_BEFORE_START = true;
 
-/** Street parties can't overlap: none within this many tiles (100 m each) of another one on at the same time. */
+/**
+ * Street parties can't overlap: none within this many tiles (100 m each) of another one on at the
+ * same time, and never where their areas (their sizes) would meet.
+ */
 export const STREET_GAP_TILES = 16;
-/** Do two street parties clash (close enough, at the same time)? */
-export function streetClash(a: { x: number; z: number; start: number; end: number }, b: { x: number; z: number; start: number; end: number }) {
-  return Math.hypot(a.x - b.x, a.z - b.z) < STREET_GAP_TILES && a.start < b.end && b.start < a.end;
+/** Do two street parties clash (close enough, or their areas meeting, at the same time)? */
+export function streetClash(a: { x: number; z: number; start: number; end: number; radiusM?: number }, b: { x: number; z: number; start: number; end: number; radiusM?: number }) {
+  const apart = Math.max(STREET_GAP_TILES, ((a.radiusM ?? PARTY_SIZE_DEFAULT) + (b.radiusM ?? PARTY_SIZE_DEFAULT)) / 100);
+  return Math.hypot(a.x - b.x, a.z - b.z) < apart && a.start < b.end && b.start < a.end;
 }
 
 /** A deterministic pick from a list for a seed (so every phone shows the same card). */

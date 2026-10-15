@@ -39,6 +39,7 @@ export function PartyRoom({
   view,
   me,
   onMin,
+  onLeave,
   onPerson,
   onMessage,
   onEnd,
@@ -47,6 +48,8 @@ export function PartyRoom({
   me: RoomMe;
   /** Back to the map (still in). */
   onMin: () => void;
+  /** Out of the room (the ticket stays paid). */
+  onLeave: () => void;
   onPerson: (id: string) => void;
   onMessage: (text: string, good: boolean) => void;
   /** The host ends it. */
@@ -224,8 +227,9 @@ export function PartyRoom({
         title={view.title}
         icon={f?.icon ?? "🎉"}
         endsAt={Date.parse(view.endsAt)}
-        here={people.length}
+        here={Math.max(people.length, view.came)}
         onMin={onMin}
+        onLeave={onLeave}
         onHere={() => setPanel("who")}
         extra={
           <button onClick={() => setSound((s) => !s)} className="grid size-10 shrink-0 place-items-center rounded-full bg-white/15" aria-label={sound ? "Music off" : "Music on"}>
@@ -662,6 +666,7 @@ function MusicPanel({ vibe, onVibe, dj, onSong, onClose }: { vibe: Vibe | null; 
     <RoomPanel title="DJ & music" onClose={onClose}>
       <p className="text-xs font-semibold uppercase tracking-wide text-muted">Play a song (YouTube)</p>
       <p className="mt-1 text-sm text-muted">Paste a song&apos;s YouTube link. Everyone hears it at the same moment; add more and they play one after another.</p>
+      <p className="mt-1 text-xs text-muted">On a phone: in YouTube, open the song, tap Share, then Copy link. Come back and paste it here.</p>
       <div className="mt-2 flex gap-2">
         <input value={link} onChange={(e) => setLink(e.target.value.slice(0, 300))} placeholder="https://youtube.com/watch?v=…" inputMode="url" className="h-11 min-w-0 flex-1 rounded-2xl bg-ink/5 px-3.5 text-sm outline-none" />
         <button

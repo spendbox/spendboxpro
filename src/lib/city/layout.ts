@@ -299,11 +299,19 @@ export type CityPlan = {
   /** Streets: x positions of the north–south streets, z positions of the east–west ones. */
   xs: number[];
   zs: number[];
+  /** Each street's number by its position (what the gaps in the grid are worked out from). */
   xAt: Map<number, number>;
   zAt: Map<number, number>;
   /** Index of the first street at or past 0 (so street numbers can go negative). */
   x0: number;
   z0: number;
+  /**
+   * How many streets lie west (north) of where a real place's numbering starts (Region.streetsFrom):
+   * a street's number is its index less this, so a bigger map adds streets without renumbering
+   * (and so reshuffling) the ones already there. 0 when left out.
+   */
+  kx?: number;
+  kz?: number;
   /** How this city is built: how tall, how green, how many gaps in the street grid. */
   style: { towers: number; green: number; gaps: number; roundabouts: number };
   centres: { x: number; z: number; radius: number; weight: number }[];
@@ -635,6 +643,10 @@ function regionPlan(seed: number, region: RegionMap): CityPlan {
   const hi = Math.max(bounds.x1, bounds.z1) + 4;
   const xs = streetLines(seed, 1, lo, hi);
   const zs = streetLines(seed, 2, lo, hi);
+  // The streets west (north) of where the numbering starts: the box grew that way.
+  const from = region.region.streetsFrom ?? lo;
+  const kx = xs.filter((v) => v < from).length;
+  const kz = zs.filter((v) => v < from).length;
   const flavor = FLAVORS.find((f) => f.id === region.region.flavor) ?? FLAVORS[0];
   const streets = [...flavor.streets].sort(
     (a, b) =>
@@ -647,10 +659,12 @@ function regionPlan(seed: number, region: RegionMap): CityPlan {
     city: { name: region.region.name, flavor, streets },
     xs,
     zs,
-    xAt: new Map(xs.map((v, k) => [v, k])),
-    zAt: new Map(zs.map((v, k) => [v, k])),
+    xAt: new Map(xs.map((v, k) => [v, k - kx])),
+    zAt: new Map(zs.map((v, k) => [v, k - kz])),
     x0: xs.findIndex((v) => v >= 0),
     z0: zs.findIndex((v) => v >= 0),
+    kx,
+    kz,
     style: { towers: 1, green: 0, gaps: 0.1, roundabouts: 0.08 },
     centres: region.centres,
     river: null,
@@ -1015,8 +1029,8 @@ export function isRoad(plan: CityPlan, x: number, z: number) {
   let grid = false;
   if (k !== undefined && j !== undefined) {
     grid = !gapNS(plan, k, j - 1) || !gapNS(plan, k, j) || !gapEW(plan, j, k - 1) || !gapEW(plan, j, k);
-  } else if (k !== undefined) grid = !gapNS(plan, k, below(plan.zs, z));
-  else if (j !== undefined) grid = !gapEW(plan, j, below(plan.xs, x));
+  } else if (k !== undefined) grid = !gapNS(plan, k, below(plan.zs, z) - (plan.kz ?? 0));
+  else if (j !== undefined) grid = !gapEW(plan, j, below(plan.xs, x) - (plan.kx ?? 0));
   return grid || laneAt(plan, x, z);
 }
 
@@ -1625,8 +1639,8 @@ function estateOf(plan: CityPlan, x: number, z: number, wealth: number): EstateP
   // and span several blocks: one name, one estate, block after block.
   const rule = estateRule(growthOf(plan.region!.region.id));
   if (wealth < rule.wealth || plan.xAt.has(x) || plan.zAt.has(z)) return null;
-  const kx = Math.floor(below(plan.xs, x) / rule.blocks);
-  const kz = Math.floor(below(plan.zs, z) / rule.blocks);
+  const kx = Math.floor((below(plan.xs, x) - (plan.kx ?? 0)) / rule.blocks);
+  const kz = Math.floor((below(plan.zs, z) - (plan.kz ?? 0)) / rule.blocks);
   if (hash(kx, kz, plan.seed + 7800) > rule.chance) return null;
   const r = (k: number) => hash(kx, kz, plan.seed + 7801 + k);
   const sides: [number, number][] = [[0, 1], [1, 0], [0, -1], [-1, 0]];

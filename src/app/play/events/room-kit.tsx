@@ -1,7 +1,7 @@
 "use client";
 
 import { Component, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from "react";
-import { ChevronDown, CornerUpLeft, ImagePlus, LoaderCircle, Send, Smile, SmilePlus, Trash2, Users, X } from "lucide-react";
+import { ChevronDown, CornerUpLeft, ImagePlus, LoaderCircle, LogOut, Send, Smile, SmilePlus, Trash2, Users, X } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar } from "@/lib/avatar";
 import { cn } from "@/lib/cn";
@@ -14,8 +14,11 @@ import { randomKey, type ChatLine, type Quote, type RoomMsg, type RoomPerson } f
 
 export type RoomMe = { id: string; name: string; avatar: unknown };
 
-/** Along the top: the event, how long is left, who's here, and a button back to the map. */
-export function RoomTop({ title, icon, endsAt, here, onMin, onHere, extra }: { title: string; icon: string; endsAt: number; here: number; onMin: () => void; onHere?: () => void; extra?: ReactNode }) {
+/**
+ * Along the top: the event, how long is left, who's here, a button back to the map (you stay in)
+ * and one to leave.
+ */
+export function RoomTop({ title, icon, endsAt, here, onMin, onLeave, onHere, extra }: { title: string; icon: string; endsAt: number; here: number; onMin: () => void; onLeave: () => void; onHere?: () => void; extra?: ReactNode }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 15_000);
@@ -39,6 +42,9 @@ export function RoomTop({ title, icon, endsAt, here, onMin, onHere, extra }: { t
       {extra}
       <button onClick={onMin} className="grid size-10 shrink-0 place-items-center rounded-full bg-white/15" aria-label="Back to the map (you stay in)" title="Back to the map">
         <ChevronDown className="size-5" />
+      </button>
+      <button onClick={onLeave} className="flex h-10 shrink-0 items-center gap-1 rounded-full bg-white/15 px-3 text-xs font-bold" aria-label="Leave the event" title="Leave (your ticket stays paid: come back any time while it's on)">
+        <LogOut className="size-4" /> Leave
       </button>
     </div>
   );

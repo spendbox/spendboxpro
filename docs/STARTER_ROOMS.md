@@ -3,7 +3,9 @@
 Every player gets a free room to live in, straight away, so nobody starts by hunting for a home.
 
 - **Where:** a random room in one of the city's rooming houses ("face-me-I-face-you"), in the
-  cheaper half of the city (`src/lib/world/starter-rooms.ts`). Lagos has about 41,500 rooms in 4,157
+  cheaper half of the busy city (`src/lib/world/starter-rooms.ts`): Ikeja to the coast, Festac to
+  Ajah (the region's `starterBox`), not out in Badagry or Epe, so new players start where things
+  happen. Lagos has about 41,500 rooms in 4,157
   rooming houses; rich areas like Ikoyi have none, so they stay something to work towards.
 - **When:** the moment a player has a life and no home (a new life, a pack bought, back after a
   long time away). The game asks `POST /api/starter-room`, takes you there, and says where it is.

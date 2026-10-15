@@ -4356,3 +4356,191 @@ begin
   end if;
 end $$;
 
+-- ======================================================== 096_event_refund.sql
+-- Newtown, part 96: a party that hardly anyone came to costs the host nothing (docs/EVENTS.md).
+-- When an event ends and fewer than event_min_guests people came in (10; the host doesn't count),
+-- the hosting fee goes back to the host instead of to the state as the permit, and the notice
+-- says so. Ticket money is settled as before (VAT and income tax on what was sold). Called off
+-- after it started with fewer than that in: the fee comes back too.
+--
+-- Safe to run more than once. Run after part 95.
+
+insert into public.game_settings (key, value, note) values
+  ('event_min_guests', 10, 'Fewer people than this came to an event: its hosting fee goes back to the host')
+-- Running this again sets it back to the number here.
+on conflict (key) do update set value = excluded.value, note = excluded.note;
+
+create or replace function public.event_settle(p_id bigint) returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  e public.hosted_events;
+  v_vat numeric;
+  v_gross numeric;
+  v_tax numeric;
+  v_share numeric;
+  v_came int;
+  v_back boolean;
+begin
+  select * into e from public.hosted_events where id = p_id for update;
+  if not found then return 'gone'; end if;
+  if e.status <> 'on' then return e.status; end if;
+  if e.ends_at > now() then return 'on'; end if;
+  -- Tickets include VAT; the rest is the host's income, taxed at source like pay.
+  v_vat := round(e.pool * public.setting('service_vat') / (1 + public.setting('service_vat')), 2);
+  v_gross := e.pool - v_vat;
+  v_tax := round(v_gross * public.setting('work_income_tax'), 2);
+  v_share := v_gross - v_tax;
+  if v_vat > 0 then perform public.pay_tax(e.region, v_vat, 'vat', 'VAT on event tickets: ' || left(e.title, 40)); end if;
+  if v_gross > 0 then
+    update public.profiles set coins = coins + v_share where id = e.host_id;
+    perform public.log_coins(e.host_id, null, 'event_tickets', v_gross, false, 'Tickets: ' || e.title);
+    if v_tax > 0 then
+      perform public.log_coins(e.host_id, null, 'income_tax', -v_tax, false, 'Income tax on tickets');
+      perform public.pay_tax(e.region, v_tax, 'income_tax', 'Income tax on event tickets');
+    end if;
+  end if;
+  select count(*) into v_came from public.hosted_event_guests where event_id = p_id and entered_at is not null and user_id <> e.host_id;
+  -- The permit to host it (parties): the state's, unless fewer than event_min_guests came, when
+  -- it all goes back to the host.
+  v_back := e.host_fee > 0 and v_came < coalesce(public.setting('event_min_guests'), 10);
+  if v_back then
+    update public.profiles set coins = coins + e.host_fee where id = e.host_id;
+    perform public.log_coins(e.host_id, null, 'event_hosting_back', e.host_fee, false, 'Hosting fee back (under ' || coalesce(public.setting('event_min_guests'), 10) || ' came): ' || e.title);
+  elsif e.host_fee > 0 then
+    perform public.pay_tax(e.region, e.host_fee, 'event_permit', 'Event permit: ' || left(e.title, 40));
+  end if;
+  update public.hosted_events set status = 'closed', paid_out = v_share where id = p_id;
+  perform public.notify(e.host_id, null, 'event',
+    format('"%s" is over. %s came%s.%s Thanks for hosting!', e.title, case when v_came = 1 then '1 person' else v_came || ' people' end,
+           case when v_share > 0 then format(' and ₥%s of tickets is yours (after VAT and income tax)', trim_scale(v_share)) else '' end,
+           case when v_back then format(' Fewer than %s came, so your ₥%s hosting fee is back.', coalesce(public.setting('event_min_guests'), 10), trim_scale(e.host_fee)) else '' end));
+  return 'closed';
+end $$;
+
+/**
+ * The host calls it off (before or while it's on): everyone's ticket back, and the people going
+ * are told. The hosting fee comes back if it hadn't started, or if fewer than event_min_guests
+ * had come in; otherwise it's the state's.
+ */
+create or replace function public.event_cancel(p_user uuid, p_id bigint) returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  e public.hosted_events;
+  r record;
+  v_came int;
+begin
+  select * into e from public.hosted_events where id = p_id for update;
+  if not found then raise exception 'gone'; end if;
+  if e.host_id <> p_user then raise exception 'not_host'; end if;
+  if e.status <> 'on' or e.ends_at <= now() then raise exception 'over'; end if;
+  for r in select user_id, paid from public.hosted_event_guests where event_id = p_id and paid > 0 loop
+    update public.profiles set coins = coins + r.paid where id = r.user_id;
+    perform public.log_coins(r.user_id, null, 'event_refund', r.paid, false, 'Event called off: ' || e.title);
+  end loop;
+  update public.hosted_event_guests set paid = 0 where event_id = p_id;
+  select count(*) into v_came from public.hosted_event_guests where event_id = p_id and entered_at is not null and user_id <> e.host_id;
+  if e.host_fee > 0 and (now() < e.starts_at or v_came < coalesce(public.setting('event_min_guests'), 10)) then
+    update public.profiles set coins = coins + e.host_fee where id = e.host_id;
+    perform public.log_coins(e.host_id, null, 'event_hosting_back', e.host_fee, false, 'Hosting fee back: ' || e.title);
+  elsif e.host_fee > 0 then
+    perform public.pay_tax(e.region, e.host_fee, 'event_permit', 'Event permit: ' || left(e.title, 40));
+  end if;
+  update public.hosted_events set status = 'cancelled', pool = 0, ends_at = least(ends_at, greatest(now(), starts_at + interval '1 second')) where id = p_id;
+  for r in select user_id from public.hosted_event_guests where event_id = p_id and going and user_id <> p_user loop
+    perform public.notify(r.user_id, null, 'event', format('"%s" was called off by the host.%s', e.title, case when e.price > 0 then ' Any ticket you bought is back.' else '' end));
+  end loop;
+  return 'cancelled';
+end $$;
+
+-- ======================================================== 097_party_sizes.sql
+-- Newtown, part 97: parties of any size (docs/EVENTS.md). The host picks how far a party reaches
+-- (radius_m: from one spot, 50 m, to a carnival 2.5 km round, every road in it lit up), and the
+-- biggest can take up to 10,000 people. Two street parties on at the same time can't be closer than
+-- the old 16 tiles, nor so close that their areas meet. The server works out the price from the
+-- size (src/lib/world/events.ts partyCost) as before.
+--
+-- Safe to run more than once. Run after part 96.
+
+alter table public.hosted_events add column if not exists radius_m int not null default 50;
+-- Up to 10,000 people (part 95 allowed 1,000).
+alter table public.hosted_events drop constraint if exists hosted_events_capacity_check;
+alter table public.hosted_events add constraint hosted_events_capacity_check check (capacity between 2 and 10000);
+alter table public.hosted_events drop constraint if exists hosted_events_radius_m_check;
+alter table public.hosted_events add constraint hosted_events_radius_m_check check (radius_m between 20 and 5000);
+
+drop function if exists public.event_open(uuid, text, text, text, text, text, int, int, text, boolean, timestamptz, int, numeric, numeric, int, int, numeric, int);
+create or replace function public.event_open(p_user uuid, p_region text, p_category text, p_format text, p_title text, p_about text,
+  p_x int, p_z int, p_place text, p_on_street boolean, p_starts timestamptz, p_minutes int, p_price numeric, p_price_max numeric,
+  p_capacity int, p_per_day int default 3, p_fee numeric default 0, p_gap int default 16, p_radius int default 50)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_title text := btrim(regexp_replace(coalesce(p_title, ''), '\s+', ' ', 'g'));
+  v_starts timestamptz := greatest(now(), coalesce(p_starts, now()));
+  v_minutes int := coalesce(p_minutes, 0);
+  v_price numeric := round(coalesce(p_price, 0), 2);
+  v_fee numeric := round(greatest(0, coalesce(p_fee, 0)), 2);
+  v_radius int := coalesce(p_radius, 50);
+  v_id bigint;
+  v_ends timestamptz;
+begin
+  perform public.event_player(p_user);
+  if p_category not in ('party', 'stage') or coalesce(p_format, '') !~ '^[a-z_]{2,20}$' then raise exception 'bad_kind'; end if;
+  if char_length(v_title) < 3 or char_length(v_title) > 60 then raise exception 'bad_title'; end if;
+  if v_starts > now() + interval '7 days 5 minutes' then raise exception 'too_far'; end if;
+  if v_minutes < 15 or v_minutes > 240 then raise exception 'bad_length'; end if;
+  if v_price < 0 or v_price > greatest(0, coalesce(p_price_max, 0)) then raise exception 'bad_price'; end if;
+  if coalesce(p_capacity, 0) < 2 or p_capacity > 10000 then raise exception 'bad_capacity'; end if;
+  if v_radius < 20 or v_radius > 5000 or (p_category <> 'party' and v_radius > 50) then raise exception 'bad_size'; end if;
+  if public.event_hosting(p_user) is not null then raise exception 'busy'; end if;
+  if (select count(*) from public.hosted_events where host_id = p_user and created_at > now() - interval '24 hours') >= greatest(1, coalesce(p_per_day, 3)) then
+    raise exception 'too_many';
+  end if;
+  v_ends := v_starts + make_interval(mins => v_minutes);
+  -- Street parties take the road: none on the same stretch at the same time, and no two whose
+  -- areas meet (tiles are 100 m).
+  if p_category = 'party' and coalesce(p_on_street, false) and exists (
+    select 1 from public.hosted_events e
+    where e.region = p_region and e.category = 'party' and e.on_street and e.status = 'on'
+      and e.starts_at < v_ends and v_starts < e.ends_at
+      and sqrt(power(e.x - p_x, 2) + power(e.z - p_z, 2)) < greatest(1, coalesce(p_gap, 16), (e.radius_m + v_radius) / 100.0)) then
+    raise exception 'street_taken';
+  end if;
+  if v_fee > 0 then
+    if public.life_can_spend(p_user, array['fun']) < v_fee then raise exception 'not_enough:%', trim_scale(v_fee); end if;
+    perform public.life_spend(p_user, array['fun'], v_fee);
+  end if;
+  insert into public.hosted_events (host_id, region, category, format, title, about, x, z, place, on_street, starts_at, ends_at, price, capacity, host_fee, radius_m)
+    values (p_user, p_region, p_category, p_format, v_title, left(coalesce(p_about, ''), 280), p_x, p_z, left(coalesce(p_place, ''), 80),
+            coalesce(p_on_street, false), v_starts, v_ends, v_price, p_capacity, v_fee, v_radius)
+    returning id into v_id;
+  if v_fee > 0 then
+    -- Held until it's over (or called off before it starts, when it comes back).
+    perform public.log_coins(p_user, null, 'event_hosting', -v_fee, false, 'Hosting: ' || v_title);
+  end if;
+  insert into public.hosted_event_guests (event_id, user_id, going) values (v_id, p_user, true);
+  return jsonb_build_object('id', v_id, 'starts_at', v_starts, 'ends_at', v_ends, 'fee', v_fee);
+end $$;
+
+/**
+ * What the events list shows for each event, worked out here instead of sending every guest
+ * (a carnival can have 10,000): how many are going and came in, whether p_user is going or in,
+ * and the first 7 people going besides the host (for faces). One row per event id.
+ */
+create or replace function public.event_counts(p_ids bigint[], p_user uuid) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'id', e.id,
+    'going', (select count(*) from public.hosted_event_guests g where g.event_id = e.id and g.going),
+    'came', (select count(*) from public.hosted_event_guests g where g.event_id = e.id and g.entered_at is not null),
+    'me_going', coalesce((select g.going from public.hosted_event_guests g where g.event_id = e.id and g.user_id = p_user), false),
+    'me_in', coalesce((select g.entered_at is not null from public.hosted_event_guests g where g.event_id = e.id and g.user_id = p_user), false),
+    'faces', coalesce((select jsonb_agg(f.user_id) from (
+      select g.user_id from public.hosted_event_guests g
+      where g.event_id = e.id and g.going and g.user_id <> e.host_id order by g.going_at limit 7) f), '[]'::jsonb)
+  )), '[]'::jsonb)
+  from public.hosted_events e where e.id = any(p_ids)
+$$;
+revoke all on function public.event_counts(bigint[], uuid) from public, anon, authenticated;
+grant execute on function public.event_counts(bigint[], uuid) to service_role;
+

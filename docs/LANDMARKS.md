@@ -15,7 +15,9 @@ Worked out by the game from the map, never from the phone (`src/lib/world/landma
 - your reputation level takes its usual discount off (`src/lib/world/rep-levels.ts`).
 
 Some Lagos prices (at their real sizes): Apapa Port ₦3.81tn, Tin Can Island Port ₦3.51tn, Unilag
-₦2.4tn, Murtala Muhammed Airport ₦2.1tn, Yabatech ₦1.61tn, LUTH ₦800bn, Eko Hotel ₦790bn.
+₦2.4tn, Murtala Muhammed Airport ₦2.1tn, Yabatech ₦1.61tn, LUTH ₦800bn, Eko Hotel ₦790bn. Out in
+the rest of the state: Dangote Petroleum Refinery ₦6.44tn, Lekki Deep Sea Port ₦4.87tn, LASUSTECH
+₦2.68tn, Pan-Atlantic University ₦2.63tn, Alaba International Market ₦590bn.
 
 ## Owning one
 

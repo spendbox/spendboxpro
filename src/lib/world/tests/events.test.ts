@@ -16,6 +16,9 @@ import {
   cleanQuestion,
   cleanStage,
   partyCost,
+  PARTY_SIZES,
+  capacityChoices,
+  isBigParty,
   streetClash,
   ticketSplit,
   cleanTitle,
@@ -154,4 +157,18 @@ test("tickets are taxed like pay: VAT inside the price, then income tax (the sam
   assert.deepEqual(ticketSplit(300), { vat: 20.93, tax: 19.53, host: 259.54 });
   const t = ticketSplit(1000);
   assert.ok(Math.abs(t.vat + t.tax + t.host - 1000) < 0.011, "it all adds up");
+});
+
+test("bigger parties cost more, hold more people, and never meet another one", () => {
+  const base = { minutes: 120, capacity: 300, venue: "street" as const, area: 1 };
+  const prices = PARTY_SIZES.map((sz) => partyCost({ ...base, radiusM: sz.m }).naira);
+  for (let k = 1; k < prices.length; k++) assert.ok(prices[k] > prices[k - 1], `${PARTY_SIZES[k].label} costs more`);
+  assert.equal(partyCost({ ...base }).naira, partyCost({ ...base, radiusM: 50 }).naira, "one spot is the old price");
+  assert.deepEqual(capacityChoices(50), [20, 50, 100, 300]);
+  assert.equal(capacityChoices(1000).at(-1), 10_000, "a carnival holds 10,000");
+  // Two carnivals 2.5 km round can't be 3 km apart (their areas would meet); one-spot parties can.
+  const at = (x: number, radiusM: number) => ({ x, z: 0, start: 0, end: 100, radiusM });
+  assert.ok(streetClash(at(0, 2500), at(30, 2500)));
+  assert.ok(!streetClash(at(0, 50), at(30, 50)));
+  assert.ok(isBigParty(600, 50) && isBigParty(50, 1000) && !isBigParty(300, 300));
 });

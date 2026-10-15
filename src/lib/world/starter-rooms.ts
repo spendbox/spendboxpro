@@ -4,17 +4,22 @@
 import { spiralIndex, tileAt, type CityPlan } from "../city/layout.ts";
 import type { Building } from "./buildings.ts";
 import type { RegionMap } from "./compile.ts";
+import { tileBounds } from "./geo.ts";
 import { landNow, valueOf } from "./value.ts";
 
 export type StarterBuilding = { building: Building; x: number; z: number; area: string; rooms: number[]; price: number };
 
 const cache = new Map<string, StarterBuilding[]>();
 
-/** Every built rooming house in the region with its home rooms, the cheaper half (by a room's value). */
+/**
+ * Every built rooming house in the region's starter area (its busy city: Region.starterBox) with
+ * its home rooms, the cheaper half (by a room's value).
+ */
 export function starterBuildings(region: RegionMap, plan: CityPlan): StarterBuilding[] {
   const hit = cache.get(region.region.id);
   if (hit) return hit;
-  const { x0, x1, z0, z1 } = region.bounds;
+  const box = region.region.starterBox;
+  const { x0, x1, z0, z1 } = box ? tileBounds(region.frame, box) : region.bounds;
   const prices = region.region.prices;
   const all: StarterBuilding[] = [];
   for (let z = z0; z <= z1; z++)

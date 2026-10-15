@@ -7,9 +7,16 @@
 //   npm run bake:world -- lagos --from-files
 //       uses downloaded files instead of asking overpass-api.de: the sea and tidal water from
 //       scripts/world/clip-water.py, and roads from .cache/<id>-roads.json if there is one
+//   npm run bake:world -- lagos --grow
+//       after the box has grown: keeps everything already baked inside the region's bake.keep box
+//       exactly as it is (tiles, bridges, railways, names, landmark spots) and bakes only the new
+//       land round it, so nothing already there (or owned there) moves. Lists the earlier bake
+//       couldn't get at all (empty ones) are filled in everywhere.
 //
-// Needs curl and access to overpass-api.de (or the files). Downloads are kept in
-// scripts/world/.cache (not committed). Prints a small map of the result to check by eye.
+// Needs curl and access to an Overpass server (or the files): overpass-api.de, then
+// overpass.private.coffee if that one fails (OVERPASS_URL, comma-separated, to choose others).
+// Downloads are kept in scripts/world/.cache (not committed). Prints a small map of the result to
+// check by eye.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -25,17 +32,24 @@ const root = join(here, "..", "..");
 const id = process.argv[2];
 const fresh = process.argv.includes("--fresh");
 const fromFiles = process.argv.includes("--from-files");
+const grow = process.argv.includes("--grow");
 const region = REGIONS[id];
 if (!region) {
   console.error(`Which region? One of: ${Object.keys(REGIONS).join(", ")}`);
   process.exit(1);
 }
+if (grow && !region.bake?.keep) {
+  console.error(`--grow needs the part already baked: bake.keep in ${id}'s index.ts`);
+  process.exit(1);
+}
 
-const OVERPASS = process.env.OVERPASS_URL ?? "https://overpass-api.de/api/interpreter";
+// Servers to ask, in turn: each failed try moves on to the next.
+const AGENT = "spendbox-world-bake/1.0 (scripts/world/bake.mjs; real-world map for a game)";
+const OVERPASS = (process.env.OVERPASS_URL ?? "https://overpass-api.de/api/interpreter,https://overpass.private.coffee/api/interpreter").split(",");
 const cacheDir = join(here, ".cache");
 mkdirSync(cacheDir, { recursive: true });
 
-function overpass(name, query, tries = 8) {
+function overpass(name, query, tries = 20) {
   const file = join(cacheDir, `${id}-${name}.json`);
   if (!fresh && existsSync(file)) return JSON.parse(readFileSync(file, "utf8"));
   console.log(`Downloading ${name} from OpenStreetMap…`);
@@ -44,32 +58,44 @@ function overpass(name, query, tries = 8) {
   // Busy servers fail now and then: try again a few times, waiting longer each time.
   for (let attempt = 1; ; attempt++) {
     try {
-      const out = execFileSync("curl", ["-sS", "--fail", "-m", "900", "--data-urlencode", `data@${q}`, OVERPASS], { maxBuffer: 1 << 30 });
+      const server = OVERPASS[(attempt - 1) % OVERPASS.length];
+      // Overpass turns away requests that don't say what they're from (406).
+      const out = execFileSync("curl", ["-sS", "--fail", "-m", "900", "-A", AGENT, "--data-urlencode", `data@${q}`, server], { maxBuffer: 1 << 30 });
       const json = JSON.parse(out.toString("utf8"));
       // A server that ran out of time still answers, but with nothing in it: try again.
       if (/error/i.test(json.remark ?? "")) throw new Error(json.remark);
       writeFileSync(file, out);
       return json;
     } catch (e) {
-      if (attempt >= tries) throw e;
-      const wait = Math.min(60, 5 * 2 ** attempt);
+      // A dropped connection (curl 35, 56): straight back, many times over (some networks drop
+      // most of them). A busy server (504, 429): wait longer, fewer times.
+      const dropped = e.status === 35 || e.status === 56;
+      if (attempt >= (dropped ? tries * 5 : tries)) throw e;
+      const wait = dropped ? 3 : Math.min(60, 5 * 2 ** Math.min(attempt, 4));
       console.log(`  failed (${String(e.message).split("\n").pop()}), trying again in ${wait} s`);
       execFileSync("sleep", [String(wait)]);
     }
   }
 }
 
-/** A big area asked for in smaller pieces (servers turn down very big questions), joined up. */
-function overpassPieces(name, body, cols, rows, tries = 8) {
+/**
+ * A big area asked for in smaller pieces (servers turn down very big questions), joined up: about
+ * `wide` × `high` degrees each (all of Lagos State: 4 × 1 pieces of water, 6 × 2 of roads).
+ */
+function overpassPieces(name, body, wide, high, tries = 20, everywhere = false) {
   const seen = new Set();
   const elements = [];
   const s0 = region.box.south - m, w0 = region.box.west - m, n0 = region.box.north + m, e0 = region.box.east + m;
+  const cols = Math.max(1, Math.ceil((region.box.east - region.box.west) / wide));
+  const rows = Math.max(1, Math.ceil((region.box.north - region.box.south) / high));
   for (let i = 0; i < cols; i++) {
     for (let j = 0; j < rows; j++) {
-      const b = [s0 + ((n0 - s0) * j) / rows, w0 + ((e0 - w0) * i) / cols, s0 + ((n0 - s0) * (j + 1)) / rows, w0 + ((e0 - w0) * (i + 1)) / cols]
-        .map((v) => v.toFixed(5))
-        .join(",");
-      for (const e of overpass(`${name}-${i}-${j}`, `[out:json][timeout:600];\n(\n${body(b)}\n);\nout geom;`, tries).elements) {
+      const sb = [s0 + ((n0 - s0) * j) / rows, w0 + ((e0 - w0) * i) / cols, s0 + ((n0 - s0) * (j + 1)) / rows, w0 + ((e0 - w0) * (i + 1)) / cols];
+      // Growing: a piece wholly inside the part already baked has nothing new in it.
+      if (keepBox && !everywhere && sb[0] >= keepBox.south && sb[1] >= keepBox.west && sb[2] <= keepBox.north && sb[3] <= keepBox.east) continue;
+      const b = sb.map((v) => v.toFixed(5)).join(",");
+      // Named by where it is, so a piece of another size never reads this one's download.
+      for (const e of overpass(`${name}-${sb.map((v) => v.toFixed(3)).join("_")}`, `[out:json][timeout:600];\n(\n${body(b)}\n);\nout geom;`, tries).elements) {
         const key = `${e.type}${e.id}`;
         if (!seen.has(key)) {
           seen.add(key);
@@ -88,6 +114,14 @@ const W = B.x1 - B.x0 + 1;
 const H = B.z1 - B.z0 + 1;
 const at = (lat, lon) => toTile(frame, { lat, lon });
 const m = 0.02; // download a little round the edges, so shapes crossing them are whole
+// Growing: the part already baked (kept as it is), in tiles.
+const keepBox = grow ? region.bake.keep : null;
+const KB = keepBox ? tileBounds(frame, keepBox) : null;
+const inKeep = (x, z) => !!KB && x >= KB.x0 && x <= KB.x1 && z >= KB.z0 && z <= KB.z1;
+const inKeepAt = (lat, lon) => {
+  const t = at(lat, lon);
+  return inKeep(Math.round(t.x), Math.round(t.z));
+};
 const bbox = `${region.box.south - m},${region.box.west - m},${region.box.north + m},${region.box.east + m}`;
 
 const RANKS = ["tertiary", "secondary", "primary", "trunk", "motorway"];
@@ -112,10 +146,10 @@ const osm = fromFiles
   relation["natural"="water"](${b});
   way["waterway"="riverbank"](${b});
   relation["waterway"="riverbank"](${b});`,
-          2,
-          1,
+          0.45,
+          0.4,
         ),
-        ...overpassPieces("roads", (b) => `  way["highway"~"^(${wanted})$"](${b});`, 3, 2),
+        ...overpassPieces("roads", (b) => `  way["highway"~"^(${wanted})$"](${b});`, 0.3, 0.2),
       ],
     };
 void bbox;
@@ -133,7 +167,7 @@ const fz = (p) => (p.z - (B.z0 - 0.5)) * S - 0.5;
 const inFine = (x, z) => x >= 0 && z >= 0 && x < FW && z < FH;
 
 /** Fill every fine cell inside a set of rings (even–odd, so holes stay out). */
-function fillRings(rings) {
+function fillRings(rings, into = fine, value = WATER) {
   const edges = [];
   for (const ring of rings) {
     const pts = ring.map((g) => {
@@ -153,17 +187,22 @@ function fillRings(rings) {
     for (const [a, b] of edges) if ((a.z <= z && b.z > z) || (b.z <= z && a.z > z)) cuts.push(a.x + ((z - a.z) / (b.z - a.z)) * (b.x - a.x));
     cuts.sort((p, q) => p - q);
     for (let k = 0; k + 1 < cuts.length; k += 2) {
-      for (let x = Math.max(0, Math.ceil(cuts[k])); x <= Math.min(FW - 1, Math.floor(cuts[k + 1])); x++) fine[z * FW + x] = WATER;
+      for (let x = Math.max(0, Math.ceil(cuts[k])); x <= Math.min(FW - 1, Math.floor(cuts[k + 1])); x++) into[z * FW + x] = value;
     }
   }
 }
 
-// Lakes, lagoons, creeks and wide rivers drawn as areas.
+// Lakes, lagoons, creeks and wide rivers drawn as areas. They're inland water whatever they join
+// (the sea never reaches into them: a narrow channel through the beach, or a jetty's dredged
+// channel, doesn't make the Lekki Lagoon or Badagry Creek the sea).
+const inland = new Uint8Array(FW * FH);
 for (const e of osm.elements) {
   const t = e.tags ?? {};
   if (t.natural !== "water" && t.waterway !== "riverbank") continue;
-  if (e.type === "way" && e.geometry) fillRings([e.geometry]);
-  if (e.type === "relation") fillRings((e.members ?? []).filter((mb) => mb.geometry && (mb.role === "outer" || mb.role === "inner")).map((mb) => mb.geometry));
+  const rings = e.type === "way" && e.geometry ? [e.geometry] : e.type === "relation" ? (e.members ?? []).filter((mb) => mb.geometry && (mb.role === "outer" || mb.role === "inner")).map((mb) => mb.geometry) : [];
+  fillRings(rings);
+  // Not the coastline file's own shapes (those are the sea and the tidal water joined to it).
+  if (t.source !== "osmdata") fillRings(rings, inland, 1);
 }
 
 // The coast: land is on the left of each coastline, water on its right. Draw the coastlines as
@@ -214,7 +253,7 @@ for (const path of region.bake?.seaGates ?? []) {
 const sea = new Uint8Array(FW * FH);
 const bottom = [];
 for (let x = 0; x < FW; x++) if (fine[(FH - 1) * FW + x] === WATER) bottom.push([x, FH - 1]);
-flood(bottom, (x, z) => fine[z * FW + x] === WATER && !gate[z * FW + x], sea);
+flood(bottom, (x, z) => fine[z * FW + x] === WATER && !gate[z * FW + x] && !inland[z * FW + x], sea);
 
 function flood(start, ok, mark) {
   const stack = [];
@@ -251,6 +290,53 @@ for (let tz = 0; tz < H; tz++) {
     }
     if (wet * 2 >= S * S) waterTiles[tz * W + tx] = salt * 2 > wet ? 2 : 1;
   }
+}
+
+// ---------------------------------------------------------------- the region's border
+// Land in the box but over the border (another state or country) isn't part of the region: it's
+// baked as X, so nothing is built or bought there. Water over the border stays water.
+const BEYOND = 3;
+let bordered = false;
+if (region.bake?.border && !fromFiles) {
+  try {
+    const rel = overpass("border", `[out:json][timeout:300];\nrelation(${region.bake.border});\nout geom;`).elements.find((e) => e.type === "relation");
+    const ways = (rel?.members ?? []).filter((mb) => mb.type === "way" && mb.geometry && (mb.role === "outer" || mb.role === "inner" || mb.role === ""));
+    if (!ways.length) throw new Error("no border in the answer");
+    const inState = new Uint8Array(FW * FH);
+    fillRings(ways.map((mb) => mb.geometry), inState, 1);
+    for (let tz = 0; tz < H; tz++) {
+      for (let tx = 0; tx < W; tx++) {
+        if (waterTiles[tz * W + tx]) continue;
+        let n = 0;
+        for (let a = 0; a < S; a++) for (let b = 0; b < S; b++) n += inState[(tz * S + b) * FW + tx * S + a];
+        if (n * 2 < S * S) waterTiles[tz * W + tx] = BEYOND;
+      }
+    }
+    bordered = true;
+  } catch (e) {
+    console.log(`  couldn't get the border (${String(e.message).split("\n").pop()}): all the land in the box is the region's`);
+  }
+}
+const beyond = (x, z) => x >= B.x0 && x <= B.x1 && z >= B.z0 && z <= B.z1 && waterTiles[(z - B.z0) * W + (x - B.x0)] === BEYOND;
+const beyondAt = (lat, lon) => {
+  const t = at(lat, lon);
+  return beyond(Math.round(t.x), Math.round(t.z));
+};
+
+/** Reads a grid baked before (see BakedGrid in region.ts), calling put for each run of a letter. */
+function readOld(g, put) {
+  g.rows.forEach((row, k) => {
+    let x = g.x0;
+    for (const mm of row.matchAll(/([A-Za-z])(\d+)/g)) {
+      for (let j = 0; j < Number(mm[2]); j++) put(x + j, g.z0 + k, mm[1]);
+      x += Number(mm[2]);
+    }
+  });
+}
+if (KB) {
+  // The part already baked: exactly as it was (water first; roads further down).
+  for (let z = KB.z0; z <= KB.z1; z++) for (let x = KB.x0; x <= KB.x1; x++) waterTiles[(z - B.z0) * W + (x - B.x0)] = 0;
+  if (region.water) readOld(region.water, (x, z, ch) => inKeep(x, z) && (waterTiles[(z - B.z0) * W + (x - B.x0)] = ch === "S" ? 2 : ch === "W" ? 1 : ch === "X" ? BEYOND : 0));
 }
 
 // ---------------------------------------------------------------- main roads
@@ -329,6 +415,57 @@ for (const e of roads) {
   }
 }
 
+// Nothing over the border (the region stops there), and the part already baked as it was.
+for (let k = 0; k < W * H; k++) if (waterTiles[k] === BEYOND) roadTiles[k] = 0;
+if (KB) {
+  for (let z = KB.z0; z <= KB.z1; z++) for (let x = KB.x0; x <= KB.x1; x++) roadTiles[(z - B.z0) * W + (x - B.x0)] = 0;
+  const LETTER = { A: 5, B: 4, C: 3, D: 2, E: 1 };
+  if (region.roadGrid) {
+    readOld(region.roadGrid, (x, z, ch) => {
+      const v = LETTER[ch.toUpperCase()];
+      if (v && inKeep(x, z)) roadTiles[(z - B.z0) * W + (x - B.x0)] = v + (ch === ch.toLowerCase() ? 8 : 0);
+    });
+  }
+}
+
+/**
+ * Growing: the lines baked before, plus each new one whose middle is out in the new land and
+ * that isn't one already there (the same way, or one running along it: the map's ways can be
+ * split differently from one download to the next).
+ */
+function withOld(old, fresh) {
+  if (!keepBox) return fresh;
+  const ids = new Set(old.map((l) => l.id));
+  const near = new Map();
+  const cellKey = (lat, lon) => `${Math.round(lat * 2000)},${Math.round(lon * 2000)}`; // about 55 m
+  for (const l of old) for (const [lat, lon] of densify(l.path)) near.set(cellKey(lat, lon), true);
+  const along = (l) => {
+    const pts = densify(l.path);
+    let hits = 0;
+    for (const [lat, lon] of pts) {
+      let hit = false;
+      for (let a = -1; a <= 1 && !hit; a++) for (let b = -1; b <= 1 && !hit; b++) hit = near.has(`${Math.round(lat * 2000) + a},${Math.round(lon * 2000) + b}`);
+      if (hit) hits++;
+    }
+    return hits / pts.length;
+  };
+  return [...old, ...fresh.filter((l) => !ids.has(l.id) && !inKeepAt(...midOf(l.path)) && along(l) < 0.6)];
+}
+/** A path's points every 25 m or so. */
+function densify(path) {
+  const out = [path[0]];
+  for (let k = 1; k < path.length; k++) {
+    const [a, b] = [path[k - 1], path[k]];
+    const n = Math.max(1, Math.ceil(metres({ lat: a[0], lon: a[1] }, { lat: b[0], lon: b[1] }) / 25));
+    for (let s2 = 1; s2 <= n; s2++) out.push([a[0] + ((b[0] - a[0]) * s2) / n, a[1] + ((b[1] - a[1]) * s2) / n]);
+  }
+  return out;
+}
+const midOf = (path) => {
+  const p = middle(path.map(([lat, lon]) => ({ lat, lon })));
+  return [p.lat, p.lon];
+};
+
 // The long bridges with their real curves (for drawing them smoothly later).
 function simplify(pts, tol) {
   if (pts.length < 3) return pts;
@@ -352,8 +489,12 @@ for (const e of roads) {
   if (!isBridge(e.tags) || !keep(e) || lengthOf(e.geometry) < 40) continue;
   // Which level it's on where flyovers cross (the map's "layer": 1 just above the ground).
   const layer = Math.max(1, Math.min(4, Number(e.tags.layer) || 1));
+  // Not one standing out over the border, away from the region's own roads.
+  const mid = middle(e.geometry);
+  if (beyondAt(mid.lat, mid.lon)) continue;
   routes.push({ id: `osm-w${e.id}`, name: label(e.tags) || "Bridge", kind: e.tags.highway, bridge: true, ...(layer > 1 ? { layer } : {}), path: shape(e.geometry, 0.05) });
 }
+const allRoutes = withOld(region.roads, routes);
 
 // ---------------------------------------------------------------- railways, stations, crossings
 let rail = [];
@@ -366,27 +507,30 @@ if (!fromFiles) {
       (b) => `  way["railway"~"^(rail|light_rail|subway|narrow_gauge)$"][!"service"](${b});
   node["railway"~"^(station|halt)$"](${b});
   node["public_transport"="station"]["train"="yes"](${b});`,
-      2,
-      1,
+      0.45,
+      0.4,
     );
+    // Railways carry on over the border (the line to Ibadan); stations are the region's own.
     rail = els
       .filter((e) => e.type === "way" && e.geometry && lengthOf(e.geometry) > 30)
       .map((e) => ({ id: `osm-w${e.id}`, name: e.tags.name ?? e.tags.ref ?? "Railway", bridge: !!isBridge(e.tags), path: shape(e.geometry, 0.05) }));
     const seen = new Set();
     stations = els
-      .filter((e) => e.type === "node" && e.tags.name && !seen.has(e.tags.name) && seen.add(e.tags.name))
+      .filter((e) => e.type === "node" && e.tags.name && !beyondAt(e.lat, e.lon) && !seen.has(e.tags.name) && seen.add(e.tags.name))
       .map((e) => ({ name: e.tags.name, at: [+e.lat.toFixed(5), +e.lon.toFixed(5)] }));
   } catch {
     console.log("  couldn't get the railways");
   }
   try {
     // 0 zebra, 1 with its own traffic lights, 2 marked (ladder), 3 with a refuge island.
-    const els = overpassPieces("crossings", (b) => `  node["highway"="crossing"](${b});`, 4, 2, 2);
-    crossings = els.map((e) => {
-      const t = e.tags ?? {};
-      const type = t["crossing:island"] === "yes" ? 3 : t.crossing === "traffic_signals" ? 1 : t.crossing === "zebra" || t.crossing_ref === "zebra" ? 0 : 2;
-      return [+e.lat.toFixed(5), +e.lon.toFixed(5), type];
-    });
+    const els = overpassPieces("crossings", (b) => `  node["highway"="crossing"](${b});`, 0.3, 0.2, 20, !region.crossings.length);
+    crossings = els
+      .filter((e) => !beyondAt(e.lat, e.lon))
+      .map((e) => {
+        const t = e.tags ?? {};
+        const type = t["crossing:island"] === "yes" ? 3 : t.crossing === "traffic_signals" ? 1 : t.crossing === "zebra" || t.crossing_ref === "zebra" ? 0 : 2;
+        return [+e.lat.toFixed(5), +e.lon.toFixed(5), type];
+      });
   } catch {
     console.log("  couldn't get the crossings");
   }
@@ -394,7 +538,9 @@ if (!fromFiles) {
 
 // ---------------------------------------------------------------- landmarks
 const pattern = (l) => l.osm ?? l.name.replace(/\s*[(,].*$/, "").replace(/[.*+?^${}()|[\]\\"]/g, "\\$&");
-const wantedMarks = fromFiles ? [] : region.landmarks.filter((l) => l.approx);
+// Growing: the ones already found stay where they are (they're in the part already baked).
+// Growing: only new ones out in the new land (one in the kept part never moves).
+const wantedMarks = fromFiles ? [] : region.landmarks.filter((l) => l.approx && !(grow && (region.found[l.id] || inKeepAt(l.at.lat, l.at.lon))));
 // What earlier bakes found stays, unless this one finds it again.
 const found = { ...region.found };
 const missed = [];
@@ -407,13 +553,14 @@ for (let k = 0; k < wantedMarks.length; k += 3) {
   try {
     marks.push(
       ...overpass(
-        `landmarks-${k / 3}`,
+        // Named by which ones it asks about, so a different list never reads this one's answer.
+        `landmarks-${batch.map((l) => l.id).join("+")}`,
         `[out:json][timeout:120];
 (
 ${batch.map((l) => `  nwr["name"](${(l.at.lat - 0.022).toFixed(4)},${(l.at.lon - 0.022).toFixed(4)},${(l.at.lat + 0.022).toFixed(4)},${(l.at.lon + 0.022).toFixed(4)});`).join("\n")}
 );
 out center tags;`,
-        2,
+        6,
       ).elements,
     );
   } catch {
@@ -446,7 +593,7 @@ out;`,
     ).elements;
     const seen = new Set();
     areas = els
-      .filter((e) => e.tags.name !== region.name && region.box.south <= e.lat && e.lat <= region.box.north && region.box.west <= e.lon && e.lon <= region.box.east)
+      .filter((e) => e.tags.name !== region.name && region.box.south <= e.lat && e.lat <= region.box.north && region.box.west <= e.lon && e.lon <= region.box.east && !beyondAt(e.lat, e.lon))
       .map((e) => ({ name: e.tags["name:en"] ?? e.tags.name, at: [+e.lat.toFixed(5), +e.lon.toFixed(5)], kind: KIND[e.tags.place] }))
       .filter((a) => !seen.has(a.name) && seen.add(a.name))
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -459,7 +606,7 @@ out;`,
 let footbridges = [];
 if (!fromFiles) {
   try {
-    const els = overpassPieces("footbridges", (b) => `  way["highway"~"^(footway|pedestrian|path|steps|cycleway)$"]["bridge"](${b});`, 2, 1);
+    const els = overpassPieces("footbridges", (b) => `  way["highway"~"^(footway|pedestrian|path|steps|cycleway)$"]["bridge"](${b});`, 0.45, 0.4);
     // Short ones only (over a road, not along a river), by their middle.
     footbridges = els
       .filter((e) => e.geometry && e.tags.bridge !== "no" && lengthOf(e.geometry) < 160)
@@ -467,11 +614,23 @@ if (!fromFiles) {
         const p = middle(e.geometry);
         return [+p.lat.toFixed(5), +p.lon.toFixed(5)];
       })
-      .filter(([lat, lon]) => region.box.south <= lat && lat <= region.box.north && region.box.west <= lon && lon <= region.box.east);
+      .filter(([lat, lon]) => region.box.south <= lat && lat <= region.box.north && region.box.west <= lon && lon <= region.box.east && !beyondAt(lat, lon));
   } catch {
     console.log("  couldn't get the footbridges");
   }
 }
+
+// ---------------------------------------------------------------- growing: with what was there
+// Points (footbridges, crossings): the ones before, and new ones out in the new land; a list the
+// earlier bake couldn't get at all is taken whole.
+const withOldPoints = (old, fresh) => (!keepBox || !old.length ? fresh : [...old, ...fresh.filter(([lat, lon]) => !inKeepAt(lat, lon))]);
+const allRail = withOld(region.rail, rail);
+const allStations = !keepBox ? stations : [...region.stations, ...stations.filter((st) => !inKeepAt(...st.at) && !region.stations.some((o) => o.name === st.name))];
+const allFootbridges = withOldPoints(region.footbridges, footbridges);
+const allCrossings = withOldPoints(region.crossings, crossings);
+const allAreas = !keepBox
+  ? areas
+  : [...region.areas, ...areas.filter((a) => !inKeepAt(...a.at) && !region.areas.some((o) => o.name === a.name))].sort((a, b) => a.name.localeCompare(b.name));
 
 // ---------------------------------------------------------------- write it out
 function rows(cells, letter, none) {
@@ -492,7 +651,7 @@ function rows(cells, letter, none) {
   }
   return out;
 }
-const waterRows = rows(waterTiles, (v) => (v === 2 ? "S" : v === 1 ? "W" : "L"), "L");
+const waterRows = rows(waterTiles, (v) => (v === BEYOND ? "X" : v === 2 ? "S" : v === 1 ? "W" : "L"), "L");
 const roadRows = rows(roadTiles, (v) => (v ? (v > 8 ? "abcde"[5 - (v & 7)] : "ABCDE"[5 - v]) : "N"), "N");
 const grid2 = (r) => `{\n  x0: ${B.x0},\n  z0: ${B.z0},\n  rows: [\n${r.map((s) => `    ${JSON.stringify(s)},`).join("\n")}\n  ],\n}`;
 const file = join(root, "src", "lib", "world", "regions", id, "baked.ts");
@@ -508,20 +667,20 @@ export const WATER: BakedGrid | null = ${grid2(waterRows)};
 
 export const ROAD_GRID: BakedGrid | null = ${grid2(roadRows)};
 
-export const ROUTES: Road[] = ${JSON.stringify(routes, null, 1)};
+export const ROUTES: Road[] = ${JSON.stringify(allRoutes, null, 1)};
 
 export const FOUND: Record<string, LatLon> = ${JSON.stringify(found, null, 1)};
 
-export const FOOTBRIDGES: [number, number][] = ${JSON.stringify(footbridges)};
+export const FOOTBRIDGES: [number, number][] = ${JSON.stringify(allFootbridges)};
 
-export const RAIL: Rail[] = ${JSON.stringify(rail, null, 1)};
+export const RAIL: Rail[] = ${JSON.stringify(allRail, null, 1)};
 
-export const STATIONS: Station[] = ${JSON.stringify(stations)};
+export const STATIONS: Station[] = ${JSON.stringify(allStations)};
 
-export const CROSSINGS: [number, number, number][] = ${JSON.stringify(crossings)};
+export const CROSSINGS: [number, number, number][] = ${JSON.stringify(allCrossings)};
 
 export const AREAS: Area[] = [
-${areas.map((a) => `  ${JSON.stringify(a)},`).join("\n")}
+${allAreas.map((a) => `  ${JSON.stringify(a)},`).join("\n")}
 ];
 `,
 );
@@ -529,15 +688,17 @@ ${areas.map((a) => `  ${JSON.stringify(a)},`).join("\n")}
 // ---------------------------------------------------------------- a quick look
 const count = (arr, f) => arr.reduce((n, v) => n + (f(v) ? 1 : 0), 0);
 console.log(`Wrote ${file}`);
-console.log(`${W} × ${H} tiles: ${count(waterTiles, (v) => v === 1)} lagoon, ${count(waterTiles, (v) => v === 2)} sea, ${count(roadTiles, (v) => v > 0)} road (${kept} of ${roads.length} roads kept), ${routes.length} long bridges`);
-console.log(`${areas.length} named neighbourhoods and towns, ${footbridges.length} footbridges, ${rail.length} stretches of railway, ${stations.length} stations, ${crossings.length} crossings, ${routes.length} bridges and flyovers`);
+console.log(`${W} × ${H} tiles: ${count(waterTiles, (v) => v === 1)} lagoon, ${count(waterTiles, (v) => v === 2)} sea, ${count(waterTiles, (v) => v === BEYOND)} over the border${bordered ? "" : " (no border)"}, ${count(roadTiles, (v) => v > 0)} road (${kept} of ${roads.length} roads kept)`);
+console.log(`${allAreas.length} named neighbourhoods and towns, ${allFootbridges.length} footbridges, ${allRail.length} stretches of railway, ${allStations.length} stations, ${allCrossings.length} crossings, ${allRoutes.length} bridges and flyovers`);
+if (keepBox) console.log(`Kept as it was: tiles ${KB.x0}..${KB.x1} × ${KB.z0}..${KB.z1}; new: ${allRoutes.length - region.roads.length} bridges and flyovers, ${allRail.length - region.rail.length} railways, ${allStations.length - region.stations.length} stations, ${allAreas.length - region.areas.length} places`);
 console.log(`Landmarks found in the map: ${Object.keys(found).length} of ${wantedMarks.length}${missed.length ? `; not found: ${missed.join(", ")}` : ""}`);
-const step = 3;
+// About 150 characters across whatever the region's size (x: over the border).
+const step = Math.max(3, Math.ceil(W / 150));
 for (let z = 0; z < H; z += step * 2) {
   let line = "";
   for (let x = 0; x < W; x += step) {
     const c = z * W + x;
-    line += roadTiles[c] > 8 ? "=" : roadTiles[c] ? "+" : waterTiles[c] === 2 ? "~" : waterTiles[c] === 1 ? "-" : ".";
+    line += roadTiles[c] > 8 ? "=" : roadTiles[c] ? "+" : waterTiles[c] === BEYOND ? "x" : waterTiles[c] === 2 ? "~" : waterTiles[c] === 1 ? "-" : ".";
   }
   console.log(line);
 }

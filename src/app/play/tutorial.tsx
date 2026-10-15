@@ -264,7 +264,7 @@ export function Tutorial({
     win: {
       emoji: "🎉",
       title: "Mission 3 of 3 · Go to an event",
-      text: "Tap the party button (top right, it glows). What's on shows the parties and talks happening now: tap one and Go in. Nothing on? Host your own in Host an event: a party on your street or a free talk. The moment you're in, the reward is yours. Dance like nobody's watching. (Everybody's watching.)",
+      text: "Tap the party button (top right, it glows). What's on shows the parties and talks happening now: tap one and Go in. Nothing on? Host your own in Host an event: a party on your street or a free talk (How to host a great party there shows you how, music and all; if fewer than 10 people come, the hosting fee comes back). The moment you're in, the reward is yours. Dance like nobody's watching. (Everybody's watching.)",
       glow: "events",
       action: { label: "Show me", run: actions.events },
     },

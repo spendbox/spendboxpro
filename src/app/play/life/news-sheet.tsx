@@ -52,7 +52,7 @@ export function NewsSheet({ region, onShow, onClose }: { region: RegionMap; onSh
           events.map((e) => {
             const sp = e.building ? ownedSpot(e.building) : e.x != null && e.z != null ? { x: e.x, z: e.z } : null;
             const area = sp ? region.areaAt(sp.x, sp.z) : "";
-            return { id: e.id, at: e.at, kind: e.kind === "challenge" ? ("game" as const) : ("money" as const), ...playerStory(e, area, cash(e.price)), area, ...(sp ? { x: sp.x, z: sp.z } : {}) };
+            return { id: e.id, at: e.at, kind: e.kind === "challenge" ? ("game" as const) : e.kind === "party" ? ("festival" as const) : ("money" as const), ...playerStory(e, area, cash(e.price)), area, ...(sp ? { x: sp.x, z: sp.z } : {}) };
           }),
         );
       })

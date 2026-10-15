@@ -98,6 +98,7 @@ import { homePlanFor } from "./life/home-plan-actions";
 import type { HomePlan } from "@/lib/home-plan";
 import { setEventSoundsEnabled } from "./city/event-sounds";
 import type { CityDancer, CityEvent, CityFriendPin, CityGhost, CityInteract, CityMarkers, CityRide, RideTarget } from "./city-view";
+import type { PartyZone } from "./city/party-lights";
 import { FeedIconView, FeedRow, NotificationsPanel, SwipeRow, type FeedIcon, type FeedItem } from "./notifications";
 import { dismissNotices, readNotices } from "./notice-actions";
 import { closePhoneNotices, setPhoneBadge } from "./phone/phone-notices";
@@ -132,6 +133,7 @@ import type { ChatLocation } from "@/lib/chat-location";
 import { RecentRail, rememberPerson } from "./people/recent-rail";
 import { PrankReveal, usePrankReveal } from "./people/prank-reveal";
 import { openAdvertise } from "./life/advertise-panel";
+import { SUPPORT_X, SUPPORT_X_URL } from "@/lib/brand";
 import { Fight, type ChallengeLight } from "./fight/fight";
 import { Events, type EventLight } from "./events/events";
 import { CallBar } from "./call/call-bar";
@@ -1968,6 +1970,8 @@ export function Game({
   // An event's beam (or its bubble) tapped on the map: open that event.
   const [eventTapped, setEventTapped] = useState<{ id: number; at: number } | null>(null);
   const [eventScenes, setEventScenes] = useState<GameState["worldEvents"]>(NO_WORLD_EVENTS);
+  /** Parties on now (and the one you're placing), their roads strung with lights. */
+  const [partyZones, setPartyZones] = useState<PartyZone[]>([]);
   const mapLights = useMemo(() => [...challengeLights, ...eventLights], [challengeLights, eventLights]);
   const newsScene = worldLife.newsScene;
   const worldScenes = useMemo(() => (eventScenes.length ? [...(newsScene ?? []), ...eventScenes] : (newsScene ?? NO_WORLD_EVENTS)), [newsScene, eventScenes]);
@@ -2301,6 +2305,7 @@ export function Game({
             dance={isDancing && dancing ? { id: me.id, move: dancing.move, with: dancing.with } : null}
             friendsAt={worldId ? (walking ? facesOnMap.filter((f) => !f.mine) : facesOnMap) : friendsAt}
             challengeLights={worldId ? mapLights : undefined}
+            partyZones={worldId ? partyZones : undefined}
             onLightTap={
               worldId
                 ? (id) => {
@@ -2653,6 +2658,7 @@ export function Game({
           openId={eventTapped}
           onLights={setEventLights}
           onScenes={setEventScenes}
+          onZones={setPartyZones}
           onMessage={(text, good) => setMessage({ text, tone: good ? "good" : "bad" })}
           onFly={(x, z) => worldLife.lookAt(x, z)}
           onPerson={(id) => setPersonId(id)}
@@ -3087,7 +3093,7 @@ export function Game({
             }}
             onSignIn={() => {
               setSportsOpen(null);
-              setSignInWhy("Sign in to watch matches and bet mint on who wins.");
+              setSignInWhy("Sign in to watch matches and bet on who wins.");
             }}
           />
         </Safe>
@@ -3367,6 +3373,16 @@ export function Game({
             Advertise on the map
           </button>
         )}
+        {worldId && guest && !place && ride === null && (
+          <a
+            href={SUPPORT_X_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="pointer-events-auto rounded-full bg-black/45 px-2.5 py-1 text-[11px] font-semibold text-white shadow backdrop-blur-sm"
+          >
+            Support: @{SUPPORT_X} on X
+          </a>
+        )}
         {/* On foot: Stop walking and the camera, in the middle (the joystick is bottom left). */}
         {worldId && !guest && !place && ride === null && walking && (
           <div className="pointer-events-auto flex items-stretch gap-1.5">
@@ -3586,7 +3602,7 @@ export function Game({
             )}
             {!dockOpen && !isDancing && place && placeRoom && jobAt(placeRoom.type) && (
               <button
-                onClick={() => (guest ? setSignInWhy("Sign in to apply for jobs and earn mint by the hour.") : setJobsAt({ id: placeRoom.id, name: placeRoom.name }))}
+                onClick={() => (guest ? setSignInWhy("Sign in to apply for jobs and earn money by the hour.") : setJobsAt({ id: placeRoom.id, name: placeRoom.name }))}
                 className="glass pointer-events-auto flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold shadow sm:text-sm"
               >
                 <Briefcase className="size-4 text-[#1971c2]" />

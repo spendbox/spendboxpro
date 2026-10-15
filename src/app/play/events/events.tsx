@@ -8,6 +8,10 @@ import { cn } from "@/lib/cn";
 import {
   ABOUT_MAX,
   CAPACITY_MAX,
+  PARTY_SIZES,
+  PARTY_SIZE_DEFAULT,
+  capacityChoices,
+  partySize,
   DAYS_AHEAD,
   DURATIONS,
   EARLY_DOORS_MINS,
@@ -50,6 +54,8 @@ import { cancelEvent, endEvent, enterEvent, eventQuote, hostEvent, rsvpEvent, st
 import { PartyRoom } from "./party-room";
 import { RoomGuard } from "./room-kit";
 import { StageRoom } from "./stage-room";
+import { HostGuide } from "./host-guide";
+import type { PartyZone } from "../city/party-lights";
 
 // Events on the map (docs/EVENTS.md). The Events button (top right) opens what's on (on now and
 // coming up, nearest first) and hosting your own: what kind, where (the street you're on or a place
@@ -79,6 +85,7 @@ export function Events({
   roads,
   onLights,
   onScenes,
+  onZones,
   onMessage,
   onFly,
   onPerson,
@@ -98,6 +105,8 @@ export function Events({
   onLights: (lights: EventLight[]) => void;
   /** The party scenes to play on the map (a crowd dancing in the street...). */
   onScenes: (scenes: WorldEvent[]) => void;
+  /** The parties on now as areas (as big as their hosts made them): their roads strung with lights. */
+  onZones: (zones: PartyZone[]) => void;
   onMessage: (text: string, good: boolean) => void;
   onFly: (x: number, z: number) => void;
   onPerson: (id: string) => void;
@@ -112,13 +121,20 @@ export function Events({
   const [tucked, setTucked] = useState(false);
   const [confirm, setConfirm] = useState<null | { kind: "end" | "cancel"; e: EventView }>(null);
   const [dismissed, setDismissed] = useState<number[]>([]);
+  /** Out of the room for good (the ticket stays paid: Go in again any time while it's on). */
+  const leave = () => {
+    setInside(null);
+    setTucked(false);
+  };
   const [now, setNow] = useState(() => Date.now());
 
+  /** The party being placed on the map (Choose on the map): its area shows while you move. */
+  const [preview, setPreview] = useState<PartyZone | null>(null);
   const whereRef = useRef(where);
-  const cbs = useRef({ onLights, onScenes });
+  const cbs = useRef({ onLights, onScenes, onZones });
   useEffect(() => {
     whereRef.current = where;
-    cbs.current = { onLights, onScenes };
+    cbs.current = { onLights, onScenes, onZones };
   });
   const signedIn = !!me;
   const look = useCallback(async () => {
@@ -161,23 +177,43 @@ export function Events({
 
   // On the map: a beam for each event on now (and those starting within the hour), and a crowd in
   // the street for each party on now.
-  const mapKey = list.map((e) => `${e.id}:${e.status}:${e.startsAt}:${e.endsAt}`).join("|") + `|${Math.floor(now / 60_000)}`;
+  const mapKey =
+    list.map((e) => `${e.id}:${e.status}:${e.startsAt}:${e.endsAt}:${e.radiusM}`).join("|") +
+    `|${Math.floor(now / 60_000)}|${preview ? `${preview.x},${preview.z},${preview.r}` : ""}`;
   useEffect(() => {
     const t = Date.now();
     const showing = list.filter((e) => e.status === "live" || (e.status === "upcoming" && Date.parse(e.startsAt) - t < 60 * 60_000));
     cbs.current.onLights(showing.map((e) => ({ id: -e.id, x: e.x, z: e.z, colour: colourOf(e), playing: e.status === "live", endsAt: null, label: e.status === "live" ? "LIVE" : "SOON" })));
+    // A party's crowd at its middle, and the bigger it is the more crowds round it (one for every
+    // 300 m it reaches, up to 4 more), so a carnival dances all over its streets.
+    const parties = list.filter((e) => e.status === "live" && eventFormat(e.format)?.scene);
     cbs.current.onScenes(
-      list
-        .filter((e) => e.status === "live" && eventFormat(e.format)?.scene)
-        .slice(0, 6)
-        .map((e) => ({ id: -1_000_000 - e.id, key: eventFormat(e.format)!.scene!, tile: spiralIndex(e.x, e.z), startsAt: e.startsAt, endsAt: e.endsAt, near: true })),
+      parties
+        .flatMap((e) => {
+          const key = eventFormat(e.format)!.scene!;
+          const more = Math.min(4, Math.floor((e.radiusM ?? 50) / 300));
+          const r = ((e.radiusM ?? 50) / 100) * 0.55;
+          return [
+            { id: -1_000_000 - e.id, key, tile: spiralIndex(e.x, e.z), startsAt: e.startsAt, endsAt: e.endsAt, near: true },
+            ...Array.from({ length: more }, (_, k) => {
+              const a = (k / more) * Math.PI * 2 + e.id;
+              return { id: -1_000_000 - e.id - (k + 1) * 10_000_000, key, tile: spiralIndex(Math.round(e.x + Math.cos(a) * r), Math.round(e.z + Math.sin(a) * r)), startsAt: e.startsAt, endsAt: e.endsAt, near: true };
+            }),
+          ];
+        })
+        .slice(0, 12),
     );
+    cbs.current.onZones([
+      ...list.filter((e) => e.category === "party" && e.status === "live").map((e) => ({ id: e.id, x: e.x, z: e.z, r: (e.radiusM ?? 50) / 100, colour: colourOf(e) })),
+      ...(preview ? [preview] : []),
+    ]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapKey]);
   useEffect(
     () => () => {
       cbs.current.onLights([]);
       cbs.current.onScenes([]);
+      cbs.current.onZones([]);
     },
     [],
   );
@@ -247,7 +283,11 @@ export function Events({
           places={places}
           describe={describe}
           roads={roads}
-          onClose={onClose}
+          onClose={() => {
+            setPreview(null);
+            onClose();
+          }}
+          onPreview={setPreview}
           onOpen={(id) => setDetail(id)}
           onHosted={(id, startsNow, v) => {
             void look();
@@ -298,24 +338,28 @@ export function Events({
         </div>
       ))}
       {inside && me && tucked && (
-        <button
-          onClick={() => setTucked(false)}
-          className="toast-in pointer-events-auto fixed left-1/2 top-28 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full bg-ink py-2 pl-2 pr-4 text-sm font-bold text-white shadow-2xl"
+        <div
+          className="toast-in pointer-events-auto fixed left-1/2 top-28 z-40 flex -translate-x-1/2 items-center gap-1 rounded-full bg-ink py-2 pl-2 pr-1.5 text-sm font-bold text-white shadow-2xl"
           style={{ boxShadow: `0 0 0 2px ${colourOf(inside)}, 0 10px 30px rgba(0,0,0,.35)` }}
         >
-          <span className="grid size-8 place-items-center rounded-full text-lg" style={{ background: colourOf(inside) }}>
-            {eventFormat(inside.format)?.icon}
-          </span>
-          Back to {inside.title.length > 22 ? `${inside.title.slice(0, 21)}…` : inside.title}
-          <span className="rounded-full bg-hit px-1.5 text-[10px]">LIVE</span>
-        </button>
+          <button onClick={() => setTucked(false)} className="flex items-center gap-2 pr-1">
+            <span className="grid size-8 place-items-center rounded-full text-lg" style={{ background: colourOf(inside) }}>
+              {eventFormat(inside.format)?.icon}
+            </span>
+            Back to {inside.title.length > 22 ? `${inside.title.slice(0, 21)}…` : inside.title}
+            <span className="rounded-full bg-hit px-1.5 text-[10px]">LIVE</span>
+          </button>
+          <button onClick={leave} className="grid size-7 place-items-center rounded-full text-white/70 hover:bg-white/10" aria-label="Leave the event">
+            <X className="size-4" />
+          </button>
+        </div>
       )}
       {inside && me && !tucked && (
         <RoomGuard key={inside.id} onClose={() => setTucked(true)}>
           {inside.category === "stage" ? (
-            <StageRoom view={inside} me={me} onMin={() => setTucked(true)} onPerson={onPerson} onMessage={onMessage} onEnd={() => setConfirm({ kind: "end", e: inside })} />
+            <StageRoom view={inside} me={me} onMin={() => setTucked(true)} onLeave={leave} onPerson={onPerson} onMessage={onMessage} onEnd={() => setConfirm({ kind: "end", e: inside })} />
           ) : (
-            <PartyRoom view={inside} me={me} onMin={() => setTucked(true)} onPerson={onPerson} onMessage={onMessage} onEnd={() => setConfirm({ kind: "end", e: inside })} />
+            <PartyRoom view={inside} me={me} onMin={() => setTucked(true)} onLeave={leave} onPerson={onPerson} onMessage={onMessage} onEnd={() => setConfirm({ kind: "end", e: inside })} />
           )}
         </RoomGuard>
       )}
@@ -324,7 +368,7 @@ export function Events({
           <p className="text-sm text-muted">
             {confirm.kind === "end"
               ? `Everyone leaves the room${confirm.e.price > 0 ? `, and the ticket money is paid to you (less VAT and income tax)` : ""}.`
-              : `Everyone going is told${confirm.e.price > 0 ? ", and every ticket bought is paid back" : ""}.${confirm.e.category === "party" ? (confirm.e.status === "upcoming" ? " Your hosting fee comes back too." : " It has started, so the hosting fee is spent.") : ""}`}
+              : `Everyone going is told${confirm.e.price > 0 ? ", and every ticket bought is paid back" : ""}.${confirm.e.category === "party" ? (confirm.e.status === "upcoming" ? " Your hosting fee comes back too." : " It has started: the hosting fee is spent unless fewer than 10 people have come.") : ""}`}
           </p>
           <div className="mt-4 grid grid-cols-2 gap-2">
             <button onClick={() => setConfirm(null)} className="h-11 rounded-full bg-ink/5 text-sm font-semibold">
@@ -367,6 +411,7 @@ function EventsSheet({
   describe,
   roads,
   onClose,
+  onPreview,
   onOpen,
   onHosted,
 }: {
@@ -379,6 +424,8 @@ function EventsSheet({
   describe: (x: number, z: number) => SpotWords;
   roads: (x: number, z: number) => NearRoad[];
   onClose: () => void;
+  /** The party being placed (Choose on the map), shown on the map; null when done. */
+  onPreview: (zone: PartyZone | null) => void;
   onOpen: (id: number) => void;
   onHosted: (id: number, startsNow: boolean, view: EventView | null) => void;
 }) {
@@ -391,6 +438,11 @@ function EventsSheet({
   });
   const [tab, setTab] = useState<Tab>("on");
   const [shelf, setShelf] = useState<Shelf>("all");
+  // Choose on the map: the card tucks away (all you've filled in kept), a pin in the middle of the
+  // screen shows where and how far the party reaches, and Use this spot brings the card back.
+  const [picking, setPicking] = useState<number | null>(null);
+  const [guide, setGuide] = useState(false);
+  const [picked, setPicked] = useState(0);
 
   if (intro)
     return (
@@ -426,6 +478,21 @@ function EventsSheet({
   const keep = (e: EventView) => (shelf === "all" ? true : shelf === "going" ? e.me.going || e.me.host : e.category === shelf);
 
   return (
+    <>
+    {picking !== null && (
+      <MapPicker
+        radiusM={picking}
+        where={where}
+        describe={describe}
+        onPreview={onPreview}
+        onDone={(use) => {
+          onPreview(null);
+          setPicking(null);
+          if (use) setPicked((k) => k + 1);
+        }}
+      />
+    )}
+    <div className={picking !== null ? "hidden" : undefined}>
     <Sheet onClose={onClose} title="Events" wide>
       <div className="grid grid-cols-2 gap-1 rounded-full bg-ink/5 p-1">
         {(
@@ -470,9 +537,21 @@ function EventsSheet({
           )}
         </>
       ) : (
-        <HostForm region={region} where={where} places={places} describe={describe} roads={roads} onOpen={onOpen} onHosted={onHosted} />
+        <>
+        <button onClick={() => setGuide(true)} className="mt-3 flex w-full items-center gap-2.5 rounded-2xl bg-gradient-to-r from-[#d6336c]/10 to-[#7048e8]/10 px-3 py-2.5 text-left">
+          <span className="text-2xl">📖</span>
+          <span className="min-w-0 flex-1">
+            <b className="block text-sm">How to host a great party</b>
+            <span className="text-xs text-muted">Setting it up, adding music, getting it going · 8 quick steps</span>
+          </span>
+        </button>
+        {guide && <HostGuide onClose={() => setGuide(false)} />}
+        <HostForm region={region} where={where} places={places} describe={describe} roads={roads} onOpen={onOpen} onHosted={onHosted} picked={picked} onPickOnMap={(m) => setPicking(m)} />
+        </>
       )}
     </Sheet>
+    </div>
+    </>
   );
 }
 
@@ -547,6 +626,8 @@ function HostForm({
   roads,
   onOpen,
   onHosted,
+  picked,
+  onPickOnMap,
 }: {
   region: string;
   where: () => { x: number; z: number } | null;
@@ -555,6 +636,10 @@ function HostForm({
   roads: (x: number, z: number) => NearRoad[];
   onOpen: (id: number) => void;
   onHosted: (id: number, startsNow: boolean, view: EventView | null) => void;
+  /** Counts up each time a spot is chosen on the map: look round it again. */
+  picked: number;
+  /** Tuck the card away to choose the spot on the map (showing a party this big). */
+  onPickOnMap: (radiusM: number) => void;
 }) {
   const [quote, setQuote] = useState<EventQuote | null>(null);
   useEffect(() => {
@@ -573,6 +658,10 @@ function HostForm({
   const [chip, setChip] = useState<number | null>(0);
   const [raw, setRaw] = useState("");
   const [capacity, setCapacity] = useState(f.capacity);
+  /** How far the party reaches (metres): one spot up to a carnival. */
+  const [radiusM, setRadiusM] = useState<number>(PARTY_SIZE_DEFAULT);
+  const size = partySize(radiusM);
+  const crowds = cat === "party" ? capacityChoices(radiusM) : [20, 50, 100, 300, CAPACITY_MAX];
   const [going, setGoing] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const opened = useRef(Date.now());
@@ -589,8 +678,14 @@ function HostForm({
     setNearRoads(at ? roads(Math.round(at.x), Math.round(at.z)) : []);
     setVenueKey(null);
   };
+  // Back from choosing on the map: the roads and places round that spot (the nearest road picked).
+  const [seenPick, setSeenPick] = useState(picked);
+  if (picked !== seenPick) {
+    setSeenPick(picked);
+    lookAgain();
+  }
   // Street parties already on the roads (two can't share a stretch at the same time).
-  const [taken, setTaken] = useState<{ x: number; z: number; start: number; end: number; title: string }[]>([]);
+  const [taken, setTaken] = useState<{ x: number; z: number; start: number; end: number; title: string; radiusM: number }[]>([]);
   useEffect(() => {
     void streetParties(region).then(setTaken).catch(() => setTaken([]));
   }, [region]);
@@ -627,10 +722,10 @@ function HostForm({
   const timeBad = !Number.isFinite(startAt) || startAt > opened.current + DAYS_AHEAD * 86_400_000;
   // A street party on a stretch of road another one already has at that time.
   const span = { start: startId === "now" ? Date.now() : startAt, end: (startId === "now" ? Date.now() : startAt) + minutes * 60_000 };
-  const clashOf = (v: Venue) => (cat === "party" && v.street && Number.isFinite(span.start) ? (taken.find((t) => streetClash({ x: v.x, z: v.z, ...span }, t)) ?? null) : null);
+  const clashOf = (v: Venue) => (cat === "party" && v.street && Number.isFinite(span.start) ? (taken.find((t) => streetClash({ x: v.x, z: v.z, ...span, radiusM: cat === "party" ? radiusM : PARTY_SIZE_DEFAULT }, t)) ?? null) : null);
   const clash = venue ? clashOf(venue) : null;
   // What hosting costs (parties): the hours, how many can come, the kind of place and the area.
-  const cost = cat === "party" && venue ? partyCost({ minutes, capacity, venue: venue.kind, area: venue.areaK }) : null;
+  const cost = cat === "party" && venue ? partyCost({ minutes, capacity, venue: venue.kind, area: venue.areaK, radiusM }) : null;
   const ready = !!name && !!venue && !priceBad && !timeBad && !going && !clash;
 
   const pickFormat = (id: string) => {
@@ -638,7 +733,11 @@ function HostForm({
     if (!nf) return;
     setFormatId(id);
     setMinutes(nf.minutes);
-    setCapacity(nf.capacity);
+    setCapacity(Math.min(nf.capacity, nf.category === "party" ? size.most : CAPACITY_MAX));
+  };
+  const pickSize = (m: number) => {
+    setRadiusM(m);
+    setCapacity((c) => Math.min(c, partySize(m).most));
   };
 
   if (quote?.hosting)
@@ -736,7 +835,9 @@ function HostForm({
           <Navigation className="size-3.5" /> Here
         </button>
       </div>
-      <p className="mt-1 text-[11px] text-muted">Want another road? Close this, move the map there, come back and tap Here.</p>
+      <button onClick={() => onPickOnMap(cat === "party" ? radiusM : PARTY_SIZE_DEFAULT)} className="mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-full bg-ink text-sm font-bold text-white">
+        <MapPin className="size-4" /> Choose on the map
+      </button>
       <div className="mt-2 max-h-52 space-y-1 overflow-y-auto">
         {shownVenues.length === 0 && <p className="rounded-2xl bg-ink/5 p-3 text-center text-sm text-muted">{venues.length ? "No place by that name near you." : "Walk somewhere on the map (or go home) first."}</p>}
         {shownVenues.map((v) => {
@@ -756,6 +857,25 @@ function HostForm({
           );
         })}
       </div>
+
+      {cat === "party" && (
+        <>
+          <Label>How big?</Label>
+          <div className="grid grid-cols-3 gap-1.5">
+            {PARTY_SIZES.map((sz) => (
+              <button key={sz.m} onClick={() => pickSize(sz.m)} className={cn("rounded-2xl px-2 py-2 text-left", radiusM === sz.m ? "bg-ink text-white shadow" : "bg-ink/5")}>
+                <b className="block text-[13px] leading-tight">{sz.label}</b>
+                <span className={cn("block text-[10px] leading-tight", radiusM === sz.m ? "text-white/70" : "text-muted")}>
+                  {sz.m < 1000 ? `${sz.m} m` : `${sz.m / 1000} km`} round · up to {sz.most.toLocaleString("en-GB")}
+                </span>
+              </button>
+            ))}
+          </div>
+          <p className="mt-1 text-xs text-muted">
+            {size.blurb}. Every road inside it is strung with lights and full of dancing on the map{size.m >= 600 ? ", and a party this big makes the Lagos news" : ""}.
+          </p>
+        </>
+      )}
 
       <Label>When?</Label>
       <div className="flex flex-wrap gap-1.5">
@@ -828,7 +948,7 @@ function HostForm({
         <Users className="size-3.5" /> How many can come
       </p>
       <div className="mt-1 flex flex-wrap gap-1.5">
-        {[20, 50, 100, 300, CAPACITY_MAX].map((c) => (
+        {crowds.map((c) => (
           <Chip key={c} on={capacity === c} onClick={() => setCapacity(c)}>
             {c.toLocaleString("en-GB")}
           </Chip>
@@ -845,10 +965,11 @@ function HostForm({
           <div className="mt-2 flex flex-wrap gap-1 text-[11px] font-semibold text-muted">
             <span className="rounded-full bg-panel px-2 py-0.5">{cash(PARTY_NAIRA_PER_HOUR / perMint)} an hour × {cost.parts.hours % 1 ? cost.parts.hours.toFixed(1) : cost.parts.hours}</span>
             <span className="rounded-full bg-panel px-2 py-0.5">{capacity.toLocaleString("en-GB")} people ×{cost.parts.capacity}</span>
+            {cost.parts.size !== 1 && <span className="rounded-full bg-panel px-2 py-0.5">{size.label} ×{cost.parts.size}</span>}
             <span className="rounded-full bg-panel px-2 py-0.5">{VENUE_COST[venue!.kind].label} ×{cost.parts.venue}</span>
             {cost.parts.area !== 1 && <span className="rounded-full bg-panel px-2 py-0.5">{cost.parts.area > 1 ? "Pricey area" : "Cheaper area"} ×{cost.parts.area}</span>}
           </div>
-          <p className="mt-2 text-[11px] text-muted">A permit paid to the state, when you put it on the map (from your Fun money, then your wallet). Call it off before it starts and it all comes back.</p>
+          <p className="mt-2 text-[11px] text-muted">A permit paid to the state, when you put it on the map (from your Fun money, then your wallet). Call it off before it starts, or fewer than 10 people come, and it all comes back.</p>
         </div>
       ) : (
         <p className="rounded-2xl bg-ink/5 p-3 text-sm text-muted">{cat === "party" ? "Pick where it is to see the price." : "Free to host."}</p>
@@ -862,7 +983,7 @@ function HostForm({
           setGoing(true);
           setProblem(null);
           const at = startId === "now" ? Date.now() : startAt;
-          const r = await hostEvent({ region, format: f.id, title: name, about, x: venue.x, z: venue.z, place: venue.name, onStreet: venue.street, venue: venue.kind, startsAt: at, minutes, price, capacity }).catch(() => fail());
+          const r = await hostEvent({ region, format: f.id, title: name, about, x: venue.x, z: venue.z, place: venue.name, onStreet: venue.street, venue: venue.kind, startsAt: at, minutes, price, capacity, radiusM: cat === "party" ? radiusM : PARTY_SIZE_DEFAULT }).catch(() => fail());
           setGoing(false);
           if (!r.ok) return setProblem(r.error);
           playSfx("levelup");
@@ -878,6 +999,70 @@ function HostForm({
         Your friends are told{startId === "now" ? ", and everyone near" : ""}. {HOSTS_A_DAY} a day at most.
       </p>
     </div>
+  );
+}
+
+/**
+ * Choosing where a party is on the map: the card is tucked away, a pin stands in the middle of the
+ * screen with the party's area round it (as big as picked), and the road under it is named as you
+ * move. Use this spot brings the card back with the roads round there.
+ */
+function MapPicker({
+  radiusM,
+  where,
+  describe,
+  onPreview,
+  onDone,
+}: {
+  radiusM: number;
+  where: () => { x: number; z: number } | null;
+  describe: (x: number, z: number) => SpotWords;
+  onPreview: (zone: PartyZone | null) => void;
+  onDone: (use: boolean) => void;
+}) {
+  const [spot, setSpot] = useState<SpotWords | null>(null);
+  useEffect(() => {
+    let last = "";
+    const look = () => {
+      const at = where();
+      if (!at) return;
+      const x = Math.round(at.x);
+      const z = Math.round(at.z);
+      if (`${x},${z}` === last) return;
+      last = `${x},${z}`;
+      setSpot(describe(x, z));
+      onPreview({ id: -1, x, z, r: radiusM / 100, colour: "#d6336c" });
+    };
+    look();
+    const t = setInterval(look, 300);
+    return () => clearInterval(t);
+  }, [where, describe, onPreview, radiusM]);
+  return (
+    <>
+      <div className="pointer-events-none fixed inset-0 z-40 grid place-items-center" aria-hidden>
+        <div className="-mt-10 flex flex-col items-center">
+          <span className="text-4xl drop-shadow-[0_2px_4px_rgba(0,0,0,.4)]">📍</span>
+          <span className="-mt-1 size-2 rounded-full bg-black/40" />
+        </div>
+      </div>
+      <div className="pointer-events-auto fixed inset-x-0 bottom-0 z-40 flex justify-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="w-full max-w-sm rounded-3xl bg-panel p-3 shadow-2xl ring-1 ring-black/5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">Move the map to where it is</p>
+          <p className="mt-1 truncate text-sm font-bold">
+            {spot?.street ? `${spot.street.name}, ${spot.area}` : spot?.area || "Somewhere in the city"}
+          </p>
+          <p className="text-[11px] text-muted">The ring shows how far it reaches ({radiusM < 1000 ? `${radiusM} m` : `${radiusM / 1000} km`} round).</p>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <button onClick={() => onDone(false)} className="h-11 rounded-full bg-ink/5 text-sm font-semibold">
+              Back
+            </button>
+            <button onClick={() => onDone(true)} className="h-11 rounded-full bg-gradient-to-r from-[#d6336c] to-[#7048e8] text-sm font-bold text-white">
+              Use this spot
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
 

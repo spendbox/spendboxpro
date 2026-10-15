@@ -153,12 +153,12 @@ function useReward(def: MiniGameDef, signedIn: boolean) {
   async function claim(score: number, grade: number, won?: boolean) {
     questEvent({ type: "play", game: def.id, score, won });
     if (grade < 1) return setNote(null);
-    if (!signedIn) return setNote({ text: "Sign in to win mint for scores like that.", coins: 0 });
-    setNote({ text: "Collecting your mint…", coins: 0 });
+    if (!signedIn) return setNote({ text: "Sign in to win money for scores like that.", coins: 0 });
+    setNote({ text: "Collecting your winnings…", coins: 0 });
     const res = await claimMinigameReward(def.id, grade).catch(() => ({ ok: false as const, error: "The connection blinked." }));
     if (!res.ok) return setNote({ text: res.error, coins: 0 });
-    if (res.coins > 0) return setNote({ text: `+${cash(res.coins)}!${res.leftToday === 0 ? " That's all the game mint for today." : ""}`, coins: res.coins });
-    setNote({ text: res.reason === "daily_limit" ? "You've won all the game mint for today. Playing is still fun!" : "Mint pays once a minute per game, so this one's for glory.", coins: 0 });
+    if (res.coins > 0) return setNote({ text: `+${cash(res.coins)}!${res.leftToday === 0 ? " That's all the game winnings for today." : ""}`, coins: res.coins });
+    setNote({ text: res.reason === "daily_limit" ? "You've won all the game money for today. Playing is still fun!" : "Games pay once a minute each, so this one's for glory.", coins: 0 });
   }
   return { note, claim, reset: () => setNote(null) };
 }

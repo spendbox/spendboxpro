@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON \"src/**/*.test.ts\"",
     "test:db": "bash game-db/tests/run.sh",
-    "bake:world": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/world/bake.mjs"
+    "bake:world": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/world/bake.mjs",
+    "world:snapshot": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/world/alias.mjs scripts/world/snapshot.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.0",

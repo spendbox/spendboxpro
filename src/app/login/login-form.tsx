@@ -142,7 +142,7 @@ export function LoginForm({ onDone }: { onDone?: (next: "play" | "welcome") => v
       <button className={button} disabled={busy}>
         {busy ? "One moment…" : "Continue"}
       </button>
-      <p className="text-xs text-muted">First time? We&apos;ll email you a code, then you pick a name and PIN. New players start with 500 mint. You must be 18 or older to play.</p>
+      <p className="text-xs text-muted">First time? We&apos;ll email you a code, then you pick a name and PIN. New players start with ₦2,000,000 and a free home. You must be 18 or older to play.</p>
       {error && <p className="text-sm text-hit">{error}</p>}
     </form>
   );
