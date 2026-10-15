@@ -288,3 +288,15 @@ a[href]:active,
 }
 .buy-sparkle { animation: buy-sparkle 1.6s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .buy-pop, .buy-rays, .buy-shine::after, .buy-art, .buy-sparkle { animation: none; } }
+
+/* A new passport stamp (src/app/play/life/passport.tsx): the card drops in, the stamp thuds down. */
+@keyframes stamp-card { from { opacity: 0; transform: translateY(-16px); } to { opacity: 1; transform: none; } }
+.stamp-card { animation: stamp-card 0.3s ease-out both; }
+@keyframes stamp-thud {
+  0% { transform: scale(2.4) rotate(-14deg); opacity: 0; }
+  55% { transform: scale(0.9) rotate(4deg); opacity: 1; }
+  70% { transform: scale(1.06) rotate(-2deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+.stamp-thud { display: inline-block; animation: stamp-thud 0.55s cubic-bezier(0.3, 1.4, 0.5, 1) 0.15s both; }
+@media (prefers-reduced-motion: reduce) { .stamp-card, .stamp-thud { animation: none; } }

@@ -10,7 +10,7 @@ import { regionMap } from "@/lib/world";
 import { ownedSpot } from "@/lib/world/owned";
 import { propertyInfo, type PropertyInfo } from "@/lib/world/property";
 import { homesByArea, type AreaHomes, type HomeFind } from "@/lib/world/homes";
-import type { BuildingOwner, InterviewStart, LifeStatus, Neighbour, PaySettled, PropertyApi, PropertyResult, WorkStatus } from "@/lib/world/property-api";
+import type { BuildingOwner, InterviewStart, LifeStatus, Neighbour, PassportStampNews, PaySettled, PropertyApi, PropertyResult, WorkStatus } from "@/lib/world/property-api";
 import { cheapestCommute, COMMUTE_LABEL, dayNet, fareMint, fareOrBus, tripFareMint, INCOME_TAX, needsInterview, payDay, tripKmBetween, tripWords, type Commute } from "@/lib/world/work";
 import { ferryKmBetween } from "@/lib/world/trips";
 import { dayOf, EXERCISE } from "@/lib/world/day";
@@ -76,6 +76,8 @@ const MomentSheet = dynamic(() => import("./moments").then((m) => m.MomentSheet)
 const AmountSheet = dynamic(() => import("./amount-sheet").then((m) => m.AmountSheet));
 const LoanSheet = dynamic(() => import("./amount-sheet").then((m) => m.LoanSheet));
 const CurrencySheet = dynamic(() => import("./currency-pick").then((m) => m.CurrencySheet));
+const PassportSheet = dynamic(() => import("./passport").then((m) => m.PassportSheet));
+const StampPop = dynamic(() => import("./passport").then((m) => m.StampPop));
 
 /** Each region's plan for finding jobs near home, worked out once (only when Work is opened). */
 const plans = new Map<string, CityPlan>();
@@ -209,6 +211,14 @@ export function useWorldLife({
     }
   };
   const [currencyOpen, setCurrencyOpen] = useState(false);
+  // The passport (./passport): open, and a new stamp just collected ("nt-stamp", from any trip).
+  const [passportOpen, setPassportOpen] = useState(false);
+  const [stampNews, setStampNews] = useState<PassportStampNews | null>(null);
+  useEffect(() => {
+    const on = (e: Event) => setStampNews((e as CustomEvent<PassportStampNews>).detail);
+    window.addEventListener("nt-stamp", on);
+    return () => window.removeEventListener("nt-stamp", on);
+  }, []);
   // Today's exchange rates, for anyone showing money in something other than naira: kept ones at
   // once, fresh ones from /api/rates when they're older than a few hours (docs/COSTS.md).
   const [ratesKept] = useState(() => {
@@ -639,6 +649,7 @@ export function useWorldLife({
       onTripFailed?.();
       return;
     }
+    if (r.stamp) window.dispatchEvent(new CustomEvent("nt-stamp", { detail: r.stamp }));
     if (r.found) setMessage({ text: `On the way you found: ${r.found}! It's in your Items.`, good: true });
     else if (r.fare) setMessage({ text: `${cash(r.fare)} fare there.`, good: true });
     void refresh();
@@ -1471,6 +1482,17 @@ export function useWorldLife({
         />
       )}
       {currencyOpen && <CurrencySheet value={currency} onPick={chooseCurrency} onClose={() => setCurrencyOpen(false)} />}
+      {passportOpen && region && <PassportSheet map={region} onClose={() => setPassportOpen(false)} onShow={(x, z) => fly(x, z)} />}
+      {stampNews && (
+        <StampPop
+          news={stampNews}
+          onOpen={() => {
+            setStampNews(null);
+            setPassportOpen(true);
+          }}
+          onClose={() => setStampNews(null)}
+        />
+      )}
       {ask && (
         <AmountSheet
           key={ask.title}
@@ -1833,7 +1855,7 @@ export function useWorldLife({
     fly(p.x, p.z);
     setPlace(workplaceById(planOf(region), p.id) ?? { id: p.id, name: p.name, x: Math.round(p.x), z: Math.round(p.z), jobs: [] });
   };
-  return { explore, describeSpot, roadsNear, openExplorePlace, rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, newsScene, adOpen, search: region ? { region, mine: assets?.units ?? [], owned: shown, businesses, coins, homes: () => homesFor(region), onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit, mySpot: whereAmI(), homeSpot, goHome, nameHome, homeBuilding: homeUnit ? homeUnit.split("/")[0] : null, openPlanner: () => setPlanning(true), locateMe, lookAt: (x: number, z: number) => setFlyTo({ tile: spiralIndex(Math.round(x), Math.round(z)), at: ++flies.current }), makeRow, openSoon: () => setSoonOpen(true), openGuestBook: (building: string) => setGuestBook(building),
+  return { explore, describeSpot, roadsNear, openExplorePlace, rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, newsScene, adOpen, search: region ? { region, mine: assets?.units ?? [], owned: shown, businesses, coins, homes: () => homesFor(region), onPick: (h: SearchHit) => fly(h.x, h.z) } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openPassport: () => setPassportOpen(true), openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit, mySpot: whereAmI(), homeSpot, goHome, nameHome, homeBuilding: homeUnit ? homeUnit.split("/")[0] : null, openPlanner: () => setPlanning(true), locateMe, lookAt: (x: number, z: number) => setFlyTo({ tile: spiralIndex(Math.round(x), Math.round(z)), at: ++flies.current }), makeRow, openSoon: () => setSoonOpen(true), openGuestBook: (building: string) => setGuestBook(building),
     /** Where you are changed outside (a trip to a friend): read it again. */
     refreshLife: () => void refresh(),
     openLife: () => setLifeOpen(true),

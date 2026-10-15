@@ -2199,6 +2199,7 @@ export function Game({
         setMessage({ text: r.error, tone: "bad" });
         return false;
       }
+      if (r.stamp) window.dispatchEvent(new CustomEvent("nt-stamp", { detail: r.stamp }));
       if (r.fare) setMessage({ text: `${cash(r.fare)} ${r.mode ? tripWords(r.mode as Commute) : ""} to get there.`, tone: "good" });
       // You're there now: where you are (and the next fare) starts from here.
       worldLife.refreshLife();
@@ -2889,6 +2890,7 @@ export function Game({
           onResults={() => { setMenu(false); if (state.results) setShowResults(state.results.roundId); }}
           onMyStyle={guest || worldId ? undefined : () => { setMenu(false); setStyleOpen(true); }}
           onMyHouse={guest || worldId ? undefined : () => { setMenu(false); setHouseOpen(true); }}
+          onPassport={guest || !worldId ? undefined : () => { setMenu(false); worldLife.openPassport(); }}
           onFriends={guest ? undefined : () => { setMenu(false); setFriendsOpen(true); }}
           friendRequests={state.friends.incoming.length}
           onMyGifts={guest ? undefined : () => { setMenu(false); openGifts(); }}

@@ -2,7 +2,7 @@
 
 import { cash } from "@/lib/world/value";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { Briefcase, ChevronRight, Flag, KeyRound, Smartphone } from "lucide-react";
+import { Briefcase, ChevronRight, Flag, KeyRound, Smartphone, Stamp } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import {
   Award,
@@ -81,6 +81,7 @@ export function Menu({
   onMyStyle,
   onMyHouse,
   onFriends,
+  onPassport,
   onPhone,
   onMyJob,
   onGames,
@@ -108,6 +109,8 @@ export function Menu({
   onMyHouse?: () => void;
   /** Opens your friends. Left out: the entry is hidden. */
   onFriends?: () => void;
+  /** Your passport: the real places you've visited (./life/passport). */
+  onPassport?: () => void;
   /** Opens your phone (camera and gallery). */
   onPhone?: () => void;
   /** Opens My job (pay, skills). Left out: the entry is hidden. */
@@ -177,6 +180,7 @@ export function Menu({
       disabled: !hasResults,
       hint: hasResults ? undefined : "Shows up after your first round",
     },
+    onPassport && { key: "passport", label: "Passport", icon: Stamp, tint: "bg-[#e3f5e9] text-[#0b6b3a]", onClick: onPassport },
     onFriends && { key: "friends", label: "Meet friends", icon: Users, tint: "bg-[#ffe3f1] text-[#c2255c]", onClick: onFriends, badge: friendRequests },
     onMyGifts && { key: "gifts", label: "My gifts", icon: Gift, tint: "bg-[#ffe3ec] text-[#d6336c]", onClick: onMyGifts, badge: newGifts },
     onMyStyle && { key: "style", label: "My style", icon: Gamepad2, tint: "bg-[#fbe3f6] text-[#b8268f]", onClick: onMyStyle },

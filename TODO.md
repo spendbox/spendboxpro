@@ -31,6 +31,7 @@
 - [ ] Then run `game-db/092_monthly_leases.sql` (buildings for advertisers are leased by the month, 1/3/6/12 months, and "Another month" on the ad page). Until it's run, the building checkout says monthly leases are switched on soon; billboard ads work either way. If you ever run 043 or 047 again, run 092 again after.
 - [ ] Then run `game-db/093_engagement_rep.sql` (reputation also grows quietly with time in the game, real conversations, gifts and greetings, friends and visitors; see docs/REPUTATION.md).
 - [ ] Then run `game-db/094_lived_in_leases.sql` (advertisers can take buildings people live in: the homes stay buyable and lived in, nobody renames the building while it's leased). If you ever run 043, 047 or 092 again, run 094 again after.
+- [ ] Then run `game-db/106_passport.sql` (the passport: a stamp for every real place you go into, rewards for new stamps and complete areas; see docs/PASSPORT.md). Until it's run, the passport says it's switched on soon.
 - [ ] Then run `game-db/105_pack_72_hours.sql` (starter packs are on offer for a player's first 72 hours only, not until they buy a home). Until it's run, the old rule stays.
 - [ ] Then run `game-db/104_luxury.sql` (luxury things up to ₦3bn: Patek Philippe, Richard Mille, Rolls-Royce...). Until it's run, anything over ₦300m can't be bought.
 - [ ] Then run `game-db/103_call_off_refunds.sql` (when a host calls off an event, everyone who came in is told their ticket was paid back, not only those who said they were going). Run it after 96.
