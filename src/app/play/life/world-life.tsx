@@ -62,7 +62,7 @@ import type { OwnedProperty } from "@/lib/world/owned";
 import { InterviewSheet, MomentSheet } from "./moments";
 import { AmountSheet, LoanSheet } from "./amount-sheet";
 import { CurrencySheet } from "./currency-pick";
-import { cash, cashText, playerCurrency, setShownCurrency } from "@/lib/world/value";
+import { cash, cashText, playerCurrency, setRates, setShownCurrency } from "@/lib/world/value";
 import { buyerPays, sellerGets, OFFER_HOURS, RENT_LEVEL, type Listing, type MarketBoard } from "@/lib/world/market";
 import { BUY_TAX, INCOME_DAY } from "@/lib/world/property-api";
 import { SIMPLE_LIFE } from "@/lib/world/simple-life";
@@ -93,6 +93,10 @@ function planOf(region: RegionMap) {
 }
 
 const CURRENCY_KEY = "newtown.currency";
+/** The last exchange rates fetched (kept in this browser, so amounts are right from the start). */
+const RATES_KEY = "newtown.rates";
+/** How long kept rates do before asking again (the server's answer changes every few hours). */
+const RATES_FRESH_MS = 6 * 3600_000;
 
 const paid = (p: PaySettled | undefined) =>
   p && p.gross > 0 ? ` Collected ${cash(p.net)} pay (after ${cash(p.tax)} tax and ${cash(p.fares)} fares).` : "";
@@ -195,6 +199,39 @@ export function useWorldLife({
     }
   };
   const [currencyOpen, setCurrencyOpen] = useState(false);
+  // Today's exchange rates, for anyone showing money in something other than naira: kept ones at
+  // once, fresh ones from /api/rates when they're older than a few hours (docs/COSTS.md).
+  const [ratesKept] = useState(() => {
+    try {
+      const kept = JSON.parse(localStorage.getItem(RATES_KEY) ?? "null") as { rates: Record<string, number>; at: number } | null;
+      if (kept?.at) setRates(kept.rates, kept.at);
+      return kept?.at ?? 0;
+    } catch {
+      return 0;
+    }
+  });
+  const [, setRatesTick] = useState(0);
+  useEffect(() => {
+    if (currency === "NGN" || Date.now() - ratesKept < RATES_FRESH_MS) return;
+    let live = true;
+    fetch("/api/rates")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { rates?: Record<string, number>; at?: number } | null) => {
+        if (!live || !j?.at || !j.rates) return;
+        setRates(j.rates, j.at);
+        setRatesTick((t) => t + 1);
+        try {
+          localStorage.setItem(RATES_KEY, JSON.stringify({ rates: j.rates, at: j.at }));
+        } catch {
+          // Not kept: fetched again next time.
+        }
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [currency, ratesKept]);
+
   /** Which Finance tab to open on next (the Income screen's "See your property" opens Property). */
   /** When this screen opened (tenants who've moved in by then count towards rent a day). */
   const [clock] = useState(() => Date.now());

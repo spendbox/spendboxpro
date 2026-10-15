@@ -14,6 +14,10 @@ compare.
   Lagos map 43 KB. Polling adds about 100 MB a month for a daily player.
 - **Live rooms** (parties, talks, chat) use Supabase Realtime: one connection each, and every line
   said is delivered to everyone in the room.
+- **Exchange rates** (money shown in dollars, pounds, cedis...): from free public feeds
+  (open.er-api.com, then the fawazahmed0 currency API), kept by the CDN for 6 hours and by each
+  phone for 6 hours (src/lib/rates.ts, /api/rates): a few requests a day, free. With no feed
+  answering, the rough built-in rates in src/lib/world/value.ts are used.
 - **No AI costs**: the characters' chat is written in advance; the ad picture check (Claude) is
   switched off.
 

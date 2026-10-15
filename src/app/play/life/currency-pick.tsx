@@ -1,6 +1,6 @@
 "use client";
 
-import { PLAYER_CURRENCIES } from "@/lib/world/value";
+import { nairaPer, PLAYER_CURRENCIES, ratesAt, type CurrencyCode } from "@/lib/world/value";
 import { Sheet } from "../sheet";
 
 /** The currencies as chips: tap one to show every amount in it. */
@@ -31,10 +31,25 @@ export function CurrencySheet({ value, onPick, onClose }: { value: string; onPic
       <div className="mt-3">
         <CurrencyChips value={value} onPick={onPick} />
       </div>
-      <p className="mt-3 text-[11px] text-muted">Rates are rough. Payments (packs, leases) are still made in naira.</p>
+      <p className="mt-3 text-[11px] text-muted">
+        <RateLine code={value} /> Payments (packs, leases) are still made in naira.
+      </p>
       <button onClick={onClose} className="mt-4 h-11 w-full rounded-full bg-ink font-semibold text-white">
         Done
       </button>
     </Sheet>
+  );
+}
+
+/** "$1 = ₦1,548 (today's rate)." for the chosen currency, or nothing for naira. */
+export function RateLine({ code }: { code: string }) {
+  const c = PLAYER_CURRENCIES.find((x) => x.code === code);
+  if (!c || c.code === "NGN") return null;
+  const n = nairaPer(c.code as CurrencyCode);
+  const naira = n >= 100 ? Math.round(n).toLocaleString("en-GB") : n.toLocaleString("en-GB", { maximumFractionDigits: 2 });
+  return (
+    <>
+      {c.symbol.trim()}1 = ₦{naira} ({ratesAt() ? "today's rate" : "a rough rate"}).
+    </>
   );
 }

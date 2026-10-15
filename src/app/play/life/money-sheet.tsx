@@ -6,6 +6,7 @@ import { BUDGET_PRESETS, POT_INFO, POTS, type Budget, type Pot } from "@/lib/wor
 import type { OwnedProperty } from "@/lib/world/owned";
 import type { AssetsData, AssetUnit, LifeStatus, MoneyDay, MoneyFlow } from "@/lib/world/property-api";
 import { cash, PLAYER_CURRENCIES, shownCurrency } from "@/lib/world/value";
+import { RateLine } from "./currency-pick";
 import { Sheet } from "../sheet";
 import { AssetsBody, unitValueNow, type Owning } from "./assets-sheet";
 import { MoneyChart, UpOrDown, useMoneyDays } from "./money-chart";
@@ -174,7 +175,11 @@ export function MoneySheet({
                 ))}
               </select>
             </div>
-            {shownCurrency() !== "NGN" && <p className="mt-1 text-right text-[11px] text-muted">Rates are rough. Payments are in naira.</p>}
+            {shownCurrency() !== "NGN" && (
+              <p className="mt-1 text-right text-[11px] text-muted">
+                <RateLine code={currency} /> Payments are in naira.
+              </p>
+            )}
           </div>
         )}
         {tab === "budget" && status && <BudgetTab budget={status.budget} busy={busy} onSave={onBudget} first={glowBudget} />}
