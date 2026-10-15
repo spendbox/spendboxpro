@@ -67,8 +67,6 @@ import { BookOpen, Church, FerrisWheel, Landmark as LandmarkIcon, Plane, Ship, T
 import { BellOff, BellRing, Landmark, LayoutGrid, PartyPopper, LocateFixed, Rocket, Wallet, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Palette, ShoppingBag, Swords, TrendingUp, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
-import { GhostsSheet } from "./ghost-duel/ghosts-sheet";
-import { ExploreSheet } from "./explore-sheet";
 import type { Sport } from "@/lib/sports/types";
 import type { ActivityItem } from "./activities/games";
 import { useActivityRoom } from "./activities/hub";
@@ -82,15 +80,15 @@ import { GreetButtons } from "./greet-buttons";
 import { useNoPageZoom } from "./no-page-zoom";
 import type { PersonOnMap } from "./people-actions";
 import { peopleAround } from "./life/things-cache";
-import { PersonCard } from "./people/person-card";
+
 import { prefetchCard, rememberPreview, rememberPreviews } from "./people/card-cache";
-import { AwaySheet, DoorstepSheet, notificationsOn, turnOffNotifications, turnOnNotifications, useAwayDigest } from "./people/doorstep";
-import { DatingSheet, RivalsSheet } from "./people/street-dating";
+import { notificationsOn, turnOffNotifications, turnOnNotifications, useAwayDigest } from "./people/doorstep";
+
 import { weatherNow } from "@/lib/world/news";
-import { MyGiftsSheet } from "./my-gifts-sheet";
-import { StreakPill, StreakSheet } from "./streak-sheet";
+
+import { StreakPill } from "./streak-sheet";
 import { useQuestTracker } from "./activities/quest-tracker";
-import { QuestBanner, QuestCelebration, QuestSheet } from "./activities/quest-ui";
+import { QuestBanner, QuestCelebration } from "./activities/quest-ui";
 import { Chat, type NewtownLine } from "./chat";
 import { sendPhoto, type ChatTarget } from "./chat-actions";
 import { announceChatSent } from "./chat-photo";
@@ -125,16 +123,16 @@ import { useWorldLife } from "./life/world-life";
 import type { ExplorePlace } from "@/lib/world/explore";
 import { Joystick } from "./joystick";
 import { onlineIdle, onlinePinged, settleIncome, syncIncome, useLiveCoins } from "./income";
-import { Tutorial, useTourShows, useTutorialGlow, useTutorialPhase } from "./tutorial";
-import { PeopleList, prefetchPeople } from "./people/people-list";
-import { StatsSheet } from "./stats-sheet";
+import { setTutorialUser, Tutorial, useTourShows, useTutorialGlow, useTutorialPhase } from "./tutorial";
+import { prefetchPeople } from "./people/people-list";
+
 import { GiftPop, GiftSent } from "./people/gift-pop";
-import { MeSheet } from "./me-sheet";
-import { DailyGiftPop, MoneyHome } from "./money-home";
+
+import { DailyGiftPop } from "./money-home";
 import type { ChatLocation } from "@/lib/chat-location";
 import { RecentRail, rememberPerson } from "./people/recent-rail";
 import { PrankReveal, usePrankReveal } from "./people/prank-reveal";
-import { openAdvertise } from "./life/advertise-panel";
+import { openAdvertise } from "./life/advertise-open";
 import { SUPPORT_X, SUPPORT_X_URL } from "@/lib/brand";
 import { Fight, type ChallengeLight } from "./fight/fight";
 import { Events, type EventLight } from "./events/events";
@@ -151,6 +149,21 @@ import * as reportActions from "./report-actions";
 import * as marketActions from "./market-actions";
 import { REGIONS } from "@/lib/world";
 
+// Sheets opened from the map: loaded when first opened.
+const GhostsSheet = dynamic(() => import("./ghost-duel/ghosts-sheet").then((m) => m.GhostsSheet));
+const ExploreSheet = dynamic(() => import("./explore-sheet").then((m) => m.ExploreSheet));
+const PersonCard = dynamic(() => import("./people/person-card").then((m) => m.PersonCard));
+const AwaySheet = dynamic(() => import("./people/doorstep").then((m) => m.AwaySheet));
+const DoorstepSheet = dynamic(() => import("./people/doorstep").then((m) => m.DoorstepSheet));
+const DatingSheet = dynamic(() => import("./people/street-dating").then((m) => m.DatingSheet));
+const RivalsSheet = dynamic(() => import("./people/street-dating").then((m) => m.RivalsSheet));
+const MyGiftsSheet = dynamic(() => import("./my-gifts-sheet").then((m) => m.MyGiftsSheet));
+const StreakSheet = dynamic(() => import("./streak-sheet").then((m) => m.StreakSheet));
+const QuestSheet = dynamic(() => import("./activities/quest-ui").then((m) => m.QuestSheet));
+const PeopleList = dynamic(() => import("./people/people-list").then((m) => m.PeopleList));
+const StatsSheet = dynamic(() => import("./stats-sheet").then((m) => m.StatsSheet));
+const MeSheet = dynamic(() => import("./me-sheet").then((m) => m.MeSheet));
+const MoneyHome = dynamic(() => import("./money-home").then((m) => m.MoneyHome));
 // The 3D city only runs in the browser.
 const CityView = dynamic(() => import("./city-view").then((m) => m.CityView), {
   ssr: false,
@@ -242,7 +255,7 @@ type PlaceRoom = {
   levels?: { id: string; label: string; capacity: number; kind?: string; theme?: string }[];
 };
 // Same order as the balloons in the 3D city (used until the city lists its rides).
-const BALLOON_NAMES = ["Red", "Yellow", "Blue", "Purple", "Mint"];
+const BALLOON_NAMES = ["Red", "Yellow", "Blue", "Purple", "Green"];
 const RIDE_HELLO: Record<RideKindName, string> = {
   balloon: "Up we go! Drag to look around; tap Chat to talk to everyone on board.",
   train: "All aboard! Grab a window and drag to look around; tap Chat to talk to the carriage.",
@@ -430,11 +443,13 @@ export function Game({
   openSignIn = false,
 }: {
   state: GameState;
-  /** Signed in, but still to finish signing up (name and PIN, date of birth): the pop-up asks. */
+  /** Signed in, but still to finish signing up (name, date of birth, password): the pop-up asks. */
   welcome?: WelcomeNeeds | null;
   /** Open the sign-in pop-up straight away (a link to sign in). */
   openSignIn?: boolean;
 }) {
+  // Each account has its own walkthrough (a new account on a shared phone starts from the top).
+  setTutorialUser(state.me.guest ? null : state.me.id);
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [message, setMessage] = useState<{ text: string; tone: "good" | "bad" | "info"; icon?: LucideIcon } | null>(null);
@@ -485,6 +500,19 @@ export function Game({
   const [newtownAsk, setNewtownAsk] = useState(0);
   /** What counts as new on the phone's screen (when it was last opened), and a little ring when something arrives. */
   const [phoneRing, setPhoneRing] = useState(0);
+  // New private messages while the chat is shut: the sender and what they said float up from the
+  // chat button for a few seconds, like chat at a party (chat.tsx sends "nt-dm-float").
+  const [dmFloats, setDmFloats] = useState<{ k: number; from: string; name: string; text: string; tilt: number }[]>([]);
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ id: number; from: string; name: string; text: string }>).detail;
+      if (!d) return;
+      setDmFloats((list) => [...list.filter((x) => x.k !== d.id).slice(-2), { k: d.id, from: d.from, name: d.name, text: d.text.length > 90 ? `${d.text.slice(0, 89)}…` : d.text, tilt: Math.random() * 6 - 3 }]);
+      setTimeout(() => setDmFloats((list) => list.filter((x) => x.k !== d.id)), 4600);
+    };
+    window.addEventListener("nt-dm-float", on);
+    return () => window.removeEventListener("nt-dm-float", on);
+  }, []);
   /** Someone's card (a face tapped on the map, or from your doorstep), and your doorstep. */
   const [personId, setPersonId] = useState<string | null>(null);
   /** The camera was opened from a chat: the selfie goes to them. */
@@ -2434,14 +2462,11 @@ export function Game({
       )}
       {worldRegion && (worldRegion.water || worldRegion.roads.length > 0) && (
         // The map data's credit (its licence asks for it): small and out of the way.
-        <a
-          href="https://www.openstreetmap.org/copyright"
-          target="_blank"
-          rel="noreferrer"
-          className="pointer-events-auto absolute bottom-1 left-1.5 z-10 text-[9px] leading-none text-black/40 hover:text-black/70"
-        >
-          © OpenStreetMap
-        </a>
+        // Plain text, bottom middle, and not a link: a tap meant for the map never opens a website
+        // (the link is in How it works).
+        <span className="pointer-events-none absolute bottom-0.5 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap text-[8px] leading-none text-black/35">
+          © OpenStreetMap contributors
+        </span>
       )}
 
       {/* Inside a place: mint spraying, the jukebox, duel invites and room news. */}
@@ -2517,7 +2542,7 @@ export function Game({
             </span>
             )}
             {me.bigFish && !worldId && (
-              <span className="glass flex h-8 items-center gap-1 whitespace-nowrap rounded-full px-2 text-xs font-bold text-[#1c7ed6] sm:h-9 sm:px-2.5" title="You hold 10,000+ mint: everyone sees you as a big fish">
+              <span className="glass flex h-8 items-center gap-1 whitespace-nowrap rounded-full px-2 text-xs font-bold text-[#1c7ed6] sm:h-9 sm:px-2.5" title={`You hold ${cash(10_000)}+: everyone sees you as a big fish`}>
                 <Fish className="size-3.5" />
                 <span className="hidden sm:inline">Big fish</span>
               </span>
@@ -2595,13 +2620,18 @@ export function Game({
         </div>
       </div>
 
-      {/* Watchers on a phone: the logo and the name, small, in 3D letters, floating in the middle of the screen (taps go through to the map). */}
+      {/* Watchers on a phone: the logo and the name, big, in 3D letters with a soft glow, and the
+          line under it, floating in the middle of the screen (taps go through to the map). */}
       {guest && worldId && !place && ride === null && !camera && (
         <div className="pointer-events-none absolute inset-0 z-[5] grid place-items-center sm:hidden" title="Newtown">
-          <span className="title-float-sm flex items-center gap-1.5">
-            <LogoMark size={26} className="rounded-[7px] shadow-[0_6px_14px_rgba(0,0,0,0.35)]" />
-            <span className="title-3d-sm font-display text-[26px] font-black italic leading-none tracking-tight text-white">Newtown</span>
-          </span>
+          <div className="title-float-sm relative flex flex-col items-center">
+            <span aria-hidden className="title-halo absolute left-1/2 top-1/2 h-28 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full" />
+            <span className="relative flex items-center gap-2.5">
+              <LogoMark size={46} className="rounded-[12px] shadow-[0_8px_20px_rgba(0,0,0,0.35)]" />
+              <span className="title-3d-sm title-glow font-display text-[46px] font-black italic leading-none tracking-tight text-white">Newtown</span>
+            </span>
+            <span className="title-tagline relative mt-2.5 font-display text-[15px] font-bold tracking-wide text-white">Your city. Your story. Your tribe.</span>
+          </div>
         </div>
       )}
       {/* Watchers on a computer: the Newtown logo, top centre. */}
@@ -3073,8 +3103,8 @@ export function Game({
           <h2 className="font-display text-xl font-bold">Sign out?</h2>
           <p className="mt-1 text-sm text-muted">
             {isHider && entry && !entry.caught
-              ? "Your light stays on the map while you're away, and challenges you don't answer count as losses. Sign back in any time with your email and PIN."
-              : "You can sign back in any time with your email and PIN."}
+              ? "Your light stays on the map while you're away, and challenges you don't answer count as losses. Sign back in any time with your email and password."
+              : "You can sign back in any time with your email and password."}
           </p>
           <div className="mt-4 flex gap-2">
             <button onClick={() => setConfirmSignOut(false)} disabled={signingOut} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold disabled:opacity-50">
@@ -3855,7 +3885,7 @@ export function Game({
             setTownOpen(true);
             setTownNew(false);
           }}
-          className="pointer-events-auto absolute bottom-[5.5rem] right-3.5 z-20 grid size-12 place-items-center rounded-full bg-[#e8590c] text-white shadow-[0_8px_20px_-6px_rgba(232,89,12,0.8)] sm:bottom-[6.5rem] sm:right-5"
+          className="pointer-events-auto absolute bottom-[5.75rem] right-[1.125rem] z-20 grid size-12 place-items-center rounded-full bg-[#e8590c] text-white shadow-[0_8px_20px_-6px_rgba(232,89,12,0.8)] sm:bottom-[6.75rem] sm:right-[1.375rem]"
           aria-label={townNew ? "Town Hall: new messages" : "Town Hall"}
           title="Town Hall: everyone online"
         >
@@ -3883,17 +3913,42 @@ export function Game({
           onClose={() => setTownOpen(false)}
         />
       )}
+      {worldId && !camera && !guest && dmFloats.length > 0 && (
+        <div className="pointer-events-none absolute bottom-24 right-3 z-20 flex w-[min(17rem,calc(100vw-1.5rem))] flex-col items-end gap-2 sm:bottom-28 sm:right-4">
+          {dmFloats.map((b) => {
+            const known = state.friends.friends.find((f) => f.id === b.from) ?? state.players.find((p) => p.id === b.from) ?? hereNow.find((p) => p.id === b.from);
+            return (
+              <button
+                key={b.k}
+                onClick={() => {
+                  setDmFloats((list) => list.filter((x) => x.k !== b.k));
+                  chatWith({ id: b.from, name: b.name });
+                }}
+                className="event-chat-rise pointer-events-auto flex max-w-full items-end gap-1.5 text-left"
+                style={{ ["--tilt" as string]: `${b.tilt}deg` }}
+                aria-label={`Message from ${b.name}: ${b.text}. Tap to reply.`}
+              >
+                <span className="min-w-0 rounded-2xl rounded-br-md bg-white px-3 py-1.5 text-[13px] font-semibold text-ink shadow-xl">
+                  <b className="block text-[10px] text-[#7048e8]">{b.name}</b>
+                  <span className="line-clamp-3 break-words">{b.text}</span>
+                </span>
+                <AvatarFace avatar={cleanAvatar(known?.avatar, b.name)} size={32} className="shrink-0 rounded-full ring-2 ring-white" />
+              </button>
+            );
+          })}
+        </div>
+      )}
       {worldId && !camera && !guest && !place && tour("chat") && (
         <button
           onClick={() => {
             setChatOpen(true);
             setMenu(false);
           }}
-          className="pointer-events-auto absolute bottom-4 right-3 z-20 grid size-14 place-items-center rounded-full bg-[#7048e8] text-white shadow-[0_8px_20px_-6px_rgba(112,72,232,0.8)] sm:bottom-6 sm:right-4"
+          className="pointer-events-auto absolute bottom-4 right-3 z-20 grid size-16 place-items-center rounded-full bg-[#7048e8] text-white shadow-[0_8px_20px_-6px_rgba(112,72,232,0.8)] sm:bottom-6 sm:right-4"
           aria-label={unread + chatUnread > 0 ? `Chat: ${unread + chatUnread} new` : "Chat"}
         >
           <span key={phoneRing} className={phoneRing ? "phone-ring grid place-items-center" : "grid place-items-center"}>
-            <MessageCircle className="size-7 fill-white" />
+            <MessageCircle className="size-8 fill-white" />
           </span>
           {tutorialGlow === "chat" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
           {unread + chatUnread > 0 && (

@@ -1,5 +1,6 @@
 "use server";
 
+import { naira } from "@/lib/brand";
 import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { regionMap } from "@/lib/world";
@@ -21,7 +22,7 @@ function say(message: string | undefined): PropertyResult {
   const words: Record<string, string> = {
     no_life: "Start your life first.",
     home_first: "Buy a home first.",
-    not_enough: `You need ₥${arg} to start that.`,
+    not_enough: `You need ${naira(arg)} to start that.`,
     already: "That's already one of your side hustles.",
     too_many: `You can run ${arg ?? 3} side hustles at once. Stop one first.`,
     no_hustle: "You don't run that side hustle.",

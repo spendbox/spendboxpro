@@ -1,5 +1,6 @@
 "use server";
 
+import { naira } from "@/lib/brand";
 import { currentUserId } from "@/lib/game";
 import { pushTo } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -22,7 +23,7 @@ function say(message: string | undefined): { ok: false; error: string } {
     no_life: "Start your life first.",
     too_many: "That's all the marks for today. Come back tomorrow.",
     empty: "Write something first.",
-    not_enough: `You don't have enough for that (${arg} mint).`,
+    not_enough: `You don't have enough for that (${naira(arg)}).`,
     not_yours: "That isn't yours.",
     gone: "That's no longer there.",
     own: "That's yours: take it down yourself if you like.",

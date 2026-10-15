@@ -25,7 +25,7 @@ const WHY: Record<string, string> = {
   busy: "In a duel right now. The button comes back when they're free.",
   you_busy: "Finish your own duel first.",
   cooldown: "Catching your breath after your last duel…",
-  not_enough: "You don't have enough mint for a challenge.",
+  not_enough: "You don't have enough money for a challenge.",
 };
 
 // Cheers for a golden ghost (one picked per ghost, so it doesn't change while the card is open).

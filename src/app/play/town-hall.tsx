@@ -7,6 +7,7 @@ import { cleanAvatar } from "@/lib/avatar";
 import type { TownMessage } from "@/app/api/town-hall/route";
 import { prefetchCard, rememberPreviews } from "./people/card-cache";
 import { Sheet } from "./sheet";
+import { whileHere } from "./activity";
 
 // Town Hall (game-db/085, 086): one chat for the whole state that everyone online can talk in.
 // The floating button above the chat bubble opens it. Messages come from GET /api/town-hall every
@@ -123,10 +124,10 @@ export function TownHall({
   }, [region]);
   useEffect(() => {
     const first = setTimeout(() => void load(), 0);
-    const t = setInterval(() => document.visibilityState === "visible" && void load(), 6_000);
+    const stop = whileHere(() => void load(), 6_000);
     return () => {
       clearTimeout(first);
-      clearInterval(t);
+      stop();
     };
   }, [load]);
   useEffect(() => {

@@ -1,5 +1,6 @@
 "use server";
 
+import { naira } from "@/lib/brand";
 import { challengeRep } from "@/lib/world/challenges";
 import { eventRep } from "@/lib/world/events";
 import { currentUserId } from "@/lib/game";
@@ -45,7 +46,7 @@ function say(message: string | undefined): PropertyResult {
   const [code, arg] = (message ?? "").split(":");
   const words: Record<string, string> = {
     no_life: "Start your life first.",
-    not_enough: `You don't have enough for that (${arg} mint).`,
+    not_enough: `You don't have enough for that (${naira(arg)}).`,
     not_yours: "That isn't yours.",
     no_player: "There's no player with that name.",
     self: "That's you!",
@@ -56,7 +57,7 @@ function say(message: string | undefined): PropertyResult {
     bad_price: "Pick a price above nothing.",
     gone: "Someone has just bought that, or it's no longer for sale.",
     yours: "That's yours already.",
-    price_changed: `The price changed to ${arg} mint. Look again.`,
+    price_changed: `The price changed to ${naira(arg)}. Look again.`,
     busy_crafting: "You have two things being made already. Wait for one to finish.",
     not_done: "It isn't finished yet.",
     already: "That's done already.",

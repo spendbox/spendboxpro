@@ -16,6 +16,7 @@ import { createClient } from "@/lib/supabase/client";
 import { BotCard } from "./bot-card";
 import { loadDms, loadRoom, sendLocation, sendMessage, sendPhoto, sendVoice, voiceUrl, type ChatMessage, type ChatTarget } from "./chat-actions";
 import { locationIn, withoutTag, type ChatLocation } from "@/lib/chat-location";
+import { cash } from "@/lib/world/value";
 import { ChatPhoto, PhotoPicker, type PhotoPick } from "./chat-photo";
 import { NpcBadge, NpcCard, NpcFace } from "./npc-card";
 import { closePhoneNotices } from "./phone/phone-notices";
@@ -51,7 +52,7 @@ export type ChatPlayer = {
 /** "Big fish": a player holding lots of coins. */
 function BigFishBadge() {
   return (
-    <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-[#1c7ed6]/12 px-1.5 py-px text-[10px] font-semibold text-[#1864ab]" title="Holding 10,000+ mint">
+    <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-[#1c7ed6]/12 px-1.5 py-px text-[10px] font-semibold text-[#1864ab]" title={`Holding ${cash(10_000)}+`}>
       <Fish className="size-3" aria-hidden />
       Big fish
     </span>
@@ -399,6 +400,10 @@ export function Chat({
       // Someone sent you where they are: say so over the game (unless you're reading their chat now).
       const loc = m.recipient_id === meIdRef.current && m.sender_id !== meIdRef.current ? locationIn(m.body) : null;
       if (loc && !(openRef.current && threadRef.current === m.sender_id)) onLocationRef.current?.({ id: m.sender_id, name: m.sender_name, loc });
+      // A new private message with the chat shut: it floats up from the chat button (game.tsx).
+      else if (m.recipient_id === meIdRef.current && m.sender_id !== meIdRef.current && !openRef.current) {
+        window.dispatchEvent(new CustomEvent("nt-dm-float", { detail: { id: m.id, from: m.sender_id, name: m.sender_name, text: withoutTag(preview(m, meIdRef.current) ?? "") } }));
+      }
     } else {
       setRoomMsgs((r) => (r && (keep ? m.room === r.key : r.round === m.round_id && (m.room === r.key || m.room === "*")) ? { ...r, list: append(r.list, m, 200) } : r));
     }
@@ -409,23 +414,45 @@ export function Chat({
     window.addEventListener("nt-chat-sent", on);
     return () => window.removeEventListener("nt-chat-sent", on);
   }, [addMessage]);
+  // New messages, live. On the real map only the ones that concern you (sent to you, sent by you,
+  // and yours being opened): listening to every message in the game made the database check each
+  // one against every player (docs/COSTS.md). The place you're in has its own channel, below.
   useEffect(() => {
     if (guest) return;
     const supabase = createClient();
-    const channel = supabase
-      .channel(keep ? "chat:world" : `chat:${roundId}`)
-      .on(
-        "postgres_changes",
-        keep ? { event: "INSERT", schema: "public", table: "chat_messages" } : { event: "INSERT", schema: "public", table: "chat_messages", filter: `round_id=eq.${roundId}` },
-        (payload) => addMessage(payload.new as ChatMessage),
-      );
-    // Your messages being opened (the real map).
-    if (keep) channel.on("postgres_changes", { event: "UPDATE", schema: "public", table: "chat_messages" }, (payload) => readMessage(payload.new as ChatMessage));
+    const add = (payload: { new: unknown }) => addMessage(payload.new as ChatMessage);
+    const channel = keep
+      ? supabase
+          .channel(`chat:me:${meId}`)
+          .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `recipient_id=eq.${meId}` }, add)
+          .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `sender_id=eq.${meId}` }, add)
+          .on("postgres_changes", { event: "UPDATE", schema: "public", table: "chat_messages", filter: `sender_id=eq.${meId}` }, (payload) => readMessage(payload.new as ChatMessage))
+      : supabase
+          .channel(`chat:${roundId}`)
+          .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `round_id=eq.${roundId}` }, add);
     channel.subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [roundId, guest, addMessage, readMessage, keep]);
+  }, [roundId, guest, addMessage, readMessage, keep, meId]);
+  // The real map: what's said in the place you're in (a new channel when you move).
+  // (The room as the server named it when its messages were loaded.)
+  const roomKey = roomMsgs?.key ?? null;
+  useEffect(() => {
+    if (guest || !keep || !roomKey) return;
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`chat:room:${roomKey}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `room=eq.${roomKey}` }, (payload) => {
+        const m = payload.new as ChatMessage;
+        // Your own come in on your channel already.
+        if (m.sender_id !== meIdRef.current && !m.recipient_id) addMessage(m);
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [guest, keep, roomKey, addMessage]);
 
   // ---- the place's NPCs: who they are, and what they've been saying
   const hint = roomHint(room);
@@ -675,8 +702,8 @@ export function Chat({
           "flex shrink-0 items-center gap-1 rounded-full bg-gold/25 font-semibold text-gold-dark hover:bg-gold/40",
           small ? "absolute -right-1 -top-1 size-5 justify-center p-0 shadow" : "px-2.5 py-1 text-xs",
         )}
-        aria-label={`Give mint to ${p.name}`}
-        title={`Give mint to ${p.name}`}
+        aria-label={`Give money to ${p.name}`}
+        title={`Give money to ${p.name}`}
       >
         <Coins className={small ? "size-3" : "size-3.5"} aria-hidden />
         {!small && "Give"}

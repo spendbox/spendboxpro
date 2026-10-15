@@ -38,7 +38,7 @@ import {
   type PropertyResult,
   type WorkStatus,
 } from "@/lib/world/property-api";
-import { landNow, toMint, valueOf } from "@/lib/world/value";
+import { cash, landNow, toMint, valueOf } from "@/lib/world/value";
 import { ferryKmBetween } from "@/lib/world/trips";
 import { moneyDaysOf } from "@/lib/world/money";
 import { cheapestCommute, fareMint, fareOrBus, GAME_DAY_HOURS, HOLD_DAYS, INCOME_TAX, payDay, SKILL_BONUS, skillLevel, tripKmBetween, type Commute } from "@/lib/world/work";
@@ -449,7 +449,7 @@ export function makeLabApi(budget: number): PropertyApi {
         L().pots.savings = r2(L().pots.savings - move);
         s.coins = r2(s.coins + move);
       }
-      if (s.coins < cost) return fail(`You need ₥${cost.toLocaleString("en-GB")} for that (with the 3% tax).`);
+      if (s.coins < cost) return fail(`You need ${cash(cost)} for that (with the 3% tax).`);
       s.coins = Math.round((s.coins - cost) * 100) / 100;
       log("property_buy", -price);
       log("property_tax", -(cost - price));
@@ -608,7 +608,7 @@ export function makeLabApi(budget: number): PropertyApi {
       const v = r2(amount);
       if (from === to || v <= 0) return fail("You can't move money like that.");
       const have = from === "wallet" ? s.coins : L().pots[from];
-      if (have < v) return fail(`You need ₥${v} for that.`);
+      if (have < v) return fail(`You need ${cash(v)} for that.`);
       if (from === "wallet") s.coins = r2(s.coins - v);
       else L().pots[from] = r2(L().pots[from] - v);
       if (to === "wallet") s.coins = r2(s.coins + v);
@@ -624,7 +624,7 @@ export function makeLabApi(budget: number): PropertyApi {
       const pots: Pot[] = c.away ? ["fun", "savings"] : ["essentials"];
       const l = L();
       if (c.away && l.recoveringUntil && l.recoveringUntil > Date.now()) return fail("You're away already.");
-      if (canSpend(pots) < price.total) return fail(`You need ₥${price.total.toLocaleString("en-GB")} for that.`);
+      if (canSpend(pots) < price.total) return fail(`You need ${cash(price.total)} for that.`);
       spend(pots, price.total);
       log("health_care", -price.base);
       log("vat", -price.tax);
@@ -642,7 +642,7 @@ export function makeLabApi(budget: number): PropertyApi {
       const l = L();
       if (l.recoveringUntil && l.recoveringUntil > Date.now()) return fail("You're still recovering from the last one.");
       const price = priceOf(p.fee, prices(), true);
-      if (canSpend(["fun", "savings"]) < price.total) return fail(`You need ₥${price.total.toLocaleString("en-GB")} for that.`);
+      if (canSpend(["fun", "savings"]) < price.total) return fail(`You need ${cash(price.total)} for that.`);
       spend(["fun", "savings"], price.total);
       log("procedure", -price.base);
       log("vat", -price.tax);
@@ -660,7 +660,7 @@ export function makeLabApi(budget: number): PropertyApi {
       if (l.courses.some((x) => x.course === c.id)) return fail("You've done that course already.");
       if (!plan({ studyHours: { short: 2, diploma: 3, degree: 4, licence: 4 }[c.kind] }).fits) return fail("That won't fit in your day. Drop your side hustle or some exercise first.");
       const fee = priceOf(c.fee, prices(), false).total;
-      if (canSpend(["savings"]) < fee) return fail(`You need ₥${fee.toLocaleString("en-GB")} for that.`);
+      if (canSpend(["savings"]) < fee) return fail(`You need ${cash(fee)} for that.`);
       spend(["savings"], fee);
       log("school_fees", -fee);
       l.courses.push({ course: c.id, title: c.title, cert: c.cert ?? null, skill: c.skill, grants: c.grants, startedAt: Date.now(), endsAt: Date.now() + c.days * DAY_MS, done: false });
@@ -692,7 +692,7 @@ export function makeLabApi(budget: number): PropertyApi {
       if (h.level && skillLevel(s.skills?.[h.skill] ?? 0) < h.level) return fail(`You need ${h.skill} level ${h.level} for that.`);
       if (!plan({ hustleHours: h.hours }).fits) return fail("That won't fit in your day. Cut back somewhere first.");
       const cost = hustleStart(h, prices());
-      if (canSpend(["savings"]) < cost) return fail(`You need ₥${cost.toLocaleString("en-GB")} to start that.`);
+      if (canSpend(["savings"]) < cost) return fail(`You need ${cash(cost)} to start that.`);
       settleHustle();
       spend(["savings"], cost);
       log("hustle_start", -cost);
@@ -849,7 +849,7 @@ export function makeLabApi(budget: number): PropertyApi {
       const board = await this.serviceBoard();
       const o = board?.offers.find((x) => x.id === offerId && x.kind === "game");
       if (!o || o.mine) return fail("That isn't available.");
-      if (canSpend(["savings"]) < o.price) return fail(`You need ₥${o.price} for that.`);
+      if (canSpend(["savings"]) < o.price) return fail(`You need ${cash(o.price)} for that.`);
       spend(["savings"], o.price);
       log("service_hold", -o.price);
       const g = gameService(o.category);
@@ -980,7 +980,7 @@ export function makeLabApi(budget: number): PropertyApi {
       if (!s.region) return fail("Start your life first.");
       if (M().loan) return fail("You already have a loan.");
       const limit = r2(s.units.reduce((t, u) => t + u.price, 0) * LOAN_LTV);
-      if (!(amount >= 10) || amount > limit) return fail(`The World Bank lends you up to ₥${limit.toLocaleString("en-GB")} right now.`);
+      if (!(amount >= 10) || amount > limit) return fail(`The World Bank lends you up to ${cash(limit)} right now.`);
       const due = Date.now() + LOAN_MONTH_HOURS * 3_600_000;
       M().loan = { id: `lab-loan-${M().n++}`, principal: r2(amount), balance: r2(amount), rate: LOAN_RATE, instalment: instalment(amount, months), months, nextDue: new Date(due).toISOString(), missed: 0, due };
       for (const u of s.units) u.loan = true;
@@ -995,7 +995,7 @@ export function makeLabApi(budget: number): PropertyApi {
       if (!ln) return fail("You don't have a loan.");
       const pay = Math.min(r2(amount), ln.balance);
       if (!(pay > 0)) return fail("That amount doesn't work.");
-      if (canSpend(["savings"]) < pay) return fail(`You need ₥${pay.toLocaleString("en-GB")} for that.`);
+      if (canSpend(["savings"]) < pay) return fail(`You need ${cash(pay)} for that.`);
       spend(["savings"], pay);
       log("loan_repay", -pay);
       ln.balance = r2(ln.balance - pay);

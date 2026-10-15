@@ -119,8 +119,9 @@ export function shortMint(mint: number) {
 }
 
 /**
- * The money amounts are shown in beside mint, chosen by each player (they can change it any
- * time): what one of each is worth in naira, roughly (the region's prices are in naira).
+ * The currencies players can see money in (they can change it any time). `naira` is what one is
+ * worth in naira when the day's rates can't be had (the region's prices are in naira); the real
+ * rate comes in from /api/rates (setRates) once the game opens, and moves with the market.
  */
 export const CURRENCIES = [
   { code: "NGN", symbol: "₦", name: "Naira", naira: 1 },
@@ -128,13 +129,42 @@ export const CURRENCIES = [
   { code: "GBP", symbol: "£", name: "British pound", naira: 2050 },
   { code: "EUR", symbol: "€", name: "Euro", naira: 1780 },
   { code: "CAD", symbol: "C$", name: "Canadian dollar", naira: 1120 },
+  { code: "AUD", symbol: "A$", name: "Australian dollar", naira: 1010 },
+  { code: "AED", symbol: "AED ", name: "UAE dirham", naira: 420 },
+  { code: "CNY", symbol: "¥", name: "Chinese yuan", naira: 215 },
+  { code: "INR", symbol: "₹", name: "Indian rupee", naira: 18 },
   { code: "GHS", symbol: "GH₵", name: "Ghana cedi", naira: 100 },
+  { code: "XOF", symbol: "CFA ", name: "West African CFA franc", naira: 2.7 },
   { code: "KES", symbol: "KSh", name: "Kenyan shilling", naira: 12 },
   { code: "ZAR", symbol: "R", name: "South African rand", naira: 88 },
+  { code: "EGP", symbol: "E£", name: "Egyptian pound", naira: 32 },
   /** The game's own money, for those who'd rather count in it. */
   { code: "MINT", symbol: "₥", name: "Mint", naira: 0 },
 ] as const;
 export type CurrencyCode = (typeof CURRENCIES)[number]["code"];
+
+/** Today's rates: naira for one of each (only those the rate service gave and that make sense). */
+let live: Partial<Record<CurrencyCode, number>> = {};
+/** When today's rates were set (ms), or 0 while the fallback rates are in use. */
+let liveAt = 0;
+/** Take in the day's rates (naira for one of each currency, as /api/rates sends them). */
+export function setRates(rates: Record<string, number> | null | undefined, at = Date.now()) {
+  const next: Partial<Record<CurrencyCode, number>> = {};
+  for (const c of CURRENCIES) {
+    const r = rates?.[c.code];
+    // Far off the fallback (more than 20 times either way) is a broken feed, not the market.
+    if (c.code !== "NGN" && c.code !== "MINT" && typeof r === "number" && Number.isFinite(r) && r > c.naira / 20 && r < c.naira * 20) next[c.code] = r;
+  }
+  live = next;
+  liveAt = Object.keys(next).length ? at : 0;
+}
+/** Naira for one of a currency: today's rate, else the fallback. */
+export function nairaPer(code: CurrencyCode) {
+  return live[code] ?? CURRENCIES.find((c) => c.code === code)?.naira ?? 1;
+}
+/** When the rates in use were fetched (0: none yet, the rough ones are in use). */
+export const ratesAt = () => liveAt;
+
 /** The ones players can pick: real money only (mint is how the game counts, not what anyone sees). */
 export const PLAYER_CURRENCIES = CURRENCIES.filter((c) => c.code !== "MINT");
 /** A saved choice, as one players can have (anything else, mint included, is naira). */
@@ -155,12 +185,12 @@ const current = () => CURRENCIES.find((x) => x.code === shown) ?? CURRENCIES[0];
 /** Mint in the chosen currency, as a number. */
 export function toShown(mint: number) {
   const c = current();
-  return c.code === "MINT" ? mint : (mint * perMint) / c.naira;
+  return c.code === "MINT" ? mint : (mint * perMint) / nairaPer(c.code);
 }
 /** An amount typed in the chosen currency, back in mint. */
 export function fromShown(amount: number) {
   const c = current();
-  return c.code === "MINT" ? amount : (amount * c.naira) / perMint;
+  return c.code === "MINT" ? amount : (amount * nairaPer(c.code)) / perMint;
 }
 /**
  * Money is kept in mint to the cent, and a mint is ₦1,500, so a cent is ₦15: ₦5,000 is ₥3.33, which
@@ -234,7 +264,7 @@ export function shortLocal(amount: number, prices: Prices) {
   // The region's prices are in its own money (naira); other currencies convert from it.
   const own = c.code === "NGN" || prices.symbol !== "₦";
   const s = own ? prices.symbol : c.symbol;
-  const v = own ? amount : amount / c.naira;
+  const v = own ? amount : amount / nairaPer(c.code);
   const one = (n: number, whole: boolean) => (whole ? n.toFixed(0) : n.toFixed(1).replace(/\.0$/, ""));
   if (v >= 1e9) return `${s}${one(v / 1e9, v >= 1e10)}bn`;
   if (v >= 1e6) return `${s}${one(v / 1e6, v >= 1e8)}m`;

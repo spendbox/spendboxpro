@@ -2,28 +2,35 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { PinInput } from "@/components/pin-input";
-import { loginWithPin, sendCode, startSignIn, verifyCode } from "./actions";
+import { PasswordInput } from "@/components/password-input";
+import { RobotCheck } from "@/components/robot-check";
+import { createAccount, loginWithPassword, sendCode, startSignIn, verifyCode } from "./actions";
 
 const input = "w-full rounded-xl border border-line bg-panel px-4 py-3 text-ink outline-none focus:border-gold";
 const button = "w-full rounded-xl bg-gold px-4 py-3 font-semibold text-ink disabled:opacity-50";
 
-type Step = "email" | "pin" | "code";
+type Step = "email" | "password" | "again" | "code";
 
 /**
- * Email first. Returning players type their PIN; new players (and forgot PIN) get a code.
+ * Email first, one question a screen. Players with an account type their password (or, from
+ * before passwords, their old PIN); new players type their email again and pass the robot check,
+ * then answer the rest (src/app/welcome/welcome-form.tsx); forgot password gets a code by email.
  * onDone (the sign-in pop-up over the town): called instead of going to another page, with
- * "play" once signed in, or "welcome" when a name and PIN come next.
+ * "play" once signed in, "new" for a new player, or "reset" to make a new password.
  */
-export function LoginForm({ onDone }: { onDone?: (next: "play" | "welcome") => void } = {}) {
+export function LoginForm({ onDone }: { onDone?: (next: "play" | "new" | "reset") => void } = {}) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
-  const [pin, setPin] = useState("");
+  const [again, setAgain] = useState("");
+  const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  /** The robot check's token for sign-up, and a count to ask for a fresh one (each works once). */
+  const [robot, setRobot] = useState<string | null>(null);
+  const [robotRound, setRobotRound] = useState(0);
 
   async function run<T extends { ok: boolean }>(fn: () => Promise<T>, then: (res: T) => void) {
     setBusy(true);
@@ -34,31 +41,30 @@ export function LoginForm({ onDone }: { onDone?: (next: "play" | "welcome") => v
     if (!res.ok) setError((res as unknown as { error: string }).error);
     else then(res);
   }
+  const finish = (next: "play" | "new" | "reset") => {
+    setBusy(true);
+    if (onDone) return onDone(next);
+    router.push(next === "play" ? "/play" : "/welcome");
+  };
 
   const back = (
-    <button type="button" className="text-sm text-muted underline" onClick={() => { setStep("email"); setPin(""); setCode(""); setError(null); }}>
+    <button type="button" className="text-sm text-muted underline" onClick={() => { setStep("email"); setPassword(""); setAgain(""); setCode(""); setError(null); }}>
       Use a different email
     </button>
   );
+  const problem = error && <p className="text-sm text-hit">{error}</p>;
 
-  if (step === "pin") {
+  if (step === "password") {
     return (
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          run(() => loginWithPin(email, pin), () => {
-            setBusy(true);
-            if (onDone) return onDone("play");
-            router.push("/play");
-          });
-        }}
-        className="flex flex-col gap-3"
-      >
+      <form onSubmit={(e) => { e.preventDefault(); run(() => loginWithPassword(email, password), () => finish("play")); }} className="flex flex-col gap-3">
         <p className="text-sm text-muted">
-          Welcome back, <b className="text-ink">{email}</b>. Enter your 6-digit PIN.
+          Welcome back, <b className="text-ink">{email}</b>.
         </p>
-        <PinInput label="Your PIN" value={pin} onChange={setPin} autoFocus />
-        <button className={button} disabled={busy || pin.length !== 6}>
+        {/* For password managers: the account this password belongs to. */}
+        <input type="email" autoComplete="username" value={email} readOnly hidden />
+        <PasswordInput label="Your password" value={password} onChange={setPassword} autoFocus />
+        <p className="-mt-1 text-xs text-muted">Played before passwords? Type your old 6-digit PIN.</p>
+        <button className={button} disabled={busy || !password}>
           {busy ? "Opening the city…" : "Enter"}
         </button>
         <div className="flex justify-between">
@@ -67,29 +73,68 @@ export function LoginForm({ onDone }: { onDone?: (next: "play" | "welcome") => v
             type="button"
             className="text-sm text-muted underline"
             disabled={busy}
-            onClick={() => run(() => sendCode(email), () => { setStep("code"); setNotice("We emailed you a code to reset your PIN."); })}
+            onClick={() => run(() => sendCode(email), () => { setStep("code"); setNotice("We emailed you a code to make a new password."); })}
           >
-            Forgot PIN?
+            Forgot password?
           </button>
         </div>
-        {error && <p className="text-sm text-hit">{error}</p>}
+        {problem}
+      </form>
+    );
+  }
+
+  if (step === "again") {
+    const typo = again.length >= email.length && again.trim().toLowerCase() !== email.trim().toLowerCase();
+    return (
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          run(
+            async () => {
+              const res = await createAccount(email, again, robot);
+              // A token works once: get a fresh one for the next try.
+              if (!res.ok) setRobotRound((r) => r + 1);
+              return res;
+            },
+            () => finish("new"),
+          );
+        }}
+        className="flex flex-col gap-3"
+      >
+        <p className="font-display text-lg font-bold">New here? Welcome! 👋</p>
+        <label className="text-sm font-medium">
+          Type your email again
+          <input
+            className={`${input} mt-1`}
+            type="email"
+            autoComplete="off"
+            placeholder={email.replace(/^(.).*@/, "$1…@")}
+            value={again}
+            onChange={(e) => setAgain(e.target.value)}
+            onPaste={(e) => {
+              e.preventDefault();
+              setNotice("Type it rather than paste it: that's how we catch a typo.");
+            }}
+            autoFocus
+            required
+          />
+        </label>
+        <p className="-mt-1 text-xs text-muted">It&apos;s how you get back in if you ever forget your password, so make sure it&apos;s right.</p>
+        {typo && <p className="text-sm text-hit">That doesn&apos;t match what you typed before.</p>}
+        <RobotCheck onToken={setRobot} round={robotRound} />
+        <button className={button} disabled={busy || !again || typo}>
+          {busy ? "Making your account…" : "That's me"}
+        </button>
+        {back}
+        {notice && !error && <p className="text-sm text-muted">{notice}</p>}
+        {problem}
       </form>
     );
   }
 
   if (step === "code") {
     return (
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          run(() => verifyCode(email, code), () => {
-            setBusy(true);
-            if (onDone) return onDone("welcome");
-            router.push("/welcome?pin=1");
-          });
-        }}
-        className="flex flex-col gap-3"
-      >
+      <form onSubmit={(e) => { e.preventDefault(); run(() => verifyCode(email, code), () => finish("reset")); }} className="flex flex-col gap-3">
         <p className="text-sm text-muted">
           We sent a 4-digit code to <b className="text-ink">{email}</b>. If you can&apos;t see it, check your spam folder.
         </p>
@@ -116,7 +161,7 @@ export function LoginForm({ onDone }: { onDone?: (next: "play" | "welcome") => v
           </button>
         </div>
         {notice && !error && <p className="text-sm text-me">{notice}</p>}
-        {error && <p className="text-sm text-hit">{error}</p>}
+        {problem}
       </form>
     );
   }
@@ -125,25 +170,28 @@ export function LoginForm({ onDone }: { onDone?: (next: "play" | "welcome") => v
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        run(() => startSignIn(email), (res) => res.ok && setStep(res.next));
+        run(() => startSignIn(email), (res) => res.ok && setStep(res.next === "password" ? "password" : "again"));
       }}
       className="flex flex-col gap-3"
     >
-      <input
-        className={input}
-        type="email"
-        autoComplete="email"
-        placeholder="you@example.com"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        autoFocus
-        required
-      />
+      <label className="text-sm font-medium">
+        Your email
+        <input
+          className={`${input} mt-1`}
+          type="email"
+          autoComplete="username"
+          placeholder="you@example.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          autoFocus
+          required
+        />
+      </label>
       <button className={button} disabled={busy}>
         {busy ? "One moment…" : "Continue"}
       </button>
-      <p className="text-xs text-muted">First time? We&apos;ll email you a code, then you pick a name and PIN. New players start with ₦2,000,000 and a free home. You must be 18 or older to play.</p>
-      {error && <p className="text-sm text-hit">{error}</p>}
+      <p className="text-xs text-muted">New players start with ₦2,000,000 and a free home. You must be 18 or older to play.</p>
+      {problem}
     </form>
   );
 }

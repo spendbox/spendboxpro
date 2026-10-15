@@ -459,7 +459,7 @@ export async function confirmPayment(reference: string): Promise<PaymentOutcome>
           r.status === "applied",
         );
         await sendEmail({ to: s.contact_email as string, ...email }).catch(() => {});
-        const line = `${s.brand} paid ${naira(Number(s.amount_kobo))} for ${Number(s.coins)} mint in a prize pool (${
+        const line = `${s.brand} paid ${naira(Number(s.amount_kobo))} for a prize pool (${
           r.status === "applied" ? "added to the current round" : "waiting for the next round"
         }). Contact: ${s.contact_name} <${s.contact_email}>.`;
         await emailAdmin({ subject: `New prize pool sponsor: ${s.brand}`, text: line, html: `<p>${esc(line)}</p>` });
@@ -492,7 +492,7 @@ async function adWentLive(adId: string) {
   const ad = toAdForEmail(data);
   const pricing = await adPricing();
   await sendEmail({ to: ad.contact_email, ...(await adLiveEmail(ad, pricing.viewReward)) }).catch(() => {});
-  await emailAdmin(adminNewAdEmail(ad, adImageUrl(data.image_path as string)));
+  await emailAdmin(adminNewAdEmail(ad, adImageUrl(data.image_path as string), pricing.viewReward));
 }
 
 async function toppedUp(adId: string, coins: number, reference: string) {

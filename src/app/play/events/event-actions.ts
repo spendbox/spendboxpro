@@ -1,9 +1,11 @@
 "use server";
 
+import { naira } from "@/lib/brand";
 import { after } from "next/server";
 import { cleanAvatar } from "@/lib/avatar";
 import { currentUserId } from "@/lib/game";
-import { pushTo } from "@/lib/push";
+import { notifyMany } from "@/lib/notify-many";
+import { pushToMany } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { REGIONS, regionMap } from "@/lib/world";
 import {
@@ -69,7 +71,7 @@ function say(message: string): Fail {
     frozen: "Your account is paused right now.",
     unknown_player: "Please sign in again.",
   };
-  if (code === "not_enough") return { ok: false, error: `You need ${arg ? `₥${arg}` : "more"} for that.` };
+  if (code === "not_enough") return { ok: false, error: `You need ${arg ? naira(arg) : "more"} for that.` };
   if (words[code]) return { ok: false, error: words[code] };
   if (missing(message)) return { ok: false, error: OFF };
   console.error("Event failed", message);
@@ -195,7 +197,7 @@ async function sweep(db: Db, region: string) {
   const r = await db.rpc("event_sweep", { p_region: region });
   if (r.error) return r.error;
   const told = (Array.isArray(r.data) ? r.data : []) as string[];
-  if (told.length) await Promise.all(told.slice(0, 200).map((u) => pushTo(String(u)).catch(() => {})));
+  if (told.length) await pushToMany(told.map(String));
   return null;
 }
 
@@ -253,20 +255,30 @@ export type EventQuote = {
   /** Events you hosted in the last day. */
   today: number;
   rep: { hosted: number; attended: number } | null;
+  /** What you can spend on it (Fun money and your wallet, mint), or null if not known. */
+  canSpend: number | null;
 };
 
 export async function eventQuote(region: string): Promise<EventQuote> {
   const perMint = perMintOf(region);
   const priceMax = Math.round((TICKET_MAX_NAIRA / perMint) * 100) / 100;
   const userId = await currentUserId();
-  if (!userId) return { perMint, priceMax, hosting: null, today: 0, rep: null };
+  if (!userId) return { perMint, priceMax, hosting: null, today: 0, rep: null, canSpend: null };
   const db = createAdminClient();
-  const [hosting, today, rep] = await Promise.all([
+  const [hosting, today, rep, spend] = await Promise.all([
     db.rpc("event_hosting", { p_user: userId }),
     db.from("hosted_events").select("id", { count: "exact", head: true }).eq("host_id", userId).gt("created_at", new Date(Date.now() - 86_400_000).toISOString()),
     myEventRep(),
+    db.rpc("life_can_spend", { p_user: userId, p_pots: ["fun"] }),
   ]);
-  return { perMint, priceMax, hosting: hosting.error || hosting.data == null ? null : n(hosting.data), today: today.count ?? 0, rep };
+  return {
+    perMint,
+    priceMax,
+    hosting: hosting.error || hosting.data == null ? null : n(hosting.data),
+    today: today.count ?? 0,
+    rep,
+    canSpend: spend.error || spend.data == null ? null : n(spend.data),
+  };
 }
 
 /** Events you hosted that people came to, and events you went to (for reputation). */
@@ -363,7 +375,7 @@ export type NewEvent = {
   radiusM?: number;
 };
 
-/** Host an event. Everyone near the spot is told if it's starting soon; your friends are told either way. */
+/** Host an event. Your friends are told, and the nearest people (twice as many as it holds, or everyone within 4 km). */
 export async function hostEvent(input: NewEvent): Promise<{ ok: true; id: number; startsAt: string; fee: number; view: EventView | null } | Fail> {
   const f = eventFormat(String(input.format));
   if (!f) return { ok: false, error: "Pick what kind of event it is." };
@@ -426,35 +438,44 @@ async function tellPeople(
   db: Db,
   { userId, region, title, f, input, startsAt, perMint }: { userId: string; region: string; title: string; f: { title: string }; input: NewEvent; startsAt: string; perMint: number },
 ) {
-  // Who hears about it: friends always; everyone near the spot if it starts within 15 minutes.
+  // Who hears about it: friends always (their own message), and nobody near misses out: the
+  // nearest people however far, twice as many as it holds, or everyone within 4 km if that's
+  // more (game-db/101 event_tell).
   const { data: me } = await db.from("profiles").select("username").eq("id", userId).maybeSingle();
   const name = (me?.username as string | null) ?? "Someone";
   const soon = Date.parse(startsAt) - Date.now() < 15 * 60_000;
-  const [{ data: fr }, near] = await Promise.all([
-    db.from("friendships").select("requester, addressee").or(`requester.eq.${userId},addressee.eq.${userId}`).not("accepted_at", "is", null).limit(500),
-    soon
-      ? db.from("lives").select("user_id, at_place, home_unit").eq("region", region).neq("user_id", userId).limit(1000)
-      : Promise.resolve({ data: [] as { user_id: string; at_place: string | null; home_unit: string | null }[] }),
-  ]);
-  const friends = new Set(((fr ?? []) as { requester: string; addressee: string }[]).map((r) => (r.requester === userId ? r.addressee : r.requester)));
-  const nearby = ((near.data ?? []) as { user_id: string; at_place: string | null; home_unit: string | null }[])
-    .filter((l) => {
-      const s = spotOf(l.at_place ?? l.home_unit);
-      return s && Math.hypot(s.x - input.x, s.z - input.z) <= NEAR_TILES;
-    })
-    .map((l) => l.user_id);
+  const { data: fr } = await db.from("friendships").select("requester, addressee").or(`requester.eq.${userId},addressee.eq.${userId}`).not("accepted_at", "is", null).limit(500);
+  const friends = [...new Set(((fr ?? []) as { requester: string; addressee: string }[]).map((r) => (r.requester === userId ? r.addressee : r.requester)))];
   const where = input.place ? ` at ${String(input.place).slice(0, 60)}` : "";
   const ticket = input.price > 0 ? ` Tickets ₦${tidy(input.price * perMint).toLocaleString("en-GB")}.` : " Free to come.";
-  const told = new Map<string, string>();
-  for (const u of nearby.slice(0, 60)) told.set(u, `${name} is hosting "${title}" (${f.title})${where}, starting now!${ticket} Tap Events to go.`);
-  for (const u of [...friends].slice(0, 100))
-    told.set(u, soon ? `Your friend ${name} is hosting "${title}"${where}, starting now!${ticket}` : `Your friend ${name} is hosting "${title}"${where}. Tap Events and say you're going.${ticket}`);
-  await Promise.all(
-    [...told].map(async ([u, body]) => {
-      await db.rpc("notify", { p_user: u, p_round: null, p_kind: "event", p_body: body });
-      await pushTo(u).catch(() => {});
-    }),
-  );
+  const when = soon ? "starting now!" : `starting ${new Date(startsAt).toLocaleString("en-GB", { weekday: "short", hour: "numeric", minute: "2-digit", timeZone: "Africa/Lagos" })}.`;
+  const nearBody = `${name} is hosting "${title}" (${f.title})${where} near you, ${when}${ticket} Tap Events to ${soon ? "go" : "say you're going"}.`;
+  const told = await db.rpc("event_tell", {
+    p_region: region,
+    p_x: Math.round(input.x),
+    p_z: Math.round(input.z),
+    p_want: Math.max(0, Math.round(n(input.capacity))) * 2,
+    p_tiles: NEAR_TILES,
+    p_skip: [userId, ...friends],
+    p_body: nearBody,
+  });
+  let near = (told.data ?? []) as string[];
+  if (told.error) {
+    // game-db/101 not run yet: the old way (people within 4 km, if it starts soon).
+    const { data } = soon ? await db.from("lives").select("user_id, at_place, home_unit").eq("region", region).neq("user_id", userId).limit(1000) : { data: [] };
+    const skip = new Set(friends);
+    near = ((data ?? []) as { user_id: string; at_place: string | null; home_unit: string | null }[])
+      .filter((l) => {
+        const s = spotOf(l.at_place ?? l.home_unit);
+        return !skip.has(l.user_id) && s && Math.hypot(s.x - input.x, s.z - input.z) <= NEAR_TILES;
+      })
+      .map((l) => l.user_id)
+      .slice(0, 60);
+    await notifyMany(db, near, "event", nearBody);
+  }
+  const friendBody = soon ? `Your friend ${name} is hosting "${title}"${where}, starting now!${ticket}` : `Your friend ${name} is hosting "${title}"${where}. Tap Events and say you're going.${ticket}`;
+  await notifyMany(db, friends.slice(0, 500), "event", friendBody);
+  await pushToMany([...friends.slice(0, 500), ...near]);
 }
 
 /** Going (or not any more). */
@@ -480,10 +501,11 @@ export async function cancelEvent(id: number): Promise<{ ok: true } | Fail> {
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Please sign in again." };
   const db = createAdminClient();
-  const { data: going } = await db.from("hosted_event_guests").select("user_id").eq("event_id", Math.round(n(id))).eq("going", true).neq("user_id", userId).limit(300);
+  const { data: going } = await db.from("hosted_event_guests").select("user_id").eq("event_id", Math.round(n(id))).eq("going", true).neq("user_id", userId).limit(10_000);
   const { error } = await db.rpc("event_cancel", { p_user: userId, p_id: Math.round(n(id)) });
   if (error) return say(error.message);
-  await Promise.all(((going ?? []) as { user_id: string }[]).map((g) => pushTo(g.user_id).catch(() => {})));
+  // Their phones are tapped after the host has their answer.
+  after(() => pushToMany(((going ?? []) as { user_id: string }[]).map((g) => g.user_id)));
   return { ok: true };
 }
 

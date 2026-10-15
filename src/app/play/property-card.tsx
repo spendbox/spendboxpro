@@ -7,7 +7,7 @@ import { Building2, Flag, House, KeyRound, MapPin, Megaphone, Pencil, Store, Tre
 import type { PropertyInfo, PropertyUnit } from "@/lib/world/property";
 import { BUY_TAX, INCOME_DAY, type BuildingOwner } from "@/lib/world/property-api";
 import { discounted, repLevel } from "@/lib/world/rep-levels";
-import { openAdvertise } from "./life/advertise-panel";
+import { openAdvertise } from "./life/advertise-open";
 import { JobsHere, type JobsContext } from "./life/jobs-here";
 import { Sheet } from "./sheet";
 import { SIMPLE_LIFE } from "@/lib/world/simple-life";

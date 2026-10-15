@@ -409,7 +409,7 @@ const WINDOW = 40;
  */
 const DETAIL = 18;
 const SKY = 0xd7ebf7;
-const BALLOON_NAMES = ["Red", "Yellow", "Blue", "Purple", "Mint"];
+const BALLOON_NAMES = ["Red", "Yellow", "Blue", "Purple", "Green"];
 const GROUND = 0xd3e4c8;
 const ASPHALT = 0x5b6470;
 const SIDEWALK = 0xf3f1ec;
@@ -1630,11 +1630,25 @@ export function CityView({
     // the city stays smooth and the phone stays cool.
     const nav = navigator as Navigator & { deviceMemory?: number; connection?: { saveData?: boolean } };
     const small = !ios && ((nav.deviceMemory ?? 8) <= 3 || (nav.hardwareConcurrency ?? 8) <= 4 || nav.connection?.saveData === true);
-    const renderer = new THREE.WebGLRenderer({ antialias: !ios && !small, powerPreference: ios ? "default" : "high-performance" });
-    // Phones have very dense screens; 1.5× looks just as sharp and draws much faster.
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, small ? 1 : ios ? 1.25 : window.innerWidth < 700 ? 1.5 : 2));
+    // Any other phone or tablet (a touch screen, not a big one): most mid-range Android phones
+    // don't count as "small" above but can't draw desktop settings smoothly either. No extra
+    // smoothing, a slightly lighter screen and plainer shadows.
+    const phone = !ios && !small && navigator.maxTouchPoints > 0 && Math.min(screen.width, screen.height) < 900;
+    const lite = ios || small || phone;
+    const renderer = new THREE.WebGLRenderer({ antialias: !lite, powerPreference: ios ? "default" : "high-performance" });
+    // Phones have very dense screens; a lower ratio looks just as sharp and draws much faster.
+    let pixelRatio = Math.min(window.devicePixelRatio, small ? 1 : ios ? 1.25 : phone ? 1.35 : window.innerWidth < 700 ? 1.5 : 2);
+    renderer.setPixelRatio(pixelRatio);
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = small ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = lite ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+    // Shadows are drawn again every other frame (every third on phones), not every frame: the sun
+    // stands still, and moving things' shadows still look smooth.
+    renderer.shadowMap.autoUpdate = false;
+    renderer.shadowMap.needsUpdate = true;
+    // The view's size, kept when it changes (reading it every frame makes the browser lay the
+    // page out again, several times a frame).
+    let viewW = el.clientWidth || 1;
+    let viewH = el.clientHeight || 1;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
     el.appendChild(renderer.domElement);
@@ -1660,7 +1674,7 @@ export function CityView({
     scene.add(hemi);
     const sun = new THREE.DirectionalLight(0xfff1dc, 2.4);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(ios || small ? 1024 : 2048, ios || small ? 1024 : 2048);
+    sun.shadow.mapSize.set(lite ? 1024 : 2048, lite ? 1024 : 2048);
     sun.shadow.bias = -0.0005;
     sun.shadow.normalBias = 0.02;
     scene.add(sun, sun.target);
@@ -4993,8 +5007,8 @@ export function CityView({
       const on = isRevealed && tags.length > 0 && !view;
       tagLayer.style.display = on ? "" : "none";
       if (!on) return;
-      const w = el.clientWidth || 1;
-      const h = el.clientHeight || 1;
+      const w = viewW;
+      const h = viewH;
       for (const t of tags) {
         const tile = tileById.get(t.tile);
         if (!tile) {
@@ -5019,8 +5033,8 @@ export function CityView({
       const on = isRevealed && pins.length > 0;
       pinLayer.style.display = on ? "" : "none";
       if (!on) return;
-      const w = el.clientWidth || 1;
-      const h = el.clientHeight || 1;
+      const w = viewW;
+      const h = viewH;
       for (const p of pins) {
         if (p.balloon >= 0) {
           const b = balloons[p.balloon];
@@ -5074,7 +5088,7 @@ export function CityView({
     }
     function setGhosts(list: CityGhost[]) {
       // Phones get smaller faces and just the name (the colour already says free, in a duel or golden).
-      const small = (el.clientWidth || 1) < 640;
+      const small = viewW < 640;
       const key = `${currentSeed}|${small ? "s" : "l"}|${list.map((g) => `${g.id}@${g.tile}|${g.status}|${g.name}|${g.mine ? 1 : 0}|${JSON.stringify(g.avatar)}`).join(";")}`;
       if (key === ghostKey) return;
       ghostKey = key;
@@ -5123,8 +5137,8 @@ export function CityView({
       ghostLayer.style.display = on ? "" : "none";
       ghostGroup.visible = isRevealed && ghostLights.length > 0;
       if (!ghostGroup.visible) return;
-      const w = el.clientWidth || 1;
-      const h = el.clientHeight || 1;
+      const w = viewW;
+      const h = viewH;
       for (const g of ghostLights) {
         const p = posOf(g.tile);
         const top = topOf(g.tile);
@@ -5218,8 +5232,8 @@ export function CityView({
       const on = bizGroup.visible && isRevealed && !immersive();
       bizLayer.style.display = on ? "" : "none";
       if (!bizGroup.visible) return;
-      const w = el.clientWidth || 1;
-      const h = el.clientHeight || 1;
+      const w = viewW;
+      const h = viewH;
       const far = camera.position.y > 60;
       for (const l of bizLights) {
         const p = posOf(l.tile);
@@ -7370,6 +7384,8 @@ export function CityView({
     const resize = () => {
       const w = el.clientWidth || 1;
       const h = el.clientHeight || 1;
+      viewW = w;
+      viewH = h;
       renderer.setSize(w, h);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
@@ -7481,15 +7497,43 @@ export function CityView({
       sc.heliPan = pan;
     }
 
-    // Small phones draw at most 30 frames a second: smooth enough, half the work.
+    // Small phones draw at most 30 frames a second: smooth enough, half the work. Other phones do
+    // too while nobody's touching the map (full speed while you drag, pinch or turn), and any
+    // phone that can't keep up (slow frames for a few seconds) drops to 30 and a lighter screen.
     let lastDraw = 0;
+    let touchedAt = performance.now();
+    const touchNow = () => {
+      touchedAt = performance.now();
+    };
+    renderer.domElement.addEventListener("pointerdown", touchNow, { passive: true });
+    renderer.domElement.addEventListener("pointermove", touchNow, { passive: true });
+    renderer.domElement.addEventListener("wheel", touchNow, { passive: true });
+    let capped = small;
+    let slowFrames = 0;
+    let frames = 0;
+    let shadowTick = 0;
     const loop = () => {
       frame = requestAnimationFrame(loop);
-      if (small) {
-        const t = performance.now();
-        if (t - lastDraw < 30) return;
-        lastDraw = t;
+      const tNow = performance.now();
+      const resting = capped || (lite && tNow - touchedAt > 2500);
+      if (resting && tNow - lastDraw < 30) return;
+      const gap = tNow - lastDraw;
+      lastDraw = tNow;
+      // Keeping up? Count frames slower than ~35 a second over the last 120 drawn at full speed.
+      if (!resting && gap < 200) {
+        frames++;
+        if (gap > 28) slowFrames++;
+        if (frames >= 120) {
+          if (slowFrames > 80) {
+            capped = true;
+            pixelRatio = Math.min(pixelRatio, 1);
+            renderer.setPixelRatio(pixelRatio);
+          }
+          frames = 0;
+          slowFrames = 0;
+        }
       }
+      if (++shadowTick % (lite ? 3 : 2) === 0) renderer.shadowMap.needsUpdate = true;
       // Frozen (behind the sign-in pop-up): the last picture stays, nothing moves. (Not in the
       // first few seconds, so there's a town to see behind it when the page opens with it up.)
       if (cb.current.paused && clock.elapsedTime > 3) {

@@ -1,5 +1,6 @@
 "use server";
 
+import { naira } from "@/lib/brand";
 import type { Avatar } from "@/lib/avatar";
 import { currentUserId } from "@/lib/game";
 import { pushTo } from "@/lib/push";
@@ -26,7 +27,7 @@ function say(message: string | undefined): { ok: false; error: string } {
     too_many_here: "You've already tried them today. Leave them be until tomorrow.",
     in_jail: "You're in jail. Nothing doing from a cell.",
     not_in_jail: "You're not in jail.",
-    not_enough: `You don't have enough for that (${arg} mint).`,
+    not_enough: `You don't have enough for that (${naira(arg)}).`,
     frozen: "Your account is paused right now.",
     bad_kind: "That isn't a prank.",
   };
@@ -56,8 +57,8 @@ export async function stealFrom(victim: string): Promise<Result & { caught?: boo
   if (error) return say(error.message);
   const d = data as Record<string, unknown>;
   await pushTo(String(victim));
-  if (d.caught) return { ok: true, caught: true, jailed: !!d.jailed, text: `Caught! They saw you. Fined ${n(d.fine)} mint, and your reputation took a hit.${d.jailed ? " The police took you in: 2 hours in jail." : ""}` };
-  if (d.what === "cash") return { ok: true, text: `You got away with ${n(d.amount)} mint. Nobody saw a thing... this time.` };
+  if (d.caught) return { ok: true, caught: true, jailed: !!d.jailed, text: `Caught! They saw you. Fined ${naira(n(d.fine))}, and your reputation took a hit.${d.jailed ? " The police took you in: 2 hours in jail." : ""}` };
+  if (d.what === "cash") return { ok: true, text: `You got away with ${naira(n(d.amount))}. Nobody saw a thing... this time.` };
   if (d.what === "item") return { ok: true, text: `You got away with their ${String(d.item)}. It's in your things.` };
   return { ok: true, text: "Empty pockets. Nothing worth taking." };
 }

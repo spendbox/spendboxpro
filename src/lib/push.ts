@@ -55,3 +55,42 @@ export async function pushTo(userId: string | null | undefined) {
     console.error("Push failed", e);
   }
 }
+
+/**
+ * Tap many players at once (an event told to thousands): their phones looked up a few hundred
+ * players at a time, one signature per push service, and at most 50 sent at once. Never throws.
+ */
+export async function pushToMany(userIds: string[]) {
+  const ids = [...new Set(userIds.filter(Boolean))];
+  if (!ids.length) return;
+  try {
+    const keys = vapidKey();
+    if (!keys) return;
+    const db = createAdminClient();
+    const tokens = new Map<string, string>();
+    const tokenFor = (endpoint: string) => {
+      const origin = new URL(endpoint).origin;
+      let t = tokens.get(origin);
+      if (!t) tokens.set(origin, (t = vapidToken(endpoint, keys.key)));
+      return t;
+    };
+    for (let i = 0; i < ids.length; i += 300) {
+      const { data } = await db.from("push_subscriptions").select("endpoint").in("user_id", ids.slice(i, i + 300)).limit(3000);
+      const ends = (data ?? []).map((r) => String(r.endpoint));
+      for (let j = 0; j < ends.length; j += 50) {
+        await Promise.all(
+          ends.slice(j, j + 50).map(async (endpoint) => {
+            const res = await fetch(endpoint, {
+              method: "POST",
+              headers: { Authorization: `vapid t=${tokenFor(endpoint)}, k=${keys.pub}`, TTL: "3600", Urgency: "normal", "Content-Length": "0" },
+              signal: AbortSignal.timeout(8000),
+            }).catch(() => null);
+            if (res && (res.status === 404 || res.status === 410)) await db.from("push_subscriptions").delete().eq("endpoint", endpoint);
+          }),
+        );
+      }
+    }
+  } catch (e) {
+    console.error("Push failed", e);
+  }
+}

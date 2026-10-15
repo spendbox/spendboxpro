@@ -5,6 +5,7 @@
 \ir ../095_events.sql
 \ir ../096_event_refund.sql
 \ir ../097_party_sizes.sql
+\ir ../101_event_audience.sql
 \ir ../095_events.sql
 \ir ../096_event_refund.sql
 \ir ../097_party_sizes.sql
@@ -207,6 +208,16 @@ begin
   perform pg_temp.check((select coins from profiles where id = b) = coins0 + 5, 'and pays its reward');
   v := tutorial_check(b, '{"name": 1, "hi": 1, "win": 5}');
   perform pg_temp.check(not (v->'paid' ? 'win') and (select coins from profiles where id = b) = coins0 + 5, 'paid once');
+
+  -- Who hears about a new event: the nearest, twice as many as it holds, or everyone within 4 km.
+  insert into profiles (id, username) select ('00000000-0000-0000-0000-0000000001'||lpad(i::text, 2, '0'))::uuid, 'aud' || i from generate_series(10, 19) i;
+  insert into lives (user_id, region, home_unit) select ('00000000-0000-0000-0000-0000000001'||lpad(i::text, 2, '0'))::uuid, 'aud',
+    'aud:' || (case when i < 15 then (i - 10) * 8 else (i - 14) * 100 end) || ',0/1' from generate_series(10, 19) i;
+  perform pg_temp.check(cardinality(event_tell('aud', 0, 0, 2, 40, '{}', 'hi')) = 5, 'a small party tells everyone within 4 km');
+  perform pg_temp.check(cardinality(event_tell('aud', 0, 0, 8, 40, '{}', 'hi')) = 8, 'a bigger one, the nearest twice its size');
+  perform pg_temp.check(event_tell('aud', 1000, 0, 2, 40, '{}', 'hi') @> array['00000000-0000-0000-0000-000000000118', '00000000-0000-0000-0000-000000000119']::uuid[], 'far from everyone, still the nearest');
+  perform pg_temp.check(cardinality(event_tell('aud', 0, 0, 2, 40, array['00000000-0000-0000-0000-000000000110']::uuid[], 'hi')) = 4, 'friends (told apart) are left out');
+  perform pg_temp.check((select count(*) from notifications where body = 'hi') = 19, 'each one gets a notice');
 
 end $$;
 

@@ -7,6 +7,8 @@
 // tease lines, the stats that explain it) and as a fallback when the server can't be reached.
 // Change a rule here, change it there too.
 
+import { cash } from "@/lib/world/value";
+
 /** The play styles, in a fixed order (the order they're listed in). */
 export const STYLE_KEYS = [
   "explorer",
@@ -224,14 +226,14 @@ export const STYLES: Record<StyleKey, PlayStyle> = {
     short: "Party Animal",
     icon: "PartyPopper",
     color: "#e11d48",
-    blurb: "Clubs, dance floors and mint showers. Wherever the music was, so were you.",
-    how: "Clubs visited, time in the club, dance-offs and jams, mint sprayed",
+    blurb: "Clubs, dance floors and money showers. Wherever the music was, so were you.",
+    how: "Clubs visited, time in the club, dance-offs and jams, money sprayed",
     combo: "a Party Animal streak",
     mintStat: "spray_mint",
     tie: 7,
     lines: [
       "The DJ played your song. Twice.",
-      "You came, you danced, you made it rain mint.",
+      "You came, you danced, you made it rain.",
       "The dance floor misses you already.",
       "Ghosts hide. You shine under the disco lights.",
       "Sleep is for people without dance moves.",
@@ -291,15 +293,15 @@ export const STYLES: Record<StyleKey, PlayStyle> = {
     short: "Master Thief",
     icon: "VenetianMask",
     color: "#334155",
-    blurb: "Side quests, sneaky jobs and a swiped mint or two. Smooth.",
-    how: "Mint swiped, thief jobs and other side quests finished",
+    blurb: "Side quests, sneaky jobs and a swiped naira or two. Smooth.",
+    how: "Money swiped, thief jobs and other side quests finished",
     combo: "a Master Thief's light fingers",
     tie: 1,
     lines: [
       "Light fingers, big smile, zero regrets.",
       "Nobody saw anything. Nobody ever does.",
       "Smooth operator energy, all game long.",
-      "You don't take mint. You relocate it.",
+      "You don't take money. You relocate it.",
       "The job was clean. The getaway was cleaner.",
       "Lock your pockets, the legend is in town.",
       "Every heist needs a mastermind. Hello.",
@@ -361,7 +363,7 @@ type CounterInfo = {
   source: CounterSource;
   /** [one, many] after the number ("1 building visited", "5 buildings visited"); null: never shown. */
   label: [string, string] | null;
-  /** A mint amount ("300 mint sprayed"): shown as "{n} {label[1]}". */
+  /** An amount of money ("₦450,000 sprayed"): shown in the player's currency, then label[1]. */
   mint?: boolean;
 };
 
@@ -405,12 +407,12 @@ export const COUNTERS = {
   tricks: { max: 3, source: "server", label: ["trick pulled", "tricks pulled"] },
   bets: { max: 100, source: "server", label: ["bet placed", "bets placed"] },
   bets_won: { max: 100, source: "server", label: ["bet won", "bets won"] },
-  bet_mint: { max: 100000, source: "server", label: ["mint on the line", "mint on the line"], mint: true },
+  bet_mint: { max: 100000, source: "server", label: ["on the line", "on the line"], mint: true },
   tickets: { max: 50, source: "server", label: ["match watched", "matches watched"] },
   gifts: { max: 200, source: "server", label: ["gift given", "gifts given"] },
-  gift_mint: { max: 1000000, source: "server", label: ["mint gifted", "mint gifted"], mint: true },
-  sprays: { max: 200, source: "server", label: ["mint shower", "mint showers"] },
-  spray_mint: { max: 1000000, source: "server", label: ["mint sprayed", "mint sprayed"], mint: true },
+  gift_mint: { max: 1000000, source: "server", label: ["gifted", "gifted"], mint: true },
+  sprays: { max: 200, source: "server", label: ["money shower", "money showers"] },
+  spray_mint: { max: 1000000, source: "server", label: ["sprayed", "sprayed"], mint: true },
   steals: { max: 50, source: "server", label: ["sneaky swipe", "sneaky swipes"] },
   quests_done: { max: 20, source: "server", label: ["side quest done", "side quests done"] },
   thief_quests: { max: 20, source: "server", label: ["thief job pulled off", "thief jobs pulled off"] },
@@ -556,12 +558,13 @@ export function comboText(side: StyleKey | null) {
 
 export type StyleStat = { key: CounterKey | "survived" | "visited"; value: number; text: string };
 
-/** "5 buildings visited", "300 mint sprayed", "Stayed hidden to the end". */
+/** "5 buildings visited", "₦450,000 sprayed", "Stayed hidden to the end". */
 export function statText(key: CounterKey | "survived" | "visited", value: number): string | null {
   if (key === "survived") return value > 0 ? "Stayed hidden to the end" : null;
   if (key === "visited") return "Dropped into town";
   const info: CounterInfo = COUNTERS[key];
   if (!info.label || value <= 0) return null;
+  if (info.mint) return `${cash(value)} ${info.label[1]}`;
   const n = value.toLocaleString("en");
   return `${n} ${value === 1 ? info.label[0] : info.label[1]}`;
 }

@@ -26,7 +26,9 @@ export async function GET(request: Request) {
     .from("rounds")
     .select("id")
     .eq("status", "done")
-    .lt("finished_at", new Date(Date.now() - 3600_000).toISOString());
+    .lt("finished_at", new Date(Date.now() - 3600_000).toISOString())
+    // Older rounds were cleared on earlier days (not every round ever, every day).
+    .gt("finished_at", new Date(Date.now() - 9 * 86_400_000).toISOString());
   const roundIds = (old ?? []).map((r) => r.id);
   let removed = 0;
   for (let i = 0; i < roundIds.length; i += 50) {
@@ -41,6 +43,11 @@ export async function GET(request: Request) {
     const dms = await db.from("chat_messages").delete({ count: "exact" }).in("round_id", batch).lt("created_at", week).is("room", null);
     const rooms = await db.from("chat_messages").delete({ count: "exact" }).in("round_id", batch).lt("created_at", week).not("room", "like", "town:%");
     removed += (dms.count ?? 0) + (rooms.count ?? 0);
+  }
+  // Notices over 30 days old, a batch at a time (game-db/102; nothing happens before it's run).
+  for (let i = 0; i < 25; i++) {
+    const { data: gone, error: sweepError } = await db.rpc("notices_sweep", { p_days: 30, p_batch: 20000 });
+    if (sweepError || !gone) break;
   }
   // The Town Hall: everything over a day old (and its photos).
   try {

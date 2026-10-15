@@ -6,12 +6,13 @@ import { LoaderCircle, X } from "lucide-react";
 import { Logo } from "@/components/logo";
 import type { WelcomeNeeds } from "@/lib/welcome";
 import { LoginForm } from "../login/login-form";
-import { AdultsOnly, WelcomeForm } from "../welcome/welcome-form";
+import { AdultsOnly, WelcomeForm, type WelcomeMode } from "../welcome/welcome-form";
 
 // Signing in and signing up, in a pop-up over the town (the town stops moving and blurs behind
 // it). Only the X closes it: a tap outside does nothing, so nobody loses what they typed.
-// Steps: your email; then your PIN (returning players) or a code we email you (new players,
-// and forgot PIN); then, for new players, a name, a PIN and your date of birth (18+).
+// Steps: your email; then your password (returning players), or your email again and the robot
+// check (new players), or a code we email you (forgot password); then, one question a screen,
+// what's still missing (src/app/welcome/welcome-form.tsx).
 
 export function SignInOverlay({
   why,
@@ -25,7 +26,7 @@ export function SignInOverlay({
   why: string | null;
   /** The game now knows who they are. */
   signedIn: boolean;
-  /** Signed in, but still to pick a name and PIN or give their date of birth (or under 18). */
+  /** Signed in, but still to finish signing up, make a password or give their date of birth (or under 18). */
   welcome: WelcomeNeeds | null;
   meName: string | null;
   onClose: () => void;
@@ -33,7 +34,7 @@ export function SignInOverlay({
   onSignOut: () => void;
 }) {
   const router = useRouter();
-  const [stage, setStage] = useState<"email" | "signed-in" | "new-pin">("email");
+  const [stage, setStage] = useState<"email" | "signed-in" | "new" | "reset">("email");
   const [pending, startTransition] = useTransition();
   const refresh = () => startTransition(() => router.refresh());
 
@@ -57,29 +58,21 @@ export function SignInOverlay({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [waiting]);
   const blocked = Boolean(welcome?.blocked);
-  const details = !waiting && !blocked && (welcome !== null || (stage === "new-pin" && signedIn));
-  const askPin = stage === "new-pin" || Boolean(welcome?.askPin);
-  const askBirth = Boolean(welcome?.askBirth);
-  // Halfway through signing up (no name and PIN yet, or no date of birth): the X signs out again.
+  const details = !waiting && !blocked && (welcome !== null || ((stage === "new" || stage === "reset") && signedIn));
+  const mode: WelcomeMode =
+    stage === "reset" ? "reset" : welcome?.setup || stage === "new" ? "setup" : welcome?.askPassword ? "upgrade" : "birth";
+  // Halfway through signing up: the X signs out again.
   const mustFinish = welcome !== null;
 
   const title = blocked
     ? "Adults only"
     : details
-      ? welcome?.askPin
-        ? "Welcome to the city"
-        : askPin
-          ? "Set a new PIN"
-          : "One quick thing"
+      ? { setup: "Welcome to the city", upgrade: "Make a password", reset: "New password", birth: "One quick thing" }[mode]
       : "Enter Newtown";
   const intro = blocked
     ? "Newtown is for adults 18+."
     : details
-      ? welcome?.askPin
-        ? "Pick the name other players will see, a 6-digit PIN for next time, and tell us your date of birth."
-        : askPin
-          ? "Choose a new 6-digit PIN. You can change your name here too."
-          : "Newtown is for adults 18+. Please add your date of birth to keep playing. We'll only ask once."
+      ? { setup: "A few quick questions, one at a time.", upgrade: "One last thing before you play.", reset: "Choose a new password.", birth: "Newtown is for adults 18+. Please add your date of birth to keep playing." }[mode]
       : "Just your email to start.";
 
   return (
@@ -120,17 +113,18 @@ export function SignInOverlay({
             <AdultsOnly />
           ) : details ? (
             <WelcomeForm
-              key={askPin ? "pin" : "birth"}
+              key={mode}
+              mode={mode}
+              email={welcome?.email ?? ""}
               initialName={welcome?.name || meName || ""}
-              askPin={askPin}
-              askBirth={askBirth}
+              askBirth={welcome ? welcome.askBirth : stage === "new"}
               onDone={() => {
                 refresh();
                 onClose();
               }}
             />
           ) : (
-            <LoginForm onDone={(next) => setStage(next === "play" ? "signed-in" : "new-pin")} />
+            <LoginForm onDone={(next) => setStage(next === "play" ? "signed-in" : next)} />
           )}
         </div>
       </section>

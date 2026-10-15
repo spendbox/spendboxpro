@@ -240,7 +240,7 @@ export default async function Gate({ params }: { params: Promise<{ gate: string 
 
       <section className="rounded-2xl bg-panel p-4 ring-1 ring-line">
         <p className="text-sm font-semibold">Older starter pack payments</p>
-        <p className="text-xs text-muted">A pack still &ldquo;pending&rdquo; after someone paid: Check with Paystack gives them the mint if the money arrived.</p>
+        <p className="text-xs text-muted">A pack still &ldquo;pending&rdquo; after someone paid: Check with Paystack gives them the pack if the money arrived.</p>
         <div className="mt-2 overflow-x-auto">
           <table className="w-full min-w-[560px] text-left text-sm">
             <tbody>

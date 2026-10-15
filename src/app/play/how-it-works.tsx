@@ -1,6 +1,6 @@
 "use client";
 
-import { cashText } from "@/lib/world/value";
+import { cash, cashText } from "@/lib/world/value";
 import {
   Building2,
   Coins,
@@ -27,7 +27,8 @@ function Ico({ icon: Icon }: { icon: LucideIcon }) {
   return <Icon className="mx-0.5 inline-block size-[1.05em] align-[-0.17em]" />;
 }
 
-const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] = [
+/** The old ghost game's guide. A function so amounts are in the player's currency when it's shown. */
+const legacySections = (): { icon: LucideIcon; title: string; body: React.ReactNode[] }[] => [
   {
     icon: Building2,
     title: "One city, one hour",
@@ -42,7 +43,7 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
     icon: Ghost,
     title: "Ghosts",
     body: [
-      "Join as a ghost in the first 2 minutes of the hour: put down ₥100. Ghosts don't hide or move: when the hunt starts, every ghost lights up on the map for everyone to see.",
+      `Join as a ghost in the first 2 minutes of the hour: put down ${cash(100)}. Ghosts don't hide or move: when the hunt starts, every ghost lights up on the map for everyone to see.`,
       "Hunters challenge you to a quick game (Rock-Paper-Scissors for now, first to 2, a minute at most). A pop-up tells you wherever you are, even inside a building: answer within 30 seconds or you lose that duel.",
       "Win 3 duels and your light turns gold: you're safe for the rest of the game, you get your stake back, and you share the prize pool.",
       "Lose 3 and you're out: your light goes. Each loss costs a third of your stake (80% to the hunter who beat you, 20% to the prize pool).",
@@ -55,7 +56,7 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
     body: [
       "Everyone who isn't a ghost is a hunter: there's nothing to join.",
       "Tap a ghost's light (or Ghosts in the bottom bar) to see their stats: wins and losses this game and their record. Chat with them, or challenge them.",
-      "A challenge costs ₥10. Win and you get your 10 back plus a slice of the ghost's stake. Lose and your 10 goes into the prize pool. Ghosts start with the advantage: if time runs out with the score level, the ghost wins.",
+      `A challenge costs ${cash(10)}. Win and you get your money back plus a slice of the ghost's stake. Lose and it goes into the prize pool. Ghosts start with the advantage: if time runs out with the score level, the ghost wins.`,
       "After each duel you catch your breath for 30 seconds. You can't challenge a ghost who's already in a duel, or a golden one.",
       "Win 20 duels in one game and you're in the prize pool too.",
     ],
@@ -81,30 +82,30 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
       "You can message anyone privately from the People list, or from a ghost's card.",
       "When other real players are in the same place as you, a card pops up saying who they are (they're people, not NPCs), so you can say hi or add them as a friend.",
       "Add friends from the menu (Friends), the People list or that card. Once they say yes, they stay your friends in every new town: you see their faces over the places they're in, get a nudge when they go somewhere, and can go straight to them. Remove a friend any time.",
-      "Send someone a hug or a handshake (from that card, Friends, or a private chat). It's free: up to 30 a day, and 3 a day to the same person. My gifts in the menu shows the hugs, handshakes and mint people sent you, with a Thank you button. Don't want to hear from someone? Block them there: their hugs, gifts, private messages and friend requests stop reaching you.",
+      "Send someone a hug or a handshake (from that card, Friends, or a private chat). It's free: up to 30 a day, and 3 a day to the same person. My gifts in the menu shows the hugs, handshakes and money people sent you, with a Thank you button. Don't want to hear from someone? Block them there: their hugs, gifts, private messages and friend requests stop reaching you.",
     ],
   },
   {
     icon: Star,
     title: "Levels",
     body: [
-      "Earn XP, then spend mint to level up from the menu. Playing a game gives 10 XP, finishing a side quest 10, and every day of your streak 5.",
-      "Levels up to 20 are quick: 15 XP each, and ₥40 times the level you're on (₥40 from level 1 to 2, ₥400 from 10 to 11). After that each level takes more XP and more mint, all the way to level 100.",
+      "Earn XP, then spend money to level up from the menu. Playing a game gives 10 XP, finishing a side quest 10, and every day of your streak 5.",
+      `Levels up to 20 are quick: 15 XP each, and ${cash(40)} times the level you're on (${cash(40)} from level 1 to 2, ${cash(400)} from 10 to 11). After that each level takes more XP and more money, all the way to level 100.`,
       "Perks for the new duel game are on the way.",
     ],
   },
   {
     icon: Coins,
-    title: "Mint",
+    title: "Money",
     body: [
-      "Mint is just for playing: it can't be bought or cashed out.",
-      "Mint spent during a game goes into its prize pool (see above). Sometimes a brand sponsors the pool and adds extra mint.",
-      "Tap a billboard to see the ad on it, then tap the ad's button to earn ₥5, paid by the brand (up to 5 ads a day).",
-      "Running low? While your wallet and budget pots together are under your refill line you earn passive income every hour: up to ₥100 a day at level 1, and 25 more for every level after that, up to level 40 (1,075 a day).",
-      "Anyone holding ₥10,000 or more is a big fish, and everyone can see it.",
-      "You can give mint to other players, and spray mint on the dance floor in clubs.",
-      "Going places costs a little: the first time you go into a place in each town costs ₥0.10 (a house) up to ₥5 (an international airport). Going back is free until the next town. Trains cost a fare every time you board (₥1, the monorail ₥1.50). Half of every fee goes into the prize pool.",
-      "Coming soon: a marketplace to swap mint for rewards from brands, like custom tees and event tickets.",
+      "Game money is just for playing: it can't be cashed out.",
+      "Money spent during a game goes into its prize pool (see above). Sometimes a brand sponsors the pool and adds extra money.",
+      `Tap a billboard to see the ad on it, then tap the ad's button to earn ${cash(5)}, paid by the brand (up to 5 ads a day).`,
+      `Running low? While your wallet and budget pots together are under your refill line you earn passive income every hour: up to ${cash(100)} a day at level 1, and ${cash(25)} more for every level after that, up to level 40 (${cash(1075)} a day).`,
+      `Anyone holding ${cash(10_000)} or more is a big fish, and everyone can see it.`,
+      "You can give money to other players, and spray money on the dance floor in clubs.",
+      `Going places costs a little: the first time you go into a place in each town costs ${cash(0.1)} (a house) up to ${cash(5)} (an international airport). Going back is free until the next town. Trains cost a fare every time you board (${cash(1)}, the monorail ${cash(1.5)}). Half of every fee goes into the prize pool.`,
+      "Coming soon: a marketplace to swap money for rewards from brands, like custom tees and event tickets.",
     ],
   },
   {
@@ -113,7 +114,7 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
     body: [
       "Any business can give you a job: offices, shops, restaurants, clubs, banks, hotels, the station, the airport and more. Go inside and tap Jobs.",
       "To get the job, pass a quick interview: 5 questions about the town you're in (its name, its streets, its station, its country...). Fail and that place won't see you again in this town, so look around first!",
-      "A job pays mint by the hour while the town lasts (better jobs pay more), up to 8 paid hours a day. Collect your pay from My job in the menu. Pay is taxed 10%, and the tax goes into the prize pool.",
+      "A job pays by the hour while the town lasts (better jobs pay more), up to 8 paid hours a day. Collect your pay from My job in the menu. Pay is taxed 10%, and the tax goes into the prize pool.",
       "Working builds skills (hospitality, finance, health care...). With a skill, the same kind of job in the next town needs no interview, and every skill level adds 10% to your pay.",
       "At work, tap Work a shift to play a quick game that fits the job. A medal score earns a tip.",
     ],
@@ -124,7 +125,7 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
     body: [
       "Tap Games (in the menu, or inside any place) for 100 quick games: heists, sport, water, shooting, board games, cards, arcade, party and town life. The ones that suit the place you're in come first.",
       "Play alone, take turns with friends on one phone, or challenge someone in the same place: you both play the same level on your own phones and the best score wins. Board and card games can be played against the computer or someone online.",
-      "A bronze, silver or gold score pays ₥2, ₥4 or ₥6, for up to 10 games a day.",
+      `A bronze, silver or gold score pays ${cash(2)}, ${cash(4)} or ${cash(6)}, for up to 10 games a day.`,
       "Robbing the bank? The job itself is a run of heist games. Fail one and the alarm goes off.",
     ],
   },
@@ -133,8 +134,8 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
     title: "Town events",
     body: [
       "Every hour something rare happens somewhere in the city: fires, parades, UFOs, a treasure chest, a money truck spill, and dozens more.",
-      "Tap the news to fly straight there. Some events pay mint to the first few people who tap them.",
-      "Some events change the rules for a few minutes: double mint, free searches on a lucky street, a safe house where nobody can be found, a blackout where nobody can search…",
+      "Tap the news to fly straight there. Some events pay money to the first few people who tap them.",
+      "Some events change the rules for a few minutes: double money, free searches on a lucky street, a safe house where nobody can be found, a blackout where nobody can search…",
     ],
   },
   {
@@ -142,11 +143,11 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
     title: "Things to do",
     body: [
       "Tap any building to go inside: lobbies, floors, restaurants, clubs and rooftops. Tap the floor to walk around and tap glowing things to use them.",
-      "Sit down, play mini games with the people around you (archery, darts, arcade, duels, trivia and more), order food, dance and spray mint in clubs.",
+      "Sit down, play mini games with the people around you (archery, darts, arcade, duels, trivia and more), order food, dance and spray money in clubs.",
       "In a club, tap Dance (or the dance floor): the music starts and you see yourself dancing in the middle of the crowd, with a glowing ring under you. Pick a move (groove, hands up, shaku shaku, disco point, body wave, gwara gwara, legwork, spin), dance with another player or one of the regulars, and drag to look round. Everyone in the club sees you dance.",
       "Tap Explore to hop on a ride (hot-air balloons, bullet trains, the monorail, buses, cars, boats, the Ferris wheel and water slides) or watch sport. Rides drive themselves, so just sit back and look around.",
-      "Watch sport: football at the stadium, basketball, boxing and wrestling at the arenas (or Explore, then Sports). Every match is a brand-new simulated game, shown live from above. A ticket costs a few mint, and you can bet mint on who wins before kick-off. Tickets and the sportsbook's cut of bets go into the game's prize pool. Mint only, just for fun.",
-      "Sometimes you'll get a side quest (sitting down makes it more likely). Finish it for mint and special moves.",
+      "Watch sport: football at the stadium, basketball, boxing and wrestling at the arenas (or Explore, then Sports). Every match is a brand-new simulated game, shown live from above. A ticket costs a little, and you can bet money on who wins before kick-off. Tickets and the sportsbook's cut of bets go into the game's prize pool. Game money only, just for fun.",
+      "Sometimes you'll get a side quest (sitting down makes it more likely). Finish it for money and special moves.",
       "Chat with the city's regulars (NPCs). Some joke, some are rude, some are generous, and a few spill real secrets about where ghosts are.",
     ],
   },
@@ -171,9 +172,9 @@ const SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[] }[] =
     icon: Flame,
     title: "Daily streaks",
     body: [
-      "Do one thing a day to keep your streak going: play a game, finish a side quest, give or spray mint, hug or shake hands, or ride something. The flame next to your mint shows your days in a row.",
+      "Do one thing a day to keep your streak going: play a game, finish a side quest, give or spray money, hug or shake hands, or ride something. The flame next to your money shows your days in a row.",
       "Miss a day and your free weekly freeze saves your streak (one a week). Miss more and it starts again.",
-      "Reach 3, 7, 14, 30, 60 and 100 days for mint (10 up to 500) and a badge.",
+      `Reach 3, 7, 14, 30, 60 and 100 days for money (${cash(10)} up to ${cash(500)}) and a badge.`,
     ],
   },
   {
@@ -263,7 +264,7 @@ const WORLD_SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[]
 
 /** How it works: the real map (legacy: the old hourly ghost-hunt towns). */
 export function HowItWorks({ onClose, legacy }: { onClose: () => void; legacy?: boolean }) {
-  const sections = legacy ? SECTIONS : WORLD_SECTIONS;
+  const sections = legacy ? legacySections() : WORLD_SECTIONS;
   return (
     <Sheet onClose={onClose} wide>
       <div className="mb-4 flex items-start justify-between">
@@ -307,6 +308,13 @@ export function HowItWorks({ onClose, legacy }: { onClose: () => void; legacy?: 
             @{SUPPORT_X}
           </a>{" "}
           on X. Play at <b className="text-ink">{SITE_DOMAIN}</b>.
+        </p>
+        <p className="px-1 text-center text-xs text-muted">
+          Map data ©{" "}
+          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="underline">
+            OpenStreetMap contributors
+          </a>
+          , available under the Open Database License.
         </p>
       </div>
       <button onClick={onClose} className="mt-5 w-full rounded-xl bg-gold py-3 font-semibold text-ink">

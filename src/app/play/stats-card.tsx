@@ -97,7 +97,7 @@ export function StatsCard({
         <dl className="mt-2 grid grid-cols-3 gap-1 text-center sm:mt-3">
           {[
             ["Ghosts", short(hidden), `${hidden.toLocaleString("en")} of ${hidersTotal.toLocaleString("en")} ghosts still lit up`, `of ${short(hidersTotal)}`],
-            ["Pool", short(pool), `${cash(pool)} in the pool`, "mint"],
+            ["Pool", cash(pool), `${cash(pool)} in the pool`, "to win"],
             ["Golden", short(golden), `${golden.toLocaleString("en")} ghosts turned golden`, "safe"],
           ].map(([k, v, full, sub]) => (
             <div key={k} className="min-w-0 rounded-lg bg-white/60 px-0.5 py-1 sm:rounded-xl sm:px-1 sm:py-1.5" title={full}>

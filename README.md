@@ -92,7 +92,7 @@ sport, plus private messages. Explore stays locked while the town is still a bui
    `game-db/036_minigames.sql` and `game-db/037_better_pay.sql`, in order, once each, on an empty database. In Supabase → Database → Extensions, switch on **pg_cron** first if you
    can: the file then schedules the round clock to run every minute. (Without it, the clock
    still moves whenever someone has the game open.)
-2. **Email codes.** The app sends its own 4-digit sign-in codes through Resend, so nothing
+2. **Email codes** (only for "Forgot password" now). The app sends its own 4-digit codes through Resend (or Amazon SES), so nothing
    needs setting up in Supabase. Just make sure `RESEND_API_KEY` and `EMAIL_FROM` (an address on
    your Resend-verified domain) are set in Vercel.
 3. **Vercel environment variables** (see `.env.example`): `NEXT_PUBLIC_SUPABASE_URL`,
@@ -264,9 +264,14 @@ Two side quests (Town hugger, Diplomat) count hugs and handshakes.
 
 Signing in and signing up happen in a pop-up over the town (the town freezes and blurs behind
 it; only the X closes it). `/login` and signed-out visits to `/play` open it at `/?signin=1`.
-The pop-up asks for an email. Returning players type their 6-digit PIN; new players get
-a 4-digit email code (sent by the app through Resend), then pick a name and PIN. "Forgot
-PIN" emails a code and lets you set a new one. 5 wrong PINs locks it for 15 minutes. Chat has a public City room and private
+The pop-up asks for an email. Returning players type their password (players from before
+passwords type their old 6-digit PIN, then are asked to make a password). New players type their
+email again and pass a robot check (Cloudflare Turnstile: TURNSTILE_SECRET_KEY and
+NEXT_PUBLIC_TURNSTILE_SITE_KEY), then answer one question a screen: name, man or woman, date of
+birth, password (with a strength meter; common, guessable and leaked passwords are refused),
+the password again, and a reminder to keep both somewhere safe. No email is sent. "Forgot
+password" emails a 4-digit code and lets you make a new one (and marks the email as confirmed).
+5 wrong passwords lock it for 15 minutes. Chat has a public City room and private
 messages, with text and voice notes, a People list showing who's a ghost or a hunter, and town
 news signed by the bot; it belongs to one round, so a new map starts a new
 chat (old chats and voice notes are deleted by the daily job).

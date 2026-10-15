@@ -5,17 +5,25 @@ import { cn } from "@/lib/cn";
 import { HOST_SHARE, PARTY_SIZES } from "@/lib/world/events";
 import { Sheet } from "../sheet";
 
-// How to host a party, step by step (docs/EVENTS.md, "How to host a great party"): setting it up,
-// then everything the host does inside, music first. Opened from Host an event.
+// How to host a party, step by step (docs/EVENTS.md, "How to host a great party"): setting it up
+// (the same steps as the form), then everything the host does inside. Opened from Host an event.
 
 const STEPS: { icon: string; title: string; points: string[] }[] = [
   {
     icon: "🎉",
     title: "Pick your party",
     points: [
-      "Open Events (the party button, top right), then Host an event.",
-      "Pick Parties, then the kind: Street party, Owambe, Concert, Rave, House party or Drum circle.",
-      "Give it a name people will want to tap (\"Ada's 30th Owambe\"), and say what to expect: the dress code, the music, the food.",
+      "Open Events with the party button at the top right, then tap Host an event.",
+      "Choose Parties, then the kind you want: a street party, an owambe, a concert, a rave, a house party or a drum circle.",
+      "The form takes you through it one question at a time. Tap Back whenever you want to change something.",
+    ],
+  },
+  {
+    icon: "✍️",
+    title: "Name it",
+    points: [
+      "Pick a name people will want to tap, like \"Ada's 30th Owambe\".",
+      "Add a line about what to expect if you like: the dress code, the music or the food.",
     ],
   },
   {
@@ -23,65 +31,64 @@ const STEPS: { icon: string; title: string; points: string[] }[] = [
     title: "Choose where",
     points: [
       "Pick a road or a place from the list, or tap Choose on the map.",
-      "On the map: move it until the pin is where you want it. The ring shows how far your party reaches. Tap Use this spot.",
-      "Landmarks, clubs and hotels cost more than a street; pricey areas (Ikoyi, VI) cost more too.",
+      "On the map, move it until the pin sits where you want it. The ring shows how far your party reaches. Then tap Use this spot.",
+      "Landmarks, clubs and hotels cost more than a street, and so do pricey areas like Ikoyi and VI.",
     ],
   },
   {
     icon: "🎆",
     title: "Choose how big",
     points: [
-      `From one spot to a mega carnival ${PARTY_SIZES[PARTY_SIZES.length - 1].m * 2 / 1000} km across. Every road inside it lights up with bulbs and dancing crowds on the map.`,
-      "Bigger parties can take more people (up to 10,000) and cost more to host.",
-      "From the area size up, or with 1,000+ people, your party is announced in the Lagos news.",
+      `It can be one spot or a carnival ${PARTY_SIZES[PARTY_SIZES.length - 1].m * 2 / 1000} km across. Every road inside it lights up with bulbs and dancing crowds.`,
+      "Bigger parties hold more people (up to 10,000) and cost more to host.",
+      "Big parties, and any party for 1,000 or more, make the Lagos news.",
     ],
   },
   {
     icon: "🎟️",
-    title: "When, tickets and how many",
+    title: "Time and tickets",
     points: [
-      "Start now, later today, or any time in the next week; 30 minutes to 4 hours.",
-      `Free, or sell tickets: once it's over you keep about ${Math.round(HOST_SHARE * 100)}% (VAT and income tax go to the state).`,
-      "You pay the hosting fee when it goes on the map. If fewer than 10 people come, it all comes back.",
+      "Start now, later today or any time in the next week. It can run from 30 minutes to 4 hours.",
+      `Make it free or sell tickets. Once it's over, you keep about ${Math.round(HOST_SHARE * 100)}% of each ticket; the rest is VAT and income tax.`,
+      "You pay the hosting fee when it goes on the map. If fewer than 10 people come, you get all of it back.",
     ],
   },
   {
     icon: "🎵",
-    title: "Add music (the DJ booth)",
+    title: "Add your music",
     points: [
-      "Inside your party, tap DJ & music (only the host sees it).",
-      "Get a song: open YouTube, find the song, tap Share, then Copy link.",
-      "Come back, paste the link and tap Play. Everyone at the party hears it at the same moment.",
-      "Paste more links to queue them (up to 20): they play one after another. Next skips, Stop stops.",
-      "No links? Pick a beat (Afrobeats, Amapiano...): it's made on everyone's phone.",
+      "The form asks for your songs before the party goes on the map, so the music is ready when you walk in.",
+      "To add a song, open YouTube and find it. Tap Share, then Copy link. Come back, paste it and tap Add.",
+      "Add up to 20 songs and they play one after another. Inside, tap Play in DJ & music and everyone hears it at the same moment.",
+      "No songs? Pick a ready-made beat inside instead, like Afrobeats or Amapiano. It keeps playing even when people switch to another app.",
     ],
   },
   {
     icon: "🔥",
     title: "Get the party going",
     points: [
-      "Watch the hype meter: reactions, dancing, toasts and spraying fill it. Full, the party is LIT.",
-      "Hot seat: ask everyone a question (yours, or a random one) and love the best answers.",
+      "Watch the hype meter. Reactions, dancing, toasts and spraying fill it up, and when it's full the party is LIT.",
+      "Use the hot seat to ask everyone a question, then love the best answers.",
       "Raise a toast, send shout-outs, and pair people up with Meet someone.",
-      "Guests can spray you real money; it rains on everyone's screen.",
+      "Guests can spray you real money, and it rains on everyone's screen.",
     ],
   },
   {
     icon: "📣",
-    title: "Bring people in",
+    title: "Who hears about it",
     points: [
-      "Your friends are told the moment you host, and everyone nearby when it starts.",
-      "Tap Invite friends on your event to share its link (WhatsApp, X, anywhere).",
-      "Starting later? People can say I'm going and they're told when it starts.",
+      "As soon as you host, your friends are told, and so are the people nearest to you: twice as many as your party holds, or everyone within 4 km if that's more.",
+      "Tap Invite friends on your event to share the link on WhatsApp, X or anywhere else.",
+      "If it starts later, people can tap I'm going and they'll be told when it starts.",
     ],
   },
   {
     icon: "👋",
     title: "Leaving and ending",
     points: [
-      "The arrow at the top takes you back to the map: you stay in, with a Back to button.",
-      "Leave takes you out (anyone can come back while it's on).",
-      "End it when you're done: ticket money is paid to you. Call it off before it starts and everyone gets their money back.",
+      "The arrow at the top takes you back to the map. You're still in the party, and a Back to button brings you straight back.",
+      "Tap Leave to go out. You can come back in any time while it's on.",
+      "When you're done, tap End. Ticket money is paid to you then. If you call it off before it starts, everyone gets their money back.",
     ],
   },
 ];

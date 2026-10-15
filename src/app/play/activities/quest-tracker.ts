@@ -12,6 +12,7 @@ import {
 import { myQuest, offerQuest, reportQuest } from "../quest-actions";
 import { buildingOf } from "../rooms";
 import { clearQuestFlash, onQuestEvent, onRefreshQuest, setQuest, useQuestSnapshot, type QuestEvent } from "./quest-store";
+import { isHere, whileHere } from "../activity";
 
 // Keeps the player's side quest up to date: loads it, asks for new ones now and then (sitting
 // down makes one much more likely), turns what the player does into quest progress and
@@ -140,10 +141,10 @@ export function useQuestTracker(opts: { room?: string | null; seated?: boolean; 
   useEffect(() => {
     if (!signedIn) return;
     const first = window.setTimeout(() => void load(), 0);
-    const id = window.setInterval(() => void load(), active ? 30_000 : 120_000);
+    const stop = whileHere(() => void load(), active ? 30_000 : 120_000);
     return () => {
       window.clearTimeout(first);
-      window.clearInterval(id);
+      stop();
     };
   }, [signedIn, active, load]);
 
@@ -153,7 +154,7 @@ export function useQuestTracker(opts: { room?: string | null; seated?: boolean; 
   // A surprise quest now and then.
   useEffect(() => {
     if (!signedIn || active) return;
-    const id = window.setInterval(() => void offer("random"), RANDOM_OFFER_MS);
+    const id = window.setInterval(() => isHere() && void offer("random"), RANDOM_OFFER_MS);
     return () => window.clearInterval(id);
   }, [signedIn, active, offer]);
 

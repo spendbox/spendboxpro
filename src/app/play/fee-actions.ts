@@ -1,5 +1,6 @@
 "use server";
 
+import { naira } from "@/lib/brand";
 import { currentUserId } from "@/lib/game";
 import { clubEntryMint, MONORAIL_FARE, RIDE_FARE_NAIRA, rideFare, TRAIN_FARE, visitFee } from "@/lib/fees";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -15,7 +16,7 @@ const n = (v: unknown) => Number(v ?? 0) || 0;
 
 function say(message: string | undefined): Fail {
   const [code, arg] = (message ?? "").split(":");
-  if (code === "not_enough") return { ok: false, error: `You need ₥${arg} for that.`, need: n(arg), kick: true };
+  if (code === "not_enough") return { ok: false, error: `You need ${naira(arg)} for that.`, need: n(arg), kick: true };
   if (code === "frozen") return { ok: false, error: "Your account is paused right now.", kick: true };
   if (code === "unknown_player") return { ok: false, error: "Please sign in again." };
   console.error("Fee failed", message);

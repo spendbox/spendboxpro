@@ -12,6 +12,7 @@ import { Sheet } from "./sheet";
 import { useIncome } from "./income";
 import { confirmTopUp, myPackStatus, startTopUp, startTransferTopUp, toppedUpBefore, type TopUpRow } from "./topup-actions";
 import type { TransferAccount } from "@/lib/paystack";
+import { whileHere } from "./activity";
 
 // Your wallet (docs/MONEY.md): tap your cash. Kept short: what you have, today's gift, top up.
 // Amounts come in naira and show in your currency. Paying happens in Paystack's pop-up, over the game.
@@ -400,10 +401,10 @@ function WorldBank() {
         .then((b) => alive && b && setBank(b))
         .catch(() => {});
     load();
-    const t = setInterval(load, 15_000);
+    const stop = whileHere(load, 15_000);
     return () => {
       alive = false;
-      clearInterval(t);
+      stop();
     };
   }, []);
   if (!bank) return null;

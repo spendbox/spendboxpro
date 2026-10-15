@@ -151,6 +151,19 @@ a[href]:active,
   text-shadow: 0 1px 0 #f4c542, 0 2px 0 #d9a406, 0 3px 0 #b98605, 0 4px 0 #966804, 0 6px 10px rgba(0, 0, 0, 0.4);
   -webkit-text-stroke: 0.5px rgba(255, 255, 255, 0.6);
 }
+/* The name's glow (signed out, on a phone): a warm light round the letters, a soft halo behind them,
+   and the line under it lifted off the map. */
+.title-glow {
+  text-shadow: 0 1px 0 #f4c542, 0 2px 0 #d9a406, 0 3px 0 #b98605, 0 4px 0 #966804, 0 6px 10px rgba(0, 0, 0, 0.4),
+    0 0 18px rgba(255, 214, 92, 0.55), 0 0 42px rgba(255, 197, 61, 0.35);
+}
+.title-halo {
+  background: radial-gradient(closest-side, rgba(255, 214, 92, 0.32), rgba(255, 214, 92, 0.12) 55%, transparent);
+  filter: blur(6px);
+}
+.title-tagline {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55), 0 0 14px rgba(255, 214, 92, 0.45);
+}
 @media (prefers-reduced-motion: reduce) { .title-float-sm { animation: none; } }
 
 /* A challenge's stage floating over the map: tilted a little, bobbing gently. */
@@ -232,3 +245,11 @@ a[href]:active,
 @keyframes radar-sweep { to { transform: rotate(360deg); } }
 .radar-sweep { animation: radar-sweep 2.4s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .radar-ring, .radar-sweep { animation: none; } }
+
+/* Signing up: a strong password gets a little burst of emoji (src/components/password-input.tsx). */
+@keyframes pw-burst {
+  0% { transform: translate(0, 0) scale(0.4); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translate(var(--dx), -46px) scale(1.15); opacity: 0; }
+}
+.pw-burst { animation: pw-burst 0.9s ease-out both; }

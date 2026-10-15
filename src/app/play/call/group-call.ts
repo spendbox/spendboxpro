@@ -94,9 +94,25 @@ const SPEAK_HOLD_MS = 450;
 const CONNECT_TIMEOUT_MS = 15000;
 const MAX_TRIES = 4;
 
-/** Free public STUN servers, plus a TURN relay if one is set in the environment (see the docs). */
+/**
+ * Relay servers fetched for this player (Cloudflare TURN, /api/turn), kept for an hour: for the
+ * phones that can't reach each other directly (many on mobile data).
+ */
+let relay: { servers: RTCIceServer[]; at: number } | null = null;
+async function loadRelay() {
+  if (relay && Date.now() - relay.at < 3600_000) return;
+  try {
+    const res = await fetch("/api/turn", { signal: AbortSignal.timeout(4000) });
+    const j = (await res.json()) as { iceServers?: RTCIceServer[] };
+    relay = { servers: Array.isArray(j.iceServers) ? j.iceServers : [], at: Date.now() };
+  } catch {
+    // No relay this time: direct links only.
+  }
+}
+
+/** Free public STUN servers, plus a TURN relay if there is one (see the docs). */
 function iceServers(): RTCIceServer[] {
-  const list: RTCIceServer[] = [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }];
+  const list: RTCIceServer[] = [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }, ...(relay?.servers ?? [])];
   const turn = process.env.NEXT_PUBLIC_TURN_URL;
   if (turn) {
     const urls = turn
@@ -604,6 +620,8 @@ export function useGroupCall(room: string | null, me: CallMe | null, opts: { max
         fail(micError(e));
         return;
       }
+      // The relay's login (fetched once an hour), before any link is made.
+      await loadRelay();
       // The channel may still be connecting if Join was tapped straight away.
       for (let i = 0; i < 50 && alive && !s.subscribed; i++) await new Promise((r) => setTimeout(r, 100));
       if (!alive) {

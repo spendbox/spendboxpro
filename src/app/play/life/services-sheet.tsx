@@ -1,6 +1,6 @@
 "use client";
 
-import { cash } from "@/lib/world/value";
+import { cash, cashSymbol, fromShown } from "@/lib/world/value";
 import { useEffect, useState } from "react";
 import { MapPin, MessageCircle, Phone } from "@/components/icons";
 import type { PropertyResult } from "@/lib/world/property-api";
@@ -86,7 +86,7 @@ export function ServicesSheet({
         </div>
       )}
       {tab !== "yours" && (
-        <p className="mt-2 text-[11px] text-muted" title={kind === "game" ? `The price is held when you book and paid when it's done, less ${SERVICE_VAT * 100}% VAT.` : undefined}>
+        <p className="mt-2 text-[11px] text-muted" title={kind === "game" ? `The price is held when you book and paid when it's done, less ${+(SERVICE_VAT * 100).toFixed(1)}% VAT.` : undefined}>
           {kind === "game" ? "Paid in game money, only once it's done." : "Paid in person, outside the game. Meet safely."}
         </p>
       )}
@@ -286,7 +286,8 @@ function ServiceFormSheet({ what, kind: start, onPost, onClose }: { what: "offer
             category: String(d.get("category") ?? ""),
             title: String(d.get("title") ?? ""),
             about: String(d.get("about") ?? ""),
-            price: Number(String(d.get("price") ?? "").replace(/[,\s₦₥]/g, "")),
+            // In-game prices are typed in the player's own money and kept in mint.
+            price: ((v: number) => (kind === "game" ? Math.round(fromShown(v) * 100) / 100 : v))(Number(String(d.get("price") ?? "").replace(/[^\d.]/g, ""))),
             area: String(d.get("area") ?? ""),
             phone: String(d.get("phone") ?? "") || undefined,
             whatsapp: String(d.get("whatsapp") ?? "") || undefined,
@@ -323,7 +324,7 @@ function ServiceFormSheet({ what, kind: start, onPost, onClose }: { what: "offer
         <input name="title" required minLength={3} maxLength={60} placeholder={what === "offer" ? "What you offer, in a few words" : "What you need, in a few words"} className={input} />
         <textarea name="about" required minLength={10} maxLength={300} rows={3} placeholder="A little more about it" className={input} />
         <div className="grid grid-cols-2 gap-2">
-          <input name="price" required inputMode="decimal" placeholder={`${what === "offer" ? "Price" : "You'll pay"} (${kind === "game" ? "₥" : "₦"})`} className={input} />
+          <input name="price" required inputMode="decimal" placeholder={`${what === "offer" ? "Price" : "You'll pay"} (${kind === "game" ? cashSymbol() : "₦"})`} className={input} />
           <input name="area" required maxLength={60} placeholder="Area (e.g. Yaba)" className={input} />
         </div>
         {kind === "real" && (

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { BellRing, BookOpen, DoorClosed, PartyPopper } from "lucide-react";
 import { Sheet } from "../sheet";
 import { answerKnock, knock, knockStatus, myDoor, myGuestBook, signGuestBook, type GuestLine, type Knock } from "./visit-actions";
+import { whileHere } from "../activity";
 
 /**
  * At someone else's door (docs/HOME_PLANNER.md, "Visiting"): knock or ring, and wait for them to
@@ -113,10 +114,10 @@ export function DoorBell({ signedIn }: { signedIn: boolean }) {
       if (live) setKnocks(k);
     };
     void look();
-    const t = setInterval(look, 8000);
+    const stop = whileHere(look, 8000);
     return () => {
       live = false;
-      clearInterval(t);
+      stop();
     };
   }, [signedIn]);
   const k = knocks[0];

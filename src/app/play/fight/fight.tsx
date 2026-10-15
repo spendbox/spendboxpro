@@ -33,6 +33,7 @@ import { TurnTable, type Seat } from "../minigames/turn-table";
 import { Confetti } from "../activities/ui";
 import { playSfx } from "../sound";
 import { Sheet } from "../sheet";
+import { whileHere } from "../activity";
 import { challengeQuote, joinChallenge, leaveChallenge, myChallengeRep, openChallenge, reportWinner, type ChallengeQuote, type ChallengeView } from "./challenge-actions";
 import { useChallengeChannel } from "./channel";
 import { CallBar } from "../call/call-bar";
@@ -109,23 +110,29 @@ export function Fight({
   useEffect(() => {
     if (!signedIn) return;
     const first = setTimeout(() => void look(), 1200);
-    const t = setInterval(() => !document.hidden && void look(), 6000);
+    // Every 6 s while the list is open, every 30 s on the map; nothing while they're away.
+    const stop = whileHere(() => void look(), open ? 6000 : 30_000);
     return () => {
       clearTimeout(first);
-      clearInterval(t);
+      stop();
     };
-  }, [signedIn, look]);
+  }, [signedIn, look, open]);
   // The lights on the map: open ones only while their minute lasts (with the seconds left), and
   // games being played.
   const lightsKey = list.map((c) => `${c.id}:${c.status}:${c.startsAt}`).join("|");
   useEffect(() => {
+    // Only sent on when which lights show changes (a new list each second would redraw the
+    // whole game every second).
+    let shown = "";
     const show = () => {
       const t = Date.now();
-      lightsRef.current(
-        list
-          .filter((c) => c.status === "playing" || (c.status === "open" && Date.parse(c.startsAt) > t - 3000))
-          .map((c) => ({ id: c.id, x: c.x, z: c.z, colour: challengeGame(c.game)?.colour ?? "#f08c00", playing: c.status === "playing", endsAt: c.status === "open" ? Date.parse(c.startsAt) : null })),
-      );
+      const lights = list
+        .filter((c) => c.status === "playing" || (c.status === "open" && Date.parse(c.startsAt) > t - 3000))
+        .map((c) => ({ id: c.id, x: c.x, z: c.z, colour: challengeGame(c.game)?.colour ?? "#f08c00", playing: c.status === "playing", endsAt: c.status === "open" ? Date.parse(c.startsAt) : null }));
+      const key = lights.map((l) => l.id).join(",");
+      if (key === shown) return;
+      shown = key;
+      lightsRef.current(lights);
     };
     show();
     const t = setInterval(show, 1000);

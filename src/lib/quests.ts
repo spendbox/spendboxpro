@@ -9,6 +9,11 @@
 //
 // No imports on purpose: the browser, the server and the SQL generator all read this file.
 
+/** How an amount of game money is written: the app passes the player's own currency (cash()). */
+type Money = (amount: number) => string;
+/** Without one, in naira (a mint is ₦1,500, as in Lagos). */
+const naira: Money = (amount) => `₦${Math.round(amount * 1500).toLocaleString("en-GB")}`;
+
 /** Anyone holding this many coins (or more) is a big fish. */
 export const BIG_FISH_COINS = 10_000;
 
@@ -149,7 +154,7 @@ export type QuestDef = {
   action?: SpecialAction;
 };
 
-const STEAL_BRIEF = "Then pick a player and swipe a little of their mint (1–5%, at most 100).";
+const STEAL_BRIEF = "Then pick a player and swipe a little of their money (1–5%, at most ₦150,000).";
 
 export const QUESTS: QuestDef[] = [
   // ------------------------------------------------------------------ thieves and tricksters
@@ -365,7 +370,7 @@ export const QUESTS: QuestDef[] = [
     key: "courier",
     title: "Courier",
     role: "Today you are a courier.",
-    brief: "Deliver a parcel of ₥50 to any player (tap someone, then Give mint).",
+    brief: "Deliver a parcel of ₦75,000 to any player (tap someone, then Give money).",
     icon: "courier",
     fits: "any",
     steps: [{ type: "gift", coins: 50 }],
@@ -375,7 +380,7 @@ export const QUESTS: QuestDef[] = [
     key: "philanthropist",
     title: "Philanthropist",
     role: "Today you are a philanthropist.",
-    brief: "Share the love: give ₥100 in total to at least 2 different players.",
+    brief: "Share the love: give ₦150,000 in total to at least 2 different players.",
     icon: "gift",
     fits: "any",
     steps: [{ type: "gift", coins: 100 }, { type: "gift_people", count: 2 }],
@@ -385,7 +390,7 @@ export const QUESTS: QuestDef[] = [
     key: "good_samaritan",
     title: "Good Samaritan",
     role: "Today you are a Good Samaritan.",
-    brief: "Give ₥20 to someone who could use it.",
+    brief: "Give ₦30,000 to someone who could use it.",
     icon: "gift",
     fits: "any",
     steps: [{ type: "gift", coins: 20 }],
@@ -407,7 +412,7 @@ export const QUESTS: QuestDef[] = [
     key: "party_starter",
     title: "Party starter",
     role: "Today you start the party.",
-    brief: "Hit a club dance floor, do a dance-off and spray ₥100 on the dancers.",
+    brief: "Hit a club dance floor, do a dance-off and spray ₦150,000 on the dancers.",
     icon: "party",
     fits: "any",
     steps: [{ type: "play_game", count: 1, game: "dance" }, { type: "spray", coins: 100 }],
@@ -417,7 +422,7 @@ export const QUESTS: QuestDef[] = [
     key: "big_spender",
     title: "Big spender",
     role: "Today you are the big spender.",
-    brief: "Make it rain: spray ₥300 on a dance floor.",
+    brief: "Make it rain: spray ₦450,000 on a dance floor.",
     icon: "coins",
     fits: "any",
     steps: [{ type: "spray", coins: 300 }],
@@ -676,7 +681,7 @@ export const QUESTS: QuestDef[] = [
     key: "treasure_hunter",
     title: "Treasure hunter",
     role: "Today you hunt treasure.",
-    brief: "Grab a reward from a city event or a mint balloon before anyone else.",
+    brief: "Grab a reward from a city event or a money balloon before anyone else.",
     icon: "treasure",
     fits: "any",
     steps: [{ type: "claim_event", count: 1 }],
@@ -795,7 +800,7 @@ const plural = (n: number, w: [string, string]) => `${n} ${n === 1 ? w[0] : w[1]
 const secs = (s: number) => (s >= 60 && s % 60 === 0 ? `${s / 60} minute${s === 60 ? "" : "s"}` : `${s} seconds`);
 
 /** A step in plain words, e.g. "Visit 2 rooftops" or "Sit down for 30 seconds". */
-export function stepLabel(step: QuestStep): string {
+export function stepLabel(step: QuestStep, cash: Money = naira): string {
   switch (step.type) {
     case "visit_kind":
       return `Visit ${plural(step.count, PLACE_WORD[step.kind])}`;
@@ -821,11 +826,11 @@ export function stepLabel(step: QuestStep): string {
     case "order_food":
       return `Order at ${step.count} different ${step.where === "bar" ? "bars" : step.where === "restaurant" ? "restaurants" : "places"}`;
     case "spray":
-      return `Spray ₥${step.coins} on a dance floor`;
+      return `Spray ${cash(step.coins)} on a dance floor`;
     case "gift":
-      return `Give ₥${step.coins} away`;
+      return `Give ${cash(step.coins)} away`;
     case "gift_people":
-      return `Give mint to ${step.count} different players`;
+      return `Give money to ${step.count} different players`;
     case "search_tiles":
       return `Search ${step.count} spots`;
     case "sweep":
@@ -833,7 +838,7 @@ export function stepLabel(step: QuestStep): string {
     case "survive_minutes":
       return `Stay hidden for ${step.minutes} minute${step.minutes === 1 ? "" : "s"}`;
     case "claim_event":
-      return "Grab a city event or mint balloon reward";
+      return "Grab a city event or money balloon reward";
     case "greet": {
       const who = `${step.count} different player${step.count === 1 ? "" : "s"}`;
       return step.kind === "hug" ? `Hug ${who}` : step.kind === "handshake" ? `Shake hands with ${who}` : `Hug or shake hands with ${who}`;
@@ -841,13 +846,13 @@ export function stepLabel(step: QuestStep): string {
   }
 }
 
-/** "12/30 s", "1/2", "40/100 coins" for how far a step is. */
-export function stepProgressText(step: QuestStep, value: number) {
+/** "12/30 s", "1/2", "₦60,000/₦150,000" for how far a step is. */
+export function stepProgressText(step: QuestStep, value: number, cash: Money = naira) {
   const target = stepTarget(step);
   const v = Math.min(Math.floor(value), target);
   if (step.type === "survive_minutes") return `${Math.floor(v / 60)}/${step.minutes} min`;
   if (step.type === "sit_seconds" || step.type === "stay_seconds") return `${v}/${target} s`;
-  if (step.type === "spray" || step.type === "gift") return `₥${v}/${target}`;
+  if (step.type === "spray" || step.type === "gift") return `${cash(v)}/${cash(target)}`;
   return `${v}/${target}`;
 }
 
@@ -856,7 +861,7 @@ export const ACTION_INFO: Record<SpecialAction, { label: string; button: string;
   steal: {
     label: "Steal",
     button: "Steal from…",
-    about: "Pick a player and take 1–5% of their mint (at most 100). They'll know it was you, and thieves can't touch them for 24 hours.",
+    about: "Pick a player and take 1–5% of their money (at most ₦150,000). They'll know it was you, and thieves can't touch them for 24 hours.",
   },
   hint: {
     label: "Hint",

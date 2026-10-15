@@ -52,7 +52,7 @@ export default async function AdvertisePage() {
       </>,
     ],
     ["Can I change my billboard?", "Yes, any time and free: upload a new design from your business page and it's on the billboards in minutes."],
-    ["Do players get paid to look?", "No. Players don't get mint for tapping ads; they tap because they're interested."],
+    ["Do players get paid to look?", "No. Players don't get paid for tapping ads; they tap because they're interested."],
     ["What do I see?", "Building taps, card views, billboard views, calls, WhatsApp messages, website visits and directions, all time and this week."],
     ["Who will see it?", "Adults (18+) living their lives in Newtown's Lagos, mostly in Nigeria."],
     ["How do I reach you?", `Email ${CONTACT_EMAIL} and a real person will get back to you. Newtown lives at ${SITE_DOMAIN}.`],

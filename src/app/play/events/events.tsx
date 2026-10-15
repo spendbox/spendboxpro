@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, Clock, LoaderCircle, MapPin, Navigation, PartyPopper, Search, Share2, Ticket, Users, X } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Clock, ImagePlus, LoaderCircle, MapPin, Navigation, PartyPopper, Search, Share2, Ticket, Users, X } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar } from "@/lib/avatar";
 import { cn } from "@/lib/cn";
@@ -43,6 +43,11 @@ import {
   whenText,
   type EventCategoryId,
   type EventFormat,
+  EMPTY_STAGE,
+  QUEUE_MAX,
+  SLIDES_MAX,
+  youtubeId,
+  type StageState,
 } from "@/lib/world/events";
 import type { WorldEvent } from "@/lib/world-events";
 import type { ExplorePlace } from "@/lib/world/explore";
@@ -50,9 +55,9 @@ import { spiralIndex } from "@/lib/city/layout";
 import { cash, cashSymbol, fromShown, toShown } from "@/lib/world/value";
 import { playSfx } from "../sound";
 import { Sheet } from "../sheet";
-import { cancelEvent, endEvent, enterEvent, eventQuote, hostEvent, rsvpEvent, streetParties, type EventQuote, type EventView } from "./event-actions";
+import { cancelEvent, endEvent, enterEvent, eventQuote, hostEvent, rsvpEvent, setStage, streetParties, type EventQuote, type EventView } from "./event-actions";
 import { PartyRoom } from "./party-room";
-import { RoomGuard } from "./room-kit";
+import { RoomGuard, shrinkPhoto } from "./room-kit";
 import { StageRoom } from "./stage-room";
 import { HostGuide } from "./host-guide";
 import { whileHere } from "../activity";
@@ -173,7 +178,8 @@ export function Events({
     if (open) void look();
   }, [open, look]);
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 5000);
+    // The map's lights only change by the minute.
+    const t = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(t);
   }, []);
 
@@ -236,7 +242,7 @@ export function Events({
   const insideId = inside?.id ?? null;
   useEffect(() => {
     if (insideId === null) return;
-    const t = setInterval(async () => {
+    const stop = whileHere(async () => {
       const v = await fetch(`/api/events?id=${insideId}`, { cache: "no-store" })
         .then((r) => (r.ok ? (r.json() as Promise<{ view: EventView | null }>) : null))
         .then((d) => d?.view ?? null)
@@ -248,7 +254,7 @@ export function Events({
         void look();
       } else setInside(v);
     }, 20_000);
-    return () => clearInterval(t);
+    return stop;
   }, [insideId, look, onMessage]);
 
   // Going in: the room opens at once, and the server lets you in (and takes the ticket) meanwhile.
@@ -353,29 +359,34 @@ export function Events({
       ))}
       {inside && me && tucked && (
         <div
-          className="toast-in pointer-events-auto fixed left-1/2 top-28 z-40 flex -translate-x-1/2 items-center gap-1 rounded-full bg-ink py-2 pl-2 pr-1.5 text-sm font-bold text-white shadow-2xl"
+          className="toast-in pointer-events-auto fixed left-1/2 top-28 z-40 flex w-max max-w-[calc(100vw-7rem)] -translate-x-1/2 items-center gap-1 rounded-full bg-ink py-1.5 pl-1.5 pr-1.5 text-sm font-bold text-white shadow-2xl"
           style={{ boxShadow: `0 0 0 2px ${colourOf(inside)}, 0 10px 30px rgba(0,0,0,.35)` }}
         >
-          <button onClick={() => setTucked(false)} className="flex items-center gap-2 pr-1">
-            <span className="grid size-8 place-items-center rounded-full text-lg" style={{ background: colourOf(inside) }}>
+          <button onClick={() => setTucked(false)} className="flex min-w-0 items-center gap-2 pr-1">
+            <span className="grid size-8 shrink-0 place-items-center rounded-full text-lg" style={{ background: colourOf(inside) }}>
               {eventFormat(inside.format)?.icon}
             </span>
-            Back to {inside.title.length > 22 ? `${inside.title.slice(0, 21)}…` : inside.title}
-            <span className="rounded-full bg-hit px-1.5 text-[10px]">LIVE</span>
+            {/* One line, cut short if the name is long. */}
+            <span className="min-w-0 truncate whitespace-nowrap">Back to {inside.title}</span>
+            <span className="shrink-0 rounded-full bg-hit px-1.5 text-[10px]">LIVE</span>
           </button>
-          <button onClick={leave} className="grid size-7 place-items-center rounded-full text-white/70 hover:bg-white/10" aria-label="Leave the event">
+          <button onClick={leave} className="grid size-7 shrink-0 place-items-center rounded-full text-white/70 hover:bg-white/10" aria-label="Leave the event">
             <X className="size-4" />
           </button>
         </div>
       )}
-      {inside && me && !tucked && (
-        <RoomGuard key={inside.id} onClose={() => setTucked(true)}>
-          {inside.category === "stage" ? (
-            <StageRoom view={inside} me={me} onMin={() => setTucked(true)} onLeave={leave} onPerson={onPerson} onMessage={onMessage} onEnd={() => setConfirm({ kind: "end", e: inside })} />
-          ) : (
-            <PartyRoom view={inside} me={me} onMin={() => setTucked(true)} onLeave={leave} onPerson={onPerson} onMessage={onMessage} onEnd={() => setConfirm({ kind: "end", e: inside })} />
-          )}
-        </RoomGuard>
+      {/* Still in the room while it's tucked away (back on the map): hidden, not closed, so the
+          music, voices and chat carry on until you leave. */}
+      {inside && me && (
+        <div className={tucked ? "hidden" : undefined}>
+          <RoomGuard key={inside.id} onClose={() => setTucked(true)}>
+            {inside.category === "stage" ? (
+              <StageRoom view={inside} me={me} onMin={() => setTucked(true)} onLeave={leave} onPerson={onPerson} onMessage={onMessage} onEnd={() => setConfirm({ kind: "end", e: inside })} />
+            ) : (
+              <PartyRoom view={inside} me={me} onMin={() => setTucked(true)} onLeave={leave} onPerson={onPerson} onMessage={onMessage} onEnd={() => setConfirm({ kind: "end", e: inside })} />
+            )}
+          </RoomGuard>
+        </div>
       )}
       {confirm && (
         <Sheet onClose={() => setConfirm(null)} title={confirm.kind === "end" ? "End it now?" : "Call it off?"} centred>
@@ -467,10 +478,10 @@ function EventsSheet({
           <p className="mt-1 text-sm text-white/85">Parties, talks and watch parties, right on the map.</p>
         </div>
         <div className="mt-3 space-y-2.5 text-sm">
-          <Point icon="📍" text="Host anywhere: the street you're on, a landmark, a restaurant, a park." />
-          <Point icon="🎊" text="Parties fill the street on the map. Inside: music, the hot seat, meeting someone new, shout-outs, toasts and spraying the host." />
-          <Point icon="🎤" text="Talks and screenings: slides or a video everyone watches together, with reactions and questions." />
-          <Point icon="🎟️" text={`Free, or sell tickets: once it's over you keep about ${Math.round(HOST_SHARE * 100)}% (tickets include ${TICKET_VAT * 100}% VAT, and your takings pay ${INCOME_TAX * 100}% income tax, like pay).`} />
+          <Point icon="📍" text="Host anywhere you like: the street you're on, a landmark, a restaurant or a park." />
+          <Point icon="🎊" text="Parties fill the street on the map. Inside there's music, the hot seat, shout-outs, toasts, new people to meet and a host to spray." />
+          <Point icon="🎤" text="Talks and screenings put slides or a video on a big screen. Everyone watches together and can react and ask questions." />
+          <Point icon="🎟️" text={`Make it free or sell tickets. Once it's over you keep about ${Math.round(HOST_SHARE * 100)}% of each ticket. Tickets include ${+(TICKET_VAT * 100).toFixed(1)}% VAT, and your takings pay ${Math.round(INCOME_TAX * 100)}% income tax, just like pay.`} />
           <Point icon="⭐" text={`+${REP_PER_HOSTED} reputation for every event you host that 3 or more people come to.`} />
         </div>
         <button
@@ -556,7 +567,7 @@ function EventsSheet({
           <span className="text-2xl">📖</span>
           <span className="min-w-0 flex-1">
             <b className="block text-sm">How to host a great party</b>
-            <span className="text-xs text-muted">Setting it up, adding music, getting it going · 8 quick steps</span>
+            <span className="text-xs text-muted">Setting it up, adding music and getting it going, in 9 short steps</span>
           </span>
         </button>
         {guide && <HostGuide onClose={() => setGuide(false)} />}
@@ -679,6 +690,16 @@ function HostForm({
   const [going, setGoing] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const opened = useRef(Date.now());
+  // The music (parties): YouTube songs, in order. The screen (talks): slides or a YouTube video.
+  const [songs, setSongs] = useState<string[]>([]);
+  const [songLink, setSongLink] = useState("");
+  const [mediaKind, setMediaKind] = useState<"slides" | "video">("slides");
+  const [slideFiles, setSlideFiles] = useState<File[]>([]);
+  const [videoLink, setVideoLink] = useState("");
+  /** Uploading the slides after it's made ("Adding slide 2 of 5…"). */
+  const [loadingStage, setLoadingStage] = useState<string | null>(null);
+  /** Which screen of the form (see `steps`). */
+  const [stepAt, setStepAt] = useState(0);
 
   // Where it can be: any named road round the middle of your screen (move the map and look again
   // to pick another), and the places round you (those that suit it first).
@@ -741,6 +762,8 @@ function HostForm({
   // What hosting costs (parties): the hours, how many can come, the kind of place and the area.
   const cost = cat === "party" && venue ? partyCost({ minutes, capacity, venue: venue.kind, area: venue.areaK, radiusM }) : null;
   const ready = !!name && !!venue && !priceBad && !timeBad && !going && !clash;
+  /** Not enough money to pay for hosting it. */
+  const short = !!cost && quote?.canSpend != null && quote.canSpend < cost.naira / (quote?.perMint ?? 1_500) - 0.005;
 
   const pickFormat = (id: string) => {
     const nf = eventFormat(id);
@@ -767,251 +790,516 @@ function HostForm({
     );
 
   const rep = quote?.rep ? eventRep(quote.rep.hosted, quote.rep.attended) : null;
+  // One question a screen (docs/EVENTS.md): what, its name, where, how big (parties), when,
+  // tickets, then the music (parties) or slides and video (talks), and a last look before it goes on
+  // the map.
+  const steps: { id: string; title: string; tip: string }[] = [
+    { id: "kind", title: "What are you hosting?", tip: "Parties fill the street with music and dancing. Talks and screenings put slides or a video on a big screen." },
+    { id: "name", title: "Give it a name", tip: "A good name makes people want to come. Add a line about the dress code, the music or the speaker if you like." },
+    { id: "where", title: "Where is it?", tip: "Pick a road or a place near you, or tap Choose on the map and drop the pin where you want it." },
+    ...(cat === "party" ? [{ id: "size", title: "How big is the party?", tip: "Every road inside the circle lights up with bulbs and dancing crowds. Bigger parties hold more people." }] : []),
+    { id: "when", title: "When does it start?", tip: `Start now, or any time in the next ${DAYS_AHEAD} days. People who say they're going are told when it starts.` },
+    { id: "tickets", title: "Tickets and guests", tip: "Make it free, or sell tickets. You're paid once it's over." },
+    cat === "party"
+      ? { id: "music", title: "Add your music", tip: "Line up songs now so the party starts the moment you walk in." }
+      : { id: "media", title: "Add slides or a video", tip: "Get your screen ready now, so you can start as soon as you walk in." },
+    { id: "review", title: "Ready to go?", tip: "Here's your event. Tap Back to change anything." },
+  ];
+  const k = Math.min(stepAt, steps.length - 1);
+  const stepId = steps[k].id;
+  const stepOk =
+    stepId === "name" ? !!name : stepId === "where" ? !!venue && !clash : stepId === "when" ? !timeBad : stepId === "tickets" ? !priceBad : true;
+  const stepHint = stepId === "name" ? "Give it a name first." : stepId === "where" ? (clash ? "That road is taken then. Pick another." : "Pick where it is first.") : stepId === "when" ? `Pick a time in the next ${DAYS_AHEAD} days.` : stepId === "tickets" ? "Check the ticket price." : "";
+
+  /** After it's made: the songs, or the slides (uploaded now) or video, put on its stage. */
+  const loadStage = async (id: number): Promise<StageState | null> => {
+    let stage: StageState | null = null;
+    if (cat === "party" && songs.length) {
+      stage = { ...EMPTY_STAGE, mode: "video", video: songs[0], queue: songs.slice(1, QUEUE_MAX + 1), playing: false };
+    } else if (cat !== "party" && mediaKind === "video" && youtubeId(videoLink)) {
+      stage = { ...EMPTY_STAGE, mode: "video", video: youtubeId(videoLink), playing: false };
+    } else if (cat !== "party" && slideFiles.length) {
+      const urls: string[] = [];
+      for (let i = 0; i < slideFiles.length; i++) {
+        setLoadingStage(`Adding slide ${i + 1} of ${slideFiles.length}…`);
+        const body = new FormData();
+        body.set("id", String(id));
+        body.set("photo", await shrinkPhoto(slideFiles[i], 1600), "slide.jpg");
+        const r = (await fetch("/api/events/slide", { method: "POST", body }).then((res) => res.json())) as { ok: boolean; url?: string };
+        if (r.ok && r.url) urls.push(r.url);
+      }
+      if (urls.length) stage = { ...EMPTY_STAGE, mode: "slides", slides: urls, slide: 0 };
+    }
+    setLoadingStage(null);
+    if (!stage) return null;
+    const r = await setStage(id, stage);
+    return r.ok ? stage : null;
+  };
+
   return (
     <div className="mt-3">
-      {rep !== null && (
-        <div className="rounded-2xl bg-ink/5 px-3 py-2">
-          <div className="flex justify-between text-[11px] font-semibold text-muted">
-            <span>Your reputation from events</span>
-            <span className="tabular-nums">
-              {rep} / {REP_MAX}
-            </span>
-          </div>
-          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-ink/10">
-            <div className="h-full rounded-full bg-[#d6336c]" style={{ width: `${Math.min(100, (rep / REP_MAX) * 100)}%` }} />
-          </div>
-        </div>
-      )}
-
-      <Label>What kind of event?</Label>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {EVENT_CATEGORIES.map((c) => {
-          const on = c.id === cat;
-          return (
-            <button
-              key={c.id}
-              onClick={() => {
-                if (!c.ready) return;
-                setCat(c.id);
-                pickFormat(formatsIn(c.id)[0].id);
-              }}
-              className={cn("relative flex min-h-[5.5rem] flex-col items-start overflow-hidden rounded-2xl p-2.5 text-left text-white transition active:scale-95", on ? "ring-4 ring-gold" : "ring-1 ring-black/10", !c.ready && "opacity-60 saturate-50")}
-              style={{ background: `linear-gradient(150deg, ${c.colour} 0%, ${c.colour} 40%, #101418 130%)` }}
-            >
-              <span className="text-2xl leading-none">{c.icon}</span>
-              <b className="mt-auto pt-1 text-[13px] leading-tight">{c.label}</b>
-              {!c.ready && <span className="absolute right-1.5 top-1.5 rounded-full bg-black/35 px-1.5 py-0.5 text-[9px] font-bold uppercase">Soon</span>}
-            </button>
-          );
-        })}
-      </div>
-      <p className="mt-1.5 text-xs text-muted">{eventCategory(cat)?.blurb}</p>
-
-      <div className="-mx-5 mt-2 flex gap-1.5 overflow-x-auto px-5 pb-1 [scrollbar-width:none]">
-        {formatsIn(cat).map((x) => (
-          <button key={x.id} onClick={() => pickFormat(x.id)} className={cn("flex h-10 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-sm font-bold", x.id === formatId ? "bg-ink text-white shadow" : "bg-ink/5")}>
-            {x.icon} {x.title}
+      {/* Where you are in it, and the question on this screen. */}
+      <div className="flex items-center gap-2">
+        {k > 0 ? (
+          <button onClick={() => setStepAt(k - 1)} className="grid size-8 shrink-0 place-items-center rounded-full bg-ink/5" aria-label="Back">
+            <ChevronLeft className="size-4" />
           </button>
-        ))}
-      </div>
-      <p className="mt-1 text-xs text-muted">{f.blurb}</p>
-
-      <Label>Name it</Label>
-      <input
-        value={title}
-        onChange={(e) => setTitle(e.target.value.slice(0, TITLE_MAX))}
-        placeholder={cat === "party" ? "Ada's birthday owambe" : f.id === "watch_party" ? "Friday film night" : "How I saved my first ₦1m"}
-        className="h-12 w-full rounded-2xl bg-ink/5 px-4 font-semibold outline-none focus:ring-2 focus:ring-ink/20"
-      />
-      <textarea
-        value={about}
-        onChange={(e) => setAbout(e.target.value.slice(0, ABOUT_MAX))}
-        rows={2}
-        placeholder="What to expect (optional): the dress code, the speaker, the film…"
-        className="mt-2 w-full resize-none rounded-2xl bg-ink/5 p-3 text-sm outline-none focus:ring-2 focus:ring-ink/20"
-      />
-
-      <Label>Where?</Label>
-      {venue && (
-        <div className="mb-2 flex items-center gap-2 rounded-2xl bg-[#d6336c]/10 px-3 py-2 text-sm">
-          <MapPin className="size-4 shrink-0 text-[#d6336c]" />
-          <span className="min-w-0 flex-1 truncate">
-            <b>{venue.name}</b> <span className="text-muted">· {venue.what}</span>
-          </span>
+        ) : (
+          <span className="size-8 shrink-0" />
+        )}
+        <div className="flex flex-1 gap-1" aria-label={`Step ${k + 1} of ${steps.length}`}>
+          {steps.map((st, i) => (
+            <span key={st.id} className={cn("h-1.5 flex-1 rounded-full transition-colors", i <= k ? "bg-[#d6336c]" : "bg-ink/10")} />
+          ))}
         </div>
-      )}
-      <div className="flex gap-2">
-        <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-full bg-ink/5 px-3.5">
-          <Search className="size-4 shrink-0 text-muted" />
-          <input value={q} onChange={(e) => setQ(e.target.value.slice(0, 40))} placeholder="Search roads and places" className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none" />
-        </label>
-        <button onClick={lookAgain} className="flex h-10 shrink-0 items-center gap-1 rounded-full bg-ink/5 px-3 text-xs font-bold" title="Use where the map is now">
-          <Navigation className="size-3.5" /> Here
-        </button>
+        <span className="shrink-0 text-xs font-semibold tabular-nums text-muted">
+          {k + 1}/{steps.length}
+        </span>
       </div>
-      <button onClick={() => onPickOnMap(cat === "party" ? radiusM : PARTY_SIZE_DEFAULT)} className="mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-full bg-ink text-sm font-bold text-white">
-        <MapPin className="size-4" /> Choose on the map
-      </button>
-      <div className="mt-2 max-h-52 space-y-1 overflow-y-auto">
-        {shownVenues.length === 0 && <p className="rounded-2xl bg-ink/5 p-3 text-center text-sm text-muted">{venues.length ? "No place by that name near you." : "Walk somewhere on the map (or go home) first."}</p>}
-        {shownVenues.map((v) => {
-          const c = clashOf(v);
-          return (
-            <button key={v.key} onClick={() => setVenueKey(v.key)} className={cn("flex w-full items-center gap-2.5 rounded-2xl px-3 py-2 text-left", venue?.key === v.key ? "bg-ink text-white" : "bg-ink/5", c && venue?.key !== v.key && "opacity-55")}>
-              <span className="text-lg">{v.street ? "🛣️" : "📍"}</span>
-              <span className="min-w-0 flex-1">
-                <b className="block truncate text-sm">{v.name}</b>
-                <span className={cn("text-[11px]", venue?.key === v.key ? "text-white/70" : "text-muted")}>
-                  {c ? `Taken then: "${c.title}"` : v.what}
-                  {v.dist > 0 ? ` · ${v.dist < 10 ? `${Math.round(v.dist * 100)} m` : `${(v.dist / 10).toFixed(1)} km`}` : ""}
-                  {!c && v.suits ? " · good for this" : ""}
-                </span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      <div key={stepId} className="mt-3 motion-safe:animate-[stepIn_.2s_ease-out]">
+        <p className="font-display text-xl font-extrabold leading-tight">{steps[k].title}</p>
+        <p className="mb-3 mt-1 text-sm text-muted">{steps[k].tip}</p>
+        {stepId === "kind" && (
+          <>
+            {rep !== null && (
+              <div className="rounded-2xl bg-ink/5 px-3 py-2">
+                <div className="flex justify-between text-[11px] font-semibold text-muted">
+                  <span>Your reputation from events</span>
+                  <span className="tabular-nums">
+                    {rep} / {REP_MAX}
+                  </span>
+                </div>
+                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-ink/10">
+                  <div className="h-full rounded-full bg-[#d6336c]" style={{ width: `${Math.min(100, (rep / REP_MAX) * 100)}%` }} />
+                </div>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {EVENT_CATEGORIES.map((c) => {
+                const on = c.id === cat;
+                return (
+                  <button
+                    key={c.id}
+                    onClick={() => {
+                      if (!c.ready) return;
+                      setCat(c.id);
+                      pickFormat(formatsIn(c.id)[0].id);
+                    }}
+                    className={cn("relative flex min-h-[5.5rem] flex-col items-start overflow-hidden rounded-2xl p-2.5 text-left text-white transition active:scale-95", on ? "ring-4 ring-gold" : "ring-1 ring-black/10", !c.ready && "opacity-60 saturate-50")}
+                    style={{ background: `linear-gradient(150deg, ${c.colour} 0%, ${c.colour} 40%, #101418 130%)` }}
+                  >
+                    <span className="text-2xl leading-none">{c.icon}</span>
+                    <b className="mt-auto pt-1 text-[13px] leading-tight">{c.label}</b>
+                    {!c.ready && <span className="absolute right-1.5 top-1.5 rounded-full bg-black/35 px-1.5 py-0.5 text-[9px] font-bold uppercase">Soon</span>}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-1.5 text-xs text-muted">{eventCategory(cat)?.blurb}</p>
 
-      {cat === "party" && (
-        <>
-          <Label>How big?</Label>
-          <div className="grid grid-cols-3 gap-1.5">
-            {PARTY_SIZES.map((sz) => (
-              <button key={sz.m} onClick={() => pickSize(sz.m)} className={cn("rounded-2xl px-2 py-2 text-left", radiusM === sz.m ? "bg-ink text-white shadow" : "bg-ink/5")}>
-                <b className="block text-[13px] leading-tight">{sz.label}</b>
-                <span className={cn("block text-[10px] leading-tight", radiusM === sz.m ? "text-white/70" : "text-muted")}>
-                  {sz.m < 1000 ? `${sz.m} m` : `${sz.m / 1000} km`} round · up to {sz.most.toLocaleString("en-GB")}
+            <div className="-mx-5 mt-2 flex gap-1.5 overflow-x-auto px-5 pb-1 [scrollbar-width:none]">
+              {formatsIn(cat).map((x) => (
+                <button key={x.id} onClick={() => pickFormat(x.id)} className={cn("flex h-10 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-sm font-bold", x.id === formatId ? "bg-ink text-white shadow" : "bg-ink/5")}>
+                  {x.icon} {x.title}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-muted">{f.blurb}</p>
+          </>
+        )}
+        {stepId === "name" && (
+          <>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value.slice(0, TITLE_MAX))}
+              placeholder={cat === "party" ? "Ada's birthday owambe" : f.id === "watch_party" ? "Friday film night" : "How I saved my first ₦1m"}
+              className="h-12 w-full rounded-2xl bg-ink/5 px-4 font-semibold outline-none focus:ring-2 focus:ring-ink/20"
+            />
+            <textarea
+              value={about}
+              onChange={(e) => setAbout(e.target.value.slice(0, ABOUT_MAX))}
+              rows={2}
+              placeholder="What to expect (optional): the dress code, the speaker, the film…"
+              className="mt-2 w-full resize-none rounded-2xl bg-ink/5 p-3 text-sm outline-none focus:ring-2 focus:ring-ink/20"
+            />
+          </>
+        )}
+        {stepId === "where" && (
+          <>
+            {venue && (
+              <div className="mb-2 flex items-center gap-2 rounded-2xl bg-[#d6336c]/10 px-3 py-2 text-sm">
+                <MapPin className="size-4 shrink-0 text-[#d6336c]" />
+                <span className="min-w-0 flex-1 truncate">
+                  <b>{venue.name}</b> <span className="text-muted">· {venue.what}</span>
                 </span>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-full bg-ink/5 px-3.5">
+                <Search className="size-4 shrink-0 text-muted" />
+                <input value={q} onChange={(e) => setQ(e.target.value.slice(0, 40))} placeholder="Search roads and places" className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none" />
+              </label>
+              <button onClick={lookAgain} className="flex h-10 shrink-0 items-center gap-1 rounded-full bg-ink/5 px-3 text-xs font-bold" title="Use where the map is now">
+                <Navigation className="size-3.5" /> Here
               </button>
-            ))}
-          </div>
-          <p className="mt-1 text-xs text-muted">
-            {size.blurb}. Every road inside it is strung with lights and full of dancing on the map{size.m >= 600 ? ", and a party this big makes the Lagos news" : ""}.
-          </p>
+            </div>
+            <button onClick={() => onPickOnMap(cat === "party" ? radiusM : PARTY_SIZE_DEFAULT)} className="mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-full bg-ink text-sm font-bold text-white">
+              <MapPin className="size-4" /> Choose on the map
+            </button>
+            <div className="mt-2 max-h-52 space-y-1 overflow-y-auto">
+              {shownVenues.length === 0 && <p className="rounded-2xl bg-ink/5 p-3 text-center text-sm text-muted">{venues.length ? "No place by that name near you." : "Walk somewhere on the map (or go home) first."}</p>}
+              {shownVenues.map((v) => {
+                const c = clashOf(v);
+                return (
+                  <button key={v.key} onClick={() => setVenueKey(v.key)} className={cn("flex w-full items-center gap-2.5 rounded-2xl px-3 py-2 text-left", venue?.key === v.key ? "bg-ink text-white" : "bg-ink/5", c && venue?.key !== v.key && "opacity-55")}>
+                    <span className="text-lg">{v.street ? "🛣️" : "📍"}</span>
+                    <span className="min-w-0 flex-1">
+                      <b className="block truncate text-sm">{v.name}</b>
+                      <span className={cn("text-[11px]", venue?.key === v.key ? "text-white/70" : "text-muted")}>
+                        {c ? `Taken then: "${c.title}"` : v.what}
+                        {v.dist > 0 ? ` · ${v.dist < 10 ? `${Math.round(v.dist * 100)} m` : `${(v.dist / 10).toFixed(1)} km`}` : ""}
+                        {!c && v.suits ? " · good for this" : ""}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+        {stepId === "size" && (
+          <>
+            {cat === "party" && (
+              <>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {PARTY_SIZES.map((sz) => (
+                    <button key={sz.m} onClick={() => pickSize(sz.m)} className={cn("rounded-2xl px-2 py-2 text-left", radiusM === sz.m ? "bg-ink text-white shadow" : "bg-ink/5")}>
+                      <b className="block text-[13px] leading-tight">{sz.label}</b>
+                      <span className={cn("block text-[10px] leading-tight", radiusM === sz.m ? "text-white/70" : "text-muted")}>
+                        {sz.m < 1000 ? `${sz.m} m` : `${sz.m / 1000} km`} round · up to {sz.most.toLocaleString("en-GB")}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1 text-xs text-muted">
+                  {size.blurb}. Every road inside it is strung with lights and full of dancing on the map{size.m >= 600 ? ", and a party this big makes the Lagos news" : ""}.
+                </p>
+              </>
+            )}
+          </>
+        )}
+        {stepId === "when" && (
+          <>
+            <div className="flex flex-wrap gap-1.5">
+              {choices.map((c) => (
+                <Chip key={c.id} on={startId === c.id} onClick={() => setStartId(c.id)}>
+                  {c.label}
+                </Chip>
+              ))}
+              <Chip on={startId === "custom"} onClick={() => setStartId("custom")}>
+                <CalendarDays className="size-3.5" /> Pick a time
+              </Chip>
+            </div>
+            {startId === "custom" && (
+              <input
+                type="datetime-local"
+                value={custom}
+                onChange={(e) => setCustom(e.target.value)}
+                className="mt-2 h-11 w-full rounded-2xl bg-ink/5 px-3 text-sm outline-none"
+                min={new Date(opened.current - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 16)}
+              />
+            )}
+            {timeBad && startId === "custom" && custom && <p className="mt-1 text-xs font-semibold text-hit">Pick a time in the next {DAYS_AHEAD} days.</p>}
+            <p className="mt-2 flex items-center gap-1 text-xs font-semibold text-muted">
+              <Clock className="size-3.5" /> How long
+            </p>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {DURATIONS.map((m) => (
+                <Chip key={m} on={minutes === m} onClick={() => setMinutes(m)}>
+                  {m < 60 ? `${m} min` : `${m / 60} hour${m > 60 ? "s" : ""}`}
+                </Chip>
+              ))}
+            </div>
+          </>
+        )}
+        {stepId === "tickets" && (
+          <>
+            <div className="grid grid-cols-4 gap-1.5">
+              {TICKETS_NAIRA.map((t) => (
+                <button key={t} onClick={() => setChip(t)} className={cn("h-10 min-w-0 truncate rounded-full px-1 text-[13px] font-bold", chip === t ? "bg-ink text-white shadow" : "bg-ink/5")}>
+                  {t === 0 ? "Free" : cash(t / perMint)}
+                </button>
+              ))}
+            </div>
+            <label className={cn("mt-2 flex h-11 items-center gap-2 rounded-2xl px-4", chip === null ? "bg-panel ring-2 ring-ink" : "bg-ink/5")}>
+              <Ticket className="size-4 text-muted" />
+              <span className="font-display text-lg font-extrabold text-muted">{cashSymbol()}</span>
+              <input
+                value={chip !== null ? (chip === 0 ? "" : Number(typedOf(chip / perMint)).toLocaleString("en-GB")) : raw}
+                onFocus={() => {
+                  if (chip !== null) {
+                    setRaw(chip === 0 ? "" : typedOf(chip / perMint));
+                    setChip(null);
+                  }
+                }}
+                onChange={(e) => {
+                  setChip(null);
+                  setRaw(e.target.value.replace(/[^\d.,\s]/g, "").slice(0, 12));
+                }}
+                inputMode="decimal"
+                placeholder="Or type any price"
+                className="h-full min-w-0 flex-1 bg-transparent font-display text-lg font-extrabold tabular-nums outline-none"
+              />
+            </label>
+            <p className={cn("mt-1 text-xs", priceBad && raw ? "font-semibold text-hit" : "text-muted")}>
+              {priceBad && raw
+                ? `Up to ${cash(quote?.priceMax ?? 0)} a ticket.`
+                : price
+                  ? `Guests pay ${cash(price)} to come in (VAT included). Once it's over you get ${cash(ticketSplit(price).host)} of each: ${cash(ticketSplit(price).vat)} is VAT and ${cash(ticketSplit(price).tax)} income tax, paid to the state. If you call it off, everyone gets theirs back.`
+                  : "Free to come. People can still spray you at a party."}
+            </p>
+            <p className="mt-2 flex items-center gap-1 text-xs font-semibold text-muted">
+              <Users className="size-3.5" /> How many can come
+            </p>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {crowds.map((c) => (
+                <Chip key={c} on={capacity === c} onClick={() => setCapacity(c)}>
+                  {c.toLocaleString("en-GB")}
+                </Chip>
+              ))}
+            </div>
+          </>
+        )}
+        {stepId === "music" && (
+          <>
+            <div className="rounded-2xl bg-ink/5 p-3 text-sm">
+              <p className="font-bold">How to add a song</p>
+              <ol className="mt-1.5 space-y-1 text-muted">
+                <li>1. Open YouTube and find the song.</li>
+                <li>2. Tap Share, then Copy link.</li>
+                <li>3. Come back here, paste it below and tap Add.</li>
+              </ol>
+            </div>
+            <div className="mt-3 flex gap-2">
+              <input
+                value={songLink}
+                onChange={(e) => setSongLink(e.target.value.slice(0, 300))}
+                placeholder="Paste a YouTube link"
+                inputMode="url"
+                className="h-11 min-w-0 flex-1 rounded-2xl bg-ink/5 px-3.5 text-sm outline-none focus:ring-2 focus:ring-ink/20"
+              />
+              <button
+                disabled={!youtubeId(songLink) || songs.length >= QUEUE_MAX + 1}
+                onClick={() => {
+                  const id = youtubeId(songLink);
+                  if (!id) return;
+                  setSongs((l) => (l.includes(id) ? l : [...l, id]));
+                  setSongLink("");
+                }}
+                className="h-11 shrink-0 rounded-full bg-ink px-4 text-sm font-bold text-white disabled:opacity-40"
+              >
+                Add
+              </button>
+            </div>
+            {songLink && !youtubeId(songLink) && <p className="mt-1 text-xs font-semibold text-hit">That isn&apos;t a YouTube link.</p>}
+            {songs.length > 0 && (
+              <ol className="mt-3 space-y-1.5">
+                {songs.map((id, k) => (
+                  <li key={id} className="flex items-center gap-2.5 rounded-2xl bg-ink/5 p-1.5 pr-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={`https://i.ytimg.com/vi/${id}/default.jpg`} alt="" loading="lazy" className="h-9 w-12 shrink-0 rounded-lg object-cover" />
+                    <span className="min-w-0 flex-1 text-sm font-semibold">{k === 0 ? "Plays first" : `Song ${k + 1}`}</span>
+                    <button onClick={() => setSongs((l) => l.filter((x) => x !== id))} className="grid size-8 place-items-center rounded-full text-muted hover:bg-ink/10" aria-label="Remove this song">
+                      <X className="size-4" />
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            )}
+            <p className="mt-2 text-xs text-muted">
+              {songs.length
+                ? `${songs.length} song${songs.length > 1 ? "s" : ""} ready. When you go in, tap Play in DJ & music and everyone hears them at the same moment, one after another.`
+                : "No songs yet? That's fine. You can add them inside, or pick a ready-made beat (Afrobeats, Amapiano and more)."}
+            </p>
+          </>
+        )}
+        {stepId === "media" && (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => setMediaKind("slides")} className={cn("rounded-2xl p-3 text-left", mediaKind === "slides" ? "bg-ink text-white" : "bg-ink/5")}>
+                <b className="block text-sm">🖼️ Slides</b>
+                <span className={cn("text-[11px]", mediaKind === "slides" ? "text-white/70" : "text-muted")}>Pictures you show one by one</span>
+              </button>
+              <button onClick={() => setMediaKind("video")} className={cn("rounded-2xl p-3 text-left", mediaKind === "video" ? "bg-ink text-white" : "bg-ink/5")}>
+                <b className="block text-sm">🎬 A video</b>
+                <span className={cn("text-[11px]", mediaKind === "video" ? "text-white/70" : "text-muted")}>From YouTube, watched together</span>
+              </button>
+            </div>
+            {mediaKind === "slides" ? (
+              <>
+                <p className="mt-3 rounded-2xl bg-ink/5 p-3 text-sm text-muted">
+                  Made your slides in PowerPoint, Google Slides or Canva? Save or screenshot each slide as a picture, then add them here in order.
+                </p>
+                <label className="mt-2 flex h-11 cursor-pointer items-center justify-center gap-1.5 rounded-full bg-ink text-sm font-bold text-white">
+                  <ImagePlus className="size-4" /> {slideFiles.length ? "Add more slides" : "Choose pictures"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      const list = [...(e.target.files ?? [])];
+                      setSlideFiles((l) => [...l, ...list].slice(0, SLIDES_MAX));
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+                {slideFiles.length > 0 && (
+                  <div className="mt-2 grid grid-cols-4 gap-1.5">
+                    {slideFiles.map((file, k) => (
+                      <SlideThumb key={`${file.name}-${k}`} file={file} n={k + 1} onRemove={() => setSlideFiles((l) => l.filter((_, i) => i !== k))} />
+                    ))}
+                  </div>
+                )}
+                <p className="mt-2 text-xs text-muted">
+                  {slideFiles.length ? `${slideFiles.length} of ${SLIDES_MAX} slides. Inside, you move through them with Next and everyone sees the same one.` : `Up to ${SLIDES_MAX} slides. You can also add them once you're inside.`}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="mt-3 rounded-2xl bg-ink/5 p-3 text-sm text-muted">Open YouTube, find the video, tap Share, then Copy link. Paste it below.</p>
+                <input
+                  value={videoLink}
+                  onChange={(e) => setVideoLink(e.target.value.slice(0, 300))}
+                  placeholder="Paste a YouTube link"
+                  inputMode="url"
+                  className="mt-2 h-11 w-full rounded-2xl bg-ink/5 px-3.5 text-sm outline-none focus:ring-2 focus:ring-ink/20"
+                />
+                {videoLink && !youtubeId(videoLink) && <p className="mt-1 text-xs font-semibold text-hit">That isn&apos;t a YouTube link.</p>}
+                {youtubeId(videoLink) && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={`https://i.ytimg.com/vi/${youtubeId(videoLink)}/hqdefault.jpg`} alt="The video" className="mt-2 aspect-video w-full rounded-2xl object-cover" />
+                )}
+                <p className="mt-2 text-xs text-muted">It&apos;s ready on the screen when you go in. Tap Play and everyone watches at the same moment.</p>
+              </>
+            )}
+          </>
+        )}
+        {stepId === "review" && (
+          <>
+            <div className="space-y-1.5 rounded-2xl bg-ink/5 p-3 text-sm">
+              <p>
+                <b>{f.icon} {name || "No name yet"}</b> <span className="text-muted">· {f.title}</span>
+              </p>
+              <p className="text-muted">📍 {venue ? venue.name : "No place picked"}</p>
+              <p className="text-muted">
+                🕒 {startId === "now" ? "Starts now" : Number.isFinite(startAt) ? new Date(startAt).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "Pick a time"} · {minutes < 60 ? `${minutes} min` : `${minutes / 60} hour${minutes > 60 ? "s" : ""}`}
+              </p>
+              <p className="text-muted">
+                🎟️ {price ? `${cash(price)} a ticket` : "Free"} · up to {capacity.toLocaleString("en-GB")} people{cat === "party" ? ` · ${size.label}` : ""}
+              </p>
+              <p className="text-muted">
+                {cat === "party"
+                  ? `🎵 ${songs.length ? `${songs.length} song${songs.length > 1 ? "s" : ""} ready` : "No songs yet (add them inside)"}`
+                  : mediaKind === "video" && youtubeId(videoLink)
+                    ? "🎬 Video ready"
+                    : `🖼️ ${slideFiles.length ? `${slideFiles.length} slide${slideFiles.length > 1 ? "s" : ""} ready` : "No slides yet (add them inside)"}`}
+              </p>
+            </div>
+            <p className="mt-2 text-xs text-muted">Your friends and the people nearest to it are told as soon as it&apos;s on the map. You can host up to {HOSTS_A_DAY} events a day.</p>
+            <div className="mt-3" />
+            {cost ? (
+              <div className="rounded-2xl bg-ink/5 p-3">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-sm font-semibold">Hosting this party costs</span>
+                  <b className="font-display text-xl font-extrabold tabular-nums">{cash(cost.naira / perMint)}</b>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1 text-[11px] font-semibold text-muted">
+                  <span className="rounded-full bg-panel px-2 py-0.5">{cash(PARTY_NAIRA_PER_HOUR / perMint)} an hour × {cost.parts.hours % 1 ? cost.parts.hours.toFixed(1) : cost.parts.hours}</span>
+                  <span className="rounded-full bg-panel px-2 py-0.5">{capacity.toLocaleString("en-GB")} people ×{cost.parts.capacity}</span>
+                  {cost.parts.size !== 1 && <span className="rounded-full bg-panel px-2 py-0.5">{size.label} ×{cost.parts.size}</span>}
+                  <span className="rounded-full bg-panel px-2 py-0.5">{VENUE_COST[venue!.kind].label} ×{cost.parts.venue}</span>
+                  {cost.parts.area !== 1 && <span className="rounded-full bg-panel px-2 py-0.5">{cost.parts.area > 1 ? "Pricey area" : "Cheaper area"} ×{cost.parts.area}</span>}
+                </div>
+                <p className="mt-2 text-[11px] text-muted">A permit paid to the state, when you put it on the map (from your Fun money, then your wallet). Call it off before it starts, or fewer than 10 people come, and it all comes back.</p>
+              </div>
+            ) : (
+              <p className="rounded-2xl bg-ink/5 p-3 text-sm text-muted">{cat === "party" ? "Pick where it is to see the price." : "Free to host."}</p>
+            )}
+            {clash && <p className="mt-3 rounded-2xl bg-hit/10 px-3 py-2 text-sm font-semibold text-hit">&ldquo;{clash.title}&rdquo; has that stretch of road then. Pick another road, one further along, or another time.</p>}
+            {problem && <p className="mt-3 rounded-2xl bg-hit/10 px-3 py-2 text-sm font-semibold text-hit">{problem}</p>}
+            <button
+              disabled={!ready || short}
+              onClick={async () => {
+                if (!venue || !name || price === null) return;
+                setGoing(true);
+                setProblem(null);
+                const at = startId === "now" ? Date.now() : startAt;
+                const r = await hostEvent({ region, format: f.id, title: name, about, x: venue.x, z: venue.z, place: venue.name, onStreet: venue.street, venue: venue.kind, startsAt: at, minutes, price, capacity, radiusM: cat === "party" ? radiusM : PARTY_SIZE_DEFAULT }).catch(() => fail());
+                if (!r.ok) {
+                  setGoing(false);
+                  return setProblem(r.error);
+                }
+                // What's on its stage, ready for when it starts: the songs (parties), or the slides or
+                // video (talks).
+                const ready = await loadStage(r.id).catch(() => null);
+                setGoing(false);
+                if (ready && r.view) r.view = { ...r.view, stage: ready };
+                playSfx("levelup");
+                onHosted(r.id, Date.parse(r.startsAt) - Date.now() < EARLY_DOORS_MINS * 60_000, r.view);
+              }}
+              className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#d6336c] to-[#7048e8] font-bold text-white shadow-lg disabled:opacity-40"
+            >
+              {going ? <LoaderCircle className="size-5 animate-spin" /> : <PartyPopper className="size-5" />}
+              {going ? (loadingStage ?? "Setting it up…") : `${startId === "now" ? "Start it now" : "Put it on the map"}${cost ? ` · ${cash(cost.naira / perMint)}` : ""}`}
+            </button>
+            {/* What they have to pay it with (Fun money and wallet together, as the server checks). */}
+            {quote?.canSpend != null && (
+              <p className={cn("mt-2 text-center text-sm", short ? "font-semibold text-hit" : "text-muted")}>
+                Your balance: <b className={short ? "" : "text-ink"}>{cash(quote.canSpend)}</b>
+                {short && cost ? `. You need ${cash(cost.naira / perMint - quote.canSpend)} more. Top up in your Wallet.` : ""}
+              </p>
+            )}
+          </>
+        )}
+      </div>
+      {stepId !== "review" && (
+        <>
+          <button
+            disabled={!stepOk}
+            onClick={() => setStepAt(k + 1)}
+            className="mt-5 flex h-12 w-full items-center justify-center gap-1.5 rounded-full bg-ink font-bold text-white disabled:opacity-40"
+          >
+            {stepId === "music" && !songs.length ? "Skip for now" : stepId === "media" && !slideFiles.length && !youtubeId(videoLink) ? "Skip for now" : "Next"}
+            <ChevronRight className="size-4" />
+          </button>
+          {!stepOk && stepHint && <p className="mt-2 text-center text-xs text-muted">{stepHint}</p>}
         </>
       )}
+      <style>{`@keyframes stepIn { from { opacity: 0; transform: translateX(10px) } to { opacity: 1; transform: none } }`}</style>
+    </div>
+  );
+}
 
-      <Label>When?</Label>
-      <div className="flex flex-wrap gap-1.5">
-        {choices.map((c) => (
-          <Chip key={c.id} on={startId === c.id} onClick={() => setStartId(c.id)}>
-            {c.label}
-          </Chip>
-        ))}
-        <Chip on={startId === "custom"} onClick={() => setStartId("custom")}>
-          <CalendarDays className="size-3.5" /> Pick a time
-        </Chip>
-      </div>
-      {startId === "custom" && (
-        <input
-          type="datetime-local"
-          value={custom}
-          onChange={(e) => setCustom(e.target.value)}
-          className="mt-2 h-11 w-full rounded-2xl bg-ink/5 px-3 text-sm outline-none"
-          min={new Date(opened.current - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 16)}
-        />
-      )}
-      {timeBad && startId === "custom" && custom && <p className="mt-1 text-xs font-semibold text-hit">Pick a time in the next {DAYS_AHEAD} days.</p>}
-      <p className="mt-2 flex items-center gap-1 text-xs font-semibold text-muted">
-        <Clock className="size-3.5" /> How long
-      </p>
-      <div className="mt-1 flex flex-wrap gap-1.5">
-        {DURATIONS.map((m) => (
-          <Chip key={m} on={minutes === m} onClick={() => setMinutes(m)}>
-            {m < 60 ? `${m} min` : `${m / 60} hour${m > 60 ? "s" : ""}`}
-          </Chip>
-        ))}
-      </div>
-
-      <Label>Tickets</Label>
-      <div className="grid grid-cols-4 gap-1.5">
-        {TICKETS_NAIRA.map((t) => (
-          <button key={t} onClick={() => setChip(t)} className={cn("h-10 min-w-0 truncate rounded-full px-1 text-[13px] font-bold", chip === t ? "bg-ink text-white shadow" : "bg-ink/5")}>
-            {t === 0 ? "Free" : cash(t / perMint)}
-          </button>
-        ))}
-      </div>
-      <label className={cn("mt-2 flex h-11 items-center gap-2 rounded-2xl px-4", chip === null ? "bg-panel ring-2 ring-ink" : "bg-ink/5")}>
-        <Ticket className="size-4 text-muted" />
-        <span className="font-display text-lg font-extrabold text-muted">{cashSymbol()}</span>
-        <input
-          value={chip !== null ? (chip === 0 ? "" : Number(typedOf(chip / perMint)).toLocaleString("en-GB")) : raw}
-          onFocus={() => {
-            if (chip !== null) {
-              setRaw(chip === 0 ? "" : typedOf(chip / perMint));
-              setChip(null);
-            }
-          }}
-          onChange={(e) => {
-            setChip(null);
-            setRaw(e.target.value.replace(/[^\d.,\s]/g, "").slice(0, 12));
-          }}
-          inputMode="decimal"
-          placeholder="Or type any price"
-          className="h-full min-w-0 flex-1 bg-transparent font-display text-lg font-extrabold tabular-nums outline-none"
-        />
-      </label>
-      <p className={cn("mt-1 text-xs", priceBad && raw ? "font-semibold text-hit" : "text-muted")}>
-        {priceBad && raw
-          ? `Up to ${cash(quote?.priceMax ?? 0)} a ticket.`
-          : price
-            ? `Guests pay ${cash(price)} to come in (VAT included). Once it's over you get ${cash(ticketSplit(price).host)} of each: ${cash(ticketSplit(price).vat)} is VAT and ${cash(ticketSplit(price).tax)} income tax, paid to the state. If you call it off, everyone gets theirs back.`
-            : "Free to come. People can still spray you at a party."}
-      </p>
-      <p className="mt-2 flex items-center gap-1 text-xs font-semibold text-muted">
-        <Users className="size-3.5" /> How many can come
-      </p>
-      <div className="mt-1 flex flex-wrap gap-1.5">
-        {crowds.map((c) => (
-          <Chip key={c} on={capacity === c} onClick={() => setCapacity(c)}>
-            {c.toLocaleString("en-GB")}
-          </Chip>
-        ))}
-      </div>
-
-      <Label>Hosting</Label>
-      {cost ? (
-        <div className="rounded-2xl bg-ink/5 p-3">
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-sm font-semibold">Hosting this party costs</span>
-            <b className="font-display text-xl font-extrabold tabular-nums">{cash(cost.naira / perMint)}</b>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-1 text-[11px] font-semibold text-muted">
-            <span className="rounded-full bg-panel px-2 py-0.5">{cash(PARTY_NAIRA_PER_HOUR / perMint)} an hour × {cost.parts.hours % 1 ? cost.parts.hours.toFixed(1) : cost.parts.hours}</span>
-            <span className="rounded-full bg-panel px-2 py-0.5">{capacity.toLocaleString("en-GB")} people ×{cost.parts.capacity}</span>
-            {cost.parts.size !== 1 && <span className="rounded-full bg-panel px-2 py-0.5">{size.label} ×{cost.parts.size}</span>}
-            <span className="rounded-full bg-panel px-2 py-0.5">{VENUE_COST[venue!.kind].label} ×{cost.parts.venue}</span>
-            {cost.parts.area !== 1 && <span className="rounded-full bg-panel px-2 py-0.5">{cost.parts.area > 1 ? "Pricey area" : "Cheaper area"} ×{cost.parts.area}</span>}
-          </div>
-          <p className="mt-2 text-[11px] text-muted">A permit paid to the state, when you put it on the map (from your Fun money, then your wallet). Call it off before it starts, or fewer than 10 people come, and it all comes back.</p>
-        </div>
-      ) : (
-        <p className="rounded-2xl bg-ink/5 p-3 text-sm text-muted">{cat === "party" ? "Pick where it is to see the price." : "Free to host."}</p>
-      )}
-      {clash && <p className="mt-3 rounded-2xl bg-hit/10 px-3 py-2 text-sm font-semibold text-hit">&ldquo;{clash.title}&rdquo; has that stretch of road then. Pick another road, one further along, or another time.</p>}
-      {problem && <p className="mt-3 rounded-2xl bg-hit/10 px-3 py-2 text-sm font-semibold text-hit">{problem}</p>}
-      <button
-        disabled={!ready}
-        onClick={async () => {
-          if (!venue || !name || price === null) return;
-          setGoing(true);
-          setProblem(null);
-          const at = startId === "now" ? Date.now() : startAt;
-          const r = await hostEvent({ region, format: f.id, title: name, about, x: venue.x, z: venue.z, place: venue.name, onStreet: venue.street, venue: venue.kind, startsAt: at, minutes, price, capacity, radiusM: cat === "party" ? radiusM : PARTY_SIZE_DEFAULT }).catch(() => fail());
-          setGoing(false);
-          if (!r.ok) return setProblem(r.error);
-          playSfx("levelup");
-          onHosted(r.id, Date.parse(r.startsAt) - Date.now() < EARLY_DOORS_MINS * 60_000, r.view);
-        }}
-        className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#d6336c] to-[#7048e8] font-bold text-white shadow-lg disabled:opacity-40"
-      >
-        {going ? <LoaderCircle className="size-5 animate-spin" /> : <PartyPopper className="size-5" />}
-        {going ? "Setting it up…" : `${startId === "now" ? "Start it now" : "Put it on the map"}${cost ? ` · ${cash(cost.naira / perMint)}` : ""}`}
+/** A slide picked for a talk, before it's uploaded. */
+function SlideThumb({ file, n, onRemove }: { file: File; n: number; onRemove: () => void }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    const u = URL.createObjectURL(file);
+    const t = setTimeout(() => setUrl(u), 0);
+    return () => {
+      clearTimeout(t);
+      URL.revokeObjectURL(u);
+    };
+  }, [file]);
+  return (
+    <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-ink/10">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {url && <img src={url} alt={`Slide ${n}`} className="size-full object-cover" />}
+      <span className="absolute bottom-0.5 left-1 text-[10px] font-bold text-white drop-shadow">{n}</span>
+      <button onClick={onRemove} className="absolute right-0.5 top-0.5 grid size-5 place-items-center rounded-full bg-black/60 text-white" aria-label={`Remove slide ${n}`}>
+        <X className="size-3" />
       </button>
-      <p className="mt-2 text-center text-[11px] text-muted">
-        {!name ? "Give it a name first. " : !venue ? "Pick where it is. " : ""}
-        Your friends are told{startId === "now" ? ", and everyone near" : ""}. {HOSTS_A_DAY} a day at most.
-      </p>
     </div>
   );
 }
@@ -1080,9 +1368,6 @@ function MapPicker({
   );
 }
 
-function Label({ children }: { children: React.ReactNode }) {
-  return <p className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-muted">{children}</p>;
-}
 function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button onClick={onClick} className={cn("flex h-9 items-center gap-1 rounded-full px-3 text-xs font-bold transition", on ? "bg-ink text-white shadow" : "bg-ink/5")}>

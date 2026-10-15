@@ -2,7 +2,15 @@
 // ducks, clays, moles, fruit, cars, people, coins, gems, lasers... Each draws centred on (x, y)
 // at size s (about its width), facing right unless it says otherwise.
 
+import { cashSymbol } from "@/lib/world/value";
+
 type C = CanvasRenderingContext2D;
+
+/** The money sign on a coin or a bag: the player's own, one letter wide ("C$" is "$", "KSh" is "K"). */
+function coinSign() {
+  const s = cashSymbol();
+  return s.length === 1 ? s : s.endsWith("$") ? "$" : s[0];
+}
 
 export function circle(c: C, x: number, y: number, r: number, fill: string, stroke?: string, lw = 2) {
   c.beginPath();
@@ -349,7 +357,7 @@ export function coin(c: C, x: number, y: number, r: number, t = 0) {
   c.translate(x, y);
   c.scale(sx, 1);
   circle(c, 0, 0, r, "#fcc419", "#e67700", 2);
-  text(c, "₥", 0, 1, r * 1.1, "#e67700");
+  text(c, coinSign(), 0, 1, r * 1.1, "#e67700");
   c.restore();
 }
 
@@ -377,7 +385,7 @@ export function moneyBag(c: C, x: number, y: number, s: number) {
   c.fillStyle = "#c9a227";
   c.fill();
   rrect(c, x - s * 0.15, y - s * 0.4, s * 0.3, s * 0.2, 4, "#b08d1e");
-  text(c, "₥", x, y + s * 0.12, s * 0.45, "#5c4a0b");
+  text(c, coinSign(), x, y + s * 0.12, s * 0.45, "#5c4a0b");
 }
 
 /** A boat or jet ski seen from above, pointing up. */

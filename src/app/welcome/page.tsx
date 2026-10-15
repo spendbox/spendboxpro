@@ -2,18 +2,18 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { AdultsOnly, WelcomeForm } from "./welcome-form";
+import { AdultsOnly, WelcomeForm, type WelcomeMode } from "./welcome-form";
 import { Logo } from "@/components/logo";
 
 export const metadata: Metadata = { title: "Welcome" };
 
-type Profile = { username: string | null; pin_set: boolean; birth_date?: string | null; age_blocked_at?: string | null };
+type Profile = { username: string | null; email?: string | null; pin_set: boolean; birth_date?: string | null; age_blocked_at?: string | null };
 
 async function loadProfile(userId: string): Promise<Profile | null> {
   const db = createAdminClient();
   const { data, error } = await db
     .from("profiles")
-    .select("username, pin_set, birth_date, age_blocked_at")
+    .select("username, email, pin_set, birth_date, age_blocked_at")
     .eq("id", userId)
     .maybeSingle();
   if (!error) return data;
@@ -22,16 +22,15 @@ async function loadProfile(userId: string): Promise<Profile | null> {
   return old.data ? { ...old.data, birth_date: "unknown" } : null;
 }
 
-// Who lands here:
-// - new players (after the email code): name, PIN and date of birth;
-// - "forgot PIN" (?pin=1 from the sign-in page) and "Change PIN": name and PIN
-//   (plus date of birth if we still don't have it);
-// - players from before the 18+ rule (sent here by the game pages): just the date of birth;
+// Who lands here (one question a screen, src/app/welcome/welcome-form.tsx):
+// - new players still signing up: name, man or woman, date of birth, password;
+// - "forgot password" and "Change password" from the menu: a new password (plus the date of
+//   birth if we still don't have it);
 // - anyone who said they're under 18: a friendly "adults only" note, no form.
-export default async function WelcomePage({ searchParams }: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
+export default async function WelcomePage() {
   const userId = await currentUserId();
   if (!userId) redirect("/login");
-  const [data, params] = await Promise.all([loadProfile(userId), searchParams]);
+  const data = await loadProfile(userId);
 
   if (data?.age_blocked_at) {
     return (
@@ -46,15 +45,10 @@ export default async function WelcomePage({ searchParams }: { searchParams: Prom
     );
   }
 
-  const pinSet = Boolean(data?.pin_set);
   const askBirth = !data?.birth_date;
-  const askPin = !pinSet || !askBirth || params.pin === "1";
-  const title = !pinSet ? "Welcome to the city" : askPin ? "Set a new PIN" : "One quick thing";
-  const intro = !pinSet
-    ? "Pick the name other players will see, a 6-digit PIN for next time, and tell us your date of birth."
-    : askPin
-      ? "Choose a new 6-digit PIN. You can change your name here too."
-      : "Newtown is now for adults 18+. Please add your date of birth to keep playing. We'll only ask once.";
+  const mode: WelcomeMode = !data?.pin_set ? "setup" : "reset";
+  const title = mode === "setup" ? "Welcome to the city" : "New password";
+  const intro = mode === "setup" ? "A few quick questions, one at a time." : "Choose a new password.";
 
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-4">
@@ -63,7 +57,7 @@ export default async function WelcomePage({ searchParams }: { searchParams: Prom
         <h1 className="font-display text-3xl font-bold">{title}</h1>
         <p className="mt-1 text-muted">{intro}</p>
       </div>
-      <WelcomeForm initialName={data?.username ?? ""} askPin={askPin} askBirth={askBirth} />
+      <WelcomeForm mode={mode} email={data?.email ?? ""} initialName={data?.username ?? ""} askBirth={askBirth} />
     </main>
   );
 }

@@ -147,9 +147,9 @@ export function AdForm({ pricing, regions = [{ id: "lagos", name: "Lagos State" 
                 <div className="rounded-lg bg-panel-2 p-2">
                   <div className="flex items-center justify-center gap-1.5 font-display text-xl font-bold">
                     <Coins className="size-5 text-gold-dark" />
-                    {fmt(coins)}
+                    ₦{fmt(coins / pricing.coinsPerNgn)}
                   </div>
-                  <div className="text-xs text-muted">mint in your ad&apos;s pool</div>
+                  <div className="text-xs text-muted">in your ad&apos;s reward pool</div>
                 </div>
                 <div className="rounded-lg bg-panel-2 p-2">
                   <div className="flex items-center justify-center gap-1.5 font-display text-xl font-bold">
@@ -160,8 +160,9 @@ export function AdForm({ pricing, regions = [{ id: "lagos", name: "Lagos State" 
                 </div>
               </div>
               <p className="mt-2 text-xs text-muted">
-                Each tap gives a player {fmt(pricing.viewReward)} mint (mint ÷ {fmt(pricing.viewReward)} = taps). Plus free taps from
-                watchers and link clicks. Unused mint at the end of your run expires.
+                Each tap gives a player a ₦{fmt(pricing.viewReward / pricing.coinsPerNgn)} reward from the pool (pool ÷{" "}
+                ₦{fmt(pricing.viewReward / pricing.coinsPerNgn)} = taps). Plus free taps from watchers and link clicks. Whatever&apos;s left in the pool at
+                the end of your run expires.
               </p>
               {tooBig && <p className="mt-2 text-sm text-hit">For budgets over ₦{fmt(pricing.maxNgn)}, please contact us.</p>}
             </>

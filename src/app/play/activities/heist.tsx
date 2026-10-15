@@ -36,7 +36,7 @@ const WHY: Record<string, string> = {
   no_name: "Pick a player name first.",
   frozen: "Your account is paused right now.",
   empty_vault: "The vault is nearly empty. Come back when the prize pool has grown.",
-  not_enough: "You don't have enough mint to pull a job.",
+  not_enough: "You don't have enough money to pull a job.",
 };
 
 const STEPS = ["Cutting the alarm wires…", "Cracking the vault…", "Filling the bags…", "Running for the van…"];
@@ -76,7 +76,7 @@ export function Heist(props: GameProps) {
     setError(null);
     playSfx("start");
     // The answer comes back straight away, but the drama takes a few seconds.
-    const res = await robBank(plan).catch(() => ({ ok: false as const, error: "The connection blinked. Your mint is safe." }));
+    const res = await robBank(plan).catch(() => ({ ok: false as const, error: "The connection blinked. Your money is safe." }));
     if (!res.ok) {
       setError(res.error);
       setPhase("choose");
@@ -141,7 +141,7 @@ export function Heist(props: GameProps) {
       )}
       {alarm && phase === "choose" && (
         <p className="flex items-center gap-2 rounded-xl bg-hit/10 px-3 py-2 text-sm font-semibold text-hit">
-          <Siren className="size-4 shrink-0" /> The alarm went off before you reached the vault. You slipped away with your mint. Try again when you&apos;re ready.
+          <Siren className="size-4 shrink-0" /> The alarm went off before you reached the vault. You slipped away with your money. Try again when you&apos;re ready.
         </p>
       )}
       {info && phase !== "done" && phase !== "job" && (
@@ -201,7 +201,7 @@ export function Heist(props: GameProps) {
                 Get away: your stake back plus <b className="text-[#2b8a3e]">{cash(chosen.loot)}</b>.
               </p>
               <p className="mt-1 text-muted">
-                First you have to get in: {plan === "big" ? "three heist games (the last one is the getaway)" : "two heist games"}. Fail one and the alarm goes off before you reach the vault (you keep your mint).
+                First you have to get in: {plan === "big" ? "three heist games (the last one is the getaway)" : "two heist games"}. Fail one and the alarm goes off before you reach the vault (you keep your money).
               </p>
             </div>
           )}
