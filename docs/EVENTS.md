@@ -58,7 +58,7 @@ Going into any event (or hosting one and going in) counts
      people, are announced in the Lagos news in a fun way (and break into it when they're new).
    - **Street parties don't overlap**: no two within 1.6 km (16 tiles) of each other at the same
      time. Roads already taken then are greyed with the party that has them, and the database
-     refuses a clash (`street_taken`).
+     refuses a clash (`street_taken`). Nor can two be so close that their areas (their sizes) would meet.
 4. **When**: now, in 30 minutes, in an hour, tonight, tomorrow, Saturday, or any time in the next
    7 days; and for how long (30 minutes to 4 hours).
 5. **Tickets**: free, a quick pick, or any price up to ₦500,000; and how many can come.
@@ -72,7 +72,9 @@ Worked out by the server from the map (the phone's number is only a preview; src
 `partyCost`):
 
 - **₦100,000 an hour** for up to 20 people on a street in an ordinary area.
-- **How many can come**: 20 ×1, 50 ×1.25, 100 ×1.6, 300 ×2.4, 1,000 ×4.5.
+- **How many can come**: 20 ×1, 50 ×1.25, 100 ×1.6, 300 ×2.4, 1,000 ×4.5, 3,000 ×8, 10,000 ×14.
+- **How big**: one spot ×1, the block ×1.5, the street ×2.5, the area ×4.5, a carnival ×7, a mega
+  carnival ×14 (a 3-hour carnival for 10,000 on an ordinary street is about ₦29m).
 - **The kind of place**: a street ×1, a park or square ×1.2, a restaurant or hotel ×1.5, a club ×1.6,
   a landmark ×2. A "street" must really be a road on the map; a place the map can't name is
   never charged below a park.
@@ -102,8 +104,10 @@ within about 4 km is told too when it starts within 15 minutes.
 - **The room opens at once**: going in is checked (and the ticket taken) while it opens; if the
   server says no (full, not enough money), it closes again with why. Hosting "now" opens the room
   straight from the answer.
-- The arrow at the top tucks it away (you stay in, with a "Back to" button). If anything in a room
-  goes wrong, only the room closes ("The room hiccupped", with Open it again), never the game.
+- The arrow at the top tucks it away (you stay in, with a "Back to" button). **Leave** (next to it,
+  or the ✕ on the "Back to" button) takes you out; your ticket stays paid, so you can Go in again
+  while it's on. If anything in a room goes wrong, only the room closes ("The room hiccupped",
+  with Open it again), never the game.
 
 ## In a party
 
