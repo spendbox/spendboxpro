@@ -132,6 +132,7 @@ import type { ChatLocation } from "@/lib/chat-location";
 import { RecentRail, rememberPerson } from "./people/recent-rail";
 import { PrankReveal, usePrankReveal } from "./people/prank-reveal";
 import { openAdvertise } from "./life/advertise-panel";
+import { SUPPORT_X, SUPPORT_X_URL } from "@/lib/brand";
 import { Fight, type ChallengeLight } from "./fight/fight";
 import { Events, type EventLight } from "./events/events";
 import { CallBar } from "./call/call-bar";
@@ -3366,6 +3367,16 @@ export function Game({
             <Megaphone className="size-3.5 text-[#e8590c]" />
             Advertise on the map
           </button>
+        )}
+        {worldId && guest && !place && ride === null && (
+          <a
+            href={SUPPORT_X_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="pointer-events-auto rounded-full bg-black/45 px-2.5 py-1 text-[11px] font-semibold text-white shadow backdrop-blur-sm"
+          >
+            Support: @{SUPPORT_X} on X
+          </a>
         )}
         {/* On foot: Stop walking and the camera, in the middle (the joystick is bottom left). */}
         {worldId && !guest && !place && ride === null && walking && (

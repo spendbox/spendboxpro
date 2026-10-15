@@ -20,7 +20,7 @@ import { Briefcase, PartyPopper, Swords, Trophy, Wallet } from "lucide-react";
 import { CITY_ASSETS } from "@/lib/city/layout";
 import { Sheet } from "./sheet";
 import { Logo } from "@/components/logo";
-import { CONTACT_EMAIL, SITE_DOMAIN } from "@/lib/brand";
+import { CONTACT_EMAIL, SITE_DOMAIN, SUPPORT_X, SUPPORT_X_URL } from "@/lib/brand";
 
 /** A small icon that sits in a line of text, the same size as the words. */
 function Ico({ icon: Icon }: { icon: LucideIcon }) {
@@ -301,8 +301,12 @@ export function HowItWorks({ onClose, legacy }: { onClose: () => void; legacy?: 
           Questions or ideas? Email{" "}
           <a href={`mailto:${CONTACT_EMAIL}`} className="font-semibold text-ink underline">
             {CONTACT_EMAIL}
-          </a>
-          . Play at <b className="text-ink">{SITE_DOMAIN}</b>.
+          </a>{" "}
+          or message{" "}
+          <a href={SUPPORT_X_URL} target="_blank" rel="noopener noreferrer" className="font-semibold text-ink underline">
+            @{SUPPORT_X}
+          </a>{" "}
+          on X. Play at <b className="text-ink">{SITE_DOMAIN}</b>.
         </p>
       </div>
       <button onClick={onClose} className="mt-5 w-full rounded-xl bg-gold py-3 font-semibold text-ink">

@@ -4,6 +4,9 @@ export const SITE_NAME = "Newtown";
 export const SITE_DOMAIN = "newtown.world";
 export const SITE_URL = `https://${SITE_DOMAIN}`;
 export const CONTACT_EMAIL = "hello@newtown.world";
+/** Newtown on X (formerly Twitter): where players reach us for support. */
+export const SUPPORT_X = "newtown_play";
+export const SUPPORT_X_URL = `https://x.com/${SUPPORT_X}`;
 /** The in-game currency. It's a mass noun: "50 mint", "not enough mint". */
 export const CURRENCY = "mint";
 /** The mint sign, written before amounts: "₥50" (drawn by our own one-glyph font, see app/layout.tsx). */
