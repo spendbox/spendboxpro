@@ -255,20 +255,30 @@ export type EventQuote = {
   /** Events you hosted in the last day. */
   today: number;
   rep: { hosted: number; attended: number } | null;
+  /** What you can spend on it (Fun money and your wallet, mint), or null if not known. */
+  canSpend: number | null;
 };
 
 export async function eventQuote(region: string): Promise<EventQuote> {
   const perMint = perMintOf(region);
   const priceMax = Math.round((TICKET_MAX_NAIRA / perMint) * 100) / 100;
   const userId = await currentUserId();
-  if (!userId) return { perMint, priceMax, hosting: null, today: 0, rep: null };
+  if (!userId) return { perMint, priceMax, hosting: null, today: 0, rep: null, canSpend: null };
   const db = createAdminClient();
-  const [hosting, today, rep] = await Promise.all([
+  const [hosting, today, rep, spend] = await Promise.all([
     db.rpc("event_hosting", { p_user: userId }),
     db.from("hosted_events").select("id", { count: "exact", head: true }).eq("host_id", userId).gt("created_at", new Date(Date.now() - 86_400_000).toISOString()),
     myEventRep(),
+    db.rpc("life_can_spend", { p_user: userId, p_pots: ["fun"] }),
   ]);
-  return { perMint, priceMax, hosting: hosting.error || hosting.data == null ? null : n(hosting.data), today: today.count ?? 0, rep };
+  return {
+    perMint,
+    priceMax,
+    hosting: hosting.error || hosting.data == null ? null : n(hosting.data),
+    today: today.count ?? 0,
+    rep,
+    canSpend: spend.error || spend.data == null ? null : n(spend.data),
+  };
 }
 
 /** Events you hosted that people came to, and events you went to (for reputation). */

@@ -762,6 +762,8 @@ function HostForm({
   // What hosting costs (parties): the hours, how many can come, the kind of place and the area.
   const cost = cat === "party" && venue ? partyCost({ minutes, capacity, venue: venue.kind, area: venue.areaK, radiusM }) : null;
   const ready = !!name && !!venue && !priceBad && !timeBad && !going && !clash;
+  /** Not enough money to pay for hosting it. */
+  const short = !!cost && quote?.canSpend != null && quote.canSpend < cost.naira / (quote?.perMint ?? 1_500) - 0.005;
 
   const pickFormat = (id: string) => {
     const nf = eventFormat(id);
@@ -1227,7 +1229,7 @@ function HostForm({
             {clash && <p className="mt-3 rounded-2xl bg-hit/10 px-3 py-2 text-sm font-semibold text-hit">&ldquo;{clash.title}&rdquo; has that stretch of road then. Pick another road, one further along, or another time.</p>}
             {problem && <p className="mt-3 rounded-2xl bg-hit/10 px-3 py-2 text-sm font-semibold text-hit">{problem}</p>}
             <button
-              disabled={!ready}
+              disabled={!ready || short}
               onClick={async () => {
                 if (!venue || !name || price === null) return;
                 setGoing(true);
@@ -1251,6 +1253,13 @@ function HostForm({
               {going ? <LoaderCircle className="size-5 animate-spin" /> : <PartyPopper className="size-5" />}
               {going ? (loadingStage ?? "Setting it up…") : `${startId === "now" ? "Start it now" : "Put it on the map"}${cost ? ` · ${cash(cost.naira / perMint)}` : ""}`}
             </button>
+            {/* What they have to pay it with (Fun money and wallet together, as the server checks). */}
+            {quote?.canSpend != null && (
+              <p className={cn("mt-2 text-center text-sm", short ? "font-semibold text-hit" : "text-muted")}>
+                Your balance: <b className={short ? "" : "text-ink"}>{cash(quote.canSpend)}</b>
+                {short && cost ? `. You need ${cash(cost.naira / perMint - quote.canSpend)} more. Top up in your Wallet.` : ""}
+              </p>
+            )}
           </>
         )}
       </div>
