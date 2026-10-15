@@ -3,13 +3,14 @@
 import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { regionMap } from "@/lib/world";
-import { MOMENT_BY_ID, MOMENT_RULES, isDayInLagos, momentVars, pickMoment, rollOutcome, type MomentSpot, type MomentVars } from "@/lib/world/moments";
+import { COMMUTES, type Commute } from "@/lib/world/work";
+import { MOMENT_BY_ID, MOMENT_RULES, ROAD_RULES, isDayInLagos, momentVars, pickMoment, rollOutcome, type MomentSpot, type MomentVars } from "@/lib/world/moments";
 
 // Moments (docs/MOMENTS.md, game-db/109_moments.sql): the game picks one that fits where you are
 // and fills it in; when you answer, it rolls what happens (never the phone) and the database
 // settles the money and reputation, within the day's limits.
 
-const SPOTS: MomentSpot[] = ["street", "home", "food", "night", "sport", "shop", "worship", "outdoors", "work"];
+const SPOTS: MomentSpot[] = ["street", "home", "food", "night", "sport", "shop", "worship", "outdoors", "work", "road"];
 const n = (v: unknown) => Number(v) || 0;
 
 /** A moment to show: its id, which story, what's filled in, and how much you can spend (mint). */
@@ -25,11 +26,18 @@ async function me() {
   return { userId, db, perMint };
 }
 
-/** The next moment, if it's time for one (null: not now). */
-export async function momentNext(input: { spot: MomentSpot; place?: string }): Promise<MomentShown | null> {
+/**
+ * The next moment, if it's time for one (null: not now). On the road (the trip film, docs/TRIPS.md),
+ * `ride`: how you're going; they can come closer together there, and nothing from before comes back.
+ */
+export async function momentNext(input: { spot: MomentSpot; place?: string; ride?: Commute }): Promise<MomentShown | null> {
   const m = await me().catch(() => null);
   if (!m) return null;
   const spot: MomentSpot = SPOTS.includes(input?.spot) ? input.spot : "street";
+  const ride = COMMUTES.includes(input?.ride as Commute) ? input.ride : undefined;
+  const road = spot === "road";
+  if (road && !ride) return null;
+  const gap = road ? ROAD_RULES.gapSeconds : MOMENT_RULES.gapSeconds;
   const place = typeof input?.place === "string" ? input.place.replace(/\s+/g, " ").trim().slice(0, 60) : "";
   const [{ data: prof }, recentRes, dueRes, spendRes] = await Promise.all([
     m.db.from("profiles").select("level, frozen").eq("id", m.userId).maybeSingle(),
@@ -41,13 +49,13 @@ export async function momentNext(input: { spot: MomentSpot; place?: string }): P
   if (recentRes.error) return null;
   if (prof?.frozen) return null;
   const last = recentRes.data?.[0]?.created_at as string | undefined;
-  if (last && Date.now() - Date.parse(last) < MOMENT_RULES.gapSeconds * 1000) return null;
+  if (last && Date.now() - Date.parse(last) < gap * 1000) return null;
   const level = Math.max(1, n(prof?.level));
   const seed = Math.floor(Math.random() * 2 ** 31);
   // Something coming back from before comes first.
-  const due = dueRes.data?.[0];
+  const due = road ? undefined : dueRes.data?.[0];
   const followed = due ? MOMENT_BY_ID.get(String(due.moment)) : undefined;
-  const def = followed ?? pickMoment({ spot, day: isDayInLagos(), level, recent: (recentRes.data ?? []).map((r) => String(r.moment)), rand: Math.random });
+  const def = followed ?? pickMoment({ spot, day: isDayInLagos(), level, recent: (recentRes.data ?? []).map((r) => String(r.moment)), rand: Math.random, ride });
   if (!def) return null;
   const vars = momentVars(def, seed, level, place);
   // A follow-up keeps the name from before.
@@ -59,8 +67,8 @@ export async function momentNext(input: { spot: MomentSpot; place?: string }): P
     p_moment: def.id,
     p_vars: full,
     p_spot: spot,
-    p_gap: MOMENT_RULES.gapSeconds,
-    p_per_day: MOMENT_RULES.perDay,
+    p_gap: gap,
+    p_per_day: road ? ROAD_RULES.perDay : MOMENT_RULES.perDay,
     p_follow: followed ? due!.id : null,
   });
   if (error || id == null) return null;

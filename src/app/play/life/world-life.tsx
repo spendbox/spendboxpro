@@ -116,11 +116,15 @@ const RATES_FRESH_MS = 6 * 3600_000;
 const paid = (p: PaySettled | undefined) =>
   p && p.gross > 0 ? ` Collected ${cash(p.net)} pay (after ${cash(p.tax)} tax and ${cash(p.fares)} fares).` : "";
 
+/** The area a spot is in (for the trip film's welcome arch). */
+const areaOf = (region: ReturnType<typeof regionMap>, id: string) => placeName(region, id, true);
+
 /** What to call a spot on the trip card: the landmark or named place there, or its area. */
-function placeName(region: ReturnType<typeof regionMap>, id: string) {
+function placeName(region: ReturnType<typeof regionMap>, id: string, areaOnly = false) {
   const m = /:(-?\d+),(-?\d+)/.exec(id);
   if (!region || !m) return "";
   const x = Number(m[1]), z = Number(m[2]);
+  if (areaOnly) return region.areaAt(x, z);
   const lm = region.landmarks.find((l) => x >= l.ax && x < l.ax + l.w && z >= l.az && z < l.az + l.d);
   if (lm) return lm.name;
   const spot = region.spotAt(x, z);
@@ -673,7 +677,7 @@ export function useWorldLife({
     if (!signedIn) return;
     const paying = api.travelTo(id, driving).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
     if (film && trip) {
-      await playTrip({ mode: trip.mode, from: placeName(region, trip.from), to: placeName(region, id) || "There", km: trip.km, fare: trip.fare, ferry: trip.ferry });
+      await playTrip({ mode: trip.mode, from: placeName(region, trip.from), to: placeName(region, id) || "There", area: areaOf(region, id), km: trip.km, fare: trip.fare, ferry: trip.ferry });
     }
     const r = await paying;
     if (!r.ok) {

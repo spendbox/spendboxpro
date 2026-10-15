@@ -2,13 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, FastForward } from "lucide-react";
+import { MOMENT_BY_ID, ROAD_RULES } from "@/lib/world/moments";
 import { COMMUTE_LABEL } from "@/lib/world/work";
 import { cash } from "@/lib/world/value";
+import { momentNext, type MomentShown } from "../moment-actions";
+import { MomentCard, type MomentMood } from "../moments/moment-card";
 import { TRIP_OFF_KEY, tripLayerMounted, type TripShow } from "./play";
+import { lagosHour } from "./sky";
+import type { TripScene } from "./trip-scene";
 
 // The trip there, as a short film over the map (docs/TRIPS.md): the 3D scene (./trip-scene, loaded
 // when a trip plays), where you're going, the fare, a line from the conductor or the driver, a
-// progress bar, Skip and Always skip.
+// progress bar, Skip and Always skip. Often something happens on the way (a road moment): it's
+// asked for as the film loads, acted out on the road, and its card asks what you do.
 
 const SAY: Record<string, string[]> = {
   danfo: ["\"Obalende! CMS! Enter with your change o!\"", "\"Wole! Wole! One chance remain!\"", "\"Owa o! Driver, owa!\""],
@@ -19,17 +25,15 @@ const SAY: Record<string, string[]> = {
   walk: ["A nice walk. 🚶🏾", "Hello, neighbours!"],
 };
 
-/** Lagos time: night from 7pm to 6am. */
-const nightInLagos = () => {
-  const h = (new Date().getUTCHours() + 1) % 24;
-  return h >= 19 || h < 6;
-};
-
 export function TripLayer({ avatar }: { avatar: unknown }) {
   const [trip, setTrip] = useState<(TripShow & { id: number; at: number }) | null>(null);
   const host = useRef<HTMLDivElement>(null);
-  const scene = useRef<{ finish(): void; dispose(): void } | null>(null);
+  const scene = useRef<TripScene | null>(null);
   const [progress, setProgress] = useState(0);
+  // The road moment: what it is, whether its card is up, and how the choice went.
+  const [event, setEvent] = useState<MomentShown | null>(null);
+  const [cardUp, setCardUp] = useState(false);
+  const mood = useRef<MomentMood>("calm");
   const avatarRef = useRef(avatar);
   useEffect(() => {
     avatarRef.current = avatar;
@@ -39,7 +43,11 @@ export function TripLayer({ avatar }: { avatar: unknown }) {
     tripLayerMounted(true);
     const on = (e: Event) => {
       const d = (e as CustomEvent<TripShow & { id: number }>).detail;
-      if (d) setTrip({ ...d, at: Date.now() });
+      if (!d) return;
+      setTrip({ ...d, at: Date.now() });
+      setEvent(null);
+      setCardUp(false);
+      window.dispatchEvent(new CustomEvent("nt-trip-started", { detail: { id: d.id } }));
     };
     window.addEventListener("nt-trip-play", on);
     return () => {
@@ -51,33 +59,46 @@ export function TripLayer({ avatar }: { avatar: unknown }) {
   const end = (id: number) => {
     window.dispatchEvent(new CustomEvent("nt-trip-done", { detail: { id } }));
     setTrip((t) => (t?.id === id ? null : t));
+    setCardUp(false);
   };
 
-  // The film: loaded, played, freed.
+  // The film: loaded, played, freed; and maybe something on the way.
   useEffect(() => {
     if (!trip || !host.current) return;
     let live = true;
     const el = host.current;
+    let shown: MomentShown | null = null;
+    const tryStage = () => {
+      const def = shown && MOMENT_BY_ID.get(shown.moment);
+      if (!live || !scene.current || !shown || !def?.stage) return;
+      if (scene.current.stage(def.stage, shown.moment)) setEvent(shown);
+      shown = null;
+    };
+    if (trip.km >= ROAD_RULES.minKm && Math.random() < ROAD_RULES.chance)
+      void momentNext({ spot: "road", ride: trip.mode, place: trip.to })
+        .then((m) => {
+          shown = m;
+          tryStage();
+        })
+        .catch(() => {});
     void import("./trip-scene").then(({ createTripScene }) => {
       if (!live) return;
       // The bar follows the film's own clock (a few updates a second is plenty).
-      let shown = 0;
       scene.current = createTripScene(el, {
         mode: trip.mode,
         avatar: avatarRef.current,
         toName: trip.to,
-        night: nightInLagos(),
-        onProgress: (u) => {
-          if (u - shown < 0.04 && u < 1) return;
-          shown = u;
-          if (live) setProgress(u);
-        },
+        area: trip.area ?? trip.to,
+        hour: lagosHour(),
+        onProgress: (u) => live && setProgress(u),
+        onEvent: () => live && setCardUp(true),
         onDone: () => {
           // A breath at the end, then in.
           setTimeout(() => live && end(trip.id), 250);
         },
       });
-    });
+      tryStage();
+    }).catch(() => live && end(trip.id));
     return () => {
       live = false;
       scene.current?.dispose();
@@ -91,6 +112,11 @@ export function TripLayer({ avatar }: { avatar: unknown }) {
   const lines = SAY[trip.mode] ?? SAY.walk;
   const line = lines[trip.id % lines.length];
   const how = trip.mode === "walk" ? "On foot" : COMMUTE_LABEL[trip.mode];
+  const carryOn = () => {
+    setCardUp(false);
+    setEvent(null);
+    scene.current?.resolve(mood.current);
+  };
   return (
     <div className="trip-in fixed inset-0 z-[75] bg-black" role="dialog" aria-label={`On the way to ${trip.to}`}>
       <div ref={host} className="absolute inset-0" />
@@ -108,30 +134,48 @@ export function TripLayer({ avatar }: { avatar: unknown }) {
             {trip.fare > 0 ? ` · ${cash(trip.fare)}` : ""}
           </p>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/20">
-            <div className="h-full rounded-full bg-[#ffd43b] transition-[width] duration-100" style={{ width: `${progress * 100}%` }} />
+            <div className="h-full rounded-full bg-[#ffd43b] transition-[width] duration-200" style={{ width: `${progress * 100}%` }} />
           </div>
         </div>
       </div>
-      {/* What they say on the way. */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-24 flex justify-center px-4">
-        <p className="start-pop max-w-sm rounded-2xl bg-white/95 px-4 py-2 text-center text-sm font-semibold text-ink shadow-xl">{line}</p>
-      </div>
-      <div className="absolute inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))] flex items-center justify-center gap-3 px-4">
-        <button onClick={() => (scene.current ? scene.current.finish() : end(trip.id))} className="flex h-11 items-center gap-1.5 rounded-full bg-white/90 px-5 text-sm font-bold text-ink shadow-lg">
-          <FastForward className="size-4" /> Skip
-        </button>
-        <button
-          onClick={() => {
-            try {
-              localStorage.setItem(TRIP_OFF_KEY, "1");
-            } catch {}
-            end(trip.id);
-          }}
-          className="h-11 rounded-full bg-black/40 px-4 text-xs font-semibold text-white/80"
-        >
-          Always skip
-        </button>
-      </div>
+      {cardUp && event ? (
+        // What happened on the way: choose.
+        <div className="absolute inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))] flex justify-center px-3">
+          <MomentCard
+            key={event.id}
+            shown={event}
+            closeLabel="Ignore it"
+            onAnswered={(m) => (mood.current = m)}
+            onClose={carryOn}
+            className="max-h-[70dvh] overflow-y-auto"
+          />
+        </div>
+      ) : (
+        <>
+          {/* What they say on the way. */}
+          {!event && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-24 flex justify-center px-4">
+              <p className="start-pop max-w-sm rounded-2xl bg-white/95 px-4 py-2 text-center text-sm font-semibold text-ink shadow-xl">{line}</p>
+            </div>
+          )}
+          <div className="absolute inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))] flex items-center justify-center gap-3 px-4">
+            <button onClick={() => (scene.current ? scene.current.finish() : end(trip.id))} className="flex h-11 items-center gap-1.5 rounded-full bg-white/90 px-5 text-sm font-bold text-ink shadow-lg">
+              <FastForward className="size-4" /> Skip
+            </button>
+            <button
+              onClick={() => {
+                try {
+                  localStorage.setItem(TRIP_OFF_KEY, "1");
+                } catch {}
+                end(trip.id);
+              }}
+              className="h-11 rounded-full bg-black/40 px-4 text-xs font-semibold text-white/80"
+            >
+              Always skip
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

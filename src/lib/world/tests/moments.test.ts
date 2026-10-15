@@ -1,6 +1,8 @@
 // Tests for moments (docs/MOMENTS.md). Run with: npm test
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { COMMUTES } from "../work.ts";
+import { ROAD_STAGES } from "../road-moments.ts";
 import { MOMENTS, MOMENT_BY_ID, choiceCost, fillMoment, momentVars, pickMoment, rollOutcome, spotOfTheme, type MomentSpot } from "../moments.ts";
 
 test("every moment is complete: unique ids, text, choices, outcomes, and follow-ups that exist", () => {
@@ -72,4 +74,27 @@ test("places map to the right kind of moment", () => {
   assert.equal(spotOfTheme("living", false), "home");
   assert.equal(spotOfTheme("club", true), "home");
   assert.equal(spotOfTheme(null, false), "street");
+});
+
+test("on the road: every ride has moments by day and night, each with a scene, and nothing from elsewhere", () => {
+  const road = MOMENTS.filter((m) => m.spots !== "any" && m.spots.includes("road"));
+  assert.ok(road.length >= 50, `${road.length}`);
+  for (const m of road) {
+    assert.ok(m.stage && ROAD_STAGES.includes(m.stage), `${m.id}: stage`);
+    assert.ok(m.rides?.length, `${m.id}: rides`);
+  }
+  for (const ride of COMMUTES)
+    for (const day of [true, false]) {
+      const seen = new Set<string>();
+      for (let i = 0; i < 300; i++) {
+        const m = pickMoment({ spot: "road", day, level: 1, recent: [], rand: Math.random, ride });
+        assert.ok(m, `${ride} ${day}`);
+        assert.ok(m.stage && m.rides?.includes(ride), `${ride}: ${m.id}`);
+        seen.add(m.id);
+      }
+      assert.ok(seen.size >= 6, `${ride}: only ${seen.size}`);
+    }
+  // Road moments stay off the street, and without a ride none comes up on the road.
+  for (let i = 0; i < 100; i++) assert.ok(!pickMoment({ spot: "street", day: true, level: 1, recent: [], rand: Math.random })!.stage);
+  assert.equal(pickMoment({ spot: "road", day: true, level: 1, recent: [], rand: Math.random }), null);
 });

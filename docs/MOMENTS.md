@@ -32,7 +32,8 @@ money to pays you back (or doesn't).
 | Offices and other places | A colleague's loan, praise from the boss, the office birthday collection |
 | Anywhere | A scam call, a friend who wants to borrow, money in an old pocket, and a fan who recognises you (level 5 and up) |
 
-There are 64 moments in all, 7 of which only come back as follow-ups. Each is told one of a few
+There are 64 moments for these places, 7 of which only come back as follow-ups, and 55 more on the
+road, acted out in the trip film (docs/TRIPS.md). Each is told one of a few
 ways, with a name, an amount and the place filled in, so the same one rarely reads the same. The
 25 you had last don't come again until you've had others.
 
@@ -73,4 +74,6 @@ follow-ups exist, and that every kind of place has moments by day and by night.
 | The moments, picking one, filling it in, rolling the outcome | `src/lib/world/moments.ts` |
 | Picking and settling on the server | `src/app/play/moment-actions.ts` |
 | The card over the map, and when it comes | `src/app/play/moments/moments-layer.tsx` |
+| The card itself (also in the trip film) | `src/app/play/moments/moment-card.tsx` |
+| Moments on the road | `src/lib/world/road-moments.ts` |
 | The books: one at a time, the day's limits, follow-ups | `game-db/109_moments.sql` |

@@ -14,6 +14,8 @@ export type TripShow = {
   fare: number;
   /** Part of it by ferry (km). */
   ferry?: number;
+  /** The area you're going to (on the welcome arch). */
+  area?: string;
 };
 
 export const TRIP_OFF_KEY = "nt-trip-off";
@@ -44,19 +46,26 @@ export function playTrip(show: TripShow): Promise<void> {
   const id = ++seq;
   return new Promise((resolve) => {
     let over = false;
-    const done = (e: Event) => {
-      if ((e as CustomEvent<{ id: number }>).detail?.id !== id) return;
-      finish();
+    // Never stuck: if the film doesn't start within a few seconds, on our way (and in any case
+    // within a few minutes, however long a choice on the road takes).
+    let started = false;
+    const start = (e: Event) => {
+      if ((e as CustomEvent<{ id: number }>).detail?.id === id) started = true;
     };
     const finish = () => {
       if (over) return;
       over = true;
       window.removeEventListener("nt-trip-done", done);
+      window.removeEventListener("nt-trip-started", start);
       resolve();
     };
+    function done(e: Event) {
+      if ((e as CustomEvent<{ id: number }>).detail?.id === id) finish();
+    }
+    window.addEventListener("nt-trip-started", start);
     window.addEventListener("nt-trip-done", done);
     window.dispatchEvent(new CustomEvent("nt-trip-play", { detail: { id, ...show } }));
-    // Never stuck: whatever happens, on our way within 12 seconds.
-    setTimeout(finish, 12_000);
+    setTimeout(() => !started && finish(), 4_000);
+    setTimeout(finish, 300_000);
   });
 }

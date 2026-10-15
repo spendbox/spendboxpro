@@ -12,7 +12,7 @@ import { getAvatarModel } from "@/lib/avatar3d/client";
 import { LOD } from "@/lib/avatar3d/lod";
 import { makeMaterials, type MaterialSet } from "@/lib/avatar3d/materials";
 import { MOVES, applyMove, type Dims, type Move } from "@/lib/avatar3d/moves";
-import { seededRecipe } from "@/lib/avatar3d/recipe";
+import { seededRecipe, type Recipe } from "@/lib/avatar3d/recipe";
 import { recipeOf } from "@/lib/avatar";
 import { mountModel, type AvatarObject } from "@/lib/avatar3d/scene";
 import type { Pose, Act } from "./figures";
@@ -159,17 +159,19 @@ export function upgradeNpcs(figs: FigLike[], people: { id: string; avatar?: unkn
  */
 /** level: how detailed (LOD.own close up in a home; a light one on the street, where you're small on screen). */
 /** seed: someone with no avatar of their own (a passer-by in the street) gets a look made from it. */
-export function createMyAvatar(avatar: unknown, level: number = LOD.own, seed = "me") {
+/** costume: parts set on top of the look (a uniform, a wrapper and head-tie), for people in a scene. */
+export function createMyAvatar(avatar: unknown, level: number = LOD.own, seed = "me", costume?: Partial<Recipe>) {
   const root = new THREE.Group();
   let live: { obj: AvatarObject; mats: MaterialSet; scale: number; floor: number } | null = null;
   let gone = false;
   let t = 0;
-  let recipe;
+  let recipe: Recipe;
   try {
     recipe = avatar ? recipeOf(avatar as Npc["avatar"]) : seededRecipe(seed);
   } catch {
     recipe = seededRecipe(seed);
   }
+  if (costume) recipe = { ...recipe, ...costume };
   void getAvatarModel(recipe, level)
     .then((model) => {
       if (gone) return;
@@ -191,12 +193,15 @@ export function createMyAvatar(avatar: unknown, level: number = LOD.own, seed = 
     root,
     /** Built and showing yet? */
     ready: () => !!live,
-    /** doing: "walk", "run", "idle" or "sit" (seat: its height in metres). */
-    update(dt: number, doing: "walk" | "run" | "idle" | "sit", seat = 0.46) {
+    /**
+     * doing: "walk", "run", "idle" or "sit" (seat: its height in metres), or any other move by its
+     * id ("wave", "talk", "cheer", "clap", "dance"...; docs/AVATAR_POSES.md). rate: faster or slower.
+     */
+    update(dt: number, doing: "walk" | "run" | "idle" | "sit" | (string & {}), seat = 0.46, rate = 1) {
       if (!live) return;
-      t += dt;
-      const move = byIdMove(doing === "sit" ? "sit" : doing);
-      applyMove(live.obj.nodes, live.obj.rest, move, t, live.obj.stride, doing === "sit" ? { seat: seat / live.scale + live.floor } : undefined);
+      t += dt * rate;
+      const move = byIdMove(doing);
+      applyMove(live.obj.nodes, live.obj.rest, move, t, live.obj.stride, move.id.startsWith("sit") ? { seat: seat / live.scale + live.floor } : undefined);
     },
     dispose() {
       gone = true;

@@ -1,318 +1,66 @@
-// The trip there (docs/TRIPS.md): a few seconds of film when you go somewhere. You walk out to the
-// danfo (or your car, a taxi, a keke, an okada), get in, and it drives off down a Lagos street,
-// past pastel houses with water tanks, palms, hawkers' umbrellas and a billboard, to the place
-// you're going, its name on a sign. On foot, you just walk there. Everything in metres; a small
-// scene of plain shapes, so it plays smoothly on any phone, and all of it is freed at the end.
+// The trip there (docs/TRIPS.md): a short film when you go somewhere. You walk out to the danfo
+// (or your car, a taxi, a keke, an okada) and get in; it pulls off, the camera swinging round from
+// the side to behind it, and drives through a Lagos street: round a junction, under a welcome
+// arch, past a mosque and a filling station, shops with painted signs, people on the pavements,
+// traffic coming the other way, under a pedestrian bridge, and stops at the place you're going,
+// its name across the front, where you get out and walk in. On foot, you walk there along the
+// pavement. The sky is the time in Lagos. Something may happen on the way (a road moment,
+// src/lib/world/road-moments.ts): the ride stops, it's acted out (./stages.ts), you choose, and
+// the ride goes on. Everything is freed at the end.
 
 import * as THREE from "three";
 import type { Commute } from "@/lib/world/work";
+import type { RoadStage } from "@/lib/world/road-moments";
 import { LOD } from "@/lib/avatar3d/lod";
 import { createMyAvatar } from "../city/npc3d";
-import { Kit } from "../city/kit";
+import type { MomentMood } from "../moments/moment-card";
+import { buildAtlas } from "./atlas";
+import { createWalkers } from "./people";
+import { makeRoute } from "./road-path";
+import { buildSky, skyAt } from "./sky";
+import { createStage, type Stage } from "./stages";
+import { buildStreet, LANE, PAVE_MID } from "./street";
+import { buildVehicle, type Vehicle, type VehicleKind } from "./vehicles";
 
-/** How long each part takes (seconds). */
-const T = { walk: 1.4, getIn: 0.5, drive: 2.7, arrive: 1.0 };
-export const TRIP_SECONDS = T.walk + T.getIn + T.drive + T.arrive;
-const WALK_ONLY_SECONDS = 3.4;
+/** How fast each ride goes (m/s; a film, so a little quicker than life), speeds up and turns. */
+const RIDE: Record<Exclude<Commute, "walk">, { cruise: number; accel: number; turn: number }> = {
+  car: { cruise: 21, accel: 7, turn: 9.5 },
+  taxi: { cruise: 20, accel: 6.5, turn: 9 },
+  danfo: { cruise: 18, accel: 6, turn: 8.5 },
+  keke: { cruise: 13, accel: 5, turn: 7 },
+  okada: { cruise: 17, accel: 7, turn: 8.5 },
+};
+const DECEL = 7.5;
+const WALK_SPEED = 2.2;
+const T_BOARD = { walk: 1.6, getIn: 0.55 };
+const T_ARRIVE = 3.0;
+const TRAFFIC: VehicleKind[] = ["car", "danfo", "taxi", "keke", "car", "okada", "bus", "truck", "danfo", "suv", "car"];
 
-type Vehicle = { group: THREE.Group; wheels: THREE.Mesh[]; door: THREE.Vector3; seat: { x: number; y: number; z: number; ry: number }; extras: { update(dt: number): void; dispose(): void }[] };
-
-const TYRE = 0x1b1b1b;
-const GLASS = 0x22303f;
-
-function textTexture(lines: string[], w: number, h: number, bg: string, fg: string, font = 64) {
-  const c = document.createElement("canvas");
-  c.width = w;
-  c.height = h;
-  const g = c.getContext("2d")!;
-  g.fillStyle = bg;
-  g.fillRect(0, 0, w, h);
-  g.fillStyle = fg;
-  g.textAlign = "center";
-  g.textBaseline = "middle";
-  lines.forEach((t, i) => {
-    let size = font;
-    g.font = `800 ${size}px system-ui, sans-serif`;
-    while (g.measureText(t).width > w * 0.9 && size > 14) g.font = `800 ${(size -= 2)}px system-ui, sans-serif`;
-    g.fillText(t, w / 2, (h / (lines.length + 1)) * (i + 1));
-  });
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-/** The vehicles, built facing +x, standing on y = 0, the kerb side (doors) towards +z. */
-function buildVehicle(mode: Commute, paint: number, mats: { solid: THREE.Material; glow: THREE.Material }, disposers: (() => void)[]): Vehicle | null {
-  if (mode === "walk") return null;
-  const k = new Kit();
-  k.floorY = -10;
-  const group = new THREE.Group();
-  const wheels: THREE.Mesh[] = [];
-  const wheelGeo = new THREE.CylinderGeometry(1, 1, 1, 18).rotateX(Math.PI / 2);
-  const wheelMat = new THREE.MeshLambertMaterial({ color: TYRE });
-  disposers.push(() => (wheelGeo.dispose(), wheelMat.dispose()));
-  const wheel = (x: number, z: number, r: number, w: number) => {
-    const m = new THREE.Mesh(wheelGeo, wheelMat);
-    m.scale.set(r, r, w);
-    m.position.set(x, r, z);
-    m.castShadow = true;
-    group.add(m);
-    wheels.push(m);
-  };
-  let door = new THREE.Vector3(0, 0, 1.4);
-  let seat = { x: 0, y: 0.5, z: 0, ry: 0 };
-  const extras: Vehicle["extras"] = [];
-  if (mode === "danfo") {
-    // The yellow Lagos minibus: two black stripes, the sliding door open, a roof rack.
-    k.soft(0, 0.38, 0, 4.9, 1.75, 1.92, 0xf5c518, 0.18);
-    k.soft(1.95, 0.38, 0, 1.0, 1.25, 1.92, 0xf5c518, 0.25);
-    for (const side of [-1, 1]) {
-      k.box(-0.1, 0.78, side * 0.965, 4.7, 0.09, 0.02, 0x111111, { noAo: true });
-      k.box(-0.1, 1.0, side * 0.965, 4.7, 0.09, 0.02, 0x111111, { noAo: true });
-      k.box(-0.5, 1.4, side * 0.965, 3.4, 0.5, 0.02, GLASS, { noAo: true });
-    }
-    // The open door (a dark gap on the kerb side).
-    k.box(0.75, 0.42, 0.968, 0.95, 1.55, 0.02, 0x2b2b2b, { noAo: true });
-    k.box(2.3, 1.12, 0, 0.3, 0.55, 1.7, GLASS, { noAo: true });
-    k.box(-0.3, 2.13, 0, 3.6, 0.06, 1.6, 0x343a40);
-    for (const x of [-1.8, -0.3, 1.2]) k.box(x, 2.13, 0, 0.06, 0.18, 1.6, 0x343a40);
-    k.box(2.47, 0.45, 0, 0.12, 0.22, 1.9, 0x343a40);
-    for (const side of [-1, 1]) k.box(2.48, 0.85, side * 0.65, 0.04, 0.16, 0.3, 0xfff3bf, { layer: "glow", noAo: true });
-    for (const x of [1.6, -1.5]) for (const z of [-0.88, 0.88]) wheel(x, z, 0.38, 0.26);
-    // The board on top: where it's going.
-    const sign = textTexture(["OBALENDE • CMS"], 512, 96, "#111111", "#f5c518", 56);
-    const sm = new THREE.MeshBasicMaterial({ map: sign });
-    const sp = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.34), sm);
-    sp.position.set(0.2, 2.42, 0.82);
-    group.add(sp);
-    disposers.push(() => (sign.dispose(), sm.dispose(), sp.geometry.dispose()));
-    door = new THREE.Vector3(0.75, 0, 1.55);
-    seat = { x: -0.6, y: 0.62, z: 0.2, ry: Math.PI / 2 };
-    // The conductor, hanging out of the door.
-    const conductor = createMyAvatar(null, LOD.near, "danfo-conductor");
-    conductor.root.position.set(1.05, 0.42, 1.0);
-    conductor.root.rotation.y = Math.PI / 2;
-    conductor.root.scale.setScalar(0.95);
-    group.add(conductor.root);
-    extras.push({ update: (dt) => conductor.update(dt, "idle"), dispose: () => conductor.dispose() });
-  } else if (mode === "keke") {
-    // The Keke Marwa: yellow body, green canopy, one wheel at the front.
-    k.soft(-0.2, 0.32, 0, 1.9, 0.75, 1.25, 0xf5c518, 0.15);
-    k.soft(0.95, 0.32, 0, 0.5, 0.8, 0.8, 0xf5c518, 0.15);
-    k.box(-0.2, 1.75, 0, 2.2, 0.08, 1.35, 0x2f9e44);
-    for (const [x, z] of [[-1.2, -0.62], [-1.2, 0.62], [0.85, -0.5], [0.85, 0.5]]) k.box(x, 1.05, z, 0.05, 0.72, 0.05, 0x2b2b2b);
-    k.box(0.92, 1.05, 0, 0.04, 0.5, 0.75, GLASS, { noAo: true });
-    k.box(1.2, 0.85, 0, 0.04, 0.12, 0.2, 0xfff3bf, { layer: "glow", noAo: true });
-    wheel(1.0, 0, 0.27, 0.16);
-    for (const z of [-0.6, 0.6]) wheel(-0.8, z, 0.27, 0.16);
-    door = new THREE.Vector3(-0.4, 0, 1.15);
-    seat = { x: -0.55, y: 0.42, z: 0, ry: Math.PI / 2 };
-    const driver = createMyAvatar(null, LOD.near, "keke-driver");
-    driver.root.position.set(0.55, 0.42, 0);
-    driver.root.rotation.y = Math.PI / 2;
-    group.add(driver.root);
-    extras.push({ update: (dt) => driver.update(dt, "sit", 0.45), dispose: () => driver.dispose() });
-  } else if (mode === "okada") {
-    // A motorbike and its rider; you ride behind.
-    k.box(-0.1, 0.48, 0, 1.4, 0.22, 0.26, 0x1b1b1b);
-    k.soft(0.15, 0.62, 0, 0.6, 0.3, 0.34, 0xc92a2a, 0.08);
-    k.box(-0.45, 0.72, 0, 0.9, 0.12, 0.3, 0x2b2b2b);
-    k.box(0.7, 0.55, 0, 0.06, 0.65, 0.06, 0x868e96, { rz: -0.35 });
-    k.box(0.85, 1.12, 0, 0.06, 0.06, 0.62, 0x868e96);
-    k.box(0.92, 0.95, 0, 0.06, 0.12, 0.14, 0xfff3bf, { layer: "glow", noAo: true });
-    wheel(0.85, 0, 0.32, 0.1);
-    wheel(-0.75, 0, 0.32, 0.1);
-    door = new THREE.Vector3(-0.4, 0, 0.9);
-    seat = { x: -0.42, y: 0.0, z: 0, ry: Math.PI / 2 };
-    const rider = createMyAvatar(null, LOD.near, "okada-rider");
-    rider.root.position.set(0.05, 0, 0);
-    rider.root.rotation.y = Math.PI / 2;
-    group.add(rider.root);
-    extras.push({ update: (dt) => rider.update(dt, "sit", 0.74), dispose: () => rider.dispose() });
-  } else {
-    // A car: yours (its own colour), or a taxi (Lagos yellow, the black band, a roof sign).
-    const taxi = mode === "taxi";
-    const body = taxi ? 0xf5c518 : paint;
-    k.soft(0, 0.3, 0, 4.5, 0.72, 1.84, body, 0.22);
-    k.soft(-0.25, 0.95, 0, 2.4, 0.6, 1.62, GLASS, 0.18);
-    k.soft(-0.25, 1.48, 0, 2.0, 0.08, 1.5, body, 0.04);
-    for (const side of [-1, 1]) {
-      if (taxi) k.box(0, 0.66, side * 0.925, 4.2, 0.12, 0.02, 0x111111, { noAo: true });
-      k.box(0.1, 0.55, side * 0.93, 0.02, 0.45, 0.012, 0x495057, { noAo: true });
-      k.box(2.24, 0.72, side * 0.6, 0.04, 0.14, 0.34, 0xfff3bf, { layer: "glow", noAo: true });
-      k.box(-2.24, 0.72, side * 0.6, 0.04, 0.12, 0.3, 0xff6b6b, { layer: "glow", noAo: true });
-    }
-    if (taxi) k.box(-0.25, 1.56, 0, 0.5, 0.18, 0.24, 0x111111);
-    for (const x of [1.45, -1.45]) for (const z of [-0.84, 0.84]) wheel(x, z, 0.34, 0.24);
-    door = new THREE.Vector3(0.2, 0, 1.35);
-    seat = { x: taxi ? -0.55 : 0.05, y: 0.36, z: taxi ? 0.38 : -0.38, ry: Math.PI / 2 };
-  }
-  const built = k.build({ solid: mats.solid, glow: mats.glow });
-  built.traverse((o) => {
-    if (o instanceof THREE.Mesh) {
-      o.castShadow = true;
-      disposers.push(() => o.geometry.dispose());
-    }
-  });
-  group.add(built);
-  return { group, wheels, door, seat, extras };
-}
-
-/** A Lagos street: houses and blocks across the road, palms, umbrellas, lamps, a billboard, and the place you're going. */
-function buildStreet(scene: THREE.Scene, end: number, toName: string, night: boolean, disposers: (() => void)[]) {
-  const add = (m: THREE.Mesh) => {
-    scene.add(m);
-    disposers.push(() => m.geometry.dispose());
-    return m;
-  };
-  const lam = (color: number, extra: THREE.MeshLambertMaterialParameters = {}) => {
-    const m = new THREE.MeshLambertMaterial({ color, ...extra });
-    disposers.push(() => m.dispose());
-    return m;
-  };
-  // Ground, road, kerbs, pavement, dashes.
-  const ground = add(new THREE.Mesh(new THREE.PlaneGeometry(400, 120).rotateX(-Math.PI / 2), lam(0xc9b79a)));
-  ground.position.set(end / 2, -0.01, -20);
-  ground.receiveShadow = true;
-  const road = add(new THREE.Mesh(new THREE.PlaneGeometry(400, 8).rotateX(-Math.PI / 2), lam(0x3b3f45)));
-  road.position.set(end / 2, 0, 0);
-  road.receiveShadow = true;
-  for (const z of [4.1, -4.1]) {
-    const kerb = add(new THREE.Mesh(new THREE.BoxGeometry(400, 0.18, 0.25), lam(0xdee2e6)));
-    kerb.position.set(end / 2, 0.09, z);
-  }
-  const pave = add(new THREE.Mesh(new THREE.PlaneGeometry(400, 3.2).rotateX(-Math.PI / 2), lam(0xb8aa94)));
-  pave.position.set(end / 2, 0.02, 5.8);
-  pave.receiveShadow = true;
-  const dashGeo = new THREE.PlaneGeometry(2, 0.14).rotateX(-Math.PI / 2);
-  const dashMat = new THREE.MeshBasicMaterial({ color: 0xf8f9fa });
-  disposers.push(() => (dashGeo.dispose(), dashMat.dispose()));
-  for (let x = -40; x < end + 60; x += 5) {
-    const d = new THREE.Mesh(dashGeo, dashMat);
-    d.position.set(x, 0.015, -0.3);
-    scene.add(d);
-  }
-  // Windows: one texture, lit at night.
-  const wc = document.createElement("canvas");
-  wc.width = 64;
-  wc.height = 64;
-  const wg = wc.getContext("2d")!;
-  wg.fillStyle = "#ffffff";
-  wg.fillRect(0, 0, 64, 64);
-  wg.fillStyle = night ? "#ffd8a8" : "#5c6f82";
-  wg.fillRect(14, 12, 36, 34);
-  const winTex = new THREE.CanvasTexture(wc);
-  winTex.wrapS = winTex.wrapT = THREE.RepeatWrapping;
-  disposers.push(() => winTex.dispose());
-  const walls = [0xf3e3c3, 0xffd8b5, 0xcfe3f5, 0xd3f0dc, 0xf1c6b0, 0xe9ecef, 0xfff3bf];
-  let rnd = 7;
-  const rand = () => ((rnd = (rnd * 16807) % 2147483647) / 2147483647);
-  const boxGeo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
-  disposers.push(() => boxGeo.dispose());
-  const facadeMats = new Map<string, THREE.MeshLambertMaterial>();
-  const facade = (color: number, w: number, h: number) => {
-    const key = `${color}:${Math.round(w / 3)}:${Math.round(h / 3)}`;
-    let m = facadeMats.get(key);
-    if (!m) {
-      const t = winTex.clone();
-      t.repeat.set(Math.max(1, Math.round(w / 3)), Math.max(1, Math.round(h / 3)));
-      t.needsUpdate = true;
-      m = new THREE.MeshLambertMaterial({ color, map: t });
-      facadeMats.set(key, m);
-      disposers.push(() => (t.dispose(), m!.dispose()));
-    }
-    return m;
-  };
-  const roofMat = lam(0x9c4f2f);
-  const tankMat = lam(0x2b2b2b);
-  // Across the road: a row of houses and blocks, a few metres apart.
-  for (let x = -40; x < end - 14; ) {
-    const w = 6 + rand() * 7;
-    const h = rand() < 0.25 ? 12 + rand() * 14 : 5 + rand() * 5;
-    const d = 8 + rand() * 4;
-    const b = new THREE.Mesh(boxGeo, facade(walls[Math.floor(rand() * walls.length)], w, h));
-    b.scale.set(w, h, d);
-    b.position.set(x + w / 2, 0, -9 - d / 2);
-    b.castShadow = b.receiveShadow = true;
-    scene.add(b);
-    if (h < 11) {
-      const r = new THREE.Mesh(boxGeo, roofMat);
-      r.scale.set(w + 0.4, 0.3, d + 0.4);
-      r.position.set(x + w / 2, h, -9 - d / 2);
-      scene.add(r);
-    }
-    if (rand() < 0.7) {
-      const tank = add(new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 1.2, 12), tankMat));
-      tank.position.set(x + w * 0.7, h + 0.9, -10.5);
-    }
-    x += w + 1 + rand() * 2;
-  }
-  // Palms, umbrellas and street lamps along the pavements.
-  const trunk = lam(0x8d6e63);
-  const leaf = lam(0x2f9e44);
-  const pole = lam(0x495057);
-  const bulb = new THREE.MeshBasicMaterial({ color: night ? 0xffe8a8 : 0xf1f3f5 });
-  disposers.push(() => bulb.dispose());
-  const umbrellas = [0xe03131, 0x1971c2, 0xf59f00, 0x2f9e44, 0x7048e8];
-  for (let x = -30; x < end + 30; x += 9 + rand() * 6) {
-    const r = rand();
-    const z = rand() < 0.5 ? -6 : 7.4;
-    if (r < 0.4) {
-      const t = add(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 5, 8), trunk));
-      t.position.set(x, 2.5, z);
-      for (let a = 0; a < 6; a++) {
-        const l = add(new THREE.Mesh(new THREE.ConeGeometry(0.35, 2.2, 5), leaf));
-        l.position.set(x + Math.cos(a) * 0.9, 4.8, z + Math.sin(a) * 0.9);
-        l.rotation.set(Math.sin(a) * 1.2, 0, -Math.cos(a) * 1.2);
-      }
-    } else if (r < 0.7) {
-      const u = add(new THREE.Mesh(new THREE.ConeGeometry(1.3, 0.6, 10), lam(umbrellas[Math.floor(rand() * umbrellas.length)])));
-      u.position.set(x, 2.2, z);
-      const p = add(new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2, 6), pole));
-      p.position.set(x, 1, z);
-      const stall = add(new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.8, 0.7), lam(0xa0522d)));
-      stall.position.set(x, 0.4, z);
-    } else {
-      const p = add(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 6, 8), pole));
-      p.position.set(x, 3, z);
-      const b = add(new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), bulb));
-      b.position.set(x, 6, z - Math.sign(z) * 0.4);
-    }
-  }
-  // A billboard on the way.
-  const adTex = textTexture(["NEWTOWN", "Your city. Your story."], 512, 256, "#7048e8", "#ffffff", 70);
-  const adMat = new THREE.MeshBasicMaterial({ map: adTex });
-  disposers.push(() => (adTex.dispose(), adMat.dispose()));
-  const ad = add(new THREE.Mesh(new THREE.PlaneGeometry(8, 4), adMat));
-  ad.position.set(end * 0.45, 9, -7.5);
-  const adPole = add(new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 7, 8), pole));
-  adPole.position.set(end * 0.45, 3.5, -7.6);
-  // Where you're going: a bigger building with its name across the front.
-  const dest = new THREE.Mesh(boxGeo, facade(0xffffff, 16, 16));
-  dest.scale.set(16, 16, 12);
-  dest.position.set(end + 4, 0, -16);
-  dest.castShadow = dest.receiveShadow = true;
-  scene.add(dest);
-  const nameTex = textTexture([toName.toUpperCase()], 1024, 160, "#0b7285", "#ffffff", 84);
-  const nameMat = new THREE.MeshBasicMaterial({ map: nameTex });
-  disposers.push(() => (nameTex.dispose(), nameMat.dispose()));
-  const name = add(new THREE.Mesh(new THREE.PlaneGeometry(14, 2.2), nameMat));
-  name.position.set(end + 4, 12.5, -9.95);
-  const canopy = add(new THREE.Mesh(new THREE.BoxGeometry(8, 0.3, 3), lam(0x0b7285)));
-  canopy.position.set(end + 4, 4, -9);
-}
+export type TripScene = {
+  /** Jump to the end (Skip). */
+  finish(): void;
+  /** Something happens on the way: stage it (false if it's too late on this trip). */
+  stage(kind: RoadStage, momentId: string): boolean;
+  /** The choice was made: play out how it went, then ride on. */
+  resolve(mood: MomentMood): void;
+  dispose(): void;
+};
 
 /**
- * Play the trip in `host` (a full-screen box). mode: how you go; paint: your car's colour.
- * Calls onDone once it's over (or skipped with finish()).
+ * Play the trip in `host` (a full-screen box). mode: how you go; hour: the time in Lagos; area:
+ * the area you're going to (the welcome arch); paint: your car's colour. onEvent: something on the
+ * way is ready for the card; onDone: it's over (or skipped).
  */
-export function createTripScene(host: HTMLElement, o: { mode: Commute; avatar: unknown; toName: string; night: boolean; paint?: number; onProgress?: (u: number) => void; onDone: () => void }) {
+export function createTripScene(
+  host: HTMLElement,
+  o: { mode: Commute; avatar: unknown; toName: string; area: string; hour: number; paint?: number; onProgress?: (u: number) => void; onEvent?: () => void; onDone: () => void },
+): TripScene {
   let renderer: THREE.WebGLRenderer;
   try {
-    renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "low-power" });
+    renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
   } catch {
     o.onDone();
-    return { finish() {}, dispose() {} };
+    return { finish() {}, stage: () => false, resolve() {}, dispose() {} };
   }
   const disposers: (() => void)[] = [];
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -320,151 +68,418 @@ export function createTripScene(host: HTMLElement, o: { mode: Commute; avatar: u
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.domElement.style.display = "block";
   host.appendChild(renderer.domElement);
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(o.night ? 0x1b2340 : 0x9fd3f2);
-  scene.fog = new THREE.Fog(scene.background as THREE.Color, 45, 120);
-  scene.add(new THREE.HemisphereLight(o.night ? 0x7b8ab8 : 0xffffff, o.night ? 0x3a2f2a : 0xb39a7a, o.night ? 1.1 : 1.8));
-  const sun = new THREE.DirectionalLight(o.night ? 0xbfd2ff : 0xfff1d8, o.night ? 0.6 : 2.4);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
-  Object.assign(sun.shadow.camera, { left: -25, right: 25, top: 25, bottom: -25, near: 1, far: 120 });
-  scene.add(sun, sun.target);
-  const cam = new THREE.PerspectiveCamera(46, 1, 0.1, 300);
-  const mats = { solid: new THREE.MeshLambertMaterial({ vertexColors: true }), glow: new THREE.MeshBasicMaterial({ vertexColors: true }) };
-  disposers.push(() => (mats.solid.dispose(), mats.glow.dispose()));
-
   const walking = o.mode === "walk";
-  const total = walking ? WALK_ONLY_SECONDS : TRIP_SECONDS;
-  const end = walking ? 12 : 72;
-  buildStreet(scene, end, o.toName, o.night, disposers);
-  const veh = buildVehicle(o.mode, o.paint ?? 0x1c3faa, mats, disposers);
+  const look = skyAt(o.hour);
+  const night = look.lights;
+  const scene = new THREE.Scene();
+  scene.background = look.horizon.clone();
+  scene.fog = new THREE.Fog(look.horizon.clone(), 70, 300);
+  const hemi = new THREE.HemisphereLight(look.hemi, look.ground, look.hemiI);
+  scene.add(hemi);
+  if (night) scene.add(new THREE.AmbientLight(0x8090c0, 0.35));
+  const sun = new THREE.DirectionalLight(look.sun, look.sunI);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.bias = -0.0004;
+  Object.assign(sun.shadow.camera, { left: -32, right: 32, top: 32, bottom: -32, near: 1, far: 160 });
+  scene.add(sun, sun.target);
+  const cam = new THREE.PerspectiveCamera(50, 1, 0.1, 900);
+  const sky = buildSky(look, disposers);
+  scene.add(sky.group);
+
+  // The road: two turns for a ride; a straight pavement on foot.
+  const route = walking ? makeRoute([{ straight: 240 }]) : makeRoute([{ straight: 58 }, { turn: "left", r: 9 }, { straight: 60 }, { turn: "right", r: 9 }, { straight: 150 }]);
+  const B = route.lines[Math.min(1, route.lines.length - 1)];
+  const C = route.lines[route.lines.length - 1];
+  const boardS = walking ? 76 : 40;
+  const eventS = walking ? 84 : B.s0 + 34;
+  const stopS = walking ? 98 : C.s0 + 30;
+  const atlas = buildAtlas({ night, toName: o.toName, area: o.area || "Lagos" });
+  disposers.push(() => atlas.texture.dispose());
+  const street = buildStreet(scene, { route, boardS, stopS, eventS, walking, look, seed: (Math.random() * 2 ** 31) | 0 }, atlas, disposers);
+
+  const mats = {
+    solid: new THREE.MeshLambertMaterial({ vertexColors: true }),
+    glow: new THREE.MeshBasicMaterial({ vertexColors: true }),
+    tex: new THREE.MeshLambertMaterial({ vertexColors: true, map: atlas.texture }),
+  };
+  disposers.push(() => (mats.solid.dispose(), mats.glow.dispose(), mats.tex.dispose()));
+  const makeVehicle = (kind: VehicleKind, crew = false) => buildVehicle(kind, { paint: o.paint, mats, atlas, crew, night });
+
+  // Your ride, parked at the kerb where you get in.
+  const veh: Vehicle | null = walking ? null : makeVehicle(o.mode, true);
+  const halfW = o.mode === "danfo" ? 0.96 : o.mode === "keke" ? 0.65 : o.mode === "okada" ? 0.25 : 0.92;
+  const place = (v: Vehicle, s: number, lat: number, reverse = false) => {
+    const p = route.place(s, lat);
+    v.root.position.set(p.x, 0, p.z);
+    v.root.rotation.y = p.yaw + (reverse ? Math.PI : 0);
+    return p;
+  };
   if (veh) {
-    veh.group.position.set(0, 0, 1.8);
-    scene.add(veh.group);
+    scene.add(veh.root);
+    place(veh, boardS, LANE);
+    if (night) {
+      const lamp = new THREE.SpotLight(0xfff1c4, 40, 45, 0.55, 0.6, 1.6);
+      lamp.position.set(veh.half, 0.9, 0);
+      lamp.target.position.set(veh.half + 12, 0, 0);
+      veh.body.add(lamp, lamp.target);
+    }
   }
+
+  // You.
   const me = createMyAvatar(o.avatar, LOD.near, "me");
   scene.add(me.root);
-  const startAt = walking ? new THREE.Vector3(-2, 0.02, 6.2) : new THREE.Vector3(-4.5, 0.02, 6.4);
-  me.root.position.copy(startAt);
-  me.root.rotation.y = walking ? Math.PI / 2 : Math.atan2(1, -0.6);
+  // Out from the bus stop (just ahead) to the door.
+  const startP = walking ? route.place(boardS, PAVE_MID) : route.place(boardS + 4.5, PAVE_MID + 0.9);
+  me.root.position.set(startP.x, 0.16, startP.z);
+
+  // Traffic coming the other way, and people on the pavements.
+  const traffic = Array.from({ length: walking ? 6 : 8 }, (_, i) => {
+    const v = makeVehicle(TRAFFIC[(i * 7 + Math.floor(Math.random() * 4)) % TRAFFIC.length]);
+    scene.add(v.root);
+    return { v, s: boardS - 20 + i * 24 + Math.random() * 10, speed: 8 + Math.random() * 6 };
+  });
+  const walkers = createWalkers(scene, route, { count: walking ? 12 : 10, night, mats });
 
   const size = () => {
     const w = host.clientWidth || 1;
     const h = host.clientHeight || 1;
     renderer.setSize(w, h);
     cam.aspect = w / h;
-    // Narrow screens see a bit wider, so the bus fits.
-    cam.fov = cam.aspect < 0.8 ? 58 : 46;
+    // Narrow screens see a little wider.
+    cam.fov = cam.aspect < 0.8 ? 62 : 50;
     cam.updateProjectionMatrix();
   };
   size();
   const ro = new ResizeObserver(size);
   ro.observe(host);
 
-  const ease = (u: number) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
-  /** How far the vehicle has gone (metres) by d seconds into the drive: speeds up, cruises, slows to a stop. */
-  const driven = (d: number) => {
-    const u = Math.max(0, Math.min(1, d / T.drive));
-    const a = 0.25;
-    const v = 1 / (1 - a);
-    const s = u < a ? (0.5 * v * u * u) / a : u > 1 - a ? 1 - (0.5 * v * (1 - u) * (1 - u)) / a : 0.5 * v * a + v * (u - a);
-    return end * s;
-  };
-  let t = 0;
-  // The clock starts once the first frame is on screen (building the shaders can take a slow
-  // phone a second or two, and the film shouldn't be half over before you see it).
-  let began = 0;
-  let last = 0;
-  /** How far back the camera sits: further on a tall, narrow phone screen. */
-  const back = () => (cam.aspect < 0.8 ? 1.2 : 1);
-  let raf = 0;
+  // ---------------------------------------------------------------- state
+  type Phase = "board" | "go" | "event" | "outro" | "arrive";
+  let phase: Phase = walking ? "go" : "board";
+  let tPhase = 0;
+  let s = boardS;
+  let v = 0;
+  let stage: Stage | null = null;
+  let stageKind: RoadStage | null = null;
+  let stageDone = false;
+  let mood: MomentMood = "calm";
+  let eventShown = false;
+  let chase = 0;
   let done = false;
-  const look = new THREE.Vector3();
-  const camPos = new THREE.Vector3(walking ? -4 : -1.5, 2.4, 12);
+  const ease = (u: number) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
+  const camPos = new THREE.Vector3(startP.x, 3, startP.z);
+  const lookAt = new THREE.Vector3(startP.x, 1.3, startP.z);
+  {
+    const p = route.place(boardS - 2, walking ? -1 : 12.5);
+    camPos.set(p.x, 2.4, p.z);
+  }
+  const ride = walking ? null : RIDE[o.mode as Exclude<Commute, "walk">];
+
+  /** A point in the ride's frame (forward, up, right) in the world. */
+  const frame = (f: number, up: number, r: number) => {
+    const p = route.place(s + f, (walking ? PAVE_MID : LANE) + r);
+    return new THREE.Vector3(p.x, up, p.z);
+  };
+  /** The top speed here: slow for the turns ahead. */
+  const vmaxAt = (sAt: number) => {
+    if (!ride) return WALK_SPEED;
+    let vm = ride.cruise;
+    for (const t of route.turns) {
+      if (sAt >= t.s0 - 0.5 && sAt <= t.s1) vm = Math.min(vm, ride.turn);
+      else if (sAt < t.s0) vm = Math.min(vm, Math.sqrt(ride.turn ** 2 + 2 * DECEL * (t.s0 - sAt)));
+    }
+    return vm;
+  };
+  const stopAt = () => {
+    let at = stopS;
+    if (stage && !stageDone && phase !== "outro") at = Math.min(at, eventS);
+    const ob = stage?.obstacle();
+    if (ob != null && !walking && ob > s) at = Math.min(at, ob - (veh?.half ?? 1) - 1.2);
+    return at;
+  };
+
   const finish = () => {
     if (done) return;
     done = true;
     o.onDone();
   };
-  const frame = () => {
-    raf = requestAnimationFrame(frame);
+
+  // ---------------------------------------------------------------- the frame
+  let began = 0;
+  let last = 0;
+  let raf = 0;
+  const lastProgress = { u: 0 };
+  const frameFn = () => {
+    raf = requestAnimationFrame(frameFn);
     const now = performance.now();
-    const real = began ? (now - last) / 1000 : 0;
+    const real = began ? Math.min(0.25, (now - last) / 1000) : 0;
     const dt = Math.min(0.05, real);
     last = now;
     /** Easing towards a target at the same pace on any phone (however few frames it draws). */
     const k = (rate: number) => 1 - Math.exp(-real * rate);
-    // The real clock (a slow phone drops frames rather than playing in slow motion).
-    t = began ? (now - began) / 1000 : 0;
-    let doing: "walk" | "idle" | "sit" = "idle";
-    if (walking) {
-      // On foot: down the pavement to the place.
-      const u = ease(t / (total - 0.4));
-      me.root.position.set(startAt.x + u * (end + 2 - startAt.x), 0.02, 6.2);
-      doing = u < 1 ? "walk" : "idle";
-      look.set(me.root.position.x + 2, 1.4, 0);
-      camPos.lerp(new THREE.Vector3(me.root.position.x - 3, 2.2 * back(), 10 * back()), k(5));
-    } else if (veh) {
-      const tw = t;
-      if (tw < T.walk) {
-        // Out to the door.
-        const u = ease(tw / T.walk);
-        const door = veh.group.position.clone().add(veh.door);
-        me.root.position.lerpVectors(startAt, door, u);
-        me.root.rotation.y = Math.atan2(door.x - startAt.x, door.z - startAt.z);
-        doing = "walk";
-        look.set(0, 1.5, 1.5);
-        camPos.set(-1.5, 2.3 * back(), 10.5 * back());
-      } else if (tw < T.walk + T.getIn) {
-        // In through the door, and sit down.
-        const u = ease((tw - T.walk) / T.getIn);
-        const door = veh.group.position.clone().add(veh.door);
-        const seat = veh.group.position.clone().add(new THREE.Vector3(veh.seat.x, veh.seat.y, veh.seat.z));
-        me.root.position.lerpVectors(door, seat, u);
-        me.root.rotation.y = veh.seat.ry;
-        doing = u > 0.6 ? "sit" : "walk";
-        look.set(0.3, 1.2, 1.5);
-      } else {
-        const d = tw - T.walk - T.getIn;
-        const x = driven(Math.min(d, T.drive));
-        const prevX = veh.group.position.x;
-        veh.group.position.x = x;
-        const speed = (x - prevX) / Math.max(0.001, dt);
-        for (const w of veh.wheels) w.rotation.z -= (speed * dt) / Math.max(0.1, w.scale.x);
-        // A little bounce on the road.
-        veh.group.position.y = d < T.drive ? Math.abs(Math.sin(t * 9)) * 0.025 * Math.min(1, speed / 8) : 0;
-        me.root.position.set(x + veh.seat.x, veh.seat.y + veh.group.position.y, 1.8 + veh.seat.z);
-        doing = "sit";
-        if (d < T.drive) {
-          look.set(x + 1.5, 1.4, 0);
-          camPos.lerp(new THREE.Vector3(x - 2.5, 2.6 * back(), 10 * back()), k(6));
-        } else {
-          // There: the camera turns to the building.
-          look.lerp(new THREE.Vector3(end + 4, 6, -12), k(3));
-          camPos.lerp(new THREE.Vector3(end - 7, 3 * back(), 13 * back()), k(2.5));
+    tPhase += real;
+    let doing = "sit";
+
+    // Moving along.
+    if (phase === "go" || phase === "outro") {
+      if (phase === "outro" && stage && stage.canGo(tPhase)) {
+        phase = "go";
+        tPhase = 0;
+      }
+      if (phase === "go") {
+        const target = stopAt();
+        const vStop = Math.sqrt(2 * DECEL * Math.max(0, target - s));
+        const want = Math.min(vmaxAt(s), vStop);
+        const accel = ride?.accel ?? 3;
+        v = v < want ? Math.min(want, v + accel * real) : Math.max(want, v - DECEL * 1.6 * real);
+        if (target - s > 0.05 && v < 0.5 && want > 0.4) v = 0.5;
+        s = Math.min(target, s + v * real);
+        if (target - s < 0.04 && v <= Math.max(0.6, vStop)) {
+          s = target;
+          v = 0;
+          if (Math.abs(s - stopS) < 0.05) {
+            phase = "arrive";
+            tPhase = 0;
+          } else if (stage && !stageDone && Math.abs(s - eventS) < 0.08) {
+            phase = "event";
+            tPhase = 0;
+          }
         }
+        if (walking) doing = v > 0.2 ? "walk" : "idle";
       }
     }
-    me.update(dt, doing, veh?.seat.y ?? 0.45);
-    if (veh) for (const e of veh.extras) e.update(dt);
+    if (stage && phase === "event" && !eventShown && stage.ready(tPhase)) {
+      eventShown = true;
+      o.onEvent?.();
+    }
+
+    // Your ride: placed on the road, wheels turning, a little bounce, leaning in the turns.
+    if (veh) {
+      place(veh, s, LANE);
+      for (const w of veh.wheels) w.rotation.z -= (v * real) / Math.max(0.1, w.scale.x);
+      const bounce = v > 1 ? Math.abs(Math.sin(now / 1000 * 9)) * 0.02 * Math.min(1, v / 10) : 0;
+      veh.body.position.y = bounce;
+      const turning = route.turns.find((t) => s > t.s0 && s < t.s1);
+      const flat = stage?.flat && (phase === "event" || (phase === "outro" && tPhase < 1.5)) ? 0.06 : 0;
+      veh.body.rotation.x += ((turning ? -turning.dir * Math.min(0.05, (v * v) / turning.r / 200) : 0) + flat - veh.body.rotation.x) * k(5);
+      veh.body.rotation.z += (-(flat ? 0.025 : 0) - veh.body.rotation.z) * k(5);
+      for (const e of veh.extras) e.update(dt, v > 0.5);
+    }
+
+    // You: out to the door, in, riding, out again and in through the doors.
+    if (veh) {
+      const door = veh.root.localToWorld(veh.door.clone());
+      const seat = veh.body.localToWorld(new THREE.Vector3(veh.seat.x, veh.seat.y, veh.seat.z));
+      if (phase === "board") {
+        if (tPhase < T_BOARD.walk) {
+          const u = ease(tPhase / T_BOARD.walk);
+          me.root.position.set(startP.x + (door.x - startP.x) * u, u > 0.75 ? 0 : 0.16, startP.z + (door.z - startP.z) * u);
+          me.root.rotation.y = Math.atan2(door.x - startP.x, door.z - startP.z);
+          doing = "walk";
+        } else {
+          const u = ease((tPhase - T_BOARD.walk) / T_BOARD.getIn);
+          me.root.position.lerpVectors(door, seat, u);
+          me.root.rotation.y = veh.root.rotation.y + veh.seat.ry;
+          doing = u > 0.6 ? "sit" : "walk";
+          if (tPhase >= T_BOARD.walk + T_BOARD.getIn) {
+            phase = "go";
+            tPhase = 0;
+          }
+        }
+      } else if (phase === "arrive") {
+        const out = 0.5;
+        if (tPhase < out) {
+          me.root.position.lerpVectors(seat, door, ease(tPhase / out));
+          doing = "walk";
+        } else {
+          const to = street.destDoor;
+          const dx = to.x - me.root.position.x;
+          const dz = to.z - me.root.position.z;
+          const d = Math.hypot(dx, dz);
+          if (d > 0.3) {
+            const step = Math.min(d, 2.0 * real);
+            me.root.position.x += (dx / d) * step;
+            me.root.position.z += (dz / d) * step;
+            me.root.rotation.y = Math.atan2(dx, dz);
+            doing = "walk";
+          } else doing = "wave";
+          const lat = Math.abs((me.root.position.x - veh.root.position.x) * Math.sin(veh.root.rotation.y) + (me.root.position.z - veh.root.position.z) * Math.cos(veh.root.rotation.y));
+          me.root.position.y = lat > 3.4 ? 0.16 : 0;
+        }
+        if (tPhase > T_ARRIVE) finish();
+      } else {
+        me.root.position.copy(seat);
+        me.root.rotation.y = veh.root.rotation.y + veh.seat.ry;
+        doing = "sit";
+      }
+    } else {
+      // On foot.
+      const p = route.place(s, PAVE_MID);
+      if (phase === "arrive") {
+        const to = street.destDoor;
+        const dx = to.x - me.root.position.x;
+        const dz = to.z - me.root.position.z;
+        const d = Math.hypot(dx, dz);
+        if (d > 0.3) {
+          const step = Math.min(d, 1.8 * real);
+          me.root.position.x += (dx / d) * step;
+          me.root.position.z += (dz / d) * step;
+          me.root.rotation.y = Math.atan2(dx, dz);
+          doing = "walk";
+        } else doing = "wave";
+        if (tPhase > T_ARRIVE - 0.6) finish();
+      } else {
+        me.root.position.set(p.x, 0.16, p.z);
+        me.root.rotation.y = Math.atan2(Math.cos(p.yaw), -Math.sin(p.yaw));
+        doing = phase === "go" && v > 0.2 ? "walk" : "idle";
+      }
+    }
+    me.update(dt, doing, veh?.seat.y ?? 0.45, doing === "walk" && walking ? WALK_SPEED / 1.35 : 1);
+
+    // The stage, traffic and people.
+    if (stage) {
+      const sp = phase === "event" ? "stopped" : phase === "outro" || stageDone ? "outro" : "approach";
+      stage.update(dt, sp, sp === "outro" ? outroT : tPhase, cam);
+      if (phase === "outro" || stageDone) outroT += real;
+    }
+    const blocking = !!stage && !(stageDone && s > eventS + 30);
+    const sorted = [...traffic].sort((a, b) => a.s - b.s);
+    let queueAt = eventS + 26;
+    for (const t of sorted) {
+      let next = t.s - t.speed * real;
+      if (blocking && t.s >= eventS + 20 && next < queueAt) {
+        next = Math.max(next, queueAt);
+        queueAt += t.v.half * 2 + 2.5;
+      }
+      const moved = t.s - next;
+      t.s = next;
+      if (t.s < s - 45) t.s = s + 140 + Math.random() * 60;
+      place(t.v, t.s, -LANE, true);
+      for (const w of t.v.wheels) w.rotation.z -= moved / Math.max(0.1, w.scale.x);
+    }
+    walkers.update(dt, s);
+
+    // ---------------------------------------------------------------- the camera
+    const back = cam.aspect < 0.8 ? 1.22 : 1;
+    let want: THREE.Vector3;
+    let wantLook: THREE.Vector3;
+    if (walking) {
+      want = frame(1.2 + 5.2 * Math.cos(-0.95), 2.0, -5.2 * Math.sin(0.95) * back);
+      wantLook = frame(1.4, 1.25, 0);
+    } else if (phase === "board") {
+      want = frame(-2.2, 2.4 * back, 10.5 * back - 0.5);
+      wantLook = frame(0.2, 1.4, 1.2);
+    } else {
+      // From the side round to behind as it pulls off.
+      chase = Math.min(1, chase + real / 2.6);
+      const c = ease(chase);
+      const phi = THREE.MathUtils.lerp(Math.PI / 2, Math.PI - 0.16, c);
+      const rad = THREE.MathUtils.lerp(10.5, 8.8, c) * back;
+      want = frame(rad * Math.cos(phi), THREE.MathUtils.lerp(2.4, 3.3, c) * back, rad * Math.sin(phi));
+      wantLook = frame(THREE.MathUtils.lerp(0.2, 7, c), THREE.MathUtils.lerp(1.4, 1.2, c), THREE.MathUtils.lerp(1.2, 0, c));
+    }
+    // Something happening: turn to it.
+    if (stage) {
+      const dist = eventS - s;
+      const w = phase === "event" || (phase === "outro" && tPhase < 1.6) ? 1 : !stageDone && dist < 24 && dist > -2 ? ease(1 - dist / 24) : stageDone && s - eventS < 12 ? ease(1 - (s - eventS) / 12) * 0.9 : 0;
+      if (w > 0) {
+        const inside = stageKind === "inside";
+        const vw = stage.view;
+        // On foot the kerb side is shopfronts: watch from the road.
+        const phi = walking && Math.sin(vw.phi) > 0 ? -vw.phi : vw.phi;
+        const rad = (walking ? Math.min(vw.rad, 6.8) : vw.rad) * back;
+        const ev = route.place(eventS + rad * Math.cos(phi), (walking ? PAVE_MID : LANE) + rad * Math.sin(phi));
+        const eye = new THREE.Vector3(ev.x, vw.h * back, ev.z);
+        const target = inside ? frame(0, 1.15, 0) : vw.focus;
+        want.lerp(eye, w);
+        wantLook.lerp(target, w);
+      }
+    }
+    // Arriving: across the road, looking up at the place over your ride.
+    const arriveSpan = walking ? 10 : 26;
+    if (s > stopS - arriveSpan && phase !== "event" && phase !== "outro" && !(stage && !stageDone)) {
+      const w = ease(1 - (stopS - s) / arriveSpan);
+      const p = route.place(stopS - (walking ? 6 : 13) * back, walking ? 1.5 : -LANE - 2.6);
+      const eye = new THREE.Vector3(p.x, walking ? 2.3 : 2.9, p.z);
+      const tgt = street.destLook.clone().lerp(walking ? me.root.position.clone().setY(1.4) : frame(1, 1.2, 0), 0.4);
+      want.lerp(eye, w);
+      wantLook.lerp(tgt, w);
+    }
+    camPos.lerp(want, began ? k(phase === "event" ? 2.2 : 3.2) : 1);
+    lookAt.lerp(wantLook, began ? k(4) : 1);
     cam.position.copy(camPos);
-    cam.lookAt(look);
-    sun.position.set(cam.position.x + 18, 30, 20);
-    sun.target.position.set(cam.position.x + 4, 0, 0);
+    cam.lookAt(lookAt);
+    sky.follow(cam);
+    const focus = veh ? veh.root.position : me.root.position;
+    sun.target.position.copy(focus);
+    sun.position.copy(focus).addScaledVector(look.sunDir, 80);
     renderer.render(scene, cam);
     if (!began) began = last = performance.now();
-    o.onProgress?.(Math.min(1, t / total));
-    if (t >= total) finish();
+
+    // How far along (the bar): getting in, the ride, getting out.
+    const span = Math.max(1, stopS - boardS);
+    const u = walking ? (phase === "arrive" ? 0.9 + 0.1 * Math.min(1, tPhase / T_ARRIVE) : 0.9 * ((s - boardS) / span)) : phase === "board" ? 0.1 * Math.min(1, tPhase / (T_BOARD.walk + T_BOARD.getIn)) : phase === "arrive" ? 0.9 + 0.1 * Math.min(1, tPhase / T_ARRIVE) : 0.1 + 0.8 * ((s - boardS) / span);
+    if (Math.abs(u - lastProgress.u) > 0.01) {
+      lastProgress.u = u;
+      o.onProgress?.(Math.min(1, Math.max(0, u)));
+    }
   };
-  frame();
+  let outroT = 0;
+  frameFn();
+
   return {
-    /** Jump to the end (Skip). */
     finish,
+    stage(kind, momentId) {
+      if (stage || done) return false;
+      // Too late on this trip: it would pop up right in front of you.
+      if (s > eventS - (walking ? 3 : 18)) return false;
+      stageKind = kind;
+      stage = createStage(kind, {
+        scene,
+        route,
+        eventS,
+        lane: walking ? PAVE_MID : LANE,
+        walking,
+        mode: o.mode,
+        night,
+        momentId,
+        half: veh?.half ?? 0.4,
+        halfW,
+        driverF: o.mode === "danfo" ? 1.55 : o.mode === "keke" || o.mode === "okada" ? 0.5 : 0.1,
+        seatF: veh?.seat.x ?? 0,
+        mats,
+        makeVehicle: (kk) => makeVehicle(kk),
+      });
+      if (stage.rain) {
+        sky.gloom(1);
+        hemi.intensity *= 0.7;
+        sun.intensity *= 0.35;
+        (scene.fog as THREE.Fog).far = 160;
+        (scene.fog as THREE.Fog).color.lerp(new THREE.Color(0x868e96), 0.6);
+        (scene.background as THREE.Color).lerp(new THREE.Color(0x868e96), 0.6);
+      }
+      return true;
+    },
+    resolve(m) {
+      if (!stage || stageDone) return;
+      mood = m;
+      stageDone = true;
+      stage.outro(mood);
+      outroT = 0;
+      if (phase === "event") {
+        phase = "outro";
+        tPhase = 0;
+      }
+    },
     dispose() {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      stage?.dispose();
       me.dispose();
-      if (veh) for (const e of veh.extras) e.dispose();
+      veh?.dispose();
+      for (const t of traffic) t.v.dispose();
+      walkers.dispose();
       for (const d of disposers) d();
       scene.clear();
       renderer.dispose();
