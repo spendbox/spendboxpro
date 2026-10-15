@@ -34,7 +34,13 @@ import { Confetti } from "../activities/ui";
 import { playSfx } from "../sound";
 import { Sheet } from "../sheet";
 import { whileHere } from "../activity";
-import { challengeQuote, joinChallenge, leaveChallenge, myChallengeRep, openChallenge, reportWinner, type ChallengeQuote, type ChallengeView } from "./challenge-actions";
+import { challengeQuote, declineChallenge, inviteChallenge, joinChallenge, leaveChallenge, myChallengeRep, openChallenge, reportWinner, type ChallengeQuote, type ChallengeView } from "./challenge-actions";
+import { createClient } from "@/lib/supabase/client";
+import dynamic from "next/dynamic";
+import { InviteCard, WhotInvite, type GameTarget } from "./whot-invite";
+
+// The full-screen Whot! table (docs/GAME_TABLES.md), loaded when a game opens.
+const WhotTable = dynamic(() => import("../games/whot-table").then((m) => m.WhotTable), { ssr: false });
 import { useChallengeChannel } from "./channel";
 import { CallBar } from "../call/call-bar";
 
@@ -77,6 +83,10 @@ export function Fight({
   const [mine, setMine] = useState<number | null>(null);
   const [view, setView] = useState<ChallengeView | null>(null);
   const [dismissed, setDismissed] = useState<number[]>([]);
+  /** Invitations to you (game-db/110), a game you're watching, and who you're about to challenge. */
+  const [invites, setInvites] = useState<ChallengeView[]>([]);
+  const [watchId, setWatchId] = useState<number | null>(null);
+  const [inviting, setInviting] = useState<GameTarget | null>(null);
   /** Challenges you closed (they don't open again by themselves). */
   const closedRef = useRef<number[]>([]);
   const [busy, setBusy] = useState(false);
@@ -99,10 +109,11 @@ export function Fight({
     const at = whereRef.current();
     if (!at || !meRef.current) return;
     const r = await fetch(`/api/challenges?region=${encodeURIComponent(region)}&x=${Math.round(at.x)}&z=${Math.round(at.z)}`, { cache: "no-store" })
-      .then((res) => (res.ok ? (res.json() as Promise<{ list: ChallengeView[]; mine: number | null }>) : null))
+      .then((res) => (res.ok ? (res.json() as Promise<{ list: ChallengeView[]; mine: number | null; invites?: ChallengeView[] }>) : null))
       .catch(() => null);
     if (!r) return;
     setList(r.list);
+    setInvites((r as { invites?: ChallengeView[] }).invites ?? []);
     // The one you're in stays open until you close it (its result included); one you're in that
     // you haven't opened (after a reload) opens by itself, unless you closed it.
     setMine((m) => m ?? (r.mine !== null && !closedRef.current.includes(r.mine) ? r.mine : null));
@@ -117,6 +128,51 @@ export function Fight({
       stop();
     };
   }, [signedIn, look, open]);
+  // A knock from someone who just challenged you (a live nudge to look now; the invitation itself
+  // comes from the server, so a knock can't be faked into anything).
+  const meId = me?.id ?? null;
+  useEffect(() => {
+    if (!meId) return;
+    const supabase = createClient();
+    const channel = supabase.channel(`knock:${meId}`).on("broadcast", { event: "knock" }, () => {
+      playSfx("chime");
+      void look();
+    });
+    channel.subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [meId, look]);
+  const knock = (to: string) => {
+    const supabase = createClient();
+    const channel = supabase.channel(`knock:${to}`);
+    channel.subscribe((status) => {
+      if (status !== "SUBSCRIBED") return;
+      void channel.send({ type: "broadcast", event: "knock", payload: { at: Date.now() } }).finally(() => setTimeout(() => void supabase.removeChannel(channel), 1500));
+    });
+  };
+  // "Play Whot!" on someone's card.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<GameTarget & { game: string }>).detail;
+      if (d?.id) setInviting({ id: d.id, name: d.name, avatar: d.avatar });
+    };
+    window.addEventListener("nt-play-game", on);
+    return () => window.removeEventListener("nt-play-game", on);
+  }, []);
+  /** Challenge one player (from their card, or a rematch): the table opens for you straight away. */
+  const challengePlayer = async (target: string, game: string, stakeMint: number, at: { x: number; z: number }): Promise<string | null> => {
+    const r = await inviteChallenge(target, game, stakeMint, at.x, at.z, region).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
+    if (!r.ok) return r.error;
+    playSfx("start");
+    knock(target);
+    closedRef.current = closedRef.current.filter((x) => x !== r.id);
+    setWatchId(null);
+    setMine(r.id);
+    void look();
+    return null;
+  };
+
   // The lights on the map: open ones only while their minute lasts (with the seconds left), and
   // games being played.
   const lightsKey = list.map((c) => `${c.id}:${c.status}:${c.startsAt}`).join("|");
@@ -140,12 +196,13 @@ export function Fight({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lightsKey]);
 
-  // The one you're in, closely (starting it once its minute is up).
+  // The one you're in (or watching), closely (starting it once its minute is up).
+  const shownId = mine ?? watchId;
   useEffect(() => {
-    if (mine === null) return setView(null);
+    if (shownId === null) return setView(null);
     let live = true;
     const get = async () => {
-      const v = await fetch(`/api/challenges?id=${mine}`, { cache: "no-store" })
+      const v = await fetch(`/api/challenges?id=${shownId}`, { cache: "no-store" })
         .then((res) => (res.ok ? (res.json() as Promise<{ view: ChallengeView | null }>) : null))
         .then((d) => d?.view ?? null)
         .catch(() => null);
@@ -163,7 +220,7 @@ export function Fight({
       live = false;
       clearInterval(t);
     };
-  }, [mine, look]);
+  }, [shownId, look]);
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(t);
@@ -175,12 +232,24 @@ export function Fight({
     setBusy(false);
     if (!r.ok) return onMessage(r.error, false);
     playSfx("start");
+    setWatchId(null);
     setMine(c.id);
     onFly?.(c.x, c.z);
   };
+  const decline = async (c: ChallengeView) => {
+    setBusy(true);
+    const r = await declineChallenge(c.id).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
+    setBusy(false);
+    if (!r.ok) return onMessage(r.error, false);
+    knock(c.host);
+    setInvites((l) => l.filter((x) => x.id !== c.id));
+  };
+  // Games of Whot! being played nearby that you could watch (not yours, not dismissed).
+  const watchable = list.filter((c) => c.status === "playing" && c.game === "whot" && c.id !== mine && !dismissed.includes(-c.id) && !c.players.some((p) => p.id === me?.id)).slice(0, 1);
 
   // Alerts: open challenges near you, not yours, still taking players.
-  const alerts = list.filter((c) => c.status === "open" && c.id !== mine && !dismissed.includes(c.id) && Date.parse(c.startsAt) > now && !c.players.some((p) => p.id === me?.id)).slice(0, 2);
+  const alerts = list.filter((c) => c.status === "open" && c.id !== mine && !dismissed.includes(c.id) && Date.parse(c.startsAt) > now && !c.players.some((p) => p.id === me?.id) && c.invited?.id !== me?.id).slice(0, 2);
+  const myInvites = invites.filter((c) => c.id !== mine && !dismissed.includes(c.id) && Date.parse(c.startsAt) > now);
 
   return (
     <>
@@ -222,7 +291,7 @@ export function Fight({
                 </button>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-bold">
-                    {host?.name ?? "Someone"} challenged everyone to {g?.title}!
+                    {c.invited ? `${host?.name ?? "Someone"} vs ${c.invited.name}: ${g?.title}! Hop in` : `${host?.name ?? "Someone"} challenged everyone to ${g?.title}!`}
                   </p>
                   <p className="text-xs text-white/70">
                     Pool {cash(c.pool)} · {c.players.length}/{c.seats} · <b className="tabular-nums text-gold">{mmss(left)}</b>
@@ -239,7 +308,72 @@ export function Fight({
           })}
         </div>
       )}
-      {view && me && <Arena
+      {!view && (myInvites.length > 0 || watchable.length > 0) && (
+        <div className="pointer-events-none fixed inset-x-0 top-28 z-[45] flex flex-col items-center gap-2 px-3">
+          {myInvites.slice(0, 2).map((c) => (
+            <InviteCard
+              key={c.id}
+              host={c.players[0] ?? { id: c.host, name: "Someone", avatar: null }}
+              stake={c.stake}
+              pool={c.pool}
+              secsLeft={(Date.parse(c.startsAt) - now) / 1000}
+              busy={busy}
+              onAccept={() => void join(c)}
+              onDecline={() => void decline(c)}
+            />
+          ))}
+          {watchable.map((c) => (
+            <div key={c.id} className="toast-in pointer-events-auto flex items-center gap-2 rounded-full bg-[#0a4127] py-1.5 pl-3 pr-1.5 text-sm text-white shadow-xl ring-1 ring-[#ffd43b]/60">
+              <span className="truncate">
+                🃏 {c.players.map((p) => p.name).join(" vs ")} are playing Whot!
+              </span>
+              <button onClick={() => (setDismissed((d) => [...d, -c.id]), setWatchId(c.id))} className="shrink-0 rounded-full bg-[#ffd43b] px-3 py-1 text-xs font-bold text-ink">
+                Watch
+              </button>
+              <button onClick={() => setDismissed((d) => [...d, -c.id])} className="grid size-7 shrink-0 place-items-center rounded-full text-white/60" aria-label="Not now">
+                <X className="size-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {inviting && me && (
+        <WhotInvite
+          region={region}
+          target={inviting}
+          onClose={() => setInviting(null)}
+          onSend={async (stake) => {
+            const at = where();
+            if (!at) return "Find a home or walk somewhere on the map first.";
+            const e = await challengePlayer(inviting.id, "whot", stake, at);
+            if (!e) setInviting(null);
+            return e;
+          }}
+        />
+      )}
+      {view && me && view.game === "whot" && (
+        <WhotTable
+          key={view.id}
+          view={view}
+          me={me}
+          now={now}
+          onMessage={onMessage}
+          onClose={() => {
+            closedRef.current = [...closedRef.current, view.id];
+            setMine(null);
+            setWatchId(null);
+            setView(null);
+            void look();
+          }}
+          onJoin={() => void join(view)}
+          onRematch={() => {
+            const other = view.players.find((p) => p.id !== me.id);
+            if (!other) return;
+            void challengePlayer(other.id, view.game, view.stake, { x: view.x, z: view.z }).then((e) => e && onMessage(e, false));
+          }}
+        />
+      )}
+      {view && me && view.game !== "whot" && (mine !== null) && <Arena
           key={view.id}
           view={view}
           me={me}

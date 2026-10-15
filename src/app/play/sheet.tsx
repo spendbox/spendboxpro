@@ -18,6 +18,9 @@ function onEscape(e: KeyboardEvent) {
  * Only a tap that STARTS on the dark backdrop closes it (a tap on the city that opened it
  * must not also close it).
  */
+/** Whether any card is open (so nothing else pops up over it). */
+export const anySheetOpen = () => openSheets.length > 0;
+
 export function Sheet({
   onClose,
   children,

@@ -12,7 +12,8 @@ down a challenge, a minute to gather players, a game floating over the city, a p
    tags; accents don't matter, so "ayo" finds Ayò), shelves (All, Cards, Board, Party, Sports,
    Coming soon, each with a count) and a scrolling grid of tiles (icon, name, players). Games
    you can play now come first; the rest carry a "Soon" badge and can't be started yet.
-   Whot! and Ludo play now.
+   Whot! and Ludo play now. Whot! opens at its full-screen table (docs/GAME_TABLES.md), where
+   you can also challenge one person directly from their card.
 3. **Pick a stake**: what each player puts into the pool. Tap a quick pick (₦1,000, ₦5,000,
    ₦20,000, ₦50,000) or type any amount from ₦1,000 to ₦1,000,000, in the player's own
    currency (converted to mint). The card shows "You have X" (Fun money and wallet) and the
@@ -100,5 +101,5 @@ colour, icon, blurb, and optional search tags. Set the engine once its turn game
   cannon-es or Rapier), which needs an npm install.
 - **Police and Thief** on the real streets.
 - **Seats taken over** by a computer player when someone drops out mid-game.
-- **Spectators** who watch and bet on the winner.
+- **Betting** on the winner while watching (watching itself is done: docs/GAME_TABLES.md).
 - **Leagues** and a weekly leaderboard.

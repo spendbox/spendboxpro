@@ -34,6 +34,8 @@
 - [ ] Then run `game-db/106_passport.sql` (the passport: a stamp for every real place you go into, rewards for new stamps and complete areas; see docs/PASSPORT.md). Until it's run, the passport says it's switched on soon.
 - [ ] Then run `game-db/107_gifts_uncapped.sql` (no cap on giving money, except brand-new accounts: ₦750,000 a day until 3 days old and level 5).
 - [ ] Then run `game-db/108_home_builder.sql` (the house builder: one save can cost more, and big plans fit).
+- [ ] Then run `game-db/109_moments.sql` (moments: little stories out and about, with choices that move money and reputation; see docs/MOMENTS.md).
+- [ ] Then run `game-db/110_game_tables.sql` (game tables: challenge one person to Whot!, accept or decline, start now; see docs/GAME_TABLES.md).
 - [ ] Then run `game-db/105_pack_72_hours.sql` (starter packs are on offer for a player's first 72 hours only, not until they buy a home). Until it's run, the old rule stays.
 - [ ] Then run `game-db/104_luxury.sql` (luxury things up to ₦3bn: Patek Philippe, Richard Mille, Rolls-Royce...). Until it's run, anything over ₦300m can't be bought.
 - [ ] Then run `game-db/103_call_off_refunds.sql` (when a host calls off an event, everyone who came in is told their ticket was paid back, not only those who said they were going). Run it after 96.

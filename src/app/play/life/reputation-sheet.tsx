@@ -171,7 +171,7 @@ function Levels({ score }: { score: number }) {
           </li>
         ))}
       </ul>
-      <p className="mt-2 text-[11px] text-muted">Win challenges (+3 each), host games people play (+1), own property and fine things, and leave marks people love.</p>
+      <p className="mt-2 text-[11px] text-muted">Win challenges (+3 each), host games people play (+1), own property and fine things, leave marks people love, and choose well when life happens to you out and about.</p>
     </div>
   );
 }

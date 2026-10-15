@@ -4981,3 +4981,260 @@ alter table public.home_plans drop constraint if exists home_plans_plan_check;
 alter table public.home_plans drop constraint if exists home_plans_plan_size;
 alter table public.home_plans add constraint home_plans_plan_size check (pg_column_size(plan) <= 262144);
 
+-- ======================================================== 109_moments.sql
+-- Newtown, part 109: moments (docs/MOMENTS.md). Little stories that happen to you as you go round
+-- the city, each with a choice that can cost or bring money and reputation. The game picks them
+-- and works out what happens (src/lib/world/moments.ts, src/app/play/moment-actions.ts); this
+-- keeps the books: one at a time, not too often, and how far they can move you in a day.
+--
+-- Safe to run more than once. Run after part 108.
+
+-- What moments have done to your reputation (part of it, src/lib/world/items.ts reputationOf).
+alter table public.lives add column if not exists moment_rep numeric(8,2) not null default 0;
+
+create table if not exists public.moments (
+  id bigserial primary key,
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  moment text not null check (char_length(moment) <= 40),
+  -- The name, amount and place filled in, and the seed that told it.
+  vars jsonb not null default '{}'::jsonb,
+  spot text not null default 'street' check (char_length(spot) <= 20),
+  created_at timestamptz not null default now(),
+  answered_at timestamptz,
+  choice int,
+  -- What happened: { text, cash (mint, signed), rep }.
+  outcome jsonb
+);
+create index if not exists moments_user_idx on public.moments (user_id, created_at desc);
+
+-- Moments that come back later (the woman you helped returns with her grandson).
+create table if not exists public.moment_followups (
+  id bigserial primary key,
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  moment text not null check (char_length(moment) <= 40),
+  vars jsonb not null default '{}'::jsonb,
+  due_at timestamptz not null
+);
+create index if not exists moment_followups_due_idx on public.moment_followups (user_id, due_at);
+
+do $$
+begin
+  revoke all on table public.moments, public.moment_followups from public, anon, authenticated;
+  grant all on table public.moments, public.moment_followups to service_role;
+  revoke all on sequence public.moments_id_seq, public.moment_followups_id_seq from public, anon, authenticated;
+  grant all on sequence public.moments_id_seq, public.moment_followups_id_seq to service_role;
+end $$;
+
+/**
+ * Start a moment for a player: not within p_gap seconds of the last one, at most p_per_day a day,
+ * any earlier one left unanswered closed. p_follow: the follow-up it comes from (used up). Returns
+ * its id. Errors: too_soon, daily_cap.
+ */
+create or replace function public.moment_open(p_user uuid, p_moment text, p_vars jsonb, p_spot text, p_gap int, p_per_day int, p_follow bigint default null)
+returns bigint
+language plpgsql security definer set search_path = public as $$
+declare
+  v_last timestamptz;
+  v_today int;
+  v_id bigint;
+begin
+  perform 1 from public.profiles where id = p_user for update;
+  select max(created_at) into v_last from public.moments where user_id = p_user;
+  if v_last is not null and v_last > now() - make_interval(secs => greatest(0, p_gap)) then raise exception 'too_soon'; end if;
+  select count(*) into v_today from public.moments where user_id = p_user and created_at >= date_trunc('day', now());
+  if v_today >= p_per_day then raise exception 'daily_cap'; end if;
+  update public.moments set answered_at = now(), choice = -1 where user_id = p_user and answered_at is null;
+  if p_follow is not null then delete from public.moment_followups where id = p_follow and user_id = p_user; end if;
+  insert into public.moments (user_id, moment, vars, spot) values (p_user, left(p_moment, 40), coalesce(p_vars, '{}'::jsonb), left(coalesce(p_spot, 'street'), 20))
+    returning id into v_id;
+  return v_id;
+end $$;
+
+/**
+ * Answer a moment: what you chose and what came of it (worked out by the game). p_cash (mint):
+ * paid from Fun money then the wallet when below 0, into the wallet when above (no more than
+ * p_gain_day a day from moments); p_rep: reputation, no more than p_rep_day either way in a day,
+ * and kept between p_rep_min and p_rep_max in all. p_follow: a moment to come back p_follow_hours
+ * later. Returns { cash, rep, coins }. Errors: no_moment, too_late, not_enough.
+ */
+create or replace function public.moment_answer(
+  p_user uuid, p_id bigint, p_choice int, p_text text, p_cash numeric, p_rep numeric,
+  p_follow text, p_follow_vars jsonb, p_follow_hours numeric,
+  p_answer_secs int, p_gain_day numeric, p_rep_day numeric, p_rep_min numeric, p_rep_max numeric
+) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  m public.moments;
+  v_cash numeric := round(coalesce(p_cash, 0), 2);
+  v_rep numeric := round(coalesce(p_rep, 0), 2);
+  v_gained numeric;
+  v_rep_today numeric;
+  v_now numeric;
+begin
+  select * into m from public.moments where id = p_id and user_id = p_user for update;
+  if not found or m.answered_at is not null then raise exception 'no_moment'; end if;
+  if m.created_at < now() - make_interval(secs => greatest(60, p_answer_secs)) then
+    update public.moments set answered_at = now(), choice = -1 where id = p_id;
+    raise exception 'too_late';
+  end if;
+  perform 1 from public.profiles where id = p_user for update;
+  if v_cash < 0 then
+    if public.life_can_spend(p_user, array['fun']) < -v_cash then raise exception 'not_enough'; end if;
+    perform public.life_spend(p_user, array['fun'], -v_cash);
+    perform public.log_coins(p_user, null, 'moment', v_cash, false, 'Out and about');
+    perform public.burn(null, -v_cash, 'Moments');
+  elsif v_cash > 0 then
+    select coalesce(sum((outcome ->> 'cash')::numeric), 0) into v_gained from public.moments
+      where user_id = p_user and answered_at >= date_trunc('day', now()) and (outcome ->> 'cash')::numeric > 0;
+    v_cash := least(v_cash, greatest(0, coalesce(p_gain_day, 0) - v_gained));
+    if v_cash > 0 then
+      update public.profiles set coins = coins + v_cash where id = p_user;
+      perform public.log_coins(p_user, null, 'moment', v_cash, false, 'Out and about');
+    end if;
+  end if;
+  if v_rep <> 0 then
+    select coalesce(sum((outcome ->> 'rep')::numeric), 0) into v_rep_today from public.moments
+      where user_id = p_user and answered_at >= date_trunc('day', now());
+    v_rep := case when v_rep > 0 then least(v_rep, greatest(0, p_rep_day - greatest(0, v_rep_today)))
+                  else greatest(v_rep, -greatest(0, p_rep_day + least(0, v_rep_today))) end;
+    select moment_rep into v_now from public.lives where user_id = p_user for update;
+    if found then
+      v_rep := least(p_rep_max, greatest(p_rep_min, v_now + v_rep)) - v_now;
+      update public.lives set moment_rep = moment_rep + v_rep where user_id = p_user;
+    else
+      v_rep := 0;
+    end if;
+  end if;
+  update public.moments
+    set answered_at = now(), choice = p_choice,
+        outcome = jsonb_build_object('text', left(coalesce(p_text, ''), 400), 'cash', v_cash, 'rep', v_rep)
+    where id = p_id;
+  if p_follow is not null and p_follow <> '' then
+    insert into public.moment_followups (user_id, moment, vars, due_at)
+      values (p_user, left(p_follow, 40), coalesce(p_follow_vars, '{}'::jsonb), now() + make_interval(secs => (greatest(1, coalesce(p_follow_hours, 24)) * 3600)::int));
+  end if;
+  return jsonb_build_object('cash', v_cash, 'rep', v_rep, 'coins', (select coins from public.profiles where id = p_user));
+end $$;
+
+do $$
+begin
+  revoke all on function public.moment_open(uuid, text, jsonb, text, int, int, bigint) from public, anon, authenticated;
+  grant execute on function public.moment_open(uuid, text, jsonb, text, int, int, bigint) to service_role;
+  revoke all on function public.moment_answer(uuid, bigint, int, text, numeric, numeric, text, jsonb, numeric, int, numeric, numeric, numeric, numeric) from public, anon, authenticated;
+  grant execute on function public.moment_answer(uuid, bigint, int, text, numeric, numeric, text, jsonb, numeric, int, numeric, numeric, numeric, numeric) to service_role;
+end $$;
+
+-- ======================================================== 110_game_tables.sql
+-- Newtown, part 110: game tables (docs/GAME_TABLES.md). Challenge one person to a game (Whot! first),
+-- for a stake: they get an invitation to accept or decline. Anyone nearby can still join before it
+-- starts, and anyone can watch. The host can start as soon as two are in. Built on the challenges of
+-- part 70 (the pool, the stakes, the winner's prize and every safety rail stay the same).
+--
+-- Safe to run more than once. Run after part 109.
+
+-- The person a challenge is for (null: everyone nearby, as before).
+alter table public.challenges add column if not exists invited uuid references public.profiles (id) on delete set null;
+create index if not exists challenges_invited_idx on public.challenges (invited, status);
+
+/**
+ * Challenge one player (p_target) to a game for a stake. No fee (it's between the two of you).
+ * They have three minutes to answer. Errors: as challenge_open, plus self, target_busy, blocked,
+ * unknown_target.
+ */
+create or replace function public.challenge_invite(p_user uuid, p_target uuid, p_region text, p_game text, p_stake numeric, p_x int, p_z int, p_seats int)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  p public.profiles;
+  t public.profiles;
+  v_stake numeric := round(least(10000, greatest(0, coalesce(p_stake, 0))), 2);
+  v_id bigint;
+  v_seed bigint := floor(random() * 2000000000)::bigint;
+  v_starts timestamptz := now() + interval '180 seconds';
+begin
+  if p_target is null or p_target = p_user then raise exception 'self'; end if;
+  select * into p from public.profiles where id = p_user;
+  if not found or p.is_bot then raise exception 'unknown_player'; end if;
+  if p.frozen or p.age_blocked_at is not null then raise exception 'frozen'; end if;
+  select * into t from public.profiles where id = p_target;
+  if not found or t.is_bot or t.username is null then raise exception 'unknown_target'; end if;
+  if t.frozen or t.age_blocked_at is not null then raise exception 'unknown_target'; end if;
+  if public.has_blocked(p_target, p_user) or public.has_blocked(p_user, p_target) then raise exception 'blocked'; end if;
+  perform 1 from public.lives where user_id = p_user for update;
+  if not found then raise exception 'no_life'; end if;
+  if public.challenge_busy(p_user) is not null then raise exception 'busy'; end if;
+  if public.challenge_busy(p_target) is not null then raise exception 'target_busy'; end if;
+  if public.life_can_spend(p_user, array['fun']) < v_stake then raise exception 'not_enough:%', trim_scale(v_stake); end if;
+  if v_stake > 0 then
+    perform public.life_spend(p_user, array['fun'], v_stake);
+    perform public.log_coins(p_user, null, 'challenge_stake', -v_stake, false, 'Challenge stake');
+  end if;
+  insert into public.challenges (host_id, region, game, stake, fee, x, z, seats, seed, pool, starts_at, invited)
+    values (p_user, p_region, p_game, v_stake, 0, p_x, p_z, greatest(2, least(6, coalesce(p_seats, 4))), v_seed, v_stake, v_starts, p_target)
+    returning id into v_id;
+  insert into public.challenge_players (challenge_id, user_id, paid) values (v_id, p_user, v_stake);
+  perform public.notify(p_target, null, 'challenge', coalesce(p.username, 'Someone') || ' challenged you to a game! Open the game to accept.');
+  return jsonb_build_object('id', v_id, 'seed', v_seed, 'starts_at', v_starts);
+end $$;
+
+/**
+ * Accept (or join) a challenge: pay the stake in. When the invited player accepts, the game starts
+ * 15 seconds later (time for anyone else nearby to hop in), unless the host starts it sooner.
+ */
+create or replace function public.challenge_accept(p_user uuid, p_id bigint) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v jsonb;
+begin
+  v := public.challenge_join(p_user, p_id);
+  update public.challenges set starts_at = least(starts_at, now() + interval '15 seconds')
+    where id = p_id and invited = p_user and status = 'open';
+  return v;
+end $$;
+
+/** The invited player says no: if nobody else has joined, it's called off and the host's stake goes back. */
+create or replace function public.challenge_decline(p_user uuid, p_id bigint) returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  c public.challenges;
+  v_name text;
+begin
+  select * into c from public.challenges where id = p_id for update;
+  if not found or c.invited is distinct from p_user or c.status <> 'open' then return 'gone'; end if;
+  select username into v_name from public.profiles where id = p_user;
+  update public.challenges set invited = null where id = p_id;
+  if (select count(*) from public.challenge_players where challenge_id = p_id) < 2 then
+    perform public.challenge_refund(p_id);
+    perform public.notify(c.host_id, null, 'challenge', coalesce(v_name, 'They') || ' can''t play right now. Your stake is back.');
+    return 'cancelled';
+  end if;
+  return 'declined';
+end $$;
+
+/** The host starts it now (two or more players in). Returns the status. */
+create or replace function public.challenge_start_now(p_user uuid, p_id bigint) returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  c public.challenges;
+begin
+  select * into c from public.challenges where id = p_id for update;
+  if not found then return 'gone'; end if;
+  if c.host_id <> p_user then raise exception 'not_host'; end if;
+  if c.status <> 'open' then return c.status; end if;
+  if (select count(*) from public.challenge_players where challenge_id = p_id) < 2 then raise exception 'need_players'; end if;
+  update public.challenges set starts_at = now() where id = p_id;
+  return public.challenge_begin(p_id);
+end $$;
+
+do $$
+begin
+  revoke all on function public.challenge_invite(uuid, uuid, text, text, numeric, int, int, int) from public, anon, authenticated;
+  grant execute on function public.challenge_invite(uuid, uuid, text, text, numeric, int, int, int) to service_role;
+  revoke all on function public.challenge_accept(uuid, bigint) from public, anon, authenticated;
+  grant execute on function public.challenge_accept(uuid, bigint) to service_role;
+  revoke all on function public.challenge_decline(uuid, bigint) from public, anon, authenticated;
+  grant execute on function public.challenge_decline(uuid, bigint) to service_role;
+  revoke all on function public.challenge_start_now(uuid, bigint) from public, anon, authenticated;
+  grant execute on function public.challenge_start_now(uuid, bigint) to service_role;
+end $$;
+

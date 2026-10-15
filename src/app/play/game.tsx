@@ -205,6 +205,7 @@ const AvatarStudio = dynamic(() => import("./avatar-studio").then((m) => m.Avata
 const SportsSheet = dynamic(() => import("./sports/sportsbook").then((m) => m.SportsSheet));
 const ActivitySheet = dynamic(() => import("./activities/activity-sheet").then((m) => m.ActivitySheet));
 const GiveCoinsSheet = dynamic(() => import("./activities/gift-sheet").then((m) => m.GiveCoinsSheet));
+const MomentsLayer = dynamic(() => import("./moments/moments-layer").then((m) => m.MomentsLayer), { ssr: false });
 const RoomActivityLayer = dynamic(() => import("./activities/room-layer").then((m) => m.RoomActivityLayer));
 const AdvertiseExplainer = dynamic(() => import("@/components/advertise-explainer").then((m) => m.AdvertiseExplainer));
 const HouseSheet = dynamic(() => import("./houses/house-sheet").then((m) => m.HouseSheet));
@@ -3277,6 +3278,12 @@ export function Game({
           />
         </Safe>
       )}
+      {/* Moments (docs/MOMENTS.md): little stories as you go round the city. */}
+      {worldId && !guest && (
+        <Safe name="Moments">
+          <MomentsLayer inside={place ? (placeLevel?.theme ?? "lobby") : null} home={!!place && inPlannedHome} place={place ? (rooms.myRoomInfo?.name ?? placeRoom?.name ?? "") : ""} enabled={!camera && ride === null} />
+        </Safe>
+      )}
       {giveTo && (
         <Safe name="Give coins">
           <GiveCoinsSheet
@@ -3746,6 +3753,7 @@ export function Game({
                 externalNpc={npcTap}
                 enteredAt={rooms.enteredAt}
                 onGiveCoins={guest ? undefined : setGiveTo}
+                onPlay={guest || !worldId ? undefined : (p) => window.dispatchEvent(new CustomEvent("nt-play-game", { detail: { game: "whot", ...p } }))}
                 greet={guest ? undefined : greet}
                 friendStatusOf={friendStatusOf}
                 onAddFriend={guest ? undefined : befriend}
