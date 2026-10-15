@@ -208,7 +208,7 @@ function storyOf(slot: number, p: ReturnType<typeof placesOf>): NewsItem {
 export type PlayerEvent = {
   id: string;
   at: number;
-  kind: "buy" | "business" | "rich" | "challenge";
+  kind: "buy" | "business" | "rich" | "challenge" | "party";
   who: string;
   what: string;
   price: number;
@@ -218,15 +218,19 @@ export type PlayerEvent = {
   z?: number;
   /** A challenge: who else played (their names) and how many. */
   beat?: string[];
+  /** A big party: how far it reaches (metres), when it starts (ms), and its scene on the map. */
+  radiusM?: number;
+  startsAt?: number;
+  scene?: string;
 };
 
 /** A player's big moment as a headline, said with some fun (the same words each time for the same event). */
 export function playerStory(e: PlayerEvent, area: string, price: string): Pick<NewsItem, "title" | "text" | "scene"> {
-  return { ...playerWords(e, area, price), scene: PLAYER_SCENE[e.kind] };
+  return { ...playerWords(e, area, price), scene: e.scene ?? PLAYER_SCENE[e.kind] };
 }
 
 /** What's happening at the spot when you go and look: a housewarming owambe, a ribbon cut, a motorcade, a victory dance. */
-const PLAYER_SCENE: Record<PlayerEvent["kind"], string> = { buy: "owambe", business: "ribbon_cutting", rich: "celebrity_visit", challenge: "lottery_winner" };
+const PLAYER_SCENE: Record<PlayerEvent["kind"], string> = { buy: "owambe", business: "ribbon_cutting", rich: "celebrity_visit", challenge: "lottery_winner", party: "street_party" };
 
 function playerWords(e: PlayerEvent, area: string, price: string): Pick<NewsItem, "title" | "text"> {
   let h = 0;
@@ -249,6 +253,19 @@ function playerWords(e: PlayerEvent, area: string, price: string): Pick<NewsItem
       { title: `${where}: ${others} vs ${e.who}. Guess who won.`, text: `It was ${e.who}. ${e.what}, ${prize}, and a victory dance that witnesses describe as "unnecessary but effective".` },
       { title: `Champion alert: ${e.who} rules ${e.what} in ${where}`, text: `${e.who} beat ${others} for ${prize}. Think you can do better? Tap Challenge and find out.` },
       { title: `${e.who} sends ${others} home empty-handed`, text: `A ${e.what} challenge in ${where} ended with ${e.who} collecting ${prize}. The losers have asked for "small time to recover".` },
+    ]);
+  }
+  if (e.kind === "party") {
+    const across = (e.radiusM ?? 0) * 2;
+    const big = across >= 1000 ? `${(across / 1000).toLocaleString("en-GB", { maximumFractionDigits: 1 })} km` : `${across} m`;
+    const crowd = e.price.toLocaleString("en-GB");
+    const when = !e.startsAt || e.startsAt <= Date.now() ? "Right now" : "Coming soon";
+    return pick([
+      { title: `${when}: ${e.who} shuts down ${where} with "${e.what}"`, text: `A party ${big} across, room for ${crowd}. Every road in it is strung with lights. Traffic wardens have reportedly joined in. Tap Events to go.` },
+      { title: `${where} declares public holiday (unofficially)`, text: `${e.who}'s "${e.what}" covers ${big} of ${where}, with space for ${crowd} people. Neighbours who complained about the noise were last seen dancing.` },
+      { title: `Carnival alert! ${e.who} lights up ${where}`, text: `Speakers on every corner, bulbs over every street: "${e.what}" stretches ${big} across ${where}. Up to ${crowd} can come. Bring your dancing shoes, and maybe a spare pair.` },
+      { title: `"Is it Detty December already?": ${where} parties`, text: `No, it's ${e.who}'s "${e.what}": ${big} of road, ${crowd} guests, zero chill. The area boys have formed an orderly queue. For once.` },
+      { title: `${e.who} throws the party of the year in ${where}`, text: `"${e.what}" takes over ${big} of ${where}. Okada riders report it's faster to dance through than drive round. Up to ${crowd} people can join.` },
     ]);
   }
   if (e.kind === "rich")

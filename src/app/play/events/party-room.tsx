@@ -39,6 +39,7 @@ export function PartyRoom({
   view,
   me,
   onMin,
+  onLeave,
   onPerson,
   onMessage,
   onEnd,
@@ -47,6 +48,8 @@ export function PartyRoom({
   me: RoomMe;
   /** Back to the map (still in). */
   onMin: () => void;
+  /** Out of the room (the ticket stays paid). */
+  onLeave: () => void;
   onPerson: (id: string) => void;
   onMessage: (text: string, good: boolean) => void;
   /** The host ends it. */
@@ -226,6 +229,7 @@ export function PartyRoom({
         endsAt={Date.parse(view.endsAt)}
         here={people.length}
         onMin={onMin}
+        onLeave={onLeave}
         onHere={() => setPanel("who")}
         extra={
           <button onClick={() => setSound((s) => !s)} className="grid size-10 shrink-0 place-items-center rounded-full bg-white/15" aria-label={sound ? "Music off" : "Music on"}>

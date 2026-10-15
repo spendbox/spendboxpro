@@ -23,6 +23,7 @@ export function StageRoom({
   view,
   me,
   onMin,
+  onLeave,
   onPerson,
   onMessage,
   onEnd,
@@ -30,6 +31,7 @@ export function StageRoom({
   view: EventView;
   me: RoomMe;
   onMin: () => void;
+  onLeave: () => void;
   onPerson: (id: string) => void;
   onMessage: (text: string, good: boolean) => void;
   onEnd: () => void;
@@ -115,7 +117,7 @@ export function StageRoom({
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-[#0d0b14] text-white">
-      <RoomTop title={view.title} icon={f?.icon ?? "🎤"} endsAt={Date.parse(view.endsAt)} here={here.length || 1} onMin={onMin} onHere={() => setPanel("who")} />
+      <RoomTop title={view.title} icon={f?.icon ?? "🎤"} endsAt={Date.parse(view.endsAt)} here={here.length || 1} onMin={onMin} onLeave={onLeave} onHere={() => setPanel("who")} />
 
       <div className="relative min-h-0 flex-1 overflow-y-auto px-3 pt-2">
         {/* The screen. */}

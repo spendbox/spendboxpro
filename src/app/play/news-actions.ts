@@ -3,6 +3,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { regionMap } from "@/lib/world";
 import { challengeGame } from "@/lib/world/challenges";
+import { eventFormat, isBigParty } from "@/lib/world/events";
 import type { PlayerEvent } from "@/lib/world/news";
 
 // Players in the news (docs/NEWS.md): the dearest homes bought lately, businesses that just put their
@@ -17,7 +18,7 @@ export async function playerNews(region: string): Promise<PlayerEvent[]> {
   const db = createAdminClient();
   const since = new Date(Date.now() - 14 * 86_400_000).toISOString();
   try {
-    const [buys, leases, packs, games] = await Promise.all([
+    const [buys, leases, packs, games, parties] = await Promise.all([
       db
         .from("property_units")
         .select("unit_id, building_id, label, price, bought_at, owner_id")
@@ -30,13 +31,18 @@ export async function playerNews(region: string): Promise<PlayerEvent[]> {
       db.from("starter_payments").select("reference, user_id, mint, paid_at").eq("region", region).eq("status", "paid").eq("pack", "odogwu").gte("paid_at", since).order("paid_at", { ascending: false }).limit(20),
       // Challenges won (game-db/070; nothing until it's run).
       db.from("challenges").select("id, game, x, z, winner_id, prize, finished_at, challenge_players(user_id)").eq("region", region).eq("status", "done").not("winner_id", "is", null).gte("finished_at", since).order("finished_at", { ascending: false }).limit(20),
+      // Big parties on now or coming up (game-db/095; their size from 097: every column, so it's
+      // fine before 097 runs).
+      db.from("hosted_events").select("*").eq("region", region).eq("category", "party").eq("status", "on").gt("ends_at", new Date().toISOString()).order("created_at", { ascending: false }).limit(40),
     ]);
+    const big = ((parties.error ? [] : parties.data) ?? []).filter((p) => isBigParty(Number(p.radius_m ?? 50), Number(p.capacity ?? 0))) as Record<string, unknown>[];
     const played = ((games.error ? [] : games.data) ?? []) as { id: number; game: string; x: number; z: number; winner_id: string; prize: number | null; finished_at: string; challenge_players: { user_id: string }[] | null }[];
     const ids = [
       ...new Set([
         ...(buys.data ?? []).map((b) => String(b.owner_id)),
         ...(packs.data ?? []).map((p) => String(p.user_id)),
         ...played.flatMap((g) => [String(g.winner_id), ...(g.challenge_players ?? []).map((p) => String(p.user_id))]),
+        ...big.map((p) => String(p.host_id)),
       ]),
     ];
     const { data: people } = ids.length ? await db.from("profiles").select("id, username").in("id", ids) : { data: [] };
@@ -59,6 +65,20 @@ export async function playerNews(region: string): Promise<PlayerEvent[]> {
         x: Number(g.x),
         z: Number(g.z),
         beat: (g.challenge_players ?? []).filter((p) => String(p.user_id) !== String(g.winner_id)).map((p) => nameOf.get(String(p.user_id)) ?? "a newcomer").slice(0, 4),
+      });
+    for (const p of big)
+      out.push({
+        id: `party-${p.id}`,
+        at: Date.parse(String(p.created_at)),
+        kind: "party",
+        who: nameOf.get(String(p.host_id)) ?? "A newcomer",
+        what: String(p.title),
+        price: Number(p.capacity ?? 0),
+        x: Number(p.x),
+        z: Number(p.z),
+        radiusM: Number(p.radius_m ?? 50),
+        startsAt: Date.parse(String(p.starts_at)),
+        scene: eventFormat(String(p.format))?.scene ?? undefined,
       });
     return out.filter((e) => Number.isFinite(e.at)).sort((a, b) => b.at - a.at);
   } catch (error) {

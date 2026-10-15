@@ -98,6 +98,7 @@ import { homePlanFor } from "./life/home-plan-actions";
 import type { HomePlan } from "@/lib/home-plan";
 import { setEventSoundsEnabled } from "./city/event-sounds";
 import type { CityDancer, CityEvent, CityFriendPin, CityGhost, CityInteract, CityMarkers, CityRide, RideTarget } from "./city-view";
+import type { PartyZone } from "./city/party-lights";
 import { FeedIconView, FeedRow, NotificationsPanel, SwipeRow, type FeedIcon, type FeedItem } from "./notifications";
 import { dismissNotices, readNotices } from "./notice-actions";
 import { closePhoneNotices, setPhoneBadge } from "./phone/phone-notices";
@@ -1969,6 +1970,8 @@ export function Game({
   // An event's beam (or its bubble) tapped on the map: open that event.
   const [eventTapped, setEventTapped] = useState<{ id: number; at: number } | null>(null);
   const [eventScenes, setEventScenes] = useState<GameState["worldEvents"]>(NO_WORLD_EVENTS);
+  /** Parties on now (and the one you're placing), their roads strung with lights. */
+  const [partyZones, setPartyZones] = useState<PartyZone[]>([]);
   const mapLights = useMemo(() => [...challengeLights, ...eventLights], [challengeLights, eventLights]);
   const newsScene = worldLife.newsScene;
   const worldScenes = useMemo(() => (eventScenes.length ? [...(newsScene ?? []), ...eventScenes] : (newsScene ?? NO_WORLD_EVENTS)), [newsScene, eventScenes]);
@@ -2302,6 +2305,7 @@ export function Game({
             dance={isDancing && dancing ? { id: me.id, move: dancing.move, with: dancing.with } : null}
             friendsAt={worldId ? (walking ? facesOnMap.filter((f) => !f.mine) : facesOnMap) : friendsAt}
             challengeLights={worldId ? mapLights : undefined}
+            partyZones={worldId ? partyZones : undefined}
             onLightTap={
               worldId
                 ? (id) => {
@@ -2654,6 +2658,7 @@ export function Game({
           openId={eventTapped}
           onLights={setEventLights}
           onScenes={setEventScenes}
+          onZones={setPartyZones}
           onMessage={(text, good) => setMessage({ text, tone: good ? "good" : "bad" })}
           onFly={(x, z) => worldLife.lookAt(x, z)}
           onPerson={(id) => setPersonId(id)}

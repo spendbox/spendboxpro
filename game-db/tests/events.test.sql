@@ -4,8 +4,10 @@
 -- (tickets back), ending early, the stage, reputation, and running it twice.
 \ir ../095_events.sql
 \ir ../096_event_refund.sql
+\ir ../097_party_sizes.sql
 \ir ../095_events.sql
 \ir ../096_event_refund.sql
+\ir ../097_party_sizes.sql
 \o /dev/null
 
 create function pg_temp.uid(e text) returns uuid language sql as $$ select id from profiles where email_key = e $$;
@@ -177,6 +179,16 @@ begin
   perform pg_temp.check((select coins from profiles where id = b) + (select coalesce(sum(balance), 0) from life_pots where user_id = b) = coins0, 'with nobody in: the fee is back');
   perform pg_temp.check(exists (select 1 from treasury_ledger where kind = 'event_permit' and note like 'Event permit: Owambe%'), 'the permit went to the state');
   perform pg_temp.check((select balance from world_bank where id = 1) - bank0 = 70, 'the World Bank counts the permit (and not before the party started)');
+
+  -- Parties of any size (part 97): a carnival 1 km round for 10,000 people; another one whose area
+  -- would meet it can't be on at the same time, one far enough away can.
+  insert into lives (user_id, region, granted) values (e, 'lagos', 1000) on conflict do nothing;
+  v := event_open(e, 'lagos', 'party', 'rave', 'Lekki Carnival', '', 300, 300, 'Admiralty Way', true, now() + interval '2 days', 120, 0, 400, 10000, 3, 0, 16, 1000);
+  perform pg_temp.check((select radius_m from hosted_events where id = (v->>'id')::bigint) = 1000 and (select capacity from hosted_events where id = (v->>'id')::bigint) = 10000, 'a carnival for 10,000');
+  perform pg_temp.fails('their areas would meet', 'street_taken', format($q$select event_open(%L, 'lagos', 'party', 'rave', 'Rival carnival', '', 318, 300, 'Admiralty Way', true, now() + interval '2 days', 60, 0, 400, 300, 3, 0, 16, 1000)$q$, b));
+  perform pg_temp.fails('no bigger than 10,000', 'bad_capacity', format($q$select event_open(%L, 'lagos', 'party', 'rave', 'Too big', '', 900, 900, '', true, now() + interval '2 days', 60, 0, 400, 20000, 3, 0, 16, 1000)$q$, b));
+  perform pg_temp.fails('talks are one spot', 'bad_size', format($q$select event_open(%L, 'lagos', 'stage', 'talk', 'Big talk', '', 900, 900, '', false, now() + interval '2 days', 60, 0, 400, 100, 3, 0, 16, 1000)$q$, b));
+  perform event_cancel(e, (v->>'id')::bigint);
 
   -- The walkthrough's third mission is going to an event now (not winning a challenge).
   update hosted_event_guests set entered_at = entered_at - interval '1 hour' where user_id = b;

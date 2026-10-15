@@ -13,6 +13,8 @@ import {
   MINUTES_MAX,
   MINUTES_MIN,
   NEAR_TILES,
+  PARTY_SIZES,
+  PARTY_SIZE_DEFAULT,
   STREET_GAP_TILES,
   TICKET_MAX_NAIRA,
   VENUE_COST,
@@ -23,6 +25,7 @@ import {
   eventFormat,
   eventStatus,
   partyCost,
+  partySize,
   type EventStatus,
   type VenueKind,
   type StageState,
@@ -58,7 +61,8 @@ function say(message: string): Fail {
     not_host: "Only the host can do that.",
     not_yet: `The doors open ${EARLY_DOORS_MINS} minutes before it starts. Say you're going and you'll be told.`,
     not_started: "It hasn't started yet. Call it off instead?",
-    street_taken: "Another street party is on that stretch of road then. Pick another road, further along, or another time.",
+    street_taken: "Another street party is on that stretch of road then (or so close your parties would meet). Pick another road, further along, a smaller size, or another time.",
+    bad_size: "Pick how big the party is.",
     not_road: "That spot isn't on a road. Pick a street from the list.",
     bad_stage: "That's too much for the stage. Try fewer slides.",
     no_life: "Start your life in the city first.",
@@ -97,6 +101,8 @@ export type EventView = {
   /** The ticket (mint; 0 free) and the most people. */
   price: number;
   capacity: number;
+  /** How far a party reaches (metres): one spot (50) up to a carnival (2,500). */
+  radiusM: number;
   status: EventStatus;
   host: EventPerson;
   going: number;
@@ -144,6 +150,7 @@ async function views(db: Db, rows: Record<string, unknown>[], userId: string | n
       endsAt: String(r.ends_at),
       price: n(r.price),
       capacity: n(r.capacity),
+      radiusM: n(r.radius_m) || PARTY_SIZE_DEFAULT,
       status: eventStatus(Date.parse(String(r.starts_at)), Date.parse(String(r.ends_at)), r.status === "cancelled"),
       host: person(hostId),
       going: going.length,
@@ -262,32 +269,42 @@ function venueAt(region: string, x: number, z: number, onStreet: boolean, said: 
 }
 
 /** What hosting a party costs (naira), worked out here from the map. null: not on a road. */
-function hostingNaira(region: string, x: number, z: number, onStreet: boolean, said: VenueKind, minutes: number, capacity: number) {
+function hostingNaira(region: string, x: number, z: number, onStreet: boolean, said: VenueKind, minutes: number, capacity: number, radiusM: number) {
   const venue = venueAt(region, x, z, onStreet, said);
   if (!venue) return null;
   const map = regionMap(region);
-  return partyCost({ minutes, capacity, venue, area: map ? areaK(map.centres, x, z) : 1 }).naira;
+  return partyCost({ minutes, capacity, venue, area: map ? areaK(map.centres, x, z) : 1, radiusM }).naira;
 }
+/** A size the host can pick (one of PARTY_SIZES), and the crowd it can hold; null for anything else. */
+const sizeOf = (radiusM: unknown) => PARTY_SIZES.find((s) => s.m === Math.round(n(radiusM))) ?? null;
 
 /** What a party would cost to host (naira), for the host's form (the same sum as when it's hosted). */
-export async function partyPrice(input: { region: string; x: number; z: number; onStreet: boolean; venue: VenueKind; minutes: number; capacity: number }): Promise<number | null> {
+export async function partyPrice(input: { region: string; x: number; z: number; onStreet: boolean; venue: VenueKind; minutes: number; capacity: number; radiusM?: number }): Promise<number | null> {
   if (!REGIONS[input.region]) return null;
-  return hostingNaira(input.region, Math.round(input.x), Math.round(input.z), !!input.onStreet, input.venue, Math.round(n(input.minutes)), Math.round(n(input.capacity)));
+  return hostingNaira(input.region, Math.round(input.x), Math.round(input.z), !!input.onStreet, input.venue, Math.round(n(input.minutes)), Math.round(n(input.capacity)), partySize(n(input.radiusM)).m);
 }
 
 /** Street parties on now or coming up (for the host's road list: which stretches are taken, and when). */
-export async function streetParties(region: string): Promise<{ x: number; z: number; start: number; end: number; title: string }[]> {
+export async function streetParties(region: string): Promise<{ x: number; z: number; start: number; end: number; title: string; radiusM: number }[]> {
   if (!REGIONS[region]) return [];
   const { data } = await createAdminClient()
     .from("hosted_events")
-    .select("x, z, starts_at, ends_at, title")
+    .select("*")
     .eq("region", region)
     .eq("category", "party")
     .eq("on_street", true)
     .eq("status", "on")
     .gt("ends_at", new Date().toISOString())
     .limit(300);
-  return ((data ?? []) as { x: number; z: number; starts_at: string; ends_at: string; title: string }[]).map((r) => ({ x: n(r.x), z: n(r.z), start: Date.parse(r.starts_at), end: Date.parse(r.ends_at), title: String(r.title) }));
+  // (Every column: radius_m is only there once game-db/097 has run.)
+  return ((data ?? []) as { x: number; z: number; starts_at: string; ends_at: string; title: string; radius_m?: number }[]).map((r) => ({
+    x: n(r.x),
+    z: n(r.z),
+    start: Date.parse(r.starts_at),
+    end: Date.parse(r.ends_at),
+    title: String(r.title),
+    radiusM: n(r.radius_m) || PARTY_SIZE_DEFAULT,
+  }));
 }
 
 export type NewEvent = {
@@ -307,6 +324,8 @@ export type NewEvent = {
   /** The ticket (mint; 0 free). */
   price: number;
   capacity: number;
+  /** A party's size (metres round the spot, one of PARTY_SIZES); talks are one spot. */
+  radiusM?: number;
 };
 
 /** Host an event. Everyone near the spot is told if it's starting soon; your friends are told either way. */
@@ -326,8 +345,11 @@ export async function hostEvent(input: NewEvent): Promise<{ ok: true; id: number
   const z = Math.round(input.z);
   // Parties cost money to host (stages are free for now).
   let feeMint = 0;
+  const size = f.category === "party" ? sizeOf(input.radiusM ?? PARTY_SIZE_DEFAULT) : PARTY_SIZES[0];
+  if (!size) return say("bad_size");
+  if (f.category === "party" && Math.round(n(input.capacity)) > size.most) return { ok: false, error: `A party that size holds up to ${size.most.toLocaleString("en-GB")} people. Pick a bigger size for more.` };
   if (f.category === "party") {
-    const naira = hostingNaira(region, x, z, !!input.onStreet, input.venue, Math.round(n(input.minutes)), Math.round(n(input.capacity)));
+    const naira = hostingNaira(region, x, z, !!input.onStreet, input.venue, Math.round(n(input.minutes)), Math.round(n(input.capacity)), size.m);
     if (naira === null) return say("not_road");
     feeMint = Math.round((naira / perMint) * 100) / 100;
   }
@@ -350,6 +372,8 @@ export async function hostEvent(input: NewEvent): Promise<{ ok: true; id: number
     p_per_day: HOSTS_A_DAY,
     p_fee: feeMint,
     p_gap: STREET_GAP_TILES,
+    // Only bigger than one spot is sent (so hosting one-spot parties works before game-db/097 runs).
+    ...(size.m !== PARTY_SIZE_DEFAULT ? { p_radius: size.m } : {}),
   });
   if (error) return say(error.message);
   const d = (data ?? {}) as { id?: number; starts_at?: string; fee?: number };

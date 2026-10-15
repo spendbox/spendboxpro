@@ -42,10 +42,20 @@ Going into any event (or hosting one and going in) counts
 
 1. **What kind**, then the format (each has its usual length and size).
 2. **A name** (3 to 60 letters) and, if you like, what to expect.
-3. **Where**: any named road within about 2 km of the middle of the map (its real name; move the
-   map and tap **Here** for roads elsewhere), or a place near you: landmarks, restaurants, clubs,
-   parks, stadiums, markets (the same list as Explore). Places that suit the format come first.
-   A party on the street plays its crowd along that road.
+3. **Where**: any named road within about 2 km of the middle of the map (its real name), or a
+   place near you: landmarks, restaurants, clubs, parks, stadiums, markets (the same list as
+   Explore). Places that suit the format come first. A party on the street plays its crowd along
+   that road. **Choose on the map** tucks the card away (everything filled in is kept): a pin
+   stands in the middle of the screen with the party's area round it, the road under it is named
+   as you move, and **Use this spot** brings the card back with that road picked.
+   - **How big** (parties; game-db/097, `radius_m`): how far it reaches from the spot. One spot
+     (50 m, up to 300 people), the block (150 m, 1,000), the street (300 m, 1,000), the area
+     (600 m, 3,000), a carnival (1 km round, 10,000) or a mega carnival (2.5 km round, 5 km across,
+     10,000). On the map every road inside it is strung with coloured bulbs that chase and twinkle
+     (brightest at night), the area is tinted and ringed in the party's colour (the ring shows from
+     far away), and bigger parties get more dancing crowds round their streets (one for every
+     300 m, up to 4 more; src/app/play/city/party-lights.ts). Parties of 600 m or more, or 1,000+
+     people, are announced in the Lagos news in a fun way (and break into it when they're new).
    - **Street parties don't overlap**: no two within 1.6 km (16 tiles) of each other at the same
      time. Roads already taken then are greyed with the party that has them, and the database
      refuses a clash (`street_taken`).

@@ -40,6 +40,7 @@ import type { MapBusiness } from "@/lib/world/business";
 import type { OwnedProperty } from "@/lib/world/owned";
 import { daylight, weatherAt } from "@/lib/city/sky";
 import { createStars } from "./city/stars";
+import { createPartyLights, type PartyZone } from "./city/party-lights";
 import { npcsFor, type Npc } from "@/lib/npcs";
 import { createBirds } from "./city/birds";
 import { createBubbles, type BubbleSpot } from "./city/bubbles";
@@ -353,6 +354,8 @@ type Props = {
   friendsAt?: CityFriendPin[];
   /** Challenges on the map (src/app/play/fight): a beam of light shining up from each one. */
   challengeLights?: { id: number; x: number; z: number; colour: string; playing: boolean; endsAt?: number | null; label?: string | null }[];
+  /** Parties on now, as big as their hosts made them: their roads strung with lights (./city/party-lights). */
+  partyZones?: PartyZone[];
   /** A beam (or the bubble over it) was tapped: which one (events use their own ids, below zero). True: handled (the tap stops there). */
   onLightTap?: (id: number) => boolean | void;
   /** A face on the map was tapped (someone's card). */
@@ -1554,6 +1557,7 @@ export function CityView({
   dancers,
   friendsAt,
   challengeLights,
+  partyZones,
   onPerson,
   marks,
   onMark,
@@ -1595,6 +1599,7 @@ export function CityView({
     setDance: (me: CityDance | null, others: CityDancer[]) => void;
     setFriendPins: (list: CityFriendPin[]) => void;
     setChallengeLights: (list: { id: number; x: number; z: number; colour: string; playing: boolean; endsAt?: number | null; label?: string | null }[]) => void;
+    setPartyZones: (list: PartyZone[]) => void;
     setMarkTags: (list: CityMarkTag[]) => void;
     setRoomPeople: (list: CityPerson[]) => void;
     openRoom: (id: string) => void;
@@ -3174,6 +3179,7 @@ export function CityView({
     const sites = createSites(world, life);
     const buildingSite = createBuildingSite(scene);
     // World events (fires, parades, a UFO...): drawn over the city while they're on.
+    const partyLights = createPartyLights(life);
     const worldEventsLayer = createWorldEvents({ scene, parent: life, camera, renderer, hemi, sun, tiles: () => tiles, plan: () => currentPlan, ground: (x, z) => landHeight(x, z), night: () => carNight });
     /** Flying the map camera over to an event (target and camera glide together). */
     let eventFly: THREE.Vector3 | null = null;
@@ -7625,6 +7631,7 @@ export function CityView({
       fog.near = (dist + radius * 0.8) * (1 - fogFactor * 0.45);
       fog.far = (dist + radius * 4 + 30) * (1 - fogFactor * 0.3);
       worldEventsLayer.update(dt, time, Date.now() + cb.current.clockOffsetMs);
+      partyLights.update(time, tiles, carNight);
       renderer.render(scene, camera);
       if (statsOn) {
         // ?stats: what the last frame cost, for checking the drawing budget (see the world lab).
@@ -7754,7 +7761,7 @@ export function CityView({
       if (regionNow && currentSeed >= 0 && builtCount > 0) build(currentSeed, builtCount);
     }
     const center = () => ({ x: Math.round(controls.target.x), z: Math.round(controls.target.z) });
-    api.current = { setMarkTags, center, build: buildFor, setOwned, setBusinesses, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setChallengeLights, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, setHomePlans, zoom, goInside };
+    api.current = { setMarkTags, center, build: buildFor, setOwned, setBusinesses, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setChallengeLights, setPartyZones: partyLights.set, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, setHomePlans, zoom, goInside };
 
     return () => {
       alive = false;
@@ -7943,6 +7950,15 @@ export function CityView({
   useEffect(() => {
     api.current?.setChallengeLights(lightsRef.current ?? []);
   }, [lightsKey, tileCount, seed]);
+
+  const zonesKey = (partyZones ?? []).map((z) => `${z.id}@${z.x},${z.z},${z.r}|${z.colour}`).join(";");
+  const zonesRef = useRef(partyZones);
+  useEffect(() => {
+    zonesRef.current = partyZones;
+  });
+  useEffect(() => {
+    api.current?.setPartyZones(zonesRef.current ?? []);
+  }, [zonesKey, tileCount, seed]);
 
   const marksKey = (marks ?? []).map((m) => `${m.id}|${m.text}|${m.colour}|${m.rating}`).join(";");
   const marksRef = useRef(marks);

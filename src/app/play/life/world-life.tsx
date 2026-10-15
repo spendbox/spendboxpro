@@ -343,7 +343,7 @@ export function useWorldLife({
           if (seen === e.id) return;
           const sp = e.building ? ownedSpot(e.building) : e.x != null && e.z != null ? { x: e.x, z: e.z } : null;
           const area = sp ? region.areaAt(sp.x, sp.z) : "";
-          setBreaking({ id: e.id, at: e.at, kind: e.kind === "challenge" ? "game" : "money", ...playerStory(e, area, cash(e.price)), area, ...(sp ? { x: sp.x, z: sp.z } : {}) });
+          setBreaking({ id: e.id, at: e.at, kind: e.kind === "challenge" ? "game" : e.kind === "party" ? "festival" : "money", ...playerStory(e, area, cash(e.price)), area, ...(sp ? { x: sp.x, z: sp.z } : {}) });
           playSfx("chime");
         })
         .catch(() => {});
