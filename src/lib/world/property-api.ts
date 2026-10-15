@@ -14,7 +14,10 @@ import type { Listing, MarketBoard, RentLevel } from "./market.ts";
 /** What collecting pay came to (mint): game days, pay, income tax, fares, what's left. */
 export type PaySettled = { days: number; gross: number; tax: number; fares: number; net: number; hustle?: { gross: number; tax: number; net: number } };
 
-export type PropertyResult = { ok: true; coins?: number; home?: boolean; rent?: number; pay?: PaySettled; fare?: number; /** How you went (a trip). */ mode?: string; /** Something you found on the way. */ found?: string } | { ok: false; error: string };
+export type PropertyResult = { ok: true; coins?: number; home?: boolean; rent?: number; pay?: PaySettled; fare?: number; /** How you went (a trip). */ mode?: string; /** Something you found on the way. */ found?: string; /** A new passport stamp for the place you went to (src/lib/world/passport.ts). */ stamp?: PassportStampNews } | { ok: false; error: string };
+
+/** A passport stamp just collected: the place, what it paid (mint), and its area page if that's now complete. */
+export type PassportStampNews = { id: string; name: string; what: string; look: string; area: string; paid: number; count: number; total: number; areaDone: { name: string; paid: number } | null };
 
 export type AssetUnit = {
   unit: string;

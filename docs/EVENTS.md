@@ -143,7 +143,7 @@ a song's link on a phone.
   starter. "Chat or add friend" opens their card.
 - **Shout-out**: to someone (or everyone), shown big across the party.
 - **Toast**: raise one, everyone clinks.
-- **Spray** the host ₦1,500 / ₦7,500 / ₦30,000 (a real gift, with the usual daily gift limits);
+- **Spray** the host ₦1,500 / ₦7,500 / ₦30,000 (a real gift, with no limit except for brand-new accounts);
   money rains on everyone's screen.
 - **Talk corner**: a voice call for up to 6 (docs/VOICE_CALLS.md).
 - **The chat** (parties and stages): emojis and photos (shrunk on the phone, kept in the "events"

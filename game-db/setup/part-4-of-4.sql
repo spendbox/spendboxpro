@@ -4831,3 +4831,136 @@ $$;
 revoke all on function public.pack_ends_at(uuid) from public, anon, authenticated;
 grant execute on function public.pack_ends_at(uuid) to service_role;
 
+-- ======================================================== 106_passport.sql
+-- Newtown, part 106: the passport (docs/PASSPORT.md). A stamp for every real place you go into
+-- (its landmarks, named places and railway stations; src/lib/world/passport.ts says which), a
+-- small reward for each new one, and a bonus for every area page you complete. One row a stamp.
+--
+-- Safe to run more than once.
+
+create table if not exists public.passport_stamps (
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  region text not null check (char_length(region) <= 30),
+  place text not null check (place ~ '^[a-z]{2}:[a-z0-9-]{1,80}$'),
+  stamped_at timestamptz not null default now(),
+  primary key (user_id, region, place)
+);
+create table if not exists public.passport_areas (
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  region text not null check (char_length(region) <= 30),
+  area text not null check (char_length(area) between 1 and 60),
+  done_at timestamptz not null default now(),
+  primary key (user_id, region, area)
+);
+alter table public.passport_stamps enable row level security;
+alter table public.passport_areas enable row level security;
+
+/** Stamp a place (the server worked out which, and the reward): { new, paid }. Once a place. */
+create or replace function public.passport_stamp(p_user uuid, p_region text, p_place text, p_reward numeric) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_new boolean;
+  v_pay numeric := round(least(greatest(coalesce(p_reward, 0), 0), 50), 2);
+begin
+  insert into public.passport_stamps (user_id, region, place) values (p_user, p_region, p_place)
+  on conflict do nothing;
+  get diagnostics v_new = row_count;
+  if v_new and v_pay > 0 and exists (select 1 from public.profiles where id = p_user and not is_bot and not frozen) then
+    update public.profiles set coins = coins + v_pay where id = p_user;
+    perform public.log_coins(p_user, null, 'passport', v_pay, false, 'Passport stamp');
+  else
+    v_pay := 0;
+  end if;
+  return jsonb_build_object('new', v_new, 'paid', v_pay);
+end $$;
+
+/** A whole area page stamped (the server checked): its bonus, once. True if it's new. */
+create or replace function public.passport_area_done(p_user uuid, p_region text, p_area text, p_reward numeric) returns boolean
+language plpgsql security definer set search_path = public as $$
+declare
+  v_new boolean;
+  v_pay numeric := round(least(greatest(coalesce(p_reward, 0), 0), 1000), 2);
+begin
+  insert into public.passport_areas (user_id, region, area) values (p_user, p_region, p_area)
+  on conflict do nothing;
+  get diagnostics v_new = row_count;
+  if v_new and v_pay > 0 then
+    update public.profiles set coins = coins + v_pay where id = p_user;
+    perform public.log_coins(p_user, null, 'passport', v_pay, false, 'Passport page complete: ' || left(p_area, 40));
+  end if;
+  return v_new;
+end $$;
+
+revoke all on table public.passport_stamps, public.passport_areas from public, anon, authenticated;
+grant all on table public.passport_stamps, public.passport_areas to service_role;
+revoke all on function public.passport_stamp(uuid, text, text, numeric), public.passport_area_done(uuid, text, text, numeric) from public, anon, authenticated;
+grant execute on function public.passport_stamp(uuid, text, text, numeric), public.passport_area_done(uuid, text, text, numeric) to service_role;
+
+-- ======================================================== 107_gifts_uncapped.sql
+-- Part 107: no cap on giving money. Players can give as much as they have, as often as they like,
+-- to anyone. The one rule left is for brand-new accounts (part 65): under gift_new_days days old
+-- or below level gift_new_level, they can give gift_new_daily_max a day, so nobody can farm the
+-- free starting money with throwaway accounts. Spraying uses the same checks.
+
+/** How much more this player may give away today: null when there's no limit. */
+create or replace function public.gift_left_today(p public.profiles) returns numeric
+language sql stable set search_path = public as $$
+  select case
+    when p.created_at > now() - make_interval(days => public.setting('gift_new_days')::int)
+      or coalesce(p.level, 1) < public.setting('gift_new_level')
+    then greatest(0, public.setting('gift_new_daily_max') - (select coalesce(sum(amount), 0) from public.coin_gifts
+                                                            where from_id = p.id and created_at >= date_trunc('day', now())))
+    else null end
+$$;
+
+-- Checks shared by gifts and spraying: may this player give this much away?
+create or replace function public.gift_check(p public.profiles, p_amount numeric) returns void
+language plpgsql set search_path = public as $$
+declare
+  v_left numeric;
+begin
+  if p.id is null or p.is_bot then raise exception 'unknown_player'; end if;
+  if p.frozen then raise exception 'frozen'; end if;
+  if p.username is null then raise exception 'no_name'; end if;
+  if p.seeker_rounds + p.hider_rounds < public.setting('gift_min_rounds') then raise exception 'new_player'; end if;
+  v_left := public.gift_left_today(p);
+  if v_left is not null and p_amount > v_left then raise exception 'new_giver_cap:%', v_left; end if;
+  if p.coins < p_amount then raise exception 'not_enough'; end if;
+end $$;
+
+-- Give money to another player: any whole amount you have. Returns { amount, to, balance, left_today }
+-- (left_today is null unless you're a new player with a daily limit).
+create or replace function public.give_coins(p_from uuid, p_to uuid, p_amount numeric, p_note text default null) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  f public.profiles;
+  t public.profiles;
+  v_note text := nullif(btrim(left(regexp_replace(coalesce(p_note, ''), '\s+', ' ', 'g'), 80)), '');
+  v_round bigint;
+  v_q bigint;
+begin
+  if p_amount is null or p_amount <> trunc(p_amount) or p_amount < 1 then raise exception 'bad_amount'; end if;
+  if p_to is null or p_to = p_from then raise exception 'gift_self'; end if;
+  perform public.lock_players(array[p_from, p_to]);
+  select * into f from public.profiles where id = p_from;
+  select * into t from public.profiles where id = p_to;
+  if t.id is null or t.username is null then raise exception 'unknown_target'; end if;
+  if t.is_bot then raise exception 'target_bot'; end if;
+  if t.frozen then raise exception 'target_frozen'; end if;
+  perform public.gift_check(f, p_amount);
+
+  select max(id) into v_round from public.rounds;
+  update public.profiles set coins = coins - p_amount where id = p_from;
+  update public.profiles set coins = coins + p_amount where id = p_to;
+  perform public.log_coins(p_from, v_round, 'gift_sent', -p_amount, false, 'To ' || t.username || coalesce(': ' || v_note, ''));
+  perform public.log_coins(p_to, v_round, 'gift_received', p_amount, false, 'From ' || f.username || coalesce(': ' || v_note, ''));
+  insert into public.coin_gifts (from_id, to_id, kind, amount, note) values (p_from, p_to, 'gift', p_amount, v_note);
+  perform public.notify(p_to, v_round, 'gift', format('%s gave you %s coins%s', f.username, p_amount,
+    coalesce(': "' || v_note || '"', '!')));
+
+  select id into v_q from public.quests where user_id = p_from and status = 'active' and expires_at > now();
+  if found then perform public.quest_sync(v_q); end if;
+  select * into f from public.profiles where id = p_from;
+  return jsonb_build_object('amount', p_amount, 'to', t.username, 'balance', f.coins, 'left_today', public.gift_left_today(f));
+end $$;
+

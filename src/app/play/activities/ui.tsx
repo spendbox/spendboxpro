@@ -60,8 +60,9 @@ export function ActivityStyles() {
 }
 
 /** A player's face (works with any saved avatar, or makes one up from their id). */
-export function Face({ p, size = 32, className }: { p: { id: string; avatar: unknown }; size?: number; className?: string }) {
-  return <AvatarFace avatar={cleanAvatar(p.avatar, p.id)} size={size} className={cn("shrink-0 rounded-full", className)} />;
+export function Face({ p, size = 32, className }: { p: { id: string; name?: string; avatar: unknown }; size?: number; className?: string }) {
+  // Seeded by name, like everywhere else, so a player without a saved look has the same face here.
+  return <AvatarFace avatar={cleanAvatar(p.avatar, p.name ?? p.id)} size={size} className={cn("shrink-0 rounded-full", className)} />;
 }
 
 export function GameHeader({

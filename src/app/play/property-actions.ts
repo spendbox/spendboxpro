@@ -7,7 +7,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { REGIONS, regionMap } from "@/lib/world";
 import { grownBuilding, type Building } from "@/lib/world/buildings";
 import { cleanPropertyName, ownedSpot } from "@/lib/world/owned";
-import { BUY_TAX, rentPerDay, type AssetsData, type BuildingOwner, type OwnedBuildingRow, type PropertyResult } from "@/lib/world/property-api";
+import { BUY_TAX, rentPerDay, type AssetsData, type BuildingOwner, type OwnedBuildingRow, type PassportStampNews, type PropertyResult } from "@/lib/world/property-api";
+import { PASSPORT_ON } from "@/lib/features";
+import { AREA_REWARD, passportOf, STAMP_REWARD } from "@/lib/world/passport";
 import { landNow, toMint, valueOf } from "@/lib/world/value";
 import { discounted } from "@/lib/world/rep-levels";
 import { myThings } from "./item-actions";
@@ -320,7 +322,48 @@ export async function travelTo(buildingId: string, drive?: boolean, from?: { x: 
       if (!findError) found = k.name;
     }
   }
-  return { ok: true, fare: n(data), mode, ...(found ? { found } : {}) };
+  // A passport stamp, if it's one of the city's real places (game-db/106; nothing before it's run).
+  const stamp = !PASSPORT_ON ? null : await stampPassport(db, userId, spot.region, spot.x, spot.z).catch(() => null);
+  return { ok: true, fare: n(data), mode, ...(found ? { found } : {}), ...(stamp ? { stamp } : {}) };
+}
+
+/** Stamp the passport for the place at (x, z), if it's on it and new: the reward, and an area page's bonus once it's complete. */
+async function stampPassport(db: ReturnType<typeof createAdminClient>, userId: string, region: string, x: number, z: number): Promise<PassportStampNews | null> {
+  const map = regionMap(region);
+  if (!map) return null;
+  const passport = passportOf(map);
+  const place = passport.at(x, z);
+  if (!place) return null;
+  const reward = place.id.startsWith("lm:") ? STAMP_REWARD.landmark : STAMP_REWARD.other;
+  const { data, error } = await db.rpc("passport_stamp", { p_user: userId, p_region: region, p_place: place.id, p_reward: reward });
+  if (error || !(data as { new?: boolean } | null)?.new) return null;
+  // How far through the passport, and whether this page is now complete.
+  const { data: rows } = await db.from("passport_stamps").select("place").eq("user_id", userId).eq("region", region);
+  const mine = new Set(((rows ?? []) as { place: string }[]).map((r) => r.place));
+  const page = passport.areas.find((a) => a.name === place.area);
+  let areaDone: PassportStampNews["areaDone"] = null;
+  if (page && page.ids.every((id) => mine.has(id))) {
+    const { data: fresh } = await db.rpc("passport_area_done", { p_user: userId, p_region: region, p_area: page.name, p_reward: AREA_REWARD });
+    if (fresh) areaDone = { name: page.name, paid: AREA_REWARD };
+  }
+  return { id: place.id, name: place.name, what: place.what, look: place.look, area: place.area, paid: n((data as { paid?: number }).paid), count: [...mine].filter((id) => passport.byId.has(id)).length, total: passport.places.length, areaDone };
+}
+
+/** Your passport in a region: the places you've stamped (and when), and the pages you've completed. */
+export async function myPassport(region: string): Promise<{ stamps: { place: string; at: string }[]; areas: string[] } | null> {
+  if (!REGIONS[region]) return null;
+  const userId = await currentUserId();
+  if (!userId) return null;
+  const db = createAdminClient();
+  const [{ data: stamps, error }, { data: areas }] = await Promise.all([
+    db.from("passport_stamps").select("place, stamped_at").eq("user_id", userId).eq("region", region),
+    db.from("passport_areas").select("area").eq("user_id", userId).eq("region", region),
+  ]);
+  if (error) return null;
+  return {
+    stamps: ((stamps ?? []) as { place: string; stamped_at: string }[]).map((r) => ({ place: r.place, at: r.stamped_at })),
+    areas: ((areas ?? []) as { area: string }[]).map((r) => r.area),
+  };
 }
 
 /** A month's rent for a home from the city: 6% of what it's worth, as landlords earn (docs/MONEY.md). */

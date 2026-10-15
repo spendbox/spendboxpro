@@ -6,8 +6,8 @@ import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Giving coins to other players, and spraying coins on dancers in clubs. The database
-// (give_coins / spray_coins in game-db/019_activities.sql, new givers in 065) checks every rule: whole coins,
-// enough coins, daily limits, no gifts to yourself or the bot, frozen accounts blocked.
+// (give_coins / spray_coins in game-db/019_activities.sql, new givers in 065, no cap in 107) checks every rule: whole coins,
+// enough coins, new accounts' daily limit, no gifts to yourself or the bot, frozen accounts blocked.
 
 type Fail = { ok: false; error: string };
 
@@ -16,19 +16,12 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 function friendly(message: string | undefined, fallback: string) {
   const m = message ?? "";
   const left = Number(/:(\d+(\.\d+)?)/.exec(m)?.[1] ?? 0);
-  if (m.startsWith("daily_cap")) {
-    return left > 0 ? `You can give ${naira(Math.floor(left))} more today.` : "You've given all you can for today. Come back tomorrow!";
-  }
-  // New accounts (under 3 days old) and players under level 5 can give ₥500 a day (part 65).
+  // There's no limit on giving (part 107), except for new accounts: under 3 days old or below
+  // level 5, they can give ₥500 a day (part 65), so nobody farms the starting money.
   if (m.startsWith("new_giver_cap")) {
     return left > 0
       ? `You can give ${naira(Math.floor(left))} more today. New players can give up to ${naira(500)} a day until their account is 3 days old and level 5.`
       : `New players can give up to ${naira(500)} a day until their account is 3 days old and level 5. Come back tomorrow!`;
-  }
-  if (m.startsWith("pair_cap")) {
-    return left > 0
-      ? `You can give this player ${naira(Math.floor(left))} more today.`
-      : "You've given this player all you can for today.";
   }
   const map: Record<string, string> = {
     bad_amount: "Pick a whole amount.",
@@ -49,22 +42,22 @@ function friendly(message: string | undefined, fallback: string) {
   return code ? map[code] : fallback;
 }
 
-/** Give coins to another player (1–10,000 at a time), with an optional short note. */
+/** Give money to another player: any whole amount you have, with an optional short note. */
 export async function giveCoins(
   toId: string,
   amount: number,
   note?: string,
-): Promise<{ ok: true; amount: number; to: string; balance: number; leftToday: number } | Fail> {
+): Promise<{ ok: true; amount: number; to: string; balance: number; leftToday: number | null } | Fail> {
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Sign in to give money." };
   if (typeof toId !== "string" || !UUID_RE.test(toId)) return { ok: false, error: "Pick a player." };
-  if (!Number.isInteger(amount) || amount < 1 || amount > 10_000) return { ok: false, error: `Pick between ${naira(1)} and ${naira(10_000)}.` };
+  if (!Number.isSafeInteger(amount) || amount < 1) return { ok: false, error: "Pick a whole amount." };
   const text = typeof note === "string" ? note.replace(/\s+/g, " ").trim().slice(0, 80) : "";
   const { data, error } = await createAdminClient().rpc("give_coins", { p_from: userId, p_to: toId, p_amount: amount, p_note: text || null });
   if (error || !data) return { ok: false, error: friendly(error?.message, "Couldn't send the money. Try again.") };
-  const d = data as { amount: number; to: string; balance: number; left_today: number };
+  const d = data as { amount: number; to: string; balance: number; left_today: number | null };
   await pushTo(toId);
-  return { ok: true, amount: Number(d.amount), to: String(d.to), balance: Number(d.balance), leftToday: Number(d.left_today) };
+  return { ok: true, amount: Number(d.amount), to: String(d.to), balance: Number(d.balance), leftToday: d.left_today == null ? null : Number(d.left_today) };
 }
 
 /** Spray coins on the dance floor: 10–500 coins split between up to 10 dancers. */

@@ -253,3 +253,50 @@ a[href]:active,
   100% { transform: translate(var(--dx), -46px) scale(1.15); opacity: 0; }
 }
 .pw-burst { animation: pw-burst 0.9s ease-out both; }
+
+/* "It's yours!" after buying something (src/app/play/life/purchase-pop.tsx). */
+@keyframes buy-pop {
+  0% { transform: scale(0.3) rotate(-8deg); opacity: 0; }
+  55% { transform: scale(1.08) rotate(2deg); opacity: 1; }
+  75% { transform: scale(0.97) rotate(-1deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+.buy-pop { animation: buy-pop 0.7s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
+@keyframes buy-rays { to { transform: translate(-50%, -50%) rotate(360deg); } }
+.buy-rays {
+  background: repeating-conic-gradient(from 0deg, rgba(255, 214, 92, 0.32) 0deg 9deg, transparent 9deg 22deg);
+  mask-image: radial-gradient(circle, #000 25%, transparent 70%);
+  animation: buy-rays 14s linear infinite;
+}
+@keyframes buy-shine {
+  0%, 30% { transform: translateX(-130%) skewX(-18deg); }
+  70%, 100% { transform: translateX(130%) skewX(-18deg); }
+}
+.buy-shine::after {
+  content: "";
+  position: absolute;
+  inset: -10% auto -10% 0;
+  width: 45%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.85), transparent);
+  animation: buy-shine 2.4s ease-in-out 0.5s infinite;
+}
+@keyframes buy-art { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+.buy-art { animation: buy-art 3s ease-in-out 0.7s infinite; }
+@keyframes buy-sparkle {
+  0%, 100% { transform: scale(0.3) rotate(0); opacity: 0; }
+  50% { transform: scale(1.15) rotate(20deg); opacity: 1; }
+}
+.buy-sparkle { animation: buy-sparkle 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .buy-pop, .buy-rays, .buy-shine::after, .buy-art, .buy-sparkle { animation: none; } }
+
+/* A new passport stamp (src/app/play/life/passport.tsx): the card drops in, the stamp thuds down. */
+@keyframes stamp-card { from { opacity: 0; transform: translateY(-16px); } to { opacity: 1; transform: none; } }
+.stamp-card { animation: stamp-card 0.3s ease-out both; }
+@keyframes stamp-thud {
+  0% { transform: scale(2.4) rotate(-14deg); opacity: 0; }
+  55% { transform: scale(0.9) rotate(4deg); opacity: 1; }
+  70% { transform: scale(1.06) rotate(-2deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+.stamp-thud { display: inline-block; animation: stamp-thud 0.55s cubic-bezier(0.3, 1.4, 0.5, 1) 0.15s both; }
+@media (prefers-reduced-motion: reduce) { .stamp-card, .stamp-thud { animation: none; } }
