@@ -367,7 +367,7 @@ export const VENUE_COST = {
   outdoors: { k: 1.2, label: "A park or square" },
   food: { k: 1.5, label: "A restaurant or hotel" },
   nightlife: { k: 1.6, label: "A club" },
-  landmark: { k: 2, label: "A landmark" },
+  landmark: { k: 5, label: "A landmark" },
 } as const;
 export type VenueKind = keyof typeof VENUE_COST;
 /** Explore's groups (src/lib/world/explore.ts) as venue kinds. */

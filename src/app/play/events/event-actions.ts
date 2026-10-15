@@ -305,7 +305,8 @@ function venueAt(region: string, x: number, z: number, onStreet: boolean, said: 
   };
   if (onStreet) return near((dx, dz) => !!map.roadAt(x + dx, z + dz)) ? "street" : null;
   const l = map.landmarks.find((m) => x >= m.ax - 1 && x <= m.ax + m.w && z >= m.az - 1 && z <= m.az + m.d);
-  if (l) return l.type === "hotel" || l.type === "spa" ? "food" : l.type === "bigpark" || l.type === "waterpark" || l.type === "funfair" ? "outdoors" : "landmark";
+  // Every landmark on the map (Eko Hotel, Freedom Park, the National Stadium...) costs the landmark rate.
+  if (l) return "landmark";
   let spot: string | null = null;
   for (let dz = -1; dz <= 1 && !spot; dz++) for (let dx = -1; dx <= 1 && !spot; dx++) spot = map.spotAt(x + dx, z + dz)?.kind ?? null;
   if (spot === "club") return "nightlife";

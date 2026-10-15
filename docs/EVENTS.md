@@ -76,7 +76,7 @@ Worked out by the server from the map (the phone's number is only a preview; src
 - **How big**: one spot ×1, the block ×1.5, the street ×2.5, the area ×4.5, a carnival ×7, a mega
   carnival ×14 (a 3-hour carnival for 10,000 on an ordinary street is about ₦29m).
 - **The kind of place**: a street ×1, a park or square ×1.2, a restaurant or hotel ×1.5, a club ×1.6,
-  a landmark ×2. A "street" must really be a road on the map; a place the map can't name is
+  a landmark ×5 (any landmark on the map, its hotels and parks too). A "street" must really be a road on the map; a place the map can't name is
   never charged below a park.
 - **The area**: from the land price of the district round it (0.8 to 1.8; Ikoyi, Victoria Island
   and Eko Atlantic cost most).
