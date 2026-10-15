@@ -410,23 +410,45 @@ export function Chat({
     window.addEventListener("nt-chat-sent", on);
     return () => window.removeEventListener("nt-chat-sent", on);
   }, [addMessage]);
+  // New messages, live. On the real map only the ones that concern you (sent to you, sent by you,
+  // and yours being opened): listening to every message in the game made the database check each
+  // one against every player (docs/COSTS.md). The place you're in has its own channel, below.
   useEffect(() => {
     if (guest) return;
     const supabase = createClient();
-    const channel = supabase
-      .channel(keep ? "chat:world" : `chat:${roundId}`)
-      .on(
-        "postgres_changes",
-        keep ? { event: "INSERT", schema: "public", table: "chat_messages" } : { event: "INSERT", schema: "public", table: "chat_messages", filter: `round_id=eq.${roundId}` },
-        (payload) => addMessage(payload.new as ChatMessage),
-      );
-    // Your messages being opened (the real map).
-    if (keep) channel.on("postgres_changes", { event: "UPDATE", schema: "public", table: "chat_messages" }, (payload) => readMessage(payload.new as ChatMessage));
+    const add = (payload: { new: unknown }) => addMessage(payload.new as ChatMessage);
+    const channel = keep
+      ? supabase
+          .channel(`chat:me:${meId}`)
+          .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `recipient_id=eq.${meId}` }, add)
+          .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `sender_id=eq.${meId}` }, add)
+          .on("postgres_changes", { event: "UPDATE", schema: "public", table: "chat_messages", filter: `sender_id=eq.${meId}` }, (payload) => readMessage(payload.new as ChatMessage))
+      : supabase
+          .channel(`chat:${roundId}`)
+          .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `round_id=eq.${roundId}` }, add);
     channel.subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [roundId, guest, addMessage, readMessage, keep]);
+  }, [roundId, guest, addMessage, readMessage, keep, meId]);
+  // The real map: what's said in the place you're in (a new channel when you move).
+  // (The room as the server named it when its messages were loaded.)
+  const roomKey = roomMsgs?.key ?? null;
+  useEffect(() => {
+    if (guest || !keep || !roomKey) return;
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`chat:room:${roomKey}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `room=eq.${roomKey}` }, (payload) => {
+        const m = payload.new as ChatMessage;
+        // Your own come in on your channel already.
+        if (m.sender_id !== meIdRef.current && !m.recipient_id) addMessage(m);
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [guest, keep, roomKey, addMessage]);
 
   // ---- the place's NPCs: who they are, and what they've been saying
   const hint = roomHint(room);

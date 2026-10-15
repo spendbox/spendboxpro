@@ -6,7 +6,7 @@ import { Star } from "@/components/icons";
 import { REP_LEVELS, repLevel } from "@/lib/world/rep-levels";
 import { reputationDetails, type RepDetails } from "../rep-actions";
 import { Sheet } from "../sheet";
-import { openAdvertise } from "./advertise-panel";
+import { openAdvertise } from "./advertise-open";
 
 // Your reputation (what adds to it, what takes it away), and what's coming to Newtown.
 

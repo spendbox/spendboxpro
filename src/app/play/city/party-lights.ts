@@ -32,6 +32,8 @@ export function createPartyLights(parent: THREE.Object3D) {
   const discs: THREE.Mesh[] = [];
   let zones: PartyZone[] = [];
   let builtFor: { tiles: Tile[] | null; key: string } = { tiles: null, key: "" };
+  /** Which parties are lit (worked out when they change, not every frame). */
+  let zonesKey = "";
   const m4 = new THREE.Matrix4();
   const col = new THREE.Color();
 
@@ -95,16 +97,16 @@ export function createPartyLights(parent: THREE.Object3D) {
     /** The parties on now (an empty list clears them). */
     set(list: PartyZone[]) {
       zones = list.filter((z) => Number.isFinite(z.x) && Number.isFinite(z.z) && z.r > 0);
+      zonesKey = zones.map((z) => `${z.id}:${z.x},${z.z},${z.r}`).join("|");
       builtFor = { tiles: null, key: "" };
       group.visible = zones.length > 0;
     },
     /** Each frame: rebuild when the city round the camera changed, and run the chase. */
     update(time: number, tiles: Tile[], night: number) {
       if (!zones.length) return;
-      const key = zones.map((z) => `${z.id}:${z.x},${z.z},${z.r}`).join("|");
-      if (builtFor.tiles !== tiles || builtFor.key !== key) {
+      if (builtFor.tiles !== tiles || builtFor.key !== zonesKey) {
         build(tiles);
-        builtFor = { tiles, key };
+        builtFor = { tiles, key: zonesKey };
       }
       // The two sets take turns, a little faster at night; dimmer by day so they don't glare.
       const on = Math.floor(time * (night > 0.5 ? 2.5 : 1.6)) % 2;

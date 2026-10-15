@@ -173,7 +173,8 @@ export function Events({
     if (open) void look();
   }, [open, look]);
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 5000);
+    // The map's lights only change by the minute.
+    const t = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(t);
   }, []);
 
@@ -236,7 +237,7 @@ export function Events({
   const insideId = inside?.id ?? null;
   useEffect(() => {
     if (insideId === null) return;
-    const t = setInterval(async () => {
+    const stop = whileHere(async () => {
       const v = await fetch(`/api/events?id=${insideId}`, { cache: "no-store" })
         .then((r) => (r.ok ? (r.json() as Promise<{ view: EventView | null }>) : null))
         .then((d) => d?.view ?? null)
@@ -248,7 +249,7 @@ export function Events({
         void look();
       } else setInside(v);
     }, 20_000);
-    return () => clearInterval(t);
+    return stop;
   }, [insideId, look, onMessage]);
 
   // Going in: the room opens at once, and the server lets you in (and takes the ticket) meanwhile.

@@ -67,8 +67,6 @@ import { BookOpen, Church, FerrisWheel, Landmark as LandmarkIcon, Plane, Ship, T
 import { BellOff, BellRing, Landmark, LayoutGrid, PartyPopper, LocateFixed, Rocket, Wallet, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Palette, ShoppingBag, Swords, TrendingUp, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
-import { GhostsSheet } from "./ghost-duel/ghosts-sheet";
-import { ExploreSheet } from "./explore-sheet";
 import type { Sport } from "@/lib/sports/types";
 import type { ActivityItem } from "./activities/games";
 import { useActivityRoom } from "./activities/hub";
@@ -82,15 +80,15 @@ import { GreetButtons } from "./greet-buttons";
 import { useNoPageZoom } from "./no-page-zoom";
 import type { PersonOnMap } from "./people-actions";
 import { peopleAround } from "./life/things-cache";
-import { PersonCard } from "./people/person-card";
+
 import { prefetchCard, rememberPreview, rememberPreviews } from "./people/card-cache";
-import { AwaySheet, DoorstepSheet, notificationsOn, turnOffNotifications, turnOnNotifications, useAwayDigest } from "./people/doorstep";
-import { DatingSheet, RivalsSheet } from "./people/street-dating";
+import { notificationsOn, turnOffNotifications, turnOnNotifications, useAwayDigest } from "./people/doorstep";
+
 import { weatherNow } from "@/lib/world/news";
-import { MyGiftsSheet } from "./my-gifts-sheet";
-import { StreakPill, StreakSheet } from "./streak-sheet";
+
+import { StreakPill } from "./streak-sheet";
 import { useQuestTracker } from "./activities/quest-tracker";
-import { QuestBanner, QuestCelebration, QuestSheet } from "./activities/quest-ui";
+import { QuestBanner, QuestCelebration } from "./activities/quest-ui";
 import { Chat, type NewtownLine } from "./chat";
 import { sendPhoto, type ChatTarget } from "./chat-actions";
 import { announceChatSent } from "./chat-photo";
@@ -126,15 +124,15 @@ import type { ExplorePlace } from "@/lib/world/explore";
 import { Joystick } from "./joystick";
 import { onlineIdle, onlinePinged, settleIncome, syncIncome, useLiveCoins } from "./income";
 import { Tutorial, useTourShows, useTutorialGlow, useTutorialPhase } from "./tutorial";
-import { PeopleList, prefetchPeople } from "./people/people-list";
-import { StatsSheet } from "./stats-sheet";
+import { prefetchPeople } from "./people/people-list";
+
 import { GiftPop, GiftSent } from "./people/gift-pop";
-import { MeSheet } from "./me-sheet";
-import { DailyGiftPop, MoneyHome } from "./money-home";
+
+import { DailyGiftPop } from "./money-home";
 import type { ChatLocation } from "@/lib/chat-location";
 import { RecentRail, rememberPerson } from "./people/recent-rail";
 import { PrankReveal, usePrankReveal } from "./people/prank-reveal";
-import { openAdvertise } from "./life/advertise-panel";
+import { openAdvertise } from "./life/advertise-open";
 import { SUPPORT_X, SUPPORT_X_URL } from "@/lib/brand";
 import { Fight, type ChallengeLight } from "./fight/fight";
 import { Events, type EventLight } from "./events/events";
@@ -151,6 +149,21 @@ import * as reportActions from "./report-actions";
 import * as marketActions from "./market-actions";
 import { REGIONS } from "@/lib/world";
 
+// Sheets opened from the map: loaded when first opened.
+const GhostsSheet = dynamic(() => import("./ghost-duel/ghosts-sheet").then((m) => m.GhostsSheet));
+const ExploreSheet = dynamic(() => import("./explore-sheet").then((m) => m.ExploreSheet));
+const PersonCard = dynamic(() => import("./people/person-card").then((m) => m.PersonCard));
+const AwaySheet = dynamic(() => import("./people/doorstep").then((m) => m.AwaySheet));
+const DoorstepSheet = dynamic(() => import("./people/doorstep").then((m) => m.DoorstepSheet));
+const DatingSheet = dynamic(() => import("./people/street-dating").then((m) => m.DatingSheet));
+const RivalsSheet = dynamic(() => import("./people/street-dating").then((m) => m.RivalsSheet));
+const MyGiftsSheet = dynamic(() => import("./my-gifts-sheet").then((m) => m.MyGiftsSheet));
+const StreakSheet = dynamic(() => import("./streak-sheet").then((m) => m.StreakSheet));
+const QuestSheet = dynamic(() => import("./activities/quest-ui").then((m) => m.QuestSheet));
+const PeopleList = dynamic(() => import("./people/people-list").then((m) => m.PeopleList));
+const StatsSheet = dynamic(() => import("./stats-sheet").then((m) => m.StatsSheet));
+const MeSheet = dynamic(() => import("./me-sheet").then((m) => m.MeSheet));
+const MoneyHome = dynamic(() => import("./money-home").then((m) => m.MoneyHome));
 // The 3D city only runs in the browser.
 const CityView = dynamic(() => import("./city-view").then((m) => m.CityView), {
   ssr: false,

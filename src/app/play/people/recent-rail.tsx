@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, MessageCircle } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar, type Avatar } from "@/lib/avatar";
+import { whileHere } from "../activity";
 
 // The people you've been dealing with lately, down the left side of the screen (docs/PEOPLE.md):
 // who you messaged, whose card you opened, who you gave something to or pranked. Tap a face for
@@ -56,10 +57,10 @@ export function RecentRail({ meId, onPerson, onMessage }: { meId?: string; onPer
       if (live) setOnline(new Set(ids));
     };
     void ask();
-    const t = setInterval(ask, 60_000);
+    const stop = whileHere(ask, 60_000);
     return () => {
       live = false;
-      clearInterval(t);
+      stop();
     };
   }, [idsKey]);
   useEffect(() => {

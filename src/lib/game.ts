@@ -488,7 +488,8 @@ export async function loadGame(userIdOrGuest: string | null): Promise<GameState>
   const [, last, results, , , { data: visits }, { count: playerCount }, houses, friends, streak, duels, lifeNotes] = await Promise.all([
     roundPart(),
     lastPart(),
-    loadResults(db, userId),
+    // The real map has no rounds, so no round results (reading a whole round's entries each load).
+    realMap ? Promise.resolve(null) : loadResults(db, userId),
     playersPart(),
     balloonPart(),
     db.from("site_counters").select("value").eq("key", "visits").maybeSingle(),

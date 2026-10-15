@@ -1,5 +1,4 @@
 "use client";
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DoorOpen } from "lucide-react";
 import { Flag, MapPin, Pencil, Search, Star, X } from "@/components/icons";
@@ -9,7 +8,6 @@ import { BUILDING_LABEL } from "@/lib/world/buildings";
 import type { RegionMap } from "@/lib/world/compile";
 import { regionMap } from "@/lib/world";
 import { ownedSpot } from "@/lib/world/owned";
-import { HomePlanner } from "../home/home-planner";
 import { propertyInfo, type PropertyInfo } from "@/lib/world/property";
 import { homesByArea, type AreaHomes, type HomeFind } from "@/lib/world/homes";
 import type { BuildingOwner, InterviewStart, LifeStatus, Neighbour, PaySettled, PropertyApi, PropertyResult, WorkStatus } from "@/lib/world/property-api";
@@ -19,31 +17,25 @@ import { dayOf, EXERCISE } from "@/lib/world/day";
 import { HUSTLES, hustleDay, hustleStart } from "@/lib/world/hustles";
 import { workplaceById, type Workplace } from "@/lib/world/workplace";
 import { PropertyCard } from "../property-card";
-import { AdvertisePanel, type AdPreview } from "./advertise-panel";
+import type { AdPreview } from "./advertise-panel";
 import { explorePlaces, type ExplorePlace } from "@/lib/world/explore";
 import type { NearRoad, SpotWords } from "../events/events";
 import { areaK } from "@/lib/world/events";
 import { around, cachedThings, loadThings, sharedPlayerNews } from "./things-cache";
 import { isHere, whileHere } from "../activity";
-import { ThingsSheet, type ThingsTab } from "./things-sheet";
-import { NewsSheet } from "./news-sheet";
-import { ComingSoonSheet, ReputationSheet } from "./reputation-sheet";
-import { CertificateSheet } from "./certificate";
+import type { ThingsTab } from "./things-sheet";
 import { JailBanner } from "../people/street-dating";
 import { cityNews, playerStory, type NewsItem } from "@/lib/world/news";
 import { playSfx } from "../sound";
-import { LeaveMarkSheet, MarkCard } from "./marks-sheet";
+import { MarkCard } from "./marks-sheet";
 import type { MapMark } from "../mark-actions";
 import type { CityMarkTag } from "../city-view";
 import { Sheet } from "../sheet";
-import { LifeSheet } from "./life-sheet";
-import { MoneySheet } from "./money-sheet";
 import { HomeCard } from "./home-card";
-import { DoorBell, DoorSheet, HomeParty, SignGuestBook } from "./door-sheet";
+import { DoorBell, HomeParty } from "./door-sheet";
 import { homeDoor, type Door } from "./visit-actions";
 import { JobsHere, type JobsContext } from "./jobs-here";
 import type { SearchHit } from "./map-search";
-import { HomeFinder } from "./home-finder";
 import { StartLife } from "./start-life";
 import { growthOf, setGrowth } from "@/lib/world/growth";
 import { useLife } from "./use-life";
@@ -51,21 +43,39 @@ import { confirmTopUp } from "../topup-actions";
 import { moveOut, myRental, renameHome, type Rental } from "../property-actions";
 import { discounted } from "@/lib/world/rep-levels";
 import { StarterRoomBox } from "./starter-room";
-import { LandmarkBuy } from "./landmark-buy";
 import { restartTutorial, useTutorialPhase } from "../tutorial";
-import { WorkSheet } from "./work-sheet";
-import { BusinessSheet } from "./business-sheet";
-import { ServicesSheet } from "./services-sheet";
-import { ReportSheet } from "./report-sheet";
 import type { MapBusiness } from "@/lib/world/business";
 import type { OwnedProperty } from "@/lib/world/owned";
-import { InterviewSheet, MomentSheet } from "./moments";
-import { AmountSheet, LoanSheet } from "./amount-sheet";
-import { CurrencySheet } from "./currency-pick";
 import { cash, cashText, playerCurrency, setRates, setShownCurrency } from "@/lib/world/value";
 import { buyerPays, sellerGets, OFFER_HOURS, RENT_LEVEL, type Listing, type MarketBoard } from "@/lib/world/market";
 import { BUY_TAX, INCOME_DAY } from "@/lib/world/property-api";
 import { SIMPLE_LIFE } from "@/lib/world/simple-life";
+import dynamic from "next/dynamic";
+
+// Sheets and panels load when first opened, not with the map (docs/COSTS.md).
+const HomePlanner = dynamic(() => import("../home/home-planner").then((m) => m.HomePlanner));
+const AdvertisePanel = dynamic(() => import("./advertise-panel").then((m) => m.AdvertisePanel));
+const ThingsSheet = dynamic(() => import("./things-sheet").then((m) => m.ThingsSheet));
+const NewsSheet = dynamic(() => import("./news-sheet").then((m) => m.NewsSheet));
+const ComingSoonSheet = dynamic(() => import("./reputation-sheet").then((m) => m.ComingSoonSheet));
+const ReputationSheet = dynamic(() => import("./reputation-sheet").then((m) => m.ReputationSheet));
+const CertificateSheet = dynamic(() => import("./certificate").then((m) => m.CertificateSheet));
+const LeaveMarkSheet = dynamic(() => import("./marks-sheet").then((m) => m.LeaveMarkSheet));
+const LifeSheet = dynamic(() => import("./life-sheet").then((m) => m.LifeSheet));
+const MoneySheet = dynamic(() => import("./money-sheet").then((m) => m.MoneySheet));
+const DoorSheet = dynamic(() => import("./door-sheet").then((m) => m.DoorSheet));
+const SignGuestBook = dynamic(() => import("./door-sheet").then((m) => m.SignGuestBook));
+const HomeFinder = dynamic(() => import("./home-finder").then((m) => m.HomeFinder));
+const LandmarkBuy = dynamic(() => import("./landmark-buy").then((m) => m.LandmarkBuy));
+const WorkSheet = dynamic(() => import("./work-sheet").then((m) => m.WorkSheet));
+const BusinessSheet = dynamic(() => import("./business-sheet").then((m) => m.BusinessSheet));
+const ServicesSheet = dynamic(() => import("./services-sheet").then((m) => m.ServicesSheet));
+const ReportSheet = dynamic(() => import("./report-sheet").then((m) => m.ReportSheet));
+const InterviewSheet = dynamic(() => import("./moments").then((m) => m.InterviewSheet));
+const MomentSheet = dynamic(() => import("./moments").then((m) => m.MomentSheet));
+const AmountSheet = dynamic(() => import("./amount-sheet").then((m) => m.AmountSheet));
+const LoanSheet = dynamic(() => import("./amount-sheet").then((m) => m.LoanSheet));
+const CurrencySheet = dynamic(() => import("./currency-pick").then((m) => m.CurrencySheet));
 
 /** Each region's plan for finding jobs near home, worked out once (only when Work is opened). */
 const plans = new Map<string, CityPlan>();
@@ -165,10 +175,10 @@ export function useWorldLife({
         })
         .catch(() => {});
     ask();
-    const t = setInterval(ask, 10 * 60_000);
+    const stop = whileHere(ask, 10 * 60_000);
     return () => {
       alive = false;
-      clearInterval(t);
+      stop();
     };
   }, [regionId, pretend]);
   const { assets, owned, loaded, refresh } = useLife(api, signedIn ? regionId : null);
@@ -386,12 +396,12 @@ export function useWorldLife({
         .catch(() => {});
     };
     const first = setTimeout(look, 15_000);
-    const every = setInterval(look, 60_000);
+    const every = whileHere(look, 60_000);
     const firstP = setTimeout(lookPlayers, 40_000);
     const everyP = setInterval(() => isHere() && lookPlayers(), 3 * 60_000);
     return () => {
       clearTimeout(first);
-      clearInterval(every);
+      every();
       clearTimeout(firstP);
       clearInterval(everyP);
     };
@@ -460,13 +470,13 @@ export function useWorldLife({
       void api.marketBoard().then(setBoard);
     }, 0);
     // Bills, health, school and offers move on with time: look again now and then.
-    const every = setInterval(() => {
+    const every = whileHere(() => {
       void api.lifeStatus().then(setStatus);
       void api.marketBoard().then(setBoard);
     }, 120_000);
     return () => {
       clearTimeout(t);
-      clearInterval(every);
+      every();
     };
   }, [api, signedIn, regionId, setStatus]);
 
@@ -490,11 +500,11 @@ export function useWorldLife({
     let alive = true;
     const load = () => void api.mapBusinesses(regionId).then((list) => alive && setBusinesses(list)).catch(() => {});
     const first = setTimeout(load, 0);
-    const every = setInterval(load, 5 * 60_000);
+    const every = whileHere(load, 5 * 60_000);
     return () => {
       alive = false;
       clearTimeout(first);
-      clearInterval(every);
+      every();
     };
   }, [api, regionId]);
 

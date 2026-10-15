@@ -25,10 +25,7 @@ import { BILLBOARD_STEPS, BillboardWizard } from "./billboard-wizard";
 //     It comes with your design on the billboards too.
 // The map behind stays live the whole time: the camera flies to each building.
 
-/** Opens the advertising panel from anywhere in the game (a billboard, a building, a menu). */
-export function openAdvertise(building?: string) {
-  window.dispatchEvent(new CustomEvent("nt-advertise", { detail: { building: building ?? null } }));
-}
+export { openAdvertise } from "./advertise-open";
 
 /** What the map shows while you choose: your name lit up on the building, your design on the billboards. */
 export type AdPreview = { building: string; name: string; line: string; logo: string | null; billboard: string | null };

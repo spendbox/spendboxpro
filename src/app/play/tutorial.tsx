@@ -6,6 +6,7 @@ import { CircleHelp } from "lucide-react";
 import { MISSION_NAIRA, MISSIONS, MISSIONS_TOTAL, nextMission, type Mission, type MissionState, type Phase } from "@/lib/world/tutorial";
 import { cash } from "@/lib/world/value";
 import { playSfx } from "./sound";
+import { whileHere } from "./activity";
 
 // The walkthrough (docs/FIRST_STEPS.md): a small card over the map (always in front, chat
 // included) that takes everyone, old players too, through a few fun tips, three missions with
@@ -185,6 +186,7 @@ export function Tutorial({
   useEffect(() => {
     if (s.phase !== "missions" || s.closed) return;
     let alive = true;
+    let stop = () => {};
     const look = () => {
       if (asking.current || document.visibilityState !== "visible") return;
       asking.current = true;
@@ -195,7 +197,7 @@ export function Tutorial({
           if ("off" in d) {
             // Rewards aren't switched on: no point asking again.
             setDone("off");
-            clearInterval(t);
+            stop();
             return;
           }
           setDone(d);
@@ -212,11 +214,11 @@ export function Tutorial({
         });
     };
     // Every 15 seconds while a mission's on (and straight away).
-    const t = setInterval(look, 15_000);
+    stop = whileHere(look, 15_000);
     look();
     return () => {
       alive = false;
-      clearInterval(t);
+      stop();
     };
     // naira only formats the cheer; actions.paid only refreshes the cash.
     // eslint-disable-next-line react-hooks/exhaustive-deps

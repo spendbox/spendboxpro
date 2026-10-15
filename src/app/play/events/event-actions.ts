@@ -4,6 +4,7 @@ import { naira } from "@/lib/brand";
 import { after } from "next/server";
 import { cleanAvatar } from "@/lib/avatar";
 import { currentUserId } from "@/lib/game";
+import { notifyMany } from "@/lib/notify-many";
 import { pushToMany } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { REGIONS, regionMap } from "@/lib/world";
@@ -460,10 +461,10 @@ async function tellPeople(
       })
       .map((l) => l.user_id)
       .slice(0, 60);
-    await Promise.all(near.map((u) => db.rpc("notify", { p_user: u, p_round: null, p_kind: "event", p_body: nearBody })));
+    await notifyMany(db, near, "event", nearBody);
   }
   const friendBody = soon ? `Your friend ${name} is hosting "${title}"${where}, starting now!${ticket}` : `Your friend ${name} is hosting "${title}"${where}. Tap Events and say you're going.${ticket}`;
-  await Promise.all(friends.slice(0, 500).map((u) => db.rpc("notify", { p_user: u, p_round: null, p_kind: "event", p_body: friendBody })));
+  await notifyMany(db, friends.slice(0, 500), "event", friendBody);
   await pushToMany([...friends.slice(0, 500), ...near]);
 }
 

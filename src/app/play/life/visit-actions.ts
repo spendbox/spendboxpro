@@ -145,7 +145,7 @@ export async function signGuestBook(building: string, body: string, atDoor = fal
   const name = (await nameOf(db, me)).slice(0, 40);
   const { error } = await db.from("home_guestbook").insert(others.slice(0, 4).map((r) => ({ owner_id: r.user_id, author_id: me, author_name: name, body: text, at_door: atDoor })));
   if (error) return { ok: false, error: missing(error.message) ? "The guest book is switched on soon (the game's owner has one update to run)." : "Couldn't write it. Try again." };
-  for (const r of others.slice(0, 4)) await db.rpc("notify", { p_user: r.user_id, p_round: null, p_kind: "door", p_body: atDoor ? `${name} left you a note at the door: “${text.slice(0, 80)}”` : `${name} signed your guest book: “${text.slice(0, 80)}”` });
+  await Promise.all(others.slice(0, 4).map((r) => db.rpc("notify", { p_user: r.user_id, p_round: null, p_kind: "door", p_body: atDoor ? `${name} left you a note at the door: “${text.slice(0, 80)}”` : `${name} signed your guest book: “${text.slice(0, 80)}”` })));
   return { ok: true };
 }
 

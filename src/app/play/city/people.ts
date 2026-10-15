@@ -282,7 +282,7 @@ export function createPeople(world: World, parent: THREE.Object3D) {
         else brolly.setMatrixAt(k, m4.compose(v, q, zero));
       }
       const swing = Math.sin(p.phase) * 0.55;
-      for (const leg of [0, 1]) {
+      for (let leg = 0; leg < 2; leg++) {
         q2.setFromAxisAngle(xAxis, leg ? swing : -swing);
         hip.compose(v.set(smooth[o] + (leg ? 0.011 : -0.011) * Math.cos(yaw + Math.PI / 2), smooth[o + 1] + 0.064 + bob, smooth[o + 2] - (leg ? 0.011 : -0.011) * Math.sin(yaw + Math.PI / 2)), q3.copy(q).multiply(q2), show && !as3d ? s.set(1, 1, 1) : zero);
         legs.setMatrixAt(k * 2 + leg, hip);

@@ -3,7 +3,9 @@
 import { naira } from "@/lib/brand";
 import { cleanAvatar } from "@/lib/avatar";
 import { currentUserId } from "@/lib/game";
-import { pushTo } from "@/lib/push";
+import { after } from "next/server";
+import { notifyMany } from "@/lib/notify-many";
+import { pushToMany } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { REGIONS } from "@/lib/world";
 import { CHALLENGE_COOLDOWN_SECS, CHALLENGE_FEE_NAIRA, NEAR_TILES, STAKE_MAX_NAIRA, STAKE_MIN_NAIRA, challengeGame, cleanStake, stakeBounds } from "@/lib/world/challenges";
@@ -121,19 +123,33 @@ export async function openChallenge(game: string, stakeMint: number, x: number, 
   // Everyone nearby hears about it (a notice, and a push).
   const { data: me } = await db.from("profiles").select("username").eq("id", userId).maybeSingle();
   const name = (me?.username as string | null) ?? "Someone";
-  const { data: lives } = await db.from("lives").select("user_id, at_place, home_unit").eq("region", region).neq("user_id", userId).limit(1000);
-  const near = ((lives ?? []) as { user_id: string; at_place: string | null; home_unit: string | null }[]).filter((l) => {
-    const s = spotOf(l.at_place ?? l.home_unit);
-    return s && Math.hypot(s.x - x, s.z - z) <= NEAR_TILES;
-  });
-  // All at once (not one after another), so the host isn't kept waiting while the minute runs.
+  // Who's within reach: from the kept positions (game-db/102), else the old way.
+  const box = await db
+    .from("lives")
+    .select("user_id")
+    .eq("region", region)
+    .neq("user_id", userId)
+    .gte("at_x", x - NEAR_TILES)
+    .lte("at_x", x + NEAR_TILES)
+    .gte("at_z", z - NEAR_TILES)
+    .lte("at_z", z + NEAR_TILES)
+    .limit(2000);
+  let near: string[];
+  if (!box.error) near = ((box.data ?? []) as { user_id: string }[]).map((l) => l.user_id);
+  else {
+    const { data: lives } = await db.from("lives").select("user_id, at_place, home_unit").eq("region", region).neq("user_id", userId).limit(1000);
+    near = ((lives ?? []) as { user_id: string; at_place: string | null; home_unit: string | null }[])
+      .filter((l) => {
+        const s = spotOf(l.at_place ?? l.home_unit);
+        return s && Math.hypot(s.x - x, s.z - z) <= NEAR_TILES;
+      })
+      .map((l) => l.user_id)
+      .slice(0, 60);
+  }
   const body = `${name} challenged everyone nearby to ${g.title}! ₦${tidy(stake * perMint).toLocaleString("en-GB")} each into the pool. Join within a minute.`;
-  await Promise.all(
-    near.slice(0, 60).map(async (l) => {
-      await db.rpc("notify", { p_user: l.user_id, p_round: null, p_kind: "challenge", p_body: body });
-      await pushTo(l.user_id).catch(() => {});
-    }),
-  );
+  await notifyMany(db, near, "challenge", body);
+  // Phones are tapped after the host has their answer (the minute is already running).
+  after(() => pushToMany(near));
   return { ok: true, id: n(d.id), fee: n(d.fee) };
 }
 
@@ -209,19 +225,27 @@ export async function challengeView(id: number): Promise<ChallengeView | null> {
     // Started (or called off): every player is told, on their phone too.
     if (!begun.error && begun.data !== "open") {
       const { data: players } = await db.from("challenge_players").select("user_id").eq("challenge_id", cid).is("left_at", null);
-      await Promise.all(((players ?? []) as { user_id: string }[]).map((p) => pushTo(String(p.user_id)).catch(() => {})));
+      await pushToMany(((players ?? []) as { user_id: string }[]).map((p) => String(p.user_id)));
     }
   }
   const { data } = await db.from("challenges").select("*").eq("id", cid).maybeSingle();
   return data ? ((await views(db, [data as Record<string, unknown>]))[0] ?? null) : null;
 }
 
+/** When each region's challenges were last tidied (on this server). */
+const lastSweep = new Map<string, number>();
+
 /** Challenges near a spot (open to join, or being played), and the one you're in, if any. */
 export async function nearbyChallenges(region: string, x: number, z: number): Promise<{ list: ChallengeView[]; mine: number | null }> {
   if (!REGIONS[region]) return { list: [], mine: null };
   const db = createAdminClient();
-  const sweep = await db.rpc("challenge_sweep", { p_region: region });
-  if (sweep.error && missing(sweep.error.message)) return { list: [], mine: null };
+  // Tidying up finished and expired challenges: at most every 10 s per region on this server (every
+  // player looking at challenges asks every few seconds).
+  if (Date.now() - (lastSweep.get(region) ?? 0) > 10_000) {
+    lastSweep.set(region, Date.now());
+    const sweep = await db.rpc("challenge_sweep", { p_region: region });
+    if (sweep.error && missing(sweep.error.message)) return { list: [], mine: null };
+  }
   const since = new Date(Date.now() - 50 * 60_000).toISOString();
   const { data } = await db.from("challenges").select("*").eq("region", region).in("status", ["open", "playing"]).gt("created_at", since).order("created_at", { ascending: false }).limit(40);
   const rows = ((data ?? []) as Record<string, unknown>[]).filter((r) => Math.hypot(n(r.x) - x, n(r.z) - z) <= NEAR_TILES * 2);
