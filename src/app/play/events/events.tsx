@@ -54,6 +54,7 @@ import { cancelEvent, endEvent, enterEvent, eventQuote, hostEvent, rsvpEvent, st
 import { PartyRoom } from "./party-room";
 import { RoomGuard } from "./room-kit";
 import { StageRoom } from "./stage-room";
+import { HostGuide } from "./host-guide";
 import type { PartyZone } from "../city/party-lights";
 
 // Events on the map (docs/EVENTS.md). The Events button (top right) opens what's on (on now and
@@ -440,6 +441,7 @@ function EventsSheet({
   // Choose on the map: the card tucks away (all you've filled in kept), a pin in the middle of the
   // screen shows where and how far the party reaches, and Use this spot brings the card back.
   const [picking, setPicking] = useState<number | null>(null);
+  const [guide, setGuide] = useState(false);
   const [picked, setPicked] = useState(0);
 
   if (intro)
@@ -535,7 +537,17 @@ function EventsSheet({
           )}
         </>
       ) : (
+        <>
+        <button onClick={() => setGuide(true)} className="mt-3 flex w-full items-center gap-2.5 rounded-2xl bg-gradient-to-r from-[#d6336c]/10 to-[#7048e8]/10 px-3 py-2.5 text-left">
+          <span className="text-2xl">📖</span>
+          <span className="min-w-0 flex-1">
+            <b className="block text-sm">How to host a great party</b>
+            <span className="text-xs text-muted">Setting it up, adding music, getting it going · 8 quick steps</span>
+          </span>
+        </button>
+        {guide && <HostGuide onClose={() => setGuide(false)} />}
         <HostForm region={region} where={where} places={places} describe={describe} roads={roads} onOpen={onOpen} onHosted={onHosted} picked={picked} onPickOnMap={(m) => setPicking(m)} />
+        </>
       )}
     </Sheet>
     </div>

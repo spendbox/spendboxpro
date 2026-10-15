@@ -88,6 +88,16 @@ Worked out by the server from the map (the phone's number is only a preview; src
 - Talks and screenings are free to host for now. Your friends are always told (a notice and a push); everyone
 within about 4 km is told too when it starts within 15 minutes.
 
+## How to host a great party
+
+Host an event opens with **How to host a great party** (src/app/play/events/host-guide.tsx): eight
+quick steps, Next and Back. Pick your party; choose where (Choose on the map); choose how big;
+when, tickets and how many (the fee back if fewer than 10 come); add music in the DJ booth (in
+YouTube: Share, Copy link, then paste and Play; queue up to 20; or a beat); get it going (the hype
+meter, hot seat, toasts, shout-outs, Meet someone, spraying); bring people in (Invite friends);
+leaving and ending. The walkthrough's third mission points to it, and the DJ panel says how to copy
+a song's link on a phone.
+
 ## Going
 
 - **What's on** lists events in your state: on now (nearest first) and coming up (soonest first),
