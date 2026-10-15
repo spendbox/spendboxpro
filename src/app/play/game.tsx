@@ -3087,7 +3087,7 @@ export function Game({
             }}
             onSignIn={() => {
               setSportsOpen(null);
-              setSignInWhy("Sign in to watch matches and bet mint on who wins.");
+              setSignInWhy("Sign in to watch matches and bet on who wins.");
             }}
           />
         </Safe>
@@ -3586,7 +3586,7 @@ export function Game({
             )}
             {!dockOpen && !isDancing && place && placeRoom && jobAt(placeRoom.type) && (
               <button
-                onClick={() => (guest ? setSignInWhy("Sign in to apply for jobs and earn mint by the hour.") : setJobsAt({ id: placeRoom.id, name: placeRoom.name }))}
+                onClick={() => (guest ? setSignInWhy("Sign in to apply for jobs and earn money by the hour.") : setJobsAt({ id: placeRoom.id, name: placeRoom.name }))}
                 className="glass pointer-events-auto flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold shadow sm:text-sm"
               >
                 <Briefcase className="size-4 text-[#1971c2]" />

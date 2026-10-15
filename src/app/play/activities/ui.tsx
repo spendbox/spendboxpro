@@ -239,18 +239,18 @@ export function useGameReward(game: RewardGame | "piano" | "jukebox" | "slots" |
   async function finish(score: number, won?: boolean) {
     questEvent({ type: "play", game, score, won });
     if (!reward) return;
-    if (!signedIn) return setClaim({ state: "done", coins: 0, text: "Sign in to win mint." });
+    if (!signedIn) return setClaim({ state: "done", coins: 0, text: "Sign in to win money." });
     if (score < reward.min) {
-      return setClaim({ state: "done", coins: 0, text: reward.unit === "win" ? "" : `Get ${reward.min}+ ${reward.unit} to win mint.` });
+      return setClaim({ state: "done", coins: 0, text: reward.unit === "win" ? "" : `Get ${reward.min}+ ${reward.unit} to win money.` });
     }
-    setClaim({ state: "claiming", coins: 0, text: "Collecting your mint…" });
+    setClaim({ state: "claiming", coins: 0, text: "Collecting your winnings…" });
     const res = await claimActivityReward(game as RewardGame, score);
     if (!res.ok) return setClaim({ state: "done", coins: 0, text: res.error });
     if (res.coins > 0) {
       return setClaim({
         state: "done",
         coins: res.coins,
-        text: `+${cash(res.coins)}!${res.leftToday === 0 ? " That's all the game mint for today." : ""}`,
+        text: `+${cash(res.coins)}!${res.leftToday === 0 ? " That's all the game winnings for today." : ""}`,
       });
     }
     setClaim({
@@ -258,10 +258,10 @@ export function useGameReward(game: RewardGame | "piano" | "jukebox" | "slots" |
       coins: 0,
       text:
         res.reason === "daily_limit"
-          ? "You've won all the game mint for today. Playing is still fun!"
+          ? "You've won all the game money for today. Playing is still fun!"
           : res.reason === "too_soon"
-            ? "Nice! Mint pays out once a minute per game, so this one's just for glory."
-            : `Get ${reward.min}+ ${reward.unit} to win mint.`,
+            ? "Nice! Games pay out once a minute each, so this one's just for glory."
+            : `Get ${reward.min}+ ${reward.unit} to win money.`,
     });
   }
   return { claim, finish, reset: () => setClaim({ state: "idle", coins: 0, text: "" }), reward };

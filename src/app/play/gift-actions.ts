@@ -55,7 +55,7 @@ export async function giveCoins(
   note?: string,
 ): Promise<{ ok: true; amount: number; to: string; balance: number; leftToday: number } | Fail> {
   const userId = await currentUserId();
-  if (!userId) return { ok: false, error: "Sign in to give mint." };
+  if (!userId) return { ok: false, error: "Sign in to give money." };
   if (typeof toId !== "string" || !UUID_RE.test(toId)) return { ok: false, error: "Pick a player." };
   if (!Number.isInteger(amount) || amount < 1 || amount > 10_000) return { ok: false, error: "Pick between ₥1 and ₥10,000." };
   const text = typeof note === "string" ? note.replace(/\s+/g, " ").trim().slice(0, 80) : "";

@@ -11,15 +11,15 @@ export type MinigameReward = { ok: true; coins: number; leftToday: number; reaso
 
 export async function claimMinigameReward(game: string, grade: number): Promise<MinigameReward> {
   const userId = await currentUserId();
-  if (!userId) return { ok: false, error: "Sign in to win mint." };
+  if (!userId) return { ok: false, error: "Sign in to win money." };
   const def = MINIGAME_BY_ID.get(game);
-  if (!def || def.legacy) return { ok: false, error: "That game doesn't pay mint." };
+  if (!def || def.legacy) return { ok: false, error: "That game doesn't pay money." };
   if (!Number.isInteger(grade) || grade < 1 || grade > 3) return { ok: false, error: "That score doesn't count." };
   const { data, error } = await createAdminClient().rpc("claim_minigame_reward", { p_user: userId, p_game: game, p_grade: grade });
   if (error || !data) {
     if (error?.message?.startsWith("frozen")) return { ok: false, error: "Your account is paused right now." };
     console.error("claim_minigame_reward failed", error?.message);
-    return { ok: false, error: "Couldn't collect your mint. Try again later." };
+    return { ok: false, error: "Couldn't collect your winnings. Try again later." };
   }
   const d = data as { coins: number; left_today: number; reason: string | null };
   return { ok: true, coins: Number(d.coins ?? 0), leftToday: Number(d.left_today ?? 0), reason: d.reason === "daily_limit" || d.reason === "too_soon" ? d.reason : null };

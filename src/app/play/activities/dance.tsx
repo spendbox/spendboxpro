@@ -71,7 +71,7 @@ export function DanceFloor(props: GameProps) {
             className={cn("flex items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-semibold", tab === t ? "bg-panel shadow-sm" : "text-muted")}
           >
             {t === "dance" ? <Music className="size-4" /> : <Banknote className="size-4" />}
-            {t === "dance" ? "Dance-off" : "Spray mint"}
+            {t === "dance" ? "Dance-off" : "Spray money"}
           </button>
         ))}
       </div>
@@ -289,7 +289,7 @@ function Spray({ dancers, send, ...props }: GameProps & { dancers: ActivityPlaye
     setTarget(null);
   }
 
-  if (!props.me) return <p className="rounded-2xl bg-panel-2 p-3 text-sm text-muted">Sign in to spray mint.</p>;
+  if (!props.me) return <p className="rounded-2xl bg-panel-2 p-3 text-sm text-muted">Sign in to spray money.</p>;
 
   return (
     <div className="space-y-3">

@@ -193,14 +193,34 @@ export function cash(mint: number, opts: { full?: boolean; exact?: boolean } = {
 
 /**
  * Text from the server with amounts in mint ("+10 mint", "₥50", "300 coins") rewritten in the
- * player's currency ("+₦15,000"). For notices and messages the database writes.
+ * player's currency ("+₦15,000"), and "mint" on its own said as "money" ("not enough money").
+ * For notices and messages the database writes, and any wording that still says mint.
  */
 export function cashText(s: string) {
   if (!s) return s;
   const num = (x: string) => Number(x.replace(/,/g, ""));
-  return s
+  const out = s
     .replace(/₥\s?(\d[\d,]*(?:\.\d+)?)/g, (_, n: string) => cash(num(n)))
     .replace(/\b(\d[\d,]*(?:\.\d+)?) (?:mint|coins?)\b/g, (_, n: string) => cash(num(n)));
+  return current().code === "MINT" ? out : moneyWord(out);
+}
+
+/** "mint" (the word, not an amount) said as "money". */
+function moneyWord(s: string) {
+  return s.replace(/\bmint\b/g, "money").replace(/\bMint\b/g, "Money").replace(/\bMINT\b/g, "MONEY");
+}
+
+/**
+ * The same for the server, where there's no player's choice (a push notification): amounts in
+ * the region's own money ("₥50" in Lagos: "₦75,000"), rounded the way people say them.
+ */
+export function cashTextIn(s: string, prices: Pick<Prices, "perMint" | "symbol">) {
+  if (!s) return s;
+  const num = (x: string) => Number(x.replace(/,/g, ""));
+  const say = (m: number) => `${prices.symbol}${tidy(m * prices.perMint).toLocaleString("en-GB", { maximumFractionDigits: 0 })}`;
+  return moneyWord(
+    s.replace(/₥\s?(\d[\d,]*(?:\.\d+)?)/g, (_, n: string) => say(num(n))).replace(/\b(\d[\d,]*(?:\.\d+)?) (?:mint|coins?)\b/g, (_, n: string) => say(num(n))),
+  );
 }
 
 /** A short local price, in the player's chosen currency: "₦148m" / "$95k" / "£1.2". */

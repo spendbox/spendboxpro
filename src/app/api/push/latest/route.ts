@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { PRICES } from "@/lib/world/regions/lagos/prices";
+import { cashTextIn } from "@/lib/world/value";
 
 // What a push notification shows (public/sw.js asks when a push arrives): your latest notice, or
 // your latest private message if that's newer. Also how many things are waiting for you (the
@@ -44,7 +46,8 @@ export async function GET() {
         unread,
       }
     : n
-      ? { title: TITLE[String(n.kind)] ?? "Newtown", body: String(n.body), url: "/play?alerts=1", tag: "notice", unread }
+      ? // Notices keep amounts in mint ("₥50"): on the lock screen, in naira like the rest of the game.
+        { title: TITLE[String(n.kind)] ?? "Newtown", body: cashTextIn(String(n.body), PRICES), url: "/play?alerts=1", tag: "notice", unread }
       : { ...fallback, unread };
   return NextResponse.json(body, { headers: { "Cache-Control": "no-store" } });
 }
