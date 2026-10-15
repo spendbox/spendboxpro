@@ -11,7 +11,7 @@ async function run(fn: string, args: Record<string, unknown>): Promise<ActionRes
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Please sign in again." };
   const { data, error } = await createAdminClient().rpc(fn, { p_user: userId, ...args });
-  if (error) return { ok: false, error: mintify(error.message) };
+  if (error) return { ok: false, error: mintify(error.message, true) };
   return { ok: true, data: (data ?? {}) as Record<string, unknown> };
 }
 

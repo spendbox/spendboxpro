@@ -333,7 +333,7 @@ export function Menu({
                 Marketplace
                 <span className="rounded-full bg-ink px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-white">Soon</span>
               </span>
-              <span className="block truncate text-[11px] text-ink/75">Swap mint for tees, tickets, vouchers and gadgets.</span>
+              <span className="block truncate text-[11px] text-ink/75">Swap money for tees, tickets, vouchers and gadgets.</span>
             </span>
           </div>
           )}

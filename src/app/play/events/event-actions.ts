@@ -1,5 +1,6 @@
 "use server";
 
+import { naira } from "@/lib/brand";
 import { after } from "next/server";
 import { cleanAvatar } from "@/lib/avatar";
 import { currentUserId } from "@/lib/game";
@@ -69,7 +70,7 @@ function say(message: string): Fail {
     frozen: "Your account is paused right now.",
     unknown_player: "Please sign in again.",
   };
-  if (code === "not_enough") return { ok: false, error: `You need ${arg ? `₥${arg}` : "more"} for that.` };
+  if (code === "not_enough") return { ok: false, error: `You need ${arg ? naira(arg) : "more"} for that.` };
   if (words[code]) return { ok: false, error: words[code] };
   if (missing(message)) return { ok: false, error: OFF };
   console.error("Event failed", message);

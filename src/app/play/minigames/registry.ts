@@ -195,7 +195,7 @@ export const MINIGAMES: MiniGameDef[] = [
   S(81, "stack-tower", "Stack the Tower", "arcade", "stacker", {}, "floors", [10, 20, 30], ["office", "tower", "twin", "capitol", ...ARCADE], "Building", "#3b5bdb",
     "Build the tallest tower.", "Tap to drop the sliding floor. Anything hanging over the edge falls off. Perfect drops keep it wide."),
   S(82, "endless-runner", "Street Runner", "arcade", "lanes", { theme: "runner", seconds: 60 }, "metres", [600, 1100, 1600], ["anywhere"], "Footprints", "#f08c00",
-    "Run the streets, grab the mint.", "Swipe left and right to change lanes and up to jump over barriers. Collect mint coins."),
+    "Run the streets, grab the cash.", "Swipe left and right to change lanes and up to jump over barriers. Collect the coins."),
   S(83, "snake", "Snake", "arcade", "snake", {}, "length", [12, 22, 35], [...ARCADE, ...RIDES, "anywhere"], "Spline", "#2f9e44",
     "Eat, grow, don't bite yourself.", "Swipe or tap the arrows to turn. Eat the food to grow. Don't hit the walls or your tail."),
   S(84, "brick-breaker", "Brick Breaker", "arcade", "bricks", {}, "points", [300, 600, 900], [...ARCADE, "office"], "BrickWall", "#e8590c",

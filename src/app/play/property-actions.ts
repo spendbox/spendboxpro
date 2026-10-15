@@ -1,5 +1,6 @@
 "use server";
 
+import { naira } from "@/lib/brand";
 import { makePlan, spiralIndex, tileAt, type CityPlan } from "@/lib/city/layout";
 import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -38,7 +39,7 @@ const n = (v: unknown) => Number(v ?? 0) || 0;
 function say(message: string | undefined): PropertyResult {
   const [code, arg] = (message ?? "").split(":");
   const words: Record<string, string> = {
-    not_enough: `You need ₥${arg} for that.`,
+    not_enough: `You need ${naira(arg)} for that.`,
     taken: "Someone has just bought that one.",
     home_first: "Buy a home first: somewhere to live comes before anything else.",
     no_life: "Start your life first.",

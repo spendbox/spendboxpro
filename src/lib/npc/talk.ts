@@ -15,6 +15,7 @@ import { JOKES, RIDDLES } from "./jokes";
 import { TOPICS, type Mood, type Topic } from "./lines";
 import type { Special } from "./personas";
 import { between, chance, hashText, pick, sample, seeded, type Rand } from "./rng";
+import { cash } from "../world/value";
 
 export type Intent =
   | { kind: "start" }
@@ -516,7 +517,7 @@ export function afterAction(
       lines.push({ text: s(result.why === "no_hunt" ? "hint_nohunt" : "hint_none") });
     }
   } else if (action === "gift" && "coins" in result) {
-    if (result.coins > 0) lines.push({ text: s("gift_yes", { coins: result.coins }), tag: "gift" });
+    if (result.coins > 0) lines.push({ text: s("gift_yes", { coins: result.coins, cash: cash(result.coins) }), tag: "gift" });
     else lines.push({ text: s(result.why === "already" ? "gift_already" : result.why === "daily_cap" ? "gift_cap" : "gift_no") });
   } else if (action === "quest" && "quest" in result) {
     if (result.quest) lines.push({ text: s("quest_yes", { title: result.quest.title, brief: result.quest.brief.replace(/\.?$/, ".") }), tag: "quest" });

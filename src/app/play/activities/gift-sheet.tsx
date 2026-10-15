@@ -57,7 +57,7 @@ export function GiveCoinsSheet({ to, onClose, local }: { to: { id: string; name:
     setBalance(res.balance);
     setSent({ amount: res.amount, leftToday: res.leftToday });
     announceGiftSent(res.to, `${cash(res.amount)}`);
-    rememberPerson({ id: to.id, name: res.to }, "Gave mint");
+    rememberPerson({ id: to.id, name: res.to }, "Gave money");
     questEvent({ type: "gift", amount: res.amount });
     playSfx("found");
   }

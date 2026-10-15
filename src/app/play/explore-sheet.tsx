@@ -117,7 +117,7 @@ export function ExploreSheet({
         </div>
       ) : tab === "sports" ? (
         <div className="mt-3 space-y-2">
-          <p className="text-sm text-muted">Every match is a brand-new game, shown live from above. Tickets cost a few mint, and you can bet mint on who wins.</p>
+          <p className="text-sm text-muted">Every match is a brand-new game, shown live from above. Tickets cost a little, and you can bet on who wins.</p>
           {SPORTS.map((sp) => {
             const Icon = SPORT_ICON[sp];
             const live = liveVenues[sp];

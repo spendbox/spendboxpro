@@ -7,6 +7,8 @@
 // - Real-life services (a barber, a plumber, a photographer...) are only listed here: people agree
 //   and pay outside the game, and the game shows how to reach each other.
 
+import { cash } from "./value.ts";
+
 export type ServiceKind = "game" | "real";
 
 export type GameService = { id: string; label: string; what: string; body?: number; mind?: number };
@@ -101,7 +103,7 @@ export function checkServiceForm(f: ServiceForm): string | null {
   if ((f.title ?? "").trim().length < 3 || f.title.trim().length > 60) return "A title of 3 to 60 characters, please.";
   if ((f.about ?? "").trim().length < 10 || f.about.trim().length > 300) return "Say a little more (10 to 300 characters).";
   if (!(Number(f.price) > 0)) return "Add a price.";
-  if (f.kind === "game" && f.price > 100_000) return "In-game services can't cost more than ₥100,000.";
+  if (f.kind === "game" && f.price > 100_000) return `In-game services can't cost more than ${cash(100_000)}.`;
   if (f.kind === "real" && f.price > 50_000_000) return "That price looks too high.";
   if ((f.area ?? "").trim().length < 2 || f.area.trim().length > 60) return "Say where (an area of Lagos).";
   const phoneOk = (p?: string) => !p || /^[+\d][\d\s()-]{6,}$/.test(p);

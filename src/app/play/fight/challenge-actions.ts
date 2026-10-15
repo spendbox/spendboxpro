@@ -1,5 +1,6 @@
 "use server";
 
+import { naira } from "@/lib/brand";
 import { cleanAvatar } from "@/lib/avatar";
 import { currentUserId } from "@/lib/game";
 import { pushTo } from "@/lib/push";
@@ -18,7 +19,7 @@ const OFF = "Challenges are switched on soon (the game's owner has one update to
 
 function say(message: string): Fail {
   const [code, arg] = message.split(":");
-  if (code === "not_enough") return { ok: false, error: `You need ${arg ? `₥${arg}` : "more"} for that.` };
+  if (code === "not_enough") return { ok: false, error: `You need ${arg ? naira(arg) : "more"} for that.` };
   if (code === "busy") return { ok: false, error: "You're already in a challenge. Finish that one first." };
   if (code === "started") return { ok: false, error: "Too late: that one has started." };
   if (code === "full") return { ok: false, error: "That one is full." };

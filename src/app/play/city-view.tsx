@@ -409,7 +409,7 @@ const WINDOW = 40;
  */
 const DETAIL = 18;
 const SKY = 0xd7ebf7;
-const BALLOON_NAMES = ["Red", "Yellow", "Blue", "Purple", "Mint"];
+const BALLOON_NAMES = ["Red", "Yellow", "Blue", "Purple", "Green"];
 const GROUND = 0xd3e4c8;
 const ASPHALT = 0x5b6470;
 const SIDEWALK = 0xf3f1ec;

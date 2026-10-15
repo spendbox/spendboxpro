@@ -10,6 +10,7 @@
 import type { LucideIcon } from "lucide-react";
 import * as THREE from "three";
 import { drawIcon } from "../textures";
+import { cash } from "@/lib/world/value";
 
 const FONT = "system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
 const CELL = 128;
@@ -738,7 +739,7 @@ export function createUiSheet(): UiSheet {
       c.fillText(label, 128, 186);
       c.font = `800 26px ${FONT}`;
       c.fillStyle = "#b8590b";
-      c.fillText("+100 mint", 128, 222);
+      c.fillText(`+${cash(100)}`, 128, 222);
       done();
     },
     dispose: () => texture.dispose(),

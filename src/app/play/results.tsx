@@ -96,7 +96,7 @@ export function Results({
 
         <h3 className="mb-2 mt-4 font-semibold">Top winners</h3>
         {r.winners.length === 0 ? (
-          <p className="text-sm text-muted">Nobody won mint this round.</p>
+          <p className="text-sm text-muted">Nobody won money this round.</p>
         ) : (
           <ol className="space-y-1.5">
             {r.winners.map((w, i) => (

@@ -322,8 +322,8 @@ export function QuestSheet({
                     <span className={cn("grid size-6 shrink-0 place-items-center rounded-full", ok ? "bg-me text-white" : "bg-white text-muted ring-1 ring-line")}>
                       {ok ? <Check className="size-4" /> : <span className="text-xs font-bold">{i + 1}</span>}
                     </span>
-                    <span className={cn("flex-1 text-sm font-semibold", ok && "text-muted line-through")}>{stepLabel(s)}</span>
-                    <span className="text-xs tabular-nums text-muted">{stepProgressText(s, value)}</span>
+                    <span className={cn("flex-1 text-sm font-semibold", ok && "text-muted line-through")}>{stepLabel(s, cash)}</span>
+                    <span className="text-xs tabular-nums text-muted">{stepProgressText(s, value, cash)}</span>
                   </div>
                   {!ok && (
                     <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white">
@@ -336,7 +336,7 @@ export function QuestSheet({
           </ol>
           <p className="flex items-center gap-1.5 text-sm">
             <Coins className="size-4 text-gold-dark" />
-            {quest.reward > 0 ? `Reward: ${cash(quest.reward)}` : "No mint for this one"}
+            {quest.reward > 0 ? `Reward: ${cash(quest.reward)}` : "No money for this one"}
             {quest.action ? ` + ${ACTION_INFO[quest.action].label.toLowerCase()}` : ""}
             {quest.status === "done" && <b className="ml-auto text-me">Done!</b>}
           </p>

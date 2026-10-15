@@ -242,7 +242,7 @@ type PlaceRoom = {
   levels?: { id: string; label: string; capacity: number; kind?: string; theme?: string }[];
 };
 // Same order as the balloons in the 3D city (used until the city lists its rides).
-const BALLOON_NAMES = ["Red", "Yellow", "Blue", "Purple", "Mint"];
+const BALLOON_NAMES = ["Red", "Yellow", "Blue", "Purple", "Green"];
 const RIDE_HELLO: Record<RideKindName, string> = {
   balloon: "Up we go! Drag to look around; tap Chat to talk to everyone on board.",
   train: "All aboard! Grab a window and drag to look around; tap Chat to talk to the carriage.",
@@ -2517,7 +2517,7 @@ export function Game({
             </span>
             )}
             {me.bigFish && !worldId && (
-              <span className="glass flex h-8 items-center gap-1 whitespace-nowrap rounded-full px-2 text-xs font-bold text-[#1c7ed6] sm:h-9 sm:px-2.5" title="You hold 10,000+ mint: everyone sees you as a big fish">
+              <span className="glass flex h-8 items-center gap-1 whitespace-nowrap rounded-full px-2 text-xs font-bold text-[#1c7ed6] sm:h-9 sm:px-2.5" title={`You hold ${cash(10_000)}+: everyone sees you as a big fish`}>
                 <Fish className="size-3.5" />
                 <span className="hidden sm:inline">Big fish</span>
               </span>

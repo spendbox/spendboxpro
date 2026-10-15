@@ -1,5 +1,6 @@
 "use server";
 
+import { naira } from "@/lib/brand";
 import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { REGIONS } from "@/lib/world";
@@ -15,14 +16,14 @@ const UNIT = /^[a-z0-9-]+:-?\d+,-?\d+\/\d+$/;
 function say(message: string | undefined): PropertyResult {
   const [code, arg] = (message ?? "").split(":");
   const words: Record<string, string> = {
-    not_enough: `You need ₥${arg} for that.`,
+    not_enough: `You need ${naira(arg)} for that.`,
     not_yours: "That isn't yours.",
     is_home: "That's a home someone lives in, so it isn't for sale. (Your own home: move somewhere else first.)",
     yours: "That's already yours.",
     home_first: "Buy a home first: somewhere to live comes before anything else.",
     no_life: "Start your life first.",
     not_for_sale: "That's not for sale any more.",
-    price_changed: `The price has changed to ₥${arg}. Look again before you buy.`,
+    price_changed: `The price has changed to ${naira(arg)}. Look again before you buy.`,
     not_owned: "Nobody owns that yet: buy it from the city instead.",
     already_offered: "You've already made an offer on that one.",
     too_many_offers: "You have 5 offers waiting. Wait for answers, or withdraw one.",
@@ -30,7 +31,7 @@ function say(message: string | undefined): PropertyResult {
     gone: "That property isn't there any more.",
     bad_price: "That price doesn't work. A counter-offer must be higher than the offer.",
     bad_level: "Pick cheap, fair or high.",
-    over_limit: `The World Bank lends you up to ₥${arg} right now.`,
+    over_limit: `The World Bank lends you up to ${naira(arg)} right now.`,
     bank_short: "The World Bank can't lend that much today.",
     bad_amount: "That amount doesn't work.",
     bad_months: "Pick 6, 12 or 24 months (a month is 2½ days).",

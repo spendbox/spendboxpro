@@ -1,5 +1,6 @@
 "use server";
 
+import { naira } from "@/lib/brand";
 import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { regionMap } from "@/lib/world";
@@ -29,7 +30,7 @@ const n = (v: unknown) => Number(v ?? 0) || 0;
 function say(message: string | undefined): LandmarkResult {
   const [code, arg] = (message ?? "").split(":");
   const words: Record<string, string> = {
-    not_enough: `You need ₥${arg} for that. Keep stacking!`,
+    not_enough: `You need ${naira(arg)} for that. Keep stacking!`,
     taken: "Someone has just bought that one.",
     no_life: "Start your life first.",
     bad_price: "That landmark isn't for sale right now.",

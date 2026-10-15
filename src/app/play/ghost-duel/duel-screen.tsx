@@ -239,7 +239,7 @@ export function DuelScreen({ initial, me, onClose }: { initial: DuelView; me: { 
             <p className="mt-1 text-sm text-muted">
               {duel.status === "void"
                 ? duel.reason === "game_over"
-                  ? "The game ended first. Your mint came back."
+                  ? "The game ended first. Your money came back."
                   : `Called off. ${duel.role === "hunter" ? `Your ${cash(duel.fee)} came back.` : ""}`
                 : (REASON[duel.reason ?? "score"]?.[result === "won" ? "me" : "them"] ?? "").replace(/.$/, "$& ")}
               {duel.status === "done" &&

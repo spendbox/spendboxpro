@@ -105,6 +105,7 @@ import {
 } from "lucide-react";
 import { Sheet } from "@/app/play/sheet";
 import { Lock, Whale, X } from "@/components/icons";
+import { cash } from "@/lib/world/value";
 
 // Badges players earn in a round, drawn as shiny medals, a pop-up that explains each one,
 // and a share card they can post.
@@ -118,9 +119,12 @@ export type BadgeInfo = { title: string; blurb: string; icon: LucideIcon; from: 
 /** The order the groups are shown in. */
 export const BADGE_GROUPS: BadgeGroup[] = ["Hiding", "Hunting", "Drones", "Powers", "Levels", "Milestones", "Social", "Rare", "Legendary"];
 
-const def = (group: BadgeGroup, rim: BadgeRim, icon: LucideIcon, title: string, blurb: string, from: string, to: string): BadgeInfo => ({
+/** A blurb with an amount in it is a function, so the amount is in the player's currency when shown. */
+const def = (group: BadgeGroup, rim: BadgeRim, icon: LucideIcon, title: string, blurb: string | (() => string), from: string, to: string): BadgeInfo => ({
   title,
-  blurb,
+  get blurb() {
+    return typeof blurb === "function" ? blurb() : blurb;
+  },
   icon,
   from,
   to,
@@ -166,7 +170,7 @@ export const BADGE_INFO: Record<string, BadgeInfo> = {
   giant_slayer: def("Hunting", "gold", Sword, "Giant Slayer", "Catch a player who is level 10 or higher.", "#cbd5e1", "#475569"),
   titan_slayer: def("Hunting", "diamond", Swords, "Titan Slayer", "Catch a player who is level 25 or higher.", "#fca5a5", "#7f1d1d"),
   perfect_aim: def("Hunting", "diamond", Crosshair, "Perfect Aim", "Make 3+ searches in a round and find someone with every single one.", "#fecdd3", "#9f1239"),
-  bounty_hunter: def("Hunting", "gold", HandCoins, "Bounty Hunter", "Earn ₥1,000 in level bonuses by catching high-level players.", "#fde047", "#713f12"),
+  bounty_hunter: def("Hunting", "gold", HandCoins, "Bounty Hunter", () => `Earn ${cash(1000)} in level bonuses by catching high-level players.`, "#fde047", "#713f12"),
   // Drones
   trapper: def("Drones", "bronze", Radar, "Trapper", "Catch someone sneaking into your drone trap.", "#c4b5fd", "#6d28d9"),
   trap_master: def("Drones", "gold", RadioTower, "Trap Master", "Have your traps go off 3 times in one round.", "#ddd6fe", "#5b21b6"),
@@ -203,10 +207,10 @@ export const BADGE_INFO: Record<string, BadgeInfo> = {
   survive_25: def("Milestones", "gold", CircleDashed, "Invisible", "Survive 25 rounds in total.", "#e0f2fe", "#0c4a6e"),
   survive_50: def("Milestones", "gold", Palette, "Chameleon", "Survive 50 rounds in total.", "#bbf7d0", "#14532d"),
   survive_100: def("Milestones", "diamond", CloudFog, "Vanishing Act", "Survive 100 rounds in total.", "#e2e8f0", "#334155"),
-  coins_1k: def("Milestones", "silver", Coins, "Mint Collector", "Win ₥1,000 in total.", "#fef3c7", "#b45309"),
-  coins_5k: def("Milestones", "silver", Banknote, "Money Maker", "Win ₥5,000 in total.", "#bbf7d0", "#166534"),
-  coins_10k: def("Milestones", "gold", Gem, "Tycoon", "Win ₥10,000 in total.", "#a5f3fc", "#155e75"),
-  coins_25k: def("Milestones", "diamond", Vault, "Mogul", "Win ₥25,000 in total.", "#fde68a", "#78350f"),
+  coins_1k: def("Milestones", "silver", Coins, "Cash Collector", () => `Win ${cash(1000)} in total.`, "#fef3c7", "#b45309"),
+  coins_5k: def("Milestones", "silver", Banknote, "Money Maker", () => `Win ${cash(5000)} in total.`, "#bbf7d0", "#166534"),
+  coins_10k: def("Milestones", "gold", Gem, "Tycoon", () => `Win ${cash(10_000)} in total.`, "#a5f3fc", "#155e75"),
+  coins_25k: def("Milestones", "diamond", Vault, "Mogul", () => `Win ${cash(25_000)} in total.`, "#fde68a", "#78350f"),
   streak_3: def("Milestones", "bronze", Calendar, "Three in a Row", "Keep a daily streak for 3 days.", "#bfdbfe", "#1e40af"),
   streak_7: def("Milestones", "gold", CalendarCheck, "Week Warrior", "Keep a daily streak for a week.", "#93c5fd", "#1e3a8a"),
   streak_14: def("Milestones", "diamond", CalendarDays, "Fortnight Fanatic", "Keep a daily streak for 14 days.", "#c7d2fe", "#312e81"),
@@ -221,22 +225,22 @@ export const BADGE_INFO: Record<string, BadgeInfo> = {
   festival: def("Social", "gold", Tent, "Festival", "Play in a round with 100+ players.", "#fecaca", "#9f1239"),
   // Rare
   welcome: def("Rare", "bronze", KeyRound, "Welcome to the City", "Play your very first round.", "#fde68a", "#92400e"),
-  big_win: def("Rare", "gold", Wallet, "Big Win", "Win 300+ mint in one round.", "#fde047", "#a16207"),
-  jackpot: def("Rare", "diamond", PiggyBank, "Jackpot", "Win 1,000+ mint in one round.", "#bbf7d0", "#14532d"),
-  high_roller: def("Rare", "gold", Dices, "High Roller", "Play a round with a 1,000+ mint pool.", "#fcd34d", "#7c2d12"),
-  whale: def("Rare", "diamond", Whale, "Whale", "Play a round with a 10,000+ mint pool.", "#bae6fd", "#1e3a8a"),
+  big_win: def("Rare", "gold", Wallet, "Big Win", () => `Win ${cash(300)}+ in one round.`, "#fde047", "#a16207"),
+  jackpot: def("Rare", "diamond", PiggyBank, "Jackpot", () => `Win ${cash(1000)}+ in one round.`, "#bbf7d0", "#14532d"),
+  high_roller: def("Rare", "gold", Dices, "High Roller", () => `Play a round with a ${cash(1000)}+ prize pool.`, "#fcd34d", "#7c2d12"),
+  whale: def("Rare", "diamond", Whale, "Whale", () => `Play a round with a ${cash(10_000)}+ prize pool.`, "#bae6fd", "#1e3a8a"),
   weekly_champ: def("Rare", "diamond", Medal, "Champion of the Week", "Be top of the weekly leaderboard (with 5+ winners that week) when a round ends.", "#fde68a", "#a16207"),
   night_owl: def("Rare", "silver", Moon, "Night Owl", "Play a round that ends between midnight and 5am (UTC).", "#818cf8", "#1e1b4b"),
   early_bird: def("Rare", "bronze", Sunrise, "Early Bird", "Play a round that ends between 5 and 8am (UTC).", "#fef9c3", "#d97706"),
   weekend_warrior: def("Rare", "bronze", Bike, "Weekend Warrior", "Play a round on a Saturday or Sunday.", "#99f6e4", "#115e59"),
-  balloon_popper: def("Rare", "silver", Balloon, "Balloon Popper", "Pop 10 mint balloons.", "#fecaca", "#dc2626"),
+  balloon_popper: def("Rare", "silver", Balloon, "Balloon Popper", "Pop 10 money balloons.", "#fecaca", "#dc2626"),
   // Legendary: the hardest badges in the game
   phantom: def("Legendary", "legendary", Galaxy, "Phantom", "Stay hidden 10 hiding rounds in a row.", "#a78bfa", "#1e1b4b"),
   unstoppable: def("Legendary", "legendary", FastForward, "Unstoppable", "Catch 10 or more ghosts in one round.", "#fb923c", "#7f1d1d"),
   exterminator: def("Legendary", "legendary", Tornado, "Exterminator", "Find every single ghost yourself in a round with 5+ ghosts.", "#5eead4", "#134e4a"),
   immortal: def("Legendary", "legendary", InfinityIcon, "Immortal", "Respawn and then survive, 5 times in total.", "#f9a8d4", "#500724"),
   level_50: def("Legendary", "legendary", MountainSnow, "Level 50", "Reach level 50. Catching you is worth a fortune.", "#fde047", "#713f12"),
-  coins_100k: def("Legendary", "legendary", Diamond, "Mint Royalty", "Win ₥100,000 in total.", "#67e8f9", "#164e63"),
+  coins_100k: def("Legendary", "legendary", Diamond, "Cash Royalty", () => `Win ${cash(100_000)} in total.`, "#67e8f9", "#164e63"),
   rounds_500: def("Legendary", "legendary", Landmark, "Living Legend", "Play 500 rounds.", "#fcd34d", "#451a03"),
   streak_30: def("Legendary", "legendary", MoonStar, "Month of Madness", "Keep a daily streak for 30 days.", "#818cf8", "#0f172a"),
   streak_60: def("Legendary", "legendary", Flame, "Eternal Flame", "Keep a daily streak for 60 days.", "#fdba74", "#7c2d12"),

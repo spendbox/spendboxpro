@@ -16,6 +16,7 @@ import { createClient } from "@/lib/supabase/client";
 import { BotCard } from "./bot-card";
 import { loadDms, loadRoom, sendLocation, sendMessage, sendPhoto, sendVoice, voiceUrl, type ChatMessage, type ChatTarget } from "./chat-actions";
 import { locationIn, withoutTag, type ChatLocation } from "@/lib/chat-location";
+import { cash } from "@/lib/world/value";
 import { ChatPhoto, PhotoPicker, type PhotoPick } from "./chat-photo";
 import { NpcBadge, NpcCard, NpcFace } from "./npc-card";
 import { closePhoneNotices } from "./phone/phone-notices";
@@ -51,7 +52,7 @@ export type ChatPlayer = {
 /** "Big fish": a player holding lots of coins. */
 function BigFishBadge() {
   return (
-    <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-[#1c7ed6]/12 px-1.5 py-px text-[10px] font-semibold text-[#1864ab]" title="Holding 10,000+ mint">
+    <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-[#1c7ed6]/12 px-1.5 py-px text-[10px] font-semibold text-[#1864ab]" title={`Holding ${cash(10_000)}+`}>
       <Fish className="size-3" aria-hidden />
       Big fish
     </span>
@@ -675,8 +676,8 @@ export function Chat({
           "flex shrink-0 items-center gap-1 rounded-full bg-gold/25 font-semibold text-gold-dark hover:bg-gold/40",
           small ? "absolute -right-1 -top-1 size-5 justify-center p-0 shadow" : "px-2.5 py-1 text-xs",
         )}
-        aria-label={`Give mint to ${p.name}`}
-        title={`Give mint to ${p.name}`}
+        aria-label={`Give money to ${p.name}`}
+        title={`Give money to ${p.name}`}
       >
         <Coins className={small ? "size-3" : "size-3.5"} aria-hidden />
         {!small && "Give"}

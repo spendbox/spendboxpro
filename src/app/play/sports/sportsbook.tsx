@@ -23,7 +23,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { short } from "@/lib/format";
 import { liveAndNext, matchById, SPORT_INFO, SPORTS } from "@/lib/sports/schedule";
 import type { FeedResponse, MatchInfo, MatchResult, Side, Sport } from "@/lib/sports/types";
 import { Sheet } from "../sheet";
@@ -102,11 +101,11 @@ function estimate(pool: Record<string, number>, option: string, amount: number, 
   return { payout: Math.floor(((total - cut) * amount) / win), refund: false };
 }
 
-/** "50 on Lions, 20 on Draw". */
+/** "₦75,000 on Lions, ₦30,000 on Draw". */
 function myBetText(m: MatchInfo, mine: Record<string, number> | undefined) {
   return Object.entries(mine ?? {})
     .filter(([, v]) => v > 0)
-    .map(([k, v]) => `${short(v)} on ${m.options.find((o) => o.key === k)?.label ?? k}`)
+    .map(([k, v]) => `${cash(v)} on ${m.options.find((o) => o.key === k)?.label ?? k}`)
     .join(", ");
 }
 
@@ -368,7 +367,7 @@ export function SportsSheet({
                   <CircleAlert className="mt-0.5 size-4 shrink-0" /> {note.text}
                 </p>
               )}
-              <p className="text-center text-[11px] text-muted">Mint only, just for fun. Mint has no cash value.</p>
+              <p className="text-center text-[11px] text-muted">Game money only, just for fun: it can&apos;t be cashed out.</p>
             </div>
           )}
         </MatchView>
@@ -518,11 +517,11 @@ export function SportsSheet({
 
         {/* The small print */}
         <div className="space-y-1 rounded-2xl bg-panel-2 px-3 py-2.5 text-xs text-muted">
-          <p className="font-semibold text-ink">Mint only, just for fun. Mint has no cash value.</p>
+          <p className="font-semibold text-ink">Game money only, just for fun: it can&apos;t be cashed out.</p>
           <p>
             Bets: {cash(limits.min)}–{cash(limits.max)} a match, up to {cash(limits.dailyMax)} a day, until kick-off. Winners share
-            the pool by stake (the house keeps {Math.round(limits.burnShare * 100)}%, never from winners&apos; own mint). If nobody picks
-            the winner, everyone gets their mint back.
+            the pool by stake (the house keeps {Math.round(limits.burnShare * 100)}%, never from winners&apos; own stakes). If nobody picks
+            the winner, everyone gets their money back.
           </p>
           <p>
             Every {SPORT_INFO[tab].noun} is played out live once and never repeats. A ticket lets you watch one {SPORT_INFO[tab].noun}.
@@ -718,7 +717,7 @@ function PoolBar({ match: m, pool }: { match: MatchInfo; pool: Record<string, nu
           <span key={o.key} className="inline-flex min-w-0 items-center gap-1 text-muted">
             <span className="size-2 shrink-0 rounded-full" style={{ background: optionColour(m, o.key) }} />
             <span className="max-w-32 truncate">{o.label}</span>
-            <b className="tabular-nums text-ink">{short(pool[o.key] ?? 0)}</b>
+            <b className="tabular-nums text-ink">{cash(pool[o.key] ?? 0)}</b>
           </span>
         ))}
       </div>
@@ -832,15 +831,15 @@ function BetSlip({
   let problem: string | null = null;
   if (closed) problem = "Bets are closed: it's kicked off";
   else if (!chosen) problem = "Pick who you think will win.";
-  else if (!Number.isInteger(n) || n <= 0) problem = "How much mint?";
+  else if (!Number.isInteger(n) || n <= 0) problem = "How much?";
   else if (n < limits.min) problem = `Bets start at ${cash(limits.min)}.`;
   else if (n > leftMatch)
     problem =
       leftMatch < limits.min
         ? `You've bet the most allowed on this match (${cash(limits.max)}).`
-        : `You can bet ${short(leftMatch)} more mint on this match.`;
+        : `You can bet ${cash(leftMatch)} more on this match.`;
   else if (n > leftToday)
-    problem = leftToday < limits.min ? "That's today's betting limit. Come back tomorrow!" : `You can bet ${short(leftToday)} more mint today.`;
+    problem = leftToday < limits.min ? "That's today's betting limit. Come back tomorrow!" : `You can bet ${cash(leftToday)} more today.`;
   else if (coins !== null && n > coins) problem = `You only have ${cash(Math.floor(coins))}.`;
 
   const est = chosen && !problem ? estimate(pool, chosen.key, n, limits.burnShare) : null;
@@ -876,7 +875,7 @@ function BetSlip({
               </span>
               <span className={cn("inline-flex items-center gap-0.5 text-[11px] font-semibold tabular-nums", on ? "opacity-90" : "text-muted")}>
                 {on && <Check className="size-3 shrink-0" aria-hidden />}
-                {short(pool[o.key] ?? 0)} in
+                {cash(pool[o.key] ?? 0)} in
               </span>
             </button>
           );
@@ -991,12 +990,12 @@ function MyBetsList({ now, refreshKey }: { now: number; refreshKey: number }) {
       <div className="flex items-center gap-2">
         <div className="grid flex-1 grid-cols-2 gap-2 text-center">
           <div className="rounded-2xl bg-panel-2 px-2 py-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Mint in play</p>
-            <p className="font-display text-lg font-bold tabular-nums">{short(open.reduce((a, b) => a + b.amount, 0))}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Money in play</p>
+            <p className="font-display text-lg font-bold tabular-nums">{cash(open.reduce((a, b) => a + b.amount, 0))}</p>
           </div>
           <div className="rounded-2xl bg-panel-2 px-2 py-2">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Won lately</p>
-            <p className="font-display text-lg font-bold tabular-nums text-me">{short(won.reduce((a, b) => a + (b.payout ?? 0), 0))}</p>
+            <p className="font-display text-lg font-bold tabular-nums text-me">{cash(won.reduce((a, b) => a + (b.payout ?? 0), 0))}</p>
           </div>
         </div>
         <button
@@ -1030,7 +1029,7 @@ function MyBetsList({ now, refreshKey }: { now: number; refreshKey: number }) {
             <span className="size-3 shrink-0 rounded-full ring-1 ring-black/10" style={{ background: b.color ?? NEUTRAL }} aria-hidden />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-bold">
-                {short(b.amount)} on {b.optionLabel}
+                {cash(b.amount)} on {b.optionLabel}
               </p>
               <p className="flex min-w-0 items-center gap-1 text-xs text-muted">
                 {b.sport && <SportIcon sport={b.sport} />}
@@ -1060,14 +1059,14 @@ function BetStatus({ bet: b, now }: { bet: MyBet; now: number }) {
     if (b.refunded || (b.payout !== null && b.payout === b.amount && b.winner !== b.option)) {
       return (
         <span className={cn(pill, "bg-panel-2 text-muted")}>
-          <Undo2 className="size-3.5" /> Refunded {short(b.payout ?? b.amount)}
+          <Undo2 className="size-3.5" /> Refunded {cash(b.payout ?? b.amount)}
         </span>
       );
     }
     if ((b.payout ?? 0) > 0) {
       return (
         <span className={cn(pill, "bg-me/15 text-me")}>
-          <Trophy className="size-3.5" /> Won {short(b.payout ?? 0)}
+          <Trophy className="size-3.5" /> Won {cash(b.payout ?? 0)}
         </span>
       );
     }

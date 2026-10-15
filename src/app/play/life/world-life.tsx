@@ -1383,7 +1383,7 @@ export function useWorldLife({
                     yes: `Pay ${cash(o.counter ?? 0)}`,
                     run: () => void act(() => api.replyOffer(o.id, "accept"), () => `${o.label ?? "It"} is yours.`),
                   })
-                : act(() => api.replyOffer(o.id, "withdraw"), () => "Offer withdrawn. Your mint is back."),
+                : act(() => api.replyOffer(o.id, "withdraw"), () => "Offer withdrawn. Your money is back."),
             onBorrow: () => setLoanOpen(true),
             onFind: () => {
               setAssetsOpen(false);

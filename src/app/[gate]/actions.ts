@@ -1,5 +1,6 @@
 "use server";
 
+import { naira } from "@/lib/brand";
 import { revalidatePath } from "next/cache";
 import { adminSignIn, adminSignOut, isAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -26,7 +27,7 @@ export async function hqRecheckPack(reference: string): Promise<string> {
   if (!(await isAdmin())) return "Sign in again.";
   const r = await confirmPack(reference);
   revalidatePath("/", "layout");
-  return r.ok ? `Paid: the player now has the pack (${Math.round(r.mint ?? 0).toLocaleString("en-GB")} mint).` : (r.error ?? "Not paid.");
+  return r.ok ? `Paid: the player now has the pack (${naira(r.mint)}).` : (r.error ?? "Not paid.");
 }
 
 /** Take a business off the map (it breaks the policy). */
@@ -91,7 +92,7 @@ export async function hqRecheckTopUp(reference: string): Promise<string> {
   if (!(await isAdmin())) return "Sign in again.";
   const r = await confirmTopUp(reference);
   revalidatePath("/", "layout");
-  return r.ok ? `Paid: credited${r.fresh ? " now" : " already"} (${Math.round(r.mint ?? 0).toLocaleString("en-GB")} mint).` : (r.error ?? "Not paid.");
+  return r.ok ? `Paid: credited${r.fresh ? " now" : " already"} (${naira(r.mint)}).` : (r.error ?? "Not paid.");
 }
 
 export type CreditState = { ok: boolean; text: string } | null;

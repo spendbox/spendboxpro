@@ -179,7 +179,7 @@ function makeNpc(roomId: string, roundId: number, n: number, kind: PlaceKind, ta
 
   const traits = [about];
   if (persona.clue === "fake" && !/tall tales|wrong|unreliable/i.test(about)) traits.push("Tells tall tales.");
-  if (persona.gives) traits.push("Known to give mint to people they like.");
+  if (persona.gives) traits.push("Known to give money to people they like.");
   if (persona.quests) traits.push("Might have a side quest for you.");
 
   return {

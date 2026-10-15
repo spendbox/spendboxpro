@@ -1,5 +1,6 @@
 "use server";
 
+import { naira } from "@/lib/brand";
 import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { PropertyResult } from "@/lib/world/property-api";
@@ -16,7 +17,7 @@ function say(message: string | undefined): PropertyResult {
     bad_price: "That price is too high.",
     gone: "That isn't available any more.",
     own: "That's your own.",
-    not_enough: `You need ₥${arg} for that.`,
+    not_enough: `You need ${naira(arg)} for that.`,
     their_funds: "They don't have the money for that right now.",
     not_now: "That can't be done now.",
   };
