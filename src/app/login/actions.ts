@@ -1,18 +1,23 @@
 "use server";
 
 import { createHash, createHmac, randomInt } from "node:crypto";
+import { headers } from "next/headers";
 import { saveBirthDate, toIsoDate } from "@/lib/age";
 import { codeEmail, sendEmail } from "@/lib/email";
 import { supabaseSecretKey } from "@/lib/env";
 import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { passedTurnstile } from "@/lib/turnstile";
 
 // Signing in starts with an email address:
 // - Returning players (who have a PIN) type their PIN.
-// - New players (and "forgot PIN") get a 4-digit code that we email through Resend ourselves
-//   (Supabase sends nothing, so its email limits don't apply), then pick a name and PIN,
-//   and give their date of birth (the game is for adults 18+).
+// - New players pass a robot check (Cloudflare Turnstile, src/lib/turnstile.ts) and go straight
+//   on to pick a name and PIN and give their date of birth (the game is for adults 18+). No email
+//   is sent, so sign-ups never wait on (or pay for) email.
+// - "Forgot PIN" gets a 4-digit code that we email ourselves (Resend or Amazon SES; Supabase sends
+//   nothing, so its email limits don't apply). It's the only email signing in sends, and it marks
+//   the address as the player's (profiles.email_verified_at, game-db/099).
 // Guessing a 4-digit code is kept very unlikely: 5 wrong tries per code, codes last 10 minutes,
 // at most 5 codes an hour, and at most 15 wrong tries a day per email (checked in the database,
 // in one locked step, so a flood of guesses at once can't get round it).
@@ -22,7 +27,7 @@ import { createClient } from "@/lib/supabase/server";
 export type LoginResult = { ok: true; needsSetup?: boolean } | { ok: false; error: string; underage?: boolean };
 /** Day, month (1-12) and year from the date-of-birth boxes. */
 export type BirthInput = { day: number; month: number; year: number };
-export type StartResult = { ok: true; next: "pin" | "code" } | { ok: false; error: string };
+export type StartResult = { ok: true; next: "pin" | "welcome" } | { ok: false; error: string; robot?: boolean };
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const NAME = /^[A-Za-z0-9_]{3,16}$/;
@@ -44,14 +49,36 @@ const hash = (email: string, code: string) =>
 const pinPassword = (userId: string, pin: string) =>
   createHmac("sha256", supabaseSecretKey()).update(`pin:${userId}:${pin}`).digest("base64url");
 
-/** Step 1: "Enter world" with an email. Returning players go to their PIN; others get a code. */
-export async function startSignIn(rawEmail: string): Promise<StartResult> {
+/**
+ * Step 1: "Continue" with an email. Returning players go to their PIN; new players (who passed the
+ * robot check) get an account and are signed in, to pick a name and PIN next.
+ */
+export async function startSignIn(rawEmail: string, robotToken?: string | null): Promise<StartResult> {
   const email = clean(rawEmail);
   if (!EMAIL.test(email) || email.length > 200) return { ok: false, error: "Please check your email address." };
-  const { data } = await createAdminClient().from("profiles").select("pin_set").eq("email", email).maybeSingle();
+  const db = createAdminClient();
+  const { data } = await db.from("profiles").select("pin_set").eq("email", email).maybeSingle();
   if (data?.pin_set) return { ok: true, next: "pin" };
-  const sent = await sendCode(email);
-  return sent.ok ? { ok: true, next: "code" } : sent;
+  const h = await headers();
+  const ip = (h.get("x-forwarded-for")?.split(",")[0] ?? h.get("x-real-ip") ?? "").trim() || null;
+  if (!(await passedTurnstile(robotToken, ip))) return { ok: false, error: "Please tick the box to show you're not a robot, then try again.", robot: true };
+  const created = await db.auth.admin.createUser({ email, email_confirm: true });
+  if (created.error && !/already|registered|exists/i.test(created.error.message)) {
+    console.error("Creating account failed", created.error.message);
+    return { ok: false, error: "We couldn't create your account. Please try again." };
+  }
+  // An account already there for this email (one whose profile lost track of its email, or an
+  // older one) is only handed over if it never got a PIN: anything else asks for the PIN.
+  if (created.error) {
+    const link = await db.auth.admin.generateLink({ type: "magiclink", email });
+    const id = link.data?.user?.id;
+    const { data: had } = id ? await db.from("profiles").select("pin_set").eq("id", id).maybeSingle() : { data: null };
+    if (!id || had?.pin_set) return { ok: true, next: "pin" };
+  }
+  if (!(await signInAs(created.data.user?.id ?? "", email))) return { ok: false, error: "We couldn't sign you in. Please try again." };
+  const userId = await currentUserId();
+  if (userId) await db.from("profiles").update({ email }).eq("id", userId).is("email", null);
+  return { ok: true, next: "welcome" };
 }
 
 export async function sendCode(rawEmail: string): Promise<LoginResult> {
@@ -145,8 +172,12 @@ export async function verifyCode(rawEmail: string, rawCode: string): Promise<Log
     return { ok: false, error: "We couldn't sign you in. Please try again." };
   }
   const userId = await currentUserId();
-  if (userId) await db.from("profiles").update({ email }).eq("id", userId).is("email", null);
-  // After an email code they always (re)set their PIN: new players, and "forgot PIN".
+  if (userId) {
+    await db.from("profiles").update({ email }).eq("id", userId).is("email", null);
+    // The code reached them: the address is theirs (game-db/099; nothing happens before it's run).
+    await db.from("profiles").update({ email_verified_at: new Date().toISOString() }).eq("id", userId).is("email_verified_at", null);
+  }
+  // After an email code they always set a new PIN ("forgot PIN").
   return { ok: true, needsSetup: true };
 }
 

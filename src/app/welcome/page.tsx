@@ -23,7 +23,7 @@ async function loadProfile(userId: string): Promise<Profile | null> {
 }
 
 // Who lands here:
-// - new players (after the email code): name, PIN and date of birth;
+// - new players (after the robot check): name, PIN and date of birth;
 // - "forgot PIN" (?pin=1 from the sign-in page) and "Change PIN": name and PIN
 //   (plus date of birth if we still don't have it);
 // - players from before the 18+ rule (sent here by the game pages): just the date of birth;

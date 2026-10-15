@@ -10,8 +10,9 @@ import { AdultsOnly, WelcomeForm } from "../welcome/welcome-form";
 
 // Signing in and signing up, in a pop-up over the town (the town stops moving and blurs behind
 // it). Only the X closes it: a tap outside does nothing, so nobody loses what they typed.
-// Steps: your email; then your PIN (returning players) or a code we email you (new players,
-// and forgot PIN); then, for new players, a name, a PIN and your date of birth (18+).
+// Steps: your email (and, for new players, the robot check); then your PIN (returning players),
+// or a code we email you (forgot PIN); then, for new players, a name, a PIN and your date of
+// birth (18+).
 
 export function SignInOverlay({
   why,

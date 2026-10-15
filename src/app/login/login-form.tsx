@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { PinInput } from "@/components/pin-input";
+import { RobotCheck } from "@/components/robot-check";
 import { loginWithPin, sendCode, startSignIn, verifyCode } from "./actions";
 
 const input = "w-full rounded-xl border border-line bg-panel px-4 py-3 text-ink outline-none focus:border-gold";
@@ -11,7 +12,8 @@ const button = "w-full rounded-xl bg-gold px-4 py-3 font-semibold text-ink disab
 type Step = "email" | "pin" | "code";
 
 /**
- * Email first. Returning players type their PIN; new players (and forgot PIN) get a code.
+ * Email first. Returning players type their PIN; new players pass the robot check and go on to
+ * pick a name and PIN; forgot PIN gets a code by email.
  * onDone (the sign-in pop-up over the town): called instead of going to another page, with
  * "play" once signed in, or "welcome" when a name and PIN come next.
  */
@@ -24,6 +26,9 @@ export function LoginForm({ onDone }: { onDone?: (next: "play" | "welcome") => v
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  /** The robot check's token for sign-up, and a count to ask for a fresh one (each works once). */
+  const [robot, setRobot] = useState<string | null>(null);
+  const [robotRound, setRobotRound] = useState(0);
 
   async function run<T extends { ok: boolean }>(fn: () => Promise<T>, then: (res: T) => void) {
     setBusy(true);
@@ -125,7 +130,21 @@ export function LoginForm({ onDone }: { onDone?: (next: "play" | "welcome") => v
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        run(() => startSignIn(email), (res) => res.ok && setStep(res.next));
+        run(
+          async () => {
+            const res = await startSignIn(email, robot);
+            // A token works once: get a fresh one for the next try.
+            if (!res.ok || res.next !== "pin") setRobotRound((r) => r + 1);
+            return res;
+          },
+          (res) => {
+            if (!res.ok) return;
+            if (res.next === "pin") return setStep("pin");
+            setBusy(true);
+            if (onDone) return onDone("welcome");
+            router.push("/welcome");
+          },
+        );
       }}
       className="flex flex-col gap-3"
     >
@@ -139,10 +158,11 @@ export function LoginForm({ onDone }: { onDone?: (next: "play" | "welcome") => v
         autoFocus
         required
       />
+      <RobotCheck onToken={setRobot} round={robotRound} />
       <button className={button} disabled={busy}>
         {busy ? "One moment…" : "Continue"}
       </button>
-      <p className="text-xs text-muted">First time? We&apos;ll email you a code, then you pick a name and PIN. New players start with ₦2,000,000 and a free home. You must be 18 or older to play.</p>
+      <p className="text-xs text-muted">First time? Use an email you can open (itFirst time? Just pick a name and a 6-digit PIN next: that&apos;s your password.apos;s how you get back in if you forget your PIN), then pick a name and a 6-digit PIN. New players start with ₦2,000,000 and a free home. You must be 18 or older to play.</p>
       {error && <p className="text-sm text-hit">{error}</p>}
     </form>
   );

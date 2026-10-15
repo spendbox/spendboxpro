@@ -31,6 +31,8 @@
 - [ ] Then run `game-db/092_monthly_leases.sql` (buildings for advertisers are leased by the month, 1/3/6/12 months, and "Another month" on the ad page). Until it's run, the building checkout says monthly leases are switched on soon; billboard ads work either way. If you ever run 043 or 047 again, run 092 again after.
 - [ ] Then run `game-db/093_engagement_rep.sql` (reputation also grows quietly with time in the game, real conversations, gifts and greetings, friends and visitors; see docs/REPUTATION.md).
 - [ ] Then run `game-db/094_lived_in_leases.sql` (advertisers can take buildings people live in: the homes stay buyable and lived in, nobody renames the building while it's leased). If you ever run 043, 047 or 092 again, run 094 again after.
+- [ ] Then run `game-db/099_email_verified.sql` (new players sign up without an email code; this remembers whose email is confirmed, for a later reward). Sign-up works before it's run.
+- [ ] Switch on the robot check on sign-up (free): Cloudflare dashboard → Turnstile → Add widget for newtown.world (Managed), then in Vercel add `NEXT_PUBLIC_TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` and redeploy. Until then new players sign up with no robot check.
 - [ ] Then run `game-db/098_no_fare_caps.sql` (fares are no longer capped: a long trip costs what it costs by the kilometre).
 - [ ] Then run `game-db/097_party_sizes.sql` (parties of any size, from one spot to a carnival 5 km across, for up to 10,000 people). Run it after 096 (and again if you ever run 095 again). Until it's run, only one-spot parties for up to 1,000 can be hosted.
 - [ ] Then run `game-db/096_event_refund.sql` (a party fewer than 10 people come to: the host gets the hosting fee back). Run it after 095 (and again if you ever run 095 again).

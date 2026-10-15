@@ -48,20 +48,22 @@ events and the Town Hall are fetched only when the minute's ping says something 
 |---:|---:|---:|---|---:|---:|---:|---:|---:|
 | 100 | 20 | 2 | Micro | $20 | $25 | $0 | **$45** | $45 |
 | 1,000 | 200 | 20 | Micro | $20 | $25 | $0 | **$45** | $50 |
-| 10,000 | 2,000 | 200 | Small | $25 | $45 | $1 | **$70** | $160 |
-| 100,000 | 20,000 | 2,000 | Large | $250 | $350 | $15 | **$600** | $1,900 |
-| 1,000,000 | 200,000 | 20,000 | 4XL, Team plan | $2,500 | $2,500 | $150 | **$5,000** | $21,000 |
-| 10,000,000 | 2,000,000 | 200,000 | 16XL + read copies | $25,000 | $20,000 | $1,500 | **$46,000** | $200,000+ |
+| 10,000 | 2,000 | 200 | Small | $25 | $45 | $0 | **$70** | $160 |
+| 100,000 | 20,000 | 2,000 | Large | $250 | $350 | $2 | **$600** | $1,900 |
+| 1,000,000 | 200,000 | 20,000 | 4XL, Team plan | $2,500 | $2,500 | $15 | **$5,000** | $21,000 |
+| 10,000,000 | 2,000,000 | 200,000 | 16XL + read copies | $25,000 | $20,000 | $150 | **$45,000** | $200,000+ |
 
 Email: taking $15,000 a month on Resend at 10 million users (as assumed), the same emails on
 Amazon SES cost about $1,500 (about $0.10 a thousand). The game sends through SES once its keys
 are set (AWS_SES_ACCESS_KEY_ID, AWS_SES_SECRET_ACCESS_KEY, AWS_SES_REGION; src/lib/email-ses.ts).
-Only new players and forgotten PINs get a code by email; returning players use their PIN.
+Since game-db/099, only a forgotten PIN sends an email: new players pass a free robot check
+(Cloudflare Turnstile) instead of waiting for a code, and returning players use their PIN. That's
+about a tenth of the emails, so the column above is a tenth of the $1,500 too.
 
 ## Cheaper still
 
-1. **Sign in with Google** (free: Supabase does it, no email sent): most new players would tap it
-   instead of waiting for a code, cutting email by most of what's left.
+1. ~~Sign-up codes by email~~: done (only forgotten PINs send an email). Later: a reward for
+   confirming your email (profiles.email_verified_at), once SES is set up.
 2. **Own servers from about a million users**: the game's server code on a few rented machines
    (Hetzner, Fly.io and the like: a few hundred to a few thousand dollars a month) instead of
    Vercel's functions; at 10 million users about $25,000 becomes $3,000 to $6,000.
