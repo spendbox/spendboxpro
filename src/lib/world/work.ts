@@ -157,20 +157,21 @@ export const COMMUTES: Commute[] = ["walk", "keke", "okada", "danfo", "taxi", "c
 
 export const COMMUTE_LABEL: Record<Commute, string> = { walk: "Walk", keke: "Keke", okada: "Okada", danfo: "Danfo bus", taxi: "Taxi", car: "My car" };
 
-/** One trip's fare in local money: a start price, so much a km, the most it costs, and how far it'll go (km). */
-type Fare = { base: number; perKm: number; cap?: number; maxKm: number };
+/** One trip's fare in local money: a start price, so much a km, and how far it'll go (km). */
+type Fare = { base: number; perKm: number; maxKm: number };
 
 /**
  * Lagos fares (naira) a trip, at real 2026 prices (after the fuel subsidy went): a keke from ₦200
- * plus about ₦80 a km, a danfo from ₦300 (a long ride changing buses tops out at ₦1,500), an
- * okada dearer, a taxi (Bolt / Uber) from ₦1,000 plus ₦300 a km. Your own car is the petrol (about
- * ₦1,050 a litre, 10 km to the litre) and a little for parking. Walking is free but only so far.
+ * plus about ₦80 a km, a danfo from ₦300 plus ₦40 a km, an okada dearer, a taxi (Bolt / Uber) from
+ * ₦1,000 plus ₦300 a km. Your own car is the petrol (about ₦1,050 a litre, 10 km to the litre) and a
+ * little for parking. Walking is free but only so far. No fare is capped: Badagry to Epe costs what
+ * 180 km costs (only how far a keke or okada will go is limited).
  */
 const FARES: Record<Commute, Fare> = {
   walk: { base: 0, perKm: 0, maxKm: 3 },
-  keke: { base: 200, perKm: 80, cap: 1_500, maxKm: 8 },
-  okada: { base: 300, perKm: 120, cap: 3_000, maxKm: 15 },
-  danfo: { base: 300, perKm: 40, cap: 1_500, maxKm: Infinity },
+  keke: { base: 200, perKm: 80, maxKm: 8 },
+  okada: { base: 300, perKm: 120, maxKm: 15 },
+  danfo: { base: 300, perKm: 40, maxKm: Infinity },
   taxi: { base: 1_000, perKm: 300, maxKm: Infinity },
   car: { base: 200, perKm: 110, maxKm: Infinity },
 };
@@ -208,7 +209,7 @@ export function fareMint(mode: Commute, km: number, prices: Prices, ferryKm = 0)
   if (land > f.maxKm) return null;
   const ferry = ferryKm > 0 ? FERRY.base + FERRY.perKm * ferryKm : 0;
   if (land < 0.2 && !ferry) return 0;
-  const road = land < 0.2 ? 0 : Math.min(f.cap ?? Infinity, f.base + f.perKm * land);
+  const road = land < 0.2 ? 0 : f.base + f.perKm * land;
   return Math.round(((road + ferry) / prices.perMint) * 100) / 100;
 }
 

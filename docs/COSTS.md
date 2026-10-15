@@ -36,18 +36,38 @@ compare.
 
 ## The estimate (a month)
 
-| Registered users | Playing a day | On at once | Database | Vercel | Supabase | **About** |
-|---:|---:|---:|---|---:|---:|---:|
-| 100 | 20 | 2 | Micro | $20 | $25 | **$45** |
-| 1,000 | 200 | 20 | Micro | $20 | $25 | **$50** |
-| 10,000 | 2,000 | 200 | Medium | $70 | $90 | **$160** |
-| 100,000 | 20,000 | 2,000 | XL | $1,200 | $700 | **$1,900** |
-| 1,000,000 | 200,000 | 20,000 | 16XL + read copies, Team plan | $12,000 | $9,000 | **$21,000** |
-| 10,000,000 | 2,000,000 | 200,000 | beyond one database (see below) | $120,000 | $80,000+ | **$200,000+** |
+Since the server-call changes (src/app/play/activity.ts and pulse.ts): an active player makes
+about **3 calls a minute** (was 16) and one who has left the game open makes **none**. Notices,
+events and the Town Hall are fetched only when the minute's ping says something changed.
 
-That's about 2 US cents per registered user per month at a million users. Other small costs:
-sign-in emails (a few dollars per 10,000), the domain, and Paystack's fee on payments (a share of
-what players pay, not a running cost).
+| Registered users | Playing a day | On at once | Database | Vercel | Supabase | Email (SES) | **About** | Before |
+|---:|---:|---:|---|---:|---:|---:|---:|---:|
+| 100 | 20 | 2 | Micro | $20 | $25 | $0 | **$45** | $45 |
+| 1,000 | 200 | 20 | Micro | $20 | $25 | $0 | **$45** | $50 |
+| 10,000 | 2,000 | 200 | Small | $25 | $45 | $1 | **$70** | $160 |
+| 100,000 | 20,000 | 2,000 | Large | $250 | $350 | $15 | **$600** | $1,900 |
+| 1,000,000 | 200,000 | 20,000 | 4XL, Team plan | $2,500 | $2,500 | $150 | **$5,000** | $21,000 |
+| 10,000,000 | 2,000,000 | 200,000 | 16XL + read copies | $25,000 | $20,000 | $1,500 | **$46,000** | $200,000+ |
+
+Email: taking $15,000 a month on Resend at 10 million users (as assumed), the same emails on
+Amazon SES cost about $1,500 (about $0.10 a thousand). The game sends through SES once its keys
+are set (AWS_SES_ACCESS_KEY_ID, AWS_SES_SECRET_ACCESS_KEY, AWS_SES_REGION; src/lib/email-ses.ts).
+Only new players and forgotten PINs get a code by email; returning players use their PIN.
+
+## Cheaper still
+
+1. **Sign in with Google** (free: Supabase does it, no email sent): most new players would tap it
+   instead of waiting for a code, cutting email by most of what's left.
+2. **Own servers from about a million users**: the game's server code on a few rented machines
+   (Hetzner, Fly.io and the like: a few hundred to a few thousand dollars a month) instead of
+   Vercel's functions; at 10 million users about $25,000 becomes $3,000 to $6,000.
+3. **The database split by city** (Lagos, Abuja, Accra...) once there are several: each smaller,
+   cheaper, and nearer its players.
+4. **Push instead of the minute's ping** for what's new (Supabase Realtime broadcast from the
+   database): halves the remaining calls, at the cost of more Realtime connections.
+5. **Images** (profile photos, slides) through a cheap CDN (Cloudflare R2: no charge for data
+   out) once they add up.
+With 1 to 3, 10 million users comes to roughly $20,000 to $25,000 a month.
 
 ## What's above budget and slows things down
 
@@ -65,10 +85,8 @@ Fixed already:
 
 Still to do (biggest saving first):
 
-1. **Polling → push.** The 14 calls a minute are most of the bill from 100,000 users up. Sending
-   notices, events and people-around over Realtime (or on a push) when something changes, with a
-   slow check every few minutes as a back-up, cuts calls about five-fold.
-2. **Cache what's the same for everyone.** The events list, the news and people-around are the same
+1. ~~Polling every few seconds~~: done (about 16 calls a minute down to 3, none when idle).
+2. **Cache what's the same for everyone** (players in the news: done). The events list, the news and people-around are the same
    for everyone in an area for a few seconds: cached at the edge for 10 to 15 seconds, the
    database sees one request where it saw thousands.
 3. **Nothing while the tab is hidden.** Some timers already stop; all of them should.

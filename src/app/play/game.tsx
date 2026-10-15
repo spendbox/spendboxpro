@@ -99,6 +99,8 @@ import type { HomePlan } from "@/lib/home-plan";
 import { setEventSoundsEnabled } from "./city/event-sounds";
 import type { CityDancer, CityEvent, CityFriendPin, CityGhost, CityInteract, CityMarkers, CityRide, RideTarget } from "./city-view";
 import type { PartyZone } from "./city/party-lights";
+import { isHere, whileHere } from "./activity";
+import { onLatest, setLatest, type Latest } from "./pulse";
 import { FeedIconView, FeedRow, NotificationsPanel, SwipeRow, type FeedIcon, type FeedItem } from "./notifications";
 import { dismissNotices, readNotices } from "./notice-actions";
 import { closePhoneNotices, setPhoneBadge } from "./phone/phone-notices";
@@ -817,11 +819,12 @@ export function Game({
         .catch(() => {});
     };
     const first = setTimeout(look, 800);
-    const every = setInterval(look, 45_000);
+    // Every 90 s while you're playing (and when you come back); moving to a new area looks at once.
+    const stop = whileHere(look, 90_000);
     return () => {
       alive = false;
       clearTimeout(first);
-      clearInterval(every);
+      stop();
     };
     // A new area: look again (the people round here show under the menu).
   }, [worldId, me.guest, worldLife.centerRef, worldArea]);
@@ -898,30 +901,22 @@ export function Game({
   // online (counted up on screen every 5 seconds, ./income).
   useEffect(() => {
     if (!worldId || me.guest) return;
-    let touched = Date.now();
-    const touch = () => {
-      touched = Date.now();
-    };
-    const opts = { passive: true, capture: true } as const;
-    window.addEventListener("pointerdown", touch, opts);
-    window.addEventListener("keydown", touch, opts);
-    window.addEventListener("wheel", touch, opts);
+    // It also says what's new (./pulse): notices, the Town Hall and events are fetched on a change.
     const ping = () => {
-      if (document.visibilityState !== "visible" || Date.now() - touched > 120_000) return onlineIdle();
-      void fetch("/api/active", { method: "POST", cache: "no-store" })
-        .then((r) => (r.ok ? (r.json() as Promise<{ ok: boolean; paid?: number; rate?: number; left?: number }>) : null))
-        .then((d) => d?.ok && onlinePinged(d.paid ?? 0, d.rate ?? 0, d.left ?? 0))
+      if (!isHere()) return onlineIdle();
+      void fetch(`/api/active?region=${encodeURIComponent(worldId)}`, { method: "POST", cache: "no-store" })
+        .then((r) => (r.ok ? (r.json() as Promise<{ ok: boolean; paid?: number; rate?: number; left?: number; latest?: Latest | null }>) : null))
+        .then((d) => {
+          if (!d?.ok) return;
+          onlinePinged(d.paid ?? 0, d.rate ?? 0, d.left ?? 0);
+          if (d.latest) setLatest(d.latest);
+        })
         .catch(() => {});
     };
     // One straight away (being online pays from the first minute), then once a minute.
     ping();
     const t = setInterval(ping, 60_000);
-    return () => {
-      clearInterval(t);
-      window.removeEventListener("pointerdown", touch, opts);
-      window.removeEventListener("keydown", touch, opts);
-      window.removeEventListener("wheel", touch, opts);
-    };
+    return () => clearInterval(t);
   }, [worldId, me.guest]);
   // The daily gift pops up once a day, a few seconds after the game opens (if it's not opened yet).
   useEffect(() => {
@@ -1229,7 +1224,7 @@ export function Game({
         .then((d: { ads?: Ad[] }) => !stop && setAds(Array.isArray(d.ads) ? d.ads : []))
         .catch(() => {});
     load();
-    const id = setInterval(load, 5 * 60_000);
+    const id = setInterval(() => isHere() && load(), 5 * 60_000);
     return () => {
       stop = true;
       clearInterval(id);
@@ -1358,9 +1353,9 @@ export function Game({
       startRefresh(() => router.refresh());
     };
     // The real map's life keeps itself up to date (cash, notices, people each have their own
-    // small checks), so the whole page is only fetched again every few minutes; the old hourly
-    // game needed this every 4 s.
-    const id = setInterval(refresh, worldId ? 180_000 : 4000);
+    // small checks), so the whole page is only fetched again every ten minutes while you're
+    // playing (and when you come back to it); the old hourly game needed this every 4 s.
+    const id = setInterval(() => (!worldId || isHere()) && refresh(), worldId ? 600_000 : 4000);
     const onVisible = () => refresh();
     document.addEventListener("visibilitychange", onVisible);
     return () => {
@@ -1559,10 +1554,16 @@ export function Game({
         })
         .catch(() => {});
     };
-    // A push makes it look at once (below), so every 15 s is plenty in between.
-    const every = setInterval(() => document.visibilityState === "visible" && look(), 15_000);
-    const onVisible = () => document.visibilityState === "visible" && look();
-    document.addEventListener("visibilitychange", onVisible);
+    // Only when there's something new: the minute's ping says your newest notice (./pulse), a push
+    // makes it look at once (below), and so does coming back. Every 5 minutes as well, in case.
+    let seen = 0;
+    const stopLatest = onLatest((l) => {
+      if (l.notice > seen) {
+        seen = l.notice;
+        look();
+      }
+    });
+    const every = whileHere(look, 5 * 60_000);
     // A push arrived (the phone's service worker says so): look now. A tapped notification: go there.
     const onMessage = (e: MessageEvent) => {
       const t = (e.data as { type?: string; url?: string } | null)?.type;
@@ -1577,9 +1578,9 @@ export function Game({
     navigator.serviceWorker?.addEventListener("message", onMessage);
     return () => {
       alive = false;
-      clearInterval(every);
+      stopLatest();
+      every();
       navigator.serviceWorker?.removeEventListener("message", onMessage);
-      document.removeEventListener("visibilitychange", onVisible);
     };
     // chatWith is a plain function (new each render); the listener only needs the latest at the time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1843,11 +1844,21 @@ export function Game({
         if (alive && list?.length) setTownNew(list[list.length - 1].id > townSeen() && list[list.length - 1].from !== me.id);
       });
     const first = setTimeout(look, 5_000);
-    const t = setInterval(look, 60_000);
+    // Only when someone has said something (the minute's ping says the newest message, ./pulse),
+    // and every 10 minutes in case.
+    let newest = 0;
+    const stopLatest = onLatest((l) => {
+      if (l.town > newest) {
+        newest = l.town;
+        look();
+      }
+    });
+    const every = whileHere(look, 10 * 60_000);
     return () => {
       alive = false;
       clearTimeout(first);
-      clearInterval(t);
+      stopLatest();
+      every();
     };
   }, [worldId, me.guest, me.id, townOpen]);
   // Everyone's card opens at once: their face and name are known from here (people/card-cache).
@@ -1890,7 +1901,7 @@ export function Game({
   }, [worldId, me.guest, me.coins]);
   useEffect(() => {
     if (!worldId || me.guest) return;
-    const t = setInterval(() => document.visibilityState === "visible" && void settleIncome(), 5 * 60_000);
+    const t = setInterval(() => isHere() && void settleIncome(), 5 * 60_000);
     return () => clearInterval(t);
   }, [worldId, me.guest]);
   useEffect(() => {

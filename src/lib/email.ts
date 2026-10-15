@@ -1,9 +1,11 @@
 import "server-only";
 import { CONTACT_EMAIL, SITE_DOMAIN } from "@/lib/brand";
+import { sendViaSes, sesReady } from "@/lib/email-ses";
 
-// Sends email through Resend (https://resend.com). Needs RESEND_API_KEY.
-// Without a verified domain, Resend only delivers to your own Resend account
-// email, so add a domain in Resend and set EMAIL_FROM to an address on it.
+// Sends email through Amazon SES when it's set up (AWS_SES_ACCESS_KEY_ID, AWS_SES_SECRET_ACCESS_KEY,
+// AWS_SES_REGION: about a tenth of the price, docs/COSTS.md), otherwise through Resend
+// (https://resend.com, RESEND_API_KEY). Either way EMAIL_FROM is an address on a domain verified
+// with that service.
 
 const API = "https://api.resend.com";
 
@@ -19,6 +21,7 @@ export async function sendEmail({
   html: string;
   text: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (sesReady()) return sendViaSes({ from: process.env.EMAIL_FROM ?? `Newtown <hello@${SITE_DOMAIN}>`, replyTo: CONTACT_EMAIL, to, subject, html, text });
   const key = process.env.RESEND_API_KEY;
   if (!key) return { ok: false, error: "Email is not set up (RESEND_API_KEY is missing)." };
   try {

@@ -4,9 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Banknote, CloudRain, Flame, Laugh, Dices, Lightbulb, MapPin, Megaphone, Music, ShoppingBasket, Star, TrafficCone, Trophy, Waves, Wrench, Zap } from "lucide-react";
 import type { RegionMap } from "@/lib/world/compile";
 import { cityNews, playerStory, weatherNow, type NewsItem, type NewsKind } from "@/lib/world/news";
+import { sharedPlayerNews } from "./things-cache";
 import { ownedSpot } from "@/lib/world/owned";
 import { cash } from "@/lib/world/value";
-import { playerNews } from "../news-actions";
 import { gossip, type Gossip } from "../street-actions";
 import { Sheet } from "../sheet";
 
@@ -45,7 +45,7 @@ export function NewsSheet({ region, onShow, onClose }: { region: RegionMap; onSh
   const [people, setPeople] = useState<Story[]>([]);
   useEffect(() => {
     let alive = true;
-    void playerNews(region.region.id)
+    void sharedPlayerNews(region.region.id)
       .then((events) => {
         if (!alive) return;
         setPeople(

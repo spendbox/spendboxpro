@@ -36,12 +36,15 @@ Two trips a game day, there and back, taken off your pay when you collect:
 | Way | Fare a trip | How far it goes |
 | --- | --- | --- |
 | Walk | free | up to 3 km |
-| Keke | ₦200 + ₦80 a km, at most ₦1,500 | up to 8 km |
-| Okada | ₦300 + ₦120 a km, at most ₦3,000 | up to 15 km |
-| Danfo bus | ₦300 + ₦40 a km, at most ₦1,500 | anywhere |
+| Keke | ₦200 + ₦80 a km | up to 8 km |
+| Okada | ₦300 + ₦120 a km | up to 15 km |
+| Danfo bus | ₦300 + ₦40 a km (Badagry to Epe, ~180 km: about ₦7,500) | anywhere |
 | Taxi | ₦1,000 + ₦300 a km | anywhere |
 | My car | ₦200 + ₦110 a km (petrol and parking) | anywhere |
 | Ferry (added on) | ₦1,000 + ₦150 a km on the water | to islands no road reaches |
+
+No fare is capped (game-db/098): the further you go, the more it costs, so a low-paid job far from
+home can cost more in fares than it pays.
 
 A trip is the straight distance between home and work plus 30% (roads wind). Living near your
 work saves money every day, which is part of why central places are worth more. If you move

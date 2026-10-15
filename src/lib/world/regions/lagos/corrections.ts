@@ -21,6 +21,7 @@ export const CORRECTIONS: Correction[] = [
   { kind: "area", note: "Not a place in OpenStreetMap.", area: { name: "Fadeyi", at: [6.5300, 3.3720], kind: "neighbourhood" } },
   { kind: "area", note: "Not a place in OpenStreetMap.", area: { name: "Obalende", at: [6.4495, 3.4040], kind: "neighbourhood" } },
   { kind: "area", note: "Not a place in OpenStreetMap.", area: { name: "Oniru", at: [6.4370, 3.4560], kind: "neighbourhood" } },
+  { kind: "area", note: "The reclaimed island off Ikoyi; not named as a place in OpenStreetMap (its channel is narrower than a tile, so it's joined to Ikoyi on the map).", area: { name: "Banana Island", at: [6.4655, 3.4505], kind: "neighbourhood" } },
   {
     kind: "landmark",
     note: "Its real spot (6.4500, 3.3964) is ~120 m from Freedom Park and City Hall: just west of them (~180 m) so all three fit.",
