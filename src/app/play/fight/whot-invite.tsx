@@ -46,7 +46,7 @@ export function WhotInvite({ region, target, onClose, onSend }: { region: string
   };
 
   return (
-    <Sheet onClose={onClose} title="Play Whot!">
+    <Sheet onClose={onClose} title="Play Whot!" above>
       <div className="space-y-4">
         <div className="flex items-center justify-center gap-4 rounded-3xl p-4 text-white" style={{ background: "radial-gradient(ellipse at 50% 40%, #23915a, #0a4127)", ["--cw" as string]: "44px" }}>
           <CardFace c={520} style={{ transform: "rotate(-12deg)" }} />

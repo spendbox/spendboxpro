@@ -3753,6 +3753,7 @@ export function Game({
                 externalNpc={npcTap}
                 enteredAt={rooms.enteredAt}
                 onGiveCoins={guest ? undefined : setGiveTo}
+                onPlay={guest || !worldId ? undefined : (p) => window.dispatchEvent(new CustomEvent("nt-play-game", { detail: { game: "whot", ...p } }))}
                 greet={guest ? undefined : greet}
                 friendStatusOf={friendStatusOf}
                 onAddFriend={guest ? undefined : befriend}

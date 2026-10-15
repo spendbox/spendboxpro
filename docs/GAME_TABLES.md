@@ -6,7 +6,7 @@ Ludo and more are coming soon.
 
 ## How it goes
 
-1. **Challenge someone.** On anyone's card (tap them on the map), **Play Whot!**:
+1. **Challenge someone.** On anyone's card (tap them on the map), **Play Whot!**, or **🃏 Play** at the top of a private chat with them:
    - pick a stake (₦1,000, ₦5,000, ₦20,000, ₦50,000, or type any amount up to ₦1,000,000);
    - the card shows what you have, and the button stays off if it's more than that.
 2. **They're asked.** A green invitation card pops up for them straight away (a live knock, plus
