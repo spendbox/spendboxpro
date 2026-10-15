@@ -400,6 +400,10 @@ export function Chat({
       // Someone sent you where they are: say so over the game (unless you're reading their chat now).
       const loc = m.recipient_id === meIdRef.current && m.sender_id !== meIdRef.current ? locationIn(m.body) : null;
       if (loc && !(openRef.current && threadRef.current === m.sender_id)) onLocationRef.current?.({ id: m.sender_id, name: m.sender_name, loc });
+      // A new private message with the chat shut: it floats up from the chat button (game.tsx).
+      else if (m.recipient_id === meIdRef.current && m.sender_id !== meIdRef.current && !openRef.current) {
+        window.dispatchEvent(new CustomEvent("nt-dm-float", { detail: { id: m.id, from: m.sender_id, name: m.sender_name, text: withoutTag(preview(m, meIdRef.current) ?? "") } }));
+      }
     } else {
       setRoomMsgs((r) => (r && (keep ? m.room === r.key : r.round === m.round_id && (m.room === r.key || m.room === "*")) ? { ...r, list: append(r.list, m, 200) } : r));
     }

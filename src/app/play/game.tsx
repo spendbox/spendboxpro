@@ -500,6 +500,19 @@ export function Game({
   const [newtownAsk, setNewtownAsk] = useState(0);
   /** What counts as new on the phone's screen (when it was last opened), and a little ring when something arrives. */
   const [phoneRing, setPhoneRing] = useState(0);
+  // New private messages while the chat is shut: the sender and what they said float up from the
+  // chat button for a few seconds, like chat at a party (chat.tsx sends "nt-dm-float").
+  const [dmFloats, setDmFloats] = useState<{ k: number; from: string; name: string; text: string; tilt: number }[]>([]);
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ id: number; from: string; name: string; text: string }>).detail;
+      if (!d) return;
+      setDmFloats((list) => [...list.filter((x) => x.k !== d.id).slice(-2), { k: d.id, from: d.from, name: d.name, text: d.text.length > 90 ? `${d.text.slice(0, 89)}…` : d.text, tilt: Math.random() * 6 - 3 }]);
+      setTimeout(() => setDmFloats((list) => list.filter((x) => x.k !== d.id)), 4600);
+    };
+    window.addEventListener("nt-dm-float", on);
+    return () => window.removeEventListener("nt-dm-float", on);
+  }, []);
   /** Someone's card (a face tapped on the map, or from your doorstep), and your doorstep. */
   const [personId, setPersonId] = useState<string | null>(null);
   /** The camera was opened from a chat: the selfie goes to them. */
@@ -2607,13 +2620,18 @@ export function Game({
         </div>
       </div>
 
-      {/* Watchers on a phone: the logo and the name, small, in 3D letters, floating in the middle of the screen (taps go through to the map). */}
+      {/* Watchers on a phone: the logo and the name, big, in 3D letters with a soft glow, and the
+          line under it, floating in the middle of the screen (taps go through to the map). */}
       {guest && worldId && !place && ride === null && !camera && (
         <div className="pointer-events-none absolute inset-0 z-[5] grid place-items-center sm:hidden" title="Newtown">
-          <span className="title-float-sm flex items-center gap-1.5">
-            <LogoMark size={26} className="rounded-[7px] shadow-[0_6px_14px_rgba(0,0,0,0.35)]" />
-            <span className="title-3d-sm font-display text-[26px] font-black italic leading-none tracking-tight text-white">Newtown</span>
-          </span>
+          <div className="title-float-sm relative flex flex-col items-center">
+            <span aria-hidden className="title-halo absolute left-1/2 top-1/2 h-28 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full" />
+            <span className="relative flex items-center gap-2.5">
+              <LogoMark size={46} className="rounded-[12px] shadow-[0_8px_20px_rgba(0,0,0,0.35)]" />
+              <span className="title-3d-sm title-glow font-display text-[46px] font-black italic leading-none tracking-tight text-white">Newtown</span>
+            </span>
+            <span className="title-tagline relative mt-2.5 font-display text-[15px] font-bold tracking-wide text-white">Your city. Your story. Your tribe.</span>
+          </div>
         </div>
       )}
       {/* Watchers on a computer: the Newtown logo, top centre. */}
@@ -3894,6 +3912,31 @@ export function Game({
           onPerson={(id) => setPersonId(id)}
           onClose={() => setTownOpen(false)}
         />
+      )}
+      {worldId && !camera && !guest && dmFloats.length > 0 && (
+        <div className="pointer-events-none absolute bottom-24 right-3 z-20 flex w-[min(17rem,calc(100vw-1.5rem))] flex-col items-end gap-2 sm:bottom-28 sm:right-4">
+          {dmFloats.map((b) => {
+            const known = state.friends.friends.find((f) => f.id === b.from) ?? state.players.find((p) => p.id === b.from) ?? hereNow.find((p) => p.id === b.from);
+            return (
+              <button
+                key={b.k}
+                onClick={() => {
+                  setDmFloats((list) => list.filter((x) => x.k !== b.k));
+                  chatWith({ id: b.from, name: b.name });
+                }}
+                className="event-chat-rise pointer-events-auto flex max-w-full items-end gap-1.5 text-left"
+                style={{ ["--tilt" as string]: `${b.tilt}deg` }}
+                aria-label={`Message from ${b.name}: ${b.text}. Tap to reply.`}
+              >
+                <span className="min-w-0 rounded-2xl rounded-br-md bg-white px-3 py-1.5 text-[13px] font-semibold text-ink shadow-xl">
+                  <b className="block text-[10px] text-[#7048e8]">{b.name}</b>
+                  <span className="line-clamp-3 break-words">{b.text}</span>
+                </span>
+                <AvatarFace avatar={cleanAvatar(known?.avatar, b.name)} size={32} className="shrink-0 rounded-full ring-2 ring-white" />
+              </button>
+            );
+          })}
+        </div>
       )}
       {worldId && !camera && !guest && !place && tour("chat") && (
         <button
