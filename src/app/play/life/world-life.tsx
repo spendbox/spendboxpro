@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DoorOpen } from "lucide-react";
 import type { HomePlan } from "@/lib/home-plan";
+import { playTrip, tripsWillPlay } from "../trip/play";
 import { Flag, MapPin, Pencil, Search, Star, X } from "@/components/icons";
 import { addressOf, makePlan, spiralIndex, tileAt, type CityPlan } from "@/lib/city/layout";
 import { WORLD_EVENT_BY_KEY, type WorldEvent } from "@/lib/world-events";
@@ -114,6 +115,17 @@ const RATES_FRESH_MS = 6 * 3600_000;
 
 const paid = (p: PaySettled | undefined) =>
   p && p.gross > 0 ? ` Collected ${cash(p.net)} pay (after ${cash(p.tax)} tax and ${cash(p.fares)} fares).` : "";
+
+/** What to call a spot on the trip card: the landmark or named place there, or its area. */
+function placeName(region: ReturnType<typeof regionMap>, id: string) {
+  const m = /:(-?\d+),(-?\d+)/.exec(id);
+  if (!region || !m) return "";
+  const x = Number(m[1]), z = Number(m[2]);
+  const lm = region.landmarks.find((l) => x >= l.ax && x < l.ax + l.w && z >= l.az && z < l.az + l.d);
+  if (lm) return lm.name;
+  const spot = region.spotAt(x, z);
+  return spot ? spot.name : region.areaAt(x, z);
+}
 
 /**
  * A life on a real map (docs/PROPERTY.md): the search box, your assets, the welcome (start with a
@@ -619,7 +631,7 @@ export function useWorldLife({
     const cheapest = cheapestCommute(km, ferry);
     // Your own car when you'd rather drive (anywhere; only the fuel to pay).
     const mode: Commute = driving && cheapest !== "walk" ? "car" : cheapest;
-    return { mode, ferry, fare: tripFareMint(mode, km, region.region.prices, ferry) ?? 0 };
+    return { mode, ferry, km, from, fare: tripFareMint(mode, km, region.region.prices, ferry) ?? 0 };
   };
   /** Drive or take the bus: a switch under each Go there, for car owners. */
   const driveSwitch = signedIn && rep?.hasCar ? (
@@ -652,15 +664,24 @@ export function useWorldLife({
       if (!d.open) return setDoor({ id, owner: d.owner, signedIn: d.signedIn });
       if (d.party) setMessage({ text: `${d.party}: the door's open, come on in!`, good: true });
     }
-    // In at once; the fare is paid on the way (and if it can't be, you're back out).
-    onEnter?.(id);
+    // The trip there (docs/TRIPS.md): a short film of you getting into the danfo (or your car)
+    // and riding there while the fare is paid, then in. With the film off, in at once as before
+    // (the fare paid on the way, and if it can't be, you're back out).
+    const trip = signedIn ? tripTo(id) : null;
+    const film = !!trip && trip.km >= 0.05 && tripsWillPlay();
+    if (!film) onEnter?.(id);
     if (!signedIn) return;
-    const r = await api.travelTo(id, driving).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
+    const paying = api.travelTo(id, driving).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
+    if (film && trip) {
+      await playTrip({ mode: trip.mode, from: placeName(region, trip.from), to: placeName(region, id) || "There", km: trip.km, fare: trip.fare, ferry: trip.ferry });
+    }
+    const r = await paying;
     if (!r.ok) {
       setMessage({ text: r.error, good: false });
-      onTripFailed?.();
+      if (!film) onTripFailed?.();
       return;
     }
+    if (film) onEnter?.(id);
     if (r.stamp) window.dispatchEvent(new CustomEvent("nt-stamp", { detail: r.stamp }));
     if (r.found) setMessage({ text: `On the way you found: ${r.found}! It's in your Items.`, good: true });
     else if (r.fare) setMessage({ text: `${cash(r.fare)} fare there.`, good: true });

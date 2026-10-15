@@ -58,7 +58,8 @@ import {
 } from "@/components/icons";
 import { short } from "@/lib/format";
 import { cash, cashText, toShown } from "@/lib/world/value";
-import { tripWords, type Commute } from "@/lib/world/work";
+import { COMMUTES as COMMUTE_MODES, tripWords, type Commute } from "@/lib/world/work";
+import { playTrip } from "./trip/play";
 import { createClient } from "@/lib/supabase/client";
 import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
 import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
@@ -148,7 +149,7 @@ import * as businessActions from "./business-actions";
 import * as serviceActions from "./service-actions";
 import * as reportActions from "./report-actions";
 import * as marketActions from "./market-actions";
-import { REGIONS } from "@/lib/world";
+import { REGIONS, regionMap } from "@/lib/world";
 
 // Sheets opened from the map: loaded when first opened.
 const GhostsSheet = dynamic(() => import("./ghost-duel/ghosts-sheet").then((m) => m.GhostsSheet));
@@ -205,6 +206,7 @@ const AvatarStudio = dynamic(() => import("./avatar-studio").then((m) => m.Avata
 const SportsSheet = dynamic(() => import("./sports/sportsbook").then((m) => m.SportsSheet));
 const ActivitySheet = dynamic(() => import("./activities/activity-sheet").then((m) => m.ActivitySheet));
 const GiveCoinsSheet = dynamic(() => import("./activities/gift-sheet").then((m) => m.GiveCoinsSheet));
+const TripLayer = dynamic(() => import("./trip/trip-layer").then((m) => m.TripLayer), { ssr: false });
 const MomentsLayer = dynamic(() => import("./moments/moments-layer").then((m) => m.MomentsLayer), { ssr: false });
 const RoomActivityLayer = dynamic(() => import("./activities/room-layer").then((m) => m.RoomActivityLayer));
 const AdvertiseExplainer = dynamic(() => import("@/components/advertise-explainer").then((m) => m.AdvertiseExplainer));
@@ -2203,6 +2205,12 @@ export function Game({
       }
       if (r.stamp) window.dispatchEvent(new CustomEvent("nt-stamp", { detail: r.stamp }));
       if (r.fare) setMessage({ text: `${cash(r.fare)} ${r.mode ? tripWords(r.mode as Commute) : ""} to get there.`, tone: "good" });
+      // Meeting someone or going to a sent location: the ride there, as a short film (docs/TRIPS.md).
+      if (ride && from && r.mode && COMMUTE_MODES.includes(r.mode as Commute) && r.mode !== "walk") {
+        const map = regionMap(worldId);
+        const km = Math.hypot(x - from.x, z - from.z) / 10;
+        if (km >= 0.05) await playTrip({ mode: r.mode as Commute, from: map?.areaAt(from.x, from.z) ?? "", to: map?.areaAt(Math.round(x), Math.round(z)) ?? "There", km, fare: r.fare ?? 0 });
+      }
       // You're there now: where you are (and the next fare) starts from here.
       worldLife.refreshLife();
       return true;
@@ -3278,6 +3286,8 @@ export function Game({
           />
         </Safe>
       )}
+      {/* The trip there (docs/TRIPS.md): a short film of the ride when you go somewhere. */}
+      {worldId && !guest && <TripLayer avatar={me.avatar} />}
       {/* Moments (docs/MOMENTS.md): little stories as you go round the city. */}
       {worldId && !guest && (
         <Safe name="Moments">
