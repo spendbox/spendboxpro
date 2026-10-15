@@ -23,14 +23,14 @@ import { AdvertisePanel, type AdPreview } from "./advertise-panel";
 import { explorePlaces, type ExplorePlace } from "@/lib/world/explore";
 import type { NearRoad, SpotWords } from "../events/events";
 import { areaK } from "@/lib/world/events";
-import { around, cachedThings, loadThings } from "./things-cache";
+import { around, cachedThings, loadThings, sharedPlayerNews } from "./things-cache";
+import { isHere, whileHere } from "../activity";
 import { ThingsSheet, type ThingsTab } from "./things-sheet";
 import { NewsSheet } from "./news-sheet";
 import { ComingSoonSheet, ReputationSheet } from "./reputation-sheet";
 import { CertificateSheet } from "./certificate";
 import { JailBanner } from "../people/street-dating";
 import { cityNews, playerStory, type NewsItem } from "@/lib/world/news";
-import { playerNews } from "../news-actions";
 import { playSfx } from "../sound";
 import { LeaveMarkSheet, MarkCard } from "./marks-sheet";
 import type { MapMark } from "../mark-actions";
@@ -331,7 +331,7 @@ export function useWorldLife({
     // A player's big buy (or a challenge just won) that just happened breaks into the news too (checked every few minutes).
     const lookPlayers = () => {
       if (document.visibilityState !== "visible") return;
-      void playerNews(region.region.id)
+      void sharedPlayerNews(region.region.id)
         .then((events) => {
           const e = events[0];
           if (!e || Date.now() - e.at > 15 * 60_000) return;
@@ -351,7 +351,7 @@ export function useWorldLife({
     const first = setTimeout(look, 15_000);
     const every = setInterval(look, 60_000);
     const firstP = setTimeout(lookPlayers, 40_000);
-    const everyP = setInterval(lookPlayers, 3 * 60_000);
+    const everyP = setInterval(() => isHere() && lookPlayers(), 3 * 60_000);
     return () => {
       clearTimeout(first);
       clearInterval(every);
@@ -377,10 +377,10 @@ export function useWorldLife({
   useEffect(() => {
     if (!regionId || pretend || !signedIn) return;
     const first = setTimeout(loadMarks, 2500);
-    const every = setInterval(loadMarks, 60_000);
+    const every = whileHere(loadMarks, 3 * 60_000);
     return () => {
       clearTimeout(first);
-      clearInterval(every);
+      every();
     };
   }, [regionId, pretend, signedIn, loadMarks]);
   /** Your reputation (shown at the top) and whether you own a car (to drive to work). */
@@ -407,11 +407,11 @@ export function useWorldLife({
     const seen = cachedThings();
     const shown = setTimeout(() => seen && setRep({ score: seen.reputation.score, hasCar: seen.hasCar, jail: seen.jailedUntil ?? null }), 0);
     const first = setTimeout(loadRep, 400);
-    const every = setInterval(loadRep, 180_000);
+    const every = whileHere(loadRep, 10 * 60_000);
     return () => {
       clearTimeout(shown);
       clearTimeout(first);
-      clearInterval(every);
+      every();
     };
   }, [signedIn, regionId, pretend, loadRep]);
 

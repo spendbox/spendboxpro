@@ -1,4 +1,5 @@
 import type { MyThings } from "../item-actions";
+import type { PlayerEvent } from "@/lib/world/news";
 
 // Your things and reputation, kept on the phone so the reputation pill and the Things screen
 // open at once with what was last seen, then freshen in the background.
@@ -49,4 +50,12 @@ export async function peopleAround<T>(region: string, x: number, z: number): Pro
   if (!r.ok) return null;
   const body = (await r.json()) as { people?: T[]; online?: number };
   return { people: body.people ?? [], online: Number(body.online) || 0 };
+}
+
+/** Players in the news (the same for everyone: cached for a minute, /api/player-news). */
+export async function sharedPlayerNews(region: string): Promise<PlayerEvent[]> {
+  const r = await fetch(`/api/player-news?region=${encodeURIComponent(region)}`);
+  if (!r.ok) return [];
+  const body = (await r.json()) as { events?: PlayerEvent[] };
+  return body.events ?? [];
 }

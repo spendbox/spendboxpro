@@ -55,6 +55,8 @@ import { PartyRoom } from "./party-room";
 import { RoomGuard } from "./room-kit";
 import { StageRoom } from "./stage-room";
 import { HostGuide } from "./host-guide";
+import { whileHere } from "../activity";
+import { onLatest } from "../pulse";
 import type { PartyZone } from "../city/party-lights";
 
 // Events on the map (docs/EVENTS.md). The Events button (top right) opens what's on (on now and
@@ -146,15 +148,27 @@ export function Events({
     setList(r.list);
     setOff(!!r.off);
   }, [region]);
+  // Asked again only when the city's events change (the minute's ping says, ../pulse), every 5
+  // minutes in case, and every 20 s while Events is open or you're in one.
+  const busy = open || inside !== null;
   useEffect(() => {
     if (!signedIn) return;
     const first = setTimeout(() => void look(), 1500);
-    const t = setInterval(() => !document.hidden && void look(), 20_000);
+    let seen = "";
+    const stopLatest = onLatest((l) => {
+      if (l.events !== seen) {
+        const was = seen;
+        seen = l.events;
+        if (was) void look();
+      }
+    });
+    const every = whileHere(() => void look(), busy ? 20_000 : 5 * 60_000);
     return () => {
       clearTimeout(first);
-      clearInterval(t);
+      stopLatest();
+      every();
     };
-  }, [signedIn, look]);
+  }, [signedIn, look, busy]);
   useEffect(() => {
     if (open) void look();
   }, [open, look]);
