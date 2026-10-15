@@ -116,10 +116,12 @@ export async function myThings(): Promise<MyThings | null> {
     db.rpc("jail_until", { p_user: userId }),
   ]);
   // Challenges hosted and won (game-db/070), taking part (game-db/093) and events (game-db/095): nothing until they're run.
-  const [{ data: ch }, { data: eng }, { data: ev }] = await Promise.all([
+  const [{ data: ch }, { data: eng }, { data: ev }, { data: mo }] = await Promise.all([
     db.rpc("challenge_rep", { p_user: userId }),
     db.rpc("engagement_rep", { p_user: userId }),
     db.rpc("event_rep", { p_user: userId }),
+    // Moments (game-db/109; nothing until it's run).
+    db.from("lives").select("moment_rep").eq("user_id", userId).maybeSingle(),
   ]);
   const e = (eng ?? {}) as Record<string, unknown>;
   if (!data) return null;
@@ -162,6 +164,7 @@ export async function myThings(): Promise<MyThings | null> {
     challenges: challengeRep(n((ch as { hosted?: number } | null)?.hosted), n((ch as { won?: number } | null)?.won)),
     events: eventRep(n((ev as { hosted?: number } | null)?.hosted), n((ev as { attended?: number } | null)?.attended)),
     engagement: n(e.time) + n(e.talk) + n(e.kind) + n(e.people),
+    moments: n((mo as { moment_rep?: number } | null)?.moment_rep),
   });
   return { items, crafts, crafted, effects, reputation, craftSkill: skill, hasCar: items.some((i) => i.category === "car"), jailedUntil: jail ? String(jail) : null };
 }

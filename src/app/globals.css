@@ -300,3 +300,16 @@ a[href]:active,
 }
 .stamp-thud { display: inline-block; animation: stamp-thud 0.55s cubic-bezier(0.3, 1.4, 0.5, 1) 0.15s both; }
 @media (prefers-reduced-motion: reduce) { .stamp-card, .stamp-thud { animation: none; } }
+
+/* A moment sliding up over the map (src/app/play/moments/moments-layer.tsx). */
+@keyframes moment-in {
+  0% { opacity: 0; transform: translateY(24px) scale(0.96); }
+  60% { opacity: 1; transform: translateY(-4px) scale(1.01); }
+  100% { opacity: 1; transform: none; }
+}
+.moment-in {
+  animation: moment-in 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .moment-in { animation: none; }
+}

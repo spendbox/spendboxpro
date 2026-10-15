@@ -473,6 +473,16 @@ export function useWorldLife({
       every();
     };
   }, [signedIn, regionId, pretend, loadRep]);
+  // A moment (../moments) moved your money or reputation: show it straight away.
+  useEffect(() => {
+    if (!signedIn) return;
+    const on = () => {
+      void refresh();
+      loadRep();
+    };
+    window.addEventListener("nt-money-changed", on);
+    return () => window.removeEventListener("nt-money-changed", on);
+  }, [signedIn, refresh, loadRep]);
 
   useEffect(() => {
     if (!signedIn || !regionId) return;
