@@ -1109,6 +1109,14 @@ export function useWorldLife({
             setBuilding(false);
             setPlanning(plan);
           }}
+          onAddMoney={
+            onWallet
+              ? () => {
+                  setBuilding(false);
+                  onWallet();
+                }
+              : undefined
+          }
         />
       )}
       {door && (

@@ -97,7 +97,7 @@ const STYLE_HINT = ["Warm wood and soft colours", "Clean lines, greys and black"
 const m2 = (r: Pick<PlanRoom, "w" | "d">) => Math.round(r.w * r.d * CELL_M * CELL_M);
 const metres = (r: Pick<PlanRoom, "w" | "d">) => `${+(r.w * CELL_M).toFixed(1)} × ${+(r.d * CELL_M).toFixed(1)} m`;
 
-export function HomeBuilder({ onClose, onFineTune }: { onClose: () => void; onFineTune?: (plan: HomePlan) => void }) {
+export function HomeBuilder({ onClose, onFineTune, onAddMoney }: { onClose: () => void; onFineTune?: (plan: HomePlan) => void; onAddMoney?: () => void }) {
   useEscape(onClose);
   const [plan, setPlanNow] = useState<HomePlan | null>(null);
   const [history, setHistory] = useState<HomePlan[]>([]);
@@ -112,6 +112,9 @@ export function HomeBuilder({ onClose, onFineTune }: { onClose: () => void; onFi
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ text: string; bad?: boolean } | null>(null);
   const [built, setBuilt] = useState<number | null>(null);
+  /** What building can be paid from (mint; null: not known), and the "not enough money" card. */
+  const [canSpend, setCanSpend] = useState<number | null>(null);
+  const [short, setShort] = useState<{ cost: number; have: number } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -123,6 +126,7 @@ export function HomeBuilder({ onClose, onFineTune }: { onClose: () => void; onFi
         setPaid(r.paid);
         setPerMint(r.perMint);
         setOwner(r.owner);
+        setCanSpend(r.canSpend);
       })
       .catch(() => alive && setLoadError("The connection blinked. Close this and try again."));
     return () => {
@@ -205,11 +209,21 @@ export function HomeBuilder({ onClose, onFineTune }: { onClose: () => void; onFi
   };
 
   async function build() {
-    if (!plan || busy) return;
+    if (!plan || !bill || busy) return;
+    // Not enough to pay for it: say so straight away (the server checks again).
+    const cost = bill.naira / perMint;
+    if (canSpend != null && cost > canSpend + 0.005) return setShort({ cost, have: canSpend });
     setBusy(true);
-    const r = await saveHomePlan(plan).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
+    const r = await saveHomePlan(plan).catch(() => ({ ok: false as const, error: "The connection blinked. Try again.", short: undefined }));
     setBusy(false);
-    if (!r.ok) return setNote({ text: r.error, bad: true });
+    if (!r.ok) {
+      if (r.short) {
+        setCanSpend(r.short.have);
+        return setShort(r.short);
+      }
+      return setNote({ text: r.error, bad: true });
+    }
+    if (canSpend != null) setCanSpend(Math.max(0, canSpend - r.paidMint));
     setPaid(r.paid);
     setBuilt(r.paidMint);
     window.dispatchEvent(new Event("nt-home-plan-saved"));
@@ -466,6 +480,12 @@ export function HomeBuilder({ onClose, onFineTune }: { onClose: () => void; onFi
                 <p className="rounded-2xl bg-me/10 p-3 text-sm">Nothing new to pay for. Saving just rearranges your home.</p>
               )}
               {bill.valueNaira > 0 && <p className="text-xs text-muted">It adds about {money(bill.valueNaira)} to your home&apos;s value.</p>}
+              {canSpend != null && bill.naira > 0 && (
+                <p className={cn("rounded-xl px-3 py-2 text-sm", bill.naira / perMint > canSpend + 0.005 ? "bg-hit/10 text-hit" : "bg-me/10")}>
+                  You have <b>{cash(canSpend)}</b> in your savings and wallet
+                  {bill.naira / perMint > canSpend + 0.005 ? `, ${cash(bill.naira / perMint - canSpend)} short.` : ". Enough to build it."}
+                </p>
+              )}
             </>
           )}
 
@@ -492,6 +512,37 @@ export function HomeBuilder({ onClose, onFineTune }: { onClose: () => void; onFi
           </div>
         )}
       </div>
+      {short && (
+        <div className="fixed inset-0 z-[70] grid place-items-end bg-black/40 p-3 sm:place-items-center" onClick={() => setShort(null)}>
+          <div className="start-pop w-full max-w-sm rounded-3xl bg-panel p-5 text-center shadow-xl" onClick={(e) => e.stopPropagation()} role="alertdialog" aria-label="Not enough money">
+            <p className="text-4xl">💸</p>
+            <p className="mt-2 font-display text-xl font-extrabold">Not enough money yet</p>
+            <p className="mt-1 text-sm text-muted">
+              Building this costs <b className="text-ink">{cash(short.cost)}</b>. You have <b className="text-ink">{cash(short.have)}</b> in your savings and wallet, so you&apos;re{" "}
+              <b className="text-hit">{cash(Math.max(0, short.cost - short.have))}</b> short.
+            </p>
+            <div className="mt-4 flex flex-col gap-2">
+              {onAddMoney && (
+                <button onClick={onAddMoney} className="h-12 rounded-full bg-gold font-bold text-ink">
+                  Add money
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setShort(null);
+                  go(0);
+                }}
+                className="h-12 rounded-full bg-ink font-semibold text-white"
+              >
+                Make it smaller or simpler
+              </button>
+              <button onClick={() => setShort(null)} className="h-10 text-sm font-semibold text-muted">
+                Not now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Shell>
   );
 }

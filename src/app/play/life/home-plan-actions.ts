@@ -50,7 +50,8 @@ async function savedRow(db: ReturnType<typeof createAdminClient>, userId: string
   return (data as { unit: string; plan: unknown } | null) ? { ...(data as { unit: string; plan: unknown }), paid: null } : null;
 }
 
-export type HomePlanLoad = { ok: true; plan: HomePlan; saved: boolean; paid: PlanPaid; perMint: number; owner: boolean };
+/** canSpend: what building can be paid from (savings and wallet, mint), the same sum the save checks. */
+export type HomePlanLoad = { ok: true; plan: HomePlan; saved: boolean; paid: PlanPaid; perMint: number; owner: boolean; canSpend: number | null };
 
 /** Your plan (or a starter one if you haven't drawn yours yet, or moved house since), and what you've paid for. */
 export async function loadHomePlan(): Promise<HomePlanLoad | Fail> {
@@ -64,10 +65,11 @@ export async function loadHomePlan(): Promise<HomePlanLoad | Fail> {
   const gift = plan ? null : await giftHome(me.db, me.userId).catch(() => null);
   const shown = plan ?? gift?.plan ?? starterPlan();
   const paid = cleanPaid(mine?.paid, shown.size);
-  return { ok: true, plan: shown, saved: !!plan, paid: gift ? mergePaid(paid, gift.paid) : paid, perMint: me.perMint, owner: me.owner };
+  const spend = await me.db.rpc("life_can_spend", { p_user: me.userId, p_pots: ["savings"] }).then((r) => (r.error ? null : Number(r.data)), () => null);
+  return { ok: true, plan: shown, saved: !!plan, paid: gift ? mergePaid(paid, gift.paid) : paid, perMint: me.perMint, owner: me.owner, canSpend: spend };
 }
 
-export async function saveHomePlan(raw: unknown): Promise<{ ok: true; paidMint: number; paid: PlanPaid } | Fail> {
+export async function saveHomePlan(raw: unknown): Promise<{ ok: true; paidMint: number; paid: PlanPaid } | (Fail & { short?: { cost: number; have: number } })> {
   const me = await myHome();
   if (!me) return { ok: false, error: "Sign in to plan your home." };
   if (!me.unit) return { ok: false, error: "Find a home first, then plan it." };
@@ -97,7 +99,10 @@ export async function saveHomePlan(raw: unknown): Promise<{ ok: true; paidMint: 
   });
   if (!error) return { ok: true, paidMint: mint, paid: bill.paid };
   const msg = error.message ?? "";
-  if (msg.includes("not_enough")) return { ok: false, error: "You don't have enough in your savings and wallet for that. Take something out, or save up." };
+  if (msg.includes("not_enough")) {
+    const have = await me.db.rpc("life_can_spend", { p_user: me.userId, p_pots: ["savings"] }).then((r) => Number(r.data) || 0, () => 0);
+    return { ok: false, error: "You don't have enough in your savings and wallet for that.", short: { cost: mint, have } };
+  }
   if (msg.includes("not_owner")) return { ok: false, error: "You rent this home, so you can't build onto it or buy furniture for it here. Rearranging is free." };
   if (msg.includes("too_dear")) return { ok: false, error: "That's too much to build in one go. Save part of it first." };
   if (/home_plan_save|home_plans/.test(msg)) {
