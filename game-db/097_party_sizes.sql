@@ -66,3 +66,25 @@ begin
   insert into public.hosted_event_guests (event_id, user_id, going) values (v_id, p_user, true);
   return jsonb_build_object('id', v_id, 'starts_at', v_starts, 'ends_at', v_ends, 'fee', v_fee);
 end $$;
+
+/**
+ * What the events list shows for each event, worked out here instead of sending every guest
+ * (a carnival can have 10,000): how many are going and came in, whether p_user is going or in,
+ * and the first 7 people going besides the host (for faces). One row per event id.
+ */
+create or replace function public.event_counts(p_ids bigint[], p_user uuid) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'id', e.id,
+    'going', (select count(*) from public.hosted_event_guests g where g.event_id = e.id and g.going),
+    'came', (select count(*) from public.hosted_event_guests g where g.event_id = e.id and g.entered_at is not null),
+    'me_going', coalesce((select g.going from public.hosted_event_guests g where g.event_id = e.id and g.user_id = p_user), false),
+    'me_in', coalesce((select g.entered_at is not null from public.hosted_event_guests g where g.event_id = e.id and g.user_id = p_user), false),
+    'faces', coalesce((select jsonb_agg(f.user_id) from (
+      select g.user_id from public.hosted_event_guests g
+      where g.event_id = e.id and g.going and g.user_id <> e.host_id order by g.going_at limit 7) f), '[]'::jsonb)
+  )), '[]'::jsonb)
+  from public.hosted_events e where e.id = any(p_ids)
+$$;
+revoke all on function public.event_counts(bigint[], uuid) from public, anon, authenticated;
+grant execute on function public.event_counts(bigint[], uuid) to service_role;

@@ -96,6 +96,13 @@ function clean(p: unknown): RoomMsg | null {
   return null;
 }
 
+/**
+ * The most people whose presence a room shares (the host always). In a carnival of thousands,
+ * everyone sharing theirs with everyone else is millions of messages (and a big bill): the rest
+ * hear and say everything, and the room's count comes from the database instead.
+ */
+export const PRESENCE_MAX = 200;
+
 export const randomKey = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
 /**
@@ -116,10 +123,12 @@ export function useEventRoom(id: number | null, me: { id: string; name: string; 
     meRef.current = me;
   });
 
+  // Whether you share your presence here (the host always; others while the room has room).
+  const sharing = useRef(false);
   const track = useCallback(() => {
     const ch = channelRef.current;
     const m = meRef.current;
-    if (!ch || !joined.current || !m) return;
+    if (!ch || !joined.current || !m || !sharing.current) return;
     void ch.track({ name: m.name, avatar: m.avatar, host: m.host, looking: meta.current.looking, vibe: m.host ? meta.current.vibe : null, at: Date.now() });
   }, []);
 
@@ -136,6 +145,11 @@ export function useEventRoom(id: number | null, me: { id: string; name: string; 
       })
       .on("presence", { event: "sync" }, () => {
         const state = channel.presenceState() as unknown as Record<string, Record<string, unknown>[]>;
+        // Once we know who's here: share yours if there's room (or you're the host).
+        if (joined.current && !sharing.current && (meRef.current?.host || Object.keys(state).length < PRESENCE_MAX)) {
+          sharing.current = true;
+          track();
+        }
         setHere(
           Object.entries(state).map(([pid, metas]) => {
             const x = metas[metas.length - 1] ?? {};
@@ -146,11 +160,13 @@ export function useEventRoom(id: number | null, me: { id: string; name: string; 
       .subscribe((status) => {
         if (status !== "SUBSCRIBED") return;
         joined.current = true;
+        if (meRef.current?.host) sharing.current = true;
         track();
         for (const m of outbox.current.splice(0)) void channel.send({ type: "broadcast", event: "m", payload: m });
       });
     return () => {
       joined.current = false;
+      sharing.current = false;
       channelRef.current = null;
       void supabase.removeChannel(channel);
       setHere([]);

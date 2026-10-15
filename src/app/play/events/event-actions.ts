@@ -114,13 +114,39 @@ export type EventView = {
   stage: StageState;
 };
 
+/** Per event: how many are going and came in, you, and the first few going (their ids). */
+type Counts = { going: number; came: number; meGoing: boolean; meIn: boolean; faces: string[] };
+
+/**
+ * The counts for a list of events: from the database's event_counts (game-db/097: just the numbers,
+ * however many guests), or before that runs, worked out from the guests themselves.
+ */
+async function countsOf(db: Db, ids: number[], userId: string | null): Promise<Map<number, Counts>> {
+  const out = new Map<number, Counts>();
+  const r = await db.rpc("event_counts", { p_ids: ids, p_user: userId ?? "00000000-0000-0000-0000-000000000000" });
+  if (!r.error && Array.isArray(r.data)) {
+    for (const c of r.data as { id: number; going: number; came: number; me_going: boolean; me_in: boolean; faces: string[] }[]) {
+      out.set(n(c.id), { going: n(c.going), came: n(c.came), meGoing: !!c.me_going, meIn: !!c.me_in, faces: (c.faces ?? []).map(String) });
+    }
+    return out;
+  }
+  const { data: gs } = await db.from("hosted_event_guests").select("event_id, user_id, going, entered_at").in("event_id", ids).order("going_at", { ascending: true }).limit(5000);
+  const guests = (gs ?? []) as { event_id: number; user_id: string; going: boolean; entered_at: string | null }[];
+  for (const id of ids) {
+    const mine = guests.filter((g) => n(g.event_id) === id);
+    const me = userId ? mine.find((g) => g.user_id === userId) : undefined;
+    const going = mine.filter((g) => g.going);
+    out.set(id, { going: going.length, came: mine.filter((g) => g.entered_at).length, meGoing: !!me?.going, meIn: !!me?.entered_at, faces: going.map((g) => g.user_id) });
+  }
+  return out;
+}
+
 async function views(db: Db, rows: Record<string, unknown>[], userId: string | null): Promise<EventView[]> {
   if (!rows.length) return [];
   const ids = rows.map((r) => n(r.id));
-  const { data: gs } = await db.from("hosted_event_guests").select("event_id, user_id, going, entered_at").in("event_id", ids).order("going_at", { ascending: true }).limit(5000);
-  const guests = (gs ?? []) as { event_id: number; user_id: string; going: boolean; entered_at: string | null }[];
+  const counts = await countsOf(db, ids, userId);
   const faceIds = new Set<string>(rows.map((r) => String(r.host_id)));
-  for (const id of ids) guests.filter((g) => n(g.event_id) === id && g.going).slice(0, 8).forEach((g) => faceIds.add(g.user_id));
+  for (const id of ids) (counts.get(id)?.faces ?? []).slice(0, 8).forEach((u) => faceIds.add(u));
   const { data: profs } = await db.from("profiles").select("id, username, avatar").in("id", [...faceIds]);
   const byId = new Map(((profs ?? []) as { id: string; username: string | null; avatar: unknown }[]).map((p) => [p.id, p]));
   const person = (id: string): EventPerson => {
@@ -131,10 +157,8 @@ async function views(db: Db, rows: Record<string, unknown>[], userId: string | n
   const base = slideBase(db);
   return rows.map((r) => {
     const id = n(r.id);
-    const mine = guests.filter((g) => n(g.event_id) === id);
+    const c = counts.get(id) ?? { going: 0, came: 0, meGoing: false, meIn: false, faces: [] };
     const hostId = String(r.host_id);
-    const me = userId ? mine.find((g) => g.user_id === userId) : undefined;
-    const going = mine.filter((g) => g.going);
     return {
       id,
       region: String(r.region),
@@ -153,14 +177,18 @@ async function views(db: Db, rows: Record<string, unknown>[], userId: string | n
       radiusM: n(r.radius_m) || PARTY_SIZE_DEFAULT,
       status: eventStatus(Date.parse(String(r.starts_at)), Date.parse(String(r.ends_at)), r.status === "cancelled"),
       host: person(hostId),
-      going: going.length,
-      came: mine.filter((g) => g.entered_at).length,
-      faces: [hostId, ...going.map((g) => g.user_id).filter((u) => u !== hostId)].slice(0, 8).map(person),
-      me: { going: !!me?.going, in: !!me?.entered_at, host: userId === hostId },
+      going: c.going,
+      came: c.came,
+      faces: [hostId, ...c.faces.filter((u) => u !== hostId)].slice(0, 8).map(person),
+      me: { going: c.meGoing, in: c.meIn, host: userId === hostId },
       stage: cleanStage(r.stage, base),
     };
   });
 }
+
+/** When each region's events were last swept (on this server), and how often to. */
+const lastSweep = new Map<string, number>();
+const SWEEP_MS = 30_000;
 
 /** Tell the people going that their event started (on their phones too). */
 async function sweep(db: Db, region: string) {
@@ -175,10 +203,16 @@ async function sweep(db: Db, region: string) {
 export async function eventsAround(region: string, x: number, z: number): Promise<{ list: EventView[]; off?: boolean }> {
   if (!REGIONS[region]) return { list: [] };
   const db = createAdminClient();
-  const err = await sweep(db, region);
-  if (err && missing(err.message)) return { list: [], off: true };
+  // Telling people their event started and settling the ones that are over: once every 30 s per
+  // server is plenty (every player asks every 20 s; at thousands of players that was the database's
+  // busiest job).
+  if (Date.now() - (lastSweep.get(region) ?? 0) > SWEEP_MS) {
+    lastSweep.set(region, Date.now());
+    const err = await sweep(db, region);
+    if (err && missing(err.message)) return { list: [], off: true };
+  }
   const until = new Date(Date.now() + (DAYS_AHEAD + 1) * 86_400_000).toISOString();
-  const { data } = await db
+  const { data, error } = await db
     .from("hosted_events")
     .select("*")
     .eq("region", region)
@@ -187,6 +221,7 @@ export async function eventsAround(region: string, x: number, z: number): Promis
     .lt("starts_at", until)
     .order("starts_at", { ascending: true })
     .limit(80);
+  if (error && missing(error.message)) return { list: [], off: true };
   const userId = await currentUserId().catch(() => null);
   const list = await views(db, (data ?? []) as Record<string, unknown>[], userId);
   const now = Date.now();

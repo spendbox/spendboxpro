@@ -227,7 +227,7 @@ export function PartyRoom({
         title={view.title}
         icon={f?.icon ?? "🎉"}
         endsAt={Date.parse(view.endsAt)}
-        here={people.length}
+        here={Math.max(people.length, view.came)}
         onMin={onMin}
         onLeave={onLeave}
         onHere={() => setPanel("who")}

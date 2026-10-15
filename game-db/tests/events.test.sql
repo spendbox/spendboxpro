@@ -189,6 +189,11 @@ begin
   perform pg_temp.fails('no bigger than 10,000', 'bad_capacity', format($q$select event_open(%L, 'lagos', 'party', 'rave', 'Too big', '', 900, 900, '', true, now() + interval '2 days', 60, 0, 400, 20000, 3, 0, 16, 1000)$q$, b));
   perform pg_temp.fails('talks are one spot', 'bad_size', format($q$select event_open(%L, 'lagos', 'stage', 'talk', 'Big talk', '', 900, 900, '', false, now() + interval '2 days', 60, 0, 400, 100, 3, 0, 16, 1000)$q$, b));
   perform event_cancel(e, (v->>'id')::bigint);
+  -- The events list's counts, worked out in the database (however many guests).
+  v := event_counts(array[id1], b);
+  perform pg_temp.check((v->0->>'going')::int = (select count(*) from hosted_event_guests where event_id = id1 and going)
+    and (v->0->>'came')::int = (select count(*) from hosted_event_guests where event_id = id1 and entered_at is not null)
+    and (v->0->>'me_in')::boolean, 'event counts: going, came in, and you');
 
   -- The walkthrough's third mission is going to an event now (not winning a challenge).
   update hosted_event_guests set entered_at = entered_at - interval '1 hour' where user_id = b;
