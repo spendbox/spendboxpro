@@ -82,7 +82,9 @@ export function useChallengeChannel(id: number | null, me: { id: string; name: s
       setChat((c) => [...c.slice(-40), line]);
       send({ t: "chat", ...line });
     },
-    /** Who has the challenge open right now (player ids). */
+    /** Who has the challenge open right now (players and watchers). */
     here,
+    /** Anything else for the table (catching up on the moves so far); it arrives through online.listen. */
+    post: (m: Record<string, unknown>) => send(m as unknown as ChallengeMsg),
   };
 }

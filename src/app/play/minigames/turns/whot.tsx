@@ -13,7 +13,7 @@ import { Act, rnd, seededShuffle } from "./common";
 // market (everyone else draws one). First to empty their hand wins; if the market runs dry, the
 // lowest hand (stars count double) wins.
 
-const SHAPES = ["Circle", "Triangle", "Cross", "Square", "Star"];
+export const SHAPES = ["Circle", "Triangle", "Cross", "Square", "Star"];
 const SHAPE_ICONS = [Circle, Triangle, Plus, Square, Star];
 const SHAPE_COLOUR = "#7a1f2b";
 const NUMBERS: number[][] = [
@@ -23,18 +23,18 @@ const NUMBERS: number[][] = [
   [1, 2, 3, 5, 7, 10, 11, 13, 14],
   [1, 2, 3, 4, 5, 7, 8],
 ];
-const WHOT = 520; // shape 5, value 20
-const shapeOf = (c: number) => Math.floor(c / 100);
-const valueOf = (c: number) => c % 100;
+export const WHOT = 520; // shape 5, value 20
+export const shapeOf = (c: number) => Math.floor(c / 100);
+export const valueOf = (c: number) => c % 100;
 const SPECIAL = new Set([1, 2, 5, 8, 14, 20]);
 
-type S = { hands: number[][]; market: number[]; top: number; ask: number | null; turn: number; n: number; seed: number; won: number[] | null; log: string };
-type M = { play: number; ask?: number } | { draw: true };
+export type S = { hands: number[][]; market: number[]; top: number; ask: number | null; turn: number; n: number; seed: number; won: number[] | null; log: string };
+export type M = { play: number; ask?: number } | { draw: true };
 
 function nextSeat(s: S, from: number, skip = 0) {
   return (from + 1 + skip) % s.hands.length;
 }
-function playable(s: S, c: number) {
+export function playable(s: S, c: number) {
   if (c === WHOT) return true;
   if (s.top === WHOT) return s.ask === null || shapeOf(c) === s.ask;
   return shapeOf(c) === shapeOf(s.top) || valueOf(c) === valueOf(s.top);

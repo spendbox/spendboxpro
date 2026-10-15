@@ -28,6 +28,11 @@ function say(message: string): Fail {
   if (code === "gone") return { ok: false, error: "That challenge is gone." };
   if (code === "no_life") return { ok: false, error: "Start your life in the city first." };
   if (code === "frozen") return { ok: false, error: "Your account is paused right now." };
+  if (code === "target_busy") return { ok: false, error: "They're in another game right now. Try again in a bit." };
+  if (code === "blocked") return { ok: false, error: "You can't play with this person." };
+  if (code === "unknown_target" || code === "self") return { ok: false, error: "That player can't play right now." };
+  if (code === "need_players") return { ok: false, error: "Wait for someone to join first." };
+  if (code === "not_host") return { ok: false, error: "Only the host can start it." };
   if (missing(message)) return { ok: false, error: OFF };
   console.error("Challenge failed", message);
   return { ok: false, error: "That didn't work. Try again." };
@@ -156,9 +161,62 @@ export async function openChallenge(game: string, stakeMint: number, x: number, 
 export async function joinChallenge(id: number): Promise<{ ok: true; paid: number } | Fail> {
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Sign in to join." };
-  const { data, error } = await createAdminClient().rpc("challenge_join", { p_user: userId, p_id: Math.round(n(id)) });
+  const db = createAdminClient();
+  // Accepting an invitation starts the game soon after (game-db/110); joining anything else, as before.
+  let res = await db.rpc("challenge_accept", { p_user: userId, p_id: Math.round(n(id)) });
+  if (res.error && /challenge_accept/.test(res.error.message)) res = await db.rpc("challenge_join", { p_user: userId, p_id: Math.round(n(id)) });
+  if (res.error) return say(res.error.message);
+  return { ok: true, paid: n((res.data as { paid?: number })?.paid) };
+}
+
+/**
+ * Challenge one player to a game for a stake (game-db/110): they're asked to accept or decline,
+ * anyone nearby can still join, and anyone can watch.
+ */
+export async function inviteChallenge(target: string, game: string, stakeMint: number, x: number, z: number, region: string): Promise<{ ok: true; id: number } | (Fail & { busyId?: number })> {
+  const g = challengeGame(game);
+  if (!g?.engine) return { ok: false, error: "That game is coming soon." };
+  if (!/^[0-9a-f-]{36}$/i.test(String(target))) return { ok: false, error: "That player can't play right now." };
+  if (!REGIONS[region] || !Number.isFinite(x) || !Number.isFinite(z)) return { ok: false, error: "Unknown place." };
+  const userId = await currentUserId();
+  if (!userId) return { ok: false, error: "Sign in to play." };
+  const perMint = perMintOf(region);
+  const stake = cleanStake(Number(stakeMint), perMint);
+  if (stake === null) return { ok: false, error: `Pick a stake from ₦${STAKE_MIN_NAIRA.toLocaleString("en-GB")} to ₦${STAKE_MAX_NAIRA.toLocaleString("en-GB")}.` };
+  const db = createAdminClient();
+  const { data, error } = await db.rpc("challenge_invite", { p_user: userId, p_target: target, p_region: region, p_game: g.id, p_stake: stake, p_x: Math.round(x), p_z: Math.round(z), p_seats: g.seats });
+  if (error) {
+    if (error.message.startsWith("busy")) {
+      const { data: busy } = await db.rpc("challenge_busy", { p_user: userId });
+      return { ok: false, error: "You're still in another game.", busyId: busy == null ? undefined : n(busy) };
+    }
+    if (/challenge_invite/.test(error.message)) return { ok: false, error: OFF };
+    return say(error.message);
+  }
+  after(() => pushToMany([String(target)]));
+  return { ok: true, id: n((data as { id?: number })?.id) };
+}
+
+/** Say no to an invitation (the host's stake goes back if nobody else has joined). */
+export async function declineChallenge(id: number): Promise<{ ok: true } | Fail> {
+  const userId = await currentUserId();
+  if (!userId) return { ok: false, error: "Please sign in again." };
+  const { error } = await createAdminClient().rpc("challenge_decline", { p_user: userId, p_id: Math.round(n(id)) });
+  return error ? say(error.message) : { ok: true };
+}
+
+/** The host starts the game now (two or more in). */
+export async function startChallengeNow(id: number): Promise<{ ok: true; status: string } | Fail> {
+  const userId = await currentUserId();
+  if (!userId) return { ok: false, error: "Please sign in again." };
+  const db = createAdminClient();
+  const { data, error } = await db.rpc("challenge_start_now", { p_user: userId, p_id: Math.round(n(id)) });
   if (error) return say(error.message);
-  return { ok: true, paid: n((data as { paid?: number })?.paid) };
+  if (data === "playing") {
+    const { data: players } = await db.from("challenge_players").select("user_id").eq("challenge_id", Math.round(n(id))).is("left_at", null);
+    after(() => pushToMany(((players ?? []) as { user_id: string }[]).map((p) => String(p.user_id)).filter((u) => u !== userId)));
+  }
+  return { ok: true, status: String(data) };
 }
 
 export type ChallengePlayer = { id: string; name: string; avatar: unknown };
@@ -179,6 +237,8 @@ export type ChallengeView = {
   players: ChallengePlayer[];
   winner: string | null;
   prize: number | null;
+  /** The one player it's for (game-db/110), or null: everyone nearby. */
+  invited: ChallengePlayer | null;
 };
 
 async function views(db: ReturnType<typeof createAdminClient>, rows: Record<string, unknown>[]): Promise<ChallengeView[]> {
@@ -186,7 +246,7 @@ async function views(db: ReturnType<typeof createAdminClient>, rows: Record<stri
   const ids = rows.map((r) => n(r.id));
   const { data: ps } = await db.from("challenge_players").select("challenge_id, user_id, joined_at").in("challenge_id", ids).order("joined_at", { ascending: true });
   const players = (ps ?? []) as { challenge_id: number; user_id: string }[];
-  const people = [...new Set(players.map((p) => p.user_id))];
+  const people = [...new Set([...players.map((p) => p.user_id), ...rows.map((r) => (r.invited ? String(r.invited) : "")).filter(Boolean)])];
   const { data: profs } = people.length ? await db.from("profiles").select("id, username, avatar").in("id", people) : { data: [] };
   const byId = new Map(((profs ?? []) as { id: string; username: string | null; avatar: unknown }[]).map((p) => [p.id, p]));
   return rows.map((r) => {
@@ -211,6 +271,13 @@ async function views(db: ReturnType<typeof createAdminClient>, rows: Record<stri
       }),
       winner: r.winner_id ? String(r.winner_id) : null,
       prize: r.prize == null ? null : n(r.prize),
+      invited: r.invited
+        ? (() => {
+            const pr = byId.get(String(r.invited));
+            const name = pr?.username ?? "Player";
+            return { id: String(r.invited), name, avatar: cleanAvatar(pr?.avatar, name) };
+          })()
+        : null,
     };
   });
 }
@@ -236,7 +303,7 @@ export async function challengeView(id: number): Promise<ChallengeView | null> {
 const lastSweep = new Map<string, number>();
 
 /** Challenges near a spot (open to join, or being played), and the one you're in, if any. */
-export async function nearbyChallenges(region: string, x: number, z: number): Promise<{ list: ChallengeView[]; mine: number | null }> {
+export async function nearbyChallenges(region: string, x: number, z: number): Promise<{ list: ChallengeView[]; mine: number | null; invites?: ChallengeView[] }> {
   if (!REGIONS[region]) return { list: [], mine: null };
   const db = createAdminClient();
   // Tidying up finished and expired challenges: at most every 10 s per region on this server (every
@@ -251,11 +318,17 @@ export async function nearbyChallenges(region: string, x: number, z: number): Pr
   const rows = ((data ?? []) as Record<string, unknown>[]).filter((r) => Math.hypot(n(r.x) - x, n(r.z) - z) <= NEAR_TILES * 2);
   const userId = await currentUserId().catch(() => null);
   let mine: number | null = null;
+  let invites: ChallengeView[] = [];
   if (userId) {
-    const { data: busy } = await db.rpc("challenge_busy", { p_user: userId });
+    const [{ data: busy }, inv] = await Promise.all([
+      db.rpc("challenge_busy", { p_user: userId }),
+      // Invitations to you, still waiting (game-db/110; none before it's run).
+      db.from("challenges").select("*").eq("invited", userId).eq("status", "open").gt("starts_at", new Date().toISOString()).limit(5),
+    ]);
     mine = busy == null ? null : n(busy);
+    if (!inv.error) invites = await views(db, (inv.data ?? []) as Record<string, unknown>[]);
   }
-  return { list: await views(db, rows), mine };
+  return { list: await views(db, rows), mine, invites };
 }
 
 /**

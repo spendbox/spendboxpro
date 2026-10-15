@@ -313,3 +313,41 @@ a[href]:active,
 @media (prefers-reduced-motion: reduce) {
   .moment-in { animation: none; }
 }
+
+/* Whot! (src/app/play/games): cards sized by --cw, and the table's moves. */
+.whot-card { width: var(--cw); height: calc(var(--cw) * 1.45); }
+.whot-pip { width: calc(var(--cw) * 0.16); height: calc(var(--cw) * 0.16); }
+.whot-mid { width: calc(var(--cw) * 0.5); height: calc(var(--cw) * 0.5); }
+@keyframes whot-drop {
+  0% { opacity: 0; transform: translate(var(--from-x, 0), var(--from-y, 120%)) rotate(var(--from-r, 0deg)) scale(1.15); }
+  100% { opacity: 1; transform: translate(0, 0) rotate(var(--rot, 0deg)) scale(1); }
+}
+.whot-drop { animation: whot-drop 0.38s cubic-bezier(0.2, 0.9, 0.3, 1) both; }
+@keyframes whot-deal {
+  0% { opacity: 0; transform: translateY(-160%) scale(0.7); }
+  100% { opacity: 1; }
+}
+.whot-deal { animation: whot-deal 0.4s ease-out both; }
+@keyframes whot-banner {
+  0% { opacity: 0; transform: scale(0.4) rotate(-6deg); }
+  18% { opacity: 1; transform: scale(1.12) rotate(2deg); }
+  30% { transform: scale(1) rotate(0deg); }
+  82% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.08); }
+}
+.whot-banner { animation: whot-banner 1.5s ease-out both; }
+@keyframes whot-glow {
+  0%, 100% { box-shadow: 0 0 0 2px #ffd43b, 0 0 14px 2px rgba(255, 212, 59, 0.55); }
+  50% { box-shadow: 0 0 0 2px #ffd43b, 0 0 24px 6px rgba(255, 212, 59, 0.85); }
+}
+.whot-playable { animation: whot-glow 1.4s ease-in-out infinite; border-radius: 10% / 7%; }
+@keyframes whot-bubble {
+  0% { opacity: 0; transform: translateY(6px) scale(0.9); }
+  12% { opacity: 1; transform: none; }
+  85% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.whot-bubble { animation: whot-bubble 4.5s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .whot-drop, .whot-deal, .whot-banner, .whot-playable, .whot-bubble { animation: none; }
+}
