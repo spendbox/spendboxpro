@@ -5,7 +5,9 @@ import { useCallback, useEffect, useState } from "react";
 import { cachedThings, loadThings } from "./things-cache";
 import { Building2, Check, Gem, House, MapPin, Pencil, ShoppingBag, Store, TrendingUp, X } from "lucide-react";
 import { renameUnit } from "../property-actions";
-import { CATEGORY_LABEL, effectWords, LUXURY_FROM, mintOf, QUICK_SALE, SHOP, STEAL_MAX, CAUGHT_CHANCE, type ItemCategory } from "@/lib/world/items";
+import { CATEGORY_LABEL, effectWords, LUXURY_FROM, mintOf, QUICK_SALE, SHOP, STEAL_MAX, CAUGHT_CHANCE, type ItemCategory, type ItemKind } from "@/lib/world/items";
+import { ItemArt } from "./item-art";
+import { PurchasePop } from "./purchase-pop";
 import { INCOME_DAY, type AssetUnit } from "@/lib/world/property-api";
 import type { Prices } from "@/lib/world/region";
 import { cash } from "@/lib/world/value";
@@ -55,6 +57,8 @@ export function ThingsSheet({
   const [note, setNote] = useState<{ text: string; good: boolean } | null>(null);
   const load = useCallback(() => void loadThings().then((t) => t && setMe(t)), []);
   useEffect(() => load(), [load]);
+  /** Just bought from the shop: the "It's yours!" pop-up. */
+  const [bought, setBought] = useState<{ kind: ItemKind; paid: number } | null>(null);
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>, done: string | ((r: Record<string, unknown>) => string)) => {
     setBusy(true);
     const r = (await fn()) as { ok: boolean; error?: string } & Record<string, unknown>;
@@ -65,7 +69,8 @@ export function ThingsSheet({
     return r.ok;
   };
   return (
-    <Sheet
+    <>
+      <Sheet
       onClose={onClose}
       wide
       title={
@@ -83,7 +88,7 @@ export function ThingsSheet({
       </div>
       {note && <p className={`mt-3 rounded-xl px-3 py-2 text-xs font-semibold ${note.good ? "bg-me/10 text-me" : "bg-hit/10 text-hit"}`}>{note.text}</p>}
       {tab === "mine" && <Mine me={me} busy={busy} run={run} />}
-      {tab === "shops" && <Shops startCars={start === "cars"} prices={prices} coins={coins} busy={busy} run={run} />}
+      {tab === "shops" && <Shops startCars={start === "cars"} prices={prices} coins={coins} busy={busy} run={run} onBought={(k, paid) => setBought({ kind: k, paid })} />}
       {tab === "assets" && (
         <Assets
           units={units}
@@ -97,7 +102,10 @@ export function ThingsSheet({
           }}
         />
       )}
-    </Sheet>
+      </Sheet>
+      {/* What you just bought, popping up big and shiny (outside the sheet, over everything). */}
+      {bought && <PurchasePop kind={bought.kind} paid={bought.paid} onClose={() => setBought(null)} />}
+    </>
   );
 }
 
@@ -123,6 +131,7 @@ function Mine({ me, busy, run }: { me: MyThings | null; busy: boolean; run: Run 
           {me.items.map((i) => (
             <li key={i.id} className="px-3 py-2.5">
               <button onClick={() => setOpen(open === i.id ? null : i.id)} className="flex w-full items-center gap-3 text-left">
+                <ItemArt kind={i.kind} category={i.category} size={40} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">
                     {i.name}
@@ -181,7 +190,7 @@ function ItemActions({ item, busy, to, setTo, run, done }: { item: MyItem; busy:
 }
 
 /** The city's shop, cars included: buy new (reputation for fine things), or try to steal something small. */
-function Shops({ startCars, prices, coins, busy, run }: { startCars: boolean; prices: Prices; coins: number; busy: boolean; run: Run }) {
+function Shops({ startCars, prices, coins, busy, run, onBought }: { startCars: boolean; prices: Prices; coins: number; busy: boolean; run: Run; onBought: (k: ItemKind, paid: number) => void }) {
   const [cat, setCat] = useState<ItemCategory | "all" | "luxury">(startCars ? "car" : "all");
   const [risky, setRisky] = useState<string | null>(null);
   const cars = cat === "car";
@@ -201,6 +210,7 @@ function Shops({ startCars, prices, coins, busy, run }: { startCars: boolean; pr
       <ul className="mt-2 divide-y divide-ink/5 rounded-2xl ring-1 ring-ink/5">
         {list.map((k) => (
           <li key={k.id} className="flex items-center gap-3 px-3 py-2.5">
+            <ItemArt kind={k.id} category={k.category} size={44} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{k.name}</p>
               <p className="truncate text-xs text-muted">{effectWords(k.effect)}</p>
@@ -229,7 +239,7 @@ function Shops({ startCars, prices, coins, busy, run }: { startCars: boolean; pr
               return (
                 <button
                   disabled={busy || !can}
-                  onClick={() => void run(() => items.buyFromShop(k.id), `${k.name} is yours!${k.effect.rep ? ` +${k.effect.rep} reputation.` : ""}`)}
+                  onClick={() => void run(() => items.buyFromShop(k.id), `${k.name} is yours!${k.effect.rep ? ` +${k.effect.rep} reputation.` : ""}`).then((ok) => ok && onBought(k, price))}
                   title={can ? `Buy for ${cash(price)}` : `You need ${cash(price)}`}
                   className={`h-8 shrink-0 rounded-full px-3 text-xs font-bold tabular-nums ${can ? "bg-[#2b8a3e] text-white" : "bg-[#e03131]/10 text-[#e03131]"} disabled:cursor-not-allowed`}
                 >
