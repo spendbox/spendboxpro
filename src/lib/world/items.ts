@@ -86,7 +86,27 @@ export const SHOP: ItemKind[] = [
   K("car_camry", "Toyota Camry", "car", 22_000_000, { mind: 0.3, rep: 6 }, { speed: 21, fuelKm: 45 }),
   K("car_lexus", "Lexus RX", "car", 60_000_000, { mind: 0.4, rep: 12 }, { speed: 21, fuelKm: 60 }),
   K("car_gwagon", "Mercedes G-Wagon", "car", 250_000_000, { mind: 0.5, rep: 30 }, { speed: 21, fuelKm: 90 }),
+
+  // ---- Luxury (game-db/104): what Lagos's richest wear, drive and hang on the wall, at roughly
+  // what they really cost there. The dearer, the more reputation, on the same scale as the cars.
+  K("cartier_love", "Cartier Love bracelet", "jewellery", 12_000_000, { mind: 0.2, rep: 6 }),
+  K("rolex_submariner", "Rolex Submariner", "jewellery", 28_000_000, { mind: 0.2, rep: 10 }),
+  K("hermes_birkin", "Hermès Birkin bag", "clothing", 60_000_000, { mind: 0.2, rep: 14 }),
+  K("rolex_daytona", "Rolex Daytona", "jewellery", 65_000_000, { mind: 0.2, rep: 15 }),
+  K("ap_royal_oak", "Audemars Piguet Royal Oak", "jewellery", 95_000_000, { mind: 0.25, rep: 18 }),
+  K("rolex_day_date", "Rolex Day-Date Platinum", "jewellery", 120_000_000, { mind: 0.25, rep: 20 }),
+  K("diamond_necklace", "Diamond necklace", "jewellery", 180_000_000, { mind: 0.25, rep: 24 }),
+  K("patek_nautilus", "Patek Philippe Nautilus", "jewellery", 250_000_000, { mind: 0.3, rep: 30 }),
+  K("enwonwu_painting", "Ben Enwonwu painting", "art", 300_000_000, { mind: 0.4, rep: 34 }),
+  K("car_bentayga", "Bentley Bentayga", "car", 450_000_000, { mind: 0.5, rep: 38 }, { speed: 21, fuelKm: 100 }),
+  K("richard_mille", "Richard Mille RM 11", "jewellery", 500_000_000, { mind: 0.3, rep: 40 }),
+  K("car_urus", "Lamborghini Urus", "car", 550_000_000, { mind: 0.6, rep: 42 }, { speed: 22, fuelKm: 110 }),
+  K("car_cullinan", "Rolls-Royce Cullinan", "car", 950_000_000, { mind: 0.6, rep: 50 }, { speed: 21, fuelKm: 120 }),
+  K("patek_grandmaster", "Patek Philippe Grandmaster Chime", "jewellery", 1_500_000_000, { mind: 0.4, rep: 60 }),
 ];
+
+/** Luxury things (a ₦10m price and up): shown together in the shops, dearest last. */
+export const LUXURY_FROM = 10_000_000;
 
 export const shopKind = (id: string) => SHOP.find((k) => k.id === id);
 

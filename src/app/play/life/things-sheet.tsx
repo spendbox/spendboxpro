@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { cachedThings, loadThings } from "./things-cache";
 import { Building2, Check, Gem, House, MapPin, Pencil, ShoppingBag, Store, TrendingUp, X } from "lucide-react";
 import { renameUnit } from "../property-actions";
-import { CATEGORY_LABEL, effectWords, mintOf, QUICK_SALE, SHOP, STEAL_MAX, CAUGHT_CHANCE, type ItemCategory } from "@/lib/world/items";
+import { CATEGORY_LABEL, effectWords, LUXURY_FROM, mintOf, QUICK_SALE, SHOP, STEAL_MAX, CAUGHT_CHANCE, type ItemCategory } from "@/lib/world/items";
 import { INCOME_DAY, type AssetUnit } from "@/lib/world/property-api";
 import type { Prices } from "@/lib/world/region";
 import { cash } from "@/lib/world/value";
@@ -182,20 +182,22 @@ function ItemActions({ item, busy, to, setTo, run, done }: { item: MyItem; busy:
 
 /** The city's shop, cars included: buy new (reputation for fine things), or try to steal something small. */
 function Shops({ startCars, prices, coins, busy, run }: { startCars: boolean; prices: Prices; coins: number; busy: boolean; run: Run }) {
-  const [cat, setCat] = useState<ItemCategory | "all">(startCars ? "car" : "all");
+  const [cat, setCat] = useState<ItemCategory | "all" | "luxury">(startCars ? "car" : "all");
   const [risky, setRisky] = useState<string | null>(null);
   const cars = cat === "car";
-  const list = SHOP.filter((k) => cat === "all" || k.category === cat);
+  // Luxury: the ₦10m-and-up watches, bags, art and cars together, cheapest first.
+  const list = cat === "luxury" ? SHOP.filter((k) => k.price >= LUXURY_FROM).sort((a, b) => a.price - b.price) : SHOP.filter((k) => cat === "all" || k.category === cat);
   return (
     <div className="mt-3">
       <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
-        {(["all", "car", "jewellery", "clothing", "gadget", "home", "art", "book", "fitness"] as const).map((c) => (
-          <button key={c} onClick={() => setCat(c)} className={`h-8 shrink-0 rounded-full px-3 text-xs font-semibold ${cat === c ? "bg-ink text-white" : "bg-ink/5"}`}>
-            {c === "all" ? "All" : CATEGORY_LABEL[c]}
+        {(["all", "luxury", "car", "jewellery", "clothing", "gadget", "home", "art", "book", "fitness"] as const).map((c) => (
+          <button key={c} onClick={() => setCat(c)} className={`h-8 shrink-0 rounded-full px-3 text-xs font-semibold ${cat === c ? "bg-ink text-white" : c === "luxury" ? "bg-gold/25 text-gold-dark" : "bg-ink/5"}`}>
+            {c === "all" ? "All" : c === "luxury" ? "Luxury ✨" : CATEGORY_LABEL[c]}
           </button>
         ))}
       </div>
       {cars && <p className="text-xs text-muted">A good car turns heads (reputation), and you can drive it round the city.</p>}
+      {cat === "luxury" && <p className="text-xs text-muted">The finest watches, jewellery, art and cars in Lagos. The dearer it is, the more reputation it brings, for as long as you own it. Watches, jewellery and art also tend to gain value over time.</p>}
       <ul className="mt-2 divide-y divide-ink/5 rounded-2xl ring-1 ring-ink/5">
         {list.map((k) => (
           <li key={k.id} className="flex items-center gap-3 px-3 py-2.5">

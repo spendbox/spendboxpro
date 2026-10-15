@@ -1069,11 +1069,9 @@ export function useWorldLife({
           )}
           {signedIn && (
             <StarterRoomBox
-              onMoved={async (r) => {
+              onFindHome={() => {
                 setHomeOpen(false);
-                await refresh();
-                setMessage({ text: `Moved! Your free room is in ${r.area} now.`, good: true });
-                setFlyTo({ tile: spiralIndex(Math.round(r.x), Math.round(r.z)), at: ++flies.current });
+                openFinder();
               }}
             />
           )}
