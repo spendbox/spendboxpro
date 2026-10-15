@@ -13,8 +13,8 @@ import { playSfx } from "../sound";
 import { questEvent } from "./quest-store";
 import { ActivityStyles, BigButton, Confetti, Face, GameHeader } from "./ui";
 
-// Give coins to another player: 1–10,000 at a time, with an optional note. The server checks
-// the limits (20,000 a day in total, 10,000 a day to the same person) and tells the receiver.
+// Give money to another player: any amount you have, with an optional note. No limit, except for
+// brand-new accounts (game-db/107). The server checks and tells the receiver.
 
 const PRESETS = [10, 50, 100, 500, 1000];
 
@@ -28,7 +28,7 @@ export function GiveCoinsSheet({ to, onClose, local }: { to: { id: string; name:
   const [balance, setBalance] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sent, setSent] = useState<{ amount: number; leftToday: number } | null>(null);
+  const [sent, setSent] = useState<{ amount: number; leftToday: number | null } | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -41,7 +41,7 @@ export function GiveCoinsSheet({ to, onClose, local }: { to: { id: string; name:
   // What's sent: whole mint (typed in your currency on the real map).
   const typed = Number(amount);
   const n = local ? Math.round(fromShown(typed)) : Math.floor(typed);
-  const valid = Number.isInteger(n) && n >= 1 && n <= 10_000 && (balance === null || n <= balance);
+  const valid = Number.isInteger(n) && Number.isSafeInteger(n) && n >= 1 && (balance === null || n <= balance);
 
   async function give() {
     if (!valid || busy) return;
@@ -83,7 +83,9 @@ export function GiveCoinsSheet({ to, onClose, local }: { to: { id: string; name:
             <p className="font-display text-xl font-bold">
               Sent {cash(sent.amount)} to {to.name}!
             </p>
-            <p className="text-sm text-muted">They&apos;ll get a notification. You can give {short(sent.leftToday)} more today.</p>
+            <p className="text-sm text-muted">
+              They&apos;ll get a notification.{sent.leftToday != null && ` As a new player, you can give ${short(sent.leftToday)} more today.`}
+            </p>
             <BigButton onClick={onClose}>Done</BigButton>
           </div>
         ) : (
@@ -104,7 +106,7 @@ export function GiveCoinsSheet({ to, onClose, local }: { to: { id: string; name:
               <input
                 inputMode="numeric"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, "").slice(0, local ? 9 : 5))}
+                onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, "").slice(0, 15))}
                 className="mt-1 w-full rounded-2xl border border-line bg-panel px-4 py-3 text-lg font-bold outline-none focus:border-ink"
                 aria-label="How much to give"
               />
@@ -124,7 +126,7 @@ export function GiveCoinsSheet({ to, onClose, local }: { to: { id: string; name:
               <Send className="size-4" /> {busy ? "Sending…" : `Give ${valid ? cash(n) : ""}`}
             </BigButton>
             <p className="text-center text-xs text-muted">
-              Up to {cash(10_000)} at a time (less for new players). Money you give can&apos;t be taken back.
+              Money you give can&apos;t be taken back.
             </p>
           </>
         )}
