@@ -86,7 +86,7 @@ export function ServicesSheet({
         </div>
       )}
       {tab !== "yours" && (
-        <p className="mt-2 text-[11px] text-muted" title={kind === "game" ? `The price is held when you book and paid when it's done, less ${SERVICE_VAT * 100}% VAT.` : undefined}>
+        <p className="mt-2 text-[11px] text-muted" title={kind === "game" ? `The price is held when you book and paid when it's done, less ${+(SERVICE_VAT * 100).toFixed(1)}% VAT.` : undefined}>
           {kind === "game" ? "Paid in game money, only once it's done." : "Paid in person, outside the game. Meet safely."}
         </p>
       )}

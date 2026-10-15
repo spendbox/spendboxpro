@@ -123,7 +123,7 @@ import { useWorldLife } from "./life/world-life";
 import type { ExplorePlace } from "@/lib/world/explore";
 import { Joystick } from "./joystick";
 import { onlineIdle, onlinePinged, settleIncome, syncIncome, useLiveCoins } from "./income";
-import { Tutorial, useTourShows, useTutorialGlow, useTutorialPhase } from "./tutorial";
+import { setTutorialUser, Tutorial, useTourShows, useTutorialGlow, useTutorialPhase } from "./tutorial";
 import { prefetchPeople } from "./people/people-list";
 
 import { GiftPop, GiftSent } from "./people/gift-pop";
@@ -448,6 +448,8 @@ export function Game({
   /** Open the sign-in pop-up straight away (a link to sign in). */
   openSignIn?: boolean;
 }) {
+  // Each account has its own walkthrough (a new account on a shared phone starts from the top).
+  setTutorialUser(state.me.guest ? null : state.me.id);
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [message, setMessage] = useState<{ text: string; tone: "good" | "bad" | "info"; icon?: LucideIcon } | null>(null);
@@ -3411,13 +3413,11 @@ export function Game({
             <DockButton icon={Footprints} label="Stop walking" dark onClick={() => setWalking(false)} />
           </div>
         )}
-        {/* Bottom right, just left of the chat bubble (nothing at the bottom left, where a thumb
-            meant for the map lands): the notifications bell (while they're off), then one small
-            round button that opens the quick buttons (Home, Camera, Coming soon, Locate me, Walk)
-            upwards; tap anywhere else and they fold away again. The walkthrough opens them when it
-            points at one. */}
+        {/* Down the left, out of the way of the city: the notifications bell (while they're off), then one
+            round button that opens the quick buttons (Home, Camera, Coming soon, Locate me, Walk); tap
+            anywhere else and they fold away again. The walkthrough opens them when it points at one. */}
         {worldId && !guest && !place && ride === null && !walking && tour("dock") && (
-          <div ref={quickRef} className="pointer-events-auto absolute bottom-7 right-[5.25rem] z-20 flex flex-col items-center gap-2 sm:bottom-9 sm:right-[6rem]">
+          <div ref={quickRef} className="pointer-events-auto absolute bottom-[max(0.625rem,env(safe-area-inset-bottom))] left-2.5 flex flex-col items-center gap-2 sm:bottom-4 sm:left-4">
             {!pushOn && tour("extras") && (
               <button onClick={turnOnBell} className="relative grid size-10 place-items-center rounded-full bg-gold/80 text-ink shadow transition-opacity hover:bg-gold" aria-label="Notifications are off: tap to turn them on" title="Turn notifications on">
                 <BellOff className="size-4" />
@@ -3474,12 +3474,12 @@ export function Game({
                   setQuickShutFor(null);
                 }
               }}
-              className={cn("relative grid size-10 place-items-center rounded-full shadow-md transition", quickShown ? "bg-ink text-white" : "bg-white/80 text-ink backdrop-blur-sm hover:bg-white")}
+              className={cn("relative grid size-11 place-items-center rounded-full shadow-md transition", quickShown ? "bg-ink text-white" : "bg-white/80 text-ink backdrop-blur-sm hover:bg-white")}
               aria-label={quickShown ? "Close the quick buttons" : "Open the quick buttons: home, camera, locate me, walk"}
               aria-expanded={quickShown}
               title="Quick buttons"
             >
-              {quickShown ? <X className="size-[18px]" /> : <LayoutGrid className="size-[18px]" />}
+              {quickShown ? <X className="size-5" /> : <LayoutGrid className="size-5" />}
               {tutorialGlow === "dock" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
             </button>
             <style>{`@keyframes dockIn { from { opacity: 0; transform: translateY(8px) scale(.96) } to { opacity: 1; transform: none } }`}</style>

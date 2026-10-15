@@ -181,7 +181,7 @@ export function useWorldLife({
       stop();
     };
   }, [regionId, pretend]);
-  const { assets, owned, loaded, refresh } = useLife(api, signedIn ? regionId : null);
+  const { assets, owned, loaded, refresh } = useLife(api, signedIn ? regionId : null, meName);
   const [property, setProperty] = useState<PropertyInfo | null>(null);
   const [owners, setOwners] = useState<BuildingOwner[] | null>(null);
   const [busy, setBusy] = useState(false);

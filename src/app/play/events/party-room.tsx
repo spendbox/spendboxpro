@@ -7,7 +7,7 @@ import { HOT_MAX, HYPE_FULL, HYPE_POINTS, ICEBREAKERS, MEET_PROMPTS, MOVES, QUEU
 import { cash } from "@/lib/world/value";
 import { CallBar } from "../call/call-bar";
 import { giveCoins } from "../gift-actions";
-import { playLoop, stopLoop, VIBES, VIBE_BY_ID, type Vibe } from "../activities/synth";
+import { backgroundAudio, playLoop, stopLoop, VIBES, VIBE_BY_ID, type Vibe } from "../activities/synth";
 import { Confetti } from "../activities/ui";
 import { playSfx } from "../sound";
 import { randomKey, useEventRoom, useRoomChat, useRoomList, type RoomMsg, type RoomPerson } from "./channel";
@@ -99,6 +99,41 @@ export function PartyRoom({
     return () => stop();
   }, [sound, songOn, hostVibe]);
   useEffect(() => () => stopLoop(), []);
+  // Leave the browser (another app, the screen off) and the beat plays on until you leave the
+  // party, with the party's name and Play, Pause and Leave on the lock screen (docs/EVENTS.md).
+  // YouTube songs can't: YouTube stops them when the browser isn't in front.
+  const leaveRef = useRef(onLeave);
+  useEffect(() => {
+    leaveRef.current = onLeave;
+  });
+  useEffect(() => {
+    backgroundAudio(true);
+    const ms = typeof navigator !== "undefined" ? navigator.mediaSession : undefined;
+    if (ms) {
+      try {
+        ms.metadata = new MediaMetadata({ title: view.title, artist: "Party in Newtown", album: eventFormat(view.format)?.title ?? "Party", artwork: [{ src: "/icon.svg", sizes: "any", type: "image/svg+xml" }] });
+        ms.setActionHandler("play", () => setSound(true));
+        ms.setActionHandler("pause", () => setSound(false));
+        ms.setActionHandler("stop", () => leaveRef.current?.());
+      } catch {
+        // Some browsers have only part of it: the sound still plays.
+      }
+    }
+    return () => {
+      backgroundAudio(false);
+      if (ms) {
+        try {
+          ms.metadata = null;
+          for (const a of ["play", "pause", "stop"] as const) ms.setActionHandler(a, null);
+        } catch {
+          // Nothing to undo.
+        }
+      }
+    };
+  }, [view.title, view.format]);
+  useEffect(() => {
+    if (typeof navigator !== "undefined" && navigator.mediaSession) navigator.mediaSession.playbackState = sound ? "playing" : "paused";
+  }, [sound]);
 
   // Shout-outs: the newest shows big for a few seconds.
   const shouts = useRoomList(on, "shout", 6);

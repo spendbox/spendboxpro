@@ -12,10 +12,14 @@ import { whileHere } from "./activity";
 // included) that takes everyone, old players too, through a few fun tips, three missions with
 // rewards (name your home, say hi, go to an event; paid by the server, game-db/080 and 095), and a tour of
 // the rest (photos, exploring, getting home, property, your profile). The button it talks about
-// glows. Kept in this browser; "Start the guide" in your profile starts it again.
+// glows. Kept in this browser for each player (a second account on the same phone starts from the
+// top); "Start the guide" in your profile starts it again.
 
 /** Bump to show a new walkthrough to everyone again. */
 const KEY = "newtown.tutorial.v1";
+/** Whose walkthrough this is (set by the game before it draws; see setTutorialUser). */
+let userKey: string | null = null;
+const keyFor = (user: string | null) => (user ? `${KEY}:${user}` : KEY);
 
 /** What the walkthrough points at: that button glows. */
 export type TutorialGlow = "home" | "chat" | "events" | "camera" | "profile" | "wallet" | "dock" | "leave" | "townhall" | null;
@@ -26,7 +30,16 @@ const FRESH: Saved = { phase: "intro", i: 0, skipped: [] };
 
 function read(): Saved {
   try {
-    const s = JSON.parse(localStorage.getItem(KEY) ?? "null") as Saved | null;
+    let raw = localStorage.getItem(keyFor(userKey));
+    // From before it was kept per player: the first player to come back takes it over.
+    if (raw === null && userKey) {
+      raw = localStorage.getItem(KEY);
+      if (raw !== null) {
+        localStorage.setItem(keyFor(userKey), raw);
+        localStorage.removeItem(KEY);
+      }
+    }
+    const s = JSON.parse(raw ?? "null") as Saved | null;
     if (s && ["intro", "missions", "tips", "done"].includes(s.phase)) return { phase: s.phase, i: Math.max(0, Number(s.i) || 0), skipped: Array.isArray(s.skipped) ? s.skipped : [], closed: s.closed === true && s.phase !== "done" };
   } catch {
     // Not readable: start from the top.
@@ -45,13 +58,23 @@ const subscribe = (f: () => void) => (subs.add(f), () => void subs.delete(f));
 function save(next: Saved) {
   saved = next;
   try {
-    localStorage.setItem(KEY, JSON.stringify(next));
+    localStorage.setItem(keyFor(userKey), JSON.stringify(next));
   } catch {
     // Not kept: it carries on from here this visit.
   }
   emit();
 }
 const current = () => (saved ??= typeof window === "undefined" ? FRESH : read());
+
+/** Whose walkthrough to show: each account has its own (call before drawing, on every render). */
+export function setTutorialUser(id: string | null) {
+  if (id === userKey) return;
+  userKey = id;
+  saved = null;
+  missionNow = null;
+  // Told after this render, not during it.
+  queueMicrotask(emit);
+}
 
 /** Where the walkthrough is (for the rest of the game: e.g. no daily-gift pop-up during the intro). */
 export function useTutorialPhase(): Phase {
@@ -230,20 +253,20 @@ export function Tutorial({
   }, [cheer]);
 
   const intro: Card[] = [
-    { emoji: "👋", title: `Welcome to ${place}!`, text: "A real city, real streets, real people. Grab a seat, this takes a minute." },
+    { emoji: "👋", title: `Welcome to ${place}!`, text: "It's a real city, with real streets and real people. This tour takes about a minute." },
     {
       emoji: "✋",
-      title: "Psst: you can move me",
-      text: "This card is in the way? Hold it anywhere (not on a button) and drag it wherever you like. It stays where you leave it, so you can always see what it's talking about.",
+      title: "You can move this card",
+      text: "If it's in the way, hold it anywhere except a button and drag it somewhere else. It stays where you leave it.",
     },
-    { emoji: "🏖️", title: "No work. No bills. No brushing your teeth.", text: "Seriously. In Newtown you skip the boring bits and keep the fun ones." },
-    { emoji: "🎲", title: "Your cash is for fun", text: "Play games, meet new people, visit real places and send gifts. That's the whole job description." },
+    { emoji: "🏖️", title: "No work, no bills, no chores", text: "In Newtown you skip the boring parts of life and keep the fun ones." },
+    { emoji: "🎲", title: "Your money is for fun", text: "Play games, meet new people, visit real places and send gifts. That's the whole job." },
     {
       emoji: "🎯",
       title: "Three quick missions",
       text: (
         <>
-          Do them and pocket <b className="text-gold">{naira(MISSIONS_TOTAL)}</b>. Ready?
+          Finish them and you&apos;ll earn <b className="text-gold">{naira(MISSIONS_TOTAL)}</b>. Ready?
         </>
       ),
     },
@@ -251,77 +274,77 @@ export function Tutorial({
   const missionCards: Record<Mission, Card> = {
     name: {
       emoji: "🏠",
-      title: "Mission 1 of 3 · Name your home",
-      text: `Every legend needs a base. Tap the glowing house (in the quick buttons, bottom right, next to the chat), then the pencil, and give your place a name. “${palace}”? Bold. We like it.`,
+      title: "Mission 1 of 3: Name your home",
+      text: `Every legend needs a base. Tap the glowing house in your quick buttons (bottom left), then tap the pencil and give your place a name. How about “${palace}”?`,
       glow: "home",
       action: { label: "Show me", run: actions.nameHome },
     },
     hi: {
       emoji: "💬",
-      title: "Mission 2 of 3 · Say hi to someone",
-      text: "Tap the glowing chat bubble (bottom right), then New chat (it glows too). Tap anyone with a green dot, they're online now, and send a hi. Worst case, you make a friend.",
+      title: "Mission 2 of 3: Say hi",
+      text: "Tap the glowing chat bubble (bottom right), then tap New chat. Pick anyone with a green dot, since they're online right now, and say hi. Worst case, you make a friend.",
       glow: "chat",
       action: { label: "Show me", run: actions.chat },
     },
     win: {
       emoji: "🎉",
-      title: "Mission 3 of 3 · Go to an event",
-      text: "Tap the party button (top right, it glows). What's on shows the parties and talks happening now: tap one and Go in. Nothing on? Host your own in Host an event: a party on your street or a free talk (How to host a great party there shows you how, music and all; if fewer than 10 people come, the hosting fee comes back). The moment you're in, the reward is yours. Dance like nobody's watching. (Everybody's watching.)",
+      title: "Mission 3 of 3: Go to an event",
+      text: "Tap the glowing party button (top right). What's on lists the parties and talks happening now. Tap one, then Go in, and the reward is yours. Nothing on? Host your own under Host an event. It walks you through every step, music included, and if fewer than 10 people come, you get the hosting fee back.",
       glow: "events",
       action: { label: "Show me", run: actions.events },
     },
   };
   const tips: Card[] = [
-    { emoji: "🎉", title: "Missions complete!", text: "You're officially a Newtowner. A few quick tips and you're free to roam." },
+    { emoji: "🎉", title: "Missions complete!", text: "You're officially a Newtowner. Here are a few quick tips, then the city is yours." },
     {
       emoji: "🏛️",
       title: "The Town Hall",
-      text: `One big chat for everyone online in ${place}. Ask for directions, brag about your new crib, find people to play with. Tap the orange button just above your chat bubble (bottom right). Send emojis and photos, tap a message to reply, react or delete it, and tap a name to see who it is. Everything said there is gone after 24 hours.`,
+      text: `It's one big chat for everyone online in ${place}. Ask for directions, show off your new place or find people to play with. It's the orange button just above your chat bubble. Messages there disappear after 24 hours.`,
       glow: "townhall",
       action: { label: "Open it", run: actions.townHall },
     },
     {
       emoji: "🧰",
       title: "Your quick buttons",
-      text: "The small round button at the bottom right, next to the chat, opens your quick buttons: Home, Camera, Coming soon, Locate me and Walk. Tap anywhere else and they tuck themselves away. Neat, right?",
+      text: "The round button at the bottom left opens your quick buttons: Home, Camera, Coming soon, Locate me and Walk. Tap anywhere else and they tuck away again.",
       glow: "dock",
     },
     {
       emoji: "📸",
-      title: "Snap anything you like",
-      text: "Love a place or a thing? Tap the camera in your quick buttons (or the orange one inside places). Your pictures live in your Photos.",
+      title: "Take pictures",
+      text: "See a place you love? Tap the camera in your quick buttons. Your pictures are saved in Photos.",
       glow: "camera",
       action: { label: "Try it", run: actions.camera },
     },
-    { emoji: "🧭", title: "Go explore", text: "Tap any building to peek inside, hop on a danfo, find the hidden spots. Nobody's watching the clock." },
-    { emoji: "🏠", title: "Lost? Tap the house", text: "The house in your quick buttons (bottom right) always takes you home. Like a very fast okada.", glow: "home" },
+    { emoji: "🧭", title: "Go exploring", text: "Tap any building to look inside, hop on a danfo or hunt for hidden spots. There's no clock to beat." },
+    { emoji: "🏠", title: "Lost? Tap the house", text: "The house in your quick buttons (bottom left) always takes you home, faster than any okada.", glow: "home" },
     {
       emoji: "👛",
-      title: "Your Wallet",
-      text: "Tap your cash (top right) for your Wallet: today's daily gift, your payments, top-ups (pay by bank transfer right in the game) and the World Bank. 🏦",
+      title: "Your wallet",
+      text: "Tap your money (top right) to open your wallet. That's where you'll find your daily gift, your payments, top-ups and the World Bank.",
       glow: "wallet",
       action: { label: "Open it", run: actions.wallet },
     },
     {
       emoji: "💰",
       title: "Money comes to you",
-      text: "Rewards for showing up: you're paid for every minute you're online, plus a daily gift, missions, and ticket sales from events you host. Property earns you money every day too, by itself. Watch your cash tick up! See it all in Things › Assets.",
+      text: "You earn for every minute you're online, plus a daily gift, missions, and ticket sales from events you host. Property you own pays you every day too. You can see it all under Things, then Assets.",
     },
     {
       emoji: "👤",
       title: "Your profile",
-      text: "Tap your face (top left) for Things, Assets, Wallet, Photos, Friends and settings. Missed something? “Start the guide” in there plays all this again.",
+      text: "Tap your face (top left) for your things, wallet, photos, friends and settings. Missed something? Tap Start the guide in there to see this tour again.",
       glow: "profile",
       action: { label: "Open it", run: actions.profile },
     },
     {
       emoji: "💅",
       title: "Make it you",
-      text: "Everyone on the map sees your face, so make it yours: skin, hair, eyes, outfit, accessories, or use a photo of yourself. Tap your face (top left), then My look or Profile photo. Change it as often as you like, it's free.",
+      text: "Everyone on the map sees your face, so make it look like you. Change your skin, hair, eyes and outfit, or use a photo. It's free, and you can change it whenever you like.",
       glow: "profile",
-      action: { label: "Change my look", run: actions.look },
+      action: { label: "My look", run: actions.look },
     },
-    { emoji: "🚀", title: "That's it. Go have fun!", text: "The city's yours. Say hi, win big, buy the block. See you around!" },
+    { emoji: "🚀", title: "That's it. Have fun!", text: "Say hi to people, win some games, buy the block. See you around!" },
   ];
 
   const server = done && done !== "off" ? done : null;
@@ -343,8 +366,8 @@ export function Tutorial({
           title: planned.title || "First, step outside",
           text:
             inside.kind === "ride"
-              ? `You're on ${inside.name} right now, and this button is out on the map. Tap the dark “Get off” button at the bottom of the screen (it's glowing), and we'll carry on from there.`
-              : `You're inside ${inside.name} right now, and this button is out on the map. To step out, tap the dark “Leave” button at the bottom of the screen (it's glowing), or tap “Take me out” here. Then we'll carry on.`,
+              ? `You're on ${inside.name} right now, and this button is out on the map. Tap the glowing Get off button at the bottom of the screen, and we'll carry on from there.`
+              : `You're inside ${inside.name} right now, and this button is out on the map. Tap the glowing Leave button at the bottom of the screen, or tap Take me out here, and we'll carry on.`,
           glow: "leave",
           action: { label: "Take me out", run: actions.leave },
         }
@@ -432,43 +455,46 @@ export function Tutorial({
                 <X className="size-4" />
               </button>
             </div>
-            <div className="mt-3 flex items-center justify-between gap-2">
-              {count > 0 ? (
-                <div className="flex gap-1">
-                  {Array.from({ length: count }, (_, n) => (
-                    <span key={n} className={`h-1.5 rounded-full transition-all ${n === s.i ? "w-4 bg-gold" : "w-1.5 bg-white/30"}`} />
-                  ))}
-                </div>
-              ) : (
-                <button onClick={skipMission} className="text-[11px] font-semibold text-white/60 hover:text-white">
-                  Skip this one
-                </button>
-              )}
-              <div className="flex gap-1.5">
+            {count > 0 && (
+              <div className="mt-3 flex justify-center gap-1" aria-hidden>
+                {Array.from({ length: count }, (_, n) => (
+                  <span key={n} className={`h-1.5 rounded-full transition-all ${n === s.i ? "w-4 bg-gold" : "w-1.5 bg-white/30"}`} />
+                ))}
+              </div>
+            )}
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-2">
+              <div className="flex items-center gap-1">
                 {back && (
-                  <button onClick={back} className="h-8 rounded-full px-2 text-sm font-semibold text-white/70 hover:text-white" aria-label="Back">
+                  <button onClick={back} className="h-9 whitespace-nowrap rounded-full px-2.5 text-sm font-semibold text-white/70 hover:text-white" aria-label="Back">
                     ‹ Back
                   </button>
                 )}
+                {mission && (
+                  <button onClick={skipMission} className="h-9 whitespace-nowrap rounded-full px-2.5 text-xs font-semibold text-white/60 hover:text-white">
+                    Skip this one
+                  </button>
+                )}
+              </div>
+              <div className="ml-auto flex items-center gap-1.5">
                 {shown.action && (
-                  <button onClick={shown.action.run} className="h-8 rounded-full bg-white/15 px-3 text-sm font-semibold">
+                  <button onClick={shown.action.run} className="h-9 whitespace-nowrap rounded-full bg-white/15 px-3.5 text-sm font-semibold">
                     {shown.action.label}
                   </button>
                 )}
                 {mission ? (
                   done === "off" && (
-                    <button onClick={skipMission} className="h-8 rounded-full bg-gold px-4 text-sm font-bold text-ink">
+                    <button onClick={skipMission} className="h-9 whitespace-nowrap rounded-full bg-gold px-4 text-sm font-bold text-ink">
                       Done it ✓
                     </button>
                   )
                 ) : (
-                  <button onClick={next} className="h-8 rounded-full bg-gold px-4 text-sm font-bold text-ink">
+                  <button onClick={next} className="h-9 whitespace-nowrap rounded-full bg-gold px-4 text-sm font-bold text-ink">
                     {last ? "Let's go!" : "Next"}
                   </button>
                 )}
               </div>
             </div>
-            {mission && done !== "off" && <p className="mt-2 text-[11px] text-white/50">Ticks itself off when you&apos;ve done it.</p>}
+            {mission && done !== "off" && <p className="mt-2 text-[11px] text-white/50">This ticks itself off once you&apos;ve done it.</p>}
           </>
         )}
       </div>

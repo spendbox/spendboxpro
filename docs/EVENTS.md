@@ -220,3 +220,21 @@ Looked into, not used:
   ending early, the stage, reputation, the hosting fee back when fewer than 10 came (at the end
   or called off), and running parts 95 and 96 twice. Run it against a throwaway database that
   already has parts 1 to 94.
+
+## Hosting, one question at a time
+
+Host an event is a short wizard (src/app/play/events/events.tsx `HostForm`): what kind, its name,
+where, how big (parties), when, tickets and guests, then the music (parties) or the slides or video
+(talks), and a last look with the price before it goes on the map. Each screen says what it's for,
+and Back changes anything.
+
+- **Music before it starts (parties):** the host pastes YouTube links (it shows how: Share, Copy
+  link, paste). Once the party is made, they go on its stage as the DJ's queue, so the first song is
+  ready when the host walks in and taps Play.
+- **Slides or a video before it starts (talks):** pictures picked on the phone are uploaded once the
+  talk is made (they need its id), or a YouTube link is set as the video.
+- **Sound in the background:** the room stays open while it's tucked away (Back to the map), so
+  the music, voices and chat carry on until you leave. The made-on-the-phone beat keeps playing with
+  the screen off or in another app, with Play, Pause and Leave on the lock screen (Media Session;
+  src/app/play/activities/synth.ts `backgroundAudio`). YouTube songs and videos can't: YouTube
+  stops them when the browser isn't in front.

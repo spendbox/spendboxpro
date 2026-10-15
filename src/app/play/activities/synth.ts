@@ -17,6 +17,9 @@ export const VIBE_BY_ID = Object.fromEntries(VIBES.map((v) => [v.id, v])) as Rec
 
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
+let comp: DynamicsCompressorNode | null = null;
+/** The sound going out through a media element instead (see backgroundAudio). */
+let viaElement: { dest: MediaStreamAudioDestinationNode; el: HTMLAudioElement } | null = null;
 let noiseBuf: AudioBuffer | null = null;
 
 function engine() {
@@ -25,12 +28,16 @@ function engine() {
     const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!Ctor) return null;
     ctx = new Ctor();
-    const comp = ctx.createDynamicsCompressor();
+    comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -16;
     comp.ratio.value = 4;
     master = ctx.createGain();
     master.gain.value = 0.5;
     master.connect(comp).connect(ctx.destination);
+    // A phone wakes the sound back up when you come back to the tab.
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && ctx?.state === "suspended") void ctx.resume();
+    });
     noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
@@ -202,7 +209,10 @@ export function playLoop(vibe: Vibe, opts: { seconds?: number; onBeat?: (beat: n
   const timers: number[] = [];
   const tick = () => {
     if (stopped) return;
-    while (start + step * sixteenth < Math.min(c.currentTime + 0.15, end)) {
+    // Notes are lined up a little ahead. With the tab in the background the browser only lets this
+    // run about once a second, so it lines up two seconds ahead then and the beat doesn't stutter.
+    const ahead = document.visibilityState === "visible" ? 0.15 : 2.2;
+    while (start + step * sixteenth < Math.min(c.currentTime + ahead, end)) {
       const t = start + step * sixteenth;
       playStep(vibe, c, bus, t, step, Math.floor(step / 16), beatLen);
       if (step % 4 === 0 && opts.onBeat) {
@@ -251,4 +261,36 @@ export function blip(freq = 880, dur = 0.08, type: OscillatorType = "triangle", 
   const e = engine();
   if (!e) return;
   osc(e.ctx, e.out, e.ctx.currentTime + 0.005, { f: freq, dur, gain, type });
+}
+
+/**
+ * Keep the beat playing when you leave the browser (until you leave the event): the sound goes out
+ * through a media element, which phones treat as music (it carries on with the screen off or in
+ * another app, with controls on the lock screen), instead of straight to the speaker. Off: back to
+ * the speaker. Call it from a tap (going in), as phones only start sound after one.
+ */
+export function backgroundAudio(on: boolean) {
+  const e = engine();
+  if (!e || !comp) return;
+  const c = e.ctx;
+  if (on && !viaElement) {
+    if (typeof c.createMediaStreamDestination !== "function") return;
+    const dest = c.createMediaStreamDestination();
+    const el = new Audio();
+    el.srcObject = dest.stream;
+    el.setAttribute("playsinline", "");
+    comp.disconnect();
+    comp.connect(dest);
+    viaElement = { dest, el };
+    void el.play().catch(() => {
+      // Not allowed (no tap yet): straight to the speaker as before.
+      backgroundAudio(false);
+    });
+  } else if (!on && viaElement) {
+    comp.disconnect();
+    comp.connect(c.destination);
+    viaElement.el.pause();
+    viaElement.el.srcObject = null;
+    viaElement = null;
+  }
 }
