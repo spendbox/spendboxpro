@@ -430,7 +430,7 @@ export function Game({
   openSignIn = false,
 }: {
   state: GameState;
-  /** Signed in, but still to finish signing up (name and PIN, date of birth): the pop-up asks. */
+  /** Signed in, but still to finish signing up (name, date of birth, password): the pop-up asks. */
   welcome?: WelcomeNeeds | null;
   /** Open the sign-in pop-up straight away (a link to sign in). */
   openSignIn?: boolean;
@@ -3073,8 +3073,8 @@ export function Game({
           <h2 className="font-display text-xl font-bold">Sign out?</h2>
           <p className="mt-1 text-sm text-muted">
             {isHider && entry && !entry.caught
-              ? "Your light stays on the map while you're away, and challenges you don't answer count as losses. Sign back in any time with your email and PIN."
-              : "You can sign back in any time with your email and PIN."}
+              ? "Your light stays on the map while you're away, and challenges you don't answer count as losses. Sign back in any time with your email and password."
+              : "You can sign back in any time with your email and password."}
           </p>
           <div className="mt-4 flex gap-2">
             <button onClick={() => setConfirmSignOut(false)} disabled={signingOut} className="flex-1 rounded-xl bg-panel-2 py-2.5 font-semibold disabled:opacity-50">

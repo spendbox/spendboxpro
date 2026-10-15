@@ -342,7 +342,7 @@ export function Menu({
           <div className="mt-3 grid grid-cols-2 gap-1.5 border-t border-line/80 pt-3">
             <button onClick={onChangePin} className="flex items-center justify-center gap-1.5 rounded-xl bg-panel-2/80 px-3 py-2 text-xs font-semibold hover:bg-panel-2">
               <KeyRound className="size-3.5" strokeWidth={2.25} />
-              Change PIN
+              Change password
             </button>
             <button onClick={onSignOut} className="flex items-center justify-center gap-1.5 rounded-xl bg-panel-2/80 px-3 py-2 text-xs font-semibold text-muted hover:bg-panel-2">
               <LogOut className="size-3.5" strokeWidth={2.25} />

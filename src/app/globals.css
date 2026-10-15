@@ -232,3 +232,11 @@ a[href]:active,
 @keyframes radar-sweep { to { transform: rotate(360deg); } }
 .radar-sweep { animation: radar-sweep 2.4s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .radar-ring, .radar-sweep { animation: none; } }
+
+/* Signing up: a strong password gets a little burst of emoji (src/components/password-input.tsx). */
+@keyframes pw-burst {
+  0% { transform: translate(0, 0) scale(0.4); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translate(var(--dx), -46px) scale(1.15); opacity: 0; }
+}
+.pw-burst { animation: pw-burst 0.9s ease-out both; }

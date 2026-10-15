@@ -8,26 +8,30 @@ import { supabaseSecretKey } from "@/lib/env";
 import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { passwordProblem } from "@/lib/password";
+import { timesLeaked } from "@/lib/pwned";
 import { passedTurnstile } from "@/lib/turnstile";
 
 // Signing in starts with an email address:
-// - Returning players (who have a PIN) type their PIN.
-// - New players pass a robot check (Cloudflare Turnstile, src/lib/turnstile.ts) and go straight
-//   on to pick a name and PIN and give their date of birth (the game is for adults 18+). No email
-//   is sent, so sign-ups never wait on (or pay for) email.
-// - "Forgot PIN" gets a 4-digit code that we email ourselves (Resend or Amazon SES; Supabase sends
-//   nothing, so its email limits don't apply). It's the only email signing in sends, and it marks
-//   the address as the player's (profiles.email_verified_at, game-db/099).
+// - Players with an account type their password. Players from before passwords type their old
+//   6-digit PIN there, and are then asked to make a password (profiles.password_set, game-db/100).
+// - New players type their email again (to catch typos: it's how they get back in), pass a robot
+//   check (Cloudflare Turnstile, src/lib/turnstile.ts) and are signed in, then, one question at a
+//   time: a name, man or woman, date of birth (18+), a password, the password again, and a
+//   reminder to keep both somewhere safe. No email is sent, so sign-ups never wait on email.
+// - "Forgot password" gets a 4-digit code that we email ourselves (Resend or Amazon SES; Supabase
+//   sends nothing). It's the only email signing in sends, and it marks the address as the
+//   player's (profiles.email_verified_at, game-db/099).
 // Guessing a 4-digit code is kept very unlikely: 5 wrong tries per code, codes last 10 minutes,
 // at most 5 codes an hour, and at most 15 wrong tries a day per email (checked in the database,
-// in one locked step, so a flood of guesses at once can't get round it).
-// After either check passes, the server signs the player in with Supabase, which sets the
-// login cookies.
+// in one locked step, so a flood of guesses at once can't get round it). 5 wrong passwords lock
+// the account for 15 minutes.
+// After a check passes, the server signs the player in with Supabase, which sets the cookies.
 
 export type LoginResult = { ok: true; needsSetup?: boolean } | { ok: false; error: string; underage?: boolean };
 /** Day, month (1-12) and year from the date-of-birth boxes. */
 export type BirthInput = { day: number; month: number; year: number };
-export type StartResult = { ok: true; next: "pin" | "welcome" } | { ok: false; error: string; robot?: boolean };
+export type StartResult = { ok: true; next: "password" | "new" } | { ok: false; error: string; robot?: boolean };
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const NAME = /^[A-Za-z0-9_]{3,16}$/;
@@ -39,46 +43,53 @@ const RESEND_SECONDS = 30;
 const DAILY_WRONG = 15; // same number as in check_email_code (game-db/012)
 const LOCKED = "Too many wrong codes today. Please try again tomorrow.";
 const UNDERAGE = "Sorry, Newtown is only for adults 18 and over, so you can't play.";
-const PIN_TRIES = 5;
-const PIN_LOCK_MINUTES = 15;
+const PASSWORD_TRIES = 5;
+const PASSWORD_LOCK_MINUTES = 15;
 
 const clean = (email: string) => email.trim().toLowerCase();
 const hash = (email: string, code: string) =>
   createHash("sha256").update(`${email}:${code}:${supabaseSecretKey()}`).digest("hex");
-/** The account password is made from the PIN plus a server secret, so it is long and strong. */
+/** Before passwords, the account password was made from the PIN plus a server secret. */
 const pinPassword = (userId: string, pin: string) =>
   createHmac("sha256", supabaseSecretKey()).update(`pin:${userId}:${pin}`).digest("base64url");
 
-/**
- * Step 1: "Continue" with an email. Returning players go to their PIN; new players (who passed the
- * robot check) get an account and are signed in, to pick a name and PIN next.
- */
-export async function startSignIn(rawEmail: string, robotToken?: string | null): Promise<StartResult> {
+/** Step 1: "Continue" with an email. Players with an account go to their password; others sign up. */
+export async function startSignIn(rawEmail: string): Promise<StartResult> {
   const email = clean(rawEmail);
   if (!EMAIL.test(email) || email.length > 200) return { ok: false, error: "Please check your email address." };
+  const { data } = await createAdminClient().from("profiles").select("pin_set").eq("email", email).maybeSingle();
+  return { ok: true, next: data?.pin_set ? "password" : "new" };
+}
+
+/**
+ * Sign-up, after the email typed twice and the robot check: the account is made and they're signed
+ * in, to answer the rest one question at a time.
+ */
+export async function createAccount(rawEmail: string, rawAgain: string, robotToken?: string | null): Promise<LoginResult> {
+  const email = clean(rawEmail);
+  if (!EMAIL.test(email) || email.length > 200) return { ok: false, error: "Please check your email address." };
+  if (clean(rawAgain) !== email) return { ok: false, error: "The two emails don't match. Check for a typo." };
   const db = createAdminClient();
-  const { data } = await db.from("profiles").select("pin_set").eq("email", email).maybeSingle();
-  if (data?.pin_set) return { ok: true, next: "pin" };
   const h = await headers();
   const ip = (h.get("x-forwarded-for")?.split(",")[0] ?? h.get("x-real-ip") ?? "").trim() || null;
-  if (!(await passedTurnstile(robotToken, ip))) return { ok: false, error: "Please tick the box to show you're not a robot, then try again.", robot: true };
+  if (!(await passedTurnstile(robotToken, ip))) return { ok: false, error: "Please tick the box to show you're not a robot, then try again." };
   const created = await db.auth.admin.createUser({ email, email_confirm: true });
   if (created.error && !/already|registered|exists/i.test(created.error.message)) {
     console.error("Creating account failed", created.error.message);
     return { ok: false, error: "We couldn't create your account. Please try again." };
   }
   // An account already there for this email (one whose profile lost track of its email, or an
-  // older one) is only handed over if it never got a PIN: anything else asks for the PIN.
+  // older one) is only handed over if it was never finished: anything else asks for the password.
   if (created.error) {
     const link = await db.auth.admin.generateLink({ type: "magiclink", email });
     const id = link.data?.user?.id;
     const { data: had } = id ? await db.from("profiles").select("pin_set").eq("id", id).maybeSingle() : { data: null };
-    if (!id || had?.pin_set) return { ok: true, next: "pin" };
+    if (!id || had?.pin_set) return { ok: false, error: "There's already an account with this email. Go back and sign in with your password." };
   }
   if (!(await signInAs(created.data.user?.id ?? "", email))) return { ok: false, error: "We couldn't sign you in. Please try again." };
   const userId = await currentUserId();
   if (userId) await db.from("profiles").update({ email }).eq("id", userId).is("email", null);
-  return { ok: true, next: "welcome" };
+  return { ok: true, needsSetup: true };
 }
 
 export async function sendCode(rawEmail: string): Promise<LoginResult> {
@@ -177,14 +188,15 @@ export async function verifyCode(rawEmail: string, rawCode: string): Promise<Log
     // The code reached them: the address is theirs (game-db/099; nothing happens before it's run).
     await db.from("profiles").update({ email_verified_at: new Date().toISOString() }).eq("id", userId).is("email_verified_at", null);
   }
-  // After an email code they always set a new PIN ("forgot PIN").
+  // After an email code they always make a new password ("forgot password").
   return { ok: true, needsSetup: true };
 }
 
-export async function loginWithPin(rawEmail: string, rawPin: string): Promise<LoginResult> {
+/** Signing in: the password (or, for players from before passwords, their old 6-digit PIN). */
+export async function loginWithPassword(rawEmail: string, password: string): Promise<LoginResult> {
   const email = clean(rawEmail);
-  const pin = rawPin.replace(/\D/g, "");
-  if (!EMAIL.test(email) || !PIN.test(pin)) return { ok: false, error: "That PIN isn't right." };
+  const wrong = "That password isn't right.";
+  if (!EMAIL.test(email) || !password || password.length > 200) return { ok: false, error: wrong };
 
   const db = createAdminClient();
   const { data: profile } = await db
@@ -192,30 +204,31 @@ export async function loginWithPin(rawEmail: string, rawPin: string): Promise<Lo
     .select("id, pin_set, pin_failures, pin_locked_until")
     .eq("email", email)
     .maybeSingle();
-  if (!profile?.pin_set) return { ok: false, error: "That PIN isn't right." };
+  if (!profile?.pin_set) return { ok: false, error: wrong };
   if (profile.pin_locked_until && Date.parse(profile.pin_locked_until) > Date.now()) {
-    return { ok: false, error: "Too many wrong PINs. Wait a few minutes, or use Forgot PIN." };
+    return { ok: false, error: "Too many wrong tries. Wait a few minutes, or use Forgot password." };
   }
 
   const { data: user } = await db.auth.admin.getUserById(profile.id);
   const authEmail = user.user?.email;
   const supabase = await createClient();
-  const { error } = authEmail
-    ? await supabase.auth.signInWithPassword({ email: authEmail, password: pinPassword(profile.id, pin) })
-    : { error: new Error("no email") };
+  const tryWith = async (pw: string) => (authEmail ? (await supabase.auth.signInWithPassword({ email: authEmail, password: pw })).error : new Error("no email"));
+  let error = await tryWith(password);
+  // Players from before passwords: their old PIN still lets them in (and they're asked to make a password).
+  if (error && PIN.test(password)) error = await tryWith(pinPassword(profile.id, password));
   if (error) {
     const failures = profile.pin_failures + 1;
     await db
       .from("profiles")
       .update(
-        failures >= PIN_TRIES
-          ? { pin_failures: 0, pin_locked_until: new Date(Date.now() + PIN_LOCK_MINUTES * 60_000).toISOString() }
+        failures >= PASSWORD_TRIES
+          ? { pin_failures: 0, pin_locked_until: new Date(Date.now() + PASSWORD_LOCK_MINUTES * 60_000).toISOString() }
           : { pin_failures: failures },
       )
       .eq("id", profile.id);
     return {
       ok: false,
-      error: failures >= PIN_TRIES ? "Too many wrong PINs. Wait 15 minutes, or use Forgot PIN." : "That PIN isn't right.",
+      error: failures >= PASSWORD_TRIES ? "Too many wrong tries. Wait 15 minutes, or use Forgot password." : wrong,
     };
   }
   // Only when there's something to reset (one less trip to the database on the way in).
@@ -258,49 +271,83 @@ export async function signOutNow(): Promise<void> {
   await (await createClient()).auth.signOut();
 }
 
-/**
- * First sign-in (or "forgot PIN"): choose a name and a 6-digit PIN, plus the date of birth
- * if we don't have it yet. Under-18s are stopped before the name and PIN are saved, so their
- * account never becomes playable.
- */
-export async function saveNameAndPin(rawName: string, rawPin: string, birth?: BirthInput | null): Promise<LoginResult> {
-  const userId = await currentUserId();
-  if (!userId) return { ok: false, error: "Please sign in again." };
-  const name = rawName.trim();
-  const pin = rawPin.replace(/\D/g, "");
-  if (!NAME.test(name)) return { ok: false, error: "Names are 3 to 16 letters, numbers or _." };
-  if (!PIN.test(pin)) return { ok: false, error: "Your PIN must be 6 digits." };
-  if (/^(\d)\1{5}$/.test(pin) || ["123456", "654321", "012345"].includes(pin)) {
-    return { ok: false, error: "That PIN is too easy to guess. Pick another." };
-  }
-
-  const db = createAdminClient();
-  const { data: taken } = await db
+/** Whether a name will do (the name step, before moving on): null if it's fine. */
+async function nameProblem(userId: string, name: string): Promise<string | null> {
+  if (!NAME.test(name)) return "Names are 3 to 16 letters, numbers or _.";
+  if (/^seed.?bot$/i.test(name)) return "That name is taken. Try another.";
+  const { data: taken } = await createAdminClient()
     .from("profiles")
     .select("id")
     .ilike("username", name.replace(/_/g, "\\_"))
     .neq("id", userId)
     .maybeSingle();
-  if (taken || /^seed.?bot$/i.test(name)) return { ok: false, error: "That name is taken. Try another." };
+  return taken ? "That name is taken. Try another." : null;
+}
 
-  const age = await checkBirthDate(userId, birth);
+/** Sign-up, the name step: the name other players see, kept for them straight away. */
+export async function saveName(rawName: string): Promise<LoginResult> {
+  const userId = await currentUserId();
+  if (!userId) return { ok: false, error: "Please sign in again." };
+  const name = rawName.trim();
+  const problem = await nameProblem(userId, name);
+  if (problem) return { ok: false, error: problem };
+  const { error } = await createAdminClient().from("profiles").update({ username: name }).eq("id", userId);
+  if (error) return { ok: false, error: /duplicate|unique/i.test(error.message) ? "That name is taken. Try another." : "We couldn't save your name." };
+  return { ok: true };
+}
+
+/** Who's signed in, for the password checks (their email and name can't be in it). */
+async function aboutMe(userId: string) {
+  const db = createAdminClient();
+  const [{ data: user }, { data: p }] = await Promise.all([
+    db.auth.admin.getUserById(userId),
+    db.from("profiles").select("username").eq("id", userId).maybeSingle(),
+  ]);
+  return { email: user.user?.email ?? "", name: p?.username ?? "" };
+}
+
+/** The password step, before typing it again: the same rules as savePassword, the leak check too. */
+export async function checkPassword(password: string): Promise<LoginResult> {
+  const userId = await currentUserId();
+  if (!userId) return { ok: false, error: "Please sign in again." };
+  const problem = passwordProblem(password, await aboutMe(userId));
+  if (problem) return { ok: false, error: problem };
+  if ((await timesLeaked(password)) > 0) {
+    return { ok: false, error: "That password has turned up in a data leak somewhere, so hackers try it. Pick another." };
+  }
+  return { ok: true };
+}
+
+/**
+ * The last step of signing up, and new passwords (forgot password, change password, players from
+ * before passwords): checked again here, then it's the account's password. A new player has to
+ * have a name and date of birth by now; their account is finished with it.
+ */
+export async function savePassword(password: string, again: string): Promise<LoginResult> {
+  const userId = await currentUserId();
+  if (!userId) return { ok: false, error: "Please sign in again." };
+  if (password !== again) return { ok: false, error: "The two passwords don't match." };
+  const checked = await checkPassword(password);
+  if (!checked.ok) return checked;
+  const db = createAdminClient();
+  const { data: p } = await db.from("profiles").select("username, pin_set").eq("id", userId).maybeSingle();
+  if (!p?.username) return { ok: false, error: "Please pick your name first." };
+  const age = await checkBirthDate(userId, null);
   if (!age.ok) return age;
 
-  const { error: pwError } = await db.auth.admin.updateUserById(userId, { password: pinPassword(userId, pin) });
+  const { error: pwError } = await db.auth.admin.updateUserById(userId, { password });
   if (pwError) {
-    console.error("Saving PIN failed", pwError.message);
-    return { ok: false, error: "We couldn't save your PIN. Please try again." };
+    console.error("Saving password failed", pwError.message);
+    return { ok: false, error: /weak|pwned|leak/i.test(pwError.message) ? "That password is too easy to guess. Pick another." : "We couldn't save your password. Please try again." };
   }
-  const { error } = await db
-    .from("profiles")
-    .update({ username: name, pin_set: true, pin_failures: 0, pin_locked_until: null })
-    .eq("id", userId);
-  if (error) return { ok: false, error: /duplicate|unique/i.test(error.message) ? "That name is taken. Try another." : "We couldn't save your name." };
+  // So the game stops asking for one (before game-db/100 is run there's nowhere to keep it: no harm).
+  const { error: markError } = await db.from("profiles").update({ password_set: true }).eq("id", userId);
+  if (markError) console.error("Marking password failed", markError.message);
+  const { error } = await db.from("profiles").update({ pin_set: true, pin_failures: 0, pin_locked_until: null }).eq("id", userId);
+  if (error) return { ok: false, error: "We couldn't finish setting up your account. Please try again." };
   // Changing the password can end the current login on Supabase's side, so sign straight
-  // back in with the new PIN. Otherwise players get thrown out right after setting it.
+  // back in with the new one. Otherwise players get thrown out right after setting it.
   const { data: user } = await db.auth.admin.getUserById(userId);
-  if (user.user?.email) {
-    await (await createClient()).auth.signInWithPassword({ email: user.user.email, password: pinPassword(userId, pin) });
-  }
+  if (user.user?.email) await (await createClient()).auth.signInWithPassword({ email: user.user.email, password });
   return { ok: true };
 }

@@ -56,8 +56,8 @@ events and the Town Hall are fetched only when the minute's ping says something 
 Email: taking $15,000 a month on Resend at 10 million users (as assumed), the same emails on
 Amazon SES cost about $1,500 (about $0.10 a thousand). The game sends through SES once its keys
 are set (AWS_SES_ACCESS_KEY_ID, AWS_SES_SECRET_ACCESS_KEY, AWS_SES_REGION; src/lib/email-ses.ts).
-Since game-db/099, only a forgotten PIN sends an email: new players pass a free robot check
-(Cloudflare Turnstile) instead of waiting for a code, and returning players use their PIN. That's
+Since game-db/099, only a forgotten password sends an email: new players pass a free robot check
+(Cloudflare Turnstile) instead of waiting for a code, and returning players use their password. That's
 about a tenth of the emails, so the column above is a tenth of the $1,500 too.
 
 ## Cheaper still
