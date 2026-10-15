@@ -6,10 +6,9 @@ import { regionMap } from "@/lib/world";
 import { shuffled, starterBuildings, type StarterBuilding } from "@/lib/world/starter-rooms";
 
 // Free starter rooms (docs/STARTER_ROOMS.md, game-db/074_simple_life.sql).
-//   GET  /api/starter-room            → your free room (if you have one), whether you can still move,
-//                                       and a few neighbourhoods with free rooms to move to.
+//   GET  /api/starter-room            → your free room (if you have one).
 //   POST /api/starter-room            → a free room now, if you have no home (the game calls it).
-//   POST /api/starter-room {area}     → your one free move, to a free room in that neighbourhood.
+// Moving isn't free: to live anywhere else you buy or rent a home there (Find a home).
 
 const plans = new Map<string, CityPlan>();
 function planFor(region: string) {
@@ -54,43 +53,33 @@ export async function GET() {
   if (!userId) return NextResponse.json(null);
   const db = createAdminClient();
   const [{ data: life }, { data: room }] = await Promise.all([
-    db.from("lives").select("region, starter_moves").eq("user_id", userId).maybeSingle(),
+    db.from("lives").select("region").eq("user_id", userId).maybeSingle(),
     db.from("property_units").select("unit_id, label").eq("owner_id", userId).eq("starter", true).maybeSingle(),
   ]);
   if (!life) return NextResponse.json(null);
-  const p = planFor(String(life.region));
-  if (!p) return NextResponse.json(null);
-  // A handful of neighbourhoods to move to (different ones each time).
-  const list = starterBuildings(p.map, p.plan);
-  const areas = [...new Set(shuffled(list).map((b) => b.area).filter(Boolean))].slice(0, 8);
-  return NextResponse.json(
-    { room: room ? { unit: String(room.unit_id), label: String(room.label) } : null, canMove: !!room && Number(life.starter_moves ?? 0) < 1, areas },
-    { headers: { "Cache-Control": "no-store" } },
-  );
+  return NextResponse.json({ room: room ? { unit: String(room.unit_id), label: String(room.label) } : null }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(req: NextRequest) {
   const userId = await currentUserId().catch(() => null);
   if (!userId) return NextResponse.json({ error: "Sign in first." });
   const body = (await req.json().catch(() => ({}))) as { area?: unknown };
-  const area = typeof body.area === "string" ? body.area.slice(0, 80) : null;
+  // The old free move to another neighbourhood: moving costs money now.
+  if (typeof body.area === "string") return NextResponse.json({ error: "Moving isn't free: buy or rent a home where you'd like to live, in Find a home." });
   const db = createAdminClient();
   const { data: life } = await db.from("lives").select("region").eq("user_id", userId).maybeSingle();
   if (!life) return NextResponse.json({ error: words.no_life });
   const p = planFor(String(life.region));
   if (!p) return NextResponse.json({ error: "Unknown place." });
   // Renting a home (game-db/077): no free room as well.
-  if (!area) {
-    const { data: rented } = await db.from("home_rentals").select("unit_id").eq("user_id", userId).maybeSingle();
-    if (rented) return NextResponse.json({ error: words.has_home });
-  }
+  const { data: rented } = await db.from("home_rentals").select("unit_id").eq("user_id", userId).maybeSingle();
+  if (rented) return NextResponse.json({ error: words.has_home });
   // Rooms of players away for 60 days go back first.
   await db.rpc("starter_rooms_sweep");
-  let list = starterBuildings(p.map, p.plan);
-  if (area) list = list.filter((b) => b.area === area);
+  const list = starterBuildings(p.map, p.plan);
   for (let tries = 0; tries < 3; tries++) {
     const free = await freeRoom(db, list);
-    if (!free) return NextResponse.json({ error: area ? `No free rooms in ${area} right now. Try another area.` : "No free rooms right now. Try again soon." });
+    if (!free) return NextResponse.json({ error: "No free rooms right now. Try again soon." });
     const unit = free.b.building.units[free.k];
     const { data, error } = await db.rpc("starter_room_give", {
       p_user: userId,
@@ -99,7 +88,7 @@ export async function POST(req: NextRequest) {
       p_snapshot: free.b.building,
       p_label: unit?.label ?? "Room",
       p_area: unit?.area ?? 12,
-      p_move: !!area,
+      p_move: false,
     });
     if (error) {
       const code = error.message.split(":")[0];

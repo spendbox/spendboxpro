@@ -11,7 +11,9 @@ export const DISTRICTS: District[] = [
   { id: "lagos-island", name: "Lagos Island", at: { lat: 6.4535, lon: 3.3925 }, radiusKm: 1.4, density: 1.25, landPrice: 450_000 },
   { id: "victoria-island", name: "Victoria Island", at: { lat: 6.4300, lon: 3.4200 }, radiusKm: 1.6, density: 1.2, landPrice: 900_000 },
   { id: "eko-atlantic", name: "Eko Atlantic", at: { lat: 6.4100, lon: 3.4080 }, radiusKm: 1.2, density: 1.1, landPrice: 1_400_000 },
-  { id: "ikoyi", name: "Ikoyi", at: { lat: 6.4520, lon: 3.4350 }, radiusKm: 1.8, density: 0.42, landPrice: 1_100_000 },
+  // The dearest land in Lagos: Banana Island (mansions on their own island off Ikoyi), then Ikoyi.
+  { id: "banana-island", name: "Banana Island", at: { lat: 6.4655, lon: 3.4505 }, radiusKm: 0.7, density: 0.34, landPrice: 3_200_000 },
+  { id: "ikoyi", name: "Ikoyi", at: { lat: 6.4520, lon: 3.4350 }, radiusKm: 1.8, density: 0.42, landPrice: 1_600_000 },
   { id: "lekki-phase-1", name: "Lekki Phase 1", at: { lat: 6.4450, lon: 3.4750 }, radiusKm: 2.2, density: 0.36, landPrice: 500_000 },
   { id: "lekki-ajah", name: "Ajah", at: { lat: 6.4680, lon: 3.5700 }, radiusKm: 2, density: 0.3, landPrice: 90_000 },
   { id: "ikeja", name: "Ikeja", at: { lat: 6.6000, lon: 3.3500 }, radiusKm: 2.4, density: 0.5, landPrice: 230_000 },

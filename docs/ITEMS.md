@@ -48,3 +48,14 @@ Database: `game-db/050_economy_items.sql`.
 ## Reputation
 - Shown at the top (the star). Property (by what you paid, plus having a home), the reputation of
   your things, and inventions people bought; being caught swiping takes it down.
+
+## Luxury
+
+The shop's Luxury ✨ tab has the things Lagos's richest own, at roughly their real prices there:
+a Cartier Love bracelet (₦12m), Rolex Submariner (₦28m), Hermès Birkin (₦60m), Rolex Daytona
+(₦65m), Audemars Piguet Royal Oak (₦95m), Rolex Day-Date Platinum (₦120m), a diamond necklace
+(₦180m), Patek Philippe Nautilus (₦250m), a Ben Enwonwu painting (₦300m), Bentley Bentayga (₦450m),
+Richard Mille RM 11 (₦500m), Lamborghini Urus (₦550m), Rolls-Royce Cullinan (₦950m) and a Patek
+Philippe Grandmaster Chime (₦1.5bn). Reputation is on the same scale as the cars (a G-Wagon, ₦250m,
+gives 30): from +6 to +60, for as long as you own it. Watches, jewellery and art gain value over
+time. game-db/104 raises the dearest single thing from ₦300m to ₦3bn.

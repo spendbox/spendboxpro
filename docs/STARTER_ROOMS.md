@@ -9,8 +9,9 @@ Every player gets a free room to live in, straight away, so nobody starts by hun
   rooming houses; rich areas like Ikoyi have none, so they stay something to work towards.
 - **When:** the moment a player has a life and no home (a new life, a pack bought, back after a
   long time away). The game asks `POST /api/starter-room`, takes you there, and says where it is.
-- **One free move:** on your home card, "Move to another free room (once)": pick a neighbourhood
-  and you get a free room there.
+- **Moving costs money:** the free room is where you start. To live anywhere else (Banana Island,
+  Ikoyi, anywhere) you buy or rent a home there at its price: the home card's Find a home opens
+  the homes on sale and to let. (There used to be one free move to another free room; it's gone.)
 - **It's free, so it's not yours to sell:** it can't be sold, let, listed or borrowed against.
 - **It goes back to the city when:**
   - you buy a home of your own (from the city or a player): that becomes your home;
