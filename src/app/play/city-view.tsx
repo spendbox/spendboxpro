@@ -6039,7 +6039,11 @@ export function CityView({
       const mx = (fx * jy + rx * jx) / (mag || 1), mz = (fz * jy + rz * jx) / (mag || 1);
       const step = 1.6 * mag * dt;
       const nx = st.local.x + mx * step, nz = st.local.z + mz * step;
-      if (st.walker.isFree(nx, nz)) {
+      // Just stood up from a seat, you're still in the chair's (or sofa's) footprint: step out of it.
+      // (Only towards open floor within a step or two, never through a wall behind the sofa.)
+      const w = st.walker;
+      const stuck = !w.isFree(st.local.x, st.local.z) && [0.3, 0.6, 0.9, 1.2].some((d) => w.isFree(st.local.x + mx * d, st.local.z + mz * d));
+      if (stuck || w.isFree(nx, nz)) {
         st.local.x = nx;
         st.local.z = nz;
       } else if (st.walker.isFree(nx, st.local.z)) st.local.x = nx;

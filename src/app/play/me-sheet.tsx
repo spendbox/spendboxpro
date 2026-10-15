@@ -1,7 +1,7 @@
 "use client";
 
 import { AvatarFace } from "@/components/avatar";
-import { Star } from "@/components/icons";
+import { Star, X } from "@/components/icons";
 import type { Avatar } from "@/lib/avatar";
 import { Sheet } from "./sheet";
 
@@ -13,7 +13,13 @@ export type MeItem = { label: string; icon: React.ComponentType<{ className?: st
 export function MeSheet({ name, avatar, reputation, groups, onClose }: { name: string; avatar: Avatar; reputation: number | null; groups: { title: string; items: MeItem[] }[]; onClose: () => void }) {
   return (
     <Sheet onClose={onClose} above>
-      <div className="flex items-center gap-3 pr-8">
+      {/* Close, kept in reach while the card scrolls. */}
+      <div className="sticky -top-5 z-10 -mr-2 -mt-2 flex h-0 justify-end">
+        <button onClick={onClose} className="grid size-9 place-items-center rounded-full bg-ink/5 hover:bg-ink/10" aria-label="Close">
+          <X className="size-4" />
+        </button>
+      </div>
+      <div className="flex items-center gap-3 pr-10">
         <AvatarFace avatar={avatar} size={56} className="shrink-0 rounded-full" />
         <div className="min-w-0">
           <h2 className="truncate font-display text-xl font-extrabold">{name}</h2>

@@ -22,6 +22,11 @@ bought once, in the first 72 hours after joining (`src/lib/world/packs.ts`, game
   (`checkMyPacks`), the Wallet opening (Your payments), or the daily job (`/api/cron/daily`, the last
   three days). A second pack paid in another tab before the first landed is credited too (in full:
   paid is paid). The owner's dashboard lists every payment with a Check with Paystack button.
+- **Only real money counts.** Paystack's test payments (its test cards and pretend transfers move
+  no money) are never treated as paid on the live site, and with a test key (`sk_test_…`) on the
+  live site no checkout opens at all. This covers packs, top-ups, ads, sponsors and business leases
+  (`src/lib/paystack.ts`). Test payments count only on the test version (Vercel previews,
+  `NEXT_PUBLIC_APP_ENV=test`), a developer's machine, or with `PAYSTACK_ALLOW_TEST=1`.
 - **Mint can never be turned back into cash.**
 - Packs don't use up the first top-up's doubling.
 - Older pack payments (`pk-…`, game-db/042) still arrive as before.

@@ -283,15 +283,34 @@ export function RewardNote({ claim }: { claim: Claim }) {
   );
 }
 
-/** "Score 30+ points to win 2–8 coins". */
+/** How long each game is, so you know when it ends. */
+const LENGTH: Record<RewardGame, string> = {
+  archery: "6 arrows",
+  darts: "6 darts",
+  reflex: "30 seconds",
+  pool: "8 shots",
+  rps: "Best of 3",
+  dice: "Best of 3 against the house",
+  cards: "60 seconds",
+  trivia: "7 questions",
+  dance: "One 40-second song",
+  karaoke: "30 seconds on the mic",
+  stairs: "10 seconds",
+};
+
+/** "6 arrows. Score 30+ points to win ₦3,000–₦12,000 (more for a better score)". */
 export function RewardHint({ game }: { game: RewardGame }) {
   const r = REWARDS[game];
   return (
-    <p className="flex items-center gap-1.5 text-xs text-muted">
-      <Coins className="size-3.5 text-gold-dark" />
-      {r.unit === "win"
-        ? `Win to earn ${cash(r.coinsMax)} (5 rewarded games a day).`
-        : `Score ${r.min}+ ${r.unit} to win ${cash(r.coinsMin)}–${cash(r.coinsMax)} (5 rewarded games a day).`}
+    <p className="flex items-start gap-1.5 text-xs text-muted">
+      <Coins className="mt-px size-3.5 shrink-0 text-gold-dark" />
+      <span>
+        <b className="text-ink">{LENGTH[game]}.</b>{" "}
+        {r.unit === "win"
+          ? `Win the match to earn ${cash(r.coinsMax)}.`
+          : `Score ${r.min}+ ${r.unit} to win ${cash(r.coinsMin)}, up to ${cash(r.coinsMax)} for ${r.top}+.`}{" "}
+        5 paid games a day.
+      </span>
     </p>
   );
 }
