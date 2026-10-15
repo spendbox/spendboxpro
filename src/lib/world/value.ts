@@ -135,6 +135,10 @@ export const CURRENCIES = [
   { code: "MINT", symbol: "₥", name: "Mint", naira: 0 },
 ] as const;
 export type CurrencyCode = (typeof CURRENCIES)[number]["code"];
+/** The ones players can pick: real money only (mint is how the game counts, not what anyone sees). */
+export const PLAYER_CURRENCIES = CURRENCIES.filter((c) => c.code !== "MINT");
+/** A saved choice, as one players can have (anything else, mint included, is naira). */
+export const playerCurrency = (code: string | null | undefined) => (PLAYER_CURRENCIES.some((c) => c.code === code) ? (code as CurrencyCode) : "NGN");
 
 // Every amount in the game is kept in mint; players see it in their chosen currency (naira by
 // default in Lagos), never both. A mint is worth the region's perMint in naira.

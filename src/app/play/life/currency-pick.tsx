@@ -1,13 +1,13 @@
 "use client";
 
-import { CURRENCIES } from "@/lib/world/value";
+import { PLAYER_CURRENCIES } from "@/lib/world/value";
 import { Sheet } from "../sheet";
 
 /** The currencies as chips: tap one to show every amount in it. */
 export function CurrencyChips({ value, onPick }: { value: string; onPick: (code: string) => void }) {
   return (
     <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Currency">
-      {CURRENCIES.map((c) => (
+      {PLAYER_CURRENCIES.map((c) => (
         <button
           key={c.code}
           role="radio"

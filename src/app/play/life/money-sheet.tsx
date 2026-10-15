@@ -5,7 +5,7 @@ import type { RegionMap } from "@/lib/world/compile";
 import { BUDGET_PRESETS, POT_INFO, POTS, type Budget, type Pot } from "@/lib/world/living";
 import type { OwnedProperty } from "@/lib/world/owned";
 import type { AssetsData, AssetUnit, LifeStatus, MoneyDay, MoneyFlow } from "@/lib/world/property-api";
-import { cash, CURRENCIES, shownCurrency } from "@/lib/world/value";
+import { cash, PLAYER_CURRENCIES, shownCurrency } from "@/lib/world/value";
 import { Sheet } from "../sheet";
 import { AssetsBody, unitValueNow, type Owning } from "./assets-sheet";
 import { MoneyChart, UpOrDown, useMoneyDays } from "./money-chart";
@@ -167,14 +167,14 @@ export function MoneySheet({
             <div className="mt-5 flex items-center justify-between gap-2">
               <span className="text-sm font-semibold">Show money in</span>
               <select value={currency} onChange={(e) => onCurrency(e.target.value)} className="h-9 rounded-full bg-ink/5 px-3 text-sm font-semibold" aria-label="Currency">
-                {CURRENCIES.map((c) => (
+                {PLAYER_CURRENCIES.map((c) => (
                   <option key={c.code} value={c.code}>
                     {c.symbol} {c.name}
                   </option>
                 ))}
               </select>
             </div>
-            {shownCurrency() !== "NGN" && shownCurrency() !== "MINT" && <p className="mt-1 text-right text-[11px] text-muted">Rates are rough. Payments are in naira.</p>}
+            {shownCurrency() !== "NGN" && <p className="mt-1 text-right text-[11px] text-muted">Rates are rough. Payments are in naira.</p>}
           </div>
         )}
         {tab === "budget" && status && <BudgetTab budget={status.budget} busy={busy} onSave={onBudget} first={glowBudget} />}

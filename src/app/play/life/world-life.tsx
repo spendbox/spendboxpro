@@ -62,7 +62,7 @@ import type { OwnedProperty } from "@/lib/world/owned";
 import { InterviewSheet, MomentSheet } from "./moments";
 import { AmountSheet, LoanSheet } from "./amount-sheet";
 import { CurrencySheet } from "./currency-pick";
-import { cash, cashText, setShownCurrency } from "@/lib/world/value";
+import { cash, cashText, playerCurrency, setShownCurrency } from "@/lib/world/value";
 import { buyerPays, sellerGets, OFFER_HOURS, RENT_LEVEL, type Listing, type MarketBoard } from "@/lib/world/market";
 import { BUY_TAX, INCOME_DAY } from "@/lib/world/property-api";
 import { SIMPLE_LIFE } from "@/lib/world/simple-life";
@@ -176,10 +176,11 @@ export function useWorldLife({
   const [assetsOpen, setAssetsOpen] = useState(false);
   const [welcomeShut, setWelcomeShut] = useState(false);
   const [finderOpen, setFinderOpen] = useState(false);
-  // The currency amounts show in beside mint (kept in this browser; change it any time).
-  const [currency, setCurrency] = useState(() => {
+  // The currency amounts show in (kept in this browser; change it any time). Mint, once a choice,
+  // is naira now.
+  const [currency, setCurrency] = useState<string>(() => {
     try {
-      return localStorage.getItem(CURRENCY_KEY) ?? "NGN";
+      return playerCurrency(localStorage.getItem(CURRENCY_KEY));
     } catch {
       return "NGN";
     }
