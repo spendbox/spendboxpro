@@ -2434,14 +2434,11 @@ export function Game({
       )}
       {worldRegion && (worldRegion.water || worldRegion.roads.length > 0) && (
         // The map data's credit (its licence asks for it): small and out of the way.
-        <a
-          href="https://www.openstreetmap.org/copyright"
-          target="_blank"
-          rel="noreferrer"
-          className="pointer-events-auto absolute bottom-1 left-1.5 z-10 text-[9px] leading-none text-black/40 hover:text-black/70"
-        >
-          © OpenStreetMap
-        </a>
+        // Plain text, bottom middle, and not a link: a tap meant for the map never opens a website
+        // (the link is in How it works).
+        <span className="pointer-events-none absolute bottom-0.5 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap text-[8px] leading-none text-black/35">
+          © OpenStreetMap contributors
+        </span>
       )}
 
       {/* Inside a place: mint spraying, the jukebox, duel invites and room news. */}
@@ -3401,11 +3398,13 @@ export function Game({
             <DockButton icon={Footprints} label="Stop walking" dark onClick={() => setWalking(false)} />
           </div>
         )}
-        {/* Down the left, out of the way of the city: the notifications bell (while they're off), then one
-            round button that opens the quick buttons (Home, Camera, Coming soon, Locate me, Walk); tap
-            anywhere else and they fold away again. The walkthrough opens them when it points at one. */}
+        {/* Bottom right, just left of the chat bubble (nothing at the bottom left, where a thumb
+            meant for the map lands): the notifications bell (while they're off), then one small
+            round button that opens the quick buttons (Home, Camera, Coming soon, Locate me, Walk)
+            upwards; tap anywhere else and they fold away again. The walkthrough opens them when it
+            points at one. */}
         {worldId && !guest && !place && ride === null && !walking && tour("dock") && (
-          <div ref={quickRef} className="pointer-events-auto absolute bottom-[max(0.625rem,env(safe-area-inset-bottom))] left-2.5 flex flex-col items-center gap-2 sm:bottom-4 sm:left-4">
+          <div ref={quickRef} className="pointer-events-auto absolute bottom-7 right-[5.25rem] z-20 flex flex-col items-center gap-2 sm:bottom-9 sm:right-[6rem]">
             {!pushOn && tour("extras") && (
               <button onClick={turnOnBell} className="relative grid size-10 place-items-center rounded-full bg-gold/80 text-ink shadow transition-opacity hover:bg-gold" aria-label="Notifications are off: tap to turn them on" title="Turn notifications on">
                 <BellOff className="size-4" />
@@ -3462,12 +3461,12 @@ export function Game({
                   setQuickShutFor(null);
                 }
               }}
-              className={cn("relative grid size-11 place-items-center rounded-full shadow-md transition", quickShown ? "bg-ink text-white" : "bg-white/80 text-ink backdrop-blur-sm hover:bg-white")}
+              className={cn("relative grid size-10 place-items-center rounded-full shadow-md transition", quickShown ? "bg-ink text-white" : "bg-white/80 text-ink backdrop-blur-sm hover:bg-white")}
               aria-label={quickShown ? "Close the quick buttons" : "Open the quick buttons: home, camera, locate me, walk"}
               aria-expanded={quickShown}
               title="Quick buttons"
             >
-              {quickShown ? <X className="size-5" /> : <LayoutGrid className="size-5" />}
+              {quickShown ? <X className="size-[18px]" /> : <LayoutGrid className="size-[18px]" />}
               {tutorialGlow === "dock" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
             </button>
             <style>{`@keyframes dockIn { from { opacity: 0; transform: translateY(8px) scale(.96) } to { opacity: 1; transform: none } }`}</style>
@@ -3855,7 +3854,7 @@ export function Game({
             setTownOpen(true);
             setTownNew(false);
           }}
-          className="pointer-events-auto absolute bottom-[5.5rem] right-3.5 z-20 grid size-12 place-items-center rounded-full bg-[#e8590c] text-white shadow-[0_8px_20px_-6px_rgba(232,89,12,0.8)] sm:bottom-[6.5rem] sm:right-5"
+          className="pointer-events-auto absolute bottom-[5.75rem] right-[1.125rem] z-20 grid size-12 place-items-center rounded-full bg-[#e8590c] text-white shadow-[0_8px_20px_-6px_rgba(232,89,12,0.8)] sm:bottom-[6.75rem] sm:right-[1.375rem]"
           aria-label={townNew ? "Town Hall: new messages" : "Town Hall"}
           title="Town Hall: everyone online"
         >
@@ -3889,11 +3888,11 @@ export function Game({
             setChatOpen(true);
             setMenu(false);
           }}
-          className="pointer-events-auto absolute bottom-4 right-3 z-20 grid size-14 place-items-center rounded-full bg-[#7048e8] text-white shadow-[0_8px_20px_-6px_rgba(112,72,232,0.8)] sm:bottom-6 sm:right-4"
+          className="pointer-events-auto absolute bottom-4 right-3 z-20 grid size-16 place-items-center rounded-full bg-[#7048e8] text-white shadow-[0_8px_20px_-6px_rgba(112,72,232,0.8)] sm:bottom-6 sm:right-4"
           aria-label={unread + chatUnread > 0 ? `Chat: ${unread + chatUnread} new` : "Chat"}
         >
           <span key={phoneRing} className={phoneRing ? "phone-ring grid place-items-center" : "grid place-items-center"}>
-            <MessageCircle className="size-7 fill-white" />
+            <MessageCircle className="size-8 fill-white" />
           </span>
           {tutorialGlow === "chat" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
           {unread + chatUnread > 0 && (

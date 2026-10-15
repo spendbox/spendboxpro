@@ -250,7 +250,7 @@ export function Tutorial({
     name: {
       emoji: "🏠",
       title: "Mission 1 of 3 · Name your home",
-      text: `Every legend needs a base. Tap the glowing house (in the quick buttons, bottom left), then the pencil, and give your place a name. “${palace}”? Bold. We like it.`,
+      text: `Every legend needs a base. Tap the glowing house (in the quick buttons, bottom right, next to the chat), then the pencil, and give your place a name. “${palace}”? Bold. We like it.`,
       glow: "home",
       action: { label: "Show me", run: actions.nameHome },
     },
@@ -281,7 +281,7 @@ export function Tutorial({
     {
       emoji: "🧰",
       title: "Your quick buttons",
-      text: "The round button at the bottom left opens your quick buttons: Home, Camera, Coming soon, Locate me and Walk. Tap anywhere else and they tuck themselves away. Neat, right?",
+      text: "The small round button at the bottom right, next to the chat, opens your quick buttons: Home, Camera, Coming soon, Locate me and Walk. Tap anywhere else and they tuck themselves away. Neat, right?",
       glow: "dock",
     },
     {
@@ -292,7 +292,7 @@ export function Tutorial({
       action: { label: "Try it", run: actions.camera },
     },
     { emoji: "🧭", title: "Go explore", text: "Tap any building to peek inside, hop on a danfo, find the hidden spots. Nobody's watching the clock." },
-    { emoji: "🏠", title: "Lost? Tap the house", text: "The house in your quick buttons (bottom left) always takes you home. Like a very fast okada.", glow: "home" },
+    { emoji: "🏠", title: "Lost? Tap the house", text: "The house in your quick buttons (bottom right) always takes you home. Like a very fast okada.", glow: "home" },
     {
       emoji: "👛",
       title: "Your Wallet",

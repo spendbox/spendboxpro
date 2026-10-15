@@ -70,7 +70,7 @@ const STEPS: { icon: string; title: string; points: string[] }[] = [
     icon: "📣",
     title: "Bring people in",
     points: [
-      "Your friends are told the moment you host, and everyone nearby when it starts.",
+      "The moment you host, your friends are told, and so are the people nearest you: twice as many as your party holds (100 people? the closest 200 hear), or everyone within 4 km if that's more. Nobody misses out.",
       "Tap Invite friends on your event to share its link (WhatsApp, X, anywhere).",
       "Starting later? People can say I'm going and they're told when it starts.",
     ],

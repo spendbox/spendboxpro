@@ -309,6 +309,13 @@ export function HowItWorks({ onClose, legacy }: { onClose: () => void; legacy?: 
           </a>{" "}
           on X. Play at <b className="text-ink">{SITE_DOMAIN}</b>.
         </p>
+        <p className="px-1 text-center text-xs text-muted">
+          Map data ©{" "}
+          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="underline">
+            OpenStreetMap contributors
+          </a>
+          , available under the Open Database License.
+        </p>
       </div>
       <button onClick={onClose} className="mt-5 w-full rounded-xl bg-gold py-3 font-semibold text-ink">
         Got it

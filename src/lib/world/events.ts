@@ -14,6 +14,7 @@ export const EVENT_CATEGORIES = [
   { id: "market", label: "Pop-up market", icon: "🛍️", colour: "#e8590c", blurb: "A row of stalls for a day: sell your things and services.", ready: false },
   { id: "community", label: "Faith & community", icon: "🙏", colour: "#1c7ed6", blurb: "Prayer meetings, town meetings, clean-ups and drives.", ready: false },
   { id: "mixer", label: "Meet-ups & mixers", icon: "💞", colour: "#ae3ec9", blurb: "Singles mixers, networking, book clubs and fan meet-ups.", ready: false },
+  { id: "adults", label: "18+ nights", icon: "🔞", colour: "#c92a2a", blurb: "Grown-up nights: late shows, comedy with no filter, after-parties. Every player is 18+ already.", ready: false },
 ] as const;
 export type EventCategoryId = (typeof EVENT_CATEGORIES)[number]["id"];
 /** The categories kept in the database (game-db/095 checks the same list). */

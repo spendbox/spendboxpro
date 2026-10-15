@@ -80,7 +80,19 @@ a spinner, and they won't be heard. The fix is a **TURN relay**: a server that p
 along for just those people (still encrypted, still not recorded). It costs a little money only
 for the traffic it actually relays.
 
-### Adding a TURN relay (optional)
+### Adding a TURN relay (recommended): Cloudflare, with a login per player
+
+Best: **Cloudflare Realtime TURN**. The first 1,000 GB relayed a month are free, then about $0.05 a
+GB (a voice call is about 30 MB an hour per person relayed). Each player gets their own login
+that runs out after a day (from `/api/turn`, signed-in players only), so nobody can copy it out of
+the page and use the relay for something else.
+
+1. Cloudflare dashboard → Realtime → TURN Server → Create. It gives a **Turn Token ID** and an
+   **API Token**.
+2. In Vercel add `CLOUDFLARE_TURN_KEY_ID` (the Turn Token ID) and `CLOUDFLARE_TURN_API_TOKEN`
+   (the API Token), and redeploy. Nothing else to change.
+
+### Or: a fixed TURN login (any provider)
 
 Set these three environment variables in Vercel (Project, Settings, Environment Variables) and
 redeploy. No code changes needed.

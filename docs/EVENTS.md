@@ -85,8 +85,12 @@ Worked out by the server from the map (the phone's number is only a preview; src
   **unless fewer than 10 people came in** (the host doesn't count; setting `event_min_guests`,
   game-db/096): then it all comes back when it ends or is called off, and the host's notice says
   so. The walkthrough's third mission and the host's form both say this.
-- Talks and screenings are free to host for now. Your friends are always told (a notice and a push); everyone
-within about 4 km is told too when it starts within 15 minutes.
+- Talks and screenings are free to host for now. Coming: game challenges, sport, pop-up markets,
+  faith & community, meet-ups, and 18+ nights.
+- Your friends are always told (a notice and a push). So nobody misses out, the nearest players
+  are told too the moment it's hosted, however far they are: twice as many as it holds (a party
+  for 100 tells the closest 200), or everyone within 4 km if that's more (game-db/101
+  `event_tell`; where someone is: where they are now, else their home).
 
 ## How to host a great party
 
