@@ -987,9 +987,60 @@ function campus(t: Tile, B0: BoxFn, tree0: TreeFn, hospital = false) {
   }
 }
 
+/**
+ * Lagos's National Theatre (Iganmu), shaped like a general's cap: a round drum of dark glass ringed
+ * by white fins that lean outwards, white bands round it, a wide white rim and a raised white crown
+ * and dome on top, on a broad low podium (the halls round its base), in round lawns inside a ring
+ * road with paths in from four sides.
+ */
+function nationalTheatre(t: Tile, B: BoxFn, tree: TreeFn) {
+  const st = t.structure!;
+  const w = st.w ?? 6;
+  const d = st.d ?? 6;
+  const cx = (w - 1) / 2;
+  const cz = (d - 1) / 2;
+  const s = Math.min(w, d) / 6;
+  // The grounds: lawns, the ring road round them, and paths in.
+  B(cx, 0.02, cz, w - 0.04, 0.07, d - 0.04, GRASS, 0, "ground");
+  B(cx, 0.09, cz, 5.5 * s, 0.004, 5.5 * s, 0x9ea3a8, 0, "disc");
+  B(cx, 0.094, cz, 5.0 * s, 0.004, 5.0 * s, GRASS, 0, "disc");
+  for (let k = 0; k < 4; k++) {
+    const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
+    const r = 2.0 * s;
+    B(cx + Math.cos(a) * r, 0.097, cz + Math.sin(a) * r, 1.3 * s, 0.003, 0.16 * s, 0xe9e4da, Math.atan2(-Math.sin(a), Math.cos(a)), "paint");
+  }
+  for (let k = 0; k < 14; k++) {
+    const a = (k / 14) * Math.PI * 2 + t.r[0];
+    const r = (2.85 + (k % 3) * 0.12) * s;
+    tree(cx + Math.cos(a) * r, cz + Math.sin(a) * r, 0.42 + (k % 2) * 0.1, t.r[1] + k * 0.37);
+  }
+  // The brim: a broad, low podium with a grey roof ring.
+  B(cx, 0.09, cz, 3.9 * s, 0.13, 3.9 * s, 0xe4e1da, 0, "cyl");
+  B(cx, 0.22, cz, 3.7 * s, 0.015, 3.7 * s, 0x9aa0a6, 0, "cyl");
+  // The drum: dark glass, white bands round it.
+  const R = 1.3 * s;
+  B(cx, 0.22, cz, 2 * R, 0.62, 2 * R, 0x2b3a4f, 0, "cyl");
+  for (const y of [0.4, 0.62]) B(cx, y, cz, 2 * R + 0.04 * s, 0.035, 2 * R + 0.04 * s, WHITE, 0, "cyl");
+  // The fins: white, all the way round, leaning outwards.
+  const fins = 28;
+  for (let k = 0; k < fins; k++) {
+    const a = (k / fins) * Math.PI * 2;
+    const ry = Math.atan2(-Math.sin(a), Math.cos(a));
+    B(cx + Math.cos(a) * (R + 0.02), 0.22, cz + Math.sin(a) * (R + 0.02), 0.16 * s, 0.68, 0.05 * s, WHITE, ry, "building", -0.3);
+  }
+  // The rim where the fins meet the top, then the crown and the dome.
+  B(cx, 0.82, cz, 2 * R + 0.5 * s, 0.06, 2 * R + 0.5 * s, WHITE, 0, "cyl");
+  B(cx, 0.88, cz, 2 * R - 0.1 * s, 0.12, 2 * R - 0.1 * s, 0xeef0f2, 0, "cyl");
+  B(cx, 1.0, cz, 2 * R - 0.3 * s, 0.3, 2 * R - 0.3 * s, WHITE, 0, "dome");
+}
+
 export function megaParts(t: Tile, B: BoxFn, tree: TreeFn): boolean {
   const st = t.structure;
   if (!st || !st.w) return false;
+  if (/^National Theatre/i.test(st.name ?? "")) {
+    nationalTheatre(t, B, tree);
+    return true;
+  }
   if (st.type === "arena") stadium(t, B, tree);
   else if (st.type === "capitol") capitol(t, B, tree);
   else if (st.type === "megamall") megamall(t, B, tree);

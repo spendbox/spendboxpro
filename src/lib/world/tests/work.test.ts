@@ -81,12 +81,12 @@ test("a job can run at a loss when the fares cost more than the pay", () => {
   assert.ok(dayNet(2, 0, 0) > 0);
 });
 
-test("a long danfo ride is capped, so a first job across town still pays", () => {
+test("fares aren't capped: the further you go, the more it costs", () => {
   const far = fareMint("danfo", 30, PRICES)!;
   const farther = fareMint("danfo", 45, PRICES)!;
-  assert.equal(far, farther, "the cap");
-  assert.ok(far * PRICES.perMint <= 1_510, "about ₦1,500 at most (rounded to the mint)");
-  // A loader (₦80,000 a month) 30 km away keeps something every day.
+  assert.ok(farther > far, "45 km costs more than 30");
+  assert.ok(Math.abs(fareMint("danfo", 180, PRICES)! * PRICES.perMint - (300 + 40 * 180)) < 15, "Badagry to Epe: ₦300 + ₦40 a km");
+  // A loader (₦80,000 a month) 30 km away still keeps something every day; much further, they don't.
   const loader = jobsInBuilding({ kind: "warehouse", state: "built" }).find((j) => j.job === "loader")!;
   assert.ok(dayNet(payDay(loader, PRICES), 0, far) > 0);
 });
