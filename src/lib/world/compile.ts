@@ -12,6 +12,8 @@ export { fillArea, line4 };
 
 /** 0 land, 1 lagoon or creek, 2 sea. */
 export type Water = 0 | 1 | 2;
+/** In the baked grid only: land in the box but outside the region (over a state or country border). */
+const BEYOND = 3;
 
 export type PlacedLandmark = { id: string; type: StructureType; name: string; ax: number; az: number; w: number; d: number; inside?: string[] };
 export type Spot = { id: string; kind: TileKind; name: string };
@@ -22,6 +24,10 @@ export type RegionMap = {
   frame: Frame;
   /** The tiles the region covers (inclusive). */
   bounds: { x0: number; x1: number; z0: number; z1: number };
+  /**
+   * Is this tile part of the region: in its box, and not land over its border (Ogun State, Benin
+   * round Lagos). Water over the border still counts, so a lagoon is whole.
+   */
   inside: (x: number, z: number) => boolean;
   waterAt: (x: number, z: number) => Water;
   roadAt: (x: number, z: number) => RoadTile | undefined;
@@ -138,30 +144,32 @@ export function compileRegion(region: Region): RegionMap {
   const bounds = tileBounds(frame, region.box);
   const W = bounds.x1 - bounds.x0 + 1;
   const H = bounds.z1 - bounds.z0 + 1;
-  const inside = (x: number, z: number) => x >= bounds.x0 && x <= bounds.x1 && z >= bounds.z0 && z <= bounds.z1;
+  const inBox = (x: number, z: number) => x >= bounds.x0 && x <= bounds.x1 && z >= bounds.z0 && z <= bounds.z1;
   const at = (p: LatLon) => toTile(frame, p);
 
   const cell = (x: number, z: number) => (z - bounds.z0) * W + (x - bounds.x0);
   const area = (path: [number, number][], put: (x: number, z: number) => void) =>
-    fillArea(path.map(([lat, lon]) => at({ lat, lon })), (x, z) => inside(x, z) && put(x, z));
+    fillArea(path.map(([lat, lon]) => at({ lat, lon })), (x, z) => inBox(x, z) && put(x, z));
 
-  // ---- land and water: the baked map, then the fixes in order
+  // ---- land and water: the baked map, then the fixes in order (a fix can bring land over the
+  // border into the region by making it land)
   const water = new Uint8Array(W * H);
-  if (region.water) readGrid(region.water, inside, (x, z, ch) => (water[cell(x, z)] = ch === "S" ? 2 : ch === "W" ? 1 : 0));
+  if (region.water) readGrid(region.water, inBox, (x, z, ch) => (water[cell(x, z)] = ch === "S" ? 2 : ch === "W" ? 1 : ch === "X" ? BEYOND : 0));
   for (const c of region.corrections) {
     if (c.kind === "land" || c.kind === "lagoon" || c.kind === "sea") {
       const v = c.kind === "sea" ? 2 : c.kind === "lagoon" ? 1 : 0;
       area(c.area, (x, z) => (water[cell(x, z)] = v));
     }
   }
-  const waterAt = (x: number, z: number): Water => (inside(x, z) ? (water[cell(x, z)] as Water) : 0);
+  const inside = (x: number, z: number) => inBox(x, z) && water[cell(x, z)] !== BEYOND;
+  const waterAt = (x: number, z: number): Water => (inBox(x, z) && water[cell(x, z)] !== BEYOND ? (water[cell(x, z)] as Water) : 0);
 
   // ---- main roads and bridges: the baked map, the roads with real curves, then the fixes in order
   // 0 none, 1-5 tertiary to motorway, +8 on a bridge.
   const road = new Uint8Array(W * H);
   const LETTER: Record<string, number> = { E: 1, D: 2, C: 3, B: 4, A: 5 };
   if (region.roadGrid) {
-    readGrid(region.roadGrid, inside, (x, z, ch) => {
+    readGrid(region.roadGrid, inBox, (x, z, ch) => {
       const v = LETTER[ch.toUpperCase()];
       if (v) road[cell(x, z)] = v + (ch === ch.toLowerCase() ? 8 : 0);
     });
@@ -173,7 +181,7 @@ export function compileRegion(region: Region): RegionMap {
     const pts = r.path.map(([lat, lon]) => at({ lat, lon }));
     for (let k = 1; k < pts.length; k++) {
       line4(pts[k - 1].x, pts[k - 1].z, pts[k].x, pts[k].z, (x, z) => {
-        if (!inside(x, z)) return;
+        if (!inBox(x, z)) return;
         const old = road[cell(x, z)];
         // Where roads cross, the tile belongs to the bigger road (a bridge wins).
         if (!old || (v & 7) > (old & 7) || (v > 8 && old < 8)) {

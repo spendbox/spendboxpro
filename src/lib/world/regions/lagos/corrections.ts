@@ -27,9 +27,4 @@ export const CORRECTIONS: Correction[] = [
     id: "holy-cross-cathedral",
     set: { at: { lat: 6.45015, lon: 3.39481 }, approx: false },
   },
-  {
-    kind: "no-landmark",
-    note: "The map has it at 6.6229, 3.3569, just north of the area Lagos covers for now. Take this out when the area grows north.",
-    id: "new-afrika-shrine",
-  },
 ];

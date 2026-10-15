@@ -17,7 +17,7 @@ export type Path = [number, number][];
  * A map of the region's tiles baked from the map data: one string per row of tiles, north to
  * south, each row runs of a letter and a count ("L120W35L4S9"). A row that ends early carries on
  * with nothing (land, no road) to the end.
- *  - Water: L land, W lagoon or creek, S sea.
+ *  - Water: L land, W lagoon or creek, S sea, X land over the region's border (not part of it).
  *  - Roads: N none; A motorway, B trunk, C primary, D secondary, E tertiary (lower case: on a bridge).
  */
 export type BakedGrid = {
@@ -133,6 +133,17 @@ export type Region = {
   origin: LatLon;
   /** The part of the world this region covers (it can grow; the origin stays). */
   box: LatLonBox;
+  /**
+   * Where the side streets' numbering starts (tiles west and north of the origin): fixed for good
+   * once set, like the origin, so growing the box west or north adds streets without renumbering
+   * the ones already there (which would reshuffle every street, building and estate in the city).
+   */
+  streetsFrom?: number;
+  /**
+   * Where the free starter rooms are (docs/STARTER_ROOMS.md): the busy city, so new players start
+   * where things happen, not out at the far ends of the region. The whole box when left out.
+   */
+  starterBox?: LatLonBox;
   prices: Prices;
   /** Where the camera starts. */
   start: LatLon;
@@ -171,5 +182,15 @@ export type Region = {
     seaGates?: Path[];
     /** The smallest roads baked in (default "secondary"); the layout fills in the rest. */
     roads?: RoadKind;
+    /**
+     * The region's own border (an OpenStreetMap boundary relation, by id): land in the box but
+     * outside it is baked as beyond the region (nothing built, nothing to buy). Water stays water.
+     */
+    border?: number;
+    /**
+     * Part of the box already baked, kept exactly as it is when the box grows (`--grow`): only the
+     * new land round it is baked, so nothing already there (or owned there) moves.
+     */
+    keep?: LatLonBox;
   };
 };

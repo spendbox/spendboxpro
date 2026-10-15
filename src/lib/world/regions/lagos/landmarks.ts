@@ -49,4 +49,42 @@ export const LANDMARKS: Landmark[] = [
   { id: "new-afrika-shrine", name: "New Afrika Shrine", type: "club", at: { lat: 6.6030, lon: 3.3510 }, approx: true },
   { id: "kalakuta-museum", name: "Kalakuta Republic Museum", type: "museum", w: 3, d: 3, at: { lat: 6.5985, lon: 3.3525 }, approx: true },
   { id: "ikeja-city-mall", name: "Ikeja City Mall", type: "megamall", w: 6, d: 5, at: { lat: 6.6130, lon: 3.3580 }, approx: true },
+
+  // ---- The rest of Lagos State (baked 2026-10-15). Positions and sizes from OpenStreetMap; none
+  // of them touches the first box (Ikeja to the coast, Festac to Ajah), which is kept as it was.
+
+  // Agege
+  { id: "agege-stadium", name: "Agege Stadium", type: "arena", w: 3, d: 3, at: { lat: 6.62372, lon: 3.33006 }, approx: true },
+
+  // Ojo and Badagry, out to the Benin border
+  { id: "alaba-market", name: "Alaba International Market", type: "market", w: 8, d: 5, at: { lat: 6.46059, lon: 3.19066 }, approx: true },
+  // The Ojo campus runs 1.2 × 2.6 km across the first box's west edge: this is its western strip,
+  // by the Lagos–Badagry Expressway (the rest is in the first box, kept as it was).
+  { id: "lasu", name: "Lagos State University (LASU)", type: "campus", w: 5, d: 10, at: { lat: 6.4705, lon: 3.1968 } },
+  { id: "whispering-palms", name: "Whispering Palms Resort", type: "hotel", w: 3, d: 3, at: { lat: 6.41583, lon: 3.04503 }, approx: true },
+  { id: "badagry-market", name: "Badagry Market", type: "market", w: 3, d: 4, at: { lat: 6.41885, lon: 2.87559 }, approx: true },
+  { id: "seriki-abass-museum", name: "Seriki Williams Abass Slave Museum", type: "museum", w: 2, d: 2, at: { lat: 6.41193, lon: 2.8841 }, approx: true, osm: "Seriki Williams? Abass" },
+  { id: "first-storey-building", name: "First Storey Building in Nigeria", type: "museum", w: 2, d: 2, at: { lat: 6.41213, lon: 2.88659 }, approx: true },
+  { id: "badagry-heritage-museum", name: "Badagry Heritage Museum", type: "museum", w: 2, d: 2, at: { lat: 6.41175, lon: 2.88907 }, approx: true },
+  { id: "badagry-hospital", name: "Badagry General Hospital", type: "hospital", at: { lat: 6.41458, lon: 2.89728 }, approx: true },
+  // On Gberefu Island, across the lagoon from the town: no road, so it's a ferry ride.
+  { id: "point-of-no-return", name: "Point of No Return, Gberefu", type: "monument", at: { lat: 6.39416, lon: 2.87942 }, approx: true },
+
+  // Ikorodu
+  { id: "lasustech", name: "Lagos State University of Science and Technology (LASUSTECH)", type: "campus", w: 12, d: 10, at: { lat: 6.64059, lon: 3.5275 }, approx: true, osm: "Lagos State Polytechnic|LASUSTECH|Lagos State University of Science" },
+
+  // The Lekki corridor: Sangotedo to Ibeju-Lekki and the Free Zone
+  { id: "novare-lekki-mall", name: "Novare Lekki Mall", type: "megamall", w: 3, d: 4, at: { lat: 6.4683, lon: 3.63877 }, approx: true },
+  { id: "lufasi-nature-park", name: "Lufasi Nature Park", type: "bigpark", w: 4, d: 10, at: { lat: 6.4639, lon: 3.65473 }, approx: true },
+  { id: "pan-atlantic-university", name: "Pan-Atlantic University", type: "campus", w: 10, d: 12, at: { lat: 6.48549, lon: 3.85571 }, approx: true },
+  { id: "jara-beach-resort", name: "Jara Beach Resort", type: "hotel", w: 2, d: 2, at: { lat: 6.43853, lon: 3.86429 }, approx: true },
+  // The site is 6.5 × 7.4 km; this is its works (drawn as one big plant, like the airport's 2.4 km).
+  { id: "dangote-refinery", name: "Dangote Petroleum Refinery", type: "power", w: 18, d: 16, at: { lat: 6.45873, lon: 4.01409 }, approx: true, osm: "Dangote (Petroleum )?Refinery$" },
+  // On the open coast: its quays and basin face the sea (south).
+  { id: "lekki-deep-sea-port", name: "Lekki Deep Sea Port", type: "port", w: 16, d: 8, at: { lat: 6.42779, lon: 4.00924 }, approx: true, osm: "Lekki Deep Sea ?port" },
+  { id: "la-campagne-tropicana", name: "La Campagne Tropicana Beach Resort", type: "hotel", w: 5, d: 5, at: { lat: 6.39495, lon: 4.1881 }, approx: true, osm: "La Campagne Tropicana" },
+
+  // Epe
+  { id: "epe-fish-market", name: "Epe Fish Market", type: "market", w: 2, d: 2, at: { lat: 6.58276, lon: 3.99068 }, approx: true },
+  { id: "epe-resort", name: "Epe Resort and Spa", type: "hotel", w: 2, d: 2, at: { lat: 6.58757, lon: 3.94716 }, approx: true },
 ];

@@ -17,8 +17,10 @@ export const MAP_MARGIN = 150;
 const FINE_BLOCKS = 40;
 /** The most blocks ever drawn (a hard cap: about 60,000 triangles). */
 const MAX_BLOCKS = 6000;
-/** Pixels per tile on the painted map. */
-const PX = 2;
+/** Pixels per tile on the painted map, at most (fewer for a big region: see MAP_PX_MAX). */
+const PX_MOST = 2;
+/** The widest picture every phone can draw (WebGL's smallest maximum texture size). */
+const MAP_PX_MAX = 4096;
 
 const COLORS = {
   // The same blues as the near water (./water): shallows by the shore, deep further out.
@@ -82,6 +84,8 @@ export function createFarCity(parent: THREE.Object3D) {
     const W = b.x1 - b.x0 + 1 + 2 * MAP_MARGIN;
     const H = b.z1 - b.z0 + 1 + 2 * MAP_MARGIN;
     const canvas = document.createElement("canvas");
+    // All of Lagos State is about 1,800 tiles across: one pixel a tile, so phones can draw it.
+    const PX = Math.max(1, Math.min(PX_MOST, Math.floor(MAP_PX_MAX / Math.max(W, H))));
     canvas.width = W * PX;
     canvas.height = H * PX;
     const ctx = canvas.getContext("2d")!;

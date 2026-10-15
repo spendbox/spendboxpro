@@ -8,18 +8,18 @@ So property never runs out, Lagos gets bigger as more people play (`src/lib/worl
 Each city has a level from how many people live there. It only ever goes up (players leaving never
 shrinks the city):
 
-| Level | Players | About how many homes in Lagos |
+| Level | Players | About how many homes in Lagos (all of Lagos State) |
 |---|---|---|
-| 0 | under 1,000 | 82,000 |
+| 0 | under 1,000 | 322,000 |
 | 1 | 1,000 | |
 | 2 | 3,000 | |
-| 3 | 7,500 | 240,000 |
+| 3 | 7,500 | 828,000 |
 | 4 | 15,000 | |
 | 5 | 30,000 | |
-| 6 | 60,000 | 410,000 |
+| 6 | 60,000 | 1,537,000 |
 | 7 | 120,000 | |
 | 8 | 250,000 | |
-| 9 | 500,000 | 624,000 |
+| 9 | 500,000 | 2,534,000 |
 
 (Counted from the map; sold-out blocks growing adds more on top.)
 

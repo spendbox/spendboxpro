@@ -64,7 +64,7 @@
 - [ ] Then run `game-db/050_economy_items.sql` (pay four times real wages, money by day for the Finance chart, things, the market, crafting, cars, reputation; see `docs/ITEMS.md`). Until it's run, the Things screens and the Finance chart stay empty.
 - [ ] Then run `game-db/049_reports_and_work.sql` (reporting people; up to 3 side hustles; pay that goes into wallets by itself every game week). Until it's run, starting a second side hustle and reporting a person won't work.
 - [ ] In Vercel, set `GAME_SECRET` to a long random string (seals interview answers and passes; without it the service key is used).
-- [ ] Let the cloud sessions reach OpenStreetMap (for the real Lagos map): in the Claude Code environment settings, Network access, add `overpass-api.de` to the allowed domains. Then ask for the real pedestrian crossings (the list is still empty: the download failed) and a fresh Lagos bake (`npm run bake:world -- lagos`).
+- [x] The rest of Lagos State baked (Badagry to Epe and the Lekki corridor, Agege, Ikorodu), with the real pedestrian crossings. Overpass answers cloud sessions only with a named User-Agent (the bake sends one).
 - [ ] Try the new 3D avatar studio (see `avatar-reference/docs/AVATAR_SPEC.md`): open the game with `?avatar3d=1` on your phone, tap your look, design and save. Only your browser gets it; `?avatar3d=0` switches it back.
 - [ ] In the Supabase SQL Editor run `game-db/035_fees_and_jobs.sql` (first-visit fees, train fares, jobs). Until it's run, places and trains stay free and Jobs won't load.
 - [ ] In the Supabase SQL Editor run `game-db/036_minigames.sql` (minigame rewards). Until it's run, the games all play but good scores pay no mint.
@@ -160,7 +160,8 @@ Everything Newtown is becoming (life, careers, money, property, love, news, voic
 
 ## Real-world map (see `docs/WORLD.md`)
 - [x] Step 1, the foundation: one tile = 100 m, regions placed by real latitude and longitude, Lagos (45 × 25 km) drawn round the camera, its districts and landmarks, a fixes file, the bake script, `/world-lab` and `/play?world=lagos` to see it.
-- [ ] Step 2: bake Lagos's real coastline, lagoon, creeks, islands and main roads from OpenStreetMap (needs the network access above). Check the landmarks against the map.
+- [x] Step 2: bake Lagos's real coastline, lagoon, creeks, islands and main roads from OpenStreetMap, then all of Lagos State round it. Landmarks checked against the map.
+- [ ] Landmarks in the first box the map has but the game doesn't yet (each would replace the buildings on its ground, so they wait for a decision): Lagos State Secretariat (Alausa), the Trade Fair Complex, Ojo Cantonment, the rest of LASU's Ojo campus.
 - [ ] Step 3: smooth long bridges on piers (Third Mainland Bridge and its curves, Carter, Eko, Lekki–Ikoyi Link), rail lines, beaches, Makoko stilt houses, landmarks at real size. Drawing in chunks.
 - [ ] Step 4: zoomed-out map to tap and fly anywhere.
 - [ ] Step 5: the game on the permanent map. The hourly game is on hold and becomes something else (owner to decide).

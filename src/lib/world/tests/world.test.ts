@@ -23,12 +23,12 @@ test("tiles and latitude/longitude convert both ways", () => {
   assert.ok(Math.abs(t.x - 123.4) < 1e-6 && Math.abs(t.z + 56.7) < 1e-6);
 });
 
-test("Lagos covers about 45 × 25 km and sits at its place on the world map", () => {
+test("Lagos covers all of Lagos State (about 183 × 38 km) and sits at its place on the world map", () => {
   const map = compileRegion(LAGOS);
   const w = map.bounds.x1 - map.bounds.x0 + 1;
   const h = map.bounds.z1 - map.bounds.z0 + 1;
-  assert.ok(w >= 440 && w <= 460, `width ${w}`);
-  assert.ok(h >= 245 && h <= 255, `height ${h}`);
+  assert.ok(w >= 1800 && w <= 1850, `width ${w}`);
+  assert.ok(h >= 370 && h <= 385, `height ${h}`);
   const o = worldOffset(map.frame);
   // About 3.4° east and 6.5° north of where the equator meets Greenwich (north is -z).
   assert.ok(o.x > 3700 && o.x < 3850 && o.z < -7150 && o.z > -7300, JSON.stringify(o));
@@ -39,6 +39,27 @@ test("every Lagos landmark is placed (none outside, none overlapping)", () => {
   assert.deepEqual(map.skipped, []);
   const ids = new Set(LAGOS.landmarks.map((l) => l.id));
   assert.equal(ids.size, LAGOS.landmarks.length, "landmark ids are unique");
+});
+
+test("Lagos State's towns are on the map; land over its border isn't, water over it is", () => {
+  const map = compileRegion(LAGOS);
+  const tile = (lat: number, lon: number) => {
+    const t = toTile(map.frame, { lat, lon });
+    return [Math.round(t.x), Math.round(t.z)] as const;
+  };
+  // Badagry, Epe, Ikorodu and the Lekki Free Zone: the region's own land.
+  for (const [lat, lon] of [[6.4167, 2.8846], [6.585, 3.98], [6.615, 3.508], [6.4538, 3.9861]]) {
+    const [x, z] = tile(lat, lon);
+    assert.ok(map.inside(x, z) && !map.waterAt(x, z), `${lat}, ${lon} should be Lagos land`);
+  }
+  // Ota, Agbara, Ado-Odo and Ijebu's side of the Lekki Lagoon (Ogun State): not Lagos.
+  for (const [lat, lon] of [[6.69, 3.23], [6.515, 3.08], [6.68, 2.95], [6.62, 4.2]]) {
+    const [x, z] = tile(lat, lon);
+    assert.ok(!map.inside(x, z), `${lat}, ${lon} is over the border`);
+  }
+  // The Lekki Lagoon stays whole, Ogun's shore included.
+  const [lx, lz] = tile(6.54, 4.16);
+  assert.equal(map.waterAt(lx, lz), 1);
 });
 
 test("a road drawn between two points is always joined up side by side", () => {
@@ -103,6 +124,25 @@ test("baked water and roads are read from their rows", () => {
   assert.equal(map.roadAt(-4, -5)?.kind, "motorway");
   assert.deepEqual(map.roadAt(-1, -4), { kind: "primary", bridge: true });
   assert.equal(map.roadAt(-5, -5), undefined);
+});
+
+test("land baked as over the border (X) isn't part of the region, and a correction can bring it in", () => {
+  const box = (s: number, w: number, n: number, e: number): [number, number][] => [[n, w], [n, e], [s, e], [s, w]];
+  const deg = 1 / 1113.2; // a tile, near enough, at the equator
+  const map = compileRegion(
+    tiny({
+      water: { x0: -5, z0: -5, rows: ["X3W1L2"] },
+      roadGrid: { x0: -5, z0: -5, rows: ["A6"] },
+      corrections: [{ kind: "land", area: box(5 * deg - deg / 2, -4 * deg - deg / 2, 5 * deg + deg / 2, -4 * deg + deg / 2) }],
+    }),
+  );
+  assert.equal(map.inside(-5, -5), false);
+  assert.equal(map.waterAt(-5, -5), 0);
+  assert.equal(map.roadAt(-5, -5), undefined, "no road over the border");
+  assert.equal(map.inside(-4, -5), true, "made land by a correction");
+  assert.equal(map.inside(-2, -5), true);
+  assert.equal(map.waterAt(-2, -5), 1);
+  assert.equal(map.roadAt(-1, -5)?.kind, "motorway");
 });
 
 test("corrections change only the tiles they cover, in order", () => {
