@@ -167,8 +167,26 @@ const MoneyHome = dynamic(() => import("./money-home").then((m) => m.MoneyHome))
 // The 3D city only runs in the browser.
 const CityView = dynamic(() => import("./city-view").then((m) => m.CityView), {
   ssr: false,
-  loading: () => <div className="absolute inset-0 grid place-items-center text-muted">Building the city…</div>,
+  loading: () => <CityLoading />,
 });
+
+/** While the 3D city downloads: after a few seconds, a word about slow connections. */
+function CityLoading() {
+  const [long, setLong] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setLong(true), 6000);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <div className="absolute inset-0 grid place-items-center px-6 text-center text-muted">
+      <div>
+        <div className="mx-auto mb-3 size-6 animate-spin rounded-full border-2 border-line border-t-gold" />
+        <p className="font-semibold">Building the city…</p>
+        {long && <p className="mt-1 max-w-xs text-sm">Your connection seems slow, so the first visit takes a little longer. After that, the city is saved on your phone and opens quickly.</p>}
+      </div>
+    </div>
+  );
+}
 // Panels people open now and then: their code only loads when first opened, so the town
 // itself starts faster.
 const Menu = dynamic(() => import("./menu").then((m) => m.Menu));

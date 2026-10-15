@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { LoaderCircle, X } from "lucide-react";
 import { Logo } from "@/components/logo";
+import { slowNetwork } from "@/components/recovering";
 import type { WelcomeNeeds } from "@/lib/welcome";
 import { LoginForm } from "../login/login-form";
 import { AdultsOnly, WelcomeForm, type WelcomeMode } from "../welcome/welcome-form";
@@ -49,8 +50,10 @@ export function SignInOverlay({
   // ask again; if it still hasn't, load the page afresh, so nobody is left waiting on a spinner.
   useEffect(() => {
     if (!waiting) return;
-    const again = setTimeout(refresh, 4_000);
-    const reload = setTimeout(() => window.location.reload(), 20_000);
+    // On a slow connection both wait longer: reloading starts the whole download again.
+    const slow = slowNetwork();
+    const again = setTimeout(refresh, slow ? 8_000 : 4_000);
+    const reload = setTimeout(() => window.location.reload(), slow ? 60_000 : 25_000);
     return () => {
       clearTimeout(again);
       clearTimeout(reload);
