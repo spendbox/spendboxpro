@@ -39,6 +39,7 @@ import { workplaceOfTile, type Workplace } from "@/lib/world/workplace";
 import type { MapBusiness } from "@/lib/world/business";
 import type { OwnedProperty } from "@/lib/world/owned";
 import { daylight, weatherAt } from "@/lib/city/sky";
+import { createStars } from "./city/stars";
 import { npcsFor, type Npc } from "@/lib/npcs";
 import { createBirds } from "./city/birds";
 import { createBubbles, type BubbleSpot } from "./city/bubbles";
@@ -4238,17 +4239,8 @@ export function CityView({
     let fogFactor = 0;
     let atmosT = 1;
 
-    const starGeo = new THREE.BufferGeometry();
-    const starPos = new Float32Array(700 * 3);
-    for (let k = 0; k < 700; k++) {
-      const a = Math.random() * Math.PI * 2;
-      const e = Math.random() * 0.45 + 0.08;
-      starPos.set([Math.cos(a) * Math.cos(e) * 160, Math.sin(e) * 160, Math.sin(a) * Math.cos(e) * 160], k * 3);
-    }
-    starGeo.setAttribute("position", new THREE.BufferAttribute(starPos, 3));
-    const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.6, sizeAttenuation: false, transparent: true, opacity: 0, fog: false, depthWrite: false });
-    const stars = new THREE.Points(starGeo, starMat);
-    scene.add(stars);
+    // Out in space, behind everything (./city/stars): never a dome you can fly past.
+    const stars = createStars(scene, renderer.getPixelRatio());
 
     const RAIN = 900;
     const rainPos = new Float32Array(RAIN * 6);
@@ -4287,7 +4279,7 @@ export function CityView({
       glassMat.emissive.copy(C.windowDay).lerp(C.windowNight, 1 - dl);
       glassMat.emissiveIntensity = 0.2 + (1 - dl) * 0.8;
       lampMat.color.copy(C.lampOff).lerp(C.lampOn, Math.min(1, (1 - dl) * 1.6));
-      starMat.opacity = Math.max(0, (0.35 - dl) / 0.35) * (1 - cloud);
+      stars.opacity = Math.max(0, (0.35 - dl) / 0.35) * (1 - cloud);
       cloudMat.color.setRGB(1 - cloud * 0.4, 1 - cloud * 0.38, 1 - cloud * 0.33);
       rain.visible = w.kind === "rain";
       rainMat.opacity = 0.45 * w.strength;
