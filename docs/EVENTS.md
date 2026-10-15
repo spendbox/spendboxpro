@@ -34,7 +34,8 @@ the database keeps needs its id added to the `category` check in game-db/095 too
 ## In the walkthrough
 
 The walkthrough's third mission is **Go to an event** (₦50,000): the party button glows, and
-"Show me" opens Events. Going into any event (or hosting one and going in) counts
+"Show me" opens Events, and says a party fewer than 10 people come to costs nothing to host.
+Going into any event (or hosting one and going in) counts
 (docs/FIRST_STEPS.md). It replaced "Create and win a challenge".
 
 ## Hosting
@@ -68,7 +69,10 @@ Worked out by the server from the map (the phone's number is only a preview; src
 - **The area**: from the land price of the district round it (0.8 to 1.8; Ikoyi, Victoria Island
   and Eko Atlantic cost most).
 - Rounded to ₦1,000 and paid when it's put on the map (Fun money, then the wallet). Called off
-  before it starts: it all comes back. Once it has started it's spent (the city's when it ends).
+  before it starts: it all comes back. Once it has started it's spent (the city's when it ends),
+  **unless fewer than 10 people came in** (the host doesn't count; setting `event_min_guests`,
+  game-db/096): then it all comes back when it ends or is called off, and the host's notice says
+  so. The walkthrough's third mission and the host's form both say this.
 - Talks and screenings are free to host for now. Your friends are always told (a notice and a push); everyone
 within about 4 km is told too when it starts within 15 minutes.
 
@@ -185,5 +189,6 @@ Looked into, not used:
   times, YouTube links, what the stage keeps, reputation.
 - `game-db/tests/events.test.sql`: hosting and its limits, going, early doors, a full room,
   tickets paid once, the start notice, VAT and income tax on tickets (to the treasuries, on the host's pay slips, in Finance), the permit to the state, paid once, calling off with tickets back,
-  ending early, the stage, reputation, and running the part twice. Run it against a throwaway
-  database that already has parts 1 to 94.
+  ending early, the stage, reputation, the hosting fee back when fewer than 10 came (at the end
+  or called off), and running parts 95 and 96 twice. Run it against a throwaway database that
+  already has parts 1 to 94.

@@ -324,7 +324,7 @@ export function Events({
           <p className="text-sm text-muted">
             {confirm.kind === "end"
               ? `Everyone leaves the room${confirm.e.price > 0 ? `, and the ticket money is paid to you (less VAT and income tax)` : ""}.`
-              : `Everyone going is told${confirm.e.price > 0 ? ", and every ticket bought is paid back" : ""}.${confirm.e.category === "party" ? (confirm.e.status === "upcoming" ? " Your hosting fee comes back too." : " It has started, so the hosting fee is spent.") : ""}`}
+              : `Everyone going is told${confirm.e.price > 0 ? ", and every ticket bought is paid back" : ""}.${confirm.e.category === "party" ? (confirm.e.status === "upcoming" ? " Your hosting fee comes back too." : " It has started: the hosting fee is spent unless fewer than 10 people have come.") : ""}`}
           </p>
           <div className="mt-4 grid grid-cols-2 gap-2">
             <button onClick={() => setConfirm(null)} className="h-11 rounded-full bg-ink/5 text-sm font-semibold">
@@ -848,7 +848,7 @@ function HostForm({
             <span className="rounded-full bg-panel px-2 py-0.5">{VENUE_COST[venue!.kind].label} ×{cost.parts.venue}</span>
             {cost.parts.area !== 1 && <span className="rounded-full bg-panel px-2 py-0.5">{cost.parts.area > 1 ? "Pricey area" : "Cheaper area"} ×{cost.parts.area}</span>}
           </div>
-          <p className="mt-2 text-[11px] text-muted">A permit paid to the state, when you put it on the map (from your Fun money, then your wallet). Call it off before it starts and it all comes back.</p>
+          <p className="mt-2 text-[11px] text-muted">A permit paid to the state, when you put it on the map (from your Fun money, then your wallet). Call it off before it starts, or fewer than 10 people come, and it all comes back.</p>
         </div>
       ) : (
         <p className="rounded-2xl bg-ink/5 p-3 text-sm text-muted">{cat === "party" ? "Pick where it is to see the price." : "Free to host."}</p>

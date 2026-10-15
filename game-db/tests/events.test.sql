@@ -3,7 +3,9 @@
 -- early doors, a full room), the start notice, the host's share once it's over, calling it off
 -- (tickets back), ending early, the stage, reputation, and running it twice.
 \ir ../095_events.sql
+\ir ../096_event_refund.sql
 \ir ../095_events.sql
+\ir ../096_event_refund.sql
 \o /dev/null
 
 create function pg_temp.uid(e text) returns uuid language sql as $$ select id from profiles where email_key = e $$;
@@ -149,12 +151,30 @@ begin
   perform event_cancel(d, (v->>'id')::bigint);
   perform pg_temp.check(event_cancel(c, id4) = 'cancelled', 'called off');
   perform pg_temp.check((select coins from profiles where id = c) = coins0, 'called off before it starts: the fee is back');
-  -- Once it has started, the fee is spent (the city's when it ends).
+  -- Once it has started, the fee is spent (the city's when it ends)... unless fewer than 10 came
+  -- (part 96): then it all comes back.
+  v := event_open(c, 'lagos', 'party', 'owambe', 'Quiet owambe', '', 50, 50, 'Allen Avenue', true, now(), 60, 0, 400, 50, 3, 70, 16);
+  id4 := (v->>'id')::bigint;
+  perform event_enter(b, id4, 5);
+  perform pg_temp.check(event_end(c, id4) = 'closed', 'ended with 1 guest');
+  perform pg_temp.check((select coins from profiles where id = c) = coins0, 'fewer than 10 came: the fee is back');
+  perform pg_temp.check(exists (select 1 from notifications where user_id = c and body like '%Fewer than 10 came, so your ₥70 hosting fee is back%'), 'and the host is told');
+  perform pg_temp.check(not exists (select 1 from treasury_ledger where kind = 'event_permit' and note like 'Event permit: Quiet owambe%'), 'no permit for it');
+  -- Enough came (the line set to 1 here, as if 10 had): the fee is the state's.
+  update game_settings set value = 1 where key = 'event_min_guests';
   bank0 := (select balance from world_bank where id = 1);
   v := event_open(c, 'lagos', 'party', 'owambe', 'Owambe', '', 50, 50, 'Allen Avenue', true, now(), 60, 0, 400, 50, 3, 70, 16);
   id4 := (v->>'id')::bigint;
+  perform event_enter(b, id4, 5);
   perform pg_temp.check(event_end(c, id4) = 'closed', 'ended');
-  perform pg_temp.check((select coins from profiles where id = c) = coins0 - 70, 'ended: the fee is spent');
+  update game_settings set value = 10 where key = 'event_min_guests';
+  perform pg_temp.check((select coins from profiles where id = c) = coins0 - 70, 'enough came: the fee is spent');
+  -- Called off after it started, with nobody in: the fee comes back too.
+  -- (Paid from Fun money, back into the wallet: b's money in all is the same.)
+  coins0 := (select coins from profiles where id = b) + (select coalesce(sum(balance), 0) from life_pots where user_id = b);
+  v := event_open(b, 'lagos', 'party', 'rave', 'Empty rave', '', 70, 70, 'Allen Avenue', true, now(), 60, 0, 400, 50, 3, 40, 16);
+  perform pg_temp.check(event_cancel(b, (v->>'id')::bigint) = 'cancelled', 'called off after it started');
+  perform pg_temp.check((select coins from profiles where id = b) + (select coalesce(sum(balance), 0) from life_pots where user_id = b) = coins0, 'with nobody in: the fee is back');
   perform pg_temp.check(exists (select 1 from treasury_ledger where kind = 'event_permit' and note like 'Event permit: Owambe%'), 'the permit went to the state');
   perform pg_temp.check((select balance from world_bank where id = 1) - bank0 = 70, 'the World Bank counts the permit (and not before the party started)');
 
@@ -162,7 +182,7 @@ begin
   update hosted_event_guests set entered_at = entered_at - interval '1 hour' where user_id = b;
   v := tutorial_check(b, '{"name": 1, "hi": 1, "win": 5}');
   perform pg_temp.check(not (v->>'win')::boolean, 'mission 3 not done yet (earlier events don''t count)');
-  v := event_open(c, 'lagos', 'stage', 'talk', 'Money talk', '', 60, 60, 'Terra Kulture', false, now(), 60, 0, 400, 50, 3, 0, 16);
+  v := event_open(d, 'lagos', 'stage', 'talk', 'Money talk', '', 60, 60, 'Terra Kulture', false, now(), 60, 0, 400, 50, 3, 0, 16);
   perform event_enter(b, (v->>'id')::bigint, 5);
   coins0 := (select coins from profiles where id = b);
   v := tutorial_check(b, '{"name": 1, "hi": 1, "win": 5}');
