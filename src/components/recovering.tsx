@@ -7,12 +7,25 @@ import { useEffect, useRef, useState } from "react";
 // that didn't arrive), sometimes a bug. It tells the server what happened (so it shows in the
 // logs), then gets the player back in by itself:
 // - offline: waits for the connection to come back, then tries again;
-// - otherwise: fetches the page again (retry), a few times, waiting a little longer each time;
-// - still broken: loads the page afresh (at most twice in two minutes, so it never loops);
+// - otherwise: fetches the page again (retry), a few times, waiting a little longer each time
+//   (much longer on a slow connection, where a try can take a while to arrive);
+// - a piece of the app that didn't download: tries to fetch it again first, then loads the page
+//   afresh (a new version may have come out);
+// - still broken: loads the page afresh (at most twice in two minutes, so it never loops; on a
+//   slow connection only after many tries, as it means downloading everything again);
 // - coming back to the tab: tries again straight away.
 
 const RELOADS_KEY = "nt-error-reloads";
-const RETRIES = 3;
+
+/**
+ * A slow connection (2G/3G, or data saver on): everything waits longer, and reloading the page (which
+ * downloads it all again from the start) is the very last resort.
+ */
+export function slowNetwork() {
+  if (typeof navigator === "undefined") return false;
+  const c = (navigator as Navigator & { connection?: { effectiveType?: string; saveData?: boolean } }).connection;
+  return !!c && (c.saveData === true || ["slow-2g", "2g", "3g"].includes(c.effectiveType ?? ""));
+}
 
 /** Tell the server once per error (it shows in the Vercel logs). */
 function report(error: Error & { digest?: string }, where: string) {
@@ -52,7 +65,8 @@ export function Recovering({ error, retry, where }: { error: Error & { digest?: 
   const [offline, setOffline] = useState(false);
   const reported = useRef<unknown>(null);
 
-  // A new version was released while this tab was open: load it fresh.
+  // A piece of the app that didn't download (a dropped connection, or a new version released while
+  // this tab was open).
   const stale = /ChunkLoadError|Loading chunk|Failed to fetch dynamically imported module|Importing a module script failed/i.test(`${error?.name} ${error?.message}`);
 
   useEffect(() => {
@@ -63,7 +77,9 @@ export function Recovering({ error, retry, where }: { error: Error & { digest?: 
   }, [error, where]);
 
   useEffect(() => {
-    if (stale) {
+    // A piece of the app didn't download: fetch it again twice (a dropped connection), then load
+    // the page afresh (a new version came out and the old piece is gone).
+    if (stale && tries >= 2) {
       if (!reloadOnce()) setTimeout(() => setStuck(true), 0);
       return;
     }
@@ -82,15 +98,16 @@ export function Recovering({ error, retry, where }: { error: Error & { digest?: 
         window.removeEventListener("online", back);
       };
     }
-    const t = setTimeout(
-      () => {
-        if (tries < RETRIES) {
-          setTries((n) => n + 1);
-          retry();
-        } else if (!reloadOnce()) setStuck(true);
-      },
-      1200 * (tries + 1),
-    );
+    const slow = slowNetwork();
+    const most = slow ? 8 : 3;
+    // Fast: 1.2 s, 2.4 s, 3.6 s. Slow: 4 s, then doubling up to 30 s, so a try has time to arrive.
+    const wait = slow ? Math.min(30_000, 4000 * 2 ** tries) : 1200 * (tries + 1);
+    const t = setTimeout(() => {
+      if (tries < most) {
+        setTries((n) => n + 1);
+        retry();
+      } else if (!reloadOnce()) setStuck(true);
+    }, wait);
     return () => clearTimeout(t);
   }, [tries, stuck, stale, retry]);
 

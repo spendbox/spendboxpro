@@ -220,7 +220,41 @@ async function tickSoon(db: ReturnType<typeof createAdminClient>) {
   if (ticked.error && !/abort/i.test(ticked.error.message)) await db.rpc("tick").abortSignal(AbortSignal.timeout(5000));
 }
 
+/**
+ * The town as a signed-out visitor sees it is the same for everyone: kept for 15 seconds on each
+ * server and handed to every visitor (and up to two minutes old while a fresh one is got ready
+ * behind it), so a first visit doesn't wait on the database at all (docs/COSTS.md).
+ */
+let guestState: { at: number; state: Promise<GameState> } | null = null;
+const GUEST_FRESH_MS = 15_000;
+const GUEST_STALE_MS = 120_000;
+
 export async function loadGame(userIdOrGuest: string | null): Promise<GameState> {
+  if (userIdOrGuest) return loadGameFresh(userIdOrGuest);
+  const age = guestState ? Date.now() - guestState.at : Infinity;
+  if (guestState && age < GUEST_FRESH_MS) return guestState.state;
+  const fresh = () => {
+    const next = { at: Date.now(), state: loadGameFresh(null) };
+    // Only kept once it worked (a failed load isn't handed to the next visitor).
+    next.state.then(
+      () => {
+        guestState = next;
+      },
+      () => {},
+    );
+    return next.state;
+  };
+  if (guestState && age < GUEST_STALE_MS) {
+    const kept = guestState.state;
+    // Hand out the one we have, and get a fresh one ready for the next visitor.
+    guestState = { at: Date.now() - GUEST_FRESH_MS + 5_000, state: kept };
+    after(() => fresh().then(() => {}, () => {}));
+    return kept;
+  }
+  return fresh();
+}
+
+async function loadGameFresh(userIdOrGuest: string | null): Promise<GameState> {
   const db = createAdminClient();
   const guest = !userIdOrGuest;
   const userId = userIdOrGuest ?? GUEST;

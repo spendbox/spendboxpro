@@ -278,18 +278,38 @@ function TopUps({ region, perMint, onToppedUp }: { region: string; perMint: numb
   );
 }
 
+/** "Offer ends in 2 days 5 hours" (to the minute in the last hour), ticking down. */
+function PackCountdown({ endsAt }: { endsAt: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  const left = Math.max(0, endsAt - now);
+  const h = Math.floor(left / 3_600_000);
+  const m = Math.ceil((left % 3_600_000) / 60_000);
+  const words = h >= 24 ? `${Math.floor(h / 24)} day${h >= 48 ? "s" : ""} ${h % 24} hour${h % 24 === 1 ? "" : "s"}` : h >= 1 ? `${h} hour${h === 1 ? "" : "s"} ${m} min` : `${m} min`;
+  return <b>Offer ends in {words}.</b>;
+}
+
 /**
- * Starter packs (docs/PACKS.md): once, until you buy a home of your own, start with ₦20m, ₦80m or
+ * Starter packs (docs/PACKS.md): once, in your first 72 hours (game-db/105), start with ₦20m, ₦80m or
  * ₦300m instead of ₦2m (and the pack's gifts). Paid like a top-up, so it can't get lost.
  */
 function StarterPacks({ region, perMint, open, onPaid }: { region: string; perMint: number; open?: boolean; onPaid: (mint: number, doubled: boolean, pack?: string) => void }) {
   const [status, setStatus] = useState<"open" | "had" | "too_late" | null | undefined>(undefined);
+  /** When the offer ends (72 hours after joining), for the countdown. */
+  const [endsAt, setEndsAt] = useState<number | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
   const [shown, setShown] = useState(!!open);
   useEffect(() => {
     let alive = true;
     void myPackStatus()
-      .then((s) => alive && setStatus(s))
+      .then((s) => {
+        if (!alive) return;
+        setStatus(s?.status ?? null);
+        setEndsAt(s?.endsAt ? Date.parse(s.endsAt) : null);
+      })
       .catch(() => alive && setStatus(null));
     return () => {
       alive = false;
@@ -306,7 +326,7 @@ function StarterPacks({ region, perMint, open, onPaid }: { region: string; perMi
       <button onClick={() => setShown((v) => !v)} className="flex w-full items-center justify-between text-left">
         <span>
           <b className="block text-sm">🎁 Starter packs</b>
-          <span className="block text-xs text-[#5c4400]">Start richer, once, until you buy a home of your own.</span>
+          <span className="block text-xs text-[#5c4400]">Start richer, once. {endsAt ? <PackCountdown endsAt={endsAt} /> : "Only for your first 72 hours."}</span>
         </span>
         <ChevronDown className={`size-4 shrink-0 transition ${shown ? "rotate-180" : ""}`} />
       </button>
