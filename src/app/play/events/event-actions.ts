@@ -501,7 +501,8 @@ export async function cancelEvent(id: number): Promise<{ ok: true } | Fail> {
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Please sign in again." };
   const db = createAdminClient();
-  const { data: going } = await db.from("hosted_event_guests").select("user_id").eq("event_id", Math.round(n(id))).eq("going", true).neq("user_id", userId).limit(10_000);
+  // Everyone going, and everyone who came in: they're told (and paid back) by event_cancel.
+  const { data: going } = await db.from("hosted_event_guests").select("user_id").eq("event_id", Math.round(n(id))).or("going.eq.true,entered_at.not.is.null").neq("user_id", userId).limit(10_000);
   const { error } = await db.rpc("event_cancel", { p_user: userId, p_id: Math.round(n(id)) });
   if (error) return say(error.message);
   // Their phones are tapped after the host has their answer.
