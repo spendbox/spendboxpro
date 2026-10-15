@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, Building, Clapperboard, Coins, Egg, Gift, Globe, Landmark, Megaphone, Plane, Rocket, Skull, Smile, Users, Briefcase as Work, Wallet, Zap } from "lucide-react";
+import { ArrowDown, ArrowUp, Building, Clapperboard, Egg, Gift, Globe, Landmark, Megaphone, Plane, Rocket, Skull, Smile, Users, Briefcase as Work, Wallet, Zap } from "lucide-react";
 import { Star } from "@/components/icons";
 import { REP_LEVELS, repLevel } from "@/lib/world/rep-levels";
 import { reputationDetails, type RepDetails } from "../rep-actions";
@@ -10,7 +10,7 @@ import { openAdvertise } from "./advertise-open";
 
 // Your reputation (what adds to it, what takes it away), and what's coming to Newtown.
 
-/** Reputation: the score, what's bringing it up and what's pulling it down, and earning from it (soon). */
+/** Reputation: the score, what's bringing it up and what's pulling it down. */
 export function ReputationSheet({ onClose }: { onClose: () => void }) {
   const [d, setD] = useState<RepDetails | null | undefined>(undefined);
   useEffect(() => {
@@ -56,15 +56,6 @@ export function ReputationSheet({ onClose }: { onClose: () => void }) {
               ))}
             </ul>
           )}
-          <div className="mt-5 rounded-2xl bg-ink p-4 text-white">
-            <p className="flex items-center gap-2 text-sm font-semibold">
-              <Coins className="size-4 text-gold" /> Earn from your reputation
-              <span className="rounded-full bg-gold px-2 py-0.5 text-[10px] font-bold uppercase text-ink">Coming soon</span>
-            </p>
-            <p className="mt-1.5 text-xs text-white/75">
-              Half of everything Newtown earns (adverts, packs, leases) will be shared with the players with the highest reputation. The higher yours, the bigger your share. Start building it now.
-            </p>
-          </div>
         </>
       )}
     </Sheet>
