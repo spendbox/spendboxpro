@@ -101,6 +101,12 @@ None known right now. Fixed lately:
 - [x] During the walkthrough, the ✕ on the quick buttons couldn't close them: it does now.
 
 ## Next (ideas agreed)
+- [ ] **Short-lived voice-call logins.** The relay server's login for voice calls (`NEXT_PUBLIC_TURN_USERNAME`,
+  `NEXT_PUBLIC_TURN_CREDENTIAL`, used in `src/app/play/call/group-call.ts`) is in the browser code, so
+  anyone could copy it and use the relay's bandwidth (it can't reach player data, but it can cost money).
+  Instead the server hands each signed-in player a login that runs out after a few hours (the relay's
+  shared-secret "time-limited credentials", or the TURN provider's API), kept in a server-only setting;
+  then take the old login out of the public settings and change it at the provider.
 - [ ] **Walk inside your planned home** (`docs/HOME_PLANNER.md`, next steps): your own home on the map drawn from your plan, then your shop things placed in it, then visitors.
 - [ ] **2D characters for activities** (`docs/2D_CHARACTERS.md`): a 2D character drawn from your avatar with expressions (chat first), then the dance hall, boxing, basketball, football.
 - [ ] **The 3D characters' poses** (`docs/AVATAR_POSES.md`): sit, sip, eat, type, hug and handshake first, so seated characters and greetings switch to the new design; then work, games, street life, rides and feelings; then your own 3D avatar on the street and inside.
