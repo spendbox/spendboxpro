@@ -144,9 +144,9 @@ Each phase is built in one go (a few hours to a couple of days); writing the sto
 
 **Phase 3: people who remember you and story arcs.** Built.
 - [x] A cast of 40 for Lagos; how each feels about you, how far your story has gone, what you chose (game-db/113).
-- [x] Stories for 10 of them (Mama Nkechi, Officer Bello, Baba Sule, Kunle, Chioma, Aunty Bisi, Coach Dayo, Ify, Uncle Sunday), branching on feeling.
+- [x] Stories for 9 of them (Mama Nkechi, Officer Bello, Baba Sule, Kunle, Chioma, Aunty Bisi, Coach Dayo, Ify, Uncle Sunday), branching on feeling.
 - [x] Shared characters the world remembers (enough help and Mama Nkechi opens a shop; enough reports and Bello is dismissed); people who arrive over time.
-- [ ] Stories for the other 30 characters, and later chapters for the first 10.
+- [ ] Stories for the other 31 characters, and later chapters for the first 9.
 - [ ] Their faces in the trip film: the same officer, conductor or area boys every time (costumes per character).
 
 **Phase 4: standing and quiet badges.**

@@ -345,10 +345,10 @@ reviewing.
    you saw, Grandpa's land, your numbers coming in), and 35 more answers across 24 everyday
    moments (game-db/112).
 3. **People who remember you and story arcs.** *Built.* A cast of 40 for Lagos, with stories
-   written for 10 of them (36 steps, branching on how they feel about you and on what the whole
+   written for 9 of them (37 steps, branching on how they feel about you and on what the whole
    city has done for them); how each feels about you, how far your story has gone and what you
    chose, for every player; the city's shared count for each character; people who arrive over
-   time; "People who know you" on the wheel (game-db/113). Still to come: stories for the other 30,
+   time; "People who know you" on the wheel (game-db/113). Still to come: stories for the other 31,
    and their faces in the trip film.
 4. **Standing and quiet badges.** Trust, Fame, Legacy and the leaderboard; the badges above.
 5. **Careers.** Starting a business, its moments, daily income, growing and failing, and the
