@@ -104,6 +104,79 @@ export function buildingParts(t: Tile, b: Building, pal: Palette, B0: BoxFn, add
   const tanks = (dx: number, y: number, dz: number, n: number) => {
     for (let k = 0; k < n; k++) B(dx + (k - (n - 1) / 2) * 0.08, y, dz, 0.055, 0.065, 0.055, TANK, 0, "cyl");
   };
+  /**
+   * The way in at the foot of a tower or office block, its front at z = fz, `w` wide: one of eight
+   * designs (a glass canopy and revolving door, a grand portico, an angled canopy over a glass box,
+   * a two-storey glass atrium, a stone arch with a fountain, an awning over a red carpet, a timber
+   * pergola, or a pool with a bridge to the door), picked by the building's own numbers, in its
+   * own accent colours.
+   */
+  const entrance = (fz: number, w: number, glass: number) => {
+    const design = Math.floor(((l0 * 7.3 + l2 * 3.1 + l4) % 1) * 8);
+    const metal = pick([0x343a40, 0xadb5bd, 0xc9a227, 0x1a1b1e], l1);
+    const stone = pick([0xece4d4, 0xd8d2c4, 0x868e96, 0xf8f9fa], l3);
+    const door = Math.min(0.28, w * 0.4);
+    switch (design) {
+      case 0: // a glass canopy on steel posts, a revolving door
+        B(0, BASE, fz + 0.005, door, STOREY * 0.75, 0.02, glass, 0, "glass");
+        B(0, BASE, fz + 0.04, 0.12, STOREY * 0.7, 0.08, 0xd0ebff, 0, "glass");
+        B(0, BASE + STOREY * 0.75, fz + 0.04, 0.13, 0.02, 0.09, metal, 0, "cyl");
+        B(0, BASE + STOREY * 0.9, fz + 0.1, door + 0.12, 0.012, 0.2, 0xd0ebff, 0, "glass");
+        for (const sx of [-1, 1]) B(sx * (door / 2 + 0.05), BASE, fz + 0.18, 0.012, STOREY * 0.9, 0.012, metal);
+        break;
+      case 1: // a grand portico: tall columns, a slab roof, flagpoles
+        for (let k = 0; k < 4; k++) B(-door + (k * door * 2) / 3, BASE, fz + 0.12, 0.035, STOREY * 1.6, 0.035, stone, 0, "cyl");
+        B(0, BASE + STOREY * 1.6, fz + 0.08, door * 2 + 0.1, 0.04, 0.2, stone);
+        B(0, BASE, fz + 0.005, door, STOREY * 0.8, 0.02, glass, 0, "glass");
+        for (const sx of [-1, 1]) {
+          B(sx * (door + 0.12), BASE, fz + 0.24, 0.008, STOREY * 2, 0.008, 0xdee2e6);
+          B(sx * (door + 0.12) + 0.03, BASE + STOREY * 1.8, fz + 0.24, 0.06, 0.035, 0.003, sx < 0 ? 0x2b8a3e : pick(SIGNS, l3), 0, "paint");
+        }
+        B(0, BASE, fz + 0.16, door * 2 + 0.06, 0.012, 0.18, stone);
+        break;
+      case 2: // an angled canopy over a glass box porch, planters either side
+        B(0, BASE, fz + 0.06, door + 0.04, STOREY * 0.8, 0.12, glass, 0, "glass");
+        B(0, BASE + STOREY * 1.0, fz + 0.12, door + 0.22, 0.02, 0.3, pick(SIGNS, l2), 0, "building", 0.12);
+        for (const sx of [-1, 1]) {
+          B(sx * (door / 2 + 0.12), BASE, fz + 0.12, 0.08, 0.05, 0.08, 0x8d6e63);
+          B(sx * (door / 2 + 0.12), BASE + 0.05, fz + 0.12, 0.07, 0.06, 0.07, 0x5f9e6a, 0, "cone");
+        }
+        break;
+      case 3: // a two-storey glass atrium standing out from the front, with a frame
+        B(0, BASE, fz + 0.06, door + 0.16, STOREY * 2, 0.12, glass, 0, "curtain");
+        B(0, BASE + STOREY * 2, fz + 0.06, door + 0.2, 0.02, 0.14, metal);
+        for (const sx of [-1, 1]) B(sx * (door / 2 + 0.09), BASE, fz + 0.12, 0.015, STOREY * 2, 0.015, metal);
+        B(0, BASE + STOREY, fz + 0.125, door + 0.16, 0.01, 0.005, metal);
+        break;
+      case 4: // a stone arch, steps, a round fountain in front
+        B(0, BASE, fz + 0.02, door + 0.1, STOREY * 1.1, 0.04, stone);
+        B(0, BASE, fz + 0.045, door * 0.7, STOREY * 0.8, 0.01, glass, 0, "glass");
+        B(0, BASE + STOREY * 0.8, fz + 0.05, door * 1.6, door * 1.6, door * 1.6, stone, 0, "arch");
+        for (let k = 0; k < 2; k++) B(0, BASE + k * 0.012, fz + 0.1 - k * 0.02, door + 0.12 - k * 0.04, 0.012, 0.08, stone);
+        B(0, BASE, fz + 0.3, 0.18, 0.03, 0.18, stone, 0, "cyl");
+        B(0, BASE + 0.03, fz + 0.3, 0.15, 0.005, 0.15, 0x74c0fc, 0, "disc");
+        break;
+      case 5: // an awning over a red carpet, gold posts and rope, a guard's booth
+        B(0, BASE, fz + 0.005, door, STOREY * 0.8, 0.02, glass, 0, "glass");
+        B(0, BASE + STOREY * 0.85, fz + 0.14, door + 0.06, 0.03, 0.28, 0x1a1b1e);
+        B(0, BASE + 0.002, fz + 0.18, door * 0.6, 0.003, 0.34, 0xc92a2a, 0, "ground");
+        for (const sx of [-1, 1]) for (const z of [0.1, 0.3]) B(sx * door * 0.36, BASE, fz + z, 0.012, 0.06, 0.012, 0xc9a227, 0, "cyl");
+        B(door / 2 + 0.16, BASE, fz + 0.14, 0.1, 0.14, 0.1, 0x495057);
+        break;
+      case 6: // a timber pergola, bollards
+        for (let k = 0; k < 6; k++) B(-door / 2 - 0.05 + (k * (door + 0.1)) / 5, BASE + STOREY * 0.9, fz + 0.16, 0.012, 0.012, 0.3, 0x8a5a3c);
+        for (const sx of [-1, 1]) B(sx * (door / 2 + 0.05), BASE, fz + 0.28, 0.02, STOREY * 0.9, 0.02, 0x8a5a3c);
+        B(0, BASE, fz + 0.005, door, STOREY * 0.8, 0.02, glass, 0, "glass");
+        for (let k = 0; k < 4; k++) B(-door / 2 + (k * door) / 3, BASE, fz + 0.38, 0.015, 0.035, 0.015, 0x495057, 0, "cyl");
+        break;
+      default: // a long pool with a little bridge to the door, a sign totem
+        B(0, BASE, fz + 0.005, door, STOREY * 0.8, 0.02, glass, 0, "glass");
+        B(0, BASE + 0.001, fz + 0.2, door * 2 + 0.1, 0.004, 0.3, 0x4dabf7, 0, "ground");
+        B(0, BASE + 0.004, fz + 0.2, door * 0.5, 0.01, 0.32, stone);
+        B(-door - 0.1, BASE, fz + 0.32, 0.04, 0.22, 0.02, pick(SIGNS, l1));
+        break;
+    }
+  };
   /** A parked car on the forecourt. */
   const car = (dx: number, dz: number, v: number) => {
     const c = pick(CARS, v);
@@ -301,6 +374,7 @@ export function buildingParts(t: Tile, b: Building, pal: Palette, B0: BoxFn, add
         B(0, BASE + lower * STOREY, 0.22, w, 0.02, 0.15, 0x8ce99a, 0, "ground");
       }
       tanks(0.18, BASE + h, 0.18, 2);
+      entrance(w / 2, w, 0x4c6e91);
       if (l4 > 0.6) B(-0.3, BASE, 0.35, 0.2, 0.04, 0.12, 0x74c0fc, 0, "glass");
       break;
     }
@@ -347,11 +421,13 @@ export function buildingParts(t: Tile, b: Building, pal: Palette, B0: BoxFn, add
       if (l3 < 0.5) {
         B(0, BASE, 0, w, h, 0.6, office);
         windows(0, 0, w, 0.6, BASE, b.storeys, WINDOW);
+        entrance(0.3, w, pick(GLASS, l1));
       } else {
         // A glass front on a solid block.
         B(0, BASE, -0.05, w, h, 0.5, office);
         B(0, BASE, 0.21, w * 0.9, h, 0.03, pick(GLASS, l1), 0, "curtain");
         windows(0, -0.05, w, 0.5, BASE, b.storeys, WINDOW);
+        entrance(0.225, w, pick(GLASS, l2));
       }
       B(-w * 0.2, BASE + h, 0, 0.18, 0.1, 0.18, 0xced4da);
       if (l4 > 0.5) B(w * 0.2, BASE + h, 0.05, 0.2, 0.12, 0.03, pick(SIGNS, l2));
@@ -383,8 +459,9 @@ export function buildingParts(t: Tile, b: Building, pal: Palette, B0: BoxFn, add
       const top = style >= 0.7 ? h : h * 0.78;
       for (let y = STOREY * 0.4; y < top - STOREY * 0.3; y += STOREY * 2) B(0, BASE + y, 0, w + 0.01, STOREY * 0.28, deep + 0.01, WINDOW, 0, "glass");
       for (let y = 1.2; y < h * 0.78; y += 1.2) B(0, BASE + y, 0, w + 0.015, 0.03, deep + 0.015, 0xe9ecef);
-      // A podium of shops at the foot.
+      // A podium of shops at the foot, or the tower's own way in.
       if (l4 > 0.4) B(0, BASE, 0.3, w + 0.1, STOREY, 0.2, office);
+      else entrance(w * (style >= 0.7 ? 0.35 : 0.5), w, color);
       break;
     }
     case "warehouse": {
