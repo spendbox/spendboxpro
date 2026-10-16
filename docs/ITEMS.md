@@ -59,3 +59,12 @@ Richard Mille RM 11 (₦500m), Lamborghini Urus (₦550m), Rolls-Royce Cullinan 
 Philippe Grandmaster Chime (₦1.5bn). Reputation is on the same scale as the cars (a G-Wagon, ₦250m,
 gives 30): from +6 to +60, for as long as you own it. Watches, jewellery and art gain value over
 time. game-db/104 raises the dearest single thing from ₦300m to ₦3bn.
+
+## Pictures
+
+Every kind in the shop has its own drawing (`src/app/play/life/item-art.tsx` and `art/`): watches
+from one carefully drawn watch, varied by case, metal, dial, bezel and strap (`art/watches.tsx`);
+things you wear (`art/wear.tsx`); books, gadgets, home, art and fitness (`art/home.tsx`); and the
+cars, each from its own profile, plus the keke and the motorbike (`art/cars.tsx`). A kind that
+isn't drawn (an invention) shows its category's drawing on the category's colour. A new kind in
+the shop needs a drawing added to one of these, with its id as the key.
