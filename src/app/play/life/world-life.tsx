@@ -1814,11 +1814,11 @@ export function useWorldLife({
     () =>
       businesses
         .filter((b) => b.billboard && (b.billboardImage || b.logo || b.name))
-        .map((b) => ({ id: `bz:${b.id}`, image: b.billboardImage || b.logo || "", headline: b.about.slice(0, 60), brand: b.name, link: b.website }))
+        .map((b) => ({ id: `bz:${b.id}`, image: b.billboardImage || b.logo || "", headline: b.about.slice(0, 60), brand: b.name, link: b.website, fit: b.billboardImage ? ("cover" as const) : ("contain" as const) }))
         .concat(
           // Choosing a billboard ad: yours, on the boards round you, while you make it.
           adPreview && !adPreview.building && (adPreview.billboard || adPreview.name)
-            ? [{ id: "bz:preview", image: adPreview.billboard ?? "", headline: adPreview.line.slice(0, 60), brand: adPreview.name, link: null }]
+            ? [{ id: "bz:preview", image: adPreview.billboard ?? "", headline: adPreview.line.slice(0, 60), brand: adPreview.name, link: null, fit: "cover" as const }]
             : [],
         ),
     [businesses, adPreview],

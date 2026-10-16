@@ -103,6 +103,11 @@ export function BillboardWizard({ step, go, regionId, onPreview }: { step: numbe
           <input value={headline} onChange={(e) => setHeadline(e.target.value)} maxLength={60} placeholder="A short line (e.g. 20% off this week)" className={field} />
           <input value={link} onChange={(e) => setLink(e.target.value)} maxLength={300} placeholder="Your website or WhatsApp link (optional)" className={field} />
           <Billboard image={pic.url} brand={brand} headline={headline} />
+          {(pic.url || brand.trim()) && (
+            <p className="rounded-2xl bg-[#e7f5ff] px-3 py-2 text-xs text-[#1864ab]">
+              <b>Only you can see this.</b> The billboards around you show your ad as a preview while you make it. Everyone else sees it once it&apos;s paid for and live.
+            </p>
+          )}
           <button onClick={next0} className="h-11 w-full rounded-full bg-ink font-semibold text-white">
             Next: where and how long
           </button>

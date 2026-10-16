@@ -1,7 +1,8 @@
 import { ImageIcon } from "@/components/icons";
 
 /** A preview of an ad as a billboard on a city street (used on /advertise and /advertiser). */
-export function Billboard({ image, brand, headline }: { image: string | null; brand: string; headline: string }) {
+/** fit "contain": a logo, shown whole on white (as the map shows a business with no billboard design). */
+export function Billboard({ image, brand, headline, fit = "cover" }: { image: string | null; brand: string; headline: string; fit?: "cover" | "contain" }) {
   return (
     <div className="overflow-hidden rounded-2xl bg-gradient-to-b from-sky-300 via-sky-100 to-[#cfe3c4] px-4 pt-5">
       <div className="mx-auto max-w-md">
@@ -9,7 +10,7 @@ export function Billboard({ image, brand, headline }: { image: string | null; br
           <div className="relative aspect-[2/1] overflow-hidden rounded bg-slate-600">
             {image ? (
               // eslint-disable-next-line @next/next/no-img-element -- a local preview, or the advertiser's own picture
-              <img src={image} alt="Your billboard" className="h-full w-full object-cover" />
+              <img src={image} alt="Your billboard" className={fit === "contain" ? "h-full w-full bg-white object-contain p-2" : "h-full w-full object-cover"} />
             ) : (
               <div className="flex h-full flex-col items-center justify-center gap-1 text-sm text-slate-300">
                 <ImageIcon className="size-7" strokeWidth={1.75} />
