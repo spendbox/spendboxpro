@@ -2074,7 +2074,7 @@ export function Game({
       case "suite":
         return { label: theme === "lounge" ? "Order a drink" : theme === "suite" ? "Room service" : "Order food", icon: UtensilsCrossed, run: act("menu", "Order") };
       case "club":
-        return { label: "Dance", icon: Music, run: startDancing };
+        return { label: "Dance", icon: Music, run: () => startDancing() };
       case "shop":
       case "mall":
         return { label: "Shop", icon: ShoppingBag, run: () => worldLife.openThings("shops") };
@@ -3869,7 +3869,7 @@ export function Game({
                       Chat
                     </button>
                     {placeLevel?.kind === "club" && (
-                      <button onClick={startDancing} className="flex items-center gap-1.5 rounded-xl bg-[#e64980] px-3 py-2 font-semibold text-white">
+                      <button onClick={() => startDancing()} className="flex items-center gap-1.5 rounded-xl bg-[#e64980] px-3 py-2 font-semibold text-white">
                         <Music className="size-4" />
                         Dance
                       </button>
