@@ -59,3 +59,21 @@ Richard Mille RM 11 (₦500m), Lamborghini Urus (₦550m), Rolls-Royce Cullinan 
 Philippe Grandmaster Chime (₦1.5bn). Reputation is on the same scale as the cars (a G-Wagon, ₦250m,
 gives 30): from +6 to +60, for as long as you own it. Watches, jewellery and art gain value over
 time. game-db/104 raises the dearest single thing from ₦300m to ₦3bn.
+
+## More things
+
+Twenty-six more kinds join the shop at real Lagos prices: gold earrings and a signet ring; a gele,
+designer sunglasses, an aso-oke set and a tailored suit; a Nigerian cookbook; wireless earbuds, a
+party speaker, a tablet, a camera drone and a pro camera; a blender, a gas cooker, a sofa set, an
+air conditioner, an inverter and batteries; a talking drum, an adire hanging and a Nok-style
+terracotta head; a football, boxing gloves and a treadmill; a danfo bus, a Toyota Sienna and a
+Toyota Hilux. Every thing also has its own moment in the story (docs/MOMENTS.md, "Your things").
+
+## Pictures
+
+Every kind in the shop has its own drawing (`src/app/play/life/item-art.tsx` and `art/`): watches
+from one carefully drawn watch, varied by case, metal, dial, bezel and strap (`art/watches.tsx`);
+things you wear (`art/wear.tsx`); books, gadgets, home, art and fitness (`art/home.tsx`); and the
+cars, each from its own profile, plus the keke and the motorbike (`art/cars.tsx`). A kind that
+isn't drawn (an invention) shows its category's drawing on the category's colour. A new kind in
+the shop needs a drawing added to one of these, with its id as the key.

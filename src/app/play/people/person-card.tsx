@@ -10,6 +10,7 @@ import { Star, X } from "@/components/icons";
 import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar } from "@/lib/avatar";
 import { myThings, type MyItem } from "../item-actions";
+import { LIFE_BADGE_BY_ID, badgeName } from "@/lib/world/life-badges";
 import { leaveAtDoor, type PlayerCardData } from "../people-actions";
 import { cachedCard, cardPreview, forgetCard, loadCard } from "./card-cache";
 import { Sheet } from "../sheet";
@@ -149,6 +150,21 @@ export function PersonCard({
                   <Star className="size-3" /> {card.reputation}
                 </span>
               </p>
+              {/* The badges they chose to show (docs/LIFE_WHEEL.md); cards cached from before have none. */}
+              {(card.lifeBadges ?? []).some((b) => LIFE_BADGE_BY_ID.has(b)) && (
+                <p className="mt-1 flex flex-wrap gap-1">
+                  {(card.lifeBadges ?? [])
+                    .filter((b) => LIFE_BADGE_BY_ID.has(b))
+                    .map((b) => {
+                      const def = LIFE_BADGE_BY_ID.get(b)!;
+                      return (
+                        <span key={b} className="rounded-full bg-gold/20 px-2 py-0.5 text-[11px] font-semibold" title={def.about}>
+                          {def.emoji} {badgeName(def, card.region ?? "lagos")}
+                        </span>
+                      );
+                    })}
+                </p>
+              )}
             </div>
           </div>
           <button onClick={onClose} className="absolute right-4 top-4 grid size-8 place-items-center rounded-full bg-ink/5 hover:bg-ink/10" aria-label="Close">

@@ -1,8 +1,14 @@
 // Pictures of the things in the shop (src/lib/world/items.ts), drawn to look like the real thing:
-// the shop list shows them small, and the "It's yours!" pop-up big. Things not drawn yet show their
-// category's sign on a coloured tile.
+// the shop list shows them small, and the "It's yours!" pop-up big. Every kind in the shop has its
+// own drawing (./art/: watches, things you wear, things for home, cars). A kind that isn't drawn
+// (an invention a player made) shows its category's drawing on the category's coloured tile.
 
 import type { ItemCategory } from "@/lib/world/items";
+import { ART as CARS } from "./art/cars";
+import { ART as HOME } from "./art/home";
+import { ART as MORE } from "./art/more";
+import { WATCHES, Watch } from "./art/watches";
+import { ART as WEAR } from "./art/wear";
 
 /**
  * Points along a hanging necklace: a U from one shoulder (x = cx - w, y = top) down to the front
@@ -266,20 +272,23 @@ const DRAWN: Partial<
   beads: CoralBeads,
   gold_chain: GoldChain,
   wristwatch: Wristwatch,
+  ...Object.fromEntries(Object.entries(WATCHES).map(([k, style]) => [k, ({ id }: { id: string }) => <Watch id={id} s={style} />])),
+  ...WEAR,
+  ...HOME,
+  ...MORE,
+  ...CARS,
 };
 
-const CATEGORY_SIGN: Record<
-  ItemCategory,
-  { sign: string; from: string; to: string }
-> = {
-  jewellery: { sign: "💍", from: "#fff3bf", to: "#ffd43b" },
-  clothing: { sign: "👕", from: "#e7f5ff", to: "#a5d8ff" },
-  book: { sign: "📚", from: "#fff4e6", to: "#ffc078" },
-  gadget: { sign: "📱", from: "#f3f0ff", to: "#b197fc" },
-  home: { sign: "🛋️", from: "#ebfbee", to: "#8ce99a" },
-  art: { sign: "🖼️", from: "#fff0f6", to: "#faa2c1" },
-  fitness: { sign: "🏋️", from: "#e6fcf5", to: "#63e6be" },
-  car: { sign: "🚗", from: "#f1f3f5", to: "#adb5bd" },
+/** Each category's own picture (a kind that stands for it) and tile colours, for things not drawn. */
+const CATEGORY_SIGN: Record<ItemCategory, { kind: string; from: string; to: string }> = {
+  jewellery: { kind: "gold_chain", from: "#fff3bf", to: "#ffd43b" },
+  clothing: { kind: "ankara", from: "#e7f5ff", to: "#a5d8ff" },
+  book: { kind: "novel", from: "#fff4e6", to: "#ffc078" },
+  gadget: { kind: "smartphone", from: "#f3f0ff", to: "#b197fc" },
+  home: { kind: "fan", from: "#ebfbee", to: "#8ce99a" },
+  art: { kind: "painting", from: "#fff0f6", to: "#faa2c1" },
+  fitness: { kind: "dumbbells", from: "#e6fcf5", to: "#63e6be" },
+  car: { kind: "car_corolla", from: "#f1f3f5", to: "#adb5bd" },
 };
 
 /** Whether a kind has its own picture yet. */
@@ -297,23 +306,22 @@ export function ItemArt({
   size?: number;
   className?: string;
 }) {
-  const Drawn = DRAWN[kind];
+  const own = DRAWN[kind];
   const c = CATEGORY_SIGN[category];
+  const Drawn = own ?? DRAWN[c.kind];
   return (
     <span
       className={`grid shrink-0 place-items-center overflow-hidden rounded-2xl ${className ?? ""}`}
       style={{
         width: size,
         height: size,
-        background: Drawn
-          ? "radial-gradient(circle at 50% 40%, #ffffff, #f1f3f5)"
-          : `linear-gradient(145deg, ${c.from}, ${c.to})`,
+        background: own ? "radial-gradient(circle at 50% 40%, #ffffff, #f1f3f5)" : `linear-gradient(145deg, ${c.from}, ${c.to})`,
       }}
     >
-      {Drawn ? (
-        <Drawn id={`art-${kind}-${size}`} />
-      ) : (
-        <span style={{ fontSize: size * 0.5 }}>{c.sign}</span>
+      {Drawn && (
+        <span className={own ? "size-full" : "size-[78%]"}>
+          <Drawn id={`art-${kind}-${size}`} />
+        </span>
       )}
     </span>
   );
