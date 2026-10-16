@@ -326,3 +326,20 @@ export function createWalker(w: number, d: number, blocks: Block[], margin = 0.4
   }
   return { path, isFree, openSpot };
 }
+
+/**
+ * Walking round a landmark's open grounds (a market, a park, outside a stadium): anywhere inside
+ * its bounds (local metres, x0..x1 by z0..z1), in a straight line. The grounds are big and mostly
+ * open, so there's no path-finding round things (the city's own pieces aren't solid to walk into).
+ */
+export function createGroundsWalker(x0: number, x1: number, z0: number, z1: number) {
+  const clampX = (x: number) => Math.min(x1, Math.max(x0, x));
+  const clampZ = (z: number) => Math.min(z1, Math.max(z0, z));
+  const isFree = (x: number, z: number) => x >= x0 && x <= x1 && z >= z0 && z <= z1;
+  return {
+    path: (_fx: number, _fz: number, tx: number, tz: number) => [{ x: clampX(tx), z: clampZ(tz) }],
+    isFree,
+    openSpot: (x: number, z: number) => ({ x: clampX(x), z: clampZ(z) }),
+    bounds: { x0, x1, z0, z1 },
+  };
+}

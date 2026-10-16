@@ -1897,6 +1897,8 @@ export function Game({
   const enteredRoom = place ? (rooms.myRoomInfo?.id ?? null) : null;
   const enteredTile = enteredRoom ? Number(/^b:(\d+)/.exec(enteredRoom)?.[1] ?? NaN) : NaN;
   const inPlannedHome = !!worldId && Number.isFinite(enteredTile) && enteredTile in homePlans;
+  /** Inside a place on the real map (not on a ride): the joystick walks you round it. */
+  const stickInPlace = !!worldId && !!place && ride === null;
   // Your cash on screen, with what your property earns going up every 5 seconds (./income). The
   // server pays what's been earned when the game opens, every 5 minutes, and when you open Money.
   // Around (the row of faces under the top bar): only people online right now.
@@ -1994,11 +1996,11 @@ export function Game({
   const [bottomDockH, setBottomDockH] = useState(96);
   useEffect(() => {
     const el = bottomDock.current;
-    if (!el || !inPlannedHome) return;
+    if (!el || !stickInPlace) return;
     const ro = new ResizeObserver(() => setBottomDockH(Math.round(el.getBoundingClientRect().height)));
     ro.observe(el);
     return () => ro.disconnect();
-  }, [inPlannedHome]);
+  }, [stickInPlace]);
   // Inside a place when the page reloads (the game updated, or the phone dropped the tab): back
   // inside it. Remembered while you're in; forgotten once you leave.
   const lastRoom = useRef<{ pending: boolean } | null>(null);
@@ -4320,8 +4322,8 @@ export function Game({
           <RecentRail meId={state.me.guest ? undefined : state.me.id} onPerson={setPersonId} onMessage={chatWith} />
         </div>
       )}
-      {/* In a planned home: the joystick walks you round it (or tap the floor). */}
-      {inPlannedHome && !camera && (
+      {/* Inside any place (a planned home, a landmark, its grounds): the joystick walks you round it (or tap the floor). */}
+      {stickInPlace && !camera && !isDancing && (
         <div className="pointer-events-none fixed left-4 z-30 sm:left-8" style={{ bottom: bottomDockH + 12 }}>
           <Joystick stick={homeStick} />
         </div>

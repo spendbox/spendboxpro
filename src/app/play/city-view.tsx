@@ -47,7 +47,7 @@ import { createBirds } from "./city/birds";
 import { createBubbles, type BubbleSpot } from "./city/bubbles";
 import { createBuildingSite, createSites } from "./city/construction";
 import { createFigures, type Figures, type Person, type Spot } from "./city/figures";
-import { createInteractables, createWalker, type Interactables, type Item } from "./city/interact";
+import { createGroundsWalker, createInteractables, createWalker, type Interactables, type Item } from "./city/interact";
 import { coolingTowerGeometry, createPlumes, industryParts } from "./city/industry";
 import { createInterior, type Interior, type RoomItem } from "./city/interiors";
 import { disposeBlobTexture, disposeKitCaches, rngFrom } from "./city/kit";
@@ -5637,7 +5637,7 @@ export function CityView({
       npcSeats: Set<Spot>;
       interact: Interactables | null;
       hover: string | null;
-      walker: ReturnType<typeof createWalker> | null;
+      walker: (ReturnType<typeof createWalker> & { bounds?: { x0: number; x1: number; z0: number; z1: number } }) | null;
       /** Where you are in the room (metres), your eye height, and the walk you're on. */
       local: { x: number; z: number };
       eye: number;
@@ -5889,6 +5889,25 @@ export function CityView({
         hideRoof(st, true);
         setupUse(st, deck.seats, deck.items, deck.spots, npcs.length);
         st.walker = createWalker(deck.w, deck.d, deck.blocks, 0.3);
+        // Out in a landmark's grounds (a market, a park, outside a stadium): walk anywhere on them,
+        // not just round the spot you came to. Its footprint, in this spot's own metres.
+        const sto = anchor.structure;
+        if (sto && lvl.kind === "outdoor") {
+          const w = sto.w ?? 2;
+          const d = sto.d ?? 2;
+          const c = Math.cos(-lvl.ry);
+          const sn = Math.sin(-lvl.ry);
+          const xs: number[] = [];
+          const zs: number[] = [];
+          for (const [cx, cz] of [[sto.ax - 0.5, sto.az - 0.5], [sto.ax + w - 0.5, sto.az - 0.5], [sto.ax - 0.5, sto.az + d - 0.5], [sto.ax + w - 0.5, sto.az + d - 0.5]]) {
+            const dx = (cx - lvl.x) * METRES;
+            const dz = (cz - lvl.z) * METRES;
+            xs.push(dx * c + dz * sn);
+            zs.push(-dx * sn + dz * c);
+          }
+          const cap = (v: number) => Math.max(-80, Math.min(80, v));
+          st.walker = createGroundsWalker(cap(Math.min(...xs) + 1), cap(Math.max(...xs) - 1), cap(Math.min(...zs) + 1), cap(Math.max(...zs) - 1));
+        }
       }
       return st;
     }
@@ -6276,6 +6295,12 @@ export function CityView({
       floorPlane.constant = -st.holder.getWorldPosition(tmpV).y;
       if (!ray.ray.intersectPlane(floorPlane, floorHit)) return false;
       st.holder.worldToLocal(floorHit);
+      const b = st.walker?.bounds;
+      if (b) {
+        // A landmark's grounds: anywhere on them.
+        if (floorHit.x < b.x0 - 0.5 || floorHit.x > b.x1 + 0.5 || floorHit.z < b.z0 - 0.5 || floorHit.z > b.z1 + 0.5) return false;
+        return walkTo(st, floorHit.x, floorHit.z);
+      }
       const W = st.interior ? st.interior.w : 7;
       const D = st.interior ? st.interior.d : 7;
       if (Math.abs(floorHit.x) > W / 2 + 0.5 || Math.abs(floorHit.z) > D / 2 + 0.5) return false;
@@ -6854,6 +6879,8 @@ export function CityView({
       } else if (view?.kind === "place") {
         const st = view.stage;
         stepWalk(st, dt);
+        // The joystick walks you about any place too (the way you're looking).
+        stepStick(st, dt);
         stageToCity(st, st.local.x, st.local.z, st.eye, pose.pos);
         hfov = st.level.kind === "interior" ? 84 : 80;
       } else if (view?.kind === "vehicle") {
