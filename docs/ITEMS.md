@@ -60,6 +60,15 @@ Philippe Grandmaster Chime (₦1.5bn). Reputation is on the same scale as the ca
 gives 30): from +6 to +60, for as long as you own it. Watches, jewellery and art gain value over
 time. game-db/104 raises the dearest single thing from ₦300m to ₦3bn.
 
+## More things
+
+Twenty-six more kinds join the shop at real Lagos prices: gold earrings and a signet ring; a gele,
+designer sunglasses, an aso-oke set and a tailored suit; a Nigerian cookbook; wireless earbuds, a
+party speaker, a tablet, a camera drone and a pro camera; a blender, a gas cooker, a sofa set, an
+air conditioner, an inverter and batteries; a talking drum, an adire hanging and a Nok-style
+terracotta head; a football, boxing gloves and a treadmill; a danfo bus, a Toyota Sienna and a
+Toyota Hilux. Every thing also has its own moment in the story (docs/MOMENTS.md, "Your things").
+
 ## Pictures
 
 Every kind in the shop has its own drawing (`src/app/play/life/item-art.tsx` and `art/`): watches

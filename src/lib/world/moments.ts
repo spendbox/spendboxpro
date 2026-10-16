@@ -16,6 +16,9 @@ import { LOCAL_MOMENTS } from "./local-moments.ts";
 import { PLAYER_MOMENTS } from "./player-moments.ts";
 import { SEASON_MOMENTS } from "./season-moments.ts";
 import { TEMPLATE_MOMENTS } from "./template-moments.ts";
+import { TEMPLATE_MOMENTS_2 } from "./template-moments-2.ts";
+import { THING_ANSWERS } from "./thing-answers.ts";
+import { THING_MOMENTS } from "./thing-moments.ts";
 import { VENTURE_MOMENTS } from "./venture-moments.ts";
 import type { VentureChange } from "./ventures.ts";
 
@@ -73,6 +76,11 @@ export type MomentChoice = {
   tone?: "kind" | "bold" | "mean" | "calm";
   /** How this answer nudges who you are (see TRAITS), when the tone's guess isn't right. */
   traits?: TraitNudge;
+  /**
+   * Only for people who own one of these (a thing's kind, "gold_chain", or a whole category,
+   * "cat:car"): what you have gives you more ways to answer (lend your generator, give a lift).
+   */
+  has?: string[];
   outcomes: MomentOutcome[];
 };
 export type MomentDef = {
@@ -126,6 +134,8 @@ export type MomentDef = {
   fits?: Fit[];
   /** Written by a player (./written.ts): their name, shown on the card. */
   by?: string;
+  /** Only for people who own one of these (kinds, or "cat:" and a category); {item} is the one they have (./thing-moments.ts). */
+  item?: string[];
   /** The amount in it, in naira: somewhere between these (rounded the way people say prices). */
   ask?: [number, number];
   emoji: string;
@@ -1031,9 +1041,11 @@ export const MOMENTS: MomentDef[] = [
   },
 ];
 
-MOMENTS.push(...ROAD_MOMENTS, ...BIG_MOMENTS, ...CAST_MOMENTS, ...VENTURE_MOMENTS, ...PLAYER_MOMENTS, ...TEMPLATE_MOMENTS, ...SEASON_MOMENTS, ...LOCAL_MOMENTS);
+MOMENTS.push(...ROAD_MOMENTS, ...BIG_MOMENTS, ...CAST_MOMENTS, ...VENTURE_MOMENTS, ...PLAYER_MOMENTS, ...TEMPLATE_MOMENTS, ...TEMPLATE_MOMENTS_2, ...SEASON_MOMENTS, ...LOCAL_MOMENTS, ...THING_MOMENTS);
 // Each moment's pool of answers: the ones written with it, and more (./more-answers.ts).
 for (const m of MOMENTS) if (MORE_ANSWERS[m.id]) m.choices.push(...MORE_ANSWERS[m.id]);
+// Answers your things give you (./thing-answers.ts): only shown if you have one.
+for (const m of MOMENTS) if (THING_ANSWERS[m.id]) m.choices.push(...THING_ANSWERS[m.id]);
 
 export const MOMENT_BY_ID = new Map(MOMENTS.map((m) => [m.id, m]));
 
@@ -1048,9 +1060,9 @@ export function registerMoments(defs: MomentDef[]) {
 /** How often moments come, and how far they can move you in a day (docs/LIFE_WHEEL.md: fewer, each one mattering more). */
 export const MOMENT_RULES = {
   /** At least this long between two (seconds). */
-  gapSeconds: 1_200,
+  gapSeconds: 720,
   /** At most this many a day, on the street and the road together. */
-  perDay: 5,
+  perDay: 8,
   /** A big one at most this often (days). */
   bigEveryDays: 3,
   /** A moment not answered in this long is gone (seconds). */
@@ -1069,7 +1081,7 @@ export const MOMENT_RULES = {
  * On the road (the trip film): how likely a trip of at least `minKm` brings a moment, and how close
  * together they can come (the day's count is shared with the rest).
  */
-export const ROAD_RULES = { chance: 0.25, minKm: 0.3, gapSeconds: 1_200, perDay: MOMENT_RULES.perDay };
+export const ROAD_RULES = { chance: 0.33, minKm: 0.3, gapSeconds: 720, perDay: MOMENT_RULES.perDay };
 
 /** The places in the game (an inside's theme) as where a moment can happen. */
 export function spotOfTheme(theme: string | null | undefined, home: boolean): MomentSpot {
@@ -1223,6 +1235,8 @@ export function pickMoment(o: {
   fits?: Fit[];
   /** More moments to choose from (written by players and approved, ./written.ts). */
   extra?: MomentDef[];
+  /** What they own: kinds, and "cat:" and each category they have something in. */
+  owned?: string[];
   now?: number;
   rand: () => number;
   ride?: Commute;
@@ -1247,6 +1261,7 @@ export function pickMoment(o: {
       (!m.season || m.season.some((x) => !!o.seasons?.includes(x))) &&
       (!m.areas || (!!o.area && m.areas.some((a) => o.area!.toLowerCase().includes(a.toLowerCase())))) &&
       (!m.fits || m.fits.some((x) => !!o.fits?.includes(x))) &&
+      (!m.item || m.item.some((x) => !!o.owned?.includes(x))) &&
       !o.recent.includes(m.id),
   );
   // Moments for this kind of place come first; "anywhere" ones fill in. Never had: three times as likely.
@@ -1265,7 +1280,9 @@ export function pickMoment(o: {
     // The season, your area and who you are make their moments likelier.
     (m.season ? 3 : 1) *
     (m.areas ? 2 : 1) *
-    (m.fits ? 2 : 1);
+    (m.fits ? 2 : 1) *
+    // What you own turns up in your life.
+    (m.item ? 2 : 1);
   const total = fits.reduce((a, m) => a + weight(m), 0);
   let r = o.rand() * total;
   for (const m of fits) if ((r -= weight(m)) <= 0) return m;
@@ -1273,7 +1290,7 @@ export function pickMoment(o: {
 }
 
 /** The things filled into a moment: a name, an amount (naira) and where. */
-export type MomentVars = { name: string; ask: number; place: string; parts?: Record<string, string>; tags?: string[] };
+export type MomentVars = { name: string; ask: number; place: string; parts?: Record<string, string>; tags?: string[]; has?: string[] };
 
 /** Fill a moment's names and amounts, the same every time for the same seed. Richer players get asked for a bit more. */
 export function momentVars(m: MomentDef, seed: number, level: number, place: string): MomentVars {
@@ -1386,14 +1403,30 @@ export function areaOf(m: MomentDef): LifeArea {
  * MOMENT_RULES.shown drawn from the moment's pool, shuffled, so no position gives an answer away.
  * Indexes into `choices`.
  */
-export function choiceOrder(m: MomentDef, seed: number): number[] {
+export function choiceOrder(m: MomentDef, seed: number, has: string[] = []): number[] {
   const rand = rng((seed ^ 0x5bd1e995) >>> 0);
-  const order = m.choices.map((_, i) => i);
-  for (let i = order.length - 1; i > 0; i--) {
-    const j = Math.floor(rand() * (i + 1));
-    [order[i], order[j]] = [order[j], order[i]];
-  }
-  return order.slice(0, MOMENT_RULES.shown);
+  const shuffle = (a: number[]) => {
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  };
+  // Answers your things give you always show (they're why you have them); the rest fill up.
+  const yours = m.choices.map((c, i) => (c.has && c.has.some((h) => has.includes(h)) ? i : -1)).filter((i) => i >= 0);
+  const open = shuffle(m.choices.map((c, i) => (c.has ? -1 : i)).filter((i) => i >= 0));
+  return shuffle([...yours.slice(0, 2), ...open].slice(0, MOMENT_RULES.shown));
+}
+
+/** What someone owns, as moments ask about it: each kind, and "cat:" with each category. */
+export function ownedTokens(items: { kind: string; category: string }[]): string[] {
+  return [...new Set(items.flatMap((i) => [i.kind, `cat:${i.category}`]))];
+}
+
+/** Of what someone owns, what a moment cares about (its answers' `has` and its `item`). */
+export function relevantOwned(m: MomentDef, owned: string[]): string[] {
+  const wants = new Set([...(m.item ?? []), ...m.choices.flatMap((c) => c.has ?? [])]);
+  return owned.filter((o) => wants.has(o));
 }
 
 /** How a kind of answer nudges who you are, when a choice doesn't say. */

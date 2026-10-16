@@ -25,7 +25,9 @@ import {
   isDayInLagos,
   momentVars,
   niceNaira,
+  ownedTokens,
   pickMoment,
+  relevantOwned,
   rollOutcome,
   type Bond,
   type CastWorld,
@@ -218,7 +220,7 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; area
   const gap = road ? ROAD_RULES.gapSeconds : MOMENT_RULES.gapSeconds;
   const place = typeof input?.place === "string" ? input.place.replace(/\s+/g, " ").trim().slice(0, 60) : "";
   const area = typeof input?.area === "string" ? input.area.replace(/\s+/g, " ").trim().slice(0, 60) : "";
-  const [{ data: prof }, recentRes, dueRes, spendRes, effects, bonds, world, badges, business, fits, written] = await Promise.all([
+  const [{ data: prof }, recentRes, dueRes, spendRes, effects, bonds, world, badges, business, fits, written, itemsRes] = await Promise.all([
     m.db.from("profiles").select("level, frozen").eq("id", m.userId).maybeSingle(),
     // Every one you've had lately (up to 500): the last 25 don't come again, ones never had come first.
     m.db.from("moments").select("moment, created_at").eq("user_id", m.userId).order("created_at", { ascending: false }).limit(500),
@@ -232,7 +234,11 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; area
     fitsOf(m.db, m.userId, m.perMint).catch(() => [] as Fit[]),
     // Written by players and approved (game-db/117).
     writtenMoments(m.db).catch(() => [] as MomentDef[]),
+    // What you own: your things turn up in your moments, and give you more ways to answer.
+    m.db.from("items").select("kind, name, category").eq("owner", m.userId).limit(300),
   ]);
+  const items = itemsRes.error ? [] : (itemsRes.data ?? []).map((i) => ({ kind: String(i.kind), name: String(i.name), category: String(i.category) }));
+  const owned = ownedTokens(items);
   // Part 109 not run yet: no moments.
   if (recentRes.error) return null;
   if (prof?.frozen) return null;
@@ -271,6 +277,7 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; area
       area,
       fits,
       extra: written,
+      owned,
       rand: Math.random,
       ride,
     });
@@ -294,7 +301,14 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; area
     vars.name = partner.name;
     other = partner.id;
   }
-  const full = { ...vars, seed, ...(other ? { partner: other } : {}) };
+  // Your things: which of them this moment cares about (so its answers stay the same when you
+  // answer), and the one it's about by name ({item}).
+  const has = relevantOwned(def, owned);
+  if (def.item) {
+    const mine = items.find((i) => def.item!.includes(i.kind)) ?? items.find((i) => def.item!.includes(`cat:${i.category}`));
+    if (mine) vars.parts = { ...(vars.parts ?? {}), item: mine.name };
+  }
+  const full = { ...vars, seed, ...(other ? { partner: other } : {}), ...(has.length ? { has } : {}) };
   const { data: id, error } = await m.db.rpc("moment_open", {
     p_user: m.userId,
     p_moment: def.id,
@@ -333,7 +347,8 @@ export async function momentAnswer(id: number, choice: number): Promise<MomentRe
   const vars = (row.vars ?? {}) as MomentVars & { seed?: number };
   const pick = Math.round(n(choice));
   // Only the answers that were shown can be chosen.
-  const c = def && choiceOrder(def, n(vars.seed)).includes(pick) ? def.choices[pick] : undefined;
+  const hadThen = Array.isArray((vars as { has?: unknown }).has) ? ((vars as { has: unknown[] }).has.map(String)) : [];
+  const c = def && choiceOrder(def, n(vars.seed), hadThen).includes(pick) ? def.choices[pick] : undefined;
   if (!def || !c) return { ok: false, error: "That moment has passed." };
   // The same answer doesn't always turn out the same: who you are and what's on you shift it.
   const [answers, effects, biz] = await Promise.all([

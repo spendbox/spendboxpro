@@ -6,6 +6,7 @@
 import type { ItemCategory } from "@/lib/world/items";
 import { ART as CARS } from "./art/cars";
 import { ART as HOME } from "./art/home";
+import { ART as MORE } from "./art/more";
 import { WATCHES, Watch } from "./art/watches";
 import { ART as WEAR } from "./art/wear";
 
@@ -274,6 +275,7 @@ const DRAWN: Partial<
   ...Object.fromEntries(Object.entries(WATCHES).map(([k, style]) => [k, ({ id }: { id: string }) => <Watch id={id} s={style} />])),
   ...WEAR,
   ...HOME,
+  ...MORE,
   ...CARS,
 };
 

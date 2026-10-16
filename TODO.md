@@ -181,6 +181,8 @@ Each phase is built in one go (a few hours to a couple of days); writing the sto
 - [x] Player-written moments: write, automatic checks, votes, approval on the dashboard, ₦50,000 to the author (game-db/117).
 - [ ] Open Write a moment to players (built; Me → Write a moment says "coming soon" for now, and it's listed under Coming soon). To open it: in `src/app/play/game.tsx` point that item back at the WriteSheet (`./moments/write-sheet.tsx`).
 - [x] On the dashboard: how every moment is doing (came, walked away, met again, top answer).
+- [x] 16 templates and over 5,000 versions of moments in all; 70 things in the shop, each with its own moment, and 23 answers your things give you in everyday moments.
+- [x] More often: up to 8 a day, at least 12 minutes apart, the road on 1 trip in 3.
 - [ ] Many more templates (aim: about 80, for about 16,000 versions), and 20 to 30 new moments every month (AI drafts, owner reviews).
 - [ ] Owner, every month: read "How moments are doing" on the dashboard, and rewrite or retire the weakest.
 

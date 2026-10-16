@@ -32,6 +32,9 @@ type Profile = {
   spare?: boolean;
   rails?: boolean;
   twoTone?: string;
+  /** An open load bed behind the cab (a pickup), or a sliding side door (a people carrier). */
+  bed?: boolean;
+  slider?: boolean;
 };
 
 const ROAD = 92;
@@ -120,6 +123,14 @@ function Car({ id, p }: { id: string; p: Profile }) {
       <rect x={p.nose} y={p.belt + 2.5} width="5" height="3.5" rx="1.5" fill="#fff9db" stroke="#adb5bd" strokeWidth="0.4" />
       <rect x={p.tail - 4} y={p.belt + 2.5} width="4" height="3.5" rx="1.2" fill="#e03131" />
       {p.chrome && <line x1={p.nose + 4} y1={p.sill - 3} x2={p.tail - 4} y2={p.sill - 3} stroke="#e9ecef" strokeWidth="1.2" opacity="0.9" />}
+      {p.bed && (
+        <g>
+          <rect x={p.cFoot + 1} y={p.belt - 4} width={p.tail - p.cFoot - 2} height="4" rx="1" fill={p.shade} />
+          <line x1={p.cFoot + 2} y1={p.belt - 4.5} x2={p.tail - 1} y2={p.belt - 4.5} stroke="#343a40" strokeWidth="1.2" />
+          <line x1={p.cFoot + 1} y1={p.belt} x2={p.cFoot + 1} y2={p.sill - 3} stroke="#00000044" strokeWidth="0.7" />
+        </g>
+      )}
+      {p.slider && <line x1={mid + 12} y1={p.belt + 4} x2={mid + 12} y2={p.sill - 4} stroke="#00000044" strokeWidth="0.7" />}
       {/* wheel arches and wheels */}
       <path d={arch(w1)} fill="#1a1b1e" />
       <path d={arch(w2)} fill="#1a1b1e" />
@@ -175,6 +186,8 @@ const CARS: Record<string, Profile> = {
   car_gwagon: suv("#1a1b1e", "#000000", { square: 1, aFoot: 36, aTop: 40, roof: 32, cTop: 104, cFoot: 106, spare: true, rails: false, belt: 56, tail: 110, nose: 6 }),
   car_bentayga: suv("#1d4b3a", "#0b2a1f", { chrome: true, square: 0.35, cTop: 92, cFoot: 108 }),
   car_urus: suv("#fab005", "#c47f00", { square: 0.05, roof: 44, belt: 62, aFoot: 30, aTop: 52, cTop: 86, cFoot: 108, sill: 82, rails: false, rim: "spoke" }),
+  car_hilux: suv("#e9ecef", "#868e96", { square: 0.6, aFoot: 30, aTop: 42, roof: 36, cTop: 68, cFoot: 70, belt: 56, sill: 80, bed: true, rails: false, wheelR: 12.5 }),
+  car_sienna: suv("#7d1d2f", "#3d0a15", { square: 0.35, aFoot: 24, aTop: 44, roof: 38, cTop: 104, cFoot: 110, belt: 60, slider: true, rails: true, rim: "multi" }),
   car_cullinan: suv("#c0c6cc", "#6c757d", { square: 0.9, roof: 30, belt: 56, aFoot: 38, aTop: 46, cTop: 100, cFoot: 104, twoTone: "#212529", chrome: true, rails: false, wheelR: 13 }),
 };
 
@@ -203,6 +216,40 @@ function Keke({ id }: P) {
         <g key={x}>
           <circle cx={x} cy="86" r="8" fill="#1a1b1e" />
           <circle cx={x} cy="86" r="4" fill="#adb5bd" />
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+/** Danfo: the yellow Lagos bus with its black stripes, door slid open for the conductor. */
+function Danfo({ id }: P) {
+  return (
+    <svg viewBox="0 0 120 120" className="size-full" aria-hidden>
+      <defs>
+        <linearGradient id={`${id}-y`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#ffe066" />
+          <stop offset="1" stopColor="#f08c00" />
+        </linearGradient>
+      </defs>
+      <ellipse cx="60" cy="96" rx="54" ry="4" fill="#00000022" />
+      <path d="M8 86 L8 50 Q8 32 22 30 L100 30 Q112 30 112 44 L112 86 Q112 88 110 88 L10 88 Q8 88 8 86 Z" fill={`url(#${id}-y)`} stroke="#7a4a00" strokeWidth="1" />
+      {/* windows, the open door, the stripes */}
+      <path d="M12 52 Q12 38 22 36 L30 36 L30 54 L12 54 Z" fill="#a5d8ff" />
+      {[34, 52, 70, 88].map((x) => (
+        <rect key={x} x={x} y="36" width="15" height="18" rx="2" fill="#a5d8ff" stroke="#7a4a00" strokeWidth="0.6" />
+      ))}
+      <rect x="52" y="56" width="16" height="26" fill="#212529" />
+      <rect x="70" y="34" width="2" height="48" fill="#7a4a00" opacity="0.4" />
+      <rect x="8" y="62" width="104" height="3.5" fill="#212529" />
+      <rect x="8" y="70" width="104" height="3.5" fill="#212529" />
+      <circle cx="12" cy="78" r="2.6" fill="#fff9db" stroke="#adb5bd" strokeWidth="0.5" />
+      <rect x="22" y="24" width="60" height="6" rx="2" fill="#343a40" />
+      {[26, 96].map((x) => (
+        <g key={x}>
+          <path d={`M${x - 13} 88 A13 13 0 0 1 ${x + 13} 88`} fill="#1a1b1e" />
+          <circle cx={x} cy="86" r="10" fill="#1a1b1e" />
+          <circle cx={x} cy="86" r="5" fill="#adb5bd" />
         </g>
       ))}
     </svg>
@@ -255,5 +302,6 @@ function Motorbike({ id }: P) {
 export const ART: Record<string, (p: P) => React.ReactElement> = {
   ...Object.fromEntries(Object.entries(CARS).map(([k, prof]) => [k, ({ id }: P) => <Car id={id} p={prof} />])),
   car_keke: Keke,
+  car_danfo: Danfo,
   car_bike: Motorbike,
 };

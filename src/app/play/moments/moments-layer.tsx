@@ -13,12 +13,12 @@ import { MomentCard } from "./moment-card";
 // more likely soon after (one that fits there).
 
 /**
- * The first one a few minutes in, then now and then (docs/LIFE_WHEEL.md: a few a day, each one
- * mattering; the server keeps them at least 20 minutes apart and to 5 a day).
+ * The first one a couple of minutes in, then now and then (docs/LIFE_WHEEL.md: several a day, each
+ * one mattering; the server keeps them at least 12 minutes apart and to 8 a day).
  */
-const FIRST_MS: [number, number] = [150_000, 300_000];
-const NEXT_MS: [number, number] = [1_260_000, 2_400_000];
-const AFTER_ENTERING_MS: [number, number] = [40_000, 90_000];
+const FIRST_MS: [number, number] = [100_000, 200_000];
+const NEXT_MS: [number, number] = [760_000, 1_500_000];
+const AFTER_ENTERING_MS: [number, number] = [30_000, 70_000];
 const between = ([a, b]: [number, number]) => a + Math.random() * (b - a);
 
 /** Something else is up: the phone's in a pocket, a card or a full-screen tool is open. */

@@ -11,13 +11,13 @@ careers, other players in your story): `docs/LIFE_WHEEL.md`.
 
 ## When they come
 
-- On the real map, signed in: the first one a few minutes after you start, then now and then
-  (about every 20 to 40 minutes of play). Fewer, so each one matters (docs/LIFE_WHEEL.md).
+- On the real map, signed in: the first one a couple of minutes after you start, then now and
+  then (about every 12 to 25 minutes of play, up to 8 a day), so each one matters (docs/LIFE_WHEEL.md).
 - Going into a place makes one more likely soon after (one that fits there: a wrong bill in a
   restaurant, a plank challenge at the gym, the offering basket at church).
 - Never while a card or a full-screen tool is open, while you're taking a photo or on a ride, or
   while the game isn't on screen. It waits and tries again.
-- At least 20 minutes apart and at most 5 a day, street and road together (the server keeps to
+- At least 12 minutes apart and at most 8 a day, street and road together (the server keeps to
   this). A big one (`size: "big"`) at most every 3 days.
 - The cross (or **Walk away**) closes one without choosing. Nothing happens.
 
@@ -98,6 +98,19 @@ hours). An outcome's `link` sends the next part to them some hours later; it com
 else when they next get a moment. `give` sends them real money (`give_coins`, with its limits);
 `feel` is how you feel about them now; `stood` counts towards Ride or Die.
 
+## Your things in your story
+
+What you own adds to your life (`src/lib/world/thing-moments.ts`, `thing-answers.ts`):
+
+- **Every thing in the shop has a moment of its own** (`item`: kinds, or "cat:" and a category):
+  someone eyes your gold chain at the bus stop, the neighbours stand in the dark looking at your
+  generator's light, a crowd takes selfies with your Lamborghini, the museum asks to borrow your
+  bronze. They only come to owners, twice as often as others, and {item} is the thing's name.
+- **Things give you more answers** (`has` on an answer): with a car you can drive the stranded
+  student back to campus; with a camera you can give the police your video of the hit-and-run;
+  with a generator you can light up the compound when NEPA takes light. These answers always show
+  when you have the thing (marked "yours" on the card), and never when you don't.
+
 ## Never running out
 
 - **Built from parts** (`parts`): for each {slot} in a moment's story, answers and outcomes, one
@@ -165,7 +178,8 @@ follow-ups exist, and that every kind of place has moments by day and by night.
 | Businesses: the kinds, the stages, a day of business | `src/lib/world/ventures.ts` |
 | Business moments | `src/lib/world/venture-moments.ts` |
 | Moments with other players | `src/lib/world/player-moments.ts`, `src/app/play/stories-server.ts` |
-| Moments built from parts | `src/lib/world/template-moments.ts` |
+| Moments built from parts | `src/lib/world/template-moments.ts`, `template-moments-2.ts` |
+| Your things in your story | `src/lib/world/thing-moments.ts`, `thing-answers.ts` |
 | The Lagos calendar, and its moments | `src/lib/world/calendar.ts`, `season-moments.ts` |
 | Moments for your area and who you are | `src/lib/world/local-moments.ts` |
 | Player-written moments | `src/lib/world/written.ts`, `src/app/play/moments/write-sheet.tsx`, `written-actions.ts`, `written-server.ts`; approved on the dashboard |

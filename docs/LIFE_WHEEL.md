@@ -16,13 +16,13 @@ Moments should feel like life, not like adverts. Fewer, but each one matters mor
 
 | Size | What | How often |
 | --- | --- | --- |
-| Small | Everyday Lagos: hawkers, neighbours, the danfo, the bill | 3 to 5 a day of play, at least 20 minutes apart |
+| Small | Everyday Lagos: hawkers, neighbours, the danfo, the bill | Up to 8 a day of play, at least 12 minutes apart |
 | Big | Turning points: a job offer, a loan, a betrayal, a business choice | About 1 or 2 a week |
 | Life-changing | An inheritance, a scandal, the deal of a lifetime, a wedding, a court case | A few a year |
 
 - Counted by time actually playing, not the clock: someone who plays 20 minutes a day still gets
   one; someone who plays all day doesn't get flooded.
-- Road moments stay (the trip film), but on about 1 trip in 4, and they count in the day's total.
+- Road moments stay (the trip film), on about 1 trip in 3, and they count in the day's total.
 - The next step of a story you're in comes first, before anything new.
 - Today it's one every 4 to 9 minutes, up to 15 a day (40 with the road). That comes down to the
   numbers above.

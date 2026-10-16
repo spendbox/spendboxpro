@@ -20,6 +20,8 @@ test("moments built from parts: hundreds of ways each, and every way fills in co
       const texts = [m.title, ...m.text, ...m.choices.flatMap((c) => [c.label, ...c.outcomes.map((o) => o.text)])];
       for (const t of texts) assert.ok(!/\{[a-z]+\}/.test(fillMoment(t, v, money)), `${m.id}: left "${fillMoment(t, v, money)}"`);
       assert.ok(v.ask > 0 || !m.ask, `${m.id}: no amount`);
+      // A part that starts a sentence ("A boy...") never lands mid-sentence with its capital.
+      for (const t of m.text) assert.ok(!/(, |and )(A|An|The|Your|Two|Someone) [a-z]/.test(fillMoment(t, v, money)), `${m.id}: "${fillMoment(t, v, money)}"`);
     }
   }
   assert.ok(ways >= 1_500, `only ${ways} ways in all`);

@@ -117,7 +117,7 @@ export const TEMPLATE_MOMENTS: MomentDef[] = [
         { text: "It's exactly what you came for, at a fair price.", tag: "fair" },
       ],
     },
-    text: ["{trader} wants {ask} for {item}. {twist}"],
+    text: ["{trader} wants {ask} for {item}. {twist}", "{trader} holds up {item} as you pass deep in the market: {ask}. {twist}"],
     choices: [
       { label: "Pay the price", tone: "calm", outcomes: [{ text: "You pay. They throw in a little extra: jara.", pay: 1, rep: 1 }, { chance: 0.3, text: "You pay. Later you find out you paid far too much.", pay: 1, likelier: [{ tag: "dear" }] }, { chance: 0.3, text: "At home, it isn't what you thought.", pay: 1, likelier: [{ tag: "fake" }] }] },
       {
@@ -162,7 +162,7 @@ export const TEMPLATE_MOMENTS: MomentDef[] = [
         { text: " The whole building will hear who said yes.", tag: "watched" },
       ],
     },
-    text: ["{who} {want}.{twist}"],
+    text: ["{who} {want}.{twist}", "A knock at your door. {who} {want}.{twist}"],
     choices: [
       { label: "Yes, of course", tone: "kind", traits: { people: 2 }, outcomes: [{ text: "They're so grateful. Next week, a plate of jollof appears at your door.", rep: 2 }, { chance: 0.3, text: "It comes back broken, again.", rep: 1, effect: "bad_day", likelier: [{ tag: "broke" }] }, { chance: 0.3, text: "Fair is fair. You owed them, and now you're square.", rep: 2, likelier: [{ tag: "owed" }] }] },
       { label: "Yes, but just this once", tone: "calm", outcomes: [{ text: "\"Just once,\" you say. You both know it won't be.", rep: 1 }] },
@@ -182,6 +182,8 @@ export const TEMPLATE_MOMENTS: MomentDef[] = [
         { text: "Mr Okon, who's been here twenty years" },
         { text: "Halima from the front desk" },
         { text: "Tayo, your lunch friend" },
+        { text: "Kunle from IT" },
+        { text: "Grace, who sits next to you" },
       ],
       want: [
         { text: "asks you to cover their shift so they can go to a job interview" },
@@ -189,6 +191,8 @@ export const TEMPLATE_MOMENTS: MomentDef[] = [
         { text: "asks you to keep quiet about a mistake that cost the company money" },
         { text: "is being blamed for something you did" },
         { text: "wants you to back them up in a fight with the manager" },
+        { text: "asks you to share your bonus with the team who did the work" },
+        { text: "wants you to recommend their cousin for a job here" },
       ],
       twist: [
         plain,
@@ -197,7 +201,7 @@ export const TEMPLATE_MOMENTS: MomentDef[] = [
         { text: " Everyone says they're about to be promoted over you.", tag: "rival" },
       ],
     },
-    text: ["{who} {want}.{twist}"],
+    text: ["{who} {want}.{twist}", "Five minutes before the end of the day, {who} {want}.{twist}"],
     choices: [
       { label: "Help them", tone: "kind", traits: { people: 2, truth: -1 }, outcomes: [{ text: "You do it. They squeeze your arm and say nothing; they don't need to.", rep: 1 }, { chance: 0.35, text: "The manager notices. You both get a warning.", rep: -1, effect: "bad_day", likelier: [{ tag: "risky" }] }] },
       { label: "Tell the truth", tone: "bold", traits: { truth: 3, people: -1 }, outcomes: [{ text: "You tell it straight. Some respect you for it; one person doesn't.", rep: 1, trust: 1 }, { chance: 0.4, text: "Straight, even though it helps you get ahead of them. People wonder why.", rep: 0, likelier: [{ tag: "rival" }] }] },
@@ -232,7 +236,7 @@ export const TEMPLATE_MOMENTS: MomentDef[] = [
         { text: " They know your name and where you work.", tag: "pushy" },
       ],
     },
-    text: ["{who} offers you {deal}: {ask} to join.{twist}"],
+    text: ["{who} offers you {deal}: {ask} to join.{twist}", "{who} leans in over lunch and offers you {deal}. It's {ask} to join.{twist}"],
     choices: [
       {
         label: "Put money in",
@@ -276,7 +280,7 @@ export const TEMPLATE_MOMENTS: MomentDef[] = [
         { text: " Your phone is on 4%.", tag: "battery" },
       ],
     },
-    text: ["{who} {offer}.{twist}"],
+    text: ["{who} {offer}.{twist}", "It's past midnight. {who} {offer}.{twist}"],
     choices: [
       { label: "Go big", tone: "bold", traits: { giving: 2, daring: 2 }, outcomes: [{ text: "You go all in. It's the best night in months.", pay: 1, rep: 3 }, { chance: 0.4, text: "The best night in months, and the worst morning.", pay: 1, rep: 2, effect: "bad_day", likelier: [{ tag: "early" }] }, { chance: 0.3, text: "Everyone saw it. You're the talk of the club.", pay: 1, rep: 3, effect: "talked_about", likelier: [{ tag: "watched" }] }] },
       { label: "Do the sensible thing", tone: "calm", traits: { daring: -2 }, outcomes: [{ text: "You get them a taxi and go home. Boring. Right.", rep: 1 }, { chance: 0.5, text: "You make sure they get home safe. They text you a thank-you at noon.", rep: 2, likelier: [{ tag: "drunk" }] }] },
@@ -311,7 +315,7 @@ export const TEMPLATE_MOMENTS: MomentDef[] = [
         { text: " You were just about to call them.", tag: "warm" },
       ],
     },
-    text: ["{who} is on the phone: \"We {news}.\"{twist}"],
+    text: ["{who} is on the phone: \"We {news}.\"{twist}", "A missed call, then another. {who} is on the phone: \"We {news}.\"{twist}"],
     choices: [
       { label: "Say yes", tone: "kind", traits: { people: 2, ways: 2 }, outcomes: [{ text: "\"I knew you would.\" You can hear them smiling.", pay: 0.6, rep: 2 }, { chance: 0.4, text: "After saying no twice, this yes means a lot to them.", pay: 0.6, rep: 3, likelier: [{ tag: "again" }] }] },
       { label: "Say yes, in your own way", tone: "calm", traits: { ways: -1, people: 1 }, outcomes: [{ text: "Not exactly what they asked, but close. They'll take it.", pay: 0.3, rep: 1 }] },

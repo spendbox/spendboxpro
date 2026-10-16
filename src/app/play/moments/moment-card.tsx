@@ -86,7 +86,7 @@ export function MomentCard({ shown, onClose, onAnswered, closeLabel = "Walk away
       {!answered ? (
         <div className="flex flex-col gap-1.5 px-4 pb-4">
           {/* Every answer looks the same, in a shuffled order: nothing gives the "right" one away (docs/LIFE_WHEEL.md). */}
-          {choiceOrder(def, shown.vars.seed).map((i) => {
+          {choiceOrder(def, shown.vars.seed, shown.vars.has ?? []).map((i) => {
             const c = def.choices[i];
             const cost = choiceCost(c, shown.vars.ask) / shown.perMint;
             const short = cost > shown.canSpend + 0.005;
@@ -98,6 +98,8 @@ export function MomentCard({ shown, onClose, onAnswered, closeLabel = "Walk away
                 className="min-h-11 rounded-2xl bg-ink/[0.06] px-4 py-2 text-left text-sm font-semibold text-ink transition hover:bg-ink/[0.09] active:scale-[0.98] disabled:opacity-45"
               >
                 {fill(c.label)}
+                {/* An answer one of your things gives you (docs/LIFE_WHEEL.md). */}
+                {c.has && <span className="ml-1.5 rounded-full bg-gold/30 px-1.5 py-px align-middle text-[10px] font-bold">yours</span>}
                 {short && <span className="ml-1.5 text-xs font-normal">(not enough on you)</span>}
               </button>
             );

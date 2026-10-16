@@ -105,7 +105,9 @@ test("answers come in a shuffled order, the same for the same seed, at most a fe
     for (let seed = 1; seed < 40; seed++) {
       const order = choiceOrder(m, seed);
       assert.deepEqual(order, choiceOrder(m, seed), m.id);
-      assert.equal(order.length, Math.min(m.choices.length, MOMENT_RULES.shown), m.id);
+      // Answers that need a thing you own don't show without it.
+      assert.equal(order.length, Math.min(m.choices.filter((c) => !c.has).length, MOMENT_RULES.shown), m.id);
+      for (const i of order) assert.ok(!m.choices[i].has, `${m.id}: a thing's answer shown to someone without it`);
       assert.equal(new Set(order).size, order.length, m.id);
       for (const i of order) assert.ok(i >= 0 && i < m.choices.length, m.id);
       if (m.choices.length === 3) firsts.add(order[0]);
@@ -269,4 +271,27 @@ test("the cast: a story waits its turn, branches on feeling, and changes with th
   const fola = (await import("../cast.ts")).CAST_BY_ID.get("fola_intern")!;
   const { castHere } = await import("../cast.ts");
   assert.ok(!castHere(fola, Date.parse("2026-11-01T00:00:00Z")) && castHere(fola, Date.parse("2026-11-16T00:00:00Z")));
+});
+
+test("what you own: every thing in the shop has its own moment, and gives you answers elsewhere", async () => {
+  const { SHOP } = await import("../items.ts");
+  const { ownedTokens, relevantOwned } = await import("../moments.ts");
+  for (const k of SHOP) {
+    assert.ok(MOMENTS.some((m) => m.item?.includes(k.id) || m.item?.includes(`cat:${k.category}`)), `${k.id} has no moment of its own`);
+  }
+  // Every thing a moment or answer names is in the shop (or a category).
+  const kinds = new Set(SHOP.map((k) => k.id));
+  for (const m of MOMENTS) {
+    for (const x of [...(m.item ?? []), ...m.choices.flatMap((c) => c.has ?? [])]) assert.ok(kinds.has(x) || x.startsWith("cat:"), `${m.id}: ${x}`);
+  }
+  // A thing's moment comes only to owners; with the thing, its answer always shows.
+  const owned = ownedTokens([{ kind: "generator", category: "gadget" }]);
+  for (let i = 0; i < 300; i++) assert.ok(!pickMoment({ spot: "home", day: true, level: 1, recent: [], rand: Math.random })?.item);
+  let mine = 0;
+  for (let i = 0; i < 2000; i++) if (pickMoment({ spot: "home", day: true, level: 1, recent: [], owned, rand: Math.random })?.id === "th_light") mine++;
+  assert.ok(mine > 0);
+  const nepa = MOMENT_BY_ID.get("nepa")!;
+  const has = relevantOwned(nepa, owned);
+  assert.deepEqual(has, ["generator"]);
+  for (let seed = 1; seed < 50; seed++) assert.ok(choiceOrder(nepa, seed, has).some((i) => nepa.choices[i].has), "the generator's answer is missing");
 });

@@ -1,7 +1,7 @@
 # The trip there
 
 The trip film plays only when something is going to happen on the way: a road moment (below).
-Any other trip is instant, as before. On 1 in 4 trips of 300 m or more the game asks the server
+Any other trip is instant, as before. On 1 in 3 trips of 300 m or more the game asks the server
 for a road moment. If one comes, the film plays; if not (say, one came less than 20 minutes ago),
 there's no film.
 
@@ -71,7 +71,7 @@ The rules:
 - The road picks only road moments, never the ones from elsewhere, and only ones for your ride.
 - Money and reputation work like any moment (paid from Fun money then the wallet, with the same
   daily limits).
-- On the road too they come at least 20 minutes apart, and count in the same 5 a day. Nothing from
+- On the road too they come at least 12 minutes apart, and count in the same 8 a day. Nothing from
   before comes back on the road.
 
 ## The scenes
