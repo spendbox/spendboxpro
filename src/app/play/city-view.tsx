@@ -400,8 +400,12 @@ type Props = {
    * spot), and stay there until `gateIn` changes (Go inside). Says which landmark, or null once gone.
    */
   onAtGate?: (gate: { name: string } | null) => void;
+  /** Inside a planned home: which of its floors you're on, and how many it has (null: not in one). */
+  onHomeFloors?: (floors: { now: number; count: number } | null) => void;
   /** Change it to go on inside from a landmark's entrance. */
   gateIn?: number;
+  /** Go to this floor of the planned home you're in (its Floor button); `at` makes each ask new. */
+  homeFloorTo?: { to: number; at: number } | null;
   /** Signed out: a tap on a place's bubble (or its fun-place icon) asks you to sign in instead. */
   onBubbleSignIn?: () => void;
   /** The 3D view broke and couldn't mend itself (the phone took the canvas away, or nothing draws): build it again. */
@@ -1671,7 +1675,9 @@ export function CityView({
   homeStick,
   onWalkBlocked,
   onAtGate,
+  onHomeFloors,
   gateIn = 0,
+  homeFloorTo = null,
   onBubbleSignIn,
   onBroken,
 }: Props) {
@@ -1707,14 +1713,15 @@ export function CityView({
     flyToTile: (tile: number) => void;
     /** From a landmark's entrance, on inside. */
     goInside: () => void;
+    setHomeFloor: (to: number) => void;
     setHomePlans: (plans: Record<number, HomePlan> | undefined) => void;
     /** Zoom in (dir 1) or out (dir -1) a step: the + and − buttons on a computer. */
     zoom: (dir: number) => void;
   } | null>(null);
-  const cb = useRef({ onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onLightTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick, onAtGate, onBubbleSignIn, onBroken });
+  const cb = useRef({ onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onLightTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick, onAtGate, onHomeFloors, onBubbleSignIn, onBroken });
   const atmos = useRef({ progress, nightFirst, meAvatar, weather });
   useEffect(() => {
-    cb.current = { onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onLightTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick, onAtGate, onBubbleSignIn, onBroken };
+    cb.current = { onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onLightTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick, onAtGate, onHomeFloors, onBubbleSignIn, onBroken };
     atmos.current = { progress, nightFirst, meAvatar, weather };
   });
 
@@ -5385,6 +5392,8 @@ export function CityView({
     // Planned homes: the plans by tile, and which floor of each you're on.
     const homePlans = new Map<number, HomePlan>();
     const homeFloor = new Map<number, number>();
+    /** The planned home's floors last told to the game (see tellHomeFloors). */
+    let homeFloorsKey = "";
     let restage = false;
     /** Draw the place you're in again (its plan arrived or changed, or you took the stairs). */
     function redrawHere() {
@@ -6383,6 +6392,7 @@ export function CityView({
       const from = camera.position.clone();
       if (!next) {
         view = null;
+        tellHomeFloors();
         look.setEnabled(false);
         // Out the way we came in: back out through the side we're facing from, then up.
         let ctrl: THREE.Vector3 | null = null;
@@ -6428,6 +6438,7 @@ export function CityView({
       if (!sameBuilding) homeFloor.delete(next.anchor.i);
       const st = buildStage(next.building, next.anchor, next.level);
       view = { kind: "place", stage: st };
+      tellHomeFloors();
       look.lookAt(0, 0, true);
       look.resetZoom(true);
       pickView(wantSpot);
@@ -6706,6 +6717,25 @@ export function CityView({
       vv.figures?.update(time);
       vv.figures3d?.update(Math.min(0.1, Math.max(0, time - (vv.t3 ?? time))));
       vv.t3 = time;
+    }
+    /** Tell the game which floor of a planned home you're on (for its Floor button). */
+    function tellHomeFloors() {
+      const plan = view?.kind === "place" && view.stage.homeKey ? homePlans.get(view.stage.tile) : undefined;
+      const f = plan && view?.kind === "place" ? { now: homeFloor.get(view.stage.tile) ?? 0, count: plan.floors.length } : null;
+      const key = f ? `${f.now}/${f.count}` : "";
+      if (key === homeFloorsKey) return;
+      homeFloorsKey = key;
+      cb.current.onHomeFloors?.(f);
+    }
+    /** Inside a planned home: go to one of its floors (its Floor button). */
+    function setHomeFloor(to: number) {
+      if (view?.kind !== "place" || !view.stage.homeKey) return;
+      const t = view.stage.tile;
+      const plan = homePlans.get(t);
+      if (!plan || to < 0 || to >= plan.floors.length || to === (homeFloor.get(t) ?? 0)) return;
+      playSfx("whoosh");
+      homeFloor.set(t, to);
+      redrawHere();
     }
     function setPlace(p: CityPlace | null) {
       wantPlace = p;
@@ -8087,7 +8117,7 @@ export function CityView({
       if (regionNow && currentSeed >= 0 && builtCount > 0) build(currentSeed, builtCount);
     }
     const center = () => ({ x: Math.round(controls.target.x), z: Math.round(controls.target.z) });
-    api.current = { setMarkTags, center, build: buildFor, setOwned, setBusinesses, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setChallengeLights, setPartyZones: partyLights.set, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, setHomePlans, zoom, goInside };
+    api.current = { setMarkTags, center, build: buildFor, setOwned, setBusinesses, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setChallengeLights, setPartyZones: partyLights.set, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, setHomePlans, zoom, goInside, setHomeFloor };
 
     return () => {
       alive = false;
@@ -8186,6 +8216,11 @@ export function CityView({
   useEffect(() => {
     api.current?.setAds(ads ?? []);
   }, [ads]);
+  // A planned home's Floor button.
+  const homeFloorKey = homeFloorTo ? `${homeFloorTo.to}|${homeFloorTo.at}` : "";
+  useEffect(() => {
+    if (homeFloorKey) api.current?.setHomeFloor(Number(homeFloorKey.split("|")[0]));
+  }, [homeFloorKey]);
   // Go inside from a landmark's entrance (the game's "Go inside" button).
   const gateInSeen = useRef(gateIn);
   useEffect(() => {

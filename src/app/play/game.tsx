@@ -576,6 +576,10 @@ export function Game({
   /** At a landmark's main entrance (going in): its name, and the count that sends you on inside. */
   const [atGate, setAtGate] = useState<{ name: string } | null>(null);
   const [gateIn, setGateIn] = useState(0);
+  /** Inside a planned home: its floors (for the Floor button), the list open, and a floor asked for. */
+  const [homeFloors, setHomeFloors] = useState<{ now: number; count: number } | null>(null);
+  const [homeFloorsOpen, setHomeFloorsOpen] = useState(false);
+  const [homeFloorTo, setHomeFloorTo] = useState<{ to: number; at: number } | null>(null);
   const [townNew, setTownNew] = useState(false);
   // The new 3D studio, while it is being tried out (see avatar3d-flag.ts).
   // (Read in the browser only; it matters only once the studio is opened, so the server's false is harmless.)
@@ -2362,6 +2366,8 @@ export function Game({
             onProperty={worldId && (!guest || worldLife.adOpen) ? worldLife.onProperty : undefined}
             onWorkplace={worldId && !guest ? worldLife.onWorkplace : undefined}
             onAtGate={setAtGate}
+            onHomeFloors={setHomeFloors}
+            homeFloorTo={homeFloorTo}
             onBubbleSignIn={guest ? () => setSignInWhy("Sign in to go into places, meet people and play.") : undefined}
             gateIn={gateIn}
             centerRef={worldId ? worldLife.centerRef : undefined}
@@ -3632,7 +3638,31 @@ export function Game({
                 {chatUnread > 0 && <span className="absolute -right-1.5 -top-1.5 grid min-w-5 place-items-center rounded-full bg-hit px-1 text-[11px] text-white">{chatUnread > 99 ? "99+" : chatUnread}</span>}
               </button>
             )}
-            {place && placeRoom && placeRoom.id === place.building && (placeRoom.levels?.length ?? 0) > 1 && (
+            {/* A planned home with more than one floor: its own floors, like any building's. */}
+            {place && homeFloors && homeFloors.count > 1 && (
+              <span className="relative">
+                <button onClick={() => setHomeFloorsOpen((o) => !o)} className="flex shrink-0 items-center gap-1 rounded-xl bg-panel-2 px-3 py-2 text-xs font-semibold" aria-expanded={homeFloorsOpen}>
+                  <Layers className="size-4" /> {homeFloors.now === 0 ? "Ground floor" : `Floor ${homeFloors.now}`}
+                </button>
+                {homeFloorsOpen && (
+                  <span className="glass absolute bottom-full left-0 z-10 mb-2 flex min-w-36 flex-col gap-1 rounded-2xl p-1.5 shadow-lg">
+                    {Array.from({ length: homeFloors.count }, (_, f) => homeFloors.count - 1 - f).map((f) => (
+                      <button
+                        key={f}
+                        onClick={() => {
+                          setHomeFloorsOpen(false);
+                          setHomeFloorTo((r) => ({ to: f, at: (r?.at ?? 0) + 1 }));
+                        }}
+                        className={cn("rounded-xl px-3 py-2 text-left text-xs font-semibold", f === homeFloors.now ? "bg-ink text-white" : "hover:bg-ink/5")}
+                      >
+                        {f === 0 ? "Ground floor" : `Floor ${f}`}
+                      </button>
+                    ))}
+                  </span>
+                )}
+              </span>
+            )}
+            {place && !homeFloors && placeRoom && placeRoom.id === place.building && (placeRoom.levels?.length ?? 0) > 1 && (
               <button
                 onClick={() => setPickPlace(placeRoom)}
                 className={cn("relative flex shrink-0 items-center gap-1 rounded-xl bg-panel-2 px-3 py-2 text-xs font-semibold", floorGlow && "outline outline-2 outline-offset-2 outline-gold")}

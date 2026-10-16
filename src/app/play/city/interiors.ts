@@ -1594,7 +1594,249 @@ function firehall(x: Ctx) {
 
 // ---------------------------------------------------------------- themes
 
+/**
+ * A home's room: one of several designs, the same one for everyone in this house (picked from its
+ * key). Downstairs: the open-plan kitchen and lounge, a Nigerian parlour, a family lounge or a
+ * grand lounge. Upstairs: a bedroom with a desk, a master bedroom, a children's room or a study.
+ */
 function livingRoom(x: Ctx, upstairs: boolean) {
+  const design = Math.floor(x.rnd() * 4);
+  if (design === 1) return upstairs ? masterBedroom(x) : parlour(x);
+  if (design === 2) return upstairs ? kidsRoom(x) : familyLounge(x);
+  if (design === 3) return upstairs ? study(x) : grandLounge(x);
+  openPlan(x, upstairs);
+}
+
+/** A standing fan: a round base, a pole, the guard and blades (turned a little). */
+function standingFan(x: Ctx, px: number, pz: number, ry: number) {
+  const { k } = x;
+  k.at(px, 0, pz, ry, () => {
+    k.cyl(0, 0, 0, 0.2, 0.22, 0.04, 0x2b2b2b, 14);
+    k.cyl(0, 0.04, 0, 0.02, 0.02, 1.1, 0xdee2e6, 8);
+    k.box(0, 1.1, 0.02, 0.14, 0.14, 0.18, 0xf1f3f5);
+    k.ring(0, 1.17, 0.14, 0.24, 0.015, 0xdee2e6);
+    for (let b = 0; b < 3; b++) k.box(0, 1.17, 0.13, 0.4, 0.06, 0.01, 0x74c0fc, { rz: (b * Math.PI * 2) / 3, noAo: true });
+  });
+}
+
+/** A wall clock (side, u along the wall, y its middle). */
+function wallClock(x: Ctx, side: number, u: number, y: number) {
+  const { k } = x;
+  atWall(x, side, u, () => {
+    k.cyl(0, y, 0.02, 0.22, 0.22, 0.04, 0x2b2b2b, 20, { rx: Math.PI / 2, noAo: true });
+    k.cyl(0, y, 0.045, 0.19, 0.19, 0.01, 0xfbfaf7, 20, { rx: Math.PI / 2, noAo: true });
+    k.box(0, y, 0.055, 0.015, 0.13, 0.005, 0x111111, { noAo: true });
+    k.box(0.04, y, 0.056, 0.09, 0.012, 0.005, 0x111111, { noAo: true });
+  });
+}
+
+/** A Nigerian parlour: the big sofa set round a centre table facing the TV, a dining set for six,
+ * a standing fan, a deep freezer, a wall clock and family photos, net curtains at the windows. */
+function parlour(x: Ctx) {
+  const { k, room, pal, rnd } = x;
+  const W = room.w;
+  const D = room.d;
+  const leather = pickOf(rnd, [0x5c3d2e, 0x2b2b2b, 0x8a5a3c, 0xe9dcc4, 0x7a2e3a]);
+  tvWall(x, 3, 0.4);
+  // The three-seater facing the TV, two armchairs either side, the glass-top centre table.
+  sofa(x, 0.6, 0.4, -Math.PI / 2, 2.4, leather, { seats: 3 });
+  armchair(x, -0.9, -1.0, 0, leather);
+  armchair(x, -0.9, 1.8, Math.PI, leather);
+  rugAt(x, -1.0, 0.4, 2.6, 2.4, 0);
+  table(x, -1.0, 0.4, 0, 1.2, 0.7, 0xcfe3ea, pal.metal, { h: 0.42 });
+  k.cyl(-0.8, 0.42, 0.4, 0.09, 0.07, 0.06, 0xe9ecef, 10);
+  // Dining for six at the back.
+  const tx = W / 2 - 1.6;
+  const tz = -D / 2 + 1.3;
+  table(x, tx, tz, 0, 1.8, 0.9, pal.wood, pal.wood);
+  for (let c = 0; c < 6; c++) chair(x, tx - 0.6 + (c % 3) * 0.6, tz + (c < 3 ? -0.65 : 0.65), c < 3 ? 0 : Math.PI, pal.fabric2, pal.wood, { spot: c === 1 });
+  pendant(x, tx, tz, 1.0, "drum", pal.metal);
+  x.lamps.push({ x: tx, y: room.h - 1.2, z: tz });
+  standingFan(x, -W / 2 + 0.7, D / 2 - 0.7, Math.PI * 0.8);
+  // The deep freezer by the wall, a plate of chin-chin on it.
+  atWall(x, 1, 1.4, () => {
+    k.box(0, 0, 0.4, 1.1, 0.88, 0.7, 0xf8f9fa);
+    k.box(0, 0.88, 0.4, 1.12, 0.03, 0.72, 0xdee2e6);
+    k.cyl(0.25, 0.91, 0.4, 0.12, 0.1, 0.04, 0xe8b04a, 12);
+  });
+  wallClock(x, 2, 0.6, 2.2);
+  art(x, 2, -1.4, 1.6, 0.6, 0.8);
+  art(x, 2, 1.8, 1.6, 0.9, 0.6);
+  plant(x, W / 2 - 0.5, D / 2 - 0.5, 1.0, "snake");
+  downlights(x, 2, 2, 1.6);
+  x.views.push(
+    { x: 1.8, z: D / 2 - 0.7, yaw: yawTo(1.8, D / 2 - 0.7, -W / 4, -D / 3), pitch: -0.12 },
+    { x: W / 2 - 0.8, z: 0.8, yaw: yawTo(W / 2 - 0.8, 0.8, -W / 2, 0), pitch: -0.1 },
+  );
+  atWindow(x, 0, -W / 4);
+}
+
+/** A family lounge: an L of sofas round a big rug facing the TV, a bookshelf, a little table for two. */
+function familyLounge(x: Ctx) {
+  const { room, pal, rnd } = x;
+  const W = room.w;
+  const D = room.d;
+  const fabric = pickOf(rnd, [pal.fabric, pal.fabric2, 0x6b8f71, 0x4a6fa5]);
+  // The TV on the side wall, an L of sofas facing it round the rug.
+  tvWall(x, 3, 0);
+  rugAt(x, -1.2, 0, 2.6, 2.8, 0);
+  sofa(x, 0.4, 0, -Math.PI / 2, 2.6, fabric);
+  sofa(x, -1.2, 1.6, Math.PI, 1.8, fabric);
+  table(x, -1.3, 0, Math.PI / 2, 1.1, 0.6, pal.wood, pal.wood, { h: 0.4 });
+  bookshelf(x, 2, 2.4, 1.8, 2.0);
+  bookshelf(x, 1, 0.8, 1.4, 1.6);
+  const tx = -W / 2 + 1.3;
+  const tz = D / 2 - 1.2;
+  table(x, tx, tz, 0, 0.8, 0.8, pal.wood, pal.metal, { round: true });
+  for (const sz of [-0.55, 0.55]) chair(x, tx, tz + sz, sz < 0 ? 0 : Math.PI, pal.fabric2, pal.metal, { spot: sz < 0 });
+  floorLamp(x, W / 2 - 0.45, -0.6, pal.metal);
+  plant(x, W / 2 - 0.5, -D / 2 + 0.5, 1.2, "tall");
+  plant(x, -W / 2 + 0.5, -D / 2 + 0.5, 0.9, "bush");
+  art(x, 1, 0.2, 1.6, 1.0, 0.7);
+  downlights(x, 3, 2, 1.4);
+  x.views.push(
+    { x: 1.9, z: D / 2 - 0.6, yaw: yawTo(1.9, D / 2 - 0.6, -W / 2, -0.4), pitch: -0.14 },
+    { x: W / 2 - 0.8, z: D / 2 - 0.8, yaw: yawTo(W / 2 - 0.8, D / 2 - 0.8, -W / 3, -D / 3), pitch: -0.12 },
+  );
+  atWindow(x, 0, W / 3);
+}
+
+/** A grand lounge: two sofas facing over a long table under a chandelier, a piano, a bar. */
+function grandLounge(x: Ctx) {
+  const { k, room, pal, rnd } = x;
+  const W = room.w;
+  const D = room.d;
+  const fabric = pickOf(rnd, [0xefe6d8, 0xf8f4ec, 0x1f3b2c, 0x2b2b2b]);
+  rugAt(x, 0.6, 0, 3.4, 2.6, 0, 0xefe6d8, 0xc9a227);
+  sofa(x, 0.6, -1.1, 0, 2.4, fabric);
+  sofa(x, 0.6, 1.1, Math.PI, 2.4, fabric);
+  table(x, 0.6, 0, 0, 1.4, 0.7, 0xf1efea, 0xc9a227, { h: 0.42 });
+  armchair(x, 2.4, 0, -Math.PI / 2, pal.accent);
+  grandPiano(x, -W / 2 + 1.6, -D / 2 + 1.7, Math.PI * 0.2);
+  // The bar: a sideboard with bottles and glasses.
+  sideboard(x, 2, -2.6, 1.6, 0x2b2b2b, false);
+  atWall(x, 2, -2.6, () => {
+    for (let b = 0; b < 5; b++) k.cyl(-0.55 + b * 0.27, 0.72, 0.24, 0.035, 0.035, 0.28, pickOf(rnd, [0x2f6b3a, 0x7a2e3a, 0xc9a227, 0x5c3d2e]), 8);
+  });
+  // The chandelier.
+  k.cyl(0.6, room.h - 0.5, 0, 0.012, 0.012, 0.5, 0xc9a227, 6, { noAo: true });
+  k.ring(0.6, room.h - 0.75, 0, 0.42, 0.02, 0xc9a227, { rx: Math.PI / 2 });
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    k.ball(0.6 + Math.cos(a) * 0.42, room.h - 0.84, Math.sin(a) * 0.42, 0.05, 0xfff6dc, { layer: "glow", w: 8, h: 6 });
+  }
+  x.lamps.push({ x: 0.6, y: room.h - 0.9, z: 0 });
+  plant(x, W / 2 - 0.5, D / 2 - 0.5, 1.6, "palm");
+  plant(x, W / 2 - 0.5, -D / 2 + 0.5, 1.6, "palm");
+  art(x, 3, 0.8, 1.7, 1.4, 1.0);
+  art(x, 1, 0, 1.7, 1.2, 0.9);
+  x.views.push(
+    { x: 0, z: D / 2 - 0.6, yaw: yawTo(0, D / 2 - 0.6, 0.6, -D / 2), pitch: -0.12 },
+    { x: W / 2 - 0.9, z: D / 2 - 0.9, yaw: yawTo(W / 2 - 0.9, D / 2 - 0.9, -W / 2, -D / 2), pitch: -0.12 },
+  );
+  atWindow(x, 0, W / 4);
+}
+
+/** A wardrobe against a wall (side, u), w wide. */
+function wardrobe(x: Ctx, side: number, u: number, w: number) {
+  const { k, pal } = x;
+  atWall(x, side, u, () => {
+    k.box(0, 0, 0.32, w, 2.1, 0.6, pal.wood);
+    for (let d = 0; d < Math.max(2, Math.round(w / 0.6)); d++) {
+      const n = Math.max(2, Math.round(w / 0.6));
+      k.box(-w / 2 + (w / n) * (d + 0.5), 0.05, 0.625, w / n - 0.02, 2.0, 0.01, shadeHex(pal.wood, 0.06), { noAo: true });
+      k.box(-w / 2 + (w / n) * (d + 0.5) + (d % 2 ? -1 : 1) * (w / n / 2 - 0.08), 0.95, 0.64, 0.02, 0.2, 0.02, pal.metal, { noAo: true });
+    }
+    k.shadow(0, 0.32, w + 0.2, 0.8, 0.3);
+  });
+}
+
+/** A master bedroom: the big bed, a wardrobe, a dressing table with a mirror, an armchair. */
+function masterBedroom(x: Ctx) {
+  const { k, room, pal } = x;
+  const W = room.w;
+  const D = room.d;
+  bed(x, 1, -0.3, pal.fabric);
+  wardrobe(x, 3, -0.6, 2.4);
+  // The dressing table and its mirror.
+  atWall(x, 2, -2.4, () => {
+    k.box(0, 0.72, 0.25, 1.1, 0.04, 0.45, pal.wood);
+    for (const sx of [-0.5, 0.5]) k.box(sx, 0, 0.25, 0.05, 0.72, 0.42, pal.wood);
+    k.box(0, 0.9, 0.04, 0.8, 0.9, 0.03, pal.frame, { noAo: true });
+    k.box(0, 0.95, 0.06, 0.72, 0.8, 0.005, 0xd8e6ee, { noAo: true });
+    for (let b = 0; b < 4; b++) k.cyl(-0.35 + b * 0.12, 0.76, 0.3, 0.025, 0.025, 0.1, [0xe64980, 0xc9a227, 0xffffff, 0x7048e8][b], 8);
+  });
+  armchair(x, -W / 2 + 1.0, -D / 2 + 1.0, Math.PI * 0.25, pal.fabric2);
+  floorLamp(x, -W / 2 + 0.45, -D / 2 + 0.45, pal.metal);
+  rugAt(x, 0.8, -0.3, 2.4, 2.8, 0);
+  art(x, 0, 0.6, 1.7, 1.2, 0.8);
+  plant(x, W / 2 - 0.45, D / 2 - 0.45, 1.0, "tall");
+  downlights(x, 2, 2, 1.6);
+  x.views.push(
+    { x: -W / 2 + 0.9, z: D / 2 - 0.7, yaw: yawTo(-W / 2 + 0.9, D / 2 - 0.7, W / 3, -D / 4), pitch: -0.14 },
+    { x: 0, z: D / 2 - 0.6, yaw: 0, pitch: -0.12 },
+  );
+  atWindow(x, 0, -W / 4);
+}
+
+/** A children's room: two single beds, a toy box, a little desk, stars on the wall. */
+function kidsRoom(x: Ctx) {
+  const { k, room, pal, rnd } = x;
+  const W = room.w;
+  const D = room.d;
+  const covers = [pickOf(rnd, [0x4dabf7, 0xf783ac, 0x69db7c]), pickOf(rnd, [0xffd43b, 0x9775fa, 0xff922b])];
+  for (const [n, u] of [[0, -1.6], [1, 1.2]] as const) {
+    atWall(x, 3, u, () => {
+      k.box(0, 0, 1.0, 1.0, 0.3, 2.0, pal.wood);
+      k.soft(0, 0.3, 1.0, 0.95, 0.18, 1.95, 0xfbfaf7, 0.06);
+      k.soft(0, 0.46, 1.25, 0.98, 0.06, 1.4, covers[n], 0.04);
+      k.soft(0, 0.5, 0.25, 0.6, 0.14, 0.3, 0xffffff, 0.06);
+      k.box(0, 0, 0.04, 1.0, 0.9, 0.06, pal.wood);
+      k.shadow(0, 1.0, 1.2, 2.2, 0.3);
+    });
+  }
+  // A toy box with a ball and a teddy on it.
+  k.box(W / 2 - 1.2, 0, D / 2 - 0.6, 0.9, 0.5, 0.5, pickOf(rnd, [0xe03131, 0x1c7ed6, 0x2f9e44]));
+  k.ball(W / 2 - 1.4, 0.62, D / 2 - 0.6, 0.12, 0xffd43b);
+  k.ball(W / 2 - 1.0, 0.64, D / 2 - 0.6, 0.14, 0x8a5a3c);
+  const screen = x.sheet.paint(160, 100, (c, w, h) => dashboard(c, w, h, pal.accent, rnd));
+  desk(x, W / 2 - 1.0, -D / 2 + 1.0, Math.PI, pal.wood, screen, covers[0]);
+  rugAt(x, 0.6, 0.3, 2.0, 2.0, 0, 0xfff3bf, covers[1]);
+  for (let st = 0; st < 6; st++) atWall(x, 1, -1.5 + st * 0.6, () => k.box(0, 1.8 + (st % 2) * 0.35, 0.02, 0.12, 0.12, 0.01, 0xffd43b, { rz: 0.785, noAo: true }));
+  downlights(x, 2, 2, 1.4);
+  x.views.push(
+    { x: W / 2 - 0.8, z: D / 2 - 1.2, yaw: yawTo(W / 2 - 0.8, D / 2 - 1.2, -W / 2, -D / 4), pitch: -0.14 },
+    { x: 0, z: -D / 2 + 0.8, yaw: yawTo(0, -D / 2 + 0.8, -W / 3, D / 2), pitch: -0.12 },
+  );
+  atWindow(x, 0, W / 4);
+}
+
+/** A study: bookshelves on two walls, a big desk, a reading chair, a sofa bed for guests. */
+function study(x: Ctx) {
+  const { room, pal, rnd } = x;
+  const W = room.w;
+  const D = room.d;
+  bookshelf(x, 3, -1.0, 2.4, 2.3);
+  bookshelf(x, 3, 1.6, 1.6, 2.3);
+  bookshelf(x, 2, 2.2, 2.0, 2.3);
+  const screen = x.sheet.paint(160, 100, (c, w, h) => dashboard(c, w, h, pal.accent, rnd));
+  desk(x, 0.6, -D / 2 + 1.1, Math.PI, pal.wood, screen, pal.fabric);
+  armchair(x, -1.2, 1.1, Math.PI * 0.8, pal.fabric2);
+  floorLamp(x, -1.9, 1.6, pal.metal);
+  sofa(x, W / 2 - 0.7, 0.4, -Math.PI / 2, 2.0, pal.fabric);
+  rugAt(x, 0, 0.6, 2.4, 1.8, 0);
+  plant(x, W / 2 - 0.45, -D / 2 + 0.45, 1.1, "tall");
+  art(x, 1, -2.2, 1.7, 0.8, 0.6);
+  downlights(x, 2, 2, 1.4);
+  x.views.push(
+    { x: W / 2 - 1.6, z: D / 2 - 0.6, yaw: yawTo(W / 2 - 1.6, D / 2 - 0.6, -W / 3, -D / 3), pitch: -0.13 },
+    { x: -W / 2 + 1.2, z: D / 2 - 0.7, yaw: yawTo(-W / 2 + 1.2, D / 2 - 0.7, W / 4, -D / 2), pitch: -0.12 },
+  );
+  atWindow(x, 0, -W / 4);
+}
+
+/** The open-plan home: kitchen, island, round dining table and a lounge (or upstairs, a bedroom with a desk). */
+function openPlan(x: Ctx, upstairs: boolean) {
   const { room, pal, rnd } = x;
   const W = room.w;
   const D = room.d;
@@ -4231,14 +4473,37 @@ function plannedHome(x: Ctx, home: NonNullable<InteriorInfo["home"]>) {
         break;
       case "stairs":
         k.at(cx, 0, cz, ry, () => {
-          // Steps rising towards the wall behind, with a handrail.
-          const n = 12;
-          const sw = fw - 0.1, run = fd - 0.2;
+          // A proper staircase rising towards the wall behind: wooden treads with a little nosing
+          // over pale risers, a stringer either side, newel posts at the foot and the top, and
+          // balusters under a sloping handrail on both sides.
+          const n = 14;
+          const sw = fw - 0.16, run = fd - 0.2;
+          const rise = room.h / n;
+          const go = run / n;
+          const riser = shadeHex(pal.wall, -0.04);
           for (let st = 0; st < n; st++) {
-            const zz = run / 2 - (st + 0.5) * (run / n);
-            k.box(0, 0, zz, sw, ((st + 1) * room.h) / n, run / n + 0.01, st % 2 ? wood : shadeHex(wood, 0.05));
+            const zz = run / 2 - (st + 0.5) * go;
+            const top = (st + 1) * rise;
+            k.box(0, top - 0.045, zz - 0.015, sw + 0.02, 0.045, go + 0.03, st % 2 ? wood : shadeHex(wood, 0.05));
+            k.box(0, top - rise, zz + go / 2 - 0.01, sw, rise - 0.045, 0.02, riser, { noAo: true });
           }
-          k.box(sw / 2 + 0.02, 0.9, 0, 0.04, 0.04, run, pal.metal, { rx: -Math.atan2(room.h, run) });
+          // The space under the stairs, closed in, with a little cupboard door.
+          const slope = Math.atan2(room.h, run);
+          for (const side of [-1, 1]) {
+            const sx = side * (sw / 2 + 0.04);
+            // The stringer: a board along the slope.
+            k.box(sx, room.h / 2 - 0.12, 0, 0.06, 0.24, Math.hypot(room.h, run), shadeHex(wood, -0.1), { rx: slope, noAo: true });
+            // Balusters every other step, the handrail along their tops, newel posts at each end.
+            for (let st = 1; st < n; st += 2) {
+              const zz = run / 2 - (st + 0.5) * go;
+              k.cyl(sx, (st + 1) * rise, zz, 0.018, 0.018, 0.86, 0xf1efea, 6);
+            }
+            k.box(sx, 0.86 + room.h / 2 + rise / 2, 0, 0.07, 0.05, Math.hypot(room.h, run) + 0.05, shadeHex(wood, -0.15), { rx: slope, noAo: true });
+            k.box(sx, 0, run / 2 - go / 2, 0.11, 1.0 + rise, 0.11, shadeHex(wood, -0.15));
+            k.ball(sx, 1.02 + rise, run / 2 - go / 2, 0.065, shadeHex(wood, -0.15), { w: 10, h: 8 });
+          }
+          k.box(0, 0, 0, sw, 0.02, run, shadeHex(pal.wall, -0.08), { noAo: true });
+          k.shadow(0, 0, sw + 0.3, run + 0.3, 0.3);
           x.blocks.push({ x: cx, z: cz, w: s.w * CELL_M - 0.1, d: s.d * CELL_M - 0.1, ry: 0 });
         });
         if (level < plan.floors.length - 1) x.items.push({ kind: "stairs", label: "Go upstairs", x: cx, y: 0.6, z: cz, r: 0.8 });
@@ -4295,7 +4560,23 @@ function plannedHome(x: Ctx, home: NonNullable<InteriorInfo["home"]>) {
     if (below) {
       const s = itemSize(below);
       const cx = mx(below.x + s.w / 2), cz = mz(below.y + s.d / 2);
-      k.box(cx, 0.001, cz, s.w * CELL_M - 0.1, 0.01, s.d * CELL_M - 0.1, 0x2b2b2b, { noAo: true });
+      const w = s.w * CELL_M - 0.1, d = s.d * CELL_M - 0.1;
+      // The stairwell: the top steps showing in the opening, a railing round three sides (the
+      // fourth is where you come up), with a post at each corner.
+      k.box(cx, 0.001, cz, w, 0.01, d, 0x3b3530, { noAo: true });
+      for (let st = 0; st < 3; st++) k.box(cx, 0.002 - st * 0.0005, cz - d / 2 + 0.25 + st * 0.3, w - 0.1, 0.008, 0.26, shadeHex(pal.wood, -0.05 - st * 0.08), { noAo: true });
+      const rail = shadeHex(pal.wood, -0.15);
+      for (const [rx, rz, rw, rd] of [[cx, cz - d / 2, w, 0.05], [cx - w / 2, cz, 0.05, d], [cx + w / 2, cz, 0.05, d]] as const) {
+        k.box(rx, 0.92, rz, rw + 0.04, 0.05, rd + 0.04, rail, { noAo: true });
+        const along = rw > rd ? rw : rd;
+        const nb = Math.max(2, Math.round(along / 0.25));
+        for (let b = 0; b <= nb; b++) {
+          const t = -along / 2 + (along / nb) * b;
+          k.cyl(rx + (rw > rd ? t : 0), 0, rz + (rw > rd ? 0 : t), 0.016, 0.016, 0.92, 0xf1efea, 6);
+        }
+      }
+      for (const [px, pz] of [[cx - w / 2, cz - d / 2], [cx + w / 2, cz - d / 2], [cx - w / 2, cz + d / 2], [cx + w / 2, cz + d / 2]]) k.box(px, 0, pz, 0.09, 1.02, 0.09, rail);
+      x.blocks.push({ x: cx, z: cz, w, d, ry: 0 });
       x.items.push({ kind: "stairs", label: "Go downstairs", x: cx, y: 0.3, z: cz, r: 0.8 });
     }
   }

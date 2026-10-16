@@ -270,6 +270,14 @@ export function levelsOf(t: Tile, plan: CityPlan): PlaceLevel[] {
         }
         break;
       }
+      // A real map's property: a floor for each of its storeys (up to six; a tall block's top
+      // floors are like the ones below), so a duplex has its upstairs and a bungalow doesn't.
+      if (t.building && plan.region && t.building.state === "built") {
+        const n = Math.max(1, Math.min(6, t.building.storeys));
+        R("g", n > 1 ? "Ground floor" : "Living room", "interior", "living", x, 0.08, z - 0.04, 0.25, 0.2);
+        for (let f = 1; f < n; f++) R(`f${f}`, n === 2 ? "Upstairs" : floorLabel(f), "interior", "upstairs", x, 0.08 + f * STOREY + 0.02, z - 0.04, 0.25, 0.2, { weight: 0.8 });
+        break;
+      }
       const dx = (r[1] - 0.5) * 0.1;
       if (t.v === 1) {
         R("g", "Living room", "interior", "living", x + dx - 0.08, 0.08, z - 0.05, 0.25, 0.2);
