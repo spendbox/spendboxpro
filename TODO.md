@@ -131,6 +131,11 @@ moments are built, not only how many there are. In this order:
 - [ ] **New moments every month, and measuring.** 20 to 30 a month (AI helps draft variations, a person
   reviews); track the ones people close without choosing or always answer the same way, and retire or
   rewrite them.
+- [ ] **Choices that don't repeat or give the game away.** Each moment draws its 3 choices from a pool of 6
+  to 8 possible answers, in a random order; the same answer doesn't always turn out the same (it depends
+  on who's asking, what you did before, the time, your reputation), so there's no "always pick the kind
+  one" rule. No colours or styles that hint which answer is best or worst: every choice button looks the
+  same (today kind is green, bold gold and mean red: change that).
 - [ ] **Door setting** in the home card: Open to everyone / Friends walk in (today) / Closed to all. Today the
   door is closed to strangers (they knock), friends walk in, and a home party opens it to all.
 
