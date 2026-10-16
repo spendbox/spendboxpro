@@ -352,6 +352,16 @@ a[href]:active,
   .whot-drop, .whot-deal, .whot-banner, .whot-playable, .whot-bubble { animation: none; }
 }
 
+/* The map search opening out of the place pill (top left) across the top (src/app/play/city-card.tsx). */
+@keyframes search-open {
+  from { clip-path: inset(0.6rem calc(100% - min(16rem, 60vw)) calc(100% - 3rem) 0.6rem round 999px); opacity: 0.6; }
+  to { clip-path: inset(0 0 0 0 round 0 0 1.5rem 1.5rem); opacity: 1; }
+}
+.search-open { animation: search-open 0.32s cubic-bezier(0.2, 0.9, 0.3, 1) both; }
+@keyframes search-dim { from { opacity: 0; } to { opacity: 1; } }
+.search-dim { animation: search-dim 0.25s ease-out both; }
+@media (prefers-reduced-motion: reduce) { .search-open, .search-dim { animation: none; } }
+
 /* The party games (src/app/play/games: Truth or Dare, Impostor). */
 @keyframes party-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 .party-float { animation: party-float 3s ease-in-out infinite; }

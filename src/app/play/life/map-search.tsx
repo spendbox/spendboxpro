@@ -100,6 +100,8 @@ export function MapSearch({
   compact,
   onOpenChange,
   near,
+  full,
+  onClose,
 }: {
   region: RegionMap;
   mine: AssetUnit[];
@@ -116,6 +118,10 @@ export function MapSearch({
   onOpenChange?: (open: boolean) => void;
   /** Where you're looking: "club", "church", "airport"... finds the nearest ones. */
   near?: SearchNear;
+  /** Across the top of the screen: the box as wide as the screen, the results under it (not floating), focused straight away. */
+  full?: boolean;
+  /** Full: the close button (and Escape) closes it. */
+  onClose?: () => void;
 }) {
   const [q, setQ] = useState("");
   // In a card (not the compact button): the kinds of place show straight away.
@@ -217,8 +223,8 @@ export function MapSearch({
 
   function box() {
     return (
-      <div className={`pointer-events-auto relative ${compact ? "w-[min(18rem,calc(100vw-1.5rem))]" : "w-[min(20rem,calc(100vw-1.5rem))]"}`}>
-        <label className="glass flex h-9 items-center gap-2 rounded-full px-3 text-sm">
+      <div className={`pointer-events-auto relative ${full ? "flex min-h-0 w-full flex-col" : compact ? "w-[min(18rem,calc(100vw-1.5rem))]" : "w-[min(20rem,calc(100vw-1.5rem))]"}`}>
+        <label className={full ? "flex h-11 shrink-0 items-center gap-2 rounded-full bg-ink/5 px-3.5 text-[15px]" : "glass flex h-9 items-center gap-2 rounded-full px-3 text-sm"}>
           <Search className="size-4 shrink-0 text-muted" />
           <input
             value={q}
@@ -227,13 +233,16 @@ export function MapSearch({
               setOpen(true);
             }}
             onFocus={() => setOpen(true)}
-            autoFocus={shown}
+            autoFocus={shown || full}
             onKeyDown={(e) => {
               if (e.key === "Enter" && shownHits[0]) {
                 onPick(shownHits[0]);
                 setOpen(false);
               }
-              if (e.key === "Escape") setOpen(false);
+              if (e.key === "Escape") {
+                if (full) onClose?.();
+                else setOpen(false);
+              }
             }}
             placeholder={`Search ${region.region.name}: club, church, a name…`}
             className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted"
@@ -244,7 +253,8 @@ export function MapSearch({
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => {
                 setQ("");
-                setOpen(false);
+                // Across the top: the kinds of place come back (it stays open).
+                setOpen(!!full);
                 if (compact) setShown(false);
               }}
               aria-label={compact && shown ? "Close search" : "Clear"}
@@ -254,7 +264,7 @@ export function MapSearch({
           )}
         </label>
         {open && (
-          <div className="absolute inset-x-0 top-11 z-20 overflow-hidden rounded-2xl bg-panel shadow-xl ring-1 ring-ink/10">
+          <div className={full ? "mt-2 flex min-h-0 flex-col" : "absolute inset-x-0 top-11 z-20 overflow-hidden rounded-2xl bg-panel shadow-xl ring-1 ring-ink/10"}>
             {/* The budget: what you want to spend (a row you can swipe along). */}
             <div className="flex items-center gap-1.5 overflow-x-auto border-b border-ink/5 px-2.5 py-2 [scrollbar-width:none]" onMouseDown={(e) => e.preventDefault()}>
               <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted">Budget</span>
@@ -295,7 +305,7 @@ export function MapSearch({
               </p>
             )}
             {!budgetHits && q.trim().length > 1 && shownHits.length === 0 && kinds.length === 0 && <p className="px-3 py-3 text-sm text-muted">Nothing called that here. Try a kind of place: club, church, court, airport…</p>}
-          <ul className="max-h-[min(20rem,50dvh)] overflow-y-auto">
+          <ul className={full ? "min-h-0 flex-1 overflow-y-auto overscroll-contain" : "max-h-[min(20rem,50dvh)] overflow-y-auto"}>
             {shownHits.map((h) => {
               const Icon = ICON[h.kind];
               return (
