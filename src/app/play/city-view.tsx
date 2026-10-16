@@ -65,6 +65,7 @@ import { createFarCity, MAP_MARGIN } from "./city/far-city";
 import { createKites } from "./city/kites";
 import { buildingParts } from "./city/building-kit";
 import { marketParts } from "./city/market-kit";
+import { museumParts } from "./city/museum-kit";
 import { plotLayout } from "@/lib/city/plots";
 import { CLEAR_GROUND, crossingParts, pieceParts, stationParts } from "./city/spans-kit";
 import { setSceneSnapshot } from "./city/snapshot";
@@ -1197,6 +1198,8 @@ function structureParts(t: Tile, plan: CityPlan, B0: BoxFn, tree0: TreeFn) {
   const st = t.structure!;
   // A market fills its whole site, at any size, with its own stalls.
   if (st.type === "market") return marketParts(t, B0, tree0);
+  // A museum: its own building (never domed: a dome reads as a mosque) in a sculpture garden.
+  if (st.type === "museum") return museumParts(t, B0, tree0);
   // A real landmark bigger than the usual 2 × 2 (a market, a museum, a hotel, a port at their
   // true size): its grounds fill the whole site (paving, lawns, trees along a low fence), and its
   // building stands in the middle, drawn bigger to match.
@@ -1261,15 +1264,6 @@ function structureParts(t: Tile, plan: CityPlan, B0: BoxFn, tree0: TreeFn) {
         B(c + side, 0.09 + H, c, 0.12, 0.9, 0.12, 0xe9ecef, 0, "cone");
       }
       B(c, 0.09 + H * 0.55, c, 0.3, 0.22, 0.28, 0xadb5bd);
-      break;
-    }
-    case "museum": {
-      B(c, 0.09, c, 1.8, 0.15, 1.6, 0xf1ece2);
-      B(c, 0.24, c - 0.1, 1.3, 0.65, 1.0, 0xf8f4ec);
-      B(c, 0.89, c - 0.1, 0.9, 0.6, 0.9, 0x96c7c1, 0, "dome");
-      for (let k = 0; k < 6; k++) B(c - 0.55 + k * 0.22, 0.24, c + 0.5, 0.08, 0.6, 0.08, 0xffffff, 0, "cyl");
-      B(c, 0.84, c + 0.5, 1.3, 0.08, 0.2, 0xf8f4ec);
-      B(c, 0.09, c + 0.78, 1.2, 0.08, 0.2, 0xe9ecef);
       break;
     }
     case "funfair": {

@@ -485,10 +485,16 @@ function structureLevels(t: Tile, type: StructureType, plan: CityPlan): Draft[] 
       R(`f${n}`, `Floor ${n} · Sky lounge`, "interior", "lounge", X + 0.42, 0.09 + n * STOREY, Z, 0.26, 0.26);
       break;
     }
-    case "museum":
-      R("g", "Main gallery", "interior", "gallery", X, 0.24, Z - 0.1, 0.6, 0.45);
-      R("f3", "Rotunda", "interior", "rotunda", X, 0.89, Z - 0.1, 0.3, 0.3, { weight: 0.8 });
+    case "museum": {
+      // Four floors, each its own kind of show (src/app/play/city/interiors.ts gallery): the main
+      // gallery, the sculpture hall, modern art, and the rotunda at the top.
+      const bz = Z - (t.structure?.d ?? 2) * 0.16;
+      R("g", "Main gallery", "interior", "gallery", X, 0.12, bz, 0.6, 0.45);
+      R("f1", "Floor 1 · Sculpture hall", "interior", "gallery", X, 0.12 + STOREY, bz, 0.6, 0.45);
+      R("f2", "Floor 2 · Modern art", "interior", "gallery", X, 0.12 + 2 * STOREY, bz, 0.6, 0.45, { weight: 0.9 });
+      R("f3", "Floor 3 · Rotunda", "interior", "rotunda", X, 0.12 + 3 * STOREY, bz, 0.3, 0.3, { weight: 0.8 });
       break;
+    }
     case "funfair":
       R("o", "Funfair", "outdoor", "funfair", X - 0.25, 0.09, Z + 0.15, 0.1, 0.1);
       break;

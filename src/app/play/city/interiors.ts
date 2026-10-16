@@ -2405,10 +2405,72 @@ function mall(x: Ctx, food: boolean) {
   );
 }
 
+/** Bold colours for museum sculptures and modern art. */
+const BOLD = [0xe03131, 0xfab005, 0x1c63d6, 0xb07a3b, 0x1a1b1e, 0xf8f9fa, 0x2b8a3e, 0xf76707, 0xc2255c];
+
+/**
+ * A big, bold sculpture on the floor at (px, pz), about `s` metres tall: a giant bronze head, a
+ * great ring, stacked turning blocks, a painted totem, a leaning spike, a ball on a cube, crossing
+ * arches or a figure with its arms up.
+ */
+function boldSculpture(x: Ctx, px: number, pz: number, s: number) {
+  const { k, rnd } = x;
+  const kind = Math.floor(rnd() * 8);
+  const c1 = pickOf(rnd, BOLD);
+  const c2 = pickOf(rnd, BOLD);
+  const turn = rnd() * Math.PI;
+  k.at(px, 0, pz, turn, () => {
+    k.box(0, 0, 0, s * 0.5, 0.18, s * 0.5, 0xf1efea);
+    const y = 0.18;
+    switch (kind) {
+      case 0:
+        k.cyl(0, y, 0, s * 0.1, s * 0.12, s * 0.25, 0x8a5a2b, 12);
+        k.ball(0, y + s * 0.5, 0, s * 0.26, 0xb07a3b, { sx: 0.85, sy: 1.15, w: 14, h: 12 });
+        k.box(0, y + s * 0.5, s * 0.22, s * 0.08, s * 0.1, s * 0.06, 0x8a5a2b);
+        break;
+      case 1:
+        k.box(0, y, 0, s * 0.5, s * 0.1, s * 0.16, c2);
+        k.ring(0, y + s * 0.5, 0, s * 0.4, s * 0.06, c1);
+        break;
+      case 2:
+        for (let b = 0; b < 4; b++) k.box(0, y + b * s * 0.22, 0, s * (0.36 - b * 0.05), s * 0.22, s * (0.36 - b * 0.05), b % 2 ? c1 : c2, { ry: b * 0.4 });
+        break;
+      case 3:
+        for (let b = 0; b < 5; b++) k.cyl(0, y + b * s * 0.18, 0, s * 0.12, s * 0.12, s * 0.18, [c1, c2, 0xfab005, 0x1a1b1e, 0xf8f9fa][b], 12);
+        k.cyl(0, y + s * 0.9, 0, 0, s * 0.18, s * 0.25, c1, 12);
+        break;
+      case 4:
+        k.cyl(0, y, 0, 0, s * 0.16, s * 1.1, c1, 10, { rz: 0.15 });
+        break;
+      case 5:
+        k.box(0, y, 0, s * 0.36, s * 0.36, s * 0.36, c2);
+        k.ball(0, y + s * 0.36 + s * 0.22, 0, s * 0.22, c1, { w: 14, h: 12 });
+        break;
+      case 6:
+        k.ring(0, y, 0, s * 0.45, s * 0.05, c1, { arc: Math.PI });
+        k.ring(0, y, 0, s * 0.45, s * 0.05, c2, { arc: Math.PI, ry: Math.PI / 2 });
+        break;
+      default:
+        k.box(0, y, 0, s * 0.18, s * 0.55, s * 0.12, c1);
+        k.ball(0, y + s * 0.65, 0, s * 0.1, c1, { w: 10, h: 8 });
+        for (const side of [-1, 1]) k.box(side * s * 0.13, y + s * 0.4, 0, s * 0.05, s * 0.4, s * 0.05, c1, { rz: side * 0.5 });
+    }
+    k.shadow(0, 0, s * 0.7, s * 0.7, 0.3);
+  });
+}
+
+/**
+ * A museum's floors, each its own show: the main gallery (paintings round the walls, or in some
+ * museums a wall of masks and textiles), the sculpture hall (a room full of big bold sculptures),
+ * modern art (huge bright canvases and an installation hanging from the ceiling), and the rotunda
+ * (a giant piece in the middle).
+ */
 function gallery(x: Ctx, rotunda: boolean) {
   const { room, pal, rnd } = x;
   const W = room.w;
   const D = room.d;
+  if (!rotunda && x.info.floor === 1) return sculptureHall(x);
+  if (!rotunda && x.info.floor === 2) return modernArt(x);
   if (rotunda) {
     // Columns round a central sculpture.
     for (let c = 0; c < 10; c++) {
@@ -2419,7 +2481,7 @@ function gallery(x: Ctx, rotunda: boolean) {
       x.k.box(Math.cos(a) * r, 0, Math.sin(a) * r, 0.55, 0.12, 0.55, 0xe8e2d6);
     }
     x.k.cyl(0, 0, 0, 1.1, 1.2, 0.25, 0xe8e2d6, 28);
-    plinth(x, 0, 0, 0xf3efe6, pickOf(rnd, pal.art));
+    boldSculpture(x, 0, 0, Math.min(room.h - 1.2, 3.2));
     for (let b = 0; b < 4; b++) {
       const a = (b / 4) * Math.PI * 2 + Math.PI / 4;
       bench(x, Math.cos(a) * 2.6, Math.sin(a) * 2.6, -a + Math.PI / 2 + Math.PI, 1.6, pal.wood, pal.wood);
@@ -2448,9 +2510,20 @@ function gallery(x: Ctx, rotunda: boolean) {
     }
     atWall(x, s, 0, () => x.k.box(0, room.h - 0.25, 1.0, wallLen(room, s) - 0.4, 0.03, 0.05, 0x1f1f1f, { noAo: true }));
   }
+  // In some museums, a wall of carved masks over a long display case.
+  if (rnd() < 0.5) {
+    atWall(x, 0, 0, () => {
+      for (let m = 0; m < 7; m++) {
+        const mx = -3 + m;
+        x.k.ball(mx, 1.9 + (m % 2) * 0.35, 0.08, 0.2, pickOf(rnd, [0x5c3d2e, 0x8a5a2b, 0x1a1b1e, 0xb07a3b]), { sx: 0.8, sy: 1.25, sz: 0.4, w: 10, h: 8 });
+      }
+      x.k.box(0, 0, 0.4, 6.4, 0.9, 0.6, 0x2b2b2b);
+      x.k.box(0, 0.9, 0.4, 6.4, 0.5, 0.6, 0xd8e6ee, { layer: "glass" });
+    });
+  }
   // Sculptures and benches in the middle.
-  plinth(x, -W / 4, 0, 0xf6f4f0, pickOf(rnd, pal.art));
-  plinth(x, W / 4, 0.3, 0xf6f4f0, pickOf(rnd, pal.art));
+  boldSculpture(x, -W / 4, 0, 1.6);
+  boldSculpture(x, W / 4, 0.3, 1.4);
   bench(x, 0, 0.4, 0, 2.2, pal.wood, pal.wood);
   bench(x, 0, -1.2, Math.PI, 2.2, pal.wood, pal.wood);
   item(x, "photo", "Selfie with the art", -W / 4, 0, 1.1, 0.8);
@@ -2459,6 +2532,68 @@ function gallery(x: Ctx, rotunda: boolean) {
     { x: -W / 2 + 1.2, z: -D / 2 + 1.4, yaw: yawTo(-W / 2 + 1.2, -D / 2 + 1.4, W / 4, D / 2), pitch: -0.05 },
     { x: W / 2 - 1.2, z: D / 2 - 1.2, yaw: yawTo(W / 2 - 1.2, D / 2 - 1.2, -W / 3, -D / 2), pitch: -0.04 },
     { x: 0, z: -D / 2 + 1.0, yaw: Math.PI, pitch: -0.02 },
+  );
+}
+
+/** The sculpture hall: rows of big, bold sculptures, room to walk between them, benches. */
+function sculptureHall(x: Ctx) {
+  const { room, pal } = x;
+  const W = room.w;
+  const D = room.d;
+  // Rows of them across the room (the end you come in at, -z, kept clear to look from).
+  const cols = Math.max(3, Math.floor((W - 2) / 3.4));
+  const rows = Math.max(2, Math.floor((D - 4) / 3.2));
+  for (let i = 0; i < cols; i++)
+    for (let j = 0; j < rows; j++) boldSculpture(x, -W / 2 + 1.8 + (i * (W - 3.6)) / (cols - 1), -D / 2 + 3.4 + (j * (D - 5.2)) / Math.max(1, rows - 1), 2.2 + x.rnd() * 1.4);
+  bench(x, 0, -D / 2 + 1.6, 0, 2.4, pal.wood, pal.wood);
+  wallSign(x, 2, 0, room.h - 0.9, "SCULPTURE HALL", 0x1a1b1e, 0xfab005, 3.6, 0.45, false);
+  linearLights(x, 3, "x", 0xffffff);
+  item(x, "photo", "Selfie with the sculptures", 0, 0, -D / 2 + 2.2, 0.8);
+  for (let s = 0; s < 6; s++) x.spots.push({ x: -W / 2 + 1 + x.rnd() * (W - 2), z: -D / 2 + 1 + x.rnd() * (D - 2), ry: x.rnd() * 6, pose: "stand", y: 0 });
+  x.views.push(
+    { x: 0, z: -D / 2 + 0.8, yaw: Math.PI, pitch: 0.02 },
+    { x: W / 2 - 1.0, z: -D / 2 + 1.0, yaw: yawTo(W / 2 - 1.0, -D / 2 + 1.0, -W / 3, D / 2), pitch: 0.02 },
+  );
+}
+
+/** Modern art: huge bright canvases on the walls, a mobile hanging from the ceiling, a neon line. */
+function modernArt(x: Ctx) {
+  const { k, room, pal, rnd } = x;
+  const W = room.w;
+  const D = room.d;
+  for (const s of [1, 2, 3]) {
+    const L = wallLen(room, s);
+    const n = Math.max(1, Math.floor(L / 5));
+    for (let p = 0; p < n; p++) {
+      const u = -L / 2 + (L / n) * (p + 0.5);
+      // A big canvas of colour blocks.
+      atWall(x, s, u, () => {
+        const w = 2.6 + rnd() * 1.0;
+        const h = 1.8 + rnd() * 0.8;
+        k.box(0, 0.9, 0.03, w, h, 0.05, 0xf8f9fa, { noAo: true });
+        for (let b = 0; b < 5; b++) k.box(-w / 2 + rnd() * w * 0.7 + 0.3, 0.95 + rnd() * h * 0.7, 0.06, 0.4 + rnd() * 0.9, 0.3 + rnd() * 0.7, 0.01, pickOf(rnd, BOLD), { noAo: true });
+      });
+    }
+  }
+  // The mobile: shapes on wires, high up.
+  for (let m = 0; m < 9; m++) {
+    const mx = (rnd() - 0.5) * (W - 3);
+    const mz = (rnd() - 0.5) * (D - 3);
+    const my = room.h - 1.2 - rnd() * 1.2;
+    k.cyl(mx, my, mz, 0.005, 0.005, room.h - my, 0x2b2b2b, 4, { noAo: true });
+    k.ball(mx, my, mz, 0.18 + rnd() * 0.2, pickOf(rnd, BOLD), { w: 10, h: 8 });
+  }
+  // A neon line along the back wall.
+  atWall(x, 0, 0, () => k.box(0, room.h - 0.6, 0.04, W - 2, 0.05, 0.03, pickOf(rnd, [0xff4fd8, 0x22d3ee, 0xa3e635]), { layer: "glow", noAo: true }));
+  boldSculpture(x, 0, 0.6, 2.6);
+  bench(x, -W / 4, -D / 4, Math.PI, 2.0, pal.wood, pal.wood);
+  bench(x, W / 4, -D / 4, Math.PI, 2.0, pal.wood, pal.wood);
+  wallSign(x, 2, 0, room.h - 0.9, "MODERN ART", 0xf8f9fa, 0xe03131, 3.0, 0.45, false);
+  item(x, "photo", "Selfie with the art", 0, 0, 1.6, 0.8);
+  for (let s = 0; s < 5; s++) x.spots.push({ x: -W / 2 + 1 + rnd() * (W - 2), z: -D / 2 + 1.5 + rnd() * (D - 3), ry: rnd() * 6, pose: "stand", y: 0 });
+  x.views.push(
+    { x: 0, z: -D / 2 + 0.8, yaw: Math.PI, pitch: 0.04 },
+    { x: -W / 2 + 1.2, z: -D / 2 + 1.2, yaw: yawTo(-W / 2 + 1.2, -D / 2 + 1.2, W / 3, D / 2), pitch: 0.02 },
   );
 }
 
