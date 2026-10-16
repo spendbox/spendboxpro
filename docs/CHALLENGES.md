@@ -14,7 +14,8 @@ down a challenge, a minute to gather players, a game floating over the city, a p
    you can play now come first; the rest carry a "Soon" badge and can't be started yet.
    Whot! and Ludo play now. Whot! opens at its full-screen table (docs/GAME_TABLES.md), where
    you can also challenge one person directly from their card.
-3. **Pick a stake**: what each player puts into the pool. Tap a quick pick (₦1,000, ₦5,000,
+3. **Pick a stake (optional)**: what each player puts into the pool. "No stake" is the first pick
+   and plays just for fun, with nothing in the pool. Or tap a quick pick (₦1,000, ₦5,000,
    ₦20,000, ₦50,000) or type any amount from ₦1,000 to ₦1,000,000, in the player's own
    currency (converted to mint). The card shows "You have X" (Fun money and wallet) and the
    button stays off when the stake (plus any fee) is more than you have. Everyone who joins

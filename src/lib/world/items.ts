@@ -131,7 +131,37 @@ export const SHOP: ItemKind[] = [
   K("car_urus", "Lamborghini Urus", "car", 550_000_000, { mind: 0.6, rep: 42 }, { speed: 22, fuelKm: 110 }),
   K("car_cullinan", "Rolls-Royce Cullinan", "car", 950_000_000, { mind: 0.6, rep: 50 }, { speed: 21, fuelKm: 120 }),
   K("patek_grandmaster", "Patek Philippe Grandmaster Chime", "jewellery", 1_500_000_000, { mind: 0.4, rep: 60 }),
+
+  // ---- The market's own goods (sold at its stalls, see MARKET_GOODS).
+  K("rice_bag", "Bag of rice (50 kg)", "home", 85_000, { body: 0.3 }),
+  K("palm_oil", "Keg of palm oil (25 L)", "home", 60_000, { body: 0.2 }),
+  K("yam_tubers", "Yam tubers (ten)", "home", 45_000, { body: 0.25 }),
+  K("tomato_basket", "Basket of tomatoes and pepper", "home", 30_000, { body: 0.2 }),
+  K("stockfish", "Stockfish and crayfish", "home", 25_000, { body: 0.15, mind: 0.05 }),
+  K("pot_set", "Set of cooking pots", "home", 35_000, { body: 0.1 }),
+  K("mortar", "Mortar and pestle", "home", 20_000, { body: 0.1, mind: 0.05 }),
+  K("lace_fabric", "Lace fabric (5 yards)", "clothing", 80_000, { mind: 0.15, rep: 0.8 }),
+  K("okrika", "Okrika jeans (second-hand)", "clothing", 6_000, { mind: 0.05 }),
+  K("phone_charger", "Phone charger", "gadget", 8_000, { mind: 0.05 }),
+
+  // ---- Fine art, sold at the museums (see MUSEUM_ART): Nigeria's modern masters, the dearest
+  // things in the city after the watches and cars. Art gains value over time.
+  K("art_onabolu", "Aina Onabolu portrait", "art", 150_000_000, { mind: 0.3, rep: 22 }),
+  K("art_okeke", "Uche Okeke ink drawing", "art", 90_000_000, { mind: 0.3, rep: 17 }),
+  K("art_twins", "Twins Seven-Seven painting", "art", 120_000_000, { mind: 0.35, rep: 20 }),
+  K("art_emokpae", "Erhabor Emokpae painting", "art", 180_000_000, { mind: 0.35, rep: 25 }),
+  K("art_grillo", "Yusuf Grillo painting", "art", 200_000_000, { mind: 0.4, rep: 27 }),
+  K("art_ife_cast", "Ife bronze head (museum cast)", "art", 400_000_000, { mind: 0.4, rep: 36 }),
+  K("art_enwonwu_tutu", "Ben Enwonwu \"Tutu\" study", "art", 1_200_000_000, { mind: 0.5, rep: 55 }),
 ];
+
+/** What a market's stalls sell: food, fabric, pots and the cheap everyday things. */
+export const MARKET_GOODS = [
+  "rice_bag", "palm_oil", "yam_tubers", "tomato_basket", "stockfish", "pot_set", "mortar", "lace_fabric", "okrika", "phone_charger",
+  "ankara", "gele", "aso_oke", "beads", "adire", "talking_drum", "fan", "blender", "cookbook", "football", "sunglasses", "earbuds",
+];
+/** What a museum's shop sells: art, from the gift-shop pieces up to the masters. */
+export const MUSEUM_ART = ["talking_drum", "adire", "painting", "sculpture", "terracotta", "art_okeke", "art_twins", "art_onabolu", "art_emokpae", "art_grillo", "enwonwu_painting", "art_ife_cast", "art_enwonwu_tutu"];
 
 /** Luxury things (a ₦10m price and up): shown together in the shops, dearest last. */
 export const LUXURY_FROM = 10_000_000;

@@ -17,7 +17,8 @@ careers, other players in your story): `docs/LIFE_WHEEL.md`.
   restaurant, a plank challenge at the gym, the offering basket at church).
 - Never while a card or a full-screen tool is open, while you're taking a photo or on a ride, or
   while the game isn't on screen. It waits and tries again.
-- At least 10 minutes apart and at most 40 a day, street and road together (the server keeps to
+- Street moments at least 10 minutes after any moment; road moments at least 5 minutes after the
+  last road moment (game-db/119). At most 40 a day, street and road together (the server keeps to
   this). A big one (`size: "big"`) at most every 3 days.
 - The cross (or **Walk away**) closes one without choosing. Nothing happens.
 

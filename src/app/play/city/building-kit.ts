@@ -12,6 +12,7 @@
 
 import type { Palette, Tile } from "@/lib/city/layout";
 import { STOREY, type Building } from "@/lib/world/buildings";
+import { LOW_STOREY, ROOF_TINTS, WALL_TINTS, type PlotLayout } from "@/lib/city/plots";
 
 type BoxFn = (dx: number, y: number, dz: number, sx: number, sy: number, sz: number, color: number, ry?: number, mesh?: string, tilt?: number) => void;
 type AddFn = (mesh: string, p: { x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number; color: number; tilt?: number }) => void;
@@ -37,22 +38,34 @@ const pickOf = <T,>(list: readonly T[], v: number) => list[Math.floor(v * list.l
 /** Draw a storey band every this many storeys (1 up to 24 storeys; fewer, so about 24 bands, above). */
 const bandEvery = (storeys: number) => Math.max(1, Math.ceil(storeys / 24));
 
-export function buildingParts(t: Tile, b: Building, pal: Palette, B0: BoxFn, add0: AddFn, tree0: TreeFn) {
+/**
+ * Draw a property. With `plots` (src/lib/city/plots), it's plot 0 of a shared tile: drawn smaller
+ * at the front, with the neighbours' little houses packed round it.
+ */
+export function buildingParts(t: Tile, b: Building, pal: Palette, B0: BoxFn, add0: AddFn, tree0: TreeFn, plots?: PlotLayout | null) {
   const { x, z } = t;
   const [l0, l1, l2, l3, l4] = b.look;
   // Everything below is drawn facing +z, then turned to face the street.
   const turn = (b.face * Math.PI) / 2;
   const cos = Math.cos(turn);
   const sin = Math.sin(turn);
-  const rot = (dx: number, dz: number): [number, number] => [dx * cos + dz * sin, -dx * sin + dz * cos];
+  const turnTo = (dx: number, dz: number): [number, number] => [dx * cos + dz * sin, -dx * sin + dz * cos];
+  // On a shared tile the property is drawn in its plot: smaller across (the same height), moved to the front.
+  const s = plots?.main.s ?? 1;
+  const v = plots?.main.v ?? 1;
+  const up = (y: number) => BASE + (y - BASE) * v;
+  const ox = plots?.main.x ?? 0;
+  const oz = plots?.main.z ?? 0;
+  const rot = (dx: number, dz: number): [number, number] => turnTo(ox + dx * s, oz + dz * s);
   const B: BoxFn = (dx, y, dz, sx, sy, sz, color, ry = 0, mesh = "building", tilt = 0) => {
     const [rx, rz] = rot(dx, dz);
-    B0(rx, y, rz, sx, sy, sz, color, ry + turn, mesh, tilt);
+    B0(rx, up(y), rz, sx * s, sy * v, sz * s, color, ry + turn, mesh, tilt);
   };
   const tree = (dx: number, dz: number, size: number, v: number) => {
     const [rx, rz] = rot(dx, dz);
-    tree0(rx, rz, size, v);
+    tree0(rx, rz, size * (plots ? 0.8 : 1), v);
   };
+  if (plots) neighbours(plots, x, z, turn, turnTo, B0, add0, tree0);
   const wall = pick(pal.walls, l0);
   const roofColor = pick(pal.roofs, l1);
   const office = pick(pal.offices, l2);
@@ -62,7 +75,7 @@ export function buildingParts(t: Tile, b: Building, pal: Palette, B0: BoxFn, add
   const roof = (dx: number, y: number, dz: number, w: number, d: number, style: number, color = roofColor) => {
     const [rx, rz] = rot(dx, dz);
     if (style < 0.5) {
-      add0("roof", { x: x + rx, y, z: z + rz, sx: (w + 0.08) / Math.SQRT2, sy: 0.22, sz: (d + 0.08) / Math.SQRT2, ry: turn, color });
+      add0("roof", { x: x + rx, y: up(y), z: z + rz, sx: (w * s + 0.08 * s) / Math.SQRT2, sy: 0.22 * v, sz: (d * s + 0.08 * s) / Math.SQRT2, ry: turn, color });
     } else if (style < 0.8) {
       // Gabled: two tilted slabs meeting at a ridge.
       // Each slab turned so its length runs front to back, then tilted up towards the ridge.
@@ -91,6 +104,79 @@ export function buildingParts(t: Tile, b: Building, pal: Palette, B0: BoxFn, add
   const tanks = (dx: number, y: number, dz: number, n: number) => {
     for (let k = 0; k < n; k++) B(dx + (k - (n - 1) / 2) * 0.08, y, dz, 0.055, 0.065, 0.055, TANK, 0, "cyl");
   };
+  /**
+   * The way in at the foot of a tower or office block, its front at z = fz, `w` wide: one of eight
+   * designs (a glass canopy and revolving door, a grand portico, an angled canopy over a glass box,
+   * a two-storey glass atrium, a stone arch with a fountain, an awning over a red carpet, a timber
+   * pergola, or a pool with a bridge to the door), picked by the building's own numbers, in its
+   * own accent colours.
+   */
+  const entrance = (fz: number, w: number, glass: number) => {
+    const design = Math.floor(((l0 * 7.3 + l2 * 3.1 + l4) % 1) * 8);
+    const metal = pick([0x343a40, 0xadb5bd, 0xc9a227, 0x1a1b1e], l1);
+    const stone = pick([0xece4d4, 0xd8d2c4, 0x868e96, 0xf8f9fa], l3);
+    const door = Math.min(0.28, w * 0.4);
+    switch (design) {
+      case 0: // a glass canopy on steel posts, a revolving door
+        B(0, BASE, fz + 0.005, door, STOREY * 0.75, 0.02, glass, 0, "glass");
+        B(0, BASE, fz + 0.04, 0.12, STOREY * 0.7, 0.08, 0xd0ebff, 0, "glass");
+        B(0, BASE + STOREY * 0.75, fz + 0.04, 0.13, 0.02, 0.09, metal, 0, "cyl");
+        B(0, BASE + STOREY * 0.9, fz + 0.1, door + 0.12, 0.012, 0.2, 0xd0ebff, 0, "glass");
+        for (const sx of [-1, 1]) B(sx * (door / 2 + 0.05), BASE, fz + 0.18, 0.012, STOREY * 0.9, 0.012, metal);
+        break;
+      case 1: // a grand portico: tall columns, a slab roof, flagpoles
+        for (let k = 0; k < 4; k++) B(-door + (k * door * 2) / 3, BASE, fz + 0.12, 0.035, STOREY * 1.6, 0.035, stone, 0, "cyl");
+        B(0, BASE + STOREY * 1.6, fz + 0.08, door * 2 + 0.1, 0.04, 0.2, stone);
+        B(0, BASE, fz + 0.005, door, STOREY * 0.8, 0.02, glass, 0, "glass");
+        for (const sx of [-1, 1]) {
+          B(sx * (door + 0.12), BASE, fz + 0.24, 0.008, STOREY * 2, 0.008, 0xdee2e6);
+          B(sx * (door + 0.12) + 0.03, BASE + STOREY * 1.8, fz + 0.24, 0.06, 0.035, 0.003, sx < 0 ? 0x2b8a3e : pick(SIGNS, l3), 0, "paint");
+        }
+        B(0, BASE, fz + 0.16, door * 2 + 0.06, 0.012, 0.18, stone);
+        break;
+      case 2: // an angled canopy over a glass box porch, planters either side
+        B(0, BASE, fz + 0.06, door + 0.04, STOREY * 0.8, 0.12, glass, 0, "glass");
+        B(0, BASE + STOREY * 1.0, fz + 0.12, door + 0.22, 0.02, 0.3, pick(SIGNS, l2), 0, "building", 0.12);
+        for (const sx of [-1, 1]) {
+          B(sx * (door / 2 + 0.12), BASE, fz + 0.12, 0.08, 0.05, 0.08, 0x8d6e63);
+          B(sx * (door / 2 + 0.12), BASE + 0.05, fz + 0.12, 0.07, 0.06, 0.07, 0x5f9e6a, 0, "cone");
+        }
+        break;
+      case 3: // a two-storey glass atrium standing out from the front, with a frame
+        B(0, BASE, fz + 0.06, door + 0.16, STOREY * 2, 0.12, glass, 0, "curtain");
+        B(0, BASE + STOREY * 2, fz + 0.06, door + 0.2, 0.02, 0.14, metal);
+        for (const sx of [-1, 1]) B(sx * (door / 2 + 0.09), BASE, fz + 0.12, 0.015, STOREY * 2, 0.015, metal);
+        B(0, BASE + STOREY, fz + 0.125, door + 0.16, 0.01, 0.005, metal);
+        break;
+      case 4: // a stone arch, steps, a round fountain in front
+        B(0, BASE, fz + 0.02, door + 0.1, STOREY * 1.1, 0.04, stone);
+        B(0, BASE, fz + 0.045, door * 0.7, STOREY * 0.8, 0.01, glass, 0, "glass");
+        B(0, BASE + STOREY * 0.8, fz + 0.05, door * 1.6, door * 1.6, door * 1.6, stone, 0, "arch");
+        for (let k = 0; k < 2; k++) B(0, BASE + k * 0.012, fz + 0.1 - k * 0.02, door + 0.12 - k * 0.04, 0.012, 0.08, stone);
+        B(0, BASE, fz + 0.3, 0.18, 0.03, 0.18, stone, 0, "cyl");
+        B(0, BASE + 0.03, fz + 0.3, 0.15, 0.005, 0.15, 0x74c0fc, 0, "disc");
+        break;
+      case 5: // an awning over a red carpet, gold posts and rope, a guard's booth
+        B(0, BASE, fz + 0.005, door, STOREY * 0.8, 0.02, glass, 0, "glass");
+        B(0, BASE + STOREY * 0.85, fz + 0.14, door + 0.06, 0.03, 0.28, 0x1a1b1e);
+        B(0, BASE + 0.002, fz + 0.18, door * 0.6, 0.003, 0.34, 0xc92a2a, 0, "ground");
+        for (const sx of [-1, 1]) for (const z of [0.1, 0.3]) B(sx * door * 0.36, BASE, fz + z, 0.012, 0.06, 0.012, 0xc9a227, 0, "cyl");
+        B(door / 2 + 0.16, BASE, fz + 0.14, 0.1, 0.14, 0.1, 0x495057);
+        break;
+      case 6: // a timber pergola, bollards
+        for (let k = 0; k < 6; k++) B(-door / 2 - 0.05 + (k * (door + 0.1)) / 5, BASE + STOREY * 0.9, fz + 0.16, 0.012, 0.012, 0.3, 0x8a5a3c);
+        for (const sx of [-1, 1]) B(sx * (door / 2 + 0.05), BASE, fz + 0.28, 0.02, STOREY * 0.9, 0.02, 0x8a5a3c);
+        B(0, BASE, fz + 0.005, door, STOREY * 0.8, 0.02, glass, 0, "glass");
+        for (let k = 0; k < 4; k++) B(-door / 2 + (k * door) / 3, BASE, fz + 0.38, 0.015, 0.035, 0.015, 0x495057, 0, "cyl");
+        break;
+      default: // a long pool with a little bridge to the door, a sign totem
+        B(0, BASE, fz + 0.005, door, STOREY * 0.8, 0.02, glass, 0, "glass");
+        B(0, BASE + 0.001, fz + 0.2, door * 2 + 0.1, 0.004, 0.3, 0x4dabf7, 0, "ground");
+        B(0, BASE + 0.004, fz + 0.2, door * 0.5, 0.01, 0.32, stone);
+        B(-door - 0.1, BASE, fz + 0.32, 0.04, 0.22, 0.02, pick(SIGNS, l1));
+        break;
+    }
+  };
   /** A parked car on the forecourt. */
   const car = (dx: number, dz: number, v: number) => {
     const c = pick(CARS, v);
@@ -101,6 +187,13 @@ export function buildingParts(t: Tile, b: Building, pal: Palette, B0: BoxFn, add
   const compound = (gate = 0x495057) => {
     // Estate houses share the estate's wall instead (drawn at the end).
     if (b.estate) return;
+    // On a shared tile: just the front wall and its gate (the neighbours' houses close the sides).
+    if (plots) {
+      B(-0.27, BASE, 0.45, 0.38, 0.12, 0.03, WALL_FENCE);
+      B(0.27, BASE, 0.45, 0.38, 0.12, 0.03, WALL_FENCE);
+      B(0, BASE, 0.45, 0.16, 0.11, 0.025, gate);
+      return;
+    }
     B(0, BASE, -0.45, 0.92, 0.12, 0.03, WALL_FENCE);
     B(-0.45, BASE, 0, 0.03, 0.12, 0.92, WALL_FENCE);
     B(0.45, BASE, 0, 0.03, 0.12, 0.92, WALL_FENCE);
@@ -281,6 +374,7 @@ export function buildingParts(t: Tile, b: Building, pal: Palette, B0: BoxFn, add
         B(0, BASE + lower * STOREY, 0.22, w, 0.02, 0.15, 0x8ce99a, 0, "ground");
       }
       tanks(0.18, BASE + h, 0.18, 2);
+      entrance(w / 2, w, 0x4c6e91);
       if (l4 > 0.6) B(-0.3, BASE, 0.35, 0.2, 0.04, 0.12, 0x74c0fc, 0, "glass");
       break;
     }
@@ -327,11 +421,13 @@ export function buildingParts(t: Tile, b: Building, pal: Palette, B0: BoxFn, add
       if (l3 < 0.5) {
         B(0, BASE, 0, w, h, 0.6, office);
         windows(0, 0, w, 0.6, BASE, b.storeys, WINDOW);
+        entrance(0.3, w, pick(GLASS, l1));
       } else {
         // A glass front on a solid block.
         B(0, BASE, -0.05, w, h, 0.5, office);
         B(0, BASE, 0.21, w * 0.9, h, 0.03, pick(GLASS, l1), 0, "curtain");
         windows(0, -0.05, w, 0.5, BASE, b.storeys, WINDOW);
+        entrance(0.225, w, pick(GLASS, l2));
       }
       B(-w * 0.2, BASE + h, 0, 0.18, 0.1, 0.18, 0xced4da);
       if (l4 > 0.5) B(w * 0.2, BASE + h, 0.05, 0.2, 0.12, 0.03, pick(SIGNS, l2));
@@ -363,8 +459,9 @@ export function buildingParts(t: Tile, b: Building, pal: Palette, B0: BoxFn, add
       const top = style >= 0.7 ? h : h * 0.78;
       for (let y = STOREY * 0.4; y < top - STOREY * 0.3; y += STOREY * 2) B(0, BASE + y, 0, w + 0.01, STOREY * 0.28, deep + 0.01, WINDOW, 0, "glass");
       for (let y = 1.2; y < h * 0.78; y += 1.2) B(0, BASE + y, 0, w + 0.015, 0.03, deep + 0.015, 0xe9ecef);
-      // A podium of shops at the foot.
+      // A podium of shops at the foot, or the tower's own way in.
       if (l4 > 0.4) B(0, BASE, 0.3, w + 0.1, STOREY, 0.2, office);
+      else entrance(w * (style >= 0.7 ? 0.35 : 0.5), w, color);
       break;
     }
     case "warehouse": {
@@ -403,5 +500,44 @@ export function buildingParts(t: Tile, b: Building, pal: Palette, B0: BoxFn, add
   if (b.estate) {
     estateWall();
     B(0, BASE, 0.38, 0.6, 0.004, 0.12, 0x9fd88f, 0, "ground");
+  }
+}
+
+/**
+ * The little houses round a property on a shared tile (src/lib/city/plots): a block for the walls,
+ * a roof (hipped, gabled or flat with a black water tank), a band of windows on taller ones; or a
+ * yard with a tree. Two or three of the city's shared pieces each, so a tile of them costs little.
+ */
+function neighbours(plots: PlotLayout, x: number, z: number, turn: number, turnTo: (dx: number, dz: number) => [number, number], B0: BoxFn, add0: AddFn, tree0: TreeFn) {
+  for (const f of plots.fillers) {
+    const [rx, rz] = turnTo(f.x, f.z);
+    const ry = f.ry + turn;
+    if (f.yard) {
+      B0(rx, BASE, rz, f.w, 0.004, f.d, 0xc8b48a, ry, "ground");
+      tree0(rx, rz, 0.32 + f.tint * 0.2, f.wall);
+      continue;
+    }
+    const storey = STOREY * LOW_STOREY;
+    const h = f.storeys * storey;
+    B0(rx, BASE, rz, f.w, h, f.d, pick(WALL_TINTS, f.wall), ry);
+    if (f.storeys > 1) B0(rx, BASE + storey * 1.35, rz, f.w + 0.008, storey * 0.3, f.d + 0.008, WINDOW, ry, "glass");
+    const top = BASE + h;
+    const color = pick(ROOF_TINTS, f.tint);
+    if (f.roof === 0) {
+      add0("roof", { x: x + rx, y: top, z: z + rz, sx: (f.w + 0.05) / Math.SQRT2, sy: 0.04 + Math.min(f.w, f.d) * 0.3, sz: (f.d + 0.05) / Math.SQRT2, ry, color });
+    } else if (f.roof === 1) {
+      // Gabled: two sheets meeting at a ridge along the longer side.
+      const long = f.w >= f.d;
+      const span = long ? f.d : f.w;
+      for (const side of [-1, 1]) {
+        const [sx, sz] = long ? [0, side * (span / 4)] : [side * (span / 4), 0];
+        const c = Math.cos(ry);
+        const sn = Math.sin(ry);
+        B0(rx + sx * c + sz * sn, top + 0.03, rz - sx * sn + sz * c, span / 2 + 0.04, 0.02, (long ? f.w : f.d) + 0.04, color, ry + (long ? Math.PI / 2 : 0), "building", side * 0.45);
+      }
+    } else {
+      B0(rx, top, rz, f.w + 0.012, 0.03, f.d + 0.012, 0xd5d0c6, ry);
+      if (f.tint > 0.4) B0(rx + f.w * 0.2, top + 0.03, rz, 0.045, 0.055, 0.045, TANK, 0, "cyl");
+    }
   }
 }

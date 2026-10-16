@@ -25,7 +25,7 @@ import type { NearRoad, SpotWords } from "../events/events";
 import { areaK } from "@/lib/world/events";
 import { around, cachedThings, loadThings, sharedPlayerNews } from "./things-cache";
 import { isHere, whileHere } from "../activity";
-import type { ThingsTab } from "./things-sheet";
+import type { Stall, ThingsTab } from "./things-sheet";
 import { JailBanner } from "../people/street-dating";
 import { cityNews, playerStory, type NewsItem } from "@/lib/world/news";
 import { playSfx } from "../sound";
@@ -367,6 +367,8 @@ export function useWorldLife({
   const [listings, setListings] = useState<Listing[] | null>(null);
   /** Things (items, shops, cars, market, craft) open on a tab, and the news. */
   const [things, setThings] = useState<ThingsTab | null>(null);
+  /** The shop opened at a market's stalls or a museum (only what they sell), or the city's shops. */
+  const [stall, setStall] = useState<Stall | undefined>(undefined);
   const [newsOpen, setNewsOpen] = useState(false);
   /** Your reputation explained, and what's coming soon. */
   const [repOpen, setRepOpen] = useState(false);
@@ -1620,6 +1622,7 @@ export function useWorldLife({
       {things && (
         <ThingsSheet
           tab={things}
+          stall={stall}
           prices={region.region.prices}
           coins={coins}
           units={assets?.units ?? []}
@@ -1932,7 +1935,10 @@ export function useWorldLife({
     fly(p.x, p.z);
     setPlace(workplaceById(planOf(region), p.id) ?? { id: p.id, name: p.name, x: Math.round(p.x), z: Math.round(p.z), jobs: [] });
   };
-  return { explore, describeSpot, roadsNear, openExplorePlace, rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab) => setThings(tab), openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, newsScene, adOpen, search: region ? { region, mine: assets?.units ?? [], owned: shown, businesses, coins, homes: () => homesFor(region), onPick: (h: SearchHit) => fly(h.x, h.z), near: searchNear } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openPassport: () => setPassportOpen(true), openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit, mySpot: whereAmI(), homeSpot, goHome, nameHome, homeBuilding: homeUnit ? homeUnit.split("/")[0] : null, openPlanner: () => setPlanning(true), openBuilder: () => setBuilding(true), locateMe, lookAt: (x: number, z: number) => setFlyTo({ tile: spiralIndex(Math.round(x), Math.round(z)), at: ++flies.current }), makeRow, openSoon: () => setSoonOpen(true), openGuestBook: (building: string) => setGuestBook(building),
+  return { explore, describeSpot, roadsNear, openExplorePlace, rowButtons, rowBelow, marks: markTags, onMark: (id: number) => setMarkOpen(id), openLeaveMark, fly, openThings: (tab: ThingsTab, at?: Stall) => {
+      setStall(at);
+      setThings(tab);
+    }, openReputation: () => setRepOpen(true), openNews: () => setNewsOpen(true), reputation: rep?.score ?? null, centerRef, owned: shown, flyTo, newsScene, adOpen, search: region ? { region, mine: assets?.units ?? [], owned: shown, businesses, coins, homes: () => homesFor(region), onPick: (h: SearchHit) => fly(h.x, h.z), near: searchNear } : null, onProperty, onWorkplace: setPlace, openPlace: setPlace, businesses, onBusiness: openBusiness, billboardAds, businessViews, overlay, restartGuide, openCurrency, openPassport: () => setPassportOpen(true), openReport, openFinance, cashNow: coins, financeGlow, financeDot, hasHome: !!homeUnit, mySpot: whereAmI(), homeSpot, goHome, nameHome, homeBuilding: homeUnit ? homeUnit.split("/")[0] : null, openPlanner: () => setPlanning(true), openBuilder: () => setBuilding(true), locateMe, lookAt: (x: number, z: number) => setFlyTo({ tile: spiralIndex(Math.round(x), Math.round(z)), at: ++flies.current }), makeRow, openSoon: () => setSoonOpen(true), openGuestBook: (building: string) => setGuestBook(building),
     /** Where you are changed outside (a trip to a friend): read it again. */
     refreshLife: () => void refresh(),
     openLife: () => setLifeOpen(true),

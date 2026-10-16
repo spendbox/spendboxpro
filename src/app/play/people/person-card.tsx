@@ -92,6 +92,10 @@ export function PersonCard({
     onDone(kind === "note" ? `Note left for ${card.name}.` : `${itemName ?? "Your gift"} is wrapped and waiting at ${card.name}'s door.`, true);
   };
   const canAct = !!card && !self && !card.blocked;
+  /** Challenge them: the game picker opens on this game (the others a tap away in it). */
+  const playGame = (game: string) => {
+    if (card) window.dispatchEvent(new CustomEvent("nt-play-game", { detail: { game, id: card.id, name: card.name, avatar: card.avatar } }));
+  };
   return (
     <Sheet onClose={onClose} above centred>
       {card === undefined ? (
@@ -190,7 +194,18 @@ export function PersonCard({
 
           {/* Play a game against them: Whot!, Truth or Dare, Impostor (src/app/play/fight/whot-invite.tsx). */}
           {canAct && (
-            <div className="mt-3 flex items-center gap-3 rounded-2xl bg-[#7048e8]/[0.07] p-3">
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => playGame("whot")}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" && e.key !== " ") return;
+                e.preventDefault();
+                playGame("whot");
+              }}
+              className="mt-3 flex cursor-pointer items-center gap-3 rounded-2xl bg-[#7048e8]/[0.07] p-3 transition hover:bg-[#7048e8]/[0.12] active:scale-[0.99]"
+              aria-label={`Play a game with ${card.name}: pick the game and the stake`}
+            >
               <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#7048e8] text-white">
                 <Dices className="size-5" />
               </span>
@@ -206,7 +221,10 @@ export function PersonCard({
                 ].map(([game, icon, label]) => (
                   <button
                     key={game}
-                    onClick={() => window.dispatchEvent(new CustomEvent("nt-play-game", { detail: { game, id: card.id, name: card.name, avatar: card.avatar } }))}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      playGame(game);
+                    }}
                     className="grid size-9 place-items-center rounded-full bg-[#7048e8] text-base shadow"
                     aria-label={`Play ${label}`}
                     title={label}

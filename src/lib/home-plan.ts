@@ -1192,12 +1192,13 @@ export function autoDesign(size: HomeSize, floors: number, seed: number, special
     rooms.push({ id: rooms.length + 1, kind: "hall", x: hallLeft ? 0 : w - hallW, y: 0, w: hallW, d: back });
     lay(front, 0, w, back, d - back, widths);
     const floor: PlanFloor = { rooms, items: [] };
-    // The stairs, against the hall's back wall (the same spot on every floor).
-    if (level < n - 1) {
-      const s = itemSize({ kind: "stairs", rot: 1 });
-      floor.items.push({ id: 1, kind: "stairs", rot: 1, x: hallLeft ? 0 : w - s.w, y: 0 });
-    }
+    // The stairs, against the hall's back wall (the same spot on every floor). On the top floor
+    // the spot where they arrive is kept clear while furnishing (as layoutFloor does), then freed.
+    const s = itemSize({ kind: "stairs", rot: 1 });
+    if (n > 1) floor.items.push({ id: 1, kind: "stairs", rot: 1, x: hallLeft ? 0 : w - s.w, y: 0 });
     for (const r of rooms) furnishRoom(floor, r, seed + level * 31, size);
+    if (level === n - 1) floor.items = floor.items.filter((i) => i.kind !== "stairs");
+    floor.items.forEach((it, i) => (it.id = i + 1));
     out.floors.push(floor);
   }
   return out;

@@ -14,6 +14,7 @@
 
 import {
   Anchor,
+  Scale,
   Bath,
   Rocket,
   Dumbbell,
@@ -153,6 +154,8 @@ const KIND_LOOK: Partial<Record<Tile["kind"], Look>> = {
   hospital: { icon: Hospital, color: C.civic, outdoor: false },
   police: { icon: Shield, color: C.law, outdoor: false },
   fire: { icon: Flame, color: C.civic, outdoor: false },
+  bank: { icon: Vault, color: C.power, outdoor: false },
+  lawcourt: { icon: Scale, color: C.law, outdoor: false },
   fuel: { icon: Fuel, color: C.grey, outdoor: false },
   clock: { icon: Clock, color: C.grey, outdoor: false },
   ferris: { icon: FerrisWheel, color: C.fun, outdoor: true },

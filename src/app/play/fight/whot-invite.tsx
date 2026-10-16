@@ -48,7 +48,8 @@ export function GameInvite({ region, target, game, onGame, onClose, onSend }: { 
     void challengeQuote(region).then((q) => {
       if (!live) return;
       setQuote(q);
-      setStake((s) => s ?? Math.round((STAKES_NAIRA[1] / q.perMint) * 100) / 100);
+      // No stake to start with: playing for money is a choice (docs/GAME_TABLES.md).
+      setStake((s) => s ?? 0);
     });
     return () => {
       live = false;
@@ -58,7 +59,7 @@ export function GameInvite({ region, target, game, onGame, onClose, onSend }: { 
   const g = challengeGame(game);
   const look = lookOf(game);
   const amount = typed ? Math.round(fromShown(Number(typed)) * 100) / 100 : stake;
-  const ok = !!quote && amount != null && amount >= quote.minStake && amount <= quote.maxStake && (quote.canSpend == null || amount <= quote.canSpend + 0.005);
+  const ok = !!quote && amount != null && (amount === 0 || (amount >= quote.minStake && amount <= quote.maxStake)) && (quote.canSpend == null || amount <= quote.canSpend + 0.005);
   const send = async () => {
     if (!ok || amount == null) return;
     setBusy(true);
@@ -92,15 +93,15 @@ export function GameInvite({ region, target, game, onGame, onClose, onSend }: { 
         </div>
         <p className="-mt-2 text-center text-xs text-muted">{g?.blurb}</p>
         <div>
-          <p className="text-sm font-semibold">Stake (each of you puts in)</p>
-          <div className="mt-2 grid grid-cols-4 gap-1.5">
+          <p className="text-sm font-semibold">Stake (optional: each of you puts in)</p>
+          <div className="mt-2 grid grid-cols-5 gap-1.5">
             {quote &&
               STAKES_NAIRA.map((nv) => {
                 const m = Math.round((nv / quote.perMint) * 100) / 100;
                 const on = !typed && stake === m;
                 return (
-                  <button key={nv} onClick={() => (setTyped(""), setStake(m))} className={cn("h-11 rounded-xl text-sm font-bold", on ? "bg-gold text-ink" : "bg-panel-2 text-muted")}>
-                    {cash(m)}
+                  <button key={nv} onClick={() => (setTyped(""), setStake(m))} className={cn("h-11 min-w-0 truncate rounded-xl px-1 text-sm font-bold", on ? "bg-gold text-ink" : "bg-panel-2 text-muted")}>
+                    {nv === 0 ? "None" : cash(m)}
                   </button>
                 );
               })}
@@ -112,14 +113,14 @@ export function GameInvite({ region, target, game, onGame, onClose, onSend }: { 
           {quote && (
             <p className="mt-1.5 text-xs text-muted">
               {cash(quote.minStake)} to {cash(quote.maxStake)}.{quote.canSpend != null && ` You have ${cash(quote.canSpend)}.`}
-              {amount != null && ` Winner takes ${cash(amount * 2 * WINNER_SHARE)} (more if others join).`}
+              {amount === 0 ? " No stake: just for fun." : amount != null && ` Winner takes ${cash(amount * 2 * WINNER_SHARE)} (more if others join).`}
             </p>
           )}
           {quote && amount != null && quote.canSpend != null && amount > quote.canSpend + 0.005 && <p className="mt-1 text-sm text-hit">That&apos;s more than you have.</p>}
         </div>
         <button onClick={() => void send()} disabled={!ok || busy} className="flex h-12 w-full items-center justify-center gap-2 rounded-full font-bold text-white disabled:opacity-40" style={{ background: look.button }}>
           {busy && <LoaderCircle className="size-4 animate-spin" />}
-          {amount != null && quote ? `Challenge ${target.name} for ${cash(amount)}` : "Challenge"}
+          {amount != null && quote ? (amount === 0 ? `Challenge ${target.name} for fun` : `Challenge ${target.name} for ${cash(amount)}`) : "Challenge"}
         </button>
         <p className="text-center text-xs text-muted">
           {minPlayers(game) > 2
@@ -148,7 +149,7 @@ export function InviteCard({ game, host, stake, pool, secsLeft, busy, onAccept, 
             {host.name} challenges you to <span style={{ color: look.ring }}>{g?.title ?? "a game"}</span>
           </p>
           <p className="text-xs text-white/75">
-            Stake {cash(stake)} · winner takes {cash((pool + stake) * WINNER_SHARE)} · <b className="tabular-nums text-[#ffd43b]">{Math.floor(secsLeft / 60)}:{String(Math.max(0, Math.floor(secsLeft) % 60)).padStart(2, "0")}</b>
+            {stake > 0 ? `Stake ${cash(stake)} · winner takes ${cash((pool + stake) * WINNER_SHARE)}` : "Just for fun, no stake"} · <b className="tabular-nums text-[#ffd43b]">{Math.floor(secsLeft / 60)}:{String(Math.max(0, Math.floor(secsLeft) % 60)).padStart(2, "0")}</b>
           </p>
         </div>
       </div>
@@ -157,7 +158,7 @@ export function InviteCard({ game, host, stake, pool, secsLeft, busy, onAccept, 
           Not now
         </button>
         <button onClick={onAccept} disabled={busy} className="h-10 rounded-full text-sm font-black text-ink shadow-[0_3px_0_rgba(0,0,0,0.35)] disabled:opacity-50" style={{ background: game === "whot" ? "#ffd43b" : "#ffffff" }}>
-          Accept {cash(stake)}
+          {stake > 0 ? `Accept ${cash(stake)}` : "Accept"}
         </button>
       </div>
     </div>

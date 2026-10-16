@@ -306,7 +306,7 @@ export function Fight({
                   </p>
                 </div>
                 <button disabled={busy} onClick={() => void join(c)} className="shrink-0 rounded-full bg-gold px-3 py-2 text-xs font-bold text-ink disabled:opacity-50">
-                  Join {cash(c.stake)}
+                  {c.stake > 0 ? `Join ${cash(c.stake)}` : "Join"}
                 </button>
                 <button onClick={() => setDismissed((d) => [...d, c.id])} className="grid size-7 shrink-0 place-items-center rounded-full text-white/60" aria-label="Not this one">
                   <X className="size-4" />
@@ -494,7 +494,7 @@ function FightSheet({
   const fee = free ? 0 : (quote?.feeMint ?? 0);
   const need = (stake ?? 0) + fee;
   const canSpend = quote?.canSpend ?? null;
-  const tooSmall = stake !== null && stake < stakeBounds(perMint).min;
+  const tooSmall = stake !== null && stake !== 0 && stake < stakeBounds(perMint).min;
   const tooBig = stake !== null && stake > stakeBounds(perMint).max;
   const stakeOk = stake !== null && cleanStake(stake, perMint) !== null;
   const short = stakeOk && canSpend !== null && need > canSpend + 0.001;
@@ -618,7 +618,7 @@ function FightSheet({
           </p>
         )}
       </div>
-      <div className="mt-2 grid grid-cols-4 gap-1.5">
+      <div className="mt-2 grid grid-cols-5 gap-1.5">
         {STAKES_NAIRA.map((s) => {
           const mint = s / perMint;
           const cant = canSpend !== null && Math.round(mint * 100) / 100 + fee > canSpend + 0.001;
@@ -628,7 +628,7 @@ function FightSheet({
               onClick={() => setChip(s)}
               className={cn("h-10 min-w-0 truncate rounded-full px-1 text-[13px] font-bold transition", chip === s ? "bg-ink text-white shadow" : "bg-ink/5", cant && chip !== s && "text-muted line-through decoration-1")}
             >
-              {cash(mint)}
+              {s === 0 ? "No stake" : cash(mint)}
             </button>
           );
         })}
@@ -658,7 +658,9 @@ function FightSheet({
       </label>
       <p className={cn("mt-1.5 text-xs", stakeNote ? "font-semibold text-hit" : "text-muted")}>
         {stakeNote ??
-          (g?.engine
+          (stake === 0
+            ? "Just for fun: nobody puts money in. Pick an amount to play for a pool."
+            : g?.engine
             ? `Winner takes up to ${cash((stake ?? 0) * g.seats * WINNER_SHARE)} with ${g.seats} players. From ${cash(STAKE_MIN_NAIRA / perMint)} to ${cash(STAKE_MAX_NAIRA / perMint)}.`
             : `From ${cash(STAKE_MIN_NAIRA / perMint)} to ${cash(STAKE_MAX_NAIRA / perMint)} each.`)}
       </p>
@@ -690,7 +692,7 @@ function FightSheet({
           className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#e03131] to-[#f08c00] px-4 font-bold text-white shadow-lg transition active:scale-[0.98] disabled:from-ink/30 disabled:to-ink/30 disabled:shadow-none"
         >
           {going ? <LoaderCircle className="size-5 animate-spin" /> : <Swords className="size-5" />}
-          <span className="truncate">{!g?.engine ? `${g?.title ?? "That game"} is coming soon` : stakeOk ? `Challenge everyone · ${cash(stake!)}` : "Challenge everyone nearby"}</span>
+          <span className="truncate">{!g?.engine ? `${g?.title ?? "That game"} is coming soon` : stakeOk ? (stake === 0 ? "Challenge everyone, for fun" : `Challenge everyone · ${cash(stake!)}`) : "Challenge everyone nearby"}</span>
         </button>
         {problem && (
           <div className="mt-3 rounded-2xl bg-hit/10 p-3 text-sm">

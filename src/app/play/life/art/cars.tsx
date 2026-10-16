@@ -35,16 +35,21 @@ type Profile = {
   /** An open load bed behind the cab (a pickup), or a sliding side door (a people carrier). */
   bed?: boolean;
   slider?: boolean;
+  /** Dark rims (a supercar's black multi-spoke wheels), black cladding along the sills and arches,
+   * slim slit lights with a light bar across the back (a sports SUV like the Urus). */
+  darkRims?: boolean;
+  cladding?: string;
+  slimLights?: boolean;
 };
 
 const ROAD = 92;
 
-function Wheel({ x, r, rim, id }: { x: number; r: number; rim: Profile["rim"]; id: string }) {
+function Wheel({ x, r, rim, id, dark }: { x: number; r: number; rim: Profile["rim"]; id: string; dark?: boolean }) {
   const y = ROAD - r;
   return (
     <g>
       <circle cx={x} cy={y} r={r} fill="#1a1b1e" />
-      <circle cx={x} cy={y} r={r * 0.66} fill={`url(#${id}-rim)`} stroke="#495057" strokeWidth="0.6" />
+      <circle cx={x} cy={y} r={r * (dark ? 0.74 : 0.66)} fill={dark ? "#2b2d31" : `url(#${id}-rim)`} stroke={dark ? "#5c5f66" : "#495057"} strokeWidth="0.6" />
       {rim === "classic" ? (
         <circle cx={x} cy={y} r={r * 0.4} fill="none" stroke="#868e96" strokeWidth="1" />
       ) : (
@@ -120,8 +125,27 @@ function Car({ id, p }: { id: string; p: Profile }) {
       <rect x={mid - 9} y={p.belt + 6} width="5" height="1.6" rx="0.8" fill={p.chrome ? "#e9ecef" : "#00000055"} />
       <rect x={mid + 5} y={p.belt + 6} width="5" height="1.6" rx="0.8" fill={p.chrome ? "#e9ecef" : "#00000055"} />
       {/* lights */}
-      <rect x={p.nose} y={p.belt + 2.5} width="5" height="3.5" rx="1.5" fill="#fff9db" stroke="#adb5bd" strokeWidth="0.4" />
-      <rect x={p.tail - 4} y={p.belt + 2.5} width="4" height="3.5" rx="1.2" fill="#e03131" />
+      {p.slimLights ? (
+        <g>
+          <path d={`M${p.nose + 1} ${p.belt + 4} L${p.nose + 10} ${p.belt + 2.2} L${p.nose + 9} ${p.belt + 3.8} Z`} fill="#fff9db" stroke="#adb5bd" strokeWidth="0.3" />
+          <rect x={p.tail - 9} y={p.belt + 1.6} width="9" height="1.4" rx="0.6" fill="#e03131" />
+        </g>
+      ) : (
+        <g>
+          <rect x={p.nose} y={p.belt + 2.5} width="5" height="3.5" rx="1.5" fill="#fff9db" stroke="#adb5bd" strokeWidth="0.4" />
+          <rect x={p.tail - 4} y={p.belt + 2.5} width="4" height="3.5" rx="1.2" fill="#e03131" />
+        </g>
+      )}
+      {/* black cladding along the sills, round the arches, and the front intake */}
+      {p.cladding && (
+        <g>
+          <path d={`M${p.nose + 3} ${p.sill - 5} L${p.tail - 3} ${p.sill - 5} L${p.tail - 5} ${p.sill} L${p.nose + 5} ${p.sill} Z`} fill={p.cladding} />
+          <path d={`M${p.nose} ${p.sill - 9} L${p.nose + 9} ${p.sill - 9} L${p.nose + 7} ${p.sill - 4} L${p.nose + 1} ${p.sill - 4} Z`} fill={p.cladding} />
+          {[p.wheels[0], p.wheels[1]].map((x) => (
+            <path key={x} d={`M${x - p.wheelR - 4.5} ${p.sill} A${p.wheelR + 4.5} ${p.wheelR + 4.5} 0 0 1 ${x + p.wheelR + 4.5} ${p.sill}`} fill="none" stroke={p.cladding} strokeWidth="2.4" />
+          ))}
+        </g>
+      )}
       {p.chrome && <line x1={p.nose + 4} y1={p.sill - 3} x2={p.tail - 4} y2={p.sill - 3} stroke="#e9ecef" strokeWidth="1.2" opacity="0.9" />}
       {p.bed && (
         <g>
@@ -134,8 +158,8 @@ function Car({ id, p }: { id: string; p: Profile }) {
       {/* wheel arches and wheels */}
       <path d={arch(w1)} fill="#1a1b1e" />
       <path d={arch(w2)} fill="#1a1b1e" />
-      <Wheel x={w1} r={p.wheelR} rim={p.rim} id={id} />
-      <Wheel x={w2} r={p.wheelR} rim={p.rim} id={id} />
+      <Wheel x={w1} r={p.wheelR} rim={p.rim} id={id} dark={p.darkRims} />
+      <Wheel x={w2} r={p.wheelR} rim={p.rim} id={id} dark={p.darkRims} />
     </svg>
   );
 }
@@ -185,7 +209,9 @@ const CARS: Record<string, Profile> = {
   car_lexus: suv("#f1f3f5", "#adb5bd", { square: 0.4, cTop: 92, cFoot: 108, chrome: true }),
   car_gwagon: suv("#1a1b1e", "#000000", { square: 1, aFoot: 36, aTop: 40, roof: 32, cTop: 104, cFoot: 106, spare: true, rails: false, belt: 56, tail: 110, nose: 6 }),
   car_bentayga: suv("#1d4b3a", "#0b2a1f", { chrome: true, square: 0.35, cTop: 92, cFoot: 108 }),
-  car_urus: suv("#fab005", "#c47f00", { square: 0.05, roof: 44, belt: 62, aFoot: 30, aTop: 52, cTop: 86, cFoot: 108, sill: 82, rails: false, rim: "spoke" }),
+  // Arancio orange, low and wide: a thin band of glass under a roof that slopes all the way down to
+  // the tail like a coupé, short overhangs, big dark wheels, black cladding, slit lights.
+  car_urus: suv("#f76707", "#b84a00", { square: 0.12, roof: 47, belt: 61, aFoot: 31, aTop: 45, cTop: 72, cFoot: 111, sill: 81, nose: 5, tail: 115, wheels: [26, 94], wheelR: 13.5, rails: false, rim: "multi", darkRims: true, cladding: "#1a1b1e", slimLights: true }),
   car_hilux: suv("#e9ecef", "#868e96", { square: 0.6, aFoot: 30, aTop: 42, roof: 36, cTop: 68, cFoot: 70, belt: 56, sill: 80, bed: true, rails: false, wheelR: 12.5 }),
   car_sienna: suv("#7d1d2f", "#3d0a15", { square: 0.35, aFoot: 24, aTop: 44, roof: 38, cTop: 104, cFoot: 110, belt: 60, slider: true, rails: true, rim: "multi" }),
   car_cullinan: suv("#c0c6cc", "#6c757d", { square: 0.9, roof: 30, belt: 56, aFoot: 38, aTop: 46, cTop: 100, cFoot: 104, twoTone: "#212529", chrome: true, rails: false, wheelR: 13 }),

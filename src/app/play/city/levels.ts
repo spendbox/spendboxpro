@@ -9,6 +9,8 @@
 
 import { structureCentre, venueName, type CityPlan, type Sport, type StructureType, type Tile } from "@/lib/city/layout";
 import { RAIL_Y } from "./trains";
+import { plotLayout } from "@/lib/city/plots";
+import { wealthOf } from "@/lib/world/buildings";
 
 export type LevelKind = "interior" | "roof" | "outdoor";
 
@@ -57,6 +59,8 @@ export type Theme =
   | "spa"
   | "church"
   | "mosque"
+  // a law court's courtroom: the judge's bench, the witness box, the dock, the public gallery
+  | "courtroom"
   // sports venues: the stands round a football pitch, an indoor basketball court, a boxing
   // ring and a wrestling ring (seats facing the action, a big screen)
   | "stands"
@@ -132,6 +136,8 @@ export const ROOM_LABEL: Partial<Record<Tile["kind"], string>> = {
   trees: "Woods",
   pond: "Pond",
   fire: "Fire station",
+  bank: "Bank",
+  lawcourt: "Law court",
   club: "Nightclub",
   restaurant: "Restaurant",
   school: "School",
@@ -264,6 +270,14 @@ export function levelsOf(t: Tile, plan: CityPlan): PlaceLevel[] {
         }
         break;
       }
+      // A real map's property: a floor for each of its storeys (up to six; a tall block's top
+      // floors are like the ones below), so a duplex has its upstairs and a bungalow doesn't.
+      if (t.building && plan.region && t.building.state === "built") {
+        const n = Math.max(1, Math.min(6, t.building.storeys));
+        R("g", n > 1 ? "Ground floor" : "Living room", "interior", "living", x, 0.08, z - 0.04, 0.25, 0.2);
+        for (let f = 1; f < n; f++) R(`f${f}`, n === 2 ? "Upstairs" : floorLabel(f), "interior", "upstairs", x, 0.08 + f * STOREY + 0.02, z - 0.04, 0.25, 0.2, { weight: 0.8 });
+        break;
+      }
       const dx = (r[1] - 0.5) * 0.1;
       if (t.v === 1) {
         R("g", "Living room", "interior", "living", x + dx - 0.08, 0.08, z - 0.05, 0.25, 0.2);
@@ -360,6 +374,14 @@ export function levelsOf(t: Tile, plan: CityPlan): PlaceLevel[] {
       R("g", "Engine bay", "interior", "firehall", x - 0.04, 0.08, z - 0.08, 0.3, 0.24);
       R("f1", floorLabel(1, "Crew room"), "interior", "living", x - 0.04, 0.08 + STOREY + 0.06, z - 0.08, 0.3, 0.24, { weight: 0.6 });
       break;
+    case "bank":
+      // A branch: the banking hall (tellers, cash machines, the vault door behind the counter).
+      R("g", "Banking hall", "interior", "bank", x, 0.08, z - 0.06, 0.3, 0.22);
+      break;
+    case "lawcourt":
+      R("g", "Courtroom", "interior", "courtroom", x, 0.08, z - 0.1, 0.32, 0.22, { weight: 1.3 });
+      if (t.v === 1) R("f1", floorLabel(1, "Judges' chambers"), "interior", "office", x, 0.08 + STOREY + 0.05, z - 0.1, 0.32, 0.22, { weight: 0.5 });
+      break;
     case "club":
       R("g", t.name ?? "Dance floor", "interior", "club", x, 0.08, z, 0.36, 0.3, { weight: 1.6 });
       if (t.v === 1) R("f1", floorLabel(1, "VIP lounge"), "interior", "lounge", x, 0.08 + STOREY + 0.05, z, 0.36, 0.3);
@@ -408,7 +430,36 @@ export function levelsOf(t: Tile, plan: CityPlan): PlaceLevel[] {
       R("o", "By the monument", "outdoor", "plaza", x + 0.3, 0.08, z + 0.3, 0.08, 0.08);
       break;
   }
+  inPlot(t, plan, out);
   return share(total, out);
+}
+
+/**
+ * A property on a shared tile (src/lib/city/plots) is drawn smaller and lower, at the front of its
+ * tile: its floors move with it, so going in swoops to where it really stands.
+ */
+function inPlot(t: Tile, plan: CityPlan, out: Draft[]) {
+  if (!t.building || t.home || !plan.region) return;
+  const plots = plotLayout(t.building, t.x, t.z, wealthOf(plan.region.landPriceAt(t.x, t.z)));
+  if (!plots) return;
+  const { s, v } = plots.main;
+  const turn = (t.building.face * Math.PI) / 2;
+  const c = Math.cos(turn);
+  const sn = Math.sin(turn);
+  const BASE = 0.08;
+  for (const l of out) {
+    // Into the building's own frame (+z its street), into its plot, and back.
+    const wx = l.x - t.x;
+    const wz = l.z - t.z;
+    const lx = plots.main.x + (wx * c - wz * sn) * s;
+    const lz = plots.main.z + (wx * sn + wz * c) * s;
+    l.x = t.x + lx * c + lz * sn;
+    l.z = t.z - lx * sn + lz * c;
+    l.y = BASE + (l.y - BASE) * v;
+    l.hw *= s;
+    l.hd *= s;
+    if (l.hide) l.hide = { ...l.hide, above: BASE + (l.hide.above - BASE) * v, rect: undefined };
+  }
 }
 
 function structureLevels(t: Tile, type: StructureType, plan: CityPlan): Draft[] {
@@ -434,10 +485,16 @@ function structureLevels(t: Tile, type: StructureType, plan: CityPlan): Draft[] 
       R(`f${n}`, `Floor ${n} · Sky lounge`, "interior", "lounge", X + 0.42, 0.09 + n * STOREY, Z, 0.26, 0.26);
       break;
     }
-    case "museum":
-      R("g", "Main gallery", "interior", "gallery", X, 0.24, Z - 0.1, 0.6, 0.45);
-      R("f3", "Rotunda", "interior", "rotunda", X, 0.89, Z - 0.1, 0.3, 0.3, { weight: 0.8 });
+    case "museum": {
+      // Four floors, each its own kind of show (src/app/play/city/interiors.ts gallery): the main
+      // gallery, the sculpture hall, modern art, and the rotunda at the top.
+      const bz = Z - (t.structure?.d ?? 2) * 0.16;
+      R("g", "Main gallery", "interior", "gallery", X, 0.12, bz, 0.6, 0.45);
+      R("f1", "Floor 1 · Sculpture hall", "interior", "gallery", X, 0.12 + STOREY, bz, 0.6, 0.45);
+      R("f2", "Floor 2 · Modern art", "interior", "gallery", X, 0.12 + 2 * STOREY, bz, 0.6, 0.45, { weight: 0.9 });
+      R("f3", "Floor 3 · Rotunda", "interior", "rotunda", X, 0.12 + 3 * STOREY, bz, 0.3, 0.3, { weight: 0.8 });
       break;
+    }
     case "funfair":
       R("o", "Funfair", "outdoor", "funfair", X - 0.25, 0.09, Z + 0.15, 0.1, 0.1);
       break;

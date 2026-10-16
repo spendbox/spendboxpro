@@ -53,7 +53,8 @@ test("the rules the owner asked for", () => {
   assert.equal(JOIN_SECS, 60);
   assert.ok(WINNER_SHARE > 0.5 && WINNER_SHARE <= 1);
   // The database takes stakes up to ₥10,000 (game-db/070).
-  assert.ok(STAKES_NAIRA.every((s) => s >= STAKE_MIN_NAIRA && s <= STAKE_MAX_NAIRA));
+  assert.equal(STAKES_NAIRA[0], 0, "a stake is optional");
+  assert.ok(STAKES_NAIRA.slice(1).every((s) => s >= STAKE_MIN_NAIRA && s <= STAKE_MAX_NAIRA));
   assert.ok(STAKE_MAX_NAIRA / 1_500 <= 10_000);
 });
 
@@ -66,7 +67,7 @@ test("any stake between the smallest and the biggest", () => {
   assert.equal(cleanStake(7_500 / 1_500, 1_500), 5);
   assert.equal(cleanStake(1_000_000 / 1_500, 1_500), 666.67);
   assert.equal(cleanStake(0.5, 1_500), null);
-  assert.equal(cleanStake(0, 1_500), null);
+  assert.equal(cleanStake(0, 1_500), 0, "no stake: just for fun");
   assert.equal(cleanStake(-3, 1_500), null);
   assert.equal(cleanStake(667, 1_500), null);
   assert.equal(cleanStake(Number.NaN, 1_500), null);

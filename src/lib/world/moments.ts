@@ -1081,7 +1081,11 @@ export const MOMENT_RULES = {
  * On the road (the trip film): how likely a trip of at least `minKm` brings a moment, and how close
  * together they can come (the day's count is shared with the rest).
  */
-export const ROAD_RULES = { chance: 0.33, minKm: 0.3, gapSeconds: 600, perDay: MOMENT_RULES.perDay };
+/**
+ * On the road: 3 trips in 5 of 300 m or more ask for one, and a road moment waits only for the last
+ * road moment (5 minutes), not for the street's (game-db/119).
+ */
+export const ROAD_RULES = { chance: 0.6, minKm: 0.3, gapSeconds: 300, perDay: MOMENT_RULES.perDay };
 
 /** The places in the game (an inside's theme) as where a moment can happen. */
 export function spotOfTheme(theme: string | null | undefined, home: boolean): MomentSpot {

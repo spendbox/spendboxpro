@@ -37,6 +37,10 @@ export type TileKind =
   | "fuel"
   | "police"
   | "fire"
+  // A bank branch (a banking hall with a vault, cash machines outside) and a law court (judges,
+  // not basketball): on busy streets all over town, see baseTile.
+  | "bank"
+  | "lawcourt"
   | "club"
   | "restaurant"
   | "structure"
@@ -151,6 +155,11 @@ export type Tile = {
    * big interchange drawn two or more tiles wide): plain asphalt, no lights or crossings.
    */
   wide?: boolean;
+  /**
+   * A straight road's middle, as offsets across the tile at its start edge, middle and end edge
+   * (a winding street, see waveOf). Missing: dead centre.
+   */
+  wave?: [number, number, number];
   /** A real place's expressway (no pavements: nobody walks along it). */
   express?: boolean;
   /** A real place's tile kept clear of buildings: under a deck, beside a railway, a station's site. */
@@ -189,6 +198,8 @@ export const KIND_LABEL: Record<TileKind, string> = {
   fuel: "Fuel station",
   police: "Police station",
   fire: "Fire station",
+  bank: "Bank",
+  lawcourt: "Law court",
   club: "Nightclub",
   restaurant: "Restaurant",
   structure: "Landmark",
@@ -1094,7 +1105,8 @@ function makeLane(plan: CityPlan, bx: number, bz: number): Set<number> | null {
 
 // ---------------------------------------------------------------- neighbourhood places
 // Every 6×6 cell of suburb gets one interesting place on a lot by a road (most cells): a
-// school, a mosque or church, a little football pitch, a playground or a monument.
+// school, a mosque or church, a little football pitch, a playground, a monument, a bank branch
+// or a law court.
 const FEATURE = 6;
 const FEATURE_KINDS: TileKind[] = ["school", "worship", "pitch", "playground", "worship", "school", "pitch", "playground", "monument"];
 
@@ -1128,7 +1140,14 @@ function pickFeature(plan: CityPlan, fx: number, fz: number) {
     }
   }
   if (!best) return null;
-  const kind = FEATURE_KINDS[Math.floor(hash(fz, fx, plan.seed + 952) * FEATURE_KINDS.length) % FEATURE_KINDS.length];
+  let kind = FEATURE_KINDS[Math.floor(hash(fz, fx, plan.seed + 952) * FEATURE_KINDS.length) % FEATURE_KINDS.length];
+  // Some of the pitches, playgrounds and monuments are a bank branch or a law court instead (so
+  // the quieter parts of town have them too; schools and places of worship stay as they were).
+  if (kind === "pitch" || kind === "playground" || kind === "monument") {
+    const roll = hash(fx, fz, plan.seed + 953);
+    if (roll < 0.36) kind = "bank";
+    else if (roll < 0.46) kind = "lawcourt";
+  }
   return { x: best.x, z: best.z, kind };
 }
 
@@ -1428,6 +1447,10 @@ function tileName(plan: CityPlan, t: Tile): string | undefined {
       return any("police", 0.9);
     case "fire":
       return any("fire", 0.9);
+    case "bank":
+      return bankName(plan, x, z);
+    case "lawcourt":
+      return courtName(plan, x, z);
     case "clock":
       return roll < 0.7 ? any("clock", 1) : undefined;
     case "tower":
@@ -1444,6 +1467,35 @@ function tileName(plan: CityPlan, t: Tile): string | undefined {
       return aroundName(plan, "restaurant", x, z) ?? any("restaurant", 0.9) ?? RESTAURANT_NAMES[Math.floor(roll * RESTAURANT_NAMES.length) % RESTAURANT_NAMES.length];
   }
   return undefined;
+}
+
+/** Made-up banks (no real bank's name on a vault you can rob), one per branch, by the street's name. */
+const BANK_BRANDS = ["Unity Trust Bank", "Crest Bank", "Harbour Bank", "Palm Savings Bank", "Eagle Bank", "Cowry Bank", "Lagoon Bank", "Sterling Gate Bank", "Heritage Savings", "Kola Bank"];
+
+/** The street a lot is on (the nearest one). */
+function streetOf(plan: CityPlan, x: number, z: number) {
+  const ew = nearestLine(plan.zs, plan.z0, z);
+  const ns = nearestLine(plan.xs, plan.x0, x);
+  return ew.d <= ns.d ? streetBase(plan, "x", ew.k) : streetBase(plan, "z", ns.k);
+}
+
+/** Where a place is, in a word, for its name: the neighbourhood on a real map ("Akoka"), else its street. */
+function localName(plan: CityPlan, x: number, z: number) {
+  const area = plan.region?.areaAt(x, z).split(" · ")[0];
+  return area && !/lagoon|creek|sea|ocean|river|lake/i.test(area) ? area : streetOf(plan, x, z);
+}
+
+/** A bank branch's name: "Crest Bank, Adekunle branch". */
+function bankName(plan: CityPlan, x: number, z: number) {
+  const brand = BANK_BRANDS[Math.floor(hash(x, z, plan.seed + 545) * BANK_BRANDS.length) % BANK_BRANDS.length];
+  return `${brand}, ${streetOf(plan, x, z)} branch`;
+}
+
+/** A law court's name: mostly magistrates' courts, now and then a high court or a customary court. */
+function courtName(plan: CityPlan, x: number, z: number) {
+  const roll = hash(x, z, plan.seed + 546);
+  const kind = roll < 0.6 ? "Magistrates' Court" : roll < 0.85 ? "High Court" : "Customary Court";
+  return `${localName(plan, x, z)} ${kind}`;
 }
 
 /** A name for a club or restaurant floor inside a bigger building (stable for the tile). */
@@ -1756,10 +1808,65 @@ function roadTile(plan: CityPlan, x: number, z: number, r: Tile["r"]): Tile {
     const express = kind === "motorway" || kind === "trunk" || undefined;
     // Pedestrian crossings: where the map has one, and now and then on busy streets.
     const crossing = straight && !works && !incident ? crossingOf(plan, x, z, mask) : undefined;
-    if (crossing !== undefined) return { i: -1, x, z, kind: "road", top: 0.05, road: dir, mask, roundabout: false, r, crossing, express };
+    if (crossing !== undefined) return { i: -1, x, z, kind: "road", top: 0.05, road: dir, mask, roundabout: false, r, crossing, express, wave: straight ? waveOf(plan, x, z, mask === 10) : undefined };
     if (express) return { i: -1, x, z, kind: "road", top: works ? 0.45 : roundabout ? 0.3 : 0.05, road: dir, mask, roundabout, r, works: works || undefined, incident, express };
   }
-  return { i: -1, x, z, kind: "road", top: works ? 0.45 : roundabout ? 0.3 : 0.05, road: dir, mask, roundabout, r, works: works || undefined, incident };
+  const t: Tile = { i: -1, x, z, kind: "road", top: works ? 0.45 : roundabout ? 0.3 : 0.05, road: dir, mask, roundabout, r, works: works || undefined, incident };
+  if (straight) t.wave = waveOf(plan, x, z, mask === 10);
+  return t;
+}
+
+// ---------------------------------------------------------------- winding streets
+// Streets don't run dead straight between junctions: the asphalt winds gently from side to side
+// inside its strip of tiles (docs/STREETS.md). Which tiles are road never changes (so no building,
+// address or property moves); only where the road is drawn on them, and where the cars drive.
+
+/** The furthest the middle of the road strays from the middle of its tiles (tile widths). */
+export const WAVE_MAX = 0.17;
+/** The longest piece of straight road that winds as one (longer ones are cut into pieces). */
+const WAVE_REACH = 16;
+
+/** Is (x, z) part of a straight stretch that winds (along x or z)? */
+function winds(plan: CityPlan, x: number, z: number, alongX: boolean) {
+  if (!isRoad(plan, x, z) || wet(plan, x, z)) return false;
+  if (roadMask(plan, x, z) !== (alongX ? 10 : 5)) return false;
+  const kind = plan.region?.roadAt(x, z)?.kind;
+  return kind !== "motorway" && kind !== "trunk";
+}
+
+/**
+ * Where the road's middle is on a straight tile, as offsets across it (+z for a road along x, +x
+ * for one along z) at its start edge, its middle and its end edge. The stretch between two
+ * junctions (or bends, dead ends, expressways, water) bends once or twice, smoothly, and meets
+ * each end dead centre, so it joins the next tile's road.
+ */
+export function waveOf(plan: CityPlan, x: number, z: number, alongX: boolean): [number, number, number] | undefined {
+  if (!winds(plan, x, z, alongX)) return undefined;
+  const step = (k: number): [number, number] => (alongX ? [x + k, z] : [x, z + k]);
+  // Very long straight roads wind in pieces of up to WAVE_REACH tiles (cut at the same places
+  // whichever tile asks, so every tile of a piece agrees on its shape).
+  const c0 = alongX ? x : z;
+  const piece = Math.floor(c0 / WAVE_REACH);
+  const same = (k: number) => Math.floor((c0 + k) / WAVE_REACH) === piece;
+  let lo = 0;
+  while (same(lo - 1) && winds(plan, ...step(lo - 1), alongX)) lo--;
+  let hi = 0;
+  while (same(hi + 1) && winds(plan, ...step(hi + 1), alongX)) hi++;
+  // The stretch runs from the start edge of its first tile to the end edge of its last.
+  const a = (alongX ? x : z) + lo - 0.5;
+  const b = (alongX ? x : z) + hi + 0.5;
+  const len = b - a;
+  if (len < 2) return undefined;
+  // The same stretch winds the same way from every one of its tiles: keyed by where it starts.
+  const [kx, kz] = step(lo);
+  const h1 = hash(kx * 2 + (alongX ? 1 : 0), kz, plan.seed + 7301);
+  const h2 = hash(kz, kx * 2 + (alongX ? 1 : 0), plan.seed + 7302);
+  const bends = len >= 6 && h2 < 0.45 ? 2 : 1;
+  const amp = Math.min(WAVE_MAX, 0.045 * len) * (h1 < 0.5 ? -1 : 1) * (0.7 + 0.3 * h2);
+  const at = (v: number) => amp * Math.sin((Math.PI * bends * (v - a)) / len);
+  const c = alongX ? x : z;
+  const r3 = (v: number) => Math.round(v * 1000) / 1000;
+  return [r3(at(c - 0.5)), r3(at(c)), r3(at(c + 0.5))];
 }
 
 /** A pedestrian crossing on a straight stretch of a real place's road, or undefined. */
@@ -1879,7 +1986,11 @@ function baseTile(plan: CityPlan, x: number, z: number): Tile {
   if (density > 0.24) {
     if (r[0] < 0.06) return { i, x, z, kind: "plaza", top: 0.6, r };
     if (r[0] < 0.075) return { i, x, z, kind: "hospital", top: 1.7, r };
+    // A law court now and then, and a bank branch more often (lots that were a clock tower or a
+    // building site: nobody can own those, so no one's property changes).
+    if (r[0] >= 0.083 && r[0] < 0.09 && nextToRoad) return { i, x, z, kind: "lawcourt", top: 1.3, r, v: Math.floor(r[2] * 2) };
     if (r[0] < 0.09) return { i, x, z, kind: "clock", top: 2.6, r };
+    if (r[0] >= 0.097 && r[0] < 0.11 && nextToRoad) return { i, x, z, kind: "bank", top: 1.1, r, v: Math.floor(r[2] * 2) };
     if (r[0] < 0.11) return { i, x, z, kind: "crane", top: 3.2, r };
     if (r[0] < 0.122 && nextToRoad) return { i, x, z, kind: "police", top: 1.1, r };
     if (r[0] >= 0.122 && r[0] < 0.133 && nextToRoad) return { i, x, z, kind: "fire", top: 1.0, r };
@@ -1891,7 +2002,7 @@ function baseTile(plan: CityPlan, x: number, z: number): Tile {
   // The neighbourhood's own place (a school, a mosque or church, a pitch, a playground…).
   const feature = featureAt(plan, x, z);
   if (feature) {
-    const tops: Partial<Record<TileKind, number>> = { school: 0.9, worship: 1.6, pitch: 0.3, playground: 0.5, monument: 1.4 };
+    const tops: Partial<Record<TileKind, number>> = { school: 0.9, worship: 1.6, pitch: 0.3, playground: 0.5, monument: 1.4, bank: 1.1, lawcourt: 1.3 };
     return { i, x, z, kind: feature, top: tops[feature] ?? 0.8, r, v: Math.floor(r[2] * 2) };
   }
   if (!plan.region && Math.hypot(x, z) > 13 && r[2] < 0.035) return { i, x, z, kind: "turbine", top: 3.2, r };

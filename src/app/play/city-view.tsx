@@ -33,7 +33,7 @@ import { growthOf } from "@/lib/world/growth";
 import { regionMap } from "@/lib/world";
 import { GATED_SPOTS, type RegionMap } from "@/lib/world/compile";
 import { toTile } from "@/lib/world/geo";
-import { BUILDING_LABEL, type Building } from "@/lib/world/buildings";
+import { BUILDING_LABEL, wealthOf, type Building } from "@/lib/world/buildings";
 import { propertyInfo, type PropertyInfo } from "@/lib/world/property";
 import { workplaceOfTile, type Workplace } from "@/lib/world/workplace";
 import type { MapBusiness } from "@/lib/world/business";
@@ -47,7 +47,7 @@ import { createBirds } from "./city/birds";
 import { createBubbles, type BubbleSpot } from "./city/bubbles";
 import { createBuildingSite, createSites } from "./city/construction";
 import { createFigures, type Figures, type Person, type Spot } from "./city/figures";
-import { createInteractables, createWalker, type Interactables, type Item } from "./city/interact";
+import { createGroundsWalker, createInteractables, createWalker, type Interactables, type Item } from "./city/interact";
 import { coolingTowerGeometry, createPlumes, industryParts } from "./city/industry";
 import { createInterior, type Interior, type RoomItem } from "./city/interiors";
 import { disposeBlobTexture, disposeKitCaches, rngFrom } from "./city/kit";
@@ -64,6 +64,9 @@ import { createAircraft } from "./city/aircraft";
 import { createFarCity, MAP_MARGIN } from "./city/far-city";
 import { createKites } from "./city/kites";
 import { buildingParts } from "./city/building-kit";
+import { marketParts } from "./city/market-kit";
+import { museumParts } from "./city/museum-kit";
+import { plotLayout } from "@/lib/city/plots";
 import { CLEAR_GROUND, crossingParts, pieceParts, stationParts } from "./city/spans-kit";
 import { setSceneSnapshot } from "./city/snapshot";
 import { createTraffic, type VehiclePose } from "./city/traffic";
@@ -399,8 +402,12 @@ type Props = {
    * spot), and stay there until `gateIn` changes (Go inside). Says which landmark, or null once gone.
    */
   onAtGate?: (gate: { name: string } | null) => void;
+  /** Inside a planned home: which of its floors you're on, and how many it has (null: not in one). */
+  onHomeFloors?: (floors: { now: number; count: number } | null) => void;
   /** Change it to go on inside from a landmark's entrance. */
   gateIn?: number;
+  /** Go to this floor of the planned home you're in (its Floor button); `at` makes each ask new. */
+  homeFloorTo?: { to: number; at: number } | null;
   /** Signed out: a tap on a place's bubble (or its fun-place icon) asks you to sign in instead. */
   onBubbleSignIn?: () => void;
   /** The 3D view broke and couldn't mend itself (the phone took the canvas away, or nothing draws): build it again. */
@@ -416,6 +423,11 @@ const WINDOW = 40;
  * beyond it, plain blocks and a painted map (./city/far-city) keep a strict drawing budget.
  */
 const DETAIL = 18;
+/** A winding street's asphalt (tile widths), and the dusty verges either side of it. */
+const ROAD_W = 0.6;
+const VERGE = 0xbcb3a0;
+/** How far from the middle of the drawn area (tiles) shared tiles get their little houses (src/lib/city/plots). */
+const PLOTS_NEAR = 12;
 const SKY = 0xd7ebf7;
 
 /**
@@ -474,8 +486,9 @@ function geometries() {
 }
 
 // ---------------------------------------------------------------- what stands on a tile
-function partsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "tile">) => void) {
-  basePartsFor(t, plan, add);
+/** `near`: close enough to the middle of the drawn area for the little houses on shared tiles (src/lib/city/plots). */
+function partsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "tile">) => void, near = true) {
+  basePartsFor(t, plan, add, near);
   // A real place's bridges, flyovers, railways and stations along their real curves.
   const region = plan.region;
   if (region) {
@@ -555,7 +568,38 @@ function homeParts(
   B(-0.13, 0.19, 0.405, 0.2, 0.08, 0.02, 0x7048e8);
 }
 
-function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "tile">) => void) {
+/**
+ * Power lines along a straight street: a wooden pole on the verge (the same side all along the
+ * street, so the wires run on), a crossbar, and two wires the length of the tile.
+ */
+function powerLine(x: number, z: number, along: boolean, add: (mesh: string, p: Omit<Part, "tile">) => void) {
+  const side = hashish(along ? z : x + 0.5, 77) < 0.5 ? -0.47 : 0.47;
+  const px = along ? x : x + side;
+  const pz = along ? z + side : z;
+  add("trunk", { x: px, y: 0.06, z: pz, sx: 0.2, sy: 0.62, sz: 0.2, ry: 0, color: 0x6b5440 });
+  add("building", { x: px, y: 0.62, z: pz, sx: along ? 0.02 : 0.16, sy: 0.015, sz: along ? 0.16 : 0.02, ry: 0, color: 0x5c4a3a });
+  for (const o of [-0.06, 0.06]) {
+    const wx = along ? x + 0.5 : px + o;
+    const wz = along ? pz + o : z - 0.5;
+    // A cylinder on its side, the length of the tile (tipped over it reaches from here towards -x,
+    // or, turned a quarter, towards +z).
+    add("trunk", { x: wx, y: 0.632, z: wz, sx: 0.06, sy: 1.0, sz: 0.06, ry: along ? 0 : Math.PI / 2, tilt: Math.PI / 2, color: 0x212529 });
+  }
+}
+
+/** A hawker on a verge: a big umbrella over a table of goods, a stool, a basin. */
+function roadsideSeller(x: number, z: number, along: boolean, lateral: number, r: number, add: (mesh: string, p: Omit<Part, "tile">) => void) {
+  const sx = along ? x + (r - 0.5) * 0.4 : x + lateral;
+  const sz = along ? z + lateral : z + (r - 0.5) * 0.4;
+  const um = [0xe03131, 0x1c7ed6, 0xfab005, 0x2f9e44, 0xf76707][Math.floor(r * 5)];
+  add("trunk", { x: sx, y: 0.06, z: sz, sx: 0.12, sy: 0.24, sz: 0.12, ry: 0, color: 0x495057 });
+  add("cone", { x: sx, y: 0.29, z: sz, sx: 0.2, sy: 0.05, sz: 0.2, ry: 0, color: um });
+  add("building", { x: sx, y: 0.06, z: sz, sx: 0.11, sy: 0.07, sz: 0.08, ry: along ? 0 : Math.PI / 2, color: 0x9c7b56 });
+  for (let k = 0; k < 2; k++) add("cone", { x: sx + (along ? (k - 0.5) * 0.05 : 0), y: 0.13, z: sz + (along ? 0 : (k - 0.5) * 0.05), sx: 0.045, sy: 0.03, sz: 0.045, ry: 0, color: [0xd9480f, 0xfcc419, 0x82c91e, 0xe64980][Math.floor(r * 13 + k) % 4] });
+  add("cyl", { x: sx + (along ? 0.08 : 0.05), y: 0.06, z: sz + (along ? 0.05 : 0.08), sx: 0.04, sy: 0.035, sz: 0.04, ry: 0, color: 0x2b2b2b });
+}
+
+function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "tile">) => void, near = true) {
   const { x, z, r } = t;
   const pal = plan.palette;
   const pick = (list: number[], v: number) => list[Math.floor(v * list.length) % list.length];
@@ -627,7 +671,21 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
       add("crown", { x: x - cx * 0.7, y: 0.17, z: z - cz * 0.7, sx: 0.27, sy: 0.34, sz: 0.27, ry: t.r[0] * 6, color: plan.palette.leaves[0] });
       return;
     }
-    add("ground", { x, y: 0, z, sx: 1, sy: 0.06, sz: 1, ry: 0, color: ASPHALT });
+    // (Where an expressway meets it, drawn full width, the junction stays full width too.)
+    const bigRoad = (dx: number, dz: number) => {
+      const k = plan.region?.roadAt(x + dx, z + dz)?.kind;
+      return k === "motorway" || k === "trunk";
+    };
+    const junction = !t.roundabout && !t.express && !(m === 5 || m === 10 || m === 1 || m === 4 || m === 2 || m === 8) && ![[0, -1], [1, 0], [0, 1], [-1, 0]].some(([dx, dz]) => bigRoad(dx, dz));
+    if (junction) {
+      // A junction as wide as the streets meeting at it: verges on the corners, asphalt in the
+      // middle and out to each street.
+      add("ground", { x, y: 0, z, sx: 1, sy: 0.055, sz: 1, ry: 0, color: VERGE });
+      add("ground", { x, y: 0, z, sx: ROAD_W, sy: 0.06, sz: ROAD_W, ry: 0, color: ASPHALT });
+      for (const [bit, dx, dz] of [[1, 0, -0.25], [2, 0.25, 0], [4, 0, 0.25], [8, -0.25, 0]] as const) {
+        if (m & bit) add("ground", { x: x + dx, y: 0, z: z + dz, sx: dx ? 0.5 : ROAD_W, sy: 0.06, sz: dz ? 0.5 : ROAD_W, ry: 0, color: ASPHALT });
+      }
+    } else add("ground", { x, y: 0, z, sx: 1, sy: 0.06, sz: 1, ry: 0, color: ASPHALT });
     if (t.roundabout) {
       // Roundabout: a grassy island with a fountain or a tree, and a painted ring.
       add("curveLine", { x: x + 0.5, y: 0.064, z: z - 0.5, sx: 0.8, sy: 1, sz: 0.8, ry: Math.PI, color: 0xffffff });
@@ -647,6 +705,40 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
       return;
     }
     const straight = m === 5 || m === 10 || m === 1 || m === 4 || m === 2 || m === 8;
+    // A winding street (src/lib/city/layout waveOf): dusty verges, and the asphalt sweeping across
+    // the tile in two pieces through its start, middle and end.
+    if (straight && t.wave && t.crossing === undefined && !t.works && !t.incident) {
+      add("ground", { x, y: 0, z, sx: 1, sy: 0.055, sz: 1, ry: 0, color: VERGE });
+      const along = m === 10;
+      const [o0, o1, o2] = t.wave;
+      const pts = along
+        ? [[x - 0.5, z + o0], [x, z + o1], [x + 0.5, z + o2]]
+        : [[x + o0, z - 0.5], [x + o1, z], [x + o2, z + 0.5]];
+      for (let k = 0; k < 2; k++) {
+        const [ax, az] = pts[k];
+        const [bx, bz] = pts[k + 1];
+        const len = Math.hypot(bx - ax, bz - az);
+        const ry = Math.atan2(-(bz - az), bx - ax);
+        const mx = (ax + bx) / 2;
+        const mz = (az + bz) / 2;
+        add("ground", { x: mx, y: 0, z: mz, sx: len + 0.04, sy: 0.062, sz: ROAD_W, ry, color: ASPHALT });
+        add("paint", { x: mx, y: 0.063, z: mz, sx: 0.2, sy: 0.005, sz: 0.035, ry, color: 0xffffff });
+      }
+      // A street light on every other stretch, on the verge, on the side the road leans away from.
+      if ((x + z) % 2 === 0) {
+        const side = o1 > 0 ? -0.42 : 0.42;
+        const lx = along ? x : x + side;
+        const lz = along ? z + side : z;
+        add("trunk", { x: lx, y: 0.06, z: lz, sx: 0.3, sy: 0.5, sz: 0.3, ry: 0, color: 0x495057 });
+        add("lamp", { x: lx - (along ? 0 : side * 0.12), y: 0.56, z: lz - (along ? side * 0.12 : 0), sx: 0.11, sy: 0.07, sz: 0.11, ry: 0, color: 0xffffff });
+      }
+      if (near) {
+        powerLine(x, z, along, add);
+        // Now and then a hawker on the wider verge (the side the road leans away from).
+        if (hashish(x * 3.1 + z, 91) < 0.14) roadsideSeller(x, z, along, o1 > 0 ? -0.36 : 0.36, t.r[3], add);
+      }
+      return;
+    }
     if (straight) {
       const along = m === 10 || m === 2 || m === 8;
       // A street light on every other stretch, alternating sides.
@@ -657,6 +749,7 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
         add("trunk", { x: lx, y: 0.06, z: lz, sx: 0.3, sy: 0.5, sz: 0.3, ry: 0, color: 0x495057 });
         add("lamp", { x: lx - (along ? 0 : side * 0.12), y: 0.56, z: lz - (along ? side * 0.12 : 0), sx: 0.11, sy: 0.07, sz: 0.11, ry: 0, color: 0xffffff });
       }
+      if (near && !t.express && (m === 5 || m === 10)) powerLine(x, z, along, add);
       if (t.crossing !== undefined) crossingParts(t, t.crossing, along, add);
       else {
         for (const o of [-0.25, 0.25]) {
@@ -718,7 +811,9 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
 
   // A real place's property (a bungalow, flats, shops, a plot...): see ./city/building-kit.
   if (t.building && !t.home) {
-    buildingParts(t, t.building, pal, B, add, tree);
+    // Low-rise property shares its tile with little houses round it, close in (further out, just the property).
+    const plots = near && plan.region ? plotLayout(t.building, x, z, wealthOf(plan.region.landPriceAt(x, z))) : null;
+    buildingParts(t, t.building, pal, B, add, tree, plots);
     if (t.egg) eggParts(t, B);
     return;
   }
@@ -877,6 +972,39 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
       B(0.28, 0.08, 0.34, 0.3, 0.09, 0.15, 0xffffff);
       B(0.28, 0.12, 0.34, 0.305, 0.03, 0.155, 0x1c3faa);
       B(0.28, 0.17, 0.34, 0.15, 0.06, 0.13, 0x343a40);
+      break;
+    }
+    case "bank": {
+      // A bank branch: a glass-fronted block with the bank's colour round the top, a canopy over
+      // the doors, cash machines in the wall and a guard's booth.
+      const brand = [0x1c7ed6, 0xe8590c, 0x2f9e44, 0x7048e8, 0xc92a2a][Math.floor(r[1] * 5)];
+      const h = t.v === 1 ? 0.95 : 0.7;
+      B(0, 0.08, -0.08, 0.76, h, 0.56, 0xf1f3f5);
+      bands(0, -0.08, 0.76, 0.56, 0.08, 0.08 + h, 0.3, 0x5d7fa3);
+      B(0, 0.08, 0.2, 0.5, 0.36, 0.02, 0x4c6e91, 0, "glass");
+      B(0, 0.08 + h - 0.12, -0.08, 0.77, 0.12, 0.57, brand);
+      B(0, 0.08 + h - 0.08, 0.205, 0.5, 0.06, 0.012, 0xffffff, 0, "paint");
+      B(0, 0.44, 0.3, 0.56, 0.03, 0.2, brand);
+      for (const ax of [0.28, 0.34]) B(ax, 0.14, 0.205, 0.05, 0.12, 0.02, 0x4dabf7, 0, "lamp");
+      B(-0.32, 0.08, 0.34, 0.12, 0.2, 0.12, 0x495057);
+      tree(-0.36, -0.38, 0.4, r[0]);
+      break;
+    }
+    case "lawcourt": {
+      // A law court: a pale stone hall on steps behind a row of columns under a pediment, the
+      // country's flag on a pole out front.
+      const stone = 0xece4d4;
+      for (let k = 0; k < 3; k++) B(0, 0.08 + k * 0.03, 0.02 - k * 0.03, 0.86 - k * 0.06, 0.03, 0.74 - k * 0.06, k % 2 ? stone : 0xf7f1e6);
+      const top = t.v === 1 ? 0.95 : 0.75;
+      B(0, 0.17, -0.12, 0.72, top, 0.44, 0xf7f1e6);
+      for (let k = 0; k < 6; k++) B(-0.3 + k * 0.12, 0.17, 0.17, 0.05, top - 0.12, 0.05, 0xffffff, 0, "cyl");
+      B(0, 0.05 + top, 0.04, 0.78, 0.08, 0.34, stone);
+      add("roof", { x, y: 0.13 + top, z: z + 0.02, sx: 0.78 / Math.SQRT2, sy: 0.16, sz: 0.36 / Math.SQRT2, ry: 0, color: 0xd8cfbd });
+      B(0, 0.17, 0.11, 0.14, 0.3, 0.02, 0x6b4f37);
+      B(0, 0.12 + top, 0.205, 0.4, 0.05, 0.01, 0x1f3b5c, 0, "paint");
+      B(0.38, 0.08, 0.36, 0.012, 0.6, 0.012, 0x868e96, 0, "cyl");
+      B(0.43, 0.56, 0.36, 0.1, 0.07, 0.004, 0x2f9e44, 0, "paint");
+      tree(-0.38, 0.36, 0.4, r[0]);
       break;
     }
     case "fuel": {
@@ -1068,6 +1196,10 @@ function structureParts(t: Tile, plan: CityPlan, B0: BoxFn, tree0: TreeFn) {
   // The big ones (the stadium, the capitol, mega malls) have their own drawings.
   if (megaParts(t, B0, tree0)) return;
   const st = t.structure!;
+  // A market fills its whole site, at any size, with its own stalls.
+  if (st.type === "market") return marketParts(t, B0, tree0);
+  // A museum: its own building (never domed: a dome reads as a mosque) in a sculpture garden.
+  if (st.type === "museum") return museumParts(t, B0, tree0);
   // A real landmark bigger than the usual 2 × 2 (a market, a museum, a hotel, a port at their
   // true size): its grounds fill the whole site (paving, lawns, trees along a low fence), and its
   // building stands in the middle, drawn bigger to match.
@@ -1134,15 +1266,6 @@ function structureParts(t: Tile, plan: CityPlan, B0: BoxFn, tree0: TreeFn) {
       B(c, 0.09 + H * 0.55, c, 0.3, 0.22, 0.28, 0xadb5bd);
       break;
     }
-    case "museum": {
-      B(c, 0.09, c, 1.8, 0.15, 1.6, 0xf1ece2);
-      B(c, 0.24, c - 0.1, 1.3, 0.65, 1.0, 0xf8f4ec);
-      B(c, 0.89, c - 0.1, 0.9, 0.6, 0.9, 0x96c7c1, 0, "dome");
-      for (let k = 0; k < 6; k++) B(c - 0.55 + k * 0.22, 0.24, c + 0.5, 0.08, 0.6, 0.08, 0xffffff, 0, "cyl");
-      B(c, 0.84, c + 0.5, 1.3, 0.08, 0.2, 0xf8f4ec);
-      B(c, 0.09, c + 0.78, 1.2, 0.08, 0.2, 0xe9ecef);
-      break;
-    }
     case "funfair": {
       // Ferris wheel and carousel turn (see landmarks); tents and a little roller coaster here.
       const tents = [0xff6b6b, 0xffd43b, 0x4dabf7, 0xda77f2];
@@ -1155,18 +1278,6 @@ function structureParts(t: Tile, plan: CityPlan, B0: BoxFn, tree0: TreeFn) {
         B(c + 0.55 + Math.cos(a) * 0.35, 0.09, c + 0.55, 0.05, 0.3 + Math.sin(a) * 0.6, 0.05, 0xe03131);
       }
       B(c + 0.55, 0.39, c + 0.55, 1, 1, 1, 0xe03131, 0, "arch");
-      break;
-    }
-    case "market": {
-      const roofs = [0xff6b6b, 0xffd43b, 0x4dabf7, 0x69db7c, 0xf783ac, 0xff922b];
-      for (let i = 0; i < 3; i++) {
-        for (let j = 0; j < 3; j++) {
-          const sx = c - 0.6 + i * 0.6;
-          const sz = c - 0.6 + j * 0.6;
-          B(sx, 0.09, sz, 0.36, 0.22, 0.36, 0xf1e3c8);
-          B(sx, 0.31, sz, 0.48 / Math.SQRT2, 0.2, 0.48 / Math.SQRT2, roofs[(i * 3 + j + Math.floor(r[0] * 6)) % roofs.length], 0, "roof");
-        }
-      }
       break;
     }
     case "arena": {
@@ -1586,7 +1697,9 @@ export function CityView({
   homeStick,
   onWalkBlocked,
   onAtGate,
+  onHomeFloors,
   gateIn = 0,
+  homeFloorTo = null,
   onBubbleSignIn,
   onBroken,
 }: Props) {
@@ -1622,14 +1735,15 @@ export function CityView({
     flyToTile: (tile: number) => void;
     /** From a landmark's entrance, on inside. */
     goInside: () => void;
+    setHomeFloor: (to: number) => void;
     setHomePlans: (plans: Record<number, HomePlan> | undefined) => void;
     /** Zoom in (dir 1) or out (dir -1) a step: the + and − buttons on a computer. */
     zoom: (dir: number) => void;
   } | null>(null);
-  const cb = useRef({ onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onLightTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick, onAtGate, onBubbleSignIn, onBroken });
+  const cb = useRef({ onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onLightTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick, onAtGate, onHomeFloors, onBubbleSignIn, onBroken });
   const atmos = useRef({ progress, nightFirst, meAvatar, weather });
   useEffect(() => {
-    cb.current = { onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onLightTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick, onAtGate, onBubbleSignIn, onBroken };
+    cb.current = { onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onLightTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick, onAtGate, onHomeFloors, onBubbleSignIn, onBroken };
     atmos.current = { progress, nightFirst, meAvatar, weather };
   });
 
@@ -1790,7 +1904,19 @@ export function CityView({
     let tallest = 0;
     let framed = false;
     /** Stopping at a landmark's gate on the way in (see syncView), and the place it was for. */
-    let gateTour: { t: number; fromPos: THREE.Vector3; fromTarget: THREE.Vector3; toPos: THREE.Vector3; toTarget: THREE.Vector3; building: string; name: string; arrived: boolean } | null = null;
+    let gateTour: {
+      t: number;
+      fromPos: THREE.Vector3;
+      fromTarget: THREE.Vector3;
+      toPos: THREE.Vector3;
+      toTarget: THREE.Vector3;
+      /** The map view to go back to (from before the first gate, if you went from one gate to another). */
+      backPos: THREE.Vector3;
+      backTarget: THREE.Vector3;
+      building: string;
+      name: string;
+      arrived: boolean;
+    } | null = null;
     /** Leaving a landmark's gate without going in: gliding back up to the map view from before. */
     let afterGate: { pos: THREE.Vector3; target: THREE.Vector3 } | null = null;
     let gateReturn: { t: number; fromPos: THREE.Vector3; fromTarget: THREE.Vector3; toPos: THREE.Vector3; toTarget: THREE.Vector3 } | null = null;
@@ -3307,12 +3433,14 @@ export function CityView({
       parts = {};
       tileParts = new Map();
       for (const t of tiles) {
+        // The little houses on shared tiles only within PLOTS_NEAR of the middle (the drawing budget).
+        const near = !win || Math.max(Math.abs(t.x - win.cx), Math.abs(t.z - win.cz)) <= PLOTS_NEAR;
         partsFor(t, plan, (mesh, p) => {
           (parts[mesh] ??= []).push({ ...p, tile: t.i });
           const list = tileParts.get(t.i) ?? [];
           list.push([mesh, parts[mesh].length - 1]);
           tileParts.set(t.i, list);
-        });
+        }, near);
       }
 
       for (const m of Object.values(meshes)) {
@@ -4579,6 +4707,14 @@ export function CityView({
       hoverBox.visible = true;
       hoverBox.position.set(a.x + (size.w - 1) / 2, 0, a.z + (size.d - 1) / 2);
       hoverBox.scale.set(size.w + 0.04, a.top + 0.12, size.d + 0.04);
+      // A property sharing its tile (src/lib/city/plots): just its own plot at the front.
+      const plots = a.building && !a.home && currentPlan?.region ? plotLayout(a.building, a.x, a.z, wealthOf(currentPlan.region.landPriceAt(a.x, a.z))) : null;
+      if (plots) {
+        const turn = (a.building!.face * Math.PI) / 2;
+        const { x: mx, z: mz, s: ms, v: mv } = plots.main;
+        hoverBox.position.set(a.x + mx * Math.cos(turn) + mz * Math.sin(turn), 0, a.z - mx * Math.sin(turn) + mz * Math.cos(turn));
+        hoverBox.scale.set(0.9 * ms + 0.06, (a.top - 0.08) * mv + 0.2, 0.9 * ms + 0.06);
+      }
       const n = roomCountsNow[r.room.id] ?? 0;
       cb.current.onHover?.({ tile: a.i, label: `${r.room.name}${t.egg ? ` · ${t.egg.name}` : ""} · ${n ? `${n} inside` : "nobody inside yet"} · tap to go in` });
     }
@@ -5278,6 +5414,8 @@ export function CityView({
     // Planned homes: the plans by tile, and which floor of each you're on.
     const homePlans = new Map<number, HomePlan>();
     const homeFloor = new Map<number, number>();
+    /** The planned home's floors last told to the game (see tellHomeFloors). */
+    let homeFloorsKey = "";
     let restage = false;
     /** Draw the place you're in again (its plan arrived or changed, or you took the stairs). */
     function redrawHere() {
@@ -5493,7 +5631,7 @@ export function CityView({
       npcSeats: Set<Spot>;
       interact: Interactables | null;
       hover: string | null;
-      walker: ReturnType<typeof createWalker> | null;
+      walker: (ReturnType<typeof createWalker> & { bounds?: { x0: number; x1: number; z0: number; z1: number } }) | null;
       /** Where you are in the room (metres), your eye height, and the walk you're on. */
       local: { x: number; z: number };
       eye: number;
@@ -5745,6 +5883,25 @@ export function CityView({
         hideRoof(st, true);
         setupUse(st, deck.seats, deck.items, deck.spots, npcs.length);
         st.walker = createWalker(deck.w, deck.d, deck.blocks, 0.3);
+        // Out in a landmark's grounds (a market, a park, outside a stadium): walk anywhere on them,
+        // not just round the spot you came to. Its footprint, in this spot's own metres.
+        const sto = anchor.structure;
+        if (sto && lvl.kind === "outdoor") {
+          const w = sto.w ?? 2;
+          const d = sto.d ?? 2;
+          const c = Math.cos(-lvl.ry);
+          const sn = Math.sin(-lvl.ry);
+          const xs: number[] = [];
+          const zs: number[] = [];
+          for (const [cx, cz] of [[sto.ax - 0.5, sto.az - 0.5], [sto.ax + w - 0.5, sto.az - 0.5], [sto.ax - 0.5, sto.az + d - 0.5], [sto.ax + w - 0.5, sto.az + d - 0.5]]) {
+            const dx = (cx - lvl.x) * METRES;
+            const dz = (cz - lvl.z) * METRES;
+            xs.push(dx * c + dz * sn);
+            zs.push(-dx * sn + dz * c);
+          }
+          const cap = (v: number) => Math.max(-80, Math.min(80, v));
+          st.walker = createGroundsWalker(cap(Math.min(...xs) + 1), cap(Math.max(...xs) - 1), cap(Math.min(...zs) + 1), cap(Math.max(...zs) - 1));
+        }
       }
       return st;
     }
@@ -6132,6 +6289,12 @@ export function CityView({
       floorPlane.constant = -st.holder.getWorldPosition(tmpV).y;
       if (!ray.ray.intersectPlane(floorPlane, floorHit)) return false;
       st.holder.worldToLocal(floorHit);
+      const b = st.walker?.bounds;
+      if (b) {
+        // A landmark's grounds: anywhere on them.
+        if (floorHit.x < b.x0 - 0.5 || floorHit.x > b.x1 + 0.5 || floorHit.z < b.z0 - 0.5 || floorHit.z > b.z1 + 0.5) return false;
+        return walkTo(st, floorHit.x, floorHit.z);
+      }
       const W = st.interior ? st.interior.w : 7;
       const D = st.interior ? st.interior.d : 7;
       if (Math.abs(floorHit.x) > W / 2 + 0.5 || Math.abs(floorHit.z) > D / 2 + 0.5) return false;
@@ -6188,24 +6351,32 @@ export function CityView({
       restage = false;
       if (next?.kind === "ride" && view?.kind === "ride" && view.k === next.k) return;
       if (next?.kind === "vehicle" && view?.kind === "vehicle" && view.ride.kind === next.ride.kind && view.ride.index === next.ride.index) return;
-      if (!next && !view) return;
       // Going into a landmark from the map: you arrive at its main gate, out on the street in
       // front of the name sign (a photo spot), and go on inside when you choose (goInside).
+      // (Before the "nothing to do" check below: at the gate there's no view yet, so leaving from
+      // there used to stop at that check, and the camera stayed stuck at the gate.)
       if (!next) gateSeen = null;
       if (next) gateReturn = null;
       if (gateTour) {
         if (next?.kind === "place" && next.building === gateTour.building) return;
+        // Still going there, its tiles just being drawn again (the map moving round): stay at the gate.
+        if (!next && wantPlace?.building === gateTour.building) return;
         // Left (or went somewhere else) from the entrance. Back to the map: glide up to the view from
         // before (from down at the gate, looking sideways at the sign, dragging the map felt stuck).
         const gt = gateTour;
         gateTour = null;
+        gateSeen = null;
         cb.current.onAtGate?.(null);
         if (!next && !view) {
-          gateReturn = { t: 0, fromPos: camera.position.clone(), fromTarget: controls.target.clone(), toPos: gt.fromPos, toTarget: gt.fromTarget };
+          gateReturn = { t: 0, fromPos: camera.position.clone(), fromTarget: controls.target.clone(), toPos: gt.backPos, toTarget: gt.backTarget };
           return;
         }
+        // Somewhere else instead (a ride, another place): coming back from it lands on the map view
+        // from before the gate too.
+        afterGate = { pos: gt.backPos.clone(), target: gt.backTarget.clone() };
         controls.enabled = true;
       }
+      if (!next && !view) return;
       if (next?.kind === "place" && !view && !flight && !walker.on && gateSeen !== next.building) {
         const g = gateFor(next.anchor.x, next.anchor.z);
         gateSeen = next.building;
@@ -6228,10 +6399,13 @@ export function CityView({
             toPos: new THREE.Vector3(g.x + g.dx * (mid + back) + g.dz * 0.12 * back, 0.3 * S + back * 0.5, g.z + g.dz * (mid + back) - g.dx * 0.12 * back),
             // Looking at the name sign, with the gate behind it.
             toTarget: new THREE.Vector3(g.x + g.dx * mid, 0.38 * S, g.z + g.dz * mid),
+            backPos: afterGate?.pos.clone() ?? camera.position.clone(),
+            backTarget: afterGate?.target.clone() ?? controls.target.clone(),
             building: next.building,
             name: g.name,
             arrived: false,
           };
+          afterGate = null;
           return;
         }
       }
@@ -6265,6 +6439,7 @@ export function CityView({
       const from = camera.position.clone();
       if (!next) {
         view = null;
+        tellHomeFloors();
         look.setEnabled(false);
         // Out the way we came in: back out through the side we're facing from, then up.
         let ctrl: THREE.Vector3 | null = null;
@@ -6310,6 +6485,7 @@ export function CityView({
       if (!sameBuilding) homeFloor.delete(next.anchor.i);
       const st = buildStage(next.building, next.anchor, next.level);
       view = { kind: "place", stage: st };
+      tellHomeFloors();
       look.lookAt(0, 0, true);
       look.resetZoom(true);
       pickView(wantSpot);
@@ -6589,6 +6765,25 @@ export function CityView({
       vv.figures3d?.update(Math.min(0.1, Math.max(0, time - (vv.t3 ?? time))));
       vv.t3 = time;
     }
+    /** Tell the game which floor of a planned home you're on (for its Floor button). */
+    function tellHomeFloors() {
+      const plan = view?.kind === "place" && view.stage.homeKey ? homePlans.get(view.stage.tile) : undefined;
+      const f = plan && view?.kind === "place" ? { now: homeFloor.get(view.stage.tile) ?? 0, count: plan.floors.length } : null;
+      const key = f ? `${f.now}/${f.count}` : "";
+      if (key === homeFloorsKey) return;
+      homeFloorsKey = key;
+      cb.current.onHomeFloors?.(f);
+    }
+    /** Inside a planned home: go to one of its floors (its Floor button). */
+    function setHomeFloor(to: number) {
+      if (view?.kind !== "place" || !view.stage.homeKey) return;
+      const t = view.stage.tile;
+      const plan = homePlans.get(t);
+      if (!plan || to < 0 || to >= plan.floors.length || to === (homeFloor.get(t) ?? 0)) return;
+      playSfx("whoosh");
+      homeFloor.set(t, to);
+      redrawHere();
+    }
     function setPlace(p: CityPlace | null) {
       wantPlace = p;
       syncView();
@@ -6678,6 +6873,8 @@ export function CityView({
       } else if (view?.kind === "place") {
         const st = view.stage;
         stepWalk(st, dt);
+        // The joystick walks you about any place too (the way you're looking).
+        stepStick(st, dt);
         stageToCity(st, st.local.x, st.local.z, st.eye, pose.pos);
         hfov = st.level.kind === "interior" ? 84 : 80;
       } else if (view?.kind === "vehicle") {
@@ -6781,6 +6978,7 @@ export function CityView({
         const from = stick?.from;
         const at = standAt(from?.x ?? controls.target.x, from?.z ?? controls.target.z);
         walker.on = true;
+        gateReturn = null;
         walker.x = at.x;
         walker.z = at.z;
         walker.cam = walker.face = cameraYaw();
@@ -7912,7 +8110,7 @@ export function CityView({
     function goInside() {
       if (!gateTour) return;
       // Coming back out later lands on the map view from before the gate, not down at the gate.
-      afterGate = { pos: gateTour.fromPos.clone(), target: gateTour.fromTarget.clone() };
+      afterGate = { pos: gateTour.backPos.clone(), target: gateTour.backTarget.clone() };
       gateTour = null;
       cb.current.onAtGate?.(null);
       syncView();
@@ -7968,7 +8166,7 @@ export function CityView({
       if (regionNow && currentSeed >= 0 && builtCount > 0) build(currentSeed, builtCount);
     }
     const center = () => ({ x: Math.round(controls.target.x), z: Math.round(controls.target.z) });
-    api.current = { setMarkTags, center, build: buildFor, setOwned, setBusinesses, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setChallengeLights, setPartyZones: partyLights.set, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, setHomePlans, zoom, goInside };
+    api.current = { setMarkTags, center, build: buildFor, setOwned, setBusinesses, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setChallengeLights, setPartyZones: partyLights.set, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, setHomePlans, zoom, goInside, setHomeFloor };
 
     return () => {
       alive = false;
@@ -8067,6 +8265,11 @@ export function CityView({
   useEffect(() => {
     api.current?.setAds(ads ?? []);
   }, [ads]);
+  // A planned home's Floor button.
+  const homeFloorKey = homeFloorTo ? `${homeFloorTo.to}|${homeFloorTo.at}` : "";
+  useEffect(() => {
+    if (homeFloorKey) api.current?.setHomeFloor(Number(homeFloorKey.split("|")[0]));
+  }, [homeFloorKey]);
   // Go inside from a landmark's entrance (the game's "Go inside" button).
   const gateInSeen = useRef(gateIn);
   useEffect(() => {

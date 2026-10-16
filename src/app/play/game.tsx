@@ -576,6 +576,10 @@ export function Game({
   /** At a landmark's main entrance (going in): its name, and the count that sends you on inside. */
   const [atGate, setAtGate] = useState<{ name: string } | null>(null);
   const [gateIn, setGateIn] = useState(0);
+  /** Inside a planned home: its floors (for the Floor button), the list open, and a floor asked for. */
+  const [homeFloors, setHomeFloors] = useState<{ now: number; count: number } | null>(null);
+  const [homeFloorsOpen, setHomeFloorsOpen] = useState(false);
+  const [homeFloorTo, setHomeFloorTo] = useState<{ to: number; at: number } | null>(null);
   const [townNew, setTownNew] = useState(false);
   // The new 3D studio, while it is being tried out (see avatar3d-flag.ts).
   // (Read in the browser only; it matters only once the studio is opened, so the server's false is harmless.)
@@ -1893,6 +1897,8 @@ export function Game({
   const enteredRoom = place ? (rooms.myRoomInfo?.id ?? null) : null;
   const enteredTile = enteredRoom ? Number(/^b:(\d+)/.exec(enteredRoom)?.[1] ?? NaN) : NaN;
   const inPlannedHome = !!worldId && Number.isFinite(enteredTile) && enteredTile in homePlans;
+  /** Inside a place on the real map (not on a ride): the joystick walks you round it. */
+  const stickInPlace = !!worldId && !!place && ride === null;
   // Your cash on screen, with what your property earns going up every 5 seconds (./income). The
   // server pays what's been earned when the game opens, every 5 minutes, and when you open Money.
   // Around (the row of faces under the top bar): only people online right now.
@@ -1990,11 +1996,11 @@ export function Game({
   const [bottomDockH, setBottomDockH] = useState(96);
   useEffect(() => {
     const el = bottomDock.current;
-    if (!el || !inPlannedHome) return;
+    if (!el || !stickInPlace) return;
     const ro = new ResizeObserver(() => setBottomDockH(Math.round(el.getBoundingClientRect().height)));
     ro.observe(el);
     return () => ro.disconnect();
-  }, [inPlannedHome]);
+  }, [stickInPlace]);
   // Inside a place when the page reloads (the game updated, or the phone dropped the tab): back
   // inside it. Remembered while you're in; forgotten once you leave.
   const lastRoom = useRef<{ pending: boolean } | null>(null);
@@ -2108,6 +2114,8 @@ export function Game({
       }
       case "gallery":
       case "rotunda":
+        // A museum's galleries: its art is for sale (the masters at museum prices).
+        return { label: "Buy art", icon: ShoppingBag, run: () => worldLife.openThings("shops", "museum") };
       case "skybridge":
       case "clockroom":
       case "park":
@@ -2116,7 +2124,7 @@ export function Game({
       case "poolDeck":
         return { label: "Take a photo", icon: Camera, run: () => setCamera("photo") };
       case "market":
-        return { label: "Shop at the market", icon: ShoppingBag, run: () => worldLife.openThings("shops") };
+        return { label: "Shop at the stalls", icon: ShoppingBag, run: () => worldLife.openThings("shops", "market") };
     }
     return null;
   }
@@ -2126,6 +2134,8 @@ export function Game({
     setRide(null);
     setPlace(null);
     setActivity(null);
+    // Left from a landmark's entrance (before going in): its Photo / Go inside bar goes too.
+    setAtGate(null);
   }
   useEffect(() => {
     leaveInside.current = () => {
@@ -2360,6 +2370,8 @@ export function Game({
             onProperty={worldId && (!guest || worldLife.adOpen) ? worldLife.onProperty : undefined}
             onWorkplace={worldId && !guest ? worldLife.onWorkplace : undefined}
             onAtGate={setAtGate}
+            onHomeFloors={setHomeFloors}
+            homeFloorTo={homeFloorTo}
             onBubbleSignIn={guest ? () => setSignInWhy("Sign in to go into places, meet people and play.") : undefined}
             gateIn={gateIn}
             centerRef={worldId ? worldLife.centerRef : undefined}
@@ -3630,7 +3642,31 @@ export function Game({
                 {chatUnread > 0 && <span className="absolute -right-1.5 -top-1.5 grid min-w-5 place-items-center rounded-full bg-hit px-1 text-[11px] text-white">{chatUnread > 99 ? "99+" : chatUnread}</span>}
               </button>
             )}
-            {place && placeRoom && placeRoom.id === place.building && (placeRoom.levels?.length ?? 0) > 1 && (
+            {/* A planned home with more than one floor: its own floors, like any building's. */}
+            {place && homeFloors && homeFloors.count > 1 && (
+              <span className="relative">
+                <button onClick={() => setHomeFloorsOpen((o) => !o)} className="flex shrink-0 items-center gap-1 rounded-xl bg-panel-2 px-3 py-2 text-xs font-semibold" aria-expanded={homeFloorsOpen}>
+                  <Layers className="size-4" /> {homeFloors.now === 0 ? "Ground floor" : `Floor ${homeFloors.now}`}
+                </button>
+                {homeFloorsOpen && (
+                  <span className="glass absolute bottom-full left-0 z-10 mb-2 flex min-w-36 flex-col gap-1 rounded-2xl p-1.5 shadow-lg">
+                    {Array.from({ length: homeFloors.count }, (_, f) => homeFloors.count - 1 - f).map((f) => (
+                      <button
+                        key={f}
+                        onClick={() => {
+                          setHomeFloorsOpen(false);
+                          setHomeFloorTo((r) => ({ to: f, at: (r?.at ?? 0) + 1 }));
+                        }}
+                        className={cn("rounded-xl px-3 py-2 text-left text-xs font-semibold", f === homeFloors.now ? "bg-ink text-white" : "hover:bg-ink/5")}
+                      >
+                        {f === 0 ? "Ground floor" : `Floor ${f}`}
+                      </button>
+                    ))}
+                  </span>
+                )}
+              </span>
+            )}
+            {place && !homeFloors && placeRoom && placeRoom.id === place.building && (placeRoom.levels?.length ?? 0) > 1 && (
               <button
                 onClick={() => setPickPlace(placeRoom)}
                 className={cn("relative flex shrink-0 items-center gap-1 rounded-xl bg-panel-2 px-3 py-2 text-xs font-semibold", floorGlow && "outline outline-2 outline-offset-2 outline-gold")}
@@ -4286,8 +4322,8 @@ export function Game({
           <RecentRail meId={state.me.guest ? undefined : state.me.id} onPerson={setPersonId} onMessage={chatWith} />
         </div>
       )}
-      {/* In a planned home: the joystick walks you round it (or tap the floor). */}
-      {inPlannedHome && !camera && (
+      {/* Inside any place (a planned home, a landmark, its grounds): the joystick walks you round it (or tap the floor). */}
+      {stickInPlace && !camera && !isDancing && (
         <div className="pointer-events-none fixed left-4 z-30 sm:left-8" style={{ bottom: bottomDockH + 12 }}>
           <Joystick stick={homeStick} />
         </div>

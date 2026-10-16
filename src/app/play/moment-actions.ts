@@ -223,7 +223,7 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; area
   const [{ data: prof }, recentRes, dueRes, spendRes, effects, bonds, world, badges, business, fits, written, itemsRes] = await Promise.all([
     m.db.from("profiles").select("level, frozen").eq("id", m.userId).maybeSingle(),
     // Every one you've had lately (up to 500): the last 25 don't come again, ones never had come first.
-    m.db.from("moments").select("moment, created_at").eq("user_id", m.userId).order("created_at", { ascending: false }).limit(500),
+    m.db.from("moments").select("moment, created_at, spot").eq("user_id", m.userId).order("created_at", { ascending: false }).limit(500),
     m.db.from("moment_followups").select("id, moment, vars").eq("user_id", m.userId).lte("due_at", new Date().toISOString()).order("due_at").limit(1),
     m.db.rpc("life_can_spend", { p_user: m.userId, p_pots: ["fun"] }),
     effectsOf(m.db, m.userId),
@@ -242,7 +242,8 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; area
   // Part 109 not run yet: no moments.
   if (recentRes.error) return null;
   if (prof?.frozen) return null;
-  const last = recentRes.data?.[0]?.created_at as string | undefined;
+  // On the road, only the last road moment counts (game-db/119); elsewhere, the last of any.
+  const last = (road ? recentRes.data?.find((r) => r.spot === "road") : recentRes.data?.[0])?.created_at as string | undefined;
   if (last && Date.now() - Date.parse(last) < gap * 1000) return null;
   const level = Math.max(1, n(prof?.level));
   const seed = Math.floor(Math.random() * 2 ** 31);

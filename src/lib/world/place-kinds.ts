@@ -1,5 +1,5 @@
 // Searching the map by what a place is, not only its name (docs/MAP_SEARCH.md): type "club",
-// "church", "court", "airport", "petrol" or "hospital" and the nearest ones come up first, with how
+// "church", "court" (a law court), "airport", "petrol" or "hospital" and the nearest ones come up first, with how
 // far they are. Every kind of place on the map has the words people use for it (plurals, Nigerian
 // words and short forms too); the everyday places are found on the streets round where you're
 // looking, the big landmarks, named spots and stations anywhere in the city. No database.
@@ -33,7 +33,8 @@ export const PLACE_KINDS: PlaceKind[] = [
   { id: "fuel", label: "Petrol station", plural: "Petrol stations", icon: "⛽", words: ["petrol", "fuel", "filling", "gas", "gas station", "fuel station", "filling station", "mega station"], tiles: ["fuel"] },
   { id: "school", label: "School", plural: "Schools", icon: "🏫", words: ["school", "college", "academy", "nursery", "primary", "secondary", "lesson", "class"], tiles: ["school"] },
   { id: "university", label: "University", plural: "Universities", icon: "🎓", words: ["university", "uni", "campus", "unilag", "polytechnic", "poly", "varsity"], structures: ["campus"] },
-  { id: "court", label: "Basketball court", plural: "Courts", icon: "🏀", words: ["court", "basketball", "ball court", "hoops"], structures: ["court"] },
+  { id: "court", label: "Law court", plural: "Law courts", icon: "⚖️", words: ["court", "law court", "courthouse", "court house", "magistrate", "magistrate court", "high court", "customary court", "judge", "justice", "law", "lawyer", "tribunal", "trial"], tiles: ["lawcourt"] },
+  { id: "basketball", label: "Basketball court", plural: "Basketball courts", icon: "🏀", words: ["basketball", "basketball court", "ball court", "hoops"], structures: ["court"] },
   { id: "stadium", label: "Stadium", plural: "Stadiums", icon: "🏟️", words: ["stadium", "arena", "football", "soccer", "match", "sport", "sports"], tiles: ["stadium"], structures: ["arena"] },
   { id: "pitch", label: "Football pitch", plural: "Football pitches", icon: "⚽", words: ["pitch", "field", "football", "soccer", "five aside", "5 aside"], tiles: ["pitch"] },
   { id: "boxing", label: "Boxing arena", plural: "Boxing arenas", icon: "🥊", words: ["boxing", "boxer", "fight", "ring"], structures: ["boxing"] },
@@ -43,7 +44,7 @@ export const PLACE_KINDS: PlaceKind[] = [
   { id: "hotel", label: "Hotel", plural: "Hotels", icon: "🏨", words: ["hotel", "motel", "inn", "suite", "lodge", "stay"], structures: ["hotel"] },
   { id: "mall", label: "Mall", plural: "Malls", icon: "🛍️", words: ["mall", "shopping", "shop", "shops", "store", "plaza", "supermarket", "boutique"], structures: ["mall", "megamall"] },
   { id: "market", label: "Market", plural: "Markets", icon: "🧺", words: ["market", "oja", "kasuwa", "balogun", "trader", "buy"], structures: ["market"] },
-  { id: "bank", label: "Bank", plural: "Banks", icon: "🏦", words: ["bank", "atm", "money", "cash", "world bank"], structures: ["bank"] },
+  { id: "bank", label: "Bank", plural: "Banks", icon: "🏦", words: ["bank", "atm", "money", "cash", "branch", "savings", "deposit", "withdraw"], tiles: ["bank"], structures: ["bank"] },
   { id: "airport", label: "Airport", plural: "Airports", icon: "✈️", words: ["airport", "airstrip", "plane", "planes", "flight", "fly", "flights", "terminal", "mmia", "murtala"], structures: ["airport", "intlairport"] },
   { id: "spaceport", label: "Spaceport", plural: "Spaceports", icon: "🚀", words: ["spaceport", "rocket", "space"], structures: ["spaceport"] },
   { id: "port", label: "Port", plural: "Ports", icon: "⚓", words: ["port", "harbour", "harbor", "dock", "docks", "ship", "ships", "jetty", "apapa"], structures: ["port"] },
