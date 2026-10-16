@@ -164,7 +164,7 @@ Each phase is built in one go (a few hours to a couple of days); writing the sto
 - [x] Six career badges (Founder, First Profit, The Boss, Brand Name, Mogul, Comeback Kid); businesses count towards Legacy.
 - [ ] A business at Shop taking a real building on the map, its sign up (docs/BUSINESS.md).
 - [ ] More business moments for each kind (a suya spot's problems aren't a tech startup's).
-- [ ] Owner to decide: how much businesses may pay at most each stage (now ₦15,000 a day at Idea up to ₦1.5m at Empire).
+- [x] Owner decided: no limit on an Empire's earnings, but harder to grow the bigger it is; the smallest cap is ₦150,000 a day (Idea), then ₦500,000, ₦1.5m and ₦5m.
 
 **Phase 6: other players in your story.**
 - [ ] Threads between two players (a loan, a favour), cameos, shared moments, group moments at a place,

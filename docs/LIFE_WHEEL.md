@@ -361,11 +361,13 @@ reviewing.
    (suya spot, buka, fashion house, POS kiosk, salon, dispatch riders, event planning, poultry farm,
    tech startup, import and export), each with its own price, growth and risk
    (`src/lib/world/ventures.ts`). Hidden numbers shown in words; a day of business at a time (up to
-   a week caught up), paying you 60% of a good day's profit, capped per stage (₦15,000 a day at
-   Idea up to ₦1.5m at Empire); 16 business moments (`venture-moments.ts`) two or three a week,
+   a week caught up), paying you 60% of a good day's profit, capped per stage (₦150,000 a day at
+   Idea, ₦500,000 at Stall, ₦1.5m at Shop, ₦5m at Brand, and no limit at Empire); the bigger it
+   is the harder it grows (word spreads more slowly at each stage, and an Empire grows ever more
+   slowly as it gets bigger, with no end); 16 business moments (`venture-moments.ts`) two or three a week,
    with amounts that grow with the stage; ready-to-grow and crisis moments; closing by itself after
-   a month deep in the red. Run well, it's about a month to Stall, six to Shop, a year to Brand and
-   a year and a half to Empire. Six career badges, and businesses count towards Legacy
+   a month deep in the red. Run well, it's about a month to Stall, six to eight to Shop, a year or
+   more to Brand and a year and a half to two and a half to Empire. Six career badges, and businesses count towards Legacy
    (game-db/115). Still to come: a Shop taking a real building on the map, and real players as
    customers, suppliers, partners and rivals (phase 6).
 6. **Other players in your story.** Threads between players, cameos, shared and group moments,
@@ -381,5 +383,3 @@ reviewing.
 - The badge names, and whether badges are private until you choose to show them (suggested: yes).
 - The list of businesses to start with.
 - Whether a business can fail completely (suggested: yes, but you never lose your home).
-- How big business income can get at each stage (now ₦15,000 a day at Idea, ₦50,000 at Stall,
-  ₦150,000 at Shop, ₦500,000 at Brand, ₦1.5m at Empire, at most).

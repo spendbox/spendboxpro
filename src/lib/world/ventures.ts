@@ -44,14 +44,21 @@ export const VENTURE_KINDS: VentureKind[] = [
 ];
 export const VENTURE_KIND_BY_ID = new Map(VENTURE_KINDS.map((k) => [k.id, k]));
 
-/** The stages, what it takes to be ready for the next, and what each pays you a day at most. */
+/**
+ * The stages: what it takes to be ready for the next, what each pays you a day at most (an Empire
+ * has no limit), how many customers its premises hold (an Empire's have no end), and how fast word
+ * spreads there (`pace`: the bigger it is, the harder it is to grow).
+ */
 export const VENTURE_STAGES = [
-  { name: "Idea", grow: { customers: 25, cash: 40_000 }, upkeep: 2_000, cap: 15_000, room: 40, expand: 30_000 },
-  { name: "Stall", grow: { customers: 100, cash: 250_000 }, upkeep: 8_000, cap: 50_000, room: 150, expand: 200_000 },
-  { name: "Shop", grow: { customers: 400, cash: 1_200_000 }, upkeep: 30_000, cap: 150_000, room: 600, expand: 1_000_000 },
-  { name: "Brand", grow: { customers: 1_600, cash: 6_000_000 }, upkeep: 120_000, cap: 500_000, room: 2_500, expand: 5_000_000 },
-  { name: "Empire", grow: null, upkeep: 400_000, cap: 1_500_000, room: 10_000, expand: 0 },
+  { name: "Idea", grow: { customers: 25, cash: 40_000 }, upkeep: 2_000, cap: 150_000, room: 40, expand: 30_000, pace: 1 },
+  { name: "Stall", grow: { customers: 100, cash: 250_000 }, upkeep: 8_000, cap: 500_000, room: 150, expand: 200_000, pace: 0.9 },
+  { name: "Shop", grow: { customers: 400, cash: 1_200_000 }, upkeep: 30_000, cap: 1_500_000, room: 600, expand: 1_000_000, pace: 0.75 },
+  { name: "Brand", grow: { customers: 1_600, cash: 6_000_000 }, upkeep: 120_000, cap: 5_000_000, room: 2_500, expand: 5_000_000, pace: 0.6 },
+  { name: "Empire", grow: null, upkeep: 400_000, cap: Infinity, room: Infinity, expand: 0, pace: 0.45 },
 ] as const;
+
+/** An Empire keeps growing, ever more slowly: word spreads less the bigger it already is. */
+export const EMPIRE_SCALE = 5_000;
 export const EMPIRE = VENTURE_STAGES.length - 1;
 
 /** What a member of staff costs a day (naira), and how many customers each (and you) can serve. */
@@ -110,7 +117,10 @@ export function ventureDay(v: Venture, rand: () => number): { venture: Venture; 
   // Something goes wrong: a theft, a fine, spoiled stock.
   if (rand() < v.risk / 1000) profit -= revenue * 0.5 + st.upkeep * 3;
   // Word of mouth: quality and happy staff bring people; a full house turns some away.
-  const spread = (((v.quality - 50) / 50) * 0.022 + ((v.mood - 50) / 50) * 0.007) * k.growth;
+  const tougher = st.pace * (v.stage === EMPIRE ? 1 / (1 + v.customers / EMPIRE_SCALE) : 1);
+  const raw = (((v.quality - 50) / 50) * 0.022 + ((v.mood - 50) / 50) * 0.007) * k.growth;
+  // Bigger is harder to grow; bad news travels at full speed.
+  const spread = raw > 0 ? raw * tougher : raw;
   const full = v.customers > capacity(v) ? -0.01 : 0;
   // A new business finds its first customers one by one.
   const customers = clamp(v.customers * (1 + spread + full) + (spread > 0 && v.stage === 0 ? 0.5 : 0), 0, st.room * 1.2);
