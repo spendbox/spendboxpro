@@ -808,6 +808,23 @@ function dancePose(move: DanceMove, b: number, P: Float32Array) {
       P[HEAD * 3] = -0.1;
       break;
     }
+    case "pole": {
+      // At the pole (just in front): one hand high on it, a slow grind down and up over eight
+      // beats, hips swaying, a body roll, the free arm flowing out.
+      const ph = Math.PI * b;
+      const drop = 0.5 - 0.5 * Math.cos((TAU * b) / 8);
+      crouch(P, 0.12 + 0.55 * drop);
+      P[HX] = 0.06 * Math.sin(ph);
+      P[HIPS * 3 + 2] = -0.12 * Math.sin(ph);
+      P[SPINE * 3] = 0.18 * Math.sin(ph);
+      P[CHEST * 3] = 0.2 * Math.sin(ph - 1);
+      R(P, UARM_R, -0.4, 0, 2.6);
+      P[FARM_R * 3] = -0.35;
+      R(P, UARM_L, -0.6, 0, -0.9 - 0.5 * Math.sin(ph + 1));
+      P[FARM_L * 3] = -0.5 - 0.4 * Math.sin(ph + 2);
+      R(P, HEAD, -0.25 + 0.2 * Math.sin(ph - 2), 0.2 * Math.sin(ph * 0.5), 0);
+      break;
+    }
   }
 }
 
@@ -851,7 +868,8 @@ export type FigureOpts = {
   inert?: boolean;
 };
 
-const MOVE_IDS = DANCE_MOVES.map((m) => m.id);
+/** The moves the regulars mix up on the floor (the pole is for the poles). */
+const MOVE_IDS = DANCE_MOVES.map((m) => m.id).filter((m) => m !== "pole");
 
 /** Regulars (from npcsFor) or players, each in their spot (spots[n], wrapping round). */
 export function createFigures(people: (Npc | Person)[], spots: Spot[], opts?: FigureOpts) {

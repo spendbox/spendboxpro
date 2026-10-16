@@ -12,12 +12,12 @@ careers, other players in your story): `docs/LIFE_WHEEL.md`.
 ## When they come
 
 - On the real map, signed in: the first one a couple of minutes after you start, then now and
-  then (about every 12 to 25 minutes of play, up to 8 a day), so each one matters (docs/LIFE_WHEEL.md).
+  then every 12 to 18 minutes of play: 3 or 4 an hour while you're online (docs/LIFE_WHEEL.md).
 - Going into a place makes one more likely soon after (one that fits there: a wrong bill in a
   restaurant, a plank challenge at the gym, the offering basket at church).
 - Never while a card or a full-screen tool is open, while you're taking a photo or on a ride, or
   while the game isn't on screen. It waits and tries again.
-- At least 12 minutes apart and at most 8 a day, street and road together (the server keeps to
+- At least 10 minutes apart and at most 40 a day, street and road together (the server keeps to
   this). A big one (`size: "big"`) at most every 3 days.
 - The cross (or **Walk away**) closes one without choosing. Nothing happens.
 

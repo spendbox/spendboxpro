@@ -9,7 +9,7 @@
 
 import * as THREE from "three";
 import { books, board, cityMap, dashboard, departures, floorTexture, painting, products, rug, sign, tvPicture, ART_STYLES, RUG_STYLES, Sheet, type FloorStyle } from "./interior-art";
-import { blobTexture, Kit, mixHex, pickOf, rngFrom, shadeHex, shadowMesh, type Rng, type UvRect } from "./kit";
+import { blobTexture, cssHex, Kit, mixHex, pickOf, rngFrom, shadeHex, shadowMesh, type Rng, type UvRect } from "./kit";
 import { createAthletes, createCrowd, faceRig, runRig, skinOf, type AthleteLook } from "./arenas";
 import { clubBeat } from "./dance-moves";
 import type { Act, Spot } from "./figures";
@@ -55,6 +55,8 @@ export type Interior = {
   blocks: Block[];
   /** A club's dance floor (middle and size, metres), where players dance. */
   danceFloor?: { x: number; z: number; w: number; d: number };
+  /** A club's dance poles (room metres). */
+  poles?: { x: number; z: number }[];
   /** Room size (metres), for keeping things inside. */
   w: number;
   d: number;
@@ -172,6 +174,8 @@ type Ctx = {
   blocks: Block[];
   /** A club's dance floor. */
   dance?: { x: number; z: number; w: number; d: number };
+  /** A club's dance poles (where pole dancers stand round them). */
+  poles?: { x: number; z: number }[];
   /** Textures made for extras (disposed with the room). */
   textures: THREE.Texture[];
 };
@@ -869,213 +873,561 @@ function karaokeCorner(x: Ctx, px: number, pz: number, ry: number) {
 }
 
 // ---------------------------------------------------------------- the club
+//
+// Clubs are big (a dance floor for a crowd, booths all round, a long bar, a DJ up on a stage) and
+// each one is built in one of four designs, so no two feel the same:
+//   crystal:   red and magenta faceted walls, a waving canopy of crystal lights over the floor,
+//              glowing crystal pillars, a gold light strip round the floor;
+//   ice:       violet and cyan, a cyan crystal canopy, lantern chandeliers, pink velvet booths;
+//   gold:      a lounge of gold mosaic pillars, a mirrored ceiling, teal tufted sofas, red velvet;
+//   warehouse: a Lagos rave in a warehouse, truss rigs of moving lights, a giant LED screen, lasers.
+// The floor is dark and glossy with patterns of light thrown across it (no tiles, no mirror ball).
+// Pole stages stand by the dance floor: players can dance there (the "Pole dance" move) and
+// everyone else watches and sprays money.
 
-function club(x: Ctx) {
-  const { room, pal, rnd, sheet, info, k } = x;
+export type ClubStyle = "crystal" | "ice" | "gold" | "warehouse";
+export const CLUB_STYLES: ClubStyle[] = ["crystal", "ice", "gold", "warehouse"];
+
+type ClubLook = {
+  room: { w: number; d: number; h: number };
+  wall: number;
+  accentWall: number;
+  ceiling: number;
+  floor: [number, number];
+  /** Booth fabric, the light colours (main, second, the floor's edge), and the gobo colours. */
+  fabric: number;
+  neon: number;
+  neon2: number;
+  edge: number;
+  gobos: number[];
+  /** Beams from the ceiling and their colour. */
+  beams: number;
+};
+
+const CLUB_LOOKS: Record<ClubStyle, ClubLook> = {
+  crystal: { room: { w: 30, d: 22, h: 7 }, wall: 0x8a1030, accentWall: 0xb3124a, ceiling: 0x14060f, floor: [0x16101c, 0x0b0810], fabric: 0xf4f0f2, neon: 0xff2d95, neon2: 0x7c3aed, edge: 0xffc61a, gobos: [0x3b82f6, 0xff2d55, 0x22d3ee], beams: 0xff4fd8 },
+  ice: { room: { w: 28, d: 22, h: 6.5 }, wall: 0x4c1d95, accentWall: 0x6d28d9, ceiling: 0x0c0a24, floor: [0x101629, 0x0a0d1a], fabric: 0xe879f9, neon: 0x22d3ee, neon2: 0xe879f9, edge: 0x67e8f9, gobos: [0x22d3ee, 0xa5f3fc, 0xe879f9], beams: 0x22d3ee },
+  gold: { room: { w: 28, d: 20, h: 5.5 }, wall: 0x3b1d14, accentWall: 0x5c1f1a, ceiling: 0x2a1a10, floor: [0x1c1210, 0x120b09], fabric: 0x0f5c5c, neon: 0xffb347, neon2: 0xff3d7f, edge: 0xffb347, gobos: [0xffb347, 0xff6b6b, 0xffd8a8], beams: 0xffc078 },
+  warehouse: { room: { w: 36, d: 26, h: 9 }, wall: 0x3a3d42, accentWall: 0x2b2e33, ceiling: 0x111214, floor: [0x1d1f22, 0x141517], fabric: 0x1c1c1c, neon: 0x39ff14, neon2: 0x22d3ee, edge: 0x39ff14, gobos: [0x39ff14, 0x22d3ee, 0xff2d95], beams: 0xb2f2bb },
+};
+
+/** The room and colours for a club in this design. */
+export function clubPlan(style: ClubStyle): { room: Room; pal: Pal } {
+  const L = CLUB_LOOKS[style];
+  return {
+    room: { ...L.room, walls: ["solid", "solid", "solid", "solid"] },
+    pal: { ...LOUNGE[0], wall: L.wall, accentWall: L.accentWall, trim: shadeHex(L.wall, 0.2), ceiling: L.ceiling, floor: ["marble", L.floor[0], L.floor[1]], fabric: L.fabric, fabric2: L.neon2, accent: L.neon, metal: style === "gold" ? 0xc9a227 : 0x2b2b2b },
+  };
+}
+
+/** A texture drawn on a canvas, kept with the room (disposed with it). */
+function canvasTex(x: Ctx, w: number, h: number, draw: (c: CanvasRenderingContext2D, w: number, h: number) => void, repeat = false) {
+  const cv = document.createElement("canvas");
+  cv.width = w;
+  cv.height = h;
+  draw(cv.getContext("2d")!, w, h);
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  if (repeat) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  x.textures.push(t);
+  return t;
+}
+const glowMat = (color: number, map?: THREE.Texture, opacity = 1) =>
+  new THREE.MeshBasicMaterial({ color, map, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+
+/** A pattern of light like a gobo projector throws: petals of dashes round a ring. */
+function goboTexture(x: Ctx, kind: number) {
+  return canvasTex(x, 256, 256, (c, w, h) => {
+    c.translate(w / 2, h / 2);
+    c.fillStyle = "#fff";
+    c.shadowColor = "#fff";
+    c.shadowBlur = 6;
+    const arms = kind === 0 ? 14 : kind === 1 ? 9 : 20;
+    for (let a = 0; a < arms; a++) {
+      c.save();
+      c.rotate((a / arms) * Math.PI * 2);
+      for (let r = 0; r < (kind === 2 ? 3 : 5); r++) {
+        const at = 30 + r * 19;
+        const len = kind === 1 ? 14 : 10;
+        c.beginPath();
+        c.ellipse(at, 0, len, kind === 1 ? 6 : 4, kind === 0 ? 0.5 : 0, 0, Math.PI * 2);
+        c.fill();
+      }
+      c.restore();
+    }
+    if (kind === 2) {
+      c.lineWidth = 6;
+      c.strokeStyle = "#fff";
+      c.beginPath();
+      c.arc(0, 0, 112, 0, Math.PI * 2);
+      c.stroke();
+    }
+  });
+}
+
+function club(x: Ctx, style: ClubStyle) {
+  const { room, pal, rnd, info, k } = x;
+  const L = CLUB_LOOKS[style];
   const W = room.w;
   const D = room.d;
+  const H = room.h;
   x.dark = true;
-  const neon = pickOf(rnd, [0xff4fd8, 0x22d3ee, 0xa3e635, 0xffd43b]);
-  const neon2 = pickOf(rnd, [0x7c3aed, 0x22d3ee, 0xff4fd8, 0xff6b6b]);
-  // Glowing strips round the ceiling and along the bottom of the walls.
+  const neon = L.neon;
+  const neon2 = L.neon2;
+
+  // ---- walls: each design dresses them its own way.
+  if (style === "crystal" || style === "ice") {
+    // Faceted panels: triangles in two shades of the wall colour, like cut glass.
+    const facets = canvasTex(x, 512, 256, (c, w, h) => {
+      const a = cssHex(shadeHex(L.wall, 0.15));
+      const b = cssHex(shadeHex(L.wall, -0.15));
+      const s = 64;
+      for (let i = 0; i < w / s; i++)
+        for (let j = 0; j < h / s; j++) {
+          c.fillStyle = (i + j) % 2 ? a : b;
+          c.beginPath();
+          c.moveTo(i * s, j * s);
+          c.lineTo(i * s + s, j * s);
+          c.lineTo(i * s, j * s + s);
+          c.fill();
+          c.fillStyle = (i + j) % 2 ? b : a;
+          c.beginPath();
+          c.moveTo(i * s + s, j * s);
+          c.lineTo(i * s + s, j * s + s);
+          c.lineTo(i * s, j * s + s);
+          c.fill();
+        }
+    }, true);
+    for (const side of [1, 3]) {
+      const len = wallLen(room, side);
+      const t = facets.clone();
+      t.repeat.set(len / 6, (H - 1.2) / 3);
+      t.needsUpdate = true;
+      x.textures.push(t);
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(len, H - 1.2), new THREE.MeshLambertMaterial({ map: t, color: 0xffffff }));
+      const [px, pz, ry] = onWall(room, side, 0);
+      m.position.set(px + Math.sin(ry) * 0.02, 1.2 + (H - 1.2) / 2, pz + Math.cos(ry) * 0.02);
+      m.rotation.y = ry;
+      x.extras.push(m);
+    }
+  }
+  if (style === "gold" || style === "crystal") {
+    // Velvet curtains in the corners and either side of the DJ.
+    const velvet = style === "gold" ? 0x7a0f1d : 0x5c0b2a;
+    for (const [side, u] of [[0, -W / 2 + 1.2], [0, W / 2 - 1.2], [2, -6.2], [2, 6.2]] as const) {
+      atWall(x, side, u, () => {
+        for (let f = 0; f < 6; f++) k.box(-0.75 + f * 0.3, 0, 0.18 + (f % 2) * 0.06, 0.28, H - 0.2, 0.12, shadeHex(velvet, (f % 2) * 0.12 - 0.04), { grad: [0.7, 1.1, H] });
+        k.box(0, H - 0.5, 0.2, 2.0, 0.5, 0.3, shadeHex(velvet, 0.1));
+      });
+    }
+  }
+  if (style === "warehouse") {
+    // Brick and concrete, painted murals in neon.
+    const brick = canvasTex(x, 256, 256, (c, w, h) => {
+      c.fillStyle = "#2d2f33";
+      c.fillRect(0, 0, w, h);
+      for (let j = 0; j < 16; j++)
+        for (let i = 0; i < 8; i++) {
+          c.fillStyle = `hsl(10, ${12 + ((i * 7 + j * 13) % 10)}%, ${16 + ((i * 11 + j * 5) % 7)}%)`;
+          c.fillRect(i * 32 + (j % 2) * 16 + 1, j * 16 + 1, 30, 14);
+        }
+    }, true);
+    for (const side of [0, 1, 3]) {
+      const len = wallLen(room, side);
+      const t = brick.clone();
+      t.repeat.set(len / 4, H / 4);
+      t.needsUpdate = true;
+      x.textures.push(t);
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(len, H), new THREE.MeshLambertMaterial({ map: t }));
+      const [px, pz, ry] = onWall(room, side, 0);
+      m.position.set(px + Math.sin(ry) * 0.02, H / 2, pz + Math.cos(ry) * 0.02);
+      m.rotation.y = ry;
+      x.extras.push(m);
+    }
+    // Steel beams and roof trusses.
+    for (let b = -2; b <= 2; b++) k.box(b * (W / 5), H - 0.6, 0, 0.3, 0.4, D, 0x3b3f45, { noAo: true });
+  }
+
+  // Light strips round the ceiling and along the bottom of the walls.
   for (const [cx, cz, cw, cd] of [[0, -D / 2 + 0.05, W, 0.05], [0, D / 2 - 0.05, W, 0.05], [-W / 2 + 0.05, 0, 0.05, D], [W / 2 - 0.05, 0, 0.05, D]] as const) {
-    k.box(cx, room.h - 0.12, cz, cw, 0.04, cd, neon, { layer: "glow" });
-    k.box(cx, 0.1, cz, cw, 0.03, cd, neon2, { layer: "glow" });
+    k.box(cx, H - 0.14, cz, cw, 0.05, cd, neon, { layer: "glow" });
+    k.box(cx, 0.08, cz, cw, 0.04, cd, neon2, { layer: "glow" });
   }
-  // The dance floor: a raised edge round a floor of light tiles (they change colour).
-  const fw = 7;
-  const fd = 5.5;
-  const fz = -0.4;
-  k.box(0, 0, fz, fw + 0.3, 0.06, fd + 0.3, 0x1b1b1b, { noAo: true });
-  const tiles = new THREE.InstancedMesh(new THREE.BoxGeometry(0.46, 0.02, 0.46).translate(0, 0.07, 0), new THREE.MeshBasicMaterial({ color: 0xffffff }), Math.round(fw / 0.5) * Math.round(fd / 0.5));
-  const cols = [0xff4fd8, 0x22d3ee, 0xa3e635, 0xffd43b, 0x7c3aed, 0xff6b6b].map((c) => new THREE.Color(c));
-  const n0 = Math.round(fw / 0.5);
-  const n1 = Math.round(fd / 0.5);
-  const m4 = new THREE.Matrix4();
-  for (let i = 0; i < n0; i++) for (let j = 0; j < n1; j++) {
-    m4.makeTranslation(-fw / 2 + 0.25 + i * 0.5, 0, fz - fd / 2 + 0.25 + j * 0.5);
-    tiles.setMatrixAt(i * n1 + j, m4);
-    tiles.setColorAt(i * n1 + j, cols[(i + j) % cols.length]);
-  }
-  x.extras.push(tiles);
+
+  // ---- the dance floor: big, in the middle, a strip of light round its edge that pulses on the beat.
+  const fw = Math.min(14, W * 0.45);
+  const fd = Math.min(10, D * 0.45);
+  const fz = -0.8;
   x.dance = { x: 0, z: fz, w: fw, d: fd };
-  let lastBeat = -1;
-  const dim = new THREE.Color();
-  x.anim.push(() => {
-    // The floor changes on every beat (the same beat the dancers move to).
-    const beat = Math.floor(clubBeat());
-    if (beat === lastBeat) return;
-    lastBeat = beat;
-    for (let i = 0; i < n0; i++) for (let j = 0; j < n1; j++) {
-      const wave = Math.sin(i * 0.9 + j * 0.7 + beat * 1.3);
-      tiles.setColorAt(i * n1 + j, dim.copy(cols[(i + j + beat) % cols.length]).multiplyScalar(wave > 0.2 ? 1 : 0.18));
-    }
-    if (tiles.instanceColor) tiles.instanceColor.needsUpdate = true;
-  });
-  item(x, "dance", "Dance floor", 0, 0.07, fz, 1.6);
+  const edgeMat = new THREE.MeshBasicMaterial({ color: L.edge });
+  const edge = new THREE.Group();
+  for (const [ex, ez, ew, ed] of [[0, fz - fd / 2, fw + 0.12, 0.06], [0, fz + fd / 2, fw + 0.12, 0.06], [-fw / 2, fz, 0.06, fd], [fw / 2, fz, 0.06, fd]] as const) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(ew, 0.03, ed), edgeMat);
+    m.position.set(ex, 0.03, ez);
+    edge.add(m);
+  }
+  x.extras.push(edge);
+  item(x, "dance", "Dance floor", 0, 0.07, fz, 2.2);
+  // The regulars dancing (players get the middle; a bigger crowd joins them, see the city view).
   x.act = "dance";
-  for (let d = 0; d < 10; d++) {
+  for (let d = 0; d < 26; d++) {
     const a = rnd() * Math.PI * 2;
-    const r = 0.6 + rnd() * 1.8;
-    spot(x, Math.cos(a) * r * 1.2, fz + Math.sin(a) * r * 0.9, rnd() * 6, "stand");
+    const r = 1.6 + rnd() * (Math.min(fw, fd) / 2 - 2);
+    spot(x, Math.cos(a) * r * (fw / fd), fz + Math.sin(a) * r, rnd() * 6, "stand");
   }
   x.act = undefined;
-  // The DJ booth on the back wall: a platform, the decks, speakers, and a glowing wall.
-  const name = info.name;
-  const wall = sheet.paint(512, 128, (c, w, h) => {
-    const g = c.createLinearGradient(0, 0, w, 0);
-    g.addColorStop(0, "#1a0b3b");
-    g.addColorStop(0.5, "#3b0a45");
-    g.addColorStop(1, "#0b2a3b");
-    c.fillStyle = g;
-    c.fillRect(0, 0, w, h);
-    c.font = "900 54px system-ui, sans-serif";
-    c.textAlign = "center";
-    c.textBaseline = "middle";
-    c.shadowColor = "#ff4fd8";
-    c.shadowBlur = 18;
-    c.fillStyle = "#ffffff";
-    c.fillText(name.toUpperCase().slice(0, 18), w / 2, h / 2, w - 30);
-  });
-  atWall(x, 2, 0, () => {
-    k.box(0, 0, 1.0, 4.2, 0.5, 2.0, 0x1b1b1b);
-    k.box(0, 0.5, 1.4, 2.6, 0.9, 0.7, 0x2b2b2b);
-    k.box(0, 1.4, 1.4, 2.7, 0.04, 0.8, 0x111111);
-    for (const dx of [-0.75, 0.75]) {
-      k.cyl(dx, 1.44, 1.45, 0.22, 0.22, 0.03, 0x343a40, 20);
-      k.cyl(dx, 1.47, 1.45, 0.08, 0.08, 0.01, neon, 12, { layer: "glow" });
-    }
-    k.box(0, 1.44, 1.45, 0.4, 0.05, 0.3, 0x495057);
-    k.box(0, 0.6, 1.76, 2.6, 0.7, 0.02, neon2, { layer: "glow" });
-    for (const sx of [-1.9, 1.9]) {
-      k.box(sx, 0.5, 1.2, 0.8, 2.0, 0.7, 0x1b1b1b);
-      for (const sy of [0.95, 1.85]) k.cyl(sx, 0.5 + sy, 1.56, 0.25, 0.25, 0.02, 0x343a40, 18, { rx: Math.PI / 2 });
-    }
-    k.quad(0, 2.4, 0.04, 6.0, 1.5, 0xffffff, { layer: "texGlow" }, wall);
-    x.act = "dj";
-    spot(x, 0, 1.0, Math.PI, "stand");
-    x.act = undefined;
-    item(x, "dj", "DJ booth", 0, 0.5, 2.3, 1.2);
-  });
-  // The bar along the east wall, backlit bottles, stools.
-  atWall(x, 1, 0.4, () => {
-    k.box(0, 0, 1.6, 4.6, 1.1, 0.7, 0x1b1b1b);
-    k.box(0, 1.1, 1.6, 4.7, 0.05, 0.8, 0x343a40);
-    k.box(0, 0.08, 1.96, 4.6, 0.03, 0.02, neon, { layer: "glow" });
-    k.box(0, 1.2, 0.2, 4.2, 1.2, 0.3, 0x111111);
-    for (let b = 0; b < 22; b++) k.cyl(-2.0 + (b % 11) * 0.4, 1.32 + Math.floor(b / 11) * 0.55, 0.25, 0.04, 0.04, 0.28, pickOf(rnd, [0x2f9e44, 0xe8c07d, 0xb6d7e6, 0x7a2e3a, 0xff922b]), 8, { layer: "glow" });
-    spot(x, 0, 0.9, 0, "stand");
-    x.act = "sip";
-    for (let s2 = 0; s2 < 5; s2++) chair(x, -1.6 + s2 * 0.8, 2.35, 0, neon2, 0x343a40, { stool: true });
-    x.act = undefined;
-    item(x, "bar", "Bar", 0, 0, 2.6, 1.2);
-  });
-  // Booths along the west wall.
-  x.act = "sip";
-  for (let b = 0; b < 2; b++) {
-    const bz = -D / 2 + 2.4 + b * 3.0;
-    sofa(x, -W / 2 + 0.75, bz, Math.PI / 2, 2.4, pal.fabric, { legs: 0x111111 });
-    table(x, -W / 2 + 1.85, bz, 0, 0.8, 1.4, 0x111111, 0x343a40, { h: 0.5 });
-    x.k.cyl(-W / 2 + 1.85, 0.5, bz, 0.05, 0.05, 0.1, neon, 10, { layer: "glow" });
+
+  // Patterns of light thrown over the floor, turning and drifting (and changing colour on the beat).
+  const goboTex = [0, 1, 2].map((g) => goboTexture(x, g));
+  const gobos: { m: THREE.Mesh; mat: THREE.MeshBasicMaterial; ox: number; oz: number; sp: number; ph: number; r: number }[] = [];
+  const goboGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+  for (let g = 0; g < 16; g++) {
+    const mat = glowMat(L.gobos[g % L.gobos.length], goboTex[g % 3], 0.75);
+    const m = new THREE.Mesh(goboGeo, mat);
+    const size = 2.2 + rnd() * 1.8;
+    m.scale.set(size, 1, size);
+    m.renderOrder = 2;
+    const inFloor = g < 10;
+    const ox = inFloor ? (rnd() - 0.5) * fw : (rnd() - 0.5) * (W - 4);
+    const oz = inFloor ? fz + (rnd() - 0.5) * fd : (rnd() - 0.5) * (D - 4);
+    m.position.set(ox, 0.025 + g * 0.0004, oz);
+    gobos.push({ m, mat, ox, oz, sp: 0.15 + rnd() * 0.35, ph: rnd() * 6, r: inFloor ? 1.2 : 2.5 });
+    x.extras.push(m);
   }
-  x.act = undefined;
-  // Karaoke or a photo booth in the corner.
-  if (rnd() < 0.55) karaokeCorner(x, -W / 2 + 1.6, D / 2 - 1.3, 0);
-  else photoBooth(x, -W / 2 + 1.2, D / 2 - 1.2, Math.PI / 2, neon2);
-  // A disco ball, lasers and moving spotlights (all moving).
-  const ballMat = new THREE.MeshBasicMaterial({ color: 0xdfe6ff });
-  const ball = new THREE.Mesh(new THREE.IcosahedronGeometry(0.35, 1), ballMat);
-  ball.position.set(0, room.h - 0.6, fz);
-  x.extras.push(ball);
-  const beamMat = new THREE.MeshBasicMaterial({ color: neon, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
-  const lasers = new THREE.Group();
-  const beamGeo = new THREE.CylinderGeometry(0.012, 0.012, 9, 4).translate(0, 4.5, 0);
-  for (let l = 0; l < 6; l++) {
-    const b = new THREE.Mesh(beamGeo, beamMat);
-    b.rotation.z = -1.2 + (l / 5) * 2.4;
-    b.rotation.x = -1.1;
-    lasers.add(b);
+
+  // ---- over the floor: the crystal canopy (crystal, ice), a mirrored ceiling (gold) or a truss rig (warehouse).
+  const animCanopy: ((t: number) => void)[] = [];
+  if (style === "crystal" || style === "ice") {
+    const dots = canvasTex(x, 64, 64, (c, w, h) => {
+      const g = c.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+      g.addColorStop(0, "rgba(255,255,255,1)");
+      g.addColorStop(0.35, "rgba(255,255,255,0.9)");
+      g.addColorStop(0.6, "rgba(255,255,255,0.15)");
+      g.addColorStop(1, "rgba(255,255,255,0)");
+      c.fillStyle = g;
+      c.fillRect(0, 0, w, h);
+    }, true);
+    const cw = fw + 3;
+    const cd = fd + 3;
+    dots.repeat.set(cw / 0.16, cd / 0.16);
+    const geo = new THREE.PlaneGeometry(cw, cd, 48, 36).rotateX(-Math.PI / 2);
+    const pos = geo.getAttribute("position") as THREE.BufferAttribute;
+    // A billowing sheet, lowest in the middle, like the crystal ceilings of the big clubs.
+    for (let i = 0; i < pos.count; i++) {
+      const px = pos.getX(i);
+      const pz = pos.getZ(i);
+      const r = Math.hypot(px / (cw / 2), pz / (cd / 2));
+      pos.setY(i, -0.9 * Math.max(0, 1 - r * r) - 0.25 * Math.sin(px * 0.7) * Math.cos(pz * 0.6));
+    }
+    geo.computeVertexNormals();
+    const mat = glowMat(neon, dots, 0.95);
+    const canopy = new THREE.Mesh(geo, mat);
+    canopy.position.set(0, H - 0.5, fz);
+    x.extras.push(canopy);
+    const base = new THREE.Color(neon);
+    const alt = new THREE.Color(style === "ice" ? 0xffffff : neon2);
+    animCanopy.push((t) => {
+      // A wave of light running across it, the colour swinging between the two.
+      dots.offset.set(t * 0.6, Math.sin(t * 0.4) * 0.5);
+      mat.color.copy(base).lerp(alt, 0.5 + 0.5 * Math.sin(t * 0.6));
+    });
+    // Crystal pillars at the corners of the floor: glowing columns wrapped in the same lights.
+    const colDots = dots.clone();
+    colDots.repeat.set(10, (H / 0.16) | 0);
+    colDots.needsUpdate = true;
+    x.textures.push(colDots);
+    const colMat = glowMat(style === "ice" ? 0xa5f3fc : 0xffd6e8, colDots, 0.9);
+    for (const [cx, cz] of [[-fw / 2 - 1.4, fz - fd / 2 - 1.2], [fw / 2 + 1.4, fz - fd / 2 - 1.2], [-fw / 2 - 1.4, fz + fd / 2 + 1.2], [fw / 2 + 1.4, fz + fd / 2 + 1.2]] as const) {
+      k.cyl(cx, 0, cz, 0.42, 0.42, H, 0x2a1030, 20);
+      const col = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.46, H, 24, 1, true), colMat);
+      col.position.set(cx, H / 2, cz);
+      x.extras.push(col);
+      k.shadow(cx, cz, 1.1, 1.1, 0.4);
+    }
+    animCanopy.push((t) => {
+      colDots.offset.y = -t * 0.35;
+    });
   }
-  lasers.position.set(0, 2.2, D / 2 - 1.2);
-  x.extras.push(lasers);
-  const coneMat = new THREE.MeshBasicMaterial({ color: neon2, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-  const coneGeo = new THREE.ConeGeometry(1.0, room.h - 0.2, 20, 1, true).translate(0, -(room.h - 0.2) / 2, 0);
+  if (style === "ice") {
+    // Lantern chandeliers: hexagonal cages of brass with candles glowing inside.
+    for (const [lx, lz] of [[-W / 2 + 4, -D / 2 + 4], [W / 2 - 4, -D / 2 + 4], [-W / 2 + 4, D / 2 - 5], [W / 2 - 4, D / 2 - 5], [-W / 2 + 4, 0], [W / 2 - 4, 0]] as const) {
+      const top = H - 1.1;
+      k.cyl(lx, top + 0.6, lz, 0.01, 0.01, H - top - 0.6, 0x8a7a5a, 4);
+      for (let s = 0; s < 6; s++) {
+        const a = (s / 6) * Math.PI * 2;
+        k.cyl(lx + Math.cos(a) * 0.45, top - 0.6, lz + Math.sin(a) * 0.45, 0.012, 0.012, 1.2, 0xc9a227, 4);
+      }
+      k.cyl(lx, top + 0.55, lz, 0.05, 0.5, 0.12, 0xc9a227, 6);
+      k.cyl(lx, top - 0.65, lz, 0.5, 0.05, 0.1, 0xc9a227, 6);
+      for (let c = 0; c < 5; c++) k.cyl(lx + Math.cos(c * 1.25) * 0.2, top - 0.5, lz + Math.sin(c * 1.25) * 0.2, 0.025, 0.025, 0.2 + (c % 2) * 0.1, 0xfff1d6, 6, { layer: "glow" });
+      k.ball(lx, top - 0.2, lz, 0.3, 0xffd8a0, { layer: "glow", sy: 1.4 });
+    }
+  }
+  if (style === "gold") {
+    // Gold mosaic pillars down both sides, and a ceiling of mirror panels catching the light.
+    const mosaic = canvasTex(x, 128, 128, (c, w, h) => {
+      for (let i = 0; i < 16; i++)
+        for (let j = 0; j < 16; j++) {
+          c.fillStyle = `hsl(${38 + ((i * 7 + j * 3) % 8)}, ${60 + ((i * 5 + j * 11) % 25)}%, ${34 + ((i * 13 + j * 7) % 22)}%)`;
+          c.fillRect(i * 8, j * 8, 7, 7);
+        }
+    }, true);
+    mosaic.repeat.set(2, 6);
+    const pillarMat = new THREE.MeshPhongMaterial({ map: mosaic, shininess: 90, specular: 0x8a6a2a, emissive: 0x3a2508 });
+    for (const side of [-1, 1])
+      for (let p = 0; p < 4; p++) {
+        const px = side * (fw / 2 + 0.8);
+        const pz = -D / 2 + 4.5 + p * ((D - 9) / 3);
+        const m = new THREE.Mesh(new THREE.BoxGeometry(1.1, H, 1.1), pillarMat);
+        m.position.set(px, H / 2, pz);
+        x.extras.push(m);
+        k.shadow(px, pz, 1.4, 1.4, 0.45);
+        // Wall lamps on the pillars.
+        k.cyl(px - side * 0.58, 2.2, pz, 0.09, 0.14, 0.26, 0xffd8a0, 10, { layer: "glow" });
+      }
+    for (let i = -3; i <= 3; i++)
+      for (let j = -2; j <= 2; j++) k.box(i * (W / 7), H - 0.06, j * (D / 5), W / 7 - 0.15, 0.04, D / 5 - 0.15, 0x6b4a1c, { noAo: true, layer: "glow" });
+    // Standard lamps along the booths.
+    for (const side of [-1, 1])
+      for (let l = 0; l < 6; l++) {
+        const lx = side * (W / 2 - 2.9);
+        const lz = -D / 2 + 2 + l * ((D - 4) / 5);
+        k.cyl(lx, 0, lz, 0.02, 0.02, 1.6, 0xc9a227, 6);
+        k.cyl(lx, 1.6, lz, 0.12, 0.2, 0.25, 0xffc878, 12, { layer: "glow" });
+      }
+  }
+  if (style === "warehouse") {
+    // Truss rigs across the room, hung with lights.
+    for (const tz of [fz - fd / 2, fz + fd / 2, fz]) {
+      for (const dy of [0, 0.5])
+        for (const dz of [-0.25, 0.25]) k.box(0, H - 2.2 + dy, tz + dz, W - 2, 0.05, 0.05, 0x9aa0a6, { noAo: true });
+      for (let s = -W / 2 + 1.5; s < W / 2 - 1; s += 0.5) k.box(s, H - 2.2, tz, 0.03, 0.5, 0.5, 0x9aa0a6, { noAo: true });
+      for (let s = -6; s <= 6; s += 2) k.cyl(s, H - 2.6, tz, 0.14, 0.14, 0.3, 0x222222, 10);
+    }
+    // Shipping containers turned into booths' backs, stacked at the far corners.
+    for (const [cx, y0, col] of [[-W / 2 + 3, 0, 0xc92a2a], [W / 2 - 3, 0, 0x1c7ed6], [-W / 2 + 3, 2.6, 0xf08c00]] as const) {
+      const cz = D / 2 - 1.6;
+      k.box(cx, y0, cz, 4.8, 2.6, 2.4, col);
+      for (let r = -2.2; r <= 2.2; r += 0.2) k.box(cx + r, y0 + 0.1, cz - 1.21, 0.06, 2.4, 0.02, shadeHex(col, 0.2), { noAo: true });
+    }
+  }
+
+  // Beams of light from the ceiling, sweeping the floor (more, and thinner, in the warehouse).
+  const beamN = style === "warehouse" ? 10 : style === "gold" ? 4 : 7;
+  const coneMat = glowMat(L.beams, undefined, style === "gold" ? 0.07 : 0.11);
+  const coneLen = H - 0.4;
+  const coneGeo = new THREE.ConeGeometry(style === "warehouse" ? 0.55 : 0.9, coneLen, 20, 1, true).translate(0, -coneLen / 2, 0);
   const cones: THREE.Mesh[] = [];
-  for (let c = 0; c < 3; c++) {
+  for (let c = 0; c < beamN; c++) {
     const cone = new THREE.Mesh(coneGeo, coneMat);
-    cone.position.set((c - 1) * 2.5, room.h - 0.1, fz);
+    cone.position.set((c - (beamN - 1) / 2) * (fw / beamN) * 1.2, H - 0.3, fz + (c % 2 ? -fd / 4 : fd / 4));
     cones.push(cone);
     x.extras.push(cone);
   }
-  // Spots of light thrown round the room by the mirror ball, sweeping over floor and walls.
-  const SPOTS = 56;
-  const dots = new THREE.InstancedMesh(
-    new THREE.CircleGeometry(0.09, 10),
-    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
-    SPOTS,
-  );
-  dots.renderOrder = 3;
-  dots.frustumCulled = false;
-  const rays: THREE.Vector3[] = [];
-  for (let i = 0; i < SPOTS; i++) {
-    // Evenly round a sphere (a golden spiral), mostly pointing down and out.
-    const yy = -0.95 + (i / (SPOTS - 1)) * 1.3;
-    const r = Math.sqrt(1 - yy * yy);
-    const a = i * 2.39996;
-    rays.push(new THREE.Vector3(Math.cos(a) * r, yy, Math.sin(a) * r));
-  }
-  const dotCols = cols.map((c) => c.clone().lerp(new THREE.Color(0xffffff), 0.55));
-  for (let i = 0; i < SPOTS; i++) dots.setColorAt(i, dotCols[i % dotCols.length]);
-  x.extras.push(dots);
-  const ballAt = new THREE.Vector3(0, room.h - 0.6, fz);
-  const dir = new THREE.Vector3();
-  const hitAt = new THREE.Vector3();
-  const look = new THREE.Vector3();
-  const dm = new THREE.Matrix4();
-  const dq = new THREE.Quaternion();
-  const one = new THREE.Vector3(1, 1, 1);
-  const zAxis = new THREE.Vector3(0, 0, 1);
-  x.anim.push((t) => {
-    const spin = t * 0.8;
-    const pulse = 0.55 + 0.35 * Math.max(0, Math.cos(clubBeat() * Math.PI * 2));
-    (dots.material as THREE.MeshBasicMaterial).opacity = pulse;
-    for (let i = 0; i < SPOTS; i++) {
-      dir.copy(rays[i]).applyAxisAngle(THREE.Object3D.DEFAULT_UP, spin);
-      // Where the ray meets the floor or a wall (whichever comes first).
-      let best = Infinity;
-      if (dir.y < -0.01) best = Math.min(best, (0.08 - ballAt.y) / dir.y);
-      if (Math.abs(dir.x) > 0.01) best = Math.min(best, ((Math.sign(dir.x) * (W / 2 - 0.03)) - ballAt.x) / dir.x);
-      if (Math.abs(dir.z) > 0.01) best = Math.min(best, ((Math.sign(dir.z) * (D / 2 - 0.03)) - ballAt.z) / dir.z);
-      if (!Number.isFinite(best)) best = 3;
-      hitAt.copy(ballAt).addScaledVector(dir, best);
-      // Lie flat on whatever it landed on.
-      if (Math.abs(hitAt.y - 0.08) < 0.02) look.set(0, 1, 0);
-      else if (Math.abs(Math.abs(hitAt.x) - (W / 2 - 0.03)) < 0.02) look.set(-Math.sign(hitAt.x), 0, 0);
-      else look.set(0, 0, -Math.sign(hitAt.z));
-      dq.setFromUnitVectors(zAxis, look);
-      dm.compose(hitAt, dq, one);
-      dots.setMatrixAt(i, dm);
+  // Lasers fanning out from over the DJ (not in the gold lounge).
+  const lasers = new THREE.Group();
+  if (style !== "gold") {
+    const beamMat = glowMat(style === "warehouse" ? 0x39ff14 : neon, undefined, 0.6);
+    const beamGeo = new THREE.CylinderGeometry(0.014, 0.014, D, 4).translate(0, D / 2, 0);
+    for (let l = 0; l < 9; l++) {
+      const b = new THREE.Mesh(beamGeo, beamMat);
+      b.rotation.z = -1.1 + (l / 8) * 2.2;
+      b.rotation.x = -1.25;
+      lasers.add(b);
     }
-    dots.instanceMatrix.needsUpdate = true;
+    lasers.position.set(0, H - 1.0, D / 2 - 1.2);
+    x.extras.push(lasers);
+  }
+
+  // ---- the DJ on a stage at the back, with a big screen behind (a giant LED wall in the warehouse).
+  const name = info.name.toUpperCase().slice(0, 18);
+  const screenW = style === "warehouse" ? Math.min(16, W * 0.5) : 9;
+  const screenH = style === "warehouse" ? 4.6 : 2.6;
+  const screenTex = canvasTex(x, 1024, 256, (c, w, h) => {
+    const g = c.createLinearGradient(0, 0, w, 0);
+    const css = cssHex;
+    g.addColorStop(0, css(shadeHex(neon2, 0.5)));
+    g.addColorStop(0.5, css(shadeHex(neon, 0.35)));
+    g.addColorStop(1, css(shadeHex(neon2, 0.5)));
+    c.fillStyle = g;
+    c.fillRect(0, 0, w, h);
+    c.globalAlpha = 0.25;
+    c.fillStyle = "#fff";
+    for (let i = 0; i < 40; i++) c.fillRect((i * 97) % w, 0, 3, h);
+    c.globalAlpha = 1;
+    c.font = "900 120px system-ui, sans-serif";
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    c.shadowColor = css(neon);
+    c.shadowBlur = 30;
+    c.fillStyle = "#ffffff";
+    c.fillText(name, w / 2, h / 2, w - 60);
+  }, true);
+  const screenMat = new THREE.MeshBasicMaterial({ map: screenTex });
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(screenW, screenH), screenMat);
+  screen.position.set(0, 1.6 + screenH / 2, D / 2 - 0.06);
+  screen.rotation.y = Math.PI;
+  x.extras.push(screen);
+  atWall(x, 2, 0, () => {
+    // The stage, a step up, with the decks on a glowing desk.
+    k.box(0, 0, 1.4, 7.5, 0.35, 2.8, 0x111111);
+    k.box(0, 0.35, 2.82, 7.5, 0.03, 0.03, neon, { layer: "glow" });
+    k.box(0, 0.35, 1.7, 3.2, 0.95, 0.8, 0x1b1b1b);
+    k.box(0, 0.4, 2.11, 3.0, 0.8, 0.02, neon2, { layer: "glow" });
+    k.box(0, 1.3, 1.7, 3.3, 0.04, 0.9, 0x0d0d0d);
+    for (const dx of [-0.9, 0.9]) {
+      k.cyl(dx, 1.34, 1.72, 0.24, 0.24, 0.03, 0x343a40, 20);
+      k.cyl(dx, 1.37, 1.72, 0.08, 0.08, 0.01, neon, 12, { layer: "glow" });
+    }
+    k.box(0, 1.34, 1.72, 0.5, 0.05, 0.34, 0x495057);
+    // Stacks of speakers either side.
+    for (const sx of [-3.0, 3.0])
+      for (let s = 0; s < 3; s++) {
+        k.box(sx, 0.35 + s * 1.0, 1.2, 1.1, 0.95, 0.9, 0x161616);
+        k.cyl(sx, 0.35 + s * 1.0 + 0.48, 1.66, 0.3, 0.3, 0.02, 0x2b2b2b, 18, { rx: Math.PI / 2 });
+      }
+    k.shadow(0, 1.4, 7.8, 3.0, 0.5);
+    x.act = "dj";
+    spot(x, 0, 1.2, Math.PI, "stand");
+    x.act = undefined;
+    item(x, "dj", "DJ booth", 0, 0.5, 2.6, 1.4);
   });
-  x.anim.push((t) => {
-    ball.rotation.y = t * 0.8;
-    lasers.rotation.y = Math.sin(t * 0.7) * 0.6;
-    lasers.visible = Math.sin(t * 0.5) > -0.3;
-    cones.forEach((c, i) => {
-      c.rotation.z = Math.sin(t * 0.9 + i * 2) * 0.45;
-      c.rotation.x = Math.cos(t * 0.7 + i) * 0.35;
+
+  // ---- pole stages by the dance floor: a glowing disc, a chrome pole up to the ceiling.
+  const chrome = new THREE.MeshPhongMaterial({ color: 0xe9ecef, shininess: 120, specular: 0xffffff, emissive: 0x222222 });
+  const poleGeo = new THREE.CylinderGeometry(0.035, 0.035, H, 12).translate(0, H / 2, 0);
+  const ringMats: THREE.MeshBasicMaterial[] = [];
+  const poles: { x: number; z: number }[] = [
+    { x: -fw / 2 - 2.8, z: fz - 1.6 },
+    { x: fw / 2 + 2.8, z: fz - 1.6 },
+    { x: -fw / 2 - 2.8, z: fz + 2.2 },
+  ];
+  for (const [i, p] of poles.entries()) {
+    const pole = new THREE.Mesh(poleGeo, chrome);
+    pole.position.set(p.x, 0, p.z);
+    x.extras.push(pole);
+    k.cyl(p.x, 0, p.z, 1.15, 1.2, 0.04, 0x0d0d0d, 32);
+    k.cyl(p.x, 0, p.z, 0.12, 0.16, 0.08, 0xadb5bd, 16);
+    k.cyl(p.x, H - 0.1, p.z, 0.16, 0.12, 0.1, 0xadb5bd, 16);
+    const ringMat = new THREE.MeshBasicMaterial({ color: i % 2 ? neon : L.edge });
+    ringMats.push(ringMat);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(1.08, 1.2, 48).rotateX(-Math.PI / 2), ringMat);
+    ring.position.set(p.x, 0.045, p.z);
+    x.extras.push(ring);
+    // A pink spotlight on each pole.
+    const spotCone = new THREE.Mesh(new THREE.ConeGeometry(1.1, H - 0.2, 24, 1, true).translate(0, -(H - 0.2) / 2, 0), glowMat(style === "gold" ? 0xffa8a8 : 0xff6ad5, undefined, 0.09));
+    spotCone.position.set(p.x, H - 0.1, p.z);
+    x.extras.push(spotCone);
+    item(x, "pole", "Pole", p.x, 0.9, p.z, 0.9);
+  }
+  x.poles = poles;
+
+  // ---- the bar: long, backlit, shelves of glowing bottles, stools all along.
+  atWall(x, 1, -1.0, () => {
+    const len = Math.min(11, D - 6);
+    k.box(0, 0, 1.7, len, 1.1, 0.75, style === "gold" ? 0x2a1a10 : 0x111111);
+    k.box(0, 1.1, 1.7, len + 0.1, 0.06, 0.85, style === "gold" ? 0xc9a227 : 0x2b2b2b);
+    k.box(0, 0.06, 2.08, len, 0.03, 0.02, neon, { layer: "glow" });
+    k.box(0, 0.95, 2.08, len, 0.02, 0.02, neon2, { layer: "glow" });
+    k.box(0, 1.1, 0.12, len, 2.3, 0.2, shadeHex(neon2, 0.55), { layer: "glow" });
+    for (let row = 0; row < 3; row++) {
+      k.box(0, 1.25 + row * 0.62, 0.3, len, 0.03, 0.3, 0x2b2b2b);
+      for (let b = 0; b < Math.floor(len / 0.32); b++) k.cyl(-len / 2 + 0.2 + b * 0.32, 1.28 + row * 0.62, 0.3, 0.045, 0.045, 0.3, pickOf(rnd, [0x2f9e44, 0xe8c07d, 0xb6d7e6, 0x7a2e3a, 0xff922b, 0xfab005]), 8, { layer: "glow" });
+    }
+    spot(x, -1.5, 1.0, 0, "stand");
+    spot(x, 1.5, 1.0, 0, "stand");
+    x.act = "sip";
+    const stools = Math.floor(len / 0.85);
+    for (let s2 = 0; s2 < stools; s2++) chair(x, -len / 2 + 0.5 + s2 * 0.85, 2.45, 0, neon2, 0x343a40, { stool: true });
+    x.act = undefined;
+    item(x, "bar", "Bar", 0, 0, 2.7, 1.6);
+  });
+
+  // ---- booths: rows of curved booths along the walls, champagne and sparklers on the tables.
+  const sparks: THREE.Vector3[] = [];
+  const booth = (cx: number, cz: number, ry: number) => {
+    k.at(cx, 0, cz, ry, () => {
+      x.act = "sip";
+      sofa(x, 0, -0.95, 0, 2.6, pal.fabric, { legs: 0x111111 });
+      sofa(x, -1.35, 0.15, Math.PI / 2, 1.5, pal.fabric, { legs: 0x111111, seats: 2 });
+      sofa(x, 1.35, 0.15, -Math.PI / 2, 1.5, pal.fabric, { legs: 0x111111, seats: 2 });
+      x.act = undefined;
+      table(x, 0, 0.15, 0, 1.3, 0.8, style === "gold" ? 0x2a1a10 : 0x111111, 0x343a40, { h: 0.5 });
+      k.cyl(0, 0.5, 0.15, 0.13, 0.1, 0.24, 0xced4da, 14);
+      for (const bx of [-0.05, 0.06]) k.cyl(bx, 0.6, 0.15 + bx, 0.035, 0.035, 0.32, 0x1b4d2b, 8);
+      k.cyl(0.35, 0.5, 0.0, 0.03, 0.03, 0.06, neon, 8, { layer: "glow" });
+      const sp = k.world(0, 0.98, 0.15);
+      sparks.push(new THREE.Vector3(sp.x, sp.y, sp.z));
+      k.box(0, 0, 1.25, 3.0, 0.02, 0.02, L.edge, { layer: "glow" });
     });
-    ballMat.color.setHSL((t * 0.1) % 1, 0.4, 0.85);
-  });
-  // A neon sign on the side wall.
-  wallSign(x, 3, D / 4, 2.6, "DANCE", 0x14102b, neon, 2.0, 0.6);
-  x.lamps.push({ x: -2, y: room.h - 0.8, z: fz }, { x: 2, y: room.h - 0.8, z: fz });
+  };
+  const rows = Math.max(2, Math.floor((D - 8) / 3.4));
+  for (let b = 0; b < rows; b++) {
+    const bz = -D / 2 + 3 + b * 3.4;
+    booth(-W / 2 + 1.5, bz, Math.PI / 2);
+  }
+  for (let b = 0; b < 2; b++) booth(-W / 2 + 6 + b * 4.2, -D / 2 + 1.5, 0);
+  for (let b = 0; b < 2; b++) booth(W / 2 - 6 - b * 4.2, -D / 2 + 1.5, 0);
+  // A glass rail with a light strip between the booths and the floor (the VIP side).
+  k.box(-W / 2 + 3.25, 0, 0, 0.04, 1.0, D - 6, 0xd6e9f5, { layer: "glass" });
+  k.box(-W / 2 + 3.25, 0.02, 0, 0.06, 0.04, D - 6, L.edge, { layer: "glow" });
+  k.box(-W / 2 + 3.25, 1.0, 0, 0.07, 0.05, D - 6, style === "gold" ? 0xc9a227 : 0xced4da);
+  // Sparklers fizzing on the tables (each flickers).
+  const sparkMat = glowMat(0xfff3bf, undefined, 0.95);
+  const sparkMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.07, 0), sparkMat, Math.max(1, sparks.length));
+  sparkMesh.frustumCulled = false;
+  x.extras.push(sparkMesh);
+  const sm = new THREE.Matrix4();
+  const sq = new THREE.Quaternion();
+  const ss = new THREE.Vector3();
+
+  // A photo booth in the corner, and the club's name in neon.
+  if (style === "gold") karaokeCorner(x, W / 2 - 1.8, -D / 2 + 1.5, -Math.PI / 2);
+  else photoBooth(x, W / 2 - 1.4, -D / 2 + 1.6, -Math.PI / 2, neon2);
+  wallSign(x, 0, 0, H * 0.55, name.slice(0, 14), 0x14102b, neon, 5.0, 1.0);
+
+  x.lamps.push({ x: -fw / 3, y: H - 1, z: fz }, { x: fw / 3, y: H - 1, z: fz });
   x.views.push(
-    { x: W / 2 - 1.6, z: -D / 2 + 1.4, yaw: yawTo(W / 2 - 1.6, -D / 2 + 1.4, -1, D / 2), pitch: -0.1 },
-    { x: -W / 2 + 2.8, z: -D / 2 + 1.0, yaw: yawTo(-W / 2 + 2.8, -D / 2 + 1.0, 1.5, D / 2), pitch: -0.08 },
-    { x: 0, z: fz + 1.0, yaw: 0, pitch: -0.05 },
+    { x: W / 2 - 3.5, z: -D / 2 + 3, yaw: yawTo(W / 2 - 3.5, -D / 2 + 3, -2, D / 3), pitch: -0.14 },
+    { x: -W / 2 + 5, z: -D / 2 + 3.5, yaw: yawTo(-W / 2 + 5, -D / 2 + 3.5, 2, D / 3), pitch: -0.12 },
+    { x: 0, z: fz - fd / 2 + 1.2, yaw: yawTo(0, fz - fd / 2 + 1.2, 0, D / 2), pitch: -0.02 },
   );
+
+  // ---- everything that moves, every frame.
+  const goboCol = L.gobos.map((c) => new THREE.Color(c));
+  let lastBeat = -1;
+  x.anim.push((t) => {
+    const beat = clubBeat();
+    const on = 0.5 + 0.5 * Math.cos(beat * Math.PI * 2);
+    edgeMat.color.setHex(L.edge).multiplyScalar(0.45 + 0.75 * on);
+    for (const [i, m] of ringMats.entries()) m.color.setHex(i % 2 ? neon : L.edge).multiplyScalar(0.5 + 0.6 * (0.5 + 0.5 * Math.cos((beat + i * 0.5) * Math.PI)));
+    for (const g of gobos) {
+      g.m.rotation.y = t * g.sp * (g.ph > 3 ? 1 : -1);
+      g.m.position.x = g.ox + Math.sin(t * 0.3 + g.ph) * g.r;
+      g.m.position.z = g.oz + Math.cos(t * 0.23 + g.ph * 1.7) * g.r * 0.7;
+    }
+    const b = Math.floor(beat);
+    if (b !== lastBeat) {
+      lastBeat = b;
+      for (const [i, g] of gobos.entries()) g.mat.color.copy(goboCol[(i + Math.floor(b / 4)) % goboCol.length]);
+    }
+    for (const [i, c] of cones.entries()) {
+      c.rotation.z = Math.sin(t * 0.8 + i * 1.7) * 0.55;
+      c.rotation.x = Math.cos(t * 0.6 + i) * 0.4;
+    }
+    lasers.rotation.y = Math.sin(t * 0.7) * 0.7;
+    lasers.visible = Math.sin(t * 0.45) > -0.35;
+    screenTex.offset.x = t * 0.03;
+    screenMat.color.setScalar(0.75 + 0.35 * on);
+    for (const [i, p] of sparks.entries()) {
+      const f = 0.6 + 0.6 * Math.abs(Math.sin(t * 23 + i * 7.1)) * Math.abs(Math.cos(t * 17 + i));
+      ss.setScalar(f);
+      sm.compose(p, sq, ss);
+      sparkMesh.setMatrixAt(i, sm);
+    }
+    sparkMesh.instanceMatrix.needsUpdate = true;
+    for (const a of animCanopy) a(t);
+  });
 }
 
 // ---------------------------------------------------------------- restaurants
@@ -3157,12 +3509,11 @@ function plan(theme: Theme, rnd: Rng, variant?: InteriorInfo["variant"], info?: 
       return { room: { w: 12, d: 3.6, h: 3.0, walls: ["glass", "solid", "glass", "solid"], frame: 0x2b2f33 }, pal: pickOf(rnd, CORP), build: skybridge };
     case "clockroom":
       return { room: { w: 4.6, d: 4.6, h: 4.4, walls: ["solid", "solid", "solid", "solid"] }, pal: { ...LIBRARY, wall: 0x8a6a4f, floor: ["planks", 0x8a6a4f, 0x6b5440] }, build: clockroom };
-    case "club":
-      return {
-        room: { w: 16, d: 12, h: 4.4, walls: ["band", "solid", "solid", "solid"], frame: 0x111111, headDrop: 0.6 },
-        pal: { ...pickOf(rnd, LOUNGE), wall: 0x3a2d5c, accentWall: 0x4a2f6e, trim: 0x2b2140, ceiling: 0x1c1430, floor: ["marble", 0x3a3346, 0x262130], fabric: pickOf(rnd, [0x7048e8, 0xae3ec9, 0x1c7ed6]) },
-        build: club,
-      };
+    case "club": {
+      // One of the four designs (the same one for everyone in this club).
+      const style = pickOf(rnd, CLUB_STYLES);
+      return { ...clubPlan(style), build: (x) => club(x, style) };
+    }
     case "restaurant":
       return { room: { w: 14, d: 10, h: 3.5, walls: ["glass", "solid", "solid", "solid"], accentSide: 3, frame: 0x2b2b2b }, pal: pickOf(rnd, [...HOME.slice(1, 6), LOUNGE[3]]), build: restaurant };
     case "firehall":
@@ -3997,7 +4348,7 @@ export function createInterior(info: InteriorInfo): Interior {
       mats.glow.color.setScalar(1.3);
       poolMat.opacity = 0.35;
     }
-    poolMat.opacity = 0.32 * n;
+    if (!x.dark) poolMat.opacity = 0.32 * n;
     for (const h of x.nightHooks) h(n);
     mats.glass.opacity = 0.09 + 0.05 * n;
     baseOpacity.set(mats.glass, mats.glass.opacity);
@@ -4033,5 +4384,5 @@ export function createInterior(info: InteriorInfo): Interior {
     if (x.dark) warm.forEach((l, i) => l.color.setHSL((time * 0.07 + i * 0.4) % 1, 0.8, 0.6));
   }
 
-  return { group, views: x.views, spots, seats, items: x.items, blocks, danceFloor: x.dance, w: room.w, d: room.d, setNight, setAlpha, update, dispose };
+  return { group, views: x.views, spots, seats, items: x.items, blocks, danceFloor: x.dance, poles: x.poles, w: room.w, d: room.d, setNight, setAlpha, update, dispose };
 }

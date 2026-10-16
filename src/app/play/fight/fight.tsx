@@ -23,6 +23,8 @@ import {
   challengeRep,
   challengeRepGained,
   cleanStake,
+  isTableGame,
+  type TableGame,
   findGames,
   playersText,
   stakeBounds,
@@ -37,10 +39,13 @@ import { whileHere } from "../activity";
 import { challengeQuote, declineChallenge, inviteChallenge, joinChallenge, leaveChallenge, myChallengeRep, openChallenge, reportWinner, type ChallengeQuote, type ChallengeView } from "./challenge-actions";
 import { createClient } from "@/lib/supabase/client";
 import dynamic from "next/dynamic";
-import { InviteCard, WhotInvite, type GameTarget } from "./whot-invite";
+import { GameInvite, InviteCard, type GameTarget } from "./whot-invite";
 
-// The full-screen Whot! table (docs/GAME_TABLES.md), loaded when a game opens.
+// The full-screen tables (docs/GAME_TABLES.md, docs/PARTY_GAMES.md), loaded when a game opens.
 const WhotTable = dynamic(() => import("../games/whot-table").then((m) => m.WhotTable), { ssr: false });
+const TruthDareTable = dynamic(() => import("../games/truth-dare-table").then((m) => m.TruthDareTable), { ssr: false });
+const ImpostorTable = dynamic(() => import("../games/impostor-table").then((m) => m.ImpostorTable), { ssr: false });
+const TABLES = { whot: WhotTable, truth_dare: TruthDareTable, impostor: ImpostorTable };
 import { useChallengeChannel } from "./channel";
 import { CallBar } from "../call/call-bar";
 
@@ -86,7 +91,7 @@ export function Fight({
   /** Invitations to you (game-db/110), a game you're watching, and who you're about to challenge. */
   const [invites, setInvites] = useState<ChallengeView[]>([]);
   const [watchId, setWatchId] = useState<number | null>(null);
-  const [inviting, setInviting] = useState<GameTarget | null>(null);
+  const [inviting, setInviting] = useState<(GameTarget & { game: TableGame }) | null>(null);
   /** Challenges you closed (they don't open again by themselves). */
   const closedRef = useRef<number[]>([]);
   const [busy, setBusy] = useState(false);
@@ -155,7 +160,7 @@ export function Fight({
   useEffect(() => {
     const on = (e: Event) => {
       const d = (e as CustomEvent<GameTarget & { game: string }>).detail;
-      if (d?.id) setInviting({ id: d.id, name: d.name, avatar: d.avatar });
+      if (d?.id) setInviting({ id: d.id, name: d.name, avatar: d.avatar, game: isTableGame(d.game) ? d.game : "whot" });
     };
     window.addEventListener("nt-play-game", on);
     return () => window.removeEventListener("nt-play-game", on);
@@ -244,11 +249,14 @@ export function Fight({
     knock(c.host);
     setInvites((l) => l.filter((x) => x.id !== c.id));
   };
-  // Games of Whot! being played nearby that you could watch (not yours, not dismissed).
-  const watchable = list.filter((c) => c.status === "playing" && c.game === "whot" && c.id !== mine && !dismissed.includes(-c.id) && !c.players.some((p) => p.id === me?.id)).slice(0, 1);
+  // Table games being played nearby that you could watch (not yours, not dismissed).
+  const watchable = list.filter((c) => c.status === "playing" && isTableGame(c.game) && c.id !== mine && !dismissed.includes(-c.id) && !c.players.some((p) => p.id === me?.id)).slice(0, 1);
 
   // Alerts: open challenges near you, not yours, still taking players.
   const alerts = list.filter((c) => c.status === "open" && c.id !== mine && !dismissed.includes(c.id) && Date.parse(c.startsAt) > now && !c.players.some((p) => p.id === me?.id) && c.invited?.id !== me?.id).slice(0, 2);
+  // The full-screen table for the game shown, if it has one.
+  const tableGame = view && isTableGame(view.game) ? view.game : null;
+  const Table = tableGame ? TABLES[tableGame] : null;
   const myInvites = invites.filter((c) => c.id !== mine && !dismissed.includes(c.id) && Date.parse(c.startsAt) > now);
 
   return (
@@ -313,6 +321,7 @@ export function Fight({
           {myInvites.slice(0, 2).map((c) => (
             <InviteCard
               key={c.id}
+              game={c.game}
               host={c.players[0] ?? { id: c.host, name: "Someone", avatar: null }}
               stake={c.stake}
               pool={c.pool}
@@ -325,7 +334,7 @@ export function Fight({
           {watchable.map((c) => (
             <div key={c.id} className="toast-in pointer-events-auto flex items-center gap-2 rounded-full bg-[#0a4127] py-1.5 pl-3 pr-1.5 text-sm text-white shadow-xl ring-1 ring-[#ffd43b]/60">
               <span className="truncate">
-                🃏 {c.players.map((p) => p.name).join(" vs ")} are playing Whot!
+                {challengeGame(c.game)?.icon} {c.players.map((p) => p.name).join(" vs ")} are playing {challengeGame(c.game)?.title}
               </span>
               <button onClick={() => (setDismissed((d) => [...d, -c.id]), setWatchId(c.id))} className="shrink-0 rounded-full bg-[#ffd43b] px-3 py-1 text-xs font-bold text-ink">
                 Watch
@@ -338,21 +347,23 @@ export function Fight({
         </div>
       )}
       {inviting && me && (
-        <WhotInvite
+        <GameInvite
           region={region}
           target={inviting}
+          game={inviting.game}
+          onGame={(game) => setInviting((t) => (t ? { ...t, game } : t))}
           onClose={() => setInviting(null)}
           onSend={async (stake) => {
             const at = where();
             if (!at) return "Find a home or walk somewhere on the map first.";
-            const e = await challengePlayer(inviting.id, "whot", stake, at);
+            const e = await challengePlayer(inviting.id, inviting.game, stake, at);
             if (!e) setInviting(null);
             return e;
           }}
         />
       )}
-      {view && me && view.game === "whot" && (
-        <WhotTable
+      {view && me && Table && (
+        <Table
           key={view.id}
           view={view}
           me={me}
@@ -373,7 +384,7 @@ export function Fight({
           }}
         />
       )}
-      {view && me && view.game !== "whot" && (mine !== null) && <Arena
+      {view && me && !isTableGame(view.game) && (mine !== null) && <Arena
           key={view.id}
           view={view}
           me={me}

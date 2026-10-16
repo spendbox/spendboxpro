@@ -13,11 +13,13 @@ import { MomentCard } from "./moment-card";
 // more likely soon after (one that fits there).
 
 /**
- * The first one a couple of minutes in, then now and then (docs/LIFE_WHEEL.md: several a day, each
- * one mattering; the server keeps them at least 12 minutes apart and to 8 a day).
+ * The first one a couple of minutes in, then every 12 to 18 minutes while you're playing: 3 or 4
+ * an hour (the server keeps them at least 10 minutes apart and to 40 a day). Nothing came (too
+ * soon after a trip's, say)? Try again in a few minutes rather than waiting a whole turn.
  */
-const FIRST_MS: [number, number] = [100_000, 200_000];
-const NEXT_MS: [number, number] = [760_000, 1_500_000];
+const FIRST_MS: [number, number] = [90_000, 150_000];
+const NEXT_MS: [number, number] = [720_000, 1_080_000];
+const RETRY_MS: [number, number] = [150_000, 240_000];
 const AFTER_ENTERING_MS: [number, number] = [30_000, 70_000];
 const between = ([a, b]: [number, number]) => a + Math.random() * (b - a);
 
@@ -52,7 +54,7 @@ export function MomentsLayer({ inside, home, place, area, enabled }: { inside: s
     const m = await momentNext({ spot: l.spot, place: l.place, area: l.area }).catch(() => null);
     // A player-written one comes with its story (docs/LIFE_WHEEL.md, phase 7).
     if (m?.def) registerMoments([m.def]);
-    if (!m || !MOMENT_BY_ID.has(m.moment) || busy() || live.current.open) return schedule(between(NEXT_MS));
+    if (!m || !MOMENT_BY_ID.has(m.moment) || busy() || live.current.open) return schedule(between(RETRY_MS));
     setShown(m);
     playSfx("pop");
     schedule(between(NEXT_MS));

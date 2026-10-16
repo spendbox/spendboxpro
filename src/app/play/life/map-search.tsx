@@ -10,10 +10,25 @@ import { landmarkPriceMint } from "@/lib/world/landmark-price";
 import { cash } from "@/lib/world/value";
 import { ownedSpot, type OwnedProperty } from "@/lib/world/owned";
 import type { AssetUnit } from "@/lib/world/property-api";
+import type { Tile } from "@/lib/city/layout";
+import { QUICK_KINDS, distanceWords, findPlaces, kindsFor, wordMatches } from "@/lib/world/place-kinds";
 
-export type SearchHit = { label: string; note: string; x: number; z: number; kind: "area" | "landmark" | "station" | "mine" | "named" | "business" | "road" | "home"; /** What it costs to buy (mint), when it's for sale. */ price?: number };
+export type SearchHit = {
+  label: string;
+  note: string;
+  x: number;
+  z: number;
+  kind: "area" | "landmark" | "station" | "mine" | "named" | "business" | "road" | "home" | "place";
+  /** What it costs to buy (mint), when it's for sale. */
+  price?: number;
+  /** A place found by its kind ("club"): the kind's emoji. */
+  emoji?: string;
+};
 
-const ICON = { area: MapPin, landmark: Landmark, station: TrainFront, mine: House, named: Building2, business: Store, road: Route, home: House };
+const ICON = { area: MapPin, landmark: Landmark, station: TrainFront, mine: House, named: Building2, business: Store, road: Route, home: House, place: MapPin };
+
+/** Where you're looking, and the city's tile at any spot (for places found by their kind). */
+export type SearchNear = () => { x: number; z: number; tileOf: (x: number, z: number) => Tile } | null;
 
 /** The budget steps (naira): what a player can say they want to spend. */
 const BUDGETS = [5e6, 20e6, 50e6, 250e6, 1e9];
@@ -84,6 +99,9 @@ export function MapSearch({
   onPick,
   compact,
   onOpenChange,
+  near,
+  full,
+  onClose,
 }: {
   region: RegionMap;
   mine: AssetUnit[];
@@ -98,9 +116,16 @@ export function MapSearch({
   compact?: boolean;
   /** Compact: tells when the box opens and closes (the life buttons make way on phones). */
   onOpenChange?: (open: boolean) => void;
+  /** Where you're looking: "club", "church", "airport"... finds the nearest ones. */
+  near?: SearchNear;
+  /** Across the top of the screen: the box as wide as the screen, the results under it (not floating), focused straight away. */
+  full?: boolean;
+  /** Full: the close button (and Escape) closes it. */
+  onClose?: () => void;
 }) {
   const [q, setQ] = useState("");
-  const [open, setOpen] = useState(false);
+  // In a card (not the compact button): the kinds of place show straight away.
+  const [open, setOpen] = useState(!compact);
   // Compact: a round search button that opens into the box (on a computer, always the box).
   const [shown, setShownState] = useState(false);
   const setShown = (v: boolean) => {
@@ -153,23 +178,37 @@ export function MapSearch({
     for (const h of all) if (h.kind === "landmark" && h.price !== undefined && h.price <= cap && match(h.label)) list.push(h);
     return list.sort((x, y) => (x.price ?? 0) - (y.price ?? 0));
   }, [cap, q, homes, all]);
+  // A kind of place typed ("clubs", "church near me", "petrol"): the nearest ones, with how far.
+  const kinds = useMemo(() => kindsFor(q), [q]);
+  const placeHits = useMemo(() => {
+    if (!kinds.length) return [];
+    const at = near?.();
+    if (!at) return [];
+    const emoji = new Map(kinds.map((k) => [k.id, k.icon]));
+    return findPlaces(region, at.tileOf, kinds, at.x, at.z, 10).map(
+      (p): SearchHit => ({ label: p.name, note: `${p.what} · ${distanceWords(p.dist)}`, x: p.x, z: p.z, kind: "place", emoji: emoji.get(p.kind) }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kinds, region]);
   const hits = useMemo(() => {
     const t = fold(q);
     if (!t) return [];
     const words = t.split(" ");
-    const local = all.filter((h) => words.every((w) => h.key.includes(w)));
+    let local = all.filter((h) => words.every((w) => h.key.includes(w)));
+    // Nothing spelt like that: allow a slip in each word ("Ikoyi" typed "Ikyoi").
+    if (!local.length) local = all.filter((h) => words.every((w) => h.key.split(" ").some((kw) => wordMatches(w, kw))));
     // Whole name first, then names starting with it, then words starting with it, then the rest.
     const rank = (h: { key: string }) => (h.key === t ? 0 : h.key.startsWith(t) ? 1 : ` ${h.key}`.includes(` ${t}`) ? 2 : 3);
     local.sort((a, b) => rank(a) - rank(b) || a.label.length - b.label.length);
     const server = named.q && fold(named.q) === t ? named.hits : [];
     const seen = new Set<string>();
-    return [...local.slice(0, 4), ...server, ...local.slice(4)]
+    return [...placeHits, ...local.slice(0, 4), ...server, ...local.slice(4)]
       .filter((h) => {
         const k = `${fold(h.label)}|${Math.round(h.x)},${Math.round(h.z)}`;
         return !seen.has(k) && seen.add(k);
       })
-      .slice(0, 10);
-  }, [all, q, named]);
+      .slice(0, placeHits.length ? 16 : 10);
+  }, [all, q, named, placeHits]);
   const shownHits = budgetHits ? budgetHits.slice(0, 30) : hits;
   if (compact && !shown)
     return (
@@ -184,8 +223,8 @@ export function MapSearch({
 
   function box() {
     return (
-      <div className={`pointer-events-auto relative ${compact ? "w-[min(18rem,calc(100vw-1.5rem))]" : "w-[min(20rem,calc(100vw-1.5rem))]"}`}>
-        <label className="glass flex h-9 items-center gap-2 rounded-full px-3 text-sm">
+      <div className={`pointer-events-auto relative ${full ? "flex min-h-0 w-full flex-col" : compact ? "w-[min(18rem,calc(100vw-1.5rem))]" : "w-[min(20rem,calc(100vw-1.5rem))]"}`}>
+        <label className={full ? "flex h-11 shrink-0 items-center gap-2 rounded-full bg-ink/5 px-3.5 text-[15px]" : "glass flex h-9 items-center gap-2 rounded-full px-3 text-sm"}>
           <Search className="size-4 shrink-0 text-muted" />
           <input
             value={q}
@@ -194,15 +233,18 @@ export function MapSearch({
               setOpen(true);
             }}
             onFocus={() => setOpen(true)}
-            autoFocus={shown}
+            autoFocus={shown || full}
             onKeyDown={(e) => {
               if (e.key === "Enter" && shownHits[0]) {
                 onPick(shownHits[0]);
                 setOpen(false);
               }
-              if (e.key === "Escape") setOpen(false);
+              if (e.key === "Escape") {
+                if (full) onClose?.();
+                else setOpen(false);
+              }
             }}
-            placeholder={`Search ${region.region.name}: places, roads, names…`}
+            placeholder={`Search ${region.region.name}: club, church, a name…`}
             className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted"
             aria-label="Search the map"
           />
@@ -211,7 +253,8 @@ export function MapSearch({
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => {
                 setQ("");
-                setOpen(false);
+                // Across the top: the kinds of place come back (it stays open).
+                setOpen(!!full);
                 if (compact) setShown(false);
               }}
               aria-label={compact && shown ? "Close search" : "Clear"}
@@ -221,7 +264,7 @@ export function MapSearch({
           )}
         </label>
         {open && (
-          <div className="absolute inset-x-0 top-11 z-20 overflow-hidden rounded-2xl bg-panel shadow-xl ring-1 ring-ink/10">
+          <div className={full ? "mt-2 flex min-h-0 flex-col" : "absolute inset-x-0 top-11 z-20 overflow-hidden rounded-2xl bg-panel shadow-xl ring-1 ring-ink/10"}>
             {/* The budget: what you want to spend (a row you can swipe along). */}
             <div className="flex items-center gap-1.5 overflow-x-auto border-b border-ink/5 px-2.5 py-2 [scrollbar-width:none]" onMouseDown={(e) => e.preventDefault()}>
               <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted">Budget</span>
@@ -242,7 +285,27 @@ export function MapSearch({
                   : `${budgetHits.length > 30 ? "30 of " : ""}${budgetHits.length} places you could buy, cheapest first.`}
               </p>
             )}
-          <ul className="max-h-[min(20rem,50dvh)] overflow-y-auto">
+            {/* Nothing typed yet: the kinds of place, one tap each. */}
+            {!q.trim() && !budgetHits && (
+              <div className="px-3 py-2.5">
+                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Find the nearest</p>
+                <div className="flex flex-wrap gap-1.5" onMouseDown={(e) => e.preventDefault()}>
+                  {QUICK_KINDS.map((k) => (
+                    <button key={k.id} onClick={() => setQ(k.plural)} className="flex h-8 items-center gap-1 rounded-full bg-ink/5 px-2.5 text-xs font-semibold">
+                      <span aria-hidden>{k.icon}</span> {k.plural}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-2 text-[11px] text-muted">Or type any place, road, area or name.</p>
+              </div>
+            )}
+            {!budgetHits && kinds.length > 0 && (
+              <p className="px-3 pt-2 text-[11px] font-semibold text-muted">
+                {placeHits.length ? `The nearest ${kinds[0].plural.toLowerCase()} to where you're looking` : `No ${kinds[0].plural.toLowerCase()} found nearby. Move the map and try again.`}
+              </p>
+            )}
+            {!budgetHits && q.trim().length > 1 && shownHits.length === 0 && kinds.length === 0 && <p className="px-3 py-3 text-sm text-muted">Nothing called that here. Try a kind of place: club, church, court, airport…</p>}
+          <ul className={full ? "min-h-0 flex-1 overflow-y-auto overscroll-contain" : "max-h-[min(20rem,50dvh)] overflow-y-auto"}>
             {shownHits.map((h) => {
               const Icon = ICON[h.kind];
               return (
@@ -257,7 +320,7 @@ export function MapSearch({
                     }}
                     className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-ink/5"
                   >
-                    <Icon className="size-4 shrink-0 text-muted" />
+                    {h.emoji ? <span className="w-4 shrink-0 text-center text-sm" aria-hidden>{h.emoji}</span> : <Icon className="size-4 shrink-0 text-muted" />}
                     <span className="min-w-0 flex-1 truncate">{h.label}</span>
                     <span className="shrink-0 text-xs text-muted">{h.note}</span>
                   </button>

@@ -7,7 +7,9 @@ dragged anywhere, and has a Back button.
 
 ## 1. A few fun tips
 Welcome; no work, no bills, no brushing your teeth; your cash is for games, people, real places
-and gifts; three missions coming up.
+and gifts; find any place with the search (a name, or a kind of place: club, church, court,
+airport...; docs/MAP_SEARCH.md); now and then you'll face choices (moments), and what you choose
+matters now and later (docs/MOMENTS.md); three missions coming up.
 
 ## 2. Three missions, with rewards
 | Mission | How | Reward |

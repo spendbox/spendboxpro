@@ -107,7 +107,7 @@ import { closePhoneNotices, setPhoneBadge } from "./phone/phone-notices";
 import { signOutNow } from "../login/actions";
 import { claimBalloon, recordVisit } from "./profile-actions";
 import { myVisits, payClubEntry, payFare, payRide, payVisit } from "./fee-actions";
-import { CLUB_ENTRY_MS, clubEntryMint, rideFare, TRAIN_FARE, visitFee } from "@/lib/fees";
+import { CLUB_ENTRY_MS, clubEntryMint, clubEntryNaira, clubTier, rideFare, TRAIN_FARE, visitFee } from "@/lib/fees";
 import { jobAt } from "@/lib/jobs";
 import type { Invite, PlayCtx } from "./minigames/shell";
 import { rideRoom, useRooms, type RoomInfo } from "./rooms";
@@ -583,6 +583,9 @@ export function Game({
   // The real place everyone lives in (Lagos): the hourly towns and their countdown are off.
   const worldId = useSyncExternalStore(noSubscribe, worldPreview, noWorld);
   const worldRegion = worldId ? REGIONS[worldId] : null;
+  // The 3D city broke and couldn't mend itself (a blank grey map): build it again, a few times at most.
+  const [cityLife, setCityLife] = useState(0);
+  const rebuildCity = useCallback(() => setCityLife((n) => (n < 3 ? n + 1 : n)), []);
   /** On a real place: the area pointed at, or in the middle of the view. */
   const [worldArea, setWorldArea] = useState<string | null>(null);
   // A life on the real map: search, assets, buying a home first (see ./life/world-life).
@@ -836,10 +839,11 @@ export function Game({
     if (!isDancing || !sound) return;
     return playLoop("disco", { seconds: 900, volume: 0.8, onBeat: syncBeat });
   }, [isDancing, sound]);
-  function startDancing() {
+  function startDancing(move?: DanceMove) {
     if (me.guest) return setSignInWhy("Sign in to dance here.");
     if (rooms.mySeat) rooms.stand();
-    setDancing((d) => d ?? { move: "groove", with: null });
+    // The pole: on your own (a partner dances on the floor), at a free pole.
+    setDancing((d) => (move ? { move, with: move === "pole" ? null : (d?.with ?? null) } : (d ?? { move: "groove", with: null })));
     playSfx("pop");
   }
 
@@ -2070,7 +2074,7 @@ export function Game({
       case "suite":
         return { label: theme === "lounge" ? "Order a drink" : theme === "suite" ? "Room service" : "Order food", icon: UtensilsCrossed, run: act("menu", "Order") };
       case "club":
-        return { label: "Dance", icon: Music, run: startDancing };
+        return { label: "Dance", icon: Music, run: () => startDancing() };
       case "shop":
       case "mall":
         return { label: "Shop", icon: ShoppingBag, run: () => worldLife.openThings("shops") };
@@ -2171,6 +2175,7 @@ export function Game({
     if (item.kind === "match") return setSportsOpen(item.sport ?? "football");
     if (guest) return setSignInWhy(item.kind === "seat" ? "Sign in to sit down here." : `Sign in to use the ${item.label.toLowerCase() || "games"} here: play games, order food, sit down and chat with people.`);
     if (item.kind === "dance") return startDancing();
+    if (item.kind === "pole") return startDancing("pole");
     if (item.kind === "seat") {
       if (rooms.mySeat === item.id) return setActivity(item as ActivityItem);
       const res = rooms.sit(item.id);
@@ -2345,6 +2350,8 @@ export function Game({
       {(round || worldId) && (
         <Safe name="City view" fallback={<div className="absolute inset-0 grid place-items-center text-muted">Rebuilding the city…</div>}>
           <CityView
+            key={cityLife}
+            onBroken={rebuildCity}
             seed={round?.id ?? 0}
             tileCount={round?.tileCount ?? 0}
             region={worldId}
@@ -2750,6 +2757,7 @@ export function Game({
             <div className="grid size-16 place-items-center rounded-3xl bg-[#7048e8] text-white">
               <Music className="size-8" />
             </div>
+            <p className="rounded-full bg-[#7048e8]/10 px-3 py-0.5 text-xs font-bold uppercase tracking-wider text-[#7048e8]">{clubTier(clubEntryNaira(clubDoor.room.id, clubDoor.room.type))}</p>
             <p className="text-2xl font-bold">{cash(clubDoor.fee)}</p>
             <p className="text-sm text-muted">Entry to {clubDoor.level.label}. Pay once and come and go as you like for 24 hours.</p>
           </div>
@@ -3861,7 +3869,7 @@ export function Game({
                       Chat
                     </button>
                     {placeLevel?.kind === "club" && (
-                      <button onClick={startDancing} className="flex items-center gap-1.5 rounded-xl bg-[#e64980] px-3 py-2 font-semibold text-white">
+                      <button onClick={() => startDancing()} className="flex items-center gap-1.5 rounded-xl bg-[#e64980] px-3 py-2 font-semibold text-white">
                         <Music className="size-4" />
                         Dance
                       </button>

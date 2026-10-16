@@ -16,7 +16,7 @@ Moments should feel like life, not like adverts. Fewer, but each one matters mor
 
 | Size | What | How often |
 | --- | --- | --- |
-| Small | Everyday Lagos: hawkers, neighbours, the danfo, the bill | Up to 8 a day of play, at least 12 minutes apart |
+| Small | Everyday Lagos: hawkers, neighbours, the danfo, the bill | 3 or 4 an hour of play (up to 40 a day), at least 10 minutes apart |
 | Big | Turning points: a job offer, a loan, a betrayal, a business choice | About 1 or 2 a week |
 | Life-changing | An inheritance, a scandal, the deal of a lifetime, a wedding, a court case | A few a year |
 

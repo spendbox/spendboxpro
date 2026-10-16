@@ -41,6 +41,7 @@ import type { OwnedProperty } from "@/lib/world/owned";
 import { daylight, weatherAt } from "@/lib/city/sky";
 import { createStars } from "./city/stars";
 import { createPartyLights, type PartyZone } from "./city/party-lights";
+import { createMoneySpray } from "./city/money-spray";
 import { npcsFor, type Npc } from "@/lib/npcs";
 import { createBirds } from "./city/birds";
 import { createBubbles, type BubbleSpot } from "./city/bubbles";
@@ -219,6 +220,8 @@ export type TurnDir = "left" | "right" | "straight";
 /** Things you can do inside places (shown with a soft glow and a label; tap to use). */
 export type InteractKind =
   | "seat" | "darts" | "archery" | "arcade" | "pool" | "cards" | "dance" | "dj" | "bar" | "jukebox" | "menu" | "stairs" | "window" | "piano" | "karaoke" | "slots-free" | "photo"
+  /** A club's dance pole: pole dance there. */
+  | "pole"
   /** At a sports venue: "Watch the match" / "Watch the fight" (by the big screen). */
   | "match"
   /** In the bank: "Rob the vault". */
@@ -400,6 +403,8 @@ type Props = {
   gateIn?: number;
   /** Signed out: a tap on a place's bubble (or its fun-place icon) asks you to sign in instead. */
   onBubbleSignIn?: () => void;
+  /** The 3D view broke and couldn't mend itself (the phone took the canvas away, or nothing draws): build it again. */
+  onBroken?: () => void;
 };
 
 type Part = { tile: number; x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number; color: number; tilt?: number };
@@ -1583,6 +1588,7 @@ export function CityView({
   onAtGate,
   gateIn = 0,
   onBubbleSignIn,
+  onBroken,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const api = useRef<{
@@ -1620,10 +1626,10 @@ export function CityView({
     /** Zoom in (dir 1) or out (dir -1) a step: the + and − buttons on a computer. */
     zoom: (dir: number) => void;
   } | null>(null);
-  const cb = useRef({ onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onLightTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick, onAtGate, onBubbleSignIn });
+  const cb = useRef({ onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onLightTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick, onAtGate, onBubbleSignIn, onBroken });
   const atmos = useRef({ progress, nightFirst, meAvatar, weather });
   useEffect(() => {
-    cb.current = { onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onLightTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick, onAtGate, onBubbleSignIn };
+    cb.current = { onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onLightTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick, onAtGate, onBubbleSignIn, onBroken };
     atmos.current = { progress, nightFirst, meAvatar, weather };
   });
 
@@ -5501,6 +5507,10 @@ export function CityView({
       /** A club's dance floor: where it is, the spots kept free for players, the crowd dancing on it, and the players dancing (you too). */
       floor: { x: number; z: number; w: number; d: number } | null;
       slots: { x: number; z: number }[];
+      /** A club's dance poles (room metres): players pole dancing go to these; the last has a regular on it. */
+      poles?: { x: number; z: number }[];
+      /** Money sprayed here, flying and lying on the floor (./city/money-spray). */
+      money?: ReturnType<typeof createMoneySpray> | null;
       crowd: Figures | null;
       dancers: Figures | null;
       dancersKey: string;
@@ -5703,6 +5713,7 @@ export function CityView({
         st.update = interior.update;
         setupUse(st, interior.seats, interior.items, interior.spots, npcs.length);
         st.walker = createWalker(interior.w, interior.d, interior.blocks);
+        st.poles = interior.poles ?? [];
         if (interior.danceFloor) setupFloor(st, interior.danceFloor, interior.spots.slice(0, npcs.length), key);
       } else {
         const deck = lvl.kind === "roof" ? createDeck(lvl.theme, key, lvl.hw * 2 * METRES, lvl.hd * 2 * METRES) : createOpenAir(lvl.theme, key);
@@ -5752,6 +5763,7 @@ export function CityView({
       st.crowd3d?.dispose();
       st.dancers?.dispose();
       st.dancers3d?.dispose();
+      st.money?.dispose();
       st.me3d?.dispose();
       if (st.meRing) {
         st.meRing.geometry.dispose();
@@ -5858,10 +5870,17 @@ export function CityView({
       free.sort((a, b) => Math.hypot(a.x - floor.x, a.z - floor.z) - Math.hypot(b.x - floor.x, b.z - floor.z));
       // The middle is kept for players; a crowd dances round it (facing the DJ, more or less).
       st.slots = free.slice(0, 10);
-      // A home's dance hall: just you and your guests (no crowd of strangers).
-      const around = st.homeKey ? [] : free.slice(10).filter(() => rnd() < 0.6).slice(0, 12);
+      // A home's dance hall: just you and your guests (no crowd of strangers). A club is packed.
+      const around = st.homeKey ? [] : free.slice(10).filter(() => rnd() < 0.8).slice(0, lite ? 26 : 44);
       const people: Person[] = around.map((_, i) => ({ id: `crowd:${i}`, name: "", avatar: defaultAvatar(`${key}|crowd|${i}`), npc: false }));
       const spots: Spot[] = around.map((p) => ({ x: p.x, z: p.z, ry: (rnd() - 0.5) * 1.4, pose: "stand", act: "dance" }));
+      // A dancer of the club's own on the last pole (players get the others first).
+      const poles = st.poles ?? [];
+      if (!st.homeKey && poles.length > 1) {
+        const at = poleSpot(poles[poles.length - 1], floor);
+        people.push({ id: "crowd:pole", name: "", avatar: defaultAvatar(`${key}|pole`), npc: false });
+        spots.push({ x: at.x, z: at.z, ry: at.ry, pose: "stand", act: "dance", move: "pole" });
+      }
       if (people.length) {
         st.crowd = createFigures(people, spots, { key, inert: true, tags: false });
         st.holder.add(st.crowd.group);
@@ -5869,6 +5888,13 @@ export function CityView({
         st.crowd3d = upgradeNpcs(st.crowd.figs, people, { players: true, level: LOD.far });
       }
       syncDancers(st);
+    }
+    /** Where a pole dancer stands: just in front of the pole (the side facing the dance floor), facing it. */
+    function poleSpot(pole: { x: number; z: number }, fl: { x: number; z: number }) {
+      const a = Math.atan2(fl.x - pole.x, fl.z - pole.z);
+      const x = pole.x + Math.sin(a) * 0.3;
+      const z = pole.z + Math.cos(a) * 0.3;
+      return { x, z, ry: Math.atan2(pole.x - x, pole.z - z) };
     }
     /** Draw the players dancing here (you too), each in their place with their move; partners face each other. */
     function syncDancers(st: Stage) {
@@ -5881,6 +5907,7 @@ export function CityView({
       const at = new Map<string, { x: number; z: number; ry: number }>();
       const crowded = new Map<string, number>();
       let next = 0;
+      let poleNext = 0;
       const nextSlot = () => st.slots[next++ % Math.max(1, st.slots.length)] ?? { x: fl.x, z: fl.z };
       const face = (from: { x: number; z: number }, to: { x: number; z: number }) => Math.atan2(to.x - from.x, to.z - from.z);
       /** A spot next to someone (towards the middle of the floor; the next one round them, and so on). */
@@ -5913,6 +5940,12 @@ export function CityView({
           at.set(d.id, { ...p, ry: face(p, npc) });
           if (!npcFacing.has(d.with)) npcFacing.set(d.with, face(npc, p));
           npcMoves.set(d.with, d.move);
+          continue;
+        }
+        // Pole dancing: the next free pole (on the floor if they're all taken).
+        const poles = st.poles ?? [];
+        if (d.move === "pole" && poleNext < poles.length - (poles.length > 1 ? 1 : 0)) {
+          at.set(d.id, poleSpot(poles[poleNext++], fl));
           continue;
         }
         const p = nextSlot();
@@ -6980,6 +7013,7 @@ export function CityView({
         st.players3d?.update(dt3);
         st.dancers3d?.update(dt3);
         st.crowd3d?.update(dt3);
+        st.money?.update(dt3);
         st.npcT = time;
         st.players?.update(time, camLocal);
         st.crowd?.update(time);
@@ -7542,6 +7576,13 @@ export function CityView({
     let slowFrames = 0;
     let frames = 0;
     let shadowTick = 0;
+    // The last good camera (every number real): a camera that goes "not a number" (a divide by
+    // nothing somewhere) shows only sky, a blank grey map until a refresh. It's put back instead.
+    const goodCam = new THREE.Vector3();
+    const goodTarget = new THREE.Vector3();
+    let hasGoodCam = false;
+    // Frames in a row that drew nothing of the city on the map (only the sky): see after render.
+    let emptyFrames = 0;
     const loop = () => {
       frame = requestAnimationFrame(loop);
       const tNow = performance.now();
@@ -7727,6 +7768,22 @@ export function CityView({
         controls.update();
       }
       const dist = riding ? 10 : camera.position.distanceTo(controls.target);
+      const camOk = [camera.position.x, camera.position.y, camera.position.z, controls.target.x, controls.target.y, controls.target.z].every(Number.isFinite);
+      if (camOk) {
+        goodCam.copy(camera.position);
+        goodTarget.copy(controls.target);
+        hasGoodCam = true;
+      } else {
+        if (hasGoodCam) {
+          camera.position.copy(goodCam);
+          controls.target.copy(goodTarget);
+        } else {
+          camera.position.set(30, 40, 30);
+          controls.target.set(0, 0, 0);
+        }
+        if (walker.on && ![walker.x, walker.z].every(Number.isFinite)) walker.on = false;
+        controls.update();
+      }
       const fog = scene.fog as THREE.Fog;
       fog.near = (dist + radius * 0.8) * (1 - fogFactor * 0.45);
       fog.far = (dist + radius * 4 + 30) * (1 - fogFactor * 0.3);
@@ -7738,6 +7795,17 @@ export function CityView({
       worldEventsLayer.update(dt, time, Date.now() + cb.current.clockOffsetMs);
       partyLights.update(time, tiles, carNight);
       renderer.render(scene, camera);
+      // Nothing of the city drawn for a few seconds on the map (only sky): something's broken
+      // that putting the camera back didn't mend. Start the city again rather than stay blank.
+      if (framed && !view && document.visibilityState === "visible") {
+        emptyFrames = renderer.info.render.triangles === 0 ? emptyFrames + 1 : 0;
+        if (emptyFrames === 150) {
+          try {
+            localStorage.removeItem(LAST_SPOT);
+          } catch {}
+          cb.current.onBroken?.();
+        }
+      }
       if (statsOn) {
         // ?stats: what the last frame cost, for checking the drawing budget (see the world lab).
         const info = renderer.info.render;
@@ -7770,6 +7838,7 @@ export function CityView({
     const onVisibility = () => {
       cancelAnimationFrame(frame);
       if (document.visibilityState === "visible") {
+        if (renderer.getContext().isContextLost()) return watchLost();
         clock.getDelta();
         loop();
       }
@@ -7777,12 +7846,43 @@ export function CityView({
     const onLost = (e: Event) => {
       e.preventDefault();
       cancelAnimationFrame(frame);
+      watchLost();
     };
     const onRestored = () => {
+      clearTimeout(lostTimer);
+      cancelAnimationFrame(frame);
       clock.getDelta();
       loop();
     };
+    // Some phones never give the 3D canvas back (after switching apps, or short of memory): the map
+    // stays blank until a refresh. Not back within four seconds of being on screen: start again.
+    let lostTimer: ReturnType<typeof setTimeout> | undefined;
+    const watchLost = () => {
+      clearTimeout(lostTimer);
+      lostTimer = setTimeout(() => {
+        if (document.visibilityState === "visible" && renderer.getContext().isContextLost()) cb.current.onBroken?.();
+      }, 4000);
+    };
     document.addEventListener("visibilitychange", onVisibility);
+    // Someone sprayed money in the place you're in: the notes fly in 3D (the page skips its flat
+    // shower of notes when this takes it: preventDefault).
+    const onSpray = (e: Event) => {
+      const st = view?.kind === "place" ? view.stage : null;
+      const d = (e as CustomEvent<{ ids?: string[]; amount?: number; mine?: boolean }>).detail;
+      if (!st?.interior || !d) return;
+      e.preventDefault();
+      if (!st.money) {
+        st.money = createMoneySpray();
+        st.holder.add(st.money.object);
+      }
+      const ids = (d.ids ?? []).slice(0, 6);
+      const targets = ids.map((id) => (id === danceNow?.id ? st.meAt : st.dancers?.where(id)) ?? null).filter((p): p is { x: number; z: number; ry: number } => !!p);
+      if (!targets.length) targets.push(st.floor ? { x: st.floor.x, z: st.floor.z, ry: 0 } : { x: st.local.x, z: st.local.z, ry: 0 });
+      const from = d.mine ? (st.meAt ? null : { x: st.local.x, z: st.local.z }) : null;
+      const notes = Math.min(140, 12 + Math.sqrt(Math.max(0, Number(d.amount) || 0)) * 5);
+      for (const t of targets) st.money.spray(t, from, notes / targets.length);
+    };
+    window.addEventListener("nt-money-spray", onSpray);
     renderer.domElement.addEventListener("webglcontextlost", onLost);
     renderer.domElement.addEventListener("webglcontextrestored", onRestored);
 
@@ -7906,6 +8006,8 @@ export function CityView({
 
       honkTex.dispose();
       for (const t of boardTextures) t.dispose();
+      clearTimeout(lostTimer);
+      window.removeEventListener("nt-money-spray", onSpray);
       document.removeEventListener("visibilitychange", onVisibility);
       renderer.domElement.removeEventListener("webglcontextlost", onLost);
       renderer.domElement.removeEventListener("webglcontextrestored", onRestored);

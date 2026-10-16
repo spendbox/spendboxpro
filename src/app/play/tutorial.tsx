@@ -277,6 +277,16 @@ export function Tutorial({
     { emoji: "🏖️", title: "No work, no bills, no chores", text: "In Newtown you skip the boring parts of life and keep the fun ones." },
     { emoji: "🎲", title: "Your money is for fun", text: "Play games, meet new people, visit real places and send gifts. That's the whole job." },
     {
+      emoji: "🔎",
+      title: "Find any place",
+      text: `Tap the search next to ${place}'s name (top left) and type any place, or a kind of place: club, church, mosque, court, hospital, airport, petrol. The nearest come first. Tap one and you're there.`,
+    },
+    {
+      emoji: "🧭",
+      title: "Your choices matter",
+      text: "Now and then, life happens: a stranger asks for help, a deal looks too good to be true, an old friend calls. Pick what you'd do. Each choice moves your money and reputation now, and shapes who you become, who remembers you and what comes your way later.",
+    },
+    {
       emoji: "🎯",
       title: "Three quick missions",
       text: (

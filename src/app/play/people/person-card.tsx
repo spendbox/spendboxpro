@@ -188,7 +188,7 @@ export function PersonCard({
           )}
           {!self && <div className="mt-2 flex flex-wrap items-center gap-2">{greet({ id: card.id, name: card.name })}</div>}
 
-          {/* Play a game against them: Whot! now (src/app/play/fight/whot-invite.tsx), more soon. */}
+          {/* Play a game against them: Whot!, Truth or Dare, Impostor (src/app/play/fight/whot-invite.tsx). */}
           {canAct && (
             <div className="mt-3 flex items-center gap-3 rounded-2xl bg-[#7048e8]/[0.07] p-3">
               <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#7048e8] text-white">
@@ -196,14 +196,25 @@ export function PersonCard({
               </span>
               <p className="min-w-0 flex-1 text-sm">
                 <b>Play a game with {card.name}</b>
-                <span className="block text-xs text-muted">Whot! for a stake. Ludo and more coming soon.</span>
+                <span className="block text-xs text-muted">For a stake: Whot!, Truth or Dare, Impostor.</span>
               </p>
-              <button
-                onClick={() => window.dispatchEvent(new CustomEvent("nt-play-game", { detail: { game: "whot", id: card.id, name: card.name, avatar: card.avatar } }))}
-                className="shrink-0 rounded-full bg-[#7048e8] px-3.5 py-2 text-xs font-bold text-white shadow"
-              >
-                Play Whot!
-              </button>
+              <span className="flex shrink-0 gap-1">
+                {[
+                  ["whot", "🃏", "Whot!"],
+                  ["truth_dare", "🍾", "Truth or Dare"],
+                  ["impostor", "🕵️", "Impostor"],
+                ].map(([game, icon, label]) => (
+                  <button
+                    key={game}
+                    onClick={() => window.dispatchEvent(new CustomEvent("nt-play-game", { detail: { game, id: card.id, name: card.name, avatar: card.avatar } }))}
+                    className="grid size-9 place-items-center rounded-full bg-[#7048e8] text-base shadow"
+                    aria-label={`Play ${label}`}
+                    title={label}
+                  >
+                    {icon}
+                  </button>
+                ))}
+              </span>
             </div>
           )}
 

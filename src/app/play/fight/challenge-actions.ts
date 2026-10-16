@@ -8,7 +8,7 @@ import { notifyMany } from "@/lib/notify-many";
 import { pushToMany } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { REGIONS } from "@/lib/world";
-import { CHALLENGE_COOLDOWN_SECS, CHALLENGE_FEE_NAIRA, NEAR_TILES, STAKE_MAX_NAIRA, STAKE_MIN_NAIRA, challengeGame, cleanStake, stakeBounds } from "@/lib/world/challenges";
+import { CHALLENGE_COOLDOWN_SECS, CHALLENGE_FEE_NAIRA, NEAR_TILES, STAKE_MAX_NAIRA, STAKE_MIN_NAIRA, challengeGame, cleanStake, minPlayers, stakeBounds } from "@/lib/world/challenges";
 import { tidy } from "@/lib/world/value";
 
 // Challenges on the map (docs/CHALLENGES.md; the database part is game-db/070_challenges.sql).
@@ -162,7 +162,14 @@ export async function joinChallenge(id: number): Promise<{ ok: true; paid: numbe
   const userId = await currentUserId();
   if (!userId) return { ok: false, error: "Sign in to join." };
   const db = createAdminClient();
-  // Accepting an invitation starts the game soon after (game-db/110); joining anything else, as before.
+  // Accepting an invitation starts the game soon after (game-db/110); joining anything else, as
+  // before. A game that needs more than two (Impostor) keeps its whole time for others to join.
+  const { data: c } = await db.from("challenges").select("game").eq("id", Math.round(n(id))).maybeSingle();
+  if (c && minPlayers(String(c.game)) > 2) {
+    const r = await db.rpc("challenge_join", { p_user: userId, p_id: Math.round(n(id)) });
+    if (r.error) return say(r.error.message);
+    return { ok: true, paid: n((r.data as { paid?: number })?.paid) };
+  }
   let res = await db.rpc("challenge_accept", { p_user: userId, p_id: Math.round(n(id)) });
   if (res.error && /challenge_accept/.test(res.error.message)) res = await db.rpc("challenge_join", { p_user: userId, p_id: Math.round(n(id)) });
   if (res.error) return say(res.error.message);
