@@ -71,7 +71,7 @@ The rules:
 - The road picks only road moments, never the ones from elsewhere, and only ones for your ride.
 - Money and reputation work like any moment (paid from Fun money then the wallet, with the same
   daily limits).
-- On the road too they come at least 12 minutes apart, and count in the same 8 a day. Nothing from
+- On the road too they come at least 10 minutes apart, and count in the same 40 a day. Nothing from
   before comes back on the road.
 
 ## The scenes

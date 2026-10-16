@@ -1059,10 +1059,10 @@ export function registerMoments(defs: MomentDef[]) {
 
 /** How often moments come, and how far they can move you in a day (docs/LIFE_WHEEL.md: fewer, each one mattering more). */
 export const MOMENT_RULES = {
-  /** At least this long between two (seconds). */
-  gapSeconds: 720,
-  /** At most this many a day, on the street and the road together. */
-  perDay: 8,
+  /** At least this long between two (seconds): the game asks every 12 to 18 minutes online, so 3 or 4 an hour. */
+  gapSeconds: 600,
+  /** At most this many a day, on the street and the road together (about ten hours online). */
+  perDay: 40,
   /** A big one at most this often (days). */
   bigEveryDays: 3,
   /** A moment not answered in this long is gone (seconds). */
@@ -1081,7 +1081,7 @@ export const MOMENT_RULES = {
  * On the road (the trip film): how likely a trip of at least `minKm` brings a moment, and how close
  * together they can come (the day's count is shared with the rest).
  */
-export const ROAD_RULES = { chance: 0.33, minKm: 0.3, gapSeconds: 720, perDay: MOMENT_RULES.perDay };
+export const ROAD_RULES = { chance: 0.33, minKm: 0.3, gapSeconds: 600, perDay: MOMENT_RULES.perDay };
 
 /** The places in the game (an inside's theme) as where a moment can happen. */
 export function spotOfTheme(theme: string | null | undefined, home: boolean): MomentSpot {
