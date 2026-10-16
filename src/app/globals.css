@@ -352,6 +352,64 @@ a[href]:active,
   .whot-drop, .whot-deal, .whot-banner, .whot-playable, .whot-bubble { animation: none; }
 }
 
+/* The party games (src/app/play/games: Truth or Dare, Impostor). */
+@keyframes party-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+.party-float { animation: party-float 3s ease-in-out infinite; }
+@keyframes party-pop {
+  0% { opacity: 0; transform: scale(0.6) translateY(10px); }
+  60% { opacity: 1; transform: scale(1.06); }
+  100% { transform: none; }
+}
+.party-pop { animation: party-pop 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.3) both; }
+@keyframes party-flip {
+  0% { opacity: 0; transform: perspective(900px) rotateY(-100deg) scale(0.8); }
+  60% { opacity: 1; transform: perspective(900px) rotateY(12deg) scale(1.03); }
+  100% { transform: perspective(900px) rotateY(0) scale(1); }
+}
+.party-flip { animation: party-flip 0.7s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
+@keyframes party-stamp {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(2.6) rotate(-14deg); }
+  35% { opacity: 1; transform: translate(-50%, -50%) scale(0.94) rotate(-8deg); }
+  45% { transform: translate(-50%, -50%) scale(1.04) rotate(-8deg); }
+  85% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(-8deg); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.1) rotate(-8deg); }
+}
+.party-stamp { animation: party-stamp 2.4s cubic-bezier(0.2, 0.9, 0.3, 1) both; }
+@keyframes party-beam { 0%, 100% { transform: rotate(-22deg); } 50% { transform: rotate(22deg); } }
+.party-beam { transform-origin: 50% 0; animation: party-beam 7s ease-in-out infinite; }
+@keyframes party-neon {
+  0%, 18%, 22%, 25%, 53%, 57%, 100% { opacity: 1; }
+  20%, 24%, 55% { opacity: 0.55; }
+}
+.party-neon { animation: party-neon 4s linear infinite; }
+@keyframes party-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--glow, rgba(255, 45, 149, 0.7)), 0 6px 0 rgba(0, 0, 0, 0.35); }
+  50% { box-shadow: 0 0 0 14px transparent, 0 6px 0 rgba(0, 0, 0, 0.35); }
+}
+.party-pulse { animation: party-pulse 1.6s ease-out infinite; }
+@keyframes party-shake {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-2px, 1px); }
+  40% { transform: translate(2px, -1px); }
+  60% { transform: translate(-1px, -2px); }
+  80% { transform: translate(1px, 2px); }
+}
+.party-shake { animation: party-shake 0.18s linear infinite; }
+@keyframes party-glitch {
+  0%, 90%, 100% { text-shadow: 2px 0 rgba(239, 68, 68, 0.8), -2px 0 rgba(56, 189, 248, 0.6); transform: none; }
+  92% { text-shadow: -3px 0 rgba(239, 68, 68, 0.9), 3px 0 rgba(56, 189, 248, 0.8); transform: translateX(1px) skewX(-6deg); }
+  95% { text-shadow: 3px 0 rgba(239, 68, 68, 0.9), -3px 0 rgba(56, 189, 248, 0.8); transform: translateX(-1px) skewX(6deg); }
+}
+.party-glitch { animation: party-glitch 3.2s steps(1) infinite; }
+@keyframes party-scan { from { background-position: 0 0; } to { background-position: 0 6px; } }
+.party-scan { background-image: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 3px); animation: party-scan 0.6s linear infinite; }
+@keyframes party-spot { 0% { opacity: 0; transform: scale(1.6); } 100% { opacity: 1; transform: scale(1); } }
+.party-spot { animation: party-spot 0.9s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .party-float, .party-pop, .party-flip, .party-beam, .party-neon, .party-pulse, .party-shake, .party-glitch, .party-scan, .party-spot { animation: none; }
+  .party-stamp { animation: none; transform: translate(-50%, -50%) rotate(-8deg); }
+}
+
 /* The trip film fading in over the map (src/app/play/trip). */
 @keyframes trip-in {
   from { opacity: 0; }

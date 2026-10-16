@@ -232,7 +232,7 @@ export function Chat({
   externalNpc?: { id: string; at: number } | null;
   /** "Give coins" to a real player (shown in a private chat and on players in the people lists). */
   onGiveCoins?: (p: { id: string; name: string; avatar: unknown }) => void;
-  /** Challenge them to a game (Whot! for a stake, docs/GAME_TABLES.md). */
+  /** Challenge them to a game for a stake: Whot!, Truth or Dare or Impostor (docs/GAME_TABLES.md). */
   onPlay?: (p: { id: string; name: string; avatar: unknown }) => void;
   /** Hug and handshake buttons for a real player (shown in a private chat). */
   greet?: (p: { id: string; name: string }) => React.ReactNode;
@@ -971,8 +971,8 @@ export function Chat({
               <button
                 onClick={() => onPlay({ id: thread.id, name: thread.name, avatar: byId.get(thread.id)?.avatar ?? avatarOf(thread.id, thread.name) })}
                 className="flex shrink-0 items-center gap-1 rounded-full bg-[#0a4127] px-2.5 py-1 text-xs font-semibold text-white hover:bg-[#136b3f]"
-                aria-label={`Challenge ${thread.name} to Whot!`}
-                title="Challenge to Whot!"
+                aria-label={`Challenge ${thread.name} to a game`}
+                title="Challenge to a game"
               >
                 🃏 <span className="hidden sm:inline">Play</span>
               </button>

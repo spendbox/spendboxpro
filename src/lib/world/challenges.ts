@@ -40,6 +40,8 @@ export const CHALLENGE_GAMES: ChallengeGame[] = [
   { id: "dominoes", title: "Dominoes", category: "board", engine: null, seats: 4, colour: "#212529", icon: "🔳", blurb: "Match the ends, block your rivals, empty your hand first.", tags: "domino" },
   { id: "crazy_eights", title: "Crazy Eights", category: "cards", engine: null, seats: 4, colour: "#c2255c", icon: "🎴", blurb: "Match the suit or number; eights are wild. First out wins.", tags: "eights" },
   { id: "go_fish", title: "Go Fish", category: "cards", engine: null, seats: 4, colour: "#1c7ed6", icon: "🐟", blurb: "Ask for cards, make sets of four, most sets wins." },
+  { id: "truth_dare", title: "Truth or Dare", category: "party", engine: "truth_dare", seats: 6, colour: "#ff2d95", icon: "🍾", blurb: "Spin the bottle. Answer the truth, do the dare, or chicken out. The table judges.", tags: "spin bottle tod" },
+  { id: "impostor", title: "Impostor", category: "party", engine: "impostor", seats: 6, colour: "#ef4444", icon: "🕵️", blurb: "Everyone knows the secret word but one. Give clues, find the faker, vote them out. 3 to 6 players.", tags: "spy chameleon word imposter" },
   { id: "jenga", title: "Jenga", category: "party", engine: null, seats: 4, colour: "#a5673f", icon: "🧱", blurb: "Pull a block, stack it on top, and don't be the one who topples the tower.", tags: "tower blocks" },
   { id: "police_thief", title: "Police and Thief", category: "party", engine: null, seats: 6, colour: "#1c3f6e", icon: "🚓", blurb: "One thief, the rest police, round the streets of Lagos. Catch them or get away.", tags: "chase" },
   { id: "penalties", title: "Penalty Shoot-out", category: "sports", engine: null, seats: 2, colour: "#2b8a3e", icon: "⚽", blurb: "Five kicks each. Pick your corner, beat the keeper.", tags: "football soccer" },
@@ -47,6 +49,16 @@ export const CHALLENGE_GAMES: ChallengeGame[] = [
 ];
 
 export const challengeGame = (id: string) => CHALLENGE_GAMES.find((g) => g.id === id);
+
+/**
+ * The games with their own full-screen table (docs/GAME_TABLES.md, docs/PARTY_GAMES.md): the ones
+ * you can challenge one person to, from their card or a private chat.
+ */
+export const TABLE_GAMES = ["whot", "truth_dare", "impostor"] as const;
+export type TableGame = (typeof TABLE_GAMES)[number];
+export const isTableGame = (id: string): id is TableGame => (TABLE_GAMES as readonly string[]).includes(id);
+/** Fewest players a game can be played with (Impostor needs three: with two, each knows who it is). */
+export const minPlayers = (id: string) => (id === "impostor" ? 3 : 2);
 
 /** "2 to 4 players", or "2 players". */
 export const playersText = (g: ChallengeGame) => (g.seats > 2 ? `2 to ${g.seats} players` : "2 players");

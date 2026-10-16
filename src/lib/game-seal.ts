@@ -15,6 +15,11 @@ function secret() {
 const b64 = (s: string) => Buffer.from(s).toString("base64url");
 const mac = (body: string) => createHmac("sha256", secret()).update(body).digest("base64url");
 
+/** Secret random bytes for a label: the same label always gives the same bytes, and nobody can work them out without the server's secret (who the impostor is). */
+export function secretBytes(label: string): Uint8Array {
+  return new Uint8Array(createHmac("sha256", secret()).update(`bytes:${label}`).digest());
+}
+
 /** Seal a note that stops being valid after `minutes`. */
 export function seal(data: Record<string, unknown>, minutes: number): string {
   const body = b64(JSON.stringify({ ...data, exp: Date.now() + minutes * 60_000 }));

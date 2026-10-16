@@ -1,12 +1,13 @@
 # Game tables: playing people (Whot! first)
 
 Challenge a player to a game for a stake, then play it full screen like a mobile card game, with
-chat and voice. Others nearby can join before it starts, and anyone can watch. Whot! plays now;
-Ludo and more are coming soon.
+chat and voice. Others nearby can join before it starts, and anyone can watch. Whot!, Truth or
+Dare and Impostor play now (the party games: docs/PARTY_GAMES.md); Ludo and more are coming soon.
 
 ## How it goes
 
-1. **Challenge someone.** On anyone's card (tap them on the map), **Play Whot!**, or **🃏 Play** at the top of a private chat with them:
+1. **Challenge someone.** On anyone's card (tap them on the map), 🃏 🍾 or 🕵️, or **🃏 Play** at the top of a private chat with them:
+   - pick the game (Whot!, Truth or Dare, Impostor);
    - pick a stake (₦1,000, ₦5,000, ₦20,000, ₦50,000, or type any amount up to ₦1,000,000);
    - the card shows what you have, and the button stays off if it's more than that.
 2. **They're asked.** A green invitation card pops up for them straight away (a live knock, plus
