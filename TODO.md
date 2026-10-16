@@ -1,7 +1,7 @@
 # To do
 
 ## Now (owner)
-- [ ] Then run `game-db/118_spirit_realm.sql` (the Spirit Realm: a battle at the top of every hour with fighters bought for it; docs/REALM.md). Run it after 117. Until then the Spirit Realm page says it opens soon.
+- [ ] Then run `game-db/118_spirit_realm.sql` (the Spirit Realm: a battle on the map every hour, lasting the hour, with troops sent in from Spirit mode; docs/REALM.md). Run it after 117. Until then Spirit mode opens, but says it opens soon and troops can't be sent.
 - [ ] Then run `game-db/117_written_moments.sql` (player-written moments, and how moments are doing on the dashboard). Run it after 116. Until then Write a moment says it's switched on soon.
 - [ ] Then run `game-db/116_player_stories.sql` (other players in your story: loans, lifts, vouching, the wallet). Run it after 115. Until then no other player turns up in anyone's moments.
 - [ ] Then run `game-db/115_ventures.sql` (careers: start a business and grow it). Run it after 114. Until then My business says businesses are switched on soon.

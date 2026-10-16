@@ -118,7 +118,7 @@ export function Menu({
   onMyJob?: () => void;
   /** Opens the games (all 100 minigames). */
   onGames?: () => void;
-  /** Opens the Spirit Realm (a battle every hour, src/app/realm). Left out: the entry is hidden. */
+  /** Opens Spirit mode (a battle on the map every hour, ./realm). Left out: the entry is hidden. */
   onRealm?: () => void;
   /** Friend requests waiting for you (a red number on Friends). */
   friendRequests?: number;
@@ -170,7 +170,7 @@ export function Menu({
   const all: (Entry | undefined)[] = [
     onPhone && { key: "phone", label: "Phone", icon: Smartphone, tint: "bg-[#1f2328] text-white", onClick: onPhone },
     onGames && { key: "games", label: "Games", icon: Gamepad2, tint: "bg-[#e5dbff] text-[#5f3dc4]", onClick: onGames },
-    onRealm && { key: "realm", label: "Spirit Realm", icon: Ghost, tint: "bg-[#1e1037] text-[#c4b5fd]", onClick: onRealm, hint: "A battle every hour" },
+    onRealm && { key: "realm", label: "Spirit Realm", icon: Ghost, tint: "bg-[#1e1037] text-[#c4b5fd]", onClick: onRealm, hint: "A battle on the map every hour" },
     onMyJob && { key: "job", label: "My job", icon: Briefcase, tint: "bg-[#e7f5ff] text-[#1971c2]", onClick: onMyJob },
     { key: "how", label: life ? "How to play" : "How it works", icon: CircleHelp, tint: "bg-[#e3edff] text-[#2d6bff]", onClick: onHowItWorks },
     onCurrency && { key: "currency", label: "Currency", icon: Coins, tint: "bg-[#fff1c7] text-gold-dark", onClick: onCurrency },
