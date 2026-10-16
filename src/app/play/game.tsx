@@ -2920,6 +2920,7 @@ export function Game({
           onPhone={() => { setMenu(false); setPhone("home"); }}
           onMyJob={guest || worldId ? undefined : () => { setMenu(false); setJobsAt(null); }}
           onGames={worldId ? undefined : () => { setMenu(false); setGamesOpen({}); }}
+          onRealm={() => { setMenu(false); router.push("/realm"); }}
           onChangePin={() => router.push("/welcome")}
           onSignOut={() => { setMenu(false); setConfirmSignOut(true); }}
         />

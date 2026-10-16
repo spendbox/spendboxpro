@@ -5,6 +5,7 @@ import { tickLife } from "@/app/play/life-tick";
 import { clearOldTownHall } from "@/lib/town-hall";
 import { confirmPack } from "@/app/play/pack-actions";
 import { confirmTopUp } from "@/app/play/topup-actions";
+import { settleDue } from "@/lib/realm/server";
 
 // Vercel runs this once a day (see vercel.json): tops broke players up to the floor,
 // deletes chats (and voice notes) from finished maps, and nudges the round clock in
@@ -20,6 +21,8 @@ export async function GET(request: Request) {
   const upkeep = await db.rpc("daily_upkeep");
   const error = tick.error ?? upkeep.error;
   if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  // Spirit Realm battles nobody looked at afterwards: paid out now (docs/REALM.md).
+  await settleDue().catch((e) => console.error("Spirit Realm settle failed", e));
 
   // Old chats: everything from rounds that finished more than an hour ago.
   const { data: old } = await db

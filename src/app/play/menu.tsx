@@ -2,7 +2,7 @@
 
 import { cash } from "@/lib/world/value";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { Briefcase, ChevronRight, Flag, KeyRound, Smartphone, Stamp } from "lucide-react";
+import { Briefcase, ChevronRight, Flag, Ghost, KeyRound, Smartphone, Stamp } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import {
   Award,
@@ -85,6 +85,7 @@ export function Menu({
   onPhone,
   onMyJob,
   onGames,
+  onRealm,
   friendRequests = 0,
   onMyGifts,
   newGifts = 0,
@@ -117,6 +118,8 @@ export function Menu({
   onMyJob?: () => void;
   /** Opens the games (all 100 minigames). */
   onGames?: () => void;
+  /** Opens the Spirit Realm (a battle every hour, src/app/realm). Left out: the entry is hidden. */
+  onRealm?: () => void;
   /** Friend requests waiting for you (a red number on Friends). */
   friendRequests?: number;
   /** Opens My gifts. Left out: the entry is hidden. */
@@ -167,6 +170,7 @@ export function Menu({
   const all: (Entry | undefined)[] = [
     onPhone && { key: "phone", label: "Phone", icon: Smartphone, tint: "bg-[#1f2328] text-white", onClick: onPhone },
     onGames && { key: "games", label: "Games", icon: Gamepad2, tint: "bg-[#e5dbff] text-[#5f3dc4]", onClick: onGames },
+    onRealm && { key: "realm", label: "Spirit Realm", icon: Ghost, tint: "bg-[#1e1037] text-[#c4b5fd]", onClick: onRealm, hint: "A battle every hour" },
     onMyJob && { key: "job", label: "My job", icon: Briefcase, tint: "bg-[#e7f5ff] text-[#1971c2]", onClick: onMyJob },
     { key: "how", label: life ? "How to play" : "How it works", icon: CircleHelp, tint: "bg-[#e3edff] text-[#2d6bff]", onClick: onHowItWorks },
     onCurrency && { key: "currency", label: "Currency", icon: Coins, tint: "bg-[#fff1c7] text-gold-dark", onClick: onCurrency },
