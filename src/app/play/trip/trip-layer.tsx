@@ -61,8 +61,9 @@ export function TripLayer({ avatar }: { avatar: unknown }) {
     };
   }, []);
 
-  const end = (id: number) => {
-    window.dispatchEvent(new CustomEvent("nt-trip-done", { detail: { id } }));
+  /** shown: a film played (the caller then goes in after it; with none, it goes in at once). */
+  const end = (id: number, shown = false) => {
+    window.dispatchEvent(new CustomEvent("nt-trip-done", { detail: { id, shown } }));
     setTrip((t) => (t?.id === id ? null : t));
     setCardUp(false);
   };
@@ -73,12 +74,16 @@ export function TripLayer({ avatar }: { avatar: unknown }) {
     if (!trip || !host.current) return;
     let live = true;
     const el = host.current;
-    void Promise.all([momentNext({ spot: "road", ride: trip.mode, place: trip.to }).catch(() => null), import("./trip-scene")])
-      .then(([m, { createTripScene }]) => {
+    // Asked quickly: no answer within a second and a half, no film (going in isn't held up).
+    const quick = Promise.race([momentNext({ spot: "road", ride: trip.mode, place: trip.to }).catch(() => null), new Promise<null>((ok) => setTimeout(() => ok(null), 1500))]);
+    void quick
+      .then(async (m) => {
         const def = m && MOMENT_BY_ID.get(m.moment);
         if (!live) return;
         // Nothing on the way this time: no film, straight there.
         if (!m || !def?.stage) return end(trip.id);
+        const { createTripScene } = await import("./trip-scene");
+        if (!live) return;
         setEvent(m);
         setReady(trip.id);
         scene.current = createTripScene(el, {
@@ -91,7 +96,7 @@ export function TripLayer({ avatar }: { avatar: unknown }) {
           onEvent: () => live && setCardUp(true),
           onDone: () => {
             // A breath at the end, then on.
-            setTimeout(() => live && end(trip.id), 250);
+            setTimeout(() => live && end(trip.id, true), 250);
           },
         });
         if (!scene.current.stage(def.stage, m.moment)) end(trip.id);
@@ -158,7 +163,7 @@ export function TripLayer({ avatar }: { avatar: unknown }) {
             <p className="start-pop max-w-sm rounded-2xl bg-white/95 px-4 py-2 text-center text-sm font-semibold text-ink shadow-xl">{line}</p>
           </div>
           <div className="absolute inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))] flex items-center justify-center gap-3 px-4">
-            <button onClick={() => (scene.current ? scene.current.finish() : end(trip.id))} className="flex h-11 items-center gap-1.5 rounded-full bg-white/90 px-5 text-sm font-bold text-ink shadow-lg">
+            <button onClick={() => (scene.current ? scene.current.finish() : end(trip.id, true))} className="flex h-11 items-center gap-1.5 rounded-full bg-white/90 px-5 text-sm font-bold text-ink shadow-lg">
               <FastForward className="size-4" /> Skip
             </button>
           </div>

@@ -664,7 +664,10 @@ export function useWorldLife({
   const goInside = async (id: string, knocked = false) => {
     // Only homes have a door to knock at: everywhere else, straight in.
     if (!knocked && mightBeHome(id)) {
+      // A slow answer: show the tap did something.
+      const slow = setTimeout(() => setMessage({ text: "Knocking on the door…", good: true }), 600);
       const d = await homeDoor(id).catch(() => ({ open: true }) as Door);
+      clearTimeout(slow);
       if (!d.open) return setDoor({ id, owner: d.owner, signedIn: d.signedIn });
       if (d.party) setMessage({ text: `${d.party}: the door's open, come on in!`, good: true });
     }
@@ -676,16 +679,19 @@ export function useWorldLife({
     if (!film) onEnter?.(id);
     if (!signedIn) return;
     const paying = api.travelTo(id, driving).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
+    // Nothing happened on the way (no film after all): in at once, as without one.
+    let shown = false;
     if (film && trip) {
-      await playTrip({ mode: trip.mode, from: placeName(region, trip.from), to: placeName(region, id) || "There", area: areaOf(region, id), km: trip.km, fare: trip.fare, ferry: trip.ferry });
+      shown = await playTrip({ mode: trip.mode, from: placeName(region, trip.from), to: placeName(region, id) || "There", area: areaOf(region, id), km: trip.km, fare: trip.fare, ferry: trip.ferry });
+      if (!shown) onEnter?.(id);
     }
     const r = await paying;
     if (!r.ok) {
       setMessage({ text: r.error, good: false });
-      if (!film) onTripFailed?.();
+      if (!shown) onTripFailed?.();
       return;
     }
-    if (film) onEnter?.(id);
+    if (shown) onEnter?.(id);
     if (r.stamp) window.dispatchEvent(new CustomEvent("nt-stamp", { detail: r.stamp }));
     if (r.found) setMessage({ text: `On the way you found: ${r.found}! It's in your Items.`, good: true });
     else if (r.fare) setMessage({ text: `${cash(r.fare)} fare there.`, good: true });
