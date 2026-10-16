@@ -1,6 +1,7 @@
 # To do
 
 ## Now (owner)
+- [ ] Then run `game-db/112_wheel.sql` (the wheel: effects that stay on you, and what came of each moment). Run it after 111. Until then the wheel shows your moments, but no effects and no "what came of it".
 - [ ] In the Supabase SQL Editor run `game-db/111_character.sql` (each answer to a moment quietly shapes who you are; docs/LIFE_WHEEL.md). Until then moments work as before, they just aren't remembered for that.
 - [x] Set up the test version with its own database (docs/TESTING.md, about 20 minutes). Until then, previews use the live database.
 - [x] In the Supabase SQL Editor run `game-db/065_economy_balance.sql` (a fairer economy: jobs pay 18 times real wages, food as a daily cost, the daily refill counts your pots, dearer levels, gift limits for new accounts, rent follows value, no wash-trading up shop prices, pickpocketing doesn't pay). Run it soon after this update goes live: until then the game still works, but food isn't charged and the old rules apply. Run 064 first.
@@ -133,11 +134,12 @@ Each phase is built in one go (a few hours to a couple of days); writing the sto
 - [x] Sizes (small, big at most every 3 days, life-changing) and rarity (rare about monthly, legendary about yearly); ones never had come first.
 - [x] Every answer quietly nudges the six character sliders, fading with time (game-db/111; nothing shown yet).
 
-**Phase 2: the wheel and the three layers.**
-- [ ] The wheel screen: notches by part of life, the stories still going, who you're becoming in words.
-- [ ] Short effects that wear off (Blessed, Talked about, In debt, Owed a favour, Hurt...).
-- [ ] Stories that travel with you: the next step finds you wherever you are.
-- [ ] More answers in each moment's pool (6 to 8), outcomes that shift with context, and the first big and life-changing moments.
+**Phase 2: the wheel and the three layers.** Built.
+- [x] The wheel (Me → My life): notches by part of life, the stories still going, who you're becoming in words, what came of each moment.
+- [x] Eight short effects that wear off (Blessed, Lucky streak, Bad day, Talked about, Hurt, Under watch, Owed a favour, In debt), changing later outcomes.
+- [x] Stories that travel with you: the next step finds you wherever you are, and is shown under the moment it came from.
+- [x] 35 more answers across 24 everyday moments; outcomes that shift with who you are; 8 big and life-changing moments with 8 follow-ups.
+- [ ] More answers for the rest (every moment up to 6 to 8), and more big moments (aim: 50).
 
 **Phase 3: people who remember you and story arcs.**
 - [ ] About 40 recurring characters with a memory of you; story arcs of 5 to 10 steps over weeks.

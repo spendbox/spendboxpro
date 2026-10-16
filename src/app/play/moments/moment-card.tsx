@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { X } from "@/components/icons";
 import { cn } from "@/lib/cn";
-import { MOMENT_BY_ID, choiceCost, choiceOrder, fillMoment, momentText, type MomentOutcome, type MomentSpot } from "@/lib/world/moments";
+import { EFFECTS, MOMENT_BY_ID, choiceCost, choiceOrder, fillMoment, momentText, type EffectId, type MomentOutcome, type MomentSpot } from "@/lib/world/moments";
 import { cash } from "@/lib/world/value";
 import { momentAnswer, type MomentShown } from "../moment-actions";
 import { playSfx } from "../sound";
@@ -24,7 +24,7 @@ const SPOT_TINT: Record<MomentSpot, string> = {
   work: "from-[#e9ecef] to-[#868e96]",
   road: "from-[#fff3bf] to-[#f59f00]",
 };
-type Answered = { text: string; cash: number; rep: number };
+type Answered = { text: string; cash: number; rep: number; effect: EffectId | null };
 
 /** How it went, for the film: well (reputation or money in), badly, or neither. */
 export type MomentMood = "happy" | "angry" | "calm";
@@ -52,7 +52,7 @@ export function MomentCard({ shown, onClose, onAnswered, closeLabel = "Walk away
     if (!r.ok) return setError(r.error);
     const c = def!.choices[i];
     const o = c.outcomes[r.outcome] ?? c.outcomes[0];
-    setAnswered({ text: fill(o.text), cash: r.cash, rep: r.rep });
+    setAnswered({ text: fill(o.text), cash: r.cash, rep: r.rep, effect: r.effect });
     if (r.cash || r.rep) window.dispatchEvent(new Event("nt-money-changed"));
     playSfx(r.cash > 0 || r.rep > 0 ? "found" : r.cash < 0 || r.rep < 0 ? "miss" : "pop");
     onAnswered?.(moodOf(o, c.tone));
@@ -63,7 +63,7 @@ export function MomentCard({ shown, onClose, onAnswered, closeLabel = "Walk away
       <div className="flex items-start gap-3 p-4 pb-3">
         <span className={cn("grid size-14 shrink-0 place-items-center rounded-2xl bg-gradient-to-br text-3xl shadow-inner", SPOT_TINT[(def.spots === "any" ? "street" : def.spots[0]) as MomentSpot])}>{def.emoji}</span>
         <div className="min-w-0 flex-1">
-          <p className="font-display text-lg font-extrabold leading-tight">{def.title}</p>
+          <p className="font-display text-lg font-extrabold leading-tight">{fill(def.title)}</p>
           {!answered && <p className="mt-1 text-sm leading-snug text-ink/80">{fill(momentText(def, shown.vars.seed))}</p>}
         </div>
         {!answered && (
@@ -96,7 +96,7 @@ export function MomentCard({ shown, onClose, onAnswered, closeLabel = "Walk away
       ) : (
         <div className="moment-in px-4 pb-4">
           <p className="text-sm leading-snug">{answered.text}</p>
-          {(answered.cash !== 0 || answered.rep !== 0) && (
+          {(answered.cash !== 0 || answered.rep !== 0 || answered.effect) && (
             <div className="mt-2.5 flex flex-wrap gap-1.5">
               {answered.cash !== 0 && (
                 <span className={cn("rounded-full px-2.5 py-1 text-xs font-bold", answered.cash > 0 ? "bg-[#12b886]/15 text-[#0b7a5a]" : "bg-hit/10 text-hit")}>
@@ -108,6 +108,11 @@ export function MomentCard({ shown, onClose, onAnswered, closeLabel = "Walk away
                 <span className={cn("rounded-full px-2.5 py-1 text-xs font-bold", answered.rep > 0 ? "bg-gold/25 text-ink" : "bg-hit/10 text-hit")}>
                   {answered.rep > 0 ? "+" : "−"}
                   {Math.abs(Math.round(answered.rep * 10) / 10)} reputation
+                </span>
+              )}
+              {answered.effect && (
+                <span className="rounded-full bg-ink/[0.06] px-2.5 py-1 text-xs font-bold" title={EFFECTS[answered.effect].about}>
+                  {EFFECTS[answered.effect].emoji} {EFFECTS[answered.effect].name}
                 </span>
               )}
             </div>

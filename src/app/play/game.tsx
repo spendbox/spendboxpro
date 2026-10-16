@@ -66,7 +66,7 @@ import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
 import { BookOpen, Church, FerrisWheel, Landmark as LandmarkIcon, Plane, Ship, TrainFront, Trophy, UtensilsCrossed } from "lucide-react";
-import { BellOff, BellRing, Landmark, LayoutGrid, PartyPopper, LocateFixed, Rocket, Wallet, PenLine, Compass, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Palette, ShoppingBag, Swords, TrendingUp, User } from "lucide-react";
+import { BellOff, BellRing, Landmark, LayoutGrid, PartyPopper, LocateFixed, Rocket, Wallet, PenLine, Compass, Orbit, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Palette, ShoppingBag, Swords, TrendingUp, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
 import type { Sport } from "@/lib/sports/types";
@@ -165,6 +165,7 @@ const QuestSheet = dynamic(() => import("./activities/quest-ui").then((m) => m.Q
 const PeopleList = dynamic(() => import("./people/people-list").then((m) => m.PeopleList));
 const StatsSheet = dynamic(() => import("./stats-sheet").then((m) => m.StatsSheet));
 const MeSheet = dynamic(() => import("./me-sheet").then((m) => m.MeSheet));
+const WheelSheet = dynamic(() => import("./moments/wheel-sheet").then((m) => m.WheelSheet));
 const MoneyHome = dynamic(() => import("./money-home").then((m) => m.MoneyHome));
 // The 3D city only runs in the browser.
 const CityView = dynamic(() => import("./city-view").then((m) => m.CityView), {
@@ -518,6 +519,7 @@ export function Game({
   const closeGiftPop = useCallback(() => setGiftPop(false), []);
   /** You (your face, top left): everything that isn't chat. */
   const [meOpen, setMeOpen] = useState(false);
+  const [wheelOpen, setWheelOpen] = useState(false);
   /** Open Newtown's own chat (a notice tapped...): changes to ask. */
   const [newtownAsk, setNewtownAsk] = useState(0);
   /** What counts as new on the phone's screen (when it was last opened), and a little ring when something arrives. */
@@ -4027,6 +4029,7 @@ export function Game({
           }}
         />
       )}
+      {wheelOpen && worldId && !guest && <WheelSheet avatar={me.avatar} onClose={() => setWheelOpen(false)} />}
       {meOpen && worldId && !guest && (
         <MeSheet
           name={me.name ?? "You"}
@@ -4040,6 +4043,7 @@ export function Game({
                 { label: "My look", icon: Palette, colour: "#e64980", go: () => setEditAvatar(true) },
                 { label: "Profile photo", icon: ImageIcon, colour: "#0c8599", go: () => setPhotoOpen(true) },
                 { label: "My card", icon: User, colour: "#7048e8", go: () => setPersonId(me.id) },
+                { label: "My life", icon: Orbit, colour: "#e8590c", go: () => setWheelOpen(true) },
                 ...(worldLife.hasHome ? [{ label: "Home", icon: House, colour: "#7048e8", go: () => worldLife.goHome() }] : []),
                 { label: "Wallet", icon: Wallet, colour: "#2b8a3e", go: () => setMoneyOpen(true) },
                 { label: "Photos", icon: ImageIcon, colour: "#f59f00", go: () => setPhone("photos") },

@@ -55,6 +55,24 @@ times as likely. Rare ones (`rarity`) come about monthly, legendary ones about y
   count most (half after 3 weeks), and it takes many to reach either end. Nothing shows yet; the
   wheel and badges come next (docs/LIFE_WHEEL.md).
 
+## Your wheel
+
+Me → **My life** shows your wheel (docs/LIFE_WHEEL.md): the last 120 moments you lived as notches
+round a ring, newest at the top, coloured by the part of life they touched (`area`, or a guess
+from where they happen) and longer for big ones. A notch that glows started a story whose next
+step hasn't come yet. Tap one for what you chose, what happened, and what came of it later (the
+follow-ups that came from it). In the middle, who you're becoming, in words; below, what's on you
+now and the stories still going.
+
+## Short effects
+
+An outcome can leave something on you for a while (`effect`): Blessed and Lucky streak make good
+outcomes likelier, a Bad day bad ones; Talked about makes people a little wary; Hurt means no
+sport moments; Under watch brings more police stops on the road; Owed a favour and In debt are
+about someone. They wear off by themselves (`EFFECTS` says how long). An outcome can also be
+`likelier` for people who are a certain way (strongly street-smart, say) or while an effect is on
+them, so the same answer doesn't always turn out the same.
+
 ## What they do
 
 - **Money:**
@@ -91,9 +109,14 @@ follow-ups exist, and that every kind of place has moments by day and by night.
 
 | What | File |
 | --- | --- |
-| The moments, picking one, filling it in, rolling the outcome | `src/lib/world/moments.ts` |
+| The moments, picking one, filling it in, rolling the outcome, effects, who you are | `src/lib/world/moments.ts` |
+| Big and life-changing moments, and their follow-ups | `src/lib/world/big-moments.ts` |
+| More answers for everyday moments | `src/lib/world/more-answers.ts` |
+| Your wheel (Me → My life) | `src/app/play/moments/wheel-sheet.tsx` |
 | Picking and settling on the server | `src/app/play/moment-actions.ts` |
 | The card over the map, and when it comes | `src/app/play/moments/moments-layer.tsx` |
 | The card itself (also in the trip film) | `src/app/play/moments/moment-card.tsx` |
 | Moments on the road | `src/lib/world/road-moments.ts` |
 | The books: one at a time, the day's limits, follow-ups | `game-db/109_moments.sql` |
+| Who you are: each answer's nudge | `game-db/111_character.sql` |
+| The wheel: short effects, and where each story came from | `game-db/112_wheel.sql` |

@@ -308,8 +308,14 @@ reviewing.
    shuffled, from a pool of up to 8 answers (4 shown); the new pace (5 a day, 20 minutes apart,
    the road on 1 trip in 4); sizes and rarity; ones never had first; every answer quietly nudges
    the six sliders (game-db/111).
-2. **The wheel and the three layers.** The wheel screen; short effects; stories that travel with
-   you; the first big and life-changing moments, and more answers in each moment's pool.
+2. **The wheel and the three layers.** *Built.* The wheel (Me → My life): every moment as a notch
+   coloured by part of life, the stories still going glowing, who you're becoming in the middle,
+   tap a notch for what you chose and what came of it. Eight short effects that wear off and change
+   how later moments turn out. Outcomes that shift with who you are (`likelier`). Follow-ups find
+   you wherever you are. 8 big and life-changing moments with 8 follow-ups (your cousin's
+   exam, the family meeting, your boss's offer, standing guarantor, an offer abroad, a hit-and-run
+   you saw, Grandpa's land, your numbers coming in), and 35 more answers across 24 everyday
+   moments (game-db/112).
 3. **People who remember you and story arcs.** About 40 recurring characters and their stories;
    shared characters the world remembers.
 4. **Standing and quiet badges.** Trust, Fame, Legacy and the leaderboard; the badges above.

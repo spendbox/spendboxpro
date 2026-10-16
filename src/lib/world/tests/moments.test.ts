@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { COMMUTES } from "../work.ts";
 import { ROAD_STAGES } from "../road-moments.ts";
-import { MOMENTS, MOMENT_BY_ID, MOMENT_RULES, TRAIT_KEYS, characterOf, characterWords, choiceCost, choiceOrder, choiceTraits, fillMoment, momentVars, pickMoment, rollOutcome, spotOfTheme, type MomentSpot } from "../moments.ts";
+import { EFFECTS, LIFE_AREAS, MOMENTS, MOMENT_BY_ID, MOMENT_RULES, TRAIT_KEYS, areaOf, outcomeWeight, characterOf, characterWords, choiceCost, choiceOrder, choiceTraits, fillMoment, momentVars, pickMoment, rollOutcome, spotOfTheme, type MomentSpot } from "../moments.ts";
 
 test("every moment is complete: unique ids, text, choices, outcomes, and follow-ups that exist", () => {
   assert.equal(MOMENT_BY_ID.size, MOMENTS.length);
@@ -170,4 +170,50 @@ test("rare ones are rare, big ones wait, and ones never had come first", () => {
     if (pickMoment({ spot: "street", day: true, level: 1, recent: [], rand: Math.random })?.id === fresh) plainHits++;
   }
   assert.ok(freshHits > plainHits * 1.8, `never had: ${freshHits} against ${plainHits}`);
+});
+
+test("effects, areas and likelier outcomes all point at real things", () => {
+  for (const m of MOMENTS) {
+    assert.ok(LIFE_AREAS[areaOf(m)], m.id);
+    for (const c of m.choices)
+      for (const o of c.outcomes) {
+        if (o.effect) assert.ok(EFFECTS[o.effect], `${m.id}: ${o.effect}`);
+        for (const l of o.likelier ?? []) {
+          if ("effect" in l) assert.ok(EFFECTS[l.effect], `${m.id}: ${l.effect}`);
+          else assert.ok((TRAIT_KEYS as string[]).includes(l.trait), `${m.id}: ${l.trait}`);
+        }
+      }
+  }
+});
+
+test("the same answer turns out differently with who you are and what's on you", () => {
+  const good = { text: "", get: 1, likelier: [{ trait: "truth" as const, side: -1 as const }] };
+  const plain = { text: "", pay: 1 };
+  assert.equal(outcomeWeight(good), 1);
+  assert.ok(outcomeWeight(good, { character: { truth: -50 } }) > 2);
+  assert.equal(outcomeWeight(good, { character: { truth: 50 } }), 1);
+  assert.ok(outcomeWeight(good, { effects: ["blessed"] }) > 1);
+  assert.ok(outcomeWeight(plain, { effects: ["bad_day"] }) > 1);
+  assert.equal(outcomeWeight(plain, { effects: ["blessed"] }), 1);
+});
+
+test("big and life-changing moments: several answers, each with a tail somewhere, and nothing hurt can't do", () => {
+  const big = MOMENTS.filter((m) => m.size === "big" || m.size === "life");
+  assert.ok(big.length >= 6, `only ${big.length}`);
+  for (const m of big) {
+    assert.ok(m.choices.length >= 3, `${m.id}: answers`);
+    // No single answer is free and best: every one costs or risks something, or brings nothing.
+    assert.ok(m.choices.some((c) => c.outcomes.some((o) => o.follow || o.effect)) || m.size === "life", `${m.id}: no tail`);
+  }
+  // Hurt means no sport.
+  for (let i = 0; i < 300; i++) {
+    const m = pickMoment({ spot: "sport", day: true, level: 1, recent: [], effects: ["hurt"], rand: Math.random });
+    assert.ok(!m || m.spots === "any", m?.id);
+  }
+});
+
+test("more answers: pools of up to eight, and plenty with more than are shown at once", () => {
+  for (const m of MOMENTS) assert.ok(m.choices.length <= 8, m.id);
+  const pooled = MOMENTS.filter((m) => m.choices.length > MOMENT_RULES.shown);
+  assert.ok(pooled.length >= 8, `only ${pooled.length} moments with more answers than are shown`);
 });
