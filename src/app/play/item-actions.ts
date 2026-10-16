@@ -93,7 +93,7 @@ export type MyThings = {
   crafted: number;
   /** What your things do for you together, every 2 hours. */
   effects: { mind: number; body: number; rep: number };
-  reputation: { score: number; parts: { property: number; things: number; inventions: number; marks: number; challenges: number; events: number; engagement: number; penalty: number } };
+  reputation: { score: number; parts: { property: number; things: number; inventions: number; marks: number; challenges: number; events: number; engagement: number; moments: number; penalty: number } };
   /** How good you are at making each kind of thing (0..1). */
   craftSkill: Record<string, number>;
   hasCar: boolean;

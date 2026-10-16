@@ -7,6 +7,7 @@ import { MISSION_NAIRA, MISSIONS, MISSIONS_TOTAL, nextMission, type Mission, typ
 import { cash } from "@/lib/world/value";
 import { playSfx } from "./sound";
 import { whileHere } from "./activity";
+import { anySheetOpen } from "./sheet";
 
 // The walkthrough (docs/FIRST_STEPS.md): a small card over the map (always in front, chat
 // included) that takes everyone, old players too, through a few fun tips, three missions with
@@ -186,6 +187,20 @@ export function Tutorial({
   const [cheer, setCheer] = useState<string | null>(null);
   const asking = useRef(false);
   const [pos, setPos] = useState(dragged);
+  // "Show me" opened something: the card steps aside (a small pill) until that's closed again,
+  // so it never sits on top of what it's showing.
+  const [tucked, setTucked] = useState(false);
+  useEffect(() => {
+    if (!tucked) return;
+    const began = Date.now();
+    let seen = false;
+    const id = window.setInterval(() => {
+      const open = anySheetOpen() || !!document.querySelector('[role="dialog"]:not([aria-label="Walkthrough"])');
+      if (open) seen = true;
+      if ((seen && !open) || (!seen && Date.now() - began > 5000)) setTucked(false);
+    }, 600);
+    return () => window.clearInterval(id);
+  }, [tucked]);
   const startDrag = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest("button")) return;
     const from = { x: e.clientX - pos.x, y: e.clientY - pos.y };
@@ -397,6 +412,16 @@ export function Tutorial({
   }
   // The last mission's cheer shows even though there's no mission card after it.
   if (!card && !cheer) return null;
+  if (tucked && card && !cheer)
+    return (
+      <button
+        onClick={() => setTucked(false)}
+        className="pointer-events-auto fixed right-3 top-[7.6rem] z-[90] flex h-9 items-center gap-1.5 rounded-full bg-ink px-3 text-xs font-bold text-white shadow-lg ring-2 ring-gold/60 sm:right-4 sm:top-[7.25rem]"
+        aria-label="Back to the guide"
+      >
+        <span aria-hidden>{card.emoji}</span> {mission ? `Mission ${MISSIONS.indexOf(mission) + 1} of ${MISSIONS.length}` : "Guide"}
+      </button>
+    );
   const shown: Card = card ?? { emoji: "🎉", title: "", text: "" };
 
   const next = () => {
@@ -477,7 +502,13 @@ export function Tutorial({
               </div>
               <div className="ml-auto flex items-center gap-1.5">
                 {shown.action && (
-                  <button onClick={shown.action.run} className="h-9 whitespace-nowrap rounded-full bg-white/15 px-3.5 text-sm font-semibold">
+                  <button
+                    onClick={() => {
+                      shown.action!.run();
+                      setTucked(true);
+                    }}
+                    className="h-9 whitespace-nowrap rounded-full bg-white/15 px-3.5 text-sm font-semibold"
+                  >
                     {shown.action.label}
                   </button>
                 )}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Dice5, Hand, HandMetal, Scissors, Swords, Trophy } from "lucide-react";
+import { Dice5, Hand, HandMetal, RotateCcw, Scissors, Swords, Trophy } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Sheet } from "../sheet";
 import { playSfx } from "../sound";
@@ -108,7 +108,10 @@ export function Die({ n, rolling, size = 56 }: { n: number; rolling?: boolean; s
 export function DuelLobby({ game, ...props }: GameProps & { game: DuelGame }) {
   const room = useActivityRoom(props.roundId, props.roomId, props.me);
   const reward = useGameReward(game, !!props.me);
+  // Practice against the house: a match, first to 2 (draws don't count), paid like a duel when you win.
   const [practice, setPractice] = useState<{ mine: string | [number, number]; theirs: string | [number, number]; result: string } | null>(null);
+  const [match, setMatch] = useState({ me: 0, house: 0, round: 1 });
+  const matchOver = match.me >= 2 || match.house >= 2;
   const others = props.members.filter((m) => m.id !== props.me?.id).map((m) => ({ id: m.id, name: m.name, avatar: m.avatar }));
   const Icon = game === "rps" ? Swords : Dice5;
 
@@ -121,21 +124,36 @@ export function DuelLobby({ game, ...props }: GameProps & { game: DuelGame }) {
   }
 
   function practise(pick?: string) {
+    if (matchOver) return;
+    let mine: string | [number, number];
+    let theirs: string | [number, number];
+    let outcome: "win" | "lose" | "tie";
     if (game === "rps" && pick) {
       const house = PICKS[Math.floor(rand() * 3)].id;
-      const result = pick === house ? "A draw!" : BEATS[pick] === house ? "You win!" : "The house wins!";
-      setPractice({ mine: pick, theirs: house, result });
-      playSfx(result === "You win!" ? "found" : "pop");
+      mine = pick;
+      theirs = house;
+      outcome = pick === house ? "tie" : BEATS[pick] === house ? "win" : "lose";
     } else {
       const roll = (): [number, number] => [1 + Math.floor(rand() * 6), 1 + Math.floor(rand() * 6)];
       const a = roll();
       const b = roll();
-      const result = a[0] + a[1] === b[0] + b[1] ? "A draw!" : a[0] + a[1] > b[0] + b[1] ? "You win!" : "The house wins!";
-      setPractice({ mine: a, theirs: b, result });
-      playSfx("toy");
+      mine = a;
+      theirs = b;
+      outcome = a[0] + a[1] === b[0] + b[1] ? "tie" : a[0] + a[1] > b[0] + b[1] ? "win" : "lose";
     }
-    // Practice counts as playing (for quests), never for coins.
-    void reward.finish(0, false);
+    const next = { me: match.me + (outcome === "win" ? 1 : 0), house: match.house + (outcome === "lose" ? 1 : 0), round: match.round + (outcome === "tie" ? 0 : 1) };
+    const done = next.me >= 2 || next.house >= 2;
+    const result = done ? (next.me >= 2 ? "You win the match!" : "The house wins the match") : outcome === "tie" ? "A draw, go again!" : outcome === "win" ? "You take the round" : "The house takes it";
+    setPractice({ mine, theirs, result });
+    setMatch(next);
+    playSfx(done && next.me >= 2 ? "found" : outcome === "lose" ? "miss" : game === "rps" ? "pop" : "toy");
+    // Winning the match pays like a duel (the server keeps to the day's limit).
+    if (done) void reward.finish(next.me >= 2 ? 1 : 0, next.me >= 2);
+  }
+  function newMatch() {
+    setMatch({ me: 0, house: 0, round: 1 });
+    setPractice(null);
+    reward.reset();
   }
 
   return (
@@ -156,8 +174,20 @@ export function DuelLobby({ game, ...props }: GameProps & { game: DuelGame }) {
         )}
       </div>
       <div className="rounded-2xl border border-line p-3">
-        <p className="mb-2 text-sm font-semibold">Practise against the house</p>
-        {game === "rps" ? (
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="text-sm font-semibold">Play the house: first to 2 wins</p>
+          <span className="rounded-full bg-panel-2 px-2.5 py-0.5 text-xs font-bold tabular-nums">
+            {matchOver ? "Match over" : `Round ${Math.min(3, match.round)} of 3`} · You {match.me}–{match.house} House
+          </span>
+        </div>
+        {matchOver ? (
+          <div className="space-y-2">
+            <RewardNote claim={reward.claim} />
+            <BigButton tone="gold" onClick={newMatch}>
+              <RotateCcw className="size-4" /> New match
+            </BigButton>
+          </div>
+        ) : game === "rps" ? (
           <div className="grid grid-cols-3 gap-2">
             {PICKS.map((p) => (
               <button key={p.id} onClick={() => practise(p.id)} className="flex flex-col items-center gap-1 rounded-2xl bg-panel-2 py-3 font-semibold hover:bg-gold/20">
@@ -406,7 +436,9 @@ export function DuelSheet({ duel }: { duel: Duel }) {
         {phase === "pick" &&
           (game === "rps" ? (
             <div>
-              <p className="mb-2 text-center text-sm font-semibold">Round {round}: pick in secret</p>
+              <p className="mb-2 text-center text-sm font-semibold">
+                {round <= 3 ? `Round ${round} of 3` : "Decider"} · you {score.me}–{score.them} · pick in secret
+              </p>
               <div className="grid grid-cols-3 gap-2">
                 {PICKS.map((p) => (
                   <button key={p.id} onClick={() => void pick(p.id)} className="flex flex-col items-center gap-1 rounded-2xl bg-panel-2 py-4 font-semibold hover:bg-gold/20 active:scale-95">

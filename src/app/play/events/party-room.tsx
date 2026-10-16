@@ -7,7 +7,7 @@ import { HOT_MAX, HYPE_FULL, HYPE_POINTS, ICEBREAKERS, MEET_PROMPTS, MOVES, QUEU
 import { cash } from "@/lib/world/value";
 import { CallBar } from "../call/call-bar";
 import { giveCoins } from "../gift-actions";
-import { backgroundAudio, playLoop, stopLoop, VIBES, VIBE_BY_ID, type Vibe } from "../activities/synth";
+import { backgroundAudio, playLoop, soundWaiting, stopLoop, VIBES, VIBE_BY_ID, wakeSound, type Vibe } from "../activities/synth";
 import { Confetti } from "../activities/ui";
 import { playSfx } from "../sound";
 import { randomKey, useEventRoom, useRoomChat, useRoomList, type RoomMsg, type RoomPerson } from "./channel";
@@ -102,6 +102,16 @@ export function PartyRoom({
     return () => stop();
   }, [sound, songOn, hostVibe]);
   useEffect(() => () => stopLoop(), []);
+  // The phone hasn't let the beat start yet (it wants a tap): say so, with a button.
+  const [waiting, setWaiting] = useState(false);
+  useEffect(() => {
+    if (!sound || songOn || !hostVibe) return;
+    const id = window.setInterval(() => setWaiting(soundWaiting()), 800);
+    return () => {
+      window.clearInterval(id);
+      setWaiting(false);
+    };
+  }, [sound, songOn, hostVibe]);
   // Leave the browser (another app, the screen off) and the beat plays on until you leave the
   // party, with the party's name and Play, Pause and Leave on the lock screen (docs/EVENTS.md).
   // YouTube songs can't: YouTube stops them when the browser isn't in front.
@@ -295,6 +305,17 @@ export function PartyRoom({
             <p className="toast-in mx-auto mb-2 w-fit rounded-full bg-gold px-4 py-1.5 font-display text-lg font-extrabold text-ink shadow-2xl">🔥 The party is LIT! 🔥</p>
           </>
         )}
+        {waiting && !songOn && (
+          <button
+            onClick={() => {
+              wakeSound();
+              setWaiting(false);
+            }}
+            className="toast-in mx-auto mb-3 flex items-center gap-2 rounded-full bg-gold px-4 py-2 font-bold text-ink shadow-xl"
+          >
+            <Volume2 className="size-4" /> Tap for the music
+          </button>
+        )}
         {songOn && (
           <div className="mx-auto mb-3 flex max-w-sm items-center gap-3 rounded-3xl bg-black/35 p-2 ring-1 ring-white/20">
             <div className="h-[72px] w-32 shrink-0 overflow-hidden rounded-2xl bg-black">
@@ -303,6 +324,21 @@ export function PartyRoom({
                 host={host}
                 onHostChange={(s) => changeDj(s, false)}
                 onEnded={host ? () => (dj.queue.length ? changeDj({ ...dj, video: dj.queue[0], queue: dj.queue.slice(1), playing: true, pos: 0, at: Date.now() }) : changeDj({ ...dj, mode: "none", video: null, playing: false })) : undefined}
+                onError={
+                  host
+                    ? (blocked) => {
+                        onMessage(
+                          blocked
+                            ? "That song's owner doesn't let it play outside YouTube. Try another link: lyric videos and audio uploads usually work."
+                            : "That song won't play. Check the link, or try another.",
+                          false,
+                        );
+                        const d = djRef.current;
+                        changeDj(d.queue.length ? { ...d, video: d.queue[0], queue: d.queue.slice(1), playing: true, pos: 0, at: Date.now() } : { ...d, mode: "none", video: null, playing: false });
+                      }
+                    : undefined
+                }
+                small
               />
             </div>
             <div className="min-w-0 flex-1">
@@ -310,6 +346,11 @@ export function PartyRoom({
               <p className="text-xs text-white/75">{dj.playing ? "Playing now" : "Paused"} · {dj.queue.length} up next</p>
               {host && (
                 <div className="mt-1 flex gap-1">
+                  {!dj.playing && (
+                    <button onClick={() => changeDj({ ...dj, playing: true, at: Date.now() })} className="flex h-7 items-center gap-1 rounded-full bg-gold px-2 text-[11px] font-bold text-ink">
+                      ▶ Play
+                    </button>
+                  )}
                   <button
                     disabled={!dj.queue.length}
                     onClick={() => changeDj({ ...dj, video: dj.queue[0], queue: dj.queue.slice(1), playing: true, pos: 0, at: Date.now() })}

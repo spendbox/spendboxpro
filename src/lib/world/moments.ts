@@ -6,8 +6,11 @@
 // repeat. Pure data and rules, shared by the phone (to show them) and the server (which picks and
 // settles them, so nobody can choose their own luck).
 
+import type { Commute } from "./work.ts";
+import { ROAD_MOMENTS, type RoadStage } from "./road-moments.ts";
+
 /** Where a moment can happen. */
-export type MomentSpot = "street" | "home" | "food" | "night" | "sport" | "shop" | "worship" | "outdoors" | "work";
+export type MomentSpot = "street" | "home" | "food" | "night" | "sport" | "shop" | "worship" | "outdoors" | "work" | "road";
 
 export type MomentOutcome = {
   /** How likely, against the choice's other outcomes (default 1). */
@@ -39,6 +42,9 @@ export type MomentDef = {
   minLevel?: number;
   /** Only as the follow-up of another moment. */
   followOnly?: boolean;
+  /** On the road (docs/TRIPS.md): the rides it can happen on, and the scene the trip film plays. */
+  rides?: Commute[];
+  stage?: RoadStage;
   /** How often, against the others (default 1). */
   weight?: number;
   /** The amount in it, in naira: somewhere between these (rounded the way people say prices). */
@@ -891,6 +897,8 @@ export const MOMENTS: MomentDef[] = [
   },
 ];
 
+MOMENTS.push(...ROAD_MOMENTS);
+
 export const MOMENT_BY_ID = new Map(MOMENTS.map((m) => [m.id, m]));
 
 /** How often moments come, and how far they can move you in a day. */
@@ -908,6 +916,12 @@ export const MOMENT_RULES = {
   /** Money moments can bring in a day (naira; what they cost isn't limited). */
   gainPerDay: 300_000,
 };
+
+/**
+ * On the road (the trip film): how likely a trip of at least `minKm` brings a moment, and how close
+ * together they can come (the day's count is shared with the rest, with a higher cap).
+ */
+export const ROAD_RULES = { chance: 0.6, minKm: 0.3, gapSeconds: 45, perDay: 40 };
 
 /** The places in the game (an inside's theme) as where a moment can happen. */
 export function spotOfTheme(theme: string | null | undefined, home: boolean): MomentSpot {
@@ -983,13 +997,15 @@ export const niceNaira = (n: number) => (n < 1_000 ? Math.round(n / 50) * 50 : n
 
 /**
  * Pick a moment for someone: one that can happen here and now, not one they've had lately (`recent`
- * ids), weighted. `rand` from 0 to 1.
+ * ids), weighted. `rand` from 0 to 1. On the road, `ride`: how they're going.
  */
-export function pickMoment(o: { spot: MomentSpot; day: boolean; level: number; recent: string[]; rand: () => number }): MomentDef | null {
+export function pickMoment(o: { spot: MomentSpot; day: boolean; level: number; recent: string[]; rand: () => number; ride?: Commute }): MomentDef | null {
   const fits = MOMENTS.filter(
     (m) =>
       !m.followOnly &&
-      (m.spots === "any" || m.spots.includes(o.spot)) &&
+      // On the road, only road moments (each has a scene in the trip film), for this ride.
+      (m.spots === "any" ? o.spot !== "road" : m.spots.includes(o.spot)) &&
+      (!m.rides || (!!o.ride && m.rides.includes(o.ride))) &&
       (!m.time || (m.time === "day") === o.day) &&
       (m.minLevel ?? 0) <= o.level &&
       !o.recent.includes(m.id),

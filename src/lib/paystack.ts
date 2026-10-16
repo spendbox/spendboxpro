@@ -10,6 +10,23 @@ export function paystackEnabled() {
   return Boolean(process.env.PAYSTACK_SECRET_KEY);
 }
 
+/**
+ * Test payments (Paystack's test cards and pretend transfers move no real money) only count where
+ * that's allowed on purpose: the test version (Vercel previews, NEXT_PUBLIC_APP_ENV=test, docs/
+ * TESTING.md), a developer's machine, or PAYSTACK_ALLOW_TEST=1. On the live site a test key opens no checkout at all, and a test payment is never "paid".
+ */
+function testAllowed() {
+  const env = process.env;
+  return env.PAYSTACK_ALLOW_TEST === "1" || env.VERCEL_ENV === "preview" || env.NEXT_PUBLIC_APP_ENV === "test" || (env.NODE_ENV !== "production" && !env.VERCEL_ENV);
+}
+const testKey = () => (process.env.PAYSTACK_SECRET_KEY ?? "").startsWith("sk_test_");
+function testModeBlocked() {
+  if (!testKey() || testAllowed()) return false;
+  console.error("Paystack is on a TEST key on the live site: no payment will start or count. Set the live secret key (sk_live_…).");
+  return true;
+}
+const BLOCKED = "Payments are being set up. Please try again a little later.";
+
 function key() {
   const k = process.env.PAYSTACK_SECRET_KEY;
   if (!k) throw new Error("Payments aren't switched on yet (PAYSTACK_SECRET_KEY is missing).");
@@ -24,6 +41,7 @@ export async function startPayment(input: {
   callbackUrl: string;
   metadata: Record<string, string | number>;
 }): Promise<{ ok: true; url: string; accessCode?: string } | { ok: false; error: string }> {
+  if (testModeBlocked()) return { ok: false, error: BLOCKED };
   try {
     const res = await fetch(`${API}/transaction/initialize`, {
       method: "POST",
@@ -63,6 +81,7 @@ export type TransferAccount = { bank: string; accountNumber: string; accountName
 export async function startTransfer(input: { email: string; amountKobo: number; reference: string; metadata: Record<string, string | number> }): Promise<
   { ok: true; account: TransferAccount } | { ok: false; error: string }
 > {
+  if (testModeBlocked()) return { ok: false, error: BLOCKED };
   try {
     const res = await fetch(`${API}/charge`, {
       method: "POST",
@@ -120,15 +139,18 @@ export async function checkPayment(reference: string): Promise<VerifiedPayment |
       signal: AbortSignal.timeout(6000),
     });
     const body = (await res.json().catch(() => null)) as
-      | { status?: boolean; data?: { status?: string; amount?: number; currency?: string; reference?: string } }
+      | { status?: boolean; data?: { status?: string; amount?: number; currency?: string; reference?: string; domain?: string } }
       | null;
     if (!res.ok || !body?.status || !body.data) return null;
     const d = body.data;
     const amountKobo = Number(d.amount ?? 0);
     const currency = String(d.currency ?? "");
     const status = String(d.status ?? "");
+    // A test payment (Paystack's test cards, pretend transfers) moved no real money.
+    const live = d.domain === "live" || (d.domain === "test" && testAllowed());
+    if (status === "success" && !live) console.error("Paystack: a TEST payment was refused", reference, d.domain);
     return {
-      paid: status === "success" && currency === "NGN" && d.reference === reference && amountKobo > 0,
+      paid: status === "success" && live && currency === "NGN" && d.reference === reference && amountKobo > 0,
       amountKobo,
       currency,
       status,

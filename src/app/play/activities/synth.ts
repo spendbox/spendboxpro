@@ -38,6 +38,22 @@ function engine() {
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible" && ctx?.state === "suspended") void ctx.resume();
     });
+    // Phones only start sound from a tap: the next tap anywhere wakes it (sound made before it, like
+    // a party's beat starting as you walk in, is silent until then).
+    const wake = () => {
+      if (ctx && ctx.state !== "running") void ctx.resume();
+      if (ctx?.state === "running") for (const k of ["pointerdown", "touchend", "keydown"]) document.removeEventListener(k, wake, true);
+    };
+    for (const k of ["pointerdown", "touchend", "keydown"]) document.addEventListener(k, wake, true);
+    // iPhones: play like music, not like a game's beeps, so the silent switch doesn't mute it.
+    const session = (navigator as unknown as { audioSession?: { type: string } }).audioSession;
+    if (session) {
+      try {
+        session.type = "playback";
+      } catch {
+        // Older browsers: nothing to set.
+      }
+    }
     noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
@@ -273,6 +289,8 @@ export function backgroundAudio(on: boolean) {
   const e = engine();
   if (!e || !comp) return;
   const c = e.ctx;
+  // iPhones and iPads can play this route silently: there it stays straight to the speaker.
+  if (on && isApple()) return;
   if (on && !viaElement) {
     if (typeof c.createMediaStreamDestination !== "function") return;
     const dest = c.createMediaStreamDestination();
@@ -293,4 +311,17 @@ export function backgroundAudio(on: boolean) {
     viaElement.el.srcObject = null;
     viaElement = null;
   }
+}
+
+const isApple = () => typeof navigator !== "undefined" && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
+
+/** Is sound waiting for a tap (the phone hasn't let it start yet)? */
+export function soundWaiting() {
+  return !!ctx && ctx.state !== "running";
+}
+
+/** From a tap: start the sound now. */
+export function wakeSound() {
+  const e = engine();
+  if (e && e.ctx.state !== "running") void e.ctx.resume();
 }

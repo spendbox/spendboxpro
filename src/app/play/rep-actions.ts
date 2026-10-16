@@ -35,6 +35,7 @@ export async function reputationDetails(): Promise<RepDetails | null> {
     { label: "Taking part", points: p.engagement ?? 0, how: "Time you spend in the game, real conversations, gifts and greetings, friends and visitors. What you do lately counts most." },
     { label: "Challenges", points: p.challenges ?? 0, how: "1 for every challenge you hosted that was played, 3 for every one you won (up to 120)." },
     { label: "Events", points: p.events ?? 0, how: "3 for every event you hosted that 3 or more people came to, 1 for every two events you went to (up to 100)." },
+    { label: "Out and about", points: Math.max(0, p.moments ?? 0), how: "How you handled the moments that happen round the city: kindness raises it (up to 60)." },
   ];
 
   // What took it away: the database keeps one total; this works out where it came from.
@@ -58,5 +59,6 @@ export async function reputationDetails(): Promise<RepDetails | null> {
   const known = minus.reduce((t, m) => t - m.points, 0);
   const other = Math.round(n(life?.rep_penalty) - known);
   if (other > 0) minus.push({ label: "Other", points: -other, how: "Older fines and penalties." });
+  if ((p.moments ?? 0) < 0) minus.push({ label: "Out and about", points: p.moments ?? 0, how: "How you handled the moments that happen round the city: unkind choices lower it." });
   return { score: things.reputation.score, plus, minus: minus.filter((m) => m.points < 0) };
 }

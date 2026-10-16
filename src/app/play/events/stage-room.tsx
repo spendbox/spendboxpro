@@ -341,7 +341,7 @@ function loadYouTube(): Promise<YTNamespace> {
  * everyone. Everyone else's player follows (a jump when it drifts more than 2 seconds), and asks for
  * a tap when the phone won't start sound by itself.
  */
-export function YouTubeScreen({ stage, host, onHostChange, onEnded }: { stage: StageState; host: boolean; onHostChange: (s: StageState) => void; onEnded?: () => void }) {
+export function YouTubeScreen({ stage, host, onHostChange, onEnded, onError, small }: { stage: StageState; host: boolean; onHostChange: (s: StageState) => void; onEnded?: () => void; onError?: (blocked: boolean) => void; small?: boolean }) {
   const box = useRef<HTMLDivElement>(null);
   const player = useRef<YTPlayer | null>(null);
   const [ready, setReady] = useState(false);
@@ -349,10 +349,12 @@ export function YouTubeScreen({ stage, host, onHostChange, onEnded }: { stage: S
   const stageRef = useRef(stage);
   const changeRef = useRef(onHostChange);
   const endedRef = useRef(onEnded);
+  const errorRef = useRef(onError);
   useEffect(() => {
     stageRef.current = stage;
     changeRef.current = onHostChange;
     endedRef.current = onEnded;
+    errorRef.current = onError;
   });
   const video = stage.video;
 
@@ -370,11 +372,12 @@ export function YouTubeScreen({ stage, host, onHostChange, onEnded }: { stage: S
         playerVars: { playsinline: 1, rel: 0, modestbranding: 1, controls: host ? 1 : 0, disablekb: host ? 0 : 1, start: Math.floor(videoPosNow(stageRef.current)), autoplay: host && stageRef.current.playing ? 1 : 0 },
         events: {
           onReady: () => setReady(true),
+          // A song that can't play here: 101 and 150 are its owner not allowing it outside YouTube
+          // (many official music videos), 100 gone, 2 a bad link.
+          onError: (e: { data: number }) => errorRef.current?.(e.data === 101 || e.data === 150),
           onStateChange: (e: { data: number }) => {
-            if (!host) {
-              if (e.data === 1) setNeedTap(false);
-              return;
-            }
+            if (e.data === 1) setNeedTap(false);
+            if (!host) return;
             const p = player.current;
             if (!p) return;
             // Finished, with something to play next (a party's queue): the next song.
@@ -397,16 +400,27 @@ export function YouTubeScreen({ stage, host, onHostChange, onEnded }: { stage: S
     };
   }, [video, host]);
 
-  // Guests follow the host.
+  // Guests follow the host; the host's own player starts when the stage says it's playing (a phone
+  // may want a tap for that too).
   useEffect(() => {
-    if (host || !ready) return;
+    if (!ready) return;
     const follow = () => {
       const p = player.current;
       const s = stageRef.current;
       if (!p) return;
       const want = videoPosNow(s);
-      if (Math.abs(p.getCurrentTime() - want) > 2) p.seekTo(want, true);
+      if (!host && Math.abs(p.getCurrentTime() - want) > 2) p.seekTo(want, true);
       const state = p.getPlayerState();
+      if (host) {
+        if (s.playing && state !== 1 && state !== 3 && state !== 2 && state !== 0) {
+          p.playVideo();
+          setTimeout(() => {
+            const now = player.current?.getPlayerState();
+            if (stageRef.current.playing && now !== 1 && now !== 3 && now !== 2) setNeedTap(true);
+          }, 1500);
+        }
+        return;
+      }
       if (s.playing && state !== 1 && state !== 3) {
         p.playVideo();
         // Still not playing a moment later: the phone wants a tap first.
@@ -435,17 +449,13 @@ export function YouTubeScreen({ stage, host, onHostChange, onEnded }: { stage: S
   return (
     <div className="relative size-full">
       <div ref={box} className="size-full [&>iframe]:size-full" />
-      {!host && <div className="absolute inset-0" aria-hidden />}
-      {needTap && !host && (
-        <button
-          onClick={() => {
-            player.current?.playVideo();
-            setNeedTap(false);
-          }}
-          className="absolute inset-0 grid place-items-center bg-black/60 font-display text-lg font-extrabold"
-        >
-          ▶ Tap to watch with everyone
-        </button>
+      {/* Guests can't work the video (the host does), except when the phone wants a tap on it to
+          start the sound: then the tap goes to YouTube's own play button (phones only allow it there). */}
+      {!host && !needTap && <div className="absolute inset-0" aria-hidden />}
+      {needTap && (
+        <p className={`pointer-events-none absolute inset-x-0 bottom-0 bg-black/70 px-1 py-0.5 text-center font-bold ${small ? "text-[10px]" : "text-sm"}`}>
+          ▶ Tap the video to hear it
+        </p>
       )}
     </div>
   );

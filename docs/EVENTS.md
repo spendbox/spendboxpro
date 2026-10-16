@@ -233,8 +233,17 @@ and Back changes anything.
   ready when the host walks in and taps Play.
 - **Slides or a video before it starts (talks):** pictures picked on the phone are uploaded once the
   talk is made (they need its id), or a YouTube link is set as the video.
+- **When the phone holds the sound back:** phones only start sound after a tap. The beat starts
+  on the next tap anywhere, and a "Tap for the music" button shows until then. On iPhones it plays
+  like music, so the silent switch doesn't mute it (where Safari allows that). A YouTube song that
+  won't start by itself shows "Tap the video to hear it", and the tap goes to YouTube's own play
+  button, the only place phones allow it. The host has a Play button for a song that's waiting.
+- **Songs that won't play here:** many official music videos are blocked by their owners outside
+  YouTube. The host is told so (lyric videos and audio uploads usually work), and the next song in
+  the queue plays.
 - **Sound in the background:** the room stays open while it's tucked away (Back to the map), so
   the music, voices and chat carry on until you leave. The made-on-the-phone beat keeps playing with
   the screen off or in another app, with Play, Pause and Leave on the lock screen (Media Session;
-  src/app/play/activities/synth.ts `backgroundAudio`). YouTube songs and videos can't: YouTube
-  stops them when the browser isn't in front.
+  src/app/play/activities/synth.ts `backgroundAudio`), except on iPhones and iPads, where that way
+  of playing can go silent. YouTube songs and videos can't: YouTube stops them when the browser
+  isn't in front.

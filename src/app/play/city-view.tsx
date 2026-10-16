@@ -1777,6 +1777,9 @@ export function CityView({
     let framed = false;
     /** Stopping at a landmark's gate on the way in (see syncView), and the place it was for. */
     let gateTour: { t: number; fromPos: THREE.Vector3; fromTarget: THREE.Vector3; toPos: THREE.Vector3; toTarget: THREE.Vector3; building: string; name: string; arrived: boolean } | null = null;
+    /** Leaving a landmark's gate without going in: gliding back up to the map view from before. */
+    let afterGate: { pos: THREE.Vector3; target: THREE.Vector3 } | null = null;
+    let gateReturn: { t: number; fromPos: THREE.Vector3; fromTarget: THREE.Vector3; toPos: THREE.Vector3; toTarget: THREE.Vector3 } | null = null;
     let gateSeen: string | null = null;
     /** A place asked for before the city was drawn (just after a reload): opened once it is. */
     let openLater: string | null = null;
@@ -6039,7 +6042,11 @@ export function CityView({
       const mx = (fx * jy + rx * jx) / (mag || 1), mz = (fz * jy + rz * jx) / (mag || 1);
       const step = 1.6 * mag * dt;
       const nx = st.local.x + mx * step, nz = st.local.z + mz * step;
-      if (st.walker.isFree(nx, nz)) {
+      // Just stood up from a seat, you're still in the chair's (or sofa's) footprint: step out of it.
+      // (Only towards open floor within a step or two, never through a wall behind the sofa.)
+      const w = st.walker;
+      const stuck = !w.isFree(st.local.x, st.local.z) && [0.3, 0.6, 0.9, 1.2].some((d) => w.isFree(st.local.x + mx * d, st.local.z + mz * d));
+      if (stuck || w.isFree(nx, nz)) {
         st.local.x = nx;
         st.local.z = nz;
       } else if (st.walker.isFree(nx, st.local.z)) st.local.x = nx;
@@ -6144,13 +6151,19 @@ export function CityView({
       // Going into a landmark from the map: you arrive at its main gate, out on the street in
       // front of the name sign (a photo spot), and go on inside when you choose (goInside).
       if (!next) gateSeen = null;
+      if (next) gateReturn = null;
       if (gateTour) {
         if (next?.kind === "place" && next.building === gateTour.building) return;
-        // Left (or went somewhere else) from the entrance: the map again, from where you stand.
+        // Left (or went somewhere else) from the entrance. Back to the map: glide up to the view from
+        // before (from down at the gate, looking sideways at the sign, dragging the map felt stuck).
+        const gt = gateTour;
         gateTour = null;
         cb.current.onAtGate?.(null);
+        if (!next && !view) {
+          gateReturn = { t: 0, fromPos: camera.position.clone(), fromTarget: controls.target.clone(), toPos: gt.fromPos, toTarget: gt.fromTarget };
+          return;
+        }
         controls.enabled = true;
-        if (!next && !view) return;
       }
       if (next?.kind === "place" && !view && !flight && !walker.on && gateSeen !== next.building) {
         const g = gateFor(next.anchor.x, next.anchor.z);
@@ -6187,7 +6200,16 @@ export function CityView({
         saved.target.copy(controls.target);
         saved.quat.copy(camera.quaternion);
         saved.fov = camera.fov;
+        if (afterGate) {
+          const c = new THREE.PerspectiveCamera();
+          c.position.copy(afterGate.pos);
+          c.lookAt(afterGate.target);
+          saved.pos.copy(afterGate.pos);
+          saved.target.copy(afterGate.target);
+          saved.quat.copy(c.quaternion);
+        }
       }
+      afterGate = null;
       if (leaving) disposeStage(leaving);
       if (leavingVehicle) disposeVehicle(leavingVehicle);
       const prev = view;
@@ -7647,6 +7669,19 @@ export function CityView({
           gt.arrived = true;
           cb.current.onAtGate?.({ name: gt.name });
         }
+      } else if (!riding && gateReturn) {
+        const gr = gateReturn;
+        gr.t += dt;
+        const k = Math.min(1, gr.t / 0.8);
+        const e = k * k * (3 - 2 * k);
+        camera.position.lerpVectors(gr.fromPos, gr.toPos, e);
+        controls.target.lerpVectors(gr.fromTarget, gr.toTarget, e);
+        camera.lookAt(controls.target);
+        if (k >= 1) {
+          gateReturn = null;
+          controls.enabled = true;
+          controls.update();
+        }
       } else if (!riding) {
         if (focus) {
           controls.target.lerp(focus, 0.06);
@@ -7750,6 +7785,8 @@ export function CityView({
     /** From a landmark's entrance, on inside (the place the game has already gone into). */
     function goInside() {
       if (!gateTour) return;
+      // Coming back out later lands on the map view from before the gate, not down at the gate.
+      afterGate = { pos: gateTour.fromPos.clone(), target: gateTour.fromTarget.clone() };
       gateTour = null;
       cb.current.onAtGate?.(null);
       syncView();
