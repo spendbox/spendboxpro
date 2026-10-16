@@ -150,7 +150,7 @@ export function AdvertisePanel({
   // The map shows the building you're looking at lit up with your name, and your design on the billboards.
   useEffect(() => {
     if (mode !== "building") return;
-    onPreview(current ? { building: current.building, name: name.trim() || "YOUR NAME", line: line.trim(), logo: logo.url, billboard: board.url ?? logo.url } : null);
+    onPreview(current ? { building: current.building, name: name.trim() || "YOUR NAME", line: line.trim(), logo: logo.url, billboard: board.url } : null);
   }, [mode, current, name, line, logo.url, board.url, onPreview]);
   useEffect(() => () => onPreview(null), [onPreview]);
 
@@ -493,7 +493,10 @@ export function AdvertisePanel({
                   <input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder="Business name" className="h-11 rounded-xl bg-ink/[0.05] px-4 text-base outline-none ring-gold focus:ring-2" />
                   <input value={line} onChange={(e) => setLine(e.target.value)} maxLength={60} placeholder="A line (e.g. Fresh bread daily)" className="h-11 rounded-xl bg-ink/[0.05] px-4 text-base outline-none ring-gold focus:ring-2" />
                 </div>
-                <Billboard image={board.url ?? logo.url} brand={name} headline={line} />
+                <Billboard image={board.url ?? logo.url} fit={board.url ? "cover" : "contain"} brand={name} headline={line} />
+                <p className="rounded-2xl bg-[#e7f5ff] px-3 py-2 text-xs text-[#1864ab]">
+                  <b>Only you can see this.</b> The building and the billboards around you show your business as a preview while you set it up. Everyone else sees it once it&apos;s paid for and live.
+                </p>
                 <div className="overflow-hidden rounded-2xl bg-ink/[0.04]">
                   {shot ? (
                     // eslint-disable-next-line @next/next/no-img-element -- a picture of the 3D map taken here

@@ -143,8 +143,11 @@ export type CityEvent = {
   } | null;
 };
 
-/** An advert shown on the city's billboards (image: a public URL, ideally about 2:1). */
-export type CityAd = { id: string; image: string; headline: string; brand: string; link: string | null };
+/**
+ * An advert shown on the city's billboards (image: a public URL, ideally about 2:1). fit: "cover"
+ * (the default) fills the whole board like the advertiser's preview; "contain" shows a logo whole.
+ */
+export type CityAd = { id: string; image: string; headline: string; brand: string; link: string | null; fit?: "cover" | "contain" };
 
 /**
  * One place inside a building: "g" the ground floor (lobby, living room, shop...), "f<n>" floor n
@@ -1278,12 +1281,13 @@ function structureParts(t: Tile, plan: CityPlan, B0: BoxFn, tree0: TreeFn) {
 }
 
 /**
- * An ad's picture on a 2:1 canvas (the billboard's shape). A picture close to that shape fills the
- * board (a little cropped); any other is shown whole on a soft blur of itself. Always on a white
- * ground (a logo with a see-through background would otherwise go black), with the brand and
- * headline in a strip along the bottom.
+ * An ad's picture on a 2:1 canvas (the billboard's shape), drawn the way the advertiser's preview
+ * shows it (src/app/advertise/billboard.tsx): the picture fills the whole board (cropped to fit),
+ * with the headline and brand on a see-through band over the bottom. A logo (fit "contain") is
+ * shown whole on a soft blur of itself instead. Always on a white ground (a picture with a
+ * see-through background would otherwise go black).
  */
-function adTexture(img: CanvasImageSource & { width: number; height: number }, ad?: { headline?: string; brand?: string }) {
+function adTexture(img: CanvasImageSource & { width: number; height: number }, ad?: { headline?: string; brand?: string; fit?: "cover" | "contain" }) {
   const W = 1024;
   const H = 512;
   const canvas = document.createElement("canvas");
@@ -1294,14 +1298,9 @@ function adTexture(img: CanvasImageSource & { width: number; height: number }, a
   const ih = img.height || H;
   c.fillStyle = "#ffffff";
   c.fillRect(0, 0, W, H);
-  const words = [ad?.brand, ad?.headline].map((t) => (t ?? "").trim()).filter(Boolean);
-  const strip = words.length ? 92 : 0;
-  const area = H - strip;
-  const ratio = iw / ih;
-  if (Math.abs(ratio / (W / area) - 1) < 0.25) {
-    // Near the board's shape: fill it, cropping the little that's over.
-    const k = Math.max(W / iw, area / ih);
-    c.drawImage(img, (W - iw * k) / 2, (area - ih * k) / 2, iw * k, ih * k);
+  if (ad?.fit !== "contain") {
+    const k = Math.max(W / iw, H / ih);
+    c.drawImage(img, (W - iw * k) / 2, (H - ih * k) / 2, iw * k, ih * k);
   } else {
     // The blur behind: shrink the picture to a few pixels (on white), then stretch it back up.
     const tiny = document.createElement("canvas");
@@ -1312,32 +1311,33 @@ function adTexture(img: CanvasImageSource & { width: number; height: number }, a
     t.fillRect(0, 0, 16, 8);
     t.drawImage(img, 0, 0, 16, 8);
     c.imageSmoothingEnabled = true;
-    c.drawImage(tiny, 0, 0, W, area);
+    c.drawImage(tiny, 0, 0, W, H);
     c.fillStyle = "rgba(255,255,255,0.35)";
-    c.fillRect(0, 0, W, area);
-    const k = Math.min((W * 0.92) / iw, (area * 0.9) / ih);
+    c.fillRect(0, 0, W, H);
+    const k = Math.min((W * 0.92) / iw, (H * 0.9) / ih);
     const dw = iw * k;
     const dh = ih * k;
     c.fillStyle = "#ffffff";
-    c.fillRect((W - dw) / 2, (area - dh) / 2, dw, dh);
-    c.drawImage(img, (W - dw) / 2, (area - dh) / 2, dw, dh);
+    c.fillRect((W - dw) / 2, (H - dh) / 2, dw, dh);
+    c.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
   }
-  if (strip) {
-    c.fillStyle = "#16181d";
-    c.fillRect(0, area, W, strip);
+  // The words, as in the preview: the headline (bold) and the brand under it, on a dark band.
+  const headline = (ad?.headline ?? "").trim();
+  const brand = (ad?.brand ?? "").trim();
+  if (headline || brand) {
+    const band = brand && headline ? 104 : 70;
+    c.fillStyle = "rgba(0,0,0,0.6)";
+    c.fillRect(0, H - band, W, band);
     c.fillStyle = "#ffffff";
     c.textBaseline = "middle";
     c.textAlign = "left";
-    const [brand, headline] = words.length > 1 ? words : [words[0], ""];
-    let size = 44;
-    c.font = `800 ${size}px system-ui, -apple-system, "Segoe UI", sans-serif`;
-    const brandW = Math.min(c.measureText(brand).width, W * 0.45);
-    c.fillText(brand, 28, area + strip / 2, W * 0.45);
-    if (headline) {
-      size = 34;
-      c.fillStyle = "#e0b84c";
-      c.font = `600 ${size}px system-ui, -apple-system, "Segoe UI", sans-serif`;
-      c.fillText(headline, 28 + brandW + 26, area + strip / 2, W - brandW - 80);
+    c.font = `800 40px system-ui, -apple-system, "Segoe UI", sans-serif`;
+    c.fillText(headline || brand, 34, H - band + (brand && headline ? 36 : band / 2), W - 68);
+    if (brand && headline) {
+      c.globalAlpha = 0.8;
+      c.font = `500 28px system-ui, -apple-system, "Segoe UI", sans-serif`;
+      c.fillText(brand, 34, H - band + 76, W - 68);
+      c.globalAlpha = 1;
     }
   }
   const tex = new THREE.CanvasTexture(canvas);

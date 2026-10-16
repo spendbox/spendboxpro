@@ -4,7 +4,10 @@ Advertisers choose, in one wizard over the live map (`src/app/play/life/advertis
 
 1. **Billboard ads on their own** (`src/app/play/life/billboard-wizard.tsx`, `src/lib/ads.ts`): a picture,
    brand and line on the city's billboards, in one state or all of Nigeria, from ₦5,000 a week for 1 to
-   8 weeks. Their ad goes up on the billboards round them while they make it.
+   8 weeks. Their ad goes up on the billboards round them while they make it (a note says only they
+   see that preview, until it's paid for and live). On the map the picture fills the whole board, as in
+   the preview: cropped to the board's 2:1 shape, with the line and brand on a see-through band at the
+   bottom. A business with only a logo shows it whole, on a soft blur of itself.
 2. **A building of their own, by the month**, which comes with their design on the billboards too.
 
 Buildings are leased through Paystack, 1, 3, 6 or 12 months up front, with **Another month** any time
