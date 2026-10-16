@@ -606,6 +606,31 @@ MOVES.push(
     },
   },
   {
+    id: "dance_pole", n: "Pole dance", period: 4, speed: 0,
+    pose: (t, D) => {
+      // Facing the pole, one hand high on it: a slow grind down and back up over eight beats, the
+      // hips swaying and rolling, a knee hooking up now and then, the free arm flowing out, and a
+      // swivel round the pole.
+      const b = t * 2, ph = Math.PI * b, drop = 0.5 - 0.5 * Math.cos((TAU * b) / 8);
+      const hook = Math.max(0, Math.sin((TAU * b) / 4)) ** 2;
+      const knee: FootTarget = { x: -D.height * 0.03 * hook, y: D.height * 0.16 * hook, z: D.height * 0.08 * hook, pitch: 0.5 * hook };
+      return {
+        spin: 0.45 * Math.sin((TAU * b) / 16),
+        hips: [D.height * 0.035 * Math.sin(ph), crouchY(D, 0.12 + 0.6 * drop), D.height * 0.02 * Math.sin(ph + 1)],
+        feet: [flat(), knee],
+        rot: {
+          hips: [0, 0.12 * Math.sin(ph), -0.1 * Math.sin(ph)],
+          spine: [0.16 * Math.sin(ph) - 0.08, 0, 0.06 * Math.sin(ph)],
+          chest: [0.2 * Math.sin(ph - 1) - 0.1, 0, 0],
+          skull: [-0.25 + 0.2 * Math.sin(ph - 2), 0.2 * Math.sin(ph * 0.5), 0],
+          // The right hand up on the pole, the left arm out and flowing.
+          upperArm0: [-2.3, 0, -0.35], forearm0: [-0.35, 0, 0],
+          upperArm1: [-0.6, 0, 0.9 + 0.5 * Math.sin(ph + 1)], forearm1: [-0.5 - 0.4 * Math.sin(ph + 2), 0, 0],
+        },
+      };
+    },
+  },
+  {
     id: "dance_spin", n: "Spin", period: 2, speed: 0,
     pose: (t, D) => {
       // A slow turn (once round every four beats), arms out wide.

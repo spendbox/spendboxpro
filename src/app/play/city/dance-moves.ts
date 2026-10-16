@@ -10,6 +10,8 @@ export const DANCE_MOVES = [
   { id: "gwara", label: "Gwara gwara" },
   { id: "legwork", label: "Legwork" },
   { id: "spin", label: "Spin" },
+  // At one of a club's poles (the dancer goes to a free pole; the crowd watches and sprays).
+  { id: "pole", label: "Pole dance" },
 ] as const;
 
 export type DanceMove = (typeof DANCE_MOVES)[number]["id"];

@@ -47,7 +47,7 @@ export function RoomActivityLayer({
   className?: string;
 }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [rain, setRain] = useState<{ id: number; from: ActivityPlayer; amount: number; mine: number } | null>(null);
+  const [rain, setRain] = useState<{ id: number; from: ActivityPlayer; amount: number; mine: number; flat: boolean } | null>(null);
   const [playing, setPlaying] = useState<{ vibe: Vibe; by: ActivityPlayer; until: number } | null>(null);
   const [listening, setListening] = useState(false);
   const [invites, setInvites] = useState<Invite[]>([]);
@@ -90,7 +90,11 @@ export function RoomActivityLayer({
         if (!m.from?.id || !Array.isArray(m.shares)) return;
         const amount = Math.max(0, Math.min(500, Number(m.amount) || 0));
         const mine = me ? Number(m.shares.find((s) => s?.id === me.id)?.coins ?? 0) : 0;
-        setRain({ id: nextId.current++, from: m.from, amount, mine });
+        // The notes fly in 3D in the room (the city view takes it); the flat shower over the
+        // screen is only for when it can't.
+        const ids = m.shares.map((s) => String(s?.id ?? "")).filter(Boolean);
+        const flat = window.dispatchEvent(new CustomEvent("nt-money-spray", { cancelable: true, detail: { ids, amount, mine: m.from.id === me?.id } }));
+        setRain({ id: nextId.current++, from: m.from, amount, mine, flat });
         if (mine > 0) playSfx("found");
         break;
       }
@@ -168,7 +172,7 @@ export function RoomActivityLayer({
   return (
     <>
       <ActivityStyles />
-      {rain && <SprayRain key={rain.id} count={rain.amount >= 200 ? 48 : 30} />}
+      {rain?.flat && <SprayRain key={rain.id} count={rain.amount >= 200 ? 48 : 30} />}
       <div className={cn("pointer-events-none fixed inset-x-0 top-14 z-[45] flex flex-col items-center gap-1.5 px-3 sm:top-16 sm:gap-2", className)}>
         {rain && (
           <div key={rain.id} className="act-pop flex max-w-[min(24rem,100%)] items-center gap-2 rounded-2xl bg-[#2b8a3e] px-3 py-1.5 text-xs font-semibold text-white shadow-lg sm:py-2 sm:text-sm">

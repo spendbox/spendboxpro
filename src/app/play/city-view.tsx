@@ -41,6 +41,7 @@ import type { OwnedProperty } from "@/lib/world/owned";
 import { daylight, weatherAt } from "@/lib/city/sky";
 import { createStars } from "./city/stars";
 import { createPartyLights, type PartyZone } from "./city/party-lights";
+import { createMoneySpray } from "./city/money-spray";
 import { npcsFor, type Npc } from "@/lib/npcs";
 import { createBirds } from "./city/birds";
 import { createBubbles, type BubbleSpot } from "./city/bubbles";
@@ -219,6 +220,8 @@ export type TurnDir = "left" | "right" | "straight";
 /** Things you can do inside places (shown with a soft glow and a label; tap to use). */
 export type InteractKind =
   | "seat" | "darts" | "archery" | "arcade" | "pool" | "cards" | "dance" | "dj" | "bar" | "jukebox" | "menu" | "stairs" | "window" | "piano" | "karaoke" | "slots-free" | "photo"
+  /** A club's dance pole: pole dance there. */
+  | "pole"
   /** At a sports venue: "Watch the match" / "Watch the fight" (by the big screen). */
   | "match"
   /** In the bank: "Rob the vault". */
@@ -5504,6 +5507,10 @@ export function CityView({
       /** A club's dance floor: where it is, the spots kept free for players, the crowd dancing on it, and the players dancing (you too). */
       floor: { x: number; z: number; w: number; d: number } | null;
       slots: { x: number; z: number }[];
+      /** A club's dance poles (room metres): players pole dancing go to these; the last has a regular on it. */
+      poles?: { x: number; z: number }[];
+      /** Money sprayed here, flying and lying on the floor (./city/money-spray). */
+      money?: ReturnType<typeof createMoneySpray> | null;
       crowd: Figures | null;
       dancers: Figures | null;
       dancersKey: string;
@@ -5706,6 +5713,7 @@ export function CityView({
         st.update = interior.update;
         setupUse(st, interior.seats, interior.items, interior.spots, npcs.length);
         st.walker = createWalker(interior.w, interior.d, interior.blocks);
+        st.poles = interior.poles ?? [];
         if (interior.danceFloor) setupFloor(st, interior.danceFloor, interior.spots.slice(0, npcs.length), key);
       } else {
         const deck = lvl.kind === "roof" ? createDeck(lvl.theme, key, lvl.hw * 2 * METRES, lvl.hd * 2 * METRES) : createOpenAir(lvl.theme, key);
@@ -5755,6 +5763,7 @@ export function CityView({
       st.crowd3d?.dispose();
       st.dancers?.dispose();
       st.dancers3d?.dispose();
+      st.money?.dispose();
       st.me3d?.dispose();
       if (st.meRing) {
         st.meRing.geometry.dispose();
@@ -5861,10 +5870,17 @@ export function CityView({
       free.sort((a, b) => Math.hypot(a.x - floor.x, a.z - floor.z) - Math.hypot(b.x - floor.x, b.z - floor.z));
       // The middle is kept for players; a crowd dances round it (facing the DJ, more or less).
       st.slots = free.slice(0, 10);
-      // A home's dance hall: just you and your guests (no crowd of strangers).
-      const around = st.homeKey ? [] : free.slice(10).filter(() => rnd() < 0.6).slice(0, 12);
+      // A home's dance hall: just you and your guests (no crowd of strangers). A club is packed.
+      const around = st.homeKey ? [] : free.slice(10).filter(() => rnd() < 0.8).slice(0, lite ? 26 : 44);
       const people: Person[] = around.map((_, i) => ({ id: `crowd:${i}`, name: "", avatar: defaultAvatar(`${key}|crowd|${i}`), npc: false }));
       const spots: Spot[] = around.map((p) => ({ x: p.x, z: p.z, ry: (rnd() - 0.5) * 1.4, pose: "stand", act: "dance" }));
+      // A dancer of the club's own on the last pole (players get the others first).
+      const poles = st.poles ?? [];
+      if (!st.homeKey && poles.length > 1) {
+        const at = poleSpot(poles[poles.length - 1], floor);
+        people.push({ id: "crowd:pole", name: "", avatar: defaultAvatar(`${key}|pole`), npc: false });
+        spots.push({ x: at.x, z: at.z, ry: at.ry, pose: "stand", act: "dance", move: "pole" });
+      }
       if (people.length) {
         st.crowd = createFigures(people, spots, { key, inert: true, tags: false });
         st.holder.add(st.crowd.group);
@@ -5872,6 +5888,13 @@ export function CityView({
         st.crowd3d = upgradeNpcs(st.crowd.figs, people, { players: true, level: LOD.far });
       }
       syncDancers(st);
+    }
+    /** Where a pole dancer stands: just in front of the pole (the side facing the dance floor), facing it. */
+    function poleSpot(pole: { x: number; z: number }, fl: { x: number; z: number }) {
+      const a = Math.atan2(fl.x - pole.x, fl.z - pole.z);
+      const x = pole.x + Math.sin(a) * 0.3;
+      const z = pole.z + Math.cos(a) * 0.3;
+      return { x, z, ry: Math.atan2(pole.x - x, pole.z - z) };
     }
     /** Draw the players dancing here (you too), each in their place with their move; partners face each other. */
     function syncDancers(st: Stage) {
@@ -5884,6 +5907,7 @@ export function CityView({
       const at = new Map<string, { x: number; z: number; ry: number }>();
       const crowded = new Map<string, number>();
       let next = 0;
+      let poleNext = 0;
       const nextSlot = () => st.slots[next++ % Math.max(1, st.slots.length)] ?? { x: fl.x, z: fl.z };
       const face = (from: { x: number; z: number }, to: { x: number; z: number }) => Math.atan2(to.x - from.x, to.z - from.z);
       /** A spot next to someone (towards the middle of the floor; the next one round them, and so on). */
@@ -5916,6 +5940,12 @@ export function CityView({
           at.set(d.id, { ...p, ry: face(p, npc) });
           if (!npcFacing.has(d.with)) npcFacing.set(d.with, face(npc, p));
           npcMoves.set(d.with, d.move);
+          continue;
+        }
+        // Pole dancing: the next free pole (on the floor if they're all taken).
+        const poles = st.poles ?? [];
+        if (d.move === "pole" && poleNext < poles.length - (poles.length > 1 ? 1 : 0)) {
+          at.set(d.id, poleSpot(poles[poleNext++], fl));
           continue;
         }
         const p = nextSlot();
@@ -6983,6 +7013,7 @@ export function CityView({
         st.players3d?.update(dt3);
         st.dancers3d?.update(dt3);
         st.crowd3d?.update(dt3);
+        st.money?.update(dt3);
         st.npcT = time;
         st.players?.update(time, camLocal);
         st.crowd?.update(time);
@@ -7833,6 +7864,25 @@ export function CityView({
       }, 4000);
     };
     document.addEventListener("visibilitychange", onVisibility);
+    // Someone sprayed money in the place you're in: the notes fly in 3D (the page skips its flat
+    // shower of notes when this takes it: preventDefault).
+    const onSpray = (e: Event) => {
+      const st = view?.kind === "place" ? view.stage : null;
+      const d = (e as CustomEvent<{ ids?: string[]; amount?: number; mine?: boolean }>).detail;
+      if (!st?.interior || !d) return;
+      e.preventDefault();
+      if (!st.money) {
+        st.money = createMoneySpray();
+        st.holder.add(st.money.object);
+      }
+      const ids = (d.ids ?? []).slice(0, 6);
+      const targets = ids.map((id) => (id === danceNow?.id ? st.meAt : st.dancers?.where(id)) ?? null).filter((p): p is { x: number; z: number; ry: number } => !!p);
+      if (!targets.length) targets.push(st.floor ? { x: st.floor.x, z: st.floor.z, ry: 0 } : { x: st.local.x, z: st.local.z, ry: 0 });
+      const from = d.mine ? (st.meAt ? null : { x: st.local.x, z: st.local.z }) : null;
+      const notes = Math.min(140, 12 + Math.sqrt(Math.max(0, Number(d.amount) || 0)) * 5);
+      for (const t of targets) st.money.spray(t, from, notes / targets.length);
+    };
+    window.addEventListener("nt-money-spray", onSpray);
     renderer.domElement.addEventListener("webglcontextlost", onLost);
     renderer.domElement.addEventListener("webglcontextrestored", onRestored);
 
@@ -7957,6 +8007,7 @@ export function CityView({
       honkTex.dispose();
       for (const t of boardTextures) t.dispose();
       clearTimeout(lostTimer);
+      window.removeEventListener("nt-money-spray", onSpray);
       document.removeEventListener("visibilitychange", onVisibility);
       renderer.domElement.removeEventListener("webglcontextlost", onLost);
       renderer.domElement.removeEventListener("webglcontextrestored", onRestored);

@@ -839,10 +839,11 @@ export function Game({
     if (!isDancing || !sound) return;
     return playLoop("disco", { seconds: 900, volume: 0.8, onBeat: syncBeat });
   }, [isDancing, sound]);
-  function startDancing() {
+  function startDancing(move?: DanceMove) {
     if (me.guest) return setSignInWhy("Sign in to dance here.");
     if (rooms.mySeat) rooms.stand();
-    setDancing((d) => d ?? { move: "groove", with: null });
+    // The pole: on your own (a partner dances on the floor), at a free pole.
+    setDancing((d) => (move ? { move, with: move === "pole" ? null : (d?.with ?? null) } : (d ?? { move: "groove", with: null })));
     playSfx("pop");
   }
 
@@ -2174,6 +2175,7 @@ export function Game({
     if (item.kind === "match") return setSportsOpen(item.sport ?? "football");
     if (guest) return setSignInWhy(item.kind === "seat" ? "Sign in to sit down here." : `Sign in to use the ${item.label.toLowerCase() || "games"} here: play games, order food, sit down and chat with people.`);
     if (item.kind === "dance") return startDancing();
+    if (item.kind === "pole") return startDancing("pole");
     if (item.kind === "seat") {
       if (rooms.mySeat === item.id) return setActivity(item as ActivityItem);
       const res = rooms.sit(item.id);
