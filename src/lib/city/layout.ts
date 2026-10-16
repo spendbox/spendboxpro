@@ -155,6 +155,11 @@ export type Tile = {
    * big interchange drawn two or more tiles wide): plain asphalt, no lights or crossings.
    */
   wide?: boolean;
+  /**
+   * A straight road's middle, as offsets across the tile at its start edge, middle and end edge
+   * (a winding street, see waveOf). Missing: dead centre.
+   */
+  wave?: [number, number, number];
   /** A real place's expressway (no pavements: nobody walks along it). */
   express?: boolean;
   /** A real place's tile kept clear of buildings: under a deck, beside a railway, a station's site. */
@@ -1803,10 +1808,65 @@ function roadTile(plan: CityPlan, x: number, z: number, r: Tile["r"]): Tile {
     const express = kind === "motorway" || kind === "trunk" || undefined;
     // Pedestrian crossings: where the map has one, and now and then on busy streets.
     const crossing = straight && !works && !incident ? crossingOf(plan, x, z, mask) : undefined;
-    if (crossing !== undefined) return { i: -1, x, z, kind: "road", top: 0.05, road: dir, mask, roundabout: false, r, crossing, express };
+    if (crossing !== undefined) return { i: -1, x, z, kind: "road", top: 0.05, road: dir, mask, roundabout: false, r, crossing, express, wave: straight ? waveOf(plan, x, z, mask === 10) : undefined };
     if (express) return { i: -1, x, z, kind: "road", top: works ? 0.45 : roundabout ? 0.3 : 0.05, road: dir, mask, roundabout, r, works: works || undefined, incident, express };
   }
-  return { i: -1, x, z, kind: "road", top: works ? 0.45 : roundabout ? 0.3 : 0.05, road: dir, mask, roundabout, r, works: works || undefined, incident };
+  const t: Tile = { i: -1, x, z, kind: "road", top: works ? 0.45 : roundabout ? 0.3 : 0.05, road: dir, mask, roundabout, r, works: works || undefined, incident };
+  if (straight) t.wave = waveOf(plan, x, z, mask === 10);
+  return t;
+}
+
+// ---------------------------------------------------------------- winding streets
+// Streets don't run dead straight between junctions: the asphalt winds gently from side to side
+// inside its strip of tiles (docs/STREETS.md). Which tiles are road never changes (so no building,
+// address or property moves); only where the road is drawn on them, and where the cars drive.
+
+/** The furthest the middle of the road strays from the middle of its tiles (tile widths). */
+export const WAVE_MAX = 0.17;
+/** The longest piece of straight road that winds as one (longer ones are cut into pieces). */
+const WAVE_REACH = 16;
+
+/** Is (x, z) part of a straight stretch that winds (along x or z)? */
+function winds(plan: CityPlan, x: number, z: number, alongX: boolean) {
+  if (!isRoad(plan, x, z) || wet(plan, x, z)) return false;
+  if (roadMask(plan, x, z) !== (alongX ? 10 : 5)) return false;
+  const kind = plan.region?.roadAt(x, z)?.kind;
+  return kind !== "motorway" && kind !== "trunk";
+}
+
+/**
+ * Where the road's middle is on a straight tile, as offsets across it (+z for a road along x, +x
+ * for one along z) at its start edge, its middle and its end edge. The stretch between two
+ * junctions (or bends, dead ends, expressways, water) bends once or twice, smoothly, and meets
+ * each end dead centre, so it joins the next tile's road.
+ */
+export function waveOf(plan: CityPlan, x: number, z: number, alongX: boolean): [number, number, number] | undefined {
+  if (!winds(plan, x, z, alongX)) return undefined;
+  const step = (k: number): [number, number] => (alongX ? [x + k, z] : [x, z + k]);
+  // Very long straight roads wind in pieces of up to WAVE_REACH tiles (cut at the same places
+  // whichever tile asks, so every tile of a piece agrees on its shape).
+  const c0 = alongX ? x : z;
+  const piece = Math.floor(c0 / WAVE_REACH);
+  const same = (k: number) => Math.floor((c0 + k) / WAVE_REACH) === piece;
+  let lo = 0;
+  while (same(lo - 1) && winds(plan, ...step(lo - 1), alongX)) lo--;
+  let hi = 0;
+  while (same(hi + 1) && winds(plan, ...step(hi + 1), alongX)) hi++;
+  // The stretch runs from the start edge of its first tile to the end edge of its last.
+  const a = (alongX ? x : z) + lo - 0.5;
+  const b = (alongX ? x : z) + hi + 0.5;
+  const len = b - a;
+  if (len < 2) return undefined;
+  // The same stretch winds the same way from every one of its tiles: keyed by where it starts.
+  const [kx, kz] = step(lo);
+  const h1 = hash(kx * 2 + (alongX ? 1 : 0), kz, plan.seed + 7301);
+  const h2 = hash(kz, kx * 2 + (alongX ? 1 : 0), plan.seed + 7302);
+  const bends = len >= 6 && h2 < 0.45 ? 2 : 1;
+  const amp = Math.min(WAVE_MAX, 0.045 * len) * (h1 < 0.5 ? -1 : 1) * (0.7 + 0.3 * h2);
+  const at = (v: number) => amp * Math.sin((Math.PI * bends * (v - a)) / len);
+  const c = alongX ? x : z;
+  const r3 = (v: number) => Math.round(v * 1000) / 1000;
+  return [r3(at(c - 0.5)), r3(at(c)), r3(at(c + 0.5))];
 }
 
 /** A pedestrian crossing on a straight stretch of a real place's road, or undefined. */
