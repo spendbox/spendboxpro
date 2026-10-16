@@ -7,15 +7,18 @@ import { anySheetOpen } from "../sheet";
 import { playSfx } from "../sound";
 import { MomentCard } from "./moment-card";
 
-// Moments (docs/MOMENTS.md): every few minutes of play, if nothing else is open, a little story
+// Moments (docs/MOMENTS.md): now and then in play, if nothing else is open, a little story
 // slides up over the map: someone asks for money, a wallet lies on the ground, the waiter spills
 // a drink on you. Pick what you do and see what comes of it. Going into a place makes one a bit
 // more likely soon after (one that fits there).
 
-/** The first one a minute or two in, then every few minutes (the server keeps them apart too). */
-const FIRST_MS: [number, number] = [75_000, 150_000];
-const NEXT_MS: [number, number] = [240_000, 540_000];
-const AFTER_ENTERING_MS: [number, number] = [25_000, 50_000];
+/**
+ * The first one a few minutes in, then now and then (docs/LIFE_WHEEL.md: a few a day, each one
+ * mattering; the server keeps them at least 20 minutes apart and to 5 a day).
+ */
+const FIRST_MS: [number, number] = [150_000, 300_000];
+const NEXT_MS: [number, number] = [1_260_000, 2_400_000];
+const AFTER_ENTERING_MS: [number, number] = [40_000, 90_000];
 const between = ([a, b]: [number, number]) => a + Math.random() * (b - a);
 
 /** Something else is up: the phone's in a pocket, a card or a full-screen tool is open. */

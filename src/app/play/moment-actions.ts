@@ -4,7 +4,7 @@ import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { regionMap } from "@/lib/world";
 import { COMMUTES, type Commute } from "@/lib/world/work";
-import { MOMENT_BY_ID, MOMENT_RULES, ROAD_RULES, isDayInLagos, momentVars, pickMoment, rollOutcome, type MomentSpot, type MomentVars } from "@/lib/world/moments";
+import { MOMENT_BY_ID, MOMENT_RULES, ROAD_RULES, choiceOrder, choiceTraits, isDayInLagos, momentVars, pickMoment, rollOutcome, type MomentSpot, type MomentVars } from "@/lib/world/moments";
 
 // Moments (docs/MOMENTS.md, game-db/109_moments.sql): the game picks one that fits where you are
 // and fills it in; when you answer, it rolls what happens (never the phone) and the database
@@ -41,7 +41,8 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; ride
   const place = typeof input?.place === "string" ? input.place.replace(/\s+/g, " ").trim().slice(0, 60) : "";
   const [{ data: prof }, recentRes, dueRes, spendRes] = await Promise.all([
     m.db.from("profiles").select("level, frozen").eq("id", m.userId).maybeSingle(),
-    m.db.from("moments").select("moment, created_at").eq("user_id", m.userId).order("created_at", { ascending: false }).limit(25),
+    // Every one you've had lately (up to 500): the last 25 don't come again, ones never had come first.
+    m.db.from("moments").select("moment, created_at").eq("user_id", m.userId).order("created_at", { ascending: false }).limit(500),
     m.db.from("moment_followups").select("id, moment, vars").eq("user_id", m.userId).lte("due_at", new Date().toISOString()).order("due_at").limit(1),
     m.db.rpc("life_can_spend", { p_user: m.userId, p_pots: ["fun"] }),
   ]);
@@ -55,7 +56,21 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; ride
   // Something coming back from before comes first.
   const due = road ? undefined : dueRes.data?.[0];
   const followed = due ? MOMENT_BY_ID.get(String(due.moment)) : undefined;
-  const def = followed ?? pickMoment({ spot, day: isDayInLagos(), level, recent: (recentRes.data ?? []).map((r) => String(r.moment)), rand: Math.random, ride });
+  const had = recentRes.data ?? [];
+  const bigSince = Date.now() - MOMENT_RULES.bigEveryDays * 86_400_000;
+  const bigOk = !had.some((r) => (MOMENT_BY_ID.get(String(r.moment))?.size ?? "small") !== "small" && Date.parse(String(r.created_at)) > bigSince);
+  const def =
+    followed ??
+    pickMoment({
+      spot,
+      day: isDayInLagos(),
+      level,
+      recent: had.slice(0, 25).map((r) => String(r.moment)),
+      seen: new Set(had.map((r) => String(r.moment))),
+      bigOk,
+      rand: Math.random,
+      ride,
+    });
   if (!def) return null;
   const vars = momentVars(def, seed, level, place);
   // A follow-up keeps the name from before.
@@ -84,9 +99,11 @@ export async function momentAnswer(id: number, choice: number): Promise<MomentRe
   const { data: row } = await m.db.from("moments").select("moment, vars, answered_at").eq("id", Math.round(n(id))).eq("user_id", m.userId).maybeSingle();
   if (!row || row.answered_at) return { ok: false, error: "That moment has passed." };
   const def = MOMENT_BY_ID.get(String(row.moment));
-  const c = def?.choices[Math.round(n(choice))];
+  const vars = (row.vars ?? {}) as MomentVars & { seed?: number };
+  const pick = Math.round(n(choice));
+  // Only the answers that were shown can be chosen.
+  const c = def && choiceOrder(def, n(vars.seed)).includes(pick) ? def.choices[pick] : undefined;
   if (!def || !c) return { ok: false, error: "That moment has passed." };
-  const vars = (row.vars ?? {}) as MomentVars;
   const outcome = rollOutcome(c, Math.random);
   const naira = ((outcome.get ?? 0) - (outcome.pay ?? 0)) * n(vars.ask);
   const mint = Math.round((naira / m.perMint) * 100) / 100;
@@ -97,7 +114,7 @@ export async function momentAnswer(id: number, choice: number): Promise<MomentRe
   const { data, error } = await m.db.rpc("moment_answer", {
     p_user: m.userId,
     p_id: Math.round(n(id)),
-    p_choice: Math.round(n(choice)),
+    p_choice: pick,
     p_text: text,
     p_cash: mint,
     p_rep: outcome.rep ?? 0,
@@ -118,6 +135,12 @@ export async function momentAnswer(id: number, choice: number): Promise<MomentRe
     console.error("Moment answer", msg);
     return { ok: false, error: "Something went wrong. Try again." };
   }
+  // Who you are (docs/LIFE_WHEEL.md): how this answer nudges the six sliders. Quietly; before
+  // game-db/111 is run there's nowhere to keep it, and nothing else depends on it yet.
+  await m.db.from("moments").update({ traits: choiceTraits(c) }).eq("id", Math.round(n(id))).eq("user_id", m.userId).then(
+    () => null,
+    () => null,
+  );
   const d = (data ?? {}) as { cash?: number; rep?: number };
   return { ok: true, outcome: c.outcomes.indexOf(outcome), cash: n(d.cash), rep: n(d.rep) };
 }

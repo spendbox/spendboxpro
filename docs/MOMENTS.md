@@ -11,13 +11,14 @@ careers, other players in your story): `docs/LIFE_WHEEL.md`.
 
 ## When they come
 
-- On the real map, signed in: the first one a minute or two after you start, then one every four
-  to nine minutes.
+- On the real map, signed in: the first one a few minutes after you start, then now and then
+  (about every 20 to 40 minutes of play). Fewer, so each one matters (docs/LIFE_WHEEL.md).
 - Going into a place makes one more likely soon after (one that fits there: a wrong bill in a
   restaurant, a plank challenge at the gym, the offering basket at church).
 - Never while a card or a full-screen tool is open, while you're taking a photo or on a ride, or
   while the game isn't on screen. It waits and tries again.
-- At least 3 minutes apart and at most 15 a day (the server keeps to this).
+- At least 20 minutes apart and at most 5 a day, street and road together (the server keeps to
+  this). A big one (`size: "big"`) at most every 3 days.
 - The cross (or **Walk away**) closes one without choosing. Nothing happens.
 
 ## Where
@@ -38,7 +39,21 @@ careers, other players in your story): `docs/LIFE_WHEEL.md`.
 There are 64 moments for these places, 7 of which only come back as follow-ups, and 55 more on the
 road, acted out in the trip film (docs/TRIPS.md). Each is told one of a few
 ways, with a name, an amount and the place filled in, so the same one rarely reads the same. The
-25 you had last don't come again until you've had others.
+25 you had last don't come again until you've had others, and ones you've never had are three
+times as likely. Rare ones (`rarity`) come about monthly, legendary ones about yearly.
+
+## The answers
+
+- Every answer button looks the same, in a shuffled order (the same order for the same moment, so
+  it doesn't jump about). Nothing gives the "right" answer away.
+- A moment can have up to 8 answers; at most 4 are shown each time, so it plays differently next
+  time. Only the answers shown can be chosen (the server checks).
+- Each answer quietly nudges who you are: six sliders, Generous/Prudent, Bold/Careful,
+  Straight/Street-smart, Community/Self-made, Forgiving/Firm, Traditional/Modern
+  (`characterOf` in `src/lib/world/moments.ts`, kept with each moment by game-db/111). An answer
+  says its nudges in `traits`, or they're guessed from its `tone` and what it does. Recent answers
+  count most (half after 3 weeks), and it takes many to reach either end. Nothing shows yet; the
+  wheel and badges come next (docs/LIFE_WHEEL.md).
 
 ## What they do
 
@@ -47,7 +62,7 @@ ways, with a name, an amount and the place filled in, so the same one rarely rea
   - Money you get goes to your wallet, at most ₦300,000 a day from moments.
   - Amounts grow a little with your level (richer people get asked for more).
 - **Reputation:**
-  - Kind choices raise it a little and mean ones lower it.
+  - Choices people would admire raise it a little, and ones they wouldn't lower it.
   - At most 10 a day either way, and between −40 and +60 from moments in all.
   - It's its own part of your reputation (`moments` in `reputationOf`).
 - **Chance:** many choices are a gamble (stand up to the area boys, take the plank bet, stake on
@@ -63,8 +78,10 @@ Add a moment to `MOMENTS` in `src/lib/world/moments.ts`:
 - `time`: optional, day or night only;
 - `minLevel`: optional;
 - `ask`: the amount range in naira;
+- `size`: optional, `big` or `life` for turning points (default small);
+- `rarity`: optional, `uncommon`, `rare` or `legendary`;
 - `text`: one or more ways to tell it;
-- `choices`: each with `outcomes`, where each outcome has a `chance`, `pay` or `get` (times the
+- `choices` (up to 8; at most 4 are shown): each with an optional `traits` nudge, and `outcomes`, where each outcome has a `chance`, `pay` or `get` (times the
   amount), `rep`, and optionally `follow`.
 
 The tests (`src/lib/world/tests/moments.test.ts`) check that every moment is complete, that

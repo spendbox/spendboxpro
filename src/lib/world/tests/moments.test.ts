@@ -3,13 +3,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { COMMUTES } from "../work.ts";
 import { ROAD_STAGES } from "../road-moments.ts";
-import { MOMENTS, MOMENT_BY_ID, choiceCost, fillMoment, momentVars, pickMoment, rollOutcome, spotOfTheme, type MomentSpot } from "../moments.ts";
+import { MOMENTS, MOMENT_BY_ID, MOMENT_RULES, TRAIT_KEYS, characterOf, characterWords, choiceCost, choiceOrder, choiceTraits, fillMoment, momentVars, pickMoment, rollOutcome, spotOfTheme, type MomentSpot } from "../moments.ts";
 
 test("every moment is complete: unique ids, text, choices, outcomes, and follow-ups that exist", () => {
   assert.equal(MOMENT_BY_ID.size, MOMENTS.length);
   for (const m of MOMENTS) {
     assert.ok(m.id.length <= 40 && m.title && m.text.length && m.emoji, m.id);
-    assert.ok(m.choices.length >= 1 && m.choices.length <= 3, `${m.id}: choices`);
+    assert.ok(m.choices.length >= 1 && m.choices.length <= 8, `${m.id}: choices`);
     for (const c of m.choices) {
       assert.ok(c.outcomes.length > 0, `${m.id}: ${c.label}`);
       for (const o of c.outcomes) {
@@ -97,4 +97,77 @@ test("on the road: every ride has moments by day and night, each with a scene, a
   // Road moments stay off the street, and without a ride none comes up on the road.
   for (let i = 0; i < 100; i++) assert.ok(!pickMoment({ spot: "street", day: true, level: 1, recent: [], rand: Math.random })!.stage);
   assert.equal(pickMoment({ spot: "road", day: true, level: 1, recent: [], rand: Math.random }), null);
+});
+
+test("answers come in a shuffled order, the same for the same seed, at most a few at once", () => {
+  const firsts = new Set<number>();
+  for (const m of MOMENTS) {
+    for (let seed = 1; seed < 40; seed++) {
+      const order = choiceOrder(m, seed);
+      assert.deepEqual(order, choiceOrder(m, seed), m.id);
+      assert.equal(order.length, Math.min(m.choices.length, MOMENT_RULES.shown), m.id);
+      assert.equal(new Set(order).size, order.length, m.id);
+      for (const i of order) assert.ok(i >= 0 && i < m.choices.length, m.id);
+      if (m.choices.length === 3) firsts.add(order[0]);
+    }
+  }
+  // Any answer can come first: position gives nothing away.
+  assert.deepEqual([...firsts].sort(), [0, 1, 2]);
+});
+
+test("every answer nudges who you are, a few points at most on any slider", () => {
+  for (const m of MOMENTS)
+    for (const c of m.choices) {
+      const t = choiceTraits(c);
+      const keys = Object.keys(t);
+      assert.ok(keys.length > 0, `${m.id}: ${c.label}`);
+      for (const k of keys) {
+        assert.ok((TRAIT_KEYS as string[]).includes(k), `${m.id}: ${k}`);
+        assert.ok(Math.abs(t[k as keyof typeof t] ?? 0) <= 4, `${m.id}: ${c.label} ${k}`);
+      }
+    }
+});
+
+test("who you are: one answer never decides it, many do, and old answers fade", () => {
+  const now = Date.parse("2026-10-16T12:00:00Z");
+  const day = 86_400_000;
+  const one = characterOf([{ traits: { giving: 3 }, at: now }], now);
+  assert.ok(one.giving > 0 && one.giving < 20, `one answer: ${one.giving}`);
+  assert.deepEqual(characterWords(one), []);
+  const many = characterOf(Array.from({ length: 15 }, (_, i) => ({ traits: { giving: 3, daring: -1 }, at: now - i * day })), now);
+  assert.ok(many.giving > 60, `many: ${many.giving}`);
+  assert.equal(characterWords(many)[0], "generous");
+  const old = characterOf(Array.from({ length: 15 }, (_, i) => ({ traits: { giving: 3 }, at: now - (120 + i) * day })), now);
+  assert.ok(old.giving < 15, `old: ${old.giving}`);
+  // Both ends are words too.
+  const firm = characterOf(Array.from({ length: 15 }, () => ({ traits: { wrongs: -3 }, at: now })), now);
+  assert.equal(characterWords(firm)[0], "firm");
+  for (const k of TRAIT_KEYS) assert.ok(Math.abs(many[k]) <= 100);
+});
+
+test("rare ones are rare, big ones wait, and ones never had come first", () => {
+  const rare = MOMENTS.find((m) => m.spots !== "any" && m.spots.includes("street") && !m.followOnly && !m.time && !m.minLevel)!;
+  const was = { rarity: rare.rarity, size: rare.size };
+  try {
+    rare.rarity = "legendary";
+    let hits = 0;
+    for (let i = 0; i < 4000; i++) if (pickMoment({ spot: "street", day: true, level: 1, recent: [], rand: Math.random })?.id === rare.id) hits++;
+    assert.ok(hits < 10, `legendary came ${hits} times in 4000`);
+    rare.rarity = undefined;
+    rare.size = "big";
+    for (let i = 0; i < 500; i++) assert.notEqual(pickMoment({ spot: "street", day: true, level: 1, recent: [], bigOk: false, rand: Math.random })?.id, rare.id);
+  } finally {
+    rare.rarity = was.rarity;
+    rare.size = was.size;
+  }
+  const street = MOMENTS.filter((m) => !m.followOnly && m.spots !== "any" && m.spots.includes("street"));
+  const fresh = street[0].id;
+  const seen = new Set(street.slice(1).map((m) => m.id));
+  let freshHits = 0;
+  let plainHits = 0;
+  for (let i = 0; i < 6000; i++) {
+    if (pickMoment({ spot: "street", day: true, level: 1, recent: [], seen, rand: Math.random })?.id === fresh) freshHits++;
+    if (pickMoment({ spot: "street", day: true, level: 1, recent: [], rand: Math.random })?.id === fresh) plainHits++;
+  }
+  assert.ok(freshHits > plainHits * 1.8, `never had: ${freshHits} against ${plainHits}`);
 });

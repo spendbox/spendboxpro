@@ -28,8 +28,13 @@ export type MomentOutcome = {
 };
 export type MomentChoice = {
   label: string;
-  /** The button's colour: kind (green), bold (gold), mean (red), calm (grey). */
+  /**
+   * What kind of answer it is: kind, bold, mean or calm. Never shown (every button looks the
+   * same, docs/LIFE_WHEEL.md); it sets the character nudges when `traits` isn't given.
+   */
   tone?: "kind" | "bold" | "mean" | "calm";
+  /** How this answer nudges who you are (see TRAITS), when the tone's guess isn't right. */
+  traits?: TraitNudge;
   outcomes: MomentOutcome[];
 };
 export type MomentDef = {
@@ -47,6 +52,10 @@ export type MomentDef = {
   stage?: RoadStage;
   /** How often, against the others (default 1). */
   weight?: number;
+  /** How big it is in your life (default small): big ones come about twice a week at most. */
+  size?: MomentSize;
+  /** How rare (default common): rare about monthly, legendary about yearly. */
+  rarity?: MomentRarity;
   /** The amount in it, in naira: somewhere between these (rounded the way people say prices). */
   ask?: [number, number];
   emoji: string;
@@ -55,6 +64,26 @@ export type MomentDef = {
   text: string[];
   choices: MomentChoice[];
 };
+
+export type MomentSize = "small" | "big" | "life";
+export type MomentRarity = "common" | "uncommon" | "rare" | "legendary";
+
+/**
+ * Who you are (docs/LIFE_WHEEL.md): six pairs of opposites, each a slider. Plus is the first
+ * word, minus the second; both ends are fine and both ends have badges.
+ */
+export const TRAITS = {
+  giving: ["Generous", "Prudent"],
+  daring: ["Bold", "Careful"],
+  truth: ["Straight", "Street-smart"],
+  people: ["Community", "Self-made"],
+  wrongs: ["Forgiving", "Firm"],
+  ways: ["Traditional", "Modern"],
+} as const;
+export type Trait = keyof typeof TRAITS;
+export const TRAIT_KEYS = Object.keys(TRAITS) as Trait[];
+/** A nudge to the sliders: a few points either way. */
+export type TraitNudge = Partial<Record<Trait, number>>;
 
 const SMALL: [number, number] = [500, 3_000];
 const MEDIUM: [number, number] = [2_000, 15_000];
@@ -901,14 +930,18 @@ MOMENTS.push(...ROAD_MOMENTS);
 
 export const MOMENT_BY_ID = new Map(MOMENTS.map((m) => [m.id, m]));
 
-/** How often moments come, and how far they can move you in a day. */
+/** How often moments come, and how far they can move you in a day (docs/LIFE_WHEEL.md: fewer, each one mattering more). */
 export const MOMENT_RULES = {
   /** At least this long between two (seconds). */
-  gapSeconds: 180,
-  /** At most this many a day. */
-  perDay: 15,
+  gapSeconds: 1_200,
+  /** At most this many a day, on the street and the road together. */
+  perDay: 5,
+  /** A big one at most this often (days). */
+  bigEveryDays: 3,
   /** A moment not answered in this long is gone (seconds). */
   answerSeconds: 1_800,
+  /** Answers shown at most (drawn from the moment's pool, in a shuffled order). */
+  shown: 4,
   /** Reputation from moments: at most this much either way in a day, and in all. */
   repPerDay: 10,
   repMin: -40,
@@ -919,9 +952,9 @@ export const MOMENT_RULES = {
 
 /**
  * On the road (the trip film): how likely a trip of at least `minKm` brings a moment, and how close
- * together they can come (the day's count is shared with the rest, with a higher cap).
+ * together they can come (the day's count is shared with the rest).
  */
-export const ROAD_RULES = { chance: 0.6, minKm: 0.3, gapSeconds: 45, perDay: 40 };
+export const ROAD_RULES = { chance: 0.25, minKm: 0.3, gapSeconds: 1_200, perDay: MOMENT_RULES.perDay };
 
 /** The places in the game (an inside's theme) as where a moment can happen. */
 export function spotOfTheme(theme: string | null | undefined, home: boolean): MomentSpot {
@@ -995,11 +1028,16 @@ function rng(seed: number) {
 /** Round an amount the way people say prices (₦1,350 → ₦1,400; ₦12,340 → ₦12,500). */
 export const niceNaira = (n: number) => (n < 1_000 ? Math.round(n / 50) * 50 : n < 5_000 ? Math.round(n / 100) * 100 : Math.round(n / 500) * 500);
 
+/** How likely each rarity is, against common. Rare is about monthly, legendary about yearly, at 5 a day. */
+const RARITY_WEIGHT: Record<MomentRarity, number> = { common: 1, uncommon: 0.4, rare: 0.05, legendary: 0.004 };
+
 /**
  * Pick a moment for someone: one that can happen here and now, not one they've had lately (`recent`
- * ids), weighted. `rand` from 0 to 1. On the road, `ride`: how they're going.
+ * ids), weighted. Ones they've never had (`seen`: every one they've ever had) come first. `bigOk`:
+ * a big one may come (none in the last few days). `rand` from 0 to 1. On the road, `ride`: how
+ * they're going.
  */
-export function pickMoment(o: { spot: MomentSpot; day: boolean; level: number; recent: string[]; rand: () => number; ride?: Commute }): MomentDef | null {
+export function pickMoment(o: { spot: MomentSpot; day: boolean; level: number; recent: string[]; seen?: Set<string>; bigOk?: boolean; rand: () => number; ride?: Commute }): MomentDef | null {
   const fits = MOMENTS.filter(
     (m) =>
       !m.followOnly &&
@@ -1008,10 +1046,12 @@ export function pickMoment(o: { spot: MomentSpot; day: boolean; level: number; r
       (!m.rides || (!!o.ride && m.rides.includes(o.ride))) &&
       (!m.time || (m.time === "day") === o.day) &&
       (m.minLevel ?? 0) <= o.level &&
+      ((m.size ?? "small") === "small" || !!o.bigOk) &&
       !o.recent.includes(m.id),
   );
-  // Moments for this kind of place come first; "anywhere" ones fill in.
-  const weight = (m: MomentDef) => (m.weight ?? 1) * (m.spots === "any" ? 0.5 : 1.5);
+  // Moments for this kind of place come first; "anywhere" ones fill in. Never had: three times as likely.
+  const weight = (m: MomentDef) =>
+    (m.weight ?? 1) * (m.spots === "any" ? 0.5 : 1.5) * RARITY_WEIGHT[m.rarity ?? "common"] * (o.seen && !o.seen.has(m.id) ? 3 : 1);
   const total = fits.reduce((a, m) => a + weight(m), 0);
   let r = o.rand() * total;
   for (const m of fits) if ((r -= weight(m)) <= 0) return m;
@@ -1048,4 +1088,74 @@ export function rollOutcome(c: MomentChoice, rand: () => number): MomentOutcome 
   let r = rand() * total;
   for (const o of c.outcomes) if ((r -= o.chance ?? 1) <= 0) return o;
   return c.outcomes[c.outcomes.length - 1];
+}
+
+/**
+ * Which answers to show, in what order (the same every time for the same seed): at most
+ * MOMENT_RULES.shown drawn from the moment's pool, shuffled, so no position gives an answer away.
+ * Indexes into `choices`.
+ */
+export function choiceOrder(m: MomentDef, seed: number): number[] {
+  const rand = rng((seed ^ 0x5bd1e995) >>> 0);
+  const order = m.choices.map((_, i) => i);
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  return order.slice(0, MOMENT_RULES.shown);
+}
+
+/** How a kind of answer nudges who you are, when a choice doesn't say. */
+const TONE_TRAITS: Record<NonNullable<MomentChoice["tone"]>, TraitNudge> = {
+  kind: { giving: 2, people: 1, wrongs: 1 },
+  bold: { daring: 2 },
+  mean: { wrongs: -2, people: -1 },
+  calm: { daring: -2 },
+};
+
+/**
+ * How an answer nudges the six sliders: what the choice says, or a guess from its tone and what it
+ * does (paying out is giving; taking money and losing face for it is street-smart; keeping your
+ * money is prudent).
+ */
+export function choiceTraits(c: MomentChoice): TraitNudge {
+  if (c.traits) return c.traits;
+  const out: TraitNudge = { ...TONE_TRAITS[c.tone ?? "calm"] };
+  const pays = c.outcomes.some((o) => (o.pay ?? 0) > 0);
+  const shady = c.outcomes.some((o) => (o.get ?? 0) > 0 && (o.rep ?? 0) < 0);
+  if (pays && c.tone === "kind") out.giving = (out.giving ?? 0) + 1;
+  if (shady) out.truth = (out.truth ?? 0) - 2;
+  if (!pays && c.tone === "calm") out.giving = (out.giving ?? 0) - 1;
+  return out;
+}
+
+/** One answer you gave: its nudges and when (ms). */
+export type TraitAnswer = { traits: TraitNudge; at: number };
+
+/** Lately counts more: an answer is worth half after this many days. */
+export const TRAIT_HALF_LIFE_DAYS = 21;
+
+/**
+ * Who you are now, from the answers you gave: each slider from −100 to 100. Recent answers count
+ * most (they fade), and it takes many answers to reach either end, so one choice never decides it.
+ */
+export function characterOf(answers: TraitAnswer[], now = Date.now()): Record<Trait, number> {
+  const sum = Object.fromEntries(TRAIT_KEYS.map((k) => [k, 0])) as Record<Trait, number>;
+  for (const a of answers) {
+    const days = Math.max(0, (now - a.at) / 86_400_000);
+    const w = 0.5 ** (days / TRAIT_HALF_LIFE_DAYS);
+    for (const k of TRAIT_KEYS) sum[k] += (Number(a.traits?.[k]) || 0) * w;
+  }
+  // About 25 points of steady nudging makes a slider read strongly (about 76).
+  for (const k of TRAIT_KEYS) sum[k] = Math.round(100 * Math.tanh(sum[k] / 25));
+  return sum;
+}
+
+/** Who you are, in words (the wheel's middle): the strongest sides, "a bit" for the milder ones. */
+export function characterWords(c: Record<Trait, number>, most = 3): string[] {
+  return TRAIT_KEYS.map((k) => ({ k, v: c[k] }))
+    .filter((t) => Math.abs(t.v) >= 20)
+    .sort((a, b) => Math.abs(b.v) - Math.abs(a.v))
+    .slice(0, most)
+    .map(({ k, v }) => `${Math.abs(v) < 45 ? "a bit " : ""}${TRAITS[k][v > 0 ? 0 : 1].toLowerCase()}`);
 }

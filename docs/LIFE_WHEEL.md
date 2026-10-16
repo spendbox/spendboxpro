@@ -164,7 +164,7 @@ everyone can climb, rich or poor.
   That way nobody can farm them.
 - **They can fade.** If you change, an old badge goes grey: "Once known as Open Hand."
 - **Private by default.** You choose which ones show on your profile.
-- **They change your life:** characters react to them, they unlock moments (an Omoluabi gets asked
+- **They change your life:** characters react to them, they unlock moments (a Person of Honour gets asked
   to be the estate's treasurer; a Hustler gets offered deals others never see), and a few give a
   small perk. None pays big money directly.
 
@@ -173,10 +173,10 @@ everyone can climb, rich or poor.
 | Badge | For |
 | --- | --- |
 | 🤲🏾 **Open Hand** | Very generous, again and again, even when it cost you |
-| 🏦 **Owo Mi** ("my money") | Very prudent: you don't let money slip away |
+| 🏦 **Money Wise** (in Nigeria *Owo Mi*, "my money") | Very prudent: you don't let money slip away |
 | 🦁 **Lion Heart** | Bold when others step back |
 | 🦉 **Wise Owl** | Careful; you think before you jump, and it usually pays |
-| 🕊️ **Omoluabi** | Honest when it cost you; the Yoruba word for a person of good character |
+| 🕊️ **Person of Honour** (in Nigeria *Omoluabi*, the Yoruba word for a person of good character) | Honest when it cost you |
 | 🧠 **Street Scholar** | Street-smart; you always find a way |
 | 🏘️ **Pillar of the Street** | Community first |
 | 🧗🏾 **Self-Made** | You build your own way |
@@ -190,7 +190,7 @@ everyone can climb, rich or poor.
 | Badge | For |
 | --- | --- |
 | 🏹 **Robin Hood** | Generous and street-smart |
-| 🧓🏾 **Baba / Mama Agba** (the elder) | Careful, community and traditional |
+| 🧓🏾 **The Elder** (in Nigeria *Baba / Mama Agba*) | Careful, community and traditional |
 | 💼 **Hustler** | Bold, street-smart and self-made |
 | ☮️ **Peacemaker** | Forgiving and community |
 | 🎅🏾 **Father Christmas** | Generous and bold: you spray money |
@@ -200,8 +200,8 @@ everyone can climb, rich or poor.
 
 *Mama's Favourite* (Mama Nkechi's story), *Bello's Nightmare* (you reported Officer Bello until he
 was moved), *Kept My Word* (paid back every debt for 3 months), *Survivor* (went broke and came
-back), *Prodigal* (left your family's way and came home), *Agbero Whisperer* (the area boys
-respect you), *Wahala Magnet* (always in the middle of drama), *Touched by Fate* (a legendary
+back), *Prodigal* (left your family's way and came home), *Street Whisperer* (the street's tough
+guys respect you; in Lagos *Agbero Whisperer*), *Wahala Magnet* (always in the middle of drama), *Touched by Fate* (a legendary
 moment).
 
 ### Career badges
@@ -277,27 +277,52 @@ Ajegunle feel different); moments that fit who you are; player-written moments, 
 approved; 20 to 30 new ones a month; and measuring which ones people skip or always answer the
 same way. The aim is the same: decades of play without meeting the same moment the same way.
 
-## 11. How we build it
+## 11. Going international
 
-Each phase works on its own.
+Lagos comes first, but the game will go to players everywhere, so all of this is built to travel:
 
-1. **Fair answers, slower pace, and starting to know who you are** (about 1 week). Same-looking
-   buttons, shuffled, from a pool of answers; the new pace; every answer starts nudging the six
-   character sliders (nothing shown yet, it just starts counting).
-2. **The wheel and the three layers** (about 2 weeks). The wheel screen; short effects; stories
-   that travel with you.
-3. **People who remember you and story arcs** (about 2 to 3 weeks). About 40 recurring characters
-   and their stories; shared characters the world remembers.
-4. **Standing and quiet badges** (about 2 weeks). Trust, Fame, Legacy and the leaderboard; the
-   badges above.
-5. **Careers** (about 3 to 4 weeks). Starting a business, its moments, daily income, growing and
-   failing, and the career badges.
-6. **Other players in your story** (about 3 weeks). Threads between players, cameos, shared and
-   group moments, allies and rivals.
-7. **The freshness engine** (ongoing). Templates, the calendar, player-written moments, monthly new
+- **The machinery is the same everywhere:** the wheel, the six sliders, the three layers, badges,
+  careers and other players in your story. Only the flavour changes.
+- **Every moment says where it belongs:** anywhere (a friend who wants to borrow, a lost wallet),
+  or a country, city or area (danfo change is Lagos; a London one has the night bus). Players get
+  moments for where they are, with universal ones filling in.
+- **Local casts and calendars:** each region gets its own recurring characters, its own seasons and
+  dates (Detty December in Lagos, Thanksgiving in the US, Diwali in India, Ramadan wherever it's
+  kept) and its own businesses (a suya spot in Lagos, a food truck in Houston).
+- **Badges have a world name and a local name:** *Person of Honour* everywhere, *Omoluabi* in
+  Nigeria; *Money Wise*, *Owo Mi* at home. Players see the local one where it exists.
+- **Money is the player's own:** amounts are set in a region's prices (already true: each region
+  has its own prices), so ₦2,000 in Lagos is the same kind of ask as £5 in London.
+- **Words ready to translate:** stories are written in plain English with the names, amounts and
+  places filled in from outside, so they can be translated per language later.
+- **Different values, same freedom:** what's "traditional" or "modern" differs by place; the
+  sliders never call either end wrong, so they work across cultures.
+
+## 12. How we build it
+
+Each phase works on its own and is built in one go, a few hours to a couple of days each. The
+slowest part is writing the stories themselves, and that's done with AI drafting and the owner
+reviewing.
+
+1. **Fair answers, slower pace, and starting to know who you are.** *Built.* Same-looking buttons,
+   shuffled, from a pool of up to 8 answers (4 shown); the new pace (5 a day, 20 minutes apart,
+   the road on 1 trip in 4); sizes and rarity; ones never had first; every answer quietly nudges
+   the six sliders (game-db/111).
+2. **The wheel and the three layers.** The wheel screen; short effects; stories that travel with
+   you; the first big and life-changing moments, and more answers in each moment's pool.
+3. **People who remember you and story arcs.** About 40 recurring characters and their stories;
+   shared characters the world remembers.
+4. **Standing and quiet badges.** Trust, Fame, Legacy and the leaderboard; the badges above.
+5. **Careers.** Starting a business, its moments, daily income, growing and failing, and the
+   career badges.
+6. **Other players in your story.** Threads between players, cameos, shared and group moments,
+   allies and rivals.
+7. **The freshness engine.** Templates, the calendar, your area, player-written moments, monthly new
    ones, measuring.
+8. **Going international.** Moments tagged by where they belong, local casts, calendars and
+   businesses, local badge names, translation.
 
-## 12. For the owner to decide
+## 13. For the owner to decide
 
 - How many moments a day (suggested above: 3 to 5 small a day, 1 or 2 big a week).
 - The badge names, and whether badges are private until you choose to show them (suggested: yes).

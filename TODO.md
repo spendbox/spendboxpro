@@ -1,6 +1,7 @@
 # To do
 
 ## Now (owner)
+- [ ] In the Supabase SQL Editor run `game-db/111_character.sql` (each answer to a moment quietly shapes who you are; docs/LIFE_WHEEL.md). Until then moments work as before, they just aren't remembered for that.
 - [x] Set up the test version with its own database (docs/TESTING.md, about 20 minutes). Until then, previews use the live database.
 - [x] In the Supabase SQL Editor run `game-db/065_economy_balance.sql` (a fairer economy: jobs pay 18 times real wages, food as a daily cost, the daily refill counts your pots, dearer levels, gift limits for new accounts, rent follows value, no wash-trading up shop prices, pickpocketing doesn't pay). Run it soon after this update goes live: until then the game still works, but food isn't charged and the old rules apply. Run 064 first.
 - [x] In the Supabase SQL Editor run `game-db/064_home_upgrades.sql` (paying for new floors and furniture in Plan my home, which raises the home's value). Run 062 and 063 first if they aren't yet.
@@ -123,38 +124,44 @@ quiet badges; reputation, Trust, Fame and Legacy follow; careers grow or fail; o
 your story and you of theirs. The old freshness plan (answer pools, never seen first, rarity, characters,
 moments from parts, the Lagos calendar, player-written, monthly new ones, measuring) lives inside this.
 
-**Phase 1: fair answers, slower pace, starting to know who you are (about 1 week).**
-- [ ] Every answer button looks the same (drop the green, gold and red); the order is shuffled each time.
-- [ ] Each moment keeps a pool of answers (6 to 8) and shows 3 or 4; outcomes shift with context, so no answer is always best.
-- [ ] The new pace: 3 to 5 small a day of play, at least 20 minutes apart; road moments on about 1 trip in 4, in the same count.
-- [ ] Sizes: small, big (1 or 2 a week), life-changing (a few a year); rare and legendary ones.
-- [ ] Every answer nudges the six character sliders (Generous/Prudent, Bold/Careful, Straight/Street-smart,
-  Community/Self-made, Forgiving/Firm, Traditional/Modern), fading with time; who saw it decides reputation.
+Each phase is built in one go (a few hours to a couple of days); writing the stories is the slow part.
 
-**Phase 2: the wheel and the three layers (about 2 weeks).**
+**Phase 1: fair answers, slower pace, starting to know who you are.** Built.
+- [x] Every answer button looks the same (no green, gold and red), in a shuffled order.
+- [x] Pools of up to 8 answers, at most 4 shown; only the ones shown can be chosen.
+- [x] The new pace: at most 5 a day, at least 20 minutes apart; road moments on 1 trip in 4, in the same count.
+- [x] Sizes (small, big at most every 3 days, life-changing) and rarity (rare about monthly, legendary about yearly); ones never had come first.
+- [x] Every answer quietly nudges the six character sliders, fading with time (game-db/111; nothing shown yet).
+
+**Phase 2: the wheel and the three layers.**
 - [ ] The wheel screen: notches by part of life, the stories still going, who you're becoming in words.
 - [ ] Short effects that wear off (Blessed, Talked about, In debt, Owed a favour, Hurt...).
 - [ ] Stories that travel with you: the next step finds you wherever you are.
+- [ ] More answers in each moment's pool (6 to 8), outcomes that shift with context, and the first big and life-changing moments.
 
-**Phase 3: people who remember you and story arcs (about 2 to 3 weeks).**
+**Phase 3: people who remember you and story arcs.**
 - [ ] About 40 recurring characters with a memory of you; story arcs of 5 to 10 steps over weeks.
 - [ ] Shared characters the world remembers (if many help Mama Nkechi, she opens a shop everyone sees).
 
-**Phase 4: standing and quiet badges (about 2 weeks).**
-- [ ] Trust, Fame, Legacy (and a Legacy leaderboard); moments' reputation range widened to about −100 to +150.
+**Phase 4: standing and quiet badges.**
+- [ ] Who saw it decides reputation; Trust, Fame, Legacy (and a Legacy leaderboard); moments' reputation range widened to about −100 to +150.
 - [ ] Badges from patterns (character, mixed, story, career, people), arriving quietly later, able to fade, private by default.
 
-**Phase 5: careers (about 3 to 4 weeks).**
+**Phase 5: careers.**
 - [ ] Start a business (suya, buka, fashion, POS, salon, dispatch, events, poultry, tech, import/export):
   hidden cash, customers, quality, staff mood, risk; Idea → Stall → Shop → Brand → Empire; 2 or 3 business
   moments a week; daily income from the World Bank with caps; failing starts the Comeback story.
 
-**Phase 6: other players in your story (about 3 weeks).**
+**Phase 6: other players in your story.**
 - [ ] Threads between two players (a loan, a favour), cameos, shared moments, group moments at a place,
   allies and rivals; only with friends, people met, or those who opt in; all settled by the server.
 
-**Phase 7: the freshness engine (ongoing).**
+**Phase 7: the freshness engine.**
 - [ ] Moments built from parts, the Lagos calendar and your area, player-written moments, 20 to 30 new a month, measuring.
+
+**Phase 8: going international.**
+- [ ] Moments tagged by where they belong (anywhere, a country, a city), local casts, calendars and businesses,
+  badges with a world name and a local one (Person of Honour / Omoluabi), translation.
 
 **For the owner to decide:** how many a day; badge names and private-by-default; the businesses to start
 with; whether a business can fail completely; how big business income can get.
