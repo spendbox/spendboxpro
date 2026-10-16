@@ -1,94 +1,94 @@
 # To do
 
 ## Now (owner)
-- [ ] Set up the test version with its own database (docs/TESTING.md, about 20 minutes). Until then, previews use the live database.
-- [ ] In the Supabase SQL Editor run `game-db/065_economy_balance.sql` (a fairer economy: jobs pay 18 times real wages, food as a daily cost, the daily refill counts your pots, dearer levels, gift limits for new accounts, rent follows value, no wash-trading up shop prices, pickpocketing doesn't pay). Run it soon after this update goes live: until then the game still works, but food isn't charged and the old rules apply. Run 064 first.
-- [ ] In the Supabase SQL Editor run `game-db/064_home_upgrades.sql` (paying for new floors and furniture in Plan my home, which raises the home's value). Run 062 and 063 first if they aren't yet.
-- [ ] In the Supabase SQL Editor run `game-db/066_home_visits.sql` (knocking at homes, parties and the guest book). Until then doors stay open and those buttons say "switched on soon".
-- [ ] In the Supabase SQL Editor run `game-db/067_club_entry.sql` (entry fees at some clubs, good for 24 hours). Until then every club is free to walk into.
-- [ ] In the Supabase SQL Editor run `game-db/069_pack_perks.sql` (paid packs' gifts: phone, car, watch...). Until then the gifts wait; the furnished home works already.
+- [x] Set up the test version with its own database (docs/TESTING.md, about 20 minutes). Until then, previews use the live database.
+- [x] In the Supabase SQL Editor run `game-db/065_economy_balance.sql` (a fairer economy: jobs pay 18 times real wages, food as a daily cost, the daily refill counts your pots, dearer levels, gift limits for new accounts, rent follows value, no wash-trading up shop prices, pickpocketing doesn't pay). Run it soon after this update goes live: until then the game still works, but food isn't charged and the old rules apply. Run 064 first.
+- [x] In the Supabase SQL Editor run `game-db/064_home_upgrades.sql` (paying for new floors and furniture in Plan my home, which raises the home's value). Run 062 and 063 first if they aren't yet.
+- [x] In the Supabase SQL Editor run `game-db/066_home_visits.sql` (knocking at homes, parties and the guest book). Until then doors stay open and those buttons say "switched on soon".
+- [x] In the Supabase SQL Editor run `game-db/067_club_entry.sql` (entry fees at some clubs, good for 24 hours). Until then every club is free to walk into.
+- [x] In the Supabase SQL Editor run `game-db/069_pack_perks.sql` (paid packs' gifts: phone, car, watch...). Until then the gifts wait; the furnished home works already.
 - [x] In the Supabase SQL Editor run `game-db/070_challenges.sql` (Challenge: challenges on the map, pools and prizes). Until then Challenge says it is switched on soon.
 - [x] In the Supabase SQL Editor run `game-db/071_chat_read.sql` (private messages show "Opened" once read, and read ones stop counting on every phone). Until then each phone remembers what it has read.
 - [x] In the Supabase SQL Editor run `game-db/072_first_steps.sql` (the first five minutes: the small rewards for saying hi, playing a challenge and picking a home). Until then the guide shows but pays nothing.
 - [x] In the Supabase SQL Editor run `game-db/073_daily_money.sql` (the daily gift, counting active time, and Newtown's prize for a challenge won). Until then Your money says the gift is switched on soon. Run it again if you ran it before the economy was resized: it sets the gift cap and the prize to the new numbers.
 - [x] In the Supabase SQL Editor run `game-db/074_simple_life.sql` (the simple life: ₦250,000 to start, free starter rooms). Run 072 again too (the first steps are now: say hi, play a challenge, go out).
 - [x] In the Supabase SQL Editor run `game-db/076_topups.sql` (top-ups any time: ₦1,000 = ₦1,000,000, bonuses on bigger ones, the first doubled). Until then Top up says it is switched on soon.
-- [ ] In the Supabase SQL Editor run `game-db/077_renting.sql` (renting a home: 6% of its value a month, paid when you open the game). Until then Rent says it is switched on soon.
-- [ ] In the Supabase SQL Editor run `game-db/078_home_name.sql` (naming your home from its card). Until then the pencil says it is switched on soon.
-- [ ] In the Supabase SQL Editor run `game-db/079_property_income.sql` (property pays you every day by itself; no buying tax). Until then property earns nothing and the 3% tax still applies.
-- [ ] In the Supabase SQL Editor run `game-db/080_tutorial.sql` (the walkthrough's missions and rewards: ₦20,000 for naming your home, ₦50,000 for saying hi, ₦50,000 for winning a challenge). Until then the missions show with no reward.
-- [ ] In the Supabase SQL Editor run `game-db/081_no_challenge_prize.sql` (no more ₦2,000 Newtown prize on a win).
-- [ ] In the Supabase SQL Editor run `game-db/082_landmarks.sql` (buying landmarks, ₦50bn to ₦2tn, earning 10% a day). Run it after 079.
-- [ ] In the Supabase SQL Editor run `game-db/083_online_pay_world_bank.sql` (₦500 for every minute online, up to 4 hours a day; the World Bank).
-- [ ] In the Supabase SQL Editor run `game-db/084_bank_ads_admin.sql` (the World Bank opens with ₦1 billion and grows from there; every billboard view counted; paid ads for one state or everywhere; the money made today on the dashboard). Run it after 083. If you ever run 083 again, run 084 again after it.
-- [ ] In the Supabase SQL Editor run `game-db/085_town_hall_faces.sql` (the Town Hall, one chat for everyone online in the state; and the "faces" storage for profile photos). Until then Town Hall says it opens soon and photos say they're switched on soon.
-- [ ] Then run `game-db/086_town_hall_more.sql` (Town Hall replies, reactions, photos, deleting, messages gone after 24 hours; nobody shows "at work" on the map any more; no top price for landmarks).
-- [ ] Then run `game-db/087_rename_property.sql` (name any property you own from Things › Assets, not just your home).
-- [ ] Then run `game-db/088_world_bank_sports.sql` (the World Bank also counts sports money: the house cut on bets and match tickets, not only challenges). Run it after 083 and 084.
-- [ ] Then run `game-db/089_world_bank_everything.sql` (the World Bank counts everything players pay the city: fares, food, bills, taxes, shopping, property from the city, games; loans come out of it and repayments go back in; spending since it opened is added once). If you ever run 083, 084 or 088 again, run 089 again after.
-- [ ] Then run `game-db/090_packs_and_credits.sql` (new lives start with ₦2,000,000 and a free home; starter packs raise it to ₦20m / ₦80m / ₦300m for ₦1,000 / ₦2,500 / ₦5,000, paid like top-ups so a payment is never lost; the dashboard can credit players). Until it's run, the Wallet doesn't show the packs.
-- [ ] Then run `game-db/091_city_growth.sql` (the city grows with its players: unsold buildings rebuilt taller, estates spread, sold-out blocks gain storeys; see docs/GROWTH.md).
-- [ ] Then run `game-db/092_monthly_leases.sql` (buildings for advertisers are leased by the month, 1/3/6/12 months, and "Another month" on the ad page). Until it's run, the building checkout says monthly leases are switched on soon; billboard ads work either way. If you ever run 043 or 047 again, run 092 again after.
-- [ ] Then run `game-db/093_engagement_rep.sql` (reputation also grows quietly with time in the game, real conversations, gifts and greetings, friends and visitors; see docs/REPUTATION.md).
-- [ ] Then run `game-db/094_lived_in_leases.sql` (advertisers can take buildings people live in: the homes stay buyable and lived in, nobody renames the building while it's leased). If you ever run 043, 047 or 092 again, run 094 again after.
-- [ ] Then run `game-db/106_passport.sql` (the passport: a stamp for every real place you go into, rewards for new stamps and complete areas; see docs/PASSPORT.md). Until it's run, the passport says it's switched on soon.
-- [ ] Then run `game-db/107_gifts_uncapped.sql` (no cap on giving money, except brand-new accounts: ₦750,000 a day until 3 days old and level 5).
-- [ ] Then run `game-db/108_home_builder.sql` (the house builder: one save can cost more, and big plans fit).
-- [ ] Then run `game-db/109_moments.sql` (moments: little stories out and about, with choices that move money and reputation; see docs/MOMENTS.md).
-- [ ] Then run `game-db/110_game_tables.sql` (game tables: challenge one person to Whot!, accept or decline, start now; see docs/GAME_TABLES.md).
-- [ ] Then run `game-db/105_pack_72_hours.sql` (starter packs are on offer for a player's first 72 hours only, not until they buy a home). Until it's run, the old rule stays.
-- [ ] Then run `game-db/104_luxury.sql` (luxury things up to ₦3bn: Patek Philippe, Richard Mille, Rolls-Royce...). Until it's run, anything over ₦300m can't be bought.
-- [ ] Then run `game-db/103_call_off_refunds.sql` (when a host calls off an event, everyone who came in is told their ticket was paid back, not only those who said they were going). Run it after 96.
-- [ ] Then run `game-db/102_speed.sql` (faster at scale: players' positions kept with indexes, missing indexes, one notice to many players, old notices cleared daily). Run it after 101. Everything works before it's run, just slower with many players.
-- [ ] Then run `game-db/101_event_audience.sql` (a new event tells the nearest players however far, twice as many as it holds, or everyone within 4 km). Until it's run, only people within 4 km hear, and only if it starts soon.
-- [ ] Voice calls: set up Cloudflare's TURN relay so people on mobile data can be heard (docs/VOICE_CALLS.md: CLOUDFLARE_TURN_KEY_ID and CLOUDFLARE_TURN_API_TOKEN in Vercel). Free for the first 1,000 GB a month.
-- [ ] Then run `game-db/100_passwords.sql` (passwords instead of PINs: players from before are asked to make one after signing in with their old PIN). Passwords work before it's run; until then old players just aren't asked.
-- [ ] Then run `game-db/099_email_verified.sql` (new players sign up without an email code; this remembers whose email is confirmed, for a later reward). Sign-up works before it's run.
-- [ ] Switch on the robot check on sign-up (free): Cloudflare dashboard → Turnstile → Add widget for newtown.world (Managed), then in Vercel add `NEXT_PUBLIC_TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` and redeploy. Until then new players sign up with no robot check.
-- [ ] Then run `game-db/098_no_fare_caps.sql` (fares are no longer capped: a long trip costs what it costs by the kilometre).
-- [ ] Then run `game-db/097_party_sizes.sql` (parties of any size, from one spot to a carnival 5 km across, for up to 10,000 people). Run it after 096 (and again if you ever run 095 again). Until it's run, only one-spot parties for up to 1,000 can be hosted.
-- [ ] Then run `game-db/096_event_refund.sql` (a party fewer than 10 people come to: the host gets the hosting fee back). Run it after 095 (and again if you ever run 095 again).
-- [ ] Then run `game-db/095_events.sql` (Events: anyone hosts a party or a talk/screening on the street or at a place, others say they're going and come in; tickets held until it's over, 90% to the host; parties cost from ₦100,000 an hour to host; street parties can't overlap; slides and chat photos storage; the walkthrough's third mission becomes "go to an event"; see docs/EVENTS.md). If you ever run 054 or 080 again, run 095 again after it. Until it's run, the Events button opens but says events are switched on soon, and hosting doesn't work.
-- [ ] Paystack dashboard: turn on "Pay with Transfer" (for bank transfer in the game), and set the Webhook URL to `https://<your site>/api/paystack/webhook` (Settings → API Keys & Webhooks).
-- [ ] On the day the simple life goes live (after merging), run `game-db/075_fresh_start.sql` ONCE: everyone's money becomes ₦350,000 (₦250,000 + ₦100,000 founder bonus), pots emptied, Founder badge, homes and things kept. Old balances are backed up; the undo lines are at the bottom of the file.
-- [ ] Optional, for voice calls on every network: add a TURN relay (docs/VOICE_CALLS.md) with NEXT_PUBLIC_TURN_URL, NEXT_PUBLIC_TURN_USERNAME and NEXT_PUBLIC_TURN_CREDENTIAL in Vercel.
-- [ ] In the Supabase SQL Editor run `game-db/062_notices_read.sql` (exact unread counts, swiping notices away, photos and selfies in messages) and then `game-db/063_home_plans.sql` (saving home plans).
-- [ ] In the Supabase SQL Editor run `game-db/061_ride_fares.sql` (rides on the map cost their fare: train, ferry, bus, taxi, balloon, helicopter...; until it's run they stay free on the real map).
-- [ ] In the Supabase SQL Editor run `game-db/060_find_people.sql` (search anyone nearest first, man or woman). Until it's run, People still lists those within 50 km and nobody shows as man or woman.
-- [ ] In the Supabase SQL Editor run `game-db/059_bigger_starts.sql` (free start ₥6,500; visits counted by day for the online button's numbers and the dashboard). The bigger packs work without it.
-- [ ] For the owner's dashboard: in Vercel → Settings → Environment Variables add `ADMIN_PATH` (a hard-to-guess address, at least 8 characters, e.g. `hq-7f3k29xq`), and `ADMIN_PASSWORD` (at least 8 characters; `ADMIN_EMAIL` is the sign-in email). Redeploy, then open `https://newtown.world/<ADMIN_PATH>`.
-- [ ] Starter packs: check Paystack → Settings → API Keys & Webhooks → Webhook URL is `https://newtown.world/api/paystack/webhook` (live and test). Payments are now also checked when the player comes back and every time they open the game; a stuck one can be re-checked from the dashboard.
-- [ ] Follow `docs/LIVE_CHECK.md`: switch the real-map game on (database, Vercel settings, Paystack) and try it on your phone, step by step.
-- [ ] In the Supabase SQL Editor run `game-db/038_property.sql` (owning property on the real map: starting budget of ₥5,000, buying, homes, rent, treasuries). Until it's run, `/play?world=lagos` shows the map but buying won't work. Already ran it? Run it again: it is safe and sets the starting budget back to ₥5,000.
-- [ ] Then run `game-db/039_work.sql` (jobs on the real map, fares to work, neighbours; see `docs/WORK.md`). Until it's run, Work and neighbours won't load.
-- [ ] Then run `game-db/040_living.sql` (money pots and budget, bills, health, school, looks, essential services paid from tax; see `docs/LIVING.md`). Run it after 038 and 039 (and again if you ever run 038 again): the game's Money and Life screens need it.
-- [ ] Then run `game-db/041_your_day.sql` (side hustles, Body and Mind, exercise, interviews, breakthroughs; see `docs/DAY.md`). Run it after 040 (and again after 040 if you ever re-run 040).
-- [ ] Then run `game-db/042_starter_packs.sql` (starter packs paid through Paystack; see `docs/PACKS.md`). Paystack's webhook URL must already point at `/api/paystack/webhook` (it does for ads).
-- [ ] Then run `game-db/043_business.sql` (real businesses leasing buildings; see `docs/BUSINESS.md`). Leases and upgrades are paid through the same Paystack webhook.
-- [ ] Then run `game-db/044_services.sql` (services between people; see `docs/SERVICES.md`).
-- [ ] Then run `game-db/045_map_reports.sql` (players report map problems; you read them at `/map-reports` while signed in with the `ADMIN_EMAIL` email; see `docs/MAP_REPORTS.md`).
-- [ ] Then run `game-db/046_market.sql` (the player market: selling, offers, tenants, World Bank loans; see `docs/MARKET.md`). If you ever run 038 or 040 again, run 046 again after them.
-- [ ] Then run `game-db/047_ads_are_property.sql` (advertising is leasing a building: billboards included, a design you can swap, ends after a year or its taps; no mint for tapping ads; see `docs/BUSINESS.md`).
-- [ ] Then run `game-db/048_trips.sql` (going into a building costs the fare from where you last were).
-- [ ] Then run `game-db/052_marks.sql` (writing, reviews, trees, statues, time capsules on the map; see `docs/MARKS.md`). Run it after 051.
-- [ ] Then run `game-db/053_marks_rules.sql` (short writing, graffiti styles, the reputation limits). Run it after 052.
-- [ ] Then run `game-db/054_earnings.sql` (Finance's Overview: what you've earned, the tax on it, and each payment in). Run it after 053; already ran it? Run it again (it now leaves out home sales and adds the tax).
-- [ ] Then run `game-db/055_street.sql` (stealing, jail and bribes, pranks, rivals, gossip; see `docs/STREET.md`) and then `game-db/056_dating.sql` (dating, opt-in with a yes every time; see `docs/DATING.md`).
-- [ ] Then run `game-db/057_outdoor_chat.sql` (chat works in parks, plazas and at a landmark's main entrance).
-- [ ] Then run `game-db/058_course_done.sql` (a notification with congratulations when a course ends).
-- [ ] Then run `game-db/051_people.sql` (faces on the map, cards, doorsteps, while you were away, push; see `docs/PEOPLE.md`).
-- [ ] For notifications: run `node scripts/vapid-keys.mjs` once, put the three lines it prints into Vercel's environment variables (NEXT_PUBLIC_VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT), and redeploy.
-- [ ] Then run `game-db/050_economy_items.sql` (pay four times real wages, money by day for the Finance chart, things, the market, crafting, cars, reputation; see `docs/ITEMS.md`). Until it's run, the Things screens and the Finance chart stay empty.
-- [ ] Then run `game-db/049_reports_and_work.sql` (reporting people; up to 3 side hustles; pay that goes into wallets by itself every game week). Until it's run, starting a second side hustle and reporting a person won't work.
-- [ ] In Vercel, set `GAME_SECRET` to a long random string (seals interview answers and passes; without it the service key is used).
+- [x] In the Supabase SQL Editor run `game-db/077_renting.sql` (renting a home: 6% of its value a month, paid when you open the game). Until then Rent says it is switched on soon.
+- [x] In the Supabase SQL Editor run `game-db/078_home_name.sql` (naming your home from its card). Until then the pencil says it is switched on soon.
+- [x] In the Supabase SQL Editor run `game-db/079_property_income.sql` (property pays you every day by itself; no buying tax). Until then property earns nothing and the 3% tax still applies.
+- [x] In the Supabase SQL Editor run `game-db/080_tutorial.sql` (the walkthrough's missions and rewards: ₦20,000 for naming your home, ₦50,000 for saying hi, ₦50,000 for winning a challenge). Until then the missions show with no reward.
+- [x] In the Supabase SQL Editor run `game-db/081_no_challenge_prize.sql` (no more ₦2,000 Newtown prize on a win).
+- [x] In the Supabase SQL Editor run `game-db/082_landmarks.sql` (buying landmarks, ₦50bn to ₦2tn, earning 10% a day). Run it after 079.
+- [x] In the Supabase SQL Editor run `game-db/083_online_pay_world_bank.sql` (₦500 for every minute online, up to 4 hours a day; the World Bank).
+- [x] In the Supabase SQL Editor run `game-db/084_bank_ads_admin.sql` (the World Bank opens with ₦1 billion and grows from there; every billboard view counted; paid ads for one state or everywhere; the money made today on the dashboard). Run it after 083. If you ever run 083 again, run 084 again after it.
+- [x] In the Supabase SQL Editor run `game-db/085_town_hall_faces.sql` (the Town Hall, one chat for everyone online in the state; and the "faces" storage for profile photos). Until then Town Hall says it opens soon and photos say they're switched on soon.
+- [x] Then run `game-db/086_town_hall_more.sql` (Town Hall replies, reactions, photos, deleting, messages gone after 24 hours; nobody shows "at work" on the map any more; no top price for landmarks).
+- [x] Then run `game-db/087_rename_property.sql` (name any property you own from Things › Assets, not just your home).
+- [x] Then run `game-db/088_world_bank_sports.sql` (the World Bank also counts sports money: the house cut on bets and match tickets, not only challenges). Run it after 083 and 084.
+- [x] Then run `game-db/089_world_bank_everything.sql` (the World Bank counts everything players pay the city: fares, food, bills, taxes, shopping, property from the city, games; loans come out of it and repayments go back in; spending since it opened is added once). If you ever run 083, 084 or 088 again, run 089 again after.
+- [x] Then run `game-db/090_packs_and_credits.sql` (new lives start with ₦2,000,000 and a free home; starter packs raise it to ₦20m / ₦80m / ₦300m for ₦1,000 / ₦2,500 / ₦5,000, paid like top-ups so a payment is never lost; the dashboard can credit players). Until it's run, the Wallet doesn't show the packs.
+- [x] Then run `game-db/091_city_growth.sql` (the city grows with its players: unsold buildings rebuilt taller, estates spread, sold-out blocks gain storeys; see docs/GROWTH.md).
+- [x] Then run `game-db/092_monthly_leases.sql` (buildings for advertisers are leased by the month, 1/3/6/12 months, and "Another month" on the ad page). Until it's run, the building checkout says monthly leases are switched on soon; billboard ads work either way. If you ever run 043 or 047 again, run 092 again after.
+- [x] Then run `game-db/093_engagement_rep.sql` (reputation also grows quietly with time in the game, real conversations, gifts and greetings, friends and visitors; see docs/REPUTATION.md).
+- [x] Then run `game-db/094_lived_in_leases.sql` (advertisers can take buildings people live in: the homes stay buyable and lived in, nobody renames the building while it's leased). If you ever run 043, 047 or 092 again, run 094 again after.
+- [x] Then run `game-db/106_passport.sql` (the passport: a stamp for every real place you go into, rewards for new stamps and complete areas; see docs/PASSPORT.md). Until it's run, the passport says it's switched on soon.
+- [x] Then run `game-db/107_gifts_uncapped.sql` (no cap on giving money, except brand-new accounts: ₦750,000 a day until 3 days old and level 5).
+- [x] Then run `game-db/108_home_builder.sql` (the house builder: one save can cost more, and big plans fit).
+- [x] Then run `game-db/109_moments.sql` (moments: little stories out and about, with choices that move money and reputation; see docs/MOMENTS.md).
+- [x] Then run `game-db/110_game_tables.sql` (game tables: challenge one person to Whot!, accept or decline, start now; see docs/GAME_TABLES.md).
+- [x] Then run `game-db/105_pack_72_hours.sql` (starter packs are on offer for a player's first 72 hours only, not until they buy a home). Until it's run, the old rule stays.
+- [x] Then run `game-db/104_luxury.sql` (luxury things up to ₦3bn: Patek Philippe, Richard Mille, Rolls-Royce...). Until it's run, anything over ₦300m can't be bought.
+- [x] Then run `game-db/103_call_off_refunds.sql` (when a host calls off an event, everyone who came in is told their ticket was paid back, not only those who said they were going). Run it after 96.
+- [x] Then run `game-db/102_speed.sql` (faster at scale: players' positions kept with indexes, missing indexes, one notice to many players, old notices cleared daily). Run it after 101. Everything works before it's run, just slower with many players.
+- [x] Then run `game-db/101_event_audience.sql` (a new event tells the nearest players however far, twice as many as it holds, or everyone within 4 km). Until it's run, only people within 4 km hear, and only if it starts soon.
+- [x] Voice calls: set up Cloudflare's TURN relay so people on mobile data can be heard (docs/VOICE_CALLS.md: CLOUDFLARE_TURN_KEY_ID and CLOUDFLARE_TURN_API_TOKEN in Vercel). Free for the first 1,000 GB a month.
+- [x] Then run `game-db/100_passwords.sql` (passwords instead of PINs: players from before are asked to make one after signing in with their old PIN). Passwords work before it's run; until then old players just aren't asked.
+- [x] Then run `game-db/099_email_verified.sql` (new players sign up without an email code; this remembers whose email is confirmed, for a later reward). Sign-up works before it's run.
+- [x] Switch on the robot check on sign-up (free): Cloudflare dashboard → Turnstile → Add widget for newtown.world (Managed), then in Vercel add `NEXT_PUBLIC_TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` and redeploy. Until then new players sign up with no robot check.
+- [x] Then run `game-db/098_no_fare_caps.sql` (fares are no longer capped: a long trip costs what it costs by the kilometre).
+- [x] Then run `game-db/097_party_sizes.sql` (parties of any size, from one spot to a carnival 5 km across, for up to 10,000 people). Run it after 096 (and again if you ever run 095 again). Until it's run, only one-spot parties for up to 1,000 can be hosted.
+- [x] Then run `game-db/096_event_refund.sql` (a party fewer than 10 people come to: the host gets the hosting fee back). Run it after 095 (and again if you ever run 095 again).
+- [x] Then run `game-db/095_events.sql` (Events: anyone hosts a party or a talk/screening on the street or at a place, others say they're going and come in; tickets held until it's over, 90% to the host; parties cost from ₦100,000 an hour to host; street parties can't overlap; slides and chat photos storage; the walkthrough's third mission becomes "go to an event"; see docs/EVENTS.md). If you ever run 054 or 080 again, run 095 again after it. Until it's run, the Events button opens but says events are switched on soon, and hosting doesn't work.
+- [x] Paystack dashboard: turn on "Pay with Transfer" (for bank transfer in the game), and set the Webhook URL to `https://<your site>/api/paystack/webhook` (Settings → API Keys & Webhooks).
+- [x] On the day the simple life goes live (after merging), run `game-db/075_fresh_start.sql` ONCE: everyone's money becomes ₦350,000 (₦250,000 + ₦100,000 founder bonus), pots emptied, Founder badge, homes and things kept. Old balances are backed up; the undo lines are at the bottom of the file.
+- [x] Optional, for voice calls on every network: add a TURN relay (docs/VOICE_CALLS.md) with NEXT_PUBLIC_TURN_URL, NEXT_PUBLIC_TURN_USERNAME and NEXT_PUBLIC_TURN_CREDENTIAL in Vercel.
+- [x] In the Supabase SQL Editor run `game-db/062_notices_read.sql` (exact unread counts, swiping notices away, photos and selfies in messages) and then `game-db/063_home_plans.sql` (saving home plans).
+- [x] In the Supabase SQL Editor run `game-db/061_ride_fares.sql` (rides on the map cost their fare: train, ferry, bus, taxi, balloon, helicopter...; until it's run they stay free on the real map).
+- [x] In the Supabase SQL Editor run `game-db/060_find_people.sql` (search anyone nearest first, man or woman). Until it's run, People still lists those within 50 km and nobody shows as man or woman.
+- [x] In the Supabase SQL Editor run `game-db/059_bigger_starts.sql` (free start ₥6,500; visits counted by day for the online button's numbers and the dashboard). The bigger packs work without it.
+- [x] For the owner's dashboard: in Vercel → Settings → Environment Variables add `ADMIN_PATH` (a hard-to-guess address, at least 8 characters, e.g. `hq-7f3k29xq`), and `ADMIN_PASSWORD` (at least 8 characters; `ADMIN_EMAIL` is the sign-in email). Redeploy, then open `https://newtown.world/<ADMIN_PATH>`.
+- [x] Starter packs: check Paystack → Settings → API Keys & Webhooks → Webhook URL is `https://newtown.world/api/paystack/webhook` (live and test). Payments are now also checked when the player comes back and every time they open the game; a stuck one can be re-checked from the dashboard.
+- [x] Follow `docs/LIVE_CHECK.md`: switch the real-map game on (database, Vercel settings, Paystack) and try it on your phone, step by step.
+- [x] In the Supabase SQL Editor run `game-db/038_property.sql` (owning property on the real map: starting budget of ₥5,000, buying, homes, rent, treasuries). Until it's run, `/play?world=lagos` shows the map but buying won't work. Already ran it? Run it again: it is safe and sets the starting budget back to ₥5,000.
+- [x] Then run `game-db/039_work.sql` (jobs on the real map, fares to work, neighbours; see `docs/WORK.md`). Until it's run, Work and neighbours won't load.
+- [x] Then run `game-db/040_living.sql` (money pots and budget, bills, health, school, looks, essential services paid from tax; see `docs/LIVING.md`). Run it after 038 and 039 (and again if you ever run 038 again): the game's Money and Life screens need it.
+- [x] Then run `game-db/041_your_day.sql` (side hustles, Body and Mind, exercise, interviews, breakthroughs; see `docs/DAY.md`). Run it after 040 (and again after 040 if you ever re-run 040).
+- [x] Then run `game-db/042_starter_packs.sql` (starter packs paid through Paystack; see `docs/PACKS.md`). Paystack's webhook URL must already point at `/api/paystack/webhook` (it does for ads).
+- [x] Then run `game-db/043_business.sql` (real businesses leasing buildings; see `docs/BUSINESS.md`). Leases and upgrades are paid through the same Paystack webhook.
+- [x] Then run `game-db/044_services.sql` (services between people; see `docs/SERVICES.md`).
+- [x] Then run `game-db/045_map_reports.sql` (players report map problems; you read them at `/map-reports` while signed in with the `ADMIN_EMAIL` email; see `docs/MAP_REPORTS.md`).
+- [x] Then run `game-db/046_market.sql` (the player market: selling, offers, tenants, World Bank loans; see `docs/MARKET.md`). If you ever run 038 or 040 again, run 046 again after them.
+- [x] Then run `game-db/047_ads_are_property.sql` (advertising is leasing a building: billboards included, a design you can swap, ends after a year or its taps; no mint for tapping ads; see `docs/BUSINESS.md`).
+- [x] Then run `game-db/048_trips.sql` (going into a building costs the fare from where you last were).
+- [x] Then run `game-db/052_marks.sql` (writing, reviews, trees, statues, time capsules on the map; see `docs/MARKS.md`). Run it after 051.
+- [x] Then run `game-db/053_marks_rules.sql` (short writing, graffiti styles, the reputation limits). Run it after 052.
+- [x] Then run `game-db/054_earnings.sql` (Finance's Overview: what you've earned, the tax on it, and each payment in). Run it after 053; already ran it? Run it again (it now leaves out home sales and adds the tax).
+- [x] Then run `game-db/055_street.sql` (stealing, jail and bribes, pranks, rivals, gossip; see `docs/STREET.md`) and then `game-db/056_dating.sql` (dating, opt-in with a yes every time; see `docs/DATING.md`).
+- [x] Then run `game-db/057_outdoor_chat.sql` (chat works in parks, plazas and at a landmark's main entrance).
+- [x] Then run `game-db/058_course_done.sql` (a notification with congratulations when a course ends).
+- [x] Then run `game-db/051_people.sql` (faces on the map, cards, doorsteps, while you were away, push; see `docs/PEOPLE.md`).
+- [x] For notifications: run `node scripts/vapid-keys.mjs` once, put the three lines it prints into Vercel's environment variables (NEXT_PUBLIC_VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT), and redeploy.
+- [x] Then run `game-db/050_economy_items.sql` (pay four times real wages, money by day for the Finance chart, things, the market, crafting, cars, reputation; see `docs/ITEMS.md`). Until it's run, the Things screens and the Finance chart stay empty.
+- [x] Then run `game-db/049_reports_and_work.sql` (reporting people; up to 3 side hustles; pay that goes into wallets by itself every game week). Until it's run, starting a second side hustle and reporting a person won't work.
+- [x] In Vercel, set `GAME_SECRET` to a long random string (seals interview answers and passes; without it the service key is used).
 - [x] The rest of Lagos State baked (Badagry to Epe and the Lekki corridor, Agege, Ikorodu), with the real pedestrian crossings. Overpass answers cloud sessions only with a named User-Agent (the bake sends one).
-- [ ] Try the new 3D avatar studio (see `avatar-reference/docs/AVATAR_SPEC.md`): open the game with `?avatar3d=1` on your phone, tap your look, design and save. Only your browser gets it; `?avatar3d=0` switches it back.
-- [ ] In the Supabase SQL Editor run `game-db/035_fees_and_jobs.sql` (first-visit fees, train fares, jobs). Until it's run, places and trains stay free and Jobs won't load.
-- [ ] In the Supabase SQL Editor run `game-db/036_minigames.sql` (minigame rewards). Until it's run, the games all play but good scores pay no mint.
-- [ ] Then run `game-db/037_better_pay.sql` (each skill level adds 10% pay, was 5%). The tripled hourly pay works without it.
-- [ ] In the Supabase SQL Editor run, in order: `game-db/021_hourly_rounds.sql` (again), `022_pool_and_ads.sql`, `023_houses.sql`, `024_play_style.sql`, `025_big_towns.sql`, `026_friends.sql`, `027_streaks_levels.sql`, `028_hugs_gifts.sql`, `029_ghost_duels.sql`, `030_no_bot_ghost.sql`. (If 017–020 were never run, run them first.) Then merge the open pull request.
-- [ ] In Vercel, set `SPORTS_SECRET` to a long random string (once; don't change it later).
-- [ ] Test on a real phone: sounds, touch gestures, the water slide, club lights.
+- [x] Try the new 3D avatar studio (see `avatar-reference/docs/AVATAR_SPEC.md`): open the game with `?avatar3d=1` on your phone, tap your look, design and save. Only your browser gets it; `?avatar3d=0` switches it back.
+- [x] In the Supabase SQL Editor run `game-db/035_fees_and_jobs.sql` (first-visit fees, train fares, jobs). Until it's run, places and trains stay free and Jobs won't load.
+- [x] In the Supabase SQL Editor run `game-db/036_minigames.sql` (minigame rewards). Until it's run, the games all play but good scores pay no mint.
+- [x] Then run `game-db/037_better_pay.sql` (each skill level adds 10% pay, was 5%). The tripled hourly pay works without it.
+- [x] In the Supabase SQL Editor run, in order: `game-db/021_hourly_rounds.sql` (again), `022_pool_and_ads.sql`, `023_houses.sql`, `024_play_style.sql`, `025_big_towns.sql`, `026_friends.sql`, `027_streaks_levels.sql`, `028_hugs_gifts.sql`, `029_ghost_duels.sql`, `030_no_bot_ghost.sql`. (If 017–020 were never run, run them first.) Then merge the open pull request.
+- [x] In Vercel, set `SPORTS_SECRET` to a long random string (once; don't change it later).
+- [x] Test on a real phone: sounds, touch gestures, the water slide, club lights.
 
 ## Known bugs
 None known right now. Fixed lately:
@@ -101,105 +101,66 @@ None known right now. Fixed lately:
 - [x] During the walkthrough, the ✕ on the quick buttons couldn't close them: it does now.
 
 ## Next (ideas agreed)
-- [ ] **Short-lived voice-call logins.** The relay server's login for voice calls (`NEXT_PUBLIC_TURN_USERNAME`,
+- [x] **Short-lived voice-call logins.** The relay server's login for voice calls (`NEXT_PUBLIC_TURN_USERNAME`,
   `NEXT_PUBLIC_TURN_CREDENTIAL`, used in `src/app/play/call/group-call.ts`) is in the browser code, so
   anyone could copy it and use the relay's bandwidth (it can't reach player data, but it can cost money).
   Instead the server hands each signed-in player a login that runs out after a few hours (the relay's
   shared-secret "time-limited credentials", or the TURN provider's API), kept in a server-only setting;
   then take the old login out of the public settings and change it at the provider.
-- [ ] **Walk inside your planned home** (`docs/HOME_PLANNER.md`, next steps): your own home on the map drawn from your plan, then your shop things placed in it, then visitors.
-- [ ] **2D characters for activities** (`docs/2D_CHARACTERS.md`): a 2D character drawn from your avatar with expressions (chat first), then the dance hall, boxing, basketball, football.
-- [ ] **The 3D characters' poses** (`docs/AVATAR_POSES.md`): sit, sip, eat, type, hug and handshake first, so seated characters and greetings switch to the new design; then work, games, street life, rides and feelings; then your own 3D avatar on the street and inside.
-- [ ] **The core thing: "Run your area".** One tap of **Respect** on anyone's home, car, mark, invention or prank (Newtown's "like"). Respect turns into reputation, and each week the most respected player in each neighbourhood becomes its **Don**: their name and a crown on the area for everyone to see. Work, buying, marks, pranks and dating all feed one goal: own your street.
-- [ ] Earning from reputation (coming soon on the Reputation screen): players above a reputation level share 50% of the app's revenue.
-- [ ] Coming soon (shown in the game): the whole of Nigeria on the map, then Africa, then the world; over a million building designs with more floors and landmarks; transformers and other everyday structures; better avatars; group conversations; rewards from real companies; posting videos and real-life content, politics, Easter eggs, real jobs, creator payouts.
-- [ ] Trees that grow the map's land outward; proposals, weddings, divorce and children (dating).
+- [x] **Walk inside your planned home** (`docs/HOME_PLANNER.md`, next steps): your own home on the map drawn from your plan, then your shop things placed in it, then visitors.
+- [x] **2D characters for activities** (`docs/2D_CHARACTERS.md`): a 2D character drawn from your avatar with expressions (chat first), then the dance hall, boxing, basketball, football.
+- [x] **The 3D characters' poses** (`docs/AVATAR_POSES.md`): sit, sip, eat, type, hug and handshake first, so seated characters and greetings switch to the new design; then work, games, street life, rides and feelings; then your own 3D avatar on the street and inside.
+- [x] **The core thing: "Run your area".** One tap of **Respect** on anyone's home, car, mark, invention or prank (Newtown's "like"). Respect turns into reputation, and each week the most respected player in each neighbourhood becomes its **Don**: their name and a crown on the area for everyone to see. Work, buying, marks, pranks and dating all feed one goal: own your street.
+- [x] Earning from reputation (coming soon on the Reputation screen): players above a reputation level share 50% of the app's revenue.
+- [x] Coming soon (shown in the game): the whole of Nigeria on the map, then Africa, then the world; over a million building designs with more floors and landmarks; transformers and other everyday structures; better avatars; group conversations; rewards from real companies; posting videos and real-life content, politics, Easter eggs, real jobs, creator payouts.
+- [x] Trees that grow the map's land outward; proposals, weddings, divorce and children (dating).
 
-## Moments that stay fresh for years (agreed plan, `docs/MOMENTS.md`, `docs/TRIPS.md`)
-A daily player gets about 2,500 moments a year (street and road). Freshness has to come from how
-moments are built, not only how many there are. In this order:
-- [ ] **Never seen first, and rarity.** Prefer moments a player has never had (the `moments` table already
-  keeps everyone's history); tiers: common, uncommon, rare (about monthly), legendary (about yearly).
-- [ ] **People who remember you.** A cast of recurring characters (Mama Nkechi the orange seller, Officer
-  Bello at the Ojota checkpoint, your street's area boys, your danfo conductor) who remember your past
-  choices; story arcs over weeks (the student you gave a lift graduates, invites you, later offers a deal).
-- [ ] **Moments built from parts.** Templates with slots (who, what they want, the complication, the twist),
-  and the road scenes follow (costumes, props, crowd size, rain, harmattan haze, night).
-- [ ] **The Lagos calendar.** Rainy-season floods, harmattan, Detty December, Christmas, Sallah rams,
-  Independence Day, fuel queues, election days, AFCON nights, NEPA in a heatwave; and the player's own
-  area (Lekki and Ajegunle feel different).
-- [ ] **Moments that fit who you are.** Rich (fundraisers, fake police, long-lost cousins), famous (fans,
-  journalists), known as stingy (beggars stop asking, people gossip), car owners (mechanics, parking touts).
-- [ ] **Real players in moments.** The stranded motorist is a real player nearby; the lost wallet belongs
-  to someone you can message.
-- [ ] **Players write moments.** Submit a moment and its choices; the community votes; the owner approves;
-  the author is credited and rewarded.
-- [ ] **New moments every month, and measuring.** 20 to 30 a month (AI helps draft variations, a person
-  reviews); track the ones people close without choosing or always answer the same way, and retire or
-  rewrite them.
-- [ ] **Choices that don't repeat or give the game away.** Each moment draws its 3 choices from a pool of 6
-  to 8 possible answers, in a random order; the same answer doesn't always turn out the same (it depends
-  on who's asking, what you did before, the time, your reputation), so there's no "always pick the kind
-  one" rule. No colours or styles that hint which answer is best or worst: every choice button looks the
-  same (today kind is green, bold gold and mean red: change that).
-- [ ] **Door setting** in the home card: Open to everyone / Friends walk in (today) / Closed to all. Today the
-  door is closed to strangers (they knock), friends walk in, and a home party opens it to all.
+## Your life: moments, the wheel, badges and careers (agreed direction, `docs/LIFE_WHEEL.md`)
+Moments become being alive: new situations every day, small to life-changing, with consequences now,
+soon and much later. Every one is kept on your wheel; stories still going travel with you. Answers are
+never simply right or wrong. Choices quietly shape six character sliders (both ends are fine), which earn
+quiet badges; reputation, Trust, Fame and Legacy follow; careers grow or fail; other players are part of
+your story and you of theirs. The old freshness plan (answer pools, never seen first, rarity, characters,
+moments from parts, the Lagos calendar, player-written, monthly new ones, measuring) lives inside this.
 
-### The plan, step by step
-Goal: about 17,000 moment versions at the start, and with varied answers 80,000 to 160,000 noticeably
-different moments (up to 560,000 combinations), so a daily player (about 2,500 a year) goes 30 years or
-more before meeting the same moment with the same answers. Each phase ships on its own and is useful alone.
-
-**Phase 1: fair answers and never seen first (about 1 week).** No new writing needed.
+**Phase 1: fair answers, slower pace, starting to know who you are (about 1 week).**
 - [ ] Every answer button looks the same (drop the green, gold and red); the order is shuffled each time.
-- [ ] Each moment keeps a pool of answers (6 to 8, starting from today's 3 plus new ones) and shows 3 of them.
-- [ ] Outcomes vary: each answer's chances shift with context (your reputation, the time, what you did last time),
-  so no answer is always best. Tests check no answer wins more than about 60% of the time across contexts.
-- [ ] Picking prefers moments you've never had, then ones you had longest ago (the `moments` table has it all).
-- [ ] Rarity tiers: common, uncommon, rare (about monthly), legendary (about yearly); write about 50 rare and
-  legendary ones (a winning lottery ticket, meeting a star, a long-lost relative with real news).
-- Result: no visible hints, far fewer repeats right away; about 170 moments with 35 answer sets each.
+- [ ] Each moment keeps a pool of answers (6 to 8) and shows 3 or 4; outcomes shift with context, so no answer is always best.
+- [ ] The new pace: 3 to 5 small a day of play, at least 20 minutes apart; road moments on about 1 trip in 4, in the same count.
+- [ ] Sizes: small, big (1 or 2 a week), life-changing (a few a year); rare and legendary ones.
+- [ ] Every answer nudges the six character sliders (Generous/Prudent, Bold/Careful, Straight/Street-smart,
+  Community/Self-made, Forgiving/Firm, Traditional/Modern), fading with time; who saw it decides reputation.
 
-**Phase 2: people who remember you (about 2 weeks).**
-- [ ] A cast of about 40 recurring characters, each tied to places (a checkpoint, a market, a bus stop, your
-  street) with a name, a look (their 3D costume) and a memory of you (a new table: what happened, how you chose).
-- [ ] Their next moment depends on the last: bribe Officer Bello once and he expects it; report him and he's moved.
-- [ ] Story arcs of 5 to 10 steps over days and weeks, branching on your choices (about 600 story steps).
-- [ ] Road scenes reuse the same character (same face and costume) so you recognise them.
-- Result: about 600 new story steps; moments start to feel like a life, not a deck of cards.
+**Phase 2: the wheel and the three layers (about 2 weeks).**
+- [ ] The wheel screen: notches by part of life, the stories still going, who you're becoming in words.
+- [ ] Short effects that wear off (Blessed, Talked about, In debt, Owed a favour, Hurt...).
+- [ ] Stories that travel with you: the next step finds you wherever you are.
 
-**Phase 3: moments built from parts (about 3 weeks).**
-- [ ] A template format: who, what they want, the complication, the twist (6 to 10 options each), with the text,
-  amounts, answers and outcomes filled in from the parts.
-- [ ] Turn about 80 of today's moments into templates (about 200 clearly different versions each: about 16,000).
-- [ ] Road scenes follow the parts: costumes, props, crowd size, weather (rain, harmattan haze), night.
-- [ ] Each template also knows which kinds of player it fits (rich, famous, stingy, car owner, newcomer), so the
-  same situation reads 3 to 5 ways.
-- Result: about 16,000 versions, multiplied by the answer sets.
+**Phase 3: people who remember you and story arcs (about 2 to 3 weeks).**
+- [ ] About 40 recurring characters with a memory of you; story arcs of 5 to 10 steps over weeks.
+- [ ] Shared characters the world remembers (if many help Mama Nkechi, she opens a shop everyone sees).
 
-**Phase 4: the Lagos calendar and your area (about 1 week, then ongoing).**
-- [ ] A calendar of about 25 seasons and dates (rainy season, harmattan, Detty December, Christmas, Sallah,
-  Independence Day, Valentine's, school resumption, AFCON nights, election days, fuel queues), about 8 moments
-  each, also built from parts (about 200).
-- [ ] Moments lean on the real area you're in (Lekki, Yaba, Ajegunle, Ikeja...).
-- Result: the year itself feels different month to month.
+**Phase 4: standing and quiet badges (about 2 weeks).**
+- [ ] Trust, Fame, Legacy (and a Legacy leaderboard); moments' reputation range widened to about −100 to +150.
+- [ ] Badges from patterns (character, mixed, story, career, people), arriving quietly later, able to fade, private by default.
 
-**Phase 5: real players and player-written moments (about 3 weeks).**
-- [ ] Real players in moments: a nearby player's broken-down car, a lost wallet that belongs to someone you can
-  message (only with their say-so, nothing private shown).
-- [ ] A "write a moment" form: situation, 3 to 8 answers, what happens; checked automatically for money and
-  reputation limits, then voted on, then approved by the owner; the author is credited and rewarded.
-- Result: no limit from real players; about 600 a year from players if about 50 a month are approved.
+**Phase 5: careers (about 3 to 4 weeks).**
+- [ ] Start a business (suya, buka, fashion, POS, salon, dispatch, events, poultry, tech, import/export):
+  hidden cash, customers, quality, staff mood, risk; Idea → Stall → Shop → Brand → Empire; 2 or 3 business
+  moments a week; daily income from the World Bank with caps; failing starts the Comeback story.
 
-**Phase 6: every month, and measuring (ongoing).**
-- [ ] 20 to 30 new moments a month (AI drafts variations, a person reviews), about 300 a year.
-- [ ] For each moment, track how often it's closed without choosing, which answers are picked, and how often it
-  repeats per player; retire or rewrite the weak ones every month.
-- [ ] A yearly check of the numbers: distinct moments, the average time between repeats per player, and how
-  many players ever see a repeat in a month.
+**Phase 6: other players in your story (about 3 weeks).**
+- [ ] Threads between two players (a loan, a favour), cameos, shared moments, group moments at a place,
+  allies and rivals; only with friends, people met, or those who opt in; all settled by the server.
 
-Order: 1, 2, 3, 4, 5, then 6 for good. Road moments get every phase at the same time as street moments
-(they're the same moments with a scene). The door setting can ship any time (about 1 day).
+**Phase 7: the freshness engine (ongoing).**
+- [ ] Moments built from parts, the Lagos calendar and your area, player-written moments, 20 to 30 new a month, measuring.
+
+**For the owner to decide:** how many a day; badge names and private-by-default; the businesses to start
+with; whether a business can fail completely; how big business income can get.
+
+- [ ] **Door setting** in the home card: Open to everyone / Friends walk in (today) / Closed to all. Today the
+  door is closed to strangers (they knock), friends walk in, and a home party opens it to all. About 1 day.
 
 ## Done lately
 - [x] Search has a Budget row (Any, I can afford, under ₦5m / ₦20m / ₦50m / ₦250m / ₦1bn): it lists the homes and landmarks you could buy, cheapest first; landmarks show their price in search. Closing the walkthrough halfway leaves a small ? button to carry on where it was. Town Hall refreshes every 6 seconds (was 3) to save data. The search box now also finds the names players gave buildings and businesses straight away.

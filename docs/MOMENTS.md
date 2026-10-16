@@ -6,6 +6,9 @@ Each one has two or three choices, and what you choose can cost or bring money a
 Some come back days later: the woman you helped returns with her grandson, the friend you lent
 money to pays you back (or doesn't).
 
+Where moments are going next (the wheel, consequences that last, character and quiet badges,
+careers, other players in your story): `docs/LIFE_WHEEL.md`.
+
 ## When they come
 
 - On the real map, signed in: the first one a minute or two after you start, then one every four
