@@ -150,6 +150,37 @@ export function ventureDays(v: Venture, days: number, rand: () => number) {
   return { venture: cur, pay };
 }
 
+/** Hours between business moments (two or three a week), in a crisis, and before the first one after starting. */
+export const BUSINESS_EVERY_H = 56;
+export const CRISIS_EVERY_H = 12;
+export const FIRST_MOMENT_H = 6;
+
+/** What it still needs for the next stage: customers and cash, now and needed (null at Empire). */
+export function nextStage(v: Venture) {
+  const g = VENTURE_STAGES[v.stage].grow;
+  if (!g) return null;
+  return { name: VENTURE_STAGES[v.stage + 1].name, customers: { now: Math.round(v.customers), need: g.customers }, cash: { now: Math.round(v.cash), need: growCash(v) } };
+}
+
+/** What a decision did to the business, in words ("+10% customers", "quality down"). */
+export function changeWords(c: VentureChange): string[] {
+  const out: string[] = [];
+  const pts = (v: number | undefined, up: string, down: string) => {
+    if (!v) return;
+    out.push(v > 0 ? up : down);
+  };
+  if (c.customers) out.push(`${c.customers > 0 ? "+" : "−"}${Math.round(Math.abs(c.customers) * 100)}% customers`);
+  pts(c.quality, "better work", "worse work");
+  pts(c.mood, "happier staff", "unhappier staff");
+  pts(c.risk, "more risk", "less risk");
+  if (c.staff) out.push(`${c.staff > 0 ? "+" : "−"}${Math.abs(c.staff)} staff`);
+  if (c.cash) out.push(c.cash > 0 ? "cash in" : "cash out");
+  if (c.sell) out.push(`sold ${Math.round(c.sell * 100)}%`);
+  if (c.grow) out.push("grew a stage");
+  if (c.close) out.push("closed");
+  return out;
+}
+
 /** Its cash has run out: a crisis. */
 export const inCrisis = (v: Venture) => v.cash < 0;
 /** So far gone it closes by itself (a month of upkeep in the red). */

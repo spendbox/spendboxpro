@@ -176,6 +176,33 @@ function Running({ career, naira, onClosed }: { career: Career; naira: (v: numbe
       {!o.crisis && o.ready && v.stage < EMPIRE && <p className="mt-3 rounded-2xl bg-[#12b886]/10 p-3 text-sm font-semibold text-[#0b7a5a]">Business is good: you could go bigger. The choice will come to you.</p>}
       {o.justPaid > 0 && <p className="mt-3 text-sm">Since you last looked, it paid you {naira(o.justPaid)}.</p>}
 
+      {/* Where it's going: what the next stage needs, and when things happen. */}
+      <section className="mt-3 rounded-2xl p-3 ring-1 ring-ink/10">
+        {o.next ? (
+          <>
+            <p className="text-sm font-bold">To grow into a {o.next.name}</p>
+            <Bar label={k.customers.replace(/ a (day|night)$/, "")} now={o.next.customers.now} need={o.next.customers.need} show={(x) => x.toLocaleString("en-GB")} />
+            <Bar label="Its cash" now={o.next.cash.now} need={o.next.cash.need} show={naira} />
+            <p className="mt-1.5 text-xs text-muted">When both are full, the choice to grow comes to you as a moment, wherever you are.</p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm font-bold">An Empire</p>
+            <p className="mt-0.5 text-xs text-muted">There&apos;s no ceiling now: it can keep growing for ever, just more slowly the bigger it gets.</p>
+          </>
+        )}
+        <ul className="mt-2.5 grid gap-1 text-xs">
+          <li className="flex justify-between gap-2">
+            <span className="text-muted">Next day of business</span>
+            <span className="font-semibold">{inWords(o.nextDayAt)}</span>
+          </li>
+          <li className="flex justify-between gap-2">
+            <span className="text-muted">Your next decision for it</span>
+            <span className="font-semibold">{inWords(o.nextMomentAt)}</span>
+          </li>
+        </ul>
+      </section>
+
       <dl className="mt-3 grid grid-cols-2 gap-1.5 text-sm">
         <div className="rounded-2xl bg-ink/[0.04] px-3 py-2">
           <dt className="text-[10.5px] font-bold uppercase tracking-wide text-muted">Customers</dt>
@@ -219,6 +246,9 @@ function Running({ career, naira, onClosed }: { career: Career; naira: (v: numbe
         </section>
       )}
 
+      <Decisions decisions={o.decisions} />
+      <HowToGrow />
+
       <div className="mt-4">
         {!confirm ? (
           <button onClick={() => setConfirm(true)} className="text-xs font-semibold text-muted underline underline-offset-2">
@@ -247,6 +277,88 @@ function Running({ career, naira, onClosed }: { career: Career; naira: (v: numbe
           </div>
         )}
       </div>
+    </section>
+  );
+}
+
+/** When something happens, from now: "in 5 hours", "tomorrow", "any time now". */
+function inWords(at: string) {
+  const h = (Date.parse(at) - Date.now()) / 3_600_000;
+  if (h <= 0.25) return "any time now";
+  if (h < 1) return `in ${Math.max(1, Math.round(h * 60))} minutes`;
+  if (h < 20) return `in about ${Math.round(h)} hour${Math.round(h) === 1 ? "" : "s"}`;
+  if (h < 36) return "tomorrow";
+  return `in about ${Math.round(h / 24)} days`;
+}
+
+function Bar({ label, now, need, show }: { label: string; now: number; need: number; show: (v: number) => string }) {
+  const pct = Math.max(0, Math.min(100, (now / Math.max(1, need)) * 100));
+  return (
+    <div className="mt-2">
+      <div className="flex justify-between gap-2 text-xs">
+        <span className="font-semibold capitalize">{label}</span>
+        <span className="tabular-nums text-muted">
+          {show(Math.max(0, now))} of {show(need)}
+        </span>
+      </div>
+      <div className="mt-1 h-2 overflow-hidden rounded-full bg-ink/10" role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100} aria-label={label}>
+        <div className={cn("h-full rounded-full", pct >= 100 ? "bg-[#12b886]" : "bg-gold")} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function Decisions({ decisions }: { decisions: NonNullable<Career["open"]>["decisions"] }) {
+  return (
+    <section className="mt-4">
+      <h3 className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-muted">Your decisions</h3>
+      {decisions.length === 0 ? (
+        <p className="text-xs text-muted">None yet. Your first decision for it comes within a few hours, as a moment, wherever you are in the city. What you choose is what grows it, or sinks it.</p>
+      ) : (
+        <ul className="grid gap-1.5">
+          {decisions.map((d, i) => (
+            <li key={i} className="rounded-2xl bg-ink/[0.04] px-3 py-2">
+              <p className="text-sm font-bold">
+                {d.emoji} {d.title}
+              </p>
+              <p className="text-xs">You chose: {d.chose}</p>
+              {d.text && <p className="text-xs text-muted">{d.text}</p>}
+              {d.did.length > 0 && (
+                <p className="mt-1 flex flex-wrap gap-1">
+                  {d.did.map((w) => (
+                    <span key={w} className="rounded-full bg-panel px-2 py-0.5 text-[10.5px] font-semibold ring-1 ring-ink/10">
+                      {w}
+                    </span>
+                  ))}
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function HowToGrow() {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="mt-4 rounded-2xl bg-gold/10 p-3">
+      <button onClick={() => setOpen(!open)} className="flex w-full items-center justify-between text-left text-sm font-bold" aria-expanded={open}>
+        How to grow it
+        <span className="text-xs text-muted">{open ? "Hide" : "Show"}</span>
+      </button>
+      {open && (
+        <ul className="mt-2 grid list-disc gap-1.5 pl-4 text-xs leading-snug">
+          <li>It grows from your decisions. Two or three times a week a business moment comes to you: a supplier, a worker, a rival, an offer. There&apos;s no button to press; choosing well is how it grows.</li>
+          <li>Good work brings customers by word of mouth. Cutting corners saves money today and loses customers slowly.</li>
+          <li>Happy staff keep the work good. When customers are being turned away, you need more hands: hiring comes as a choice too.</li>
+          <li>Risky choices make trouble likelier: thefts, fines, bad luck.</li>
+          <li>To reach the next stage it needs both: enough customers and enough of its own cash. Then the choice to grow comes to you.</li>
+          <li>Every day it makes money, you&apos;re paid your share. It keeps working while you&apos;re away, for up to a week.</li>
+          <li>If its cash runs out, a crisis comes. Get through it, or it closes. You never lose your home.</li>
+        </ul>
+      )}
     </section>
   );
 }

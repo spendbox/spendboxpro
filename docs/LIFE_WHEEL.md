@@ -46,6 +46,13 @@ Your wheel is your life drawn as a ring.
 wherever you are: on the road, at home, at work, in another area. People move too: "Officer Bello
 was transferred to Ikeja, and there he is at the junction."
 
+**Showing people how it works.** The first time My life opens, an explainer says what it is:
+every decision counts, there are no right or wrong answers, things come back now, soon and later,
+people remember, badges arrive quietly; the "?" by the title brings it back. Under the wheel,
+"Your first steps" is a checklist ticked off as you live: your first moment, meeting someone who'll
+remember you, making a friend, starting a business (with a button to start one), a big decision,
+seeing what came of a choice, your first badge, a story with a friend, 25 moments.
+
 ## 3. Consequences in three layers
 
 Every moment has at least two of these, and the bigger the moment, the longer its tail.
@@ -258,6 +265,10 @@ stages: **Idea → Stall → Shop → Brand → Empire**.
   offers money for a share, NEPA takes light before the party order, your family wants jobs.
 - **What you choose moves the numbers.** Cut quality to save money and customers slowly leave.
   Treat staff well and they stay, but it costs. Take the investor and grow fast, but they own half.
+- **Seeing it move.** My business shows what the next stage needs (customers and its own cash, as
+  two bars filling up), when its next day is counted and when its next decision comes, every
+  decision you've made for it and what each did ("+10% customers", "worse work"), and "How to grow
+  it". The first decision comes within six hours of starting.
 - **It pays daily** into your wallet (from customers, quality and stage), and a bad month loses
   money. If cash runs out there's a crisis moment; get it wrong and the business closes.
 - **Failing isn't the end.** You keep your home and what you own; the *Comeback* story starts.

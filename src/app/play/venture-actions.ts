@@ -3,7 +3,20 @@
 import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { regionMap } from "@/lib/world";
-import { VENTURE_KIND_BY_ID, inCrisis, newVenture, readyToGrow, type Venture, type VentureKindId } from "@/lib/world/ventures";
+import { MOMENT_BY_ID, fillMoment, type MomentVars } from "@/lib/world/moments";
+import {
+  BUSINESS_EVERY_H,
+  CRISIS_EVERY_H,
+  FIRST_MOMENT_H,
+  VENTURE_KIND_BY_ID,
+  changeWords,
+  inCrisis,
+  newVenture,
+  nextStage,
+  readyToGrow,
+  type Venture,
+  type VentureKindId,
+} from "@/lib/world/ventures";
 import { openVenture, rowOf, settleVenture } from "./ventures-server";
 
 // Careers (docs/LIFE_WHEEL.md, phase 5; src/lib/world/ventures.ts, game-db/115): starting a
@@ -31,6 +44,13 @@ export type Career = {
     ready: boolean;
     /** What it paid you just now, catching up (naira). */
     justPaid: number;
+    /** When its next day of business is counted, and when its next decision can come. */
+    nextDayAt: string;
+    nextMomentAt: string;
+    /** What it still needs for the next stage (null at Empire). */
+    next: ReturnType<typeof nextStage>;
+    /** Your last decisions for it: the moment, what you chose, what happened, and what it did. */
+    decisions: { title: string; emoji: string; chose: string; text: string; did: string[]; at: string }[];
   } | null;
   /** It just went under (counting its days). */
   justClosed: boolean;
@@ -56,7 +76,37 @@ export async function myCareer(): Promise<Career | null> {
     const s = await settleVenture(m.db, m.userId, m.perMint, found.row);
     justClosed = s.closed;
     if (s.row) {
-      open = { venture: s.row.venture, startedAt: s.row.startedAt, crisis: inCrisis(s.row.venture), ready: readyToGrow(s.row.venture), justPaid: s.paid };
+      const v = s.row.venture;
+      const crisis = inCrisis(v);
+      const { data: rows } = await m.db
+        .from("moments")
+        .select("moment, vars, choice, outcome, marks, answered_at")
+        .eq("user_id", m.userId)
+        .like("moment", "biz_%")
+        .gte("created_at", s.row.startedAt)
+        .gte("choice", 0)
+        .order("answered_at", { ascending: false })
+        .limit(10);
+      const money = (x: number) => `₦${Math.round(x).toLocaleString("en-GB")}`;
+      const decisions = (rows ?? []).flatMap((r) => {
+        const def = MOMENT_BY_ID.get(String(r.moment));
+        const c = def?.choices[n(r.choice)];
+        if (!def || !c) return [];
+        const vars = (r.vars ?? {}) as MomentVars;
+        const marks = (r.marks ?? {}) as { biz?: Parameters<typeof changeWords>[0] };
+        return [{ title: def.title, emoji: def.emoji, chose: fillMoment(c.label, { name: vars.name ?? "", ask: n(vars.ask), place: vars.place ?? "" }, money), text: String((r.outcome as { text?: string } | null)?.text ?? ""), did: marks.biz ? changeWords(marks.biz) : [], at: String(r.answered_at) }];
+      });
+      open = {
+        venture: v,
+        startedAt: s.row.startedAt,
+        crisis,
+        ready: readyToGrow(v),
+        justPaid: s.paid,
+        nextDayAt: new Date(Date.parse(s.row.settledAt) + 86_400_000).toISOString(),
+        nextMomentAt: new Date(Date.parse(s.row.lastMomentAt) + (crisis ? CRISIS_EVERY_H : BUSINESS_EVERY_H) * 3_600_000).toISOString(),
+        next: nextStage(v),
+        decisions,
+      };
     }
   }
   return {
@@ -95,6 +145,16 @@ export async function startVenture(kind: string, name: string): Promise<{ ok: tr
     console.error("Start a business", msg);
     return { ok: false, error: "Something went wrong. Try again." };
   }
+  // Its first decision comes within a few hours, not days.
+  await m.db
+    .from("ventures")
+    .update({ last_moment_at: new Date(Date.now() - (BUSINESS_EVERY_H - FIRST_MOMENT_H) * 3_600_000).toISOString() })
+    .eq("user_id", m.userId)
+    .is("closed_at", null)
+    .then(
+      () => null,
+      () => null,
+    );
   return { ok: true };
 }
 

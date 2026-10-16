@@ -412,6 +412,14 @@ const WINDOW = 40;
  */
 const DETAIL = 18;
 const SKY = 0xd7ebf7;
+
+/**
+ * The last camera position and target that were real numbers. If something (a fly-to with a
+ * missing spot, a divide by zero) ever turns the camera into "not a number", nothing in the city
+ * draws and the screen shows only sky; the frame puts it back here instead.
+ */
+const goodCamera = { pos: new THREE.Vector3(), target: new THREE.Vector3(), ok: false };
+const finiteVec = (v: THREE.Vector3) => Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
 const BALLOON_NAMES = ["Red", "Yellow", "Blue", "Purple", "Green"];
 const GROUND = 0xd3e4c8;
 const ASPHALT = 0x5b6470;
@@ -7705,10 +7713,28 @@ export function CityView({
       updateTags();
       updateGhosts(time);
       updateBusinesses(time);
+      // A camera that's gone to "not a number" shows only sky: put it back where it last was.
+      if (finiteVec(camera.position) && finiteVec(controls.target)) {
+        goodCamera.pos.copy(camera.position);
+        goodCamera.target.copy(controls.target);
+        goodCamera.ok = true;
+      } else if (goodCamera.ok) {
+        console.warn("City camera was lost; putting it back");
+        camera.position.copy(goodCamera.pos);
+        controls.target.copy(goodCamera.target);
+        focus = null;
+        eventFly = null;
+        controls.update();
+      }
       const dist = riding ? 10 : camera.position.distanceTo(controls.target);
       const fog = scene.fog as THREE.Fog;
       fog.near = (dist + radius * 0.8) * (1 - fogFactor * 0.45);
       fog.far = (dist + radius * 4 + 30) * (1 - fogFactor * 0.3);
+      // Fog at "not a number" hides the whole city too.
+      if (!Number.isFinite(fog.near) || !Number.isFinite(fog.far)) {
+        fog.near = 40;
+        fog.far = 110;
+      }
       worldEventsLayer.update(dt, time, Date.now() + cb.current.clockOffsetMs);
       partyLights.update(time, tiles, carNight);
       renderer.render(scene, camera);

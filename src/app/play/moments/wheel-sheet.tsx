@@ -38,9 +38,31 @@ function left(until: string) {
   return h >= 48 ? `${Math.round(h / 24)} days left` : h >= 1 ? `${Math.round(h)} h left` : "ending soon";
 }
 
+/** The explainer has been seen on this phone (it shows the first time My life opens; "?" brings it back). */
+const INTRO_KEY = "nt-life-intro-seen";
+const introSeen = () => {
+  try {
+    return localStorage.getItem(INTRO_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
+
 export function WheelSheet({ avatar, onClose }: { avatar: Avatar; onClose: () => void }) {
   const [wheel, setWheel] = useState<Wheel | null | undefined>(undefined);
   const [picked, setPicked] = useState<number | null>(null);
+  const [intro, setIntro] = useState(false);
+  useEffect(() => {
+    if (!introSeen()) setIntro(true);
+  }, []);
+  const closeIntro = () => {
+    setIntro(false);
+    try {
+      localStorage.setItem(INTRO_KEY, "1");
+    } catch {
+      // A private window: it shows again next time, which is fine.
+    }
+  };
   useEffect(() => {
     let live = true;
     myWheel()
@@ -72,7 +94,12 @@ export function WheelSheet({ avatar, onClose }: { avatar: Avatar; onClose: () =>
         </button>
       </div>
       <div className="pr-10">
-        <h2 className="font-display text-xl font-extrabold">My life</h2>
+        <h2 className="flex items-center gap-2 font-display text-xl font-extrabold">
+          My life
+          <button onClick={() => setIntro(true)} className="grid size-6 place-items-center rounded-full bg-ink/[0.06] text-xs font-bold text-muted hover:bg-ink/10" aria-label="How My life works">
+            ?
+          </button>
+        </h2>
         {wheel && (
           <p className="text-xs text-muted">
             {wheel.total.toLocaleString("en-GB")} moment{wheel.total === 1 ? "" : "s"} lived
@@ -80,6 +107,8 @@ export function WheelSheet({ avatar, onClose }: { avatar: Avatar; onClose: () =>
           </p>
         )}
       </div>
+
+      {intro && <Intro onClose={closeIntro} />}
 
       {wheel === undefined && <div className="mx-auto mt-6 aspect-square w-full max-w-[340px] animate-pulse rounded-full bg-ink/[0.05]" aria-label="Loading your wheel" />}
       {wheel === null && <p className="mt-6 text-sm text-muted">Your wheel isn&apos;t ready yet. Try again in a little while.</p>}
@@ -89,6 +118,7 @@ export function WheelSheet({ avatar, onClose }: { avatar: Avatar; onClose: () =>
           <Ring moments={lived} picked={picked} onPick={setPicked} avatar={avatar} words={wheel.words} />
           <Legend moments={lived} />
           {wheel.standing && <Standing s={wheel.standing} />}
+          <Checklist wheel={wheel} lived={lived} onClose={onClose} />
 
           {lived.length === 0 ? (
             <p className="mt-3 rounded-2xl bg-ink/[0.04] p-3 text-sm text-ink/80">
@@ -454,6 +484,98 @@ function Players({ wheel, onOpen }: { wheel: Wheel; onOpen: (open: NonNullable<W
               : "Nobody: no other player turns up in your moments, and you don't turn up in theirs."}
         </p>
       </div>
+    </section>
+  );
+}
+
+/** The explainer: every decision counts (shown the first time, and from the "?"). */
+function Intro({ onClose }: { onClose: () => void }) {
+  const points = [
+    { emoji: "⚖️", title: "Every decision counts", text: "Now and then, something happens to you: someone asks for help, a deal, a family call, a crisis. What you choose changes your money, your reputation and who you become." },
+    { emoji: "🤔", title: "No right or wrong answers", text: "Every answer costs something and gives something. The same choice can turn out differently next time. Choose what you can live with." },
+    { emoji: "⏳", title: "Now, soon and later", text: "Some things happen at once. Some come back days or weeks later: the person you helped returns, the friend you lent money to pays you back (or doesn't)." },
+    { emoji: "🧑🏾‍🤝‍🧑🏾", title: "People remember", text: "Mama Nkechi, Officer Bello, your neighbour, your friends: they remember how you treated them, and so does the city." },
+    { emoji: "🏅", title: "Quiet badges", text: "Keep choosing a certain way and, after a while, people start to call you something: Open Hand, Lion Heart, Person of Honour. They arrive by themselves." },
+    { emoji: "🌀", title: "Your wheel", text: "Every moment you live is kept here as a notch. Tap one to see what you chose and what came of it." },
+  ];
+  return (
+    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-ink/40 p-3 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="life-intro-title">
+      <div className="moment-in max-h-[85vh] w-full max-w-sm overflow-y-auto rounded-3xl bg-panel p-5 shadow-2xl">
+        <p className="text-3xl">🌀</p>
+        <h3 id="life-intro-title" className="mt-1 font-display text-xl font-extrabold">This is your life</h3>
+        <ul className="mt-3 grid gap-3">
+          {points.map((p) => (
+            <li key={p.title} className="grid grid-cols-[auto_minmax(0,1fr)] gap-2.5">
+              <span className="text-xl leading-tight">{p.emoji}</span>
+              <span>
+                <span className="block text-sm font-bold">{p.title}</span>
+                <span className="block text-[13px] leading-snug text-ink/80">{p.text}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+        <button onClick={onClose} className="mt-4 h-11 w-full rounded-full bg-ink text-sm font-semibold text-white">
+          Got it
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Things to do in your life: the first steps, ticked off as you live them. */
+function Checklist({ wheel, lived, onClose }: { wheel: Wheel; lived: WheelMoment[]; onClose: () => void }) {
+  const [open, setOpen] = useState(true);
+  const startBusiness = () => {
+    onClose();
+    window.dispatchEvent(new Event("nt-open-career"));
+  };
+  const items: { done: boolean; title: string; hint: string; action?: { label: string; go: () => void } }[] = [
+    { done: wheel.total >= 1, title: "Live your first moment", hint: "Go about the city: something will happen to you within a few minutes." },
+    { done: wheel.people.length >= 1, title: "Meet someone who'll remember you", hint: "People like Mama Nkechi at the bus stop turn up as you go round the city." },
+    { done: wheel.people.some((p) => p.feeling >= 2), title: "Make a friend in the city", hint: "Treat someone well, again and again, and they'll start to see you as a friend." },
+    {
+      done: !!wheel.business?.ever,
+      title: "Start a business",
+      hint: "Pick a trade, name it, and grow it with your decisions.",
+      action: wheel.business ? { label: "Start one", go: startBusiness } : undefined,
+    },
+    { done: lived.some((m) => MOMENT_BY_ID.get(m.moment)?.size === "big" || MOMENT_BY_ID.get(m.moment)?.size === "life"), title: "Face a big decision", hint: "Turning points come once or twice a week: a job offer, a family meeting, a loan." },
+    { done: lived.some((m) => m.from != null), title: "See what came of a choice", hint: "Some choices come back days later. Help someone, lend money, make a promise." },
+    { done: wheel.badges.length >= 1, title: "Earn your first badge", hint: "Keep choosing a certain way for a couple of weeks. It arrives by itself." },
+    { done: wheel.players.length >= 1, title: "Share a story with a friend", hint: "Add friends: now and then they turn up in your moments, and you in theirs." },
+    { done: wheel.total >= 25, title: "Live 25 moments", hint: `${Math.min(25, wheel.total)} of 25 so far.` },
+  ];
+  const done = items.filter((i) => i.done).length;
+  if (done === items.length) return <p className="mt-3 rounded-2xl bg-[#12b886]/10 p-3 text-center text-xs font-semibold text-[#0b7a5a]">First steps all done. The rest of your life is yours to write.</p>;
+  return (
+    <section className="mt-3 rounded-2xl p-3 ring-1 ring-ink/10">
+      <button onClick={() => setOpen(!open)} className="flex w-full items-center justify-between gap-2 text-left" aria-expanded={open}>
+        <span className="text-sm font-bold">Your first steps</span>
+        <span className="text-xs font-semibold text-muted">
+          {done} of {items.length} {open ? "▴" : "▾"}
+        </span>
+      </button>
+      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-ink/10">
+        <div className="h-full rounded-full bg-gold" style={{ width: `${(done / items.length) * 100}%` }} />
+      </div>
+      {open && (
+        <ul className="mt-2.5 grid gap-1.5">
+          {items.map((i) => (
+            <li key={i.title} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2.5">
+              <span className={cn("mt-0.5 grid size-5 place-items-center rounded-full text-[11px] font-bold", i.done ? "bg-[#12b886] text-white" : "ring-2 ring-ink/15")}>{i.done ? "✓" : ""}</span>
+              <span className="min-w-0">
+                <span className={cn("block text-sm font-semibold", i.done && "text-muted line-through")}>{i.title}</span>
+                {!i.done && <span className="block text-xs text-muted">{i.hint}</span>}
+              </span>
+              {!i.done && i.action && (
+                <button onClick={i.action.go} className="rounded-full bg-gold px-3 py-1 text-xs font-semibold text-ink">
+                  {i.action.label}
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

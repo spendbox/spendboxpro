@@ -4,7 +4,7 @@ import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { seasonsAt } from "@/lib/world/calendar";
 import { CAST_BY_ID } from "@/lib/world/cast";
-import { applyChange, inCrisis, readyToGrow } from "@/lib/world/ventures";
+import { BUSINESS_EVERY_H, CRISIS_EVERY_H, applyChange, inCrisis, readyToGrow } from "@/lib/world/ventures";
 import { STORY_OPENS, bondWith, dueLink, findPartner, giveInStory, openLink, sendLink, storyOpenOf, type StoryOpen } from "./stories-server";
 import { openVenture, settleVenture, stageScale, type VentureRow } from "./ventures-server";
 import { writtenMoments } from "./written-server";
@@ -115,8 +115,6 @@ async function fitsOf(db: ReturnType<typeof createAdminClient>, userId: string, 
 }
 
 /** How long between business moments (two or three a week), and in a crisis. */
-const BUSINESS_EVERY_H = 56;
-const CRISIS_EVERY_H = 12;
 
 /** Someone's business, its days counted, as moment picking needs it (undefined before game-db/115). */
 async function businessOf(db: ReturnType<typeof createAdminClient>, userId: string, perMint: number): Promise<{ row: VentureRow | null; state: VentureState | undefined }> {
@@ -442,6 +440,8 @@ export async function momentAnswer(id: number, choice: number): Promise<MomentRe
   if (outcome.trust != null) marks.trust = outcome.trust;
   if (outcome.unseen) marks.unseen = true;
   if (outcome.stood) marks.stood = true;
+  // What it did to your business, for My business's list of your decisions.
+  if (outcome.biz && biz.row) marks.biz = outcome.biz;
   if (outcome.effect) marks.effect = outcome.effect;
   await m.db.from("moments").update({ marks }).eq("id", Math.round(n(id))).eq("user_id", m.userId).then(
     () => null,
@@ -487,6 +487,8 @@ export type Wheel = {
   storyOpen: StoryOpen | null;
   /** Player-written moments you lived (the phone doesn't have them). */
   written: MomentDef[];
+  /** Your business: whether you run one now, and whether you ever started one (null before game-db/115). */
+  business: { open: boolean; ever: boolean } | null;
   /** Other players you've shared stories with: how you feel about them, how they feel about you, and how many stories. */
   players: { name: string; mine: number; theirs: number; together: number }[];
   region: string;
@@ -499,6 +501,7 @@ export async function myWheel(): Promise<Wheel | null> {
   if (!m) return null;
   const standing = await refreshStanding(m.db, m.userId, true).catch(() => null);
   const writtenAll = await writtenMoments(m.db).catch(() => [] as MomentDef[]);
+  const { data: myVentures, error: venturesError } = await m.db.from("ventures").select("closed_at").eq("user_id", m.userId).limit(50);
   const [storyOpen, myBondsRes] = await Promise.all([
     storyOpenOf(m.db, m.userId).catch(() => null),
     m.db.from("player_bonds").select("other, feeling, together").eq("user_id", m.userId).order("last_at", { ascending: false }).limit(30),
@@ -570,6 +573,7 @@ export async function myWheel(): Promise<Wheel | null> {
     board,
     storyOpen,
     written: writtenAll.filter((w) => moments.some((x) => x.moment === w.id)),
+    business: venturesError ? null : { open: (myVentures ?? []).some((v) => !v.closed_at), ever: (myVentures ?? []).length > 0 },
     players,
     region: m.region,
     perMint: m.perMint,
