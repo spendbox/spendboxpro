@@ -18,6 +18,10 @@ test("what people type finds the kind of place", () => {
   assert.deepEqual(ids("churches"), ["church"]);
   assert.deepEqual(ids("mosque"), ["mosque"]);
   assert.deepEqual(ids("court"), ["court"]);
+  assert.equal(kindsFor("court")[0].label, "Law court", "a court is a law court");
+  assert.deepEqual(ids("magistrates court"), ["court"]);
+  assert.deepEqual(ids("basketball"), ["basketball"]);
+  assert.deepEqual(ids("banks near me"), ["bank"]);
   assert.deepEqual(ids("airport"), ["airport"]);
   assert.deepEqual(ids("petrol station"), ["fuel"]);
   assert.deepEqual(ids("police station"), ["police"]);

@@ -57,6 +57,8 @@ export type Theme =
   | "spa"
   | "church"
   | "mosque"
+  // a law court's courtroom: the judge's bench, the witness box, the dock, the public gallery
+  | "courtroom"
   // sports venues: the stands round a football pitch, an indoor basketball court, a boxing
   // ring and a wrestling ring (seats facing the action, a big screen)
   | "stands"
@@ -132,6 +134,8 @@ export const ROOM_LABEL: Partial<Record<Tile["kind"], string>> = {
   trees: "Woods",
   pond: "Pond",
   fire: "Fire station",
+  bank: "Bank",
+  lawcourt: "Law court",
   club: "Nightclub",
   restaurant: "Restaurant",
   school: "School",
@@ -359,6 +363,14 @@ export function levelsOf(t: Tile, plan: CityPlan): PlaceLevel[] {
     case "fire":
       R("g", "Engine bay", "interior", "firehall", x - 0.04, 0.08, z - 0.08, 0.3, 0.24);
       R("f1", floorLabel(1, "Crew room"), "interior", "living", x - 0.04, 0.08 + STOREY + 0.06, z - 0.08, 0.3, 0.24, { weight: 0.6 });
+      break;
+    case "bank":
+      // A branch: the banking hall (tellers, cash machines, the vault door behind the counter).
+      R("g", "Banking hall", "interior", "bank", x, 0.08, z - 0.06, 0.3, 0.22);
+      break;
+    case "lawcourt":
+      R("g", "Courtroom", "interior", "courtroom", x, 0.08, z - 0.1, 0.32, 0.22, { weight: 1.3 });
+      if (t.v === 1) R("f1", floorLabel(1, "Judges' chambers"), "interior", "office", x, 0.08 + STOREY + 0.05, z - 0.1, 0.32, 0.22, { weight: 0.5 });
       break;
     case "club":
       R("g", t.name ?? "Dance floor", "interior", "club", x, 0.08, z, 0.36, 0.3, { weight: 1.6 });

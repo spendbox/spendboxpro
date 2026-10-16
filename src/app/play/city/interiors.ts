@@ -3443,6 +3443,78 @@ function mosqueHall(x: Ctx) {
   x.views.push({ x: 0, z: D / 2 - 1.2, yaw: 0, pitch: 0.04 }, { x: W / 2 - 1.5, z: D / 2 - 1.5, yaw: yawTo(W / 2 - 1.5, D / 2 - 1.5, 0, -D / 2), pitch: 0.02 });
 }
 
+// ---------------------------------------------------------------- a law court's courtroom
+
+const COURT_PAL: Pal = { wall: 0xece3d2, accentWall: 0x5c3d26, trim: 0xd9ccb4, ceiling: 0xf6f0e4, floor: ["parquet", 0x7d5737, 0x684629], wood: 0x5c3d26, fabric: 0x1f3b5c, fabric2: 0xc7a76c, accent: 0x2f6650, metal: 0xb08d57, art: [0x1f3b5c, 0xc7a76c, 0x2f6650], frame: 0xb08d57, leaves: LEAVES, pot: 0x5c3d26 };
+
+/**
+ * A courtroom: the judge's raised bench at the front under the coat of arms, the clerk's desk
+ * below it, the witness box to one side and the dock to the other, lawyers' tables facing the
+ * bench, and rows of benches for the public at the back.
+ */
+function courtroom(x: Ctx) {
+  const { k, room, pal, info } = x;
+  const W = room.w;
+  const D = room.d;
+  const front = -D / 2;
+  const dark = shadeHex(pal.wood, -0.15);
+  // The judge's bench: a raised platform, a tall panelled front, a high-backed chair.
+  k.box(0, 0, front + 1.2, 5.6, 0.5, 2.0, dark);
+  k.box(0, 0.5, front + 2.15, 5.6, 0.75, 0.12, pal.wood);
+  k.box(0, 1.25, front + 2.15, 5.8, 0.05, 0.4, pal.trim);
+  k.at(0, 0.5, front + 1.2, 0, () => {
+    k.box(0, 0, 0, 0.7, 0.5, 0.6, pal.fabric);
+    k.box(0, 0.5, -0.28, 0.7, 1.1, 0.12, pal.fabric);
+    k.box(0, 1.6, -0.28, 0.8, 0.08, 0.16, pal.metal);
+  });
+  // The gavel and a book on the bench top.
+  k.box(0.6, 1.3, front + 2.1, 0.3, 0.06, 0.22, 0xf2ece0);
+  k.cyl(-0.5, 1.3, front + 2.1, 0.035, 0.035, 0.05, 0x3b2618, 10);
+  // The coat of arms and the court's name on the wall behind.
+  atWall(x, 0, 0, () => {
+    k.box(0, 2.3, 0.03, 1.3, 1.3, 0.04, pal.metal, { noAo: true });
+    k.box(0, 2.35, 0.06, 0.9, 0.9, 0.02, pal.fabric, { noAo: true });
+  });
+  wallSign(x, 0, 0, 3.55, info.name.toUpperCase(), pal.accentWall, 0xf2c94c, Math.min(7, W * 0.5), 0.5, false);
+  // Flags either side of the bench.
+  for (const side of [-1, 1]) {
+    k.cyl(side * 3.4, 0, front + 0.6, 0.03, 0.03, 2.4, pal.metal, 8);
+    k.box(side * 3.4 + 0.3, 1.8, front + 0.6, 0.55, 0.5, 0.02, side < 0 ? 0x1f8a4c : pal.fabric);
+  }
+  // The clerk's desk just below the bench.
+  table(x, 0, front + 2.9, 0, 2.2, 0.7, pal.wood, dark, { h: 0.8 });
+  chair(x, 0, front + 2.45, 0, pal.fabric, dark);
+  // The witness box (left) and the dock (right): low panelled pens.
+  for (const [side, w] of [[-1, 1.4], [1, 2.2]] as const) {
+    const bx = side * (W / 2 - 1.8);
+    const bz = front + 3.0;
+    k.box(bx, 0, bz, w, 0.12, 1.4, dark);
+    for (const [px, pz, pw, pd] of [[0, 0.7, w, 0.08], [-w / 2, 0, 0.08, 1.4], [w / 2, 0, 0.08, 1.4]] as const) k.box(bx + px, 0.12, bz + pz, pw, 0.95, pd, pal.wood);
+    k.box(bx, 1.07, bz + 0.7, w + 0.1, 0.05, 0.14, pal.trim);
+    spot(x, bx, bz, side < 0 ? Math.PI / 2 : -Math.PI / 2, "stand");
+  }
+  // The lawyers' tables facing the bench, a chair each.
+  for (const side of [-1, 1]) {
+    const tx = side * 2.4;
+    const tz = front + 4.9;
+    table(x, tx, tz, 0, 2.6, 0.8, pal.wood, dark, { h: 0.78 });
+    for (let c = 0; c < 3; c++) chair(x, tx - 0.85 + c * 0.85, tz + 0.65, Math.PI, pal.fabric, dark, { spot: c !== 1 });
+    k.box(tx - 0.5, 0.78, tz, 0.35, 0.05, 0.26, 0xf2ece0);
+  }
+  // A wooden rail across the room, and the public benches behind it.
+  k.box(0, 0, front + 6.1, W - 3, 0.9, 0.08, pal.wood);
+  k.box(0, 0.9, front + 6.1, W - 2.9, 0.05, 0.14, pal.trim);
+  for (let r = 0; r < 3; r++) for (const side of [-1, 1]) bench(x, side * 2.6, front + 7.0 + r * 1.15, Math.PI, 3.6, pal.wood, dark, 3);
+  linearLights(x, 3, "x", 0xfff6e6);
+  for (const s of solidSides(room)) if (s !== 0) art(x, s, 0, 2.0, 1.0, 1.3);
+  plant(x, -W / 2 + 0.7, D / 2 - 0.7, 1.4, "tall");
+  plant(x, W / 2 - 0.7, D / 2 - 0.7, 1.4, "tall");
+  x.views.push(
+    { x: 0, z: D / 2 - 0.9, yaw: 0, pitch: -0.06 },
+    { x: W / 2 - 1.0, z: front + 5.2, yaw: yawTo(W / 2 - 1.0, front + 5.2, -W / 4, front + 1.5), pitch: -0.08 },
+  );
+}
+
 function plan(theme: Theme, rnd: Rng, variant?: InteriorInfo["variant"], info?: InteriorInfo): { room: Room; pal: Pal; build: (x: Ctx) => void } {
   const home = pickOf(rnd, HOME);
   if (info?.home) {
@@ -3533,6 +3605,8 @@ function plan(theme: Theme, rnd: Rng, variant?: InteriorInfo["variant"], info?: 
       return { room: { w: 18, d: 13, h: 5, walls: ["solid", "glass", "glass", "solid"], frame: 0x1f2226 }, pal: GYM_PAL, build: gymFloor };
     case "spa":
       return { room: { w: 14, d: 12, h: 4.2, walls: ["solid", "glass", "glass", "glass"], frame: 0xb08458 }, pal: SPA_PAL, build: spaRoom };
+    case "courtroom":
+      return { room: { w: 14, d: 11, h: 4.4, walls: ["solid", "tall", "solid", "tall"] }, pal: COURT_PAL, build: courtroom };
     case "church":
       return { room: { w: 16, d: 26, h: 12, walls: ["solid", "tall", "solid", "tall"] }, pal: CHURCH_PAL, build: churchNave };
     case "mosque":

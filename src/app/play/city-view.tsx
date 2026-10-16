@@ -879,6 +879,39 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
       B(0.28, 0.17, 0.34, 0.15, 0.06, 0.13, 0x343a40);
       break;
     }
+    case "bank": {
+      // A bank branch: a glass-fronted block with the bank's colour round the top, a canopy over
+      // the doors, cash machines in the wall and a guard's booth.
+      const brand = [0x1c7ed6, 0xe8590c, 0x2f9e44, 0x7048e8, 0xc92a2a][Math.floor(r[1] * 5)];
+      const h = t.v === 1 ? 0.95 : 0.7;
+      B(0, 0.08, -0.08, 0.76, h, 0.56, 0xf1f3f5);
+      bands(0, -0.08, 0.76, 0.56, 0.08, 0.08 + h, 0.3, 0x5d7fa3);
+      B(0, 0.08, 0.2, 0.5, 0.36, 0.02, 0x4c6e91, 0, "glass");
+      B(0, 0.08 + h - 0.12, -0.08, 0.77, 0.12, 0.57, brand);
+      B(0, 0.08 + h - 0.08, 0.205, 0.5, 0.06, 0.012, 0xffffff, 0, "paint");
+      B(0, 0.44, 0.3, 0.56, 0.03, 0.2, brand);
+      for (const ax of [0.28, 0.34]) B(ax, 0.14, 0.205, 0.05, 0.12, 0.02, 0x4dabf7, 0, "lamp");
+      B(-0.32, 0.08, 0.34, 0.12, 0.2, 0.12, 0x495057);
+      tree(-0.36, -0.38, 0.4, r[0]);
+      break;
+    }
+    case "lawcourt": {
+      // A law court: a pale stone hall on steps behind a row of columns under a pediment, the
+      // country's flag on a pole out front.
+      const stone = 0xece4d4;
+      for (let k = 0; k < 3; k++) B(0, 0.08 + k * 0.03, 0.02 - k * 0.03, 0.86 - k * 0.06, 0.03, 0.74 - k * 0.06, k % 2 ? stone : 0xf7f1e6);
+      const top = t.v === 1 ? 0.95 : 0.75;
+      B(0, 0.17, -0.12, 0.72, top, 0.44, 0xf7f1e6);
+      for (let k = 0; k < 6; k++) B(-0.3 + k * 0.12, 0.17, 0.17, 0.05, top - 0.12, 0.05, 0xffffff, 0, "cyl");
+      B(0, 0.05 + top, 0.04, 0.78, 0.08, 0.34, stone);
+      add("roof", { x, y: 0.13 + top, z: z + 0.02, sx: 0.78 / Math.SQRT2, sy: 0.16, sz: 0.36 / Math.SQRT2, ry: 0, color: 0xd8cfbd });
+      B(0, 0.17, 0.11, 0.14, 0.3, 0.02, 0x6b4f37);
+      B(0, 0.12 + top, 0.205, 0.4, 0.05, 0.01, 0x1f3b5c, 0, "paint");
+      B(0.38, 0.08, 0.36, 0.012, 0.6, 0.012, 0x868e96, 0, "cyl");
+      B(0.43, 0.56, 0.36, 0.1, 0.07, 0.004, 0x2f9e44, 0, "paint");
+      tree(-0.38, 0.36, 0.4, r[0]);
+      break;
+    }
     case "fuel": {
       const brand = [0xe03131, 0x1971c2, 0x2f9e44, 0xf08c00][Math.floor(r[2] * 4)];
       for (const [px, pz] of [[-0.32, -0.2], [0.32, -0.2], [-0.32, 0.25], [0.32, 0.25]]) {
@@ -1790,7 +1823,19 @@ export function CityView({
     let tallest = 0;
     let framed = false;
     /** Stopping at a landmark's gate on the way in (see syncView), and the place it was for. */
-    let gateTour: { t: number; fromPos: THREE.Vector3; fromTarget: THREE.Vector3; toPos: THREE.Vector3; toTarget: THREE.Vector3; building: string; name: string; arrived: boolean } | null = null;
+    let gateTour: {
+      t: number;
+      fromPos: THREE.Vector3;
+      fromTarget: THREE.Vector3;
+      toPos: THREE.Vector3;
+      toTarget: THREE.Vector3;
+      /** The map view to go back to (from before the first gate, if you went from one gate to another). */
+      backPos: THREE.Vector3;
+      backTarget: THREE.Vector3;
+      building: string;
+      name: string;
+      arrived: boolean;
+    } | null = null;
     /** Leaving a landmark's gate without going in: gliding back up to the map view from before. */
     let afterGate: { pos: THREE.Vector3; target: THREE.Vector3 } | null = null;
     let gateReturn: { t: number; fromPos: THREE.Vector3; fromTarget: THREE.Vector3; toPos: THREE.Vector3; toTarget: THREE.Vector3 } | null = null;
@@ -6188,24 +6233,32 @@ export function CityView({
       restage = false;
       if (next?.kind === "ride" && view?.kind === "ride" && view.k === next.k) return;
       if (next?.kind === "vehicle" && view?.kind === "vehicle" && view.ride.kind === next.ride.kind && view.ride.index === next.ride.index) return;
-      if (!next && !view) return;
       // Going into a landmark from the map: you arrive at its main gate, out on the street in
       // front of the name sign (a photo spot), and go on inside when you choose (goInside).
+      // (Before the "nothing to do" check below: at the gate there's no view yet, so leaving from
+      // there used to stop at that check, and the camera stayed stuck at the gate.)
       if (!next) gateSeen = null;
       if (next) gateReturn = null;
       if (gateTour) {
         if (next?.kind === "place" && next.building === gateTour.building) return;
+        // Still going there, its tiles just being drawn again (the map moving round): stay at the gate.
+        if (!next && wantPlace?.building === gateTour.building) return;
         // Left (or went somewhere else) from the entrance. Back to the map: glide up to the view from
         // before (from down at the gate, looking sideways at the sign, dragging the map felt stuck).
         const gt = gateTour;
         gateTour = null;
+        gateSeen = null;
         cb.current.onAtGate?.(null);
         if (!next && !view) {
-          gateReturn = { t: 0, fromPos: camera.position.clone(), fromTarget: controls.target.clone(), toPos: gt.fromPos, toTarget: gt.fromTarget };
+          gateReturn = { t: 0, fromPos: camera.position.clone(), fromTarget: controls.target.clone(), toPos: gt.backPos, toTarget: gt.backTarget };
           return;
         }
+        // Somewhere else instead (a ride, another place): coming back from it lands on the map view
+        // from before the gate too.
+        afterGate = { pos: gt.backPos.clone(), target: gt.backTarget.clone() };
         controls.enabled = true;
       }
+      if (!next && !view) return;
       if (next?.kind === "place" && !view && !flight && !walker.on && gateSeen !== next.building) {
         const g = gateFor(next.anchor.x, next.anchor.z);
         gateSeen = next.building;
@@ -6228,10 +6281,13 @@ export function CityView({
             toPos: new THREE.Vector3(g.x + g.dx * (mid + back) + g.dz * 0.12 * back, 0.3 * S + back * 0.5, g.z + g.dz * (mid + back) - g.dx * 0.12 * back),
             // Looking at the name sign, with the gate behind it.
             toTarget: new THREE.Vector3(g.x + g.dx * mid, 0.38 * S, g.z + g.dz * mid),
+            backPos: afterGate?.pos.clone() ?? camera.position.clone(),
+            backTarget: afterGate?.target.clone() ?? controls.target.clone(),
             building: next.building,
             name: g.name,
             arrived: false,
           };
+          afterGate = null;
           return;
         }
       }
@@ -6781,6 +6837,7 @@ export function CityView({
         const from = stick?.from;
         const at = standAt(from?.x ?? controls.target.x, from?.z ?? controls.target.z);
         walker.on = true;
+        gateReturn = null;
         walker.x = at.x;
         walker.z = at.z;
         walker.cam = walker.face = cameraYaw();
@@ -7912,7 +7969,7 @@ export function CityView({
     function goInside() {
       if (!gateTour) return;
       // Coming back out later lands on the map view from before the gate, not down at the gate.
-      afterGate = { pos: gateTour.fromPos.clone(), target: gateTour.fromTarget.clone() };
+      afterGate = { pos: gateTour.backPos.clone(), target: gateTour.backTarget.clone() };
       gateTour = null;
       cb.current.onAtGate?.(null);
       syncView();

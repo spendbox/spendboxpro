@@ -2126,6 +2126,8 @@ export function Game({
     setRide(null);
     setPlace(null);
     setActivity(null);
+    // Left from a landmark's entrance (before going in): its Photo / Go inside bar goes too.
+    setAtGate(null);
   }
   useEffect(() => {
     leaveInside.current = () => {
