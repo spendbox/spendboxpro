@@ -33,7 +33,7 @@ import { growthOf } from "@/lib/world/growth";
 import { regionMap } from "@/lib/world";
 import { GATED_SPOTS, type RegionMap } from "@/lib/world/compile";
 import { toTile } from "@/lib/world/geo";
-import { BUILDING_LABEL, type Building } from "@/lib/world/buildings";
+import { BUILDING_LABEL, wealthOf, type Building } from "@/lib/world/buildings";
 import { propertyInfo, type PropertyInfo } from "@/lib/world/property";
 import { workplaceOfTile, type Workplace } from "@/lib/world/workplace";
 import type { MapBusiness } from "@/lib/world/business";
@@ -64,6 +64,7 @@ import { createAircraft } from "./city/aircraft";
 import { createFarCity, MAP_MARGIN } from "./city/far-city";
 import { createKites } from "./city/kites";
 import { buildingParts } from "./city/building-kit";
+import { plotLayout } from "@/lib/city/plots";
 import { CLEAR_GROUND, crossingParts, pieceParts, stationParts } from "./city/spans-kit";
 import { setSceneSnapshot } from "./city/snapshot";
 import { createTraffic, type VehiclePose } from "./city/traffic";
@@ -416,6 +417,8 @@ const WINDOW = 40;
  * beyond it, plain blocks and a painted map (./city/far-city) keep a strict drawing budget.
  */
 const DETAIL = 18;
+/** How far from the middle of the drawn area (tiles) shared tiles get their little houses (src/lib/city/plots). */
+const PLOTS_NEAR = 12;
 const SKY = 0xd7ebf7;
 
 /**
@@ -474,8 +477,9 @@ function geometries() {
 }
 
 // ---------------------------------------------------------------- what stands on a tile
-function partsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "tile">) => void) {
-  basePartsFor(t, plan, add);
+/** `near`: close enough to the middle of the drawn area for the little houses on shared tiles (src/lib/city/plots). */
+function partsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "tile">) => void, near = true) {
+  basePartsFor(t, plan, add, near);
   // A real place's bridges, flyovers, railways and stations along their real curves.
   const region = plan.region;
   if (region) {
@@ -555,7 +559,7 @@ function homeParts(
   B(-0.13, 0.19, 0.405, 0.2, 0.08, 0.02, 0x7048e8);
 }
 
-function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "tile">) => void) {
+function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "tile">) => void, near = true) {
   const { x, z, r } = t;
   const pal = plan.palette;
   const pick = (list: number[], v: number) => list[Math.floor(v * list.length) % list.length];
@@ -718,7 +722,9 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
 
   // A real place's property (a bungalow, flats, shops, a plot...): see ./city/building-kit.
   if (t.building && !t.home) {
-    buildingParts(t, t.building, pal, B, add, tree);
+    // Low-rise property shares its tile with little houses round it, close in (further out, just the property).
+    const plots = near && plan.region ? plotLayout(t.building, x, z, wealthOf(plan.region.landPriceAt(x, z))) : null;
+    buildingParts(t, t.building, pal, B, add, tree, plots);
     if (t.egg) eggParts(t, B);
     return;
   }
@@ -3352,12 +3358,14 @@ export function CityView({
       parts = {};
       tileParts = new Map();
       for (const t of tiles) {
+        // The little houses on shared tiles only within PLOTS_NEAR of the middle (the drawing budget).
+        const near = !win || Math.max(Math.abs(t.x - win.cx), Math.abs(t.z - win.cz)) <= PLOTS_NEAR;
         partsFor(t, plan, (mesh, p) => {
           (parts[mesh] ??= []).push({ ...p, tile: t.i });
           const list = tileParts.get(t.i) ?? [];
           list.push([mesh, parts[mesh].length - 1]);
           tileParts.set(t.i, list);
-        });
+        }, near);
       }
 
       for (const m of Object.values(meshes)) {
@@ -4624,6 +4632,14 @@ export function CityView({
       hoverBox.visible = true;
       hoverBox.position.set(a.x + (size.w - 1) / 2, 0, a.z + (size.d - 1) / 2);
       hoverBox.scale.set(size.w + 0.04, a.top + 0.12, size.d + 0.04);
+      // A property sharing its tile (src/lib/city/plots): just its own plot at the front.
+      const plots = a.building && !a.home && currentPlan?.region ? plotLayout(a.building, a.x, a.z, wealthOf(currentPlan.region.landPriceAt(a.x, a.z))) : null;
+      if (plots) {
+        const turn = (a.building!.face * Math.PI) / 2;
+        const { x: mx, z: mz, s: ms, v: mv } = plots.main;
+        hoverBox.position.set(a.x + mx * Math.cos(turn) + mz * Math.sin(turn), 0, a.z - mx * Math.sin(turn) + mz * Math.cos(turn));
+        hoverBox.scale.set(0.9 * ms + 0.06, (a.top - 0.08) * mv + 0.2, 0.9 * ms + 0.06);
+      }
       const n = roomCountsNow[r.room.id] ?? 0;
       cb.current.onHover?.({ tile: a.i, label: `${r.room.name}${t.egg ? ` · ${t.egg.name}` : ""} · ${n ? `${n} inside` : "nobody inside yet"} · tap to go in` });
     }

@@ -9,6 +9,8 @@
 
 import { structureCentre, venueName, type CityPlan, type Sport, type StructureType, type Tile } from "@/lib/city/layout";
 import { RAIL_Y } from "./trains";
+import { plotLayout } from "@/lib/city/plots";
+import { wealthOf } from "@/lib/world/buildings";
 
 export type LevelKind = "interior" | "roof" | "outdoor";
 
@@ -420,7 +422,36 @@ export function levelsOf(t: Tile, plan: CityPlan): PlaceLevel[] {
       R("o", "By the monument", "outdoor", "plaza", x + 0.3, 0.08, z + 0.3, 0.08, 0.08);
       break;
   }
+  inPlot(t, plan, out);
   return share(total, out);
+}
+
+/**
+ * A property on a shared tile (src/lib/city/plots) is drawn smaller and lower, at the front of its
+ * tile: its floors move with it, so going in swoops to where it really stands.
+ */
+function inPlot(t: Tile, plan: CityPlan, out: Draft[]) {
+  if (!t.building || t.home || !plan.region) return;
+  const plots = plotLayout(t.building, t.x, t.z, wealthOf(plan.region.landPriceAt(t.x, t.z)));
+  if (!plots) return;
+  const { s, v } = plots.main;
+  const turn = (t.building.face * Math.PI) / 2;
+  const c = Math.cos(turn);
+  const sn = Math.sin(turn);
+  const BASE = 0.08;
+  for (const l of out) {
+    // Into the building's own frame (+z its street), into its plot, and back.
+    const wx = l.x - t.x;
+    const wz = l.z - t.z;
+    const lx = plots.main.x + (wx * c - wz * sn) * s;
+    const lz = plots.main.z + (wx * sn + wz * c) * s;
+    l.x = t.x + lx * c + lz * sn;
+    l.z = t.z - lx * sn + lz * c;
+    l.y = BASE + (l.y - BASE) * v;
+    l.hw *= s;
+    l.hd *= s;
+    if (l.hide) l.hide = { ...l.hide, above: BASE + (l.hide.above - BASE) * v, rect: undefined };
+  }
 }
 
 function structureLevels(t: Tile, type: StructureType, plan: CityPlan): Draft[] {

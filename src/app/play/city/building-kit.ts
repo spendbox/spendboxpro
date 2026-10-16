@@ -12,6 +12,7 @@
 
 import type { Palette, Tile } from "@/lib/city/layout";
 import { STOREY, type Building } from "@/lib/world/buildings";
+import { LOW_STOREY, ROOF_TINTS, WALL_TINTS, type PlotLayout } from "@/lib/city/plots";
 
 type BoxFn = (dx: number, y: number, dz: number, sx: number, sy: number, sz: number, color: number, ry?: number, mesh?: string, tilt?: number) => void;
 type AddFn = (mesh: string, p: { x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number; color: number; tilt?: number }) => void;
@@ -37,22 +38,34 @@ const pickOf = <T,>(list: readonly T[], v: number) => list[Math.floor(v * list.l
 /** Draw a storey band every this many storeys (1 up to 24 storeys; fewer, so about 24 bands, above). */
 const bandEvery = (storeys: number) => Math.max(1, Math.ceil(storeys / 24));
 
-export function buildingParts(t: Tile, b: Building, pal: Palette, B0: BoxFn, add0: AddFn, tree0: TreeFn) {
+/**
+ * Draw a property. With `plots` (src/lib/city/plots), it's plot 0 of a shared tile: drawn smaller
+ * at the front, with the neighbours' little houses packed round it.
+ */
+export function buildingParts(t: Tile, b: Building, pal: Palette, B0: BoxFn, add0: AddFn, tree0: TreeFn, plots?: PlotLayout | null) {
   const { x, z } = t;
   const [l0, l1, l2, l3, l4] = b.look;
   // Everything below is drawn facing +z, then turned to face the street.
   const turn = (b.face * Math.PI) / 2;
   const cos = Math.cos(turn);
   const sin = Math.sin(turn);
-  const rot = (dx: number, dz: number): [number, number] => [dx * cos + dz * sin, -dx * sin + dz * cos];
+  const turnTo = (dx: number, dz: number): [number, number] => [dx * cos + dz * sin, -dx * sin + dz * cos];
+  // On a shared tile the property is drawn in its plot: smaller across (the same height), moved to the front.
+  const s = plots?.main.s ?? 1;
+  const v = plots?.main.v ?? 1;
+  const up = (y: number) => BASE + (y - BASE) * v;
+  const ox = plots?.main.x ?? 0;
+  const oz = plots?.main.z ?? 0;
+  const rot = (dx: number, dz: number): [number, number] => turnTo(ox + dx * s, oz + dz * s);
   const B: BoxFn = (dx, y, dz, sx, sy, sz, color, ry = 0, mesh = "building", tilt = 0) => {
     const [rx, rz] = rot(dx, dz);
-    B0(rx, y, rz, sx, sy, sz, color, ry + turn, mesh, tilt);
+    B0(rx, up(y), rz, sx * s, sy * v, sz * s, color, ry + turn, mesh, tilt);
   };
   const tree = (dx: number, dz: number, size: number, v: number) => {
     const [rx, rz] = rot(dx, dz);
-    tree0(rx, rz, size, v);
+    tree0(rx, rz, size * (plots ? 0.8 : 1), v);
   };
+  if (plots) neighbours(plots, x, z, turn, turnTo, B0, add0, tree0);
   const wall = pick(pal.walls, l0);
   const roofColor = pick(pal.roofs, l1);
   const office = pick(pal.offices, l2);
@@ -62,7 +75,7 @@ export function buildingParts(t: Tile, b: Building, pal: Palette, B0: BoxFn, add
   const roof = (dx: number, y: number, dz: number, w: number, d: number, style: number, color = roofColor) => {
     const [rx, rz] = rot(dx, dz);
     if (style < 0.5) {
-      add0("roof", { x: x + rx, y, z: z + rz, sx: (w + 0.08) / Math.SQRT2, sy: 0.22, sz: (d + 0.08) / Math.SQRT2, ry: turn, color });
+      add0("roof", { x: x + rx, y: up(y), z: z + rz, sx: (w * s + 0.08 * s) / Math.SQRT2, sy: 0.22 * v, sz: (d * s + 0.08 * s) / Math.SQRT2, ry: turn, color });
     } else if (style < 0.8) {
       // Gabled: two tilted slabs meeting at a ridge.
       // Each slab turned so its length runs front to back, then tilted up towards the ridge.
@@ -101,6 +114,13 @@ export function buildingParts(t: Tile, b: Building, pal: Palette, B0: BoxFn, add
   const compound = (gate = 0x495057) => {
     // Estate houses share the estate's wall instead (drawn at the end).
     if (b.estate) return;
+    // On a shared tile: just the front wall and its gate (the neighbours' houses close the sides).
+    if (plots) {
+      B(-0.27, BASE, 0.45, 0.38, 0.12, 0.03, WALL_FENCE);
+      B(0.27, BASE, 0.45, 0.38, 0.12, 0.03, WALL_FENCE);
+      B(0, BASE, 0.45, 0.16, 0.11, 0.025, gate);
+      return;
+    }
     B(0, BASE, -0.45, 0.92, 0.12, 0.03, WALL_FENCE);
     B(-0.45, BASE, 0, 0.03, 0.12, 0.92, WALL_FENCE);
     B(0.45, BASE, 0, 0.03, 0.12, 0.92, WALL_FENCE);
@@ -403,5 +423,44 @@ export function buildingParts(t: Tile, b: Building, pal: Palette, B0: BoxFn, add
   if (b.estate) {
     estateWall();
     B(0, BASE, 0.38, 0.6, 0.004, 0.12, 0x9fd88f, 0, "ground");
+  }
+}
+
+/**
+ * The little houses round a property on a shared tile (src/lib/city/plots): a block for the walls,
+ * a roof (hipped, gabled or flat with a black water tank), a band of windows on taller ones; or a
+ * yard with a tree. Two or three of the city's shared pieces each, so a tile of them costs little.
+ */
+function neighbours(plots: PlotLayout, x: number, z: number, turn: number, turnTo: (dx: number, dz: number) => [number, number], B0: BoxFn, add0: AddFn, tree0: TreeFn) {
+  for (const f of plots.fillers) {
+    const [rx, rz] = turnTo(f.x, f.z);
+    const ry = f.ry + turn;
+    if (f.yard) {
+      B0(rx, BASE, rz, f.w, 0.004, f.d, 0xc8b48a, ry, "ground");
+      tree0(rx, rz, 0.32 + f.tint * 0.2, f.wall);
+      continue;
+    }
+    const storey = STOREY * LOW_STOREY;
+    const h = f.storeys * storey;
+    B0(rx, BASE, rz, f.w, h, f.d, pick(WALL_TINTS, f.wall), ry);
+    if (f.storeys > 1) B0(rx, BASE + storey * 1.35, rz, f.w + 0.008, storey * 0.3, f.d + 0.008, WINDOW, ry, "glass");
+    const top = BASE + h;
+    const color = pick(ROOF_TINTS, f.tint);
+    if (f.roof === 0) {
+      add0("roof", { x: x + rx, y: top, z: z + rz, sx: (f.w + 0.05) / Math.SQRT2, sy: 0.04 + Math.min(f.w, f.d) * 0.3, sz: (f.d + 0.05) / Math.SQRT2, ry, color });
+    } else if (f.roof === 1) {
+      // Gabled: two sheets meeting at a ridge along the longer side.
+      const long = f.w >= f.d;
+      const span = long ? f.d : f.w;
+      for (const side of [-1, 1]) {
+        const [sx, sz] = long ? [0, side * (span / 4)] : [side * (span / 4), 0];
+        const c = Math.cos(ry);
+        const sn = Math.sin(ry);
+        B0(rx + sx * c + sz * sn, top + 0.03, rz - sx * sn + sz * c, span / 2 + 0.04, 0.02, (long ? f.w : f.d) + 0.04, color, ry + (long ? Math.PI / 2 : 0), "building", side * 0.45);
+      }
+    } else {
+      B0(rx, top, rz, f.w + 0.012, 0.03, f.d + 0.012, 0xd5d0c6, ry);
+      if (f.tint > 0.4) B0(rx + f.w * 0.2, top + 0.03, rz, 0.045, 0.055, 0.045, TANK, 0, "cyl");
+    }
   }
 }
