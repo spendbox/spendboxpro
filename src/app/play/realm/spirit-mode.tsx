@@ -128,7 +128,11 @@ export function SpiritMode({
         .then((r) => r.json())
         .then((d: ArenaData) => {
           if (stop) return;
-          if (d.off) return setOff(true);
+          // Not set up yet: the realm still shows, with only its wild spirits roaming.
+          if (d.off) {
+            setOff(true);
+            return setData({ at, arena, arenas: 0, seed: 0, armies: [], waves: [], results: null });
+          }
           if (d.at === at && d.arena === arena) setData(d);
         })
         .catch(() => {});
@@ -145,10 +149,12 @@ export function SpiritMode({
   const battle = useRef<{ key: string; b: Battle; known: Set<string> } | null>(null);
   useEffect(() => {
     if (!data) return;
-    const key = `${data.at}|${data.arena}|${data.seed}`;
+    // No battle kept yet (nobody has sent troops): the wild spirits still roam, from a seed of the hour's own.
+    const seed = data.seed || Math.floor(data.at / 3_600_000) + data.arena * 7919;
+    const key = `${data.at}|${data.arena}|${seed}`;
     const cur = battle.current;
     const fresh = () => {
-      battle.current = { key, b: new Battle({ seed: data.seed, armies: data.armies, waves: data.waves }), known: new Set(data.waves.map((w) => `${w.by}:${w.n}`)) };
+      battle.current = { key, b: new Battle({ seed, armies: data.armies, waves: data.waves }), known: new Set(data.waves.map((w) => `${w.by}:${w.n}`)) };
     };
     if (!cur || cur.key !== key) return fresh();
     // New players join at the end of the list; anything else: start again.
