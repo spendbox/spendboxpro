@@ -389,7 +389,7 @@ reviewing.
    Ramadan to Detty December, pay week and the long wait for salary) with 22 seasonal moments;
    9 moments for parts of the city (Lekki's toll gate, Yaba's startups, Ajegunle's football,
    Computer Village...) and 7 for who you are (rich, famous, stingy, car owners, newcomers);
-   player-written moments (Me → Write a moment: checked as you type, voted on by players,
+   player-written moments (built, shown as coming soon for now; Me → Write a moment: checked as you type, voted on by players,
    approved on the dashboard, paid ₦50,000, with the author's name on the card); and on the
    dashboard, how every moment is doing (how often it came, walked away from, met again, and its
    most-picked answer). 262 moments and about 2,000 versions in all, before the shuffled answers

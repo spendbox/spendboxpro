@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, Building, Clapperboard, Egg, Gift, Globe, Landmark, Megaphone, Plane, Rocket, Skull, Smile, Users, Briefcase as Work, Wallet, Zap } from "lucide-react";
+import { ArrowDown, ArrowUp, Building, Clapperboard, Egg, Gift, Globe, Landmark, Megaphone, PenLine, Plane, Rocket, Skull, Smile, Users, Briefcase as Work, Wallet, Zap } from "lucide-react";
 import { Star } from "@/components/icons";
 import { REP_LEVELS, repLevel } from "@/lib/world/rep-levels";
 import { reputationDetails, type RepDetails } from "../rep-actions";
@@ -80,6 +80,7 @@ const SOON: { icon: typeof Rocket; title: string; text: string }[] = [
   { icon: Globe, title: "All of Nigeria, then Africa, then the world", text: "Every Nigerian city on its real map first, then Africa's, then the world's. Live in one, visit the others." },
   { icon: Skull, title: "Thugs, touts and characters with a mind of their own", text: "Area boys who block your road and ask for 'settlement', agberos at the bus park, thugs a rival can hire to scare you, and people who remember how you treated them. Pay, run, call the police or stand your ground." },
   { icon: Plane, title: "Fly out of Lagos", text: "Book a seat at the airport and fly to other states and countries: a weekend in Abuja, business in Accra, a holiday abroad." },
+  { icon: PenLine, title: "Write your own moments", text: "Write something that could happen to anyone in the city, with the choices and what they lead to. Players vote, and the best ones come to everyone with your name on them, and you're paid." },
   { icon: Clapperboard, title: "Post videos and moments", text: "Share videos, photos and stories from your real life, pinned to places on the map." },
   { icon: Landmark, title: "Politics", text: "Run for councillor of your area, campaign, vote, and decide what the city's taxes pay for." },
   { icon: Egg, title: "Easter eggs", text: "Secrets hidden around Lagos, with prizes for whoever finds them first." },
