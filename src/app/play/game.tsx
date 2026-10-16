@@ -166,6 +166,7 @@ const PeopleList = dynamic(() => import("./people/people-list").then((m) => m.Pe
 const StatsSheet = dynamic(() => import("./stats-sheet").then((m) => m.StatsSheet));
 const MeSheet = dynamic(() => import("./me-sheet").then((m) => m.MeSheet));
 const WheelSheet = dynamic(() => import("./moments/wheel-sheet").then((m) => m.WheelSheet));
+const CareerSheet = dynamic(() => import("./moments/career-sheet").then((m) => m.CareerSheet));
 const MoneyHome = dynamic(() => import("./money-home").then((m) => m.MoneyHome));
 // The 3D city only runs in the browser.
 const CityView = dynamic(() => import("./city-view").then((m) => m.CityView), {
@@ -520,6 +521,13 @@ export function Game({
   /** You (your face, top left): everything that isn't chat. */
   const [meOpen, setMeOpen] = useState(false);
   const [wheelOpen, setWheelOpen] = useState(false);
+  /** My business (docs/LIFE_WHEEL.md, phase 5): from Me, or from a moment that invites you to start one. */
+  const [careerOpen, setCareerOpen] = useState(false);
+  useEffect(() => {
+    const open = () => setCareerOpen(true);
+    window.addEventListener("nt-open-career", open);
+    return () => window.removeEventListener("nt-open-career", open);
+  }, []);
   /** Open Newtown's own chat (a notice tapped...): changes to ask. */
   const [newtownAsk, setNewtownAsk] = useState(0);
   /** What counts as new on the phone's screen (when it was last opened), and a little ring when something arrives. */
@@ -4030,6 +4038,7 @@ export function Game({
         />
       )}
       {wheelOpen && worldId && !guest && <WheelSheet avatar={me.avatar} onClose={() => setWheelOpen(false)} />}
+      {careerOpen && worldId && !guest && <CareerSheet onClose={() => setCareerOpen(false)} />}
       {meOpen && worldId && !guest && (
         <MeSheet
           name={me.name ?? "You"}
@@ -4044,6 +4053,7 @@ export function Game({
                 { label: "Profile photo", icon: ImageIcon, colour: "#0c8599", go: () => setPhotoOpen(true) },
                 { label: "My card", icon: User, colour: "#7048e8", go: () => setPersonId(me.id) },
                 { label: "My life", icon: Orbit, colour: "#e8590c", go: () => setWheelOpen(true) },
+                { label: "My business", icon: Briefcase, colour: "#7048e8", go: () => setCareerOpen(true) },
                 ...(worldLife.hasHome ? [{ label: "Home", icon: House, colour: "#7048e8", go: () => worldLife.goHome() }] : []),
                 { label: "Wallet", icon: Wallet, colour: "#2b8a3e", go: () => setMoneyOpen(true) },
                 { label: "Photos", icon: ImageIcon, colour: "#f59f00", go: () => setPhone("photos") },

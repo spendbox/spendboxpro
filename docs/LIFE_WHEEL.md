@@ -357,8 +357,17 @@ reviewing.
    card with their local names; moments nobody saw move who you are but not your reputation; four
    moments that only come to people known for something (game-db/114). Career badges come with
    careers (phase 5); Main Character, Ride or Die and Connector with other players (phase 6).
-5. **Careers.** Starting a business, its moments, daily income, growing and failing, and the
-   career badges.
+5. **Careers.** *Built.* Me → My business, or a moment that invites you: ten kinds to start
+   (suya spot, buka, fashion house, POS kiosk, salon, dispatch riders, event planning, poultry farm,
+   tech startup, import and export), each with its own price, growth and risk
+   (`src/lib/world/ventures.ts`). Hidden numbers shown in words; a day of business at a time (up to
+   a week caught up), paying you 60% of a good day's profit, capped per stage (₦15,000 a day at
+   Idea up to ₦1.5m at Empire); 16 business moments (`venture-moments.ts`) two or three a week,
+   with amounts that grow with the stage; ready-to-grow and crisis moments; closing by itself after
+   a month deep in the red. Run well, it's about a month to Stall, six to Shop, a year to Brand and
+   a year and a half to Empire. Six career badges, and businesses count towards Legacy
+   (game-db/115). Still to come: a Shop taking a real building on the map, and real players as
+   customers, suppliers, partners and rivals (phase 6).
 6. **Other players in your story.** Threads between players, cameos, shared and group moments,
    allies and rivals.
 7. **The freshness engine.** Templates, the calendar, your area, player-written moments, monthly new
@@ -372,4 +381,5 @@ reviewing.
 - The badge names, and whether badges are private until you choose to show them (suggested: yes).
 - The list of businesses to start with.
 - Whether a business can fail completely (suggested: yes, but you never lose your home).
-- How big business income can get at each stage.
+- How big business income can get at each stage (now ₦15,000 a day at Idea, ₦50,000 at Stall,
+  ₦150,000 at Shop, ₦500,000 at Brand, ₦1.5m at Empire, at most).

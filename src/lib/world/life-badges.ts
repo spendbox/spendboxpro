@@ -2,7 +2,7 @@
 // city has its own word for it, and what it's for. How each is earned is in ./standing.ts; this is
 // kept apart so a player's card can show badges without loading every moment.
 
-export type BadgeKind = "character" | "mixed" | "story" | "people" | "fate";
+export type BadgeKind = "character" | "mixed" | "story" | "people" | "career" | "fate";
 
 export type BadgeInfo = {
   id: string;
@@ -47,6 +47,12 @@ export const BADGE_INFO: BadgeInfo[] = [
   { id: "good_neighbour", emoji: "🚪", name: "Good Neighbour", kind: "people", fades: false, about: "Your neighbour would trust you with her keys, and her cat." },
   { id: "family_pillar", emoji: "🌳", name: "Family Pillar", kind: "people", fades: false, about: "The family turns to you first." },
   { id: "well_known", emoji: "📣", name: "Talk of the Town", kind: "people", fades: false, about: "Half the city knows your name." },
+  { id: "founder", emoji: "🌱", name: "Founder", kind: "career", fades: false, about: "You started something of your own." },
+  { id: "first_profit", emoji: "💵", name: "First Profit", kind: "career", fades: false, about: "Your business paid you." },
+  { id: "the_boss", emoji: "👥", name: "The Boss", kind: "career", fades: false, about: "Ten people work for you." },
+  { id: "brand_name", emoji: "🏷️", name: "Brand Name", kind: "career", fades: false, about: "Your business is known across the city." },
+  { id: "mogul", emoji: "🏙️", name: "Mogul", kind: "career", fades: false, about: "You built an empire." },
+  { id: "comeback_kid", emoji: "🔁", name: "Comeback Kid", kind: "career", fades: false, about: "Your business failed, and you started again." },
   { id: "touched_by_fate", emoji: "✨", name: "Touched by Fate", kind: "fate", fades: false, about: "Something happened to you that happens to almost nobody." },
 ];
 

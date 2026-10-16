@@ -25,7 +25,7 @@ const SPOT_TINT: Record<MomentSpot, string> = {
   work: "from-[#e9ecef] to-[#868e96]",
   road: "from-[#fff3bf] to-[#f59f00]",
 };
-type Answered = { text: string; cash: number; rep: number; effect: EffectId | null; cast: { who: string; feeling: number; bond: number } | null };
+type Answered = { text: string; cash: number; rep: number; effect: EffectId | null; cast: { who: string; feeling: number; bond: number } | null; opens?: "career" };
 
 /** How it went, for the film: well (reputation or money in), badly, or neither. */
 export type MomentMood = "happy" | "angry" | "calm";
@@ -53,7 +53,7 @@ export function MomentCard({ shown, onClose, onAnswered, closeLabel = "Walk away
     if (!r.ok) return setError(r.error);
     const c = def!.choices[i];
     const o = c.outcomes[r.outcome] ?? c.outcomes[0];
-    setAnswered({ text: fill(o.text), cash: r.cash, rep: r.rep, effect: r.effect, cast: r.cast });
+    setAnswered({ text: fill(o.text), cash: r.cash, rep: r.rep, effect: r.effect, cast: r.cast, opens: o.opens });
     if (r.cash || r.rep) window.dispatchEvent(new Event("nt-money-changed"));
     playSfx(r.cash > 0 || r.rep > 0 ? "found" : r.cash < 0 || r.rep < 0 ? "miss" : "pop");
     onAnswered?.(moodOf(o, c.tone));
@@ -124,7 +124,18 @@ export function MomentCard({ shown, onClose, onAnswered, closeLabel = "Walk away
               )}
             </div>
           )}
-          <button onClick={onClose} className="mt-3 h-10 w-full rounded-full bg-ink text-sm font-semibold text-white">
+          {answered.opens === "career" && (
+            <button
+              onClick={() => {
+                window.dispatchEvent(new Event("nt-open-career"));
+                onClose();
+              }}
+              className="mt-3 h-10 w-full rounded-full bg-gold text-sm font-semibold text-ink"
+            >
+              Choose what to start
+            </button>
+          )}
+          <button onClick={onClose} className={cn("h-10 w-full rounded-full text-sm font-semibold", answered.opens ? "mt-1.5 bg-ink/10 text-ink" : "mt-3 bg-ink text-white")}>
             Carry on
           </button>
         </div>

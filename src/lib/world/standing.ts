@@ -33,6 +33,8 @@ export type LivedMoment = {
 };
 /** Where you are with a character. */
 export type LivedBond = { who: string; step: number; feeling: number };
+/** A business you started (./ventures.ts): the best stage it reached, its staff, all it paid you, when it started and whether it closed. */
+export type LivedVenture = { best: number; staff: number; paid: number; startedAt: number; closed: boolean };
 
 export type LifeFacts = {
   character: Record<Trait, number>;
@@ -44,6 +46,7 @@ export type LifeFacts = {
   bonds: Record<string, LivedBond>;
   /** Times you were talked about in the last 60 days. */
   talkedAbout: number;
+  ventures: LivedVenture[];
   trust: number;
   fame: number;
   legacy: number;
@@ -75,7 +78,7 @@ export function fameWord(fame: number) {
 }
 
 /** Everything the badges and standing need, from your moments and the cast. */
-export function lifeFacts(moments: LivedMoment[], bonds: LivedBond[], now = Date.now()): LifeFacts {
+export function lifeFacts(moments: LivedMoment[], bonds: LivedBond[], now = Date.now(), ventures: LivedVenture[] = []): LifeFacts {
   const character = characterOf(
     moments.filter((m) => m.traits).map((m) => ({ traits: m.traits!, at: m.at })),
     now,
@@ -116,6 +119,8 @@ export function lifeFacts(moments: LivedMoment[], bonds: LivedBond[], now = Date
     legacy += size === "life" ? 15 : size === "big" ? 5 : 1;
     if (m.followed) legacy += 3;
   }
+  // Businesses built, even ones that failed.
+  for (const v of ventures) legacy += 20 + 10 * v.best;
   for (const b of bonds) {
     if (!CAST_BY_ID.has(b.who)) continue;
     legacy += 2;
@@ -130,6 +135,7 @@ export function lifeFacts(moments: LivedMoment[], bonds: LivedBond[], now = Date
     chose: new Set(moments.map((m) => `${m.moment}:${m.choice}`)),
     bonds: Object.fromEntries(bonds.map((b) => [b.who, b])),
     talkedAbout: moments.filter((m) => m.marks?.effect === "talked_about" && now - m.at < 60 * DAY).length,
+    ventures,
     trust,
     fame,
     legacy,
@@ -175,6 +181,12 @@ const RULES: Record<string, (f: LifeFacts) => boolean> = {
   good_neighbour: feels("chioma_neighbour", 4),
   family_pillar: (f) => feels("uncle_sunday", 4)(f) && (f.lived.has("sister_wedding") || f.lived.has("land_later")),
   well_known: (f) => f.fame >= 60,
+  founder: (f) => f.ventures.length > 0,
+  first_profit: (f) => f.ventures.some((v) => v.paid > 0),
+  the_boss: (f) => f.ventures.some((v) => v.staff >= 10),
+  brand_name: (f) => f.ventures.some((v) => v.best >= 3),
+  mogul: (f) => f.ventures.some((v) => v.best >= 4),
+  comeback_kid: (f) => f.ventures.some((v, _, all) => all.some((w) => w.closed && w.startedAt < v.startedAt)),
   touched_by_fate: (f) => [...f.lived].some((id) => MOMENT_BY_ID.get(id)?.rarity === "legendary"),
 };
 

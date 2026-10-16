@@ -12,6 +12,8 @@ import { CAST_BY_ID, CAST_GAP_HOURS, castHere } from "./cast.ts";
 import { CAST_MOMENTS } from "./cast-moments.ts";
 import { MORE_ANSWERS } from "./more-answers.ts";
 import { ROAD_MOMENTS, type RoadStage } from "./road-moments.ts";
+import { VENTURE_MOMENTS } from "./venture-moments.ts";
+import type { VentureChange } from "./ventures.ts";
 
 /** Where a moment can happen. */
 export type MomentSpot = "street" | "home" | "food" | "night" | "sport" | "shop" | "worship" | "outdoors" | "work" | "road";
@@ -43,9 +45,13 @@ export type MomentOutcome = {
   unseen?: boolean;
   /** How much it moves Trust (default: half of how honest the answer was; ./standing.ts). */
   trust?: number;
+  /** What it does to your business (./ventures.ts). */
+  biz?: VentureChange;
+  /** Opens a screen after: choosing a business to start. */
+  opens?: "career";
 };
 /** When an outcome is likelier: a side of who you are (strongly enough), or an effect on you. */
-export type Likely = { trait: Trait; side: 1 | -1 } | { effect: EffectId };
+export type Likely = { trait: Trait; side: 1 | -1 } | { effect: EffectId } | { venture: "quality" };
 export type MomentChoice = {
   label: string;
   /**
@@ -87,6 +93,11 @@ export type MomentDef = {
   world?: { good?: number; bad?: number; goodBelow?: number; badBelow?: number };
   /** Only for people with this badge (./standing.ts): what you're known for brings its own moments. */
   badge?: string;
+  /**
+   * A business moment (./venture-moments.ts): only while you run one (or, `none`, while you don't),
+   * at these stages, in a crisis (`crisis`) or when it's ready to grow (`grow`).
+   */
+  venture?: { none?: boolean; stages?: [number, number]; crisis?: boolean; grow?: boolean };
   /** The amount in it, in naira: somewhere between these (rounded the way people say prices). */
   ask?: [number, number];
   emoji: string;
@@ -988,7 +999,7 @@ export const MOMENTS: MomentDef[] = [
   },
 ];
 
-MOMENTS.push(...ROAD_MOMENTS, ...BIG_MOMENTS, ...CAST_MOMENTS);
+MOMENTS.push(...ROAD_MOMENTS, ...BIG_MOMENTS, ...CAST_MOMENTS, ...VENTURE_MOMENTS);
 // Each moment's pool of answers: the ones written with it, and more (./more-answers.ts).
 for (const m of MOMENTS) if (MORE_ANSWERS[m.id]) m.choices.push(...MORE_ANSWERS[m.id]);
 
@@ -1120,6 +1131,22 @@ export function castFits(m: MomentDef, bonds: Record<string, Bond>, world: Recor
   return true;
 }
 
+/** Where someone's business is, for picking its moments. */
+export type VentureState = { open: boolean; stage: number; crisis: boolean; grow: boolean; due: boolean };
+
+/** Whether a business moment fits: they run one (or not, for the invitation), it's time, at the right stage. */
+export function ventureFits(m: MomentDef, b: VentureState | undefined): boolean {
+  const v = m.venture;
+  if (!v) return true;
+  if (!b) return false;
+  if (v.none) return !b.open;
+  if (!b.open || !b.due) return false;
+  if (v.crisis) return b.crisis;
+  if (v.grow) return b.grow && !b.crisis;
+  if (v.stages && (b.stage < v.stages[0] || b.stage > v.stages[1])) return false;
+  return true;
+}
+
 /** How likely each rarity is, against common. Rare is about monthly, legendary about yearly, at 5 a day. */
 const RARITY_WEIGHT: Record<MomentRarity, number> = { common: 1, uncommon: 0.4, rare: 0.05, legendary: 0.004 };
 
@@ -1144,6 +1171,8 @@ export function pickMoment(o: {
   castWorld?: Record<string, CastWorld>;
   /** The badges they have (moments for people known for something). */
   badges?: string[];
+  /** Their business, if they run one (`due`: it's time for its next moment). Without it, no business moment comes. */
+  business?: VentureState;
   now?: number;
   rand: () => number;
   ride?: Commute;
@@ -1162,6 +1191,7 @@ export function pickMoment(o: {
       !(hurt && m.spots !== "any" && m.spots.includes("sport")) &&
       (!m.cast || (!!o.bonds && castFits(m, o.bonds, o.castWorld ?? {}, o.now ?? Date.now()))) &&
       (!m.badge || !!o.badges?.includes(m.badge)) &&
+      (!m.venture || ventureFits(m, o.business)) &&
       !o.recent.includes(m.id),
   );
   // Moments for this kind of place come first; "anywhere" ones fill in. Never had: three times as likely.
@@ -1174,7 +1204,9 @@ export function pickMoment(o: {
     // People you already know come back more than strangers turn up.
     (m.cast && (m.step ?? 0) > 0 ? 2 : 1) *
     // What you're known for comes looking for you.
-    (m.badge ? 2 : 1);
+    (m.badge ? 2 : 1) *
+    // Your business needs you when it's time.
+    (m.venture && !m.venture.none ? 4 : 1);
   const total = fits.reduce((a, m) => a + weight(m), 0);
   let r = o.rand() * total;
   for (const m of fits) if ((r -= weight(m)) <= 0) return m;
@@ -1206,7 +1238,7 @@ export function fillMoment(text: string, v: MomentVars, money: (naira: number) =
 export const choiceCost = (c: MomentChoice, ask: number) => Math.max(0, ...c.outcomes.map((o) => (o.pay ?? 0) * ask));
 
 /** Who you are and what's on you, when an outcome is rolled (outcomes shift with it). */
-export type RollContext = { character?: Partial<Record<Trait, number>>; effects?: EffectId[] };
+export type RollContext = { character?: Partial<Record<Trait, number>>; effects?: EffectId[]; venture?: { quality: number } };
 
 /** How far a side of you has to lean for an outcome to count you as that way. */
 export const LEAN = 30;
@@ -1223,7 +1255,8 @@ export function outcomeWeight(o: MomentOutcome, ctx: RollContext = {}): number {
   let w = o.chance ?? 1;
   const fx = ctx.effects ?? [];
   for (const l of o.likelier ?? []) {
-    if ("effect" in l ? fx.includes(l.effect) : (ctx.character?.[l.trait] ?? 0) * l.side >= LEAN) w *= 2.5;
+    const fits = "effect" in l ? fx.includes(l.effect) : "venture" in l ? (ctx.venture?.quality ?? 0) >= 60 : (ctx.character?.[l.trait] ?? 0) * l.side >= LEAN;
+    if (fits) w *= 2.5;
   }
   if (good(o) && (fx.includes("blessed") || fx.includes("lucky"))) w *= 1.5;
   if (bad(o) && fx.includes("bad_day")) w *= 1.5;

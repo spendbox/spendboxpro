@@ -3,6 +3,8 @@
 import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CAST_BY_ID } from "@/lib/world/cast";
+import { applyChange, inCrisis, readyToGrow } from "@/lib/world/ventures";
+import { openVenture, settleVenture, stageScale, type VentureRow } from "./ventures-server";
 import { BADGE_DELAY_HOURS, LIFE_BADGES, LIFE_BADGE_BY_ID, fameWord, lifeFacts, type LivedMoment } from "@/lib/world/standing";
 import { regionMap } from "@/lib/world";
 import { COMMUTES, type Commute } from "@/lib/world/work";
@@ -18,6 +20,7 @@ import {
   choiceTraits,
   isDayInLagos,
   momentVars,
+  niceNaira,
   pickMoment,
   rollOutcome,
   type Bond,
@@ -26,6 +29,7 @@ import {
   type MomentSpot,
   type MomentVars,
   type TraitAnswer,
+  type VentureState,
 } from "@/lib/world/moments";
 
 // Moments (docs/MOMENTS.md, game-db/109_moments.sql): the game picks one that fits where you are
@@ -76,6 +80,23 @@ async function badgesOf(db: ReturnType<typeof createAdminClient>, userId: string
   return error ? [] : (data ?? []).map((b) => String(b.badge));
 }
 
+/** How long between business moments (two or three a week), and in a crisis. */
+const BUSINESS_EVERY_H = 56;
+const CRISIS_EVERY_H = 12;
+
+/** Someone's business, its days counted, as moment picking needs it (undefined before game-db/115). */
+async function businessOf(db: ReturnType<typeof createAdminClient>, userId: string, perMint: number): Promise<{ row: VentureRow | null; state: VentureState | undefined }> {
+  const found = await openVenture(db, userId);
+  if (found.missing) return { row: null, state: undefined };
+  if (!found.row) return { row: null, state: { open: false, stage: 0, crisis: false, grow: false, due: false } };
+  const s = await settleVenture(db, userId, perMint, found.row);
+  if (!s.row) return { row: null, state: { open: false, stage: 0, crisis: false, grow: false, due: false } };
+  const v = s.row.venture;
+  const crisis = inCrisis(v);
+  const since = (Date.now() - Date.parse(s.row.lastMomentAt)) / 3_600_000;
+  return { row: s.row, state: { open: true, stage: v.stage, crisis, grow: readyToGrow(v), due: since >= (crisis ? CRISIS_EVERY_H : BUSINESS_EVERY_H) } };
+}
+
 /** How often at most standing and badges are worked out again for someone (ms), unless asked. */
 const STANDING_EVERY = 5 * 60_000;
 
@@ -88,10 +109,11 @@ async function refreshStanding(db: ReturnType<typeof createAdminClient>, userId:
   const { data: was, error } = await db.from("life_standing").select("trust, fame, legacy, updated_at").eq("user_id", userId).maybeSingle();
   if (error) return null;
   if (was && !force && Date.now() - Date.parse(String(was.updated_at)) < STANDING_EVERY) return { trust: n(was.trust), fame: n(was.fame), legacy: n(was.legacy) };
-  const [rowsRes, bondsRes, badgesRes] = await Promise.all([
+  const [rowsRes, bondsRes, badgesRes, venturesRes] = await Promise.all([
     db.from("moments").select("moment, choice, answered_at, traits, outcome, marks, from_id").eq("user_id", userId).gte("choice", 0).order("answered_at", { ascending: false }).limit(2000),
     db.from("cast_bonds").select("who, step, feeling").eq("user_id", userId),
     db.from("life_badges").select("badge, faded_at").eq("user_id", userId),
+    db.from("ventures").select("state, started_at, closed_at").eq("user_id", userId),
   ]);
   if (rowsRes.error) return null;
   const lived: LivedMoment[] = (rowsRes.data ?? []).map((r) => {
@@ -108,7 +130,13 @@ async function refreshStanding(db: ReturnType<typeof createAdminClient>, userId:
     };
   });
   const bonds = bondsRes.error ? [] : (bondsRes.data ?? []).map((b) => ({ who: String(b.who), step: n(b.step), feeling: n(b.feeling) }));
-  const facts = lifeFacts(lived, bonds);
+  const ventures = venturesRes.error
+    ? []
+    : (venturesRes.data ?? []).map((v) => {
+        const st = (v.state ?? {}) as { best?: number; staff?: number; paid?: number };
+        return { best: n(st.best), staff: n(st.staff), paid: n(st.paid), startedAt: Date.parse(String(v.started_at)), closed: !!v.closed_at };
+      });
+  const facts = lifeFacts(lived, bonds, Date.now(), ventures);
   const had = new Map((badgesRes.data ?? []).map((b) => [String(b.badge), b.faded_at as string | null]));
   const now = Date.now();
   for (const b of LIFE_BADGES) {
@@ -152,7 +180,7 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; ride
   if (road && !ride) return null;
   const gap = road ? ROAD_RULES.gapSeconds : MOMENT_RULES.gapSeconds;
   const place = typeof input?.place === "string" ? input.place.replace(/\s+/g, " ").trim().slice(0, 60) : "";
-  const [{ data: prof }, recentRes, dueRes, spendRes, effects, bonds, world, badges] = await Promise.all([
+  const [{ data: prof }, recentRes, dueRes, spendRes, effects, bonds, world, badges, business] = await Promise.all([
     m.db.from("profiles").select("level, frozen").eq("id", m.userId).maybeSingle(),
     // Every one you've had lately (up to 500): the last 25 don't come again, ones never had come first.
     m.db.from("moments").select("moment, created_at").eq("user_id", m.userId).order("created_at", { ascending: false }).limit(500),
@@ -162,6 +190,7 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; ride
     bondsOf(m.db, m.userId),
     castWorld(m.db),
     badgesOf(m.db, m.userId),
+    businessOf(m.db, m.userId, m.perMint).catch(() => ({ row: null, state: undefined })),
   ]);
   // Part 109 not run yet: no moments.
   if (recentRes.error) return null;
@@ -189,6 +218,7 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; ride
       bonds: bonds ?? undefined,
       castWorld: world,
       badges,
+      business: business.state,
       rand: Math.random,
       ride,
     });
@@ -200,6 +230,8 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; ride
   // Someone from the cast is themselves.
   const who = def.cast ? CAST_BY_ID.get(def.cast) : undefined;
   if (who) vars.name = who.name;
+  // A business's problems grow with it.
+  if (def.venture && !def.venture.none && business.row) vars.ask = niceNaira(vars.ask * stageScale(business.row.venture.stage));
   const full = { ...vars, seed };
   const { data: id, error } = await m.db.rpc("moment_open", {
     p_user: m.userId,
@@ -231,8 +263,16 @@ export async function momentAnswer(id: number, choice: number): Promise<MomentRe
   const c = def && choiceOrder(def, n(vars.seed)).includes(pick) ? def.choices[pick] : undefined;
   if (!def || !c) return { ok: false, error: "That moment has passed." };
   // The same answer doesn't always turn out the same: who you are and what's on you shift it.
-  const [answers, effects] = await Promise.all([answersOf(m.db, m.userId), effectsOf(m.db, m.userId)]);
-  const outcome = rollOutcome(c, Math.random, { character: characterOf(answers), effects: effects.map((e) => e.effect) });
+  const [answers, effects, biz] = await Promise.all([
+    answersOf(m.db, m.userId),
+    effectsOf(m.db, m.userId),
+    def.venture && !def.venture.none ? openVenture(m.db, m.userId).catch(() => ({ row: null, missing: true })) : Promise.resolve({ row: null, missing: false }),
+  ]);
+  const outcome = rollOutcome(c, Math.random, {
+    character: characterOf(answers),
+    effects: effects.map((e) => e.effect),
+    venture: biz.row ? { quality: biz.row.venture.quality } : undefined,
+  });
   const naira = ((outcome.get ?? 0) - (outcome.pay ?? 0)) * n(vars.ask);
   const mint = Math.round((naira / m.perMint) * 100) / 100;
   const text = outcome.text
@@ -294,6 +334,16 @@ export async function momentAnswer(id: number, choice: number): Promise<MomentRe
       p_memory: { moment: def.id, choice: pick, at: new Date().toISOString() },
     });
     if (!castError) cast = { who: def.cast, feeling: n((after as { feeling?: number } | null)?.feeling), bond: Math.round(outcome.bond ?? 0) };
+  }
+  // Your business (game-db/115): what you chose does to it; and its next moment is a few days off.
+  if (biz.row) {
+    const changed = outcome.biz ? applyChange(biz.row.venture, outcome.biz, n(vars.ask)) : { venture: biz.row.venture, closed: false };
+    await m.db
+      .rpc("venture_save", { p_user: m.userId, p_id: biz.row.id, p_was: biz.row.settledAt, p_state: changed.venture, p_pay: 0, p_settled: null, p_moment: true, p_close: changed.closed })
+      .then(
+        () => null,
+        () => null,
+      );
   }
   // What the game noted (game-db/114), then standing and badges worked out again now and then.
   const marks: Record<string, unknown> = { i: c.outcomes.indexOf(outcome) };

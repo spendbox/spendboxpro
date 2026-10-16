@@ -180,6 +180,7 @@ test("effects, areas and likelier outcomes all point at real things", () => {
         if (o.effect) assert.ok(EFFECTS[o.effect], `${m.id}: ${o.effect}`);
         for (const l of o.likelier ?? []) {
           if ("effect" in l) assert.ok(EFFECTS[l.effect], `${m.id}: ${l.effect}`);
+          else if ("venture" in l) assert.ok(m.venture, `${m.id}: a business likelier outside business`);
           else assert.ok((TRAIT_KEYS as string[]).includes(l.trait), `${m.id}: ${l.trait}`);
         }
       }
@@ -203,7 +204,7 @@ test("big and life-changing moments: several answers, each with a tail somewhere
   for (const m of big) {
     assert.ok(m.choices.length >= 3, `${m.id}: answers`);
     // No single answer is free and best: every one costs or risks something, or brings nothing.
-    assert.ok(m.choices.some((c) => c.outcomes.some((o) => o.follow || o.effect)) || m.size === "life", `${m.id}: no tail`);
+    assert.ok(m.choices.some((c) => c.outcomes.some((o) => o.follow || o.effect || o.biz || o.opens)) || m.size === "life", `${m.id}: no tail`);
   }
   // Hurt means no sport.
   for (let i = 0; i < 300; i++) {

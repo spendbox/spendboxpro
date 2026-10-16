@@ -1,6 +1,7 @@
 # To do
 
 ## Now (owner)
+- [ ] Then run `game-db/115_ventures.sql` (careers: start a business and grow it). Run it after 114. Until then My business says businesses are switched on soon.
 - [ ] Then run `game-db/114_standing.sql` (Trust, Fame, Legacy and quiet badges). Run it after 113. Until then the wheel shows no standing and no badges.
 - [ ] Then run `game-db/113_cast.sql` (people who remember you: Mama Nkechi, Officer Bello, Baba Sule...). Run it after 112. Until then no character's story comes.
 - [ ] Then run `game-db/112_wheel.sql` (the wheel: effects that stay on you, and what came of each moment). Run it after 111. Until then the wheel shows your moments, but no effects and no "what came of it".
@@ -157,10 +158,13 @@ Each phase is built in one go (a few hours to a couple of days); writing the sto
 - [ ] Trust lowering World Bank loan rates (the loan's rate is set in the database today, one for everyone).
 - [ ] More badge-only moments, and career and people badges (phases 5 and 6).
 
-**Phase 5: careers.**
-- [ ] Start a business (suya, buka, fashion, POS, salon, dispatch, events, poultry, tech, import/export):
-  hidden cash, customers, quality, staff mood, risk; Idea → Stall → Shop → Brand → Empire; 2 or 3 business
-  moments a week; daily income from the World Bank with caps; failing starts the Comeback story.
+**Phase 5: careers.** Built.
+- [x] Start a business (10 kinds) from Me → My business or an invitation moment; hidden numbers in words; Idea → Stall → Shop → Brand → Empire.
+- [x] A day of business at a time, paying you your share, capped per stage; 16 business moments two or three a week; crises; closing; starting again (game-db/115).
+- [x] Six career badges (Founder, First Profit, The Boss, Brand Name, Mogul, Comeback Kid); businesses count towards Legacy.
+- [ ] A business at Shop taking a real building on the map, its sign up (docs/BUSINESS.md).
+- [ ] More business moments for each kind (a suya spot's problems aren't a tech startup's).
+- [ ] Owner to decide: how much businesses may pay at most each stage (now ₦15,000 a day at Idea up to ₦1.5m at Empire).
 
 **Phase 6: other players in your story.**
 - [ ] Threads between two players (a loan, a favour), cameos, shared moments, group moments at a place,

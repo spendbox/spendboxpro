@@ -80,6 +80,15 @@ From what you've lived, the game works out Trust, Fame and Legacy and your badge
 most every 5 minutes after an answer and whenever you open your wheel. An outcome can say how much
 it moves Trust (`trust`). A moment with `badge` only comes to people who have that badge.
 
+## Your business
+
+A business moment (`venture`) only comes while you run a business (or, `none`, while you don't:
+the invitation, whose answer can open My business, `opens: "career"`), at most every 56 hours (12
+in a crisis), at the right stage, in a crisis (`crisis`) or when it's ready to grow (`grow`). Its
+amounts grow with the stage. An outcome's `biz` changes the business (`VentureChange` in
+`src/lib/world/ventures.ts`). Each time a moment is picked or My business opens, the business's
+days since last time are counted and it pays you.
+
 ## Short effects
 
 An outcome can leave something on you for a while (`effect`): Blessed and Lucky streak make good
@@ -130,6 +139,9 @@ follow-ups exist, and that every kind of place has moments by day and by night.
 | The moments, picking one, filling it in, rolling the outcome, effects, who you are | `src/lib/world/moments.ts` |
 | Big and life-changing moments, and their follow-ups | `src/lib/world/big-moments.ts` |
 | The cast (people who remember you) | `src/lib/world/cast.ts` |
+| Businesses: the kinds, the stages, a day of business | `src/lib/world/ventures.ts` |
+| Business moments | `src/lib/world/venture-moments.ts` |
+| My business (Me → My business) | `src/app/play/moments/career-sheet.tsx`, `venture-actions.ts`, `ventures-server.ts` |
 | The cast's stories with you | `src/lib/world/cast-moments.ts` |
 | More answers for everyday moments | `src/lib/world/more-answers.ts` |
 | Your wheel (Me → My life) | `src/app/play/moments/wheel-sheet.tsx` |
@@ -142,3 +154,4 @@ follow-ups exist, and that every kind of place has moments by day and by night.
 | The wheel: short effects, and where each story came from | `game-db/112_wheel.sql` |
 | The cast: how each feels about you, and what the city has done for them | `game-db/113_cast.sql` |
 | Standing and badges | `game-db/114_standing.sql` |
+| Businesses | `game-db/115_ventures.sql` |
