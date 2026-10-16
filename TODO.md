@@ -109,6 +109,31 @@ None known right now. Fixed lately:
 - [ ] Coming soon (shown in the game): the whole of Nigeria on the map, then Africa, then the world; over a million building designs with more floors and landmarks; transformers and other everyday structures; better avatars; group conversations; rewards from real companies; posting videos and real-life content, politics, Easter eggs, real jobs, creator payouts.
 - [ ] Trees that grow the map's land outward; proposals, weddings, divorce and children (dating).
 
+## Moments that stay fresh for years (agreed plan, `docs/MOMENTS.md`, `docs/TRIPS.md`)
+A daily player gets about 2,500 moments a year (street and road). Freshness has to come from how
+moments are built, not only how many there are. In this order:
+- [ ] **Never seen first, and rarity.** Prefer moments a player has never had (the `moments` table already
+  keeps everyone's history); tiers: common, uncommon, rare (about monthly), legendary (about yearly).
+- [ ] **People who remember you.** A cast of recurring characters (Mama Nkechi the orange seller, Officer
+  Bello at the Ojota checkpoint, your street's area boys, your danfo conductor) who remember your past
+  choices; story arcs over weeks (the student you gave a lift graduates, invites you, later offers a deal).
+- [ ] **Moments built from parts.** Templates with slots (who, what they want, the complication, the twist),
+  and the road scenes follow (costumes, props, crowd size, rain, harmattan haze, night).
+- [ ] **The Lagos calendar.** Rainy-season floods, harmattan, Detty December, Christmas, Sallah rams,
+  Independence Day, fuel queues, election days, AFCON nights, NEPA in a heatwave; and the player's own
+  area (Lekki and Ajegunle feel different).
+- [ ] **Moments that fit who you are.** Rich (fundraisers, fake police, long-lost cousins), famous (fans,
+  journalists), known as stingy (beggars stop asking, people gossip), car owners (mechanics, parking touts).
+- [ ] **Real players in moments.** The stranded motorist is a real player nearby; the lost wallet belongs
+  to someone you can message.
+- [ ] **Players write moments.** Submit a moment and its choices; the community votes; the owner approves;
+  the author is credited and rewarded.
+- [ ] **New moments every month, and measuring.** 20 to 30 a month (AI helps draft variations, a person
+  reviews); track the ones people close without choosing or always answer the same way, and retire or
+  rewrite them.
+- [ ] **Door setting** in the home card: Open to everyone / Friends walk in (today) / Closed to all. Today the
+  door is closed to strangers (they knock), friends walk in, and a home party opens it to all.
+
 ## Done lately
 - [x] Search has a Budget row (Any, I can afford, under ₦5m / ₦20m / ₦50m / ₦250m / ₦1bn): it lists the homes and landmarks you could buy, cheapest first; landmarks show their price in search. Closing the walkthrough halfway leaves a small ? button to carry on where it was. Town Hall refreshes every 6 seconds (was 3) to save data. The search box now also finds the names players gave buildings and businesses straight away.
 - [x] Landmarks: every one has a big name sign in front of its gate (nothing in front of it, a photo spot); going into one, you arrive at its entrance (Photo, Go inside). Unilag's campus faces its gate (no second gate); LUTH is a teaching hospital's grounds (8 × 7); the big landmarks are near their real size (most 4 to 10 tiles), drawn to fill their grounds. Fun places (clubs, restaurants, stadiums, funfairs, malls, parks...) show a little icon on the map from further out than the names.
