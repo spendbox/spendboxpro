@@ -76,7 +76,7 @@ export function StreetRow({ id, name, hasHome, prices, onDone }: { id: string; n
       </div>
       {sure && (
         <p className="mt-1.5 rounded-xl bg-hit/10 px-3 py-2 text-[11px] text-hit">
-          Pick {name}&apos;s pocket? About 4 in 10 get caught (more if they&apos;re around): a fine of {prices ? cash(mintOf(PICK_FINE, prices)) : `₦${PICK_FINE.toLocaleString("en-GB")}`}, reputation lost, they&apos;ll know it was you, and sometimes 2 hours in jail. Get away with it and you still lose a little reputation: people talk.
+          Thinking about picking {name}&apos;s pocket? Think again. About 40% of thieves get caught, and the odds get worse if a crowd is watching. You&apos;ll face a {prices ? cash(mintOf(PICK_FINE, prices)) : `₦${PICK_FINE.toLocaleString("en-GB")}`} fine, a ruined reputation with your name dragged into the open, and occasionally, 2 hours behind bars. Even if you somehow pull it off, you don&apos;t walk away completely clean: people talk.
         </p>
       )}
       {open === "prank" && (
