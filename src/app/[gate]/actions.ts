@@ -7,6 +7,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { REGIONS } from "@/lib/world";
 import { confirmPack } from "../play/pack-actions";
 import { confirmTopUp } from "../play/topup-actions";
+import { forgetWritten } from "../play/written-server";
+import { AUTHOR_REWARD } from "@/lib/world/written";
 
 // The owner's dashboard (src/lib/admin.ts): signing in and out, and the few things it can do.
 
@@ -121,4 +123,39 @@ export async function hqCredit(_: CreditState, form: FormData): Promise<CreditSt
   revalidatePath("/", "layout");
   const balance = Math.round(Number(data ?? 0) * perMint);
   return { ok: true, text: `Credited ₦${Math.round(naira).toLocaleString("en-GB")} to ${player.username ?? who}. They now have ₦${balance.toLocaleString("en-GB")}.` };
+}
+
+/** Approve a player-written moment (docs/LIFE_WHEEL.md, phase 7): it comes to everyone, and its author is paid. */
+export async function hqApproveMoment(id: string): Promise<string> {
+  if (!(await isAdmin())) return "Sign in again.";
+  const db = createAdminClient();
+  const { data: d, error } = await db.from("moment_drafts").update({ status: "approved", decided_at: new Date().toISOString() }).eq("id", Number(id)).eq("status", "voting").select("author").maybeSingle();
+  if (error || !d) return "That didn't work (already decided?).";
+  const perMint = REGIONS.lagos?.prices.perMint ?? 1_500;
+  const { error: payError } = await db.rpc("admin_credit", {
+    p_user: d.author,
+    p_mint: Math.round((AUTHOR_REWARD / perMint) * 100) / 100,
+    p_note: "Your moment was approved: thank you for writing it!",
+    p_by: (process.env.ADMIN_EMAIL ?? "").split(",")[0].trim() || null,
+  });
+  forgetWritten();
+  revalidatePath("/", "layout");
+  return payError ? "Approved, but paying the author didn't work: credit them by hand." : `Approved. The author got ${naira(AUTHOR_REWARD / perMint)}.`;
+}
+
+/** Turn a player-written moment down. */
+export async function hqRejectMoment(id: string): Promise<string> {
+  if (!(await isAdmin())) return "Sign in again.";
+  const { error } = await createAdminClient().from("moment_drafts").update({ status: "rejected", decided_at: new Date().toISOString() }).eq("id", Number(id)).eq("status", "voting");
+  revalidatePath("/", "layout");
+  return error ? "That didn't work." : "Turned down.";
+}
+
+/** Take an approved player-written moment out of the game. */
+export async function hqRetireMoment(id: string): Promise<string> {
+  if (!(await isAdmin())) return "Sign in again.";
+  const { error } = await createAdminClient().from("moment_drafts").update({ status: "retired", decided_at: new Date().toISOString() }).eq("id", Number(id)).eq("status", "approved");
+  forgetWritten();
+  revalidatePath("/", "layout");
+  return error ? "That didn't work." : "Taken out of the game.";
 }

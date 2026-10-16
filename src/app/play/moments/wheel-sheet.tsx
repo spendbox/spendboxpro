@@ -5,7 +5,7 @@ import { AvatarFace } from "@/components/avatar";
 import { X } from "@/components/icons";
 import type { Avatar } from "@/lib/avatar";
 import { cn } from "@/lib/cn";
-import { EFFECTS, LIFE_AREAS, MOMENT_BY_ID, areaOf, fillMoment, type LifeArea, type MomentDef } from "@/lib/world/moments";
+import { EFFECTS, LIFE_AREAS, MOMENT_BY_ID, areaOf, fillMoment, registerMoments, type LifeArea, type MomentDef } from "@/lib/world/moments";
 import { CAST_BY_ID, feelingWord } from "@/lib/world/cast";
 import { cash } from "@/lib/world/value";
 import { LIFE_BADGES, LIFE_BADGE_BY_ID, badgeName } from "@/lib/world/standing";
@@ -31,7 +31,7 @@ function when(at: string) {
 }
 
 /** What was filled into a moment (missing parts left blank). */
-const varsOf = (m: WheelMoment) => ({ name: m.vars.name ?? "", ask: Number(m.vars.ask) || 0, place: m.vars.place ?? "" });
+const varsOf = (m: WheelMoment) => ({ name: m.vars.name ?? "", ask: Number(m.vars.ask) || 0, place: m.vars.place ?? "", parts: m.vars.parts });
 
 function left(until: string) {
   const h = Math.max(0, (Date.parse(until) - Date.now()) / 3_600_000);
@@ -47,6 +47,8 @@ export function WheelSheet({ avatar, onClose }: { avatar: Avatar; onClose: () =>
       .catch(() => null)
       .then((w) => {
         if (!live) return;
+        // Player-written moments you lived, so they show like the rest.
+        if (w?.written.length) registerMoments(w.written);
         setWheel(w);
         setPicked(w?.moments.find((m) => MOMENT_BY_ID.has(m.moment))?.id ?? null);
       });

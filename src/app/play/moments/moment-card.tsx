@@ -47,7 +47,7 @@ export function MomentCard({ shown, onClose, onAnswered, closeLabel = "Walk away
   const [answered, setAnswered] = useState<Answered | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const def = MOMENT_BY_ID.get(shown.moment);
+  const def = shown.def ?? MOMENT_BY_ID.get(shown.moment);
   if (!def) return null;
   const naira = (v: number) => cash(v / shown.perMint);
   const fill = (t: string) => fillMoment(t, shown.vars, naira);
@@ -75,6 +75,7 @@ export function MomentCard({ shown, onClose, onAnswered, closeLabel = "Walk away
         <div className="min-w-0 flex-1">
           <p className="font-display text-lg font-extrabold leading-tight">{fill(def.title)}</p>
           {!answered && <p className="mt-1 text-sm leading-snug text-ink/80">{fill(momentText(def, shown.vars.seed))}</p>}
+          {def.by && <p className="mt-1 text-[11px] font-semibold text-muted">Written by {def.by}</p>}
         </div>
         {!answered && (
           <button onClick={onClose} className="-mr-1 -mt-1 grid size-8 shrink-0 place-items-center rounded-full text-muted hover:bg-ink/5" aria-label={closeLabel}>

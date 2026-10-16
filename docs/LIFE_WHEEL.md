@@ -383,8 +383,18 @@ reviewing.
    other people's stories counts towards Legacy (game-db/116). Still to come: group moments
    (everyone in the same club or party gets the same moment and the group decides), more threads,
    and Connector.
-7. **The freshness engine.** Templates, the calendar, your area, player-written moments, monthly new
-   ones, measuring.
+7. **The freshness engine.** *Built (the engine; the writing goes on).* Moments built from parts
+   (`template-moments.ts`: 8 so far, 100 to 480 ways each, parts that change the amount and make
+   outcomes likelier); the Lagos calendar (`calendar.ts`: 22 seasons and days, from harmattan and
+   Ramadan to Detty December, pay week and the long wait for salary) with 22 seasonal moments;
+   9 moments for parts of the city (Lekki's toll gate, Yaba's startups, Ajegunle's football,
+   Computer Village...) and 7 for who you are (rich, famous, stingy, car owners, newcomers);
+   player-written moments (Me → Write a moment: checked as you type, voted on by players,
+   approved on the dashboard, paid ₦50,000, with the author's name on the card); and on the
+   dashboard, how every moment is doing (how often it came, walked away from, met again, and its
+   most-picked answer). 262 moments and about 2,000 versions in all, before the shuffled answers
+   (game-db/117). Still to come: many more templates (the aim is about 80), and 20 to 30 new
+   moments a month.
 8. **Going international.** Moments tagged by where they belong, local casts, calendars and
    businesses, local badge names, translation.
 

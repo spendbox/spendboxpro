@@ -98,6 +98,20 @@ hours). An outcome's `link` sends the next part to them some hours later; it com
 else when they next get a moment. `give` sends them real money (`give_coins`, with its limits);
 `feel` is how you feel about them now; `stood` counts towards Ride or Die.
 
+## Never running out
+
+- **Built from parts** (`parts`): for each {slot} in a moment's story, answers and outcomes, one
+  option is picked by the seed and kept with the moment. A part can scale the amount (`ask`) and
+  carry a `tag`; an outcome with `likelier: [{ tag }]` is likelier when that part came up.
+- **The calendar** (`season`): only in those seasons (`seasonsAt` in `calendar.ts`), three times as
+  likely then.
+- **Your area** (`areas`): only where the map's area name contains one of these (the phone sends
+  where you are), twice as likely there.
+- **Who you are** (`fits`): rich (₦20m in your wallet), famous (Fame 60), stingy (Generous slider at
+  −40 or below), with a car, or new (under a week).
+- **Written by players**: approved ones are loaded on the server (kept 5 minutes), come with their
+  story to the phone, and are settled like any other (ids `w_` and the draft's number).
+
 ## Short effects
 
 An outcome can leave something on you for a while (`effect`): Blessed and Lucky streak make good
@@ -151,6 +165,10 @@ follow-ups exist, and that every kind of place has moments by day and by night.
 | Businesses: the kinds, the stages, a day of business | `src/lib/world/ventures.ts` |
 | Business moments | `src/lib/world/venture-moments.ts` |
 | Moments with other players | `src/lib/world/player-moments.ts`, `src/app/play/stories-server.ts` |
+| Moments built from parts | `src/lib/world/template-moments.ts` |
+| The Lagos calendar, and its moments | `src/lib/world/calendar.ts`, `season-moments.ts` |
+| Moments for your area and who you are | `src/lib/world/local-moments.ts` |
+| Player-written moments | `src/lib/world/written.ts`, `src/app/play/moments/write-sheet.tsx`, `written-actions.ts`, `written-server.ts`; approved on the dashboard |
 | My business (Me → My business) | `src/app/play/moments/career-sheet.tsx`, `venture-actions.ts`, `ventures-server.ts` |
 | The cast's stories with you | `src/lib/world/cast-moments.ts` |
 | More answers for everyday moments | `src/lib/world/more-answers.ts` |
@@ -166,3 +184,4 @@ follow-ups exist, and that every kind of place has moments by day and by night.
 | Standing and badges | `game-db/114_standing.sql` |
 | Businesses | `game-db/115_ventures.sql` |
 | Other players in your story | `game-db/116_player_stories.sql` |
+| Player-written moments, and how moments are doing | `game-db/117_written_moments.sql` |

@@ -5,6 +5,8 @@ import { connection } from "next/server";
 import { isAdmin, isAdminGate } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { siteStats } from "../play/profile-actions";
+import { MOMENT_BY_ID } from "@/lib/world/moments";
+import { AUTHOR_REWARD, type Draft } from "@/lib/world/written";
 import { HqButton, HqCredit, HqSignIn, HqSignOut } from "./hq-forms";
 
 // The owner's dashboard, at the secret address ADMIN_PATH (src/lib/admin.ts). Every other address
@@ -31,6 +33,30 @@ const lagosMidnight = () => {
 /** The names a unit has until its owner gives it one (src/app/play/search-actions.ts). */
 const PLAIN_UNIT = /^(room|home|flat|house|apartment|office|office floor|office suite|shop|lobby shop|ground floor shops|the whole [a-z]+)( [0-9]+[a-z]?)?( .*)?$/i;
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" }) : "");
+
+/** Player-written moments and how every moment is doing (docs/LIFE_WHEEL.md, phase 7; game-db/117). */
+async function loadMoments() {
+  const db = createAdminClient();
+  const [voting, approved, stats] = await Promise.all([
+    db.from("moment_drafts").select("id, author, draft, up, down, created_at").eq("status", "voting").order("created_at", { ascending: false }).limit(60),
+    db.from("moment_drafts").select("id, draft, decided_at").eq("status", "approved").order("decided_at", { ascending: false }).limit(20),
+    db.rpc("moment_stats", { p_since: new Date(Date.now() - 30 * 86_400_000).toISOString() }),
+  ]);
+  if (voting.error) return null;
+  const ids = [...new Set((voting.data ?? []).map((v) => String(v.author)))];
+  const { data: names } = ids.length ? await db.from("profiles").select("id, username").in("id", ids) : { data: [] };
+  const nameOf = new Map((names ?? []).map((p) => [String(p.id), String(p.username ?? "?")]));
+  const rows = (stats.data ?? []) as { moment: string; shown: number; walked: number; players: number; repeats: number; picks: Record<string, number> }[];
+  return {
+    voting: (voting.data ?? [])
+      .map((v) => ({ id: Number(v.id), by: nameOf.get(String(v.author)) ?? "?", draft: v.draft as Draft, up: Number(v.up), down: Number(v.down), created: String(v.created_at) }))
+      .sort((a, b) => b.up - b.down - (a.up - a.down)),
+    approved: (approved.data ?? []).map((a) => ({ id: Number(a.id), title: String((a.draft as Draft).title ?? ""), at: String(a.decided_at) })),
+    weakest: rows.filter((r) => Number(r.shown) >= 5).slice(0, 15),
+    total: rows.reduce((a, r) => a + Number(r.shown), 0),
+    distinct: rows.length,
+  };
+}
 
 async function load() {
   const db = createAdminClient();
@@ -128,7 +154,7 @@ export default async function Gate({ params }: { params: Promise<{ gate: string 
       </main>
     );
   }
-  const d = await load();
+  const [d, mo] = await Promise.all([load(), loadMoments().catch(() => null)]);
   const today = d.stats.days[d.stats.days.length - 1];
   const tiles: [string, string, string?][] = [
     ["Active now", fmt(d.activeNow), "seen in the last 5 minutes"],
@@ -382,6 +408,90 @@ export default async function Gate({ params }: { params: Promise<{ gate: string 
           </ul>
         </div>
       </section>
+
+      {mo && (
+        <section className="grid gap-4 sm:grid-cols-2">
+          <div className="rounded-2xl bg-panel p-4 ring-1 ring-line">
+            <p className="text-sm font-semibold">Moments players wrote</p>
+            <p className="text-xs text-muted">Most liked first. Approving puts it in the game for everyone and pays the author {`₦${AUTHOR_REWARD.toLocaleString("en-GB")}`}.</p>
+            <ul className="mt-2 space-y-3 text-sm">
+              {mo.voting.map((v) => (
+                <li key={v.id} className="rounded-xl bg-ink/[0.03] p-2.5">
+                  <p className="font-semibold">
+                    {v.draft.emoji} {v.draft.title} <span className="text-xs font-normal text-muted">by {v.by} · 👍 {v.up} · 👎 {v.down}</span>
+                  </p>
+                  <p className="text-xs">{v.draft.text}</p>
+                  <ul className="mt-1 space-y-0.5 text-xs text-muted">
+                    {v.draft.choices.map((c, i) => (
+                      <li key={i}>
+                        <span className="font-semibold text-ink">{c.label}</span>: {c.outcomes.map((o) => `${o.text} (money ${o.money}, rep ${o.rep})`).join(" / ")}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-1.5 flex gap-2">
+                    <HqButton kind="approvemoment" id={String(v.id)} label="Approve" />
+                    <HqButton kind="rejectmoment" id={String(v.id)} label="Turn down" danger />
+                  </div>
+                </li>
+              ))}
+              {mo.voting.length === 0 && <li className="text-muted">None waiting.</li>}
+            </ul>
+            {mo.approved.length > 0 && (
+              <>
+                <p className="mt-4 text-xs font-semibold">In the game</p>
+                <ul className="mt-1 space-y-1 text-sm">
+                  {mo.approved.map((a) => (
+                    <li key={a.id} className="flex items-center justify-between gap-2">
+                      <span className="truncate">{a.title}</span>
+                      <HqButton kind="retiremoment" id={String(a.id)} label="Take out" danger />
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+          <div className="rounded-2xl bg-panel p-4 ring-1 ring-line">
+            <p className="text-sm font-semibold">How moments are doing</p>
+            <p className="text-xs text-muted">
+              Last 30 days: {fmt(mo.total)} moments, {fmt(mo.distinct)} different ones. Weakest first: the ones people walk away from most, or meet again too often, or always answer the same way. Rewrite or retire them.
+            </p>
+            <table className="mt-2 w-full text-xs">
+              <thead>
+                <tr className="text-left text-muted">
+                  <th className="py-1 font-medium">Moment</th>
+                  <th className="py-1 text-right font-medium">Came</th>
+                  <th className="py-1 text-right font-medium">Walked away</th>
+                  <th className="py-1 text-right font-medium">Again</th>
+                  <th className="py-1 text-right font-medium">Top answer</th>
+                </tr>
+              </thead>
+              <tbody>
+                {mo.weakest.map((r) => {
+                  const picks = Object.values(r.picks ?? {}).map(Number);
+                  const all = picks.reduce((a, x) => a + x, 0);
+                  const top = all ? Math.round((Math.max(...picks) / all) * 100) : 0;
+                  return (
+                    <tr key={r.moment} className="border-t border-line">
+                      <td className="py-1">{MOMENT_BY_ID.get(r.moment)?.title ?? r.moment}</td>
+                      <td className="py-1 text-right tabular-nums">{fmt(Number(r.shown))}</td>
+                      <td className="py-1 text-right tabular-nums">{Math.round((Number(r.walked) / Math.max(1, Number(r.shown))) * 100)}%</td>
+                      <td className="py-1 text-right tabular-nums">{fmt(Number(r.repeats))}</td>
+                      <td className={`py-1 text-right tabular-nums ${top >= 80 ? "font-semibold text-hit" : ""}`}>{all ? `${top}%` : "-"}</td>
+                    </tr>
+                  );
+                })}
+                {mo.weakest.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="py-2 text-muted">
+                      Not enough moments yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       <section className="grid gap-4 sm:grid-cols-2">
         <div className="rounded-2xl bg-panel p-4 ring-1 ring-line">

@@ -2,10 +2,12 @@
 
 import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { seasonsAt } from "@/lib/world/calendar";
 import { CAST_BY_ID } from "@/lib/world/cast";
 import { applyChange, inCrisis, readyToGrow } from "@/lib/world/ventures";
 import { STORY_OPENS, bondWith, dueLink, findPartner, giveInStory, openLink, sendLink, storyOpenOf, type StoryOpen } from "./stories-server";
 import { openVenture, settleVenture, stageScale, type VentureRow } from "./ventures-server";
+import { writtenMoments } from "./written-server";
 import { BADGE_DELAY_HOURS, LIFE_BADGES, LIFE_BADGE_BY_ID, fameWord, lifeFacts, type LivedMoment } from "@/lib/world/standing";
 import { regionMap } from "@/lib/world";
 import { COMMUTES, type Commute } from "@/lib/world/work";
@@ -19,6 +21,7 @@ import {
   characterWords,
   choiceOrder,
   choiceTraits,
+  fillMoment,
   isDayInLagos,
   momentVars,
   niceNaira,
@@ -27,6 +30,8 @@ import {
   type Bond,
   type CastWorld,
   type EffectId,
+  type Fit,
+  type MomentDef,
   type MomentSpot,
   type MomentVars,
   type TraitAnswer,
@@ -41,7 +46,15 @@ const SPOTS: MomentSpot[] = ["street", "home", "food", "night", "sport", "shop",
 const n = (v: unknown) => Number(v) || 0;
 
 /** A moment to show: its id, which story, what's filled in, and how much you can spend (mint). */
-export type MomentShown = { id: number; moment: string; vars: MomentVars & { seed: number }; perMint: number; canSpend: number };
+export type MomentShown = {
+  id: number;
+  moment: string;
+  vars: MomentVars & { seed: number };
+  perMint: number;
+  canSpend: number;
+  /** A player-written moment (docs/LIFE_WHEEL.md, phase 7): the phone doesn't have it, so it comes along. */
+  def?: MomentDef;
+};
 
 /** What's on someone now (game-db/112; none before it's run): each effect, who it's about, and until when. */
 async function effectsOf(db: ReturnType<typeof createAdminClient>, userId: string) {
@@ -79,6 +92,26 @@ async function castWorld(db: ReturnType<typeof createAdminClient>) {
 async function badgesOf(db: ReturnType<typeof createAdminClient>, userId: string) {
   const { data, error } = await db.from("life_badges").select("badge").eq("user_id", userId).is("faded_at", null).lte("visible_at", new Date().toISOString());
   return error ? [] : (data ?? []).map((b) => String(b.badge));
+}
+
+/** Rich: this much in your wallet (naira). */
+const RICH = 20_000_000;
+
+/** What kind of person someone is now, for moments meant for people like them (docs/LIFE_WHEEL.md, phase 7). */
+async function fitsOf(db: ReturnType<typeof createAdminClient>, userId: string, perMint: number): Promise<Fit[]> {
+  const [{ data: p }, standing, car, answers] = await Promise.all([
+    db.from("profiles").select("coins, created_at").eq("id", userId).maybeSingle(),
+    db.from("life_standing").select("fame").eq("user_id", userId).maybeSingle(),
+    db.from("items").select("id").eq("owner", userId).eq("category", "car").limit(1),
+    answersOf(db, userId),
+  ]);
+  const out: Fit[] = [];
+  if (n(p?.coins) * perMint >= RICH) out.push("rich");
+  if (!standing.error && n(standing.data?.fame) >= 60) out.push("famous");
+  if (characterOf(answers).giving <= -40) out.push("stingy");
+  if (!car.error && (car.data ?? []).length > 0) out.push("car");
+  if (p?.created_at && Date.now() - Date.parse(String(p.created_at)) < 7 * 86_400_000) out.push("newcomer");
+  return out;
 }
 
 /** How long between business moments (two or three a week), and in a crisis. */
@@ -177,7 +210,7 @@ async function me() {
  * The next moment, if it's time for one (null: not now). On the road (the trip film, docs/TRIPS.md),
  * `ride`: how you're going; they can come closer together there, and nothing from before comes back.
  */
-export async function momentNext(input: { spot: MomentSpot; place?: string; ride?: Commute }): Promise<MomentShown | null> {
+export async function momentNext(input: { spot: MomentSpot; place?: string; area?: string; ride?: Commute }): Promise<MomentShown | null> {
   const m = await me().catch(() => null);
   if (!m) return null;
   const spot: MomentSpot = SPOTS.includes(input?.spot) ? input.spot : "street";
@@ -186,7 +219,8 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; ride
   if (road && !ride) return null;
   const gap = road ? ROAD_RULES.gapSeconds : MOMENT_RULES.gapSeconds;
   const place = typeof input?.place === "string" ? input.place.replace(/\s+/g, " ").trim().slice(0, 60) : "";
-  const [{ data: prof }, recentRes, dueRes, spendRes, effects, bonds, world, badges, business] = await Promise.all([
+  const area = typeof input?.area === "string" ? input.area.replace(/\s+/g, " ").trim().slice(0, 60) : "";
+  const [{ data: prof }, recentRes, dueRes, spendRes, effects, bonds, world, badges, business, fits, written] = await Promise.all([
     m.db.from("profiles").select("level, frozen").eq("id", m.userId).maybeSingle(),
     // Every one you've had lately (up to 500): the last 25 don't come again, ones never had come first.
     m.db.from("moments").select("moment, created_at").eq("user_id", m.userId).order("created_at", { ascending: false }).limit(500),
@@ -197,6 +231,9 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; ride
     castWorld(m.db),
     badgesOf(m.db, m.userId),
     businessOf(m.db, m.userId, m.perMint).catch(() => ({ row: null, state: undefined })),
+    fitsOf(m.db, m.userId, m.perMint).catch(() => [] as Fit[]),
+    // Written by players and approved (game-db/117).
+    writtenMoments(m.db).catch(() => [] as MomentDef[]),
   ]);
   // Part 109 not run yet: no moments.
   if (recentRes.error) return null;
@@ -232,6 +269,10 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; ride
       badges,
       business: business.state,
       partner: !!partner,
+      seasons: seasonsAt(Date.now(), m.region),
+      area,
+      fits,
+      extra: written,
       rand: Math.random,
       ride,
     });
@@ -267,7 +308,7 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; ride
   });
   if (error || id == null) return null;
   if (linked && link) await openLink(m.db, link.id);
-  return { id: n(id), moment: def.id, vars: full, perMint: m.perMint, canSpend: spendRes.error ? 0 : n(spendRes.data) };
+  return { id: n(id), moment: def.id, vars: full, perMint: m.perMint, canSpend: spendRes.error ? 0 : n(spendRes.data), ...(def.by ? { def } : {}) };
 }
 
 /** What came of your choice: which outcome, and the money (mint) and reputation that came of it. */
@@ -289,6 +330,7 @@ export async function momentAnswer(id: number, choice: number): Promise<MomentRe
   if (!m) return { ok: false, error: "Sign in first." };
   const { data: row } = await m.db.from("moments").select("moment, vars, answered_at").eq("id", Math.round(n(id))).eq("user_id", m.userId).maybeSingle();
   if (!row || row.answered_at) return { ok: false, error: "That moment has passed." };
+  if (String(row.moment).startsWith("w_")) await writtenMoments(m.db).catch(() => []);
   const def = MOMENT_BY_ID.get(String(row.moment));
   const vars = (row.vars ?? {}) as MomentVars & { seed?: number };
   const pick = Math.round(n(choice));
@@ -305,13 +347,15 @@ export async function momentAnswer(id: number, choice: number): Promise<MomentRe
     character: characterOf(answers),
     effects: effects.map((e) => e.effect),
     venture: biz.row ? { quality: biz.row.venture.quality } : undefined,
+    tags: Array.isArray(vars.tags) ? vars.tags.map(String) : [],
   });
   const naira = ((outcome.get ?? 0) - (outcome.pay ?? 0)) * n(vars.ask);
   const mint = Math.round((naira / m.perMint) * 100) / 100;
-  const text = outcome.text
-    .replace(/\{name\}/g, String(vars.name ?? ""))
-    .replace(/\{ask\}/g, `₦${Math.round(n(vars.ask)).toLocaleString("en-GB")}`)
-    .replace(/\{place\}/g, String(vars.place ?? ""));
+  const text = fillMoment(
+    outcome.text,
+    { name: String(vars.name ?? ""), ask: n(vars.ask), place: String(vars.place ?? ""), parts: vars.parts },
+    (v) => `₦${Math.round(v).toLocaleString("en-GB")}`,
+  );
   const { data, error } = await m.db.rpc("moment_answer", {
     p_user: m.userId,
     p_id: Math.round(n(id)),
@@ -441,6 +485,8 @@ export type Wheel = {
   board: { name: string; legacy: number; me: boolean }[];
   /** Who can be in your story (null before game-db/116). */
   storyOpen: StoryOpen | null;
+  /** Player-written moments you lived (the phone doesn't have them). */
+  written: MomentDef[];
   /** Other players you've shared stories with: how you feel about them, how they feel about you, and how many stories. */
   players: { name: string; mine: number; theirs: number; together: number }[];
   region: string;
@@ -452,6 +498,7 @@ export async function myWheel(): Promise<Wheel | null> {
   const m = await me().catch(() => null);
   if (!m) return null;
   const standing = await refreshStanding(m.db, m.userId, true).catch(() => null);
+  const writtenAll = await writtenMoments(m.db).catch(() => [] as MomentDef[]);
   const [storyOpen, myBondsRes] = await Promise.all([
     storyOpenOf(m.db, m.userId).catch(() => null),
     m.db.from("player_bonds").select("other, feeling, together").eq("user_id", m.userId).order("last_at", { ascending: false }).limit(30),
@@ -522,6 +569,7 @@ export async function myWheel(): Promise<Wheel | null> {
     badges,
     board,
     storyOpen,
+    written: writtenAll.filter((w) => moments.some((x) => x.moment === w.id)),
     players,
     region: m.region,
     perMint: m.perMint,

@@ -181,6 +181,7 @@ test("effects, areas and likelier outcomes all point at real things", () => {
         for (const l of o.likelier ?? []) {
           if ("effect" in l) assert.ok(EFFECTS[l.effect], `${m.id}: ${l.effect}`);
           else if ("venture" in l) assert.ok(m.venture, `${m.id}: a business likelier outside business`);
+          else if ("tag" in l) assert.ok(Object.values(m.parts ?? {}).some((opts) => opts.some((p) => p.tag === l.tag)), `${m.id}: no part has tag ${l.tag}`);
           else assert.ok((TRAIT_KEYS as string[]).includes(l.trait), `${m.id}: ${l.trait}`);
         }
       }

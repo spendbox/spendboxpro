@@ -167,6 +167,7 @@ const StatsSheet = dynamic(() => import("./stats-sheet").then((m) => m.StatsShee
 const MeSheet = dynamic(() => import("./me-sheet").then((m) => m.MeSheet));
 const WheelSheet = dynamic(() => import("./moments/wheel-sheet").then((m) => m.WheelSheet));
 const CareerSheet = dynamic(() => import("./moments/career-sheet").then((m) => m.CareerSheet));
+const WriteSheet = dynamic(() => import("./moments/write-sheet").then((m) => m.WriteSheet));
 const MoneyHome = dynamic(() => import("./money-home").then((m) => m.MoneyHome));
 // The 3D city only runs in the browser.
 const CityView = dynamic(() => import("./city-view").then((m) => m.CityView), {
@@ -523,6 +524,8 @@ export function Game({
   const [wheelOpen, setWheelOpen] = useState(false);
   /** My business (docs/LIFE_WHEEL.md, phase 5): from Me, or from a moment that invites you to start one. */
   const [careerOpen, setCareerOpen] = useState(false);
+  /** Write a moment, and vote on other players' (docs/LIFE_WHEEL.md, phase 7). */
+  const [writeOpen, setWriteOpen] = useState(false);
   useEffect(() => {
     const open = () => setCareerOpen(true);
     window.addEventListener("nt-open-career", open);
@@ -3301,7 +3304,13 @@ export function Game({
       {/* Moments (docs/MOMENTS.md): little stories as you go round the city. */}
       {worldId && !guest && (
         <Safe name="Moments">
-          <MomentsLayer inside={place ? (placeLevel?.theme ?? "lobby") : null} home={!!place && inPlannedHome} place={place ? (rooms.myRoomInfo?.name ?? placeRoom?.name ?? "") : ""} enabled={!camera && ride === null} />
+          <MomentsLayer
+            inside={place ? (placeLevel?.theme ?? "lobby") : null}
+            home={!!place && inPlannedHome}
+            place={place ? (rooms.myRoomInfo?.name ?? placeRoom?.name ?? "") : ""}
+            area={worldId && worldLife.mySpot ? (regionMap(worldId)?.areaAt(worldLife.mySpot.x, worldLife.mySpot.z) ?? "") : ""}
+            enabled={!camera && ride === null}
+          />
         </Safe>
       )}
       {giveTo && (
@@ -4039,6 +4048,7 @@ export function Game({
       )}
       {wheelOpen && worldId && !guest && <WheelSheet avatar={me.avatar} onClose={() => setWheelOpen(false)} />}
       {careerOpen && worldId && !guest && <CareerSheet onClose={() => setCareerOpen(false)} />}
+      {writeOpen && worldId && !guest && <WriteSheet onClose={() => setWriteOpen(false)} />}
       {meOpen && worldId && !guest && (
         <MeSheet
           name={me.name ?? "You"}
@@ -4077,6 +4087,7 @@ export function Game({
                 { label: "Shop", icon: ShoppingBag, colour: "#5f3dc4", go: () => worldLife.openThings("shops") },
                 { label: "Assets", icon: TrendingUp, colour: "#2b8a3e", go: () => worldLife.openThings("assets") },
                 { label: "Leave a mark", icon: PenLine, colour: "#1098ad", go: () => worldLife.openLeaveMark() },
+                { label: "Write a moment", icon: PenLine, colour: "#e8590c", go: () => setWriteOpen(true) },
                 ...(worldLife.hasHome ? [{ label: "Coming soon", icon: Rocket, colour: "#7048e8", go: worldLife.openSoon }] : []),
               ],
             },

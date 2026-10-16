@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MOMENT_BY_ID, spotOfTheme } from "@/lib/world/moments";
+import { MOMENT_BY_ID, registerMoments, spotOfTheme } from "@/lib/world/moments";
 import { momentNext, type MomentShown } from "../moment-actions";
 import { anySheetOpen } from "../sheet";
 import { playSfx } from "../sound";
@@ -28,13 +28,13 @@ const busy = () => document.hidden || anySheetOpen() || !!document.querySelector
  * inside: the theme of the place you're in (null on the street), home: it's a home. place: its
  * name (or the area's), for the stories.
  */
-export function MomentsLayer({ inside, home, place, enabled }: { inside: string | null; home: boolean; place: string; enabled: boolean }) {
+export function MomentsLayer({ inside, home, place, area, enabled }: { inside: string | null; home: boolean; place: string; area?: string; enabled: boolean }) {
   const spot = inside == null && !home ? "street" : spotOfTheme(inside, home);
   const [shown, setShown] = useState<MomentShown | null>(null);
-  const live = useRef({ spot, place, enabled, open: false });
+  const live = useRef({ spot, place, area: area ?? "", enabled, open: false });
   useEffect(() => {
-    live.current = { ...live.current, spot, place, enabled };
-  }, [spot, place, enabled]);
+    live.current = { ...live.current, spot, place, area: area ?? "", enabled };
+  }, [spot, place, area, enabled]);
   useEffect(() => {
     live.current.open = !!shown;
   }, [shown]);
@@ -49,7 +49,9 @@ export function MomentsLayer({ inside, home, place, enabled }: { inside: string 
     const l = live.current;
     if (!l.enabled || l.open) return schedule(between(NEXT_MS));
     if (busy()) return schedule(30_000);
-    const m = await momentNext({ spot: l.spot, place: l.place }).catch(() => null);
+    const m = await momentNext({ spot: l.spot, place: l.place, area: l.area }).catch(() => null);
+    // A player-written one comes with its story (docs/LIFE_WHEEL.md, phase 7).
+    if (m?.def) registerMoments([m.def]);
     if (!m || !MOMENT_BY_ID.has(m.moment) || busy() || live.current.open) return schedule(between(NEXT_MS));
     setShown(m);
     playSfx("pop");

@@ -1,9 +1,25 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { hqClearBuildingName, hqClearHomeName, hqClearPhoto, hqCredit, hqDeleteMessage, hqRecheckPack, hqRecheckTopUp, hqSignIn, hqSignOut, hqStopAd, hqTakeDown, type CreditState } from "./actions";
+import {
+  hqApproveMoment,
+  hqClearBuildingName,
+  hqClearHomeName,
+  hqClearPhoto,
+  hqCredit,
+  hqDeleteMessage,
+  hqRecheckPack,
+  hqRecheckTopUp,
+  hqRejectMoment,
+  hqRetireMoment,
+  hqSignIn,
+  hqSignOut,
+  hqStopAd,
+  hqTakeDown,
+  type CreditState,
+} from "./actions";
 
-type HqKind = "pack" | "topup" | "takedown" | "clearbuilding" | "clearhome" | "stopad" | "deletemsg" | "clearphoto";
+type HqKind = "pack" | "topup" | "takedown" | "clearbuilding" | "clearhome" | "stopad" | "deletemsg" | "clearphoto" | "approvemoment" | "rejectmoment" | "retiremoment";
 const RUN: Record<HqKind, (id: string) => Promise<string>> = {
   pack: hqRecheckPack,
   topup: hqRecheckTopUp,
@@ -13,6 +29,9 @@ const RUN: Record<HqKind, (id: string) => Promise<string>> = {
   stopad: hqStopAd,
   deletemsg: hqDeleteMessage,
   clearphoto: hqClearPhoto,
+  approvemoment: hqApproveMoment,
+  rejectmoment: hqRejectMoment,
+  retiremoment: hqRetireMoment,
 };
 const ASK: Partial<Record<HqKind, string>> = {
   takedown: "Take this business off the map?",
@@ -21,6 +40,9 @@ const ASK: Partial<Record<HqKind, string>> = {
   stopad: "Stop this ad?",
   deletemsg: "Delete this Town Hall message?",
   clearphoto: "Remove this profile photo?",
+  approvemoment: "Approve this moment? It goes into the game for everyone, and its author is paid.",
+  rejectmoment: "Turn this moment down?",
+  retiremoment: "Take this moment out of the game?",
 };
 
 const input = "h-11 w-full rounded-xl border border-line bg-panel px-4 text-base outline-none focus:border-gold";

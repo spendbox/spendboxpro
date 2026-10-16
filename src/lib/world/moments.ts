@@ -12,7 +12,10 @@ import { CAST_BY_ID, CAST_GAP_HOURS, castHere } from "./cast.ts";
 import { CAST_MOMENTS } from "./cast-moments.ts";
 import { MORE_ANSWERS } from "./more-answers.ts";
 import { ROAD_MOMENTS, type RoadStage } from "./road-moments.ts";
+import { LOCAL_MOMENTS } from "./local-moments.ts";
 import { PLAYER_MOMENTS } from "./player-moments.ts";
+import { SEASON_MOMENTS } from "./season-moments.ts";
+import { TEMPLATE_MOMENTS } from "./template-moments.ts";
 import { VENTURE_MOMENTS } from "./venture-moments.ts";
 import type { VentureChange } from "./ventures.ts";
 
@@ -60,7 +63,7 @@ export type MomentOutcome = {
   stood?: boolean;
 };
 /** When an outcome is likelier: a side of who you are (strongly enough), or an effect on you. */
-export type Likely = { trait: Trait; side: 1 | -1 } | { effect: EffectId } | { venture: "quality" };
+export type Likely = { trait: Trait; side: 1 | -1 } | { effect: EffectId } | { venture: "quality" } | { tag: string };
 export type MomentChoice = {
   label: string;
   /**
@@ -109,6 +112,20 @@ export type MomentDef = {
   venture?: { none?: boolean; stages?: [number, number]; crisis?: boolean; grow?: boolean };
   /** With a real player as {name} (./player-moments.ts); `start`: it begins a thread, picked only when there's someone to be in it. */
   player?: { start?: boolean };
+  /**
+   * Built from parts (./template-moments.ts): for each {slot} in its text, labels and outcomes, one
+   * of these is picked (by the seed), so one moment reads hundreds of ways. A part can make the
+   * amount bigger or smaller (`ask`) and carry a `tag` that outcomes can be likelier with.
+   */
+  parts?: Record<string, MomentPart[]>;
+  /** Only in these seasons or on these days (./calendar.ts), when it's three times as likely. */
+  season?: string[];
+  /** Only in these areas of the city (by name, as the map calls them). */
+  areas?: string[];
+  /** Only for people like this (rich, famous, stingy, with a car, new in town). */
+  fits?: Fit[];
+  /** Written by a player (./written.ts): their name, shown on the card. */
+  by?: string;
   /** The amount in it, in naira: somewhere between these (rounded the way people say prices). */
   ask?: [number, number];
   emoji: string;
@@ -119,6 +136,10 @@ export type MomentDef = {
 };
 
 export type MomentSize = "small" | "big" | "life";
+/** One option for a slot in a moment built from parts. */
+export type MomentPart = { text: string; ask?: number; tag?: string };
+/** Kinds of people some moments are for. */
+export type Fit = "rich" | "famous" | "stingy" | "car" | "newcomer";
 
 /** The parts of life a moment can touch: the colours on the wheel (docs/LIFE_WHEEL.md). */
 export const LIFE_AREAS = {
@@ -1010,11 +1031,19 @@ export const MOMENTS: MomentDef[] = [
   },
 ];
 
-MOMENTS.push(...ROAD_MOMENTS, ...BIG_MOMENTS, ...CAST_MOMENTS, ...VENTURE_MOMENTS, ...PLAYER_MOMENTS);
+MOMENTS.push(...ROAD_MOMENTS, ...BIG_MOMENTS, ...CAST_MOMENTS, ...VENTURE_MOMENTS, ...PLAYER_MOMENTS, ...TEMPLATE_MOMENTS, ...SEASON_MOMENTS, ...LOCAL_MOMENTS);
 // Each moment's pool of answers: the ones written with it, and more (./more-answers.ts).
 for (const m of MOMENTS) if (MORE_ANSWERS[m.id]) m.choices.push(...MORE_ANSWERS[m.id]);
 
 export const MOMENT_BY_ID = new Map(MOMENTS.map((m) => [m.id, m]));
+
+/**
+ * Add player-written moments (./written.ts, ids starting "w_") so they can be shown and settled
+ * like any other. Only those: the game's own moments can't be replaced.
+ */
+export function registerMoments(defs: MomentDef[]) {
+  for (const d of defs) if (d.id.startsWith("w_")) MOMENT_BY_ID.set(d.id, d);
+}
 
 /** How often moments come, and how far they can move you in a day (docs/LIFE_WHEEL.md: fewer, each one mattering more). */
 export const MOMENT_RULES = {
@@ -1186,13 +1215,22 @@ export function pickMoment(o: {
   business?: VentureState;
   /** There's another player who can be in their story right now. */
   partner?: boolean;
+  /** The seasons and special days it is now (./calendar.ts). */
+  seasons?: string[];
+  /** The area of the city they're in. */
+  area?: string;
+  /** What kind of person they are now (rich, famous...). */
+  fits?: Fit[];
+  /** More moments to choose from (written by players and approved, ./written.ts). */
+  extra?: MomentDef[];
   now?: number;
   rand: () => number;
   ride?: Commute;
 }): MomentDef | null {
   const hurt = !!o.effects?.includes("hurt");
   const watched = !!o.effects?.includes("under_watch");
-  const fits = MOMENTS.filter(
+  const pool = o.extra?.length ? [...MOMENTS, ...o.extra] : MOMENTS;
+  const fits = pool.filter(
     (m) =>
       !m.followOnly &&
       // On the road, only road moments (each has a scene in the trip film), for this ride.
@@ -1206,6 +1244,9 @@ export function pickMoment(o: {
       (!m.badge || !!o.badges?.includes(m.badge)) &&
       (!m.venture || ventureFits(m, o.business)) &&
       (!m.player || (!!m.player.start && !!o.partner)) &&
+      (!m.season || m.season.some((x) => !!o.seasons?.includes(x))) &&
+      (!m.areas || (!!o.area && m.areas.some((a) => o.area!.toLowerCase().includes(a.toLowerCase())))) &&
+      (!m.fits || m.fits.some((x) => !!o.fits?.includes(x))) &&
       !o.recent.includes(m.id),
   );
   // Moments for this kind of place come first; "anywhere" ones fill in. Never had: three times as likely.
@@ -1220,7 +1261,11 @@ export function pickMoment(o: {
     // What you're known for comes looking for you.
     (m.badge ? 2 : 1) *
     // Your business needs you when it's time.
-    (m.venture && !m.venture.none ? 4 : 1);
+    (m.venture && !m.venture.none ? 4 : 1) *
+    // The season, your area and who you are make their moments likelier.
+    (m.season ? 3 : 1) *
+    (m.areas ? 2 : 1) *
+    (m.fits ? 2 : 1);
   const total = fits.reduce((a, m) => a + weight(m), 0);
   let r = o.rand() * total;
   for (const m of fits) if ((r -= weight(m)) <= 0) return m;
@@ -1228,7 +1273,7 @@ export function pickMoment(o: {
 }
 
 /** The things filled into a moment: a name, an amount (naira) and where. */
-export type MomentVars = { name: string; ask: number; place: string };
+export type MomentVars = { name: string; ask: number; place: string; parts?: Record<string, string>; tags?: string[] };
 
 /** Fill a moment's names and amounts, the same every time for the same seed. Richer players get asked for a bit more. */
 export function momentVars(m: MomentDef, seed: number, level: number, place: string): MomentVars {
@@ -1236,8 +1281,17 @@ export function momentVars(m: MomentDef, seed: number, level: number, place: str
   const name = MOMENT_NAMES[Math.floor(rand() * MOMENT_NAMES.length)];
   const [lo, hi] = m.ask ?? [0, 0];
   const lift = 1 + Math.min(1.5, Math.max(0, level - 1) * 0.08);
-  const ask = hi ? niceNaira((lo + rand() * (hi - lo)) * lift) : 0;
-  return { name, ask, place: place || "the bus stop" };
+  let ask = hi ? niceNaira((lo + rand() * (hi - lo)) * lift) : 0;
+  // Built from parts: one option for each slot.
+  const parts: Record<string, string> = {};
+  const tags: string[] = [];
+  for (const [slot, options] of Object.entries(m.parts ?? {})) {
+    const o = options[Math.floor(rand() * options.length)];
+    parts[slot] = o.text;
+    if (o.ask) ask = niceNaira(ask * o.ask);
+    if (o.tag) tags.push(o.tag);
+  }
+  return m.parts ? { name, ask, place: place || "the bus stop", parts, tags } : { name, ask, place: place || "the bus stop" };
 }
 
 /** Which way of telling it (by the seed). */
@@ -1245,14 +1299,20 @@ export const momentText = (m: MomentDef, seed: number) => m.text[Math.abs(seed) 
 
 /** Fill in {name}, {ask} and {place}; `money` shows an amount (naira) the player's way. */
 export function fillMoment(text: string, v: MomentVars, money: (naira: number) => string) {
-  return text.replace(/\{name\}/g, v.name).replace(/\{ask\}/g, money(v.ask)).replace(/\{place\}/g, v.place);
+  let out = text;
+  // Parts first: a part can itself say {name} or {ask}.
+  for (const [slot, part] of Object.entries(v.parts ?? {})) out = out.split(`{${slot}}`).join(part);
+  return out.replace(/\{name\}/g, v.name).replace(/\{ask\}/g, money(v.ask)).replace(/\{place\}/g, v.place);
 }
+
+/** How many ways a moment built from parts can read (1 for any other). */
+export const partVersions = (m: MomentDef) => Object.values(m.parts ?? {}).reduce((a, o) => a * o.length, 1) * Math.max(1, m.text.length);
 
 /** What a choice costs at most (naira), to grey it out when you can't afford it. */
 export const choiceCost = (c: MomentChoice, ask: number) => Math.max(0, ...c.outcomes.map((o) => ((o.pay ?? 0) + (o.give ?? 0)) * ask));
 
 /** Who you are and what's on you, when an outcome is rolled (outcomes shift with it). */
-export type RollContext = { character?: Partial<Record<Trait, number>>; effects?: EffectId[]; venture?: { quality: number } };
+export type RollContext = { character?: Partial<Record<Trait, number>>; effects?: EffectId[]; venture?: { quality: number }; tags?: string[] };
 
 /** How far a side of you has to lean for an outcome to count you as that way. */
 export const LEAN = 30;
@@ -1269,7 +1329,14 @@ export function outcomeWeight(o: MomentOutcome, ctx: RollContext = {}): number {
   let w = o.chance ?? 1;
   const fx = ctx.effects ?? [];
   for (const l of o.likelier ?? []) {
-    const fits = "effect" in l ? fx.includes(l.effect) : "venture" in l ? (ctx.venture?.quality ?? 0) >= 60 : (ctx.character?.[l.trait] ?? 0) * l.side >= LEAN;
+    const fits =
+      "effect" in l
+        ? fx.includes(l.effect)
+        : "venture" in l
+          ? (ctx.venture?.quality ?? 0) >= 60
+          : "tag" in l
+            ? !!ctx.tags?.includes(l.tag)
+            : (ctx.character?.[l.trait] ?? 0) * l.side >= LEAN;
     if (fits) w *= 2.5;
   }
   if (good(o) && (fx.includes("blessed") || fx.includes("lucky"))) w *= 1.5;

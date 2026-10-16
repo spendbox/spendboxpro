@@ -1,6 +1,7 @@
 # To do
 
 ## Now (owner)
+- [ ] Then run `game-db/117_written_moments.sql` (player-written moments, and how moments are doing on the dashboard). Run it after 116. Until then Write a moment says it's switched on soon.
 - [ ] Then run `game-db/116_player_stories.sql` (other players in your story: loans, lifts, vouching, the wallet). Run it after 115. Until then no other player turns up in anyone's moments.
 - [ ] Then run `game-db/115_ventures.sql` (careers: start a business and grow it). Run it after 114. Until then My business says businesses are switched on soon.
 - [ ] Then run `game-db/114_standing.sql` (Trust, Fame, Legacy and quiet badges). Run it after 113. Until then the wheel shows no standing and no badges.
@@ -174,8 +175,13 @@ Each phase is built in one go (a few hours to a couple of days); writing the sto
 - [ ] Group moments: everyone in the same club, party or church gets the same moment, and the group decides together.
 - [ ] More threads (a business partnership between players, a rivalry over the same shop, a wedding invitation), and Connector (introducing two players who become partners).
 
-**Phase 7: the freshness engine.**
-- [ ] Moments built from parts, the Lagos calendar and your area, player-written moments, 20 to 30 new a month, measuring.
+**Phase 7: the freshness engine.** Built (the engine; the writing goes on).
+- [x] Moments built from parts: 8 templates, 100 to 480 ways each.
+- [x] The Lagos calendar (22 seasons and days) with 22 seasonal moments; 9 moments for parts of the city; 7 for who you are.
+- [x] Player-written moments: write, automatic checks, votes, approval on the dashboard, ₦50,000 to the author (game-db/117).
+- [x] On the dashboard: how every moment is doing (came, walked away, met again, top answer).
+- [ ] Many more templates (aim: about 80, for about 16,000 versions), and 20 to 30 new moments every month (AI drafts, owner reviews).
+- [ ] Owner, every month: read "How moments are doing" on the dashboard, and rewrite or retire the weakest.
 
 **Phase 8: going international.**
 - [ ] Moments tagged by where they belong (anywhere, a country, a city), local casts, calendars and businesses,
