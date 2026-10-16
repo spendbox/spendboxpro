@@ -583,6 +583,9 @@ export function Game({
   // The real place everyone lives in (Lagos): the hourly towns and their countdown are off.
   const worldId = useSyncExternalStore(noSubscribe, worldPreview, noWorld);
   const worldRegion = worldId ? REGIONS[worldId] : null;
+  // The 3D city broke and couldn't mend itself (a blank grey map): build it again, a few times at most.
+  const [cityLife, setCityLife] = useState(0);
+  const rebuildCity = useCallback(() => setCityLife((n) => (n < 3 ? n + 1 : n)), []);
   /** On a real place: the area pointed at, or in the middle of the view. */
   const [worldArea, setWorldArea] = useState<string | null>(null);
   // A life on the real map: search, assets, buying a home first (see ./life/world-life).
@@ -2345,6 +2348,8 @@ export function Game({
       {(round || worldId) && (
         <Safe name="City view" fallback={<div className="absolute inset-0 grid place-items-center text-muted">Rebuilding the city…</div>}>
           <CityView
+            key={cityLife}
+            onBroken={rebuildCity}
             seed={round?.id ?? 0}
             tileCount={round?.tileCount ?? 0}
             region={worldId}

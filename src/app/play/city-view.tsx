@@ -400,6 +400,8 @@ type Props = {
   gateIn?: number;
   /** Signed out: a tap on a place's bubble (or its fun-place icon) asks you to sign in instead. */
   onBubbleSignIn?: () => void;
+  /** The 3D view broke and couldn't mend itself (the phone took the canvas away, or nothing draws): build it again. */
+  onBroken?: () => void;
 };
 
 type Part = { tile: number; x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number; color: number; tilt?: number };
@@ -1583,6 +1585,7 @@ export function CityView({
   onAtGate,
   gateIn = 0,
   onBubbleSignIn,
+  onBroken,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const api = useRef<{
@@ -1620,10 +1623,10 @@ export function CityView({
     /** Zoom in (dir 1) or out (dir -1) a step: the + and − buttons on a computer. */
     zoom: (dir: number) => void;
   } | null>(null);
-  const cb = useRef({ onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onLightTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick, onAtGate, onBubbleSignIn });
+  const cb = useRef({ onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onLightTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick, onAtGate, onBubbleSignIn, onBroken });
   const atmos = useRef({ progress, nightFirst, meAvatar, weather });
   useEffect(() => {
-    cb.current = { onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onLightTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick, onAtGate, onBubbleSignIn };
+    cb.current = { onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onLightTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick, onAtGate, onBubbleSignIn, onBroken };
     atmos.current = { progress, nightFirst, meAvatar, weather };
   });
 
@@ -7542,6 +7545,13 @@ export function CityView({
     let slowFrames = 0;
     let frames = 0;
     let shadowTick = 0;
+    // The last good camera (every number real): a camera that goes "not a number" (a divide by
+    // nothing somewhere) shows only sky, a blank grey map until a refresh. It's put back instead.
+    const goodCam = new THREE.Vector3();
+    const goodTarget = new THREE.Vector3();
+    let hasGoodCam = false;
+    // Frames in a row that drew nothing of the city on the map (only the sky): see after render.
+    let emptyFrames = 0;
     const loop = () => {
       frame = requestAnimationFrame(loop);
       const tNow = performance.now();
@@ -7727,6 +7737,22 @@ export function CityView({
         controls.update();
       }
       const dist = riding ? 10 : camera.position.distanceTo(controls.target);
+      const camOk = [camera.position.x, camera.position.y, camera.position.z, controls.target.x, controls.target.y, controls.target.z].every(Number.isFinite);
+      if (camOk) {
+        goodCam.copy(camera.position);
+        goodTarget.copy(controls.target);
+        hasGoodCam = true;
+      } else {
+        if (hasGoodCam) {
+          camera.position.copy(goodCam);
+          controls.target.copy(goodTarget);
+        } else {
+          camera.position.set(30, 40, 30);
+          controls.target.set(0, 0, 0);
+        }
+        if (walker.on && ![walker.x, walker.z].every(Number.isFinite)) walker.on = false;
+        controls.update();
+      }
       const fog = scene.fog as THREE.Fog;
       fog.near = (dist + radius * 0.8) * (1 - fogFactor * 0.45);
       fog.far = (dist + radius * 4 + 30) * (1 - fogFactor * 0.3);
@@ -7738,6 +7764,17 @@ export function CityView({
       worldEventsLayer.update(dt, time, Date.now() + cb.current.clockOffsetMs);
       partyLights.update(time, tiles, carNight);
       renderer.render(scene, camera);
+      // Nothing of the city drawn for a few seconds on the map (only sky): something's broken
+      // that putting the camera back didn't mend. Start the city again rather than stay blank.
+      if (framed && !view && document.visibilityState === "visible") {
+        emptyFrames = renderer.info.render.triangles === 0 ? emptyFrames + 1 : 0;
+        if (emptyFrames === 150) {
+          try {
+            localStorage.removeItem(LAST_SPOT);
+          } catch {}
+          cb.current.onBroken?.();
+        }
+      }
       if (statsOn) {
         // ?stats: what the last frame cost, for checking the drawing budget (see the world lab).
         const info = renderer.info.render;
@@ -7770,6 +7807,7 @@ export function CityView({
     const onVisibility = () => {
       cancelAnimationFrame(frame);
       if (document.visibilityState === "visible") {
+        if (renderer.getContext().isContextLost()) return watchLost();
         clock.getDelta();
         loop();
       }
@@ -7777,10 +7815,22 @@ export function CityView({
     const onLost = (e: Event) => {
       e.preventDefault();
       cancelAnimationFrame(frame);
+      watchLost();
     };
     const onRestored = () => {
+      clearTimeout(lostTimer);
+      cancelAnimationFrame(frame);
       clock.getDelta();
       loop();
+    };
+    // Some phones never give the 3D canvas back (after switching apps, or short of memory): the map
+    // stays blank until a refresh. Not back within four seconds of being on screen: start again.
+    let lostTimer: ReturnType<typeof setTimeout> | undefined;
+    const watchLost = () => {
+      clearTimeout(lostTimer);
+      lostTimer = setTimeout(() => {
+        if (document.visibilityState === "visible" && renderer.getContext().isContextLost()) cb.current.onBroken?.();
+      }, 4000);
     };
     document.addEventListener("visibilitychange", onVisibility);
     renderer.domElement.addEventListener("webglcontextlost", onLost);
@@ -7906,6 +7956,7 @@ export function CityView({
 
       honkTex.dispose();
       for (const t of boardTextures) t.dispose();
+      clearTimeout(lostTimer);
       document.removeEventListener("visibilitychange", onVisibility);
       renderer.domElement.removeEventListener("webglcontextlost", onLost);
       renderer.domElement.removeEventListener("webglcontextrestored", onRestored);
