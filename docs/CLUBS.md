@@ -22,6 +22,20 @@ Every club has:
   spotlight). A dancer of the club's own is on one of them;
 - a crowd: up to 44 people dancing (26 on lighter phones) besides the regulars and the players.
 
+## At the door
+
+Every club charges to get in (paid once, good for 24 hours, the money burned; never a home's
+party room). Which club charges what is fixed by where it is (`src/lib/fees.ts`):
+
+| Price | Shown as | How many clubs |
+| --- | --- | --- |
+| ₦250,000 | Club | 4 in 10 |
+| ₦500,000 | Premium club | 3 in 10 |
+| ₦1,000,000 | VIP club | 2 in 10 |
+| ₦10,000,000 | Billionaire's row | 1 in 10 |
+
+Run `game-db/118_club_fees.sql` for the ₦10m doors: until then a door charges at most ₥1,000 (about ₦1.5m).
+
 ## Pole dancing
 
 Tap a pole (or pick **Pole dance** in the dance moves): you dance at the next free pole. Everyone

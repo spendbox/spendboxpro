@@ -107,7 +107,7 @@ import { closePhoneNotices, setPhoneBadge } from "./phone/phone-notices";
 import { signOutNow } from "../login/actions";
 import { claimBalloon, recordVisit } from "./profile-actions";
 import { myVisits, payClubEntry, payFare, payRide, payVisit } from "./fee-actions";
-import { CLUB_ENTRY_MS, clubEntryMint, rideFare, TRAIN_FARE, visitFee } from "@/lib/fees";
+import { CLUB_ENTRY_MS, clubEntryMint, clubEntryNaira, clubTier, rideFare, TRAIN_FARE, visitFee } from "@/lib/fees";
 import { jobAt } from "@/lib/jobs";
 import type { Invite, PlayCtx } from "./minigames/shell";
 import { rideRoom, useRooms, type RoomInfo } from "./rooms";
@@ -2757,6 +2757,7 @@ export function Game({
             <div className="grid size-16 place-items-center rounded-3xl bg-[#7048e8] text-white">
               <Music className="size-8" />
             </div>
+            <p className="rounded-full bg-[#7048e8]/10 px-3 py-0.5 text-xs font-bold uppercase tracking-wider text-[#7048e8]">{clubTier(clubEntryNaira(clubDoor.room.id, clubDoor.room.type))}</p>
             <p className="text-2xl font-bold">{cash(clubDoor.fee)}</p>
             <p className="text-sm text-muted">Entry to {clubDoor.level.label}. Pay once and come and go as you like for 24 hours.</p>
           </div>

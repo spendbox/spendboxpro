@@ -53,11 +53,16 @@ export function rideFare(kind: string, nairaPerMint = 1_500) {
 }
 
 /**
- * Club entry on a real map (naira, paid once and good for 24 hours): about a third of clubs are
- * free to walk into; the rest charge at the door, from a cover charge up to a VIP night. Which
- * club charges what is fixed by where it is (the same for everyone). Never for a home's party room.
+ * Club entry on a real map (naira, paid once and good for 24 hours): every club charges at the
+ * door, ₦250k at most, ₦500k at the better ones, ₦1m for a VIP club and ₦10m at the very top
+ * (one in ten). Which club charges what is fixed by where it is (the same for everyone). Never for
+ * a home's party room. The database takes up to ₥10,000 a door (game-db/118_club_fees.sql).
  */
-const CLUB_ENTRY_NAIRA = [0, 3_000, 5_000, 0, 10_000, 5_000, 20_000, 0, 3_000].map(everyday);
+const CLUB_ENTRY_NAIRA = [250_000, 250_000, 250_000, 250_000, 500_000, 500_000, 500_000, 1_000_000, 1_000_000, 10_000_000].map(everyday);
+/** What kind of night a club's price buys (shown at the door). */
+export function clubTier(naira: number) {
+  return naira >= 10_000_000 ? "Billionaire's row" : naira >= 1_000_000 ? "VIP club" : naira >= 500_000 ? "Premium club" : "Club";
+}
 export function clubEntryNaira(place: string, type?: string) {
   if (type === "home" || type === "house") return 0;
   let h = 7;
