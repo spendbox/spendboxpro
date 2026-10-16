@@ -2112,6 +2112,8 @@ export function Game({
       }
       case "gallery":
       case "rotunda":
+        // A museum's galleries: its art is for sale (the masters at museum prices).
+        return { label: "Buy art", icon: ShoppingBag, run: () => worldLife.openThings("shops", "museum") };
       case "skybridge":
       case "clockroom":
       case "park":
@@ -2120,7 +2122,7 @@ export function Game({
       case "poolDeck":
         return { label: "Take a photo", icon: Camera, run: () => setCamera("photo") };
       case "market":
-        return { label: "Shop at the market", icon: ShoppingBag, run: () => worldLife.openThings("shops") };
+        return { label: "Shop at the stalls", icon: ShoppingBag, run: () => worldLife.openThings("shops", "market") };
     }
     return null;
   }

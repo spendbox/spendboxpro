@@ -64,6 +64,7 @@ import { createAircraft } from "./city/aircraft";
 import { createFarCity, MAP_MARGIN } from "./city/far-city";
 import { createKites } from "./city/kites";
 import { buildingParts } from "./city/building-kit";
+import { marketParts } from "./city/market-kit";
 import { plotLayout } from "@/lib/city/plots";
 import { CLEAR_GROUND, crossingParts, pieceParts, stationParts } from "./city/spans-kit";
 import { setSceneSnapshot } from "./city/snapshot";
@@ -1157,6 +1158,8 @@ function structureParts(t: Tile, plan: CityPlan, B0: BoxFn, tree0: TreeFn) {
   // The big ones (the stadium, the capitol, mega malls) have their own drawings.
   if (megaParts(t, B0, tree0)) return;
   const st = t.structure!;
+  // A market fills its whole site, at any size, with its own stalls.
+  if (st.type === "market") return marketParts(t, B0, tree0);
   // A real landmark bigger than the usual 2 × 2 (a market, a museum, a hotel, a port at their
   // true size): its grounds fill the whole site (paving, lawns, trees along a low fence), and its
   // building stands in the middle, drawn bigger to match.
@@ -1244,18 +1247,6 @@ function structureParts(t: Tile, plan: CityPlan, B0: BoxFn, tree0: TreeFn) {
         B(c + 0.55 + Math.cos(a) * 0.35, 0.09, c + 0.55, 0.05, 0.3 + Math.sin(a) * 0.6, 0.05, 0xe03131);
       }
       B(c + 0.55, 0.39, c + 0.55, 1, 1, 1, 0xe03131, 0, "arch");
-      break;
-    }
-    case "market": {
-      const roofs = [0xff6b6b, 0xffd43b, 0x4dabf7, 0x69db7c, 0xf783ac, 0xff922b];
-      for (let i = 0; i < 3; i++) {
-        for (let j = 0; j < 3; j++) {
-          const sx = c - 0.6 + i * 0.6;
-          const sz = c - 0.6 + j * 0.6;
-          B(sx, 0.09, sz, 0.36, 0.22, 0.36, 0xf1e3c8);
-          B(sx, 0.31, sz, 0.48 / Math.SQRT2, 0.2, 0.48 / Math.SQRT2, roofs[(i * 3 + j + Math.floor(r[0] * 6)) % roofs.length], 0, "roof");
-        }
-      }
       break;
     }
     case "arena": {

@@ -77,3 +77,17 @@ things you wear (`art/wear.tsx`); books, gadgets, home, art and fitness (`art/ho
 cars, each from its own profile, plus the keke and the motorbike (`art/cars.tsx`). A kind that
 isn't drawn (an invention) shows its category's drawing on the category's colour. A new kind in
 the shop needs a drawing added to one of these, with its id as the key.
+
+## At the market and the museum
+
+- **Markets** (`src/app/play/city/market-kit.ts`) are drawn as a real Nigerian market at any size:
+  dusty ground, rows of stalls between narrow aisles (rusty zinc sheds, big umbrellas, blue
+  tarpaulins on poles, traders' mats), heaps of tomatoes, pepper, yam, plantain, onions, fabric and
+  pots, lock-up shops with coloured shutters along two edges. Inside, traders sit at their stalls.
+  **Shop at the stalls** opens the market's own goods (`MARKET_GOODS`): a bag of rice, palm oil,
+  yam, tomatoes and pepper, stockfish, pots, a mortar and pestle, lace, okrika jeans, a charger,
+  and the cheaper fabric, beads, crafts and kitchen things.
+- **Museums** sell art (`MUSEUM_ART`, **Buy art** in their galleries): from a talking drum up to
+  Nigeria's modern masters (Aina Onabolu, Uche Okeke, Twins Seven-Seven, Erhabor Emokpae, Yusuf
+  Grillo, Ben Enwonwu) and a museum cast of an Ife bronze head, up to ₦1.2bn. Art gains value over
+  time, and the masters bring a lot of reputation. Each new thing has its own moment.

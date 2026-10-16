@@ -174,4 +174,30 @@ export const THING_MOMENTS: MomentDef[] = [
     { label: "Ask them to step away", tone: "calm", outcomes: [{ text: "They do, mostly. One grumbles about \"big men\"." }] },
     { label: "Drive off and spray them with dust", tone: "mean", traits: { people: -2 }, outcomes: [{ text: "Someone films that instead. It doesn't look good.", rep: -3, effect: "talked_about" }] },
   ]),
+  // ---------------------------------------------------------------- from the market
+  thing(["rice_bag", "palm_oil", "yam_tubers", "tomato_basket", "stockfish"], "foodstuff", ["home", "street"], "🍚", "A full kitchen", "Word has gone round the compound that your kitchen is full: rice, oil, yam, the lot. A neighbour knocks. Her children haven't eaten since morning.", [
+    { label: "Fill a bag for her", tone: "kind", traits: { giving: 2, people: 1 }, outcomes: [{ text: "She prays for you all the way down the stairs. The compound remembers.", rep: 2, effect: "blessed" }] },
+    { label: "Cook a big pot and call everyone", tone: "bold", traits: { people: 2 }, outcomes: [{ text: "Jollof for the whole compound. Someone brings drinks, someone brings music.", rep: 3 }] },
+    { label: "\"Sorry, it's all counted\"", tone: "calm", traits: { giving: -1 }, outcomes: [{ text: "She nods and goes. The door stays shut a little longer next time you need something." }] },
+  ]),
+  thing(["pot_set", "mortar"], "pounding", ["home"], "🥣", "Pounded yam day", "Your aunt is visiting and has seen your mortar and big pots. \"Today we pound yam. Properly. No machine.\"", [
+    { label: "Take the pestle yourself", tone: "bold", traits: { ways: 2 }, outcomes: [{ text: "Your arms burn. The yam is perfect. She tells everyone you were raised well.", rep: 1 }] },
+    { label: "Call the neighbour's boys to help", tone: "kind", traits: { people: 1 }, outcomes: [{ text: "Six hands, one rhythm, a song. Everyone eats.", rep: 1 }] },
+    { label: "Order poundo from the shop instead", tone: "calm", traits: { ways: -2 }, outcomes: [{ text: "She takes one look and says nothing. Loudly." }] },
+  ]),
+  thing(["lace_fabric", "okrika"], "tailor", ["street", "shop", "worship"], "🪡", "The tailor's promise", "Your tailor swore your outfit would be ready \"latest Friday\". It's Saturday morning, the party starts at noon, and his shop is shut.", [
+    { label: "Find his house", tone: "bold", traits: { daring: 2 }, outcomes: [{ text: "He's sewing the last hem in his sitting room. You arrive at the party fashionably late, and fabulous.", rep: 1 }] },
+    { label: "Wear something old, with style", tone: "calm", outcomes: [{ text: "Nobody notices. Or they're too polite to say." }] },
+    { label: "Post about him online", tone: "mean", traits: { people: -1 }, outcomes: [{ text: "Two hundred people share their own stories about him. He calls you, crying.", effect: "talked_about" }] },
+  ]),
+  thing(["phone_charger"], "charger", ["street", "work", "food"], "🔌", "\"Abeg, help me charge\"", "Your phone charger is the only one in the room that fits. Five people want to use it, one after the other.", [
+    { label: "Share it round", tone: "kind", traits: { people: 2, giving: 1 }, outcomes: [{ text: "Everyone's phone lives. You're the hero of the afternoon.", rep: 1 }] },
+    { label: "Charge for the charging", tone: "bold", traits: { giving: -1 }, outcomes: [{ text: "Business is business. A small, unexpected profit.", get: 1 }] },
+  ], SMALL),
+  // ---------------------------------------------------------------- from the museum
+  thing(["art_onabolu", "art_okeke", "art_twins", "art_emokpae", "art_grillo", "art_ife_cast", "art_enwonwu_tutu"], "masterpiece", ["home", "food", "night"], "🖼️", "A museum calls", "The National Museum wants to borrow your masterpiece for a big exhibition of Nigerian modern art. Collectors from London and New York will be there.", [
+    { label: "Lend it, with your name on the card", tone: "bold", traits: { ways: 2, daring: 1 }, outcomes: [{ text: "\"From the collection of...\" Your name on the wall of the National Museum. People talk about it for weeks.", rep: 5, effect: "talked_about" }] },
+    { label: "Lend it without your name", tone: "kind", traits: { giving: 2 }, outcomes: [{ text: "Thousands of schoolchildren see it. Nobody knows it's yours, and that's fine.", rep: 2, effect: "blessed" }] },
+    { label: "Keep it at home", tone: "calm", traits: { giving: -1 }, outcomes: [{ text: "It stays on your wall, where only your guests see it." }] },
+  ]),
 ];

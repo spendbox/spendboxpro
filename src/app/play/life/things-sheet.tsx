@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { cachedThings, loadThings } from "./things-cache";
 import { Building2, Check, Gem, House, MapPin, Pencil, ShoppingBag, Store, TrendingUp, X } from "lucide-react";
 import { renameUnit } from "../property-actions";
-import { CATEGORY_LABEL, effectWords, LUXURY_FROM, mintOf, QUICK_SALE, SHOP, STEAL_MAX, CAUGHT_CHANCE, type ItemCategory, type ItemKind } from "@/lib/world/items";
+import { CATEGORY_LABEL, effectWords, LUXURY_FROM, MARKET_GOODS, MUSEUM_ART, mintOf, QUICK_SALE, SHOP, STEAL_MAX, CAUGHT_CHANCE, type ItemCategory, type ItemKind } from "@/lib/world/items";
 import { ItemArt } from "./item-art";
 import { PurchasePop } from "./purchase-pop";
 import { INCOME_DAY, type AssetUnit } from "@/lib/world/property-api";
@@ -28,8 +28,16 @@ const TABS: { id: ThingsTab; label: string; icon: typeof Gem }[] = [
   { id: "assets", label: "Assets", icon: TrendingUp },
 ];
 
+/** A shop at a place: a market's stalls, or a museum's art. */
+export type Stall = "market" | "museum";
+const STALLS: Record<Stall, { title: string; note: string; ids: string[] }> = {
+  market: { title: "The market stalls", note: "Food, fabric, pots and everyday things, from the traders here. Bargain hard!", ids: MARKET_GOODS },
+  museum: { title: "The museum's art", note: "From the gift shop up to Nigeria's modern masters. Art tends to gain value, and the masters bring a lot of reputation.", ids: MUSEUM_ART },
+};
+
 export function ThingsSheet({
   tab: start,
+  stall,
   prices,
   coins,
   units,
@@ -50,6 +58,8 @@ export function ThingsSheet({
   onShow?: (u: AssetUnit) => void;
   onClose: () => void;
   onChanged?: () => void;
+  /** Opened at a market or a museum: only what's sold there. */
+  stall?: Stall;
 }) {
   const [tab, setTab] = useState<ThingsTab>(start === "cars" ? "shops" : start);
   const [me, setMe] = useState<MyThings | null>(() => cachedThings());
@@ -75,11 +85,11 @@ export function ThingsSheet({
       wide
       title={
         <span className="flex items-center gap-2">
-          <Gem className="size-5" /> Things
+          <Gem className="size-5" /> {stall ? STALLS[stall].title : "Things"}
         </span>
       }
     >
-      <div className="flex gap-1 rounded-full bg-ink/5 p-1">
+      <div className={`flex gap-1 rounded-full bg-ink/5 p-1 ${stall ? "hidden" : ""}`}>
         {TABS.map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)} className={`flex h-8 flex-1 items-center justify-center gap-1 rounded-full text-xs font-semibold ${tab === t.id ? "bg-panel shadow-sm" : "text-muted"}`}>
             <t.icon className="size-3.5" /> {t.label}
@@ -88,7 +98,7 @@ export function ThingsSheet({
       </div>
       {note && <p className={`mt-3 rounded-xl px-3 py-2 text-xs font-semibold ${note.good ? "bg-me/10 text-me" : "bg-hit/10 text-hit"}`}>{note.text}</p>}
       {tab === "mine" && <Mine me={me} busy={busy} run={run} />}
-      {tab === "shops" && <Shops startCars={start === "cars"} prices={prices} coins={coins} busy={busy} run={run} onBought={(k, paid) => setBought({ kind: k, paid })} />}
+      {tab === "shops" && <Shops startCars={start === "cars"} stall={stall} prices={prices} coins={coins} busy={busy} run={run} onBought={(k, paid) => setBought({ kind: k, paid })} />}
       {tab === "assets" && (
         <Assets
           units={units}
@@ -190,15 +200,20 @@ function ItemActions({ item, busy, to, setTo, run, done }: { item: MyItem; busy:
 }
 
 /** The city's shop, cars included: buy new (reputation for fine things), or try to steal something small. */
-function Shops({ startCars, prices, coins, busy, run, onBought }: { startCars: boolean; prices: Prices; coins: number; busy: boolean; run: Run; onBought: (k: ItemKind, paid: number) => void }) {
+function Shops({ startCars, stall, prices, coins, busy, run, onBought }: { startCars: boolean; stall?: Stall; prices: Prices; coins: number; busy: boolean; run: Run; onBought: (k: ItemKind, paid: number) => void }) {
   const [cat, setCat] = useState<ItemCategory | "all" | "luxury">(startCars ? "car" : "all");
   const [risky, setRisky] = useState<string | null>(null);
   const cars = cat === "car";
   // Luxury: the ₦10m-and-up watches, bags, art and cars together, cheapest first.
-  const list = cat === "luxury" ? SHOP.filter((k) => k.price >= LUXURY_FROM).sort((a, b) => a.price - b.price) : SHOP.filter((k) => cat === "all" || k.category === cat);
+  const list = stall
+    ? STALLS[stall].ids.map((id) => SHOP.find((k) => k.id === id)).filter((k): k is ItemKind => !!k).sort((a, b) => a.price - b.price)
+    : cat === "luxury"
+      ? SHOP.filter((k) => k.price >= LUXURY_FROM).sort((a, b) => a.price - b.price)
+      : SHOP.filter((k) => cat === "all" || k.category === cat);
   return (
     <div className="mt-3">
-      <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+      {stall && <p className="text-xs text-muted">{STALLS[stall].note}</p>}
+      <div className={`-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 ${stall ? "hidden" : ""}`}>
         {(["all", "luxury", "car", "jewellery", "clothing", "gadget", "home", "art", "book", "fitness"] as const).map((c) => (
           <button key={c} onClick={() => setCat(c)} className={`h-8 shrink-0 rounded-full px-3 text-xs font-semibold ${cat === c ? "bg-ink text-white" : c === "luxury" ? "bg-gold/25 text-gold-dark" : "bg-ink/5"}`}>
             {c === "all" ? "All" : c === "luxury" ? "Luxury ✨" : CATEGORY_LABEL[c]}

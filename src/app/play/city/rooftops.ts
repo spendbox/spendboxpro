@@ -436,8 +436,28 @@ export function createOpenAir(theme: Theme, key: string): Deck {
     }
   }
   if (theme === "market") {
-    for (let c = 0; c < 3; c++) k.box(-1.5 + c * 0.7, 0, 1.4, 0.55, 0.4, 0.4, pickOf(rnd, [0x8f6b4a, 0x6b5440]));
-    for (let f = 0; f < 10; f++) k.ball(-1.5 + (f % 3) * 0.7 + (rnd() - 0.5) * 0.3, 0.45, 1.4 + (rnd() - 0.5) * 0.2, 0.07, pickOf(rnd, [0xe5484d, 0xf5a524, 0x69db7c, 0xffd43b]), { w: 6, h: 5 });
+    // Close by, three traders' stalls: a table of goods in heaps and baskets, a big umbrella,
+    // the trader on a stool behind it, a basin of pure water sachets.
+    const GOODS = [0xd9480f, 0xe03131, 0xc8a27a, 0x82c91e, 0xfcc419, 0x862e9c, 0x2f9e44];
+    for (let c = 0; c < 3; c++) {
+      const sx = -2.0 + c * 1.9;
+      const sz = 1.6 + (c % 2) * 0.3;
+      k.at(sx, 0, sz, (rnd() - 0.5) * 0.3, () => {
+        k.box(0, 0, 0, 1.3, 0.75, 0.6, pickOf(rnd, [0x9c7b56, 0x8f6b4a, 0x6b5440]));
+        for (let g = 0; g < 4; g++) {
+          const gx = -0.45 + g * 0.3;
+          const color = pickOf(rnd, GOODS);
+          for (let b = 0; b < 5; b++) k.ball(gx + (rnd() - 0.5) * 0.12, 0.8 + (b > 2 ? 0.07 : 0), (rnd() - 0.5) * 0.18, 0.05, color, { w: 6, h: 5 });
+        }
+        k.cyl(0.75, 0, -0.1, 0.2, 0.16, 0.18, pickOf(rnd, [0x1c7ed6, 0xe03131, 0x2f9e44]), 12);
+        k.cyl(0, 0, 0.55, 0.025, 0.025, 2.2, 0x495057, 6);
+        k.cyl(0, 2.05, 0.55, 0.05, 1.2, 0.35, pickOf(rnd, [0xe03131, 0x1c7ed6, 0xfab005, 0x2f9e44, 0xf76707]), 12);
+        k.cyl(0, 0, 0.75, 0.18, 0.18, 0.4, 0x2b2b2b, 10);
+        spotAt(x, 0, 0.75, Math.PI, "sit", 0.42);
+      });
+    }
+    // Shoppers going between them.
+    for (let p = 0; p < 4; p++) spotAt(x, -2 + p * 1.3 + (rnd() - 0.5) * 0.4, 0.6 + (rnd() - 0.5) * 0.4, rnd() * 6, "stand");
   }
   // People standing about in twos and threes.
   const groups = 2 + Math.floor(rnd() * 2);
