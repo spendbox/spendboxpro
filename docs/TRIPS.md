@@ -1,9 +1,10 @@
 # The trip there
 
 The trip film plays only when something is going to happen on the way: a road moment (below).
-Any other trip is instant, as before. On 1 in 3 trips of 300 m or more the game asks the server
-for a road moment. If one comes, the film plays; if not (say, one came less than 20 minutes ago),
-there's no film.
+Any other trip is instant, as before. On 3 in 5 trips of 300 m or more the game asks the server
+for a road moment. If one comes, the film plays; if not (say, a road moment came less than 5
+minutes ago), there's no film. Road moments wait only for the last road moment, not for the
+street's (game-db/119).
 
 The film is the ride up to the moment. You walk out from the bus stop and get into the danfo (or
 your car, a taxi, a keke, an okada), and it pulls off. The camera swings round from the side to

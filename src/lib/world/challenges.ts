@@ -84,8 +84,11 @@ export function findGames(query: string, shelf: ChallengeCategory | "all" | "soo
     .sort((a, b) => Number(!a.engine) - Number(!b.engine));
 }
 
-/** Quick picks for what each player puts into the pool (naira): the host can type any amount too. */
-export const STAKES_NAIRA = [1_000, 5_000, 20_000, 50_000];
+/**
+ * Quick picks for what each player puts into the pool (naira): the host can type any amount too.
+ * A stake is optional: 0 is a game just for fun, with nothing in the pool (the first pick).
+ */
+export const STAKES_NAIRA = [0, 1_000, 5_000, 20_000, 50_000];
 /** The smallest and biggest stake (naira). The database takes up to ₥10,000 (game-db/070). */
 export const STAKE_MIN_NAIRA = 1_000;
 export const STAKE_MAX_NAIRA = 1_000_000;
@@ -96,10 +99,11 @@ export function stakeBounds(perMint: number) {
   const p = perMint > 0 ? perMint : 1_500;
   return { min: cents(STAKE_MIN_NAIRA / p), max: cents(STAKE_MAX_NAIRA / p) };
 }
-/** A stake in mint, to the cent, if it's within the bounds (null when it isn't). */
+/** A stake in mint, to the cent, if it's 0 (no stake) or within the bounds (null when it isn't). */
 export function cleanStake(mint: number, perMint: number): number | null {
   if (!Number.isFinite(mint)) return null;
   const v = cents(mint);
+  if (v === 0) return 0;
   const { min, max } = stakeBounds(perMint);
   return v >= min && v <= max ? v : null;
 }

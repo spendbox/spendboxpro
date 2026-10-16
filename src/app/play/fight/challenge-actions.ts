@@ -151,7 +151,7 @@ export async function openChallenge(game: string, stakeMint: number, x: number, 
       .map((l) => l.user_id)
       .slice(0, 60);
   }
-  const body = `${name} challenged everyone nearby to ${g.title}! ₦${tidy(stake * perMint).toLocaleString("en-GB")} each into the pool. Join within a minute.`;
+  const body = stake > 0 ? `${name} challenged everyone nearby to ${g.title}! ₦${tidy(stake * perMint).toLocaleString("en-GB")} each into the pool. Join within a minute.` : `${name} challenged everyone nearby to ${g.title}, just for fun! Join within a minute.`;
   await notifyMany(db, near, "challenge", body);
   // Phones are tapped after the host has their answer (the minute is already running).
   after(() => pushToMany(near));

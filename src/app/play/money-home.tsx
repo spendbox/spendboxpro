@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, ChevronDown, Copy, Gift, House } from "lucide-react";
+import { Check, ChevronDown, Copy, Gift, House, TrendingUp } from "lucide-react";
 import { cash } from "@/lib/world/value";
 import type { GiftParts } from "@/lib/world/daily-gift";
 import type { MoneyView } from "@/lib/world/money-view";
@@ -519,6 +519,14 @@ export function MoneyHome({
         )}
         <span className="shrink-0 text-xs font-semibold text-[#2b8a3e]">Assets →</span>
       </button>
+      {/* Investing (stocks, savings that grow, funds): not built yet, shown so people know it's coming. */}
+      <div aria-disabled className="mt-2 flex w-full items-center gap-2 rounded-2xl bg-ink/5 px-3 py-2 text-left text-sm text-muted">
+        <TrendingUp className="size-4 shrink-0" />
+        <span className="min-w-0 flex-1">
+          <b className="text-ink">Invest</b> your money and watch it grow.
+        </span>
+        <span className="shrink-0 rounded-full bg-gold/20 px-2 py-0.5 text-[11px] font-bold text-gold-dark">Coming soon</span>
+      </div>
       <div className="mt-3">
         {view === undefined ? (
           <div className="h-16 animate-pulse rounded-2xl bg-ink/5" />

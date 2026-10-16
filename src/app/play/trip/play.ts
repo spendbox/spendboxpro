@@ -7,7 +7,7 @@
 import type { Commute } from "@/lib/world/work";
 
 /** How likely a trip of at least minKm tries for a road moment (src/lib/world/moments.ts ROAD_RULES). */
-const ROAD = { chance: 0.33, minKm: 0.3 };
+const ROAD = { chance: 0.6, minKm: 0.3 };
 
 export type TripShow = {
   mode: Commute;
