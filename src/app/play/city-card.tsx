@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { MapPin } from "@/components/icons";
 import { Sheet } from "./sheet";
 import { cityPlayers } from "./city-actions";
-import { MapSearch, type SearchHit } from "./life/map-search";
+import { MapSearch, type SearchHit, type SearchNear } from "./life/map-search";
 import type { RegionMap } from "@/lib/world/compile";
 import type { MapBusiness } from "@/lib/world/business";
 import type { AreaHomes } from "@/lib/world/homes";
@@ -22,7 +22,7 @@ export function CityCard({
   area: string | null;
   onClose: () => void;
   /** Searching the map: pick a place and the camera flies there. */
-  search?: { region: RegionMap; mine: AssetUnit[]; owned?: OwnedProperty[]; businesses?: MapBusiness[]; coins?: number; homes?: () => AreaHomes[]; onPick: (h: SearchHit) => void } | null;
+  search?: { region: RegionMap; mine: AssetUnit[]; owned?: OwnedProperty[]; businesses?: MapBusiness[]; coins?: number; homes?: () => AreaHomes[]; onPick: (h: SearchHit) => void; near?: SearchNear } | null;
 }) {
   const [cities, setCities] = useState<{ id: string; name: string; players: number }[] | null>(null);
   useEffect(() => {
@@ -45,6 +45,7 @@ export function CityCard({
             businesses={search.businesses}
             coins={search.coins}
             homes={search.homes}
+            near={search.near}
             onPick={(h) => {
               search.onPick(h);
               onClose();
