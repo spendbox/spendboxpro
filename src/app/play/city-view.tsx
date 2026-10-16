@@ -567,6 +567,37 @@ function homeParts(
   B(-0.13, 0.19, 0.405, 0.2, 0.08, 0.02, 0x7048e8);
 }
 
+/**
+ * Power lines along a straight street: a wooden pole on the verge (the same side all along the
+ * street, so the wires run on), a crossbar, and two wires the length of the tile.
+ */
+function powerLine(x: number, z: number, along: boolean, add: (mesh: string, p: Omit<Part, "tile">) => void) {
+  const side = hashish(along ? z : x + 0.5, 77) < 0.5 ? -0.47 : 0.47;
+  const px = along ? x : x + side;
+  const pz = along ? z + side : z;
+  add("trunk", { x: px, y: 0.06, z: pz, sx: 0.2, sy: 0.62, sz: 0.2, ry: 0, color: 0x6b5440 });
+  add("building", { x: px, y: 0.62, z: pz, sx: along ? 0.02 : 0.16, sy: 0.015, sz: along ? 0.16 : 0.02, ry: 0, color: 0x5c4a3a });
+  for (const o of [-0.06, 0.06]) {
+    const wx = along ? x + 0.5 : px + o;
+    const wz = along ? pz + o : z - 0.5;
+    // A cylinder on its side, the length of the tile (tipped over it reaches from here towards -x,
+    // or, turned a quarter, towards +z).
+    add("trunk", { x: wx, y: 0.632, z: wz, sx: 0.06, sy: 1.0, sz: 0.06, ry: along ? 0 : Math.PI / 2, tilt: Math.PI / 2, color: 0x212529 });
+  }
+}
+
+/** A hawker on a verge: a big umbrella over a table of goods, a stool, a basin. */
+function roadsideSeller(x: number, z: number, along: boolean, lateral: number, r: number, add: (mesh: string, p: Omit<Part, "tile">) => void) {
+  const sx = along ? x + (r - 0.5) * 0.4 : x + lateral;
+  const sz = along ? z + lateral : z + (r - 0.5) * 0.4;
+  const um = [0xe03131, 0x1c7ed6, 0xfab005, 0x2f9e44, 0xf76707][Math.floor(r * 5)];
+  add("trunk", { x: sx, y: 0.06, z: sz, sx: 0.12, sy: 0.24, sz: 0.12, ry: 0, color: 0x495057 });
+  add("cone", { x: sx, y: 0.29, z: sz, sx: 0.2, sy: 0.05, sz: 0.2, ry: 0, color: um });
+  add("building", { x: sx, y: 0.06, z: sz, sx: 0.11, sy: 0.07, sz: 0.08, ry: along ? 0 : Math.PI / 2, color: 0x9c7b56 });
+  for (let k = 0; k < 2; k++) add("cone", { x: sx + (along ? (k - 0.5) * 0.05 : 0), y: 0.13, z: sz + (along ? 0 : (k - 0.5) * 0.05), sx: 0.045, sy: 0.03, sz: 0.045, ry: 0, color: [0xd9480f, 0xfcc419, 0x82c91e, 0xe64980][Math.floor(r * 13 + k) % 4] });
+  add("cyl", { x: sx + (along ? 0.08 : 0.05), y: 0.06, z: sz + (along ? 0.05 : 0.08), sx: 0.04, sy: 0.035, sz: 0.04, ry: 0, color: 0x2b2b2b });
+}
+
 function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part, "tile">) => void, near = true) {
   const { x, z, r } = t;
   const pal = plan.palette;
@@ -700,6 +731,11 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
         add("trunk", { x: lx, y: 0.06, z: lz, sx: 0.3, sy: 0.5, sz: 0.3, ry: 0, color: 0x495057 });
         add("lamp", { x: lx - (along ? 0 : side * 0.12), y: 0.56, z: lz - (along ? side * 0.12 : 0), sx: 0.11, sy: 0.07, sz: 0.11, ry: 0, color: 0xffffff });
       }
+      if (near) {
+        powerLine(x, z, along, add);
+        // Now and then a hawker on the wider verge (the side the road leans away from).
+        if (hashish(x * 3.1 + z, 91) < 0.14) roadsideSeller(x, z, along, o1 > 0 ? -0.36 : 0.36, t.r[3], add);
+      }
       return;
     }
     if (straight) {
@@ -712,6 +748,7 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
         add("trunk", { x: lx, y: 0.06, z: lz, sx: 0.3, sy: 0.5, sz: 0.3, ry: 0, color: 0x495057 });
         add("lamp", { x: lx - (along ? 0 : side * 0.12), y: 0.56, z: lz - (along ? side * 0.12 : 0), sx: 0.11, sy: 0.07, sz: 0.11, ry: 0, color: 0xffffff });
       }
+      if (near && !t.express && (m === 5 || m === 10)) powerLine(x, z, along, add);
       if (t.crossing !== undefined) crossingParts(t, t.crossing, along, add);
       else {
         for (const o of [-0.25, 0.25]) {

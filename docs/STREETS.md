@@ -24,3 +24,11 @@ Checked over 36,000 tiles of Lagos: neighbouring tiles always meet, every stretc
 centred, nothing goes further than 0.17 off the middle, and working it out takes under a second.
 
 Next: real side streets from OpenStreetMap along their true lines.
+
+## Power lines and hawkers
+
+Close in (the same distance as the little houses on shared tiles), every straight street has power
+lines: a wooden pole on the verge of each tile, always on the same side along a street, with a
+crossbar and two wires running on to the next pole (`powerLine` in `src/app/play/city-view.tsx`).
+Expressways have none. On about one winding street tile in seven, a hawker sits on the wider verge:
+a big umbrella over a table of goods, a stool and a basin (`roadsideSeller`).
