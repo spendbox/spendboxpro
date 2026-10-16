@@ -4526,14 +4526,14 @@ export function CityView({
     scene.add(hoverBox);
     const ray = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
-    const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const tapPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     const groundHit = new THREE.Vector3();
     /** Where on the ground (tiles) a tap lands, or null (the sky). */
     function groundUnder(clientX: number, clientY: number): { x: number; z: number } | null {
       const rect = renderer.domElement.getBoundingClientRect();
       pointer.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
       ray.setFromCamera(pointer, camera);
-      return ray.ray.intersectPlane(groundPlane, groundHit) ? { x: groundHit.x, z: groundHit.z } : null;
+      return ray.ray.intersectPlane(tapPlane, groundHit) ? { x: groundHit.x, z: groundHit.z } : null;
     }
 
     function tileUnder(clientX: number, clientY: number): number | null {

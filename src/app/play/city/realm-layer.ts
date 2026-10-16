@@ -70,7 +70,7 @@ const cyl = (r1: number, r2: number, h: number, seg = 8) => new THREE.CylinderGe
 /** Each fighter about 1 tall, standing on y = 0, facing +z. */
 function fighterGeometry(id: FighterId): THREE.BufferGeometry {
   const skin = 0xe0b48a;
-  let parts: THREE.BufferGeometry[];
+  let parts: THREE.BufferGeometry[] = [];
   switch (id) {
     case "soldier":
       parts = [
