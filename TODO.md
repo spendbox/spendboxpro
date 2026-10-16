@@ -109,6 +109,92 @@ None known right now. Fixed lately:
 - [ ] Coming soon (shown in the game): the whole of Nigeria on the map, then Africa, then the world; over a million building designs with more floors and landmarks; transformers and other everyday structures; better avatars; group conversations; rewards from real companies; posting videos and real-life content, politics, Easter eggs, real jobs, creator payouts.
 - [ ] Trees that grow the map's land outward; proposals, weddings, divorce and children (dating).
 
+## Moments that stay fresh for years (agreed plan, `docs/MOMENTS.md`, `docs/TRIPS.md`)
+A daily player gets about 2,500 moments a year (street and road). Freshness has to come from how
+moments are built, not only how many there are. In this order:
+- [ ] **Never seen first, and rarity.** Prefer moments a player has never had (the `moments` table already
+  keeps everyone's history); tiers: common, uncommon, rare (about monthly), legendary (about yearly).
+- [ ] **People who remember you.** A cast of recurring characters (Mama Nkechi the orange seller, Officer
+  Bello at the Ojota checkpoint, your street's area boys, your danfo conductor) who remember your past
+  choices; story arcs over weeks (the student you gave a lift graduates, invites you, later offers a deal).
+- [ ] **Moments built from parts.** Templates with slots (who, what they want, the complication, the twist),
+  and the road scenes follow (costumes, props, crowd size, rain, harmattan haze, night).
+- [ ] **The Lagos calendar.** Rainy-season floods, harmattan, Detty December, Christmas, Sallah rams,
+  Independence Day, fuel queues, election days, AFCON nights, NEPA in a heatwave; and the player's own
+  area (Lekki and Ajegunle feel different).
+- [ ] **Moments that fit who you are.** Rich (fundraisers, fake police, long-lost cousins), famous (fans,
+  journalists), known as stingy (beggars stop asking, people gossip), car owners (mechanics, parking touts).
+- [ ] **Real players in moments.** The stranded motorist is a real player nearby; the lost wallet belongs
+  to someone you can message.
+- [ ] **Players write moments.** Submit a moment and its choices; the community votes; the owner approves;
+  the author is credited and rewarded.
+- [ ] **New moments every month, and measuring.** 20 to 30 a month (AI helps draft variations, a person
+  reviews); track the ones people close without choosing or always answer the same way, and retire or
+  rewrite them.
+- [ ] **Choices that don't repeat or give the game away.** Each moment draws its 3 choices from a pool of 6
+  to 8 possible answers, in a random order; the same answer doesn't always turn out the same (it depends
+  on who's asking, what you did before, the time, your reputation), so there's no "always pick the kind
+  one" rule. No colours or styles that hint which answer is best or worst: every choice button looks the
+  same (today kind is green, bold gold and mean red: change that).
+- [ ] **Door setting** in the home card: Open to everyone / Friends walk in (today) / Closed to all. Today the
+  door is closed to strangers (they knock), friends walk in, and a home party opens it to all.
+
+### The plan, step by step
+Goal: about 17,000 moment versions at the start, and with varied answers 80,000 to 160,000 noticeably
+different moments (up to 560,000 combinations), so a daily player (about 2,500 a year) goes 30 years or
+more before meeting the same moment with the same answers. Each phase ships on its own and is useful alone.
+
+**Phase 1: fair answers and never seen first (about 1 week).** No new writing needed.
+- [ ] Every answer button looks the same (drop the green, gold and red); the order is shuffled each time.
+- [ ] Each moment keeps a pool of answers (6 to 8, starting from today's 3 plus new ones) and shows 3 of them.
+- [ ] Outcomes vary: each answer's chances shift with context (your reputation, the time, what you did last time),
+  so no answer is always best. Tests check no answer wins more than about 60% of the time across contexts.
+- [ ] Picking prefers moments you've never had, then ones you had longest ago (the `moments` table has it all).
+- [ ] Rarity tiers: common, uncommon, rare (about monthly), legendary (about yearly); write about 50 rare and
+  legendary ones (a winning lottery ticket, meeting a star, a long-lost relative with real news).
+- Result: no visible hints, far fewer repeats right away; about 170 moments with 35 answer sets each.
+
+**Phase 2: people who remember you (about 2 weeks).**
+- [ ] A cast of about 40 recurring characters, each tied to places (a checkpoint, a market, a bus stop, your
+  street) with a name, a look (their 3D costume) and a memory of you (a new table: what happened, how you chose).
+- [ ] Their next moment depends on the last: bribe Officer Bello once and he expects it; report him and he's moved.
+- [ ] Story arcs of 5 to 10 steps over days and weeks, branching on your choices (about 600 story steps).
+- [ ] Road scenes reuse the same character (same face and costume) so you recognise them.
+- Result: about 600 new story steps; moments start to feel like a life, not a deck of cards.
+
+**Phase 3: moments built from parts (about 3 weeks).**
+- [ ] A template format: who, what they want, the complication, the twist (6 to 10 options each), with the text,
+  amounts, answers and outcomes filled in from the parts.
+- [ ] Turn about 80 of today's moments into templates (about 200 clearly different versions each: about 16,000).
+- [ ] Road scenes follow the parts: costumes, props, crowd size, weather (rain, harmattan haze), night.
+- [ ] Each template also knows which kinds of player it fits (rich, famous, stingy, car owner, newcomer), so the
+  same situation reads 3 to 5 ways.
+- Result: about 16,000 versions, multiplied by the answer sets.
+
+**Phase 4: the Lagos calendar and your area (about 1 week, then ongoing).**
+- [ ] A calendar of about 25 seasons and dates (rainy season, harmattan, Detty December, Christmas, Sallah,
+  Independence Day, Valentine's, school resumption, AFCON nights, election days, fuel queues), about 8 moments
+  each, also built from parts (about 200).
+- [ ] Moments lean on the real area you're in (Lekki, Yaba, Ajegunle, Ikeja...).
+- Result: the year itself feels different month to month.
+
+**Phase 5: real players and player-written moments (about 3 weeks).**
+- [ ] Real players in moments: a nearby player's broken-down car, a lost wallet that belongs to someone you can
+  message (only with their say-so, nothing private shown).
+- [ ] A "write a moment" form: situation, 3 to 8 answers, what happens; checked automatically for money and
+  reputation limits, then voted on, then approved by the owner; the author is credited and rewarded.
+- Result: no limit from real players; about 600 a year from players if about 50 a month are approved.
+
+**Phase 6: every month, and measuring (ongoing).**
+- [ ] 20 to 30 new moments a month (AI drafts variations, a person reviews), about 300 a year.
+- [ ] For each moment, track how often it's closed without choosing, which answers are picked, and how often it
+  repeats per player; retire or rewrite the weak ones every month.
+- [ ] A yearly check of the numbers: distinct moments, the average time between repeats per player, and how
+  many players ever see a repeat in a month.
+
+Order: 1, 2, 3, 4, 5, then 6 for good. Road moments get every phase at the same time as street moments
+(they're the same moments with a scene). The door setting can ship any time (about 1 day).
+
 ## Done lately
 - [x] Search has a Budget row (Any, I can afford, under ₦5m / ₦20m / ₦50m / ₦250m / ₦1bn): it lists the homes and landmarks you could buy, cheapest first; landmarks show their price in search. Closing the walkthrough halfway leaves a small ? button to carry on where it was. Town Hall refreshes every 6 seconds (was 3) to save data. The search box now also finds the names players gave buildings and businesses straight away.
 - [x] Landmarks: every one has a big name sign in front of its gate (nothing in front of it, a photo spot); going into one, you arrive at its entrance (Photo, Go inside). Unilag's campus faces its gate (no second gate); LUTH is a teaching hospital's grounds (8 × 7); the big landmarks are near their real size (most 4 to 10 tiles), drawn to fill their grounds. Fun places (clubs, restaurants, stadiums, funfairs, malls, parks...) show a little icon on the map from further out than the names.
