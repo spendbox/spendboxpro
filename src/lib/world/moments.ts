@@ -12,6 +12,7 @@ import { CAST_BY_ID, CAST_GAP_HOURS, castHere } from "./cast.ts";
 import { CAST_MOMENTS } from "./cast-moments.ts";
 import { MORE_ANSWERS } from "./more-answers.ts";
 import { ROAD_MOMENTS, type RoadStage } from "./road-moments.ts";
+import { PLAYER_MOMENTS } from "./player-moments.ts";
 import { VENTURE_MOMENTS } from "./venture-moments.ts";
 import type { VentureChange } from "./ventures.ts";
 
@@ -49,6 +50,14 @@ export type MomentOutcome = {
   biz?: VentureChange;
   /** Opens a screen after: choosing a business to start. */
   opens?: "career";
+  /** With another player (./player-moments.ts): the moment it sends them next, how many hours later, and its amount (times this one's; default the same). */
+  link?: { send: string; hours: number; ask?: number };
+  /** With another player: real money you give them, this many times the amount (within the gift limits). */
+  give?: number;
+  /** With another player: how much more (or less) you like them, from −3 to 3. */
+  feel?: number;
+  /** With another player: you stood by them (it counts towards Ride or Die). */
+  stood?: boolean;
 };
 /** When an outcome is likelier: a side of who you are (strongly enough), or an effect on you. */
 export type Likely = { trait: Trait; side: 1 | -1 } | { effect: EffectId } | { venture: "quality" };
@@ -98,6 +107,8 @@ export type MomentDef = {
    * at these stages, in a crisis (`crisis`) or when it's ready to grow (`grow`).
    */
   venture?: { none?: boolean; stages?: [number, number]; crisis?: boolean; grow?: boolean };
+  /** With a real player as {name} (./player-moments.ts); `start`: it begins a thread, picked only when there's someone to be in it. */
+  player?: { start?: boolean };
   /** The amount in it, in naira: somewhere between these (rounded the way people say prices). */
   ask?: [number, number];
   emoji: string;
@@ -999,7 +1010,7 @@ export const MOMENTS: MomentDef[] = [
   },
 ];
 
-MOMENTS.push(...ROAD_MOMENTS, ...BIG_MOMENTS, ...CAST_MOMENTS, ...VENTURE_MOMENTS);
+MOMENTS.push(...ROAD_MOMENTS, ...BIG_MOMENTS, ...CAST_MOMENTS, ...VENTURE_MOMENTS, ...PLAYER_MOMENTS);
 // Each moment's pool of answers: the ones written with it, and more (./more-answers.ts).
 for (const m of MOMENTS) if (MORE_ANSWERS[m.id]) m.choices.push(...MORE_ANSWERS[m.id]);
 
@@ -1173,6 +1184,8 @@ export function pickMoment(o: {
   badges?: string[];
   /** Their business, if they run one (`due`: it's time for its next moment). Without it, no business moment comes. */
   business?: VentureState;
+  /** There's another player who can be in their story right now. */
+  partner?: boolean;
   now?: number;
   rand: () => number;
   ride?: Commute;
@@ -1192,6 +1205,7 @@ export function pickMoment(o: {
       (!m.cast || (!!o.bonds && castFits(m, o.bonds, o.castWorld ?? {}, o.now ?? Date.now()))) &&
       (!m.badge || !!o.badges?.includes(m.badge)) &&
       (!m.venture || ventureFits(m, o.business)) &&
+      (!m.player || (!!m.player.start && !!o.partner)) &&
       !o.recent.includes(m.id),
   );
   // Moments for this kind of place come first; "anywhere" ones fill in. Never had: three times as likely.
@@ -1235,7 +1249,7 @@ export function fillMoment(text: string, v: MomentVars, money: (naira: number) =
 }
 
 /** What a choice costs at most (naira), to grey it out when you can't afford it. */
-export const choiceCost = (c: MomentChoice, ask: number) => Math.max(0, ...c.outcomes.map((o) => (o.pay ?? 0) * ask));
+export const choiceCost = (c: MomentChoice, ask: number) => Math.max(0, ...c.outcomes.map((o) => ((o.pay ?? 0) + (o.give ?? 0)) * ask));
 
 /** Who you are and what's on you, when an outcome is rolled (outcomes shift with it). */
 export type RollContext = { character?: Partial<Record<Trait, number>>; effects?: EffectId[]; venture?: { quality: number } };

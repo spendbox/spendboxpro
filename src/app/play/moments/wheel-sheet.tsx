@@ -9,7 +9,7 @@ import { EFFECTS, LIFE_AREAS, MOMENT_BY_ID, areaOf, fillMoment, type LifeArea, t
 import { CAST_BY_ID, feelingWord } from "@/lib/world/cast";
 import { cash } from "@/lib/world/value";
 import { LIFE_BADGES, LIFE_BADGE_BY_ID, badgeName } from "@/lib/world/standing";
-import { myWheel, setBadgeShown, type Wheel, type WheelMoment } from "../moment-actions";
+import { myWheel, setBadgeShown, setStoryOpen, type Wheel, type WheelMoment } from "../moment-actions";
 import { Sheet } from "../sheet";
 
 // My life (docs/LIFE_WHEEL.md): your life drawn as a ring. Every moment you've lived is a notch,
@@ -162,6 +162,8 @@ export function WheelSheet({ avatar, onClose }: { avatar: Avatar; onClose: () =>
               </div>
             </section>
           )}
+
+          <Players wheel={wheel} onOpen={(open) => setWheel((w) => (w ? { ...w, storyOpen: open } : w))} />
 
           <Badges wheel={wheel} onChange={(id, shown) => setWheel((w) => (w ? { ...w, badges: w.badges.map((b) => (b.id === id ? { ...b, shown } : b)) } : w))} />
 
@@ -386,6 +388,70 @@ function Badges({ wheel, onChange }: { wheel: Wheel; onChange: (id: string, show
           ))}
         </div>
       )}
+    </section>
+  );
+}
+
+const OPENS = [
+  { id: "friends", label: "Friends" },
+  { id: "everyone", label: "Anyone" },
+  { id: "nobody", label: "Nobody" },
+] as const;
+
+/** Other players in your story (phase 6): allies and rivals, and who can be in it. */
+function Players({ wheel, onOpen }: { wheel: Wheel; onOpen: (open: NonNullable<Wheel["storyOpen"]>) => void }) {
+  if (wheel.storyOpen === null) return null;
+  const word = (p: Wheel["players"][number]) =>
+    p.mine >= 5 && p.theirs >= 5 ? "Ally" : p.mine <= -5 && p.theirs <= -5 ? "Rival" : p.mine >= 2 ? "You like them" : p.mine <= -2 ? "You don't trust them" : "Shared a story";
+  return (
+    <section className="mt-4">
+      <h3 className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-muted">Players in your story</h3>
+      {wheel.players.length === 0 && <p className="mb-2 text-xs text-muted">Now and then a friend turns up in your moments, and you in theirs: a loan, a lift in the rain, a wallet you both saw.</p>}
+      <div className="grid gap-1.5">
+        {wheel.players.map((p, i) => {
+          const w = word(p);
+          return (
+            <div key={i} className="flex items-center gap-2.5 rounded-2xl bg-ink/[0.04] px-3 py-2">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-bold">{p.name}</span>
+                <span className="block text-xs text-muted">
+                  {p.together} {p.together === 1 ? "story" : "stories"} together
+                </span>
+              </span>
+              <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-bold", w === "Ally" || w === "You like them" ? "bg-[#12b886]/15 text-[#0b7a5a]" : w === "Rival" || w === "You don't trust them" ? "bg-hit/10 text-hit" : "bg-ink/[0.06] text-ink")}>{w}</span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-2 rounded-2xl p-2.5 ring-1 ring-ink/10">
+        <p className="text-xs font-semibold">Who can be in my story</p>
+        <div className="mt-1.5 grid grid-cols-3 gap-1" role="radiogroup" aria-label="Who can be in my story">
+          {OPENS.map((o) => (
+            <button
+              key={o.id}
+              role="radio"
+              aria-checked={wheel.storyOpen === o.id}
+              onClick={() => {
+                const was = wheel.storyOpen!;
+                onOpen(o.id);
+                void setStoryOpen(o.id).then((r) => {
+                  if (!r.ok) onOpen(was);
+                });
+              }}
+              className={cn("h-8 rounded-full text-xs font-semibold", wheel.storyOpen === o.id ? "bg-ink text-white" : "bg-ink/[0.05]")}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1.5 text-[11px] leading-snug text-muted">
+          {wheel.storyOpen === "friends"
+            ? "Only your friends turn up in your moments, and you in theirs."
+            : wheel.storyOpen === "everyone"
+              ? "Friends, and anyone in your city who also chose Anyone. Only your name is shown, nothing private."
+              : "Nobody: no other player turns up in your moments, and you don't turn up in theirs."}
+        </p>
+      </div>
     </section>
   );
 }

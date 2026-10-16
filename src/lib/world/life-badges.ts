@@ -47,6 +47,8 @@ export const BADGE_INFO: BadgeInfo[] = [
   { id: "good_neighbour", emoji: "🚪", name: "Good Neighbour", kind: "people", fades: false, about: "Your neighbour would trust you with her keys, and her cat." },
   { id: "family_pillar", emoji: "🌳", name: "Family Pillar", kind: "people", fades: false, about: "The family turns to you first." },
   { id: "well_known", emoji: "📣", name: "Talk of the Town", kind: "people", fades: false, about: "Half the city knows your name." },
+  { id: "main_character", emoji: "🎬", name: "Main Character", kind: "people", fades: false, about: "You're in other people's stories, again and again." },
+  { id: "ride_or_die", emoji: "🛡️", name: "Ride or Die", kind: "people", fades: false, about: "When it mattered, you stood by your people." },
   { id: "founder", emoji: "🌱", name: "Founder", kind: "career", fades: false, about: "You started something of your own." },
   { id: "first_profit", emoji: "💵", name: "First Profit", kind: "career", fades: false, about: "Your business paid you." },
   { id: "the_boss", emoji: "👥", name: "The Boss", kind: "career", fades: false, about: "Ten people work for you." },

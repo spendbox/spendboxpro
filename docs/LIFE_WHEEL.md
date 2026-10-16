@@ -370,8 +370,19 @@ reviewing.
    more to Brand and a year and a half to two and a half to Empire. Six career badges, and businesses count towards Legacy
    (game-db/115). Still to come: a Shop taking a real building on the map, and real players as
    customers, suppliers, partners and rivals (phase 6).
-6. **Other players in your story.** Threads between players, cameos, shared and group moments,
-   allies and rivals.
+6. **Other players in your story.** *Built (most of it).* Four threads between two real players
+   (`src/lib/world/player-moments.ts`): a loan (ask, lend or not, pay back or not, chase or forgive),
+   a lift in the rain that comes back round when their car dies, vouching for a job (and how they
+   do in it reflects on you), and a wallet you both saw (a dilemma played one after the other: the
+   second player chooses without knowing what the first did). Each answer sends the next part to
+   the other player; real money goes through the usual gifts and their limits; nobody can be made
+   to pay by someone else's choice. How you feel about each other builds into allies and rivals,
+   shown on the wheel as "Players in your story", with who can be in your story: friends (the
+   default), anyone in your city who also says so, or nobody. Blocked people never, nobody away
+   for a week, nobody more than twice in 12 hours. Main Character and Ride or Die badges; being in
+   other people's stories counts towards Legacy (game-db/116). Still to come: group moments
+   (everyone in the same club or party gets the same moment and the group decides), more threads,
+   and Connector.
 7. **The freshness engine.** Templates, the calendar, your area, player-written moments, monthly new
    ones, measuring.
 8. **Going international.** Moments tagged by where they belong, local casts, calendars and

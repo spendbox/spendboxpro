@@ -89,6 +89,15 @@ amounts grow with the stage. An outcome's `biz` changes the business (`VentureCh
 `src/lib/world/ventures.ts`). Each time a moment is picked or My business opens, the business's
 days since last time are counted and it pays you.
 
+## Other players in your story
+
+A moment with `player` is about a real player ({name}). One marked `player.start` begins a thread
+and is only picked when someone can be in your story (`findPartner`: a friend, or, if you both chose
+"Anyone", someone in your city; never someone blocked, away a week, or already in two stories in 12
+hours). An outcome's `link` sends the next part to them some hours later; it comes before anything
+else when they next get a moment. `give` sends them real money (`give_coins`, with its limits);
+`feel` is how you feel about them now; `stood` counts towards Ride or Die.
+
 ## Short effects
 
 An outcome can leave something on you for a while (`effect`): Blessed and Lucky streak make good
@@ -141,6 +150,7 @@ follow-ups exist, and that every kind of place has moments by day and by night.
 | The cast (people who remember you) | `src/lib/world/cast.ts` |
 | Businesses: the kinds, the stages, a day of business | `src/lib/world/ventures.ts` |
 | Business moments | `src/lib/world/venture-moments.ts` |
+| Moments with other players | `src/lib/world/player-moments.ts`, `src/app/play/stories-server.ts` |
 | My business (Me → My business) | `src/app/play/moments/career-sheet.tsx`, `venture-actions.ts`, `ventures-server.ts` |
 | The cast's stories with you | `src/lib/world/cast-moments.ts` |
 | More answers for everyday moments | `src/lib/world/more-answers.ts` |
@@ -155,3 +165,4 @@ follow-ups exist, and that every kind of place has moments by day and by night.
 | The cast: how each feels about you, and what the city has done for them | `game-db/113_cast.sql` |
 | Standing and badges | `game-db/114_standing.sql` |
 | Businesses | `game-db/115_ventures.sql` |
+| Other players in your story | `game-db/116_player_stories.sql` |

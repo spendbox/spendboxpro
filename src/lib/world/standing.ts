@@ -27,12 +27,15 @@ export type LivedMoment = {
   /** Reputation it moved. */
   rep: number;
   /** What the game noted at the time (game-db/114): trust it moved, whether anyone saw, the effect it left. */
-  marks: { trust?: number; unseen?: boolean; effect?: string } | null;
+  marks: { trust?: number; unseen?: boolean; effect?: string; stood?: boolean } | null;
   /** It was the next step of a story. */
   followed: boolean;
 };
 /** Where you are with a character. */
 export type LivedBond = { who: string; step: number; feeling: number };
+/** Other players in your story (game-db/116). */
+export type LivedOthers = { links: number; people: number; stood: number; allies: number };
+
 /** A business you started (./ventures.ts): the best stage it reached, its staff, all it paid you, when it started and whether it closed. */
 export type LivedVenture = { best: number; staff: number; paid: number; startedAt: number; closed: boolean };
 
@@ -47,6 +50,8 @@ export type LifeFacts = {
   /** Times you were talked about in the last 60 days. */
   talkedAbout: number;
   ventures: LivedVenture[];
+  /** Other players: parts of their stories you've been in (and from how many people), times you stood by someone, and close allies. */
+  others: LivedOthers;
   trust: number;
   fame: number;
   legacy: number;
@@ -78,7 +83,7 @@ export function fameWord(fame: number) {
 }
 
 /** Everything the badges and standing need, from your moments and the cast. */
-export function lifeFacts(moments: LivedMoment[], bonds: LivedBond[], now = Date.now(), ventures: LivedVenture[] = []): LifeFacts {
+export function lifeFacts(moments: LivedMoment[], bonds: LivedBond[], now = Date.now(), ventures: LivedVenture[] = [], others: LivedOthers = { links: 0, people: 0, stood: 0, allies: 0 }): LifeFacts {
   const character = characterOf(
     moments.filter((m) => m.traits).map((m) => ({ traits: m.traits!, at: m.at })),
     now,
@@ -119,6 +124,8 @@ export function lifeFacts(moments: LivedMoment[], bonds: LivedBond[], now = Date
     legacy += size === "life" ? 15 : size === "big" ? 5 : 1;
     if (m.followed) legacy += 3;
   }
+  // Being in other people's stories, and people who'd do anything for you.
+  legacy += 3 * others.links + 5 * others.allies;
   // Businesses built, even ones that failed.
   for (const v of ventures) legacy += 20 + 10 * v.best;
   for (const b of bonds) {
@@ -136,6 +143,7 @@ export function lifeFacts(moments: LivedMoment[], bonds: LivedBond[], now = Date
     bonds: Object.fromEntries(bonds.map((b) => [b.who, b])),
     talkedAbout: moments.filter((m) => m.marks?.effect === "talked_about" && now - m.at < 60 * DAY).length,
     ventures,
+    others,
     trust,
     fame,
     legacy,
@@ -181,6 +189,8 @@ const RULES: Record<string, (f: LifeFacts) => boolean> = {
   good_neighbour: feels("chioma_neighbour", 4),
   family_pillar: (f) => feels("uncle_sunday", 4)(f) && (f.lived.has("sister_wedding") || f.lived.has("land_later")),
   well_known: (f) => f.fame >= 60,
+  main_character: (f) => f.others.links >= 50 && f.others.people >= 10,
+  ride_or_die: (f) => f.others.stood >= 5,
   founder: (f) => f.ventures.length > 0,
   first_profit: (f) => f.ventures.some((v) => v.paid > 0),
   the_boss: (f) => f.ventures.some((v) => v.staff >= 10),

@@ -4,6 +4,7 @@ import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CAST_BY_ID } from "@/lib/world/cast";
 import { applyChange, inCrisis, readyToGrow } from "@/lib/world/ventures";
+import { STORY_OPENS, bondWith, dueLink, findPartner, giveInStory, openLink, sendLink, storyOpenOf, type StoryOpen } from "./stories-server";
 import { openVenture, settleVenture, stageScale, type VentureRow } from "./ventures-server";
 import { BADGE_DELAY_HOURS, LIFE_BADGES, LIFE_BADGE_BY_ID, fameWord, lifeFacts, type LivedMoment } from "@/lib/world/standing";
 import { regionMap } from "@/lib/world";
@@ -109,11 +110,14 @@ async function refreshStanding(db: ReturnType<typeof createAdminClient>, userId:
   const { data: was, error } = await db.from("life_standing").select("trust, fame, legacy, updated_at").eq("user_id", userId).maybeSingle();
   if (error) return null;
   if (was && !force && Date.now() - Date.parse(String(was.updated_at)) < STANDING_EVERY) return { trust: n(was.trust), fame: n(was.fame), legacy: n(was.legacy) };
-  const [rowsRes, bondsRes, badgesRes, venturesRes] = await Promise.all([
+  const [rowsRes, bondsRes, badgesRes, venturesRes, linksRes, alliesRes] = await Promise.all([
     db.from("moments").select("moment, choice, answered_at, traits, outcome, marks, from_id").eq("user_id", userId).gte("choice", 0).order("answered_at", { ascending: false }).limit(2000),
     db.from("cast_bonds").select("who, step, feeling").eq("user_id", userId),
     db.from("life_badges").select("badge, faded_at").eq("user_id", userId),
     db.from("ventures").select("state, started_at, closed_at").eq("user_id", userId),
+    // Parts of other players' stories you've been in.
+    db.from("story_links").select("from_user").eq("to_user", userId).limit(2000),
+    db.from("player_bonds").select("feeling").eq("user_id", userId).gte("feeling", 5),
   ]);
   if (rowsRes.error) return null;
   const lived: LivedMoment[] = (rowsRes.data ?? []).map((r) => {
@@ -136,7 +140,9 @@ async function refreshStanding(db: ReturnType<typeof createAdminClient>, userId:
         const st = (v.state ?? {}) as { best?: number; staff?: number; paid?: number };
         return { best: n(st.best), staff: n(st.staff), paid: n(st.paid), startedAt: Date.parse(String(v.started_at)), closed: !!v.closed_at };
       });
-  const facts = lifeFacts(lived, bonds, Date.now(), ventures);
+  const links = linksRes.error ? [] : (linksRes.data ?? []);
+  const others = { links: links.length, people: new Set(links.map((l) => String(l.from_user))).size, stood: lived.filter((x) => x.marks?.stood).length, allies: alliesRes.error ? 0 : (alliesRes.data ?? []).length };
+  const facts = lifeFacts(lived, bonds, Date.now(), ventures, others);
   const had = new Map((badgesRes.data ?? []).map((b) => [String(b.badge), b.faded_at as string | null]));
   const now = Date.now();
   for (const b of LIFE_BADGES) {
@@ -200,12 +206,18 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; ride
   const level = Math.max(1, n(prof?.level));
   const seed = Math.floor(Math.random() * 2 ** 31);
   // Something coming back from before comes first.
-  const due = road ? undefined : dueRes.data?.[0];
+  // The next part of another player's story comes first of all (game-db/116), then your own follow-ups.
+  const link = road ? null : await dueLink(m.db, m.userId).catch(() => null);
+  const linked = link ? MOMENT_BY_ID.get(link.moment) : undefined;
+  const due = road || linked ? undefined : dueRes.data?.[0];
   const followed = due ? MOMENT_BY_ID.get(String(due.moment)) : undefined;
+  // Someone who could be in your story, if a new one is to start.
+  const partner = linked || followed ? null : await findPartner(m.db, m.userId, m.region).catch(() => null);
   const had = recentRes.data ?? [];
   const bigSince = Date.now() - MOMENT_RULES.bigEveryDays * 86_400_000;
   const bigOk = !had.some((r) => (MOMENT_BY_ID.get(String(r.moment))?.size ?? "small") !== "small" && Date.parse(String(r.created_at)) > bigSince);
   const def =
+    linked ??
     followed ??
     pickMoment({
       spot,
@@ -219,6 +231,7 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; ride
       castWorld: world,
       badges,
       business: business.state,
+      partner: !!partner,
       rand: Math.random,
       ride,
     });
@@ -232,7 +245,17 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; ride
   if (who) vars.name = who.name;
   // A business's problems grow with it.
   if (def.venture && !def.venture.none && business.row) vars.ask = niceNaira(vars.ask * stageScale(business.row.venture.stage));
-  const full = { ...vars, seed };
+  // Another player in it: them by name, and who they are (for what you choose to reach them).
+  let other: string | null = null;
+  if (linked && link) {
+    vars.name = link.fromName;
+    if (n(link.vars.ask) > 0) vars.ask = n(link.vars.ask);
+    other = link.from;
+  } else if (def.player?.start && partner) {
+    vars.name = partner.name;
+    other = partner.id;
+  }
+  const full = { ...vars, seed, ...(other ? { partner: other } : {}) };
   const { data: id, error } = await m.db.rpc("moment_open", {
     p_user: m.userId,
     p_moment: def.id,
@@ -243,12 +266,22 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; ride
     p_follow: followed ? due!.id : null,
   });
   if (error || id == null) return null;
+  if (linked && link) await openLink(m.db, link.id);
   return { id: n(id), moment: def.id, vars: full, perMint: m.perMint, canSpend: spendRes.error ? 0 : n(spendRes.data) };
 }
 
 /** What came of your choice: which outcome, and the money (mint) and reputation that came of it. */
 export type MomentResult =
-  | { ok: true; outcome: number; cash: number; rep: number; effect: EffectId | null; cast: { who: string; feeling: number; bond: number } | null }
+  | {
+      ok: true;
+      outcome: number;
+      cash: number;
+      rep: number;
+      effect: EffectId | null;
+      cast: { who: string; feeling: number; bond: number } | null;
+      /** Another player in it: their name and whether money you gave them went through (`note`: why not). */
+      player: { name: string; gave: number; note: string | null } | null;
+    }
   | { ok: false; error: string };
 
 export async function momentAnswer(id: number, choice: number): Promise<MomentResult> {
@@ -345,10 +378,26 @@ export async function momentAnswer(id: number, choice: number): Promise<MomentRe
         () => null,
       );
   }
+  // Another player in it (game-db/116): money to them, how you feel about them, and the next part of the story, theirs now.
+  let player: { name: string; gave: number; note: string | null } | null = null;
+  const other = typeof (vars as { partner?: unknown }).partner === "string" ? String((vars as { partner?: string }).partner) : null;
+  if (def.player && other) {
+    let note: string | null = null;
+    let gave = 0;
+    if (outcome.give) {
+      note = await giveInStory(m.db, m.userId, other, outcome.give * n(vars.ask), m.perMint).catch(() => "It didn't go through.");
+      if (!note) gave = Math.max(1, Math.round((outcome.give * n(vars.ask)) / m.perMint));
+    }
+    await bondWith(m.db, m.userId, other, outcome.feel ?? 0).catch(() => 0);
+    // Money that didn't go doesn't need paying back.
+    if (outcome.link && !(outcome.give && note)) await sendLink(m.db, m.userId, other, outcome.link.send, n(vars.ask) * (outcome.link.ask ?? 1), outcome.link.hours).catch(() => false);
+    player = { name: String(vars.name ?? ""), gave, note };
+  }
   // What the game noted (game-db/114), then standing and badges worked out again now and then.
   const marks: Record<string, unknown> = { i: c.outcomes.indexOf(outcome) };
   if (outcome.trust != null) marks.trust = outcome.trust;
   if (outcome.unseen) marks.unseen = true;
+  if (outcome.stood) marks.stood = true;
   if (outcome.effect) marks.effect = outcome.effect;
   await m.db.from("moments").update({ marks }).eq("id", Math.round(n(id))).eq("user_id", m.userId).then(
     () => null,
@@ -356,7 +405,7 @@ export async function momentAnswer(id: number, choice: number): Promise<MomentRe
   );
   await refreshStanding(m.db, m.userId).catch(() => null);
   const d = (data ?? {}) as { cash?: number; rep?: number };
-  return { ok: true, outcome: c.outcomes.indexOf(outcome), cash: n(d.cash), rep: n(d.rep), effect, cast };
+  return { ok: true, outcome: c.outcomes.indexOf(outcome), cash: n(d.cash), rep: n(d.rep), effect, cast, player };
 }
 
 /** One moment you lived, for the wheel: what it was, what you chose and what came of it. */
@@ -390,6 +439,10 @@ export type Wheel = {
   badges: { id: string; isNew: boolean; faded: boolean; shown: boolean }[];
   /** The most legendary lives. */
   board: { name: string; legacy: number; me: boolean }[];
+  /** Who can be in your story (null before game-db/116). */
+  storyOpen: StoryOpen | null;
+  /** Other players you've shared stories with: how you feel about them, how they feel about you, and how many stories. */
+  players: { name: string; mine: number; theirs: number; together: number }[];
   region: string;
   perMint: number;
 };
@@ -399,6 +452,20 @@ export async function myWheel(): Promise<Wheel | null> {
   const m = await me().catch(() => null);
   if (!m) return null;
   const standing = await refreshStanding(m.db, m.userId, true).catch(() => null);
+  const [storyOpen, myBondsRes] = await Promise.all([
+    storyOpenOf(m.db, m.userId).catch(() => null),
+    m.db.from("player_bonds").select("other, feeling, together").eq("user_id", m.userId).order("last_at", { ascending: false }).limit(30),
+  ]);
+  const others = myBondsRes.error ? [] : (myBondsRes.data ?? []);
+  const [{ data: theirBonds }, { data: otherNames }] = others.length
+    ? await Promise.all([
+        m.db.from("player_bonds").select("user_id, feeling").eq("other", m.userId).in("user_id", others.map((o) => String(o.other))),
+        m.db.from("profiles").select("id, username").in("id", others.map((o) => String(o.other))),
+      ])
+    : [{ data: [] }, { data: [] }];
+  const theirOf = new Map((theirBonds ?? []).map((b) => [String(b.user_id), n(b.feeling)]));
+  const otherName = new Map((otherNames ?? []).map((p) => [String(p.id), String(p.username ?? "Someone")]));
+  const players = others.map((o) => ({ name: otherName.get(String(o.other)) ?? "Someone", mine: n(o.feeling), theirs: theirOf.get(String(o.other)) ?? 0, together: n(o.together) }));
   const nowIso = new Date().toISOString();
   const [rowsRes, countRes, dueRes, effects, answers, bondsRes, myBadges, boardRes, aboveRes] = await Promise.all([
     m.db.from("moments").select("*").eq("user_id", m.userId).not("answered_at", "is", null).gte("choice", 0).order("created_at", { ascending: false }).limit(120),
@@ -454,6 +521,8 @@ export async function myWheel(): Promise<Wheel | null> {
     standing: standing ? { ...standing, fameWord: fameWord(standing.fame), rank: n((aboveRes as { count?: number | null }).count) + 1 } : null,
     badges,
     board,
+    storyOpen,
+    players,
     region: m.region,
     perMint: m.perMint,
   };
@@ -464,5 +533,13 @@ export async function setBadgeShown(badge: string, shown: boolean): Promise<{ ok
   const m = await me().catch(() => null);
   if (!m || !LIFE_BADGE_BY_ID.has(String(badge))) return { ok: false };
   const { error } = await m.db.from("life_badges").update({ shown: !!shown }).eq("user_id", m.userId).eq("badge", String(badge));
+  return { ok: !error };
+}
+
+/** Who can be in your story: friends, anyone in your city who says so too, or nobody (docs/LIFE_WHEEL.md, phase 6). */
+export async function setStoryOpen(open: StoryOpen): Promise<{ ok: boolean }> {
+  const m = await me().catch(() => null);
+  if (!m || !STORY_OPENS.includes(open)) return { ok: false };
+  const { error } = await m.db.from("story_prefs").upsert({ user_id: m.userId, open, updated_at: new Date().toISOString() });
   return { ok: !error };
 }

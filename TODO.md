@@ -1,6 +1,7 @@
 # To do
 
 ## Now (owner)
+- [ ] Then run `game-db/116_player_stories.sql` (other players in your story: loans, lifts, vouching, the wallet). Run it after 115. Until then no other player turns up in anyone's moments.
 - [ ] Then run `game-db/115_ventures.sql` (careers: start a business and grow it). Run it after 114. Until then My business says businesses are switched on soon.
 - [ ] Then run `game-db/114_standing.sql` (Trust, Fame, Legacy and quiet badges). Run it after 113. Until then the wheel shows no standing and no badges.
 - [ ] Then run `game-db/113_cast.sql` (people who remember you: Mama Nkechi, Officer Bello, Baba Sule...). Run it after 112. Until then no character's story comes.
@@ -166,9 +167,12 @@ Each phase is built in one go (a few hours to a couple of days); writing the sto
 - [ ] More business moments for each kind (a suya spot's problems aren't a tech startup's).
 - [x] Owner decided: no limit on an Empire's earnings, but harder to grow the bigger it is; the smallest cap is ₦150,000 a day (Idea), then ₦500,000, ₦1.5m and ₦5m.
 
-**Phase 6: other players in your story.**
-- [ ] Threads between two players (a loan, a favour), cameos, shared moments, group moments at a place,
-  allies and rivals; only with friends, people met, or those who opt in; all settled by the server.
+**Phase 6: other players in your story.** Built, except group moments.
+- [x] Four threads between two players: a loan, a lift in the rain, vouching for a job, a wallet you both saw (a dilemma).
+- [x] Real money through gifts and their limits; nobody made to pay by another's choice; allies and rivals; who can be in your story (friends, anyone, nobody) (game-db/116).
+- [x] Main Character and Ride or Die badges; being in others' stories counts towards Legacy.
+- [ ] Group moments: everyone in the same club, party or church gets the same moment, and the group decides together.
+- [ ] More threads (a business partnership between players, a rivalry over the same shop, a wedding invitation), and Connector (introducing two players who become partners).
 
 **Phase 7: the freshness engine.**
 - [ ] Moments built from parts, the Lagos calendar and your area, player-written moments, 20 to 30 new a month, measuring.

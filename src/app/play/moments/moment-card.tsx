@@ -25,7 +25,15 @@ const SPOT_TINT: Record<MomentSpot, string> = {
   work: "from-[#e9ecef] to-[#868e96]",
   road: "from-[#fff3bf] to-[#f59f00]",
 };
-type Answered = { text: string; cash: number; rep: number; effect: EffectId | null; cast: { who: string; feeling: number; bond: number } | null; opens?: "career" };
+type Answered = {
+  text: string;
+  cash: number;
+  rep: number;
+  effect: EffectId | null;
+  cast: { who: string; feeling: number; bond: number } | null;
+  player: { name: string; gave: number; note: string | null } | null;
+  opens?: "career";
+};
 
 /** How it went, for the film: well (reputation or money in), badly, or neither. */
 export type MomentMood = "happy" | "angry" | "calm";
@@ -53,7 +61,8 @@ export function MomentCard({ shown, onClose, onAnswered, closeLabel = "Walk away
     if (!r.ok) return setError(r.error);
     const c = def!.choices[i];
     const o = c.outcomes[r.outcome] ?? c.outcomes[0];
-    setAnswered({ text: fill(o.text), cash: r.cash, rep: r.rep, effect: r.effect, cast: r.cast, opens: o.opens });
+    setAnswered({ text: fill(o.text), cash: r.cash, rep: r.rep, effect: r.effect, cast: r.cast, player: r.player, opens: o.opens });
+    if (r.player?.gave) window.dispatchEvent(new Event("nt-money-changed"));
     if (r.cash || r.rep) window.dispatchEvent(new Event("nt-money-changed"));
     playSfx(r.cash > 0 || r.rep > 0 ? "found" : r.cash < 0 || r.rep < 0 ? "miss" : "pop");
     onAnswered?.(moodOf(o, c.tone));
@@ -97,6 +106,12 @@ export function MomentCard({ shown, onClose, onAnswered, closeLabel = "Walk away
       ) : (
         <div className="moment-in px-4 pb-4">
           <p className="text-sm leading-snug">{answered.text}</p>
+          {answered.player?.gave ? (
+            <p className="mt-1.5 text-xs font-semibold text-[#0b7a5a]">
+              You gave {answered.player.name} {cash(answered.player.gave)}.
+            </p>
+          ) : null}
+          {answered.player?.note && <p className="mt-1.5 text-xs font-semibold text-hit">{answered.player.note}</p>}
           {(answered.cash !== 0 || answered.rep !== 0 || answered.effect || answered.cast) && (
             <div className="mt-2.5 flex flex-wrap gap-1.5">
               {answered.cash !== 0 && (
