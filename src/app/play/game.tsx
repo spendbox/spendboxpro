@@ -150,8 +150,6 @@ import * as serviceActions from "./service-actions";
 import * as reportActions from "./report-actions";
 import * as marketActions from "./market-actions";
 import { REGIONS, regionMap } from "@/lib/world";
-import type { RealmSource } from "./city/realm-layer";
-import { SpiritMode } from "./realm/spirit-mode";
 
 // Sheets opened from the map: loaded when first opened.
 const GhostsSheet = dynamic(() => import("./ghost-duel/ghosts-sheet").then((m) => m.GhostsSheet));
@@ -481,11 +479,6 @@ export function Game({
   const [message, setMessage] = useState<{ text: string; tone: "good" | "bad" | "info"; icon?: LucideIcon } | null>(null);
   const [hover, setHover] = useState<{ tile: number; label: string } | null>(null);
   const [menu, setMenu] = useState(false);
-  // Spirit mode (the Spirit Realm, docs/REALM.md): the map shows only the hour's battle. The map
-  // reads what to draw from spiritSource every frame, and hands taps on the ground to spiritTap.
-  const [spiritOn, setSpiritOn] = useState(false);
-  const spiritSource = useRef<RealmSource | null>(null);
-  const spiritTap = useRef<((x: number, z: number) => void) | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [showResults, setShowResults] = useState<number | null>(null);
   const [toasts, setToasts] = useState<FeedItem[]>([]);
@@ -2361,8 +2354,6 @@ export function Game({
             onWorkplace={worldId && !guest ? worldLife.onWorkplace : undefined}
             onAtGate={setAtGate}
             onBubbleSignIn={guest ? () => setSignInWhy("Sign in to go into places, meet people and play.") : undefined}
-            spirit={spiritOn && worldId ? spiritSource : null}
-            onSpiritTap={(x, z) => spiritTap.current?.(x, z)}
             gateIn={gateIn}
             centerRef={worldId ? worldLife.centerRef : undefined}
             walkStick={walkStick}
@@ -2438,19 +2429,6 @@ export function Game({
           />
         </Safe>
       )}
-      {spiritOn && worldId ? (
-        <Safe name="Spirit Realm">
-          <SpiritMode
-            region={worldId}
-            guest={guest}
-            source={spiritSource}
-            tapRef={spiritTap}
-            onExit={() => setSpiritOn(false)}
-            onSignIn={() => setSignInWhy("Sign in to send troops into the Spirit Realm.")}
-          />
-        </Safe>
-      ) : (
-      <>
       {worldId && worldLife.overlay}
       {/* The real map's second row: who's online, your life (Home, Income, Life, Soon), and the
           notifications bell on the far right. */}
@@ -2495,15 +2473,6 @@ export function Game({
               {onlineNow}
               <span className="max-[440px]:hidden">online</span>
             </button>
-            )}
-            {!place && ride === null && !walking && (
-              <button
-                onClick={() => setSpiritOn(true)}
-                className="pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-2xl bg-[#1e1037] px-3 text-xs font-bold text-[#ddd6fe] shadow-[0_0_14px_rgba(139,92,246,0.55)]"
-                title="The Spirit Realm: a battle on the map every hour"
-              >
-                <Ghost className="size-4" /> Spirit Realm
-              </button>
             )}
             {worldLife.rowButtons}
           </div>
@@ -2951,7 +2920,6 @@ export function Game({
           onPhone={() => { setMenu(false); setPhone("home"); }}
           onMyJob={guest || worldId ? undefined : () => { setMenu(false); setJobsAt(null); }}
           onGames={worldId ? undefined : () => { setMenu(false); setGamesOpen({}); }}
-          onRealm={worldId && !place && ride === null && !walking ? () => { setMenu(false); setSpiritOn(true); } : undefined}
           onChangePin={() => router.push("/welcome")}
           onSignOut={() => { setMenu(false); setConfirmSignOut(true); }}
         />
@@ -4371,19 +4339,6 @@ export function Game({
       {statsOpen && <StatsSheet online={onlineNow} onClose={() => setStatsOpen(false)} people={peopleFinder("stats")} />}
       {cityOpen && worldRegion && (
         <CityCard city={worldRegion.name} area={worldArea} onClose={() => setCityOpen(false)} search={worldLife.search} />
-      )}
-      </>
-      )}
-      {/* Signing in from Spirit mode (to send troops). */}
-      {spiritOn && worldId && signInShown && (
-        <SignInOverlay
-          why={signIn?.why ?? null}
-          signedIn={!guest}
-          welcome={welcomeDone ? null : welcome}
-          meName={me.name}
-          onClose={closeSignIn}
-          onSignOut={() => void signOut()}
-        />
       )}
     </main>
   );

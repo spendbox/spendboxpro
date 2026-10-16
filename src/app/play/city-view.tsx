@@ -90,7 +90,6 @@ import { createCountryside, regionOf } from "./city/countryside";
 import { buildLandmarks as buildCountryLandmarks } from "./city/landmarks";
 import { causewayParts, jettyParts, neighbourhoodParts, pond, pool, supertallParts } from "./city/neighbourhood";
 import { homeLabel, type TownHouse } from "@/lib/houses";
-import { createRealmLayer, type RealmSource } from "./city/realm-layer";
 
 /** The country's famous landmarks out in the farmland round each town (hidden for now). */
 const SHOW_COUNTRY_LANDMARKS = false;
@@ -401,13 +400,6 @@ type Props = {
   gateIn?: number;
   /** Signed out: a tap on a place's bubble (or its fun-place icon) asks you to sign in instead. */
   onBubbleSignIn?: () => void;
-  /**
-   * Spirit mode (the Spirit Realm, docs/REALM.md): set, everything on the map hides but the city
-   * itself (tinted purple), the battle is drawn from it every frame, and the camera flies to the
-   * arena. Taps on the ground go to onSpiritTap (where on the map, in tiles) instead.
-   */
-  spirit?: { current: RealmSource | null } | null;
-  onSpiritTap?: (x: number, z: number) => void;
 };
 
 type Part = { tile: number; x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number; color: number; tilt?: number };
@@ -1591,8 +1583,6 @@ export function CityView({
   onAtGate,
   gateIn = 0,
   onBubbleSignIn,
-  spirit = null,
-  onSpiritTap,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const api = useRef<{
@@ -1630,10 +1620,10 @@ export function CityView({
     /** Zoom in (dir 1) or out (dir -1) a step: the + and − buttons on a computer. */
     zoom: (dir: number) => void;
   } | null>(null);
-  const cb = useRef({ onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onLightTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick, onAtGate, onBubbleSignIn, spirit, onSpiritTap });
+  const cb = useRef({ onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onLightTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick, onAtGate, onBubbleSignIn });
   const atmos = useRef({ progress, nightFirst, meAvatar, weather });
   useEffect(() => {
-    cb.current = { onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onLightTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick, onAtGate, onBubbleSignIn, spirit, onSpiritTap };
+    cb.current = { onMark, onPerson, onHover, onArea, onProperty, onWorkplace, onBusiness, onBillboard, onBalloon, onAdViews, onRoom, onBalloons, onNpc, onSpots, onEventTap, onLightTap, onEventInfo, liveVenues, clockOffsetMs, onRides, onRideEnd, onJunction, onInteract, onGhost, paused, walkStick, onWalkBlocked, homeStick, onAtGate, onBubbleSignIn };
     atmos.current = { progress, nightFirst, meAvatar, weather };
   });
 
@@ -1754,16 +1744,6 @@ export function CityView({
     // is still a secret building site.
     const life = new THREE.Group();
     scene.add(life);
-    // The Spirit Realm's battle, drawn over the city in Spirit mode (./city/realm-layer).
-    const realm = createRealmLayer();
-    const spiritBg = new THREE.Color(0x150b2e);
-    const spiritFog = new THREE.Color(0x2a1650);
-    const keepBg = new THREE.Color();
-    const keepFog = new THREE.Color();
-    /** The arena the camera last flew to (so it flies once, not every frame). */
-    let spiritAt = "";
-    let realmFly: THREE.Vector3 | null = null;
-    let spiritWas = false;
     const world = makeWorld();
 
     let meshes: Record<string, THREE.InstancedMesh> = {};
@@ -4526,15 +4506,6 @@ export function CityView({
     scene.add(hoverBox);
     const ray = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
-    const tapPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-    const groundHit = new THREE.Vector3();
-    /** Where on the ground (tiles) a tap lands, or null (the sky). */
-    function groundUnder(clientX: number, clientY: number): { x: number; z: number } | null {
-      const rect = renderer.domElement.getBoundingClientRect();
-      pointer.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
-      ray.setFromCamera(pointer, camera);
-      return ray.ray.intersectPlane(tapPlane, groundHit) ? { x: groundHit.x, z: groundHit.z } : null;
-    }
 
     function tileUnder(clientX: number, clientY: number): number | null {
       const rect = renderer.domElement.getBoundingClientRect();
@@ -7341,12 +7312,6 @@ export function CityView({
         return;
       }
       if (moved > 8 || !quick) return;
-      // Spirit mode: a tap on the ground says where (for sending troops), and nothing else is tapped.
-      if (cb.current.spirit?.current) {
-        const p = groundUnder(e.clientX, e.clientY);
-        if (p) cb.current.onSpiritTap?.(p.x, p.z);
-        return;
-      }
       // A beam of light (a challenge, or an event someone is hosting), or the bubble over it.
       const lightTap = cb.current.onLightTap ? lightAt(e.clientX, e.clientY) : null;
       if (lightTap !== null && cb.current.onLightTap?.(lightTap) === true) return;
@@ -7730,16 +7695,6 @@ export function CityView({
           controls.target.lerp(focus, 0.06);
           if (controls.target.distanceTo(focus) < 0.05) focus = null;
         }
-        if (realmFly) {
-          // Spirit mode: over to the arena, and back far enough to see all of it.
-          flyStep.subVectors(realmFly, controls.target).multiplyScalar(0.06);
-          controls.target.add(flyStep);
-          camera.position.add(flyStep);
-          const d = camera.position.distanceTo(controls.target);
-          const want = 42;
-          if (Math.abs(d - want) > 0.5) camera.position.lerp(controls.target, ((d - want) / d) * 0.06);
-          if (flyStep.lengthSq() < 1e-6 && Math.abs(d - want) <= 0.5) realmFly = null;
-        }
         if (eventFly) {
           flyStep.subVectors(eventFly, controls.target).multiplyScalar(0.06);
           controls.target.add(flyStep);
@@ -7782,49 +7737,7 @@ export function CityView({
       }
       worldEventsLayer.update(dt, time, Date.now() + cb.current.clockOffsetMs);
       partyLights.update(time, tiles, carNight);
-      const spiritSrc = cb.current.spirit?.current ?? null;
-      const spiritOn = !!spiritSrc;
-      if (spiritOn !== spiritWas) {
-        spiritWas = spiritOn;
-        // The labels, pins and bubbles over the map hide too.
-        for (const child of Array.from(el.children)) if (child !== renderer.domElement) (child as HTMLElement).style.visibility = spiritOn ? "hidden" : "";
-        if (!spiritOn) {
-          spiritAt = "";
-          realmFly = null;
-        }
-      }
-      if (spiritSrc) {
-        const at = `${spiritSrc.centre.x},${spiritSrc.centre.z}`;
-        if (at !== spiritAt) {
-          spiritAt = at;
-          focus = null;
-          eventFly = null;
-          realmFly = new THREE.Vector3(spiritSrc.centre.x, 0, spiritSrc.centre.z);
-          if (regionNow && win && Math.max(Math.abs(spiritSrc.centre.x - win.cx), Math.abs(spiritSrc.centre.z - win.cz)) > DETAIL * 0.45) {
-            build(currentSeed, builtCount, { cx: Math.round(spiritSrc.centre.x), cz: Math.round(spiritSrc.centre.z) });
-          }
-        }
-        realm.update(time, spiritSrc);
-        // Only the city itself shows (no traffic, people, pins...), under a purple sky.
-        const hide = [moving, markerGroup, fxGroup, life, pillGroup, ghostGroup, bizGroup, caughtGroup, meFig];
-        const was = hide.map((g) => g.visible);
-        hide.forEach((g) => (g.visible = false));
-        const bg = scene.background as THREE.Color;
-        keepBg.copy(bg);
-        keepFog.copy(fog.color);
-        bg.copy(spiritBg);
-        fog.color.copy(spiritFog);
-        const exposure = renderer.toneMappingExposure;
-        renderer.toneMappingExposure = exposure * 0.7;
-        renderer.render(scene, camera);
-        renderer.toneMappingExposure = exposure;
-        realm.render(renderer, camera);
-        bg.copy(keepBg);
-        fog.color.copy(keepFog);
-        hide.forEach((g, k) => (g.visible = was[k]));
-      } else {
-        renderer.render(scene, camera);
-      }
+      renderer.render(scene, camera);
       if (statsOn) {
         // ?stats: what the last frame cost, for checking the drawing budget (see the world lab).
         const info = renderer.info.render;
@@ -8019,7 +7932,6 @@ export function CityView({
       for (const g of hillTreeShapes.values()) g.dispose();
       farCity.dispose();
       kites.dispose();
-      realm.dispose();
       renderer.dispose();
       el.removeChild(renderer.domElement);
       api.current = null;
