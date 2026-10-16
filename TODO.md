@@ -1,6 +1,7 @@
 # To do
 
 ## Now (owner)
+- [ ] Then run `game-db/114_standing.sql` (Trust, Fame, Legacy and quiet badges). Run it after 113. Until then the wheel shows no standing and no badges.
 - [ ] Then run `game-db/113_cast.sql` (people who remember you: Mama Nkechi, Officer Bello, Baba Sule...). Run it after 112. Until then no character's story comes.
 - [ ] Then run `game-db/112_wheel.sql` (the wheel: effects that stay on you, and what came of each moment). Run it after 111. Until then the wheel shows your moments, but no effects and no "what came of it".
 - [ ] In the Supabase SQL Editor run `game-db/111_character.sql` (each answer to a moment quietly shapes who you are; docs/LIFE_WHEEL.md). Until then moments work as before, they just aren't remembered for that.
@@ -149,9 +150,12 @@ Each phase is built in one go (a few hours to a couple of days); writing the sto
 - [ ] Stories for the other 31 characters, and later chapters for the first 9.
 - [ ] Their faces in the trip film: the same officer, conductor or area boys every time (costumes per character).
 
-**Phase 4: standing and quiet badges.**
-- [ ] Who saw it decides reputation; Trust, Fame, Legacy (and a Legacy leaderboard); moments' reputation range widened to about −100 to +150.
-- [ ] Badges from patterns (character, mixed, story, career, people), arriving quietly later, able to fade, private by default.
+**Phase 4: standing and quiet badges.** Built.
+- [x] Who saw it decides reputation; Trust, Fame, Legacy and the "Most legendary lives" board; moments' reputation range −100 to +150.
+- [x] 29 badges from patterns (character, mixed, story, people, fate), arriving quietly later, able to fade, private until shown on your card (game-db/114).
+- [x] Four moments that only come to people known for something (Person of Honour, Hustler, The Judge, Open Hand).
+- [ ] Trust lowering World Bank loan rates (the loan's rate is set in the database today, one for everyone).
+- [ ] More badge-only moments, and career and people badges (phases 5 and 6).
 
 **Phase 5: careers.**
 - [ ] Start a business (suya, buka, fashion, POS, salon, dispatch, events, poultry, tech, import/export):

@@ -279,8 +279,8 @@ export function reputationOf(o: { propertyMint: number; homes: number; itemRep: 
     events: Math.max(0, Math.round(o.events ?? 0)),
     // Taking part: time in the game, real conversations, gifts and greetings, friends (game-db/093, up to 150).
     engagement: Math.max(0, Math.min(150, Math.round(o.engagement ?? 0))),
-    // What you did in moments, out and about (game-db/109, from -40 to +60).
-    moments: Math.max(-40, Math.min(60, Math.round(o.moments ?? 0))),
+    // What you did in moments, out and about (game-db/109, from -100 to +150: stories last months).
+    moments: Math.max(-100, Math.min(150, Math.round(o.moments ?? 0))),
     penalty: -Math.round(o.penalty),
   };
   return { score: Math.max(0, parts.property + parts.things + parts.inventions + parts.marks + parts.challenges + parts.events + parts.engagement + parts.moments + parts.penalty), parts };

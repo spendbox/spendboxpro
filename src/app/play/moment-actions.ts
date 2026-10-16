@@ -3,6 +3,7 @@
 import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CAST_BY_ID } from "@/lib/world/cast";
+import { BADGE_DELAY_HOURS, LIFE_BADGES, LIFE_BADGE_BY_ID, fameWord, lifeFacts, type LivedMoment } from "@/lib/world/standing";
 import { regionMap } from "@/lib/world";
 import { COMMUTES, type Commute } from "@/lib/world/work";
 import {
@@ -69,14 +70,73 @@ async function castWorld(db: ReturnType<typeof createAdminClient>) {
   return out;
 }
 
+/** The badges someone has that show (game-db/114): earned, shown up by now, not faded. */
+async function badgesOf(db: ReturnType<typeof createAdminClient>, userId: string) {
+  const { data, error } = await db.from("life_badges").select("badge").eq("user_id", userId).is("faded_at", null).lte("visible_at", new Date().toISOString());
+  return error ? [] : (data ?? []).map((b) => String(b.badge));
+}
+
+/** How often at most standing and badges are worked out again for someone (ms), unless asked. */
+const STANDING_EVERY = 5 * 60_000;
+
+/**
+ * Work out someone's Trust, Fame and Legacy and their badges again (docs/LIFE_WHEEL.md, phase 4):
+ * new badges are kept to show up quietly later; character badges fade if they no longer fit, and
+ * come back if they do again. Legacy never goes down. Null before game-db/114 is run.
+ */
+async function refreshStanding(db: ReturnType<typeof createAdminClient>, userId: string, force = false) {
+  const { data: was, error } = await db.from("life_standing").select("trust, fame, legacy, updated_at").eq("user_id", userId).maybeSingle();
+  if (error) return null;
+  if (was && !force && Date.now() - Date.parse(String(was.updated_at)) < STANDING_EVERY) return { trust: n(was.trust), fame: n(was.fame), legacy: n(was.legacy) };
+  const [rowsRes, bondsRes, badgesRes] = await Promise.all([
+    db.from("moments").select("moment, choice, answered_at, traits, outcome, marks, from_id").eq("user_id", userId).gte("choice", 0).order("answered_at", { ascending: false }).limit(2000),
+    db.from("cast_bonds").select("who, step, feeling").eq("user_id", userId),
+    db.from("life_badges").select("badge, faded_at").eq("user_id", userId),
+  ]);
+  if (rowsRes.error) return null;
+  const lived: LivedMoment[] = (rowsRes.data ?? []).map((r) => {
+    const o = (r.outcome ?? {}) as { cash?: number; rep?: number };
+    return {
+      moment: String(r.moment),
+      choice: n(r.choice),
+      at: Date.parse(String(r.answered_at)),
+      traits: (r.traits ?? null) as LivedMoment["traits"],
+      cash: n(o.cash),
+      rep: n(o.rep),
+      marks: (r.marks ?? null) as LivedMoment["marks"],
+      followed: !!r.from_id,
+    };
+  });
+  const bonds = bondsRes.error ? [] : (bondsRes.data ?? []).map((b) => ({ who: String(b.who), step: n(b.step), feeling: n(b.feeling) }));
+  const facts = lifeFacts(lived, bonds);
+  const had = new Map((badgesRes.data ?? []).map((b) => [String(b.badge), b.faded_at as string | null]));
+  const now = Date.now();
+  for (const b of LIFE_BADGES) {
+    const earned = b.earned(facts);
+    if (earned && !had.has(b.id)) {
+      const hours = BADGE_DELAY_HOURS[0] + Math.random() * (BADGE_DELAY_HOURS[1] - BADGE_DELAY_HOURS[0]);
+      await db.from("life_badges").insert({ user_id: userId, badge: b.id, visible_at: new Date(now + hours * 3_600_000).toISOString() });
+    } else if (earned && had.get(b.id)) {
+      await db.from("life_badges").update({ faded_at: null }).eq("user_id", userId).eq("badge", b.id);
+    } else if (!earned && b.fades && had.has(b.id) && !had.get(b.id)) {
+      await db.from("life_badges").update({ faded_at: new Date(now).toISOString() }).eq("user_id", userId).eq("badge", b.id);
+    }
+  }
+  // Badges count towards Legacy too.
+  const legacy = Math.max(n(was?.legacy), facts.legacy + 10 * [...had.keys()].length);
+  await db.from("life_standing").upsert({ user_id: userId, trust: facts.trust, fame: facts.fame, legacy, updated_at: new Date(now).toISOString() });
+  return { trust: facts.trust, fame: facts.fame, legacy };
+}
+
 async function me() {
   const userId = await currentUserId();
   if (!userId) return null;
   const db = createAdminClient();
   const { data: life } = await db.from("lives").select("region").eq("user_id", userId).maybeSingle();
   if (!life) return null;
-  const perMint = regionMap(String(life.region ?? "lagos"))?.region.prices.perMint ?? 1500;
-  return { userId, db, perMint };
+  const region = String(life.region ?? "lagos");
+  const perMint = regionMap(region)?.region.prices.perMint ?? 1500;
+  return { userId, db, perMint, region };
 }
 
 /**
@@ -92,7 +152,7 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; ride
   if (road && !ride) return null;
   const gap = road ? ROAD_RULES.gapSeconds : MOMENT_RULES.gapSeconds;
   const place = typeof input?.place === "string" ? input.place.replace(/\s+/g, " ").trim().slice(0, 60) : "";
-  const [{ data: prof }, recentRes, dueRes, spendRes, effects, bonds, world] = await Promise.all([
+  const [{ data: prof }, recentRes, dueRes, spendRes, effects, bonds, world, badges] = await Promise.all([
     m.db.from("profiles").select("level, frozen").eq("id", m.userId).maybeSingle(),
     // Every one you've had lately (up to 500): the last 25 don't come again, ones never had come first.
     m.db.from("moments").select("moment, created_at").eq("user_id", m.userId).order("created_at", { ascending: false }).limit(500),
@@ -101,6 +161,7 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; ride
     effectsOf(m.db, m.userId),
     bondsOf(m.db, m.userId),
     castWorld(m.db),
+    badgesOf(m.db, m.userId),
   ]);
   // Part 109 not run yet: no moments.
   if (recentRes.error) return null;
@@ -127,6 +188,7 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; ride
       effects: effects.map((e) => e.effect),
       bonds: bonds ?? undefined,
       castWorld: world,
+      badges,
       rand: Math.random,
       ride,
     });
@@ -183,7 +245,8 @@ export async function momentAnswer(id: number, choice: number): Promise<MomentRe
     p_choice: pick,
     p_text: text,
     p_cash: mint,
-    p_rep: outcome.rep ?? 0,
+    // Nobody saw it: who you are moves, your reputation doesn't.
+    p_rep: outcome.unseen ? 0 : (outcome.rep ?? 0),
     p_follow: outcome.follow ?? null,
     p_follow_vars: outcome.follow ? { name: vars.name, place: vars.place } : null,
     // Back some hours later: half a day to two days.
@@ -232,6 +295,16 @@ export async function momentAnswer(id: number, choice: number): Promise<MomentRe
     });
     if (!castError) cast = { who: def.cast, feeling: n((after as { feeling?: number } | null)?.feeling), bond: Math.round(outcome.bond ?? 0) };
   }
+  // What the game noted (game-db/114), then standing and badges worked out again now and then.
+  const marks: Record<string, unknown> = { i: c.outcomes.indexOf(outcome) };
+  if (outcome.trust != null) marks.trust = outcome.trust;
+  if (outcome.unseen) marks.unseen = true;
+  if (outcome.effect) marks.effect = outcome.effect;
+  await m.db.from("moments").update({ marks }).eq("id", Math.round(n(id))).eq("user_id", m.userId).then(
+    () => null,
+    () => null,
+  );
+  await refreshStanding(m.db, m.userId).catch(() => null);
   const d = (data ?? {}) as { cash?: number; rep?: number };
   return { ok: true, outcome: c.outcomes.indexOf(outcome), cash: n(d.cash), rep: n(d.rep), effect, cast };
 }
@@ -261,6 +334,13 @@ export type Wheel = {
   people: { who: string; feeling: number; going: boolean; last: string }[];
   /** Who you're becoming, in words (empty: too soon to say). */
   words: string[];
+  /** Trust (0 to 100), Fame (in words) and Legacy, and where your Legacy ranks (null before game-db/114). */
+  standing: { trust: number; fame: number; fameWord: string; legacy: number; rank: number } | null;
+  /** Your badges that have shown up: new ones you haven't seen, faded ones, and whether they're on your card. */
+  badges: { id: string; isNew: boolean; faded: boolean; shown: boolean }[];
+  /** The most legendary lives. */
+  board: { name: string; legacy: number; me: boolean }[];
+  region: string;
   perMint: number;
 };
 
@@ -268,13 +348,18 @@ export type Wheel = {
 export async function myWheel(): Promise<Wheel | null> {
   const m = await me().catch(() => null);
   if (!m) return null;
-  const [rowsRes, countRes, dueRes, effects, answers, bondsRes] = await Promise.all([
+  const standing = await refreshStanding(m.db, m.userId, true).catch(() => null);
+  const nowIso = new Date().toISOString();
+  const [rowsRes, countRes, dueRes, effects, answers, bondsRes, myBadges, boardRes, aboveRes] = await Promise.all([
     m.db.from("moments").select("*").eq("user_id", m.userId).not("answered_at", "is", null).gte("choice", 0).order("created_at", { ascending: false }).limit(120),
     m.db.from("moments").select("id", { count: "exact", head: true }).eq("user_id", m.userId).gte("choice", 0),
     m.db.from("moment_followups").select("*").eq("user_id", m.userId).order("due_at").limit(30),
     effectsOf(m.db, m.userId),
     answersOf(m.db, m.userId),
     m.db.from("cast_bonds").select("who, step, feeling, last_at").eq("user_id", m.userId).order("last_at", { ascending: false }),
+    m.db.from("life_badges").select("badge, seen_at, faded_at, shown, visible_at").eq("user_id", m.userId).lte("visible_at", nowIso).order("visible_at", { ascending: false }),
+    m.db.from("life_standing").select("legacy, user_id").order("legacy", { ascending: false }).limit(10),
+    standing ? m.db.from("life_standing").select("user_id", { count: "exact", head: true }).gt("legacy", standing.legacy) : Promise.resolve({ count: 0 }),
   ]);
   // Part 109 not run yet: nothing to show.
   if (rowsRes.error) return null;
@@ -300,5 +385,34 @@ export async function myWheel(): Promise<Wheel | null> {
   const people = (bondsRes.error ? [] : (bondsRes.data ?? []))
     .filter((b) => CAST_BY_ID.has(String(b.who)))
     .map((b) => ({ who: String(b.who), feeling: n(b.feeling), going: n(b.step) >= 0, last: String(b.last_at) }));
-  return { moments, total: countRes.count ?? moments.length, stories, effects, people, words: characterWords(characterOf(answers)), perMint: m.perMint };
+  const badges = (myBadges.error ? [] : (myBadges.data ?? []))
+    .filter((b) => LIFE_BADGE_BY_ID.has(String(b.badge)))
+    .map((b) => ({ id: String(b.badge), isNew: !b.seen_at, faded: !!b.faded_at, shown: !!b.shown }));
+  // Seen now.
+  if (badges.some((b) => b.isNew)) await m.db.from("life_badges").update({ seen_at: nowIso }).eq("user_id", m.userId).is("seen_at", null).lte("visible_at", nowIso);
+  const top = boardRes.error ? [] : (boardRes.data ?? []);
+  const { data: names } = top.length ? await m.db.from("profiles").select("id, username").in("id", top.map((b) => String(b.user_id))) : { data: [] };
+  const nameOf = new Map((names ?? []).map((p) => [String(p.id), String(p.username ?? "Someone")]));
+  const board = top.map((b) => ({ name: nameOf.get(String(b.user_id)) ?? "Someone", legacy: n(b.legacy), me: String(b.user_id) === m.userId }));
+  return {
+    moments,
+    total: countRes.count ?? moments.length,
+    stories,
+    effects,
+    people,
+    words: characterWords(characterOf(answers)),
+    standing: standing ? { ...standing, fameWord: fameWord(standing.fame), rank: n((aboveRes as { count?: number | null }).count) + 1 } : null,
+    badges,
+    board,
+    region: m.region,
+    perMint: m.perMint,
+  };
+}
+
+/** Show one of your badges on your card, or hide it (they're private until you choose). */
+export async function setBadgeShown(badge: string, shown: boolean): Promise<{ ok: boolean }> {
+  const m = await me().catch(() => null);
+  if (!m || !LIFE_BADGE_BY_ID.has(String(badge))) return { ok: false };
+  const { error } = await m.db.from("life_badges").update({ shown: !!shown }).eq("user_id", m.userId).eq("badge", String(badge));
+  return { ok: !error };
 }

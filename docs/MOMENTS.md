@@ -73,6 +73,13 @@ too much) for them (`world`). An outcome says how much more they like you (`bond
 comes next (`next`; −1 ends it) and whether it counts as the city helping or hurting them
 (`world`). People you know come back twice as often as strangers turn up.
 
+## Standing and badges
+
+From what you've lived, the game works out Trust, Fame and Legacy and your badges
+(`src/lib/world/standing.ts`, names in `life-badges.ts`; docs/LIFE_WHEEL.md sections 5 and 6), at
+most every 5 minutes after an answer and whenever you open your wheel. An outcome can say how much
+it moves Trust (`trust`). A moment with `badge` only comes to people who have that badge.
+
 ## Short effects
 
 An outcome can leave something on you for a while (`effect`): Blessed and Lucky streak make good
@@ -90,7 +97,9 @@ them, so the same answer doesn't always turn out the same.
   - Amounts grow a little with your level (richer people get asked for more).
 - **Reputation:**
   - Choices people would admire raise it a little, and ones they wouldn't lower it.
-  - At most 10 a day either way, and between −40 and +60 from moments in all.
+  - At most 10 a day either way, and between −100 and +150 from moments in all.
+  - Only what people saw counts: an outcome marked `unseen` (you kept the wallet and nobody saw)
+    shapes who you are and your Trust, but not your reputation.
   - It's its own part of your reputation (`moments` in `reputationOf`).
 - **Chance:** many choices are a gamble (stand up to the area boys, take the plank bet, stake on
   the lottery). The server rolls what happens, never the phone.
@@ -132,3 +141,4 @@ follow-ups exist, and that every kind of place has moments by day and by night.
 | Who you are: each answer's nudge | `game-db/111_character.sql` |
 | The wheel: short effects, and where each story came from | `game-db/112_wheel.sql` |
 | The cast: how each feels about you, and what the city has done for them | `game-db/113_cast.sql` |
+| Standing and badges | `game-db/114_standing.sql` |

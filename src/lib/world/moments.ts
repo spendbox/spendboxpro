@@ -39,6 +39,10 @@ export type MomentOutcome = {
   next?: number;
   /** In a character's story: this adds to how much the whole city has helped or hurt them. */
   world?: "good" | "bad";
+  /** Nobody saw it: it shapes who you are, but your reputation doesn't move (`rep` is what it would have been). */
+  unseen?: boolean;
+  /** How much it moves Trust (default: half of how honest the answer was; ./standing.ts). */
+  trust?: number;
 };
 /** When an outcome is likelier: a side of who you are (strongly enough), or an effect on you. */
 export type Likely = { trait: Trait; side: 1 | -1 } | { effect: EffectId };
@@ -81,6 +85,8 @@ export type MomentDef = {
   feel?: [number, number];
   /** Only once the whole city has helped (`good`) or hurt (`bad`) them at least this much, or while less than (`goodBelow`, `badBelow`). */
   world?: { good?: number; bad?: number; goodBelow?: number; badBelow?: number };
+  /** Only for people with this badge (./standing.ts): what you're known for brings its own moments. */
+  badge?: string;
   /** The amount in it, in naira: somewhere between these (rounded the way people say prices). */
   ask?: [number, number];
   emoji: string;
@@ -191,7 +197,7 @@ export const MOMENTS: MomentDef[] = [
     text: ["There's a wallet on the pavement. Inside: {ask} and an ID card for {name}.", "Someone just dropped a wallet. It's bulging: {ask} in cash, and a card that says {name}."],
     choices: [
       { label: "Find {name} and return it", tone: "kind", outcomes: [{ text: "{name} nearly cries. \"Nobody does this in Lagos!\" They tell everyone about you.", rep: 3 }, { chance: 0.5, text: "{name} insists you take something for your trouble.", rep: 3, get: 0.3 }] },
-      { label: "Keep the cash", tone: "mean", outcomes: [{ text: "You pocket the money and drop the wallet in a gutter.", get: 1, rep: -3 }, { chance: 0.3, text: "\"That's my wallet!\" {name} saw everything. The crowd is not kind to you.", rep: -6 }] },
+      { label: "Keep the cash", tone: "mean", outcomes: [{ text: "You pocket the money and drop the wallet in a gutter. Nobody saw.", get: 1, rep: -3, unseen: true, trust: -2 }, { chance: 0.3, text: "\"That's my wallet!\" {name} saw everything. The crowd is not kind to you.", rep: -6 }] },
       { label: "Leave it there", tone: "calm", outcomes: [{ text: "You leave it for someone else to deal with." }] },
     ],
   },
@@ -685,7 +691,7 @@ export const MOMENTS: MomentDef[] = [
     text: ["The cashier is rushing and gives you {ask} too much change."],
     choices: [
       { label: "Give it back", tone: "kind", outcomes: [{ text: "The cashier is so grateful: it would have come out of her pay.", rep: 3 }] },
-      { label: "Keep it", tone: "mean", outcomes: [{ text: "You walk out quickly.", get: 1, rep: -2 }] },
+      { label: "Keep it", tone: "mean", outcomes: [{ text: "You walk out quickly. Nobody noticed.", get: 1, rep: -2, unseen: true, trust: -1 }, { chance: 0.3, text: "\"Excuse me!\" The man behind you saw it all.", get: 1, rep: -3 }] },
     ],
   },
   {
@@ -1000,10 +1006,10 @@ export const MOMENT_RULES = {
   answerSeconds: 1_800,
   /** Answers shown at most (drawn from the moment's pool, in a shuffled order). */
   shown: 4,
-  /** Reputation from moments: at most this much either way in a day, and in all. */
+  /** Reputation from moments: at most this much either way in a day, and in all (wide: stories last months). */
   repPerDay: 10,
-  repMin: -40,
-  repMax: 60,
+  repMin: -100,
+  repMax: 150,
   /** Money moments can bring in a day (naira; what they cost isn't limited). */
   gainPerDay: 300_000,
 };
@@ -1136,6 +1142,8 @@ export function pickMoment(o: {
   bonds?: Record<string, Bond>;
   /** How much the city has helped and hurt each character. */
   castWorld?: Record<string, CastWorld>;
+  /** The badges they have (moments for people known for something). */
+  badges?: string[];
   now?: number;
   rand: () => number;
   ride?: Commute;
@@ -1153,6 +1161,7 @@ export function pickMoment(o: {
       ((m.size ?? "small") === "small" || !!o.bigOk) &&
       !(hurt && m.spots !== "any" && m.spots.includes("sport")) &&
       (!m.cast || (!!o.bonds && castFits(m, o.bonds, o.castWorld ?? {}, o.now ?? Date.now()))) &&
+      (!m.badge || !!o.badges?.includes(m.badge)) &&
       !o.recent.includes(m.id),
   );
   // Moments for this kind of place come first; "anywhere" ones fill in. Never had: three times as likely.
@@ -1163,7 +1172,9 @@ export function pickMoment(o: {
     (o.seen && !o.seen.has(m.id) ? 3 : 1) *
     (watched && (m.stage === "police" || m.stage === "lastma") ? 3 : 1) *
     // People you already know come back more than strangers turn up.
-    (m.cast && (m.step ?? 0) > 0 ? 2 : 1);
+    (m.cast && (m.step ?? 0) > 0 ? 2 : 1) *
+    // What you're known for comes looking for you.
+    (m.badge ? 2 : 1);
   const total = fits.reduce((a, m) => a + weight(m), 0);
   let r = o.rand() * total;
   for (const m of fits) if ((r -= weight(m)) <= 0) return m;

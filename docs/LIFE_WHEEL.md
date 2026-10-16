@@ -350,7 +350,13 @@ reviewing.
    chose, for every player; the city's shared count for each character; people who arrive over
    time; "People who know you" on the wheel (game-db/113). Still to come: stories for the other 31,
    and their faces in the trip film.
-4. **Standing and quiet badges.** Trust, Fame, Legacy and the leaderboard; the badges above.
+4. **Standing and quiet badges.** *Built.* Trust, Fame and Legacy (`src/lib/world/standing.ts`)
+   on the wheel, with the "Most legendary lives" board; 29 badges (12 character, 6 mixed, 7 story,
+   3 people, 1 fate) earned by patterns over at least two weeks, arriving 12 to 30 hours later,
+   character ones fading if you change; private until you tick "On my card", then on your player
+   card with their local names; moments nobody saw move who you are but not your reputation; four
+   moments that only come to people known for something (game-db/114). Career badges come with
+   careers (phase 5); Main Character, Ride or Die and Connector with other players (phase 6).
 5. **Careers.** Starting a business, its moments, daily income, growing and failing, and the
    career badges.
 6. **Other players in your story.** Threads between players, cameos, shared and group moments,

@@ -76,6 +76,9 @@ export type PlayerCardData = {
   reputation: number;
   /** "male" or "female", if they've said. */
   gender: Gender | null;
+  /** The badges they chose to show (docs/LIFE_WHEEL.md; src/lib/world/standing.ts), and their city for local names. */
+  lifeBadges: string[];
+  region: string;
 };
 
 export type Gender = "male" | "female";
@@ -90,7 +93,7 @@ const engagementOf = (v: unknown) => {
 export async function playerCard(id: string): Promise<PlayerCardData | null> {
   const userId = await currentUserId();
   if (!userId || !/^[0-9a-f-]{36}$/i.test(String(id))) return null;
-  const [{ data }, { data: liked }, { data: who }, { data: ch }, { data: eng }, { data: ev }, { data: mo }] = await Promise.all([
+  const [{ data }, { data: liked }, { data: who }, { data: ch }, { data: eng }, { data: ev }, { data: mo }, badgesRes] = await Promise.all([
     createAdminClient().rpc("player_card", { p_viewer: userId, p_target: id }),
     createAdminClient().rpc("marks_liked", { p_user: id }),
     createAdminClient().from("profiles").select("gender").eq("id", id).maybeSingle(),
@@ -101,7 +104,9 @@ export async function playerCard(id: string): Promise<PlayerCardData | null> {
     // Events hosted and gone to (game-db/095; nothing until it's run).
     createAdminClient().rpc("event_rep", { p_user: id }),
     // Moments (game-db/109; nothing until it's run).
-    createAdminClient().from("lives").select("moment_rep").eq("user_id", id).maybeSingle(),
+    createAdminClient().from("lives").select("moment_rep, region").eq("user_id", id).maybeSingle(),
+    // Badges they show on their card (game-db/114; none until it's run).
+    createAdminClient().from("life_badges").select("badge").eq("user_id", id).eq("shown", true).is("faded_at", null).lte("visible_at", new Date().toISOString()),
   ]);
   if (!data) return null;
   const d = data as Record<string, unknown>;
@@ -124,6 +129,8 @@ export async function playerCard(id: string): Promise<PlayerCardData | null> {
     blocked: !!d.blocked,
     reputation: rep.score,
     gender: genderOf(who?.gender),
+    lifeBadges: badgesRes.error ? [] : (badgesRes.data ?? []).map((b) => String(b.badge)),
+    region: String((mo as { region?: string } | null)?.region ?? "lagos"),
   };
 }
 

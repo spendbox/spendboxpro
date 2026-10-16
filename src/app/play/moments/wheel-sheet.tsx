@@ -8,7 +8,8 @@ import { cn } from "@/lib/cn";
 import { EFFECTS, LIFE_AREAS, MOMENT_BY_ID, areaOf, fillMoment, type LifeArea, type MomentDef } from "@/lib/world/moments";
 import { CAST_BY_ID, feelingWord } from "@/lib/world/cast";
 import { cash } from "@/lib/world/value";
-import { myWheel, type Wheel, type WheelMoment } from "../moment-actions";
+import { LIFE_BADGES, LIFE_BADGE_BY_ID, badgeName } from "@/lib/world/standing";
+import { myWheel, setBadgeShown, type Wheel, type WheelMoment } from "../moment-actions";
 import { Sheet } from "../sheet";
 
 // My life (docs/LIFE_WHEEL.md): your life drawn as a ring. Every moment you've lived is a notch,
@@ -85,6 +86,7 @@ export function WheelSheet({ avatar, onClose }: { avatar: Avatar; onClose: () =>
         <>
           <Ring moments={lived} picked={picked} onPick={setPicked} avatar={avatar} words={wheel.words} />
           <Legend moments={lived} />
+          {wheel.standing && <Standing s={wheel.standing} />}
 
           {lived.length === 0 ? (
             <p className="mt-3 rounded-2xl bg-ink/[0.04] p-3 text-sm text-ink/80">
@@ -161,7 +163,27 @@ export function WheelSheet({ avatar, onClose }: { avatar: Avatar; onClose: () =>
             </section>
           )}
 
-          <p className="mt-4 text-xs text-muted">Badges come quietly, as your story grows.</p>
+          <Badges wheel={wheel} onChange={(id, shown) => setWheel((w) => (w ? { ...w, badges: w.badges.map((b) => (b.id === id ? { ...b, shown } : b)) } : w))} />
+
+          {wheel.board.length > 0 && (
+            <section className="mt-4">
+              <h3 className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-muted">Most legendary lives</h3>
+              <ol className="grid gap-1">
+                {wheel.board.map((b, i) => (
+                  <li key={i} className={cn("flex items-center gap-2.5 rounded-xl px-3 py-1.5 text-sm", b.me ? "bg-gold/25 font-bold" : "bg-ink/[0.03]")}>
+                    <span className="w-5 text-right text-xs font-bold tabular-nums text-muted">{i + 1}</span>
+                    <span className="min-w-0 flex-1 truncate">{b.me ? "You" : b.name}</span>
+                    <span className="text-xs font-bold tabular-nums">{b.legacy.toLocaleString("en-GB")}</span>
+                  </li>
+                ))}
+              </ol>
+              {wheel.standing && !wheel.board.some((b) => b.me) && (
+                <p className="mt-1.5 text-xs text-muted">
+                  You&apos;re number {wheel.standing.rank.toLocaleString("en-GB")}, with {wheel.standing.legacy.toLocaleString("en-GB")}.
+                </p>
+              )}
+            </section>
+          )}
         </>
       )}
     </Sheet>
@@ -291,5 +313,79 @@ function Detail({ m, lived, naira }: { m: WheelMoment; lived: WheelMoment[]; nai
         </p>
       )}
     </div>
+  );
+}
+
+function Standing({ s }: { s: NonNullable<Wheel["standing"]> }) {
+  const tiles = [
+    { label: "Trust", value: `${s.trust}`, note: s.trust >= 70 ? "People believe you" : s.trust >= 40 ? "Most believe you" : "People doubt you" },
+    { label: "Fame", value: s.fameWord, note: "Fades if you go quiet" },
+    { label: "Legacy", value: s.legacy.toLocaleString("en-GB"), note: `Number ${s.rank.toLocaleString("en-GB")} in the city` },
+  ];
+  return (
+    <div className="mt-3 grid grid-cols-3 gap-1.5">
+      {tiles.map((t) => (
+        <div key={t.label} className="rounded-2xl bg-ink/[0.04] px-2.5 py-2">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-muted">{t.label}</p>
+          <p className="font-display text-[15px] font-extrabold leading-tight">{t.value}</p>
+          <p className="mt-0.5 text-[10.5px] leading-tight text-muted">{t.note}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Badges({ wheel, onChange }: { wheel: Wheel; onChange: (id: string, shown: boolean) => void }) {
+  const mine = wheel.badges;
+  // A few question marks for what's still to find.
+  const hidden = Math.min(4, LIFE_BADGES.length - mine.length);
+  return (
+    <section className="mt-4">
+      <h3 className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-muted">Badges</h3>
+      {mine.length === 0 && <p className="mb-2 text-xs text-muted">Badges come quietly, as your story grows. Nobody can earn one with a single answer.</p>}
+      <div className="grid gap-1.5">
+        {mine.map((b) => {
+          const def = LIFE_BADGE_BY_ID.get(b.id)!;
+          return (
+            <div key={b.id} className={cn("grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 rounded-2xl px-3 py-2", b.faded ? "bg-ink/[0.03] opacity-60" : "bg-gold/15")}>
+              <span className={cn("grid size-10 place-items-center rounded-xl text-xl", b.faded ? "bg-ink/[0.06] grayscale" : "bg-gradient-to-br from-gold to-[#ffdf85]")}>{def.emoji}</span>
+              <span className="min-w-0">
+                <span className="flex items-center gap-1.5 text-sm font-bold">
+                  {b.faded ? `Once known as ${badgeName(def, wheel.region)}` : badgeName(def, wheel.region)}
+                  {b.isNew && <span className="rounded-full bg-hit px-1.5 py-px text-[10px] font-bold text-white">New</span>}
+                </span>
+                <span className="block text-xs text-muted">{def.about}</span>
+              </span>
+              {!b.faded && (
+                <label className="flex cursor-pointer flex-col items-center gap-0.5 text-[10px] font-semibold text-muted">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-[#c98a00]"
+                    checked={b.shown}
+                    onChange={(e) => {
+                      const on = e.target.checked;
+                      onChange(b.id, on);
+                      void setBadgeShown(b.id, on).then((r) => {
+                        if (!r.ok) onChange(b.id, !on);
+                      });
+                    }}
+                  />
+                  On my card
+                </label>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {hidden > 0 && (
+        <div className="mt-2 flex gap-1.5" aria-label="Badges still to find">
+          {Array.from({ length: hidden }, (_, i) => (
+            <span key={i} className="grid size-10 place-items-center rounded-xl border border-dashed border-ink/15 text-sm font-bold text-muted">
+              ?
+            </span>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
