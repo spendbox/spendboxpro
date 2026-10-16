@@ -8,6 +8,8 @@
 
 import type { Commute } from "./work.ts";
 import { BIG_MOMENTS } from "./big-moments.ts";
+import { CAST_BY_ID, CAST_GAP_HOURS, castHere } from "./cast.ts";
+import { CAST_MOMENTS } from "./cast-moments.ts";
 import { MORE_ANSWERS } from "./more-answers.ts";
 import { ROAD_MOMENTS, type RoadStage } from "./road-moments.ts";
 
@@ -31,6 +33,12 @@ export type MomentOutcome = {
   effect?: EffectId;
   /** Likelier (about 2.5 times) for people who are this way, or while this is on them. */
   likelier?: Likely[];
+  /** In a character's story (./cast-moments.ts): how much more (or less) they like you, from −3 to 3. */
+  bond?: number;
+  /** In a character's story: the step that comes next (default the one after; −1: the story ends). */
+  next?: number;
+  /** In a character's story: this adds to how much the whole city has helped or hurt them. */
+  world?: "good" | "bad";
 };
 /** When an outcome is likelier: a side of who you are (strongly enough), or an effect on you. */
 export type Likely = { trait: Trait; side: 1 | -1 } | { effect: EffectId };
@@ -66,6 +74,13 @@ export type MomentDef = {
   rarity?: MomentRarity;
   /** The part of life it touches, for the wheel (default: from where it happens, see areaOf). */
   area?: LifeArea;
+  /** A step in a character's story with you (./cast.ts, ./cast-moments.ts). */
+  cast?: string;
+  step?: number;
+  /** Only if they feel this way about you (from −5 to 5, both ends included). */
+  feel?: [number, number];
+  /** Only once the whole city has helped (`good`) or hurt (`bad`) them at least this much, or while less than (`goodBelow`, `badBelow`). */
+  world?: { good?: number; bad?: number; goodBelow?: number; badBelow?: number };
   /** The amount in it, in naira: somewhere between these (rounded the way people say prices). */
   ask?: [number, number];
   emoji: string;
@@ -967,7 +982,7 @@ export const MOMENTS: MomentDef[] = [
   },
 ];
 
-MOMENTS.push(...ROAD_MOMENTS, ...BIG_MOMENTS);
+MOMENTS.push(...ROAD_MOMENTS, ...BIG_MOMENTS, ...CAST_MOMENTS);
 // Each moment's pool of answers: the ones written with it, and more (./more-answers.ts).
 for (const m of MOMENTS) if (MORE_ANSWERS[m.id]) m.choices.push(...MORE_ANSWERS[m.id]);
 
@@ -1071,6 +1086,34 @@ function rng(seed: number) {
 /** Round an amount the way people say prices (₦1,350 → ₦1,400; ₦12,340 → ₦12,500). */
 export const niceNaira = (n: number) => (n < 1_000 ? Math.round(n / 50) * 50 : n < 5_000 ? Math.round(n / 100) * 100 : Math.round(n / 500) * 500);
 
+/** Where you are with a character: how far your story has gone (−1: it's over), how they feel, and when you last met (ms). */
+export type Bond = { step: number; feeling: number; last: number };
+/** How much the whole city has helped and hurt a character. */
+export type CastWorld = { good: number; bad: number };
+
+/**
+ * Whether a character's step can happen for someone now: it's the step they're on (or the first,
+ * when they haven't met), they feel the right way, it's been long enough since the last one, the
+ * character is in the game yet, and the city has done enough (or not too much) for them.
+ */
+export function castFits(m: MomentDef, bonds: Record<string, Bond>, world: Record<string, CastWorld>, now: number): boolean {
+  if (!m.cast) return true;
+  const who = CAST_BY_ID.get(m.cast);
+  if (!who || !castHere(who, now)) return false;
+  const b = bonds[m.cast];
+  if ((b?.step ?? 0) !== (m.step ?? 0)) return false;
+  if (b && now - b.last < CAST_GAP_HOURS * 3_600_000) return false;
+  const f = b?.feeling ?? 0;
+  if (m.feel && (f < m.feel[0] || f > m.feel[1])) return false;
+  const w = world[m.cast] ?? { good: 0, bad: 0 };
+  const need = m.world;
+  if (need?.good != null && w.good < need.good) return false;
+  if (need?.bad != null && w.bad < need.bad) return false;
+  if (need?.goodBelow != null && w.good >= need.goodBelow) return false;
+  if (need?.badBelow != null && w.bad >= need.badBelow) return false;
+  return true;
+}
+
 /** How likely each rarity is, against common. Rare is about monthly, legendary about yearly, at 5 a day. */
 const RARITY_WEIGHT: Record<MomentRarity, number> = { common: 1, uncommon: 0.4, rare: 0.05, legendary: 0.004 };
 
@@ -1089,6 +1132,11 @@ export function pickMoment(o: {
   bigOk?: boolean;
   /** What's on them now: hurt means no sport; under watch, the police stop them more. */
   effects?: EffectId[];
+  /** Where they are with the cast (game-db/113). Without it, no character's story comes. */
+  bonds?: Record<string, Bond>;
+  /** How much the city has helped and hurt each character. */
+  castWorld?: Record<string, CastWorld>;
+  now?: number;
   rand: () => number;
   ride?: Commute;
 }): MomentDef | null {
@@ -1104,6 +1152,7 @@ export function pickMoment(o: {
       (m.minLevel ?? 0) <= o.level &&
       ((m.size ?? "small") === "small" || !!o.bigOk) &&
       !(hurt && m.spots !== "any" && m.spots.includes("sport")) &&
+      (!m.cast || (!!o.bonds && castFits(m, o.bonds, o.castWorld ?? {}, o.now ?? Date.now()))) &&
       !o.recent.includes(m.id),
   );
   // Moments for this kind of place come first; "anywhere" ones fill in. Never had: three times as likely.
@@ -1112,7 +1161,9 @@ export function pickMoment(o: {
     (m.spots === "any" ? 0.5 : 1.5) *
     RARITY_WEIGHT[m.rarity ?? "common"] *
     (o.seen && !o.seen.has(m.id) ? 3 : 1) *
-    (watched && (m.stage === "police" || m.stage === "lastma") ? 3 : 1);
+    (watched && (m.stage === "police" || m.stage === "lastma") ? 3 : 1) *
+    // People you already know come back more than strangers turn up.
+    (m.cast && (m.step ?? 0) > 0 ? 2 : 1);
   const total = fits.reduce((a, m) => a + weight(m), 0);
   let r = o.rand() * total;
   for (const m of fits) if ((r -= weight(m)) <= 0) return m;
@@ -1181,6 +1232,7 @@ export function rollOutcome(c: MomentChoice, rand: () => number, ctx: RollContex
 /** The part of life a moment touches (for the wheel): what it says, or a guess from where it happens. */
 export function areaOf(m: MomentDef): LifeArea {
   if (m.area) return m.area;
+  if (m.cast && CAST_BY_ID.get(m.cast)) return CAST_BY_ID.get(m.cast)!.area;
   const spot = m.spots === "any" ? "any" : m.spots[0];
   switch (spot) {
     case "home":

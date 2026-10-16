@@ -6,6 +6,7 @@ import { X } from "@/components/icons";
 import type { Avatar } from "@/lib/avatar";
 import { cn } from "@/lib/cn";
 import { EFFECTS, LIFE_AREAS, MOMENT_BY_ID, areaOf, fillMoment, type LifeArea, type MomentDef } from "@/lib/world/moments";
+import { CAST_BY_ID, feelingWord } from "@/lib/world/cast";
 import { cash } from "@/lib/world/value";
 import { myWheel, type Wheel, type WheelMoment } from "../moment-actions";
 import { Sheet } from "../sheet";
@@ -130,6 +131,32 @@ export function WheelSheet({ avatar, onClose }: { avatar: Avatar; onClose: () =>
                     <span className="text-xs text-muted">{s.name ? `${s.name} will be back.` : "Someone from before will be back."}</span>
                   </div>
                 ))}
+              </div>
+            </section>
+          )}
+
+          {wheel.people.length > 0 && (
+            <section className="mt-4">
+              <h3 className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-muted">People who know you</h3>
+              <div className="grid gap-1.5">
+                {wheel.people.map((p) => {
+                  const c = CAST_BY_ID.get(p.who)!;
+                  return (
+                    <div key={p.who} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 rounded-2xl bg-ink/[0.04] px-3 py-2">
+                      <span className="text-xl leading-tight">{c.emoji}</span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-bold">{c.name}</span>
+                        <span className="block truncate text-xs text-muted">
+                          {c.role}
+                          {p.going ? "" : " · your story together has ended"}
+                        </span>
+                      </span>
+                      <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-bold", p.feeling >= 1 ? "bg-[#12b886]/15 text-[#0b7a5a]" : p.feeling <= -1 ? "bg-hit/10 text-hit" : "bg-ink/[0.06] text-ink")}>
+                        {feelingWord(p.feeling)}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </section>
           )}

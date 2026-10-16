@@ -64,6 +64,15 @@ step hasn't come yet. Tap one for what you chose, what happened, and what came o
 follow-ups that came from it). In the middle, who you're becoming, in words; below, what's on you
 now and the stories still going.
 
+## People who remember you
+
+A cast of recurring people (docs/LIFE_WHEEL.md, "The cast"): each character's moments are steps
+of a story with you (`cast`, `step`). A step only comes when it's the one you're on, at most every
+36 hours, and if they feel the right way about you (`feel`) and the city has done enough (or not
+too much) for them (`world`). An outcome says how much more they like you (`bond`, −3 to 3), what
+comes next (`next`; −1 ends it) and whether it counts as the city helping or hurting them
+(`world`). People you know come back twice as often as strangers turn up.
+
 ## Short effects
 
 An outcome can leave something on you for a while (`effect`): Blessed and Lucky streak make good
@@ -111,6 +120,8 @@ follow-ups exist, and that every kind of place has moments by day and by night.
 | --- | --- |
 | The moments, picking one, filling it in, rolling the outcome, effects, who you are | `src/lib/world/moments.ts` |
 | Big and life-changing moments, and their follow-ups | `src/lib/world/big-moments.ts` |
+| The cast (people who remember you) | `src/lib/world/cast.ts` |
+| The cast's stories with you | `src/lib/world/cast-moments.ts` |
 | More answers for everyday moments | `src/lib/world/more-answers.ts` |
 | Your wheel (Me → My life) | `src/app/play/moments/wheel-sheet.tsx` |
 | Picking and settling on the server | `src/app/play/moment-actions.ts` |
@@ -120,3 +131,4 @@ follow-ups exist, and that every kind of place has moments by day and by night.
 | The books: one at a time, the day's limits, follow-ups | `game-db/109_moments.sql` |
 | Who you are: each answer's nudge | `game-db/111_character.sql` |
 | The wheel: short effects, and where each story came from | `game-db/112_wheel.sql` |
+| The cast: how each feels about you, and what the city has done for them | `game-db/113_cast.sql` |

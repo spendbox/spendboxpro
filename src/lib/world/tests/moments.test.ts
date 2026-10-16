@@ -217,3 +217,54 @@ test("more answers: pools of up to eight, and plenty with more than are shown at
   const pooled = MOMENTS.filter((m) => m.choices.length > MOMENT_RULES.shown);
   assert.ok(pooled.length >= 8, `only ${pooled.length} moments with more answers than are shown`);
 });
+
+test("the cast: every story step belongs to a real character, steps start at 0, and every next step exists", async () => {
+  const { CAST, CAST_BY_ID } = await import("../cast.ts");
+  assert.equal(CAST_BY_ID.size, CAST.length);
+  assert.ok(CAST.length >= 40, `only ${CAST.length} in the cast`);
+  const steps = new Map<string, Set<number>>();
+  for (const m of MOMENTS.filter((x) => x.cast)) {
+    const who = CAST_BY_ID.get(m.cast!);
+    assert.ok(who?.story, `${m.id}: ${m.cast}`);
+    assert.ok(!m.followOnly && !m.size, `${m.id}: a story step is its own kind`);
+    if (!steps.has(m.cast!)) steps.set(m.cast!, new Set());
+    steps.get(m.cast!)!.add(m.step ?? 0);
+    for (const c of m.choices) for (const o of c.outcomes) assert.ok(Math.abs(o.bond ?? 0) <= 3, `${m.id}: bond`);
+  }
+  for (const c of CAST.filter((x) => x.story)) assert.ok(steps.get(c.id)?.has(0), `${c.id}: no first step`);
+  for (const m of MOMENTS.filter((x) => x.cast))
+    for (const c of m.choices)
+      for (const o of c.outcomes) {
+        const next = o.next ?? (m.step ?? 0) + 1;
+        if (next >= 0 && next !== (m.step ?? 0) + 1) assert.ok(steps.get(m.cast!)!.has(next), `${m.id}: next ${next}`);
+      }
+});
+
+test("the cast: a story waits its turn, branches on feeling, and changes with the city", async () => {
+  const { castFits } = await import("../moments.ts");
+  const now = Date.parse("2026-12-20T12:00:00Z");
+  const day = 86_400_000;
+  const nk0 = MOMENT_BY_ID.get("nkechi_0")!;
+  const nk1 = MOMENT_BY_ID.get("nkechi_1")!;
+  const nk1cold = MOMENT_BY_ID.get("nkechi_1_cold")!;
+  assert.ok(castFits(nk0, {}, {}, now));
+  assert.ok(!castFits(nk1, {}, {}, now));
+  const warm = { mama_nkechi: { step: 1, feeling: 2, last: now - 2 * day } };
+  assert.ok(castFits(nk1, warm, {}, now) && !castFits(nk1cold, warm, {}, now));
+  const cold = { mama_nkechi: { step: 1, feeling: -1, last: now - 2 * day } };
+  assert.ok(!castFits(nk1, cold, {}, now) && castFits(nk1cold, cold, {}, now));
+  // Too soon after the last time.
+  assert.ok(!castFits(nk1, { mama_nkechi: { step: 1, feeling: 2, last: now - 3_600_000 } }, {}, now));
+  // The city decides whether her shop is open yet.
+  const at3 = { mama_nkechi: { step: 3, feeling: 2, last: now - 2 * day } };
+  assert.ok(castFits(MOMENT_BY_ID.get("nkechi_3_wait")!, at3, { mama_nkechi: { good: 10, bad: 0 } }, now));
+  assert.ok(!castFits(MOMENT_BY_ID.get("nkechi_3")!, at3, { mama_nkechi: { good: 10, bad: 0 } }, now));
+  assert.ok(castFits(MOMENT_BY_ID.get("nkechi_3")!, at3, { mama_nkechi: { good: 40, bad: 0 } }, now));
+  // A story that's over doesn't come back; without the cast's books, no character comes at all.
+  assert.ok(!castFits(nk0, { mama_nkechi: { step: -1, feeling: 3, last: 0 } }, {}, now));
+  for (let i = 0; i < 300; i++) assert.ok(!pickMoment({ spot: "street", day: true, level: 1, recent: [], rand: Math.random })?.cast);
+  // People arrive over time.
+  const fola = (await import("../cast.ts")).CAST_BY_ID.get("fola_intern")!;
+  const { castHere } = await import("../cast.ts");
+  assert.ok(!castHere(fola, Date.parse("2026-11-01T00:00:00Z")) && castHere(fola, Date.parse("2026-11-16T00:00:00Z")));
+});

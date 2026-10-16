@@ -2,6 +2,7 @@
 
 import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { CAST_BY_ID } from "@/lib/world/cast";
 import { regionMap } from "@/lib/world";
 import { COMMUTES, type Commute } from "@/lib/world/work";
 import {
@@ -18,6 +19,8 @@ import {
   momentVars,
   pickMoment,
   rollOutcome,
+  type Bond,
+  type CastWorld,
   type EffectId,
   type MomentSpot,
   type MomentVars,
@@ -49,6 +52,23 @@ async function answersOf(db: ReturnType<typeof createAdminClient>, userId: strin
   return (data ?? []).map((r) => ({ traits: (r.traits ?? {}) as TraitAnswer["traits"], at: Date.parse(String(r.answered_at)) }));
 }
 
+/** Where someone is with the cast (game-db/113; null before it's run, and then no character's story comes). */
+async function bondsOf(db: ReturnType<typeof createAdminClient>, userId: string) {
+  const { data, error } = await db.from("cast_bonds").select("who, step, feeling, last_at").eq("user_id", userId);
+  if (error) return null;
+  const out: Record<string, Bond> = {};
+  for (const b of data ?? []) out[String(b.who)] = { step: n(b.step), feeling: n(b.feeling), last: Date.parse(String(b.last_at)) };
+  return out;
+}
+
+/** How much the whole city has helped and hurt each character. */
+async function castWorld(db: ReturnType<typeof createAdminClient>) {
+  const { data } = await db.from("cast_world").select("who, good, bad");
+  const out: Record<string, CastWorld> = {};
+  for (const w of data ?? []) out[String(w.who)] = { good: n(w.good), bad: n(w.bad) };
+  return out;
+}
+
 async function me() {
   const userId = await currentUserId();
   if (!userId) return null;
@@ -72,13 +92,15 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; ride
   if (road && !ride) return null;
   const gap = road ? ROAD_RULES.gapSeconds : MOMENT_RULES.gapSeconds;
   const place = typeof input?.place === "string" ? input.place.replace(/\s+/g, " ").trim().slice(0, 60) : "";
-  const [{ data: prof }, recentRes, dueRes, spendRes, effects] = await Promise.all([
+  const [{ data: prof }, recentRes, dueRes, spendRes, effects, bonds, world] = await Promise.all([
     m.db.from("profiles").select("level, frozen").eq("id", m.userId).maybeSingle(),
     // Every one you've had lately (up to 500): the last 25 don't come again, ones never had come first.
     m.db.from("moments").select("moment, created_at").eq("user_id", m.userId).order("created_at", { ascending: false }).limit(500),
     m.db.from("moment_followups").select("id, moment, vars").eq("user_id", m.userId).lte("due_at", new Date().toISOString()).order("due_at").limit(1),
     m.db.rpc("life_can_spend", { p_user: m.userId, p_pots: ["fun"] }),
     effectsOf(m.db, m.userId),
+    bondsOf(m.db, m.userId),
+    castWorld(m.db),
   ]);
   // Part 109 not run yet: no moments.
   if (recentRes.error) return null;
@@ -103,6 +125,8 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; ride
       seen: new Set(had.map((r) => String(r.moment))),
       bigOk,
       effects: effects.map((e) => e.effect),
+      bonds: bonds ?? undefined,
+      castWorld: world,
       rand: Math.random,
       ride,
     });
@@ -111,6 +135,9 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; ride
   // A follow-up keeps the name from before.
   const kept = (due?.vars ?? {}) as Partial<MomentVars>;
   if (followed && typeof kept.name === "string") vars.name = kept.name;
+  // Someone from the cast is themselves.
+  const who = def.cast ? CAST_BY_ID.get(def.cast) : undefined;
+  if (who) vars.name = who.name;
   const full = { ...vars, seed };
   const { data: id, error } = await m.db.rpc("moment_open", {
     p_user: m.userId,
@@ -126,7 +153,9 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; ride
 }
 
 /** What came of your choice: which outcome, and the money (mint) and reputation that came of it. */
-export type MomentResult = { ok: true; outcome: number; cash: number; rep: number; effect: EffectId | null } | { ok: false; error: string };
+export type MomentResult =
+  | { ok: true; outcome: number; cash: number; rep: number; effect: EffectId | null; cast: { who: string; feeling: number; bond: number } | null }
+  | { ok: false; error: string };
 
 export async function momentAnswer(id: number, choice: number): Promise<MomentResult> {
   const m = await me().catch(() => null);
@@ -190,8 +219,21 @@ export async function momentAnswer(id: number, choice: number): Promise<MomentRe
     const { error: fxError } = await m.db.from("life_effects").insert({ user_id: m.userId, effect: outcome.effect, who, moment_id: Math.round(n(id)), until });
     if (!fxError) effect = outcome.effect;
   }
+  // A character's story moves on (game-db/113): how they feel about you, what comes next, and the city's count.
+  let cast: { who: string; feeling: number; bond: number } | null = null;
+  if (def.cast) {
+    const { data: after, error: castError } = await m.db.rpc("cast_after", {
+      p_user: m.userId,
+      p_who: def.cast,
+      p_bond: Math.round(outcome.bond ?? 0),
+      p_next: outcome.next ?? (def.step ?? 0) + 1,
+      p_world: outcome.world ?? null,
+      p_memory: { moment: def.id, choice: pick, at: new Date().toISOString() },
+    });
+    if (!castError) cast = { who: def.cast, feeling: n((after as { feeling?: number } | null)?.feeling), bond: Math.round(outcome.bond ?? 0) };
+  }
   const d = (data ?? {}) as { cash?: number; rep?: number };
-  return { ok: true, outcome: c.outcomes.indexOf(outcome), cash: n(d.cash), rep: n(d.rep), effect };
+  return { ok: true, outcome: c.outcomes.indexOf(outcome), cash: n(d.cash), rep: n(d.rep), effect, cast };
 }
 
 /** One moment you lived, for the wheel: what it was, what you chose and what came of it. */
@@ -215,6 +257,8 @@ export type Wheel = {
   /** Stories still going whose start isn't among `moments` (or from before game-db/112). */
   stories: { moment: string; name: string; from: number | null }[];
   effects: { effect: EffectId; who: string | null; until: string }[];
+  /** People who know you: how they feel, whether your story together is still going, and when you last met. */
+  people: { who: string; feeling: number; going: boolean; last: string }[];
   /** Who you're becoming, in words (empty: too soon to say). */
   words: string[];
   perMint: number;
@@ -224,12 +268,13 @@ export type Wheel = {
 export async function myWheel(): Promise<Wheel | null> {
   const m = await me().catch(() => null);
   if (!m) return null;
-  const [rowsRes, countRes, dueRes, effects, answers] = await Promise.all([
+  const [rowsRes, countRes, dueRes, effects, answers, bondsRes] = await Promise.all([
     m.db.from("moments").select("*").eq("user_id", m.userId).not("answered_at", "is", null).gte("choice", 0).order("created_at", { ascending: false }).limit(120),
     m.db.from("moments").select("id", { count: "exact", head: true }).eq("user_id", m.userId).gte("choice", 0),
     m.db.from("moment_followups").select("*").eq("user_id", m.userId).order("due_at").limit(30),
     effectsOf(m.db, m.userId),
     answersOf(m.db, m.userId),
+    m.db.from("cast_bonds").select("who, step, feeling, last_at").eq("user_id", m.userId).order("last_at", { ascending: false }),
   ]);
   // Part 109 not run yet: nothing to show.
   if (rowsRes.error) return null;
@@ -252,5 +297,8 @@ export async function myWheel(): Promise<Wheel | null> {
   const stories = pending
     .filter((f) => !f.from_id || !shownIds.has(n(f.from_id)))
     .map((f) => ({ moment: String(f.moment), name: String((f.vars as { name?: string } | null)?.name ?? ""), from: f.from_id ? n(f.from_id) : null }));
-  return { moments, total: countRes.count ?? moments.length, stories, effects, words: characterWords(characterOf(answers)), perMint: m.perMint };
+  const people = (bondsRes.error ? [] : (bondsRes.data ?? []))
+    .filter((b) => CAST_BY_ID.has(String(b.who)))
+    .map((b) => ({ who: String(b.who), feeling: n(b.feeling), going: n(b.step) >= 0, last: String(b.last_at) }));
+  return { moments, total: countRes.count ?? moments.length, stories, effects, people, words: characterWords(characterOf(answers)), perMint: m.perMint };
 }

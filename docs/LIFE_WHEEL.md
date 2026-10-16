@@ -69,6 +69,34 @@ Every moment has at least two of these, and the bigger the moment, the longer it
 the trader you were honest with gives you credit when you're broke, the colleague you covered for
 becomes your boss, the cousin you refused doesn't invite you to the wedding.
 
+## 3b. The cast: people who remember you
+
+The city has a cast of recurring people (`src/lib/world/cast.ts`): Mama Nkechi selling oranges at
+the bus stop, Officer Bello at the Ojota checkpoint, Baba Sule whose boys own your street, Kunle
+your danfo conductor, Chioma next door, Aunty Bisi's buka, Coach Dayo at the gym, Ify at work,
+Uncle Sunday in the village, and 31 more.
+
+- **Each has a story with you** (`cast-moments.ts`), a few steps over days and weeks: one step at
+  most every day and a half, met where they are. Your choices move how they feel about you (from
+  "Can't stand you" to "Like family") and which step comes next, so the story branches: bribe
+  Officer Bello and he expects it next time; report him and he searches your car.
+- **They live in the city, not only in your story.** Everyone's choices add up: each character has
+  a count of how much the whole city has helped and hurt them. When enough players have helped
+  Mama Nkechi, her shop opens, for everyone. When enough have reported Officer Bello, he's
+  dismissed and selling recharge cards at Ojota; if not, he's promoted, and worse.
+
+**The cast isn't fixed at 40.** It changes with time:
+
+- New people arrive on set days (`since`): Fola the intern from mid-November, Amaka the journalist
+  from December. New characters can be added any time without touching anyone's story.
+- Characters change: promoted, dismissed, a stall becomes a shop, a son leaves the street, a
+  conductor gets his own bus. Some changes come from your story, some from the whole city's.
+- Stories end, and new ones begin: when your story with someone ends, they're still in the city,
+  and later chapters can be written for them.
+- Each city gets its own cast as the game goes international (`region`).
+- Later (phase 6), real players become characters in each other's stories too, which is where the
+  cast becomes endless.
+
 ## 4. No easy answers
 
 Rules for every moment we write:
@@ -316,8 +344,12 @@ reviewing.
    exam, the family meeting, your boss's offer, standing guarantor, an offer abroad, a hit-and-run
    you saw, Grandpa's land, your numbers coming in), and 35 more answers across 24 everyday
    moments (game-db/112).
-3. **People who remember you and story arcs.** About 40 recurring characters and their stories;
-   shared characters the world remembers.
+3. **People who remember you and story arcs.** *Built.* A cast of 40 for Lagos, with stories
+   written for 10 of them (36 steps, branching on how they feel about you and on what the whole
+   city has done for them); how each feels about you, how far your story has gone and what you
+   chose, for every player; the city's shared count for each character; people who arrive over
+   time; "People who know you" on the wheel (game-db/113). Still to come: stories for the other 30,
+   and their faces in the trip film.
 4. **Standing and quiet badges.** Trust, Fame, Legacy and the leaderboard; the badges above.
 5. **Careers.** Starting a business, its moments, daily income, growing and failing, and the
    career badges.

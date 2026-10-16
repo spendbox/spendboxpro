@@ -1,6 +1,7 @@
 # To do
 
 ## Now (owner)
+- [ ] Then run `game-db/113_cast.sql` (people who remember you: Mama Nkechi, Officer Bello, Baba Sule...). Run it after 112. Until then no character's story comes.
 - [ ] Then run `game-db/112_wheel.sql` (the wheel: effects that stay on you, and what came of each moment). Run it after 111. Until then the wheel shows your moments, but no effects and no "what came of it".
 - [ ] In the Supabase SQL Editor run `game-db/111_character.sql` (each answer to a moment quietly shapes who you are; docs/LIFE_WHEEL.md). Until then moments work as before, they just aren't remembered for that.
 - [x] Set up the test version with its own database (docs/TESTING.md, about 20 minutes). Until then, previews use the live database.
@@ -141,9 +142,12 @@ Each phase is built in one go (a few hours to a couple of days); writing the sto
 - [x] 35 more answers across 24 everyday moments; outcomes that shift with who you are; 8 big and life-changing moments with 8 follow-ups.
 - [ ] More answers for the rest (every moment up to 6 to 8), and more big moments (aim: 50).
 
-**Phase 3: people who remember you and story arcs.**
-- [ ] About 40 recurring characters with a memory of you; story arcs of 5 to 10 steps over weeks.
-- [ ] Shared characters the world remembers (if many help Mama Nkechi, she opens a shop everyone sees).
+**Phase 3: people who remember you and story arcs.** Built.
+- [x] A cast of 40 for Lagos; how each feels about you, how far your story has gone, what you chose (game-db/113).
+- [x] Stories for 10 of them (Mama Nkechi, Officer Bello, Baba Sule, Kunle, Chioma, Aunty Bisi, Coach Dayo, Ify, Uncle Sunday), branching on feeling.
+- [x] Shared characters the world remembers (enough help and Mama Nkechi opens a shop; enough reports and Bello is dismissed); people who arrive over time.
+- [ ] Stories for the other 30 characters, and later chapters for the first 10.
+- [ ] Their faces in the trip film: the same officer, conductor or area boys every time (costumes per character).
 
 **Phase 4: standing and quiet badges.**
 - [ ] Who saw it decides reputation; Trust, Fame, Legacy (and a Legacy leaderboard); moments' reputation range widened to about −100 to +150.
