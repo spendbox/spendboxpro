@@ -11,10 +11,14 @@ import { PartyShell, useSeats, useSettle, type Me, type Theme } from "./party-ta
 // Chess and draughts against someone you challenged (docs/GAME_TABLES.md): the table's lobby,
 // chat, voice and stake (./party-table), and the full-screen 3D board in the middle
 // (../minigames/turns/board3d). The first one in plays white (red at draughts). Every phone plays
-// the same game; only the moves travel, over the challenge's own channel. Someone gone for 40
-// seconds is played by the computer, so a game never freezes; the winner takes the pool.
+// the same game; only the moves travel, over the challenge's own channel, and a phone that falls
+// behind (a lost move, a reload, a late watcher) catches up from the others' list of moves.
+// Each move has MOVE_SECS (then the computer plays it); someone gone for 40 seconds is played by
+// the computer, so a game never freezes; the winner takes the pool.
 
 const GOLD = "#f2c14e";
+/** Seconds for each move. */
+const MOVE_SECS = 90;
 const theme = (game: string): Theme => ({
   background: "radial-gradient(ellipse 80% 50% at 50% 0%, #4a2a14 0%, transparent 70%), linear-gradient(180deg, #1d140d 0%, #0d0906 100%)",
   accent: GOLD,
@@ -57,7 +61,7 @@ export function BoardTable({ view, me, now, onClose, onMessage, onJoin, onRematc
         ) : (
           <BoardInTable.Provider value={true}>
             <div className="relative flex min-h-0 flex-1 flex-col">
-              <TurnTable bare def={def} seats={seats} seed={view.seed} online={ch.online} onEnd={(r) => setWinners(r.seats ?? [])} />
+              <TurnTable bare def={def} seats={seats} seed={view.seed} online={ch.online} moveSecs={MOVE_SECS} onEnd={(r) => setWinners(r.seats ?? [])} />
             </div>
           </BoardInTable.Provider>
         )

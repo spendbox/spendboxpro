@@ -29,16 +29,25 @@ Ticked off here as they're done (most urgent first). Prices and limits: docs/COS
   minutes (a trip, a message, a moment, a game, spending). The rate is unchanged.
 
 ## Stage 2: players getting stuck
-- [ ] **6. Chess and draughts freeze** after a lost move or a reload, and late watchers see a
+- [x] **6. Chess and draughts freeze** after a lost move or a reload, and late watchers see a
   frozen board (src/app/play/minigames/turn-table.tsx). Keep the move list and catch up from it
   (as Whot! does), plus a timer for each move.
-- [ ] **7. "You're still in another game" for up to 45 minutes** when phones disagree on the
+  Done (src/app/play/minigames/turn-table.tsx): every phone keeps the moves; one that opens late,
+  reloads, watches or misses a move asks and catches up (a catch-up can only add moves, never
+  rewrite them). 90 seconds a move at chess and draughts, 60 for map challenges: then the
+  computer plays it.
+- [x] **7. "You're still in another game" for up to 45 minutes** when phones disagree on the
   result. Settle a dispute as a draw (stakes back) after about 3 minutes; Play shows Open / Leave
   for the game you're stuck in.
-- [ ] **8. Hosting position trusted** (anyone can notify a far-off area). Take it from the
+  Done: a dispute is stakes back after 3 minutes (game-db/124); Play shows Open it / Leave it.
+- [x] **8. Hosting position trusted** (anyone can notify a far-off area). Take it from the
   player's stored position.
-- [ ] **9. Small ones:** a starting game's notice says "ended"; Back while paying still opens the
+  Done: a game is hosted where the phone says only within 1.5 km of the stored position, else
+  there (hosting, challenging everyone, inviting). Events still go where you pick: that's the point.
+- [x] **9. Small ones:** a starting game's notice says "ended"; Back while paying still opens the
   game; Watch does nothing while you're in a game.
+  Done: a game waiting to start says "Starting now"; Back while paying stays back; Watch opens the
+  game you picked (closing it brings yours back).
 
 ## Stage 3: cost and phone speed
 - [ ] **10. "Who's online" for the whole city** (`city-online`, `rooms:`): every arrival goes to

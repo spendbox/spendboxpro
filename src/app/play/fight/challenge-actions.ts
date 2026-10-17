@@ -96,6 +96,22 @@ export async function myChallengeRep(): Promise<{ hosted: number; won: number } 
   return repOf(createAdminClient(), userId);
 }
 
+/** How far from where the server last had you the phone can say you walked to (map tiles; 10 to a km). */
+const WALK_TILES = 15;
+
+/**
+ * Where a game is hosted: where the phone says you are, as long as that's within a walk of where
+ * the server last had you (your last trip, or home); otherwise there. So nobody can light up (and
+ * tell everyone in) a far-off part of the map. null: no life in this region.
+ */
+async function hostSpot(db: ReturnType<typeof createAdminClient>, userId: string, region: string, x: number, z: number): Promise<{ x: number; z: number } | null> {
+  const { data } = await db.from("lives").select("region, at_place, home_unit").eq("user_id", userId).maybeSingle();
+  if (!data || data.region !== region) return null;
+  const was = spotOf((data.at_place as string | null) ?? (data.home_unit as string | null));
+  if (!was || Math.hypot(x - was.x, z - was.z) <= WALK_TILES) return { x: Math.round(x), z: Math.round(z) };
+  return was;
+}
+
 /** Players within reach of a spot (not you): from the kept positions (game-db/102), else the old way. */
 async function nearbyPeople(db: ReturnType<typeof createAdminClient>, region: string, x: number, z: number, userId: string): Promise<string[]> {
   const box = await db
@@ -137,7 +153,10 @@ export async function hostGame(game: string, stakeMint: number, x: number, z: nu
   if (stake === null) return { ok: false, error: `Pick a stake from ₦${STAKE_MIN_NAIRA.toLocaleString("en-GB")} to ₦${STAKE_MAX_NAIRA.toLocaleString("en-GB")}.` };
   const fee = Math.round((hostFeeNaira(g.id) / perMint) * 100) / 100;
   const db = createAdminClient();
-  const args = { p_user: userId, p_region: region, p_game: g.id, p_stake: stake, p_x: Math.round(x), p_z: Math.round(z), p_seats: g.seats, p_fee: fee };
+  const spot = await hostSpot(db, userId, region, x, z);
+  if (!spot) return { ok: false, error: "Start your life in the city first." };
+  ({ x, z } = spot);
+  const args = { p_user: userId, p_region: region, p_game: g.id, p_stake: stake, p_x: x, p_z: z, p_seats: g.seats, p_fee: fee };
   let res = await db.rpc("challenge_host", { ...args, p_secs: HOST_JOIN_SECS });
   // Before part 122 is run: hosted as a challenge (its own fee rules), so Play works already.
   if (res.error && /challenge_host/.test(res.error.message)) res = await db.rpc("challenge_open", { ...args, p_fee: Math.round((CHALLENGE_FEE_NAIRA / perMint) * 100) / 100, p_cooldown: CHALLENGE_COOLDOWN_SECS });
@@ -200,6 +219,9 @@ export async function openChallenge(game: string, stakeMint: number, x: number, 
   const stake = cleanStake(Number(stakeMint), perMint);
   if (stake === null) return { ok: false, error: `Pick a stake from ₦${STAKE_MIN_NAIRA.toLocaleString("en-GB")} to ₦${STAKE_MAX_NAIRA.toLocaleString("en-GB")}.` };
   const db = createAdminClient();
+  const spot = await hostSpot(db, userId, region, x, z);
+  if (!spot) return { ok: false, error: "Start your life in the city first." };
+  ({ x, z } = spot);
   const { data, error } = await db.rpc("challenge_open", {
     p_user: userId,
     p_region: region,
@@ -264,7 +286,9 @@ export async function inviteChallenge(target: string, game: string, stakeMint: n
   const stake = cleanStake(Number(stakeMint), perMint);
   if (stake === null) return { ok: false, error: `Pick a stake from ₦${STAKE_MIN_NAIRA.toLocaleString("en-GB")} to ₦${STAKE_MAX_NAIRA.toLocaleString("en-GB")}.` };
   const db = createAdminClient();
-  const { data, error } = await db.rpc("challenge_invite", { p_user: userId, p_target: target, p_region: region, p_game: g.id, p_stake: stake, p_x: Math.round(x), p_z: Math.round(z), p_seats: g.seats });
+  const spot = await hostSpot(db, userId, region, x, z);
+  if (!spot) return { ok: false, error: "Start your life in the city first." };
+  const { data, error } = await db.rpc("challenge_invite", { p_user: userId, p_target: target, p_region: region, p_game: g.id, p_stake: stake, p_x: spot.x, p_z: spot.z, p_seats: g.seats });
   if (error) {
     if (error.message.startsWith("busy")) {
       const { data: busy } = await db.rpc("challenge_busy", { p_user: userId });

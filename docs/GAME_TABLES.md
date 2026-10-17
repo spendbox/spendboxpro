@@ -62,6 +62,9 @@ If the market runs dry, the lowest hand wins (stars count double).
   and each move is checked against the rules.
 - Money only moves on the server: the stakes, the pool, and the prize once the other players
   agree on who won (as for every challenge, docs/CHALLENGES.md).
+- Chess and draughts: each phone keeps the list of moves, and one that falls behind (a lost move,
+  a reload, a late watcher) asks the others and catches up. 90 seconds a move, then the computer
+  plays it.
 - Someone gone for 40 seconds is played by the computer, so a game never freezes. Leaving
   mid-game with one other player gives them the pool.
 

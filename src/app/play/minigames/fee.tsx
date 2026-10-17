@@ -43,18 +43,34 @@ export function feeLabel(game: string) {
 export function Paying({ fee, pay, onPaid, onFailed, full }: { fee: number; pay: () => Promise<boolean>; onPaid: () => void; onFailed: () => void; full?: { title: string; colour: string; icon: React.ReactNode } }) {
   const started = useRef(false);
   const cb = useRef({ onPaid, onFailed });
+  // Backed out (or closed) while it was paying: the game doesn't open after all.
+  const here = useRef(true);
   useEffect(() => {
     cb.current = { onPaid, onFailed };
   });
   useEffect(() => {
+    here.current = true;
+    return () => {
+      here.current = false;
+    };
+  }, []);
+  useEffect(() => {
     if (started.current) return;
     started.current = true;
-    void pay().then((ok) => (ok ? cb.current.onPaid() : cb.current.onFailed()));
+    void pay().then((ok) => {
+      if (!here.current) return;
+      if (ok) cb.current.onPaid();
+      else cb.current.onFailed();
+    });
   }, [pay]);
+  const back = () => {
+    here.current = false;
+    cb.current.onFailed();
+  };
   // A full-screen game: its loading screen fills the screen too, in the game's own colours.
   if (full) {
     return (
-      <FullScreen onQuit={() => cb.current.onFailed()} quitLabel="Back" className="bg-[#14171c]">
+      <FullScreen onQuit={back} quitLabel="Back" className="bg-[#14171c]">
         <div className="relative grid flex-1 place-items-center overflow-hidden">
           <div className="pointer-events-none absolute inset-0" style={{ background: `radial-gradient(ellipse at 50% 35%, ${full.colour}55, transparent 60%), linear-gradient(180deg, #1b1f26, #0b0d11)` }} />
           <div className="relative text-center">

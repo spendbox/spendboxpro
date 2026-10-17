@@ -73,6 +73,8 @@ export function useChallengeChannel(id: number | null, me: { id: string; name: s
           listeners.current.delete(fn);
         };
       },
+      /** Anything else for the board (catching up on the moves so far). */
+      post: (m: Record<string, unknown>) => send(m as unknown as ChallengeMsg),
     },
     chat,
     say: (text: string) => {
