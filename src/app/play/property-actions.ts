@@ -298,9 +298,10 @@ export async function travelTo(buildingId: string, drive?: boolean, from?: { x: 
   const km = start ? tripKmBetween(start, buildingId) : null;
   // Over the water to an island with no bridge: a ferry, and the ride either side.
   const ferry = start ? ferryKmBetween(start, buildingId) : 0;
-  // Driving your own car (if you have one): just the fuel, anywhere.
+  // Driving your own car (if you have one): the fuel, anywhere (short trips too: a car never
+  // goes for free).
   let mode: Commute = km === null ? "walk" : onFoot ? cheapestRide(km, ferry) : cheapestCommute(km, ferry);
-  if (drive && km !== null && mode !== "walk") {
+  if (drive && km !== null && km >= 0.2) {
     const { count } = await db.from("items").select("id", { count: "exact", head: true }).eq("owner", userId).eq("category", "car");
     if (!count) return { ok: false, error: "You need a car to drive. Get one from Things, Cars." };
     mode = "car";

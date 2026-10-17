@@ -635,8 +635,8 @@ export function useWorldLife({
     if (km === null || !region || !from) return null;
     const ferry = ferryKmBetween(from, id);
     const cheapest = cheapestCommute(km, ferry);
-    // Your own car when you'd rather drive (anywhere; only the fuel to pay).
-    const mode: Commute = driving && cheapest !== "walk" ? "car" : cheapest;
+    // Your own car when you'd rather drive (anywhere, even round the corner: the fuel to pay).
+    const mode: Commute = driving && km >= 0.2 ? "car" : cheapest;
     return { mode, ferry, km, from, fare: tripFareMint(mode, km, region.region.prices, ferry) ?? 0 };
   };
   /** Drive or take the bus: a switch under each Go there, for car owners. */
