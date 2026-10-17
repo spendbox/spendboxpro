@@ -152,6 +152,7 @@ import * as serviceActions from "./service-actions";
 import * as reportActions from "./report-actions";
 import * as marketActions from "./market-actions";
 import { REGIONS, regionMap } from "@/lib/world";
+import { MINIGAMES_LISTED } from "./minigames/registry";
 
 // Sheets opened from the map: loaded when first opened.
 const GhostsSheet = dynamic(() => import("./ghost-duel/ghosts-sheet").then((m) => m.GhostsSheet));
@@ -198,6 +199,8 @@ function CityLoading() {
 const Menu = dynamic(() => import("./menu").then((m) => m.Menu));
 const JobsSheet = dynamic(() => import("./jobs-sheet").then((m) => m.JobsSheet));
 const GamesSheet = dynamic(() => import("./minigames/games-sheet").then((m) => m.GamesSheet));
+const CopsRobbers = dynamic(() => import("./cops/cops").then((m) => m.CopsRobbers));
+const CopsCountdown = dynamic(() => import("./cops/countdown-ring").then((m) => m.CopsCountdown));
 const MinigameInvites = dynamic(() => import("./minigames/invites").then((m) => m.MinigameInvites));
 const CameraMode = dynamic(() => import("./phone/camera").then((m) => m.CameraMode));
 const PhoneSheet = dynamic(() => import("./phone/phone-sheet").then((m) => m.PhoneSheet));
@@ -2064,6 +2067,8 @@ export function Game({
   const [fightOpen, setFightOpen] = useState(false);
   /** Play (beside Events): host a game now, or join, watch or get in line for one near you. */
   const [playOpen, setPlayOpen] = useState(false);
+  // Police & Thieves (docs/POLICE_THIEVES.md): its lobby, opened from the countdown beside Play.
+  const [copsOpen, setCopsOpen] = useState(false);
   const [challengeLights, setChallengeLights] = useState<ChallengeLight[]>([]);
   // Events (docs/EVENTS.md): what's on and hosting, their beams on the map, and parties' crowds.
   const [eventsOpen, setEventsOpen] = useState(false);
@@ -2974,7 +2979,7 @@ export function Game({
           level={guest ? undefined : me.level}
           onPhone={() => { setMenu(false); setPhone("home"); }}
           onMyJob={guest || worldId ? undefined : () => { setMenu(false); setJobsAt(null); }}
-          onGames={() => { setMenu(false); setGamesOpen({}); }}
+          onGames={MINIGAMES_LISTED ? () => { setMenu(false); setGamesOpen({}); } : undefined}
           onChangePin={() => router.push("/welcome")}
           onSignOut={() => { setMenu(false); setConfirmSignOut(true); }}
         />
@@ -3777,7 +3782,7 @@ export function Game({
                 )}
               </button>
             )}
-            {!dockOpen && !isDancing && (place || ride !== null) && (
+            {MINIGAMES_LISTED && !dockOpen && !isDancing && (place || ride !== null) && (
               <button onClick={() => setGamesOpen({})} className="glass pointer-events-auto flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold shadow sm:text-sm">
                 <Gamepad2 className="size-4 text-[#7048e8]" />
                 Games
@@ -4021,6 +4026,12 @@ export function Game({
           {challengeLights.length > 0 && <span className="absolute -right-0.5 -top-0.5 size-3 rounded-full bg-[#ffd43b] ring-2 ring-white" />}
         </button>
       )}
+      {/* Police & Thieves: beside Play, the countdown to the next game (2am, 10am, 6pm Lagos time),
+          a ring that fills as it comes closer; LIVE while one is on. Opens its lobby. */}
+      {worldId && !guest && !camera && !place && ride === null && !walking && tour("events") && (
+        <CopsCountdown onOpen={() => setCopsOpen(true)} className="fixed right-[8.25rem] top-14 z-20 sm:right-[9.25rem] sm:top-16" />
+      )}
+      {copsOpen && <CopsRobbers me={{ id: me.id, name: me.name ?? "Player" }} onClose={() => setCopsOpen(false)} />}
       {/* Notifications off on this phone: a bell on the right, halfway down, to switch them on (gone
           once they're on). On the real map it's in the column down the left instead. */}
       {!me.guest && !pushOn && !camera && !worldId && (

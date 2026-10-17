@@ -242,6 +242,13 @@ export const MINIGAMES: MiniGameDef[] = [
     "Every 8 hours: police against thieves in a whole city.", "A big game at 2am, 10am and 6pm (Lagos time). Sign up on a side (the sides stay even), buy guns, grenades, rocket launchers and tanks before it starts: it all goes into the pool, and the winning side shares it. Thieves rob the bank's vault and run for the hideout; police stop them. Watch a match that's on, or practise against bots any time.", { full: true }),
 ];
 
+/**
+ * The list of the 100 small games (Games in the menu and the Games button in places) is retired
+ * for now. The games still run where something else needs them (heists, job shifts, the shooting
+ * range, paintball, and the table games under Play).
+ */
+export const MINIGAMES_LISTED = false;
+
 export const MINIGAME_BY_ID = new Map(MINIGAMES.map((g) => [g.id, g]));
 
 /** Is a score a bronze (1), silver (2) or gold (3) one (0: none)? */

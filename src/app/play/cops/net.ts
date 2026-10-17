@@ -23,7 +23,9 @@ export type Msg =
   | { t: "boom"; x: number; y: number; z: number; k: number }
   | { t: "chat"; from: string; n: string; tm: number; text: string }
   | { t: "ping"; by: string; n: string; tm: number; x: number; z: number }
-  | { t: "sync"; sc: [number, number]; st: Record<string, number[]>; bags: { id: string; x: number; z: number }[] };
+  | { t: "sync"; sc: [number, number]; st: Record<string, number[]>; bags: { id: string; x: number; z: number }[] }
+  // A sample game with friends: the room's host starts it (who's on which side, its city, its times).
+  | { t: "start"; seed: number; at: number; ends: number; tod: "day" | "dusk" | "night"; roster: { i: string; n: string; tm: number }[] };
 export type Member = { id: string; name: string; at: number; st: "play" | "watch" };
 
 export class CopsNet {

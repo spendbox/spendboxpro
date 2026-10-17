@@ -1,17 +1,17 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { startTransition, useCallback, useEffect, useMemo, useState } from "react";
-import { Bomb, Bot, Check, Clock, Crosshair, Crown, Download, Eye, HeartPulse, LoaderCircle, LogOut, Play, Shield, ShoppingCart, Siren, Swords, Trophy, Truck, Users } from "lucide-react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Bomb, Bot, Check, Clock, Copy, Crosshair, Crown, Download, Eye, HeartPulse, LoaderCircle, LogOut, Play, Shield, ShoppingCart, Siren, Swords, Trophy, Truck, Users } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { COPS_TICKET_NAIRA, GEAR, PRACTICE_LOADOUT, SIDES, copsMint, type GearId, type Loadout } from "@/lib/cops";
+import { GEAR, PRACTICE_LOADOUT, SIDES, copsMint, type GearId, type Loadout } from "@/lib/cops";
 import { countdown, sessionsNow, startLabel, timeOfDay } from "@/lib/scheduled";
 import { cash } from "@/lib/world/value";
 import { copsBuy, copsJoin, copsLeave, copsReport, copsRoom, copsStatus, type BoardRow, type CopsResult, type CopsRoom, type CopsStatus } from "../cops-actions";
 import { FullScreen } from "../minigames/fullscreen";
-import { FeeLine, usePlayFee } from "../minigames/fee";
+import { newCode } from "../paintball/net";
 import { playSfx } from "../sound";
-import { CopsNet } from "./net";
+import { CopsNet, type Msg } from "./net";
 import { Match, type EndResult, type Setup } from "./match";
 
 // Police & Thieves: the lobby. A big game every 8 hours (2am, 10am and 6pm Lagos time). Sign up
@@ -22,7 +22,15 @@ import { Match, type EndResult, type Setup } from "./match";
 
 const GAME = "cops-robbers";
 type Me = { id: string; name: string };
-type Screen = { k: "lobby" } | { k: "play"; setup: Setup; live: boolean } | { k: "done"; result: EndResult; setup: Setup; live: boolean };
+/** sample: the code of the friends' room a sample game is played from (null: alone, or the real game). */
+type Screen = { k: "lobby" } | { k: "room" } | { k: "play"; setup: Setup; live: boolean; sample: boolean } | { k: "done"; result: EndResult; setup: Setup; live: boolean; sample: boolean };
+const TODS = ["day", "dusk", "night"] as const;
+
+/** A sample game alone against bots: 5 minutes, a random city and time of day, every weapon. */
+function soloSample(p: Me, tm: number): Setup {
+  const t = Date.now();
+  return { key: null, room: 0, seed: Math.floor(Math.random() * 1e9), fightAt: t + 5000, endsAt: t + 5000 + 300_000, roster: [{ i: p.id, n: p.name, tm, g: PRACTICE_LOADOUT }], tod: TODS[Math.floor(Math.random() * 3)], watch: false, pool: 0 };
+}
 
 const GEAR_ICON: Record<GearId, React.ComponentType<{ className?: string }>> = { smg: Crosshair, shotgun: Crosshair, rifle: Crosshair, sniper: Crosshair, rocket: Swords, grenade: Bomb, medkit: HeartPulse, armour: Shield, tank: Truck };
 
@@ -45,10 +53,21 @@ export function CopsRobbers({ me, onClose, demo }: { me: Me | null; onClose: () 
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [screen, setScreen] = useState<Screen>({ k: "lobby" });
-  const fee = usePlayFee(GAME, !!me);
   const meId = me?.id ?? null;
   const meName = me?.name ?? "Player";
   const who = useMemo(() => (meId ? { id: meId, name: meName } : null), [meId, meName]);
+  // Sample games need no sign-in: someone who isn't signed in plays as a guest.
+  const [guest] = useState(() => ({ id: crypto.randomUUID(), name: "Guest" }));
+  const player = who ?? guest;
+  // A sample game with friends: the room's code, and its live channel (from the room through its matches).
+  const [sample, setSample] = useState<string | null>(null);
+  const [joinCode, setJoinCode] = useState("");
+  const sampleNet = useMemo(() => (sample ? new CopsNet(`sample:${sample}`, player, "play") : null), [sample, player]);
+  useEffect(() => {
+    if (!sampleNet) return;
+    sampleNet.open();
+    return () => sampleNet.close();
+  }, [sampleNet]);
 
   const refresh = useCallback(async () => {
     const res = await copsStatus().catch(() => null);
@@ -103,24 +122,37 @@ export function CopsRobbers({ me, onClose, demo }: { me: Me | null; onClose: () 
     if (!res || !res.ok) return setErr(res && !res.ok ? res.error : "The connection blinked. Try again.");
     if (!("seed" in res)) return setErr(res.status === "none" || !res.rooms ? "Nobody signed up for this one. Sign up for the next!" : "Getting the matches ready… try again in a moment.");
     const r = res as CopsRoom;
-    setScreen({ k: "play", live: true, setup: { key: live.key, room: r.room, seed: r.seed, fightAt: r.fightAt, endsAt: r.endsAt, roster: r.roster, tod: timeOfDay(live.starts), watch: watch || !r.me.in || r.me.room !== r.room, pool: r.pool } });
+    setScreen({ k: "play", live: true, sample: false, setup: { key: live.key, room: r.room, seed: r.seed, fightAt: r.fightAt, endsAt: r.endsAt, roster: r.roster, tod: timeOfDay(live.starts), watch: watch || !r.me.in || r.me.room !== r.room, pool: r.pool } });
   }
 
-  async function practice() {
-    if (!who) return void fee.pay();
-    setBusy("practice");
-    const ok = await fee.pay();
-    setBusy(null);
-    if (!ok) return;
-    const seed = Math.floor(Math.random() * 1e9);
-    const t = Date.now();
-    setScreen({ k: "play", live: false, setup: { key: null, room: 0, seed, fightAt: t + 5000, endsAt: t + 5000 + 300_000, roster: [{ i: who.id, n: who.name, tm: Math.random() < 0.5 ? 0 : 1, g: PRACTICE_LOADOUT }], tod: (["day", "dusk", "night"] as const)[Math.floor(Math.random() * 3)], watch: false, pool: 0 } });
+  /** A free sample game against bots, now: every weapon to try, nothing to pay or win. */
+  function practice(tm: number) {
+    setScreen({ k: "play", live: false, sample: false, setup: soloSample(player, tm) });
   }
+  const back = () => setScreen(sample ? { k: "room" } : { k: "lobby" });
 
-  if (screen.k === "play" && who) {
-    return <Playing me={who} setup={screen.setup} onQuit={() => setScreen({ k: "lobby" })} onEnd={(result) => setScreen({ k: "done", result, setup: screen.setup, live: screen.live })} />;
+  if (screen.k === "play") {
+    return <Playing me={player} setup={screen.setup} net={screen.sample ? sampleNet : undefined} onQuit={back} onEnd={(result) => setScreen({ k: "done", result, setup: screen.setup, live: screen.live, sample: screen.sample })} />;
   }
-  if (screen.k === "done") return <Results me={who} result={screen.result} setup={screen.setup} onBack={() => setScreen({ k: "lobby" })} />;
+  if (screen.k === "done") return <Results me={player} result={screen.result} setup={screen.setup} onBack={back} />;
+  if (screen.k === "room" && sample && sampleNet) {
+    return (
+      <SampleRoom
+        me={player}
+        net={sampleNet}
+        code={sample}
+        onLeave={() => {
+          setSample(null);
+          setScreen({ k: "lobby" });
+        }}
+        onStart={(setup) => setScreen({ k: "play", live: false, sample: true, setup })}
+      />
+    );
+  }
+  const openRoom = (code: string) => {
+    setSample(code);
+    setScreen({ k: "room" });
+  };
 
   const until = next.starts - now;
   const side = nextMe.in ? (nextMe.side ?? 0) : null;
@@ -138,6 +170,34 @@ export function CopsRobbers({ me, onClose, demo }: { me: Me | null; onClose: () 
             <p className="mt-1 text-sm text-white/65">Thieves rob the bank and run for the hideout. Police stop them. A whole city to fight in. The winners share the pool.</p>
           </div>
 
+          {/* Sample games: free, any time, every weapon to try; nothing to pay and nothing won. */}
+          <div className="space-y-2 rounded-3xl border border-white/10 bg-black/40 p-4 text-white">
+            <p className="text-[11px] font-black tracking-[0.2em] text-white/55">SAMPLE GAMES · FREE · ANY TIME</p>
+            <p className="text-xs text-white/60">Try it before the real thing: every weapon and a tank to try, unlimited lives, 5 minutes. Nothing to pay, nothing to win.</p>
+            <div className="flex gap-2">
+              {[0, 1].map((tm) => (
+                <button key={tm} onClick={() => practice(tm)} className="flex flex-1 items-center justify-center gap-1.5 rounded-2xl py-2.5 text-sm font-bold" style={{ background: tm === 0 ? "rgba(28,79,214,.55)" : "rgba(232,89,12,.55)" }}>
+                  <Bot className="size-4" /> As {tm === 0 ? "police" : "a thief"}
+                </button>
+              ))}
+            </div>
+            <button onClick={() => openRoom(newCode())} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white/12 py-2.5 text-sm font-bold">
+              <Users className="size-4" /> Sample game with friends (get a code)
+            </button>
+            <form
+              className="flex gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const c = joinCode.trim().toUpperCase();
+                if (c.length >= 4) openRoom(c);
+              }}
+            >
+              <input value={joinCode} onChange={(e) => setJoinCode(e.target.value.toUpperCase().slice(0, 6))} placeholder="Friend's code" className="min-w-0 flex-1 rounded-xl bg-white/10 px-3 py-2 font-bold tracking-widest text-white placeholder:font-normal placeholder:tracking-normal placeholder:text-white/40" />
+              <button disabled={joinCode.trim().length < 4} className="rounded-xl bg-white/15 px-4 text-sm font-bold disabled:opacity-40">
+                Join
+              </button>
+            </form>
+          </div>
           {off && <p className="rounded-2xl bg-white/10 p-3 text-center text-sm text-white/80">Scheduled games are switched on soon. Practice against bots meanwhile.</p>}
           {err && <p className="rounded-2xl bg-[#ffe3e3] px-3 py-2 text-center text-sm font-semibold text-[#c92a2a]">{err}</p>}
 
@@ -213,7 +273,7 @@ export function CopsRobbers({ me, onClose, demo }: { me: Me | null; onClose: () 
 
             {side === null ? (
               <>
-                <p className="text-sm text-white/70">Pick a side. The ticket is {cash(copsMint(COPS_TICKET_NAIRA))} (it goes in the pool). A side can&apos;t get ahead by more than one.</p>
+                <p className="text-sm text-white/70">Pick a side: joining is free. Then buy your weapons (that&apos;s the pool). A side can&apos;t get ahead by more than one.</p>
                 <div className="flex gap-2">
                   {[0, 1].map((tm) => (
                     <button
@@ -254,18 +314,12 @@ export function CopsRobbers({ me, onClose, demo }: { me: Me | null; onClose: () 
             )}
           </div>
 
-          <button disabled={!!busy} onClick={() => void practice()} className="flex items-center justify-center gap-2 rounded-2xl bg-white/10 py-3 font-semibold text-white disabled:opacity-50">
-            {busy === "practice" ? <LoaderCircle className="size-4 animate-spin" /> : <Bot className="size-4" />} Practice now against bots
-          </button>
-          <div className="[&_p]:text-white/55">
-            <FeeLine fee={fee.fee} error={fee.error} />
-          </div>
 
           {st?.last && st.last.rows.length > 0 && <LastBoard last={st.last} meId={meId} />}
 
           <div className="rounded-2xl bg-black/30 p-3 text-xs leading-relaxed text-white/60">
-            <b className="text-white/85">How it works.</b> Sign up on a side before the start and buy your gear: everything spent goes into the pool (a tenth to the house). Up to 8 a side in a match; more players make more matches, and bots fill any gaps so the sides are always even. Thieves: stand in the vault to crack a bag of money (2 seconds) and carry it to the hideout: 3 points. Police: guard the vault; a takedown is 1, a bag taken back is 1. Most points after 10 minutes wins, and the winning side shares its pool by what each player did (damage, takedowns, loot, time in the fight). Controls: left thumb moves, right thumb looks, tap to shoot, AIM (or SCOPE), DUCK behind low cover, JUMP, SWAP guns, grenades, medkits, TANK. AUTO aim helps you on a phone. Team chat and pings are for your side only.
-          </div>
+            <b className="text-white/85">How it works.</b> Joining is free: pick a side before the start, then buy your weapons and gear. Everything spent on gear goes into the pool (a tenth to the house). Up to 8 a side in a match; more players make more matches, and bots fill any gaps so the sides are always even. Unlimited lives: after every takedown you&apos;re back in 4 seconds with your weapons, until the 10 minutes are up. Thieves: stand in the vault to crack a bag of money (2 seconds) and carry it to the hideout: 3 points. Police: guard the vault; a takedown is 1, a bag taken back is 1. Most points wins, and the winning side shares its pool by what each player did (damage, takedowns, loot, time in the fight). Controls: left thumb moves, right thumb looks, tap to shoot, AIM (or SCOPE), DUCK behind low cover, JUMP, SWAP guns, grenades, medkits, TANK. AUTO aim helps you on a phone. Team chat and pings are for your side only.
+        </div>
         </div>
       </div>
     </FullScreen>
@@ -338,15 +392,102 @@ function Board({ rows, meId, pool }: { rows: BoardRow[]; meId: string | null; po
 
 // ---------------------------------------------------------------- playing (with the live channel)
 
-function Playing({ me, setup, onQuit, onEnd }: { me: Me; setup: Setup; onQuit: () => void; onEnd: (r: EndResult) => void }) {
-  const code = setup.key ? `${setup.key}:${setup.room}` : null;
+function Playing({ me, setup, net: given, onQuit, onEnd }: { me: Me; setup: Setup; net?: CopsNet | null; onQuit: () => void; onEnd: (r: EndResult) => void }) {
+  // A sample game with friends brings its room's channel; the real game opens its match's.
+  const code = setup.key && given === undefined ? `${setup.key}:${setup.room}` : null;
   const net = useMemo(() => (code ? new CopsNet(code, me, setup.watch || !setup.roster.some((s) => s.i === me.id) ? "watch" : "play") : null), [code, me, setup.watch, setup.roster]);
   useEffect(() => {
     if (!net) return;
     net.open();
     return () => net.close();
   }, [net]);
-  return <Match me={me} setup={setup} net={net} onQuit={onQuit} onEnd={onEnd} />;
+  return <Match me={me} setup={setup} net={given ?? net} onQuit={onQuit} onEnd={onEnd} />;
+}
+
+// ---------------------------------------------------------------- a sample game with friends
+
+/**
+ * A room with a code: friends come in with the code, the sides are shared out in turn as they
+ * come (so they stay even; bots fill the rest), and the first one in starts it. Free, every weapon.
+ */
+function SampleRoom({ me, net, code, onLeave, onStart }: { me: Me; net: CopsNet; code: string; onLeave: () => void; onStart: (s: Setup) => void }) {
+  const members = useSyncExternalStore(net.subscribe, net.getMembers, net.getMembers);
+  const [mins, setMins] = useState(5);
+  const [copied, setCopied] = useState(false);
+  const started = useRef(false);
+  const cb = useRef(onStart);
+  useEffect(() => {
+    cb.current = onStart;
+  });
+  const setupOf = useCallback(
+    (m: Extract<Msg, { t: "start" }>): Setup => ({ key: null, room: 0, seed: m.seed, fightAt: m.at, endsAt: m.ends, tod: m.tod, watch: !m.roster.some((r) => r.i === me.id), pool: 0, roster: m.roster.map((r) => ({ ...r, g: PRACTICE_LOADOUT })) }),
+    [me.id],
+  );
+  useEffect(() => {
+    started.current = false;
+    return net.listen((m) => {
+      if (m.t !== "start" || started.current) return;
+      started.current = true;
+      cb.current(setupOf(m));
+    });
+  }, [net, setupOf]);
+  const people = members.length ? members : [{ id: me.id, name: me.name, at: 0, st: "play" as const }];
+  const host = people[0]?.id === me.id;
+  function start() {
+    if (started.current) return;
+    const at = Date.now() + 6000;
+    const msg: Extract<Msg, { t: "start" }> = { t: "start", seed: Math.floor(Math.random() * 1e9), at, ends: at + mins * 60_000, tod: TODS[Math.floor(Math.random() * 3)], roster: people.slice(0, 16).map((p, k) => ({ i: p.id, n: p.name, tm: k % 2 })) };
+    net.send(msg);
+    started.current = true;
+    onStart(setupOf(msg));
+  }
+  return (
+    <FullScreen onQuit={onLeave} quitLabel="Leave the room" className="bg-[#0b0e14]">
+      <div className="relative flex flex-1 flex-col overflow-y-auto">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_15%_0%,rgba(28,79,214,.45),transparent_55%),radial-gradient(ellipse_at_85%_100%,rgba(240,140,0,.35),transparent_55%)]" />
+        <div className="relative mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-3 px-4 py-14 text-white">
+          <p className="text-center text-[11px] font-black tracking-[0.3em] text-white/60">SAMPLE GAME WITH FRIENDS · FREE</p>
+          <button
+            onClick={() => {
+              void navigator.clipboard?.writeText(code).catch(() => {});
+              setCopied(true);
+            }}
+            className="mx-auto flex items-center gap-2 font-mono text-4xl font-black tracking-[0.25em]"
+          >
+            {code} {copied ? <Check className="size-5 text-[#8ce99a]" /> : <Copy className="size-5 text-white/50" />}
+          </button>
+          <p className="text-center text-sm text-white/65">Friends open Police &amp; Thieves, put this code in under Sample games, and Join. Sides are shared out in turn; bots fill the rest.</p>
+          <ul className="grid grid-cols-2 gap-1.5">
+            {people.slice(0, 16).map((p, k) => (
+              <li key={p.id} className="flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm font-semibold" style={{ background: k % 2 ? "rgba(232,89,12,.3)" : "rgba(28,79,214,.35)" }}>
+                {k === 0 && <Crown className="size-3.5 shrink-0 text-[#ffd43b]" />}
+                <span className="truncate">{p.id === me.id ? `${p.name} (you)` : p.name}</span>
+              </li>
+            ))}
+          </ul>
+          {host ? (
+            <>
+              <div className="flex items-center justify-center gap-2 text-sm">
+                <span className="text-white/60">Length</span>
+                {[3, 5, 10].map((m) => (
+                  <button key={m} onClick={() => setMins(m)} className={cn("rounded-full px-3 py-1 font-bold", mins === m ? "bg-white text-black" : "bg-white/10")}>
+                    {m} min
+                  </button>
+                ))}
+              </div>
+              <button onClick={start} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#2f9e44] py-3 font-bold shadow-[0_5px_0_#1e6b2d] active:translate-y-1 active:shadow-none">
+                <Play className="size-4" /> Start ({people.length} {people.length === 1 ? "player" : "players"}, bots fill the rest)
+              </button>
+            </>
+          ) : (
+            <p className="flex items-center justify-center gap-2 py-2 text-sm text-white/70">
+              <LoaderCircle className="size-4 animate-spin" /> Waiting for {people[0]?.name ?? "the host"} to start…
+            </p>
+          )}
+        </div>
+      </div>
+    </FullScreen>
+  );
 }
 
 // ---------------------------------------------------------------- the end
@@ -472,7 +613,7 @@ export function Results({ me, result, setup, onBack }: { me: Me | null; result: 
         )}
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(11,14,20,.1)_0%,rgba(11,14,20,.55)_35%,#0b0e14_62%)]" />
         <div className="relative mx-auto flex w-full max-w-md flex-1 flex-col justify-end gap-3 px-4 pb-8 pt-20 text-white">
-          <p className="text-center text-[11px] font-black tracking-[0.3em] text-white/70">{setup.key ? "MATCH OVER · CAPTURED AT THE FINAL WHISTLE" : "PRACTICE OVER"}</p>
+          <p className="text-center text-[11px] font-black tracking-[0.3em] text-white/70">{setup.key ? "MATCH OVER · CAPTURED AT THE FINAL WHISTLE" : "SAMPLE GAME OVER · CAPTURED AT THE FINAL WHISTLE"}</p>
           <p className={cn("text-center font-display text-5xl font-black", title === "VICTORY" ? "text-[#ffd43b]" : "text-white")}>{title}</p>
           <p className="text-center text-3xl font-black tabular-nums">
             <span style={{ color: SIDES[0].css }}>{result.scores[0]}</span> <span className="text-white/40">–</span> <span style={{ color: SIDES[1].css }}>{result.scores[1]}</span>

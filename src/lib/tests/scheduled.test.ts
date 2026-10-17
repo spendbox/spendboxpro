@@ -44,13 +44,13 @@ test("the time of day each game is played in", () => {
 });
 
 test("the shop: prices in mint, what a loadout carries", () => {
-  assert.equal(copsMint(COPS_TICKET_NAIRA), 3.33);
-  assert.equal(copsMint(250_000), 166.67);
+  assert.equal(copsMint(COPS_TICKET_NAIRA), 0);
+  assert.equal(copsMint(300_000), 200);
   // The database's caps: no item over 250 mint, and everything at most once fits under 500.
   for (const g of GEAR) assert.ok(copsMint(g.naira) <= 250, g.id);
   const all = GEAR.reduce((n, g) => n + copsMint(g.naira) * g.max, copsMint(COPS_TICKET_NAIRA));
   assert.ok(all <= 500, `everything costs ${all}`);
   assert.deepEqual(gunsOf({}), ["pistol"]);
   assert.deepEqual(gunsOf(PRACTICE_LOADOUT), ["rifle", "shotgun", "rocket", "pistol"]);
-  assert.equal(loadoutNaira({ rifle: 1, grenade: 2 }), 31_000);
+  assert.equal(loadoutNaira({ rifle: 1, grenade: 2 }), 60_000);
 });

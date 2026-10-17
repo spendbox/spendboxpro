@@ -4,27 +4,29 @@ The first **scheduled game**: a big match every 8 hours, at **2am, 10am and 6pm 
 (01:00, 09:00 and 17:00 UTC). More scheduled games can be added the same way (`src/lib/scheduled.ts`
 and the `sched_games` table).
 
-Found in **Games** (a banner at the top of the list counts down to the next one) and under
-Shooting. Code: `src/app/play/cops/` (lobby `cops.tsx`, match `match.tsx`, world `world.ts`,
+Found on the map beside **Play** (the six table games): a siren button with a ring that fills up
+as the next game comes closer, the time left under it, LIVE while one is on. (The list of the 100
+small games is retired for now: `MINIGAMES_LISTED` in the registry.) Code: `src/app/play/cops/` (lobby `cops.tsx`, match `match.tsx`, world `world.ts`,
 drawing `scene.ts`, connection `net.ts`), the shop and prices `src/lib/cops.ts`, the server
 `src/app/play/cops-actions.ts` and `game-db/123_scheduled_games.sql`. Test page: `/cops-lab`
-(`?view=lobby|match|watch`, `?tod=day|dusk|night`, `?side=0|1`, `?secs=75` for a short one).
+(`?view=lobby|ring|match|watch`, `?tod=day|dusk|night`, `?side=0|1`, `?secs=75` for a short one).
 
 ## How a game goes
-1. **Sign up** for the next game any time before it starts: pick police or thieves and pay the
-   ticket (₦5,000). **The sides stay even**: a side can never get more than one ahead (the server
+1. **Sign up** for the next game any time before it starts: pick police or thieves. **Joining is
+   free.** **The sides stay even**: a side can never get more than one ahead (the server
    refuses, the button says "ahead: pick the other"); you can switch to the smaller side, or pull
    out and get everything back.
-2. **Buy your gear** in the Armoury before the start (you always have a pistol): SMG ₦10k,
-   shotgun ₦15k, assault rifle ₦25k, sniper ₦40k, rocket launcher ₦60k (6 rockets), grenades
-   ₦3k each (up to 6), medkits ₦3k (up to 3), body armour ₦15k, a **tank** ₦250k (call it in
-   once: 700 health, a cannon). The price always comes from the server's copy of the list.
-3. **Everything spent goes into the pool**, less a tenth for the house.
+2. **Buy your weapons and gear** in the Armoury before the start (you always have a pistol): SMG
+   ₦20k, shotgun ₦30k, assault rifle ₦50k, sniper ₦80k, rocket launcher ₦120k (6 rockets),
+   grenades ₦5k each (up to 6), medkits ₦5k (up to 3), body armour ₦30k, a **tank** ₦300k (call
+   it in once: 700 health, a cannon). The price always comes from the server's copy of the list.
+3. **Everything spent on gear goes into the pool**, less a tenth for the house.
 4. **At the start** the players are shared into matches of up to **8 a side** (more players make
    more matches, round-robin, so each is even), each with its own pool and city. **Bots fill any
    gap** so every match is even and at least 4 v 4. Someone who signed up but isn't there is
    played by a bot until they arrive (it earns them nothing).
-5. **The match**: 30 seconds to get ready, then 10 minutes. Thieves stand in the bank's vault for
+5. **The match**: 30 seconds to get ready, then 10 minutes. **Unlimited lives**: after every
+   takedown you're back in 4 seconds at your base, with your weapons, until the time's up. Thieves stand in the bank's vault for
    2 seconds to crack a bag of money and carry it to their hideout (3 points; carrying slows
    you). Police guard the vault; a takedown is 1 point, a dropped bag taken back is 1. Police see
    a thief with a bag on their map. Most points when the time's up wins.
@@ -32,6 +34,12 @@ drawing `scene.ts`, connection `net.ts`), the shop and prices `src/lib/cops.ts`,
    picture shares or downloads it). **The winning side shares its match's pool by activity**
    (damage, takedowns ×50, bags banked ×150, bags taken back ×60, time in the fight).
 7. **Watching**: anyone can watch a match that's on (follow any player, or look from above).
+
+## Sample games (to try it before the real thing)
+At the top of the lobby, free, any time, no sign-in needed: **against bots** (as police or a
+thief, 5 minutes), or **with friends**: one gets a code, the others put it in and Join, sides are
+shared out in turn, bots fill the rest, and the first one in picks 3, 5 or 10 minutes and starts.
+Every weapon and a tank to try; nothing to pay, nothing to win.
 
 ## The city
 260 m across: a grid of roads and 25 blocks. The bank in the middle, police HQ at the west end,

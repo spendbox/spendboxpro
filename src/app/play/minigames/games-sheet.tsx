@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, Gamepad2, MapPin, Search, Siren, Users, X } from "lucide-react";
-import { countdown, sessionsNow, startLabel } from "@/lib/scheduled";
+import { useMemo, useState } from "react";
+import { ChevronLeft, Gamepad2, MapPin, Search, Users, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Sheet } from "../sheet";
 import { GameIcon } from "./icons";
@@ -96,14 +95,6 @@ export function GamesSheet({
               </button>
             ))}
           </div>
-          {!q && (
-            <ScheduledBanner
-              onOpen={() => {
-                const def = MINIGAME_BY_ID.get("cops-robbers");
-                if (def) setPlaying({ def, invite: null, at: Date.now() });
-              }}
-            />
-          )}
           {cat !== "all" && cat !== "here" && <p className="text-xs text-muted">{CATEGORIES[cat].blurb}</p>}
           <div className="grid max-h-[55dvh] grid-cols-1 gap-2 overflow-y-auto overscroll-contain sm:grid-cols-2">
             {list.map((g) => (
@@ -128,24 +119,3 @@ export function GamesSheet({
   );
 }
 
-/** The scheduled game at the top of the list: on now, or when the next one starts. */
-function ScheduledBanner({ onOpen }: { onOpen: () => void }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 15000);
-    return () => window.clearInterval(id);
-  }, []);
-  const { live, next } = sessionsNow("cops-robbers", now);
-  return (
-    <button onClick={onOpen} className="flex w-full items-center gap-3 rounded-2xl bg-[linear-gradient(100deg,#1c4fd6,#e8590c)] p-3 text-left text-white shadow-sm">
-      <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-white/20">
-        <Siren className="size-6" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <b className="block truncate">Police &amp; Thieves</b>
-        <span className="block truncate text-xs text-white/85">{live ? "On now: go in or watch" : `Next game ${startLabel(next.starts)}, in ${countdown(next.starts - now)}: sign up and gear up`}</span>
-      </span>
-      {live && <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-[#e03131]">LIVE</span>}
-    </button>
-  );
-}

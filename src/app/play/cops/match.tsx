@@ -1177,7 +1177,7 @@ export function Match({ me, setup, net, onQuit, onEnd }: { me: { id: string; nam
             <div className="rounded-3xl bg-black/65 px-6 py-4 text-center text-white backdrop-blur-sm">
               <p className="font-display text-3xl font-black">TAKEN DOWN</p>
               <p className="text-sm text-white/75">
-                {hud.by ? `${hud.by} got you.` : "You're out."} Back in {Math.ceil(hud.out)}…
+                {hud.by ? `${hud.by} got you.` : "You're out."} Back in {Math.ceil(hud.out)}, with your weapons…
               </p>
             </div>
           </div>

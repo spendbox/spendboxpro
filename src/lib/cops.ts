@@ -2,13 +2,13 @@
 // naira, like every other price) and how each gun behaves. Plain data, so the server takes the
 // price from here (never from the phone) and the match uses the same numbers.
 //
-// Everything you spend (the ticket and your gear) goes into your match's pool, less a tenth for
+// Signing up is free. Everything you spend on gear goes into your match's pool, less a tenth for
 // the house. The winning side shares the pool by how much each of them did (docs/POLICE_THIEVES.md).
 
 import { everyday } from "./world/price-level.ts";
 
-/** The ticket: what it costs to sign up (it goes into the pool too). */
-export const COPS_TICKET_NAIRA = 5_000;
+/** Signing up is free: the pool is what players spend on weapons and gear. */
+export const COPS_TICKET_NAIRA = 0;
 
 export type GunId = "pistol" | "smg" | "shotgun" | "rifle" | "sniper" | "rocket";
 export type GearId = Exclude<GunId, "pistol"> | "grenade" | "medkit" | "armour" | "tank";
@@ -51,15 +51,15 @@ export const GUNS: Record<GunId, Gun> = {
 export type Gear = { id: GearId; name: string; naira: number; max: number; kind: "gun" | "throw" | "heal" | "armour" | "vehicle"; blurb: string };
 
 export const GEAR: Gear[] = [
-  { id: "smg", name: "SMG", naira: 10_000, max: 1, kind: "gun", blurb: "Fast and close: sprays 11 a second." },
-  { id: "shotgun", name: "Shotgun", naira: 15_000, max: 1, kind: "gun", blurb: "Eight pellets. Deadly round a corner." },
-  { id: "rifle", name: "Assault rifle", naira: 25_000, max: 1, kind: "gun", blurb: "The all-rounder: hits hard, reaches far." },
-  { id: "sniper", name: "Sniper", naira: 40_000, max: 1, kind: "gun", blurb: "One shot nearly takes anyone down. Aim to scope in." },
-  { id: "rocket", name: "Rocket launcher", naira: 60_000, max: 1, kind: "gun", blurb: "Six rockets. Blows up anyone near, and tanks." },
-  { id: "grenade", name: "Grenade", naira: 3_000, max: 6, kind: "throw", blurb: "Throw over cover; it goes off after 2 seconds." },
-  { id: "medkit", name: "Medkit", naira: 3_000, max: 3, kind: "heal", blurb: "Back to full health in a moment." },
-  { id: "armour", name: "Body armour", naira: 15_000, max: 1, kind: "armour", blurb: "60 more health, and it's back each time you're back in." },
-  { id: "tank", name: "Tank", naira: 250_000, max: 1, kind: "vehicle", blurb: "Call it in once: 700 health and a cannon." },
+  { id: "smg", name: "SMG", naira: 20_000, max: 1, kind: "gun", blurb: "Fast and close: sprays 11 a second." },
+  { id: "shotgun", name: "Shotgun", naira: 30_000, max: 1, kind: "gun", blurb: "Eight pellets. Deadly round a corner." },
+  { id: "rifle", name: "Assault rifle", naira: 50_000, max: 1, kind: "gun", blurb: "The all-rounder: hits hard, reaches far." },
+  { id: "sniper", name: "Sniper", naira: 80_000, max: 1, kind: "gun", blurb: "One shot nearly takes anyone down. Aim to scope in." },
+  { id: "rocket", name: "Rocket launcher", naira: 120_000, max: 1, kind: "gun", blurb: "Six rockets. Blows up anyone near, and tanks." },
+  { id: "grenade", name: "Grenade", naira: 5_000, max: 6, kind: "throw", blurb: "Throw over cover; it goes off after 2 seconds." },
+  { id: "medkit", name: "Medkit", naira: 5_000, max: 3, kind: "heal", blurb: "Back to full health in a moment." },
+  { id: "armour", name: "Body armour", naira: 30_000, max: 1, kind: "armour", blurb: "60 more health, back every time you respawn." },
+  { id: "tank", name: "Tank", naira: 300_000, max: 1, kind: "vehicle", blurb: "Call it in once: 700 health and a cannon." },
 ];
 export const GEAR_BY_ID = new Map(GEAR.map((g) => [g.id, g]));
 

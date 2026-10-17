@@ -24,7 +24,8 @@ export const RULES = {
   radius: 0.42,
   eye: 1.55,
   crouchEye: 1.02,
-  respawn: 5,
+  /** Unlimited lives: back in this many seconds after every takedown, with your weapons, until time's up. */
+  respawn: 4,
   shield: 2.5,
   grenadeFuse: 2.1,
   grenadeSplash: 6,
