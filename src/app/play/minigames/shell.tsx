@@ -45,6 +45,7 @@ const Pool = dynamic(() => import("../activities/pool").then((m) => m.Pool));
 const Karaoke = dynamic(() => import("../activities/karaoke").then((m) => m.Karaoke));
 const DuelLobby = dynamic(() => import("../activities/duels").then((m) => m.DuelLobby));
 const Paintball = dynamic(() => import("../paintball/paintball").then((m) => m.Paintball));
+const CopsRobbers = dynamic(() => import("../cops/cops").then((m) => m.CopsRobbers));
 
 function LegacyGame({ name, gp }: { name: string; gp: GameProps }) {
   switch (name) {
@@ -75,6 +76,8 @@ export function MiniGamePlayer({ def, ctx, onClose, invite, task }: { def: MiniG
   if (def.legacy) return <LegacyPlay def={def} ctx={ctx} gp={gp} />;
   // Paintball has its own screens (rooms, matches between phones) and takes its fee each match.
   if (def.engine === "paintball") return <Paintball me={ctx.me ? { id: ctx.me.id, name: ctx.me.name } : null} onClose={onClose} ctx={ctx} invite={invite} />;
+  // Police & Thieves: the scheduled game (its lobby, shop, matches and watching).
+  if (def.engine === "cops") return <CopsRobbers me={ctx.me ? { id: ctx.me.id, name: ctx.me.name } : null} onClose={onClose} />;
   return (
     <div className="space-y-3">
       <ActivityStyles />

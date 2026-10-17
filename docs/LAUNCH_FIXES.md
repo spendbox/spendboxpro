@@ -52,6 +52,14 @@ Ticked off here as they're done (most urgent first). Prices and limits: docs/COS
   **JWT signing keys** (so each call doesn't ask Supabase Auth).
 - [ ] Run game-db/121 and 122 (TODO.md).
 
+## Police & Thieves (new, docs/POLICE_THIEVES.md)
+- [ ] **17. Results come from the phones.** The pool is paid only when the losing side's phones
+  agree (or by medians), but a hacked app can still fake hits mid-match. Before big pools: a game
+  server that decides hits.
+- [ ] **18. Realtime messages.** A full 8 v 8 is about 0.8m messages a match. Watch the Supabase
+  bill after the first week; the game server above fixes this too.
+- [ ] Run game-db/123 (TODO.md).
+
 ## Later
 - [ ] The `ledger` gets a row per player a minute: add it up by the hour.
 - [ ] TURN relay password in the app's code: use only the short-lived ones from /api/turn.

@@ -1,4 +1,4 @@
-// All the minigames (docs/MINIGAMES.md: the 100, and paintball). Each names an engine (./engines, ./turns) and its
+// All the minigames (docs/MINIGAMES.md: the 100, paintball, and Police & Thieves). Each names an engine (./engines, ./turns) and its
 // settings, the kinds of places it belongs to (so a bank offers heist games and a gym offers
 // boxing pads), and bronze / silver / gold scores (mint rewards, heist pass marks).
 //
@@ -238,6 +238,8 @@ export const MINIGAMES: MiniGameDef[] = [
   // ---------------------------------------------------------------- big games, full screen
   S(101, "paintball", "Paintball", "shooting", "paintball", {}, "splats", [5, 10, 15], ["park", "bigpark", "funfair"], "Swords", "#e03131",
     "Red against blue, 4 v 4, full screen in 3D.", "Team Splat: every hit is a splat for your team, first to 25. Quick match with whoever's looking for a game, a private match with a code for friends, or practice against bots. Only at parks. Left thumb moves, right thumb looks; tap to shoot or hold FIRE.", { full: true }),
+  S(102, "cops-robbers", "Police & Thieves", "shooting", "cops", {}, "points", [5, 10, 20], ["anywhere", ...POLICE, ...PARK], "Siren", "#1c4fd6",
+    "Every 8 hours: police against thieves in a whole city.", "A big game at 2am, 10am and 6pm (Lagos time). Sign up on a side (the sides stay even), buy guns, grenades, rocket launchers and tanks before it starts: it all goes into the pool, and the winning side shares it. Thieves rob the bank's vault and run for the hideout; police stop them. Watch a match that's on, or practise against bots any time.", { full: true }),
 ];
 
 export const MINIGAME_BY_ID = new Map(MINIGAMES.map((g) => [g.id, g]));

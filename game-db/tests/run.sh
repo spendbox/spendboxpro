@@ -49,8 +49,8 @@ done
 # Part 30 takes the bot out of the ghosts, which the scenarios above still count on; part 31
 # adds the throw clock; part 32 the bank robbery; part 33 helicopter rides; part 34 the phone
 # gallery; part 35 first-visit fees, fares and jobs; part 36 minigame rewards; part 37 better
-# pay; part 38 property on the real map; part 39 work on the real map; part 40 living (pots, bills, health, school); part 41 your day; parts 42-46 packs, business, services, map reports and the market; parts 47-49 adverts as property, trips, and several hustles with reports about people; parts 50-56 items, people, marks, the street and dating; part 70 challenges. Each test runs its own part.
-for t in nobot stalling heist heli phone jobs minigames pay property work living day packs business services reports market adsprop trips hustles items people marks street dating challenges; do
+# pay; part 38 property on the real map; part 39 work on the real map; part 40 living (pots, bills, health, school); part 41 your day; parts 42-46 packs, business, services, map reports and the market; parts 47-49 adverts as property, trips, and several hustles with reports about people; parts 50-56 items, people, marks, the street and dating; part 70 challenges; part 123 scheduled games (Police & Thieves). Each test runs its own part.
+for t in nobot stalling heist heli phone jobs minigames pay property work living day packs business services reports market adsprop trips hustles items people marks street dating challenges scheduled; do
   [ -f "game-db/tests/$t.test.sql" ] || continue
   $P -f "game-db/tests/$t.test.sql" 2>&1 | sed 's/^psql:[^ ]* NOTICE:  //'
 done
