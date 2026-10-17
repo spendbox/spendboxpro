@@ -331,7 +331,8 @@ begin
   end if;
   -- Everyone's numbers: the middle of what the phones said.
   create temp table if not exists sched_tally (user_id uuid, side int, name text, spent numeric, a numeric, k numeric, d numeric, l numeric) on commit drop;
-  delete from sched_tally;
+  -- ("where true": Supabase refuses a DELETE without a WHERE when the game calls it.)
+  delete from sched_tally where true;
   for pl in select * from public.sched_players where session_id = p_session and room = p_room loop
     select array[
         public.sched_median(array_agg(least(1000000, greatest(0, coalesce((x.report -> 's' -> pl.user_id::text ->> 0)::numeric, 0))))),

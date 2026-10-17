@@ -38,7 +38,80 @@ compare.
   $599 a month, or Enterprise), messages about $2.50 a million after 5 million.
 - Third-party summaries of these prices disagree in places; treat them as approximate.
 
-## The estimate (a month)
+## The estimate after launch fixes 1 to 10 (a month, October 2026)
+
+Measured again from the code: an active player on the map makes about **11 server calls a
+minute**, not 3 (the 60 s looks at your assets and the city's owned buildings, the 30 s look at
+games near you, the 60 s look at who of your recent people is online, the minute's ping, news,
+bills and market, people around...). And one of them is heavy: **the list of every owned building
+in the city, with its layout, downloaded by every player every minute** (src/app/play/life/use-life.ts,
+property-actions.ts ownedBuildings). It grows with the players, and so does the number of
+players fetching it, so its cost grows with the square of the players: about 625 KB a minute
+per player at 1,000 daily players (28 MB of mobile data a day each), 6 MB a minute at 10,000.
+
+The model (scratch numbers, rough): players play 45 minutes a day; 5 registered for each daily
+player; at the busiest hour 1 in 10 of the day's players are on; 3 database queries a call;
+half an owned building per registered player (about 1.2 KB each, 0.25 KB compressed); 1 in 10
+daily players play one paintball match and 1 in 10 a Police & Thieves game a day; Realtime as in
+"Live channels" below.
+
+| Daily players | Now: Vercel | Now: Supabase | **Now** | With the savings below | Database then |
+|---:|---:|---:|---:|---:|---|
+| 100 | $22 | $40 | **$62** | **$56** | Micro (Small advised) |
+| 1,000 | $45 | $727 | **$772** | **$370** | Small |
+| 10,000 | $12,800 | $13,800 | **$26,700** | **$2,640** | Large |
+| 100,000 | breaks first | breaks first | **(over $2m)** | **$26,300** | 4XL |
+
+Now, at 1,000 daily players the bill is mostly Realtime messages (Police & Thieves about $540,
+paintball $80); from 10,000 the owned-buildings list (84 TB a month) is most of it.
+
+### The savings, biggest first
+
+1. **The owned-buildings list: one shared copy per city, and only what changed** (a cached GET
+   per region that the CDN serves, and `since=`; a building's row gets an updated_at). At 10,000
+   daily players it saves about $20,000 a month (and the database size from 2XL to XL); at
+   1,000 about $60, and 28 MB a day of each player's mobile data.
+2. **Police & Thieves sends fewer updates**: 3 a second instead of 5, and none while you stand
+   still (the other phones already smooth movement out). About half its messages: $270 a month
+   at 1,000 daily players, $1,900 at 10,000. At 100,000 only a game server (Colyseus,
+   docs/PAINTBALL_PLAN.md) keeps it down.
+3. **Less polling (launch fix 15, and more)**: games near you every 2 minutes, not 30 s (a game
+   changing already nudges every phone, map-news.ts); your assets and the city's buildings
+   every 5 minutes, not every minute; bills and market every 5, not 2; who's online among your
+   recent people answered by the minute's ping, not its own call. 11 calls a minute down to
+   about 6. Saves about $10 at 1,000 daily players, $200 at 10,000 (Large instead of XL),
+   $1,500 at 100,000.
+4. **Paintball 4 updates a second, not 8** (launch fix 14): $45 at 1,000, $450 at 10,000.
+5. **Counts over buildings from the server** (with the 90 s people look) instead of the area
+   channels, keeping a live channel only for the place you're in: $11 at 1,000, $1,100 at
+   10,000, $110,000 at 100,000.
+
+### Further still, without making the game any less
+
+6. **A small game server for Police & Thieves and paintball** (Colyseus on a rented machine,
+   docs/PAINTBALL_PLAN.md): match traffic stops being Supabase messages at $2.50 a million and
+   becomes a fixed rent (about $10 a month at 1,000 daily players, $40 at 10,000, $400 at
+   100,000). It also decides hits and results itself (launch fixes 17 and 18), so matches are
+   fair and smoother.
+7. **One heartbeat instead of many looks**: the minute's ping (/api/active, ./pulse) already says
+   when notices, events and the Town Hall changed; it can say the same for your money, bills,
+   games near you, quests and the city's buildings, and the phone asks only for what changed.
+   What's the same for everyone near a spot (news, businesses, marks, people around, the
+   buildings) is served from the CDN for a few seconds, not worked out per player. About 6
+   calls a minute down to 2 or 3, and things still show up as fast (or faster: on change, not on
+   the next poll).
+
+| Daily players | With 1 to 5 | + 6 game server | + 7 heartbeat |
+|---:|---:|---:|---:|
+| 100 | $56 | $56 | $55 |
+| 1,000 | $350 | $80 | **$70** |
+| 10,000 | $2,400 | $340 | **$210** |
+| 100,000 | $24,000 | $3,400 | **$1,700** |
+
+Further off (as below, "Cheaper still"): own servers from about a million users, the database
+split by city, images on Cloudflare R2.
+
+## The estimate (a month, before launch fixes 1 to 10)
 
 Since the server-call changes (src/app/play/activity.ts and pulse.ts): an active player makes
 about **3 calls a minute** (was 16) and one who has left the game open makes **none**. Notices,
