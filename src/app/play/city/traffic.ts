@@ -217,10 +217,6 @@ export function createTraffic(world: World, parent: THREE.Object3D) {
     const same = plan.seed === seedNow;
     seedNow = plan.seed;
     const roads = world.tiles.filter((t) => (t.kind === "road" || t.kind === "bridge") && !t.works && !world.blocked.has(keyOf(t.x, t.z)));
-    // Winding streets (src/lib/city/layout waveOf): where the road's middle is on each straight tile
-    // drawn winding (crossings, road works and incidents are drawn straight, so cars keep to the middle there).
-    waves.clear();
-    for (const t of roads) if (t.wave && t.crossing === undefined && !t.incident && (t.mask === 5 || t.mask === 10)) waves.set(keyOf(t.x, t.z), t.wave);
     if (!same) {
       cars = [];
       ride = -1;
@@ -379,32 +375,6 @@ export function createTraffic(world: World, parent: THREE.Object3D) {
 
   // ---- where a car is: along its lane, curving round corners.
   const P = { x: 0, z: 0, fx: 1, fz: 0 };
-  const waves = new Map<string, [number, number, number]>();
-  /**
-   * How far a winding street's middle is off the line between two tile centres, at t (0..1) from
-   * a to b, and how fast that changes (per tile): across the road (+z on one along x, +x along z).
-   */
-  const W = { off: 0, slope: 0 };
-  function waveAt(a: [number, number], b: [number, number], t: number) {
-    W.off = 0;
-    W.slope = 0;
-    const dx = b[0] - a[0];
-    const dz = b[1] - a[1];
-    const fwd = dx + dz > 0;
-    // The first half on a's tile (middle to its far edge), the second on b's (near edge to middle).
-    const tile = t < 0.5 ? a : b;
-    const w = waves.get(keyOf(tile[0], tile[1]));
-    if (!w) return W;
-    const edge = t < 0.5 ? (fwd ? w[2] : w[0]) : fwd ? w[0] : w[2];
-    if (t < 0.5) {
-      W.off = w[1] + (edge - w[1]) * (t / 0.5);
-      W.slope = (edge - w[1]) / 0.5;
-    } else {
-      W.off = edge + (w[1] - edge) * ((t - 0.5) / 0.5);
-      W.slope = (w[1] - edge) / 0.5;
-    }
-    return W;
-  }
   function bez(ax: number, az: number, bx: number, bz: number, cx: number, cz: number, u: number) {
     const w = 1 - u;
     P.x = w * w * ax + 2 * u * w * bx + u * u * cx;
@@ -449,15 +419,10 @@ export function createTraffic(world: World, parent: THREE.Object3D) {
         return;
       }
     }
-    const wv = waveAt(c.from, c.to, c.t);
-    P.x = c.from[0] + dx * c.t - dz * LANE + (dz ? wv.off : 0);
-    P.z = c.from[1] + dz * c.t + dx * LANE + (dx ? wv.off : 0);
-    // The way it faces: along the road, turned by how fast the road's middle moves across (per t).
-    const fx = dx + (dz ? wv.slope : 0);
-    const fz = dz + (dx ? wv.slope : 0);
-    const l = Math.hypot(fx, fz) || 1;
-    P.fx = fx / l;
-    P.fz = fz / l;
+    P.x = c.from[0] + dx * c.t - dz * LANE;
+    P.z = c.from[1] + dz * c.t + dx * LANE;
+    P.fx = dx;
+    P.fz = dz;
   }
   const roadHeight = (c: Car) => {
     const onBridge = c.t < 0.5 ? c.bridgeFrom : c.bridgeTo;
@@ -478,9 +443,8 @@ export function createTraffic(world: World, parent: THREE.Object3D) {
     }
     const dx = b[0] - a[0];
     const dz = b[1] - a[1];
-    const wv = waveAt(a, b, t);
-    trail.x = a[0] + dx * t - dz * LANE + (dz ? wv.off : 0);
-    trail.z = a[1] + dz * t + dx * LANE + (dx ? wv.off : 0);
+    trail.x = a[0] + dx * t - dz * LANE;
+    trail.z = a[1] + dz * t + dx * LANE;
   }
   const fwd = { x: 0, z: 0 };
   function box(mesh: THREE.InstancedMesh, k: number, x: number, y: number, z: number, a: number, lift: number, len: number, h: number, w: number) {

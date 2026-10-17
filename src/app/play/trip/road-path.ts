@@ -3,11 +3,12 @@
 // (yaw: 0 along +x, turning left adds), and the side directions, so the street, the traffic, the
 // people and the camera can all be placed "so far along, so far to the right".
 
-export type RouteStep = { straight: number } | { turn: "left" | "right"; r: number };
+/** A turn at a junction: left, right, or straight on across it (the cross street goes off both sides). */
+export type RouteStep = { straight: number } | { turn: "left" | "right" | "straight"; r: number };
 
 type Seg =
   | { kind: "line"; s0: number; len: number; x: number; z: number; yaw: number }
-  | { kind: "arc"; s0: number; len: number; cx: number; cz: number; r: number; a0: number; dir: 1 | -1; yaw0: number };
+  | { kind: "arc"; s0: number; len: number; cx: number; cz: number; r: number; a0: number; dir: 1 | 0 | -1; yaw0: number; sx: number; sz: number };
 
 export type RoutePoint = { x: number; z: number; yaw: number };
 
@@ -27,6 +28,14 @@ export function makeRoute(steps: RouteStep[]) {
       x += f.fx * st.straight;
       z += f.fz * st.straight;
       s += st.straight;
+    } else if (st.turn === "straight") {
+      // Straight on across the junction: as long as two radii, no turning.
+      const f = ahead(yaw);
+      const len = 2 * st.r;
+      segs.push({ kind: "arc", s0: s, len, cx: x, cz: z, r: st.r, a0: 0, dir: 0, yaw0: yaw, sx: x, sz: z });
+      x += f.fx * len;
+      z += f.fz * len;
+      s += len;
     } else {
       // Left turns round a centre on the left, right turns round one on the right.
       const dir = st.turn === "left" ? 1 : -1;
@@ -36,7 +45,7 @@ export function makeRoute(steps: RouteStep[]) {
       const cz = z + side.z * st.r;
       const a0 = Math.atan2(z - cz, x - cx);
       const len = (Math.PI / 2) * st.r;
-      segs.push({ kind: "arc", s0: s, len, cx, cz, r: st.r, a0, dir, yaw0: yaw });
+      segs.push({ kind: "arc", s0: s, len, cx, cz, r: st.r, a0, dir, yaw0: yaw, sx: x, sz: z });
       // A quarter turn: angle about the centre in the x/z plane goes the opposite way to yaw.
       const a1 = a0 - dir * (Math.PI / 2);
       x = cx + Math.cos(a1) * st.r;
@@ -71,6 +80,10 @@ export function makeRoute(steps: RouteStep[]) {
   };
 
   function arcAt(seg: Extract<Seg, { kind: "arc" }>, u: number): RoutePoint {
+    if (seg.dir === 0) {
+      const f = ahead(seg.yaw0);
+      return { x: seg.sx + f.fx * u, z: seg.sz + f.fz * u, yaw: seg.yaw0 };
+    }
     const k = u / seg.r;
     const a = seg.a0 - seg.dir * k;
     return { x: seg.cx + Math.cos(a) * seg.r, z: seg.cz + Math.sin(a) * seg.r, yaw: seg.yaw0 + seg.dir * k };

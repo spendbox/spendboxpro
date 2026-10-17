@@ -28,7 +28,6 @@ begin
     v_paid := public.life_spend(p_user, array['fun', 'savings', 'essentials'], v_cost);
     perform public.log_coins(p_user, null, 'food', -v_paid, false, left('Ate out: ' || coalesce(p_items, 'a meal'), 120));
     perform public.burn(null, v_paid, 'Restaurants');
-    update public.lives set mind = least(100, mind + 2), health = least(100, health + 1) where user_id = p_user;
   end if;
   return v_paid;
 end $$;

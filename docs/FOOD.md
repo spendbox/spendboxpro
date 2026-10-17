@@ -10,7 +10,7 @@ Restaurants, bars, lounges, hotel restaurants and clubs all have a menu.
 5. A **waiter** in a white shirt walks over from the door with a tray, stops beside you, sets the dishes
    down on your table (food in front, drinks behind) and walks back. The food stays until you leave or
    order again.
-6. Eating out lifts your **mind (+2)** and **health (+1)**, and the room sees what you ordered.
+6. The room sees what you ordered. (No mind or body meters: those are switched off.)
 
 ## The menu (at an ordinary restaurant)
 Food: party jollof ₦6,500 · pounded yam & egusi ₦8,000 · suya platter ₦7,500 · goat pepper soup ₦6,000 ·

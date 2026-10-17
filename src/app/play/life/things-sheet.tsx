@@ -3,6 +3,8 @@
 import { announceGiftSent } from "../people/gift-pop";
 import { useCallback, useEffect, useState } from "react";
 import { cachedThings, loadThings } from "./things-cache";
+import { myCareer, type Career } from "../venture-actions";
+import { VENTURE_KIND_BY_ID, VENTURE_STAGES } from "@/lib/world/ventures";
 import { Building2, Check, Gem, House, MapPin, Pencil, ShoppingBag, Store, TrendingUp, X } from "lucide-react";
 import { renameUnit } from "../property-actions";
 import { CATEGORY_LABEL, effectWords, LUXURY_FROM, MARKET_GOODS, MUSEUM_ART, mintOf, QUICK_SALE, SHOP, STEAL_MAX, CAUGHT_CHANCE, type ItemCategory, type ItemKind } from "@/lib/world/items";
@@ -17,15 +19,16 @@ import { useIncome, useLiveEarned } from "../income";
 import type { Earnings } from "@/app/api/earnings/route";
 import { Sheet } from "../sheet";
 
-// Your things (docs/ITEMS.md): what you own and the reputation it brings, the city's shop (cars
-// too), and your assets: the property you own and what it earns you, by itself (game-db/079).
+// Things (docs/ITEMS.md), three tabs: My things (what you own and the reputation it brings), My
+// assets (your business, and the property you own and what it earns you, by itself, game-db/079),
+// and the city's Shop (cars too).
 
 export type ThingsTab = "mine" | "shops" | "cars" | "assets";
 
 const TABS: { id: ThingsTab; label: string; icon: typeof Gem }[] = [
-  { id: "mine", label: "Mine", icon: Gem },
+  { id: "mine", label: "My things", icon: Gem },
+  { id: "assets", label: "My assets", icon: TrendingUp },
   { id: "shops", label: "Shop", icon: ShoppingBag },
-  { id: "assets", label: "Assets", icon: TrendingUp },
 ];
 
 /** A shop at a place: a market's stalls, or a museum's art. */
@@ -101,6 +104,7 @@ export function ThingsSheet({
       {tab === "shops" && <Shops startCars={start === "cars"} stall={stall} prices={prices} coins={coins} busy={busy} run={run} onBought={(k, paid) => setBought({ kind: k, paid })} />}
       {tab === "assets" && (
         <Assets
+          onLeave={onClose}
           units={units}
           whereIs={whereIs}
           onShow={onShow}
@@ -271,11 +275,14 @@ function Shops({ startCars, stall, prices, coins, busy, run, onBought }: { start
 
 /** Your assets: the property you own and what it earns you, by itself, going up as you watch. */
 function Assets({
+  onLeave,
   units,
   whereIs,
   onShow,
   onRename,
 }: {
+  /** Close Things (to open your business). */
+  onLeave?: () => void;
   units: AssetUnit[];
   whereIs?: (building: string) => string | null;
   onShow?: (u: AssetUnit) => void;
@@ -345,6 +352,8 @@ function Assets({
           </ul>
         )}
       </div>
+      <Businesses onOpen={onLeave} />
+      <p className="mt-4 text-xs font-bold uppercase tracking-wide text-muted">Property</p>
       {owned.length === 0 ? (
         <p className="mt-3 rounded-2xl bg-ink/[0.04] px-4 py-6 text-center text-sm text-muted">
           No property yet{rooms ? " (your free room doesn't earn)" : ""}. Tap any building on the map and Buy: homes, shops and offices all pay you every day, by themselves.
@@ -375,6 +384,65 @@ function Assets({
           </p>
         ) : null;
       })()}
+    </div>
+  );
+}
+
+/** Your business (docs/LIFE_WHEEL.md): the one you run now, and the ones you ran before. Tap to open it. */
+function Businesses({ onOpen }: { onOpen?: () => void }) {
+  const [career, setCareer] = useState<Career | null | undefined>(undefined);
+  useEffect(() => {
+    let alive = true;
+    void myCareer()
+      .then((c) => alive && setCareer(c))
+      .catch(() => alive && setCareer(null));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const open = () => {
+    window.dispatchEvent(new Event("nt-open-career"));
+    onOpen?.();
+  };
+  if (career === undefined) return <div className="mt-3 h-16 animate-pulse rounded-2xl bg-ink/5" />;
+  if (!career || career.missing) return null;
+  const v = career.open?.venture;
+  const kind = v ? VENTURE_KIND_BY_ID.get(v.kind) : null;
+  return (
+    <div className="mt-4">
+      <p className="text-xs font-bold uppercase tracking-wide text-muted">Business</p>
+      {v ? (
+        <button onClick={open} className="mt-2 flex w-full items-center gap-3 rounded-2xl bg-[#7048e8]/10 px-3 py-3 text-left hover:bg-[#7048e8]/15">
+          <span className="text-2xl">{kind?.emoji ?? "💼"}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-bold">{v.name}</span>
+            <span className="block text-xs text-muted">
+              {kind?.name ?? "Business"} · {VENTURE_STAGES[v.stage]?.name ?? ""} · {Math.round(v.customers).toLocaleString("en-GB")} {kind?.customers ?? "customers"}
+            </span>
+          </span>
+          <span className="shrink-0 text-right">
+            <b className="block text-sm tabular-nums text-[#2b8a3e]">{cash(v.paid / career.perMint)}</b>
+            <span className="block text-[10px] text-muted">paid you</span>
+          </span>
+        </button>
+      ) : (
+        <button onClick={open} className="mt-2 w-full rounded-2xl bg-ink/[0.04] px-4 py-4 text-center text-sm text-muted hover:bg-ink/[0.07]">
+          No business running. <b className="text-ink">Start one</b>: a suya spot, a salon, a tech startup...
+        </button>
+      )}
+      {career.past.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {career.past.slice(0, 5).map((b) => (
+            <li key={b.startedAt} className="flex items-center gap-2 rounded-xl bg-ink/[0.03] px-3 py-2 text-xs">
+              <span>{VENTURE_KIND_BY_ID.get(b.kind)?.emoji ?? "💼"}</span>
+              <span className="min-w-0 flex-1 truncate">
+                {b.name} <span className="text-muted">· closed, got to {VENTURE_STAGES[b.best]?.name ?? "Idea"}</span>
+              </span>
+              <span className="shrink-0 tabular-nums text-muted">{cash(b.paid / career.perMint)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

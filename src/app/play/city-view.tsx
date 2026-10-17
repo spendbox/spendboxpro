@@ -66,6 +66,7 @@ import { createKites } from "./city/kites";
 import { buildingParts } from "./city/building-kit";
 import { marketParts } from "./city/market-kit";
 import { museumParts } from "./city/museum-kit";
+import { plazaDesign, plazaParts } from "./city/plaza-kit";
 import { createService } from "./city/serve";
 import { MENU_BY_ID } from "@/lib/world/menu";
 import { plotLayout } from "@/lib/city/plots";
@@ -427,9 +428,6 @@ const WINDOW = 40;
  * beyond it, plain blocks and a painted map (./city/far-city) keep a strict drawing budget.
  */
 const DETAIL = 18;
-/** A winding street's asphalt (tile widths), and the dusty verges either side of it. */
-const ROAD_W = 0.6;
-const VERGE = 0xbcb3a0;
 /** How far from the middle of the drawn area (tiles) shared tiles get their little houses (src/lib/city/plots). */
 const PLOTS_NEAR = 12;
 const SKY = 0xd7ebf7;
@@ -675,21 +673,7 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
       add("crown", { x: x - cx * 0.7, y: 0.17, z: z - cz * 0.7, sx: 0.27, sy: 0.34, sz: 0.27, ry: t.r[0] * 6, color: plan.palette.leaves[0] });
       return;
     }
-    // (Where an expressway meets it, drawn full width, the junction stays full width too.)
-    const bigRoad = (dx: number, dz: number) => {
-      const k = plan.region?.roadAt(x + dx, z + dz)?.kind;
-      return k === "motorway" || k === "trunk";
-    };
-    const junction = !t.roundabout && !t.express && !(m === 5 || m === 10 || m === 1 || m === 4 || m === 2 || m === 8) && ![[0, -1], [1, 0], [0, 1], [-1, 0]].some(([dx, dz]) => bigRoad(dx, dz));
-    if (junction) {
-      // A junction as wide as the streets meeting at it: verges on the corners, asphalt in the
-      // middle and out to each street.
-      add("ground", { x, y: 0, z, sx: 1, sy: 0.055, sz: 1, ry: 0, color: VERGE });
-      add("ground", { x, y: 0, z, sx: ROAD_W, sy: 0.06, sz: ROAD_W, ry: 0, color: ASPHALT });
-      for (const [bit, dx, dz] of [[1, 0, -0.25], [2, 0.25, 0], [4, 0, 0.25], [8, -0.25, 0]] as const) {
-        if (m & bit) add("ground", { x: x + dx, y: 0, z: z + dz, sx: dx ? 0.5 : ROAD_W, sy: 0.06, sz: dz ? 0.5 : ROAD_W, ry: 0, color: ASPHALT });
-      }
-    } else add("ground", { x, y: 0, z, sx: 1, sy: 0.06, sz: 1, ry: 0, color: ASPHALT });
+    add("ground", { x, y: 0, z, sx: 1, sy: 0.06, sz: 1, ry: 0, color: ASPHALT });
     if (t.roundabout) {
       // Roundabout: a grassy island with a fountain or a tree, and a painted ring.
       add("curveLine", { x: x + 0.5, y: 0.064, z: z - 0.5, sx: 0.8, sy: 1, sz: 0.8, ry: Math.PI, color: 0xffffff });
@@ -709,40 +693,6 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
       return;
     }
     const straight = m === 5 || m === 10 || m === 1 || m === 4 || m === 2 || m === 8;
-    // A winding street (src/lib/city/layout waveOf): dusty verges, and the asphalt sweeping across
-    // the tile in two pieces through its start, middle and end.
-    if (straight && t.wave && t.crossing === undefined && !t.works && !t.incident) {
-      add("ground", { x, y: 0, z, sx: 1, sy: 0.055, sz: 1, ry: 0, color: VERGE });
-      const along = m === 10;
-      const [o0, o1, o2] = t.wave;
-      const pts = along
-        ? [[x - 0.5, z + o0], [x, z + o1], [x + 0.5, z + o2]]
-        : [[x + o0, z - 0.5], [x + o1, z], [x + o2, z + 0.5]];
-      for (let k = 0; k < 2; k++) {
-        const [ax, az] = pts[k];
-        const [bx, bz] = pts[k + 1];
-        const len = Math.hypot(bx - ax, bz - az);
-        const ry = Math.atan2(-(bz - az), bx - ax);
-        const mx = (ax + bx) / 2;
-        const mz = (az + bz) / 2;
-        add("ground", { x: mx, y: 0, z: mz, sx: len + 0.04, sy: 0.062, sz: ROAD_W, ry, color: ASPHALT });
-        add("paint", { x: mx, y: 0.063, z: mz, sx: 0.2, sy: 0.005, sz: 0.035, ry, color: 0xffffff });
-      }
-      // A street light on every other stretch, on the verge, on the side the road leans away from.
-      if ((x + z) % 2 === 0) {
-        const side = o1 > 0 ? -0.42 : 0.42;
-        const lx = along ? x : x + side;
-        const lz = along ? z + side : z;
-        add("trunk", { x: lx, y: 0.06, z: lz, sx: 0.3, sy: 0.5, sz: 0.3, ry: 0, color: 0x495057 });
-        add("lamp", { x: lx - (along ? 0 : side * 0.12), y: 0.56, z: lz - (along ? side * 0.12 : 0), sx: 0.11, sy: 0.07, sz: 0.11, ry: 0, color: 0xffffff });
-      }
-      if (near) {
-        powerLine(x, z, along, add);
-        // Now and then a hawker on the wider verge (the side the road leans away from).
-        if (hashish(x * 3.1 + z, 91) < 0.14) roadsideSeller(x, z, along, o1 > 0 ? -0.36 : 0.36, t.r[3], add);
-      }
-      return;
-    }
     if (straight) {
       const along = m === 10 || m === 2 || m === 8;
       // A street light on every other stretch, alternating sides.
@@ -754,6 +704,10 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
         add("lamp", { x: lx - (along ? 0 : side * 0.12), y: 0.56, z: lz - (along ? side * 0.12 : 0), sx: 0.11, sy: 0.07, sz: 0.11, ry: 0, color: 0xffffff });
       }
       if (near && !t.express && (m === 5 || m === 10)) powerLine(x, z, along, add);
+      // Now and then a hawker under an umbrella on the kerb.
+      if (near && !t.express && (m === 5 || m === 10) && t.crossing === undefined && !t.works && !t.incident && hashish(x * 3.1 + z, 91) < 0.14) {
+        roadsideSeller(x, z, along, (x * 3 + z) % 4 < 2 ? -0.44 : 0.44, t.r[3], add);
+      }
       if (t.crossing !== undefined) crossingParts(t, t.crossing, along, add);
       else {
         for (const o of [-0.25, 0.25]) {
@@ -1070,13 +1024,9 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
           B(px, 0.1, pz, 0.22, 0.05, 0.06, 0x8d5a3b);
           tree(-px, pz, 0.35, r[0]);
         }
-      } else if (r[1] < 0.22 && !t.rail) {
-        // A statue on a plinth in the middle of the square.
-        statue(B, 0, 0, 0.7);
       } else {
-        add("disc", { x, y: 0.1, z, sx: 0.3, sy: 0.12, sz: 0.3, ry: 0, color: 0xcfd6dd });
-        add("waterDisc", { x, y: 0.22, z, sx: 0.25, sy: 0.02, sz: 0.25, ry: 0, color: WATER });
-        add("cyl", { x, y: 0.22, z, sx: 0.04, sy: 0.12, sz: 0.04, ry: 0, color: 0xcfd6dd });
+        // One of eight kinds of square (./city/plaza-kit): statue, fountain, clock tower, bandstand...
+        plazaParts(t, B, tree, WATER);
       }
       break;
     case "school":
@@ -7351,7 +7301,7 @@ export function CityView({
     function tapExtras(i: number) {
       const t = tileById.get(i);
       if (!t || !isRevealed) return;
-      const fountain = t.kind === "plaza" || (t.kind === "road" && t.roundabout && t.r[1] < 0.5);
+      const fountain = (t.kind === "plaza" && !t.forecourt && plazaDesign(t) === "fountain") || (t.kind === "road" && t.roundabout && t.r[1] < 0.5);
       if (fountain) {
         splashScene(t);
         playSfx("splash");
