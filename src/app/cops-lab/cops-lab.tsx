@@ -5,6 +5,7 @@ import { PRACTICE_LOADOUT } from "@/lib/cops";
 import { sessionsNow } from "@/lib/scheduled";
 import type { CopsStatus } from "../play/cops-actions";
 import { CopsRobbers, Results } from "../play/cops/cops";
+import { GamesSheet } from "../play/minigames/games-sheet";
 import { Match, type EndResult, type Setup } from "../play/cops/match";
 import type { Tod } from "../play/cops/scene";
 
@@ -39,6 +40,8 @@ export function CopsLab({ view, tod, side, secs }: { view: string; tod: string; 
     [seed, run, t0, secs, view, side, tod],
   );
   if (view === "lobby") return <CopsRobbers me={ME} onClose={() => {}} demo={demo()} />;
+  // The real Games list, with the countdown banner at its top.
+  if (view === "games") return <GamesSheet ctx={{ roundId: null, roomId: "lab", me: null, members: [] }} onClose={() => {}} />;
   if (end) return <Results me={ME} result={end} setup={setup} onBack={() => (setEnd(null), setRun((r) => r + 1))} />;
   return <Match me={ME} setup={setup} net={null} onQuit={() => setRun((r) => r + 1)} onEnd={setEnd} />;
 }

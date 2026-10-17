@@ -3,7 +3,7 @@ import { CopsLabLoader as CopsLab } from "./lab-loader";
 
 // Test page for Police & Thieves (src/app/play/cops): the lobby with made-up numbers, or a
 // practice match against bots, without signing in or a database. Not linked from anywhere, and
-// kept out of search results. ?view=lobby|match|watch, ?tod=day|dusk|night, ?side=0|1 (police or
+// kept out of search results. ?view=lobby|games|match|watch, ?tod=day|dusk|night, ?side=0|1 (police or
 // thieves), ?secs=<match length> (a short one shows the end screen), ?at=<seconds into the match>.
 
 export const metadata: Metadata = {
