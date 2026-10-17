@@ -1,5 +1,6 @@
 "use client";
 
+import { OnTop } from "../on-top";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar } from "@/lib/avatar";
@@ -67,7 +68,7 @@ export function PrankReveal({ prank, onDone, onPerson, onMessage }: { prank: Doo
   const pieces = useMemo(() => Array.from({ length: kind === "glitter" ? 60 : kind === "toilet_paper" ? 9 : kind === "fake_parcel" ? 36 : kind === "stickers" ? 12 : 7 }, (_, i) => i), [kind]);
 
   return (
-    <div className={`fixed inset-0 z-[70] flex flex-col items-center justify-end overflow-hidden bg-black/70 ${kind === "air_horn" ? "prank-shake" : ""}`} role="dialog" aria-label="Someone pranked your door">
+    <OnTop className={`fixed inset-0 flex flex-col items-center justify-end overflow-hidden bg-black/70 ${kind === "air_horn" ? "prank-shake" : ""}`} role="dialog" aria-label="Someone pranked your door">
       <style>{CSS}</style>
       {/* Your front door. */}
       <div className="pointer-events-none absolute inset-x-0 top-[8%] flex justify-center">
@@ -195,7 +196,7 @@ export function PrankReveal({ prank, onDone, onPerson, onMessage }: { prank: Doo
           Leave it for now
         </button>
       </div>
-    </div>
+    </OnTop>
   );
 }
 

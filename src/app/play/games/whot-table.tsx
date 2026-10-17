@@ -1,5 +1,6 @@
 "use client";
 
+import { OnTop } from "../on-top";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Crown, Eye, LoaderCircle, MessageCircle, Mic, MicOff, PhoneOff, Play, RotateCcw, Send, Users, X } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
@@ -278,7 +279,7 @@ export function WhotTable({
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex h-[100dvh] select-none flex-col overflow-hidden text-white" style={stage} role="dialog" aria-label="Whot!">
+    <OnTop className="fixed inset-0 flex h-[100dvh] select-none flex-col overflow-hidden text-white" style={stage} role="dialog" aria-label="Whot!">
       {/* Felt texture and a soft ring round the middle of the table. */}
       <div aria-hidden className="pointer-events-none absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.8) 0.6px, transparent 0.6px)", backgroundSize: "6px 6px" }} />
       <div aria-hidden className="pointer-events-none absolute left-1/2 top-[44%] h-[46%] w-[88%] max-w-3xl -translate-x-1/2 -translate-y-1/2 rounded-[50%] border-[3px] border-white/10 shadow-[inset_0_0_60px_rgba(0,0,0,0.35)]" />
@@ -479,7 +480,7 @@ export function WhotTable({
           </div>
         </div>
       )}
-    </div>
+    </OnTop>
   );
 }
 

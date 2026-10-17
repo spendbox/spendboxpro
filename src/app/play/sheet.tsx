@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { X } from "@/components/icons";
 import { cn } from "@/lib/cn";
+import { useOnClient, useTopLayer } from "./layers";
 
 /** The cards open right now, oldest first: Escape closes only the top one. */
 const openSheets: { current: () => void }[] = [];
@@ -62,10 +64,15 @@ export function Sheet({
       if (at >= 0) openSheets.splice(at, 1);
     };
   }, []);
-  return (
+  // On top of everything opened before it (drawn on the page itself, so no layer of the game's
+  // can keep it underneath the messages or anything else).
+  const z = useTopLayer();
+  const onClient = useOnClient();
+  const card = (
     <div
       // Never blurred: the city behind stays sharp (just a little dimmer, or not at all).
-      className={cn("fixed inset-0 grid p-2 sm:place-items-center sm:p-4", centred ? "place-items-center pb-16" : "place-items-end", above ? "z-[70]" : "z-[60]", clear ? "bg-transparent" : "bg-ink/20")}
+      className={cn("fixed inset-0 grid p-2 sm:place-items-center sm:p-4", centred ? "place-items-center pb-16" : "place-items-end", clear ? "bg-transparent" : "bg-ink/20")}
+      style={{ zIndex: z + (above ? 1 : 0) }}
       onPointerDown={(e) => {
         downOnBackdrop.current = e.target === e.currentTarget;
         // Taps and typing in a card are the card's alone: the map's own listeners (dragging,
@@ -99,4 +106,5 @@ export function Sheet({
       </section>
     </div>
   );
+  return onClient ? createPortal(card, document.body) : card;
 }

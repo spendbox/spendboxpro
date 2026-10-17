@@ -10,6 +10,7 @@ import { MomentCard, type MomentMood } from "../moments/moment-card";
 import { tripLayerMounted, type TripShow } from "./play";
 import { lagosHour } from "./sky";
 import type { TripScene } from "./trip-scene";
+import { useTopLayer } from "../layers";
 
 // The trip there, as a short film over the map (docs/TRIPS.md), only when something happens on the
 // way (a road moment): the moment is asked for first, and with none there's no film. Then the 3D
@@ -111,6 +112,8 @@ export function TripLayer({ avatar }: { avatar: unknown }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trip?.id]);
+  // The film goes over anything open when it starts.
+  const layer = useTopLayer(!!trip && ready === trip.id);
 
   if (!trip) return null;
   const showing = ready === trip.id;
@@ -124,7 +127,7 @@ export function TripLayer({ avatar }: { avatar: unknown }) {
   };
   return (
     // Until the moment's in, nothing shows (no film without one).
-    <div className={showing ? "trip-in fixed inset-0 z-[75] bg-black" : "pointer-events-none fixed inset-0 -z-10 opacity-0"} role={showing ? "dialog" : undefined} aria-label={`On the way to ${trip.to}`}>
+    <div className={showing ? "trip-in fixed inset-0 bg-black" : "pointer-events-none fixed inset-0 -z-10 opacity-0"} style={showing ? { zIndex: layer } : undefined} role={showing ? "dialog" : undefined} aria-label={`On the way to ${trip.to}`}>
       <div ref={host} className="absolute inset-0" />
       {/* Where you're going. */}
       <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/60 to-transparent px-4 pb-10 pt-[max(0.9rem,env(safe-area-inset-top))] text-white">

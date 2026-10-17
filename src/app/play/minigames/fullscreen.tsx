@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Maximize2, Minimize2, X } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { useTopLayer } from "../layers";
 
 // A game that fills the whole screen (the shooting range, paintball, chess and draughts): over
 // everything else, edge to edge, with a button to quit and one for the browser's own full screen
@@ -14,6 +15,7 @@ export function FullScreen({ children, onQuit, quitLabel = "Leave the game", cla
   // its 3D screen as it first appears, so the screen must be there from the first moment.
   const host = typeof document === "undefined" ? null : document.body;
   const [native, setNative] = useState(false);
+  const z = useTopLayer();
   useEffect(() => {
     const was = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -32,8 +34,8 @@ export function FullScreen({ children, onQuit, quitLabel = "Leave the game", cla
   };
   return createPortal(
     <div
-      className={cn("fixed inset-0 z-[300] flex flex-col overflow-hidden bg-black text-white", className)}
-      style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)", paddingLeft: "env(safe-area-inset-left)", paddingRight: "env(safe-area-inset-right)" }}
+      className={cn("fixed inset-0 flex flex-col overflow-hidden bg-black text-white", className)}
+      style={{ zIndex: z, paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)", paddingLeft: "env(safe-area-inset-left)", paddingRight: "env(safe-area-inset-right)" }}
     >
       {children}
       <div className="pointer-events-none absolute right-2 top-[calc(env(safe-area-inset-top)+0.5rem)] z-50 flex gap-1.5">

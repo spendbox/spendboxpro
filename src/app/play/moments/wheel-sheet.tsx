@@ -1,5 +1,6 @@
 "use client";
 
+import { OnTop } from "../on-top";
 import { useEffect, useMemo, useState } from "react";
 import { AvatarFace } from "@/components/avatar";
 import { X } from "@/components/icons";
@@ -499,7 +500,7 @@ function Intro({ onClose }: { onClose: () => void }) {
     { emoji: "🌀", title: "Your wheel", text: "Every moment you live is kept here as a notch. Tap one to see what you chose and what came of it." },
   ];
   return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-ink/40 p-3 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="life-intro-title">
+    <OnTop className="fixed inset-0 flex items-end justify-center bg-ink/40 p-3 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="life-intro-title">
       <div className="moment-in max-h-[85vh] w-full max-w-sm overflow-y-auto rounded-3xl bg-panel p-5 shadow-2xl">
         <p className="text-3xl">🌀</p>
         <h3 id="life-intro-title" className="mt-1 font-display text-xl font-extrabold">This is your life</h3>
@@ -518,7 +519,7 @@ function Intro({ onClose }: { onClose: () => void }) {
           Got it
         </button>
       </div>
-    </div>
+    </OnTop>
   );
 }
 

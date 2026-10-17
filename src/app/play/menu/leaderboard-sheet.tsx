@@ -1,5 +1,6 @@
 "use client";
 
+import { PersonLink } from "../people/open-person";
 import { useEffect } from "react";
 import { AvatarFace } from "@/components/avatar";
 import { Crown } from "@/components/icons";
@@ -63,11 +64,13 @@ export function LeaderboardSheet({ me }: { me: { id: string } }) {
               {rest.map((l, i) => (
                 <li key={l.id} className={cn("flex items-center gap-2.5 rounded-xl px-2 py-1.5", l.id === me.id ? "bg-gold/25" : "bg-panel-2")}>
                   <span className="w-5 text-center font-display font-bold text-muted">{i + 4}</span>
-                  <AvatarFace avatar={l.avatar} size={30} className="shrink-0 rounded-full" />
-                  <span className="min-w-0 flex-1 truncate font-medium">
+                  <PersonLink id={l.id} className="shrink-0 hover:no-underline">
+                    <AvatarFace avatar={l.avatar} size={30} className="rounded-full" />
+                  </PersonLink>
+                  <PersonLink id={l.id} className="flex-1 truncate font-medium">
                     {l.name}
                     {l.id === me.id && <span className="text-muted"> (you)</span>}
-                  </span>
+                  </PersonLink>
                   <span className="font-display font-bold tabular-nums">{short(l.won)}</span>
                 </li>
               ))}
@@ -100,10 +103,10 @@ function PodiumStep({ leader: l, place, isMe }: { leader: Leader; place: number;
           <AvatarFace avatar={l.avatar} size={first ? 56 : 46} className="block rounded-full" />
         </span>
       </div>
-      <p className="mt-2 w-full truncate text-center text-xs font-semibold">
+      <PersonLink id={l.id} className="mt-2 w-full truncate text-center text-xs font-semibold">
         {l.name}
         {isMe && <span className="text-muted"> (you)</span>}
-      </p>
+      </PersonLink>
       <p className="font-display text-sm font-bold tabular-nums">
         {cash(l.won)}
       </p>

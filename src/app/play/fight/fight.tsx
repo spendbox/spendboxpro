@@ -618,7 +618,8 @@ function FightSheet({
           </p>
         )}
       </div>
-      <div className="mt-2 grid grid-cols-5 gap-1.5">
+      {/* Roomy: "No stake" across the top, the amounts two a row below. */}
+      <div className="mt-2 grid grid-cols-2 gap-2">
         {STAKES_NAIRA.map((s) => {
           const mint = s / perMint;
           const cant = canSpend !== null && Math.round(mint * 100) / 100 + fee > canSpend + 0.001;
@@ -626,7 +627,7 @@ function FightSheet({
             <button
               key={s}
               onClick={() => setChip(s)}
-              className={cn("h-10 min-w-0 truncate rounded-full px-1 text-[13px] font-bold transition", chip === s ? "bg-ink text-white shadow" : "bg-ink/5", cant && chip !== s && "text-muted line-through decoration-1")}
+              className={cn("h-12 min-w-0 rounded-2xl px-3 text-base font-bold tabular-nums transition", s === 0 && "col-span-2", chip === s ? "bg-ink text-white shadow" : "bg-ink/5", cant && chip !== s && "text-muted line-through decoration-1")}
             >
               {s === 0 ? "No stake" : cash(mint)}
             </button>

@@ -94,13 +94,14 @@ export function GameInvite({ region, target, game, onGame, onClose, onSend }: { 
         <p className="-mt-2 text-center text-xs text-muted">{g?.blurb}</p>
         <div>
           <p className="text-sm font-semibold">Stake (optional: each of you puts in)</p>
-          <div className="mt-2 grid grid-cols-5 gap-1.5">
+          {/* Roomy: "None" across the top, the amounts two a row below. */}
+          <div className="mt-2 grid grid-cols-2 gap-2">
             {quote &&
               STAKES_NAIRA.map((nv) => {
                 const m = Math.round((nv / quote.perMint) * 100) / 100;
                 const on = !typed && stake === m;
                 return (
-                  <button key={nv} onClick={() => (setTyped(""), setStake(m))} className={cn("h-11 min-w-0 truncate rounded-xl px-1 text-sm font-bold", on ? "bg-gold text-ink" : "bg-panel-2 text-muted")}>
+                  <button key={nv} onClick={() => (setTyped(""), setStake(m))} className={cn("h-12 min-w-0 rounded-2xl px-3 text-base font-bold tabular-nums", nv === 0 && "col-span-2", on ? "bg-gold text-ink" : "bg-panel-2 text-muted")}>
                     {nv === 0 ? "None" : cash(m)}
                   </button>
                 );

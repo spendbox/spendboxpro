@@ -22,6 +22,7 @@ import { NpcBadge, NpcCard, NpcFace } from "./npc-card";
 import { closePhoneNotices } from "./phone/phone-notices";
 import { useTutorialGlow } from "./tutorial";
 import { RideIcon } from "./ride-icon";
+import { useTopLayer } from "./layers";
 import { formatCountdown, levelLabel, levelOf, useCountdown, type RoomInfo, type RoomMember } from "./rooms";
 
 // In-game chat, in places: everyone on the same floor of a building (or the same hot-air
@@ -285,6 +286,8 @@ export function Chat({
   };
   // The real map has no group chat in places (voice is enough there): your chats come first.
   const [tab, setTab] = useState<"here" | "private" | "people">(keep ? "private" : "here");
+  // Opening the messages puts them over whatever was open before (and a card opened after, over them).
+  const layer = useTopLayer(open);
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
@@ -886,11 +889,11 @@ export function Chat({
     <section
       aria-label="Chat"
       className={cn(
-        "pointer-events-auto fixed inset-x-0 bottom-0 z-50 flex flex-col overflow-hidden rounded-t-3xl bg-panel shadow-[0_-8px_40px_-12px_rgb(24_32_43/0.35)]",
+        "pointer-events-auto fixed inset-x-0 bottom-0 flex flex-col overflow-hidden rounded-t-3xl bg-panel shadow-[0_-8px_40px_-12px_rgb(24_32_43/0.35)]",
         "sm:inset-x-auto sm:bottom-4 sm:right-4 sm:w-96 sm:rounded-3xl",
         expanded ? "h-[90dvh] sm:h-[calc(100dvh-2rem)]" : "h-[50dvh] sm:h-[min(640px,calc(100dvh-7rem))]",
       )}
-      style={sheetStyle}
+      style={{ ...sheetStyle, zIndex: layer }}
     >
       <button
         type="button"

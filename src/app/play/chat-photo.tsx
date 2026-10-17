@@ -1,5 +1,6 @@
 "use client";
 
+import { OnTop } from "./on-top";
 import { useEffect, useRef, useState } from "react";
 import { LoaderCircle } from "lucide-react";
 import { Camera, ImageIcon, User, X } from "@/components/icons";
@@ -43,13 +44,13 @@ export function ChatPhoto({ id, mine }: { id: number; mine: boolean }) {
         )}
       </button>
       {big && url && (
-        <div className="fixed inset-0 z-[80] grid place-items-center bg-black/90 p-3" onClick={() => setBig(false)} role="dialog" aria-label="The picture">
+        <OnTop className="fixed inset-0 grid place-items-center bg-black/90 p-3" onClick={() => setBig(false)} role="dialog" aria-label="The picture">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={url} alt="A picture" className="max-h-full max-w-full rounded-xl object-contain" />
           <button onClick={() => setBig(false)} className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] grid size-10 place-items-center rounded-full bg-white/15 text-white" aria-label="Close">
             <X className="size-5" />
           </button>
-        </div>
+        </OnTop>
       )}
     </>
   );

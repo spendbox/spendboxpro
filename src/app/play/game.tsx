@@ -1,5 +1,6 @@
 "use client";
 
+import { OnTop } from "./on-top";
 import { PASSPORT_ON } from "@/lib/features";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
@@ -547,6 +548,15 @@ export function Game({
   }, []);
   /** Someone's card (a face tapped on the map, or from your doorstep), and your doorstep. */
   const [personId, setPersonId] = useState<string | null>(null);
+  // A player's name or face tapped anywhere (./people/open-person): their card, over everything.
+  useEffect(() => {
+    const open = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail;
+      if (typeof id === "string" && id) setPersonId(id);
+    };
+    window.addEventListener("nt-person", open);
+    return () => window.removeEventListener("nt-person", open);
+  }, []);
   /** The camera was opened from a chat: the selfie goes to them. */
   const [selfieTo, setSelfieTo] = useState<{ target: ChatTarget; to: string } | null>(null);
   const [doorstepOpen, setDoorstepOpen] = useState(false);
@@ -2820,7 +2830,7 @@ export function Game({
       )}
       {prayer > 0 && <PrayerMoment key={prayer} onDone={() => setPrayer(0)} />}
       {leaveAsk && (
-        <div className="fixed inset-0 z-[70] grid place-items-center bg-black/40 p-4" onPointerDown={(e) => e.target === e.currentTarget && setLeaveAsk(null)} role="dialog" aria-label="Leave here?">
+        <OnTop className="fixed inset-0 grid place-items-center bg-black/40 p-4" onPointerDown={(e) => e.target === e.currentTarget && setLeaveAsk(null)} role="dialog" aria-label="Leave here?">
           <div className="w-full max-w-xs rounded-3xl bg-panel p-5 text-center shadow-2xl">
             <DoorOpen className="mx-auto size-8 text-gold-dark" aria-hidden />
             <h2 className="mt-2 font-display text-lg font-bold">Leave {ride !== null ? "this ride" : (rooms.myRoomInfo?.name ?? "this place")}?</h2>
@@ -2843,7 +2853,7 @@ export function Game({
               </button>
             </div>
           </div>
-        </div>
+        </OnTop>
       )}
       {alertsOpen && (
         <Sheet onClose={() => setAlertsOpen(false)} title="Notifications">
@@ -4512,12 +4522,12 @@ function PrayerMoment({ onDone }: { onDone: () => void }) {
     return () => clearTimeout(t);
   }, [onDone]);
   return (
-    <div className="pointer-events-none fixed inset-0 z-[65] grid place-items-center bg-black/55 text-center text-white" style={{ animation: "toast-in .6s ease-out" }}>
+    <OnTop className="pointer-events-none fixed inset-0 grid place-items-center bg-black/55 text-center text-white" style={{ animation: "toast-in .6s ease-out" }}>
       <div>
         <p className="font-display text-2xl font-bold">A quiet moment</p>
         <p className="mt-1 text-sm text-white/80">You bow your head and pray. You feel calmer.</p>
       </div>
-    </div>
+    </OnTop>
   );
 }
 

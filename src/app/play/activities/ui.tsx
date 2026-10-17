@@ -1,5 +1,6 @@
 "use client";
 
+import { PersonLink } from "../people/open-person";
 import { useEffect, useRef, useState } from "react";
 import { AvatarFace } from "@/components/avatar";
 import { Coins, Crown, Medal, Trophy, X } from "@/components/icons";
@@ -212,7 +213,9 @@ export function Leaderboard({
                 {i === 0 ? <Crown className="mx-auto size-4 text-gold-dark" /> : i === 1 ? <Medal className="mx-auto size-4 text-[#8b95a1]" /> : i + 1}
               </span>
               <Face p={e.p} size={24} />
-              <span className="min-w-0 flex-1 truncate font-medium">{e.p.id === meId ? "You" : e.p.name}</span>
+              <PersonLink id={e.p.id} className="flex-1 truncate font-medium">
+                {e.p.id === meId ? "You" : e.p.name}
+              </PersonLink>
               <span className="font-bold tabular-nums">
                 {e.score.toLocaleString("en")}
                 {unit ? <span className="ml-1 text-xs font-normal text-muted">{unit}</span> : null}

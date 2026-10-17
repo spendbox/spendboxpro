@@ -1,5 +1,6 @@
 "use client";
 
+import { OnTop } from "../on-top";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -513,7 +514,7 @@ export function HomeBuilder({ onClose, onFineTune, onAddMoney }: { onClose: () =
         )}
       </div>
       {short && (
-        <div className="fixed inset-0 z-[70] grid place-items-end bg-black/40 p-3 sm:place-items-center" onClick={() => setShort(null)}>
+        <OnTop className="fixed inset-0 grid place-items-end bg-black/40 p-3 sm:place-items-center" onClick={() => setShort(null)}>
           <div className="start-pop w-full max-w-sm rounded-3xl bg-panel p-5 text-center shadow-xl" onClick={(e) => e.stopPropagation()} role="alertdialog" aria-label="Not enough money">
             <p className="text-4xl">💸</p>
             <p className="mt-2 font-display text-xl font-extrabold">Not enough money yet</p>
@@ -541,7 +542,7 @@ export function HomeBuilder({ onClose, onFineTune, onAddMoney }: { onClose: () =
               </button>
             </div>
           </div>
-        </div>
+        </OnTop>
       )}
     </Shell>
   );
