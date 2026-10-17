@@ -86,6 +86,28 @@ paintball $80); from 10,000 the owned-buildings list (84 TB a month) is most of 
    channels, keeping a live channel only for the place you're in: $11 at 1,000, $1,100 at
    10,000, $110,000 at 100,000.
 
+### Further still, without making the game any less
+
+6. **A small game server for Police & Thieves and paintball** (Colyseus on a rented machine,
+   docs/PAINTBALL_PLAN.md): match traffic stops being Supabase messages at $2.50 a million and
+   becomes a fixed rent (about $10 a month at 1,000 daily players, $40 at 10,000, $400 at
+   100,000). It also decides hits and results itself (launch fixes 17 and 18), so matches are
+   fair and smoother.
+7. **One heartbeat instead of many looks**: the minute's ping (/api/active, ./pulse) already says
+   when notices, events and the Town Hall changed; it can say the same for your money, bills,
+   games near you, quests and the city's buildings, and the phone asks only for what changed.
+   What's the same for everyone near a spot (news, businesses, marks, people around, the
+   buildings) is served from the CDN for a few seconds, not worked out per player. About 6
+   calls a minute down to 2 or 3, and things still show up as fast (or faster: on change, not on
+   the next poll).
+
+| Daily players | With 1 to 5 | + 6 game server | + 7 heartbeat |
+|---:|---:|---:|---:|
+| 100 | $56 | $56 | $55 |
+| 1,000 | $350 | $80 | **$70** |
+| 10,000 | $2,400 | $340 | **$210** |
+| 100,000 | $24,000 | $3,400 | **$1,700** |
+
 Further off (as below, "Cheaper still"): own servers from about a million users, the database
 split by city, images on Cloudflare R2.
 
