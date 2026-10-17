@@ -225,7 +225,7 @@ const WORLD_SECTIONS: { icon: LucideIcon; title: string; body: React.ReactNode[]
     title: "People",
     body: [
       "See who's online and who's nearby, chat privately, and talk out loud in a voice call with the people in the same place (never recorded).",
-      "Add friends, send gifts and money, sign a guest book, leave notes on the map.",
+      "Add friends, send gifts and money, leave notes on the map.",
     ],
   },
   {

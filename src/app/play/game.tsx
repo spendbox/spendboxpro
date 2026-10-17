@@ -65,7 +65,7 @@ import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
 import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
-import { BookOpen, Church, Crosshair, FerrisWheel, Landmark as LandmarkIcon, Plane, Ship, TrainFront, Trophy, UtensilsCrossed } from "lucide-react";
+import { Church, Crosshair, FerrisWheel, Landmark as LandmarkIcon, Plane, Ship, TrainFront, Trophy, UtensilsCrossed } from "lucide-react";
 import { BellOff, BellRing, Landmark, LayoutGrid, PartyPopper, LocateFixed, Rocket, Wallet, PenLine, Compass, Orbit, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Palette, ShoppingBag, Swords, TrendingUp, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
@@ -2073,10 +2073,8 @@ export function Game({
     };
     const sport = THEME_SPORT_GAME[theme];
     if (sport) return { label: "Watch the match", icon: Trophy, run: () => setSportsOpen(sport) };
-    if (inPlannedHome) {
-      const [hx, hz] = spiralXY(enteredTile);
-      return { label: "Sign the guest book", icon: BookOpen, run: () => worldLife.openGuestBook(`${worldId}:${hx},${hz}`) };
-    }
+    // In someone's home there's no main button (the guest book is gone).
+    if (inPlannedHome) return null;
     switch (theme) {
       case "restaurant":
       case "foodcourt":
