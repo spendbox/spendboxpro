@@ -106,10 +106,10 @@ export class PaintballScene {
         g.fillStyle = k % 2 ? "#3f9a3b" : "#46a643";
         g.fillRect((k * 1024) / 16, 0, 1024 / 16 + 1, 640);
       }
-      g.globalAlpha = 0.35;
-      g.fillStyle = "#e03131";
+      g.globalAlpha = 0.16;
+      g.fillStyle = "#ff4d4d";
       g.fillRect(0, 0, 70, 640);
-      g.fillStyle = "#1c7ed6";
+      g.fillStyle = "#339af0";
       g.fillRect(1024 - 70, 0, 70, 640);
       g.globalAlpha = 1;
       g.strokeStyle = "#ffffff";
@@ -497,9 +497,12 @@ export class PaintballScene {
     const fwd = new THREE.Vector3(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch));
     const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
     const head = new THREE.Vector3(x, y + 1.65, z);
-    const back = aiming ? 0.9 : 2.7;
-    const side = aiming ? 0.32 : 0.62;
-    const want = head.clone().addScaledVector(right, side).addScaledVector(fwd, -back).add(new THREE.Vector3(0, aiming ? 0.05 : 0.3, 0));
+    // A tall phone screen is narrow: further back, higher and nearly straight behind, so you're
+    // in the middle of the view (not cut off at its edge).
+    const tall = this.camera.aspect < 1;
+    const back = aiming ? 0.9 : tall ? 3.6 : 2.7;
+    const side = aiming ? 0.32 : tall ? 0.28 : 0.62;
+    const want = head.clone().addScaledVector(right, side).addScaledVector(fwd, -back).add(new THREE.Vector3(0, aiming ? 0.05 : tall ? 0.6 : 0.3, 0));
     // Don't go through a bunker: come in closer.
     const hit = segmentHit(this.shapes, head, want);
     if (hit) want.lerpVectors(head, want, Math.max(0.1, hit.t - 0.08));

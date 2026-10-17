@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { playSfx } from "../../sound";
+import { canWebGL } from "../webgl";
 
 // The 3D board chess and draughts are played on, full screen: a polished wooden board with its
 // letters and numbers on the frame, on a table in a dim club room, real-looking pieces (carved
@@ -136,7 +137,8 @@ function makePiece(style: BoardStyle, code: string, mats: Mats): THREE.Group {
     const mat = code[0] === "w" ? mats.white : mats.black;
     for (const geo of chessGeos(code[1])) add(geo, mat);
     // Knights look towards the other side.
-    if (code[1] === "N") g.rotation.y = code[0] === "w" ? 0 : Math.PI;
+    // Knights look across the board (their heads side on, as on a real set).
+    if (code[1] === "N") g.rotation.y = code[0] === "w" ? -Math.PI / 2 : Math.PI / 2;
   } else {
     const mat = code[0] === "0" ? mats.red : mats.black;
     const king = code[1] === "K";
@@ -234,7 +236,7 @@ export function Board3D(p: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const api = useRef<{ sync: (board: Board, last: number[]) => void; marks: (p: Props) => void; flip: (f: boolean) => void } | null>(null);
   const props = useRef(p);
-  const [failed, setFailed] = useState(false);
+  const [failed] = useState(() => !canWebGL());
   useEffect(() => {
     props.current = p;
   });
@@ -246,7 +248,6 @@ export function Board3D(p: Props) {
     try {
       renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
     } catch {
-      setFailed(true);
       return;
     }
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));

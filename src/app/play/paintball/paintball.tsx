@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Bot, Copy, Crosshair, Crown, LoaderCircle, Lock, Play, RotateCcw, Swords, Target, Users, Zap } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { FullScreen } from "../minigames/fullscreen";
 import { FeeLine, usePlayFee } from "../minigames/fee";
 import { playSfx } from "../sound";
 import { tone } from "../minigames/sfx";
-import { PaintballNet, newCode, type Member, type Msg, type Seat } from "./net";
+import { PaintballNet, newCode, type Msg, type Seat } from "./net";
 import { PaintballScene } from "./scene";
 import { FIELD, RULES, TEAM, fly, hitsPerson, layout, rand, segmentHit, spawns, step, think, type Actor, type Ball, type V3 } from "./world";
+import { canWebGL } from "../minigames/webgl";
 
 // Paintball: two teams (red and blue, up to 8 players, bots in the empty places) on a speedball
 // field, full screen, third person over the shoulder. Team Splat: every hit is a splat for your
@@ -46,16 +47,12 @@ export function Paintball({ me: who, onClose }: { me: Me | null; onClose: () => 
   const [paying, setPaying] = useState(false);
   // One live channel for the room, from waiting through the match and back (practice: none).
   const roomCode = screen.k === "menu" ? null : screen.code;
-  const [net, setNet] = useState<PaintballNet | null>(null);
+  const net = useMemo(() => (roomCode && me ? new PaintballNet(roomCode, me) : null), [roomCode, me]);
   useEffect(() => {
-    if (!roomCode || !me) return;
-    const n = new PaintballNet(roomCode, me);
-    setNet(n);
-    return () => {
-      n.close();
-      setNet(null);
-    };
-  }, [roomCode, me]);
+    if (!net) return;
+    net.open();
+    return () => net.close();
+  }, [net]);
 
   async function begin(start: Extract<Msg, { t: "start" }>, code: string | null, quick: boolean) {
     setPaying(true);
@@ -155,7 +152,8 @@ export function Paintball({ me: who, onClose }: { me: Me | null; onClose: () => 
 // ---------------------------------------------------------------- waiting in a room
 
 function Room({ me, net, code, quick, paying, onStart }: { me: Me; net: PaintballNet; code: string; quick: boolean; paying: boolean; onStart: (s: Extract<Msg, { t: "start" }>) => void }) {
-  const [members, setMembers] = useState<Member[]>(net.members);
+  const members = useSyncExternalStore(net.subscribe, net.getMembers, net.getMembers);
+  // The quick match's countdown: how many seconds are left (null: not counting).
   const [count, setCount] = useState<number | null>(null);
   const started = useRef(false);
   const cb = useRef(onStart);
@@ -164,18 +162,12 @@ function Room({ me, net, code, quick, paying, onStart }: { me: Me; net: Paintbal
   });
   useEffect(() => {
     net.status("wait");
-    setMembers(net.members);
-    net.onMembers = setMembers;
-    net.onMsg = (m) => {
+    return net.listen((m) => {
       if (m.t !== "start" || started.current) return;
       if (!m.roster.some((s) => s.i === me.id)) return;
       started.current = true;
       cb.current(m);
-    };
-    return () => {
-      net.onMembers = () => {};
-      net.onMsg = () => {};
-    };
+    });
   }, [net, me]);
 
   const waiting = members.filter((m) => m.st === "wait");
@@ -184,11 +176,18 @@ function Room({ me, net, code, quick, paying, onStart }: { me: Me; net: Paintbal
   // Quick match: once two are waiting and no match is on, a short countdown, then the host starts.
   const ready = quick && waiting.length >= 2 && !playing.length;
   useEffect(() => {
-    if (!ready) return setCount(null);
-    setCount(8);
-    const id = window.setInterval(() => setCount((c) => (c === null ? null : Math.max(0, c - 1))), 1000);
-    return () => window.clearInterval(id);
+    if (!ready) return;
+    const t0 = Date.now();
+    const tick = () => setCount(Math.max(0, 8 - Math.floor((Date.now() - t0) / 1000)));
+    const first = window.setTimeout(tick, 0);
+    const id = window.setInterval(tick, 250);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(id);
+      setCount(null);
+    };
   }, [ready]);
+  const left = ready ? count : null;
   function start() {
     if (started.current) return;
     const seed = Math.floor(Math.random() * 1e9);
@@ -198,7 +197,7 @@ function Room({ me, net, code, quick, paying, onStart }: { me: Me; net: Paintbal
     onStart(msg);
   }
   useEffect(() => {
-    if (count === 0 && host) start();
+    if (left === 0 && host) start();
   });
 
   return (
@@ -237,8 +236,8 @@ function Room({ me, net, code, quick, paying, onStart }: { me: Me; net: Paintbal
         </p>
       ) : quick ? (
         <p className="flex items-center justify-center gap-2 py-2 text-sm font-semibold text-white/80">
-          {count !== null ? (
-            <>Starting in {count}…</>
+          {left !== null ? (
+            <>Starting in {left}…</>
           ) : (
             <>
               <LoaderCircle className="size-4 animate-spin" /> Looking for players…
@@ -296,15 +295,15 @@ function Results({ result, again, menu }: { result: Result; again: () => void; m
 // ---------------------------------------------------------------- the match
 
 type Snap = { t: number; p: number[] };
-type Hud = { left: number; red: number; blue: number; hopper: number; reloading: boolean; out: number; by: string; count: number; feed: { id: number; text: string; team: number }[]; hit: number; aiming: boolean; shield: boolean };
+type Hud = { left: number; red: number; blue: number; hopper: number; reloading: boolean; out: number; by: string; count: number; feed: { id: number; text: string; team: number }[]; hit: boolean; aiming: boolean; shield: boolean };
 
 export function Match({ me, start, net, onQuit, onEnd }: { me: Me; start: Extract<Msg, { t: "start" }>; net: PaintballNet | null; onQuit: () => void; onEnd: (r: Result) => void }) {
   const wrap = useRef<HTMLDivElement>(null);
   const mapRef = useRef<HTMLCanvasElement>(null);
   const shapes = useMemo(() => layout(start.seed), [start.seed]);
   const input = useRef({ mx: 0, mz: 0, look: { dx: 0, dy: 0 }, fire: false, aim: false, jump: false, reload: false, keys: new Set<string>() });
-  const [hud, setHud] = useState<Hud>({ left: RULES.seconds, red: 0, blue: 0, hopper: RULES.hopper, reloading: false, out: 0, by: "", count: 3, feed: [], hit: 0, aiming: false, shield: false });
-  const [failed, setFailed] = useState(false);
+  const [hud, setHud] = useState<Hud>({ left: RULES.seconds, red: 0, blue: 0, hopper: RULES.hopper, reloading: false, out: 0, by: "", count: 3, feed: [], hit: false, aiming: false, shield: false });
+  const [failed] = useState(() => !canWebGL());
   const [stick, setStick] = useState<{ x: number; y: number; dx: number; dy: number } | null>(null);
   const ends = useRef(onEnd);
   useEffect(() => {
@@ -318,7 +317,6 @@ export function Match({ me, start, net, onQuit, onEnd }: { me: Me; start: Extrac
     try {
       sc = new PaintballScene(el, shapes);
     } catch {
-      setFailed(true);
       return;
     }
     net?.status("play");
@@ -405,8 +403,7 @@ export function Match({ me, start, net, onQuit, onEnd }: { me: Me; start: Extrac
       sc.clearMarks(a.id);
     }
 
-    if (net) {
-      net.onMsg = (m) => {
+    const unlisten = net?.listen((m) => {
         if (!("m" in m) || m.m !== start.m) return;
         const t = nowS();
         if (m.t === "s") {
@@ -444,8 +441,7 @@ export function Match({ me, start, net, onQuit, onEnd }: { me: Me; start: Extrac
           const tg = actors.get(m.tg);
           if (tg) out(tg, actors.get(m.by), m.h);
         } else if (m.t === "end") over = true;
-      };
-    }
+    });
 
     // ---- input: keys and the mouse (a computer)
     const keys = input.current.keys;
@@ -720,7 +716,7 @@ export function Match({ me, start, net, onQuit, onEnd }: { me: Me; start: Extrac
           by: outBy,
           count: t < 0 ? Math.ceil(-t) : 0,
           feed: feed.slice(0, 4),
-          hit: hitFlash,
+          hit: now - hitFlash < 220,
           aiming: inp.aim,
           shield: mine.shield > t,
         });
@@ -786,7 +782,7 @@ export function Match({ me, start, net, onQuit, onEnd }: { me: Me; start: Extrac
       cv.removeEventListener("pointerdown", md);
       cv.removeEventListener("contextmenu", ctx);
       if (document.pointerLockElement) document.exitPointerLock?.();
-      if (net) net.onMsg = () => {};
+      unlisten?.();
       net?.status("wait");
       sc.dispose();
     };
@@ -852,7 +848,7 @@ export function Match({ me, start, net, onQuit, onEnd }: { me: Me; start: Extrac
 
   const m = Math.floor(hud.left / 60);
   const s = Math.floor(hud.left % 60);
-  const flash = performance.now() - hud.hit < 220;
+  const flash = hud.hit;
   if (failed) {
     return (
       <FullScreen onQuit={onQuit}>
@@ -884,7 +880,7 @@ export function Match({ me, start, net, onQuit, onEnd }: { me: Me; start: Extrac
         </div>
 
         {/* The map */}
-        <canvas ref={mapRef} width={160} height={96} className="pointer-events-none absolute left-2 top-2 h-[72px] w-[120px] rounded-lg border border-white/20 shadow sm:h-24 sm:w-40" />
+        <canvas ref={mapRef} width={160} height={96} className="pointer-events-none absolute left-2 top-16 h-[72px] w-[120px] rounded-lg border border-white/20 shadow sm:top-2 sm:h-24 sm:w-40" />
 
         {/* Who splatted whom */}
         <div className="pointer-events-none absolute right-2 top-14 space-y-1 text-right">
@@ -928,7 +924,7 @@ export function Match({ me, start, net, onQuit, onEnd }: { me: Me; start: Extrac
         {!stick && hud.count > 0 && <p className="pointer-events-none absolute bottom-24 left-6 text-xs font-bold text-white/70">Left thumb: move · Right thumb: look</p>}
 
         {/* Paint left */}
-        <div className="pointer-events-none absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 rounded-xl bg-black/50 px-3 py-1 text-center text-white">
+        <div className="pointer-events-none absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-3 rounded-xl bg-black/50 px-3 py-1 text-center text-white">
           <b className="text-xl tabular-nums">{hud.reloading ? "…" : hud.hopper}</b>
           <span className="ml-1 text-[10px] font-black tracking-widest text-white/60">{hud.reloading ? "RELOADING" : "PAINT"}</span>
         </div>

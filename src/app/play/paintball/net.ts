@@ -21,35 +21,66 @@ export type Msg =
 export type Member = { id: string; name: string; at: number; st: "wait" | "play" };
 
 export class PaintballNet {
-  private channel: RealtimeChannel;
+  private channel: RealtimeChannel | null = null;
   private live = false;
   private outbox: Msg[] = [];
+  /** Who's in the room (a new list each time it changes). */
   members: Member[] = [];
-  onMsg: (m: Msg) => void = () => {};
-  onMembers: (m: Member[]) => void = () => {};
-  readonly joinedAt = Date.now();
+  private msgFns = new Set<(m: Msg) => void>();
+  private memberFns = new Set<() => void>();
   private meta: { name: string; at: number; st: "wait" | "play" };
-  private remove: () => void;
+  private remove: (() => void) | null = null;
 
-  constructor(code: string, readonly me: { id: string; name: string }) {
+  /** Nothing connects until open() (so making one is harmless; open it from an effect). */
+  constructor(
+    private readonly code: string,
+    readonly me: { id: string; name: string },
+  ) {
+    this.meta = { name: me.name, at: Date.now(), st: "wait" };
+  }
+
+  /** Join the room's channel (again, after close(), if need be). */
+  open() {
+    if (this.channel) return;
     const supabase = createClient();
-    this.meta = { name: me.name, at: this.joinedAt, st: "wait" };
-    this.channel = supabase.channel(`pb:${code}`, { config: { broadcast: { self: false }, presence: { key: me.id } } });
-    this.remove = () => void supabase.removeChannel(this.channel);
-    this.channel
+    const channel = supabase.channel(`pb:${this.code}`, { config: { broadcast: { self: false }, presence: { key: this.me.id } } });
+    this.channel = channel;
+    this.remove = () => void supabase.removeChannel(channel);
+    channel
       .on("broadcast", { event: "p" }, ({ payload }) => {
-        if (payload && typeof payload === "object" && typeof (payload as Msg).t === "string") this.onMsg(payload as Msg);
+        if (payload && typeof payload === "object" && typeof (payload as Msg).t === "string") for (const fn of this.msgFns) fn(payload as Msg);
       })
       .on("presence", { event: "sync" }, () => this.readPresence())
       .subscribe((status) => {
-        if (status !== "SUBSCRIBED") return;
+        if (status !== "SUBSCRIBED" || this.channel !== channel) return;
         this.live = true;
-        void this.channel.track(this.meta);
-        for (const m of this.outbox.splice(0)) void this.channel.send({ type: "broadcast", event: "p", payload: m });
+        void channel.track(this.meta);
+        for (const m of this.outbox.splice(0)) void channel.send({ type: "broadcast", event: "p", payload: m });
       });
   }
 
+  close() {
+    this.live = false;
+    this.channel = null;
+    this.remove?.();
+    this.remove = null;
+  }
+
+  /** Hear every message (returns how to stop). */
+  listen(fn: (m: Msg) => void) {
+    this.msgFns.add(fn);
+    return () => void this.msgFns.delete(fn);
+  }
+
+  /** Be told when who's in the room changes (for useSyncExternalStore). */
+  subscribe = (fn: () => void) => {
+    this.memberFns.add(fn);
+    return () => void this.memberFns.delete(fn);
+  };
+  getMembers = () => this.members;
+
   private readPresence() {
+    if (!this.channel) return;
     const state = this.channel.presenceState() as Record<string, { name?: unknown; at?: unknown; st?: unknown }[]>;
     const out: Member[] = [];
     for (const [id, metas] of Object.entries(state)) {
@@ -59,24 +90,19 @@ export class PaintballNet {
     }
     out.sort((a, b) => a.at - b.at || (a.id < b.id ? -1 : 1));
     this.members = out;
-    this.onMembers(out);
+    for (const fn of this.memberFns) fn();
   }
 
   /** Playing or waiting (others see a match is on). */
   status(st: "wait" | "play") {
     if (this.meta.st === st) return;
     this.meta = { ...this.meta, st, at: st === "wait" ? Date.now() : this.meta.at };
-    if (this.live) void this.channel.track(this.meta);
+    if (this.live) void this.channel?.track(this.meta);
   }
 
   send(m: Msg) {
-    if (this.live) void this.channel.send({ type: "broadcast", event: "p", payload: m });
+    if (this.live) void this.channel?.send({ type: "broadcast", event: "p", payload: m });
     else if (m.t !== "s" && m.t !== "b") this.outbox.push(m);
-  }
-
-  close() {
-    this.live = false;
-    this.remove();
   }
 }
 

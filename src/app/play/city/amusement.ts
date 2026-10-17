@@ -74,7 +74,8 @@ export function createAmusementPark(key: string, name: string): Interior {
   }
 
   // ---------------------------------------------------------------- sky, ground, the tree ring
-  const skyGeo = new THREE.SphereGeometry(360, 32, 16);
+  // Inside the camera's reach from anywhere in the park (it draws 400 m): a bigger dome leaves a hole.
+  const skyGeo = new THREE.SphereGeometry(300, 32, 16);
   const skyCol: number[] = [];
   const pos = skyGeo.getAttribute("position");
   const top = new THREE.Color(0x3d8bd9);
@@ -620,19 +621,26 @@ export function createAmusementPark(key: string, name: string): Interior {
     const lamps: [number, number][] = [];
     for (let z = 4; z < 48; z += 6) lamps.push([-4.8, z], [4.8, z]);
     for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * Math.PI * 2;
+      const a = (i / 12) * Math.PI * 2 + Math.PI / 12;
       lamps.push([Math.cos(a) * 12.4, Math.sin(a) * 12.4]);
     }
     for (const [x, z] of lamps) {
       k.cyl(x, 0, z, 0.08, 0.12, 4.2, 0x2b2b2b, 8);
       k.ball(x, 4.35, z, 0.3, 0xfff3bf, { layer: "glow" });
     }
-    // Bunting over the avenue.
-    for (let z = 6; z < 46; z += 6) {
-      for (let f = 0; f < 10; f++) {
-        const x = -4.5 + f;
-        const y = 5.2 - Math.sin((f / 9) * Math.PI) * 0.8;
-        k.cyl(x, y - 0.5, z, 0.25, 0, 0.5, BRIGHT[f % BRIGHT.length], 3, { rx: Math.PI, noAo: true });
+    // Bunting across the avenue, lamp to lamp: little flags hanging off a string that dips.
+    for (let z = 4; z < 44; z += 6) {
+      const sag = (x: number) => 4.3 - Math.cos((x / 4.8) * (Math.PI / 2)) * 0.6;
+      for (let f = 0; f < 24; f++) {
+        const x0 = -4.8 + (f * 9.6) / 24;
+        const x1 = x0 + 9.6 / 24;
+        const y0 = sag(x0);
+        const y1 = sag(x1);
+        k.box((x0 + x1) / 2, (y0 + y1) / 2, z, 9.6 / 24 + 0.01, 0.02, 0.02, 0xf1f3f5, { rz: Math.atan2(y1 - y0, x1 - x0), noAo: true });
+      }
+      for (let f = 0; f < 12; f++) {
+        const x = -4.4 + f * 0.8;
+        k.cyl(x, sag(x) - 0.32, z, 0.13, 0, 0.3, BRIGHT[f % BRIGHT.length], 3, { noAo: true });
       }
     }
     // Shade trees and flower beds round the rides.

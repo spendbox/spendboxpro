@@ -42,17 +42,13 @@ export function PaintballTable({ view, me, now, onClose, onMessage, onJoin, onRe
   useSettle(view, watching, playing ? winners : null, onMessage);
 
   // The match's own live channel, while it's on.
-  const [net, setNet] = useState<PaintballNet | null>(null);
   const inMatch = playing && !watching && !result && !left;
+  const net = useMemo(() => (inMatch ? new PaintballNet(`ch-${view.id}`, { id: me.id, name: me.name }) : null), [inMatch, view.id, me.id, me.name]);
   useEffect(() => {
-    if (!inMatch) return;
-    const n = new PaintballNet(`ch-${view.id}`, { id: me.id, name: me.name });
-    setNet(n);
-    return () => {
-      n.close();
-      setNet(null);
-    };
-  }, [inMatch, view.id, me.id, me.name]);
+    if (!net) return;
+    net.open();
+    return () => net.close();
+  }, [net]);
   const ids = players.map((p) => `${p.id}:${p.name}`).join("|");
   const start = useMemo(
     () => ({ t: "start" as const, m: `ch-${view.id}`, seed: view.seed, at: Date.parse(view.startsAt) + 4000, roster: makeRoster(players.map((p) => ({ id: p.id, name: p.name })), view.seed) }),

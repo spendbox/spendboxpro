@@ -7,6 +7,7 @@ import { cn } from "@/lib/cn";
 import { playSfx } from "../../sound";
 import { drum, tone } from "../sfx";
 import { FullScreen } from "../fullscreen";
+import { canWebGL } from "../webgl";
 import { Pad, Pads, useFinish, useKeys } from "../stage";
 import type { EngineProps } from "../types";
 import { planRounds, RangeWorld, WEAPONS, type RoundPlan, type ShotResult } from "./range3d-scene";
@@ -71,7 +72,7 @@ export default function Range3D({ seed, onEnd }: EngineProps) {
   const timers = useRef(new Set<number>());
   const popId = useRef(1);
   const g = useRef<G | null>(null);
-  const [failed, setFailed] = useState(false);
+  const [failed] = useState(() => !canWebGL());
   const [pops, setPops] = useState<Pop[]>([]);
   const [hitMark, setHitMark] = useState<{ id: number; colour: string } | null>(null);
   const [hud, setHud] = useState({ phase: "intro" as Phase, ri: 0, score: 0, rScore: 0, mag: 0, reserve: 0, reloading: false, scoped: false, count: 3, hint: true, results: [] as Result[] });
@@ -268,7 +269,6 @@ export default function Range3D({ seed, onEnd }: EngineProps) {
       renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
     } catch {
       canvas.remove();
-      setFailed(true);
       return;
     }
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
