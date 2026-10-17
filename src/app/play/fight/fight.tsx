@@ -36,6 +36,7 @@ import { Confetti } from "../activities/ui";
 import { playSfx } from "../sound";
 import { Sheet } from "../sheet";
 import { onMapNews, tellMap } from "../map-news";
+import { onLatest } from "../pulse";
 import { whileHere } from "../activity";
 import { PlaySheet } from "./play-sheet";
 import { challengeQuote, declineChallenge, hostGame, inviteChallenge, queueNext, joinChallenge, leaveChallenge, myChallengeRep, openChallenge, reportWinner, type ChallengeQuote, type ChallengeView } from "./challenge-actions";
@@ -135,11 +136,18 @@ export function Fight({
   useEffect(() => {
     if (!signedIn) return;
     const first = setTimeout(() => void look(), 1200);
-    // Every 6 s while the list is open, every 30 s on the map; nothing while they're away. And
-    // within seconds when someone in the city opens, starts or calls off a game (../map-news).
-    const stop = whileHere(() => void look(), open || playOpen ? 6000 : 30_000);
+    // Every 6 s while the list is open, every 2 minutes on the map; nothing while they're away.
+    // And within seconds when someone in the city opens, starts or calls off a game
+    // (../map-news), and within the minute when you get a notice (an invitation, ../pulse).
+    const stop = whileHere(() => void look(), open || playOpen ? 6000 : 120_000);
     const stopNews = onMapNews(region, "games", () => void look());
+    let seen = 0;
+    const stopLatest = onLatest((l) => {
+      if (seen && l.notice > seen) void look();
+      seen = l.notice;
+    });
     return () => {
+      stopLatest();
       clearTimeout(first);
       stop();
       stopNews();
