@@ -141,6 +141,10 @@ type Room = {
   accentSide?: number;
   /** Curtain fabric for windows, or none. */
   curtains?: number;
+  /** Places against the outside walls that need plain wall, not a window (a TV, the stairs...), metres. */
+  keepClear?: { x: number; z: number; w: number; d: number }[];
+  /** A hole in the ceiling (the stairwell going up), metres. */
+  ceilingHole?: { x: number; z: number; w: number; d: number };
   /** Window frames. */
   frame?: number;
   /** Ceiling height of window heads (from the top). */
@@ -252,7 +256,10 @@ function shell(x: Ctx) {
         k.box(0, 0, 0.008, L, 0.09, 0.02, pal.trim, { noAo: true });
         return;
       }
-      const { open, s, hh } = windowLayout(kind, L, room.h, room.headDrop ?? 0.15);
+      const laid = windowLayout(kind, L, room.h, room.headDrop ?? 0.15);
+      const { s, hh } = laid;
+      // No window (or curtains) behind a TV, the stairs, a wardrobe...: plain wall there.
+      const open = room.keepClear?.length ? laid.open.filter(([a, b]) => !blockedOpening(room, side, a, b)) : laid.open;
       if (s > 0) k.box(0, 0, -T / 2, full, s, T, color, { noAo: true, grad: [0.84, 1.04, room.h] });
       k.box(0, hh, -T / 2, full, room.h - hh, T, color, { noAo: true, grad: [0.84, 1.04, room.h] });
       let prev = -full / 2;
@@ -291,8 +298,36 @@ function shell(x: Ctx) {
       }
     });
   }
-  // The ceiling.
-  k.box(0, room.h, 0, room.w + 0.6, 0.12, room.d + 0.6, pal.ceiling, { noAo: true });
+  // The ceiling (round the stairwell, when the stairs go up through it).
+  const hole = room.ceilingHole;
+  if (!hole) k.box(0, room.h, 0, room.w + 0.6, 0.12, room.d + 0.6, pal.ceiling, { noAo: true });
+  else {
+    const X0 = -room.w / 2 - 0.3, X1 = room.w / 2 + 0.3, Z0 = -room.d / 2 - 0.3, Z1 = room.d / 2 + 0.3;
+    const hx0 = hole.x - hole.w / 2, hx1 = hole.x + hole.w / 2, hz0 = hole.z - hole.d / 2, hz1 = hole.z + hole.d / 2;
+    const slab = (x0: number, x1: number, z0: number, z1: number) => {
+      if (x1 - x0 > 0.01 && z1 - z0 > 0.01) k.box((x0 + x1) / 2, room.h, (z0 + z1) / 2, x1 - x0, 0.12, z1 - z0, pal.ceiling, { noAo: true });
+    };
+    slab(X0, X1, Z0, hz0);
+    slab(X0, X1, hz1, Z1);
+    slab(X0, hx0, hz0, hz1);
+    slab(hx1, X1, hz0, hz1);
+    // The stairwell's sides, up into the floor above.
+    for (const [cx, cz, w, d] of [[hole.x, hz0, hole.w, 0.04], [hole.x, hz1, hole.w, 0.04], [hx0, hole.z, 0.04, hole.d], [hx1, hole.z, 0.04, hole.d]] as const) k.box(cx, room.h, cz, w, 0.5, d, pal.wall, { noAo: true });
+  }
+}
+
+/** Is the window from a to b along this wall behind something that needs plain wall? */
+function blockedOpening(room: Room, side: number, a: number, b: number) {
+  const [, , ry] = onWall(room, side, 0);
+  const ix = Math.sin(ry), iz = Math.cos(ry);
+  for (let u = a - 0.3; u <= b + 0.3; u += 0.2) {
+    const [px, pz] = onWall(room, side, u);
+    for (const dIn of [0.25, 0.6, 1.0]) {
+      const x = px + ix * dIn, z = pz + iz * dIn;
+      if (room.keepClear!.some((r) => Math.abs(x - r.x) <= r.w / 2 && Math.abs(z - r.z) <= r.d / 2)) return true;
+    }
+  }
+  return false;
 }
 
 /** The inside walls with no windows, for pictures and shelves. */
@@ -3892,13 +3927,115 @@ function courtroom(x: Ctx) {
   );
 }
 
+// ---------------------------------------------------------------- a shooting range
+
+const RANGE_PAL: Pal = { wall: 0x4a4f57, accentWall: 0xe8590c, trim: 0x2b2f35, ceiling: 0x2f343b, floor: ["concrete", 0x7b7f86, 0x6c7077], wood: 0x3b3f46, fabric: 0x1f2328, fabric2: 0xe8590c, accent: 0xe8590c, metal: 0x9aa1a8, art: [0xe8590c, 0xf8f9fa, 0x1f2328], frame: 0x2b2f35, leaves: LEAVES, pot: 0x2b2f35 };
+
+/**
+ * An indoor shooting range: six lanes down a long dark hall, a booth for each (partitions, a
+ * shelf, ear defenders on a hook), paper targets hanging at 10, 25 and 50 m on their carriers,
+ * distance lines on the floor, angled baffles across the ceiling, a sloping rubber backstop, and
+ * behind the booths the lobby: the counter, guns on a wall rack, safety signs and benches.
+ */
+function shootingRange(x: Ctx) {
+  const { k, room, pal, info } = x;
+  const W = room.w;
+  const D = room.d;
+  const far = -D / 2;
+  const line = D / 2 - 6.5;
+  const lanes = 6;
+  const lw = (W - 1) / lanes;
+  // The backstop: a dark sloping berm across the far end, lit from above.
+  k.box(0, 0, far + 1.0, W, 1.2, 2.0, 0x23262b);
+  k.box(0, 1.2, far + 0.6, W, 1.6, 1.2, 0x1b1d21, { rx: -0.35 });
+  for (let i = 0; i < 6; i++) k.box(-W / 2 + (i + 0.5) * (W / 6), 3.3, far + 1.5, 0.9, 0.06, 0.25, 0xfff4d6, { layer: "glow" });
+  // Distance lines and numbers on the floor, a yellow firing line.
+  for (const [dz, c] of [[10, 0xf8f9fa], [15, 0xadb5bd], [19, 0xf8f9fa]] as const) {
+    const zz = line - dz;
+    if (zz < far + 2.2) continue;
+    k.box(0, 0.004, zz, W - 1, 0.006, 0.06, c, { noAo: true });
+  }
+  k.box(0, 0.005, line, W - 0.6, 0.008, 0.14, 0xfab005, { noAo: true });
+  // Baffles: angled panels across the ceiling all the way down.
+  for (let zz = line - 1.5; zz > far + 2; zz -= 2.2) k.box(0, room.h - 0.55, zz, W - 0.4, 0.06, 0.9, 0x3a3f46, { rx: 0.45 });
+  // The lanes: partitions, a shelf, a target on its carrier at its own distance.
+  for (let l = 0; l < lanes; l++) {
+    const cx = -W / 2 + 0.5 + (l + 0.5) * lw;
+    // Booth partitions (padded panels) either side, a shelf across the front.
+    for (const sx of [-lw / 2, lw / 2]) k.box(cx + sx, 0, line + 0.75, 0.08, 1.9, 1.5, 0x5a6069);
+    k.box(cx, 0.95, line + 0.1, lw - 0.12, 0.06, 0.45, 0x8a6a4f);
+    k.box(cx, 0, line + 0.1, lw - 0.14, 0.95, 0.06, 0x3b3f46);
+    // A lane number above, and ear defenders hanging on the partition.
+    k.box(cx, 2.2, line + 0.2, 0.4, 0.3, 0.04, [0xe8590c, 0xf8f9fa][l % 2], { noAo: true });
+    k.ball(cx - lw / 2 + 0.15, 1.5, line + 1.0, 0.08, 0x1f2328, { w: 8, h: 6 });
+    // The target carrier: a rail along the ceiling, a hanger, the paper target.
+    const dz = [10, 16, 20, 12, 18, 14][l];
+    const tz = Math.max(far + 2.4, line - dz);
+    k.box(cx, room.h - 0.25, (line + far) / 2, 0.05, 0.05, line - far, 0x6c7077);
+    k.box(cx, room.h - 0.3, tz, 0.3, 0.1, 0.1, 0x2b2f35);
+    k.cyl(cx, 1.6, tz, 0.006, 0.006, room.h - 1.9, 0x9aa1a8, 4);
+    k.box(cx, 1.0, tz, 0.62, 0.86, 0.01, 0xf3efe6, { noAo: true });
+    // Rings and a silhouette, drawn on the paper.
+    k.box(cx, 1.14, tz + 0.007, 0.3, 0.6, 0.004, 0x2b2f35, { noAo: true });
+    k.cyl(cx, 1.62, tz + 0.006, 0.08, 0.08, 0.004, 0x2b2f35, 14, { rx: Math.PI / 2, noAo: true });
+    for (const [r, c] of [[0.13, 0xf3efe6], [0.09, 0xe8590c], [0.04, 0xf3efe6]] as const) k.cyl(cx, 1.3, tz + 0.012, r, r, 0.004, c, 18, { rx: Math.PI / 2, noAo: true });
+    // A shooter at most lanes.
+    if (l !== 2) spot(x, cx, line + 0.55, Math.PI, "stand");
+  }
+  // Lights down the range, red and green lamps over the line.
+  for (let zz = line - 3; zz > far + 3; zz -= 4.5) k.box(0, room.h - 0.08, zz, W - 2, 0.04, 0.2, 0xf4f8ff, { layer: "glow" });
+  for (const [sx, c] of [[-1, 0xff4d4d], [1, 0x40e080]] as const) k.ball(sx * (W / 2 - 0.6), 3.2, line + 0.3, 0.12, c, { layer: "glow" });
+  // The lobby behind the booths: a glass wall, the counter, the gun rack, benches, signs.
+  k.box(0, 0, line + 1.6, W, 0.9, 0.08, 0x3b3f46);
+  k.box(0, 0.9, line + 1.6, W, room.h - 0.9, 0.03, 0xbcd7e8, { layer: "glass" });
+  k.box(0, room.h - 0.12, line + 1.6, W, 0.12, 0.12, pal.trim);
+  const cz = D / 2 - 2.2;
+  k.box(-W / 2 + 3.2, 0, cz, 4.6, 1.05, 0.8, 0x2b2f35);
+  k.box(-W / 2 + 3.2, 1.05, cz, 4.8, 0.05, 0.95, 0xe8590c);
+  k.box(-W / 2 + 2.4, 1.1, cz, 0.6, 0.06, 0.4, 0x1a1b1e);
+  spot(x, -W / 2 + 3.2, cz - 0.9, 0, "stand");
+  // The gun rack on the side wall: rifles and pistols on a pegboard.
+  atWall(x, 3, D / 2 - 3.2, () => {
+    k.box(0, 1.0, 0.03, 3.2, 1.6, 0.05, 0x1f2328, { noAo: true });
+    for (let g = 0; g < 6; g++) {
+      k.box(-1.3 + g * 0.52, 1.75 - (g % 2) * 0.05, 0.08, 0.1, 0.06, 0.03, 0x9aa1a8);
+      k.box(-1.3 + g * 0.52, 1.15, 0.08, 0.05, 1.1, 0.04, g % 3 === 0 ? 0x6b4a2b : 0x2b2f35);
+    }
+    for (let g = 0; g < 5; g++) k.box(-1.2 + g * 0.6, 1.95 - 0.02, 0.08, 0.26, 0.1, 0.04, 0x2b2f35);
+  });
+  wallSign(x, 1, D / 2 - 3.5, 2.6, "EYES & EARS ON", 0xe8590c, 0xffffff, 3.2, 0.5, true, "Muzzle down range. Always.");
+  wallSign(x, 2, 0, 3.2, info.name.toUpperCase(), 0x1f2328, 0xe8590c, Math.min(8, W * 0.6), 0.6, true);
+  bench(x, W / 2 - 2.6, D / 2 - 2.0, -Math.PI / 2, 3.0, 0x3b3f46, 0x2b2f35, 3);
+  linearLights(x, 2, "x", 0xfff6e6);
+  x.views.push(
+    { x: -W / 2 + 0.5 + 2.5 * lw, z: line + 1.45, yaw: 0, pitch: -0.1 },
+    { x: W / 2 - 1.2, z: D / 2 - 1.2, yaw: yawTo(W / 2 - 1.2, D / 2 - 1.2, 0, far), pitch: -0.04 },
+  );
+}
+
+/** Kinds that stand against a wall and need it plain (no window, no curtains in front of them). */
+const AGAINST_WALL = new Set(["tv", "stairs", "wardrobe", "shelf", "fridge", "cooker", "counter", "sideboard", "art", "mirror", "clock", "screen", "djbooth", "homebar", "arcade", "dartboard", "jukebox", "piano"]);
+/** A planned home's floor: where the outside walls must stay plain, and the stairwell in the ceiling. */
+function homeClearings(home: NonNullable<InteriorInfo["home"]>): Pick<Room, "keepClear" | "ceilingHole"> {
+  const floor = home.plan.floors[home.level];
+  const { w: GW, d: GD } = SIZES[home.plan.size];
+  const W = GW * CELL_M, D = GD * CELL_M;
+  const rect = (it: (typeof floor.items)[number]) => {
+    const s = itemSize(it);
+    return { x: (it.x + s.w / 2) * CELL_M - W / 2, z: (it.y + s.d / 2) * CELL_M - D / 2, w: s.w * CELL_M, d: s.d * CELL_M };
+  };
+  const keepClear = floor.items.filter((i) => AGAINST_WALL.has(i.kind)).map(rect);
+  const up = home.level < home.plan.floors.length - 1 ? floor.items.find((i) => i.kind === "stairs") : undefined;
+  return { keepClear, ceilingHole: up ? rect(up) : undefined };
+}
+
 function plan(theme: Theme, rnd: Rng, variant?: InteriorInfo["variant"], info?: InteriorInfo): { room: Room; pal: Pal; build: (x: Ctx) => void } {
   const home = pickOf(rnd, HOME);
   if (info?.home) {
     const { w, d } = SIZES[info.home.plan.size];
     const kinds: WallKind[] = ["windows", "windows", "windows", "windows"];
     return {
-      room: { w: w * CELL_M, d: d * CELL_M, h: 2.8, walls: kinds as Room["walls"], curtains: rnd() < 0.8 ? mixHex(home.fabric2, 0xfaf6ef, 0.5) : undefined, frame: rnd() < 0.5 ? 0xffffff : 0x2b2b2b },
+      room: { w: w * CELL_M, d: d * CELL_M, h: 2.8, walls: kinds as Room["walls"], curtains: rnd() < 0.8 ? mixHex(home.fabric2, 0xfaf6ef, 0.5) : undefined, frame: rnd() < 0.5 ? 0xffffff : 0x2b2b2b, ...homeClearings(info.home) },
       pal: home,
       build: (x) => plannedHome(x, info.home!),
     };
@@ -3984,6 +4121,8 @@ function plan(theme: Theme, rnd: Rng, variant?: InteriorInfo["variant"], info?: 
       return { room: { w: 14, d: 12, h: 4.2, walls: ["solid", "glass", "glass", "glass"], frame: 0xb08458 }, pal: SPA_PAL, build: spaRoom };
     case "courtroom":
       return { room: { w: 14, d: 11, h: 4.4, walls: ["solid", "tall", "solid", "tall"] }, pal: COURT_PAL, build: courtroom };
+    case "range":
+      return { room: { w: 13, d: 26, h: 4.2, walls: ["solid", "solid", "solid", "solid"] }, pal: RANGE_PAL, build: shootingRange };
     case "church":
       return { room: { w: 16, d: 26, h: 12, walls: ["solid", "tall", "solid", "tall"] }, pal: CHURCH_PAL, build: churchNave };
     case "mosque":

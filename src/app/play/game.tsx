@@ -65,7 +65,7 @@ import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
 import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
-import { BookOpen, Church, FerrisWheel, Landmark as LandmarkIcon, Plane, Ship, TrainFront, Trophy, UtensilsCrossed } from "lucide-react";
+import { BookOpen, Church, Crosshair, FerrisWheel, Landmark as LandmarkIcon, Plane, Ship, TrainFront, Trophy, UtensilsCrossed } from "lucide-react";
 import { BellOff, BellRing, Landmark, LayoutGrid, PartyPopper, LocateFixed, Rocket, Wallet, PenLine, Compass, Orbit, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Palette, ShoppingBag, Swords, TrendingUp, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
@@ -2066,7 +2066,9 @@ export function Game({
     const room = rooms.myRoom;
     const act = (kind: ActivityItem["kind"], label: string) => () => room && setActivity({ id: `${room}:${kind}:0`, kind, label, place: room });
     const board = (kind: RideKindName, label: string) => {
-      const r = rideList.find((x) => x.kind === kind);
+      // This place's own wheel or slides when there are (a park's slides: a different one each time).
+      const here = rideList.filter((x) => x.kind === kind && x.tile === enteredTile);
+      const r = here.length ? here[Math.floor(Math.random() * here.length)] : rideList.find((x) => x.kind === kind);
       return r ? { label, run: () => boardRide(r) } : null;
     };
     const sport = THEME_SPORT_GAME[theme];
@@ -2106,12 +2108,13 @@ export function Game({
         if (b) return { ...b, icon: type === "port" || theme === "quay" ? Ship : TrainFront };
         break;
       }
+      case "ferris":
       case "funfair": {
-        const f = board("ferris", "Ride the Ferris wheel");
+        const f = board("ferris", `Ride the Ferris wheel · ${cash(rideFare("ferris", worldRegion?.prices.perMint))}`);
         return f && { ...f, icon: FerrisWheel };
       }
       case "waterpark": {
-        const w = board("slide", "Down the water slide");
+        const w = board("slide", `Down a water slide · ${cash(rideFare("slide", worldRegion?.prices.perMint))}`);
         return w && { ...w, icon: FerrisWheel };
       }
       case "gallery":
@@ -2125,6 +2128,8 @@ export function Game({
       case "roofTerrace":
       case "poolDeck":
         return { label: "Take a photo", icon: Camera, run: () => setCamera("photo") };
+      case "range":
+        return { label: "Shoot at the range", icon: Crosshair, run: () => setGamesOpen({ game: "shooting-range" }) };
       case "market":
         return { label: "Shop at the stalls", icon: ShoppingBag, run: () => worldLife.openThings("shops", "market") };
     }

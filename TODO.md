@@ -178,12 +178,13 @@ Each phase is built in one go (a few hours to a couple of days); writing the sto
 
 **Phase 7: the freshness engine.** Built (the engine; the writing goes on).
 - [x] Moments built from parts: 8 templates, 100 to 480 ways each.
-- [x] The Lagos calendar (22 seasons and days) with 22 seasonal moments; 9 moments for parts of the city; 7 for who you are.
+- [x] The Lagos calendar (22 seasons and days) with 33 seasonal moments; 17 moments for parts of the city; 12 for who you are.
 - [x] Player-written moments: write, automatic checks, votes, approval on the dashboard, ₦50,000 to the author (game-db/117).
 - [ ] Open Write a moment to players (built; Me → Write a moment says "coming soon" for now, and it's listed under Coming soon). To open it: in `src/app/play/game.tsx` point that item back at the WriteSheet (`./moments/write-sheet.tsx`).
 - [x] On the dashboard: how every moment is doing (came, walked away, met again, top answer).
-- [x] 16 templates and over 5,000 versions of moments in all; 70 things in the shop, each with its own moment, and 23 answers your things give you in everyday moments.
+- [x] 26 templates and about 8,900 versions of moments in all (368 moments); 70 things in the shop, each with its own moment, and 23 answers your things give you in everyday moments.
 - [x] More often: up to 8 a day, at least 12 minutes apart, the road on 1 trip in 3.
+- [x] 62 more moments: 10 templates (okada, keke, bus stop, owambe, NEPA, the compound, suya, the beach, the barber's, the viewing centre), 14 on the road, 11 for the calendar, 8 for parts of the city (Festac, Badagry, Epe, Banana Island, Eko Atlantic, Ibeju-Lekki, Agege, Maryland), 5 for who you are, 14 for your things.
 - [ ] Many more templates (aim: about 80, for about 16,000 versions), and 20 to 30 new moments every month (AI drafts, owner reviews).
 - [ ] Owner, every month: read "How moments are doing" on the dashboard, and rewrite or retire the weakest.
 
@@ -199,6 +200,7 @@ with; whether a business can fail completely; how big business income can get.
 
 ## Done lately
 - [ ] **Owner: run these in Supabase (SQL editor), in order:** `game-db/119_road_moments.sql` (road moments come more often) and `game-db/120_restaurant_orders.sql` (paying for food at a table). Until 120 is run, ordering says "Paying for food is switched on soon."
+- [x] Guns in the shop (Guns · soon): nine, drawn, very dear, coming soon. Past the edge of the map: forest, then hills and mountains (the sea stays sea). Bigger Ferris wheels (25 m across, 16 gondolas, lights) with a ride button at every wheel (₦3,000); water parks with 20 m and 15 m towers and four long slides from six designs (Mega Twister, Free Fall or Kamikaze, Wave Rider, Anaconda or the Black Hole tube), slides ₦1,500. Shooting ranges in some neighbourhoods (six lanes inside; "Shoot at the range"). In homes, no window or curtains behind a TV, the stairs or a wardrobe; the stairs go up through a stairwell.
 - [x] Streets are straight again (the winding streets are undone; hawkers now stand on the straight kerbs). The trip film's two junctions go left, right or straight on, a different way each trip. Plazas are one of eight squares (statue, fountain, clock tower, bandstand, sculpture, shady umbrella tables, flags, chessboard). Things has three tabs: My things, My assets (now with your business, open and past), Shop. The market's goods and the museum's art all have their own drawings.
 - [x] Eating out (docs/FOOD.md): sit at a table, order up to 6 things from 13 Nigerian dishes and 8 drinks at Lagos prices (dearer in a hotel, club or mall), pay from your money, and a waiter walks over with a tray and fills your table.
 - [x] Search has a Budget row (Any, I can afford, under ₦5m / ₦20m / ₦50m / ₦250m / ₦1bn): it lists the homes and landmarks you could buy, cheapest first; landmarks show their price in search. Closing the walkthrough halfway leaves a small ? button to carry on where it was. Town Hall refreshes every 6 seconds (was 3) to save data. The search box now also finds the names players gave buildings and businesses straight away.

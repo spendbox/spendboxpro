@@ -163,6 +163,21 @@ export const MARKET_GOODS = [
 /** What a museum's shop sells: art, from the gift-shop pieces up to the masters. */
 export const MUSEUM_ART = ["talking_drum", "adire", "painting", "sculpture", "terracotta", "art_okeke", "art_twins", "art_onabolu", "art_emokpae", "art_grillo", "enwonwu_painting", "art_ife_cast", "art_enwonwu_tutu"];
 
+
+/** Guns: shown in the shop, drawn, priced, but not for sale yet (coming soon). Very dear, on purpose. */
+export type SoonKind = { id: string; name: string; price: number; blurb: string };
+export const GUNS_SOON: SoonKind[] = [
+  { id: "dane_gun", name: "Dane gun", price: 1_500_000 * OWNED_PRICES, blurb: "The village hunter's long gun, hand-made." },
+  { id: "pistol_glock", name: "Glock 19 pistol", price: 4_500_000 * OWNED_PRICES, blurb: "Light, plain and reliable." },
+  { id: "revolver", name: "Colt Python revolver", price: 8_000_000 * OWNED_PRICES, blurb: "Six shots, blued steel, a wooden grip." },
+  { id: "pump_shotgun", name: "Pump-action shotgun", price: 12_000_000 * OWNED_PRICES, blurb: "Loud. Very loud." },
+  { id: "hunting_rifle", name: "Hunting rifle with scope", price: 18_000_000 * OWNED_PRICES, blurb: "Walnut stock, a bolt action and a good scope." },
+  { id: "desert_eagle", name: "Gold Desert Eagle", price: 25_000_000 * OWNED_PRICES, blurb: "Big, heavy, gold-plated. Pure show." },
+  { id: "ar15", name: "AR-15 rifle", price: 45_000_000 * OWNED_PRICES, blurb: "For the shooting range only." },
+  { id: "sniper", name: "Sniper rifle", price: 80_000_000 * OWNED_PRICES, blurb: "A bipod, a huge scope and a long, long barrel." },
+  { id: "gold_ak", name: "Gold-plated AK", price: 250_000_000 * OWNED_PRICES, blurb: "Gold metal and dark wood. Nobody needs it. Everybody wants it." },
+];
+
 /** Luxury things (a ₦10m price and up): shown together in the shops, dearest last. */
 export const LUXURY_FROM = 10_000_000;
 

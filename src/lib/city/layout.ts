@@ -41,6 +41,8 @@ export type TileKind =
   // not basketball): on busy streets all over town, see baseTile.
   | "bank"
   | "lawcourt"
+  // A shooting range (six indoor lanes): in some neighbourhoods, see pickFeature.
+  | "range"
   | "club"
   | "restaurant"
   | "structure"
@@ -195,6 +197,7 @@ export const KIND_LABEL: Record<TileKind, string> = {
   fire: "Fire station",
   bank: "Bank",
   lawcourt: "Law court",
+  range: "Shooting range",
   club: "Nightclub",
   restaurant: "Restaurant",
   structure: "Landmark",
@@ -1142,6 +1145,7 @@ function pickFeature(plan: CityPlan, fx: number, fz: number) {
     const roll = hash(fx, fz, plan.seed + 953);
     if (roll < 0.36) kind = "bank";
     else if (roll < 0.46) kind = "lawcourt";
+    else if (roll < 0.52) kind = "range";
   }
   return { x: best.x, z: best.z, kind };
 }
@@ -1446,6 +1450,8 @@ function tileName(plan: CityPlan, t: Tile): string | undefined {
       return bankName(plan, x, z);
     case "lawcourt":
       return courtName(plan, x, z);
+    case "range":
+      return rangeName(plan, x, z);
     case "clock":
       return roll < 0.7 ? any("clock", 1) : undefined;
     case "tower":
@@ -1491,6 +1497,12 @@ function courtName(plan: CityPlan, x: number, z: number) {
   const roll = hash(x, z, plan.seed + 546);
   const kind = roll < 0.6 ? "Magistrates' Court" : roll < 0.85 ? "High Court" : "Customary Court";
   return `${localName(plan, x, z)} ${kind}`;
+}
+
+/** A shooting range's name: "Bullseye Range, Akoka". */
+function rangeName(plan: CityPlan, x: number, z: number) {
+  const brands = ["Bullseye Range", "Eagle Eye Shooting Club", "Range 9", "Steady Aim Range", "Marksman's Club", "Deadshot Range", "Centre Mass Range"];
+  return `${brands[Math.floor(hash(x, z, plan.seed + 547) * brands.length) % brands.length]}, ${localName(plan, x, z)}`;
 }
 
 /** A name for a club or restaurant floor inside a bigger building (stable for the tile). */
@@ -1912,7 +1924,7 @@ function baseTile(plan: CityPlan, x: number, z: number): Tile {
   const green = smoothNoise(x / 6 + 31, z / 6 - 17, s + 11) - plan.style.green;
   if (green > 0.7 && density < 0.6) {
     if (green > 0.82 && r[0] < 0.3) return { i, x, z, kind: "pond", top: 0.5, r };
-    if (r[3] < 0.035) return { i, x, z, kind: "ferris", top: 2.6, r };
+    if (r[3] < 0.035) return { i, x, z, kind: "ferris", top: 2.85, r };
     return { i, x, z, kind: "park", top: 0.9, r };
   }
   const nextToRoad = isRoad(plan, x + 1, z) || isRoad(plan, x - 1, z) || isRoad(plan, x, z + 1) || isRoad(plan, x, z - 1);
@@ -1942,11 +1954,11 @@ function baseTile(plan: CityPlan, x: number, z: number): Tile {
   // The neighbourhood's own place (a school, a mosque or church, a pitch, a playground…).
   const feature = featureAt(plan, x, z);
   if (feature) {
-    const tops: Partial<Record<TileKind, number>> = { school: 0.9, worship: 1.6, pitch: 0.3, playground: 0.5, monument: 1.4, bank: 1.1, lawcourt: 1.3 };
+    const tops: Partial<Record<TileKind, number>> = { school: 0.9, worship: 1.6, pitch: 0.3, playground: 0.5, monument: 1.4, bank: 1.1, lawcourt: 1.3, range: 0.75 };
     return { i, x, z, kind: feature, top: tops[feature] ?? 0.8, r, v: Math.floor(r[2] * 2) };
   }
   if (!plan.region && Math.hypot(x, z) > 13 && r[2] < 0.035) return { i, x, z, kind: "turbine", top: 3.2, r };
-  if (r[3] > 0.997) return { i, x, z, kind: "ferris", top: 2.6, r };
+  if (r[3] > 0.997) return { i, x, z, kind: "ferris", top: 2.85, r };
   if (r[0] < 0.16) return { i, x, z, kind: "trees", top: 1, r };
   if (r[0] < 0.175) return { i, x, z, kind: "watertower", top: 2.2, r };
   if (r[0] < 0.182) return { i, x, z, kind: "mast", top: 4, r };

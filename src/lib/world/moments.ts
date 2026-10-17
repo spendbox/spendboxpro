@@ -17,6 +17,7 @@ import { PLAYER_MOMENTS } from "./player-moments.ts";
 import { SEASON_MOMENTS } from "./season-moments.ts";
 import { TEMPLATE_MOMENTS } from "./template-moments.ts";
 import { TEMPLATE_MOMENTS_2 } from "./template-moments-2.ts";
+import { TEMPLATE_MOMENTS_3 } from "./template-moments-3.ts";
 import { THING_ANSWERS } from "./thing-answers.ts";
 import { THING_MOMENTS } from "./thing-moments.ts";
 import { VENTURE_MOMENTS } from "./venture-moments.ts";
@@ -1041,7 +1042,7 @@ export const MOMENTS: MomentDef[] = [
   },
 ];
 
-MOMENTS.push(...ROAD_MOMENTS, ...BIG_MOMENTS, ...CAST_MOMENTS, ...VENTURE_MOMENTS, ...PLAYER_MOMENTS, ...TEMPLATE_MOMENTS, ...TEMPLATE_MOMENTS_2, ...SEASON_MOMENTS, ...LOCAL_MOMENTS, ...THING_MOMENTS);
+MOMENTS.push(...ROAD_MOMENTS, ...BIG_MOMENTS, ...CAST_MOMENTS, ...VENTURE_MOMENTS, ...PLAYER_MOMENTS, ...TEMPLATE_MOMENTS, ...TEMPLATE_MOMENTS_2, ...TEMPLATE_MOMENTS_3, ...SEASON_MOMENTS, ...LOCAL_MOMENTS, ...THING_MOMENTS);
 // Each moment's pool of answers: the ones written with it, and more (./more-answers.ts).
 for (const m of MOMENTS) if (MORE_ANSWERS[m.id]) m.choices.push(...MORE_ANSWERS[m.id]);
 // Answers your things give you (./thing-answers.ts): only shown if you have one.

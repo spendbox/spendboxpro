@@ -66,5 +66,5 @@ crossing (`src/lib/world/trips.ts` works out which pieces of land join up). Fare
 
 ## Rides (Explore → Rides, game-db/061_ride_fares.sql)
 Every ride costs its fare each time you board, from your Travel money (src/lib/fees.ts): the train
-₦2,000, a lagoon ferry ₦2,500, a BRT bus ₦500, a taxi ₦3,500, the Ferris wheel ₦1,000, a water slide
-₦500, a hot-air balloon flight ₦25,000, a helicopter tour ₦150,000. Fares are 2026 Lagos prices.
+₦2,000, a lagoon ferry ₦2,500, a BRT bus ₦500, a taxi ₦3,500, the Ferris wheel ₦3,000, a water slide
+₦1,500, a hot-air balloon flight ₦25,000, a helicopter tour ₦150,000. Fares are 2026 Lagos prices.

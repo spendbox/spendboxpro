@@ -34,6 +34,7 @@ export const PLACE_KINDS: PlaceKind[] = [
   { id: "school", label: "School", plural: "Schools", icon: "🏫", words: ["school", "college", "academy", "nursery", "primary", "secondary", "lesson", "class"], tiles: ["school"] },
   { id: "university", label: "University", plural: "Universities", icon: "🎓", words: ["university", "uni", "campus", "unilag", "polytechnic", "poly", "varsity"], structures: ["campus"] },
   { id: "court", label: "Law court", plural: "Law courts", icon: "⚖️", words: ["court", "law court", "courthouse", "court house", "magistrate", "magistrate court", "high court", "customary court", "judge", "justice", "law", "lawyer", "tribunal", "trial"], tiles: ["lawcourt"] },
+  { id: "range", label: "Shooting range", plural: "Shooting ranges", icon: "🎯", words: ["shooting", "shooting range", "range", "gun range", "firing range", "shoot", "target", "targets", "gun", "guns"], tiles: ["range"] },
   { id: "basketball", label: "Basketball court", plural: "Basketball courts", icon: "🏀", words: ["basketball", "basketball court", "ball court", "hoops"], structures: ["court"] },
   { id: "stadium", label: "Stadium", plural: "Stadiums", icon: "🏟️", words: ["stadium", "arena", "football", "soccer", "match", "sport", "sports"], tiles: ["stadium"], structures: ["arena"] },
   { id: "pitch", label: "Football pitch", plural: "Football pitches", icon: "⚽", words: ["pitch", "field", "football", "soccer", "five aside", "5 aside"], tiles: ["pitch"] },

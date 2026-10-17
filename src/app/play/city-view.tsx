@@ -67,6 +67,7 @@ import { buildingParts } from "./city/building-kit";
 import { marketParts } from "./city/market-kit";
 import { museumParts } from "./city/museum-kit";
 import { plazaDesign, plazaParts } from "./city/plaza-kit";
+import { FERRIS, ferrisWheel } from "./city/ferris";
 import { createService } from "./city/serve";
 import { MENU_BY_ID } from "@/lib/world/menu";
 import { plotLayout } from "@/lib/city/plots";
@@ -219,7 +220,7 @@ export type RideTarget = { kind: RideKind; index: number };
  * A ride that exists this round (see onRides). Its chat room id is `v:<kind>:<index>`, except
  * balloons, which keep `balloon:<k>`.
  */
-export type CityRide = { kind: RideKind; index: number; name: string; capacity: number; /** Mint to board (trains), each time. */ fare?: number };
+export type CityRide = { kind: RideKind; index: number; name: string; capacity: number; /** Mint to board (trains), each time. */ fare?: number; /** The tile it stands on (a Ferris wheel, a water park's slide). */ tile?: number };
 /** Which way to go at a junction when you're driving a car. */
 export type TurnDir = "left" | "right" | "straight";
 
@@ -965,6 +966,19 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
       tree(-0.38, 0.36, 0.4, r[0]);
       break;
     }
+    case "range": {
+      // A shooting range: a long, low, windowless block (dark grey, an orange band), a big target
+      // on the front, a covered entrance, a few cars, and an earth berm behind.
+      B(0, 0.08, -0.06, 0.8, 0.42, 0.66, 0x4a4f57);
+      B(0, 0.5, -0.06, 0.82, 0.04, 0.68, 0x2b2f35);
+      B(0, 0.36, 0.272, 0.8, 0.05, 0.006, 0xe8590c, 0, "paint");
+      for (const [rr, c, dz] of [[0.13, 0xf8f9fa, 0], [0.1, 0xe8590c, 0.002], [0.065, 0xf8f9fa, 0.004], [0.03, 0xe8590c, 0.006]] as const) B(0.2, 0.22, 0.276 + dz, rr * 2, 0.005, rr * 2, c, Math.PI / 2, "disc", Math.PI / 2);
+      B(-0.2, 0.08, 0.3, 0.2, 0.2, 0.08, 0x2b2f35);
+      B(-0.2, 0.28, 0.33, 0.28, 0.025, 0.16, 0xe8590c);
+      add("roof", { x, y: 0.08, z: z - 0.42, sx: 0.6, sy: 0.12, sz: 0.06, ry: 0, color: 0x6b8e4e });
+      for (let k = 0; k < 2; k++) B(-0.3 + k * 0.5, 0.08, 0.42, 0.13, 0.06, 0.07, [0x1a1b1e, 0xadb5bd][k]);
+      break;
+    }
     case "fuel": {
       const brand = [0xe03131, 0x1971c2, 0x2f9e44, 0xf08c00][Math.floor(r[2] * 4)];
       for (const [px, pz] of [[-0.32, -0.2], [0.32, -0.2], [-0.32, 0.25], [0.32, 0.25]]) {
@@ -995,11 +1009,8 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
       tree(0.36, -0.36, 0.6, r[2]);
       break;
     case "ferris":
-      // The legs; the turning wheel is added separately (see landmarks).
-      for (const o of [-0.2, 0.2]) {
-        add("building", { x: x + o, y: 0.08, z, sx: 0.05, sy: 1.25, sz: 0.05, ry: 0, color: 0xdee2e6 });
-      }
-      add("building", { x, y: 0.08, z: z + 0.32, sx: 0.5, sy: 0.12, sz: 0.2, ry: 0, color: 0xf08c6b });
+      // The wheel, its A-frames and deck are added separately (see addFerris); a paved yard here.
+      add("ground", { x, y: 0.08, z, sx: 0.9, sy: 0.01, sz: 0.9, ry: 0, color: 0xd8d2c4 });
       break;
     case "turbine":
       add("trunk", { x, y: 0.08, z, sx: 1.1, sy: 2.6, sz: 1.1, ry: 0, color: 0xf1f3f5 });
@@ -2261,39 +2272,13 @@ export function CityView({
     }
 
     function addFerris(px: number, pz: number, rotY: number, tile: number, scale: number) {
-      const obj = new THREE.Group();
-      const wheel = new THREE.Group();
-      wheel.add(new THREE.Mesh(lmGeo.rim, lmMat.frame));
-      for (let k = 0; k < 4; k++) {
-        const sp = new THREE.Mesh(lmGeo.spoke, lmMat.frame);
-        sp.rotation.z = (k * Math.PI) / 4;
-        wheel.add(sp);
-      }
-      const cabins: THREE.Mesh[] = [];
-      for (let k = 0; k < 8; k++) {
-        const c = new THREE.Mesh(lmGeo.cabin, lmMat.cabins[k % lmMat.cabins.length]);
-        const a = (k / 8) * Math.PI * 2;
-        c.position.set(Math.cos(a) * 0.62, Math.sin(a) * 0.62, 0);
-        c.castShadow = true;
-        wheel.add(c);
-        cabins.push(c);
-      }
-      wheel.position.y = 1.35;
-      obj.add(wheel);
-      if (scale !== 1) {
-        // Legs for the bigger funfair wheel (the single-tile one has legs drawn with the tile).
-        for (const o of [-0.2, 0.2]) {
-          const leg = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.3, 0.05), lmMat.frame);
-          leg.position.set(o, 0.7, 0);
-          obj.add(leg);
-        }
-      }
+      const { obj, wheel, cabins } = ferrisWheel();
       obj.position.set(px, 0, pz);
       obj.rotation.y = rotY;
       obj.userData.scale = scale;
-      // A slow wheel (about 75 s a turn), its cabins hanging upright as it goes round.
+      // A slow wheel (about 90 s a turn), its gondolas hanging level as it goes round.
       obj.userData.cabins = cabins;
-      landmarks.push({ obj, spin: wheel, tile, speed: (Math.PI * 2) / 75 });
+      landmarks.push({ obj, spin: wheel, tile, speed: (Math.PI * 2) / 90 });
       wheels.push({ obj, wheel, tile, scale });
       life.add(obj);
     }
@@ -2825,7 +2810,7 @@ export function CityView({
           life.add(park.group);
         }
         if (t.structure?.anchor && t.structure.type === "funfair") {
-          addFerris(t.x + 0.05, t.z, Math.PI / 4, t.i, 1.15);
+          addFerris(t.x + 0.05, t.z, Math.PI / 4, t.i, 1.3);
           // A carousel that turns
           const obj = new THREE.Group();
           const spin = new THREE.Group();
@@ -6524,9 +6509,9 @@ export function CityView({
       wheels.forEach((w, i) => {
         const t = tileById.get(w.tile);
         const name = t?.name ?? (t?.structure ? `${t.structure.name} wheel` : t ? `Ferris wheel, ${shortAddress(addressOf(plan, t))}` : "Ferris wheel");
-        out.push({ kind: "ferris", index: i, name, capacity: RIDE_CAP.ferris });
+        out.push({ kind: "ferris", index: i, name, capacity: RIDE_CAP.ferris, tile: w.tile });
       });
-      slidesFlat.forEach((sl, i) => out.push({ kind: "slide", index: i, name: sl.name, capacity: RIDE_CAP.slide }));
+      slidesFlat.forEach((sl, i) => out.push({ kind: "slide", index: i, name: sl.name, capacity: RIDE_CAP.slide, tile: sl.tile }));
       for (let i = 0; i < aircraft.count; i++) out.push({ kind: "heli", index: i, name: `${city} Sky Tours · helicopter ${i + 1}`, capacity: RIDE_CAP.heli });
       const key = out.map((r) => `${r.kind}${r.index}:${r.name}`).join("|");
       if (key !== ridesKey) {
@@ -6564,8 +6549,8 @@ export function CityView({
         const w = wheels[r.index];
         let best = 0;
         let bestD = 9;
-        for (let k = 0; k < 8; k++) {
-          const a = (k / 8) * Math.PI * 2 + w.wheel.rotation.z;
+        for (let k = 0; k < FERRIS.cabins; k++) {
+          const a = (k / FERRIS.cabins) * Math.PI * 2 + w.wheel.rotation.z;
           const d = Math.abs(turnTo(a, -Math.PI / 2));
           if (d < bestD) {
             bestD = d;
@@ -6631,12 +6616,12 @@ export function CityView({
           const w = wheels[r.index];
           if (!w) return false;
           const sc = w.obj.scale.x;
-          const a = (vv.cabinK / 8) * Math.PI * 2 + w.wheel.rotation.z;
-          const lx = Math.cos(a) * 0.62 * sc;
+          const a = (vv.cabinK / FERRIS.cabins) * Math.PI * 2 + w.wheel.rotation.z;
+          const lx = Math.cos(a) * FERRIS.r * sc;
           const ry = w.obj.rotation.y;
           out.x = w.obj.position.x + Math.cos(ry) * lx;
           out.z = w.obj.position.z - Math.sin(ry) * lx;
-          out.y = (1.35 + Math.sin(a) * 0.62) * sc;
+          out.y = (FERRIS.hub + Math.sin(a) * FERRIS.r - FERRIS.hang) * sc;
           out.yaw = ry + (vv.flip ? Math.PI : 0);
           out.speed = 0;
           return true;
@@ -6693,7 +6678,7 @@ export function CityView({
           sl.v = 0.32;
           playSfx("whoosh");
         } else if (sl.phase === "slide") {
-          sl.v = Math.min(1.3, sl.v + dt * 0.85);
+          sl.v = Math.min(1.0, sl.v + dt * 0.6);
           sl.d += sl.v * dt;
           if (sl.d >= sl.length) {
             sl.d = sl.length;

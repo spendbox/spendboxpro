@@ -6,6 +6,7 @@
 import type { ItemCategory } from "@/lib/world/items";
 import { ART as CARS } from "./art/cars";
 import { ART as HOME } from "./art/home";
+import { ART as GUNS } from "./art/guns";
 import { ART as MARKET } from "./art/market";
 import { ART as MORE } from "./art/more";
 import { WATCHES, Watch } from "./art/watches";
@@ -278,6 +279,7 @@ const DRAWN: Partial<
   ...HOME,
   ...MORE,
   ...MARKET,
+  ...GUNS,
   ...CARS,
 };
 

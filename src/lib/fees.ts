@@ -38,8 +38,8 @@ const REAL_RIDE_FARE_NAIRA: Record<string, number> = {
   boat: 2_500,
   bus: 500,
   car: 3_500,
-  ferris: 1_000,
-  slide: 500,
+  ferris: 3_000,
+  slide: 1_500,
   balloon: 25_000,
   heli: 150_000,
 };

@@ -7,7 +7,7 @@ import { myCareer, type Career } from "../venture-actions";
 import { VENTURE_KIND_BY_ID, VENTURE_STAGES } from "@/lib/world/ventures";
 import { Building2, Check, Gem, House, MapPin, Pencil, ShoppingBag, Store, TrendingUp, X } from "lucide-react";
 import { renameUnit } from "../property-actions";
-import { CATEGORY_LABEL, effectWords, LUXURY_FROM, MARKET_GOODS, MUSEUM_ART, mintOf, QUICK_SALE, SHOP, STEAL_MAX, CAUGHT_CHANCE, type ItemCategory, type ItemKind } from "@/lib/world/items";
+import { CATEGORY_LABEL, effectWords, GUNS_SOON, LUXURY_FROM, MARKET_GOODS, MUSEUM_ART, mintOf, QUICK_SALE, SHOP, STEAL_MAX, CAUGHT_CHANCE, type ItemCategory, type ItemKind } from "@/lib/world/items";
 import { ItemArt } from "./item-art";
 import { PurchasePop } from "./purchase-pop";
 import { INCOME_DAY, type AssetUnit } from "@/lib/world/property-api";
@@ -205,11 +205,13 @@ function ItemActions({ item, busy, to, setTo, run, done }: { item: MyItem; busy:
 
 /** The city's shop, cars included: buy new (reputation for fine things), or try to steal something small. */
 function Shops({ startCars, stall, prices, coins, busy, run, onBought }: { startCars: boolean; stall?: Stall; prices: Prices; coins: number; busy: boolean; run: Run; onBought: (k: ItemKind, paid: number) => void }) {
-  const [cat, setCat] = useState<ItemCategory | "all" | "luxury">(startCars ? "car" : "all");
+  const [cat, setCat] = useState<ItemCategory | "all" | "luxury" | "guns">(startCars ? "car" : "all");
   const [risky, setRisky] = useState<string | null>(null);
   const cars = cat === "car";
   // Luxury: the ₦10m-and-up watches, bags, art and cars together, cheapest first.
-  const list = stall
+  const list = cat === "guns"
+    ? []
+    : stall
     ? STALLS[stall].ids.map((id) => SHOP.find((k) => k.id === id)).filter((k): k is ItemKind => !!k).sort((a, b) => a.price - b.price)
     : cat === "luxury"
       ? SHOP.filter((k) => k.price >= LUXURY_FROM).sort((a, b) => a.price - b.price)
@@ -218,15 +220,35 @@ function Shops({ startCars, stall, prices, coins, busy, run, onBought }: { start
     <div className="mt-3">
       {stall && <p className="text-xs text-muted">{STALLS[stall].note}</p>}
       <div className={`-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 ${stall ? "hidden" : ""}`}>
-        {(["all", "luxury", "car", "jewellery", "clothing", "gadget", "home", "art", "book", "fitness"] as const).map((c) => (
+        {(["all", "luxury", "car", "jewellery", "clothing", "gadget", "home", "art", "book", "fitness", "guns"] as const).map((c) => (
           <button key={c} onClick={() => setCat(c)} className={`h-8 shrink-0 rounded-full px-3 text-xs font-semibold ${cat === c ? "bg-ink text-white" : c === "luxury" ? "bg-gold/25 text-gold-dark" : "bg-ink/5"}`}>
-            {c === "all" ? "All" : c === "luxury" ? "Luxury ✨" : CATEGORY_LABEL[c]}
+            {c === "all" ? "All" : c === "luxury" ? "Luxury ✨" : c === "guns" ? "Guns · soon" : CATEGORY_LABEL[c]}
           </button>
         ))}
       </div>
       {cars && <p className="text-xs text-muted">A good car turns heads (reputation), and you can drive it round the city.</p>}
       {cat === "luxury" && <p className="text-xs text-muted">The finest watches, jewellery, art and cars in Lagos. The dearer it is, the more reputation it brings, for as long as you own it. Watches, jewellery and art also tend to gain value over time.</p>}
-      <ul className="mt-2 divide-y divide-ink/5 rounded-2xl ring-1 ring-ink/5">
+      {cat === "guns" && (
+        <>
+          <p className="text-xs text-muted">Coming soon: guns, for the shooting range and for show. They&apos;ll be very dear. Look now, buy later.</p>
+          <ul className="mt-2 divide-y divide-ink/5 rounded-2xl ring-1 ring-ink/5">
+            {GUNS_SOON.map((g) => (
+              <li key={g.id} className="flex items-center gap-3 px-3 py-2.5">
+                <ItemArt kind={g.id} category="gadget" size={44} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{g.name}</p>
+                  <p className="truncate text-xs text-muted">{g.blurb}</p>
+                </div>
+                <span className="shrink-0 text-right">
+                  <span className="block text-xs font-bold tabular-nums">{cash(mintOf(g.price, prices))}</span>
+                  <span className="mt-0.5 block rounded-full bg-gold/20 px-2 py-0.5 text-[10px] font-bold text-gold-dark">Coming soon</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      <ul className={`mt-2 divide-y divide-ink/5 rounded-2xl ring-1 ring-ink/5 ${list.length ? "" : "hidden"}`}>
         {list.map((k) => (
           <li key={k.id} className="flex items-center gap-3 px-3 py-2.5">
             <ItemArt kind={k.id} category={k.category} size={44} />
