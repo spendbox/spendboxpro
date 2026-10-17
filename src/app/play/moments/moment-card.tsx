@@ -58,6 +58,8 @@ export function MomentCard({ shown, onClose, onAnswered, closeLabel = "Walk away
     setError(null);
     const r = await momentAnswer(shown.id, i).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
     setBusy(false);
+    // Gone already (it timed out, or another one started on another screen): just close it.
+    if (!r.ok && r.error === "That moment has passed.") return onClose();
     if (!r.ok) return setError(r.error);
     const c = def!.choices[i];
     const o = c.outcomes[r.outcome] ?? c.outcomes[0];

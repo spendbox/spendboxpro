@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MOMENT_BY_ID, registerMoments, spotOfTheme } from "@/lib/world/moments";
+import { MOMENT_BY_ID, MOMENT_RULES, registerMoments, spotOfTheme } from "@/lib/world/moments";
 import { momentNext, type MomentShown } from "../moment-actions";
 import { anySheetOpen } from "../sheet";
 import { playSfx } from "../sound";
@@ -25,6 +25,17 @@ const between = ([a, b]: [number, number]) => a + Math.random() * (b - a);
 
 /** Something else is up: the phone's in a pocket, a card or a full-screen tool is open. */
 const busy = () => document.hidden || anySheetOpen() || !!document.querySelector('[role="dialog"], [role="alertdialog"]');
+
+/** Only while you're really playing: you touched the screen (or a key) in the last two minutes. */
+const ACTIVE_MS = 120_000;
+let lastTouch = 0;
+if (typeof window !== "undefined") {
+  lastTouch = Date.now();
+  for (const ev of ["pointerdown", "keydown", "wheel", "touchstart"]) window.addEventListener(ev, () => (lastTouch = Date.now()), { passive: true, capture: true });
+}
+const playing = () => !document.hidden && Date.now() - lastTouch < ACTIVE_MS;
+/** A card nobody answered goes before the server lets it go (so you never tap one that's passed). */
+const SHOW_MS = (MOMENT_RULES.answerSeconds - 120) * 1000;
 
 /**
  * inside: the theme of the place you're in (null on the street), home: it's a home. place: its
@@ -50,11 +61,11 @@ export function MomentsLayer({ inside, home, place, area, enabled }: { inside: s
   const attempt = async () => {
     const l = live.current;
     if (!l.enabled || l.open) return schedule(between(NEXT_MS));
-    if (busy()) return schedule(30_000);
+    if (busy() || !playing()) return schedule(30_000);
     const m = await momentNext({ spot: l.spot, place: l.place, area: l.area }).catch(() => null);
     // A player-written one comes with its story (docs/LIFE_WHEEL.md, phase 7).
     if (m?.def) registerMoments([m.def]);
-    if (!m || !MOMENT_BY_ID.has(m.moment) || busy() || live.current.open) return schedule(between(RETRY_MS));
+    if (!m || !MOMENT_BY_ID.has(m.moment) || busy() || !playing() || live.current.open) return schedule(between(RETRY_MS));
     setShown(m);
     playSfx("pop");
     schedule(between(NEXT_MS));
@@ -76,6 +87,19 @@ export function MomentsLayer({ inside, home, place, area, enabled }: { inside: s
     if (spot !== "street") schedule(between(AFTER_ENTERING_MS));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spot, enabled]);
+
+  // Away from the game (the phone locked, another app) or left too long: the card goes. Nothing
+  // happens for it, just as with Walk away.
+  useEffect(() => {
+    if (!shown) return;
+    const hide = () => document.hidden && setShown(null);
+    document.addEventListener("visibilitychange", hide);
+    const id = setTimeout(() => setShown(null), SHOW_MS);
+    return () => {
+      document.removeEventListener("visibilitychange", hide);
+      clearTimeout(id);
+    };
+  }, [shown]);
 
   if (!shown || !MOMENT_BY_ID.has(shown.moment)) return null;
   return (

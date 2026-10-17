@@ -10,10 +10,11 @@ import { cn } from "@/lib/cn";
 // (no address bar). Drawn on <body>, so a sheet's own layout can't box it in.
 
 export function FullScreen({ children, onQuit, quitLabel = "Leave the game", className }: { children: React.ReactNode; onQuit: () => void; quitLabel?: string; className?: string }) {
-  const [host, setHost] = useState<HTMLElement | null>(null);
+  // Drawn straight away (games only open after a tap, never on the server): a game inside sets up
+  // its 3D screen as it first appears, so the screen must be there from the first moment.
+  const host = typeof document === "undefined" ? null : document.body;
   const [native, setNative] = useState(false);
   useEffect(() => {
-    setHost(document.body);
     const was = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const onChange = () => setNative(!!document.fullscreenElement);

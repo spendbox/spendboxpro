@@ -1023,9 +1023,11 @@ export function Game({
     [rooms.members, me.id],
   );
   // Where you are, for the minigames (the room's channel for challenges, who's here).
+  // The live room for games and challenges: on the real map there are no rounds, so round 0 (as chat).
+  const actRound = worldId ? 0 : (round?.id ?? null);
   const playCtx: PlayCtx = useMemo(
-    () => ({ roundId: round?.id ?? null, roomId: place || ride !== null ? (rooms.myRoomInfo?.id ?? null) : null, me: meP, members: rooms.members }),
-    [round?.id, place, ride, rooms.myRoomInfo?.id, meP, rooms.members],
+    () => ({ roundId: actRound, roomId: place || ride !== null ? (rooms.myRoomInfo?.id ?? null) : null, me: meP, members: rooms.members }),
+    [actRound, place, ride, rooms.myRoomInfo?.id, meP, rooms.members],
   );
   // Who you can add to a selfie: the people here, then your friends.
   const selfiePeople = useMemo(() => {
@@ -2539,7 +2541,7 @@ export function Game({
       {/* Inside a place: mint spraying, the jukebox, duel invites and room news. */}
       {meP && rooms.myRoom && (
         <Safe name="Room activity">
-          <RoomActivityLayer roundId={round?.id ?? null} roomId={rooms.myRoom} me={meP} />
+          <RoomActivityLayer roundId={actRound} roomId={rooms.myRoom} me={meP} />
         </Safe>
       )}
 
@@ -2948,7 +2950,7 @@ export function Game({
           level={guest ? undefined : me.level}
           onPhone={() => { setMenu(false); setPhone("home"); }}
           onMyJob={guest || worldId ? undefined : () => { setMenu(false); setJobsAt(null); }}
-          onGames={worldId ? undefined : () => { setMenu(false); setGamesOpen({}); }}
+          onGames={() => { setMenu(false); setGamesOpen({}); }}
           onChangePin={() => router.push("/welcome")}
           onSignOut={() => { setMenu(false); setConfirmSignOut(true); }}
         />
@@ -3311,7 +3313,7 @@ export function Game({
             roomId={activity.place}
             me={meP}
             members={rooms.members}
-            roundId={round?.id ?? null}
+            roundId={actRound}
             onClose={() => setActivity(null)}
             seating={rooms}
             ordering={{
@@ -3751,7 +3753,7 @@ export function Game({
                 )}
               </button>
             )}
-            {!dockOpen && !isDancing && !worldId && (place || ride !== null) && (
+            {!dockOpen && !isDancing && (place || ride !== null) && (
               <button onClick={() => setGamesOpen({})} className="glass pointer-events-auto flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold shadow sm:text-sm">
                 <Gamepad2 className="size-4 text-[#7048e8]" />
                 Games

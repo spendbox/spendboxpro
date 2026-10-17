@@ -16,7 +16,10 @@ careers, other players in your story): `docs/LIFE_WHEEL.md`.
 - Going into a place makes one more likely soon after (one that fits there: a wrong bill in a
   restaurant, a plank challenge at the gym, the offering basket at church).
 - Never while a card or a full-screen tool is open, while you're taking a photo or on a ride, or
-  while the game isn't on screen. It waits and tries again.
+  while the game isn't on screen. Only while you're really playing: you touched the screen (or a
+  key) in the last two minutes. It waits and tries again.
+- A card you leave goes by itself: when you put the phone down or switch apps, and after 28
+  minutes on screen (just before the server lets it go), so you never tap one that's passed.
 - Street moments at least 10 minutes after any moment; road moments at least 5 minutes after the
   last road moment (game-db/119). At most 40 a day, street and road together (the server keeps to
   this). A big one (`size: "big"`) at most every 3 days.
