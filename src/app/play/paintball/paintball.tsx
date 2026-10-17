@@ -28,6 +28,11 @@ export type Result = { won: boolean; draw: boolean; scores: [number, number]; ro
 type Screen = { k: "menu" } | { k: "room"; code: string; quick: boolean } | { k: "play"; code: string | null; quick: boolean; start: Extract<Msg, { t: "start" }> } | { k: "done"; code: string | null; quick: boolean; result: Result };
 
 const MAX = 8;
+/** How often a phone says where its player is (ms); standing still, at least this often (ms). */
+const SEND_MS = 250;
+const IDLE_MS = 1000;
+/** How far behind the others are drawn (s), so there are always two updates to smooth between. */
+const SMOOTH_S = 0.3;
 const BOT_NAMES = ["Tunde", "Ada", "Bayo", "Chika", "Emeka", "Funmi", "Kemi", "Segun", "Ngozi", "Dayo", "Ife", "Obi", "Zainab", "Lola"];
 
 /** Fill a roster to 4 a side (people first, then bots), teams in turn. */
@@ -374,6 +379,8 @@ export function Match({ me, start, net, onQuit, onEnd, inviteTo }: { me: Me; sta
     let myShots: number[][] = [];
     let botShots = new Map<string, number[][]>();
     let lastSend = 0;
+    let lastBots = 0;
+    let lastP: number[] | null = null;
     let lastHud = 0;
     let hitFlash = 0;
     let outBy = "";
@@ -630,7 +637,7 @@ export function Match({ me, start, net, onQuit, onEnd, inviteTo }: { me: Me; sta
         if (a.id === me.id || (a.bot && host)) continue;
         const list = snaps.get(a.id);
         if (!list?.length) continue;
-        const rt = t - 0.13;
+        const rt = t - SMOOTH_S;
         let i = list.length - 1;
         while (i > 0 && list[i - 1].t > rt) i--;
         const s1 = list[i];
@@ -696,17 +703,25 @@ export function Match({ me, start, net, onQuit, onEnd, inviteTo }: { me: Me; sta
         } else sc.moveBall(b);
       }
 
-      // Tell the others where I am (and the bots, if I run them), about 8 times a second.
-      if (net && now - lastSend > 125) {
-        lastSend = now;
+      // Tell the others where I am (and the bots, if I run them), 4 times a second; standing
+      // still with nothing to say, once a second (so they know I'm still here). Every message is
+      // paid for (Supabase Realtime, docs/COSTS.md); the others smooth out what's in between.
+      if (net && now - lastSend > SEND_MS) {
         const p = [mine.body.x, mine.body.y, mine.body.z, mine.yaw, mine.pitch, mine.alive ? 1 : 0].map((v) => Math.round(v * 100) / 100);
-        net.send({ t: "s", m: start.m, i: me.id, p, sh: myShots.length ? myShots : undefined });
-        myShots = [];
-        if (host) {
-          const bots = [...actors.values()].filter((a) => a.bot).map((a) => ({ i: a.id, p: [a.body.x, a.body.y, a.body.z, a.yaw, a.pitch, a.alive ? 1 : 0].map((v) => Math.round(v * 100) / 100), sh: botShots.get(a.id) }));
-          net.send({ t: "b", m: start.m, bots });
-          botShots = new Map();
+        const was = lastP;
+        const still = !myShots.length && !!was && p.every((v, k) => v === was[k]);
+        if (!still || now - lastSend > IDLE_MS) {
+          lastSend = now;
+          lastP = p;
+          net.send({ t: "s", m: start.m, i: me.id, p, sh: myShots.length ? myShots : undefined });
+          myShots = [];
         }
+      }
+      if (net && host && now - lastBots > SEND_MS) {
+        lastBots = now;
+        const bots = [...actors.values()].filter((a) => a.bot).map((a) => ({ i: a.id, p: [a.body.x, a.body.y, a.body.z, a.yaw, a.pitch, a.alive ? 1 : 0].map((v) => Math.round(v * 100) / 100), sh: botShots.get(a.id) }));
+        net.send({ t: "b", m: start.m, bots });
+        botShots = new Map();
       }
 
       // Draw.

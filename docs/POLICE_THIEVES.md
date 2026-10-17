@@ -76,9 +76,10 @@ could still lie about hits during a match: a real game server is the fix (see be
 
 ## Still to do
 - A game server (Colyseus, docs/PAINTBALL_PLAN.md) so hits and results are decided off the phones,
-  and so big matches don't run up Realtime messages (a full 8 v 8 sends about 16 × 5 updates a
-  second to 16 phones: roughly 0.8m messages a match; 3 games a day is about 70m a month at full
-  rooms, ~$170 on Supabase's $2.50 a million).
+  and so big matches don't run up Realtime messages (a full 8 v 8 sends up to 16 × 3 updates a
+  second to 16 phones, fewer while players stand still: roughly 0.3m to 0.5m messages a match;
+  3 games a day is about 30m to 45m a month at full rooms, $60 to $100 on Supabase's $2.50 a
+  million).
 - A push notification 10 minutes before each game for those signed up.
 - Voice chat for teams (the call code could be reused).
 - More scheduled games.
