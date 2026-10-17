@@ -30,9 +30,13 @@ down a challenge, a minute to gather players, a game floating over the city, a p
    it (faded if they've left), a chat along the bottom and a voice call for the players
    (src/app/play/call, docs/VOICE_CALLS.md).
 7. **The winner takes the pool**, less a tenth.
-   - Every player's game works out who won, and the pool is paid once the players agree: more
-     than half say the same winner, or a loser owns up.
-   - If only one name is said and nobody disagrees for 2 minutes, that player is paid.
+   - Every player's game works out who won, and the pool is paid once the other players agree
+     (game-db/124): more than half of the others still in say the same winner (with two
+     players, the loser owns up), or everyone else gave up. Saying you won counts for nothing.
+   - A lone "I won", or players who disagree: after 3 minutes everyone's stake comes back. Nobody
+     is ever paid on their own word.
+   - Whot! is dealt and refereed by the server, which pays the winner itself (docs/GAME_TABLES.md).
+   - New accounts (under 3 days old or below level 5) can put at most ₥500 a day into pools.
 
 ## Play: host a game
 
@@ -87,9 +91,10 @@ colour, icon, blurb, and optional search tags. Set the engine once its turn game
 
 - **Normal finish.** Every player's game works out the result, and each phone tells the server
   and keeps telling it every few seconds until it's settled.
-  - **Paid at once** when more than half agree, or when a loser's phone names the winner.
-  - **If the others have closed the game**, a lone answer is settled after 2 minutes, by the
-    phones still open or the next look at the map.
+  - **Paid at once** when more than half of the other players agree, or when a loser's phone
+    names the winner in a game of two.
+  - **No agreement in 3 minutes** (a lone answer, or a dispute): everyone's stake comes back,
+    settled by the phones still open or the next look at the map.
 - **A draw** (Whot! can end in a tie): everyone's stake comes back.
 - **Leaving mid-game** asks first.
   - With one other player, they win the pool.

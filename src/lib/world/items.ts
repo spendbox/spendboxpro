@@ -185,8 +185,8 @@ export const shopKind = (id: string) => SHOP.find((k) => k.id === id);
 
 /** Things you might find going about the city (once in a while, when you go somewhere). */
 export const FINDS = ["novel", "beads", "dumbbells", "ankara", "business_book", "fan"];
-/** How often going somewhere turns something up. */
-export const FIND_CHANCE = 0.08;
+// How often going somewhere turns something up, and how many a day: the database decides
+// (game-db/124 trip_find_chance and trip_find_daily_max).
 /** Only cheap things can be swiped from a stall, and it often goes wrong. */
 export const STEAL_MAX = 50_000;
 export const CAUGHT_CHANCE = 0.4;

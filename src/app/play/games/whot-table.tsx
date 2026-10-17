@@ -1,7 +1,7 @@
 "use client";
 
 import { OnTop } from "../on-top";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Crown, Eye, LoaderCircle, MessageCircle, Mic, MicOff, PhoneOff, Play, RotateCcw, Send, Users, X } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar } from "@/lib/avatar";
@@ -14,14 +14,17 @@ import { leaveChallenge, reportWinner, startChallengeNow, type ChallengeView } f
 import { useChallengeChannel } from "../fight/channel";
 import { SHAPES, WHOT, playable, rules, shapeOf, valueOf, type M, type S } from "../minigames/turns/whot";
 import { playSfx } from "../sound";
+import { whotMove, whotState, type WhotView } from "./whot-actions";
 import { CardBack, CardFace, ShapeIcon } from "./whot-cards";
 
 // Whot! at a full-screen table (docs/GAME_TABLES.md): you at the bottom with your hand fanned out,
 // the others round the table with their cards face down, the market and the pile in the middle,
 // big call-outs for the special cards, a timer on every turn, chat bubbles and a voice call.
-// Anyone can watch (everyone's cards face down). Every phone plays the same game from the same
-// shuffle; only the moves travel, and anyone arriving late (or watching) catches up from the
-// players' list of moves. The money is the server's: it pays the pool once the players agree.
+// Anyone can watch (everyone's cards face down). The server deals and referees the game
+// (./whot-actions.ts): each phone is sent only its own hand, sends its moves there, and asks for
+// the game as it is (every few seconds, and at once when another phone says it moved); the server
+// pays the winner. Before game-db/124 is run, the old way: every phone plays the same game from
+// the same shuffle, only the moves travel, and the players agree on who won.
 
 type Me = { id: string; name: string; avatar: unknown };
 type Kind = "me" | "remote" | "bot";
@@ -135,6 +138,45 @@ function useWhot({ seed, kinds, watching, ch, live }: { seed: number; kinds: Kin
   return { state, pile, count, turn, move };
 }
 
+/** The game as the server has it (./whot-actions.ts). off: not there yet (game-db/124), so the phones play it themselves. */
+function useWhotServer({ id, ch, asking, live, onMessage }: { id: number; ch: ReturnType<typeof useChallengeChannel>; asking: boolean; live: boolean; onMessage: (text: string, good: boolean) => void }) {
+  const [v, setV] = useState<WhotView | null>(null);
+  const nRef = useRef(-1);
+  const busy = useRef(false);
+  const take = useCallback((nv: WhotView | null) => {
+    if (!nv) return;
+    if (nv.off) return setV(nv);
+    if (nv.n < nRef.current) return;
+    if (nRef.current >= 0 && nv.n > nRef.current) playSfx(CALLOUT[nv.s.log] ? "chime" : "tick");
+    nRef.current = nv.n;
+    setV(nv);
+  }, []);
+  const ask = useCallback(() => void whotState(id).then(take, () => undefined), [id, take]);
+  // As the game opens (and once it's over, for how it ended); every few seconds while it's played.
+  useEffect(() => {
+    if (!asking) return;
+    ask();
+    if (!live) return;
+    const t = setInterval(ask, 3000);
+    return () => clearInterval(t);
+  }, [asking, live, ask]);
+  // Another phone moved: ask now.
+  useEffect(() => ch.online.listen((raw) => void ((raw as unknown as Record<string, unknown>).t === "wnudge" && ask())), [ch.online, ask]);
+  const move = (m: M) => {
+    if (!v || v.off || busy.current || rules.turn(v.s) !== v.seat) return;
+    busy.current = true;
+    void whotMove(id, v.n, m)
+      .then((r) => {
+        take(r.view);
+        if (r.ok) ch.post({ t: "wnudge" });
+        else if (r.error) onMessage(r.error, false);
+      })
+      .catch(() => onMessage("The connection blinked. Try again.", false))
+      .finally(() => (busy.current = false));
+  };
+  return { v, move };
+}
+
 export function WhotTable({
   view,
   me,
@@ -185,10 +227,21 @@ export function WhotTable({
   }, [playing, ids, me.id]);
   const kinds: Kind[] = useMemo(() => players.map((p) => (p.id === me.id ? "me" : gone.includes(p.id) ? "bot" : "remote")), [players, me.id, gone]);
 
-  const game = useWhot({ seed: view.seed, kinds, watching, ch, live: playing });
+  // The server's game; the phones' own only before game-db/124 is run.
+  const server = useWhotServer({ id: view.id, ch, asking: view.status !== "open", live: playing, onMessage });
+  const sv = server.v && !server.v.off ? server.v : null;
+  const peer = !!server.v?.off;
+  const own = useWhot({ seed: view.seed, kinds, watching, ch, live: playing && peer });
+  // Until the server's game arrives: everyone's cards face down, nothing to play.
+  const waiting = useMemo<S>(() => ({ hands: players.map(() => [-1, -1, -1, -1, -1]), market: [], top: 0, ask: null, turn: 0, n: 0, seed: 0, won: null, log: "" }), [players]);
+  const game = peer
+    ? own
+    : { state: sv?.s ?? waiting, pile: sv?.pile ?? [], count: sv?.n ?? 0, turn: sv ? rules.turn(sv.s) : 0, move: server.move };
   const { state, pile, turn } = game;
   const over = turn < 0;
-  const myTurn = !over && turn === mySeat && playing;
+  const myTurn = !over && turn === mySeat && playing && (peer || !!sv);
+  // Who the computer plays for: as the server says (or, the old way, whoever this phone saw go).
+  const shown: Kind[] = peer || !sv ? kinds : players.map((p, i) => (p.id === me.id ? "me" : sv.bots.includes(i) ? "bot" : "remote"));
 
   // The timer on each turn (from when this phone saw it start); on your own turn, time up means
   // you go to market.
@@ -206,13 +259,14 @@ export function WhotTable({
   const calloutText = CALLOUT[state.log] ?? (state.log.startsWith("Whot!") ? `⭐ ${state.log.toUpperCase()}` : null);
   const banner = calloutText && game.count > 0 && now - tk.at < 1500 ? { text: calloutText, at: game.count } : null;
 
-  // How it ended, told to the server until it's settled (players only).
+  // How it ended, told to the server until it's settled (players only; only the old way: the
+  // server's own game is settled by the server).
   const claim = useMemo(() => {
-    if (!over || watching || !playing) return null;
+    if (!over || watching || !playing || !peer) return null;
     const w = rules.winners(state) ?? [];
     const winner = w.length === 1 ? (players[w[0]]?.id ?? null) : null;
     return winner ? { winner, draw: false } : { winner: null, draw: true };
-  }, [over, watching, playing, state, players]);
+  }, [over, watching, playing, peer, state, players]);
   const claimKey = claim ? `${claim.winner}:${claim.draw}` : "";
   useEffect(() => {
     if (claimKey) playSfx(claimKey.startsWith(`${me.id}:`) ? "found" : "miss");
@@ -341,7 +395,7 @@ export function WhotTable({
                 cw={cw}
                 active={turn === seat && !over}
                 left={turnLeft}
-                bot={kinds[seat] === "bot"}
+                bot={shown[seat] === "bot"}
                 talking={inCall.has(players[seat]?.id ?? "")}
                 bubble={bubbles.get(players[seat]?.id ?? "")}
                 winner={view.winner === players[seat]?.id}
@@ -406,7 +460,7 @@ export function WhotTable({
                 : myTurn
                   ? "Your turn: play a card, or go to market"
                   : turn >= 0
-                    ? kinds[turn] === "bot"
+                    ? shown[turn] === "bot"
                       ? `${players[turn]?.name} has left: the computer plays for them`
                       : `${players[turn]?.name ?? "Someone"}'s turn`
                     : ""

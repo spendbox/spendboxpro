@@ -990,10 +990,10 @@ export function Game({
     const ping = () => {
       if (!isHere()) return onlineIdle();
       void fetch(`/api/active?region=${encodeURIComponent(worldId)}`, { method: "POST", cache: "no-store" })
-        .then((r) => (r.ok ? (r.json() as Promise<{ ok: boolean; paid?: number; rate?: number; left?: number; latest?: Latest | null }>) : null))
+        .then((r) => (r.ok ? (r.json() as Promise<{ ok: boolean; paid?: number; rate?: number; left?: number; idle?: boolean; latest?: Latest | null }>) : null))
         .then((d) => {
           if (!d?.ok) return;
-          onlinePinged(d.paid ?? 0, d.rate ?? 0, d.left ?? 0);
+          onlinePinged(d.paid ?? 0, d.rate ?? 0, d.left ?? 0, !!d.idle);
           if (d.latest) setLatest(d.latest);
         })
         .catch(() => {});

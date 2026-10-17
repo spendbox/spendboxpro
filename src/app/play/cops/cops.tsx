@@ -25,6 +25,8 @@ type Me = { id: string; name: string; avatar?: unknown };
 /** sample: the code of the friends' room a sample game is played from (null: alone, or the real game). */
 type Screen = { k: "lobby" } | { k: "room" } | { k: "play"; setup: Setup; live: boolean; sample: boolean } | { k: "done"; result: EndResult; setup: Setup; live: boolean; sample: boolean };
 const TODS = ["day", "dusk", "night"] as const;
+/** The sample games box in the lobby: hidden for now (true shows it again). */
+const SHOW_SAMPLES = false;
 
 /** A sample game alone against bots: 5 minutes, a random city and time of day, every weapon. */
 function soloSample(p: Me, tm: number): Setup {
@@ -172,7 +174,8 @@ export function CopsRobbers({ me, onClose, demo }: { me: Me | null; onClose: () 
           </div>
 
           {/* Sample games: free, any time, every weapon to try; nothing to pay and nothing won. */}
-          <div className="space-y-2 rounded-3xl border border-white/10 bg-black/40 p-4 text-white">
+          {SHOW_SAMPLES && (
+            <div className="space-y-2 rounded-3xl border border-white/10 bg-black/40 p-4 text-white">
             <p className="text-[11px] font-black tracking-[0.2em] text-white/55">SAMPLE GAMES · FREE · ANY TIME</p>
             <p className="text-xs text-white/60">Try it before the real thing: every weapon and a tank to try, unlimited lives, 5 minutes. Nothing to pay, nothing to win.</p>
             <div className="flex gap-2">
@@ -198,8 +201,9 @@ export function CopsRobbers({ me, onClose, demo }: { me: Me | null; onClose: () 
                 Join
               </button>
             </form>
-          </div>
-          {off && <p className="rounded-2xl bg-white/10 p-3 text-center text-sm text-white/80">Scheduled games are switched on soon. Practice against bots meanwhile.</p>}
+            </div>
+          )}
+          {off && <p className="rounded-2xl bg-white/10 p-3 text-center text-sm text-white/80">Scheduled games are switched on soon.</p>}
           {err && <p className="rounded-2xl bg-[#ffe3e3] px-3 py-2 text-center text-sm font-semibold text-[#c92a2a]">{err}</p>}
 
           {/* The game being played now. */}

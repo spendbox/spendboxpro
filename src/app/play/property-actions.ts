@@ -15,7 +15,7 @@ import { discounted } from "@/lib/world/rep-levels";
 import { myThings } from "./item-actions";
 import { cheapestCommute, cheapestRide, tripFareMint, tripKmBetween, type Commute } from "@/lib/world/work";
 import { ferryKmBetween } from "@/lib/world/trips";
-import { FIND_CHANCE, FINDS, mintOf, shopKind } from "@/lib/world/items";
+import { FINDS, mintOf, shopKind } from "@/lib/world/items";
 import { collectPay } from "./work-actions";
 import { syncGrowth } from "@/lib/world/growth-server";
 
@@ -37,6 +37,13 @@ function planFor(region: string): CityPlan | null {
 }
 
 const n = (v: unknown) => Number(v ?? 0) || 0;
+/** The map spot in a place or home id ("lagos:12,-40" or "lagos:12,-40/3"), or null. */
+const spotOf = (id: string | null) => {
+  const m = /:(-?\d+),(-?\d+)/.exec(id ?? "");
+  return m ? { x: Number(m[1]), z: Number(m[2]) } : null;
+};
+/** How far from where you last were the phone can say you walked to (map tiles; 10 to a km). */
+const WALK_TILES = 15;
 
 function say(message: string | undefined): PropertyResult {
   const [code, arg] = (message ?? "").split(":");
@@ -52,6 +59,7 @@ function say(message: string | undefined): PropertyResult {
     bad_name: "Names are 2 to 40 letters and numbers.",
     frozen: "Your account is paused right now.",
     unknown_player: "Please sign in again.",
+    too_fast: "Slow down: that's a lot of trips in a minute. Try again in a moment.",
   };
   if (words[code]) return { ok: false, error: words[code] };
   console.error("Property action failed", message);
@@ -293,8 +301,14 @@ export async function travelTo(buildingId: string, drive?: boolean, from?: { x: 
   ]);
   if (!life) return { ok: false, error: "Start your life first." };
   if (jail) return { ok: false, error: `You're in jail until ${new Date(String(jail)).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" })}. Wait it out, or try a bribe.` };
-  const onFoot = !!from && Number.isFinite(from.x) && Number.isFinite(from.z);
-  const start = onFoot ? `${spot.region}:${Math.round(from!.x)},${Math.round(from!.z)}` : ((life.at_place as string | null) ?? (life.home_unit as string | null));
+  // Where you last were, as the server has it. Walking on the map isn't seen by the server, so
+  // the spot the phone says you walked to only counts within a walk of there (a phone saying it's
+  // already at the door doesn't make every trip free).
+  const stored = (life.at_place as string | null) ?? (life.home_unit as string | null);
+  const was = spotOf(stored);
+  const sent = !!from && Number.isFinite(from.x) && Number.isFinite(from.z);
+  const onFoot = sent && (!was || Math.hypot(from!.x - was.x, from!.z - was.z) <= WALK_TILES);
+  const start = onFoot ? `${spot.region}:${Math.round(from!.x)},${Math.round(from!.z)}` : stored;
   const km = start ? tripKmBetween(start, buildingId) : null;
   // Over the water to an island with no bridge: a ferry, and the ride either side.
   const ferry = start ? ferryKmBetween(start, buildingId) : 0;
@@ -313,9 +327,11 @@ export async function travelTo(buildingId: string, drive?: boolean, from?: { x: 
     if (code === "not_enough") return { ok: false, error: "You don't have enough for the fare there." };
     return say(error.message);
   }
-  // Now and then you find something on the way (src/lib/world/items.ts).
+  // Now and then you find something on the way (src/lib/world/items.ts): rolled in the database,
+  // a few a day at most (game-db/124; nothing is found before it's run), and never on the spot.
   let found: string | undefined;
-  if (Math.random() < FIND_CHANCE) {
+  const lucky = km !== null && km >= 0.2 && !!(await db.rpc("trip_find", { p_user: userId })).data;
+  if (lucky) {
     const k = shopKind(FINDS[Math.floor(Math.random() * FINDS.length)]);
     const prices = regionMap(spot.region)!.region.prices;
     if (k) {

@@ -349,7 +349,7 @@ function Assets({
       {/* Rewards for showing up: just being here pays. */}
       <div className="mt-3 rounded-3xl bg-gold/15 p-4">
         <p className="text-sm font-bold">🎉 Rewards for showing up</p>
-        <p className="text-[11px] text-muted">Free money for being here and having fun: a daily gift, pay for every minute you&apos;re online, wins and missions.</p>
+        <p className="text-[11px] text-muted">Free money for being here and having fun: a daily gift, pay for every minute you&apos;re online and playing, wins and missions.</p>
         {play === undefined ? (
           <div className="mt-2 h-16 animate-pulse rounded-2xl bg-ink/5" />
         ) : (
