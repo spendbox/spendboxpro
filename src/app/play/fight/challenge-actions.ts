@@ -22,6 +22,7 @@ const OFF = "Challenges are switched on soon (the game's owner has one update to
 function say(message: string): Fail {
   const [code, arg] = message.split(":");
   if (code === "not_enough") return { ok: false, error: `You need ${arg ? naira(arg) : "more"} for that.` };
+  if (code === "new_stake_cap") return { ok: false, error: `New accounts can put ${arg && Number(arg) > 0 ? `only ${naira(arg)} more` : "no more"} into games today. The limit lifts once your account is 3 days old and level 5.` };
   if (code === "busy") return { ok: false, error: "You're already in a challenge. Finish that one first." };
   if (code === "started") return { ok: false, error: "Too late: that one has started." };
   if (code === "full") return { ok: false, error: "That one is full." };

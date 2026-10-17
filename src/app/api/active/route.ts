@@ -35,8 +35,10 @@ async function latestFor(db: Db, userId: string, region: string | null) {
 /**
  * POST /api/active: a minute of you actually playing (the game sends it at most once a minute,
  * only while it's open in front of you and you've touched it lately). It counts towards tomorrow's
- * daily gift (game-db/073) and pays you for being online (game-db/083; up to 4 hours a day).
- * Answers { ok, minutes, paid, rate, left } (paid and rate in mint), and latest: what's new (with
+ * daily gift (game-db/073) and pays you for being online (game-db/083; up to 4 hours a day), once
+ * the server has seen you do something in the last 20 minutes (game-db/124: a trip, a message, a
+ * game...). Answers { ok, minutes, paid, rate, left, idle } (paid and rate in mint; idle: not paid
+ * for that reason), and latest: what's new (with
  * ?region=, your city's too), so the game only fetches notices, events and the Town Hall when
  * something changed.
  */
@@ -48,8 +50,8 @@ export async function POST(request: NextRequest) {
   const region = asked && REGIONS[asked] ? asked : null;
   const [{ data, error }, latest] = await Promise.all([db.rpc("online_ping", { p_user: userId }), latestFor(db, userId, region).catch(() => null)]);
   if (!error && data) {
-    const d = data as { minutes?: number; paid?: number; rate?: number; left?: number };
-    return NextResponse.json({ ok: true, minutes: Number(d.minutes ?? 0), paid: Number(d.paid ?? 0), rate: Number(d.rate ?? 0), left: Number(d.left ?? 0), latest });
+    const d = data as { minutes?: number; paid?: number; rate?: number; left?: number; idle?: boolean };
+    return NextResponse.json({ ok: true, minutes: Number(d.minutes ?? 0), paid: Number(d.paid ?? 0), rate: Number(d.rate ?? 0), left: Number(d.left ?? 0), idle: !!d.idle, latest });
   }
   // Before part 83 is run: counted, not paid.
   const { data: m, error: e2 } = await db.rpc("active_ping", { p_user: userId });

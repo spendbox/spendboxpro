@@ -4,20 +4,29 @@ The fixes to make before opening Newtown to 1,000 players, from the full review 
 Ticked off here as they're done (most urgent first). Prices and limits: docs/COSTS.md.
 
 ## Stage 1: money cheats (urgent)
-- [ ] **1. Challenge pool claims.** A lone early "I won" (or "draw") pays out after 2 minutes
+- [x] **1. Challenge pool claims.** A lone early "I won" (or "draw") pays out after 2 minutes
   (game-db/070 `challenge_report`). Accept results only after the game really ended; a lone or
   disputed claim goes to a refund, never a payout.
-- [ ] **2. Colluding players.** In 3+ player games, one player naming a friend as winner pays at
+  Done (game-db/124): paid only when the other players agree; no agreement in 3 minutes, stakes back.
+- [x] **2. Colluding players.** In 3+ player games, one player naming a friend as winner pays at
   once (`v_owned`). Only a player conceding for themselves counts; otherwise a majority of the
   players not named. Limits on staked games for brand-new accounts (as for gifts).
-- [ ] **3. Trip farming.** Every trip has an 8% chance of a free item, with no limit, and the
+  Done (game-db/124): a majority of the others still in; new accounts ₥500 a day into pools.
+- [x] **3. Trip farming.** Every trip has an 8% chance of a free item, with no limit, and the
   starting point is taken from the phone (src/app/play/property-actions.ts `travelTo`). Use the
   stored position, roll the find in the database with a daily cap, and limit trips a minute.
-- [ ] **4. Card games readable and moves fakeable.** The deck comes from a seed every phone gets,
+  Done: the phone's spot counts only within 1.5 km of the stored one; finds rolled in the
+  database, 3 a day, not on trips under 200 m; 10 trips a minute (game-db/124).
+- [x] **4. Card games readable and moves fakeable.** The deck comes from a seed every phone gets,
   and table moves aren't checked (src/app/play/fight/channel.ts). Deal hands on the server
   (each player sees only theirs) and check who sent each move.
-- [ ] **5. Online pay farmed by scripts** (/api/active `online_ping`). Pay only for activity the
+  Done for Whot! (the one card game; src/app/play/games/whot-actions.ts, game-db/124 whot_games):
+  dealt, refereed and paid by the server. Chess, draughts and the party games still run on the
+  phones (their boards aren't secret, and the result needs the other players to agree).
+- [x] **5. Online pay farmed by scripts** (/api/active `online_ping`). Pay only for activity the
   server sees, or lower the rate.
+  Done (game-db/124): a minute is paid only if the server saw you do something in the last 20
+  minutes (a trip, a message, a moment, a game, spending). The rate is unchanged.
 
 ## Stage 2: players getting stuck
 - [ ] **6. Chess and draughts freeze** after a lost move or a reload, and late watchers see a
@@ -50,7 +59,7 @@ Ticked off here as they're done (most urgent first). Prices and limits: docs/COS
 ## Stage 4: before opening the doors (settings, no code)
 - [ ] Supabase: database on **Small** ($15), **spend cap off**, check the login uses the newer
   **JWT signing keys** (so each call doesn't ask Supabase Auth).
-- [ ] Run game-db/121 and 122 (TODO.md).
+- [ ] Run game-db/121, 122, 123 and 124 (TODO.md).
 
 ## Police & Thieves (new, docs/POLICE_THIEVES.md)
 - [ ] **17. Results come from the phones.** The pool is paid only when the losing side's phones

@@ -50,10 +50,13 @@ export function onlineIdle() {
   emit();
 }
 
-/** The game's once-a-minute "I'm here" ping came back (paid, rate in mint; left: paid minutes left today). */
-export function onlinePinged(paid: number, rate: number, left: number) {
+/**
+ * The game's once-a-minute "I'm here" ping came back (paid, rate in mint; left: paid minutes left
+ * today; idle: not paid, as the server hasn't seen you do anything lately, game-db/124).
+ */
+export function onlinePinged(paid: number, rate: number, left: number, idle = false) {
   if (paid > 0 && base !== null) base += paid;
-  online = { rate, at: Date.now(), on: rate > 0 && left > 0 };
+  online = { rate, at: Date.now(), on: rate > 0 && left > 0 && !idle };
   emit();
 }
 

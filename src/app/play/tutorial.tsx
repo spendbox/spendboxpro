@@ -353,7 +353,7 @@ export function Tutorial({
     {
       emoji: "💰",
       title: "Money comes to you",
-      text: "You earn for every minute you're online, plus a daily gift, missions, and ticket sales from events you host. Property you own pays you every day too. You can see it all under Things, then Assets.",
+      text: "You earn for every minute you're online and playing (going places, chatting, games), plus a daily gift, missions, and ticket sales from events you host. Property you own pays you every day too. You can see it all under Things, then Assets.",
     },
     {
       emoji: "👤",

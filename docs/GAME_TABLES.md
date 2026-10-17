@@ -54,10 +54,14 @@ If the market runs dry, the lowest hand wins (stars count double).
 
 ## Fair play
 
-- Every phone plays the same game from the same shuffle; only the moves travel, and each move is
-  checked against the rules.
-- Money only moves on the server: the stakes, the pool, and the prize once the players agree on
-  who won (as for every challenge, docs/CHALLENGES.md).
+- Whot! is dealt on the server (game-db/124, src/app/play/games/whot-actions.ts): the shuffle and
+  everyone's hands stay there, each phone gets only its own hand, a move counts only from the
+  player whose turn it is and only if the rules allow it, and the server pays the winner. A turn
+  left to run out is a trip to market; two in a row, and the computer plays that seat.
+- The other games: every phone plays the same game from the same shuffle; only the moves travel,
+  and each move is checked against the rules.
+- Money only moves on the server: the stakes, the pool, and the prize once the other players
+  agree on who won (as for every challenge, docs/CHALLENGES.md).
 - Someone gone for 40 seconds is played by the computer, so a game never freezes. Leaving
   mid-game with one other player gives them the pool.
 
