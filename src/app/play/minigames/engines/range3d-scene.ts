@@ -406,7 +406,7 @@ type Fx = { obj: THREE.Object3D; life: number; age: number; v?: THREE.Vector3; s
 
 /** Eye height and the camera's pull-back between rounds. */
 const EYE = new THREE.Vector3(0, 1.52, 0);
-const BACK = new THREE.Vector3(0, 1.72, 1.55);
+const BACK = new THREE.Vector3(0, 1.68, 2.15);
 
 export class RangeWorld {
   readonly scene = new THREE.Scene();
@@ -790,20 +790,23 @@ export class RangeWorld {
     for (const tx of [-1.45, 0, 1.45, -7.2, 7.2]) this.cube(E, track, 0.05, 0.07, 13, tx, 3.3, -7.5);
     for (const tx of [-7.2, 7.2]) this.cube(E, track, 0.08, 0.1, 30, tx, 3.25, -16);
     // The booth: bench, partitions, lane number, and a few things on the bench.
-    const top = this.mat("bench", "#30353c", 0.55, 0.15);
+    const top = this.mat("bench", "#4a515b", 0.5, 0.2);
     const panel = this.mat("booth", "#3a414b", 0.85);
     const orange = this.mat("orange", "#e8590c", 0.5);
     this.cube(E, top, 2.1, 0.06, 0.6, 0, 1.2, -1.05);
     this.cube(E, orange, 2.1, 0.025, 0.015, 0, 1.185, -1.355);
     this.cube(E, panel, 2.1, 1.17, 0.05, 0, 0.585, -1.3);
+    this.cube(E, top, 2.0, 0.035, 0.3, 0, 0.62, -1.12);
+    this.cube(E, orange, 2.1, 0.05, 0.01, 0, 1.0, -1.27);
+    this.cube(E, this.mat("ammo", "#4c5a3a", 0.7), 0.3, 0.18, 0.2, 0.55, 0.73, -1.12);
     for (const sx of [-1, 1]) {
       this.cube(E, panel, 0.06, 2.3, 1.9, sx * 1.08, 1.15, -0.45);
       this.cube(E, orange, 0.07, 0.04, 1.9, sx * 1.08, 2.3, -0.45);
     }
     const laneSign = this.track(new THREE.MeshStandardMaterial({ map: this.canvasTex(this.sign("LANE 4", "#e8590c", "#ffffff")), roughness: 0.6 }));
-    this.cube(E, laneSign, 0.9, 0.28, 0.03, 0, 2.75, -1.5);
-    this.cube(E, this.mat("ammo", "#4c5a3a", 0.7), 0.28, 0.16, 0.13, -0.6, 1.31, -1.05);
-    this.cube(E, this.mat("ammo-lid", "#3d4a2e", 0.6), 0.29, 0.03, 0.14, -0.6, 1.4, -1.05);
+    this.cube(E, laneSign, 0.7, 0.22, 0.03, 0, 2.95, -1.7);
+    this.cube(E, this.mat("ammo", "#4c5a3a", 0.7), 0.24, 0.13, 0.12, -0.72, 1.295, -0.98);
+    this.cube(E, this.mat("ammo-lid", "#3d4a2e", 0.6), 0.25, 0.025, 0.13, -0.72, 1.37, -0.98);
     for (let i = 0; i < 2; i++) {
       const m = this.cube(E, this.mat("mag", "#1d1f23", 0.5, 0.4), 0.03, 0.025, 0.13, 0.42 + i * 0.07, 1.245, -1.02);
       m.rotation.y = 0.2 - i * 0.35;
@@ -950,8 +953,8 @@ export class RangeWorld {
       const sup = this.glove(g, -0.012, 0.005, -0.31, 0);
       sup.rotation.z = -0.9;
       this.sleeve(g, new THREE.Vector3(-0.04, -0.02, -0.29), new THREE.Vector3(-0.16, -0.42, 0.02));
-      g.position.set(0.15, -0.15, -0.52);
-      g.rotation.set(0.03, 0.16, 0);
+      g.position.set(0.15, -0.17, -0.5);
+      g.rotation.set(0.05, 0.07, 0);
       g.userData.base = { p: g.position.clone(), r: g.rotation.clone() };
       this.guns.carbine = g;
     }
@@ -997,8 +1000,8 @@ export class RangeWorld {
       const sup = this.glove(g, -0.01, -0.03, -0.28, 0);
       sup.rotation.z = -0.9;
       this.sleeve(g, new THREE.Vector3(-0.04, -0.05, -0.26), new THREE.Vector3(-0.16, -0.42, 0.04));
-      g.position.set(0.15, -0.16, -0.5);
-      g.rotation.set(0.03, 0.15, 0);
+      g.position.set(0.16, -0.19, -0.5);
+      g.rotation.set(0.06, 0.05, 0);
       g.userData.base = { p: g.position.clone(), r: g.rotation.clone() };
       this.guns.rifle = g;
     }
@@ -1140,7 +1143,7 @@ export class RangeWorld {
     this.ray.set(EYE, dir);
     this.ray.far = 120;
     const hits = this.ray.intersectObjects([this.round, this.env], true);
-    const hit = hits.find((h) => shown(h.object) && !(h.object as THREE.Mesh).userData.noHit);
+    const hit = hits.find((h: THREE.Intersection) => shown(h.object) && !(h.object as THREE.Mesh).userData.noHit);
     if (!hit) return { kind: "miss", steel: false };
     const L = hit.object.userData.live as Live | undefined;
     if (L && L.face > 0.2) {
@@ -1219,8 +1222,8 @@ export class RangeWorld {
     if (slide) slide.position.z = Math.min(1, kick * 1.6) * 0.028;
     gs.flash -= dt;
     this.flash.visible = gs.flash > 0;
-    this.gunFlash.intensity = gs.flash > 0 ? 0.5 : 0;
-    this.rangeFlash.intensity = gs.flash > 0 ? 5 : 0;
+    this.gunFlash.intensity = gs.flash > 0 ? 0.12 : 0;
+    this.rangeFlash.intensity = gs.flash > 0 ? 3 : 0;
     if (gs.flash > 0) {
       const mz = gun.userData.muzzle as THREE.Object3D;
       mz.getWorldPosition(this.gunFlash.position);
