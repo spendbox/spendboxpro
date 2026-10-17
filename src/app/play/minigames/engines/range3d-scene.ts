@@ -786,8 +786,8 @@ export class RangeWorld {
       }
     }
     // Target carrier tracks over our lane, and over the lanes either side.
-    const track = this.mat("track", "#3a4048", 0.5, 0.6);
-    for (const tx of [-1.45, 0, 1.45, -7.2, 7.2]) this.cube(E, track, 0.08, 0.1, 13, tx, 3.25, -7);
+    const track = this.mat("track", "#59616b", 0.5, 0.6);
+    for (const tx of [-1.45, 0, 1.45, -7.2, 7.2]) this.cube(E, track, 0.05, 0.07, 13, tx, 3.3, -7.5);
     for (const tx of [-7.2, 7.2]) this.cube(E, track, 0.08, 0.1, 30, tx, 3.25, -16);
     // The booth: bench, partitions, lane number, and a few things on the bench.
     const top = this.mat("bench", "#30353c", 0.55, 0.15);
@@ -895,8 +895,8 @@ export class RangeWorld {
       for (const sx of [-1, 1]) this.cube(slide, poly, 0.007, 0.008, 0.008, sx * 0.008, 0.05, 0.012);
       g.add(slide);
       g.userData.slide = slide;
-      this.rbox(g, poly, 0.028, 0.024, 0.155, 0, 0.004, -0.065, 0.005);
-      const grip = this.rbox(g, poly, 0.029, 0.105, 0.048, 0, -0.046, 0.004, 0.008);
+      this.rbox(g, tan, 0.028, 0.024, 0.155, 0, 0.004, -0.065, 0.005);
+      const grip = this.rbox(g, tan, 0.029, 0.105, 0.048, 0, -0.046, 0.004, 0.008);
       grip.rotation.x = -0.28;
       this.cube(g, poly, 0.007, 0.006, 0.045, 0, -0.024, -0.045);
       this.cube(g, poly, 0.007, 0.026, 0.006, 0, -0.013, -0.068);
@@ -949,9 +949,9 @@ export class RangeWorld {
       this.sleeve(g, new THREE.Vector3(0.008, -0.085, 0.07), new THREE.Vector3(0.12, -0.3, 0.4));
       const sup = this.glove(g, -0.012, 0.005, -0.31, 0);
       sup.rotation.z = -0.9;
-      this.sleeve(g, new THREE.Vector3(-0.04, -0.02, -0.29), new THREE.Vector3(-0.3, -0.32, 0.05));
-      g.position.set(0.12, -0.13, -0.32);
-      g.rotation.set(0.02, 0.1, 0);
+      this.sleeve(g, new THREE.Vector3(-0.04, -0.02, -0.29), new THREE.Vector3(-0.16, -0.42, 0.02));
+      g.position.set(0.15, -0.15, -0.52);
+      g.rotation.set(0.03, 0.16, 0);
       g.userData.base = { p: g.position.clone(), r: g.rotation.clone() };
       this.guns.carbine = g;
     }
@@ -996,9 +996,9 @@ export class RangeWorld {
       this.sleeve(g, new THREE.Vector3(0.008, -0.085, 0.09), new THREE.Vector3(0.12, -0.3, 0.42));
       const sup = this.glove(g, -0.01, -0.03, -0.28, 0);
       sup.rotation.z = -0.9;
-      this.sleeve(g, new THREE.Vector3(-0.04, -0.05, -0.26), new THREE.Vector3(-0.3, -0.34, 0.06));
-      g.position.set(0.12, -0.13, -0.31);
-      g.rotation.set(0.02, 0.1, 0);
+      this.sleeve(g, new THREE.Vector3(-0.04, -0.05, -0.26), new THREE.Vector3(-0.16, -0.42, 0.04));
+      g.position.set(0.15, -0.16, -0.5);
+      g.rotation.set(0.03, 0.15, 0);
       g.userData.base = { p: g.position.clone(), r: g.rotation.clone() };
       this.guns.rifle = g;
     }
@@ -1025,7 +1025,7 @@ export class RangeWorld {
     this.turners = [];
     this.plan = plan;
     this.setWeapon(plan.weapon);
-    const steel = this.mat("track", "#3a4048", 0.5, 0.6);
+    const steel = this.mat("track", "#59616b", 0.5, 0.6);
     const wire = this.mat("wire", "#9aa0a6", 0.4, 0.8);
     const yel = this.mat("paint-y", "#e9b10a", 0.7);
     const wood = this.mat("wood", "#8a6a45", 0.9);
@@ -1219,7 +1219,7 @@ export class RangeWorld {
     if (slide) slide.position.z = Math.min(1, kick * 1.6) * 0.028;
     gs.flash -= dt;
     this.flash.visible = gs.flash > 0;
-    this.gunFlash.intensity = gs.flash > 0 ? 1.5 : 0;
+    this.gunFlash.intensity = gs.flash > 0 ? 0.5 : 0;
     this.rangeFlash.intensity = gs.flash > 0 ? 5 : 0;
     if (gs.flash > 0) {
       const mz = gun.userData.muzzle as THREE.Object3D;
