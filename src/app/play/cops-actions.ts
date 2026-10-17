@@ -30,7 +30,9 @@ function say(message: string | undefined): Fail {
   if (code === "unknown_player") return { ok: false, error: "Please sign in again." };
   if (code === "bad_time") return { ok: false, error: "That game isn't open for sign-ups." };
   console.error("Police & Thieves failed", message);
-  return { ok: false, error: "Couldn't do that just now. Try again." };
+  // The database's own reason, short, so a problem can be told apart from a blip (and fixed).
+  const why = (message ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
+  return { ok: false, error: `Couldn't do that just now. Try again.${why ? ` (${why})` : ""}` };
 }
 
 export type Mine = { in: boolean; side?: number; gear?: Loadout; spent?: number; room?: number | null; prize?: number; reported?: boolean };
