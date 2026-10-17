@@ -3,7 +3,9 @@
 import { naira } from "@/lib/brand";
 import { currentUserId } from "@/lib/game";
 import { clubEntryMint, gameFeeMint, MONORAIL_FARE, RIDE_FARE_NAIRA, rideFare, TRAIN_FARE, visitFee } from "@/lib/fees";
+import { spiralXY } from "@/lib/city/layout";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { REGIONS, regionMap } from "@/lib/world";
 import { MINIGAME_BY_ID } from "./minigames/registry";
 
 // Paying to go places: the first visit to a place in each town, and train fares (every time).
@@ -75,8 +77,13 @@ export async function payClubEntry(place: string, type: string | undefined): Pro
   if (!/^b:\d{1,7}$/.test(place)) return { ok: false, error: "Unknown place." };
   const userId = await currentUserId();
   if (!userId) return { ok: true, paid: 0, coins: 0, until: null };
-  const fee = clubEntryMint(place, type);
   const db = createAdminClient();
+  // A famous club has its own price (its landmark's): looked up on the map of the player's city.
+  const { data: life } = await db.from("lives").select("region").eq("user_id", userId).maybeSingle();
+  const region = String(life?.region ?? "");
+  const map = REGIONS[region] ? regionMap(region) : null;
+  const [x, z] = spiralXY(Number(place.slice(2)));
+  const fee = clubEntryMint(place, type, REGIONS[region]?.prices.perMint ?? 1_500, map?.spotAt(x, z)?.door);
   const { data, error } = await db.rpc("life_club_entry", { p_user: userId, p_place: place, p_fee: fee });
   if (error) {
     // Never free at the door: before part 67 is run, entry is switched off; you need a life first.

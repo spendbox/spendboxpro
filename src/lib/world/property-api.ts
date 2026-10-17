@@ -50,6 +50,8 @@ export type AssetsData = {
 };
 
 export type OwnedBuildingRow = { id: string; building: Building; name: string | null };
+/** The city's owned buildings that changed (/api/owned): at, ms to ask from next time; full, all of them. */
+export type OwnedChanges = { at: number; rows: OwnedBuildingRow[]; full: boolean };
 export type BuildingOwner = { unit: string; name: string; mine: boolean; forSale?: number | null; home?: boolean; /** Rented from the city (game-db/077), not owned. */ rented?: boolean };
 
 /** Your job on the real map (if any) and your skills (game days worked in each). */
@@ -108,6 +110,8 @@ export type PropertyApi = {
   renameBuilding: (buildingId: string, name: string) => Promise<PropertyResult>;
   myAssets: () => Promise<AssetsData | null>;
   ownedBuildings: (region: string) => Promise<OwnedBuildingRow[]>;
+  /** The same, whole once then only what changed (the game's; the labs leave it out). */
+  ownedChanges?: (region: string, since: number | null, fresh: boolean) => Promise<OwnedChanges | null>;
   buildingOwners: (buildingId: string) => Promise<BuildingOwner[]>;
   workStatus: () => Promise<WorkStatus | null>;
   takeJob: (placeId: string, job: string, mode: Commute, ticket?: string) => Promise<PropertyResult>;

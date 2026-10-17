@@ -67,21 +67,21 @@ paintball $80); from 10,000 the owned-buildings list (84 TB a month) is most of 
 
 ### The savings, biggest first
 
-1. **The owned-buildings list: one shared copy per city, and only what changed** (a cached GET
+1. **Done** (game-db/125, /api/owned). **The owned-buildings list: one shared copy per city, and only what changed** (a cached GET
    per region that the CDN serves, and `since=`; a building's row gets an updated_at). At 10,000
    daily players it saves about $20,000 a month (and the database size from 2XL to XL); at
    1,000 about $60, and 28 MB a day of each player's mobile data.
-2. **Police & Thieves sends fewer updates**: 3 a second instead of 5, and none while you stand
+2. **Done** (3 a second). **Police & Thieves sends fewer updates**: 3 a second instead of 5, and none while you stand
    still (the other phones already smooth movement out). About half its messages: $270 a month
    at 1,000 daily players, $1,900 at 10,000. At 100,000 only a game server (Colyseus,
    docs/PAINTBALL_PLAN.md) keeps it down.
-3. **Less polling (launch fix 15, and more)**: games near you every 2 minutes, not 30 s (a game
+3. **Done.** **Less polling (launch fix 15, and more)**: games near you every 2 minutes, not 30 s (a game
    changing already nudges every phone, map-news.ts); your assets and the city's buildings
    every 5 minutes, not every minute; bills and market every 5, not 2; who's online among your
    recent people answered by the minute's ping, not its own call. 11 calls a minute down to
    about 6. Saves about $10 at 1,000 daily players, $200 at 10,000 (Large instead of XL),
    $1,500 at 100,000.
-4. **Paintball 4 updates a second, not 8** (launch fix 14): $45 at 1,000, $450 at 10,000.
+4. **Done.** **Paintball 4 updates a second, not 8** (launch fix 14): $45 at 1,000, $450 at 10,000.
 5. **Counts over buildings from the server** (with the 90 s people look) instead of the area
    channels, keeping a live channel only for the place you're in: $11 at 1,000, $1,100 at
    10,000, $110,000 at 100,000.

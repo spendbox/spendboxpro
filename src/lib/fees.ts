@@ -63,15 +63,17 @@ const CLUB_ENTRY_NAIRA = [250_000, 250_000, 250_000, 250_000, 500_000, 500_000, 
 export function clubTier(naira: number) {
   return naira >= 10_000_000 ? "Billionaire's row" : naira >= 1_000_000 ? "VIP club" : naira >= 500_000 ? "Premium club" : "Club";
 }
-export function clubEntryNaira(place: string, type?: string) {
+/** door: a famous club's own price (Landmark.door, as real prices), else one picked by where it is. */
+export function clubEntryNaira(place: string, type?: string, door?: number) {
   if (type === "home" || type === "house") return 0;
+  if (door && door > 0) return everyday(door);
   let h = 7;
   for (const c of place) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   return CLUB_ENTRY_NAIRA[h % CLUB_ENTRY_NAIRA.length];
 }
 /** The same in mint. */
-export function clubEntryMint(place: string, type?: string, nairaPerMint = 1_500) {
-  return Math.round((clubEntryNaira(place, type) / nairaPerMint) * 100) / 100;
+export function clubEntryMint(place: string, type?: string, nairaPerMint = 1_500, door?: number) {
+  return Math.round((clubEntryNaira(place, type, door) / nairaPerMint) * 100) / 100;
 }
 /** How long a club's entry lasts once paid. */
 export const CLUB_ENTRY_MS = 24 * 3_600_000;

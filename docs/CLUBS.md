@@ -34,6 +34,10 @@ party room). Which club charges what is fixed by where it is (`src/lib/fees.ts`)
 | ₦1,000,000 | VIP club | 2 in 10 |
 | ₦10,000,000 | Billionaire's row | 1 in 10 |
 
+Famous clubs have their own price instead (a landmark's `door`, src/lib/world/regions): in Lagos,
+**Quilox** (Ozumba Mbadiwe Avenue) and **Vaniti** (Adeola Odeku Street) on Victoria Island, and
+**Cubana** in Ikeja GRA, all ₦10m (Billionaire's row). Placed from their listings (approx).
+
 Run `game-db/118_club_fees.sql` for the ₦10m doors: until then a door charges at most ₥1,000 (about ₦1.5m).
 
 ## Pole dancing

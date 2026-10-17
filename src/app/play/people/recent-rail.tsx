@@ -57,7 +57,8 @@ export function RecentRail({ meId, onPerson, onMessage }: { meId?: string; onPer
       if (live) setOnline(new Set(ids));
     };
     void ask();
-    const stop = whileHere(ask, 60_000);
+    // Every 3 minutes (who's online is counted over 4 minutes anyway).
+    const stop = whileHere(ask, 3 * 60_000);
     return () => {
       live = false;
       stop();

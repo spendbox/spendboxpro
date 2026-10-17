@@ -16,7 +16,8 @@ export type Water = 0 | 1 | 2;
 const BEYOND = 3;
 
 export type PlacedLandmark = { id: string; type: StructureType; name: string; ax: number; az: number; w: number; d: number; inside?: string[] };
-export type Spot = { id: string; kind: TileKind; name: string };
+/** door: a club's own price at the door (naira, as real prices; Landmark.door). */
+export type Spot = { id: string; kind: TileKind; name: string; door?: number };
 export type RoadTile = { kind: RoadKind; bridge: boolean; name?: string };
 
 export type RegionMap = {
@@ -261,7 +262,7 @@ export function compileRegion(region: Region): RegionMap {
       if (!inside(x, z)) skipped.push({ id: l.id, reason: "outside the region" });
       else if (taken.has(tileKey(x, z))) skipped.push({ id: l.id, reason: "overlaps another landmark" });
       else {
-        spots.set(tileKey(x, z), { id: l.id, kind: l.type, name: l.name });
+        spots.set(tileKey(x, z), { id: l.id, kind: l.type, name: l.name, ...(l.door ? { door: l.door } : {}) });
         spotList.push({ id: l.id, kind: l.type, name: l.name, x, z });
         taken.add(tileKey(x, z));
       }

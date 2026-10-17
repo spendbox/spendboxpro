@@ -29,6 +29,10 @@ export type Setup = { key: string | null; room: number; seed: number; fightAt: n
 export type EndRow = { id: string; name: string; team: number; bot: boolean; kills: number; downs: number; loot: number; returns: number; dmg: number; act: number; me: boolean };
 export type EndResult = { winner: number; scores: [number, number]; rows: EndRow[]; shot: string | null };
 
+/** How often a phone says where its player (and the bots it runs) are (ms). */
+const SEND_MS = 333;
+/** How far behind the others are drawn (s), so there are always two updates to smooth between. */
+const SMOOTH_S = 0.4;
 const GUN_ORDER: GunId[] = ["pistol", "smg", "shotgun", "rifle", "sniper", "rocket"];
 const BOT_NAMES = ["Tunde", "Ada", "Bayo", "Chika", "Emeka", "Funmi", "Kemi", "Segun", "Ngozi", "Dayo", "Ife", "Obi", "Zainab", "Lola", "Musa", "Uche"];
 const BOT_GUNS: Loadout[] = [{ rifle: 1 }, { smg: 1 }, { rifle: 1, grenade: 2 }, { shotgun: 1 }, { smg: 1, armour: 1 }, { rifle: 1, armour: 1 }];
@@ -135,6 +139,7 @@ export function Match({ me, setup, net, onQuit, onEnd }: { me: { id: string; nam
     let myShots: number[][] = [];
     let botShots = new Map<string, number[][]>();
     let lastSend = 0;
+    let lastBots = 0;
     let lastSentKey = "";
     let lastHud = 0;
     let lastSync = 0;
@@ -776,7 +781,7 @@ export function Match({ me, setup, net, onQuit, onEnd }: { me: { id: string; nam
         if (host && driven(a, here, t)) continue;
         const list = snaps.get(a.id);
         if (!list?.length) continue;
-        const rt = t - 0.15;
+        const rt = t - SMOOTH_S;
         let i = list.length - 1;
         while (i > 0 && list[i - 1].t > rt) i--;
         const s1 = list[i];
@@ -823,8 +828,10 @@ export function Match({ me, setup, net, onQuit, onEnd }: { me: { id: string; nam
         } else sc.moveShot(s);
       }
 
-      // Tell the others where I am (and the bots, if I run them): 5 times a second when something changed, else once a second.
-      if (net && !watch && mine && now - lastSend > 200) {
+      // Tell the others where I am: 3 times a second when something changed, else once a second
+      // (every message is paid for: Supabase Realtime, docs/COSTS.md; the others smooth out
+      // what's in between). The bots I run, 3 times a second whatever I'm doing.
+      if (net && !watch && mine && now - lastSend > SEND_MS) {
         const p = toState(mine);
         const key = p.join(",");
         if (key !== lastSentKey || myShots.length || now - lastSend > 1000) {
@@ -832,12 +839,13 @@ export function Match({ me, setup, net, onQuit, onEnd }: { me: { id: string; nam
           lastSentKey = key;
           net.send({ t: "s", i: me.id, p, sh: myShots.length ? myShots : undefined });
           myShots = [];
-          if (host) {
-            const bots = [...actors.values()].filter((a) => driven(a, here, t)).map((a) => ({ i: a.id, p: toState(a), sh: botShots.get(a.id) }));
-            if (bots.length) net.send({ t: "b", bots });
-            botShots = new Map();
-          }
         }
+      }
+      if (net && host && !watch && now - lastBots > SEND_MS) {
+        lastBots = now;
+        const bots = [...actors.values()].filter((a) => driven(a, here, t)).map((a) => ({ i: a.id, p: toState(a), sh: botShots.get(a.id) }));
+        if (bots.length) net.send({ t: "b", bots });
+        botShots = new Map();
       }
       if (net && host && !watch && now - lastSync > 3000) {
         lastSync = now;

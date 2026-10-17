@@ -65,9 +65,12 @@ Ticked off here as they're done (most urgent first). Prices and limits: docs/COS
   each match.
 - [ ] **13. Presence redraws the whole screen.** Only update when the numbers change, at most once
   a second.
-- [ ] **14. Paintball sends 8 updates a second.** 4 to 5, and only when someone moved.
-- [ ] **15. Polling.** The games-near-you list shared per city for a few seconds; poll less now that
+- [x] **14. Paintball sends 8 updates a second.** 4 to 5, and only when someone moved.
+  Done: 4 a second, once a second standing still; Police & Thieves 3 a second (was 5).
+- [x] **15. Polling.** The games-near-you list shared per city for a few seconds; poll less now that
   changes are pushed; the tutorial check every 30 to 60 s.
+  Done: games near you every 2 minutes (and on a new notice), bills and market 5, news and who's
+  online 3, missions 30 s; the city's buildings only what changed, every 5 (game-db/125).
 - [ ] **16. Play button on 360px phones** may sit over "Find a home"; make room in that row.
 
 ## Stage 4: before opening the doors (settings, no code)

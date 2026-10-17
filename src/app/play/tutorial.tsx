@@ -251,8 +251,8 @@ export function Tutorial({
           asking.current = false;
         });
     };
-    // Every 15 seconds while a mission's on (and straight away).
-    stop = whileHere(look, 15_000);
+    // Every 30 seconds while a mission's on (and straight away).
+    stop = whileHere(look, 30_000);
     look();
     return () => {
       alive = false;

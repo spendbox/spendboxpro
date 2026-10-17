@@ -426,7 +426,8 @@ export function useWorldLife({
         .catch(() => {});
     };
     const first = setTimeout(look, 15_000);
-    const every = whileHere(look, 60_000);
+    // Every 3 minutes (the news is the same for everyone, and big news isn't missed: it waits).
+    const every = whileHere(look, 3 * 60_000);
     const firstP = setTimeout(lookPlayers, 40_000);
     const everyP = setInterval(() => isHere() && lookPlayers(), 3 * 60_000);
     return () => {
@@ -509,11 +510,12 @@ export function useWorldLife({
       void api.lifeStatus().then(setStatus);
       void api.marketBoard().then(setBoard);
     }, 0);
-    // Bills, health, school and offers move on with time: look again now and then.
+    // Bills, health, school and offers move on with time: look again now and then (every 5
+    // minutes; your own changes show at once).
     const every = whileHere(() => {
       void api.lifeStatus().then(setStatus);
       void api.marketBoard().then(setBoard);
-    }, 120_000);
+    }, 5 * 60_000);
     return () => {
       clearTimeout(t);
       every();
