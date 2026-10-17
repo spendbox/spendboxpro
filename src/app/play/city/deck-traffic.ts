@@ -2,11 +2,14 @@
 // Link...): the decks are drawn along their real curves above the water and the streets
 // (src/lib/world/spans), off the street grid the rest of the traffic drives, so these cars run
 // along each deck's own path instead, both ways, keeping right, on and off at its ramps. Only the
-// decks in the part of the map being drawn get cars. Two instanced meshes.
+// decks in the part of the map being drawn get cars: saloons, taxis and danfos from the game's own
+// designs (city/vehicles.ts, light versions), one instanced mesh per design and colour.
 
 import * as THREE from "three";
 import type { RegionMap } from "@/lib/world/compile";
 import { keyOf, rushHour, type World } from "./world";
+import { Kit } from "./kit";
+import { carKit, danfoKit, lite } from "./vehicles";
 
 type Route = { pts: { x: number; y: number; z: number }[]; at: number[]; len: number; width: number };
 type DeckCar = { route: number; s: number; dir: 1 | -1; speed: number };
@@ -16,28 +19,29 @@ const PER_TILE = 0.32;
 const MAX = 260;
 
 export function createDeckTraffic(world: World, parent: THREE.Object3D) {
-  const boxGeo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
-  const bodyMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-  const topMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const solidMat = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true });
+  const glowMat = new THREE.MeshBasicMaterial({ vertexColors: true });
   let routes: Route[] = [];
   let cars: DeckCar[] = [];
-  let body: THREE.InstancedMesh | null = null;
-  let top: THREE.InstancedMesh | null = null;
+  type Model = { meshes: THREE.InstancedMesh[]; scale: number };
+  let models: Model[] = [];
+  let slots: { m: Model; i: number }[] = [];
   const m4 = new THREE.Matrix4();
   const q = new THREE.Quaternion();
   const up = new THREE.Vector3(0, 1, 0);
   const pos = new THREE.Vector3();
   const scl = new THREE.Vector3();
   const off = new THREE.Vector3();
-  const color = new THREE.Color();
 
   function clear() {
-    for (const m of [body, top]) {
-      if (!m) continue;
-      parent.remove(m);
-      m.dispose();
-    }
-    body = top = null;
+    for (const md of models)
+      for (const m of md.meshes) {
+        parent.remove(m);
+        m.geometry.dispose();
+        m.dispose();
+      }
+    models = [];
+    slots = [];
   }
 
   /** Cars for the decks in the part of the map being drawn. */
@@ -62,22 +66,42 @@ export function createDeckTraffic(world: World, parent: THREE.Object3D) {
       }
     }
     if (!cars.length) return;
-    body = new THREE.InstancedMesh(boxGeo, bodyMat, cars.length);
-    top = new THREE.InstancedMesh(boxGeo, topMat, cars.length);
-    body.castShadow = true;
-    cars.forEach((_, k) => {
-      body!.setColorAt(k, color.setHex(k % 9 === 0 ? 0xffd43b : palette[k % palette.length] ?? 0xe5484d));
-      top!.setColorAt(k, color.setHex(0xe9f2fb));
-    });
-    for (const m of [body, top]) {
-      m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      m.frustumCulled = false;
+    // Each car's design: a taxi now and then, a danfo, else a saloon in the city's colours.
+    const keyOf_ = (k: number) => (k % 9 === 0 ? "taxi" : k % 7 === 3 ? "danfo" : `car:${palette[k % palette.length] ?? 0xe5484d}`);
+    const keys = cars.map((_, k) => keyOf_(k));
+    const count = new Map<string, number>();
+    for (const key of keys) count.set(key, (count.get(key) ?? 0) + 1);
+    const byKey = new Map<string, Model & { used: number }>();
+    for (const [key, n] of count) {
+      const kk = new Kit();
+      lite(() => {
+        if (key === "taxi") carKit(kk, 0xf5c518, "taxi");
+        else if (key === "danfo") danfoKit(kk);
+        else carKit(kk, Number(key.slice(4)));
+      });
+      const meshes: THREE.InstancedMesh[] = [];
+      for (const [layer, mat] of [["solid", solidMat], ["glow", glowMat]] as const) {
+        const g = kk.take(layer);
+        if (!g) continue;
+        const m = new THREE.InstancedMesh(g, mat, n);
+        m.castShadow = layer === "solid";
+        m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        m.frustumCulled = false;
+        parent.add(m);
+        meshes.push(m);
+      }
+      const md = { meshes, scale: key === "danfo" ? 0.066 : 0.068, used: 0 };
+      byKey.set(key, md);
+      models.push(md);
     }
-    parent.add(body, top);
+    slots = keys.map((key) => {
+      const md = byKey.get(key)!;
+      return { m: md, i: md.used++ };
+    });
   }
 
   function update(dt: number) {
-    if (!body || !top) return;
+    if (!slots.length) return;
     for (let k = 0; k < cars.length; k++) {
       const c = cars[k];
       const r = routes[c.route];
@@ -105,23 +129,17 @@ export function createDeckTraffic(world: World, parent: THREE.Object3D) {
       off.set(-fz * lane, 0, fx * lane);
       pos.set(a.x + (b.x - a.x) * t + off.x, a.y + (b.y - a.y) * t + 0.01, a.z + (b.z - a.z) * t + off.z);
       q.setFromAxisAngle(up, Math.atan2(-fz, fx));
-      m4.compose(pos, q, scl.set(0.3, 0.09, 0.15));
-      body.setMatrixAt(k, m4);
-      pos.y += 0.09;
-      pos.x -= fx * 0.02;
-      pos.z -= fz * 0.02;
-      m4.compose(pos, q, scl.set(0.16, 0.06, 0.13));
-      top.setMatrixAt(k, m4);
+      const sl = slots[k];
+      m4.compose(pos, q, scl.setScalar(sl.m.scale));
+      for (const m of sl.m.meshes) m.setMatrixAt(sl.i, m4);
     }
-    body.instanceMatrix.needsUpdate = true;
-    top.instanceMatrix.needsUpdate = true;
+    for (const md of models) for (const m of md.meshes) m.instanceMatrix.needsUpdate = true;
   }
 
   function dispose() {
     clear();
-    boxGeo.dispose();
-    bodyMat.dispose();
-    topMat.dispose();
+    solidMat.dispose();
+    glowMat.dispose();
   }
 
   return { build, update, dispose };

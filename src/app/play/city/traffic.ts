@@ -1,12 +1,16 @@
 // Traffic: cars, taxis, vans, buses, trucks and articulated lorries driving the street
 // network, turning at junctions and bends (on smooth curves), queueing in the odd traffic jam
-// and stopping at bus stops. Road works close a street (cars turn back before them). Five
-// instanced meshes in all. A few buses and cars can be ridden: the city view asks where the
+// and stopping at bus stops. Road works close a street (cars turn back before them). Each one
+// is drawn from the game's own vehicle designs (city/vehicles.ts, their light versions): saloons,
+// jeeps, taxis, danfos, vans, BRT buses, lorries and articulated lorries, one instanced mesh per
+// design and colour. A few buses and cars can be ridden: the city view asks where the
 // one you're in is (pose) and you choose which way it turns at the next junction (steer).
 
 import * as THREE from "three";
 import { hash, type CityPlan, type Tile } from "@/lib/city/layout";
 import { BRIDGE_TOP, DIRS, keyOf, rushHour, type World } from "./world";
+import { Kit } from "./kit";
+import { brtBusKit, carKit, danfoKit, lite, lorryKit, tractorKit, trailerKit, vanKit } from "./vehicles";
 
 /** Vehicle kinds: 0 car, 1 taxi, 2 delivery van, 3 bus, 4 truck, 5 articulated lorry. */
 type Car = {
@@ -56,19 +60,16 @@ const MIX = [
 export function createTraffic(world: World, parent: THREE.Object3D) {
   const boxGeo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
   const mat = (opts: THREE.MeshLambertMaterialParameters = {}) => new THREE.MeshLambertMaterial({ color: 0xffffff, ...opts });
-  const bodyMat = mat();
-  const topMat = mat();
-  const extraMat = mat();
+  const solidMat = mat({ vertexColors: true });
   const lightMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-  const glowMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const glowMat = new THREE.MeshBasicMaterial({ vertexColors: true });
   let cars: Car[] = [];
-  let carBody: THREE.InstancedMesh | null = null;
-  let carTop: THREE.InstancedMesh | null = null;
   let carLights: THREE.InstancedMesh | null = null;
-  /** Truck boxes, lorry trailers, bus roofs. */
-  let carExtra: THREE.InstancedMesh | null = null;
-  /** Bus windows and taxi signs: they light up at night. */
-  let carGlow: THREE.InstancedMesh | null = null;
+  /** One instanced model per design and colour (metres, scaled into the city's units). */
+  type Model = { solid: THREE.InstancedMesh; glow: THREE.InstancedMesh | null; scale: number };
+  let models: Model[] = [];
+  /** Each car's model and place in it (and an articulated lorry's trailer). */
+  let slots: { m: Model; i: number; t?: { m: Model; i: number } }[] = [];
   let nightDrawn = -1;
   let seedNow = -1;
 
@@ -203,12 +204,20 @@ export function createTraffic(world: World, parent: THREE.Object3D) {
   }
 
   function clearMeshes() {
-    for (const m of [carBody, carTop, carLights, carExtra, carGlow]) {
-      if (!m) continue;
-      parent.remove(m);
-      m.dispose();
+    for (const md of models)
+      for (const m of [md.solid, md.glow]) {
+        if (!m) continue;
+        parent.remove(m);
+        m.geometry.dispose();
+        m.dispose();
+      }
+    models = [];
+    slots = [];
+    if (carLights) {
+      parent.remove(carLights);
+      carLights.dispose();
     }
-    carBody = carTop = carLights = carExtra = carGlow = null;
+    carLights = null;
   }
 
   /** Make the traffic for the city (keeping the cars already driving when it's the same city). */
@@ -259,34 +268,85 @@ export function createTraffic(world: World, parent: THREE.Object3D) {
     }
     buildJams(plan.seed);
     const N = Math.max(1, cars.length);
-    carBody = new THREE.InstancedMesh(boxGeo, bodyMat, N);
-    carTop = new THREE.InstancedMesh(boxGeo, topMat, N);
-    carExtra = new THREE.InstancedMesh(boxGeo, extraMat, N);
-    carGlow = new THREE.InstancedMesh(boxGeo, glowMat, N);
     // Two little lamps per car: headlights in front (on at night), brake lights behind.
     carLights = new THREE.InstancedMesh(boxGeo, lightMat, N * 2);
-    carBody.castShadow = true;
-    carExtra.castShadow = true;
     const pal = plan.palette.car;
     const pickC = (list: number[], k: number) => list[k % list.length];
-    cars.forEach((c, k) => {
-      const body =
-        c.kind === 0 ? pickC(pal, k) : c.kind === 1 ? 0xffd43b : c.kind === 2 ? pickC([0xffffff, 0xdee2e6, 0x1971c2, 0xe03131, 0xf08c00], k) : c.kind === 3 ? pickC([0xe03131, 0x1971c2, 0x2f9e44], plan.seed) : c.kind === 4 ? pickC([0xe03131, 0x1971c2, 0xf08c00, 0xffffff], k) : pickC([0x343a40, 0x1971c2, 0xe03131, 0xf1f3f5], k);
-      carBody!.setColorAt(k, color.setHex(body));
-      carTop!.setColorAt(k, color.setHex(c.kind <= 1 ? 0xe9f2fb : 0xbcd4e6));
-      carExtra!.setColorAt(k, color.setHex(c.kind === 3 ? 0xf1f3f5 : c.kind === 4 ? pickC([0xf1f3f5, 0xffd43b, 0xdee2e6, 0x69db7c], k) : pickC([0xe5484d, 0x228be6, 0xfab005, 0x2f9e44, 0xf1f3f5], k)));
-      carGlow!.setColorAt(k, color.setHex(0x2b3a4f));
-      c.lit = -1;
-    });
-    carBody.count = carTop.count = carExtra.count = carGlow.count = cars.length;
+    const busColour = pickC([0x1864ab, 0xe03131, 0x2f9e44], plan.seed);
+    // Which design each car is: its key (design and colour), size, and how to draw it.
+    type Design = { key: string; scale: number; draw: (k: Kit) => void };
+    const designOf = (c: Car, k: number): { body: Design; trailer?: Design } => {
+      switch (c.kind) {
+        case 0: {
+          if (k % 9 === 4) {
+            const p = pickC([0x111418, 0xf1f3f5, 0x495057], k);
+            return { body: { key: `suv:${p}`, scale: 0.068, draw: (kk) => carKit(kk, p, "suv") } };
+          }
+          const p = pickC(pal, k);
+          return { body: { key: `car:${p}`, scale: 0.068, draw: (kk) => carKit(kk, p) } };
+        }
+        case 1:
+          return { body: { key: "taxi", scale: 0.068, draw: (kk) => carKit(kk, 0xf5c518, "taxi") } };
+        case 2: {
+          if (k % 2 === 0) return { body: { key: `danfo:${k % 3 === 0}`, scale: 0.066, draw: (kk) => danfoKit(kk, k % 3 === 0) } };
+          const p = pickC([0xf1f3f5, 0xdee2e6, 0x1971c2, 0xe03131, 0xf08c00], k);
+          return { body: { key: `van:${p}`, scale: 0.066, draw: (kk) => vanKit(kk, p) } };
+        }
+        case 3:
+          return { body: { key: `bus:${busColour}`, scale: 0.056, draw: (kk) => brtBusKit(kk, busColour) } };
+        case 4: {
+          const cab = pickC([0xe03131, 0x1971c2, 0xf08c00, 0xf1f3f5], k);
+          const load = pickC([0x8d6e63, 0xf1f3f5, 0xfab005, 0x2f9e44], k >> 2);
+          return { body: { key: `lorry:${cab}:${load}`, scale: 0.066, draw: (kk) => lorryKit(kk, cab, load) } };
+        }
+        default: {
+          const cab = pickC([0x343a40, 0x1971c2, 0xe03131, 0xf1f3f5], k);
+          const box = pickC([0xc2410c, 0x1d4ed8, 0x15803d, 0xf1f3f5, 0xb45309], k >> 1);
+          return { body: { key: `tractor:${cab}`, scale: 0.066, draw: (kk) => tractorKit(kk, cab) }, trailer: { key: `trailer:${box}`, scale: 0.066, draw: (kk) => trailerKit(kk, box) } };
+        }
+      }
+    };
+    const designs = cars.map((c, k) => designOf(c, k));
+    const want = new Map<string, { d: Design; n: number }>();
+    for (const d of designs)
+      for (const x of [d.body, d.trailer]) {
+        if (!x) continue;
+        const w = want.get(x.key);
+        if (w) w.n++;
+        else want.set(x.key, { d: x, n: 1 });
+      }
+    const byKey = new Map<string, Model & { used: number }>();
+    for (const [key, { d, n }] of want) {
+      const kk = new Kit();
+      lite(() => d.draw(kk));
+      const g = kk.take("solid");
+      const gg = kk.take("glow");
+      if (!g) continue;
+      const solid = new THREE.InstancedMesh(g, solidMat, n);
+      solid.castShadow = true;
+      const glow = gg ? new THREE.InstancedMesh(gg, glowMat, n) : null;
+      const md = { solid, glow, scale: d.scale, used: 0 };
+      for (const m of [solid, glow]) {
+        if (!m) continue;
+        m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        m.frustumCulled = false;
+        parent.add(m);
+      }
+      byKey.set(key, md);
+      models.push(md);
+    }
+    const take = (d: Design) => {
+      const md = byKey.get(d.key)!;
+      return { m: md as Model, i: md.used++ };
+    };
+    slots = designs.map((d) => ({ ...take(d.body), ...(d.trailer ? { t: take(d.trailer) } : {}) }));
+    cars.forEach((c) => (c.lit = -1));
     carLights.count = cars.length * 2;
     for (let k = 0; k < cars.length * 2; k++) carLights.setColorAt(k, color.setHex(0x6b1d1d));
-    for (const m of [carBody, carTop, carLights, carExtra, carGlow]) {
-      m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      m.frustumCulled = false;
-    }
+    carLights.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    carLights.frustumCulled = false;
     nightDrawn = -1;
-    parent.add(carBody, carTop, carLights, carExtra, carGlow);
+    parent.add(carLights);
   }
 
   /** Pick a few streets that jam up now and then: the last few stretches before a junction. */
@@ -447,11 +507,17 @@ export function createTraffic(world: World, parent: THREE.Object3D) {
     trail.z = a[1] + dz * t + dx * LANE;
   }
   const fwd = { x: 0, z: 0 };
-  function box(mesh: THREE.InstancedMesh, k: number, x: number, y: number, z: number, a: number, lift: number, len: number, h: number, w: number) {
-    m4.compose(v.set(x + fwd.x * a, y + lift, z + fwd.z * a), q, s.set(len, h, w));
-    mesh.setMatrixAt(k, m4);
-  }
   const HIDDEN = new THREE.Vector3(0.0001, 0.0001, 0.0001);
+  /** A car's model (or its trailer) at (x, y, z) turned by quat. */
+  function setModel(sl: { m: Model; i: number }, x: number, y: number, z: number, quat: THREE.Quaternion) {
+    m4.compose(v.set(x, y, z), quat, s.setScalar(sl.m.scale));
+    sl.m.solid.setMatrixAt(sl.i, m4);
+    sl.m.glow?.setMatrixAt(sl.i, m4);
+  }
+  function hideModel(sl: { m: Model; i: number }) {
+    hide(sl.m.solid, sl.i);
+    if (sl.m.glow) hide(sl.m.glow, sl.i);
+  }
   function hide(mesh: THREE.InstancedMesh, k: number) {
     m4.compose(v.set(0, -5, 0), q, HIDDEN);
     mesh.setMatrixAt(k, m4);
@@ -462,13 +528,9 @@ export function createTraffic(world: World, parent: THREE.Object3D) {
   const BRAKE_NIGHT = new THREE.Color(0xb8222b);
   const HEAD_DAY = new THREE.Color(0x9aa3ad);
   const HEAD_NIGHT = new THREE.Color(0xfff2c4);
-  const BUS_DAY = new THREE.Color(0x2b3a4f);
-  const BUS_NIGHT = new THREE.Color(0xffd98a);
-  const TAXI_DAY = new THREE.Color(0xc9b458);
-  const TAXI_NIGHT = new THREE.Color(0xfff3bf);
 
   function update(dt: number, time: number) {
-    if (!carBody || !carTop || !carLights || !carExtra || !carGlow) return;
+    if (!carLights) return;
     updateJams(time);
     const night = world.night;
     let colorsDirty = false;
@@ -479,12 +541,6 @@ export function createTraffic(world: World, parent: THREE.Object3D) {
         carLights.setColorAt(k * 2, color);
         cars[k].lit = -1;
       }
-      for (let k = 0; k < cars.length; k++) {
-        const kind = cars[k].kind;
-        if (kind === 3) carGlow.setColorAt(k, color.copy(BUS_DAY).lerp(BUS_NIGHT, night));
-        else if (kind === 1) carGlow.setColorAt(k, color.copy(TAXI_DAY).lerp(TAXI_NIGHT, night));
-      }
-      if (carGlow.instanceColor) carGlow.instanceColor.needsUpdate = true;
       colorsDirty = true;
     }
     for (let k = 0; k < cars.length; k++) {
@@ -547,55 +603,36 @@ export function createTraffic(world: World, parent: THREE.Object3D) {
       q.setFromAxisAngle(up, Math.atan2(-fwd.z, fwd.x));
       if (k === ride) {
         // You're inside: the city doesn't draw this one (the cabin is drawn round you).
-        for (const m of [carBody, carTop, carExtra, carGlow]) hide(m, k);
+        hideModel(slots[k]);
+        if (slots[k].t) hideModel(slots[k].t!);
         hide(carLights, k * 2);
         hide(carLights, k * 2 + 1);
         continue;
       }
-      let front = 0.151;
-      let rear = -0.151;
+      let front = 0.153;
+      let rear = -0.153;
       let lampW = 0.11;
+      const sl = slots[k];
+      if (c.kind !== 5) setModel(sl, x, y, z, q);
       switch (c.kind) {
-        case 0:
-        case 1:
-          box(carBody, k, x, y, z, 0, 0, 0.3, 0.09, 0.15);
-          box(carTop, k, x, y, z, -0.02, 0.09, 0.16, 0.06, 0.13);
-          hide(carExtra, k);
-          if (c.kind === 1) box(carGlow, k, x, y, z, -0.02, 0.15, 0.05, 0.025, 0.09);
-          else hide(carGlow, k);
-          break;
         case 2:
-          box(carBody, k, x, y, z, -0.02, 0, 0.3, 0.15, 0.155);
-          box(carTop, k, x, y, z, 0.125, 0.07, 0.05, 0.06, 0.15);
-          hide(carExtra, k);
-          hide(carGlow, k);
-          front = 0.131;
-          rear = -0.171;
+          front = 0.17;
+          rear = -0.17;
           lampW = 0.12;
           break;
         case 3:
-          box(carBody, k, x, y, z, 0, 0, 0.62, 0.15, 0.17);
-          hide(carTop, k);
-          box(carGlow, k, x, y, z, 0, 0.075, 0.6, 0.05, 0.176);
-          box(carExtra, k, x, y, z, 0, 0.15, 0.58, 0.015, 0.15);
-          front = 0.311;
-          rear = -0.311;
+          front = 0.308;
+          rear = -0.308;
           lampW = 0.13;
           break;
         case 4:
-          box(carBody, k, x, y, z, 0.17, 0, 0.16, 0.15, 0.16);
-          box(carTop, k, x, y, z, 0.24, 0.07, 0.03, 0.06, 0.15);
-          box(carExtra, k, x, y, z, -0.09, 0.03, 0.34, 0.19, 0.17);
-          hide(carGlow, k);
-          front = 0.251;
-          rear = -0.261;
+          front = 0.257;
+          rear = -0.259;
           lampW = 0.13;
           break;
-        default: {
+        case 5: {
           // Articulated lorry: the tractor here, its trailer following round corners.
-          box(carBody, k, x, y, z, 0, 0, 0.18, 0.15, 0.16);
-          box(carTop, k, x, y, z, 0.08, 0.07, 0.03, 0.06, 0.15);
-          hide(carGlow, k);
+          setModel(sl, x + fwd.x * 0.01, y, z + fwd.z * 0.01, q);
           pathPoint(c, 0.1);
           const hx = trail.x;
           const hz = trail.z;
@@ -604,9 +641,8 @@ export function createTraffic(world: World, parent: THREE.Object3D) {
           const tz = trail.z;
           const yaw = Math.atan2(-(hz - tz), hx - tx || 0.0001);
           tq.setFromAxisAngle(up, yaw);
-          m4.compose(v.set((hx + tx) / 2, y + 0.03, (hz + tz) / 2), tq, s.set(0.56, 0.19, 0.17));
-          carExtra.setMatrixAt(k, m4);
-          front = 0.091;
+          if (sl.t) setModel(sl.t, (hx + tx) / 2, y, (hz + tz) / 2, tq);
+          front = 0.075;
           lampW = 0.13;
           s.set(0.012, 0.03, lampW);
           m4.compose(v.set(tx - Math.cos(yaw) * 0.005, y + 0.06, tz + Math.sin(yaw) * 0.005), tq, s);
@@ -628,7 +664,11 @@ export function createTraffic(world: World, parent: THREE.Object3D) {
         colorsDirty = true;
       }
     }
-    for (const m of [carBody, carTop, carLights, carExtra, carGlow]) m.instanceMatrix.needsUpdate = true;
+    carLights.instanceMatrix.needsUpdate = true;
+    for (const md of models) {
+      md.solid.instanceMatrix.needsUpdate = true;
+      if (md.glow) md.glow.instanceMatrix.needsUpdate = true;
+    }
     if (colorsDirty && carLights.instanceColor) carLights.instanceColor.needsUpdate = true;
   }
 
@@ -675,7 +715,7 @@ export function createTraffic(world: World, parent: THREE.Object3D) {
   function dispose() {
     clearMeshes();
     boxGeo.dispose();
-    for (const m of [bodyMat, topMat, extraMat, lightMat, glowMat]) m.dispose();
+    for (const m of [solidMat, lightMat, glowMat]) m.dispose();
   }
 
   return { build, update, rideables, isTaxi, pose, setRide, steer, dispose, get count() { return cars.length; } };
