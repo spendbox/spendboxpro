@@ -29,6 +29,10 @@ export const LANDMARKS: Landmark[] = [
   { id: "ikoyi-club", name: "Ikoyi Club 1938", type: "bigpark", w: 9, d: 7, at: { lat: 6.4555, lon: 3.4300 }, approx: true },
   { id: "the-palms", name: "The Palms Shopping Mall", type: "megamall", w: 6, d: 5, at: { lat: 6.4355, lon: 3.4510 }, approx: true },
   { id: "nike-art-gallery", name: "Nike Art Gallery", type: "museum", w: 3, d: 3, at: { lat: 6.4432, lon: 3.4888 }, approx: true },
+  // Premium clubs: their own price at the door (₦10m, as real prices; src/lib/fees.ts). Placed
+  // from their listings: Quilox, 873 Ozumba Mbadiwe Avenue; Vaniti, 17 Adeola Odeku Street.
+  { id: "quilox", name: "Quilox", type: "club", at: { lat: 6.4365, lon: 3.4264 }, approx: true, door: 10_000_000 },
+  { id: "vaniti", name: "Vaniti", type: "club", at: { lat: 6.4287, lon: 3.4180 }, approx: true, door: 10_000_000 },
   { id: "lekki-conservation-centre", name: "Lekki Conservation Centre", type: "bigpark", w: 10, d: 9, at: { lat: 6.4415, lon: 3.5355 }, approx: true },
 
   // ---- The mainland
@@ -45,6 +49,8 @@ export const LANDMARKS: Landmark[] = [
   { id: "tin-can-port", name: "Tin Can Island Port", type: "port", w: 10, d: 7, at: { lat: 6.4380, lon: 3.3430 }, approx: true },
   { id: "oshodi-market", name: "Oshodi Market", type: "market", w: 5, d: 4, at: { lat: 6.5550, lon: 3.3430 }, approx: true },
   { id: "airport", name: "Murtala Muhammed International Airport", type: "intlairport", w: 24, d: 14, at: { lat: 6.5775, lon: 3.3210 }, approx: true },
+  // Cubana, Ikeja GRA (a premium club, ₦10m at the door; placed in the GRA from its listings).
+  { id: "cubana-ikeja", name: "Cubana", type: "club", at: { lat: 6.5790, lon: 3.3560 }, approx: true, door: 10_000_000 },
   { id: "computer-village", name: "Computer Village", type: "market", w: 6, d: 5, at: { lat: 6.5965, lon: 3.3425 }, approx: true },
   { id: "new-afrika-shrine", name: "New Afrika Shrine", type: "club", at: { lat: 6.6030, lon: 3.3510 }, approx: true },
   { id: "kalakuta-museum", name: "Kalakuta Republic Museum", type: "museum", w: 3, d: 3, at: { lat: 6.5985, lon: 3.3525 }, approx: true },

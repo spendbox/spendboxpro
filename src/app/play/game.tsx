@@ -1781,6 +1781,13 @@ export function Game({
       localStorage.setItem("nt-club-entry", JSON.stringify(all));
     } catch {}
   }
+  /** A famous club's own price at the door (its landmark's, src/lib/world/regions), if it has one. */
+  function clubDoorOf(place: string) {
+    const m = /^b:(\d+)$/.exec(place);
+    if (!worldId || !m) return undefined;
+    const [x, z] = spiralXY(Number(m[1]));
+    return regionMap(worldId)?.spotAt(x, z)?.door;
+  }
   async function payClubDoor() {
     const d = clubDoor;
     if (!d) return;
@@ -1832,7 +1839,7 @@ export function Game({
     setPickPlace(null);
     // Some clubs charge at the door (once every 24 hours): ask first.
     if (worldId && !guest && !paidDoor && level.kind === "club") {
-      const fee = clubEntryMint(room.id, room.type, worldRegion?.prices.perMint);
+      const fee = clubEntryMint(room.id, room.type, worldRegion?.prices.perMint, clubDoorOf(room.id));
       if (fee > 0 && !clubPaid(room.id)) return setClubDoor({ room, level, fee });
     }
     // The real map charges the fare there instead of a first-visit fee (see useWorldLife's goInside).
@@ -2821,7 +2828,7 @@ export function Game({
             <div className="grid size-16 place-items-center rounded-3xl bg-[#7048e8] text-white">
               <Music className="size-8" />
             </div>
-            <p className="rounded-full bg-[#7048e8]/10 px-3 py-0.5 text-xs font-bold uppercase tracking-wider text-[#7048e8]">{clubTier(clubEntryNaira(clubDoor.room.id, clubDoor.room.type))}</p>
+            <p className="rounded-full bg-[#7048e8]/10 px-3 py-0.5 text-xs font-bold uppercase tracking-wider text-[#7048e8]">{clubTier(clubEntryNaira(clubDoor.room.id, clubDoor.room.type, clubDoorOf(clubDoor.room.id)))}</p>
             <p className="text-2xl font-bold">{cash(clubDoor.fee)}</p>
             <p className="text-sm text-muted">Entry to {clubDoor.level.label}. Pay once and come and go as you like for 24 hours.</p>
           </div>

@@ -25,3 +25,10 @@ test("in mint at the region's price, under the database's cap of 10,000 (game-db
     assert.equal(m, Math.round((clubEntryNaira(`b:${i}`, "club") / 1_500) * 100) / 100);
   }
 });
+
+test("A famous club charges its own price at the door, whatever its spot", () => {
+  for (let i = 0; i < 50; i++) {
+    assert.equal(clubTier(clubEntryNaira(`b:${i}`, "club", 10_000_000)), "Billionaire's row");
+    assert.equal(clubEntryNaira(`b:${i}`, "home", 10_000_000), 0);
+  }
+});

@@ -57,6 +57,8 @@ export type Landmark = {
   approx?: boolean;
   /** What it's called in the map data, when that differs (a pattern, ignoring case). */
   osm?: string;
+  /** A club with its own price at the door (naira, as real prices: src/lib/fees.ts clubEntryNaira). */
+  door?: number;
 };
 
 /** A stretch of railway with its real curves (raised on a viaduct where `bridge`). */
