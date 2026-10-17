@@ -4013,6 +4013,128 @@ function shootingRange(x: Ctx) {
   );
 }
 
+/** One straight run of steps: centred on x, its foot at zFoot, climbing towards -z (dir -1) or +z. */
+type Run = { x: number; w: number; zFoot: number; dir: 1 | -1; n: number; go: number; y0: number; open: (1 | -1)[] };
+
+/**
+ * Where a home's staircase really goes (metres), facing you as you come in from the front: a
+ * straight flight of 16 gentle steps up towards the back when the hall is deep enough; otherwise a
+ * U-shaped stair (like most Lagos duplexes): 9 steps up one side to a landing at the back, 9 more
+ * back down the other side. The stairs' spot in the plan sets where; the room it's in, how deep.
+ */
+function stairFlight(plan: HomePlan, level: number, it: { x: number; y: number; kind: string; rot: number }) {
+  const { w: GW, d: GD } = SIZES[plan.size];
+  const W = GW * CELL_M, D = GD * CELL_M;
+  const H = 2.8;
+  const s = itemSize(it as Parameters<typeof itemSize>[0]);
+  const x0 = it.x * CELL_M - W / 2, x1 = (it.x + s.w) * CELL_M - W / 2;
+  const z0 = it.y * CELL_M - D / 2;
+  const r = roomAt(plan.floors[level], it.x, it.y);
+  const zEnd = Math.min(D / 2 - 0.5, r ? (r.y + r.d) * CELL_M - D / 2 : z0 + 4);
+  const avail = zEnd - z0;
+  const nearLeft = x0 + W / 2 <= W / 2 - x1;
+  const wall: 1 | -1 = nearLeft ? -1 : 1;
+  const style = (it.x * 7 + it.y * 3) % 3;
+  if (avail >= 5.6) {
+    // Straight: from 0.9 m off the back wall (the floor above carries on there) to the front.
+    const w = 1.1, L = 4.4, n = 16;
+    const fx = nearLeft ? x0 + w / 2 : x1 - w / 2;
+    const top = z0 + 0.9;
+    const runs: Run[] = [{ x: fx, w, zFoot: top + L, dir: -1, n, go: L / n, y0: 0, open: [(-wall) as 1 | -1] }];
+    return { kind: "straight" as const, runs, rise: H / n, x: fx, z: top + L / 2, w, d: L, foot: { x: fx, z: top + L + 0.45 }, exit: { x: fx, z: top - 0.45 }, wall, style };
+  }
+  // U-shaped: two runs side by side, a landing across the back.
+  const each = Math.min(1.15, (x1 - x0 - 0.08) / 2);
+  const ax = nearLeft ? x0 + each / 2 : x1 - each / 2;
+  const bx = ax - wall * (each + 0.08);
+  const Lu = Math.max(1.9, Math.min(3.6, avail - 1.0));
+  const land = Math.min(1.0, Lu * 0.3);
+  const n = 9;
+  const go = (Lu - land) / n;
+  const runs: Run[] = [
+    { x: ax, w: each, zFoot: z0 + Lu, dir: -1, n, go, y0: 0, open: [(-wall) as 1 | -1] },
+    { x: bx, w: each, zFoot: z0 + land, dir: 1, n, go, y0: (n + 0) * (H / (2 * n)), open: [wall] },
+  ];
+  return { kind: "u" as const, runs, land, rise: H / (2 * n), x: (ax + bx) / 2, z: z0 + Lu / 2, w: 2 * each + 0.08, d: Lu, foot: { x: ax, z: z0 + Lu + 0.45 }, exit: { x: bx, z: z0 + Lu + 0.45 }, wall, style, z0, ax, bx, each };
+}
+type Flight = ReturnType<typeof stairFlight>;
+const overlapsFlight = (f: Flight, r: { x: number; z: number; w: number; d: number }) => Math.abs(r.x - f.x) < (r.w + f.w) / 2 && Math.abs(r.z - f.z) < (r.d + f.d) / 2 + 0.5;
+
+/**
+ * Draw a staircase (see stairFlight) in one of three styles, after real ones: floating oak treads
+ * on a black steel spine with tall black bars and light strips on the wall; white stairs with a
+ * blue carpet runner and slim black balusters; or dark wood treads over white risers with a
+ * wrought-iron railing and a wide rounded bottom step.
+ */
+function drawFlight(x: Ctx, f: Flight, wood: number) {
+  const { k } = x;
+  const black = 0x1f2125;
+  const rise = f.rise;
+  const dark = f.style === 2;
+  const tread = dark ? 0x4a2c1c : wood;
+  const riser = 0xf6f4ef;
+  const runDraw = (r: Run, first: boolean) => {
+    const zAt = (st: number) => r.zFoot + r.dir * (st + 0.5) * r.go;
+    const yTop = (st: number) => r.y0 + (st + 1) * rise;
+    const len = r.n * r.go;
+    const hgt = r.n * rise;
+    const slopeLen = Math.hypot(len, hgt);
+    // Turned so the rail climbs the same way as the steps.
+    const rx = r.dir === -1 ? Math.atan2(hgt, len) : -Math.atan2(hgt, len);
+    const zMid = r.zFoot + (r.dir * len) / 2;
+    for (let st = 0; st < r.n; st++) {
+      const zz = zAt(st);
+      if (f.style === 0) {
+        k.box(r.x, yTop(st) - 0.06, zz, r.w, 0.06, r.go + 0.04, st % 2 ? wood : shadeHex(wood, 0.05));
+        k.box(r.x, yTop(st) - rise, zz - (r.dir * r.go) / 2, 0.12, rise, 0.06, black);
+        k.box(r.x, yTop(st) - 0.08, zz, 0.12, 0.03, r.go, black);
+      } else {
+        const wide = dark && first && st < 2 ? 0.3 - st * 0.13 : 0;
+        const o = r.open[0];
+        k.box(r.x + o * (wide / 2), yTop(st) - 0.045, zz, r.w + wide + 0.02, 0.045, r.go + 0.03, tread);
+        k.box(r.x + o * (wide / 2), yTop(st) - rise, zz - (r.dir * r.go) / 2, r.w + wide, rise - 0.045, 0.02, riser, { noAo: true });
+        if (wide) k.cyl(r.x + o * (r.w / 2 + wide), yTop(st) - rise, zz, r.go / 2 + 0.02, r.go / 2 + 0.02, rise, riser, 14);
+        if (!dark) k.box(r.x, yTop(st) + 0.001, zz, r.w * 0.62, 0.01, r.go, st % 2 ? 0x41618f : 0x3b5880, { noAo: true });
+        // Closed in underneath on the open side.
+        k.box(r.x + o * (r.w / 2 + 0.025), r.y0, zz, 0.04, yTop(st) - r.y0 - 0.02, r.go, 0xf3f1ec, { noAo: true });
+      }
+    }
+    // Underneath: a smooth white soffit (the floating stair shows its steel spine instead).
+    if (f.style !== 0 && r.y0 > 0) k.box(r.x, r.y0 + hgt / 2 - 0.16, zMid, r.w, 0.05, slopeLen, riser, { rx, noAo: true });
+    for (const o of r.open) {
+      const ex = r.x + o * (r.w / 2 + 0.01);
+      for (let st = 0; st < r.n; st++) {
+        if (f.style === 0) k.box(ex, yTop(st), zAt(st), 0.025, 0.95, 0.025, black);
+        else {
+          k.cyl(ex, yTop(st), zAt(st), 0.012, 0.012, 0.88, black, 6);
+          if (dark && st % 2 === 0) k.ring(ex, yTop(st) + 0.45, zAt(st), 0.05, 0.008, black);
+        }
+      }
+      k.box(ex, r.y0 + hgt / 2 + 0.92, zMid, 0.06, 0.05, slopeLen + 0.06, f.style === 0 ? black : dark ? 0x3b2416 : shadeHex(wood, -0.15), { rx, noAo: true });
+      if (first && f.style !== 0) k.box(ex, 0, r.zFoot - (r.dir * r.go) / 2, 0.1, 1.05 + rise, 0.1, dark ? 0x3b2416 : shadeHex(wood, -0.15));
+    }
+  };
+  f.runs.forEach((r, i) => runDraw(r, i === 0));
+  if (f.kind === "u") {
+    // The landing across the back, at the height between the two runs, on a post.
+    const y = f.runs[1].y0;
+    k.box(f.x, y - 0.12, f.z0 + f.land / 2, f.w, 0.12, f.land, f.style === 0 ? wood : dark ? 0x4a2c1c : wood);
+    if (f.style !== 0) k.box(f.x, 0, f.z0 + f.land / 2, f.w, y - 0.12, f.land, 0xf3f1ec, { noAo: true });
+    else k.box(f.x, 0, f.z0 + f.land - 0.08, 0.1, y - 0.12, 0.1, black);
+  }
+  if (f.style === 0) {
+    // Light strips on the wall beside the stairs.
+    const wx = f.x + f.wall * (f.w / 2 + 0.01);
+    for (let i = 0; i < 4; i++) {
+      const zz = f.z - f.d / 2 + (i + 0.5) * (f.d / 4);
+      k.box(wx, 0.5 + i * 0.35, zz, 0.02, 1.3, 0.07, 0xfff1d0, { layer: "glow" });
+      k.box(wx + f.wall * 0.01, 0.45 + i * 0.35, zz, 0.03, 1.4, 0.2, shadeHex(wood, -0.1));
+    }
+  }
+  k.shadow(f.x, 0, f.w + 0.3, f.d + 0.3, 0.25);
+  x.blocks.push({ x: f.x, z: f.z, w: f.w + 0.1, d: f.d, ry: 0 });
+}
+
 /** Kinds that stand against a wall and need it plain (no window, no curtains in front of them). */
 const AGAINST_WALL = new Set(["tv", "stairs", "wardrobe", "shelf", "fridge", "cooker", "counter", "sideboard", "art", "mirror", "clock", "screen", "djbooth", "homebar", "arcade", "dartboard", "jukebox", "piano"]);
 /** A planned home's floor: where the outside walls must stay plain, and the stairwell in the ceiling. */
@@ -4024,9 +4146,12 @@ function homeClearings(home: NonNullable<InteriorInfo["home"]>): Pick<Room, "kee
     const s = itemSize(it);
     return { x: (it.x + s.w / 2) * CELL_M - W / 2, z: (it.y + s.d / 2) * CELL_M - D / 2, w: s.w * CELL_M, d: s.d * CELL_M };
   };
-  const keepClear = floor.items.filter((i) => AGAINST_WALL.has(i.kind)).map(rect);
+  const keepClear = floor.items.filter((i) => AGAINST_WALL.has(i.kind) && i.kind !== "stairs").map(rect);
   const up = home.level < home.plan.floors.length - 1 ? floor.items.find((i) => i.kind === "stairs") : undefined;
-  return { keepClear, ceilingHole: up ? rect(up) : undefined };
+  const flight = up ? stairFlight(home.plan, home.level, up) : undefined;
+  const below = home.level > 0 ? home.plan.floors[home.level - 1].items.find((i) => i.kind === "stairs") : undefined;
+  for (const f of [flight, below ? stairFlight(home.plan, home.level - 1, below) : undefined]) if (f) keepClear.push({ x: f.x, z: f.z, w: f.w, d: f.d });
+  return { keepClear, ceilingHole: flight ? { x: flight.x, z: flight.z, w: flight.w + 0.1, d: flight.d } : undefined };
 }
 
 function plan(theme: Theme, rnd: Rng, variant?: InteriorInfo["variant"], info?: InteriorInfo): { room: Room; pal: Pal; build: (x: Ctx) => void } {
@@ -4281,8 +4406,19 @@ function plannedHome(x: Ctx, home: NonNullable<InteriorInfo["home"]>) {
     x.spots.push({ x: cx + 0.3, z: cz + 0.4, ry: rnd() * 6, pose: "stand", y: 0 });
     x.views.push({ x: cx, z: cz + Math.min(1.2, rd / 3), yaw: 0, pitch: -0.12 });
   }
+  // The flights on this floor (up from here, and up to here from below): nothing stands on them.
+  const upItem = level < plan.floors.length - 1 ? floor.items.find((i) => i.kind === "stairs") : undefined;
+  const belowItem = level > 0 ? plan.floors[level - 1].items.find((i) => i.kind === "stairs") : undefined;
+  const flights = [upItem ? stairFlight(plan, level, upItem) : null, belowItem ? stairFlight(plan, level - 1, belowItem) : null].filter((f): f is Flight => !!f);
   // The furniture, in the colours of each room's style.
   for (const it of floor.items) {
+    if (it.kind !== "stairs" && it.kind !== "rug") {
+      const sz = itemSize(it);
+      const r = { x: mx(it.x + sz.w / 2), z: mz(it.y + sz.d / 2), w: sz.w * CELL_M, d: sz.d * CELL_M };
+      if (flights.some((f) => overlapsFlight(f, r))) continue;
+      // Nothing standing about in the stair hall to block the view of the stairs.
+      if (flights.length && (it.kind === "plant" || it.kind === "sideboard") && roomAt(floor, it.x, it.y)?.kind === "hall") continue;
+    }
     const centre = itemSize(it);
     const pal = styledPal(x.pal, roomAt(floor, Math.floor(it.x + centre.w / 2), Math.floor(it.y + centre.d / 2)));
     const wood = pal.wood;
@@ -4745,43 +4881,18 @@ function plannedHome(x: Ctx, home: NonNullable<InteriorInfo["home"]>) {
         });
         x.lamps.push({ x: cx, y: room.h - 0.9, z: cz });
         break;
-      case "stairs":
-        k.at(cx, 0, cz, ry, () => {
-          // A proper staircase rising towards the wall behind: wooden treads with a little nosing
-          // over pale risers, a stringer either side, newel posts at the foot and the top, and
-          // balusters under a sloping handrail on both sides.
-          const n = 14;
-          const sw = fw - 0.16, run = fd - 0.2;
-          const rise = room.h / n;
-          const go = run / n;
-          const riser = shadeHex(pal.wall, -0.04);
-          for (let st = 0; st < n; st++) {
-            const zz = run / 2 - (st + 0.5) * go;
-            const top = (st + 1) * rise;
-            k.box(0, top - 0.045, zz - 0.015, sw + 0.02, 0.045, go + 0.03, st % 2 ? wood : shadeHex(wood, 0.05));
-            k.box(0, top - rise, zz + go / 2 - 0.01, sw, rise - 0.045, 0.02, riser, { noAo: true });
-          }
-          // The space under the stairs, closed in, with a little cupboard door.
-          const slope = Math.atan2(room.h, run);
-          for (const side of [-1, 1]) {
-            const sx = side * (sw / 2 + 0.04);
-            // The stringer: a board along the slope.
-            k.box(sx, room.h / 2 - 0.12, 0, 0.06, 0.24, Math.hypot(room.h, run), shadeHex(wood, -0.1), { rx: slope, noAo: true });
-            // Balusters every other step, the handrail along their tops, newel posts at each end.
-            for (let st = 1; st < n; st += 2) {
-              const zz = run / 2 - (st + 0.5) * go;
-              k.cyl(sx, (st + 1) * rise, zz, 0.018, 0.018, 0.86, 0xf1efea, 6);
-            }
-            k.box(sx, 0.86 + room.h / 2 + rise / 2, 0, 0.07, 0.05, Math.hypot(room.h, run) + 0.05, shadeHex(wood, -0.15), { rx: slope, noAo: true });
-            k.box(sx, 0, run / 2 - go / 2, 0.11, 1.0 + rise, 0.11, shadeHex(wood, -0.15));
-            k.ball(sx, 1.02 + rise, run / 2 - go / 2, 0.065, shadeHex(wood, -0.15), { w: 10, h: 8 });
-          }
-          k.box(0, 0, 0, sw, 0.02, run, shadeHex(pal.wall, -0.08), { noAo: true });
-          k.shadow(0, 0, sw + 0.3, run + 0.3, 0.3);
-          x.blocks.push({ x: cx, z: cz, w: s.w * CELL_M - 0.1, d: s.d * CELL_M - 0.1, ry: 0 });
-        });
-        if (level < plan.floors.length - 1) x.items.push({ kind: "stairs", label: "Go upstairs", x: cx, y: 0.6, z: cz, r: 0.8 });
+      case "stairs": {
+        if (level >= plan.floors.length - 1) break;
+        const fl = stairFlight(plan, level, it);
+        drawFlight(x, fl, wood);
+        // The way up: at the foot of the stairs. And a view from there, looking up them.
+        x.items.push({ kind: "stairs", label: "Go upstairs", x: fl.foot.x, y: 0.5, z: fl.foot.z, r: 0.8 });
+        {
+          const D2 = (SIZES[plan.size].d * CELL_M) / 2;
+          x.views.push({ x: fl.x, z: Math.min(D2 - 0.4, fl.z + fl.d / 2 + 1.9), yaw: 0, pitch: 0.12 });
+        }
         break;
+      }
     }
   }
   // The dance floor: every light-up tile on this floor in one go, changing colour on the beat
@@ -4832,26 +4943,33 @@ function plannedHome(x: Ctx, home: NonNullable<InteriorInfo["home"]>) {
   if (level > 0) {
     const below = plan.floors[level - 1].items.find((i) => i.kind === "stairs");
     if (below) {
-      const s = itemSize(below);
-      const cx = mx(below.x + s.w / 2), cz = mz(below.y + s.d / 2);
-      const w = s.w * CELL_M - 0.1, d = s.d * CELL_M - 0.1;
-      // The stairwell: the top steps showing in the opening, a railing round three sides (the
-      // fourth is where you come up), with a post at each corner.
-      k.box(cx, 0.001, cz, w, 0.01, d, 0x3b3530, { noAo: true });
-      for (let st = 0; st < 3; st++) k.box(cx, 0.002 - st * 0.0005, cz - d / 2 + 0.25 + st * 0.3, w - 0.1, 0.008, 0.26, shadeHex(pal.wood, -0.05 - st * 0.08), { noAo: true });
-      const rail = shadeHex(pal.wood, -0.15);
-      for (const [rx, rz, rw, rd] of [[cx, cz - d / 2, w, 0.05], [cx - w / 2, cz, 0.05, d], [cx + w / 2, cz, 0.05, d]] as const) {
-        k.box(rx, 0.92, rz, rw + 0.04, 0.05, rd + 0.04, rail, { noAo: true });
-        const along = rw > rd ? rw : rd;
-        const nb = Math.max(2, Math.round(along / 0.25));
-        for (let b = 0; b <= nb; b++) {
-          const t = -along / 2 + (along / nb) * b;
-          k.cyl(rx + (rw > rd ? t : 0), 0, rz + (rw > rd ? 0 : t), 0.016, 0.016, 0.92, 0xf1efea, 6);
+      // The stairwell: the opening over the stairs from below, the top steps showing, a railing
+      // round it except where you step off. (When the stairs carry on up from here, they stand in
+      // it instead.)
+      const f = stairFlight(plan, level - 1, below);
+      const upHere = level < plan.floors.length - 1 && floor.items.some((i) => i.kind === "stairs");
+      if (!upHere) {
+        const { x: cx, z: cz, w, d } = f;
+        k.box(cx, 0.001, cz, w, 0.01, d, 0x2b2622, { noAo: true });
+        const last = f.runs[f.runs.length - 1];
+        for (let st = 0; st < 4; st++) k.box(last.x, 0.002 - st * 0.0004, f.exit.z + (f.kind === "u" ? -0.6 - st * last.go : 0.6 + st * last.go), last.w - 0.06, 0.008, Math.max(0.1, last.go - 0.03), shadeHex(pal.wood, -0.05 - st * 0.1), { noAo: true });
+        const rail = shadeHex(pal.wood, -0.15);
+        const openX = cx - f.wall * (w / 2);
+        // Straight: rail down the open side and across the front. U: across the front of the first run.
+        const rails: [number, number, number, number][] =
+          f.kind === "straight" ? [[openX, cz, 0.05, d], [cx, cz + d / 2, w, 0.05]] : [[f.ax, cz + d / 2, f.each, 0.05]];
+        for (const [rx, rz, rw, rd] of rails) {
+          k.box(rx, 0.92, rz, rw + 0.04, 0.05, rd + 0.04, rail, { noAo: true });
+          const along = rw > rd ? rw : rd;
+          const nb = Math.max(2, Math.round(along / 0.2));
+          for (let bb = 0; bb <= nb; bb++) {
+            const t = -along / 2 + (along / nb) * bb;
+            k.cyl(rx + (rw > rd ? t : 0), 0, rz + (rw > rd ? 0 : t), 0.014, 0.014, 0.92, 0x1f2125, 6);
+          }
         }
+        x.blocks.push({ x: cx, z: cz, w: w + 0.1, d, ry: 0 });
       }
-      for (const [px, pz] of [[cx - w / 2, cz - d / 2], [cx + w / 2, cz - d / 2], [cx - w / 2, cz + d / 2], [cx + w / 2, cz + d / 2]]) k.box(px, 0, pz, 0.09, 1.02, 0.09, rail);
-      x.blocks.push({ x: cx, z: cz, w, d, ry: 0 });
-      x.items.push({ kind: "stairs", label: "Go downstairs", x: cx, y: 0.3, z: cz, r: 0.8 });
+      x.items.push({ kind: "stairs", label: "Go downstairs", x: f.exit.x, y: 0.3, z: f.exit.z, r: 0.8 });
     }
   }
   // Coming in: the front door is in the middle of the front wall.
