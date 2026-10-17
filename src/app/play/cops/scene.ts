@@ -11,6 +11,8 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { SIDES, type GunId } from "@/lib/cops";
+import { Kit } from "../city/kit";
+import { brtBusKit, carKit, danfoKit, policePickupKit, vanKit } from "../city/vehicles";
 import { recipeOf, type Avatar } from "@/lib/avatar";
 import { getAvatarModel } from "@/lib/avatar3d/client";
 import { LOD } from "@/lib/avatar3d/lod";
@@ -158,6 +160,8 @@ export class CopsScene {
   constructor(host: HTMLElement, city: City, blocks: Block[], tod: Tod = "day", low = false) {
     this.city = city;
     this.low = low;
+    // The test page (/cops-lab) can reach the scene, to point the camera for screenshots.
+    if (location.pathname.startsWith("/cops-lab")) (window as unknown as { __cops?: CopsScene }).__cops = this;
     const look = SKY[tod];
     this.lit = look.lit;
     this.renderer = new THREE.WebGLRenderer({ antialias: !low, powerPreference: "high-performance" });
@@ -283,11 +287,30 @@ export class CopsScene {
     // Everything you can hide behind, in 3 × 3 chunks (so what's off screen isn't drawn).
     const chunks = new Map<number, Parts>();
     const chunkOf = (x: number, z: number) => Math.min(2, Math.max(0, Math.floor(((x + MAP.h) / (MAP.h * 2)) * 3))) * 3 + Math.min(2, Math.max(0, Math.floor(((z + MAP.h) / (MAP.h * 2)) * 3)));
+    // Vehicles are drawn like the rest of the game's (city/vehicles.ts): proper cars, danfos,
+    // BRT buses, vans and police pickups, merged per chunk too.
+    const rides = new Map<number, Kit>();
     for (const s of city.shapes) {
       const k = chunkOf(s.x, s.z);
+      if (s.look === "car" || s.look === "policecar" || s.look === "van" || s.look === "bus") {
+        let vk = rides.get(k);
+        if (!vk) rides.set(k, (vk = new Kit()));
+        drawRide(vk, s);
+        continue;
+      }
       let p = chunks.get(k);
       if (!p) chunks.set(k, (p = new Parts()));
       buildProp(s, p);
+    }
+    for (const vk of rides.values()) {
+      const g = vk.build({ solid: this.mats.shiny, glow: this.mats.glow });
+      g.traverse((o) => {
+        if (o instanceof THREE.Mesh) {
+          o.castShadow = o.receiveShadow = !low && o.name === "solid";
+          this.bin.push(o.geometry);
+        }
+      });
+      sc.add(g);
     }
     // The wall round the city, street lamps along the roads.
     const edge = new Parts();
@@ -1093,6 +1116,22 @@ function gunModel(g: GunId, a: Parts) {
 }
 
 // ---------------------------------------------------------------- the city's pieces
+
+/** A vehicle where the city put one (its length along its own x, like the kits). */
+function drawRide(k: Kit, s: Shape) {
+  let h = 7;
+  for (const ch of `${Math.round(s.x * 10)},${Math.round(s.z * 10)}`) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  k.at(s.x, 0, s.z, s.ry ?? 0, () => {
+    if (s.look === "bus") brtBusKit(k);
+    else if (s.look === "policecar") policePickupKit(k);
+    else if (s.look === "van") {
+      // Most vans are danfos; the hideout's getaway van is black; now and then a plain van.
+      if (s.colour === 0x212529) vanKit(k, 0x1b1d21);
+      else if (h % 4 === 0) vanKit(k, s.colour === 0xfab005 ? 0xf8f9fa : s.colour);
+      else danfoKit(k, h % 3 === 0);
+    } else carKit(k, s.colour, h % 7 === 0 ? "taxi" : h % 5 === 0 ? "suv" : "sedan");
+  });
+}
 
 function buildProp(s: Shape, p: Parts) {
   const base = m4(s.x, 0, s.z, 0, s.ry ?? 0, 0);

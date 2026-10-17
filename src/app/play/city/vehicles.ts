@@ -93,6 +93,159 @@ export function policeCarKit(k: Kit, band = 0x1c3faa) {
   for (const x of [1.45, -1.45]) for (const z of [-0.84, 0.84]) wheel(k, x, z, 0.34, 0.24);
 }
 
+// ---------------------------------------------------------------- everyday traffic (metres, front along +x)
+
+/** Lights, plates and bumpers at both ends of a vehicle len long, wide wide, lights at height y. */
+function ends(k: Kit, len: number, wide: number, y: number, bumper = 0x2b2b2b) {
+  const fx = len / 2;
+  for (const s of [-1, 1]) {
+    k.box(fx + 0.01, y, s * (wide / 2 - 0.3), 0.05, 0.15, 0.34, 0xfff3bf, { layer: "glow", noAo: true });
+    k.box(-fx - 0.01, y, s * (wide / 2 - 0.3), 0.05, 0.14, 0.3, 0xff4d4d, { layer: "glow", noAo: true });
+  }
+  k.box(fx - 0.02, 0.32, 0, 0.16, 0.24, wide + 0.04, bumper);
+  k.box(-fx + 0.02, 0.32, 0, 0.16, 0.24, wide + 0.04, bumper);
+  k.box(fx + 0.07, 0.36, 0, 0.02, 0.13, 0.48, WHITE, { noAo: true });
+  k.box(-fx - 0.07, 0.36, 0, 0.02, 0.13, 0.48, 0xffd43b, { noAo: true });
+}
+
+/** Wing mirrors at x, half width w, height y. */
+function mirrors(k: Kit, x: number, w: number, y: number, color: number) {
+  for (const s of [-1, 1]) k.box(x, y, s * (w + 0.1), 0.12, 0.12, 0.18, color, { noAo: true });
+}
+
+/**
+ * A car, about 4.5 m long: a saloon in its paint, a taxi (Lagos yellow with the black band and a
+ * roof sign), a black jeep (suv) or a white wedding car.
+ */
+export function carKit(k: Kit, paint: number, style: "sedan" | "taxi" | "suv" = "sedan") {
+  const suv = style === "suv";
+  const taxi = style === "taxi";
+  const L = 4.5;
+  const W = 1.84;
+  const body = suv ? 0.92 : 0.56;
+  // Lower body, the bonnet and boot shaped a little lower than the middle.
+  k.soft(0, 0.3, 0, L, body, W, paint, suv ? 0.2 : 0.24);
+  k.soft(1.45, 0.3 + body - 0.08, 0, 1.4, 0.1, W - 0.12, paint, 0.05);
+  // The cabin: glass all round, pillars and the roof in paint.
+  const cy = 0.3 + body - 0.02;
+  const ch = suv ? 0.72 : 0.5;
+  const cl = suv ? 2.9 : 2.6;
+  // The side windows, then the windscreen and the rear window sloping into them.
+  const mid = cl - 0.9;
+  k.soft(-0.4, cy, 0, mid, ch, W - 0.22, GLASS, 0.1);
+  k.box(-0.4 + mid / 2 + 0.12, cy, 0, 0.6, ch * 1.04, W - 0.28, GLASS, { rz: suv ? 0.35 : 0.6 });
+  k.box(-0.4 - mid / 2 - 0.12, cy, 0, 0.6, ch * 1.04, W - 0.28, GLASS, { rz: suv ? -0.15 : -0.55 });
+  k.soft(-0.4, cy + ch - 0.05, 0, mid + 0.25, 0.09, W - 0.3, paint, 0.04);
+  for (const s of [-1, 1]) {
+    k.box(-0.4, cy, s * (W / 2 - 0.12), 0.1, ch, 0.03, paint, { noAo: true });
+    // Door lines and handles.
+    k.box(0.2, 0.42, s * (W / 2 + 0.005), 0.02, body - 0.1, 0.01, shadeHex(paint, 0.3), { noAo: true });
+    k.box(-0.95, 0.42, s * (W / 2 + 0.005), 0.02, body - 0.1, 0.01, shadeHex(paint, 0.3), { noAo: true });
+    k.box(-0.05, 0.3 + body * 0.72, s * (W / 2 + 0.01), 0.18, 0.04, 0.02, CHROME, { noAo: true });
+    k.box(-1.2, 0.3 + body * 0.72, s * (W / 2 + 0.01), 0.18, 0.04, 0.02, CHROME, { noAo: true });
+    if (taxi) k.box(0, 0.3 + body * 0.45, s * (W / 2 + 0.006), L - 0.3, 0.12, 0.01, 0x111111, { noAo: true });
+  }
+  // A grille.
+  k.box(L / 2 + 0.005, 0.5, 0, 0.02, 0.18, 0.8, 0x1b1b1b, { noAo: true });
+  mirrors(k, 0.75, W / 2, cy + 0.12, paint);
+  if (taxi) k.box(-0.4, cy + ch + 0.04, 0, 0.5, 0.18, 0.24, 0x111111);
+  if (suv) for (const s of [-1, 1]) k.box(-0.4, cy + ch + 0.05, s * 0.6, mid + 0.2, 0.04, 0.06, 0x495057, { noAo: true });
+  ends(k, L, W, 0.3 + body * 0.62);
+  for (const x of [1.45, -1.45]) for (const z of [-0.84, 0.84]) wheel(k, x, z, suv ? 0.4 : 0.34, 0.24);
+}
+
+/**
+ * A danfo: the yellow Lagos minibus, about 5 m long, two black stripes down each side, the
+ * sliding door, windows all along, a roof rack (and something tied on it now and then).
+ */
+export function danfoKit(k: Kit, load = false) {
+  const Y = 0xf5c518;
+  const L = 4.9;
+  const W = 1.92;
+  k.soft(-0.2, 0.36, 0, L - 0.4, 1.78, W, Y, 0.18);
+  // The sloping nose and its windscreen.
+  k.soft(1.98, 0.36, 0, 0.95, 1.2, W, Y, 0.22);
+  k.box(2.3, 1.2, 0, 0.32, 0.62, W - 0.24, GLASS, { noAo: true, rz: -0.35 });
+  for (const s of [-1, 1]) {
+    k.box(-0.15, 0.78, s * (W / 2 + 0.006), L - 0.3, 0.09, 0.012, 0x111111, { noAo: true });
+    k.box(-0.15, 1.0, s * (W / 2 + 0.006), L - 0.3, 0.09, 0.012, 0x111111, { noAo: true });
+    // The windows, in a row (the driver's at the front).
+    for (let w = 0; w < 4; w++) k.box(-1.85 + w * 0.92, 1.18, s * (W / 2 + 0.006), 0.8, 0.52, 0.012, GLASS, { noAo: true });
+    k.box(1.55, 1.18, s * (W / 2 + 0.006), 0.55, 0.5, 0.012, GLASS, { noAo: true });
+  }
+  // The sliding door, open a crack (kerb side), and the rear doors.
+  k.box(0.72, 0.42, W / 2 + 0.012, 0.95, 1.55, 0.012, 0x2b2b2b, { noAo: true });
+  k.box(-L / 2 + 0.185, 0.5, 0, 0.012, 1.45, W - 0.2, shadeHex(Y, 0.12), { noAo: true });
+  k.box(-L / 2 + 0.18, 1.2, 0, 0.012, 0.45, W - 0.5, GLASS, { noAo: true });
+  // The roof rack.
+  k.box(-0.3, 2.16, 0, 3.6, 0.05, 1.6, 0x343a40, { noAo: true });
+  for (const x of [-1.9, -0.3, 1.3]) k.box(x, 2.14, 0, 0.06, 0.16, 1.62, 0x343a40, { noAo: true });
+  if (load) {
+    k.soft(-0.9, 2.21, 0.1, 1.1, 0.42, 0.9, 0x8d6e63, 0.08);
+    k.soft(0.4, 2.21, -0.2, 0.7, 0.3, 0.6, 0x1971c2, 0.06);
+  }
+  mirrors(k, 1.75, W / 2, 1.25, 0x1b1b1b);
+  ends(k, L, W, 0.82);
+  for (const x of [1.6, -1.5]) for (const z of [-0.9, 0.9]) wheel(k, x, z, 0.38, 0.26);
+}
+
+/** A white or coloured panel van (like a danfo, plainer), about 5.2 m long. */
+export function vanKit(k: Kit, paint: number) {
+  const L = 5.2;
+  const W = 2.05;
+  k.soft(-0.25, 0.38, 0, L - 0.5, 1.9, W, paint, 0.16);
+  k.soft(2.05, 0.38, 0, 1.0, 1.3, W, paint, 0.24);
+  k.box(2.38, 1.3, 0, 0.3, 0.62, W - 0.24, GLASS, { noAo: true, rz: -0.35 });
+  for (const s of [-1, 1]) {
+    k.box(1.6, 1.25, s * (W / 2 + 0.006), 0.6, 0.55, 0.012, GLASS, { noAo: true });
+    k.box(0.9, 0.5, s * (W / 2 + 0.006), 0.02, 1.5, 0.01, shadeHex(paint, 0.3), { noAo: true });
+  }
+  mirrors(k, 1.8, W / 2, 1.35, 0x1b1b1b);
+  ends(k, L, W, 0.85);
+  for (const x of [1.75, -1.65]) for (const z of [-0.95, 0.95]) wheel(k, x, z, 0.4, 0.27);
+}
+
+/** A BRT bus: long, blue and white, windows all along, a door each side of the middle. About 11 m. */
+export function brtBusKit(k: Kit) {
+  const L = 11;
+  const W = 2.5;
+  k.soft(0, 0.32, 0, L, 2.7, W, 0x1864ab, 0.22);
+  k.box(0, 0.32, 0, L + 0.02, 0.62, W + 0.02, WHITE, { noAo: true });
+  k.box(0, 2.62, 0, L - 0.4, 0.25, W - 0.3, 0xdee2e6);
+  for (const s of [-1, 1]) {
+    for (let w = 0; w < 8; w++) k.box(-4.6 + w * 1.25, 1.3, s * (W / 2 + 0.006), 1.12, 0.95, 0.012, GLASS, { noAo: true });
+    k.box(2.6, 0.45, s * (W / 2 + 0.008), 1.0, 1.95, 0.012, 0x22303f, { noAo: true });
+    k.box(-1.2, 0.45, s * (W / 2 + 0.008), 1.0, 1.95, 0.012, 0x22303f, { noAo: true });
+    k.box(0, 1.0, s * (W / 2 + 0.008), L - 0.6, 0.08, 0.012, 0xfab005, { noAo: true });
+  }
+  k.box(L / 2 + 0.01, 1.05, 0, 0.02, 1.45, W - 0.25, GLASS, { noAo: true });
+  k.box(L / 2 + 0.015, 2.55, 0, 0.02, 0.28, 1.4, 0x111111, { noAo: true });
+  k.box(L / 2 + 0.02, 2.58, 0, 0.01, 0.18, 1.2, 0xffd43b, { layer: "glow", noAo: true });
+  k.box(-L / 2 - 0.01, 1.4, 0, 0.02, 0.9, W - 0.4, GLASS, { noAo: true });
+  mirrors(k, L / 2 - 0.25, W / 2, 2.1, 0x1b1b1b);
+  ends(k, L, W, 0.75, 0x343a40);
+  for (const x of [3.8, -3.6]) for (const z of [-1.12, 1.12]) wheel(k, x, z, 0.52, 0.3);
+}
+
+/** A police pickup at the HQ and the bank: dark blue, POLICE stripe, a light bar. About 5.2 m. */
+export function policePickupKit(k: Kit) {
+  const P = 0x1c2d5a;
+  k.soft(0.4, 0.33, 0, 5.1, 0.8, 1.86, P, 0.15);
+  k.soft(0.9, 1.08, 0, 1.8, 0.75, 1.7, GLASS, 0.12);
+  k.box(0.9, 1.81, 0, 1.6, 0.08, 1.6, P);
+  k.box(-1.3, 1.1, 0, 2.2, 0.3, 1.86, P);
+  for (const s of [-1, 1]) {
+    k.box(0.4, 0.75, s * 0.94, 4.8, 0.16, 0.01, WHITE, { noAo: true });
+    k.box(0.9, 1.08, s * 0.86, 0.08, 0.75, 0.02, P, { noAo: true });
+  }
+  k.box(0.9, 1.9, -0.4, 0.5, 0.15, 0.3, 0x4dabf7, { layer: "glow", noAo: true });
+  k.box(0.9, 1.9, 0.4, 0.5, 0.15, 0.3, 0xff4d4d, { layer: "glow", noAo: true });
+  mirrors(k, 1.55, 0.93, 1.25, P);
+  k.box(2.96, 0.32, 0, 0.16, 0.26, 1.9, 0x2b2b2b);
+  for (const s of [-1, 1]) k.box(2.97, 0.78, s * 0.62, 0.04, 0.14, 0.32, 0xfff3bf, { layer: "glow", noAo: true });
+  for (const x of [1.9, -1.4]) for (const z of [-0.84, 0.84]) wheel(k, x, z, 0.38, 0.26);
+}
+
 // ---------------------------------------------------------------- ready-made groups (city units)
 
 let shared: { solid: THREE.MeshLambertMaterial; glow: THREE.MeshBasicMaterial; red: THREE.MeshBasicMaterial; blue: THREE.MeshBasicMaterial; bulb: THREE.SphereGeometry } | null = null;
