@@ -2121,8 +2121,10 @@ export function Game({
         return { label: "Buy art", icon: ShoppingBag, run: () => worldLife.openThings("shops", "museum") };
       case "skybridge":
       case "clockroom":
-      case "park":
       case "amusement":
+        // A park's amusement park: paintball on its field (Photo is in the bar too).
+        return { label: `Play paintball · ${cash(gameFeeMint("paintball", worldRegion?.prices.perMint))}`, icon: Crosshair, run: () => setGamesOpen({ game: "paintball", only: true }) };
+      case "park":
       case "plaza":
       case "roofTerrace":
       case "poolDeck":

@@ -107,7 +107,7 @@ export function FullBoard({
 
 function Player({ side, active, className }: { side: Side; active: boolean; className?: string }) {
   return (
-    <div className={cn("flex min-w-0 items-center gap-2.5 rounded-2xl px-3 py-2 text-white transition", active ? "bg-white/15 ring-2" : "bg-black/30", className)} style={active ? { ["--tw-ring-color" as string]: side.ring } : undefined}>
+    <div className={cn("flex min-w-0 items-center gap-2.5 rounded-2xl px-3 py-2 text-white transition", active ? "bg-white/15 ring-2" : "bg-black/30", className)} style={active ? ({ "--tw-ring-color": side.ring } as React.CSSProperties) : undefined}>
       <span className="size-7 shrink-0 rounded-full border-2 border-white/60 shadow" style={{ background: side.colour }} />
       <span className="min-w-0">
         <b className="block max-w-[11rem] truncate leading-tight">{side.name}</b>

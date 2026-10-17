@@ -1,4 +1,16 @@
-# Paintball: the plan (not built yet)
+# Paintball: the plan
+
+**Built so far** (`src/app/play/paintball/`): stage 1 and most of stage 2. Team Splat, 4 v 4 on a
+speedball field (inflatable bunkers, nets, a scoreboard, splats that stay), third person over the
+shoulder, AIM to come in close, a mini-map, who-splatted-whom, results. Quick match, a private
+match with a code, or practice against bots; bots fill the empty places. Between phones it runs on
+the game's own realtime connection (Supabase broadcast, about 8 updates a second each); each phone
+says who its own shots hit, and the first player in the room runs the bots. The fee is ₦5,000 a
+match; nothing is paid out. Found in Games and with the Play paintball button in parks.
+
+Still to do from below: the other arenas and modes, skins from the shop, and a real game server
+(Colyseus) once there are many matches at once: realtime messages are counted on the Supabase
+plan, and a full 8-person match sends a lot of them.
 
 A team shooter you can join from the map: two teams, a proper 3D arena, fast and good-looking
 on a phone. It should feel like the moment-to-moment of Call of Duty or Fortnite, but with

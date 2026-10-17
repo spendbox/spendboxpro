@@ -575,8 +575,8 @@ export function Board3D(p: Props) {
     let raf = 0;
     let lastT = performance.now();
     const tmp = new THREE.Vector3();
-    function frame(now: number) {
-      raf = requestAnimationFrame(frame);
+    function tick(now: number) {
+      raf = requestAnimationFrame(tick);
       const dt = Math.min(0.05, (now - lastT) / 1000);
       lastT = now;
       // Ease the camera.
@@ -612,7 +612,7 @@ export function Board3D(p: Props) {
       }
       renderer.render(scene, camera);
     }
-    raf = requestAnimationFrame(frame);
+    raf = requestAnimationFrame(tick);
 
     return () => {
       cancelAnimationFrame(raf);

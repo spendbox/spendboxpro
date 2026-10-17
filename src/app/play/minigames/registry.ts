@@ -1,4 +1,4 @@
-// All 100 minigames (docs/MINIGAMES.md). Each names an engine (./engines, ./turns) and its
+// All the minigames (docs/MINIGAMES.md: the 100, and paintball). Each names an engine (./engines, ./turns) and its
 // settings, the kinds of places it belongs to (so a bank offers heist games and a gym offers
 // boxing pads), and bronze / silver / gold scores (mint rewards, heist pass marks).
 //
@@ -234,6 +234,10 @@ export const MINIGAMES: MiniGameDef[] = [
     "Deliver the parcels on your bike.", "Pick up parcels and ride past the glowing doors to deliver them. Dodge pedestrians and potholes."),
   S(100, "treasure-hunt", "Treasure Hunt", "life", "treasure", { theme: "map", size: 7, chests: 3, digs: 14, rounds: 3 }, "points", [200, 330, 420], [...PARK, "museum", "monument", "anywhere"], "Map", "#a5673f",
     "Dig for the hidden chests.", "Tap to dig. Each hole tells you how far the nearest chest is. Find all three with the fewest digs."),
+
+  // ---------------------------------------------------------------- big games, full screen
+  S(101, "paintball", "Paintball", "shooting", "paintball", {}, "splats", [5, 10, 15], [...PARK, "military", "funfair", "anywhere"], "Swords", "#e03131",
+    "Red against blue, 4 v 4, full screen in 3D.", "Team Splat: every hit is a splat for your team, first to 25. Quick match with whoever's looking for a game, a private match with a code for friends, or practice against bots. Left thumb moves, right thumb looks; hold FIRE.", { full: true }),
 ];
 
 export const MINIGAME_BY_ID = new Map(MINIGAMES.map((g) => [g.id, g]));

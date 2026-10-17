@@ -44,6 +44,7 @@ const Trivia = dynamic(() => import("../activities/trivia").then((m) => m.Trivia
 const Pool = dynamic(() => import("../activities/pool").then((m) => m.Pool));
 const Karaoke = dynamic(() => import("../activities/karaoke").then((m) => m.Karaoke));
 const DuelLobby = dynamic(() => import("../activities/duels").then((m) => m.DuelLobby));
+const Paintball = dynamic(() => import("../paintball/paintball").then((m) => m.Paintball));
 
 function LegacyGame({ name, gp }: { name: string; gp: GameProps }) {
   switch (name) {
@@ -72,6 +73,8 @@ const roomOf = (ctx: PlayCtx) => ctx.roomId ?? "arcade";
 export function MiniGamePlayer({ def, ctx, onClose, invite, task }: { def: MiniGameDef; ctx: PlayCtx; onClose: () => void; invite?: Invite | null; task?: Task | null }) {
   const gp: GameProps = { roundId: ctx.roundId, roomId: roomOf(ctx), me: ctx.me, members: ctx.members, label: CATEGORIES[def.cat].label, onClose };
   if (def.legacy) return <LegacyPlay def={def} ctx={ctx} gp={gp} />;
+  // Paintball has its own screens (rooms, matches between phones) and takes its fee each match.
+  if (def.engine === "paintball") return <Paintball me={ctx.me ? { id: ctx.me.id, name: ctx.me.name } : null} onClose={onClose} />;
   return (
     <div className="space-y-3">
       <ActivityStyles />
