@@ -37,7 +37,8 @@ import { playSfx } from "../sound";
 import { Sheet } from "../sheet";
 import { onMapNews, tellMap } from "../map-news";
 import { whileHere } from "../activity";
-import { challengeQuote, declineChallenge, inviteChallenge, joinChallenge, leaveChallenge, myChallengeRep, openChallenge, reportWinner, type ChallengeQuote, type ChallengeView } from "./challenge-actions";
+import { PlaySheet } from "./play-sheet";
+import { challengeQuote, declineChallenge, hostGame, inviteChallenge, queueNext, joinChallenge, leaveChallenge, myChallengeRep, openChallenge, reportWinner, type ChallengeQuote, type ChallengeView } from "./challenge-actions";
 import { createClient } from "@/lib/supabase/client";
 import dynamic from "next/dynamic";
 import { GameInvite, InviteCard, type GameTarget } from "./whot-invite";
@@ -75,11 +76,16 @@ export function Fight({
   onLights,
   onMessage,
   onFly,
+  playOpen = false,
+  onPlayClose,
 }: {
   region: string;
   me: Me | null;
   open: boolean;
   onClose: () => void;
+  /** Play (the button beside Events): host one of the table games now, or join, watch, get in line. */
+  playOpen?: boolean;
+  onPlayClose?: () => void;
   /** Where you are on the map now (where the challenge is set). */
   where: () => { x: number; z: number } | null;
   onLights: (lights: ChallengeLight[]) => void;
@@ -131,14 +137,14 @@ export function Fight({
     const first = setTimeout(() => void look(), 1200);
     // Every 6 s while the list is open, every 30 s on the map; nothing while they're away. And
     // within seconds when someone in the city opens, starts or calls off a game (../map-news).
-    const stop = whileHere(() => void look(), open ? 6000 : 30_000);
+    const stop = whileHere(() => void look(), open || playOpen ? 6000 : 30_000);
     const stopNews = onMapNews(region, "games", () => void look());
     return () => {
       clearTimeout(first);
       stop();
       stopNews();
     };
-  }, [signedIn, look, open, region]);
+  }, [signedIn, look, open, playOpen, region]);
   // A knock from someone who just challenged you (a live nudge to look now; the invitation itself
   // comes from the server, so a knock can't be faked into anything).
   const meId = me?.id ?? null;
@@ -299,6 +305,56 @@ export function Fight({
           }}
         />
       )}
+      {playOpen && me && (
+        <PlaySheet
+          region={region}
+          meId={me.id}
+          list={list}
+          mine={mine}
+          now={now}
+          onClose={() => onPlayClose?.()}
+          onHost={async (game, stake) => {
+            const at = where();
+            if (!at) return "Find a home or walk somewhere on the map first.";
+            const r = await hostGame(game, stake, at.x, at.z, region).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
+            if (!r.ok) return r.error;
+            playSfx("start");
+            tellMap(region, "games");
+            onPlayClose?.();
+            closedRef.current = closedRef.current.filter((x) => x !== r.id);
+            setWatchId(null);
+            setMine(r.id);
+            onMessage(`You're hosting ${challengeGame(game)?.title}! Everyone nearby has been told.${r.fee > 0 ? ` ${cash(r.fee)} hosting fee paid.` : ""}`, true);
+            void look();
+            return null;
+          }}
+          onJoin={(c) => {
+            onPlayClose?.();
+            void join(c);
+          }}
+          onWatch={(c) => {
+            onPlayClose?.();
+            setDismissed((d) => [...d, -c.id]);
+            setWatchId(c.id);
+          }}
+          onQueue={async (c, on) => {
+            const r = await queueNext(c.id, on).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
+            if (!r.ok) return r.error;
+            if (on) onMessage(`You're in line for the next ${challengeGame(c.game)?.title}. You'll be told first when it's hosted.`, true);
+            void look();
+            return null;
+          }}
+          onOpenMine={(id) => {
+            onPlayClose?.();
+            closedRef.current = closedRef.current.filter((x) => x !== id);
+            setMine(id);
+          }}
+          onFly={(x, z) => {
+            onPlayClose?.();
+            onFly?.(x, z);
+          }}
+        />
+      )}
       {!view && alerts.length > 0 && (
         <div className="pointer-events-none fixed inset-x-0 top-28 z-40 flex flex-col items-center gap-2 px-3">
           {alerts.map((c) => {
@@ -313,7 +369,7 @@ export function Fight({
                 </button>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-bold">
-                    {c.invited ? `${host?.name ?? "Someone"} vs ${c.invited.name}: ${g?.title}! Hop in` : `${host?.name ?? "Someone"} challenged everyone to ${g?.title}!`}
+                    {c.invited ? `${host?.name ?? "Someone"} vs ${c.invited.name}: ${g?.title}! Hop in` : `${host?.name ?? "Someone"} is hosting ${g?.title}!`}
                   </p>
                   <p className="text-xs text-white/70">
                     Pool {cash(c.pool)} · {c.players.length}/{c.seats} · <b className="tabular-nums text-gold">{mmss(left)}</b>

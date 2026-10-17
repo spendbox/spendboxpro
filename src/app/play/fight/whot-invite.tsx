@@ -56,6 +56,8 @@ const LOOKS: Record<TableGame, { bg: string; ring: string; button: string; left:
     right: <span className="rotate-12 rounded-lg bg-[#d6c7a1] px-1.5 py-1 font-mono text-[10px] font-black text-[#1c1917] shadow">TOP SECRET</span>,
   },
 };
+/** The same looks for the Play sheet (./play-sheet). */
+export const GAME_LOOKS = LOOKS;
 const lookOf = (game: string) => LOOKS[(TABLE_GAMES as readonly string[]).includes(game) ? (game as TableGame) : "whot"];
 
 export function GameInvite({ region, target, game, onGame, onClose, onSend }: { region: string; target: GameTarget; game: TableGame; onGame: (g: TableGame) => void; onClose: () => void; onSend: (stakeMint: number) => Promise<string | null> }) {

@@ -102,6 +102,7 @@ import type { CityDancer, CityEvent, CityFriendPin, CityGhost, CityInteract, Cit
 import type { PartyZone } from "./city/party-lights";
 import { isHere, whileHere } from "./activity";
 import { onLatest, setLatest, type Latest } from "./pulse";
+import { onMapNews } from "./map-news";
 import { FeedIconView, FeedRow, NotificationsPanel, SwipeRow, type FeedIcon, type FeedItem } from "./notifications";
 import { dismissNotices, readNotices } from "./notice-actions";
 import { closePhoneNotices, setPhoneBadge } from "./phone/phone-notices";
@@ -1474,7 +1475,7 @@ export function Game({
       quiet: n.kind === "duel_won" || n.kind === "duel_lost" || n.kind === "heist" || n.kind === "location",
       icon: ((
         { trap: "trap", trapped: "trap", swept: "drone", caught: "catch", shield: "shield", shielded: "shield", decoy: "decoy", streak: "flame", gift: "gift", spray: "gift", hug: "hug", handshake: "handshake", thanks: "hug", duel: "duel", duel_won: "duel", duel_lost: "duel", heist: "coin", market: "coin", dating: "hug" }) as Record<string, FeedIcon>
-      )[n.kind] ?? (n.kind === "doorstep" && /gift/i.test(n.body) ? "gift" : "info"),
+      )[n.kind] ?? (n.kind.startsWith("game:") ? "duel" : n.kind === "doorstep" && /gift/i.test(n.body) ? "gift" : "info"),
       kind: n.kind,
       tile: n.tile,
       // The real map's notices can be read and cleared; the old game's are counted by time.
@@ -1646,6 +1647,8 @@ export function Game({
       }
     });
     const every = whileHere(look, 5 * 60_000);
+    // A game near you started, ended or was called off: its notice changes (src/lib/notices.ts).
+    const stopNews = onMapNews(worldId, "games", look);
     // A push arrived (the phone's service worker says so): look now. A tapped notification: go there.
     const onMessage = (e: MessageEvent) => {
       const t = (e.data as { type?: string; url?: string } | null)?.type;
@@ -1662,6 +1665,7 @@ export function Game({
       alive = false;
       stopLatest();
       every();
+      stopNews();
       navigator.serviceWorker?.removeEventListener("message", onMessage);
     };
     // chatWith is a plain function (new each render); the listener only needs the latest at the time.
@@ -2058,6 +2062,8 @@ export function Game({
   const [flightsOpen, setFlightsOpen] = useState(false);
   // Challenge (docs/CHALLENGES.md): the picker, and the challenges lit up on the map.
   const [fightOpen, setFightOpen] = useState(false);
+  /** Play (beside Events): host a game now, or join, watch or get in line for one near you. */
+  const [playOpen, setPlayOpen] = useState(false);
   const [challengeLights, setChallengeLights] = useState<ChallengeLight[]>([]);
   // Events (docs/EVENTS.md): what's on and hosting, their beams on the map, and parties' crowds.
   const [eventsOpen, setEventsOpen] = useState(false);
@@ -2738,6 +2744,11 @@ export function Game({
               onClick={() => {
                 if (n.noteId) markRead([n.noteId]);
                 if (n.eventId) return openEvent(n.eventId);
+                // A hosted game near you: Play shows it (join, watch, or get in line).
+                if (worldId && n.kind?.startsWith("game:")) {
+                  setToasts([]);
+                  return setPlayOpen(true);
+                }
                 if (!guest && (n.icon === "hug" || n.icon === "handshake" || n.icon === "gift")) {
                   setToasts([]);
                   return openGifts();
@@ -2760,6 +2771,8 @@ export function Game({
           me={{ id: me.id, name: me.name ?? "Player", avatar: me.avatar }}
           open={fightOpen}
           onClose={() => setFightOpen(false)}
+          playOpen={playOpen}
+          onPlayClose={() => setPlayOpen(false)}
           where={() => worldLife.centerRef.current?.() ?? null}
           onLights={setChallengeLights}
           onMessage={(text, good) => setMessage({ text, tone: good ? "good" : "bad" })}
@@ -3992,6 +4005,20 @@ export function Game({
           <PartyPopper className="size-6" />
           {eventLights.some((l) => l.playing) && <span className="absolute -right-0.5 -top-0.5 size-3 rounded-full bg-hit ring-2 ring-white" />}
           {tutorialGlow === "events" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
+        </button>
+      )}
+      {/* Play (docs/CHALLENGES.md "Play: host a game"): beside Events, host one of the full-screen
+          games right here, now, or join, watch or get in line for one near you. A dot while a
+          game is on near you. */}
+      {worldId && !guest && !camera && !place && ride === null && !walking && tour("events") && (
+        <button
+          onClick={() => setPlayOpen(true)}
+          className="pointer-events-auto fixed right-[4.25rem] top-14 z-20 grid size-12 place-items-center rounded-full bg-gradient-to-br from-[#7048e8] to-[#e03131] text-white shadow-lg ring-1 ring-black/5 sm:right-[4.75rem] sm:top-16"
+          aria-label="Play: host a game now, or join one near you"
+          title="Play"
+        >
+          <Gamepad2 className="size-6" />
+          {challengeLights.length > 0 && <span className="absolute -right-0.5 -top-0.5 size-3 rounded-full bg-[#ffd43b] ring-2 ring-white" />}
         </button>
       )}
       {/* Notifications off on this phone: a bell on the right, halfway down, to switch them on (gone

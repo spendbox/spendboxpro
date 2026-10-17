@@ -2,6 +2,7 @@
 
 ## Now (owner)
 - [ ] Then run `game-db/121_games_cost.sql` (games cost money to play: ₦1,000 a go, the shooting range and paintball ₦5,000, chess and draughts ₦2,000; the older room games stop paying out). Run it after 120. Until then games are free to play (and pay nothing).
+- [ ] Then run `game-db/122_host_games.sql` (Play: hosting a game costs ₦20,000 for two-player games and ₦100,000 for the rest, 3 minutes to join, and "I'm next" lines). Run it after 121. Until then Play still works, with the old challenge fee rules.
 - [ ] Then run `game-db/118_club_fees.sql` (clubs cost ₦250k, ₦500k, ₦1m or ₦10m at the door). Run it after 117. Until then a door can charge at most about ₦1.5m, so the ₦10m clubs charge ₦1.5m.
 - [ ] Then run `game-db/117_written_moments.sql` (player-written moments, and how moments are doing on the dashboard). Run it after 116. Until then Write a moment says it's switched on soon.
 - [ ] Then run `game-db/116_player_stories.sql` (other players in your story: loans, lifts, vouching, the wallet). Run it after 115. Until then no other player turns up in anyone's moments.

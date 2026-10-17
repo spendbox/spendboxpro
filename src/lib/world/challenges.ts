@@ -115,6 +115,17 @@ export const CHALLENGE_FEE_NAIRA = 50_000;
 export const CHALLENGE_COOLDOWN_SECS = 8 * 60;
 /** How long people have to join. */
 export const JOIN_SECS = 60;
+
+/**
+ * Play: hosting a game right where you are (game-db/122 challenge_host). Always costs a fee:
+ * ₦20,000 for a two-player game (chess, draughts), ₦100,000 for one with more players.
+ */
+export const HOST_FEE_NAIRA = { two: 20_000, more: 100_000 } as const;
+export const hostFeeNaira = (id: string) => ((CHALLENGE_GAMES.find((g) => g.id === id)?.seats ?? 2) > 2 ? HOST_FEE_NAIRA.more : HOST_FEE_NAIRA.two);
+/** How long others have to join a hosted game (time to come over, or to hear about it). */
+export const HOST_JOIN_SECS = 180;
+/** The games you can host from Play (the full-screen tables; more to come). */
+export const PLAY_GAMES: readonly TableGame[] = TABLE_GAMES;
 /** The winner takes this share of the pool (the rest is the house's). */
 export const WINNER_SHARE = 0.9;
 /** Challenges near enough to hear about (tiles, 100 m each). */

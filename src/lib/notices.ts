@@ -31,8 +31,31 @@ export async function loadNotices(db: ReturnType<typeof createAdminClient>, user
     .gte("created_at", since)
     .order("id", { ascending: false })
     .limit(50);
-  if (!full.error) return map(full.data as Record<string, unknown>[], true);
+  if (!full.error) return games(db, map(full.data as Record<string, unknown>[], true));
   // Before part 62 is run: no read or cleared marks yet.
   const { data } = await db.from("notifications").select("id, kind, body, tile, created_at").eq("user_id", userId).or(MINE).gte("created_at", since).order("id", { ascending: false }).limit(50);
-  return map(data as Record<string, unknown>[], false);
+  return games(db, map(data as Record<string, unknown>[], false));
+}
+
+/**
+ * A hosted game's notice (kind "game:<id>", src/app/play/fight/challenge-actions.ts hostGame)
+ * says how the game is now: still taking players, being played (watch, or get in line), or over
+ * (and then it's read: nothing to do).
+ */
+async function games(db: ReturnType<typeof createAdminClient>, list: Notice[]): Promise<Notice[]> {
+  const ids = [...new Set(list.map((n) => /^game:(\d+)$/.exec(n.kind)?.[1]).filter(Boolean).map(Number))];
+  if (!ids.length) return list;
+  const { data, error } = await db.from("challenges").select("id, status, starts_at").in("id", ids);
+  if (error) return list;
+  const now = Date.now();
+  const by = new Map(((data ?? []) as { id: number; status: string; starts_at: string }[]).map((c) => [Number(c.id), c]));
+  return list.map((n) => {
+    const id = Number(/^game:(\d+)$/.exec(n.kind)?.[1] ?? 0);
+    if (!id) return n;
+    const c = by.get(id);
+    const open = c?.status === "open" && Date.parse(c.starts_at) > now;
+    if (open) return n;
+    if (c?.status === "playing") return { ...n, body: `${n.body.replace(/ (Join|Join now|Join, watch, or get in line for the next one)\.$/, "")} Being played now: watch, or get in line for the next one.` };
+    return { ...n, body: `${n.body.split(/(?<=\.) /)[0]} That game has ended.`, read: true };
+  });
 }

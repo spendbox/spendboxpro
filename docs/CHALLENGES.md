@@ -34,6 +34,30 @@ down a challenge, a minute to gather players, a game floating over the city, a p
      than half say the same winner, or a loser owns up.
    - If only one name is said and nobody disagrees for 2 minutes, that player is paid.
 
+## Play: host a game
+
+The **Play** button (beside Events, top right; src/app/play/fight/play-sheet.tsx) hosts one of the
+six full-screen games right where you are, now: Whot!, chess, draughts, paintball, Truth or Dare
+and Impostor (`PLAY_GAMES`; more to come).
+
+- **Hosting costs** ₦20,000 for a two-player game (chess, draughts) and ₦100,000 for one with more
+  players (`HOST_FEE_NAIRA`), always (no free first one), from Fun money then the wallet. A stake
+  is optional, as for any challenge. If nobody joins, the stake comes back; the fee doesn't.
+- **Everyone nearby is told**: a notice ("Ada is hosting Whot! near you...") and a push, the
+  pop-up card with Join, and the spot lights up on the map with the time left. They have
+  3 minutes to join (`HOST_JOIN_SECS`).
+- **It all ends by itself**: when the time's up without players, the host calls it off, or the
+  game ends, the light and its timer go from every map within seconds (map-news) and the notice
+  says so: "Being played now: watch, or get in line" while it's on, then "That game has ended."
+  (marked read; src/lib/notices.ts rewrites "game:<id>" notices from the game's state).
+- **Games near you** at the top of the sheet: Join (while it's taking players), Watch (while it's
+  played), or **I'm next** (get in line; up to 12). Whoever hosts the next game on that spot
+  (within 300 m, in the next half hour) tells the line first ("Your turn: ...") and the line is
+  cleared.
+- Database: game-db/122_host_games.sql (`challenge_host`, `challenge_next`, `challenge_queue`).
+  Before it's run, Play hosts with the old challenge rules (first one free, then the fee within the
+  cooldown) and "I'm next" says it's coming soon.
+
 ## The fee and the cooldown
 
 - Your first challenge is free, and so is one after the cooldown (8 minutes).
