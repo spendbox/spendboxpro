@@ -214,8 +214,9 @@ export function Fight({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lightsKey]);
 
-  // The one you're in (or watching), closely (starting it once its minute is up).
-  const shownId = mine ?? watchId;
+  // The one you're watching (you asked to, even while in another), or the one you're in, closely
+  // (starting it once its minute is up). Closing the one you watched brings yours back.
+  const shownId = watchId ?? mine;
   useEffect(() => {
     if (shownId === null) return setView(null);
     let live = true;
@@ -315,9 +316,9 @@ export function Fight({
           onClose={() => onPlayClose?.()}
           onHost={async (game, stake) => {
             const at = where();
-            if (!at) return "Find a home or walk somewhere on the map first.";
-            const r = await hostGame(game, stake, at.x, at.z, region).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
-            if (!r.ok) return r.error;
+            if (!at) return { error: "Find a home or walk somewhere on the map first." };
+            const r = await hostGame(game, stake, at.x, at.z, region).catch(() => ({ ok: false as const, error: "The connection blinked. Try again.", busyId: undefined }));
+            if (!r.ok) return { error: r.error, busyId: "busyId" in r ? r.busyId : undefined };
             playSfx("start");
             tellMap(region, "games");
             onPlayClose?.();
@@ -348,6 +349,17 @@ export function Fight({
             onPlayClose?.();
             closedRef.current = closedRef.current.filter((x) => x !== id);
             setMine(id);
+          }}
+          onLeaveMine={async (id) => {
+            const r = await leaveChallenge(id).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
+            if (!r.ok) return r.error;
+            closedRef.current = [...closedRef.current, id];
+            setMine((m) => (m === id ? null : m));
+            if (view?.id === id) setView(null);
+            tellMap(region, "games");
+            onMessage("You left that game.", true);
+            void look();
+            return null;
           }}
           onFly={(x, z) => {
             onPlayClose?.();
@@ -441,7 +453,8 @@ export function Fight({
           onMessage={onMessage}
           onClose={() => {
             closedRef.current = [...closedRef.current, view.id];
-            setMine(null);
+            // Closing one you were watching keeps (and brings back) the one you're in.
+            setMine((m) => (m === view.id ? null : m));
             setWatchId(null);
             setView(null);
             // Leaving an open game calls it off: its light goes now, here and on every map.
@@ -1009,6 +1022,7 @@ function Arena({ view, me, now, onClose, onMessage }: { view: ChallengeView; me:
                 seats={seats}
                 seed={view.seed}
                 online={ch.online}
+                moveSecs={60}
                 onEnd={(r) => {
                   if (claim) return;
                   const seats = r.seats ?? [];

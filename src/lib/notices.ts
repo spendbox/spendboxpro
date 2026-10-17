@@ -39,8 +39,8 @@ export async function loadNotices(db: ReturnType<typeof createAdminClient>, user
 
 /**
  * A hosted game's notice (kind "game:<id>", src/app/play/fight/challenge-actions.ts hostGame)
- * says how the game is now: still taking players, being played (watch, or get in line), or over
- * (and then it's read: nothing to do).
+ * says how the game is now: still taking players, starting or being played (watch, or get in
+ * line), or over (and then it's read: nothing to do).
  */
 async function games(db: ReturnType<typeof createAdminClient>, list: Notice[]): Promise<Notice[]> {
   const ids = [...new Set(list.map((n) => /^game:(\d+)$/.exec(n.kind)?.[1]).filter(Boolean).map(Number))];
@@ -55,6 +55,8 @@ async function games(db: ReturnType<typeof createAdminClient>, list: Notice[]): 
     const c = by.get(id);
     const open = c?.status === "open" && Date.parse(c.starts_at) > now;
     if (open) return n;
+    // Its time to join is up but it hasn't been started yet (that happens at the next look): starting.
+    if (c?.status === "open") return { ...n, body: `${n.body.replace(/ (Join|Join now|Join, watch, or get in line for the next one)\.$/, "")} Starting now: watch, or get in line for the next one.` };
     if (c?.status === "playing") return { ...n, body: `${n.body.replace(/ (Join|Join now|Join, watch, or get in line for the next one)\.$/, "")} Being played now: watch, or get in line for the next one.` };
     return { ...n, body: `${n.body.split(/(?<=\.) /)[0]} That game has ended.`, read: true };
   });

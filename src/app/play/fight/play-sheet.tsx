@@ -31,6 +31,7 @@ export function PlaySheet({
   onWatch,
   onQueue,
   onOpenMine,
+  onLeaveMine,
   onFly,
 }: {
   region: string;
@@ -41,13 +42,15 @@ export function PlaySheet({
   mine: number | null;
   now: number;
   onClose: () => void;
-  /** Host it: an error to show, or null when it's on. */
-  onHost: (game: TableGame, stakeMint: number) => Promise<string | null>;
+  /** Host it: an error to show (and the game you're still in, if that's why), or null when it's on. */
+  onHost: (game: TableGame, stakeMint: number) => Promise<{ error: string; busyId?: number } | null>;
   onJoin: (c: ChallengeView) => void;
   onWatch: (c: ChallengeView) => void;
   /** In line for the next game (or out of it): an error, or null. */
   onQueue: (c: ChallengeView, on: boolean) => Promise<string | null>;
   onOpenMine: (id: number) => void;
+  /** Leave the game you're in (from here, wherever it is): an error, or null. */
+  onLeaveMine: (id: number) => Promise<string | null>;
   onFly: (x: number, z: number) => void;
 }) {
   const [game, setGame] = useState<TableGame>("whot");
@@ -56,6 +59,19 @@ export function PlaySheet({
   const [going, setGoing] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [lining, setLining] = useState<number | null>(null);
+  // The game you're still in (the host button says why it can't be used), to open or leave.
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const stuck = mine ?? busyId;
+  const [leaving, setLeaving] = useState(false);
+  async function leaveStuck() {
+    if (stuck === null) return;
+    setLeaving(true);
+    const err = await onLeaveMine(stuck);
+    setLeaving(false);
+    if (err) return setProblem(err);
+    setBusyId(null);
+    setProblem(null);
+  }
   useEffect(() => {
     void challengeQuote(region).then(setQuote).catch(() => setQuote(null));
   }, [region]);
@@ -74,7 +90,10 @@ export function PlaySheet({
     setProblem(null);
     const err = await onHost(game, stake);
     setGoing(false);
-    if (err) setProblem(err);
+    if (err) {
+      setProblem(err.error);
+      if (err.busyId !== undefined) setBusyId(err.busyId);
+    }
   }
 
   return (
@@ -248,6 +267,21 @@ export function PlaySheet({
           <b className="tabular-nums">{cash(need)}</b>
         </div>
         {(problem || short) && <p className="mb-2 rounded-2xl bg-hit/10 px-3 py-2 text-sm font-semibold text-hit">{problem ?? `Not enough: you need ${cash(need)}.`}</p>}
+        {/* Still in another game: open it, or leave it, right here. */}
+        {stuck !== null && (
+          <div className="mb-2 rounded-2xl bg-ink/5 p-2.5">
+            <p className="text-xs font-semibold">You&apos;re still in another game. Finish it, or leave it to host a new one.</p>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button onClick={() => onOpenMine(stuck)} className="h-10 rounded-full bg-ink text-xs font-bold text-white">
+                Open it
+              </button>
+              <button disabled={leaving} onClick={() => void leaveStuck()} className="h-10 rounded-full bg-hit text-xs font-bold text-white disabled:opacity-50">
+                {leaving ? "Leaving…" : "Leave it"}
+              </button>
+            </div>
+            <p className="mt-1.5 text-[11px] text-muted">Leaving before it starts gives your stake back; leaving a game being played gives it up.</p>
+          </div>
+        )}
         <button
           disabled={going || short || mine !== null}
           onClick={() => void host()}
