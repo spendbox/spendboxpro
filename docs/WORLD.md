@@ -69,6 +69,10 @@ there moving, so nobody's property is touched:
 - New landmarks go outside the kept part. New districts can reach into it: that changes what
   stands on lots nobody owns near the old edge (as the city's growth does), never owned property.
 
+- Exception (2026-10-17): three small landmarks went inside the kept part (Apapa Amusement Park,
+  Hakuna Matata, the Landmark Beach paintball park, docs/LANDMARKS.md). They replace a few
+  ordinary lots nobody owns (checked: no rooming house); owned property stands as bought.
+
 ## Baking: the method
 
 What worked for baking all of Lagos State from a cloud session (step by step in

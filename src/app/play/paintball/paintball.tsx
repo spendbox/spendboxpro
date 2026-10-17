@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Bot, Copy, Crosshair, Crown, LoaderCircle, Lock, Play, RotateCcw, Swords, Target, Users, Zap } from "lucide-react";
+import { Bot, Check, Copy, Crosshair, Crown, LoaderCircle, Lock, Play, RotateCcw, Share2, Swords, Target, UserPlus, Users, X, Zap } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { FullScreen } from "../minigames/fullscreen";
 import { FeeLine, usePlayFee } from "../minigames/fee";
@@ -9,8 +9,11 @@ import { playSfx } from "../sound";
 import { tone } from "../minigames/sfx";
 import { PaintballNet, newCode, type Msg, type Seat } from "./net";
 import { PaintballScene } from "./scene";
-import { FIELD, RULES, TEAM, fly, hitsPerson, layout, rand, segmentHit, spawns, step, think, type Actor, type Ball, type V3 } from "./world";
+import { FIELD, RULES, TEAM, arenaOf, fly, hitsPerson, layout, rand, segmentHit, spawns, step, think, type Actor, type Ball, type V3 } from "./world";
 import { canWebGL } from "../minigames/webgl";
+import { useActivityRoom } from "../activities/hub";
+import { Face } from "../activities/ui";
+import type { Invite, PlayCtx } from "../minigames/shell";
 
 // Paintball: two teams (red and blue, up to 8 players, bots in the empty places) on a speedball
 // field, full screen, third person over the shoulder. Team Splat: every hit is a splat for your
@@ -36,12 +39,21 @@ export function makeRoster(people: { id: string; name: string }[], seed: number)
   return out;
 }
 
-export function Paintball({ me: who, onClose }: { me: Me | null; onClose: () => void }) {
+/** Who to invite from a match, and to which room (practice makes a private room the first time). */
+type InviteTo = { ctx: PlayCtx; code: string | null; quick: boolean; make: () => string };
+
+export function Paintball({ me: who, onClose, ctx, invite }: { me: Me | null; onClose: () => void; ctx?: PlayCtx; invite?: Invite | null }) {
   // The same you for the whole time paintball is open (a new object each render would restart it).
   const meId = who?.id ?? null;
   const meName = who?.name ?? "Player";
   const me = useMemo(() => (meId ? { id: meId, name: meName } : null), [meId, meName]);
-  const [screen, setScreen] = useState<Screen>({ k: "menu" });
+  // Someone invited you from their match: straight into their room ("pb:<code>").
+  const [screen, setScreen] = useState<Screen>(() => {
+    const c = invite?.cid.startsWith("pb:") ? invite.cid.slice(3, 12) : "";
+    return c ? { k: "room", code: c, quick: c === "quick" } : { k: "menu" };
+  });
+  // Invites sent from a practice game point to this private room (you go there after).
+  const [spare, setSpare] = useState<string | null>(null);
   const fee = usePlayFee("paintball", !!me);
   const [joinCode, setJoinCode] = useState("");
   const [paying, setPaying] = useState(false);
@@ -73,7 +85,21 @@ export function Paintball({ me: who, onClose }: { me: Me | null; onClose: () => 
         me={me}
         start={screen.start}
         net={screen.code ? net : null}
-        onQuit={() => setScreen(screen.code ? { k: "room", code: screen.code, quick: screen.quick } : { k: "menu" })}
+        inviteTo={
+          ctx?.me
+            ? {
+                ctx,
+                code: screen.code ?? spare,
+                quick: screen.quick,
+                make: () => {
+                  const c = newCode();
+                  setSpare(c);
+                  return c;
+                },
+              }
+            : null
+        }
+        onQuit={() => setScreen(screen.code ? { k: "room", code: screen.code, quick: screen.quick } : spare ? { k: "room", code: spare, quick: false } : { k: "menu" })}
         onEnd={(result) => setScreen({ k: "done", code: screen.code, quick: screen.quick, result })}
       />
     );
@@ -126,7 +152,7 @@ export function Paintball({ me: who, onClose }: { me: Me | null; onClose: () => 
                 {paying ? <LoaderCircle className="size-4 animate-spin" /> : <Bot className="size-4" />} Practice against bots
               </button>
               <div className="rounded-2xl bg-black/30 p-3 text-xs leading-relaxed text-white/60">
-                <b className="text-white/85">Controls.</b> Left thumb: move. Right thumb: look. Hold FIRE to shoot, AIM to look down the sights, JUMP over low bunkers. On a computer: WASD, the mouse (click the field to lock it), Space to jump, R to reload, right button to aim.
+                <b className="text-white/85">Controls.</b> Left thumb: move. Right thumb: look. Tap the screen to shoot, or hold FIRE for a stream, AIM to look down the sights, JUMP over low bunkers. On a computer: WASD, the mouse (click the field to lock it), Space to jump, R to reload, right button to aim.
               </div>
               <div className="[&_p]:text-white/60">
                 <FeeLine fee={fee.fee} error={fee.error} />
@@ -142,7 +168,7 @@ export function Paintball({ me: who, onClose }: { me: Me | null; onClose: () => 
             </p>
           ))}
 
-          {screen.k === "done" && <Results result={screen.result} again={() => (screen.code ? setScreen({ k: "room", code: screen.code, quick: screen.quick }) : practice())} menu={() => setScreen({ k: "menu" })} />}
+          {screen.k === "done" && <Results result={screen.result} again={() => (screen.code ? setScreen({ k: "room", code: screen.code, quick: screen.quick }) : spare ? setScreen({ k: "room", code: spare, quick: false }) : practice())} menu={() => setScreen({ k: "menu" })} />}
         </div>
       </div>
     </FullScreen>
@@ -297,11 +323,12 @@ function Results({ result, again, menu }: { result: Result; again: () => void; m
 type Snap = { t: number; p: number[] };
 type Hud = { left: number; red: number; blue: number; hopper: number; reloading: boolean; out: number; by: string; count: number; feed: { id: number; text: string; team: number }[]; hit: boolean; aiming: boolean; shield: boolean };
 
-export function Match({ me, start, net, onQuit, onEnd }: { me: Me; start: Extract<Msg, { t: "start" }>; net: PaintballNet | null; onQuit: () => void; onEnd: (r: Result) => void }) {
+export function Match({ me, start, net, onQuit, onEnd, inviteTo }: { me: Me; start: Extract<Msg, { t: "start" }>; net: PaintballNet | null; onQuit: () => void; onEnd: (r: Result) => void; inviteTo?: InviteTo | null }) {
+  const [inviting, setInviting] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   const mapRef = useRef<HTMLCanvasElement>(null);
   const shapes = useMemo(() => layout(start.seed), [start.seed]);
-  const input = useRef({ mx: 0, mz: 0, look: { dx: 0, dy: 0 }, fire: false, aim: false, jump: false, reload: false, keys: new Set<string>() });
+  const input = useRef({ mx: 0, mz: 0, look: { dx: 0, dy: 0 }, fire: false, tap: 0, aim: false, jump: false, reload: false, keys: new Set<string>() });
   const [hud, setHud] = useState<Hud>({ left: RULES.seconds, red: 0, blue: 0, hopper: RULES.hopper, reloading: false, out: 0, by: "", count: 3, feed: [], hit: false, aiming: false, shield: false });
   const [failed] = useState(() => !canWebGL());
   const [stick, setStick] = useState<{ x: number; y: number; dx: number; dy: number } | null>(null);
@@ -315,7 +342,7 @@ export function Match({ me, start, net, onQuit, onEnd }: { me: Me; start: Extrac
     if (!el) return;
     let sc: PaintballScene;
     try {
-      sc = new PaintballScene(el, shapes);
+      sc = new PaintballScene(el, shapes, arenaOf(start.seed).id);
     } catch {
       return;
     }
@@ -534,7 +561,8 @@ export function Match({ me, start, net, onQuit, onEnd }: { me: Me; start: Extrac
         hopper = RULES.hopper;
         reloadUntil = 0;
       }
-      if (inp.fire && mine.alive && live && hopper > 0 && t >= nextShot && t >= reloadUntil) {
+      if ((inp.fire || inp.tap > 0) && mine.alive && live && hopper > 0 && t >= nextShot && t >= reloadUntil) {
+        inp.tap = Math.max(0, inp.tap - 1);
         nextShot = t + 1 / RULES.rate;
         hopper -= 1;
         if (!hopper) reloadUntil = t + RULES.reload;
@@ -789,12 +817,13 @@ export function Match({ me, start, net, onQuit, onEnd }: { me: Me; start: Extrac
   }, [shapes, start, net, me]);
 
   // ---- touch: left thumb moves, right thumb looks
-  const touches = useRef(new Map<number, { side: "move" | "look"; x: number; y: number; ox: number; oy: number }>());
+  // A quick tap on the look side fires one ball (a computer clicks instead).
+  const touches = useRef(new Map<number, { side: "move" | "look"; x: number; y: number; ox: number; oy: number; at: number }>());
   function tDown(e: React.PointerEvent) {
     if (e.pointerType === "mouse") return;
     const w = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const side = e.clientX - w.left < w.width * 0.42 ? "move" : "look";
-    touches.current.set(e.pointerId, { side, x: e.clientX, y: e.clientY, ox: e.clientX, oy: e.clientY });
+    touches.current.set(e.pointerId, { side, x: e.clientX, y: e.clientY, ox: e.clientX, oy: e.clientY, at: e.timeStamp });
     if (side === "move") setStick({ x: e.clientX - w.left, y: e.clientY - w.top, dx: 0, dy: 0 });
   }
   function tMove(e: React.PointerEvent) {
@@ -822,6 +851,9 @@ export function Match({ me, start, net, onQuit, onEnd }: { me: Me; start: Extrac
   function tUp(e: React.PointerEvent) {
     const tt = touches.current.get(e.pointerId);
     touches.current.delete(e.pointerId);
+    if (tt?.side === "look" && e.type === "pointerup" && e.timeStamp - tt.at < 320 && Math.hypot(e.clientX - tt.ox, e.clientY - tt.oy) < 14) {
+      input.current.tap = Math.min(input.current.tap + 1, 3);
+    }
     if (tt?.side === "move") {
       input.current.mx = 0;
       input.current.mz = 0;
@@ -880,7 +912,19 @@ export function Match({ me, start, net, onQuit, onEnd }: { me: Me; start: Extrac
         </div>
 
         {/* The map */}
-        <canvas ref={mapRef} width={160} height={96} className="pointer-events-none absolute left-2 top-16 h-[72px] w-[120px] rounded-lg border border-white/20 shadow sm:top-2 sm:h-24 sm:w-40" />
+        <canvas ref={mapRef} width={160} height={96} className="pointer-events-none absolute left-2 top-14 h-[72px] w-[120px] rounded-lg border border-white/20 shadow sm:top-2 sm:h-24 sm:w-40" />
+
+        {/* Invite others (the match goes on behind) */}
+        {inviteTo && (
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => setInviting(true)}
+            className="absolute left-2 top-2 flex h-9 items-center gap-1.5 rounded-full bg-black/55 px-3 text-xs font-black tracking-wider text-white shadow backdrop-blur-sm sm:left-44"
+          >
+            <UserPlus className="size-4" /> INVITE
+          </button>
+        )}
+        {inviting && inviteTo && <InvitePanel to={inviteTo} onClose={() => setInviting(false)} />}
 
         {/* Who splatted whom */}
         <div className="pointer-events-none absolute right-2 top-14 space-y-1 text-right">
@@ -900,9 +944,12 @@ export function Match({ me, start, net, onQuit, onEnd }: { me: Me; start: Extrac
         {/* Countdown, out, shield */}
         {hud.count > 0 && (
           <div className="pointer-events-none absolute inset-0 grid place-items-center">
-            <p key={hud.count} className="font-display text-8xl font-black text-white [text-shadow:0_6px_30px_rgba(0,0,0,.7)]">
-              {hud.count}
-            </p>
+            <div className="text-center">
+              <p className="text-xs font-black tracking-[0.3em] text-white/80 [text-shadow:0_2px_10px_rgba(0,0,0,.7)]">{arenaOf(start.seed).name.toUpperCase()}</p>
+              <p key={hud.count} className="font-display text-8xl font-black text-white [text-shadow:0_6px_30px_rgba(0,0,0,.7)]">
+                {hud.count}
+              </p>
+            </div>
           </div>
         )}
         {hud.out > 0 && (
@@ -921,7 +968,7 @@ export function Match({ me, start, net, onQuit, onEnd }: { me: Me; start: Extrac
             <span className="absolute left-1/2 top-1/2 size-12 rounded-full bg-white/60 shadow" style={{ transform: `translate(calc(-50% + ${stick.dx}px), calc(-50% + ${stick.dy}px))` }} />
           </div>
         )}
-        {!stick && hud.count > 0 && <p className="pointer-events-none absolute bottom-24 left-6 text-xs font-bold text-white/70">Left thumb: move · Right thumb: look</p>}
+        {!stick && hud.count > 0 && <p className="pointer-events-none absolute bottom-24 left-6 text-xs font-bold text-white/70">Left thumb: move · Right thumb: look · Tap to shoot</p>}
 
         {/* Paint left */}
         <div className="pointer-events-none absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-3 rounded-xl bg-black/50 px-3 py-1 text-center text-white">
@@ -980,5 +1027,90 @@ export function Match({ me, start, net, onQuit, onEnd }: { me: Me; start: Extrac
         </div>
       </div>
     </FullScreen>
+  );
+}
+
+// ---------------------------------------------------------------- inviting from a match
+
+/** Everyone in the place (or with Games open in town) gets a tap to invite; or share the code. */
+function InvitePanel({ to, onClose }: { to: InviteTo; onClose: () => void }) {
+  const me = to.ctx.me;
+  const room = useActivityRoom(to.ctx.roundId, to.ctx.roomId ?? "arcade", me, { doing: "mg:paintball" });
+  const [sent, setSent] = useState<Set<string>>(() => new Set());
+  const [code, setCode] = useState(to.code);
+  const [copied, setCopied] = useState(false);
+  const seen = new Set<string>();
+  const people = [...room.present, ...to.ctx.members.map((m) => ({ id: m.id, name: m.name, avatar: m.avatar }))].filter((p) => {
+    if (p.id === me?.id || seen.has(p.id)) return false;
+    seen.add(p.id);
+    return true;
+  });
+  const roomCode = () => {
+    if (code) return code;
+    const c = to.make();
+    setCode(c);
+    return c;
+  };
+  function invite(id: string) {
+    if (!me) return;
+    room.send({ t: "mg_invite", cid: `pb:${roomCode()}`, game: "paintball", seed: 0, from: me, to: id });
+    setSent((s) => new Set(s).add(id));
+    playSfx("tick");
+  }
+  async function share() {
+    const c = roomCode();
+    const text = c === "quick" ? "Come and play paintball with me in Newtown: open Games, Paintball, Quick match." : `Come and play paintball with me in Newtown: open Games, Paintball, Private match, and put in the code ${c}.`;
+    try {
+      if (navigator.share) await navigator.share({ title: "Paintball in Newtown", text });
+      else {
+        await navigator.clipboard?.writeText(text);
+        setCopied(true);
+      }
+    } catch {
+      // They closed the share sheet.
+    }
+  }
+  return (
+    <div className="absolute inset-0 z-40 grid place-items-center bg-black/50 p-4" onPointerDown={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-sm space-y-3 rounded-3xl border border-white/10 bg-[#0d1117]/95 p-4 text-white shadow-2xl">
+        <div className="flex items-center justify-between">
+          <p className="flex items-center gap-2 font-display text-xl font-black">
+            <UserPlus className="size-5 text-[#ff6b6b]" /> Invite others
+          </p>
+          <button onClick={onClose} className="grid size-8 place-items-center rounded-full bg-white/10" aria-label="Close">
+            <X className="size-4" />
+          </button>
+        </div>
+        <p className="text-sm text-white/60">
+          {to.code
+            ? "They get a pop-up and come into this room. The match keeps going: they play the next one."
+            : "They get a pop-up and wait in your own room. When this practice game ends, you go there and play together."}
+        </p>
+        {people.length ? (
+          <ul className="max-h-56 space-y-1.5 overflow-y-auto">
+            {people.map((p) => (
+              <li key={p.id} className="flex items-center gap-3 rounded-2xl bg-white/5 px-3 py-2">
+                <Face p={p} size={32} />
+                <span className="min-w-0 flex-1 truncate font-semibold">{p.name}</span>
+                {sent.has(p.id) ? (
+                  <span className="flex items-center gap-1 text-xs font-bold text-[#8ce99a]">
+                    <Check className="size-3.5" /> Invited
+                  </span>
+                ) : (
+                  <button onClick={() => invite(p.id)} className="rounded-full bg-[#e03131] px-3 py-1.5 text-xs font-bold">
+                    Invite
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="rounded-2xl bg-white/5 p-3 text-sm text-white/60">Nobody else is here right now. Share the match with a friend instead.</p>
+        )}
+        <button onClick={() => void share()} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#1c7ed6] py-3 font-bold">
+          {copied ? <Check className="size-4" /> : <Share2 className="size-4" />} {copied ? "Copied: paste it in a chat" : code && code !== "quick" ? `Share the code ${code}` : "Share with a friend"}
+        </button>
+      </div>
+    </div>
   );
 }

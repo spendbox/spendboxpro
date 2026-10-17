@@ -77,3 +77,21 @@ paint, not blood: splats, colour and laughs.
 - The entry fee and how the pot is shared (winners only, or everyone gets something).
 - Which game server host to pay for (about $5–$20 a month to start).
 - Whether paintball parks are only in some places or in every big area.
+
+## Built so far (2026-10-17)
+- **Only at parks:** a park's fun park ("Play paintball"), the big parks (bigpark landmarks: the
+  paintball parks among them, drawn on the map as a netted field of inflatables) and fun parks.
+  Not at army bases or "anywhere" any more.
+- **Four grounds**, one per match from its seed (everyone in a match plays the same one, the next
+  match is likely another): Speedball Arena (inflatables on astroturf), The Woods (trees, logs,
+  hay bales and crates on a forest floor), The Yard (walls, cars, shipping containers and tyres on
+  concrete among tall buildings) and Beach Camp (palms, drums, sandbags, boats and huts on sand by
+  the sea). Each is laid out from the seed, so no two matches are the same. Its name shows over
+  the countdown. (`src/app/play/paintball/world.ts` ARENAS and layout, `scene.ts` Kit and
+  surroundings.)
+- **Tap to shoot:** a quick tap on the right side of the screen fires one ball; hold FIRE for a
+  stream.
+- **Invite during a match:** the INVITE button (top left) lists everyone in the place (or with
+  Games open in town): Invite sends them a pop-up that brings them into your room (they play the
+  next match), or Share sends the room's code. From a practice game it makes a private room for
+  you, and you go there when the practice game ends.

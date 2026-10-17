@@ -28,7 +28,9 @@ export const TEAM = [
   { name: "Blue", colour: 0x1c7ed6, css: "#4dabf7", dark: 0x11497d },
 ];
 
-export type Shape = { kind: "box" | "cyl" | "cone"; x: number; z: number; w: number; d: number; h: number; colour: number; ry?: number };
+/** What a bunker looks like (how it's drawn; what you can hide behind is its kind and size). */
+export type Look = "inflatable" | "tree" | "log" | "bale" | "crate" | "wall" | "barrel" | "car" | "container" | "tyres" | "palm" | "drum" | "sandbags" | "boat" | "hut";
+export type Shape = { kind: "box" | "cyl" | "cone"; x: number; z: number; w: number; d: number; h: number; colour: number; ry?: number; look?: Look };
 
 /** A seeded random 0-1 (the same everywhere for the same seed). */
 export function rand(seed: number) {
@@ -47,11 +49,69 @@ export function rand(seed: number) {
 const BUNKER = [0xffd43b, 0xff922b, 0x20c997, 0xf06595, 0x845ef7, 0xe9ecef];
 
 /**
- * The bunkers, one half laid out and mirrored (so both ends are the same): snakes along one side,
- * cans, temples, a tall tower each, the dorito in the middle, and a few made from the seed so
- * every match is a little different.
+ * The grounds: a different one for each match (from its seed, so everyone in it plays on the
+ * same): a speedball field of inflatables, a woodland of trees, logs and hay bales, a yard of
+ * walls, cars and containers, or a beach of palms, drums, sandbags and boats.
  */
+export const ARENAS = [
+  { id: "speedball", name: "Speedball Arena" },
+  { id: "woods", name: "The Woods" },
+  { id: "yard", name: "The Yard" },
+  { id: "beach", name: "Beach Camp" },
+] as const;
+export type ArenaId = (typeof ARENAS)[number]["id"];
+export const arenaOf = (seed: number) => ARENAS[(seed >>> 0) % ARENAS.length];
+
+type Piece = { look: Look; kind: Shape["kind"]; w: [number, number]; d: [number, number]; h: [number, number]; colours: number[]; turn?: boolean };
+const PIECES: Record<Exclude<ArenaId, "speedball">, { n: number; pieces: Piece[] }> = {
+  woods: {
+    n: 13,
+    pieces: [
+      { look: "tree", kind: "cyl", w: [0.8, 1.2], d: [0.8, 1.2], h: [7, 9], colours: [0x6b4f37] },
+      { look: "tree", kind: "cyl", w: [0.8, 1.1], d: [0.8, 1.1], h: [7, 9], colours: [0x5c4330] },
+      { look: "log", kind: "box", w: [4, 6], d: [0.9, 1.1], h: [0.9, 1.1], colours: [0x7a5536], turn: true },
+      { look: "bale", kind: "cyl", w: [1.6, 1.9], d: [1.6, 1.9], h: [1.3, 1.5], colours: [0xd9b44a] },
+      { look: "crate", kind: "box", w: [1.4, 1.8], d: [1.4, 1.8], h: [1.4, 1.8], colours: [0xa5773d], turn: true },
+    ],
+  },
+  yard: {
+    n: 11,
+    pieces: [
+      { look: "wall", kind: "box", w: [4, 7], d: [0.5, 0.6], h: [2.2, 2.6], colours: [0x9aa0a6, 0xb0a99f], turn: true },
+      { look: "barrel", kind: "cyl", w: [0.9, 1], d: [0.9, 1], h: [1.2, 1.3], colours: [0x2f6fb3, 0xc92a2a, 0x2b8a3e] },
+      { look: "car", kind: "box", w: [3.8, 4.2], d: [1.8, 1.9], h: [1.4, 1.5], colours: [0xf1f3f5, 0x343a40, 0xc92a2a, 0x1971c2, 0xf08c00], turn: true },
+      { look: "container", kind: "box", w: [5.8, 6.1], d: [2.4, 2.5], h: [2.5, 2.6], colours: [0xc2410c, 0x1d4ed8, 0x15803d, 0xb45309], turn: true },
+      { look: "tyres", kind: "cyl", w: [1.3, 1.5], d: [1.3, 1.5], h: [1, 1.3], colours: [0x1f2124] },
+    ],
+  },
+  beach: {
+    n: 12,
+    pieces: [
+      { look: "palm", kind: "cyl", w: [0.6, 0.8], d: [0.6, 0.8], h: [7, 9], colours: [0x8a6a45] },
+      { look: "drum", kind: "cyl", w: [0.9, 1], d: [0.9, 1], h: [1.2, 1.3], colours: [0x2f9e44, 0xf08c00, 0x1971c2] },
+      { look: "sandbags", kind: "box", w: [3, 4.5], d: [1, 1.2], h: [1, 1.2], colours: [0xc8b07a], turn: true },
+      { look: "boat", kind: "box", w: [4.2, 5], d: [1.6, 1.8], h: [1.1, 1.3], colours: [0x1c7ed6, 0xe03131, 0xfab005, 0x12b886], turn: true },
+      { look: "hut", kind: "box", w: [2.6, 3], d: [2.6, 3], h: [2.4, 2.7], colours: [0xb08850], turn: true },
+    ],
+  },
+};
+
+/** The bunkers, one half laid out and mirrored (so both ends are the same). */
 export function layout(seed: number): Shape[] {
+  const arena = arenaOf(seed).id;
+  const half = arena === "speedball" ? speedball(seed) : scatter(seed, PIECES[arena]);
+  const out: Shape[] = [];
+  // The other half: the same, turned round the middle.
+  for (const s of half) out.push(s, { ...s, x: -s.x, z: -s.z, ry: s.ry });
+  if (arena === "speedball") out.push({ kind: "cone", x: 0, z: 0, w: 2.6, d: 2.6, h: 2.2, colour: 0xffd43b, look: "inflatable" });
+  else if (arena === "woods") out.push({ kind: "cyl", x: 0, z: 0, w: 1.4, d: 1.4, h: 9, colour: 0x6b4f37, look: "tree" });
+  else if (arena === "yard") out.push({ kind: "box", x: 0, z: 0, w: 6, d: 2.45, h: 2.6, colour: 0xfab005, ry: Math.PI / 2, look: "container" });
+  else out.push({ kind: "box", x: 0, z: 0, w: 3, d: 3, h: 2.6, colour: 0xb08850, look: "hut" });
+  return out;
+}
+
+/** Speedball: snakes along one side, cans, temples, a tall tower each, the dorito in the middle, and a few from the seed. */
+function speedball(seed: number): Shape[] {
   const r = rand(seed);
   const half: Shape[] = [
     { kind: "box", x: -14, z: 15, w: 11, d: 1.1, h: 0.9, colour: 0xffd43b },
@@ -67,6 +127,9 @@ export function layout(seed: number): Shape[] {
     { kind: "box", x: -26, z: 12, w: 1.2, d: 4, h: 1.4, colour: 0x845ef7 },
     { kind: "box", x: -3, z: -7, w: 3, d: 1.1, h: 1.2, colour: 0x20c997 },
   ];
+  // Each match its own colours (and a few bunkers of its own).
+  const shift = Math.floor(r() * BUNKER.length);
+  for (const s of half) s.colour = BUNKER[(BUNKER.indexOf(s.colour) + shift) % BUNKER.length] ?? s.colour;
   for (let k = 0; k < 3; k++) {
     const x = -24 + r() * 20;
     const z = -14 + r() * 28;
@@ -74,11 +137,29 @@ export function layout(seed: number): Shape[] {
     const kind = r() < 0.5 ? "cyl" : "box";
     half.push({ kind, x, z, w: 1.4 + r(), d: 1.2 + r() * 0.8, h: 1.2 + r() * 0.8, colour: BUNKER[Math.floor(r() * BUNKER.length)] });
   }
-  const out: Shape[] = [];
-  // The other half: the same, turned round the middle.
-  for (const s of half) out.push(s, { ...s, x: -s.x, z: -s.z });
-  out.push({ kind: "cone", x: 0, z: 0, w: 2.6, d: 2.6, h: 2.2, colour: 0xffd43b });
-  return out;
+  for (const s of half) s.look = "inflatable";
+  return half;
+}
+
+/** The other grounds: their pieces scattered over one half, never in the start area or too close. */
+function scatter(seed: number, kit: { n: number; pieces: Piece[] }): Shape[] {
+  const r = rand(seed);
+  const pick = (a: [number, number]) => a[0] + r() * (a[1] - a[0]);
+  const half: Shape[] = [];
+  for (let tries = 0; half.length < kit.n && tries < 400; tries++) {
+    const p = kit.pieces[Math.floor(r() * kit.pieces.length)];
+    const w = pick(p.w);
+    const d = p.kind === "cyl" ? w : pick(p.d);
+    const reach = Math.max(w, d) / 2;
+    const x = -FIELD.hx + 6 + reach + r() * (FIELD.hx - 8 - reach * 2);
+    const z = -FIELD.hz + 1.5 + reach + r() * (FIELD.hz * 2 - 3 - reach * 2);
+    // Room to run round every piece (and the middle kept for its own piece).
+    if (Math.hypot(x, z) < 5 || half.some((s) => Math.hypot(s.x - x, s.z - z) < Math.max(s.w, s.d) / 2 + reach + 2.6)) continue;
+    const shape: Shape = { kind: p.kind, x, z, w, d, h: pick(p.h), colour: p.colours[Math.floor(r() * p.colours.length)], look: p.look };
+    if (p.turn) shape.ry = (r() - 0.5) * Math.PI;
+    half.push(shape);
+  }
+  return half;
 }
 
 export function spawns(team: number) {

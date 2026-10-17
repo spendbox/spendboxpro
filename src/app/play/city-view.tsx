@@ -2833,7 +2833,14 @@ export function CityView({
           life.add(park.group);
         }
         if (t.structure?.anchor && t.structure.type === "funfair") {
-          addFerris(t.x + 0.05, t.z, Math.PI / 4, t.i, 1.3);
+          // A real fun park bigger than 2 × 2 (Apapa's, Ikorodu's): its rides drawn bigger, in the
+          // middle of its grounds (as structureParts draws them).
+          const W = t.structure.w ?? 2;
+          const D = t.structure.d ?? 2;
+          const big = W > 2 || D > 2 ? Math.min(W, D) / 2 : 1;
+          const at = (lx: number, lz: number) => (big > 1 ? [t.x + (W - 1) / 2 + (lx - 0.5) * big, t.z + (D - 1) / 2 + (lz - 0.5) * big] : [t.x + lx, t.z + lz]);
+          const [fx, fz] = at(0.05, 0);
+          addFerris(fx, fz, Math.PI / 4, t.i, 1.3 * Math.min(1.8, big));
           // A carousel that turns
           const obj = new THREE.Group();
           const spin = new THREE.Group();
@@ -2852,7 +2859,9 @@ export function CityView({
             spin.add(pole, horse);
           }
           obj.add(spin);
-          obj.position.set(t.x + 0.95, 0, t.z + 0.15);
+          const [cx, cz] = at(0.95, 0.15);
+          obj.position.set(cx, 0, cz);
+          obj.scale.setScalar(Math.min(1.8, big));
           landmarks.push({ obj, spin, tile: t.i, speed: 0.8, axis: "y" });
           life.add(obj);
         }

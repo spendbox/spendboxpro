@@ -35,6 +35,7 @@ import { TurnTable, type Seat } from "../minigames/turn-table";
 import { Confetti } from "../activities/ui";
 import { playSfx } from "../sound";
 import { Sheet } from "../sheet";
+import { onMapNews, tellMap } from "../map-news";
 import { whileHere } from "../activity";
 import { challengeQuote, declineChallenge, inviteChallenge, joinChallenge, leaveChallenge, myChallengeRep, openChallenge, reportWinner, type ChallengeQuote, type ChallengeView } from "./challenge-actions";
 import { createClient } from "@/lib/supabase/client";
@@ -128,13 +129,16 @@ export function Fight({
   useEffect(() => {
     if (!signedIn) return;
     const first = setTimeout(() => void look(), 1200);
-    // Every 6 s while the list is open, every 30 s on the map; nothing while they're away.
+    // Every 6 s while the list is open, every 30 s on the map; nothing while they're away. And
+    // within seconds when someone in the city opens, starts or calls off a game (../map-news).
     const stop = whileHere(() => void look(), open ? 6000 : 30_000);
+    const stopNews = onMapNews(region, "games", () => void look());
     return () => {
       clearTimeout(first);
       stop();
+      stopNews();
     };
-  }, [signedIn, look, open]);
+  }, [signedIn, look, open, region]);
   // A knock from someone who just challenged you (a live nudge to look now; the invitation itself
   // comes from the server, so a knock can't be faked into anything).
   const meId = me?.id ?? null;
@@ -173,6 +177,7 @@ export function Fight({
     if (!r.ok) return r.error;
     playSfx("start");
     knock(target);
+    tellMap(region, "games");
     closedRef.current = closedRef.current.filter((x) => x !== r.id);
     setWatchId(null);
     setMine(r.id);
@@ -208,6 +213,8 @@ export function Fight({
   useEffect(() => {
     if (shownId === null) return setView(null);
     let live = true;
+    // Its lights changed (it started, ended or was called off): the city's maps are told.
+    let status = "";
     const get = async () => {
       const v = await fetch(`/api/challenges?id=${shownId}`, { cache: "no-store" })
         .then((res) => (res.ok ? (res.json() as Promise<{ view: ChallengeView | null }>) : null))
@@ -215,6 +222,8 @@ export function Fight({
         .catch(() => null);
       if (!live) return;
       setView(v);
+      if (v && status && v.status !== status) tellMap(region, "games");
+      if (v) status = v.status;
       if (v && (v.status === "cancelled" || v.status === "done")) {
         // Over: no need to keep asking.
         clearInterval(t);
@@ -227,7 +236,7 @@ export function Fight({
       live = false;
       clearInterval(t);
     };
-  }, [shownId, look]);
+  }, [shownId, look, region]);
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(t);
@@ -239,6 +248,7 @@ export function Fight({
     setBusy(false);
     if (!r.ok) return onMessage(r.error, false);
     playSfx("start");
+    tellMap(region, "games");
     setWatchId(null);
     setMine(c.id);
     onFly?.(c.x, c.z);
@@ -249,6 +259,7 @@ export function Fight({
     setBusy(false);
     if (!r.ok) return onMessage(r.error, false);
     knock(c.host);
+    tellMap(region, "games");
     setInvites((l) => l.filter((x) => x.id !== c.id));
   };
   // Table games being played nearby that you could watch (not yours, not dismissed).
@@ -274,6 +285,7 @@ export function Fight({
             // Errors show in the Challenge card itself (not behind it).
             if (!r.ok) return { error: r.error, busyId: "busyId" in r ? r.busyId : undefined };
             playSfx("start");
+            tellMap(region, "games");
             onClose();
             setMine(r.id);
             onMessage(r.fee > 0 ? `Challenge on! ${cash(r.fee)} fee paid. Everyone nearby has a minute to join.` : "Challenge on! Everyone nearby has a minute to join.", true);
@@ -376,6 +388,8 @@ export function Fight({
             setMine(null);
             setWatchId(null);
             setView(null);
+            // Leaving an open game calls it off: its light goes now, here and on every map.
+            tellMap(region, "games");
             void look();
           }}
           onJoin={() => void join(view)}
@@ -395,6 +409,7 @@ export function Fight({
             closedRef.current = [...closedRef.current, view.id];
             setMine(null);
             setView(null);
+            tellMap(region, "games");
             void look();
           }}
           onMessage={onMessage}

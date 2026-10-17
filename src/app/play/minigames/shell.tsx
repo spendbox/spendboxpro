@@ -74,7 +74,7 @@ export function MiniGamePlayer({ def, ctx, onClose, invite, task }: { def: MiniG
   const gp: GameProps = { roundId: ctx.roundId, roomId: roomOf(ctx), me: ctx.me, members: ctx.members, label: CATEGORIES[def.cat].label, onClose };
   if (def.legacy) return <LegacyPlay def={def} ctx={ctx} gp={gp} />;
   // Paintball has its own screens (rooms, matches between phones) and takes its fee each match.
-  if (def.engine === "paintball") return <Paintball me={ctx.me ? { id: ctx.me.id, name: ctx.me.name } : null} onClose={onClose} />;
+  if (def.engine === "paintball") return <Paintball me={ctx.me ? { id: ctx.me.id, name: ctx.me.name } : null} onClose={onClose} ctx={ctx} invite={invite} />;
   return (
     <div className="space-y-3">
       <ActivityStyles />

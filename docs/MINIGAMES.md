@@ -18,6 +18,7 @@ How they're used:
   still earns a tip). The little games tapped inside places (darts, archery, pool...) cost too.
 - **Full screen:** the shooting range, chess and draughts (a 3D board) and paintball fill the
   screen. At a shooting range its button opens only the shooting game.
+- **Paintball only at parks** (parks, the big parks and fun parks; docs/PAINTBALL_PLAN.md).
 - **Heists:** the bank robbery has a "job" step: two stealth games (three for the big job, ending
   with the getaway drive), picked from the heist category. Fail one and the alarm goes off.
   `HeistChain` (heist-chain.tsx) chains any games for any future heist.

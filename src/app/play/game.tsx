@@ -2131,11 +2131,12 @@ export function Game({
       case "rotunda":
         // A museum's galleries: its art is for sale (the masters at museum prices).
         return { label: "Buy art", icon: ShoppingBag, run: () => worldLife.openThings("shops", "museum") };
+      case "amusement":
+        // A park's amusement park: paintball on its field (Photo is in the bar too). Paintball is
+        // only at parks.
+        return { label: `Play paintball · ${cash(gameFeeMint("paintball", worldRegion?.prices.perMint))}`, icon: Crosshair, run: () => setGamesOpen({ game: "paintball", only: true }) };
       case "skybridge":
       case "clockroom":
-      case "amusement":
-        // A park's amusement park: paintball on its field (Photo is in the bar too).
-        return { label: `Play paintball · ${cash(gameFeeMint("paintball", worldRegion?.prices.perMint))}`, icon: Crosshair, run: () => setGamesOpen({ game: "paintball", only: true }) };
       case "park":
       case "plaza":
       case "roofTerrace":

@@ -5,7 +5,7 @@ import { rememberPerson } from "./recent-rail";
 import { GenderMark } from "./people-list";
 import { setGender } from "../people-actions";
 import { useEffect, useState } from "react";
-import { Banknote, BellRing, Car, Dices, Gift, House, MapPin, MessageCircle, StickyNote, UserPlus } from "lucide-react";
+import { Banknote, BellRing, Car, ChevronRight, Dices, Gift, House, MapPin, MessageCircle, StickyNote, UserPlus } from "lucide-react";
 import { Star, X } from "@/components/icons";
 import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar } from "@/lib/avatar";
@@ -194,26 +194,21 @@ export function PersonCard({
 
           {/* Play a game against them: Whot!, chess, draughts, paintball and the party games (src/app/play/fight/whot-invite.tsx). */}
           {canAct && (
-            <div
-              role="button"
-              tabIndex={0}
+            <button
+              type="button"
               onClick={() => playGame("whot")}
-              onKeyDown={(e) => {
-                if (e.key !== "Enter" && e.key !== " ") return;
-                e.preventDefault();
-                playGame("whot");
-              }}
-              className="mt-3 flex cursor-pointer items-center gap-3 rounded-2xl bg-[#7048e8]/[0.07] p-3 transition hover:bg-[#7048e8]/[0.12] active:scale-[0.99]"
+              className="mt-3 flex w-full items-center gap-3 rounded-2xl bg-[#7048e8] p-3 text-left text-white shadow-[0_4px_0_#4c2fb0] transition hover:bg-[#7c56f0] active:translate-y-1 active:shadow-none"
               aria-label={`Play a game with ${card.name}: pick the game and the stake`}
             >
-              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#7048e8] text-white">
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-white/20">
                 <Dices className="size-5" />
               </span>
-              <p className="min-w-0 flex-1 text-sm">
-                <b>Play a game with {card.name}</b>
-                <span className="block text-xs text-muted">Whot!, chess, draughts, paintball, Truth or Dare, Impostor. For fun or a stake.</span>
-              </p>
-            </div>
+              <span className="min-w-0 flex-1 text-sm">
+                <b className="block">Play a game with {card.name}</b>
+                <span className="block text-xs text-white/80">Whot!, chess, draughts, paintball, Truth or Dare, Impostor. For fun or a stake.</span>
+              </span>
+              <ChevronRight className="size-5 shrink-0 text-white/80" />
+            </button>
           )}
 
           {/* About them. */}

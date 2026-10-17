@@ -1,13 +1,23 @@
-// Paintball, drawn: a speedball field on astroturf (team-coloured ends, white lines), bright
-// inflatable bunkers, tall nets on poles round it, trees and hills beyond under a big sky, a
-// scoreboard screen on the sideline and team flags. Players in team jerseys and masks with their
+// Paintball, drawn: one of four grounds (world.ts ARENAS): a speedball field on astroturf
+// (team-coloured ends, white lines) with bright inflatable bunkers, woods of trees, logs and hay
+// bales on a forest floor, a yard of walls, cars and containers on concrete among tall buildings,
+// or a beach camp of palms, drums, sandbags and boats by the sea. Tall nets on poles round it, a
+// big sky, a scoreboard screen on the sideline and team flags. Players in team jerseys and masks with their
 // markers, legs that run, a name over each head. Paintballs fly as little bright streaks and
 // burst into splats that stay on bunkers, the turf and the nets. Third-person camera over the
 // right shoulder; aiming brings it in close.
 
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
-import { FIELD, RULES, TEAM, segmentHit, type Ball, type Shape, type V3 } from "./world";
+import { FIELD, RULES, TEAM, segmentHit, type ArenaId, type Ball, type Shape, type V3 } from "./world";
+
+/** Each ground's sky, light and land round the field. */
+const LOOKS: Record<ArenaId, { sky: [number, number]; fog: number; land: number; hemi: number; sun: number }> = {
+  speedball: { sky: [0x2f7fd0, 0xd6ebf7], fog: 0xbfd9ee, land: 0x5f9f4a, hemi: 0x4d6b3a, sun: 0xfff2dc },
+  woods: { sky: [0x4f86b8, 0xd9e6dc], fog: 0xb7c9b4, land: 0x4a7a3a, hemi: 0x3d5a2e, sun: 0xfff0d0 },
+  yard: { sky: [0x5b7fa6, 0xe3e1da], fog: 0xcfd2d4, land: 0x8d9094, hemi: 0x6b6f73, sun: 0xffe9c7 },
+  beach: { sky: [0x1d8fe0, 0xe8f6ff], fog: 0xd8eef8, land: 0xe8d5a3, hemi: 0xc9b48a, sun: 0xfff6e0 },
+};
 
 type Char = {
   root: THREE.Group;
@@ -46,8 +56,9 @@ export class PaintballScene {
   private camLook = new THREE.Vector3();
   private fov = 70;
 
-  constructor(host: HTMLElement, shapes: Shape[]) {
+  constructor(host: HTMLElement, shapes: Shape[], arena: ArenaId = "speedball") {
     this.shapes = shapes;
+    const look = LOOKS[arena];
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
     const r = this.renderer;
     r.setPixelRatio(Math.min(1.75, window.devicePixelRatio || 1));
@@ -62,13 +73,13 @@ export class PaintballScene {
     host.appendChild(r.domElement);
 
     const sc = this.scene;
-    sc.fog = new THREE.Fog(0xbfd9ee, 70, 260);
+    sc.fog = new THREE.Fog(look.fog, arena === "woods" ? 50 : 70, arena === "woods" ? 200 : 260);
 
     // The sky: a soft gradient dome and the sun.
     const skyGeo = new THREE.SphereGeometry(400, 32, 16);
     const cols: number[] = [];
-    const top = new THREE.Color(0x2f7fd0);
-    const low = new THREE.Color(0xd6ebf7);
+    const top = new THREE.Color(look.sky[0]);
+    const low = new THREE.Color(look.sky[1]);
     const c = new THREE.Color();
     const pos = skyGeo.getAttribute("position");
     for (let i = 0; i < pos.count; i++) {
@@ -80,8 +91,8 @@ export class PaintballScene {
     sc.add(new THREE.Mesh(skyGeo, skyMat));
     this.disposables.push(skyGeo, skyMat);
 
-    sc.add(new THREE.HemisphereLight(0xeaf4ff, 0x4d6b3a, 1.1));
-    const sun = new THREE.DirectionalLight(0xfff2dc, 2.4);
+    sc.add(new THREE.HemisphereLight(0xeaf4ff, look.hemi, 1.1));
+    const sun = new THREE.DirectionalLight(look.sun, 2.4);
     sun.position.set(-30, 60, 25);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
@@ -96,38 +107,12 @@ export class PaintballScene {
     sc.add(sun);
 
     // Grass all round, the turf field, its lines and team ends.
-    const grassMat = new THREE.MeshLambertMaterial({ color: 0x5f9f4a });
+    const grassMat = new THREE.MeshLambertMaterial({ color: look.land });
     const grass = new THREE.Mesh(new THREE.CircleGeometry(380, 48).rotateX(-Math.PI / 2), grassMat);
     grass.position.y = -0.02;
     grass.receiveShadow = true;
     sc.add(grass);
-    const turfTex = canvasTex(1024, 640, (g) => {
-      for (let k = 0; k < 16; k++) {
-        g.fillStyle = k % 2 ? "#3f9a3b" : "#46a643";
-        g.fillRect((k * 1024) / 16, 0, 1024 / 16 + 1, 640);
-      }
-      g.globalAlpha = 0.16;
-      g.fillStyle = "#ff4d4d";
-      g.fillRect(0, 0, 70, 640);
-      g.fillStyle = "#339af0";
-      g.fillRect(1024 - 70, 0, 70, 640);
-      g.globalAlpha = 1;
-      g.strokeStyle = "#ffffff";
-      g.lineWidth = 6;
-      g.strokeRect(8, 8, 1008, 624);
-      g.beginPath();
-      g.moveTo(512, 8);
-      g.lineTo(512, 632);
-      g.stroke();
-      g.beginPath();
-      g.arc(512, 320, 70, 0, Math.PI * 2);
-      g.stroke();
-      // Turf speckle.
-      for (let k = 0; k < 9000; k++) {
-        g.fillStyle = Math.random() < 0.5 ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.05)";
-        g.fillRect(Math.random() * 1024, Math.random() * 640, 2, 2);
-      }
-    });
+    const turfTex = canvasTex(1024, 640, (g) => groundOf(arena, g));
     const turfMat = new THREE.MeshLambertMaterial({ map: turfTex });
     const turf = new THREE.Mesh(new THREE.PlaneGeometry(FIELD.hx * 2 + 2, FIELD.hz * 2 + 2).rotateX(-Math.PI / 2), turfMat);
     turf.receiveShadow = true;
@@ -147,7 +132,12 @@ export class PaintballScene {
     };
     const stripe = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
     this.disposables.push(stripe);
+    const kit = new Kit(this.disposables);
     for (const s of shapes) {
+      if (s.look && s.look !== "inflatable") {
+        sc.add(kit.piece(s));
+        continue;
+      }
       let mesh: THREE.Mesh;
       if (s.kind === "box") {
         mesh = new THREE.Mesh(new RoundedBoxGeometry(s.w, s.h, s.d, 4, Math.min(0.3, s.h / 3, s.w / 3, s.d / 3)), bmat(s.colour));
@@ -254,38 +244,8 @@ export class PaintballScene {
     sc.add(board);
     this.setScore(0, 0, RULES.seconds);
 
-    // Trees and hills beyond.
-    const trunkMat = new THREE.MeshLambertMaterial({ color: 0x6b4f37 });
-    const leafMat = new THREE.MeshLambertMaterial({ color: 0x3f7a4f, flatShading: true });
-    const hillMat = new THREE.MeshLambertMaterial({ color: 0x5a8c4f });
-    this.disposables.push(trunkMat, leafMat, hillMat);
-    const trunkGeo = new THREE.CylinderGeometry(0.3, 0.45, 4, 6);
-    const leafGeo = new THREE.IcosahedronGeometry(2.8, 0);
-    const N = 90;
-    const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, N);
-    const leaves = new THREE.InstancedMesh(leafGeo, leafMat, N);
-    const m4 = new THREE.Matrix4();
-    for (let k = 0; k < N; k++) {
-      const a = (k / N) * Math.PI * 2;
-      const rx = 52 + ((k * 37) % 23);
-      const rz = 36 + ((k * 53) % 19);
-      const x = Math.cos(a) * rx;
-      const z = Math.sin(a) * rz;
-      const s = 0.8 + ((k * 29) % 10) / 12;
-      m4.compose(new THREE.Vector3(x, 2 * s, z), new THREE.Quaternion(), new THREE.Vector3(s, s, s));
-      trunks.setMatrixAt(k, m4);
-      m4.compose(new THREE.Vector3(x, 5.2 * s, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, k, 0)), new THREE.Vector3(s, s * 1.2, s));
-      leaves.setMatrixAt(k, m4);
-    }
-    trunks.castShadow = leaves.castShadow = true;
-    sc.add(trunks, leaves);
-    for (let k = 0; k < 14; k++) {
-      const a = (k / 14) * Math.PI * 2;
-      const hill = new THREE.Mesh(new THREE.SphereGeometry(40 + (k % 4) * 12, 16, 8), hillMat);
-      hill.scale.y = 0.35;
-      hill.position.set(Math.cos(a) * 220, -6, Math.sin(a) * 200);
-      sc.add(hill);
-    }
+    // Round the field: trees and hills, deep woods, the city's buildings, or palms and the sea.
+    surroundings(sc, arena, this.disposables);
 
     // Shared bits for the people, balls and splats.
     this.mats.skin = new THREE.MeshStandardMaterial({ color: 0x8d5524, roughness: 0.7 });
@@ -570,5 +530,297 @@ export class PaintballScene {
     for (const d of this.disposables) d.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
+  }
+}
+
+// ---------------------------------------------------------------- the grounds
+
+/** The field's own ground (1024 × 640, the whole field): turf, forest floor, concrete or sand. */
+function groundOf(arena: ArenaId, g: CanvasRenderingContext2D) {
+  const W = 1024;
+  const H = 640;
+  if (arena === "speedball") {
+    for (let k = 0; k < 16; k++) {
+      g.fillStyle = k % 2 ? "#3f9a3b" : "#46a643";
+      g.fillRect((k * W) / 16, 0, W / 16 + 1, H);
+    }
+  } else {
+    g.fillStyle = arena === "woods" ? "#4f6b33" : arena === "yard" ? "#8a8c8e" : "#e6d29e";
+    g.fillRect(0, 0, W, H);
+    // Patches: leaves and moss, oil stains and cracks, damp sand and shells.
+    const spots = arena === "woods" ? ["#5d4a2c", "#3e5a28", "#6b7d3a"] : arena === "yard" ? ["#6f7173", "#9a9c9e", "#5e6062"] : ["#d6bf86", "#f1e2b8", "#cdb27a"];
+    for (let k = 0; k < 160; k++) {
+      g.fillStyle = spots[k % spots.length];
+      g.globalAlpha = 0.35;
+      g.beginPath();
+      g.ellipse(Math.random() * W, Math.random() * H, 10 + Math.random() * 50, 6 + Math.random() * 30, Math.random() * 3, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.globalAlpha = 1;
+    if (arena === "yard") {
+      g.strokeStyle = "rgba(40,40,40,.35)";
+      g.lineWidth = 2;
+      for (let x = 0; x < W; x += 64) {
+        g.beginPath();
+        g.moveTo(x, 0);
+        g.lineTo(x, H);
+        g.stroke();
+      }
+      for (let y = 0; y < H; y += 64) {
+        g.beginPath();
+        g.moveTo(0, y);
+        g.lineTo(W, y);
+        g.stroke();
+      }
+    }
+  }
+  // Team ends and the lines (painted, or chalk and rope on the rougher grounds).
+  g.globalAlpha = arena === "speedball" ? 0.16 : 0.22;
+  g.fillStyle = "#ff4d4d";
+  g.fillRect(0, 0, 70, H);
+  g.fillStyle = "#339af0";
+  g.fillRect(W - 70, 0, 70, H);
+  g.globalAlpha = arena === "speedball" ? 1 : 0.7;
+  g.strokeStyle = arena === "yard" ? "#ffd43b" : "#ffffff";
+  g.lineWidth = 6;
+  g.strokeRect(8, 8, W - 16, H - 16);
+  g.beginPath();
+  g.moveTo(W / 2, 8);
+  g.lineTo(W / 2, H - 8);
+  g.stroke();
+  g.beginPath();
+  g.arc(W / 2, H / 2, 70, 0, Math.PI * 2);
+  g.stroke();
+  g.globalAlpha = 1;
+  for (let k = 0; k < 9000; k++) {
+    g.fillStyle = Math.random() < 0.5 ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.05)";
+    g.fillRect(Math.random() * W, Math.random() * H, 2, 2);
+  }
+}
+
+/** Builds the bunkers that aren't inflatables, each the size of what you hide behind. */
+class Kit {
+  private mats = new Map<string, THREE.Material>();
+  constructor(private bin: { dispose(): void }[]) {}
+  mat(colour: number, rough = 0.8, metal = 0) {
+    const key = `${colour}:${rough}:${metal}`;
+    let m = this.mats.get(key);
+    if (!m) {
+      m = new THREE.MeshStandardMaterial({ color: colour, roughness: rough, metalness: metal, flatShading: rough > 0.85 });
+      this.mats.set(key, m);
+      this.bin.push(m);
+    }
+    return m;
+  }
+  mesh(geo: THREE.BufferGeometry, m: THREE.Material, x = 0, y = 0, z = 0) {
+    this.bin.push(geo);
+    const o = new THREE.Mesh(geo, m);
+    o.position.set(x, y, z);
+    o.castShadow = true;
+    o.receiveShadow = true;
+    return o;
+  }
+  piece(s: Shape): THREE.Object3D {
+    const g = new THREE.Group();
+    g.position.set(s.x, 0, s.z);
+    g.rotation.y = s.ry ?? 0;
+    const { w, d, h } = s;
+    const c = s.colour;
+    switch (s.look) {
+      case "tree": {
+        g.add(this.mesh(new THREE.CylinderGeometry(w * 0.4, w * 0.55, h, 9), this.mat(c, 0.95), 0, h / 2, 0));
+        const leaf = this.mat(0x3b6e35, 0.95);
+        for (const [lx, ly, lz, r] of [[0, h * 0.78, 0, 2.6], [0.9, h * 0.66, 0.5, 1.9], [-0.8, h * 0.7, -0.6, 2], [0.2, h * 0.95, -0.3, 1.8]]) g.add(this.mesh(new THREE.IcosahedronGeometry(r, 0), leaf, lx, ly, lz));
+        break;
+      }
+      case "palm": {
+        // A leaning trunk, its fronds on top.
+        const trunk = this.mesh(new THREE.CylinderGeometry(w * 0.35, w * 0.5, h, 8), this.mat(c, 0.95), 0, h / 2, 0);
+        g.add(trunk);
+        const frond = this.mat(0x2f9e44, 0.9);
+        for (let k = 0; k < 7; k++) {
+          const f = this.mesh(new THREE.BoxGeometry(3.2, 0.06, 0.7), frond);
+          const a = (k / 7) * Math.PI * 2;
+          f.position.set(Math.cos(a) * 1.4, h - 0.3, Math.sin(a) * 1.4);
+          f.rotation.set(0, -a, -0.35);
+          g.add(f);
+        }
+        g.add(this.mesh(new THREE.SphereGeometry(0.35, 8, 6), this.mat(0x6b4f2a), 0, h - 0.4, 0));
+        break;
+      }
+      case "log": {
+        const log = this.mesh(new THREE.CylinderGeometry(h / 2, h / 2, w, 12), this.mat(c, 0.95), 0, h / 2, 0);
+        log.rotation.z = Math.PI / 2;
+        g.add(log);
+        const ring = this.mat(0xc8a26a, 0.9);
+        for (const e of [-1, 1]) {
+          const end = this.mesh(new THREE.CircleGeometry(h / 2 - 0.02, 12), ring, (e * w) / 2 + e * 0.005, h / 2, 0);
+          end.rotation.y = (e * Math.PI) / 2;
+          g.add(end);
+        }
+        break;
+      }
+      case "bale":
+        g.add(this.mesh(new THREE.CylinderGeometry(w / 2, w / 2, h, 16), this.mat(c, 1), 0, h / 2, 0));
+        g.add(this.mesh(new THREE.TorusGeometry(w / 2 + 0.01, 0.025, 4, 24).rotateX(Math.PI / 2), this.mat(0x8c6d1f), 0, h * 0.3, 0));
+        g.add(this.mesh(new THREE.TorusGeometry(w / 2 + 0.01, 0.025, 4, 24).rotateX(Math.PI / 2), this.mat(0x8c6d1f), 0, h * 0.7, 0));
+        break;
+      case "crate": {
+        g.add(this.mesh(new THREE.BoxGeometry(w, h, d), this.mat(c, 0.9), 0, h / 2, 0));
+        const slat = this.mat(0x7d5527, 0.9);
+        for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(this.mesh(new THREE.BoxGeometry(0.12, h + 0.02, 0.12), slat, (sx * (w - 0.1)) / 2, h / 2, (sz * (d - 0.1)) / 2));
+        g.add(this.mesh(new THREE.BoxGeometry(w + 0.02, 0.12, d + 0.02), slat, 0, h / 2, 0));
+        break;
+      }
+      case "wall": {
+        g.add(this.mesh(new THREE.BoxGeometry(w, h, d), this.mat(c, 0.95), 0, h / 2, 0));
+        g.add(this.mesh(new THREE.BoxGeometry(w + 0.1, 0.12, d + 0.1), this.mat(0x6c7075, 0.9), 0, h + 0.06, 0));
+        // A bit of colour: graffiti on each side.
+        const paint = this.mat([0xe64980, 0x15aabf, 0xfab005][Math.abs(Math.round(s.x * 7 + s.z)) % 3], 0.8);
+        for (const e of [-1, 1]) g.add(this.mesh(new THREE.BoxGeometry(w * 0.5, h * 0.35, 0.02), paint, w * 0.1, h * 0.45, e * (d / 2 + 0.011)));
+        break;
+      }
+      case "barrel":
+      case "drum": {
+        g.add(this.mesh(new THREE.CylinderGeometry(w / 2, w / 2, h, 16), this.mat(c, 0.45, 0.4), 0, h / 2, 0));
+        for (const y of [0.25, 0.75]) g.add(this.mesh(new THREE.TorusGeometry(w / 2 + 0.01, 0.03, 4, 20).rotateX(Math.PI / 2), this.mat(0x495057, 0.5, 0.5), 0, h * y, 0));
+        break;
+      }
+      case "tyres": {
+        const rub = this.mat(c, 0.9);
+        const n = Math.max(2, Math.round(h / 0.32));
+        for (let k = 0; k < n; k++) g.add(this.mesh(new THREE.TorusGeometry(w / 2 - 0.16, 0.16, 8, 18).rotateX(Math.PI / 2), rub, 0, 0.16 + k * (h - 0.32) / (n - 1), 0));
+        break;
+      }
+      case "car": {
+        g.add(this.mesh(new RoundedBoxGeometry(w, h * 0.55, d, 3, 0.12), this.mat(c, 0.35, 0.3), 0, 0.25 + h * 0.275, 0));
+        g.add(this.mesh(new RoundedBoxGeometry(w * 0.55, h * 0.4, d * 0.9, 3, 0.1), this.mat(0x2a3d55, 0.1, 0.5), -w * 0.05, h * 0.78, 0));
+        const tyre = this.mat(0x1f2124, 0.9);
+        for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(this.mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.25, 12).rotateX(Math.PI / 2), tyre, sx * w * 0.32, 0.34, sz * (d / 2 - 0.05)));
+        break;
+      }
+      case "container": {
+        g.add(this.mesh(new THREE.BoxGeometry(w, h, d), this.mat(c, 0.7, 0.3), 0, h / 2, 0));
+        const rib = this.mat(new THREE.Color(c).multiplyScalar(0.75).getHex(), 0.7, 0.3);
+        for (let k = 0; k <= 10; k++) for (const e of [-1, 1]) g.add(this.mesh(new THREE.BoxGeometry(0.08, h - 0.2, 0.04), rib, -w / 2 + 0.2 + (k * (w - 0.4)) / 10, h / 2, e * (d / 2 + 0.02)));
+        break;
+      }
+      case "sandbags": {
+        const bag = this.mat(c, 1);
+        const rows = Math.max(2, Math.round(h / 0.3));
+        const per = Math.max(2, Math.round(w / 0.7));
+        for (let y = 0; y < rows; y++)
+          for (let k = 0; k < per - (y % 2); k++) {
+            const b = this.mesh(new THREE.CapsuleGeometry(d * 0.32, 0.32, 3, 8), bag, -w / 2 + 0.35 + (k + (y % 2) * 0.5) * ((w - 0.7) / (per - 1)), 0.16 + y * ((h - 0.2) / rows), 0);
+            b.rotation.z = Math.PI / 2;
+            b.scale.set(0.6, 1, 1.4);
+            g.add(b);
+          }
+        break;
+      }
+      case "boat": {
+        // Upside down on the sand, its keel up.
+        g.add(this.mesh(new THREE.CylinderGeometry(d / 2, d / 2, w, 14, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateX(-Math.PI / 2), this.mat(c, 0.6), 0, 0, 0));
+        g.add(this.mesh(new THREE.BoxGeometry(w, 0.12, 0.12), this.mat(0xf8f9fa, 0.6), 0, h - 0.06, 0));
+        g.add(this.mesh(new THREE.BoxGeometry(w, h * 0.5, d), this.mat(c, 0.6), 0, h * 0.25, 0));
+        break;
+      }
+      case "hut": {
+        g.add(this.mesh(new THREE.BoxGeometry(w, h * 0.7, d), this.mat(c, 0.95), 0, h * 0.35, 0));
+        const roof = this.mesh(new THREE.ConeGeometry(Math.max(w, d) * 0.8, h * 0.45, 4), this.mat(0xc9a35a, 1), 0, h * 0.7 + h * 0.2, 0);
+        roof.rotation.y = Math.PI / 4;
+        g.add(roof);
+        break;
+      }
+      default:
+        g.add(this.mesh(new THREE.BoxGeometry(w, h, d), this.mat(c), 0, h / 2, 0));
+    }
+    return g;
+  }
+}
+
+/** What's round the field, out past the nets. */
+function surroundings(sc: THREE.Scene, arena: ArenaId, bin: { dispose(): void }[]) {
+  const m4 = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const ring = (k: number, n: number, rx: number, rz: number) => {
+    const a = (k / n) * Math.PI * 2;
+    return [Math.cos(a) * (rx + ((k * 37) % 23)), Math.sin(a) * (rz + ((k * 53) % 19))] as const;
+  };
+  if (arena === "yard") {
+    // Tall blocks of the city all round, with lit windows.
+    const win = canvasTex(64, 128, (g) => {
+      g.fillStyle = "#9aa3ab";
+      g.fillRect(0, 0, 64, 128);
+      for (let y = 6; y < 128; y += 16) for (let x = 6; x < 64; x += 14) {
+        g.fillStyle = Math.random() < 0.3 ? "#ffe8a3" : "#3b4a5a";
+        g.fillRect(x, y, 8, 9);
+      }
+    });
+    win.wrapS = win.wrapT = THREE.RepeatWrapping;
+    const geo = new THREE.BoxGeometry(1, 1, 1);
+    const mat = new THREE.MeshLambertMaterial({ map: win });
+    bin.push(win, geo, mat);
+    const N = 46;
+    const blocks = new THREE.InstancedMesh(geo, mat, N);
+    for (let k = 0; k < N; k++) {
+      const [x, z] = ring(k, N, 62, 46);
+      const h = 14 + ((k * 31) % 9) * 5;
+      const w = 10 + ((k * 17) % 5) * 2;
+      m4.compose(new THREE.Vector3(x, h / 2, z), q.setFromEuler(new THREE.Euler(0, Math.atan2(x, z), 0)), new THREE.Vector3(w, h, w * 0.8));
+      blocks.setMatrixAt(k, m4);
+    }
+    sc.add(blocks);
+    return;
+  }
+  // Trees (palms on the beach), and hills, or the sea.
+  const palm = arena === "beach";
+  const trunkMat = new THREE.MeshLambertMaterial({ color: palm ? 0x8a6a45 : 0x6b4f37 });
+  const leafMat = new THREE.MeshLambertMaterial({ color: palm ? 0x2f9e44 : arena === "woods" ? 0x2f5f3a : 0x3f7a4f, flatShading: true });
+  bin.push(trunkMat, leafMat);
+  const trunkGeo = new THREE.CylinderGeometry(0.3, 0.45, palm ? 8 : 4, 6);
+  const leafGeo = palm ? new THREE.ConeGeometry(3, 1.2, 7) : new THREE.IcosahedronGeometry(2.8, 0);
+  bin.push(trunkGeo, leafGeo);
+  const N = arena === "woods" ? 220 : palm ? 60 : 90;
+  const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, N);
+  const leaves = new THREE.InstancedMesh(leafGeo, leafMat, N);
+  for (let k = 0; k < N; k++) {
+    // The woods: three deep rings of trees. The beach: palms on the land side only.
+    const deep = arena === "woods" ? (k % 3) * 9 : 0;
+    const [x, z0] = ring(k, N, 52 + deep, 36 + deep);
+    const z = palm && z0 > 0 ? -z0 * 0.6 - 30 : z0;
+    const s = 0.8 + ((k * 29) % 10) / 12;
+    const tall = arena === "woods" ? 1.5 : 1;
+    m4.compose(new THREE.Vector3(x, (palm ? 4 : 2) * s * tall, z), q.identity(), new THREE.Vector3(s, s * tall, s));
+    trunks.setMatrixAt(k, m4);
+    m4.compose(new THREE.Vector3(x, (palm ? 8.2 : 5.2) * s * tall, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, k, 0)), new THREE.Vector3(s, s * (palm ? 0.6 : 1.2), s));
+    leaves.setMatrixAt(k, m4);
+  }
+  trunks.castShadow = leaves.castShadow = true;
+  sc.add(trunks, leaves);
+  if (palm) {
+    // The sea on the far side, and its line of surf.
+    const seaMat = new THREE.MeshLambertMaterial({ color: 0x1c8fc9 });
+    const surfMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    const seaGeo = new THREE.PlaneGeometry(900, 300).rotateX(-Math.PI / 2);
+    const surfGeo = new THREE.PlaneGeometry(900, 2.5).rotateX(-Math.PI / 2);
+    bin.push(seaMat, surfMat, seaGeo, surfGeo);
+    const sea = new THREE.Mesh(seaGeo, seaMat);
+    sea.position.set(0, 0.01, 190);
+    const surf = new THREE.Mesh(surfGeo, surfMat);
+    surf.position.set(0, 0.02, 41);
+    sc.add(sea, surf);
+    return;
+  }
+  const hillMat = new THREE.MeshLambertMaterial({ color: arena === "woods" ? 0x47703f : 0x5a8c4f });
+  bin.push(hillMat);
+  for (let k = 0; k < 14; k++) {
+    const a = (k / 14) * Math.PI * 2;
+    const geo = new THREE.SphereGeometry(40 + (k % 4) * 12, 16, 8);
+    bin.push(geo);
+    const hill = new THREE.Mesh(geo, hillMat);
+    hill.scale.y = arena === "woods" ? 0.5 : 0.35;
+    hill.position.set(Math.cos(a) * 220, -6, Math.sin(a) * 200);
+    sc.add(hill);
   }
 }

@@ -87,4 +87,17 @@ export const LANDMARKS: Landmark[] = [
   // Epe
   { id: "epe-fish-market", name: "Epe Fish Market", type: "market", w: 2, d: 2, at: { lat: 6.58276, lon: 3.99068 }, approx: true },
   { id: "epe-resort", name: "Epe Resort and Spa", type: "hotel", w: 2, d: 2, at: { lat: 6.58757, lon: 3.94716 }, approx: true },
+
+  // ---- Fun parks, water parks and paintball (2026-10-17): Lagos's real ones. The only places
+  // with a Ferris wheel or water slides on the real map (made-up funfairs and water parks are left
+  // out there), and paintball is played at parks. Apapa Amusement Park, Ikorodu Fun Park and
+  // Hakuna Matata from OpenStreetMap; the paintball grounds aren't in its data yet: placed from
+  // their listings (approx), so a bake moves them if they turn up. Each checked against the map:
+  // open lots, no rooming house or road under it.
+  { id: "apapa-amusement-park", name: "Apapa Amusement Park", type: "funfair", w: 4, d: 3, at: { lat: 6.44381, lon: 3.36608 }, approx: true },
+  { id: "ikorodu-fun-park", name: "Ikorodu Fun Park", type: "funfair", w: 4, d: 4, at: { lat: 6.63338, lon: 3.53604 }, approx: true },
+  { id: "hakuna-matata", name: "Hakuna Matata Theme Park by Eko Hotels", type: "waterpark", at: { lat: 6.4217, lon: 3.41611 }, approx: true },
+  { id: "lsp-paintball-landmark", name: "Leisure Sports Paintball, Landmark Beach", type: "bigpark", w: 3, d: 3, at: { lat: 6.4183, lon: 3.4478 }, approx: true, osm: "Leisure Sports Paintball" },
+  { id: "lakowe-paintball", name: "Paintball Park, Lakowe", type: "bigpark", w: 4, d: 3, at: { lat: 6.4700, lon: 3.6440 }, approx: true },
+  { id: "omu-resort", name: "Omu Resort", type: "bigpark", w: 6, d: 5, at: { lat: 6.4790, lon: 3.7060 }, approx: true },
 ];

@@ -1218,6 +1218,8 @@ const STRUCTURES_BY_ZONE: { min: number; chance: number; types: StructureType[] 
 
 /** Too big or too particular to make up in a real place: only where the map has them. */
 const MAP_ONLY = new Set<StructureType>(["airport", "port", "military", "power", "dam", "oilrig", "solar"]);
+/** Made up in a made-up city, but in a real place only where the map has them (see structureAt). */
+const REAL_ONLY = new Set<StructureType>(["funfair", "waterpark"]);
 
 /**
  * The smaller sports venues: a basketball court, a boxing arena and a wrestling arena, each on
@@ -1287,7 +1289,9 @@ function structureAt(plan: CityPlan, x: number, z: number) {
       let type = types[Math.floor(hash(ax, az, plan.seed + 502) * types.length)];
       // A dam needs water next to it (the river or a lake); otherwise it's a power station.
       if (type === "dam" && !nearWater(plan, ax, az)) type = "power";
-      found = structureNamed(plan, type, ax, az);
+      // A real place's funfairs and water parks are only its real ones (its landmarks): made-up
+      // ones put a Ferris wheel or slides on every other street. Those lots stay ordinary lots.
+      found = plan.region && REAL_ONLY.has(type) ? null : structureNamed(plan, type, ax, az);
     }
     plan.structures.set(key, found);
   }
@@ -1921,11 +1925,13 @@ function baseTile(plan: CityPlan, x: number, z: number): Tile {
 
   const density = densityAt(plan, x, z);
 
-  const green = smoothNoise(x / 6 + 31, z / 6 - 17, s + 11) - plan.style.green;
+  const greenAt = (gx: number, gz: number) => smoothNoise(gx / 6 + 31, gz / 6 - 17, s + 11) - plan.style.green;
+  const green = greenAt(x, z);
   if (green > 0.7 && density < 0.6) {
     if (green > 0.82 && r[0] < 0.3) return { i, x, z, kind: "pond", top: 0.5, r };
-    // A Ferris wheel in one green lot in 300 or so (they were ten times as common: too many).
-    if (r[3] < 0.0035) return { i, x, z, kind: "ferris", top: 2.85, r };
+    // A Ferris wheel in one park lot in 400 or so (they were far more common: too many), never
+    // anywhere but a park, and only well inside a big one (parkland on every side).
+    if (r[3] < 0.0025 && [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]].every(([dx, dz]) => greenAt(x + dx * 2, z + dz * 2) > 0.7)) return { i, x, z, kind: "ferris", top: 2.85, r };
     return { i, x, z, kind: "park", top: 0.9, r };
   }
   const nextToRoad = isRoad(plan, x + 1, z) || isRoad(plan, x - 1, z) || isRoad(plan, x, z + 1) || isRoad(plan, x, z - 1);
@@ -1959,7 +1965,6 @@ function baseTile(plan: CityPlan, x: number, z: number): Tile {
     return { i, x, z, kind: feature, top: tops[feature] ?? 0.8, r, v: Math.floor(r[2] * 2) };
   }
   if (!plan.region && Math.hypot(x, z) > 13 && r[2] < 0.035) return { i, x, z, kind: "turbine", top: 3.2, r };
-  if (r[3] > 0.9997) return { i, x, z, kind: "ferris", top: 2.85, r };
   if (r[0] < 0.16) return { i, x, z, kind: "trees", top: 1, r };
   if (r[0] < 0.175) return { i, x, z, kind: "watertower", top: 2.2, r };
   if (r[0] < 0.182) return { i, x, z, kind: "mast", top: 4, r };

@@ -236,8 +236,8 @@ export const MINIGAMES: MiniGameDef[] = [
     "Dig for the hidden chests.", "Tap to dig. Each hole tells you how far the nearest chest is. Find all three with the fewest digs."),
 
   // ---------------------------------------------------------------- big games, full screen
-  S(101, "paintball", "Paintball", "shooting", "paintball", {}, "splats", [5, 10, 15], [...PARK, "military", "funfair", "anywhere"], "Swords", "#e03131",
-    "Red against blue, 4 v 4, full screen in 3D.", "Team Splat: every hit is a splat for your team, first to 25. Quick match with whoever's looking for a game, a private match with a code for friends, or practice against bots. Left thumb moves, right thumb looks; hold FIRE.", { full: true }),
+  S(101, "paintball", "Paintball", "shooting", "paintball", {}, "splats", [5, 10, 15], ["park", "bigpark", "funfair"], "Swords", "#e03131",
+    "Red against blue, 4 v 4, full screen in 3D.", "Team Splat: every hit is a splat for your team, first to 25. Quick match with whoever's looking for a game, a private match with a code for friends, or practice against bots. Only at parks. Left thumb moves, right thumb looks; tap to shoot or hold FIRE.", { full: true }),
 ];
 
 export const MINIGAME_BY_ID = new Map(MINIGAMES.map((g) => [g.id, g]));

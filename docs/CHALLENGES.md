@@ -104,3 +104,11 @@ colour, icon, blurb, and optional search tags. Set the engine once its turn game
 - **Seats taken over** by a computer player when someone drops out mid-game.
 - **Betting** on the winner while watching (watching itself is done: docs/GAME_TABLES.md).
 - **Leagues** and a weekly leaderboard.
+
+## Lights on the map, live
+A game's or event's light on the map goes as soon as it's called off (and changes when it starts
+or moves): whoever opens, starts, calls off or ends one nudges everyone in the city over a small
+live channel (`src/app/play/map-news.ts`, "map:<region>"), and each phone looks again within a
+few seconds. A nudge carries nothing but "games" or "events" (a fake one costs one more look). The
+minute's ping also notices an event moved to another time (`/api/active` fingerprints the start
+times too).
