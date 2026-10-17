@@ -25,6 +25,7 @@ export function TurnTable({
   seed,
   online,
   onEnd,
+  onQuit,
 }: {
   def: MiniGameDef;
   seats: Seat[];
@@ -33,6 +34,8 @@ export function TurnTable({
   online: { send: (m: { k: number; m: unknown }) => void; listen: (fn: (msg: ActivityMsg) => void) => () => void } | null;
   /** The game is over: did "me" (or anyone on this phone) win, and the winners' names (and seats). */
   onEnd: (result: { won: boolean; draw: boolean; winners: string[]; seats?: number[] }) => void;
+  /** Full-screen games: leave the table. */
+  onQuit?: () => void;
 }) {
   const [mod, setMod] = useState<TurnModule | null>(null);
   useEffect(() => {
@@ -49,10 +52,10 @@ export function TurnTable({
       </div>
     );
   }
-  return <Table mod={mod} def={def} seats={seats} seed={seed} online={online} onEnd={onEnd} />;
+  return <Table mod={mod} def={def} seats={seats} seed={seed} online={online} onEnd={onEnd} onQuit={onQuit} />;
 }
 
-function Table({ mod, def, seats, seed, online, onEnd }: { mod: TurnModule } & Parameters<typeof TurnTable>[0]) {
+function Table({ mod, def, seats, seed, online, onEnd, onQuit }: { mod: TurnModule } & Parameters<typeof TurnTable>[0]) {
   const { rules, View } = mod;
   const [state, setState] = useState(() => rules.init(seed, seats.length, def.cfg ?? {}));
   const [, setCount] = useState(0);
@@ -64,6 +67,7 @@ function Table({ mod, def, seats, seed, online, onEnd }: { mod: TurnModule } & P
   const turn = rules.turn(state);
   const over = turn < 0;
   const names = useMemo(() => seats.map((s) => s.name), [seats]);
+  const kinds = useMemo(() => seats.map((s) => s.kind), [seats]);
   const mine = seats.findIndex((s) => s.kind === "me");
 
   function apply(move: unknown) {
@@ -155,7 +159,7 @@ function Table({ mod, def, seats, seed, online, onEnd }: { mod: TurnModule } & P
                 : `${names[turn]} is thinking…`}
       </p>
       <div className="relative">
-        <View s={state} seat={viewSeat} canMove={canMove} onMove={move} names={names} />
+        <View s={state} seat={viewSeat} canMove={canMove} onMove={move} names={names} kinds={kinds} onQuit={onQuit} />
         {covered && (
           <button onClick={() => setCovered(false)} className="absolute inset-0 grid place-items-center rounded-3xl bg-ink/95 text-white">
             <span className="space-y-2 text-center">

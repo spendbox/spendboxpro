@@ -6,7 +6,7 @@
 
 import type { Category, Cfg, MiniGameDef } from "./types";
 
-type Extra = Partial<Pick<MiniGameDef, "lowerWins" | "seats" | "hidden" | "legacy">>;
+type Extra = Partial<Pick<MiniGameDef, "lowerWins" | "seats" | "hidden" | "legacy" | "full">>;
 
 function S(n: number, id: string, title: string, cat: Category, engine: string, cfg: Cfg, unit: string, grades: [number, number, number], places: string[], icon: string, colour: string, blurb: string, how: string, extra: Extra = {}): MiniGameDef {
   return { n, id, title, cat, engine, cfg, unit, grades, places, icon, colour, blurb, how, kind: "score", ...extra };
@@ -134,10 +134,10 @@ export const MINIGAMES: MiniGameDef[] = [
     "Race your four tokens home.", "Roll a six to bring a token out. Land on someone to send them back. First with all four home wins."),
   T(52, "snakes-ladders", "Snakes and Ladders", "board", "snakes", {}, [2, 4], [...HOME, "school", "playground", ...RIDES], "Dice3", "#2f9e44",
     "Climb the ladders, dodge the snakes.", "Roll and move. Ladders take you up, snakes take you down. First to 100 wins."),
-  T(53, "draughts", "Draughts", "board", "draughts", {}, [2, 2], [...PARK, "restaurant", ...HOME, "market"], "Grid3x3", "#212529",
-    "Jump and crown.", "Move diagonally forward. You must jump when you can, and keep jumping. Reach the far side to become a king."),
-  T(54, "chess", "Chess Blitz", "board", "chess", {}, [2, 2], [...PARK, "campus", "school", "hotel", ...HOME], "Crown", "#212529",
-    "Checkmate the king.", "Tap a piece, then where to move it. Pawns become queens on the last row."),
+  T(53, "draughts", "Draughts", "board", "draughts", {}, [2, 2], [...PARK, "restaurant", ...HOME, "market", "club", "hotel", "anywhere"], "Grid3x3", "#212529",
+    "Full-screen 3D draughts: jump and crown.", "Play someone here on their phone (Challenge), a friend on this phone, or the computer. Move diagonally forward; you must jump when you can, and keep jumping. Reach the far side to be crowned. Drag to look round the board.", { full: true }),
+  T(54, "chess", "Chess", "board", "chess", {}, [2, 2], [...PARK, "campus", "school", "hotel", ...HOME, "club", "anywhere"], "Crown", "#212529",
+    "Full-screen 3D chess against a real player.", "Play someone here on their phone (Challenge), a friend on this phone, or the computer. Tap a piece, then where it goes. Castling, en passant, check and mate; pawns become queens on the last row. Drag to look round the board.", { full: true }),
   T(55, "ayo", "Ayo (Oware)", "board", "oware", {}, [2, 2], [...PARK, "market", ...HOME, "restaurant"], "CircleDot", "#a5673f",
     "Sow the seeds, capture the most.", "Tap one of your pits to sow its seeds round the board. Ending in their row on 2 or 3 seeds captures them."),
   T(56, "whot", "Whot!", "cards", "whot", {}, [2, 4], [...BAR, ...HOME, ...RIDES, "market"], "Shapes", "#c2255c",

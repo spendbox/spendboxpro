@@ -618,8 +618,10 @@ function TurnPlay({ def, ctx, invite }: { def: MiniGameDef; ctx: PlayCtx; invite
           online={online}
           onEnd={(r) => {
             questEvent({ type: "play", game: def.id, score: r.won ? 1 : 0, won: r.won });
-            window.setTimeout(() => setPhase({ k: "over", ...r, again }), 900);
+            // A full-screen board keeps the final position and the result up a little longer.
+            window.setTimeout(() => setPhase({ k: "over", ...r, again }), def.full ? 3200 : 900);
           }}
+          onQuit={() => setPhase({ k: "menu" })}
         />
       </div>
     );

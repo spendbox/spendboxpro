@@ -57,6 +57,8 @@ export type MiniGameDef = {
   colour: string;
   /** Played inside an older screen of its own (archery, darts...). */
   legacy?: boolean;
+  /** Turn games drawn full screen (chess, draughts): the end stays on screen a little longer. */
+  full?: boolean;
 };
 
 /** What a score engine gets. It starts playing as soon as it's on screen. */
@@ -97,4 +99,8 @@ export type TurnViewProps<S, M> = {
   onMove: (m: M) => void;
   names: string[];
   rng?: Rng;
+  /** Who sits in each seat ("me", "local", "remote", "bot"), for "thinking" or "waiting for". */
+  kinds?: string[];
+  /** Full-screen games: leave the table (back to the game's menu). */
+  onQuit?: () => void;
 };
