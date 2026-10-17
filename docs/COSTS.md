@@ -75,6 +75,45 @@ about a tenth of the emails, so the column above is a tenth of the $1,500 too.
    out) once they add up.
 With 1 to 3, 10 million users comes to roughly $20,000 to $25,000 a month.
 
+## Live channels (Realtime messages), and what launch fix 10 saved
+
+Supabase counts every message it delivers. In a presence channel (who's here), each arrival,
+departure or change goes to everyone in it: with n people in a channel, that's n messages each
+time, so a channel for the whole city grows with the square of the players.
+
+The model (src/app/play/rooms.ts and game.tsx; recomputed October 2026):
+- Daily players D; 3 visits a day, 45 minutes in all; the phone sleeps and wakes about 3 times a
+  visit (each one leaves and joins again): 24 joins and leaves a day each.
+- Going into or out of a place (or a seat) about every 2 minutes on the map: about 22 more.
+- The busiest 4 hours have 1 in 10 of the day's players on, 8 hours 4 in 100, the rest 1 in 100;
+  so a message lands in a channel of about 64 people at D = 1,000 (643 at 10,000).
+- Guests (not signed in) about 6% of the people on the map.
+- 4 km areas: the busiest hold a few % of the city's players each; 5% taken.
+
+| At 1,000 daily players (a month) | Messages | Bill over the 5M included |
+|---|---:|---:|
+| Before: `city-online` + `rooms:0` for the whole city | 141M | **$341** |
+| No `city-online` on the real map (count from the server) | 95M | $225 (saves $116) |
+| No live channel for guests | 90M | $212 (saves $13, and their connections) |
+| Who's where per 4 km area | 4.5M | **$0** (saves $212) |
+
+At 10,000 daily players the same steps take about 14,100M messages ($35,300 a month) to about
+450M ($1,100): each step is worth 100 times as much, since the city-wide channels grow with the
+square of the players and the area ones with the players.
+
+Other effects:
+- **Connections** (500 on Pro): guests on the real map open none now. Every signed-in player
+  still holds one (all their channels share it), so about 500 players on at once is still the
+  limit before the plan has to go up.
+- **Database**: the online count was one counting query per look round (every 90 s per player,
+  about 34,000 a day at 1,000 daily players); now at most 2 a minute per server (about 2,900 a
+  day). Small on its own; it keeps the Small database comfortable.
+- **What it costs**: friends' live places ("Ada is at Lekki Tower") only show for friends in your
+  area; further away, the people list (the server's, every 90 s) still shows them.
+- **Added by launch fix 4** (Whot! on the server): each player asks every 3 seconds during a game.
+  At 1,000 daily players (a game a day for 1 in 5) about 4.8M calls a month: about $3 on Vercel and
+  14M small queries.
+
 ## What's above budget and slows things down
 
 Fixed already:

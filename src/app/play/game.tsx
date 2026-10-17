@@ -112,7 +112,7 @@ import { myVisits, payClubEntry, payFare, payRide, payVisit } from "./fee-action
 import { CLUB_ENTRY_MS, clubEntryMint, clubEntryNaira, clubTier, gameFeeMint, rideFare, TRAIN_FARE, visitFee } from "@/lib/fees";
 import { jobAt } from "@/lib/jobs";
 import type { Invite, PlayCtx } from "./minigames/shell";
-import { rideRoom, useRooms, type RoomInfo } from "./rooms";
+import { areaKey, rideRoom, useRooms, type RoomInfo } from "./rooms";
 import { RIDE_ICONS, RIDE_INFO, RideIcon, type RideKindName } from "./ride-icon";
 import { Safe } from "./safe";
 import { Sheet } from "./sheet";
@@ -331,10 +331,15 @@ const clock = (ms: number) => {
   return `${Math.floor(left / 60)}:${(left % 60).toString().padStart(2, "0")}`;
 };
 
-/** How many people have the city open right now (live, via Supabase Realtime presence). */
-function useOnline(userId: string, guest: boolean) {
+/**
+ * How many people have the city open right now (live, via Supabase Realtime presence): the old
+ * hunt only. On the real map every arrival would go to every phone in the city, so the count
+ * comes from the server instead (the minute's pings, /api/around).
+ */
+function useOnline(userId: string, guest: boolean, on: boolean) {
   const [count, setCount] = useState<number | null>(null);
   useEffect(() => {
+    if (!on) return;
     const supabase = createClient();
     // Everyone watching without an account gets their own random key, so each one counts.
     const key = guest ? `guest-${Math.random().toString(36).slice(2)}` : userId;
@@ -347,8 +352,8 @@ function useOnline(userId: string, guest: boolean) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId, guest]);
-  return count;
+  }, [userId, guest, on]);
+  return on ? count : null;
 }
 
 function describe(e: GameEvent, botName: string, myTile: number | null, where: (tile: number) => string): Notice | null {
@@ -772,11 +777,15 @@ export function Game({
   const [ctrlHint, setCtrlHint] = useState(false);
   const [adExplainer, setAdExplainer] = useState(false);
   const [startCard, setStartCard] = useState<{ title: string; line: string } | null>(null);
-  const online = useOnline(state.me.id, state.me.guest);
+  const online = useOnline(state.me.id, state.me.guest, !worldId);
+  // On the real map, who's in which place is shared round where you are (rooms.ts areaKey).
+  const spot = worldLife.mySpot;
+  const liveArea = worldId ? (spot ? areaKey(spot.x, spot.z) : null) : undefined;
   const rooms = useRooms(worldId ? 0 : (state.round?.id ?? null), state.me.guest ? null : { id: state.me.id, name: state.me.name ?? "Player", avatar: state.me.avatar }, {
     onRideEnd: () => {
       setRide(null);
     },
+    area: liveArea,
   });
   const meP = useMemo(() => (state.me.guest ? null : { id: state.me.id, name: state.me.name ?? "Player", avatar: state.me.avatar as unknown }), [state.me.guest, state.me.id, state.me.name, state.me.avatar]);
 

@@ -50,9 +50,14 @@ Ticked off here as they're done (most urgent first). Prices and limits: docs/COS
   game you picked (closing it brings yours back).
 
 ## Stage 3: cost and phone speed
-- [ ] **10. "Who's online" for the whole city** (`city-online`, `rooms:`): every arrival goes to
+- [x] **10. "Who's online" for the whole city** (`city-online`, `rooms:`): every arrival goes to
   everyone, guests included. Count online from the minute's ping, room counts per area, no live
   channel for guests. (The main cost risk, and the 500-connection limit.)
+  Done: on the real map no `city-online` (the count is the server's, kept 30 s per server);
+  who's in which place shared per 4 km area (`rooms:0:<area>`, src/app/play/rooms.ts); guests
+  open no live channel. About 141M Realtime messages a month at 1,000 daily players down to about
+  4.5M ($340 a month down to nothing over the 5M included). The numbers: docs/COSTS.md, "Live
+  channels".
 - [ ] **11. The city keeps drawing behind full-screen games** (paintball, chess, draughts). Pause
   it while one is open.
 - [ ] **12. Chess, draughts and paintball at full quality on cheap phones.** Use the city's phone
