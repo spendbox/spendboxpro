@@ -124,6 +124,7 @@ import { worldPreview } from "./world-flag";
 import { PlacePill } from "./place-pill";
 import { CityCard } from "./city-card";
 import { useWorldLife } from "./life/world-life";
+import { ownedChanges } from "./life/use-life";
 import type { ExplorePlace } from "@/lib/world/explore";
 import { Joystick } from "./joystick";
 import { onlineIdle, onlinePinged, settleIncome, syncIncome, useLiveCoins } from "./income";
@@ -264,7 +265,7 @@ function usePreloadSheets() {
 const NO_GHOSTS: CityGhost[] = [];
 const NO_EVENTS: CityEvent[] = [];
 /** Property on the real map, through the server (game-db/038_property.sql). */
-const PROPERTY_API = { ...propertyActions, ...workActions, ...livingActions, ...dayActions, ...interviewActions, ...packActions, ...businessActions, ...serviceActions, ...reportActions, ...marketActions };
+const PROPERTY_API = { ...propertyActions, ...workActions, ...livingActions, ...dayActions, ...interviewActions, ...packActions, ...businessActions, ...serviceActions, ...reportActions, ...marketActions, ownedChanges };
 const noSubscribe = () => () => {};
 const noWorld = worldPreview;
 const NO_HOUSES: GameState["houses"] = [];
