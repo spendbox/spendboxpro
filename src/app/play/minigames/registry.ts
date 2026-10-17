@@ -79,7 +79,7 @@ export const MINIGAMES: MiniGameDef[] = [
   S(25, "javelin", "Javelin", "sport", "meter", { style: "throw", rounds: 3 }, "metres", [55, 70, 85], ["stadium", "school", "campus"], "MoveUpRight", "#e8590c",
     "Power and angle for the longest throw.", "Stop the power bar at the top, then the angle at about 40 degrees. Best of three throws."),
   S(26, "shooting-range", "Shooting Range", "shooting", "range3d", {}, "points", [120, 210, 300], ["range", "police", "military", "funfair", "anywhere"], "Crosshair", "#e8590c",
-    "Pistol, carbine and scoped rifle on a 3D indoor range.", "Drag to aim, tap or press FIRE to shoot. Three rounds: paper at 10 m, turning targets at 25 m, runners at 50 m (use the scope, hits count double). Bullseye is 10. Watch your ammo and never hit the blue hostages."),
+    "Pistol, carbine and scoped rifle on a 3D indoor range.", "Drag to aim, tap or press FIRE to shoot. Three rounds: paper at 10 m, turning targets at 25 m, runners at 50 m (use the scope, hits count double). Bullseye is 10. Watch your ammo and never hit the blue hostages.", { full: true }),
   S(27, "clay-pigeon", "Clay Pigeon", "shooting", "targets", { theme: "clay", seconds: 45 }, "clays", [8, 14, 19], ["park", "bigpark", "military", "anywhere"], "Disc", "#e8590c",
     "Pull! Shoot the flying clays.", "Clays fly across the sky. Tap them to break them. You have 25 shells."),
   S(28, "duck-hunt", "Duck Hunt", "shooting", "targets", { theme: "ducks", seconds: 45 }, "ducks", [10, 18, 25], ["park", "bigpark", "pond", "funfair", "anywhere"], "Bird", "#2f9e44",

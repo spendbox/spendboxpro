@@ -20,14 +20,14 @@ import { FIELD, RULES, TEAM, fly, hitsPerson, layout, rand, segmentHit, spawns, 
 // WASD, the mouse (click to lock it), Space, R, right button to aim.
 
 type Me = { id: string; name: string };
-type Result = { won: boolean; draw: boolean; scores: [number, number]; rows: { name: string; team: number; hits: number; outs: number; me: boolean; bot: boolean }[] };
+export type Result = { won: boolean; draw: boolean; scores: [number, number]; rows: { id: string; name: string; team: number; hits: number; outs: number; me: boolean; bot: boolean }[] };
 type Screen = { k: "menu" } | { k: "room"; code: string; quick: boolean } | { k: "play"; code: string | null; quick: boolean; start: Extract<Msg, { t: "start" }> } | { k: "done"; code: string | null; quick: boolean; result: Result };
 
 const MAX = 8;
 const BOT_NAMES = ["Tunde", "Ada", "Bayo", "Chika", "Emeka", "Funmi", "Kemi", "Segun", "Ngozi", "Dayo", "Ife", "Obi", "Zainab", "Lola"];
 
 /** Fill a roster to 4 a side (people first, then bots), teams in turn. */
-function makeRoster(people: { id: string; name: string }[], seed: number): Seat[] {
+export function makeRoster(people: { id: string; name: string }[], seed: number): Seat[] {
   const r = rand(seed);
   const out: Seat[] = people.slice(0, MAX).map((p, k) => ({ i: p.id, n: p.name, tm: k % 2, b: false }));
   const names = [...BOT_NAMES].sort(() => r() - 0.5);
@@ -298,7 +298,7 @@ function Results({ result, again, menu }: { result: Result; again: () => void; m
 type Snap = { t: number; p: number[] };
 type Hud = { left: number; red: number; blue: number; hopper: number; reloading: boolean; out: number; by: string; count: number; feed: { id: number; text: string; team: number }[]; hit: number; aiming: boolean; shield: boolean };
 
-function Match({ me, start, net, onQuit, onEnd }: { me: Me; start: Extract<Msg, { t: "start" }>; net: PaintballNet | null; onQuit: () => void; onEnd: (r: Result) => void }) {
+export function Match({ me, start, net, onQuit, onEnd }: { me: Me; start: Extract<Msg, { t: "start" }>; net: PaintballNet | null; onQuit: () => void; onEnd: (r: Result) => void }) {
   const wrap = useRef<HTMLDivElement>(null);
   const mapRef = useRef<HTMLCanvasElement>(null);
   const shapes = useMemo(() => layout(start.seed), [start.seed]);
@@ -703,7 +703,7 @@ function Match({ me, start, net, onQuit, onEnd }: { me: Me; start: Extract<Msg, 
         over = true;
         if (host) net?.send({ t: "end", m: start.m });
         playSfx(score[mine.team] > score[1 - mine.team] ? "found" : "miss");
-        const rows = [...actors.values()].map((a) => ({ name: a.name, team: a.team, hits: a.hits, outs: a.outs, me: a.id === me.id, bot: a.bot }));
+        const rows = [...actors.values()].map((a) => ({ id: a.id, name: a.name, team: a.team, hits: a.hits, outs: a.outs, me: a.id === me.id, bot: a.bot }));
         window.setTimeout(() => ends.current({ won: score[mine.team] > score[1 - mine.team], draw: score[0] === score[1], scores: [score[0], score[1]], rows }), 2200);
       }
 

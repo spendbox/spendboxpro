@@ -1,7 +1,7 @@
 "use client";
 
 import { Crown, Flag, LoaderCircle } from "lucide-react";
-import { useState } from "react";
+import { createContext, useContext, useState } from "react";
 import { cn } from "@/lib/cn";
 import { FullScreen } from "../fullscreen";
 import { Board3D, type Board, type BoardStyle } from "./board3d";
@@ -9,6 +9,9 @@ import { Board3D, type Board, type BoardStyle } from "./board3d";
 // Chess and draughts, full screen: the 3D board edge to edge, the two players top and bottom
 // (who's to move glows, the pieces each has taken), what's happening in the middle ("Your move",
 // "Check!", "Bayo is thinking..."), and a big result at the end. Leaving mid-game asks first.
+
+/** At a game table (src/app/play/games/board-table.tsx): the board fills the table's own screen, which has its own way out. */
+export const BoardInTable = createContext(false);
 
 export type Side = { name: string; colour: string; ring: string; taken: number; label: string };
 
@@ -53,8 +56,8 @@ export function FullBoard({
     if (over || !onQuit) return onQuit?.();
     setAsking(true);
   };
-  return (
-    <FullScreen onQuit={quit} quitLabel="Leave the game" className="bg-[#15110e]">
+  const inTable = useContext(BoardInTable);
+  const body = (
       <div className="relative flex-1">
         <Board3D style={style} board={board} last={last} flip={flip} pickable={pickable} selected={selected} targets={targets} danger={danger} onSquare={onSquare} />
 
@@ -101,6 +104,11 @@ export function FullBoard({
           </div>
         )}
       </div>
+  );
+  if (inTable) return body;
+  return (
+    <FullScreen onQuit={quit} quitLabel="Leave the game" className="bg-[#15110e]">
+      {body}
     </FullScreen>
   );
 }

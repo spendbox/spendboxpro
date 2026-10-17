@@ -45,7 +45,9 @@ import { GameInvite, InviteCard, type GameTarget } from "./whot-invite";
 const WhotTable = dynamic(() => import("../games/whot-table").then((m) => m.WhotTable), { ssr: false });
 const TruthDareTable = dynamic(() => import("../games/truth-dare-table").then((m) => m.TruthDareTable), { ssr: false });
 const ImpostorTable = dynamic(() => import("../games/impostor-table").then((m) => m.ImpostorTable), { ssr: false });
-const TABLES = { whot: WhotTable, truth_dare: TruthDareTable, impostor: ImpostorTable };
+const BoardTable = dynamic(() => import("../games/board-table").then((m) => m.BoardTable), { ssr: false });
+const PaintballTable = dynamic(() => import("../games/paintball-table").then((m) => m.PaintballTable), { ssr: false });
+const TABLES = { whot: WhotTable, chess: BoardTable, draughts: BoardTable, paintball: PaintballTable, truth_dare: TruthDareTable, impostor: ImpostorTable };
 import { useChallengeChannel } from "./channel";
 import { CallBar } from "../call/call-bar";
 

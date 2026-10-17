@@ -192,7 +192,7 @@ export function PersonCard({
           )}
           {!self && <div className="mt-2 flex flex-wrap items-center gap-2">{greet({ id: card.id, name: card.name })}</div>}
 
-          {/* Play a game against them: Whot!, Truth or Dare, Impostor (src/app/play/fight/whot-invite.tsx). */}
+          {/* Play a game against them: Whot!, chess, draughts, paintball and the party games (src/app/play/fight/whot-invite.tsx). */}
           {canAct && (
             <div
               role="button"
@@ -211,28 +211,8 @@ export function PersonCard({
               </span>
               <p className="min-w-0 flex-1 text-sm">
                 <b>Play a game with {card.name}</b>
-                <span className="block text-xs text-muted">For a stake: Whot!, Truth or Dare, Impostor.</span>
+                <span className="block text-xs text-muted">Whot!, chess, draughts, paintball, Truth or Dare, Impostor. For fun or a stake.</span>
               </p>
-              <span className="flex shrink-0 gap-1">
-                {[
-                  ["whot", "🃏", "Whot!"],
-                  ["truth_dare", "🍾", "Truth or Dare"],
-                  ["impostor", "🕵️", "Impostor"],
-                ].map(([game, icon, label]) => (
-                  <button
-                    key={game}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      playGame(game);
-                    }}
-                    className="grid size-9 place-items-center rounded-full bg-[#7048e8] text-base shadow"
-                    aria-label={`Play ${label}`}
-                    title={label}
-                  >
-                    {icon}
-                  </button>
-                ))}
-              </span>
             </div>
           )}
 

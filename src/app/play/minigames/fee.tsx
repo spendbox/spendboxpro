@@ -6,6 +6,7 @@ import { Coins, LoaderCircle, Play } from "lucide-react";
 import { gameFeeMint } from "@/lib/fees";
 import { cash } from "@/lib/world/value";
 import { payToPlay } from "../fee-actions";
+import { FullScreen } from "./fullscreen";
 
 // Every go at a game costs money (src/lib/fees.ts, gameFeeMint); games never pay out. pay()
 // takes the fee (the server decides how much) and says whether you can play.
@@ -39,7 +40,7 @@ export function feeLabel(game: string) {
 }
 
 /** While the fee is being paid: a small card, then on to the game (or back, if it didn't go through). */
-export function Paying({ fee, pay, onPaid, onFailed }: { fee: number; pay: () => Promise<boolean>; onPaid: () => void; onFailed: () => void }) {
+export function Paying({ fee, pay, onPaid, onFailed, full }: { fee: number; pay: () => Promise<boolean>; onPaid: () => void; onFailed: () => void; full?: { title: string; colour: string; icon: React.ReactNode } }) {
   const started = useRef(false);
   const cb = useRef({ onPaid, onFailed });
   useEffect(() => {
@@ -50,6 +51,25 @@ export function Paying({ fee, pay, onPaid, onFailed }: { fee: number; pay: () =>
     started.current = true;
     void pay().then((ok) => (ok ? cb.current.onPaid() : cb.current.onFailed()));
   }, [pay]);
+  // A full-screen game: its loading screen fills the screen too, in the game's own colours.
+  if (full) {
+    return (
+      <FullScreen onQuit={() => cb.current.onFailed()} quitLabel="Back" className="bg-[#14171c]">
+        <div className="relative grid flex-1 place-items-center overflow-hidden">
+          <div className="pointer-events-none absolute inset-0" style={{ background: `radial-gradient(ellipse at 50% 35%, ${full.colour}55, transparent 60%), linear-gradient(180deg, #1b1f26, #0b0d11)` }} />
+          <div className="relative text-center">
+            <span className="mx-auto grid size-20 place-items-center rounded-3xl text-white shadow-2xl" style={{ background: full.colour }}>
+              {full.icon}
+            </span>
+            <p className="mt-4 font-display text-3xl font-black tracking-tight">{full.title}</p>
+            <p className="mt-3 flex items-center justify-center gap-2 text-sm font-semibold text-white/75">
+              <LoaderCircle className="size-4 animate-spin" /> Paying {cash(fee)} and getting it ready…
+            </p>
+          </div>
+        </div>
+      </FullScreen>
+    );
+  }
   return (
     <div className="grid aspect-[3/4] max-h-[62dvh] w-full place-items-center rounded-3xl bg-[#10161f] text-white">
       <p className="flex items-center gap-2 text-sm font-semibold">

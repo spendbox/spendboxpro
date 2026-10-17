@@ -193,13 +193,18 @@ function Grades({ def }: { def: MiniGameDef }) {
   );
 }
 
-function Countdown({ onDone }: { onDone: () => void }) {
+function Countdown({ onDone, full }: { onDone: () => void; full?: boolean }) {
   const [n, setN] = useState(3);
   const done = useRef(onDone);
   useEffect(() => {
     done.current = onDone;
   });
   useEffect(() => {
+    // A full-screen game (a task, a challenge): its own intro counts down, so straight in.
+    if (full) {
+      done.current();
+      return;
+    }
     playSfx("tick");
     if (n === 0) {
       const id = window.setTimeout(() => done.current(), 350);
@@ -207,7 +212,8 @@ function Countdown({ onDone }: { onDone: () => void }) {
     }
     const id = window.setTimeout(() => setN((x) => x - 1), 650);
     return () => window.clearTimeout(id);
-  }, [n]);
+  }, [n, full]);
+  if (full) return null;
   return (
     <div className="grid aspect-[3/4] max-h-[62dvh] w-full place-items-center rounded-3xl bg-[#10161f]">
       <span key={n} className="act-pop font-display text-7xl font-extrabold text-white">
@@ -308,16 +314,21 @@ function ScorePlay({ def, ctx, gp, invite, task }: { def: MiniGameDef; ctx: Play
       <Paying
         fee={fee.fee}
         pay={fee.pay}
-        onPaid={() => setPhase(then)}
+        // A full-screen game has its own intro: straight in, no little countdown first.
+        onPaid={() => setPhase(def.full && then.k === "count" ? { k: "play", seed: then.seed, who: then.who } : then)}
         onFailed={() => {
           if (cid && ctx.me) room.send({ t: "mg_quit", cid, from: ctx.me.id });
           setDuel(null);
           setPhase({ k: "menu" });
         }}
+        full={def.full ? { title: def.title, colour: def.colour, icon: <GameIcon name={def.icon} className="size-10" /> } : undefined}
       />
     );
   }
-  if (phase.k === "count") return <Countdown onDone={() => setPhase({ k: "play", seed: phase.seed, who: phase.who })} />;
+  if (phase.k === "count") {
+    if (def.full) return <Countdown key="full" full onDone={() => setPhase({ k: "play", seed: phase.seed, who: phase.who })} />;
+    return <Countdown onDone={() => setPhase({ k: "play", seed: phase.seed, who: phase.who })} />;
+  }
   if (phase.k === "play") return Engine ? <Engine key={`${phase.seed}:${phase.who}`} def={def} cfg={def.cfg ?? {}} seed={phase.seed} onEnd={ended} /> : <p>Missing game.</p>;
 
   if (phase.k === "pass") {

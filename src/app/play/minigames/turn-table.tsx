@@ -26,6 +26,7 @@ export function TurnTable({
   online,
   onEnd,
   onQuit,
+  bare,
 }: {
   def: MiniGameDef;
   seats: Seat[];
@@ -36,6 +37,8 @@ export function TurnTable({
   onEnd: (result: { won: boolean; draw: boolean; winners: string[]; seats?: number[] }) => void;
   /** Full-screen games: leave the table. */
   onQuit?: () => void;
+  /** Just the board (at a game table, which shows the players and whose turn it is itself). */
+  bare?: boolean;
 }) {
   const [mod, setMod] = useState<TurnModule | null>(null);
   useEffect(() => {
@@ -52,10 +55,10 @@ export function TurnTable({
       </div>
     );
   }
-  return <Table mod={mod} def={def} seats={seats} seed={seed} online={online} onEnd={onEnd} onQuit={onQuit} />;
+  return <Table mod={mod} def={def} seats={seats} seed={seed} online={online} onEnd={onEnd} onQuit={onQuit} bare={bare} />;
 }
 
-function Table({ mod, def, seats, seed, online, onEnd, onQuit }: { mod: TurnModule } & Parameters<typeof TurnTable>[0]) {
+function Table({ mod, def, seats, seed, online, onEnd, onQuit, bare }: { mod: TurnModule } & Parameters<typeof TurnTable>[0]) {
   const { rules, View } = mod;
   const [state, setState] = useState(() => rules.init(seed, seats.length, def.cfg ?? {}));
   const [, setCount] = useState(0);
@@ -126,6 +129,7 @@ function Table({ mod, def, seats, seed, online, onEnd, onQuit }: { mod: TurnModu
 
   const winners = over ? (rules.winners(state) ?? []) : [];
   const scores = rules.scores?.(state);
+  if (bare) return <View s={state} seat={viewSeat} canMove={canMove} onMove={move} names={names} kinds={kinds} onQuit={onQuit} />;
   return (
     <div className="space-y-2">
       <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
